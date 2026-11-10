@@ -1,4 +1,6 @@
 """L'état servi à la page : relevé + équipe + horloge."""
+import copy
+
 from . import kpi as modkpi
 from . import releve as modreleve
 from . import statuts
@@ -142,8 +144,16 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     bloquees = sum(1 for t in r["taches"] if (t.get("bloquee") or "").strip())
     directeur = {"lecons": len(lecons), "retours": retours, "bloquees": bloquees,
                  "total": len(lecons) + retours + bloquees + r["decisions"]}
+    v4 = r.get("version", 1) >= 4
+    if v4:
+        directeur["fonctionnalites"] = sum(len(f["decisions"]) for f in r["fonctionnalites"])
+        directeur["projet"] = len(r["decisions_projet"])
+        directeur["total"] += directeur["fonctionnalites"] + directeur["projet"]
+        for t, brut in zip(taches, r["taches"]):
+            for c in ("fonctionnalite", "element", "modele_depart", "montee"):
+                t[c] = brut.get(c)
 
-    return {
+    e = {
         "version": r["version"],
         "horodatage": maintenant.isoformat(),
         "projet": r["projet"],
@@ -163,6 +173,24 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         "challenges": list(r.get("challenges") or []),
         "savoir": savoir,
     }
+    if v4:
+        e["genre"] = r["genre"]
+        e["livrable"] = r["livrable"]
+        e["decisions_projet"] = [dict(d) for d in r["decisions_projet"]]
+        e["fonctionnalites"] = [_fonctionnalite(f, prenoms, services) for f in r["fonctionnalites"]]
+        e["orchestrateur_actif"] = any(a["chef"] and a["statut"] == "travail" for a in agents)
+    return e
+
+
+def _fonctionnalite(f, prenoms, services):
+    """Copie d'une fonctionnalité ; chaque message reçoit le prénom et le service de son auteur
+    (`None` pour l'utilisateur)."""
+    sortie = copy.deepcopy(f)
+    for m in sortie["discussion"]:
+        auteur = m.get("auteur")
+        m["prenom"] = None if auteur == "utilisateur" else prenoms.get(auteur, auteur)
+        m["service"] = None if auteur == "utilisateur" else services.get(auteur)
+    return sortie
 
 
 def erreur(message, maintenant):

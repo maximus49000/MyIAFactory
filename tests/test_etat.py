@@ -331,5 +331,113 @@ class TestEtat(unittest.TestCase):
         self.assertEqual(d1["statut"], "libre")
 
 
+def msg4(**champs):
+    m = {"id": "m1", "t": "2026-11-10T10:00:00", "auteur": "utilisateur", "texte": "Bonjour"}
+    m.update(champs)
+    return m
+
+
+class TestEtatV4(unittest.TestCase):
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.eq = equipe.Equipe(Path(self._t.name) / "equipe.json")
+
+    def etat(self, version=4, modif=None, minutes_chef=None):
+        r = copy.deepcopy(BASE)
+        r["version"] = version
+        r["taches"][0]["maj"] = (M - timedelta(minutes=5)).isoformat()
+        r["taches"][1]["maj"] = (M - timedelta(minutes=1)).isoformat()
+        if minutes_chef is not None:
+            r["titulaires"].append({"cle": "chef", "lieu": "local", "chef": True})
+            r["taches"].append({"id": "orch", "titre": "Orchestration", "colonne": "a", "active": True,
+                                "titulaire": "chef", "maj": (M - timedelta(minutes=minutes_chef)).isoformat()})
+        if modif:
+            modif(r)
+        return etat.construire(releve.normaliser(r), self.eq, M, 30)
+
+    def test_v3_etat_inchange(self):
+        e = self.etat(version=3)
+        for cle in ("genre", "livrable", "fonctionnalites", "decisions_projet", "orchestrateur_actif"):
+            self.assertNotIn(cle, e, cle)
+        self.assertEqual(set(e["directeur"]), {"lecons", "retours", "bloquees", "total"})
+        for t in e["taches"]:
+            for c in ("fonctionnalite", "element", "modele_depart", "montee"):
+                self.assertNotIn(c, t, c)
+
+    def test_v3_lecons_inchangees(self):
+        def avec(r):
+            r["lecons"] = [{"id": "l1", "agent": "d1", "texte": "T", "etage_propose": "genre"}]
+        e = self.etat(version=3, modif=avec)
+        self.assertEqual(e["lecons"], [{"id": "l1", "agent": "d1", "texte": "T"}])
+
+    def test_champs_v4_servis(self):
+        def avec(r):
+            r["genre"] = "ville"
+            r["livrable"] = {"libelle": "L", "chemin": "a.png", "date": "2026-11-10"}
+            r["decisions_projet"] = [{"id": "s", "genre": "session_cloud", "texte": "T", "agent": "c1"}]
+            r["taches"][0].update(fonctionnalite="f1", element="e1", modele_depart="Haiku",
+                                  montee={"de": "Haiku", "a": "Sonnet", "raison": "R"})
+            r["fonctionnalites"] = [{"id": "f1", "nom": "N", "etape": "serie", "catalogue": True}]
+            r["lecons"] = [{"id": "l1", "agent": "d1", "texte": "T", "etage_propose": "skill",
+                            "texte_general": "G", "roles": ["dev"]}]
+        e = self.etat(modif=avec)
+        self.assertEqual(e["genre"], "ville")
+        self.assertEqual(e["livrable"]["chemin"], "a.png")
+        self.assertEqual(e["decisions_projet"][0]["agent"], "c1")
+        t = next(x for x in e["taches"] if x["id"] == "t1")
+        self.assertEqual((t["fonctionnalite"], t["element"], t["modele_depart"], t["montee"]["a"]),
+                         ("f1", "e1", "Haiku", "Sonnet"))
+        self.assertEqual(e["fonctionnalites"][0]["etape"], "serie")
+        self.assertEqual((e["lecons"][0]["etage_propose"], e["lecons"][0]["texte_general"], e["lecons"][0]["roles"]),
+                         ("skill", "G", ["dev"]))
+
+    def test_defauts_v4_servis(self):
+        e = self.etat()
+        self.assertEqual((e["genre"], e["livrable"], e["fonctionnalites"], e["decisions_projet"]),
+                         (None, None, [], []))
+        self.assertEqual(e["taches"][0]["montee"], None)
+
+    def test_messages_prenom_service(self):
+        def avec(r):
+            r["fonctionnalites"] = [{"id": "f1", "nom": "N", "etape": "cadrage", "discussion": [
+                msg4(id="m1"), msg4(id="m2", auteur="d1", texte="Réponse")]}]
+        e = self.etat(modif=avec)
+        m1, m2 = e["fonctionnalites"][0]["discussion"]
+        self.assertEqual((m1["prenom"], m1["service"]), (None, None))
+        self.assertTrue(m2["prenom"])
+        self.assertEqual(m2["service"], "dev")
+        self.assertEqual(m2["prenom"], next(a for a in e["agents"] if a["id"] == "d1")["prenom"])
+
+    def test_message_ne_modifie_pas_le_releve(self):
+        r = releve.normaliser({**copy.deepcopy(BASE), "version": 4, "fonctionnalites": [
+            {"id": "f1", "nom": "N", "etape": "cadrage", "discussion": [msg4()]}]})
+        etat.construire(r, self.eq, M, 30)
+        self.assertNotIn("prenom", r["fonctionnalites"][0]["discussion"][0])
+
+    def test_directeur_total_v4(self):
+        def avec(r):
+            r["decisions"] = 1
+            r["lecons"] = [{"id": "l1", "agent": "d1", "texte": "T"}]
+            r["fonctionnalites"] = [
+                {"id": "f1", "nom": "N", "etape": "cahier", "decisions": [
+                    {"id": "d1", "genre": "valider_cahier", "texte": "T"},
+                    {"id": "d2", "genre": "valider_methode", "texte": "T"}]}]
+            r["decisions_projet"] = [{"id": "g", "genre": "confirmer_genre", "texte": "T",
+                                      "propose": "ville", "genres_connus": []}]
+        d = self.etat(modif=avec)["directeur"]
+        self.assertEqual((d["lecons"], d["fonctionnalites"], d["projet"], d["total"]), (1, 2, 1, 5))
+
+    def test_orchestrateur_actif(self):
+        self.assertTrue(self.etat(minutes_chef=2)["orchestrateur_actif"])
+        self.assertFalse(self.etat(minutes_chef=90)["orchestrateur_actif"])  # sans nouvelles
+        self.assertFalse(self.etat()["orchestrateur_actif"])  # pas de chef
+
+    def test_orchestrateur_pas_actif_si_tache_terminee(self):
+        def avec(r):
+            r["taches"][-1]["active"] = False
+        self.assertFalse(self.etat(minutes_chef=2, modif=avec)["orchestrateur_actif"])
+
+
 if __name__ == "__main__":
     unittest.main()

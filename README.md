@@ -62,7 +62,26 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 11. L'onglet KPI
 - [x] 12. La démo, la documentation, la relecture (relecture finale faite : voir la passation, phase E)
 
-État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : le projet 3, le parcours d'une tâche, est conçu ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) ; reste à écrire son plan.
+Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md), [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)) :
+
+- [ ] 1. Le relevé version 4
+- [ ] 2. L'état version 4
+- [ ] 3. Les sept demandes et les images jointes
+- [ ] 4. Plusieurs projets dans un bureau
+- [ ] 5. Le catalogue et le dernier livrable servis
+- [ ] 6. Le sélecteur de projets et la barre
+- [ ] 7. Le panneau d'une fonctionnalité et sa discussion
+- [ ] 8. Le Directeur enrichi et la montée de modèle
+- [ ] 9. Le catalogue d'une fonctionnalité
+- [ ] 10. Le fichier de factory, l'interface et le suivi générique
+- [ ] 11. La mémoire à trois étages et les leçons
+- [ ] 12. Le départ d'un agent, le choix du modèle, le vérificateur d'interface
+- [ ] 13. Les consignes génériques et le guide de passage
+- [ ] 14. La démo à deux projets, la documentation, la relecture
+- [ ] 15. Le vrai passage de bout en bout
+- [ ] Le passage du projet pilote (phases H à J, dans son dépôt)
+
+État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : le projet 3, le parcours d'une tâche, est conçu et planifié ; sa réalisation commence par la phase A (voir la [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)).
 
 ![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)
 
@@ -77,6 +96,7 @@ Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages
 
 - Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md) ; les dossiers des services : [docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md](docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md) ; le parcours d'une tâche : [docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
+- Plan du parcours d'une tâche : [docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md](docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md), sa passation : [docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)
 - Format du relevé : [docs/releve.md](docs/releve.md)

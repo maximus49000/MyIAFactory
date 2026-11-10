@@ -50,6 +50,14 @@ class TestEtat(unittest.TestCase):
         self.assertEqual([c["terminee"] for c in e["colonnes"]], [False, True])
         self.assertNotIn("terminee", self.etat()["colonnes"][0])  # version 1 : rien de nouveau
 
+    def test_suite_de_file_servie(self):
+        def avec(r):
+            r["version"] = 2
+            r["file"] = {"visibles": [{"id": "q1", "titre": "Q"}], "suite": [{"id": "q2", "titre": "Q2"}], "reste": 4}
+        self.assertEqual(self.etat(modif=avec)["file"]["suite"], [{"id": "q2", "titre": "Q2"}])
+        self.assertEqual(self.etat(modif=lambda r: r.update(version=2))["file"]["suite"], [])
+        self.assertNotIn("suite", self.etat()["file"])  # version 1 : rien de nouveau
+
     def test_chef_toujours_la(self):
         chef = next(x for x in self.etat()["agents"] if x["chef"])
         self.assertIsNone(chef["service"])

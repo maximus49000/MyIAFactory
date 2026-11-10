@@ -4,7 +4,7 @@
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {tronquer, filtrer, filtreDeListe} from "./texte.js";
 import {el, ligne} from "./dom.js";
-import {contenuTache, contenuFile, contenuListe} from "./detail.js";
+import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
@@ -28,6 +28,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         (e.agents || []).map((a) => [a.id, a.prenom]), retourListe]);
     }
     if (type === "file") return JSON.stringify([(e.file?.visibles || []).find((q) => q.id === id), e.colonnes, e.agir]);
+    if (type === "attente") return JSON.stringify([e.file, e.colonnes, e.agir]);
     if (type === "liste") {
       return JSON.stringify([(e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.maj, t.type, t.active]),
         e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
@@ -109,6 +110,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   const contexte = () => ({
     etat: etat(), barre, brouillons, filtreListe, retourListe,
     ouvrirListe: () => ouvrirPanneau("liste", null),
+    ouvrirAttente: () => ouvrirPanneau("attente", null),
     ouvrirTache: (id) => { retourListe = false; ouvrirPanneau("tache", id); },
     ouvrirTacheDepuisListe: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
     changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
@@ -156,6 +158,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       const q = (e.file?.visibles || []).find((x) => x.id === id);
       if (!q) { fermerPanneau(); return; }
       contenuFile(contexte(), contenu, q);
+    } else if (type === "attente") {
+      contenuAttente(contexte(), contenu);
     } else if (type === "liste") {
       contenuListe(contexte(), contenu);
     } else if (type === "agent") {
@@ -255,7 +259,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     attente = requestAnimationFrame(() => {
       attente = null;
       const choix = sc.pointer(ev);
-      const cliquable = ["agent", "postit", "file", "service", "direction"].includes(choix.type);
+      const cliquable = ["agent", "postit", "file", "attente", "service", "direction"].includes(choix.type);
       conteneur.style.cursor = cliquable ? "pointer" : "";
       if (choix.type === "agent") montrerCarte(choix, ev.clientX, ev.clientY);
       else cacherCarte();
@@ -269,6 +273,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     if (choix.type === "agent") ouvrirPanneau("agent", choix.id);
     else if (choix.type === "postit") ouvrirPanneau("tache", choix.id);
     else if (choix.type === "file") ouvrirPanneau("file", choix.id);
+    else if (choix.type === "attente") ouvrirPanneau("attente", null);
     else if (choix.type === "service" || choix.type === "direction") ouvrirPanneau(choix.type, choix.id);
     else fermerPanneau();
   });

@@ -34,7 +34,7 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 | `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; en v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) |
 | `titulaires` | oui | voir ci-dessous |
 | `taches` | oui | voir ci-dessous |
-| `file` | non | `{"visibles": [{id, titre}], "reste": n}` — vide par défaut |
+| `file` | non | `{"visibles": [{id, titre}], "reste": n}` — vide par défaut ; en v2, `suite` facultatif (voir ci-dessous) |
 | `decisions` | non | nombre de décisions qui attendent le Directeur — `0` par défaut |
 | `actions` | non, v2 | les boutons de la factory (voir « Faire agir le bureau ») |
 | `types` | non, v2 | liste de `{id, nom}` : les types de tâches, pour le filtre de la vue liste |
@@ -62,6 +62,8 @@ Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une 
 
 **Colonnes terminées.** En version 2, une colonne peut porter `"terminee": true`. Dès qu'au moins une colonne est terminée, la vue liste gagne un filtre « Non terminées » (toutes les tâches qui ne sont pas dans une colonne terminée, y compris celles en attente ou bloquées) : il est placé en premier et choisi par défaut, tant que l'utilisateur n'a pas choisi un autre filtre. Le filtre « En cours » (tâches `active`) ne change pas. Sans colonne terminée, ce filtre n'existe pas.
 
+**File dépliable.** En version 2, `file.suite` (facultatif, `null` = absent) est la liste `{id, titre}` des éléments qui viennent après les `visibles` : **500 au plus**, mêmes règles que `visibles`. Les identifiants sont uniques entre `visibles`, `suite` et `taches`. `reste` garde son sens : le nombre total d'éléments au-delà des visibles ; `suite` peut être plus courte que `reste` (la page dit alors combien d'éléments elle ne détaille pas). Quand il y a quelque chose au-delà des visibles, le « + n » de la file sur le Kanban (et le bouton « File d'attente » de la vue liste) ouvre un panneau « File » qui liste tous les éléments, chacun avec « Déplacer vers… » comme les éléments visibles.
+
 ## Faire agir le bureau
 
 Le bureau **n'agit jamais lui-même** sur la factory : chaque geste de l'utilisateur (un bouton, un déplacement de tâche, un retour, un verdict sur une leçon) devient une **demande** remise à votre projet, par une commande d'actions que vous déclarez dans les réglages :
@@ -75,7 +77,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `type` | Champs | Sens |
 |---|---|---|
 | `bouton` | `id` | l'utilisateur a cliqué un bouton-demande |
-| `deplacer` | `tache`, `colonne` | passer une tâche (ou un élément de `file.visibles`, par son `id`) dans cette colonne |
+| `deplacer` | `tache`, `colonne` | passer une tâche (ou un élément de `file.visibles` ou de `file.suite`, par son `id`) dans cette colonne |
 | `retour` | `tache`, `texte` (3 500 caractères au plus) | un retour de l'utilisateur sur une tâche |
 | `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`) | la décision du Directeur sur une leçon |
 

@@ -251,6 +251,50 @@ class TestColonneTerminee(unittest.TestCase):
         self.assertEqual([c["terminee"] for c in releve.normaliser(r)["colonnes"]], [False, True, False])
 
 
+class TestSuiteDeFile(unittest.TestCase):
+    def file(self, **champs):
+        return v2(file={"visibles": [{"id": "q1", "titre": "Q"}], "reste": 3, **champs})
+
+    def test_suite_valide(self):
+        r = self.file(suite=[{"id": "q2", "titre": "Q2"}, {"id": "q3", "titre": None}])
+        self.assertEqual(releve.valider(r), [])
+        self.assertEqual(releve.valider(self.file(suite=None)), [])
+        self.assertEqual(releve.valider(self.file(suite=[])), [])
+
+    def test_suite_peut_etre_plus_courte_que_reste(self):
+        self.assertEqual(releve.valider(self.file(reste=50, suite=[{"id": "q2", "titre": "Q2"}])), [])
+
+    def test_suite_mal_formee(self):
+        for suite in (3, "x", {}, [None], [{"titre": "T"}], [{"id": "", "titre": "T"}],
+                      [{"id": 3, "titre": "T"}], [{"id": "q2", "titre": 3}]):
+            self.assertTrue(releve.valider(self.file(suite=suite)), suite)
+
+    def test_suite_cinq_cent_un_elements(self):
+        def suite(n):
+            return [{"id": f"s{i}", "titre": "S"} for i in range(n)]
+        self.assertEqual(releve.valider(self.file(suite=suite(500))), [])
+        self.assertTrue(releve.valider(self.file(suite=suite(501))))
+
+    def test_identifiants_uniques_entre_visibles_suite_et_taches(self):
+        for suite in ([{"id": "q1", "titre": "doublon visible"}],
+                      [{"id": "t1", "titre": "doublon tâche"}],
+                      [{"id": "q2", "titre": "a"}, {"id": "q2", "titre": "b"}]):
+            self.assertTrue(releve.valider(self.file(suite=suite)), suite)
+        self.assertTrue(releve.valider(v2(file={"visibles": [{"id": "t1", "titre": "Q"}]})))
+
+    def test_suite_ignoree_en_version_1(self):
+        r = {**copy.deepcopy(BASE), "file": {"visibles": [], "reste": 2, "suite": 3}}
+        self.assertEqual(releve.valider(r), [])
+        self.assertNotIn("suite", releve.normaliser(r)["file"])
+
+    def test_normaliser_suite(self):
+        self.assertEqual(releve.normaliser(self.file())["file"]["suite"], [])
+        n = releve.normaliser(self.file(suite=[{"id": "q2", "titre": "Q2"}]))
+        self.assertEqual(n["file"]["suite"], [{"id": "q2", "titre": "Q2"}])
+        self.assertEqual(releve.normaliser(v2())["file"]["suite"], [])
+        self.assertEqual(releve.normaliser(self.file(suite=None))["file"]["suite"], [])
+
+
 class TestObtenir(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

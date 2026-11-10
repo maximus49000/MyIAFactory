@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides} from "./texte.js";
+import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur} from "./actions.js";
 
 export const MAX_RETOUR = 3500;
@@ -166,11 +166,37 @@ export function contenuFile(ctx, contenu, q) {
   if (ctx.etat.agir) contenu.append(menuDeplacer(ctx, q.id, null));
 }
 
+// Le panneau « File » : tous les éléments de la file (visibles puis suite), chacun déplaçable comme les visibles.
+export function contenuAttente(ctx, contenu) {
+  const file = ctx.etat.file;
+  const elements = elementsDeFile(file);
+  contenu.append(el("h2", "", "File"));
+  contenu.append(ligne("Éléments en attente", String(elements.length + resteNonListe(file))));
+  const liste = el("ul", "liste-file");
+  if (!elements.length) liste.append(el("li", "vide", "La file est vide"));
+  for (const q of elements) {
+    const li = el("li", "element-file");
+    li.append(el("span", "ligne-titre", tronquer(q.titre, MAX_TITRE)));
+    if (ctx.etat.agir) li.append(menuDeplacer(ctx, q.id, null));
+    liste.append(li);
+  }
+  contenu.append(liste);
+  const manque = resteNonListe(file);
+  if (manque > 0) contenu.append(el("p", "note", `… et ${manque} autre${manque > 1 ? "s" : ""} que le projet ne détaille pas.`));
+}
+
 // La vue liste : filtres, puis une ligne par tâche. Le filtre estompe aussi le Kanban.
 export function contenuListe(ctx, contenu) {
   const e = ctx.etat;
   const f = ctx.filtreListe;
   contenu.append(el("h2", "", "Toutes les tâches"));
+  const nFile = elementsDeFile(e.file).length + resteNonListe(e.file);
+  if (nFile > 0) {
+    const ouvrir = el("button", "bouton secondaire", `File d'attente (${nFile})`);
+    ouvrir.type = "button";
+    ouvrir.addEventListener("click", ctx.ouvrirAttente);
+    contenu.append(ouvrir);
+  }
   const filtres = el("div", "filtres");
   function bouton(texte, actif, action) {
     const b = el("button", "filtre" + (actif ? " actif" : ""), texte);

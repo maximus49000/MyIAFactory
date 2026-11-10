@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import {PAS_TABLEAU, JEU_TABLEAU} from "../logique/plan.js";
+import {fileDepliable} from "../ui/texte.js";
 
 const COULEURS = ["#ffe27a", "#ffb3b0", "#c8f0b4", "#a8e4f0", "#ffd3a1", "#cbbcff"];
 const PALE = "#f2ede2";
@@ -152,7 +153,11 @@ export class Kanban {
       let visibles = col, cache = 0;
       if (col.length > place) { visibles = col.slice(0, k.lignes - 1); cache = col.length - visibles.length; }
       visibles.forEach((c, rang) => cases.push({...c, colonne: i, rang}));
-      if (cache + extra > 0) cases.push({cle: "plus:" + i, type: "plus", texte: "+" + (cache + extra), colonne: i, rang: visibles.length});
+      if (cache + extra > 0) {
+        // Dans la première colonne, le « + n » ouvre le panneau « File » quand la file a des éléments au-delà des visibles.
+        const depliable = i === 0 && fileDepliable(file);
+        cases.push({cle: "plus:" + i, type: "plus", texte: "+" + (cache + extra), depliable, colonne: i, rang: visibles.length});
+      }
     });
     return cases;
   }
@@ -161,7 +166,7 @@ export class Kanban {
     const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom]));
     if (sigCol !== this.signatureColonnes) { this.signatureColonnes = sigCol; this._dessinerColonnes(colonnes); }
     const cases = this._disposition(colonnes, postits, taches, file);
-    const sig = JSON.stringify(cases.map((c) => [c.cle, c.colonne, c.rang, c.texte]));
+    const sig = JSON.stringify(cases.map((c) => [c.cle, c.colonne, c.rang, c.texte, c.depliable]));
     if (sig === this.signature) return;
     this.signature = sig;
 
@@ -171,12 +176,16 @@ export class Kanban {
       const pos = this.plan.postit(c.colonne, c.rang);
       const cible = new THREE.Vector3(pos.u - this.k.largeur / 2, HAUT - pos.v, DEVANT + POSTIT.e / 2 + 0.004);
       let e = this.postits.get(c.cle);
-      if (e && c.type === "plus" && e.texte !== c.texte) { this._retirer(c.cle, e); e = null; }
+      if (e && c.type === "plus" && (e.texte !== c.texte || e.depliable !== c.depliable)) { this._retirer(c.cle, e); e = null; }
       if (!e) {
         let mesh;
         if (c.type === "plus") {
           mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.19),
                                 new THREE.MeshBasicMaterial({map: texteTexture(c.texte), transparent: true}));
+          if (c.depliable) {
+            mesh.userData.choix = {type: "attente", id: null};
+            this.sc.choisissables.push(mesh);
+          }
         } else {
           mesh = new THREE.Mesh(this.geoPostit, this._materiau(c.couleur));
           mesh.castShadow = true;
@@ -189,7 +198,7 @@ export class Kanban {
         mesh.position.copy(cible);
         mesh.scale.setScalar(0.01);
         this.groupe.add(mesh);
-        e = {mesh, cible, texte: c.texte, type: c.type, id: c.id, couleur: c.couleur, estompe: false};
+        e = {mesh, cible, texte: c.texte, depliable: c.depliable, type: c.type, id: c.id, couleur: c.couleur, estompe: false};
         this.postits.set(c.cle, e);
       }
       e.cible = cible;

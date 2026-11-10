@@ -13,7 +13,7 @@ R = releve.normaliser({
     "services": [{"id": "dev", "nom": "Dev"}], "colonnes": [{"id": "a", "nom": "A"}, {"id": "b", "nom": "B"}],
     "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
     "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}],
-    "file": {"visibles": [{"id": "q1", "titre": "Q"}], "reste": 0},
+    "file": {"visibles": [{"id": "q1", "titre": "Q"}], "suite": [{"id": "q2", "titre": "Q2"}], "reste": 5},
     "actions": [{"id": "pause", "libelle": "Pause"},
                 {"id": "doc", "libelle": "Doc", "lien": "https://exemple.org"},
                 {"id": "gris", "libelle": "G", "actif": False}],
@@ -33,6 +33,7 @@ class TestVerifier(unittest.TestCase):
         self.ok({"type": "bouton", "id": "pause"})
         self.ok({"type": "deplacer", "tache": "t1", "colonne": "b"})
         self.ok({"type": "deplacer", "tache": "q1", "colonne": "a"})
+        self.ok({"type": "deplacer", "tache": "q2", "colonne": "b"})  # un élément de la suite
         self.ok({"type": "retour", "tache": "t1", "texte": "bien"})
         self.ok({"type": "retour", "tache": "t1", "texte": "x" * 3500})
         self.ok({"type": "lecon", "id": "d1:L1", "verdict": "valider"})
@@ -47,6 +48,7 @@ class TestVerifier(unittest.TestCase):
                   {"type": "deplacer", "tache": "zz", "colonne": "a"},
                   {"type": "deplacer", "tache": "t1", "colonne": "zz"},
                   {"type": "deplacer", "tache": "t1"},
+                  {"type": "deplacer", "tache": "q3", "colonne": "a"},  # dans le « reste », ni visible ni dans la suite
                   {"type": "retour", "tache": "zz", "texte": "x"},
                   {"type": "retour", "tache": "t1", "texte": "   \n"},
                   {"type": "retour", "tache": "t1", "texte": 3},

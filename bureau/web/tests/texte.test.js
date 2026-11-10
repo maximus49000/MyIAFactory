@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {COLS} from "./donnees.js";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -165,4 +165,34 @@ test("filtreDeListe : le filtre prêt pour filtrer()", () => {
                    {enCours: false, nonTerminees: false, type: null});
   assert.deepEqual(filtreDeListe({colonnes: COLS}, {etat: null, type: null}),
                    {enCours: false, nonTerminees: false, type: null});
+});
+
+const FILE = {visibles: [{id: "q1", titre: "Un"}, {id: "q2", titre: "Deux"}], suite: [{id: "q3", titre: "Trois"}, {id: "q4", titre: null}], reste: 7};
+
+test("elementsDeFile : les visibles puis la suite, une seule fois chacun", () => {
+  assert.deepEqual(elementsDeFile(FILE).map((q) => q.id), ["q1", "q2", "q3", "q4"]);
+  assert.deepEqual(elementsDeFile(FILE).map((q) => q.visible), [true, true, false, false]);
+  assert.equal(elementsDeFile(FILE)[3].titre, "q4");   // sans titre, l'identifiant fait office de titre
+  assert.deepEqual(elementsDeFile({visibles: [{id: "a", titre: "A"}], suite: [{id: "a", titre: "A bis"}, null, {titre: "x"}]}).map((q) => q.id), ["a"]);
+  assert.deepEqual(elementsDeFile({visibles: [{id: "a", titre: "A"}]}).map((q) => q.id), ["a"]);
+  assert.deepEqual(elementsDeFile({suite: "x", visibles: 3}), []);
+  assert.deepEqual(elementsDeFile({}), []);
+  assert.deepEqual(elementsDeFile(null), []);
+});
+
+test("fileDepliable : le « + n » ouvre la file seulement s'il y a quelque chose au-delà des visibles", () => {
+  assert.equal(fileDepliable(FILE), true);
+  assert.equal(fileDepliable({visibles: [{id: "a", titre: "A"}], reste: 3}), true);
+  assert.equal(fileDepliable({visibles: [{id: "a", titre: "A"}], suite: [{id: "b", titre: "B"}], reste: 0}), true);
+  assert.equal(fileDepliable({visibles: [{id: "a", titre: "A"}], reste: 0}), false);
+  assert.equal(fileDepliable({}), false);
+  assert.equal(fileDepliable(null), false);
+});
+
+test("resteNonListe : ce qui dépasse la suite fournie", () => {
+  assert.equal(resteNonListe(FILE), 5);   // 7 au-delà des visibles, 2 listés
+  assert.equal(resteNonListe({visibles: [], suite: [{id: "a", titre: "A"}], reste: 1}), 0);
+  assert.equal(resteNonListe({visibles: [], suite: [{id: "a", titre: "A"}], reste: 0}), 0);
+  assert.equal(resteNonListe({visibles: [], reste: 4}), 4);
+  assert.equal(resteNonListe(null), 0);
 });

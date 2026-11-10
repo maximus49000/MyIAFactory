@@ -10,6 +10,7 @@ from pathlib import Path
 
 MAX_SERVICES = 8
 MAX_IMAGES = 40
+MAX_SUITE = 500
 SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
 
@@ -156,9 +157,38 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
         erreurs.append("« file.visibles » doit être une liste.")
         return
     for k, q in enumerate(visibles):
-        if not _est_dict(q) or not isinstance(q.get("id"), str) or not q.get("id") \
-                or not _texte_ou_nul(q.get("titre")):
+        if not _element_de_file(q):
             erreurs.append(f"« file.visibles » : l'élément {k + 1} doit avoir un « id » et un « titre » (textes).")
+
+
+def _element_de_file(q):
+    return _est_dict(q) and isinstance(q.get("id"), str) and bool(q.get("id")) and _texte_ou_nul(q.get("titre"))
+
+
+def _verifier_file_v2(r, taches, erreurs):
+    """`file.suite` (les éléments après les visibles) et l'unicité des identifiants de la file et des tâches."""
+    file = r.get("file")
+    if not _est_dict(file):
+        return
+    suite = file.get("suite")
+    if suite is None:
+        suite = []
+    elif not isinstance(suite, list):
+        erreurs.append("« file.suite » doit être une liste.")
+        suite = []
+    if len(suite) > MAX_SUITE:
+        erreurs.append(f"« file.suite » : au plus {MAX_SUITE} éléments (il y en a {len(suite)}).")
+    for k, q in enumerate(suite):
+        if not _element_de_file(q):
+            erreurs.append(f"« file.suite » : l'élément {k + 1} doit avoir un « id » et un « titre » (textes).")
+    visibles = file.get("visibles")
+    elements = (visibles if isinstance(visibles, list) else []) + suite
+    vus = {t["id"] for t in taches if isinstance(t.get("id"), str)}
+    for q in elements:
+        if _element_de_file(q):
+            if q["id"] in vus:
+                erreurs.append(f"File : identifiant en double « {q['id']} » (entre visibles, suite et tâches).")
+            vus.add(q["id"])
 
 
 def _liste_facultative(v, champ, erreurs):
@@ -183,6 +213,7 @@ def _texte(v):
 
 def _verifier_v2(r, titulaires, taches, cles, erreurs):
     """Champs facultatifs de la version 2 (ignorés en version 1)."""
+    _verifier_file_v2(r, taches, erreurs)
     for c in r.get("colonnes") or []:
         if _est_dict(c) and c.get("terminee") is not None and not isinstance(c["terminee"], bool):
             erreurs.append(f"Colonne « {c.get('id')} » : « terminee » doit être vrai ou faux.")
@@ -296,6 +327,10 @@ def normaliser(r):
         n["file"] = {}
     n["file"].setdefault("visibles", [])
     n["file"].setdefault("reste", 0)
+    if v2:
+        n["file"]["suite"] = n["file"]["suite"] if isinstance(n["file"].get("suite"), list) else []
+    else:
+        n["file"].pop("suite", None)
     n.setdefault("decisions", 0)
     for t in n["taches"]:
         t.setdefault("titulaire", None)

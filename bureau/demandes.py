@@ -27,7 +27,8 @@ def commande_declaree(regl):
 
 def _ids_taches(r):
     ids = {t["id"] for t in r.get("taches", [])}
-    ids.update(q["id"] for q in r.get("file", {}).get("visibles", []))
+    file = r.get("file", {})
+    ids.update(q["id"] for q in file.get("visibles", []) + file.get("suite", []))
     return ids
 
 

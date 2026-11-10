@@ -133,3 +133,37 @@ export function phrasesDirectionV1(etat) {
     {classe: "note", texte: "La liste détaillée des décisions arrivera avec le projet 2."},
   ];
 }
+
+// Les éléments de la file, dans l'ordre : les visibles puis la suite. Un identifiant n'apparaît qu'une fois ;
+// sans titre, l'identifiant en tient lieu.
+export function elementsDeFile(file) {
+  const sortie = [];
+  const vus = new Set();
+  for (const [liste, visible] of [[file?.visibles, true], [file?.suite, false]]) {
+    if (!Array.isArray(liste)) continue;
+    for (const q of liste) {
+      if (!q || typeof q.id !== "string" || !q.id || vus.has(q.id)) continue;
+      vus.add(q.id);
+      sortie.push({id: q.id, titre: typeof q.titre === "string" && q.titre ? q.titre : q.id, visible});
+    }
+  }
+  return sortie;
+}
+
+// Le nombre d'éléments au-delà des visibles : `reste` s'il est donné, sinon ce que la suite compte.
+function auDela(file) {
+  const reste = Number(file?.reste);
+  const suite = Array.isArray(file?.suite) ? file.suite.length : 0;
+  return Math.max(Number.isFinite(reste) ? reste : 0, suite);
+}
+
+// Le « + n » de la file ouvre le panneau « File » seulement s'il y a des éléments au-delà des visibles.
+export function fileDepliable(file) {
+  return auDela(file) > 0;
+}
+
+// Le nombre d'éléments de la file que le panneau ne peut pas lister (la suite fournie est plus courte que le reste).
+export function resteNonListe(file) {
+  const suite = Array.isArray(file?.suite) ? file.suite.length : 0;
+  return Math.max(0, auDela(file) - suite);
+}

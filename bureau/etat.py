@@ -81,7 +81,7 @@ def erreur(message, maintenant):
     return {
         "version": 1, "horodatage": maintenant.isoformat(), "projet": "", "erreur": message,
         "factory": {"etat": "inconnu", "depuis": None, "derniere_activite": None, "inactive": False},
-        "services": [], "colonnes": [], "file": {"visibles": [], "reste": 0}, "decisions": 0,
+        "services": [], "colonnes": [], "file": {"visibles": [], "suite": [], "reste": 0}, "decisions": 0,
         "actions": [], "types": [], "lecons": [],
         "directeur": {"lecons": 0, "retours": 0, "bloquees": 0, "total": 0},
         "agents": [], "taches": [],

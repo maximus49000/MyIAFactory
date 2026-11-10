@@ -139,6 +139,141 @@ class TestServeur(unittest.TestCase):
         self.assertIn(code, (0, 1))
         self.assertIn("charge", sortie.getvalue())
 
+    # -- les demandes ------------------------------------------------------
+    RELEVE_V2 = {
+        "version": 2, "projet": "P", "factory": {"etat": "en marche"},
+        "services": [{"id": "dev", "nom": "Dev"}],
+        "colonnes": [{"id": "a", "nom": "A"}, {"id": "b", "nom": "B"}],
+        "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+        "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}],
+        "actions": [{"id": "pause", "libelle": "Pause"}],
+        "lecons": [{"id": "d1:L1", "agent": "d1", "texte": "t"}]}
+
+    SCRIPT_ACTIONS = (
+        "import sys, time\n"
+        "d = sys.stdin.buffer.read()\n"
+        "f = open(sys.argv[1], 'ab')\n"
+        "f.write(b'debut\\n'); f.flush()\n"
+        "time.sleep(float(sys.argv[2]))\n"
+        "f.write(d + b'\\nfin\\n'); f.flush()\n"
+        "sys.exit(int(sys.argv[3]))\n")
+
+    def agir(self, duree=0.0, code=0, releve=None):
+        """Installe un relevé v2 et une commande d'actions qui note ses demandes dans `notes.log`."""
+        dossier = self.tmp / "demo"
+        (dossier / "releve.json").write_text(json.dumps(releve or self.RELEVE_V2), encoding="utf-8")
+        (dossier / "actions.py").write_text(self.SCRIPT_ACTIONS, encoding="utf-8")
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["actions"] = {"commande": [sys.executable, "actions.py", "notes.log", str(duree), str(code)],
+                           "dossier": "."}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
+        return dossier / "notes.log"
+
+    def demande(self, d):
+        r, data = self.req("POST", "/api/demande", json.dumps(d), self.ENT)
+        return r.status, json.loads(data.decode("utf-8"))
+
+    def test_etat_agir(self):
+        self.assertIs(self.json("/api/etat")["agir"], False)
+        self.agir()
+        e = self.json("/api/etat")
+        self.assertIs(e["agir"], True)
+        self.assertEqual(e["version"], 2)
+
+    def test_demande_sans_entete(self):
+        notes = self.agir()
+        self.json("/api/etat")
+        corps = json.dumps({"type": "bouton", "id": "pause"})
+        for entetes in ({"Content-Type": "application/json"}, {"X-Bureau": "1"},
+                        {"X-Bureau": "1", "Content-Type": "text/plain"}):
+            r, _ = self.req("POST", "/api/demande", corps, entetes)
+            self.assertEqual(r.status, 403)
+        r, _ = self.req("POST", "/api/demande", corps, {**self.ENT, "Host": "evil.example.com"})
+        self.assertEqual(r.status, 403)
+        self.assertFalse(notes.exists())
+
+    def test_demande_ok(self):
+        notes = self.agir()
+        self.json("/api/etat")
+        statut, corps = self.demande({"type": "bouton", "id": "pause"})
+        self.assertEqual((statut, corps), (200, {"ok": True}))
+        lignes = notes.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lignes[0], "debut")
+        self.assertEqual(json.loads(lignes[1])["id"], "pause")
+
+    def test_demande_nettoyee(self):
+        notes = self.agir()
+        self.json("/api/etat")
+        self.demande({"type": "bouton", "id": "pause", "mauvais": "champ"})
+        self.assertNotIn("mauvais", notes.read_text(encoding="utf-8"))
+
+    def test_demande_inconnue(self):
+        notes = self.agir()
+        self.json("/api/etat")
+        for d in ({"type": "bouton", "id": "inconnu"}, {"type": "deplacer", "tache": "zz", "colonne": "a"},
+                  {"type": "deplacer", "tache": "t1", "colonne": "zz"},
+                  {"type": "retour", "tache": "t1", "texte": " "}, {"type": "lecon", "id": "x", "verdict": "valider"},
+                  {"type": "inconnu"}, [], "x"):
+            statut, corps = self.demande(d)
+            self.assertEqual(statut, 400, d)
+            self.assertTrue(corps["erreur"])
+        for brut in ("pas du json", ""):
+            r, _ = self.req("POST", "/api/demande", brut, self.ENT)
+            self.assertEqual(r.status, 400)
+        r, _ = self.req("POST", "/api/demande", "x" * 9000, self.ENT)
+        self.assertEqual(r.status, 400)
+        self.assertFalse(notes.exists())
+
+    def test_demande_sans_releve_valide(self):
+        self.agir()
+        (self.tmp / "demo" / "releve.json").write_text("{", encoding="utf-8")
+        statut, corps = self.demande({"type": "bouton", "id": "pause"})
+        self.assertEqual((statut, corps), (409, {"erreur": "Relevé indisponible."}))
+
+    def test_demande_commande_en_echec(self):
+        notes = self.agir(code=3)
+        self.json("/api/etat")
+        statut, corps = self.demande({"type": "bouton", "id": "pause"})
+        self.assertEqual(statut, 502)
+        self.assertTrue(corps["erreur"])
+        self.assertTrue(notes.exists())
+        self.assertEqual(self.json("/api/etat")["projet"], "P")  # le serveur reste disponible
+
+    def test_demande_sans_commande(self):
+        self.agir()
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        del regl["actions"]
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.json("/api/etat")
+        statut, corps = self.demande({"type": "bouton", "id": "pause"})
+        self.assertEqual(statut, 502)
+        self.assertIn("Aucune commande", corps["erreur"])
+
+    def test_demande_vide_le_cache_d_etat(self):
+        self.agir()
+        self.json("/api/etat")
+        self.demande({"type": "bouton", "id": "pause"})
+        self.assertEqual(self.srv._cache_etat[0], 0.0)
+
+    def test_demandes_successives(self):
+        notes = self.agir(duree=0.3)
+        self.json("/api/etat")
+        resultats = []
+
+        def envoyer(i):
+            resultats.append(self.demande({"type": "retour", "tache": "t1", "texte": f"n{i}"})[0])
+
+        fils = [threading.Thread(target=envoyer, args=(i,)) for i in range(2)]
+        for f in fils:
+            f.start()
+        for f in fils:
+            f.join(20)
+        self.assertEqual(resultats, [200, 200])
+        lignes = notes.read_text(encoding="utf-8").splitlines()
+        self.assertEqual([x for x in lignes if x in ("debut", "fin")], ["debut", "fin", "debut", "fin"])
+        self.assertEqual(sum(1 for x in lignes if x.startswith("{")), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

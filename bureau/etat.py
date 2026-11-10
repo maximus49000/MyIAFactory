@@ -93,11 +93,16 @@ def agents_locaux_au_travail(e):
                if a["lieu"] == "local" and a["statut"] == "travail" and not a["chef"])
 
 
-def lire(regl, eq, maintenant):
+def lire_avec_releve(regl, eq, maintenant):
+    """(état, relevé normalisé valide ou None)."""
     r, message = modreleve.obtenir(regl)
     if r is None:
-        return erreur(message, maintenant)
+        return erreur(message, maintenant), None
     try:
-        return construire(r, eq, maintenant, regl.get("fraicheur_min", 30))
+        return construire(r, eq, maintenant, regl.get("fraicheur_min", 30)), r
     except Exception as e:  # un relevé inattendu ne doit jamais faire tomber le serveur
-        return erreur(f"Relevé inutilisable : {e}", maintenant)
+        return erreur(f"Relevé inutilisable : {e}", maintenant), None
+
+
+def lire(regl, eq, maintenant):
+    return lire_avec_releve(regl, eq, maintenant)[0]

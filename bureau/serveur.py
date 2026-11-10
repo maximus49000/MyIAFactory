@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from . import charge, equipe, etat, reglages
+from . import charge, demandes, equipe, etat, reglages
 
 WEB = Path(__file__).resolve().parent / "web"
 DELAI_ETAT_S = 2.0
@@ -34,6 +34,8 @@ class Bureau(ThreadingHTTPServer):
         self.mesure = None  # dernière lecture brute de la sonde
         self._verrou = threading.Lock()
         self._cache_etat = (0.0, None)
+        self.dernier_releve = None  # dernier relevé normalisé valide (sert à vérifier les demandes)
+        self._verrou_demandes = threading.Lock()
         self._arret = threading.Event()
         self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
         self._fil.start()
@@ -62,11 +64,36 @@ class Bureau(ThreadingHTTPServer):
                 return e
             regl, err = self.reglages()
             maintenant = datetime.now().astimezone()
-            e = etat.erreur(err, maintenant) if err else etat.lire(regl, self.equipe, maintenant)
+            if err:
+                e, r = etat.erreur(err, maintenant), None
+            else:
+                e, r = etat.lire_avec_releve(regl, self.equipe, maintenant)
+            if r is not None:
+                self.dernier_releve = r
+            e["agir"] = demandes.commande_declaree(regl)
             self._cache_etat = (time.monotonic(), e)
             return e
         finally:
             self._verrou.release()
+
+    # -- demandes ---------------------------------------------------------
+    def demande(self, demande):
+        """(code HTTP, objet JSON). Les demandes passent une à une."""
+        self.etat()  # rafraîchit le dernier relevé valide si l'état est périmé
+        r = self.dernier_releve
+        if r is None:
+            return 409, {"erreur": "Relevé indisponible."}
+        demande = demandes.nettoyer(demande)
+        message = demandes.verifier(demande, r)
+        if message:
+            return 400, {"erreur": message}
+        with self._verrou_demandes:
+            regl, _ = self.reglages()
+            ok, message = demandes.envoyer(regl, demande)
+            self._cache_etat = (0.0, self._cache_etat[1])  # relire le relevé tout de suite
+        if not ok:
+            return 502, {"erreur": message}
+        return 200, {"ok": True}
 
     # -- charge -----------------------------------------------------------
     def _boucle_sonde(self):
@@ -170,20 +197,37 @@ class Handler(BaseHTTPRequestHandler):
         self._envoyer(200, cible.read_bytes(), type_)
 
     # -- POST -------------------------------------------------------------
+    def _vider_corps(self):
+        """Lit (et jette) un petit corps non consommé, pour que le refus arrive proprement."""
+        try:
+            self.rfile.read(min(max(int(self.headers.get("Content-Length", "0")), 0), 8192))
+        except (ValueError, OSError):
+            pass
+
     def do_POST(self):
         if not self._hote_ok():
+            self._vider_corps()
             return self._json(403, {"erreur": "Hôte refusé."})
-        if urlsplit(self.path).path != "/api/reglages":
+        chemin = urlsplit(self.path).path
+        if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         if (self.headers.get("X-Bureau") != "1"
                 or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+            self._vider_corps()
             return self._json(403, {"erreur": "En-têtes requis manquants."})
         try:
             longueur = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             longueur = -1
-        if not 0 < longueur <= 4096:
+        if not 0 < longueur <= (8192 if chemin == "/api/demande" else 4096):
             return self._json(400, {"erreur": "Corps de requête invalide."})
+        if chemin == "/api/demande":
+            try:
+                demande = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            code, objet = self.server.demande(demande)
+            return self._json(code, objet)
         try:
             corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
             if not isinstance(corps, dict) or "charge_max" not in corps:

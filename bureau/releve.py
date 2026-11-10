@@ -317,14 +317,21 @@ def _tuer_arbre(p):
         pass
 
 
-def _executer(cmd, cwd):
+def _executer(cmd, cwd, entree=None):
     """(code, sortie, erreurs) ; lève TimeoutExpired si la commande ou un de ses descendants
-    tient au-delà de DELAI_COMMANDE_S. Ne bloque jamais plus longtemps que ce délai (+ quelques s)."""
+    tient au-delà de DELAI_COMMANDE_S. Ne bloque jamais plus longtemps que ce délai (+ quelques s).
+    `entree` (octets) est écrit sur l'entrée standard de la commande ; sans lui, l'entrée est fermée."""
     delai = DELAI_COMMANDE_S
     options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                else {"start_new_session": True})
-    p = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, shell=False, **options)
+    p = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL if entree is None else subprocess.PIPE,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, **options)
+    if entree is not None:
+        try:  # la demande est petite (< 10 Ko) : elle tient dans le tube, sans bloquer
+            p.stdin.write(entree)
+            p.stdin.close()
+        except OSError:  # la commande n'a pas lu son entrée et s'est déjà fermée
+            pass
     lu = {}
 
     def lire(nom, flux):

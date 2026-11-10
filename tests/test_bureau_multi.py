@@ -40,7 +40,15 @@ class TestLireBureau(unittest.TestCase):
         f.write_text(json.dumps(contenu) if not isinstance(contenu, str) else contenu, encoding="utf-8")
         return f
 
+    def creer(self, *chemins):
+        for c in chemins:
+            f = Path(c) if Path(c).is_absolute() else self.tmp / c
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("{}", encoding="utf-8")
+
     def test_lire_bureau(self):
+        self.creer("Jeu Été/.factory/reglages.json", "outils/reglages.json", "autre/outils/reglages.json",
+                   "x/reglages.json", "y/r.json", self.tmp / "loin" / "mon-id" / "reglages.json")
         # Ids par défaut : dossier des réglages, ou son parent pour `.factory` ; ramenés à [a-z0-9-].
         f = self.ecrire({"projets": ["Jeu Été/.factory/reglages.json", "outils/reglages.json",
                                      {"chemin": "autre/outils/reglages.json"},
@@ -58,6 +66,23 @@ class TestLireBureau(unittest.TestCase):
         self.assertEqual(b["port"], 9000)
         self.assertEqual([p["id"] for p in b["projets"]], ["mon-id-2", "mon-id"])
         self.assertEqual(b["projets"][0]["chemin"], absolu)
+
+    def test_lire_bureau_reglages_absents_ou_partages(self):
+        # Une faute de frappe dans un chemin ne crée pas de projet fantôme (dossiers, prix lus pour rien).
+        for nom in ("a", "b"):
+            (self.tmp / nom).mkdir()
+            (self.tmp / nom / "reglages.json").write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(reglages.ReglagesInvalides, "introuvable"):
+            reglages.lire_bureau(self.ecrire({"projets": ["a/reglages.json", "absent/reglages.json"]}))
+        self.assertFalse((self.tmp / "absent").exists())
+        # Deux entrées sur le même dossier écriraient les mêmes historiques : refusé.
+        (self.tmp / "a" / "autre.json").write_text("{}", encoding="utf-8")
+        for projets in (["a/reglages.json", {"chemin": "a/reglages.json", "id": "bis"}],
+                        ["a/reglages.json", "a/../a/autre.json"]):
+            with self.assertRaisesRegex(reglages.ReglagesInvalides, "même dossier"):
+                reglages.lire_bureau(self.ecrire({"projets": projets}))
+        self.assertEqual(len(reglages.lire_bureau(self.ecrire({"projets": ["a/reglages.json", "b/reglages.json"]}))
+                             ["projets"]), 2)
 
     def test_lire_bureau_refus(self):
         cas = {
@@ -82,6 +107,7 @@ class TestLireBureau(unittest.TestCase):
         with self.assertRaises(reglages.ReglagesInvalides):
             reglages.lire_bureau(self.tmp / "absent.json")
         # 12 projets : la limite haute est acceptée.
+        self.creer(*[f"p{i}/r.json" for i in range(12)])
         self.assertEqual(len(reglages.lire_bureau(self.ecrire({"projets": [f"p{i}/r.json" for i in range(12)]}))
                              ["projets"]), 12)
 
@@ -236,6 +262,24 @@ class TestBureauMulti(AvecBureau):
         self.assertEqual(self.json("/api/etat?projet=b")["projet"], "Projet B")
         self.assertLess(time.monotonic() - debut, 2)
         lent.join(15)
+
+    def test_api_projets_ne_relit_pas_en_serie(self):
+        # Un relevé lent (1,5 s) : la liste des projets sert le dernier état connu et relit en arrière-plan.
+        regl = json.loads((self.dossier("a") / "reglages.json").read_text(encoding="utf-8"))
+        regl["releve"] = {"commande": [sys.executable, "-c",
+                                       "import time, sys; time.sleep(1.5); sys.stdout.write(open('releve.json').read())"],
+                          "dossier": "."}
+        (self.dossier("a") / "reglages.json").write_text(json.dumps(regl), encoding="utf-8")
+        self.srv.projets["a"]._cache_etat = (0.0, None)
+        self.assertEqual(self.json("/api/projets")["projets"][0]["nom"], "Projet A")  # première fois : on attend
+        for _ in range(2):
+            for p in self.srv.projets.values():  # états périmés
+                p._cache_etat = (0.0, p._cache_etat[1])
+            debut = time.monotonic()
+            p = self.json("/api/projets")["projets"]
+            self.assertLess(time.monotonic() - debut, 0.8)
+            self.assertEqual([x["nom"] for x in p], ["Projet A", "Projet B"])
+            time.sleep(1.8)  # laisse finir la relecture d'arrière-plan
 
     def test_une_seule_sonde(self):
         self.assertFalse(any(hasattr(p, "sonde") or hasattr(p, "lisseur") for p in self.srv.projets.values()))

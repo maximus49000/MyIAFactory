@@ -319,8 +319,13 @@ class Projet:
         return None
 
     def resume(self):
-        """La ligne du projet dans `/api/projets`."""
-        e = self.etat()
+        """La ligne du projet dans `/api/projets`. Sert le dernier état connu, même périmé, et le relit en
+        arrière-plan : un relevé lent ne retarde pas la liste (sauf la toute première fois)."""
+        t, e = self._cache_etat
+        if e is None:
+            e = self.etat()
+        elif time.monotonic() - t >= DELAI_ETAT_S and not self._verrou.locked():
+            threading.Thread(target=self.etat, daemon=True).start()
         return {"id": self.id, "nom": e.get("projet") or self.id,
                 "attente": e.get("directeur", {}).get("total", 0), "erreur": e.get("erreur") or None}
 
@@ -387,7 +392,22 @@ class Bureau(ThreadingHTTPServer):
         return projet.charge(self.mesure, self.lisseur.moyenne())
 
     def liste(self):
-        return {"multi": self.multi, "projets": [p.resume() for p in self.projets.values()]}
+        """Tous les projets, lus en parallèle : un projet lent ne fait pas attendre les autres."""
+        projets = list(self.projets.values())
+        lignes = [None] * len(projets)
+
+        def lire(i, p):
+            try:
+                lignes[i] = p.resume()
+            except Exception as e:  # jamais une liste incomplète
+                lignes[i] = {"id": p.id, "nom": p.id, "attente": 0, "erreur": f"{e}"[:200]}
+
+        fils = [threading.Thread(target=lire, args=(i, p), daemon=True) for i, p in enumerate(projets)]
+        for f in fils:
+            f.start()
+        for f in fils:
+            f.join()
+        return {"multi": self.multi, "projets": lignes}
 
     def server_close(self):
         self._arret.set()

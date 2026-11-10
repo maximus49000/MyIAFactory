@@ -72,7 +72,13 @@ def lire_bureau(chemin):
         if not isinstance(p, str) or not p.strip() or "\x00" in p:
             raise ReglagesInvalides(f"Fichier du bureau : projets[{i}] doit donner le chemin d'un fichier "
                                     "de réglages.")
-        entrees.append((id_, chemin.parent / p))
+        c = chemin.parent / p
+        if not c.is_file():  # une faute de frappe ne doit pas créer un projet fantôme
+            raise ReglagesInvalides(f"Fichier du bureau : projets[{i}] : fichier de réglages introuvable ({c}).")
+        entrees.append((id_, c))
+    dossiers = [c.resolve().parent for _, c in entrees]
+    if len(dossiers) != len(set(dossiers)):  # le bureau écrit ses historiques à côté des réglages
+        raise ReglagesInvalides("Fichier du bureau : deux projets ont leurs réglages dans le même dossier.")
     donnes = [i for i, _ in entrees if i is not None]
     if len(donnes) != len(set(donnes)):
         raise ReglagesInvalides("Fichier du bureau : deux projets portent le même id.")

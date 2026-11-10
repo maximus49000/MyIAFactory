@@ -11,6 +11,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ from bureau import releve as rel  # noqa: E402
 from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
+from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 
 MAX_IMAGES = 4
@@ -387,9 +389,8 @@ def cmd_decision(ctx, e):
 
 def genres_connus(ctx):
     try:
-        from orchestrateur import memoire
         return [g["id"] for g in memoire.genres(ctx.f["memoire"])]
-    except (ImportError, OSError, AttributeError):
+    except OSError:
         return []
 
 
@@ -641,7 +642,128 @@ def construire_releve(ctx):
     return r
 
 
-# --- Les commandes de la mémoire et du départ d'un agent s'enregistrent ici (voir plus bas).
+# --- La mémoire, les genres, les leçons, le registre des contrôles.
+
+def cmd_memoire(ctx, e):
+    role = texte(e, "role")
+    lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], role)
+    return {"genre_id": ctx.f["genre"], "skill": lecons["skill"], "genre": lecons["genre"]}
+
+
+def cmd_genre(ctx, e):
+    action = e.get("action")
+    if action == "lister":
+        return {"genre": ctx.f["genre"], "genres": memoire.genres(ctx.f["memoire"])}
+    if action != "fixer":
+        raise Refus("« action » doit valoir lister ou fixer.")
+    genre = texte(e, "genre")
+    if not fa.MOTIF_GENRE.match(genre):
+        raise Refus("Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus).")
+    cree = genre not in {g["id"] for g in memoire.genres(ctx.f["memoire"])}
+    if cree:   # un nouveau genre : son fichier de mémoire, avec sa description, avant de le noter au projet
+        ok, message = memoire.creer_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"])
+        if not ok:
+            raise Refus(message)
+    fa.ecrire_genre(ctx.f["chemin"], genre)
+    return {"genre": genre, "cree": cree}
+
+
+def _ligne_fiche(texte_lecon):
+    return " ".join(texte_lecon.split())
+
+
+def cmd_lecon(ctx, e):
+    action = e.get("action")
+    if action == "noter":
+        return _noter_lecon(ctx, e)
+    if action == "appliquer":
+        return _appliquer_lecon(ctx, e)
+    raise Refus("« action » doit valoir noter ou appliquer.")
+
+
+def _noter_lecon(ctx, e):
+    agent, contenu = texte(e, "agent"), texte(e, "texte")
+    if agent not in ctx.cles_agents():
+        raise Refus(f"Agent inconnu : {agent}")
+    etage = e.get("etage_propose", "projet")
+    if etage not in rel.ETAGES:
+        raise Refus(f"Étage inconnu « {etage} » ({', '.join(rel.ETAGES)}).")
+    general = texte(e, "texte_general", obligatoire=False)
+    if etage != "projet" and not (general and general.strip()):
+        raise Refus("Une leçon d'étage genre ou skill demande « texte_general » : le texte réécrit en termes "
+                    "généraux, sans nom de projet, de lieu, de fichier ni de personne.")
+    roles = e.get("roles", ["tous"])
+    if not isinstance(roles, list) or not roles or not all(isinstance(r, str) and r.strip() for r in roles):
+        raise Refus("« roles » doit être une liste de textes non vide (ou « tous »).")
+    tache = texte(e, "tache", obligatoire=False)
+    fiche_agent = fi.trouver(ctx.fiches(), agent)
+    with ctx.suivi.transaction() as s:
+        pris = {x["id"] for x in s["lecons"]} | {x["id"] for x in (fiche_agent["lecons"] if fiche_agent else [])}
+        while True:
+            i = f"{agent}:L{su.suivant(s, 'l')}"
+            if i not in pris:
+                break
+        s["lecons"].append({"id": i, "agent": agent, "tache": tache, "date": su.maintenant()[:10], "texte": contenu,
+                            "etat": "à valider", "etage_propose": etage, "texte_general": general, "roles": roles})
+        if fiche_agent:
+            fiche_agent["lecons"].append({"etat": "à valider", "id": i, "texte": _ligne_fiche(contenu)})
+            fi.ecrire_fiche(fiche_agent)
+    return {"id": i}
+
+
+def _appliquer_lecon(ctx, e):
+    i, verdict = texte(e, "id"), e.get("verdict")
+    if verdict not in ("valider", "invalider"):
+        raise Refus("« verdict » doit valoir valider ou invalider.")
+    s = ctx.suivi.lire()
+    lecon = next((x for x in s["lecons"] if x["id"] == i and x["etat"] == "à valider"), None)
+    if lecon is None:
+        raise Refus(f"Leçon inconnue ou déjà traitée : {i}")
+    etage = e.get("etage") or lecon["etage_propose"]
+    if etage not in rel.ETAGES:
+        raise Refus(f"Étage inconnu « {etage} » ({', '.join(rel.ETAGES)}).")
+    if verdict == "valider" and etage != "projet":
+        if not (lecon.get("texte_general") or "").strip():
+            raise Refus("Cette leçon n'a pas de texte général : elle ne peut aller qu'à l'étage projet.")
+        general = lecon["texte_general"].strip()
+        titre = general.split(".")[0].strip()[:60] or general[:60]
+        ok, message = memoire.ajouter(ctx.f["memoire"], etage, ctx.f["genre"],
+                                      {"titre": titre, "texte": general, "roles": lecon.get("roles") or ["tous"]},
+                                      ctx.f["mots_interdits"])
+        if not ok:   # la leçon reste « à valider » : rien n'a changé
+            raise Refus(message)
+    fiche_agent = fi.trouver(ctx.fiches(), lecon["agent"])
+    with ctx.suivi.transaction() as s2:
+        courante = next((x for x in s2["lecons"] if x["id"] == i and x["etat"] == "à valider"), None)
+        if courante is None:
+            raise Refus(f"La leçon {i} vient d'être traitée.")
+        if verdict == "valider":
+            courante["etat"], courante["etage_applique"] = "validée", etage
+        else:
+            s2["lecons"].remove(courante)
+        if fiche_agent:
+            if verdict == "valider":
+                for x in fiche_agent["lecons"]:
+                    if x["id"] == i:
+                        x["etat"] = "validée"
+            else:
+                fiche_agent["lecons"] = [x for x in fiche_agent["lecons"] if x["id"] != i]
+            fi.ecrire_fiche(fiche_agent)
+    return {"ok": True, "etage": etage if verdict == "valider" else None}
+
+
+def cmd_controle(ctx, e):
+    contenu, origine = texte(e, "texte"), texte(e, "origine")
+    with ctx.suivi.transaction():   # le même verrou que le suivi
+        chemin = ctx.f["controles"]
+        actuel = chemin.read_text(encoding="utf-8-sig") if chemin.is_file() else "# Registre des contrôles\n"
+        n = max([int(m) for m in re.findall(r"^- C(\d+) · ", actuel, re.M)] or [0]) + 1
+        ligne = f"- C{n} · {su.maintenant()[:10]} · {_ligne_fiche(origine)} : {_ligne_fiche(contenu)}"
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_text(actuel.rstrip("\n") + "\n" + ("\n" if n == 1 else "") + ligne + "\n", encoding="utf-8", newline="\n")
+    return {"numero": n}
+
+
 COMMANDES = {
     "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"),
@@ -649,7 +771,8 @@ COMMANDES = {
     "fonctionnalite": (cmd_fonctionnalite, "obligatoire"), "message": (cmd_message, "obligatoire"),
     "decision": (cmd_decision, "obligatoire"), "tache": (cmd_tache, "obligatoire"), "file": (cmd_file, "obligatoire"),
     "file-prendre": (cmd_file_prendre, "obligatoire"), "session": (cmd_session, "obligatoire"),
-    "catalogue": (cmd_catalogue, "obligatoire"),
+    "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
+    "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
 }
 
 

@@ -123,3 +123,33 @@ Entrée : `{"agent", "session"}`. Inscrit la session attitrée de l'agent dans l
 Entrée : `{"fonctionnalite"}` (ou, sans entrée, l'identifiant en argument : `catalogue <fonctionnalité>`, pour une
 commande de catalogue du bureau). Rend le catalogue générique (format de `bureau/catalogue.py`) : les éléments de la
 fonctionnalité avec leur état (`fait`, `en_cours`, `a_faire`), leurs captures, leurs passes et leurs retours.
+
+### `memoire`
+
+Entrée : `{"role"}`. Rend les leçons de la mémoire qui touchent ce rôle (ou « tous ») :
+`{"genre_id": "…"|null, "skill": [leçon], "genre": [leçon]}`. Une leçon : `{id, titre, roles, date, texte}`. Un projet
+sans genre ne reçoit que les leçons de la skill ; il ne reçoit **jamais** celles d'un autre genre.
+
+### `genre`
+
+Entrée : `{"action": "lister"}` → `{"genre": …, "genres": [{id, domaine, livrable, outils}]}`, ou
+`{"action": "fixer", "genre", "description"?}` : écrit le genre dans le fichier de factory. Un genre inconnu demande
+une `description` : son fichier de mémoire est alors créé, commité et poussé (rien n'est changé si cela échoue).
+Rend `{"genre": "…", "cree": true|false}`.
+
+### `lecon`
+
+Entrée : `{"action": "noter", "agent", "texte", "tache"?, "etage_propose", "texte_general"?, "roles"}` : note la
+leçon sur la fiche de l'agent, « à valider » ; `etage_propose` vaut `projet`, `genre` ou `skill` ; pour `genre` et
+`skill`, `texte_general` (le texte réécrit en termes généraux, sans nom de projet, de lieu, de fichier ni de
+personne) est obligatoire. Rend `{"id": "<agent>:L1"}`.
+
+Entrée : `{"action": "appliquer", "id", "verdict": "valider"|"invalider", "etage"?}` : le verdict de l'utilisateur.
+`projet` : la leçon de la fiche passe « validée ». `genre` ou `skill` : le texte général est ajouté à la mémoire (mise à
+jour du dépôt, mots interdits, commit, push) ; la leçon ne passe « validée » que si l'ajout réussit, sinon code 1 et
+elle reste « à valider ». `invalider` : la leçon disparaît. Rend `{"ok": true, "etage": …}`.
+
+### `controle`
+
+Entrée : `{"texte", "origine"}`. Ajoute une ligne au registre des contrôles du projet (`C<n> · date · origine :
+texte`). Rend `{"numero": n}`.

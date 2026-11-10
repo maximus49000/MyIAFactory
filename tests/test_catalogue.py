@@ -347,6 +347,21 @@ class TestCatalogueServi(AvecServeur):
         r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=pieces/f1/m.png")
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/png"))
 
+    def test_couts_d_une_fonctionnalite(self):
+        r = json.loads(json.dumps(RELEVE))
+        r["taches"][0]["fonctionnalite"] = "f1"
+        r["usage"] = [{"id": "u1", "tache": r["taches"][0]["id"], "agent": None, "modele": "modele-sans-prix",
+                       "t": "2026-11-10T10:00:00+01:00", "entree": 10, "sortie": 1}]
+        self.agir(releve=r)
+        self.p._cache_etat = (0.0, None)
+        c = self.json("/api/couts?fonctionnalite=f1")
+        self.assertTrue(c["disponible"])
+        self.assertEqual([t["id"] for t in c["taches"]], [r["taches"][0]["id"]])
+        self.assertEqual(c["sans_prix"], 1)   # un modèle sans prix n'est jamais compté à zéro sans le dire
+        for requete in ("", "?fonctionnalite=f1&fonctionnalite=f2"):
+            resp, _ = self.req("GET", "/api/couts" + requete)
+            self.assertEqual(resp.status, 404)
+
     def test_document_refuse(self):
         self.document("pieces/f1/a.md", liste=["pieces/f1/a.md"])
         (self.dossier / "pieces" / "f1" / "b.md").write_bytes(b"secret")

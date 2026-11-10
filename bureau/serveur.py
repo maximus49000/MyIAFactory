@@ -30,7 +30,7 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
-ROUTES_PROJET = ("/api/document", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
+ROUTES_PROJET = ("/api/couts", "/api/document", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
                  "/api/catalogue", "/api/livrable")
 # Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
 # en bac à sable (aucun script, aucune requête au nom du bureau).
@@ -172,6 +172,19 @@ class Projet:
             message = None if self.etat_prix["ok"] else self.etat_prix["message"]
         return 200, {**f, "disponible": True, "periode": periode, "maj": self.table_prix.derniere_maj(),
                      "message": message}
+
+    def couts(self, fonctionnalite):
+        """(code HTTP, objet JSON) : le coût de chaque tâche d'une fonctionnalité, depuis toujours."""
+        e = self.etat()
+        r = self.dernier_releve
+        if e.get("erreur") or r is None or r.get("version", 1) < 4:
+            return 200, {"disponible": False}
+        regl, _ = self.reglages()
+        self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
+
+        def prix_de(modele, date_iso):
+            return prix.prix_effectif(self.table_prix, regl, modele, date_iso)
+        return 200, {**cout.couts_fonctionnalite(self.usage.lire(), prix_de, r, fonctionnalite), "disponible": True}
 
     def kpi(self, periode):
         """(code HTTP, objet JSON) : les KPI du projet et ceux que le bureau calcule, par service."""
@@ -510,6 +523,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":
             return self._json(200, projet.conseil())
+        if chemin == "/api/couts":
+            fonc = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite", [])
+            if len(fonc) != 1:
+                return self._json(404, {"erreur": "Aucune fonctionnalité demandée."})
+            return self._json(*projet.couts(fonc[0]))
         if chemin == "/api/document":
             q = parse_qs(morceaux.query, keep_blank_values=True)
             fonc, doc = q.get("fonctionnalite", []), q.get("chemin", [])

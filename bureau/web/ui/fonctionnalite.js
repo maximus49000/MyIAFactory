@@ -3,7 +3,7 @@
 // tout texte venu du relevé passe par textContent.
 
 import {el} from "./dom.js";
-import {dateFr, tronquer} from "./texte.js";
+import {dateFr, tronquer, euros} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {urlProjet} from "./projets.js";
 
@@ -181,6 +181,36 @@ function partieDocuments(ctx, f) {
     }
     bloc.append(ul);
   }
+  return bloc;
+}
+
+// La partie « Coût » : le coût de chaque tâche de la fonctionnalité (depuis toujours), lu à l'ouverture du panneau.
+function partieCouts(f) {
+  const bloc = el("details", "couts");
+  const titre = el("summary", "", "Coût : …");
+  bloc.append(titre);
+  const corps = el("div", "");
+  bloc.append(corps);
+  (async () => {
+    let c;
+    try {
+      const r = await fetch(urlProjet(`/api/couts?fonctionnalite=${encodeURIComponent(f.id)}`), {cache: "no-store"});
+      c = await r.json();
+    } catch { titre.textContent = "Coût : indisponible"; return; }
+    if (!c?.disponible) { bloc.remove(); return; }
+    const incomplet = c.sans_prix ? " + prix inconnu" : "";
+    titre.textContent = `Coût : ${euros(c.total)}${incomplet}`;
+    if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
+    const ul = el("ul", "liste-couts");
+    for (const t of c.taches) {
+      const li = el("li", "");
+      const modeles = Object.entries(t.modeles).map(([m, v]) => `${m} ${euros(v)}`).join(" · ");
+      li.append(el("span", "cout-tache", t.titre), el("strong", "cout-montant", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
+      if (modeles) li.append(el("div", "note", modeles));
+      ul.append(li);
+    }
+    corps.append(ul, el("p", "note", "Estimation d'après les tokens notés par l'orchestrateur (au plus bas quand seul un total est connu)."));
+  })();
   return bloc;
 }
 
@@ -482,13 +512,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (vue.discussionOuverte) {
     contenu.append(blocDiscussion, blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(partieDocuments(ctx, f));
+    contenu.append(partieCouts(f), partieDocuments(ctx, f));
   } else {
     const repliee = el("details", "discussion-repliee");
     repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
     contenu.append(blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(repliee, partieDocuments(ctx, f));
+    contenu.append(repliee, partieCouts(f), partieDocuments(ctx, f));
   }
 }
 

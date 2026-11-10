@@ -212,3 +212,25 @@ class TestEuros(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCoutsFonctionnalite(unittest.TestCase):
+    def test_par_tache_de_la_fonctionnalite_depuis_toujours(self):
+        r = {"version": 4, "taches": [
+            {"id": "t1", "titre": "Dev : e1", "fonctionnalite": "f1"},
+            {"id": "t2", "titre": "Relecture : e1", "fonctionnalite": "f1"},
+            {"id": "t3", "titre": "Autre", "fonctionnalite": "f2"}]}
+        usages = [usage("u1", tache="t1"),                                            # 3 € (sonnet, 1 M en entrée)
+                  usage("u2", tache="t1", t="2025-01-01T10:00:00+00:00"),            # très ancien : compte quand même
+                  usage("u3", tache="t2", modele="opus", entree=0, sortie=100_000),  # 7,5 €
+                  usage("u4", tache="t2", modele="inconnu"),                          # sans prix : signalé
+                  usage("u5", tache="t3"),                                            # autre fonctionnalité
+                  usage("u6", tache=None)]
+        c = cout.couts_fonctionnalite(usages, prix_de, r, "f1")
+        self.assertEqual(c["total"], 13.5)
+        self.assertEqual([t["id"] for t in c["taches"]], ["t1", "t2"])
+        t1, t2 = c["taches"]
+        self.assertEqual((t1["titre"], t1["total"], t1["sans_prix"]), ("Dev : e1", 6.0, 0))
+        self.assertEqual((t2["total"], t2["sans_prix"], t2["modeles"]), (7.5, 1, {"opus": 7.5}))
+        self.assertEqual(c["sans_prix"], 1)
+        self.assertEqual(cout.couts_fonctionnalite([], prix_de, r, "f1"), {"total": 0, "taches": [], "sans_prix": 0})

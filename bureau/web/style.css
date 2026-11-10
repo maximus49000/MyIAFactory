@@ -639,3 +639,12 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .document-lien { flex: none; width: 64px; text-align: center; padding: 14px 0; border-radius: 6px; background: #efe8da; font-weight: 700; }
 .document-texte { min-width: 0; overflow-wrap: anywhere; }
 .document-chemin { font-size: 11px; color: #8a8698; }
+
+/* Le coût d'une fonctionnalité, par tâche. */
+.couts { margin-top: 12px; }
+.couts > summary { cursor: pointer; font-weight: 800; }
+.liste-couts { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.liste-couts li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; }
+.liste-couts .note { grid-column: 1 / -1; }
+.cout-tache { min-width: 0; overflow-wrap: anywhere; }
+.cout-montant { font-variant-numeric: tabular-nums; }

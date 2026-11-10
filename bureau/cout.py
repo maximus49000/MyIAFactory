@@ -220,3 +220,29 @@ def _modele_trop_fort(sid, lignes, taches):
                     "service": sid, "tache": tache,
                     "texte": f"Tâche « {_nom_tache(taches, tache)} » : {constats}."})
     return out
+
+
+def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
+    """Le coût de chaque tâche d'une fonctionnalité, depuis toujours (pas de période : c'est le prix de la
+    fonctionnalité). Un usage sans prix connu n'est compté dans aucun euro mais sa tâche le signale (`sans_prix`)."""
+    taches = {t["id"]: t for t in r.get("taches") or [] if t.get("fonctionnalite") == fonctionnalite}
+    lignes = {}
+    for u in usages:
+        if u.get("tache") not in taches:
+            continue
+        ligne = lignes.setdefault(u["tache"], {"id": u["tache"], "titre": taches[u["tache"]].get("titre") or u["tache"],
+                                              "total": 0.0, "sans_prix": 0, "modeles": {}})
+        p, _, _ = prix_de(u["modele"], u.get("t_prix") or u.get("t"))
+        if not p:
+            ligne["sans_prix"] += 1
+            continue
+        c = _cout(u, p)
+        ligne["total"] += c
+        ligne["modeles"][u["modele"]] = ligne["modeles"].get(u["modele"], 0.0) + c
+    ordre = list(taches)
+    sortie = sorted(lignes.values(), key=lambda x: ordre.index(x["id"]))
+    for x in sortie:
+        x["total"] = round(x["total"], 6)
+        x["modeles"] = {k: round(v, 6) for k, v in x["modeles"].items()}
+    return {"total": round(sum(x["total"] for x in sortie), 6), "taches": sortie,
+            "sans_prix": sum(x["sans_prix"] for x in sortie)}

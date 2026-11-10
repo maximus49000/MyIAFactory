@@ -45,7 +45,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     if (type === "attente") return JSON.stringify([e.file, e.colonnes, e.agir]);
     if (type === "fonctionnalite") {
       return JSON.stringify([(e.fonctionnalites || []).find((f) => f.id === id), e.agir, e.images_ok,
-        e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte]);
+        e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte,
+        // Une tâche de la fonctionnalité qui bouge (un agent a fini) : le panneau se redessine et relit le coût.
+        (e.taches || []).filter((t) => t.fonctionnalite === id).map((t) => [t.id, t.maj, t.colonne, t.active])]);
     }
     if (type === "fonctionnalites") return JSON.stringify([e.fonctionnalites, e.agir]);
     if (type === "catalogue") {

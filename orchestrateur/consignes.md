@@ -99,9 +99,12 @@ du flux du projet. L'étape d'une fonctionnalité se change avec `lancer fonctio
 le bandeau du bureau montre.
 
 1. **`cadrage`.** L'agent de cadrage (service Métier) pose ses questions dans la discussion jusqu'à ce que le besoin
-   et la solution soient clairs. **Le cadrage coûte une exécution par réponse** : poser une question ou reformuler
-   se fait sur le modèle le plus léger de sa fiche (Haiku conseillé) ; donne-lui la discussion et rien d'autre, et
-   demande des réponses courtes, avec des questions à choix quand c'est possible (moins d'allers-retours). Crée une fois la tâche de cadrage : `lancer tache` avec `titre` « Cadrage :
+   et la solution soient clairs. **Le cadrage coûte une exécution par réponse ; la compréhension se joue à la
+   première.** La **première réponse** à une nouvelle fonctionnalité (la première analyse du besoin : ce qui est
+   compris, ce qui est flou, les vraies questions) se fait un cran au-dessus d'une fiche Haiku (montée notée :
+   « première analyse du besoin ») ; les **questions et reformulations suivantes** se font sur le modèle de la fiche
+   (Haiku conseillé). Donne à l'agent la discussion et rien d'autre, et demande des réponses courtes, avec des
+   questions à choix quand c'est possible (moins d'allers-retours). Crée une fois la tâche de cadrage : `lancer tache` avec `titre` « Cadrage :
    <nom> », `fonctionnalite`, `role` (celui de l'agent), `colonne: cadrage`, `agent` = l'agent de cadrage,
    `active: true` ; elle reste active jusqu'à la fin du cahier des charges. Pour chaque réponse : `lancer depart`
    (`agent`, `tache` = cette tâche), un sous-agent neuf avec ce message et la discussion, puis sa réponse dans la

@@ -54,6 +54,13 @@ class TestConsignes(unittest.TestCase):
         self.assertIn("`questions`", texte)
         self.assertIn("Les choix en boutons", texte)
 
+    def test_cadrage_mixte(self):
+        # La compréhension se joue à la première réponse et au cahier : sur un cran au-dessus d'une fiche Haiku ;
+        # les questions intermédiaires restent sur le modèle léger.
+        texte = lire(ORCH / "consignes.md")
+        self.assertIn("première analyse du besoin", texte)
+        self.assertIn("écrire le cahier des charges", texte)
+
     def test_modele_factory_lisible(self):
         f = factory.lire(ORCH / "modeles" / "factory.json")
         self.assertGreaterEqual(len(f["flux"]), 1)

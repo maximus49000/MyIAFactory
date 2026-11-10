@@ -1,0 +1,28 @@
+{
+  "agents": {
+    "chef": {
+      "prenom": "Chef",
+      "couleur": "#2f6fd0"
+    },
+    "metier:1": {
+      "prenom": "Hugo",
+      "couleur": "#d0572f"
+    },
+    "dev:1": {
+      "prenom": "Léa",
+      "couleur": "#2fa05a"
+    },
+    "dev:2": {
+      "prenom": "Lucas",
+      "couleur": "#a02fd0"
+    },
+    "qa:1": {
+      "prenom": "Emma",
+      "couleur": "#d0a52f"
+    },
+    "facturation:1": {
+      "prenom": "Louis",
+      "couleur": "#2fb5b5"
+    }
+  }
+}

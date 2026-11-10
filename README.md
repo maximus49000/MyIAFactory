@@ -26,7 +26,7 @@ Projet 1, le bureau vivant :
 - [x] 3. Statuts : fraîcheur, pause, départ
 - [x] 4. L'équipe : prénoms et couleurs
 - [x] 5. L'état servi à la page
-- [ ] 6. La charge de l'ordinateur et le serveur
+- [x] 6. La charge de l'ordinateur et le serveur
 - [ ] 7. La logique de la page : changements, plan, régie
 - [ ] 8. La scène 3D en volumes simples
 - [ ] 9. L'interface : voyant, barre de charge, cartes, panneaux
@@ -34,7 +34,7 @@ Projet 1, le bureau vivant :
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : étapes 1 à 5 faites.
+État : phase A faite (étapes 1 à 6, le serveur). Reste la page : phases B, C, D.
 
 ## Ce qu'il reste à faire ensuite
 

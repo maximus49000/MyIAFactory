@@ -4,10 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from bureau import serveur  # noqa: E402
+
 if __name__ == "__main__":
-    try:
-        from bureau import serveur
-    except ImportError:
-        print("Pas encore disponible.")
-        sys.exit(2)
     sys.exit(serveur.main(sys.argv[1:]))

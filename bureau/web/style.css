@@ -436,3 +436,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .vignette-retirer { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 10px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; line-height: 1; }
 .gestes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .etapes-cahier { margin: 4px 0 8px; padding-left: 22px; }
+
+/* --- Directeur : décisions de la version 4. */
+.lecon-etage, .genre-choix { margin: 4px 0; font: inherit; max-width: 100%; }
+.lecon-general { margin-top: 4px; padding: 4px 6px; border-left: 3px solid #3b6aa8; background: #eef3fa; overflow-wrap: anywhere; }
+.decision-texte { overflow-wrap: anywhere; }
+.decision-genre input, .decision-genre textarea, .decision-session input { box-sizing: border-box; display: block; width: 100%; margin: 4px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+.decision-session .bouton, .decision-genre .bouton { margin-top: 4px; }

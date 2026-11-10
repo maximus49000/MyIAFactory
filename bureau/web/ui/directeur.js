@@ -4,6 +4,10 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
+import {demandeLecon} from "./actions.js";
+import {contenuDecisionsV4} from "./decisions.js";
+
+const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
 const MAX_TITRE = 90;
 
@@ -30,6 +34,23 @@ function carteLecon(ctx, l) {
   if (titre) { meta.append(document.createTextNode(" · "), lienTache(ctx, l.tache, titre)); }
   if (l.date) meta.append(document.createTextNode(" · " + dateFr(l.date)));
   c.append(meta);
+  let etage = null;
+  if ((e.version ?? 1) >= 4) {
+    // Le texte général est celui qui est validé mot pour mot quand l'étage est Genre ou Skill.
+    if (l.texte_general) c.append(el("div", "lecon-general", "Texte général (validé tel quel) : " + l.texte_general));
+    const propose = l.etage_propose || "projet";
+    c.append(el("div", "lecon-meta", "Étage proposé : " + (ETAGES.find(([id]) => id === propose)?.[1] || "Projet")));
+    etage = el("select", "lecon-etage");
+    etage.setAttribute("aria-label", "Étage de la leçon");
+    for (const [id, libelle] of ETAGES) {
+      const o = new Option(libelle, id);
+      o.disabled = id !== "projet" && !l.texte_general;   // sans texte général, la leçon reste celle du projet
+      etage.append(o);
+    }
+    etage.value = propose;
+    if (etage.selectedOptions[0]?.disabled) etage.value = "projet";
+    c.append(etage);
+  }
   if (l.verdict_demande) {
     c.append(el("div", "lecon-verdict", `Verdict envoyé : ${l.verdict_demande}`));
   } else if (e.agir) {
@@ -40,7 +61,7 @@ function carteLecon(ctx, l) {
       bouton.type = "button";
       bouton.addEventListener("click", async () => {
         valider.disabled = invalider.disabled = true;
-        const r = await ctx.barre.demander({type: "lecon", id: l.id, verdict});
+        const r = await ctx.barre.demander(demandeLecon(l, verdict, etage ? etage.value : undefined));
         if (!r.ok) valider.disabled = invalider.disabled = false;  // refus : on peut réessayer
       });
       rangee.append(bouton);
@@ -72,6 +93,7 @@ export function contenuDirecteur(ctx, contenu) {
     contenu.append(el("p", "decisions", n === 1 ? "1 décision attend le Directeur (comptée par le projet)."
       : `${n} décisions attendent le Directeur (comptées par le projet).`));
   }
+  if ((e.version ?? 1) >= 4) contenuDecisionsV4(ctx, contenu);
   contenu.append(partie("Leçons à valider", "Aucune leçon à valider", (e.lecons || []).map((l) => carteLecon(ctx, l))));
 
   const retours = [];

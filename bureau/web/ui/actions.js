@@ -108,3 +108,47 @@ export function resumeEnvoi(resultats) {
   if (!non.length) return ok.length ? `Demandes envoyées : ${ok.join(", ")}.` : "";
   return (ok.length ? `Envoyées : ${ok.join(", ")}. ` : "") + `Non envoyées : ${non.join(", ")}.`;
 }
+
+// --- Le Directeur enrichi (relevé version 4) : décisions des fonctionnalités et du projet.
+
+// Les décisions qui attendent le Directeur, rangées par genre ; chaque décision d'une fonctionnalité garde
+// l'identifiant et le nom de sa fonctionnalité.
+export function decisionsDirecteur(etat) {
+  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: []};
+  const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir"};
+  for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
+    for (const d of f?.decisions || []) {
+      if (rang[d?.genre]) sortie[rang[d.genre]].push({...d, fonctionnalite: f.id, nom: f.nom});
+    }
+  }
+  for (const d of Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : []) {
+    if (d?.genre === "confirmer_genre") sortie.genres.push({...d});
+    else if (d?.genre === "session_cloud") sortie.sessions.push({...d});
+  }
+  return sortie;
+}
+
+// Le verdict d'une leçon ; l'étage n'est joint que s'il diffère de l'étage proposé (« projet » par défaut).
+export function demandeLecon(lecon, verdict, etage) {
+  const d = {type: "lecon", id: lecon.id, verdict};
+  if (etage && etage !== (lecon.etage_propose || "projet")) d.etage = etage;
+  return d;
+}
+
+// Le genre du projet : un genre connu, ou un nouveau (avec sa description).
+export function demandeGenre(decision, genre, description) {
+  const d = {type: "genre", decision, genre};
+  if (plein(description)) d.description = description;
+  return d;
+}
+
+export function demandeSession(decision, session) {
+  return {type: "session_cloud", decision, session};
+}
+
+// « Sonnet, monté depuis Haiku : <raison> » ; null si la tâche n'a pas été montée de modèle.
+export function libelleMontee(tache) {
+  const m = tache?.montee;
+  if (!m || typeof m.a !== "string" || typeof m.de !== "string") return null;
+  return `${m.a}, monté depuis ${m.de}` + (plein(m.raison) ? ` : ${m.raison}` : "");
+}

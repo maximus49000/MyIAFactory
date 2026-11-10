@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, libelleMontee} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -96,4 +96,55 @@ test("challengesDuService : par cible (KPI, source, connaissance d'un agent du s
   assert.deepEqual(challengesDuService(etat, "dev:web").map((x) => x.challenge.id), ["c5"]);
   assert.deepEqual(challengesDuService(etat, "qa").map((x) => x.challenge.id), ["c4"]);
   assert.deepEqual(challengesDuService({}, "dev"), []);
+});
+
+// --- Le Directeur enrichi (version 4).
+
+test("decisionsDirecteur : chaque entrée garde sa fonctionnalité", () => {
+  const etat = {
+    fonctionnalites: [
+      {id: "f1", nom: "Accueil", decisions: [{id: "d1", genre: "valider_cahier", texte: "Cahier"},
+                                              {id: "d2", genre: "valider_methode", texte: "Méthode"}]},
+      {id: "f2", nom: "Recherche", decisions: [{id: "d3", genre: "methode_a_revoir", texte: "Revoir ?"},
+                                               {id: "d4", genre: "valider_cahier", texte: "Cahier 2"}]},
+    ],
+    decisions_projet: [{id: "p1", genre: "confirmer_genre", texte: "Genre", propose: "vitrine", genres_connus: ["vitrine"]},
+                       {id: "p2", genre: "session_cloud", texte: "Session", agent: "dev:1"}],
+  };
+  const d = decisionsDirecteur(etat);
+  assert.deepEqual(d.cahiers.map((x) => [x.id, x.fonctionnalite, x.nom]), [["d1", "f1", "Accueil"], ["d4", "f2", "Recherche"]]);
+  assert.deepEqual(d.methodes.map((x) => [x.id, x.fonctionnalite]), [["d2", "f1"]]);
+  assert.deepEqual(d.revoir.map((x) => [x.id, x.fonctionnalite]), [["d3", "f2"]]);
+  assert.deepEqual(d.genres.map((x) => x.id), ["p1"]);
+  assert.equal(d.genres[0].propose, "vitrine");
+  assert.deepEqual(d.sessions.map((x) => [x.id, x.agent]), [["p2", "dev:1"]]);
+  assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: []});
+});
+
+test("demandeLecon : étage changé, inchangé", () => {
+  const l = {id: "L1", etage_propose: "genre"};
+  assert.deepEqual(demandeLecon(l, "valider", "genre"), {type: "lecon", id: "L1", verdict: "valider"});
+  assert.deepEqual(demandeLecon(l, "valider", "skill"), {type: "lecon", id: "L1", verdict: "valider", etage: "skill"});
+  assert.deepEqual(demandeLecon(l, "invalider"), {type: "lecon", id: "L1", verdict: "invalider"});
+  assert.deepEqual(demandeLecon({id: "L2"}, "valider", "projet"), {type: "lecon", id: "L2", verdict: "valider"});
+  assert.deepEqual(demandeLecon({id: "L2"}, "valider", "genre"), {type: "lecon", id: "L2", verdict: "valider", etage: "genre"});
+});
+
+test("demandeGenre : existant, et nouveau avec description", () => {
+  assert.deepEqual(demandeGenre("p1", "vitrine"), {type: "genre", decision: "p1", genre: "vitrine"});
+  assert.deepEqual(demandeGenre("p1", "jeu-web", "  "), {type: "genre", decision: "p1", genre: "jeu-web"});
+  assert.deepEqual(demandeGenre("p1", "jeu-web", "Un jeu dans le navigateur"),
+    {type: "genre", decision: "p1", genre: "jeu-web", description: "Un jeu dans le navigateur"});
+});
+
+test("demandeSession", () => {
+  assert.deepEqual(demandeSession("p2", "Session dev 1"), {type: "session_cloud", decision: "p2", session: "Session dev 1"});
+});
+
+test("libelleMontee", () => {
+  assert.equal(libelleMontee({montee: {de: "Haiku", a: "Sonnet", raison: "trois échecs"}}), "Sonnet, monté depuis Haiku : trois échecs");
+  assert.equal(libelleMontee({montee: null}), null);
+  assert.equal(libelleMontee({}), null);
+  assert.equal(libelleMontee(null), null);
+  assert.equal(libelleMontee({montee: {de: "Haiku", a: "Sonnet"}}), "Sonnet, monté depuis Haiku");
 });

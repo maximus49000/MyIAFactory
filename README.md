@@ -57,7 +57,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 6. Le dossier, l'onglet Tâches et l'onglet Facturation
 - [x] 7. Le relevé et l'état pour les connaissances
 - [x] 8. Les trois demandes
-- [ ] 9. L'onglet Connaissances et le volet « Challenger »
+- [x] 9. L'onglet Connaissances et le volet « Challenger »
 - [ ] 10. Les KPI, les alertes, « problème revenu »
 - [ ] 11. L'onglet KPI
 - [ ] 12. La démo, la documentation, la relecture

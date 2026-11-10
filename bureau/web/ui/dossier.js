@@ -4,15 +4,19 @@
 import {el} from "./dom.js";
 import {tronquer, euros, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
 import {contenuFacturation, chargerFacturation, serviceFacture} from "./facturation.js";
+import {contenuConnaissances} from "./connaissances.js";
+import {contenuChallenge} from "./challenge.js";
 
 const MAX_TITRE = 90;
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
-const choix = {onglet: "taches", periode: PERIODE_DEFAUT};
+// `challenge` : le volet « Challenger » ouvert ({service, cible, constat, taches}) ou null.
+const choix = {onglet: "taches", periode: PERIODE_DEFAUT, challenge: null};
 
-// Les onglets disponibles, dans l'ordre. Les phases suivantes y ajoutent Connaissances et KPI.
+// Les onglets disponibles, dans l'ordre. La phase D y ajoute KPI.
 export function ongletsDisponibles(etat) {
   const d = etat?.dossier || {};
   const l = [{id: "taches", libelle: "Tâches"}];
+  if (d.connaissances) l.push({id: "connaissances", libelle: "Connaissances"});
   if (d.facturation) l.push({id: "facturation", libelle: "Facturation"});
   return l;
 }
@@ -55,6 +59,11 @@ export function contenuDossier(ctx, conteneur, service, onglet) {
   const e = ctx.etat;
   const s = (e.services || []).find((x) => x.id === service);
   if (onglet) choix.onglet = onglet;
+  if (onglet || choix.challenge?.service !== service) choix.challenge = null;
+  const ctxDossier = {...ctx, challenger: (cible, constat, taches) => {
+    choix.challenge = {service, cible, constat, taches};
+    dessiner();
+  }};
   const onglets = ongletsDisponibles(e);
   if (!onglets.some((o) => o.id === choix.onglet)) choix.onglet = "taches";
 
@@ -84,12 +93,15 @@ export function contenuDossier(ctx, conteneur, service, onglet) {
       b.type = "button";
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", String(o.id === choix.onglet));
-      b.addEventListener("click", () => { choix.onglet = o.id; dessiner(); });
+      b.addEventListener("click", () => { choix.onglet = o.id; choix.challenge = null; dessiner(); });
       barre.append(b);
     }
     zone.replaceChildren();
-    entete.hidden = !e.dossier?.facturation;
-    if (choix.onglet === "facturation") contenuFacturation(ctx, zone, service, choix.periode);
+    entete.hidden = !e.dossier?.facturation && !e.dossier?.connaissances;
+    if (choix.challenge) {
+      contenuChallenge(ctxDossier, zone, {...choix.challenge, retour: () => { choix.challenge = null; dessiner(); }});
+    } else if (choix.onglet === "facturation") contenuFacturation(ctxDossier, zone, service, choix.periode);
+    else if (choix.onglet === "connaissances") contenuConnaissances(ctxDossier, zone, service, choix.periode);
     else contenuTaches(ctx, zone, service);
   }
   select.addEventListener("change", () => { choix.periode = select.value; dessiner(); });

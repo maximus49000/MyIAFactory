@@ -83,6 +83,7 @@ test("dateFr garde un texte illisible tel quel", () => {
   assert.equal(dateFr("hier soir"), "hier soir");
   assert.equal(dateFr(null), "");
   assert.match(dateFr("2026-11-10T09:30:00"), /09:30/);
+  assert.equal(dateFr("2026-10-01"), "1 oct.");  // une date sans heure reste une date, sans décalage horaire
 });
 
 test("imagesVisibles : pas de vignettes sans racine d'images déclarée", () => {

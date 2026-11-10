@@ -2,6 +2,7 @@
 
 import {el} from "./dom.js";
 import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
+import {challengeDe} from "./actions.js";
 
 const MAX_TITRE = 90;
 
@@ -47,8 +48,9 @@ function rangee(nom, valeur, classe = "") {
   return l;
 }
 
-// Dessine la facturation du service. `donnees` vient de chargerFacturation.
-export function dessinerFacturation(conteneur, donnees, service, periode, etat) {
+// Dessine la facturation du service. `donnees` vient de chargerFacturation ;
+// `challenger(cible, constat, taches)` ouvre le volet « Challenger » (bouton grisé sans lui).
+export function dessinerFacturation(conteneur, donnees, service, periode, etat, challenger) {
   conteneur.replaceChildren();
   if (!donnees || donnees.disponible === false) {
     conteneur.append(el("p", "note", "La facturation n'est pas disponible : le relevé ne donne pas d'usage."));
@@ -101,10 +103,11 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat) 
     for (const x of sources) {
       const li = el("li", "source");
       li.append(el("span", "source-texte", x.texte));
-      const b = el("button", "bouton secondaire", "Challenger");
+      const cible = {type: "source", id: x.id};
+      const b = el("button", "bouton secondaire", challengeDe(etat, cible) ? "Voir le challenge" : "Challenger");
       b.type = "button";
-      b.disabled = true;     // le geste arrive avec la tâche 9
-      b.title = "Bientôt disponible";
+      if (challenger) b.addEventListener("click", () => challenger(cible, x.texte, x.tache ? [x.tache] : []));
+      else b.disabled = true;
       li.append(b);
       ls.append(li);
     }
@@ -119,7 +122,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat) 
 export function contenuFacturation(ctx, conteneur, service, periode) {
   conteneur.append(el("p", "note", "Chargement…"));
   chargerFacturation(periode).then(
-    (d) => { if (conteneur.isConnected) dessinerFacturation(conteneur, d, service, periode, ctx.etat); },
+    (d) => { if (conteneur.isConnected) dessinerFacturation(conteneur, d, service, periode, ctx.etat, ctx.challenger); },
     (err) => { if (conteneur.isConnected) conteneur.replaceChildren(el("p", "avertissement", err.message)); },
   );
 }

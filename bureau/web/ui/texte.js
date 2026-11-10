@@ -102,6 +102,8 @@ export function imagesUrl(tache) {
 // Une date du relevé en clair (heure locale) ; un texte illisible est rendu tel quel.
 export function dateFr(date) {
   if (typeof date !== "string" || !date) return "";
+  const jour = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);  // une date sans heure : le jour dit, sans fuseau
+  if (jour) return new Date(+jour[1], +jour[2] - 1, +jour[3]).toLocaleDateString("fr-FR", {day: "numeric", month: "short"});
   const t = new Date(date);
   if (Number.isNaN(t.getTime())) return date;
   return t.toLocaleString("fr-FR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});

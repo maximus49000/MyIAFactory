@@ -45,3 +45,39 @@ export async function envoyer(demande, fetchFn = fetch) {
     return {ok: false, message: "Demande refusée : serveur injoignable"};
   }
 }
+
+// --- Challenger : les demandes, construites ici (pures) et envoyées par le volet.
+
+const plein = (t) => typeof t === "string" && t.trim() !== "";
+
+export function demandeChallenge(cible, texte, solution) {
+  const d = {type: "challenge", cible: {type: cible.type, id: cible.id}};
+  if (plein(texte)) d.texte = texte;
+  if (plein(solution)) d.solution = solution;
+  return d;
+}
+
+export function demandeSolution(challenge, texte) {
+  return {type: "solution", challenge, texte};
+}
+
+// Un verdict « valider » par solution cochée, dans l'ordre des solutions ; une solution non cochée reste en l'état.
+export function demandesVerdicts(challenge, cochees, toutes) {
+  const choisies = new Set(cochees || []);
+  return (toutes || []).filter((s) => choisies.has(s.id))
+    .map((s) => ({type: "verdict_solution", challenge, solution: s.id, verdict: "valider"}));
+}
+
+// Le challenge du relevé ouvert sur cette cible, ou null.
+export function challengeDe(etat, cible) {
+  const liste = Array.isArray(etat?.challenges) ? etat.challenges : [];
+  return liste.find((c) => c?.cible?.type === cible.type && c?.cible?.id === cible.id) || null;
+}
+
+// Après un envoi en plusieurs demandes : ce qui est parti, ce qui ne l'est pas (rien n'est annulé).
+export function resumeEnvoi(resultats) {
+  const ok = resultats.filter((r) => r.ok).map((r) => r.nom);
+  const non = resultats.filter((r) => !r.ok).map((r) => `${r.nom} (${r.message})`);
+  if (!non.length) return ok.length ? `Demandes envoyées : ${ok.join(", ")}.` : "";
+  return (ok.length ? `Envoyées : ${ok.join(", ")}. ` : "") + `Non envoyées : ${non.join(", ")}.`;
+}

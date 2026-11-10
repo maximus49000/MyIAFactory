@@ -22,7 +22,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   const signature = (type, id, e) => {
     if (type === "service") {
       return JSON.stringify((e.agents || []).filter((a) => a.service === id)
-        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]).concat([e.dossier,
+        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]).concat([e.dossier, e.agir,
+        e.challenges, (e.savoir || []).filter((s) => s.service === id),
         (e.taches || []).filter((t) => t.active).map((t) => [t.id, t.titre, t.agent, t.etape])]));
     }
     if (type === "tache") {

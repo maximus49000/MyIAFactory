@@ -8,6 +8,7 @@ import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
+import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
@@ -18,7 +19,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
   let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
   const filtreListe = {etat: null, type: null};   // etat null : pas de choix, le défaut de la vue s'applique
-  const brouillons = new Map();  // tâche -> retour en cours d'écriture (survit aux rafraîchissements)
+  const brouillons = new Map();  // tâche -> retour en cours d'écriture ; "f:<id>" -> saisie de discussion (survit aux rafraîchissements)
+  const envois = new Set();      // saisies dont l'envoi est en cours (un double clic ne crée qu'une demande)
+  const envoyes = new Map();     // fonctionnalité -> messages envoyés que le relevé n'a pas encore repris
+  const nouvelle = {envoi: null};  // la discussion neuve : {avant, texte, images} une fois le premier message parti
 
   const signature = (type, id, e) => {
     if (type === "service") {
@@ -33,6 +37,11 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     }
     if (type === "file") return JSON.stringify([(e.file?.visibles || []).find((q) => q.id === id), e.colonnes, e.agir]);
     if (type === "attente") return JSON.stringify([e.file, e.colonnes, e.agir]);
+    if (type === "fonctionnalite") {
+      return JSON.stringify([(e.fonctionnalites || []).find((f) => f.id === id), e.agir, e.images_ok,
+        e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte]);
+    }
+    if (type === "fonctionnalites") return JSON.stringify([e.fonctionnalites, e.agir]);
     if (type === "liste") {
       return JSON.stringify([(e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.maj, t.type, t.active]),
         e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
@@ -112,7 +121,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   }
 
   const contexte = () => ({
-    etat: etat(), barre, brouillons, filtreListe, retourListe,
+    etat: etat(), barre, brouillons, filtreListe, retourListe, envois, envoyes, nouvelle,
+    rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
+    ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
+    ouvrirNouvelle: () => ouvrirPanneau("fonctionnalite", null),
     ouvrirListe: () => ouvrirPanneau("liste", null),
     ouvrirAttente: () => ouvrirPanneau("attente", null),
     ouvrirTache: (id) => { retourListe = false; ouvrirPanneau("tache", id); },
@@ -125,6 +137,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     if (!e) return;
     if (type === "file" && (e.taches || []).some((t) => t.id === id)) type = "tache";  // la file est devenue une tâche
     if (type !== "tache") retourListe = false;
+    // La saisie d'une discussion garde le curseur quand le panneau se redessine.
+    const surSaisie = panneauOuvert?.type === "fonctionnalite" && document.activeElement?.dataset?.saisie === "1"
+      && panneau.contains(document.activeElement);
+    const debut = surSaisie ? document.activeElement.selectionStart : 0;
     panneauOuvert = {type, id};
     signaturePanneau = signature(type, id, e);
     const contenu = el("div", "panneau-contenu");
@@ -151,6 +167,12 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       contenuAttente(contexte(), contenu);
     } else if (type === "liste") {
       contenuListe(contexte(), contenu);
+    } else if (type === "fonctionnalite") {
+      const f = id === null ? null : (e.fonctionnalites || []).find((x) => x.id === id);
+      if (id !== null && !f) { fermerPanneau(); return; }
+      contenuFonctionnalite(contexte(), contenu, f);
+    } else if (type === "fonctionnalites") {
+      contenuFonctionnalites(contexte(), contenu);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id);
       if (!a) { fermerPanneau(); return; }
@@ -164,6 +186,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     panneau.replaceChildren(fermer, contenu);
     panneau.hidden = false;
     document.body.classList.add("panneau-ouvert");
+    if (surSaisie) {
+      const zone = panneau.querySelector("textarea[data-saisie]");
+      if (zone) { zone.focus(); zone.setSelectionRange(debut, debut); }
+    }
     surFiltre();
   }
 
@@ -241,6 +267,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     return bloc;
   }
 
+  // --- Boutons de la barre : « + Nouvelle fonctionnalité » et « Fonctionnalités ».
+  barre.boutonNouvelle.addEventListener("click", () => { nouvelle.envoi = null; ouvrirPanneau("fonctionnalite", null); });
+  barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
+
   // --- Souris.
   let attente = null;
   conteneur.addEventListener("pointermove", (ev) => {
@@ -281,13 +311,21 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     },
     filtre: filtreActif,
     maj(e) {
+      // Une discussion neuve : dès que le relevé montre la fonctionnalité créée, on l'ouvre.
+      if (panneauOuvert?.type === "fonctionnalite" && panneauOuvert.id === null && nouvelle.envoi) {
+        const id = nouvelleApparue(nouvelle.envoi.avant, e, nouvelle.envoi.texte);
+        if (id) { nouvelle.envoi = null; ouvrirPanneau("fonctionnalite", id); }
+      }
       const n = e.directeur ? e.directeur.total : (e.decisions || 0);
       pastille.textContent = String(n);
       pastille.title = n === 1 ? "1 décision attend le Directeur" : `${n} décisions attendent le Directeur`;
       pastilleEtiquette.visible = n > 0;
-      if (panneauOuvert && !panneau.contains(document.activeElement)) {
+      const saisieOuverte = panneauOuvert?.type === "fonctionnalite" && panneau.contains(document.activeElement)
+        && document.activeElement?.dataset?.saisie === "1";   // la saisie se redessine en gardant le curseur
+      if (panneauOuvert && (saisieOuverte || !panneau.contains(document.activeElement))) {
         const {type, id} = panneauOuvert;
-        if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
+        if (type === "fonctionnalite" && id !== null && !(e.fonctionnalites || []).some((f) => f.id === id)) fermerPanneau();
+        else if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
         else if (type === "agent" && !(e.agents || []).some((a) => a.id === id)) fermerPanneau();
         else if (type === "tache" && !(e.taches || []).some((t) => t.id === id)) fermerPanneau();
         else if (type === "file" && !(e.taches || []).some((t) => t.id === id)

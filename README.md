@@ -46,5 +46,6 @@ Projet 1, le bureau vivant :
 
 - Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
+- Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : `docs/installation.md` (à venir, étape 10)
 - Format du relevé : `docs/releve.md` (à venir, étape 2)

@@ -1,0 +1,78 @@
+"""Statuts des agents : dates, fraîcheur, pause, départ, bulles."""
+from datetime import datetime, timedelta, timezone
+
+TRES_ANCIEN = datetime(1970, 1, 1, tzinfo=timezone.utc)
+LONGUEUR_BULLE = 40
+DEPART_APRES = timedelta(hours=24)
+
+
+def lire_date(texte):
+    """Date ISO 8601 avec fuseau. Sans fuseau : heure locale. Illisible : TRES_ANCIEN."""
+    if not isinstance(texte, str) or not texte.strip():
+        return TRES_ANCIEN
+    try:
+        d = datetime.fromisoformat(texte.strip())
+        if d.tzinfo is None:
+            d = d.astimezone()
+        return d
+    except (ValueError, OverflowError, OSError):
+        return TRES_ANCIEN
+
+
+def duree_en_clair(minutes):
+    if minutes < 60:
+        return f"{int(minutes)} min"
+    if minutes < 48 * 60:
+        return f"{int(minutes // 60)} h"
+    return f"{int(minutes // (24 * 60))} j"
+
+
+def _tronquer(titre):
+    titre = titre if isinstance(titre, str) else ""
+    return titre if len(titre) <= LONGUEUR_BULLE else titre[:LONGUEUR_BULLE] + "…"
+
+
+def _age_min(tache, maintenant):
+    return (maintenant - lire_date(tache.get("maj"))).total_seconds() / 60
+
+
+def statut(taches, maintenant, fraicheur_min, en_pause):
+    actives = [x for x in taches if x.get("active")]
+    if not actives:
+        return {"statut": "libre", "bulle": ""}
+    actives.sort(key=lambda x: lire_date(x.get("maj")), reverse=True)
+    recente = actives[0]
+    age = _age_min(recente, maintenant)
+    if age <= fraicheur_min:
+        bulle = _tronquer(recente.get("titre"))
+        if len(actives) > 1:
+            bulle += f" (+{len(actives) - 1})"
+        return {"statut": "travail", "bulle": bulle}
+    if en_pause:
+        return {"statut": "libre", "bulle": ""}
+    if lire_date(recente.get("maj")) == TRES_ANCIEN:
+        return {"statut": "sans_nouvelles", "bulle": "sans nouvelles"}
+    return {"statut": "sans_nouvelles", "bulle": "sans nouvelles depuis " + duree_en_clair(age)}
+
+
+def present(titulaire, taches, maintenant):
+    if titulaire.get("permanent") or titulaire.get("chef"):
+        return True
+    if any(x.get("active") for x in taches):
+        return True
+    if not taches:
+        return False
+    derniere = max(lire_date(x.get("maj")) for x in taches)
+    return maintenant - derniere < DEPART_APRES
+
+
+def factory(releve_factory, taches, maintenant, fraicheur_min):
+    dates = [lire_date(x.get("maj")) for x in taches]
+    dates = [d for d in dates if d != TRES_ANCIEN]
+    derniere = max(dates) if dates else None
+    en_marche = releve_factory.get("etat") == "en marche"
+    inactive = en_marche and (derniere is None
+                              or (maintenant - derniere).total_seconds() / 60 > fraicheur_min)
+    return {"etat": releve_factory.get("etat"), "depuis": releve_factory.get("depuis"),
+            "derniere_activite": derniere.isoformat() if derniere else None,
+            "inactive": bool(inactive)}

@@ -67,7 +67,7 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 1. Le relevé version 4
 - [x] 2. L'état version 4
 - [x] 3. Les sept demandes et les images jointes
-- [ ] 4. Plusieurs projets dans un bureau
+- [x] 4. Plusieurs projets dans un bureau
 - [ ] 5. Le catalogue et le dernier livrable servis
 - [ ] 6. Le sélecteur de projets et la barre
 - [ ] 7. Le panneau d'une fonctionnalité et sa discussion
@@ -86,6 +86,8 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 ![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)
 
 Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge) réécrivent son `releve.json` : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/demo/` ailleurs et lancez le bureau sur la copie.
+
+Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bureau bureau.local.json`, où `bureau.local.json` vaut `{"port": 8770, "projets": ["<chemin>/.factory/reglages.json", …]}` (de 1 à 12 projets, chemins relatifs à ce fichier ; chaque entrée peut aussi être `{"chemin": …, "id": …}`). Chaque projet garde ses réglages sans changement.
 
 ## Ce qu'il reste à faire ensuite
 

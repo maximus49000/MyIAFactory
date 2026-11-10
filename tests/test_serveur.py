@@ -56,6 +56,11 @@ class AvecServeur(unittest.TestCase):
         self.fil.start()
         self.addCleanup(self.arreter, self.srv)
 
+    @property
+    def p(self):
+        """Le projet unique du bureau lancé avec `--reglages`."""
+        return self.srv.projets["projet"]
+
     def arreter(self, srv):
         srv.shutdown()
         srv.server_close()
@@ -82,6 +87,21 @@ class TestServeur(AvecServeur):
     def test_ecoute_seulement_en_local(self):
         self.assertEqual(self.srv.server_address[0], "127.0.0.1")
 
+    def test_reglages_seul_inchange(self):
+        # Lancé sur un fichier de réglages : un projet, pas de sélecteur, toutes les routes sans `projet`.
+        self.assertEqual(self.json("/api/projets"), {"multi": False, "projets": [
+            {"id": "projet", "nom": self.json("/api/etat")["projet"] or "projet",
+             "attente": self.json("/api/etat")["directeur"]["total"], "erreur": None}]})
+        for chemin in ("/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi"):
+            with self.subTest(chemin):
+                self.assertIsInstance(self.json(chemin), (dict, list))
+                sep = "&" if "?" in chemin else "?"
+                self.assertEqual(self.json(chemin + sep + "projet=projet").keys(), self.json(chemin).keys())
+        r, _ = self.req("GET", "/api/image?chemin=" + "images/inconnue.png")
+        self.assertEqual(r.status, 404)
+        r, data = self.req("GET", "/api/etat?projet=autre")
+        self.assertEqual((r.status, json.loads(data)), (404, {"erreur": "Projet inconnu."}))
+
     def test_etat(self):
         e = self.json("/api/etat")
         self.assertEqual(e["projet"], "Démo")
@@ -100,8 +120,8 @@ class TestServeur(AvecServeur):
         regl = json.loads(self.regl.read_text(encoding="utf-8"))
         regl["releve"] = {"commande": [sys.executable, "-c", "import time; time.sleep(4)"]}
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, self.srv._cache_etat[1])  # état périmé : la prochaine demande relit
-        lent = threading.Thread(target=self.srv.etat, daemon=True)
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])  # état périmé : la prochaine demande relit
+        lent = threading.Thread(target=self.p.etat, daemon=True)
         lent.start()
         time.sleep(0.5)
         debut = time.monotonic()
@@ -237,7 +257,7 @@ class TestServeur(AvecServeur):
             else:
                 regl["images"] = valeur
             self.regl.write_text(json.dumps(regl), encoding="utf-8")
-            self.srv._cache_etat = (0.0, None)
+            self.p._cache_etat = (0.0, None)
             self.assertIs(self.json("/api/etat")["images_ok"], False, valeur)
 
     def test_image_sans_reglage(self):
@@ -281,7 +301,7 @@ class TestServeur(AvecServeur):
         regl["actions"] = {"commande": [sys.executable, "actions.py", "notes.log", str(duree), str(code)],
                            "dossier": "."}
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         return dossier / "notes.log"
 
     def demande(self, d):
@@ -293,7 +313,7 @@ class TestServeur(AvecServeur):
         regl = json.loads(self.regl.read_text(encoding="utf-8"))
         del regl["actions"]
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         self.assertIs(self.json("/api/etat")["agir"], False)
         self.agir()
         e = self.json("/api/etat")
@@ -394,7 +414,7 @@ class TestServeur(AvecServeur):
         self.agir()
         self.json("/api/etat")
         self.demande({"type": "bouton", "id": "pause"})
-        self.assertEqual(self.srv._cache_etat[0], 0.0)
+        self.assertEqual(self.p._cache_etat[0], 0.0)
 
     def test_demandes_successives(self):
         notes = self.agir(duree=0.3)
@@ -437,7 +457,7 @@ class TestFacturation(AvecServeur):
         regl["alias_modeles"] = {"sonnet": "modele-a"}
         regl.update(reglages or {})
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
 
     def test_api_facturation(self):
         self.v3(self.usage(), self.usage("u2", modele="mystere", entree=10))
@@ -467,7 +487,7 @@ class TestFacturation(AvecServeur):
         r = json.loads(fichier.read_text(encoding="utf-8"))
         self.assertTrue(r["usage"])
         fichier.write_text(json.dumps({**r, "version": 2}), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         self.assertEqual(self.json("/api/facturation"), {"disponible": False})
         self.assertEqual(self.json("/api/kpi"), {"disponible": False})
         self.assertEqual(self.json("/api/etat")["dossier"],
@@ -477,7 +497,7 @@ class TestFacturation(AvecServeur):
 
     def test_releve_illisible_facturation_indisponible(self):
         (self.tmp / "demo" / "releve.json").write_text("{", encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         self.assertEqual(self.json("/api/facturation"), {"disponible": False})
 
     def test_prix_automatiques_faux_aucune_requete(self):
@@ -487,7 +507,7 @@ class TestFacturation(AvecServeur):
         self.redemarrer(SourceSimulee(panne=AssertionError("requête sortante interdite")))
         self.v3(self.usage(), reglages={"prix_automatiques": False,
                                         "prix": {"sonnet": {"entree": 2.0, "sortie": 10.0, "date": "2020-01-01"}}})
-        self.assertIsNone(self.srv._fil_prix)
+        self.assertIsNone(self.p._fil_prix)
         f = self.json("/api/facturation")
         self.assertAlmostEqual(f["total"], 2.0)   # la correction à la main suffit
         self.assertIn("prix_automatiques", f["message"])
@@ -496,7 +516,7 @@ class TestFacturation(AvecServeur):
     def test_reglages_illisibles_aucune_requete(self):
         self.regl.write_text("{", encoding="utf-8")
         self.redemarrer(SourceSimulee(panne=AssertionError("requête sortante interdite")))
-        self.assertIsNone(self.srv._fil_prix)
+        self.assertIsNone(self.p._fil_prix)
         self.assertEqual(self.source.appels, [])
 
     def test_source_en_panne_serveur_ok_et_message(self):
@@ -554,7 +574,7 @@ class TestChallenges(AvecServeur):
         regl = json.loads(self.regl.read_text(encoding="utf-8"))
         regl["alias_modeles"] = {"sonnet": "modele-a"}
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         return notes
 
     def recues(self, notes):
@@ -643,7 +663,7 @@ class TestChallenges(AvecServeur):
 
         def interdit(*a, **k):
             raise AssertionError("calcul inutile")
-        self.srv._calculer = interdit
+        self.p._calculer = interdit
         statut, corps = self.demande({"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}})
         self.assertEqual(statut, 200, corps)
         self.assertEqual(len(self.recues(notes)), 1)
@@ -656,9 +676,9 @@ class TestChallenges(AvecServeur):
         r = json.loads((self.tmp / "demo" / "releve.json").read_text(encoding="utf-8"))
         r["challenges"] = [{"id": "ch9", "cible": {"type": "connaissance", "id": "k1"}, "texte": "c"}]
         (self.tmp / "demo" / "releve.json").write_text(json.dumps(r), encoding="utf-8")
-        self.srv._cache_etat = (0.0, self.srv._cache_etat[1])
-        self.srv._verrou.acquire()
-        threading.Timer(0.3, self.srv._verrou.release).start()
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        self.p._verrou.acquire()
+        threading.Timer(0.3, self.p._verrou.release).start()
         statut, corps = self.demande({"type": "solution", "challenge": "ch9", "texte": "x"})
         self.assertEqual(statut, 200, corps)
 
@@ -689,7 +709,7 @@ class TestKpi(AvecServeur):
         regl = json.loads(self.regl.read_text(encoding="utf-8"))
         regl["alias_modeles"] = {"sonnet": "modele-a"}
         self.regl.write_text(json.dumps(regl), encoding="utf-8")
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         return notes
 
     def test_api_kpi(self):
@@ -712,7 +732,7 @@ class TestKpi(AvecServeur):
 
     def test_api_kpi_indisponible_en_v2(self):
         self.agir(releve=self.RELEVE_V2)
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         self.assertEqual(self.json("/api/kpi?periode=7j"), {"disponible": False})
 
     def test_challenge_sur_kpi_calcule_accepte(self):
@@ -744,7 +764,7 @@ class TestKpi(AvecServeur):
         r["titulaires"][0]["connaissances"] = [{"id": "k1", "texte": "a", "date": "2020-01-01", "origine": "ch1"}]
         r["challenges"] = [{"id": "ch1", "cible": {"type": "kpi", "id": "kpi:dev:defauts"}, "texte": "c"}]
         self.agir(releve=r)
-        self.srv._cache_etat = (0.0, None)
+        self.p._cache_etat = (0.0, None)
         e = self.json("/api/etat")
         self.assertTrue(e["agents"][0]["connaissances"][0]["probleme_revenu"])
         self.assertTrue((self.tmp / "demo" / "alertes-historique.jsonl").exists())
@@ -844,7 +864,7 @@ class TestDemandesV4(AvecServeur):
         notes = self.preparer()
         d = {"type": "message", "fonctionnalite": "f1", "texte": "Encore"}
         self.assertEqual(self.demande(d), (200, {"ok": True}))
-        self.srv._derniere_creation = (self.srv._derniere_creation[0],
+        self.p._derniere_creation = (self.p._derniere_creation[0],
                                        time.monotonic() - serveur.GARDE_DOUBLON_S - 1)
         self.assertEqual(self.demande(d), (200, {"ok": True}))
         self.assertEqual(len(self.lignes(notes)), 2)

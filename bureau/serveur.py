@@ -28,6 +28,7 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
+ROUTES_PROJET = ("/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image")
 
 
 def images_declarees(regl):
@@ -37,11 +38,11 @@ def images_declarees(regl):
     return isinstance(racines, list) and any(isinstance(r, str) and r for r in racines)
 
 
-class Bureau(ThreadingHTTPServer):
-    daemon_threads = True
+class Projet:
+    """Tout ce que le bureau tient pour un fichier de réglages : équipe, historiques, prix, état, demandes."""
 
-    def __init__(self, adresse, chemin_reglages, ouvrir=None):
-        super().__init__(adresse, Handler)
+    def __init__(self, id_, chemin_reglages, ouvrir=None):
+        self.id = id_
         self.chemin_reglages = Path(chemin_reglages)
         dossier = self.chemin_reglages.parent
         self.equipe = equipe.Equipe(dossier / "equipe.json")
@@ -54,9 +55,6 @@ class Bureau(ThreadingHTTPServer):
         self._premiers_prix = threading.Event()
         self._usage_integre = None
         self._usage_connu = bool(self.usage.lire())
-        self.sonde = charge.Sonde()
-        self.lisseur = charge.Lisseur(60)
-        self.mesure = None  # dernière lecture brute de la sonde
         self._verrou = threading.Lock()
         self._cache_etat = (0.0, None)
         self.dernier_releve = None  # dernier relevé normalisé valide (sert à vérifier les demandes)
@@ -64,8 +62,6 @@ class Bureau(ThreadingHTTPServer):
         self._derniere_creation = None  # (empreinte, heure monotone) de la dernière fonctionnalité ou du dernier message
         self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
         self._arret = threading.Event()
-        self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
-        self._fil.start()
         self._fil_prix = None
         regl, err = self.reglages()
         if err is None and regl.get("prix_automatiques") is not False:
@@ -254,8 +250,58 @@ class Bureau(ThreadingHTTPServer):
         return hashlib.sha256(brut).hexdigest()
 
     # -- charge -----------------------------------------------------------
+    def charge(self, mesure, cpu_lisse):
+        """La charge de la machine (une seule sonde pour tout le bureau), lue contre le maximum de ce projet."""
+        regl, _ = self.reglages()
+        mach = charge.machine()
+        base = {"max": regl["charge_max"], "coeurs": mach["coeurs"],
+                "memoire_totale_go": mach["memoire_totale_go"]}
+        m = mesure
+        if m is None:
+            return {**base, "disponible": False, "cpu": None, "memoire": None, "charge": None, "feu_vert": True}
+        cpu = cpu_lisse if cpu_lisse else m["cpu"]
+        valeur = charge.affichee(cpu, m["memoire"])
+        return {**base, "disponible": True, "cpu": round(cpu, 1), "memoire": round(m["memoire"], 1),
+                "charge": valeur, "feu_vert": charge.feu_vert(valeur, regl["charge_max"])}
+
+    def conseil(self):
+        return charge.conseiller(self.historique.lire(), charge.machine())
+
+    def resume(self):
+        """La ligne du projet dans `/api/projets`."""
+        e = self.etat()
+        return {"id": self.id, "nom": e.get("projet") or self.id,
+                "attente": e.get("directeur", {}).get("total", 0), "erreur": e.get("erreur") or None}
+
+    def fermer(self):
+        self._arret.set()
+        if self._fil_prix is not None:
+            self._fil_prix.join(5)  # qu'il n'écrive plus dans le dossier une fois le serveur fermé
+
+
+class Bureau(ThreadingHTTPServer):
+    """Le serveur : un ou plusieurs projets, une seule sonde de charge (la charge est celle de la machine)."""
+    daemon_threads = True
+
+    def __init__(self, adresse, projets, ouvrir=None, multi=True):
+        super().__init__(adresse, Handler)
+        self.multi = multi
+        self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir) for id_, chemin in projets}
+        self.sonde = charge.Sonde()
+        self.lisseur = charge.Lisseur(60)
+        self.mesure = None  # dernière lecture brute de la sonde
+        self._dernier_historique = 0.0
+        self._arret = threading.Event()
+        self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
+        self._fil.start()
+
+    def projet(self, id_=None):
+        """Le projet d'id donné ; `None` → le premier ; inconnu → `None`."""
+        if id_ is None:
+            return next(iter(self.projets.values()))
+        return self.projets.get(id_)
+
     def _boucle_sonde(self):
-        dernier_historique = 0.0
         try:
             self.mesure = self.sonde.lire()  # première lecture : sert de repère
         except Exception:
@@ -268,35 +314,34 @@ class Bureau(ThreadingHTTPServer):
                 if m is None:
                     continue
                 t = time.time()
-                self.mesure = m
-                self.lisseur.ajouter(t, m["cpu"])
-                if t - dernier_historique >= PAS_HISTORIQUE_S:
-                    dernier_historique = t
-                    valeur = charge.affichee(self.lisseur.moyenne(), m["memoire"])
-                    self.historique.noter(t, valeur, etat.agents_locaux_au_travail(self.etat()))
+                self._ranger_mesure(t, m, historique=t - self._dernier_historique >= PAS_HISTORIQUE_S)
             except Exception:
                 pass  # la mesure ne doit jamais faire tomber le serveur
 
-    def charge(self):
-        regl, _ = self.reglages()
-        mach = charge.machine()
-        base = {"max": regl["charge_max"], "coeurs": mach["coeurs"],
-                "memoire_totale_go": mach["memoire_totale_go"]}
-        m = self.mesure
-        if m is None:
-            return {**base, "disponible": False, "cpu": None, "memoire": None, "charge": None, "feu_vert": True}
-        cpu = self.lisseur.moyenne() if self.lisseur.moyenne() else m["cpu"]
-        valeur = charge.affichee(cpu, m["memoire"])
-        return {**base, "disponible": True, "cpu": round(cpu, 1), "memoire": round(m["memoire"], 1),
-                "charge": valeur, "feu_vert": charge.feu_vert(valeur, regl["charge_max"])}
+    def _ranger_mesure(self, t, m, historique):
+        """Une mesure de la machine : lissée une fois, notée dans l'historique de charge de chaque projet."""
+        self.mesure = m
+        self.lisseur.ajouter(t, m["cpu"])
+        if not historique:
+            return
+        self._dernier_historique = t
+        valeur = charge.affichee(self.lisseur.moyenne(), m["memoire"])
+        for p in self.projets.values():
+            try:
+                p.historique.noter(t, valeur, etat.agents_locaux_au_travail(p.etat()))
+            except Exception:
+                pass  # un projet en panne n'empêche pas de noter les autres
 
-    def conseil(self):
-        return charge.conseiller(self.historique.lire(), charge.machine())
+    def charge(self, projet):
+        return projet.charge(self.mesure, self.lisseur.moyenne())
+
+    def liste(self):
+        return {"multi": self.multi, "projets": [p.resume() for p in self.projets.values()]}
 
     def server_close(self):
         self._arret.set()
-        if self._fil_prix is not None:
-            self._fil_prix.join(5)  # qu'il n'écrive plus dans le dossier une fois le serveur fermé
+        for p in self.projets.values():
+            p.fermer()
         super().server_close()
 
 
@@ -324,33 +369,44 @@ class Handler(BaseHTTPRequestHandler):
         port = self.server.server_address[1]
         return self.headers.get("Host", "") in (f"127.0.0.1:{port}", f"localhost:{port}")
 
+    def _projet(self, requete):
+        """Le projet visé par `?projet=` (absent → le premier) ; `None` s'il est inconnu."""
+        valeurs = parse_qs(requete, keep_blank_values=True).get("projet")
+        if valeurs is None:
+            return self.server.projet()
+        if len(valeurs) != 1:
+            return None
+        return self.server.projet(valeurs[0]) if valeurs[0] else None
+
     # -- GET --------------------------------------------------------------
     def do_GET(self):
         if not self._hote_ok():
             return self._json(403, {"erreur": "Hôte refusé."})
         morceaux = urlsplit(self.path)
         chemin = morceaux.path
+        if chemin == "/api/projets":
+            return self._json(200, self.server.liste())
+        if chemin not in ROUTES_PROJET:
+            return self._statique(chemin)
+        projet = self._projet(morceaux.query)
+        if projet is None:
+            return self._json(404, {"erreur": "Projet inconnu."})
         if chemin == "/api/image":
-            return self._image(morceaux.query)
+            return self._image(projet, morceaux.query)
         if chemin == "/api/etat":
-            return self._json(200, self.server.etat())
+            return self._json(200, projet.etat())
         if chemin == "/api/charge":
-            return self._json(200, self.server.charge())
+            return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":
-            return self._json(200, self.server.conseil())
-        if chemin == "/api/facturation":
-            periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
-            code, objet = self.server.facturation(periodes[0] if len(periodes) == 1 else None)
-            return self._json(code, objet)
-        if chemin == "/api/kpi":
-            periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
-            code, objet = self.server.kpi(periodes[0] if len(periodes) == 1 else None)
-            return self._json(code, objet)
-        self._statique(chemin)
+            return self._json(200, projet.conseil())
+        periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
+        periode = periodes[0] if len(periodes) == 1 else None
+        code, objet = projet.facturation(periode) if chemin == "/api/facturation" else projet.kpi(periode)
+        return self._json(code, objet)
 
     do_HEAD = do_GET
 
-    def _image(self, requete):
+    def _image(self, projet, requete):
         """Sert une image du projet, seulement depuis les racines déclarées (`images.racines`)."""
         introuvable = lambda: self._json(404, {"erreur": "Introuvable."})  # noqa: E731
         valeurs = parse_qs(requete, keep_blank_values=True).get("chemin", [])
@@ -360,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
         if (not brut or chr(0) in brut or Path(brut).is_absolute() or brut[0] in "/\\"
                 or Path(brut).suffix.lower() not in IMAGES):
             return introuvable()
-        regl, _ = self.server.reglages()
+        regl, _ = projet.reglages()
         conf = regl.get("images")
         racines = conf.get("racines") if isinstance(conf, dict) else None
         if not isinstance(racines, list):
@@ -411,9 +467,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self._hote_ok():
             self._vider_corps()
             return self._json(403, {"erreur": "Hôte refusé."})
-        chemin = urlsplit(self.path).path
+        morceaux = urlsplit(self.path)
+        chemin = morceaux.path
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
+        projet = self._projet(morceaux.query)
+        if projet is None:
+            self._vider_corps()
+            return self._json(404, {"erreur": "Projet inconnu."})
         if (self.headers.get("X-Bureau") != "1"
                 or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
             self._vider_corps()
@@ -430,7 +491,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             try:
-                code, objet = self.server.demande(demande)
+                code, objet = projet.demande(demande)
             except Exception as e:  # jamais une connexion coupée sans réponse lisible
                 code, objet = 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
             return self._json(code, objet)
@@ -438,18 +499,26 @@ class Handler(BaseHTTPRequestHandler):
             corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
             if not isinstance(corps, dict) or "charge_max" not in corps:
                 raise ValueError("Le corps doit contenir « charge_max ».")
-            nouveau = reglages.fixer_charge_max(self.server.chemin_reglages, corps["charge_max"])
+            nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})
         nouveau.pop("dossier", None)
         self._json(200, nouveau)
 
 
-def creer(chemin_reglages, port=None, ouvrir=None):
-    """`ouvrir(url) -> str` remplace la lecture des sources de prix (les tests n'utilisent jamais Internet)."""
+def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None):
+    """Un bureau sur un fichier de réglages (un projet d'id `projet`, sans sélecteur) ou sur un fichier de
+    bureau (`bureau`, plusieurs projets). `ouvrir(url) -> str` remplace la lecture des sources de prix
+    (les tests n'utilisent jamais Internet)."""
+    if (bureau is None) == (chemin_reglages is None):
+        raise ValueError("Donner soit un fichier de réglages, soit un fichier de bureau.")
+    if bureau is not None:
+        conf = reglages.lire_bureau(bureau)
+        projets = [(p["id"], p["chemin"]) for p in conf["projets"]]
+        return Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True)
     if port is None:
         port = reglages.charger(chemin_reglages)["port"]
-    return Bureau(("127.0.0.1", port), chemin_reglages, ouvrir=ouvrir)
+    return Bureau(("127.0.0.1", port), [("projet", Path(chemin_reglages))], ouvrir=ouvrir, multi=False)
 
 
 def _commande_charge(chemin):
@@ -476,16 +545,20 @@ def _commande_charge(chemin):
 def main(argv):
     p = argparse.ArgumentParser(prog="lancer.py", description="Le bureau vivant.")
     sous = p.add_subparsers(dest="commande", required=True)
-    for nom, aide in (("serveur", "lance le serveur local"),
-                      ("charge", "dit si la charge permet de lancer une étape locale")):
-        s = sous.add_parser(nom, help=aide)
-        s.add_argument("--reglages", required=True, help="chemin du fichier de réglages du projet")
+    s = sous.add_parser("serveur", help="lance le serveur local")
+    choix = s.add_mutually_exclusive_group(required=True)
+    choix.add_argument("--reglages", help="chemin du fichier de réglages d'un projet (un seul projet)")
+    choix.add_argument("--bureau", help="chemin du fichier du bureau, qui liste les réglages de plusieurs projets")
+    s = sous.add_parser("charge", help="dit si la charge permet de lancer une étape locale")
+    s.add_argument("--reglages", required=True, help="chemin du fichier de réglages du projet")
     args = p.parse_args(argv)
-    chemin = Path(args.reglages)
     try:
         if args.commande == "charge":
-            return _commande_charge(chemin)
-        srv = creer(chemin)
+            return _commande_charge(Path(args.reglages))
+        if getattr(args, "bureau", None):
+            srv = creer(bureau=Path(args.bureau))
+        else:
+            srv = creer(Path(args.reglages))
     except reglages.ReglagesInvalides as e:
         print(e)
         return 2

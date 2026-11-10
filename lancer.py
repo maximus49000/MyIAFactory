@@ -1,4 +1,8 @@
-"""Point d'entrée : py -3.12 lancer.py serveur|charge --reglages <chemin>"""
+"""Point d'entrée :
+  py -3.12 lancer.py serveur --reglages <réglages d'un projet>
+  py -3.12 lancer.py serveur --bureau <fichier du bureau, qui liste plusieurs projets>
+  py -3.12 lancer.py charge --reglages <réglages d'un projet>
+"""
 import sys
 from pathlib import Path
 

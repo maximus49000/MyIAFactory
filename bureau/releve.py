@@ -8,7 +8,9 @@ import threading
 import time
 from pathlib import Path
 
-MAX_SERVICES = 6
+MAX_SERVICES = 8
+MAX_IMAGES = 40
+SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
 
 
@@ -43,13 +45,23 @@ def _doublons(elements, cle, nom, erreurs):
     return vus
 
 
+def lien_valide(url):
+    """Schéma https, http ou claude ; ni espace ni caractère de contrôle."""
+    if not isinstance(url, str) or not url:
+        return False
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url):
+        return False
+    schema, sep, reste = url.partition(":")
+    return bool(sep) and schema.lower() in SCHEMAS_LIENS and len(reste) > 0
+
+
 def valider(r):
     """Messages d'erreur en français ; liste vide si le relevé est valide."""
     if not _est_dict(r):
         return ["Le relevé doit être un objet JSON."]
     erreurs = []
-    if r.get("version") != 1:
-        erreurs.append("« version » doit valoir 1.")
+    if r.get("version") not in (1, 2) or isinstance(r.get("version"), bool):
+        erreurs.append("« version » doit valoir 1 ou 2.")
     if not isinstance(r.get("projet"), str) or not r.get("projet"):
         erreurs.append("« projet » est obligatoire (texte non vide).")
     factory = r.get("factory")
@@ -92,6 +104,8 @@ def valider(r):
             if not _texte_ou_nul(t.get(champ)):
                 erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
     _verifier_facultatifs(r, services, colonnes, titulaires, erreurs)
+    if r.get("version") == 2:
+        _verifier_v2(r, titulaires, taches, cles, erreurs)
     return erreurs
 
 
@@ -142,9 +156,121 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
             erreurs.append(f"« file.visibles » : l'élément {k + 1} doit avoir un « id » et un « titre » (textes).")
 
 
+def _liste_facultative(v, champ, erreurs):
+    """La liste de dicts d'un champ facultatif, ou [] (avec erreur) si le type est faux."""
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        erreurs.append(f"{champ} doit être une liste.")
+        return []
+    ok = []
+    for k, el in enumerate(v):
+        if _est_dict(el):
+            ok.append(el)
+        else:
+            erreurs.append(f"{champ} : l'élément {k + 1} doit être un objet.")
+    return ok
+
+
+def _texte(v):
+    return isinstance(v, str)
+
+
+def _verifier_v2(r, titulaires, taches, cles, erreurs):
+    """Champs facultatifs de la version 2 (ignorés en version 1)."""
+    vus = set()
+    for a in _liste_facultative(r.get("actions"), "« actions »", erreurs):
+        i = a.get("id")
+        if not _texte(i) or not i:
+            erreurs.append("« actions » : « id » est obligatoire (texte non vide).")
+        elif i in vus:
+            erreurs.append(f"« actions » : identifiant en double « {i} ».")
+        vus.add(i)
+        if not _texte(a.get("libelle")):
+            erreurs.append(f"« actions » : le bouton « {i} » doit avoir un « libelle » (texte).")
+        if "lien" in a and not lien_valide(a["lien"]):
+            erreurs.append(f"« actions » : le bouton « {i} » a un « lien » refusé (https, http ou claude).")
+        if "confirmer" in a and not _texte(a["confirmer"]):
+            erreurs.append(f"« actions » : le bouton « {i} » : « confirmer » doit être un texte.")
+        if "actif" in a and not isinstance(a["actif"], bool):
+            erreurs.append(f"« actions » : le bouton « {i} » : « actif » doit être vrai ou faux.")
+    types = _liste_facultative(r.get("types"), "« types »", erreurs)
+    ids_types = set()
+    for t in types:
+        if not _texte(t.get("id")) or not t.get("id") or not _texte(t.get("nom")):
+            erreurs.append("« types » : chaque type a un « id » (non vide) et un « nom » (textes).")
+        else:
+            ids_types.add(t["id"])
+    vus = set()
+    for le in _liste_facultative(r.get("lecons"), "« lecons »", erreurs):
+        i = le.get("id")
+        if not _texte(i) or not i:
+            erreurs.append("« lecons » : « id » est obligatoire (texte non vide).")
+        elif i in vus:
+            erreurs.append(f"« lecons » : identifiant en double « {i} ».")
+        vus.add(i)
+        if le.get("agent") not in cles:
+            erreurs.append(f"« lecons » : la leçon « {i} » vient d'un agent inconnu « {le.get('agent')} ».")
+        if not _texte(le.get("texte")):
+            erreurs.append(f"« lecons » : la leçon « {i} » doit avoir un « texte ».")
+        for champ in ("tache", "date"):
+            if not _texte_ou_nul(le.get(champ)):
+                erreurs.append(f"« lecons » : la leçon « {i} » : « {champ} » doit être un texte.")
+        if le.get("verdict_demande") not in (None, "valider", "invalider"):
+            erreurs.append(f"« lecons » : la leçon « {i} » : « verdict_demande » doit valoir "
+                           "« valider » ou « invalider ».")
+    for ti in titulaires:
+        cle = ti.get("cle")
+        for champ in ("prenom", "specialite"):
+            if champ in ti and not _texte(ti[champ]):
+                erreurs.append(f"Titulaire « {cle} » : « {champ} » doit être un texte.")
+        for le in _liste_facultative(ti.get("lecons"), f"Titulaire « {cle} » : « lecons »", erreurs):
+            if not _texte(le.get("id")) or not _texte(le.get("texte")) \
+                    or le.get("etat") not in ("à valider", "validée"):
+                erreurs.append(f"Titulaire « {cle} » : « lecons » : chaque leçon a « id », « texte » "
+                               "et « etat » (« à valider » ou « validée »).")
+    for t in taches:
+        i = t.get("id")
+        if t.get("type") is not None:
+            if not _texte(t["type"]):
+                erreurs.append(f"Tâche « {i} » : « type » doit être un texte.")
+            elif types and t["type"] not in ids_types:
+                erreurs.append(f"Tâche « {i} » : type inconnu « {t['type']} ».")
+        for champ in ("journal", "retours"):
+            for e in _liste_facultative(t.get(champ), f"Tâche « {i} » : « {champ} »", erreurs):
+                if not _texte(e.get("t")) or not _texte(e.get("texte")):
+                    erreurs.append(f"Tâche « {i} » : « {champ} » : chaque élément a « t » et « texte » (textes).")
+                if champ == "retours" and not _texte_ou_nul(e.get("reponse")):
+                    erreurs.append(f"Tâche « {i} » : « retours » : « reponse » doit être un texte.")
+        images = _liste_facultative(t.get("images"), f"Tâche « {i} » : « images »", erreurs)
+        if len(images) > MAX_IMAGES:
+            erreurs.append(f"Tâche « {i} » : « images » : au plus {MAX_IMAGES} images.")
+        for e in images:
+            if not _texte(e.get("chemin")) or not e.get("chemin") or not _texte_ou_nul(e.get("legende")):
+                erreurs.append(f"Tâche « {i} » : « images » : chaque image a un « chemin » "
+                               "(et une « legende » en texte).")
+        for e in _liste_facultative(t.get("liens"), f"Tâche « {i} » : « liens »", erreurs):
+            if not _texte(e.get("libelle")) or not lien_valide(e.get("url")):
+                erreurs.append(f"Tâche « {i} » : « liens » : chaque lien a un « libelle » et une « url » "
+                               "valide (https, http ou claude).")
+        if not _texte_ou_nul(t.get("bloquee")):
+            erreurs.append(f"Tâche « {i} » : « bloquee » doit être un texte.")
+
+
+CHAMPS_V2_RACINE = ("actions", "types", "lecons")
+CHAMPS_V2_TACHE = ("type", "journal", "images", "liens", "retours", "bloquee")
+CHAMPS_V2_TITULAIRE = ("prenom", "specialite", "lecons")
+
+
 def normaliser(r):
     """Applique les valeurs par défaut. Ne modifie pas l'argument."""
     n = copy.deepcopy(r)
+    v2 = n.get("version") == 2
+    for c in CHAMPS_V2_RACINE:
+        if v2:
+            n[c] = n[c] if isinstance(n.get(c), list) else []
+        else:
+            n.pop(c, None)
     if not _est_dict(n.get("file")):
         n["file"] = {}
     n["file"].setdefault("visibles", [])
@@ -155,7 +281,17 @@ def normaliser(r):
         t.setdefault("postit", True)
         t.setdefault("etape", "")
         t.setdefault("maj", None)
+        for c in CHAMPS_V2_TACHE:
+            if not v2:
+                t.pop(c, None)
+            elif c in ("type", "bloquee"):
+                t.setdefault(c, None)
+            else:
+                t[c] = t[c] if isinstance(t.get(c), list) else []
     for t in n["titulaires"]:
+        if not v2:
+            for c in CHAMPS_V2_TITULAIRE:
+                t.pop(c, None)
         t.setdefault("modele", "?")
         t.setdefault("permanent", False)
         t.setdefault("chef", False)

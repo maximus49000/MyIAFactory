@@ -27,7 +27,7 @@ class TestValider(unittest.TestCase):
                ("lieu", lambda r: r["titulaires"][0].update(lieu="lune")),
                ("service inconnu", lambda r: r["titulaires"][0].update(service="rh")),
                ("doublon", lambda r: r["taches"].append(dict(r["taches"][0]))),
-               ("7 services", lambda r: r.update(services=[{"id": str(i), "nom": "S"} for i in range(7)])),
+               ("9 services", lambda r: r.update(services=[{"id": str(i), "nom": "S"} for i in range(9)])),
                ("deux chefs", lambda r: r["titulaires"].extend([{"cle": "c1", "lieu": "local", "chef": True}, {"cle": "c2", "lieu": "local", "chef": True}])),
                ("champ manquant", lambda r: r.pop("colonnes")),
                # Champs facultatifs de mauvais type : la page s'y casserait.
@@ -77,6 +77,107 @@ class TestNormaliser(unittest.TestCase):
         self.assertEqual(n["titulaires"][0]["modele"], "?")
         self.assertNotIn("file", BASE)
         self.assertEqual(len(BASE["titulaires"]), 1)
+
+
+V2 = {**copy.deepcopy(BASE), "version": 2}
+
+
+def v2(**champs):
+    r = copy.deepcopy(V2)
+    r.update(champs)
+    return r
+
+
+class TestVersion2(unittest.TestCase):
+    def test_version_2_minimale_valide(self):
+        self.assertEqual(releve.valider(V2), [])
+
+    def test_version_3_refusee(self):
+        self.assertTrue(releve.valider({**BASE, "version": 3}))
+
+    def test_neuf_services_refuses(self):
+        def avec(n):
+            return v2(services=[{"id": str(i), "nom": "S"} for i in range(n)], titulaires=[], taches=[])
+        self.assertEqual(releve.valider(avec(8)), [])
+        self.assertTrue(any("8" in m for m in releve.valider(avec(9))))
+
+    def test_lien_javascript_refuse(self):
+        r = v2(actions=[{"id": "a", "libelle": "A", "lien": "javascript:alert(1)"}])
+        self.assertTrue(any("actions" in m for m in releve.valider(r)))
+
+    def test_lien_claude_accepte(self):
+        r = v2(actions=[{"id": "a", "libelle": "A", "lien": "claude://claude.ai/code/x"}])
+        self.assertEqual(releve.valider(r), [])
+        self.assertTrue(releve.lien_valide("https://exemple.org/x"))
+        self.assertTrue(releve.lien_valide("http://exemple.org/x"))
+        for mauvais in ("javascript:x", "file:///x", "https://a b", "https://a\n.b", "", None, 3, "//x"):
+            self.assertFalse(releve.lien_valide(mauvais), mauvais)
+
+    def test_journal_pas_liste(self):
+        r = v2()
+        r["taches"][0]["journal"] = "texte"
+        self.assertTrue(any("journal" in m for m in releve.valider(r)))
+
+    def test_lien_de_tache_javascript(self):
+        r = v2()
+        r["taches"][0]["liens"] = [{"libelle": "x", "url": "javascript:alert(1)"}]
+        self.assertTrue(any("liens" in m for m in releve.valider(r)))
+
+    def test_lecon_agent_inconnu(self):
+        r = v2(lecons=[{"id": "l1", "agent": "inconnu", "texte": "t"}])
+        self.assertTrue(any("l1" in m for m in releve.valider(r)))
+        r = v2(lecons=[{"id": "l1", "agent": "d1", "texte": "t", "verdict_demande": "valider"}])
+        self.assertEqual(releve.valider(r), [])
+        r = v2(lecons=[{"id": "l1", "agent": "d1", "texte": "t", "verdict_demande": "peut-etre"}])
+        self.assertTrue(releve.valider(r))
+
+    def test_quarante_et_une_images(self):
+        r = v2()
+        r["taches"][0]["images"] = [{"chemin": f"{i}.png"} for i in range(40)]
+        self.assertEqual(releve.valider(r), [])
+        r["taches"][0]["images"].append({"chemin": "41.png"})
+        self.assertTrue(any("images" in m for m in releve.valider(r)))
+
+    def test_type_inconnu(self):
+        r = v2(types=[{"id": "bug", "nom": "Bug"}])
+        r["taches"][0]["type"] = "autre"
+        self.assertTrue(any("type" in m for m in releve.valider(r)))
+        r["taches"][0]["type"] = "bug"
+        self.assertEqual(releve.valider(r), [])
+
+    def test_titulaire_et_retours(self):
+        r = v2()
+        r["titulaires"][0].update(prenom="Zoé", specialite="Tests",
+                                  lecons=[{"id": "x", "texte": "t", "etat": "validée"}])
+        r["taches"][0].update(retours=[{"t": "2026-11-10T10:00:00", "texte": "r", "reponse": "ok"}],
+                              bloquee="attend", journal=[{"t": "x", "texte": "y"}])
+        self.assertEqual(releve.valider(r), [])
+        r["titulaires"][0]["lecons"][0]["etat"] = "autre"
+        self.assertTrue(releve.valider(r))
+
+    def test_actions_mal_formees(self):
+        for actions in ("x", [3], [{"id": "", "libelle": "A"}],
+                        [{"id": "a", "libelle": "A"}, {"id": "a", "libelle": "B"}],
+                        [{"id": "a", "libelle": "A", "actif": "oui"}],
+                        [{"id": "a", "libelle": 3}], [{"id": "a", "libelle": "A", "confirmer": 3}]):
+            self.assertTrue(releve.valider(v2(actions=actions)), actions)
+
+    def test_version_1_ignore_les_ajouts(self):
+        r = copy.deepcopy(BASE)
+        r["actions"] = "n'importe quoi"
+        r["taches"][0]["journal"] = 3
+        self.assertEqual(releve.valider(r), [])
+        n = releve.normaliser(r)
+        self.assertNotIn("actions", n)
+        self.assertNotIn("journal", n["taches"][0])
+        self.assertNotIn("bloquee", n["taches"][0])
+
+    def test_normaliser_v2_defauts(self):
+        n = releve.normaliser(V2)
+        self.assertEqual((n["actions"], n["types"], n["lecons"]), ([], [], []))
+        t = n["taches"][0]
+        self.assertEqual((t["journal"], t["images"], t["liens"], t["retours"], t["type"], t["bloquee"]),
+                         ([], [], [], [], None, None))
 
 
 class TestObtenir(unittest.TestCase):

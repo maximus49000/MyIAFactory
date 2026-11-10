@@ -36,6 +36,17 @@ Projet 1, le bureau vivant :
 - [x] 11. Le mobilier (modèles Tripo)
 - [x] 12. Le personnage (modèle Tripo)
 
+Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-bureau-qui-agit.md)) :
+
+- [x] 1. Le relevé version 2
+- [ ] 2. L'état version 2
+- [ ] 3. Les demandes (du bureau au projet)
+- [ ] 4. Les images
+- [ ] 5. Les boutons de la factory et l'envoi des demandes
+- [ ] 6. Le panneau d'une tâche, la file, la vue liste
+- [ ] 7. Le Directeur et les leçons
+- [ ] 8. La démo qui agit, la documentation
+
 État : le bureau vivant est terminé (les douze étapes et la relecture finale). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.
 
 Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`.

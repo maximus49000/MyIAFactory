@@ -62,7 +62,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 11. L'onglet KPI
 - [x] 12. La démo, la documentation, la relecture (relecture finale faite : voir la passation, phase E)
 
-État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : concevoir le projet 3, le parcours d'une tâche.
+État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : le projet 3, le parcours d'une tâche, est conçu ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) ; reste à écrire son plan.
 
 ![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)
 
@@ -70,12 +70,12 @@ Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages
 
 ## Ce qu'il reste à faire ensuite
 
-- **Projet 3, le parcours d'une tâche** : création depuis le bureau, cahier des charges, micro-tâches, boucle QA, choix de l'agent et du modèle.
+- **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : un orchestrateur générique (cadrage, cahier des charges avec maquette, découpage, prototype, méthode validée, série avec relecture croisée), une mémoire à trois étages (skill, genre de projet, projet), un bureau à plusieurs projets avec « Nouvelle fonctionnalité », la discussion de cadrage et le catalogue de chaque fonctionnalité.
 - **Projet 4, l'installation sur un projet** : scan, proposition de services, calibrage sur la machine, renfort cloud, emballage en skill.
 
 ## Documents
 
-- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md) ; les dossiers des services : [docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md](docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md)
+- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md) ; les dossiers des services : [docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md](docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md) ; le parcours d'une tâche : [docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)

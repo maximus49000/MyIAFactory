@@ -44,7 +44,7 @@ Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-burea
 - [x] 4. Les images
 - [x] 5. Les boutons de la factory et l'envoi des demandes
 - [x] 6. Le panneau d'une tâche, la file, la vue liste
-- [ ] 7. Le Directeur et les leçons
+- [x] 7. Le Directeur et les leçons
 - [ ] 8. La démo qui agit, la documentation
 
 État : le bureau vivant est terminé (les douze étapes et la relecture finale). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.

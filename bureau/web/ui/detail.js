@@ -196,7 +196,7 @@ export function contenuListe(ctx, contenu) {
     b.type = "button";
     b.append(el("span", "ligne-titre", tronquer(t.titre, MAX_TITRE)),
              el("span", "ligne-detail", `${tronquer(nomColonne(e, t.colonne), 20)} · ${prenomAgent(e, t.agent)} · ${ilYA(t.maj)}`));
-    b.addEventListener("click", () => ctx.ouvrirTache(t.id));
+    b.addEventListener("click", () => ctx.ouvrirTacheDepuisListe(t.id));
     li.append(b);
     liste.append(li);
   }

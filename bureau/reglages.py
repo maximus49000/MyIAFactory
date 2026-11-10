@@ -16,7 +16,7 @@ def charger(chemin):
     r = json.loads(json.dumps(DEFAUTS))
     if chemin.exists():
         try:
-            donnees = json.loads(chemin.read_text(encoding="utf-8"))
+            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
         except (ValueError, OSError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
         if not isinstance(donnees, dict):
@@ -33,7 +33,7 @@ def fixer_charge_max(chemin, valeur):
     donnees = {}
     if chemin.exists():
         try:
-            donnees = json.loads(chemin.read_text(encoding="utf-8"))
+            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
         except (ValueError, OSError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
     donnees["charge_max"] = valeur

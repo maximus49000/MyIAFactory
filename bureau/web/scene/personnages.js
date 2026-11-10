@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import * as Squelette from "./squelette.js";
+import {estPartage} from "./modeles.js";
 
 const FOULEE = 0.75;          // m parcourus par cycle de marche
 const VITESSE_ROTATION = 9;   // rad/s pour se tourner
@@ -99,9 +100,28 @@ export class Personnages {
   _retirer(id, f) {
     f.g.traverse((o) => { if (o.isCSS2DObject) o.element.remove(); });
     this.sc.scene.remove(f.g);
+    this._liberer(f);
     const i = this.sc.choisissables.indexOf(f.g);
     if (i >= 0) this.sc.choisissables.splice(i, 1);
     this.figures.delete(id);
+  }
+
+  // Libère ce qui n'appartient qu'à cette figure (le modèle Tripo partage sa géométrie et sa texture
+  // entre toutes les copies ; les matériaux de matiere() sont partagés aussi).
+  _liberer(f) {
+    if (f.sq) {
+      f.sq.mixer?.stopAllAction();
+      f.sq.mixer?.uncacheRoot(f.g);
+      f.sq.tasse.geometry.dispose();
+      f.sq.tasse.material.dispose();
+      f.g.traverse((m) => { if (m.isSkinnedMesh) m.material.dispose(); });
+      return;
+    }
+    f.g.traverse((m) => {
+      if (!m.isMesh) return;
+      m.geometry.dispose();
+      if (!estPartage(m.material)) m.material.dispose();
+    });
   }
 
   _etiqueter(f, agent) {

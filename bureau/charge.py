@@ -91,9 +91,11 @@ class Lisseur:
             self._echantillons.popleft()
 
     def moyenne(self):
-        if not self._echantillons:
+        # Copie : la sonde ajoute des échantillons depuis un autre fil pendant qu'on lit.
+        echantillons = list(self._echantillons)
+        if not echantillons:
             return 0.0
-        return sum(c for _, c in self._echantillons) / len(self._echantillons)
+        return sum(c for _, c in echantillons) / len(echantillons)
 
 
 def affichee(cpu_lisse, memoire):

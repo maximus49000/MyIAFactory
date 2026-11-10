@@ -2,6 +2,7 @@ import http.client
 import io
 import json
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -60,6 +61,22 @@ class TestServeur(unittest.TestCase):
         time.sleep(2.1)
         e = self.json("/api/etat")
         self.assertTrue(e["erreur"])
+
+    def test_etat_servi_pendant_une_lecture_lente(self):
+        # Pendant qu'une commande de relevé lente tourne, /api/etat rend le dernier état sans attendre.
+        self.json("/api/etat")
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["releve"] = {"commande": [sys.executable, "-c", "import time; time.sleep(4)"]}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, self.srv._cache_etat[1])  # état périmé : la prochaine demande relit
+        lent = threading.Thread(target=self.srv.etat, daemon=True)
+        lent.start()
+        time.sleep(0.5)
+        debut = time.monotonic()
+        e = self.json("/api/etat")
+        self.assertLess(time.monotonic() - debut, 1.5)
+        self.assertEqual(e["projet"], "Démo")
+        lent.join(10)
 
     def test_charge(self):
         c = self.json("/api/charge")

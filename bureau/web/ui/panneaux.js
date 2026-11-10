@@ -60,7 +60,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     const c = el("div", "carte-contenu");
     c.append(el("div", "carte-titre", tronquer(t.titre, MAX_TITRE)));
     const col = (e.colonnes || []).find((x) => x.id === t.colonne);
-    c.append(ligne("Colonne", col ? col.nom : "—"));
+    c.append(ligne("Colonne", col ? tronquer(col.nom, 30) : "—"));
     const ag = (e.agents || []).find((x) => x.id === t.agent);
     c.append(ligne("Agent", ag ? ag.prenom : "personne"));
     c.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
@@ -124,7 +124,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     if (type === "service") {
       const s = (e.services || []).find((x) => x.id === id);
       if (!s) { fermerPanneau(); return; }
-      contenu.append(el("h2", "", s.nom));
+      contenu.append(el("h2", "", tronquer(s.nom, 40)));
       const agents = (e.agents || []).filter((a) => a.service === id);
       contenu.append(el("div", "carte-sous-titre", `Agents (${agents.length})`));
       const liste = el("ul", "liste-agents");

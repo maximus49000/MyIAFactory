@@ -166,3 +166,16 @@ test("avancer(0) et avancer(3600) ne plantent pas et laissent tout le monde à u
   for (const a of r.acteurs.values()) assert.ok(Number.isFinite(a.x) && Number.isFinite(a.z) && Number.isFinite(a.cap));
   assert.equal(r.postits.get("t1").colonne, "revue");
 });
+
+test("un agent qui change de service prend une place libre de son nouveau service", () => {
+  const r = new Regie(plan);
+  const e1 = statut(copie(E1), "qa1", "travail");   // dev1 au poste dev 0, qa1 au poste qa 0
+  r.appliquer(e1, []);
+  const e2 = copie(e1);
+  e2.agents.find((a) => a.id === "dev1").service = "qa";
+  r.appliquer(e2, changements(e1, e2));
+  avancerJusqua(r, () => r.acteurs.get("dev1").action !== "marche" && pres(r.acteurs.get("dev1"), r._destination(r.acteurs.get("dev1"))), 30);
+  const dev1 = r.acteurs.get("dev1"), qa1 = r.acteurs.get("qa1");
+  assert.ok(pres(qa1, plan.poste("qa", 0)));
+  assert.ok(pres(dev1, plan.poste("qa", 1)), "dev1 doit être au poste qa 1, pas sur qa1 ni dans le bureau dev");
+});

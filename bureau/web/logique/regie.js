@@ -12,7 +12,7 @@ export class Regie {
     this.acteurs = new Map();   // id -> {x, z, cap, action, agent}
     this.postits = new Map();   // tacheId -> {colonne, rang}
     this.etat = null;
-    this._postes = new Map();   // agentId -> indice de place dans son service
+    this._postes = new Map();   // agentId -> {service, i} : indice de place dans ce service
     this._cafe = new Map();     // agentId -> indice de place au café
     this._missions = new Map(); // porteurId -> [{tache, vers}]
     this._file = [];            // porteurs, dans l'ordre de passage au tableau
@@ -194,7 +194,7 @@ export class Regie {
     }
     if (a.chef) return {...this.plan.chef, action: "debout"};
     if (this._postes.has(a.id)) {
-      const p = this.plan.poste(a.service, this._postes.get(a.id));
+      const p = this.plan.poste(a.service, this._postes.get(a.id).i);
       return {...p, action: p.assis ? "assis" : "debout"};
     }
     return {...this.plan.cafe(this._cafe.get(a.id) ?? 0), action: "cafe"};
@@ -204,12 +204,14 @@ export class Regie {
     const travaille = !a.chef && (a.statut === "travail" || a.statut === "sans_nouvelles") && this.plan.aService(a.service);
     if (travaille) {
       this._cafe.delete(a.id);
+      // Changement de service : la place gardée était celle de l'ancien service.
+      if (this._postes.get(a.id)?.service !== a.service) this._postes.delete(a.id);
       if (!this._postes.has(a.id)) {
         const pris = new Set();
-        for (const [id, i] of this._postes) if (this.acteurs.get(id)?.agent.service === a.service) pris.add(i);
+        for (const p of this._postes.values()) if (p.service === a.service) pris.add(p.i);
         let i = 0;
         while (pris.has(i)) i++;
-        this._postes.set(a.id, i);
+        this._postes.set(a.id, {service: a.service, i});
       }
     } else {
       this._postes.delete(a.id);

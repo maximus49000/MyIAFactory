@@ -177,7 +177,8 @@ export function animer(sq, p) {
     sq.tMarche = (sq.tMarche + p.parcouru / sq.vitesseAnim) % sq.clip.duration;
     sq.mixer.setTime(sq.tMarche);
     for (const b of sq.tous) {
-      b.o.quaternion.slerpQuaternions(b.courant, b.o.quaternion, w);
+      _q.copy(b.o.quaternion); // pose de la marche (ne pas la passer en alias à slerpQuaternions)
+      b.o.quaternion.copy(b.courant).slerp(_q, w);
       b.o.position.lerpVectors(b.reposPos, b.o.position, w);
     }
   } else {

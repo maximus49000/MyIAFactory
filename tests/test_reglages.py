@@ -22,6 +22,11 @@ class TestReglages(unittest.TestCase):
         self.assertEqual((r["charge_max"], r["port"]), (60, 8770))
         self.assertEqual(r["dossier"], str(self.tmp))
 
+    def test_fichier_avec_bom(self):
+        # PowerShell 5.1 écrit un BOM avec -Encoding utf8.
+        (self.tmp / "r.json").write_bytes(bytes([0xEF, 0xBB, 0xBF]) + b'{"charge_max": 60}')
+        self.assertEqual(reglages.charger(self.tmp / "r.json")["charge_max"], 60)
+
     def test_json_invalide(self):
         (self.tmp / "r.json").write_text("{", encoding="utf-8")
         with self.assertRaises(reglages.ReglagesInvalides):

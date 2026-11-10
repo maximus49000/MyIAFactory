@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import {CSS2DRenderer, CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {matiere} from "./modeles.js";
+import {tronquer} from "../ui/texte.js";
 
 const SOLS_SERVICES = ["#cfe3d2", "#d5dcf0", "#f3dccb", "#ece3b5", "#d3ebee", "#eed5e2"];
 const SOL_CAFE = "#f0c7a2", SOL_DIRECTION = "#b8cdb0", SOL_OPEN = "#ead9bf";
@@ -206,7 +207,8 @@ export function creerScene(conteneur, plan, modeles) {
   for (const r of plan.pieces) {
     const div = document.createElement("div");
     div.className = "nom-piece nom-" + r.type;
-    div.textContent = r.nom;
+    div.textContent = tronquer(r.nom, 24);
+    div.title = r.nom ?? "";
     const o = new CSS2DObject(div);
     // rangée du haut : coin gauche ; rangée du bas : coin droit (le Directeur se tient au milieu)
     const gauche = r.dir > 0;

@@ -18,6 +18,8 @@ Dans le fichier de réglages du projet (par exemple `reglages.json`), la clé `r
 {"releve": {"commande": ["python", "mon_releve.py"], "dossier": "."}}
 ```
 
+Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'elle a lancés, et affiche « La commande du relevé a dépassé 10 s ». La sortie doit être en UTF-8 (un BOM en tête est accepté, comme pour les fichiers). Sous Windows, un script PowerShell écrit par défaut dans la page de codes de la console : commencez-le par `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`. En Python, `sys.stdout.reconfigure(encoding="utf-8")`.
+
 > **Écrivez le fichier par remplacement atomique** : écrivez dans un fichier temporaire du même dossier, puis renommez-le sur `releve.json`. Le bureau relit le fichier toutes les quelques secondes ; un fichier écrit à moitié est refusé (le bureau garde alors sa dernière scène et affiche un bandeau), mais un remplacement atomique évite même cela.
 
 ## Les champs

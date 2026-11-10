@@ -12,9 +12,15 @@ export const NOMS = ["bureau", "chaise", "ecran", "armoire", "etagere", "plante"
 const materiaux = new Map();
 export function matiere(couleur, options = {}) {
   const cle = couleur + JSON.stringify(options);
-  if (!materiaux.has(cle)) materiaux.set(cle, new THREE.MeshLambertMaterial({color: couleur, ...options}));
+  if (!materiaux.has(cle)) {
+    const m = new THREE.MeshLambertMaterial({color: couleur, ...options});
+    materiaux.set(cle, m);
+    partages.add(m);
+  }
   return materiaux.get(cle);
 }
+const partages = new Set();
+export const estPartage = (m) => partages.has(m);
 
 function ombre(o) {
   o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });

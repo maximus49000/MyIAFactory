@@ -11,6 +11,7 @@ import {creerBarre} from "./ui/barre.js";
 import {creerPanneaux} from "./ui/panneaux.js";
 
 const INTERVALLE = 3000;      // ms entre deux lectures de l'état
+const DELAI_LECTURE = 15000;  // ms : au-delà, la lecture est abandonnée (le serveur coupe le relevé à 10 s)
 const DT_MAX = 0.1;           // s : plafond d'un pas de temps
 const IMAGE_MOUVEMENT = 1 / 30, IMAGE_REPOS = 1 / 12;
 
@@ -24,7 +25,7 @@ function signaler(message) {
 
 async function lireEtat() {
   try {
-    const r = await fetch("/api/etat", {cache: "no-store"});
+    const r = await fetch("/api/etat", {cache: "no-store", signal: AbortSignal.timeout(DELAI_LECTURE)});
     if (!r.ok) return {erreur: `Le serveur a répondu ${r.status}.`};
     return await r.json();
   } catch {
@@ -72,8 +73,12 @@ async function demarrer() {
   const acteursVus = () => new Map([...regie.acteurs, ["directeur", directeur]]);
   let besoin = true;          // une image est à refaire même si rien ne bouge (état changé, fenêtre redimensionnée)
 
+  let enLecture = false;      // une lecture à la fois : pas de requêtes qui s'empilent
   async function sonder() {
-    const e = await lireEtat();
+    if (enLecture) return;
+    enLecture = true;
+    let e;
+    try { e = await lireEtat(); } finally { enLecture = false; }
     if (!etatUtilisable(e)) { signaler(e?.erreur || "Relevé indisponible."); return; }
     barre.majEtat(e);
     if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
@@ -87,9 +92,12 @@ async function demarrer() {
   setInterval(sonder, INTERVALLE);
 
   let avant = performance.now(), cumul = 0, intervalle = IMAGE_REPOS;
+  let prochaine = 0;          // image demandée et pas encore jouée (une seule boucle à la fois)
+  function relancer() { if (!prochaine) prochaine = requestAnimationFrame(image); }
   function image(maintenant) {
+    prochaine = 0;
     if (document.hidden) return;
-    requestAnimationFrame(image);
+    relancer();
     cumul += (maintenant - avant) / 1000;
     avant = maintenant;
     if (cumul < intervalle && !besoin) return;
@@ -111,11 +119,11 @@ async function demarrer() {
     avant = performance.now();
     cumul = 0;
     besoin = true;
-    requestAnimationFrame(image);
+    relancer();
   });
   // La scène se recadre dès que son espace change (fenêtre, ouverture du panneau de droite).
   new ResizeObserver(() => { sc.redimensionner(); besoin = true; }).observe(conteneur);
-  requestAnimationFrame(image);
+  relancer();
 
   // Pour l'inspection depuis la console du navigateur.
   window.bureau = {plan, barre, panneaux, regie, scene: sc, personnages, kanban, etat: () => dernier};

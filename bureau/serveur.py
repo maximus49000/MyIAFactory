@@ -49,7 +49,14 @@ class Bureau(ThreadingHTTPServer):
 
     # -- état -------------------------------------------------------------
     def etat(self):
-        with self._verrou:
+        t, e = self._cache_etat
+        if e is not None and time.monotonic() - t < DELAI_ETAT_S:
+            return e
+        # Une seule lecture du relevé à la fois. Pendant qu'elle dure (une commande peut prendre
+        # jusqu'à 10 s), les autres demandes reçoivent le dernier état au lieu d'attendre.
+        if not self._verrou.acquire(blocking=e is None):
+            return e
+        try:
             t, e = self._cache_etat
             if e is not None and time.monotonic() - t < DELAI_ETAT_S:
                 return e
@@ -58,6 +65,8 @@ class Bureau(ThreadingHTTPServer):
             e = etat.erreur(err, maintenant) if err else etat.lire(regl, self.equipe, maintenant)
             self._cache_etat = (time.monotonic(), e)
             return e
+        finally:
+            self._verrou.release()
 
     # -- charge -----------------------------------------------------------
     def _boucle_sonde(self):

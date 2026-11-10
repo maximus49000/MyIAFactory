@@ -23,7 +23,7 @@ class Equipe:
         if not self.chemin.exists():
             return
         try:
-            donnees = json.loads(self.chemin.read_text(encoding="utf-8"))
+            donnees = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
             agents = donnees["agents"]
             if not isinstance(agents, dict):
                 raise ValueError

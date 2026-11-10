@@ -1,5 +1,6 @@
 """Serveur local : la page, l'état, la charge, le conseil, le réglage de charge et la facturation."""
 import argparse
+import hashlib
 import json
 import mimetypes
 import threading
@@ -18,6 +19,9 @@ PAS_SONDE_S = 5
 PAS_HISTORIQUE_S = 60
 PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit les sources qu'une fois par jour
 ATTENTE_PREMIERS_PRIX_S = 25
+MAX_CORPS_DEMANDE = 28 * 1024 * 1024  # 4 images de 5 Mo en base64, plus le texte
+MAX_CORPS_REGLAGES = 4096
+GARDE_DOUBLON_S = 10  # une même fonctionnalité ou un même message envoyé deux fois de suite : une seule demande
 GARDE_CHALLENGE_S = 120  # un challenge envoyé mais pas encore au relevé : pas de second envoi sur sa cible
 TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
          ".json": "application/json; charset=utf-8", ".html": "text/html; charset=utf-8",
@@ -57,6 +61,7 @@ class Bureau(ThreadingHTTPServer):
         self._cache_etat = (0.0, None)
         self.dernier_releve = None  # dernier relevé normalisé valide (sert à vérifier les demandes)
         self._verrou_demandes = threading.Lock()
+        self._derniere_creation = None  # (empreinte, heure monotone) de la dernière fonctionnalité ou du dernier message
         self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
         self._arret = threading.Event()
         self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
@@ -204,6 +209,11 @@ class Bureau(ThreadingHTTPServer):
         dernier relevé, relu juste avant (une demande précédente a pu le changer)."""
         demande = demandes.nettoyer(demande)
         with self._verrou_demandes:
+            empreinte = self._empreinte_creation(demande)
+            if empreinte is not None and self._derniere_creation is not None:
+                avant, quand = self._derniere_creation
+                if avant == empreinte and time.monotonic() - quand < GARDE_DOUBLON_S:
+                    return 200, {"ok": True, "doublon": True}
             self.etat(bloquant=True)  # relit le relevé s'il est périmé, en attendant une lecture en cours
             r = self.dernier_releve
             if r is None:
@@ -213,7 +223,7 @@ class Bureau(ThreadingHTTPServer):
             cible = demande.get("cible") if isinstance(demande, dict) and demande.get("type") == "challenge" else None
             if isinstance(cible, dict) and cible.get("type") in ("kpi", "source"):  # seules à recalculer
                 cibles = self.cibles_calculees(r, regl)
-            message = demandes.verifier(demande, r, cibles)
+            message = demandes.verifier(demande, r, cibles, None)  # le catalogue n'est pas encore lu ici
             if message:
                 return 400, {"erreur": message}
             cle = None
@@ -228,10 +238,20 @@ class Bureau(ThreadingHTTPServer):
             ok, message = demandes.envoyer(regl, demande)
             if ok and cle:
                 self._challenges_envoyes[cle] = time.monotonic()
+            if ok and empreinte is not None:
+                self._derniere_creation = (empreinte, time.monotonic())
             self._cache_etat = (0.0, self._cache_etat[1])  # relire le relevé tout de suite
         if not ok:
             return 502, {"erreur": message}
         return 200, {"ok": True}
+
+    @staticmethod
+    def _empreinte_creation(demande):
+        """Empreinte d'une demande `fonctionnalite` ou `message` (sans l'heure) ; `None` pour les autres."""
+        if not isinstance(demande, dict) or demande.get("type") not in ("fonctionnalite", "message"):
+            return None
+        brut = json.dumps(demande, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        return hashlib.sha256(brut).hexdigest()
 
     # -- charge -----------------------------------------------------------
     def _boucle_sonde(self):
@@ -402,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
             longueur = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             longueur = -1
-        if not 0 < longueur <= (16384 if chemin == "/api/demande" else 4096):
+        if not 0 < longueur <= (MAX_CORPS_DEMANDE if chemin == "/api/demande" else MAX_CORPS_REGLAGES):
             return self._json(400, {"erreur": "Corps de requête invalide."})
         if chemin == "/api/demande":
             try:

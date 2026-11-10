@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 import sys
@@ -220,6 +221,186 @@ class TestEnvoyer(unittest.TestCase):
         # n'écrit pas dans le tube (ne lit pas l'entrée) : pas d'erreur côté bureau
         regl = self.regl("pass")
         self.assertEqual(demandes.envoyer(regl, {"type": "bouton", "id": "x"}), (True, ""))
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+GIF = b"GIF89a" + b"\x00" * 16
+
+
+def image(nom="a.png", contenu=PNG, type_="image/png", donnees=None):
+    return {"nom": nom, "type": type_,
+            "donnees": donnees if donnees is not None else base64.b64encode(contenu).decode("ascii")}
+
+
+R4 = releve.normaliser({
+    "version": 4, "projet": "P", "factory": {"etat": "en marche"},
+    "services": [{"id": "dev", "nom": "Dev"}], "colonnes": [{"id": "a", "nom": "A"}],
+    "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+    "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}],
+    "fonctionnalites": [
+        {"id": "f1", "nom": "Cahier", "etape": "cahier",
+         "decisions": [{"id": "dc", "genre": "valider_cahier", "texte": "Valider ?"}]},
+        {"id": "f2", "nom": "Méthode", "etape": "methode",
+         "decisions": [{"id": "dm", "genre": "valider_methode", "texte": "Valider ?"}]},
+        {"id": "f3", "nom": "À revoir", "etape": "cadrage",
+         "decisions": [{"id": "dr", "genre": "methode_a_revoir", "texte": "À revoir ?"}]},
+        {"id": "f4", "nom": "Série", "etape": "serie", "catalogue": True},
+        {"id": "f5", "nom": "Simple", "etape": "cadrage"}],
+    "decisions_projet": [
+        {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
+         "genres_connus": ["ville"]},
+        {"id": "s1", "genre": "session_cloud", "texte": "Session ?", "agent": "d1"}],
+    "lecons": [{"id": "l1", "agent": "d1", "texte": "t"},
+               {"id": "l2", "agent": "d1", "texte": "t", "etage_propose": "genre", "texte_general": "G"},
+               {"id": "l3", "agent": "d1", "texte": "t", "etage_propose": "projet"}]})
+
+
+class TestVerifierV4(unittest.TestCase):
+    def ok(self, d, elements=None):
+        self.assertIsNone(demandes.verifier(d, R4, frozenset(), elements), d)
+
+    def refus(self, d, elements=None):
+        m = demandes.verifier(d, R4, frozenset(), elements)
+        self.assertTrue(m, d)
+        return m
+
+    def test_fonctionnalite(self):
+        self.ok({"type": "fonctionnalite", "texte": "Une ville"})
+        self.ok({"type": "fonctionnalite", "texte": "Une ville", "images": [image()]})
+        for d in ({"type": "fonctionnalite"}, {"type": "fonctionnalite", "texte": "  "},
+                  {"type": "fonctionnalite", "texte": 3}, {"type": "fonctionnalite", "texte": "x" * 3501}):
+            self.refus(d)
+        self.ok({"type": "fonctionnalite", "texte": "x" * 3500})
+
+    def test_message(self):
+        self.ok({"type": "message", "fonctionnalite": "f5", "texte": "Bonjour"})
+        self.ok({"type": "message", "fonctionnalite": "f5", "texte": "Bonjour", "images": [image(), image("b.jpg", JPEG, "image/jpeg")]})
+        self.refus({"type": "message", "fonctionnalite": "zz", "texte": "Bonjour"})
+        self.refus({"type": "message", "fonctionnalite": "f5", "texte": ""})
+        self.refus({"type": "message", "texte": "Bonjour"})
+
+    def test_cahier(self):
+        self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"})
+        self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger", "texte": "Plus grand"})
+        self.refus({"type": "cahier", "fonctionnalite": "f5", "verdict": "valider"})  # pas de décision
+        self.refus({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger"})
+        self.refus({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger", "texte": " "})
+        self.refus({"type": "cahier", "fonctionnalite": "f1", "verdict": "peut-être"})
+        self.refus({"type": "cahier", "fonctionnalite": "zz", "verdict": "valider"})
+        self.refus({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider", "texte": "x" * 3501})
+
+    def test_methode(self):
+        self.ok({"type": "methode", "fonctionnalite": "f2", "verdict": "valider"})
+        self.refus({"type": "methode", "fonctionnalite": "f1", "verdict": "valider"})
+        self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "garder"})
+        self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "garder"})
+        self.ok({"type": "methode", "fonctionnalite": "f2", "verdict": "revoir"})  # étape « methode »
+        self.ok({"type": "methode", "fonctionnalite": "f4", "verdict": "revoir", "texte": "Mieux"})  # « serie »
+        self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "revoir"})  # décision « à revoir »
+        self.refus({"type": "methode", "fonctionnalite": "f5", "verdict": "revoir"})
+        self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "autre"})
+
+    def test_genre(self):
+        self.ok({"type": "genre", "decision": "g1", "genre": "ville"})
+        self.ok({"type": "genre", "decision": "g1", "genre": "jeu", "description": "Un jeu"})
+        self.refus({"type": "genre", "decision": "g1", "genre": "jeu"})  # nouveau sans description
+        self.refus({"type": "genre", "decision": "g1", "genre": "jeu", "description": " "})
+        self.refus({"type": "genre", "decision": "g1", "genre": "../x", "description": "d"})
+        self.refus({"type": "genre", "decision": "g1", "genre": "Ville"})
+        self.refus({"type": "genre", "decision": "inconnue", "genre": "ville"})
+        self.refus({"type": "genre", "decision": "s1", "genre": "ville"})  # pas une décision de genre
+
+    def test_session_cloud(self):
+        self.ok({"type": "session_cloud", "decision": "s1", "session": "Ma session"})
+        self.refus({"type": "session_cloud", "decision": "s1", "session": " "})
+        self.refus({"type": "session_cloud", "decision": "s1", "session": "x" * 201})
+        self.ok({"type": "session_cloud", "decision": "s1", "session": "x" * 200})
+        self.refus({"type": "session_cloud", "decision": "g1", "session": "S"})
+        self.refus({"type": "session_cloud", "decision": "zz", "session": "S"})
+
+    def test_retour_element(self):
+        d = {"type": "retour_element", "fonctionnalite": "f4", "element": "e1", "texte": "Plus haut"}
+        self.ok(d, {"e1", "e2"})
+        self.assertEqual(self.refus(d, None), "Catalogue indisponible.")
+        self.refus({**d, "element": "e9"}, {"e1"})
+        self.refus({**d, "texte": " "}, {"e1"})
+        self.refus({**d, "fonctionnalite": "f5"}, {"e1"})  # sans catalogue
+        self.refus({**d, "fonctionnalite": "zz"}, {"e1"})
+
+    def test_lecon_etage(self):
+        self.ok({"type": "lecon", "id": "l2", "verdict": "valider", "etage": "genre"})
+        self.ok({"type": "lecon", "id": "l2", "verdict": "valider", "etage": "skill"})
+        self.ok({"type": "lecon", "id": "l1", "verdict": "valider", "etage": "projet"})
+        self.refus({"type": "lecon", "id": "l1", "verdict": "valider", "etage": "genre"})  # sans texte_general
+        self.refus({"type": "lecon", "id": "l3", "verdict": "valider", "etage": "skill"})
+        self.refus({"type": "lecon", "id": "l1", "verdict": "valider", "etage": "monde"})
+        self.ok({"type": "lecon", "id": "l1", "verdict": "valider"})
+
+    def test_demandes_v4_refusees_en_v3(self):
+        r3 = releve.normaliser({**{k: v for k, v in R4.items() if k not in ("fonctionnalites", "decisions_projet",
+                                                                            "genre", "livrable")},
+                                "version": 3})
+        for d in ({"type": "fonctionnalite", "texte": "x"},
+                  {"type": "message", "fonctionnalite": "f5", "texte": "x"},
+                  {"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"},
+                  {"type": "methode", "fonctionnalite": "f2", "verdict": "valider"},
+                  {"type": "genre", "decision": "g1", "genre": "ville"},
+                  {"type": "session_cloud", "decision": "s1", "session": "S"},
+                  {"type": "retour_element", "fonctionnalite": "f4", "element": "e", "texte": "x"},
+                  {"type": "lecon", "id": "l1", "verdict": "valider", "etage": "projet"}):
+            m = demandes.verifier(d, r3, frozenset(), {"e"})
+            self.assertTrue(m, d)
+            self.assertIn("version 4", m)
+        self.assertIsNone(demandes.verifier({"type": "lecon", "id": "l1", "verdict": "valider"}, r3))
+
+    def test_images_refusees(self):
+        gros = image("gros.png", PNG + b"\x00" * (6 * 1024 * 1024))
+        cas = {"cinq images": [image(f"a{i}.png") for i in range(5)],
+               "6 Mo": [gros],
+               "gif renommé png": [image("a.png", GIF)],
+               "base64 invalide": [image(donnees="!!pas du base64!!")],
+               "nom avec ..": [image("../x.png")],
+               "nom avec /": [image("dossier/x.png")],
+               "nom avec \\": [image("dossier\\x.png")],
+               "nom trop long": [image("a" * 77 + ".png")],
+               "extension gif": [image("a.gif")],
+               "sans extension": [image("a")],
+               "type gif": [image("a.png", type_="image/gif")],
+               "type et extension incohérents": [image("a.jpg", PNG, "image/png")],
+               "jpeg dont la signature est png": [image("a.jpg", PNG, "image/jpeg")],
+               "vide": [image("a.png", b"")],
+               "pas une liste": "x",
+               "pas un objet": ["a.png"],
+               "sans données": [{"nom": "a.png", "type": "image/png"}],
+               "données non textuelles": [{"nom": "a.png", "type": "image/png", "donnees": 3}]}
+        for nom, images in cas.items():
+            self.assertTrue(demandes.verifier_images(images), nom)
+            self.refus({"type": "fonctionnalite", "texte": "x", "images": images})
+            self.refus({"type": "message", "fonctionnalite": "f5", "texte": "x", "images": images})
+
+    def test_image_jpeg_acceptee(self):
+        for nom in ("a.jpg", "a.JPEG", "photo.Jpg"):
+            self.assertIsNone(demandes.verifier_images([image(nom, JPEG, "image/jpeg")]), nom)
+        self.assertIsNone(demandes.verifier_images([image("A.PNG")]))
+        self.assertIsNone(demandes.verifier_images([]))
+        self.assertIsNone(demandes.verifier_images([image(f"a{i}.png") for i in range(4)]))
+        juste = image("juste.png", PNG + b"\x00" * (5 * 1024 * 1024 - len(PNG)))
+        self.assertIsNone(demandes.verifier_images([juste]))  # 5 Mo pile
+
+    def test_nettoyer_v4(self):
+        d = demandes.nettoyer({"type": "message", "fonctionnalite": "f5", "texte": "x", "mauvais": 1,
+                               "images": [{**image(), "chemin": "/etc/passwd"}]})
+        self.assertEqual(set(d), {"type", "fonctionnalite", "texte", "images"})
+        self.assertEqual(set(d["images"][0]), {"nom", "type", "donnees"})
+        d = demandes.nettoyer({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider", "texte": "t", "x": 1})
+        self.assertEqual(set(d), {"type", "fonctionnalite", "verdict", "texte"})
+        d = demandes.nettoyer({"type": "genre", "decision": "g", "genre": "a", "description": "d", "x": 1})
+        self.assertEqual(set(d), {"type", "decision", "genre", "description"})
+        d = demandes.nettoyer({"type": "lecon", "id": "l", "verdict": "valider", "etage": "genre", "x": 1})
+        self.assertEqual(set(d), {"type", "id", "verdict", "etage"})
+        d = demandes.nettoyer({"type": "fonctionnalite", "texte": "x", "images": "pas une liste"})
+        self.assertEqual(d["images"], "pas une liste")  # le contrôle le refusera
 
 
 if __name__ == "__main__":

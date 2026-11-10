@@ -66,7 +66,7 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 
 - [x] 1. Le relevé version 4
 - [x] 2. L'état version 4
-- [ ] 3. Les sept demandes et les images jointes
+- [x] 3. Les sept demandes et les images jointes
 - [ ] 4. Plusieurs projets dans un bureau
 - [ ] 5. Le catalogue et le dernier livrable servis
 - [ ] 6. Le sélecteur de projets et la barre

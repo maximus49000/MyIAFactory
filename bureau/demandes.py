@@ -1,4 +1,6 @@
 """Les demandes : ce que la page demande au projet. Le bureau ne fait que les vérifier et les remettre."""
+import base64
+import binascii
 import json
 import subprocess
 from datetime import datetime
@@ -11,8 +13,20 @@ MAX_TEXTE = MAX_RETOUR
 CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour": ("tache", "texte"), "lecon": ("id", "verdict"),
           "challenge": ("cible",), "solution": ("challenge", "texte"),
-          "verdict_solution": ("challenge", "solution", "verdict")}
-FACULTATIFS = {"challenge": ("texte", "solution")}
+          "verdict_solution": ("challenge", "solution", "verdict"),
+          "fonctionnalite": ("texte",), "message": ("fonctionnalite", "texte"),
+          "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
+          "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
+          "retour_element": ("fonctionnalite", "element", "texte")}
+FACULTATIFS = {"challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
+               "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",)}
+DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element")
+MAX_IMAGES = releve.MAX_IMAGES_MESSAGE
+MAX_OCTETS_IMAGE = 5 * 1024 * 1024
+MAX_NOM_IMAGE = 80
+MAX_SESSION = 200
+SIGNATURES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
+EXTENSIONS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 TYPES_CIBLE = ("kpi", "connaissance", "source")
 
 
@@ -24,6 +38,9 @@ def nettoyer(demande):
     d = {k: demande[k] for k in ("type",) + CHAMPS[genre] + FACULTATIFS.get(genre, ()) if k in demande}
     if isinstance(d.get("cible"), dict):
         d["cible"] = {k: d["cible"][k] for k in ("type", "id") if k in d["cible"]}
+    if isinstance(d.get("images"), list):  # rien d'autre que le nom, le type et les données n'est transmis
+        d["images"] = [{k: i[k] for k in ("nom", "type", "donnees") if k in i} if isinstance(i, dict) else i
+                       for i in d["images"]]
     return d
 
 
@@ -41,10 +58,46 @@ def _ids_taches(r):
     return ids
 
 
-def verifier(demande, r, cibles_calculees=frozenset()):
+def verifier_images(images):
+    """Message d'erreur (français) ou None. Au plus 4 images, 5 Mo chacune une fois décodées,
+    `{nom, type, donnees}` : `.png`, `.jpg` ou `.jpeg`, contenu vérifié par sa signature."""
+    if not isinstance(images, list):
+        return "« images » doit être une liste."
+    if len(images) > MAX_IMAGES:
+        return f"Au plus {MAX_IMAGES} images par demande."
+    for k, im in enumerate(images, 1):
+        quoi = f"Image {k}"
+        if not isinstance(im, dict):
+            return f"{quoi} : doit être un objet {{nom, type, donnees}}."
+        nom, type_, donnees = im.get("nom"), im.get("type"), im.get("donnees")
+        if (not isinstance(nom, str) or not nom or len(nom) > MAX_NOM_IMAGE or ".." in nom
+                or any(c in nom for c in "/\\:") or any(ord(c) < 32 or ord(c) == 127 for c in nom)):
+            return f"{quoi} : nom de fichier refusé (sans séparateur ni « .. », {MAX_NOM_IMAGE} caractères au plus)."
+        extension = "." + nom.rsplit(".", 1)[-1].lower() if "." in nom else ""
+        if extension not in EXTENSIONS:
+            return f"{quoi} : seules les images .png, .jpg et .jpeg sont acceptées."
+        if type_ not in SIGNATURES or EXTENSIONS[extension] != type_:
+            return f"{quoi} : type refusé (image/png pour .png, image/jpeg pour .jpg et .jpeg)."
+        if not isinstance(donnees, str):
+            return f"{quoi} : « donnees » doit être du texte base64."
+        if len(donnees) > MAX_OCTETS_IMAGE * 4 // 3 + 4:
+            return f"{quoi} : dépasse {MAX_OCTETS_IMAGE // (1024 * 1024)} Mo."
+        try:
+            octets = base64.b64decode(donnees, validate=True)
+        except (binascii.Error, ValueError):
+            return f"{quoi} : « donnees » n'est pas du base64 valide."
+        if len(octets) > MAX_OCTETS_IMAGE:
+            return f"{quoi} : dépasse {MAX_OCTETS_IMAGE // (1024 * 1024)} Mo."
+        if not octets.startswith(SIGNATURES[type_]):
+            return f"{quoi} : le contenu n'est pas une image {type_.split('/')[1].upper()}."
+    return None
+
+
+def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
     """Message d'erreur (français) ou None. `r` : le dernier relevé normalisé valide.
     `cibles_calculees` : les identifiants des cibles que le bureau recalcule (KPI calculés, sources
-    d'amélioration) ; un dict (id -> constat) convient aussi."""
+    d'amélioration) ; un dict (id -> constat) convient aussi. `elements` : l'ensemble des identifiants
+    du catalogue (pour `retour_element`), ou `None` si le catalogue n'est pas lisible."""
     if not isinstance(demande, dict):
         return "La demande doit être un objet."
     genre = demande.get("type")
@@ -52,9 +105,13 @@ def verifier(demande, r, cibles_calculees=frozenset()):
         return "Type de demande inconnu."
     if genre in ("challenge", "solution", "verdict_solution"):
         return _verifier_challenge(demande, r, cibles_calculees)
+    if r.get("version", 1) < 4 and (genre in DEMANDES_V4 or (genre == "lecon" and "etage" in demande)):
+        return "Le relevé de ce projet ne gère pas cette demande (version 4)."
     for champ in CHAMPS[genre]:
         if not isinstance(demande.get(champ), str):
             return f"« {champ} » est obligatoire (texte)."
+    if genre in DEMANDES_V4:
+        return _verifier_v4(demande, r, elements)
     if genre == "bouton":
         a = next((a for a in r.get("actions", []) if a["id"] == demande["id"]), None)
         if a is None:
@@ -79,6 +136,100 @@ def verifier(demande, r, cibles_calculees=frozenset()):
             return "Leçon inconnue."
         if demande["verdict"] not in ("valider", "invalider"):
             return "Verdict inconnu (valider ou invalider)."
+        if "etage" in demande:
+            return _verifier_etage(demande, r)
+    return None
+
+
+def _verifier_etage(demande, r):
+    etage = demande["etage"]
+    if not isinstance(etage, str) or etage not in releve.ETAGES:
+        return "Étage inconnu (projet, genre ou skill)."
+    lecon = next(le for le in r.get("lecons", []) if le["id"] == demande["id"])
+    if etage != "projet" and not (lecon.get("texte_general") or "").strip():
+        return "Cette leçon n'a pas de texte général : elle ne peut rester qu'au projet."
+    return None
+
+
+def _fonctionnalite(r, i):
+    return next((f for f in r.get("fonctionnalites", []) if f["id"] == i), None)
+
+
+def _decision(decisions, i, genre):
+    return next((d for d in decisions if d["id"] == i and d["genre"] == genre), None)
+
+
+def _a_decision(f, genre):
+    return any(d["genre"] == genre for d in f["decisions"])
+
+
+def _verifier_v4(demande, r, elements):
+    genre = demande["type"]
+    if genre in ("fonctionnalite", "message") and "images" in demande:
+        message = verifier_images(demande["images"])
+        if message:
+            return message
+    for champ in ("texte", "description"):
+        if champ in demande and genre in ("cahier", "methode", "genre") and not isinstance(demande[champ], str):
+            return f"« {champ} » doit être un texte."
+    if genre == "fonctionnalite":
+        return _texte_libre(demande["texte"], "texte")
+    if genre == "genre":
+        return _verifier_genre(demande, r)
+    if genre == "session_cloud":
+        if _decision(r.get("decisions_projet", []), demande["decision"], "session_cloud") is None:
+            return "Décision inconnue."
+        if not demande["session"].strip():
+            return "Le nom de la session est vide."
+        if len(demande["session"]) > MAX_SESSION:
+            return f"Le nom de la session dépasse {MAX_SESSION} caractères."
+        return None
+    f = _fonctionnalite(r, demande["fonctionnalite"])
+    if f is None:
+        return "Fonctionnalité inconnue."
+    if genre == "message":
+        return _texte_libre(demande["texte"], "texte")
+    if genre == "retour_element":
+        if not f.get("catalogue"):
+            return "Cette fonctionnalité n'a pas de catalogue."
+        if elements is None:
+            return "Catalogue indisponible."
+        if demande["element"] not in elements:
+            return "Élément inconnu."
+        return _texte_libre(demande["texte"], "texte")
+    verdict = demande["verdict"]
+    texte = demande.get("texte")
+    if texte is not None and len(texte) > MAX_TEXTE:
+        return f"« texte » dépasse {MAX_TEXTE} caractères."
+    if genre == "cahier":
+        if verdict == "valider":
+            return None if _a_decision(f, "valider_cahier") else "Aucun cahier des charges à valider."
+        if verdict == "corriger":
+            return _texte_libre(texte, "texte") if texte is not None else "« texte » est obligatoire pour corriger."
+        return "Verdict inconnu (valider ou corriger)."
+    if verdict == "valider":  # méthode
+        return None if _a_decision(f, "valider_methode") else "Aucune méthode à valider."
+    if verdict == "garder":
+        return None if _a_decision(f, "methode_a_revoir") else "Aucune question « méthode à revoir ? » en attente."
+    if verdict == "revoir":
+        if f["etape"] in ("methode", "serie") or _a_decision(f, "methode_a_revoir"):
+            return None
+        return "Cette fonctionnalité n'a pas encore de méthode à revoir."
+    return "Verdict inconnu (valider, revoir ou garder)."
+
+
+def _verifier_genre(demande, r):
+    d = _decision(r.get("decisions_projet", []), demande["decision"], "confirmer_genre")
+    if d is None:
+        return "Décision inconnue."
+    genre = demande["genre"]
+    if not releve.MOTIF_GENRE.match(genre):
+        return "Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus)."
+    if genre not in (d.get("genres_connus") or []):
+        if "description" not in demande or not demande["description"].strip():
+            return "Un nouveau genre a besoin d'une description."
+        if len(demande["description"]) > MAX_TEXTE:
+            return f"« description » dépasse {MAX_TEXTE} caractères."
     return None
 
 

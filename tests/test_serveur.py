@@ -1,3 +1,4 @@
+import base64
 import http.client
 import io
 import json
@@ -752,6 +753,116 @@ class TestKpi(AvecServeur):
     def test_onglet_kpi_avec_usage_seul(self):
         self.installer(usage=True)
         self.assertTrue(self.json("/api/etat")["dossier"]["kpi"])
+
+
+class TestDemandesV4(AvecServeur):
+    RELEVE_V4 = {
+        "version": 4, "projet": "P", "factory": {"etat": "en marche"},
+        "services": [{"id": "dev", "nom": "Dev"}],
+        "colonnes": [{"id": "a", "nom": "A"}],
+        "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+        "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}],
+        "fonctionnalites": [{"id": "f1", "nom": "Ville", "etape": "cadrage"}]}
+    SCRIPT_ACTIONS = TestServeur.SCRIPT_ACTIONS
+    agir, demande = TestServeur.agir, TestServeur.demande
+
+    def preparer(self):
+        notes = self.agir(releve=self.RELEVE_V4)
+        self.json("/api/etat")
+        return notes
+
+    def lignes(self, notes):
+        if not notes.exists():
+            return []
+        return [json.loads(x) for x in notes.read_text(encoding="utf-8").splitlines()
+                if x.startswith("{")]
+
+    def test_commande_recoit_les_images(self):
+        notes = self.preparer()
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes(range(256))).decode("ascii")
+        images = [{"nom": "a.png", "type": "image/png", "donnees": png}]
+        statut, corps = self.demande({"type": "message", "fonctionnalite": "f1", "texte": "Voir", "images": images})
+        self.assertEqual((statut, corps), (200, {"ok": True}))
+        recu = self.lignes(notes)
+        self.assertEqual(len(recu), 1)
+        self.assertEqual(recu[0]["images"], images)  # base64 intact
+        self.assertEqual((recu[0]["type"], recu[0]["fonctionnalite"]), ("message", "f1"))
+
+    def test_images_refusees(self):
+        notes = self.preparer()
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8).decode("ascii")
+        gros = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * (6 * 1024 * 1024)).decode("ascii")
+        gif = base64.b64encode(b"GIF89a" + b"\x00" * 8).decode("ascii")
+        cas = [[{"nom": f"{i}.png", "type": "image/png", "donnees": png} for i in range(5)],
+               [{"nom": "gros.png", "type": "image/png", "donnees": gros}],
+               [{"nom": "a.png", "type": "image/png", "donnees": gif}],
+               [{"nom": "a.png", "type": "image/png", "donnees": "pas du base64 !"}],
+               [{"nom": "../x.png", "type": "image/png", "donnees": png}]]
+        for images in cas:
+            statut, corps = self.demande({"type": "fonctionnalite", "texte": "Une ville", "images": images})
+            self.assertEqual(statut, 400, [i["nom"] for i in images])
+            self.assertTrue(corps["erreur"])
+        self.assertEqual(self.lignes(notes), [])  # la commande n'est jamais lancée
+        self.assertFalse(notes.exists())
+
+    def test_corps_28_mo(self):
+        notes = self.preparer()
+        limite = 28 * 1024 * 1024
+        base = json.dumps({"type": "message", "fonctionnalite": "f1", "texte": "Gros"}).encode("utf-8")
+        juste = base + b" " * (limite - len(base))  # du blanc JSON : valide, et pile à la limite
+        self.assertEqual(len(juste), limite)
+        r, data = self.req("POST", "/api/demande", juste, self.ENT)
+        self.assertEqual((r.status, json.loads(data.decode("utf-8"))), (200, {"ok": True}))
+        self.assertEqual(len(self.lignes(notes)), 1)
+        # Au-dessus : refusé d'après l'en-tête, sans lire le corps.
+        r, data = self.req("POST", "/api/demande", b"{}", {**self.ENT, "Content-Length": str(limite + 1)})
+        self.assertEqual(r.status, 400)
+        self.assertEqual(len(self.lignes(notes)), 1)
+
+    def test_corps_reglages_toujours_petit(self):
+        r, _ = self.req("POST", "/api/reglages", b" " * 5000 + b"{}", self.ENT)
+        self.assertEqual(r.status, 400)
+
+    def test_doublon_message_ignore(self):
+        notes = self.preparer()
+        d = {"type": "message", "fonctionnalite": "f1", "texte": "Un seul clic"}
+        self.assertEqual(self.demande(d), (200, {"ok": True}))
+        self.assertEqual(self.demande(d), (200, {"ok": True, "doublon": True}))
+        self.assertEqual(len(self.lignes(notes)), 1)
+        autre = {**d, "texte": "Un autre"}
+        self.assertEqual(self.demande(autre), (200, {"ok": True}))
+        self.assertEqual(len(self.lignes(notes)), 2)
+
+    def test_doublon_fonctionnalite_ignore(self):
+        notes = self.preparer()
+        d = {"type": "fonctionnalite", "texte": "Une ville"}
+        self.assertEqual(self.demande(d)[0], 200)
+        self.assertEqual(self.demande(d), (200, {"ok": True, "doublon": True}))
+        self.assertEqual(len(self.lignes(notes)), 1)
+
+    def test_doublon_oublie_apres_la_garde(self):
+        notes = self.preparer()
+        d = {"type": "message", "fonctionnalite": "f1", "texte": "Encore"}
+        self.assertEqual(self.demande(d), (200, {"ok": True}))
+        self.srv._derniere_creation = (self.srv._derniere_creation[0],
+                                       time.monotonic() - serveur.GARDE_DOUBLON_S - 1)
+        self.assertEqual(self.demande(d), (200, {"ok": True}))
+        self.assertEqual(len(self.lignes(notes)), 2)
+
+    def test_echec_de_la_commande_ne_fait_pas_doublon(self):
+        notes = self.agir(code=1, releve=self.RELEVE_V4)
+        self.json("/api/etat")
+        d = {"type": "message", "fonctionnalite": "f1", "texte": "Raté"}
+        self.assertEqual(self.demande(d)[0], 502)
+        self.assertEqual(self.demande(d)[0], 502)  # pas pris pour un doublon : on peut réessayer
+        self.assertEqual(len(self.lignes(notes)), 2)
+
+    def test_demande_v4_refusee_sur_releve_v2(self):
+        notes = self.agir(releve={**self.RELEVE_V4, "version": 2, "fonctionnalites": []})  # pas de v4
+        self.json("/api/etat")
+        statut, _ = self.demande({"type": "fonctionnalite", "texte": "x"})
+        self.assertEqual(statut, 400)
+        self.assertFalse(notes.exists())
 
 
 if __name__ == "__main__":

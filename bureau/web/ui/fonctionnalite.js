@@ -351,6 +351,58 @@ function blocQuestions(attente, etat, changer) {
   return bloc;
 }
 
+// --- Les tâches de la fonctionnalité : réalisées (dans une colonne terminée, ou inactives), et à venir (les autres, puis les
+// éléments de sa file, dans l'ordre). Les tâches sans post-it (le chef qui orchestre) n'y sont pas.
+export function tachesDeFonctionnalite(etat, f) {
+  const colonnes = new Map((etat?.colonnes || []).map((c) => [c.id, c]));
+  const prenoms = new Map((etat?.agents || []).map((a) => [a.id, a.prenom]));
+  const realisees = [], aVenir = [];
+  for (const t of etat?.taches || []) {
+    if (t.fonctionnalite !== f?.id || t.postit === false) continue;
+    const c = colonnes.get(t.colonne);
+    const ligne = {id: t.id, titre: t.titre, colonne: c?.nom || t.colonne, prenom: t.agent ? prenoms.get(t.agent) || t.agent : null,
+                   maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null};
+    (c?.terminee || t.active === false ? realisees : aVenir).push(ligne);   // inactive : finie, même hors de « Fait »
+  }
+  const recent = (a, b) => String(b.maj || "").localeCompare(String(a.maj || ""));
+  realisees.sort(recent);
+  aVenir.sort(recent);
+  const prefixe = `${f?.id}/`;
+  for (const q of [...(etat?.file?.visibles || []), ...(etat?.file?.suite || [])]) {
+    if (typeof q.id === "string" && q.id.startsWith(prefixe)) aVenir.push({id: q.id, titre: q.titre, file: true});
+  }
+  return {realisees, aVenir};
+}
+
+function partieTaches(ctx, f) {
+  const {realisees, aVenir} = tachesDeFonctionnalite(ctx.etat, f);
+  const bloc = el("details", "taches-fonctionnalite");
+  bloc.open = true;
+  bloc.append(el("summary", "", `Tâches (${realisees.length} réalisée${realisees.length > 1 ? "s" : ""}, ${aVenir.length} à venir)`));
+  const liste = (titre, taches, vide) => {
+    bloc.append(el("h4", "", titre));
+    const ul = el("ul", "liste-taches-fonctionnalite");
+    if (!taches.length) ul.append(el("li", "vide", vide));
+    for (const t of taches) {
+      const li = el("li", t.file ? "en-file" : "");
+      if (t.file) li.append(el("span", "", t.titre), el("span", "note", " · en file"));
+      else {
+        const b = el("button", "lien-tache", t.titre);
+        b.type = "button";
+        b.addEventListener("click", () => ctx.ouvrirTache(t.id));
+        li.append(b);
+        const meta = [t.colonne, t.prenom, t.maj ? dateFr(t.maj) : null, t.bloquee ? "bloquée" : null].filter(Boolean).join(" · ");
+        if (meta) li.append(el("div", "note", meta));
+      }
+      ul.append(li);
+    }
+    bloc.append(ul);
+  };
+  liste("À venir", aVenir, "Rien à venir pour l'instant");
+  liste("Réalisées", realisees, "Aucune tâche réalisée pour l'instant");
+  return bloc;
+}
+
 // --- Les versions d'un document : un document qui en remplace un autre (`remplace` = son chemin), ou qui a le même
 // titre et le même élément, en est une nouvelle version. Rend [{dernier, anciens}] : la dernière version d'abord, les
 // plus récentes en tête, l'historique du plus récent au plus ancien.
@@ -896,13 +948,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (vue.discussionOuverte) {
     contenu.append(blocDiscussion, blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
   } else {
     const repliee = el("details", "discussion-repliee");
     repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
     contenu.append(blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(repliee, partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(repliee, partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
   }
 }
 

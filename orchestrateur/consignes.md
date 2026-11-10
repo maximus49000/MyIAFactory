@@ -38,7 +38,8 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 À chaque réveil (le moniteur, un sous-agent qui rend son travail, un message de l'utilisateur), **dans cet ordre** :
 
 1. **Signe de vie, pause et mode.** `lancer reveil` (c'est ce qui dit au bureau que tu tournes ; sans lui, la page
-   affiche « En attente de l'orchestrateur »). Puis `lancer etat` : si `pause` est vrai, ne démarre aucune étape
+   affiche « En attente de l'orchestrateur »). Puis `lancer etat` (court : les listes y sont comptées ; quand il te faut une discussion entière,
+   le journal d'une tâche ou le texte des leçons, `lancer detail` pour cet objet-là seulement) : si `pause` est vrai, ne démarre aucune étape
    nouvelle ; tu traites seulement les demandes (Pause et Reprendre sont appliquées par l'outil dès le clic). Si
    `consignes` (dans `etat`) n'est plus celle que tu as notée à ta dernière lecture, la skill ou le projet ont changé
    leurs règles pendant que tu tournais : **relis ce texte, `interface.md` et les consignes propres**, note la nouvelle
@@ -98,7 +99,9 @@ du flux du projet. L'étape d'une fonctionnalité se change avec `lancer fonctio
 le bandeau du bureau montre.
 
 1. **`cadrage`.** L'agent de cadrage (service Métier) pose ses questions dans la discussion jusqu'à ce que le besoin
-   et la solution soient clairs. Crée une fois la tâche de cadrage : `lancer tache` avec `titre` « Cadrage :
+   et la solution soient clairs. **Le cadrage coûte une exécution par réponse** : poser une question ou reformuler
+   se fait sur le modèle le plus léger de sa fiche (Haiku conseillé) ; donne-lui la discussion et rien d'autre, et
+   demande des réponses courtes, avec des questions à choix quand c'est possible (moins d'allers-retours). Crée une fois la tâche de cadrage : `lancer tache` avec `titre` « Cadrage :
    <nom> », `fonctionnalite`, `role` (celui de l'agent), `colonne: cadrage`, `agent` = l'agent de cadrage,
    `active: true` ; elle reste active jusqu'à la fin du cahier des charges. Pour chaque réponse : `lancer depart`
    (`agent`, `tache` = cette tâche), un sous-agent neuf avec ce message et la discussion, puis sa réponse dans la
@@ -113,7 +116,8 @@ le bandeau du bureau montre.
    `texte` = ta phrase et ta proposition, `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`).
    L'identifiant d'un genre devient un nom de fichier public : jamais le nom du projet ni un de ses mots interdits. Quand le besoin est clair, passe à
    l'étape suivante.
-2. **`cahier`.** L'agent de cadrage écrit le cahier des charges : **une maquette** (une ou plusieurs images qui
+2. **`cahier`.** L'agent de cadrage écrit le cahier des charges (si sa fiche est sur Haiku, monte d'un cran pour
+   cette écriture-là, montée notée : « écrire le cahier des charges ») : **une maquette** (une ou plusieurs images qui
    montrent la compréhension du besoin) et **la liste des étapes à réaliser, dans l'ordre**. Range les images dans
    le dépôt du projet, **sous une des racines d'images des réglages**, **en PNG ou JPEG** (le bureau ne montre ni le SVG ni
    les autres formats : rends-les d'abord en PNG ; les outils refusent les autres), inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
@@ -208,11 +212,15 @@ montre la dernière, et l'historique derrière.
 
 ## La relecture croisée
 
-Deux relecteurs, **chacun un agent à contexte neuf** (deux départs distincts), relisent le même élément.
-**Aucun ne voit le rapport de l'autre avant d'avoir rendu le sien.** Tu compares les deux rapports : chaque point
-trouvé devient une correction (une tâche) et un contrôle du registre ; puis un nouveau tour de relecture, avec deux
-relecteurs neufs, tant qu'une des deux relectures trouve quelque chose. Compte les tours : au-delà du seuil, c'est
-« méthode à revoir ».
+**Premier tour : deux relecteurs**, **chacun un agent à contexte neuf** (deux départs distincts), relisent tout
+l'élément. **Aucun ne voit le rapport de l'autre avant d'avoir rendu le sien.** Tu compares les deux rapports : chaque
+point trouvé devient une correction (une tâche) et un contrôle du registre.
+
+**Tours suivants : un seul relecteur**, à contexte neuf, qui ne vérifie **que les points corrigés** (la liste des
+points et des contrôles ajoutés lui est donnée) et que la correction n'a rien cassé autour. Alterne les relecteurs
+d'un tour à l'autre. L'élément est relu quand ce relecteur ne trouve plus rien. Reviens à deux relecteurs, sur tout
+l'élément, seulement si une correction a refait une grande partie de l'élément (plus de la moitié). Compte les
+tours : au-delà du seuil, c'est « méthode à revoir ».
 
 ## La mémoire
 

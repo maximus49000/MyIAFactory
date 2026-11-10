@@ -212,3 +212,27 @@ test("versionsDe : la dernière version d'abord, l'historique derrière", async 
   assert.deepEqual(v[1].anciens, []);
   assert.deepEqual(versionsDe([]), []);
 });
+
+test("tachesDeFonctionnalite : réalisées et à venir (la file de la fonctionnalité comprise)", async () => {
+  const {tachesDeFonctionnalite} = await import("../ui/fonctionnalite.js");
+  const etat = {
+    colonnes: [{id: "dev", nom: "Développement"}, {id: "fait", nom: "Fait", terminee: true}],
+    agents: [{id: "dev-1", prenom: "Noé"}],
+    taches: [{id: "t1", titre: "Dev : Pape", colonne: "fait", fonctionnalite: "f1", agent: "dev-1", maj: "2026-11-10T20:00:00"},
+             {id: "t2", titre: "Correction", colonne: "dev", fonctionnalite: "f1", agent: "dev-1", maj: "2026-11-10T23:00:00", active: true},
+             {id: "t3", titre: "Relecture", colonne: "fait", fonctionnalite: "f1", maj: "2026-11-10T22:00:00"},
+             {id: "t4", titre: "Autre", colonne: "dev", fonctionnalite: "f2"},
+             {id: "orchestration", titre: "Orchestration", colonne: "dev", postit: false}],
+    file: {visibles: [{id: "f1/roi", titre: "Roi"}, {id: "f2/x", titre: "X"}], suite: [{id: "f1/reine", titre: "Reine"}]}};
+  const r = tachesDeFonctionnalite(etat, {id: "f1"});
+  assert.deepEqual(r.realisees.map((t) => t.id), ["t3", "t1"]);                 // les plus récentes d'abord
+  assert.deepEqual(r.aVenir.map((t) => t.id), ["t2", "f1/roi", "f1/reine"]);    // en cours, puis la file dans l'ordre
+  assert.equal(r.aVenir[0].prenom, "Noé");
+  assert.equal(r.aVenir[0].colonne, "Développement");
+  assert.equal(r.aVenir[1].file, true);
+  assert.deepEqual(tachesDeFonctionnalite({}, {id: "f1"}), {realisees: [], aVenir: []});
+  // Une tâche finie restée dans sa colonne (inactive) compte comme réalisée.
+  const e2 = {...etat, taches: [...etat.taches, {id: "t5", titre: "Ancienne correction", colonne: "dev", fonctionnalite: "f1",
+                                                 active: false, maj: "2026-11-10T21:00:00"}]};
+  assert.ok(tachesDeFonctionnalite(e2, {id: "f1"}).realisees.some((t) => t.id === "t5"));
+});

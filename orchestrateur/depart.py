@@ -57,15 +57,24 @@ def brief(factory, role):
 
 
 def _texte_fiche(f):
+    """La fiche, sans les leçons « à valider » : elles ne sont pas encore la règle (et coûteraient à chaque départ)."""
     chemin = f.get("chemin")
     if chemin and Path(chemin).is_file():
-        return Path(chemin).read_text(encoding="utf-8-sig").strip()
+        lignes = Path(chemin).read_text(encoding="utf-8-sig").splitlines()
+        return "\n".join(x for x in lignes if not x.lstrip().startswith("- [à valider]")).strip()
     lignes = [f"Clé : {f['cle']}", f"Rôle : {f['role']}", f"Modèle : {f['modele']}", f"Lieu : {f['lieu']}"]
     if f.get("session"):
         lignes.append(f"Session : {f['session']}")
     lignes += ["", f.get("texte") or "", "", "## Leçons"]
-    lignes += [f"- [{x['etat']}] {x['id']} : {x['texte']}" for x in f.get("lecons") or []]
+    lignes += [f"- [{x['etat']}] {x['id']} : {x['texte']}" for x in f.get("lecons") or [] if x["etat"] != "à valider"]
     return "\n".join(lignes).strip()
+
+
+SOBRIETE = """## Sobriété
+Chaque lecture et chaque essai se paient en tokens. Ne lis que ce que ta tâche, ton brief et le registre des
+contrôles désignent ; n'explore pas le projet au-delà. Ne relis pas un fichier déjà lu dans cette tâche, ne refais
+pas un essai qui a réussi, et préfère un outil du projet qui fait le travail à une longue lecture. Si une information
+manque, dis-le dans ton résultat plutôt que de la chercher partout."""
 
 
 def _lecons(titre, lecons):
@@ -111,5 +120,6 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
                        "Ces mots sont déjà définis : emploie-les dans ce sens et ne les redéfinis pas. Si tu emploies un "
                        "autre mot spécialisé, donne sa définition avec ton résultat (mot et définition courte).\n"
                        + "\n".join(f"- {g['mot']} : {g['definition']}" for g in glossaire))
+    parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE)
     return "\n\n".join(parties) + "\n"

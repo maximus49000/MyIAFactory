@@ -76,10 +76,26 @@ tâche au relevé suivant. Rend `{"ok": true}` ; code 1 si la demande est inconn
 
 ### `etat`
 
-Sans entrée. Un instantané pour l'orchestrateur : `{projet, genre, pause, reveil, seuil_methode, fonctionnalites,
-taches, file, decisions, lecons, agents, consignes}`. `consignes` est une empreinte courte des consignes
-génériques, de cette interface et des consignes propres du projet : elle change quand l'un de ces textes change. Un agent : `{cle, role, service, modele, lieu, session, libre}`. Une
-décision : `{id, genre, texte, portee}` (`portee` = l'id de la fonctionnalité, ou `projet`).
+Sans entrée. L'instantané **court** que l'orchestrateur relit à chaque réveil : `{projet, genre, pause, reveil,
+seuil_methode, fonctionnalites, taches, taches_faites, file, decisions, lecons, agents, consignes}`. Les listes longues
+y sont comptées, pas recopiées :
+- une fonctionnalité : `id`, `nom`, `etape`, `agent_cadrage`, `attend_reponse`, `catalogue`, `decisions`, `livrable`,
+  `cahier` (`{maquette: n, etapes: n, valide_le}`), `methode` (`{version, validee_le}`), et les nombres `file`,
+  `messages`, `documents`, `glossaire`, plus `dernier_message` (`{id, auteur, t, texte}`, 300 caractères au plus) ;
+- `taches` : les tâches pas encore faites (active, ou hors de la colonne `fait`), avec `journal` = le nombre
+  d'entrées et `dernier_journal`, `captures` = leur nombre ; `taches_faites` : combien sont faites ;
+- `file` : le nombre d'éléments à faire par fonctionnalité ; `lecons` : `{id, agent, etage_propose}` des leçons à
+  valider ;
+- un agent : `{cle, role, service, modele, lieu, session, libre}` ; une décision : `{id, genre, texte, portee}`
+  (`portee` = l'id de la fonctionnalité, ou `projet`) ;
+- `consignes` : une empreinte courte des consignes génériques, de cette interface et des consignes propres du projet ;
+  elle change quand l'un de ces textes change.
+
+### `detail`
+
+Entrée : `{"fonctionnalite": id}` (la fonctionnalité entière : discussion, cahier, méthode, file, documents,
+glossaire), `{"tache": id}` (la tâche entière : journal, captures) ou `{"lecons": true}` (les leçons à valider avec
+leur texte). Ce que `etat` compte, `detail` le donne, quand il sert. Code 1 si l'objet est inconnu.
 
 ### `fonctionnalite`
 

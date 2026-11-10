@@ -134,6 +134,11 @@ class TestDemo(AvecCopie):
 
 
 class TestProjetNeuf(AvecCopie):
+    def test_projet_neuf_economique(self):
+        # Le cadrage pose des questions et reformule : Haiku suffit (le cahier des charges se fait en montant d'un cran).
+        fiche = (EXEMPLES / "projet-neuf" / "fiches" / "cadrage-1.md").read_text(encoding="utf-8")
+        self.assertIn("Modèle : Haiku", fiche)
+
     def test_projet_neuf_verificateur(self):
         dossier = self.tmp / "projet"
         shutil.copytree(EXEMPLES / "projet-neuf", dossier)

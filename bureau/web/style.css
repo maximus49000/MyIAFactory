@@ -710,3 +710,10 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .kanban-carte.pale { background: #f4efe6; cursor: default; }
 .kanban-carte-meta { color: #6d6980; font-size: 12px; }
 .kanban-carte-bloquee { color: #c0392b; font-size: 12px; }
+
+/* Les tâches d'une fonctionnalité : à venir, réalisées. */
+.taches-fonctionnalite { margin-top: 12px; }
+.taches-fonctionnalite > summary { cursor: pointer; font-weight: 800; }
+.taches-fonctionnalite h4 { margin: 8px 0 4px; font-size: 13px; color: #6d6980; }
+.liste-taches-fonctionnalite { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.liste-taches-fonctionnalite .en-file { color: #6d6980; }

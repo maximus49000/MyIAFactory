@@ -385,19 +385,67 @@ def _agents(ctx, s, fiches):
     return sortie
 
 
+def _fonc_compacte(f):
+    """Une fonctionnalité en quelques lignes : de quoi décider du prochain geste, sans relire la discussion entière."""
+    d = f["discussion"]
+    dernier = d[-1] if d else None
+    cahier, methode = f.get("cahier"), f.get("methode")
+    return {
+        "id": f["id"], "nom": f["nom"], "etape": f["etape"], "agent_cadrage": f["agent_cadrage"],
+        "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
+        "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
+                   "valide_le": cahier.get("valide_le")} if cahier else None,
+        "methode": {k: methode.get(k) for k in ("version", "validee_le")} if methode else None,
+        "livrable": f.get("livrable"), "file": len(f["file"]), "messages": len(d),
+        "dernier_message": {"id": dernier["id"], "auteur": dernier["auteur"], "t": dernier.get("t"),
+                            "texte": dernier["texte"][:300]} if dernier else None,
+        "documents": len(f.get("documents") or []), "glossaire": len(f.get("glossaire") or []),
+    }
+
+
+def _tache_compacte(t):
+    sortie = {k: v for k, v in t.items() if k not in ("journal", "captures")}
+    sortie["journal"] = len(t["journal"])
+    sortie["dernier_journal"] = t["journal"][-1]["texte"] if t["journal"] else None
+    sortie["captures"] = len(t.get("captures") or [])
+    return sortie
+
+
 def cmd_etat(ctx, e):
+    """L'instantané que l'orchestrateur relit à chaque réveil : court (les listes longues sont comptées) ; le détail
+    d'une fonctionnalité, d'une tâche ou des leçons se demande à `detail`."""
     s, fiches = ctx.suivi.lire(), ctx.fiches()
     decisions = [{**d, "portee": f["id"]} for f in s["fonctionnalites"] for d in f["decisions"]]
     decisions += [{**d, "portee": "projet"} for d in s["decisions_projet"]]
+    en_cours = [t for t in s["taches"] if t["active"] or t["colonne"] != "fait"]
     return {
         "projet": ctx.f["nom"], "genre": ctx.f["genre"], "pause": s["factory"]["etat"] == "en pause",
         "reveil": s["reveil"], "seuil_methode": ctx.f["seuil_methode"],
-        "fonctionnalites": [{**_resume_fonc(f), "file": len(f["file"])} for f in s["fonctionnalites"]],
-        "taches": s["taches"], "file": {f["id"]: f["file"] for f in s["fonctionnalites"] if f["file"]},
-        "decisions": decisions, "lecons": [x for x in s["lecons"] if x["etat"] == "à valider"],
+        "fonctionnalites": [_fonc_compacte(f) for f in s["fonctionnalites"]],
+        "taches": [_tache_compacte(t) for t in en_cours], "taches_faites": len(s["taches"]) - len(en_cours),
+        "file": {f["id"]: len(f["file"]) for f in s["fonctionnalites"] if f["file"]},
+        "decisions": decisions,
+        "lecons": [{"id": x["id"], "agent": x.get("agent"), "etage_propose": x.get("etage_propose")}
+                   for x in s["lecons"] if x["etat"] == "à valider"],
         "agents": _agents(ctx, s, fiches),
         "consignes": empreinte_consignes(ctx.f),
     }
+
+
+def cmd_detail(ctx, e):
+    """Le détail que `etat` ne donne pas : une fonctionnalité entière (discussion, cahier, file, documents, glossaire),
+    une tâche entière (journal, captures), ou les leçons à valider avec leur texte."""
+    s = ctx.suivi.lire()
+    if e.get("fonctionnalite") is not None:
+        return _resume_fonc(_fonc(s, e["fonctionnalite"])) | {"file": list(_fonc(s, e["fonctionnalite"])["file"])}
+    if e.get("tache") is not None:
+        t = su.tache(s, e["tache"])
+        if t is None:
+            raise Refus(f"Tâche inconnue : {e['tache']}")
+        return dict(t)
+    if e.get("lecons") is True:
+        return {"lecons": [x for x in s["lecons"] if x["etat"] == "à valider"]}
+    raise Refus("Demandez « fonctionnalite », « tache » ou « lecons » (vrai).")
 
 
 def empreinte_consignes(f):
@@ -1080,7 +1128,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
-    "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
+    "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
 }
 
 

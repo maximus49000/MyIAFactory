@@ -101,6 +101,36 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_etat_compact_et_detail_a_la_demande(self):
+        # `etat` est relu à chaque réveil (sur le modèle le plus cher) : il reste court ; le détail se demande.
+        f = self.nouvelle()
+        for k in range(30):
+            self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": f"Message {k} " + "x" * 400})
+        t = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": f, "agent": "dev-1", "colonne": "dev",
+                                     "journal": ["étape %d" % k for k in range(40)]})
+        self.ok("tache", entree={"titre": "Ancienne", "colonne": "fait"})
+        self.ok("lecon", entree={"action": "noter", "agent": "dev-1", "texte": "Une leçon " + "y" * 500,
+                                 "etage_propose": "projet", "roles": ["dev"]})
+        e = self.ok("etat")
+        self.assertLess(len(json.dumps(e, ensure_ascii=False)), 4000)
+        fonc = e["fonctionnalites"][0]
+        self.assertNotIn("discussion", fonc)
+        self.assertEqual(fonc["messages"], 31)
+        self.assertEqual(fonc["dernier_message"]["auteur"], "metier-1")
+        self.assertLessEqual(len(fonc["dernier_message"]["texte"]), 300)
+        dev = next(x for x in e["taches"] if x["id"] == t["id"])
+        self.assertEqual((dev["journal"], dev["dernier_journal"]), (40, "étape 39"))
+        self.assertNotIn("Ancienne", [x["titre"] for x in e["taches"]])          # les tâches faites sont comptées
+        self.assertEqual(e["taches_faites"], 1)
+        self.assertNotIn("texte", e["lecons"][0])
+        # Le détail, quand il sert.
+        d = self.ok("detail", entree={"fonctionnalite": f})
+        self.assertEqual(len(d["discussion"]), 31)
+        self.assertEqual(len(self.ok("detail", entree={"tache": t["id"]})["journal"]), 40)
+        self.assertTrue(self.ok("detail", entree={"lecons": True})["lecons"][0]["texte"].startswith("Une leçon"))
+        for entree in ({}, {"fonctionnalite": "f99"}, {"tache": "t99"}):
+            self.assertEqual(self.outil("detail", entree=entree)[0], 1, entree)
+
     def test_etat_donne_l_empreinte_des_consignes(self):
         # Un orchestrateur lancé avant une mise à jour de la skill voit, dans `etat`, que ses consignes ont changé.
         consignes = self.dossier / "consignes-projet.md"
@@ -218,7 +248,8 @@ class TestSuivi(AvecProjet):
         self.assertIn("Petit cube de pierre ou de verre.", texte)
         self.assertNotIn("Petit cube de mosaïque.", texte)
         self.assertIn(f"pieces/{f}/glossaire.md", [d["chemin"] for d in r["fonctionnalites"][0]["documents"]])
-        self.assertEqual(len(self.ok("etat")["fonctionnalites"][0]["glossaire"]), 3)
+        self.assertEqual(self.ok("etat")["fonctionnalites"][0]["glossaire"], 3)   # compté dans etat
+        self.assertEqual(len(self.ok("detail", entree={"fonctionnalite": f})["glossaire"]), 3)
         t = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": f, "agent": "dev-1", "colonne": "dev"})
         depart = self.ok("depart", entree={"agent": "dev-1", "tache": t["id"]})["message"]
         self.assertIn("Vocabulaire de la fonctionnalité", depart)

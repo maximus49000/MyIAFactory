@@ -85,6 +85,28 @@ class TestDepart(unittest.TestCase):
         self.assertLess(m.index("Texte de dev-1."), m.index("Brief du rôle dev."))   # fiche, puis brief, puis tâche
         self.assertLess(m.index("Brief du rôle dev."), m.index("Développer l'écran"))
 
+    def test_message_sobre(self):
+        # Les leçons « à valider » ne sont pas encore la règle : elles restent hors du message de départ ; et le message
+        # demande de ne lire que ce que la tâche demande (le coût d'un agent vient surtout de ce qu'il relit).
+        f = fiche("dev-1", "dev")
+        f["lecons"] = [{"etat": "validée", "id": "dev-1:L1", "texte": "Règle sûre."},
+                       {"etat": "à valider", "id": "dev-1:L2", "texte": "Idée pas encore validée."}]
+        m = depart.message({"nom": "P", "genre": None}, f, {"id": "t1", "titre": "T"}, None, {"skill": [], "genre": []})
+        self.assertIn("Règle sûre.", m)
+        self.assertNotIn("Idée pas encore validée.", m)
+        self.assertIn("Sobriété", m)
+        # Une fiche écrite sur disque : ses lignes « à valider » sont retirées aussi.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            chemin = Path(d) / "dev.md"
+            chemin.write_text("\n".join(["Clé : dev-1", "Rôle : dev", "Modèle : Sonnet", "Lieu : local", "", "Texte.", "",
+                                         "## Leçons", "- [validée] dev-1:L1 : Règle sûre.",
+                                         "- [à valider] dev-1:L2 : Idée pas encore validée.", ""]), encoding="utf-8")
+            m = depart.message({"nom": "P", "genre": None}, {**f, "chemin": str(chemin)}, {"id": "t1", "titre": "T"},
+                               None, {"skill": [], "genre": []})
+        self.assertIn("Règle sûre.", m)
+        self.assertNotIn("Idée pas encore validée.", m)
+
     def test_message_sans_genre_ni_brief(self):
         m = depart.message({"nom": "P", "genre": None}, fiche("dev-1", "dev"), {"id": "t1", "titre": "T"}, None,
                            {"skill": [], "genre": []})

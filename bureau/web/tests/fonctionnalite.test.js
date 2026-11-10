@@ -121,3 +121,40 @@ test("documentsParEtape : rangés par étape (parcours puis colonnes), les plus 
   assert.equal(g[3].documents[0].titre, "Notes");
   assert.deepEqual(documentsParEtape({}, []), []);
 });
+
+test("echelle : tokens et lignes produites à côté du prix", async () => {
+  const {echelle} = await import("../ui/fonctionnalite.js");
+  assert.equal(echelle({tokens: 850, lignes: 85}), "850 tokens · 85 lignes");
+  assert.equal(echelle({tokens: 120400, lignes: 1}), "120 k tokens · 1 ligne");
+  assert.equal(echelle({tokens: 1234567, lignes: null}), "1,2 M tokens");
+  assert.equal(echelle({tokens: 0}), "");
+});
+
+test("reponseComposee : les choix deviennent un message lisible ; passer demande une explication", async () => {
+  const {reponseComposee, questionsEnAttente} = await import("../ui/fonctionnalite.js");
+  const q = [{texte: "Quelle taille ?", choix: ["28 px", "56 px"]},
+             {texte: "Quels fonds ?", choix: ["Clair", "Sombre"], multiple: true}];
+  assert.deepEqual(reponseComposee(q, {0: {choix: ["56 px"]}, 1: {choix: ["Clair", "Sombre"]}}, "  "),
+                   {texte: "Quelle taille ? → 56 px\nQuels fonds ? → Clair, Sombre"});
+  assert.deepEqual(reponseComposee(q, {0: {choix: ["28 px"]}, 1: {passee: true}}, "Je ne sais pas encore."),
+                   {texte: "Quelle taille ? → 28 px\nQuels fonds ? → (passée)\n\nJe ne sais pas encore."});
+  assert.match(reponseComposee(q, {0: {choix: ["28 px"]}, 1: {passee: true}}, "").erreur, /pourquoi/);
+  assert.match(reponseComposee(q, {0: {choix: ["28 px"]}}, "").erreur, /Quels fonds/);   // sans réponse
+  assert.deepEqual(reponseComposee([], {}, "Bonjour"), {texte: "Bonjour"});
+  assert.match(reponseComposee([], {}, " ").erreur, /message/);
+  // Les questions ne s'affichent que sur le dernier message, s'il est d'un agent.
+  const f = {discussion: [{id: "m1", auteur: "a", questions: q}, {id: "m2", auteur: "utilisateur"}]};
+  assert.equal(questionsEnAttente(f), null);
+  assert.deepEqual(questionsEnAttente({discussion: [{id: "m1", auteur: "a", questions: q}]}), {message: "m1", questions: q});
+  assert.equal(questionsEnAttente({discussion: [{id: "m1", auteur: "a"}]}), null);
+});
+
+test("reponseComposee : « Autre » et sa valeur libre", async () => {
+  const {reponseComposee} = await import("../ui/fonctionnalite.js");
+  const q = [{texte: "Quelle taille ?", choix: ["28 px", "56 px"]},
+             {texte: "Quels fonds ?", choix: ["Clair", "Sombre"], multiple: true}];
+  assert.deepEqual(reponseComposee(q, {0: {choix: [], autre: "40 px"}, 1: {choix: ["Clair"], autre: "Transparent"}}, ""),
+                   {texte: "Quelle taille ? → Autre : 40 px\nQuels fonds ? → Clair, Autre : Transparent"});
+  // « Autre » ouvert mais vide : il faut le préciser.
+  assert.match(reponseComposee(q, {0: {choix: [], autre: "  "}, 1: {choix: ["Clair"]}}, "").erreur, /Autre/);
+});

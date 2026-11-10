@@ -233,4 +233,17 @@ class TestCoutsFonctionnalite(unittest.TestCase):
         self.assertEqual((t1["titre"], t1["total"], t1["sans_prix"]), ("Dev : e1", 6.0, 0))
         self.assertEqual((t2["total"], t2["sans_prix"], t2["modeles"]), (7.5, 1, {"opus": 7.5}))
         self.assertEqual(c["sans_prix"], 1)
-        self.assertEqual(cout.couts_fonctionnalite([], prix_de, r, "f1"), {"total": 0, "taches": [], "sans_prix": 0})
+        self.assertEqual(cout.couts_fonctionnalite([], prix_de, r, "f1"),
+                         {"total": 0, "taches": [], "sans_prix": 0, "tokens": 0, "lignes": None})
+
+    def test_echelle_tokens_et_lignes(self):
+        r = {"version": 4, "taches": [{"id": "t1", "titre": "Dev", "fonctionnalite": "f1", "lignes": 85},
+                                      {"id": "t2", "titre": "Relecture", "fonctionnalite": "f1"}]}
+        usages = [usage("u1", tache="t1", entree=1000, sortie=200, cache_lecture=50),
+                  usage("u2", tache="t1", entree=300, sortie=0),
+                  usage("u3", tache="t2", modele="inconnu", entree=10, sortie=5)]
+        c = cout.couts_fonctionnalite(usages, prix_de, r, "f1")
+        t1, t2 = c["taches"]
+        self.assertEqual((t1["tokens"], t1["lignes"]), (1550, 85))
+        self.assertEqual((t2["tokens"], t2["lignes"]), (15, None))      # les tokens comptent même sans prix
+        self.assertEqual((c["tokens"], c["lignes"]), (1565, 85))

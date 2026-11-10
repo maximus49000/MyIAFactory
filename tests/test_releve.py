@@ -841,6 +841,27 @@ class TestVersion4(unittest.TestCase):
         r["taches"][0]["montee"] = {"de": "Haiku", "a": "Sonnet", "raison": "trop dur"}
         self.assertEqual(releve.valider(r), [])
 
+    def test_questions_a_choix(self):
+        q = [{"texte": "Quelle taille ?", "choix": ["28 px", "56 px"]},
+             {"texte": "Quels fonds ?", "choix": ["Clair", "Sombre", "Les deux"], "multiple": True}]
+        m = msg(id="m2", auteur="d1", texte="Deux questions", questions=q)
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(discussion=[m])])), [])
+        for mauvais in ("x", [{"choix": ["a", "b"]}], [{"texte": "T", "choix": ["a"]}],
+                        [{"texte": "T", "choix": ["a", ""]}], [{"texte": "T", "choix": ["a", "b"], "multiple": "oui"}],
+                        [{"texte": "T", "choix": [str(i) for i in range(13)]}],
+                        [{"texte": "T", "choix": ["a", "b"]}] * 11):
+            with self.subTest(mauvais):
+                self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="Q", questions=mauvais)])]),
+                           "questions")
+
+    def test_tache_lignes(self):
+        r = v4()
+        r["taches"][0]["lignes"] = 120
+        self.assertEqual(releve.valider(r), [])
+        for mauvais in (-1, 1.5, "120", True):
+            r["taches"][0]["lignes"] = mauvais
+            self.refus(r, "lignes")
+
     def test_lecon_genre_sans_texte_general(self):
         lecon = {"id": "l1", "agent": "d1", "texte": "T", "etage_propose": "genre"}
         self.refus(v4(lecons=[lecon]), "texte_general")

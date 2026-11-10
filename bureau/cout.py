@@ -230,8 +230,11 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
     for u in usages:
         if u.get("tache") not in taches:
             continue
-        ligne = lignes.setdefault(u["tache"], {"id": u["tache"], "titre": taches[u["tache"]].get("titre") or u["tache"],
-                                              "total": 0.0, "sans_prix": 0, "modeles": {}})
+        t = taches[u["tache"]]
+        ligne = lignes.setdefault(u["tache"], {"id": u["tache"], "titre": t.get("titre") or u["tache"],
+                                              "total": 0.0, "sans_prix": 0, "modeles": {}, "tokens": 0,
+                                              "lignes": t.get("lignes") if isinstance(t.get("lignes"), int) else None})
+        ligne["tokens"] += sum(u.get(c) or 0 for c in COMPTEURS)   # l'échelle, même sans prix connu
         p, _, _ = prix_de(u["modele"], u.get("t_prix") or u.get("t"))
         if not p:
             ligne["sans_prix"] += 1
@@ -245,4 +248,7 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
         x["total"] = round(x["total"], 6)
         x["modeles"] = {k: round(v, 6) for k, v in x["modeles"].items()}
     return {"total": round(sum(x["total"] for x in sortie), 6), "taches": sortie,
-            "sans_prix": sum(x["sans_prix"] for x in sortie)}
+            "sans_prix": sum(x["sans_prix"] for x in sortie), "tokens": sum(x["tokens"] for x in sortie),
+            # aucune ligne notée : inconnu, pas zéro
+            "lignes": sum(x["lignes"] for x in sortie if x["lignes"] is not None)
+                      if any(x["lignes"] is not None for x in sortie) else None}

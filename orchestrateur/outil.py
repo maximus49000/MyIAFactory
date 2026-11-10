@@ -439,9 +439,20 @@ def cmd_message(ctx, e):
         images_montrables(liste_de_textes(e, "images"), "images")
         if len(images) > MAX_IMAGES:
             raise Refus(f"Au plus {MAX_IMAGES} images par message.")
+    questions = e.get("questions")
+    if questions is not None:   # des questions à choix : le bureau montre un bouton par choix
+        if auteur == "utilisateur":
+            raise Refus("Seul un agent pose des questions à choix.")
+        probleme = rel.erreur_questions(questions)
+        if probleme:
+            raise Refus(probleme)
+        questions = [{"texte": q["texte"], "choix": list(q["choix"]), **({"multiple": True} if q.get("multiple") else {})}
+                     for q in questions]
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         m = su.ajouter_message(s, f, auteur, texte(e, "texte", vide_ok=True), images)
+        if questions:
+            m["questions"] = questions
         ranger_documents(s, f, images, agent=auteur, etape=f["etape"])
     return {"id": m["id"]}
 
@@ -551,6 +562,8 @@ def cmd_tache(ctx, e):
             t["montee"] = m
             if m and not t["modele_depart"]:
                 t["modele_depart"] = m["de"]
+        if "lignes" in e:   # les lignes produites par la tâche (son total, remplacé à chaque fois)
+            t["lignes"] = _entier(e, "lignes") if e["lignes"] is not None else None
         if "captures" in e:
             t["captures"] = images_montrables(liste_de_textes(e, "captures"), "captures")
         if "journal" in e:
@@ -760,6 +773,8 @@ def construire_releve(ctx):
              "titulaire": t["agent"] if t["agent"] in cles else None, "etape": t["etape"] or "", "maj": t["maj"],
              "journal": list(t["journal"]), "fonctionnalite": t["fonctionnalite"], "element": t["element"],
              "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"]}
+        if t.get("lignes") is not None:
+            v["lignes"] = t["lignes"]
         if t.get("captures"):
             v["images"] = [{"chemin": chemin(c)} for c in t["captures"]]
         if t["id"] in retours:

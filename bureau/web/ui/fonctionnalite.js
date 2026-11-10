@@ -184,6 +184,101 @@ function partieDocuments(ctx, f) {
   return bloc;
 }
 
+// Les questions à choix qui attendent l'utilisateur : celles du dernier message, s'il vient d'un agent.
+export function questionsEnAttente(f) {
+  const d = Array.isArray(f?.discussion) ? f.discussion : [];
+  const m = d[d.length - 1];
+  return m && m.auteur !== "utilisateur" && Array.isArray(m.questions) && m.questions.length
+    ? {message: m.id, questions: m.questions} : null;
+}
+
+// La réponse envoyée : chaque question avec le choix fait (ou « passée »), puis le texte libre. Chaque question doit
+// avoir une réponse ou être passée, et passer une question demande de dire pourquoi dans le texte.
+// `reponses` : {rang: {choix: [..], autre?: "texte"} | {passee: true}} ; `autre` présent = « Autre » choisi (à préciser).
+// Rend {texte} ou {erreur}.
+export function reponseComposee(questions, reponses, libre) {
+  const texteLibre = String(libre ?? "").trim();
+  const lignes = [];
+  let passee = false;
+  for (const [k, q] of (questions || []).entries()) {
+    const r = reponses?.[k];
+    if (r?.passee) { lignes.push(`${q.texte} → (passée)`); passee = true; continue; }
+    if (typeof r?.autre === "string" && !r.autre.trim()) return {erreur: `Précisez « Autre » pour « ${q.texte} ».`};
+    const valeurs = [...(r?.choix || []), ...(typeof r?.autre === "string" ? ["Autre : " + r.autre.trim()] : [])];
+    if (!valeurs.length) return {erreur: `Répondez à « ${q.texte} » (ou passez-la).`};
+    lignes.push(`${q.texte} → ${valeurs.join(", ")}`);
+  }
+  if (passee && !texteLibre) return {erreur: "Vous passez une question : dites pourquoi dans le message."};
+  if (!lignes.length && !texteLibre) return {erreur: "Écrivez un message."};
+  return {texte: [lignes.join("\n"), texteLibre].filter(Boolean).join("\n\n")};
+}
+
+// Les boutons des questions à choix, au-dessus de la zone de saisie. `etat` : les réponses en cours (gardées dans
+// le brouillon, elles survivent aux rafraîchissements) ; `changer()` après chaque clic.
+function blocQuestions(attente, etat, changer) {
+  const bloc = el("div", "questions");
+  attente.questions.forEach((q, k) => {
+    const r = etat[k] || (etat[k] = {choix: []});
+    const div = el("div", "question" + (r.passee ? " passee" : ""));
+    div.append(el("div", "question-texte", q.texte + (q.multiple ? " (plusieurs choix possibles)" : "")));
+    const rangee = el("div", "question-choix");
+    for (const c of q.choix) {
+      const b = el("button", "choix", c);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(!r.passee && r.choix.includes(c)));
+      b.addEventListener("click", () => {
+        r.passee = false;
+        if (q.multiple) r.choix = r.choix.includes(c) ? r.choix.filter((x) => x !== c) : [...r.choix, c];
+        else { r.choix = r.choix[0] === c ? [] : [c]; delete r.autre; }   // un seul choix : « Autre » se ferme
+        changer();
+      });
+      rangee.append(b);
+    }
+    // « Autre » : un champ dessous pour la valeur que l'on veut mettre.
+    const autre = el("button", "choix", "Autre");
+    autre.type = "button";
+    autre.setAttribute("aria-pressed", String(!r.passee && typeof r.autre === "string"));
+    autre.addEventListener("click", () => {
+      r.passee = false;
+      if (typeof r.autre === "string") delete r.autre;
+      else { r.autre = ""; if (!q.multiple) r.choix = []; }
+      changer(true);
+    });
+    rangee.append(autre);
+    const passer = el("button", "choix passer", r.passee ? "Passée" : "Passer");
+    passer.type = "button";
+    passer.setAttribute("aria-pressed", String(!!r.passee));
+    passer.addEventListener("click", () => { r.passee = !r.passee; if (r.passee) { r.choix = []; delete r.autre; } changer(); });
+    rangee.append(passer);
+    div.append(rangee);
+    if (!r.passee && typeof r.autre === "string") {
+      const champ = document.createElement("input");
+      champ.type = "text";
+      champ.className = "choix-autre";
+      champ.maxLength = 300;
+      champ.placeholder = "Votre réponse…";
+      champ.value = r.autre;
+      champ.dataset.question = String(k);
+      champ.addEventListener("input", () => { r.autre = champ.value; changer(false, false); });
+      div.append(champ);
+    }
+    bloc.append(div);
+  });
+  return bloc;
+}
+
+// L'échelle d'un coût : les tokens consommés et les lignes produites, pour juger un prix.
+export function echelle({tokens = 0, lignes = null} = {}) {
+  const morceaux = [];
+  if (tokens > 0) {
+    const n = tokens >= 1e6 ? (tokens / 1e6).toFixed(1).replace(".", ",") + " M"
+      : tokens >= 1e3 ? Math.round(tokens / 1e3) + " k" : String(tokens);
+    morceaux.push(n + " tokens");
+  }
+  if (Number.isInteger(lignes)) morceaux.push(`${lignes} ligne${lignes > 1 ? "s" : ""}`);
+  return morceaux.join(" · ");
+}
+
 // La partie « Coût » : le coût de chaque tâche de la fonctionnalité (depuis toujours), lu à l'ouverture du panneau.
 function partieCouts(f) {
   const bloc = el("details", "couts");
@@ -199,14 +294,15 @@ function partieCouts(f) {
     } catch { titre.textContent = "Coût : indisponible"; return; }
     if (!c?.disponible) { bloc.remove(); return; }
     const incomplet = c.sans_prix ? " + prix inconnu" : "";
-    titre.textContent = `Coût : ${euros(c.total)}${incomplet}`;
+    titre.textContent = `Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : "");
     if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
     const ul = el("ul", "liste-couts");
     for (const t of c.taches) {
       const li = el("li", "");
       const modeles = Object.entries(t.modeles).map(([m, v]) => `${m} ${euros(v)}`).join(" · ");
       li.append(el("span", "cout-tache", t.titre), el("strong", "cout-montant", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
-      if (modeles) li.append(el("div", "note", modeles));
+      const detail = [echelle(t), modeles].filter(Boolean).join(" · ");
+      if (detail) li.append(el("div", "note", detail));
       ul.append(li);
     }
     corps.append(ul, el("p", "note", "Estimation d'après les tokens notés par l'orchestrateur (au plus bas quand seul un total est connu)."));
@@ -333,14 +429,19 @@ function lienExterne(url, texte) {
 
 // La zone de saisie : texte, images jointes (vignettes avant envoi), envoi. Le brouillon survit aux rafraîchissements.
 // `envoyerDemande(texte, images, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
-function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, invite = "Écrire un message…"} = {}) {
+function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, invite = "Écrire un message…",
+                                         questions = null} = {}) {
   const brouillon = ctx.brouillons.get(cle) || {texte: "", images: []};
   ctx.brouillons.set(cle, brouillon);
+  // Les réponses aux questions à choix du dernier message (oubliées quand un autre message en pose de nouvelles).
+  if (questions && brouillon.reponsesDe !== questions.message) { brouillon.reponsesDe = questions.message; brouillon.reponses = {}; }
+  const preparer = () => (questions ? reponseComposee(questions.questions, brouillon.reponses, zone.value)
+                                    : (zone.value.trim() ? {texte: zone.value} : {erreur: ""}));
   const bloc = el("section", "saisie-discussion");
   const zone = document.createElement("textarea");
   zone.rows = 3;
   zone.maxLength = MAX_TEXTE;
-  zone.placeholder = invite;
+  zone.placeholder = questions ? "Ajouter un commentaire (obligatoire si vous passez une question)…" : invite;
   zone.value = brouillon.texte;
   zone.dataset.saisie = "1";
   const miniatures = el("div", "vignettes");
@@ -356,7 +457,12 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   fichier.multiple = true;
   fichier.hidden = true;
 
-  const maj = () => { envoyer.disabled = !zone.value.trim() || ctx.envois.has(cle); };
+  const conseil = el("p", "note questions-conseil", "");
+  const maj = () => {
+    const pr = preparer();
+    envoyer.disabled = Boolean(pr.erreur !== undefined) || ctx.envois.has(cle);
+    conseil.textContent = questions ? (pr.erreur || "") : "";
+  };
   function dessinerMiniatures() {
     miniatures.replaceChildren();
     brouillon.images.forEach((i, n) => {
@@ -383,13 +489,14 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
     dessinerMiniatures();
   });
   envoyer.addEventListener("click", async () => {
-    if (ctx.envois.has(cle) || !zone.value.trim()) return;   // un double clic ne crée qu'une demande
+    const pr = preparer();
+    if (ctx.envois.has(cle) || pr.erreur !== undefined) return;   // un double clic ne crée qu'une demande
     ctx.envois.add(cle);
     envoyer.disabled = true;
-    const texte = zone.value, images = brouillon.images.slice();
+    const texte = pr.texte, images = brouillon.images.slice();
     let r;
     try { r = await envoyerDemande(texte, images, envoyer); } finally { ctx.envois.delete(cle); }
-    if (r?.ok) { brouillon.texte = ""; brouillon.images = []; ctx.rouvrir(); }
+    if (r?.ok) { brouillon.texte = ""; brouillon.images = []; brouillon.reponses = {}; ctx.rouvrir(); }
     else maj();
   });
   maj();
@@ -397,7 +504,20 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   const rangee = el("div", "retour-pied");
   if (images) rangee.append(joindre);
   rangee.append(envoyer);
-  bloc.append(zone, miniatures, erreur, rangee, fichier);
+  if (questions) {
+    const changer = (focusAutre = false, redessin = true) => {
+      if (!redessin) { maj(); return; }   // frappe dans « Autre » : le champ reste, seul « Envoyer » se met à jour
+      const nouveau = blocQuestions(questions, brouillon.reponses, changer);
+      questionnaire.replaceWith(nouveau);
+      questionnaire = nouveau;
+      if (focusAutre) nouveau.querySelector("input.choix-autre:placeholder-shown")?.focus();
+      maj();
+    };
+    let questionnaire = blocQuestions(questions, brouillon.reponses, changer);
+    bloc.append(questionnaire);
+  }
+  bloc.append(zone, conseil, miniatures, erreur, rangee, fichier);
+  maj();
   return {bloc, texte: () => zone.value};
 }
 
@@ -456,7 +576,7 @@ export function contenuFonctionnalite(ctx, contenu, f) {
           if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, images}]);
           if (!r.ok && !f) ctx.nouvelle.envoi = null;
           return r;
-        });
+        }, {questions: f ? questionsEnAttente(f) : null});
     blocDiscussion.append(s.bloc);
   }
   if (!f) { contenu.append(blocDiscussion); return; }

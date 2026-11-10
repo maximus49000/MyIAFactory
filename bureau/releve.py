@@ -24,6 +24,7 @@ MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
 MAX_MESSAGES = 1000
 MAX_DOCUMENTS = 2000
+MAX_QUESTIONS, MAX_CHOIX = 10, 12   # les questions à choix d'un message d'agent
 CHAMPS_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache", "date")   # d'où vient un document
 MAX_IMAGES_MESSAGE = 4
 SCHEMAS_LIENS = ("https", "http", "claude")
@@ -245,6 +246,23 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
     return vus
 
 
+def erreur_questions(questions):
+    """Les questions à choix d'un message d'agent : `[{texte, choix: [2 à 12 textes], multiple?}]`, 10 au plus.
+    Rend le problème en clair, ou `None`."""
+    if not isinstance(questions, list) or not 1 <= len(questions) <= MAX_QUESTIONS:
+        return f"« questions » doit être une liste de 1 à {MAX_QUESTIONS} questions."
+    for k, q in enumerate(questions, 1):
+        if not _est_dict(q) or not _texte_plein(q.get("texte")):
+            return f"« questions » : la question {k} doit avoir un « texte »."
+        choix = q.get("choix")
+        if (not isinstance(choix, list) or not 2 <= len(choix) <= MAX_CHOIX
+                or not all(_texte_plein(c) for c in choix)):
+            return f"« questions » : la question {k} doit avoir de 2 à {MAX_CHOIX} « choix » (textes non vides)."
+        if q.get("multiple") is not None and not isinstance(q["multiple"], bool):
+            return f"« questions » : « multiple » de la question {k} doit être vrai ou faux."
+    return None
+
+
 def _verifier_documents(f, nom, erreurs):
     """Les documents produits pour la fonctionnalité : `{chemin, titre}` et, facultatifs, d'où ils viennent."""
     documents = _liste_facultative(f.get("documents"), f"{nom} : « documents »", erreurs)
@@ -287,6 +305,10 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
         if m.get("images") is not None and not _liste_de_textes(m["images"], MAX_IMAGES_MESSAGE):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
                            f"d'au plus {MAX_IMAGES_MESSAGE} chemins (textes non vides).")
+        if m.get("questions") is not None:
+            probleme = erreur_questions(m["questions"])
+            if probleme:
+                erreurs.append(f"{nom} : « discussion » : le message « {i} » : {probleme}")
 
 
 def _verifier_cahier_methode(f, nom, erreurs):
@@ -380,6 +402,9 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         m = t.get("montee")
         if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("de", "a", "raison"))):
             erreurs.append(f"Tâche « {i} » : « montee » doit avoir « de », « a » et « raison » (textes non vides).")
+        n = t.get("lignes")
+        if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
+            erreurs.append(f"Tâche « {i} » : « lignes » doit être un entier positif ou nul (lignes produites).")
     _verifier_lecons_v4(r, titulaires, erreurs)
 
 

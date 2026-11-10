@@ -55,7 +55,9 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 4. **Les retours des agents** : leur coût d'abord (`lancer usage` : le `modele` réellement employé, l'`agent`, la
    `tache`, l'`etape`, et les tokens que l'exécution a consommés — `entree` et `sortie` si tu les as, sinon le `total`
    que rend le sous-agent ; la facturation est un élément central du bureau, ne saute jamais cette ligne), leur
-   résultat (mets la tâche à jour avec `lancer tache` : colonne, `journal`, `captures`), leurs leçons (`lancer lecon` avec `action: noter`, voir « Les leçons ») et leurs retours sur la
+   résultat (mets la tâche à jour avec `lancer tache` : colonne, `journal`, `captures`, et `lignes` : le total des
+   lignes que la tâche a produites, par exemple les lignes ajoutées et modifiées du `git diff --shortstat` de son
+   travail ; c'est l'échelle de son coût), leurs leçons (`lancer lecon` avec `action: noter`, voir « Les leçons ») et leurs retours sur la
    factory, qui deviennent des contrôles (`lancer controle`) ou des outils (point 3).
 5. **Faire avancer chaque fonctionnalité** selon son étape (« Le parcours »).
 6. **Commit et push** du dépôt du projet après chaque étape qui produit quelque chose (un cahier, une méthode, un
@@ -99,7 +101,10 @@ le bandeau du bureau montre.
    <nom> », `fonctionnalite`, `role` (celui de l'agent), `colonne: cadrage`, `agent` = l'agent de cadrage,
    `active: true` ; elle reste active jusqu'à la fin du cahier des charges. Pour chaque réponse : `lancer depart`
    (`agent`, `tache` = cette tâche), un sous-agent neuf avec ce message et la discussion, puis sa réponse dans la
-   discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre). **Si le projet n'a pas encore de genre** (`genre` nul dans
+   discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre). Quand l'agent pose des questions
+   qui ont des réponses possibles, donne-les en `questions` (chaque question et ses `choix`, `multiple` si plusieurs
+   réponses vont ensemble) : l'utilisateur répond d'un clic, peut passer une question en disant pourquoi, et garde la
+   saisie libre ; une réponse « (passée) » se lit avec le texte qui suit. **Si le projet n'a pas encore de genre** (`genre` nul dans
    `etat`), décris le projet en une phrase (domaine, livrable, outils), compare-la aux genres connus
    (`lancer genre`, `action: lister`) et pose la décision `confirmer_genre` (`lancer decision`, `portee: projet`,
    `texte` = ta phrase et ta proposition, `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`).

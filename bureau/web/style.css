@@ -648,3 +648,17 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .liste-couts .note { grid-column: 1 / -1; }
 .cout-tache { min-width: 0; overflow-wrap: anywhere; }
 .cout-montant { font-variant-numeric: tabular-nums; }
+
+/* Les questions à choix d'un agent : un bouton par choix, « Passer » à part. */
+.questions { display: grid; gap: 8px; margin-bottom: 6px; }
+.question-texte { font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
+.question-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.choix { border: 1px solid #cfc7b6; border-radius: 999px; padding: 4px 11px; background: #fff; color: inherit;
+  font: inherit; font-size: 13px; cursor: pointer; }
+.choix[aria-pressed="true"] { background: #3f8f57; border-color: #3f8f57; color: #fff; }
+.choix.passer { border-style: dashed; color: #6d6980; }
+.choix.passer[aria-pressed="true"] { background: #6d6980; border-color: #6d6980; color: #fff; }
+.question.passee .question-texte { color: #6d6980; text-decoration: line-through; }
+.questions-conseil { margin: 2px 0; color: #9a5b12; min-height: 1em; }
+.choix-autre { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 5px 9px;
+  border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }

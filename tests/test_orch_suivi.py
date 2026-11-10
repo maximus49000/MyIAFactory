@@ -140,6 +140,26 @@ class TestSuivi(AvecProjet):
                        {"id": "u99", "modele": "Sonnet", "entree": 1, "sortie": 1}):  # id inconnu
             self.assertEqual(self.outil("usage", entree=entree)[0], 1, entree)
 
+    def test_message_avec_questions_a_choix(self):
+        f = self.nouvelle()
+        q = [{"texte": "Quelle taille ?", "choix": ["28 px", "56 px"]},
+             {"texte": "Quels fonds ?", "choix": ["Clair", "Sombre"], "multiple": True}]
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Deux questions", "questions": q})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        self.assertEqual(r["fonctionnalites"][0]["discussion"][-1]["questions"], q)
+        for mauvais in ({"auteur": "metier-1", "questions": [{"texte": "T", "choix": ["seul"]}]},
+                        {"auteur": "utilisateur", "questions": q}):              # seul un agent pose des questions
+            entree = {"fonctionnalite": f, "texte": "x", **mauvais}
+            self.assertEqual(self.outil("message", entree=entree)[0], 1, mauvais)
+
+    def test_tache_lignes_produites(self):
+        t = self.ok("tache", entree={"titre": "Dev", "colonne": "dev", "lignes": 85})
+        self.assertEqual(next(x for x in self.releve()["taches"] if x["id"] == t["id"])["lignes"], 85)
+        self.ok("tache", entree={"id": t["id"], "lignes": 120})          # le total de la tâche, remplacé
+        self.assertEqual(next(x for x in self.releve()["taches"] if x["id"] == t["id"])["lignes"], 120)
+        self.assertEqual(self.outil("tache", entree={"id": t["id"], "lignes": -3})[0], 1)
+
     def test_documents_de_la_fonctionnalite(self):
         # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :
         # images de la discussion, maquettes du cahier, captures d'une tâche, et ce que l'orchestrateur y inscrit.

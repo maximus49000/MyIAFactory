@@ -91,7 +91,10 @@ validee_le?}` ; `livrable` : `{libelle, lien | chemin, date}`). Rend la fonction
 ### `message`
 
 Entrée : `{"fonctionnalite", "auteur", "texte", "images"?: [chemins]}`. `auteur` : `utilisateur` ou la clé d'un
-agent. Un message d'agent remet `attend_reponse` à faux. Rend `{"id": "m3"}`.
+agent. Un message d'agent remet `attend_reponse` à faux. Un agent peut joindre des **questions à choix**,
+`"questions": [{"texte", "choix": [2 à 12 textes], "multiple"?: true}]` (10 au plus) : le bureau montre un bouton par
+choix, un bouton « Autre » (avec un champ pour la valeur voulue) et un bouton « Passer » ; la réponse revient en un `message` lisible (« question → choix », « (passée) »,
+puis le texte libre, obligatoire quand une question est passée). Rend `{"id": "m3"}`.
 
 ### `decision`
 
@@ -104,7 +107,8 @@ même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 
 Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise à jour. Champs : `titre`,
 `fonctionnalite`, `element`, `role`, `colonne`, `agent`, `etape`, `modele_depart`, `montee` (`{de, a, raison}`),
-`journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins). Un agent ne tient qu'une
+`journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins), `lignes` (les lignes produites
+par la tâche, son total : l'échelle de son coût au bureau). Un agent ne tient qu'une
 tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé (quelle que soit la casse)
 en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Haiku → Sonnet → Opus). Rend la tâche.
 

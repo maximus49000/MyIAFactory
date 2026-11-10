@@ -32,11 +32,13 @@ export function cadrage(elements, traces, largeur, hauteur) {
   return {echelle, dx: largeur / 2 - cx * echelle, dy: hauteur / 2 + cy * echelle};
 }
 
-// opts : {elements (avec position), traces, couleur(element) -> css, estompe(element) -> bool,
+// opts : {elements (avec position), traces, teinte(element) -> clé de couleur (variable CSS --cat-<clé>),
+//         estompe(element) -> bool,
 //         surChoix(element), libelle(element) -> texte, vue: objet où garder zoom et position}
 export function creerVueDeHaut(opts) {
-  const {traces = [], couleur, surChoix, libelle, vue} = opts;
+  const {traces = [], surChoix, libelle, vue} = opts;
   const elements = (opts.elements || []).filter((e) => Number.isFinite(e?.position?.x) && Number.isFinite(e?.position?.y));
+  const teintes = new Map(elements.map((e) => [e, opts.teinte(e)]));   // calculées une fois
   let estompe = opts.estompe || (() => false);
   const boite = el("div", "cat-carte");
   const canvas = document.createElement("canvas");
@@ -50,7 +52,11 @@ export function creerVueDeHaut(opts) {
   // vue.t : {echelle, dx, dy} de l'utilisateur, gardé tant que le panneau reste sur ce catalogue.
   const t = () => vue.t || base;
 
+  let demande = 0;   // un dessin par image au plus, même si la souris envoie beaucoup d'événements
   function dessiner() {
+    if (!demande) demande = requestAnimationFrame(() => { demande = 0; dessinerMaintenant(); });
+  }
+  function dessinerMaintenant() {
     if (!largeur || !hauteur) return;
     const ctx2d = canvas.getContext("2d");
     const ratio = window.devicePixelRatio || 1;
@@ -74,6 +80,11 @@ export function creerVueDeHaut(opts) {
     const rayon = Math.min(8, depart + Math.log2(Math.max(1, echelle / (base?.echelle || echelle))));
     ctx2d.lineWidth = 1;
     ctx2d.strokeStyle = papier;
+    const couleurs = new Map();
+    const couleur = (cle) => {
+      if (!couleurs.has(cle)) couleurs.set(cle, style.getPropertyValue("--cat-" + cle).trim() || "#888");
+      return couleurs.get(cle);
+    };
     // Les estompés d'abord, pour que les éléments filtrés restent au-dessus.
     for (const passe of [true, false]) {
       ctx2d.globalAlpha = passe ? 0.18 : 1;
@@ -83,7 +94,7 @@ export function creerVueDeHaut(opts) {
         if (x < -10 || y < -10 || x > largeur + 10 || y > hauteur + 10) continue;
         ctx2d.beginPath();
         ctx2d.arc(x, y, rayon, 0, Math.PI * 2);
-        ctx2d.fillStyle = couleur(e, style);
+        ctx2d.fillStyle = couleur(teintes.get(e));
         ctx2d.fill();
         ctx2d.stroke();
       }
@@ -95,7 +106,6 @@ export function creerVueDeHaut(opts) {
     const r = boite.getBoundingClientRect();
     const l = Math.round(r.width), h = Math.round(r.height);
     if (!l || !h || (l === largeur && h === hauteur)) return;
-    const ancien = base;
     largeur = l; hauteur = h;
     const ratio = window.devicePixelRatio || 1;
     canvas.width = Math.round(l * ratio);
@@ -103,10 +113,10 @@ export function creerVueDeHaut(opts) {
     canvas.style.width = l + "px";
     canvas.style.height = h + "px";
     base = cadrage(elements, traces, l, h);
-    if (vue.t && ancien) {   // garder le zoom de l'utilisateur, recentré sur la nouvelle taille
-      vue.t = {echelle: vue.t.echelle, dx: vue.t.dx + (base.dx - ancien.dx), dy: vue.t.dy + (base.dy - ancien.dy)};
-    }
-    dessiner();
+    // Garder le zoom de l'utilisateur, recentré sur la nouvelle taille (aussi après « Agrandir » / « Réduire »).
+    if (vue.t && vue.l && vue.h) vue.t = {echelle: vue.t.echelle, dx: vue.t.dx + (l - vue.l) / 2, dy: vue.t.dy + (h - vue.h) / 2};
+    vue.l = l; vue.h = h;
+    dessinerMaintenant();
   }
 
   function zoomer(facteur, mx = largeur / 2, my = hauteur / 2) {
@@ -192,6 +202,6 @@ export function creerVueDeHaut(opts) {
     zoomer: (f) => { if (base) zoomer(f); },
     toutVoir: () => { vue.t = null; dessiner(); },
     filtrer(fn) { estompe = fn; dessiner(); },
-    detruire: () => observateur.disconnect(),
+    detruire: () => { observateur.disconnect(); cancelAnimationFrame(demande); },
   };
 }

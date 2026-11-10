@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {filtrerElements, compteurs, utilisationsKit, estCouleur, cadrage, demandeRetourElement, pageDe,
-        sansAccents} from "../ui/catalogue.js";
+        sansAccents, libelleEtat} from "../ui/catalogue.js";
 
 const cat = {
   groupes: [{id: "g1", nom: "Nord"}, {id: "g2", nom: "Sud"}],
@@ -120,4 +120,16 @@ test("pageDe : pages de 100, bornées", () => {
   assert.equal(pageDe(liste, -3).page, 0);
   assert.deepEqual(pageDe(liste, 1, 10).elements, liste.slice(10, 20));
   assert.deepEqual(pageDe([], 0), {elements: [], page: 0, pages: 1, total: 0});
+});
+
+test("compteurs et libelleEtat : des états aux noms d'Object.prototype restent des états", () => {
+  const c = compteurs({elements: [{id: "a", etat: "constructor"}, {id: "b", etat: "__proto__"}, {id: "c", etat: "toString"}]}, null);
+  assert.equal(c.total, 3);
+  assert.equal(c.parEtat.constructor, 1);
+  assert.equal(c.parEtat.toString, 1);
+  assert.ok(Object.hasOwn(c.parEtat, "__proto__"));
+  assert.equal(Object.keys(c.parEtat).length, 3);
+  assert.equal(libelleEtat("constructor"), "constructor");
+  assert.equal(libelleEtat("to_String"), "to String");
+  assert.equal(libelleEtat("a_revoir"), "à revoir");
 });

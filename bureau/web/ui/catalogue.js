@@ -49,7 +49,7 @@ export function filtrerElements(cat, {groupe = null, passe = null, aReevaluer = 
 
 // Le nombre d'éléments d'un groupe (null : tous), et par état ("" : sans état).
 export function compteurs(cat, groupe) {
-  const parEtat = {};
+  const parEtat = Object.create(null);   // un état « constructor » ou « __proto__ » reste un état
   let total = 0;
   for (const e of liste(cat?.elements)) {
     if (groupe !== null && groupe !== undefined && e.groupe !== groupe) continue;
@@ -57,7 +57,7 @@ export function compteurs(cat, groupe) {
     const k = e.etat ?? "";
     parEtat[k] = (parEtat[k] || 0) + 1;
   }
-  return {total, parEtat};
+  return {total, parEtat: {...parEtat}};
 }
 
 // Chaque élément commun (ceux déclarés d'abord, dans l'ordre) -> les ids des éléments qui l'utilisent.
@@ -106,7 +106,7 @@ const LIBELLES_ETAT = {valide: "validé", a_revoir: "à revoir", a_faire: "à fa
                        termine: "terminé", "": "sans état"};
 export function libelleEtat(etat) {
   const k = etat ?? "";
-  return LIBELLES_ETAT[k] ?? String(k).replace(/_/g, " ");
+  return Object.hasOwn(LIBELLES_ETAT, k) ? LIBELLES_ETAT[k] : String(k).replace(/_/g, " ");
 }
 
 // --- La vue (navigateur seulement).
@@ -169,14 +169,14 @@ async function charger(ctx, fonc) {
   } catch {
     Object.assign(entree, {statut: "erreur", erreur: "Serveur du bureau injoignable."});
   }
-  if (ctx.catalogues.get(fonc) === entree) ctx.rouvrir();
+  if (ctx.catalogues.get(fonc) === entree && ctx.estOuvert("catalogue", fonc)) ctx.rouvrir();
 }
 
 // Les retours envoyés que le catalogue n'a pas encore repris (clé fonc + élément).
 const cleRetour = (fonc, id) => fonc + "\u0000" + id;
 function retoursLocaux(ctx, fonc, e) {
   const cle = cleRetour(fonc, e.id);
-  const repris = new Set(liste(e.retours).map((r) => r.texte));
+  const repris = new Set(liste(e.retours).map((r) => String(r.texte).trim()));
   const restes = (ctx.retoursEnvoyes.get(cle) || []).filter((t) => !repris.has(t));
   if (restes.length) ctx.retoursEnvoyes.set(cle, restes); else ctx.retoursEnvoyes.delete(cle);
   return restes;
@@ -233,6 +233,11 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
   const nomGroupe = new Map(groupes.map((g) => [g.id, g.nom]));
   const lecons = liste(cat.lecons);
   const passes = liste(cat.passes);
+  const parPasse = new Map(), parLecon = new Map();   // un seul passage sur les éléments
+  for (const e of elements) {
+    for (const n of new Set(liste(e.passes))) parPasse.set(n, (parPasse.get(n) || 0) + 1);
+    for (const l of new Set(liste(e.a_reevaluer))) parLecon.set(l, (parLecon.get(l) || 0) + 1);
+  }
   const ouvrirFiche = (id) => {
     ui.defilement = contenu.closest(".panneau")?.scrollTop || 0;
     ui.fiche = id;
@@ -264,7 +269,10 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
       b.append(nom + " ", el("span", "n", String(c.total)));
       b.title = Object.entries(c.parEtat).map(([k, n]) => `${libelleEtat(k)} : ${n}`).join(" · ");
       b.setAttribute("aria-pressed", String(ui.groupe === id));
-      b.addEventListener("click", () => { ui.groupe = id; ui.page = 0; ui.etat = null; ctx.rouvrir(); });
+      b.addEventListener("click", () => {
+        Object.assign(ui, {groupe: id, page: 0, etat: null, doutes: false, aReevaluer: false});
+        ctx.rouvrir();
+      });
       barreGroupes.append(b);
     };
     choix(null, "Tous");
@@ -304,9 +312,10 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
     outilsCarte.append(plus, moins, tout, legende);
     ui.carte.groupe !== ui.groupe && (ui.carte = {t: null, groupe: ui.groupe});
     const correspond = new Set(filtrerElements(cat, filtres()).map((e) => e.id));
-    carte = creerVueDeHaut({
+    ui.vueDeHaut?.detruire();
+    carte = ui.vueDeHaut = creerVueDeHaut({
       elements: places, traces: liste(cat.trace), vue: ui.carte,
-      couleur: (e, style) => style.getPropertyValue("--cat-" + teinte(e)).trim() || "#888",
+      teinte,
       estompe: (e) => !correspond.has(e.id),
       libelle: (e) => `${e.nom} · ${libelleEtat(e.etat)}`,
       surChoix: (e) => ouvrirFiche(e.id),
@@ -360,7 +369,7 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
     const ul = el("ul", "cat-passes");
     for (const p of [...passes].sort((a, b) => b.numero - a.numero)) {
       const li = el("li", "");
-      const n = elements.filter((e) => liste(e.passes).includes(p.numero)).length;
+      const n = parPasse.get(p.numero) || 0;
       li.append(el("b", "", `Passe ${p.numero}`));
       if (p.titre) li.append(" · " + p.titre);
       li.append(" ", el("span", "cat-quand", [p.date ? dateFr(p.date) : null, `${n} élément${n > 1 ? "s" : ""}`].filter(Boolean).join(" · ")));
@@ -379,17 +388,21 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
       + (aReeval ? ` (${aReeval} aujourd'hui).` : ".")));
     const d = el("details", "");
     d.append(el("summary", "", `Voir les ${lecons.length} leçon${lecons.length > 1 ? "s" : ""}`));
-    const ul = el("ul", "cat-lecons");
-    for (const l of lecons) {
-      const li = el("li", "");
-      li.append(el("b", "", l.titre ? `${l.id} · ${l.titre}` : l.id));
-      const n = elements.filter((e) => liste(e.a_reevaluer).includes(l.id)).length;
-      const quand = [l.passe !== undefined ? `passe ${l.passe}` : null, l.portee || null, n ? `${n} à réévaluer` : null].filter(Boolean);
-      if (quand.length) li.append(" ", el("span", "cat-quand", quand.join(" · ")));
-      if (l.texte) li.append(el("div", "", l.texte));
-      ul.append(li);
-    }
-    d.append(ul);
+    d.addEventListener("toggle", () => {   // la liste n'est construite qu'à l'ouverture
+      if (!d.open || d.dataset.fait) return;
+      d.dataset.fait = "1";
+      const ul = el("ul", "cat-lecons");
+      for (const l of lecons) {
+        const li = el("li", "");
+        li.append(el("b", "", l.titre ? `${l.id} · ${l.titre}` : l.id));
+        const n = parLecon.get(l.id) || 0;
+        const quand = [l.passe !== undefined ? `passe ${l.passe}` : null, l.portee || null, n ? `${n} à réévaluer` : null].filter(Boolean);
+        if (quand.length) li.append(" ", el("span", "cat-quand", quand.join(" · ")));
+        if (l.texte) li.append(el("div", "", l.texte));
+        ul.append(li);
+      }
+      d.append(ul);
+    });
     section.append(d);
     contenu.append(section);
   }
@@ -438,15 +451,17 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
     minuteur = setTimeout(() => { ui.recherche = recherche.value; ui.page = 0; majListe(); }, 150);
   });
   barreFiltres.append(recherche);
-  filtre(barreFiltres, "Tous", undefined, () => ui.etat === null, () => { ui.etat = null; });
+  if (Object.keys(c.parEtat).length >= 2 || ui.etat !== null) {
+    filtre(barreFiltres, "Tous", undefined, () => ui.etat === null, () => { ui.etat = null; });
+  }
   for (const [k, n] of Object.entries(c.parEtat)) {
     if (Object.keys(c.parEtat).length < 2) break;
     filtre(barreFiltres, libelleEtat(k), n, () => ui.etat === k, () => { ui.etat = ui.etat === k ? null : k; });
   }
   const nReeval = dansGroupe.filter((e) => liste(e.a_reevaluer).length).length;
-  if (nReeval) filtre(barreFiltres, "À réévaluer", nReeval, () => ui.aReevaluer, () => { ui.aReevaluer = !ui.aReevaluer; });
+  if (nReeval || ui.aReevaluer) filtre(barreFiltres, "À réévaluer", nReeval, () => ui.aReevaluer, () => { ui.aReevaluer = !ui.aReevaluer; });
   const nDoutes = dansGroupe.filter((e) => e.doute).length;
-  if (nDoutes) filtre(barreFiltres, "Doutes", nDoutes, () => ui.doutes, () => { ui.doutes = !ui.doutes; });
+  if (nDoutes || ui.doutes) filtre(barreFiltres, "Doutes", nDoutes, () => ui.doutes, () => { ui.doutes = !ui.doutes; });
   contenu.append(barreFiltres, zoneListe);
   dessinerListe(ctx, zoneListe, cat, filtrerElements(cat, filtres()), ui, nomGroupe, ouvrirFiche);
 
@@ -458,7 +473,7 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
     section.append(el("p", "cat-discret", "Chaque élément commun, le nombre d'éléments qui l'utilisent et leur liste."));
     const grille = el("div", "cat-kit");
     const parKit = new Map(liste(cat.kit).map((k) => [k.id, k]));
-    for (const [id, ids] of usages) {
+    for (const [id, ids] of [...usages].slice(0, TAILLE_PAGE)) {
       const k = parKit.get(id) || {id};
       const art = el("article", "cat-kit-element");
       const h = el("h4", "", k.nom || id);
@@ -486,6 +501,7 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
       grille.append(art);
     }
     section.append(grille);
+    if (usages.size > TAILLE_PAGE) section.append(el("p", "cat-discret", `… et ${usages.size - TAILLE_PAGE} autres éléments communs.`));
     contenu.append(section);
   }
 
@@ -585,7 +601,8 @@ function contenuFiche(ctx, contenu, f, cat, e, ui) {
   if (principale) {
     const fig = el("figure", "cat-figure cat-principale");
     fig.append(image(ctx, principale.chemin, "Capture : " + e.nom));
-    const nPasses = new Set(captures.map((c) => c.passe).filter((x) => x !== undefined)).size;
+    const nPasses = Math.max(new Set(captures.map((c) => c.passe).filter((x) => x !== undefined)).size,
+                             new Set(liste(e.passes)).size);
     const badge = [principale.passe !== undefined ? `Passe ${principale.passe}` : null,
                    nPasses > 1 ? `${nPasses} passes` : null].filter(Boolean).join(" · ");
     if (badge) fig.append(el("span", "cat-badge", badge));
@@ -674,7 +691,7 @@ function contenuFiche(ctx, contenu, f, cat, e, ui) {
     corps.append(el("h4", "", "Kit"), p);
   }
 
-  // Les liens de référence (seulement http, https, file).
+  // Les liens de référence (seulement ceux que `lienSur` accepte : https, http, claude).
   const liens = liste(e.liens).filter((l) => lienSur(l.url));
   if (liens.length) {
     const p = el("p", "cat-liens");
@@ -788,7 +805,7 @@ function demanderModifier(ctx, f, e) {
     if (enCours || !zone.value.trim()) return;   // un double clic ne crée qu'une demande
     enCours = true;
     envoyer.disabled = true;
-    const texte = zone.value;
+    const texte = zone.value.trim();
     const r = await ctx.barre.demander(demandeRetourElement(f.id, e.id, texte), envoyer);
     enCours = false;
     if (r?.ok) {

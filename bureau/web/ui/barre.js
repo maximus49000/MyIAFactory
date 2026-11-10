@@ -112,7 +112,9 @@ export function creerBarre(entete, bandeau) {
   // le catalogue de chaque fonctionnalité qui en a un s'y ajoute (il s'ouvre dans le panneau de droite).
   let signatureLivrables = "";
   let ouvrirCatalogue = null;
+  let dernierEtat = null;
   function majLivrables(etat) {
+    dernierEtat = etat;
     const liste = livrables(etat, projetCourant());
     const cats = ouvrirCatalogue ? (etat.fonctionnalites || []).filter((f) => f?.catalogue === true) : [];
     const signature = JSON.stringify([liste, cats.map((f) => [f.id, f.nom])]);
@@ -250,7 +252,7 @@ export function creerBarre(entete, bandeau) {
     boutonNouvelle,
     boutonFonctions,
     // Le panneau donne de quoi ouvrir un catalogue ; la barre l'offre alors avec les livrables.
-    surCatalogue(fn) { ouvrirCatalogue = fn; signatureLivrables = ""; },
+    surCatalogue(fn) { ouvrirCatalogue = fn; signatureLivrables = ""; if (dernierEtat) majLivrables(dernierEtat); },
     majProjets,
     majActions,
     demander,

@@ -135,7 +135,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     etat: etat(), barre, brouillons, filtreListe, retourListe, envois, envoyes, nouvelle,
     rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
-    ouvrirCatalogue: (id) => ouvrirPanneau("catalogue", id),
+    ouvrirCatalogue: (id) => ouvrirCatalogue(id),
+    estOuvert: (type, id) => panneauOuvert?.type === type && panneauOuvert.id === id,
     catalogues, vuesCatalogue, retoursEnvoyes,
     grand: () => grand,
     basculerGrand: () => { grand = !grand; if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
@@ -146,6 +147,13 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     ouvrirTacheDepuisListe: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
     changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
   });
+
+  // Venir d'ailleurs (fonctionnalité, barre) ouvre la page du catalogue, pas la dernière fiche vue.
+  function ouvrirCatalogue(id) {
+    const v = vuesCatalogue.get(id);
+    if (v) v.fiche = null;
+    ouvrirPanneau("catalogue", id);
+  }
 
   function ouvrirPanneau(type, id) {
     const e = etat();
@@ -292,7 +300,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   // --- Boutons de la barre : « + Nouvelle fonctionnalité » et « Fonctionnalités ».
   barre.boutonNouvelle.addEventListener("click", () => { nouvelle.envoi = null; ouvrirPanneau("fonctionnalite", null); });
   barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
-  barre.surCatalogue((id) => ouvrirPanneau("catalogue", id));
+  barre.surCatalogue((id) => ouvrirCatalogue(id));
 
   // --- Souris.
   let attente = null;
@@ -322,6 +330,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
+    const cible = ev.target;
+    if ((cible?.tagName === "INPUT" || cible?.tagName === "TEXTAREA") && cible.value) return;   // Échap dans un champ rempli : rien ne se perd
     cacherCarte();
     if (grand && panneauOuvert?.type === "catalogue") { grand = false; ouvrirPanneau("catalogue", panneauOuvert.id); return; }
     fermerPanneau();

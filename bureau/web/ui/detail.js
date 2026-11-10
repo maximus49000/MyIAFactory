@@ -16,6 +16,12 @@ export function prenomAgent(e, id) {
   return (e.agents || []).find((a) => a.id === id)?.prenom || "personne";
 }
 
+// Le prénom de l'agent, sinon sa clé (un agent pas encore venu au bureau, par exemple une fiche cloud qui attend sa
+// session) ; « personne » s'il n'y a pas d'agent.
+export function nomAgent(e, id) {
+  return (e?.agents || []).find((a) => a.id === id)?.prenom || (typeof id === "string" && id ? id : "personne");
+}
+
 // Le menu « Déplacer vers… » : une demande `deplacer`, jamais un changement direct.
 function menuDeplacer(ctx, tacheId, colonneActuelle) {
   const menu = el("select", "deplacer");

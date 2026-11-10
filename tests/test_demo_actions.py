@@ -33,9 +33,9 @@ class TestDemoActions(unittest.TestCase):
         self.assertEqual(releve.valider(r), [], "le relevé doit rester valide")
         return r, p.stdout.decode("utf-8")
 
-    def test_le_relevé_de_la_démo_est_v3_et_riche(self):
+    def test_le_relevé_de_la_démo_est_v4_et_riche(self):
         r = self.lire()
-        self.assertEqual(r["version"], 3)
+        self.assertEqual(r["version"], 4)
         self.assertEqual(releve.valider(r), [])
         self.assertEqual(len(r["services"]), 6)
         self.assertIn("facturation", [s["id"] for s in r["services"]])

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "projet": "Démo",
   "factory": {
     "etat": "en marche",
@@ -253,7 +253,13 @@
       ],
       "maj": "2026-11-09T10:05:00",
       "postit": true,
-      "type": "fonction"
+      "type": "fonction",
+      "modele_depart": "Sonnet",
+      "montee": {
+        "de": "Sonnet",
+        "a": "Opus",
+        "raison": "Les règles de remise se croisent : il faut un raisonnement plus long."
+      }
     },
     {
       "id": "t3",
@@ -355,6 +361,24 @@
       "etape": "Première maquette",
       "maj": "2026-11-09T15:50:00",
       "type": "fonction"
+    },
+    {
+      "id": "t11",
+      "titre": "Rayon crèmerie : intégration",
+      "colonne": "encours",
+      "titulaire": "integration:1",
+      "etape": "Intégration du rayon dans la vitrine",
+      "active": true,
+      "maj": "2026-11-09T15:40:00+01:00",
+      "fonctionnalite": "magasin",
+      "element": "fromage",
+      "modele_depart": "Sonnet",
+      "images": [
+        {
+          "chemin": "images/magasin/fromage-p2.png",
+          "legende": "Le rayon avant intégration"
+        }
+      ]
     }
   ],
   "file": {
@@ -559,5 +583,85 @@
         }
       ]
     }
-  ]
+  ],
+  "genre": "application-de-gestion",
+  "livrable": {
+    "libelle": "Notes de version 0.3",
+    "chemin": "livrables/notes-de-version.html",
+    "date": "2026-11-09T17:00:00+01:00"
+  },
+  "fonctionnalites": [
+    {
+      "id": "magasin",
+      "nom": "Magasin en 3D",
+      "etape": "serie",
+      "agent_cadrage": "metier:1",
+      "attend_reponse": false,
+      "catalogue": true,
+      "discussion": [
+        {
+          "id": "m1",
+          "t": "2026-11-02T09:00:00+01:00",
+          "auteur": "utilisateur",
+          "texte": "Je voudrais une vitrine 3D du magasin : chaque rayon tel qu'il est en vrai, pour la page d'accueil."
+        },
+        {
+          "id": "m2",
+          "t": "2026-11-02T09:04:00+01:00",
+          "auteur": "metier:1",
+          "texte": "Bien noté. Faut-il tous les rayons, ou d'abord le rez-de-chaussée ? Et avez-vous des photos de chaque rayon ?"
+        },
+        {
+          "id": "m3",
+          "t": "2026-11-02T09:10:00+01:00",
+          "auteur": "utilisateur",
+          "texte": "Tous les rayons, le rez-de-chaussée d'abord. Les photos sont dans le dossier partagé."
+        },
+        {
+          "id": "m4",
+          "t": "2026-11-02T09:30:00+01:00",
+          "auteur": "metier:1",
+          "texte": "Voici la maquette et la liste des étapes : le cahier des charges est prêt à valider.",
+          "images": [
+            "images/magasin/maquette.png"
+          ]
+        },
+        {
+          "id": "m5",
+          "t": "2026-11-05T11:00:00+01:00",
+          "auteur": "metier:1",
+          "texte": "Prototype, deuxième tour : le rayon fruits avec les produits à leur taille réelle.",
+          "images": [
+            "images/magasin/fruits-p2.png"
+          ]
+        },
+        {
+          "id": "m6",
+          "t": "2026-11-05T11:20:00+01:00",
+          "auteur": "utilisateur",
+          "texte": "Parfait, c'est ce que je voulais. On peut lancer la série."
+        }
+      ],
+      "cahier": {
+        "maquette": [
+          "images/magasin/maquette.png"
+        ],
+        "etapes": [
+          "Relever les mesures de chaque rayon sur sa photo",
+          "Modéliser le meuble avec le kit",
+          "Placer les produits à leur taille réelle",
+          "Comparer au réel sous deux angles",
+          "Publier le rayon dans le catalogue"
+        ],
+        "valide_le": "2026-11-02T10:00:00+01:00"
+      },
+      "methode": {
+        "version": 2,
+        "chemin": "methodes/rayons.md",
+        "validee_le": "2026-11-05T11:30:00+01:00"
+      },
+      "decisions": []
+    }
+  ],
+  "decisions_projet": []
 }

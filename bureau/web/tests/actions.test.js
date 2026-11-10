@@ -148,3 +148,11 @@ test("libelleMontee", () => {
   assert.equal(libelleMontee(null), null);
   assert.equal(libelleMontee({montee: {de: "Haiku", a: "Sonnet"}}), "Sonnet, monté depuis Haiku");
 });
+
+test("nomAgent : le prénom, sinon la clé (un agent pas encore au bureau)", async () => {
+  const {nomAgent} = await import("../ui/detail.js");
+  const e = {agents: [{id: "dev:1", prenom: "Léa"}]};
+  assert.equal(nomAgent(e, "dev:1"), "Léa");
+  assert.equal(nomAgent(e, "dev:2"), "dev:2");
+  assert.equal(nomAgent({}, null), "personne");
+});

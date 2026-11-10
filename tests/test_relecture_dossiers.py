@@ -146,7 +146,8 @@ class TestCopieDeLaDemo(AvecDossier):
             (source / nom).write_text("{}\n", encoding="utf-8")
         copie_demo(self.tmp / "copie", source)
         self.assertEqual(sorted(p.name for p in (self.tmp / "copie").iterdir()),
-                         ["actions.py", "images", "reglages.json", "releve.json"])
+                         ["actions.py", "catalogue-magasin.json", "images", "livrables", "methodes", "reglages.json",
+                          "releve.json"])
 
 
 if __name__ == "__main__":

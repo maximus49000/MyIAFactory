@@ -1,0 +1,6 @@
+{
+  "releve": {"commande": ["python", "../../orchestrateur/outil.py", "--factory", "factory.json", "lancer", "releve"]},
+  "actions": {"commande": ["python", "../../orchestrateur/outil.py", "--factory", "factory.json", "lancer", "actions"]},
+  "images": {"racines": ["pieces", "captures"]},
+  "orchestrateur": "factory.json"
+}

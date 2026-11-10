@@ -1,0 +1,26 @@
+{
+  "nom": "Projet neuf",
+  "skill": "../..",
+  "genre": null,
+  "mots_interdits": [],
+  "fiches": "fiches",
+  "controles": "controles.md",
+  "consignes": "consignes-projet.md",
+  "reglages": "reglages.json",
+  "services": [
+    {"id": "metier", "nom": "Métier"},
+    {"id": "dev", "nom": "Dev"},
+    {"id": "qa", "nom": "QA"}
+  ],
+  "flux": [
+    {"id": "dev", "nom": "Développement", "role": "dev", "service": "dev"},
+    {"id": "integration", "nom": "Intégration", "role": "integrateur", "service": "dev"},
+    {"id": "relecture", "nom": "Relecture croisée", "role": "relecteur", "service": "qa"}
+  ],
+  "seuil_methode": 3,
+  "catalogues": {
+    "*": {"commande": ["python", "../../orchestrateur/outil.py", "--factory", "factory.json", "lancer", "catalogue",
+                       "{fonctionnalite}"]}
+  },
+  "commandes": {}
+}

@@ -1,0 +1,7 @@
+{
+  "port": 8770,
+  "projets": [
+    {"chemin": "demo/reglages.json", "id": "demo"},
+    {"chemin": "demo-b/reglages.json", "id": "demo-b"}
+  ]
+}

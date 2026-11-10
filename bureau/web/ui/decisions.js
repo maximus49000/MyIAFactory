@@ -2,7 +2,7 @@
 // « méthode à revoir ? », sessions cloud à créer. Chaque bouton envoie une demande au projet, jamais un changement direct.
 
 import {el} from "./dom.js";
-import {prenomAgent} from "./detail.js";
+import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession} from "./actions.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
@@ -95,7 +95,7 @@ function decisionSession(ctx, d) {
   const agent = (e.agents || []).find((a) => a.id === d.agent);
   const service = agent?.service ? (e.services || []).find((s) => s.id === agent.service)?.nom : null;
   li.append(el("div", "decision-texte", d.texte));
-  li.append(el("div", "lecon-meta", [prenomAgent(e, d.agent), agent?.modele, service].filter(Boolean).join(" · ")));
+  li.append(el("div", "lecon-meta", [nomAgent(e, d.agent), agent?.modele, service].filter(Boolean).join(" · ")));
   if (!e.agir) return li;
   const nom = document.createElement("input");
   nom.type = "text";

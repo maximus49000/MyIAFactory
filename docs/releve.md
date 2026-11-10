@@ -147,6 +147,72 @@ Une connaissance qui porte `appris_de` est marquée « partagée » : « appris 
 
 **Problème revenu.** Si une connaissance a pour `origine` l'`id` d'un challenge dont la cible est un KPI de votre projet, et que ce KPI entre de nouveau en alerte **après** la date de la connaissance, le bureau la marque « problème revenu ». Il lui faut donc quatre choses : `origine` = `id` du challenge, ce challenge toujours présent dans `challenges`, une `date` sur la connaissance, et un KPI dont `alerte` repasse à faux quand le problème cesse. Le bureau note chaque entrée en alerte dans `alertes-historique.jsonl`, à côté des réglages, à la date où il la lit : une alerte apparue et disparue pendant que le bureau était arrêté n'est pas vue.
 
+## Version 4 : le parcours d'une tâche
+
+En version 4, le relevé montre **les fonctionnalités** du projet, chacune avec son étape et sa discussion de
+cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1, 2 et 3, ces champs sont ignorés.
+
+| Champ | Où | Sens |
+|---|---|---|
+| `genre` | racine | l'identifiant du genre du projet (`^[a-z0-9][a-z0-9-]{0,39}$`), ou `null` s'il n'est pas encore choisi |
+| `livrable` | racine | le dernier livrable du projet : `{libelle, lien \| chemin, date}` (le bouton « Dernier livrable ») |
+| `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
+| `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) ou `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) |
+| `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
+| `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
+| `etage_propose`, `texte_general`, `roles` | chaque leçon | l'étage proposé (`projet`, `genre` ou `skill`), le texte réécrit en termes généraux (obligatoire si l'étage n'est pas `projet`), les rôles concernés |
+
+**Une fonctionnalité** : `id`, `nom`, `etape` (`cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie` ou
+`terminee`), et facultativement :
+- `agent_cadrage` (clé d'un titulaire) ; `discussion` : `[{id, t, auteur, texte, images?}]`, du plus ancien au plus
+  récent, 1 000 messages au plus, `auteur` = `utilisateur` ou la clé d'un titulaire, `images` = chemins (règles des
+  images) ; `attend_reponse` (vrai ou faux) ;
+- `cahier` : `{maquette: [chemins d'images], etapes: [textes], valide_le?}` ;
+- `methode` : `{version, lien | chemin, validee_le?}` ;
+- `livrable` : `{libelle, lien | chemin, date}` ;
+- `catalogue` : vrai si le projet fournit un catalogue pour cette fonctionnalité (bouton « Catalogue ») ;
+- `decisions` : `[{id, genre, texte}]` avec `genre` = `valider_cahier`, `valider_methode` ou `methode_a_revoir`.
+
+Les identifiants de décisions sont uniques dans tout le relevé. La pastille d'un projet dans le sélecteur compte
+`decisions`, les décisions des fonctionnalités et celles du projet. Pendant que `attend_reponse` est vrai, la page
+écrit « <prénom> est en train d'écrire… » si l'orchestrateur tourne (la bulle du chef est fraîche), sinon « En attente
+de l'orchestrateur ».
+
+**Le dernier livrable** : un `lien` (`https`, `http` ou `claude`) est ouvert tel quel ; un `chemin` est servi par le
+bureau s'il est dans une des racines de `livrables` des réglages (`{"livrables": {"racines": ["livrables"]}}`),
+avec l'extension `.html`, `.txt`, `.png`, `.jpg`, `.jpeg`, `.pdf`, `.zip` ou `.glb`. Un `.html` ou un `.txt` est
+servi **en bac à sable** (sans script) ; un `.zip` ou un `.glb` est téléchargé.
+
+### Le catalogue d'une fonctionnalité
+
+Le bureau ne le lit qu'à l'ouverture (bouton « Catalogue », ou le menu « Dernier livrable »), pas à chaque relevé.
+Déclarez sa source dans les réglages, ou dans le fichier de factory que les réglages désignent par
+`"orchestrateur"` :
+
+```json
+{"catalogues": {"magasin": {"fichier": "catalogue-magasin.json"},
+                "*": {"commande": ["python", "mon_catalogue.py", "{fonctionnalite}"], "dossier": "."}}}
+```
+
+`"*"` vaut pour toutes les fonctionnalités qui n'ont pas de déclaration à elles ; `{fonctionnalite}` y est remplacé
+par l'identifiant (lettres, chiffres, `-` et `_`). Une commande a 10 s pour écrire le catalogue en JSON UTF-8 ; son
+résultat est gardé 30 s. Format (tout est facultatif sauf `id` et `nom` d'un élément ; 20 000 éléments au plus) :
+
+- `groupes` : `[{id, nom}]` ; `passes` : `[{numero, date, titre}]` (les versions de la méthode) ;
+  `lecons` : `[{id, titre, texte, portee, passe}]` ; `kit` : `[{id, nom, description}]` (les éléments communs) ;
+  `trace` : `[{nom, points: [[x, y], …]}]` (des lignes sur la vue de haut) ;
+- `elements` : chacun `{id, nom, groupe, etat, note, caracteristiques: [{libelle, valeur}], captures: [{chemin,
+  passe}], comparaisons: [{angle, reel, produit, credit, lien}], liens: [{libelle, url}], kit: [ids], evenement,
+  lecons_appliquees: [ids], a_reevaluer: [ids], doute: {date, raison, leve_par}, retours: [{t, texte, etat,
+  reponse}], position: {x, y}, passes: [n]}`.
+
+Les images (`captures`, `reel`, `produit`) suivent les règles des images ci-dessous. `etat` : `fait` (ou `valide`,
+`termine`) pour un élément terminé, `a_faire` (ou `a_revoir`, `en_cours`) pour un élément à faire ; un élément avec
+un `doute` est montré à part ; un autre état est montré comme « autre ». Les positions sont dans un repère où **y monte
+vers le haut**. Un champ inconnu est ignoré ; un champ facultatif de mauvais type est retiré avec un avertissement
+(montré en haut du catalogue) ; un `elements` illisible rend le catalogue indisponible. Une partie sans donnée n'est
+pas montrée.
+
 ## Faire agir le bureau
 
 Le bureau **n'agit jamais lui-même** sur la factory : chaque geste de l'utilisateur (un bouton, un déplacement de tâche, un retour, un verdict sur une leçon, un challenge) devient une **demande** remise à votre projet, par une commande d'actions que vous déclarez dans les réglages :
@@ -162,10 +228,29 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `bouton` | `id` | l'utilisateur a cliqué un bouton-demande |
 | `deplacer` | `tache`, `colonne` | passer une tâche (ou un élément de `file.visibles` ou de `file.suite`, par son `id`) dans cette colonne |
 | `retour` | `tache`, `texte` (3 500 caractères au plus) | un retour de l'utilisateur sur une tâche |
-| `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`) | la décision du Directeur sur une leçon |
+| `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`), `etage?` | la décision du Directeur sur une leçon ; v4 : `etage` (`projet`, `genre` ou `skill`), absent s'il est celui proposé |
 | `challenge` | `cible` (`{type, id}`), `texte?`, `solution?` | v3 : ouvrir un challenge sur cette cible ; `solution` : la solution que l'utilisateur écrit dans le même geste |
 | `solution` | `challenge`, `texte` (3 500 caractères au plus) | v3 : l'utilisateur ajoute sa solution à un challenge du relevé |
 | `verdict_solution` | `challenge`, `solution`, `verdict` (`"valider"` ou `"ecarter"`) | v3 : la décision de l'utilisateur sur une solution (« Valider la sélection » ou « Écarter la sélection » : une demande par solution cochée) |
+
+**Les demandes de la version 4** (refusées sans lancer la commande si le relevé n'est pas en version 4) :
+
+| `type` | Champs | Quand |
+|---|---|---|
+| `fonctionnalite` | `texte`, `images?` | « + Nouvelle fonctionnalité » : son premier message |
+| `message` | `fonctionnalite`, `texte`, `images?` | un message de l'utilisateur dans la discussion |
+| `cahier` | `fonctionnalite`, `verdict` (`valider` ou `corriger`), `texte?` | « Valider le cahier des charges » ou « Demander une correction » |
+| `methode` | `fonctionnalite`, `verdict` (`valider`, `revoir` ou `garder`), `texte?` | valider la méthode ; « méthode à revoir ? » : Oui = `revoir`, Non = `garder` |
+| `genre` | `decision`, `genre`, `description?` | le genre confirmé ou choisi ; `description` pour un nouveau genre |
+| `session_cloud` | `decision`, `session` | « C'est fait » : la session cloud demandée est créée, avec ce nom |
+| `retour_element` | `fonctionnalite`, `element`, `texte` | « Demander à modifier » dans le catalogue (l'élément doit y être) |
+
+Textes : 3 500 caractères au plus. **Images jointes** : 4 au plus par demande, `{nom, type, donnees}` avec `donnees`
+en base64, `type` = `image/png` ou `image/jpeg`, extension `.png`, `.jpg` ou `.jpeg` assortie, 5 Mo au plus une fois
+décodée, contenu vérifié par sa signature, nom simple (ni dossier ni `..`). Le bureau ne les écrit nulle part : **votre
+commande d'actions les range** dans le projet (et les commite, si un agent cloud doit les lire), puis le relevé les
+montre par leur chemin. Un message envoyé reste affiché « en attente » tant que le relevé ne l'a pas repris ; un double
+clic ne crée qu'une demande (une demande identique dans les 10 secondes est ignorée).
 
 Chaque demande porte aussi `t` (date ISO). Le bureau ne transmet une demande qu'après l'avoir comparée au dernier relevé valide : un bouton, une colonne, une tâche, une leçon, une cible, un challenge ou une solution qui n'y figure pas est refusé sans lancer la commande.
 
@@ -199,7 +284,7 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 
 ## Exemple complet
 
-Voir [`exemples/demo/releve.json`](../exemples/demo/releve.json) (projet inventé « Démo », version 3 : boutons, détail d'une tâche, leçon à valider, retour sans réponse, tâche bloquée, usage sur plusieurs modèles, KPI dont un en alerte, connaissances partagées, un challenge avec trois solutions).
+Voir [`exemples/demo/releve.json`](../exemples/demo/releve.json) (projet inventé « Démo », version 4 : boutons, détail d'une tâche, leçon à valider, retour sans réponse, tâche bloquée, usage sur plusieurs modèles, KPI dont un en alerte, connaissances partagées, un challenge avec trois solutions, une fonctionnalité en série avec son catalogue [`catalogue-magasin.json`](../exemples/demo/catalogue-magasin.json), une montée de modèle, un dernier livrable) et [`exemples/demo-b/releve.json`](../exemples/demo-b/releve.json) (une fonctionnalité en cadrage avec une image dans la discussion, un genre à confirmer, une session cloud à créer).
 
 Version minimale :
 

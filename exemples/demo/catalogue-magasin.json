@@ -1,0 +1,84 @@
+{
+  "groupes": [
+    {"id": "rdc", "nom": "Rez-de-chaussée"},
+    {"id": "etage", "nom": "Étage"}
+  ],
+  "passes": [
+    {"numero": 1, "date": "2026-11-03", "titre": "Premiers rayons, méthode en essai"},
+    {"numero": 2, "date": "2026-11-07", "titre": "Méthode validée : produits à leur taille réelle"}
+  ],
+  "lecons": [
+    {"id": "L1", "titre": "Mesurer avant de modéliser", "texte": "Relever la largeur du meuble avant d'y placer les produits.", "portee": "tous les rayons", "passe": 1},
+    {"id": "L2", "titre": "Des produits à leur taille réelle", "texte": "La hauteur d'un produit suit la photo de référence, pas la place libre sur l'étagère.", "portee": "rayons avec produits", "passe": 2}
+  ],
+  "kit": [
+    {"id": "k-etagere", "nom": "Étagère standard", "description": "Meuble en bois, trois niveaux."},
+    {"id": "k-eclairage", "nom": "Éclairage de rayon", "description": "Rampe lumineuse au-dessus du meuble."},
+    {"id": "k-etiquette", "nom": "Étiquette de prix", "description": "Bandeau de prix sur le bord de l'étagère."}
+  ],
+  "trace": [
+    {"nom": "Parcours du client", "points": [[0, 0], [0, 6], [8, 6], [8, 12], [16, 12], [16, 4], [22, 4]]}
+  ],
+  "elements": [
+    {
+      "id": "fruits", "nom": "Rayon fruits et légumes", "groupe": "rdc", "etat": "fait", "passes": [1, 2],
+      "note": "Premier rayon de la méthode : refait à la passe 2 avec les produits à leur taille réelle.",
+      "caracteristiques": [{"libelle": "Largeur", "valeur": "6 m"}, {"libelle": "Niveaux", "valeur": 3},
+                           {"libelle": "Teinte dominante", "valeur": "#BE463C"}],
+      "captures": [{"chemin": "images/magasin/fruits-p1.png", "passe": 1}, {"chemin": "images/magasin/fruits-p2.png", "passe": 2}],
+      "comparaisons": [
+        {"angle": "Face", "reel": "images/magasin/fruits-reel-face.png", "produit": "images/magasin/fruits-p2.png",
+         "credit": "Photo inventée pour la démo, libre de droits", "lien": "https://github.com/maximus49000/MyIAFactory"},
+        {"angle": "Côté", "reel": "images/magasin/fruits-reel-cote.png", "produit": "images/magasin/fruits-produit-cote.png",
+         "credit": "Photo inventée pour la démo"}
+      ],
+      "liens": [{"libelle": "Méthode des rayons", "url": "https://github.com/maximus49000/MyIAFactory"}],
+      "kit": ["k-etagere", "k-eclairage", "k-etiquette"], "lecons_appliquees": ["L1", "L2"],
+      "position": {"x": 2, "y": 8}
+    },
+    {
+      "id": "pain", "nom": "Rayon boulangerie", "groupe": "rdc", "etat": "fait", "passes": [1],
+      "note": "Fait à la passe 1 : la leçon L2 est venue après, il est donc à réévaluer.",
+      "caracteristiques": [{"libelle": "Largeur", "valeur": "4 m"}, {"libelle": "Teinte dominante", "valeur": "#CDA05A"}],
+      "captures": [{"chemin": "images/magasin/pain-p1.png", "passe": 1}],
+      "comparaisons": [
+        {"angle": "Face", "reel": "images/magasin/pain-reel-face.png", "produit": "images/magasin/pain-p1.png",
+         "credit": "Photo inventée pour la démo"},
+        {"angle": "Côté", "reel": "images/magasin/pain-reel-cote.png", "produit": "images/magasin/pain-produit-cote.png",
+         "credit": "Photo inventée pour la démo"}
+      ],
+      "kit": ["k-etagere", "k-etiquette"], "lecons_appliquees": ["L1"], "a_reevaluer": ["L2"],
+      "position": {"x": 6, "y": 3},
+      "retours": [{"t": "2026-11-06T16:20:00+01:00", "texte": "Les baguettes devraient être debout.", "etat": "fait",
+                   "reponse": "Corrigé à la passe 1 : les baguettes sont dans des paniers."}]
+    },
+    {
+      "id": "boissons", "nom": "Rayon boissons", "groupe": "rdc", "etat": "fait", "passes": [2],
+      "note": "Fait directement avec la méthode validée.",
+      "caracteristiques": [{"libelle": "Largeur", "valeur": "8 m"}, {"libelle": "Niveaux", "valeur": 3}],
+      "captures": [{"chemin": "images/magasin/boissons-p2.png", "passe": 2}],
+      "kit": ["k-etagere", "k-eclairage", "k-etiquette"], "lecons_appliquees": ["L1", "L2"],
+      "evenement": "Décor de fête de fin d'année, passager : il n'est pas modélisé.",
+      "position": {"x": 12, "y": 10}
+    },
+    {
+      "id": "fromage", "nom": "Rayon crèmerie", "groupe": "rdc", "etat": "en_cours", "passes": [2],
+      "note": "En cours d'intégration.",
+      "captures": [{"chemin": "images/magasin/fromage-p2.png", "passe": 2}],
+      "kit": ["k-etagere", "k-eclairage"], "lecons_appliquees": ["L1", "L2"],
+      "position": {"x": 16, "y": 6}
+    },
+    {
+      "id": "jouets", "nom": "Rayon jouets", "groupe": "etage", "etat": "a_faire",
+      "note": "Laissé de côté : la photo de référence ne montre que la moitié du rayon.",
+      "doute": {"date": "2026-11-07", "raison": "La photo de référence est coupée à mi-hauteur.",
+                "leve_par": "Une photo du rayon entier, prise de face."},
+      "position": {"x": 4, "y": 18}
+    },
+    {
+      "id": "caisse", "nom": "Caisses", "groupe": "etage", "etat": "a_faire",
+      "note": "Dans la file : après la crèmerie.",
+      "position": {"x": 20, "y": 2}
+    }
+  ]
+}

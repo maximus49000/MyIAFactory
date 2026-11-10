@@ -77,21 +77,25 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 11. La mémoire à trois étages et les leçons
 - [x] 12. Le départ d'un agent, le choix du modèle, le vérificateur d'interface
 - [x] 13. Les consignes génériques et le guide de passage
-- [ ] 14. La démo à deux projets, la documentation, la relecture
+- [x] 14. La démo à deux projets, la documentation, la relecture
 - [ ] 15. Le vrai passage de bout en bout
 - [ ] Le passage du projet pilote (phases H à J, dans son dépôt)
 
-État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : le projet 3, le parcours d'une tâche, est conçu et planifié ; sa réalisation commence par la phase A (voir la [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)).
+État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Le projet 3, le parcours d'une tâche, est réalisé dans ce dépôt : un bureau qui suit plusieurs projets, « + Nouvelle fonctionnalité » et la discussion de cadrage, le Directeur enrichi, le catalogue de chaque fonctionnalité, et un **orchestrateur générique** ([consignes](orchestrateur/consignes.md), [interface des commandes](orchestrateur/interface.md), [guide de passage](docs/orchestrateur.md)) avec sa mémoire à trois étages. Restent le vrai passage de bout en bout (phase G) puis le passage du projet pilote (voir la [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)).
 
 ![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)
 
-Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge) réécrivent son `releve.json` : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/demo/` ailleurs et lancez le bureau sur la copie.
+![Une fonctionnalité : le bandeau du parcours, la discussion de cadrage, le cahier des charges](docs/img/fonctionnalite.jpg)
+
+![Le catalogue d'une fonctionnalité : la fiche d'un élément et sa comparaison « Produit » / « Réel »](docs/img/catalogue.jpg)
+
+Essayer la démo : `py -3.12 lancer.py serveur --bureau exemples/bureau.json` (deux projets inventés, avec le sélecteur), ou `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json` (un seul), puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge, nouvelle fonctionnalité, discussion, validations, « Demander à modifier ») réécrivent ses fichiers : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/` ailleurs et lancez le bureau sur la copie. Pour démarrer un vrai projet avec l'orchestrateur générique : [docs/orchestrateur.md](docs/orchestrateur.md) et `exemples/projet-neuf/`.
 
 Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bureau bureau.local.json`, où `bureau.local.json` vaut `{"port": 8770, "projets": ["<chemin>/.factory/reglages.json", …]}` (de 1 à 12 projets, chemins relatifs à ce fichier ; chaque entrée peut aussi être `{"chemin": …, "id": …}`). Chaque projet garde ses réglages sans changement.
 
 ## Ce qu'il reste à faire ensuite
 
-- **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : un orchestrateur générique (cadrage, cahier des charges avec maquette, découpage, prototype, méthode validée, série avec relecture croisée), une mémoire à trois étages (skill, genre de projet, projet), un bureau à plusieurs projets avec « Nouvelle fonctionnalité », la discussion de cadrage et le catalogue de chaque fonctionnalité.
+- **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : le vrai passage de bout en bout avec une conversation orchestratrice (phase G), puis le passage du projet pilote dans son dépôt (phases H à J).
 - **Projet 4, l'installation sur un projet** : scan, proposition de services, calibrage sur la machine, renfort cloud, emballage en skill.
 
 ## Documents
@@ -102,3 +106,4 @@ Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bu
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)
 - Format du relevé : [docs/releve.md](docs/releve.md)
+- L'orchestrateur générique : [orchestrateur/consignes.md](orchestrateur/consignes.md), [orchestrateur/interface.md](orchestrateur/interface.md), et le guide de passage d'un projet [docs/orchestrateur.md](docs/orchestrateur.md)

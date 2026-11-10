@@ -1,0 +1,49 @@
+{
+  "version": 4,
+  "projet": "Démo B",
+  "factory": {"etat": "en marche", "depuis": "2026-11-10T08:00:00"},
+  "genre": null,
+  "services": [
+    {"id": "metier", "nom": "Métier"},
+    {"id": "dev", "nom": "Dev"}
+  ],
+  "colonnes": [
+    {"id": "afaire", "nom": "À faire"},
+    {"id": "encours", "nom": "En cours"},
+    {"id": "fait", "nom": "Fait", "terminee": true}
+  ],
+  "titulaires": [
+    {"cle": "chef", "lieu": "local", "chef": true, "permanent": true, "modele": "Opus"},
+    {"cle": "metier:1", "service": "metier", "lieu": "local", "modele": "Sonnet"},
+    {"cle": "dev:1", "service": "dev", "lieu": "local", "modele": "Sonnet"},
+    {"cle": "dev:2", "service": "dev", "lieu": "local", "modele": "Opus"}
+  ],
+  "taches": [
+    {"id": "b1", "titre": "Cadrage : prise de rendez-vous", "colonne": "encours", "active": true,
+     "titulaire": "metier:1", "etape": "Questions de cadrage", "maj": "2026-11-10T09:12:00+01:00",
+     "fonctionnalite": "f1"},
+    {"id": "b2", "titre": "Page d'accueil", "colonne": "fait", "active": false, "titulaire": null, "etape": "",
+     "maj": "2026-11-09T17:00:00+01:00"}
+  ],
+  "fonctionnalites": [
+    {
+      "id": "f1", "nom": "Prise de rendez-vous en ligne", "etape": "cadrage", "agent_cadrage": "metier:1",
+      "attend_reponse": false, "catalogue": false, "decisions": [],
+      "discussion": [
+        {"id": "m1", "t": "2026-11-10T09:00:00+01:00", "auteur": "utilisateur",
+         "texte": "Les clients doivent pouvoir réserver un créneau eux-mêmes. Voici un croquis de l'agenda.",
+         "images": ["images/croquis-agenda.png"]},
+        {"id": "m2", "t": "2026-11-10T09:12:00+01:00", "auteur": "metier:1",
+         "texte": "Merci pour le croquis. Les créneaux font-ils tous la même durée, et faut-il un rappel avant le rendez-vous ?"}
+      ]
+    }
+  ],
+  "decisions_projet": [
+    {"id": "d1", "genre": "confirmer_genre",
+     "texte": "Ce projet : une application web de prise de rendez-vous (domaine : services aux clients ; livrable : une application web ; outils : formulaires et agenda). Je propose un nouveau genre « prise-de-rendez-vous ».",
+     "propose": "prise-de-rendez-vous", "genres_connus": ["application-de-gestion"]},
+    {"id": "d2", "genre": "session_cloud",
+     "texte": "Créer une session cloud pour un dev sur Opus (l'agent dev:2), pour les tâches longues.",
+     "agent": "dev:2"}
+  ]
+}

@@ -6,7 +6,12 @@ montre l'effet au relevé suivant. Dans un vrai projet, c'est l'orchestrateur qu
 
 Code de sortie 0 : demande prise. Autre code : refusée (la première ligne écrite est montrée à l'utilisateur).
 Compatible Python 3.9 et plus, bibliothèque standard seulement.
+
+Les demandes de la version 4 (nouvelle fonctionnalité, discussion, cahier des charges, méthode, genre, session
+cloud, retour sur un élément du catalogue) reçoivent des réponses fixes : la démo fait passer une fonctionnalité du
+cadrage à la série en quatre gestes. La démo B (`exemples/demo-b/actions.py`) réutilise ce fichier sur son dossier.
 """
+import base64
 import json
 import os
 import sys
@@ -14,7 +19,8 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-RELEVE = Path(__file__).resolve().parent / "releve.json"
+DOSSIER = Path(globals().get("DOSSIER") or Path(__file__).resolve().parent)   # la démo B donne le sien
+RELEVE = DOSSIER / "releve.json"
 REPONSE = "Bien reçu (démo)."
 
 
@@ -201,8 +207,176 @@ def verdict_solution(r, d):
             connaissances.append({"id": i, "texte": sol["texte"], "date": maintenant(), "origine": ch["id"]})
 
 
+# --- Version 4 : le parcours d'une fonctionnalité, joué avec des réponses fixes.
+ETAPES_DEMO = ["Décrire le besoin en une page", "Faire la maquette de l'écran", "Écrire l'écran",
+               "Le relire à deux", "Le mettre en ligne"]
+
+
+def _fonctionnalite(r, d):
+    f = next((x for x in r.get("fonctionnalites", []) if x["id"] == d.get("fonctionnalite")), None)
+    if f is None:
+        refuser("Fonctionnalité inconnue : " + str(d.get("fonctionnalite")))
+    return f
+
+
+def _agent_cadrage(r):
+    """Le premier agent du service Métier, sinon le premier titulaire."""
+    return next((t["cle"] for t in r["titulaires"] if t.get("service") == "metier"), r["titulaires"][0]["cle"])
+
+
+def _ranger_images(f_id, images):
+    """Le bureau n'écrit rien dans le projet : c'est la commande d'actions qui range les images jointes."""
+    chemins = []
+    dossier = DOSSIER / "images" / "pieces" / f_id
+    dossier.mkdir(parents=True, exist_ok=True)
+    for i in images or []:
+        nom = Path(i["nom"]).name
+        cible = dossier / nom
+        n = 1
+        while cible.exists():
+            cible = dossier / f"{Path(nom).stem}-{n}{Path(nom).suffix}"
+            n += 1
+        cible.write_bytes(base64.b64decode(i["donnees"]))
+        chemins.append(cible.relative_to(DOSSIER).as_posix())
+    return chemins
+
+
+def _dire(f, auteur, texte, images=None):
+    m = {"id": _libre({x["id"] for x in f["discussion"]}, "m"), "t": maintenant(), "auteur": auteur, "texte": texte}
+    if images:
+        m["images"] = images
+    f["discussion"].append(m)
+
+
+def _decision_id(r):
+    pris = {x["id"] for f in r.get("fonctionnalites", []) for x in f.get("decisions", [])}
+    pris |= {x["id"] for x in r.get("decisions_projet", [])}
+    return _libre(pris, "d")
+
+
+def _poser(r, f, genre, texte):
+    f["decisions"] = [x for x in f["decisions"] if x["genre"] != genre]
+    f["decisions"].append({"id": _decision_id(r), "genre": genre, "texte": texte})
+
+
+def _lever(f, *genres):
+    f["decisions"] = [x for x in f["decisions"] if x["genre"] not in genres]
+
+
+def fonctionnalite(r, d):
+    fonctionnalites = r.setdefault("fonctionnalites", [])
+    f = {"id": _libre({x["id"] for x in fonctionnalites}, "f"), "nom": d["texte"].strip()[:40] or "Sans nom",
+         "etape": "cadrage", "agent_cadrage": _agent_cadrage(r), "attend_reponse": False, "catalogue": False,
+         "discussion": [], "decisions": []}
+    _dire(f, "utilisateur", d["texte"], _ranger_images(f["id"], d.get("images")))
+    _dire(f, f["agent_cadrage"], "Merci ! Pour bien cibler : qui s'en servira, et à quel moment ? (réponse de démo)")
+    fonctionnalites.append(f)
+
+
+def message(r, d):
+    f = _fonctionnalite(r, d)
+    _dire(f, "utilisateur", d["texte"], _ranger_images(f["id"], d.get("images")))
+    if f["etape"] == "cadrage":   # la démo considère le besoin clair : le cahier des charges est prêt
+        f["etape"] = "cahier"
+        f["cahier"] = {"maquette": ["images/parcours/maquette.png"], "etapes": list(ETAPES_DEMO)}
+        _dire(f, f["agent_cadrage"], "C'est clair. Voici la maquette et les étapes : le cahier des charges est à "
+                                     "valider.", ["images/parcours/maquette.png"])
+        _poser(r, f, "valider_cahier", "Valider le cahier des charges de « " + f["nom"] + " »")
+    elif f["etape"] == "prototype":
+        _dire(f, f["agent_cadrage"], "Retour pris : nouveau tour du prototype.", ["images/parcours/prototype.png"])
+    else:
+        _dire(f, f["agent_cadrage"], REPONSE)
+
+
+def cahier(r, d):
+    f = _fonctionnalite(r, d)
+    if d.get("verdict") == "corriger":
+        _dire(f, f["agent_cadrage"], "Cahier corrigé (démo) : " + (d.get("texte") or "sans précision") + ".")
+        _poser(r, f, "valider_cahier", "Valider le cahier des charges corrigé de « " + f["nom"] + " »")
+        return
+    if d.get("verdict") != "valider":
+        refuser("Verdict inconnu : " + str(d.get("verdict")))
+    f.setdefault("cahier", {"maquette": [], "etapes": []})["valide_le"] = maintenant()
+    _lever(f, "valider_cahier")
+    # Découpage puis premier tour du prototype, joués d'un coup par la démo.
+    f["etape"] = "prototype"
+    _dire(f, f["agent_cadrage"], "Découpage fait : trois écrans, un seul modèle qui se répète. Voici le premier tour "
+                                 "du prototype.", ["images/parcours/prototype.png"])
+    _poser(r, f, "valider_methode", "Valider la méthode du prototype de « " + f["nom"] + " »")
+
+
+def methode(r, d):
+    f = _fonctionnalite(r, d)
+    verdict = d.get("verdict")
+    if verdict == "valider":
+        version = (f.get("methode") or {}).get("version", 0) + 1
+        f["methode"] = {"version": version, "chemin": f"methodes/{f['id']}.md", "validee_le": maintenant()}
+        f["etape"] = "serie"
+        _lever(f, "valider_methode", "methode_a_revoir")
+        _dire(f, f["agent_cadrage"], f"Méthode version {version} écrite : la série commence.")
+    elif verdict == "revoir":
+        f["etape"] = "prototype"
+        _lever(f, "methode_a_revoir")
+        _dire(f, f["agent_cadrage"], "Nouvelle mise au point de la méthode : prototype, nouveau tour.",
+              ["images/parcours/prototype.png"])
+        _poser(r, f, "valider_methode", "Valider la méthode revue de « " + f["nom"] + " »")
+    elif verdict == "garder":
+        _lever(f, "methode_a_revoir")
+        _dire(f, f["agent_cadrage"], "Méthode gardée : l'élément passe en « bloqué ».")
+    else:
+        refuser("Verdict inconnu : " + str(verdict))
+
+
+def _decision_projet(r, d, genre):
+    x = next((x for x in r.get("decisions_projet", []) if x["id"] == d.get("decision") and x["genre"] == genre), None)
+    if x is None:
+        refuser("Décision inconnue : " + str(d.get("decision")))
+    r["decisions_projet"] = [y for y in r["decisions_projet"] if y is not x]
+    return x
+
+
+def genre(r, d):
+    _decision_projet(r, d, "confirmer_genre")
+    r["genre"] = d["genre"]
+
+
+def session_cloud(r, d):
+    x = _decision_projet(r, d, "session_cloud")
+    for t in r["titulaires"]:
+        if t["cle"] == x.get("agent"):
+            t["lieu"] = "cloud"
+
+
+def retour_element(r, d):
+    """Le retour est noté sur l'élément, dans le fichier du catalogue de la fonctionnalité."""
+    f = _fonctionnalite(r, d)
+    regl = json.loads((DOSSIER / "reglages.json").read_text(encoding="utf-8-sig"))
+    decl = (regl.get("catalogues") or {}).get(f["id"])
+    if not decl or "fichier" not in decl:
+        refuser("Pas de catalogue pour cette fonctionnalité.")
+    chemin = DOSSIER / decl["fichier"]
+    cat = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    e = next((x for x in cat.get("elements", []) if x["id"] == d.get("element")), None)
+    if e is None:
+        refuser("Élément inconnu : " + str(d.get("element")))
+    e.setdefault("retours", []).append({"t": maintenant(), "texte": d["texte"], "etat": "pris en compte",
+                                        "reponse": "Bien reçu (démo) : la correction passera à la prochaine passe."})
+    fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as sortie:
+            json.dump(cat, sortie, ensure_ascii=False, indent=2)
+            sortie.write("\n")
+        os.replace(tmp, chemin)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 GESTES = {"bouton": bouton, "deplacer": deplacer, "retour": retour, "lecon": lecon,
-          "challenge": challenge, "solution": solution, "verdict_solution": verdict_solution}
+          "challenge": challenge, "solution": solution, "verdict_solution": verdict_solution,
+          "fonctionnalite": fonctionnalite, "message": message, "cahier": cahier, "methode": methode,
+          "genre": genre, "session_cloud": session_cloud, "retour_element": retour_element}
 
 
 def main():

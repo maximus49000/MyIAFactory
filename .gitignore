@@ -16,3 +16,15 @@ exemples/demo/usage-historique.jsonl
 exemples/demo/prix-historique.jsonl
 exemples/demo/alertes-historique.jsonl
 *.jsonl.tmp
+
+# fichiers produits quand on lance la démo ou le projet neuf sur place
+exemples/*/images/pieces/
+exemples/demo-b/equipe.json
+exemples/demo-b/*-historique.jsonl
+exemples/projet-neuf/suivi.json
+exemples/projet-neuf/suivi.json.verrou
+exemples/projet-neuf/demandes.jsonl
+exemples/projet-neuf/sessions.json
+exemples/projet-neuf/pieces/
+exemples/projet-neuf/equipe.json
+exemples/projet-neuf/*-historique.jsonl

@@ -15,18 +15,96 @@ Rien d'autre : pas de paquet à installer, ni Python ni npm. three.js est déjà
 Depuis la racine du dépôt :
 
 ```bash
+py -3.12 lancer.py serveur --bureau exemples/bureau.json
+```
+
+Le bureau suit alors **deux projets inventés** : « Démo » (une application de gestion, avec une fonctionnalité en
+série et son catalogue) et « Démo B » (une fonctionnalité en cadrage). Le sélecteur en haut à gauche passe de l'un à
+l'autre (voir « Plusieurs projets »). Pour un seul projet, sans sélecteur, comme avant :
+
+```bash
 py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json
 ```
 
+**La démo joue le projet** : ses commandes d'actions (`exemples/demo/actions.py`, que la démo B réutilise) écrivent
+dans `releve.json` et `catalogue-magasin.json`, et rangent les images jointes dans `images/pieces/`. Pour garder le
+dépôt propre, copiez le dossier `exemples/` en entier ailleurs et lancez le bureau sur la copie.
+
 Le terminal affiche `Le bureau est ouvert sur http://127.0.0.1:8770/`. Ouvrez cette adresse dans le navigateur (l'adresse `http://localhost:8770/` marche aussi ; aucune autre n'est acceptée).
 
-Ce qu'on doit voir : le bâtiment en 3D isométrique, une pièce par service (Métier, Dev, QA, Intégration, Facturation, Design), le coin café, le bureau du Directeur avec une pastille « 2 » (deux décisions en attente), le chef près du Kanban central rempli de post-its, le voyant de la factory et la barre de charge en haut. Survolez un agent pour voir sa carte, cliquez sur une pièce pour ouvrir le dossier du service à droite (voir « Les dossiers des services »), sur un post-it pour le détailler. Échap ferme.
+Ce qu'on doit voir : le bâtiment en 3D isométrique, une pièce par service (Métier, Dev, QA, Intégration, Facturation, Design), le coin café, le bureau du Directeur avec une pastille « 5 » (ce qui l'attend : décisions et leçons), le chef près du Kanban central rempli de post-its, le voyant de la factory et la barre de charge en haut. Survolez un agent pour voir sa carte, cliquez sur une pièce pour ouvrir le dossier du service à droite (voir « Les dossiers des services »), sur un post-it pour le détailler. Échap ferme.
 
 La démo fait deux lectures sur Internet pour connaître les prix des modèles (voir « Les euros : d'où viennent les prix ») ; pour l'essayer sans aucune requête sortante, ajoutez `"prix_automatiques": false` à `exemples/demo/reglages.json` (les coûts s'affichent alors « prix inconnu »).
 
 **Pourquoi les agents de la démo sont « sans nouvelles »** : les dates `maj` du relevé de démonstration sont fixes, donc de plus en plus anciennes. Le bureau ne prétend jamais qu'un agent travaille si rien n'a bougé depuis plus que le délai de fraîcheur (30 minutes par défaut) : ils restent à leur poste, avec une bulle grisée. Pour les voir au travail, ouvrez `exemples/demo/releve.json` et mettez à une tâche active une `maj` récente (par exemple l'heure qu'il est) ; pour voir un déplacement, changez en plus sa `colonne`. Dans les secondes qui suivent, l'agent marche jusqu'au Kanban et déplace son post-it. Passez `factory.etat` à `"en pause"` : le voyant change et la lumière baisse.
 
 Arrêter le bureau : `Ctrl+C` dans le terminal.
+
+## Plusieurs projets
+
+Un **fichier de bureau** liste les réglages de plusieurs projets (12 au plus), chemins relatifs à lui :
+
+```json
+{"port": 8770, "projets": [{"chemin": "demo/reglages.json", "id": "demo"}, "demo-b/reglages.json"]}
+```
+
+```bash
+py -3.12 lancer.py serveur --bureau exemples/bureau.json
+```
+
+`id` (facultatif) est l'identifiant du projet dans les adresses (`?projet=…`) ; sans lui, il vient du nom du dossier.
+Deux projets ne peuvent pas avoir leurs réglages dans le même dossier. Le nom du projet devient un **sélecteur**, avec
+pour chaque projet la pastille de ce qui l'attend ; le choix est retenu par le navigateur, et changer de projet
+recharge la page. Chaque geste va à la commande d'actions **du projet choisi**, vérifié contre son relevé ; un projet
+aux réglages illisibles n'empêche pas les autres de marcher. La charge est celle de la machine, commune à tous.
+
+## Nouvelle fonctionnalité et discussion
+
+Avec un relevé en version 4 et une commande d'actions, la barre gagne « **+ Nouvelle fonctionnalité** » et
+« **Fonctionnalités** ». Le panneau d'une fonctionnalité s'ouvre à droite (la scène reste visible) : le bandeau du
+parcours (Cadrage, Cahier des charges, Découpage, Prototype, Méthode, Série), la discussion de cadrage, une zone de
+saisie avec « Joindre une image » (PNG ou JPEG, 4 au plus, 5 Mo chacune) et « Envoyer ». Sous la discussion : la
+maquette et les étapes du cahier des charges, « Valider le cahier des charges » / « Demander une correction », la
+méthode et « Valider la méthode », et « Catalogue ».
+
+Le bureau ne parle à aucune IA : votre message devient une demande `message` pour le projet, et la réponse de
+l'agent de cadrage n'apparaît qu'au relevé suivant. Tant qu'elle n'est pas là, la page affiche « <prénom> est en
+train d'écrire… » si l'orchestrateur tourne, sinon « En attente de l'orchestrateur ». Dans la démo, les réponses sont
+fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
+méthode à la série.
+
+Le **Directeur** montre en plus les cahiers et les méthodes à valider, les genres à confirmer, les « méthode à
+revoir ? » et les sessions cloud à créer (créez la session vous-même, puis donnez son nom et cliquez « C'est fait ») ;
+pour une leçon, il montre l'étage proposé (projet, genre ou skill) et le texte général, que vous validez mot pour mot.
+
+## Le catalogue
+
+Le catalogue d'une fonctionnalité s'ouvre depuis son panneau (« Catalogue ») ou depuis le menu « Dernier livrable ».
+Il s'affiche à droite ; « Agrandir » le met en plein écran (Échap pour revenir). On y trouve le choix du groupe, la
+**vue de haut** (une carte des éléments : molette pour zoomer, glisser pour se déplacer, un clic ouvre la fiche), les
+compteurs, les demandes de modification et leurs réponses, les passes, « Ce que j'ai appris », les filtres et la
+recherche, la liste par pages de 100 et le kit. La **fiche** d'un élément montre ses captures, la comparaison
+« Produit » / « Réel » à plusieurs angles (une barre à glisser), sa connaissance, son doute, et « **Demander à
+modifier** », qui envoie une demande `retour_element` au projet. Une partie sans donnée n'est pas montrée. Le format
+et la déclaration du catalogue sont dans [`releve.md`](releve.md) (« Le catalogue d'une fonctionnalité »).
+
+## L'orchestrateur générique
+
+Pour qu'une conversation Claude mène vos fonctionnalités du cadrage à la série avec les outils de la skill, suivez
+[`orchestrateur.md`](orchestrateur.md). Pour **démarrer un projet neuf**, copiez
+[`exemples/projet-neuf/`](../exemples/projet-neuf/) dans un dossier à vous, `git init`, mettez le chemin de ce dépôt
+dans `skill` (`factory.json`) et celui de `orchestrateur/outil.py` dans `reglages.json` et dans la déclaration du
+catalogue, puis :
+
+```bash
+py -3.12 <ce dépôt>/orchestrateur/verifier_interface.py --factory <votre dossier>/factory.json
+```
+
+```bash
+py -3.12 <ce dépôt>/lancer.py serveur --reglages <votre dossier>/reglages.json
+```
+
+et ouvrez la conversation orchestratrice avec le message de départ donné dans `orchestrateur.md`.
 
 ## Brancher son projet
 

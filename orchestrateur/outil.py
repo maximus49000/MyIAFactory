@@ -113,6 +113,18 @@ def liste_de_textes(e, cle):
     return v
 
 
+IMAGES_MONTREES = (".png", ".jpg", ".jpeg")   # ce que le bureau sert ; le reste n'apparaîtrait pas
+
+
+def images_montrables(chemins, cle):
+    """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre."""
+    for c in chemins:
+        if Path(c).suffix.lower() not in IMAGES_MONTREES:
+            raise Refus(f"« {cle} » : « {c} » n'est pas une image PNG ou JPEG, et le bureau ne montre que celles-là. "
+                        "Convertissez-la en PNG (par exemple une capture de son rendu), puis donnez ce chemin.")
+    return chemins
+
+
 def _fonc(donnees, i):
     f = su.fonctionnalite(donnees, i) if isinstance(i, str) else None
     if f is None:
@@ -280,6 +292,7 @@ def _verifier_cahier(c):
             or not all(isinstance(x, str) and x for x in c["maquette"])
             or not isinstance(c.get("etapes"), list) or not all(isinstance(x, str) for x in c["etapes"])):
         raise Refus("« cahier » doit avoir une « maquette » (liste de chemins) et des « etapes » (liste de textes).")
+    images_montrables(c["maquette"], "cahier.maquette")
     if c.get("valide_le") is not None and not isinstance(c["valide_le"], str):
         raise Refus("« cahier.valide_le » doit être un texte.")
 
@@ -344,7 +357,7 @@ def cmd_message(ctx, e):
         raise Refus(f"Auteur inconnu : {auteur} (utilisateur ou un agent).")
     images = e.get("images")
     if images is not None:
-        liste_de_textes(e, "images")
+        images_montrables(liste_de_textes(e, "images"), "images")
         if len(images) > MAX_IMAGES:
             raise Refus(f"Au plus {MAX_IMAGES} images par message.")
     with ctx.suivi.transaction() as s:
@@ -459,7 +472,7 @@ def cmd_tache(ctx, e):
             if m and not t["modele_depart"]:
                 t["modele_depart"] = m["de"]
         if "captures" in e:
-            t["captures"] = liste_de_textes(e, "captures")
+            t["captures"] = images_montrables(liste_de_textes(e, "captures"), "captures")
         if "journal" in e:
             ajouts = [e["journal"]] if isinstance(e["journal"], str) else e["journal"]
             if not isinstance(ajouts, list) or not all(isinstance(x, str) and x for x in ajouts):

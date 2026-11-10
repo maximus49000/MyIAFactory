@@ -64,6 +64,17 @@ def _marquer_problemes_revenus(savoir, r, depuis):
                 c["probleme_revenu"] = modkpi.probleme_revenu(c.get("date"), depuis.get(cible))
 
 
+ETAPES_DISCUSSION = ("cadrage", "prototype")   # les étapes où l'agent attend les réponses de l'utilisateur
+
+
+def attend_utilisateur(f):
+    """La discussion attend l'utilisateur : le dernier message est d'un agent, la fonctionnalité est en cadrage ou en
+    prototype, et aucune décision ne l'attend déjà (elle serait comptée à part)."""
+    discussion = f.get("discussion") or []
+    return (f.get("etape") in ETAPES_DISCUSSION and bool(discussion)
+            and discussion[-1].get("auteur") != "utilisateur" and not f.get("decisions"))
+
+
 def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     """`alertes` : l'historique des alertes (`kpi.HistoriqueAlertes`). Sans lui, aucune connaissance n'est
     marquée « problème revenu » et rien n'est noté."""
@@ -148,7 +159,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     if v4:
         directeur["fonctionnalites"] = sum(len(f["decisions"]) for f in r["fonctionnalites"])
         directeur["projet"] = len(r["decisions_projet"])
-        directeur["total"] += directeur["fonctionnalites"] + directeur["projet"]
+        directeur["reponses"] = sum(1 for f in r["fonctionnalites"] if attend_utilisateur(f))
+        directeur["total"] += directeur["fonctionnalites"] + directeur["projet"] + directeur["reponses"]
         for t, brut in zip(taches, r["taches"]):
             for c in ("fonctionnalite", "element", "modele_depart", "montee"):
                 t[c] = brut.get(c)

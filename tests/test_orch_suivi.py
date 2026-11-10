@@ -101,6 +101,21 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_images_png_ou_jpeg_seulement(self):
+        # Le bureau ne montre que le PNG et le JPEG : une maquette, une image de message ou une capture en SVG est
+        # refusée tout de suite, avec la marche à suivre, au lieu d'apparaître cassée chez l'utilisateur.
+        f = self.nouvelle()
+        for commande, entree in (
+                ("fonctionnalite", {"id": f, "cahier": {"maquette": ["pieces/m.svg"], "etapes": ["a"]}}),
+                ("message", {"fonctionnalite": f, "auteur": "metier-1", "texte": "x", "images": ["pieces/m.svg"]}),
+                ("tache", {"titre": "T", "captures": ["captures/c.webp"]})):
+            code, sortie = self.outil(commande, entree=entree)
+            self.assertEqual(code, 1, (commande, sortie))
+            self.assertIn("PNG", sortie["erreur"])
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m.PNG", "pieces/n.jpeg"],
+                                                               "etapes": ["a"]}})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "x", "images": ["pieces/m.jpg"]})
+
     def test_verrou_en_cours_d_effacement(self):
         # Sous Windows, créer le verrou pendant qu'un autre processus l'efface lève PermissionError : c'est un
         # verrou occupé, on réessaie (et non une erreur).

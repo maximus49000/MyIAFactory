@@ -95,6 +95,14 @@ export function nouvelleApparue(avant, apres, texte) {
   return f ? f.id : null;
 }
 
+// Ce que le panneau montre : quand le cahier des charges attend le verdict de l'utilisateur, la discussion est repliée
+// pour laisser lire le cahier ; « Demander une correction » la rouvre, et « Envoyer » envoie alors la correction.
+export function presentation(f, agir, enCorrection) {
+  const cahierAValider = agir === true && (f?.decisions || []).some((d) => d.genre === "valider_cahier");
+  return {discussionOuverte: !cahierAValider || enCorrection === true,
+          envoiCorrection: cahierAValider && enCorrection === true};
+}
+
 // --- Le panneau.
 const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
 
@@ -159,20 +167,20 @@ function lienExterne(url, texte) {
 
 // La zone de saisie : texte, images jointes (vignettes avant envoi), envoi. Le brouillon survit aux rafraîchissements.
 // `envoyerDemande(texte, images, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
-function saisie(ctx, cle, envoyerDemande) {
+function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, invite = "Écrire un message…"} = {}) {
   const brouillon = ctx.brouillons.get(cle) || {texte: "", images: []};
   ctx.brouillons.set(cle, brouillon);
   const bloc = el("section", "saisie-discussion");
   const zone = document.createElement("textarea");
   zone.rows = 3;
   zone.maxLength = MAX_TEXTE;
-  zone.placeholder = "Écrire un message…";
+  zone.placeholder = invite;
   zone.value = brouillon.texte;
   zone.dataset.saisie = "1";
   const miniatures = el("div", "vignettes");
   const erreur = el("p", "saisie-erreur", "");
   erreur.setAttribute("aria-live", "polite");
-  const envoyer = el("button", "bouton", "Envoyer");
+  const envoyer = el("button", "bouton", libelle);
   envoyer.type = "button";
   const joindre = el("button", "bouton secondaire", "Joindre une image");
   joindre.type = "button";
@@ -221,7 +229,8 @@ function saisie(ctx, cle, envoyerDemande) {
   maj();
   dessinerMiniatures();
   const rangee = el("div", "retour-pied");
-  rangee.append(joindre, envoyer);
+  if (images) rangee.append(joindre);
+  rangee.append(envoyer);
   bloc.append(zone, miniatures, erreur, rangee, fichier);
   return {bloc, texte: () => zone.value};
 }
@@ -243,6 +252,9 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     contenu.append(el("p", "note", "Décrivez ce que vous voulez : l'agent de cadrage vous répondra ici."));
   }
 
+  const vue = presentation(f, e.agir, f ? ctx.corrections.has(f.id) : false);
+  const blocDiscussion = el("div", "bloc-discussion");
+
   // La discussion, du plus ancien au plus récent, puis les messages envoyés que le relevé n'a pas encore repris.
   const discussion = el("ul", "discussion");
   const messages = f ? f.discussion || [] : [];
@@ -253,38 +265,45 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (f) ctx.envoyes.set(f.id, locaux);
   for (const x of locaux) discussion.append(messageLocal(x));
   if (!messages.length && !locaux.length) discussion.append(el("li", "vide", "Aucun message"));
-  contenu.append(discussion);
+  blocDiscussion.append(discussion);
+  // On arrive sur le dernier message, pas en haut de la discussion.
+  requestAnimationFrame(() => { discussion.scrollTop = discussion.scrollHeight; });
 
   const phrase = ecrit(f, e) || (locaux.length ? ecrit({attend_reponse: true, agent_cadrage: f?.agent_cadrage}, e) : null);
   if (phrase) {
     const p = el("p", "ecrit", phrase);
     p.setAttribute("aria-live", "polite");
-    contenu.append(p);
+    blocDiscussion.append(p);
   }
 
-  let leTexte = () => "";
   if (e.agir === true) {
-    const s = saisie(ctx, cle, async (texte, images, bouton) => {
-      const joints = images.map(({nom, type, donnees}) => ({nom, type, donnees}));
-      if (!f) ctx.nouvelle.envoi = {avant: e, texte, images};
-      const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints) : demandeNouvelle(texte, joints), bouton);
-      if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, images}]);
-      if (!r.ok && !f) ctx.nouvelle.envoi = null;
-      return r;
-    });
-    leTexte = s.texte;
-    contenu.append(s.bloc);
+    const s = vue.envoiCorrection
+      ? saisie(ctx, cle + ":correction", async (texte, images, bouton) => {
+          const r = await ctx.barre.demander(demandeCahier(f.id, "corriger", texte), bouton);
+          if (r.ok) ctx.corrections.delete(f.id);
+          return r;
+        }, {libelle: "Envoyer la correction", images: false, invite: "Ce qu'il faut corriger dans le cahier des charges…"})
+      : saisie(ctx, cle, async (texte, images, bouton) => {
+          const joints = images.map(({nom, type, donnees}) => ({nom, type, donnees}));
+          if (!f) ctx.nouvelle.envoi = {avant: e, texte, images};
+          const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints) : demandeNouvelle(texte, joints), bouton);
+          if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, images}]);
+          if (!r.ok && !f) ctx.nouvelle.envoi = null;
+          return r;
+        });
+    blocDiscussion.append(s.bloc);
   }
-  if (!f) return;
+  if (!f) { contenu.append(blocDiscussion); return; }
 
   // Les pièces du cahier des charges et de la méthode.
+  const blocCahier = el("div", "bloc-cahier");
   if (f.cahier) {
-    contenu.append(el("h3", "", "Cahier des charges"));
-    if ((f.cahier.maquette || []).length) contenu.append(vignettes(f.cahier.maquette, e));
+    blocCahier.append(el("h3", "", "Cahier des charges"));
+    if ((f.cahier.maquette || []).length) blocCahier.append(vignettes(f.cahier.maquette, e));
     const etapes = el("ol", "etapes-cahier");
     for (const t of f.cahier.etapes || []) etapes.append(el("li", "", t));
-    contenu.append(etapes);
-    if (f.cahier.valide_le) contenu.append(el("p", "note", "Validé le " + dateFr(f.cahier.valide_le)));
+    blocCahier.append(etapes);
+    if (f.cahier.valide_le) blocCahier.append(el("p", "note", "Validé le " + dateFr(f.cahier.valide_le)));
   }
   const decisions = new Set((f.decisions || []).map((d) => d.genre));
   const gestes = el("div", "gestes");
@@ -300,13 +319,22 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   };
   if (e.agir === true && decisions.has("valider_cahier")) {
     geste("Valider le cahier des charges", "bouton", () => demandeCahier(f.id, "valider"));
-    geste("Demander une correction", "bouton secondaire", () => demandeCahier(f.id, "corriger", leTexte()));
+    // La correction s'écrit dans la discussion, qui se rouvre ; « Envoyer la correction » l'envoie.
+    const corriger = el("button", "bouton secondaire", vue.envoiCorrection ? "Annuler la correction" : "Demander une correction");
+    corriger.type = "button";
+    corriger.addEventListener("click", () => {
+      if (ctx.corrections.has(f.id)) ctx.corrections.delete(f.id); else ctx.corrections.add(f.id);
+      ctx.rouvrir();
+      if (ctx.corrections.has(f.id)) requestAnimationFrame(() => document.querySelector(".panneau textarea[data-saisie]")?.focus());
+    });
+    gestes.append(corriger);
   }
+  const blocMethode = el("div", "bloc-methode");
   if (f.methode) {
-    contenu.append(el("h3", "", `Méthode (version ${f.methode.version})`));
-    if (f.methode.lien && lienSur(f.methode.lien)) contenu.append(lienExterne(f.methode.lien, "Ouvrir la méthode"));
-    else if (f.methode.chemin) contenu.append(el("p", "note", f.methode.chemin));
-    if (f.methode.validee_le) contenu.append(el("p", "note", "Validée le " + dateFr(f.methode.validee_le)));
+    blocMethode.append(el("h3", "", `Méthode (version ${f.methode.version})`));
+    if (f.methode.lien && lienSur(f.methode.lien)) blocMethode.append(lienExterne(f.methode.lien, "Ouvrir la méthode"));
+    else if (f.methode.chemin) blocMethode.append(el("p", "note", f.methode.chemin));
+    if (f.methode.validee_le) blocMethode.append(el("p", "note", "Validée le " + dateFr(f.methode.validee_le)));
   }
   if (e.agir === true && decisions.has("valider_methode")) geste("Valider la méthode", "bouton", () => demandeMethode(f.id, "valider"));
   if (f.catalogue && typeof ctx.ouvrirCatalogue === "function") {
@@ -315,7 +343,16 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     b.addEventListener("click", () => ctx.ouvrirCatalogue(f.id));
     gestes.append(b);
   }
-  if (gestes.childElementCount) contenu.append(gestes);
+  if (vue.discussionOuverte) {
+    contenu.append(blocDiscussion, blocCahier, blocMethode);
+    if (gestes.childElementCount) contenu.append(gestes);
+  } else {
+    const repliee = el("details", "discussion-repliee");
+    repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
+    contenu.append(blocCahier, blocMethode);
+    if (gestes.childElementCount) contenu.append(gestes);
+    contenu.append(repliee);
+  }
 }
 
 // La liste « Fonctionnalités » du projet.

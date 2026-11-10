@@ -101,7 +101,8 @@ le bandeau du bureau montre.
    l'étape suivante.
 2. **`cahier`.** L'agent de cadrage écrit le cahier des charges : **une maquette** (une ou plusieurs images qui
    montrent la compréhension du besoin) et **la liste des étapes à réaliser, dans l'ordre**. Range les images dans
-   le dépôt du projet, **sous une des racines d'images des réglages** (sinon le bureau ne les montre pas), inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
+   le dépôt du projet, **sous une des racines d'images des réglages**, **en PNG ou JPEG** (le bureau ne montre ni le SVG ni
+   les autres formats : rends-les d'abord en PNG ; les outils refusent les autres), inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
    discussion, et pose la décision `valider_cahier` (`portee` = la fonctionnalité). Attends le verdict (demande
    `cahier`).
 3. **`decoupage`.** Identifie l'élément qui se répète et les groupes, puis dresse la file des éléments

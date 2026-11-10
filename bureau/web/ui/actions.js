@@ -114,11 +114,18 @@ export function resumeEnvoi(resultats) {
 // Les décisions qui attendent le Directeur, rangées par genre ; chaque décision d'une fonctionnalité garde
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
-  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: []};
+  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], reponses: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
     for (const d of f?.decisions || []) {
       if (rang[d?.genre]) sortie[rang[d.genre]].push({...d, fonctionnalite: f.id, nom: f.nom});
+    }
+    // La discussion attend l'utilisateur : même règle que le serveur (bureau/etat.py, attend_utilisateur).
+    const discussion = Array.isArray(f?.discussion) ? f.discussion : [];
+    const dernier = discussion[discussion.length - 1];
+    if (["cadrage", "prototype"].includes(f?.etape) && dernier && dernier.auteur !== "utilisateur"
+        && !(f.decisions || []).length) {
+      sortie.reponses.push({fonctionnalite: f.id, nom: f.nom, dernier});
     }
   }
   for (const d of Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : []) {

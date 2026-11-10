@@ -2,6 +2,7 @@
 // « méthode à revoir ? », sessions cloud à créer. Chaque bouton envoie une demande au projet, jamais un changement direct.
 
 import {el} from "./dom.js";
+import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession} from "./actions.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
@@ -106,8 +107,23 @@ function decisionSession(ctx, d) {
   return li;
 }
 
+// Une discussion qui attend votre réponse : qui parle, ce qu'il a dit en dernier, et de quoi y aller.
+function reponseAttendue(ctx, x) {
+  const li = el("li", "");
+  const qui = nomAgent(ctx.etat, x.dernier.auteur);
+  li.append(lienFonctionnalite(ctx, x), el("div", "lecon-meta", qui + " attend votre réponse"),
+            el("div", "decision-texte", tronquer(x.dernier.texte || "", 280)));
+  const b = el("button", "bouton", "Répondre");
+  b.type = "button";
+  b.addEventListener("click", () => ctx.ouvrirFonctionnalite(x.fonctionnalite));
+  li.append(b);
+  return li;
+}
+
 export function contenuDecisionsV4(ctx, contenu) {
   const d = decisionsDirecteur(ctx.etat);
+  contenu.append(partie("Réponses attendues", "Aucune discussion n'attend votre réponse",
+    d.reponses.map((x) => reponseAttendue(ctx, x))));
   const validations = [
     ...d.cahiers.map((x) => decisionFonctionnalite(ctx, x, [
       boutonDemande(ctx, "Valider le cahier", "bouton", () => demandeCahier(x.fonctionnalite, "valider"))])),

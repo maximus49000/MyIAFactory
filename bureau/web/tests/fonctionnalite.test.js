@@ -68,3 +68,14 @@ test("nouvelleApparue", () => {
   assert.equal(nouvelleApparue({}, apres, "Mon idée"), "f2");
   assert.equal(nouvelleApparue(avant, {}, "Mon idée"), null);
 });
+
+test("presentation : la discussion se replie quand le cahier attend son verdict", async () => {
+  const {presentation} = await import("../ui/fonctionnalite.js");
+  const cahier = {id: "f1", decisions: [{id: "d1", genre: "valider_cahier", texte: "T"}]};
+  const sans = {id: "f1", decisions: []};
+  assert.deepEqual(presentation(cahier, true, false), {discussionOuverte: false, envoiCorrection: false});
+  assert.deepEqual(presentation(cahier, true, true), {discussionOuverte: true, envoiCorrection: true});
+  assert.deepEqual(presentation(sans, true, true), {discussionOuverte: true, envoiCorrection: false});
+  assert.deepEqual(presentation(cahier, false, false), {discussionOuverte: true, envoiCorrection: false});  // sans agir
+  assert.deepEqual(presentation(null, true, false), {discussionOuverte: true, envoiCorrection: false});    // nouvelle
+});

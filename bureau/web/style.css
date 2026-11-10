@@ -609,3 +609,5 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .cat-kit-element p { margin: 0 0 6px; font-size: .86rem; }
 .cat-nombre { font: 600 .92rem var(--cat-mono); color: var(--cat-encre); font-variant-numeric: tabular-nums; }
 .cat-utilisateurs { color: var(--cat-discret); margin-top: 6px; }
+.discussion-repliee { margin-top: 10px; }
+.discussion-repliee > summary { cursor: pointer; color: #5d8fc7; font-weight: 700; }

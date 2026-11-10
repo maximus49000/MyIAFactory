@@ -118,7 +118,7 @@ test("decisionsDirecteur : chaque entrée garde sa fonctionnalité", () => {
   assert.deepEqual(d.genres.map((x) => x.id), ["p1"]);
   assert.equal(d.genres[0].propose, "vitrine");
   assert.deepEqual(d.sessions.map((x) => [x.id, x.agent]), [["p2", "dev:1"]]);
-  assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: []});
+  assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], reponses: []});
 });
 
 test("demandeLecon : étage changé, inchangé", () => {
@@ -155,4 +155,20 @@ test("nomAgent : le prénom, sinon la clé (un agent pas encore au bureau)", asy
   assert.equal(nomAgent(e, "dev:1"), "Léa");
   assert.equal(nomAgent(e, "dev:2"), "dev:2");
   assert.equal(nomAgent({}, null), "personne");
+});
+
+test("decisionsDirecteur : les discussions qui attendent la réponse de l'utilisateur", () => {
+  const m = (auteur, texte = "?") => ({id: "m" + auteur, t: "2026-11-10T10:00:00+01:00", auteur, texte});
+  const e = {fonctionnalites: [
+    {id: "f1", nom: "A", etape: "cadrage", discussion: [m("utilisateur"), m("cadrage-1", "Quelle taille ?")]},
+    {id: "f2", nom: "B", etape: "prototype", discussion: [m("dev-1")]},
+    {id: "f3", nom: "C", etape: "cadrage", discussion: [m("cadrage-1"), m("utilisateur")]},
+    {id: "f4", nom: "D", etape: "cahier", discussion: [m("cadrage-1")], decisions: [{id: "x", genre: "valider_cahier", texte: "T"}]},
+    {id: "f5", nom: "E", etape: "serie", discussion: [m("dev-1")]},
+    {id: "f6", nom: "F", etape: "cadrage"}]};
+  const r = decisionsDirecteur(e).reponses;
+  assert.deepEqual(r.map((x) => x.fonctionnalite), ["f1", "f2"]);
+  assert.equal(r[0].nom, "A");
+  assert.equal(r[0].dernier.texte, "Quelle taille ?");
+  assert.deepEqual(decisionsDirecteur({}).reponses, []);
 });

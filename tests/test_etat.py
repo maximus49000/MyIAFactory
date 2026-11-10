@@ -428,6 +428,26 @@ class TestEtatV4(unittest.TestCase):
         d = self.etat(modif=avec)["directeur"]
         self.assertEqual((d["lecons"], d["fonctionnalites"], d["projet"], d["total"]), (1, 2, 1, 5))
 
+    def test_directeur_reponses_attendues(self):
+        # Une discussion dont le dernier mot est à un agent, en cadrage ou en prototype, sans décision en attente :
+        # c'est à l'utilisateur de répondre. Elle compte dans la pastille du Directeur.
+        def m(auteur):
+            return {"id": "m" + auteur, "t": "2026-11-10T10:00:00+01:00", "auteur": auteur, "texte": "?"}
+
+        def avec(r):
+            r["fonctionnalites"] = [
+                {"id": "f1", "nom": "A", "etape": "cadrage", "discussion": [m("utilisateur"), m("d1")]},   # attend
+                {"id": "f2", "nom": "B", "etape": "prototype", "discussion": [m("d1")]},                  # attend
+                {"id": "f3", "nom": "C", "etape": "cadrage", "discussion": [m("d1"), m("utilisateur")]},  # agent
+                {"id": "f4", "nom": "D", "etape": "cahier", "discussion": [m("d1")],
+                 "decisions": [{"id": "x1", "genre": "valider_cahier", "texte": "T"}]},                   # décision
+                {"id": "f5", "nom": "E", "etape": "serie", "discussion": [m("d1")]},                       # série
+                {"id": "f6", "nom": "F", "etape": "cadrage", "discussion": []}]
+        d = self.etat(modif=avec)["directeur"]
+        self.assertEqual(d["reponses"], 2)
+        self.assertEqual(d["total"], d["lecons"] + d["retours"] + d["bloquees"] + d["fonctionnalites"]
+                         + d["projet"] + 2 + self.etat(modif=avec)["decisions"])
+
     def test_orchestrateur_actif(self):
         self.assertTrue(self.etat(minutes_chef=2)["orchestrateur_actif"])
         self.assertFalse(self.etat(minutes_chef=90)["orchestrateur_actif"])  # sans nouvelles

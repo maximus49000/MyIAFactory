@@ -162,7 +162,10 @@ est montré comme « autre ». Les positions (`position` d'un élément, `points
 
 ### `document`
 
-Entrée : `{"fonctionnalite", "chemin", "titre", "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?}`. Inscrit un
+Entrée : `{"fonctionnalite", "chemin", "titre", "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?, "livrable"?}`.
+`"livrable": true` marque un fichier final d'un élément validé : le bureau le montre dans les « Livrables » de la
+fonctionnalité, où l'utilisateur peut demander une modification (`retour_element` si la fonctionnalité a un
+catalogue, sinon un `message` qui nomme l'élément). Inscrit un
 fichier produit pour la fonctionnalité (une méthode, un rapport, un script, une image…) dans ses **documents**, avec
 son origine et la date ; un chemin déjà inscrit est complété, pas doublé. Rend `{"id": "doc3"}`. Les images de la
 discussion (`message`, et celles jointes par l'utilisateur), les maquettes du cahier (`fonctionnalite`) et les

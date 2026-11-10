@@ -671,3 +671,14 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
   pointer-events: none; }
 .bulle-definition[hidden] { display: none; }
 .terme:focus-visible { box-shadow: 0 0 0 2px #1f6f8b; border-radius: 3px; }
+
+/* Les livrables de chaque élément. */
+.livrables { margin-top: 12px; }
+.livrables > summary { cursor: pointer; font-weight: 800; }
+.livrable-element { margin-top: 8px; padding: 8px 10px; border: 1px solid #e6dccb; border-radius: 10px; background: #fff; }
+.livrable-element h4 { margin: 0 0 6px; font-size: 13.5px; overflow-wrap: anywhere; }
+.livrable-fichiers { display: flex; flex-wrap: wrap; gap: 6px; }
+.livrable-fichiers .document-vignette img { width: 72px; height: 72px; object-fit: contain; background: #f4efe6; }
+.livrable-fichiers .document-lien { width: auto; padding: 6px 10px; }
+.livrable-retour textarea { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 4px; padding: 6px 8px;
+  border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }

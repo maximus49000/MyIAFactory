@@ -854,6 +854,11 @@ class TestVersion4(unittest.TestCase):
                 self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="Q", questions=mauvais)])]),
                            "questions")
 
+    def test_document_livrable(self):
+        doc = {"chemin": "livrables/e1.png", "titre": "E1", "element": "e1", "livrable": True}
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(documents=[doc])])), [])
+        self.refus(v4(fonctionnalites=[fonc(documents=[{**doc, "livrable": "oui"}])]), "livrable")
+
     def test_glossaire(self):
         g = [{"mot": "Tesselle", "definition": "Petit cube de mosaïque."}]
         ok = v4(fonctionnalites=[fonc(glossaire=g, discussion=[msg(id="m2", auteur="d1", texte="x", glossaire=g)])])

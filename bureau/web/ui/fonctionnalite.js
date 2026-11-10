@@ -330,6 +330,111 @@ function blocQuestions(attente, etat, changer) {
   return bloc;
 }
 
+// --- Les livrables : les fichiers finaux de chaque élément validé (documents marqués `livrable`).
+export function livrablesParElement(f) {
+  const groupes = new Map();
+  for (const d of Array.isArray(f?.documents) ? f.documents : []) {
+    if (d?.livrable !== true) continue;
+    const cle = typeof d.element === "string" && d.element ? d.element : null;
+    if (!groupes.has(cle)) groupes.set(cle, {element: cle, documents: []});
+    groupes.get(cle).documents.push(d);
+  }
+  const recent = (g) => g.documents.reduce((m, d) => (String(d.date || "") > m ? String(d.date || "") : m), "");
+  return [...groupes.values()].map((g) => ({...g, documents: [...g.documents]
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))}))
+    .sort((a, b) => (a.element === null) - (b.element === null) || recent(b).localeCompare(recent(a)));
+}
+
+// Un retour sur le livrable d'un élément : comme « Demander à modifier » du catalogue s'il y en a un (l'élément est
+// vérifié par le bureau), sinon un message de la discussion qui nomme l'élément.
+export function demandeRetourLivrable(f, element, texte) {
+  return f?.catalogue === true && element
+    ? {type: "retour_element", fonctionnalite: f.id, element, texte}
+    : {type: "message", fonctionnalite: f.id, texte: `Retour sur le livrable de « ${element || "la fonctionnalité"} » : ${texte}`};
+}
+
+// La partie « Livrables » du panneau : par élément, ses fichiers finaux et « Demander une modification ».
+function partieLivrables(ctx, f) {
+  const groupes = livrablesParElement(f);
+  const bloc = el("details", "livrables");
+  bloc.open = groupes.length > 0;
+  bloc.append(el("summary", "", `Livrables (${groupes.length} élément${groupes.length > 1 ? "s" : ""})`));
+  if (!groupes.length) {
+    bloc.append(el("p", "note", "Aucun livrable validé pour l'instant : ils apparaissent ici élément par élément."));
+    return bloc;
+  }
+  const url = (chemin) => urlProjet(`/api/document?fonctionnalite=${encodeURIComponent(f.id)}&chemin=${encodeURIComponent(chemin)}`);
+  for (const g of groupes) {
+    const art = el("article", "livrable-element");
+    art.append(el("h4", "", g.element ? "Élément : " + g.element : "Sans élément"));
+    const images = g.documents.filter((d) => EST_IMAGE.test(d.chemin)).map((d) => d.chemin);
+    const rangee = el("div", "livrable-fichiers");
+    for (const d of g.documents) {
+      if (EST_IMAGE.test(d.chemin)) {
+        const b = el("button", "document-vignette");
+        b.type = "button";
+        b.title = d.titre;
+        b.setAttribute("aria-label", "Voir en plein écran : " + d.titre);
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = url(d.chemin);
+        img.alt = d.titre;
+        b.append(img);
+        b.addEventListener("click", () => ouvrirVisionneuse(images, images.indexOf(d.chemin), url));
+        rangee.append(b);
+      } else {
+        const a = el("a", "document-lien", d.titre);
+        a.href = url(d.chemin);
+        a.target = "_blank";
+        a.rel = "noopener";
+        rangee.append(a);
+      }
+    }
+    art.append(rangee);
+    const dernier = g.documents[0];
+    const origine = [dernier.agent ? nomAgentDe(ctx.etat, dernier.agent) : null, dernier.date ? dateFr(dernier.date) : null]
+      .filter(Boolean).join(" · ");
+    if (origine) art.append(el("div", "note", origine));
+    if (ctx.etat.agir === true) art.append(retourLivrable(ctx, f, g.element));
+    bloc.append(art);
+  }
+  return bloc;
+}
+
+// « Demander une modification » d'un livrable : un champ, puis l'envoi (un double clic ne crée qu'une demande).
+function retourLivrable(ctx, f, element) {
+  const cle = `livrable:${f.id}:${element}`;
+  const zone = el("div", "livrable-retour");
+  const ouvrir = el("button", "bouton secondaire petit", "Demander une modification");
+  ouvrir.type = "button";
+  const formulaire = el("div", "");
+  formulaire.hidden = true;
+  const texte = document.createElement("textarea");
+  texte.rows = 3;
+  texte.maxLength = MAX_TEXTE;
+  texte.placeholder = "Ce qui ne va pas et ce qu'il faut changer…";   // pas de redessin du panneau pendant la frappe
+  const envoyer = el("button", "bouton petit", "Envoyer le retour");
+  envoyer.type = "button";
+  envoyer.disabled = true;
+  const etat = el("p", "note", ctx.envoyes.has(cle) ? "Retour envoyé : l'orchestrateur le reprend." : "");
+  ouvrir.addEventListener("click", () => { formulaire.hidden = false; ouvrir.hidden = true; texte.focus(); });
+  texte.addEventListener("input", () => { envoyer.disabled = !texte.value.trim() || ctx.envois.has(cle); });
+  envoyer.addEventListener("click", async () => {
+    if (ctx.envois.has(cle) || !texte.value.trim()) return;
+    ctx.envois.add(cle);
+    envoyer.disabled = true;
+    let r;
+    try { r = await ctx.barre.demander(demandeRetourLivrable(f, element, texte.value.trim()), envoyer); }
+    finally { ctx.envois.delete(cle); }
+    if (r?.ok) { ctx.envoyes.set(cle, true); texte.value = ""; formulaire.hidden = true; ouvrir.hidden = false;
+                 etat.textContent = "Retour envoyé : l'orchestrateur le reprend."; }
+    else envoyer.disabled = !texte.value.trim();
+  });
+  formulaire.append(texte, envoyer);
+  zone.append(ouvrir, formulaire, etat);
+  return zone;
+}
+
 // L'échelle d'un coût : les tokens consommés et les lignes produites, pour juger un prix.
 export function echelle({tokens = 0, lignes = null} = {}) {
   const morceaux = [];
@@ -735,13 +840,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (vue.discussionOuverte) {
     contenu.append(blocDiscussion, blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
   } else {
     const repliee = el("details", "discussion-repliee");
     repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
     contenu.append(blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(repliee, partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(repliee, partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
   }
 }
 

@@ -153,6 +153,18 @@ class TestSuivi(AvecProjet):
             entree = {"fonctionnalite": f, "texte": "x", **mauvais}
             self.assertEqual(self.outil("message", entree=entree)[0], 1, mauvais)
 
+    def test_document_livrable_d_un_element(self):
+        # Le livrable final d'un élément validé : ses fichiers, inscrits avec l'élément et `livrable`.
+        f = self.nouvelle()
+        self.ok("document", entree={"fonctionnalite": f, "chemin": "livrables/e1-28.png", "titre": "E1, 28 px",
+                                    "element": "e1", "livrable": True, "agent": "dev-1"})
+        self.ok("document", entree={"fonctionnalite": f, "chemin": "notes.md", "titre": "Notes"})
+        docs = {d["chemin"]: d for d in self.releve()["fonctionnalites"][0]["documents"]}
+        self.assertIs(docs["livrables/e1-28.png"]["livrable"], True)
+        self.assertNotIn("livrable", docs["notes.md"])
+        self.assertEqual(self.outil("document", entree={"fonctionnalite": f, "chemin": "a.png", "titre": "A",
+                                                        "livrable": "oui"})[0], 1)
+
     def test_glossaire_de_la_fonctionnalite(self):
         # Les mots définis par les agents sont gardés par la fonctionnalité (une seule fois), écrits dans
         # glossaire.md (rangé dans ses documents), donnés par `etat` et dans le message de départ des agents.

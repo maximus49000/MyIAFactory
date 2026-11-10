@@ -177,7 +177,8 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
   (`[{texte, choix: [2 à 12], multiple?}]`, 10 au plus) : le bureau met les mots en valeur (définition au survol) et
   montre un bouton par choix, « Autre » et « Passer » ;
 - `documents` : les fichiers produits pour la fonctionnalité, 2 000 au plus, chacun `{chemin, titre}` et, facultatifs,
-  d'où il vient : `agent`, `etape`, `tache`, `element`, `sous_tache`, `date` (textes). Le panneau de la fonctionnalité
+  d'où il vient : `agent`, `etape`, `tache`, `element`, `sous_tache`, `date` (textes), et `livrable` (vrai : un fichier
+  final de son élément, montré dans les « Livrables » du panneau avec « Demander une modification »). Le panneau de la fonctionnalité
   les range par étape ; le bureau les sert par `GET /api/document?fonctionnalite=…&chemin=…`, seulement s'ils sont
   listés ici et dans une des racines de `{"documents": {"racines": [...]}}` des réglages. Images, PDF et paquets
   comme un livrable ; `.md`, `.json`, `.csv`, `.txt`, `.html` et `.svg` en bac à sable (sans script).

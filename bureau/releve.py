@@ -297,6 +297,8 @@ def _verifier_documents(f, nom, erreurs):
         for champ in CHAMPS_DOCUMENT:
             if d.get(champ) is not None and not _texte(d[champ]):
                 erreurs.append(f"{ici} : « {champ} » doit être un texte.")
+        if d.get("livrable") is not None and not isinstance(d["livrable"], bool):
+            erreurs.append(f"{ici} : « livrable » doit être vrai ou faux (le livrable final de son élément).")
 
 
 def _verifier_discussion(f, nom, cles_agents, erreurs):

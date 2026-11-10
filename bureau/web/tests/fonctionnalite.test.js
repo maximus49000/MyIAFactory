@@ -177,3 +177,21 @@ test("decouperTermes : les mots du glossaire, sans casse ni accents, mots entier
   const f = {discussion: [{glossaire: [{mot: "Tesselle", definition: "A"}]}, {}, {glossaire: [{mot: "tesselle", definition: "B"}, {mot: "Smalt", definition: "C"}]}]};
   assert.deepEqual(glossaireDe(f), [{mot: "tesselle", definition: "B"}, {mot: "Smalt", definition: "C"}]);
 });
+
+test("livrablesParElement et demandeRetourLivrable", async () => {
+  const {livrablesParElement, demandeRetourLivrable} = await import("../ui/fonctionnalite.js");
+  const f = {id: "f1", documents: [
+    {chemin: "a.png", titre: "Pape 28", element: "pape", livrable: true, date: "2026-11-10T22:00:00+01:00"},
+    {chemin: "b.png", titre: "Pape 112", element: "pape", livrable: true, date: "2026-11-10T22:05:00+01:00"},
+    {chemin: "c.png", titre: "Roi", element: "roi", livrable: true, date: "2026-11-10T23:00:00+01:00"},
+    {chemin: "brouillon.png", titre: "Essai", element: "roi"},                         // pas un livrable
+    {chemin: "d.md", titre: "Sans élément", livrable: true, date: "2026-11-10T21:00:00+01:00"}]};
+  const g = livrablesParElement(f);
+  assert.deepEqual(g.map((x) => x.element), ["roi", "pape", null]);
+  assert.deepEqual(g[1].documents.map((d) => d.chemin), ["b.png", "a.png"]);
+  assert.deepEqual(livrablesParElement({}), []);
+  assert.deepEqual(demandeRetourLivrable({id: "f1", catalogue: true}, "roi", "La couronne est trop petite."),
+    {type: "retour_element", fonctionnalite: "f1", element: "roi", texte: "La couronne est trop petite."});
+  assert.deepEqual(demandeRetourLivrable({id: "f1", catalogue: false}, "roi", "Trop petit."),
+    {type: "message", fonctionnalite: "f1", texte: "Retour sur le livrable de « roi » : Trop petit."});
+});

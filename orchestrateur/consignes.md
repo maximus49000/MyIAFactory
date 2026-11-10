@@ -198,7 +198,9 @@ Tout fichier produit pour une fonctionnalité doit se retrouver dans ses **docum
 bureau. Les images de la discussion, les maquettes du cahier et les captures des tâches y vont d'office. Pour tout le
 reste (la méthode, un rapport de relecture, un script, une planche, un fichier livré), `lancer document` avec la
 `fonctionnalite`, le `chemin`, un `titre` parlant, et son origine : l'`agent`, l'`etape`, la `tache`, l'`element`, la
-`sous_tache` s'il y en a une. Le fichier doit être sous une des racines `documents` des réglages.
+`sous_tache` s'il y en a une. Le fichier doit être sous une des racines `documents` des réglages. **Quand un élément
+est validé** (son prototype accepté, ou « fait » en série), inscris chacun de ses fichiers finaux avec son `element` et
+`"livrable": true` : ce sont les « Livrables » que l'utilisateur ouvre et peut faire reprendre depuis le bureau.
 
 ## La relecture croisée
 

@@ -634,9 +634,17 @@ def cmd_document(ctx, e):
     if "\x00" in chemin or Path(chemin).is_absolute() or chemin[0] in "/\\":
         raise Refus("« chemin » doit être relatif au fichier de factory.")
     origine = {cle: texte(e, cle, obligatoire=False) for cle in ORIGINE_DOCUMENT}
+    livrable = e.get("livrable")
+    if livrable is not None and not isinstance(livrable, bool):
+        raise Refus("« livrable » doit être vrai ou faux.")
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         documents = ranger_documents(s, f, [chemin], texte(e, "titre"), **origine)
+        d = next(x for x in documents if x["chemin"] == chemin)
+        if livrable:   # le livrable final de son élément (ce que l'utilisateur valide ou fait reprendre)
+            d["livrable"] = True
+        elif livrable is False:
+            d.pop("livrable", None)
         f["maj"] = su.maintenant()
         return {"id": next(d["id"] for d in documents if d["chemin"] == chemin)}
 

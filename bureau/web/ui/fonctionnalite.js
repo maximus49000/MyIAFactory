@@ -84,7 +84,13 @@ export async function lireImage(fichier) {
 export function ecrit(fonc, etat) {
   if (!fonc || fonc.attend_reponse !== true) return null;
   if (etat?.orchestrateur_actif !== true) return "En attente de l'orchestrateur";
-  const prenom = (etat.agents || []).find((a) => a.id === fonc.agent_cadrage)?.prenom;
+  // Celui qui travaille sur la fonctionnalité : l'agent de sa tâche active la plus récente, sinon le dernier agent
+  // qui a parlé dans la discussion, sinon l'agent de cadrage.
+  const actives = (etat.taches || []).filter((t) => t.fonctionnalite === fonc.id && t.active && t.agent)
+    .sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
+  const dernier = [...(fonc.discussion || [])].reverse().find((m) => m.auteur && m.auteur !== "utilisateur");
+  const qui = actives[0]?.agent || dernier?.auteur || fonc.agent_cadrage;
+  const prenom = (etat.agents || []).find((a) => a.id === qui)?.prenom;
   return `${prenom || "L'agent de cadrage"} est en train d'écrire…`;
 }
 

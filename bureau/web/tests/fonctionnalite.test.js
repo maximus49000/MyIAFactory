@@ -58,6 +58,24 @@ test("ecrit : trois cas", () => {
   assert.equal(ecrit(null, etat), null);
 });
 
+test("ecrit : celui qui travaille sur la fonctionnalité, pas toujours l'agent de cadrage", () => {
+  const agents = [{id: "camille", prenom: "Camille"}, {id: "noe", prenom: "Noé"}, {id: "lou", prenom: "Lou"}];
+  const f = {id: "f1", agent_cadrage: "camille", attend_reponse: true,
+             discussion: [{auteur: "camille"}, {auteur: "utilisateur"}]};
+  const t = (agent, maj, extra = {}) => ({id: agent, agent, fonctionnalite: "f1", active: true, maj, ...extra});
+  // Une tâche active sur la fonctionnalité : son agent (la plus récente s'il y en a plusieurs).
+  const e = {agents, orchestrateur_actif: true,
+             taches: [t("noe", "2026-11-10T21:00:00"), t("lou", "2026-11-10T22:00:00"),
+                      t("camille", "2026-11-10T23:00:00", {fonctionnalite: "f2"}),
+                      t("camille", "2026-11-10T23:30:00", {active: false})]};
+  assert.equal(ecrit(f, e), "Lou est en train d'écrire…");
+  // Aucune tâche active : le dernier agent qui a parlé dans la discussion.
+  const f2 = {...f, discussion: [{auteur: "camille"}, {auteur: "noe"}, {auteur: "utilisateur"}]};
+  assert.equal(ecrit(f2, {agents, orchestrateur_actif: true, taches: []}), "Noé est en train d'écrire…");
+  // Personne d'autre : l'agent de cadrage.
+  assert.equal(ecrit({...f, discussion: []}, {agents, orchestrateur_actif: true}), "Camille est en train d'écrire…");
+});
+
 test("nouvelleApparue", () => {
   const avant = {fonctionnalites: [{id: "f1", discussion: [{texte: "Ancien"}]}]};
   const apres = {fonctionnalites: [{id: "f1", discussion: [{texte: "Ancien"}]},

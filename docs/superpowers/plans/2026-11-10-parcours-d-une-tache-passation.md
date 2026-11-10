@@ -12,7 +12,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | ce dépôt | 1 à 3 : relevé v4, état v4, demandes et images jointes | Validation de champs entièrement décrite par le plan, tests en tableau | fait |
 | B | Opus 5.5 | ce dépôt | 4 et 5 : plusieurs projets, catalogue et livrable servis | Serveur à fils scindé en deux classes sans rien casser, isolation entre projets, fichiers servis (bac à sable) | fait |
-| C | Sonnet 5.5 | ce dépôt | 6 à 8 : sélecteur, panneau de fonctionnalité et discussion, Directeur | Interface cadrée par les demandes et l'état des phases A et B | à faire |
+| C | Sonnet 5.5 | ce dépôt | 6 à 8 : sélecteur, panneau de fonctionnalité et discussion, Directeur | Interface cadrée par les demandes et l'état des phases A et B | fait |
 | D | Opus 5.5 | ce dépôt | 9 : le catalogue | Reprendre fidèlement le design d'une page existante, carte avec zoom, 5 000 éléments | à faire |
 | E | Sonnet 5.5 | ce dépôt | 10 à 12 : fichier de factory, suivi, mémoire, départ d'un agent, vérificateur | Outils en ligne de commande au contrat écrit ; les cas difficiles (git, mots interdits, écritures concurrentes) ont leurs tests nommés | à faire |
 | F | Opus 5.5 | ce dépôt | 13 et 14 : consignes génériques, démo, documentation, relecture finale | Les consignes guident l'orchestrateur : leur justesse compte plus que tout ; relecture finale sur un modèle fort | à faire |
@@ -43,6 +43,16 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
 - `GET /api/livrable?projet=&fonctionnalite=?` : sert le `chemin` du livrable (du projet, ou de la fonctionnalité) dans `livrables.racines` ; un livrable donné par `lien` → 404 (la page ouvre le lien elle-même). `.html`/`.txt` avec `Content-Security-Policy: sandbox` et `nosniff` ; `.zip`/`.glb` en pièce jointe.
 - Mineurs laissés (relecture) : déclaration invalide dans les réglages qui retombe sans le dire sur le fichier de factory ; caches du catalogue sans éviction ; `Content-Length` du livrable si le fichier change pendant l'envoi ; le bac à sable HTML n'empêche pas de charger une image distante ; un fil des prix par projet ; tests à ajouter (livrable `../ailleurs/x.png`, lien symbolique sortant).
 - Tests : 424 `unittest` et 95 `node --test` verts en fin de phase.
+
+**Phase C (Sonnet 5.5) — écarts et points à surveiller**
+
+- `bureau/web/ui/projets.js` : `avecProjet`, `projetInitial`, `livrables(etat, projet)` (purs) ; état du projet courant (`definirProjet`, `projetCourant`, `urlProjet`) ; `lireProjets`. `main.js` lit `/api/projets` au démarrage ; si `multi`, il fixe le projet (mémorisé sous `myiafactory.projet`, sinon le premier) et **toute** requête de la page passe par `urlProjet` (état, charge, conseil, réglages, demandes, facturation, KPI, images via `imagesUrl`). **Phase D** : faire passer `/api/catalogue` et les images du catalogue par `urlProjet` aussi. Un changement de projet recharge la page ; les pastilles suivent à chaque lecture de l'état.
+- `ui/barre.js` : `majProjets`, `boutonNouvelle`, `boutonFonctions` (montrés pour un relevé v4 avec `agir`), « Dernier livrable » (lien, ou menu `details` s'il y en a plusieurs). `ui/panneaux.js` branche les deux boutons.
+- `ui/fonctionnalite.js` : fonctions pures du plan, plus `contenuFonctionnalite(ctx, contenu, f|null)` et `contenuFonctionnalites`. Panneaux ajoutés : `fonctionnalite` (id ou `null` = discussion neuve) et `fonctionnalites`. Le contexte gagne `envois`, `envoyes`, `nouvelle`, `rouvrir`, `ouvrirFonctionnalite`, `ouvrirNouvelle`. Le panneau d'une fonctionnalité se redessine même pendant la saisie (le brouillon, ses images et le curseur sont conservés). Un message envoyé reste affiché (« en attente ») tant que le relevé ne l'a pas repris. **Phase D** : le bouton « Catalogue » n'apparaît que si le contexte fournit `ctx.ouvrirCatalogue(id)` ; il suffit de le définir dans `contexte()` de `panneaux.js`.
+- `ui/actions.js` : `decisionsDirecteur`, `demandeLecon`, `demandeGenre`, `demandeSession`, `libelleMontee`. Les parties de décisions du Directeur sont dans `ui/decisions.js` (écart : fichier en plus) ; `ui/directeur.js` ajoute l'étage et le texte général aux leçons ; `detail.js` montre la montée de modèle.
+- Vérifié au navigateur sur deux projets (un v3, un v4) : sélecteur, pastilles, choix retenu, discussion avec image, texte hostile littéral, « En attente de l'orchestrateur », double clic = une demande, chaque bouton du Directeur envoie la bonne demande, console vide (hors un 502 voulu venant d'une commande de test cassée). Le cas `--reglages` (sans sélecteur) est couvert par `lireProjets` (404 ou `multi` faux), pas revu au navigateur.
+- Mineur laissé : les messages de la discussion ne défilent pas automatiquement vers le dernier.
+- Tests : 424 `unittest` et 110 `node --test` verts en fin de phase.
 
 ## Ce que chaque conversation doit savoir
 

@@ -1,6 +1,6 @@
 # Consignes de l'orchestrateur générique
 
-Tu es **l'orchestrateur** d'un projet : une conversation Claude (sur Opus) qui mène les fonctionnalités du projet
+Tu es **l'orchestrateur** d'un projet : une conversation Claude (sur Sonnet par défaut ; Opus pour un projet exigeant) qui mène les fonctionnalités du projet
 du cadrage jusqu'à la production en série, en confiant chaque étape à des agents spécialistes. Tu ne fais pas le
 travail des agents : tu choisis, tu lances, tu relis les retours, tu tiens le suivi à jour et tu dis toujours à
 l'utilisateur ce que tu attends.
@@ -134,7 +134,8 @@ le bandeau du bureau montre.
    croisée), mais à chaque tour l'agent montre ses images dans la discussion (`lancer message` avec `images`) et
    l'utilisateur y fait ses retours (demandes `message`). Quand la méthode semble prête, l'agent la résume dans la
    discussion et tu poses la décision `valider_methode`.
-5. **`methode`.** Sur `methode` `valider` : la méthode est écrite dans le dépôt du projet (son document, le brief
+5. **`methode`.** Sur `methode` `valider` : la méthode est écrite dans le dépôt du projet (son document, en
+   Markdown `.md` sous une racine `documents` des réglages — le bureau l'écrit en entier dans le panneau —, le brief
    de chaque rôle dans `<fiches>/briefs/<rôle>.md`, et les contrôles de départ dans le registre, `lancer controle`).
    Elle porte une **version** (1, puis 2…) : c'est la « passe » du catalogue. Inscris-la (`lancer fonctionnalite`,
    `methode: {version, chemin, validee_le}`), commit, push, puis passe à la série.

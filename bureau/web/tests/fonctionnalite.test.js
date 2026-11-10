@@ -245,3 +245,17 @@ test("texteACopier : tout le contenu d'un message", async () => {
   assert.equal(texteACopier({texte: "Choisissez", questions: [{texte: "Taille ?", choix: ["28", "56"]}]}),
                "Choisissez\n\nTaille ? (28 / 56)");
 });
+
+test("blocsMarkdown : titres, listes, paragraphes, code ; le texte reste du texte", async () => {
+  const {blocsMarkdown} = await import("../ui/fonctionnalite.js");
+  const md = ["# Méthode : un rang", "", "Intro sur", "deux lignes.", "", "## Étapes", "1. Relever", "2. Dessiner **net**",
+              "", "- un point", "- <b>deux</b>", "", "```", "py gen.py", "```"].join("\n");
+  assert.deepEqual(blocsMarkdown(md), [
+    {type: "titre", niveau: 1, texte: "Méthode : un rang"},
+    {type: "paragraphe", texte: "Intro sur deux lignes."},
+    {type: "titre", niveau: 2, texte: "Étapes"},
+    {type: "liste", ordonnee: true, elements: ["Relever", "Dessiner **net**"]},
+    {type: "liste", ordonnee: false, elements: ["un point", "<b>deux</b>"]},
+    {type: "code", texte: "py gen.py"}]);
+  assert.deepEqual(blocsMarkdown(""), []);
+});

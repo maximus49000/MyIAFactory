@@ -362,6 +362,29 @@ class TestCatalogueServi(AvecServeur):
             resp, _ = self.req("GET", "/api/couts" + requete)
             self.assertEqual(resp.status, 404)
 
+    def test_methode_servie(self):
+        # La méthode d'une fonctionnalité, lue par le panneau pour l'écrire en entier (texte brut, en bac à sable).
+        f = self.dossier / "methodes" / "f1.md"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("# Méthode\n1. Relever", encoding="utf-8", newline="")
+        r = json.loads(json.dumps(RELEVE))
+        r["fonctionnalites"][0]["methode"] = {"version": 1, "chemin": "methodes/f1.md"}
+        self.agir(releve=r)
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["documents"] = {"racines": ["methodes"]}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.p._cache_etat = (0.0, None)
+        resp, data = self.req("GET", "/api/methode?fonctionnalite=f1")
+        self.assertEqual((resp.status, data.decode("utf-8")), (200, "# Méthode\n1. Relever"))
+        self.assertEqual(resp.getheader("Content-Type"), "text/plain; charset=utf-8")
+        self.assertEqual(resp.getheader("Content-Security-Policy"), "sandbox")
+        for requete in ("", "?fonctionnalite=f9"):
+            self.assertEqual(self.req("GET", "/api/methode" + requete)[0].status, 404)
+        regl["documents"] = {"racines": ["ailleurs"]}   # hors des racines : refusée
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.p._cache_etat = (0.0, None)
+        self.assertEqual(self.req("GET", "/api/methode?fonctionnalite=f1")[0].status, 404)
+
     def test_document_refuse(self):
         self.document("pieces/f1/a.md", liste=["pieces/f1/a.md"])
         (self.dossier / "pieces" / "f1" / "b.md").write_bytes(b"secret")

@@ -2,7 +2,7 @@
 
 Ce guide sert à deux cas : **démarrer un projet neuf** avec les outils génériques de la skill, ou **faire passer un
 projet qui a déjà sa factory** (ses consignes, ses outils, son relevé) sur l'orchestrateur générique **sans rien lui
-faire perdre**. L'orchestrateur générique est une conversation Claude (sur Opus) qui lit
+faire perdre**. L'orchestrateur générique est une conversation Claude (sur Sonnet par défaut, Opus pour un projet exigeant) qui lit
 [`orchestrateur/consignes.md`](../orchestrateur/consignes.md), puis les consignes propres du projet, et mène les
 fonctionnalités du cadrage jusqu'à la série. Une conversation orchestratrice par projet.
 
@@ -23,6 +23,7 @@ relatifs à lui. Partez du modèle [`orchestrateur/modeles/factory.json`](../orc
 | `controles` | non | le registre des contrôles (défaut `controles.md`) |
 | `consignes` | non | **les consignes propres du projet** (un document) |
 | `reglages` | non | les réglages du bureau du projet (pour `charge`) |
+| `modele_orchestrateur` | non | le modèle de la conversation orchestratrice : `Sonnet` (défaut), `Opus` ou `Haiku` (jamais Fable) |
 | `seuil_methode` | non | le nombre de tours de corrections d'un élément avant « méthode à revoir ? » (défaut 3) |
 | `catalogues` | non | la source du catalogue de chaque fonctionnalité : `{<id>: {fichier} | {commande}}` ; la clé `"*"` vaut pour toutes, et `{fonctionnalite}` y est remplacé par l'identifiant |
 | `commandes` | non | **les adaptateurs** : `{<commande>: [arguments]}`, qui remplacent les outils génériques (section 2) |
@@ -117,7 +118,8 @@ Pour plusieurs projets dans un même bureau, voir « Plusieurs projets » dans [
 
 ## 7. Démarrer la conversation orchestratrice
 
-Ouvrez une conversation Claude sur **Opus**, dans le dossier du projet, et donnez-lui ce message de départ :
+Ouvrez une conversation Claude sur **Sonnet** (ou Opus pour un projet exigeant : indiquez-le alors dans
+`modele_orchestrateur` du fichier de factory, pour que le bureau et la facturation le montrent), dans le dossier du projet, et donnez-lui ce message de départ :
 
 > Tu es l'orchestrateur du projet dont le fichier de factory est `<chemin du fichier de factory>`. Lis
 > `<skill>/orchestrateur/consignes.md`, puis les consignes propres du projet, et commence la boucle de réveil.

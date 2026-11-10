@@ -101,6 +101,19 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_modele_de_l_orchestrateur(self):
+        # Sonnet par défaut (le chef du bureau le montre) ; un projet exigeant peut demander Opus.
+        chef = next(t for t in self.releve()["titulaires"] if t["cle"] == "chef")
+        self.assertEqual(chef["modele"], "Sonnet")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["modele_orchestrateur"] = "Opus"
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        chef = next(t for t in self.releve()["titulaires"] if t["cle"] == "chef")
+        self.assertEqual(chef["modele"], "Opus")
+        f["modele_orchestrateur"] = "Fable"   # jamais choisi par un outil
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        self.assertEqual(self.outil("releve")[0], 2)
+
     def test_etat_compact_et_detail_a_la_demande(self):
         # `etat` est relu à chaque réveil (sur le modèle le plus cher) : il reste court ; le détail se demande.
         f = self.nouvelle()

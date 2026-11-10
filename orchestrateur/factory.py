@@ -12,7 +12,9 @@ MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
-        "flux", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire")
+        "flux", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
+        "modele_orchestrateur")
+MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 
 
 class FactoryInvalide(Exception):
@@ -93,6 +95,9 @@ def lire(chemin):
     if not isinstance(commandes, dict) or not all(
             isinstance(v, list) and v and all(_texte(a) for a in v) for v in commandes.values()):
         raise FactoryInvalide("Factory : « commandes » doit associer à chaque commande une liste d'arguments.")
+    modele = d.get("modele_orchestrateur", "Sonnet")
+    if modele not in MODELES_ORCHESTRATEUR:
+        raise FactoryInvalide("Factory : « modele_orchestrateur » doit valoir Haiku, Sonnet ou Opus (Sonnet par défaut).")
     nom = d.get("nom")
     if nom is not None and not _texte(nom):
         raise FactoryInvalide("Factory : « nom » doit être un texte non vide.")
@@ -107,6 +112,7 @@ def lire(chemin):
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
+        "modele_orchestrateur": modele,
     }
 
 

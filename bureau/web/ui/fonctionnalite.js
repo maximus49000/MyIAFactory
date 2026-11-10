@@ -351,6 +351,83 @@ function blocQuestions(attente, etat, changer) {
   return bloc;
 }
 
+// --- La méthode, écrite dans le panneau. Un Markdown simple découpé en blocs (titres, listes, paragraphes, code),
+// affichés comme du texte : rien n'est interprété comme du HTML.
+export function blocsMarkdown(md) {
+  const blocs = [];
+  let para = [], liste = null, code = null;
+  const finir = () => {
+    if (para.length) { blocs.push({type: "paragraphe", texte: para.join(" ")}); para = []; }
+    if (liste) { blocs.push(liste); liste = null; }
+  };
+  for (const brute of String(md ?? "").split(/\r?\n/)) {
+    if (code) {
+      if (/^\s*```/.test(brute)) { blocs.push({type: "code", texte: code.join("\n")}); code = null; }
+      else code.push(brute);
+      continue;
+    }
+    const ligne = brute.trim();
+    if (/^```/.test(ligne)) { finir(); code = []; continue; }
+    if (!ligne) { finir(); continue; }
+    const titre = ligne.match(/^(#{1,6})\s+(.*)$/);
+    if (titre) { finir(); blocs.push({type: "titre", niveau: titre[1].length, texte: titre[2]}); continue; }
+    const ordonne = ligne.match(/^\d+[.)]\s+(.*)$/), puce = ligne.match(/^[-*+]\s+(.*)$/);
+    if (ordonne || puce) {
+      const ordonnee = Boolean(ordonne);
+      if (para.length || (liste && liste.ordonnee !== ordonnee)) finir();
+      if (!liste) liste = {type: "liste", ordonnee, elements: []};
+      liste.elements.push((ordonne || puce)[1]);
+      continue;
+    }
+    if (liste) finir();
+    para.push(ligne);
+  }
+  if (code) blocs.push({type: "code", texte: code.join("\n")});
+  finir();
+  return blocs;
+}
+
+// Le texte d'un bloc, avec le **gras** rendu (le reste tel quel, comme du texte).
+function enLigne(parent, texte, glossaire) {
+  String(texte).split(/(\*\*[^*]+\*\*)/).forEach((morceau) => {
+    if (/^\*\*[^*]+\*\*$/.test(morceau)) parent.append(el("strong", "", morceau.slice(2, -2)));
+    else if (morceau) parent.append(...texteAvecTermes("", morceau, glossaire).childNodes);
+  });
+}
+
+function partieMethode(ctx, f) {
+  const m = f.methode;
+  const bloc = el("details", "methode-ecrite");
+  bloc.open = true;
+  bloc.append(el("summary", "", `Méthode (version ${m.version})` + (m.validee_le ? " · validée le " + dateFr(m.validee_le) : "")));
+  if (m.lien && lienSur(m.lien)) bloc.append(lienExterne(m.lien, "Ouvrir la méthode"));
+  const corps = el("div", "methode-texte");
+  bloc.append(corps);
+  if (!m.chemin) return bloc;
+  corps.append(el("p", "note", "Lecture de la méthode…"));
+  (async () => {
+    let texte = null;
+    try {
+      const r = await fetch(urlProjet(`/api/methode?fonctionnalite=${encodeURIComponent(f.id)}`), {cache: "no-store"});
+      if (r.ok) texte = await r.text();
+    } catch { /* serveur injoignable */ }
+    corps.replaceChildren();
+    if (texte === null) { corps.append(el("p", "note", "Méthode illisible ici (" + m.chemin + ") : elle doit être en .md ou .txt, sous une racine « documents »."));  return; }
+    const glossaire = glossaireDe(f);
+    for (const b of blocsMarkdown(texte)) {
+      if (b.type === "titre") { const h = el(b.niveau <= 2 ? "h4" : "h5", ""); enLigne(h, b.texte, glossaire); corps.append(h); }
+      else if (b.type === "paragraphe") { const p = el("p", ""); enLigne(p, b.texte, glossaire); corps.append(p); }
+      else if (b.type === "liste") {
+        const l = el(b.ordonnee ? "ol" : "ul", "");
+        for (const x of b.elements) { const li = el("li", ""); enLigne(li, x, glossaire); l.append(li); }
+        corps.append(l);
+      } else corps.append(el("pre", "methode-code", b.texte));
+    }
+    corps.append(el("p", "document-chemin", m.chemin));
+  })();
+  return bloc;
+}
+
 // --- Les tâches de la fonctionnalité : réalisées (dans une colonne terminée, ou inactives), et à venir (les autres, puis les
 // éléments de sa file, dans l'ordre). Les tâches sans post-it (le chef qui orchestre) n'y sont pas.
 export function tachesDeFonctionnalite(etat, f) {
@@ -962,12 +1039,7 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     gestes.append(corriger);
   }
   const blocMethode = el("div", "bloc-methode");
-  if (f.methode) {
-    blocMethode.append(el("h3", "", `Méthode (version ${f.methode.version})`));
-    if (f.methode.lien && lienSur(f.methode.lien)) blocMethode.append(lienExterne(f.methode.lien, "Ouvrir la méthode"));
-    else if (f.methode.chemin) blocMethode.append(el("p", "note", f.methode.chemin));
-    if (f.methode.validee_le) blocMethode.append(el("p", "note", "Validée le " + dateFr(f.methode.validee_le)));
-  }
+  if (f.methode) blocMethode.append(partieMethode(ctx, f));   // la méthode écrite en entier, pas seulement son chemin
   if (e.agir === true && decisions.has("valider_methode")) geste("Valider la méthode", "bouton", () => demandeMethode(f.id, "valider"));
   if (f.catalogue && typeof ctx.ouvrirCatalogue === "function") {
     const b = el("button", "bouton secondaire", "Catalogue");

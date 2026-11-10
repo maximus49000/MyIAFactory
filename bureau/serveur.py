@@ -30,7 +30,7 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
-ROUTES_PROJET = ("/api/couts", "/api/document", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
+ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
                  "/api/catalogue", "/api/livrable")
 # Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
 # en bac à sable (aucun script, aucune requête au nom du bureau).
@@ -44,6 +44,7 @@ BAC_A_SABLE = (".html", ".txt")
 DOCUMENTS = {**LIVRABLES, ".md": ("text/plain; charset=utf-8", False), ".json": ("text/plain; charset=utf-8", False),
              ".csv": ("text/plain; charset=utf-8", False), ".svg": ("image/svg+xml", False)}
 BAC_A_SABLE_DOCUMENTS = BAC_A_SABLE + (".md", ".json", ".csv", ".svg")
+METHODES = {".md": ("text/plain; charset=utf-8", False), ".txt": ("text/plain; charset=utf-8", False)}
 
 
 def images_declarees(regl):
@@ -336,6 +337,39 @@ class Projet:
             pass
         return None
 
+    def methode(self, fonctionnalite):
+        """Le fichier de la méthode d'une fonctionnalité (`methode.chemin`), s'il peut être servi : `.md` ou `.txt`, dans
+        une des racines `documents` (ou `livrables`) des réglages. Le panneau l'écrit en entier."""
+        self.etat()
+        r = self.dernier_releve
+        if r is None or r.get("version", 1) < 4:
+            return None
+        f = next((f for f in r["fonctionnalites"] if f["id"] == fonctionnalite), None)
+        brut = ((f or {}).get("methode") or {}).get("chemin")
+        if (not isinstance(brut, str) or not brut or "\x00" in brut or Path(brut).is_absolute() or brut[0] in "/\\"
+                or Path(brut).suffix.lower() not in METHODES):
+            return None
+        regl, _ = self.reglages()
+        racines = []
+        for cle in ("documents", "livrables"):
+            conf = regl.get(cle)
+            if isinstance(conf, dict) and isinstance(conf.get("racines"), list):
+                racines += [x for x in conf["racines"] if isinstance(x, str) and x]
+        base = Path(regl["dossier"])
+        try:
+            cible = (base / brut).resolve()
+            if not cible.is_file():
+                return None
+            for racine in racines:
+                try:
+                    cible.relative_to((base / racine).resolve())
+                    return cible
+                except ValueError:
+                    continue
+        except (OSError, ValueError):
+            pass
+        return None
+
     def document(self, fonctionnalite, brut):
         """Le fichier d'un document de la fonctionnalité s'il peut être servi, sinon `None` : listé par le relevé
         (`documents` de la fonctionnalité), dans une des racines `documents.racines` des réglages, d'une extension
@@ -528,6 +562,11 @@ class Handler(BaseHTTPRequestHandler):
             if len(fonc) != 1:
                 return self._json(404, {"erreur": "Aucune fonctionnalité demandée."})
             return self._json(*projet.couts(fonc[0]))
+        if chemin == "/api/methode":
+            fonc = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite", [])
+            if len(fonc) != 1:
+                return self._json(404, {"erreur": "Aucune fonctionnalité demandée."})
+            return self._livrable(projet.methode(fonc[0]), METHODES, (".md", ".txt"))
         if chemin == "/api/document":
             q = parse_qs(morceaux.query, keep_blank_values=True)
             fonc, doc = q.get("fonctionnalite", []), q.get("chemin", [])

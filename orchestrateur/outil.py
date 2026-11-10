@@ -857,7 +857,8 @@ def construire_releve(ctx):
     en_attente = {d["id"]: d for d in s["demandes"] if d["type"] == "lecon" and d["statut"] == "en attente"}
     meta = {x["id"]: x for x in s["lecons"]}
     if not any(x["role"] == "chef" for x in fiches):
-        titulaires.append({"cle": "chef", "chef": True, "lieu": "local", "modele": "Opus", "permanent": True})
+        titulaires.append({"cle": "chef", "chef": True, "lieu": "local", "modele": ctx.f["modele_orchestrateur"],
+                           "permanent": True})
     sessions = ctx.sessions()
     for x in fiches:
         t = {"cle": x["cle"], "lieu": x["lieu"], "modele": x["modele"], "permanent": True, "prenom": x["prenom"],

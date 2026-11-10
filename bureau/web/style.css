@@ -720,3 +720,14 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .message-copier { margin-left: 6px; padding: 1px 7px; border: 1px solid #cfc7b6; border-radius: 6px; background: transparent;
   color: #6d6980; font: inherit; font-size: 11px; cursor: pointer; opacity: .55; }
 .message:hover .message-copier, .message-copier:focus-visible { opacity: 1; }
+
+/* La méthode écrite dans le panneau. */
+.methode-ecrite { margin-top: 12px; }
+.methode-ecrite > summary { cursor: pointer; font-weight: 800; }
+.methode-texte { margin-top: 6px; padding: 8px 12px; border-left: 3px solid #3f8f57; background: #fff; border-radius: 0 8px 8px 0;
+  overflow-wrap: anywhere; }
+.methode-texte h4, .methode-texte h5 { margin: 10px 0 4px; }
+.methode-texte p, .methode-texte ol, .methode-texte ul { margin: 4px 0; }
+.methode-texte ol, .methode-texte ul { padding-left: 20px; }
+.methode-code { margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: #f4efe6; white-space: pre-wrap;
+  font: 12px/1.4 ui-monospace, Consolas, monospace; }

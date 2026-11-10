@@ -36,7 +36,7 @@ Projet 1, le bureau vivant :
 - [x] 11. Le mobilier (modèles Tripo)
 - [x] 12. Le personnage (modèle Tripo)
 
-État : les douze étapes sont faites (le serveur, la logique de la page, la scène 3D, l'interface, le mode d'emploi, le mobilier et le personnage Tripo). Reste la relecture finale (phase D).
+État : le bureau vivant est terminé (les douze étapes et la relecture finale). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.
 
 Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`.
 

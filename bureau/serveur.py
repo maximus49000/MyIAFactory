@@ -218,6 +218,8 @@ class Bureau(ThreadingHTTPServer):
 
     def server_close(self):
         self._arret.set()
+        if self._fil_prix is not None:
+            self._fil_prix.join(5)  # qu'il n'écrive plus dans le dossier une fois le serveur fermé
         super().server_close()
 
 

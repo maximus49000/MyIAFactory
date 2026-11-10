@@ -172,3 +172,22 @@ test("decisionsDirecteur : les discussions qui attendent la réponse de l'utilis
   assert.equal(r[0].dernier.texte, "Quelle taille ?");
   assert.deepEqual(decisionsDirecteur({}).reponses, []);
 });
+
+test("demandesToutes : un verdict par leçon en attente, chacune avec son étage choisi", async () => {
+  const {demandesToutes} = await import("../ui/actions.js");
+  const lecons = [{id: "a", etage_propose: "projet"}, {id: "b", etage_propose: "genre", texte_general: "G"},
+                  {id: "c", etage_propose: "projet", verdict_demande: "valider"},            // déjà envoyée
+                  {id: "d", etage_propose: "skill", texte_general: "S"}];
+  const etages = new Map([["a", "projet"], ["b", "projet"], ["d", "skill"]]);           // b : changé par l'utilisateur
+  assert.deepEqual(demandesToutes(lecons, "valider", etages), [
+    {type: "lecon", id: "a", verdict: "valider"},
+    {type: "lecon", id: "b", verdict: "valider", etage: "projet"},
+    {type: "lecon", id: "d", verdict: "valider"}]);
+  assert.deepEqual(demandesToutes(lecons, "invalider", new Map()).map((d) => d.id), ["a", "b", "d"]);
+});
+
+test("demandeChallengeLecon : la leçon visée et le texte", async () => {
+  const {demandeChallengeLecon} = await import("../ui/actions.js");
+  assert.deepEqual(demandeChallengeLecon({id: "dev-1:L4"}, "  Pourquoi trois passes ?  "),
+    {type: "challenge", cible: {type: "lecon", id: "dev-1:L4"}, texte: "Pourquoi trois passes ?"});
+});

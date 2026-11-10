@@ -148,40 +148,61 @@ function partieDocuments(ctx, f) {
   for (const g of groupes) {
     bloc.append(el("h4", "", g.libelle));
     const ul = el("ul", "liste-documents");
-    const images = g.documents.filter((d) => EST_IMAGE.test(d.chemin)).map((d) => d.chemin);
-    for (const d of g.documents) {
-      const li = el("li", "document");
-      if (EST_IMAGE.test(d.chemin)) {
-        const b = el("button", "document-vignette");
-        b.type = "button";
-        b.setAttribute("aria-label", "Voir en plein écran : " + d.titre);
-        const img = document.createElement("img");
-        img.loading = "lazy";
-        img.src = url(d.chemin);
-        img.alt = d.titre;
-        b.append(img);
-        b.addEventListener("click", () => ouvrirVisionneuse(images, images.indexOf(d.chemin), url));
-        li.append(b);
-      } else {
-        const a = el("a", "document-lien", "Ouvrir");
-        a.href = url(d.chemin);
-        a.target = "_blank";
-        a.rel = "noopener";
-        li.append(a);
-      }
-      const texte = el("div", "document-texte");
-      texte.append(el("strong", "", d.titre));
-      const origine = [d.agent ? (d.agent === "utilisateur" ? "Vous" : nomAgentDe(ctx.etat, d.agent)) : null,
-        d.tache ? "tâche " + d.tache : null, d.element ? "élément " + d.element : null, d.sous_tache || null,
-        d.date ? dateFr(d.date) : null].filter(Boolean).join(" · ");
-      if (origine) texte.append(el("div", "note", origine));
-      texte.append(el("div", "document-chemin", d.chemin));
-      li.append(texte);
+    // La dernière version de chaque document ; les précédentes dans « Voir l'historique ».
+    for (const v of versionsDe(g.documents)) {
+      const toutes = [v.dernier, ...v.anciens].filter((x) => EST_IMAGE.test(x.chemin)).map((x) => x.chemin);
+      const li = ligneDocument(ctx, v.dernier, url, toutes);
+      if (v.anciens.length) li.querySelector(".document-texte").append(historique(ctx, v.anciens, url, toutes));
       ul.append(li);
     }
     bloc.append(ul);
   }
   return bloc;
+}
+
+// Une ligne de document : la vignette (une image, ouverte dans la visionneuse avec `images`) ou « Ouvrir », le titre,
+// d'où il vient, son chemin.
+function ligneDocument(ctx, d, url, images) {
+  const li = el("li", "document");
+  if (EST_IMAGE.test(d.chemin)) {
+    const b = el("button", "document-vignette");
+    b.type = "button";
+    b.setAttribute("aria-label", "Voir en plein écran : " + d.titre);
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.src = url(d.chemin);
+    img.alt = d.titre;
+    b.append(img);
+    b.addEventListener("click", () => ouvrirVisionneuse(images, Math.max(0, images.indexOf(d.chemin)), url));
+    li.append(b);
+  } else {
+    const a = el("a", "document-lien", "Ouvrir");
+    a.href = url(d.chemin);
+    a.target = "_blank";
+    a.rel = "noopener";
+    li.append(a);
+  }
+  const texte = el("div", "document-texte");
+  texte.append(el("strong", "", d.titre));
+  const origine = [d.agent ? (d.agent === "utilisateur" ? "Vous" : nomAgentDe(ctx.etat, d.agent)) : null,
+    d.tache ? "tâche " + d.tache : null, d.element ? "élément " + d.element : null, d.sous_tache || null,
+    d.date ? dateFr(d.date) : null].filter(Boolean).join(" · ");
+  if (origine) texte.append(el("div", "note", origine));
+  texte.append(el("div", "document-chemin", d.chemin));
+  li.append(texte);
+  return li;
+}
+
+// « Voir l'historique » : les versions précédentes, de la plus récente à la plus ancienne ; la visionneuse passe de
+// l'une à l'autre, la dernière version en tête.
+function historique(ctx, anciens, url, images) {
+  const d = el("details", "historique");
+  const n = anciens.length;
+  d.append(el("summary", "", `Voir l'historique (${n} version${n > 1 ? "s" : ""} précédente${n > 1 ? "s" : ""})`));
+  const ul = el("ul", "liste-documents");
+  for (const ancien of anciens) ul.append(ligneDocument(ctx, ancien, url, images));
+  d.append(ul);
+  return d;
 }
 
 // --- Le vocabulaire : les mots spécialisés que les agents définissent (`glossaire` d'un message).
@@ -330,6 +351,34 @@ function blocQuestions(attente, etat, changer) {
   return bloc;
 }
 
+// --- Les versions d'un document : un document qui en remplace un autre (`remplace` = son chemin), ou qui a le même
+// titre et le même élément, en est une nouvelle version. Rend [{dernier, anciens}] : la dernière version d'abord, les
+// plus récentes en tête, l'historique du plus récent au plus ancien.
+export function versionsDe(documents) {
+  const liste = (Array.isArray(documents) ? documents : []).filter((d) => d && typeof d.chemin === "string");
+  const parent = liste.map((_, i) => i);
+  const racine = (i) => (parent[i] === i ? i : (parent[i] = racine(parent[i])));
+  const unir = (i, j) => { parent[racine(i)] = racine(j); };
+  const parIdentite = new Map(), parChemin = new Map();
+  liste.forEach((d, i) => {
+    const cle = `${d.element || ""}\u0000${d.titre || d.chemin}`;
+    if (parIdentite.has(cle)) unir(i, parIdentite.get(cle)); else parIdentite.set(cle, i);
+    parChemin.set(d.chemin, i);
+  });
+  liste.forEach((d, i) => { if (typeof d.remplace === "string" && parChemin.has(d.remplace)) unir(i, parChemin.get(d.remplace)); });
+  const groupes = new Map();
+  liste.forEach((d, i) => {
+    const r = racine(i);
+    if (!groupes.has(r)) groupes.set(r, []);
+    groupes.get(r).push(d);
+  });
+  const date = (d) => String(d.date || "");
+  return [...groupes.values()].map((g) => {
+    const tries = [...g].sort((a, b) => date(b).localeCompare(date(a)));
+    return {dernier: tries[0], anciens: tries.slice(1)};
+  }).sort((a, b) => date(b.dernier).localeCompare(date(a.dernier)));
+}
+
 // --- Les livrables : les fichiers finaux de chaque élément validé (documents marqués `livrable`).
 export function livrablesParElement(f) {
   const groupes = new Map();
@@ -367,9 +416,10 @@ function partieLivrables(ctx, f) {
   for (const g of groupes) {
     const art = el("article", "livrable-element");
     art.append(el("h4", "", g.element ? "Élément : " + g.element : "Sans élément"));
-    const images = g.documents.filter((d) => EST_IMAGE.test(d.chemin)).map((d) => d.chemin);
+    const versions = versionsDe(g.documents);
+    const images = versions.map((v) => v.dernier.chemin).filter((c) => EST_IMAGE.test(c));
     const rangee = el("div", "livrable-fichiers");
-    for (const d of g.documents) {
+    for (const d of versions.map((v) => v.dernier)) {
       if (EST_IMAGE.test(d.chemin)) {
         const b = el("button", "document-vignette");
         b.type = "button";
@@ -391,7 +441,13 @@ function partieLivrables(ctx, f) {
       }
     }
     art.append(rangee);
-    const dernier = g.documents[0];
+    const anciens = versions.flatMap((v) => v.anciens);
+    if (anciens.length) {
+      const toutes = versions.flatMap((v) => [v.dernier, ...v.anciens]).filter((x) => EST_IMAGE.test(x.chemin))
+        .map((x) => x.chemin);
+      art.append(historique(ctx, anciens, url, toutes));
+    }
+    const dernier = versions[0].dernier;
     const origine = [dernier.agent ? nomAgentDe(ctx.etat, dernier.agent) : null, dernier.date ? dateFr(dernier.date) : null]
       .filter(Boolean).join(" · ");
     if (origine) art.append(el("div", "note", origine));

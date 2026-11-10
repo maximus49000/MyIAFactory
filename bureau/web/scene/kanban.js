@@ -72,6 +72,9 @@ export class Kanban {
       this.groupe.add(modeles.creer("tableau", {largeur: k.largeur}));
     }
     sc.scene.add(this.groupe);
+    // Le tableau lui-même est cliquable (un post-it garde son propre choix) : il ouvre le Kanban en plein écran.
+    this.groupe.userData.choix = {type: "kanban", id: null};
+    sc.choisissables.push(this.groupe);
 
     this.surface = new THREE.Mesh(new THREE.PlaneGeometry(k.largeur, k.hauteur), new THREE.MeshLambertMaterial({color: "#ffffff"}));
     this.surface.position.set(0, HAUT - k.hauteur / 2, DEVANT);

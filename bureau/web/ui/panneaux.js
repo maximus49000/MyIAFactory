@@ -10,6 +10,7 @@ import {contenuDossier} from "./dossier.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
 import {contenuCatalogue} from "./catalogue.js";
+import {ouvrirKanban} from "./kanban-plein.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
@@ -312,7 +313,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     attente = requestAnimationFrame(() => {
       attente = null;
       const choix = sc.pointer(ev);
-      const cliquable = ["agent", "postit", "file", "attente", "service", "direction"].includes(choix.type);
+      const cliquable = ["agent", "postit", "file", "attente", "service", "direction", "kanban"].includes(choix.type);
       conteneur.style.cursor = cliquable ? "pointer" : "";
       if (choix.type === "agent") montrerCarte(choix, ev.clientX, ev.clientY);
       else cacherCarte();
@@ -328,6 +329,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     else if (choix.type === "file") ouvrirPanneau("file", choix.id);
     else if (choix.type === "attente") ouvrirPanneau("attente", null);
     else if (choix.type === "service" || choix.type === "direction") ouvrirPanneau(choix.type, choix.id);
+    else if (choix.type === "kanban" && etat()) ouvrirKanban(etat(), (id) => { retourListe = false; ouvrirPanneau("tache", id); });
     else fermerPanneau();
   });
 

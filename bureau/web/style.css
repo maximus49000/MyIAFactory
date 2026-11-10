@@ -682,3 +682,31 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .livrable-fichiers .document-lien { width: auto; padding: 6px 10px; }
 .livrable-retour textarea { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 4px; padding: 6px 8px;
   border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+.lecon-challenge textarea { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 4px; padding: 6px 8px;
+  border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+.lecon-boutons.tout { margin: 4px 0 8px; }
+.historique { margin-top: 4px; }
+.historique > summary { cursor: pointer; font-size: 12.5px; color: #5d8fc7; font-weight: 700; }
+.historique .liste-documents { margin-top: 4px; opacity: .85; }
+
+/* Le Kanban en plein écran. */
+.kanban-plein { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; padding: 16px 20px;
+  background: rgba(247, 239, 226, .97); }
+.kanban-plein-tete { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.kanban-plein-tete h2 { margin: 0; font-size: 22px; }
+.kanban-plein-fermer { width: 38px; height: 38px; border: 0; border-radius: 50%; background: transparent; font-size: 26px;
+  cursor: pointer; color: inherit; }
+.kanban-plein-fermer:hover { background: #efe8da; }
+.kanban-plein-colonnes { flex: 1; min-height: 0; display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.kanban-plein-colonne { flex: 0 0 260px; display: flex; flex-direction: column; gap: 6px; padding: 10px; overflow-y: auto;
+  border-radius: 12px; background: #fffdf8; box-shadow: 0 1px 4px rgba(61, 58, 75, .12); }
+.kanban-plein-colonne h3 { margin: 0 0 4px; font-size: 15px; }
+.kanban-plein-colonne.terminee { opacity: .8; }
+.kanban-carte { display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid #e6dccb; border-radius: 8px;
+  background: #fff8c8; color: inherit; font: inherit; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
+.kanban-carte:hover { border-color: #3d3a4b; }
+.kanban-carte.inactive { background: #f4efe6; }
+.kanban-carte.bloquee { border-color: #c0392b; }
+.kanban-carte.pale { background: #f4efe6; cursor: default; }
+.kanban-carte-meta { color: #6d6980; font-size: 12px; }
+.kanban-carte-bloquee { color: #c0392b; font-size: 12px; }

@@ -239,7 +239,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `deplacer` | `tache`, `colonne` | passer une tâche (ou un élément de `file.visibles` ou de `file.suite`, par son `id`) dans cette colonne |
 | `retour` | `tache`, `texte` (3 500 caractères au plus) | un retour de l'utilisateur sur une tâche |
 | `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`), `etage?` | la décision du Directeur sur une leçon ; v4 : `etage` (`projet`, `genre` ou `skill`), absent s'il est celui proposé |
-| `challenge` | `cible` (`{type, id}`), `texte?`, `solution?` | v3 : ouvrir un challenge sur cette cible ; `solution` : la solution que l'utilisateur écrit dans le même geste |
+| `challenge` | `cible` (`{type, id}`), `texte?`, `solution?` | v3 : ouvrir un challenge sur cette cible ; `solution` : la solution que l'utilisateur écrit dans le même geste ; v4 : `cible.type` = `lecon` (une leçon, même à valider : `texte` obligatoire) pour la discuter avant le verdict |
 | `solution` | `challenge`, `texte` (3 500 caractères au plus) | v3 : l'utilisateur ajoute sa solution à un challenge du relevé |
 | `verdict_solution` | `challenge`, `solution`, `verdict` (`"valider"` ou `"ecarter"`) | v3 : la décision de l'utilisateur sur une solution (« Valider la sélection » ou « Écarter la sélection » : une demande par solution cochée) |
 

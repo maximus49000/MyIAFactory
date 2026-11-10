@@ -162,7 +162,10 @@ est montré comme « autre ». Les positions (`position` d'un élément, `points
 
 ### `document`
 
-Entrée : `{"fonctionnalite", "chemin", "titre", "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?, "livrable"?}`.
+Entrée : `{"fonctionnalite", "chemin", "titre", "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?, "livrable"?, "remplace"?}`.
+`"remplace"` : le chemin du document dont celui-ci est la nouvelle version (une maquette refaite, une ébauche
+reprise, un livrable corrigé) ; un document de même titre et de même élément en est aussi une. Le bureau montre la
+dernière version, et les précédentes sous « Voir l'historique ».
 `"livrable": true` marque un fichier final d'un élément validé : le bureau le montre dans les « Livrables » de la
 fonctionnalité, où l'utilisateur peut demander une modification (`retour_element` si la fonctionnalité a un
 catalogue, sinon un `message` qui nomme l'élément). Inscrit un

@@ -331,6 +331,17 @@ def cmd_actions(ctx, e):
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
             if images:
                 demande["images"] = images
+        elif genre == "challenge" and isinstance(e.get("cible"), dict) and e["cible"].get("type") == "lecon":
+            # Challenger une leçon ouvre une tâche : la discussion y a lieu (ce texte, puis les réponses et retours).
+            lecon = next((x for x in s["lecons"] if x["id"] == e["cible"].get("id")), None)
+            if lecon is None:
+                raise Refus(f"Leçon inconnue : {e['cible'].get('id')}")
+            t = {"id": f"t{su.suivant(s, 't')}", "titre": f"Challenge de la leçon {lecon['id']}", "fonctionnalite": None,
+                 "element": None, "role": None, "colonne": ctx.f["flux"][0]["id"], "agent": None, "etape": "Discussion",
+                 "modele_depart": None, "montee": None, "journal": [{"t": demande["t"], "texte": "Leçon : " + lecon["texte"]}],
+                 "bloquee": None, "active": True, "captures": [], "maj": demande["t"]}
+            s["taches"].append(t)
+            demande["tache"] = t["id"]
         elif genre == "bouton" and e.get("id") in ("pause", "reprendre"):
             s["factory"] = {"etat": "en pause" if e["id"] == "pause" else "en marche", "depuis": demande["t"]}
             demande["statut"] = "traitée"   # l'effet est le changement d'état lui-même
@@ -641,6 +652,11 @@ def cmd_document(ctx, e):
         f = _fonc(s, e.get("fonctionnalite"))
         documents = ranger_documents(s, f, [chemin], texte(e, "titre"), **origine)
         d = next(x for x in documents if x["chemin"] == chemin)
+        remplace = texte(e, "remplace", obligatoire=False)
+        if remplace is not None:   # une nouvelle version : l'ancienne reste dans l'historique
+            if remplace == chemin or not any(x["chemin"] == remplace for x in documents):
+                raise Refus(f"« remplace » doit être le chemin d'un autre document de la fonctionnalité : {remplace}")
+            d["remplace"] = remplace
         if livrable:   # le livrable final de son élément (ce que l'utilisateur valide ou fait reprendre)
             d["livrable"] = True
         elif livrable is False:
@@ -808,7 +824,7 @@ def construire_releve(ctx):
 
     retours = {}
     for d in s["demandes"]:
-        if d["type"] == "retour" and isinstance(d.get("tache"), str):
+        if d["type"] in ("retour", "challenge") and isinstance(d.get("tache"), str):   # un challenge ouvre sa tâche
             r = {"t": d["t"], "texte": d.get("texte") or ""}
             if d.get("reponse"):
                 r["reponse"] = d["reponse"]
@@ -871,6 +887,9 @@ def construire_releve(ctx):
         for d in en_attente.values():
             if d.get("cible") == x["id"]:
                 le["verdict_demande"] = d.get("verdict")
+        for d in s["demandes"]:   # la discussion ouverte sur cette leçon (un challenge), s'il y en a une
+            if d["type"] == "challenge" and isinstance(d.get("cible"), dict) and d["cible"].get("id") == x["id"]:
+                le["challenge_tache"] = d.get("tache")
         lecons.append(le)
 
     en_pause = s["factory"]["etat"] == "en pause"

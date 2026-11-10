@@ -4,7 +4,7 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
-import {demandeLecon} from "./actions.js";
+import {demandeLecon, demandesToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
@@ -24,7 +24,7 @@ function lienTache(ctx, id, texte) {
   return b;
 }
 
-function carteLecon(ctx, l) {
+function carteLecon(ctx, l, etages) {
   const e = ctx.etat;
   const c = el("li", "lecon");
   c.append(el("div", "lecon-texte", l.texte));
@@ -49,7 +49,12 @@ function carteLecon(ctx, l) {
     }
     etage.value = propose;
     if (etage.selectedOptions[0]?.disabled) etage.value = "projet";
+    if (etages) etages.set(l.id, etage);   // « Tout valider » relit l'étage choisi au moment du clic
     c.append(etage);
+  }
+  if (l.challenge_tache) {   // la discussion ouverte sur cette leçon
+    const lien = lienTache(ctx, l.challenge_tache, "Challengée : ouvrir la discussion");
+    c.append(lien);
   }
   if (l.verdict_demande) {
     c.append(el("div", "lecon-verdict", `Verdict envoyé : ${l.verdict_demande}`));
@@ -66,9 +71,42 @@ function carteLecon(ctx, l) {
       });
       rangee.append(bouton);
     }
+    const [boutonChallenge, zoneChallenge] = (e.version ?? 1) >= 4 && !l.challenge_tache ? challenger(ctx, l) : [];
+    if (boutonChallenge) rangee.append(boutonChallenge);
     c.append(rangee);
+    if (zoneChallenge) c.append(zoneChallenge);
   }
   return c;
+}
+
+// « Challenger » : un champ pour dire ce qu'on conteste ; l'envoi ouvre une discussion dans une tâche.
+function challenger(ctx, l) {
+  const bouton = el("button", "bouton secondaire", "Challenger");
+  bouton.type = "button";
+  const zone = el("div", "lecon-challenge");
+  zone.hidden = true;
+  const texte = document.createElement("textarea");
+  texte.rows = 3;
+  texte.maxLength = 3500;
+  texte.placeholder = "Ce que vous contestez dans cette leçon, et pourquoi…";
+  const envoyer = el("button", "bouton petit", "Envoyer le challenge");
+  envoyer.type = "button";
+  envoyer.disabled = true;
+  const note = el("p", "note", "");
+  bouton.addEventListener("click", () => { zone.hidden = !zone.hidden; if (!zone.hidden) texte.focus(); });
+  texte.addEventListener("input", () => { envoyer.disabled = !texte.value.trim(); });
+  let enCours = false;
+  envoyer.addEventListener("click", async () => {
+    if (enCours || !texte.value.trim()) return;   // un double clic ne crée qu'une demande
+    enCours = true;
+    envoyer.disabled = true;
+    const r = await ctx.barre.demander(demandeChallengeLecon(l, texte.value), envoyer);
+    enCours = false;
+    if (r.ok) { zone.replaceChildren(el("p", "note", "Challenge envoyé : une tâche s'ouvre pour en discuter.")); bouton.hidden = true; }
+    else envoyer.disabled = !texte.value.trim();
+  });
+  zone.append(texte, envoyer, note);
+  return [bouton, zone];
 }
 
 function partie(titre, vide, elements) {
@@ -94,7 +132,36 @@ export function contenuDirecteur(ctx, contenu) {
       : `${n} décisions attendent le Directeur (comptées par le projet).`));
   }
   if ((e.version ?? 1) >= 4) contenuDecisionsV4(ctx, contenu);
-  contenu.append(partie("Leçons à valider", "Aucune leçon à valider", (e.lecons || []).map((l) => carteLecon(ctx, l))));
+  const menus = new Map();   // id de leçon -> son menu d'étage
+  const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
+  const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
+  const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
+  if (e.agir && enAttente.length >= 2) {
+    // Tout valider ou tout invalider, chaque leçon avec l'étage montré dans son menu (même s'il a été changé).
+    const rangee = el("div", "lecon-boutons tout");
+    const tout = (libelle, classe, verdict, question) => {
+      const b = el("button", classe, libelle);
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        if (question && !window.confirm(question)) return;
+        const boutons = [...section.querySelectorAll(".lecon-boutons button")];
+        boutons.forEach((x) => { x.disabled = true; });
+        const etages = new Map([...menus].map(([id, menu]) => [id, menu.value]));
+        let refus = 0;
+        for (const d of demandesToutes(e.lecons, verdict, etages)) {
+          const r = await ctx.barre.demander(d);
+          if (!r.ok) refus++;
+        }
+        if (refus) boutons.forEach((x) => { x.disabled = false; });   // au moins un refus : on peut réessayer
+      });
+      rangee.append(b);
+    };
+    tout(`Tout valider (${enAttente.length})`, "bouton", "valider", null);
+    tout(`Tout invalider (${enAttente.length})`, "bouton secondaire", "invalider",
+         `Invalider les ${enAttente.length} leçons en attente ? Elles seront retirées.`);
+    section.querySelector("h3").after(rangee);
+  }
+  contenu.append(section);
 
   const retours = [];
   for (const t of e.taches || []) {

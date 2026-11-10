@@ -107,6 +107,18 @@ class TestVerifierChallenges(unittest.TestCase):
                       {"type": "source", "id": SOURCE}, {"type": "source", "id": "k1"}):
             self.refus({"type": "challenge", "cible": cible})
 
+    def test_challenge_d_une_lecon(self):
+        # Version 4 : une leçon, même encore « à valider », peut être challengée (cible « lecon »).
+        r4 = copy.deepcopy(R3)
+        r4["version"] = 4
+        r4 = releve.normaliser(r4)
+        r4["lecons"] = [{"id": "d1:L7", "agent": "d1", "texte": "T", "etage_propose": "projet"}]
+        self.assertIsNone(demandes.verifier({"type": "challenge", "cible": {"type": "lecon", "id": "d1:L7"},
+                                             "texte": "Pourquoi ?"}, r4), "leçon à valider")
+        self.refus({"type": "challenge", "cible": {"type": "lecon", "id": "d1:L9"}, "texte": "x"}, r=r4)
+        self.refus({"type": "challenge", "cible": {"type": "lecon", "id": "d1:L7"}})          # en version 3
+        self.refus({"type": "challenge", "cible": {"type": "lecon", "id": "d1:L7"}}, r=r4)    # sans texte
+
     def test_challenge_mal_forme(self):
         for d in ({"type": "challenge"}, {"type": "challenge", "cible": "k1"},
                   {"type": "challenge", "cible": {"type": "tache", "id": "t1"}},

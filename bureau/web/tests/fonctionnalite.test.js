@@ -195,3 +195,20 @@ test("livrablesParElement et demandeRetourLivrable", async () => {
   assert.deepEqual(demandeRetourLivrable({id: "f1", catalogue: false}, "roi", "Trop petit."),
     {type: "message", fonctionnalite: "f1", texte: "Retour sur le livrable de « roi » : Trop petit."});
 });
+
+test("versionsDe : la dernière version d'abord, l'historique derrière", async () => {
+  const {versionsDe} = await import("../ui/fonctionnalite.js");
+  const docs = [
+    {chemin: "p/v1.png", titre: "Pape 112", element: "pape", date: "2026-11-10T20:00:00+01:00"},
+    {chemin: "p/v3.png", titre: "Pape 112 (tour 3)", element: "pape", remplace: "p/v2.png", date: "2026-11-10T22:00:00+01:00"},
+    {chemin: "p/v2.png", titre: "Pape 112", element: "pape", date: "2026-11-10T21:00:00+01:00"},   // même titre et élément
+    {chemin: "m/planche.svg", titre: "Maquette", date: "2026-11-10T19:00:00+01:00"},
+    {chemin: "m/planche.png", titre: "Maquette", date: "2026-11-10T23:00:00+01:00"},             // même titre, sans élément
+    {chemin: "roi.png", titre: "Pape 112", element: "roi", date: "2026-11-10T22:30:00+01:00"}];  // autre élément
+  const v = versionsDe(docs);
+  assert.deepEqual(v.map((x) => x.dernier.chemin), ["m/planche.png", "roi.png", "p/v3.png"]);
+  assert.deepEqual(v[2].anciens.map((d) => d.chemin), ["p/v2.png", "p/v1.png"]);
+  assert.deepEqual(v[0].anciens.map((d) => d.chemin), ["m/planche.svg"]);
+  assert.deepEqual(v[1].anciens, []);
+  assert.deepEqual(versionsDe([]), []);
+});

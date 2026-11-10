@@ -87,7 +87,8 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `retour` | Un retour de l'utilisateur sur une tâche : transmets-le à l'agent qui la tient (ou au prochain qui la reprend) ; ta `reponse` dit ce qui sera fait. |
 | `deplacer` | Une tâche : `lancer tache` avec son `id` et la `colonne`. Un élément de la file (identifiant `<fonctionnalité>/<élément>`) : `lancer file-prendre` avec `fonctionnalite` et `element`, puis une tâche pour cet élément dans la colonne demandée (`lancer tache`). Les tâches `orchestration` et `cadrage:…` ne se déplacent pas (l'outil le refuse au bureau). |
 | `bouton` | Un bouton du projet : ce que ses consignes propres en disent. `pause` et `reprendre` sont déjà appliqués par l'outil générique. |
-| `challenge`, `solution`, `verdict_solution` | Les challenges des services (relevé version 3) : ce que disent les consignes propres du projet. Sans règle du projet, réponds que ce projet ne gère pas les challenges. |
+| `challenge` sur une leçon (`cible.type` = `lecon`) | L'utilisateur conteste une leçon avant son verdict : l'outil a ouvert une tâche « Challenge de la leçon … » (son `id` est dans `tache` de la demande). Confie-la à l'agent de la leçon (contexte neuf, avec la leçon et le texte de l'utilisateur), réponds par `lancer demande-traitee` (`reponse`) : elle s'affiche dans la tâche, où l'utilisateur peut répondre (demandes `retour`). Si la discussion change la leçon, note la leçon corrigée (`lancer lecon`, `action: noter`) et dis-le : l'utilisateur invalidera l'ancienne. Close la tâche (`colonne: fait`) quand la discussion est finie. |
+| `challenge`, `solution`, `verdict_solution` (autres cibles) | Les challenges des services (relevé version 3) : ce que disent les consignes propres du projet. Sans règle du projet, réponds que ce projet ne gère pas les challenges. |
 
 ## Le parcours d'une fonctionnalité
 
@@ -201,6 +202,9 @@ reste (la méthode, un rapport de relecture, un script, une planche, un fichier 
 `sous_tache` s'il y en a une. Le fichier doit être sous une des racines `documents` des réglages. **Quand un élément
 est validé** (son prototype accepté, ou « fait » en série), inscris chacun de ses fichiers finaux avec son `element` et
 `"livrable": true` : ce sont les « Livrables » que l'utilisateur ouvre et peut faire reprendre depuis le bureau.
+**Une nouvelle version** d'un fichier (maquette refaite, ébauche reprise, livrable corrigé, image remplacée) garde
+l'ancienne : inscris-la avec `remplace` = le chemin de l'ancienne (ou le même titre et le même élément). Le bureau
+montre la dernière, et l'historique derrière.
 
 ## La relecture croisée
 

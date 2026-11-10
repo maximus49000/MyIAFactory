@@ -27,7 +27,7 @@ MAX_NOM_IMAGE = 80
 MAX_SESSION = 200
 SIGNATURES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
 EXTENSIONS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
-TYPES_CIBLE = ("kpi", "connaissance", "source")
+TYPES_CIBLE = ("kpi", "connaissance", "source", "lecon")   # « lecon » : version 4
 
 
 def nettoyer(demande):
@@ -269,7 +269,12 @@ def _verifier_challenge(demande, r, cibles_calculees):
         if not isinstance(cible, dict) or not isinstance(cible.get("id"), str) or not cible["id"]:
             return "« cible » est obligatoire ({type, id})."
         if cible.get("type") not in TYPES_CIBLE:
-            return "Type de cible inconnu (kpi, connaissance ou source)."
+            return "Type de cible inconnu (kpi, connaissance, source ou lecon)."
+        if cible["type"] == "lecon":   # une leçon, même à valider, se discute avant le verdict (version 4)
+            if r.get("version", 1) < 4:
+                return "Le relevé de ce projet ne permet pas de challenger une leçon (version 4)."
+            if not isinstance(demande.get("texte"), str) or not demande["texte"].strip():
+                return "Dites ce que vous contestez dans la leçon."
         for champ in ("texte", "solution"):
             if champ in demande:
                 message = _texte_libre(demande[champ], champ)
@@ -278,6 +283,9 @@ def _verifier_challenge(demande, r, cibles_calculees):
         genre_cible, i = cible["type"], cible["id"]
         if genre_cible == "connaissance":
             connue = i in connaissances_du_releve(r)
+        elif genre_cible == "lecon":
+            connue = i in {le.get("id") for le in r.get("lecons") or []} | {
+                le.get("id") for ti in r.get("titulaires", []) for le in ti.get("lecons") or []}
         elif genre_cible == "kpi":
             connue = i in kpi_du_releve(r) or i in cibles_calculees
         else:

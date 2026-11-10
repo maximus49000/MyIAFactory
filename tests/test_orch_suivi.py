@@ -165,6 +165,36 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.outil("document", entree={"fonctionnalite": f, "chemin": "a.png", "titre": "A",
                                                         "livrable": "oui"})[0], 1)
 
+    def test_challenger_une_lecon_ouvre_une_tache(self):
+        # Le Directeur challenge une leçon : une tâche s'ouvre, la discussion y a lieu (le texte, puis les réponses).
+        self.ok("lecon", entree={"action": "noter", "agent": "dev-1", "texte": "Toujours 3 passes.",
+                                 "etage_propose": "projet", "roles": ["dev"]})
+        lecon = self.releve()["lecons"][0]["id"]
+        r = self.ok("actions", entree={"type": "challenge", "cible": {"type": "lecon", "id": lecon},
+                                       "texte": "Pourquoi trois ?", "t": "2026-11-10T12:00:00+01:00"})
+        rel = self.releve()
+        t = next(x for x in rel["taches"] if x["titre"].startswith("Challenge de la leçon"))
+        self.assertEqual(t["retours"][0]["texte"], "Pourquoi trois ?")
+        self.assertEqual(releve.valider(rel), [], releve.valider(rel))
+        self.ok("demande-traitee", entree={"id": r["id"], "reponse": "Parce que le relecteur B trouve encore des erreurs."})
+        t = next(x for x in self.releve()["taches"] if x["id"] == t["id"])
+        self.assertEqual(t["retours"][0]["reponse"], "Parce que le relecteur B trouve encore des erreurs.")
+        self.assertIn(lecon, t["titre"])
+        self.assertEqual(next(x for x in self.releve()["lecons"] if x["id"] == lecon)["challenge_tache"], t["id"])
+        self.assertEqual(self.outil("actions", entree={"type": "challenge", "cible": {"type": "lecon", "id": "inconnue"},
+                                                       "texte": "x"})[0], 1)
+
+    def test_document_qui_en_remplace_un_autre(self):
+        f = self.nouvelle()
+        self.ok("document", entree={"fonctionnalite": f, "chemin": "pieces/v1.png", "titre": "Maquette"})
+        self.ok("document", entree={"fonctionnalite": f, "chemin": "pieces/v2.png", "titre": "Maquette v2",
+                                    "remplace": "pieces/v1.png"})
+        docs = {d["chemin"]: d for d in self.releve()["fonctionnalites"][0]["documents"]}
+        self.assertEqual(docs["pieces/v2.png"]["remplace"], "pieces/v1.png")
+        self.assertIn("pieces/v1.png", docs)   # l'ancienne version reste : c'est l'historique
+        self.assertEqual(self.outil("document", entree={"fonctionnalite": f, "chemin": "pieces/v3.png", "titre": "M",
+                                                        "remplace": "pieces/absent.png"})[0], 1)
+
     def test_glossaire_de_la_fonctionnalite(self):
         # Les mots définis par les agents sont gardés par la fonctionnalité (une seule fois), écrits dans
         # glossaire.md (rangé dans ses documents), donnés par `etat` et dans le message de départ des agents.

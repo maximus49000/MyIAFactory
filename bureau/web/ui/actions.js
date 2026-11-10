@@ -142,6 +142,18 @@ export function demandeLecon(lecon, verdict, etage) {
   return d;
 }
 
+// Challenger une leçon (version 4) : elle se discute dans une tâche avant le verdict.
+export function demandeChallengeLecon(lecon, texte) {
+  return {type: "challenge", cible: {type: "lecon", id: lecon.id}, texte: String(texte).trim()};
+}
+
+// « Tout valider » / « Tout invalider » : un verdict par leçon encore en attente, chacune avec l'étage choisi dans son
+// menu (`etages` : id -> étage ; absent : l'étage proposé).
+export function demandesToutes(lecons, verdict, etages) {
+  return (lecons || []).filter((l) => !l.verdict_demande)
+    .map((l) => demandeLecon(l, verdict, etages?.get(l.id)));
+}
+
 // Le genre du projet : un genre connu, ou un nouveau (avec sa description).
 export function demandeGenre(decision, genre, description) {
   const d = {type: "genre", decision, genre};

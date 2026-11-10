@@ -61,11 +61,13 @@ export function demandeSolution(challenge, texte) {
   return {type: "solution", challenge, texte};
 }
 
-// Un verdict « valider » par solution cochée, dans l'ordre des solutions ; une solution non cochée reste en l'état.
-export function demandesVerdicts(challenge, cochees, toutes) {
+// Un verdict (« valider » ou « ecarter ») par solution cochée, dans l'ordre des solutions ; une solution
+// non cochée reste en l'état.
+export function demandesVerdicts(challenge, cochees, toutes, verdict = "valider") {
+  if (verdict !== "valider" && verdict !== "ecarter") return [];
   const choisies = new Set(cochees || []);
   return (toutes || []).filter((s) => choisies.has(s.id))
-    .map((s) => ({type: "verdict_solution", challenge, solution: s.id, verdict: "valider"}));
+    .map((s) => ({type: "verdict_solution", challenge, solution: s.id, verdict}));
 }
 
 // Le challenge du relevé ouvert sur cette cible, ou null.

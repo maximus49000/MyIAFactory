@@ -374,6 +374,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .ligne-cout-tache { display: block; font-size: 12px; font-weight: 700; }
 .source { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .source-texte { overflow-wrap: anywhere; }
+.rangee-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* --- Connaissances et volet « Challenger » --- */
 .agent-savoir { margin: 12px 0 2px; font-size: 14px; }

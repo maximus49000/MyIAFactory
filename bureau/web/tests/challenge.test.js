@@ -92,3 +92,10 @@ test("enAttenteCible : « Demande envoyée » sur le bouton tant que le relevé 
   assert.equal(enAttenteCible(cible), true);
   assert.equal(enAttenteCible({type: "kpi", id: cible.id}), false);
 });
+
+test("demandesVerdicts : « ecarter » pour le bouton Écarter, tout autre verdict refusé", () => {
+  const toutes = [{id: "s1"}, {id: "s2"}];
+  assert.deepEqual(demandesVerdicts("ch1", ["s2"], toutes, "ecarter"),
+    [{type: "verdict_solution", challenge: "ch1", solution: "s2", verdict: "ecarter"}]);
+  assert.deepEqual(demandesVerdicts("ch1", ["s2"], toutes, "supprimer"), []);
+});

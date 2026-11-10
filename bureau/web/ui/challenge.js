@@ -115,15 +115,18 @@ export function contenuChallenge(ctx, conteneur, volet) {
   }
   if (cases.length) {
     const valider = el("button", "bouton", "Valider la sélection");
-    valider.type = "button";
-    valider.disabled = true;
-    for (const [c] of cases) c.addEventListener("change", () => { valider.disabled = !cases.some(([x]) => x.checked); });
-    valider.addEventListener("click", async () => {
-      valider.disabled = true;
+    const ecarter = el("button", "bouton secondaire", "Écarter la sélection");
+    const boutons = [valider, ecarter];
+    for (const b of boutons) { b.type = "button"; b.disabled = true; }
+    for (const [c] of cases) {
+      c.addEventListener("change", () => { for (const b of boutons) b.disabled = !cases.some(([x]) => x.checked); });
+    }
+    const envoyer = async (verdict) => {
+      for (const b of boutons) b.disabled = true;  // tout de suite : un double clic n'envoie qu'une fois
       for (const [c] of cases) c.disabled = true;
       const cochees = cases.filter(([c]) => c.checked).map(([, s]) => s.id);
       const resultats = [];
-      for (const d of demandesVerdicts(ch.id, cochees, solutions)) {  // l'une après l'autre
+      for (const d of demandesVerdicts(ch.id, cochees, solutions, verdict)) {  // l'une après l'autre
         const s = solutions.find((x) => x.id === d.solution);
         const r = await ctx.barre.demander(d);
         if (r.ok) enAttente.set(`v:${ch.id}:${s.id}`, s.etat ?? null);
@@ -131,8 +134,12 @@ export function contenuChallenge(ctx, conteneur, volet) {
       }
       resumes.set(ch.id, resumeEnvoi(resultats));
       redessiner();
-    });
-    conteneur.append(valider);
+    };
+    valider.addEventListener("click", () => envoyer("valider"));
+    ecarter.addEventListener("click", () => envoyer("ecarter"));
+    const rangee = el("div", "rangee-boutons");
+    rangee.append(valider, ecarter);
+    conteneur.append(rangee);
   }
   if (resumes.get(ch.id)) conteneur.append(el("p", "note", resumes.get(ch.id)));
 

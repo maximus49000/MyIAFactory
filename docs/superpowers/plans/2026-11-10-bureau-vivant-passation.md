@@ -10,7 +10,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|
 | A | Sonnet | 1 à 6 : le serveur | fait (2026-11-10), 74 tests Python verts |
 | B | Opus | 7 et 8 : la logique de la page et la scène 3D | fait (2026-11-10), 31 tests JS verts |
-| C | Sonnet | 9, 10 et 11 : l'interface, le mode d'emploi, le mobilier Tripo | à faire |
+| C | Sonnet | 9, 10 et 11 : l'interface, le mode d'emploi, le mobilier Tripo | en cours : 9 et 10 faites (2026-11-10), 37 tests JS et 74 tests Python verts ; étape 11 : outil de découpe prêt, en attente de la génération 1 de l'utilisateur |
 | D | Opus | 12 : le personnage Tripo, puis la relecture finale de tout le projet | à faire |
 
 Notes laissées par la phase précédente (écarts au plan, choix faits, points à surveiller) :
@@ -41,6 +41,16 @@ Notes laissées par la phase B :
 - **Comportement du serveur observé** : un agent qui perd sa seule tâche active et dont l'autre tâche date de plus de 24 h quitte le bureau tout de suite (règle du départ, étape 3). Dans ce cas c'est le chef qui porte le post-it (conforme à la spec). Pour voir un agent marcher au tableau, changer la colonne d'une tâche d'un agent qui garde une autre tâche active, ou dont la `maj` est récente.
 - **Vérification manuelle** : faite sur une copie du relevé de la démo hors du dépôt (`.claude/launch.json`, ignoré par git, pointe vers cette copie). Vu : bâtiment entier en isométrique, une pièce par service avec son nom, agents à leur poste ou au café, Kanban rempli, marche jusqu'au tableau en contournant le Kanban, post-it qui change de colonne à la pose, retour au poste, lumière qui baisse en pause, bandeau « Relevé indisponible » sur `{` puis retour à la normale, aucune erreur de console.
 - Le bandeau d'erreur actuel est un simple `body[data-erreur]::after` dans `style.css` : l'étape 9 le remplace par celui de `barre.js`.
+
+Notes laissées par la phase C (en cours) :
+
+- **Interface (étape 9)** : `ui/texte.js` (pur, testé : `tronquer`, `dureeEnClair`, `ilYA`, `voyant`, `libelleCharge`), `ui/barre.js` (`creerBarre(entete, bandeau)` → `majEtat`, `majErreur`, `rafraichirCharge`, `charge()`), `ui/panneaux.js` (`creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre})` → `maj(etat)` ; pastille des décisions au-dessus du Directeur). La scène se recadre toute seule dans l'espace restant quand le panneau de droite s'ouvre : `main.js` observe la taille de `#scene` (ResizeObserver). L'ancien bandeau `body[data-erreur]` est supprimé. Le panneau « service » se rafraîchit à chaque état (sauf pendant la saisie du réglage). Cliquer sur un agent ou un post-it épingle sa carte jusqu'au prochain clic ou Échap.
+- **Vérifié dans le navigateur** (copie du relevé de la démo hors dépôt) : barre et voyant, carte d'un agent, panneau Facturation, « Me conseiller » puis « Appliquer » (le trait bouge, `reglages.json` contient 50), texte hostile (`<img onerror>` + 300 caractères : affiché littéralement, tronqué, rien d'exécuté, console vide), relevé cassé puis rétabli (bandeau puis disparition).
+- **Non fait** : la mesure de légèreté au Gestionnaire des tâches (voir phase B) — à refaire à la relecture finale, dans un vrai navigateur.
+- **Manuel (étape 10)** : `docs/installation.md` suivi à la lettre sur un dossier temporaire (démo et « brancher son projet ») ; capture `docs/img/bureau.jpg` (JPEG, pas PNG : c'est ce que l'outil de capture fournit). Le README est à jour jusqu'à l'étape 10.
+- **Fichiers de démo** : `exemples/demo/equipe.json` et `charge-historique.jsonl` étaient suivis par git alors que le serveur les réécrit à chaque lancement : ils sont désormais ignorés (`.gitignore`) et retirés de l'index.
+- **Blender (étape 11)** : Blender 3.2.2 est installé dans `C:\Program Files\Blender Foundation\Blender 3.2lender.exe` (pas dans le PATH). `outils/decouper_glb.py` est écrit et vérifié sur un GLB d'essai (trois objets, dont un en deux morceaux qui se touchent : trois GLB corrects, bases au sol, centrés ; erreur claire avec code 1 si le nombre d'objets est faux). Commande : `"C:\Program Files\Blender Foundation\Blender 3.2lender.exe" -b -P outils/decouper_glb.py -- <entree.glb> <dossier_sortie> <nom1,nom2,…>`. Le chargement d'un GLB par `modeles.js` (échelle à la hauteur du manifeste, base au sol, centré) a été vérifié avec un modèle d'essai, puis retiré.
+- **Reste pour l'étape 11** : génération 1 (mobilier, noms dans l'ordre : `bureau,chaise,ecran,armoire,etagere,plante`) → découper vers `bureau/web/modeles/` → compléter `manifeste.json` → vérifier → commit/push → génération 2 (`machine_cafe,canape,table_basse,tableau,bureau_direction`) → idem, et ajuster `HAUT` (`kanban.js`) et `hauteur` (`plan.js`) sur le modèle `tableau`.
 
 ## Ce que chaque conversation doit savoir
 

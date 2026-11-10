@@ -1,0 +1,111 @@
+// Le dossier d'un service : en-tête (nom, période), onglets. Tâches est toujours là ; un onglet sans donnée est masqué.
+// Onglet et période choisis sont gardés le temps de la session.
+
+import {el} from "./dom.js";
+import {tronquer, euros, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
+import {contenuFacturation, chargerFacturation, serviceFacture} from "./facturation.js";
+
+const MAX_TITRE = 90;
+const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
+const choix = {onglet: "taches", periode: PERIODE_DEFAUT};
+
+// Les onglets disponibles, dans l'ordre. Les phases suivantes y ajoutent Connaissances et KPI.
+export function ongletsDisponibles(etat) {
+  const d = etat?.dossier || {};
+  const l = [{id: "taches", libelle: "Tâches"}];
+  if (d.facturation) l.push({id: "facturation", libelle: "Facturation"});
+  return l;
+}
+
+function contenuTaches(ctx, conteneur, service) {
+  const e = ctx.etat;
+  const ids = new Set((e.agents || []).filter((a) => a.service === service).map((a) => a.id));
+  const taches = (e.taches || []).filter((t) => t.active && ids.has(t.agent));
+  conteneur.append(el("div", "carte-sous-titre", `Tâches en cours (${taches.length})`));
+  const liste = el("ul", "liste-taches");
+  if (!taches.length) liste.append(el("li", "vide", "Aucune tâche en cours"));
+  const couts = [];
+  for (const t of taches) {
+    const agent = (e.agents || []).find((a) => a.id === t.agent);
+    const li = el("li", "");
+    const b = el("button", "ligne-tache");
+    b.type = "button";
+    const cout = el("span", "ligne-cout-tache", "");
+    b.append(el("span", "ligne-titre", tronquer(t.titre, MAX_TITRE)),
+             el("span", "ligne-detail", `${agent?.prenom || "?"}${t.etape ? " · " + tronquer(t.etape, 30) : ""} · ${ilYA(t.maj)}`),
+             cout);
+    b.addEventListener("click", () => ctx.ouvrirTache(t.id));
+    li.append(b);
+    liste.append(li);
+    couts.push([t.id, cout]);
+  }
+  conteneur.append(liste);
+  if (e.dossier?.facturation && taches.length) {
+    chargerFacturation(choix.periode).then((f) => {
+      const s = serviceFacture(f, service);
+      for (const [id, cible] of couts) {
+        if (s && s.taches[id] && cible.isConnected) cible.textContent = euros(s.taches[id].total);
+      }
+    }, () => { /* le coût manque, la liste reste */ });
+  }
+}
+
+// contenuDossier(contexte, conteneur, service, onglet) — `onglet` force l'onglet ; sinon le dernier choisi.
+export function contenuDossier(ctx, conteneur, service, onglet) {
+  const e = ctx.etat;
+  const s = (e.services || []).find((x) => x.id === service);
+  if (onglet) choix.onglet = onglet;
+  const onglets = ongletsDisponibles(e);
+  if (!onglets.some((o) => o.id === choix.onglet)) choix.onglet = "taches";
+
+  conteneur.append(el("h2", "", tronquer(s?.nom ?? service, 40)));
+
+  const entete = el("div", "dossier-entete");
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Période");
+  for (const p of PERIODES) {
+    const o = el("option", "", libellePeriode(p));
+    o.value = p;
+    select.append(o);
+  }
+  select.value = choix.periode;
+  entete.append(select);
+  conteneur.append(entete);
+
+  const barre = el("div", "onglets");
+  barre.setAttribute("role", "tablist");
+  const zone = el("div", "dossier-zone");
+  conteneur.append(barre, zone);
+
+  function dessiner() {
+    barre.replaceChildren();
+    for (const o of onglets) {
+      const b = el("button", "onglet" + (o.id === choix.onglet ? " actif" : ""), o.libelle);
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(o.id === choix.onglet));
+      b.addEventListener("click", () => { choix.onglet = o.id; dessiner(); });
+      barre.append(b);
+    }
+    zone.replaceChildren();
+    entete.hidden = !e.dossier?.facturation;
+    if (choix.onglet === "facturation") contenuFacturation(ctx, zone, service, choix.periode);
+    else contenuTaches(ctx, zone, service);
+  }
+  select.addEventListener("change", () => { choix.periode = select.value; dessiner(); });
+  dessiner();
+
+  const agents = (e.agents || []).filter((a) => a.service === service);
+  conteneur.append(el("div", "carte-sous-titre", `Agents (${agents.length})`));
+  const liste = el("ul", "liste-agents");
+  if (!agents.length) liste.append(el("li", "vide", "Personne au bureau"));
+  for (const a of agents) {
+    const li = el("li", "");
+    const puce = el("span", "puce");
+    puce.style.background = a.couleur || "#999";
+    li.append(puce, el("span", "nom", a.prenom + (a.lieu === "cloud" ? " ☁" : "")),
+              el("span", "detail", `${a.modele || "?"} · ${STATUTS[a.statut] || a.statut || "—"}`));
+    liste.append(li);
+  }
+  conteneur.append(liste);
+}

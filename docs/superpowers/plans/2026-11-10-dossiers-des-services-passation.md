@@ -9,7 +9,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle proposé | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|
 | A | Opus 5.5 | 1 à 5 : la facturation (serveur) | Prix, dates figées, requêtes sortantes, valeurs absurdes : une erreur ici fausse des coûts sans se voir | fait |
-| B | Sonnet 5.5 | 6 : dossier, onglets Tâches et Facturation | Interface cadrée par l'interface serveur de la phase A | à faire |
+| B | Sonnet 5.5 | 6 : dossier, onglets Tâches et Facturation | Interface cadrée par l'interface serveur de la phase A | fait |
 | C | Opus 5.5 | 7 à 9 : connaissances, trois demandes, volet « Challenger » | Protocole en plusieurs étapes (challenge → solutions → verdict), cas de double clic et d'échec partiel | à faire |
 | D | Sonnet 5.5 | 10 et 11 : KPI et onglet KPI | Calculs bornés et grille d'affichage | à faire |
 | E | Fable 5.1 | 12 : démo, documentation, puis relecture de tout le projet | Le modèle le plus capable pour la relecture finale contre la spec et le Review Focus | à faire |
@@ -29,6 +29,14 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
 - *À surveiller — certificat de la BCE sous Windows.* Sur la machine de l'utilisateur, Python ne peut pas vérifier `www.ecb.europa.eu` (autorité Sectigo Public Server Authentication Root E46, que Windows n'installe qu'à la première visite par un programme Windows). Le bureau le dit en clair dans `message` ; mais **sans aucun taux enregistré, tous les prix restent « inconnus »**. La phase E doit l'écrire dans `docs/installation.md` (ouvrir une fois l'adresse du taux dans Edge). La liste de LiteLLM pèse 3,4 Mo (limite 5 Mo) : à surveiller.
 - *À surveiller — une erreur de test vue une fois.* En fin de phase A, un passage complet de `unittest` a donné « FAILED (errors=1) » sans que le test fautif ait été noté, puis dix passages de suite ont été verts. Cause probable corrigée : le fil des prix pouvait encore écrire dans le dossier temporaire d'un test après la fermeture du serveur (`server_close` attend maintenant ce fil). Si l'erreur revient, noter le nom du test.
 - *Commits* : le plan écrit « Co-Authored-By: Claude Sonnet 5.5 » ; chaque phase signe avec son propre modèle, comme le dit ce fichier.
+
+**Phase B (tâche 6, faite).**
+
+- *Écart — seuls deux onglets existent.* `dossier.js` exporte `ongletsDisponibles(etat)` : Tâches (toujours) et Facturation (si `etat.dossier.facturation`). La phase C ajoutera Connaissances et la phase D KPI dans cette fonction et dans `dessiner()` (une branche par onglet) ; un onglet sans module n'est pas montré plutôt que vide. `contenuDossier(ctx, conteneur, service, onglet?)` garde onglet et période dans une variable de module (`choix`), et dessine aussi la liste des agents sous les onglets.
+- *Écart — le panneau « service » ne reçoit plus la phrase ni la liste d'agents de `panneaux.js`* : tout vient de `contenuDossier`. La signature du panneau inclut `etat.dossier` et les tâches actives, pour redessiner quand elles changent. `ctx.ouvrirTache(id)` ouvre une tâche depuis le dossier.
+- *Facturation côté page* : `facturation.js` exporte `chargerFacturation(periode)` (fetch, 15 s, erreur lisible), `serviceFacture`, `lignesTaches`, `lignesModeles`, `dessinerFacturation`. La clé `""` devient « Hors tâche » / « Sans étape ». Le bouton « Challenger » des sources est désactivé (« Bientôt disponible ») : la phase C doit l'activer (c'est dans `dessinerFacturation`). L'onglet Tâches affiche le coût de chaque tâche en cours (même appel, silencieux en cas d'échec). La direction (`donnees.direction`) n'est pas montrée : elle n'a pas de dossier.
+- *Texte* : `texte.js` gagne `euros`, `tokens`, `libellePeriode`, `PERIODES`, `PERIODE_DEFAUT`. Le sélecteur de période est masqué si le relevé ne fournit pas de facturation.
+- *Vérifié au navigateur* sur une copie de la démo en version 3 (usage inventé, modèle hostile `<img onerror>`, prix à la main, `prix_automatiques: false`) : onglets, période qui recharge, prix inconnu visible, texte hostile affiché tel quel, console vide. Pas de capture d'écran gardée (la capture du dossier est à refaire en phase E).
 
 ## Ce que chaque conversation doit savoir
 

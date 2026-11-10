@@ -5,6 +5,7 @@ import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {tronquer, filtrer, filtreDeListe} from "./texte.js";
 import {el, ligne} from "./dom.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
+import {contenuDossier} from "./dossier.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
@@ -21,7 +22,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   const signature = (type, id, e) => {
     if (type === "service") {
       return JSON.stringify((e.agents || []).filter((a) => a.service === id)
-        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]));
+        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]).concat([e.dossier,
+        (e.taches || []).filter((t) => t.active).map((t) => [t.id, t.titre, t.agent, t.etape])]));
     }
     if (type === "tache") {
       return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir, e.images_ok,
@@ -133,22 +135,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     if (type === "service") {
       const s = (e.services || []).find((x) => x.id === id);
       if (!s) { fermerPanneau(); return; }
-      contenu.append(el("h2", "", tronquer(s.nom, 40)));
-      const agents = (e.agents || []).filter((a) => a.service === id);
-      contenu.append(el("div", "carte-sous-titre", `Agents (${agents.length})`));
-      const liste = el("ul", "liste-agents");
-      if (agents.length === 0) liste.append(el("li", "vide", "Personne au bureau"));
-      for (const a of agents) {
-        const li = el("li", "");
-        const pastilleCouleur = el("span", "puce");
-        pastilleCouleur.style.background = a.couleur || "#999";
-        const nom = el("span", "nom", a.prenom + (a.lieu === "cloud" ? " ☁" : ""));
-        const detail = el("span", "detail", `${a.modele || "?"} · ${STATUTS[a.statut] || a.statut}`);
-        li.append(pastilleCouleur, nom, detail);
-        liste.append(li);
-      }
-      contenu.append(liste);
-      contenu.append(el("p", "note", "Les documents de ce service arriveront avec le projet 2."));
+      contenuDossier(contexte(), contenu, id);
       avecReglage = id === "facturation";
     } else if (type === "tache") {
       const t = (e.taches || []).find((x) => x.id === id);

@@ -203,3 +203,29 @@ test("resteApresVisibles : le plus grand de `reste` et de la longueur de la suit
   assert.equal(resteApresVisibles({reste: "x"}), 0);
   assert.equal(resteApresVisibles(null), 0);
 });
+
+import {euros, tokens, libellePeriode} from "../ui/texte.js";
+
+test("euros", () => {
+  assert.equal(euros(1.42), "≈ 1,42 €");
+  assert.equal(euros(0), "≈ 0,00 €");
+  assert.equal(euros(1234.5), "≈ 1234,50 €");
+  assert.equal(euros(null), "—");
+  assert.equal(euros(undefined), "—");
+  assert.equal(euros(0.004), "≈ 0,00 €");
+});
+
+test("tokens", () => {
+  assert.equal(tokens(12400), "12,4 k");
+  assert.equal(tokens(1300000), "1,3 M");
+  assert.equal(tokens(850), "850");
+  assert.equal(tokens(0), "0");
+  assert.equal(tokens(null), "—");
+});
+
+test("libellePeriode", () => {
+  assert.equal(libellePeriode("aujourdhui"), "Aujourd'hui");
+  assert.equal(libellePeriode("7j"), "7 jours");
+  assert.equal(libellePeriode("30j"), "30 jours");
+  assert.equal(libellePeriode("x"), "7 jours");
+});

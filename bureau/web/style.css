@@ -354,3 +354,23 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .liste-file { list-style: none; margin: 8px 0 0; padding: 0; }
 .liste-file .element-file { padding: 6px 0; border-bottom: 1px solid #efe8da; }
 .liste-file .vide { margin-left: 0; }
+
+/* --- Dossier d'un service --- */
+.dossier-entete { margin: 6px 0; }
+.dossier-entete[hidden] { display: none; }
+.dossier-entete select { padding: 4px 8px; border: 1px solid #cfc7b6; border-radius: 8px; background: #fff; font: inherit; }
+.onglets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; border-bottom: 2px solid #efe8da; }
+.onglet { padding: 6px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--encre); font: inherit; cursor: pointer; }
+.onglet.actif { border-bottom-color: #3f8f56; font-weight: 700; }
+.cout-total { font-size: 28px; font-weight: 700; }
+.avertissement { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #fbe3d6; color: #8a3b1e; overflow-wrap: anywhere; }
+.liste-cout { list-style: none; margin: 4px 0 0; padding: 0; }
+.liste-cout > li { padding: 5px 0; border-bottom: 1px solid #efe8da; }
+.ligne-cout { display: flex; justify-content: space-between; gap: 10px; }
+.ligne-cout.gras { font-weight: 700; }
+.ligne-cout.etape { padding-left: 12px; font-size: 12.5px; color: #6d6980; }
+.cout-nom { overflow-wrap: anywhere; }
+.cout-val { flex: none; }
+.ligne-cout-tache { display: block; font-size: 12px; font-weight: 700; }
+.source { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.source-texte { overflow-wrap: anywhere; }

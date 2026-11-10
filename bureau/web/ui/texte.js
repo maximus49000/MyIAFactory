@@ -167,3 +167,24 @@ export function resteNonListe(file) {
   const suite = Array.isArray(file?.suite) ? file.suite.length : 0;
   return Math.max(0, resteApresVisibles(file) - suite);
 }
+
+// Un montant en euros, toujours précédé de « ≈ » (jamais une facture) ; « — » quand il manque.
+export function euros(v) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return "—";
+  return "≈ " + v.toFixed(2).replace(".", ",") + " €";
+}
+
+// Un nombre de tokens en clair : « 850 », « 12,4 k », « 1,3 M ».
+export function tokens(n) {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(".", ",") + " M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(".", ",") + " k";
+  return String(Math.round(n));
+}
+
+export const PERIODES = ["aujourdhui", "7j", "30j"];
+export const PERIODE_DEFAUT = "7j";
+
+export function libellePeriode(p) {
+  return {aujourdhui: "Aujourd'hui", "7j": "7 jours", "30j": "30 jours"}[p] || "7 jours";
+}

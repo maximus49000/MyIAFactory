@@ -108,6 +108,17 @@ class TestEnvoyer(unittest.TestCase):
                          (False, "La commande d'actions a dépassé 1 s."))
         self.assertLess(time.monotonic() - debut, 10)
 
+    def test_grosse_demande_a_une_commande_qui_ne_lit_pas(self):
+        ancien = releve.DELAI_COMMANDE_S
+        releve.DELAI_COMMANDE_S = 1
+        self.addCleanup(setattr, releve, "DELAI_COMMANDE_S", ancien)
+        regl = self.regl("import time; time.sleep(30)")
+        debut = time.monotonic()
+        ok, m = demandes.envoyer(regl, {"type": "retour", "tache": "t1", "texte": "é" * 3500})
+        self.assertFalse(ok)
+        self.assertIn("dépassé", m)
+        self.assertLess(time.monotonic() - debut, 8)
+
     def test_sans_commande(self):
         for regl in ({"dossier": str(self.tmp)}, {"dossier": str(self.tmp), "actions": {}},
                      {"dossier": str(self.tmp), "actions": {"commande": "python x.py"}}):

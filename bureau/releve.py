@@ -55,6 +55,11 @@ def lien_valide(url):
     return bool(sep) and schema.lower() in SCHEMAS_LIENS and len(reste) > 0
 
 
+def _dans(valeur, ensemble):
+    """Appartenance sûre : une valeur qui n'est pas un texte (liste, objet…) n'est jamais connue."""
+    return isinstance(valeur, str) and valeur in ensemble
+
+
 def valider(r):
     """Messages d'erreur en français ; liste vide si le relevé est valide."""
     if not _est_dict(r):
@@ -84,19 +89,19 @@ def valider(r):
             erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local » ou « cloud ».")
         if t.get("chef") is True:
             chefs += 1
-        elif t.get("service") not in ids_services:
+        elif not _dans(t.get("service"), ids_services):
             erreurs.append(f"Titulaire « {cle} » : service inconnu « {t.get('service')} ».")
     if chefs > 1:
         erreurs.append("Un seul titulaire peut avoir « chef » à vrai.")
     for t in taches:
         i = t.get("id")
-        if t.get("colonne") not in ids_colonnes:
+        if not _dans(t.get("colonne"), ids_colonnes):
             erreurs.append(f"Tâche « {i} » : colonne inconnue « {t.get('colonne')} ».")
         if not isinstance(t.get("titre"), str):
             erreurs.append(f"Tâche « {i} » : « titre » est obligatoire.")
         if not isinstance(t.get("active"), bool):
             erreurs.append(f"Tâche « {i} » : « active » doit être vrai ou faux.")
-        if t.get("titulaire") is not None and t.get("titulaire") not in cles:
+        if t.get("titulaire") is not None and not _dans(t.get("titulaire"), cles):
             erreurs.append(f"Tâche « {i} » : titulaire inconnu « {t.get('titulaire')} ».")
         if "postit" in t and not isinstance(t["postit"], bool):
             erreurs.append(f"Tâche « {i} » : « postit » doit être vrai ou faux.")
@@ -185,7 +190,8 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
             erreurs.append("« actions » : « id » est obligatoire (texte non vide).")
         elif i in vus:
             erreurs.append(f"« actions » : identifiant en double « {i} ».")
-        vus.add(i)
+        if _texte(i):
+            vus.add(i)
         if not _texte(a.get("libelle")):
             erreurs.append(f"« actions » : le bouton « {i} » doit avoir un « libelle » (texte).")
         if "lien" in a and not lien_valide(a["lien"]):
@@ -208,8 +214,9 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
             erreurs.append("« lecons » : « id » est obligatoire (texte non vide).")
         elif i in vus:
             erreurs.append(f"« lecons » : identifiant en double « {i} ».")
-        vus.add(i)
-        if le.get("agent") not in cles:
+        if _texte(i):
+            vus.add(i)
+        if not _dans(le.get("agent"), cles):
             erreurs.append(f"« lecons » : la leçon « {i} » vient d'un agent inconnu « {le.get('agent')} ».")
         if not _texte(le.get("texte")):
             erreurs.append(f"« lecons » : la leçon « {i} » doit avoir un « texte ».")
@@ -327,11 +334,13 @@ def _executer(cmd, cwd, entree=None):
     p = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL if entree is None else subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, **options)
     if entree is not None:
-        try:  # la demande est petite (< 10 Ko) : elle tient dans le tube, sans bloquer
-            p.stdin.write(entree)
-            p.stdin.close()
-        except OSError:  # la commande n'a pas lu son entrée et s'est déjà fermée
-            pass
+        def ecrire():  # dans un fil : un tube plein (commande qui ne lit pas) ne doit pas passer outre le délai
+            try:
+                p.stdin.write(entree)
+                p.stdin.close()
+            except (OSError, ValueError):  # la commande n'a pas lu son entrée et s'est déjà fermée
+                pass
+        threading.Thread(target=ecrire, daemon=True).start()
     lu = {}
 
     def lire(nom, flux):

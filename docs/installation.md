@@ -93,7 +93,7 @@ Le serveur reste réservé à votre machine : `POST /api/demande` exige les mêm
 
 ## L'équipe
 
-Le relevé ne donne pas de prénom (sauf, en version 2, un `prenom` facultatif par titulaire, qui n'est pas écrit dans ce fichier) : le bureau en attribue un à chaque clé de titulaire, avec une couleur, et le retient dans `equipe.json`, à côté des réglages. Un agent qui revient retrouve son prénom.
+Le relevé ne donne pas de prénom (sauf, en version 2, un `prenom` facultatif par titulaire, qui n'est pas écrit dans ce fichier et l'emporte sur lui tant que le relevé le donne) : le bureau en attribue un à chaque clé de titulaire, avec une couleur, et le retient dans `equipe.json`, à côté des réglages. Un agent qui revient retrouve son prénom.
 
 Pour changer un prénom, une couleur ou un modèle, éditez ce fichier (le fichier est lu au lancement : arrêtez le bureau et relancez-le après une modification) :
 

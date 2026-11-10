@@ -50,9 +50,18 @@ class TestEquipe(unittest.TestCase):
         # aucun prénom tiré : le prochain agent reçoit le premier de la liste
         self.assertEqual(e.agent("z")["prenom"], equipe.PRENOMS[0])
 
-    def test_prenom_utilisateur_l_emporte_sur_le_releve(self):
+    def test_prenom_du_releve_remplace_celui_du_fichier(self):
         self.f.write_text('{"agents": {"k": {"prenom": "Zoé", "couleur": "#000000"}}}', encoding="utf-8")
-        self.assertEqual(equipe.Equipe(self.f).agent("k", prenom="Maëlle")["prenom"], "Zoé")
+        e = equipe.Equipe(self.f)
+        self.assertEqual(e.agent("k", prenom="Maëlle")["prenom"], "Maëlle")
+        self.assertIn("Zoé", self.f.read_text(encoding="utf-8"))  # le fichier n'est pas réécrit
+        self.assertEqual(e.agent("k")["prenom"], "Zoé")  # sans prénom du relevé, celui du fichier revient
+
+    def test_agent_cree_avec_prenom_puis_sans(self):
+        e = equipe.Equipe(self.f)
+        e.agent("k", prenom="Maëlle")
+        self.assertEqual(e.agent("k")["prenom"], equipe.PRENOMS[0])
+        self.assertEqual(equipe.Equipe(self.f).agent("k")["prenom"], equipe.PRENOMS[0])
 
     def test_fichier_illisible_mis_de_cote(self):
         self.f.write_text("{", encoding="utf-8")

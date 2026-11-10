@@ -59,17 +59,20 @@ class Equipe:
 
     def agent(self, cle, chef=False, prenom=None):
         """Fiche d'un agent. `prenom` (donné par le relevé) évite le tirage et n'est pas écrit
-        dans le fichier ; un prénom déjà présent dans le fichier l'emporte."""
+        dans le fichier ; il remplace celui du fichier d'équipe tant que le relevé le donne."""
         with self._verrou:
             a = self._agents.get(cle)
-            if a is None:
+            nouveau = a is None
+            if nouveau:
                 a = {"couleur": COULEURS[len(self._agents) % len(COULEURS)]}
-                if not prenom:
-                    a["prenom"] = "Chef" if (chef or cle == "chef") else self._prenom_libre()
+            if not prenom and not a.get("prenom"):
+                a["prenom"] = "Chef" if (chef or cle == "chef") else self._prenom_libre()
+                nouveau = True
+            if nouveau:
                 self._agents[cle] = a
                 self._enregistrer()
             r = dict(a)
-            if prenom and not r.get("prenom"):
+            if prenom:  # le prénom du relevé remplace celui du fichier, sans l'y écrire
                 r["prenom"] = prenom
             r.setdefault("prenom", str(cle))
             r.setdefault("couleur", COULEURS[0])

@@ -126,13 +126,13 @@ class TestEtat(unittest.TestCase):
                   ["agents"] if x["id"] == "d1")
         self.assertEqual((d1["prenom"], d1["specialite"]), ("Maëlle", "Tests"))
 
-    def test_prenom_utilisateur_prioritaire(self):
+    def test_prenom_du_releve_remplace_celui_du_fichier(self):
         (self.tmp / "equipe.json").write_text(
             '{"agents": {"d1": {"prenom": "Zoé", "couleur": "#000000"}}}', encoding="utf-8")
         self.eq = equipe.Equipe(self.tmp / "equipe.json")
         d1 = next(x for x in self.v2(lambda r: r["titulaires"][0].update(prenom="Maëlle"))["agents"]
                   if x["id"] == "d1")
-        self.assertEqual(d1["prenom"], "Zoé")
+        self.assertEqual(d1["prenom"], "Maëlle")
 
     def test_prenom_releve_non_ecrit(self):
         self.v2(lambda r: r["titulaires"][0].update(prenom="Maëlle"))

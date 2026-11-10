@@ -155,6 +155,20 @@ class TestVersion2(unittest.TestCase):
         r["titulaires"][0]["lecons"][0]["etat"] = "autre"
         self.assertTrue(releve.valider(r))
 
+    def test_valeurs_non_hachables_refusees_sans_exception(self):
+        mauvais = [v2(actions=[{"id": [], "libelle": "A"}]), v2(actions=[{"id": {}, "libelle": "A"}]),
+                   v2(lecons=[{"id": [], "agent": "d1", "texte": "t"}]),
+                   v2(lecons=[{"id": "l", "agent": [], "texte": "t"}])]
+        for champ, valeur in (("colonne", []), ("titulaire", []), ("colonne", {})):
+            r = v2()
+            r["taches"][0][champ] = valeur
+            mauvais.append(r)
+        r = v2()
+        r["titulaires"][0]["service"] = []
+        mauvais.append(r)
+        for r in mauvais:
+            self.assertTrue(releve.valider(r))
+
     def test_actions_mal_formees(self):
         for actions in ("x", [3], [{"id": "", "libelle": "A"}],
                         [{"id": "a", "libelle": "A"}, {"id": "a", "libelle": "B"}],

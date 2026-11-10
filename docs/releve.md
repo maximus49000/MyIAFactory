@@ -42,7 +42,7 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 
 **Titulaire** (un agent) : `cle` (stable, unique), `lieu` (`"local"` ou `"cloud"`) et `service` (sauf pour le chef) sont obligatoires. Facultatifs : `modele` (`"?"` par défaut), `permanent` (ne quitte jamais le bureau), `chef` (le chef d'atelier ; un seul au plus, le bureau en ajoute un de clé `"chef"` s'il n'y en a aucun), `fraicheur_min` (délai de fraîcheur propre à cet agent, pour les travaux longs et silencieux).
 
-Facultatifs en version 2 : `prenom` (remplace le prénom tiré par le bureau, sans être écrit dans `equipe.json` ; un prénom que vous avez écrit vous-même dans `equipe.json` l'emporte), `specialite` (texte) et `lecons` (liste de `{id, texte, etat}`, `etat` valant `"à valider"` ou `"validée"`).
+Facultatifs en version 2 : `prenom` (remplace le prénom tiré par le bureau, sans être écrit dans `equipe.json`, et tant que le relevé le donne : il l'emporte sur celui du fichier), `specialite` (texte) et `lecons` (liste de `{id, texte, etat}`, `etat` valant `"à valider"` ou `"validée"`).
 
 **Tâche** : `id` (unique), `titre`, `colonne` (connue) et `active` (vrai/faux) sont obligatoires. Facultatifs : `titulaire` (clé connue, ou nul), `etape` (texte en clair), `maj` (date de dernière mise à jour), `postit` (vrai par défaut ; faux = pas de post-it sur le Kanban).
 

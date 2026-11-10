@@ -45,7 +45,7 @@ class HistoriqueUsage:
     def _lignes(self):
         """{id: ligne} dans l'ordre du fichier ; les lignes illisibles sont ignorées."""
         try:
-            texte = self.chemin.read_text(encoding="utf-8")
+            texte = self.chemin.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return {}
         lignes = {}

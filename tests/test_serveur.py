@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from bureau import prix, serveur
+from tests import copie_demo
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -42,7 +43,7 @@ class AvecServeur(unittest.TestCase):
         self._t = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)  # Windows garde parfois un fichier ouvert un instant
         self.addCleanup(self._t.cleanup)
         self.tmp = Path(self._t.name)
-        shutil.copytree(RACINE / "exemples" / "demo", self.tmp / "demo")
+        copie_demo(self.tmp / "demo")
         self.regl = self.tmp / "demo" / "reglages.json"
         self.demarrer()
 

@@ -6,6 +6,7 @@ import {challengeDe} from "./actions.js";
 import {enAttenteCible} from "./challenge.js";
 
 const MAX_TITRE = 90;
+const MAX_DISCUSSIONS = 200;  // au-delà, la liste dit combien elle n'en montre pas
 
 // Le service dans la facturation ; null si absent (le relevé ne l'a pas compté).
 export function serviceFacture(f, id) {
@@ -18,12 +19,42 @@ export function lignesTaches(s, taches) {
   const titres = new Map((taches || []).map((t) => [t.id, t.titre]));
   return Object.entries(s?.taches || {})
     .map(([id, t]) => ({
-      id, total: t.total,
+      id, total: t.total, sansPrix: t.sans_prix || 0,
       titre: id === "" ? "Hors tâche" : (titres.get(id) || id),
       etapes: Object.entries(t.etapes || {}).map(([nom, total]) => ({nom: nom === "" ? "Sans étape" : nom, total}))
         .sort((a, b) => b.total - a.total),
     }))
     .sort((a, b) => b.total - a.total);
+}
+
+// Un coût en clair qui ne passe jamais pour complet : `sans_prix` (nombre ou liste) dit que des usages
+// à prix inconnu n'y sont pas comptés.
+export function coutEnClair(x) {
+  const manque = Array.isArray(x?.sans_prix) ? x.sans_prix.length > 0 : (x?.sans_prix || 0) > 0;
+  if (!manque) return euros(x?.total ?? 0);
+  return x.total > 0 ? `${euros(x.total)} + prix inconnu` : "prix inconnu";
+}
+
+// Les discussions (usages) d'un service, la plus récente d'abord : le niveau le plus fin de la facturation.
+export function lignesDiscussions(s, etat) {
+  const prenoms = new Map((etat?.agents || []).map((a) => [a.id, a.prenom]));
+  const titres = new Map((etat?.taches || []).map((t) => [t.id, t.titre]));
+  return [...(s?.usages || [])]
+    .sort((a, b) => String(b.t).localeCompare(String(a.t)) || String(a.id).localeCompare(String(b.id)))
+    .map((u) => ({
+      id: u.id, t: u.t,
+      agent: prenoms.get(u.agent) || u.agent || "—",
+      tache: u.tache ? (titres.get(u.tache) || u.tache) : "Hors tâche",
+      modele: u.modele, etape: u.etape || "Sans étape",
+      tokens: Object.values(u.tokens || {}).reduce((n, v) => n + (typeof v === "number" ? v : 0), 0),
+      cout: typeof u.cout === "number" ? u.cout : null,
+      prixDu: u.prix_du ?? null, ancien: u.ancien === true,
+    }));
+}
+
+// Le total général du projet et la part « direction / hors service » (qui n'a pas de dossier).
+export function totalProjet(f) {
+  return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, sansPrix: (f?.sans_prix || []).length > 0};
 }
 
 export function lignesModeles(s) {
@@ -58,19 +89,21 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     return;
   }
   const s = serviceFacture(donnees, service);
-  const total = el("div", "cout-total", euros(s ? s.total : 0));
+  const total = el("div", "cout-total", coutEnClair(s || {total: 0}));
   if (donnees.prix_du) total.title = `Prix du ${dateFr(donnees.prix_du) || donnees.prix_du}`;
   conteneur.append(el("div", "carte-sous-titre", `Coût estimé · ${libellePeriode(periode)}`), total);
   conteneur.append(el("p", "note", "Estimation d'après les tokens et les prix des modèles, jamais une facture."));
-  for (const m of [donnees.message, donnees.avertissement]) {
-    if (m) conteneur.append(el("p", "avertissement", m));
-  }
-  if ((donnees.sans_prix || []).length) {
+  if (donnees.message) conteneur.append(el("p", "avertissement", donnees.message));
+  if ((s?.sans_prix || []).length) {  // ce qui manque aux euros de CE service
     const bloc = el("div", "avertissement");
     bloc.append(el("strong", "", "Prix inconnu, exclu des euros : "));
-    bloc.append(document.createTextNode(donnees.sans_prix
-      .map((x) => `${x.modele} (${tokens(x.tokens)} tokens)`).join(", ")));
+    bloc.append(document.createTextNode(s.sans_prix
+      .map((x) => `${x.modele} (${x.usages} discussion${x.usages > 1 ? "s" : ""}, ${tokens(x.tokens)} tokens)`).join(", ")));
     conteneur.append(bloc);
+  }
+  if ((s?.usages || []).some((u) => u.ancien)) {
+    conteneur.append(el("p", "avertissement",
+      "Des discussions sont antérieures au premier prix enregistré : elles sont comptées au prix du jour de l'installation."));
   }
   if (!s) {
     conteneur.append(el("p", "vide", "Aucun usage pour ce service sur la période."));
@@ -81,7 +114,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     if (!taches.length) liste.append(el("li", "vide", "Aucune tâche"));
     for (const t of taches) {
       const li = el("li", "");
-      li.append(rangee(tronquer(t.titre, MAX_TITRE), euros(t.total), "gras"));
+      li.append(rangee(tronquer(t.titre, MAX_TITRE), coutEnClair({total: t.total, sans_prix: t.sansPrix}), "gras"));
       for (const e of t.etapes) li.append(rangee("↳ " + e.nom, euros(e.total), "etape"));
       liste.append(li);
     }
@@ -96,6 +129,25 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
       lm.append(li);
     }
     conteneur.append(lm);
+    const discussions = lignesDiscussions(s, etat);
+    conteneur.append(el("div", "carte-sous-titre", `Par discussion (${discussions.length})`));
+    const ld = el("ul", "liste-cout");
+    for (const d of discussions.slice(0, MAX_DISCUSSIONS)) {
+      const li = el("li", "");
+      const ligne = rangee(`${dateFr(d.t)} · ${tronquer(d.agent, 30)} · ${tronquer(d.modele, 40)}`,
+                           d.cout === null ? "prix inconnu" : euros(d.cout));
+      if (d.cout !== null && d.prixDu) {
+        ligne.title = d.ancien ? `Prix du jour de l'installation (${dateFr(d.prixDu) || d.prixDu})`
+                               : `Prix du ${dateFr(d.prixDu) || d.prixDu}`;
+      }
+      li.append(ligne, rangee(`↳ ${tronquer(d.tache, MAX_TITRE)} · ${tronquer(d.etape, 40)}`,
+                              `${tokens(d.tokens)} tokens`, "etape"));
+      ld.append(li);
+    }
+    if (discussions.length > MAX_DISCUSSIONS) {
+      ld.append(el("li", "vide", `… et ${discussions.length - MAX_DISCUSSIONS} discussions plus anciennes`));
+    }
+    conteneur.append(ld);
   }
   const sources = (donnees.sources || []).filter((x) => x.service === service);
   if (sources.length) {
@@ -117,8 +169,12 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     }
     conteneur.append(ls);
   }
-  conteneur.append(el("div", "carte-sous-titre", "Gestion du bureau"));
-  conteneur.append(rangee("Coût du bureau lui-même", euros(donnees.gestion ?? 0)));
+  const projet = totalProjet(donnees);
+  conteneur.append(el("div", "carte-sous-titre", "Tout le projet"));
+  conteneur.append(rangee("Total, tous services", coutEnClair({total: projet.total, sans_prix: projet.sansPrix ? 1 : 0}), "gras"));
+  conteneur.append(rangee("↳ dont direction / hors service",
+                          coutEnClair(donnees.direction || {total: 0}), "etape"));
+  conteneur.append(rangee("↳ dont gestion du bureau lui-même", euros(donnees.gestion ?? 0), "etape"));
   if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }
 

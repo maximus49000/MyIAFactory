@@ -148,7 +148,8 @@ class Bureau(ThreadingHTTPServer):
         regl, _ = self.reglages()
         f = self._calculer(r, regl, periode)
         if regl.get("prix_automatiques") is False:
-            message = "Prix automatiques coupés (réglage « prix_automatiques ») : seules les corrections à la main comptent."
+            message = ("Prix automatiques coupés (réglage « prix_automatiques ») : aucune lecture ; seuls comptent "
+                       "les prix déjà enregistrés et ceux donnés à la main.")
         elif self.etat_prix is None:
             message = "Prix en cours de lecture."
         else:

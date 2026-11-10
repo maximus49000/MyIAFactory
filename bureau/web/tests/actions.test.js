@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -71,4 +71,29 @@ test("envoyer : serveur injoignable", async () => {
   const f = async () => { throw new TypeError("fetch failed"); };
   assert.deepEqual(await envoyer({type: "bouton", id: "x"}, f),
                    {ok: false, message: "Demande refusée : serveur injoignable"});
+});
+
+// --- Relecture finale : un challenge reste atteignable quand sa cible n'est plus affichée.
+
+test("challengesDuService : par cible (KPI, source, connaissance d'un agent du service)", () => {
+  const etat = {
+    services: [{id: "dev"}, {id: "dev:web"}, {id: "qa"}],
+    savoir: [{agent: "d1", service: "dev", connaissances: [{id: "k1"}]},
+             {agent: "q1", service: "qa", connaissances: [{id: "k2"}]}],
+    challenges: [
+      {id: "c1", cible: {type: "kpi", id: "kpi:dev:defauts"}, texte: "A",
+       solutions: [{id: "s1", etat: "proposée"}, {id: "s2", etat: "Validée"}, {id: "s3"}]},
+      {id: "c2", cible: {type: "source", id: "source:dev:tache_chere:t1"}, texte: "B", solutions: []},
+      {id: "c3", cible: {type: "connaissance", id: "k1"}, texte: "C", solutions: [{id: "s4", etat: "écartée"}]},
+      {id: "c4", cible: {type: "connaissance", id: "k2"}, texte: "D"},
+      {id: "c5", cible: {type: "kpi", id: "kpi:dev:web:lenteur"}, texte: "E"},
+      {id: "c6", cible: {type: "kpi", id: "kpi:devops:x"}, texte: "F"},
+      null, {id: "c7"},
+    ],
+  };
+  assert.deepEqual(challengesDuService(etat, "dev").map((x) => [x.challenge.id, x.aDecider]),
+                   [["c1", 2], ["c2", 0], ["c3", 0]]);
+  assert.deepEqual(challengesDuService(etat, "dev:web").map((x) => x.challenge.id), ["c5"]);
+  assert.deepEqual(challengesDuService(etat, "qa").map((x) => x.challenge.id), ["c4"]);
+  assert.deepEqual(challengesDuService({}, "dev"), []);
 });

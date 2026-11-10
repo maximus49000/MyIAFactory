@@ -4,11 +4,10 @@
 
 import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
-import {challengeDe, demandeChallenge, demandeSolution, demandesVerdicts, resumeEnvoi} from "./actions.js";
+import {challengeDe, demandeChallenge, demandeSolution, demandesVerdicts, resumeEnvoi, DECIDEES} from "./actions.js";
 
 const MAX_TEXTE = 3500;
 const AUTEURS = {directeur: "le Directeur", service: "le service", utilisateur: "vous"};
-const DECIDEES = ["validée", "écartée"];
 
 // Mémoire de la session (survit aux redessins du panneau) :
 const enAttente = new Map();   // clé -> repère : la demande est partie, le relevé ne la montre pas encore

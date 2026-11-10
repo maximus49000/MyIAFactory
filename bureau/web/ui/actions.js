@@ -74,6 +74,29 @@ export function challengeDe(etat, cible) {
   return liste.find((c) => c?.cible?.type === cible.type && c?.cible?.id === cible.id) || null;
 }
 
+// Les challenges qui concernent un service, avec le nombre de solutions encore à décider. Un challenge
+// doit rester atteignable même quand sa cible n'est plus affichée (alerte levée, source sortie de la période).
+// Cibles : `kpi:<service>:…`, `source:<service>:…`, ou une connaissance d'un agent du service.
+export function challengesDuService(etat, service) {
+  const liste = Array.isArray(etat?.challenges) ? etat.challenges : [];
+  const autres = (etat?.services || []).map((s) => s.id).filter((id) => id !== service && id.startsWith(service + ":"));
+  const siennes = new Set((etat?.savoir || []).filter((s) => s.service === service)
+    .flatMap((s) => (s.connaissances || []).map((c) => c.id)));
+  const duService = (c) => {
+    const id = c?.cible?.id;
+    if (typeof id !== "string") return false;
+    if (c.cible.type === "connaissance") return siennes.has(id);
+    return ["kpi", "source"].some((genre) => c.cible.type === genre && id.startsWith(`${genre}:${service}:`)
+      && !autres.some((a) => id.startsWith(`${genre}:${a}:`)));  // « dev:web » n'est pas « dev »
+  };
+  return liste.filter(duService).map((c) => ({
+    challenge: c,
+    aDecider: (c.solutions || []).filter((s) => !DECIDEES.includes(String(s?.etat || "").toLowerCase())).length,
+  }));
+}
+
+export const DECIDEES = ["validée", "écartée"];
+
 // Après un envoi en plusieurs demandes : ce qui est parti, ce qui ne l'est pas (rien n'est annulé).
 export function resumeEnvoi(resultats) {
   const ok = resultats.filter((r) => r.ok).map((r) => r.nom);

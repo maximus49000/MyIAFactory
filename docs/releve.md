@@ -84,8 +84,8 @@ Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau le
 | Champ | Valeurs |
 |---|---|
 | `id` | texte non vide, unique dans `usage` |
-| `tache` | `id` d'une tâche du relevé, ou `null` (« hors tâche ») |
-| `agent` | clé d'un titulaire, ou `null` ; l'usage du chef, ou d'un usage sans agent, est rangé dans « direction / hors service » |
+| `tache` | `id` d'une tâche **présente dans ce relevé**, ou `null` (« hors tâche ») |
+| `agent` | clé d'un titulaire **présent dans ce relevé**, ou `null` ; l'usage du chef, ou un usage sans agent, est rangé dans « direction / hors service » |
 | `modele` | le nom du modèle, tel que le projet l'écrit (voir `alias_modeles` dans [installation.md](installation.md)) |
 | `etape` | texte libre : l'étape de la tâche (« Tests », « Maquette »…) |
 | `t` | date ISO 8601 de la discussion |
@@ -93,9 +93,9 @@ Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau le
 | `cache_lecture`, `cache_ecriture` | tokens de cache, entiers ≥ 0 (0 par défaut) |
 
 - Les compteurs d'un `id` sont des **cumuls** : republiez le même `id` avec des compteurs plus grands tant que la discussion continue, le bureau garde les derniers. Ne changez pas d'`id` en cours de discussion (elle serait comptée deux fois).
-- Le relevé n'a besoin de porter que les usages **récents** : le bureau les range dans son historique (`usage-historique.jsonl`, à côté des réglages) et ne les oublie pas quand le projet les retire.
+- Le relevé n'a besoin de porter que les usages **récents** : le bureau les range dans son historique (`usage-historique.jsonl`, à côté des réglages) et ne les oublie pas quand le projet les retire. Quand une tâche ou un agent quitte le relevé, retirez aussi ses usages : un usage qui cite une tâche ou un agent absent rend tout le relevé invalide.
 - La **date de prix** d'un usage (son `t` à la première apparition) et son **service** (celui de l'agent à ce moment-là) sont figés : un coût passé ne bouge ni quand un prix change, ni quand l'agent change de service ou quitte le relevé.
-- Un modèle dont le bureau ne connaît pas le prix n'est jamais compté à zéro : l'usage est montré avec ses tokens et « prix inconnu », et il est exclu des euros avec un avertissement.
+- Un modèle dont le bureau ne connaît pas le prix n'est jamais compté à zéro : la discussion est montrée avec ses tokens et « prix inconnu », elle est exclue des euros, et les chiffres qui en dépendent le disent (« ≈ 3,00 € + prix inconnu », coût moyen « hors prix inconnus »).
 
 Le bureau en tire aussi des **sources d'amélioration** (onglet Facturation) : les tâches qui coûtent plus de trois fois la médiane du service, une étape faite avec le modèle le plus cher du service quand les autres usages de cette étape sont en médiane moins chers, et la part du coût des tâches qui ont reçu au moins deux `retours`.
 
@@ -139,13 +139,13 @@ Une connaissance qui porte `appris_de` est marquée « partagée » : « appris 
 | `id` | texte non vide, unique parmi les challenges |
 | `cible` | `{type, id}` ; `type` : `"kpi"`, `"connaissance"` ou `"source"` ; `id` : celui que la demande `challenge` vous a donné, recopié tel quel |
 | `texte` | le problème, en clair |
-| `solutions` | liste de `{id, texte, auteur, etat?}` ; `id` unique parmi les solutions de **tous** les challenges ; `auteur` : `"directeur"`, `"service"` ou `"utilisateur"` ; `etat` : mot court (« proposée », « validée », « écartée » ; une solution validée ou écartée n'a plus de case à cocher) |
+| `solutions` | liste de `{id, texte, auteur, etat?}` ; `id` unique parmi les solutions de **tous** les challenges ; `auteur` : `"directeur"`, `"service"` ou `"utilisateur"` ; `etat` : mot court (« proposée », « validée », « écartée » ; une solution validée ou écartée n'a plus de case à cocher). Gardez un challenge dans le relevé tant qu'il doit rester visible : l'onglet Tâches du service les liste tous |
 
 **Les identifiants de cible.** Une cible `connaissance` porte l'`id` de la connaissance (ou de la leçon validée). Une cible `kpi` porte **`kpi:<service>:<id du KPI>`**, pour les KPI calculés comme pour les vôtres (les `id` de KPI ne sont uniques que par service) : pour votre KPI `defauts` du service `dev`, la demande dit `kpi:dev:defauts`. Une cible `source` porte `source:<service>:<genre>:<tâche>`, `genre` valant `tache_chere`, `modele_trop_fort` ou `allers_retours`.
 
 **Le cycle.** L'utilisateur clique « Challenger » (demande `challenge`) ; votre projet ajoute le challenge au relevé et y dépose les solutions du Directeur et du service ; l'utilisateur peut ajouter la sienne (demande `solution`), puis coche et valide (une demande `verdict_solution` par solution cochée). Sur `"valider"`, votre projet inscrit la solution dans les `connaissances` des agents concernés, avec `origine` = l'`id` du challenge. Le bureau n'invente jamais une solution et n'écrit jamais une connaissance.
 
-**Problème revenu.** Si une connaissance a pour `origine` l'`id` d'un challenge dont la cible est un KPI de votre projet, et que ce KPI entre de nouveau en alerte **après** la date de la connaissance, le bureau la marque « problème revenu ». Il lui faut donc trois choses : `origine` = `id` du challenge, une `date` sur la connaissance, et un KPI dont `alerte` repasse à faux quand le problème cesse (le bureau note chaque entrée en alerte dans `alertes-historique.jsonl`, à côté des réglages).
+**Problème revenu.** Si une connaissance a pour `origine` l'`id` d'un challenge dont la cible est un KPI de votre projet, et que ce KPI entre de nouveau en alerte **après** la date de la connaissance, le bureau la marque « problème revenu ». Il lui faut donc quatre choses : `origine` = `id` du challenge, ce challenge toujours présent dans `challenges`, une `date` sur la connaissance, et un KPI dont `alerte` repasse à faux quand le problème cesse. Le bureau note chaque entrée en alerte dans `alertes-historique.jsonl`, à côté des réglages, à la date où il la lit : une alerte apparue et disparue pendant que le bureau était arrêté n'est pas vue.
 
 ## Faire agir le bureau
 
@@ -165,7 +165,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`) | la décision du Directeur sur une leçon |
 | `challenge` | `cible` (`{type, id}`), `texte?`, `solution?` | v3 : ouvrir un challenge sur cette cible ; `solution` : la solution que l'utilisateur écrit dans le même geste |
 | `solution` | `challenge`, `texte` (3 500 caractères au plus) | v3 : l'utilisateur ajoute sa solution à un challenge du relevé |
-| `verdict_solution` | `challenge`, `solution`, `verdict` (`"valider"` ou `"ecarter"`) | v3 : la décision de l'utilisateur sur une solution |
+| `verdict_solution` | `challenge`, `solution`, `verdict` (`"valider"` ou `"ecarter"`) | v3 : la décision de l'utilisateur sur une solution (la page n'envoie aujourd'hui que `"valider"`, pour les solutions cochées ; `"ecarter"` est accepté par le bureau mais aucun bouton ne l'envoie encore) |
 
 Chaque demande porte aussi `t` (date ISO). Le bureau ne transmet une demande qu'après l'avoir comparée au dernier relevé valide : un bouton, une colonne, une tâche, une leçon, une cible, un challenge ou une solution qui n'y figure pas est refusé sans lancer la commande.
 

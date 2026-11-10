@@ -70,7 +70,7 @@ Fichier JSON ; toutes les clés sont facultatives sauf `releve`.
 | `actions.commande` | — | Commande d'actions (liste de mots, sans shell, 10 s au plus) : elle reçoit chaque demande en JSON UTF-8 sur son entrée standard. Voir « Faire agir le bureau ». |
 | `actions.dossier` | dossier des réglages | Dossier où la commande d'actions est lancée. |
 | `images.racines` | — | Dossiers (relatifs au dossier des réglages) d'où le bureau peut servir les images des tâches. |
-| `prix_automatiques` | `true` | `false` : le bureau ne fait aucune requête sortante ; seuls les prix de `prix` comptent. Voir « Les euros : d'où viennent les prix ». |
+| `prix_automatiques` | `true` | `false` (le booléen, pas le texte `"false"`) : le bureau ne fait aucune requête sortante ; seuls comptent les prix déjà enregistrés et ceux de `prix`. Voir « Les euros : d'où viennent les prix ». |
 | `alias_modeles` | — | Nom de modèle du relevé → nom dans la liste de prix. |
 | `prix` | — | Prix donnés à la main, en euros par million de tokens, avec leur date. |
 
@@ -102,10 +102,10 @@ Avec un relevé `version` 3 (voir « Version 3 » dans [releve.md](releve.md)), 
 
 ![Le dossier d'un service, avec l'exemple de démonstration](img/dossier.jpg)
 
-- **Tâches** : les tâches en cours du service, avec leur coût estimé ; les KPI en alerte sont rappelés en haut.
+- **Tâches** : les tâches en cours du service, avec leur coût estimé ; en haut, les KPI en alerte et la liste des challenges du service (un challenge reste ouvrable même quand son alerte est levée).
 - **Connaissances** : ce que chaque agent du service sait, d'où il le tient (« appris du retour de … »), ce qui est partagé, et qui n'a rien reçu sur la période.
 - **KPI** : les chiffres que le projet donne, et ceux que le bureau calcule (tâches terminées, allers-retours, durée et coût moyens d'une tâche).
-- **Facturation** : le coût estimé du service, par tâche, par étape et par modèle, discussion par discussion, et les sources d'amélioration.
+- **Facturation** : le coût estimé du service, par tâche, par étape, par modèle et discussion par discussion, les sources d'amélioration, puis le total de tout le projet (dont la part « direction / hors service », qui n'a pas de dossier).
 
 Le bouton **« Challenger »** (sur une alerte, un KPI, une connaissance ou une source d'amélioration) ouvre un volet : le problème, les solutions proposées par le Directeur et par le service, une zone pour écrire la vôtre, et « Valider la sélection ». Comme tous les gestes, il ne fait que déposer des demandes : c'est le projet qui ouvre le challenge, propose les solutions et inscrit la solution validée dans les connaissances des agents. Il faut donc une commande d'actions (voir « Faire agir le bureau ») qui sache traiter les demandes `challenge`, `solution` et `verdict_solution`.
 
@@ -117,18 +117,18 @@ Les usages de la démo sont datés du 9 novembre 2026 : passé sept jours, chois
 
 Les euros affichés sont des **estimations** pour piloter (toujours précédées de « ≈ »), pas une facture. Le projet donne des tokens ; le bureau les multiplie par le prix du modèle à la date de l'usage.
 
-**Les deux requêtes sortantes.** Pour connaître les prix, le bureau lit, au démarrage puis au plus une fois par jour, deux adresses publiques, et seulement celles-là (elles sont écrites dans le code, aucun réglage ne peut les changer) :
+**Les deux requêtes sortantes.** Pour connaître les prix, le bureau lit, au démarrage puis une fois par jour (toutes les heures tant qu'une des deux lectures échoue), deux adresses publiques, et seulement celles-là (elles sont écrites dans le code, aucun réglage ne peut les changer) :
 
 | Quoi | Adresse |
 |---|---|
 | Prix des modèles, en dollars par token (liste tenue par la communauté LiteLLM) | `https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` |
 | Taux dollar-euro du jour (Banque centrale européenne) | `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml` |
 
-Ce sont de simples lectures : rien de votre projet n'est envoyé. Pour n'avoir **aucune requête sortante**, mettez `"prix_automatiques": false` dans les réglages (il faut alors donner les prix à la main, voir plus bas ; le remettre à `true` demande de relancer le bureau).
+Ce sont de simples lectures : rien de votre projet n'est envoyé. Pour n'avoir **aucune requête sortante**, mettez `"prix_automatiques": false` dans les réglages (les prix déjà enregistrés continuent de servir, les autres se donnent à la main, voir plus bas ; le remettre à `true` demande de relancer le bureau).
 
 **Un coût passé ne bouge pas.** Chaque lecture est datée et gardée dans `prix-historique.jsonl`, à côté des réglages. Le prix d'un usage est le dernier prix enregistré à sa date ou avant. Un usage plus ancien que le premier prix enregistré prend ce premier prix, et l'onglet le dit (« prix du jour de l'installation »).
 
-**Quand une source ne répond pas**, ou donne une valeur absurde (négative, nulle, ou plus de dix fois plus grande ou plus petite que la veille), le bureau garde le dernier prix connu et l'écrit en haut de l'onglet Facturation (« Prix du 3 novembre, mise à jour impossible : … »). Il réessaie dans l'heure.
+**Quand une source ne répond pas**, ou donne une valeur absurde (négative, nulle, ou plus de dix fois plus grande ou plus petite que le dernier prix gardé), le bureau garde le dernier prix connu et l'écrit en haut de l'onglet Facturation (« Prix du 3 novembre, mise à jour impossible : … », ou « valeur absurde dans la source pour … : dernier prix gardé », redit tant qu'une lecture ne l'a pas remplacé). Si un prix a vraiment changé de plus de dix fois, donnez-le à la main (`prix`) : le bureau ne l'acceptera pas tout seul.
 
 > **Sous Windows, « certificat de www.ecb.europa.eu non reconnu ».** Python ne fait confiance qu'aux autorités de certification déjà installées dans Windows, et Windows n'installe celle de la BCE qu'à la première visite. Ouvrez une fois `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml` dans Edge, puis relancez le bureau. Tant qu'aucun taux n'a été lu, **tous les prix automatiques restent « inconnus »** (le bureau ne devine pas un taux) ; seuls les prix donnés à la main comptent.
 
@@ -138,9 +138,11 @@ Ce sont de simples lectures : rien de votre projet n'est envoyé. Pour n'avoir *
 {"alias_modeles": {"Sonnet": "claude-sonnet-5-5", "Haiku": "claude-haiku-4-5"}}
 ```
 
-Un modèle sans correspondance, ou absent de la liste, reste à « prix inconnu » : ses tokens sont montrés, il est exclu des euros, et un avertissement le dit. Il n'est jamais compté à zéro.
+Un modèle sans correspondance, ou absent de la liste, reste à « prix inconnu » : ses tokens sont montrés, il est exclu des euros, et chaque chiffre qui en dépend le dit (« ≈ 3,00 € + prix inconnu »). Il n'est jamais compté à zéro.
 
-**Donner ou corriger un prix à la main** (`prix`) : en **euros par million de tokens**, avec la date à partir de laquelle il vaut. La correction passe avant le prix automatique à partir de cette date, et ne touche pas les usages antérieurs. La clé est le nom du relevé (ou celui de la liste) ; `cache_lecture` et `cache_ecriture` sont facultatifs (sans eux, les tokens de cache comptent au prix d'entrée). Pour plusieurs prix successifs, donnez une liste.
+Attention : un alias n'a pas de date. Le changer re-chiffre **aussi les usages passés** de ce nom de modèle (c'est ce qu'on veut quand l'alias était faux). Quand un nom du relevé change de modèle réel, donnez plutôt un nouveau nom dans le relevé.
+
+**Donner ou corriger un prix à la main** (`prix`) : en **euros par million de tokens**, avec la date à partir de laquelle il vaut. La correction passe avant le prix automatique à partir de cette date, et ne touche pas les usages antérieurs à cette date (une correction datée du passé re-chiffre donc les usages faits depuis). La clé est le nom du relevé (ou celui de la liste) ; `cache_lecture` et `cache_ecriture` sont facultatifs (sans eux, les tokens de cache comptent au prix d'entrée). Pour plusieurs prix successifs, donnez une liste.
 
 ```json
 {"prix": {"Maison": {"entree": 0.5, "sortie": 1.5, "date": "2026-11-01"},

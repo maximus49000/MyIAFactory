@@ -25,6 +25,7 @@ DELAI_S = 10
 MAX_OCTETS = 5 * 1024 * 1024
 FACTEUR_ABSURDE = 10
 MAX_NOM = 200
+MAX_NOTE = 600
 CHAMPS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
 CHAMPS_SOURCE = {"entree": "input_cost_per_token", "sortie": "output_cost_per_token",
                  "cache_lecture": "cache_read_input_token_cost",
@@ -141,9 +142,11 @@ def _ligne_valide(d):
     if not isinstance(modeles, dict):
         return None
     taux = d.get("taux")
+    note = d.get("note")
     return {"date": d["date"], "taux": taux if _positif(taux) else None,
             "modeles": {n: {c: e.get(c) for c in CHAMPS} for n, e in modeles.items()
-                        if isinstance(n, str) and _entree_valide(e)}}
+                        if isinstance(n, str) and _entree_valide(e)},
+            "note": note[:MAX_NOTE] if isinstance(note, str) and note else None}
 
 
 class TablePrix:
@@ -159,7 +162,7 @@ class TablePrix:
         if self._lignes is None:
             lignes = []
             try:
-                texte = self.chemin.read_text(encoding="utf-8")
+                texte = self.chemin.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 texte = ""
             for brut in texte.splitlines():
@@ -196,8 +199,15 @@ class TablePrix:
             du_jour = [x for x in self._charger() if x["date"] == jour]
             return bool(du_jour) and any(x["taux"] for x in du_jour)
 
-    def ajouter(self, date_iso, modeles, taux):
-        """Ajoute une lecture : seuls les modèles dont le prix a changé sont écrits."""
+    def note_du(self, jour):
+        """Ce que la dernière lecture de ce jour a dû rejeter (texte), ou None."""
+        with self._verrou:
+            du_jour = [x for x in self._charger() if x["date"] == jour]
+            return du_jour[-1]["note"] if du_jour else None
+
+    def ajouter(self, date_iso, modeles, taux, note=None):
+        """Ajoute une lecture : seuls les modèles dont le prix a changé sont écrits. `note` : ce que
+        cette lecture a rejeté, gardé pour le redire tant qu'aucune lecture ne l'a remplacée."""
         jour = _jour(date_iso)
         if jour is None:
             raise ValueError("date illisible")
@@ -205,7 +215,8 @@ class TablePrix:
             courant = self.etat()
             change = {n: {c: e.get(c) for c in CHAMPS} for n, e in modeles.items()
                       if _entree_valide(e) and courant.get(n) != {c: e.get(c) for c in CHAMPS}}
-            ligne = {"date": jour, "taux": taux if _positif(taux) else None, "modeles": change}
+            ligne = {"date": jour, "taux": taux if _positif(taux) else None, "modeles": change,
+                     "note": note[:MAX_NOTE] if isinstance(note, str) and note else None}
             lignes = self._charger() + [ligne]
             self.chemin.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.chemin.with_name(self.chemin.name + ".tmp")
@@ -270,6 +281,9 @@ def actualiser(table, ouvrir, aujourdhui_iso):
         return {"ok": False, "message": "Date du jour illisible : prix non mis à jour."}
     try:
         if table.complet_le(jour):
+            note = table.note_du(jour)  # la lecture du jour a rejeté une valeur : cela reste vrai et dit
+            if note:
+                return {"ok": False, "message": f"Prix du {jour} ; {note}."}
             return {"ok": True, "message": f"Prix du {jour}."}
         precedente = table.derniere_maj()
         depuis = f"Prix du {precedente}" if precedente else "Aucun prix enregistré"
@@ -304,11 +318,13 @@ def actualiser(table, ouvrir, aujourdhui_iso):
                 rejetes.append(nom)
                 continue
             gardes[nom] = nouveau
-        table.ajouter(jour, gardes, taux)
+        note = None
         if rejetes:
             noms = ", ".join(sorted(rejetes)[:5]) + ("…" if len(rejetes) > 5 else "")
-            erreurs.append(f"valeur absurde dans la source pour {len(rejetes)} modèle(s) ({noms}) : "
-                           "dernier prix gardé")
+            note = (f"valeur absurde dans la source pour {len(rejetes)} modèle(s) ({noms}) : "
+                    "dernier prix gardé")
+            erreurs.append(note)
+        table.ajouter(jour, gardes, taux, note)
         if erreurs:
             return {"ok": False, "message": f"Prix du {jour} ; " + " ; ".join(erreurs) + "."}
         return {"ok": True, "message": f"Prix du {jour}."}

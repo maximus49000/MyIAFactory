@@ -2,8 +2,9 @@
 // Onglet et période choisis sont gardés le temps de la session.
 
 import {el} from "./dom.js";
-import {tronquer, euros, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
-import {contenuFacturation, chargerFacturation, serviceFacture} from "./facturation.js";
+import {tronquer, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
+import {contenuFacturation, chargerFacturation, serviceFacture, coutEnClair} from "./facturation.js";
+import {challengesDuService} from "./actions.js";
 import {contenuConnaissances} from "./connaissances.js";
 import {contenuKpi, rappelAlertes} from "./kpi.js";
 import {contenuChallenge} from "./challenge.js";
@@ -26,6 +27,25 @@ export function ongletsDisponibles(etat) {
 function contenuTaches(ctx, conteneur, service) {
   const e = ctx.etat;
   if (e.dossier?.kpi) rappelAlertes(ctx, conteneur, service, choix.periode);
+  // Tous les challenges du service : on peut toujours rouvrir un challenge, même si son alerte est levée
+  // ou si sa source est sortie de la période.
+  const challenges = challengesDuService(e, service);
+  if (challenges.length) {
+    conteneur.append(el("div", "carte-sous-titre", `Challenges (${challenges.length})`));
+    const lc = el("ul", "liste-cout");
+    for (const {challenge: c, aDecider} of challenges) {
+      const li = el("li", "source");
+      const texte = el("span", "source-texte", tronquer(c.texte, 140));
+      texte.append(el("span", "ligne-detail", aDecider ? `${aDecider} solution${aDecider > 1 ? "s" : ""} à décider`
+        : ((c.solutions || []).length ? "tout est décidé" : "pas encore de solution")));
+      const b = el("button", "bouton secondaire", "Ouvrir");
+      b.type = "button";
+      b.addEventListener("click", () => ctx.challenger(c.cible, c.texte, []));
+      li.append(texte, b);
+      lc.append(li);
+    }
+    conteneur.append(lc);
+  }
   const ids = new Set((e.agents || []).filter((a) => a.service === service).map((a) => a.id));
   const taches = (e.taches || []).filter((t) => t.active && ids.has(t.agent));
   conteneur.append(el("div", "carte-sous-titre", `Tâches en cours (${taches.length})`));
@@ -51,7 +71,7 @@ function contenuTaches(ctx, conteneur, service) {
     chargerFacturation(choix.periode).then((f) => {
       const s = serviceFacture(f, service);
       for (const [id, cible] of couts) {
-        if (s && s.taches[id] && cible.isConnected) cible.textContent = euros(s.taches[id].total);
+        if (s && s.taches[id] && cible.isConnected) cible.textContent = coutEnClair(s.taches[id]);
       }
     }, () => { /* le coût manque, la liste reste */ });
   }

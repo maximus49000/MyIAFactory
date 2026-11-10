@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from bureau import demandes, releve
+from tests import copie_demo
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -17,7 +18,7 @@ class TestDemoActions(unittest.TestCase):
         self._t = tempfile.TemporaryDirectory()
         self.addCleanup(self._t.cleanup)
         self.dossier = Path(self._t.name) / "demo"
-        shutil.copytree(RACINE / "exemples" / "demo", self.dossier)
+        copie_demo(self.dossier)
         self.fichier = self.dossier / "releve.json"
 
     def lire(self):

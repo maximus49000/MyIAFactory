@@ -58,11 +58,13 @@ def calcules(r, usages_cout, periode, maintenant):
         if durees:
             liste.append(_calcule("duree_tache", "Durée moyenne d'une tâche",
                                   duree_en_clair(sum(durees) / len(durees)), periode))
-        couts = [c["total"] for i, c in ((usages_cout or {}).get("services", {}).get(sid) or {}).get("taches", {}).items()
-                 if i != SANS_TACHE and c["total"] > 0]
+        groupe = (usages_cout or {}).get("services", {}).get(sid) or {}
+        couts = [c["total"] for i, c in groupe.get("taches", {}).items() if i != SANS_TACHE and c["total"] > 0]
         if couts:
-            liste.append(_calcule("cout_moyen", "Coût moyen par tâche", euros_en_clair(sum(couts) / len(couts)),
-                                  periode))
+            # Des usages à prix inconnu manquent au calcul : le chiffre le dit, il ne passe pas pour complet.
+            reserve = " (hors prix inconnus)" if groupe.get("sans_prix") else ""
+            liste.append(_calcule("cout_moyen", "Coût moyen par tâche",
+                                  euros_en_clair(sum(couts) / len(couts)) + reserve, periode))
         sortie[sid] = liste
     return sortie
 
@@ -125,7 +127,7 @@ class HistoriqueAlertes:
         """{(service, kpi): date de l'entrée en alerte | None}."""
         etat = {}
         try:
-            texte = self.chemin.read_text(encoding="utf-8")
+            texte = self.chemin.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return etat
         for brut in texte.splitlines():

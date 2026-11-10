@@ -52,14 +52,20 @@ def _niveau(p):
 
 
 def _vide():
-    return {"total": 0.0, "taches": {}, "modeles": {}, "usages": []}
+    return {"total": 0.0, "taches": {}, "modeles": {}, "usages": [], "sans_prix": {}}
 
 
 def _ajouter(groupe, u, cout):
+    """Range un usage dans son groupe. Sans prix, il ne compte pour aucun euro mais sa tâche le porte
+    (`sans_prix` : nombre d'usages exclus), pour qu'un coût incomplet ne passe jamais pour complet."""
+    tache = groupe["taches"].setdefault(u.get("tache") or SANS, {"total": 0.0, "etapes": {}, "sans_prix": 0})
     if cout is None:
+        tache["sans_prix"] += 1
+        s = groupe["sans_prix"].setdefault(u["modele"], {"modele": u["modele"], "tokens": 0, "usages": 0})
+        s["tokens"] += sum(u.get(c) or 0 for c in COMPTEURS)
+        s["usages"] += 1
         return
     groupe["total"] += cout
-    tache = groupe["taches"].setdefault(u.get("tache") or SANS, {"total": 0.0, "etapes": {}})
     tache["total"] += cout
     etape = u.get("etape") or SANS
     tache["etapes"][etape] = tache["etapes"].get(etape, 0.0) + cout
@@ -72,6 +78,7 @@ def _arrondir(groupe):
         t["total"] = round(t["total"], 6)
         t["etapes"] = {k: round(v, 6) for k, v in t["etapes"].items()}
     groupe["modeles"] = {k: round(v, 6) for k, v in groupe["modeles"].items()}
+    groupe["sans_prix"] = sorted(groupe["sans_prix"].values(), key=lambda x: x["modele"])
     groupe["usages"].sort(key=lambda x: (x["t"], x["id"]))
 
 
@@ -141,11 +148,15 @@ def _nom_tache(taches, i):
     return titre if isinstance(titre, str) and titre else i
 
 
+INCOMPLET = " Des usages à prix inconnu ne sont pas comptés dans ce coût."
+
+
 def _sources(services, lignes, r):
     """Les sources d'amélioration, par service (la direction n'en a pas)."""
     taches = _titres(r)
     out = []
     for sid, g in services.items():
+        incomplet = {i: (INCOMPLET if t["sans_prix"] else "") for i, t in g["taches"].items()}
         couts = {i: t["total"] for i, t in g["taches"].items() if i != SANS and t["total"] > 0}
         # Tâches qui coûtent plus de trois fois la médiane du service.
         if couts:
@@ -155,7 +166,8 @@ def _sources(services, lignes, r):
                     out.append({"id": id_source(sid, "tache_chere", i), "genre": "tache_chere", "service": sid,
                                 "tache": i, "texte": f"Tâche « {_nom_tache(taches, i)} » : coût de "
                                                      f"{euros_en_clair(c)} pour une médiane de "
-                                                     f"{euros_en_clair(mediane)} dans le service."})
+                                                     f"{euros_en_clair(mediane)} dans le service."
+                                                     + incomplet[i]})
         out += _modele_trop_fort(sid, [x for x in lignes if x[0] == sid and x[3]], taches)
         # Tâches qui ont reçu plusieurs retours : la part du coût qu'elles représentent.
         for i, c in couts.items():
@@ -165,7 +177,8 @@ def _sources(services, lignes, r):
                 part = round(100 * c / g["total"])
                 out.append({"id": id_source(sid, "allers_retours", i), "genre": "allers_retours", "service": sid,
                             "tache": i, "texte": f"Tâche « {_nom_tache(taches, i)} » : {n} retours, "
-                                                 f"{euros_en_clair(c)} ({part} % du coût du service)."})
+                                                 f"{euros_en_clair(c)} ({part} % du coût du service)."
+                                                 + incomplet[i]})
     out.sort(key=lambda s: (s["service"], s["genre"], s["tache"]))
     return out
 
@@ -175,11 +188,15 @@ def _modele_trop_fort(sid, lignes, taches):
     d'un modèle moins cher. Une source par tâche."""
     if not lignes:
         return []
-    plus_cher = max(_niveau(p) for _, _, _, p in lignes)
-    niveaux = {}  # étape -> niveaux de tous ses usages
+    niveau_de = {}  # modèle -> son niveau sur la période (le taux du jour ne doit pas en faire deux modèles)
     for _, u, _, p in lignes:
+        niveau_de[u["modele"]] = max(niveau_de.get(u["modele"], 0.0), _niveau(p))
+    lignes = [(s, u, c, niveau_de[u["modele"]]) for s, u, c, _ in lignes]
+    plus_cher = max(n for _, _, _, n in lignes)
+    niveaux = {}  # étape -> niveaux de tous ses usages
+    for _, u, _, n in lignes:
         if u.get("etape"):
-            niveaux.setdefault(u["etape"], []).append(_niveau(p))
+            niveaux.setdefault(u["etape"], []).append(n)
     medianes = {}  # étape -> médiane des autres usages qu'un usage du modèle le plus cher
     for etape, liste in niveaux.items():
         autres = list(liste)
@@ -187,13 +204,13 @@ def _modele_trop_fort(sid, lignes, taches):
             autres.remove(plus_cher)
         medianes[etape] = statistics.median(autres) if autres else None
     par_tache = {}
-    for _, u, _, p in lignes:
+    for _, u, _, n in lignes:
         etape, tache = u.get("etape"), u.get("tache")
-        if not etape or not tache or _niveau(p) < plus_cher:
+        if not etape or not tache or n < plus_cher:
             continue
         mediane = medianes.get(etape)
-        if mediane is not None and _niveau(p) > mediane:
-            par_tache.setdefault(tache, {})[etape] = (u["modele"], _niveau(p), mediane)
+        if mediane is not None and n > mediane:
+            par_tache.setdefault(tache, {})[etape] = (u["modele"], n, mediane)
     out = []
     for tache, etapes in par_tache.items():
         constats = "; ".join(f"étape « {e} » faite avec « {m} » ({euros_en_clair(n)}/M de tokens entrée + "

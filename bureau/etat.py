@@ -120,7 +120,11 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
                          service=services.get(a.get("agent")), titre=titres.get(a.get("tache")))
 
     if alertes is not None and r.get("version", 1) >= 3:
-        _marquer_problemes_revenus(savoir, r, modkpi.suivre_alertes(r, alertes, maintenant))
+        try:
+            en_cours = modkpi.suivre_alertes(r, alertes, maintenant)
+        except OSError:  # historique des alertes non inscriptible : la marque manque, la scène reste
+            en_cours = {}
+        _marquer_problemes_revenus(savoir, r, en_cours)
 
     taches = [{
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],

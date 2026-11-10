@@ -60,7 +60,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 9. L'onglet Connaissances et le volet « Challenger »
 - [x] 10. Les KPI, les alertes, « problème revenu »
 - [x] 11. L'onglet KPI
-- [x] 12. La démo, la documentation, la relecture
+- [x] 12. La démo, la documentation, la relecture (relecture finale faite : voir la passation, phase E)
 
 État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : concevoir le projet 3, le parcours d'une tâche.
 

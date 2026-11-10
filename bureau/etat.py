@@ -25,7 +25,7 @@ def construire(r, eq, maintenant, fraicheur_min):
             continue
         presents.add(cle)
         st = statuts.statut(siennes, maintenant, _fraicheur(ti, fraicheur_min), en_pause)
-        fiche = eq.agent(cle, chef=bool(ti.get("chef")))
+        fiche = eq.agent(cle, chef=bool(ti.get("chef")), prenom=ti.get("prenom") or None)
         agents.append({
             "id": cle,
             "prenom": fiche["prenom"],
@@ -37,16 +37,29 @@ def construire(r, eq, maintenant, fraicheur_min):
             "statut": st["statut"],
             "bulle": st["bulle"],
             "taches": [x["id"] for x in siennes if x.get("active")],
+            "specialite": ti.get("specialite") or None,
+            "lecons": list(ti.get("lecons") or []),
         })
 
     taches = [{
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],
         "agent": t.get("titulaire") if t.get("titulaire") in presents else None,
         "etape": t.get("etape") or "", "maj": t.get("maj"), "postit": t.get("postit", True),
+        "type": t.get("type"),
+        "journal": sorted(t.get("journal") or [], key=lambda j: j["t"], reverse=True),
+        "images": t.get("images") or [], "liens": t.get("liens") or [],
+        "retours": t.get("retours") or [], "bloquee": t.get("bloquee") or None,
     } for t in r["taches"]]
 
+    lecons = r.get("lecons") or []
+    retours = sum(1 for t in r["taches"] for x in t.get("retours") or []
+                  if not (x.get("reponse") or "").strip())
+    bloquees = sum(1 for t in r["taches"] if (t.get("bloquee") or "").strip())
+    directeur = {"lecons": len(lecons), "retours": retours, "bloquees": bloquees,
+                 "total": len(lecons) + retours + bloquees + r["decisions"]}
+
     return {
-        "version": 1,
+        "version": r["version"],
         "horodatage": maintenant.isoformat(),
         "projet": r["projet"],
         "erreur": None,
@@ -55,6 +68,10 @@ def construire(r, eq, maintenant, fraicheur_min):
         "colonnes": r["colonnes"],
         "file": r["file"],
         "decisions": r["decisions"],
+        "actions": list(r.get("actions") or []),
+        "types": list(r.get("types") or []),
+        "lecons": list(lecons),
+        "directeur": directeur,
         "agents": agents,
         "taches": taches,
     }
@@ -65,6 +82,8 @@ def erreur(message, maintenant):
         "version": 1, "horodatage": maintenant.isoformat(), "projet": "", "erreur": message,
         "factory": {"etat": "inconnu", "depuis": None, "derniere_activite": None, "inactive": False},
         "services": [], "colonnes": [], "file": {"visibles": [], "reste": 0}, "decisions": 0,
+        "actions": [], "types": [], "lecons": [],
+        "directeur": {"lecons": 0, "retours": 0, "bloquees": 0, "total": 0},
         "agents": [], "taches": [],
     }
 

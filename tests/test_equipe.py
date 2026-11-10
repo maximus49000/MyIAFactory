@@ -39,6 +39,21 @@ class TestEquipe(unittest.TestCase):
         self.assertEqual(equipe.Equipe(self.f).agent("chef")["prenom"], "Chef")
         self.assertEqual(equipe.Equipe(self.f).agent("autre", chef=True)["prenom"], "Chef")
 
+    def test_prenom_du_releve_non_ecrit(self):
+        e = equipe.Equipe(self.f)
+        a = e.agent("k", prenom="Maëlle")
+        self.assertEqual(a["prenom"], "Maëlle")
+        self.assertRegex(a["couleur"], r"^#[0-9a-f]{6}$")
+        self.assertNotIn("Maëlle", self.f.read_text(encoding="utf-8"))
+        self.assertEqual(e.agent("k", prenom="Maëlle")["couleur"], a["couleur"])
+        self.assertEqual(equipe.Equipe(self.f).agent("k", prenom="Autre")["prenom"], "Autre")
+        # aucun prénom tiré : le prochain agent reçoit le premier de la liste
+        self.assertEqual(e.agent("z")["prenom"], equipe.PRENOMS[0])
+
+    def test_prenom_utilisateur_l_emporte_sur_le_releve(self):
+        self.f.write_text('{"agents": {"k": {"prenom": "Zoé", "couleur": "#000000"}}}', encoding="utf-8")
+        self.assertEqual(equipe.Equipe(self.f).agent("k", prenom="Maëlle")["prenom"], "Zoé")
+
     def test_fichier_illisible_mis_de_cote(self):
         self.f.write_text("{", encoding="utf-8")
         equipe.Equipe(self.f).agent("a")

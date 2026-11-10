@@ -8,9 +8,13 @@ import threading
 import time
 from pathlib import Path
 
+from .statuts import TRES_ANCIEN, lire_date
+
 MAX_SERVICES = 8
 MAX_IMAGES = 40
 MAX_SUITE = 500
+MAX_USAGE = 5000
+VERSIONS = (1, 2, 3)
 SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
 
@@ -66,8 +70,8 @@ def valider(r):
     if not _est_dict(r):
         return ["Le relevé doit être un objet JSON."]
     erreurs = []
-    if r.get("version") not in (1, 2) or isinstance(r.get("version"), bool):
-        erreurs.append("« version » doit valoir 1 ou 2.")
+    if r.get("version") not in VERSIONS or isinstance(r.get("version"), bool):
+        erreurs.append("« version » doit valoir 1, 2 ou 3.")
     if not isinstance(r.get("projet"), str) or not r.get("projet"):
         erreurs.append("« projet » est obligatoire (texte non vide).")
     factory = r.get("factory")
@@ -110,9 +114,62 @@ def valider(r):
             if not _texte_ou_nul(t.get(champ)):
                 erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
     _verifier_facultatifs(r, services, colonnes, titulaires, erreurs)
-    if r.get("version") == 2:
+    if _version(r) >= 2:
         _verifier_v2(r, titulaires, taches, cles, erreurs)
+    if _version(r) >= 3:
+        _verifier_usage(r, titulaires, taches, cles, erreurs)
     return erreurs
+
+
+def _version(r):
+    v = r.get("version")
+    return v if v in VERSIONS and not isinstance(v, bool) else 0
+
+
+def _verifier_usage(r, titulaires, taches, cles, erreurs):
+    """`usage` (version 3) : une entrée par discussion, compteurs de tokens bruts."""
+    v = r.get("usage")
+    if v is None:
+        return
+    if not isinstance(v, list):
+        erreurs.append("« usage » doit être une liste.")
+        return
+    if len(v) > MAX_USAGE:
+        erreurs.append(f"« usage » : au plus {MAX_USAGE} entrées (il y en a {len(v)}).")
+        return
+    ids_taches = {t.get("id") for t in taches if isinstance(t.get("id"), str)}
+    agents = set(cles)
+    if not any(t.get("chef") is True for t in titulaires):
+        agents.add("chef")  # le chef que la normalisation ajoute
+    vus = set()
+    for k, u in enumerate(v):
+        if not _est_dict(u):
+            erreurs.append(f"« usage » : l'élément {k + 1} doit être un objet.")
+            continue
+        i = u.get("id")
+        if not _texte(i) or not i:
+            erreurs.append(f"« usage » : l'élément {k + 1} doit avoir un « id » (texte non vide).")
+        elif i in vus:
+            erreurs.append(f"« usage » : identifiant en double « {i} ».")
+        else:
+            vus.add(i)
+        nom = f"« usage » : l'entrée « {i} »"
+        if u.get("tache") is not None and not _dans(u.get("tache"), ids_taches):
+            erreurs.append(f"{nom} : tâche inconnue « {u.get('tache')} ».")
+        if u.get("agent") is not None and not _dans(u.get("agent"), agents):
+            erreurs.append(f"{nom} : agent inconnu « {u.get('agent')} ».")
+        if not _texte(u.get("modele")) or not u.get("modele"):
+            erreurs.append(f"{nom} : « modele » est obligatoire (texte non vide).")
+        if not _texte_ou_nul(u.get("etape")):
+            erreurs.append(f"{nom} : « etape » doit être un texte.")
+        if not _texte(u.get("t")) or lire_date(u.get("t")) == TRES_ANCIEN:
+            erreurs.append(f"{nom} : « t » doit être une date ISO 8601 (texte).")
+        for champ in ("entree", "sortie"):
+            if not _entier_positif(u.get(champ)):
+                erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
+        for champ in ("cache_lecture", "cache_ecriture"):
+            if u.get(champ) is not None and not _entier_positif(u[champ]):
+                erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
 
 
 def _texte_ou_nul(v):
@@ -312,7 +369,11 @@ CHAMPS_V2_TITULAIRE = ("prenom", "specialite", "lecons")
 def normaliser(r):
     """Applique les valeurs par défaut. Ne modifie pas l'argument."""
     n = copy.deepcopy(r)
-    v2 = n.get("version") == 2
+    v2 = _version(n) >= 2
+    if _version(n) >= 3:
+        n["usage"] = [_usage_normalise(u) for u in n["usage"]] if isinstance(n.get("usage"), list) else []
+    else:
+        n.pop("usage", None)
     for c in CHAMPS_V2_RACINE:
         if v2:
             n[c] = n[c] if isinstance(n.get(c), list) else []
@@ -355,6 +416,16 @@ def normaliser(r):
         n["titulaires"].append({"cle": "chef", "lieu": "local", "chef": True,
                                 "permanent": True, "modele": "?"})
     return n
+
+
+def _usage_normalise(u):
+    u.setdefault("tache", None)
+    u.setdefault("agent", None)
+    u.setdefault("etape", None)
+    for champ in ("cache_lecture", "cache_ecriture"):
+        if u.get(champ) is None:
+            u[champ] = 0
+    return u
 
 
 def _tuer_arbre(p):

@@ -49,7 +49,7 @@ Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-burea
 
 Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-dossiers-des-services.md), [passation](docs/superpowers/plans/2026-11-10-dossiers-des-services-passation.md)) :
 
-- [ ] 1. Le relevé version 3 et l'usage
+- [x] 1. Le relevé version 3 et l'usage
 - [ ] 2. L'historique des usages
 - [ ] 3. Les prix, mise à jour automatique
 - [ ] 4. Le calcul des coûts

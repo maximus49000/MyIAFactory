@@ -95,8 +95,8 @@ class TestVersion2(unittest.TestCase):
     def test_version_2_minimale_valide(self):
         self.assertEqual(releve.valider(V2), [])
 
-    def test_version_3_refusee(self):
-        self.assertTrue(releve.valider({**BASE, "version": 3}))
+    def test_version_4_refusee(self):
+        self.assertTrue(releve.valider({**BASE, "version": 4}))
 
     def test_neuf_services_refuses(self):
         def avec(n):
@@ -227,6 +227,106 @@ class TestVersion2(unittest.TestCase):
         t = n["taches"][0]
         self.assertEqual((t["journal"], t["images"], t["liens"], t["retours"], t["type"], t["bloquee"]),
                          ([], [], [], [], None, None))
+
+
+def v3(**champs):
+    r = copy.deepcopy({**BASE, "version": 3})
+    r.update(champs)
+    return r
+
+
+def usage(**champs):
+    u = {"id": "u1", "tache": "t1", "agent": "d1", "modele": "sonnet", "etape": "dev",
+         "t": "2026-11-09T10:00:00", "entree": 1000, "sortie": 200}
+    u.update(champs)
+    return u
+
+
+class TestVersion3(unittest.TestCase):
+    def test_version_3_valide(self):
+        self.assertEqual(releve.valider(v3()), [])
+
+    def test_v2_inchange(self):
+        # Les contrôles de la version 2 s'appliquent aussi à la 3.
+        for version in (2, 3):
+            r = copy.deepcopy({**BASE, "version": version})
+            r["taches"][0]["journal"] = 3
+            self.assertTrue(releve.valider(r), version)
+        n = releve.normaliser(v3())
+        self.assertEqual((n["actions"], n["types"], n["lecons"]), ([], [], []))
+        self.assertEqual(n["taches"][0]["journal"], [])
+        self.assertEqual(n["file"]["suite"], [])
+
+    def test_usage_valide(self):
+        r = v3(usage=[usage(), usage(id="u2", tache=None, cache_lecture=5, cache_ecriture=0),
+                      usage(id="u3", etape=None)])
+        self.assertEqual(releve.valider(r), [])
+
+    def test_usage_id_en_double(self):
+        erreurs = releve.valider(v3(usage=[usage(), usage()]))
+        self.assertTrue(any("usage" in m for m in erreurs), erreurs)
+
+    def test_usage_tokens_negatifs(self):
+        for champ in ("entree", "sortie", "cache_lecture", "cache_ecriture"):
+            erreurs = releve.valider(v3(usage=[usage(**{champ: -1})]))
+            self.assertTrue(any("usage" in m for m in erreurs), champ)
+        for valeur in (1.5, "12", None):
+            self.assertTrue(releve.valider(v3(usage=[usage(entree=valeur)])), valeur)
+
+    def test_usage_bool_refuse(self):
+        self.assertTrue(releve.valider(v3(usage=[usage(entree=True)])))
+        self.assertTrue(releve.valider(v3(usage=[usage(cache_lecture=False)])))
+
+    def test_usage_agent_inconnu(self):
+        erreurs = releve.valider(v3(usage=[usage(agent="x")]))
+        self.assertTrue(any("usage" in m for m in erreurs), erreurs)
+        self.assertTrue(releve.valider(v3(usage=[usage(agent=["d1"])])))
+
+    def test_usage_tache_inconnue(self):
+        erreurs = releve.valider(v3(usage=[usage(tache="t9")]))
+        self.assertTrue(any("usage" in m for m in erreurs), erreurs)
+
+    def test_usage_mal_forme(self):
+        cas = [("pas une liste", {"usage": 3}),
+               ("élément pas un objet", {"usage": [3]}),
+               ("id vide", {"usage": [usage(id="")]}),
+               ("modele vide", {"usage": [usage(modele="")]}),
+               ("modele nombre", {"usage": [usage(modele=3)]}),
+               ("etape nombre", {"usage": [usage(etape=3)]}),
+               ("t absent", {"usage": [{k: v for k, v in usage().items() if k != "t"}]}),
+               ("t illisible", {"usage": [usage(t="hier")]}),
+               ("sortie absente", {"usage": [{k: v for k, v in usage().items() if k != "sortie"}]})]
+        for nom, champs in cas:
+            erreurs = releve.valider(v3(**champs))
+            self.assertTrue(any("usage" in m for m in erreurs), nom)
+
+    def test_usage_du_chef(self):
+        # Le chef ajouté par la normalisation (clé « chef ») est connu, comme un chef déclaré.
+        self.assertEqual(releve.valider(v3(usage=[usage(agent="chef", tache=None)])), [])
+        r = v3(usage=[usage(agent="dir", tache=None)])
+        r["titulaires"].append({"cle": "dir", "lieu": "local", "chef": True})
+        self.assertEqual(releve.valider(r), [])
+
+    def test_usage_ignore_en_v2(self):
+        for version in (1, 2):
+            r = copy.deepcopy({**BASE, "version": version, "usage": [usage(entree=-5)]})
+            self.assertEqual(releve.valider(r), [], version)
+            self.assertNotIn("usage", releve.normaliser(r))
+
+    def test_usage_5001_refuse(self):
+        def avec(n):
+            return v3(usage=[usage(id=f"u{i}") for i in range(n)])
+        self.assertEqual(releve.valider(avec(releve.MAX_USAGE)), [])
+        self.assertEqual(releve.MAX_USAGE, 5000)
+        erreurs = releve.valider(avec(5001))
+        self.assertTrue(any("usage" in m and "5000" in m for m in erreurs), erreurs[:3])
+
+    def test_normaliser_usage_defaut(self):
+        self.assertEqual(releve.normaliser(v3())["usage"], [])
+        self.assertEqual(releve.normaliser(v3(usage=None))["usage"], [])
+        n = releve.normaliser(v3(usage=[usage()]))
+        self.assertEqual(n["usage"][0]["id"], "u1")
+        self.assertEqual((n["usage"][0]["cache_lecture"], n["usage"][0]["cache_ecriture"]), (0, 0))
 
 
 class TestColonneTerminee(unittest.TestCase):

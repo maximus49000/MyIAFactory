@@ -11,7 +11,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle proposé | Où | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | ce dépôt | 1 à 3 : relevé v4, état v4, demandes et images jointes | Validation de champs entièrement décrite par le plan, tests en tableau | fait |
-| B | Opus 5.5 | ce dépôt | 4 et 5 : plusieurs projets, catalogue et livrable servis | Serveur à fils scindé en deux classes sans rien casser, isolation entre projets, fichiers servis (bac à sable) | à faire |
+| B | Opus 5.5 | ce dépôt | 4 et 5 : plusieurs projets, catalogue et livrable servis | Serveur à fils scindé en deux classes sans rien casser, isolation entre projets, fichiers servis (bac à sable) | fait |
 | C | Sonnet 5.5 | ce dépôt | 6 à 8 : sélecteur, panneau de fonctionnalité et discussion, Directeur | Interface cadrée par les demandes et l'état des phases A et B | à faire |
 | D | Opus 5.5 | ce dépôt | 9 : le catalogue | Reprendre fidèlement le design d'une page existante, carte avec zoom, 5 000 éléments | à faire |
 | E | Sonnet 5.5 | ce dépôt | 10 à 12 : fichier de factory, suivi, mémoire, départ d'un agent, vérificateur | Outils en ligne de commande au contrat écrit ; les cas difficiles (git, mots interdits, écritures concurrentes) ont leurs tests nommés | à faire |
@@ -32,6 +32,17 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
 - `bureau/releve.py` : constantes `ETAPES`, `DECISIONS_FONCTIONNALITE`, `DECISIONS_PROJET`, `ETAGES`, `MOTIF_GENRE` (compilé, `^…\Z`), `MAX_FONCTIONNALITES`, `MAX_MESSAGES`, `MAX_IMAGES_MESSAGE`. Un livrable exige `libelle` ; `date` est un texte ou nul. Les ids de décisions sont uniques dans tout le relevé ; les ids de messages le sont seulement dans leur discussion.
 - `bureau/etat.py` : en version 4, `etat` gagne `genre`, `livrable`, `fonctionnalites`, `decisions_projet`, `orchestrateur_actif`, et `directeur` gagne `fonctionnalites` et `projet` ; ces clés sont **absentes** en version < 4. Chaque tâche porte ses quatre champs v4. Les leçons gardent `etage_propose`, `texte_general`, `roles`.
 - Tests : 388 `unittest` et 95 `node --test` verts en fin de phase.
+
+**Phase B (Opus 5.5) — écarts et points à surveiller**
+
+- `bureau/serveur.py` : `Projet` (un par fichier de réglages : équipe, historiques, prix et son fil, cache d'état, dernier relevé, demandes, gardes des challenges et des doublons) et `Bureau(adresse, [(id, chemin)], ouvrir=None, multi=True)` (`projets` dict dans l'ordre du fichier, `projet(id=None)`, une seule `sonde`/`lisseur`, `_ranger_mesure` note chaque mesure dans l'historique de chaque projet). `--reglages` → un projet d'id `projet`, `multi=False`. Les tests serveur passent par `self.p` (`srv.projets["projet"]`).
+- Routes de projet (`?projet=`, absent → le premier, vide/répété/inconnu → 404 `{"erreur": "Projet inconnu."}`) : `/api/etat`, `/api/charge`, `/api/conseil`, `/api/facturation`, `/api/kpi`, `/api/image`, `/api/catalogue`, `/api/livrable`, `POST /api/demande`, `POST /api/reglages`. **Phase C** : la page doit ajouter `projet=<id>` à chacune quand `multi` est vrai (sinon rien ne change).
+- `GET /api/projets` → `{multi, projets: [{id, nom, attente, erreur}]}` ; il sert le dernier état connu (relu en arrière-plan, projets lus en parallèle) : on peut le sonder souvent. `nom` vaut l'id quand le relevé est en erreur.
+- `reglages.lire_bureau` (écart utile au plan, après relecture) refuse aussi un fichier de réglages **introuvable** et deux projets dont les réglages sont **dans le même dossier**.
+- `bureau/catalogue.py` : `declaration(regl, f)` rend aussi `base` (écart : les chemins d'une déclaration du fichier de factory sont relatifs **au fichier de factory**, comme le dit la tâche 10 ; ceux des réglages, aux réglages). `lire` → `(code, objet)` ; `ids(regl, f)` → ensemble ou `None` ; `valider` retire les champs inconnus sans le dire, et retire avec avertissement un champ facultatif au mauvais type (une liste entière si un de ses objets est fautif) ; une adresse ou un chemin absolu dans `captures[].chemin`, `comparaisons[].reel/.produit`, et un lien invalide dans `liens[].url`/`comparaisons[].lien`, sont retirés un à un. `trace[].points` = liste de paires `[x, y]`. Avertissements bornés à 100. **Phase D** : formes exactes dans `OBJ_*` et `ELEMENT` de ce fichier ; `GET /api/catalogue?projet=&fonctionnalite=` (sans `fonctionnalite` → 404).
+- `GET /api/livrable?projet=&fonctionnalite=?` : sert le `chemin` du livrable (du projet, ou de la fonctionnalité) dans `livrables.racines` ; un livrable donné par `lien` → 404 (la page ouvre le lien elle-même). `.html`/`.txt` avec `Content-Security-Policy: sandbox` et `nosniff` ; `.zip`/`.glb` en pièce jointe.
+- Mineurs laissés (relecture) : déclaration invalide dans les réglages qui retombe sans le dire sur le fichier de factory ; caches du catalogue sans éviction ; `Content-Length` du livrable si le fichier change pendant l'envoi ; le bac à sable HTML n'empêche pas de charger une image distante ; un fil des prix par projet ; tests à ajouter (livrable `../ailleurs/x.png`, lien symbolique sortant).
+- Tests : 424 `unittest` et 95 `node --test` verts en fin de phase.
 
 ## Ce que chaque conversation doit savoir
 

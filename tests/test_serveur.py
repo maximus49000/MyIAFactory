@@ -9,14 +9,33 @@ import threading
 import time
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from bureau import serveur
+from bureau import prix, serveur
 
 RACINE = Path(__file__).resolve().parent.parent
 
+PRIX_INVENTES = json.dumps({"modele-a": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05}})
+TAUX_INVENTE = ("<Envelope><Cube><Cube time='2026-11-09'><Cube currency='USD' rate='1.25'/>"
+                "</Cube></Cube></Envelope>")
 
-class TestServeur(unittest.TestCase):
+
+class SourceSimulee:
+    """Remplace Internet : jamais de requête sortante dans les tests."""
+
+    def __init__(self, panne=None):
+        self.panne = panne
+        self.appels = []
+
+    def __call__(self, url):
+        self.appels.append(url)
+        if self.panne:
+            raise self.panne
+        return {prix.URL_PRIX: PRIX_INVENTES, prix.URL_TAUX: TAUX_INVENTE}[url]
+
+
+class AvecServeur(unittest.TestCase):
     ENT = {"X-Bureau": "1", "Content-Type": "application/json"}
 
     def setUp(self):
@@ -25,15 +44,23 @@ class TestServeur(unittest.TestCase):
         self.tmp = Path(self._t.name)
         shutil.copytree(RACINE / "exemples" / "demo", self.tmp / "demo")
         self.regl = self.tmp / "demo" / "reglages.json"
-        self.srv = serveur.creer(self.regl, port=0)
+        self.demarrer()
+
+    def demarrer(self, source=None):
+        self.source = source or SourceSimulee()
+        self.srv = serveur.creer(self.regl, port=0, ouvrir=self.source)
         self.port = self.srv.server_address[1]
         self.fil = threading.Thread(target=self.srv.serve_forever, daemon=True)
         self.fil.start()
-        self.addCleanup(self.arreter)
+        self.addCleanup(self.arreter, self.srv)
 
-    def arreter(self):
-        self.srv.shutdown()
-        self.srv.server_close()
+    def arreter(self, srv):
+        srv.shutdown()
+        srv.server_close()
+
+    def redemarrer(self, source=None):
+        self.arreter(self.srv)
+        self.demarrer(source)
 
     def req(self, methode, chemin, corps=None, entetes=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
@@ -48,6 +75,8 @@ class TestServeur(unittest.TestCase):
         self.assertEqual(r.status, 200)
         return json.loads(data.decode("utf-8"))
 
+
+class TestServeur(AvecServeur):
     def test_ecoute_seulement_en_local(self):
         self.assertEqual(self.srv.server_address[0], "127.0.0.1")
 
@@ -382,6 +411,120 @@ class TestServeur(unittest.TestCase):
         lignes = notes.read_text(encoding="utf-8").splitlines()
         self.assertEqual([x for x in lignes if x in ("debut", "fin")], ["debut", "fin", "debut", "fin"])
         self.assertEqual(sum(1 for x in lignes if x.startswith("{")), 2)
+
+
+class TestFacturation(AvecServeur):
+    RELEVE_V3 = {
+        "version": 3, "projet": "P", "factory": {"etat": "en marche"},
+        "services": [{"id": "dev", "nom": "Dev"}],
+        "colonnes": [{"id": "a", "nom": "A"}],
+        "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+        "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}]}
+
+    def usage(self, id="u1", modele="sonnet", entree=1_000_000):
+        t = (datetime.now().astimezone() - timedelta(hours=1)).isoformat(timespec="seconds")
+        return {"id": id, "tache": "t1", "agent": "d1", "modele": modele, "etape": "dev", "t": t,
+                "entree": entree, "sortie": 0}
+
+    def v3(self, *usages, reglages=None):
+        dossier = self.tmp / "demo"
+        r = json.loads(json.dumps(self.RELEVE_V3))
+        r["usage"] = list(usages)
+        (dossier / "releve.json").write_text(json.dumps(r), encoding="utf-8")
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["alias_modeles"] = {"sonnet": "modele-a"}
+        regl.update(reglages or {})
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
+
+    def test_api_facturation(self):
+        self.v3(self.usage(), self.usage("u2", modele="mystere", entree=10))
+        f = self.json("/api/facturation?periode=7j")
+        self.assertIs(f["disponible"], True)
+        self.assertEqual(f["periode"], "7j")
+        self.assertAlmostEqual(f["total"], 2.4)   # 1 M de tokens × 3 $ × 0,8 €/$
+        self.assertAlmostEqual(f["services"]["dev"]["total"], 2.4)
+        self.assertEqual(f["sans_prix"], [{"modele": "mystere", "tokens": 10, "usages": 1}])
+        self.assertEqual(f["maj"], datetime.now().astimezone().date().isoformat())
+        self.assertIsNone(f["message"])
+        self.assertEqual(sorted(self.source.appels), sorted([prix.URL_PRIX, prix.URL_TAUX]))
+        self.assertEqual(self.json("/api/facturation")["periode"], "7j")   # période par défaut
+        e = self.json("/api/etat")
+        self.assertEqual(e["dossier"], {"facturation": True, "kpi": False, "connaissances": False})
+
+    def test_periode_inconnue_400(self):
+        self.v3(self.usage())
+        for requete in ("?periode=1an", "?periode=7j&periode=30j", "?periode="):
+            r, data = self.req("GET", "/api/facturation" + requete)
+            self.assertEqual(r.status, 400, requete)
+            self.assertIn("erreur", json.loads(data.decode("utf-8")))
+
+    def test_v2_facturation_indisponible(self):
+        self.assertEqual(self.json("/api/facturation"), {"disponible": False})
+        self.assertEqual(self.json("/api/etat")["dossier"],
+                         {"facturation": False, "kpi": False, "connaissances": False})
+        self.v3()  # version 3 sans aucun usage
+        self.assertEqual(self.json("/api/facturation"), {"disponible": False})
+
+    def test_releve_illisible_facturation_indisponible(self):
+        (self.tmp / "demo" / "releve.json").write_text("{", encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
+        self.assertEqual(self.json("/api/facturation"), {"disponible": False})
+
+    def test_prix_automatiques_faux_aucune_requete(self):
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["prix_automatiques"] = False
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.redemarrer(SourceSimulee(panne=AssertionError("requête sortante interdite")))
+        self.v3(self.usage(), reglages={"prix_automatiques": False,
+                                        "prix": {"sonnet": {"entree": 2.0, "sortie": 10.0, "date": "2020-01-01"}}})
+        self.assertIsNone(self.srv._fil_prix)
+        f = self.json("/api/facturation")
+        self.assertAlmostEqual(f["total"], 2.0)   # la correction à la main suffit
+        self.assertIn("prix_automatiques", f["message"])
+        self.assertEqual(self.source.appels, [])
+
+    def test_reglages_illisibles_aucune_requete(self):
+        self.regl.write_text("{", encoding="utf-8")
+        self.redemarrer(SourceSimulee(panne=AssertionError("requête sortante interdite")))
+        self.assertIsNone(self.srv._fil_prix)
+        self.assertEqual(self.source.appels, [])
+
+    def test_source_en_panne_serveur_ok_et_message(self):
+        self.arreter(self.srv)
+        (self.tmp / "demo" / "prix-historique.jsonl").unlink()  # aucun prix encore enregistré
+        self.demarrer(SourceSimulee(panne=OSError("réseau coupé")))
+        self.v3(self.usage())
+        f = self.json("/api/facturation?periode=30j")
+        self.assertIs(f["disponible"], True)
+        self.assertEqual(f["total"], 0)
+        self.assertEqual(f["sans_prix"][0]["modele"], "sonnet")
+        self.assertIn("impossible", f["message"])
+        self.assertIn("réseau coupé", f["message"])
+        self.assertIsNone(f["maj"])
+        self.assertIsNone(self.json("/api/etat")["erreur"])
+
+    def test_usage_integre_au_releve_valide(self):
+        self.v3(self.usage())
+        self.json("/api/etat")
+        historique = self.tmp / "demo" / "usage-historique.jsonl"
+        lignes = historique.read_text(encoding="utf-8").splitlines()
+        self.assertEqual([json.loads(x)["id"] for x in lignes], ["u1"])
+        # Un relevé invalide n'est pas intégré.
+        mauvais = dict(self.usage("u2"), entree=-1)
+        self.v3(mauvais)
+        self.assertIsNotNone(self.json("/api/etat")["erreur"])
+        self.assertNotIn("u2", historique.read_text(encoding="utf-8"))
+        # Le projet retire l'usage du relevé : il reste compté.
+        self.v3(self.usage("u3"))
+        self.json("/api/etat")
+        f = self.json("/api/facturation")
+        self.assertEqual(sorted(u["id"] for u in f["services"]["dev"]["usages"]), ["u1", "u3"])
+
+    def test_hote_refuse_403(self):
+        self.v3(self.usage())
+        r, _ = self.req("GET", "/api/facturation", entetes={"Host": "evil.example.com"})
+        self.assertEqual(r.status, 403)
 
 
 if __name__ == "__main__":

@@ -12,3 +12,6 @@ node_modules/
 # fichiers produits par le serveur quand on lance la démo
 exemples/demo/equipe.json
 exemples/demo/charge-historique.jsonl
+exemples/demo/usage-historique.jsonl
+exemples/demo/prix-historique.jsonl
+*.jsonl.tmp

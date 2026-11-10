@@ -137,6 +137,27 @@ class TestEtat(unittest.TestCase):
     def test_version_2(self):
         self.assertEqual(self.v2()["version"], 2)
 
+    def test_dossier_ce_que_le_releve_fournit(self):
+        rien = {"facturation": False, "kpi": False, "connaissances": False}
+        self.assertEqual(self.etat()["dossier"], rien)
+        self.assertEqual(self.v2()["dossier"], rien)
+        self.assertEqual(etat.erreur("x", M)["dossier"], rien)
+
+        def v3(modif=None):
+            def m(r):
+                r["version"] = 3
+                if modif:
+                    modif(r)
+            return self.etat(modif=m)["dossier"]
+
+        self.assertEqual(v3(), rien)
+        usage = {"id": "u1", "tache": "t1", "agent": "d1", "modele": "m", "t": M.isoformat(),
+                 "entree": 1, "sortie": 1}
+        self.assertEqual(v3(lambda r: r.update(usage=[usage])), {**rien, "facturation": True})
+        self.assertEqual(v3(lambda r: r["services"][0].update(kpi=[]))["kpi"], True)
+        self.assertEqual(v3(lambda r: r["titulaires"][0].update(connaissances=[]))["connaissances"], True)
+        self.assertEqual(v3(lambda r: r.update(challenges=[]))["connaissances"], True)
+
     def test_prenom_du_releve(self):
         d1 = next(x for x in self.v2(lambda r: r["titulaires"][0].update(prenom="Maëlle", specialite="Tests"))
                   ["agents"] if x["id"] == "d1")

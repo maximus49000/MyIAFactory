@@ -15,6 +15,7 @@ class TestReglages(unittest.TestCase):
     def test_fichier_absent_donne_les_defauts(self):
         r = reglages.charger(self.tmp / "absent.json")
         self.assertEqual((r["port"], r["charge_max"], r["fraicheur_min"]), (8770, 75, 30))
+        self.assertIs(r["prix_automatiques"], True)
 
     def test_le_fichier_complete_les_defauts(self):
         (self.tmp / "r.json").write_text('{"charge_max": 60}', encoding="utf-8")

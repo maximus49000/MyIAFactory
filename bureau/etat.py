@@ -3,6 +3,18 @@ from . import releve as modreleve
 from . import statuts
 
 
+def dossier(r):
+    """Ce que le relevé fournit au dossier d'un service (version 3) ; un onglet absent est masqué."""
+    if r.get("version", 1) < 3:
+        return {"facturation": False, "kpi": False, "connaissances": False}
+    return {
+        "facturation": bool(r.get("usage")),
+        "kpi": any(isinstance(x.get("kpi"), list) for x in r["services"]),
+        "connaissances": (isinstance(r.get("challenges"), list)
+                          or any(isinstance(t.get("connaissances"), list) for t in r["titulaires"])),
+    }
+
+
 def _fraicheur(titulaire, defaut):
     v = titulaire.get("fraicheur_min")
     if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
@@ -74,6 +86,7 @@ def construire(r, eq, maintenant, fraicheur_min):
         "directeur": directeur,
         "agents": agents,
         "taches": taches,
+        "dossier": dossier(r),
     }
 
 
@@ -85,6 +98,7 @@ def erreur(message, maintenant):
         "actions": [], "types": [], "lecons": [],
         "directeur": {"lecons": 0, "retours": 0, "bloquees": 0, "total": 0},
         "agents": [], "taches": [],
+        "dossier": {"facturation": False, "kpi": False, "connaissances": False},
     }
 
 

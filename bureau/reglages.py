@@ -4,7 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
-DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}}
+DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True}
 
 
 class ReglagesInvalides(Exception):

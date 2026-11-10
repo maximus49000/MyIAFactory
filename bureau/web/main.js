@@ -107,7 +107,7 @@ async function demarrer() {
     cumul = 0;
     regie.avancer(dt);
     personnages.synchroniser(acteursVus());
-    kanban.synchroniser(dernier.colonnes || [], regie.postits, dernier.taches || [], dernier.file);
+    kanban.synchroniser(dernier.colonnes || [], regie.postits, dernier.taches || [], dernier.file, dernier.images_ok === true);
     kanban.estomper(panneaux.filtre());
     const marche = personnages.animer(dt);
     const bouge = marche | kanban.animer(dt) | sc.transition(dt);

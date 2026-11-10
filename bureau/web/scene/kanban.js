@@ -4,12 +4,14 @@
 import * as THREE from "three";
 import {PAS_TABLEAU, JEU_TABLEAU} from "../logique/plan.js";
 import {fileDepliable} from "../ui/texte.js";
+import {vignettesVoulues, planVignettes} from "../logique/vignettes.js";
 
 const COULEURS = ["#ffe27a", "#ffb3b0", "#c8f0b4", "#a8e4f0", "#ffd3a1", "#cbbcff"];
 const PALE = "#f2ede2";
 const HAUT = 2.04;                 // hauteur du bord supérieur de la surface utile (modèle Tripo : tableau 2,2 m de haut)
 const DEVANT = 0.05;               // la surface se pose juste devant la face blanche du modèle
 const POSTIT = {l: 0.22, h: 0.19, e: 0.014};
+const VIGNETTE = {l: 0.18, h: 0.11, y: -0.025};   // cadre de la vignette sur un post-it (centré, un peu bas)
 
 function hachage(texte) {
   let h = 2166136261;
@@ -65,6 +67,8 @@ export class Kanban {
     this.signatureColonnes = null;
     this.signature = null;
     this.textes = new Map();
+    this.vignettes = new Map();    // identifiant de tâche -> adresse de la vignette demandée
+    this.chargeur = new THREE.TextureLoader();
   }
 
   _materiau(couleur) {
@@ -92,6 +96,7 @@ export class Kanban {
     e.estompe = estompe;
     e.mesh.material = estompe ? this._materiauEstompe(e.couleur) : this._materiau(e.couleur);
     e.mesh.castShadow = !estompe;
+    if (e.vignette?.mesh) e.vignette.mesh.material.opacity = estompe ? 0.25 : 1;
   }
 
   _dessinerColonnes(colonnes) {
@@ -162,14 +167,19 @@ export class Kanban {
     return cases;
   }
 
-  synchroniser(colonnes, postits, taches, file) {
+  synchroniser(colonnes, postits, taches, file, imagesOk = false) {
     const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom]));
     if (sigCol !== this.signatureColonnes) { this.signatureColonnes = sigCol; this._dessinerColonnes(colonnes); }
     const cases = this._disposition(colonnes, postits, taches, file);
     const sig = JSON.stringify(cases.map((c) => [c.cle, c.colonne, c.rang, c.texte, c.depliable]));
-    if (sig === this.signature) return;
-    this.signature = sig;
+    if (sig !== this.signature) {
+      this.signature = sig;
+      this._placer(cases);
+    }
+    this._synchroniserVignettes(taches, imagesOk);
+  }
 
+  _placer(cases) {
     const vus = new Set();
     for (const c of cases) {
       vus.add(c.cle);
@@ -207,12 +217,57 @@ export class Kanban {
     for (const [cle, e] of this.postits) if (!vus.has(cle)) this._retirer(cle, e);
   }
 
+  // Une vignette (première image de la tâche) sur chaque post-it visible, seulement si les images sont servies.
+  // Une texture par post-it ; elle est libérée quand le post-it disparaît ou que son image change.
+  _synchroniserVignettes(taches, imagesOk) {
+    const ids = [];
+    for (const e of this.postits.values()) if (e.type === "postit") ids.push(e.id);
+    const plan = planVignettes(this.vignettes, vignettesVoulues(imagesOk, taches, ids));
+    for (const id of plan.liberer) {
+      this.vignettes.delete(id);
+      const e = this.postits.get("t:" + id);
+      if (e) this._libererVignette(e);
+    }
+    for (const {cle: id, url} of plan.charger) {
+      this.vignettes.set(id, url);
+      const e = this.postits.get("t:" + id);
+      if (!e) continue;
+      const vignette = {url, mesh: null};
+      e.vignette = vignette;
+      this.chargeur.load(url, (texture) => {
+        if (e.vignette !== vignette) { texture.dispose(); return; }   // le post-it a disparu ou l'image a changé entre-temps
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const img = texture.image;
+        const k = Math.min(VIGNETTE.l / (img?.width || 1), VIGNETTE.h / (img?.height || 1));
+        const l = (img?.width || 1) * k, h = (img?.height || 1) * k;
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(l, h),
+                                    new THREE.MeshBasicMaterial({map: texture, transparent: true}));
+        mesh.position.set(0, VIGNETTE.y, POSTIT.e / 2 + 0.001);
+        e.mesh.add(mesh);
+        vignette.mesh = mesh;
+        mesh.material.opacity = e.estompe ? 0.25 : 1;
+      }, undefined, () => { /* image illisible : le post-it garde son aspect sans vignette */ });
+    }
+  }
+
+  _libererVignette(e) {
+    const v = e.vignette;
+    e.vignette = null;
+    if (!v?.mesh) return;
+    e.mesh.remove(v.mesh);
+    v.mesh.material.map?.dispose();
+    v.mesh.material.dispose();
+    v.mesh.geometry.dispose();
+  }
+
   _retirer(cle, e) {
+    this._libererVignette(e);
     this.groupe.remove(e.mesh);
     const i = this.sc.choisissables.indexOf(e.mesh);
     if (i >= 0) this.sc.choisissables.splice(i, 1);
     if (e.mesh.material.map) { e.mesh.material.map.dispose(); e.mesh.material.dispose(); e.mesh.geometry.dispose(); }
     this.postits.delete(cle);
+    if (e.type === "postit") this.vignettes.delete(e.id);
   }
 
   // Les post-its glissent vers leur case et apparaissent en grandissant. Rend vrai tant que ça bouge.

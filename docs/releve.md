@@ -97,7 +97,7 @@ Une image d'une tâche est un fichier du projet. Les réglages disent d'où le b
 {"images": {"racines": ["images"]}}
 ```
 
-Les racines sont relatives au dossier des réglages. Le champ `chemin` d'une image est relatif à ce même dossier. Le bureau ne sert que les fichiers `.png`, `.jpg` et `.jpeg` qui, une fois le chemin résolu (liens symboliques compris), sont dans une de ces racines ; tout le reste est refusé (404). Sans `images` dans les réglages, les tâches n'ont pas de vignettes. Les images sont chargées quand elles deviennent visibles dans le panneau ; l'adresse porte la `maj` de la tâche : mettez-la à jour quand une image est refaite sous le même nom.
+Les racines sont relatives au dossier des réglages. Le champ `chemin` d'une image est relatif à ce même dossier. Le bureau ne sert que les fichiers `.png`, `.jpg` et `.jpeg` qui, une fois le chemin résolu (liens symboliques compris), sont dans une de ces racines ; tout le reste est refusé (404). Sans `images` dans les réglages, les tâches n'ont pas de vignettes. La première image d'une tâche sert aussi de vignette sur son post-it du Kanban (au plus une par post-it visible, chargée en différé, libérée quand le post-it disparaît ou que l'image change ; aucune requête sans `images`). Les autres images sont chargées quand elles deviennent visibles dans le panneau ; l'adresse porte la `maj` de la tâche : mettez-la à jour quand une image est refaite sous le même nom.
 
 Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'ils sont longs.
 

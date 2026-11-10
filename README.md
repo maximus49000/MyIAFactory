@@ -41,7 +41,7 @@ Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-burea
 - [x] 1. Le relevé version 2
 - [x] 2. L'état version 2
 - [x] 3. Les demandes (du bureau au projet)
-- [ ] 4. Les images
+- [x] 4. Les images
 - [ ] 5. Les boutons de la factory et l'envoi des demandes
 - [ ] 6. Le panneau d'une tâche, la file, la vue liste
 - [ ] 7. Le Directeur et les leçons

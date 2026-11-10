@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import charge, demandes, equipe, etat, reglages
 
@@ -18,6 +18,8 @@ PAS_HISTORIQUE_S = 60
 TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
          ".json": "application/json; charset=utf-8", ".html": "text/html; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
+IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+IMAGE_MAX_OCTETS = 20 * 1024 * 1024
 
 
 class Bureau(ThreadingHTTPServer):
@@ -147,11 +149,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     # -- réponses ---------------------------------------------------------
-    def _envoyer(self, code, corps, type_="application/json; charset=utf-8"):
+    def _envoyer(self, code, corps, type_="application/json; charset=utf-8", cache="no-store"):
         self.send_response(code)
         self.send_header("Content-Type", type_)
         self.send_header("Content-Length", str(len(corps)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(corps)
@@ -168,7 +170,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._hote_ok():
             return self._json(403, {"erreur": "Hôte refusé."})
-        chemin = urlsplit(self.path).path
+        morceaux = urlsplit(self.path)
+        chemin = morceaux.path
+        if chemin == "/api/image":
+            return self._image(morceaux.query)
         if chemin == "/api/etat":
             return self._json(200, self.server.etat())
         if chemin == "/api/charge":
@@ -178,6 +183,38 @@ class Handler(BaseHTTPRequestHandler):
         self._statique(chemin)
 
     do_HEAD = do_GET
+
+    def _image(self, requete):
+        """Sert une image du projet, seulement depuis les racines déclarées (`images.racines`)."""
+        introuvable = lambda: self._json(404, {"erreur": "Introuvable."})  # noqa: E731
+        valeurs = parse_qs(requete, keep_blank_values=True).get("chemin", [])
+        if len(valeurs) != 1:
+            return introuvable()
+        brut = valeurs[0]
+        if (not brut or chr(0) in brut or Path(brut).is_absolute() or brut[0] in "/\\"
+                or Path(brut).suffix.lower() not in IMAGES):
+            return introuvable()
+        regl, _ = self.server.reglages()
+        conf = regl.get("images")
+        racines = conf.get("racines") if isinstance(conf, dict) else None
+        if not isinstance(racines, list):
+            return introuvable()
+        base = Path(regl["dossier"])
+        try:
+            cible = (base / brut).resolve()
+            for racine in racines:
+                if not isinstance(racine, str) or not racine:
+                    continue
+                try:
+                    cible.relative_to((base / racine).resolve())
+                except ValueError:
+                    continue
+                if cible.is_file() and cible.stat().st_size <= IMAGE_MAX_OCTETS:
+                    return self._envoyer(200, cible.read_bytes(), IMAGES[cible.suffix.lower()],
+                                         cache="max-age=300")
+        except (OSError, ValueError):
+            pass
+        return introuvable()
 
     def _statique(self, chemin):
         brut = unquote(chemin)

@@ -1,6 +1,7 @@
 import http.client
 import io
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -138,6 +139,66 @@ class TestServeur(unittest.TestCase):
             code = serveur.main(["charge", "--reglages", str(self.regl)])
         self.assertIn(code, (0, 1))
         self.assertIn("charge", sortie.getvalue())
+
+    # -- les images --------------------------------------------------------
+    PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489")
+
+    def images(self, racines=("images",)):
+        dossier = self.tmp / "demo"
+        (dossier / "images").mkdir(exist_ok=True)
+        (dossier / "images" / "a b&c#d.png").write_bytes(self.PNG)
+        (dossier / "images" / "photo.JPG").write_bytes(bytes.fromhex("ffd8ffe0") + b"jpeg")
+        (dossier / "images" / "notes.txt").write_text("secret", encoding="utf-8")
+        (self.tmp / "secret.png").write_bytes(b"secret")
+        (dossier / "secret.png").write_bytes(b"secret")
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["images"] = {"racines": list(racines)}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+
+    def image(self, chemin):
+        return self.req("GET", "/api/image?chemin=" + chemin)
+
+    def test_image_servie(self):
+        self.images()
+        r, data = self.image("images/a%20b%26c%23d.png")
+        self.assertEqual((r.status, data), (200, self.PNG))
+        self.assertEqual(r.getheader("Content-Type"), "image/png")
+        self.assertEqual(r.getheader("Cache-Control"), "max-age=300")
+        r, data = self.image("images/photo.JPG")
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/jpeg"))
+
+    def test_image_hors_racine_refusee(self):
+        self.images()
+        absolu = str(self.tmp / "demo" / "secret.png").replace("\\", "/")
+        for chemin in ("../secret.png", "images/../../secret.png", "..%2Fsecret.png", "images/..%5C..%5Csecret.png",
+                       "secret.png", absolu, "/etc/passwd", "images/notes.txt", "images", "images/inconnue.png",
+                       "images/a.png%00.txt", "images/a%00.png", "", "images/%2e%2e/%2e%2e/secret.png"):
+            r, data = self.image(chemin)
+            self.assertEqual(r.status, 404, chemin)
+            self.assertNotIn(b"secret", data, chemin)
+
+    def test_image_lien_symbolique_sortant(self):
+        self.images()
+        try:
+            os.symlink(self.tmp / "secret.png", self.tmp / "demo" / "images" / "lien.png")
+        except (OSError, NotImplementedError):
+            self.skipTest("création de lien symbolique non permise")
+        r, data = self.image("images/lien.png")
+        self.assertEqual(r.status, 404)
+        self.assertNotIn(b"secret", data)
+
+    def test_image_sans_reglage(self):
+        self.images()
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        del regl["images"]
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        r, _ = self.image("images/photo.JPG")
+        self.assertEqual(r.status, 404)
+
+    def test_image_hote_etranger(self):
+        self.images()
+        r, _ = self.req("GET", "/api/image?chemin=images/photo.JPG", entetes={"Host": "evil.example.com"})
+        self.assertEqual(r.status, 403)
 
     # -- les demandes ------------------------------------------------------
     RELEVE_V2 = {

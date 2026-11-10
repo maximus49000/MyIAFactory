@@ -47,7 +47,7 @@ Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-burea
 - [x] 7. Le Directeur et les leçons
 - [x] 8. La démo qui agit, la documentation
 
-Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-dossiers-des-services.md)) :
+Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-dossiers-des-services.md), [passation](docs/superpowers/plans/2026-11-10-dossiers-des-services-passation.md)) :
 
 - [ ] 1. Le relevé version 3 et l'usage
 - [ ] 2. L'historique des usages

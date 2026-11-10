@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import releve as rel  # noqa: E402
 from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
+from orchestrateur import depart  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
@@ -764,6 +765,33 @@ def cmd_controle(ctx, e):
     return {"numero": n}
 
 
+# --- Le départ d'un agent.
+
+def _fiches_avec_sessions(ctx):
+    """Les fiches, la session de la table des sessions attitrées l'emportant sur celle de la fiche."""
+    sessions = ctx.sessions()
+    return [{**x, "session": sessions.get(x["cle"]) or x["session"]} for x in ctx.fiches()]
+
+
+def cmd_agent_libre(ctx, e):
+    role = texte(e, "role")
+    cle, raison = depart.agent_libre(_fiches_avec_sessions(ctx), ctx.suivi.lire()["taches"], role,
+                                     texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False))
+    return {"agent": cle, "raison": raison}
+
+
+def cmd_depart(ctx, e):
+    cle, i = texte(e, "agent"), texte(e, "tache")
+    fiche_agent = fi.trouver(_fiches_avec_sessions(ctx), cle)
+    if fiche_agent is None:
+        raise Refus(f"Agent inconnu : {cle}")
+    tache_suivie = su.tache(ctx.suivi.lire(), i)
+    if tache_suivie is None:
+        raise Refus(f"Tâche inconnue : {i}")
+    lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], fiche_agent["role"])
+    return {"message": depart.message(ctx.f, fiche_agent, tache_suivie, depart.brief(ctx.f, fiche_agent["role"]), lecons)}
+
+
 COMMANDES = {
     "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"),
@@ -773,6 +801,7 @@ COMMANDES = {
     "file-prendre": (cmd_file_prendre, "obligatoire"), "session": (cmd_session, "obligatoire"),
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
+    "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
 }
 
 

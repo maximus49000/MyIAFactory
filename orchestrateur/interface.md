@@ -124,6 +124,12 @@ Entrée : `{"fonctionnalite"}` (ou, sans entrée, l'identifiant en argument : `c
 commande de catalogue du bureau). Rend le catalogue générique (format de `bureau/catalogue.py`) : les éléments de la
 fonctionnalité avec leur état (`fait`, `en_cours`, `a_faire`), leurs captures, leurs passes et leurs retours.
 
+Pour que la carte et les fiches du bureau colorent bien un élément, un catalogue de projet devrait employer ces
+identifiants d'état : `fait` (ou `valide`, `termine`, `ok`) pour un élément terminé, `a_faire` (ou `a_revoir`,
+`en_cours`, `todo`) pour un élément à faire ; un élément qui porte un `doute` est montré à part ; tout autre état
+est montré comme « autre ». Les positions (`position` d'un élément, `points` de `trace`) sont des paires `{x, y}` et
+`[x, y]` dans un repère où **y monte vers le haut** (le nord est en haut de la carte).
+
 ### `memoire`
 
 Entrée : `{"role"}`. Rend les leçons de la mémoire qui touchent ce rôle (ou « tous ») :
@@ -153,3 +159,36 @@ elle reste « à valider ». `invalider` : la leçon disparaît. Rend `{"ok": tr
 
 Entrée : `{"texte", "origine"}`. Ajoute une ligne au registre des contrôles du projet (`C<n> · date · origine :
 texte`). Rend `{"numero": n}`.
+
+### `agent-libre`
+
+Entrée : `{"role", "modele"?, "lieu"?}`. Cherche le premier spécialiste du rôle (fiches) sans tâche active, au
+modèle et au lieu demandés. Rend `{"agent": "<clé>"|null, "raison": "…"}` (code 0 même s'il n'y en a pas). Raisons
+sans agent : « aucun dev libre » ; pour le cloud, « aucun agent cloud dev sur Sonnet : session à créer » (l'agent
+cloud n'est utilisable qu'avec une session attitrée : l'orchestrateur pose alors une décision `session_cloud`).
+Choisir le modèle : on monte d'un cran au plus (Haiku → Sonnet → Opus) et jamais vers Fable.
+
+### `depart`
+
+Entrée : `{"agent", "tache"}`. Assemble le **message de départ** de l'agent pour cette tâche : le projet et son
+genre, la fiche entière, les leçons de la skill et du genre qui touchent son rôle (jamais celles d'un autre rôle ni
+d'un autre genre), le brief du rôle (`<fiches>/briefs/<rôle>.md`), la tâche, la consigne de fin d'étape (résultat,
+leçons avec étage proposé et texte général, retours sur la factory). Pour un agent cloud, le message commence par
+« Tu repars de zéro. ». Rend `{"message": "…"}`.
+
+## Vérifier une implémentation
+
+```
+py -3.12 orchestrateur/verifier_interface.py --factory <fichier de factory> [--complet]
+```
+
+Lance chaque commande par `lancer` (donc l'adaptateur du projet s'il y en a un) et contrôle ses champs, ses types et
+ses codes de sortie, y compris le refus (code 1 et un message) d'une entrée inconnue. Une ligne par commande : `ok`,
+`ÉCART <commande> : …` ou `ignoré <commande> : …` ; code 0 si tout est conforme, 1 s'il y a un écart.
+
+Sans `--complet`, seules les commandes qui ne changent rien (`releve`, `etat`, `demandes`, `memoire`,
+`genre lister`, `agent-libre`, `depart`, `catalogue`) sont lancées : on peut le faire sur le projet lui-même. Avec
+`--complet`, un petit scénario lance aussi les autres (création d'une fonctionnalité, d'une tâche, d'une décision,
+d'une leçon…), qui **changent le suivi, les fiches et la table des sessions** : à ne faire que sur une **copie** du
+projet. Il refuse si le dossier du fichier de factory est dans un dépôt git et n'est pas marqué par un fichier
+`.copie-de-verification` (code 2).

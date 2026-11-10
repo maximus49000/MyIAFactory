@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 # réglages propres à la machine et au projet observé (jamais publiés)
 *.local.json
+.factory/
+node_modules/

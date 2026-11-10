@@ -21,7 +21,7 @@ le projet ──(relevé : qui tient quelle tâche, dans quelle colonne)──�
 
 Projet 1, le bureau vivant :
 
-- [ ] 1. Socle et réglages
+- [x] 1. Socle et réglages
 - [ ] 2. Le relevé (contrat entre un projet et le bureau) et l'exemple de démonstration
 - [ ] 3. Statuts : fraîcheur, pause, départ
 - [ ] 4. L'équipe : prénoms et couleurs
@@ -34,7 +34,7 @@ Projet 1, le bureau vivant :
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : conception et plan écrits, rien n'est encore construit.
+État : étape 1 faite (socle et réglages).
 
 ## Ce qu'il reste à faire ensuite
 

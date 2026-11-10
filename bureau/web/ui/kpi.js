@@ -5,6 +5,7 @@
 import {el} from "./dom.js";
 import {tronquer, libellePeriode} from "./texte.js";
 import {challengeDe} from "./actions.js";
+import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
 
 const MAX_NOM = 60;
@@ -46,7 +47,7 @@ export function idCibleKpi(service, id) {
 export async function chargerKpi(periode) {
   let r;
   try {
-    r = await fetch(`/api/kpi?periode=${encodeURIComponent(periode)}`,
+    r = await fetch(urlProjet(`/api/kpi?periode=${encodeURIComponent(periode)}`),
                     {cache: "no-store", signal: AbortSignal.timeout(15000)});
   } catch {
     throw new Error("Les KPI n'ont pas pu être chargés (serveur injoignable ou trop lent).");

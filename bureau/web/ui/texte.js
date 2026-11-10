@@ -1,5 +1,7 @@
 // Petites fonctions de texte, pures (sans DOM), testées avec node.
 
+import {urlProjet} from "./projets.js";
+
 // Coupe un texte à n caractères et ajoute « … » s'il était plus long. Accepte null.
 export function tronquer(texte, n) {
   if (texte === null || texte === undefined) return "";
@@ -94,7 +96,7 @@ export function filtreDeListe(etat, filtreListe) {
 export function imagesUrl(tache) {
   const maj = encodeURIComponent(tache?.maj ?? "");
   return (tache?.images || []).map((i) => ({
-    url: `/api/image?chemin=${encodeURIComponent(i.chemin)}&t=${maj}`,
+    url: urlProjet(`/api/image?chemin=${encodeURIComponent(i.chemin)}&t=${maj}`),
     legende: i.legende || "",
   }));
 }

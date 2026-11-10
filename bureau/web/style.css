@@ -402,3 +402,18 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .liste-alertes { list-style: none; margin: 4px 0 8px; padding: 0; }
 .alerte-kpi { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 4px; border-radius: 8px; background: #fbe3d6; color: #8a3b1e; }
 .alerte-texte { flex: 1 1 160px; overflow-wrap: anywhere; }
+
+/* --- Plusieurs projets : sélecteur, livrables. */
+.barre-choix {
+  font: inherit; padding: 2px 6px; border: 1px solid #cfc6b4; border-radius: 6px; background: #fffdf7; color: inherit;
+  max-width: 22em;
+}
+.barre-livrable { position: relative; display: inline-block; }
+.menu-livrables { position: relative; }
+.menu-livrables summary { list-style: none; cursor: pointer; display: inline-block; }
+.menu-livrables summary::-webkit-details-marker { display: none; }
+.menu-livrables ul {
+  position: absolute; right: 0; top: 100%; z-index: 20; min-width: 16em; margin: 4px 0 0; padding: 6px 10px;
+  background: #fffdf7; border: 1px solid #cfc6b4; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15); list-style: none;
+}
+.menu-livrables li { padding: 3px 0; }

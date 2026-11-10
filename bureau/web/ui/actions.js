@@ -1,6 +1,8 @@
 // Les boutons de la factory et l'envoi des demandes au projet. Pur (sans DOM), testé avec node.
 // Le bureau n'agit jamais lui-même : chaque geste devient une demande remise au projet par le serveur.
 
+import {urlProjet} from "./projets.js";
+
 const SCHEMAS = ["https:", "http:", "claude:"];
 
 // Même règle que côté serveur (releve.lien_valide) : https, http ou claude, sans espace ni caractère de contrôle.
@@ -32,7 +34,7 @@ export function boutons(etat) {
 // Dépose une demande. Rend {ok, message} ; ne lève jamais.
 export async function envoyer(demande, fetchFn = fetch) {
   try {
-    const r = await fetchFn("/api/demande", {
+    const r = await fetchFn(urlProjet("/api/demande"), {
       method: "POST",
       headers: {"X-Bureau": "1", "Content-Type": "application/json"},
       body: JSON.stringify(demande),

@@ -69,7 +69,7 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 3. Les sept demandes et les images jointes
 - [x] 4. Plusieurs projets dans un bureau
 - [x] 5. Le catalogue et le dernier livrable servis
-- [ ] 6. Le sélecteur de projets et la barre
+- [x] 6. Le sélecteur de projets et la barre
 - [ ] 7. Le panneau d'une fonctionnalité et sa discussion
 - [ ] 8. Le Directeur enrichi et la montée de modèle
 - [ ] 9. Le catalogue d'une fonctionnalité

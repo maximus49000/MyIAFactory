@@ -9,6 +9,7 @@ import {Personnages} from "./scene/personnages.js";
 import {Kanban} from "./scene/kanban.js";
 import {creerBarre} from "./ui/barre.js";
 import {creerPanneaux} from "./ui/panneaux.js";
+import {lireProjets, projetInitial, definirProjet, memorise, memoriser, urlProjet, projetCourant} from "./ui/projets.js";
 
 const INTERVALLE = 3000;      // ms entre deux lectures de l'état
 const DELAI_LECTURE = 15000;  // ms : au-delà, la lecture est abandonnée (le serveur coupe le relevé à 10 s)
@@ -25,7 +26,7 @@ function signaler(message) {
 
 async function lireEtat() {
   try {
-    const r = await fetch("/api/etat", {cache: "no-store", signal: AbortSignal.timeout(DELAI_LECTURE)});
+    const r = await fetch(urlProjet("/api/etat"), {cache: "no-store", signal: AbortSignal.timeout(DELAI_LECTURE)});
     if (!r.ok) return {erreur: `Le serveur a répondu ${r.status}.`};
     return await r.json();
   } catch {
@@ -42,6 +43,13 @@ function acteurDirecteur(plan) {
 }
 
 async function demarrer() {
+  // Plusieurs projets : le choix mémorisé (sinon le premier) ; un seul projet : rien ne change.
+  let liste = await lireProjets();
+  if (liste.multi) {
+    const id = projetInitial(liste.projets, memorise());
+    definirProjet(id);
+    barre.majProjets(true, liste.projets, id);
+  }
   let etat = await lireEtat();
   while (!etatUtilisable(etat)) {
     signaler(etat?.erreur || "Relevé indisponible.");
@@ -83,6 +91,10 @@ async function demarrer() {
     try { e = await lireEtat(); } finally { enLecture = false; }
     if (!etatUtilisable(e)) { signaler(e?.erreur || "Relevé indisponible."); return; }
     barre.majEtat(e);
+    if (liste.multi) {   // les pastilles des autres projets suivent (lecture du dernier état connu côté serveur)
+      const l = await lireProjets();
+      if (l.multi) { liste = l; barre.majProjets(true, l.projets, projetCourant()); }
+    }
     if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
     if (document.hidden) { dernier = e; aRemettre = true; return; }
     regie.appliquer(e, changements(dernier, e));

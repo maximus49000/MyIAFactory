@@ -2,8 +2,9 @@
 // Plus, sous la barre, le bandeau d'erreur quand le relevé est indisponible.
 // Tout texte venu du serveur passe par textContent.
 
-import {voyant, libelleCharge, listeDisponible} from "./texte.js";
+import {voyant, libelleCharge, listeDisponible, dateFr} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
+import {urlProjet, livrables, projetCourant, memoriser} from "./projets.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -19,7 +20,10 @@ export function creerBarre(entete, bandeau) {
   const titre = el("div", "barre-titre");
   const logo = el("span", "barre-logo", "Le bureau vivant");
   const projet = el("span", "barre-projet", "");
-  titre.append(logo, projet);
+  const choixProjet = el("select", "barre-choix");
+  choixProjet.setAttribute("aria-label", "Projet");
+  choixProjet.hidden = true;   // montré seulement quand le bureau suit plusieurs projets
+  titre.append(logo, projet, choixProjet);
 
   const lampe = el("span", "voyant-lampe");
   const libelle = el("span", "voyant-libelle", "…");
@@ -41,7 +45,12 @@ export function creerBarre(entete, bandeau) {
   const boutonListe = el("button", "bouton-barre bouton-liste", "Toutes les tâches");
   boutonListe.type = "button";
   boutonListe.hidden = true;  // montré seulement pour un relevé qui a la vue liste (version 2)
-  entete.append(titre, leVoyant, zoneActions, boutonListe, charge);
+  const boutonNouvelle = el("button", "bouton-barre", "+ Nouvelle fonctionnalité");
+  const boutonFonctions = el("button", "bouton-barre", "Fonctionnalités");
+  for (const b of [boutonNouvelle, boutonFonctions]) { b.type = "button"; b.hidden = true; }   // relevé v4 et `agir`
+  const zoneLivrable = el("span", "barre-livrable");
+  zoneLivrable.hidden = true;
+  entete.append(titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe, charge);
 
   // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
   const retour = el("div", "message-demande");
@@ -99,6 +108,60 @@ export function creerBarre(entete, bandeau) {
     }
   }
 
+  // « Dernier livrable » : un lien direct, ou un petit menu s'il y en a plusieurs.
+  let signatureLivrables = "";
+  function majLivrables(etat) {
+    const liste = livrables(etat, projetCourant());
+    const signature = JSON.stringify(liste);
+    if (signature === signatureLivrables) return;
+    signatureLivrables = signature;
+    zoneLivrable.replaceChildren();
+    zoneLivrable.hidden = liste.length === 0;
+    const lien = (l, classe, texte) => {
+      const a = el("a", classe, texte);
+      a.href = l.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      return a;
+    };
+    if (liste.length === 1) {
+      zoneLivrable.append(lien(liste[0], "bouton-barre", "Dernier livrable"));
+    } else if (liste.length > 1) {
+      const details = el("details", "menu-livrables");
+      details.append(el("summary", "bouton-barre", "Dernier livrable"));
+      const ul = el("ul", "liste-partie");
+      for (const l of liste) {
+        const li = el("li", "");
+        li.append(lien(l, "lien-tache", l.libelle + (l.date ? " · " + dateFr(l.date) : "")));
+        ul.append(li);
+      }
+      details.append(ul);
+      zoneLivrable.append(details);
+    }
+  }
+
+  // Le sélecteur de projets (mode `multi`) : un choix par projet, avec sa pastille d'attente.
+  let signatureProjets = "";
+  function majProjets(multi, projets, id) {
+    choixProjet.hidden = !multi;
+    projet.hidden = multi;
+    if (!multi) return;
+    const signature = JSON.stringify([projets, id]);
+    if (signature === signatureProjets) return;
+    signatureProjets = signature;
+    choixProjet.replaceChildren();
+    for (const p of projets) {
+      const o = el("option", "", (p.nom || p.id) + (p.attente > 0 ? ` (${p.attente})` : "") + (p.erreur ? " ⚠" : ""));
+      o.value = p.id;
+      o.selected = p.id === id;
+      choixProjet.append(o);
+    }
+  }
+  choixProjet.addEventListener("change", () => {
+    memoriser(choixProjet.value);
+    location.reload();     // la scène est reconstruite pour les services du nouveau projet
+  });
+
   const message = el("span", "bandeau-message");
   bandeau.append(message);
   bandeau.hidden = true;
@@ -133,7 +196,7 @@ export function creerBarre(entete, bandeau) {
 
   async function rafraichirCharge() {
     try {
-      const r = await fetch("/api/charge", {cache: "no-store"});
+      const r = await fetch(urlProjet("/api/charge"), {cache: "no-store"});
       if (r.ok) derniere = await r.json();
     } catch { /* on garde la dernière mesure */ }
     afficherCharge();
@@ -156,6 +219,9 @@ export function creerBarre(entete, bandeau) {
       afficherVoyant();
       boutonListe.hidden = !listeDisponible(etat);
       majActions(etat);
+      const v4 = (etat.version ?? 1) >= 4 && etat.agir === true;
+      boutonNouvelle.hidden = boutonFonctions.hidden = !v4;
+      majLivrables(etat);
     },
     // Le relevé est indisponible : voyant en alerte et bandeau avec le message du serveur.
     majErreur(texte) {
@@ -165,6 +231,9 @@ export function creerBarre(entete, bandeau) {
       afficherVoyant();
     },
     boutonListe,
+    boutonNouvelle,
+    boutonFonctions,
+    majProjets,
     majActions,
     demander,
     dire,

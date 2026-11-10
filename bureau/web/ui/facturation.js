@@ -3,6 +3,7 @@
 import {el} from "./dom.js";
 import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
 import {challengeDe} from "./actions.js";
+import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
 
 const MAX_TITRE = 90;
@@ -65,7 +66,7 @@ export function lignesModeles(s) {
 export async function chargerFacturation(periode) {
   let r;
   try {
-    r = await fetch(`/api/facturation?periode=${encodeURIComponent(periode)}`,
+    r = await fetch(urlProjet(`/api/facturation?periode=${encodeURIComponent(periode)}`),
                     {cache: "no-store", signal: AbortSignal.timeout(15000)});
   } catch {
     throw new Error("La facturation n'a pas pu être chargée (serveur injoignable ou trop lent).");

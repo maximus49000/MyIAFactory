@@ -4,6 +4,7 @@
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {tronquer, filtrer, filtreDeListe} from "./texte.js";
 import {el, ligne} from "./dom.js";
+import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
@@ -189,7 +190,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
 
     async function enregistrerValeur(v) {
       try {
-        const r = await fetch("/api/reglages", {
+        const r = await fetch(urlProjet("/api/reglages"), {
           method: "POST",
           headers: {"Content-Type": "application/json", "X-Bureau": "1"},
           body: JSON.stringify({charge_max: v}),
@@ -216,7 +217,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     zoneConseil.hidden = true;
     conseiller.addEventListener("click", async () => {
       try {
-        const r = await fetch("/api/conseil", {cache: "no-store"});
+        const r = await fetch(urlProjet("/api/conseil"), {cache: "no-store"});
         const c = await r.json();
         const v = Math.max(30, Math.min(95, Math.round(c.valeur / 5) * 5));
         const phrase = el("p", "", `Je conseille ${c.valeur} %. ${c.explication}`);

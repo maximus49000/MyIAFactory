@@ -2,7 +2,7 @@
 
 À lancer avec Blender (testé avec Blender 3.2), pas avec Python :
 
-    blender -b -P outils/decouper_glb.py -- <entree.glb> <dossier_sortie> <nom1,nom2,...>
+    blender -b -P outils/decouper_glb.py -- <entree.glb|entree.fbx> <dossier_sortie> <nom1,nom2,...>
 
 Ce que fait le script :
   1. importe le GLB et réunit tous ses morceaux de maillage ;
@@ -25,7 +25,7 @@ try:
     from mathutils import Matrix, Vector
 except ImportError:  # lancé avec Python au lieu de Blender
     print("Ce script se lance avec Blender : blender -b -P outils/decouper_glb.py -- "
-          "<entree.glb> <dossier_sortie> <nom1,nom2,...>")
+          "<entree.glb|entree.fbx> <dossier_sortie> <nom1,nom2,...>")
     sys.exit(2)
 
 MARGE_RELATIVE = 0.005   # tolérance de contact : 0,5 % de la taille de l'ensemble
@@ -39,10 +39,10 @@ def arreter(message, code=1):
 def lire_arguments():
     argv = sys.argv
     if "--" not in argv:
-        arreter("usage : blender -b -P outils/decouper_glb.py -- <entree.glb> <dossier_sortie> <nom1,nom2,...>", 2)
+        arreter("usage : blender -b -P outils/decouper_glb.py -- <entree.glb|entree.fbx> <dossier_sortie> <nom1,nom2,...>", 2)
     args = argv[argv.index("--") + 1:]
     if len(args) != 3:
-        arreter("il faut trois arguments : <entree.glb> <dossier_sortie> <nom1,nom2,...>", 2)
+        arreter("il faut trois arguments : <entree.glb|entree.fbx> <dossier_sortie> <nom1,nom2,...>", 2)
     entree, sortie = Path(args[0]), Path(args[1])
     noms = [n.strip() for n in args[2].split(",") if n.strip()]
     if not entree.is_file():
@@ -75,7 +75,10 @@ def main():
     entree, sortie, noms = lire_arguments()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=str(entree))
+    if entree.suffix.lower() == ".fbx":
+        bpy.ops.import_scene.fbx(filepath=str(entree))   # la texture est cherchée dans le dossier .fbm voisin
+    else:
+        bpy.ops.import_scene.gltf(filepath=str(entree))
 
     maillages = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not maillages:
@@ -136,6 +139,10 @@ def main():
         return (min(b[0].x for b in bs) + max(b[1].x for b in bs)) / 2
 
     ordonnes = sorted(groupes.values(), key=centre_x)
+    if len(ordonnes) != len(noms) and len(parties) == len(noms):
+        # Autant de parties non reliées que d'objets attendus : leurs boîtes se recouvrent
+        # seulement (une chaise devant un clavier), elles ne se touchent pas vraiment.
+        ordonnes = sorted(([o] for o in parties), key=centre_x)
     print(f"{len(parties)} parties non reliées, regroupées en {len(ordonnes)} objets "
           f"(attendu : {len(noms)}).")
     if len(ordonnes) != len(noms):

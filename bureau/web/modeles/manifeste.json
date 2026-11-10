@@ -1,1 +1,8 @@
-{}
+{
+  "bureau": {"fichier": "bureau.glb", "hauteur": 0.75},
+  "chaise": {"fichier": "chaise.glb", "hauteur": 0.9},
+  "ecran": {"fichier": "ecran.glb", "hauteur": 0.45},
+  "armoire": {"fichier": "armoire.glb", "hauteur": 0.7},
+  "etagere": {"fichier": "etagere.glb", "hauteur": 1.6},
+  "plante": {"fichier": "plante.glb", "hauteur": 0.9}
+}

@@ -16,7 +16,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | D | Opus 5.5 | ce dépôt | 9 : le catalogue | Reprendre fidèlement le design d'une page existante, carte avec zoom, 5 000 éléments | fait |
 | E | Sonnet 5.5 | ce dépôt | 10 à 12 : fichier de factory, suivi, mémoire, départ d'un agent, vérificateur | Outils en ligne de commande au contrat écrit ; les cas difficiles (git, mots interdits, écritures concurrentes) ont leurs tests nommés | fait |
 | F | Opus 5.5 | ce dépôt | 13 et 14 : consignes génériques, démo, documentation, relecture finale | Les consignes guident l'orchestrateur : leur justesse compte plus que tout ; relecture finale sur un modèle fort | fait |
-| G | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 15 : le vrai passage de bout en bout, mené avec l'utilisateur | Diagnostic d'un orchestrateur réel et corrections génériques | à faire |
+| G | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 15 : le vrai passage de bout en bout, mené avec l'utilisateur | Diagnostic d'un orchestrateur réel et corrections génériques | fait |
 | H | Opus 5.5 | dépôt du projet pilote | la liste de compatibilité | Ne rien oublier du fonctionnement actuel : lecture fine de longues consignes | à faire |
 | I | Sonnet 5.5 | dépôt du projet pilote | les adaptateurs, la version 4, les demandes, le catalogue | Travail cadré par l'interface et contrôlé par `verifier_interface.py` | à faire |
 | J | Opus 5.5 | dépôt du projet pilote | la bascule et la vérification finale | Dernier mot sur « rien n'est perdu » | à faire |
@@ -119,6 +119,57 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
   la démo) ; sur une machine où seul `py` existe, les remplacer. Pour la mémoire, pointer `memoire` vers un clone local
   (la variable `MYIAFACTORY_MOTS` n'est pas définie sur cette machine : le test qui l'emploie est sauté).
 - Tests : 523 `unittest` (1 sauté : `MYIAFACTORY_MOTS`) et 121 `node --test` verts en fin de phase.
+
+**Phase G (Opus 5.5) — le vrai passage, mené avec l'utilisateur**
+
+- Terrain : trois projets inventés copiés du projet neuf hors du dépôt (P, Q, R), chacun dépôt git avec un distant nu
+  local ; la mémoire dans un clone local de la skill (distant nu local) : le vrai dépôt n'a reçu aucune leçon. La
+  machine n'a pas d'identité git globale : les dépôts d'essai ont reçu celle du dépôt de la skill.
+- P a été mené par une conversation orchestratrice (Opus) du bouton « + Nouvelle fonctionnalité » (avec une image)
+  jusqu'au prototype validé du premier élément, quatre tours de relecture croisée et une décision « méthode à
+  revoir ». **La série n'a pas été menée** : l'utilisateur a validé la skill à ce stade, sous condition des économies
+  ci-dessous ; la mesure de leur effet réel reste à faire sur une série (comparer le coût d'un élément au premier).
+- Mémoire de genre vérifiée par les outils : Q (même genre « pictogrammes ») reçoit les leçons de genre G1 à G5 dans
+  le message de départ de ses agents ; R (genre « outil-texte », créé, commité et poussé vers le distant local) n'en
+  reçoit aucune ; les 7 leçons de skill vont aux trois. Aucun nom des projets d'essai dans la mémoire ni dans le dépôt.
+- Compatibilité vérifiée : bureau à un seul projet (`--reglages`, sans sélecteur) sur une copie de la démo, relevés
+  versions 4, 3, 2 et 1 lus sans erreur et sans champ de la version 4.
+- **Corrections génériques** (chacune avec son test) : images PNG ou JPEG seulement (les outils refusent le reste avec
+  la marche à suivre ; l'agent avait fait des maquettes SVG que le bureau ne montrait pas) ; le Directeur liste les
+  « Réponses attendues » (règle : questions à choix, `attend`, ou une question dans le texte ; un compte rendu n'attend
+  rien) ; la discussion s'ouvre sur le dernier message et se replie quand le cahier attend son verdict ; « en train
+  d'écrire » nomme l'agent qui travaille ; `etat` donne une empreinte des consignes (relues quand elle change : un
+  orchestrateur lancé avant une mise à jour l'ignorait) ; l'orchestrateur est sur **Sonnet par défaut**
+  (`modele_orchestrateur`, choix de l'utilisateur ; Opus pour un projet exigeant ; P déclare Opus).
+- **Ajouts demandés par l'utilisateur** (chacun avec ses tests) : facturation des projets génériques (commande `usage`,
+  pièce « facturation » toujours visible) et coût par tâche dans le panneau (tokens et lignes produites, champ
+  `lignes` d'une tâche) ; espace « Documents » (rangement d'office, commande `document`, `/api/document`, versions et
+  « Voir l'historique », champ `remplace`) ; « Livrables » par élément avec « Demander une modification »
+  (`livrable: true`) ; glossaire de la fonctionnalité (mots en couleur, définition au survol, `glossaire.md`, joint au
+  départ des agents) ; questions à choix (`questions`, « Autre », « Passer ») et la règle « les choix en boutons » ;
+  bouton « Copier » ; « Agrandir » / « Plein écran » sur les images ; méthode écrite en entier dans le panneau
+  (`/api/methode`) ; tâches à venir et réalisées dans le panneau ; « Tout valider » / « Tout invalider » et
+  « Challenger » une leçon (cible `lecon`, une tâche de discussion s'ouvre) ; Kanban en plein écran au clic sur le
+  tableau ; série en parallèle (le dev suivant démarre pendant la relecture, corrections d'abord, deux éléments au plus,
+  jamais pendant le prototype).
+- **Économies** (mesurées sur P : 1,33 M tokens pour le prototype d'un élément) : `etat` court (≈ 11 300 → ≈ 2 200
+  tokens par réveil) et commande `detail` ; message de départ sans les leçons « à valider », avec une consigne de
+  sobriété ; cadrage mixte (première analyse et cahier un cran au-dessus d'une fiche Haiku, questions intermédiaires
+  sur Haiku ; le projet neuf a sa fiche de cadrage sur Haiku) ; relecture croisée proportionnée (deux relecteurs au
+  premier tour, puis un seul sur les points corrigés). Le Kanban plein écran, les documents et le coût ne coûtent aucun
+  token (lus par le bureau). Le coût d'un agent vient surtout de ce qu'il relit : c'est le levier à surveiller.
+- **Note pour plus tard (projet 4)** : l'initialisation d'un projet demandera si la facturation est un objectif du
+  projet, et la mettra en place ou non selon la réponse (souhait de l'utilisateur).
+- Échecs isolés vus une fois chacun pendant un passage complet, machine chargée par les agents de P, jamais en les
+  relançant seuls (6 fois sur 6) : `test_serveur.TestServeur.test_json_tres_imbrique` (connexion coupée) et
+  `test_orch_suivi.TestSuivi.test_ecritures_concurrentes` (sans message ; probablement l'attente du verrou du suivi
+  dépassée sous charge). À surveiller.
+- Tests en fin de phase G : 557 `unittest` verts (1 sauté) et 140 `node --test` verts ; au passage complet
+  enchaîné, un test `node` est tombé une fois (probablement le test de délai de 50 ms, sous charge) puis vert à la
+  relance.
+- Mineur : le titre d'une leçon de mémoire est coupé à 60 caractères au milieu d'un mot.
+- Ce qui reste dans les dossiers d'essai (`MyIAFactory-essais`, hors dépôt) peut être supprimé par l'utilisateur.
+
 
 ## Ce que chaque conversation doit savoir
 

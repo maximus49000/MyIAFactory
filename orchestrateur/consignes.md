@@ -48,8 +48,10 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 3. **Les outils d'abord.** Si un agent a proposé une amélioration des outils de la factory, elle passe avant toute
    nouvelle tâche : relecture de code par un agent à contexte neuf, fusion, puis annonce à chaque agent actif (dans
    son prochain message) avant qu'il ne prenne une nouvelle tâche.
-4. **Les retours des agents** : leur résultat (mets la tâche à jour avec `lancer tache` : colonne, `journal`,
-   `captures`), leurs leçons (`lancer lecon` avec `action: noter`, voir « Les leçons ») et leurs retours sur la
+4. **Les retours des agents** : leur coût d'abord (`lancer usage` : le `modele` réellement employé, l'`agent`, la
+   `tache`, l'`etape`, et les tokens que l'exécution a consommés — `entree` et `sortie` si tu les as, sinon le `total`
+   que rend le sous-agent ; la facturation est un élément central du bureau, ne saute jamais cette ligne), leur
+   résultat (mets la tâche à jour avec `lancer tache` : colonne, `journal`, `captures`), leurs leçons (`lancer lecon` avec `action: noter`, voir « Les leçons ») et leurs retours sur la
    factory, qui deviennent des contrôles (`lancer controle`) ou des outils (point 3).
 5. **Faire avancer chaque fonctionnalité** selon son étape (« Le parcours »).
 6. **Commit et push** du dépôt du projet après chaque étape qui produit quelque chose (un cahier, une méthode, un

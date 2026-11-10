@@ -600,6 +600,50 @@ def cmd_file_prendre(ctx, e):
         return {"element": f["file"].pop(rang)}
 
 
+USAGES_AU_RELEVE = 2000   # le relevé ne porte que les plus récents : le bureau garde l'historique
+
+
+def _entier(e, cle, defaut=None):
+    v = e.get(cle, defaut)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        raise Refus(f"« {cle} » doit être un entier positif ou nul.")
+    return v
+
+
+def cmd_usage(ctx, e):
+    """Note les tokens d'une exécution d'agent (pour la facturation du bureau). Les compteurs d'un même `id` sont des
+    cumuls : republier l'`id` avec des nombres plus grands, tant que l'exécution continue. Quand seul un `total` est
+    connu (un sous-agent ne donne que lui), il compte comme des tokens d'entrée : le coût est alors une estimation basse."""
+    modele = texte(e, "modele")
+    agent, tache = e.get("agent"), e.get("tache")
+    if agent is not None and agent not in ctx.cles_agents():
+        raise Refus(f"Agent inconnu : {agent}")
+    if ("total" in e) == ("entree" in e or "sortie" in e):
+        raise Refus("Donnez soit « entree » et « sortie », soit « total » (quand seul le total est connu).")
+    if "total" in e:
+        entree, sortie = _entier(e, "total"), 0
+    else:
+        entree, sortie = _entier(e, "entree"), _entier(e, "sortie")
+    caches = {c: _entier(e, c, 0) for c in ("cache_lecture", "cache_ecriture")}
+    with ctx.suivi.transaction() as s:
+        if tache is not None and su.tache(s, tache) is None:
+            raise Refus(f"Tâche inconnue : {tache}")
+        usages = s.setdefault("usage", [])
+        if e.get("id") is not None:
+            u = next((x for x in usages if x["id"] == e["id"]), None)
+            if u is None:
+                raise Refus(f"Usage inconnu : {e['id']}")
+        else:
+            u = {"id": f"u{su.suivant(s, 'u')}", "t": su.maintenant()}
+            usages.append(u)
+        u.update({"agent": agent, "tache": tache, "modele": modele, "entree": entree, "sortie": sortie, **caches,
+                  "estime": "total" in e})
+        etape = texte(e, "etape", obligatoire=False)
+        if etape:
+            u["etape"] = etape
+        return {"id": u["id"]}
+
+
 def cmd_session(ctx, e):
     agent, session = texte(e, "agent"), texte(e, "session")
     if agent not in ctx.cles_agents():
@@ -755,6 +799,14 @@ def construire_releve(ctx):
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [dict(d) for d in s["decisions_projet"]]}
+    # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
+    ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
+    r["usage"] = [{"id": u["id"], "tache": u["tache"] if u.get("tache") in ids_taches else None,
+                   "agent": u["agent"] if u.get("agent") in cles_titulaires else None, "modele": u["modele"],
+                   "t": u["t"], "entree": u["entree"], "sortie": u["sortie"],
+                   "cache_lecture": u.get("cache_lecture", 0), "cache_ecriture": u.get("cache_ecriture", 0),
+                   **({"etape": u["etape"]} if u.get("etape") else {})}
+                  for u in (s.get("usage") or [])[-USAGES_AU_RELEVE:]]
     return r
 
 
@@ -920,7 +972,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
-    "document": (cmd_document, "obligatoire"),
+    "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
 }
 
 

@@ -15,7 +15,7 @@ relatifs à lui. Partez du modèle [`orchestrateur/modeles/factory.json`](../orc
 |---|---|---|
 | `skill` | oui | le chemin du dépôt de la skill (ce dépôt) sur la machine |
 | `flux` | oui | les étapes de la série, dans l'ordre : `{id, nom, role, service}` ; elles donnent les colonnes du bureau (`cadrage` et `fait` sont ajoutées) |
-| `services` | non | les services du bureau, `{id, nom}` (chaque étape du flux en nomme un) |
+| `services` | non | les services du bureau, `{id, nom}` (chaque étape du flux en nomme un) ; un service `facturation` donne une pièce où l'onglet Facturation est toujours visible |
 | `nom` | non | le nom du projet (défaut : le nom du dossier) |
 | `genre` | non | l'identifiant du genre du projet ; `null` au départ, l'orchestrateur le propose au premier cadrage |
 | `mots_interdits` | non | le nom du projet, ses lieux, ses chemins, ses personnes : aucune leçon de genre ou de skill ne part s'il en contient un (comparaison sans casse ni accents) |

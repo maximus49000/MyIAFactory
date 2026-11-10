@@ -154,6 +154,9 @@ class TestEtat(unittest.TestCase):
         usage = {"id": "u1", "tache": "t1", "agent": "d1", "modele": "m", "t": M.isoformat(),
                  "entree": 1, "sortie": 1}
         self.assertEqual(v3(lambda r: r.update(usage=[usage])), {**rien, "facturation": True})
+        # Une pièce « facturation » dit que le projet veut voir ses coûts : l'onglet est là, même sans usage encore.
+        self.assertEqual(v3(lambda r: r["services"].append({"id": "facturation", "nom": "Facturation"}))["facturation"],
+                         True)
         self.assertEqual(v3(lambda r: r["services"][0].update(kpi=[]))["kpi"], True)
         self.assertEqual(v3(lambda r: r["titulaires"][0].update(connaissances=[]))["connaissances"], True)
         self.assertEqual(v3(lambda r: r.update(challenges=[]))["connaissances"], True)

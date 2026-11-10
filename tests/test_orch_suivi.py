@@ -101,6 +101,32 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_usage_et_facturation(self):
+        # L'orchestrateur note les tokens de chaque exécution d'agent ; le relevé les donne au bureau (facturation).
+        t = self.ok("tache", entree={"titre": "Dev", "agent": "dev-1", "colonne": "dev"})
+        u = self.ok("usage", entree={"agent": "dev-1", "tache": t["id"], "modele": "Sonnet", "etape": "Développement",
+                                     "entree": 1000, "sortie": 200})
+        # Les compteurs d'un même usage sont des cumuls : on republie le même id avec des nombres plus grands.
+        self.ok("usage", entree={"id": u["id"], "agent": "dev-1", "tache": t["id"], "modele": "Sonnet",
+                                 "entree": 3000, "sortie": 500, "cache_lecture": 10})
+        # Seul un total est connu (sous-agent) : il compte comme des tokens d'entrée (estimation basse).
+        v = self.ok("usage", entree={"agent": "metier-1", "modele": "Opus", "total": 4200})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        us = {x["id"]: x for x in r["usage"]}
+        self.assertEqual((us[u["id"]]["entree"], us[u["id"]]["sortie"], us[u["id"]]["cache_lecture"]), (3000, 500, 10))
+        self.assertEqual((us[u["id"]]["tache"], us[u["id"]]["agent"], us[u["id"]]["etape"]), (t["id"], "dev-1", "Développement"))
+        self.assertEqual((us[v["id"]]["entree"], us[v["id"]]["sortie"], us[v["id"]]["tache"]), (4200, 0, None))
+        self.assertTrue(all(x["t"] for x in us.values()))
+        for entree in ({"modele": "Sonnet"},                                         # pas de tokens
+                       {"modele": "Sonnet", "entree": -1, "sortie": 0},
+                       {"modele": "Sonnet", "entree": 1, "sortie": 1, "agent": "inconnu"},
+                       {"modele": "Sonnet", "entree": 1, "sortie": 1, "tache": "t99"},
+                       {"entree": 1, "sortie": 1},                                    # pas de modèle
+                       {"modele": "Sonnet", "total": 5, "entree": 1, "sortie": 1},    # l'un ou l'autre
+                       {"id": "u99", "modele": "Sonnet", "entree": 1, "sortie": 1}):  # id inconnu
+            self.assertEqual(self.outil("usage", entree=entree)[0], 1, entree)
+
     def test_documents_de_la_fonctionnalite(self):
         # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :
         # images de la discussion, maquettes du cahier, captures d'une tâche, et ce que l'orchestrateur y inscrit.

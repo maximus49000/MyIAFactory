@@ -11,7 +11,8 @@ def dossier(r):
     if r.get("version", 1) < 3:
         return {"facturation": False, "kpi": False, "connaissances": False}
     return {
-        "facturation": bool(r.get("usage")),
+        # Des usages, ou une pièce « facturation » (le projet veut voir ses coûts, même avant le premier usage).
+        "facturation": bool(r.get("usage")) or any(s.get("id") == "facturation" for s in r["services"]),
         "kpi": any(isinstance(x.get("kpi"), list) for x in r["services"]),
         "connaissances": (isinstance(r.get("challenges"), list)
                           or any(isinstance(t.get("connaissances"), list) or _lecons_validees(t)

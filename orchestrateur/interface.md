@@ -118,6 +118,15 @@ Entrée : `{"fonctionnalite", "element"?}`. Retire de la file et rend `{"element
 suivant, ou celui dont l'identifiant est `element` (code 1 s'il n'est pas dans la file) ; `{"element": null}` si la
 file est vide.
 
+### `usage`
+
+Entrée : `{"modele", "agent"?, "tache"?, "etape"?, "entree", "sortie", "cache_lecture"?, "cache_ecriture"?, "id"?}`, ou
+`total` à la place de `entree` et `sortie` quand seul le total est connu (un sous-agent ne donne que lui : il compte
+alors comme des tokens d'entrée, et le coût est une **estimation basse**). Note les tokens d'une exécution d'agent ;
+`id` absent : un nouvel usage, rendu `{"id": "u3"}` ; `id` donné : les compteurs de cet usage sont remplacés (des
+**cumuls**, tant que l'exécution continue). Le relevé donne les usages récents au bureau (`usage`), qui les convertit en
+euros estimés dans l'onglet Facturation ; une pièce `facturation` (service de ce nom) le garde toujours visible.
+
 ### `session`
 
 Entrée : `{"agent", "session"}`. Inscrit la session attitrée de l'agent dans la table des sessions. Rend

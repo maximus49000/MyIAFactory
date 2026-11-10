@@ -8,14 +8,23 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 
 | Phase | Modèle | Étapes du plan | État |
 |---|---|---|---|
-| A | Sonnet | 1 à 6 : le serveur | à faire |
+| A | Sonnet | 1 à 6 : le serveur | fait (2026-11-10), 74 tests Python verts |
 | B | Opus | 7 et 8 : la logique de la page et la scène 3D | à faire |
 | C | Sonnet | 9, 10 et 11 : l'interface, le mode d'emploi, le mobilier Tripo | à faire |
 | D | Opus | 12 : le personnage Tripo, puis la relecture finale de tout le projet | à faire |
 
 Notes laissées par la phase précédente (écarts au plan, choix faits, points à surveiller) :
 
-- (aucune pour l'instant)
+- Travail fait directement sur `main` (la passation demande de pousser sur `main`), un commit par étape.
+- Le dossier `bureau/web/tests/` n'existe pas encore : `node --test bureau/web/tests/` échoue tant que l'étape 7 n'a pas créé ses tests. Normal.
+- `bureau/web/index.html` est une page provisoire de deux lignes (nécessaire au test de la page) : à remplacer à l'étape 8/9.
+- `Equipe.agent(cle, chef=False)` : le paramètre `chef` sert à donner le prénom « Chef » au chef du relevé quelle que soit sa clé.
+- Dans l'état, `agent["taches"]` ne liste que les tâches **actives** de l'agent ; `tache["agent"]` est nul si l'agent est parti ou si la tâche n'a pas de titulaire.
+- Le serveur refuse (403) toute requête dont l'en-tête `Host` n'est pas `127.0.0.1:<port>` ou `localhost:<port>` (protection contre les pages tierces). La page doit donc être ouverte par l'une de ces deux adresses.
+- `GET /api/charge` : si la mesure est indisponible, `disponible` est faux, `cpu`/`memoire`/`charge` valent `null` et `feu_vert` est vrai. `POST /api/reglages` renvoie les réglages sans la clé `dossier`.
+- `Historique` ignore à la lecture les lignes de plus de 7 jours avant la ligne la plus récente du fichier.
+- Vérifié à la main sur cette machine (étape 6) : CPU 12,7 % servi contre 12 % mesuré par le système, mémoire 85,0 % contre 85,4 %. La mémoire de la machine est à 85 % : la barre de charge sera donc rouge avec le maximum par défaut de 75 % (c'est la réalité, pas un défaut).
+- La suite Python dure ~14 s (la commande `charge` mesure 5 s, le test de relevé cassé attend 2,1 s).
 
 ## Ce que chaque conversation doit savoir
 

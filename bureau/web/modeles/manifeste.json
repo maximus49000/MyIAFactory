@@ -42,5 +42,9 @@
   "bureau_direction": {
     "fichier": "bureau_direction.glb",
     "hauteur": 1.45
+  },
+  "personnage": {
+    "fichier": "personnage.glb",
+    "hauteur": 1.45
   }
 }

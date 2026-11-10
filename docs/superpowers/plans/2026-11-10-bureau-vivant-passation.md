@@ -56,6 +56,14 @@ Notes laissées par la phase C (en cours) :
 - **Barre du haut** : corrigé un chevauchement du titre et du voyant à ~800 px de large (`flex: none`, projet masqué sous 900 px).
 - **À regarder à la relecture finale** : le dos de la machine à café et de l'étagère est vu de la caméra (leurs faces regardent vers le nord/ouest, c'est voulu par le plan) ; la capture du README (`docs/img/bureau.jpg`) est à refaire après l'étape 12.
 
+Notes laissées par la phase D :
+
+- **Génération 3 (personnage)** : Tripo a livré un **FBX + texture** (squelette Mixamo de 65 os, une animation « walk » sur place de 57 images à 24 i/s, soit deux pas de 28 images). Converti par `outils/convertir_personnage.py` (Blender) en `bureau/web/modeles/personnage.glb` (~1 Mo, texture 2K). Pas d'autres animations fournies : les poses assis / taper / café / post-it sont fabriquées dans la page.
+- **Écart au plan** : un fichier en plus, `bureau/web/scene/squelette.js` (préparation du modèle, poses par rotation d'os, fondu avec la marche, teinte). `personnages.js` l'utilise si le modèle `personnage` est chargé, sinon garde la figurine articulée.
+- **Teinte** : seule la tranche « pull » du modèle (36 % à 72 % de la hauteur au repos, gris clair peu saturé) prend la couleur de l'agent, par un petit ajout au shader (`onBeforeCompile`) ; peau, cheveux, pantalon et chaussures restent tels quels. Multiplier toute la texture (le plan) aurait teinté la peau.
+- **Marche** : le temps d'animation avance avec la distance parcourue (vitesse des pieds mesurée dans Blender : 0,405 hauteur de personnage par seconde d'animation), donc pas de glissement, quelle que soit la vitesse. À 1,5 m/s, la marche est jouée 2,5 fois plus vite que l'original (pas rapides, style figurine). Hauteur du personnage : 1,45 m (manifeste), comme la figurine de repli.
+- **Vérifié dans la page** (panneau masqué : animations figées image par image à la main) : agents assis qui tapent, sans nouvelles tête basse, marche en pleine foulée, bras levé au tableau, café assis sur le canapé tasse en main, Directeur doré, pulls de couleurs distinctes, pieds au sol, aucune erreur de console. Coût du rendu : 3,0 ms par image, 3,4 ms avec ombres (comme avant). Capture du README refaite.
+
 ## Ce que chaque conversation doit savoir
 
 **Le cadre**

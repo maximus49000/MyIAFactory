@@ -3,6 +3,7 @@
 
 import * as THREE from "three";
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
+import * as Squelette from "./squelette.js";
 
 const FOULEE = 0.75;          // m parcourus par cycle de marche
 const VITESSE_ROTATION = 9;   // rad/s pour se tourner
@@ -48,7 +49,10 @@ export class Personnages {
 
   _creer(id, a) {
     const g = this.modeles.creer("personnage");
+    // Le modèle Tripo (squelette + marche) si présent ; sinon la figurine articulée.
+    const sq = this.modeles.aModele("personnage") ? Squelette.preparer(g) : null;
     if (!this.modeles.aModele("personnage")) g.scale.setScalar(ECHELLE_FIGURINE);
+    const hauteurTexte = sq ? sq.hauteur + 0.06 : 1.4;
     g.userData.choix = {type: a.agent.fixe ? "direction" : "agent", id: a.agent.fixe ? "direction" : id};
     g.position.set(a.x, 0, a.z);
     g.rotation.y = a.cap;
@@ -56,7 +60,7 @@ export class Personnages {
     // Teinte : buste et bras à la couleur de l'agent, cheveux plus foncés.
     if (g.userData.tenue) {
       g.userData.cheveux.material = new THREE.MeshLambertMaterial({color: "#555555"});
-    } else {
+    } else if (!sq) {
       g.traverse((m) => { if (m.isMesh) m.material = m.material.clone(); });
     }
 
@@ -70,7 +74,7 @@ export class Personnages {
     nuage.title = "Agent cloud";
     etiquette.append(nuage, nom);
     const oEtiquette = new CSS2DObject(etiquette);
-    oEtiquette.position.set(0, 1.4, 0);
+    oEtiquette.position.set(0, hauteurTexte, 0);
     oEtiquette.center.set(0.5, 1);
     g.add(oEtiquette);
 
@@ -80,13 +84,13 @@ export class Personnages {
     bulle.className = "bulle";
     porteur.append(bulle);
     const oBulle = new CSS2DObject(porteur);
-    oBulle.position.set(0, 1.4, 0);
+    oBulle.position.set(0, hauteurTexte, 0);
     oBulle.center.set(0.5, 1);
     g.add(oBulle);
 
     this.sc.scene.add(g);
     this.sc.choisissables.push(g);
-    const f = {id, g, art, etiquette, nom, nuage, bulle, oBulle, acteur: a, couleur: null,
+    const f = {id, g, art, sq, etiquette, nom, nuage, bulle, oBulle, acteur: a, couleur: null,
                phase: Math.random() * 10, decalage: Math.random() * 10, x: a.x, z: a.z, assise: 0};
     this.figures.set(id, f);
     return f;
@@ -104,7 +108,9 @@ export class Personnages {
     if (f.couleur !== agent.couleur) {
       f.couleur = agent.couleur;
       const c = new THREE.Color(agent.couleur || "#cccccc");
-      if (f.g.userData.tenue) {
+      if (f.sq) {
+        f.sq.teinte.value.copy(c);
+      } else if (f.g.userData.tenue) {
         f.g.userData.tenue.color.copy(c);
         f.g.userData.cheveux.material.color.copy(c).multiplyScalar(0.45);
       } else {
@@ -142,11 +148,18 @@ export class Personnages {
     if (f.oBulle.visible) f.oBulle.element.classList.toggle("haute", (Math.round(a.x / 1.4) & 1) === 1);
     if (art && art.tasse) art.tasse.visible = a.action === "cafe";
 
-    if (!art) return marche || tourne;
-
     const k = Math.min(1, dt * 10);
     const t = this.temps + f.decalage;
     f.assise = lisser(f.assise, assis ? 1 : 0, k);
+    const assiseBouge = Math.abs(f.assise - (assis ? 1 : 0)) > 0.01;
+
+    if (f.sq) {
+      const fondu = Squelette.animer(f.sq, {marche, parcouru, assise: f.assise, action: a.action,
+                                            travaille, enPoste, assis, t, dt});
+      return marche || tourne || assiseBouge || fondu;
+    }
+    if (!art) return marche || tourne;
+
     let jambe = 0, brasG = 0, brasD = 0, brasDz = 0, tete = 0, bond = 0;
 
     if (marche) {
@@ -190,6 +203,6 @@ export class Personnages {
     r.tete.rotation.x = lisser(r.tete.rotation.x, tete, k);
     r.corps.position.y = HAUTEUR_ASSIS * f.assise + bond;
     r.corps.scale.y = 1 + Math.sin(t * 2.2) * 0.008;
-    return marche || tourne || Math.abs(f.assise - (assis ? 1 : 0)) > 0.01;
+    return marche || tourne || assiseBouge;
   }
 }

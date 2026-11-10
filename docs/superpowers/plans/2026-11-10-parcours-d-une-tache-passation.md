@@ -10,7 +10,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 
 | Phase | Modèle proposé | Où | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|---|
-| A | Sonnet 5.5 | ce dépôt | 1 à 3 : relevé v4, état v4, demandes et images jointes | Validation de champs entièrement décrite par le plan, tests en tableau | à faire |
+| A | Sonnet 5.5 | ce dépôt | 1 à 3 : relevé v4, état v4, demandes et images jointes | Validation de champs entièrement décrite par le plan, tests en tableau | fait |
 | B | Opus 5.5 | ce dépôt | 4 et 5 : plusieurs projets, catalogue et livrable servis | Serveur à fils scindé en deux classes sans rien casser, isolation entre projets, fichiers servis (bac à sable) | à faire |
 | C | Sonnet 5.5 | ce dépôt | 6 à 8 : sélecteur, panneau de fonctionnalité et discussion, Directeur | Interface cadrée par les demandes et l'état des phases A et B | à faire |
 | D | Opus 5.5 | ce dépôt | 9 : le catalogue | Reprendre fidèlement le design d'une page existante, carte avec zoom, 5 000 éléments | à faire |
@@ -25,7 +25,13 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. Haiku n'est 
 
 Notes laissées par les phases précédentes (écarts au plan, choix faits, points à surveiller) :
 
-*(aucune pour l'instant)*
+**Phase A (Sonnet 5.5) — écarts et points à surveiller**
+
+- `bureau/demandes.py` : `verifier(demande, r, cibles_calculees=frozenset(), elements=None)` ; `verifier_images` rejette aussi un type incohérent avec l'extension et un nom contenant `:` ; `nettoyer` ne garde que `nom`, `type`, `donnees` de chaque image ; une `lecon` portant `etage` est refusée sur un relevé de version < 4.
+- `bureau/serveur.py` : `MAX_CORPS_DEMANDE`, `MAX_CORPS_REGLAGES`, `GARDE_DOUBLON_S`. L'anti-doublon est dans `Bureau.demande` (champ `_derniere_creation`, un seul emplacement, contrôlé **avant** la lecture du relevé, rempli seulement quand la commande a réussi). **Phase B** : ce champ, comme `_challenges_envoyes`, passe dans `Projet` (un par projet) ; `Bureau.demande` appelle `verifier(..., None)` pour `elements`, la phase B (tâche 5) fournit la lecture du catalogue.
+- `bureau/releve.py` : constantes `ETAPES`, `DECISIONS_FONCTIONNALITE`, `DECISIONS_PROJET`, `ETAGES`, `MOTIF_GENRE` (compilé, `^…\Z`), `MAX_FONCTIONNALITES`, `MAX_MESSAGES`, `MAX_IMAGES_MESSAGE`. Un livrable exige `libelle` ; `date` est un texte ou nul. Les ids de décisions sont uniques dans tout le relevé ; les ids de messages le sont seulement dans leur discussion.
+- `bureau/etat.py` : en version 4, `etat` gagne `genre`, `livrable`, `fonctionnalites`, `decisions_projet`, `orchestrateur_actif`, et `directeur` gagne `fonctionnalites` et `projet` ; ces clés sont **absentes** en version < 4. Chaque tâche porte ses quatre champs v4. Les leçons gardent `etage_propose`, `texte_general`, `roles`.
+- Tests : 388 `unittest` et 95 `node --test` verts en fin de phase.
 
 ## Ce que chaque conversation doit savoir
 

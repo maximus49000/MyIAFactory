@@ -59,7 +59,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 8. Les trois demandes
 - [x] 9. L'onglet Connaissances et le volet « Challenger »
 - [x] 10. Les KPI, les alertes, « problème revenu »
-- [ ] 11. L'onglet KPI
+- [x] 11. L'onglet KPI
 - [ ] 12. La démo, la documentation, la relecture
 
 État : le bureau vivant est terminé (les douze étapes et la relecture finale), et le bureau agit : il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches (voir « Faire agir le bureau » dans [docs/installation.md](docs/installation.md)). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.

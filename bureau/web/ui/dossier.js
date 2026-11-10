@@ -5,6 +5,7 @@ import {el} from "./dom.js";
 import {tronquer, euros, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
 import {contenuFacturation, chargerFacturation, serviceFacture} from "./facturation.js";
 import {contenuConnaissances} from "./connaissances.js";
+import {contenuKpi, rappelAlertes} from "./kpi.js";
 import {contenuChallenge} from "./challenge.js";
 
 const MAX_TITRE = 90;
@@ -12,17 +13,19 @@ const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre:
 // `challenge` : le volet « Challenger » ouvert ({service, cible, constat, taches}) ou null.
 const choix = {onglet: "taches", periode: PERIODE_DEFAUT, challenge: null};
 
-// Les onglets disponibles, dans l'ordre. La phase D y ajoute KPI.
+// Les onglets disponibles, dans l'ordre.
 export function ongletsDisponibles(etat) {
   const d = etat?.dossier || {};
   const l = [{id: "taches", libelle: "Tâches"}];
   if (d.connaissances) l.push({id: "connaissances", libelle: "Connaissances"});
+  if (d.kpi) l.push({id: "kpi", libelle: "KPI"});
   if (d.facturation) l.push({id: "facturation", libelle: "Facturation"});
   return l;
 }
 
 function contenuTaches(ctx, conteneur, service) {
   const e = ctx.etat;
+  if (e.dossier?.kpi) rappelAlertes(ctx, conteneur, service, choix.periode);
   const ids = new Set((e.agents || []).filter((a) => a.service === service).map((a) => a.id));
   const taches = (e.taches || []).filter((t) => t.active && ids.has(t.agent));
   conteneur.append(el("div", "carte-sous-titre", `Tâches en cours (${taches.length})`));
@@ -97,12 +100,13 @@ export function contenuDossier(ctx, conteneur, service, onglet) {
       barre.append(b);
     }
     zone.replaceChildren();
-    entete.hidden = !e.dossier?.facturation && !e.dossier?.connaissances;
+    entete.hidden = !e.dossier?.facturation && !e.dossier?.connaissances && !e.dossier?.kpi;
     if (choix.challenge) {
       contenuChallenge(ctxDossier, zone, {...choix.challenge, retour: () => { choix.challenge = null; dessiner(); }});
     } else if (choix.onglet === "facturation") contenuFacturation(ctxDossier, zone, service, choix.periode);
+    else if (choix.onglet === "kpi") contenuKpi(ctxDossier, zone, service, choix.periode);
     else if (choix.onglet === "connaissances") contenuConnaissances(ctxDossier, zone, service, choix.periode);
-    else contenuTaches(ctx, zone, service);
+    else contenuTaches(ctxDossier, zone, service);
   }
   select.addEventListener("change", () => { choix.periode = select.value; dessiner(); });
   dessiner();

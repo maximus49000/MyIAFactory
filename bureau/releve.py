@@ -23,6 +23,8 @@ ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
 MAX_MESSAGES = 1000
+MAX_DOCUMENTS = 2000
+CHAMPS_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache", "date")   # d'où vient un document
 MAX_IMAGES_MESSAGE = 4
 SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
@@ -239,7 +241,26 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
                            "« lien » (https, http ou claude) ou « chemin ».")
         for d in _liste_facultative(f.get("decisions"), f"{nom} : « decisions »", erreurs):
             _verifier_decision(d, DECISIONS_FONCTIONNALITE, f"{nom} : « decisions »", ids_decisions, erreurs)
+        _verifier_documents(f, nom, erreurs)
     return vus
+
+
+def _verifier_documents(f, nom, erreurs):
+    """Les documents produits pour la fonctionnalité : `{chemin, titre}` et, facultatifs, d'où ils viennent."""
+    documents = _liste_facultative(f.get("documents"), f"{nom} : « documents »", erreurs)
+    if len(documents) > MAX_DOCUMENTS:
+        erreurs.append(f"{nom} : « documents » : au plus {MAX_DOCUMENTS} documents (il y en a {len(documents)}).")
+        return
+    for k, d in enumerate(documents, 1):
+        ici = f"{nom} : « documents », le document {k}"
+        c = d.get("chemin")
+        if not _texte_plein(c) or "\x00" in c or Path(c).is_absolute() or c[0] in "/\\":
+            erreurs.append(f"{ici} : « chemin » doit être un chemin relatif aux réglages.")
+        if not _texte_plein(d.get("titre")):
+            erreurs.append(f"{ici} : « titre » est obligatoire (texte non vide).")
+        for champ in CHAMPS_DOCUMENT:
+            if d.get(champ) is not None and not _texte(d[champ]):
+                erreurs.append(f"{ici} : « {champ} » doit être un texte.")
 
 
 def _verifier_discussion(f, nom, cles_agents, erreurs):
@@ -376,7 +397,7 @@ def _normaliser_v4(n):
         else:
             n.setdefault(c, None)
     for f in n.get("fonctionnalites") or []:
-        for c in ("discussion", "decisions"):
+        for c in ("discussion", "decisions", "documents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []
         f["attend_reponse"] = f.get("attend_reponse") is True
         f["catalogue"] = f.get("catalogue") is True

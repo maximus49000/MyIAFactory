@@ -141,6 +141,15 @@ identifiants d'état : `fait` (ou `valide`, `termine`, `ok`) pour un élément t
 est montré comme « autre ». Les positions (`position` d'un élément, `points` de `trace`) sont des paires `{x, y}` et
 `[x, y]` dans un repère où **y monte vers le haut** (le nord est en haut de la carte).
 
+### `document`
+
+Entrée : `{"fonctionnalite", "chemin", "titre", "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?}`. Inscrit un
+fichier produit pour la fonctionnalité (une méthode, un rapport, un script, une image…) dans ses **documents**, avec
+son origine et la date ; un chemin déjà inscrit est complété, pas doublé. Rend `{"id": "doc3"}`. Les images de la
+discussion (`message`, et celles jointes par l'utilisateur), les maquettes du cahier (`fonctionnalite`) et les
+captures d'une tâche (`tache`) y sont rangées d'office, avec l'agent, l'étape, la tâche et l'élément. Le relevé les
+montre dans `documents` de la fonctionnalité ; le bureau les sert depuis les racines `documents` de ses réglages.
+
 ### `memoire`
 
 Entrée : `{"role"}`. Rend les leçons de la mémoire qui touchent ce rôle (ou « tous ») :

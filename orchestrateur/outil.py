@@ -125,6 +125,65 @@ def images_montrables(chemins, cle):
     return chemins
 
 
+ORIGINE_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache")
+
+
+def ranger_documents(donnees, f, chemins, titre=None, **origine):
+    """Range des fichiers produits pour la fonctionnalité dans ses documents, avec leur origine (agent, étape, tâche,
+    élément, sous-tâche) et la date. Un chemin déjà rangé n'est pas doublé : son titre et son origine sont complétés."""
+    documents = f.setdefault("documents", [])
+    for c in chemins or []:
+        d = next((x for x in documents if x["chemin"] == c), None)
+        if d is None:
+            d = {"id": f"doc{su.suivant(donnees, 'doc')}", "chemin": c, "titre": titre or Path(c).name,
+                 "date": su.maintenant()}
+            documents.append(d)
+        elif titre:
+            d["titre"] = titre
+        for cle in ORIGINE_DOCUMENT:
+            if origine.get(cle):
+                d[cle] = origine[cle]
+    return documents
+
+
+def documents_complets(f, taches):
+    """Les documents rangés, plus ceux qu'un suivi plus ancien n'avait pas rangés : images de la discussion,
+    maquettes du cahier, captures des tâches de la fonctionnalité (même origine que s'ils l'avaient été)."""
+    documents = [dict(d) for d in f.get("documents") or []]
+    connus = {d["chemin"] for d in documents}
+
+    def ajouter(c, **origine):
+        if c not in connus:
+            connus.add(c)
+            documents.append({"chemin": c, "titre": Path(c).name, **{k: v for k, v in origine.items() if v}})
+    # Les origines les plus précises d'abord : le cahier, puis les captures des tâches, puis la discussion.
+    for c in (f.get("cahier") or {}).get("maquette") or []:
+        ajouter(c, agent=f.get("agent_cadrage"), etape="cahier")
+    for t in taches:
+        if t.get("fonctionnalite") == f["id"]:
+            for c in t.get("captures") or []:
+                ajouter(c, agent=t.get("agent"), tache=t["id"], element=t.get("element"), etape=t.get("colonne"),
+                        date=t.get("maj"))
+    def fin(v):   # une date sans heure (« le 10 novembre ») vaut jusqu'à la fin de ce jour-là
+        return rel.lire_date(v + "T23:59:59" if isinstance(v, str) and len(v.strip()) == 10 else v)
+    cahier_valide = fin((f.get("cahier") or {}).get("valide_le"))
+    methode_validee = fin((f.get("methode") or {}).get("validee_le"))
+
+    def etape_au(t):   # l'étape où en était la fonctionnalité quand le message est parti
+        quand = rel.lire_date(t)
+        if quand == rel.TRES_ANCIEN:
+            return f["etape"]
+        if methode_validee != rel.TRES_ANCIEN and quand > methode_validee:
+            return "serie"
+        if cahier_valide != rel.TRES_ANCIEN:
+            return "prototype" if quand > cahier_valide else "cadrage"
+        return f["etape"]
+    for m in f["discussion"]:
+        for c in m.get("images") or []:
+            ajouter(c, agent=m["auteur"], date=m.get("t"), etape=etape_au(m.get("t")))
+    return documents
+
+
 def _fonc(donnees, i):
     f = su.fonctionnalite(donnees, i) if isinstance(i, str) else None
     if f is None:
@@ -221,6 +280,7 @@ def cmd_actions(ctx, e):
             f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40])
             images = ranger_images(ctx, e["images"], f["id"]) if e.get("images") else []
             su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"])
+            ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
             demande["fonctionnalite"] = f["id"]
             if images:
                 demande["images"] = images
@@ -228,6 +288,7 @@ def cmd_actions(ctx, e):
             f = _fonc(s, e.get("fonctionnalite"))
             images = ranger_images(ctx, e["images"], f["id"]) if e.get("images") else []
             su.ajouter_message(s, f, "utilisateur", texte(e, "texte"), images, demande["t"])
+            ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
             if images:
                 demande["images"] = images
         elif genre == "bouton" and e.get("id") in ("pause", "reprendre"):
@@ -343,6 +404,8 @@ def cmd_fonctionnalite(ctx, e):
                 if e[cle] is not None:
                     controle(e[cle])
                 f[cle] = e[cle]
+        if e.get("cahier"):
+            ranger_documents(s, f, e["cahier"]["maquette"], agent=f["agent_cadrage"], etape="cahier")
         if "catalogue" in e:
             if not isinstance(e["catalogue"], bool):
                 raise Refus("« catalogue » doit être vrai ou faux.")
@@ -363,6 +426,7 @@ def cmd_message(ctx, e):
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         m = su.ajouter_message(s, f, auteur, texte(e, "texte", vide_ok=True), images)
+        ranger_documents(s, f, images, agent=auteur, etape=f["etape"])
     return {"id": m["id"]}
 
 
@@ -482,8 +546,24 @@ def cmd_tache(ctx, e):
             autre = next((x for x in s["taches"] if x is not t and x["active"] and x["agent"] == t["agent"]), None)
             if autre:
                 raise Refus(f"L'agent {t['agent']} tient déjà la tâche {autre['id']} (une tâche à la fois).")
+        if e.get("captures") and t["fonctionnalite"]:   # les captures vont aussi dans les documents de la fonctionnalité
+            ranger_documents(s, _fonc(s, t["fonctionnalite"]), t["captures"], agent=t["agent"], tache=t["id"],
+                             element=t["element"], etape=t["colonne"])
         t["maj"] = su.maintenant()
         return dict(t)
+
+
+def cmd_document(ctx, e):
+    """Inscrit un fichier produit pour une fonctionnalité dans ses documents, avec son origine."""
+    chemin = texte(e, "chemin")
+    if "\x00" in chemin or Path(chemin).is_absolute() or chemin[0] in "/\\":
+        raise Refus("« chemin » doit être relatif au fichier de factory.")
+    origine = {cle: texte(e, cle, obligatoire=False) for cle in ORIGINE_DOCUMENT}
+    with ctx.suivi.transaction() as s:
+        f = _fonc(s, e.get("fonctionnalite"))
+        documents = ranger_documents(s, f, [chemin], texte(e, "titre"), **origine)
+        f["maj"] = su.maintenant()
+        return {"id": next(d["id"] for d in documents if d["chemin"] == chemin)}
 
 
 def cmd_file(ctx, e):
@@ -644,6 +724,7 @@ def construire_releve(ctx):
             v["methode"] = {**f["methode"], "chemin": chemin(f["methode"]["chemin"])}
         if f["livrable"] and f["livrable"].get("chemin"):
             v["livrable"] = {**f["livrable"], "chemin": chemin(f["livrable"]["chemin"])}
+        v["documents"] = [{**d, "chemin": chemin(d["chemin"])} for d in documents_complets(f, s["taches"])]
         fonctionnalites.append(v)
 
     lecons = []
@@ -839,6 +920,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
+    "document": (cmd_document, "obligatoire"),
 }
 
 

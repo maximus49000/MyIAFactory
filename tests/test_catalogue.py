@@ -319,6 +319,55 @@ class TestCatalogueServi(AvecServeur):
         r, _ = self.req("GET", "/api/livrable?fonctionnalite=f9")
         self.assertEqual(r.status, 404)
 
+    def document(self, chemin, contenu=b"x", racines=("pieces",), liste=None):
+        f = self.dossier / chemin
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(contenu)
+        r = json.loads(json.dumps(RELEVE))
+        r["fonctionnalites"][0]["documents"] = [{"chemin": c, "titre": "Doc"} for c in (liste or [chemin])]
+        self.agir(releve=r)
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["documents"] = {"racines": list(racines)}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.p._cache_etat = (0.0, None)
+
+    def test_document_servi(self):
+        # Un document de la fonctionnalité : servi s'il est listé par le relevé et dans une racine `documents`.
+        self.document("pieces/f1/methode.md", b"# M <script>x</script>")
+        r, data = self.req("GET", "/api/document?fonctionnalite=f1&chemin=pieces/f1/methode.md")
+        self.assertEqual((r.status, data), (200, b"# M <script>x</script>"))
+        self.assertEqual(r.getheader("Content-Type"), "text/plain; charset=utf-8")
+        self.assertEqual(r.getheader("Content-Security-Policy"), "sandbox")
+        self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
+        self.document("pieces/f1/m.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>x</script></svg>")
+        r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=pieces/f1/m.svg")
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/svg+xml"))
+        self.assertEqual(r.getheader("Content-Security-Policy"), "sandbox")
+        self.document("pieces/f1/m.png", bytes.fromhex("89504e470d0a1a0a"))
+        r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=pieces/f1/m.png")
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/png"))
+
+    def test_document_refuse(self):
+        self.document("pieces/f1/a.md", liste=["pieces/f1/a.md"])
+        (self.dossier / "pieces" / "f1" / "b.md").write_bytes(b"secret")
+        (self.dossier / "ailleurs").mkdir()
+        (self.dossier / "ailleurs" / "c.md").write_bytes(b"x")
+        for requete in ("fonctionnalite=f1&chemin=pieces/f1/b.md",     # pas dans la liste du relevé
+                        "fonctionnalite=f9&chemin=pieces/f1/a.md",     # fonctionnalité inconnue
+                        "chemin=pieces/f1/a.md",                       # sans fonctionnalité
+                        "fonctionnalite=f1"):                          # sans chemin
+            with self.subTest(requete):
+                r, _ = self.req("GET", "/api/document?" + requete)
+                self.assertEqual(r.status, 404)
+        for chemin, racines in (("ailleurs/c.md", ("pieces",)), ("pieces/f1/x.exe", ("pieces",)),
+                                ("pieces/f1/a.md", ()), ("pieces/../reglages.json", ("pieces",))):
+            with self.subTest(chemin):
+                self.document("pieces/f1/a.md", racines=racines, liste=[chemin])
+                if chemin == "pieces/f1/x.exe":
+                    (self.dossier / chemin).write_bytes(b"MZ")
+                r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=" + chemin)
+                self.assertEqual(r.status, 404)
+
     def test_livrable_hors_racine_404(self):
         cas = [("ailleurs/x.png", ("livrables",)),         # hors racine
                ("livrables/x.exe", ("livrables",)),        # extension refusée

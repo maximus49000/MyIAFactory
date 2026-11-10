@@ -106,13 +106,87 @@ export function presentation(f, agir, enCorrection) {
 // --- Le panneau.
 const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
 
+// Les documents de la fonctionnalité, rangés par étape : celles du parcours dans l'ordre, puis les colonnes du flux
+// (une tâche range ses captures sous sa colonne), puis « Autres » ; dans chaque groupe, les plus récents d'abord.
+export function documentsParEtape(f, colonnes) {
+  const groupes = new Map();
+  const libelle = (etape) => ETAPES_PARCOURS.find((x) => x.id === etape)?.libelle
+    || (colonnes || []).find((c) => c.id === etape)?.nom || "Autres";
+  const rang = (etape) => {
+    const i = ETAPES_PARCOURS.findIndex((x) => x.id === etape);
+    if (i >= 0) return i;
+    const j = (colonnes || []).findIndex((c) => c.id === etape);
+    return j >= 0 ? 100 + j : 1000;
+  };
+  for (const d of Array.isArray(f?.documents) ? f.documents : []) {
+    const cle = libelle(d.etape);
+    if (!groupes.has(cle)) groupes.set(cle, {libelle: cle, rang: rang(d.etape), documents: []});
+    groupes.get(cle).documents.push(d);
+  }
+  return [...groupes.values()].sort((a, b) => a.rang - b.rang).map(({libelle, documents}) => ({
+    libelle, documents: documents.map((d, i) => [d, i])
+      .sort(([a, i], [b, j]) => String(b.date || "").localeCompare(String(a.date || "")) || i - j).map(([d]) => d),
+  }));
+}
+
+const EST_IMAGE = /\.(png|jpe?g)$/i;
+
+// La partie « Documents » du panneau : chaque document avec son origine ; une image s'ouvre dans la visionneuse.
+function partieDocuments(ctx, f) {
+  const groupes = documentsParEtape(f, ctx.etat.colonnes);
+  const n = (f.documents || []).length;
+  const bloc = el("details", "documents");
+  bloc.append(el("summary", "", `Documents (${n})`));
+  if (!n) { bloc.append(el("p", "note", "Aucun document pour l'instant.")); return bloc; }
+  const url = (chemin) => urlProjet(`/api/document?fonctionnalite=${encodeURIComponent(f.id)}&chemin=${encodeURIComponent(chemin)}`);
+  for (const g of groupes) {
+    bloc.append(el("h4", "", g.libelle));
+    const ul = el("ul", "liste-documents");
+    const images = g.documents.filter((d) => EST_IMAGE.test(d.chemin)).map((d) => d.chemin);
+    for (const d of g.documents) {
+      const li = el("li", "document");
+      if (EST_IMAGE.test(d.chemin)) {
+        const b = el("button", "document-vignette");
+        b.type = "button";
+        b.setAttribute("aria-label", "Voir en plein écran : " + d.titre);
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = url(d.chemin);
+        img.alt = d.titre;
+        b.append(img);
+        b.addEventListener("click", () => ouvrirVisionneuse(images, images.indexOf(d.chemin), url));
+        li.append(b);
+      } else {
+        const a = el("a", "document-lien", "Ouvrir");
+        a.href = url(d.chemin);
+        a.target = "_blank";
+        a.rel = "noopener";
+        li.append(a);
+      }
+      const texte = el("div", "document-texte");
+      texte.append(el("strong", "", d.titre));
+      const origine = [d.agent ? (d.agent === "utilisateur" ? "Vous" : nomAgentDe(ctx.etat, d.agent)) : null,
+        d.tache ? "tâche " + d.tache : null, d.element ? "élément " + d.element : null, d.sous_tache || null,
+        d.date ? dateFr(d.date) : null].filter(Boolean).join(" · ");
+      if (origine) texte.append(el("div", "note", origine));
+      texte.append(el("div", "document-chemin", d.chemin));
+      li.append(texte);
+      ul.append(li);
+    }
+    bloc.append(ul);
+  }
+  return bloc;
+}
+
+const nomAgentDe = (e, cle) => (e.agents || []).find((a) => a.id === cle)?.prenom || cle;
+
 // L'image voisine dans une série de n images (on fait le tour : après la dernière, la première).
 export function voisine(n, i, sens) {
   return n > 0 ? (i + sens + n) % n : 0;
 }
 
 // La visionneuse plein écran : une image à la fois, flèches gauche et droite (ou boutons), Échap pour fermer.
-function ouvrirVisionneuse(chemins, depart) {
+function ouvrirVisionneuse(chemins, depart, url = urlImage) {
   let i = depart;
   const fond = el("div", "visionneuse");
   fond.setAttribute("role", "dialog");
@@ -128,7 +202,7 @@ function ouvrirVisionneuse(chemins, depart) {
     b.setAttribute("aria-label", nom);
   }
   const montrer = () => {
-    img.src = urlImage(chemins[i]);
+    img.src = url(chemins[i]);
     img.alt = `Image ${i + 1} sur ${chemins.length}`;
     compteur.textContent = chemins.length > 1 ? `${i + 1} / ${chemins.length}` : "";
     avant.hidden = apres.hidden = chemins.length < 2;
@@ -402,12 +476,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (vue.discussionOuverte) {
     contenu.append(blocDiscussion, blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
+    contenu.append(partieDocuments(ctx, f));
   } else {
     const repliee = el("details", "discussion-repliee");
     repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
     contenu.append(blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(repliee);
+    contenu.append(repliee, partieDocuments(ctx, f));
   }
 }
 

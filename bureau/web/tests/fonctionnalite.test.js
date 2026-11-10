@@ -88,3 +88,18 @@ test("voisine : navigation circulaire entre les images d'un message", async () =
   assert.equal(voisine(1, 0, 1), 0);
   assert.equal(voisine(0, 0, 1), 0);
 });
+
+test("documentsParEtape : rangés par étape (parcours puis colonnes), les plus récents d'abord", async () => {
+  const {documentsParEtape} = await import("../ui/fonctionnalite.js");
+  const f = {documents: [
+    {chemin: "pieces/a.png", titre: "a.png", etape: "cadrage", date: "2026-11-10T10:00:00+01:00"},
+    {chemin: "captures/e1.png", titre: "e1", etape: "dev", date: "2026-11-10T12:00:00+01:00"},
+    {chemin: "pieces/m.png", titre: "Maquette", etape: "cahier", date: "2026-11-10T11:00:00+01:00"},
+    {chemin: "pieces/b.png", titre: "b.png", etape: "cadrage", date: "2026-11-10T10:30:00+01:00"},
+    {chemin: "notes.md", titre: "Notes"}]};
+  const g = documentsParEtape(f, [{id: "dev", nom: "Développement"}]);
+  assert.deepEqual(g.map((x) => x.libelle), ["Cadrage", "Cahier des charges", "Développement", "Autres"]);
+  assert.deepEqual(g[0].documents.map((d) => d.chemin), ["pieces/b.png", "pieces/a.png"]);
+  assert.equal(g[3].documents[0].titre, "Notes");
+  assert.deepEqual(documentsParEtape({}, []), []);
+});

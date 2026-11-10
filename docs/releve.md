@@ -171,7 +171,12 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 - `methode` : `{version, lien | chemin, validee_le?}` ;
 - `livrable` : `{libelle, lien | chemin, date}` ;
 - `catalogue` : vrai si le projet fournit un catalogue pour cette fonctionnalité (bouton « Catalogue ») ;
-- `decisions` : `[{id, genre, texte}]` avec `genre` = `valider_cahier`, `valider_methode` ou `methode_a_revoir`.
+- `decisions` : `[{id, genre, texte}]` avec `genre` = `valider_cahier`, `valider_methode` ou `methode_a_revoir` ;
+- `documents` : les fichiers produits pour la fonctionnalité, 2 000 au plus, chacun `{chemin, titre}` et, facultatifs,
+  d'où il vient : `agent`, `etape`, `tache`, `element`, `sous_tache`, `date` (textes). Le panneau de la fonctionnalité
+  les range par étape ; le bureau les sert par `GET /api/document?fonctionnalite=…&chemin=…`, seulement s'ils sont
+  listés ici et dans une des racines de `{"documents": {"racines": [...]}}` des réglages. Images, PDF et paquets
+  comme un livrable ; `.md`, `.json`, `.csv`, `.txt`, `.html` et `.svg` en bac à sable (sans script).
 
 Les identifiants de décisions sont uniques dans tout le relevé. La pastille d'un projet dans le sélecteur compte
 `decisions`, les décisions des fonctionnalités et celles du projet. Pendant que `attend_reponse` est vrai, la page

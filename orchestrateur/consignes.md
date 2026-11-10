@@ -179,6 +179,14 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   il commence par « Tu repars de zéro ».
 - Marque la tâche (`lancer tache` avec `agent`, `colonne`, `active: true`) quand l'agent part, et rends-la à la fin.
 
+## Les documents
+
+Tout fichier produit pour une fonctionnalité doit se retrouver dans ses **documents**, que l'utilisateur consulte au
+bureau. Les images de la discussion, les maquettes du cahier et les captures des tâches y vont d'office. Pour tout le
+reste (la méthode, un rapport de relecture, un script, une planche, un fichier livré), `lancer document` avec la
+`fonctionnalite`, le `chemin`, un `titre` parlant, et son origine : l'`agent`, l'`etape`, la `tache`, l'`element`, la
+`sous_tache` s'il y en a une. Le fichier doit être sous une des racines `documents` des réglages.
+
 ## La relecture croisée
 
 Deux relecteurs, **chacun un agent à contexte neuf** (deux départs distincts), relisent le même élément.

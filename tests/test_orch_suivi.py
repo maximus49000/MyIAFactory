@@ -101,6 +101,65 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_documents_de_la_fonctionnalite(self):
+        # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :
+        # images de la discussion, maquettes du cahier, captures d'une tâche, et ce que l'orchestrateur y inscrit.
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Voici", "images": ["pieces/a.png"]})
+        self.ok("fonctionnalite", entree={"id": f, "etape": "cahier",
+                                          "cahier": {"maquette": ["pieces/m.png"], "etapes": ["x"]}})
+        t = self.ok("tache", entree={"titre": "Dev : e1", "fonctionnalite": f, "element": "e1", "agent": "dev-1",
+                                     "colonne": "dev", "captures": ["captures/e1.png"]})
+        d = self.ok("document", entree={"fonctionnalite": f, "chemin": "methodes/m.md", "titre": "Méthode v1",
+                                        "agent": "dev-1", "tache": t["id"], "sous_tache": "rédaction"})
+        self.assertTrue(d["id"])
+        # Le même chemin n'est rangé qu'une fois (la maquette renvoyée avec valide_le ne se double pas).
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m.png"], "etapes": ["x"],
+                                                               "valide_le": "2026-11-10T12:00:00+01:00"}})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        docs = {x["chemin"]: x for x in r["fonctionnalites"][0]["documents"]}
+        self.assertEqual(sorted(docs), ["captures/e1.png", "methodes/m.md", "pieces/a.png", "pieces/m.png"])
+        self.assertEqual((docs["pieces/a.png"]["agent"], docs["pieces/a.png"]["etape"]), ("metier-1", "cadrage"))
+        self.assertEqual((docs["pieces/m.png"]["agent"], docs["pieces/m.png"]["etape"]), ("metier-1", "cahier"))
+        c = docs["captures/e1.png"]
+        self.assertEqual((c["agent"], c["tache"], c["element"], c["etape"]), ("dev-1", t["id"], "e1", "dev"))
+        self.assertEqual((docs["methodes/m.md"]["titre"], docs["methodes/m.md"]["sous_tache"]), ("Méthode v1", "rédaction"))
+        self.assertTrue(all(x.get("date") for x in docs.values()))
+        # Refus : fonctionnalité inconnue, chemin absent ou absolu.
+        for entree in ({"fonctionnalite": "f99", "chemin": "a.md", "titre": "A"}, {"fonctionnalite": f, "titre": "A"},
+                       {"fonctionnalite": f, "chemin": "/abs.md", "titre": "A"}):
+            self.assertEqual(self.outil("document", entree=entree)[0], 1, entree)
+
+    def test_documents_d_un_suivi_ancien(self):
+        # Un suivi écrit avant les documents (sans la clé) : le relevé les retrouve dans la discussion, le cahier et
+        # les captures des tâches.
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Voici", "images": ["pieces/a.png"]})
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m.png"], "etapes": ["x"]}})
+        t = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": f, "element": "e1", "agent": "dev-1",
+                                     "colonne": "dev", "captures": ["captures/e1.png"]})
+        chemin = self.dossier / "suivi.json"
+        s = json.loads(chemin.read_text(encoding="utf-8"))
+        for x in s["fonctionnalites"]:
+            x.pop("documents", None)
+        chemin.write_text(json.dumps(s), encoding="utf-8")
+        docs = {d["chemin"]: d for d in self.releve()["fonctionnalites"][0]["documents"]}
+        self.assertEqual(sorted(docs), ["captures/e1.png", "pieces/a.png", "pieces/m.png"])
+        self.assertEqual(docs["pieces/a.png"]["etape"], "cadrage")
+        # Un cahier validé « le jour même » (date sans heure) : un message de ce jour-là reste du cadrage.
+        s = json.loads(chemin.read_text(encoding="utf-8"))
+        jour = s["fonctionnalites"][0]["discussion"][-1]["t"][:10]
+        s["fonctionnalites"][0]["cahier"]["valide_le"] = jour
+        chemin.write_text(json.dumps(s), encoding="utf-8")
+        docs = {d["chemin"]: d for d in self.releve()["fonctionnalites"][0]["documents"]}
+        self.assertEqual(docs["pieces/a.png"]["etape"], "cadrage")
+        self.assertEqual(docs["pieces/a.png"]["agent"], "metier-1")
+        self.assertEqual(docs["pieces/m.png"]["etape"], "cahier")
+        self.assertEqual((docs["captures/e1.png"]["tache"], docs["captures/e1.png"]["element"]), (t["id"], "e1"))
+
     def test_images_png_ou_jpeg_seulement(self):
         # Le bureau ne montre que le PNG et le JPEG : une maquette, une image de message ou une capture en SVG est
         # refusée tout de suite, avec la marche à suivre, au lieu d'apparaître cassée chez l'utilisateur.

@@ -30,7 +30,7 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
-ROUTES_PROJET = ("/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
+ROUTES_PROJET = ("/api/document", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
                  "/api/catalogue", "/api/livrable")
 # Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
 # en bac à sable (aucun script, aucune requête au nom du bureau).
@@ -39,6 +39,11 @@ LIVRABLES = {".png": ("image/png", False), ".jpg": ("image/jpeg", False), ".jpeg
              ".glb": ("model/gltf-binary", True), ".html": ("text/html; charset=utf-8", False),
              ".txt": ("text/plain; charset=utf-8", False)}
 BAC_A_SABLE = (".html", ".txt")
+# Les documents d'une fonctionnalité : ceux d'un livrable, plus les textes et le SVG produits par les agents. Tout ce qui
+# pourrait contenir un script est servi en bac à sable (un SVG ouvert seul exécuterait le sien sans cela).
+DOCUMENTS = {**LIVRABLES, ".md": ("text/plain; charset=utf-8", False), ".json": ("text/plain; charset=utf-8", False),
+             ".csv": ("text/plain; charset=utf-8", False), ".svg": ("image/svg+xml", False)}
+BAC_A_SABLE_DOCUMENTS = BAC_A_SABLE + (".md", ".json", ".csv", ".svg")
 
 
 def images_declarees(regl):
@@ -318,6 +323,41 @@ class Projet:
             pass
         return None
 
+    def document(self, fonctionnalite, brut):
+        """Le fichier d'un document de la fonctionnalité s'il peut être servi, sinon `None` : listé par le relevé
+        (`documents` de la fonctionnalité), dans une des racines `documents.racines` des réglages, d'une extension
+        de `DOCUMENTS`."""
+        self.etat()
+        r = self.dernier_releve
+        if r is None or r.get("version", 1) < 4 or not isinstance(brut, str):
+            return None
+        f = next((f for f in r["fonctionnalites"] if f["id"] == fonctionnalite), None)
+        if f is None or not any(isinstance(d, dict) and d.get("chemin") == brut for d in f.get("documents") or []):
+            return None
+        if (not brut or "\x00" in brut or Path(brut).is_absolute() or brut[0] in "/\\"
+                or Path(brut).suffix.lower() not in DOCUMENTS):
+            return None
+        regl, _ = self.reglages()
+        conf = regl.get("documents")
+        racines = conf.get("racines") if isinstance(conf, dict) else None
+        if not isinstance(racines, list):
+            return None
+        base = Path(regl["dossier"])
+        try:
+            cible = (base / brut).resolve()
+            if cible.suffix.lower() not in DOCUMENTS or not cible.is_file():
+                return None
+            for racine in racines:
+                if isinstance(racine, str) and racine:
+                    try:
+                        cible.relative_to((base / racine).resolve())
+                        return cible
+                    except ValueError:
+                        continue
+        except (OSError, ValueError):
+            pass
+        return None
+
     def resume(self):
         """La ligne du projet dans `/api/projets`. Sert le dernier état connu, même périmé, et le relit en
         arrière-plan : un relevé lent ne retarde pas la liste (sauf la toute première fois)."""
@@ -470,6 +510,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":
             return self._json(200, projet.conseil())
+        if chemin == "/api/document":
+            q = parse_qs(morceaux.query, keep_blank_values=True)
+            fonc, doc = q.get("fonctionnalite", []), q.get("chemin", [])
+            if len(fonc) != 1 or len(doc) != 1:
+                return self._json(404, {"erreur": "Introuvable."})
+            return self._livrable(projet.document(fonc[0], doc[0]), DOCUMENTS, BAC_A_SABLE_DOCUMENTS)
         if chemin in ("/api/catalogue", "/api/livrable"):
             valeurs = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite")
             if valeurs is not None and len(valeurs) != 1:
@@ -520,12 +566,12 @@ class Handler(BaseHTTPRequestHandler):
             pass
         return introuvable()
 
-    def _livrable(self, cible):
+    def _livrable(self, cible, types=LIVRABLES, bac_a_sable=BAC_A_SABLE):
         """Envoie le fichier par morceaux (un livrable peut être gros) avec les en-têtes de son extension."""
         if cible is None:
             return self._json(404, {"erreur": "Introuvable."})
         ext = cible.suffix.lower()
-        type_, piece_jointe = LIVRABLES[ext]
+        type_, piece_jointe = types[ext]
         try:
             f = open(cible, "rb")
         except OSError:
@@ -537,7 +583,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(taille))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            if ext in BAC_A_SABLE:
+            if ext in bac_a_sable:
                 self.send_header("Content-Security-Policy", "sandbox")
             if piece_jointe:
                 ascii_ = "".join(c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in cible.name)

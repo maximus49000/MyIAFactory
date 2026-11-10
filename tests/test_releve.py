@@ -873,6 +873,16 @@ class TestVersion4(unittest.TestCase):
         le = n["lecons"][0]
         self.assertEqual((le["etage_propose"], le["texte_general"], le["roles"]), ("projet", None, ["tous"]))
 
+    def test_documents_d_une_fonctionnalite(self):
+        doc = {"chemin": "pieces/f1/maquette.png", "titre": "Maquette", "agent": "d1", "etape": "cahier",
+               "tache": "t1", "element": "e1", "sous_tache": "rendu", "date": "2026-11-10T10:00:00+01:00"}
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(documents=[doc, {"chemin": "a.md", "titre": "A"}])])), [])
+        for mauvais in ([{"titre": "Sans chemin"}], [{"chemin": "a.png"}], [{"chemin": "/abs.png", "titre": "x"}],
+                        [{"chemin": "a.png", "titre": "x", "agent": 3}], "pas une liste", [3]):
+            with self.subTest(mauvais):
+                self.assertTrue(releve.valider(v4(fonctionnalites=[fonc(documents=mauvais)])))
+        self.assertEqual(releve.normaliser(v4(fonctionnalites=[fonc()]))["fonctionnalites"][0]["documents"], [])
+
     def test_normaliser_v4_sans_rien(self):
         n = releve.normaliser(v4())
         self.assertEqual((n["fonctionnalites"], n["decisions_projet"], n["genre"]), ([], [], None))

@@ -4,8 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Le bureau vivant</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {"imports": {"three": "./vendor/build/three.module.js", "three/addons/": "./vendor/examples/jsm/"}}
+  </script>
 </head>
 <body>
-  <p>Le bureau vivant : la page est en cours de construction.</p>
+  <main id="scene" aria-label="Le bureau, vu en 3D"></main>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>

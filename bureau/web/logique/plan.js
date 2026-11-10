@@ -105,13 +105,13 @@ export function creerPlan(services, colonnes) {
   const machine = local(cafePiece, 2.1, 0.4);
   const table = local(cafePiece, -1.5, 1.55);
   const placesCafe = [];
-  const ajouterCafe = (lx, d, regard) => {
+  const ajouterCafe = (lx, d, regard, assis = false) => {
     const p = local(cafePiece, lx, d);
     if (placesCafe.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 0.6)) return;
-    placesCafe.push({...p, cap: regard ? capVers(p, regard) : capPorte(cafePiece)});
+    placesCafe.push({...p, cap: regard ? capVers(p, regard) : capPorte(cafePiece), assis});
   };
-  ajouterCafe(-1.95, 0.6, null);
-  ajouterCafe(-1.05, 0.6, null);
+  ajouterCafe(-1.9, 0.6, null, true);   // sur le canapé
+  ajouterCafe(-1.1, 0.6, null, true);
   ajouterCafe(2.1, 1.25, machine);
   ajouterCafe(1.3, 1.6, machine);
   ajouterCafe(-2.45, 1.6, table);
@@ -131,28 +131,30 @@ export function creerPlan(services, colonnes) {
     return {...p, cap: capVers(p, cafePiece.porte)};
   }
 
-  // --- Direction : le grand bureau, le Directeur derrière.
+  // --- Direction : le grand bureau ; le Directeur derrière, tourné vers le mur du fond
+  // (qui, pour la rangée du bas, est le mur rasé face à la caméra : on voit son visage).
   const dir = pieces.find((p) => p.type === "direction");
-  meuble(dir, "bureau_direction", 0, 1.45, capPorte(dir));
-  meuble(dir, "chaise", 0, 0.7, capPorte(dir));
-  meuble(dir, "etagere", -2.0, 0.25, capPorte(dir));
-  meuble(dir, "armoire", 2.0, 0.3, capPorte(dir));
-  meuble(dir, "plante", 2.65, 4.55, capPorte(dir));
-  meuble(dir, "plante", -2.65, 4.55, capPorte(dir));
-  const directeur = {...local(dir, 0, 0.7), cap: capPorte(dir)};
+  meuble(dir, "bureau_direction", 0, 1.3, capPorte(dir));
+  meuble(dir, "chaise", 0, 2.15, capFond(dir));
+  meuble(dir, "etagere", -2.0, 3.0, capFond(dir));
+  meuble(dir, "armoire", 2.65, 2.4, -Math.PI / 2);
+  meuble(dir, "plante", 2.65, 0.4, capPorte(dir));
+  meuble(dir, "plante", -2.65, 0.4, capPorte(dir));
+  const directeur = {...local(dir, 0, 2.05), cap: capFond(dir)};
 
   // --- Le Kanban, au centre de l'open space, tourné vers +z.
   const nc = Math.max(1, colonnes.length);
-  const largeur = Math.min(W - 4, Math.max(3, 0.8 * nc + 0.4));
+  const largeur = Math.min(W - 4, Math.max(3, 1.0 * nc + 0.4));
   const kx = 0, kz = openspace.z - 0.6;
   const LIGNES = 5;
   const largeurColonne = (largeur - 0.3) / nc;
+  // (u, v) : position du centre d'un post-it sur la surface, depuis le coin haut gauche, en mètres.
   const postit = (colonneIndex, rang) => ({
     u: 0.15 + largeurColonne * (Math.max(0, Math.min(nc - 1, colonneIndex)) + 0.5),
-    v: 0.32 + 0.19 * Math.max(0, Math.min(LIGNES - 1, rang)),
+    v: 0.38 + 0.235 * Math.max(0, Math.min(LIGNES - 1, rang)),
   });
   const kanban = {
-    x: kx, z: kz, cap: 0, largeur, hauteur: 1.3, lignes: LIGNES, colonnes: nc, largeurColonne,
+    x: kx, z: kz, cap: 0, largeur, hauteur: 1.55, entete: 0.26, lignes: LIGNES, colonnes: nc, largeurColonne,
     devant: {x: kx, z: kz + 1.0, cap: Math.PI},
     devantColonne: (i) => ({x: kx - largeur / 2 + postit(i, 0).u, z: kz + 1.0, cap: Math.PI}),
     attente: (i) => {

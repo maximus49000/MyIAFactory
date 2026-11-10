@@ -9,14 +9,14 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle | Étapes du plan | État |
 |---|---|---|---|
 | A | Sonnet | 1 à 6 : le serveur | fait (2026-11-10), 74 tests Python verts |
-| B | Opus | 7 et 8 : la logique de la page et la scène 3D | à faire |
+| B | Opus | 7 et 8 : la logique de la page et la scène 3D | fait (2026-11-10), 31 tests JS verts |
 | C | Sonnet | 9, 10 et 11 : l'interface, le mode d'emploi, le mobilier Tripo | à faire |
 | D | Opus | 12 : le personnage Tripo, puis la relecture finale de tout le projet | à faire |
 
 Notes laissées par la phase précédente (écarts au plan, choix faits, points à surveiller) :
 
 - Travail fait directement sur `main` (la passation demande de pousser sur `main`), un commit par étape.
-- Le dossier `bureau/web/tests/` n'existe pas encore : `node --test bureau/web/tests/` échoue tant que l'étape 7 n'a pas créé ses tests. Normal.
+- (Résolu en phase B : le dossier `bureau/web/tests/` existe désormais.)
 - `bureau/web/index.html` est une page provisoire de deux lignes (nécessaire au test de la page) : à remplacer à l'étape 8/9.
 - `Equipe.agent(cle, chef=False)` : le paramètre `chef` sert à donner le prénom « Chef » au chef du relevé quelle que soit sa clé.
 - Dans l'état, `agent["taches"]` ne liste que les tâches **actives** de l'agent ; `tache["agent"]` est nul si l'agent est parti ou si la tâche n'a pas de titulaire.
@@ -25,6 +25,22 @@ Notes laissées par la phase précédente (écarts au plan, choix faits, points 
 - `Historique` ignore à la lecture les lignes de plus de 7 jours avant la ligne la plus récente du fichier.
 - Vérifié à la main sur cette machine (étape 6) : CPU 12,7 % servi contre 12 % mesuré par le système, mémoire 85,0 % contre 85,4 %. La mémoire de la machine est à 85 % : la barre de charge sera donc rouge avec le maximum par défaut de 75 % (c'est la réalité, pas un défaut).
 - La suite Python dure ~14 s (la commande `charge` mesure 5 s, le test de relevé cassé attend 2,1 s).
+
+Notes laissées par la phase B :
+
+- **Commande des tests JS** : sous Node 24, `node --test bureau/web/tests/` ne parcourt pas le dossier (il le prend pour un fichier et échoue). La commande qui marche est `node --test "bureau/web/tests/*.test.js"` (guillemets compris). `bureau/web/tests/donnees.js` contient les états inventés partagés par les tests.
+- **Écarts d'interface (tous des ajouts, rien de retiré)** :
+  - `plan.js` : `poste()` rend aussi `cap` et `assis` (vrai pour les 4 bureaux) ; `cafe()` rend `cap` et `assis` (vrai pour les 2 places du canapé). En plus : `plan.meubles` (`{nom, piece, x, z, cap}` : la scène les pose), `plan.openspace`, `plan.batiment`, `plan.pieceDe(p)`, `plan.aService(id)`, `plan.postit(i, rang)` ; chaque pièce a `dir` (+1 rangée du haut, −1 rangée du bas), `fond`, `porte`, `interieur`, `exterieur`. `plan.kanban` a en plus `largeur`, `hauteur`, `entete`, `lignes`, `colonnes`, `largeurColonne`, `devantColonne(i)` : l'agent se place devant la colonne d'arrivée du post-it.
+  - `regie.js` : `reinitialiser(etat)` (remise à plat au retour sur l'onglet) ; chaque acteur a aussi `assis` (canapé du café).
+  - `scene.js` : `creerScene(conteneur, plan, modeles)` (les modèles en 3ᵉ paramètre) ; rend aussi `choisissables`, `transition(dt)` (fondu de la pause) et `rendu(majOmbres)`. `pointer()` peut aussi rendre `type: "cafe"`.
+  - `personnages.js` et `kanban.js` reçoivent le résultat de `creerScene` (pas la `THREE.Scene`) ; `Kanban` a `animer(dt)` (post-its qui glissent). `modeles.js` : `creer(nom, options)` (le `tableau` reçoit `{largeur}`) et `aModele(nom)`.
+- **Le Directeur** est un personnage fixe (doré, étiquette « Directeur ») ajouté par `main.js` ; ce n'est pas un agent du relevé. La pastille des décisions reste à faire (étape 9).
+- **Repère des modèles** : l'avant d'un objet regarde vers +z local, base à y = 0, `rotation.y = cap`. Le personnage de repli (figurine articulée : `corps`, `jambeG/D`, `brasG/D`, `tete`, `tasse`) est agrandi ×1,3 par `personnages.js` ; un GLB de personnage (étape 12) ne l'est pas.
+- **Le Kanban** est dessiné par `kanban.js` (surface, titres, post-its) ; `modeles.creer("tableau", {largeur})` ne fournit que pieds et cadre. Surface utile : 1,55 m de haut, bord supérieur à 2,0 m. À l'étape 11, ajuster ces deux valeurs (`HAUT` dans `kanban.js`, `hauteur` dans `plan.js`) sur le modèle Tripo.
+- **Légèreté** : rendu plafonné à 30 images/s quand quelqu'un marche, 12 sinon, rien quand l'onglet est masqué ; ombres recalculées seulement pendant les déplacements (sinon une fois par seconde). Coût mesuré dans la page : ≈ 3 ms par image au repos, ≈ 4,4 ms avec ombres, soit environ 4 % d'un cœur au repos et 13 % pendant une marche. **Non fait** : la mesure au Gestionnaire des tâches pendant 2 minutes, impossible ici (le panneau du navigateur de la conversation était en arrière-plan, la page y tournait à 2 images/s) ; à refaire à l'étape 9 dans un vrai navigateur.
+- **Comportement du serveur observé** : un agent qui perd sa seule tâche active et dont l'autre tâche date de plus de 24 h quitte le bureau tout de suite (règle du départ, étape 3). Dans ce cas c'est le chef qui porte le post-it (conforme à la spec). Pour voir un agent marcher au tableau, changer la colonne d'une tâche d'un agent qui garde une autre tâche active, ou dont la `maj` est récente.
+- **Vérification manuelle** : faite sur une copie du relevé de la démo hors du dépôt (`.claude/launch.json`, ignoré par git, pointe vers cette copie). Vu : bâtiment entier en isométrique, une pièce par service avec son nom, agents à leur poste ou au café, Kanban rempli, marche jusqu'au tableau en contournant le Kanban, post-it qui change de colonne à la pose, retour au poste, lumière qui baisse en pause, bandeau « Relevé indisponible » sur `{` puis retour à la normale, aucune erreur de console.
+- Le bandeau d'erreur actuel est un simple `body[data-erreur]::after` dans `style.css` : l'étape 9 le remplace par celui de `barre.js`.
 
 ## Ce que chaque conversation doit savoir
 
@@ -38,7 +54,7 @@ Notes laissées par la phase précédente (écarts au plan, choix faits, points 
 **Les règles à ne pas oublier**
 
 - Dépôt public et vide de tout projet : rien de propre à un projet réel, rien de privé.
-- Python : `py -3.12`, bibliothèque standard uniquement. Tests : `py -3.12 -m unittest discover -s tests -v` et `node --test bureau/web/tests/`.
+- Python : `py -3.12`, bibliothèque standard uniquement. Tests : `py -3.12 -m unittest discover -s tests -v` et `node --test "bureau/web/tests/*.test.js"` (voir les notes de la phase B).
 - Chaque étape : test d'abord, le voir échouer, coder, le voir passer. Puis cocher l'étape dans le `README.md`, commit en français terminé par `Co-Authored-By: Claude <noreply@anthropic.com>`, et `git push`.
 - Ne jamais annoncer qu'une étape est finie sans avoir lancé les tests et lu leur sortie. Si un test échoue ou si une étape ne peut pas être faite comme prévu, le dire avec la sortie, ne pas contourner.
 - Un écart au plan (signature changée, fichier en plus) est permis s'il est nécessaire : le noter ci-dessus dans « Notes laissées », car la phase suivante ne lit que le plan et ce fichier.

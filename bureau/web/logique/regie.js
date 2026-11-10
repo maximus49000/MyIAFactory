@@ -135,7 +135,7 @@ export class Regie {
           distance = 0;
         }
       }
-      if (acteur._chemin.length) acteur.action = "marche";
+      if (acteur._chemin.length) { acteur.action = "marche"; acteur.assis = false; }
       else this._arrive(acteur);
     }
 
@@ -169,6 +169,7 @@ export class Regie {
   _arrive(acteur) {
     const d = acteur._dest;
     acteur.x = d.x; acteur.z = d.z; acteur.cap = d.cap; acteur.action = d.action;
+    acteur.assis = Boolean(d.assis);
   }
 
   _poser(acteur) {

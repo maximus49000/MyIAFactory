@@ -64,7 +64,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 
 Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md), [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)) :
 
-- [ ] 1. Le relevé version 4
+- [x] 1. Le relevé version 4
 - [ ] 2. L'état version 4
 - [ ] 3. Les sept demandes et les images jointes
 - [ ] 4. Plusieurs projets dans un bureau

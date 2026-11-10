@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -14,7 +15,15 @@ MAX_SERVICES = 8
 MAX_IMAGES = 40
 MAX_SUITE = 500
 MAX_USAGE = 5000
-VERSIONS = (1, 2, 3)
+VERSIONS = (1, 2, 3, 4)
+ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee")
+DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir")
+DECISIONS_PROJET = ("confirmer_genre", "session_cloud")
+ETAGES = ("projet", "genre", "skill")
+MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
+MAX_FONCTIONNALITES = 100
+MAX_MESSAGES = 1000
+MAX_IMAGES_MESSAGE = 4
 SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
 
@@ -71,7 +80,7 @@ def valider(r):
         return ["Le relevé doit être un objet JSON."]
     erreurs = []
     if r.get("version") not in VERSIONS or isinstance(r.get("version"), bool):
-        erreurs.append("« version » doit valoir 1, 2 ou 3.")
+        erreurs.append("« version » doit valoir 1, 2, 3 ou 4.")
     if not isinstance(r.get("projet"), str) or not r.get("projet"):
         erreurs.append("« projet » est obligatoire (texte non vide).")
     factory = r.get("factory")
@@ -120,6 +129,8 @@ def valider(r):
         _verifier_usage(r, titulaires, taches, cles, erreurs)
         _verifier_connaissances(r, titulaires, cles, erreurs)
         _verifier_kpi(services, erreurs)
+    if _version(r) >= 4:
+        _verifier_v4(r, titulaires, taches, cles, erreurs)
     return erreurs
 
 
@@ -170,6 +181,224 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
         for champ in ("cache_lecture", "cache_ecriture"):
             if u.get(champ) is not None and not _entier_positif(u[champ]):
                 erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
+
+
+def _genre_valide(v):
+    return isinstance(v, str) and MOTIF_GENRE.match(v) is not None
+
+
+def _chemin_ou_lien(o):
+    """Exactement un de `lien` (valide) et `chemin` (texte non vide)."""
+    a_lien, a_chemin = o.get("lien") is not None, o.get("chemin") is not None
+    if a_lien == a_chemin:
+        return False
+    return lien_valide(o["lien"]) if a_lien else _texte_plein(o["chemin"])
+
+
+def _livrable_ok(v):
+    return (_est_dict(v) and _texte_plein(v.get("libelle")) and _texte_ou_nul(v.get("date"))
+            and _chemin_ou_lien(v))
+
+
+def _liste_de_textes(v, max_n=None):
+    return (isinstance(v, list) and all(_texte_plein(x) for x in v)
+            and (max_n is None or len(v) <= max_n))
+
+
+def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
+    fonctionnalites = r.get("fonctionnalites")
+    if fonctionnalites is None:
+        return set()
+    liste = _liste_facultative(fonctionnalites, "« fonctionnalites »", erreurs)
+    if len(liste) > MAX_FONCTIONNALITES:
+        erreurs.append(f"« fonctionnalites » : au plus {MAX_FONCTIONNALITES} fonctionnalités (il y en a {len(liste)}).")
+    vus = set()
+    for f in liste:
+        i = f.get("id")
+        if not _texte_plein(i):
+            erreurs.append("« fonctionnalites » : « id » est obligatoire (texte non vide).")
+        elif i in vus:
+            erreurs.append(f"« fonctionnalites » : identifiant en double « {i} ».")
+        else:
+            vus.add(i)
+        nom = f"« fonctionnalites » : la fonctionnalité « {i} »"
+        if not _texte(f.get("nom")):
+            erreurs.append(f"{nom} doit avoir un « nom » (texte).")
+        if f.get("etape") not in ETAPES:
+            erreurs.append(f"{nom} : « etape » inconnue « {f.get('etape')} » ({', '.join(ETAPES)}).")
+        ac = f.get("agent_cadrage")
+        if ac is not None and not _dans(ac, cles_agents):
+            erreurs.append(f"{nom} : « agent_cadrage » inconnu « {ac} ».")
+        for champ in ("attend_reponse", "catalogue"):
+            if f.get(champ) is not None and not isinstance(f[champ], bool):
+                erreurs.append(f"{nom} : « {champ} » doit être vrai ou faux.")
+        _verifier_discussion(f, nom, cles_agents, erreurs)
+        _verifier_cahier_methode(f, nom, erreurs)
+        if f.get("livrable") is not None and not _livrable_ok(f["livrable"]):
+            erreurs.append(f"{nom} : « livrable » doit avoir un « libelle », une « date » et un seul de "
+                           "« lien » (https, http ou claude) ou « chemin ».")
+        for d in _liste_facultative(f.get("decisions"), f"{nom} : « decisions »", erreurs):
+            _verifier_decision(d, DECISIONS_FONCTIONNALITE, f"{nom} : « decisions »", ids_decisions, erreurs)
+    return vus
+
+
+def _verifier_discussion(f, nom, cles_agents, erreurs):
+    discussion = _liste_facultative(f.get("discussion"), f"{nom} : « discussion »", erreurs)
+    if len(discussion) > MAX_MESSAGES:
+        erreurs.append(f"{nom} : « discussion » : au plus {MAX_MESSAGES} messages (il y en a {len(discussion)}).")
+        return
+    vus = set()
+    for m in discussion:
+        i = m.get("id")
+        if not _texte_plein(i):
+            erreurs.append(f"{nom} : « discussion » : chaque message a un « id » (texte non vide).")
+        elif i in vus:
+            erreurs.append(f"{nom} : « discussion » : identifiant de message en double « {i} ».")
+        else:
+            vus.add(i)
+        if not _texte(m.get("t")) or lire_date(m.get("t")) == TRES_ANCIEN:
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » : « t » doit être une date ISO 8601 (texte).")
+        if m.get("auteur") != "utilisateur" and not _dans(m.get("auteur"), cles_agents):
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » a un « auteur » inconnu "
+                           f"« {m.get('auteur')} » (utilisateur ou un titulaire).")
+        if not _texte(m.get("texte")):
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » doit avoir un « texte ».")
+        if m.get("images") is not None and not _liste_de_textes(m["images"], MAX_IMAGES_MESSAGE):
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
+                           f"d'au plus {MAX_IMAGES_MESSAGE} chemins (textes non vides).")
+
+
+def _verifier_cahier_methode(f, nom, erreurs):
+    c = f.get("cahier")
+    if c is not None:
+        if (not _est_dict(c) or not _liste_de_textes(c.get("maquette")) or not isinstance(c.get("etapes"), list)
+                or not all(isinstance(x, str) for x in c["etapes"]) or not _texte_ou_nul(c.get("valide_le"))):
+            erreurs.append(f"{nom} : « cahier » doit avoir une « maquette » (liste de chemins), des « etapes » "
+                           "(liste de textes) et, si présent, un « valide_le » texte.")
+    m = f.get("methode")
+    if m is not None:
+        version = m.get("version") if _est_dict(m) else None
+        if (not _est_dict(m) or isinstance(version, bool) or not isinstance(version, int) or version < 1
+                or not _chemin_ou_lien(m) or not _texte_ou_nul(m.get("validee_le"))):
+            erreurs.append(f"{nom} : « methode » doit avoir une « version » (entier ≥ 1), un seul de « lien » "
+                           "(https, http ou claude) ou « chemin », et, si présent, un « validee_le » texte.")
+
+
+def _verifier_decision(d, genres, nom, ids_decisions, erreurs):
+    i = d.get("id")
+    if not _texte_plein(i):
+        erreurs.append(f"{nom} : « id » est obligatoire (texte non vide).")
+    elif i in ids_decisions:
+        erreurs.append(f"{nom} : identifiant de décision en double « {i} » (unique dans tout le relevé).")
+    else:
+        ids_decisions.add(i)
+    if d.get("genre") not in genres:
+        erreurs.append(f"{nom} : la décision « {i} » a un « genre » inconnu « {d.get('genre')} » "
+                       f"({', '.join(genres)}).")
+    if not _texte(d.get("texte")):
+        erreurs.append(f"{nom} : la décision « {i} » doit avoir un « texte ».")
+
+
+def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
+    for d in _liste_facultative(r.get("decisions_projet"), "« decisions_projet »", erreurs):
+        nom = "« decisions_projet »"
+        _verifier_decision(d, DECISIONS_PROJET, nom, ids_decisions, erreurs)
+        i = d.get("id")
+        if d.get("genre") == "confirmer_genre":
+            if not _genre_valide(d.get("propose")):
+                erreurs.append(f"{nom} : la décision « {i} » : « propose » est obligatoire "
+                               "(identifiant de genre : minuscules, chiffres et tirets, 40 au plus).")
+            connus = d.get("genres_connus")
+            if not isinstance(connus, list) or not all(_genre_valide(g) for g in connus):
+                erreurs.append(f"{nom} : la décision « {i} » : « genres_connus » est obligatoire "
+                               "(liste d'identifiants de genre).")
+        elif d.get("genre") == "session_cloud":
+            if not _dans(d.get("agent"), cles_agents):
+                erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")
+
+
+def _verifier_lecons_v4(r, titulaires, erreurs):
+    ensembles = [("« lecons »", r.get("lecons"))]
+    ensembles += [(f"Titulaire « {t.get('cle')} » : « lecons »", t.get("lecons")) for t in titulaires]
+    for nom, liste in ensembles:
+        for le in _liste_facultative(liste, nom, erreurs):
+            i = le.get("id")
+            etage = le.get("etage_propose", "projet")
+            if etage is not None and etage not in ETAGES:
+                erreurs.append(f"{nom} : la leçon « {i} » : « etage_propose » inconnu « {etage} » "
+                               "(projet, genre ou skill).")
+            elif etage in ("genre", "skill") and not _texte_plein(le.get("texte_general")):
+                erreurs.append(f"{nom} : la leçon « {i} » : « texte_general » est obligatoire "
+                               "(texte non vide) quand l'étage est genre ou skill.")
+            if le.get("texte_general") is not None and not _texte(le["texte_general"]):
+                erreurs.append(f"{nom} : la leçon « {i} » : « texte_general » doit être un texte.")
+            roles = le.get("roles")
+            if roles is not None and (not _liste_de_textes(roles) or not roles):
+                erreurs.append(f"{nom} : la leçon « {i} » : « roles » doit être une liste de textes non vide.")
+
+
+def _verifier_v4(r, titulaires, taches, cles, erreurs):
+    """Champs facultatifs de la version 4 (ignorés en version inférieure)."""
+    agents = _agents_connus(titulaires, cles)
+    if r.get("genre") is not None and not _genre_valide(r["genre"]):
+        erreurs.append("« genre » doit être un identifiant de genre (minuscules, chiffres et tirets, "
+                       "40 caractères au plus) ou nul.")
+    if r.get("livrable") is not None and not _livrable_ok(r["livrable"]):
+        erreurs.append("« livrable » doit avoir un « libelle », une « date » et un seul de « lien » "
+                       "(https, http ou claude) ou « chemin ».")
+    ids_decisions = set()
+    ids_fonc = _verifier_fonctionnalites(r, agents, erreurs, ids_decisions)
+    _verifier_decisions_projet(r, agents, erreurs, ids_decisions)
+    for t in taches:
+        i = t.get("id")
+        if t.get("fonctionnalite") is not None and not _dans(t["fonctionnalite"], ids_fonc):
+            erreurs.append(f"Tâche « {i} » : « fonctionnalite » inconnue « {t['fonctionnalite']} ».")
+        for champ in ("element", "modele_depart"):
+            if not _texte_ou_nul(t.get(champ)):
+                erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
+        m = t.get("montee")
+        if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("de", "a", "raison"))):
+            erreurs.append(f"Tâche « {i} » : « montee » doit avoir « de », « a » et « raison » (textes non vides).")
+    _verifier_lecons_v4(r, titulaires, erreurs)
+
+
+CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet")
+CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee")
+
+
+def _normaliser_v4(n):
+    v4 = _version(n) >= 4
+    for c in CHAMPS_V4_RACINE:
+        if not v4:
+            n.pop(c, None)
+        elif c in ("fonctionnalites", "decisions_projet"):
+            n[c] = n[c] if isinstance(n.get(c), list) else []
+        else:
+            n.setdefault(c, None)
+    for f in n.get("fonctionnalites") or []:
+        for c in ("discussion", "decisions"):
+            f[c] = f[c] if isinstance(f.get(c), list) else []
+        f["attend_reponse"] = f.get("attend_reponse") is True
+        f["catalogue"] = f.get("catalogue") is True
+        for c in ("cahier", "methode", "livrable", "agent_cadrage"):
+            f.setdefault(c, None)
+    for t in n["taches"]:
+        for c in CHAMPS_V4_TACHE:
+            if v4:
+                t.setdefault(c, None)
+            else:
+                t.pop(c, None)
+    for liste in [n.get("lecons")] + [t.get("lecons") for t in n["titulaires"]]:
+        for le in liste if isinstance(liste, list) else []:
+            if v4:
+                if le.get("etage_propose") is None:
+                    le["etage_propose"] = "projet"
+                le.setdefault("texte_general", None)
+                if not isinstance(le.get("roles"), list):
+                    le["roles"] = ["tous"]
+            else:
+                for c in ("etage_propose", "texte_general", "roles"):
+                    le.pop(c, None)
 
 
 PERIODES_KPI = ("aujourdhui", "7j", "30j")
@@ -559,6 +788,7 @@ def normaliser(r):
         t.setdefault("modele", "?")
         t.setdefault("permanent", False)
         t.setdefault("chef", False)
+    _normaliser_v4(n)
     if not any(t["chef"] for t in n["titulaires"]):
         n["titulaires"].append({"cle": "chef", "lieu": "local", "chef": True,
                                 "permanent": True, "modele": "?"})

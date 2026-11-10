@@ -95,8 +95,8 @@ class TestVersion2(unittest.TestCase):
     def test_version_2_minimale_valide(self):
         self.assertEqual(releve.valider(V2), [])
 
-    def test_version_4_refusee(self):
-        self.assertTrue(releve.valider({**BASE, "version": 4}))
+    def test_version_5_refusee(self):
+        self.assertTrue(releve.valider({**BASE, "version": 5}))
 
     def test_neuf_services_refuses(self):
         def avec(n):
@@ -679,6 +679,209 @@ class TestKpi(unittest.TestCase):
                          {"id": "a", "nom": "A", "valeur": 1, "unite": None, "evolution": None, "alerte": False,
                           "texte": None, "periodes": None})
         self.assertNotIn("kpi", n["services"][1])  # absent : reste absent
+
+
+def v4(**champs):
+    r = copy.deepcopy({**BASE, "version": 4})
+    r.update(champs)
+    return r
+
+
+def fonc(**champs):
+    f = {"id": "f1", "nom": "Ville", "etape": "cadrage"}
+    f.update(champs)
+    return f
+
+
+def msg(**champs):
+    m = {"id": "m1", "t": "2026-11-10T10:00:00", "auteur": "utilisateur", "texte": "Bonjour"}
+    m.update(champs)
+    return m
+
+
+class TestVersion4(unittest.TestCase):
+    def refus(self, r, mot):
+        erreurs = releve.valider(r)
+        self.assertTrue(erreurs, mot)
+        self.assertTrue(any(mot in e for e in erreurs), (mot, erreurs))
+
+    def test_version_4_minimale(self):
+        self.assertEqual(releve.valider(v4()), [])
+
+    def test_version_5_refusee(self):
+        self.assertTrue(releve.valider({**BASE, "version": 5}))
+
+    def test_v3_inchange(self):
+        r = {**copy.deepcopy(BASE), "version": 3, "genre": "../x", "fonctionnalites": "n'importe quoi",
+             "decisions_projet": 3, "livrable": 5}
+        r["taches"][0].update(fonctionnalite=3, element=4, modele_depart=5, montee="x")
+        self.assertEqual(releve.valider(r), [])
+        n = releve.normaliser(r)
+        for c in ("genre", "livrable", "fonctionnalites", "decisions_projet"):
+            self.assertNotIn(c, n)
+        for c in ("fonctionnalite", "element", "modele_depart", "montee"):
+            self.assertNotIn(c, n["taches"][0])
+
+    def test_genre_motif(self):
+        for g in ("../x", "A", "", "x" * 41, "-a", 3):
+            self.refus(v4(genre=g), "genre")
+        for g in ("ville", "jeu-2d", "a", "x" * 40, None):
+            self.assertEqual(releve.valider(v4(genre=g)), [], g)
+
+    def test_livrable_lien_et_chemin_refuse(self):
+        base = {"libelle": "L", "date": "2026-11-10"}
+        self.refus(v4(livrable={**base, "lien": "https://x.fr/a", "chemin": "a.png"}), "livrable")
+        self.refus(v4(livrable=base), "livrable")
+        self.refus(v4(livrable={**base, "lien": "javascript:alert(1)"}), "livrable")
+        self.refus(v4(livrable={"lien": "https://x.fr/a", "date": "d"}), "livrable")
+        self.assertEqual(releve.valider(v4(livrable={**base, "lien": "https://x.fr/a"})), [])
+        self.assertEqual(releve.valider(v4(livrable={**base, "chemin": "a.png"})), [])
+
+    def test_fonctionnalite_etape_inconnue(self):
+        self.refus(v4(fonctionnalites=[fonc(etape="rêve")]), "etape")
+        for e in releve.ETAPES:
+            self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(etape=e)])), [], e)
+
+    def test_fonctionnalites_ids_doubles(self):
+        self.refus(v4(fonctionnalites=[fonc(), fonc()]), "double")
+        self.refus(v4(fonctionnalites=[fonc(id="")]), "id")
+
+    def test_fonctionnalites_trop_nombreuses(self):
+        self.refus(v4(fonctionnalites=[fonc(id=f"f{i}") for i in range(101)]), "fonctionnalites")
+
+    def test_agent_cadrage(self):
+        self.refus(v4(fonctionnalites=[fonc(agent_cadrage="zz")]), "agent_cadrage")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(agent_cadrage="d1")])), [])
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(agent_cadrage=None)])), [])
+
+    def test_message_auteur_inconnu(self):
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(auteur="zz")])]), "auteur")
+        for a in ("utilisateur", "d1"):
+            self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(discussion=[msg(auteur=a)])])), [], a)
+
+    def test_message_champs(self):
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(), msg()])]), "double")
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(texte=3)])]), "texte")
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(t="hier")])]), "« t »")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[
+            fonc(id="f1", discussion=[msg()]), fonc(id="f2", discussion=[msg()])])), [])  # ids par discussion
+
+    def test_message_trop_nombreux(self):
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id=f"m{i}") for i in range(1001)])]), "discussion")
+
+    def test_message_cinq_images(self):
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(images=[f"a{i}.png" for i in range(5)])])]), "images")
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(images=[3])])]), "images")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[
+            fonc(discussion=[msg(images=[f"a{i}.png" for i in range(4)])])])), [])
+
+    def test_attend_reponse_et_catalogue_booleens(self):
+        self.refus(v4(fonctionnalites=[fonc(attend_reponse="oui")]), "attend_reponse")
+        self.refus(v4(fonctionnalites=[fonc(catalogue=1)]), "catalogue")
+
+    def test_cahier_et_methode(self):
+        self.refus(v4(fonctionnalites=[fonc(cahier={"maquette": "a.png", "etapes": []})]), "cahier")
+        self.refus(v4(fonctionnalites=[fonc(cahier={"maquette": [], "etapes": [3]})]), "cahier")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[
+            fonc(cahier={"maquette": ["a.png"], "etapes": ["un"], "valide_le": "2026-11-10"})])), [])
+        self.refus(v4(fonctionnalites=[fonc(methode={"version": 0, "chemin": "m.md"})]), "methode")
+        self.refus(v4(fonctionnalites=[fonc(methode={"version": 1})]), "methode")
+        self.refus(v4(fonctionnalites=[fonc(methode={"version": 1, "chemin": "m", "lien": "https://x.fr"})]), "methode")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(methode={"version": 2, "chemin": "m.md"})])), [])
+
+    def test_livrable_de_fonctionnalite(self):
+        self.refus(v4(fonctionnalites=[fonc(livrable={"libelle": "L", "date": "d"})]), "livrable")
+
+    def test_decision_genre_inconnu(self):
+        self.refus(v4(fonctionnalites=[fonc(decisions=[{"id": "d", "genre": "x", "texte": "T"}])]), "genre")
+        for g in releve.DECISIONS_FONCTIONNALITE:
+            self.assertEqual(releve.valider(v4(fonctionnalites=[
+                fonc(decisions=[{"id": "d", "genre": g, "texte": "T"}])])), [], g)
+
+    def test_decisions_ids_doubles_entre_fonctionnalite_et_projet(self):
+        r = v4(fonctionnalites=[fonc(decisions=[{"id": "d", "genre": "valider_cahier", "texte": "T"}])],
+               decisions_projet=[{"id": "d", "genre": "session_cloud", "texte": "T", "agent": "d1"}])
+        self.refus(r, "double")
+
+    def test_confirmer_genre_sans_propose(self):
+        base = {"id": "g", "genre": "confirmer_genre", "texte": "T"}
+        self.refus(v4(decisions_projet=[base]), "propose")
+        self.refus(v4(decisions_projet=[{**base, "propose": "ville"}]), "genres_connus")
+        self.refus(v4(decisions_projet=[{**base, "propose": "../x", "genres_connus": []}]), "propose")
+        self.refus(v4(decisions_projet=[{**base, "propose": "ville", "genres_connus": ["A"]}]), "genres_connus")
+        self.assertEqual(releve.valider(v4(decisions_projet=[
+            {**base, "propose": "ville", "genres_connus": ["jeu"]}])), [])
+
+    def test_session_cloud_agent_inconnu(self):
+        base = {"id": "s", "genre": "session_cloud", "texte": "T"}
+        self.refus(v4(decisions_projet=[{**base, "agent": "zz"}]), "agent")
+        self.refus(v4(decisions_projet=[base]), "agent")
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "agent": "d1"}])), [])
+
+    def test_decision_projet_genre_inconnu(self):
+        self.refus(v4(decisions_projet=[{"id": "s", "genre": "valider_cahier", "texte": "T"}]), "genre")
+
+    def test_tache_fonctionnalite_inconnue(self):
+        r = v4(fonctionnalites=[fonc()])
+        r["taches"][0]["fonctionnalite"] = "zz"
+        self.refus(r, "fonctionnalite")
+        r["taches"][0]["fonctionnalite"] = "f1"
+        self.assertEqual(releve.valider(r), [])
+
+    def test_tache_champs_v4(self):
+        r = v4()
+        r["taches"][0]["element"] = 3
+        self.refus(r, "element")
+        r = v4()
+        r["taches"][0]["modele_depart"] = 3
+        self.refus(r, "modele_depart")
+        r = v4()
+        r["taches"][0]["montee"] = {"de": "Haiku", "a": "Sonnet"}
+        self.refus(r, "montee")
+        r["taches"][0]["montee"] = {"de": "Haiku", "a": "Sonnet", "raison": "trop dur"}
+        self.assertEqual(releve.valider(r), [])
+
+    def test_lecon_genre_sans_texte_general(self):
+        lecon = {"id": "l1", "agent": "d1", "texte": "T", "etage_propose": "genre"}
+        self.refus(v4(lecons=[lecon]), "texte_general")
+        self.refus(v4(lecons=[{**lecon, "texte_general": ""}]), "texte_general")
+        self.refus(v4(lecons=[{**lecon, "etage_propose": "monde", "texte_general": "G"}]), "etage_propose")
+        self.refus(v4(lecons=[{**lecon, "texte_general": "G", "roles": []}]), "roles")
+        self.refus(v4(lecons=[{**lecon, "texte_general": "G", "roles": [3]}]), "roles")
+        self.assertEqual(releve.valider(v4(lecons=[{**lecon, "texte_general": "G", "roles": ["dev"]}])), [])
+        self.assertEqual(releve.valider(v4(lecons=[{**lecon, "etage_propose": "projet"}])), [])
+
+    def test_lecon_de_titulaire(self):
+        r = v4()
+        r["titulaires"][0]["lecons"] = [{"id": "l", "texte": "T", "etat": "à valider", "etage_propose": "skill"}]
+        self.refus(r, "texte_general")
+
+    def test_normaliser_v4_defauts(self):
+        r = v4(fonctionnalites=[fonc()], lecons=[{"id": "l1", "agent": "d1", "texte": "T"}])
+        n = releve.normaliser(r)
+        self.assertIsNone(n["genre"])
+        self.assertIsNone(n["livrable"])
+        self.assertEqual(n["decisions_projet"], [])
+        f = n["fonctionnalites"][0]
+        self.assertEqual((f["discussion"], f["decisions"], f["attend_reponse"], f["catalogue"]),
+                         ([], [], False, False))
+        for c in ("cahier", "methode", "livrable", "agent_cadrage"):
+            self.assertIsNone(f[c], c)
+        t = n["taches"][0]
+        for c in ("fonctionnalite", "element", "modele_depart", "montee"):
+            self.assertIsNone(t[c], c)
+        le = n["lecons"][0]
+        self.assertEqual((le["etage_propose"], le["texte_general"], le["roles"]), ("projet", None, ["tous"]))
+
+    def test_normaliser_v4_sans_rien(self):
+        n = releve.normaliser(v4())
+        self.assertEqual((n["fonctionnalites"], n["decisions_projet"], n["genre"]), ([], [], None))
+
+    def test_normaliser_v3_retire_les_champs_v4(self):
+        n = releve.normaliser({**copy.deepcopy(BASE), "version": 3,
+                               "lecons": [{"id": "l", "agent": "d1", "texte": "T", "etage_propose": "genre"}]})
+        for c in ("etage_propose", "texte_general", "roles"):
+            self.assertNotIn(c, n["lecons"][0])
 
 
 if __name__ == "__main__":

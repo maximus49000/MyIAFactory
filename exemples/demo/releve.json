@@ -169,6 +169,12 @@
       "active": true,
       "titulaire": "metier:1",
       "etape": "Rédaction du cahier des charges",
+      "notes": [
+        {
+          "libelle": "À savoir",
+          "texte": "Les remises ne se cumulent pas.\nLe plafond est fixé par la direction."
+        }
+      ],
       "maj": "2026-11-09T10:05:00",
       "postit": true,
       "type": "fonction"
@@ -186,7 +192,8 @@
       "retours": [
         {
           "t": "2026-11-09T17:00:00",
-          "texte": "Vérifie aussi l'export avec des accents."
+          "texte": "Vérifie aussi l'export avec des accents.",
+          "etat": "nouveau"
         }
       ]
     },

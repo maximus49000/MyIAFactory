@@ -83,6 +83,13 @@ export function imagesVisibles(etat, tache) {
   return etat?.images_ok === true && (tache?.images || []).length > 0;
 }
 
+// Les notes libres d'une tâche : seules celles qui ont un libellé et un texte (le texte garde ses retours à la ligne).
+export function notesValides(tache) {
+  const l = Array.isArray(tache?.notes) ? tache.notes : [];
+  return l.filter((n) => n && typeof n.libelle === "string" && n.libelle
+    && typeof n.texte === "string" && n.texte).map((n) => ({libelle: n.libelle, texte: n.texte}));
+}
+
 // La vue liste est un ajout de la version 2 : un relevé en version 1 garde le bureau d'avant, sans bouton.
 export function listeDisponible(etat) {
   return (etat?.version ?? 1) >= 2;

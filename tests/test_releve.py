@@ -186,6 +186,31 @@ class TestVersion2(unittest.TestCase):
         n = releve.normaliser(r)
         self.assertIsNone(n["actions"][0]["lien"])
 
+    def test_notes_valides(self):
+        r = v2()
+        r["taches"][0]["notes"] = [{"libelle": "L", "texte": "a\nb"}]
+        r["taches"][0]["retours"] = [{"t": "1", "texte": "x", "etat": "nouveau"}, {"t": "2", "texte": "y", "etat": None}]
+        self.assertEqual(releve.valider(r), [])
+        r["taches"][0]["notes"] = None
+        self.assertEqual(releve.valider(r), [])
+        self.assertEqual(releve.normaliser(r)["taches"][0]["notes"], [])
+
+    def test_notes_mal_formees(self):
+        for notes in ("x", [3], [{"libelle": "", "texte": "a"}], [{"libelle": "L", "texte": ""}],
+                      [{"libelle": "L"}], [{"libelle": 1, "texte": "a"}]):
+            r = v2()
+            r["taches"][0]["notes"] = notes
+            self.assertTrue(releve.valider(r), notes)
+        r = v2()
+        r["taches"][0]["retours"] = [{"t": "1", "texte": "x", "etat": 3}]
+        self.assertTrue(releve.valider(r))
+
+    def test_notes_absentes_en_version_1(self):
+        r = copy.deepcopy(BASE)
+        r["taches"][0]["notes"] = "n'importe quoi"
+        self.assertEqual(releve.valider(r), [])
+        self.assertNotIn("notes", releve.normaliser(r)["taches"][0])
+
     def test_version_1_ignore_les_ajouts(self):
         r = copy.deepcopy(BASE)
         r["actions"] = "n'importe quoi"

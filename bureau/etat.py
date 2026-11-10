@@ -48,7 +48,7 @@ def construire(r, eq, maintenant, fraicheur_min):
         "active": bool(t.get("active")), "type": t.get("type"),
         "journal": sorted(t.get("journal") or [], key=lambda j: j["t"], reverse=True),
         "images": t.get("images") or [], "liens": t.get("liens") or [],
-        "retours": t.get("retours") or [], "bloquee": t.get("bloquee") or None,
+        "retours": t.get("retours") or [], "notes": t.get("notes") or [], "bloquee": t.get("bloquee") or None,
     } for t in r["taches"]]
 
     lecons = r.get("lecons") or []

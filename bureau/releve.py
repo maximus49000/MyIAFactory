@@ -249,6 +249,12 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
                     erreurs.append(f"Tâche « {i} » : « {champ} » : chaque élément a « t » et « texte » (textes).")
                 if champ == "retours" and not _texte_ou_nul(e.get("reponse")):
                     erreurs.append(f"Tâche « {i} » : « retours » : « reponse » doit être un texte.")
+                if champ == "retours" and not _texte_ou_nul(e.get("etat")):
+                    erreurs.append(f"Tâche « {i} » : « retours » : « etat » doit être un texte.")
+        for e in _liste_facultative(t.get("notes"), f"Tâche « {i} » : « notes »", erreurs):
+            if not _texte(e.get("libelle")) or not e.get("libelle") or not _texte(e.get("texte"))                     or not e.get("texte"):
+                erreurs.append(f"Tâche « {i} » : « notes » : chaque note a un « libelle » et un « texte » "
+                               "(textes non vides).")
         images = _liste_facultative(t.get("images"), f"Tâche « {i} » : « images »", erreurs)
         if len(images) > MAX_IMAGES:
             erreurs.append(f"Tâche « {i} » : « images » : au plus {MAX_IMAGES} images.")
@@ -265,7 +271,7 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
 
 
 CHAMPS_V2_RACINE = ("actions", "types", "lecons")
-CHAMPS_V2_TACHE = ("type", "journal", "images", "liens", "retours", "bloquee")
+CHAMPS_V2_TACHE = ("type", "journal", "images", "liens", "retours", "bloquee", "notes")
 CHAMPS_V2_TITULAIRE = ("prenom", "specialite", "lecons")
 
 

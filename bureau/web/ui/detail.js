@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, dateFr, filtrer, imagesUrl, imagesVisibles} from "./texte.js";
+import {tronquer, ilYA, dateFr, filtrer, imagesUrl, imagesVisibles, notesValides} from "./texte.js";
 import {lienSur} from "./actions.js";
 
 export const MAX_RETOUR = 3500;
@@ -99,6 +99,11 @@ export function contenuTache(ctx, contenu, t) {
   contenu.append(ligne("Colonne", tronquer(nomColonne(e, t.colonne), 30)));
   contenu.append(ligne("Agent", prenomAgent(e, t.agent)));
   contenu.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
+  for (const n of notesValides(t)) {
+    const p = el("p", "note-tache");
+    p.append(el("strong", "", n.libelle + " : "), document.createTextNode(n.texte));
+    contenu.append(p);
+  }
   const type = (e.types || []).find((x) => x.id === t.type);
   if (t.type) contenu.append(ligne("Type", type ? type.nom : t.type));
   contenu.append(ligne("Mise à jour", ilYA(t.maj)));
@@ -141,7 +146,7 @@ export function contenuTache(ctx, contenu, t) {
   if (!t.retours.length) retours.append(el("li", "vide", "Aucun retour"));
   for (const r of t.retours) {
     const li = el("li", "");
-    li.append(el("div", "retour-texte", r.texte), el("div", "retour-date", dateFr(r.t)));
+    li.append(el("div", "retour-texte", r.texte), el("div", "retour-date", dateFr(r.t) + (r.etat ? " · " + r.etat : "")));
     li.append(r.reponse && r.reponse.trim() ? el("div", "retour-reponse", r.reponse)
       : el("div", "retour-attente", "en attente de réponse"));
     retours.append(li);

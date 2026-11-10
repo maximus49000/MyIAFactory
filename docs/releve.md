@@ -54,7 +54,8 @@ Facultatifs en version 2, pour le détail d'une tâche :
 | `journal` | liste de `{t, texte}` ; le plus récent est montré en premier |
 | `images` | liste de `{chemin, legende?}` ; **40 au plus** ; voir « Les images » |
 | `liens` | liste de `{libelle, url}` ; schémas `https`, `http` ou `claude` (ce dernier ouvre l'application Claude de bureau) ; ouverts dans un nouvel onglet |
-| `retours` | liste de `{t, texte, reponse?}` ; un retour sans `reponse` est « en attente de réponse » et compte pour le Directeur |
+| `retours` | liste de `{t, texte, reponse?, etat?}` (`etat` : mot court affiché à côté de la date, par exemple « nouveau » ou « pris en compte ») ; un retour sans `reponse` est « en attente de réponse » et compte pour le Directeur |
+| `notes` | liste de `{libelle, texte}` (deux textes non vides) : notes libres, montrées sous l'étape ; le texte peut avoir plusieurs lignes |
 | `bloquee` | texte : la raison, si la tâche attend une décision (compte pour le Directeur) |
 
 Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une liste, ou un lien `javascript:`) rend tout le relevé invalide : le bandeau « Relevé invalide » nomme le champ, et la scène garde sa dernière image. Un champ facultatif à `null` compte pour absent. En version 1, ces champs sont ignorés.

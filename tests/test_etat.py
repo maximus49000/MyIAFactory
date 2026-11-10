@@ -166,6 +166,17 @@ class TestEtat(unittest.TestCase):
             r["taches"][1]["bloquee"] = "attend"
         self.assertEqual(self.v2(m)["directeur"]["total"], 5)
 
+    def test_notes_et_etat_des_retours_servis(self):
+        def m(r):
+            r["taches"][0]["notes"] = [{"libelle": "À savoir", "texte": "ligne 1\nligne 2"}]
+            r["taches"][0]["retours"] = [{"t": "1", "texte": "a", "etat": "nouveau"}]
+        e = self.v2(m)
+        t1 = next(t for t in e["taches"] if t["id"] == "t1")
+        self.assertEqual(t1["notes"], [{"libelle": "À savoir", "texte": "ligne 1\nligne 2"}])
+        self.assertEqual(t1["retours"][0]["etat"], "nouveau")
+        t2 = next(t for t in e["taches"] if t["id"] == "t2")
+        self.assertEqual(t2["notes"], [])
+
     def test_journal_trie(self):
         def m(r):
             r["taches"][0]["journal"] = [{"t": "2026-11-10T08:00:00", "texte": "a"},

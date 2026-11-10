@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -107,4 +107,13 @@ test("phrasesDirectionV1 : le texte d'avant, au singulier et au pluriel", () => 
   assert.equal(phrasesDirectionV1({decisions: 1})[0].texte, "1 décision attend le Directeur.");
   assert.equal(phrasesDirectionV1({decisions: 3})[0].texte, "3 décisions attendent le Directeur.");
   assert.equal(phrasesDirectionV1({})[0].texte, "Aucune décision n'attend le Directeur.");
+});
+
+test("notesValides : seules les notes bien formées, texte gardé tel quel", () => {
+  const t = {notes: [{libelle: "À savoir", texte: "a\nb"}, {libelle: "", texte: "x"}, {libelle: "L"}, null, 3,
+                     {libelle: "<b>", texte: "<img>"}]};
+  assert.deepEqual(notesValides(t), [{libelle: "À savoir", texte: "a\nb"}, {libelle: "<b>", texte: "<img>"}]);
+  assert.deepEqual(notesValides({}), []);
+  assert.deepEqual(notesValides(null), []);
+  assert.deepEqual(notesValides({notes: "x"}), []);
 });

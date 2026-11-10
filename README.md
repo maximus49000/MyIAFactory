@@ -24,7 +24,7 @@ Projet 1, le bureau vivant :
 - [x] 1. Socle et réglages
 - [x] 2. Le relevé (contrat entre un projet et le bureau) et l'exemple de démonstration
 - [x] 3. Statuts : fraîcheur, pause, départ
-- [ ] 4. L'équipe : prénoms et couleurs
+- [x] 4. L'équipe : prénoms et couleurs
 - [ ] 5. L'état servi à la page
 - [ ] 6. La charge de l'ordinateur et le serveur
 - [ ] 7. La logique de la page : changements, plan, régie
@@ -34,7 +34,7 @@ Projet 1, le bureau vivant :
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : étapes 1 à 3 faites.
+État : étapes 1 à 4 faites.
 
 ## Ce qu'il reste à faire ensuite
 

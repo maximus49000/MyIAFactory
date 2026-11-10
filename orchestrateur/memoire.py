@@ -98,9 +98,11 @@ def genres(dossier):
 
 
 def normaliser_mot(texte):
-    """Minuscules, sans accents ; tirets et apostrophes deviennent des espaces ; espaces réduits."""
-    t = unicodedata.normalize("NFKD", str(texte)).encode("ascii", "ignore").decode("ascii").lower()
-    t = re.sub(r"[-'’`´‑–—_]", " ", t)
+    """Minuscules, sans accents (œ et æ écrits oe et ae) ; tirets, apostrophes et séparateurs de chemin deviennent
+    des espaces ; espaces réduits."""
+    t = str(texte).replace("œ", "oe").replace("Œ", "OE").replace("æ", "ae").replace("Æ", "AE")
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii").lower()
+    t = re.sub(r"[-'’`´‑–—_/\\:]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
 
@@ -202,5 +204,6 @@ def creer_genre(dossier, genre, description, mots_interdits, git=executer_git):
     if chemin.is_file():
         return False, f"Le genre « {genre} » existe déjà."
     contenu = f"# Genre : {genre}\nDomaine : {description}\nLivrable : à préciser\nOutils : à préciser\n"
-    return _ecrire_et_pousser(dossier, chemin, lambda _: contenu, mots_interdits, description,
+    # L'identifiant aussi : il devient un nom de fichier, un titre et un message de commit publics.
+    return _ecrire_et_pousser(dossier, chemin, lambda _: contenu, mots_interdits, genre + "\n" + description,
                               f"Mémoire (genre) : nouveau genre {genre}", git)

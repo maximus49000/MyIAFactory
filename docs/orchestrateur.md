@@ -129,5 +129,6 @@ discussion, les validations du Directeur, le catalogue.
 ## Démarrer un projet neuf
 
 Copiez [`exemples/projet-neuf/`](../exemples/projet-neuf/) dans un dossier à vous, `git init`, mettez dans
-`factory.json` le chemin de la skill (`skill`) et dans `reglages.json` celui de `outil.py`, remplissez
+`factory.json` le chemin de la skill (`skill`) et celui de `outil.py` dans la commande du catalogue
+(`catalogues["*"]`), et dans `reglages.json` celui de `outil.py` (relevé et actions), remplissez
 `mots_interdits` et les fiches (un agent par rôle), puis passez `verifier_interface.py` et ouvrez le bureau.

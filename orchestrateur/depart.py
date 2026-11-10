@@ -30,8 +30,22 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None):
         return f["cle"], f"{f.get('prenom') or f['cle']} est libre"
     sur = f" sur {modele}" if modele else ""
     if lieu == "cloud":
-        return None, f"aucun agent cloud {role}{sur} : session à créer"
+        attend = sans_session(fiches, role, modele)
+        if attend:   # une fiche existe mais n'a pas de session : c'est elle que la décision nommera
+            return None, f"aucun agent cloud {role}{sur} : session à créer pour {attend}"
+        if not any(f["role"] == role and f["lieu"] == "cloud" and (not modele or f["modele"] == modele) for f in fiches):
+            return None, f"aucune fiche cloud {role}{sur} : ajoutez-en une"
+        return None, f"aucun agent cloud {role} libre{sur}"   # tous occupés : on attend
     return None, f"aucun {role} libre{sur}"
+
+
+def sans_session(fiches, role, modele=None):
+    """La clé de la première fiche cloud du rôle (et du modèle) qui n'a pas de session attitrée, ou `None`."""
+    for f in fiches:
+        if (f["role"] == role and f["lieu"] == "cloud" and not f.get("session")
+                and (not modele or f["modele"] == modele)):
+            return f["cle"]
+    return None
 
 
 def brief(factory, role):

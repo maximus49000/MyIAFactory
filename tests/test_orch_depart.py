@@ -49,13 +49,21 @@ class TestDepart(unittest.TestCase):
     def test_agent_libre_cloud_manquant(self):
         liste = [fiche("prep-1", "preparateur", "Sonnet", "cloud", "Session prep"), fiche("prep-2", "preparateur", "Opus", "cloud")]
         self.assertEqual(depart.agent_libre(liste, [], "preparateur", "Sonnet", "cloud")[0], "prep-1")
+        # Aucune fiche de ce rôle et de ce modèle : il faut d'abord en écrire une (pas de session à demander).
         cle, raison = depart.agent_libre(liste, [], "preparateur", "Haiku", "cloud")
         self.assertIsNone(cle)
-        self.assertEqual(raison, "aucun agent cloud preparateur sur Haiku : session à créer")
-        cle, raison = depart.agent_libre(liste, [], "preparateur", "Opus", "cloud")   # la fiche existe, sans session
+        self.assertEqual(raison, "aucune fiche cloud preparateur sur Haiku : ajoutez-en une")
+        self.assertIsNone(depart.sans_session(liste, "preparateur", "Haiku"))
+        # La fiche existe, sans session : c'est elle qui attend sa session (la décision la nomme).
+        cle, raison = depart.agent_libre(liste, [], "preparateur", "Opus", "cloud")
         self.assertIsNone(cle)
-        self.assertEqual(raison, "aucun agent cloud preparateur sur Opus : session à créer")
-        self.assertEqual(depart.agent_libre(liste, [{"agent": "prep-1", "active": True}], "preparateur", "Sonnet", "cloud")[0], None)
+        self.assertEqual(raison, "aucun agent cloud preparateur sur Opus : session à créer pour prep-2")
+        self.assertEqual(depart.sans_session(liste, "preparateur", "Opus"), "prep-2")
+        # Occupé n'est pas « sans session » : on attend, on ne redemande pas une session qui existe.
+        cle, raison = depart.agent_libre(liste, [{"agent": "prep-1", "active": True}], "preparateur", "Sonnet", "cloud")
+        self.assertIsNone(cle)
+        self.assertEqual(raison, "aucun agent cloud preparateur libre sur Sonnet")
+        self.assertIsNone(depart.sans_session(liste, "preparateur", "Sonnet"))
 
     def test_agent_libre_local_ignore_le_cloud(self):
         liste = [fiche("prep-1", "preparateur", "Sonnet", "cloud", "S")]

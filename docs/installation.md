@@ -69,7 +69,9 @@ méthode et « Valider la méthode », et « Catalogue ».
 
 Le bureau ne parle à aucune IA : votre message devient une demande `message` pour le projet, et la réponse de
 l'agent de cadrage n'apparaît qu'au relevé suivant. Tant qu'elle n'est pas là, la page affiche « <prénom> est en
-train d'écrire… » si l'orchestrateur tourne, sinon « En attente de l'orchestrateur ». Dans la démo, les réponses sont
+train d'écrire… » si l'orchestrateur tourne, sinon « En attente de l'orchestrateur ». « Tourne » se juge à la
+fraîcheur du chef (30 minutes par défaut) : une conversation orchestratrice fermée à l'instant compte encore comme
+active pendant ce délai. Dans la démo, les réponses sont
 fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
 méthode à la série.
 

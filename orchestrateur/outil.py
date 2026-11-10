@@ -38,6 +38,11 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
 
+def _interdit(modele):
+    """Un modèle qu'aucun outil ne choisit, quelle que soit la casse."""
+    return isinstance(modele, str) and modele.strip().lower() in {m.lower() for m in MODELES_INTERDITS}
+
+
 class Refus(Exception):
     """Code 1 : la demande est lisible mais refusée."""
 
@@ -189,6 +194,10 @@ def cmd_actions(ctx, e):
     genre = e.get("type")
     if genre not in TYPES_DEMANDE:
         raise Refus(f"Demande inconnue : {genre}")
+    cible = e.get("tache")
+    if genre == "deplacer" and isinstance(cible, str) and (cible == "orchestration" or cible.startswith("cadrage:")):
+        # Ces deux tâches ne sont montrées qu'au relevé (le chef qui orchestre, un cadrage en cours) : rien à déplacer.
+        raise Refus("Cette tâche suit l'orchestrateur et ne se déplace pas.")
     with ctx.suivi.transaction() as s:
         demande = {k: v for k, v in e.items() if k != "images"}
         demande["t"] = e["t"] if _date_valide(e.get("t")) else su.maintenant()
@@ -417,6 +426,8 @@ def cmd_tache(ctx, e):
         for cle in ("element", "role", "modele_depart", "bloquee"):
             if cle in e:
                 t[cle] = texte(e, cle, obligatoire=False)
+        if _interdit(t["modele_depart"]):
+            raise Refus("Fable n'est jamais choisi par un outil (seulement sur demande expresse).")
         if "etape" in e:
             t["etape"] = texte(e, "etape", vide_ok=True)
         if "colonne" in e:
@@ -439,8 +450,10 @@ def cmd_tache(ctx, e):
                 if not isinstance(m, dict) or not all(isinstance(m.get(c), str) and m[c].strip()
                                                       for c in ("de", "a", "raison")):
                     raise Refus("« montee » doit avoir « de », « a » et « raison » (textes non vides).")
-                if m["a"] in MODELES_INTERDITS or m["de"] in MODELES_INTERDITS:
+                if _interdit(m["a"]) or _interdit(m["de"]):
                     raise Refus("Fable n'est jamais choisi par un outil (seulement sur demande expresse).")
+                if m["de"] in depart.ECHELLE and m["a"] != depart.monter(m["de"]):
+                    raise Refus(f"Une montée va d'un cran au plus : de {m['de']}, c'est {depart.monter(m['de'])}.")
                 m = {c: m[c] for c in ("de", "a", "raison")}
             t["montee"] = m
             if m and not t["modele_depart"]:
@@ -485,8 +498,13 @@ def cmd_file(ctx, e):
 def cmd_file_prendre(ctx, e):
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
-        element = f["file"].pop(0) if f["file"] else None
-        return {"element": element}
+        voulu = texte(e, "element", obligatoire=False)
+        if voulu is None:   # l'élément suivant
+            return {"element": f["file"].pop(0) if f["file"] else None}
+        rang = next((i for i, q in enumerate(f["file"]) if q["id"] == voulu), None)   # un élément précis
+        if rang is None:
+            raise Refus(f"Élément absent de la file : {voulu}")
+        return {"element": f["file"].pop(rang)}
 
 
 def cmd_session(ctx, e):
@@ -777,10 +795,13 @@ def _fiches_avec_sessions(ctx):
 
 
 def cmd_agent_libre(ctx, e):
-    role = texte(e, "role")
-    cle, raison = depart.agent_libre(_fiches_avec_sessions(ctx), ctx.suivi.lire()["taches"], role,
-                                     texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False))
-    return {"agent": cle, "raison": raison}
+    role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
+    fiches_ = _fiches_avec_sessions(ctx)
+    cle, raison = depart.agent_libre(fiches_, ctx.suivi.lire()["taches"], role, modele, lieu)
+    sortie = {"agent": cle, "raison": raison}
+    if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
+        sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
+    return sortie
 
 
 def cmd_depart(ctx, e):

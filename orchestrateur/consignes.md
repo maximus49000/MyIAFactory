@@ -38,9 +38,10 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 
 1. **Signe de vie, pause et mode.** `lancer reveil` (c'est ce qui dit au bureau que tu tournes ; sans lui, la page
    affiche « En attente de l'orchestrateur »). Puis `lancer etat` : si `pause` est vrai, ne démarre aucune étape
-   nouvelle ; tu traites seulement les demandes (la reprise en est une). Avant **chaque étape locale**,
-   `lancer charge` : si `feu_vert` est faux, n'en démarre pas (attends le réveil suivant) ; les sessions cloud ne
-   comptent pas dans la charge.
+   nouvelle ; tu traites seulement les demandes (Pause et Reprendre sont appliquées par l'outil dès le clic). Puis le
+   **mode** : en ligne (les agents cloud travaillent) ou local, selon ce que les consignes propres ou l'utilisateur
+   ont fixé. Avant **chaque étape locale**, `lancer charge` : si `feu_vert` est faux, n'en démarre pas (attends le
+   réveil suivant) ; les sessions cloud ne comptent pas dans la charge.
 2. **Les demandes du bureau d'abord**, avec `lancer demandes` (les plus anciennes d'abord), **les messages de
    discussion avant toutes les autres**, pour garder la discussion vivante. Le traitement de chaque type est plus
    bas (« Les demandes du bureau »). Chaque demande finit par `lancer demande-traitee` avec une `reponse` courte.
@@ -69,14 +70,14 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 |---|---|
 | `fonctionnalite` | Une fonctionnalité neuve, déjà créée à l'étape `cadrage` avec ce premier message. Choisis son agent de cadrage (`lancer agent-libre` avec le rôle de cadrage), inscris-le (`lancer fonctionnalite` avec `agent_cadrage` et un vrai `nom` court), puis fais-lui répondre (« Le cadrage »). |
 | `message` | Un message de l'utilisateur dans la discussion : l'agent de cadrage de la fonctionnalité y répond (même agent pendant toute la fonctionnalité). Pendant le prototype, c'est un retour sur le tour en cours. |
-| `cahier` | `valider` : note `valide_le` dans `cahier` (`lancer fonctionnalite`), lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et passe au `decoupage`. `corriger` : l'agent de cadrage corrige le cahier d'après `texte`, puis tu reposes la décision. |
-| `methode` | `valider` : écris la méthode (voir l'étape `methode`). `revoir` : retour au `prototype` (nouvelle mise au point, ou « oui » à `methode_a_revoir`). `garder` : « non » à `methode_a_revoir` ; l'élément suit le traitement « bloqué » du projet (`lancer tache` avec `bloquee`). Lève la décision concernée. |
+| `cahier` | `valider` : renvoie le cahier entier avec `valide_le` (`lancer fonctionnalite`, `cahier: {maquette, etapes, valide_le}` : le champ remplace tout le cahier), lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et passe au `decoupage`. `corriger` : l'agent de cadrage corrige le cahier d'après `texte`, puis tu reposes la décision. |
+| `methode` | `valider` : écris la méthode (voir l'étape `methode`). `revoir` : retour au `prototype` (nouvelle mise au point, ou « oui » à `methode_a_revoir`). `garder` : « non » à `methode_a_revoir` ; l'élément suit le traitement « bloqué » du projet (`lancer tache` avec `bloquee`). Lève la décision concernée (la demande ne porte pas d'identifiant de décision : ne pose donc qu'une `methode_a_revoir` à la fois par fonctionnalité). |
 | `genre` | Le genre confirmé (ou choisi) par l'utilisateur : `lancer genre` avec `action: fixer`, le `genre` et, s'il est nouveau, la `description`. Puis lève la décision `confirmer_genre` et relis la mémoire du genre. |
-| `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
+| `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision (retrouve-le avec `lancer etat`, dans `decisions`) et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
 | `retour_element` | Un « Demander à modifier » du catalogue : une tâche de correction sur cet élément (`lancer tache` avec `fonctionnalite`, `element`, le rôle de l'étape concernée), qui suit le flux et la relecture croisée comme les autres. Réponds dans la `reponse` de la demande ce qui sera fait. |
 | `lecon` | Le verdict de l'utilisateur sur une leçon (`cible` = son id, `verdict`, `etage?`) : `lancer lecon` avec `action: appliquer` (voir « Les leçons »). |
 | `retour` | Un retour de l'utilisateur sur une tâche : transmets-le à l'agent qui la tient (ou au prochain qui la reprend) ; ta `reponse` dit ce qui sera fait. |
-| `deplacer` | Passer la tâche (ou l'élément de la file) dans la colonne demandée, avec `lancer tache` (`colonne`). |
+| `deplacer` | Une tâche : `lancer tache` avec son `id` et la `colonne`. Un élément de la file (identifiant `<fonctionnalité>/<élément>`) : `lancer file-prendre` avec `fonctionnalite` et `element`, puis une tâche pour cet élément dans la colonne demandée (`lancer tache`). Les tâches `orchestration` et `cadrage:…` ne se déplacent pas (l'outil le refuse au bureau). |
 | `bouton` | Un bouton du projet : ce que ses consignes propres en disent. `pause` et `reprendre` sont déjà appliqués par l'outil générique. |
 | `challenge`, `solution`, `verdict_solution` | Les challenges des services (relevé version 3) : ce que disent les consignes propres du projet. Sans règle du projet, réponds que ce projet ne gère pas les challenges. |
 
@@ -95,11 +96,12 @@ le bandeau du bureau montre.
    discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre). **Si le projet n'a pas encore de genre** (`genre` nul dans
    `etat`), décris le projet en une phrase (domaine, livrable, outils), compare-la aux genres connus
    (`lancer genre`, `action: lister`) et pose la décision `confirmer_genre` (`lancer decision`, `portee: projet`,
-   `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`). Quand le besoin est clair, passe à
+   `texte` = ta phrase et ta proposition, `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`).
+   L'identifiant d'un genre devient un nom de fichier public : jamais le nom du projet ni un de ses mots interdits. Quand le besoin est clair, passe à
    l'étape suivante.
 2. **`cahier`.** L'agent de cadrage écrit le cahier des charges : **une maquette** (une ou plusieurs images qui
    montrent la compréhension du besoin) et **la liste des étapes à réaliser, dans l'ordre**. Range les images dans
-   le dépôt du projet, inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
+   le dépôt du projet, **sous une des racines d'images des réglages** (sinon le bureau ne les montre pas), inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
    discussion, et pose la décision `valider_cahier` (`portee` = la fonctionnalité). Attends le verdict (demande
    `cahier`).
 3. **`decoupage`.** Identifie l'élément qui se répète et les groupes, puis dresse la file des éléments
@@ -114,8 +116,8 @@ le bandeau du bureau montre.
    Elle porte une **version** (1, puis 2…) : c'est la « passe » du catalogue. Inscris-la (`lancer fonctionnalite`,
    `methode: {version, chemin, validee_le}`), commit, push, puis passe à la série.
 6. **`serie`.** La factory applique la méthode à chaque élément de la file, **sans attendre l'utilisateur** :
-   - `lancer file-prendre`, puis une tâche par étape du flux (`lancer tache` avec `fonctionnalite`, `element`,
-     `role`, `colonne`) : dev, puis intégration, selon le `flux` du projet ;
+   - `lancer file-prendre`, puis une tâche par étape du flux (`lancer tache` avec un `titre`, `fonctionnalite`,
+     `element`, `role`, `colonne`) : dev, puis intégration, selon le `flux` du projet ;
    - **la relecture croisée** (plus bas), puis les corrections et un nouveau tour de relecture, tant qu'une des
      deux relectures trouve quelque chose ;
    - le catalogue, puis « fait » (`lancer tache` avec `colonne: fait`).
@@ -123,9 +125,11 @@ le bandeau du bureau montre.
    élément fait, et relis-le (`lancer catalogue`, entrée `{"fonctionnalite"}`) pour vérifier que l'élément y
    paraît avec ses captures, sa passe et son état : c'est ce que l'utilisateur regarde. L'utilisateur suit et fait ses retours depuis le catalogue (demandes `retour_element`). Il n'est
    sollicité que pour les leçons, les décisions bloquantes et les sessions cloud à créer.
-7. **`terminee`** quand la file est vide (`file-prendre` rend `null`) et que tous les éléments sont faits. Si la
+7. **`terminee`** quand la file est vide (regarde `file` dans `lancer etat` : `file-prendre` retire l'élément qu'il
+   rend, ne t'en sers pas pour tester) et que tous les éléments sont faits. Si la
    fonctionnalité produit un livrable, inscris-le (`lancer fonctionnalite`, `livrable: {libelle, chemin | lien,
-   date}`) : c'est le « Dernier livrable » du bureau.
+   date}`) : c'est le « Dernier livrable » du bureau ; un `chemin` doit être sous une racine `livrables` des
+   réglages.
 
 **En continu, pendant toutes les étapes :**
 - chaque correction et chaque point de relecture devient un **contrôle** du registre (`lancer controle`, avec son
@@ -150,14 +154,18 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   complexe (Haiku vers Sonnet, Sonnet vers Opus), jamais plus. Note toute montée sur la tâche (`lancer tache` avec
   `modele_depart` et `montee: {de, a, raison}`, la raison en une phrase) : elle se voit au bureau et dans la
   facturation.
-- **Fable n'est jamais choisi** sans une demande expresse de l'utilisateur pour cette tâche (l'outil le refuse).
+- **Fable n'est jamais choisi** sans une demande expresse de l'utilisateur pour cette tâche : l'outil refuse de le
+  noter en `montee` ou en `modele_depart`. Si l'utilisateur le demande expressément, lance l'agent sur Fable et
+  écris-le dans le `journal` de la tâche, avec sa demande.
 - **En local**, un sous-agent neuf avec le modèle choisi.
 - **En cloud**, le modèle d'une session est fixé à sa création, et seule une demande de l'utilisateur peut en créer
   une : le projet déclare donc une fiche par couple rôle et modèle, chacune avec sa session attitrée. S'il manque
   l'agent cloud du bon rôle et du bon modèle (`agent-libre` le dit : « session à créer »), pose la décision
   `session_cloud` (`portee: projet`, `agent` = la clé de la fiche qui attend sa session, et dans le `texte` le
-  modèle et le rôle attendus) au lieu de bloquer en silence. En attendant, prends l'agent local équivalent si le
-  mode et la charge le permettent.
+  modèle et le rôle attendus) au lieu de bloquer en silence ; `agent-libre` donne cette clé dans `sans_session`.
+  S'il répond « aucun agent cloud … libre », les sessions existent mais sont occupées : attends, ne demande rien. S'il
+  répond « aucune fiche cloud … », il faut d'abord écrire la fiche (dis-le à l'utilisateur). En attendant, prends
+  l'agent local équivalent si le mode et la charge le permettent.
 
 ## Recréer un agent
 

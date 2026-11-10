@@ -266,6 +266,10 @@ class TestSuivi(AvecProjet):
                        {"titre": "B", "fonctionnalite": "f99"},
                        {"id": "t99", "etape": "x"},
                        {"titre": "B", "montee": {"de": "Opus", "a": "Fable", "raison": "x"}},   # jamais Fable
+                       {"titre": "B", "montee": {"de": "Opus", "a": "fable", "raison": "x"}},   # quelle que soit la casse
+                       {"titre": "B", "modele_depart": "Fable"},
+                       {"titre": "B", "montee": {"de": "Haiku", "a": "Opus", "raison": "x"}},   # un cran au plus
+                       {"titre": "B", "montee": {"de": "Sonnet", "a": "Haiku", "raison": "x"}},  # une montée monte
                        {"colonne": "dev"}):
             self.assertEqual(self.outil("tache", entree=entree)[0], 1, entree)
 
@@ -284,6 +288,23 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.outil("file", entree={"fonctionnalite": "f99", "elements": []})[0], 1)
         self.assertEqual(self.outil("file", entree={"fonctionnalite": f, "elements": [{"id": "a", "nom": "A"},
                                                                                        {"id": "a", "nom": "B"}]})[0], 1)
+
+    def test_file_prendre_un_element_precis(self):
+        # Un « deplacer » du bureau sur un élément de la file (id « f1/e2 ») : l'orchestrateur prend cet élément-là.
+        f = self.nouvelle()
+        self.ok("file", entree={"fonctionnalite": f, "elements": [{"id": "e1", "nom": "Un"}, {"id": "e2", "nom": "Deux"}]})
+        self.assertEqual(self.ok("file-prendre", entree={"fonctionnalite": f, "element": "e2"})["element"]["id"], "e2")
+        self.assertEqual(self.outil("file-prendre", entree={"fonctionnalite": f, "element": "e2"})[0], 1)   # déjà pris
+        self.assertEqual([q["titre"] for q in self.releve()["file"]["visibles"]], ["Un"])
+
+    def test_deplacer_une_pseudo_tache_refuse(self):
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
+        for cible in ("orchestration", f"cadrage:{f}"):
+            code, sortie = self.outil("actions", entree={"type": "deplacer", "tache": cible, "colonne": "dev"})
+            self.assertEqual(code, 1, sortie)
+        # Une vraie tâche ou un élément de la file se déplacent (l'orchestrateur s'en charge).
+        self.assertEqual(self.outil("actions", entree={"type": "deplacer", "tache": f"{f}/e1", "colonne": "dev"})[0], 0)
 
     def test_file_longue_garde_le_releve_valide(self):
         f = self.nouvelle()

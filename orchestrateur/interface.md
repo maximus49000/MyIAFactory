@@ -51,7 +51,8 @@ bureau. La demande est ajoutée au suivi comme « en attente » (identifiant `r<
 côté du suivi. Les images jointes sont décodées dans `pieces/<fonctionnalité>/<date>-<nom>` et remplacées par leurs
 chemins. `fonctionnalite` crée tout de suite la fonctionnalité (étape `cadrage`, nom provisoire de 40 caractères,
 son message en première ligne de discussion) ; `message` ajoute le message à la discussion et met `attend_reponse` ;
-le bouton `pause` ou `reprendre` change l'état de la factory (demande aussitôt « traitée »). Rend
+le bouton `pause` ou `reprendre` change l'état de la factory (demande aussitôt « traitée ») ; un `deplacer` des
+tâches `orchestration` ou `cadrage:<fonctionnalité>` (montrées seulement au relevé) est refusé. Rend
 `{"ok": true, "id": "r1"}`.
 
 **Exception au format des erreurs** : un refus (code 1) écrit **une ligne de texte brut** (pas du JSON), car le
@@ -103,7 +104,8 @@ même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise à jour. Champs : `titre`,
 `fonctionnalite`, `element`, `role`, `colonne`, `agent`, `etape`, `modele_depart`, `montee` (`{de, a, raison}`),
 `journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins). Un agent ne tient qu'une
-tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé. Rend la tâche.
+tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé (quelle que soit la casse)
+en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Haiku → Sonnet → Opus). Rend la tâche.
 
 ### `file`
 
@@ -112,7 +114,9 @@ fonctionnalité. Rend `{"elements": n}`.
 
 ### `file-prendre`
 
-Entrée : `{"fonctionnalite"}`. Rend `{"element": {id, nom, groupe?}}`, l'élément suivant, ou `{"element": null}`.
+Entrée : `{"fonctionnalite", "element"?}`. Retire de la file et rend `{"element": {id, nom, groupe?}}` : l'élément
+suivant, ou celui dont l'identifiant est `element` (code 1 s'il n'est pas dans la file) ; `{"element": null}` si la
+file est vide.
 
 ### `session`
 
@@ -171,8 +175,11 @@ texte`). Rend `{"numero": n}`.
 
 Entrée : `{"role", "modele"?, "lieu"?}`. Cherche le premier spécialiste du rôle (fiches) sans tâche active, au
 modèle et au lieu demandés. Rend `{"agent": "<clé>"|null, "raison": "…"}` (code 0 même s'il n'y en a pas). Raisons
-sans agent : « aucun dev libre » ; pour le cloud, « aucun agent cloud dev sur Sonnet : session à créer » (l'agent
-cloud n'est utilisable qu'avec une session attitrée : l'orchestrateur pose alors une décision `session_cloud`).
+sans agent : « aucun dev libre » ; pour le cloud (un agent cloud n'est utilisable qu'avec une session attitrée) :
+« aucun agent cloud dev sur Sonnet : session à créer pour dev-3 », avec `"sans_session": "dev-3"`, la fiche qui
+attend sa session (l'orchestrateur pose alors une décision `session_cloud` qui la nomme) ; « aucun agent cloud dev
+libre sur Sonnet » (les sessions existent, elles sont occupées : on attend) ; « aucune fiche cloud dev sur Sonnet :
+ajoutez-en une ». Pour le cloud, `sans_session` est toujours présent quand `agent` est nul.
 Choisir le modèle : on monte d'un cran au plus (Haiku → Sonnet → Opus) et jamais vers Fable.
 
 ### `depart`

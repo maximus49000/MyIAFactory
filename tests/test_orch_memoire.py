@@ -228,6 +228,20 @@ class TestMemoire(AvecDepots):
         self.assertFalse(memoire.creer_genre(self.ma, "autre", "  ", [])[0])
         self.assertFalse(memoire.creer_genre(self.ma, "autre", "Ville-Lumière", ["ville lumiere"])[0])
 
+    def test_creer_genre_identifiant_interdit(self):
+        # L'identifiant devient un nom de fichier, un titre et un message de commit publics : il est contrôlé aussi.
+        n = self.nb_commits(self.a)
+        ok, message = memoire.creer_genre(self.ma, "secret-ville", "Une description sans rien", ["Secret Ville"])
+        self.assertFalse(ok)
+        self.assertIn("mot interdit", message)
+        self.assertFalse((self.ma / "genres" / "secret-ville.md").exists())
+        self.assertEqual(self.nb_commits(self.a), n)
+
+    def test_mots_ligatures_et_chemins(self):
+        self.assertEqual(memoire.mots_trouves("Le Cœur du projet", ["Coeur"]), ["Coeur"])
+        self.assertEqual(memoire.mots_trouves("ex æquo", ["ex aequo"]), ["ex aequo"])
+        self.assertEqual(memoire.mots_trouves(r"voir C:\Projets\Truc", ["C:/Projets/Truc"]), ["C:/Projets/Truc"])
+
     def test_skill_md_sans_projet(self):
         """Aucun motif d'un fichier de mots tenu hors du dépôt (variable MYIAFACTORY_MOTS) ne figure dans la mémoire."""
         chemin = os.environ.get("MYIAFACTORY_MOTS")

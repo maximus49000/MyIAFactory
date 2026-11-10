@@ -8,3 +8,7 @@ node_modules/
 
 # configuration locale de prévisualisation (chemins de la machine)
 .claude/launch.json
+
+# fichiers produits par le serveur quand on lance la démo
+exemples/demo/equipe.json
+exemples/demo/charge-historique.jsonl

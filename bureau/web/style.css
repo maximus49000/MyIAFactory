@@ -4,6 +4,8 @@
   --encre: #3d3a4b;
   --papier: #fffdf8;
   --pause: 0;
+  --hauteur-barre: 52px;
+  --largeur-panneau: 340px;
   font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
   color: var(--encre);
 }
@@ -29,8 +31,9 @@ body::before {
 
 #scene {
   position: fixed;
-  inset: 0;
+  inset: var(--hauteur-barre) 0 0 0;
 }
+body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 
 #scene canvas { display: block; }
 
@@ -102,13 +105,69 @@ body::before {
 }
 .bulle.grise::after { border-top-color: #e4e1dc; }
 
-/* Relevé indisponible : la scène reste, un bandeau le dit (l'interface complète arrive à l'étape 9). */
-body[data-erreur]::after {
-  content: "Relevé indisponible — " attr(data-erreur) " La scène montrée est la dernière connue.";
+/* --- Bandeau du haut --- */
+#barre {
   position: fixed;
-  top: 12px;
+  top: 0; left: 0; right: 0;
+  height: var(--hauteur-barre);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 16px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 2px 10px rgba(61, 58, 75, 0.15);
+}
+.barre-titre { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.barre-logo { font-weight: 800; font-size: 17px; white-space: nowrap; }
+.barre-projet {
+  font-weight: 700; font-size: 14px; color: #6d6980;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.barre-projet:not(:empty)::before { content: "· "; }
+
+.voyant { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.voyant-lampe { width: 12px; height: 12px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
+.voyant[data-ton="ok"] .voyant-lampe { background: #3aa65b; box-shadow: 0 0 0 3px rgba(58, 166, 91, 0.25); }
+.voyant[data-ton="pause"] .voyant-lampe { background: #e0a21b; box-shadow: 0 0 0 3px rgba(224, 162, 27, 0.28); }
+.voyant[data-ton="alerte"] .voyant-lampe { background: #d65a31; box-shadow: 0 0 0 3px rgba(214, 90, 49, 0.28); }
+
+.charge { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; cursor: default; }
+.charge-piste {
+  position: relative;
+  width: clamp(120px, 22vw, 260px);
+  height: 14px;
+  border-radius: 999px;
+  background: #e6dfd2;
+  overflow: visible;
+}
+.charge-remplissage {
+  height: 100%;
+  border-radius: 999px;
+  background: #5aa86a;
+  transition: width 0.6s ease, background 0.3s;
+}
+.charge.depasse .charge-remplissage { background: #d65a31; }
+.charge.indisponible .charge-remplissage { background: #b9b3c3; }
+.charge-trait {
+  position: absolute;
+  top: -4px; bottom: -4px;
+  width: 3px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: var(--encre);
+  transition: left 0.4s ease;
+}
+.charge-valeur { min-width: 110px; white-space: nowrap; }
+.charge.depasse .charge-valeur { color: #b6401c; }
+
+/* --- Bandeau d'erreur, sous la barre --- */
+#bandeau {
+  position: fixed;
+  top: calc(var(--hauteur-barre) + 8px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 9;
   max-width: min(90vw, 720px);
   padding: 8px 16px;
   border-radius: 10px;
@@ -117,4 +176,98 @@ body[data-erreur]::after {
   box-shadow: 0 2px 10px rgba(61, 58, 75, 0.2);
   font-size: 14px;
   font-weight: 600;
+}
+#bandeau[hidden] { display: none; }
+
+/* --- Pastille des décisions du Directeur --- */
+.pastille-porte { pointer-events: none; }
+.pastille {
+  transform: translate(52px, -30px);
+  min-width: 22px; height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #d6402f;
+  color: #fff;
+  font-weight: 800; font-size: 13px; line-height: 22px; text-align: center;
+  box-shadow: 0 0 0 3px #fffdf8, 0 2px 6px rgba(61, 58, 75, 0.3);
+}
+
+/* --- Carte (survol d'un agent, clic sur un post-it) --- */
+.carte {
+  position: fixed;
+  z-index: 20;
+  width: 260px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--papier);
+  box-shadow: 0 6px 20px rgba(61, 58, 75, 0.28);
+  font-size: 13px;
+  pointer-events: none;
+}
+.carte[hidden] { display: none; }
+.carte-titre { font-weight: 800; font-size: 15px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.carte-sous-titre { margin-top: 8px; font-weight: 800; font-size: 12px; color: #6d6980; text-transform: uppercase; letter-spacing: 0.04em; }
+.ligne { display: flex; gap: 8px; padding: 1px 0; }
+.ligne .cle { color: #6d6980; min-width: 82px; }
+.ligne .val { font-weight: 700; overflow-wrap: anywhere; }
+.carte-taches { margin: 4px 0 0; padding-left: 18px; }
+.carte-taches li { overflow-wrap: anywhere; }
+.vide { color: #8a8698; font-style: italic; list-style: none; margin-left: -18px; }
+
+/* --- Panneau de droite --- */
+.panneau {
+  position: fixed;
+  top: var(--hauteur-barre); right: 0; bottom: 0;
+  z-index: 15;
+  width: min(var(--largeur-panneau), 92vw);
+  overflow-y: auto;
+  padding: 16px 18px 24px;
+  background: var(--papier);
+  box-shadow: -4px 0 18px rgba(61, 58, 75, 0.18);
+  font-size: 14px;
+}
+.panneau[hidden] { display: none; }
+.panneau h2 { margin: 0 0 8px; font-size: 20px; }
+.panneau h3 { margin: 0 0 6px; font-size: 16px; }
+.panneau-fermer {
+  position: absolute; top: 8px; right: 10px;
+  width: 32px; height: 32px;
+  border: 0; border-radius: 50%;
+  background: transparent; color: var(--encre);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.panneau-fermer:hover { background: #efe8da; }
+.liste-agents { list-style: none; margin: 6px 0 0; padding: 0; }
+.liste-agents li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #efe8da; }
+.liste-agents .vide { margin-left: 0; }
+.liste-agents .puce { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.liste-agents .nom { font-weight: 800; }
+.liste-agents .detail { margin-left: auto; color: #6d6980; font-size: 12px; text-align: right; }
+.note { color: #6d6980; font-size: 12.5px; line-height: 1.4; }
+.decisions { font-weight: 700; }
+
+/* --- Réglage de la charge --- */
+.reglage { margin-top: 20px; padding-top: 14px; border-top: 2px dashed #e6dfd2; }
+.reglage-label { display: block; font-size: 13px; margin-bottom: 8px; }
+.reglage-rangee { display: flex; align-items: center; gap: 10px; }
+.reglage-rangee input[type="range"] { flex: 1; accent-color: #5aa86a; }
+.reglage-valeur { min-width: 46px; font-weight: 800; text-align: right; }
+.reglage-message { min-height: 1.3em; margin: 6px 0; font-size: 12.5px; color: #3a7a49; }
+.bouton {
+  padding: 6px 14px;
+  border: 0; border-radius: 999px;
+  background: #3f8f56; color: #fff;
+  font: inherit; font-weight: 700; font-size: 13px;
+  cursor: pointer;
+}
+.bouton:hover { background: #357a48; }
+.bouton.secondaire { background: #5d8fc7; }
+.bouton.secondaire:hover { background: #4d7db3; }
+.conseil { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #eef4fb; font-size: 13px; }
+.conseil p { margin: 0 0 8px; line-height: 1.4; }
+
+@media (max-width: 760px) {
+  #barre { gap: 10px; padding: 0 10px; }
+  .barre-projet { display: none; }
+  .charge-valeur { min-width: 0; font-size: 12px; }
 }

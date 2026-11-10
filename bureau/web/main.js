@@ -7,16 +7,19 @@ import {creerScene} from "./scene/scene.js";
 import {charger} from "./scene/modeles.js";
 import {Personnages} from "./scene/personnages.js";
 import {Kanban} from "./scene/kanban.js";
+import {creerBarre} from "./ui/barre.js";
+import {creerPanneaux} from "./ui/panneaux.js";
 
 const INTERVALLE = 3000;      // ms entre deux lectures de l'état
 const DT_MAX = 0.1;           // s : plafond d'un pas de temps
 const IMAGE_MOUVEMENT = 1 / 30, IMAGE_REPOS = 1 / 12;
 
 const conteneur = document.getElementById("scene");
+const barre = creerBarre(document.getElementById("barre"), document.getElementById("bandeau"));
 
+// Relevé indisponible (message) ou de retour à la normale (null) : le bandeau et le voyant le disent.
 function signaler(message) {
-  if (message) document.body.dataset.erreur = message;
-  else delete document.body.dataset.erreur;
+  if (message) barre.majErreur(message);
 }
 
 async function lireEtat() {
@@ -44,7 +47,7 @@ async function demarrer() {
     await new Promise((r) => setTimeout(r, INTERVALLE));
     etat = await lireEtat();
   }
-  signaler(null);
+  barre.majEtat(etat);
   document.title = `${etat.projet} · le bureau vivant`;
 
   const plan = creerPlan(etat.services || [], etat.colonnes || []);
@@ -60,17 +63,24 @@ async function demarrer() {
   regie.appliquer(etat, []);
   sc.assombrir(etat.factory?.etat === "en pause");
 
+  const panneaux = creerPanneaux({
+    conteneur, carte: document.getElementById("carte"), panneau: document.getElementById("panneau"),
+    sc, plan, etat: () => dernier, barre,
+  });
+  panneaux.maj(etat);
+
   const acteursVus = () => new Map([...regie.acteurs, ["directeur", directeur]]);
   let besoin = true;          // une image est à refaire même si rien ne bouge (état changé, fenêtre redimensionnée)
 
   async function sonder() {
     const e = await lireEtat();
     if (!etatUtilisable(e)) { signaler(e?.erreur || "Relevé indisponible."); return; }
-    signaler(null);
+    barre.majEtat(e);
     if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
     if (document.hidden) { dernier = e; aRemettre = true; return; }
     regie.appliquer(e, changements(dernier, e));
     dernier = e;
+    panneaux.maj(e);
     sc.assombrir(e.factory?.etat === "en pause");
     besoin = true;
   }
@@ -97,17 +107,18 @@ async function demarrer() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
-    if (aRemettre) { regie.reinitialiser(dernier); aRemettre = false; }   // pas d'animation de rattrapage
+    if (aRemettre) { regie.reinitialiser(dernier); panneaux.maj(dernier); aRemettre = false; }   // pas d'animation de rattrapage
     avant = performance.now();
     cumul = 0;
     besoin = true;
     requestAnimationFrame(image);
   });
-  window.addEventListener("resize", () => { sc.redimensionner(); besoin = true; });
+  // La scène se recadre dès que son espace change (fenêtre, ouverture du panneau de droite).
+  new ResizeObserver(() => { sc.redimensionner(); besoin = true; }).observe(conteneur);
   requestAnimationFrame(image);
 
   // Pour l'inspection depuis la console du navigateur.
-  window.bureau = {plan, regie, scene: sc, personnages, kanban, etat: () => dernier};
+  window.bureau = {plan, barre, panneaux, regie, scene: sc, personnages, kanban, etat: () => dernier};
 }
 
 demarrer().catch((e) => {

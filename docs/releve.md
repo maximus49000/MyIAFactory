@@ -57,7 +57,7 @@ Facultatifs en version 2, pour le détail d'une tâche :
 | `retours` | liste de `{t, texte, reponse?}` ; un retour sans `reponse` est « en attente de réponse » et compte pour le Directeur |
 | `bloquee` | texte : la raison, si la tâche attend une décision (compte pour le Directeur) |
 
-Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une liste, ou un lien `javascript:`) rend tout le relevé invalide : le bandeau « Relevé invalide » nomme le champ, et la scène garde sa dernière image. En version 1, ces champs sont ignorés.
+Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une liste, ou un lien `javascript:`) rend tout le relevé invalide : le bandeau « Relevé invalide » nomme le champ, et la scène garde sa dernière image. Un champ facultatif à `null` compte pour absent. En version 1, ces champs sont ignorés.
 
 ## Faire agir le bureau
 

@@ -303,6 +303,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 
 /* --- Détail d'une tâche, vue liste --- */
 .bouton-liste { margin-left: 0; }
+.bouton-liste[hidden] { display: none; }
 .panneau h2 { overflow-wrap: anywhere; padding-right: 32px; }
 .lien-retour { margin: 0 0 8px; padding: 0; border: 0; background: none; color: #3b6aa8; font: inherit; font-weight: 700; cursor: pointer; }
 .bloquee { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #fbe3d6; color: #8a3b1e; overflow-wrap: anywhere; }

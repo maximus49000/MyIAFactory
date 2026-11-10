@@ -194,11 +194,11 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
             vus.add(i)
         if not _texte(a.get("libelle")):
             erreurs.append(f"« actions » : le bouton « {i} » doit avoir un « libelle » (texte).")
-        if "lien" in a and not lien_valide(a["lien"]):
+        if a.get("lien") is not None and not lien_valide(a["lien"]):
             erreurs.append(f"« actions » : le bouton « {i} » a un « lien » refusé (https, http ou claude).")
-        if "confirmer" in a and not _texte(a["confirmer"]):
+        if a.get("confirmer") is not None and not _texte(a["confirmer"]):
             erreurs.append(f"« actions » : le bouton « {i} » : « confirmer » doit être un texte.")
-        if "actif" in a and not isinstance(a["actif"], bool):
+        if a.get("actif") is not None and not isinstance(a["actif"], bool):
             erreurs.append(f"« actions » : le bouton « {i} » : « actif » doit être vrai ou faux.")
     types = _liste_facultative(r.get("types"), "« types »", erreurs)
     ids_types = set()
@@ -229,7 +229,7 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
     for ti in titulaires:
         cle = ti.get("cle")
         for champ in ("prenom", "specialite"):
-            if champ in ti and not _texte(ti[champ]):
+            if ti.get(champ) is not None and not _texte(ti[champ]):
                 erreurs.append(f"Titulaire « {cle} » : « {champ} » doit être un texte.")
         for le in _liste_facultative(ti.get("lecons"), f"Titulaire « {cle} » : « lecons »", erreurs):
             if not _texte(le.get("id")) or not _texte(le.get("texte")) \
@@ -363,6 +363,11 @@ def _executer(cmd, cwd, entree=None):
     except subprocess.TimeoutExpired:
         _tuer_arbre(p)
         raise
+    finally:
+        # Les tubes sont fermés dès que leur lecteur a fini ; fermer un tube encore lu par un fil bloquerait.
+        for f, flux in zip(fils, (p.stdout, p.stderr)):
+            if not f.is_alive():
+                flux.close()
     return p.returncode, lu.get("sortie", b""), lu.get("erreurs", b"")
 
 

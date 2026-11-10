@@ -187,6 +187,28 @@ class TestServeur(unittest.TestCase):
         self.assertEqual(r.status, 404)
         self.assertNotIn(b"secret", data)
 
+    def test_image_lien_vers_non_image(self):
+        self.images()
+        try:
+            os.symlink(self.tmp / "demo" / "images" / "notes.txt", self.tmp / "demo" / "images" / "faux.png")
+        except (OSError, NotImplementedError):
+            self.skipTest("création de lien symbolique non permise")
+        r, data = self.image("images/faux.png")
+        self.assertEqual(r.status, 404)
+        self.assertNotIn(b"secret", data)
+
+    def test_etat_images_ok(self):
+        self.assertIs(self.json("/api/etat")["images_ok"], True)  # la démonstration déclare des racines d'images
+        for valeur in ({}, {"racines": []}, {"racines": [""]}, None):
+            regl = json.loads(self.regl.read_text(encoding="utf-8"))
+            if valeur is None:
+                del regl["images"]
+            else:
+                regl["images"] = valeur
+            self.regl.write_text(json.dumps(regl), encoding="utf-8")
+            self.srv._cache_etat = (0.0, None)
+            self.assertIs(self.json("/api/etat")["images_ok"], False, valeur)
+
     def test_image_sans_reglage(self):
         self.images()
         regl = json.loads(self.regl.read_text(encoding="utf-8"))
@@ -290,6 +312,27 @@ class TestServeur(unittest.TestCase):
         r, _ = self.req("POST", "/api/demande", "x" * 9000, self.ENT)
         self.assertEqual(r.status, 400)
         self.assertFalse(notes.exists())
+
+    def test_demande_retour_long_en_octets(self):
+        # 3 500 caractères de 4 octets (14 000 octets) restent acceptés : seule la longueur en caractères compte.
+        notes = self.agir()
+        self.json("/api/etat")
+        brut = json.dumps({"type": "retour", "tache": "t1", "texte": "😀" * 3500},
+                          ensure_ascii=False).encode("utf-8")  # comme le navigateur : UTF-8 brut
+        r, data = self.req("POST", "/api/demande", brut, self.ENT)
+        self.assertEqual((r.status, json.loads(data.decode("utf-8"))), (200, {"ok": True}))
+        self.assertTrue(notes.exists())
+        statut, _ = self.demande({"type": "retour", "tache": "t1", "texte": "x" * 3501})
+        self.assertEqual(statut, 400)
+
+    def test_json_tres_imbrique(self):
+        self.agir()
+        self.json("/api/etat")
+        profond = "[" * 7000 + "]" * 7000  # 14 000 octets : sous la limite de taille, mais trop profond
+        for chemin in ("/api/demande", "/api/reglages"):
+            r, _ = self.req("POST", chemin, profond, self.ENT)
+            self.assertEqual(r.status, 400, chemin)
+        self.assertEqual(self.json("/api/etat")["projet"], "P")  # le serveur répond encore
 
     def test_demande_sans_releve_valide(self):
         self.agir()

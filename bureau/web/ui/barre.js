@@ -2,7 +2,7 @@
 // Plus, sous la barre, le bandeau d'erreur quand le relevé est indisponible.
 // Tout texte venu du serveur passe par textContent.
 
-import {voyant, libelleCharge} from "./texte.js";
+import {voyant, libelleCharge, listeDisponible} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
 
 const INTERVALLE_CHARGE = 5000;
@@ -40,6 +40,7 @@ export function creerBarre(entete, bandeau) {
   const zoneActions = el("div", "barre-actions");
   const boutonListe = el("button", "bouton-barre bouton-liste", "Toutes les tâches");
   boutonListe.type = "button";
+  boutonListe.hidden = true;  // montré seulement pour un relevé qui a la vue liste (version 2)
   entete.append(titre, leVoyant, zoneActions, boutonListe, charge);
 
   // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
@@ -153,6 +154,7 @@ export function creerBarre(entete, bandeau) {
       erreur = null;
       bandeau.hidden = true;
       afficherVoyant();
+      boutonListe.hidden = !listeDisponible(etat);
       majActions(etat);
     },
     // Le relevé est indisponible : voyant en alerte et bandeau avec le message du serveur.

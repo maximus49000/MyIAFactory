@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; un verdict est une demande au projet, jamais un changement direct.
 
 import {el, ligne} from "./dom.js";
-import {tronquer, dateFr} from "./texte.js";
+import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
 
 const MAX_TITRE = 90;
@@ -63,6 +63,10 @@ function partie(titre, vide, elements) {
 export function contenuDirecteur(ctx, contenu) {
   const e = ctx.etat;
   contenu.append(el("h2", "", "Direction"));
+  if (!listeDisponible(e)) {  // relevé en version 1 : le panneau d'avant
+    for (const p of phrasesDirectionV1(e)) contenu.append(el("p", p.classe, p.texte));
+    return;
+  }
   const n = e.decisions || 0;
   if (n > 0) {
     contenu.append(el("p", "decisions", n === 1 ? "1 décision attend le Directeur (comptée par le projet)."

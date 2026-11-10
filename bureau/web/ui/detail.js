@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, dateFr, filtrer, imagesUrl} from "./texte.js";
+import {tronquer, ilYA, dateFr, filtrer, imagesUrl, imagesVisibles} from "./texte.js";
 import {lienSur} from "./actions.js";
 
 export const MAX_RETOUR = 3500;
@@ -118,7 +118,7 @@ export function contenuTache(ctx, contenu, t) {
   }
   contenu.append(journal);
 
-  if (t.images.length) contenu.append(el("div", "carte-sous-titre", "Images"), blocImages(t));
+  if (imagesVisibles(e, t)) contenu.append(el("div", "carte-sous-titre", "Images"), blocImages(t));
 
   const liens = t.liens.filter((l) => lienSur(l.url));
   if (liens.length) {

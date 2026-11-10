@@ -22,6 +22,13 @@ IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
 
 
+def images_declarees(regl):
+    """Vrai si les réglages déclarent au moins une racine d'images (sinon les tâches n'ont pas de vignettes)."""
+    conf = regl.get("images")
+    racines = conf.get("racines") if isinstance(conf, dict) else None
+    return isinstance(racines, list) and any(isinstance(r, str) and r for r in racines)
+
+
 class Bureau(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -73,6 +80,7 @@ class Bureau(ThreadingHTTPServer):
             if r is not None:
                 self.dernier_releve = r
             e["agir"] = demandes.commande_declaree(regl)
+            e["images_ok"] = images_declarees(regl)
             self._cache_etat = (time.monotonic(), e)
             return e
         finally:
@@ -209,9 +217,9 @@ class Handler(BaseHTTPRequestHandler):
                     cible.relative_to((base / racine).resolve())
                 except ValueError:
                     continue
-                if cible.is_file() and cible.stat().st_size <= IMAGE_MAX_OCTETS:
-                    return self._envoyer(200, cible.read_bytes(), IMAGES[cible.suffix.lower()],
-                                         cache="max-age=300")
+                type_ = IMAGES.get(cible.suffix.lower())  # la cible d'un lien symbolique peut n'être pas une image
+                if type_ and cible.is_file() and cible.stat().st_size <= IMAGE_MAX_OCTETS:
+                    return self._envoyer(200, cible.read_bytes(), type_, cache="max-age=300")
         except (OSError, ValueError):
             pass
         return introuvable()
@@ -256,12 +264,12 @@ class Handler(BaseHTTPRequestHandler):
             longueur = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             longueur = -1
-        if not 0 < longueur <= (8192 if chemin == "/api/demande" else 4096):
+        if not 0 < longueur <= (16384 if chemin == "/api/demande" else 4096):
             return self._json(400, {"erreur": "Corps de requête invalide."})
         if chemin == "/api/demande":
             try:
                 demande = json.loads(self.rfile.read(longueur).decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
+            except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             code, objet = self.server.demande(demande)
             return self._json(code, objet)
@@ -270,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(corps, dict) or "charge_max" not in corps:
                 raise ValueError("Le corps doit contenir « charge_max ».")
             nouveau = reglages.fixer_charge_max(self.server.chemin_reglages, corps["charge_max"])
-        except (ValueError, UnicodeDecodeError, reglages.ReglagesInvalides) as e:
+        except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})
         nouveau.pop("dossier", None)
         self._json(200, nouveau)

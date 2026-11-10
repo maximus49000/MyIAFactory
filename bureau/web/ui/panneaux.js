@@ -12,7 +12,6 @@ const MAX_TITRE = 90;
 
 // opts : {conteneur, carte, panneau, sc, plan, etat: () => état courant, barre, surFiltre: () => void}
 export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre, surFiltre = () => {}}) {
-  let epingle = null;          // {type, id} de la carte épinglée par un clic
   let panneauOuvert = null;    // {type, id}
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
   let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
@@ -25,7 +24,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]));
     }
     if (type === "tache") {
-      return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir,
+      return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir, e.images_ok,
         (e.agents || []).map((a) => [a.id, a.prenom]), retourListe]);
     }
     if (type === "file") return JSON.stringify([(e.file?.visibles || []).find((q) => q.id === id), e.colonnes, e.agir]);
@@ -258,16 +257,14 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       const choix = sc.pointer(ev);
       const cliquable = ["agent", "postit", "file", "service", "direction"].includes(choix.type);
       conteneur.style.cursor = cliquable ? "pointer" : "";
-      if (epingle) return;
       if (choix.type === "agent") montrerCarte(choix, ev.clientX, ev.clientY);
       else cacherCarte();
     });
   });
-  conteneur.addEventListener("pointerleave", () => { if (!epingle) cacherCarte(); });
+  conteneur.addEventListener("pointerleave", cacherCarte);
 
   conteneur.addEventListener("click", (ev) => {
     const choix = sc.pointer(ev);
-    epingle = null;
     cacherCarte();
     if (choix.type === "agent") ouvrirPanneau("agent", choix.id);
     else if (choix.type === "postit") ouvrirPanneau("tache", choix.id);
@@ -278,13 +275,12 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
-    epingle = null;
     cacherCarte();
     fermerPanneau();
   });
 
   return {
-    // À chaque nouvel état : pastille, carte épinglée et panneau ouvert tenus à jour (sauf pendant la saisie du réglage).
+    // À chaque nouvel état : pastille et panneau ouvert tenus à jour (sauf pendant la saisie du réglage).
     // Ouvre la vue liste, ou la ferme si elle est déjà ouverte.
     basculerListe() {
       if (panneauOuvert?.type === "liste") fermerPanneau(); else ouvrirPanneau("liste", null);
@@ -295,10 +291,6 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       pastille.textContent = String(n);
       pastille.title = n === 1 ? "1 décision attend le Directeur" : `${n} décisions attendent le Directeur`;
       pastilleEtiquette.visible = n > 0;
-      if (epingle) {
-        const c = contenuCarte(epingle);
-        if (c) carte.replaceChildren(c); else { epingle = null; cacherCarte(); }
-      }
       if (panneauOuvert && !panneau.contains(document.activeElement)) {
         const {type, id} = panneauOuvert;
         if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();

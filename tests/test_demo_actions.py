@@ -81,6 +81,15 @@ class TestDemoActions(unittest.TestCase):
         self.assertEqual(len(r["file"]["visibles"]) + r["file"]["reste"],
                          len(avant["file"]["visibles"]) + avant["file"]["reste"] - 1)
 
+    def test_deplacement_d_un_element_de_la_file_sans_titre(self):
+        r = self.lire()
+        q = r["file"]["visibles"][0]
+        del q["titre"]  # le titre d'un élément de file est facultatif
+        self.fichier.write_text(json.dumps(r, ensure_ascii=False), encoding="utf-8")
+        r, _ = self.lancer({"type": "deplacer", "tache": q["id"], "colonne": "encours"})
+        t = next(t for t in r["taches"] if t["id"] == q["id"])
+        self.assertEqual(t["titre"], q["id"])
+
     def test_retour(self):
         r, _ = self.lancer({"type": "retour", "tache": "t2", "texte": "Peux-tu préciser ?"})
         retours = next(t for t in r["taches"] if t["id"] == "t2")["retours"]

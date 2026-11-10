@@ -73,7 +73,7 @@ def deplacer(r, d):
         if file.get("reste", 0) > 0:  # un élément de plus devient visible
             file["reste"] -= 1
             file["visibles"].append({"id": q["id"] + "-suite", "titre": "Élément suivant de la file"})
-        tache = {"id": q["id"], "titre": q["titre"], "titulaire": None, "postit": True, "etape": "", "active": True}
+        tache = {"id": q["id"], "titre": q.get("titre") or q["id"], "titulaire": None, "postit": True, "etape": "", "active": True}
         r["taches"].append(tache)
     tache["colonne"] = d["colonne"]
     tache["maj"] = maintenant()

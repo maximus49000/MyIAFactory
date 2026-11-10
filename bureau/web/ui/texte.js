@@ -77,3 +77,23 @@ export function dateFr(date) {
   if (Number.isNaN(t.getTime())) return date;
   return t.toLocaleString("fr-FR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
 }
+
+// Les vignettes ne se montrent que si le projet déclare des racines d'images (sinon les adresses seraient cassées).
+export function imagesVisibles(etat, tache) {
+  return etat?.images_ok === true && (tache?.images || []).length > 0;
+}
+
+// La vue liste est un ajout de la version 2 : un relevé en version 1 garde le bureau d'avant, sans bouton.
+export function listeDisponible(etat) {
+  return (etat?.version ?? 1) >= 2;
+}
+
+// Le panneau Direction d'un relevé en version 1 : la phrase d'avant (compteur de décisions) et sa note.
+export function phrasesDirectionV1(etat) {
+  const n = etat?.decisions || 0;
+  return [
+    {classe: "decisions", texte: n === 0 ? "Aucune décision n'attend le Directeur."
+      : n === 1 ? "1 décision attend le Directeur." : `${n} décisions attendent le Directeur.`},
+    {classe: "note", texte: "La liste détaillée des décisions arrivera avec le projet 2."},
+  ];
+}

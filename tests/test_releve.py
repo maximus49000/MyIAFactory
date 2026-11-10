@@ -3,8 +3,11 @@ import json
 import sys
 import tempfile
 import time
+import subprocess
 import unittest
 from pathlib import Path
+
+from unittest import mock
 
 from bureau import releve
 
@@ -176,6 +179,13 @@ class TestVersion2(unittest.TestCase):
                         [{"id": "a", "libelle": 3}], [{"id": "a", "libelle": "A", "confirmer": 3}]):
             self.assertTrue(releve.valider(v2(actions=actions)), actions)
 
+    def test_champs_facultatifs_nuls_comptent_pour_absents(self):
+        r = v2(actions=[{"id": "a", "libelle": "A", "lien": None, "confirmer": None, "actif": None}])
+        r["titulaires"][0].update({"prenom": None, "specialite": None})
+        self.assertEqual(releve.valider(r), [])
+        n = releve.normaliser(r)
+        self.assertIsNone(n["actions"][0]["lien"])
+
     def test_version_1_ignore_les_ajouts(self):
         r = copy.deepcopy(BASE)
         r["actions"] = "n'importe quoi"
@@ -244,6 +254,36 @@ class TestObtenir(unittest.TestCase):
         ancien = releve.DELAI_COMMANDE_S
         releve.DELAI_COMMANDE_S = 1
         self.addCleanup(setattr, releve, "DELAI_COMMANDE_S", ancien)
+
+    def _processus_lances(self):
+        """Note les processus créés par `_executer` pour relire l'état de leurs tubes ensuite."""
+        crees = []
+        vrai = subprocess.Popen
+
+        def espion(*a, **k):
+            p = vrai(*a, **k)
+            crees.append(p)
+            return p
+        patcheur = mock.patch.object(releve.subprocess, "Popen", espion)
+        patcheur.start()
+        self.addCleanup(patcheur.stop)
+        return crees
+
+    def test_executer_ferme_les_tubes(self):
+        crees = self._processus_lances()
+        releve._executer([sys.executable, "-c", "print(1)"], str(self.tmp))
+        releve._executer([sys.executable, "-c", "import sys; sys.exit(3)"], str(self.tmp))
+        self.assertEqual(len(crees), 2)
+        for p in crees:
+            self.assertTrue(p.stdout.closed and p.stderr.closed)
+
+    def test_executer_trop_long_ferme_les_tubes(self):
+        self._avec_delai_court()
+        crees = self._processus_lances()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            releve._executer([sys.executable, "-c", "import time; time.sleep(30)"], str(self.tmp))
+        time.sleep(0.5)
+        self.assertTrue(crees[0].stdout.closed and crees[0].stderr.closed)
 
     def test_obtenir_commande_trop_longue(self):
         self._avec_delai_court()

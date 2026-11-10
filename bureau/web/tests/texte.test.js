@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -82,4 +82,29 @@ test("dateFr garde un texte illisible tel quel", () => {
   assert.equal(dateFr("hier soir"), "hier soir");
   assert.equal(dateFr(null), "");
   assert.match(dateFr("2026-11-10T09:30:00"), /09:30/);
+});
+
+test("imagesVisibles : pas de vignettes sans racine d'images déclarée", () => {
+  const t = {images: [{chemin: "a.png"}]};
+  assert.equal(imagesVisibles({images_ok: true}, t), true);
+  assert.equal(imagesVisibles({images_ok: false}, t), false);
+  assert.equal(imagesVisibles({}, t), false);
+  assert.equal(imagesVisibles({images_ok: true}, {images: []}), false);
+  assert.equal(imagesVisibles({images_ok: true}, {}), false);
+});
+
+test("listeDisponible : la vue liste n'existe pas en version 1", () => {
+  assert.equal(listeDisponible({version: 1}), false);
+  assert.equal(listeDisponible({}), false);
+  assert.equal(listeDisponible(null), false);
+  assert.equal(listeDisponible({version: 2}), true);
+});
+
+test("phrasesDirectionV1 : le texte d'avant, au singulier et au pluriel", () => {
+  assert.deepEqual(phrasesDirectionV1({decisions: 0}), [
+    {classe: "decisions", texte: "Aucune décision n'attend le Directeur."},
+    {classe: "note", texte: "La liste détaillée des décisions arrivera avec le projet 2."}]);
+  assert.equal(phrasesDirectionV1({decisions: 1})[0].texte, "1 décision attend le Directeur.");
+  assert.equal(phrasesDirectionV1({decisions: 3})[0].texte, "3 décisions attendent le Directeur.");
+  assert.equal(phrasesDirectionV1({})[0].texte, "Aucune décision n'attend le Directeur.");
 });

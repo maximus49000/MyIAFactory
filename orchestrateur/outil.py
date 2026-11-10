@@ -9,6 +9,7 @@ est dans `interface.md` ; `lancer <commande>` lance la commande déclarée par l
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -345,7 +346,22 @@ def cmd_etat(ctx, e):
         "taches": s["taches"], "file": {f["id"]: f["file"] for f in s["fonctionnalites"] if f["file"]},
         "decisions": decisions, "lecons": [x for x in s["lecons"] if x["etat"] == "à valider"],
         "agents": _agents(ctx, s, fiches),
+        "consignes": empreinte_consignes(ctx.f),
     }
+
+
+def empreinte_consignes(f):
+    """Une empreinte courte des consignes génériques, de l'interface et des consignes propres du projet : quand elle
+    change, l'orchestrateur relit ces textes (la skill a pu évoluer pendant qu'il tournait)."""
+    h = hashlib.sha256()
+    for chemin in (f["skill"] / "orchestrateur" / "consignes.md", f["skill"] / "orchestrateur" / "interface.md",
+                   f["consignes"]):
+        try:
+            h.update(Path(chemin).read_bytes() if chemin else b"")
+        except OSError:
+            h.update(b"(absent)")
+        h.update(b"\x00")
+    return h.hexdigest()[:12]
 
 
 def _verifier_cahier(c):

@@ -26,7 +26,8 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
   jamais une commande autrement, tu contournerais l'adaptateur. Le contrat de chaque commande (entrée, sortie,
   codes) est dans `<skill>/orchestrateur/interface.md`. Code `1` : refusé, lis `erreur` et corrige ; code `2` :
   appel invalide, arrête-toi et signale-le.
-- **Au démarrage** : `lancer reveil`, puis `lancer etat` (le projet, son genre, la pause, les fonctionnalités, les
+- **Au démarrage** : `lancer reveil`, puis `lancer etat` (note son empreinte `consignes` : c'est celle des textes
+  que tu viens de lire ; le projet, son genre, la pause, les fonctionnalités, les
   tâches, la file, les décisions, les leçons, les agents), puis la mémoire (voir « La mémoire »). Lis le registre des
   contrôles du projet. Puis commence la boucle de réveil.
 - **Surveille le journal des demandes** (`demandes.jsonl`, à côté du suivi) avec un moniteur : chaque geste de
@@ -38,7 +39,10 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 
 1. **Signe de vie, pause et mode.** `lancer reveil` (c'est ce qui dit au bureau que tu tournes ; sans lui, la page
    affiche « En attente de l'orchestrateur »). Puis `lancer etat` : si `pause` est vrai, ne démarre aucune étape
-   nouvelle ; tu traites seulement les demandes (Pause et Reprendre sont appliquées par l'outil dès le clic). Puis le
+   nouvelle ; tu traites seulement les demandes (Pause et Reprendre sont appliquées par l'outil dès le clic). Si
+   `consignes` (dans `etat`) n'est plus celle que tu as notée à ta dernière lecture, la skill ou le projet ont changé
+   leurs règles pendant que tu tournais : **relis ce texte, `interface.md` et les consignes propres**, note la nouvelle
+   empreinte, et applique les nouveautés (dis-le en une ligne à l'utilisateur). Puis le
    **mode** : en ligne (les agents cloud travaillent) ou local, selon ce que les consignes propres ou l'utilisateur
    ont fixé. Avant **chaque étape locale**, `lancer charge` : si `feu_vert` est faux, n'en démarre pas (attends le
    réveil suivant) ; les sessions cloud ne comptent pas dans la charge.

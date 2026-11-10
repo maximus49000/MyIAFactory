@@ -101,6 +101,19 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_etat_donne_l_empreinte_des_consignes(self):
+        # Un orchestrateur lancé avant une mise à jour de la skill voit, dans `etat`, que ses consignes ont changé.
+        consignes = self.dossier / "consignes-projet.md"
+        consignes.write_text("Règle 1.", encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["consignes"] = "consignes-projet.md"
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        a = self.ok("etat")["consignes"]
+        self.assertRegex(a, r"^[0-9a-f]{12}$")
+        self.assertEqual(self.ok("etat")["consignes"], a)          # stable
+        consignes.write_text("Règle 1. Règle 2.", encoding="utf-8")
+        self.assertNotEqual(self.ok("etat")["consignes"], a)       # les consignes propres comptent aussi
+
     def test_usage_et_facturation(self):
         # L'orchestrateur note les tokens de chaque exécution d'agent ; le relevé les donne au bureau (facturation).
         t = self.ok("tache", entree={"titre": "Dev", "agent": "dev-1", "colonne": "dev"})

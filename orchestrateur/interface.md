@@ -77,7 +77,8 @@ tâche au relevé suivant. Rend `{"ok": true}` ; code 1 si la demande est inconn
 ### `etat`
 
 Sans entrée. Un instantané pour l'orchestrateur : `{projet, genre, pause, reveil, seuil_methode, fonctionnalites,
-taches, file, decisions, lecons, agents}`. Un agent : `{cle, role, service, modele, lieu, session, libre}`. Une
+taches, file, decisions, lecons, agents, consignes}`. `consignes` est une empreinte courte des consignes
+génériques, de cette interface et des consignes propres du projet : elle change quand l'un de ces textes change. Un agent : `{cle, role, service, modele, lieu, session, libre}`. Une
 décision : `{id, genre, texte, portee}` (`portee` = l'id de la fonctionnalité, ou `projet`).
 
 ### `fonctionnalite`

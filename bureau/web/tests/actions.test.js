@@ -191,3 +191,14 @@ test("demandeChallengeLecon : la leçon visée et le texte", async () => {
   assert.deepEqual(demandeChallengeLecon({id: "dev-1:L4"}, "  Pourquoi trois passes ?  "),
     {type: "challenge", cible: {type: "lecon", id: "dev-1:L4"}, texte: "Pourquoi trois passes ?"});
 });
+
+test("decisionsDirecteur : un compte rendu n'attend pas de réponse", () => {
+  const m = (texte, x = {}) => ({id: "m", t: "2026-11-10T10:00:00", auteur: "dev-1", texte, ...x});
+  const e = {fonctionnalites: [
+    {id: "f1", nom: "A", etape: "prototype", discussion: [m("Les joints sont supprimés.")]},
+    {id: "f2", nom: "B", etape: "prototype", discussion: [m("Ça vous va ?")]},
+    {id: "f3", nom: "C", etape: "cadrage", discussion: [m("Voici", {attend: true})]},
+    {id: "f4", nom: "D", etape: "cadrage", discussion: [m("Fait ? oui.", {attend: false})]},
+    {id: "f5", nom: "E", etape: "cadrage", discussion: [m("Choisissez", {questions: [{texte: "T", choix: ["a", "b"]}]})]}]};
+  assert.deepEqual(decisionsDirecteur(e).reponses.map((x) => x.fonctionnalite), ["f2", "f3", "f5"]);
+});

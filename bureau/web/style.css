@@ -717,3 +717,6 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .taches-fonctionnalite h4 { margin: 8px 0 4px; font-size: 13px; color: #6d6980; }
 .liste-taches-fonctionnalite { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .liste-taches-fonctionnalite .en-file { color: #6d6980; }
+.message-copier { margin-left: 6px; padding: 1px 7px; border: 1px solid #cfc7b6; border-radius: 6px; background: transparent;
+  color: #6d6980; font: inherit; font-size: 11px; cursor: pointer; opacity: .55; }
+.message:hover .message-copier, .message-copier:focus-visible { opacity: 1; }

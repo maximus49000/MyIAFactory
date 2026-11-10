@@ -236,3 +236,12 @@ test("tachesDeFonctionnalite : réalisées et à venir (la file de la fonctionna
                                                  active: false, maj: "2026-11-10T21:00:00"}]};
   assert.ok(tachesDeFonctionnalite(e2, {id: "f1"}).realisees.some((t) => t.id === "t5"));
 });
+
+test("texteACopier : tout le contenu d'un message", async () => {
+  const {texteACopier} = await import("../ui/fonctionnalite.js");
+  assert.equal(texteACopier({texte: "Bonjour"}), "Bonjour");
+  assert.equal(texteACopier({texte: "Voici", images: ["pieces/a.png", "pieces/b.png"]}),
+               "Voici\n\nImages :\n- pieces/a.png\n- pieces/b.png");
+  assert.equal(texteACopier({texte: "Choisissez", questions: [{texte: "Taille ?", choix: ["28", "56"]}]}),
+               "Choisissez\n\nTaille ? (28 / 56)");
+});

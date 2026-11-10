@@ -72,8 +72,21 @@ def attend_utilisateur(f):
     """La discussion attend l'utilisateur : le dernier message est d'un agent, la fonctionnalité est en cadrage ou en
     prototype, et aucune décision ne l'attend déjà (elle serait comptée à part)."""
     discussion = f.get("discussion") or []
-    return (f.get("etape") in ETAPES_DISCUSSION and bool(discussion)
-            and discussion[-1].get("auteur") != "utilisateur" and not f.get("decisions"))
+    if f.get("etape") not in ETAPES_DISCUSSION or not discussion or f.get("decisions"):
+        return False
+    return message_attend(discussion[-1])
+
+
+def message_attend(m):
+    """Un message d'agent attend une réponse : il pose des questions à choix, ou le dit (`attend`), ou, sans le dire,
+    contient une question. Un compte rendu (sans question, ou `attend: false`) n'attend rien."""
+    if m.get("auteur") == "utilisateur":
+        return False
+    if m.get("questions"):
+        return True
+    if isinstance(m.get("attend"), bool):
+        return m["attend"]
+    return "?" in str(m.get("texte") or "")
 
 
 def construire(r, eq, maintenant, fraicheur_min, alertes=None):

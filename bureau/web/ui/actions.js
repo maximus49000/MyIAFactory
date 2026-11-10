@@ -123,8 +123,7 @@ export function decisionsDirecteur(etat) {
     // La discussion attend l'utilisateur : même règle que le serveur (bureau/etat.py, attend_utilisateur).
     const discussion = Array.isArray(f?.discussion) ? f.discussion : [];
     const dernier = discussion[discussion.length - 1];
-    if (["cadrage", "prototype"].includes(f?.etape) && dernier && dernier.auteur !== "utilisateur"
-        && !(f.decisions || []).length) {
+    if (["cadrage", "prototype"].includes(f?.etape) && dernier && messageAttend(dernier) && !(f.decisions || []).length) {
       sortie.reponses.push({fonctionnalite: f.id, nom: f.nom, dernier});
     }
   }
@@ -145,6 +144,15 @@ export function demandeLecon(lecon, verdict, etage) {
 // Challenger une leçon (version 4) : elle se discute dans une tâche avant le verdict.
 export function demandeChallengeLecon(lecon, texte) {
   return {type: "challenge", cible: {type: "lecon", id: lecon.id}, texte: String(texte).trim()};
+}
+
+// Un message d'agent attend une réponse : des questions à choix, `attend: true`, ou (sans le dire) une question.
+// Même règle que le serveur (bureau/etat.py, message_attend).
+export function messageAttend(m) {
+  if (!m || m.auteur === "utilisateur") return false;
+  if (Array.isArray(m.questions) && m.questions.length) return true;
+  if (typeof m.attend === "boolean") return m.attend;
+  return String(m.texte || "").includes("?");
 }
 
 // « Tout valider » / « Tout invalider » : un verdict par leçon encore en attente, chacune avec l'étage choisi dans son

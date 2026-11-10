@@ -698,13 +698,43 @@ function texteAvecTermes(classe, texte, glossaire) {
   return bloc;
 }
 
+// Tout le contenu d'un message, en texte : le texte, ses questions à choix, les chemins de ses images.
+export function texteACopier(m) {
+  const parties = [String(m?.texte || "")];
+  const q = Array.isArray(m?.questions) ? m.questions : [];
+  if (q.length) parties.push(q.map((x) => `${x.texte} (${(x.choix || []).join(" / ")})`).join("\n"));
+  if ((m?.images || []).length) parties.push("Images :\n" + m.images.map((c) => "- " + c).join("\n"));
+  return parties.filter(Boolean).join("\n\n");
+}
+
+// Copie dans le presse-papiers (avec un repli quand l'API n'est pas permise) ; le bouton dit « Copié ».
+async function copier(texte, bouton) {
+  try {
+    await navigator.clipboard.writeText(texte);
+  } catch {
+    const zone = document.createElement("textarea");
+    zone.value = texte;
+    zone.style.position = "fixed";
+    zone.style.opacity = "0";
+    document.body.append(zone);
+    zone.select();
+    try { document.execCommand("copy"); } finally { zone.remove(); }
+  }
+  bouton.textContent = "Copié";
+  setTimeout(() => { bouton.textContent = "Copier"; }, 1500);
+}
+
 function messageDe(m, etat, glossaire = []) {
   const li = el("li", "message");
   const utilisateur = m.auteur === "utilisateur";
   li.classList.add(utilisateur ? "message-utilisateur" : "message-agent");
   const qui = utilisateur ? "Vous" : [m.prenom || m.auteur, m.service].filter(Boolean).join(" · ");
   const tete = el("div", "message-tete");
-  tete.append(el("strong", "", qui), el("span", "date", m.t ? dateFr(m.t) : ""));
+  const bouton = el("button", "message-copier", "Copier");
+  bouton.type = "button";
+  bouton.setAttribute("aria-label", "Copier le contenu du message");
+  bouton.addEventListener("click", () => copier(texteACopier(m), bouton));
+  tete.append(el("strong", "", qui), el("span", "date", m.t ? dateFr(m.t) : ""), bouton);
   li.append(tete, texteAvecTermes("message-texte", m.texte, glossaire));
   if ((m.images || []).length) li.append(vignettes(m.images, etat));
   return li;

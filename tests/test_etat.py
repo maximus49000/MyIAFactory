@@ -451,6 +451,22 @@ class TestEtatV4(unittest.TestCase):
         self.assertEqual(d["total"], d["lecons"] + d["retours"] + d["bloquees"] + d["fonctionnalites"]
                          + d["projet"] + 2 + self.etat(modif=avec)["decisions"])
 
+    def test_directeur_compte_rendu_n_attend_pas(self):
+        # Un compte rendu d'agent (sans question) n'attend pas l'utilisateur ; une question, des choix ou
+        # `attend: true` l'attendent ; `attend: false` jamais.
+        def m(texte, **x):
+            return {"id": "m" + str(len(texte)), "t": "2026-11-10T10:00:00+01:00", "auteur": "d1", "texte": texte, **x}
+
+        def avec(r):
+            r["fonctionnalites"] = [
+                {"id": "f1", "nom": "A", "etape": "prototype", "discussion": [m("Les joints sont supprimés.")]},
+                {"id": "f2", "nom": "B", "etape": "prototype", "discussion": [m("Ça vous va ?")]},
+                {"id": "f3", "nom": "C", "etape": "cadrage", "discussion": [m("Voici", attend=True)]},
+                {"id": "f4", "nom": "D", "etape": "cadrage", "discussion": [m("Fait ? oui.", attend=False)]},
+                {"id": "f5", "nom": "E", "etape": "cadrage",
+                 "discussion": [m("Choisissez", questions=[{"texte": "T", "choix": ["a", "b"]}])]}]
+        self.assertEqual(self.etat(modif=avec)["directeur"]["reponses"], 3)   # f2, f3, f5
+
     def test_orchestrateur_actif(self):
         self.assertTrue(self.etat(minutes_chef=2)["orchestrateur_actif"])
         self.assertFalse(self.etat(minutes_chef=90)["orchestrateur_actif"])  # sans nouvelles

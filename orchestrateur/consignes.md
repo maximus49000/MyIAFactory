@@ -105,7 +105,8 @@ le bandeau du bureau montre.
    <nom> », `fonctionnalite`, `role` (celui de l'agent), `colonne: cadrage`, `agent` = l'agent de cadrage,
    `active: true` ; elle reste active jusqu'à la fin du cahier des charges. Pour chaque réponse : `lancer depart`
    (`agent`, `tache` = cette tâche), un sous-agent neuf avec ce message et la discussion, puis sa réponse dans la
-   discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre). Quand l'agent pose des questions
+   discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre, `attend` : vrai s'il demande une
+   réponse à l'utilisateur, faux pour un simple compte rendu). Quand l'agent pose des questions
    qui ont des réponses possibles, donne-les en `questions` (chaque question et ses `choix`, `multiple` si plusieurs
    réponses vont ensemble) : l'utilisateur répond d'un clic, peut passer une question en disant pourquoi, et garde la
    saisie libre ; une réponse « (passée) » se lit avec le texte qui suit. Quand un message emploie un mot
@@ -265,3 +266,11 @@ mémoire d'un autre genre. `depart` donne à chaque agent les leçons de son rô
   « En attente de : … ».
 - Les contradictions entre les consignes propres et celles-ci, une fois chacune.
 - Un arrêt (conflit de mémoire, mot interdit, commande en code 2) : la raison exacte et ce qu'il faut faire.
+
+**Les choix en boutons.** Tout message de la discussion — le tien comme celui d'un agent — qui offre un choix à
+l'utilisateur (« soit… soit… », « si vous préférez… », « voulez-vous A ou B ? ») le donne en `questions` (`lancer
+message` : une question, un `choix` par option, `multiple` si plusieurs vont ensemble), avec `attend: true`. Ne le
+laisse jamais seulement dans le texte : l'utilisateur répond d'un clic, peut choisir « Autre » ou passer. Quand une
+décision du Directeur est posée (par exemple « méthode à revoir »), le message en reprend les options en `questions`,
+plus les autres voies possibles (par exemple : corriger un point puis valider) ; la réponse arrive en `message`, à
+appliquer comme le verdict correspondant (et lève la décision).

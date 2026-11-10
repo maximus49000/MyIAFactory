@@ -225,6 +225,13 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.outil("document", entree={"fonctionnalite": f, "chemin": "pieces/v3.png", "titre": "M",
                                                         "remplace": "pieces/absent.png"})[0], 1)
 
+    def test_message_attend(self):
+        f = self.nouvelle()
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Fait.", "attend": False})
+        self.assertIs(self.releve()["fonctionnalites"][0]["discussion"][-1]["attend"], False)
+        self.assertEqual(self.outil("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "x",
+                                                       "attend": "oui"})[0], 1)
+
     def test_glossaire_de_la_fonctionnalite(self):
         # Les mots définis par les agents sont gardés par la fonctionnalité (une seule fois), écrits dans
         # glossaire.md (rangé dans ses documents), donnés par `etat` et dans le message de départ des agents.

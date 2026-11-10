@@ -325,6 +325,8 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
         if m.get("images") is not None and not _liste_de_textes(m["images"], MAX_IMAGES_MESSAGE):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
                            f"d'au plus {MAX_IMAGES_MESSAGE} chemins (textes non vides).")
+        if m.get("attend") is not None and not isinstance(m["attend"], bool):
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » : « attend » doit être vrai ou faux.")
         if m.get("glossaire") is not None:
             probleme = erreur_glossaire(m["glossaire"])
             if probleme:

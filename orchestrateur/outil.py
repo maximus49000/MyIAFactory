@@ -550,6 +550,9 @@ def cmd_message(ctx, e):
         questions = [{"texte": q["texte"], "choix": list(q["choix"]), **({"multiple": True} if q.get("multiple") else {})}
                      for q in questions]
     glossaire = _glossaire_entree(e, auteur)
+    attend = e.get("attend")
+    if attend is not None and not isinstance(attend, bool):
+        raise Refus("« attend » doit être vrai (le message demande une réponse) ou faux (un compte rendu).")
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         m = su.ajouter_message(s, f, auteur, texte(e, "texte", vide_ok=True), images)
@@ -558,6 +561,8 @@ def cmd_message(ctx, e):
             fusionner_glossaire(ctx, s, f, glossaire, auteur)
         if questions:
             m["questions"] = questions
+        if attend is not None:
+            m["attend"] = attend
         ranger_documents(s, f, images, agent=auteur, etape=f["etape"])
     return {"id": m["id"]}
 

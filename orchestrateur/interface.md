@@ -107,7 +107,9 @@ validee_le?}` ; `livrable` : `{libelle, lien | chemin, date}`). Rend la fonction
 ### `message`
 
 Entrée : `{"fonctionnalite", "auteur", "texte", "images"?: [chemins]}`. `auteur` : `utilisateur` ou la clé d'un
-agent. Un message d'agent remet `attend_reponse` à faux. Un agent peut joindre des **questions à choix**,
+agent. Un message d'agent remet `attend_reponse` à faux. `"attend": true` dit qu'il demande une réponse de l'utilisateur
+(le Directeur le liste dans « Réponses attendues »), `false` que c'est un compte rendu ; sans lui, un message qui
+contient une question en attend une. Un agent peut joindre des **questions à choix**,
 `"questions": [{"texte", "choix": [2 à 12 textes], "multiple"?: true}]` (10 au plus) : le bureau montre un bouton par
 choix, un bouton « Autre » (avec un champ pour la valeur voulue) et un bouton « Passer » ; la réponse revient en un `message` lisible (« question → choix », « (passée) »,
 puis le texte libre, obligatoire quand une question est passée). Un agent peut aussi définir les mots spécialisés

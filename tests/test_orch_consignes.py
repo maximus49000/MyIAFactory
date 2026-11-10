@@ -47,6 +47,13 @@ class TestConsignes(unittest.TestCase):
                     "git pull --rebase", "mots interdits", "commit"):
             self.assertIn(mot.lower(), texte.lower(), f"règle absente : {mot}")
 
+    def test_choix_toujours_en_questions(self):
+        # Un message qui offre un choix le donne en boutons (questions à choix), jamais seulement en phrases.
+        texte = lire(ORCH / "consignes.md")
+        self.assertIn("soit… soit…", texte)
+        self.assertIn("`questions`", texte)
+        self.assertIn("Les choix en boutons", texte)
+
     def test_modele_factory_lisible(self):
         f = factory.lire(ORCH / "modeles" / "factory.json")
         self.assertGreaterEqual(len(f["flux"]), 1)

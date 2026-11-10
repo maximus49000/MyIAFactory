@@ -859,6 +859,11 @@ class TestVersion4(unittest.TestCase):
         self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(documents=[doc])])), [])
         self.refus(v4(fonctionnalites=[fonc(documents=[{**doc, "livrable": "oui"}])]), "livrable")
 
+    def test_message_attend(self):
+        ok = v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="Fait.", attend=False)])])
+        self.assertEqual(releve.valider(ok), [])
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="x", attend="non")])]), "attend")
+
     def test_glossaire(self):
         g = [{"mot": "Tesselle", "definition": "Petit cube de mosaïque."}]
         ok = v4(fonctionnalites=[fonc(glossaire=g, discussion=[msg(id="m2", auteur="d1", texte="x", glossaire=g)])])

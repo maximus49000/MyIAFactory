@@ -3,8 +3,10 @@
 // Tout texte venu du serveur passe par textContent.
 
 import {voyant, libelleCharge} from "./texte.js";
+import {boutons, envoyer} from "./actions.js";
 
 const INTERVALLE_CHARGE = 5000;
+const DUREE_MESSAGE = 4000;
 
 function el(tag, classe, texte) {
   const e = document.createElement(tag);
@@ -35,7 +37,64 @@ export function creerBarre(entete, bandeau) {
   const valeur = el("span", "charge-valeur", "—");
   charge.append(etiquette, piste, valeur);
 
-  entete.append(titre, leVoyant, charge);
+  const zoneActions = el("div", "barre-actions");
+  entete.append(titre, leVoyant, zoneActions, charge);
+
+  // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
+  const retour = el("div", "message-demande");
+  retour.setAttribute("role", "status");
+  retour.hidden = true;
+  entete.after(retour);
+  let minuteur = null;
+  function dire(texte, ok) {
+    retour.textContent = texte;
+    retour.dataset.ton = ok ? "ok" : "alerte";
+    retour.hidden = false;
+    clearTimeout(minuteur);
+    minuteur = setTimeout(() => { retour.hidden = true; }, DUREE_MESSAGE);
+  }
+
+  // Dépose une demande au projet ; `bouton` (facultatif) est grisé jusqu'à la réponse.
+  let enCours = 0;
+  async function demander(demande, bouton) {
+    if (bouton) bouton.disabled = true;
+    enCours++;
+    try {
+      const r = await envoyer(demande);
+      dire(r.message, r.ok);
+      return r;
+    } finally {
+      enCours--;
+      if (bouton) bouton.disabled = false;
+    }
+  }
+
+  let signatureActions = "";
+  function majActions(etat) {
+    const liste = boutons(etat);
+    const signature = JSON.stringify(liste);
+    if (signature === signatureActions) return;
+    signatureActions = signature;
+    zoneActions.replaceChildren();
+    for (const b of liste) {
+      if (b.lien) {
+        const a = el("a", "bouton-barre", b.libelle);
+        a.href = b.lien;
+        a.target = "_blank";
+        a.rel = "noopener";
+        zoneActions.append(a);
+        continue;
+      }
+      const bouton = el("button", "bouton-barre", b.libelle);
+      bouton.type = "button";
+      bouton.disabled = !b.actif;
+      bouton.addEventListener("click", () => {
+        if (b.confirmer && !confirm(b.confirmer)) return;
+        demander({type: "bouton", id: b.id}, bouton);
+      });
+      zoneActions.append(bouton);
+    }
+  }
 
   const message = el("span", "bandeau-message");
   bandeau.append(message);
@@ -92,6 +151,7 @@ export function creerBarre(entete, bandeau) {
       erreur = null;
       bandeau.hidden = true;
       afficherVoyant();
+      majActions(etat);
     },
     // Le relevé est indisponible : voyant en alerte et bandeau avec le message du serveur.
     majErreur(texte) {
@@ -100,6 +160,9 @@ export function creerBarre(entete, bandeau) {
       bandeau.hidden = false;
       afficherVoyant();
     },
+    majActions,
+    demander,
+    dire,
     rafraichirCharge,
     charge: () => derniere,
   };

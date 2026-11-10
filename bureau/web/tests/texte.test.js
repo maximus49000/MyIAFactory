@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {COLS} from "./donnees.js";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -195,4 +195,11 @@ test("resteNonListe : ce qui dépasse la suite fournie", () => {
   assert.equal(resteNonListe({visibles: [], suite: [{id: "a", titre: "A"}], reste: 0}), 0);
   assert.equal(resteNonListe({visibles: [], reste: 4}), 4);
   assert.equal(resteNonListe(null), 0);
+});
+
+test("resteApresVisibles : le plus grand de `reste` et de la longueur de la suite", () => {
+  assert.equal(resteApresVisibles({visibles: [], reste: 7, suite: [{id: "a"}]}), 7);
+  assert.equal(resteApresVisibles({visibles: [], reste: 0, suite: [{id: "a"}, {id: "b"}]}), 2);
+  assert.equal(resteApresVisibles({reste: "x"}), 0);
+  assert.equal(resteApresVisibles(null), 0);
 });

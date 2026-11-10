@@ -150,8 +150,8 @@ export function elementsDeFile(file) {
   return sortie;
 }
 
-// Le nombre d'éléments au-delà des visibles : `reste` s'il est donné, sinon ce que la suite compte.
-function auDela(file) {
+// Le nombre d'éléments au-delà des visibles : le plus grand de `reste` et de la longueur de la suite.
+export function resteApresVisibles(file) {
   const reste = Number(file?.reste);
   const suite = Array.isArray(file?.suite) ? file.suite.length : 0;
   return Math.max(Number.isFinite(reste) ? reste : 0, suite);
@@ -159,11 +159,11 @@ function auDela(file) {
 
 // Le « + n » de la file ouvre le panneau « File » seulement s'il y a des éléments au-delà des visibles.
 export function fileDepliable(file) {
-  return auDela(file) > 0;
+  return resteApresVisibles(file) > 0;
 }
 
 // Le nombre d'éléments de la file que le panneau ne peut pas lister (la suite fournie est plus courte que le reste).
 export function resteNonListe(file) {
   const suite = Array.isArray(file?.suite) ? file.suite.length : 0;
-  return Math.max(0, auDela(file) - suite);
+  return Math.max(0, resteApresVisibles(file) - suite);
 }

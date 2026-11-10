@@ -79,3 +79,12 @@ test("presentation : la discussion se replie quand le cahier attend son verdict"
   assert.deepEqual(presentation(cahier, false, false), {discussionOuverte: true, envoiCorrection: false});  // sans agir
   assert.deepEqual(presentation(null, true, false), {discussionOuverte: true, envoiCorrection: false});    // nouvelle
 });
+
+test("voisine : navigation circulaire entre les images d'un message", async () => {
+  const {voisine} = await import("../ui/fonctionnalite.js");
+  assert.equal(voisine(3, 0, 1), 1);
+  assert.equal(voisine(3, 2, 1), 0);     // après la dernière : la première
+  assert.equal(voisine(3, 0, -1), 2);    // avant la première : la dernière
+  assert.equal(voisine(1, 0, 1), 0);
+  assert.equal(voisine(0, 0, 1), 0);
+});

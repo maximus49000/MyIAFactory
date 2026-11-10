@@ -611,3 +611,19 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .cat-utilisateurs { color: var(--cat-discret); margin-top: 6px; }
 .discussion-repliee { margin-top: 10px; }
 .discussion-repliee > summary { cursor: pointer; color: #5d8fc7; font-weight: 700; }
+
+/* Les images d'un message : « Agrandir » et « Plein écran » au survol, visionneuse plein écran. */
+.vignette { position: relative; cursor: default; }
+.vignette-outils { position: absolute; top: 4px; right: 4px; display: none; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.vignette:hover .vignette-outils, .vignette:focus-within .vignette-outils { display: flex; }
+.vignette-bouton { border: 0; border-radius: 6px; padding: 2px 7px; font: 700 11px/1.4 inherit; color: #fff; background: rgba(61, 58, 75, 0.85); cursor: pointer; }
+.vignette-bouton:hover { background: rgba(61, 58, 75, 1); }
+.visionneuse { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(20, 20, 28, 0.88); }
+.visionneuse img { width: min(86vh, 92vw); height: auto; max-height: 86vh; object-fit: contain; border-radius: 6px; background: #fff; }
+.visionneuse-fleche, .visionneuse-fermer { position: absolute; border: 0; color: #fff; background: rgba(255, 255, 255, 0.14); cursor: pointer; border-radius: 50%; }
+.visionneuse-fleche { top: 50%; width: 52px; height: 52px; margin-top: -26px; font-size: 34px; line-height: 1; }
+.visionneuse-fleche.gauche { left: 16px; } .visionneuse-fleche.droite { right: 16px; }
+.visionneuse-fleche[hidden] { display: none; }
+.visionneuse-fermer { top: 14px; right: 16px; width: 40px; height: 40px; font-size: 26px; }
+.visionneuse-fleche:hover, .visionneuse-fermer:hover { background: rgba(255, 255, 255, 0.28); }
+.visionneuse-compteur { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font-weight: 700; }

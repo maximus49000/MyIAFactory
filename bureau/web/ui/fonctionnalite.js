@@ -106,22 +106,78 @@ export function presentation(f, agir, enCorrection) {
 // --- Le panneau.
 const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
 
+// L'image voisine dans une série de n images (on fait le tour : après la dernière, la première).
+export function voisine(n, i, sens) {
+  return n > 0 ? (i + sens + n) % n : 0;
+}
+
+// La visionneuse plein écran : une image à la fois, flèches gauche et droite (ou boutons), Échap pour fermer.
+function ouvrirVisionneuse(chemins, depart) {
+  let i = depart;
+  const fond = el("div", "visionneuse");
+  fond.setAttribute("role", "dialog");
+  fond.setAttribute("aria-modal", "true");
+  fond.setAttribute("aria-label", "Images du message");
+  const img = document.createElement("img");
+  const compteur = el("div", "visionneuse-compteur", "");
+  const fermer = el("button", "visionneuse-fermer", "×");
+  const avant = el("button", "visionneuse-fleche gauche", "‹");
+  const apres = el("button", "visionneuse-fleche droite", "›");
+  for (const [b, nom] of [[fermer, "Fermer"], [avant, "Image précédente"], [apres, "Image suivante"]]) {
+    b.type = "button";
+    b.setAttribute("aria-label", nom);
+  }
+  const montrer = () => {
+    img.src = urlImage(chemins[i]);
+    img.alt = `Image ${i + 1} sur ${chemins.length}`;
+    compteur.textContent = chemins.length > 1 ? `${i + 1} / ${chemins.length}` : "";
+    avant.hidden = apres.hidden = chemins.length < 2;
+  };
+  const aller = (sens) => { i = voisine(chemins.length, i, sens); montrer(); };
+  const clavier = (ev) => {   // capturé avant le panneau : Échap ferme la visionneuse, pas le panneau
+    if (ev.key === "Escape") { ev.stopPropagation(); ev.preventDefault(); clore(); }
+    else if (ev.key === "ArrowLeft") { ev.stopPropagation(); aller(-1); }
+    else if (ev.key === "ArrowRight") { ev.stopPropagation(); aller(1); }
+  };
+  const clore = () => { document.removeEventListener("keydown", clavier, true); fond.remove(); };
+  fermer.addEventListener("click", clore);
+  avant.addEventListener("click", () => aller(-1));
+  apres.addEventListener("click", () => aller(1));
+  fond.addEventListener("click", (ev) => { if (ev.target === fond) clore(); });
+  document.addEventListener("keydown", clavier, true);
+  fond.append(img, avant, apres, compteur, fermer);
+  document.body.append(fond);
+  montrer();
+  fermer.focus();
+}
+
 function vignettes(chemins, etat) {
   const zone = el("div", "vignettes");
-  for (const chemin of chemins || []) {
+  (chemins || []).forEach((chemin, n) => {
     const fig = el("figure", "vignette");
     if (etat.images_ok === true) {
       const img = document.createElement("img");
       img.loading = "lazy";
       img.src = urlImage(chemin);
       img.alt = "Image jointe";
-      fig.addEventListener("click", () => fig.classList.toggle("agrandie"));
-      fig.append(img);
+      // Au survol : agrandir dans la discussion, ou voir en plein écran (avec les autres images du message).
+      const outils = el("div", "vignette-outils");
+      const agrandir = el("button", "vignette-bouton", "Agrandir");
+      const plein = el("button", "vignette-bouton", "Plein écran");
+      for (const b of [agrandir, plein]) b.type = "button";
+      agrandir.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        fig.classList.toggle("agrandie");
+        agrandir.textContent = fig.classList.contains("agrandie") ? "Réduire" : "Agrandir";
+      });
+      plein.addEventListener("click", (ev) => { ev.stopPropagation(); ouvrirVisionneuse(chemins, n); });
+      outils.append(agrandir, plein);
+      fig.append(img, outils);
     } else {
       fig.append(el("figcaption", "", "Image non affichable (aucune racine d'images déclarée)"));
     }
     zone.append(fig);
-  }
+  });
   return zone;
 }
 

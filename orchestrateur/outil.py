@@ -577,8 +577,11 @@ def construire_releve(ctx):
             retours.setdefault(d["tache"], []).append(r)
     taches = [{"id": "orchestration", "titre": "Orchestration", "colonne": "cadrage", "active": True,
                "titulaire": chef, "etape": "", "maj": s["reveil"], "postit": False}]
+    # Une fonctionnalité en cadrage sans vraie tâche de cadrage (l'orchestrateur en crée une pour `depart`) en
+    # reçoit une, pour que son agent de cadrage se voie au travail.
+    avec_tache = {t["fonctionnalite"] for t in s["taches"] if t.get("active") and t["colonne"] == "cadrage"}
     for f in s["fonctionnalites"]:
-        if f["etape"] == "cadrage" and f["agent_cadrage"] in cles:
+        if f["etape"] == "cadrage" and f["agent_cadrage"] in cles and f["id"] not in avec_tache:
             taches.append({"id": f"cadrage:{f['id']}", "titre": f"Cadrage : {f['nom']}", "colonne": "cadrage",
                            "active": True, "titulaire": f["agent_cadrage"], "etape": "", "maj": f["maj"]})
     for t in s["taches"]:

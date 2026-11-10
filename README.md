@@ -76,7 +76,7 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 10. Le fichier de factory, l'interface et le suivi générique
 - [x] 11. La mémoire à trois étages et les leçons
 - [x] 12. Le départ d'un agent, le choix du modèle, le vérificateur d'interface
-- [ ] 13. Les consignes génériques et le guide de passage
+- [x] 13. Les consignes génériques et le guide de passage
 - [ ] 14. La démo à deux projets, la documentation, la relecture
 - [ ] 15. Le vrai passage de bout en bout
 - [ ] Le passage du projet pilote (phases H à J, dans son dépôt)

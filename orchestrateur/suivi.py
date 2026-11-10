@@ -57,6 +57,8 @@ class Suivi:
                         continue
                 except OSError:
                     continue   # le verrou vient de disparaître : on réessaie tout de suite
+            except PermissionError:
+                pass   # Windows : le verrou est en train d'être effacé par un autre processus ; il est encore pris
             if time.monotonic() > fin:
                 raise SuiviOccupe(f"Le suivi est occupé (verrou {self.verrou.name} gardé plus de "
                                   f"{DELAI_VERROU_S} s).")

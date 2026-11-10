@@ -4,6 +4,7 @@ Le bureau le lit à la demande, jamais à chaque relevé. Les champs facultatifs
 et signalés ; seuls `elements`, et l'`id` et le `nom` de chaque élément, sont exigés."""
 import json
 import math
+import re
 import subprocess
 import threading
 import time
@@ -15,6 +16,9 @@ MAX_ELEMENTS = 20000
 MAX_OCTETS = 50 * 1024 * 1024
 CACHE_COMMANDE_S = 30
 MAX_AVERTISSEMENTS = 100
+GENERIQUE = "*"                 # la déclaration qui vaut pour toute fonctionnalité
+PLACE = "{fonctionnalite}"      # y est remplacé par l'identifiant de la fonctionnalité
+MOTIF_GENERIQUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
 _verrou = threading.Lock()
 _cache_fichiers = {}   # chemin résolu -> ((date, taille), (code, objet))
@@ -58,11 +62,25 @@ def declaration(regl, fonctionnalite):
             factory = None
         if isinstance(factory, dict):
             sources.append((factory.get("catalogues"), chemin.parent))
-    for catalogues, base in sources:
-        if isinstance(catalogues, dict) and isinstance(fonctionnalite, str) and fonctionnalite in catalogues:
+    if not isinstance(fonctionnalite, str):
+        return None
+    for catalogues, base in sources:   # une déclaration exacte d'abord, réglages puis fichier de factory
+        if isinstance(catalogues, dict) and fonctionnalite in catalogues and fonctionnalite != GENERIQUE:
             d = catalogues[fonctionnalite]
             if _declaration_valide(d):
                 return {**d, "base": str(base)}
+    if not MOTIF_GENERIQUE.match(fonctionnalite):   # rien qui puisse sortir du dossier ou passer pour une option
+        return None
+    for catalogues, base in sources:   # puis « * », où {fonctionnalite} devient l'identifiant
+        d = catalogues.get(GENERIQUE) if isinstance(catalogues, dict) else None
+        if _declaration_valide(d):
+            remplacer = lambda v: v.replace(PLACE, fonctionnalite)  # noqa: E731
+            d = dict(d)
+            if "fichier" in d:
+                d["fichier"] = remplacer(d["fichier"])
+            else:
+                d["commande"] = [remplacer(a) for a in d["commande"]]
+            return {**d, "base": str(base)}
     return None
 
 

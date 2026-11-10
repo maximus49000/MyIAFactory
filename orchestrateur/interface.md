@@ -30,7 +30,8 @@ py -3.12 orchestrateur/outil.py --factory <fichier de factory> lancer <commande>
 Sans entrée. Rend le **relevé version 4** (voir la conception, §8.1) tiré du suivi et des fiches : colonnes
 `cadrage`, puis le flux du projet, puis `fait` (terminée) ; le chef porte une tâche active « Orchestration » dont
 `maj` est son dernier `reveil` ; pendant le cadrage, l'agent de cadrage porte la tâche « Cadrage : <nom> » dans la
-colonne `cadrage`. Le bureau le lit par la commande du relevé de ses réglages.
+colonne `cadrage` (celle que l'orchestrateur a créée avec `tache`, ou à défaut une tâche montrée seulement au relevé,
+d'identifiant `cadrage:<fonctionnalité>`). Le bureau le lit par la commande du relevé de ses réglages.
 
 ```
 $ outil.py --factory F releve
@@ -123,6 +124,12 @@ Entrée : `{"agent", "session"}`. Inscrit la session attitrée de l'agent dans l
 Entrée : `{"fonctionnalite"}` (ou, sans entrée, l'identifiant en argument : `catalogue <fonctionnalité>`, pour une
 commande de catalogue du bureau). Rend le catalogue générique (format de `bureau/catalogue.py`) : les éléments de la
 fonctionnalité avec leur état (`fait`, `en_cours`, `a_faire`), leurs captures, leurs passes et leurs retours.
+
+Le bureau trouve la source du catalogue d'une fonctionnalité dans `catalogues` du fichier de factory (ou des
+réglages) : `{<id>: {fichier} | {commande}}`, ou la clé `"*"` pour toutes les fonctionnalités, où `{fonctionnalite}`
+est remplacé par l'identifiant (lettres, chiffres, `-` et `_` seulement) :
+`"catalogues": {"*": {"commande": ["python", "<skill>/orchestrateur/outil.py", "--factory", "factory.json", "lancer",
+"catalogue", "{fonctionnalite}"]}}`.
 
 Pour que la carte et les fiches du bureau colorent bien un élément, un catalogue de projet devrait employer ces
 identifiants d'état : `fait` (ou `valide`, `termine`, `ok`) pour un élément terminé, `a_faire` (ou `a_revoir`,

@@ -72,6 +72,25 @@ class TestCatalogueModule(unittest.TestCase):
         self.ecrire("casse.json", "{")
         self.assertIsNone(catalogue.declaration(self.regl(orchestrateur="casse.json"), "f1"))
 
+    def test_declaration_generique(self):
+        # « * » vaut pour toute fonctionnalité ; {fonctionnalite} y est remplacé par son identifiant.
+        self.ecrire("depot/factory.json", {"catalogues": {
+            "*": {"commande": ["outil", "catalogue", "{fonctionnalite}"]},
+            "f9": {"fichier": "f9.json"}}})
+        regl = self.regl(orchestrateur="depot/factory.json")
+        d = catalogue.declaration(regl, "f3")
+        self.assertEqual(d["commande"], ["outil", "catalogue", "f3"])
+        self.assertEqual(Path(d["base"]), self.tmp / "depot")
+        self.assertEqual(catalogue.declaration(regl, "f9")["fichier"], "f9.json")   # l'exacte l'emporte
+        # Une déclaration exacte des réglages l'emporte aussi sur « * » ; « * » des réglages sur celui de la factory.
+        regl["catalogues"] = {"f3": {"fichier": "f3.json"}}
+        self.assertEqual(catalogue.declaration(regl, "f3")["fichier"], "f3.json")
+        regl["catalogues"] = {"*": {"fichier": "cat-{fonctionnalite}.json"}}
+        self.assertEqual(catalogue.declaration(regl, "f4")["fichier"], "cat-f4.json")
+        # Un identifiant qui pourrait sortir du dossier ou passer pour une option n'a pas de catalogue générique.
+        for mauvais in ("../x", "a/b", "a\\b", "-x", "", "é", "x" * 65, "a b"):
+            self.assertIsNone(catalogue.declaration(regl, mauvais), mauvais)
+
     def test_fichier_cache_puis_relu(self):
         f = self.ecrire("cat.json", CATALOGUE)
         regl = self.regl(catalogues={"f1": {"fichier": "cat.json"}})

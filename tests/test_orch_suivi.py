@@ -101,6 +101,39 @@ class TestSuivi(AvecProjet):
         orchestration = next(t for t in self.releve()["taches"] if t["titulaire"] == "chef")
         self.assertIsNotNone(orchestration["maj"])
 
+    def test_verrou_en_cours_d_effacement(self):
+        # Sous Windows, créer le verrou pendant qu'un autre processus l'efface lève PermissionError : c'est un
+        # verrou occupé, on réessaie (et non une erreur).
+        from unittest import mock
+        s = suivi.Suivi(self.dossier / "suivi-verrou.json")
+        vrai_open, essais = suivi.os.open, []
+
+        def open_capricieux(*a, **k):
+            if str(a[0]).endswith(".verrou"):
+                essais.append(1)
+            if len(essais) == 1 and str(a[0]).endswith(".verrou"):
+                raise PermissionError(13, "Permission denied")
+            return vrai_open(*a, **k)
+
+        with mock.patch.object(suivi.os, "open", open_capricieux):
+            with s.transaction() as d:
+                d["reveil"] = "x"
+        self.assertEqual(len(essais), 2)
+        self.assertEqual(s.lire()["reveil"], "x")
+
+    def test_vraie_tache_de_cadrage_remplace_la_synthetique(self):
+        # L'orchestrateur crée une vraie tâche de cadrage (il en faut une pour `depart`) : le relevé ne la montre
+        # qu'une fois, et `depart` l'accepte.
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
+        t = self.ok("tache", entree={"titre": "Cadrage : essai", "fonctionnalite": f, "colonne": "cadrage",
+                                     "agent": "metier-1", "role": "cadrage", "active": True})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        cadrages = [x for x in r["taches"] if x["colonne"] == "cadrage" and x["titulaire"] == "metier-1"]
+        self.assertEqual([x["id"] for x in cadrages], [t["id"]])
+        self.assertIn("message", self.ok("depart", entree={"agent": "metier-1", "tache": t["id"]}))
+
     def test_pause_par_le_bureau(self):
         self.outil("actions", entree={"type": "bouton", "id": "pause", "t": "2026-11-10T10:00:00+01:00"})
         r = self.releve()

@@ -104,7 +104,9 @@ le bandeau du bureau montre.
    discussion avec `lancer message` (`auteur` = sa clé, `images` si l'agent en montre). Quand l'agent pose des questions
    qui ont des réponses possibles, donne-les en `questions` (chaque question et ses `choix`, `multiple` si plusieurs
    réponses vont ensemble) : l'utilisateur répond d'un clic, peut passer une question en disant pourquoi, et garde la
-   saisie libre ; une réponse « (passée) » se lit avec le texte qui suit. **Si le projet n'a pas encore de genre** (`genre` nul dans
+   saisie libre ; une réponse « (passée) » se lit avec le texte qui suit. Quand un message emploie un mot
+   spécialisé ou rare, donne sa définition courte en `glossaire` (`mot`, `definition`), **sauf s'il est déjà dans le
+   glossaire de la fonctionnalité** (`etat` → `fonctionnalites[].glossaire`) : il est gardé, on ne le redéfinit pas. **Si le projet n'a pas encore de genre** (`genre` nul dans
    `etat`), décris le projet en une phrase (domaine, livrable, outils), compare-la aux genres connus
    (`lancer genre`, `action: lister`) et pose la décision `confirmer_genre` (`lancer decision`, `portee: projet`,
    `texte` = ta phrase et ta proposition, `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`).

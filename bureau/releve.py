@@ -25,6 +25,7 @@ MAX_FONCTIONNALITES = 100
 MAX_MESSAGES = 1000
 MAX_DOCUMENTS = 2000
 MAX_QUESTIONS, MAX_CHOIX = 10, 12   # les questions à choix d'un message d'agent
+MAX_GLOSSAIRE, MAX_MOT, MAX_DEFINITION = 500, 60, 400   # le vocabulaire défini par les agents
 CHAMPS_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache", "date")   # d'où vient un document
 MAX_IMAGES_MESSAGE = 4
 SCHEMAS_LIENS = ("https", "http", "claude")
@@ -243,7 +244,24 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
         for d in _liste_facultative(f.get("decisions"), f"{nom} : « decisions »", erreurs):
             _verifier_decision(d, DECISIONS_FONCTIONNALITE, f"{nom} : « decisions »", ids_decisions, erreurs)
         _verifier_documents(f, nom, erreurs)
+        if f.get("glossaire") is not None:
+            probleme = erreur_glossaire(f["glossaire"])
+            if probleme:
+                erreurs.append(f"{nom} : {probleme}")
     return vus
+
+
+def erreur_glossaire(glossaire):
+    """Un glossaire : `[{mot, definition}]` (le mot : 60 caractères au plus ; la définition : 400). Rend le problème
+    en clair, ou `None`."""
+    if not isinstance(glossaire, list) or len(glossaire) > MAX_GLOSSAIRE:
+        return f"« glossaire » doit être une liste d'au plus {MAX_GLOSSAIRE} mots."
+    for k, g in enumerate(glossaire, 1):
+        if (not _est_dict(g) or not _texte_plein(g.get("mot")) or len(g["mot"]) > MAX_MOT
+                or not _texte_plein(g.get("definition")) or len(g["definition"]) > MAX_DEFINITION):
+            return (f"« glossaire » : l'entrée {k} doit avoir un « mot » ({MAX_MOT} caractères au plus) et une "
+                    f"« definition » ({MAX_DEFINITION} caractères au plus).")
+    return None
 
 
 def erreur_questions(questions):
@@ -305,6 +323,10 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
         if m.get("images") is not None and not _liste_de_textes(m["images"], MAX_IMAGES_MESSAGE):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
                            f"d'au plus {MAX_IMAGES_MESSAGE} chemins (textes non vides).")
+        if m.get("glossaire") is not None:
+            probleme = erreur_glossaire(m["glossaire"])
+            if probleme:
+                erreurs.append(f"{nom} : « discussion » : le message « {i} » : {probleme}")
         if m.get("questions") is not None:
             probleme = erreur_questions(m["questions"])
             if probleme:

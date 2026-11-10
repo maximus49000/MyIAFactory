@@ -94,7 +94,12 @@ Entrée : `{"fonctionnalite", "auteur", "texte", "images"?: [chemins]}`. `auteur
 agent. Un message d'agent remet `attend_reponse` à faux. Un agent peut joindre des **questions à choix**,
 `"questions": [{"texte", "choix": [2 à 12 textes], "multiple"?: true}]` (10 au plus) : le bureau montre un bouton par
 choix, un bouton « Autre » (avec un champ pour la valeur voulue) et un bouton « Passer » ; la réponse revient en un `message` lisible (« question → choix », « (passée) »,
-puis le texte libre, obligatoire quand une question est passée). Rend `{"id": "m3"}`.
+puis le texte libre, obligatoire quand une question est passée). Un agent peut aussi définir les mots spécialisés
+qu'il emploie : `"glossaire": [{"mot", "definition"}]` (60 et 400 caractères au plus). Ils entrent dans le
+**glossaire de la fonctionnalité** (un mot redéfini prend la définition la plus récente), qui est gardé par le suivi,
+écrit dans `<pieces>/<fonctionnalité>/glossaire.md` (rangé dans ses documents), donné par `etat`, joint au message
+de départ des agents de la fonctionnalité, et mis en valeur au bureau (définition au survol). `fonctionnalite` accepte
+aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 
 ### `decision`
 

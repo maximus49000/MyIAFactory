@@ -85,7 +85,7 @@ Rends, dans cet ordre :
    à corriger."""
 
 
-def message(factory, fiche, tache, brief_du_role, lecons_memoire):
+def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = []
@@ -106,5 +106,10 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire):
     if m:
         t.append(f"- Modèle : {m['a']} (monté depuis {m['de']} : {m['raison']})")
     parties.append("\n".join(t))
+    if glossaire:   # le vocabulaire déjà défini : l'agent le reprend tel quel, sans le redéfinir
+        parties.append("## Vocabulaire de la fonctionnalité\n"
+                       "Ces mots sont déjà définis : emploie-les dans ce sens et ne les redéfinis pas. Si tu emploies un "
+                       "autre mot spécialisé, donne sa définition avec ton résultat (mot et définition courte).\n"
+                       + "\n".join(f"- {g['mot']} : {g['definition']}" for g in glossaire))
     parties.append(FIN_D_ETAPE)
     return "\n\n".join(parties) + "\n"

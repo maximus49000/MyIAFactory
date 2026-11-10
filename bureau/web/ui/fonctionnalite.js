@@ -184,6 +184,69 @@ function partieDocuments(ctx, f) {
   return bloc;
 }
 
+// --- Le vocabulaire : les mots spécialisés que les agents définissent (`glossaire` d'un message).
+// Le glossaire d'une fonctionnalité : les définitions de tous ses messages ; la dernière d'un mot l'emporte.
+export function glossaireDe(f) {
+  const parMot = new Map();
+  // Les définitions des messages, puis le glossaire gardé par la fonctionnalité (il fait foi).
+  const sources = [...(Array.isArray(f?.discussion) ? f.discussion : []).map((m) => m?.glossaire), f?.glossaire];
+  for (const liste of sources) {
+    for (const g of Array.isArray(liste) ? liste : []) {
+      if (typeof g?.mot !== "string" || !g.mot.trim() || typeof g.definition !== "string") continue;
+      const cle = sansAccentsMinuscules(g.mot.trim());
+      parMot.delete(cle);   // la plus récente prend la place de l'ancienne
+      parMot.set(cle, {mot: g.mot.trim(), definition: g.definition});
+    }
+  }
+  return [...parMot.values()];
+}
+
+function sansAccentsMinuscules(t) {
+  return String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+// Le texte en morceaux : simples, ou un mot du glossaire avec sa définition. Sans casse ni accents, mot entier
+// (le pluriel en -s ou -x compte), le terme le plus long d'abord, sans chevauchement. Le texte reste du texte.
+export function decouperTermes(texte, glossaire) {
+  texte = String(texte ?? "");
+  const termes = (glossaire || []).map((g) => ({cle: sansAccentsMinuscules(g.mot).trim(), definition: g.definition}))
+    .filter((g) => g.cle).sort((a, b) => b.cle.length - a.cle.length);
+  if (!termes.length || !texte) return [{texte}];
+  // Le texte normalisé, et pour chacun de ses caractères la position du caractère d'origine.
+  let plat = "";
+  const origine = [];
+  [...texte].reduce((pos, c) => {
+    const n = sansAccentsMinuscules(c);
+    for (const x of n) { plat += x; origine.push(pos); }
+    return pos + c.length;
+  }, 0);
+  const lettre = (c) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+  const pris = new Array(plat.length).fill(false);
+  const trouves = [];
+  for (const t of termes) {
+    let i = plat.indexOf(t.cle);
+    while (i >= 0) {
+      let fin = i + t.cle.length;
+      if (plat[fin] === "s" || plat[fin] === "x") fin += lettre(plat[fin + 1]) ? 0 : 1;   // un pluriel
+      if (!lettre(plat[i - 1]) && !lettre(plat[fin]) && !pris.slice(i, fin).some(Boolean)) {
+        pris.fill(true, i, fin);
+        trouves.push({debut: origine[i], fin: fin < origine.length ? origine[fin] : texte.length, definition: t.definition});
+      }
+      i = plat.indexOf(t.cle, i + 1);
+    }
+  }
+  trouves.sort((a, b) => a.debut - b.debut);
+  const sortie = [];
+  let pos = 0;
+  for (const x of trouves) {
+    if (x.debut > pos) sortie.push({texte: texte.slice(pos, x.debut)});
+    sortie.push({texte: texte.slice(x.debut, x.fin), definition: x.definition});
+    pos = x.fin;
+  }
+  if (pos < texte.length) sortie.push({texte: texte.slice(pos)});
+  return sortie;
+}
+
 // Les questions à choix qui attendent l'utilisateur : celles du dernier message, s'il vient d'un agent.
 export function questionsEnAttente(f) {
   const d = Array.isArray(f?.discussion) ? f.discussion : [];
@@ -387,14 +450,49 @@ function vignettes(chemins, etat) {
   return zone;
 }
 
-function messageDe(m, etat) {
+// Un texte où les mots du glossaire sont mis en valeur : autre couleur, définition au survol (ou au focus, au
+// clavier et au toucher). Tout reste du texte : la définition est un attribut, montrée par le style.
+// Une seule bulle de définition pour toute la page, placée près du mot et gardée dans la fenêtre (une bulle dans la
+// discussion serait coupée par son défilement).
+let bulle = null;
+function montrerDefinition(mot) {
+  if (!bulle) { bulle = el("div", "bulle-definition"); bulle.setAttribute("role", "tooltip"); document.body.append(bulle); }
+  bulle.textContent = mot.dataset.definition;
+  bulle.hidden = false;
+  const r = mot.getBoundingClientRect(), l = bulle.offsetWidth, h = bulle.offsetHeight;
+  const gauche = Math.max(8, Math.min(r.left, window.innerWidth - l - 8));
+  const haut = r.bottom + 6 + h > window.innerHeight - 8 ? r.top - h - 6 : r.bottom + 6;
+  bulle.style.left = gauche + "px";
+  bulle.style.top = Math.max(8, haut) + "px";
+}
+function cacherDefinition() { if (bulle) bulle.hidden = true; }
+
+function texteAvecTermes(classe, texte, glossaire) {
+  const bloc = el("div", classe);
+  for (const m of decouperTermes(texte, glossaire)) {
+    if (!m.definition) { bloc.append(m.texte); continue; }
+    const t = el("span", "terme", m.texte);
+    t.dataset.definition = m.definition;
+    t.tabIndex = 0;
+    t.setAttribute("aria-label", `${m.texte} : ${m.definition}`);
+    t.addEventListener("mouseenter", () => montrerDefinition(t));
+    t.addEventListener("focus", () => montrerDefinition(t));
+    t.addEventListener("click", () => montrerDefinition(t));   // au toucher
+    t.addEventListener("mouseleave", cacherDefinition);
+    t.addEventListener("blur", cacherDefinition);
+    bloc.append(t);
+  }
+  return bloc;
+}
+
+function messageDe(m, etat, glossaire = []) {
   const li = el("li", "message");
   const utilisateur = m.auteur === "utilisateur";
   li.classList.add(utilisateur ? "message-utilisateur" : "message-agent");
   const qui = utilisateur ? "Vous" : [m.prenom || m.auteur, m.service].filter(Boolean).join(" · ");
   const tete = el("div", "message-tete");
   tete.append(el("strong", "", qui), el("span", "date", m.t ? dateFr(m.t) : ""));
-  li.append(tete, el("div", "message-texte", m.texte));
+  li.append(tete, texteAvecTermes("message-texte", m.texte, glossaire));
   if ((m.images || []).length) li.append(vignettes(m.images, etat));
   return li;
 }
@@ -544,7 +642,8 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   // La discussion, du plus ancien au plus récent, puis les messages envoyés que le relevé n'a pas encore repris.
   const discussion = el("ul", "discussion");
   const messages = f ? f.discussion || [] : [];
-  for (const m of messages) discussion.append(messageDe(m, e));
+  const glossaire = glossaireDe(f);
+  for (const m of messages) discussion.append(messageDe(m, e, glossaire));
   const repris = new Set(messages.filter((m) => m.auteur === "utilisateur").map((m) => m.texte));
   const locaux = f ? (ctx.envoyes.get(f.id) || []).filter((x) => !repris.has(x.texte))
                    : (ctx.nouvelle.envoi ? [ctx.nouvelle.envoi] : []);
@@ -587,7 +686,11 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     blocCahier.append(el("h3", "", "Cahier des charges"));
     if ((f.cahier.maquette || []).length) blocCahier.append(vignettes(f.cahier.maquette, e));
     const etapes = el("ol", "etapes-cahier");
-    for (const t of f.cahier.etapes || []) etapes.append(el("li", "", t));
+    for (const t of f.cahier.etapes || []) {
+      const li = el("li", "");
+      li.append(...texteAvecTermes("", t, glossaire).childNodes);
+      etapes.append(li);
+    }
     blocCahier.append(etapes);
     if (f.cahier.valide_le) blocCahier.append(el("p", "note", "Validé le " + dateFr(f.cahier.valide_le)));
   }

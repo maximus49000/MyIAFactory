@@ -147,6 +147,45 @@ def ranger_documents(donnees, f, chemins, titre=None, **origine):
     return documents
 
 
+def _cle_mot(mot):
+    return " ".join(memoire.normaliser_mot(mot).split())
+
+
+def fusionner_glossaire(ctx, donnees, f, entrees, auteur):
+    """Ajoute des mots au glossaire de la fonctionnalité (un mot déjà défini prend la nouvelle définition, à la fin),
+    puis réécrit son fichier `glossaire.md`, rangé dans ses documents."""
+    glossaire = f.setdefault("glossaire", [])
+    for g in entrees:
+        cle = _cle_mot(g["mot"])
+        glossaire[:] = [x for x in glossaire if _cle_mot(x["mot"]) != cle]
+        glossaire.append({"mot": g["mot"].strip(), "definition": g["definition"].strip(),
+                          **({"ajoute_par": auteur} if auteur else {}), "date": su.maintenant()})
+    chemin = Path(ctx.f["pieces"]) / f["id"] / "glossaire.md"
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    lignes = [f"# Glossaire : {f['nom']}", "",
+              "Les mots spécialisés de la fonctionnalité, définis par les agents (le plus récent fait foi).", ""]
+    for g in sorted(glossaire, key=lambda x: _cle_mot(x["mot"])):
+        lignes.append(f"- **{g['mot']}** : {g['definition']}")
+    chemin.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+    try:
+        relatif = chemin.resolve().relative_to(ctx.f["base"]).as_posix()
+    except ValueError:
+        return
+    ranger_documents(donnees, f, [relatif], "Glossaire")
+
+
+def _glossaire_entree(e, auteur):
+    g = e.get("glossaire")
+    if g is None:
+        return None
+    if auteur == "utilisateur":
+        raise Refus("Seul un agent définit des mots.")
+    probleme = rel.erreur_glossaire(g)
+    if probleme:
+        raise Refus(probleme)
+    return g
+
+
 def documents_complets(f, taches):
     """Les documents rangés, plus ceux qu'un suivi plus ancien n'avait pas rangés : images de la discussion,
     maquettes du cahier, captures des tâches de la fonctionnalité (même origine que s'ils l'avaient été)."""
@@ -426,6 +465,9 @@ def cmd_fonctionnalite(ctx, e):
             if not isinstance(e["catalogue"], bool):
                 raise Refus("« catalogue » doit être vrai ou faux.")
             f["catalogue"] = e["catalogue"]
+        glossaire = _glossaire_entree(e, None)
+        if glossaire:
+            fusionner_glossaire(ctx, s, f, glossaire, None)
         f["maj"] = su.maintenant()
         return _resume_fonc(f)
 
@@ -448,9 +490,13 @@ def cmd_message(ctx, e):
             raise Refus(probleme)
         questions = [{"texte": q["texte"], "choix": list(q["choix"]), **({"multiple": True} if q.get("multiple") else {})}
                      for q in questions]
+    glossaire = _glossaire_entree(e, auteur)
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         m = su.ajouter_message(s, f, auteur, texte(e, "texte", vide_ok=True), images)
+        if glossaire:
+            m["glossaire"] = [{"mot": g["mot"].strip(), "definition": g["definition"].strip()} for g in glossaire]
+            fusionner_glossaire(ctx, s, f, glossaire, auteur)
         if questions:
             m["questions"] = questions
         ranger_documents(s, f, images, agent=auteur, etape=f["etape"])
@@ -800,6 +846,8 @@ def construire_releve(ctx):
         if f["livrable"] and f["livrable"].get("chemin"):
             v["livrable"] = {**f["livrable"], "chemin": chemin(f["livrable"]["chemin"])}
         v["documents"] = [{**d, "chemin": chemin(d["chemin"])} for d in documents_complets(f, s["taches"])]
+        if f.get("glossaire"):
+            v["glossaire"] = [dict(g) for g in f["glossaire"]]
         fonctionnalites.append(v)
 
     lecons = []
@@ -990,7 +1038,9 @@ def cmd_depart(ctx, e):
     if tache_suivie is None:
         raise Refus(f"Tâche inconnue : {i}")
     lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], fiche_agent["role"])
-    return {"message": depart.message(ctx.f, fiche_agent, tache_suivie, depart.brief(ctx.f, fiche_agent["role"]), lecons)}
+    fonc = su.fonctionnalite(ctx.suivi.lire(), tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
+    return {"message": depart.message(ctx.f, fiche_agent, tache_suivie, depart.brief(ctx.f, fiche_agent["role"]), lecons,
+                                      (fonc or {}).get("glossaire") or [])}
 
 
 COMMANDES = {

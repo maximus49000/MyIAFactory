@@ -854,6 +854,17 @@ class TestVersion4(unittest.TestCase):
                 self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="Q", questions=mauvais)])]),
                            "questions")
 
+    def test_glossaire(self):
+        g = [{"mot": "Tesselle", "definition": "Petit cube de mosaïque."}]
+        ok = v4(fonctionnalites=[fonc(glossaire=g, discussion=[msg(id="m2", auteur="d1", texte="x", glossaire=g)])])
+        self.assertEqual(releve.valider(ok), [])
+        for mauvais in ("x", [{"mot": "", "definition": "d"}], [{"mot": "m"}], [{"mot": "m" * 61, "definition": "d"}],
+                        [{"mot": "m", "definition": "d" * 401}], [{"mot": "m", "definition": "d"}] * 501):
+            with self.subTest(str(mauvais)[:40]):
+                self.refus(v4(fonctionnalites=[fonc(glossaire=mauvais)]), "glossaire")
+        self.refus(v4(fonctionnalites=[fonc(discussion=[msg(id="m2", auteur="d1", texte="x",
+                                                            glossaire=[{"mot": "m"}])])]), "glossaire")
+
     def test_tache_lignes(self):
         r = v4()
         r["taches"][0]["lignes"] = 120

@@ -153,6 +153,38 @@ class TestSuivi(AvecProjet):
             entree = {"fonctionnalite": f, "texte": "x", **mauvais}
             self.assertEqual(self.outil("message", entree=entree)[0], 1, mauvais)
 
+    def test_glossaire_de_la_fonctionnalite(self):
+        # Les mots définis par les agents sont gardés par la fonctionnalité (une seule fois), écrits dans
+        # glossaire.md (rangé dans ses documents), donnés par `etat` et dans le message de départ des agents.
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Des tesselles.",
+                                   "glossaire": [{"mot": "Tesselle", "definition": "Petit cube de mosaïque."},
+                                                 {"mot": "Smalt", "definition": "Verre coloré."}]})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Précision.",
+                                   "glossaire": [{"mot": "tesselle", "definition": "Petit cube de pierre ou de verre."}]})
+        self.ok("fonctionnalite", entree={"id": f, "glossaire": [{"mot": "Or byzantin", "definition": "Fond doré."}]})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        g = r["fonctionnalites"][0]["glossaire"]
+        self.assertEqual([x["mot"] for x in g], ["Smalt", "tesselle", "Or byzantin"])
+        self.assertEqual(g[1]["definition"], "Petit cube de pierre ou de verre.")
+        self.assertEqual(g[1]["ajoute_par"], "metier-1")
+        fichier = self.dossier / "pieces" / f / "glossaire.md"
+        texte = fichier.read_text(encoding="utf-8")
+        self.assertIn("**tesselle**", texte)
+        self.assertIn("Petit cube de pierre ou de verre.", texte)
+        self.assertNotIn("Petit cube de mosaïque.", texte)
+        self.assertIn(f"pieces/{f}/glossaire.md", [d["chemin"] for d in r["fonctionnalites"][0]["documents"]])
+        self.assertEqual(len(self.ok("etat")["fonctionnalites"][0]["glossaire"]), 3)
+        t = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": f, "agent": "dev-1", "colonne": "dev"})
+        depart = self.ok("depart", entree={"agent": "dev-1", "tache": t["id"]})["message"]
+        self.assertIn("Vocabulaire de la fonctionnalité", depart)
+        self.assertIn("Smalt : Verre coloré.", depart)
+        for mauvais in ({"auteur": "utilisateur", "glossaire": [{"mot": "a", "definition": "b"}]},
+                        {"auteur": "metier-1", "glossaire": [{"mot": "a"}]}):
+            self.assertEqual(self.outil("message", entree={"fonctionnalite": f, "texte": "x", **mauvais})[0], 1, mauvais)
+
     def test_tache_lignes_produites(self):
         t = self.ok("tache", entree={"titre": "Dev", "colonne": "dev", "lignes": 85})
         self.assertEqual(next(x for x in self.releve()["taches"] if x["id"] == t["id"])["lignes"], 85)

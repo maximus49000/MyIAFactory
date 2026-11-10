@@ -158,3 +158,22 @@ test("reponseComposee : « Autre » et sa valeur libre", async () => {
   // « Autre » ouvert mais vide : il faut le préciser.
   assert.match(reponseComposee(q, {0: {choix: [], autre: "  "}, 1: {choix: ["Clair"]}}, "").erreur, /Autre/);
 });
+
+test("decouperTermes : les mots du glossaire, sans casse ni accents, mots entiers, le plus long d'abord", async () => {
+  const {decouperTermes, glossaireDe} = await import("../ui/fonctionnalite.js");
+  const g = [{mot: "tesselle", definition: "Petit cube de mosaïque."},
+             {mot: "or byzantin", definition: "Fond doré des mosaïques."},
+             {mot: "or", definition: "Métal jaune."}];
+  assert.deepEqual(decouperTermes("Des Tesselles sur fond d'OR BYZANTIN, et de l'or.", g), [
+    {texte: "Des "}, {texte: "Tesselles", definition: "Petit cube de mosaïque."}, {texte: " sur fond d'"},
+    {texte: "OR BYZANTIN", definition: "Fond doré des mosaïques."}, {texte: ", et de l'"},
+    {texte: "or", definition: "Métal jaune."}, {texte: "."}]);
+  assert.deepEqual(decouperTermes("La tessellation dorée", g), [{texte: "La tessellation dorée"}]);   // pas dans un mot
+  assert.deepEqual(decouperTermes("Une tésselle", g), [{texte: "Une "}, {texte: "tésselle", definition: "Petit cube de mosaïque."}]);
+  assert.deepEqual(decouperTermes("Rien", []), [{texte: "Rien"}]);
+  assert.deepEqual(decouperTermes("<b>tesselle</b>", g),
+    [{texte: "<b>"}, {texte: "tesselle", definition: "Petit cube de mosaïque."}, {texte: "</b>"}]);   // texte brut
+  // Le glossaire d'une fonctionnalité : tous ses messages ; la dernière définition d'un mot l'emporte.
+  const f = {discussion: [{glossaire: [{mot: "Tesselle", definition: "A"}]}, {}, {glossaire: [{mot: "tesselle", definition: "B"}, {mot: "Smalt", definition: "C"}]}]};
+  assert.deepEqual(glossaireDe(f), [{mot: "tesselle", definition: "B"}, {mot: "Smalt", definition: "C"}]);
+});

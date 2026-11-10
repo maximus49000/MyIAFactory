@@ -662,3 +662,12 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .questions-conseil { margin: 2px 0; color: #9a5b12; min-height: 1em; }
 .choix-autre { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 5px 9px;
   border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+
+/* Les mots du glossaire : une autre couleur, la définition au survol (ou au focus). */
+.terme { position: relative; color: #1f6f8b; font-weight: 700; text-decoration: underline dotted; text-underline-offset: 3px;
+  cursor: help; outline: none; }
+.bulle-definition { position: fixed; z-index: 120; max-width: 280px; padding: 7px 10px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.4; color: #fff; background: #3d3a4b; box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+  pointer-events: none; }
+.bulle-definition[hidden] { display: none; }
+.terme:focus-visible { box-shadow: 0 0 0 2px #1f6f8b; border-radius: 3px; }

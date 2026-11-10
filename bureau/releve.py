@@ -252,7 +252,7 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
                 if champ == "retours" and not _texte_ou_nul(e.get("etat")):
                     erreurs.append(f"Tâche « {i} » : « retours » : « etat » doit être un texte.")
         for e in _liste_facultative(t.get("notes"), f"Tâche « {i} » : « notes »", erreurs):
-            if not _texte(e.get("libelle")) or not e.get("libelle") or not _texte(e.get("texte"))                     or not e.get("texte"):
+            if not (_texte(e.get("libelle")) and e.get("libelle")) or not (_texte(e.get("texte")) and e.get("texte")):
                 erreurs.append(f"Tâche « {i} » : « notes » : chaque note a un « libelle » et un « texte » "
                                "(textes non vides).")
         images = _liste_facultative(t.get("images"), f"Tâche « {i} » : « images »", erreurs)

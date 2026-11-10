@@ -90,6 +90,27 @@ class TestDemoActions(unittest.TestCase):
         t = next(t for t in r["taches"] if t["id"] == q["id"])
         self.assertEqual(t["titre"], q["id"])
 
+    def _avec_suite(self):
+        r = self.lire()
+        r["file"] = {"visibles": [{"id": "v1", "titre": "V1"}], "reste": 3,
+                     "suite": [{"id": "s1", "titre": "S1"}, {"id": "s2", "titre": "S2"}]}
+        self.fichier.write_text(json.dumps(r, ensure_ascii=False), encoding="utf-8")
+
+    def test_deplacement_d_un_element_de_la_suite(self):
+        self._avec_suite()
+        r, _ = self.lancer({"type": "deplacer", "tache": "s2", "colonne": "encours"})
+        self.assertEqual(next(t for t in r["taches"] if t["id"] == "s2")["colonne"], "encours")
+        self.assertEqual([q["id"] for q in r["file"]["suite"]], ["s1"])
+        self.assertEqual([q["id"] for q in r["file"]["visibles"]], ["v1"])
+        self.assertEqual(r["file"]["reste"], 2)
+
+    def test_deplacement_d_un_element_visible_fait_monter_la_suite(self):
+        self._avec_suite()
+        r, _ = self.lancer({"type": "deplacer", "tache": "v1", "colonne": "encours"})
+        self.assertEqual([q["id"] for q in r["file"]["visibles"]], ["s1"])
+        self.assertEqual([q["id"] for q in r["file"]["suite"]], ["s2"])
+        self.assertEqual(r["file"]["reste"], 2)
+
     def test_retour(self):
         r, _ = self.lancer({"type": "retour", "tache": "t2", "texte": "Peux-tu préciser ?"})
         retours = next(t for t in r["taches"] if t["id"] == "t2")["retours"]

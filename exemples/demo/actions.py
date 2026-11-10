@@ -66,13 +66,20 @@ def deplacer(r, d):
     tache = next((t for t in r["taches"] if t["id"] == d.get("tache")), None)
     if tache is None:
         file = r.get("file", {})
-        q = next((q for q in file.get("visibles", []) if q["id"] == d.get("tache")), None)
+        visibles, suite = file.get("visibles", []), file.get("suite", [])
+        q = next((q for q in visibles + suite if q["id"] == d.get("tache")), None)
         if q is None:
             refuser("Tâche inconnue : " + str(d.get("tache")))
-        file["visibles"] = [x for x in file["visibles"] if x["id"] != q["id"]]
-        if file.get("reste", 0) > 0:  # un élément de plus devient visible
+        file["visibles"] = [x for x in visibles if x["id"] != q["id"]]
+        if suite:
+            file["suite"] = [x for x in suite if x["id"] != q["id"]]
+        if file.get("reste", 0) > 0:
             file["reste"] -= 1
-            file["visibles"].append({"id": q["id"] + "-suite", "titre": "Élément suivant de la file"})
+        if q in visibles:  # un élément de plus devient visible
+            if file.get("suite"):
+                file["visibles"].append(file["suite"].pop(0))
+            elif file.get("reste", 0) > 0:
+                file["visibles"].append({"id": q["id"] + "-suite", "titre": "Élément suivant de la file"})
         tache = {"id": q["id"], "titre": q.get("titre") or q["id"], "titulaire": None, "postit": True, "etape": "", "active": True}
         r["taches"].append(tache)
     tache["colonne"] = d["colonne"]

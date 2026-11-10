@@ -72,7 +72,7 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 6. Le sélecteur de projets et la barre
 - [x] 7. Le panneau d'une fonctionnalité et sa discussion
 - [x] 8. Le Directeur enrichi et la montée de modèle
-- [ ] 9. Le catalogue d'une fonctionnalité
+- [x] 9. Le catalogue d'une fonctionnalité
 - [ ] 10. Le fichier de factory, l'interface et le suivi générique
 - [ ] 11. La mémoire à trois étages et les leçons
 - [ ] 12. Le départ d'un agent, le choix du modèle, le vérificateur d'interface

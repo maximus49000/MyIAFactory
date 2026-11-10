@@ -443,3 +443,168 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .decision-texte { overflow-wrap: anywhere; }
 .decision-genre input, .decision-genre textarea, .decision-session input { box-sizing: border-box; display: block; width: 100%; margin: 4px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .decision-session .bouton, .decision-genre .bouton { margin-top: 4px; }
+
+/* --- Catalogue d'une fonctionnalité : fiches à plaque émaillée sur papier, carte vue de haut, filtres ardoise --- */
+body.panneau-catalogue { --largeur-panneau: 620px; }
+body.panneau-grand .panneau { width: 100vw; }
+body.panneau-grand #scene { right: 0; }
+.panneau .catalogue {
+  --cat-pierre: #f3efe6; --cat-papier: #fbf9f4; --cat-encre: #2a2d33; --cat-discret: #6b6f78;
+  --cat-ardoise: #3a4656; --cat-email: #1f3a6b; --cat-email-encre: #f5f3ec; --cat-trait: #ddd6c8;
+  --cat-ok: #2f6b45; --cat-a-faire: #9a5b12; --cat-doute: #7a2f4d; --cat-autre: #5d6f8a;
+  --cat-titre: "Alegreya Sans SC", "Gill Sans", "Gill Sans MT", "Trebuchet MS", sans-serif;
+  --cat-corps: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --cat-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  margin: -16px -18px -24px; padding: 16px 18px 24px; min-height: 100%;
+  background: var(--cat-pierre); color: var(--cat-encre); font: 14px/1.5 var(--cat-corps);
+  display: grid; gap: 16px; align-content: start;
+}
+body.panneau-grand .panneau .catalogue { padding-inline: max(18px, calc((100vw - 1180px) / 2)); }
+.catalogue h2, .catalogue h3, .catalogue h4 { font-family: var(--cat-titre); color: var(--cat-ardoise); letter-spacing: .02em; margin: 0; }
+.catalogue h2 { font-size: 1.5rem; }
+.catalogue h3 { font-size: 1.2rem; margin-bottom: 4px; }
+.catalogue h4 { font-size: 1rem; margin: 8px 0 2px; }
+.cat-tete { display: grid; gap: 8px; }
+.cat-outils, .cat-filtres, .cat-outils-carte { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cat-bouton, .cat-filtre {
+  padding: 6px 11px; border: 1px solid var(--cat-trait); border-radius: 4px; cursor: pointer;
+  background: var(--cat-papier); color: var(--cat-encre); font: 600 .82rem var(--cat-corps);
+}
+.cat-bouton:disabled { opacity: .5; cursor: default; }
+.cat-bouton.principal { border-color: var(--cat-email); background: var(--cat-email); color: var(--cat-email-encre); }
+.cat-filtre[aria-pressed="true"] { background: var(--cat-ardoise); border-color: var(--cat-ardoise); color: var(--cat-papier); }
+.cat-groupes .cat-filtre[aria-pressed="true"] { background: var(--cat-email); border-color: var(--cat-email); color: var(--cat-email-encre); }
+.cat-filtre .n { font: .74rem var(--cat-mono); opacity: .8; }
+.catalogue button:focus-visible, .catalogue input:focus-visible, .catalogue a:focus-visible,
+.catalogue textarea:focus-visible { outline: 2px solid var(--cat-email); outline-offset: 2px; }
+.cat-filtres input[type="search"] {
+  flex: 1 1 200px; min-width: 0; padding: 7px 10px; border: 1px solid var(--cat-trait); border-radius: 4px;
+  background: var(--cat-papier); color: var(--cat-encre); font: inherit;
+}
+.cat-discret { margin: 0; color: var(--cat-discret); font-size: .85rem; }
+.cat-erreur { margin: 0; color: var(--cat-doute); }
+.cat-avertissements { font-size: .82rem; color: var(--cat-discret); }
+.cat-avertissements ul { margin: 4px 0 0; padding-left: 18px; overflow-wrap: anywhere; }
+.cat-compteurs { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; color: var(--cat-discret); font-variant-numeric: tabular-nums; }
+.cat-compteurs b { color: var(--cat-encre); font-size: 1.1rem; }
+.cat-section { display: grid; gap: 6px; }
+.catalogue summary { cursor: pointer; font-size: .85rem; color: var(--cat-email); }
+.cat-passes, .cat-lecons, .cat-demandes { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.cat-passes li, .cat-lecons li, .cat-demandes li { font-size: .88rem; overflow-wrap: anywhere; }
+.cat-demandes p, .cat-lecons div { margin: 2px 0 0; white-space: pre-wrap; }
+.cat-reponse { color: var(--cat-ok); }
+.cat-local { opacity: .75; }
+.cat-quand { color: var(--cat-discret); font-size: .8rem; }
+.cat-lien { all: unset; color: var(--cat-email); text-decoration: underline; cursor: pointer; overflow-wrap: anywhere; }
+.cat-lien:focus-visible { outline: 2px solid var(--cat-email); }
+
+/* La vue de haut. */
+.cat-carte {
+  position: relative; height: min(56vh, 520px); border: 1px solid var(--cat-trait); border-radius: 6px;
+  background: var(--cat-papier); overflow: hidden; touch-action: none;
+}
+.cat-carte canvas { display: block; cursor: grab; }
+.cat-carte canvas.glisse { cursor: grabbing; }
+.cat-apercu {
+  position: absolute; z-index: 2; max-width: 70%; pointer-events: none; padding: 5px 8px; font-size: .8rem;
+  background: var(--cat-papier); border: 1px solid var(--cat-trait); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+}
+.cat-outils-carte .cat-bouton { min-width: 34px; }
+.cat-legende { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .8rem; color: var(--cat-discret); }
+.cat-pastille { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.cat-pastille.ok { background: var(--cat-ok); } .cat-pastille.a-faire { background: var(--cat-a-faire); }
+.cat-pastille.doute { background: var(--cat-doute); } .cat-pastille.autre { background: var(--cat-autre); }
+.cat-pastille.trace { border-radius: 0; width: 18px; height: 3px; vertical-align: 3px; background: var(--cat-ardoise); }
+
+/* La liste : une carte par élément. */
+.cat-pages { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }
+.cat-pages .cat-discret { margin-right: auto; }
+.cat-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.cat-carte-element, .cat-fiche, .cat-kit-element {
+  background: var(--cat-papier); border: 1px solid var(--cat-trait); border-radius: 6px; overflow: hidden; min-width: 0;
+}
+.cat-ouvrir { all: unset; display: flex; padding: 10px 12px 8px; cursor: pointer; max-width: 100%; box-sizing: border-box; }
+.cat-ouvrir:focus-visible { outline: 2px solid var(--cat-email); outline-offset: -2px; }
+.catalogue .cat-plaque {
+  display: inline-block; justify-self: start; margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 700 .98rem var(--cat-titre); letter-spacing: .05em; color: var(--cat-email-encre); background: var(--cat-email);
+  padding: 3px 12px; border-radius: 3px; box-shadow: inset 0 0 0 2px var(--cat-email-encre), 0 0 0 1px var(--cat-email);
+}
+.catalogue .cat-fiche > .cat-plaque { margin: 12px 14px 0; white-space: normal; font-size: 1.05rem; }
+.cat-retour { justify-self: start; }
+.cat-figure { position: relative; margin: 0; aspect-ratio: 3 / 2; background: var(--cat-trait); cursor: zoom-in; }
+.cat-principale { cursor: default; }
+.cat-figure img, .cat-calque img, .cat-evo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cat-sans-image { height: 100%; display: grid; place-items: center; color: var(--cat-discret); font-family: var(--cat-titre); letter-spacing: .06em; font-size: .85rem; }
+.cat-badge {
+  position: absolute; left: 8px; bottom: 8px; padding: 2px 7px; border-radius: 3px;
+  font: 600 .72rem var(--cat-mono); background: var(--cat-ardoise); color: var(--cat-papier);
+}
+.cat-corps { padding: 10px 14px 12px; display: grid; gap: 6px; min-width: 0; }
+.cat-meta { margin: 0; font-size: .8rem; color: var(--cat-discret); overflow-wrap: anywhere; padding: 0 14px; }
+.cat-carte-element .cat-meta { padding: 0; }
+.cat-meta code, .catalogue code { font: .76rem var(--cat-mono); overflow-wrap: anywhere; }
+.cat-etat { font-weight: 600; }
+.cat-etat.ok { color: var(--cat-ok); } .cat-etat.a-faire { color: var(--cat-a-faire); }
+.cat-etat.doute { color: var(--cat-doute); } .cat-etat.autre { color: var(--cat-autre); }
+.cat-passe { font: 600 .7rem var(--cat-mono); padding: 1px 6px; border-radius: 3px; background: var(--cat-ardoise); color: var(--cat-papier); white-space: nowrap; }
+.cat-note { margin: 0; font-size: .88rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cat-evenement { margin: 0; font-size: .84rem; color: var(--cat-doute); }
+.cat-doute { margin: 0; font-size: .84rem; color: var(--cat-doute); border-left: 3px solid var(--cat-doute); padding-left: 8px; }
+.cat-doute p { margin: 2px 0 0; }
+.cat-reevaluer { margin: 0; font-size: .8rem; font-weight: 600; color: var(--cat-a-faire); }
+.cat-connaissance { font-size: .84rem; color: var(--cat-discret); }
+.cat-connaissance p { margin: 0 0 4px; } .cat-connaissance b { color: var(--cat-encre); }
+.cat-connaissance.a-reevaluer b { color: var(--cat-a-faire); }
+.cat-puces { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
+.cat-puce { font-size: .74rem; padding: 2px 8px; border: 1px solid var(--cat-trait); border-radius: 999px; color: var(--cat-ardoise); overflow-wrap: anywhere; }
+.cat-caracs { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; font-size: .84rem; }
+.cat-caracs dt { color: var(--cat-discret); } .cat-caracs dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.cat-echantillon { display: inline-block; width: .9em; height: .9em; border: 1px solid var(--cat-trait); vertical-align: -1px; margin-right: 5px; }
+.cat-liens { margin: 0; font-size: .85rem; overflow-wrap: anywhere; }
+.catalogue a { color: var(--cat-email); }
+.cat-fiche { display: grid; gap: 8px; }
+.cat-fiche > .cat-section, .cat-fiche > .cat-demander, .cat-fiche > .cat-comparaison, .cat-fiche > .cat-evolution { margin: 0 14px; }
+.cat-fiche > .cat-demander { margin-bottom: 14px; }
+.cat-evo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 6px; }
+.cat-evo figure { margin: 0; display: grid; gap: 4px; }
+.cat-evo img { aspect-ratio: 3 / 2; height: auto; border: 1px solid var(--cat-trait); border-radius: 4px; }
+.cat-evo figcaption { font-size: .8rem; color: var(--cat-discret); }
+
+/* La comparaison « Produit » / « Réel ». */
+.cat-angles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.cat-angles .cat-filtre { padding: 2px 8px; font: 600 .74rem var(--cat-mono); }
+.cat-compare { --pos: 50%; position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--cat-trait); border-radius: 4px; }
+.cat-calque { position: absolute; inset: 0; }
+.cat-calque.produit { clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+.cat-compare:has(input)::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; pointer-events: none;
+  background: var(--cat-papier); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.cat-compare input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.cat-etiquette {
+  position: absolute; top: 6px; padding: 2px 6px; border-radius: 3px; pointer-events: none;
+  font: 600 .72rem var(--cat-mono); background: var(--cat-ardoise); color: var(--cat-papier);
+}
+.cat-etiquette.gauche { left: 6px; } .cat-etiquette.droite { right: 6px; }
+.cat-credit { margin: 4px 0 0; font-size: .74rem; color: var(--cat-discret); overflow-wrap: anywhere; }
+.cat-credit a { color: inherit; }
+
+/* « Demander à modifier ». */
+.cat-formulaire { display: grid; gap: 6px; }
+.cat-formulaire[hidden] { display: none; }
+.cat-formulaire textarea {
+  width: 100%; min-height: 7em; padding: 8px; border: 1px solid var(--cat-trait); border-radius: 4px; resize: vertical;
+  background: var(--cat-papier); color: var(--cat-encre); font: inherit;
+}
+.cat-compte { font: .74rem var(--cat-mono); color: var(--cat-discret); }
+.cat-rangee { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* Le kit. */
+.cat-kit { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.cat-kit-element { padding: 10px 12px; }
+.cat-kit-element h4 { margin: 0 0 4px; display: flex; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; }
+.cat-kit-element p { margin: 0 0 6px; font-size: .86rem; }
+.cat-nombre { font: 600 .92rem var(--cat-mono); color: var(--cat-encre); font-variant-numeric: tabular-nums; }
+.cat-utilisateurs { color: var(--cat-discret); margin-top: 6px; }

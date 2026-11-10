@@ -108,15 +108,18 @@ export function creerBarre(entete, bandeau) {
     }
   }
 
-  // « Dernier livrable » : un lien direct, ou un petit menu s'il y en a plusieurs.
+  // « Dernier livrable » : un lien direct, ou un petit menu s'il y en a plusieurs ;
+  // le catalogue de chaque fonctionnalité qui en a un s'y ajoute (il s'ouvre dans le panneau de droite).
   let signatureLivrables = "";
+  let ouvrirCatalogue = null;
   function majLivrables(etat) {
     const liste = livrables(etat, projetCourant());
-    const signature = JSON.stringify(liste);
+    const cats = ouvrirCatalogue ? (etat.fonctionnalites || []).filter((f) => f?.catalogue === true) : [];
+    const signature = JSON.stringify([liste, cats.map((f) => [f.id, f.nom])]);
     if (signature === signatureLivrables) return;
     signatureLivrables = signature;
     zoneLivrable.replaceChildren();
-    zoneLivrable.hidden = liste.length === 0;
+    zoneLivrable.hidden = liste.length + cats.length === 0;
     const lien = (l, classe, texte) => {
       const a = el("a", classe, texte);
       a.href = l.url;
@@ -124,15 +127,28 @@ export function creerBarre(entete, bandeau) {
       a.rel = "noopener";
       return a;
     };
-    if (liste.length === 1) {
+    const catalogue = (f, classe, texte) => {
+      const b = el("button", classe, texte);
+      b.type = "button";
+      b.addEventListener("click", () => { b.closest("details")?.removeAttribute("open"); ouvrirCatalogue(f.id); });
+      return b;
+    };
+    if (liste.length === 1 && !cats.length) {
       zoneLivrable.append(lien(liste[0], "bouton-barre", "Dernier livrable"));
-    } else if (liste.length > 1) {
+    } else if (cats.length === 1 && !liste.length) {
+      zoneLivrable.append(catalogue(cats[0], "bouton-barre", "Catalogue"));
+    } else if (liste.length + cats.length > 1) {
       const details = el("details", "menu-livrables");
       details.append(el("summary", "bouton-barre", "Dernier livrable"));
       const ul = el("ul", "liste-partie");
       for (const l of liste) {
         const li = el("li", "");
         li.append(lien(l, "lien-tache", l.libelle + (l.date ? " · " + dateFr(l.date) : "")));
+        ul.append(li);
+      }
+      for (const f of cats) {
+        const li = el("li", "");
+        li.append(catalogue(f, "lien-tache", "Catalogue · " + f.nom));
         ul.append(li);
       }
       details.append(ul);
@@ -233,6 +249,8 @@ export function creerBarre(entete, bandeau) {
     boutonListe,
     boutonNouvelle,
     boutonFonctions,
+    // Le panneau donne de quoi ouvrir un catalogue ; la barre l'offre alors avec les livrables.
+    surCatalogue(fn) { ouvrirCatalogue = fn; signatureLivrables = ""; },
     majProjets,
     majActions,
     demander,

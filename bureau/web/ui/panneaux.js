@@ -9,6 +9,7 @@ import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.
 import {contenuDossier} from "./dossier.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
+import {contenuCatalogue} from "./catalogue.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
@@ -23,6 +24,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   const envois = new Set();      // saisies dont l'envoi est en cours (un double clic ne crée qu'une demande)
   const envoyes = new Map();     // fonctionnalité -> messages envoyés que le relevé n'a pas encore repris
   const nouvelle = {envoi: null};  // la discussion neuve : {avant, texte, images} une fois le premier message parti
+  const catalogues = new Map();      // fonctionnalité -> {statut, cat, avertissements, erreur, lu} (lu à l'ouverture)
+  const vuesCatalogue = new Map();   // fonctionnalité -> filtres, page, fiche ouverte, zoom de la vue de haut
+  const retoursEnvoyes = new Map();  // fonctionnalité + élément -> retours envoyés que le catalogue n'a pas repris
+  let grand = false;                 // le catalogue en plein écran (« Agrandir », Échap pour revenir)
 
   const signature = (type, id, e) => {
     if (type === "service") {
@@ -42,6 +47,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte]);
     }
     if (type === "fonctionnalites") return JSON.stringify([e.fonctionnalites, e.agir]);
+    if (type === "catalogue") {
+      const f = (e.fonctionnalites || []).find((x) => x.id === id);
+      return JSON.stringify([f?.nom, f?.catalogue, e.agir, e.images_ok]);
+    }
     if (type === "liste") {
       return JSON.stringify([(e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.maj, t.type, t.active]),
         e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
@@ -117,7 +126,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     panneauOuvert = null;
     panneau.hidden = true;
     panneau.replaceChildren();
-    document.body.classList.remove("panneau-ouvert");
+    grand = false;
+    document.body.classList.remove("panneau-ouvert", "panneau-catalogue", "panneau-grand");
     surFiltre();
   }
 
@@ -125,6 +135,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     etat: etat(), barre, brouillons, filtreListe, retourListe, envois, envoyes, nouvelle,
     rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
+    ouvrirCatalogue: (id) => ouvrirPanneau("catalogue", id),
+    catalogues, vuesCatalogue, retoursEnvoyes,
+    grand: () => grand,
+    basculerGrand: () => { grand = !grand; if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirNouvelle: () => ouvrirPanneau("fonctionnalite", null),
     ouvrirListe: () => ouvrirPanneau("liste", null),
     ouvrirAttente: () => ouvrirPanneau("attente", null),
@@ -174,6 +188,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       contenuFonctionnalite(contexte(), contenu, f);
     } else if (type === "fonctionnalites") {
       contenuFonctionnalites(contexte(), contenu);
+    } else if (type === "catalogue") {
+      const f = (e.fonctionnalites || []).find((x) => x.id === id);
+      if (!f || f.catalogue !== true) { fermerPanneau(); return; }
+      contenuCatalogue(contexte(), contenu, f);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id);
       if (!a) { fermerPanneau(); return; }
@@ -186,7 +204,10 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
 
     panneau.replaceChildren(fermer, contenu);
     panneau.hidden = false;
+    if (type !== "catalogue") grand = false;
     document.body.classList.add("panneau-ouvert");
+    document.body.classList.toggle("panneau-catalogue", type === "catalogue");
+    document.body.classList.toggle("panneau-grand", type === "catalogue" && grand);
     if (surSaisie) {
       const zone = panneau.querySelector("textarea[data-saisie]");
       if (zone) { zone.focus(); zone.setSelectionRange(debut, debut); }
@@ -271,6 +292,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   // --- Boutons de la barre : « + Nouvelle fonctionnalité » et « Fonctionnalités ».
   barre.boutonNouvelle.addEventListener("click", () => { nouvelle.envoi = null; ouvrirPanneau("fonctionnalite", null); });
   barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
+  barre.surCatalogue((id) => ouvrirPanneau("catalogue", id));
 
   // --- Souris.
   let attente = null;
@@ -301,6 +323,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     cacherCarte();
+    if (grand && panneauOuvert?.type === "catalogue") { grand = false; ouvrirPanneau("catalogue", panneauOuvert.id); return; }
     fermerPanneau();
   });
 
@@ -325,7 +348,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         && document.activeElement?.dataset?.saisie === "1";   // la saisie se redessine en gardant le curseur
       if (panneauOuvert && (saisieOuverte || !panneau.contains(document.activeElement))) {
         const {type, id} = panneauOuvert;
-        if (type === "fonctionnalite" && id !== null && !(e.fonctionnalites || []).some((f) => f.id === id)) fermerPanneau();
+        if ((type === "fonctionnalite" || type === "catalogue") && id !== null
+            && !(e.fonctionnalites || []).some((f) => f.id === id)) fermerPanneau();
         else if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
         else if (type === "agent" && !(e.agents || []).some((a) => a.id === id)) fermerPanneau();
         else if (type === "tache" && !(e.taches || []).some((t) => t.id === id)) fermerPanneau();

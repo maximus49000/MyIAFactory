@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {creerPlan} from "../logique/plan.js";
+import {creerPlan, PAS_TABLEAU, JEU_TABLEAU} from "../logique/plan.js";
 import {COLS} from "./donnees.js";
 
 const NOMS = ["Métier", "Dev", "QA", "Intégration", "Facturation", "Support"];
@@ -114,5 +114,17 @@ test("post-its : une case par colonne et par rang, rang plafonné", () => {
   for (let i = 0; i < COLS.length; i++) {
     const q = p.postit(i, 0);
     assert.ok(q.u > 0 && q.u < p.kanban.largeur);
+  }
+});
+
+test("le tableau est fait de panneaux entiers et tient dans l'open space", () => {
+  for (const nc of [1, 3, 4, 5, 6]) {
+    const cols = Array.from({length: nc}, (_, i) => ({id: "c" + i, nom: "C" + i}));
+    for (const n of [1, 3, 6]) {
+      const p = creerPlan(Array.from({length: n}, (_, i) => ({id: "s" + i, nom: "S" + i})), cols);
+      assert.ok(p.kanban.panneaux >= 1);
+      assert.ok(Math.abs(p.kanban.largeur - (p.kanban.panneaux * PAS_TABLEAU - JEU_TABLEAU)) < 1e-9);
+      assert.ok(dans(p.kanban, p.openspace, 0.5));
+    }
   }
 });

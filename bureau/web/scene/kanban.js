@@ -2,10 +2,12 @@
 // Le tableau montre `regie.postits`, qui est en retard sur l'état tant qu'un agent n'a pas posé le post-it.
 
 import * as THREE from "three";
+import {PAS_TABLEAU, JEU_TABLEAU} from "../logique/plan.js";
 
 const COULEURS = ["#ffe27a", "#ffb3b0", "#c8f0b4", "#a8e4f0", "#ffd3a1", "#cbbcff"];
 const PALE = "#f2ede2";
-const HAUT = 2.0;                  // hauteur du bord supérieur de la surface utile
+const HAUT = 2.04;                 // hauteur du bord supérieur de la surface utile (modèle Tripo : tableau 2,2 m de haut)
+const DEVANT = 0.05;               // la surface se pose juste devant la face blanche du modèle
 const POSTIT = {l: 0.22, h: 0.19, e: 0.014};
 
 function hachage(texte) {
@@ -37,11 +39,20 @@ export class Kanban {
     this.groupe = new THREE.Group();
     this.groupe.position.set(k.x, 0, k.z);
     this.groupe.rotation.y = k.cap;
-    this.groupe.add(modeles.creer("tableau", {largeur: k.largeur}));
+    if (modeles.aModele("tableau")) {
+      // Un panneau (modèle de tableau sur pieds) tous les PAS_TABLEAU mètres.
+      for (let i = 0; i < k.panneaux; i++) {
+        const t = modeles.creer("tableau");
+        t.position.x = -k.largeur / 2 - JEU_TABLEAU / 2 + PAS_TABLEAU * (i + 0.5);
+        this.groupe.add(t);
+      }
+    } else {
+      this.groupe.add(modeles.creer("tableau", {largeur: k.largeur}));
+    }
     sc.scene.add(this.groupe);
 
     this.surface = new THREE.Mesh(new THREE.PlaneGeometry(k.largeur, k.hauteur), new THREE.MeshLambertMaterial({color: "#ffffff"}));
-    this.surface.position.set(0, HAUT - k.hauteur / 2, 0.0);
+    this.surface.position.set(0, HAUT - k.hauteur / 2, DEVANT);
     this.surface.receiveShadow = true;
     this.groupe.add(this.surface);
 
@@ -134,7 +145,7 @@ export class Kanban {
     for (const c of cases) {
       vus.add(c.cle);
       const pos = this.plan.postit(c.colonne, c.rang);
-      const cible = new THREE.Vector3(pos.u - this.k.largeur / 2, HAUT - pos.v, POSTIT.e / 2 + 0.004);
+      const cible = new THREE.Vector3(pos.u - this.k.largeur / 2, HAUT - pos.v, DEVANT + POSTIT.e / 2 + 0.004);
       let e = this.postits.get(c.cle);
       if (e && c.type === "plus" && e.texte !== c.texte) { this._retirer(c.cle, e); e = null; }
       if (!e) {

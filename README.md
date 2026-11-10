@@ -33,10 +33,10 @@ Projet 1, le bureau vivant :
 - [x] 8. La scène 3D en volumes simples
 - [x] 9. L'interface : voyant, barre de charge, cartes, panneaux
 - [x] 10. Le mode d'emploi
-- [ ] 11. Le mobilier (modèles Tripo)
+- [x] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : phases A et B faites (le serveur, la logique de la page, la scène 3D), puis l'interface et le mode d'emploi (étapes 9 et 10). Le mobilier Tripo (étape 11) est en cours ; ensuite le personnage et la relecture finale (phase D).
+État : phases A, B et C faites (le serveur, la logique de la page, la scène 3D, l'interface, le mode d'emploi, le mobilier Tripo). Reste le personnage Tripo (étape 12) et la relecture finale : phase D.
 
 Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`.
 

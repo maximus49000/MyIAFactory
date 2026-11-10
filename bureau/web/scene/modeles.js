@@ -110,12 +110,12 @@ const VOLUMES = {
   },
   tableau(g, {largeur = 3} = {}) {
     // Cadre et pieds seulement : la surface et les post-its sont dessinés par kanban.js.
-    // Surface utile : 1,55 m de haut, bord supérieur à 2,0 m.
+    // Surface utile : 1,25 m de haut, bord supérieur à 2,04 m (voir kanban.js).
     for (const x of [-largeur / 2 + 0.1, largeur / 2 - 0.1]) {
       boite(g, 0.06, 2.05, 0.06, PIED, x, 0, -0.04);
       boite(g, 0.1, 0.05, 0.7, PIED, x, 0, -0.04);
     }
-    boite(g, largeur + 0.1, 1.67, 0.06, "#8d99ae", 0, 0.39, -0.04);
+    boite(g, largeur + 0.1, 1.37, 0.06, "#8d99ae", 0, 0.73, -0.04);
   },
   bureau_direction(g) {
     boite(g, 2.0, 0.08, 0.9, "#7a4b31", 0, 0.7, 0);

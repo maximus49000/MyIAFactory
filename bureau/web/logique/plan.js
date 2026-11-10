@@ -13,6 +13,9 @@ const PP = 5;          // profondeur d'une pièce
 const PO = 8;          // profondeur de l'open space
 const DEMI_PORTE = 0.6;
 const MARGE_TABLEAU = 0.35;
+// Le tableau est fait de panneaux blancs côte à côte (un modèle de tableau sur pieds chacun) :
+// un panneau tous les PAS_TABLEAU mètres, JEU_TABLEAU de cadre entre la dernière surface blanche et le bout.
+export const PAS_TABLEAU = 1.75, JEU_TABLEAU = 0.16;
 
 const capVers = (de, vers) => Math.atan2(vers.x - de.x, vers.z - de.z);
 const pt = (p) => ({x: p.x, z: p.z});
@@ -144,9 +147,11 @@ export function creerPlan(services, colonnes) {
 
   // --- Le Kanban, au centre de l'open space, tourné vers +z.
   const nc = Math.max(1, colonnes.length);
-  const largeur = Math.min(W - 4, Math.max(3, 1.0 * nc + 0.4));
+  const panneaux = Math.max(1, Math.min(Math.floor((W - 4 + JEU_TABLEAU) / PAS_TABLEAU),
+                                         Math.max(2, Math.round((0.95 * nc + 0.3) / PAS_TABLEAU))));
+  const largeur = panneaux * PAS_TABLEAU - JEU_TABLEAU;
   const kx = 0, kz = openspace.z - 0.6;
-  const LIGNES = 5;
+  const LIGNES = 4;
   const largeurColonne = (largeur - 0.3) / nc;
   // (u, v) : position du centre d'un post-it sur la surface, depuis le coin haut gauche, en mètres.
   const postit = (colonneIndex, rang) => ({
@@ -154,7 +159,7 @@ export function creerPlan(services, colonnes) {
     v: 0.38 + 0.235 * Math.max(0, Math.min(LIGNES - 1, rang)),
   });
   const kanban = {
-    x: kx, z: kz, cap: 0, largeur, hauteur: 1.55, entete: 0.26, lignes: LIGNES, colonnes: nc, largeurColonne,
+    x: kx, z: kz, cap: 0, largeur, panneaux, hauteur: 1.25, entete: 0.26, lignes: LIGNES, colonnes: nc, largeurColonne,
     devant: {x: kx, z: kz + 1.0, cap: Math.PI},
     devantColonne: (i) => ({x: kx - largeur / 2 + postit(i, 0).u, z: kz + 1.0, cap: Math.PI}),
     attente: (i) => {
@@ -166,7 +171,7 @@ export function creerPlan(services, colonnes) {
   const chef = {x: kx - largeur / 2 - 0.8, z: kz + 0.9, cap: Math.PI / 4};
 
   // --- Chemins.
-  const obstacle = {x: kx, z: kz, hx: largeur / 2 + MARGE_TABLEAU, hz: 0.15 + MARGE_TABLEAU};
+  const obstacle = {x: kx, z: kz, hx: largeur / 2 + MARGE_TABLEAU, hz: 0.7};
 
   function pieceDe(p) {
     for (const r of pieces)

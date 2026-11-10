@@ -3,14 +3,16 @@ import argparse
 import hashlib
 import json
 import mimetypes
+import os
+import shutil
 import threading
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import charge, cout, demandes, equipe, etat, kpi, prix, reglages
+from . import catalogue, charge, cout, demandes, equipe, etat, kpi, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -28,7 +30,15 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
-ROUTES_PROJET = ("/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image")
+ROUTES_PROJET = ("/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
+                 "/api/catalogue", "/api/livrable")
+# Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
+# en bac à sable (aucun script, aucune requête au nom du bureau).
+LIVRABLES = {".png": ("image/png", False), ".jpg": ("image/jpeg", False), ".jpeg": ("image/jpeg", False),
+             ".pdf": ("application/pdf", False), ".zip": ("application/zip", True),
+             ".glb": ("model/gltf-binary", True), ".html": ("text/html; charset=utf-8", False),
+             ".txt": ("text/plain; charset=utf-8", False)}
+BAC_A_SABLE = (".html", ".txt")
 
 
 def images_declarees(regl):
@@ -219,7 +229,10 @@ class Projet:
             cible = demande.get("cible") if isinstance(demande, dict) and demande.get("type") == "challenge" else None
             if isinstance(cible, dict) and cible.get("type") in ("kpi", "source"):  # seules à recalculer
                 cibles = self.cibles_calculees(r, regl)
-            message = demandes.verifier(demande, r, cibles, None)  # le catalogue n'est pas encore lu ici
+            elements = None
+            if isinstance(demande, dict) and demande.get("type") == "retour_element":
+                elements = catalogue.ids(regl, demande.get("fonctionnalite"))  # None : catalogue illisible
+            message = demandes.verifier(demande, r, cibles, elements)
             if message:
                 return 400, {"erreur": message}
             cle = None
@@ -266,6 +279,44 @@ class Projet:
 
     def conseil(self):
         return charge.conseiller(self.historique.lire(), charge.machine())
+
+    def livrable(self, fonctionnalite=None):
+        """Le fichier du dernier livrable (du projet, ou de la fonctionnalité) s'il peut être servi, sinon `None`.
+        Il doit être dans une des racines `livrables.racines` (relatives aux réglages) et d'une extension
+        de `LIVRABLES`."""
+        self.etat()
+        r = self.dernier_releve
+        if r is None or r.get("version", 1) < 4:
+            return None
+        if fonctionnalite is None:
+            liv = r.get("livrable")
+        else:
+            f = next((f for f in r["fonctionnalites"] if f["id"] == fonctionnalite), None)
+            liv = f.get("livrable") if f else None
+        brut = liv.get("chemin") if isinstance(liv, dict) else None
+        if (not isinstance(brut, str) or not brut or "\x00" in brut or Path(brut).is_absolute()
+                or brut[0] in "/\\" or Path(brut).suffix.lower() not in LIVRABLES):
+            return None
+        regl, _ = self.reglages()
+        conf = regl.get("livrables")
+        racines = conf.get("racines") if isinstance(conf, dict) else None
+        if not isinstance(racines, list):
+            return None
+        base = Path(regl["dossier"])
+        try:
+            cible = (base / brut).resolve()
+            if cible.suffix.lower() not in LIVRABLES or not cible.is_file():  # un lien peut viser autre chose
+                return None
+            for racine in racines:
+                if isinstance(racine, str) and racine:
+                    try:
+                        cible.relative_to((base / racine).resolve())
+                        return cible
+                    except ValueError:
+                        continue
+        except (OSError, ValueError):
+            pass
+        return None
 
     def resume(self):
         """La ligne du projet dans `/api/projets`."""
@@ -399,6 +450,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":
             return self._json(200, projet.conseil())
+        if chemin in ("/api/catalogue", "/api/livrable"):
+            valeurs = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite")
+            if valeurs is not None and len(valeurs) != 1:
+                return self._json(404, {"erreur": "Introuvable."})
+            fonctionnalite = valeurs[0] if valeurs else None
+            if chemin == "/api/livrable":
+                return self._livrable(projet.livrable(fonctionnalite))
+            if fonctionnalite is None:
+                return self._json(404, {"erreur": "Aucune fonctionnalité demandée."})
+            regl, _ = projet.reglages()
+            return self._json(*catalogue.lire(regl, fonctionnalite))
         periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
         periode = periodes[0] if len(periodes) == 1 else None
         code, objet = projet.facturation(periode) if chemin == "/api/facturation" else projet.kpi(periode)
@@ -437,6 +499,33 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError):
             pass
         return introuvable()
+
+    def _livrable(self, cible):
+        """Envoie le fichier par morceaux (un livrable peut être gros) avec les en-têtes de son extension."""
+        if cible is None:
+            return self._json(404, {"erreur": "Introuvable."})
+        ext = cible.suffix.lower()
+        type_, piece_jointe = LIVRABLES[ext]
+        try:
+            f = open(cible, "rb")
+        except OSError:
+            return self._json(404, {"erreur": "Introuvable."})
+        with f:
+            taille = os.fstat(f.fileno()).st_size
+            self.send_response(200)
+            self.send_header("Content-Type", type_)
+            self.send_header("Content-Length", str(taille))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            if ext in BAC_A_SABLE:
+                self.send_header("Content-Security-Policy", "sandbox")
+            if piece_jointe:
+                ascii_ = "".join(c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in cible.name)
+                self.send_header("Content-Disposition",
+                                 f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(cible.name)}")
+            self.end_headers()
+            if self.command != "HEAD":
+                shutil.copyfileobj(f, self.wfile, 1024 * 1024)
 
     def _statique(self, chemin):
         brut = unquote(chemin)

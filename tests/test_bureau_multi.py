@@ -18,7 +18,7 @@ ENT = {"X-Bureau": "1", "Content-Type": "application/json"}
 SCRIPT_ACTIONS = ("import sys\n"
                   "d = sys.stdin.buffer.read()\n"
                   "open(sys.argv[1], 'ab').write(d + b'\\n')\n")
-RELEVE = {"version": 4, "projet": "", "factory": {"etat": "en marche"},
+RELEVE = {"version": 4, "projet": "P", "factory": {"etat": "en marche"},
           "services": [{"id": "dev", "nom": "Dev"}],
           "colonnes": [{"id": "a", "nom": "A"}],
           "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
@@ -152,11 +152,13 @@ class TestBureauMulti(AvecBureau):
         self.assertEqual([x["attente"] for x in p["projets"]], [1, 1])
         self.assertEqual([x["erreur"] for x in p["projets"]], [None, None])
         self.assertEqual(p["projets"][0]["attente"], self.json("/api/etat?projet=a")["directeur"]["total"])
-        # Sans nom au relevé : l'id.
+        # Relevé invalide (sans nom de projet) : l'id tient lieu de nom, et l'erreur est dite.
         r = dict(RELEVE, projet="")
         (self.dossier("b") / "releve.json").write_text(json.dumps(r), encoding="utf-8")
         self.srv.projets["b"]._cache_etat = (0.0, None)
-        self.assertEqual(self.json("/api/projets")["projets"][1]["nom"], "b")
+        b = self.json("/api/projets")["projets"][1]
+        self.assertEqual(b["nom"], "b")
+        self.assertIn("projet", b["erreur"])
 
     def test_isolation_des_projets(self):
         avant_a = (self.dossier("a") / "reglages.json").read_bytes()

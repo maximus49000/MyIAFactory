@@ -45,11 +45,11 @@ Projet 1 bis, le bureau qui agit ([plan](docs/superpowers/plans/2026-11-10-burea
 - [x] 5. Les boutons de la factory et l'envoi des demandes
 - [x] 6. Le panneau d'une tâche, la file, la vue liste
 - [x] 7. Le Directeur et les leçons
-- [ ] 8. La démo qui agit, la documentation
+- [x] 8. La démo qui agit, la documentation
 
-État : le bureau vivant est terminé (les douze étapes et la relecture finale). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.
+État : le bureau vivant est terminé (les douze étapes et la relecture finale), et le bureau agit : il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches (voir « Faire agir le bureau » dans [docs/installation.md](docs/installation.md)). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.
 
-Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`.
+Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`. Les gestes de la démo (Pause, déplacer, retour, verdict) réécrivent son `releve.json` : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/demo/` ailleurs et lancez le bureau sur la copie.
 
 ## Ce qu'il reste à faire ensuite
 
@@ -59,7 +59,7 @@ Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages
 
 ## Documents
 
-- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md)
+- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)

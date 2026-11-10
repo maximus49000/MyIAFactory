@@ -236,6 +236,11 @@ class TestServeur(unittest.TestCase):
         return r.status, json.loads(data.decode("utf-8"))
 
     def test_etat_agir(self):
+        self.assertIs(self.json("/api/etat")["agir"], True)  # la démonstration déclare une commande d'actions
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        del regl["actions"]
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
         self.assertIs(self.json("/api/etat")["agir"], False)
         self.agir()
         e = self.json("/api/etat")

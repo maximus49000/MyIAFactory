@@ -1,3 +1,17 @@
 {
-  "releve": {"fichier": "releve.json"}
+  "releve": {
+    "fichier": "releve.json"
+  },
+  "actions": {
+    "commande": [
+      "python",
+      "actions.py"
+    ],
+    "dossier": "."
+  },
+  "images": {
+    "racines": [
+      "images"
+    ]
+  }
 }

@@ -65,10 +65,35 @@ Fichier JSON ; toutes les clés sont facultatives sauf `releve`.
 | `releve.fichier` | — | Chemin du relevé, relu toutes les quelques secondes. |
 | `releve.commande` | — | Commande (liste de mots, sans shell, 10 s au plus) qui écrit le relevé sur sa sortie standard en UTF-8. |
 | `releve.dossier` | dossier des réglages | Dossier où la commande est lancée. |
+| `actions.commande` | — | Commande d'actions (liste de mots, sans shell, 10 s au plus) : elle reçoit chaque demande en JSON UTF-8 sur son entrée standard. Voir « Faire agir le bureau ». |
+| `actions.dossier` | dossier des réglages | Dossier où la commande d'actions est lancée. |
+| `images.racines` | — | Dossiers (relatifs au dossier des réglages) d'où le bureau peut servir les images des tâches. |
+
+## Faire agir le bureau
+
+Par défaut, le bureau regarde seulement. Pour qu'il transmette les gestes de l'utilisateur à votre projet (mettre la factory en pause, déplacer une tâche, faire un retour, valider une leçon), suivez ces étapes. Le bureau ne change jamais lui-même l'état de la factory : il dépose des **demandes**, et c'est votre projet qui agit.
+
+1. Faites produire un relevé `version` 2 (voir [releve.md](releve.md)) avec, selon vos besoins, `actions` (les boutons), `types`, `lecons`, et le détail des tâches (`journal`, `images`, `liens`, `retours`, `bloquee`).
+2. Écrivez une commande d'actions : un programme qui lit **une demande JSON en UTF-8 sur son entrée standard**, l'applique, et rend le code 0 (ou un autre code, avec une ligne d'explication sur sa sortie, pour la refuser). Le modèle à suivre : [`exemples/demo/actions.py`](../exemples/demo/actions.py).
+3. Déclarez-la dans les réglages, avec les dossiers d'images si les tâches en ont :
+
+   ```json
+   {
+     "releve": {"fichier": "releve.json"},
+     "actions": {"commande": ["python", "actions.py"], "dossier": "."},
+     "images": {"racines": ["images"]}
+   }
+   ```
+
+4. Relancez le bureau. Les boutons apparaissent à droite du voyant ; « Toutes les tâches » ouvre la vue liste ; un clic sur un post-it ouvre le détail de la tâche ; un clic sur le Directeur ouvre ses leçons à valider, les retours sans réponse et les tâches bloquées.
+
+Pour essayer sans rien brancher (les gestes de la démo réécrivent son `releve.json`, donc ne travaillez pas sur l'original), copiez `exemples/demo/` ailleurs et lancez le bureau sur la copie (`py -3.12 lancer.py serveur --reglages <copie>/reglages.json`) : « Pause », un déplacement, un retour et un verdict modifient `releve.json` de la copie, et la scène suit au relevé suivant.
+
+Le serveur reste réservé à votre machine : `POST /api/demande` exige les mêmes en-têtes que le réglage de charge, et les demandes passent une à une.
 
 ## L'équipe
 
-Le relevé ne donne pas de prénom : le bureau en attribue un à chaque clé de titulaire, avec une couleur, et le retient dans `equipe.json`, à côté des réglages. Un agent qui revient retrouve son prénom.
+Le relevé ne donne pas de prénom (sauf, en version 2, un `prenom` facultatif par titulaire, qui n'est pas écrit dans ce fichier) : le bureau en attribue un à chaque clé de titulaire, avec une couleur, et le retient dans `equipe.json`, à côté des réglages. Un agent qui revient retrouve son prénom.
 
 Pour changer un prénom, une couleur ou un modèle, éditez ce fichier (le fichier est lu au lancement : arrêtez le bureau et relancez-le après une modification) :
 

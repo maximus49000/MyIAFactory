@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "projet": "Démo",
   "factory": {
     "etat": "en marche",
@@ -25,6 +25,10 @@
     {
       "id": "facturation",
       "nom": "Facturation"
+    },
+    {
+      "id": "design",
+      "nom": "Design"
     }
   ],
   "colonnes": [
@@ -68,7 +72,20 @@
       "service": "dev",
       "lieu": "local",
       "modele": "Sonnet",
-      "fraicheur_min": 90
+      "fraicheur_min": 90,
+      "specialite": "Écrans et mise en page",
+      "lecons": [
+        {
+          "id": "dev:1:L1",
+          "texte": "Relancer les tests de l'écran après chaque changement de mise en page.",
+          "etat": "à valider"
+        },
+        {
+          "id": "dev:1:L0",
+          "texte": "Nommer les écrans comme dans la maquette.",
+          "etat": "validée"
+        }
+      ]
     },
     {
       "cle": "dev:2",
@@ -80,7 +97,8 @@
       "cle": "qa:1",
       "service": "qa",
       "lieu": "local",
-      "modele": "Haiku"
+      "modele": "Haiku",
+      "specialite": "Cas limites"
     },
     {
       "cle": "integration:1",
@@ -94,6 +112,12 @@
       "lieu": "local",
       "modele": "Haiku",
       "permanent": true
+    },
+    {
+      "cle": "design:1",
+      "service": "design",
+      "lieu": "local",
+      "modele": "Haiku"
     }
   ],
   "taches": [
@@ -105,7 +129,38 @@
       "titulaire": "dev:1",
       "etape": "Mise en page en cours",
       "maj": "2026-11-09T10:12:00",
-      "postit": true
+      "postit": true,
+      "type": "fonction",
+      "journal": [
+        {
+          "t": "2026-11-09T14:05:00",
+          "texte": "Prise en charge de la tâche."
+        },
+        {
+          "t": "2026-11-09T15:20:00",
+          "texte": "Maquette de l'écran d'accueil validée."
+        },
+        {
+          "t": "2026-11-09T16:35:00",
+          "texte": "Mise en page terminée, tests en cours."
+        }
+      ],
+      "images": [
+        {
+          "chemin": "images/accueil-maquette.png",
+          "legende": "La maquette"
+        },
+        {
+          "chemin": "images/accueil-resultat.png",
+          "legende": "Le résultat"
+        }
+      ],
+      "liens": [
+        {
+          "libelle": "Session de travail (exemple)",
+          "url": "https://example.org/sessions/demo-1"
+        }
+      ]
     },
     {
       "id": "t2",
@@ -115,7 +170,8 @@
       "titulaire": "metier:1",
       "etape": "Rédaction du cahier des charges",
       "maj": "2026-11-09T10:05:00",
-      "postit": true
+      "postit": true,
+      "type": "fonction"
     },
     {
       "id": "t3",
@@ -125,7 +181,14 @@
       "titulaire": "qa:1",
       "etape": "Relecture des cas de test",
       "maj": "2026-11-09T09:58:00",
-      "postit": true
+      "postit": true,
+      "type": "bogue",
+      "retours": [
+        {
+          "t": "2026-11-09T17:00:00",
+          "texte": "Vérifie aussi l'export avec des accents."
+        }
+      ]
     },
     {
       "id": "t4",
@@ -135,7 +198,8 @@
       "titulaire": "dev:2",
       "etape": "Écriture des tests",
       "maj": "2026-11-09T09:40:00",
-      "postit": true
+      "postit": true,
+      "type": "fonction"
     },
     {
       "id": "t5",
@@ -175,7 +239,9 @@
       "titulaire": "integration:1",
       "etape": "En attente d'une décision",
       "maj": "2026-11-09T08:20:00",
-      "postit": true
+      "postit": true,
+      "type": "bogue",
+      "bloquee": "Attend le format du fichier des fournisseurs."
     },
     {
       "id": "t9",
@@ -186,6 +252,16 @@
       "etape": "",
       "maj": "2026-11-09T08:10:00",
       "postit": false
+    },
+    {
+      "id": "t10",
+      "titre": "Maquettes du tableau de bord",
+      "colonne": "encours",
+      "active": true,
+      "titulaire": "design:1",
+      "etape": "Première maquette",
+      "maj": "2026-11-09T15:50:00",
+      "type": "fonction"
     }
   ],
   "file": {
@@ -205,5 +281,36 @@
     ],
     "reste": 5
   },
-  "decisions": 2
+  "decisions": 2,
+  "actions": [
+    {
+      "id": "pause",
+      "libelle": "Pause",
+      "confirmer": "Mettre la factory de démonstration en pause ?"
+    },
+    {
+      "id": "documentation",
+      "libelle": "Documentation",
+      "lien": "https://github.com/maximus49000/MyIAFactory"
+    }
+  ],
+  "types": [
+    {
+      "id": "fonction",
+      "nom": "Fonction"
+    },
+    {
+      "id": "bogue",
+      "nom": "Bogue"
+    }
+  ],
+  "lecons": [
+    {
+      "id": "dev:1:L1",
+      "agent": "dev:1",
+      "tache": "t1",
+      "date": "2026-11-09T16:40:00",
+      "texte": "Relancer les tests de l'écran après chaque changement de mise en page."
+    }
+  ]
 }

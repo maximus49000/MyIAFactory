@@ -20,7 +20,9 @@ py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json
 
 Le terminal affiche `Le bureau est ouvert sur http://127.0.0.1:8770/`. Ouvrez cette adresse dans le navigateur (l'adresse `http://localhost:8770/` marche aussi ; aucune autre n'est acceptée).
 
-Ce qu'on doit voir : le bâtiment en 3D isométrique, une pièce par service (Métier, Dev, QA, Intégration, Facturation), le coin café, le bureau du Directeur avec une pastille « 2 » (deux décisions en attente), le chef près du Kanban central rempli de post-its, le voyant de la factory et la barre de charge en haut. Survolez un agent pour voir sa carte, cliquez sur une pièce pour ouvrir son panneau à droite, sur un post-it pour le détailler. Échap ferme.
+Ce qu'on doit voir : le bâtiment en 3D isométrique, une pièce par service (Métier, Dev, QA, Intégration, Facturation, Design), le coin café, le bureau du Directeur avec une pastille « 2 » (deux décisions en attente), le chef près du Kanban central rempli de post-its, le voyant de la factory et la barre de charge en haut. Survolez un agent pour voir sa carte, cliquez sur une pièce pour ouvrir le dossier du service à droite (voir « Les dossiers des services »), sur un post-it pour le détailler. Échap ferme.
+
+La démo fait deux lectures sur Internet pour connaître les prix des modèles (voir « Les euros : d'où viennent les prix ») ; pour l'essayer sans aucune requête sortante, ajoutez `"prix_automatiques": false` à `exemples/demo/reglages.json` (les coûts s'affichent alors « prix inconnu »).
 
 **Pourquoi les agents de la démo sont « sans nouvelles »** : les dates `maj` du relevé de démonstration sont fixes, donc de plus en plus anciennes. Le bureau ne prétend jamais qu'un agent travaille si rien n'a bougé depuis plus que le délai de fraîcheur (30 minutes par défaut) : ils restent à leur poste, avec une bulle grisée. Pour les voir au travail, ouvrez `exemples/demo/releve.json` et mettez à une tâche active une `maj` récente (par exemple l'heure qu'il est) ; pour voir un déplacement, changez en plus sa `colonne`. Dans les secondes qui suivent, l'agent marche jusqu'au Kanban et déplace son post-it. Passez `factory.etat` à `"en pause"` : le voyant change et la lumière baisse.
 
@@ -30,7 +32,7 @@ Arrêter le bureau : `Ctrl+C` dans le terminal.
 
 Un projet réel se branche **depuis son propre dépôt** : rien n'est à modifier ici.
 
-1. Dans le dossier du projet, créez un dossier `.factory/` et ajoutez `.factory/` au `.gitignore` du projet (on n'y range que des choses propres à la machine : réglages, équipe, historique de charge).
+1. Dans le dossier du projet, créez un dossier `.factory/` et ajoutez `.factory/` au `.gitignore` du projet (on n'y range que des choses propres à la machine et au projet : réglages, équipe, historiques).
 2. Écrivez `.factory/reglages.json`. Le plus simple, un relevé tenu à jour dans un fichier :
 
    ```json
@@ -51,7 +53,7 @@ Un projet réel se branche **depuis son propre dépôt** : rien n'est à modifie
    py -3.12 lancer.py serveur --reglages <chemin du projet>/.factory/reglages.json
    ```
 
-Le bureau crée lui-même, à côté des réglages, `equipe.json` (prénoms, couleurs) et `charge-historique.jsonl` (historique de charge, 7 jours).
+Le bureau crée lui-même, à côté des réglages, `equipe.json` (prénoms, couleurs), `charge-historique.jsonl` (historique de charge, 7 jours) et, avec un relevé version 3, `usage-historique.jsonl` (les usages déjà vus), `prix-historique.jsonl` (les prix lus, datés) et `alertes-historique.jsonl` (les entrées et sorties d'alerte des KPI). Ne les effacez pas : les coûts passés et la marque « problème revenu » en dépendent.
 
 ## Les réglages
 
@@ -68,6 +70,9 @@ Fichier JSON ; toutes les clés sont facultatives sauf `releve`.
 | `actions.commande` | — | Commande d'actions (liste de mots, sans shell, 10 s au plus) : elle reçoit chaque demande en JSON UTF-8 sur son entrée standard. Voir « Faire agir le bureau ». |
 | `actions.dossier` | dossier des réglages | Dossier où la commande d'actions est lancée. |
 | `images.racines` | — | Dossiers (relatifs au dossier des réglages) d'où le bureau peut servir les images des tâches. |
+| `prix_automatiques` | `true` | `false` : le bureau ne fait aucune requête sortante ; seuls les prix de `prix` comptent. Voir « Les euros : d'où viennent les prix ». |
+| `alias_modeles` | — | Nom de modèle du relevé → nom dans la liste de prix. |
+| `prix` | — | Prix donnés à la main, en euros par million de tokens, avec leur date. |
 
 ## Faire agir le bureau
 
@@ -90,6 +95,62 @@ Par défaut, le bureau regarde seulement. Pour qu'il transmette les gestes de l'
 Pour essayer sans rien brancher (les gestes de la démo réécrivent son `releve.json`, donc ne travaillez pas sur l'original), copiez `exemples/demo/` ailleurs et lancez le bureau sur la copie (`py -3.12 lancer.py serveur --reglages <copie>/reglages.json`) : « Pause », un déplacement, un retour et un verdict modifient `releve.json` de la copie, et la scène suit au relevé suivant.
 
 Le serveur reste réservé à votre machine : `POST /api/demande` exige les mêmes en-têtes que le réglage de charge, et les demandes passent une à une.
+
+## Les dossiers des services
+
+Avec un relevé `version` 3 (voir « Version 3 » dans [releve.md](releve.md)), cliquer une pièce ouvre le **dossier** du service : un sélecteur de période (aujourd'hui, 7 jours, 30 jours) et jusqu'à quatre onglets. Un onglet n'apparaît que si le relevé donne de quoi le remplir.
+
+![Le dossier d'un service, avec l'exemple de démonstration](img/dossier.jpg)
+
+- **Tâches** : les tâches en cours du service, avec leur coût estimé ; les KPI en alerte sont rappelés en haut.
+- **Connaissances** : ce que chaque agent du service sait, d'où il le tient (« appris du retour de … »), ce qui est partagé, et qui n'a rien reçu sur la période.
+- **KPI** : les chiffres que le projet donne, et ceux que le bureau calcule (tâches terminées, allers-retours, durée et coût moyens d'une tâche).
+- **Facturation** : le coût estimé du service, par tâche, par étape et par modèle, discussion par discussion, et les sources d'amélioration.
+
+Le bouton **« Challenger »** (sur une alerte, un KPI, une connaissance ou une source d'amélioration) ouvre un volet : le problème, les solutions proposées par le Directeur et par le service, une zone pour écrire la vôtre, et « Valider la sélection ». Comme tous les gestes, il ne fait que déposer des demandes : c'est le projet qui ouvre le challenge, propose les solutions et inscrit la solution validée dans les connaissances des agents. Il faut donc une commande d'actions (voir « Faire agir le bureau ») qui sache traiter les demandes `challenge`, `solution` et `verdict_solution`.
+
+**Essayer avec la démo** (sur une copie, car les gestes réécrivent `releve.json`) : cliquez la pièce Dev. L'onglet Tâches rappelle l'alerte « Défauts passés au contrôle » ; « Voir le challenge » montre trois solutions (le Directeur, le service, vous) : cochez-en une, « Valider la sélection », et au relevé suivant elle est « validée » et figure dans l'onglet Connaissances des deux agents du service. Dans l'onglet Connaissances, « Challenger » sur une connaissance ouvre un nouveau challenge : la démo répond aussitôt par une solution du Directeur et une du service (textes fixes : dans un vrai projet, ce sont les agents qui les écrivent). L'onglet Facturation montre trois sources d'amélioration, et dans le service Design un usage du modèle « Maison », laissé exprès sans prix pour montrer « prix inconnu ».
+
+Les usages de la démo sont datés du 9 novembre 2026 : passé sept jours, choisissez « 30 jours » ; passé trente jours, ils sortent de toutes les périodes (mettez une date récente dans le `t` de quelques usages de `releve.json` pour les revoir).
+
+## Les euros : d'où viennent les prix
+
+Les euros affichés sont des **estimations** pour piloter (toujours précédées de « ≈ »), pas une facture. Le projet donne des tokens ; le bureau les multiplie par le prix du modèle à la date de l'usage.
+
+**Les deux requêtes sortantes.** Pour connaître les prix, le bureau lit, au démarrage puis au plus une fois par jour, deux adresses publiques, et seulement celles-là (elles sont écrites dans le code, aucun réglage ne peut les changer) :
+
+| Quoi | Adresse |
+|---|---|
+| Prix des modèles, en dollars par token (liste tenue par la communauté LiteLLM) | `https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` |
+| Taux dollar-euro du jour (Banque centrale européenne) | `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml` |
+
+Ce sont de simples lectures : rien de votre projet n'est envoyé. Pour n'avoir **aucune requête sortante**, mettez `"prix_automatiques": false` dans les réglages (il faut alors donner les prix à la main, voir plus bas ; le remettre à `true` demande de relancer le bureau).
+
+**Un coût passé ne bouge pas.** Chaque lecture est datée et gardée dans `prix-historique.jsonl`, à côté des réglages. Le prix d'un usage est le dernier prix enregistré à sa date ou avant. Un usage plus ancien que le premier prix enregistré prend ce premier prix, et l'onglet le dit (« prix du jour de l'installation »).
+
+**Quand une source ne répond pas**, ou donne une valeur absurde (négative, nulle, ou plus de dix fois plus grande ou plus petite que la veille), le bureau garde le dernier prix connu et l'écrit en haut de l'onglet Facturation (« Prix du 3 novembre, mise à jour impossible : … »). Il réessaie dans l'heure.
+
+> **Sous Windows, « certificat de www.ecb.europa.eu non reconnu ».** Python ne fait confiance qu'aux autorités de certification déjà installées dans Windows, et Windows n'installe celle de la BCE qu'à la première visite. Ouvrez une fois `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml` dans Edge, puis relancez le bureau. Tant qu'aucun taux n'a été lu, **tous les prix automatiques restent « inconnus »** (le bureau ne devine pas un taux) ; seuls les prix donnés à la main comptent.
+
+**Rapprocher les noms de modèles** (`alias_modeles`). Le relevé écrit « Sonnet », la liste de prix dit autre chose : donnez la correspondance, nom du relevé → nom exact dans la liste.
+
+```json
+{"alias_modeles": {"Sonnet": "claude-sonnet-5-5", "Haiku": "claude-haiku-4-5"}}
+```
+
+Un modèle sans correspondance, ou absent de la liste, reste à « prix inconnu » : ses tokens sont montrés, il est exclu des euros, et un avertissement le dit. Il n'est jamais compté à zéro.
+
+**Donner ou corriger un prix à la main** (`prix`) : en **euros par million de tokens**, avec la date à partir de laquelle il vaut. La correction passe avant le prix automatique à partir de cette date, et ne touche pas les usages antérieurs. La clé est le nom du relevé (ou celui de la liste) ; `cache_lecture` et `cache_ecriture` sont facultatifs (sans eux, les tokens de cache comptent au prix d'entrée). Pour plusieurs prix successifs, donnez une liste.
+
+```json
+{"prix": {"Maison": {"entree": 0.5, "sortie": 1.5, "date": "2026-11-01"},
+          "Sonnet": [{"entree": 2.6, "sortie": 13, "date": "2026-09-01"},
+                     {"entree": 2.8, "sortie": 14, "date": "2026-11-01"}]}}
+```
+
+Une correction sans `date` lisible est ignorée (elle changerait le passé).
+
+**La ligne « gestion »** de la facturation est le coût du bureau lui-même : il vaut 0, car le bureau ne consomme aucun token (ses deux lectures de prix ne coûtent que du temps).
 
 ## L'équipe
 
@@ -128,3 +189,6 @@ Vos valeurs ne sont jamais réécrites. Le chef s'appelle « Chef » tant qu'on 
 - **Barre « Mesure indisponible »** : le système n'est pas Windows, ou la mesure a échoué. Le bureau fonctionne ; la commande `charge` laisse alors passer.
 - **Page blanche ou « Hôte refusé »** : ouvrez la page par `http://127.0.0.1:<port>/` ou `http://localhost:<port>/` ; toute autre adresse est refusée. Vérifiez aussi que le terminal du serveur est toujours ouvert.
 - **Un agent n'a pas la bonne couleur ou le bon prénom** : voir « L'équipe ».
+- **Facturation : « prix inconnu » partout, ou « mise à jour impossible »** : le message en haut de l'onglet donne la raison. Certificat de la BCE non reconnu, nom de modèle sans correspondance (`alias_modeles`), ou prix automatiques coupés : voir « Les euros : d'où viennent les prix ».
+- **Un onglet du dossier manque** : le relevé n'est pas en version 3, ou ne donne pas le champ correspondant (`usage`, `kpi`, `connaissances` ou `challenges`).
+- **« Challenger » répond « Un challenge existe déjà » ou reste sur « Demande envoyée »** : le projet n'a pas encore ajouté le challenge à son relevé.

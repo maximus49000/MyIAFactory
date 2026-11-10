@@ -52,8 +52,10 @@ class TestCalcules(unittest.TestCase):
     def test_calcules_taches_terminees(self):
         k = par_id(kpi.calcules(releve_v3(), None, "7j", M)["dev"])
         self.assertEqual(k["taches_terminees"]["valeur"], 1)  # t1 ; t2 est trop ancienne, t3 pas finie
+        self.assertEqual(k["taches_terminees"]["unite"], "tâche")  # « 1 tâche », pas « 1 tâches »
         k = par_id(kpi.calcules(releve_v3(), None, "30j", M)["dev"])
         self.assertEqual(k["taches_terminees"]["valeur"], 2)
+        self.assertEqual(k["taches_terminees"]["unite"], "tâches")
         k = par_id(kpi.calcules(releve_v3(), None, "aujourdhui", M)["qa"])
         self.assertEqual(k["taches_terminees"]["valeur"], 1)
         k = par_id(kpi.calcules(releve_v3(), None, "aujourdhui", M)["dev"])

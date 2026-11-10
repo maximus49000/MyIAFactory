@@ -60,21 +60,22 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 9. L'onglet Connaissances et le volet « Challenger »
 - [x] 10. Les KPI, les alertes, « problème revenu »
 - [x] 11. L'onglet KPI
-- [ ] 12. La démo, la documentation, la relecture
+- [x] 12. La démo, la documentation, la relecture
 
-État : le bureau vivant est terminé (les douze étapes et la relecture finale), et le bureau agit : il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches (voir « Faire agir le bureau » dans [docs/installation.md](docs/installation.md)). Prochaine étape : brancher un premier projet réel, depuis le dépôt de ce projet.
+État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Prochaine étape : concevoir le projet 3, le parcours d'une tâche.
 
-Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`. Les gestes de la démo (Pause, déplacer, retour, verdict) réécrivent son `releve.json` : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/demo/` ailleurs et lancez le bureau sur la copie.
+![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)
+
+Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge) réécrivent son `releve.json` : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/demo/` ailleurs et lancez le bureau sur la copie.
 
 ## Ce qu'il reste à faire ensuite
 
-- **Projet 2, les dossiers des services** : tâches d'un agent, facturation en tokens jusqu'à la micro-tâche, cas de test, cahiers des charges, décisions du Directeur.
 - **Projet 3, le parcours d'une tâche** : création depuis le bureau, cahier des charges, micro-tâches, boucle QA, choix de l'agent et du modèle.
 - **Projet 4, l'installation sur un projet** : scan, proposition de services, calibrage sur la machine, renfort cloud, emballage en skill.
 
 ## Documents
 
-- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md)
+- Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md) ; les dossiers des services : [docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md](docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)

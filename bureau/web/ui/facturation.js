@@ -119,7 +119,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   }
   conteneur.append(el("div", "carte-sous-titre", "Gestion du bureau"));
   conteneur.append(rangee("Coût du bureau lui-même", euros(donnees.gestion ?? 0)));
-  if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}.`));
+  if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }
 
 // contenuFacturation(contexte, conteneur, service, periode)

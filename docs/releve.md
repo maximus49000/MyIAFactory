@@ -26,12 +26,12 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 
 | Champ | Obligatoire | Valeurs |
 |---|---|---|
-| `version` | oui | `1` ou `2` (la version 2 ajoute les champs marqués ci-dessous ; un relevé version 1 marche toujours, sans eux) |
+| `version` | oui | `1`, `2` ou `3` (la version 2 ajoute les champs marqués « v2 » ci-dessous, la version 3 ceux de « Version 3 : les dossiers des services » ; un relevé version 1 ou 2 marche toujours, sans eux) |
 | `projet` | oui | nom affiché |
 | `factory.etat` | oui | `"en marche"` ou `"en pause"` |
 | `factory.depuis` | non | date ISO 8601 |
 | `services` | oui | liste de `{id, nom}` ; **8 au plus**, identifiants uniques |
-| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; en v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) |
+| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; à partir de la v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) |
 | `titulaires` | oui | voir ci-dessous |
 | `taches` | oui | voir ci-dessous |
 | `file` | non | `{"visibles": [{id, titre}], "reste": n}` — vide par défaut ; en v2, `suite` facultatif (voir ci-dessous) |
@@ -42,11 +42,11 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 
 **Titulaire** (un agent) : `cle` (stable, unique), `lieu` (`"local"` ou `"cloud"`) et `service` (sauf pour le chef) sont obligatoires. Facultatifs : `modele` (`"?"` par défaut), `permanent` (ne quitte jamais le bureau), `chef` (le chef d'atelier ; un seul au plus, le bureau en ajoute un de clé `"chef"` s'il n'y en a aucun), `fraicheur_min` (délai de fraîcheur propre à cet agent, pour les travaux longs et silencieux).
 
-Facultatifs en version 2 : `prenom` (remplace le prénom tiré par le bureau, sans être écrit dans `equipe.json`, et tant que le relevé le donne : il l'emporte sur celui du fichier), `specialite` (texte) et `lecons` (liste de `{id, texte, etat}`, `etat` valant `"à valider"` ou `"validée"`).
+Facultatifs à partir de la version 2 : `prenom` (remplace le prénom tiré par le bureau, sans être écrit dans `equipe.json`, et tant que le relevé le donne : il l'emporte sur celui du fichier), `specialite` (texte) et `lecons` (liste de `{id, texte, etat}`, `etat` valant `"à valider"` ou `"validée"`).
 
 **Tâche** : `id` (unique), `titre`, `colonne` (connue) et `active` (vrai/faux) sont obligatoires. Facultatifs : `titulaire` (clé connue, ou nul), `etape` (texte en clair), `maj` (date de dernière mise à jour), `postit` (vrai par défaut ; faux = pas de post-it sur le Kanban).
 
-Facultatifs en version 2, pour le détail d'une tâche :
+Facultatifs à partir de la version 2, pour le détail d'une tâche :
 
 | Champ | Valeurs |
 |---|---|
@@ -64,9 +64,92 @@ Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une 
 
 **File dépliable.** En version 2, `file.suite` (facultatif, `null` = absent) est la liste `{id, titre}` des éléments qui viennent après les `visibles` : **500 au plus**, mêmes règles que `visibles`. Les identifiants sont uniques entre `visibles`, `suite` et `taches` : en version 2, un `id` de `file.visibles` ou de `file.suite` identique à celui d'une tâche (ou d'un autre élément de la file) rend le relevé invalide (retirez l'élément de la file dès qu'il devient une tâche). `reste` garde son sens : le nombre total d'éléments au-delà des visibles ; `suite` peut être plus courte que `reste` (la page dit alors combien d'éléments elle ne détaille pas). Quand il y a quelque chose au-delà des visibles, le « + n » de la file sur le Kanban (et le bouton « File d'attente » de la vue liste) ouvre un panneau « File » qui liste tous les éléments, chacun avec « Déplacer vers… » comme les éléments visibles.
 
+## Version 3 : les dossiers des services
+
+En version 3, cliquer un service ouvre son **dossier** : quatre onglets (Tâches, Connaissances, KPI, Facturation) et un sélecteur de période (aujourd'hui, 7 jours, 30 jours). Tout ce qui suit est **facultatif** : un onglet dont le relevé ne donne pas la matière n'est pas montré (Tâches est toujours là). En version 1 et 2, ces champs sont ignorés et le dossier se réduit à l'onglet Tâches.
+
+| Champ | Où | Sert à |
+|---|---|---|
+| `usage` | racine | la facturation : les tokens consommés, discussion par discussion |
+| `kpi` | chaque service | l'onglet KPI et les alertes |
+| `connaissances` | chaque titulaire | l'onglet Connaissances |
+| `challenges` | racine | les challenges ouverts et leurs solutions |
+
+### L'usage (la facturation)
+
+Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau les convertit en euros **estimés** (toujours affichés avec « ≈ » : ce n'est pas une facture).
+
+`usage` : liste (**5 000 entrées au plus**) de `{id, tache, agent, modele, etape?, t, entree, sortie, cache_lecture?, cache_ecriture?}`, une entrée par discussion.
+
+| Champ | Valeurs |
+|---|---|
+| `id` | texte non vide, unique dans `usage` |
+| `tache` | `id` d'une tâche du relevé, ou `null` (« hors tâche ») |
+| `agent` | clé d'un titulaire, ou `null` ; l'usage du chef, ou d'un usage sans agent, est rangé dans « direction / hors service » |
+| `modele` | le nom du modèle, tel que le projet l'écrit (voir `alias_modeles` dans [installation.md](installation.md)) |
+| `etape` | texte libre : l'étape de la tâche (« Tests », « Maquette »…) |
+| `t` | date ISO 8601 de la discussion |
+| `entree`, `sortie` | tokens, entiers ≥ 0 |
+| `cache_lecture`, `cache_ecriture` | tokens de cache, entiers ≥ 0 (0 par défaut) |
+
+- Les compteurs d'un `id` sont des **cumuls** : republiez le même `id` avec des compteurs plus grands tant que la discussion continue, le bureau garde les derniers. Ne changez pas d'`id` en cours de discussion (elle serait comptée deux fois).
+- Le relevé n'a besoin de porter que les usages **récents** : le bureau les range dans son historique (`usage-historique.jsonl`, à côté des réglages) et ne les oublie pas quand le projet les retire.
+- La **date de prix** d'un usage (son `t` à la première apparition) et son **service** (celui de l'agent à ce moment-là) sont figés : un coût passé ne bouge ni quand un prix change, ni quand l'agent change de service ou quitte le relevé.
+- Un modèle dont le bureau ne connaît pas le prix n'est jamais compté à zéro : l'usage est montré avec ses tokens et « prix inconnu », et il est exclu des euros avec un avertissement.
+
+Le bureau en tire aussi des **sources d'amélioration** (onglet Facturation) : les tâches qui coûtent plus de trois fois la médiane du service, une étape faite avec le modèle le plus cher du service quand les autres usages de cette étape sont en médiane moins chers, et la part du coût des tâches qui ont reçu au moins deux `retours`.
+
+### Les KPI
+
+Par service, `kpi` : liste de `{id, nom, valeur, unite?, evolution?, alerte?, texte?, periodes?}`. La liste est ouverte : ajoutez les vôtres, le bureau les montre tels quels.
+
+| Champ | Valeurs |
+|---|---|
+| `id` | texte non vide, unique **dans le service** |
+| `nom` | texte affiché |
+| `valeur` | nombre ou texte |
+| `unite`, `evolution` | textes courts affichés tels quels (« défauts », « +2 depuis hier ») |
+| `alerte` | vrai si votre projet juge le seuil franchi ; `texte` explique alors pourquoi |
+| `periodes` | `{"aujourdhui": v, "7j": v, "30j": v}` : la valeur suit le sélecteur de période ; sans `periodes`, le KPI est marqué « toutes périodes » |
+
+Le bureau ajoute ceux qu'il sait calculer sur la période : tâches terminées (tâches du service dans une colonne `terminee` dont `maj` tombe dans la période), allers-retours moyens (nombre de `retours` par tâche), durée moyenne d'une tâche (de la première à la dernière entrée de son `journal`), coût moyen par tâche (d'après `usage`). Un chiffre sans donnée n'est pas montré. Si vous donnez un KPI avec le même `id` qu'un calculé (`taches_terminees`, `allers_retours`, `duree_tache`, `cout_moyen`), le vôtre le remplace.
+
+Un KPI en alerte est rappelé en haut de l'onglet Tâches, avec un bouton « Challenger ».
+
+### Les connaissances
+
+Par titulaire, `connaissances` : liste de `{id, texte, date?, origine?, appris_de?}`. Les leçons **validées** du titulaire (`lecons`, version 2) sont montrées avec elles.
+
+| Champ | Valeurs |
+|---|---|
+| `id` | texte non vide, unique parmi **toutes** les connaissances du relevé (une connaissance partagée a donc un `id` par agent qui la reçoit) |
+| `texte` | la connaissance |
+| `date` | date ISO (`2026-11-08`, ou avec l'heure) |
+| `origine` | texte libre, ou l'`id` du challenge qui l'a produite (voir « Problème revenu ») |
+| `appris_de` | liste de `{agent, tache?, retour?}` : l'agent dont le retour est la source (clé d'un titulaire, de n'importe quel service), la tâche, la date du retour |
+
+Une connaissance qui porte `appris_de` est marquée « partagée » : « appris du retour de Hugo sur *Export CSV* ». L'onglet Connaissances d'un service montre aussi ce que ses agents ont reçu d'un autre service, et signale les agents qui n'ont rien reçu sur la période. C'est votre projet qui organise le partage ; le bureau le rend visible.
+
+### Les challenges
+
+`challenges` : liste de `{id, cible, texte, date?, solutions?}`.
+
+| Champ | Valeurs |
+|---|---|
+| `id` | texte non vide, unique parmi les challenges |
+| `cible` | `{type, id}` ; `type` : `"kpi"`, `"connaissance"` ou `"source"` ; `id` : celui que la demande `challenge` vous a donné, recopié tel quel |
+| `texte` | le problème, en clair |
+| `solutions` | liste de `{id, texte, auteur, etat?}` ; `id` unique parmi les solutions de **tous** les challenges ; `auteur` : `"directeur"`, `"service"` ou `"utilisateur"` ; `etat` : mot court (« proposée », « validée », « écartée » ; une solution validée ou écartée n'a plus de case à cocher) |
+
+**Les identifiants de cible.** Une cible `connaissance` porte l'`id` de la connaissance (ou de la leçon validée). Une cible `kpi` porte **`kpi:<service>:<id du KPI>`**, pour les KPI calculés comme pour les vôtres (les `id` de KPI ne sont uniques que par service) : pour votre KPI `defauts` du service `dev`, la demande dit `kpi:dev:defauts`. Une cible `source` porte `source:<service>:<genre>:<tâche>`, `genre` valant `tache_chere`, `modele_trop_fort` ou `allers_retours`.
+
+**Le cycle.** L'utilisateur clique « Challenger » (demande `challenge`) ; votre projet ajoute le challenge au relevé et y dépose les solutions du Directeur et du service ; l'utilisateur peut ajouter la sienne (demande `solution`), puis coche et valide (une demande `verdict_solution` par solution cochée). Sur `"valider"`, votre projet inscrit la solution dans les `connaissances` des agents concernés, avec `origine` = l'`id` du challenge. Le bureau n'invente jamais une solution et n'écrit jamais une connaissance.
+
+**Problème revenu.** Si une connaissance a pour `origine` l'`id` d'un challenge dont la cible est un KPI de votre projet, et que ce KPI entre de nouveau en alerte **après** la date de la connaissance, le bureau la marque « problème revenu ». Il lui faut donc trois choses : `origine` = `id` du challenge, une `date` sur la connaissance, et un KPI dont `alerte` repasse à faux quand le problème cesse (le bureau note chaque entrée en alerte dans `alertes-historique.jsonl`, à côté des réglages).
+
 ## Faire agir le bureau
 
-Le bureau **n'agit jamais lui-même** sur la factory : chaque geste de l'utilisateur (un bouton, un déplacement de tâche, un retour, un verdict sur une leçon) devient une **demande** remise à votre projet, par une commande d'actions que vous déclarez dans les réglages :
+Le bureau **n'agit jamais lui-même** sur la factory : chaque geste de l'utilisateur (un bouton, un déplacement de tâche, un retour, un verdict sur une leçon, un challenge) devient une **demande** remise à votre projet, par une commande d'actions que vous déclarez dans les réglages :
 
 ```json
 {"actions": {"commande": ["python", "actions.py"], "dossier": "."}}
@@ -80,8 +163,13 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `deplacer` | `tache`, `colonne` | passer une tâche (ou un élément de `file.visibles` ou de `file.suite`, par son `id`) dans cette colonne |
 | `retour` | `tache`, `texte` (3 500 caractères au plus) | un retour de l'utilisateur sur une tâche |
 | `lecon` | `id`, `verdict` (`"valider"` ou `"invalider"`) | la décision du Directeur sur une leçon |
+| `challenge` | `cible` (`{type, id}`), `texte?`, `solution?` | v3 : ouvrir un challenge sur cette cible ; `solution` : la solution que l'utilisateur écrit dans le même geste |
+| `solution` | `challenge`, `texte` (3 500 caractères au plus) | v3 : l'utilisateur ajoute sa solution à un challenge du relevé |
+| `verdict_solution` | `challenge`, `solution`, `verdict` (`"valider"` ou `"ecarter"`) | v3 : la décision de l'utilisateur sur une solution |
 
-Chaque demande porte aussi `t` (date ISO). Le bureau ne transmet une demande qu'après l'avoir comparée au dernier relevé valide : un bouton, une colonne, une tâche ou une leçon qui n'y figure pas est refusé sans lancer la commande.
+Chaque demande porte aussi `t` (date ISO). Le bureau ne transmet une demande qu'après l'avoir comparée au dernier relevé valide : un bouton, une colonne, une tâche, une leçon, une cible, un challenge ou une solution qui n'y figure pas est refusé sans lancer la commande.
+
+**Les demandes de challenge** (relevé version 3 seulement). Pour une cible que le bureau calcule lui-même (un KPI calculé, une source d'amélioration), il écrit le constat en clair dans `texte` (« Tâche « … » : coût de ≈ 4,20 € pour une médiane de ≈ 1,10 € dans le service. »), suivi du texte de l'utilisateur s'il y en a un ; pour un KPI de votre projet ou une connaissance, `texte` est absent : votre projet les connaît par leur identifiant. Une cible qui a déjà un challenge dans le relevé est refusée (la page ouvre le challenge existant) ; tant que votre relevé ne montre pas le challenge demandé, le bureau refuse pendant deux minutes d'en envoyer un second sur la même cible : ajoutez le challenge au relevé dès que vous prenez la demande, même sans solution. Une solution non cochée ne reçoit aucune demande : elle reste en l'état.
 
 **Les boutons** (`actions` dans le relevé) : liste de `{id, libelle}` plus, au choix, `lien` (le bouton ouvre cette adresse dans un nouvel onglet) ou rien (le bouton envoie une demande `bouton`) ; facultativement `confirmer` (la question posée avant l'envoi) et `actif` (`false` = grisé). Pour un bouton à bascule (Pause / Reprendre), c'est le projet qui donne le bon libellé à chaque relevé. **Choisissez des identifiants qui disent l'état voulu** (`pause` puis `reprendre`, pas `basculer`) : un double clic avant le relevé suivant ne défait alors pas la demande.
 
@@ -111,7 +199,7 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 
 ## Exemple complet
 
-Voir [`exemples/demo/releve.json`](../exemples/demo/releve.json) (projet inventé « Démo », version 2 : boutons, détail d'une tâche, leçon à valider, retour sans réponse, tâche bloquée).
+Voir [`exemples/demo/releve.json`](../exemples/demo/releve.json) (projet inventé « Démo », version 3 : boutons, détail d'une tâche, leçon à valider, retour sans réponse, tâche bloquée, usage sur plusieurs modèles, KPI dont un en alerte, connaissances partagées, un challenge avec trois solutions).
 
 Version minimale :
 

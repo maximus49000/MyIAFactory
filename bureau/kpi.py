@@ -48,8 +48,9 @@ def calcules(r, usages_cout, periode, maintenant):
             par_service[s].append(t)
     sortie = {}
     for sid, taches in par_service.items():
-        liste = [_calcule("taches_terminees", "Tâches terminées",
-                          sum(1 for t in taches if t.get("colonne") in terminees), periode, "tâches")]
+        finies = sum(1 for t in taches if t.get("colonne") in terminees)
+        liste = [_calcule("taches_terminees", "Tâches terminées", finies, periode,
+                          "tâche" if finies == 1 else "tâches")]
         if taches:
             moyenne = sum(len(t.get("retours") or []) for t in taches) / len(taches)
             liste.append(_calcule("allers_retours", "Allers-retours moyens", round(moyenne, 1), periode, "par tâche"))

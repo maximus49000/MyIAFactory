@@ -108,7 +108,101 @@ def lecon(r, d):
             t["lecons"] = [x for x in t["lecons"] if x["id"] != d["id"]]
 
 
-GESTES = {"bouton": bouton, "deplacer": deplacer, "retour": retour, "lecon": lecon}
+def _libre(pris, base):
+    """Un identifiant qui n'est pas encore pris : base1, base2…"""
+    n = 1
+    while f"{base}{n}" in pris:
+        n += 1
+    return f"{base}{n}"
+
+
+def _ajouter_solution(r, ch, texte, auteur):
+    pris = {s["id"] for c in r.get("challenges", []) for s in c.get("solutions", [])}
+    ch.setdefault("solutions", []).append(
+        {"id": _libre(pris, ch["id"] + ":s"), "texte": texte, "auteur": auteur, "etat": "proposée"})
+
+
+def _probleme(r, cible):
+    """Le texte du challenge quand la demande n'en porte pas : le bureau n'écrit le constat que pour ce
+    qu'il calcule lui-même ; un KPI ou une connaissance du projet, c'est au projet de les retrouver."""
+    if cible["type"] == "kpi":
+        for s in r["services"]:
+            for k in s.get("kpi", []):
+                if cible["id"] == f"kpi:{s['id']}:{k['id']}":
+                    return k.get("texte") or f"{k['nom']} : {k['valeur']}"
+    if cible["type"] == "connaissance":
+        for t in r["titulaires"]:
+            for x in t.get("connaissances", []) + t.get("lecons", []):
+                if x["id"] == cible["id"]:
+                    return "Connaissance contestée : « " + x["texte"] + " »"
+    return "Challenge ouvert depuis le bureau."
+
+
+def challenge(r, d):
+    """Ouvre un challenge. La démo joue aussi le projet : le Directeur et le service proposent aussitôt
+    chacun une solution (dans un vrai projet, ce sont les agents qui les écrivent)."""
+    cible = d.get("cible")
+    if (not isinstance(cible, dict) or cible.get("type") not in ("kpi", "connaissance", "source")
+            or not isinstance(cible.get("id"), str) or not cible["id"]):
+        refuser("Cible illisible.")
+    cible = {"type": cible["type"], "id": cible["id"]}
+    challenges = r.setdefault("challenges", [])
+    if any(c["cible"] == cible for c in challenges):
+        refuser("Un challenge existe déjà sur cette cible.")
+    ch = {"id": _libre({c["id"] for c in challenges}, "c"), "cible": cible,
+          "texte": d.get("texte") or _probleme(r, cible), "date": maintenant(), "solutions": []}
+    challenges.append(ch)
+    _ajouter_solution(r, ch, "Solution du Directeur (démo) : revoir la consigne donnée au service.", "directeur")
+    _ajouter_solution(r, ch, "Solution du service (démo) : ajouter une vérification avant de livrer.", "service")
+    if d.get("solution"):
+        _ajouter_solution(r, ch, d["solution"], "utilisateur")
+
+
+def _challenge(r, d):
+    ch = next((c for c in r.get("challenges", []) if c["id"] == d.get("challenge")), None)
+    if ch is None:
+        refuser("Challenge inconnu : " + str(d.get("challenge")))
+    return ch
+
+
+def solution(r, d):
+    if not isinstance(d.get("texte"), str) or not d["texte"].strip():
+        refuser("La solution est vide.")
+    _ajouter_solution(r, _challenge(r, d), d["texte"], "utilisateur")
+
+
+def _agents_concernes(r, cible):
+    """Qui reçoit la connaissance : le titulaire de la connaissance contestée, ou les agents du service
+    visé par le KPI ou la source (`kpi:<service>:<id>`, `source:<service>:<genre>:<tâche>`)."""
+    if cible["type"] == "connaissance":
+        return [t for t in r["titulaires"]
+                if any(x["id"] == cible["id"] for x in t.get("connaissances", []) + t.get("lecons", []))]
+    reste = cible["id"].split(":", 1)[-1]
+    services = sorted((s["id"] for s in r["services"] if reste.startswith(s["id"] + ":")), key=len)
+    return [t for t in r["titulaires"] if services and t.get("service") == services[-1]]
+
+
+def verdict_solution(r, d):
+    ch = _challenge(r, d)
+    sol = next((s for s in ch.get("solutions", []) if s["id"] == d.get("solution")), None)
+    if sol is None:
+        refuser("Solution inconnue : " + str(d.get("solution")))
+    if d.get("verdict") == "ecarter":
+        sol["etat"] = "écartée"
+        return
+    if d.get("verdict") != "valider":
+        refuser("Verdict inconnu : " + str(d.get("verdict")))
+    sol["etat"] = "validée"
+    # La solution validée devient une connaissance des agents concernés ; son origine est le challenge.
+    for t in _agents_concernes(r, ch["cible"]):
+        i = f"k:{sol['id']}:{t['cle']}"  # un identifiant de connaissance est unique dans tout le relevé
+        connaissances = t.setdefault("connaissances", [])
+        if all(c["id"] != i for c in connaissances):
+            connaissances.append({"id": i, "texte": sol["texte"], "date": maintenant(), "origine": ch["id"]})
+
+
+GESTES = {"bouton": bouton, "deplacer": deplacer, "retour": retour, "lecon": lecon,
+          "challenge": challenge, "solution": solution, "verdict_solution": verdict_solution}
 
 
 def main():

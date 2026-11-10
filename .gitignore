@@ -14,4 +14,5 @@ exemples/demo/equipe.json
 exemples/demo/charge-historique.jsonl
 exemples/demo/usage-historique.jsonl
 exemples/demo/prix-historique.jsonl
+exemples/demo/alertes-historique.jsonl
 *.jsonl.tmp

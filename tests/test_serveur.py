@@ -460,7 +460,14 @@ class TestFacturation(AvecServeur):
             self.assertIn("erreur", json.loads(data.decode("utf-8")))
 
     def test_v2_facturation_indisponible(self):
+        # La démo, redescendue en version 2 : ses champs de la version 3 (usage, kpi…) sont alors ignorés.
+        fichier = self.tmp / "demo" / "releve.json"
+        r = json.loads(fichier.read_text(encoding="utf-8"))
+        self.assertTrue(r["usage"])
+        fichier.write_text(json.dumps({**r, "version": 2}), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
         self.assertEqual(self.json("/api/facturation"), {"disponible": False})
+        self.assertEqual(self.json("/api/kpi"), {"disponible": False})
         self.assertEqual(self.json("/api/etat")["dossier"],
                          {"facturation": False, "kpi": False, "connaissances": False})
         self.v3()  # version 3 sans aucun usage

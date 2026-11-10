@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "projet": "Démo",
   "factory": {
     "etat": "en marche",
@@ -12,11 +12,36 @@
     },
     {
       "id": "dev",
-      "nom": "Dev"
+      "nom": "Dev",
+      "kpi": [
+        {
+          "id": "defauts",
+          "nom": "Défauts passés au contrôle",
+          "valeur": 2,
+          "unite": "défauts",
+          "evolution": "+1 depuis hier",
+          "alerte": true,
+          "texte": "Export des commandes : le même défaut est passé 2 fois au contrôle.",
+          "periodes": {
+            "aujourdhui": 1,
+            "7j": 2,
+            "30j": 2
+          }
+        }
+      ]
     },
     {
       "id": "qa",
-      "nom": "QA"
+      "nom": "QA",
+      "kpi": [
+        {
+          "id": "cas",
+          "nom": "Cas de test écrits",
+          "valeur": 48,
+          "unite": "cas",
+          "evolution": "+6 cette semaine"
+        }
+      ]
     },
     {
       "id": "integration",
@@ -46,7 +71,8 @@
     },
     {
       "id": "fait",
-      "nom": "Fait"
+      "nom": "Fait",
+      "terminee": true
     },
     {
       "id": "bloque",
@@ -85,20 +111,56 @@
           "texte": "Nommer les écrans comme dans la maquette.",
           "etat": "validée"
         }
+      ],
+      "connaissances": [
+        {
+          "id": "k-dev1-1",
+          "texte": "Essayer chaque export avec des caractères accentués avant de livrer.",
+          "date": "2026-11-07",
+          "origine": "Retour sur « Thème sombre »"
+        }
       ]
     },
     {
       "cle": "dev:2",
       "service": "dev",
       "lieu": "cloud",
-      "modele": "Sonnet"
+      "modele": "Sonnet",
+      "connaissances": [
+        {
+          "id": "k-dev2-1",
+          "texte": "Essayer chaque export avec des caractères accentués avant de livrer.",
+          "date": "2026-11-08",
+          "appris_de": [
+            {
+              "agent": "dev:1",
+              "tache": "t7",
+              "retour": "2026-11-07T15:00:00"
+            }
+          ]
+        }
+      ]
     },
     {
       "cle": "qa:1",
       "service": "qa",
       "lieu": "local",
       "modele": "Haiku",
-      "specialite": "Cas limites"
+      "specialite": "Cas limites",
+      "connaissances": [
+        {
+          "id": "k-qa1-1",
+          "texte": "Ajouter un cas de test avec des accents à chaque export.",
+          "date": "2026-11-08",
+          "appris_de": [
+            {
+              "agent": "dev:1",
+              "tache": "t7",
+              "retour": "2026-11-07T15:00:00"
+            }
+          ]
+        }
+      ]
     },
     {
       "cle": "integration:1",
@@ -159,6 +221,20 @@
         {
           "libelle": "Session de travail (exemple)",
           "url": "https://example.org/sessions/demo-1"
+        }
+      ],
+      "retours": [
+        {
+          "t": "2026-11-09T15:40:00",
+          "texte": "Le titre est trop petit sur un petit écran.",
+          "reponse": "Corrigé : le titre s'adapte à la largeur.",
+          "etat": "pris en compte"
+        },
+        {
+          "t": "2026-11-09T16:10:00",
+          "texte": "Les marges ne sont pas celles de la maquette.",
+          "reponse": "Corrigé : marges reprises de la maquette.",
+          "etat": "pris en compte"
         }
       ]
     },
@@ -236,7 +312,17 @@
       "titulaire": "dev:1",
       "etape": "Livré",
       "maj": "2026-11-09T08:30:00",
-      "postit": true
+      "postit": true,
+      "journal": [
+        {
+          "t": "2026-11-07T09:30:00",
+          "texte": "Prise en charge de la tâche."
+        },
+        {
+          "t": "2026-11-09T08:30:00",
+          "texte": "Livré."
+        }
+      ]
     },
     {
       "id": "t8",
@@ -318,6 +404,160 @@
       "tache": "t1",
       "date": "2026-11-09T16:40:00",
       "texte": "Relancer les tests de l'écran après chaque changement de mise en page."
+    }
+  ],
+  "usage": [
+    {
+      "id": "u1",
+      "tache": "t1",
+      "agent": "dev:1",
+      "modele": "Sonnet",
+      "etape": "Maquette",
+      "t": "2026-11-09T14:10:00",
+      "entree": 180000,
+      "sortie": 22000,
+      "cache_lecture": 400000
+    },
+    {
+      "id": "u2",
+      "tache": "t1",
+      "agent": "dev:1",
+      "modele": "Sonnet",
+      "etape": "Mise en page",
+      "t": "2026-11-09T15:30:00",
+      "entree": 900000,
+      "sortie": 140000,
+      "cache_lecture": 2100000
+    },
+    {
+      "id": "u3",
+      "tache": "t1",
+      "agent": "dev:1",
+      "modele": "Opus",
+      "etape": "Tests",
+      "t": "2026-11-09T16:30:00",
+      "entree": 350000,
+      "sortie": 60000
+    },
+    {
+      "id": "u4",
+      "tache": "t4",
+      "agent": "dev:2",
+      "modele": "Sonnet",
+      "etape": "Tests",
+      "t": "2026-11-09T09:40:00",
+      "entree": 120000,
+      "sortie": 18000
+    },
+    {
+      "id": "u5",
+      "tache": "t7",
+      "agent": "dev:1",
+      "modele": "Sonnet",
+      "etape": "Mise en page",
+      "t": "2026-11-08T17:00:00",
+      "entree": 60000,
+      "sortie": 9000
+    },
+    {
+      "id": "u6",
+      "tache": "t7",
+      "agent": "dev:1",
+      "modele": "Sonnet",
+      "etape": "Tests",
+      "t": "2026-11-09T08:20:00",
+      "entree": 90000,
+      "sortie": 12000
+    },
+    {
+      "id": "u7",
+      "tache": "t3",
+      "agent": "qa:1",
+      "modele": "Haiku",
+      "etape": "Relecture",
+      "t": "2026-11-09T09:55:00",
+      "entree": 240000,
+      "sortie": 30000
+    },
+    {
+      "id": "u8",
+      "tache": "t2",
+      "agent": "metier:1",
+      "modele": "Sonnet",
+      "etape": "Cahier des charges",
+      "t": "2026-11-09T10:00:00",
+      "entree": 150000,
+      "sortie": 40000
+    },
+    {
+      "id": "u9",
+      "tache": "t8",
+      "agent": "integration:1",
+      "modele": "Sonnet",
+      "etape": "Analyse",
+      "t": "2026-11-09T08:15:00",
+      "entree": 80000,
+      "sortie": 10000
+    },
+    {
+      "id": "u10",
+      "tache": "t10",
+      "agent": "design:1",
+      "modele": "Haiku",
+      "etape": "Maquette",
+      "t": "2026-11-09T15:45:00",
+      "entree": 110000,
+      "sortie": 16000
+    },
+    {
+      "id": "u11",
+      "tache": "t10",
+      "agent": "design:1",
+      "modele": "Maison",
+      "etape": "Maquette",
+      "t": "2026-11-09T15:50:00",
+      "entree": 300000,
+      "sortie": 45000
+    },
+    {
+      "id": "u12",
+      "tache": null,
+      "agent": "chef",
+      "modele": "Opus",
+      "t": "2026-11-09T08:05:00",
+      "entree": 200000,
+      "sortie": 25000
+    }
+  ],
+  "challenges": [
+    {
+      "id": "c1",
+      "cible": {
+        "type": "kpi",
+        "id": "kpi:dev:defauts"
+      },
+      "texte": "Export des commandes : le même défaut est passé 2 fois au contrôle.",
+      "date": "2026-11-09T17:30:00",
+      "solutions": [
+        {
+          "id": "c1:s1",
+          "texte": "Faire relire chaque export par la QA avant de le passer en relecture.",
+          "auteur": "directeur",
+          "etat": "proposée"
+        },
+        {
+          "id": "c1:s2",
+          "texte": "Ajouter un test automatique des accents dans l'export.",
+          "auteur": "service",
+          "etat": "proposée"
+        },
+        {
+          "id": "c1:s3",
+          "texte": "Garder un fichier d'exemple avec des accents et l'essayer à chaque livraison.",
+          "auteur": "utilisateur",
+          "etat": "proposée"
+        }
+      ]
     }
   ]
 }

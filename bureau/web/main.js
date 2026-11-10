@@ -67,7 +67,9 @@ async function demarrer() {
   const panneaux = creerPanneaux({
     conteneur, carte: document.getElementById("carte"), panneau: document.getElementById("panneau"),
     sc, plan, etat: () => dernier, barre,
+    surFiltre: () => { besoin = true; },
   });
+  barre.boutonListe.addEventListener("click", () => panneaux.basculerListe());
   panneaux.maj(etat);
 
   const acteursVus = () => new Map([...regie.acteurs, ["directeur", directeur]]);
@@ -106,6 +108,7 @@ async function demarrer() {
     regie.avancer(dt);
     personnages.synchroniser(acteursVus());
     kanban.synchroniser(dernier.colonnes || [], regie.postits, dernier.taches || [], dernier.file);
+    kanban.estomper(panneaux.filtre());
     const marche = personnages.animer(dt);
     const bouge = marche | kanban.animer(dt) | sc.transition(dt);
     intervalle = bouge ? IMAGE_MOUVEMENT : IMAGE_REPOS;

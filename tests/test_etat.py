@@ -178,6 +178,10 @@ class TestEtat(unittest.TestCase):
         self.assertEqual((t1["type"], t1["bloquee"], len(t1["liens"]), len(t1["images"])),
                          ("bug", "x", 1, 1))
 
+    def test_tache_active(self):
+        e = self.etat(active=False)
+        self.assertEqual({t["id"]: t["active"] for t in e["taches"]}, {"t1": False, "t2": True})
+
     def test_etat_json_serialisable(self):
         json.dumps(self.etat())
 

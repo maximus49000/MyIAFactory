@@ -49,3 +49,31 @@ export function libelleCharge(c) {
   if (!c || !c.disponible) return "Mesure indisponible";
   return `Charge ${Math.round(c.charge)} % · processeur ${Math.round(c.cpu)} %, mémoire ${Math.round(c.memoire)} %`;
 }
+
+// Les identifiants des tâches qui passent le filtre : en cours (= `active`) et/ou d'un type donné.
+export function filtrer(taches, {enCours = false, type = null} = {}) {
+  const ids = new Set();
+  for (const t of taches || []) {
+    if (enCours && !t.active) continue;
+    if (type && t.type !== type) continue;
+    ids.add(t.id);
+  }
+  return ids;
+}
+
+// Les vignettes d'une tâche : l'adresse porte la date de mise à jour, pour que le cache suive une image refaite.
+export function imagesUrl(tache) {
+  const maj = encodeURIComponent(tache?.maj ?? "");
+  return (tache?.images || []).map((i) => ({
+    url: `/api/image?chemin=${encodeURIComponent(i.chemin)}&t=${maj}`,
+    legende: i.legende || "",
+  }));
+}
+
+// Une date du relevé en clair (heure locale) ; un texte illisible est rendu tel quel.
+export function dateFr(date) {
+  if (typeof date !== "string" || !date) return "";
+  const t = new Date(date);
+  if (Number.isNaN(t.getTime())) return date;
+  return t.toLocaleString("fr-FR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+}

@@ -38,7 +38,9 @@ export function creerBarre(entete, bandeau) {
   charge.append(etiquette, piste, valeur);
 
   const zoneActions = el("div", "barre-actions");
-  entete.append(titre, leVoyant, zoneActions, charge);
+  const boutonListe = el("button", "bouton-barre bouton-liste", "Toutes les tâches");
+  boutonListe.type = "button";
+  entete.append(titre, leVoyant, zoneActions, boutonListe, charge);
 
   // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
   const retour = el("div", "message-demande");
@@ -160,6 +162,7 @@ export function creerBarre(entete, bandeau) {
       bandeau.hidden = false;
       afficherVoyant();
     },
+    boutonListe,
     majActions,
     demander,
     dire,

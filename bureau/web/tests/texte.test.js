@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -50,4 +50,36 @@ test("ilYA", () => {
   assert.equal(ilYA("", MAINTENANT), "inconnue");
   assert.equal(ilYA("hier", MAINTENANT), "inconnue");
   assert.equal(ilYA(null, MAINTENANT), "inconnue");
+});
+
+const TACHES = [
+  {id: "a", active: true, type: "bug"}, {id: "b", active: false, type: "bug"},
+  {id: "c", active: true, type: "fonction"}, {id: "d", active: false, type: null},
+];
+
+test("filtrer", () => {
+  assert.deepEqual([...filtrer(TACHES, {enCours: false, type: null})], ["a", "b", "c", "d"]);
+  assert.deepEqual([...filtrer(TACHES, {enCours: true, type: null})], ["a", "c"]);
+  assert.deepEqual([...filtrer(TACHES, {enCours: false, type: "bug"})], ["a", "b"]);
+  assert.deepEqual([...filtrer(TACHES, {enCours: true, type: "bug"})], ["a"]);
+  assert.deepEqual([...filtrer(TACHES, {enCours: false, type: "inconnu"})], []);
+  assert.deepEqual([...filtrer([], {enCours: true, type: null})], []);
+  assert.deepEqual([...filtrer(TACHES, {})], ["a", "b", "c", "d"]);
+});
+
+test("imagesUrl encode &, espaces et #", () => {
+  const u = imagesUrl({maj: "2026-11-10T09:00:00+01:00",
+                       images: [{chemin: "img/a b&c#d.png", legende: "L"}, {chemin: "x.png"}]});
+  assert.equal(u[0].url, "/api/image?chemin=img%2Fa%20b%26c%23d.png&t=2026-11-10T09%3A00%3A00%2B01%3A00");
+  assert.equal(u[0].legende, "L");
+  assert.equal(u[1].legende, "");
+  assert.equal(imagesUrl({images: [{chemin: "x.png"}]})[0].url, "/api/image?chemin=x.png&t=");
+  assert.deepEqual(imagesUrl({}), []);
+  assert.deepEqual(imagesUrl(null), []);
+});
+
+test("dateFr garde un texte illisible tel quel", () => {
+  assert.equal(dateFr("hier soir"), "hier soir");
+  assert.equal(dateFr(null), "");
+  assert.match(dateFr("2026-11-10T09:30:00"), /09:30/);
 });

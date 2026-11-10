@@ -45,7 +45,7 @@ def construire(r, eq, maintenant, fraicheur_min):
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],
         "agent": t.get("titulaire") if t.get("titulaire") in presents else None,
         "etape": t.get("etape") or "", "maj": t.get("maj"), "postit": t.get("postit", True),
-        "type": t.get("type"),
+        "active": bool(t.get("active")), "type": t.get("type"),
         "journal": sorted(t.get("journal") or [], key=lambda j: j["t"], reverse=True),
         "images": t.get("images") or [], "liens": t.get("liens") or [],
         "retours": t.get("retours") or [], "bloquee": t.get("bloquee") or None,

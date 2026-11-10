@@ -58,6 +58,8 @@ export class Kanban {
 
     this.geoPostit = new THREE.BoxGeometry(POSTIT.l, POSTIT.h, POSTIT.e);
     this.materiaux = new Map();
+    this.pales = new Map();        // matériaux estompés (tâches exclues par le filtre de la vue liste)
+    this.filtre = null;            // Set d'identifiants de tâches à montrer, ou null (tout montrer)
     this.postits = new Map();      // cle -> {mesh, cible: Vector3}
     this.signatureColonnes = null;
     this.signature = null;
@@ -67,6 +69,28 @@ export class Kanban {
   _materiau(couleur) {
     if (!this.materiaux.has(couleur)) this.materiaux.set(couleur, new THREE.MeshLambertMaterial({color: couleur}));
     return this.materiaux.get(couleur);
+  }
+
+  _materiauEstompe(couleur) {
+    if (!this.pales.has(couleur)) {
+      this.pales.set(couleur, new THREE.MeshLambertMaterial({color: couleur, transparent: true, opacity: 0.25}));
+    }
+    return this.pales.get(couleur);
+  }
+
+  // La vue liste filtre : les post-its exclus s'estompent (opacité 0,25). `ids` null : tout est montré.
+  estomper(ids) {
+    this.filtre = ids || null;
+    for (const e of this.postits.values()) this._appliquerFiltre(e);
+  }
+
+  _appliquerFiltre(e) {
+    if (e.type !== "postit") return;
+    const estompe = Boolean(this.filtre) && !this.filtre.has(e.id);
+    if (e.estompe === estompe) return;
+    e.estompe = estompe;
+    e.mesh.material = estompe ? this._materiauEstompe(e.couleur) : this._materiau(e.couleur);
+    e.mesh.castShadow = !estompe;
   }
 
   _dessinerColonnes(colonnes) {
@@ -157,18 +181,19 @@ export class Kanban {
           mesh = new THREE.Mesh(this.geoPostit, this._materiau(c.couleur));
           mesh.castShadow = true;
           mesh.rotation.z = ((hachage(c.cle) % 9) - 4) * 0.012;
-          if (c.type === "postit") {
-            mesh.userData.choix = {type: "postit", id: c.id};
+          if (c.type === "postit" || c.type === "file") {
+            mesh.userData.choix = {type: c.type, id: c.id};
             this.sc.choisissables.push(mesh);
           }
         }
         mesh.position.copy(cible);
         mesh.scale.setScalar(0.01);
         this.groupe.add(mesh);
-        e = {mesh, cible, texte: c.texte};
+        e = {mesh, cible, texte: c.texte, type: c.type, id: c.id, couleur: c.couleur, estompe: false};
         this.postits.set(c.cle, e);
       }
       e.cible = cible;
+      this._appliquerFiltre(e);
     }
     for (const [cle, e] of this.postits) if (!vus.has(cle)) this._retirer(cle, e);
   }

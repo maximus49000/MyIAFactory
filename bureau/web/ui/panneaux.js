@@ -2,33 +2,44 @@
 // Lecture seule, sauf le réglage de la charge maximum. Tout texte venu du serveur passe par textContent.
 
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
-import {tronquer, ilYA} from "./texte.js";
+import {tronquer, filtrer} from "./texte.js";
+import {el, ligne} from "./dom.js";
+import {contenuTache, contenuFile, contenuListe} from "./detail.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
 
-function el(tag, classe, texte) {
-  const e = document.createElement(tag);
-  if (classe) e.className = classe;
-  if (texte !== undefined) e.textContent = texte;
-  return e;
-}
-
-function ligne(cle, valeur) {
-  const l = el("div", "ligne");
-  l.append(el("span", "cle", cle), el("span", "val", valeur));
-  return l;
-}
-
-// opts : {conteneur, carte, panneau, sc, plan, etat: () => état courant, barre}
-export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}) {
+// opts : {conteneur, carte, panneau, sc, plan, etat: () => état courant, barre, surFiltre: () => void}
+export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre, surFiltre = () => {}}) {
   let epingle = null;          // {type, id} de la carte épinglée par un clic
   let panneauOuvert = null;    // {type, id}
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
+  let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
+  const filtreListe = {enCours: false, type: null};
+  const brouillons = new Map();  // tâche -> retour en cours d'écriture (survit aux rafraîchissements)
 
-  const signature = (type, id, e) => JSON.stringify(type === "service"
-    ? (e.agents || []).filter((a) => a.service === id).map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur])
-    : e.decisions || 0);
+  const signature = (type, id, e) => {
+    if (type === "service") {
+      return JSON.stringify((e.agents || []).filter((a) => a.service === id)
+        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]));
+    }
+    if (type === "tache") {
+      return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir,
+        (e.agents || []).map((a) => [a.id, a.prenom]), retourListe]);
+    }
+    if (type === "file") return JSON.stringify([(e.file?.visibles || []).find((q) => q.id === id), e.colonnes, e.agir]);
+    if (type === "liste") {
+      return JSON.stringify([(e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.maj, t.type, t.active]),
+        e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
+    }
+    return JSON.stringify(e.decisions || 0);
+  };
+
+  // Les tâches qui passent le filtre tant que la vue liste est ouverte (sinon null : rien n'est estompé).
+  function filtreActif() {
+    const e = etat();
+    return panneauOuvert?.type === "liste" && e ? filtrer(e.taches, filtreListe) : null;
+  }
 
   // --- Pastille de décisions au-dessus du bureau du Directeur.
   const pastille = el("div", "pastille");
@@ -56,34 +67,12 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     return c;
   }
 
-  function cartePostit(t, e) {
-    const c = el("div", "carte-contenu");
-    c.append(el("div", "carte-titre", tronquer(t.titre, MAX_TITRE)));
-    const col = (e.colonnes || []).find((x) => x.id === t.colonne);
-    c.append(ligne("Colonne", col ? tronquer(col.nom, 30) : "—"));
-    const ag = (e.agents || []).find((x) => x.id === t.agent);
-    c.append(ligne("Agent", ag ? ag.prenom : "personne"));
-    c.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
-    c.append(ligne("Mise à jour", ilYA(t.maj)));
-    return c;
-  }
-
   function contenuCarte(choix) {
     const e = etat();
     if (!e || !choix) return null;
     if (choix.type === "agent") {
       const a = (e.agents || []).find((x) => x.id === choix.id);
       return a ? carteAgent(a, e) : null;
-    }
-    if (choix.type === "postit") {
-      const t = (e.taches || []).find((x) => x.id === choix.id);
-      if (t) return cartePostit(t, e);
-      const q = (e.file?.visibles || []).find((x) => x.id === choix.id);
-      if (q) {
-        const c = el("div", "carte-contenu");
-        c.append(el("div", "carte-titre", tronquer(q.titre, MAX_TITRE)), ligne("File d'attente", "pas encore commencée"));
-        return c;
-      }
     }
     return null;
   }
@@ -107,11 +96,21 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     panneau.hidden = true;
     panneau.replaceChildren();
     document.body.classList.remove("panneau-ouvert");
+    surFiltre();
   }
+
+  const contexte = () => ({
+    etat: etat(), barre, brouillons, filtreListe, retourListe,
+    ouvrirListe: () => ouvrirPanneau("liste", null),
+    ouvrirTache: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
+    changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
+  });
 
   function ouvrirPanneau(type, id) {
     const e = etat();
     if (!e) return;
+    if (type === "file" && (e.taches || []).some((t) => t.id === id)) type = "tache";  // la file est devenue une tâche
+    if (type !== "tache") retourListe = false;
     panneauOuvert = {type, id};
     signaturePanneau = signature(type, id, e);
     const contenu = el("div", "panneau-contenu");
@@ -141,6 +140,16 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
       contenu.append(liste);
       contenu.append(el("p", "note", "Les documents de ce service arriveront avec le projet 2."));
       avecReglage = id === "facturation";
+    } else if (type === "tache") {
+      const t = (e.taches || []).find((x) => x.id === id);
+      if (!t) { fermerPanneau(); return; }
+      contenuTache(contexte(), contenu, t);
+    } else if (type === "file") {
+      const q = (e.file?.visibles || []).find((x) => x.id === id);
+      if (!q) { fermerPanneau(); return; }
+      contenuFile(contexte(), contenu, q);
+    } else if (type === "liste") {
+      contenuListe(contexte(), contenu);
     } else {
       contenu.append(el("h2", "", "Direction"));
       const n = e.decisions || 0;
@@ -154,6 +163,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     panneau.replaceChildren(fermer, contenu);
     panneau.hidden = false;
     document.body.classList.add("panneau-ouvert");
+    surFiltre();
   }
 
   // --- Réglage de la charge maximum et « Me conseiller ».
@@ -237,7 +247,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
     attente = requestAnimationFrame(() => {
       attente = null;
       const choix = sc.pointer(ev);
-      const cliquable = ["agent", "postit", "service", "direction"].includes(choix.type);
+      const cliquable = ["agent", "postit", "file", "service", "direction"].includes(choix.type);
       conteneur.style.cursor = cliquable ? "pointer" : "";
       if (epingle) return;
       if (choix.type === "agent") montrerCarte(choix, ev.clientX, ev.clientY);
@@ -249,13 +259,15 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
   conteneur.addEventListener("click", (ev) => {
     const choix = sc.pointer(ev);
     epingle = null;
-    if (choix.type === "agent" || choix.type === "postit") {
+    if (choix.type === "agent") {
       epingle = {type: choix.type, id: choix.id};
       montrerCarte(choix, ev.clientX, ev.clientY);
       return;
     }
     cacherCarte();
-    if (choix.type === "service" || choix.type === "direction") ouvrirPanneau(choix.type, choix.id);
+    if (choix.type === "postit") ouvrirPanneau("tache", choix.id);
+    else if (choix.type === "file") ouvrirPanneau("file", choix.id);
+    else if (choix.type === "service" || choix.type === "direction") ouvrirPanneau(choix.type, choix.id);
     else fermerPanneau();
   });
 
@@ -268,6 +280,11 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
 
   return {
     // À chaque nouvel état : pastille, carte épinglée et panneau ouvert tenus à jour (sauf pendant la saisie du réglage).
+    // Ouvre la vue liste, ou la ferme si elle est déjà ouverte.
+    basculerListe() {
+      if (panneauOuvert?.type === "liste") fermerPanneau(); else ouvrirPanneau("liste", null);
+    },
+    filtre: filtreActif,
     maj(e) {
       const n = e.decisions || 0;
       pastille.textContent = String(n);
@@ -278,7 +295,11 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre}
         if (c) carte.replaceChildren(c); else { epingle = null; cacherCarte(); }
       }
       if (panneauOuvert && !panneau.contains(document.activeElement)) {
-        if (panneauOuvert.type === "service" && !(e.services || []).some((s) => s.id === panneauOuvert.id)) fermerPanneau();
+        const {type, id} = panneauOuvert;
+        if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
+        else if (type === "tache" && !(e.taches || []).some((t) => t.id === id)) fermerPanneau();
+        else if (type === "file" && !(e.taches || []).some((t) => t.id === id)
+                 && !(e.file?.visibles || []).some((q) => q.id === id)) fermerPanneau();
         else if (signature(panneauOuvert.type, panneauOuvert.id, e) !== signaturePanneau) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id);
       }
     },

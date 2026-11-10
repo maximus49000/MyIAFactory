@@ -52,7 +52,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 1. Le relevé version 3 et l'usage
 - [x] 2. L'historique des usages
 - [x] 3. Les prix, mise à jour automatique
-- [ ] 4. Le calcul des coûts
+- [x] 4. Le calcul des coûts
 - [ ] 5. Le serveur sert la facturation
 - [ ] 6. Le dossier, l'onglet Tâches et l'onglet Facturation
 - [ ] 7. Le relevé et l'état pour les connaissances

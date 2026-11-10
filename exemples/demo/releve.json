@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "projet": "Démo",
+  "factory": {
+    "etat": "en marche",
+    "depuis": "2026-11-09T08:00:00"
+  },
+  "services": [
+    {
+      "id": "metier",
+      "nom": "Métier"
+    },
+    {
+      "id": "dev",
+      "nom": "Dev"
+    },
+    {
+      "id": "qa",
+      "nom": "QA"
+    },
+    {
+      "id": "integration",
+      "nom": "Intégration"
+    },
+    {
+      "id": "facturation",
+      "nom": "Facturation"
+    }
+  ],
+  "colonnes": [
+    {
+      "id": "afaire",
+      "nom": "À faire"
+    },
+    {
+      "id": "encours",
+      "nom": "En cours"
+    },
+    {
+      "id": "revue",
+      "nom": "Relecture"
+    },
+    {
+      "id": "fait",
+      "nom": "Fait"
+    },
+    {
+      "id": "bloque",
+      "nom": "Bloqué"
+    }
+  ],
+  "titulaires": [
+    {
+      "cle": "chef",
+      "lieu": "local",
+      "chef": true,
+      "permanent": true,
+      "modele": "Opus"
+    },
+    {
+      "cle": "metier:1",
+      "service": "metier",
+      "lieu": "local",
+      "modele": "Sonnet"
+    },
+    {
+      "cle": "dev:1",
+      "service": "dev",
+      "lieu": "local",
+      "modele": "Sonnet",
+      "fraicheur_min": 90
+    },
+    {
+      "cle": "dev:2",
+      "service": "dev",
+      "lieu": "cloud",
+      "modele": "Sonnet"
+    },
+    {
+      "cle": "qa:1",
+      "service": "qa",
+      "lieu": "local",
+      "modele": "Haiku"
+    },
+    {
+      "cle": "integration:1",
+      "service": "integration",
+      "lieu": "cloud",
+      "modele": "Sonnet"
+    },
+    {
+      "cle": "facturation:1",
+      "service": "facturation",
+      "lieu": "local",
+      "modele": "Haiku",
+      "permanent": true
+    }
+  ],
+  "taches": [
+    {
+      "id": "t1",
+      "titre": "Écran d'accueil de la démo",
+      "colonne": "encours",
+      "active": true,
+      "titulaire": "dev:1",
+      "etape": "Mise en page en cours",
+      "maj": "2026-11-09T10:12:00",
+      "postit": true
+    },
+    {
+      "id": "t2",
+      "titre": "Règles de calcul des remises",
+      "colonne": "encours",
+      "active": true,
+      "titulaire": "metier:1",
+      "etape": "Rédaction du cahier des charges",
+      "maj": "2026-11-09T10:05:00",
+      "postit": true
+    },
+    {
+      "id": "t3",
+      "titre": "Export des commandes",
+      "colonne": "revue",
+      "active": true,
+      "titulaire": "qa:1",
+      "etape": "Relecture des cas de test",
+      "maj": "2026-11-09T09:58:00",
+      "postit": true
+    },
+    {
+      "id": "t4",
+      "titre": "Synchronisation hors ligne",
+      "colonne": "encours",
+      "active": true,
+      "titulaire": "dev:2",
+      "etape": "Écriture des tests",
+      "maj": "2026-11-09T09:40:00",
+      "postit": true
+    },
+    {
+      "id": "t5",
+      "titre": "Page de connexion",
+      "colonne": "afaire",
+      "active": false,
+      "titulaire": null,
+      "etape": "",
+      "maj": "2026-11-09T09:00:00",
+      "postit": true
+    },
+    {
+      "id": "t6",
+      "titre": "Rapport mensuel",
+      "colonne": "afaire",
+      "active": false,
+      "titulaire": null,
+      "etape": "",
+      "maj": "2026-11-09T08:50:00",
+      "postit": true
+    },
+    {
+      "id": "t7",
+      "titre": "Thème sombre",
+      "colonne": "fait",
+      "active": false,
+      "titulaire": "dev:1",
+      "etape": "Livré",
+      "maj": "2026-11-09T08:30:00",
+      "postit": true
+    },
+    {
+      "id": "t8",
+      "titre": "Import des fournisseurs",
+      "colonne": "bloque",
+      "active": false,
+      "titulaire": "integration:1",
+      "etape": "En attente d'une décision",
+      "maj": "2026-11-09T08:20:00",
+      "postit": true
+    },
+    {
+      "id": "t9",
+      "titre": "Tâche interne de suivi",
+      "colonne": "encours",
+      "active": false,
+      "titulaire": null,
+      "etape": "",
+      "maj": "2026-11-09T08:10:00",
+      "postit": false
+    }
+  ],
+  "file": {
+    "visibles": [
+      {
+        "id": "q1",
+        "titre": "Notifications par courriel"
+      },
+      {
+        "id": "q2",
+        "titre": "Recherche dans l'historique"
+      },
+      {
+        "id": "q3",
+        "titre": "Sauvegarde automatique"
+      }
+    ],
+    "reste": 5
+  },
+  "decisions": 2
+}

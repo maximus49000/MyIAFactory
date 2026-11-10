@@ -22,7 +22,7 @@ le projet ──(relevé : qui tient quelle tâche, dans quelle colonne)──�
 Projet 1, le bureau vivant :
 
 - [x] 1. Socle et réglages
-- [ ] 2. Le relevé (contrat entre un projet et le bureau) et l'exemple de démonstration
+- [x] 2. Le relevé (contrat entre un projet et le bureau) et l'exemple de démonstration
 - [ ] 3. Statuts : fraîcheur, pause, départ
 - [ ] 4. L'équipe : prénoms et couleurs
 - [ ] 5. L'état servi à la page
@@ -34,7 +34,7 @@ Projet 1, le bureau vivant :
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : étape 1 faite (socle et réglages).
+État : étapes 1 et 2 faites.
 
 ## Ce qu'il reste à faire ensuite
 
@@ -48,4 +48,4 @@ Projet 1, le bureau vivant :
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : `docs/installation.md` (à venir, étape 10)
-- Format du relevé : `docs/releve.md` (à venir, étape 2)
+- Format du relevé : [docs/releve.md](docs/releve.md)

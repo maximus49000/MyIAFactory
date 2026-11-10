@@ -15,7 +15,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | C | Sonnet 5.5 | ce dépôt | 6 à 8 : sélecteur, panneau de fonctionnalité et discussion, Directeur | Interface cadrée par les demandes et l'état des phases A et B | fait |
 | D | Opus 5.5 | ce dépôt | 9 : le catalogue | Reprendre fidèlement le design d'une page existante, carte avec zoom, 5 000 éléments | fait |
 | E | Sonnet 5.5 | ce dépôt | 10 à 12 : fichier de factory, suivi, mémoire, départ d'un agent, vérificateur | Outils en ligne de commande au contrat écrit ; les cas difficiles (git, mots interdits, écritures concurrentes) ont leurs tests nommés | fait |
-| F | Opus 5.5 | ce dépôt | 13 et 14 : consignes génériques, démo, documentation, relecture finale | Les consignes guident l'orchestrateur : leur justesse compte plus que tout ; relecture finale sur un modèle fort | à faire |
+| F | Opus 5.5 | ce dépôt | 13 et 14 : consignes génériques, démo, documentation, relecture finale | Les consignes guident l'orchestrateur : leur justesse compte plus que tout ; relecture finale sur un modèle fort | fait |
 | G | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 15 : le vrai passage de bout en bout, mené avec l'utilisateur | Diagnostic d'un orchestrateur réel et corrections génériques | à faire |
 | H | Opus 5.5 | dépôt du projet pilote | la liste de compatibilité | Ne rien oublier du fonctionnement actuel : lecture fine de longues consignes | à faire |
 | I | Sonnet 5.5 | dépôt du projet pilote | les adaptateurs, la version 4, les demandes, le catalogue | Travail cadré par l'interface et contrôlé par `verifier_interface.py` | à faire |
@@ -77,6 +77,48 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
 - Pas encore écrit (phase F) : `consignes.md`, `modeles/brief-role.md`, `modeles/registre-controles.md`, `modeles/factory.json`, `docs/orchestrateur.md`, `tests/test_orch_consignes.py`, la démo à deux projets. Les ids d'état du catalogue et le repère de la carte (y vers le haut) sont déjà écrits dans `interface.md`.
 - Mineurs laissés : `fonctionnalite` n'écrit pas de `livrable` de projet (seulement par fonctionnalité) ; `charge` lance la vraie mesure (cinq secondes) ; pas de nettoyage des vieux enregistrements du suivi ; une leçon dont l'agent n'a pas de fiche reste seulement dans le suivi. Honnêteté sur la méthode : pour les tâches 11 et 12, j'ai écrit les tests avant le code mais je n'ai vu « échouer » que ceux de la tâche 12 et ceux de la tâche 10 ; les tests de la mémoire ont été lancés une première fois avec le code déjà écrit.
 - Tests : 507 `unittest` (1 sauté : `MYIAFACTORY_MOTS`) et 120 `node --test` verts en fin de phase.
+
+**Phase F (Opus 5.5) — écarts et points à surveiller**
+
+- Livrés : `orchestrateur/consignes.md` (le texte que lit la conversation orchestratrice), `modeles/brief-role.md`,
+  `modeles/registre-controles.md`, `modeles/factory.json`, `docs/orchestrateur.md` (guide de passage),
+  `tests/test_orch_consignes.py` (en plus du plan : `test_guide_de_passage`, et chaque commande sauf `actions` et
+  `releve` doit être appelée au moins une fois par les consignes). Démo à deux projets (`exemples/bureau.json`,
+  `exemples/demo` en v4, `exemples/demo-b`), `exemples/projet-neuf/`, `outils/images_demo.py`,
+  `tests/test_demo_v4.py`, documentation (`releve.md` « Version 4 », `installation.md` « Plusieurs projets »,
+  « Nouvelle fonctionnalité et discussion », « Le catalogue », « L'orchestrateur générique »), README et captures
+  (`docs/img/bureau.jpg` refaite, `fonctionnalite.jpg`, `catalogue.jpg`).
+- **Catalogue générique** (point ouvert de la phase E) : le bureau accepte `catalogues: {"*": {...}}`, où
+  `{fonctionnalite}` est remplacé par l'identifiant (lettres, chiffres, `-`, `_` seulement ; une déclaration exacte
+  passe avant, réglages puis factory). Le projet neuf le déclare une fois pour toutes.
+- **Tâche de cadrage** : `depart` exige une tâche du suivi ; les consignes font créer une vraie tâche « Cadrage :
+  <nom> » (colonne `cadrage`, active), et le relevé ne montre plus la tâche synthétique `cadrage:<f>` quand elle existe.
+- Écarts au plan : le catalogue de la démo est `catalogue-magasin.json` (un magasin inventé, pas une ville, pour
+  rester loin du domaine du projet pilote) ; la démo B réutilise la commande d'actions de la démo A
+  (`runpy`, variable `DOSSIER`) : les deux dossiers vont ensemble ; la démo A garde tout son contenu v3.
+- Corrections génériques trouvées en route, chacune avec son test vu en échec : verrou du suivi qui réessaie sur
+  `PermissionError` (Windows, verrou en cours d'effacement : `test_ecritures_concurrentes` échouait parfois) ; au
+  Directeur, un agent sans prénom montre sa clé (`nomAgent`) et le champ « Identifiant du genre » reste caché pour un
+  genre connu (une règle CSS l'affichait).
+- Relecture finale indépendante (Opus) : aucun critique, trois importants corrigés avec leur test —
+  `agent-libre` disait « session à créer » pour un agent cloud simplement occupé et ne nommait pas la fiche (champ
+  `sans_session` ajouté) ; l'identifiant d'un nouveau genre n'était pas contrôlé contre les mots interdits ; un
+  `deplacer` d'un élément de la file n'avait pas d'outil (`file-prendre` accepte `element` ; `orchestration` et
+  `cadrage:…` ne se déplacent pas). Mineurs corrigés : montée d'un cran exactement, Fable refusé quelle que soit la
+  casse et en `modele_depart`, mots interdits avec œ/æ et séparateurs de chemin, consignes précisées (cahier renvoyé
+  entier, `texte` d'une décision de genre, `titre` d'une tâche, images sous une racine, file vide lue dans `etat`, une
+  seule « méthode à revoir » à la fois, mode en ligne ou local, Fable sur demande expresse noté au journal), guide
+  du projet neuf (chemin du catalogue), `livrables` dans les réglages du projet neuf, une phrase sur la fraîcheur du
+  chef. **Mineur laissé** : un bouton « Valider le cahier » ou « Valider la méthode » redevient actif au relevé suivant
+  tant que l'orchestrateur n'a pas levé la décision ; un second clic envoie une seconde demande (sans danger, mais
+  évitable).
+- `git grep` (motifs tenus hors du dépôt) sur l'arbre et les 40 derniers commits : aucun résultat réel (seulement des
+  mots plus longs qui en contiennent un).
+- **Phase G** : le projet neuf se copie hors du dépôt ; il faut y corriger `skill`, et le chemin de `outil.py` dans
+  `reglages.json` **et** dans `catalogues["*"]` du fichier de factory. Les commandes d'exemple appellent `python` (comme
+  la démo) ; sur une machine où seul `py` existe, les remplacer. Pour la mémoire, pointer `memoire` vers un clone local
+  (la variable `MYIAFACTORY_MOTS` n'est pas définie sur cette machine : le test qui l'emploie est sauté).
+- Tests : 523 `unittest` (1 sauté : `MYIAFACTORY_MOTS`) et 121 `node --test` verts en fin de phase.
 
 ## Ce que chaque conversation doit savoir
 

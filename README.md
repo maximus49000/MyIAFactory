@@ -27,7 +27,7 @@ Projet 1, le bureau vivant :
 - [x] 4. L'équipe : prénoms et couleurs
 - [x] 5. L'état servi à la page
 - [x] 6. La charge de l'ordinateur et le serveur
-- [ ] 7. La logique de la page : changements, plan, régie
+- [x] 7. La logique de la page : changements, plan, régie
 - [ ] 8. La scène 3D en volumes simples
 - [ ] 9. L'interface : voyant, barre de charge, cartes, panneaux
 - [ ] 10. Le mode d'emploi

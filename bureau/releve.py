@@ -119,6 +119,7 @@ def valider(r):
     if _version(r) >= 3:
         _verifier_usage(r, titulaires, taches, cles, erreurs)
         _verifier_connaissances(r, titulaires, cles, erreurs)
+        _verifier_kpi(services, erreurs)
     return erreurs
 
 
@@ -169,6 +170,53 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
         for champ in ("cache_lecture", "cache_ecriture"):
             if u.get(champ) is not None and not _entier_positif(u[champ]):
                 erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
+
+
+PERIODES_KPI = ("aujourdhui", "7j", "30j")
+
+
+def _valeur_kpi(v):
+    """Un nombre fini (pas un booléen) ou un texte."""
+    return isinstance(v, str) or (isinstance(v, (int, float)) and not isinstance(v, bool)
+                                  and v == v and abs(v) != float("inf"))
+
+
+def _verifier_kpi(services, erreurs):
+    """`kpi` par service (version 3) : une liste ouverte, les `id` ne sont uniques que dans leur service."""
+    for sv in services:
+        if sv.get("kpi") is None:
+            continue
+        nom_liste = f"Service « {sv.get('id')} » : « kpi »"
+        vus = set()
+        for k in _liste_facultative(sv["kpi"], nom_liste, erreurs):
+            i = k.get("id")
+            if not _texte_plein(i):
+                erreurs.append(f"{nom_liste} : chaque KPI a un « id » (texte non vide).")
+            elif i in vus:
+                erreurs.append(f"{nom_liste} : identifiant de KPI en double « {i} ».")
+            else:
+                vus.add(i)
+            nom = f"{nom_liste} : le KPI « {i} »"
+            if not _texte_plein(k.get("nom")):
+                erreurs.append(f"{nom} doit avoir un « nom » (texte non vide).")
+            if not _valeur_kpi(k.get("valeur")):
+                erreurs.append(f"{nom} : « valeur » doit être un nombre ou un texte.")
+            for champ in ("unite", "evolution", "texte"):
+                if not _texte_ou_nul(k.get(champ)):
+                    erreurs.append(f"{nom} : « {champ} » doit être un texte.")
+            if k.get("alerte") is not None and not isinstance(k["alerte"], bool):
+                erreurs.append(f"{nom} : « alerte » doit être vrai ou faux.")
+            p = k.get("periodes")
+            if p is None:
+                continue
+            if not _est_dict(p):
+                erreurs.append(f"{nom} : « periodes » doit être un objet (aujourdhui, 7j, 30j).")
+                continue
+            for cle, v in p.items():
+                if cle not in PERIODES_KPI:
+                    erreurs.append(f"{nom} : période inconnue « {cle} » (aujourdhui, 7j ou 30j).")
+                elif not _valeur_kpi(v):
+                    erreurs.append(f"{nom} : « periodes.{cle} » doit être un nombre ou un texte.")
 
 
 AUTEURS = ("directeur", "service", "utilisateur")
@@ -465,6 +513,14 @@ def normaliser(r):
     else:
         n.pop("usage", None)
     _normaliser_connaissances(n, _version(n) >= 3)
+    for sv in n["services"]:
+        if _version(n) >= 3 and isinstance(sv.get("kpi"), list):
+            for k in sv["kpi"]:
+                for champ in ("unite", "evolution", "texte", "periodes"):
+                    k.setdefault(champ, None)
+                k["alerte"] = k.get("alerte") is True
+        else:
+            sv.pop("kpi", None)
     for c in CHAMPS_V2_RACINE:
         if v2:
             n[c] = n[c] if isinstance(n.get(c), list) else []

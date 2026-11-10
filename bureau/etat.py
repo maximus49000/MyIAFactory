@@ -1,4 +1,5 @@
 """L'état servi à la page : relevé + équipe + horloge."""
+from . import kpi as modkpi
 from . import releve as modreleve
 from . import statuts
 
@@ -27,11 +28,13 @@ def _connaissances(ti, ids_connaissances):
     for c in ti.get("connaissances") or []:
         appris = [dict(a) for a in c.get("appris_de") or []]
         sortie.append({"id": c["id"], "texte": c["texte"], "date": c.get("date"), "origine": c.get("origine"),
-                       "appris_de": appris, "partagee": bool(appris), "lecon": False})
+                       "appris_de": appris, "partagee": bool(appris), "lecon": False,
+                       "probleme_revenu": False})
     for le in _lecons_validees(ti):
         if le["id"] not in ids_connaissances:
             sortie.append({"id": le["id"], "texte": le["texte"], "date": le.get("date"),
-                           "origine": le.get("tache"), "appris_de": [], "partagee": False, "lecon": True})
+                           "origine": le.get("tache"), "appris_de": [], "partagee": False, "lecon": True,
+                           "probleme_revenu": False})
     return sortie
 
 
@@ -42,7 +45,26 @@ def _fraicheur(titulaire, defaut):
     return defaut
 
 
-def construire(r, eq, maintenant, fraicheur_min):
+def _marquer_problemes_revenus(savoir, r, depuis):
+    """Une connaissance dont l'origine est un challenge sur un KPI du projet est marquée quand ce KPI est
+    de nouveau en alerte depuis une date postérieure à la sienne. C'est le même objet que dans
+    `agents[].connaissances`."""
+    ids_services = {s["id"] for s in r["services"]}
+    kpi_du_challenge = {}
+    for ch in r.get("challenges") or []:
+        cible = modkpi.cible_kpi((ch.get("cible") or {}).get("id"), ids_services)             if (ch.get("cible") or {}).get("type") == "kpi" else None
+        if cible:
+            kpi_du_challenge[ch["id"]] = cible
+    for titulaire in savoir:
+        for c in titulaire["connaissances"]:
+            cible = kpi_du_challenge.get(c.get("origine")) if isinstance(c.get("origine"), str) else None
+            if cible:
+                c["probleme_revenu"] = modkpi.probleme_revenu(c.get("date"), depuis.get(cible))
+
+
+def construire(r, eq, maintenant, fraicheur_min, alertes=None):
+    """`alertes` : l'historique des alertes (`kpi.HistoriqueAlertes`). Sans lui, aucune connaissance n'est
+    marquée « problème revenu » et rien n'est noté."""
     en_pause = r["factory"].get("etat") == "en pause"
     taches_de = {}
     for t in r["taches"]:
@@ -96,6 +118,9 @@ def construire(r, eq, maintenant, fraicheur_min):
             for a in c["appris_de"]:
                 a.update(prenom=prenoms.get(a.get("agent"), a.get("agent")),
                          service=services.get(a.get("agent")), titre=titres.get(a.get("tache")))
+
+    if alertes is not None and r.get("version", 1) >= 3:
+        _marquer_problemes_revenus(savoir, r, modkpi.suivre_alertes(r, alertes, maintenant))
 
     taches = [{
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],
@@ -154,13 +179,13 @@ def agents_locaux_au_travail(e):
                if a["lieu"] == "local" and a["statut"] == "travail" and not a["chef"])
 
 
-def lire_avec_releve(regl, eq, maintenant):
+def lire_avec_releve(regl, eq, maintenant, alertes=None):
     """(état, relevé normalisé valide ou None)."""
     r, message = modreleve.obtenir(regl)
     if r is None:
         return erreur(message, maintenant), None
     try:
-        return construire(r, eq, maintenant, regl.get("fraicheur_min", 30)), r
+        return construire(r, eq, maintenant, regl.get("fraicheur_min", 30), alertes), r
     except Exception as e:  # un relevé inattendu ne doit jamais faire tomber le serveur
         return erreur(f"Relevé inutilisable : {e}", maintenant), None
 

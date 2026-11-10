@@ -629,5 +629,57 @@ class TestObtenir(unittest.TestCase):
         self.assertEqual(releve.valider(d), [])
 
 
+class TestKpi(unittest.TestCase):
+    def avec(self, *kpi, service=0):
+        r = v3()
+        r["services"] = [dict(x) for x in r["services"]] + [{"id": "qa", "nom": "QA"}]
+        r["services"][service]["kpi"] = list(kpi)
+        return r
+
+    def test_kpi_projet_valide(self):
+        k = {"id": "defauts", "nom": "Défauts passés", "valeur": 2, "unite": "défauts", "evolution": "+1 depuis hier",
+             "alerte": True, "texte": "remises : passé 2 fois",
+             "periodes": {"aujourdhui": 0, "7j": 2, "30j": "5"}}
+        r = self.avec(k, {"id": "autre", "nom": "Autre", "valeur": "ok"})
+        self.assertEqual(releve.valider(r), [])
+
+    def test_kpi_id_double_dans_un_service(self):
+        erreurs = releve.valider(self.avec({"id": "a", "nom": "A", "valeur": 1}, {"id": "a", "nom": "B", "valeur": 2}))
+        self.assertTrue(any("kpi" in m for m in erreurs), erreurs)
+
+    def test_kpi_ok_dans_deux_services(self):
+        r = self.avec({"id": "a", "nom": "A", "valeur": 1})
+        r["services"][1]["kpi"] = [{"id": "a", "nom": "A", "valeur": 1}]
+        self.assertEqual(releve.valider(r), [])
+
+    def test_kpi_mal_formes(self):
+        for k in ({"nom": "A", "valeur": 1}, {"id": "", "nom": "A", "valeur": 1}, {"id": "a", "valeur": 1},
+                  {"id": "a", "nom": "A"}, {"id": "a", "nom": "A", "valeur": True},
+                  {"id": "a", "nom": "A", "valeur": None}, {"id": "a", "nom": "A", "valeur": float("inf")},
+                  {"id": "a", "nom": "A", "valeur": 1, "unite": 3},
+                  {"id": "a", "nom": "A", "valeur": 1, "evolution": 3},
+                  {"id": "a", "nom": "A", "valeur": 1, "alerte": "oui"},
+                  {"id": "a", "nom": "A", "valeur": 1, "texte": 3},
+                  {"id": "a", "nom": "A", "valeur": 1, "periodes": []},
+                  {"id": "a", "nom": "A", "valeur": 1, "periodes": {"1an": 3}},
+                  {"id": "a", "nom": "A", "valeur": 1, "periodes": {"7j": True}}, 7):
+            erreurs = releve.valider(self.avec(k))
+            self.assertTrue(any("kpi" in m for m in erreurs), (k, erreurs))
+        self.assertTrue(releve.valider(self.avec(service=0) | {"services": [{"id": "dev", "nom": "D", "kpi": 3}]}))
+
+    def test_kpi_ignore_en_v2(self):
+        r = self.avec({"id": "a", "valeur": 1})
+        r["version"] = 2
+        self.assertEqual(releve.valider(r), [])
+        self.assertNotIn("kpi", releve.normaliser(r)["services"][0])
+
+    def test_kpi_periodes_normalisees(self):
+        n = releve.normaliser(self.avec({"id": "a", "nom": "A", "valeur": 1}))
+        self.assertEqual(n["services"][0]["kpi"][0],
+                         {"id": "a", "nom": "A", "valeur": 1, "unite": None, "evolution": None, "alerte": False,
+                          "texte": None, "periodes": None})
+        self.assertNotIn("kpi", n["services"][1])  # absent : reste absent
+
+
 if __name__ == "__main__":
     unittest.main()

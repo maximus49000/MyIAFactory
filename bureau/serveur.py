@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import charge, cout, demandes, equipe, etat, prix, reglages
+from . import charge, cout, demandes, equipe, etat, kpi, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -43,6 +43,7 @@ class Bureau(ThreadingHTTPServer):
         self.equipe = equipe.Equipe(dossier / "equipe.json")
         self.historique = charge.Historique(dossier / "charge-historique.jsonl")
         self.usage = HistoriqueUsage(dossier / "usage-historique.jsonl")
+        self.alertes = kpi.HistoriqueAlertes(dossier / "alertes-historique.jsonl")
         self.table_prix = prix.TablePrix(dossier / "prix-historique.jsonl")
         self.ouvrir = ouvrir or prix.ouvrir_url  # la seule porte vers Internet ; remplacée dans les tests
         self.etat_prix = None  # résultat de la dernière mise à jour des prix
@@ -96,12 +97,13 @@ class Bureau(ThreadingHTTPServer):
             if err:
                 e, r = etat.erreur(err, maintenant), None
             else:
-                e, r = etat.lire_avec_releve(regl, self.equipe, maintenant)
+                e, r = etat.lire_avec_releve(regl, self.equipe, maintenant, self.alertes)
             if r is not None:
                 self.dernier_releve = r
                 self._integrer_usage(r)
             if e.get("version", 1) >= 3 and self._usage_connu:
                 e["dossier"]["facturation"] = True
+                e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["images_ok"] = images_declarees(regl)
             self._cache_etat = (time.monotonic(), e)
@@ -154,6 +156,19 @@ class Bureau(ThreadingHTTPServer):
         return 200, {**f, "disponible": True, "periode": periode, "maj": self.table_prix.derniere_maj(),
                      "message": message}
 
+    def kpi(self, periode):
+        """(code HTTP, objet JSON) : les KPI du projet et ceux que le bureau calcule, par service."""
+        if periode not in cout.PERIODES:
+            return 400, {"erreur": f"Période inconnue : « {periode} » (aujourdhui, 7j ou 30j)."}
+        e = self.etat()
+        r = self.dernier_releve
+        if e.get("erreur") or r is None or r.get("version", 1) < 3 or not e["dossier"]["kpi"]:
+            return 200, {"disponible": False}
+        regl, _ = self.reglages()
+        usages_cout = self._calculer(r, regl, periode) if self._usage_connu else None
+        return 200, {"disponible": True, "periode": periode,
+                     "services": kpi.tous(r, usages_cout, periode, datetime.now().astimezone())}
+
     def _calculer(self, r, regl, periode, usages=None):
         # Le premier jour, les prix sont lus avant de calculer (sans attendre indéfiniment).
         self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
@@ -166,15 +181,20 @@ class Bureau(ThreadingHTTPServer):
         return cout.facturation(usages, prix_de, r, periode, datetime.now().astimezone())
 
     def cibles_calculees(self, r, regl):
-        """Les cibles que le bureau recalcule (id -> constat en clair) : les sources d'amélioration des
-        trois périodes. Les KPI calculés s'y ajouteront (tâche 10)."""
+        """Les cibles que le bureau recalcule (id -> constat en clair) : les sources d'amélioration et les
+        KPI calculés, sur les trois périodes (une cible présente sur l'une suffit)."""
         cibles = {}
-        if r.get("version", 1) < 3 or not r.get("usage") and not self._usage_connu:
+        if r.get("version", 1) < 3:
             return cibles
-        usages = self.usage.lire()
+        avec_usage = bool(r.get("usage")) or self._usage_connu
+        usages = self.usage.lire() if avec_usage else []
+        maintenant = datetime.now().astimezone()
         for periode in cout.PERIODES:
-            for source in self._calculer(r, regl, periode, usages)["sources"]:
+            f = self._calculer(r, regl, periode, usages) if avec_usage else None
+            for source in (f["sources"] if f else []):
                 cibles.setdefault(source["id"], source["texte"])
+            for i, constat in kpi.constats(r, f, periode, maintenant).items():
+                cibles.setdefault(i, constat)
         return cibles
 
     # -- demandes ---------------------------------------------------------
@@ -300,6 +320,10 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/facturation":
             periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
             code, objet = self.server.facturation(periodes[0] if len(periodes) == 1 else None)
+            return self._json(code, objet)
+        if chemin == "/api/kpi":
+            periodes = parse_qs(morceaux.query, keep_blank_values=True).get("periode", ["7j"])
+            code, objet = self.server.kpi(periodes[0] if len(periodes) == 1 else None)
             return self._json(code, objet)
         self._statique(chemin)
 

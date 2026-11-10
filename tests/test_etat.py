@@ -199,6 +199,34 @@ class TestEtat(unittest.TestCase):
         source = par_id["k1"]["appris_de"][0]
         self.assertEqual((source["prenom"], source["service"], source["titre"]), ("Hugo", "qa", "U"))
 
+    def test_probleme_revenu(self):
+        from bureau import kpi
+        alertes = kpi.HistoriqueAlertes(self.tmp / "alertes.jsonl")
+
+        def m(r):
+            r["services"][0]["kpi"] = [{"id": "defauts", "nom": "D", "valeur": 2, "alerte": True}]
+            r["titulaires"][0]["connaissances"] = [
+                {"id": "k1", "texte": "a", "date": "2026-11-01", "origine": "ch1"},
+                {"id": "k2", "texte": "b", "date": "2026-11-20", "origine": "ch1"},   # plus récente que l'alerte
+                {"id": "k3", "texte": "c", "date": "2026-11-01", "origine": "ch2"},   # challenge sur autre chose
+                {"id": "k4", "texte": "d", "date": "2026-11-01", "origine": "texte libre"}]
+            r["challenges"] = [{"id": "ch1", "cible": {"type": "kpi", "id": "kpi:dev:defauts"}, "texte": "c"},
+                               {"id": "ch2", "cible": {"type": "connaissance", "id": "k1"}, "texte": "c"}]
+
+        def lire(avec):
+            r = copy.deepcopy(BASE)
+            r["version"] = 3
+            m(r)
+            e = etat.construire(releve.normaliser(r), self.eq, M, 30, alertes=avec)
+            return {c["id"]: c["probleme_revenu"] for c in e["agents"][0]["connaissances"]}, e
+
+        sans, _ = lire(None)
+        self.assertEqual(set(sans.values()), {False})  # sans historique : jamais « revenu »
+        marques, e = lire(alertes)
+        self.assertEqual(marques, {"k1": True, "k2": False, "k3": False, "k4": False})
+        # La page lit la même information dans `savoir`.
+        self.assertTrue(next(c for c in e["savoir"][0]["connaissances"] if c["id"] == "k1")["probleme_revenu"])
+
     def test_challenges_servis(self):
         ch = {"id": "ch1", "cible": {"type": "connaissance", "id": "k1"}, "texte": "c",
               "solutions": [{"id": "s1", "texte": "x", "auteur": "directeur"}]}

@@ -39,7 +39,7 @@ class AvecServeur(unittest.TestCase):
     ENT = {"X-Bureau": "1", "Content-Type": "application/json"}
 
     def setUp(self):
-        self._t = tempfile.TemporaryDirectory()
+        self._t = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)  # Windows garde parfois un fichier ouvert un instant
         self.addCleanup(self._t.cleanup)
         self.tmp = Path(self._t.name)
         shutil.copytree(RACINE / "exemples" / "demo", self.tmp / "demo")
@@ -450,7 +450,7 @@ class TestFacturation(AvecServeur):
         self.assertEqual(sorted(self.source.appels), sorted([prix.URL_PRIX, prix.URL_TAUX]))
         self.assertEqual(self.json("/api/facturation")["periode"], "7j")   # période par défaut
         e = self.json("/api/etat")
-        self.assertEqual(e["dossier"], {"facturation": True, "kpi": False, "connaissances": False})
+        self.assertEqual(e["dossier"], {"facturation": True, "kpi": True, "connaissances": False})
 
     def test_periode_inconnue_400(self):
         self.v3(self.usage())
@@ -659,6 +659,91 @@ class TestChallenges(AvecServeur):
             statut, corps = self.demande(d)
             self.assertEqual(statut, 400, d)
             self.assertIn("erreur", corps)
+
+
+class TestKpi(AvecServeur):
+    RELEVE_V2, SCRIPT_ACTIONS, agir, demande = (TestServeur.RELEVE_V2, TestServeur.SCRIPT_ACTIONS,
+                                                TestServeur.agir, TestServeur.demande)
+    RELEVE_V3, usage = TestFacturation.RELEVE_V3, TestFacturation.usage
+    recues = TestChallenges.recues
+
+    def installer(self, kpi=None, usage=True, duree=0.0):
+        r = json.loads(json.dumps(self.RELEVE_V3))
+        r["colonnes"].append({"id": "f", "nom": "Fait", "terminee": True})
+        r["taches"].append({"id": "t2", "titre": "Fini", "colonne": "f", "active": False, "titulaire": "d1",
+                            "maj": datetime.now().astimezone().isoformat(timespec="seconds")})
+        if kpi is not None:
+            r["services"][0]["kpi"] = kpi
+        if usage:
+            r["usage"] = [self.usage()]
+        notes = self.agir(duree=duree, releve=r)
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["alias_modeles"] = {"sonnet": "modele-a"}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
+        return notes
+
+    def test_api_kpi(self):
+        self.installer(kpi=[{"id": "defauts", "nom": "Défauts", "valeur": 2, "alerte": True, "texte": "deux fois"}])
+        k = self.json("/api/kpi?periode=7j")
+        self.assertIs(k["disponible"], True)
+        self.assertEqual(k["periode"], "7j")
+        dev = {x["id"]: x for x in k["services"]["dev"]}
+        self.assertEqual(dev["defauts"]["valeur"], 2)
+        self.assertEqual(dev["taches_terminees"]["valeur"], 1)
+        self.assertIn("cout_moyen", dev)
+        self.assertEqual(self.json("/api/kpi?periode=30j")["periode"], "30j")
+
+    def test_api_kpi_periode_inconnue_ou_absente(self):
+        self.installer()
+        for q in ("?periode=1an", "?periode=7j&periode=30j"):
+            r, _ = self.req("GET", "/api/kpi" + q)
+            self.assertEqual(r.status, 400, q)
+        self.assertEqual(self.json("/api/kpi")["periode"], "7j")
+
+    def test_api_kpi_indisponible_en_v2(self):
+        self.agir(releve=self.RELEVE_V2)
+        self.srv._cache_etat = (0.0, None)
+        self.assertEqual(self.json("/api/kpi?periode=7j"), {"disponible": False})
+
+    def test_challenge_sur_kpi_calcule_accepte(self):
+        notes = self.installer()
+        statut, corps = self.demande({"type": "challenge", "cible": {"type": "kpi", "id": "kpi:dev:taches_terminees"},
+                                      "texte": "trop peu"})
+        self.assertEqual(statut, 200, corps)
+        texte = self.recues(notes)[0]["texte"]
+        self.assertIn("Tâches terminées", texte)   # le constat est écrit par le bureau
+        self.assertIn("trop peu", texte)
+
+    def test_challenge_sur_kpi_du_projet_accepte(self):
+        notes = self.installer(kpi=[{"id": "defauts", "nom": "Défauts", "valeur": 2, "alerte": True}])
+        statut, _ = self.demande({"type": "challenge", "cible": {"type": "kpi", "id": "kpi:dev:defauts"}})
+        self.assertEqual(statut, 200)
+        self.assertEqual(self.recues(notes)[0]["cible"]["id"], "kpi:dev:defauts")
+
+    def test_challenge_sur_kpi_inconnu_refuse(self):
+        notes = self.installer()
+        for i in ("kpi:dev:inconnu", "kpi:rh:taches_terminees", "taches_terminees"):
+            statut, _ = self.demande({"type": "challenge", "cible": {"type": "kpi", "id": i}})
+            self.assertEqual(statut, 400, i)
+        self.assertEqual(self.recues(notes), [])
+
+    def test_probleme_revenu_servi(self):
+        # La première alerte est notée à la lecture du relevé ; une connaissance plus ancienne est marquée.
+        r = json.loads(json.dumps(self.RELEVE_V3))
+        r["services"][0]["kpi"] = [{"id": "defauts", "nom": "D", "valeur": 2, "alerte": True}]
+        r["titulaires"][0]["connaissances"] = [{"id": "k1", "texte": "a", "date": "2020-01-01", "origine": "ch1"}]
+        r["challenges"] = [{"id": "ch1", "cible": {"type": "kpi", "id": "kpi:dev:defauts"}, "texte": "c"}]
+        self.agir(releve=r)
+        self.srv._cache_etat = (0.0, None)
+        e = self.json("/api/etat")
+        self.assertTrue(e["agents"][0]["connaissances"][0]["probleme_revenu"])
+        self.assertTrue((self.tmp / "demo" / "alertes-historique.jsonl").exists())
+        self.assertTrue(e["dossier"]["kpi"])
+
+    def test_onglet_kpi_avec_usage_seul(self):
+        self.installer(usage=True)
+        self.assertTrue(self.json("/api/etat")["dossier"]["kpi"])
 
 
 if __name__ == "__main__":

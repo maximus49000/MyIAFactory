@@ -17,6 +17,8 @@ le projet ──(relevé : qui tient quelle tâche, dans quelle colonne)──�
 - Le **serveur local** (Python, sans rien à installer) en déduit qui travaille, qui est sans nouvelles, qui est libre, et mesure la charge de l'ordinateur.
 - La **page** compare les états successifs et joue les déplacements. Rien n'est simulé.
 
+![Le bureau vivant, avec l'exemple de démonstration](docs/img/bureau.jpg)
+
 ## Avancement
 
 Projet 1, le bureau vivant :
@@ -30,11 +32,11 @@ Projet 1, le bureau vivant :
 - [x] 7. La logique de la page : changements, plan, régie
 - [x] 8. La scène 3D en volumes simples
 - [x] 9. L'interface : voyant, barre de charge, cartes, panneaux
-- [ ] 10. Le mode d'emploi
+- [x] 10. Le mode d'emploi
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : phases A, B faites (le serveur, la logique de la page, la scène 3D) et l'interface (étape 9). Reste le mode d'emploi et les modèles Tripo.
+État : phases A et B faites (le serveur, la logique de la page, la scène 3D), puis l'interface et le mode d'emploi (étapes 9 et 10). Reste le mobilier Tripo (étape 11), puis le personnage et la relecture finale (phase D).
 
 Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json`, puis ouvrir `http://127.0.0.1:8770/`.
 
@@ -49,5 +51,5 @@ Essayer la démo : `py -3.12 lancer.py serveur --reglages exemples/demo/reglages
 - Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
-- Manuel d'installation et de configuration : `docs/installation.md` (à venir, étape 10)
+- Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)
 - Format du relevé : [docs/releve.md](docs/releve.md)

@@ -158,6 +158,69 @@ class TestEtat(unittest.TestCase):
         self.assertEqual(v3(lambda r: r["titulaires"][0].update(connaissances=[]))["connaissances"], True)
         self.assertEqual(v3(lambda r: r.update(challenges=[]))["connaissances"], True)
 
+    def v3(self, modif=None, **kw):
+        def m(r):
+            r["version"] = 3
+            if modif:
+                modif(r)
+        return self.etat(modif=m, **kw)
+
+    def test_etat_fusionne_lecons_validees(self):
+        def m(r):
+            r["titulaires"][0]["lecons"] = [{"id": "l1", "texte": "Leçon validée", "etat": "validée"},
+                                            {"id": "l2", "texte": "En attente", "etat": "à valider"},
+                                            {"id": "k1", "texte": "Ancienne version", "etat": "validée"}]
+            r["titulaires"][0]["connaissances"] = [{"id": "k1", "texte": "Connaissance", "date": "2026-11-08"}]
+        e = self.v3(m)
+        d1 = next(x for x in e["agents"] if x["id"] == "d1")
+        par_id = {c["id"]: c for c in d1["connaissances"]}
+        self.assertEqual(set(par_id), {"k1", "l1"})
+        self.assertEqual(par_id["k1"]["texte"], "Connaissance")  # la connaissance l'emporte
+        self.assertEqual((par_id["l1"]["texte"], par_id["l1"]["lecon"]), ("Leçon validée", True))
+        self.assertFalse(par_id["k1"]["lecon"])
+        self.assertTrue(e["dossier"]["connaissances"])
+
+    def test_lecon_validee_seule_ouvre_l_onglet_en_v3(self):
+        def m(r):
+            r["titulaires"][0]["lecons"] = [{"id": "l1", "texte": "a", "etat": "validée"}]
+        self.assertTrue(self.v3(m)["dossier"]["connaissances"])
+        self.assertFalse(self.v2(m)["dossier"]["connaissances"])
+
+    def test_etat_marque_partagee(self):
+        def m(r):
+            r["titulaires"][1]["prenom"] = "Hugo"
+            r["titulaires"][0]["connaissances"] = [
+                {"id": "k1", "texte": "a", "appris_de": [{"agent": "c1", "tache": "t2", "retour": "2026-11-07"}]},
+                {"id": "k2", "texte": "b"}]
+        d1 = next(x for x in self.v3(m)["agents"] if x["id"] == "d1")
+        par_id = {c["id"]: c for c in d1["connaissances"]}
+        self.assertTrue(par_id["k1"]["partagee"])
+        self.assertFalse(par_id["k2"]["partagee"])
+        source = par_id["k1"]["appris_de"][0]
+        self.assertEqual((source["prenom"], source["service"], source["titre"]), ("Hugo", "qa", "U"))
+
+    def test_challenges_servis(self):
+        ch = {"id": "ch1", "cible": {"type": "connaissance", "id": "k1"}, "texte": "c",
+              "solutions": [{"id": "s1", "texte": "x", "auteur": "directeur"}]}
+        e = self.v3(lambda r: r.update(challenges=[ch]))
+        self.assertEqual(e["challenges"][0]["solutions"][0]["id"], "s1")
+        self.assertEqual(self.v2()["challenges"], [])
+        self.assertEqual(etat.erreur("x", M)["challenges"], [])
+        self.assertEqual(etat.erreur("x", M)["savoir"], [])
+
+    def test_savoir_garde_les_agents_partis(self):
+        # Un agent parti du bureau (non permanent, sans tâche récente) garde ses connaissances dans le dossier.
+        def m(r):
+            r["taches"] = [r["taches"][1]]
+            r["titulaires"][0]["connaissances"] = [{"id": "k1", "texte": "a"}]
+        e = self.v3(m)
+        self.assertNotIn("d1", [a["id"] for a in e["agents"]])
+        d1 = next(s for s in e["savoir"] if s["agent"] == "d1")
+        self.assertEqual((d1["service"], d1["present"], [c["id"] for c in d1["connaissances"]]),
+                         ("dev", False, ["k1"]))
+        c1 = next(s for s in e["savoir"] if s["agent"] == "c1")
+        self.assertEqual((c1["present"], c1["connaissances"]), (True, []))
+
     def test_prenom_du_releve(self):
         d1 = next(x for x in self.v2(lambda r: r["titulaires"][0].update(prenom="Maëlle", specialite="Tests"))
                   ["agents"] if x["id"] == "d1")

@@ -329,6 +329,117 @@ class TestVersion3(unittest.TestCase):
         self.assertEqual((n["usage"][0]["cache_lecture"], n["usage"][0]["cache_ecriture"]), (0, 0))
 
 
+def connaissance(**champs):
+    c = {"id": "k1", "texte": "Relire les exports", "date": "2026-11-08",
+         "origine": "ch1", "appris_de": [{"agent": "d1", "tache": "t1", "retour": "2026-11-07"}]}
+    c.update(champs)
+    return c
+
+
+def challenge(**champs):
+    c = {"id": "ch1", "cible": {"type": "connaissance", "id": "k1"}, "texte": "Constat",
+         "date": "2026-11-09", "solutions": [{"id": "s1", "texte": "Faire X", "auteur": "directeur",
+                                              "etat": "proposée"},
+                                             {"id": "s2", "texte": "Faire Y", "auteur": "service"}]}
+    c.update(champs)
+    return c
+
+
+def avec_connaissances(*liste, **champs):
+    r = v3(**champs)
+    r["titulaires"][0]["connaissances"] = list(liste)
+    return r
+
+
+class TestConnaissances(unittest.TestCase):
+    def test_connaissance_valide(self):
+        self.assertEqual(releve.valider(avec_connaissances(connaissance(), connaissance(id="k2", date=None,
+                                                                                        origine=None,
+                                                                                        appris_de=None))), [])
+        self.assertEqual(releve.valider(avec_connaissances()), [])
+        n = releve.normaliser(avec_connaissances(connaissance(id="k2", appris_de=None)))
+        self.assertEqual(n["titulaires"][0]["connaissances"][0]["appris_de"], [])
+
+    def test_connaissance_mal_formee(self):
+        cas = [("pas une liste", 3), ("élément", [3]), ("id vide", [connaissance(id="")]),
+               ("texte absent", [{"id": "k1"}]), ("date nombre", [connaissance(date=3)]),
+               ("origine nombre", [connaissance(origine=3)]), ("appris_de objet", [connaissance(appris_de={})]),
+               ("doublon", [connaissance(), connaissance()])]
+        for nom, valeur in cas:
+            r = v3()
+            r["titulaires"][0]["connaissances"] = valeur
+            self.assertTrue(any("connaissance" in m.lower() for m in releve.valider(r)), nom)
+
+    def test_id_connaissance_double_entre_titulaires(self):
+        r = avec_connaissances(connaissance())
+        r["titulaires"].append({"cle": "d2", "service": "dev", "lieu": "local", "connaissances": [connaissance()]})
+        self.assertTrue(releve.valider(r))
+
+    def test_appris_de_agent_inconnu_refuse(self):
+        r = avec_connaissances(connaissance(appris_de=[{"agent": "x"}]))
+        self.assertTrue(any("appris_de" in m for m in releve.valider(r)))
+        r = avec_connaissances(connaissance(appris_de=[{"agent": "d1", "tache": 3}]))
+        self.assertTrue(releve.valider(r))
+        r = avec_connaissances(connaissance(appris_de=[{"agent": "d1", "retour": 3}]))
+        self.assertTrue(releve.valider(r))
+        # Le chef ajouté par la normalisation est un agent connu.
+        self.assertEqual(releve.valider(avec_connaissances(connaissance(appris_de=[{"agent": "chef"}]))), [])
+
+    def test_id_connaissance_double_avec_une_lecon(self):
+        r = avec_connaissances(connaissance(id="l1"))
+        r["titulaires"][0]["lecons"] = [{"id": "l1", "texte": "Ancien", "etat": "validée"}]
+        self.assertEqual(releve.valider(r), [])
+
+    def test_challenge_valide(self):
+        self.assertEqual(releve.valider(v3(challenges=[challenge(), challenge(id="ch2", date=None,
+                                                                              cible={"type": "kpi", "id": "x"},
+                                                                              solutions=[])])), [])
+        self.assertEqual(releve.valider(v3(challenges=[challenge(id="ch3", cible={"type": "source", "id": "y"},
+                                                                 solutions=None)])), [])
+        n = releve.normaliser(v3(challenges=[challenge(solutions=None)]))
+        self.assertEqual(n["challenges"][0]["solutions"], [])
+
+    def test_challenge_mal_forme(self):
+        cas = [("pas une liste", 3), ("élément", [3]), ("id vide", [challenge(id="")]),
+               ("texte absent", [{k: v for k, v in challenge().items() if k != "texte"}]),
+               ("cible absente", [{k: v for k, v in challenge().items() if k != "cible"}]),
+               ("cible id vide", [challenge(cible={"type": "kpi", "id": ""})]),
+               ("date nombre", [challenge(date=3)]), ("solutions objet", [challenge(solutions={})]),
+               ("doublon", [challenge(), challenge()]),
+               ("solution sans texte", [challenge(solutions=[{"id": "s1", "auteur": "service"}])]),
+               ("solution etat nombre", [challenge(solutions=[{"id": "s1", "texte": "a", "auteur": "service",
+                                                              "etat": 1}])]),
+               ("solution en double", [challenge(), challenge(id="ch2")])]
+        for nom, valeur in cas:
+            self.assertTrue(any("challenge" in m.lower() for m in releve.valider(v3(challenges=valeur))), nom)
+
+    def test_solution_auteur_inconnu(self):
+        r = v3(challenges=[challenge(solutions=[{"id": "s1", "texte": "a", "auteur": "stagiaire"}])])
+        self.assertTrue(any("auteur" in m for m in releve.valider(r)))
+        for auteur in ("directeur", "service", "utilisateur"):
+            r = v3(challenges=[challenge(solutions=[{"id": "s1", "texte": "a", "auteur": auteur}])])
+            self.assertEqual(releve.valider(r), [], auteur)
+
+    def test_cible_type_inconnu(self):
+        r = v3(challenges=[challenge(cible={"type": "tache", "id": "t1"})])
+        self.assertTrue(any("cible" in m for m in releve.valider(r)))
+
+    def test_v2_ignore_les_ajouts(self):
+        for version in (1, 2):
+            r = avec_connaissances(3, challenges=3)
+            r["version"] = version
+            self.assertEqual(releve.valider(r), [], version)
+            n = releve.normaliser(r)
+            self.assertNotIn("challenges", n)
+            self.assertNotIn("connaissances", n["titulaires"][0])
+
+    def test_normaliser_absents_restent_absents(self):
+        # L'absence masque l'onglet : la normalisation n'invente pas de liste vide.
+        n = releve.normaliser(v3())
+        self.assertNotIn("challenges", n)
+        self.assertNotIn("connaissances", n["titulaires"][0])
+
+
 class TestColonneTerminee(unittest.TestCase):
     def test_terminee_bien_formee(self):
         for valeur in (True, False, None):

@@ -55,7 +55,7 @@ Projet 2, les dossiers des services ([plan](docs/superpowers/plans/2026-11-10-do
 - [x] 4. Le calcul des coûts
 - [x] 5. Le serveur sert la facturation
 - [x] 6. Le dossier, l'onglet Tâches et l'onglet Facturation
-- [ ] 7. Le relevé et l'état pour les connaissances
+- [x] 7. Le relevé et l'état pour les connaissances
 - [ ] 8. Les trois demandes
 - [ ] 9. L'onglet Connaissances et le volet « Challenger »
 - [ ] 10. Les KPI, les alertes, « problème revenu »

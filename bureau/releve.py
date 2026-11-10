@@ -118,6 +118,7 @@ def valider(r):
         _verifier_v2(r, titulaires, taches, cles, erreurs)
     if _version(r) >= 3:
         _verifier_usage(r, titulaires, taches, cles, erreurs)
+        _verifier_connaissances(r, titulaires, cles, erreurs)
     return erreurs
 
 
@@ -138,9 +139,7 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
         erreurs.append(f"« usage » : au plus {MAX_USAGE} entrées (il y en a {len(v)}).")
         return
     ids_taches = {t.get("id") for t in taches if isinstance(t.get("id"), str)}
-    agents = set(cles)
-    if not any(t.get("chef") is True for t in titulaires):
-        agents.add("chef")  # le chef que la normalisation ajoute
+    agents = _agents_connus(titulaires, cles)
     vus = set()
     for k, u in enumerate(v):
         if not _est_dict(u):
@@ -170,6 +169,97 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
         for champ in ("cache_lecture", "cache_ecriture"):
             if u.get(champ) is not None and not _entier_positif(u[champ]):
                 erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
+
+
+AUTEURS = ("directeur", "service", "utilisateur")
+TYPES_CIBLE = ("kpi", "connaissance", "source")
+
+
+def _agents_connus(titulaires, cles):
+    agents = set(cles)
+    if not any(t.get("chef") is True for t in titulaires):
+        agents.add("chef")  # le chef que la normalisation ajoute
+    return agents
+
+
+def _texte_plein(v):
+    return isinstance(v, str) and bool(v)
+
+
+def _verifier_connaissances(r, titulaires, cles, erreurs):
+    """`connaissances` par titulaire et `challenges` (version 3). Les identifiants des connaissances,
+    des challenges et des solutions sont uniques dans tout le relevé (une leçon peut partager l'id
+    d'une connaissance : la connaissance l'emporte)."""
+    agents = _agents_connus(titulaires, cles)
+    vus = set()
+    for ti in titulaires:
+        cle = ti.get("cle")
+        nom = f"Titulaire « {cle} » : « connaissances »"
+        if "connaissances" not in ti or ti["connaissances"] is None:
+            continue
+        for c in _liste_facultative(ti["connaissances"], nom, erreurs):
+            i = c.get("id")
+            if not _texte_plein(i):
+                erreurs.append(f"{nom} : chaque connaissance a un « id » (texte non vide).")
+            elif i in vus:
+                erreurs.append(f"{nom} : identifiant de connaissance en double « {i} ».")
+            else:
+                vus.add(i)
+            if not _texte(c.get("texte")):
+                erreurs.append(f"{nom} : la connaissance « {i} » doit avoir un « texte ».")
+            for champ in ("date", "origine"):
+                if not _texte_ou_nul(c.get(champ)):
+                    erreurs.append(f"{nom} : la connaissance « {i} » : « {champ} » doit être un texte.")
+            ad = c.get("appris_de")
+            if ad is None:
+                continue
+            for a in _liste_facultative(ad, f"{nom} : la connaissance « {i} » : « appris_de »", erreurs):
+                if not _dans(a.get("agent"), agents):
+                    erreurs.append(f"{nom} : la connaissance « {i} » : « appris_de » cite un agent inconnu "
+                                   f"« {a.get('agent')} ».")
+                for champ in ("tache", "retour"):
+                    if not _texte_ou_nul(a.get(champ)):
+                        erreurs.append(f"{nom} : la connaissance « {i} » : « appris_de » : « {champ} » "
+                                       "doit être un texte.")
+    if r.get("challenges") is None:
+        return
+    vus_ch, vus_sol = set(), set()
+    for ch in _liste_facultative(r["challenges"], "« challenges »", erreurs):
+        i = ch.get("id")
+        nom = f"« challenges » : le challenge « {i} »"
+        if not _texte_plein(i):
+            erreurs.append("« challenges » : chaque challenge a un « id » (texte non vide).")
+        elif i in vus_ch:
+            erreurs.append(f"« challenges » : identifiant de challenge en double « {i} ».")
+        else:
+            vus_ch.add(i)
+        cible = ch.get("cible")
+        if not _est_dict(cible) or not _texte_plein(cible.get("id")):
+            erreurs.append(f"{nom} : « cible » doit être un objet avec un « type » et un « id » (texte non vide).")
+        elif cible.get("type") not in TYPES_CIBLE:
+            erreurs.append(f"{nom} : type de « cible » inconnu « {cible.get('type')} » "
+                           "(kpi, connaissance ou source).")
+        if not _texte(ch.get("texte")):
+            erreurs.append(f"{nom} : « texte » est obligatoire (texte).")
+        if not _texte_ou_nul(ch.get("date")):
+            erreurs.append(f"{nom} : « date » doit être un texte.")
+        if ch.get("solutions") is None:
+            continue
+        for so in _liste_facultative(ch["solutions"], f"{nom} : « solutions »", erreurs):
+            j = so.get("id")
+            if not _texte_plein(j):
+                erreurs.append(f"{nom} : chaque solution a un « id » (texte non vide).")
+            elif j in vus_sol:
+                erreurs.append(f"{nom} : identifiant de solution en double « {j} » (dans tous les challenges).")
+            else:
+                vus_sol.add(j)
+            if not _texte(so.get("texte")):
+                erreurs.append(f"{nom} : la solution « {j} » doit avoir un « texte ».")
+            if so.get("auteur") not in AUTEURS:
+                erreurs.append(f"{nom} : la solution « {j} » a un « auteur » inconnu « {so.get('auteur')} » "
+                               "(directeur, service ou utilisateur).")
+            if not _texte_ou_nul(so.get("etat")):
+                erreurs.append(f"{nom} : la solution « {j} » : « etat » doit être un texte.")
 
 
 def _texte_ou_nul(v):
@@ -374,6 +464,7 @@ def normaliser(r):
         n["usage"] = [_usage_normalise(u) for u in n["usage"]] if isinstance(n.get("usage"), list) else []
     else:
         n.pop("usage", None)
+    _normaliser_connaissances(n, _version(n) >= 3)
     for c in CHAMPS_V2_RACINE:
         if v2:
             n[c] = n[c] if isinstance(n.get(c), list) else []
@@ -416,6 +507,27 @@ def normaliser(r):
         n["titulaires"].append({"cle": "chef", "lieu": "local", "chef": True,
                                 "permanent": True, "modele": "?"})
     return n
+
+
+def _normaliser_connaissances(n, v3):
+    """Une liste absente reste absente (elle masque l'onglet) ; une connaissance ou un challenge
+    reçoit ses listes par défaut."""
+    if v3 and isinstance(n.get("challenges"), list):
+        for ch in n["challenges"]:
+            ch["solutions"] = ch["solutions"] if isinstance(ch.get("solutions"), list) else []
+            ch.setdefault("date", None)
+            for so in ch["solutions"]:
+                so.setdefault("etat", None)
+    else:
+        n.pop("challenges", None)
+    for t in n["titulaires"]:
+        if v3 and isinstance(t.get("connaissances"), list):
+            for c in t["connaissances"]:
+                c["appris_de"] = c["appris_de"] if isinstance(c.get("appris_de"), list) else []
+                for champ in ("date", "origine"):
+                    c.setdefault(champ, None)
+        else:
+            t.pop("connaissances", None)
 
 
 def _usage_normalise(u):

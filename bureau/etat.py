@@ -11,8 +11,28 @@ def dossier(r):
         "facturation": bool(r.get("usage")),
         "kpi": any(isinstance(x.get("kpi"), list) for x in r["services"]),
         "connaissances": (isinstance(r.get("challenges"), list)
-                          or any(isinstance(t.get("connaissances"), list) for t in r["titulaires"])),
+                          or any(isinstance(t.get("connaissances"), list) or _lecons_validees(t)
+                                 for t in r["titulaires"])),
     }
+
+
+def _lecons_validees(titulaire):
+    return [le for le in titulaire.get("lecons") or [] if le.get("etat") == "validée"]
+
+
+def _connaissances(ti, ids_connaissances):
+    """Connaissances du relevé + leçons validées du titulaire (une connaissance l'emporte sur une leçon
+    de même id, où qu'elle soit)."""
+    sortie = []
+    for c in ti.get("connaissances") or []:
+        appris = [dict(a) for a in c.get("appris_de") or []]
+        sortie.append({"id": c["id"], "texte": c["texte"], "date": c.get("date"), "origine": c.get("origine"),
+                       "appris_de": appris, "partagee": bool(appris), "lecon": False})
+    for le in _lecons_validees(ti):
+        if le["id"] not in ids_connaissances:
+            sortie.append({"id": le["id"], "texte": le["texte"], "date": le.get("date"),
+                           "origine": le.get("tache"), "appris_de": [], "partagee": False, "lecon": True})
+    return sortie
 
 
 def _fraicheur(titulaire, defaut):
@@ -53,6 +73,30 @@ def construire(r, eq, maintenant, fraicheur_min):
             "lecons": list(ti.get("lecons") or []),
         })
 
+    fiches = {a["id"]: a for a in agents}
+    services = {ti["cle"]: (None if ti.get("chef") else ti.get("service")) for ti in r["titulaires"]}
+    prenoms = {ti["cle"]: ti.get("prenom") or ti["cle"] for ti in r["titulaires"]}
+    prenoms.update({k: a["prenom"] for k, a in fiches.items()})
+    titres = {t["id"]: t["titre"] for t in r["taches"]}
+    ids_connaissances = {c["id"] for ti in r["titulaires"] for c in ti.get("connaissances") or []}
+    savoir = []
+    for ti in r["titulaires"]:
+        cle = ti["cle"]
+        siennes = _connaissances(ti, ids_connaissances)
+        if cle in fiches:
+            fiches[cle]["connaissances"] = siennes
+        elif not siennes:
+            continue  # parti sans rien laisser : rien à montrer
+        else:
+            prenoms[cle] = eq.agent(cle, chef=bool(ti.get("chef")), prenom=ti.get("prenom") or None)["prenom"]
+        savoir.append({"agent": cle, "prenom": prenoms[cle], "service": services[cle], "present": cle in fiches,
+                       "connaissances": siennes})
+    for titulaire in savoir:  # qui a fourni chaque connaissance partagée : prénom, service, titre de la tâche
+        for c in titulaire["connaissances"]:
+            for a in c["appris_de"]:
+                a.update(prenom=prenoms.get(a.get("agent"), a.get("agent")),
+                         service=services.get(a.get("agent")), titre=titres.get(a.get("tache")))
+
     taches = [{
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],
         "agent": t.get("titulaire") if t.get("titulaire") in presents else None,
@@ -87,6 +131,8 @@ def construire(r, eq, maintenant, fraicheur_min):
         "agents": agents,
         "taches": taches,
         "dossier": dossier(r),
+        "challenges": list(r.get("challenges") or []),
+        "savoir": savoir,
     }
 
 
@@ -99,6 +145,7 @@ def erreur(message, maintenant):
         "directeur": {"lecons": 0, "retours": 0, "bloquees": 0, "total": 0},
         "agents": [], "taches": [],
         "dossier": {"facturation": False, "kpi": False, "connaissances": False},
+        "challenges": [], "savoir": [],
     }
 
 

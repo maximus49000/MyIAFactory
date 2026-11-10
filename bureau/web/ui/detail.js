@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, dateFr, filtrer, imagesUrl, imagesVisibles, notesValides} from "./texte.js";
+import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides} from "./texte.js";
 import {lienSur} from "./actions.js";
 
 export const MAX_RETOUR = 3500;
@@ -180,8 +180,10 @@ export function contenuListe(ctx, contenu) {
     return b;
   }
   const rangeeEtat = el("div", "filtres-rangee");
-  rangeeEtat.append(bouton("Toutes", !f.enCours, () => ctx.changerFiltre({enCours: false})),
-                    bouton("En cours", f.enCours, () => ctx.changerFiltre({enCours: true})));
+  const etatEffectif = filtreEtatEffectif(e, f.etat);
+  for (const x of filtresEtat(e)) {
+    rangeeEtat.append(bouton(x.libelle, x.id === etatEffectif, () => ctx.changerFiltre({etat: x.id})));
+  }
   filtres.append(rangeeEtat);
   if ((e.types || []).length) {
     const types = el("div", "filtres-rangee");
@@ -191,7 +193,7 @@ export function contenuListe(ctx, contenu) {
   }
   contenu.append(filtres);
 
-  const ids = filtrer(e.taches, f);
+  const ids = filtrer(e.taches, filtreDeListe(e, f), e.colonnes);
   const liste = el("ul", "liste-taches");
   const montrees = (e.taches || []).filter((t) => ids.has(t.id));
   if (!montrees.length) liste.append(el("li", "vide", "Aucune tâche ne correspond"));

@@ -50,15 +50,44 @@ export function libelleCharge(c) {
   return `Charge ${Math.round(c.charge)} % · processeur ${Math.round(c.cpu)} %, mémoire ${Math.round(c.memoire)} %`;
 }
 
-// Les identifiants des tâches qui passent le filtre : en cours (= `active`) et/ou d'un type donné.
-export function filtrer(taches, {enCours = false, type = null} = {}) {
+// Les identifiants des colonnes terminées (`terminee: true`).
+export function colonnesTerminees(colonnes) {
+  return new Set((colonnes || []).filter((c) => c && c.terminee === true).map((c) => c.id));
+}
+
+// Les identifiants des tâches qui passent le filtre : en cours (= `active`), non terminées (= pas dans une colonne
+// terminée, donc aussi celles en attente ou bloquées) et/ou d'un type donné.
+export function filtrer(taches, {enCours = false, nonTerminees = false, type = null} = {}, colonnes = []) {
+  const finies = nonTerminees ? colonnesTerminees(colonnes) : new Set();
   const ids = new Set();
   for (const t of taches || []) {
     if (enCours && !t.active) continue;
+    if (finies.has(t.colonne)) continue;
     if (type && t.type !== type) continue;
     ids.add(t.id);
   }
   return ids;
+}
+
+// Les filtres d'état de la vue liste, dans l'ordre : « Non terminées » n'existe que si une colonne est terminée.
+export function filtresEtat(etat) {
+  const filtres = [{id: "toutes", libelle: "Toutes"}, {id: "en_cours", libelle: "En cours"}];
+  if (colonnesTerminees(etat?.colonnes).size > 0) filtres.unshift({id: "non_terminees", libelle: "Non terminées"});
+  return filtres;
+}
+
+// Le filtre d'état réellement appliqué : le choix de l'utilisateur s'il est encore possible,
+// sinon « Non terminées » quand une colonne est terminée, sinon « Toutes ».
+export function filtreEtatEffectif(etat, choix) {
+  const filtres = filtresEtat(etat);
+  if (choix && filtres.some((f) => f.id === choix)) return choix;
+  return filtres[0].id;
+}
+
+// Le filtre de la vue liste ({etat: choix ou null, type}) prêt pour `filtrer`.
+export function filtreDeListe(etat, filtreListe) {
+  const choix = filtreEtatEffectif(etat, filtreListe?.etat);
+  return {enCours: choix === "en_cours", nonTerminees: choix === "non_terminees", type: filtreListe?.type ?? null};
 }
 
 // Les vignettes d'une tâche : l'adresse porte la date de mise à jour, pour que le cache suive une image refaite.

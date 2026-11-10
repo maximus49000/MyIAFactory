@@ -229,6 +229,28 @@ class TestVersion2(unittest.TestCase):
                          ([], [], [], [], None, None))
 
 
+class TestColonneTerminee(unittest.TestCase):
+    def test_terminee_bien_formee(self):
+        for valeur in (True, False, None):
+            r = v2(colonnes=[{"id": "a", "nom": "A", "terminee": valeur}])
+            self.assertEqual(releve.valider(r), [], valeur)
+
+    def test_terminee_mal_formee(self):
+        for valeur in ("oui", 1, [], {}):
+            r = v2(colonnes=[{"id": "a", "nom": "A", "terminee": valeur}])
+            self.assertTrue(releve.valider(r), valeur)
+
+    def test_terminee_ignoree_en_version_1(self):
+        r = {**copy.deepcopy(BASE), "colonnes": [{"id": "a", "nom": "A", "terminee": "oui"}]}
+        self.assertEqual(releve.valider(r), [])
+        self.assertNotIn("terminee", releve.normaliser(r)["colonnes"][0])
+
+    def test_normaliser_terminee(self):
+        r = v2(colonnes=[{"id": "a", "nom": "A"}, {"id": "b", "nom": "B", "terminee": True},
+                         {"id": "c", "nom": "C", "terminee": None}])
+        self.assertEqual([c["terminee"] for c in releve.normaliser(r)["colonnes"]], [False, True, False])
+
+
 class TestObtenir(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

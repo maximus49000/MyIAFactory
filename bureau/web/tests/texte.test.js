@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides} from "../ui/texte.js";
+import {COLS} from "./donnees.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -116,4 +117,52 @@ test("notesValides : seules les notes bien formées, texte gardé tel quel", () 
   assert.deepEqual(notesValides({}), []);
   assert.deepEqual(notesValides(null), []);
   assert.deepEqual(notesValides({notes: "x"}), []);
+});
+
+const COLS_T = [{id: "af", nom: "À faire"}, {id: "ec", nom: "En cours"}, {id: "fait", nom: "Fait", terminee: true}];
+const TACHES_T = [
+  {id: "a", active: true, colonne: "ec", type: "bug"}, {id: "b", active: false, colonne: "af", type: "bug"},
+  {id: "c", active: true, colonne: "fait", type: "fonction"}, {id: "d", active: false, colonne: "fait", type: null},
+  {id: "e", active: false, colonne: "ec", type: null, bloquee: "raison"},
+];
+
+test("filtrer : « Non terminées » = toutes celles qui ne sont pas dans une colonne terminée", () => {
+  assert.deepEqual([...filtrer(TACHES_T, {nonTerminees: true}, COLS_T)], ["a", "b", "e"]);
+  assert.deepEqual([...filtrer(TACHES_T, {nonTerminees: true, type: "bug"}, COLS_T)], ["a", "b"]);
+  assert.deepEqual([...filtrer(TACHES_T, {enCours: true}, COLS_T)], ["a", "c"]);   // « En cours » ne change pas
+  assert.deepEqual([...filtrer(TACHES_T, {}, COLS_T)], ["a", "b", "c", "d", "e"]);
+  assert.deepEqual([...filtrer(TACHES_T, {nonTerminees: true}, [])], ["a", "b", "c", "d", "e"]);
+  assert.deepEqual([...filtrer(TACHES_T, {nonTerminees: true})], ["a", "b", "c", "d", "e"]);
+});
+
+test("filtresEtat : « Non terminées » en premier, seulement si une colonne est terminée", () => {
+  assert.deepEqual(filtresEtat({colonnes: COLS_T}).map((f) => f.id), ["non_terminees", "toutes", "en_cours"]);
+  assert.equal(filtresEtat({colonnes: COLS_T})[0].libelle, "Non terminées");
+  assert.deepEqual(filtresEtat({colonnes: COLS.map((c) => ({...c, terminee: false}))}).map((f) => f.id), ["toutes", "en_cours"]);
+  assert.deepEqual(filtresEtat({colonnes: [{id: "x", nom: "X", terminee: null}]}).map((f) => f.id), ["toutes", "en_cours"]);
+  assert.deepEqual(filtresEtat({}).map((f) => f.id), ["toutes", "en_cours"]);
+  assert.deepEqual(filtresEtat(null).map((f) => f.id), ["toutes", "en_cours"]);
+});
+
+test("filtreEtatEffectif : défaut « Non terminées » s'il y a une colonne terminée, le choix de l'utilisateur d'abord", () => {
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, null), "non_terminees");
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, undefined), "non_terminees");
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, "toutes"), "toutes");
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, "en_cours"), "en_cours");
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, "non_terminees"), "non_terminees");
+  assert.equal(filtreEtatEffectif({colonnes: COLS}, null), "toutes");
+  assert.equal(filtreEtatEffectif({colonnes: COLS}, "non_terminees"), "toutes");   // plus de colonne terminée
+  assert.equal(filtreEtatEffectif({colonnes: COLS}, "en_cours"), "en_cours");
+  assert.equal(filtreEtatEffectif({colonnes: COLS_T}, "n'importe quoi"), "non_terminees");
+});
+
+test("filtreDeListe : le filtre prêt pour filtrer()", () => {
+  assert.deepEqual(filtreDeListe({colonnes: COLS_T}, {etat: null, type: null}),
+                   {enCours: false, nonTerminees: true, type: null});
+  assert.deepEqual(filtreDeListe({colonnes: COLS_T}, {etat: "en_cours", type: "bug"}),
+                   {enCours: true, nonTerminees: false, type: "bug"});
+  assert.deepEqual(filtreDeListe({colonnes: COLS_T}, {etat: "toutes", type: null}),
+                   {enCours: false, nonTerminees: false, type: null});
+  assert.deepEqual(filtreDeListe({colonnes: COLS}, {etat: null, type: null}),
+                   {enCours: false, nonTerminees: false, type: null});
 });

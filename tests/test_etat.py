@@ -42,6 +42,14 @@ class TestEtat(unittest.TestCase):
         self.assertTrue(d1["prenom"])
         self.assertRegex(d1["couleur"], r"^#[0-9a-f]{6}$")
 
+    def test_colonne_terminee_servie(self):
+        def avec(r):
+            r["version"] = 2
+            r["colonnes"] = [{"id": "a", "nom": "A"}, {"id": "f", "nom": "Fait", "terminee": True}]
+        e = self.etat(modif=avec)
+        self.assertEqual([c["terminee"] for c in e["colonnes"]], [False, True])
+        self.assertNotIn("terminee", self.etat()["colonnes"][0])  # version 1 : rien de nouveau
+
     def test_chef_toujours_la(self):
         chef = next(x for x in self.etat()["agents"] if x["chef"])
         self.assertIsNone(chef["service"])

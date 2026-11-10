@@ -31,7 +31,7 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 | `factory.etat` | oui | `"en marche"` ou `"en pause"` |
 | `factory.depuis` | non | date ISO 8601 |
 | `services` | oui | liste de `{id, nom}` ; **8 au plus**, identifiants uniques |
-| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban |
+| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; en v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) |
 | `titulaires` | oui | voir ci-dessous |
 | `taches` | oui | voir ci-dessous |
 | `file` | non | `{"visibles": [{id, titre}], "reste": n}` — vide par défaut |
@@ -59,6 +59,8 @@ Facultatifs en version 2, pour le détail d'une tâche :
 | `bloquee` | texte : la raison, si la tâche attend une décision (compte pour le Directeur) |
 
 Un champ facultatif de mauvais type (par exemple un `journal` qui n'est pas une liste, ou un lien `javascript:`) rend tout le relevé invalide : le bandeau « Relevé invalide » nomme le champ, et la scène garde sa dernière image. Un champ facultatif à `null` compte pour absent. En version 1, ces champs sont ignorés.
+
+**Colonnes terminées.** En version 2, une colonne peut porter `"terminee": true`. Dès qu'au moins une colonne est terminée, la vue liste gagne un filtre « Non terminées » (toutes les tâches qui ne sont pas dans une colonne terminée, y compris celles en attente ou bloquées) : il est placé en premier et choisi par défaut, tant que l'utilisateur n'a pas choisi un autre filtre. Le filtre « En cours » (tâches `active`) ne change pas. Sans colonne terminée, ce filtre n'existe pas.
 
 ## Faire agir le bureau
 

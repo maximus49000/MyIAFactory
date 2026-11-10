@@ -2,7 +2,7 @@
 // Lecture seule, sauf le réglage de la charge maximum. Tout texte venu du serveur passe par textContent.
 
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
-import {tronquer, filtrer} from "./texte.js";
+import {tronquer, filtrer, filtreDeListe} from "./texte.js";
 import {el, ligne} from "./dom.js";
 import {contenuTache, contenuFile, contenuListe} from "./detail.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
@@ -15,7 +15,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   let panneauOuvert = null;    // {type, id}
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
   let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
-  const filtreListe = {enCours: false, type: null};
+  const filtreListe = {etat: null, type: null};   // etat null : pas de choix, le défaut de la vue s'applique
   const brouillons = new Map();  // tâche -> retour en cours d'écriture (survit aux rafraîchissements)
 
   const signature = (type, id, e) => {
@@ -43,7 +43,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   // Les tâches qui passent le filtre tant que la vue liste est ouverte (sinon null : rien n'est estompé).
   function filtreActif() {
     const e = etat();
-    return panneauOuvert?.type === "liste" && e ? filtrer(e.taches, filtreListe) : null;
+    return panneauOuvert?.type === "liste" && e ? filtrer(e.taches, filtreDeListe(e, filtreListe), e.colonnes) : null;
   }
 
   // --- Pastille de décisions au-dessus du bureau du Directeur.

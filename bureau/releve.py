@@ -183,6 +183,9 @@ def _texte(v):
 
 def _verifier_v2(r, titulaires, taches, cles, erreurs):
     """Champs facultatifs de la version 2 (ignorés en version 1)."""
+    for c in r.get("colonnes") or []:
+        if _est_dict(c) and c.get("terminee") is not None and not isinstance(c["terminee"], bool):
+            erreurs.append(f"Colonne « {c.get('id')} » : « terminee » doit être vrai ou faux.")
     vus = set()
     for a in _liste_facultative(r.get("actions"), "« actions »", erreurs):
         i = a.get("id")
@@ -284,6 +287,11 @@ def normaliser(r):
             n[c] = n[c] if isinstance(n.get(c), list) else []
         else:
             n.pop(c, None)
+    for c in n["colonnes"]:
+        if v2:
+            c["terminee"] = c.get("terminee") is True
+        else:
+            c.pop("terminee", None)
     if not _est_dict(n.get("file")):
         n["file"] = {}
     n["file"].setdefault("visibles", [])

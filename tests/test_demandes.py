@@ -67,6 +67,89 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(d, {"type": "retour", "tache": "t1", "texte": "x"})
 
 
+R3 = releve.normaliser({
+    "version": 3, "projet": "P", "factory": {"etat": "en marche"},
+    "services": [{"id": "dev", "nom": "Dev", "kpi": [{"id": "defauts", "nom": "Défauts", "valeur": 2}]}],
+    "colonnes": [{"id": "a", "nom": "A"}],
+    "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local",
+                    "connaissances": [{"id": "k1", "texte": "a"}, {"id": "k2", "texte": "b"}],
+                    "lecons": [{"id": "l1", "texte": "c", "etat": "validée"},
+                               {"id": "l2", "texte": "d", "etat": "à valider"}]}],
+    "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}],
+    "challenges": [{"id": "ch1", "cible": {"type": "connaissance", "id": "k2"}, "texte": "c",
+                    "solutions": [{"id": "s1", "texte": "x", "auteur": "directeur"}]}]})
+
+SOURCE = "source:dev:tache_chere:t1"
+
+
+class TestVerifierChallenges(unittest.TestCase):
+    def ok(self, d, cibles=frozenset()):
+        self.assertIsNone(demandes.verifier(d, R3, cibles), d)
+
+    def refus(self, d, cibles=frozenset(), r=R3):
+        m = demandes.verifier(d, r, cibles)
+        self.assertTrue(m, d)
+        return m
+
+    def test_challenge_accepte(self):
+        self.ok({"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}})
+        self.ok({"type": "challenge", "cible": {"type": "connaissance", "id": "l1"}, "texte": "pourquoi",
+                 "solution": "faire autrement"})
+        self.ok({"type": "challenge", "cible": {"type": "kpi", "id": "kpi:dev:defauts"}})
+        self.ok({"type": "challenge", "cible": {"type": "kpi", "id": "kpi:dev:cout_moyen"}},
+                {"kpi:dev:cout_moyen": "constat"})
+        self.ok({"type": "challenge", "cible": {"type": "source", "id": SOURCE}}, {SOURCE: "constat"})
+
+    def test_challenge_cible_absente(self):
+        for cible in ({"type": "connaissance", "id": "k9"}, {"type": "connaissance", "id": "l2"},
+                      {"type": "kpi", "id": "kpi:dev:inconnu"}, {"type": "kpi", "id": "defauts"},
+                      {"type": "source", "id": SOURCE}, {"type": "source", "id": "k1"}):
+            self.refus({"type": "challenge", "cible": cible})
+
+    def test_challenge_mal_forme(self):
+        for d in ({"type": "challenge"}, {"type": "challenge", "cible": "k1"},
+                  {"type": "challenge", "cible": {"type": "tache", "id": "t1"}},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": 3}},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}, "texte": 3},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}, "solution": "  "},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}, "solution": "x" * 3501},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}, "texte": "x" * 3501}):
+            self.refus(d)
+
+    def test_challenge_deja_ouvert(self):
+        m = self.refus({"type": "challenge", "cible": {"type": "connaissance", "id": "k2"}})
+        self.assertIn("existe déjà", m)
+
+    def test_solution(self):
+        self.ok({"type": "solution", "challenge": "ch1", "texte": "x" * 3500})
+        for d in ({"type": "solution", "challenge": "ch9", "texte": "x"},
+                  {"type": "solution", "challenge": "ch1", "texte": " \n"},
+                  {"type": "solution", "challenge": "ch1", "texte": "x" * 3501},
+                  {"type": "solution", "challenge": "ch1"}):
+            self.refus(d)
+
+    def test_verdict_solution(self):
+        self.ok({"type": "verdict_solution", "challenge": "ch1", "solution": "s1", "verdict": "valider"})
+        self.ok({"type": "verdict_solution", "challenge": "ch1", "solution": "s1", "verdict": "ecarter"})
+        for d in ({"type": "verdict_solution", "challenge": "ch9", "solution": "s1", "verdict": "valider"},
+                  {"type": "verdict_solution", "challenge": "ch1", "solution": "s9", "verdict": "valider"},
+                  {"type": "verdict_solution", "challenge": "ch1", "solution": "s1", "verdict": "invalider"},
+                  {"type": "verdict_solution", "challenge": "ch1", "solution": "s1"}):
+            self.refus(d)
+
+    def test_version_2_refuse(self):
+        # Les challenges n'existent qu'en version 3.
+        self.refus({"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}}, r=R)
+        self.refus({"type": "solution", "challenge": "ch1", "texte": "x"}, r=R)
+
+    def test_nettoyer_challenge(self):
+        d = demandes.nettoyer({"type": "challenge", "cible": {"type": "kpi", "id": "x", "autre": 1},
+                               "texte": "a", "solution": "b", "pirate": 1})
+        self.assertEqual(d, {"type": "challenge", "cible": {"type": "kpi", "id": "x"}, "texte": "a", "solution": "b"})
+        self.assertEqual(demandes.nettoyer({"type": "challenge", "cible": {"type": "kpi", "id": "x"}}),
+                         {"type": "challenge", "cible": {"type": "kpi", "id": "x"}})
+
+
 class TestEnvoyer(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

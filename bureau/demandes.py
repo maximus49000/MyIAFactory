@@ -7,15 +7,24 @@ from pathlib import Path
 from . import releve
 
 MAX_RETOUR = 3500
+MAX_TEXTE = MAX_RETOUR
 CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
-          "retour": ("tache", "texte"), "lecon": ("id", "verdict")}
+          "retour": ("tache", "texte"), "lecon": ("id", "verdict"),
+          "challenge": ("cible",), "solution": ("challenge", "texte"),
+          "verdict_solution": ("challenge", "solution", "verdict")}
+FACULTATIFS = {"challenge": ("texte", "solution")}
+TYPES_CIBLE = ("kpi", "connaissance", "source")
 
 
 def nettoyer(demande):
     """La demande réduite à ses champs connus (rien d'autre n'est transmis au projet)."""
     if not isinstance(demande, dict) or demande.get("type") not in CHAMPS:
         return demande
-    return {k: demande[k] for k in ("type",) + CHAMPS[demande["type"]] if k in demande}
+    genre = demande["type"]
+    d = {k: demande[k] for k in ("type",) + CHAMPS[genre] + FACULTATIFS.get(genre, ()) if k in demande}
+    if isinstance(d.get("cible"), dict):
+        d["cible"] = {k: d["cible"][k] for k in ("type", "id") if k in d["cible"]}
+    return d
 
 
 def commande_declaree(regl):
@@ -32,13 +41,17 @@ def _ids_taches(r):
     return ids
 
 
-def verifier(demande, r):
-    """Message d'erreur (français) ou None. `r` : le dernier relevé normalisé valide."""
+def verifier(demande, r, cibles_calculees=frozenset()):
+    """Message d'erreur (français) ou None. `r` : le dernier relevé normalisé valide.
+    `cibles_calculees` : les identifiants des cibles que le bureau recalcule (KPI calculés, sources
+    d'amélioration) ; un dict (id -> constat) convient aussi."""
     if not isinstance(demande, dict):
         return "La demande doit être un objet."
     genre = demande.get("type")
     if genre not in CHAMPS:
         return "Type de demande inconnu."
+    if genre in ("challenge", "solution", "verdict_solution"):
+        return _verifier_challenge(demande, r, cibles_calculees)
     for champ in CHAMPS[genre]:
         if not isinstance(demande.get(champ), str):
             return f"« {champ} » est obligatoire (texte)."
@@ -66,6 +79,75 @@ def verifier(demande, r):
             return "Leçon inconnue."
         if demande["verdict"] not in ("valider", "invalider"):
             return "Verdict inconnu (valider ou invalider)."
+    return None
+
+
+def _texte_libre(valeur, nom):
+    """Message d'erreur pour un texte de l'utilisateur, ou None."""
+    if not isinstance(valeur, str):
+        return f"« {nom} » doit être un texte."
+    if not valeur.strip():
+        return f"« {nom} » est vide."
+    if len(valeur) > MAX_TEXTE:
+        return f"« {nom} » dépasse {MAX_TEXTE} caractères."
+    return None
+
+
+def connaissances_du_releve(r):
+    """Les identifiants qu'une cible « connaissance » peut viser : connaissances et leçons validées."""
+    ids = set()
+    for ti in r.get("titulaires", []):
+        ids.update(c["id"] for c in ti.get("connaissances") or [])
+        ids.update(le["id"] for le in ti.get("lecons") or [] if le.get("etat") == "validée")
+    return ids
+
+
+def kpi_du_releve(r):
+    """Les cibles « kpi » du projet : `kpi:<service>:<id>` (les id de KPI ne sont uniques que par service)."""
+    return {f"kpi:{s['id']}:{k['id']}" for s in r.get("services", []) if isinstance(s.get("kpi"), list)
+            for k in s["kpi"] if isinstance(k, dict) and isinstance(k.get("id"), str)}
+
+
+def _verifier_challenge(demande, r, cibles_calculees):
+    if r.get("version", 1) < 3:
+        return "Le relevé de ce projet ne gère pas les challenges (version 3)."
+    genre = demande["type"]
+    challenges = {c["id"]: c for c in r.get("challenges") or []}
+    if genre == "challenge":
+        cible = demande.get("cible")
+        if not isinstance(cible, dict) or not isinstance(cible.get("id"), str) or not cible["id"]:
+            return "« cible » est obligatoire ({type, id})."
+        if cible.get("type") not in TYPES_CIBLE:
+            return "Type de cible inconnu (kpi, connaissance ou source)."
+        for champ in ("texte", "solution"):
+            if champ in demande:
+                message = _texte_libre(demande[champ], champ)
+                if message:
+                    return message
+        genre_cible, i = cible["type"], cible["id"]
+        if genre_cible == "connaissance":
+            connue = i in connaissances_du_releve(r)
+        elif genre_cible == "kpi":
+            connue = i in kpi_du_releve(r) or i in cibles_calculees
+        else:
+            connue = i in cibles_calculees
+        if not connue:
+            return "Cible inconnue : elle n'est plus dans le relevé."
+        if any(c["cible"].get("type") == genre_cible and c["cible"].get("id") == i for c in challenges.values()):
+            return "Un challenge existe déjà : ouvrez-le."
+        return None
+    for champ in CHAMPS[genre]:
+        if not isinstance(demande.get(champ), str):
+            return f"« {champ} » est obligatoire (texte)."
+    ch = challenges.get(demande["challenge"])
+    if ch is None:
+        return "Challenge inconnu."
+    if genre == "solution":
+        return _texte_libre(demande["texte"], "texte")
+    if demande["solution"] not in {s["id"] for s in ch.get("solutions") or []}:
+        return "Solution inconnue."
+    if demande["verdict"] not in ("valider", "ecarter"):
+        return "Verdict inconnu (valider ou ecarter)."
     return None
 
 

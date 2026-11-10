@@ -527,5 +527,107 @@ class TestFacturation(AvecServeur):
         self.assertEqual(r.status, 403)
 
 
+class TestChallenges(AvecServeur):
+    SOURCE = "source:dev:allers_retours:t1"
+    RELEVE_V2, SCRIPT_ACTIONS, agir, demande = (TestServeur.RELEVE_V2, TestServeur.SCRIPT_ACTIONS,
+                                                TestServeur.agir, TestServeur.demande)
+    RELEVE_V3, usage = TestFacturation.RELEVE_V3, TestFacturation.usage
+
+    def installer(self, challenges=None, duree=0.0):
+        """Relevé v3 (une connaissance, une tâche à deux retours qui coûte) et commande d'actions."""
+        r = json.loads(json.dumps(self.RELEVE_V3))
+        r["titulaires"][0]["connaissances"] = [{"id": "k1", "texte": "Relire"}]
+        r["taches"][0]["retours"] = [{"t": "1", "texte": "a"}, {"t": "2", "texte": "b"}]
+        r["usage"] = [self.usage()]
+        if challenges is not None:
+            r["challenges"] = challenges
+        notes = self.agir(duree=duree, releve=r)
+        regl = json.loads(self.regl.read_text(encoding="utf-8"))
+        regl["alias_modeles"] = {"sonnet": "modele-a"}
+        self.regl.write_text(json.dumps(regl), encoding="utf-8")
+        self.srv._cache_etat = (0.0, None)
+        return notes
+
+    def recues(self, notes):
+        if not notes.exists():
+            return []
+        return [json.loads(x) for x in notes.read_text(encoding="utf-8").splitlines() if x.startswith("{")]
+
+    def test_commande_non_lancee_si_refus(self):
+        notes = self.installer(challenges=[{"id": "ch1", "cible": {"type": "connaissance", "id": "k1"},
+                                            "texte": "c", "solutions": [{"id": "s1", "texte": "x",
+                                                                         "auteur": "service"}]}])
+        for d in ({"type": "challenge", "cible": {"type": "connaissance", "id": "k9"}},
+                  {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}},  # déjà ouvert
+                  {"type": "challenge", "cible": {"type": "source", "id": "source:dev:tache_chere:t1"}},
+                  {"type": "solution", "challenge": "ch9", "texte": "x"},
+                  {"type": "verdict_solution", "challenge": "ch1", "solution": "s9", "verdict": "valider"}):
+            statut, corps = self.demande(d)
+            self.assertEqual(statut, 400, d)
+            self.assertIn("erreur", corps)
+        self.assertEqual(self.recues(notes), [])
+
+    def test_solution_dans_le_meme_geste(self):
+        notes = self.installer()
+        statut, _ = self.demande({"type": "challenge", "cible": {"type": "connaissance", "id": "k1"},
+                                  "solution": "Relire deux fois", "pirate": 1})
+        self.assertEqual(statut, 200)
+        recue = self.recues(notes)[0]
+        self.assertEqual((recue["type"], recue["cible"], recue["solution"]),
+                         ("challenge", {"type": "connaissance", "id": "k1"}, "Relire deux fois"))
+        self.assertNotIn("pirate", recue)
+        self.assertIn("t", recue)
+
+    def test_challenge_sur_source_calculee(self):
+        # Le bureau recalcule la source et écrit lui-même le constat pour le projet.
+        notes = self.installer()
+        statut, corps = self.demande({"type": "challenge", "cible": {"type": "source", "id": self.SOURCE},
+                                      "texte": "trop cher"})
+        self.assertEqual(statut, 200, corps)
+        recue = self.recues(notes)[0]
+        self.assertIn("2 retours", recue["texte"])
+        self.assertIn("≈", recue["texte"])
+        self.assertIn("trop cher", recue["texte"])
+
+    def test_double_clic_un_seul_challenge(self):
+        # Le projet n'a pas encore inscrit le challenge : un second envoi sur la même cible est refusé.
+        notes = self.installer()
+        d = {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}}
+        self.assertEqual(self.demande(d)[0], 200)
+        statut, corps = self.demande(d)
+        self.assertEqual(statut, 400)
+        self.assertIn("déjà", corps["erreur"])
+        self.assertEqual(len(self.recues(notes)), 1)
+
+    def test_double_clic_simultane(self):
+        notes = self.installer(duree=0.3)
+        self.json("/api/etat")
+        d = {"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}}
+        resultats = []
+        fils = [threading.Thread(target=lambda: resultats.append(self.demande(d)[0])) for _ in range(2)]
+        for f in fils:
+            f.start()
+        for f in fils:
+            f.join(20)
+        self.assertEqual(sorted(resultats), [200, 400])
+        self.assertEqual(len(self.recues(notes)), 1)
+
+    def test_trois_demandes_en_alternance(self):
+        notes = self.installer(challenges=[{"id": "ch1", "cible": {"type": "connaissance", "id": "k1"},
+                                            "texte": "c", "solutions": [{"id": "s1", "texte": "x",
+                                                                         "auteur": "directeur"},
+                                                                        {"id": "s2", "texte": "y",
+                                                                         "auteur": "service"}]}])
+        envoyees = [{"type": "solution", "challenge": "ch1", "texte": "Ma solution"},
+                    {"type": "verdict_solution", "challenge": "ch1", "solution": "s1", "verdict": "valider"},
+                    {"type": "challenge", "cible": {"type": "source", "id": self.SOURCE}},
+                    {"type": "verdict_solution", "challenge": "ch1", "solution": "s2", "verdict": "ecarter"}]
+        for d in envoyees:
+            self.assertEqual(self.demande(d)[0], 200, d)
+        recues = self.recues(notes)
+        self.assertEqual([x["type"] for x in recues], [d["type"] for d in envoyees])
+        self.assertEqual(recues[3]["verdict"], "ecarter")
+
+
 if __name__ == "__main__":
     unittest.main()

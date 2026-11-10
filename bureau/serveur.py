@@ -18,6 +18,7 @@ PAS_SONDE_S = 5
 PAS_HISTORIQUE_S = 60
 PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit les sources qu'une fois par jour
 ATTENTE_PREMIERS_PRIX_S = 25
+GARDE_CHALLENGE_S = 120  # un challenge envoyé mais pas encore au relevé : pas de second envoi sur sa cible
 TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
          ".json": "application/json; charset=utf-8", ".html": "text/html; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".glb": "model/gltf-binary", ".svg": "image/svg+xml"}
@@ -55,6 +56,7 @@ class Bureau(ThreadingHTTPServer):
         self._cache_etat = (0.0, None)
         self.dernier_releve = None  # dernier relevé normalisé valide (sert à vérifier les demandes)
         self._verrou_demandes = threading.Lock()
+        self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
         self._arret = threading.Event()
         self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
         self._fil.start()
@@ -140,14 +142,8 @@ class Bureau(ThreadingHTTPServer):
         r = self.dernier_releve
         if e.get("erreur") or r is None or r.get("version", 1) < 3 or not e["dossier"]["facturation"]:
             return 200, {"disponible": False}
-        # Le premier jour, les prix sont lus avant de calculer (sans attendre indéfiniment).
-        self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
         regl, _ = self.reglages()
-
-        def prix_de(modele, date_iso):
-            return prix.prix_effectif(self.table_prix, regl, modele, date_iso)
-
-        f = cout.facturation(self.usage.lire(), prix_de, r, periode, datetime.now().astimezone())
+        f = self._calculer(r, regl, periode)
         if regl.get("prix_automatiques") is False:
             message = "Prix automatiques coupés (réglage « prix_automatiques ») : seules les corrections à la main comptent."
         elif self.etat_prix is None:
@@ -157,20 +153,55 @@ class Bureau(ThreadingHTTPServer):
         return 200, {**f, "disponible": True, "periode": periode, "maj": self.table_prix.derniere_maj(),
                      "message": message}
 
+    def _calculer(self, r, regl, periode):
+        # Le premier jour, les prix sont lus avant de calculer (sans attendre indéfiniment).
+        self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
+
+        def prix_de(modele, date_iso):
+            return prix.prix_effectif(self.table_prix, regl, modele, date_iso)
+
+        return cout.facturation(self.usage.lire(), prix_de, r, periode, datetime.now().astimezone())
+
+    def cibles_calculees(self, r, regl):
+        """Les cibles que le bureau recalcule (id -> constat en clair) : les sources d'amélioration des
+        trois périodes. Les KPI calculés s'y ajouteront (tâche 10)."""
+        cibles = {}
+        if r.get("version", 1) < 3 or not r.get("usage") and not self._usage_connu:
+            return cibles
+        for periode in cout.PERIODES:
+            for source in self._calculer(r, regl, periode)["sources"]:
+                cibles.setdefault(source["id"], source["texte"])
+        return cibles
+
     # -- demandes ---------------------------------------------------------
     def demande(self, demande):
-        """(code HTTP, objet JSON). Les demandes passent une à une."""
-        self.etat()  # rafraîchit le dernier relevé valide si l'état est périmé
-        r = self.dernier_releve
-        if r is None:
-            return 409, {"erreur": "Relevé indisponible."}
+        """(code HTTP, objet JSON). Les demandes passent une à une ; chacune est vérifiée contre le
+        dernier relevé, relu juste avant (une demande précédente a pu le changer)."""
         demande = demandes.nettoyer(demande)
-        message = demandes.verifier(demande, r)
-        if message:
-            return 400, {"erreur": message}
         with self._verrou_demandes:
+            self.etat()  # rafraîchit le dernier relevé valide si l'état est périmé
+            r = self.dernier_releve
+            if r is None:
+                return 409, {"erreur": "Relevé indisponible."}
             regl, _ = self.reglages()
+            cibles = {}
+            if isinstance(demande, dict) and demande.get("type") == "challenge":
+                cibles = self.cibles_calculees(r, regl)
+            message = demandes.verifier(demande, r, cibles)
+            if message:
+                return 400, {"erreur": message}
+            cle = None
+            if demande["type"] == "challenge":
+                cle = (demande["cible"]["type"], demande["cible"]["id"])
+                envoye = self._challenges_envoyes.get(cle)
+                if envoye is not None and time.monotonic() - envoye < GARDE_CHALLENGE_S:
+                    return 400, {"erreur": "Challenge déjà demandé : il apparaîtra au prochain relevé."}
+                constat = cibles.get(cle[1])
+                if constat:  # le bureau écrit lui-même le constat de ce qu'il a calculé
+                    demande["texte"] = constat + (f"\n\n{demande['texte']}" if demande.get("texte") else "")
             ok, message = demandes.envoyer(regl, demande)
+            if ok and cle:
+                self._challenges_envoyes[cle] = time.monotonic()
             self._cache_etat = (0.0, self._cache_etat[1])  # relire le relevé tout de suite
         if not ok:
             return 502, {"erreur": message}

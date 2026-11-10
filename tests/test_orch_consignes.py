@@ -61,6 +61,12 @@ class TestConsignes(unittest.TestCase):
         self.assertIn("première analyse du besoin", texte)
         self.assertIn("écrire le cahier des charges", texte)
 
+    def test_serie_en_parallele(self):
+        # En série, la factory n'attend pas la relecture pour lancer le dev suivant ; les corrections passent d'abord.
+        texte = lire(ORCH / "consignes.md")
+        for mot in ("En parallèle", "les corrections passent avant", "deux éléments en cours", "jamais pendant le prototype"):
+            self.assertIn(mot, texte, mot)
+
     def test_modele_factory_lisible(self):
         f = factory.lire(ORCH / "modeles" / "factory.json")
         self.assertGreaterEqual(len(f["flux"]), 1)

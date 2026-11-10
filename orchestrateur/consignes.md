@@ -149,6 +149,14 @@ le bandeau du bureau montre.
    élément fait, et relis-le (`lancer catalogue`, entrée `{"fonctionnalite"}`) pour vérifier que l'élément y
    paraît avec ses captures, sa passe et son état : c'est ce que l'utilisateur regarde. L'utilisateur suit et fait ses retours depuis le catalogue (demandes `retour_element`). Il n'est
    sollicité que pour les leçons, les décisions bloquantes et les sessions cloud à créer.
+
+   **En parallèle.** N'attends pas la fin d'une relecture pour avancer : pendant qu'un élément est relu (ou
+   intégré), lance le dev de l'élément suivant de la file, si un spécialiste du rôle est libre (`agent-libre`) et,
+   pour une étape locale, si `charge` donne le feu vert. Au retour d'une relecture, **les corrections passent avant**
+   toute nouvelle tâche de dev : l'élément commencé se termine d'abord. Garde au plus **deux éléments en cours** à la
+   fois (les consignes propres du projet peuvent fixer un autre nombre) : au-delà, les corrections et les relectures
+   s'empilent et coûtent plus qu'elles ne font gagner. Ce parallélisme ne vaut qu'en série, **jamais pendant le
+   prototype** : la méthode n'y est pas encore validée, et ses défauts se propageraient.
 7. **`terminee`** quand la file est vide (regarde `file` dans `lancer etat` : `file-prendre` retire l'élément qu'il
    rend, ne t'en sers pas pour tester) et que tous les éléments sont faits. Si la
    fonctionnalité produit un livrable, inscris-le (`lancer fonctionnalite`, `livrable: {libelle, chemin | lien,

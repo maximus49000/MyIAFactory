@@ -25,7 +25,7 @@ Projet 1, le bureau vivant :
 - [x] 2. Le relevé (contrat entre un projet et le bureau) et l'exemple de démonstration
 - [x] 3. Statuts : fraîcheur, pause, départ
 - [x] 4. L'équipe : prénoms et couleurs
-- [ ] 5. L'état servi à la page
+- [x] 5. L'état servi à la page
 - [ ] 6. La charge de l'ordinateur et le serveur
 - [ ] 7. La logique de la page : changements, plan, régie
 - [ ] 8. La scène 3D en volumes simples
@@ -34,7 +34,7 @@ Projet 1, le bureau vivant :
 - [ ] 11. Le mobilier (modèles Tripo)
 - [ ] 12. Le personnage (modèle Tripo)
 
-État : étapes 1 à 4 faites.
+État : étapes 1 à 5 faites.
 
 ## Ce qu'il reste à faire ensuite
 

@@ -628,6 +628,38 @@ class TestChallenges(AvecServeur):
         self.assertEqual([x["type"] for x in recues], [d["type"] for d in envoyees])
         self.assertEqual(recues[3]["verdict"], "ecarter")
 
+    def test_challenge_sur_connaissance_sans_calcul_de_facturation(self):
+        # Une cible « connaissance » n'a rien à recalculer : pas d'attente des prix dans le verrou.
+        notes = self.installer()
+
+        def interdit(*a, **k):
+            raise AssertionError("calcul inutile")
+        self.srv._calculer = interdit
+        statut, corps = self.demande({"type": "challenge", "cible": {"type": "connaissance", "id": "k1"}})
+        self.assertEqual(statut, 200, corps)
+        self.assertEqual(len(self.recues(notes)), 1)
+
+    def test_demande_relit_le_releve_meme_si_une_lecture_est_en_cours(self):
+        # Une autre lecture tient le verrou de l'état : la demande attend le relevé frais au lieu
+        # d'être vérifiée contre l'ancien.
+        self.installer()
+        self.json("/api/etat")
+        r = json.loads((self.tmp / "demo" / "releve.json").read_text(encoding="utf-8"))
+        r["challenges"] = [{"id": "ch9", "cible": {"type": "connaissance", "id": "k1"}, "texte": "c"}]
+        (self.tmp / "demo" / "releve.json").write_text(json.dumps(r), encoding="utf-8")
+        self.srv._cache_etat = (0.0, self.srv._cache_etat[1])
+        self.srv._verrou.acquire()
+        threading.Timer(0.3, self.srv._verrou.release).start()
+        statut, corps = self.demande({"type": "solution", "challenge": "ch9", "texte": "x"})
+        self.assertEqual(statut, 200, corps)
+
+    def test_type_de_demande_non_texte_400(self):
+        self.installer()
+        for d in ({"type": ["challenge"]}, {"type": {"a": 1}}):
+            statut, corps = self.demande(d)
+            self.assertEqual(statut, 400, d)
+            self.assertIn("erreur", corps)
+
 
 if __name__ == "__main__":
     unittest.main()

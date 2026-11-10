@@ -18,7 +18,7 @@ TYPES_CIBLE = ("kpi", "connaissance", "source")
 
 def nettoyer(demande):
     """La demande réduite à ses champs connus (rien d'autre n'est transmis au projet)."""
-    if not isinstance(demande, dict) or demande.get("type") not in CHAMPS:
+    if not isinstance(demande, dict) or not isinstance(demande.get("type"), str) or demande["type"] not in CHAMPS:
         return demande
     genre = demande["type"]
     d = {k: demande[k] for k in ("type",) + CHAMPS[genre] + FACULTATIFS.get(genre, ()) if k in demande}
@@ -48,7 +48,7 @@ def verifier(demande, r, cibles_calculees=frozenset()):
     if not isinstance(demande, dict):
         return "La demande doit être un objet."
     genre = demande.get("type")
-    if genre not in CHAMPS:
+    if not isinstance(genre, str) or genre not in CHAMPS:
         return "Type de demande inconnu."
     if genre in ("challenge", "solution", "verdict_solution"):
         return _verifier_challenge(demande, r, cibles_calculees)

@@ -5,6 +5,7 @@
 import {el} from "./dom.js";
 import {dateFr, libellePeriode, tronquer} from "./texte.js";
 import {challengeDe} from "./actions.js";
+import {enAttenteCible} from "./challenge.js";
 
 const JOUR_MS = 24 * 3600 * 1000;
 const DUREES = {"7j": 7 * JOUR_MS, "30j": 30 * JOUR_MS};
@@ -61,8 +62,11 @@ function carteConnaissance(ctx, c, service, noms, prenom) {
   if (marques.childNodes.length) li.append(marques);
   for (const p of provenances(c, service, noms)) li.append(el("div", "provenance", p));
   const cible = {type: "connaissance", id: c.id};
-  const b = el("button", "bouton secondaire petit", challengeDe(e, cible) ? "Voir le challenge" : "Challenger");
+  const existe = challengeDe(e, cible);
+  const b = el("button", "bouton secondaire petit",
+    existe ? "Voir le challenge" : (enAttenteCible(cible) ? "Demande envoyée" : "Challenger"));
   b.type = "button";
+  b.disabled = !existe && enAttenteCible(cible);  // ne renvoie rien tant que le relevé ne le montre pas
   b.addEventListener("click", () => ctx.challenger(cible, `Connaissance de ${prenom} : « ${c.texte} »`, []));
   li.append(b);
   return li;

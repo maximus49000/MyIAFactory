@@ -78,13 +78,14 @@ class Bureau(ThreadingHTTPServer):
             return d, str(e)
 
     # -- état -------------------------------------------------------------
-    def etat(self):
+    def etat(self, bloquant=False):
         t, e = self._cache_etat
         if e is not None and time.monotonic() - t < DELAI_ETAT_S:
             return e
         # Une seule lecture du relevé à la fois. Pendant qu'elle dure (une commande peut prendre
-        # jusqu'à 10 s), les autres demandes reçoivent le dernier état au lieu d'attendre.
-        if not self._verrou.acquire(blocking=e is None):
+        # jusqu'à 10 s), les autres demandes reçoivent le dernier état au lieu d'attendre
+        # (sauf `bloquant` : une demande doit être vérifiée contre le relevé frais).
+        if not self._verrou.acquire(blocking=bloquant or e is None):
             return e
         try:
             t, e = self._cache_etat
@@ -153,14 +154,16 @@ class Bureau(ThreadingHTTPServer):
         return 200, {**f, "disponible": True, "periode": periode, "maj": self.table_prix.derniere_maj(),
                      "message": message}
 
-    def _calculer(self, r, regl, periode):
+    def _calculer(self, r, regl, periode, usages=None):
         # Le premier jour, les prix sont lus avant de calculer (sans attendre indéfiniment).
         self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
 
         def prix_de(modele, date_iso):
             return prix.prix_effectif(self.table_prix, regl, modele, date_iso)
 
-        return cout.facturation(self.usage.lire(), prix_de, r, periode, datetime.now().astimezone())
+        if usages is None:
+            usages = self.usage.lire()
+        return cout.facturation(usages, prix_de, r, periode, datetime.now().astimezone())
 
     def cibles_calculees(self, r, regl):
         """Les cibles que le bureau recalcule (id -> constat en clair) : les sources d'amélioration des
@@ -168,8 +171,9 @@ class Bureau(ThreadingHTTPServer):
         cibles = {}
         if r.get("version", 1) < 3 or not r.get("usage") and not self._usage_connu:
             return cibles
+        usages = self.usage.lire()
         for periode in cout.PERIODES:
-            for source in self._calculer(r, regl, periode)["sources"]:
+            for source in self._calculer(r, regl, periode, usages)["sources"]:
                 cibles.setdefault(source["id"], source["texte"])
         return cibles
 
@@ -179,13 +183,14 @@ class Bureau(ThreadingHTTPServer):
         dernier relevé, relu juste avant (une demande précédente a pu le changer)."""
         demande = demandes.nettoyer(demande)
         with self._verrou_demandes:
-            self.etat()  # rafraîchit le dernier relevé valide si l'état est périmé
+            self.etat(bloquant=True)  # relit le relevé s'il est périmé, en attendant une lecture en cours
             r = self.dernier_releve
             if r is None:
                 return 409, {"erreur": "Relevé indisponible."}
             regl, _ = self.reglages()
             cibles = {}
-            if isinstance(demande, dict) and demande.get("type") == "challenge":
+            cible = demande.get("cible") if isinstance(demande, dict) and demande.get("type") == "challenge" else None
+            if isinstance(cible, dict) and cible.get("type") in ("kpi", "source"):  # seules à recalculer
                 cibles = self.cibles_calculees(r, regl)
             message = demandes.verifier(demande, r, cibles)
             if message:
@@ -379,7 +384,10 @@ class Handler(BaseHTTPRequestHandler):
                 demande = json.loads(self.rfile.read(longueur).decode("utf-8"))
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
-            code, objet = self.server.demande(demande)
+            try:
+                code, objet = self.server.demande(demande)
+            except Exception as e:  # jamais une connexion coupée sans réponse lisible
+                code, objet = 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
             return self._json(code, objet)
         try:
             corps = json.loads(self.rfile.read(longueur).decode("utf-8"))

@@ -83,3 +83,12 @@ test("provenances : « appris du retour de … sur … », autre service signal�
   assert.deepEqual(provenances({appris_de: [{agent: "x", prenom: "<img onerror=x>", titre: "<b>"}]}, "dev"),
     ["appris du retour de <img onerror=x> sur « <b> »"]);
 });
+
+test("enAttenteCible : « Demande envoyée » sur le bouton tant que le relevé ne montre pas le challenge", async () => {
+  const {enAttenteCible, marquerEnvoye} = await import("../ui/challenge.js");
+  const cible = {type: "source", id: "source:dev:tache_chere:t1"};
+  assert.equal(enAttenteCible(cible), false);
+  marquerEnvoye(cible);
+  assert.equal(enAttenteCible(cible), true);
+  assert.equal(enAttenteCible({type: "kpi", id: cible.id}), false);
+});

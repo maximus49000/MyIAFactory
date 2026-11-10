@@ -17,6 +17,10 @@ const resumes = new Map();     // challenge -> résumé du dernier envoi de verd
 
 const cleCible = (cible) => `c:${cible.type}:${cible.id}`;
 
+// Un challenge demandé sur cette cible n'est pas encore au relevé : les boutons disent « Demande envoyée ».
+export function enAttenteCible(cible) { return enAttente.has(cleCible(cible)); }
+export function marquerEnvoye(cible) { enAttente.set(cleCible(cible), true); }
+
 function zoneTexte(cle, etiquette) {
   const zone = document.createElement("textarea");
   zone.className = "zone-retour";
@@ -70,7 +74,7 @@ export function contenuChallenge(ctx, conteneur, volet) {
     ouvrir.addEventListener("click", async () => {
       ouvrir.disabled = true;  // tout de suite : un double clic n'envoie qu'une demande
       const r = await ctx.barre.demander(demandeChallenge(cible, undefined, zone.value));
-      if (r.ok) { enAttente.set(cle, true); brouillons.delete(cle); redessiner(); } else ouvrir.disabled = false;
+      if (r.ok) { marquerEnvoye(cible); brouillons.delete(cle); redessiner(); } else ouvrir.disabled = false;
     });
     conteneur.append(zone, ouvrir);
     return;

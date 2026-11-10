@@ -3,6 +3,7 @@
 import {el} from "./dom.js";
 import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
 import {challengeDe} from "./actions.js";
+import {enAttenteCible} from "./challenge.js";
 
 const MAX_TITRE = 90;
 
@@ -104,9 +105,12 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
       const li = el("li", "source");
       li.append(el("span", "source-texte", x.texte));
       const cible = {type: "source", id: x.id};
-      const b = el("button", "bouton secondaire", challengeDe(etat, cible) ? "Voir le challenge" : "Challenger");
+      const existe = challengeDe(etat, cible);
+      const attente = !existe && enAttenteCible(cible);
+      const b = el("button", "bouton secondaire",
+        existe ? "Voir le challenge" : (attente ? "Demande envoyée" : "Challenger"));
       b.type = "button";
-      if (challenger) b.addEventListener("click", () => challenger(cible, x.texte, x.tache ? [x.tache] : []));
+      if (challenger && !attente) b.addEventListener("click", () => challenger(cible, x.texte, x.tache ? [x.tache] : []));
       else b.disabled = true;
       li.append(b);
       ls.append(li);

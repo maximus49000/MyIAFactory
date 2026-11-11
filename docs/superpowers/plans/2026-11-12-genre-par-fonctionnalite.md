@@ -52,11 +52,11 @@
 - `factory.lire` : `workflows` (liste facultative) contrôlée comme `flux` (étapes `{id, nom, role, service}`, `id` unique **dans tout le projet**, service connu, `genre` motif `MOTIF_GENRE`) ; `flux` peut être vide ou absent (projet créé sans workflow) ; `description` facultative (texte).
 - `Ctx.colonnes()` = `["cadrage"] + workflows.ids_etapes(f) + ["fait"]`.
 
-- [ ] **Étape 1 : écrire les tests** : `test_projet_sans_workflows_lu_comme_avant` (une factory actuelle : `tous` rend un seul workflow `principal`, `colonnes` identiques à l'ancien relevé) ; `test_workflow_de_la_fonctionnalite` ; `test_identifiant_en_double_entre_workflows_refuse` ; `test_projet_sans_flux_valide` ; `test_fonctionnalite_porte_genre_et_workflow` (par `lancer fonctionnalite`) ; `test_etape_deplacee` (`etape: deplacee` avec `deplacee_vers: "<nom>"`).
-- [ ] **Étape 2 : les lancer**, `py -3.12 outils/tests.py workflows` : échec attendu (module absent).
-- [ ] **Étape 3 : écrire le code** décrit ci-dessus.
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py workflows orch` : vert.
-- [ ] **Étape 5 : commit** « Données : workflows du projet, genre et workflow de la fonctionnalité ».
+- [x] **Étape 1 : écrire les tests** : `test_projet_sans_workflows_lu_comme_avant` (une factory actuelle : `tous` rend un seul workflow `principal`, `colonnes` identiques à l'ancien relevé) ; `test_workflow_de_la_fonctionnalite` ; `test_identifiant_en_double_entre_workflows_refuse` ; `test_projet_sans_flux_valide` ; `test_fonctionnalite_porte_genre_et_workflow` (par `lancer fonctionnalite`) ; `test_etape_deplacee` (`etape: deplacee` avec `deplacee_vers: "<nom>"`).
+- [x] **Étape 2 : les lancer**, `py -3.12 outils/tests.py workflows` : échec attendu (module absent).
+- [x] **Étape 3 : écrire le code** décrit ci-dessus.
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py workflows orch` : vert.
+- [x] **Étape 5 : commit** « Données : workflows du projet, genre et workflow de la fonctionnalité ».
 
 ### Tâche 2 : relevé, tableau, départ et mémoire par fonctionnalité
 
@@ -69,11 +69,11 @@
 - Consomme : `workflows.colonnes`, `workflows.genre_de`, `workflows.de_la_fonctionnalite` (tâche 1).
 - Produit : relevé `colonnes[i] = {"id", "nom", "genre"?, "workflow"?, "terminee"?}` ; usage noté `{..., "genre"?}`.
 
-- [ ] **Étape 1 : tests** : `test_releve_inchange_sans_workflows` ; `test_deux_controles_deux_colonnes` (deux workflows `f1-controle`, `f2-controle`, genres différents : deux colonnes, chacune son genre ; une tâche de `f2` créée sans colonne va dans `f2-…`) ; `test_colonnes_d_une_fonctionnalite_finie_cachees` ; `test_depart_donne_les_lecons_du_genre_de_la_fonctionnalite` ; `test_lecon_de_genre_va_au_genre_de_sa_fonctionnalite` ; `test_usage_porte_le_genre` ; `test_estimation_par_genre_de_fonctionnalite` (un usage ancien sans genre compte pour le genre du projet) ; `test_deplacee_ni_livree_ni_comptee` ; page : `colonne affiche son genre`.
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire le code.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py workflows orch releve estimation` et `node --test bureau/web/tests` : vert.
-- [ ] **Étape 5 : commit** « Relevé, départ et mémoire : le genre et le workflow de la fonctionnalité ».
+- [x] **Étape 1 : tests** : `test_releve_inchange_sans_workflows` ; `test_deux_controles_deux_colonnes` (deux workflows `f1-controle`, `f2-controle`, genres différents : deux colonnes, chacune son genre ; une tâche de `f2` créée sans colonne va dans `f2-…`) ; `test_colonnes_d_une_fonctionnalite_finie_cachees` ; `test_depart_donne_les_lecons_du_genre_de_la_fonctionnalite` ; `test_lecon_de_genre_va_au_genre_de_sa_fonctionnalite` ; `test_usage_porte_le_genre` ; `test_estimation_par_genre_de_fonctionnalite` (un usage ancien sans genre compte pour le genre du projet) ; `test_deplacee_ni_livree_ni_comptee` ; page : `colonne affiche son genre`.
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire le code.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py workflows orch releve estimation` et `node --test bureau/web/tests` : vert.
+- [x] **Étape 5 : commit** « Relevé, départ et mémoire : le genre et le workflow de la fonctionnalité ».
 
 ## Étape 2 — les jugements
 

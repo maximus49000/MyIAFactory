@@ -10,8 +10,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 
 | Phase | Modèle proposé | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|
-| A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | à faire : **c'est la prochaine phase** |
-| B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | à faire |
+| A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | **faite** le 2026-11-12 (1121 tests verts) |
+| B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | à faire : **c'est la prochaine phase** |
 | C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | à faire |
 | D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire |
 | E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire |
@@ -21,6 +21,37 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
 ## Notes laissées par les phases
 
 (Écarts au plan, choix faits, points à surveiller.)
+
+**Phase A (Sonnet 5.5, 2026-11-12)** : tâches 1 et 2 faites, suite complète verte (1121 tests, `node --test` compris).
+
+- **Le champ `genre` d'un usage est pris** : il ne vaut que `partenaire` (validation du relevé, historique des usages).
+  Le genre de la fonctionnalité est donc noté dans `genre_fonctionnalite` (suivi, relevé, `usage-historique.jsonl`,
+  `bureau/usage.py`). `estimation.usages_du_genre` lit ce champ ; un usage sans lui compte pour le genre du projet, et
+  un projet est retenu s'il a ce genre ou un workflow de ce genre. Lignes de lot comprises.
+- **Colonnes du relevé** : `genre` n'y est mis que s'il existe, `workflow` seulement si le projet a une clé `workflows`
+  (un projet sans `workflows` garde un relevé identique à avant, sauf le `genre` du projet). Une tâche dont la colonne
+  a quitté le tableau (fonctionnalité `terminee` ou `deplacee`) est rendue en colonne `fait`, pour que le relevé reste
+  valide. La fonctionnalité du relevé gagne `genre`, `workflow`, `deplacee_vers` (s'ils existent) et `workflow_etapes`
+  (`[{id, nom}]`, pour nommer ses documents par étape quand ses colonnes ont quitté le tableau).
+- **`workflows.tous`** : le principal vient en premier (s'il a un flux), puis les workflows de `workflows`.
+  Ajout : `workflows.premiere_etape(f, fonc)` (colonne par défaut d'une tâche ; `cadrage` si le projet n'a aucun workflow,
+  `Ctx.premiere_colonne`). `workflows.colonnes` donne `genre: None` quand il n'y en a pas ; le relevé retire la clé.
+- **`factory.lire`** rend aussi `workflows` (normalisés) et `description`. Un flux vide ou absent est valide. Le test
+  `test_factory_flux_vide` est devenu `test_factory_flux_vide_ou_absent_valide`.
+- **Départ** : le genre de la fonctionnalité est passé à `depart.message*` en remplaçant `genre` dans la copie de la
+  factory (pas de changement de signature). Un lot qui mêle des genres donne les leçons de chacun, sans doublon, et
+  l'en-tête les liste. Leçon de genre appliquée : genre de la fonctionnalité de sa tâche (`tache` de la leçon), sinon
+  celui du projet.
+- **`deplacee`** : exclue des KPI calculés et de `cout.couts_fonctionnalite` (coût nul), et ses décisions ne comptent
+  plus pour le Directeur (`bureau/etat.py`). Documentée dans `interface.md` et d'une ligne dans `consignes.md`
+  (le test des consignes exige que chaque étape y soit nommée).
+- **Page** : `etiquetteColonne`, `genreEtWorkflow`, `libelleEtape` (pures, testées) ; genre sous le nom de colonne
+  (Kanban plein écran et tableau 3D), genre et workflow sous le titre d'une fonctionnalité, étape « Partie dans le
+  projet … ». Non regardé dans un navigateur (consigne de la phase).
+- **À surveiller** : `main.js` recharge la page quand les identifiants de colonnes changent (`structure`) : chaque
+  nouveau workflow de fonctionnalité va donc la recharger une fois, comme un changement de flux aujourd'hui. Ni
+  `organisation.js` (qui regarde les colonnes retirées du flux) ni la décision `organisation` n'ont été adaptés
+  (phases C et D). `ecrire_organisation`, `moteur/regles.py` lisent encore `ctx.f["flux"]` seul (phase C).
 
 ## Messages à coller
 

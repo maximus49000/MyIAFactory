@@ -207,7 +207,7 @@ class TestBureau(Base):
         dossier.racine().mkdir(parents=True)
         dossier.bureau().write_text(json.dumps({"port": 9000, "projets": [str(autre)]}), encoding="utf-8")
         r = self.appliquer()
-        self.assertTrue(r["relancer_bureau"])
+        self.assertFalse(r["relancer_bureau"])   # essai réel : le bureau en marche voit le projet sans redémarrer
         b = reglages.lire_bureau(dossier.bureau())
         self.assertEqual(b["port"], 9000)
         self.assertEqual(len(b["projets"]), 2)

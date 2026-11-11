@@ -504,8 +504,14 @@ class Bureau(ThreadingHTTPServer):
     daemon_threads = True
     distant = False
 
-    def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None, demarrer=None):
+    def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None, demarrer=None, fichier_bureau=None):
         super().__init__(adresse, Handler)
+        # Le fichier du bureau commun, relu quand il change : un projet inscrit pendant que le bureau tourne y paraît
+        # sans redémarrage (essai réel).
+        self.fichier_bureau = Path(fichier_bureau) if fichier_bureau else None
+        self.projets_vus_a = self._date_fichier_bureau()
+        self._ouvrir, self._demarrer = ouvrir, demarrer
+        self._verrou_projets = threading.Lock()
         self.multi = multi
         self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
         self.cles = None
@@ -521,8 +527,32 @@ class Bureau(ThreadingHTTPServer):
         self._fil = threading.Thread(target=self._boucle_sonde, daemon=True)
         self._fil.start()
 
+    def _date_fichier_bureau(self):
+        try:
+            return self.fichier_bureau.stat().st_mtime_ns if self.fichier_bureau else None
+        except OSError:
+            return None
+
+    def actualiser_projets(self):
+        """Ajoute les projets inscrits depuis le lancement. Un fichier illisible ne retire rien."""
+        date = self._date_fichier_bureau()
+        if date is None or date == self.projets_vus_a:
+            return
+        with self._verrou_projets:
+            if date == self.projets_vus_a:
+                return
+            self.projets_vus_a = date
+            try:
+                conf = reglages.lire_bureau(self.fichier_bureau)
+            except reglages.ReglagesInvalides:
+                return
+            for p in conf["projets"]:
+                if p["id"] not in self.projets:
+                    self.projets[p["id"]] = Projet(p["id"], p["chemin"], ouvrir=self._ouvrir, demarrer=self._demarrer)
+
     def projet(self, id_=None):
         """Le projet d'id donné ; `None` → le premier ; inconnu → `None`."""
+        self.actualiser_projets()
         if id_ is None:
             return next(iter(self.projets.values()))
         return self.projets.get(id_)
@@ -563,6 +593,7 @@ class Bureau(ThreadingHTTPServer):
 
     def liste(self):
         """Tous les projets, lus en parallèle : un projet lent ne fait pas attendre les autres."""
+        self.actualiser_projets()
         projets = list(self.projets.values())
         lignes = [None] * len(projets)
 
@@ -973,7 +1004,7 @@ def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=No
         conf = reglages.lire_bureau(bureau)
         projets = [(p["id"], p["chemin"]) for p in conf["projets"]]
         srv = Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True,
-                     lancement=lancement, demarrer=demarrer)
+                     lancement=lancement, demarrer=demarrer, fichier_bureau=bureau)
         if any(conf["acces"].values()):
             try:
                 if adresses is None:

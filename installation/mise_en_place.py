@@ -390,7 +390,7 @@ def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adres
             genre_raison = f"Le genre « {genre} » n'a pas pu être créé ; l'orchestrateur le reproposera. {message}"
     ecrits = [str(c) for c in sorted(fd.rglob("*")) if c.is_file()] + [str(gitignore), str(bureau_json)]
     lignes, pret = verifier(factory_json)
-    return {"ecrits": ecrits, "bureau": str(bureau_json), "relancer_bureau": bureau_avant is not None and bool(ajoute or ouverts),
+    return {"ecrits": ecrits, "bureau": str(bureau_json), "relancer_bureau": bureau_avant is not None and bool(ouverts),
             "acces": adresses_ouvertes(bureau_json, adresses),
             "agents_cloud": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"],
                               "environnement": list(a.get("environnement") or [])}
@@ -481,8 +481,7 @@ def reparer(projet, calibrage, acces=None, adresses=acces_inst.adresses):
             corrections.append(f"Dossier créé : {c.relative_to(projet).as_posix()}.")
     relancer = False
     if reglages is not None and inscrire(dossier.bureau(), reglages):
-        corrections.append(f"Projet inscrit au bureau commun ({dossier.bureau()}).")
-        relancer = bureau_avant is not None
+        corrections.append(f"Projet inscrit au bureau commun ({dossier.bureau()}).")   # vu sans redémarrage
     if reglages is not None and acces:
         for k in ouvrir_acces(dossier.bureau(), acces):
             corrections.append(f"Bureau commun : accès du téléphone ouvert par {NOMS_ACCES[k]}.")

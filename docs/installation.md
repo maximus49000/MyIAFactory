@@ -46,8 +46,9 @@ Le bureau commun suit tous les projets installés sur la machine :
 py -3.12 "$HOME/MyIAFactory/skill/lancer.py" serveur --bureau "$HOME/MyIAFactory/bureau.json"
 ```
 
-(`$HOME` marche dans PowerShell comme dans bash ; hors Windows, `python3` à la place de `py -3.12`.) Il lit son fichier
-au lancement : après l'installation d'un nouveau projet, arrêtez-le et relancez-le.
+(`$HOME` marche dans PowerShell comme dans bash ; hors Windows, `python3` à la place de `py -3.12`.) Un seul bureau sert
+tous les projets : un projet installé pendant qu'il tourne apparaît dans la liste déroulante, sans redémarrage
+(seule l'ouverture d'un nouvel accès au téléphone demande de le relancer, ce que l'installation fait elle-même).
 
 Sans le plugin, on peut toujours lancer le bureau à la main depuis une copie de ce dépôt : c'est ce que fait la suite
 de ce manuel.

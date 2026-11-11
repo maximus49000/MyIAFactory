@@ -306,6 +306,18 @@ def _rapports(factory, suivi, dossier_transcriptions):
     return rapports
 
 
+def _fiche_de_depart(texte):
+    """La fiche telle qu'au départ de l'essai : sa section « Leçons » vidée (les leçons y ont été notées depuis)."""
+    debut = re.search(r"^## Leçons[ \t]*$", texte, re.M)
+    return texte if debut is None else texte[:debut.end()] + "\n"
+
+
+def _brief_de_depart(texte):
+    """Le brief tel qu'au départ de l'essai : sans les sections « Méthode » écrites pendant l'essai."""
+    debut = re.search(r"^## Méthode", texte, re.M)
+    return texte if debut is None else texte[:debut.start()].rstrip() + "\n"
+
+
 def _attendu(suivi, gestes):
     attendu = []
     for f in suivi["fonctionnalites"]:
@@ -340,9 +352,10 @@ def construire(dossier_factory, transcriptions_, sortie):
     gestes = _gestes(factory, suivi)
     if not gestes:
         raise ErreurBanc("Le journal des demandes de l'essai est vide ou introuvable (demandes.jsonl à côté du suivi).")
-    fiches = {p.name: p.read_text(encoding="utf-8-sig") for p in sorted(Path(factory["fiches"]).glob("*.md"))}
+    fiches = {p.name: _fiche_de_depart(p.read_text(encoding="utf-8-sig"))
+              for p in sorted(Path(factory["fiches"]).glob("*.md"))}
     briefs_dossier = Path(factory["fiches"]) / "briefs"
-    briefs = {p.stem: p.read_text(encoding="utf-8-sig") for p in sorted(briefs_dossier.glob("*.md"))} \
+    briefs = {p.stem: _brief_de_depart(p.read_text(encoding="utf-8-sig")) for p in sorted(briefs_dossier.glob("*.md"))} \
         if briefs_dossier.is_dir() else {}
     donnees = {
         "version": 1,

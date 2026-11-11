@@ -124,6 +124,20 @@ class Construire(AvecProjet):
         self.assertEqual(s.projet["factory"]["flux"][0]["id"], "dev")
         self.assertIn("lea.md", s.projet["fiches"])
 
+    def test_le_projet_du_scenario_est_celui_du_depart(self):
+        """Les leçons notées et les méthodes écrites pendant l'essai n'existaient pas à son départ : un passage en vrai
+        repart sans elles."""
+        self.essai()
+        fiche = self.dossier / "fiches" / "lea.md"
+        fiche.write_text(fiche.read_text(encoding="utf-8") + "- [validée] dev-1:L1 : Toujours tester.\n", encoding="utf-8")
+        (self.dossier / "fiches" / "briefs").mkdir(exist_ok=True)
+        (self.dossier / "fiches" / "briefs" / "dev.md").write_text(
+            "Faire les écrans.\n\n## Méthode v1 (écrans)\nSuivre methodes/ecrans-v1.md.\n", encoding="utf-8")
+        s = scenario.charger(construire.construire(self.dossier, self.transcriptions, self.bancs / "d.json"))
+        self.assertNotIn("Toujours tester", s.projet["fiches"]["lea.md"])
+        self.assertIn("## Leçons", s.projet["fiches"]["lea.md"])
+        self.assertEqual(s.projet["briefs"]["dev"], "Faire les écrans.\n")
+
     def essai_reel(self):
         """Les formes de l'orchestrateur actuel : réponse finale rendue par `SubagentHandback`, tâche nommée
         « tâche t2 », départ d'un lot dans un fichier `depart_*.md`, cadrage sans identifiant de tâche."""
@@ -355,6 +369,16 @@ class Rapport(unittest.TestCase):
         self.assertIn("non mesuré", r)
         self.assertEqual([e for _, e, _ in rapport.objectifs(res, self.ATTENDU)], ["non mesuré"] * 3)
         self.assertIn("Non joué.", rapport.rapport({}, self.ATTENDU))
+
+    def test_le_passage_en_vrai_decide_du_total_et_du_resultat(self):
+        res = self.resultats()
+        res["moteur_vrai"] = {**res["moteur"], "euros_orchestration": 0.08, "euros_total": 3.1, "questions": 4,
+                              "attendu": [True, False, True]}
+        r = rapport.rapport(res, self.ATTENDU)
+        self.assertIn("## Le moteur, agents réels (passage complet)", r)
+        etats = [e for _, e, _ in rapport.objectifs(res, self.ATTENDU)]
+        self.assertEqual(etats, ["tenu", "non tenu", "non tenu"])          # 3,10 € > 2,90 € ; un attendu manque
+        self.assertIn("passage en vrai", rapport.objectifs(res, self.ATTENDU)[1][2])
 
     def test_ecarts_listes(self):
         r = rapport.rapport(self.resultats(ecarts=["Aucun rapport à rejouer pour relecture / relecteur / rang 3"]),

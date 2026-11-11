@@ -186,6 +186,34 @@ class Rejoue(unittest.TestCase):
 
 
 class Passage(unittest.TestCase):
+    def test_vrais_agents_a_la_place_du_rejoueur(self):
+        from moteur import agents, rapport as rap
+        s, vus = scenario.charger(SYNTHETIQUE), []
+
+        def agent(depart, matiere, *, agent, modele, dossier_projet, tache=None, lot=None, **plus):
+            vus.append((tache, dossier_projet))
+            r = rap.lire('```json\n{"statut": "fait", "message": {"texte": "Fait par un vrai agent."}}\n```')
+            return agents.Execution(tache, agent["cle"], lot, rapport=r, modele=modele, usages=[
+                {"modele": "claude-sonnet-5-5", "entree": 5, "sortie": 5, "cache_lecture": 0, "cache_ecriture": 0}])
+
+        with tempfile.TemporaryDirectory() as d:
+            r = jouer.jouer_moteur(s, d, Jugements(), executer_agent=agent, max_tours=40)
+            self.assertTrue(vus and all(p == str(Path(d)) for _, p in vus))      # les agents travaillent dans le projet
+            self.assertEqual(r["ecarts"], [])
+            self.assertTrue(r["usages_production"])
+            textes = [m["texte"] for f in r["suivi"]["fonctionnalites"] for m in f["discussion"]]
+            self.assertIn("Fait par un vrai agent.", textes)
+            self.assertFalse(any(t.startswith("Rien à rejouer") for t in textes))
+
+    def test_un_passage_en_vrai_demande_un_dossier_vide(self):
+        from banc import __main__ as banc_main
+        from banc.construire import ErreurBanc
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(banc_main.projet_vide(Path(d), "projet-moteur").is_dir())
+            (Path(d) / "projet-moteur" / "x.txt").write_text("déjà joué", encoding="utf-8")
+            with self.assertRaises(ErreurBanc):
+                banc_main.projet_vide(Path(d), "projet-moteur")
+
     def test_moteur_va_au_bout_du_synthetique(self):
         s = scenario.charger(SYNTHETIQUE)
         jugements = Jugements()

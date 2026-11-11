@@ -7,8 +7,8 @@ questions, le résultat attendu et les écarts ; puis les trois objectifs de la 
 Un chiffre absent s'écrit « non mesuré » : jamais zéro.
 """
 SEUIL_ORCHESTRATION_EUROS = 0.10
-NOMS = (("moteur", "Le moteur"), ("orchestrateur_actuel", "L'orchestrateur actuel (mesure de l'essai)"),
-        ("agent_seul", "Un agent seul"))
+NOMS = (("moteur", "Le moteur"), ("moteur_vrai", "Le moteur, agents réels (passage complet)"),
+        ("orchestrateur_actuel", "L'orchestrateur actuel (mesure de l'essai)"), ("agent_seul", "Un agent seul"))
 
 
 def _n(v):
@@ -27,28 +27,32 @@ def _part(f):
 
 
 def objectifs(resultats, attendu):
-    """Les trois objectifs : `[(texte, "tenu" | "non tenu" | "non mesuré", détail)]`."""
+    """Les trois objectifs : `[(texte, "tenu" | "non tenu" | "non mesuré", détail)]`. L'orchestration se lit sur le moteur
+    rejoué ; le total et le résultat, sur le passage en vrai quand il existe (le rejoueur ne produit rien de neuf)."""
     m, a, o = resultats.get("moteur") or {}, resultats.get("agent_seul") or {}, resultats.get("orchestrateur_actuel") or {}
+    vrai = resultats.get("moteur_vrai")
+    complet = vrai or m
+    passage = " (passage en vrai)" if vrai else ""
     lignes = []
     orch = m.get("euros_orchestration")
     lignes.append((f"Coût de l'orchestration du moteur ≤ {SEUIL_ORCHESTRATION_EUROS:.2f} €".replace(".", ","),
                    "non mesuré" if orch is None else ("tenu" if orch <= SEUIL_ORCHESTRATION_EUROS else "non tenu"),
                    f"{_euros(orch)}, contre {_euros(o.get('euros_orchestration'))} pour l'orchestrateur actuel"))
-    t_m, t_a = m.get("euros_total"), a.get("euros_total")
+    t_m, t_a = complet.get("euros_total"), a.get("euros_total")
     lignes.append(("Coût total du moteur < coût total de l'agent seul (passage complet)",
                    "non mesuré" if t_m is None or t_a is None else ("tenu" if t_m < t_a else "non tenu"),
-                   f"{_euros(t_m)} contre {_euros(t_a)}"))
-    coche = m.get("attendu")
+                   f"{_euros(t_m)}{passage} contre {_euros(t_a)}"))
+    coche = complet.get("attendu")
     if coche is None or len(coche) != len(attendu):
         lignes.append(("Même résultat : tout l'attendu, et pas plus de questions que dans l'essai", "non mesuré",
                        "résultat attendu non coché"))
     else:
         manque = [attendu[i] for i, ok in enumerate(coche) if not ok]
-        q_m, q_o = m.get("questions"), o.get("questions")
+        q_m, q_o = complet.get("questions"), o.get("questions")
         trop = q_m is not None and q_o is not None and q_m > q_o
         etat = "tenu" if not manque and not trop else "non tenu"
         detail = (f"manque : {'; '.join(manque)}" if manque else "tout l'attendu est là") + \
-                 f" ; questions : {_n(q_m)} (essai : {_n(q_o)})"
+                 f" ; questions : {_n(q_m)} (essai : {_n(q_o)})" + passage
         lignes.append(("Même résultat : tout l'attendu, et pas plus de questions que dans l'essai", etat, detail))
     return lignes
 

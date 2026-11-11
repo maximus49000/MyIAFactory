@@ -22,9 +22,24 @@ class Compteur:
         return r
 
 
-def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_TOURS):
+class AgentsReels:
+    """Les vrais agents (`moteur.agents.executer_agent`) à la place du rejoueur, pour le passage complet en vrai."""
+
+    def __init__(self, executer_agent):
+        self.executer_agent, self.rendus, self.ecarts = executer_agent, [], []
+
+    def __call__(self, depart, matiere, **options):
+        e = self.executer_agent(depart, matiere, **options)
+        self.rendus.append((options.get("tache"), e.erreur))
+        if e.erreur:
+            self.ecarts.append(f"Agent en échec sur la tâche {options.get('tache')} : {e.erreur}"[:300])
+        return e
+
+
+def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_TOURS, executer_agent=None):
     """Rend `{"tours", "appels", "usages_jugement", "usages_production", "ecarts", "etat", "suivi", "gestes_restants",
-    "demandes_en_attente"}`."""
+    "demandes_en_attente"}`. Avec `executer_agent` (les vrais agents), le passage est complet : rien n'est rejoué, et les
+    écarts sont les agents en échec."""
     dossier = Path(dossier)
     factory = scenario.materialiser(dossier)
     projet = regles.Projet(factory, couche, feu_vert=lambda: True, prerequis=lambda: "banc d'essai : pas de cloud")
@@ -39,7 +54,7 @@ def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_T
             d["elements"] = [x["element"] for x in membres if x.get("element") is not None]
         return d
 
-    rejoueur = Rejoueur(scenario, decrire)
+    rejoueur = Rejoueur(scenario, decrire) if executer_agent is None else AgentsReels(executer_agent)
     compteur = Compteur(appeler)
     moteur = boucle.Moteur([projet], appeler=compteur, executer_agent=rejoueur, synchrone=True,
                            commit=lambda *a: None)

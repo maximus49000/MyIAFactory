@@ -12,7 +12,7 @@ from pathlib import Path
 
 from banc import agent_seul, construire, jouer, mesures, rapport, reference, scenario
 from bureau import prix
-from moteur import appel
+from moteur import agents, appel
 
 BANCS = "~/MyIAFactory/bancs"
 PRIX = "~/MyIAFactory/prix-historique.jsonl"
@@ -55,22 +55,35 @@ def cmd_reference(a):
     return _ecrire(d / "reference.json", r)
 
 
+def projet_vide(d, nom):
+    """Le dossier gardé d'un passage en vrai (`<banc>/<nom>/`), qui doit être vide : un passage ne s'ajoute pas à un autre."""
+    projet = d / nom
+    if projet.exists() and any(projet.iterdir()):
+        raise construire.ErreurBanc(f"« {projet} » n'est pas vide : déplacez-le ou effacez-le avant un nouveau passage.")
+    projet.mkdir(parents=True, exist_ok=True)
+    return projet
+
+
 def cmd_moteur(a):
     d = dossier_du_banc(a.nom, a.bancs)
     s = scenario.charger(d / "scenario.json")
-    with tempfile.TemporaryDirectory(prefix="banc-moteur-") as t:
-        r = jouer.jouer_moteur(s, t, appel.appeler, couche=a.couche)
+    nom = "moteur-vrai" if a.vrais_agents else "moteur"
+    if a.vrais_agents:      # le projet du passage est gardé, pour voir ce que les agents ont produit
+        r = jouer.jouer_moteur(s, projet_vide(d, "projet-moteur"), appel.appeler, couche=a.couche,
+                               executer_agent=agents.executer_agent)
+    else:
+        with tempfile.TemporaryDirectory(prefix="banc-moteur-") as t:
+            r = jouer.jouer_moteur(s, t, appel.appeler, couche=a.couche)
     p = prix_de(a.prix)
-    _ecrire(d / "moteur-brut.json", {k: r[k] for k in ("tours", "appels", "usages_jugement", "usages_production",
+    _ecrire(d / f"{nom}-brut.json", {k: r[k] for k in ("tours", "appels", "usages_jugement", "usages_production",
                                                        "ecarts", "journal", "gestes_restants", "demandes_en_attente")})
-    return _ecrire(d / "moteur.json", mesures.mesure_moteur(r, s, p, date.today().isoformat()))
+    return _ecrire(d / f"{nom}.json", mesures.mesure_moteur(r, s, p, date.today().isoformat()))
 
 
 def cmd_agent_seul(a):
     d = dossier_du_banc(a.nom, a.bancs)
     s = scenario.charger(d / "scenario.json")
-    with tempfile.TemporaryDirectory(prefix="banc-agent-seul-") as t:
-        r = agent_seul.agent_seul(s, t, couche=a.couche)
+    r = agent_seul.agent_seul(s, projet_vide(d, "projet-agent-seul"), couche=a.couche)
     _ecrire(d / "agent-seul-brut.json", r)
     return _ecrire(d / "agent-seul.json", mesures.mesure_agent_seul(r, s, prix_de(a.prix), date.today().isoformat()))
 
@@ -82,6 +95,8 @@ def cmd_rapport(a):
     resultats = {}
     if (d / "moteur.json").is_file():
         resultats["moteur"] = _lire(d / "moteur.json")
+    if (d / "moteur-vrai.json").is_file():
+        resultats["moteur_vrai"] = _lire(d / "moteur-vrai.json")
     if (d / "reference.json").is_file():
         resultats["orchestrateur_actuel"] = mesures.mesure_orchestrateur_actuel(_lire(d / "reference.json"), s, p, jour)
     if (d / "agent-seul.json").is_file():
@@ -110,6 +125,8 @@ def _analyseur():
     x.set_defaults(f=cmd_reference)
     x = commun(s.add_parser("moteur", help="le moteur sur le scénario (ses appels de jugement sont réels et payés)"))
     x.add_argument("--couche", choices=("claude", "api"), default="claude")
+    x.add_argument("--vrais-agents", action="store_true",
+                   help="passage complet : de vrais agents à la place du rejoueur (payé ; projet gardé sous le banc)")
     x.set_defaults(f=cmd_moteur)
     x = commun(s.add_parser("agent-seul", help="un agent seul sur le scénario (passage complet, payé)"))
     x.add_argument("--couche", choices=("claude", "api"), default="claude")

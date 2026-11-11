@@ -452,7 +452,7 @@ body.panneau-grand #scene { right: 0; }
 .panneau .catalogue {
   --cat-pierre: #f3efe6; --cat-papier: #fbf9f4; --cat-encre: #2a2d33; --cat-discret: #6b6f78;
   --cat-ardoise: #3a4656; --cat-email: #1f3a6b; --cat-email-encre: #f5f3ec; --cat-trait: #ddd6c8;
-  --cat-ok: #2f6b45; --cat-a-faire: #9a5b12; --cat-doute: #7a2f4d; --cat-autre: #5d6f8a;
+  --cat-ok: #2f6b45; --cat-a-faire: #9a5b12; --cat-doute: #7a2f4d; --cat-autre: #5d6f8a; --cat-contexte: #ddd6c8;
   --cat-titre: "Alegreya Sans SC", "Gill Sans", "Gill Sans MT", "Trebuchet MS", sans-serif;
   --cat-corps: "Source Serif 4", Georgia, "Times New Roman", serif;
   --cat-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;

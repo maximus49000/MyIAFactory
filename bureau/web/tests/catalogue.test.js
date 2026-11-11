@@ -133,3 +133,28 @@ test("compteurs et libelleEtat : des états aux noms d'Object.prototype restent 
   assert.equal(libelleEtat("to_String"), "to String");
   assert.equal(libelleEtat("a_revoir"), "à revoir");
 });
+
+test("fondDuGroupe : les emprises du groupe affiché, chacune avec la teinte de son élément", async () => {
+  const {fondDuGroupe} = await import("../ui/catalogue.js");
+  const c = {
+    elements: [{id: "e1", nom: "A", groupe: "g1", etat: "valide"}, {id: "e2", nom: "B", groupe: "g2", etat: "a_revoir"}],
+    fond: [{points: [[0, 0], [1, 0], [1, 1]], element: "e1"}, {points: [[0, 0], [1, 0], [1, 1]], element: "e2"},
+           {points: [[0, 0], [2, 0], [2, 2]], groupe: "g1"}, {points: [[5, 5], [6, 5], [6, 6]]},
+           {points: [[0, 0], [1, 0], [1, 1]], element: "inconnu"}],
+  };
+  const teintes = (l) => l.map((f) => f.teinte);
+  assert.deepEqual(teintes(fondDuGroupe(c, "")), ["ok", "a-faire", "contexte", "contexte", "contexte"]);
+  assert.deepEqual(teintes(fondDuGroupe(c, "g1")), ["ok", "contexte", "contexte", "contexte"]);
+  assert.deepEqual(fondDuGroupe(c, "g2").map((f) => f.points[0]), [[0, 0], [5, 5], [0, 0]]);
+  assert.deepEqual(fondDuGroupe({elements: []}, ""), []);
+  assert.deepEqual(fondDuGroupe(null, ""), []);
+});
+
+test("tracesDuGroupe : les tracés du groupe affiché, et ceux sans groupe", async () => {
+  const {tracesDuGroupe} = await import("../ui/catalogue.js");
+  const c = {trace: [{nom: "a", groupe: "g1", points: [[0, 0], [1, 1]]}, {nom: "b", groupe: "g2", points: [[0, 0], [1, 1]]},
+                     {nom: "c", points: [[0, 0], [1, 1]]}]};
+  assert.deepEqual(tracesDuGroupe(c, null).map((t) => t.nom), ["a", "b", "c"]);
+  assert.deepEqual(tracesDuGroupe(c, "g1").map((t) => t.nom), ["a", "c"]);
+  assert.deepEqual(tracesDuGroupe({}, "g1"), []);
+});

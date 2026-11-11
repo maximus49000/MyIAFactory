@@ -32,11 +32,11 @@ export function cadrage(elements, traces, largeur, hauteur) {
   return {echelle, dx: largeur / 2 - cx * echelle, dy: hauteur / 2 + cy * echelle};
 }
 
-// opts : {elements (avec position), traces, teinte(element) -> clé de couleur (variable CSS --cat-<clé>),
+// opts : {elements (avec position), traces, fond ([{points, teinte}] : emprises dessinées dessous), teinte(element) -> clé de couleur (variable CSS --cat-<clé>),
 //         estompe(element) -> bool,
 //         surChoix(element), libelle(element) -> texte, vue: objet où garder zoom et position}
 export function creerVueDeHaut(opts) {
-  const {traces = [], surChoix, libelle, vue} = opts;
+  const {traces = [], fond = [], surChoix, libelle, vue} = opts;
   const elements = (opts.elements || []).filter((e) => Number.isFinite(e?.position?.x) && Number.isFinite(e?.position?.y));
   const teintes = new Map(elements.map((e) => [e, opts.teinte(e)]));   // calculées une fois
   let estompe = opts.estompe || (() => false);
@@ -64,6 +64,22 @@ export function creerVueDeHaut(opts) {
     ctx2d.clearRect(0, 0, largeur, hauteur);
     const {echelle, dx, dy} = t();
     const style = getComputedStyle(boite);
+    const couleurs = new Map();
+    const couleur = (cle) => {
+      if (!couleurs.has(cle)) couleurs.set(cle, style.getPropertyValue("--cat-" + cle).trim() || "#888");
+      return couleurs.get(cle);
+    };
+    // Le fond : les emprises (contexte en teinte neutre, éléments en leur teinte, légère), sous les tracés et les points.
+    for (const f of fond) {
+      const pts = (f?.points || []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      if (pts.length < 3) continue;
+      ctx2d.globalAlpha = f.teinte === "contexte" ? 1 : 0.45;
+      ctx2d.fillStyle = couleur(f.teinte);
+      ctx2d.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx2d.lineTo : ctx2d.moveTo).call(ctx2d, x * echelle + dx, dy - y * echelle));
+      ctx2d.closePath();
+      ctx2d.fill();
+    }
     ctx2d.lineJoin = "round";
     ctx2d.strokeStyle = style.getPropertyValue("--cat-ardoise").trim() || "#3a4656";
     ctx2d.globalAlpha = 0.8;
@@ -80,11 +96,6 @@ export function creerVueDeHaut(opts) {
     const rayon = Math.min(8, depart + Math.log2(Math.max(1, echelle / (base?.echelle || echelle))));
     ctx2d.lineWidth = 1;
     ctx2d.strokeStyle = papier;
-    const couleurs = new Map();
-    const couleur = (cle) => {
-      if (!couleurs.has(cle)) couleurs.set(cle, style.getPropertyValue("--cat-" + cle).trim() || "#888");
-      return couleurs.get(cle);
-    };
     // Les estompés d'abord, pour que les éléments filtrés restent au-dessus.
     for (const passe of [true, false]) {
       ctx2d.globalAlpha = passe ? 0.18 : 1;

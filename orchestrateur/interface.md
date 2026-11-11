@@ -176,7 +176,12 @@ Pour que la carte et les fiches du bureau colorent bien un élément, un catalog
 identifiants d'état : `fait` (ou `valide`, `termine`, `ok`) pour un élément terminé, `a_faire` (ou `a_revoir`,
 `en_cours`, `todo`) pour un élément à faire ; un élément qui porte un `doute` est montré à part ; tout autre état
 est montré comme « autre ». Les positions (`position` d'un élément, `points` de `trace`) sont des paires `{x, y}` et
-`[x, y]` dans un repère où **y monte vers le haut** (le nord est en haut de la carte).
+`[x, y]` dans un repère où **y monte vers le haut** (le nord est en haut de la carte). Un tracé peut porter son
+`groupe` : il n'est alors montré qu'avec ce groupe. Le **fond** de la vue de haut, facultatif, est une liste
+d'emprises `fond: [{points: [[x, y], …] (3 au moins), element?, groupe?}]` : une emprise qui nomme un `element` prend sa
+teinte et suit son groupe, les autres sont un contexte neutre (rues, bâtiments voisins). Les chemins d'un catalogue
+déclaré dans le fichier de factory sont relatifs au dossier de ce fichier ; le bureau les ramène lui-même à ses
+réglages.
 
 ### `document`
 

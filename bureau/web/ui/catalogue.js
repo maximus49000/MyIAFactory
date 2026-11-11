@@ -102,6 +102,25 @@ export function teinte(e) {
   if (ETATS_A_FAIRE.has(s)) return "a-faire";
   return "autre";
 }
+// Les tracés du groupe affiché (null ou "" : tous) ; un tracé sans `groupe` est toujours montré.
+export function tracesDuGroupe(cat, groupe) {
+  return liste(cat?.trace).filter((t) => !groupe || t?.groupe === undefined || t.groupe === groupe);
+}
+
+// Le fond de la vue de haut (les emprises `fond` du catalogue) pour le groupe affiché ("" : tous) : une emprise
+// d'élément prend sa teinte et suit son groupe ; une emprise de contexte (sans élément, ou d'un élément inconnu) est
+// « contexte » et suit son `groupe` s'il en a un.
+export function fondDuGroupe(cat, groupe) {
+  const parId = new Map(liste(cat?.elements).map((e) => [e.id, e]));
+  const sortie = [];
+  for (const f of liste(cat?.fond)) {
+    const e = f?.element !== undefined ? parId.get(f.element) : undefined;
+    const g = e ? e.groupe : f?.groupe;
+    if (groupe && g !== undefined && g !== groupe) continue;
+    sortie.push({points: f.points, teinte: e ? teinte(e) : "contexte"});
+  }
+  return sortie;
+}
 const LIBELLES_ETAT = {valide: "validé", a_revoir: "à revoir", a_faire: "à faire", en_cours: "en cours", fait: "fait",
                        termine: "terminé", "": "sans état"};
 export function libelleEtat(etat) {
@@ -304,7 +323,7 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
       s.append(el("i", "cat-pastille " + k), NOMS[k]);
       legende.append(s);
     }
-    if (liste(cat.trace).length) {
+    if (tracesDuGroupe(cat, ui.groupe).length) {
       const s = el("span", "");
       s.append(el("i", "cat-pastille trace"), "tracé");
       legende.append(s);
@@ -314,7 +333,7 @@ function contenuPage(ctx, contenu, f, cat, entree, ui, parId) {
     const correspond = new Set(filtrerElements(cat, filtres()).map((e) => e.id));
     ui.vueDeHaut?.detruire();
     carte = ui.vueDeHaut = creerVueDeHaut({
-      elements: places, traces: liste(cat.trace), vue: ui.carte,
+      elements: places, traces: tracesDuGroupe(cat, ui.groupe), fond: fondDuGroupe(cat, ui.groupe), vue: ui.carte,
       teinte,
       estompe: (e) => !correspond.has(e.id),
       libelle: (e) => `${e.nom} · ${libelleEtat(e.etat)}`,

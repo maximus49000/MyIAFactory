@@ -17,9 +17,9 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | E | Sonnet 5.5 | ce dépôt | 10 à 12 : fichier de factory, suivi, mémoire, départ d'un agent, vérificateur | Outils en ligne de commande au contrat écrit ; les cas difficiles (git, mots interdits, écritures concurrentes) ont leurs tests nommés | fait |
 | F | Opus 5.5 | ce dépôt | 13 et 14 : consignes génériques, démo, documentation, relecture finale | Les consignes guident l'orchestrateur : leur justesse compte plus que tout ; relecture finale sur un modèle fort | fait |
 | G | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 15 : le vrai passage de bout en bout, mené avec l'utilisateur | Diagnostic d'un orchestrateur réel et corrections génériques | fait |
-| H | Opus 5.5 | dépôt du projet pilote | la liste de compatibilité | Ne rien oublier du fonctionnement actuel : lecture fine de longues consignes | à faire |
-| I | Sonnet 5.5 | dépôt du projet pilote | les adaptateurs, la version 4, les demandes, le catalogue | Travail cadré par l'interface et contrôlé par `verifier_interface.py` | à faire |
-| J | Opus 5.5 | dépôt du projet pilote | la bascule et la vérification finale | Dernier mot sur « rien n'est perdu » | à faire |
+| H | Opus 5.5 | dépôt du projet pilote | la liste de compatibilité | Ne rien oublier du fonctionnement actuel : lecture fine de longues consignes | fait |
+| I | Sonnet 5.5 | dépôt du projet pilote | les adaptateurs, la version 4, les demandes, le catalogue | Travail cadré par l'interface et contrôlé par `verifier_interface.py` | fait |
+| J | Opus 5.5 | dépôt du projet pilote | la bascule et la vérification finale | Dernier mot sur « rien n'est perdu » | fait |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. Haiku n'est retenu pour aucune phase : chacune demande de lire une conception longue et de tenir des tests. **Fable n'est utilisé dans aucune phase**, ni pour exécuter, ni pour relire (la relecture finale se fait sur Opus).
 
@@ -170,6 +170,14 @@ Notes laissées par les phases précédentes (écarts au plan, choix faits, poin
 - Mineur : le titre d'une leçon de mémoire est coupé à 60 caractères au milieu d'un mot.
 - Ce qui reste dans les dossiers d'essai (`MyIAFactory-essais`, hors dépôt) peut être supprimé par l'utilisateur.
 
+
+**Phases H à J (dans le dépôt du projet pilote)**
+- Projet 3 terminé, vérifié sur le projet pilote : bascule faite, liste de compatibilité vérifiée ligne par ligne, mots
+  interdits du projet absents de ce dépôt (`git grep`).
+- Corrections génériques faites ici pendant la vérification (tests vus en échec puis verts) : le bureau ramène les
+  chemins d'un catalogue déclaré dans le fichier de factory au dossier de ses réglages (images introuvables sinon) ;
+  le catalogue gagne un fond de vue de haut (`fond`, emprises colorées par leur élément) et un `groupe` aux tracés.
+- Prochaine étape : le projet 4, l'installation sur un projet, à concevoir.
 
 ## Ce que chaque conversation doit savoir
 

@@ -4,6 +4,7 @@ Le bureau le lit à la demande, jamais à chaque relevé. Les champs facultatifs
 et signalés ; seuls `elements`, et l'`id` et le `nom` de chaque élément, sont exigés."""
 import json
 import math
+import os
 import re
 import subprocess
 import threading
@@ -136,6 +137,29 @@ def _lancer_commande(cmd, cwd):
     return _analyser(sortie)
 
 
+def _ramener(objet, base, dossier):
+    """Une copie du résultat dont les chemins (relatifs à `base`, le dossier du fichier de factory) sont rendus
+    relatifs au dossier des réglages, d'où le bureau sert les images. Le même objet si les deux dossiers sont un."""
+    base, dossier = Path(base).resolve(), Path(dossier).resolve()
+    if base == dossier or "catalogue" not in objet:
+        return objet
+
+    def r(chemin):
+        return Path(os.path.relpath(base / chemin, dossier)).as_posix()
+
+    cat = dict(objet["catalogue"])
+    elements = []
+    for e in cat.get("elements", []):
+        e = dict(e)
+        if "captures" in e:
+            e["captures"] = [{**c, "chemin": r(c["chemin"])} for c in e["captures"]]
+        if "comparaisons" in e:
+            e["comparaisons"] = [{**c, **{k: r(c[k]) for k in ("reel", "produit") if k in c}} for c in e["comparaisons"]]
+        elements.append(e)
+    cat["elements"] = elements
+    return {**objet, "catalogue": cat}
+
+
 def lire(regl, fonctionnalite):
     """(code HTTP, objet) : 200 `{catalogue, avertissements}`, 404 (pas de catalogue déclaré), 502 (la
     commande a échoué), 422 (fichier illisible ou `elements` invalide). Ne lève jamais."""
@@ -144,8 +168,10 @@ def lire(regl, fonctionnalite):
         if d is None:
             return 404, {"erreur": "Aucun catalogue pour cette fonctionnalité."}
         base = Path(d["base"])
+        dossier = Path(regl.get("dossier") or ".")
         if "fichier" in d:
-            return _lire_fichier(base / d["fichier"])
+            code, objet = _lire_fichier(base / d["fichier"])
+            return code, (_ramener(objet, base, dossier) if code == 200 else objet)
         cwd = (base / d.get("dossier", ".")).resolve()
         cle = (tuple(d["commande"]), str(cwd))
         with _verrou:
@@ -153,6 +179,8 @@ def lire(regl, fonctionnalite):
         if en_cache and time.monotonic() - en_cache[0] < CACHE_COMMANDE_S:
             return en_cache[1]
         resultat = _lancer_commande(d["commande"], cwd)
+        if resultat[0] == 200:
+            resultat = (200, _ramener(resultat[1], base, dossier))
         with _verrou:
             _cache_commandes[cle] = (time.monotonic(), resultat)
         return resultat
@@ -206,7 +234,7 @@ OBJ_PASSE = {"numero": (_entier, True), "date": (_texte, False), "titre": (_text
 OBJ_LECON = {"id": (_texte, True), "titre": (_texte, False), "texte": (_texte, False), "portee": (_texte, False),
              "passe": (_entier, False)}
 OBJ_KIT = {"id": (_texte, True), "nom": (_texte, False), "description": (_texte, False)}
-OBJ_TRACE = {"nom": (_texte, False), "points": (_liste_de(_point), True)}
+OBJ_TRACE = {"nom": (_texte, False), "points": (_liste_de(_point), True), "groupe": (_texte, False)}
 OBJ_CARAC = {"libelle": (_texte, True), "valeur": (_texte_ou_nombre, True)}
 OBJ_CAPTURE = {"chemin": (_chemin, True), "passe": (_entier, False)}
 OBJ_COMPARAISON = {"angle": (_texte, False), "reel": (_chemin, False), "produit": (_chemin, False),
@@ -215,10 +243,14 @@ OBJ_LIEN = {"libelle": (_texte, False), "url": (releve.lien_valide, True)}
 OBJ_DOUTE = {"date": (_texte, False), "raison": (_texte, False), "leve_par": (_texte, False)}
 OBJ_RETOUR = {"t": (_texte, False), "texte": (_texte, True), "etat": (_texte, False), "reponse": (_texte, False)}
 OBJ_POSITION = {"x": (_nombre, True), "y": (_nombre, True)}
+# Une emprise du fond de la vue de haut : un polygone (3 points au moins), à l'élément qu'elle figure s'il y en a un
+# (elle prend alors sa teinte), sinon un contexte neutre ; `groupe` la range avec son groupe.
+OBJ_FOND = {"points": (lambda v: _liste_de(_point)(v) and len(v) >= 3, True), "element": (_texte, False),
+            "groupe": (_texte, False)}
 DOUX = (_chemin, releve.lien_valide)
 
 RACINE = {"groupes": ("liste", OBJ_GROUPE), "passes": ("liste", OBJ_PASSE), "lecons": ("liste", OBJ_LECON),
-          "kit": ("liste", OBJ_KIT), "trace": ("liste", OBJ_TRACE)}
+          "kit": ("liste", OBJ_KIT), "trace": ("liste", OBJ_TRACE), "fond": ("liste", OBJ_FOND)}
 ELEMENT = {"groupe": ("valeur", _texte), "etat": ("valeur", _texte), "note": ("valeur", _texte),
            "evenement": ("valeur", _texte),
            "caracteristiques": ("liste", OBJ_CARAC), "captures": ("liste", OBJ_CAPTURE),

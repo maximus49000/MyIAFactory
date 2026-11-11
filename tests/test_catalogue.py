@@ -164,6 +164,37 @@ class TestCatalogueModule(unittest.TestCase):
         code, objet = catalogue.lire(self.regl(catalogues={"f1": {"fichier": "cat.json"}}), "f1")
         self.assertEqual(code, 422)
 
+    def test_chemins_d_un_catalogue_de_la_factory_ramenes_aux_reglages(self):
+        # Le fichier de factory est dans un autre dossier que les réglages : ses chemins (relatifs à lui) sont rendus
+        # relatifs au dossier des réglages, comme le bureau sert les images.
+        self.ecrire("depot/factory.json", {"catalogues": {"f1": {"fichier": "cat.json"}}})
+        self.ecrire("depot/cat.json", CATALOGUE)
+        code, objet = catalogue.lire(self.regl(orchestrateur="depot/factory.json"), "f1")
+        self.assertEqual(code, 200, objet)
+        e = objet["catalogue"]["elements"][0]
+        self.assertEqual(e["captures"], [{"chemin": "depot/images/e1.png", "passe": 2}])
+        self.assertEqual((e["comparaisons"][0]["reel"], e["comparaisons"][0]["produit"]),
+                         ("depot/images/r1.jpg", "depot/images/p1.png"))
+        # Relu (cache) : toujours ramenés, une seule fois.
+        code, objet = catalogue.lire(self.regl(orchestrateur="depot/factory.json"), "f1")
+        self.assertEqual(objet["catalogue"]["elements"][0]["captures"][0]["chemin"], "depot/images/e1.png")
+        # Déclaré dans les réglages : inchangés.
+        self.ecrire("cat.json", CATALOGUE)
+        code, objet = catalogue.lire(self.regl(catalogues={"f1": {"fichier": "cat.json"}}), "f1")
+        self.assertEqual(objet["catalogue"]["elements"][0]["captures"][0]["chemin"], "images/e1.png")
+
+    def test_fond_de_la_vue_de_haut(self):
+        fond = [{"points": [[0, 0], [4, 0], [4, 3]], "element": "e1", "groupe": "g1"},
+                {"points": [[10, 10], [12, 10], [12, 12], [10, 12]]}]
+        propre, avertissements = catalogue.valider({"elements": [{"id": "e1", "nom": "E"}], "fond": fond})
+        self.assertEqual((propre["fond"], avertissements), (fond, []))
+        trace = [{"nom": "rue", "groupe": "g1", "points": [[0, 0], [1, 1]]}]
+        self.assertEqual(catalogue.valider({"elements": [], "trace": trace})[0]["trace"], trace)
+        for mauvais in ([{"points": [[0, 0], [1, 1]]}], [{"points": [[0, "a"], [1, 1], [2, 2]]}], "x"):
+            propre, avertissements = catalogue.valider({"elements": [], "fond": mauvais})
+            self.assertNotIn("fond", propre, mauvais)
+            self.assertIn("fond", " ".join(avertissements))
+
     def test_catalogue_complet_inchange(self):
         propre, avertissements = catalogue.valider(json.loads(json.dumps(CATALOGUE)))
         self.assertEqual(avertissements, [])

@@ -3,6 +3,7 @@
 import {changements, etatUtilisable} from "./logique/diff.js";
 import {creerPlan} from "./logique/plan.js";
 import {estMobile} from "./logique/mobile.js";
+import {doitProposer} from "./logique/lancement.js";
 import {Regie} from "./logique/regie.js";
 import {creerScene} from "./scene/scene.js";
 import {charger} from "./scene/modeles.js";
@@ -25,6 +26,23 @@ const mobile = () => estMobile(window.innerWidth, requeteDoigt?.matches === true
 function majMobile() { document.documentElement.classList.toggle("mobile", mobile()); }
 majMobile();
 window.addEventListener("resize", majMobile);
+
+// Le bureau est « prêt » quand la première image de la scène est dessinée (le premier lancement attend ce moment).
+let signalerPret, echecPret;
+const pret = new Promise((ok, ko) => { signalerPret = ok; echecPret = ko; });
+pret.catch(() => {});
+
+// Premier lancement : demandé en parallèle du démarrage, sans le retarder. L'effet n'est chargé que s'il n'a jamais été
+// proposé ; une panne vaut « déjà vu ».
+fetch("/api/lancement", {cache: "no-store"})
+  .then((r) => (r.ok ? r.json() : null))
+  .then((r) => {
+    if (!doitProposer(r)) return;
+    const marquer = () => fetch("/api/lancement", {method: "POST", body: "{}",
+      headers: {"X-Bureau": "1", "Content-Type": "application/json"}}).catch(() => {});
+    return import("./ui/lancement.js").then((m) => m.lancer({pret, marquer}));
+  })
+  .catch(() => {});
 
 const conteneur = document.getElementById("scene");
 const barre = creerBarre(document.getElementById("barre"), document.getElementById("bandeau"));
@@ -137,6 +155,7 @@ async function demarrer() {
     intervalle = bouge ? IMAGE_MOUVEMENT : IMAGE_REPOS;
     sc.rendu(marche || besoin);
     besoin = false;
+    signalerPret();
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -156,6 +175,7 @@ async function demarrer() {
 }
 
 demarrer().catch((e) => {
+  echecPret(e);
   console.error(e);
   signaler("La page n'a pas pu démarrer : " + (e?.message || e));
 });

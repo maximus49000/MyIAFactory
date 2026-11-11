@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import acces, catalogue, charge, cout, demandes, equipe, etat, kpi, prix, reglages
+from . import acces, catalogue, charge, cout, demandes, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -32,6 +32,7 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".webmanifest": "application/manifest+json; charset=utf-8", ".png": "image/png"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
+LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancement, hors de tout dépôt
 ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
                  "/api/catalogue", "/api/livrable")
 # Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
@@ -438,9 +439,10 @@ class Bureau(ThreadingHTTPServer):
     daemon_threads = True
     distant = False
 
-    def __init__(self, adresse, projets, ouvrir=None, multi=True):
+    def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None):
         super().__init__(adresse, Handler)
         self.multi = multi
+        self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
         self.cles = None
         self.ecouteurs = []
         self.distants = []    # [{"genre", "url"}]
@@ -670,6 +672,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.liste())
         if chemin == "/api/acces":   # jamais atteint depuis un écouteur distant
             return self._json(200, self.server.infos_acces())
+        if chemin == "/api/lancement":
+            return self._json(200, {"vu": self.server.lancement.vu()})
         if chemin not in ROUTES_PROJET:
             return self._statique(chemin)
         projet = self._projet(morceaux.query)
@@ -819,6 +823,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"erreur": "Le bureau n'est ouvert à aucun téléphone."})
             self.server.cles.revoquer()
             return self._json(200, {"ok": True})
+        if chemin == "/api/lancement":   # le premier lancement a été proposé : il ne le sera plus
+            self._vider_corps()
+            if self.headers.get("X-Bureau") != "1":
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            self.server.lancement.marquer()
+            return self._json(200, {"vu": True})
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
@@ -856,18 +866,21 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, nouveau)
 
 
-def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=None, port_distant=None, cles=None):
+def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=None, port_distant=None, cles=None,
+          lancement=None):
     """Un bureau sur un fichier de réglages (un projet d'id `projet`, sans sélecteur) ou sur un fichier de
     bureau (`bureau`, plusieurs projets). `ouvrir(url) -> str` remplace la lecture des sources de prix
     (les tests n'utilisent jamais Internet). Seul un fichier de bureau dont `acces` ouvre quelque chose ouvre des
     écouteurs distants : `adresses() -> {"tailscale", "reseau_local"}`, `cles` (par défaut
-    `~/MyIAFactory/acces.json`) et `port_distant` (par défaut le même port) servent aux tests."""
+    `~/MyIAFactory/acces.json`) et `port_distant` (par défaut le même port) servent aux tests. `lancement` : le
+    fichier du drapeau du premier lancement (`None` : en mémoire seulement ; `main` donne `~/MyIAFactory/lancement.json`)."""
     if (bureau is None) == (chemin_reglages is None):
         raise ValueError("Donner soit un fichier de réglages, soit un fichier de bureau.")
     if bureau is not None:
         conf = reglages.lire_bureau(bureau)
         projets = [(p["id"], p["chemin"]) for p in conf["projets"]]
-        srv = Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True)
+        srv = Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True,
+                     lancement=lancement)
         if any(conf["acces"].values()):
             try:
                 if adresses is None:
@@ -881,7 +894,8 @@ def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=No
         return srv
     if port is None:
         port = reglages.charger(chemin_reglages)["port"]
-    return Bureau(("127.0.0.1", port), [("projet", Path(chemin_reglages))], ouvrir=ouvrir, multi=False)
+    return Bureau(("127.0.0.1", port), [("projet", Path(chemin_reglages))], ouvrir=ouvrir, multi=False,
+                  lancement=lancement)
 
 
 def _commande_charge(chemin):
@@ -919,9 +933,9 @@ def main(argv):
         if args.commande == "charge":
             return _commande_charge(Path(args.reglages))
         if getattr(args, "bureau", None):
-            srv = creer(bureau=Path(args.bureau))
+            srv = creer(bureau=Path(args.bureau), lancement=LANCEMENT.expanduser())
         else:
-            srv = creer(Path(args.reglages))
+            srv = creer(Path(args.reglages), lancement=LANCEMENT.expanduser())
     except reglages.ReglagesInvalides as e:
         print(e)
         return 2

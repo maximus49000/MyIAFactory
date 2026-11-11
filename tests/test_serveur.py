@@ -901,5 +901,32 @@ class TestDemandesV4(AvecServeur):
         self.assertFalse(notes.exists())
 
 
+class TestLancement(AvecServeur):
+    """Le premier lancement : un drapeau « vu », global (sans `?projet=`), en mémoire dans les tests."""
+
+    def lu(self):
+        return self.json("/api/lancement")
+
+    def test_pas_vu_puis_marque(self):
+        self.assertEqual(self.lu(), {"vu": False})
+        r, _ = self.req("POST", "/api/lancement", "{}", {"Content-Type": "application/json"})
+        self.assertEqual(r.status, 403)
+        self.assertEqual(self.lu(), {"vu": False})
+        r, _ = self.req("POST", "/api/lancement", "{}", {**self.ENT, "Host": "evil.example.com"})
+        self.assertEqual(r.status, 403)
+        self.assertEqual(self.lu(), {"vu": False})
+        r, data = self.req("POST", "/api/lancement", "{}", self.ENT)
+        self.assertEqual((r.status, json.loads(data)), (200, {"vu": True}))
+        self.assertEqual(self.lu(), {"vu": True})
+
+    def test_route_globale(self):
+        r, _ = self.req("GET", "/api/lancement?projet=inconnu")
+        self.assertEqual(r.status, 200)
+
+    def test_get_hote_refuse(self):
+        r, _ = self.req("GET", "/api/lancement", entetes={"Host": "evil.example.com"})
+        self.assertEqual(r.status, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

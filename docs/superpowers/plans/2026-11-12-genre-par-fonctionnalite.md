@@ -90,12 +90,12 @@
   - `TYPES["proposer_organisation"] = "sonnet"` ; dossier `{"demande", "genre", "projet": {nom, description}, "services", "agents": [{cle, role, modele, specialite}], "workflows_du_genre": [{id, flux}], "fonctionnalite": id, "refus": texte|null}` ; réponse `{"flux": [{"etape", "nom", "role", "service"}], "services": [{"id", "nom"}], "agents": [{"cle", "prenom"?, "role", "service", "modele", "justification", "fable_suggere"?: bool, "texte"}], "briefs": {role: texte}, "livrable": texte, "environnement": [{"outil", "pour", "executables": [str], "installation": texte}], "outils_installation": [règles d'outils, par exemple "Bash(winget:*)"]}` ; règles : `modele` dans Haiku/Sonnet/Opus (jamais Fable) ; chaque rôle du flux a un agent existant ou proposé ; la **dernière étape** produit ou remet le livrable (`livrable` non vide, et le nom de la dernière étape le dit) ; services du flux connus ou proposés.
 - Les consignes portent les décisions de l'utilisateur : *proche* = mêmes savoir-faire, mêmes outils, même sorte de livrable ; **dans le doute `incertain`, jamais élargir un genre** ; le workflow va de la demande au livrable remis (fabrication, qualité dès que c'est logique, livraison) ; reprendre tel quel le workflow le plus récent du même genre s'il convient ; le modèle selon la complexité (Haiku mécanique, Sonnet création et code courant, Opus conception difficile) ; Fable seulement en `fable_suggere`.
 
-- [ ] **Étape 1 : tests des validateurs** : `test_proposer_organisation_environnement_valide` (chaque outil a `executables` non vide et `installation`), `test_classer_genre_valide`, `test_classer_genre_nouveau_mot_interdit_refuse`, `test_proposer_organisation_sans_livraison_refuse`, `test_proposer_organisation_fable_refuse`, `test_proposer_organisation_role_sans_agent_refuse`.
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire validateurs et consignes.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py jugement` : vert.
-- [ ] **Étape 5 : essai réel, avec l'accord de l'utilisateur** (quelques centimes) : les deux jugements sur trois demandes synthétiques (badge pour le chat YouTube → `proche` ; casse-briques Android → `autre`, workflow avec qualité et livraison `.apk` ; demande floue → `incertain`) ; noter dans la passation validité au premier essai, tokens, coût.
-- [ ] **Étape 6 : commit** « Jugements : classer le genre, proposer le workflow ».
+- [x] **Étape 1 : tests des validateurs** : `test_proposer_organisation_environnement_valide` (chaque outil a `executables` non vide et `installation`), `test_classer_genre_valide`, `test_classer_genre_nouveau_mot_interdit_refuse`, `test_proposer_organisation_sans_livraison_refuse`, `test_proposer_organisation_fable_refuse`, `test_proposer_organisation_role_sans_agent_refuse`.
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire validateurs et consignes.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py jugement` : vert.
+- [x] **Étape 5 : essai réel, avec l'accord de l'utilisateur** (quelques centimes) : les deux jugements sur trois demandes synthétiques (badge pour le chat YouTube → `proche` ; casse-briques Android → `autre`, workflow avec qualité et livraison `.apk` ; demande floue → `incertain`) ; noter dans la passation validité au premier essai, tokens, coût.
+- [x] **Étape 6 : commit** « Jugements : classer le genre, proposer le workflow ».
 
 ## Étape 3 — le moteur
 

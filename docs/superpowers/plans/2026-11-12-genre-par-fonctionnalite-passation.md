@@ -11,8 +11,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle proposé | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|
 | A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | **faite** le 2026-11-12 (1121 tests verts) |
-| B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | à faire : **c'est la prochaine phase** |
-| C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | à faire |
+| B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | **faite** le 2026-11-12 (1138 tests verts) |
+| C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | à faire : **c'est la prochaine phase** |
 | D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire |
 | E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire |
 
@@ -52,6 +52,54 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
   nouveau workflow de fonctionnalité va donc la recharger une fois, comme un changement de flux aujourd'hui. Ni
   `organisation.js` (qui regarde les colonnes retirées du flux) ni la décision `organisation` n'ont été adaptés
   (phases C et D). `ecrire_organisation`, `moteur/regles.py` lisent encore `ctx.f["flux"]` seul (phase C).
+
+**Phase B (Opus 5.5, 2026-11-12)** : tâche 3 faite, suite complète verte (1138 tests).
+
+- **La validation lit le dossier** : `jugement.valider(type_, objet, dossier=None)` ; `juger` passe son dossier.
+  `classer_genre` et `proposer_organisation` sont dans `_VALIDEURS_AVEC_DOSSIER` (les cinq anciens n'ont pas changé).
+  Le moteur (phase C) doit donc remplir le dossier exactement comme le docstring de `moteur/jugement.py` le dit, sinon
+  la réponse est refusée : `genres_du_projet` et `genres_connus` (`[{id, …}]` ou `[id]`), `mots_interdits`,
+  `services` (`[{id, nom}]`), `agents` (`[{cle, role, …}]`), `fonctionnalite` (son id).
+- **`classer_genre`** : `meme` exige un genre de `genres_du_projet` ; `proche` un genre connu (projet ou skill) ;
+  `autre` un genre connu **ou** `nouveau`, pas les deux ; `incertain` accepte une piste (`genre` ou `nouveau`) ou rien ;
+  `nouveau` refusé avec `meme`/`proche`, si son id existe déjà, ou si son id ou sa description contient un mot interdit.
+- **`proposer_organisation`** : `flux[i].etape` est l'id **court** (`dev`) ; le moteur le préfixe (`f5-dev`), et la
+  validation vérifie que `<fonctionnalite>-<etape>` tient dans `MOTIF_ID` (40 caractères). `services` et `agents` ne
+  listent que les nouveaux (un service ou une clé déjà au projet est refusé). Chaque rôle du flux a un agent du projet
+  ou proposé ; chaque nouveau rôle a un brief. Pas de champ `lieu` (le moteur le fixe, comme `estimer` le coût).
+  Modèle : Haiku, Sonnet ou Opus ; « Fable » en modèle est refusé avec un message qui renvoie à `fable_suggere`.
+  **Dernière étape = livrable** : `livrable` non vide, et le nom de la dernière étape contient un mot de livraison
+  (`MOTS_DE_LIVRAISON` : livr, remis/remise, publi, dépôt, export, envoi, déploi, mise en ligne) ou un mot (3 lettres
+  et plus) du `livrable` : heuristique volontairement souple, à revoir au banc si elle laisse passer un « Développement
+  du jeu ». `environnement[i].pour` : l'`etape` ou son nom ; `executables` : noms seuls (`MOTIF_EXECUTABLE`, ni
+  chemin ni option) ; `outils_installation` : seulement `Bash(<cmd>:*)`, `Bash(<cmd> <args>)` ou `PowerShell(…)` de
+  même forme (`MOTIF_REGLE_OUTIL`) ; `Bash`, `Bash(*)` et les autres outils refusés. Listes vides permises.
+- **Écart au plan** : le test existant `test_aucune_consigne_ne_parle_de_fable_ni_d_un_projet` tolère aussi
+  `fable_suggere` (le plan l'impose dans la consigne de `proposer_organisation`). Pas de script d'essai dans le dépôt :
+  l'essai a tourné par un script hors dépôt (`juger` avec un `appeler` qui note `cout_usd`), sur le modèle de
+  `outils/mesurer_appel.py`.
+- **Essai réel** (couche `claude`, accord de l'utilisateur ; projet synthétique « badges d'une chaîne », genres
+  synthétiques `badges-twitch` et `site-vitrine`) : 9 appels, **0,16 $ en tout**.
+  - `classer_genre` (Haiku) : 4 appels, **4 valides au premier essai**, verdicts attendus (badge du chat YouTube →
+    `proche` de `badges-twitch` ; casse-briques Android → `autre` avec `nouveau` (`jeu-mobile` puis
+    `application-mobile` : l'id varie d'un essai à l'autre) ; demande floue → `incertain` avec la piste du genre du
+    projet). Environ 2 100 à 2 500 tokens d'entrée (presque tout en cache), 260 à 385 de sortie, **0,0003 à 0,0006 $**
+    par appel, 6 à 9 s.
+  - `proposer_organisation` (Sonnet) : 5 appels pour 4 jugements. Badge YouTube et demande floue : **le workflow du
+    genre repris tel quel** (mêmes étapes, aucun agent ni service nouveau), valides au premier essai, 1 000 à 1 200
+    tokens de sortie, **0,016 à 0,022 $**. Casse-briques : au premier passage, premier essai refusé (`role` écrit en
+    texte libre, « développement Android ») puis valide au second ; consigne réglée (ids en minuscules et tirets, un
+    outil une seule fois), second passage **valide au premier essai** : 6 étapes (visuels, programmation,
+    construction et signature de l'apk, tests, conformité, « Livraison de l'apk signé »), un service et deux agents
+    nouveaux (Sonnet, Haiku), JDK, Gradle et SDK Android dans l'environnement. 2 400 à 2 600 tokens d'entrée, 3 100 à
+    3 550 de sortie, **0,036 à 0,043 $** par appel, 26 à 29 s.
+- **À savoir pour la phase C** : la qualité est parfois tenue par un agent du projet (`verification`) plutôt qu'un
+  service qualité nouveau : la consigne le permet (réutiliser). Les `outils_installation` proposés comprennent des
+  téléchargements (`Bash(curl:*)`, `PowerShell(Invoke-WebRequest:*)`, `Bash(unzip:*)`) : le Directeur les valide avec
+  l'organisation ; ne pas les élargir en code. Un même exécutable peut revenir dans deux outils (vu au premier
+  passage, avant le réglage) : dédoublonner par exécutable pour la vérification du poste. `nouveau.id` varie : la
+  décision `genre_fonctionnalite` doit le laisser corriger. Les jugements ne choisissent jamais Fable (`juger` le
+  refuse toujours ; aucun agent proposé n'a eu `fable_suggere: true` à l'essai).
 
 ## Messages à coller
 

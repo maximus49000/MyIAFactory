@@ -299,7 +299,8 @@ mot pour mot, la clé jamais écrite ni affichée, et `lancer partenaires` `usag
 
 **Un lot.** `taches` (liste d'identifiants, dans l'ordre du lot) à la place de `tache` : un seul message de départ
 pour l'agent, avec le brief de chaque rôle présent, les tâches dans l'ordre et la consigne de rendre compte à la fin de
-chaque tâche (`lancer tache`) avant de passer à la suivante.
+chaque tâche (`lancer tache`) avant de passer à la suivante. Avec `"moteur": true` (le moteur procédural lance le
+lot), aucune commande n'est demandée à l'agent : il rend un seul rapport à la fin du lot, le moteur tient le suivi.
 
 ### `partenaires`
 

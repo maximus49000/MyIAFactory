@@ -177,6 +177,16 @@ class Passage(Base):
         self.moteur.tour()
         self.assertEqual(len(self.agents.lances), 1)        # une seule fois
 
+    def test_le_depart_d_un_lot_ne_demande_aucune_commande(self):
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        ids = [self.ok("tache", entree={"titre": f"Développement : {n}", "fonctionnalite": "f1", "role": "dev",
+                                        "colonne": "dev", "etape": "flux:dev", "element": n})["id"] for n in ("e1", "e2")]
+        self.moteur._partir(self.projet, ("agent", "dev-1", ids, "Matière."))
+        depart = self.agents.lances[0]["depart"]
+        self.assertIn("un seul rapport", depart)
+        self.assertNotIn("lancer tache", depart)
+
     def test_ligne_couche_dite_une_fois(self):
         (self.dossier / "reglages.json").write_text(json.dumps({"images": {"racines": ["pieces"]},
                                                                 "moteur": {"couche": "api"}}), encoding="utf-8")

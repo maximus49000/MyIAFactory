@@ -1803,10 +1803,13 @@ def _depart_d_un_lot(ctx, e):
     briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
     ids_partenaires = list(dict.fromkeys(i for t in taches for i in t.get("partenaires") or []))
     return {"message": depart.message_lot(ctx.f, fiche_agent, taches, briefs, lecons_lot, glossaire,
-                                          regles_des_partenaires(ctx, ids_partenaires))}
+                                          regles_des_partenaires(ctx, ids_partenaires),
+                                          par_le_moteur=e.get("moteur", False))}
 
 
 def cmd_depart(ctx, e):
+    if not isinstance(e.get("moteur", False), bool):
+        raise Refus("« moteur » est vrai ou faux.")
     if "taches" in e:
         return _depart_d_un_lot(ctx, e)
     cle, i = texte(e, "agent"), texte(e, "tache")

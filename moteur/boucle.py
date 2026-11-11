@@ -225,7 +225,7 @@ class Moteur:
         _, cle, taches, matiere = action
         etat = self._etat(projet)
         depart = regles.lancer(projet, "depart", {"agent": cle, "tache": taches[0]} if len(taches) == 1
-                               else {"agent": cle, "taches": taches})["message"]
+                               else {"agent": cle, "taches": taches, "moteur": True})["message"]
         d = etat["departs"].get(taches[0]) or {}
         fiche = fi.trouver(fi.lire_toutes(fa.lire(projet.factory)["fiches"]), cle)
         if fiche is None:

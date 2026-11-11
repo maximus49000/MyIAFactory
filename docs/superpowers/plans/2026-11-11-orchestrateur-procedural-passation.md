@@ -216,9 +216,9 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
 - **Limites du banc** : les gestes rejoués sont ceux de l'essai ; avec de vrais agents, leurs questions ne sont pas
   celles de l'essai (le 3ᵉ passage s'est bien déroulé, mais un passage peut dévier). L'agent seul n'a été joué qu'une
   fois valablement.
-- **Suites possibles** (non faites) : le départ d'un lot (`orchestrateur/depart.py`) dit encore aux agents de rendre
-  compte par `lancer tache` (ancien orchestrateur) ; un agent l'a signalé comme indisponible : à aligner sur le moteur.
-  Le nombre de leçons notées par passage (28) mérite une consigne plus sélective.
+- Après le bilan : le départ d'un lot lancé par le moteur (`depart` avec `"moteur": true`) ne demande plus
+  `lancer tache` à l'agent (un seul rapport à la fin du lot) ; l'ancien orchestrateur garde sa consigne.
+- **Suite possible** (non faite) : le nombre de leçons notées par passage (28) mérite une consigne plus sélective.
 
 ## Messages à coller
 

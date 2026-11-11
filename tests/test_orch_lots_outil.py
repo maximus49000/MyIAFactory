@@ -214,6 +214,19 @@ class TestDepartDUnLot(AvecTaches):
         # chaque tâche est marquée active à son début (sa durée sert à répartir le coût du lot)
         self.assertIn('"agent": "dev-1", "active": true', m)
 
+    def test_depart_d_un_lot_pour_le_moteur(self):
+        """Le moteur tient le suivi d'après le rapport : l'agent d'un lot ne lance aucune commande de la factory (à
+        l'essai réel, il cherchait `lancer tache` et le disait indisponible)."""
+        a, b = self.nt("Écrire le menu"), self.nt("Composer le son du menu", "son")
+        m = self.ok("lancer", "depart", entree={"agent": "dev-1", "taches": [a, b], "moteur": True})["message"]
+        self.assertNotIn("lancer tache", m)
+        self.assertNotIn('"active": true', m)
+        self.assertIn("un seul rapport", m)
+        self.assertLess(m.index("Écrire le menu"), m.index("Composer le son du menu"))
+        self.assertIn("## À la fin de ton lot", m)
+        with self.assertRaises(AssertionError):     # `moteur` est un booléen
+            self.ok("lancer", "depart", entree={"agent": "dev-1", "taches": [a], "moteur": "oui"})
+
     def test_lot_enchaine_les_durees(self):
         # le geste demandé par le message : active au début, inactive à la fin, tâche après tâche
         a, b = self.nt("A"), self.nt("B")

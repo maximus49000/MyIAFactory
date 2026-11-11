@@ -201,16 +201,24 @@ def compte_rendu_par_tache(cle):
             f'avec `{{"id": <son id>, "agent": "{cle}", "active": true}}`, et seulement ensuite commence-la.')
 
 
-def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=()):
+COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec ce même contexte. Ne lance aucune commande "
+                       "de la factory (`lancer …`) : le moteur tient le suivi d'après ton rapport. Rends **un seul "
+                       "rapport**, à la fin du lot : dans `message`, le résultat de chaque tâche (par son identifiant) ; "
+                       "l'`element` de chaque fichier et de chaque verdict.")
+
+
+def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
-    `(rôle, texte | None)`, un par rôle présent dans le lot."""
+    `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
+    tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
     parties = _entete(factory, fiche, lecons_memoire)
     if len(briefs) == 1:
         parties.append("## Le brief de ton rôle\n" + (briefs[0][1] or "(pas de brief propre à ce rôle)"))
     else:
         parties.append("## Les briefs des rôles de ce lot\n" + "\n\n".join(
             f"### Rôle : {role}\n{texte or '(pas de brief propre à ce rôle)'}" for role, texte in briefs))
-    lignes = [f"## Tes {len(taches)} tâches, dans l'ordre", compte_rendu_par_tache(fiche["cle"])]
+    lignes = [f"## Tes {len(taches)} tâches, dans l'ordre",
+              COMPTE_RENDU_MOTEUR if par_le_moteur else compte_rendu_par_tache(fiche["cle"])]
     for k, tache in enumerate(taches, 1):
         lignes.append(f"\n### Tâche {k} sur {len(taches)}")
         lignes += _bloc_tache(tache)

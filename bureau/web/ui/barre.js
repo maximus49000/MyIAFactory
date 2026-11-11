@@ -5,6 +5,7 @@
 import {voyant, libelleCharge, listeDisponible, dateFr} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
 import {urlProjet, livrables, projetCourant, memoriser} from "./projets.js";
+import {brancherAssociation} from "./associer.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -50,7 +51,11 @@ export function creerBarre(entete, bandeau) {
   for (const b of [boutonNouvelle, boutonFonctions]) { b.type = "button"; b.hidden = true; }   // relevé v4 et `agir`
   const zoneLivrable = el("span", "barre-livrable");
   zoneLivrable.hidden = true;
-  entete.append(titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe, charge);
+  const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
+  boutonTelephone.type = "button";
+  boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
+  entete.append(titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
+                boutonTelephone, charge);
 
   // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
   const retour = el("div", "message-demande");
@@ -221,6 +226,7 @@ export function creerBarre(entete, bandeau) {
     return derniere;
   }
 
+  brancherAssociation(boutonTelephone, dire);
   rafraichirCharge();
   setInterval(() => { if (!document.hidden) rafraichirCharge(); }, INTERVALLE_CHARGE);
   // Le voyant dit « sans activité depuis… » : on le remet à jour même sans nouvel état.

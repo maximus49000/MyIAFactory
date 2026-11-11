@@ -8,11 +8,12 @@ import shutil
 import threading
 import time
 from datetime import datetime
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import catalogue, charge, cout, demandes, equipe, etat, kpi, prix, reglages
+from . import acces, catalogue, charge, cout, demandes, equipe, etat, kpi, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -45,6 +46,14 @@ DOCUMENTS = {**LIVRABLES, ".md": ("text/plain; charset=utf-8", False), ".json": 
              ".csv": ("text/plain; charset=utf-8", False), ".svg": ("image/svg+xml", False)}
 BAC_A_SABLE_DOCUMENTS = BAC_A_SABLE + (".md", ".json", ".csv", ".svg")
 METHODES = {".md": ("text/plain; charset=utf-8", False), ".txt": ("text/plain; charset=utf-8", False)}
+# Le bureau ouvert au téléphone : le cookie posé par l'association, la page servie sans lui.
+COOKIE_ACCES = "myiafactory_acces"
+DUREE_COOKIE_S = 31536000
+NOMS_ACCES = {"tailscale": "Tailscale", "reseau_local": "Wi-Fi de la maison (non chiffré)"}
+PAGE_401 = ("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" "
+            "content=\"width=device-width, initial-scale=1\"><title>Le bureau vivant</title></head><body "
+            "style=\"font-family:sans-serif;padding:2em;text-align:center\"><h1>Accès protégé</h1><p>Scannez le QR "
+            "code affiché sur l'ordinateur (« Associer un téléphone »).</p></body></html>").encode("utf-8")
 
 
 def images_declarees(regl):
@@ -423,12 +432,18 @@ class Projet:
 
 
 class Bureau(ThreadingHTTPServer):
-    """Le serveur : un ou plusieurs projets, une seule sonde de charge (la charge est celle de la machine)."""
+    """Le serveur : un ou plusieurs projets, une seule sonde de charge (la charge est celle de la machine).
+    Il écoute sur 127.0.0.1 ; les écouteurs distants (`ouvrir_distants`) servent le même bureau, avec code d'accès."""
     daemon_threads = True
+    distant = False
 
     def __init__(self, adresse, projets, ouvrir=None, multi=True):
         super().__init__(adresse, Handler)
         self.multi = multi
+        self.cles = None
+        self.ecouteurs = []
+        self.distants = []    # [{"genre", "url"}]
+        self.annonces = []    # ce que le terminal dit au lancement
         self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir) for id_, chemin in projets}
         self.sonde = charge.Sonde()
         self.lisseur = charge.Lisseur(60)
@@ -496,11 +511,71 @@ class Bureau(ThreadingHTTPServer):
             f.join()
         return {"multi": self.multi, "projets": lignes}
 
+    def ouvrir_distants(self, ouverts, adresses, cles, port_distant=None):
+        """Un écouteur par accès ouvert dont l'adresse est trouvée (même port que 127.0.0.1, sauf `port_distant`).
+        Une adresse introuvable est dite et ignorée."""
+        self.cles = cles
+        cles.cle()   # créée maintenant plutôt qu'à la première requête
+        trouvees = adresses()
+        for genre in reglages.ACCES:
+            if not ouverts.get(genre):
+                continue
+            ip = trouvees.get(genre)
+            nom = NOMS_ACCES[genre]
+            if not ip:
+                self.annonces.append(f"{nom} : adresse introuvable, cet accès est ignoré.")
+                continue
+            port = self.server_address[1] if port_distant is None else port_distant
+            try:
+                e = Ecouteur((ip, port), self, genre)
+            except OSError as err:
+                self.annonces.append(f"{nom} : impossible d'écouter sur {ip}:{port} ({err}) ; accès ignoré.")
+                continue
+            threading.Thread(target=e.serve_forever, daemon=True).start()
+            url = f"http://{e.hote}"
+            self.ecouteurs.append(e)
+            self.distants.append({"genre": genre, "url": url})
+            self.annonces.append(f"{nom} : {url} (code d'accès exigé ; associez le téléphone depuis la page de "
+                                 "l'ordinateur)")
+
+    def infos_acces(self):
+        """Pour la page de l'ordinateur : les adresses ouvertes et un code d'association neuf."""
+        if not self.distants:
+            return {"adresses": [], "code": None, "expire": None}
+        code = self.cles.code_association()
+        expire = datetime.fromtimestamp(self.cles.expiration(code)).isoformat(timespec="seconds")
+        return {"adresses": [dict(d) for d in self.distants], "code": code, "expire": expire}
+
+    def shutdown(self):
+        for e in self.ecouteurs:
+            e.shutdown()
+        super().shutdown()
+
     def server_close(self):
+        for e in self.ecouteurs:
+            e.shutdown()
+            e.server_close()
         self._arret.set()
         for p in self.projets.values():
             p.fermer()
         super().server_close()
+
+
+class Ecouteur(ThreadingHTTPServer):
+    """Un écouteur distant (adresse Tailscale ou du réseau local) : il sert le même bureau, avec code d'accès."""
+    daemon_threads = True
+    distant = True
+
+    def __init__(self, adresse, bureau, genre):
+        self.bureau = bureau
+        self.genre = genre
+        super().__init__(adresse, Handler)
+        self.hote = f"{adresse[0]}:{self.server_address[1]}"
+
+    def __getattr__(self, nom):   # projet(), liste(), charge(), projets, multi, cles : ceux du bureau
+        if nom == "bureau":
+            raise AttributeError(nom)
+        return getattr(self.bureau, nom)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -522,6 +597,51 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, code, objet):
         self._envoyer(code, json.dumps(objet, ensure_ascii=False).encode("utf-8"))
 
+    # -- écouteur distant ---------------------------------------------------
+    def _cookie(self):
+        try:
+            morceau = SimpleCookie(self.headers.get("Cookie", "")).get(COOKIE_ACCES)
+        except CookieError:
+            return None
+        return morceau.value if morceau is not None else None
+
+    def _refus_401(self):
+        self._envoyer(401, PAGE_401, "text/html; charset=utf-8")
+
+    def _associer(self, requete):
+        codes = parse_qs(requete, keep_blank_values=True).get("code", [])
+        cle = self.server.cles.echanger(codes[0]) if len(codes) == 1 else None
+        if cle is None:
+            return self._refus_401()
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie", f"{COOKIE_ACCES}={cle}; HttpOnly; SameSite=Strict; Path=/; "
+                                       f"Max-Age={DUREE_COOKIE_S}")
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _garde_distant(self, post=False):
+        """Sur un écouteur distant : l'hôte servi, le cookie d'accès, et l'origine d'un POST. Rend vrai si la
+        requête a reçu sa réponse (un refus, ou l'association)."""
+        if self.headers.get("Host", "") != self.server.hote:
+            self._json(403, {"erreur": "Hôte refusé."})
+            return True
+        morceaux = urlsplit(self.path)
+        if not post and morceaux.path == "/associer":
+            self._associer(morceaux.query)
+            return True
+        if not self.server.cles.valide(self._cookie()):
+            self._refus_401()
+            return True
+        if post and self.headers.get("Origin") != f"http://{self.server.hote}":
+            self._json(403, {"erreur": "Origine refusée."})
+            return True
+        if morceaux.path.startswith("/api/acces"):   # le code et la révocation : depuis l'ordinateur seulement
+            self._json(404, {"erreur": "Introuvable."})
+            return True
+        return False
+
     def _hote_ok(self):
         # protège contre les pages tierces qui viseraient le serveur local (DNS rebinding)
         port = self.server.server_address[1]
@@ -538,12 +658,17 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- GET --------------------------------------------------------------
     def do_GET(self):
-        if not self._hote_ok():
+        if self.server.distant:
+            if self._garde_distant():
+                return
+        elif not self._hote_ok():
             return self._json(403, {"erreur": "Hôte refusé."})
         morceaux = urlsplit(self.path)
         chemin = morceaux.path
         if chemin == "/api/projets":
             return self._json(200, self.server.liste())
+        if chemin == "/api/acces":   # jamais atteint depuis un écouteur distant
+            return self._json(200, self.server.infos_acces())
         if chemin not in ROUTES_PROJET:
             return self._statique(chemin)
         projet = self._projet(morceaux.query)
@@ -676,11 +801,23 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
-        if not self._hote_ok():
+        if self.server.distant:
+            if self._garde_distant(post=True):
+                self._vider_corps()
+                return
+        elif not self._hote_ok():
             self._vider_corps()
             return self._json(403, {"erreur": "Hôte refusé."})
         morceaux = urlsplit(self.path)
         chemin = morceaux.path
+        if chemin == "/api/acces/revoquer":   # jamais atteint depuis un écouteur distant
+            self._vider_corps()
+            if self.headers.get("X-Bureau") != "1":
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            if self.server.cles is None:
+                return self._json(404, {"erreur": "Le bureau n'est ouvert à aucun téléphone."})
+            self.server.cles.revoquer()
+            return self._json(200, {"ok": True})
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
@@ -718,16 +855,29 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, nouveau)
 
 
-def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None):
+def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=None, port_distant=None, cles=None):
     """Un bureau sur un fichier de réglages (un projet d'id `projet`, sans sélecteur) ou sur un fichier de
     bureau (`bureau`, plusieurs projets). `ouvrir(url) -> str` remplace la lecture des sources de prix
-    (les tests n'utilisent jamais Internet)."""
+    (les tests n'utilisent jamais Internet). Seul un fichier de bureau dont `acces` ouvre quelque chose ouvre des
+    écouteurs distants : `adresses() -> {"tailscale", "reseau_local"}`, `cles` (par défaut
+    `~/MyIAFactory/acces.json`) et `port_distant` (par défaut le même port) servent aux tests."""
     if (bureau is None) == (chemin_reglages is None):
         raise ValueError("Donner soit un fichier de réglages, soit un fichier de bureau.")
     if bureau is not None:
         conf = reglages.lire_bureau(bureau)
         projets = [(p["id"], p["chemin"]) for p in conf["projets"]]
-        return Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True)
+        srv = Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True)
+        if any(conf["acces"].values()):
+            try:
+                if adresses is None:
+                    from installation.acces import adresses
+                if cles is None:
+                    cles = acces.Cles(Path("~/MyIAFactory/acces.json").expanduser())
+                srv.ouvrir_distants(conf["acces"], adresses, cles, port_distant)
+            except BaseException:
+                srv.server_close()
+                raise
+        return srv
     if port is None:
         port = reglages.charger(chemin_reglages)["port"]
     return Bureau(("127.0.0.1", port), [("projet", Path(chemin_reglages))], ouvrir=ouvrir, multi=False)
@@ -778,6 +928,8 @@ def main(argv):
         print(f"Impossible de démarrer le serveur : {e}")
         return 2
     print(f"Le bureau est ouvert sur http://127.0.0.1:{srv.server_address[1]}/ (Ctrl+C pour arrêter)")
+    for ligne in srv.annonces:
+        print(ligne)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

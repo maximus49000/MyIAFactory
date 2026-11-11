@@ -22,6 +22,21 @@ export const ETAPES_PARCOURS = [
   {id: "serie", libelle: "Série"},
 ];
 
+// Le genre et le workflow d'une fonctionnalité, en une ligne (vide si elle n'en a pas encore).
+export function genreEtWorkflow(f) {
+  const parties = [];
+  if (f?.genre) parties.push("Genre : " + f.genre);
+  if (f?.workflow) parties.push("Workflow : " + f.workflow);
+  return parties.join(" · ");
+}
+
+// L'étape d'une fonctionnalité en clair (la liste et la page).
+export function libelleEtape(f) {
+  if (f?.etape === "terminee") return "Terminée";
+  if (f?.etape === "deplacee") return f.deplacee_vers ? "Partie dans le projet " + f.deplacee_vers : "Partie dans un autre projet";
+  return ETAPES_PARCOURS.find((x) => x.id === f?.etape)?.libelle || f?.etape || "";
+}
+
 // Le bandeau du parcours : les étapes d'avant la courante sont faites ; `terminee` : toutes faites.
 export function bandeau(etape) {
   const rang = etape === "terminee" ? ETAPES_PARCOURS.length : ETAPES_PARCOURS.findIndex((e) => e.id === etape);
@@ -202,12 +217,14 @@ export function vueCahier(f) {
 
 export function documentsParEtape(f, colonnes) {
   const groupes = new Map();
+  // Les étapes du workflow de la fonctionnalité nomment ses documents même quand ses colonnes ont quitté le tableau.
+  const toutes = [...(colonnes || []), ...(Array.isArray(f?.workflow_etapes) ? f.workflow_etapes : [])];
   const libelle = (etape) => ETAPES_PARCOURS.find((x) => x.id === etape)?.libelle
-    || (colonnes || []).find((c) => c.id === etape)?.nom || "Autres";
+    || toutes.find((c) => c.id === etape)?.nom || "Autres";
   const rang = (etape) => {
     const i = ETAPES_PARCOURS.findIndex((x) => x.id === etape);
     if (i >= 0) return i;
-    const j = (colonnes || []).findIndex((c) => c.id === etape);
+    const j = toutes.findIndex((c) => c.id === etape);
     return j >= 0 ? 100 + j : 1000;
   };
   for (const d of Array.isArray(f?.documents) ? f.documents : []) {
@@ -1033,6 +1050,8 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   const cle = "f:" + (f ? f.id : "nouvelle");
   contenu.append(el("h2", "", f ? f.nom : "Nouvelle fonctionnalité"));
   if (f) {
+    if (genreEtWorkflow(f)) contenu.append(el("p", "fonctionnalite-genre", genreEtWorkflow(f)));
+    if (f.etape === "deplacee") contenu.append(el("p", "note", libelleEtape(f)));
     const ol = el("ol", "parcours");
     for (const b of bandeau(f.etape)) {
       const li = el("li", "etape" + (b.courante ? " courante" : "") + (b.faite ? " faite" : ""), b.libelle);
@@ -1199,9 +1218,9 @@ export function contenuFonctionnalites(ctx, contenu) {
     const b = el("button", "lien-tache", f.nom);
     b.type = "button";
     b.addEventListener("click", () => ctx.ouvrirFonctionnalite(f.id));
-    const etape = ETAPES_PARCOURS.find((x) => x.id === f.etape)?.libelle || (f.etape === "terminee" ? "Terminée" : f.etape);
+    const etape = libelleEtape(f);
     const n = (f.decisions || []).length;
-    li.append(b, el("div", "note", etape + (n ? ` · ${n} décision${n > 1 ? "s" : ""}` : "")));
+    li.append(b, el("div", "note", [etape, f.genre].filter(Boolean).join(" · ") + (n ? ` · ${n} décision${n > 1 ? "s" : ""}` : "")));
     ul.append(li);
   }
   contenu.append(ul);

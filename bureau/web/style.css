@@ -721,6 +721,8 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .kanban-plein-colonne { flex: 0 0 260px; display: flex; flex-direction: column; gap: 6px; padding: 10px; overflow-y: auto;
   border-radius: 12px; background: #fffdf8; box-shadow: 0 1px 4px rgba(61, 58, 75, .12); }
 .kanban-plein-colonne h3 { margin: 0 0 4px; font-size: 15px; }
+.kanban-plein-genre { margin: -2px 0 4px; font-size: 12px; opacity: .7; }
+.fonctionnalite-genre { margin: -4px 0 8px; font-size: 13px; opacity: .75; }
 .kanban-plein-colonne.terminee { opacity: .8; }
 .kanban-carte { display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid #e6dccb; border-radius: 8px;
   background: #fff8c8; color: inherit; font: inherit; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }

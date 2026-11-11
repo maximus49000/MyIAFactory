@@ -4,10 +4,16 @@
 import {el} from "./dom.js";
 import {ilYA, tronquer} from "./texte.js";
 
+// Ce que la colonne dit de son genre (sous son nom) : le genre du workflow dont elle est une étape, ou rien.
+export function etiquetteColonne(col) {
+  return typeof col?.genre === "string" ? col.genre : "";
+}
+
 // Les colonnes du relevé avec leurs tâches (les plus récentes en tête), et la file d'attente à part.
 export function colonnesKanban(etat) {
   const prenoms = new Map((etat?.agents || []).map((a) => [a.id, a.prenom]));
-  const colonnes = (etat?.colonnes || []).map((c) => ({id: c.id, nom: c.nom, terminee: c.terminee === true, taches: []}));
+  const colonnes = (etat?.colonnes || []).map((c) => ({id: c.id, nom: c.nom, terminee: c.terminee === true,
+    genre: c.genre || null, workflow: c.workflow || null, taches: []}));
   const parId = new Map(colonnes.map((c) => [c.id, c]));
   for (const t of etat?.taches || []) {
     const c = parId.get(t.colonne);
@@ -46,6 +52,7 @@ export function ouvrirKanban(etat, ouvrirTache) {
   for (const col of colonnes) {
     const c = el("section", "kanban-plein-colonne" + (col.terminee ? " terminee" : ""));
     c.append(el("h3", "", `${col.nom} (${col.taches.length})`));
+    if (etiquetteColonne(col)) c.append(el("p", "kanban-plein-genre", etiquetteColonne(col)));
     for (const t of col.taches.slice(0, 200)) {
       const carte = el("button", "kanban-carte" + (t.bloquee ? " bloquee" : "") + (t.active ? "" : " inactive"));
       carte.type = "button";

@@ -41,8 +41,12 @@ def calcules(r, usages_cout, periode, maintenant):
     `usages_cout` : le résultat de `cout.facturation` pour la même période (ou None)."""
     service_de = _service_de(r)
     terminees = {c["id"] for c in r.get("colonnes", []) if c.get("terminee")}
+    # Une fonctionnalité partie dans un autre projet ne compte ni comme livrée ni dans les chiffres de celui-ci.
+    parties = {f.get("id") for f in r.get("fonctionnalites") or [] if isinstance(f, dict) and f.get("etape") == "deplacee"}
     par_service = {s["id"]: [] for s in r.get("services", [])}
     for t in r.get("taches", []):
+        if t.get("fonctionnalite") in parties:
+            continue
         s = service_de.get(t.get("titulaire"))
         if s in par_service and _dans_la_periode(t.get("maj"), periode, maintenant):
             par_service[s].append(t)

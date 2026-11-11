@@ -51,6 +51,12 @@ class TestHistoriqueUsage(unittest.TestCase):
                                  "t_prix": "2026-11-09T10:00:00", "entree": 1000, "sortie": 200,
                                  "cache_lecture": 30, "cache_ecriture": 0})
 
+    def test_le_genre_de_la_fonctionnalite_est_gardé(self):
+        self.h.integrer(releve_avec(usage(genre_fonctionnalite="jeu-web"), usage(id="u2")))
+        lignes = {x["id"]: x for x in self.h.lire()}
+        self.assertEqual(lignes["u1"]["genre_fonctionnalite"], "jeu-web")
+        self.assertNotIn("genre_fonctionnalite", lignes["u2"])   # un usage ancien n'en a pas
+
     def test_compteurs_mis_a_jour_date_inchangee(self):
         self.h.integrer(releve_avec(usage()))
         self.h.integrer(releve_avec(usage(t="2026-11-10T09:00:00", entree=5000, sortie=900)))

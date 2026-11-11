@@ -13,9 +13,12 @@ import threading
 from pathlib import Path
 
 COMPTEURS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
-TEXTES = ("tache", "agent", "service", "modele", "etape", "lot", "reparti")
-FACULTATIFS = ("lot", "reparti")   # absents quand le relevé n'en porte pas
-CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "lot", "reparti", "t", "t_prix") + COMPTEURS
+TEXTES = ("tache", "agent", "service", "modele", "etape", "lot", "reparti", "genre_fonctionnalite")
+# Absents quand le relevé n'en porte pas. `genre_fonctionnalite` : le genre de la fonctionnalité de la tâche (le champ
+# `genre` d'un usage est réservé aux partenaires) ; un usage ancien n'en a pas et compte pour le genre de son projet.
+FACULTATIFS = ("lot", "reparti", "genre_fonctionnalite")
+CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "lot", "reparti", "genre_fonctionnalite", "t",
+          "t_prix") + COMPTEURS
 # Une ligne d'usage d'un partenaire (voix, images…) : sa quantité, son coût d'origine (ou null : non chiffré).
 CHAMPS_PARTENAIRE = ("id", "genre", "partenaire", "tache", "agent", "service", "quantite", "unite", "cout", "devise",
                      "estime", "t", "t_prix")

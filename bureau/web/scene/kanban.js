@@ -147,7 +147,17 @@ export class Kanban {
       if (i > 0) { x.beginPath(); x.moveTo(gauche, 0.04 * px); x.lineTo(gauche, H - 0.04 * px); x.stroke(); }
       let nom = String(col.nom ?? col.id ?? "");
       while (nom.length > 1 && x.measureText(nom).width > lc - 12) nom = nom.slice(0, -2) + "…";
-      x.fillText(nom, gauche + lc / 2, k.entete / 2 * px);
+      const genre = typeof col.genre === "string" ? col.genre : "";
+      x.fillText(nom, gauche + lc / 2, genre ? k.entete * 0.34 * px : k.entete / 2 * px);
+      if (genre) {   // le genre de la colonne, plus petit, sous son nom
+        x.save();
+        x.font = `400 ${Math.round(taille * 0.6)}px system-ui, sans-serif`;
+        x.fillStyle = "#6b6f8a";
+        let g = genre;
+        while (g.length > 1 && x.measureText(g).width > lc - 12) g = g.slice(0, -2) + "…";
+        x.fillText(g, gauche + lc / 2, k.entete * 0.72 * px);
+        x.restore();
+      }
     });
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -192,7 +202,7 @@ export class Kanban {
   }
 
   synchroniser(colonnes, postits, taches, file, imagesOk = false) {
-    const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom]));
+    const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom, c.genre || null]));
     if (sigCol !== this.signatureColonnes) { this.signatureColonnes = sigCol; this._dessinerColonnes(colonnes); }
     const cases = this._disposition(colonnes, postits, taches, file);
     const sig = JSON.stringify(cases.map((c) => [c.cle, c.colonne, c.rang, c.texte, c.depliable]));

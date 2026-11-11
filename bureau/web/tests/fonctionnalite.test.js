@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {ETAPES_PARCOURS, bandeau, demandeNouvelle, demandeMessage, demandeCahier, demandeMethode,
-        verifierPieces, lireImage, ecrit, nouvelleApparue} from "../ui/fonctionnalite.js";
+        verifierPieces, lireImage, ecrit, nouvelleApparue, genreEtWorkflow, libelleEtape,
+        documentsParEtape} from "../ui/fonctionnalite.js";
 
 const Mo = 1024 * 1024;
 const png = (nom = "a.png", size = 100) => ({name: nom, type: "image/png", size});
@@ -289,4 +290,22 @@ test("reprise d'une méthode : trois réponses, seulement quand la question est 
   assert.deepEqual(g.reponses[2].demande(), {type: "methode", fonctionnalite: "f6", verdict: "revoir"});
   assert.equal(gestesReprise(f, false), null);                  // sans le droit d'agir
   assert.equal(gestesReprise({id: "f1", decisions: []}, true), null);
+});
+
+test("la page d'une fonctionnalité nomme son genre et son workflow, et une fonctionnalité partie ailleurs le dit", () => {
+  assert.equal(genreEtWorkflow({genre: "jeu-android", workflow: "w-f2"}), "Genre : jeu-android · Workflow : w-f2");
+  assert.equal(genreEtWorkflow({genre: "badges"}), "Genre : badges");
+  assert.equal(genreEtWorkflow({}), "");
+  assert.equal(genreEtWorkflow(null), "");
+  assert.equal(libelleEtape({etape: "terminee"}), "Terminée");
+  assert.equal(libelleEtape({etape: "deplacee", deplacee_vers: "Casse-briques"}), "Partie dans le projet Casse-briques");
+  assert.equal(libelleEtape({etape: "deplacee"}), "Partie dans un autre projet");
+  assert.equal(libelleEtape({etape: "serie"}), "Série");
+  assert.ok(bandeau("deplacee").every((x) => !x.faite && !x.courante));
+});
+
+test("documentsParEtape : les étapes d'un workflow dont les colonnes ont quitté le tableau gardent leur nom", () => {
+  const f = {workflow_etapes: [{id: "f2-dev", nom: "Développement"}, {id: "f2-livraison", nom: "Livraison"}],
+             documents: [{etape: "f2-livraison", titre: "apk", date: "2026-11-10"}, {etape: "f2-dev", titre: "code", date: "2026-11-09"}]};
+  assert.deepEqual(documentsParEtape(f, []).map((g) => g.libelle), ["Développement", "Livraison"]);
 });

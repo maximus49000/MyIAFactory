@@ -277,6 +277,9 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
     """Le coût de chaque tâche d'une fonctionnalité, depuis toujours (pas de période : c'est le prix de la
     fonctionnalité). Un usage sans prix connu n'est compté dans aucun euro mais sa tâche le signale (`sans_prix`)."""
     taches = {t["id"]: t for t in r.get("taches") or [] if t.get("fonctionnalite") == fonctionnalite}
+    if any(isinstance(f, dict) and f.get("id") == fonctionnalite and f.get("etape") == "deplacee"
+           for f in r.get("fonctionnalites") or []):
+        taches = {}   # partie dans un autre projet : ce qui y a été fait n'est pas un coût de livraison ici
     lignes = {}
     for u in usages:
         if u.get("tache") not in taches or u.get("genre") == "partenaire":   # des tokens seulement

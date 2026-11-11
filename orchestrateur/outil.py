@@ -1065,10 +1065,14 @@ def cmd_usage(ctx, e):
         usages = s.setdefault("usage", [])
         compteurs = {"entree": entree, "sortie": sortie, **caches}
         if lot is not None and tache is None:
-            return _usage_d_un_lot(s, usages, lot, modele, agent, compteurs, "total" in e, texte(e, "etape", obligatoire=False))
+            r = _usage_d_un_lot(s, usages, lot, modele, agent, compteurs, "total" in e, texte(e, "etape", obligatoire=False))
+            _noter_genres_des_usages(ctx, s, usages, r["ids"])
+            return r
         if lot is not None and e.get("id") is not None:
-            return _usage_cumule_d_un_lot(s, usages, lot, e["id"], tache, modele, agent, compteurs, "total" in e,
-                                          texte(e, "etape", obligatoire=False))
+            r = _usage_cumule_d_un_lot(s, usages, lot, e["id"], tache, modele, agent, compteurs, "total" in e,
+                                       texte(e, "etape", obligatoire=False))
+            _noter_genres_des_usages(ctx, s, usages, [r["id"]])
+            return r
         if e.get("id") is not None:
             u = next((x for x in usages if x["id"] == e["id"]), None)
             if u is None or u.get("genre") == "partenaire":
@@ -1078,12 +1082,29 @@ def cmd_usage(ctx, e):
             usages.append(u)
         u.update({"agent": agent, "tache": tache, "modele": modele, "entree": entree, "sortie": sortie, **caches,
                   "estime": "total" in e})
+        _noter_genre_de_l_usage(ctx, s, u, su.tache(s, tache) if tache else None)
         if lot is not None:
             u["lot"] = lot
         etape = texte(e, "etape", obligatoire=False)
         if etape:
             u["etape"] = etape
         return {"id": u["id"]}
+
+
+def _noter_genre_de_l_usage(ctx, s, u, t):
+    """Le genre de la fonctionnalité de la tâche, noté sur l'usage (clé `genre_fonctionnalite` : le champ `genre` d'un
+    usage est réservé aux partenaires). Sans genre connu, rien n'est noté."""
+    genre = genre_de_tache(ctx, s, t)
+    if genre:
+        u["genre_fonctionnalite"] = genre
+    else:
+        u.pop("genre_fonctionnalite", None)
+
+
+def _noter_genres_des_usages(ctx, s, usages, ids):
+    for u in usages:
+        if u["id"] in ids:
+            _noter_genre_de_l_usage(ctx, s, u, su.tache(s, u["tache"]) if u.get("tache") else None)
 
 
 def _compteurs_du_sous_agent(agent_id):
@@ -1219,8 +1240,12 @@ def construire_releve(ctx):
         if f["etape"] == "cadrage" and f["agent_cadrage"] in cles and f["id"] not in avec_tache:
             taches.append({"id": f"cadrage:{f['id']}", "titre": f"Cadrage : {f['nom']}", "colonne": "cadrage",
                            "active": True, "titulaire": f["agent_cadrage"], "etape": "", "maj": f["maj"]})
+    colonnes = _colonnes_du_releve(ctx, s["fonctionnalites"])
+    visibles = {c["id"] for c in colonnes}
     for t in s["taches"]:
-        v = {"id": t["id"], "titre": t["titre"], "colonne": t["colonne"], "active": t["active"],
+        # La colonne d'une fonctionnalité finie ou partie ailleurs n'est plus au tableau : sa tâche est rangée à « fait ».
+        v = {"id": t["id"], "titre": t["titre"], "colonne": t["colonne"] if t["colonne"] in visibles else "fait",
+             "active": t["active"],
              "titulaire": t["agent"] if t["agent"] in cles else None, "etape": t["etape"] or "", "maj": t["maj"],
              "journal": list(t["journal"]), "fonctionnalite": t["fonctionnalite"], "element": t["element"],
              "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"],
@@ -1243,6 +1268,9 @@ def construire_releve(ctx):
         for cle in ("genre", "workflow", "deplacee_vers"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
             if f.get(cle):
                 v[cle] = f[cle]
+        w = wf.de_la_fonctionnalite(ctx.f, f) if f.get("workflow") else None
+        if w:   # ses étapes, pour nommer les documents d'une fonctionnalité dont les colonnes ont quitté le tableau
+            v["workflow_etapes"] = [{"id": x["id"], "nom": x["nom"]} for x in w["flux"]]
         for m in f["discussion"]:
             m = dict(m)
             if m.get("images"):
@@ -1283,7 +1311,7 @@ def construire_releve(ctx):
     en_pause = s["factory"]["etat"] == "en pause"
     r = {"version": 4, "projet": ctx.f["nom"], "factory": dict(s["factory"]),
          "services": [dict(x) for x in ctx.f["services"]],
-         "colonnes": _colonnes_du_releve(ctx, s["fonctionnalites"]),
+         "colonnes": colonnes,
          "titulaires": titulaires, "taches": taches,
          "file": {"visibles": elements_file[:VISIBLES], "suite": elements_file[VISIBLES:VISIBLES + rel.MAX_SUITE],
                   "reste": max(0, len(elements_file) - VISIBLES)},
@@ -1302,6 +1330,7 @@ def construire_releve(ctx):
                    "t": u["t"], "entree": u["entree"], "sortie": u["sortie"],
                    "cache_lecture": u.get("cache_lecture", 0), "cache_ecriture": u.get("cache_ecriture", 0),
                    **({"etape": u["etape"]} if u.get("etape") else {}),
+                   **({"genre_fonctionnalite": u["genre_fonctionnalite"]} if u.get("genre_fonctionnalite") else {}),
                    **({"lot": u["lot"]} if u.get("lot") else {}),
                    **({"reparti": u["reparti"]} if u.get("reparti") else {})}
                   for u in (s.get("usage") or [])[-USAGES_AU_RELEVE:]]
@@ -1726,6 +1755,17 @@ def _noter_lecon(ctx, e):
     return {"id": i}
 
 
+def genre_de_tache(ctx, s, t):
+    """Le genre de la fonctionnalité de la tâche, sinon celui du projet."""
+    fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t and t.get("fonctionnalite") else None
+    return wf.genre_de(ctx.f, fonc)
+
+
+def _genre_de_la_lecon(ctx, s, lecon):
+    """Le genre de la fonctionnalité où la leçon a été notée (sa tâche), sinon celui du projet."""
+    return genre_de_tache(ctx, s, su.tache(s, lecon["tache"]) if lecon.get("tache") else None)
+
+
 def _appliquer_lecon(ctx, e):
     i, verdict = texte(e, "id"), e.get("verdict")
     if verdict not in ("valider", "invalider"):
@@ -1742,7 +1782,7 @@ def _appliquer_lecon(ctx, e):
             raise Refus("Cette leçon n'a pas de texte général : elle ne peut aller qu'à l'étage projet.")
         general = lecon["texte_general"].strip()
         titre = general.split(".")[0].strip()[:60] or general[:60]
-        ok, message = memoire.ajouter(ctx.f["memoire"], etage, ctx.f["genre"],
+        ok, message = memoire.ajouter(ctx.f["memoire"], etage, _genre_de_la_lecon(ctx, s, lecon),
                                       {"titre": titre, "texte": general, "roles": lecon.get("roles") or ["tous"]},
                                       ctx.f["mots_interdits"])
         if not ok:   # la leçon reste « à valider » : rien n'a changé
@@ -1825,18 +1865,21 @@ def _depart_d_un_lot(ctx, e):
             raise Refus(f"Tâche inconnue : {i}")
         taches.append(t)
     roles = list(dict.fromkeys(t.get("role") or fiche_agent["role"] for t in taches))
+    genres = list(dict.fromkeys(genre_de_tache(ctx, s, t) for t in taches))   # une tâche, le genre de sa fonctionnalité
     lecons_lot = {"skill": [], "genre": []}
-    for role in roles:
-        lues = memoire.lire(ctx.f["memoire"], ctx.f["genre"], role)
-        for genre in lecons_lot:
-            lecons_lot[genre] = _sans_doublon(lecons_lot[genre] + lues[genre])
+    for g in genres:
+        for role in roles:
+            lues = memoire.lire(ctx.f["memoire"], g, role)
+            for etage in lecons_lot:
+                lecons_lot[etage] = _sans_doublon(lecons_lot[etage] + lues[etage])
     glossaire = []
     for t in taches:
         fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
         glossaire = _sans_doublon(glossaire + list((fonc or {}).get("glossaire") or []))
     briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
     ids_partenaires = list(dict.fromkeys(i for t in taches for i in t.get("partenaires") or []))
-    return {"message": depart.message_lot(ctx.f, fiche_agent, taches, briefs, lecons_lot, glossaire,
+    factory = {**ctx.f, "genre": ", ".join(g for g in genres if g) or None}
+    return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire,
                                           regles_des_partenaires(ctx, ids_partenaires),
                                           par_le_moteur=e.get("moteur", False))}
 
@@ -1853,9 +1896,12 @@ def cmd_depart(ctx, e):
     tache_suivie = su.tache(ctx.suivi.lire(), i)
     if tache_suivie is None:
         raise Refus(f"Tâche inconnue : {i}")
-    lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], fiche_agent["role"])
-    fonc = su.fonctionnalite(ctx.suivi.lire(), tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
-    return {"message": depart.message(ctx.f, fiche_agent, tache_suivie, depart.brief(ctx.f, fiche_agent["role"]), lecons,
+    s = ctx.suivi.lire()
+    fonc = su.fonctionnalite(s, tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
+    genre = wf.genre_de(ctx.f, fonc)   # les leçons du genre de la fonctionnalité de la tâche
+    lecons = memoire.lire(ctx.f["memoire"], genre, fiche_agent["role"])
+    return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie,
+                                      depart.brief(ctx.f, fiche_agent["role"]), lecons,
                                       (fonc or {}).get("glossaire") or [],
                                       regles_des_partenaires(ctx, tache_suivie.get("partenaires") or []))}
 

@@ -111,6 +111,22 @@ class TestUsagesDuGenre(unittest.TestCase):
                          ["Haiku", "Sonnet", "Sonnet"])
         self.assertEqual([u["modele"] for u in estimation.usages_du_genre(bureau, "web")], ["Opus"])
 
+    def test_estimation_par_genre_de_fonctionnalite(self):
+        # Un projet « jeu » dont une fonctionnalité est du genre « web » : ses usages se rangent par genre de
+        # fonctionnalité ; un usage ancien, sans genre, compte pour le genre du projet.
+        a = self.projet("a", "jeu", ["Sonnet", "Haiku", "Opus"])
+        d = self.base / "a" / ".factory"
+        (d / "factory.json").write_text(json.dumps({"genre": "jeu", "workflows": [
+            {"id": "w-f2", "fonctionnalite": "f2", "genre": "web", "flux": []}]}), encoding="utf-8")
+        lignes = [json.loads(x) for x in (d / "usage-historique.jsonl").read_text(encoding="utf-8").splitlines()]
+        lignes[0]["genre_fonctionnalite"] = "web"   # Sonnet : une fonctionnalité web
+        lignes[1]["genre_fonctionnalite"] = "jeu"   # Haiku : une fonctionnalité du genre du projet
+        (d / "usage-historique.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lignes), encoding="utf-8")
+        bureau = self.base / "bureau.json"
+        bureau.write_text(json.dumps({"projets": [a]}), encoding="utf-8")
+        self.assertEqual([u["modele"] for u in estimation.usages_du_genre(bureau, "web")], ["Sonnet"])
+        self.assertEqual(sorted(u["modele"] for u in estimation.usages_du_genre(bureau, "jeu")), ["Haiku", "Opus"])
+
     def test_genre_nul_ou_bureau_absent(self):
         a = self.projet("a", "jeu", ["Sonnet"])
         bureau = self.base / "bureau.json"

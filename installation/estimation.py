@@ -15,8 +15,17 @@ USAGES_MIN = 5
 MODELE_CADRAGE = "Sonnet"
 
 
+def _genres_du_projet(factory):
+    """Les genres d'un projet : le sien et ceux de ses workflows."""
+    genres = {factory.get("genre")}
+    genres |= {w.get("genre") for w in factory.get("workflows") or [] if isinstance(w, dict)}
+    genres.discard(None)
+    return genres
+
+
 def usages_du_genre(bureau_json, genre):
-    """Les usages enregistrés par les projets du bureau qui ont ce genre (rien si le genre est nul)."""
+    """Les usages enregistrés par les projets du bureau pour ce genre (rien si le genre est nul). Un usage porte le
+    genre de la fonctionnalité de sa tâche ; un usage ancien, sans genre, compte pour le genre de son projet."""
     if not genre:
         return []
     try:
@@ -31,8 +40,11 @@ def usages_du_genre(bureau_json, genre):
             factory = json.loads((chemin.parent / r["orchestrateur"]).read_text(encoding="utf-8-sig"))
         except (ValueError, OSError, KeyError, TypeError):
             continue
-        if isinstance(factory, dict) and factory.get("genre") == genre:
-            sortie += HistoriqueUsage(chemin.parent / "usage-historique.jsonl").lire()
+        if not isinstance(factory, dict) or genre not in _genres_du_projet(factory):
+            continue
+        for u in HistoriqueUsage(chemin.parent / "usage-historique.jsonl").lire():
+            if (u.get("genre_fonctionnalite") or factory.get("genre")) == genre:
+                sortie.append(u)
     return sortie
 
 

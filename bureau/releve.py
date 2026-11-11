@@ -275,6 +275,11 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
         for champ in ("workflow", "deplacee_vers"):
             if not _texte_ou_nul(f.get(champ)):
                 erreurs.append(f"{nom} : « {champ} » doit être un texte.")
+        for k, x in enumerate(f.get("workflow_etapes") or [], 1) if isinstance(f.get("workflow_etapes"), list) else ():
+            if not (_est_dict(x) and _texte_plein(x.get("id")) and _texte(x.get("nom"))):
+                erreurs.append(f"{nom} : « workflow_etapes » : l'étape {k} doit avoir un « id » et un « nom ».")
+        if f.get("workflow_etapes") is not None and not isinstance(f["workflow_etapes"], list):
+            erreurs.append(f"{nom} : « workflow_etapes » doit être une liste.")
         _verifier_discussion(f, nom, cles_agents, erreurs)
         _verifier_cahier_methode(f, nom, erreurs)
         if f.get("livrable") is not None and not _livrable_ok(f["livrable"]):

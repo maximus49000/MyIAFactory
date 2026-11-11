@@ -150,6 +150,39 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
   reçoit chaque geste de l'essai comme message (verdicts traduits en phrases) ; une réponse qui finit par « ? » compte
   comme une question. Ni l'un ni l'autre n'est essayé en vrai.
 
+**Phase D (Opus 5.5), en cours.**
+- **Mesure de référence** (`banc reference`, table de prix de l'essai) : 97 appels Sonnet, 13 577 727 tokens (13,4 M
+  relus), **1,89 €** d'orchestration (le repère de 1,76 € venait d'une autre table de prix) ; production des
+  sous-agents 1,56 €.
+- **Corrections faites pour que le banc joue l'essai réel** (chacune testée) :
+  - `construire` ne trouvait **aucun** rapport : le texte final d'un sous-agent est dans son appel `SubagentHandback`
+    (pas dans un message), la tâche est citée librement (« tâche t2 ») ou dans un fichier `depart_*.md`, le cadrage
+    n'a pas d'identifiant. Le rôle se lit dans le départ (« Rôle : », « Tu es le … ») : les tâches de l'essai changent
+    de rôle en passant dans le flux. Les départs sont rangés par heure (le nom d'un fichier est un hasard). Une réponse
+    JSON (`texte`, `questions`, `maquette`, `etapes`) devient message et cahier.
+  - **Moteur** : il cherchait un agent de rôle `cadrage`, que ce projet installé n'a pas → rien ne démarrait. Ordre
+    retenu : rôle `cadrage`, sinon service Métier, sinon le rôle de la première étape de production.
+  - **Moteur** : sans agent `relecteur`, les relectures croisées ne partaient jamais (série bloquée). La dernière
+    étape du flux (ici le contrôle) en tient lieu : sa matière lui demande des `verdicts` par élément ; un refus suit
+    le chemin habituel (après-refus, correction), puis le contrôle est refait.
+  - Scénario : l'orchestrateur actuel posait la validation de la méthode en question dans la discussion ; la réponse
+    « → Valider la méthode » devient le geste `methode`. Les `retour` sur une tâche de l'essai sont écartés (son
+    identifiant ne désigne rien dans le moteur). Le rapport du contrôle reçoit un verdict par élément (lignes qui
+    citent l'élément et disent FAIL). Chaque verdict porte le **rang** de son élément : le découpage réel nomme ses
+    éléments à sa façon, le rejoueur rend le verdict à l'élément du moteur de même rang (un lot donne leur rang à tous
+    ses éléments). Le projet du scénario est celui du **départ** : leçons et méthodes écrites pendant l'essai retirées.
+  - Banc : `moteur --vrais-agents` (projet gardé sous le banc, `moteur-vrai.json`), l'agent seul garde son projet ;
+    le rapport lit le total et le résultat sur le passage en vrai quand il existe.
+- **Moteur avec rejoueur** (jugements réels) : **5 appels, 0,077 € d'orchestration** (`decouper` Sonnet 0,011 €,
+  `ecrire_methode` Sonnet ≈ 0,060 € dont 5 400 tokens de sortie, `traduire_retour` et deux `apres_refus` Haiku
+  ≈ 0,005 €). Objectif ≤ 0,10 € **tenu sans tour de réglage**. 4 attendus sur 5 : cahier validé après 2 corrections,
+  méthode, 5 éléments, élément refusé corrigé ; les **leçons** manquent (le scénario ne rejoue pas les leçons de
+  l'essai : elles étaient dans le texte libre des rapports). 7 questions (essai : 8). Écarts : le moteur fait des lots
+  de 2 (l'essai un lot de 4) et refuse aussi un 2ᵉ élément que l'orchestrateur actuel avait laissé passer : leurs
+  tours n'ont pas de rapport à rejouer.
+- Marge : `ecrire_methode` fait l'essentiel du coût ; si un passage dépasse 0,10 €, c'est elle qu'il faut resserrer
+  (longueur du document et des briefs).
+
 ## Messages à coller
 
 **Phase A — Opus 5.5 — dans ce dépôt**

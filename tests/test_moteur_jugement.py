@@ -17,6 +17,38 @@ VALIDES = {
                        "controles": [{"texte": "Le titre fait au moins 24 px.", "origine": "prototype"}]},
     "apres_refus": {"suite": "corriger", "consigne": "Agrandir le titre.", "raison": "Le titre est trop petit."},
     "conseil": {"action": "repondre", "parametres": {}, "reponse": "C'est noté."},
+    "classer_genre": {"verdict": "proche", "genre": "badges-stream", "nouveau": None,
+                      "raison": "Mêmes outils de dessin et même sorte d'image que les badges."},
+    "proposer_organisation": {
+        "flux": [{"etape": "dev", "nom": "Développement", "role": "dev", "service": "jeu"},
+                 {"etape": "qualite", "nom": "Contrôle qualité", "role": "testeur", "service": "qualite"},
+                 {"etape": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "livraison"}],
+        "services": [{"id": "qualite", "nom": "Qualité"}, {"id": "livraison", "nom": "Livraison"}],
+        "agents": [{"cle": "testeur", "prenom": "Inès", "role": "testeur", "service": "qualite", "modele": "Haiku",
+                    "justification": "Vérification mécanique des tests et du livrable.", "texte": "Tu testes le jeu."},
+                   {"cle": "livreur", "role": "livreur", "service": "livraison", "modele": "Sonnet",
+                    "justification": "Construction et signature courantes.", "fable_suggere": False,
+                    "texte": "Tu construis et signes l'apk."}],
+        "briefs": {"testeur": "Lance les tests et essaie le jeu.", "livreur": "Construis l'apk signé et dépose-le."},
+        "livrable": "Le jeu en fichier .apk signé, déposé dans les livrables.",
+        "environnement": [{"outil": "JDK 17", "pour": "livraison", "executables": ["java", "javac"],
+                           "installation": "winget install Microsoft.OpenJDK.17 (source officielle, environ 180 Mo)."}],
+        "outils_installation": ["Bash(winget:*)", "Bash(sdkmanager:*)"]},
+}
+
+# Les jugements dont la validation lit le dossier (genres connus, agents et services du projet).
+DOSSIERS = {
+    "classer_genre": {"demande": {"texte": "Un logo pour le chat", "images": []},
+                      "projet": {"nom": "Projet d'essai", "description": "Des badges pour une chaîne."},
+                      "genres_du_projet": [{"id": "badges-stream", "domaine": "images", "livrable": "png",
+                                            "outils": "dessin"}],
+                      "genres_connus": [{"id": "badges-stream"}, {"id": "jeu-android"}],
+                      "mots_interdits": ["Zorglub"]},
+    "proposer_organisation": {"demande": {"texte": "Un casse-briques Android", "images": []}, "genre": "jeu-android",
+                              "projet": {"nom": "Projet d'essai", "description": "Des jeux."},
+                              "services": [{"id": "jeu", "nom": "Jeu"}],
+                              "agents": [{"cle": "dev", "role": "dev", "modele": "Sonnet", "specialite": "code"}],
+                              "workflows_du_genre": [], "fonctionnalite": "f2", "refus": None},
 }
 
 
@@ -44,7 +76,7 @@ class Juger(unittest.TestCase):
         for type_, objet in VALIDES.items():
             with self.subTest(type_=type_):
                 a = Appels(reponse(objet))
-                d = jugement.juger(type_, {"demande": "x"}, couche="claude", appeler=a)
+                d = jugement.juger(type_, DOSSIERS.get(type_, {"demande": "x"}), couche="claude", appeler=a)
                 self.assertEqual(d.objet, objet)
                 self.assertIsNone(d.question)
                 self.assertEqual(len(d.usages), 1)
@@ -54,7 +86,16 @@ class Juger(unittest.TestCase):
 
     def test_modeles_par_type(self):
         self.assertEqual(jugement.TYPES, {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet",
-                                          "apres_refus": "haiku", "conseil": "haiku"})
+                                          "apres_refus": "haiku", "conseil": "haiku", "classer_genre": "haiku",
+                                          "proposer_organisation": "sonnet"})
+
+    def test_la_validation_lit_le_dossier(self):
+        """Un genre inconnu du dossier est refusé, puis redemandé avec l'erreur."""
+        mauvais = dict(VALIDES["classer_genre"], genre="inconnu")
+        a = Appels(reponse(mauvais), reponse(VALIDES["classer_genre"]))
+        d = jugement.juger("classer_genre", DOSSIERS["classer_genre"], couche="claude", appeler=a)
+        self.assertEqual(d.objet, VALIDES["classer_genre"])
+        self.assertIn("inconnu", json.loads(a.recus[1]["dossier"])[jugement.CLE_ERREUR])
 
     def test_modele_impose(self):
         a = Appels(reponse(VALIDES["ecrire_methode"]))
@@ -127,17 +168,115 @@ class Juger(unittest.TestCase):
 class Valider(unittest.TestCase):
     def test_valides(self):
         for type_, objet in VALIDES.items():
-            self.assertIsNone(jugement.valider(type_, objet), type_)
+            self.assertIsNone(jugement.valider(type_, objet, DOSSIERS.get(type_)), type_)
 
     def test_pas_un_objet(self):
         for type_ in VALIDES:
-            self.assertIsNotNone(jugement.valider(type_, [1]))
-            self.assertIsNotNone(jugement.valider(type_, None))
+            self.assertIsNotNone(jugement.valider(type_, [1], DOSSIERS.get(type_)))
+            self.assertIsNotNone(jugement.valider(type_, None, DOSSIERS.get(type_)))
 
-    def _varie(self, type_, **changements):
+    def _varie(self, type_, dossier=None, **changements):
         objet = json.loads(json.dumps(VALIDES[type_]))
         objet.update(changements)
-        return jugement.valider(type_, objet)
+        return jugement.valider(type_, objet, dossier if dossier is not None else DOSSIERS.get(type_))
+
+    # --- classer_genre
+
+    def test_classer_genre_valide(self):
+        v = lambda **c: self._varie("classer_genre", **c)
+        self.assertIsNone(v(verdict="meme"))
+        self.assertIsNone(v(verdict="autre", genre="jeu-android"))
+        self.assertIsNone(v(verdict="autre", genre=None, nouveau={"id": "jeu-web", "description": "Jeux web."}))
+        self.assertIsNone(v(verdict="incertain", genre=None))
+        self.assertIsNone(v(verdict="incertain", genre="jeu-android"))
+        self.assertIsNotNone(v(verdict="peut-etre"))
+        self.assertIsNotNone(v(raison=""))
+        self.assertIsNotNone(v(genre=None))                               # proche sans genre
+        self.assertIsNotNone(v(genre="inconnu"))                          # proche : un genre connu seulement
+        self.assertIsNotNone(v(verdict="meme", genre="jeu-android"))      # meme : un genre du projet
+        self.assertIsNotNone(v(nouveau={"id": "logo", "description": "x"}))   # proche ne crée pas de genre
+        self.assertIsNotNone(v(verdict="autre", genre=None))              # autre : genre ou nouveau
+        self.assertIsNotNone(v(verdict="autre", nouveau={"id": "jeu-web", "description": "Jeux web."}))  # pas les deux
+        self.assertIsNotNone(v(verdict="autre", genre=None, nouveau={"id": "Jeu Web", "description": "x"}))
+        self.assertIsNotNone(v(verdict="autre", genre=None, nouveau={"id": "jeu-web", "description": ""}))
+        self.assertIsNotNone(v(verdict="autre", genre=None, nouveau={"id": "jeu-android", "description": "x"}))
+
+    def test_classer_genre_nouveau_mot_interdit_refuse(self):
+        v = lambda **c: self._varie("classer_genre", verdict="autre", genre=None, **c)
+        self.assertIsNotNone(v(nouveau={"id": "zorglub-jeux", "description": "Les jeux."}))
+        self.assertIsNotNone(v(nouveau={"id": "jeu-web", "description": "Les jeux de Zorglub."}))
+        self.assertIsNone(v(nouveau={"id": "jeu-web", "description": "Les jeux web."}))
+
+    def test_classer_genre_sans_dossier_ne_connait_aucun_genre(self):
+        self.assertIsNotNone(self._varie("classer_genre", dossier={}))
+        self.assertIsNone(self._varie("classer_genre", dossier={}, verdict="incertain", genre=None))
+
+    # --- proposer_organisation
+
+    def _orga(self, dossier=None, **changements):
+        return self._varie("proposer_organisation", dossier, **changements)
+
+    def _agents(self, **sur_le_premier):
+        agents = json.loads(json.dumps(VALIDES["proposer_organisation"]["agents"]))
+        agents[0].update(sur_le_premier)
+        return agents
+
+    def test_proposer_organisation_environnement_valide(self):
+        env = VALIDES["proposer_organisation"]["environnement"][0]
+        self.assertIsNone(self._orga(environnement=[]))
+        self.assertIsNone(self._orga(outils_installation=[]))
+        self.assertIsNotNone(self._orga(environnement=None))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, executables=[])]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, executables="java")]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, executables=["java --version"])]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, executables=["C:\\jdk\\java"])]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, installation="")]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, outil="")]))
+        self.assertIsNotNone(self._orga(environnement=[dict(env, pour="publication")]))   # étape inconnue
+        self.assertIsNone(self._orga(environnement=[dict(env, pour="Livraison de l'apk signé")]))   # nom de l'étape
+        self.assertIsNotNone(self._orga(outils_installation=["Bash"]))
+        self.assertIsNotNone(self._orga(outils_installation=["Bash(*)"]))
+        self.assertIsNotNone(self._orga(outils_installation=["Write"]))
+        self.assertIsNotNone(self._orga(outils_installation="Bash(winget:*)"))
+        self.assertIsNone(self._orga(outils_installation=["PowerShell(winget:*)", "Bash(gradle build)"]))
+
+    def test_proposer_organisation_sans_livraison_refuse(self):
+        flux = json.loads(json.dumps(VALIDES["proposer_organisation"]["flux"]))
+        self.assertIsNotNone(self._orga(livrable=""))
+        self.assertIsNotNone(self._orga(flux=flux[:2]))   # finit par le contrôle qualité
+        flux[2]["nom"] = "Remise du jeu"
+        self.assertIsNone(self._orga(flux=flux))
+        flux[2]["nom"] = "Fichier .apk signé"           # le nom reprend le livrable
+        self.assertIsNone(self._orga(flux=flux))
+
+    def test_proposer_organisation_fable_refuse(self):
+        self.assertIsNotNone(self._orga(agents=self._agents(modele="Fable")))
+        self.assertIsNotNone(self._orga(agents=self._agents(modele="fable")))
+        self.assertIsNotNone(self._orga(agents=self._agents(modele="GPT")))
+        self.assertIsNone(self._orga(agents=self._agents(modele="Opus", fable_suggere=True)))
+        self.assertIsNotNone(self._orga(agents=self._agents(fable_suggere="oui")))
+        self.assertIn("Fable", self._orga(agents=self._agents(modele="Fable")))
+
+    def test_proposer_organisation_role_sans_agent_refuse(self):
+        agents = VALIDES["proposer_organisation"]["agents"]
+        self.assertIsNotNone(self._orga(agents=agents[1:]))              # testeur sans agent
+        sans_dev = dict(DOSSIERS["proposer_organisation"], agents=[])
+        self.assertIsNotNone(self._orga(dossier=sans_dev))               # dev sans agent
+        self.assertIsNotNone(self._orga(briefs={"livreur": "x"}))        # testeur sans brief
+
+    def test_proposer_organisation_flux_et_services(self):
+        flux = VALIDES["proposer_organisation"]["flux"]
+        self.assertIsNotNone(self._orga(flux=[]))
+        self.assertIsNotNone(self._orga(flux=[dict(flux[0], service="inconnu")] + flux[1:]))
+        self.assertIsNotNone(self._orga(flux=[dict(flux[0], etape="cadrage")] + flux[1:]))
+        self.assertIsNotNone(self._orga(flux=[flux[0], flux[0]] + flux[1:]))
+        self.assertIsNotNone(self._orga(flux=[dict(flux[0], etape="Dév")] + flux[1:]))
+        self.assertIsNotNone(self._orga(services=[{"id": "jeu", "nom": "Jeu"}] +
+                                        VALIDES["proposer_organisation"]["services"]))   # déjà au projet
+        self.assertIsNotNone(self._orga(agents=self._agents(cle="dev")))  # clé déjà prise
+        self.assertIsNotNone(self._orga(agents=self._agents(justification="")))
+        self.assertIsNotNone(self._orga(agents=self._agents(texte="")))
+        self.assertIsNotNone(self._orga(agents=self._agents(service="inconnu")))
 
     def test_decouper(self):
         self.assertIsNotNone(self._varie("decouper", elements=[]))
@@ -232,7 +371,23 @@ class Consignes(unittest.TestCase):
         for type_ in jugement.TYPES:
             texte = jugement.consigne(type_).lower()
             self.assertNotIn("myiafactory", texte)
-            self.assertNotIn("fable", texte.replace("jamais fable", ""))
+            self.assertNotIn("fable", texte.replace("jamais fable", "").replace("fable_suggere", ""))
+
+    def test_classer_genre_porte_les_decisions_de_l_utilisateur(self):
+        texte = jugement.consigne("classer_genre")
+        self.assertIn("mêmes savoir-faire, mêmes outils, même sorte de livrable", texte)
+        self.assertIn("dans le doute, `incertain`", texte)
+        for verdict in jugement.VERDICTS_GENRE:
+            self.assertIn(f"`{verdict}`", texte)
+
+    def test_proposer_organisation_porte_les_decisions_de_l_utilisateur(self):
+        texte = jugement.consigne("proposer_organisation")
+        self.assertIn("de la demande au livrable remis", texte)
+        self.assertIn("qualité", texte)
+        self.assertIn("tel quel", texte)
+        for modele in ("Haiku", "Sonnet", "Opus"):
+            self.assertIn(modele, texte)
+        self.assertIn("jamais Fable", texte)
 
 
 if __name__ == "__main__":

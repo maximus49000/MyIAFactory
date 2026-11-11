@@ -12,24 +12,43 @@ Dossiers attendus (préparés par la table de règles) :
 - `ecrire_methode` : `fonctionnalite`, `cahier`, `flux` (rôles), `prototype` (discussion du prototype, retours,
   rapports), `controles` déjà au registre ;
 - `apres_refus` : `element`, `refus` (contrôle ou verdicts de relecture), `tours`, `seuil_methode`, `methode` ;
-- `conseil` : `evenement`, `etat` court de la fonctionnalité, `consignes_propres`, `commandes` permises.
+- `conseil` : `evenement`, `etat` court de la fonctionnalité, `consignes_propres`, `commandes` permises ;
+- `classer_genre` : `demande` (texte, images ; ou la description d'un projet créé sans genre), `projet` (nom,
+  description), `genres_du_projet` ([{id, domaine, livrable, outils}], ceux de ses workflows), `genres_connus`
+  (`memoire.genres` de la skill), `mots_interdits` du projet ;
+- `proposer_organisation` : `demande`, `genre`, `projet` (nom, description), `services` ([{id, nom}]), `agents`
+  ([{cle, role, modele, specialite}]), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
+  (son id : le moteur préfixe chaque `etape` par `<id>-`), `refus` (texte du Directeur ou null).
+
+La validation de `classer_genre` et de `proposer_organisation` lit le dossier (genres connus, mots interdits, agents et
+services du projet) : la réponse ne peut citer que ce qui existe, ou le proposer.
 """
 import json
 import re
 from pathlib import Path
 
 from moteur import appel
+from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
+from orchestrateur.memoire import mots_trouves, normaliser_mot
 from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
-         "conseil": "haiku"}
+         "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
-            "conseil": "choisir quoi faire de cette demande"}
+            "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
+            "proposer_organisation": "proposer le workflow de cette fonctionnalité"}
 ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", "rien")
 COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
+VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
+MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
+# Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
+MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
+                     "mise en ligne")
+MOTIF_EXECUTABLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")   # un nom à chercher dans le PATH, rien d'autre
+MOTIF_REGLE_OUTIL = re.compile(r"^(Bash|PowerShell)\([A-Za-z0-9][A-Za-z0-9._-]*(:\*| [^()\r\n*]+)\)\Z")
 CLE_ERREUR = "erreur_de_ta_reponse_precedente"
 
 
@@ -74,7 +93,7 @@ def juger(type_, dossier, *, couche, appeler=appel.appeler, modele=None):
         usages += r.usages
         objet = extraire_json(r.texte)
         erreur = ("Ta réponse ne contient pas d'objet JSON lisible." if objet is None
-                  else valider(type_, objet))
+                  else valider(type_, objet, dossier))
         if erreur is None:
             return Decision(objet=objet, usages=usages)
     return Decision(usages=usages, question=(
@@ -116,9 +135,12 @@ def _texte(v):
     return isinstance(v, str) and v.strip() != ""
 
 
-def valider(type_, objet):
+def valider(type_, objet, dossier=None):
+    """`dossier` : celui envoyé au jugement ; `classer_genre` et `proposer_organisation` le lisent."""
     if not isinstance(objet, dict):
         return "La réponse doit être un objet JSON."
+    if type_ in _VALIDEURS_AVEC_DOSSIER:
+        return _VALIDEURS_AVEC_DOSSIER[type_](objet, dossier if isinstance(dossier, dict) else {})
     return _VALIDEURS[type_](objet)
 
 
@@ -216,6 +238,173 @@ def _valider_conseil(o):
     return None
 
 
+def _ligne(v):
+    return _texte(v) and "\n" not in v and "\r" not in v
+
+
+def _ids_genres(liste):
+    """Les identifiants d'une liste de genres du dossier ([{id, …}] ou [id])."""
+    ids = []
+    for g in liste if isinstance(liste, list) else []:
+        i = g.get("id") if isinstance(g, dict) else g
+        if isinstance(i, str) and i not in ids:
+            ids.append(i)
+    return ids
+
+
+def _valider_classer_genre(o, d):
+    verdict, genre, nouveau = o.get("verdict"), o.get("genre"), o.get("nouveau")
+    if verdict not in VERDICTS_GENRE:
+        return f"« verdict » doit être l'un de : {', '.join(VERDICTS_GENRE)}."
+    if not _texte(o.get("raison")):
+        return "« raison » (une phrase pour l'utilisateur) est obligatoire."
+    du_projet = _ids_genres(d.get("genres_du_projet"))
+    connus = du_projet + [g for g in _ids_genres(d.get("genres_connus")) if g not in du_projet]
+    if genre is not None and genre not in connus:
+        return (f"« genre » doit être l'id d'un genre du dossier ({', '.join(connus) or 'aucun'}) ou null, pas "
+                f"« {genre} » ; un genre qui n'existe pas encore va dans « nouveau ».")
+    if nouveau is not None:
+        if verdict in ("meme", "proche"):
+            return f"« nouveau » vaut null quand le verdict est {verdict}."
+        if not (isinstance(nouveau, dict) and isinstance(nouveau.get("id"), str) and MOTIF_GENRE.match(nouveau["id"])
+                and _ligne(nouveau.get("description"))):
+            return ("« nouveau » est null ou {id (minuscules, chiffres, tirets, 40 caractères au plus), "
+                    "description (une ligne)}.")
+        if nouveau["id"] in connus:
+            return f"Le genre « {nouveau['id']} » existe déjà : mets-le dans « genre » et « nouveau » à null."
+        interdits = mots_trouves(f"{nouveau['id']} {nouveau['description']}", d.get("mots_interdits") or [])
+        if interdits:
+            return (f"« nouveau » contient un mot interdit du projet ({', '.join(interdits)}) : un genre est public, "
+                    "décris-le sans nom propre.")
+        if genre is not None:
+            return "Donne soit « genre » (un genre connu), soit « nouveau », pas les deux."
+    if verdict == "meme" and genre not in du_projet:
+        return "Le verdict meme exige dans « genre » l'id d'un genre du projet (« genres_du_projet »)."
+    if verdict == "proche" and genre is None:
+        return "Le verdict proche exige dans « genre » l'id d'un genre connu."
+    if verdict == "autre" and genre is None and nouveau is None:
+        return "Le verdict autre exige « genre » (un genre connu) ou « nouveau »."
+    return None
+
+
+def _dit_le_livrable(nom, livrable):
+    """Le nom de la dernière étape dit qu'elle remet le livrable : un mot de livraison, ou un mot du livrable."""
+    n = normaliser_mot(nom)
+    if any(m in n for m in MOTS_DE_LIVRAISON):
+        return True
+    mots = {m for m in re.findall(r"[a-z0-9]+", normaliser_mot(livrable)) if len(m) >= 3}
+    return any(m in mots for m in re.findall(r"[a-z0-9]+", n))
+
+
+def _valider_proposer_organisation(o, d):
+    services_projet = [s.get("id") for s in d.get("services") or [] if isinstance(s, dict)]
+    agents_projet = [a for a in d.get("agents") or [] if isinstance(a, dict)]
+    fonc = d.get("fonctionnalite") if isinstance(d.get("fonctionnalite"), str) else ""
+    services = o.get("services")
+    if not isinstance(services, list) or not all(isinstance(s, dict) for s in services):
+        return "« services » est la liste des nouveaux services {id, nom} (vide s'il n'en faut pas)."
+    nouveaux_services = []
+    for s in services:
+        if not (isinstance(s.get("id"), str) and MOTIF_ID.match(s["id"])) or not _ligne(s.get("nom")):
+            return f"Service {s.get('id')!r} : un « id » (minuscules, chiffres, tirets) et un « nom »."
+        if s["id"] in services_projet:
+            return f"Le service « {s['id']} » existe déjà au projet : ne propose que les nouveaux."
+        if s["id"] in nouveaux_services:
+            return f"Service « {s['id']} » en double."
+        nouveaux_services.append(s["id"])
+    tous_services = services_projet + nouveaux_services
+    flux = o.get("flux")
+    if not isinstance(flux, list) or not flux or not all(isinstance(x, dict) for x in flux):
+        return "« flux » doit lister les étapes {etape, nom, role, service}, de la demande au livrable remis."
+    etapes, noms, roles_du_flux = [], [], []
+    for x in flux:
+        e = x.get("etape")
+        if not (isinstance(e, str) and MOTIF_ID.match(e) and MOTIF_ID.match(f"{fonc}-{e}" if fonc else e)) \
+                or e in RESERVES:
+            return (f"Étape {e!r} : un id court (minuscules, chiffres, tirets), ni « cadrage » ni « fait » ; le "
+                    "moteur le préfixe par l'id de la fonctionnalité (40 caractères au plus en tout).")
+        if e in etapes:
+            return f"Étape « {e} » en double."
+        etapes.append(e)
+        if not _ligne(x.get("nom")):
+            return f"Étape « {e} » : un « nom » est attendu."
+        noms.append(x["nom"])
+        if not (isinstance(x.get("role"), str) and MOTIF_ID.match(x["role"])):
+            return f"Étape « {e} » : un « role » (minuscules, chiffres, tirets) est attendu."
+        if x["role"] not in roles_du_flux:
+            roles_du_flux.append(x["role"])
+        if x.get("service") not in tous_services:
+            return f"Étape « {e} » : service « {x.get('service')} » ni au projet ni proposé dans « services »."
+    if not _texte(o.get("livrable")):
+        return "« livrable » (ce qui est remis à l'utilisateur à la fin) est obligatoire."
+    if not _dit_le_livrable(flux[-1]["nom"], o["livrable"]):
+        return (f"La dernière étape (« {flux[-1]['nom']} ») doit produire ou remettre le livrable, et son nom doit le "
+                "dire (par exemple « Livraison de … ») : le workflow va de la demande au livrable remis.")
+    agents = o.get("agents")
+    if not isinstance(agents, list) or not all(isinstance(a, dict) for a in agents):
+        return "« agents » est la liste des nouveaux agents (vide s'il n'en faut pas)."
+    cles = [a.get("cle") for a in agents_projet]
+    roles = {a.get("role") for a in agents_projet}
+    roles_nouveaux = []
+    for a in agents:
+        c = a.get("cle")
+        if not (isinstance(c, str) and MOTIF_ID.match(c)):
+            return f"Agent {c!r} : une « cle » (minuscules, chiffres, tirets, 40 caractères au plus)."
+        if c in cles:
+            return f"Agent « {c} » : clé déjà prise."
+        cles.append(c)
+        if isinstance(a.get("modele"), str) and "fable" in a["modele"].lower():
+            return (f"Agent « {c} » : jamais Fable comme modèle ; mets Opus et « fable_suggere »: true si Fable "
+                    "serait vraiment utile (le Directeur décidera).")
+        if a.get("modele") not in MODELES_AGENT:
+            return f"Agent « {c} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
+        if not (isinstance(a.get("role"), str) and MOTIF_ID.match(a["role"])):
+            return f"Agent « {c} » : un « role » (minuscules, chiffres, tirets) est attendu."
+        roles.add(a["role"])
+        if a["role"] not in roles_nouveaux:
+            roles_nouveaux.append(a["role"])
+        if a.get("service") not in tous_services:
+            return f"Agent « {c} » : service « {a.get('service')} » ni au projet ni proposé."
+        if not _ligne(a.get("justification")):
+            return f"Agent « {c} » : « justification » du modèle, en une ligne."
+        if not _texte(a.get("texte")):
+            return f"Agent « {c} » : le « texte » de sa fiche est vide."
+        if a.get("prenom") is not None and not _ligne(a["prenom"]):
+            return f"Agent « {c} » : « prenom » tient sur une ligne."
+        if "fable_suggere" in a and not isinstance(a["fable_suggere"], bool):
+            return f"Agent « {c} » : « fable_suggere » vaut true ou false."
+    for r in roles_du_flux:
+        if r not in roles:
+            return f"Aucun agent pour le rôle « {r} » : propose-en un, ou confie l'étape à un rôle du projet."
+    briefs = o.get("briefs")
+    if not isinstance(briefs, dict) or not all(isinstance(k, str) and _texte(v) for k, v in briefs.items()):
+        return "« briefs » associe à chaque nouveau rôle un texte."
+    for r in roles_nouveaux:
+        if r not in briefs:
+            return f"Aucun brief pour le nouveau rôle « {r} »."
+    env = o.get("environnement")
+    if not isinstance(env, list) or not all(isinstance(x, dict) for x in env):
+        return "« environnement » est la liste des outils du poste {outil, pour, executables, installation} (vide si rien)."
+    for x in env:
+        if not _ligne(x.get("outil")):
+            return "Chaque outil de « environnement » a un nom (« outil »)."
+        if x.get("pour") not in etapes and x.get("pour") not in noms:
+            return f"Outil « {x['outil']} » : « pour » est l'« etape » du flux qui s'en sert."
+        ex = x.get("executables")
+        if not isinstance(ex, list) or not ex or not all(isinstance(v, str) and MOTIF_EXECUTABLE.match(v) for v in ex):
+            return (f"Outil « {x['outil']} » : « executables » liste les noms de programmes à chercher (par exemple "
+                    "« java »), sans chemin ni option.")
+        if not _texte(x.get("installation")):
+            return f"Outil « {x['outil']} » : « installation » dit comment l'installer sur Windows."
+    regles = o.get("outils_installation")
+    if not isinstance(regles, list) or not all(isinstance(r, str) and MOTIF_REGLE_OUTIL.match(r) for r in regles):
+        return ("« outils_installation » liste des règles d'outils précises, par exemple « Bash(winget:*) » ; ni "
+                "« Bash » seul ni « Bash(*) ».")
+    return None
+
+
 _VALIDEURS = {"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
               "ecrire_methode": _valider_ecrire_methode, "apres_refus": _valider_apres_refus,
               "conseil": _valider_conseil}
+_VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
+                           "proposer_organisation": _valider_proposer_organisation}

@@ -11,7 +11,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle proposé | Où | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | ce dépôt | 1 à 3 : chemins `~`, limite d'agents locaux, leçon gardée en local | Changements courts et cadrés, tests nommés | fait |
-| B | Sonnet 5.5 | ce dépôt | 4 à 6 : dossier stable, examen du dossier, calibrage et estimation | Fonctions au contrat écrit, tests en tableau | à faire |
+| B | Sonnet 5.5 | ce dépôt | 4 à 6 : dossier stable, examen du dossier, calibrage et estimation | Fonctions au contrat écrit, tests en tableau | fait |
 | C | Opus 5.5 | ce dépôt | 7 et 8 : proposition, mise en place, bureau commun, réparation, ligne de commande | Écritures atomiques sur plusieurs formats, réparation sans casser les adaptateurs | à faire |
 | D | Opus 5.5 | ce dépôt | 9 : le plugin et les consignes de la discussion | Les consignes guident toute l'installation : sobriété et justesse comptent plus que tout | à faire |
 | E | Sonnet 5.5 | ce dépôt | 10 : l'organisation qui évolue | Décision, demande et commande sur le modèle de celles qui existent | à faire |
@@ -30,6 +30,14 @@ Phase A (Sonnet 5.5) :
 - `depart.agent_libre` : la limite ne compte que les tâches actives tenues par une fiche de lieu `local` ; avec `lieu` non précisé, un agent cloud libre reste rendu quand les locaux sont retenus. La raison « limite de {n} agents locaux atteinte » n'apparaît que si un agent local aurait été rendu sans la limite.
 - Relevé : `agents_locaux_max` est un champ de racine de la version 4 ; `libelleCharge(c, agentsLocauxMax)` (`bureau/web/ui/texte.js`) ajoute « {n} agents locaux au plus » à la bulle ; documenté dans `docs/releve.md` et `docs/orchestrateur.md`.
 - `test_echec_du_push_defait_tout` est remplacé par `test_push_refuse_garde_le_commit_local` ; `test_echec_du_commit_defait_tout` garde l'ancienne garantie pour les autres échecs.
+
+Phase B (Sonnet 5.5) :
+
+- Les tâches 4 à 6 sont dans un seul commit. Le paquet `installation/` contient `dossier.py`, `examen.py`, `calibrage.py`, `estimation.py` (la phase C ajoute `proposition.py`, `mise_en_place.py`, `outil.py`).
+- `dossier.Echec` est l'exception de refus de tout le paquet : la phase C la réutilise (`from installation.dossier import Echec`). `preparer` rend aussi l'action `deja_lie` quand `lier` désigne déjà la cible du dossier stable ; sinon, avec `lier` et un dossier stable déjà dépôt git, le `pull` passe d'abord.
+- `examiner` rend en plus la clé `factory` (booléen) ; `nb_fichiers` vaut `"100000+"` au-delà de la borne ; `extensions` est une liste de `[extension, nombre]`.
+- `calibrer` : mesure indisponible → `charge_max` reste celui du `conseiller` ; avec historique, `agents_locaux_max` = `floor((85 - repos) / par_agent)` borné à 1..6 (6 si `par_agent` est nul).
+- `estimer` lève `ValueError` si un rôle du flux n'a pas d'agent (la proposition le refuse avant). `usages_du_genre` lit le genre de chaque projet du bureau par la clé `orchestrateur` de ses réglages ; un projet illisible est ignoré. Les euros comptent `PART_SORTIE` en sortie et ignorent les caches.
 
 ## Ce que chaque conversation doit savoir
 

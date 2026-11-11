@@ -86,9 +86,9 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 1. Les chemins `~`
 - [x] 2. La limite d'agents locaux
 - [x] 3. Une leçon gardée en local quand le push échoue
-- [ ] 4. Le dossier stable
-- [ ] 5. L'examen du dossier
-- [ ] 6. Le calibrage et l'estimation du coût
+- [x] 4. Le dossier stable
+- [x] 5. L'examen du dossier
+- [x] 6. Le calibrage et l'estimation du coût
 - [ ] 7. La proposition, la mise en place, le bureau commun, la réparation
 - [ ] 8. La ligne de commande de l'installation
 - [ ] 9. Le plugin et les consignes de la discussion

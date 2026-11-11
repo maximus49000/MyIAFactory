@@ -126,6 +126,25 @@ class Demandes(Base):
         t = self.taches(etape="cadrage")[0]
         self.assertEqual((t["agent"], t["colonne"], t["role"]), ("dev-1", "cadrage", "dev"))
 
+    def test_chemins_rendus_ramenes_au_dossier_de_la_factory(self):
+        """L'agent travaille dans le dossier du projet (le parent de `.factory`) ; le suivi et le bureau comptent depuis
+        `.factory`. Vu en vrai : `.factory/pieces/f2/maquette.png` dans le cahier, image introuvable au bureau."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            projet = regles.Projet(Path(d) / "jeu" / ".factory" / "factory.json")
+            absolu = str(Path(d) / "jeu" / ".factory" / "pieces" / "f2" / "b.png")
+            r = {"statut": "fait", "message": {"texte": "Voici.", "images": [".factory/pieces/f2/a.png", absolu]},
+                 "cahier": {"maquette": [".factory\\pieces\\f2\\a.png"], "etapes": ["Faire"]},
+                 "fichiers": [{"chemin": ".factory/pieces/f2/x.md", "titre": "x"},
+                              {"chemin": "pieces/f2/y.md", "titre": "y"},     # déjà relatif à la factory : gardé
+                              {"chemin": "src/main.kt", "titre": "code"}]}    # hors de la factory : gardé tel quel
+            n = regles._chemins_du_projet(projet, r)
+            self.assertEqual(n["message"]["images"], ["pieces/f2/a.png", "pieces/f2/b.png"])
+            self.assertEqual(n["cahier"]["maquette"], ["pieces/f2/a.png"])
+            self.assertEqual([x["chemin"] for x in n["fichiers"]], ["pieces/f2/x.md", "pieces/f2/y.md", "src/main.kt"])
+            self.assertEqual(r["cahier"]["maquette"], [".factory\\pieces\\f2\\a.png"])     # le rapport lu n'est pas modifié
+
     def test_le_cadrage_pose_une_seule_serie_de_questions(self):
         """Au passage en vrai, l'agent de cadrage reposait des questions à chaque tour et n'écrivait jamais le cahier."""
         _, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")

@@ -791,6 +791,31 @@ def _matiere(projet, etat, t):
 
 # --- Le retour d'un agent.
 
+def _chemin_du_projet(projet, chemin):
+    """Un chemin rendu par un agent, compté depuis le dossier de la factory (là où comptent le suivi et le bureau).
+    L'agent travaille dans le dossier du projet, le parent de `.factory` : il écrit `.factory/pieces/a.png`, ou un
+    chemin absolu. Un chemin hors de la factory est gardé tel quel."""
+    if not isinstance(chemin, str) or not chemin.strip():
+        return chemin
+    p = Path(chemin.replace("\\", "/"))
+    try:
+        return (p if p.is_absolute() else projet.dossier / p).resolve().relative_to(
+            projet.factory.resolve().parent).as_posix()
+    except ValueError:
+        return chemin
+
+
+def _chemins_du_projet(projet, r):
+    """Le rapport, ses chemins (images du message, maquette du cahier, fichiers) comptés depuis la factory."""
+    r = dict(r)
+    if isinstance(r.get("message"), dict) and isinstance(r["message"].get("images"), list):
+        r["message"] = {**r["message"], "images": [_chemin_du_projet(projet, x) for x in r["message"]["images"]]}
+    if isinstance(r.get("cahier"), dict) and isinstance(r["cahier"].get("maquette"), list):
+        r["cahier"] = {**r["cahier"], "maquette": [_chemin_du_projet(projet, x) for x in r["cahier"]["maquette"]]}
+    r["fichiers"] = [{**f, "chemin": _chemin_du_projet(projet, f.get("chemin"))} for f in r.get("fichiers") or []]
+    return r
+
+
 def traiter_retour(projet, execution, etat):
     """Applique le rapport d'un agent terminé (ou sa panne). Rend les actions qui restent."""
     depart = _m(etat, "departs").get(execution.tache) or {"agent": execution.agent, "taches": [execution.tache],
@@ -800,6 +825,7 @@ def traiter_retour(projet, execution, etat):
     r = execution.rapport
     if r is None:
         return _agent_en_echec(projet, etat, execution, depart)
+    r = _chemins_du_projet(projet, r)
     fid = None
     for tid in taches:
         t = _tache(projet, tid)

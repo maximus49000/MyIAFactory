@@ -510,5 +510,83 @@ class TestPartenairesDemandes(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({"type": "partenaires_actualiser", "x": 1}), {"type": "partenaires_actualiser"})
 
 
+ORGANISATION_WORKFLOW = {
+    "services": [{"id": "dev", "nom": "Dev"}], "flux": [], "briefs": {}, "cout": {"tokens": [1, 2], "euros": None},
+    "agents": [{"cle": "liv-1", "role": "livreur", "service": "dev", "modele": "Opus", "fable_suggere": True},
+               {"cle": "dev-2", "role": "dev", "service": "dev", "modele": "Sonnet"}],
+    "fonctionnalite": "f1", "workflow": {"id": "w-f1", "genre": "badges", "flux": []}}
+R5 = releve.normaliser({
+    "version": 4, "projet": "P", "factory": {"etat": "en marche"},
+    "services": [{"id": "dev", "nom": "Dev"}], "colonnes": [{"id": "a", "nom": "A"}],
+    "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+    "taches": [],
+    "fonctionnalites": [
+        {"id": "f1", "nom": "Casse-briques", "etape": "cadrage",
+         "decisions": [{"id": "q1", "genre": "genre_fonctionnalite", "texte": "Où le faire ?", "propose": "jeu-mobile",
+                        "genres_connus": ["badges"], "incertain": False,
+                        "nouveau": {"id": "jeu-mobile", "description": "Jeux"}}]},
+        {"id": "f2", "nom": "Incertain", "etape": "cadrage",
+         "decisions": [{"id": "q2", "genre": "genre_fonctionnalite", "texte": "Même genre ?", "propose": "badges",
+                        "genres_connus": ["badges"], "incertain": True}]}],
+    "decisions_projet": [{"id": "o2", "genre": "organisation", "texte": "Workflow ?",
+                          "organisation": ORGANISATION_WORKFLOW}]})
+
+
+class TestVerifierGenreEtWorkflow(unittest.TestCase):
+    """Les réponses aux décisions du parcours d'une nouvelle fonctionnalité (genre, workflow)."""
+
+    def ok(self, d):
+        self.assertIsNone(demandes.verifier(d, R5, frozenset(), None), d)
+
+    def refus(self, d):
+        self.assertTrue(demandes.verifier(d, R5, frozenset(), None), d)
+
+    def test_genre_fonctionnalite(self):
+        base = {"type": "genre_fonctionnalite", "decision": "q1", "fonctionnalite": "f1"}
+        self.ok({**base, "choix": "ici"})
+        self.ok({**base, "choix": "ici", "genre": "badges"})
+        self.ok({**base, "choix": "ici", "genre": "jeu-mobile"})                     # le genre nouveau de la décision
+        self.ok({**base, "choix": "ici", "genre": "jeu-de-role", "description": "Jeux de rôle"})
+        self.ok({**base, "choix": "nouveau_projet", "projet_cree": "C:/p/reglages.json"})
+        self.refus({**base, "choix": "ici", "genre": "jeu-de-role"})                  # nouveau, sans description
+        self.refus({**base, "choix": "ici", "genre": "Pas Valide"})
+        self.refus({**base, "choix": "meme"})                                         # le moteur n'hésitait pas
+        self.refus({**base, "choix": "nouveau_projet"})                               # sans le projet créé
+        self.refus({**base, "choix": "ailleurs"})
+        self.refus({**base, "choix": "ici", "decision": "zz"})
+        self.refus({**base, "choix": "ici", "fonctionnalite": "zz"})
+        self.refus({**base, "choix": "ici", "decision": "q2"})                        # la question d'une autre fonctionnalité
+        self.ok({"type": "genre_fonctionnalite", "decision": "q2", "fonctionnalite": "f2", "choix": "meme"})
+
+    def test_organisation_d_un_workflow(self):
+        base = {"type": "organisation", "decision": "o2"}
+        self.ok({**base, "verdict": "accepter"})
+        self.ok({**base, "verdict": "accepter", "fable": ["liv-1"]})
+        self.ok({**base, "verdict": "accepter", "fable": []})
+        self.ok({**base, "verdict": "refuser", "texte": "Sans service de livraison"})
+        self.ok({**base, "verdict": "refuser"})
+        self.ok({**base, "verdict": "abandonner"})
+        self.refus({**base, "verdict": "accepter", "fable": ["dev-2"]})                # Fable pas suggéré pour lui
+        self.refus({**base, "verdict": "accepter", "fable": "liv-1"})
+        self.refus({**base, "verdict": "refuser", "fable": ["liv-1"]})
+        self.refus({**base, "verdict": "refuser", "texte": "  "})
+        self.refus({**base, "verdict": "peut-etre"})
+
+    def test_abandonner_seulement_un_workflow(self):
+        sans = copy.deepcopy(R4)
+        self.assertTrue(demandes.verifier({"type": "organisation", "decision": "o1", "verdict": "abandonner"}, sans,
+                                          frozenset(), None))
+
+    def test_nettoyer(self):
+        d = demandes.nettoyer({"type": "genre_fonctionnalite", "decision": "q1", "fonctionnalite": "f1",
+                               "choix": "ici", "genre": "x", "description": "d", "projet_cree": "p", "autre": 1})
+        self.assertEqual(d, {"type": "genre_fonctionnalite", "decision": "q1", "fonctionnalite": "f1", "choix": "ici",
+                             "genre": "x", "description": "d", "projet_cree": "p"})
+        d = demandes.nettoyer({"type": "organisation", "decision": "o2", "verdict": "accepter", "fable": ["liv-1"],
+                               "texte": "t", "autre": 1})
+        self.assertEqual(d, {"type": "organisation", "decision": "o2", "verdict": "accepter", "texte": "t",
+                             "fable": ["liv-1"]})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,11 @@ class Jugements:
 
     def __call__(self, consigne, dossier, modele, **options):
         type_ = next(t for t in jugement.TYPES if jugement.consigne(t) == consigne)
+        if type_ in ("classer_genre", "proposer_organisation"):
+            # le banc n'a pas encore les gestes du parcours d'une nouvelle fonctionnalité (phase E de « un genre et un
+            # workflow par fonctionnalité ») : l'appel échoue, le moteur prend son issue de secours (le genre du
+            # projet, puis le cadrage) et le passage reste celui d'avant
+            raise appel.ErreurAppel("banc : pas de geste pour ce jugement")
         self.types.append(type_)
         return appel.Reponse(json.dumps(self.reponses[type_], ensure_ascii=False), [dict(USAGE_JUGEMENT)])
 

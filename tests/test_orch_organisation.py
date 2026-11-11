@@ -133,3 +133,144 @@ class TestFableSurAccord(AvecProjet):
         self.assertEqual(self.outil("tache", entree={"id": t, "agent": "dev-1", "modele_depart": "Fable"})[0], 1)
         self.assertEqual(self.outil("tache", entree={"id": t, "montee": {"de": "Opus", "a": "Fable",
                                                                          "raison": "x"}})[0], 1)
+
+
+def organisation_de_fonctionnalite(fid="f1", **extra):
+    flux = [{"id": f"{fid}-dev", "nom": "Développement", "role": "dev", "service": "dev"},
+            {"id": f"{fid}-son", "nom": "Livraison des sons", "role": "son", "service": "son"}]
+    o = organisation(flux=flux, fonctionnalite=fid, livrable="Les sons",
+                     workflow={"id": f"w-{fid}", "genre": "jeu-mobile", "flux": [dict(x) for x in flux]},
+                     environnement=[{"outil": "Java", "pour": "dev", "executables": ["java"], "installation": "x",
+                                     "etat": "a_installer"}], outils_installation=["Bash(winget:*)"])
+    o["agents"][0].update(modele="Opus", justification="Conception.", fable_suggere=True)
+    o.update(extra)
+    return o
+
+
+class TestWorkflowDeFonctionnalite(AvecProjet):
+    def nouvelle(self):
+        self.ok("actions", entree={"type": "fonctionnalite", "texte": "Un jeu"})
+        (self.dossier / "fiches" / "briefs").mkdir(exist_ok=True)
+        (self.dossier / "fiches" / "briefs" / "dev.md").write_text("Brief dev.", encoding="utf-8")
+        return "f1"
+
+    def lire_factory(self):
+        return json.loads(self.factory.read_text(encoding="utf-8"))
+
+    def poser(self, o=None):
+        return self.ok("decision", entree=poser(o or organisation_de_fonctionnalite()))["id"]
+
+    def test_decision_d_un_workflow_valide_et_lisible_au_releve(self):
+        self.nouvelle()
+        i = self.poser()
+        r = self.ok("releve")
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        d = next(x for x in r["decisions_projet"] if x["id"] == i)
+        self.assertEqual(d["organisation"]["workflow"]["id"], "w-f1")
+        self.assertEqual(d["organisation"]["agents"][0]["fable_suggere"], True)
+        self.assertEqual(self.poser(), i)
+
+    def test_decision_d_un_workflow_refusee(self):
+        self.nouvelle()
+        base = organisation_de_fonctionnalite()
+        etape_prise = dict(base["flux"][0], id="dev")
+        cas = {"fonctionnalité inconnue": {**base, "fonctionnalite": "f9"},
+               "workflow sans id": {**base, "workflow": {"genre": "x", "flux": base["flux"]}},
+               "workflow réservé": {**base, "workflow": {**base["workflow"], "id": "principal"}},
+               "flux différent": {**base, "workflow": {**base["workflow"], "flux": base["flux"][:1]}},
+               "genre invalide": {**base, "workflow": {**base["workflow"], "genre": "Pas Valide"}},
+               "étape déjà prise": {**base, "flux": [etape_prise, base["flux"][1]],
+                                    "workflow": {**base["workflow"], "flux": [etape_prise, base["flux"][1]]}},
+               "fable_suggere": {**base, "agents": [dict(base["agents"][0], fable_suggere="oui")]},
+               "environnement": {**base, "environnement": ["java"]}}
+        for nom, o in cas.items():
+            code, sortie = self.outil("decision", entree=poser(o))
+            self.assertEqual(code, 1, (nom, sortie))
+        self.assertEqual(self.ok("etat")["decisions"], [])
+
+    def appliquer(self, **plus):
+        self.nouvelle()
+        i = self.poser()
+        return self.outil("lancer", "organisation", entree={"action": "appliquer", "decision": i, **plus})
+
+    def test_appliquer_ajoute_le_workflow_sans_toucher_au_flux(self):
+        code, r = self.appliquer()
+        self.assertEqual(code, 0, r)
+        self.assertEqual((r["workflow"], r["fonctionnalite"], r["genre"]), ("w-f1", "f1", "jeu-mobile"))
+        f = self.lire_factory()
+        self.assertEqual([e["id"] for e in f["flux"]], ["dev", "relecture"])
+        self.assertEqual([(w["id"], w["fonctionnalite"], w["genre"]) for w in f["workflows"]],
+                         [("w-f1", "f1", "jeu-mobile")])
+        self.assertEqual([e["id"] for e in f["workflows"][0]["flux"]], ["f1-dev", "f1-son"])
+        self.assertEqual([s["id"] for s in f["services"]], ["metier", "dev", "son"])
+        self.assertEqual(f["environnement"][0]["outil"], "Java")
+        fonc = self.ok("etat")["fonctionnalites"][0]
+        self.assertEqual((fonc["genre"], fonc["workflow"]), ("jeu-mobile", "w-f1"))
+        self.assertEqual(self.ok("etat")["decisions"], [])
+        self.assertEqual(releve.valider(self.ok("releve")), [])
+
+    def test_appliquer_sans_fable_coche_garde_opus(self):
+        self.appliquer()
+        fiche = (self.dossier / "fiches" / "son-1.md").read_text(encoding="utf-8")
+        self.assertIn("Modèle : Opus", fiche)
+        self.assertNotIn("Fable", fiche)
+
+    def test_appliquer_avec_fable_coche(self):
+        code, r = self.appliquer(fable=["son-1"])
+        self.assertEqual(code, 0, r)
+        fiche = (self.dossier / "fiches" / "son-1.md").read_text(encoding="utf-8")
+        self.assertIn("Modèle : Fable", fiche)
+        self.assertRegex(fiche, r"Fable : accordé par le Directeur le \d{4}-\d{2}-\d{2}")
+        self.assertEqual(next(a for a in self.ok("etat")["agents"] if a["cle"] == "son-1")["modele"], "Fable")
+
+    def test_fable_refuse_pour_un_agent_non_suggere_ou_mal_forme(self):
+        self.nouvelle()
+        i = self.poser()
+        for fable in (["dev-1"], ["inconnu"], "son-1", [3]):
+            code, r = self.outil("lancer", "organisation", entree={"action": "appliquer", "decision": i, "fable": fable})
+            self.assertEqual(code, 1, (fable, r))
+        self.assertEqual(len(self.ok("etat")["decisions"]), 1)          # la décision reste
+        self.assertFalse((self.dossier / "fiches" / "son-1.md").exists())
+
+    def test_appliquer_refuse_une_etape_devenue_prise(self):
+        self.nouvelle()
+        i = self.poser()
+        d = self.lire_factory()
+        d["workflows"] = [{"id": "ailleurs", "fonctionnalite": None, "genre": None,
+                           "flux": [{"id": "f1-dev", "nom": "X", "role": "dev", "service": "dev"}]}]
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        code, r = self.outil("lancer", "organisation", entree={"action": "appliquer", "decision": i})
+        self.assertEqual(code, 1, r)
+        self.assertEqual(len(self.ok("etat")["decisions"]), 1)
+
+    def test_decision_genre_fonctionnalite(self):
+        self.nouvelle()
+        entree = {"action": "poser", "portee": "f1", "genre": "genre_fonctionnalite", "texte": "Où ?",
+                  "propose": "jeu-mobile", "genres_connus": ["badges"], "incertain": False,
+                  "nouveau": {"id": "jeu-mobile", "description": "Jeux pour téléphone"}}
+        i = self.ok("decision", entree=entree)["id"]
+        self.assertEqual(self.ok("decision", entree=entree)["id"], i)
+        d = self.ok("detail", entree={"fonctionnalite": "f1"})["decisions"][0]
+        self.assertEqual((d["propose"], d["incertain"], d["nouveau"]["id"]), ("jeu-mobile", False, "jeu-mobile"))
+        r = self.ok("releve")
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        for refus in ({"propose": "Pas Valide"}, {"propose": None}, {"genres_connus": ["Pas Valide"]},
+                      {"incertain": "oui"}, {"nouveau": {"id": "jeu-mobile"}}, {"nouveau": "jeu"},
+                      {"portee": "f9"}):
+            code, sortie = self.outil("decision", entree={**entree, "texte": "Autre ?", **refus})
+            self.assertEqual(code, 1, (refus, sortie))
+
+    def test_confirmer_genre_porte_la_fonctionnalite_qui_attend(self):
+        self.nouvelle()
+        entree = {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": "Genre ?",
+                  "propose": "badges", "genres_connus": ["badges"], "fonctionnalite": "f1"}
+        i = self.ok("decision", entree=entree)["id"]
+        d = next(x for x in self.ok("etat")["decisions"] if x["id"] == i)
+        self.assertEqual(d["fonctionnalite"], "f1")
+        self.assertEqual(self.outil("decision", entree={**entree, "texte": "Autre ?", "fonctionnalite": "f9"})[0], 1)
+
+    def test_actions_genre_fonctionnalite_est_une_demande(self):
+        self.nouvelle()
+        r = self.ok("actions", entree={"type": "genre_fonctionnalite", "decision": "d1", "fonctionnalite": "f1",
+                                       "choix": "ici"})
+        self.assertTrue(r["ok"])

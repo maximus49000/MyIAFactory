@@ -134,12 +134,18 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 ### `decision`
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
-`portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`) ou
-`projet` (`confirmer_genre` avec `propose` et `genres_connus`, `session_cloud` avec `agent`, ou `organisation` avec
-`organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+`portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`,
+`reprendre_methode`, `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
+quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
+`projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
+genre), `session_cloud` avec `agent`, ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
-(Fable refusé, clés et rôles, briefs). Poser deux fois la
+(Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
+`"fonctionnalite"` (son id), `"workflow": {"id", "genre", "flux", "genre_nouveau"?: {"description"}}` (le `flux` est celui
+de l'organisation : des étapes `<fonctionnalité>-<étape>`, uniques dans le projet), `"livrable"`, `"environnement"`
+(les outils du poste) et `"outils_installation"` ; ses agents portent `justification` et, facultatif,
+`fable_suggere`. Poser deux fois la
 même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 
 ### `tache`
@@ -157,10 +163,15 @@ en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Hai
 
 ### `organisation`
 
-Entrée : `{"action": "appliquer", "decision": id}`, pour une décision `organisation` du projet que l'utilisateur a
-acceptée (demande `organisation`, `verdict` : `accepter` ou `refuser`, version 4). Réécrit `services` et `flux` du
-fichier de factory (le reste est gardé), crée les fiches et les briefs nouveaux (un brief existant est gardé), lève la
-décision. Rend `{"ok": true, "services": [...], "flux": [...]}`. Refus (code 1) si la décision est inconnue ou n'est
+Entrée : `{"action": "appliquer", "decision": id, "fable"?: [clés d'agents]}`, pour une décision `organisation` du
+projet que l'utilisateur a acceptée (demande `organisation`, `verdict` : `accepter` ou `refuser`, version 4). Réécrit
+`services` et `flux` du fichier de factory (le reste est gardé), crée les fiches et les briefs nouveaux (un brief
+existant est gardé), lève la décision. Pour le workflow d'une fonctionnalité, le `flux` du projet n'est pas touché :
+le workflow s'ajoute à `workflows`, la fonctionnalité prend son `genre` et son `workflow`, les outils du poste sont
+notés (`environnement`), et un genre nouveau est créé dans la mémoire de la skill (en dernier : un échec est dit dans
+`genre_raison`, il ne bloque rien). `fable` : les agents que le Directeur a cochés ; ils doivent avoir été suggérés
+(`fable_suggere`), et leur fiche porte alors `Fable : accordé par le Directeur le <date>`. Rend `{"ok": true,
+"services": [...], "flux": [...]}` (et, pour un workflow, `workflow`, `fonctionnalite`, `genre`, `genre_raison`?). Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 
 ### `file`

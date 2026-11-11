@@ -63,6 +63,15 @@ class Base(AvecProjet):
     def statut(self, i):
         return next(d for d in self.suivi()["demandes"] if d["id"] == i)
 
+    def cadrer(self, **champs):
+        """Une demande de fonctionnalité dont le genre n'a pas pu être classé : le parcours continue par le cadrage
+        (l'issue de secours de la conception, section 8). Rend la demande et les actions du cadrage."""
+        d, actions = self.traiter(type="fonctionnalite", **champs)
+        (_, type_, _, suite), = actions
+        self.assertEqual(type_, "classer_genre")
+        return d, regles.appliquer_jugement(self.projet, "classer_genre", jugement.Decision(question="Raté."), suite,
+                                            self.etat)
+
     # --- Des états de départ.
     def fonctionnalite(self, etape="cadrage", **extra):
         self.ok("actions", entree={"type": "fonctionnalite", "texte": "Des écrans pour l'appli"})
@@ -106,7 +115,7 @@ def _lu(r):
 
 class Demandes(Base):
     def test_fonctionnalite_lance_le_cadrage(self):
-        d, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        d, actions = self.cadrer(texte="Des écrans pour l'appli")
         self.assertEqual([a[0] for a in actions], ["agent"])
         self.assertEqual(actions[0][1], "metier-1")
         self.assertIn("Discussion", actions[0][3])
@@ -120,7 +129,7 @@ class Demandes(Base):
         """Un projet installé sans rôle `cadrage` ni service Métier (l'essai de référence) : le cadrage revient à
         l'agent de la première étape de production, comme le faisait l'orchestrateur actuel."""
         (self.dossier / "fiches" / "hugo.md").unlink()
-        _, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        _, actions = self.cadrer(texte="Des écrans pour l'appli")
         self.assertEqual([a[0] for a in actions], ["agent"])
         self.assertEqual(actions[0][1], "dev-1")
         t = self.taches(etape="cadrage")[0]
@@ -147,7 +156,7 @@ class Demandes(Base):
 
     def test_le_cadrage_pose_une_seule_serie_de_questions(self):
         """Au passage en vrai, l'agent de cadrage reposait des questions à chaque tour et n'écrivait jamais le cahier."""
-        _, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        _, actions = self.cadrer(texte="Des écrans pour l'appli")
         matiere = actions[0][3]
         self.assertIn("Une seule série de questions", matiere)
         self.assertIn("rends le cahier corrigé", matiere)
@@ -272,7 +281,9 @@ class Demandes(Base):
         self.ok("lecon", entree={"action": "noter", "agent": "dev-1", "texte": "Une leçon.", "etage_propose": "projet",
                                  "roles": ["dev"]})
         tache = self.ok("tache", entree={"titre": "Écran", "role": "dev", "colonne": "dev", "active": False})["id"]
-        cas = [({"type": "fonctionnalite", "texte": "Autre chose"}, {}),
+        cas = [({"type": "fonctionnalite", "texte": "Autre chose"},
+                {"classer_genre": {"verdict": "autre", "genre": None, "raison": "Des écrans.",
+                                   "nouveau": {"id": "ecrans", "description": "Des écrans d'application."}}}),
                ({"type": "message", "fonctionnalite": "f1", "texte": "Bonjour"}, {}),
                ({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger", "texte": "Plus court"}, {}),
                ({"type": "lecon", "id": "dev-1:L1", "verdict": "invalider"}, {}),
@@ -527,7 +538,7 @@ class Serie(Base):
 
 class Arrets(Base):
     def depart_cadrage(self):
-        d, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        d, actions = self.cadrer(texte="Des écrans pour l'appli")
         return actions
 
     def test_accord_requis_pose_une_decision(self):
@@ -587,7 +598,7 @@ class Arrets(Base):
         (self.dossier / "fiches" / "hugo.md").unlink()     # le cadrage revient à dev-1, qui est occupé
         occupe = self.ok("tache", entree={"titre": "Autre chose", "role": "dev", "colonne": "dev", "agent": "dev-1",
                                           "active": True})["id"]
-        d, actions = self.traiter(type="fonctionnalite", texte="Des écrans")
+        d, actions = self.cadrer(texte="Des écrans")
         self.assertEqual(actions, [])
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
         self.assertEqual([t["id"] for t in self.taches()], [occupe])

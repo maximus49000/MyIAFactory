@@ -46,7 +46,8 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation", "partenaire_regle", "partenaires_actualiser", "partenaires_maj")
+                 "organisation", "genre_fonctionnalite", "partenaire_regle", "partenaires_actualiser",
+                 "partenaires_maj")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -673,6 +674,9 @@ def cmd_decision(ctx, e):
                                                                    for g in connus)):
                     raise Refus("« confirmer_genre » demande « propose » et « genres_connus » (identifiants de genre).")
                 d.update(propose=e["propose"], genres_connus=connus)
+                if e.get("fonctionnalite") is not None:   # la fonctionnalité qui attend le genre du projet
+                    _fonc(s, e["fonctionnalite"])
+                    d["fonctionnalite"] = e["fonctionnalite"]
             elif genre == "organisation":
                 d["organisation"] = _organisation_decidee(ctx, e.get("organisation"))
             else:
@@ -685,6 +689,8 @@ def cmd_decision(ctx, e):
                 raise Refus(f"Décision d'une fonctionnalité : genre inconnu « {genre} » "
                             f"({', '.join(rel.DECISIONS_FONCTIONNALITE)}).")
             d = {"genre": genre, "texte": contenu}
+            if genre == "genre_fonctionnalite":
+                d.update(_genre_fonctionnalite_decide(ctx, e))
             liste = _fonc(s, portee)["decisions"]
         existante = next((x for x in liste if {k: v for k, v in x.items() if k != "id"} == d), None)
         if existante:   # poser deux fois la même décision n'en crée qu'une
@@ -692,6 +698,26 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _genre_fonctionnalite_decide(ctx, e):
+    """Les champs de la décision `genre_fonctionnalite` : le genre proposé, le nouveau genre éventuel (`{id,
+    description}`), si le moteur hésite, et les genres connus entre lesquels choisir."""
+    connus = e.get("genres_connus", genres_connus(ctx))
+    nouveau = e.get("nouveau")
+    if (not isinstance(e.get("propose"), str) or not fa.MOTIF_GENRE.match(e["propose"])
+            or not isinstance(connus, list) or not all(isinstance(g, str) and fa.MOTIF_GENRE.match(g) for g in connus)
+            or not isinstance(e.get("incertain", False), bool)):
+        raise Refus("« genre_fonctionnalite » demande « propose » et « genres_connus » (identifiants de genre) "
+                    "et « incertain » (vrai ou faux).")
+    sortie = {"propose": e["propose"], "genres_connus": list(connus), "incertain": bool(e.get("incertain", False))}
+    if nouveau is not None:
+        if (not isinstance(nouveau, dict) or not isinstance(nouveau.get("id"), str)
+                or not fa.MOTIF_GENRE.match(nouveau["id"]) or not isinstance(nouveau.get("description"), str)
+                or not nouveau["description"].strip()):
+            raise Refus("« nouveau » demande {id (identifiant de genre), description}.")
+        sortie["nouveau"] = {"id": nouveau["id"], "description": nouveau["description"].strip()}
+    return sortie
 
 
 def _bornes_valides(v):
@@ -733,30 +759,108 @@ def _organisation_decidee(ctx, o):
         erreurs.append("« cout » demande « tokens » [a, b] et « euros » [a, b] ou null (a ≤ b).")
     if erreurs:
         raise Refus("Organisation refusée : " + " ; ".join(erreurs))
-    return {"services": [dict(x) for x in o["services"]], "flux": [dict(x) for x in o["flux"]],
-            "agents": [dict(x) for x in o["agents"]], "briefs": dict(o["briefs"]),
-            "cout": {"tokens": list(cout["tokens"]), "euros": None if cout.get("euros") is None
-                     else list(cout["euros"])}}
+    decidee = {"services": [dict(x) for x in o["services"]], "flux": [dict(x) for x in o["flux"]],
+               "agents": [dict(x) for x in o["agents"]], "briefs": dict(o["briefs"]),
+               "cout": {"tokens": list(cout["tokens"]), "euros": None if cout.get("euros") is None
+                        else list(cout["euros"])}}
+    if "workflow" in o or "fonctionnalite" in o:
+        decidee.update(_workflow_decide(ctx, o))
+    return decidee
+
+
+def _workflow_decide(ctx, o):
+    """Ce qu'une décision `organisation` porte de plus quand elle propose le workflow d'une fonctionnalité : la
+    fonctionnalité, son workflow `{id, genre, flux, genre_nouveau?}` (le flux est celui de l'organisation), le livrable,
+    l'environnement du poste et les règles d'outils d'installation."""
+    fid, w = o.get("fonctionnalite"), o.get("workflow")
+    if not isinstance(fid, str) or su.fonctionnalite(ctx.suivi.lire(), fid) is None:
+        raise Refus(f"Organisation refusée : fonctionnalité inconnue « {fid} ».")
+    if not isinstance(w, dict) or not isinstance(w.get("id"), str) or not fa.MOTIF_ID.match(w["id"]):
+        raise Refus("Organisation refusée : « workflow » demande {id, genre, flux}.")
+    if w["id"] in {x["id"] for x in wf.tous(ctx.f)}:
+        raise Refus(f"Organisation refusée : le workflow « {w['id']} » existe déjà.")
+    if w.get("genre") is not None and not (isinstance(w["genre"], str) and fa.MOTIF_GENRE.match(w["genre"])):
+        raise Refus("Organisation refusée : le genre du workflow est nul ou un identifiant de genre.")
+    if w.get("flux") != o["flux"]:
+        raise Refus("Organisation refusée : le flux du workflow est celui de l'organisation.")
+    pris = set(wf.ids_etapes(ctx.f))
+    doubles = [x["id"] for x in o["flux"] if x["id"] in pris]
+    if doubles:
+        raise Refus(f"Organisation refusée : étape déjà prise dans le projet : {', '.join(doubles)}.")
+    workflow = {"id": w["id"], "genre": w.get("genre"), "flux": [dict(x) for x in w["flux"]]}
+    nouveau = w.get("genre_nouveau")
+    if nouveau is not None:
+        if not (isinstance(nouveau, dict) and isinstance(nouveau.get("description"), str) and nouveau["description"].strip()):
+            raise Refus("Organisation refusée : « genre_nouveau » demande une « description ».")
+        workflow["genre_nouveau"] = {"description": nouveau["description"].strip()}
+    env, regles = o.get("environnement", []), o.get("outils_installation", [])
+    if not isinstance(env, list) or not all(isinstance(x, dict) for x in env):
+        raise Refus("Organisation refusée : « environnement » est une liste d'outils.")
+    if not isinstance(regles, list) or not all(isinstance(x, str) and x.strip() for x in regles):
+        raise Refus("Organisation refusée : « outils_installation » est une liste de règles d'outils.")
+    for a in o["agents"]:
+        if "fable_suggere" in a and not isinstance(a["fable_suggere"], bool):
+            raise Refus(f"Organisation refusée : « fable_suggere » de l'agent « {a.get('cle')} » vaut vrai ou faux.")
+    livrable = o.get("livrable")
+    if livrable is not None and not isinstance(livrable, str):
+        raise Refus("Organisation refusée : « livrable » est un texte.")
+    return {"fonctionnalite": fid, "workflow": workflow, "livrable": livrable,
+            "environnement": [dict(x) for x in env], "outils_installation": list(regles)}
 
 
 def cmd_organisation(ctx, e):
-    """Applique une décision `organisation` acceptée : services, flux, fiches et briefs, puis lève la décision."""
+    """Applique une décision `organisation` acceptée : services, flux (ou workflow d'une fonctionnalité), fiches et
+    briefs, puis lève la décision. `fable` : les clés des agents que le Directeur a cochés pour Fable (parmi ceux dont la
+    proposition le suggérait) ; leur fiche porte alors l'accord."""
     from installation.dossier import Echec
     from installation import mise_en_place
     if e.get("action") != "appliquer":
         raise Refus("« action » doit valoir appliquer.")
     i = texte(e, "decision")
+    fable = e.get("fable", [])
+    if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):
+        raise Refus("« fable » est la liste des clés d'agents que le Directeur autorise sur Fable.")
+    genre_a_creer = None
     with ctx.suivi.transaction() as s:
         d = next((x for x in s["decisions_projet"] if x["id"] == i and x.get("genre") == "organisation"), None)
         if d is None:
             raise Refus(f"Décision d'organisation inconnue : {i}")
         o = d["organisation"]
+        agents = [dict(a) for a in o["agents"]]
+        if fable:
+            suggerees = {a["cle"] for a in agents if a.get("fable_suggere") is True}
+            hors = [c for c in fable if c not in suggerees]
+            if hors:
+                raise Refus("Fable n'a pas été suggéré pour : " + ", ".join(hors) + ".")
+            accord = f"accordé par le Directeur le {su.maintenant()[:10]}"
+            for a in agents:
+                if a["cle"] in fable:
+                    a["modele"], a["fable"] = "Fable", accord
+        w = o.get("workflow")
         try:
-            mise_en_place.ecrire_organisation(ctx.f["chemin"], o["services"], o["flux"], o["agents"], o["briefs"])
+            mise_en_place.ecrire_organisation(
+                ctx.f["chemin"], o["services"], o["flux"], agents, o["briefs"],
+                workflow={**w, "fonctionnalite": o.get("fonctionnalite")} if w else None,
+                environnement=o.get("environnement") if w and o.get("environnement") else None)
         except Echec as ex:
             raise Refus(str(ex))
+        if w:
+            fonc = su.fonctionnalite(s, o["fonctionnalite"])
+            if fonc is not None:
+                fonc["genre"], fonc["workflow"], fonc["maj"] = w.get("genre"), w["id"], su.maintenant()
+            if w.get("genre_nouveau") and w.get("genre"):
+                genre_a_creer = (w["genre"], w["genre_nouveau"]["description"])
         s["decisions_projet"].remove(d)
-    return {"ok": True, "services": o["services"], "flux": o["flux"]}
+    sortie = {"ok": True, "services": o["services"], "flux": o["flux"]}
+    if w:
+        sortie.update(workflow=w["id"], fonctionnalite=o["fonctionnalite"], genre=w.get("genre"))
+    if genre_a_creer and genre_a_creer[0] not in genres_connus(ctx):   # en dernier : il publie dans la mémoire de la skill
+        ok, message = memoire.creer_genre(ctx.f["memoire"], genre_a_creer[0], genre_a_creer[1],
+                                          ctx.f["mots_interdits"], git=GIT)
+        sortie["genre_cree"] = ok
+        if not ok:
+            sortie["genre_raison"] = f"le genre « {genre_a_creer[0]} » n'a pas pu être créé : {message}"
+    return sortie
 
 
 def genres_connus(ctx):

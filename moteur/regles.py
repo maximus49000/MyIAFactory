@@ -18,14 +18,18 @@ alors son identifiant). Un refus de l'outil ne reste jamais silencieux : il devi
 série, contrôles refusés. Elle se reconstruit en partie depuis le suivi après un arrêt (tâche orpheline relancée une
 fois, éléments repris) ; ce qui s'y perd est dit dans la passation.
 """
+import base64
+import json
 import re
 import time
 from pathlib import Path
 
+from installation import estimation
 from moteur import agents, cloud, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
+from orchestrateur import fiches as fi
 from orchestrateur import outil
 from orchestrateur import suivi as su
 from orchestrateur import workflows as wf
@@ -42,6 +46,9 @@ ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour",
 ATTENDRE = "Attendre encore"
 RELANCER = "Relancer l'agent"
 ABANDONNER = "Abandonner la tâche"
+CONTINUER = "Continuer avec le workflow actuel"
+JE_PRECISE = "Je précise"
+DECISIONS_DU_PARCOURS = ("genre_fonctionnalite", "environnement")   # celles de la fonctionnalité qui retiennent son cadrage
 ACCEPTE = "J'accepte"
 REFUSE = "Je refuse"
 FAIT = "C'est fait, relancez l'agent"
@@ -292,18 +299,18 @@ def _conseil(projet, etat, evenement, fid, **plus):
     return a_juger("conseil", dossier, {"demande": evenement.get("id"), "fonctionnalite": fid})
 
 
-def _sur_fonctionnalite(projet, demande, etat):
-    fid = demande["fonctionnalite"]
-    _terminer(projet, {"demande": demande["id"]}, "Je cherche l'agent qui va cadrer votre demande.")
-    return _repondre_cadrage(projet, etat, fid)
-
-
 def _sur_message(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
     accord = _m(etat, "accords").get(fid)
     if accord is not None and f["etape"] in ("cadrage", "cahier", "prototype", "serie"):
         return _reponse_a_une_question(projet, etat, demande, f, accord)
+    if f["etape"] == "cadrage" and fid in _m(etat, "proposition_ratee"):
+        return _reponse_proposition_ratee(projet, etat, demande, fid)
+    if f["etape"] == "cadrage" and _en_parcours(projet, etat, fid):
+        _terminer(projet, {"demande": demande["id"]}, "C'est noté. Répondez d'abord à la question posée dans les "
+                                                      "décisions : le cadrage commencera ensuite.")
+        return []
     if f["etape"] in ("cadrage", "cahier"):
         _terminer(projet, {"demande": demande["id"]}, "C'est noté, l'agent de cadrage vous répond.")
         return _repondre_cadrage(projet, etat, fid)
@@ -425,20 +432,369 @@ def _sur_lecon(projet, demande, etat):
     return []
 
 
-def _sur_genre(projet, demande, etat):
-    e = {"action": "fixer", "genre": demande["genre"]}
-    if demande.get("description"):
-        e["description"] = demande["description"]
-    lancer(projet, "genre", e)
+# --- Le parcours d'une nouvelle fonctionnalité : classer le genre, proposer son workflow, recruter (conception, section 5).
+
+def _genres_du_projet(fac):
+    """Les genres déjà employés dans le projet : le sien et ceux de ses workflows."""
+    ids = []
+    for g in [fac["genre"]] + [w.get("genre") for w in wf.tous(fac)]:
+        if g and g not in ids:
+            ids.append(g)
+    return ids
+
+
+def _genre_du_projet(fac):
+    genres = _genres_du_projet(fac)
+    return genres[0] if genres else None
+
+
+def _demande_de(f):
+    """Le texte et les images de la demande d'origine : le premier message de l'utilisateur."""
+    m = next((m for m in f.get("discussion") or [] if m["auteur"] == "utilisateur"), None)
+    return {"texte": (m or {}).get("texte") or f.get("nom") or "", "images": list((m or {}).get("images") or [])}
+
+
+def _en_parcours(projet, etat, fid):
+    """Vrai si la fonctionnalité attend encore une réponse du Directeur sur son genre ou son workflow, ou la mise en
+    place de l'environnement : le cadrage ne démarre pas avant."""
     court = _etat(projet)
-    for d in court["decisions"]:
-        if d["id"] == demande["decision"]:
-            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    _terminer(projet, {"demande": demande["id"]}, f"Le genre du projet est « {demande['genre']} ».")
+    f = next((x for x in court["fonctionnalites"] if x["id"] == fid), None)
+    if f is None:
+        return False
+    if any(d["genre"] in DECISIONS_DU_PARCOURS for d in f["decisions"]):
+        return True
+    if any(d["portee"] == "projet" and d["genre"] in ("organisation", "confirmer_genre") and d.get("fonctionnalite") == fid
+           for d in court["decisions"]):
+        return True
+    if fid in _m(etat, "proposition_ratee"):
+        return True
+    return any(t.get("fonctionnalite") == fid and t.get("etape") == "environnement" and t["colonne"] != "fait"
+               for t in court["taches"])
+
+
+def _classer(projet, etat, fid, suite):
+    """L'appel qui classe la demande (Haiku). Un projet sans genre classe sa description ; la fonctionnalité attend la
+    réponse (`confirmer_genre`)."""
+    fac = _factory(projet)
+    f = _fonc(projet, fid)
+    demande = _demande_de(f)
+    sans_genre = not _genres_du_projet(fac)
+    if sans_genre:
+        suite = {**suite, "sans_genre": True}
+        demande = {"texte": fac["description"] or demande["texte"], "images": []}
+    connus = lancer(projet, "genre", {"action": "lister"})["genres"]
+    par_id = {g["id"]: g for g in connus}
+    du_projet = [par_id.get(i) or {"id": i, "domaine": None, "livrable": None, "outils": None}
+                 for i in _genres_du_projet(fac)]
+    dossier = {"demande": demande, "projet": {"nom": fac["nom"], "description": fac["description"]},
+               "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
+    return [a_juger("classer_genre", dossier, suite)]
+
+
+def _sur_fonctionnalite(projet, demande, etat):
+    fid = demande["fonctionnalite"]
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if demande.get("genre"):      # recréée depuis un autre projet : son genre est déjà connu
+        lancer(projet, "fonctionnalite", {"id": fid, "genre": demande["genre"]})
+        connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
+        if demande["genre"] not in connus and demande.get("description"):
+            suite["genre_nouveau"] = {"description": demande["description"]}
+        return _proposer(projet, etat, fid, suite)
+    return _classer(projet, etat, fid, suite)
+
+
+def _apres_classer_genre(projet, o, ctx, etat):
+    fid = ctx["fonctionnalite"]
+    fac = _factory(projet)
+    nouveau, piste = o.get("nouveau"), o.get("genre") or (o.get("nouveau") or {}).get("id")
+    verdict, raison = o["verdict"], o["raison"]
+    connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
+    if ctx.get("sans_genre"):
+        if not piste:        # aucune piste : on continue sans genre, la proposition de workflow en dira plus
+            _terminer(projet, ctx, "Je n'ai pas pu deviner le genre du projet ; je propose un workflow quand même.")
+            return _proposer(projet, etat, fid, {"fonctionnalite": fid})
+        texte = (f"Le projet n'a pas encore de genre. D'après sa description, je propose « {piste} » "
+                 f"({(nouveau or {}).get('description') or 'un genre déjà connu'}). {raison} Le confirmer, ou en "
+                 "choisir un autre ?")
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": texte,
+                                    "propose": piste, "genres_connus": connus, "fonctionnalite": fid})
+        _dire(projet, fid, texte)
+        _terminer(projet, ctx, "Le projet n'a pas encore de genre : je vous en propose un.")
+        return []
+    if verdict in ("meme", "proche"):
+        lancer(projet, "fonctionnalite", {"id": fid, "genre": o["genre"]})
+        if verdict == "proche":
+            _dire(projet, fid, f"Cette demande est proche du genre « {o['genre']} » : elle y est rattachée. {raison}")
+        return _proposer(projet, etat, fid, ctx)
+    du_projet = _genre_du_projet(fac) or "aucun"
+    propose = piste or _genre_du_projet(fac) or "a-preciser"
+    if verdict == "autre":
+        texte = (f"Cette demande n'est pas du genre du projet ({du_projet}) : elle relève plutôt de « {propose} ». "
+                 f"{raison} La faire dans un nouveau projet, ou dans ce projet ?")
+    else:
+        texte = (f"Je ne suis pas sûr du genre de cette demande (le projet est de genre {du_projet}). {raison} "
+                 "Est-ce le même genre, ou faut-il un autre projet ?")
+    entree = {"action": "poser", "portee": fid, "genre": "genre_fonctionnalite", "texte": texte, "propose": propose,
+              "incertain": verdict == "incertain", "genres_connus": connus}
+    if nouveau:
+        entree["nouveau"] = {"id": nouveau["id"], "description": nouveau["description"]}
+    lancer(projet, "decision", entree)
+    _dire(projet, fid, texte)
+    _terminer(projet, ctx, "Cette demande ne semble pas être du genre du projet : dites où la faire.")
     return []
 
 
+def _decision_de(f, i, genre):
+    return next((d for d in f.get("decisions") or [] if d["id"] == i and d["genre"] == genre), None)
+
+
+def _sur_genre_fonctionnalite(projet, demande, etat):
+    """La réponse à « cette demande n'est pas du genre du projet » : ici, même genre, ou nouveau projet."""
+    fid, choix = demande["fonctionnalite"], demande["choix"]
+    f = _fonc(projet, fid)
+    d = _decision_de(f, demande["decision"], "genre_fonctionnalite")
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    fac = _factory(projet)
+    if choix == "nouveau_projet":
+        return _vers_un_nouveau_projet(projet, demande, f, d)
+    if choix == "meme":
+        genre = _genre_du_projet(fac)
+        if genre is None:
+            raise Refus("le projet n'a pas de genre : choisissez « Dans ce projet »")
+    elif choix == "ici":
+        genre = demande.get("genre") or d["propose"]
+    else:
+        raise Refus(f"choix inconnu : {choix}")
+    nouveau = d.get("nouveau") or {}
+    if genre not in (d.get("genres_connus") or []) and genre not in _genres_du_projet(fac):
+        description = demande.get("description") or (nouveau.get("description") if nouveau.get("id") == genre else None)
+        if not description:
+            raise Refus(f"« {genre} » est un nouveau genre : il a besoin d'une description")
+        suite["genre_nouveau"] = {"description": description}
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+    return _proposer(projet, etat, fid, suite)
+
+
+def _factory_du_projet_cree(chemin_reglages):
+    """Le fichier de factory du projet créé au bureau, d'après ses réglages (`orchestrateur`, sinon `factory.json`)."""
+    reglages = Path(chemin_reglages)
+    if not reglages.is_file():
+        raise Refus(f"le nouveau projet est introuvable ({chemin_reglages})")
+    nom = "factory.json"
+    try:
+        lus = json.loads(reglages.read_text(encoding="utf-8-sig"))
+        if isinstance(lus, dict) and isinstance(lus.get("orchestrateur"), str) and lus["orchestrateur"].strip():
+            nom = lus["orchestrateur"]
+    except (OSError, ValueError):
+        pass
+    factory = (reglages.parent / nom).resolve()
+    if not factory.is_file():
+        raise Refus(f"le nouveau projet n'a pas de fichier de factory ({factory})")
+    try:
+        fa.lire(factory)
+    except fa.FactoryInvalide as e:
+        raise Refus(f"le nouveau projet est illisible : {e}")
+    return factory
+
+
+def _images_a_recreer(projet, f):
+    """Les images de la demande d'origine, relues sur le disque pour être recréées dans l'autre projet."""
+    sortie = []
+    for chemin in _demande_de(f)["images"]:
+        p = projet.factory.resolve().parent / chemin
+        type_ = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(p.suffix.lower())
+        try:
+            if type_ and p.is_file():
+                sortie.append({"nom": p.name, "type": type_, "donnees": base64.b64encode(p.read_bytes()).decode()})
+        except OSError:
+            continue
+    return sortie
+
+
+def _vers_un_nouveau_projet(projet, demande, f, d):
+    """La demande d'origine est recréée dans le nouveau projet (par sa commande `actions`), puis la fonctionnalité passe
+    à `deplacee` ici. Un projet injoignable : rien ne bouge, la décision reste (« Dans ce projet » reste possible)."""
+    fid = f["id"]
+    try:
+        if not isinstance(demande.get("projet_cree"), str) or not demande["projet_cree"].strip():
+            raise Refus("le nouveau projet n'est pas indiqué")
+        factory = _factory_du_projet_cree(demande["projet_cree"])
+        nom = fa.lire(factory)["nom"]
+        origine = _demande_de(f)
+        entree = {"type": "fonctionnalite", "texte": origine["texte"], "t": su.maintenant()}
+        genre = demande.get("genre") or d.get("propose")
+        if genre:
+            entree["genre"] = genre
+            nouveau = d.get("nouveau") or {}
+            description = demande.get("description") or (nouveau.get("description") if nouveau.get("id") == genre else None)
+            if description:
+                entree["description"] = description
+        images = _images_a_recreer(projet, f)
+        if images:
+            entree["images"] = images
+        code, objet = outil.executer(str(factory), ["lancer", "actions"], entree)
+        if code != 0:
+            raise Refus(str(objet.get("erreur") if isinstance(objet, dict) else objet))
+    except Refus as e:
+        _terminer(projet, {"demande": demande["id"]}, f"Je n'ai pas pu créer la demande dans le nouveau projet ({e}). "
+                                                      "Vous pouvez la garder dans ce projet : « Dans ce projet ».")
+        return []
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    lancer(projet, "fonctionnalite", {"id": fid, "etape": "deplacee", "deplacee_vers": nom})
+    _dire(projet, fid, f"Partie dans le projet {nom}")
+    _terminer(projet, {"demande": demande["id"]}, f"Votre demande est partie dans le projet « {nom} ».")
+    return []
+
+
+def _proposer(projet, etat, fid, suite, refus=None):
+    """L'appel qui propose le workflow de la fonctionnalité (Sonnet) : toujours un workflow par fonctionnalité."""
+    fac = _factory(projet)
+    f = _fonc(projet, fid)
+    genre = f.get("genre") or _genre_du_projet(fac)
+    try:
+        fiches_ = fi.lire_toutes(fac["fiches"])
+    except (fi.FicheInvalide, OSError):
+        fiches_ = []
+    anterieurs = []
+    for w in reversed(wf.tous(fac)):        # le plus récent d'abord ; les ids sont donnés sans le préfixe de leur fonctionnalité
+        if genre and w.get("genre") == genre:
+            prefixe = f"{w['fonctionnalite']}-" if w.get("fonctionnalite") else ""
+            anterieurs.append({"id": w["id"], "flux": [
+                {"etape": e["id"][len(prefixe):] if prefixe and e["id"].startswith(prefixe) else e["id"],
+                 "nom": e["nom"], "role": e["role"], "service": e["service"]} for e in w["flux"]]})
+    dossier = {"demande": _demande_de(f), "genre": genre, "projet": {"nom": fac["nom"], "description": fac["description"]},
+               "services": [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]],
+               "agents": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"], "specialite": a.get("specialite")}
+                          for a in fiches_],
+               "workflows_du_genre": anterieurs, "fonctionnalite": fid, "refus": refus}
+    return [a_juger("proposer_organisation", dossier, {k: v for k, v in suite.items() if k != "sans_genre"})]
+
+
+def _cout(projet, flux, agents, genre):
+    """Le coût estimé du workflow, calculé en code (jamais par l'IA) : une fourchette de tokens."""
+    usages = []
+    if getattr(projet, "bureau", None):
+        try:
+            usages = estimation.usages_du_genre(projet.bureau, genre)
+        except Exception:      # une estimation d'après les mesures est une aide : jamais une raison d'échouer
+            usages = []
+    agents = [dict(a, modele="Opus" if a["modele"] == "Fable" else a["modele"]) for a in agents]   # Fable : tarif d'Opus
+    e = estimation.estimer(flux, agents, usages, lambda modele: None)
+    return {"tokens": e["tokens"], "euros": e["euros"]}
+
+
+def _apres_proposer_organisation(projet, o, ctx, etat):
+    fid = ctx["fonctionnalite"]
+    fac = _factory(projet)
+    f = _fonc(projet, fid)
+    genre = f.get("genre") or _genre_du_projet(fac)
+    flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], "role": x["role"], "service": x["service"]} for x in o["flux"]]
+    nouveaux = [dict(a, lieu="local") for a in o["agents"]]
+    services = [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]] + [dict(s) for s in o["services"]]
+    existants = [{"role": a["role"], "modele": a["modele"]} for a in _etat(projet)["agents"]]
+    try:
+        cout = _cout(projet, flux, nouveaux + existants, genre)
+        w = {"id": f"w-{fid}", "genre": genre, "flux": [dict(x) for x in flux]}
+        if ctx.get("genre_nouveau"):
+            w["genre_nouveau"] = ctx["genre_nouveau"]
+        organisation = {"services": services, "flux": flux, "agents": nouveaux, "briefs": dict(o["briefs"]),
+                        "cout": cout, "fonctionnalite": fid, "workflow": w, "livrable": o["livrable"],
+                        "environnement": _verifier_poste(projet, o["environnement"]),
+                        "outils_installation": list(o["outils_installation"])}
+        etapes = " puis ".join(x["nom"] for x in flux)
+        texte = (f"Voici le workflow que je propose pour « {f['nom']} » : {etapes}. Livrable : {o['livrable']}. "
+                 + (f"Agents à recruter : {', '.join(a.get('prenom') or a['cle'] for a in nouveaux)}. " if nouveaux
+                    else "Aucun agent à recruter : ceux du projet suffisent. ")
+                 + (f"Services à créer : {', '.join(s['nom'] for s in o['services'])}. " if o["services"] else ""))
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "organisation",
+                                    "texte": texte.strip(), "organisation": organisation})
+    except (Refus, ValueError) as e:
+        return _proposition_ratee(projet, etat, ctx, f"Je n'ai pas pu mettre en place la proposition de workflow ({e}). "
+                                                     "Que faire ?")
+    _dire(projet, fid, texte.strip() + " Dites si vous l'acceptez.")
+    _terminer(projet, ctx, "Je vous propose un workflow pour cette demande : à vous de le valider.")
+    return []
+
+
+def _proposition_ratee(projet, etat, ctx, texte):
+    """Aucune proposition utilisable : une question au Directeur, avec l'issue qui laisse avancer (le workflow actuel)."""
+    fid = ctx["fonctionnalite"]
+    _m(etat, "proposition_ratee")[fid] = {k: v for k, v in ctx.items() if k != "demande"}
+    _question(projet, fid, texte, [CONTINUER, JE_PRECISE], ctx)
+    return []
+
+
+def _reponse_proposition_ratee(projet, etat, demande, fid):
+    """La réponse à « je n'ai pas pu proposer de workflow » : continuer avec celui qui existe, ou un texte qui guide une
+    nouvelle proposition."""
+    ctx = etat["proposition_ratee"].pop(fid)
+    texte = (demande.get("texte") or "").strip()
+    suite = {**ctx, "demande": demande["id"], "fonctionnalite": fid}
+    if texte == JE_PRECISE:
+        etat["proposition_ratee"][fid] = ctx
+        _terminer(projet, suite, "Dites-moi en une phrase ce que le workflow doit contenir.")
+        return []
+    if CONTINUER in texte or not texte:
+        _reprendre_un_workflow(projet, etat, fid, suite)
+        _terminer(projet, suite, "C'est noté : je continue avec le workflow actuel ; le cadrage commence.")
+        return _repondre_cadrage(projet, etat, fid)
+    return _proposer(projet, etat, fid, suite, refus=texte)
+
+
+def _classer_rate(projet, etat, fid, ctx):
+    """Le genre n'a pas pu être classé (deux essais) : la fonctionnalité prend le genre du projet et le cadrage démarre."""
+    genre = _genre_du_projet(_factory(projet))
+    if genre:
+        lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+    _dire(projet, fid, "Je n'ai pas réussi à classer le genre de cette demande"
+                       + (f" : je la traite avec le genre du projet (« {genre} »)." if genre else "."))
+    _terminer(projet, ctx, "Le genre de la demande n'a pas pu être classé : je la traite avec celui du projet.")
+    return _repondre_cadrage(projet, etat, fid)
+
+
+def _workflow_de_repli(projet, fid):
+    """Le workflow qu'une fonctionnalité reprend sans proposition : le plus récent du même genre, sinon le principal ;
+    `None` si le projet n'a aucun workflow."""
+    fac = _factory(projet)
+    f = _fonc(projet, fid)
+    genre = f.get("genre") or _genre_du_projet(fac)
+    ws = [w for w in wf.tous(fac) if w["id"] != f.get("workflow")]
+    memes = [w for w in reversed(ws) if genre and w.get("genre") == genre and w["id"] != wf.PRINCIPAL]
+    if memes:
+        return memes[0]
+    return next((w for w in ws if w["id"] == wf.PRINCIPAL), None)
+
+
+def _reprendre_un_workflow(projet, etat, fid, ctx):
+    """Sans proposition acceptée : la fonctionnalité suit le workflow le plus récent de son genre, sinon le principal, et
+    le cadrage démarre. `False` si le projet n'a aucun workflow (rien n'est fait)."""
+    w = _workflow_de_repli(projet, fid)
+    if w is None:
+        return False
+    entree = {"id": fid, "workflow": w["id"]}
+    f = _fonc(projet, fid)
+    if not f.get("genre") and w.get("genre"):
+        entree["genre"] = w["genre"]
+    lancer(projet, "fonctionnalite", entree)
+    _dire(projet, fid, "Je garde le workflow existant "
+                       + ("du même genre." if w["id"] != wf.PRINCIPAL else "du projet."))
+    return True
+
+
+def _verifier_poste(projet, outils):
+    """Les outils du poste et ce qui est déjà en place (tâche 10)."""
+    return [dict(x) for x in outils]
+
+
 def _sur_organisation(projet, demande, etat):
+    court = _etat(projet)
+    d = next((x for x in court["decisions"] if x["id"] == demande["decision"] and x["genre"] == "organisation"), None)
+    org = (d or {}).get("organisation") or {}
+    if org.get("workflow"):
+        return _sur_organisation_de_fonctionnalite(projet, demande, etat, d, org)
     if demande["verdict"] == "accepter":
         lancer(projet, "organisation", {"action": "appliquer", "decision": demande["decision"]})
         reponse = "La nouvelle organisation est en place."
@@ -446,6 +802,64 @@ def _sur_organisation(projet, demande, etat):
         lancer(projet, "decision", {"action": "lever", "id": demande["decision"]})
         reponse = "C'est noté : l'organisation ne change pas."
     _terminer(projet, {"demande": demande["id"]}, reponse)
+    return []
+
+
+def _sur_organisation_de_fonctionnalite(projet, demande, etat, d, org):
+    """L'utilisateur répond à la proposition de workflow d'une fonctionnalité."""
+    fid, verdict = org["fonctionnalite"], demande["verdict"]
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if (org["workflow"].get("genre_nouveau")):
+        suite["genre_nouveau"] = org["workflow"]["genre_nouveau"]
+    if verdict == "accepter":
+        entree = {"action": "appliquer", "decision": d["id"]}
+        if demande.get("fable"):
+            entree["fable"] = demande["fable"]
+        r = lancer(projet, "organisation", entree)
+        _dire(projet, fid, "Le workflow est en place" + (" ; " + r["genre_raison"] if r.get("genre_raison") else "."))
+        actions = _apres_mise_en_place(projet, etat, fid, org)
+        _terminer(projet, suite, "Le workflow est en place : le cadrage commence.")
+        return actions
+    if verdict == "abandonner":
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        lancer(projet, "fonctionnalite", {"id": fid, "etape": "deplacee", "deplacee_vers": "(demande abandonnée)"})
+        _dire(projet, fid, "Demande abandonnée.")
+        _terminer(projet, suite, "C'est noté : la demande est abandonnée.")
+        return []
+    texte = (demande.get("texte") or "").strip()
+    if texte:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        return _proposer(projet, etat, fid, suite, refus=texte)
+    if _workflow_de_repli(projet, fid) is None:
+        _terminer(projet, suite, "Ce projet n'a encore aucun workflow : dites ce qu'il faut changer à la proposition "
+                                 "(refuser avec un texte), ou abandonnez la demande.")
+        return []
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _reprendre_un_workflow(projet, etat, fid, suite)
+    _terminer(projet, suite, "C'est noté : je garde un workflow existant ; le cadrage commence.")
+    return _repondre_cadrage(projet, etat, fid)
+
+
+def _apres_mise_en_place(projet, etat, fid, org):
+    """Le workflow est en place : le cadrage démarre."""
+    return _repondre_cadrage(projet, etat, fid)
+
+
+def _sur_genre(projet, demande, etat):
+    court = _etat(projet)
+    d = next((x for x in court["decisions"] if x["id"] == demande["decision"]), None)
+    e = {"action": "fixer", "genre": demande["genre"]}
+    if demande.get("description"):
+        e["description"] = demande["description"]
+    lancer(projet, "genre", e)
+    for x in court["decisions"]:
+        if x["id"] == demande["decision"]:
+            lancer(projet, "decision", {"action": "lever", "id": x["id"]})
+    _terminer(projet, {"demande": demande["id"]}, f"Le genre du projet est « {demande['genre']} ».")
+    fid = (d or {}).get("fonctionnalite")
+    if fid:      # une fonctionnalité attendait ce genre : elle poursuit son parcours
+        lancer(projet, "fonctionnalite", {"id": fid, "genre": demande["genre"]})
+        return _proposer(projet, etat, fid, {"fonctionnalite": fid})
     return []
 
 
@@ -537,6 +951,7 @@ def _sur_challenge(projet, demande, etat):
 
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
+        "genre_fonctionnalite": _sur_genre_fonctionnalite,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
         "partenaires_actualiser": _sur_partenaires, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}
@@ -546,6 +961,8 @@ _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier"
 
 def _repondre_cadrage(projet, etat, fid, consigne=None):
     """Prépare la réponse de l'agent de cadrage (sa tâche, persistante) et la lance si l'agent est libre."""
+    if _en_parcours(projet, etat, fid):
+        return []      # le genre ou le workflow de la fonctionnalité attend encore une réponse
     f = _fonc(projet, fid)
     court = _etat(projet)
     agent = f.get("agent_cadrage")
@@ -1205,7 +1622,12 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
     ratés) devient une question au Directeur."""
     etat = nouvel_etat() if etat is None else etat
     if decision.question is not None:
-        _question(projet, contexte.get("fonctionnalite"), decision.question, ["Je précise", "Plus tard"], contexte)
+        fid = contexte.get("fonctionnalite")
+        if type_ == "classer_genre" and fid:
+            return _classer_rate(projet, etat, fid, contexte)
+        if type_ == "proposer_organisation" and fid:
+            return _proposition_ratee(projet, etat, contexte, decision.question)
+        _question(projet, fid, decision.question, ["Je précise", "Plus tard"], contexte)
         return []
     o = decision.objet
     return _APRES[type_](projet, o, contexte, etat)
@@ -1314,4 +1736,5 @@ def _apres_conseil(projet, o, ctx, etat):
 
 
 _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour,
-          "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil}
+          "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
+          "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation}

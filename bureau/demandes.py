@@ -18,13 +18,14 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
           "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
           "retour_element": ("fonctionnalite", "element", "texte"),
-          "organisation": ("decision", "verdict"),
+          "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",)}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
-               "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",)}
+               "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
+               "organisation": ("texte", "fable"), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-               "organisation")
+               "organisation", "genre_fonctionnalite")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -214,8 +215,9 @@ def _verifier_v4(demande, r, elements):
         message = verifier_images(demande["images"])
         if message:
             return message
-    for champ in ("texte", "description"):
-        if champ in demande and genre in ("cahier", "methode", "genre") and not isinstance(demande[champ], str):
+    for champ in ("texte", "description", "projet_cree"):
+        if (champ in demande and genre in ("cahier", "methode", "genre", "organisation", "genre_fonctionnalite")
+                and not isinstance(demande[champ], str)):
             return f"« {champ} » doit être un texte."
     if genre == "fonctionnalite":
         return _texte_libre(demande["texte"], "texte")
@@ -229,11 +231,30 @@ def _verifier_v4(demande, r, elements):
         if len(demande["session"]) > MAX_SESSION:
             return f"Le nom de la session dépasse {MAX_SESSION} caractères."
         return None
+    if genre == "genre_fonctionnalite":
+        return _verifier_genre_fonctionnalite(demande, r)
     if genre == "organisation":
-        if _decision(r.get("decisions_projet", []), demande["decision"], "organisation") is None:
+        d = _decision(r.get("decisions_projet", []), demande["decision"], "organisation")
+        if d is None:
             return "Décision inconnue."
-        if demande["verdict"] not in ("accepter", "refuser"):
-            return "Verdict inconnu (accepter ou refuser)."
+        if demande["verdict"] not in ("accepter", "refuser", "abandonner"):
+            return "Verdict inconnu (accepter, refuser ou abandonner)."
+        if demande["verdict"] == "abandonner" and not (d.get("organisation") or {}).get("workflow"):
+            return "On n'abandonne que la proposition de workflow d'une demande."
+        if "texte" in demande:
+            message = _texte_libre(demande["texte"], "texte")
+            if message:
+                return message
+        if "fable" in demande:
+            proposes = {a.get("cle") for a in (d.get("organisation") or {}).get("agents") or []
+                        if a.get("fable_suggere") is True}
+            fable = demande["fable"]
+            if not isinstance(fable, list) or not all(isinstance(c, str) for c in fable):
+                return "« fable » doit être la liste des clés d'agents."
+            if demande["verdict"] != "accepter" and fable:
+                return "Fable ne se coche qu'avec l'acceptation."
+            if any(c not in proposes for c in fable):
+                return "Fable n'a pas été suggéré pour cet agent."
         return None
     f = _fonctionnalite(r, demande["fonctionnalite"])
     if f is None:
@@ -287,6 +308,34 @@ def _verifier_genre(demande, r):
             return "Un nouveau genre a besoin d'une description."
         if len(demande["description"]) > MAX_TEXTE:
             return f"« description » dépasse {MAX_TEXTE} caractères."
+    return None
+
+
+def _verifier_genre_fonctionnalite(demande, r):
+    """La réponse à « cette demande n'est pas du genre du projet » : ici, même genre (si le moteur hésitait), nouveau
+    projet (avec le chemin des réglages du projet créé)."""
+    f = _fonctionnalite(r, demande["fonctionnalite"])
+    if f is None:
+        return "Fonctionnalité inconnue."
+    d = _decision(f["decisions"], demande["decision"], "genre_fonctionnalite")
+    if d is None:
+        return "Décision inconnue."
+    choix = demande["choix"]
+    if choix not in ("ici", "meme", "nouveau_projet"):
+        return "Choix inconnu (ici, meme ou nouveau_projet)."
+    if choix == "meme" and not d.get("incertain"):
+        return "Le moteur n'hésite pas sur le genre de cette demande : choisissez « ici » ou « nouveau_projet »."
+    if "genre" in demande:
+        if not releve.MOTIF_GENRE.match(demande["genre"]):
+            return "Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus)."
+        connus = d.get("genres_connus") or []
+        if demande["genre"] not in connus and not (demande.get("description") or "").strip() and not (
+                (d.get("nouveau") or {}).get("id") == demande["genre"]):
+            return "Un nouveau genre a besoin d'une description."
+    if "description" in demande and len(demande["description"]) > MAX_TEXTE:
+        return f"« description » dépasse {MAX_TEXTE} caractères."
+    if choix == "nouveau_projet" and not (demande.get("projet_cree") or "").strip():
+        return "Le nouveau projet n'est pas indiqué."
     return None
 
 

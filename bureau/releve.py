@@ -19,7 +19,8 @@ MAX_SUITE = 500
 MAX_USAGE = 5000
 VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
-DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode")
+DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
+                            "genre_fonctionnalite")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
@@ -287,6 +288,8 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
                            "« lien » (https, http ou claude) ou « chemin ».")
         for d in _liste_facultative(f.get("decisions"), f"{nom} : « decisions »", erreurs):
             _verifier_decision(d, DECISIONS_FONCTIONNALITE, f"{nom} : « decisions »", ids_decisions, erreurs)
+            if d.get("genre") == "genre_fonctionnalite":
+                _verifier_genre_fonctionnalite(d, f"{nom} : « decisions »", erreurs)
         _verifier_documents(f, nom, erreurs)
         if f.get("glossaire") is not None:
             probleme = erreur_glossaire(f["glossaire"])
@@ -438,6 +441,21 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
+
+
+def _verifier_genre_fonctionnalite(d, nom, erreurs):
+    """La décision `genre_fonctionnalite` : le genre proposé, les genres connus, si le moteur hésite, le nouveau genre."""
+    ici = f"{nom} : la décision « {d.get('id')} »"
+    if not _genre_valide(d.get("propose")):
+        erreurs.append(f"{ici} : « propose » est obligatoire (identifiant de genre).")
+    connus = d.get("genres_connus")
+    if not isinstance(connus, list) or not all(_genre_valide(g) for g in connus):
+        erreurs.append(f"{ici} : « genres_connus » est obligatoire (liste d'identifiants de genre).")
+    if not isinstance(d.get("incertain"), bool):
+        erreurs.append(f"{ici} : « incertain » doit être vrai ou faux.")
+    n = d.get("nouveau")
+    if n is not None and not (_est_dict(n) and _genre_valide(n.get("id")) and _texte_plein(n.get("description"))):
+        erreurs.append(f"{ici} : « nouveau » doit avoir un « id » (identifiant de genre) et une « description ».")
 
 
 MODELES_ORGANISATION = ("Haiku", "Sonnet", "Opus")

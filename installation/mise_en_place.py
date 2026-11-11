@@ -17,6 +17,7 @@ from installation import dossier, proposition
 from installation.dossier import PREFIXE_SKILL, Echec
 from orchestrateur import factory as fa
 from orchestrateur import fiches, memoire
+from orchestrateur import workflows as wf
 from orchestrateur import verifier_interface as vi
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -208,9 +209,18 @@ def _fiche(a, chemin):
             "texte": a["texte"].strip(), "lecons": [], "chemin": chemin}
 
 
-def ecrire_organisation(factory_json, services, flux, agents, briefs):
+def fusionner_environnement(actuel, outils):
+    """Les outils du poste du projet : ceux de `outils` remplacent les entrées de même nom, les autres sont gardés."""
+    noms = {x["outil"] for x in outils if isinstance(x, dict) and x.get("outil")}
+    gardes = [x for x in actuel or [] if isinstance(x, dict) and x.get("outil") not in noms]
+    return gardes + [dict(x) for x in outils if isinstance(x, dict) and x.get("outil")]
+
+
+def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=None, environnement=None):
     """Réécrit `services` et `flux` du fichier de factory (le reste est gardé) et écrit les fiches et les briefs
-    nouveaux (un brief existant est gardé). Contrôlé comme une proposition ; un refus n'écrit rien."""
+    nouveaux (un brief existant est gardé). Contrôlé comme une proposition ; un refus n'écrit rien.
+    Avec `workflow` (`{id, genre, flux, fonctionnalite}`), le flux n'est pas réécrit : le workflow s'ajoute à
+    `workflows` (ses étapes ne doivent pas déjà exister dans le projet). `environnement` : les outils du poste à noter."""
     factory_json = Path(factory_json)
     try:
         f = fa.lire(factory_json)
@@ -223,6 +233,12 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs):
     erreurs = proposition.verifier_organisation(
         services, flux, agents, briefs, cloud=True, roles_deja_pourvus={x["role"] for x in existantes},
         cles_prises={x["cle"] for x in existantes}, briefs_existants=briefs_existants)
+    if workflow is not None:
+        pris = set(wf.ids_etapes(f))
+        erreurs += [f"Étape « {x['id']} » : déjà prise dans le projet." for x in flux if isinstance(x, dict)
+                    and x.get("id") in pris]
+        if workflow.get("id") in {w["id"] for w in wf.tous(f)}:
+            erreurs.append(f"Workflow « {workflow.get('id')} » : déjà dans le projet.")
     if not erreurs:
         erreurs += [f"Agent « {a['cle']} » : le fichier de sa fiche existe déjà." for a in agents
                     if (f["fiches"] / f"{a['cle']}.md").exists()]
@@ -230,7 +246,15 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs):
         raise Echec("Organisation refusée : " + " ; ".join(erreurs))
     d = json.loads(brut)
     d["services"] = [{"id": s["id"], "nom": s["nom"]} for s in services]
-    d["flux"] = [{c: e[c] for c in ("id", "nom", "role", "service")} for e in flux]
+    etapes = [{c: e[c] for c in ("id", "nom", "role", "service")} for e in flux]
+    if workflow is None:
+        d["flux"] = etapes
+    else:
+        d["workflows"] = list(d.get("workflows") or []) + [
+            {"id": workflow["id"], "fonctionnalite": workflow.get("fonctionnalite"), "genre": workflow.get("genre"),
+             "flux": etapes}]
+    if environnement is not None:
+        d["environnement"] = fusionner_environnement(d.get("environnement"), environnement)
     crees, factory_ecrite = [], False
     try:
         dossier_briefs.mkdir(parents=True, exist_ok=True)

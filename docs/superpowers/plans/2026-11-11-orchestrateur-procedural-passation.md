@@ -11,8 +11,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | Phase | Modèle proposé | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|
 | A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | **faite** le 2026-11-11 |
-| B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | à faire : **c'est la prochaine phase** |
-| C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire |
+| B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | **faite** le 2026-11-11 |
+| C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire : **c'est la prochaine phase** |
 | D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
@@ -65,6 +65,46 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
 - Essai réel des cinq consignes sur un petit dossier synthétique : toutes valides au premier essai ; 1 500 à 1 800
   tokens d'entrée par appel ; `decouper` 713 tokens de sortie, `ecrire_methode` 2 310 (Sonnet). Ordre de grandeur
   d'une fonctionnalité : moins de 0,05 $ de jugement.
+
+**Phase B (Sonnet 5.5).**
+- **Écart au plan : une commande `ecrire`** (`orchestrateur/outil.py`, `interface.md`, `consignes.md`). Le moteur doit
+  écrire le document de méthode et les briefs rendus par `ecrire_methode`, et aucune commande ne le permettait ; pour
+  tenir « le moteur n'écrit que par `lancer` », `ecrire` écrit `<pièces>/<fonctionnalité>/<nom>.md` (inscrit dans les
+  documents) ou ajoute un texte à `<fiches>/briefs/<rôle>.md`. Rien d'autre n'est écrit. Un adaptateur de projet peut la
+  remplacer comme les autres.
+- **Rapport structuré** (`moteur/rapport.py`) : en plus du contrat, trois champs facultatifs demandés **par la matière**
+  des agents concernés (pas par la consigne de fin commune) : `nom` et `cahier` (cadrage), `methode_prete` (prototype).
+  Les tests de l'`usage` de `orchestrateur` et du bloc `json` du départ sont dans `tests/test_moteur_rapport.py`.
+- **Outils d'un agent** : ligne `Outils :` facultative de la fiche (`fiches.outils`, défaut `fiches.OUTILS_PAR_DEFAUT`,
+  repris par `agents.OUTILS_PAR_DEFAUT`). `agents.executer_agent` accepte aussi `tache`, `lot`, `delai_s`.
+- **Architecture de `regles.py`** : les fonctions publiques **exécutent** leurs commandes (par `lancer`) et ne rendent
+  que ce qui reste asynchrone : `("juger", type, dossier, suite)` et `("agent", agent, taches, matiere)` (plus
+  `("lancer", nom, entree)`, que la boucle sait aussi passer). La `suite` d'un jugement porte l'identifiant de la
+  demande, qui n'est marquée traitée qu'à la fin du jugement (ou de l'agent, `etat["liees"]`). `appliquer_jugement` prend
+  `etat` en cinquième argument. Le modèle du départ est dans `etat["departs"][taches[0]]`.
+- **Une tâche « en attente de départ »** = pas active, pas faite, jamais prise, d'étape `flux:<id>`, `prototype`,
+  `relecture`, `correction`, `retour` ou `demande` (ou dans `etat["a_lancer"]` : cadrage, challenge, agent imposé). Les
+  tâches de flux sont regroupées par `lancer lots` ; tout le reste part seul. Charge (`feu_vert`), pause et
+  `agent-libre` sont tenus avant chaque départ.
+- **Choix pour tenir la conception** : la relecture croisée est faite en code (deux relecteurs au premier tour, un seul
+  ensuite, comparaison des `verdicts`) ; un refus passe par `apres_refus` (Haiku) sauf si le seuil de tours est dépassé
+  ou si le même point échoue sur deux éléments (décision `methode_a_revoir` posée **sans IA**). Un accord
+  (`accord_requis`) ou un outil refusé devient un **message à choix** dans la discussion (aucun genre de décision ne
+  convient) ; la réponse revient en `message` (« J'accepte », « C'est fait, relancez l'agent »…).
+- **Prototype** : un seul tour d'agent par message de l'utilisateur, au rôle de la première étape du flux (le flux
+  entier n'est appliqué qu'en série). `methode adapter` écrit la méthode adaptée d'emblée (sans seconde validation).
+- **Limites connues (à traiter ou à accepter en phase D)** : l'état de la série (éléments en cours, tours de
+  relecture, dépendances, contrôles refusés) est **en mémoire** ; après un arrêt, seules les tâches orphelines sont
+  reprises (une fois). Pas de montée de modèle dédiée pour l'écriture du cahier ; pas d'alternance des relecteurs ni de
+  retour à deux relecteurs quand une correction refait plus de la moitié de l'élément ; pas de proposition de genre ni
+  d'organisation par le moteur ; `partenaires_maj` relève seulement les fiches à refaire (la recherche n'est pas
+  lancée, la réponse le dit). Un message de l'utilisateur envoyé pendant qu'un agent de cadrage répond n'est pas relu
+  avant sa fin. Les jugements sont synchrones (la boucle attend leur fin).
+- **La boucle** (`moteur/boucle.py`) lit le bureau à chaque passage (projet ajouté pris sans redémarrer), lance les
+  agents dans des fils (`synchrone=True` pour les essais), note l'usage de chaque appel, commit/push le dépôt du projet
+  avec `Factory : <ce que l'agent a dit>` (`git add -A` sur tout le dossier du projet), relance une fois les tâches
+  orphelines. La ligne « API sans clé » est dite dans la réponse de la première demande traitée du projet. Le verrou
+  `moteur.pid` et le démarrage depuis le bureau sont en tâche 8 ; `py -3.12 -m moteur [--bureau …]` tourne déjà.
 
 ## Messages à coller
 

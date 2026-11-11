@@ -60,6 +60,7 @@ class Projet:
         self.factory = Path(factory)
         self.couche = couche
         self._feu_vert = feu_vert
+        self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
 
@@ -158,8 +159,11 @@ def _terminer(projet, suite, reponse):
     i = (suite or {}).get("demande")
     if not i:
         return
+    ligne = getattr(projet, "ligne_a_dire", None)
     try:
-        lancer(projet, "demande-traitee", {"id": i, "reponse": reponse})
+        lancer(projet, "demande-traitee", {"id": i, "reponse": f"{reponse} {ligne}".strip() if ligne else reponse})
+        if ligne:
+            projet.ligne_a_dire = None
     except Refus:
         pass
 
@@ -935,6 +939,36 @@ def _bloquer_element(projet, etat, fid, eid, raison):
     for t in court["taches"]:
         if t.get("fonctionnalite") == fid and t.get("element") == eid and t["colonne"] != "fait":
             lancer(projet, "tache", {"id": t["id"], "bloquee": raison, "active": False})
+
+
+def orphelines(projet, etat):
+    """À la reprise du moteur : une tâche active dont l'agent a disparu est relancée une fois (avec le reste de son lot).
+    Une tâche relancée une fois n'est plus reprise."""
+    court = _etat(projet)
+    if court["pause"]:
+        return []
+    actions, relancees = [], _m(etat, "relancees", set)
+    for t in court["taches"]:
+        etape = str(t.get("etape") or "")
+        if (not t["active"] or not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
+                or not (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
+            continue
+        relancees.add(t["id"])
+        ids = [t["id"]]
+        if isinstance(t.get("lot"), dict):
+            reste = [x for x in court["taches"] if isinstance(x.get("lot"), dict) and x["lot"]["id"] == t["lot"]["id"]
+                     and x["lot"]["rang"] > t["lot"]["rang"] and x["colonne"] != "fait"]
+            ids += [x["id"] for x in sorted(reste, key=lambda x: x["lot"]["rang"])]
+        par_id = {x["id"]: x for x in court["taches"]}
+        fiche = next(a for a in court["agents"] if a["cle"] == t["agent"])
+        modele = (t.get("montee") or {}).get("a") or fiche["modele"]
+        matiere = (chr(10) * 2).join(_matiere(projet, etat, par_id[i]) for i in ids)
+        lancer(projet, "tache", {"id": t["id"], "journal": ["Le moteur a repris : l'agent avait disparu, nouvel essai."]})
+        etat["departs"][ids[0]] = {"agent": t["agent"], "taches": ids, "matiere": matiere, "modele": modele,
+                                   "lot": (t.get("lot") or {}).get("id")}
+        etat["en_cours"].add(ids[0])
+        actions.append(a_agent(t["agent"], ids, matiere))
+    return actions
 
 
 def avancer(projet, etat):

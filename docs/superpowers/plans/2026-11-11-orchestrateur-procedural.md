@@ -215,11 +215,11 @@ def test_api_sans_cle_bascule_une_fois(self):
 - Commit et push du dépôt du projet après une étape qui produit (même règle que `consignes.md`), message `Factory : <ce qui a été produit>`.
 - Partenaires : `partenaires detecter` au démarrage d'un projet, `partenaires quota` à chaque tour (l'outil ne relit qu'une fois par heure) ; jamais de `confirmer` d'office (c'est un geste de l'utilisateur ou d'un agent qui voit les outils).
 
-- [ ] **Étape 1 : tests qui échouent** : `test_tour_ecrit_la_presence`, `test_tour_traite_les_messages_d_abord`, `test_usage_de_chaque_jugement_note`, `test_pause_par_projet`, `test_reprise_relance_tache_orpheline`, `test_demande_traitee_pas_rejouee`, `test_feu_vert_faux_ne_lance_rien`, `test_ligne_couche_dite_une_fois` (la ligne de `choisir_couche` part une seule fois au bureau, en `reponse` de la première demande traitée), `test_projet_ajoute_au_bureau_pris_sans_redemarrer`.
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** `moteur/boucle.py` et `moteur/__main__.py`.
-- [ ] **Étape 4 : lancer toute la suite** : verte.
-- [ ] **Étape 5 : commit** `Moteur : la boucle`.
+- [x] **Étape 1 : tests qui échouent** : `test_tour_ecrit_la_presence`, `test_tour_traite_les_messages_d_abord`, `test_usage_de_chaque_jugement_note`, `test_pause_par_projet`, `test_reprise_relance_tache_orpheline`, `test_demande_traitee_pas_rejouee`, `test_feu_vert_faux_ne_lance_rien`, `test_ligne_couche_dite_une_fois` (la ligne de `choisir_couche` part une seule fois au bureau, en `reponse` de la première demande traitée), `test_projet_ajoute_au_bureau_pris_sans_redemarrer`.
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** `moteur/boucle.py` et `moteur/__main__.py`.
+- [x] **Étape 4 : lancer toute la suite** : verte.
+- [x] **Étape 5 : commit** `Moteur : la boucle`.
 
 ## Étape 3 — le bureau et l'installation
 

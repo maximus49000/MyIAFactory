@@ -4,6 +4,8 @@ Préparation du **bureau partenaire** (à concevoir). Les partenaires sont **fac
 
 **Fiabilité.** (O) = lu sur la page officielle. Sans marque = agrégateurs tiers, qui se contredisent souvent : à revérifier avant d'afficher un prix. Les prix sont dans la devise d'origine. Plusieurs pages officielles étaient illisibles (Kling, Pika, HeyGen, D-ID, Hedra, Veo, Stability, Ideogram, Leonardo, Adobe).
 
+**Popularité** (de 1 à 5) : téléchargements mensuels du SDK officiel (npm, PyPI), étoiles GitHub ou utilisateurs annoncés, relevés le 11/11/2026 ; à défaut, une estimation (section 11 pour les sections 1 à 6).
+
 Légende de la colonne Quota : ✅ endpoint confirmé · 🟡 probable ou partiel · ❌ pas par l'API (console ou cloud) · ❔ inconnu.
 
 ## Ce qu'il faut retenir pour le bureau
@@ -307,6 +309,278 @@ Montage automatique par API : JSON2Video (600 crédits gratuits), Creatomate, Sh
 | **PostHog** | oui / ? | allocations mensuelles par produit | à l'usage | ❔ |
 | **Plausible** (O) | oui (plan Business) / ? | essai 30 jours | 9 à 19 $/mois | ❔ |
 
-## Pas couverts dans ces deux passes
+## 7. Hubs de connecteurs, IA et documents
 
-Voix : Speechify, Hume (Octave), Rime, Rev, Google Cloud STT, Amazon Transcribe, Descript, Respeecher. Vidéo : Captions, Akool, Colossyan, Argil. Jeu : SpriteCook, Ludo.ai, textures dédiées. Langue et web : Smartling, Captions, LiveKit, You.com, ScrapingBee, Bright Data. Médias : Pond5, Storyblocks, Jamendo, Envato. Mise en ligne : Firebase Hosting, Bunny.net, Geoapify, Mixpanel, Umami, Sentry. Les sources de chaque ligne sont gardées dans les rapports de recherche.
+Popularité de 1 à 5 : téléchargements mensuels du SDK officiel (npm, PyPI), étoiles GitHub ou utilisateurs annoncés, relevés le 11/11/2026.
+
+### Hubs de connecteurs (un branchement, des milliers d'applications)
+
+| Partenaire | API / MCP | Gratuit | Payant | Quota | Pop. |
+|---|---|---|---|---|---|
+| **Zapier** (O) | restreint / **oui**, sur tous les plans | 100 tâches/mois | Pro dès 19,99 $, Team dès 69 $ | ❔ | 4 (9 000+ applications) |
+| **Composio** (O) | oui / **oui** | 10 000 appels/mois | 18 $/siège | 🟡 | 4 (npm 6,1 M ; 31 k étoiles ; 1 700+ outils) |
+| **Make** (O) | oui / oui (à vérifier) | 1 000 crédits/mois | prix non lus | 🟡 API de gestion | 4 |
+| **n8n** (O) | oui / oui | auto-hébergé gratuit | 20 à 667 €/mois | ❔ | 5 (210 k étoiles) |
+| **Pipedream** (O) | oui / **oui** | développement | dès 99 $/mois | ❔ | 3 (npm 1,4 M ; 3 000+ connecteurs) |
+| **Activepieces** (O) | oui / oui | 1 000 crédits | 20 à 200 $/mois | ❔ | 3 (25,5 k étoiles ; open source) |
+| **Nango** (O) | oui / oui | 10 connexions | dès 50 $/mois | ❔ | 3 (npm 2,9 M) |
+| **Merge** (O) | oui / oui | 3 comptes | dès 650 $/mois | ❔ | 2 |
+| Paragon, IFTTT, Workato, Tray | restreint ou sur devis | essais | sur devis | ❔ | — |
+
+### Annuaires de serveurs MCP
+
+| Annuaire | Taille | Accès par API | Remarque |
+|---|---|---|---|
+| **Registre MCP officiel** | non mesurée | oui (`GET /v0/servers`) | la référence ; dépôt `modelcontextprotocol/servers` : 91,9 k étoiles |
+| **Glama** (O) | 119 397 serveurs | oui (`GET /v1/servers`) | comptage large, doublons |
+| **PulseMCP** (O) | 21 558 serveurs | ? | soumissions suspendues |
+| **mcp.so** | ≈ 20 000 | ? | |
+| **Smithery** | ≈ 6 000 à 7 000 | oui (registre, CLI) | héberge aussi les serveurs |
+| **Annuaire des connecteurs Claude** (O) | 1 112 connecteurs, 530 plugins | ? | vérifiés par Anthropic |
+| **Docker MCP Catalog** | ? | dépôt `docker/mcp-registry` | serveurs en conteneurs |
+
+Environ 22 500 serveurs distincts une fois les doublons retirés (juin 2026). Ces annuaires sont la meilleure source pour aller encore plus large : le catalogue pourra s'en nourrir.
+
+### Autres IA de texte et de code (prix par million de tokens, entrée / sortie)
+
+| Partenaire | API / MCP | Gratuit | Tarif | Quota | Pop. |
+|---|---|---|---|---|---|
+| **OpenAI** (O) | oui / ? | non | de 0,05 $ / 0,40 $ à 10 $ / 50 $ | ❔ | 5 (npm 203 M ; PyPI 296 M) |
+| **Google Gemini** (O) | oui / ? | oui (Flash) | de 0,30 $ / 2,50 $ à 2 $ / 10 $ | ❔ | 5 (npm 111 M ; PyPI 138 M) |
+| **Mistral** (O) | oui / ? | ? | Large 0,50 $ / 1,50 $ | ❔ | 4 (npm 25,6 M) |
+| **DeepSeek** (O) | oui (compatible OpenAI) | ? | 0,15 $ / 0,60 $ à 0,66 $ / 1,98 $ | 🟡 | 4 |
+| **xAI Grok** (O) | oui | ? | 1 $ / 2 $ à 2 $ / 6 $ | ❔ | 3 |
+| **Cohere** (O) | oui | clé d'essai | Command 2,50 $ / 10 $ | ❔ | 3 |
+| **Groq** (O) | oui | oui | non lu | ❔ | 4 |
+| **OpenRouter** (O) | oui (un accès à des centaines de modèles) | modèles gratuits limités | prix des modèles | ✅ `GET /api/v1/key` | 3 |
+| **Fireworks** (O), **Together**, **AI21** (O), **Qwen** | oui | crédits d'essai | dès 0,05 $ | ❔ | 2 à 3 |
+
+### Documents et OCR
+
+| Partenaire | API | Gratuit | Tarif | Pop. |
+|---|---|---|---|---|
+| **AWS Textract** (O) | oui | 1 000 pages/mois (3 mois) | 1,50 $ les 1 000 pages | 4 |
+| **Azure Document Intelligence** (O) | oui | 500 pages/mois | non lu | 4 |
+| **Mistral OCR** | oui | ? | ≈ 4 $ les 1 000 pages | 4 |
+| **Google Document AI** | oui | ? | non lu | 3 |
+| **LlamaParse** (O) | oui / oui | 10 000 crédits | 1,50 $ les 1 000 crédits | 3 |
+| **Unstructured** (O) | oui | 10 000 pages | 0,015 $ la page | 3 |
+| **Reducto** (O) | oui | 150 $ d'usage | 1 à 40 $ les 1 000 pages | 2 |
+| **Nanonets** (O) | oui | 50 $ de crédits | dès 100 $/mois | — |
+| **Docling** | bibliothèque libre | gratuit | — | 4 (70 k étoiles) |
+
+### Recherche vectorielle et embeddings
+
+| Partenaire | Gratuit | Tarif | Pop. |
+|---|---|---|---|
+| **Qdrant** (O) | 1 nœud, 1 Go | à l'usage | 4 (PyPI 12 M) |
+| **Weaviate** (O) | 100 000 objets | dès 45 $/mois | 4 |
+| **Chroma** (O) | 5 $ de crédits | Team 250 $/mois | 4 |
+| **Pinecone** (O) | 2 Go | dès 20 $/mois | 3 |
+| **Voyage AI** (O) | 200 M de tokens | 0,02 à 0,12 $ / M | 3 |
+| **Turbopuffer** (O) | non | dès 16 $/mois | 3 |
+
+## 8. Infrastructure : e-mail, paiement, comptes, surveillance, intégration continue
+
+Popularité : téléchargements npm sur 30 jours (5 ≥ 20 M, 4 = 5 à 20 M, 3 = 1 à 5 M, 2 = 0,1 à 1 M, 1 < 0,1 M) ; sinon estimation.
+
+### E-mail, SMS, notifications
+
+| Partenaire | MCP | Gratuit | Payant | Quota | Pop. |
+|---|---|---|---|---|---|
+| **Resend** (O) | ? | 3 000 mails/mois | Pro 20 à 35 $, Scale 90 à 1 150 $ | ❔ | 5 (63 M) |
+| **Amazon SES** (O) | ? | crédits AWS | 0,10 $ les 1 000 | ✅ GetSendQuota | 5 (20,5 M) |
+| **SendGrid** | communautaire | essai | non lu | 🟡 statistiques | 5 (23 M) |
+| **Twilio** (SMS) (O) | documentation | essai | SMS US 0,0083 $ | ✅ `/Balance.json` | 5 (33,6 M) |
+| **Firebase Cloud Messaging** (O) | oui (Firebase) | gratuit | — | sans objet | 5 |
+| **Postmark** (O) | oui (expérimental) | 100 mails/mois | dès 15 $ | 🟡 | 4 (5,9 M) |
+| **Mailgun** (O) | oui (local) | 100 mails/jour | 15 à 90 $ | 🟡 | 4 (5,1 M) |
+| **Brevo** | oui (accès anticipé) | ? | ? | 🟡 `GET /v3/account` | 3 |
+| **Mailchimp** (O) | documentation | 500 mails/mois | 11,73 à 315,93 € | ❔ | 4 |
+| **OneSignal** (O) | ? | 10 000 mails, push 1 000 MAU | dès 19 $ | ❔ | 2 |
+| **Pusher** (O) | ? | 200 000 messages/jour | 49 à 499 $ | ❔ | 3 |
+| **Knock** (O), **Novu** (O), **Bird** (O), **Vonage** | ? | paliers gratuits | 15 à 250 $ | ❔ (Vonage 🟡 solde) | 2 à 3 |
+
+### Paiement et vente
+
+| Partenaire | MCP | Frais | Quota | Pop. |
+|---|---|---|---|---|
+| **Stripe** (O) | **oui** (`https://mcp.stripe.com`) | à la transaction (cartes EEE 1,5 % + 0,25 €) | ✅ `GET /v1/balance` | 5 (119 M) |
+| **PayPal** (O) | **oui** (`https://mcp.paypal.com`) | à la transaction | 🟡 | 4 |
+| **Paddle** (O), **Lemon Squeezy** (O) | ? | 5 % + 0,50 $ | ❔ | 2 |
+| **Mollie** (O) | ? | 1,80 % + 0,25 € | 🟡 | 2 |
+| **RevenueCat** (O) | ? | gratuit jusqu'à 2 500 $/mois, puis 1 % | 🟡 | 3 |
+| **Gumroad** (O) | ? | 10 % + 0,50 $ | ❔ | 3 |
+| **Chargebee** (O), **Adyen**, **Square** | ? | selon l'offre | ❔ | 3 |
+
+### Comptes et bases de données
+
+| Partenaire | MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **Supabase** (O) | **oui** (`https://mcp.supabase.com/mcp`) | 50 000 MAU, 500 Mo | dès 25 $ | 5 (211 M) |
+| **MongoDB Atlas** (O) | **oui** | 512 Mo | dès 56,94 $ | 5 (76 M) |
+| **Neon** (O) | oui | 100 projets, 1 Go | à l'usage | 5 (25 M) |
+| **Upstash** (O) | oui | 500 000 commandes/mois | à l'usage | 5 (26 M) |
+| **Turso** (O) | ? | 5 Go | 4,99 à 416,58 $ | 4 (20 M) |
+| **Firebase Auth** (O) | oui (Firebase) | 50 000 MAU | à l'usage | 5 |
+| **Auth0** (O) | oui | 25 000 MAU | 35 à 800 $ | 4 |
+| **WorkOS** (O) | ? | 1 M MAU | SSO dès 125 $ | 4 |
+| **Clerk** (O) | ? | 50 000 MRU | 25 à 300 $ | 4 |
+| **Convex** (O) | oui | 1 M appels | Pro 25 $ | 4 |
+| **Stytch** (O), **PlanetScale** (O) | ? | 10 000 MAU / non | à l'usage / dès 10 $ | 3 |
+
+### Surveillance des erreurs et journaux
+
+| Partenaire | MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **Sentry** (O) | **oui** (`https://mcp.sentry.dev/mcp`) | 5 000 erreurs | 29 à 89 $ | 5 (198 M) |
+| **Datadog** (O) | contradictoire | 5 hôtes | dès 15 $/hôte | 5 (51 M) |
+| **Grafana Cloud** (O) | oui | gratuit | Pro 19 $ | 4 |
+| **New Relic** (O) | ? | 100 Go/mois | 0,40 $/Go | 4 |
+| **Better Stack** (O), **Honeybadger** (O), **Rollbar** (O), **LogRocket** (O) | ? | paliers gratuits | 26 à 292 $ | 2 à 3 |
+
+### Intégration continue
+
+| Partenaire | Gratuit | Payant | Pop. |
+|---|---|---|---|
+| **GitHub Actions** (O) | 2 000 min/mois | 0,006 $/min | 5 |
+| **GitLab CI** (O) | 400 min/mois | Premium 29 $ | 4 |
+| **Expo EAS** (O) | 15 + 15 builds/mois | 19 à 199 $ | 4 |
+| **CircleCI** (O) | 30 000 crédits | dès 15 $ | 4 |
+| **Bitrise** (O), **Codemagic** (O), **Buildkite** (O) | paliers gratuits | 30 à 218 $ | 3 |
+
+## 9. Boutiques et services pour le jeu
+
+### Boutiques et portails
+
+| Partenaire | API / MCP | Frais | Quota | Pop. |
+|---|---|---|---|---|
+| **App Store Connect** (O) | oui | 99 $/an, part des ventes | ✅ en-tête `X-Rate-Limit` | 5 |
+| **Google Play** (O) | oui | 25 $ une fois | ❌ (console) | 5 |
+| **Steamworks** | oui (Web API) | 100 $ par jeu ; 30 / 25 / 20 % | ❔ | 5 |
+| **Roblox Open Cloud** (O) | oui / **oui** (intégré à Roblox Studio) | — | ❔ | 5 |
+| **Epic Games Store** | oui (EOS) | 12 %, 0 % sur le premier million | ❔ | 4 |
+| **itch.io** (O) | oui (`butler`) | part libre, 10 % par défaut | sans objet | 4 |
+| **Microsoft Store** | oui (soumission) | inscription gratuite (particuliers) | ❔ | 4 |
+| **Meta Quest** (O) | oui (serveur à serveur) | 30 % | ❔ | 4 |
+| **CrazyGames**, **Poki** | SDK obligatoire | part des revenus publicitaires | ❔ | 4 |
+| **Newgrounds**, **Game Jolt** | ? | ≤ 10 % | ❔ | 3 |
+| **Nintendo**, **PlayStation**, **Xbox** | sur validation, pas d'API publique | kits, sans frais (Xbox) | sans objet | 5 |
+| **GOG**, **Fab** (O), **Unity Asset Store** | pas d'API publique | 70/30 ; 88 % au créateur (Fab) | sans objet | 3 à 4 |
+
+### Services pour le jeu
+
+| Partenaire | API / MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **FMOD**, **Wwise** | outils locaux | gratuits pour les indépendants (sous 200 k$ et 250 k$) | licences | 5 |
+| **Unity Gaming Services** (O) | oui | paliers gratuits par service | à l'usage | 4 |
+| **Photon** (O) | SDK | 20 joueurs simultanés | 95 $ et plus | 4 |
+| **PlayFab** | oui | palier réduit en mars 2026 | ≈ 99 $/mois | 4 |
+| **Nakama / Heroic Labs** | oui | open source | dès 600 $/mois | 4 |
+| **GameAnalytics** | oui / oui (PipelineIQ) | gratuit | ≈ 499 $/mois | 4 |
+| **AccelByte** (O) | oui / **oui** | 30 joueurs en développement | à l'usage | 3 |
+| **Modulate ToxMod** (O) | oui | Starter 0 $ | dès 2 500 $/mois | 3 |
+| **Lokalise**, **Gridly** (O) | oui | ? | 54 à 999 $/mois | 2 à 4 |
+| Edgegap, Community Sift, Inworld, Convai | oui | ? | sur devis ou contradictoire | 2 à 3 |
+
+Fermé : **Hathora** (mai 2026).
+
+## 10. Publication, sites, agenda et messageries
+
+### Réseaux sociaux et publication
+
+| Partenaire | API / MCP | Payant | Quota | Pop. |
+|---|---|---|---|---|
+| **YouTube Data API** (O) | oui | quota gratuit (10 000 unités/jour) | ❌ (console) | 5 |
+| **Instagram / Facebook** | oui (revue d'application) | — | 🟡 en-tête `X-App-Usage` | 5 |
+| **TikTok** | oui (audit pour publier en public) | — | ❔ | 4 |
+| **X** | oui | paiement à l'usage, plus de gratuit | ❔ | 4 |
+| **LinkedIn** | restreint | — | ❔ | 4 |
+| **Twitch** (O) | oui | — | ✅ en-têtes `Ratelimit-*` | 4 |
+| **Mastodon** (O) | oui | — | ✅ en-têtes `X-RateLimit-*` | 3 |
+| **Bluesky** | oui | — | points par heure | 3 |
+| **Reddit** | restreint | ≈ 0,24 $ les 1 000 appels | ❔ | 4 — **fermeture de l'API ouverte annoncée (à vérifier)** |
+| **Metricool** (O) | oui / **oui** | ? | ❔ | 3 |
+| **Buffer**, **Hootsuite**, **Later**, **Sprout Social**, **Ayrshare** (O) | oui | 5 à 599 $/mois | ❔ | 2 à 4 |
+| **Pinterest**, **Threads** | oui | — | ❔ | 3 |
+
+### Sites, CMS et commerce
+
+| Partenaire | MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **WordPress.com** (O) | ? | 1 Go | 9 à 70 $ | 5 |
+| **Shopify** (O) | ? | non | 36 à 384 €/mois | 5 |
+| **Wix** | **oui** (`https://mcp.wix.com/mcp`) | ? | ? | 5 |
+| **WooCommerce** (O) | **oui** (natif, aperçu) | extension gratuite | — | 5 |
+| **Webflow** (O) | **oui** (`https://mcp.webflow.com/sse`) | ? | ? | 4 |
+| **Contentful** (O) | **oui** (`https://mcp.contentful.com/mcp`) | ? | ? | 4 |
+| **Strapi** (O) | ? | open source | Cloud 35 à 450 $ | 4 |
+| **Ghost** (O) | ? | auto-hébergé | 18 à 199 $ | 4 |
+| **Sanity** (O), **Storyblok** (O) | ? | paliers gratuits | 15 $/siège ; 99 à 349 $ | 3 |
+| **Directus**, **Payload**, **Squarespace**, **Framer CMS**, **Prismic**, **Hygraph** | Directus oui (à confirmer) | auto-hébergés ou ? | ? | 2 à 3 |
+
+### Agenda, formulaires et visio
+
+| Partenaire | MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **Microsoft 365 / Teams** (Graph) | ? | — | — | 5 |
+| **Google Agenda, Meet, Forms** | communautaire (Workspace) | gratuits | — | 4 à 5 |
+| **Zoom** (O) | ? | réunions de 40 min | Pro 16,99 $ | 5 |
+| **Calendly** (O) | ? | 1 type d'événement | 10 à 16 $ | 5 |
+| **Cal.com** (O) | ? | 1 utilisateur | Teams 12 $ | 4 |
+| **Typeform** (O) | ? | limité | 39 à 379 $ | 4 |
+| **Jotform** (O) | **oui** (`https://mcp.jotform.com`) | ? | ? | 3 |
+| **Tally** (O) | **oui** | formulaires sans limite | 20 à 65 € | 3 |
+| **SurveyMonkey**, **Loom**, **Whereby**, **Fillout** | ? | ? | ? | 2 à 4 |
+
+### Messageries
+
+| Partenaire | MCP | Remarque | Pop. |
+|---|---|---|---|
+| **Slack** (O) | **oui** | voir section 6 | 5 |
+| **Discord** | communautaire seulement | en-têtes de limite | 5 |
+| **Telegram Bot API** | ? | gratuit | 5 |
+| **WhatsApp Business** (O) | ? | facturation par message depuis juillet 2025 | 5 |
+
+## 11. Popularité des partenaires des sections 1 à 6
+
+Téléchargements npm sur 30 jours au 11/11/2026 quand ils existent ; « est. » = estimation.
+
+| Niveau | Partenaires |
+|---|---|
+| **5** | OpenAI (203 M), ElevenLabs (≈ 11 M sur ses SDK, leader de sa catégorie), Google Gemini (112 M), OpenAI Moderation, Unsplash, Figma, Canva (est.), Mapbox (21 M), Google Maps (29 M), OpenStreetMap, Supabase (211 M), Vercel, Cloudflare (145 M), GitHub (94 M), Notion, Slack (65 M), Jira/Confluence, Google Drive, Trello, Discord (est.), PostHog (86 M), GitHub Pages |
+| **4** | Google Cloud TTS, Amazon Polly, Azure Speech (est.), Deepgram (4,9 M), AssemblyAI, DeepL, Amazon Translate, Google Translation, Azure Translator (est.), Lokalise, Black Forest Labs, Stability, Adobe Firefly, fal.ai (8,4 M), Replicate (2,9 M), Runway, Google Veo, HeyGen, Synthesia, Meshy (est.), Firecrawl (5,4 M), Exa (4,5 M), Tavily, Apify, Browserbase (10,6 M), Brave, Jina, Perplexity, Vapi, Pexels, Pixabay, Epidemic Sound, Shutterstock, Getty, Adobe Stock, Artlist, Iconify, Noun Project, Google Fonts, Flaticon, Font Awesome, Poly Haven, Sketchfab, Kenney, Fab, Adobe Substance, Framer, Netlify, GitLab, Linear (15 M), Asana, Render, Fly.io, itch.io, BrowserStack, Sauce Labs, TestMu AI, Firebase Test Lab |
+| **3** | Cartesia, Murf, WellSaid, Resemble, Fish Audio, Speechmatics, Gladia, Crowdin, Phrase, Ideogram, Leonardo, Recraft, Freepik/Magnific, Krea, Picsart, remove.bg, Photoroom, Topaz, Scenario, Tripo, Kling, MiniMax, Luma, Seedance, SerpAPI, Retell, Bland, Inworld, Freesound, Openverse, ambientCG, KIRI Engine, Polycam, RealityScan, Gamma, Penpot, MapTiler, Plausible, Railway, Backblaze, AWS Device Farm |
+| **2** | Mubert, Soundraw, Stable Audio, Clipdrop, AutoSprite, PixelLab, D-ID, Tavus, Hedra, Sync Labs, JSON2Video, Creatomate, Shotstack, Rodin, CSM, Move.ai, Hume, Convai, Sightengine, Hive, Reality Defender, Stadia, QuickChart, Datawrapper |
+
+## 12. Compléments des services « pas couverts »
+
+| Partenaire | API / MCP | Gratuit | Payant | Pop. |
+|---|---|---|---|---|
+| **Google Cloud STT** (O) | oui | 60 min/mois | ≈ 0,016 à 0,024 $/min | 4 (3,1 M) |
+| **Amazon Transcribe** (O) | oui | 60 min/mois (12 mois) | 0,006 à 0,024 $/min | 4 (3,1 M) |
+| **Descript** | bêta / **oui** | 60 min/mois | crédits du plan | 4 |
+| **Hume Octave** (O) | oui | 10 000 car./mois (non commercial) | 3 à 900 $/mois | 3 |
+| **Speechify** | oui | contradictoire | dès 6 $ le million de car. | 3 |
+| **Rev AI** | oui | ≈ 5 h | 0,10 à 0,30 $/h | 3 |
+| **Rime** | oui | crédits d'essai | 30 à 50 $ le million de car. | 2 |
+| **LiveKit** (O) | oui | 1 000 min d'agent | ≈ 50 à 500 $/mois | 4 (25 M) |
+| **Bright Data** (O) | oui / **oui** | 5 000 crédits/mois | à l'usage | 4 |
+| **ScrapingBee** (O) | oui | 1 000 crédits | dès 19,99 $ | 3 |
+| **Smartling** | oui | ? | ≈ 500 $/mois | 3 |
+| **Mixpanel** (O) | oui / **oui** | 1 M événements/mois | à l'usage | 4 (13 M) |
+| **Firebase Hosting** | oui | Spark | Blaze à l'usage | 5 (50 M) |
+| **Bunny.net** (O) | oui | non (1 $/mois minimum) | 0,01 $/Go | 3 |
+| **Umami** (O) | oui | Cloud Hobby gratuit | ≈ 9 $/mois | 3 |
+| **Geoapify** (O) | oui | 3 000 crédits/jour | dès 59 $ | 2 |
+| **Captions**, **Colossyan**, **Akool**, **Argil** | oui | ? | 39 à 149 $/mois | 2 à 3 |
+| **Ludo.ai** | bêta / **oui** (bêta) | ? | ≈ 50 $/mois | 2 |
+| **Storyblocks**, **Pond5** | partenariat | clé développeur | sur devis | 3 |
+| **Jamendo** | ? | non commercial | ? | 2 |
+| Textures PBR : **fal.ai Patina** | oui | — | ≈ 0,10 $ le matériau | — |
+
+À écarter : **Envato Elements** (aucune API publique pour les médias), **Respeecher** et **You.com** (API non confirmée), SpriteCook (introuvable). À instruire : Seedream, Imagen, Higgsfield, Moonvalley, Genmo, Sloyd, Gradium.
+
+## Encore à instruire
+
+Les sources de chaque ligne sont gardées dans les rapports de recherche. Les annuaires de serveurs MCP (section 7, environ 22 500 serveurs distincts) restent la meilleure source pour aller encore plus large ; le bouton « Mettre à jour les offres » et les prochaines recherches compléteront le catalogue.

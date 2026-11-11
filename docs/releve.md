@@ -328,6 +328,8 @@ Les partenaires (voix, images, vidéo, 3D, traduction…) sont **facultatifs** :
                                  "inscription": "https://…", "connexions": [{"type": "mcp", "url": "https://…", "commande": "claude mcp add …"}],
                                  "plans": [{"nom": "Gratuit", "prix": 0, "devise": "USD", "periode": "mois", "quota": "…", "tarif": "gratuit"}],
                                  "gratuit": "…", "quota_lisible": "oui", "illimite": false, "statut": "actif",
+                                 "description": "À quoi sert le partenaire et ce qu'il contient (280 caractères au plus).",
+                                 "popularite": {"niveau": 4, "base": "npm 5 M sur 30 jours", "date": "2026-11-11"},
                                  "fiabilite": "officielle", "verifie_le": "2026-11-11"}]},
   "etat": {"connexions": {"elevenlabs": {"etat": "connecte", "source": "…", "abonnement": "Pro", "vu_le": "2026-11-11T10:00:00"}},
            "quotas": {"elevenlabs": {"reste": 4200, "unite": "caractères", "lu_le": "2026-11-11T10:05:00"}},

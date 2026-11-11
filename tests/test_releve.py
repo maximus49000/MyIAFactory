@@ -1065,6 +1065,7 @@ class TestPartenaires(unittest.TestCase):
                 (lambda p: p["categories"]["voix-audio"][0].update(verifie_le="demain"), "date"),
                 (lambda p: p["categories"]["voix-audio"].append({"id": "vox", "nom": "Bis"}), "double"),
                 (lambda p: p["categories"]["voix-audio"][0].update(popularite={"niveau": 9, "base": "x", "date": "2026-11-12"}), "popularite"),
+                (lambda p: p["categories"]["voix-audio"][0].update(description="  "), "description"),
                 (lambda p: p["categories"].update({"voix-audio": "x"}), "categories"),
                 (lambda p: p.update(maj_catalogue="bientôt"), "date"),
                 (lambda p: p["conseils"].update(voix="x"), "conseils"),

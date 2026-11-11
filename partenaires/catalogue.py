@@ -10,7 +10,10 @@ from pathlib import Path
 
 from orchestrateur.factory import MOTIF_ID
 
-CATEGORIES = ("voix-audio", "images", "video-3d-avatars", "langue-web-agents", "medias-design", "mise-en-ligne-equipe")
+CATEGORIES = ("voix-audio", "images", "video-3d-avatars", "langue-web-agents", "medias-design", "mise-en-ligne-equipe",
+              "hubs-mcp", "ia-texte-code", "documents-donnees", "infrastructure", "jeu", "publication-sites",
+              "agenda-messageries")
+DESCRIPTION_MAX = 280
 TARIFS = ("gratuit", "inclus", "usage", "inconnu")
 STATUTS = ("actif", "ferme", "sans_api", "restreint")
 CONNEXIONS = ("mcp", "api", "studio", "compte")
@@ -79,6 +82,11 @@ def verifier(d):
             e("quota_lisible doit valoir oui, non ou inconnu")
         if p.get("lecteur") is not None and p.get("quota_lisible") != "oui":
             e("lecteur seulement si quota_lisible vaut oui")
+        d_ = p.get("description")
+        if d_ is None and p.get("statut") == "actif":
+            e("description manquante (une entrée active doit dire à quoi sert le partenaire)")
+        elif d_ is not None and not (isinstance(d_, str) and d_.strip() and len(d_) <= DESCRIPTION_MAX and "\n" not in d_):
+            e(f"description : un texte d'une ligne de {DESCRIPTION_MAX} caractères au plus")
         if p.get("popularite") is not None and not popularite_ok(p["popularite"]):
             e("popularite : null ou {niveau (1 à 5), base (texte court), date (AAAA-MM-JJ)}")
         if not isinstance(p.get("illimite"), bool):

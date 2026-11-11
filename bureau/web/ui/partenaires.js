@@ -13,6 +13,10 @@ const LIBELLES_CATEGORIE = {
   "voix-audio": "Voix et audio", "images": "Images et graphisme", "video-3d-avatars": "Vidéo, 3D et avatars",
   "langue-web-agents": "Langue, web et agents", "medias-design": "Médias et design",
   "mise-en-ligne-equipe": "Mise en ligne et outils d'équipe",
+  "hubs-mcp": "Hubs de connecteurs et annuaires MCP", "ia-texte-code": "Autres IA de texte et de code",
+  "documents-donnees": "Documents, OCR et recherche vectorielle", "infrastructure": "E-mail, paiement, comptes et surveillance",
+  "jeu": "Boutiques et services pour le jeu", "publication-sites": "Publication, sites et commerce",
+  "agenda-messageries": "Agenda, formulaires et messageries",
 };
 const PERIODES = {mois: "/mois", an: "/an", usage: " à l'usage", jour: "/jour", heure: "/heure", minute: "/minute"};
 const tableau = (v) => (Array.isArray(v) ? v : []);
@@ -83,7 +87,7 @@ export function lignePlan(plan) {
 const filtreOk = (carte, filtre) => {
   const f = String(filtre || "").trim().toLowerCase();
   if (!f) return true;
-  return [carte.nom, carte.id, carte.sous_categorie, libelleCategorie(carte.categorie)].some((t) => String(t || "").toLowerCase().includes(f));
+  return [carte.nom, carte.id, carte.sous_categorie, carte.description, libelleCategorie(carte.categorie)].some((t) => String(t || "").toLowerCase().includes(f));
 };
 
 // Les trois parties de l'espace : connectés, conseillés pour ce projet (ordre et raison des conseils), tous par catégorie.
@@ -195,6 +199,7 @@ function carte(donnees, c, vue) {
     vue.redessiner();
   }), el("strong", "partenaire-nom", c.nom), el("span", "partenaire-categorie", libelleCategorie(c.categorie)));
   racine.append(entete);
+  if (typeof c.description === "string" && c.description.trim()) racine.append(el("p", "partenaire-description", c.description));
   const etat = etatConnexion(donnees, c.id);
   const connexion = objet(objet(donnees?.etat).connexions)[c.id];
   const lignes = el("div", "partenaire-resume");

@@ -101,7 +101,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 16. La vue 3D adaptée au mobile
 - [x] 17. Les lots par modèle dans l'orchestrateur
 - [x] 18. Le catalogue des partenaires
-- [ ] 18 bis. Le catalogue complet, décrit et noté
+- [x] 18 bis. Le catalogue complet, décrit et noté
 - [ ] 19. Partenaires : connexions, quotas, règles, choix et usage
 - [x] 20. L'espace partenaire au bureau
 - [ ] 21. Les partenaires dans les consignes et l'installation

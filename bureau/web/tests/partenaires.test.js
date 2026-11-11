@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, creerVue, rendrePartenaires,
+import {libelleCategorie, popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, creerVue, rendrePartenaires,
         MAX_REGLE} from "../ui/partenaires.js";
 import {lignesPartenaires, coutDePartenaire} from "../ui/facturation.js";
 import {creerPlan} from "../logique/plan.js";
@@ -328,4 +328,27 @@ test("tri par popularité : les plus populaires d'abord, les non mesurés à la 
   assert.equal(vue.tri, "popularite");
   const liste = racine.tous((n) => n.className === "partenaires-liste")[0];
   assert.ok(liste.textContent.indexOf("Zeta") < liste.textContent.indexOf("Vox"));
+});
+
+test("la description s'affiche sous le nom et le filtre la trouve", () => {
+  const d = JSON.parse(JSON.stringify(DONNEES));
+  d.categories["voix-audio"][0].description = "Voix de synthèse très naturelles pour narrer un jeu.";
+  d.categories["voix-audio"][1].description = "<b>Pas de balise</b>";
+  const {racine} = rendre(d);
+  const carteVox = racine.tous((n) => n.className === "partenaire-carte" && /Vox/.test(n.textContent))[0];
+  const desc = carteVox.tous((n) => n.className === "partenaire-description")[0];
+  assert.equal(desc.textContent, "Voix de synthèse très naturelles pour narrer un jeu.");
+  assert.equal(desc.tagName, "p");
+  const carteEcho = racine.tous((n) => n.className === "partenaire-carte" && /Echo/.test(n.textContent))[0];
+  assert.equal(carteEcho.tous((n) => n.className === "partenaire-description")[0].textContent, "<b>Pas de balise</b>");   // textContent, jamais du HTML
+  const sans = racine.tous((n) => n.className === "partenaire-carte" && /Tripo/.test(n.textContent))[0];
+  assert.equal(sans.tous((n) => n.className === "partenaire-description").length, 0);
+  assert.deepEqual(parties(d, "narrer").categories.map((g) => g.cartes.map((c) => c.id)), [["vox"]]);
+  assert.deepEqual(parties(d, "NARRER").categories.map((g) => g.id), ["voix-audio"]);
+});
+
+test("les nouvelles catégories ont un libellé lisible", () => {
+  for (const id of ["hubs-mcp", "ia-texte-code", "documents-donnees", "infrastructure", "jeu", "publication-sites", "agenda-messageries"]) {
+    assert.notEqual(libelleCategorie(id), id, id);
+  }
 });

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task (une conversation par phase, voir la passation `2026-11-11-installation-sur-un-projet-passation.md`). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** La skill devient un plugin Claude Code ; depuis le dossier d'un projet, une commande mène la discussion (projet vide ou existant), propose une organisation chiffrée, puis configure tout (fichier de factory, réglages, fiches, consignes, contrôles, bureau commun) pour partir sur une première fonctionnalité ; ensuite l'orchestrateur fait évoluer l'organisation par des décisions du Directeur.
+**Goal:** La skill devient un plugin Claude Code ; depuis le dossier d'un projet, une commande mène la discussion (projet vide ou existant), propose une organisation chiffrée, puis configure tout (fichier de factory, réglages, fiches, consignes, contrôles, bureau commun, accès mobile si demandé) pour partir sur une première fonctionnalité ; le bureau devient accessible au téléphone (Tailscale, Wi-Fi de la maison) avec un code d'accès et une vue 3D adaptée ; ensuite l'orchestrateur fait évoluer l'organisation par des décisions du Directeur.
 
-**Architecture:** Un nouveau paquet `installation/` (Python, bibliothèque standard) : `dossier.py` (le dossier stable `~/MyIAFactory`), `examen.py` (vide, existant, déjà installé), `calibrage.py`, `estimation.py`, `proposition.py` (contrôle d'une proposition), `mise_en_place.py` (écriture, inscription au bureau, réparation, organisation), `outil.py` (ligne de commande). Le plugin : `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skills/installer/SKILL.md` (les consignes de la discussion). Côté orchestrateur et bureau : chemins `~` développés, limite d'agents locaux tenue, leçon gardée en local si le push échoue, décision et commande `organisation`.
+**Architecture:** Un nouveau paquet `installation/` (Python, bibliothèque standard) : `dossier.py` (le dossier stable `~/MyIAFactory`), `examen.py` (vide, existant, déjà installé), `calibrage.py`, `estimation.py`, `proposition.py` (contrôle d'une proposition), `mise_en_place.py` (écriture, inscription au bureau, réparation, organisation), `outil.py` (ligne de commande). Le plugin : `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skills/installer/SKILL.md` (les consignes de la discussion). Côté orchestrateur et bureau : chemins `~` développés, limite d'agents locaux tenue, leçon gardée en local si le push échoue, décision et commande `organisation`, écouteurs distants avec code d'accès (`bureau/acces.py`), vue 3D adaptée au mobile (`logique/mobile.js`).
 
 **Tech Stack:** Python 3.12 bibliothèque standard ; JavaScript en modules ; `git` et, dans la discussion seulement, `gh` ; tests `unittest` et `node --test`.
 
@@ -17,6 +17,7 @@
 - Dossier stable : `~/MyIAFactory` ; la skill y est en `~/MyIAFactory/skill` ; le fichier de bureau commun en `~/MyIAFactory/bureau.json` ; les propositions en attente en `~/MyIAFactory/propositions/`. Dans tout fichier versionné, la skill s'écrit `~/MyIAFactory/skill/...` (jamais un chemin absolu).
 - **Rien n'est écrit dans le dossier du projet avant `appliquer`** : `examiner`, `calibrer`, `estimer`, `proposer` n'y écrivent rien.
 - Modèles : Haiku, Sonnet, Opus ; **Fable refusé par tout outil** (proposition, organisation, fiche).
+- Accès mobile : `127.0.0.1` reste toujours ouvert ; les écouteurs distants (adresse Tailscale, adresse du réseau local privé) n'existent que si le fichier de bureau les demande, et **chaque requête qui y arrive exige le cookie d'accès**, y compris depuis la machine elle-même. Aucun tunnel public, aucun hébergement.
 - Le bureau n'agit jamais lui-même et n'appelle aucune IA ; un geste devient une demande.
 - Versionnés dans le projet : `.factory/factory.json`, `.factory/reglages.json`, fiches, briefs, consignes propres, contrôles, suivi. Ignorés par git : `.factory/equipe.json`, `.factory/*-historique.jsonl`.
 - Les tests n'utilisent jamais le vrai dossier de l'utilisateur ni le réseau : ils fixent `HOME` et `USERPROFILE` sur un dossier temporaire, et les appels `git` passent par une fonction injectée ou par des dépôts temporaires locaux.
@@ -29,6 +30,8 @@
 3. Dossier utilisateur avec espaces et accents (`Zoé Martin`) : les chemins `~` se développent, le bureau lance les commandes, `bureau.json` se relit. (Tâche 1 : `test_tilde_espaces_accents` ; tâche 7 : `test_chemin_espaces_accents`.)
 4. Échec au milieu de la mise en place (fiche invalide, disque plein simulé) : aucun `.factory/` à moitié écrit, `.gitignore` et `bureau.json` intacts. (Tâche 7 : `test_echec_au_milieu_rien_ne_reste`.)
 5. `.gitignore` absent, sans fin de ligne, ou portant l'ancienne règle `.factory/` du guide : la configuration devient versionnée, le bloc n'est ajouté qu'une fois. (Tâche 7 : `test_gitignore_ancienne_regle`, `test_gitignore_idempotent`.)
+6. Le bureau ouvert au réseau : une requête sur l'écouteur distant sans cookie, avec un cookie d'avant une révocation, avec un code d'association déjà servi ou expiré, ou avec un `Host` inconnu → 401 ou 403, aucune donnée ; `/api/acces` (le code et le QR) n'est jamais servi à l'écouteur distant. (Tâche 15 : `test_distant_sans_cookie_401`, `test_revoquer_invalide_les_cookies`, `test_code_usage_unique`, `test_api_acces_jamais_a_distance`.)
+7. Photo prise au téléphone : 12 Mo, format HEIC ou WebP, très grande définition → réduite et réencodée en JPEG sous 5 Mo dans la page avant l'envoi, jamais refusée en silence. (Tâche 16 : tests de `dimensionsReduites`, `formatEnvoye` et `qualitePour`.)
 
 ---
 
@@ -160,6 +163,19 @@
 
 ## Étape 3 — le plugin et la discussion (phase D)
 
+### Task 14 : le support de traitement dans la proposition et la mise en place
+
+**Files:** Modify `installation/proposition.py`, `installation/mise_en_place.py`, `installation/outil.py`, `bureau/reglages.py`, `tests/inst_aide.py` ; Create `installation/acces.py` ; Test `tests/test_inst_proposition.py`, `tests/test_inst_mise_en_place.py`, `tests/test_inst_acces.py`, `tests/test_reglages.py`
+
+**Interfaces:**
+- Produces: la proposition gagne `supports` (liste non vide, sans double, de `"ordinateur"`, `"mobile"`) et `acces` `{"tailscale": bool, "reseau_local": bool}` (au moins un vrai si `"mobile"` est dans `supports` ; tous deux faux sinon).
+- `acces.adresse_tailscale(executer=subprocess.run) -> str | None` (`tailscale ip -4`, première ligne, délai 5 s ; absent ou en échec → `None`) ; `acces.adresse_reseau_local() -> str | None` (l'adresse IPv4 de sortie de la machine, lue par un `socket` UDP connecté sans envoi, gardée seulement si elle est privée : `10/8`, `172.16/12`, `192.168/16`).
+- `outil.py acces` → `{"tailscale": adresse | null, "reseau_local": adresse | null}` (pour la discussion).
+- `mise_en_place.appliquer` et `reparer` : si la proposition demande le mobile, le fichier de bureau commun reçoit `acces` (fusion : un accès déjà ouvert le reste) et le rendu gagne `acces: {"tailscale", "reseau_local"}` (les adresses, ou `null`) ; `relancer_bureau` est vrai quand `acces` a changé. `bureau.reglages.lire_bureau` accepte et rend `acces` (défaut : tous deux faux ; tout autre type refusé).
+
+- [ ] **Step 1 : tests** — `test_supports_vides_refuses`, `test_mobile_sans_acces_refuse`, `test_ordinateur_seul_acces_faux`, `test_acces_ecrit_dans_le_bureau`, `test_acces_fusionne`, `test_lire_bureau_acces_invalide`, `test_adresse_reseau_local_publique_refusee`, `test_tailscale_absent_none`.
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Installation : le support de traitement et l'accès mobile ».
+
 ### Task 9 : le plugin et les consignes de la discussion
 
 **Files:** Create `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skills/installer/SKILL.md` ; Test `tests/test_plugin.py`
@@ -170,10 +186,10 @@
   1. `py -3.12 "${CLAUDE_PLUGIN_ROOT}/installation/outil.py" preparer` ; ensuite toujours `~/MyIAFactory/skill/installation/outil.py` ;
   2. `examiner` le dossier courant ; `installe` → `reparer` et en rendre compte ; `factory_propre` → renvoyer vers `docs/orchestrateur.md` et s'arrêter ;
   3. vide → les questions de la section 6, une à la fois ; existant → lecture confiée à un sous-agent Haiku (arbre, fichiers clés, documentation, un échantillon du code ; résumé du métier en 300 mots au plus), puis reformulation et questions sur les zones d'ombre ;
-  4. les questions communes : cloud ou local, facturation, dépôt GitHub (vide), genre proposé parmi `orchestrateur/memoire/genres/` (jamais la mémoire d'un autre genre lue en détail) ; `calibrer` ;
+  4. les questions communes : le support de traitement (ordinateur, mobile : choix multiple ; avec le mobile, `outil.py acces`, puis Tailscale par défaut — la marche à suivre pour installer l'application sur l'ordinateur et le téléphone, que l'utilisateur fait lui-même — et le Wi-Fi de la maison en secours, en disant que son trafic n'est pas chiffré), cloud ou local, facturation, dépôt GitHub (vide), genre proposé parmi `orchestrateur/memoire/genres/` (jamais la mémoire d'un autre genre lue en détail) ; `calibrer` ;
   5. la proposition en cinq parties (compréhension, paramétrage, organisation, workflow avec une justification par étape, estimation par `estimer`), le workflow le plus court qui tienne, le plus petit modèle capable, jamais Fable ; corrections jusqu'à « je valide » ;
   6. `proposer`, puis `appliquer` ; pour un projet vide et si demandé : `git init`, puis `gh repo create <nom> --private --source . --push` après un dernier accord ; pour un projet existant au dépôt GitHub public, le signaler ;
-  7. la fin : la liste des agents cloud (clé, rôle, modèle à régler, environnement), la commande du bureau (`py -3.12 ~/MyIAFactory/skill/lancer.py serveur --bureau ~/MyIAFactory/bureau.json`, et « relancez-le » si `relancer_bureau`), le message qui ouvre la conversation orchestratrice ; si `pret` est faux, le dire en clair.
+  7. la fin : la liste des agents cloud (clé, rôle, modèle à régler, environnement), la commande du bureau (`py -3.12 ~/MyIAFactory/skill/lancer.py serveur --bureau ~/MyIAFactory/bureau.json`, et « relancez-le » si `relancer_bureau`), le message qui ouvre la conversation orchestratrice ; avec le mobile : relancer le bureau, ouvrir la page sur l'ordinateur, « Associer un téléphone », scanner le QR code ; si `pret` est faux, le dire en clair.
 
 - [ ] **Step 1 : tests** — `test_json_du_plugin` (champs ci-dessus), `test_frontmatter`, `test_commandes_citees_existent` (chaque `outil.py <commande>` cité dans `SKILL.md` existe dans `installation/outil.py`), `test_longueur_consignes` (≤ 2 000 mots), `test_aucun_fable_choisi`. Si `claude plugin validate` existe sur la machine, le passer aussi.
 - [ ] **Step 2–4 :** échec, écrire, verts. **Step 5 :** commit « Le plugin et la commande d'installation ».
@@ -195,26 +211,57 @@
 - [ ] **Step 1 : tests** — `test_decision_organisation_valide`, `test_decision_organisation_fable_refuse`, `test_demande_organisation_v3_refusee`, `test_demande_organisation_verdict_inconnu`, `test_appliquer_organisation` (factory relue avec le nouveau service et la nouvelle étape, fiche créée, décision levée), `test_appliquer_garde_les_autres_cles`, `test_refus_etape_service_inconnu` ; node : rendu de la décision (texte hostile littéral, coût sans euros → « prix inconnu »).
 - [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « L'organisation qui évolue ».
 
-## Étape 5 — les guides et la relecture (phase F)
+## Étape 5 — le bureau sur le téléphone (phases F et G)
+
+### Task 15 : le bureau ouvert au réseau, le code d'accès, l'association
+
+**Files:** Modify `bureau/serveur.py`, `bureau/web/index.html`, `bureau/web/ui/barre.js` ; Create `bureau/acces.py`, `bureau/web/ui/associer.js`, `bureau/web/vendor/qrcode.js` (+ sa licence) ; Test `tests/test_acces.py`, `bureau/web/tests/associer.test.js`
+
+**Interfaces:**
+- Consumes: `lire_bureau(...)["acces"]` et `installation.acces.adresse_tailscale`, `adresse_reseau_local` (tâche 14).
+- Produces: `bureau/acces.py` : `Cles(chemin)` sur `~/MyIAFactory/acces.json` `{"cle": secret}` (créé au besoin, `secrets.token_urlsafe(32)`) avec `cle()`, `revoquer() -> str` (nouvelle clé), `code_association() -> str` (usage unique, 10 minutes, 8 caractères sans ambiguïté), `echanger(code) -> str | None`, `valide(cookie) -> bool` (`hmac.compare_digest`).
+- `serveur.creer(...)` avec un fichier de bureau dont `acces` ouvre quelque chose : en plus de `127.0.0.1`, un **écouteur distant** par adresse trouvée (même port), qui sert le même `Bureau` ; une adresse introuvable est dite au lancement et ignorée. Le mode `--reglages` (un projet) n'ouvre jamais d'écouteur distant. Les tests simulent un écouteur distant sur `127.0.0.1` (port libre).
+- Sur un écouteur distant : `Host` doit valoir `<adresse>:<port>` (sinon 403) ; `GET /associer?code=…` valide → cookie `myiafactory_acces=<clé>; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000` et redirection vers `/` ; toute autre requête sans cookie valide → 401 et une page courte « Scannez le QR code affiché sur l'ordinateur » ; un `POST` exige aussi `Origin` égal à l'adresse servie (sinon 403).
+- Sur `127.0.0.1` seulement : `GET /api/acces` → `{"adresses": [{"genre": "tailscale" | "reseau_local", "url"}], "code", "expire"}` (un code neuf à chaque appel) ; `POST /api/acces/revoquer` → nouvelle clé, codes en cours annulés. Sur un écouteur distant : 404.
+- Page (ordinateur) : « Associer un téléphone » dans la barre quand une adresse distante existe ; un panneau montre, par adresse, le QR code de `<url>/associer?code=<code>` (bibliothèque `qrcode-generator`, licence MIT, copiée dans `bureau/web/vendor/` comme three.js), l'adresse en clair, la mention « non chiffré » pour le réseau local, et « Révoquer les téléphones ». Le terminal affiche les adresses ouvertes (pas de QR).
+
+- [ ] **Step 1 : tests** — `test_sans_acces_un_seul_ecouteur`, `test_distant_sans_cookie_401`, `test_associer_pose_le_cookie`, `test_code_usage_unique`, `test_code_expire`, `test_revoquer_invalide_les_cookies`, `test_host_inconnu_403`, `test_post_distant_sans_origin_403`, `test_api_acces_jamais_a_distance`, `test_reglages_un_projet_jamais_distant` ; node : le panneau d'association (adresse et mention en `textContent`, un QR par adresse).
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Le bureau ouvert au téléphone, avec un code d'accès ».
+
+### Task 16 : la vue 3D adaptée au mobile
+
+**Files:** Modify `bureau/web/main.js`, `bureau/web/scene/scene.js`, `bureau/web/style.css`, `bureau/web/index.html`, `bureau/web/ui/fonctionnalite.js`, `bureau/web/ui/panneaux.js` ; Create `bureau/web/logique/mobile.js`, `bureau/web/manifest.webmanifest`, `bureau/web/icone.png` ; Test `bureau/web/tests/mobile.test.js`
+
+**Interfaces:**
+- Produces: `logique/mobile.js` (pur, testable) : `estMobile(largeur, pointeurGrossier) -> bool` (vrai sous 768 px ou pointeur grossier), `zoomPincement(ecartDebut, ecartFin, zoom, min, max) -> number`, `dimensionsReduites(largeur, hauteur, coteMax = 2048) -> [l, h]`, `formatEnvoye(type) -> "image/png" | "image/jpeg"` (PNG gardé, tout le reste en JPEG), `qualitePour(octets) -> number` (pour rester sous 5 Mo).
+- Sur mobile : la scène 3D reste ; toucher = le clic actuel (`pointer`), pincer = zoom borné, glisser à un doigt = déplacement borné au bâtiment ; définition plafonnée à 1,5 × et ombres coupées ; panneaux plein écran avec un bouton « Fermer » ; barre compacte ; le Kanban plein écran garde son geste. Sur ordinateur, rien ne change.
+- Discussion : le champ image accepte `image/*` ; chaque image est réduite (`dimensionsReduites`) et réencodée (`formatEnvoye`, `qualitePour`) par un `canvas` avant l'envoi ; si elle dépasse encore 5 Mo, un message clair, pas d'envoi.
+- `manifest.webmanifest` (nom « MyIAFactory », `display: standalone`, l'icône) lié depuis `index.html` : la page s'ajoute à l'écran d'accueil.
+
+- [ ] **Step 1 : tests** node — `estMobile` en tableau, `zoomPincement` borné, `dimensionsReduites` (4032 × 3024 → 2048 × 1536 ; petite image inchangée), `formatEnvoye` (`image/heic`, `image/webp` → JPEG ; PNG gardé), `qualitePour`.
+- [ ] **Step 2–4 :** échec, coder, verts ; vérifier dans le navigateur en vue mobile (375 × 812) et en tablette : toucher une pièce ouvre son dossier, pincer zoome, une décision du Directeur se valide, une photo s'envoie ; capture d'écran.
+- [ ] **Step 5 :** commit « La vue 3D adaptée au mobile ».
+
+## Étape 6 — les guides et la relecture (phase H)
 
 ### Task 11 : les guides d'accord, relecture finale
 
 **Files:** Modify `docs/installation.md`, `docs/orchestrateur.md`, `README.md`
 
-- [ ] **Step 1 :** `docs/installation.md` commence par l'installation du plugin (`/plugin marketplace add maximus49000/MyIAFactory`, `/plugin install myiafactory@myiafactory`, puis `/myiafactory:installer` dans le dossier d'un projet) ; « Brancher son projet » suit la nouvelle règle de versionnement (plus de `.factory/` dans `.gitignore`) ; `docs/orchestrateur.md` « Démarrer un projet neuf » renvoie à la commande ; README : le projet 4 et ses cases.
+- [ ] **Step 1 :** `docs/installation.md` commence par l'installation du plugin (`/plugin marketplace add maximus49000/MyIAFactory`, `/plugin install myiafactory@myiafactory`, puis `/myiafactory:installer` dans le dossier d'un projet) ; « Brancher son projet » suit la nouvelle règle de versionnement (plus de `.factory/` dans `.gitignore`) ; une section « Le bureau sur le téléphone » (Tailscale, Wi-Fi de la maison, association par QR code, révocation, ce qui n'est pas chiffré) ; `docs/orchestrateur.md` « Démarrer un projet neuf » renvoie à la commande ; README : le projet 4 et ses cases.
 - [ ] **Step 2 :** relecture de tout le projet 4 contre la conception et ce plan par un relecteur indépendant **sur Opus** (jamais Fable) : exactitude, Review Focus, contre-buts 1 et 2 (sobriété des consignes, workflow proposé), rien de propre à un projet ; corrections avec leurs tests.
 - [ ] **Step 3 :** tous les tests verts ; commit « Projet 4 : guides et relecture ».
 
-## Étape 6 — le vrai passage (phase G, avec l'utilisateur)
+## Étape 7 — le vrai passage (phase I, avec l'utilisateur)
 
 ### Task 12 : installer sur un projet vide et sur un projet existant
 
 - [ ] **Step 1 :** hors du dépôt, un dossier vide et la copie d'un petit projet existant choisi par l'utilisateur ; le plugin ajouté depuis le dépôt local (`/plugin marketplace add <chemin du dépôt>`).
 - [ ] **Step 2 :** l'utilisateur lance `/myiafactory:installer` dans chacun et mène la discussion ; on note chaque écart (question inutile, workflow trop long, coût mal estimé, fichier faux).
-- [ ] **Step 3 :** chaque écart générique est corrigé ici avec un test ; la première fonctionnalité démarre sur l'un des deux projets pour vérifier qu'il est prêt.
+- [ ] **Step 3 :** chaque écart générique est corrigé ici avec un test ; la première fonctionnalité démarre sur l'un des deux projets pour vérifier qu'il est prêt ; l'utilisateur associe son téléphone (Tailscale puis Wi-Fi) et y fait un geste de chaque sorte (décision du Directeur, message avec photo, déplacement d'un post-it).
 - [ ] **Step 4 :** commit et push ; fin de phase.
 
-## Étape 7 — la mise à jour du projet pilote (phase H, dépôt privé)
+## Étape 8 — la mise à jour du projet pilote (phase J, dépôt privé)
 
 ### Task 13 : le projet pilote rejoint le nouveau rangement
 

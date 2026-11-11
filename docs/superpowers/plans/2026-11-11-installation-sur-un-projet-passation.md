@@ -1,8 +1,8 @@
 # L'installation sur un projet — passation entre conversations
 
-Le plan (`2026-11-11-installation-sur-un-projet.md`) est réalisé en huit phases, chacune dans sa propre conversation Claude, avec le modèle indiqué. C'est l'utilisateur qui crée chaque conversation et choisit le modèle. Une conversation enchaîne toutes les tâches de sa phase sans s'arrêter, puis s'arrête et annonce la suivante. Même méthode que `2026-11-10-parcours-d-une-tache-passation.md`.
+Le plan (`2026-11-11-installation-sur-un-projet.md`) est réalisé en dix phases, chacune dans sa propre conversation Claude, avec le modèle indiqué. C'est l'utilisateur qui crée chaque conversation et choisit le modèle. Une conversation enchaîne toutes les tâches de sa phase sans s'arrêter, puis s'arrête et annonce la suivante. Même méthode que `2026-11-10-parcours-d-une-tache-passation.md`.
 
-Les phases A à G se font **dans ce dépôt**. La phase H se fait **dans le dépôt privé du projet pilote** : elle y tient ses notes, et n'écrit ici que des corrections génériques et, à la toute fin, une ligne générique dans le `README.md` et dans ce fichier.
+Les phases A à I se font **dans ce dépôt**. La phase J se fait **dans le dépôt privé du projet pilote** : elle y tient ses notes, et n'écrit ici que des corrections génériques et, à la toute fin, une ligne générique dans le `README.md` et dans ce fichier.
 
 ## Où on en est
 
@@ -13,11 +13,13 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | A | Sonnet 5.5 | ce dépôt | 1 à 3 : chemins `~`, limite d'agents locaux, leçon gardée en local | Changements courts et cadrés, tests nommés | fait |
 | B | Sonnet 5.5 | ce dépôt | 4 à 6 : dossier stable, examen du dossier, calibrage et estimation | Fonctions au contrat écrit, tests en tableau | fait |
 | C | Opus 5.5 | ce dépôt | 7 et 8 : proposition, mise en place, bureau commun, réparation, ligne de commande | Écritures atomiques sur plusieurs formats, réparation sans casser les adaptateurs | fait |
-| D | Opus 5.5 | ce dépôt | 9 : le plugin et les consignes de la discussion | Les consignes guident toute l'installation : sobriété et justesse comptent plus que tout | à faire |
+| D | Opus 5.5 | ce dépôt | 14 puis 9 : le support de traitement dans la proposition, puis le plugin et les consignes de la discussion | Les consignes guident toute l'installation : sobriété et justesse comptent plus que tout | à faire |
 | E | Sonnet 5.5 | ce dépôt | 10 : l'organisation qui évolue | Décision, demande et commande sur le modèle de celles qui existent | à faire |
-| F | Opus 5.5 | ce dépôt | 11 : guides et relecture finale | Relecture finale sur un modèle fort | à faire |
-| G | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 12 : le vrai passage, mené avec l'utilisateur | Diagnostic d'une installation réelle et corrections génériques | à faire |
-| H | Opus 5.5 | dépôt du projet pilote | 13 : le projet pilote rejoint le nouveau rangement | Dernier mot sur « rien n'est perdu » | à faire |
+| F | Opus 5.5 | ce dépôt | 15 : le bureau ouvert au téléphone, le code d'accès, l'association | Sécurité : un bureau joignable depuis un autre appareil ne doit rien laisser passer sans code | à faire |
+| G | Sonnet 5.5 | ce dépôt | 16 : la vue 3D adaptée au mobile | Fonctions pures testées, gestes et mise en page cadrés, vérifiés au navigateur | à faire |
+| H | Opus 5.5 | ce dépôt | 11 : guides et relecture finale | Relecture finale sur un modèle fort | à faire |
+| I | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 12 : le vrai passage, téléphone compris, mené avec l'utilisateur | Diagnostic d'une installation réelle et corrections génériques | à faire |
+| J | Opus 5.5 | dépôt du projet pilote | 13 : le projet pilote rejoint le nouveau rangement | Dernier mot sur « rien n'est perdu » | à faire |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. Haiku n'est retenu pour aucune phase : chacune demande de lire une conception et de tenir des tests. **Fable n'est utilisé dans aucune phase**, ni pour exécuter, ni pour relire.
 
@@ -71,8 +73,8 @@ Phase C (Opus 5.5) :
 
 **Ce qui demande l'utilisateur**
 
-- Phase G : il choisit le petit projet existant à copier, lance la commande et mène les deux discussions.
-- Phase H : il ouvre la conversation sur le dépôt privé, et valide les corrections de la réparation.
+- Phase I : il choisit le petit projet existant à copier, lance la commande, mène les deux discussions, installe Tailscale sur l'ordinateur et le téléphone, et associe son téléphone.
+- Phase J : il ouvre la conversation sur le dépôt privé, et valide les corrections de la réparation.
 - En dehors de ces moments, ne pas s'arrêter pour demander : enchaîner les tâches de la phase.
 
 **La fin d'une phase**
@@ -100,7 +102,7 @@ Un message par conversation. L'utilisateur crée la conversation dans le dossier
 
 **Phase D — Opus 5.5 — dans ce dépôt**
 
-> Réalise la phase D de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 9 du plan : les consignes de la discussion doivent suivre la conception à la lettre et rester sobres (2 000 mots au plus). Termine par la fin de phase.
+> Réalise la phase D de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 14 du plan, puis la tâche 9 : les consignes de la discussion doivent suivre la conception à la lettre et rester sobres (2 000 mots au plus). Termine par la fin de phase.
 
 **Phase E — Sonnet 5.5 — dans ce dépôt**
 
@@ -108,12 +110,20 @@ Un message par conversation. L'utilisateur crée la conversation dans le dossier
 
 **Phase F — Opus 5.5 — dans ce dépôt**
 
-> Réalise la phase F de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 11 du plan ; elle se termine par la relecture de tout le projet 4 contre la conception et le plan (un relecteur indépendant sur Opus, jamais Fable, puis tes corrections). Termine par la fin de phase.
+> Réalise la phase F de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 15 du plan (le bureau ouvert au téléphone, le code d'accès, l'association), puis la fin de phase décrite dans la passation.
 
-**Phase G — Opus 5.5 — dans ce dépôt**
+**Phase G — Sonnet 5.5 — dans ce dépôt**
 
-> Réalise la phase G de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 12 du plan avec moi : prépare hors du dépôt un dossier vide et la copie du petit projet que je te désignerai, dis-moi comment ajouter le plugin depuis ce dépôt, puis guide-moi pas à pas et corrige ici, avec un test, chaque écart générique. Termine par la fin de phase ; la prochaine phase à annoncer est la phase H, dans le dépôt privé du projet pilote.
+> Réalise la phase G de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 16 du plan (la vue 3D adaptée au mobile), vérifie-la dans le navigateur en vue mobile, puis fais la fin de phase décrite dans la passation.
 
-**Phase H — Opus 5.5 — dans le dépôt privé du projet pilote**
+**Phase H — Opus 5.5 — dans ce dépôt**
 
-> Réalise la phase H de l'installation sur un projet de MyIAFactory, pour ce projet. Le dépôt de la skill MyIAFactory est sur cette machine (demande-moi son chemin si tu ne le trouves pas) : lis-y `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md`, la conception et le plan (tâche 13) ; tout est validé, rien à recadrer. Fais pointer le dossier stable sur ce dépôt de la skill (`preparer --lier`), lance la réparation sur ce projet et montre-moi chaque correction, vérifie que ses adaptateurs n'ont pas bougé, fais-lui rejoindre le bureau commun, repasse la liste de compatibilité ligne par ligne, puis `git grep -i` des mots interdits de ce projet dans le dépôt de la skill (aucun résultat attendu). Enfin, dans le dépôt de la skill seulement, mets à jour le `README.md` et cette passation en une phrase générique (« projet 4 terminé, vérifié sur le projet pilote »), sans aucun nom, commit et push.
+> Réalise la phase H de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 11 du plan ; elle se termine par la relecture de tout le projet 4 contre la conception et le plan (un relecteur indépendant sur Opus, jamais Fable, puis tes corrections). Termine par la fin de phase.
+
+**Phase I — Opus 5.5 — dans ce dépôt**
+
+> Réalise la phase I de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 12 du plan avec moi : prépare hors du dépôt un dossier vide et la copie du petit projet que je te désignerai, dis-moi comment ajouter le plugin depuis ce dépôt, guide-moi pas à pas, y compris pour associer mon téléphone, et corrige ici, avec un test, chaque écart générique. Termine par la fin de phase ; la prochaine phase à annoncer est la phase J, dans le dépôt privé du projet pilote.
+
+**Phase J — Opus 5.5 — dans le dépôt privé du projet pilote**
+
+> Réalise la phase J de l'installation sur un projet de MyIAFactory, pour ce projet. Le dépôt de la skill MyIAFactory est sur cette machine (demande-moi son chemin si tu ne le trouves pas) : lis-y `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md`, la conception et le plan (tâche 13) ; tout est validé, rien à recadrer. Fais pointer le dossier stable sur ce dépôt de la skill (`preparer --lier`), lance la réparation sur ce projet et montre-moi chaque correction, vérifie que ses adaptateurs n'ont pas bougé, fais-lui rejoindre le bureau commun, repasse la liste de compatibilité ligne par ligne, puis `git grep -i` des mots interdits de ce projet dans le dépôt de la skill (aucun résultat attendu). Enfin, dans le dépôt de la skill seulement, mets à jour le `README.md` et cette passation en une phrase générique (« projet 4 terminé, vérifié sur le projet pilote »), sans aucun nom, commit et push.

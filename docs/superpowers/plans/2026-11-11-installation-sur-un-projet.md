@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 bibliothèque standard ; JavaScript en modules ; `git` et, dans la discussion seulement, `gh` ; tests `unittest` et `node --test`.
 
-**Spec:** `docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md` (contexte : `2026-11-10-parcours-d-une-tache-design.md`, `docs/orchestrateur.md`, `docs/installation.md`).
+**Spec:** `docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md` et `docs/superpowers/specs/2026-11-11-bureau-partenaire-design.md` (tâches 18 à 21) (contexte : `2026-11-10-parcours-d-une-tache-design.md`, `docs/orchestrateur.md`, `docs/installation.md`).
 
 ## Global Constraints
 
@@ -33,6 +33,8 @@
 6. Le bureau ouvert au réseau : une requête sur l'écouteur distant sans cookie, avec un cookie d'avant une révocation, avec un code d'association déjà servi ou expiré, ou avec un `Host` inconnu → 401 ou 403, aucune donnée ; `/api/acces` (le code et le QR) n'est jamais servi à l'écouteur distant. (Tâche 15 : `test_distant_sans_cookie_401`, `test_revoquer_invalide_les_cookies`, `test_code_usage_unique`, `test_api_acces_jamais_a_distance`.)
 7. Photo prise au téléphone : 12 Mo, format HEIC ou WebP, très grande définition → réduite et réencodée en JPEG sous 5 Mo dans la page avant l'envoi, jamais refusée en silence. (Tâche 16 : tests de `dimensionsReduites`, `formatEnvoye` et `qualitePour`.)
 8. Lots par modèle : un lot dont le total de tokens ne se divise pas juste (1 000 003 sur 3 tâches) → la somme des parts vaut exactement le total, compteur par compteur ; `depend_de` qui forme un cycle, nomme une tâche inconnue ou une tâche déjà faite ; une relecture qui dépend du travail relu ; 12 tâches du même modèle → refus clair pour le cycle et l'inconnue, relecture toujours seule, lots de 5 au plus, ordre d'origine gardé à défaut de dépendance connue. (Tâche 17 : `test_cycle_refuse`, `test_relecture_jamais_en_lot`, `test_lot_de_cinq_au_plus`.)
+9. Une clé de partenaire (environnement ou `.env` du projet) : jamais écrite dans un fichier, le relevé, une sortie ou un journal ; un `.mcp.json` dont les `headers` portent un jeton n'est lu que pour ses noms et adresses. (Tâche 19 : `test_cle_jamais_ecrite`, `test_mcp_headers_jamais_lus`.)
+10. Aucun partenaire connecté, ou tous en limite : rien ne bloque ; `choisir` rend une liste vide et le meilleur non connecté, l'orchestrateur passe au mode manuel ou propose le navigateur. (Tâche 19 : `test_choisir_saute_limite`, `test_meilleur_non_connecte`.)
 
 ---
 
@@ -266,6 +268,72 @@
 - [ ] **Step 1 :** `docs/installation.md` commence par l'installation du plugin (`/plugin marketplace add maximus49000/MyIAFactory`, `/plugin install myiafactory@myiafactory`, puis `/myiafactory:installer` dans le dossier d'un projet) ; « Brancher son projet » suit la nouvelle règle de versionnement (plus de `.factory/` dans `.gitignore`) ; une section « Le bureau sur le téléphone » (Tailscale, Wi-Fi de la maison, association par QR code, révocation, ce qui n'est pas chiffré) ; `docs/orchestrateur.md` « Démarrer un projet neuf » renvoie à la commande ; README : le projet 4 et ses cases.
 - [ ] **Step 2 :** relecture de tout le projet 4 contre la conception et ce plan par un relecteur indépendant **sur Opus** (jamais Fable) : exactitude, Review Focus, contre-buts 1 et 2 (sobriété des consignes, workflow proposé, lots par modèle), rien de propre à un projet ; corrections avec leurs tests.
 - [ ] **Step 3 :** tous les tests verts ; commit « Projet 4 : guides et relecture ».
+
+## Étape 6 bis — le bureau partenaire
+
+Conception : `docs/superpowers/specs/2026-11-11-bureau-partenaire-design.md`. Règles communes à ces tâches : les partenaires sont **facultatifs** (rien ne bloque sans eux) ; **aucune valeur de clé** n'est écrite, affichée, journalisée ni envoyée ailleurs que chez son partenaire ; le bureau n'agit pas lui-même (chaque geste est une demande).
+
+### Task 18 : le catalogue des partenaires
+
+**Files:** Create `partenaires/__init__.py`, `partenaires/catalogue.json`, `partenaires/catalogue.py` ; Test `tests/test_part_catalogue.py`
+
+**Interfaces:**
+- Produces: `CATEGORIES = ("voix-audio", "images", "video-3d-avatars", "langue-web-agents", "medias-design", "mise-en-ligne-equipe")` ; `TARIFS = ("gratuit", "inclus", "usage", "inconnu")` ; `STATUTS = ("actif", "ferme", "sans_api", "restreint")`.
+- `catalogue.json` : `{"version": 1, "partenaires": [...]}` ; une entrée : `{"id" (motif MOTIF_ID), "nom", "categorie", "sous_categorie", "site", "inscription" (URL), "connexions": [{"type": "mcp" | "api" | "studio" | "compte", "url"?, "commande"? (ex. `claude mcp add --transport http <nom> <url>`), "variables"?: [noms de variables d'environnement]}], "plans": [{"nom", "prix" (nombre ou null), "devise", "periode" ("mois" | "an" | "usage" | null), "quota" (texte), "tarif" ∈ TARIFS}], "gratuit" (texte ou null), "quota_lisible": "oui" | "non" | "inconnu", "lecteur"? (id d'un lecteur de quota, tâche 19), "illimite" (bool), "statut" ∈ STATUTS, "fiabilite": "officielle" | "tiers", "verifie_le" (AAAA-MM-JJ)}`.
+- Amorce : **toutes** les lignes de `docs/recherche/partenaires-2026-11.md` (les fermés et sans API avec leur statut), `verifie_le: "2026-11-11"`, liens d'inscription et de connexion relevés sur le site du partenaire (un lien non trouvé reste `null`, jamais inventé).
+- `catalogue.lire(chemin=None) -> dict` (défaut : le fichier du paquet), `catalogue.verifier(d) -> list[str]` (ids uniques, catégories et tarifs connus, URL en `https://`, dates valides, `lecteur` seulement si `quota_lisible == "oui"`), `catalogue.par_categorie(d) -> dict[categorie, list]` (actifs d'abord, puis les autres).
+
+- [ ] **Step 1 : tests** — `test_catalogue_livre_valide`, `test_ids_uniques`, `test_url_https`, `test_tarif_inconnu_refuse`, `test_fermes_marques` (LMNT, PlayHT, Sora, Tome : statut `ferme` ; Midjourney, Suno, Udio, Mixamo : `sans_api`), `test_au_moins_une_entree_par_categorie`, `test_aucun_mot_prive` (aucun nom du projet pilote ; le test lit les mots d'une variable d'environnement facultative et passe sans elle).
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Le catalogue des partenaires ».
+
+### Task 19 : connexions, quotas, règles, choix et usage
+
+**Files:** Create `partenaires/etat.py`, `partenaires/detection.py`, `partenaires/quota.py`, `partenaires/choix.py` ; Modify `orchestrateur/outil.py` (nouvelle commande `partenaires`, `construire_releve`), `orchestrateur/depart.py`, `bureau/usage.py`, `bureau/cout.py`, `orchestrateur/interface.md` ; Test `tests/test_part_etat.py`, `tests/test_part_detection.py`, `tests/test_part_quota.py`, `tests/test_part_choix.py`, `tests/test_orch_interface.py`
+
+**Interfaces:**
+- Consumes: `catalogue.lire` (tâche 18), `installation.dossier.racine()`.
+- Produces: `etat.Etat(chemin = racine()/"partenaires.json")` : `{"connexions": {id: {"etat": "connecte" | "declare" | "non_connecte", "source": texte, "abonnement"?: texte, "vu_le"}}, "quotas": {id: {"reste"?: nombre, "unite"?: texte, "illimite"?: bool, "lu_le"}}, "limites": {id: {"depuis", "raison"}}, "regles": {id: [{"id": "r1", "texte", "cree_le", "modifie_le"?}]}}` ; écriture atomique sous verrou ; règle de départ proposée pour `tripo` à la création du fichier : « Si plusieurs éléments sont nécessaires, les générer au maximum en un seul prompt, sauf besoin de détail très précis ou d'animation. »
+- `detection.declares(projet: Path, environ=os.environ, config_utilisateur: Path = ~/.claude.json) -> dict[id, source]` : noms et adresses des serveurs MCP (`mcpServers` de la configuration de l'utilisateur et du `.mcp.json` du projet ; **on ne lit que les clés `url` et le nom**, jamais `headers`, `env`, `args`) rapprochés du catalogue par adresse ou par nom ; présence des variables du catalogue dans `environ` et dans le `.env` du projet (**noms seulement** : analyseur de lignes `NOM=…`, `export NOM=…`, commentaires et guillemets compris, valeurs jetées sans être gardées).
+- `detection.cle(id, projet, environ=os.environ) -> str | None` : la valeur, pour un appel seulement (environnement d'abord, puis `.env` du projet) ; jamais mise en cache.
+- `quota.LECTEURS = {"elevenlabs", "bfl", "stability", "leonardo", "meshy", "removebg", "deepl", "kiri"}` ; `quota.lire(id, cle, ouvrir=urllib) -> {"reste"?, "unite"?, "illimite"?, "abonnement"?}` ou `None` (erreur, délai 10 s) ; un lecteur par endpoint de la recherche ; DeepL : `character_limit` à 1 000 000 000 000 → `illimite: true`.
+- `choix.ordonner(besoin: str, conseils: list[id], catalogue, etat) -> {"partenaires": [{"id", "tarif", "accord_requis": bool}], "meilleur_non_connecte": id | None}` : connectés et non limités ; d'abord l'ordre des conseils du projet pour ce besoin, puis les autres connectés de la sous-catégorie dans l'ordre du catalogue ; `accord_requis` vrai si le tarif connu est `usage` ou `inconnu`.
+- `outil.py lancer partenaires` (entrée `{"action", …}`) : `detecter` (met à jour `declare` / `non_connecte`), `confirmer` (`{ids}` vus utilisables par l'orchestrateur → `connecte`), `quota` (`{ids?}` ; au plus une lecture par heure et par partenaire sauf `force`), `choisir` (`{besoin}`), `usage` (`{partenaire, tache?, quantite, unite, cout?, devise?, estime?}` → une ligne d'usage partenaire), `limite` (`{partenaire, raison}`), `regle` (`{partenaire, operation: "ajouter" | "modifier" | "supprimer", id?, texte?}`), `conseils` (lit ou écrit `.factory/partenaires.json` : `{"besoins": {besoin: [{"id", "raison"}]}}`).
+- Lignes d'usage : `bureau/usage.py` accepte en plus `{"genre": "partenaire", "partenaire", "quantite", "unite", "cout", "devise", "estime"}` ; `bureau/cout.py` les additionne par projet, tâche et partenaire, convertit les dollars au taux du jour déjà lu (le coût d'origine gardé) ; un coût absent compte « non chiffré », jamais 0.
+- `depart.message` : une tâche qui porte `partenaires: [ids]` reçoit les règles de chacun, mot pour mot, sous le titre « Règles de tes partenaires ».
+- Relevé version 4 : racine `partenaires` facultative `{"categories": {...catalogue par catégorie, réduit aux champs affichés}, "etat": {...connexions, quotas avec date, limites, règles}, "conseils": {...}, "maj_catalogue": date}` remplie par `construire_releve`.
+
+- [ ] **Step 1 : tests** — `test_cle_jamais_ecrite` (une fausse clé reconnaissable dans `environ` et dans `.env` : après `detecter`, `quota`, `usage`, aucun fichier écrit, ni le relevé, ni la sortie ne la contiennent), `test_mcp_headers_jamais_lus`, `test_env_noms_seulement` (guillemets, `export`, commentaires), `test_lecteur_deepl_illimite`, `test_lecteur_erreur_none`, `test_quota_une_fois_par_heure`, `test_choisir_ordre_conseils_puis_catalogue`, `test_choisir_saute_limite`, `test_accord_requis_si_usage_ou_inconnu`, `test_meilleur_non_connecte`, `test_regles_crud`, `test_regle_tripo_proposee_une_fois`, `test_depart_porte_les_regles`, `test_usage_partenaire_facture_par_tache`, `test_cout_absent_non_chiffre`, `test_releve_v4_partenaires`.
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Partenaires : connexions, quotas, règles, choix et usage ».
+
+### Task 20 : l'espace partenaire au bureau
+
+**Files:** Modify `bureau/releve.py`, `bureau/etat.py`, `bureau/demandes.py`, `bureau/web/logique/plan.js`, `bureau/web/main.js`, `bureau/web/ui/panneaux.js`, `bureau/web/ui/facturation.js`, `bureau/web/style.css` ; Create `bureau/web/ui/partenaires.js` ; Test `tests/test_releve.py`, `tests/test_etat.py`, `tests/test_demandes.py`, `bureau/web/tests/partenaires.test.js`
+
+**Interfaces:**
+- Consumes: la forme du champ `partenaires` du relevé (tâche 19, ci-dessus) ; les tests s'appuient sur un relevé d'exemple et ne dépendent pas du code de la tâche 19.
+- Produces: `releve.py` contrôle `partenaires` (types, ids connus du catalogue reçu, dates) ; `etat.py` le rend tel quel (absent en version < 4). Demandes nouvelles : `partenaire_regle` (`partenaire`, `operation`, `id`?, `texte`?, 500 caractères au plus), `partenaires_actualiser` (aucun champ), `partenaires_maj` (`confirme: true` obligatoire).
+- La pièce **« Partenaires »** est ajoutée au plan du bâtiment quand le relevé porte `partenaires` ; un clic ouvre le panneau (plein écran sur mobile).
+- `ui/partenaires.js` : `rendrePartenaires(donnees, envoyer)` ; trois parties, « Connectés », « Conseillés pour ce projet » (ordre et raison), « Tous les partenaires » (par catégorie, filtre texte) ; une carte : nom, catégorie, plans et prix (« prix à vérifier » si `fiabilite: "tiers"`), état de connexion (« connecté », « déclaré, à vérifier », « non connecté »), abonnement, « reste N unité » / « illimité » / « quota inconnu » avec la date du relevé, « limite atteinte » le cas échéant, la date de vérification des offres, les règles (ajouter, modifier, supprimer), les liens « S'inscrire » et « Se connecter » (ouverts dans un nouvel onglet, `rel="noopener noreferrer"`) et la commande MCP avec un bouton « Copier » ; boutons « Actualiser » et « Mettre à jour les offres » (une fenêtre de confirmation qui montre le coût estimé fourni par le relevé, puis la demande `partenaires_maj` avec `confirme: true`). Textes par `textContent`.
+- Facturation : une ligne par partenaire (coût en euros, coût d'origine en info-bulle, « estimé » ou « non chiffré » marqués).
+
+- [ ] **Step 1 : tests** — python : `test_releve_partenaires_valide`, `test_releve_partenaires_id_inconnu`, `test_demande_regle_texte_trop_long`, `test_demande_maj_sans_confirmation_refusee` ; node : rendu des trois parties, carte « illimité », carte « quota inconnu », « prix à vérifier », texte hostile littéral, lien `https` seulement (un `javascript:` n'est pas rendu), la confirmation avant `partenaires_maj`, la facturation par partenaire.
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « L'espace partenaire au bureau ».
+
+### Task 21 : les partenaires dans les consignes et dans l'installation
+
+**Files:** Modify `orchestrateur/consignes.md`, `orchestrateur/interface.md`, `installation/examen.py`, `installation/proposition.py`, `installation/mise_en_place.py`, `skills/installer/SKILL.md`, `docs/installation.md`, `docs/orchestrateur.md`, `README.md` ; Test `tests/test_inst_examen.py`, `tests/test_inst_proposition.py`, `tests/test_inst_mise_en_place.py`, `tests/test_orch_consignes.py`, `tests/test_plugin.py`
+
+**Interfaces:**
+- Consumes: tâches 18 et 19.
+- `examen.examiner` rend en plus `partenaires_declares` : serveurs de `.mcp.json` (noms et adresses), paquets de partenaires connus dans les dépendances (table `PAQUETS_PARTENAIRES`, par exemple `elevenlabs`, `openai`, `replicate`, `fal-client`), noms de variables de `.env.example` ; jamais le contenu d'un `.env`.
+- La proposition gagne `partenaires_conseilles: {besoin: [{"id", "raison"}]}` (ids du catalogue, actifs) ; la mise en place l'écrit dans `.factory/partenaires.json`.
+- `SKILL.md` : une étape au début (après `examiner`) : `lancer partenaires detecter`, puis dire ce qui est déjà connecté sur la machine, reprendre les partenaires déclarés du projet (projet existant) ou proposer un ensemble utile (projet vide), avec les liens ; rien n'est obligatoire ; reste sous 2 000 mots.
+- Consignes, nouvelle section « Les partenaires » : `choisir` avant d'appeler ; dire le meilleur non connecté sans bloquer ; les accords (gratuit ou inclus : prévenir ; usage ou inconnu : accord pour la tâche ; changer de partenaire ou agir dans le navigateur : toujours l'accord) ; `usage` après chaque appel payant, `limite` sur un refus, puis le suivant ; sans partenaire utilisable : mode manuel (prompt et mode d'emploi exact, chaque réglage), mode navigateur (seulement avec l'accord ; l'utilisateur se connecte lui-même), ou une autre voie ; `confirmer` les partenaires dont les outils sont disponibles au démarrage ; `quota` au réveil (une fois par heure) ; les demandes `partenaire_regle`, `partenaires_actualiser`, `partenaires_maj` (recherche en lots sur Sonnet des seules fiches à refaire, puis écriture du catalogue avec `verifie_le`, contrôle des mots interdits, commit et push comme une leçon de skill) ; la tâche porte `partenaires` pour que le départ donne leurs règles.
+- Guides : `docs/installation.md` gagne « Le bureau partenaire » ; README : cases 18 à 21.
+
+- [ ] **Step 1 : tests** — `test_partenaires_declares_mcp_paquets_env_exemple`, `test_env_jamais_lu_a_l_examen`, `test_proposition_partenaire_inconnu_refuse`, `test_conseils_ecrits_par_la_mise_en_place`, `test_skill_cite_partenaires_detecter`, `test_longueur_consignes` (toujours ≤ 2 000 mots), `test_orch_consignes` (la section existe et cite les commandes).
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Les partenaires dans les consignes et l'installation ».
+- [ ] **Step 6 :** relecture des tâches 18 à 21 contre la conception du bureau partenaire par un relecteur indépendant **sur Opus** (jamais Fable) : contre-buts (rien ne bloque, aucune dépense sans accord, aucune clé écrite, aucun prix ancien montré comme actuel), Review Focus 9 et 10 ; corrections avec leurs tests ; commit.
 
 ## Étape 7 — le vrai passage (avec l'utilisateur)
 

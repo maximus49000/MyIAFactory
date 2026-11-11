@@ -99,6 +99,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [ ] 14. Le support de traitement dans la proposition et la mise en place
 - [ ] 15. Le bureau ouvert au téléphone, avec un code d'accès
 - [ ] 16. La vue 3D adaptée au mobile
+- [ ] 17. Les lots par modèle dans l'orchestrateur
 
 État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Le projet 3, le parcours d'une tâche, est réalisé dans ce dépôt : un bureau qui suit plusieurs projets, « + Nouvelle fonctionnalité » et la discussion de cadrage, le Directeur enrichi, le catalogue de chaque fonctionnalité, et un **orchestrateur générique** ([consignes](orchestrateur/consignes.md), [interface des commandes](orchestrateur/interface.md), [guide de passage](docs/orchestrateur.md)) avec sa mémoire à trois étages. Le vrai passage de bout en bout est fait (phase G). **Projet 3 terminé, vérifié sur le projet pilote** (voir la [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)).
 

@@ -19,6 +19,7 @@ Le plugin sert autant à **économiser** qu'à **montrer** : une factory qui co�
 - Le **calibrage sur la machine** (combien d'agents en parallèle) et le choix **local ou cloud**.
 - La question « **la facturation est-elle un objectif du projet ?** », et sa mise en place ou non.
 - Une **estimation du coût** du workflow proposé, avant validation.
+- **Les lots par modèle** comme norme de l'orchestrateur : un modèle fait d'une traite tout ce qu'il peut faire d'affilée, en réordonnant les tâches quand leurs dépendances le permettent (section 14).
 - Une **organisation qui évolue** : pendant le cadrage d'une fonctionnalité, l'orchestrateur propose de créer un service et de modifier le workflow quand un secteur manque, comme une entreprise qui crée un service.
 - Une **mémoire privée par défaut**, sauf ce qui est universel, qui alimente le plugin public.
 - Le **support de traitement** de l'entreprise (ordinateur, mobile, ou les deux) : avec le mobile, l'entreprise est accessible sur le téléphone comme sur l'ordinateur, vue 3D comprise (section 13).
@@ -160,7 +161,20 @@ L'installation demande **sur quels supports l'entreprise est traitée : ordinate
 
 **La mise en place.** Les réglages d'accès sont ceux de la machine : ils vont dans le fichier de bureau commun (par exemple `acces: {"tailscale": bool, "reseau_local": bool}`), pas dans le projet. La skill vérifie l'adresse Tailscale quand elle est choisie (`tailscale ip -4`), et à la fin donne la marche à suivre : relancer le bureau, ouvrir la page sur l'ordinateur, scanner le QR code. Sans mobile, rien ne change : le bureau n'écoute que sur `127.0.0.1`.
 
-## 14. Ce qui est laissé au constructeur
+## 14. Les lots par modèle
+
+La méthode de développement de l'utilisateur devient **la norme de la skill** : l'orchestrateur générique l'applique dans tous les projets installés.
+
+- **À chaque sollicitation**, l'orchestrateur évalue le meilleur modèle pour chaque tâche (le plus petit capable, règle déjà en vigueur) et **regroupe les tâches en lots par modèle**.
+- **Un modèle fait d'une traite tout ce qu'il peut faire d'affilée** : un lot est confié à **une seule conversation**, qui enchaîne ses tâches sans repartir de zéro entre elles. But : le moins possible de conversations différentes pour un même modèle, parce que le coût d'un agent vient surtout de ce qu'il relit à chaque départ.
+- **On réordonne quand c'est possible.** Exemple de l'utilisateur : des tâches Sonnet en a, b et d, une tâche Opus en c. Si d peut passer avant c, on fait a, b, d puis c (une seule itération Sonnet) ; sinon on garde l'ordre.
+- **L'orchestrateur gère le lien entre les modèles** : chaque lot reçoit ce que les lots précédents ont produit, comme la passation entre conversations le fait pour le développement de la skill.
+- **[choix]** Les dépendances sont notées au découpage : chaque tâche peut porter `depend_de` (les tâches qu'elle attend). Sans cette mention, l'ordre d'origine est gardé entre les tâches concernées : on ne réordonne jamais sur une supposition.
+- **[choix]** Un lot réunit des tâches de même modèle et de même lieu (local ou cloud) ; il peut mêler des rôles, et son message de départ porte alors le brief de chacun. **La relecture croisée ne se met jamais en lot** : chaque relecteur reste un agent à contexte neuf, distinct de celui qui a produit, et distinct de l'autre relecteur.
+- **[choix]** Un lot compte 5 tâches au plus : au-delà, la conversation grossit et chaque tâche coûte plus cher qu'un départ neuf.
+- Le bureau montre chaque tâche comme aujourd'hui ; une tâche faite dans un lot le dit (le lot et sa place dans le lot), pour que la facturation reste lisible.
+
+## 15. Ce qui est laissé au constructeur
 
 - Le nom exact de la commande, la structure du plugin et le mécanisme du dossier stable, dans les limites de la section 4.
 - Le format du nouveau réglage « agents locaux en parallèle » et la formule du calibrage.

@@ -1,6 +1,6 @@
 # L'installation sur un projet — plan de réalisation
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task (une conversation par phase, voir la passation `2026-11-11-installation-sur-un-projet-passation.md`). Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task (une conversation par lot de modèle, voir la passation `2026-11-11-installation-sur-un-projet-passation.md` : l'ordre des tâches y est celui des lots, pas celui des numéros). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** La skill devient un plugin Claude Code ; depuis le dossier d'un projet, une commande mène la discussion (projet vide ou existant), propose une organisation chiffrée, puis configure tout (fichier de factory, réglages, fiches, consignes, contrôles, bureau commun, accès mobile si demandé) pour partir sur une première fonctionnalité ; le bureau devient accessible au téléphone (Tailscale, Wi-Fi de la maison) avec un code d'accès et une vue 3D adaptée ; ensuite l'orchestrateur fait évoluer l'organisation par des décisions du Directeur.
 
@@ -32,10 +32,11 @@
 5. `.gitignore` absent, sans fin de ligne, ou portant l'ancienne règle `.factory/` du guide : la configuration devient versionnée, le bloc n'est ajouté qu'une fois. (Tâche 7 : `test_gitignore_ancienne_regle`, `test_gitignore_idempotent`.)
 6. Le bureau ouvert au réseau : une requête sur l'écouteur distant sans cookie, avec un cookie d'avant une révocation, avec un code d'association déjà servi ou expiré, ou avec un `Host` inconnu → 401 ou 403, aucune donnée ; `/api/acces` (le code et le QR) n'est jamais servi à l'écouteur distant. (Tâche 15 : `test_distant_sans_cookie_401`, `test_revoquer_invalide_les_cookies`, `test_code_usage_unique`, `test_api_acces_jamais_a_distance`.)
 7. Photo prise au téléphone : 12 Mo, format HEIC ou WebP, très grande définition → réduite et réencodée en JPEG sous 5 Mo dans la page avant l'envoi, jamais refusée en silence. (Tâche 16 : tests de `dimensionsReduites`, `formatEnvoye` et `qualitePour`.)
+8. Lots par modèle : `depend_de` qui forme un cycle, nomme une tâche inconnue ou une tâche déjà faite ; une relecture qui dépend du travail relu ; 12 tâches du même modèle → refus clair pour le cycle et l'inconnue, relecture toujours seule, lots de 5 au plus, ordre d'origine gardé à défaut de dépendance connue. (Tâche 17 : `test_cycle_refuse`, `test_relecture_jamais_en_lot`, `test_lot_de_cinq_au_plus`.)
 
 ---
 
-## Étape 1 — l'orchestrateur et le bureau s'y prêtent (phase A)
+## Étape 1 — l'orchestrateur et le bureau s'y prêtent
 
 ### Task 1 : les chemins `~`
 
@@ -71,7 +72,7 @@
 - [ ] **Step 1 : tests** — `test_push_refuse_garde_le_commit_local` (git simulé : push rend 1 → fichier écrit, `reset` jamais appelé, message contenant « n'est pas publiée »), `test_conflit_arrete_sans_commit` inchangé.
 - [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Leçon gardée en local si le push échoue ».
 
-## Étape 2 — les outils de l'installation (phases B et C)
+## Étape 2 — les outils de l'installation
 
 ### Task 4 : le dossier stable
 
@@ -161,7 +162,7 @@
 - [ ] **Step 1 : tests** — `test_parcours_vide_bout_en_bout` (sous-processus, `HOME`/`USERPROFILE` temporaires, git simulé par un dépôt local : `examiner` → `proposer` → `appliquer` → `reparer` sans correction), `test_appliquer_sans_proposition`, `test_proposer_invalide_code_1`, `test_commande_inconnue_code_2`.
 - [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Installation : la ligne de commande ».
 
-## Étape 3 — le plugin et la discussion (phase D)
+## Étape 3 — le plugin et la discussion
 
 ### Task 14 : le support de traitement dans la proposition et la mise en place
 
@@ -194,7 +195,7 @@
 - [ ] **Step 1 : tests** — `test_json_du_plugin` (champs ci-dessus), `test_frontmatter`, `test_commandes_citees_existent` (chaque `outil.py <commande>` cité dans `SKILL.md` existe dans `installation/outil.py`), `test_longueur_consignes` (≤ 2 000 mots), `test_aucun_fable_choisi`. Si `claude plugin validate` existe sur la machine, le passer aussi.
 - [ ] **Step 2–4 :** échec, écrire, verts. **Step 5 :** commit « Le plugin et la commande d'installation ».
 
-## Étape 4 — l'organisation qui évolue (phase E)
+## Étape 4 — l'organisation qui évolue et les lots par modèle
 
 ### Task 10 : la décision et la commande `organisation`
 
@@ -211,7 +212,20 @@
 - [ ] **Step 1 : tests** — `test_decision_organisation_valide`, `test_decision_organisation_fable_refuse`, `test_demande_organisation_v3_refusee`, `test_demande_organisation_verdict_inconnu`, `test_appliquer_organisation` (factory relue avec le nouveau service et la nouvelle étape, fiche créée, décision levée), `test_appliquer_garde_les_autres_cles`, `test_refus_etape_service_inconnu` ; node : rendu de la décision (texte hostile littéral, coût sans euros → « prix inconnu »).
 - [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « L'organisation qui évolue ».
 
-## Étape 5 — le bureau sur le téléphone (phases F et G)
+### Task 17 : les lots par modèle dans l'orchestrateur
+
+**Files:** Create `orchestrateur/lots.py` ; Modify `orchestrateur/outil.py` (`cmd_tache`, `cmd_depart`, nouvelle `cmd_lots`, `construire_releve`), `orchestrateur/depart.py`, `orchestrateur/verifier_interface.py`, `orchestrateur/consignes.md`, `orchestrateur/interface.md`, `bureau/releve.py`, `bureau/web/ui/detail.js` ; Test `tests/test_orch_lots.py`, `tests/test_orch_depart.py`, `tests/test_orch_interface.py`, `tests/test_releve.py`
+
+**Interfaces:**
+- Produces: `MAX_TACHES_LOT = 5` ; `lots.former(taches: list[dict]) -> list[dict]`. Chaque tâche en entrée : `{"id", "modele", "lieu", "role", "depend_de": [ids]}` (dans l'ordre d'origine). Rend `[{"lot": "L1", "modele", "lieu", "taches": [ids]}]`. Algorithme glouton stable : tant qu'il reste des tâches, prendre les tâches prêtes (dépendances faites ou formées dans un lot précédent) ; continuer le lot courant avec la première tâche prête de même modèle et même lieu dans l'ordre d'origine ; sinon ouvrir un lot sur la première tâche prête dans l'ordre d'origine ; une tâche de rôle `relecteur` forme toujours un lot à elle seule ; un lot s'arrête à `MAX_TACHES_LOT`. Lève `ValueError` sur un cycle ou une dépendance inconnue (message nommant les tâches).
+- `outil.py lancer tache` accepte `depend_de` (liste d'ids de tâches connues) et `lot` (`{"id", "rang"}`) ; `lancer lots` `{"taches": [ids]}` → `{"lots": [...]}` sur les tâches suivies (modèle et lieu tirés de l'agent libre du rôle si la tâche n'en a pas encore) ; `lancer depart` accepte `taches: [ids]` à la place de `tache` : un seul message de départ, les briefs de chaque rôle présent, les tâches dans l'ordre du lot, et la consigne « rends compte à la fin de chaque tâche (`lancer tache`) avant de passer à la suivante ».
+- Relevé version 4 : une tâche peut porter `lot` `{"id": texte, "rang": entier ≥ 1}` (facultatif, normalisé à `None`) ; le détail d'une tâche au bureau affiche « Lot L2, tâche 3 sur 4 ».
+- Consignes, « Choisir l'agent et le modèle » et « Recréer un agent » : au découpage, note `depend_de` ; avant de lancer, `lancer lots` sur les tâches prêtes ; un lot = un agent, un départ (`depart` avec `taches`), enchaîné d'une traite ; « contexte neuf » vaut désormais à chaque **lot** ; la relecture croisée reste un agent neuf par relecteur.
+
+- [ ] **Step 1 : tests** — `test_exemple_de_l_utilisateur` (a, b, d Sonnet, c Opus, sans dépendance → `[a, b, d]`, `[c]` ; avec `d` dépendant de `c` → `[a, b]`, `[c]`, `[d]`), `test_ordre_garde_sans_dependance_connue_entre_modeles` (l'ordre interne de chaque lot suit l'ordre d'origine), `test_lieu_separe_les_lots`, `test_relecture_jamais_en_lot`, `test_lot_de_cinq_au_plus`, `test_cycle_refuse`, `test_dependance_inconnue_refusee`, `test_depart_d_un_lot` (un message, deux briefs, consigne de compte rendu par tâche), `test_tache_lot_releve_v4`.
+- [ ] **Step 2–4 :** échec, coder, verts (dont `test_orch_consignes`). **Step 5 :** commit « Les lots par modèle dans l'orchestrateur ».
+
+## Étape 5 — le bureau sur le téléphone
 
 ### Task 15 : le bureau ouvert au réseau, le code d'accès, l'association
 
@@ -242,17 +256,17 @@
 - [ ] **Step 2–4 :** échec, coder, verts ; vérifier dans le navigateur en vue mobile (375 × 812) et en tablette : toucher une pièce ouvre son dossier, pincer zoome, une décision du Directeur se valide, une photo s'envoie ; capture d'écran.
 - [ ] **Step 5 :** commit « La vue 3D adaptée au mobile ».
 
-## Étape 6 — les guides et la relecture (phase H)
+## Étape 6 — les guides et la relecture
 
 ### Task 11 : les guides d'accord, relecture finale
 
 **Files:** Modify `docs/installation.md`, `docs/orchestrateur.md`, `README.md`
 
 - [ ] **Step 1 :** `docs/installation.md` commence par l'installation du plugin (`/plugin marketplace add maximus49000/MyIAFactory`, `/plugin install myiafactory@myiafactory`, puis `/myiafactory:installer` dans le dossier d'un projet) ; « Brancher son projet » suit la nouvelle règle de versionnement (plus de `.factory/` dans `.gitignore`) ; une section « Le bureau sur le téléphone » (Tailscale, Wi-Fi de la maison, association par QR code, révocation, ce qui n'est pas chiffré) ; `docs/orchestrateur.md` « Démarrer un projet neuf » renvoie à la commande ; README : le projet 4 et ses cases.
-- [ ] **Step 2 :** relecture de tout le projet 4 contre la conception et ce plan par un relecteur indépendant **sur Opus** (jamais Fable) : exactitude, Review Focus, contre-buts 1 et 2 (sobriété des consignes, workflow proposé), rien de propre à un projet ; corrections avec leurs tests.
+- [ ] **Step 2 :** relecture de tout le projet 4 contre la conception et ce plan par un relecteur indépendant **sur Opus** (jamais Fable) : exactitude, Review Focus, contre-buts 1 et 2 (sobriété des consignes, workflow proposé, lots par modèle), rien de propre à un projet ; corrections avec leurs tests.
 - [ ] **Step 3 :** tous les tests verts ; commit « Projet 4 : guides et relecture ».
 
-## Étape 7 — le vrai passage (phase I, avec l'utilisateur)
+## Étape 7 — le vrai passage (avec l'utilisateur)
 
 ### Task 12 : installer sur un projet vide et sur un projet existant
 
@@ -261,7 +275,7 @@
 - [ ] **Step 3 :** chaque écart générique est corrigé ici avec un test ; la première fonctionnalité démarre sur l'un des deux projets pour vérifier qu'il est prêt ; l'utilisateur associe son téléphone (Tailscale puis Wi-Fi) et y fait un geste de chaque sorte (décision du Directeur, message avec photo, déplacement d'un post-it).
 - [ ] **Step 4 :** commit et push ; fin de phase.
 
-## Étape 8 — la mise à jour du projet pilote (phase J, dépôt privé)
+## Étape 8 — la mise à jour du projet pilote (dépôt privé)
 
 ### Task 13 : le projet pilote rejoint le nouveau rangement
 

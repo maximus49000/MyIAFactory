@@ -100,7 +100,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 15. Le bureau ouvert au téléphone, avec un code d'accès
 - [x] 16. La vue 3D adaptée au mobile
 - [x] 17. Les lots par modèle dans l'orchestrateur
-- [ ] 18. Le catalogue des partenaires
+- [x] 18. Le catalogue des partenaires
 - [ ] 19. Partenaires : connexions, quotas, règles, choix et usage
 - [ ] 20. L'espace partenaire au bureau
 - [ ] 21. Les partenaires dans les consignes et l'installation

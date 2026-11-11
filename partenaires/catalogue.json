@@ -1,0 +1,6417 @@
+{
+ "version": 1,
+ "partenaires": [
+  {
+   "id": "elevenlabs",
+   "nom": "ElevenLabs",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://elevenlabs.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://elevenlabs.io/docs/overview/administration/workspaces/api-keys",
+     "variables": [
+      "ELEVENLABS_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "10 000 caractères et 4,5 h de transcription",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Starter",
+     "prix": 6,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "75 000 caractères",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Creator",
+     "prix": 22,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "275 000 caractères",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Pro",
+     "prix": 99,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "1,24 M caractères",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Scale",
+     "prix": 299,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Business",
+     "prix": 990,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,04 à 0,08 $ pour 1 000 caractères ; musique 0,15 $/min ; effets 0,12 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 000 caractères et 4,5 h de transcription par mois",
+   "quota_lisible": "oui",
+   "lecteur": "elevenlabs",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "cartesia",
+   "nom": "Cartesia",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://cartesia.ai",
+   "inscription": "https://play.cartesia.ai/",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://play.cartesia.ai/",
+     "variables": [
+      "CARTESIA_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "20 000 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "100 000 crédits",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Startup",
+     "prix": 49,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "1,25 M crédits",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Scale",
+     "prix": 299,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "8 M crédits",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "20 000 crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openai-audio",
+   "nom": "OpenAI audio",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://platform.openai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://platform.openai.com/api-keys",
+     "variables": [
+      "OPENAI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "tts-1",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par million de caractères",
+     "tarif": "usage"
+    },
+    {
+     "nom": "tts-1-hd",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par million de caractères",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "google-cloud-tts",
+   "nom": "Google Cloud Text-to-Speech",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://cloud.google.com/text-to-speech",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.cloud.google.com/text-to-speech/docs/authentication",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "4 à 160 $ par million de caractères selon la voix (à vérifier)",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "Palier mensuel (à vérifier)",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "azure-speech",
+   "nom": "Azure Speech",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://azure.microsoft.com/products/ai-services/ai-speech",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-speech-to-text",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "0,5 M caractères, 5 h de transcription",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "prix non lus",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "0,5 M caractères par mois et 5 h de transcription",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "amazon-polly",
+   "nom": "Amazon Polly",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://aws.amazon.com/polly",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.aws.amazon.com/polly/latest/dg/what-is.html",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "5 M caractères (Standard)",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "4 à 100 $ par million de caractères",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "5 M caractères par mois (Standard)",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "assemblyai",
+   "nom": "AssemblyAI",
+   "categorie": "voix-audio",
+   "sous_categorie": "transcription",
+   "site": "https://www.assemblyai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://assemblyai.com/docs/api-reference",
+     "variables": [
+      "ASSEMBLYAI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits d'essai",
+     "prix": 0,
+     "devise": "USD",
+     "periode": null,
+     "quota": "50 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Transcription",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,15 à 0,45 $/h",
+     "tarif": "usage"
+    },
+    {
+     "nom": "Synthèse vocale",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par million de caractères",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "50 $ de crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "deepgram",
+   "nom": "Deepgram",
+   "categorie": "voix-audio",
+   "sous_categorie": "transcription",
+   "site": "https://deepgram.com",
+   "inscription": "https://console.deepgram.com/signup?jump=keys",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developers.deepgram.com/docs/create-additional-api-keys",
+     "variables": [
+      "DEEPGRAM_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits d'essai",
+     "prix": 0,
+     "devise": "USD",
+     "periode": null,
+     "quota": "200 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Nova-3",
+     "prix": 0.0043,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par minute",
+     "tarif": "usage"
+    },
+    {
+     "nom": "Aura (synthèse vocale)",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,015 à 0,045 $ pour 1 000 caractères",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "200 $ de crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openai-transcription",
+   "nom": "OpenAI transcription",
+   "categorie": "voix-audio",
+   "sous_categorie": "transcription",
+   "site": "https://platform.openai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://platform.openai.com/api-keys",
+     "variables": [
+      "OPENAI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,0045 à 0,006 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "murf",
+   "nom": "Murf",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://murf.ai",
+   "inscription": "https://murf.ai/api/signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://murf.ai/api/dashboard",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "wellsaid",
+   "nom": "WellSaid",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://wellsaid.io",
+   "inscription": "https://studio.wellsaidlabs.com/auth/request_access",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.wellsaidlabs.com/docs/creating-an-account",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "resemble",
+   "nom": "Resemble AI",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://www.resemble.ai",
+   "inscription": "https://app.resemble.ai/",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.resemble.ai/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "fish-audio",
+   "nom": "Fish Audio",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://fish.audio",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.fish.audio/api-reference/introduction.md",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "speechmatics",
+   "nom": "Speechmatics",
+   "categorie": "voix-audio",
+   "sous_categorie": "transcription",
+   "site": "https://www.speechmatics.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.speechmatics.com/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits d'essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Crédits d'essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "gladia",
+   "nom": "Gladia",
+   "categorie": "voix-audio",
+   "sous_categorie": "transcription",
+   "site": "https://www.gladia.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.gladia.io/api-reference.md",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits d'essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Crédits d'essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "mubert",
+   "nom": "Mubert",
+   "categorie": "voix-audio",
+   "sous_categorie": "musique-sfx",
+   "site": "https://mubert.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "25 pistes, sans usage commercial",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "App",
+     "prix": null,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "14 à 89 $/mois ; API non publiée",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "25 pistes, sans usage commercial",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "soundraw",
+   "nom": "Soundraw",
+   "categorie": "voix-audio",
+   "sous_categorie": "musique-sfx",
+   "site": "https://soundraw.io",
+   "inscription": "https://soundraw.io/generate_music",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://soundraw.io/api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API Starter",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "100 morceaux (≈)",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "API Pro",
+     "prix": 300,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "stable-audio",
+   "nom": "Stable Audio",
+   "categorie": "voix-audio",
+   "sous_categorie": "musique-sfx",
+   "site": "https://stability.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.stability.ai/api-reference",
+     "variables": []
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "lmnt",
+   "nom": "LMNT",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://www.lmnt.com",
+   "inscription": null,
+   "connexions": [],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "ferme",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "playht",
+   "nom": "PlayHT",
+   "categorie": "voix-audio",
+   "sous_categorie": "synthese-vocale",
+   "site": "https://play.ht",
+   "inscription": null,
+   "connexions": [],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "ferme",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "suno",
+   "nom": "Suno",
+   "categorie": "voix-audio",
+   "sous_categorie": "musique-sfx",
+   "site": "https://suno.com",
+   "inscription": "https://suno.com",
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://suno.com"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "udio",
+   "nom": "Udio",
+   "categorie": "voix-audio",
+   "sous_categorie": "musique-sfx",
+   "site": "https://www.udio.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://www.udio.com"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openai-images",
+   "nom": "OpenAI Images",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://platform.openai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developers.openai.com/api/reference/resources/images",
+     "variables": [
+      "OPENAI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "gpt-image-2",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "8 $ / 30 $ par million de tokens (entrée / sortie)",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "gemini-image",
+   "nom": "Google Gemini image",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://ai.google.dev",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://aistudio.google.com/llms.txt",
+     "variables": [
+      "GEMINI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,034 à 0,24 $ par image selon le modèle et la taille",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "bfl",
+   "nom": "Black Forest Labs (FLUX)",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://bfl.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.bfl.ml/quick_start/generating_images",
+     "variables": [
+      "BFL_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits prépayés",
+     "prix": 0.01,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "1 crédit = 0,01 $ ; ≈ 0,014 à 0,03 $ par image",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "oui",
+   "lecteur": "bfl",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "stability",
+   "nom": "Stability AI",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://stability.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.stability.ai/getting-started.md",
+     "variables": [
+      "STABILITY_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "25 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Crédits",
+     "prix": 10,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "1 000 crédits",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "25 crédits",
+   "quota_lisible": "oui",
+   "lecteur": "stability",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "ideogram",
+   "nom": "Ideogram",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://ideogram.ai",
+   "inscription": "https://ideogram.ai",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://developer.ideogram.ai/_mcp/server",
+     "commande": "claude mcp add --transport http fern_mcp_developer-ideogram-ai https://developer.ideogram.ai/_mcp/server"
+    },
+    {
+     "type": "api",
+     "url": "https://ideogram.ai/platform",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,003 à 0,03 $ par image",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "App seulement",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "leonardo",
+   "nom": "Leonardo",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://leonardo.ai",
+   "inscription": "https://app.leonardo.ai/",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.leonardo.ai/api-access",
+     "variables": [
+      "LEONARDO_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "App",
+     "prix": null,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "12 à 60 $/mois ; crédits API rechargés",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "App (montant incertain)",
+   "quota_lisible": "oui",
+   "lecteur": "leonardo",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "runway-images",
+   "nom": "Runway images",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://runwayml.com",
+   "inscription": "https://dev.runway.com/",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://dev.runwayml.com/mcp/claude",
+     "commande": "claude mcp add --transport http --scope user runway-dev-mcp https://dev.runwayml.com/mcp/claude"
+    },
+    {
+     "type": "api",
+     "url": "https://dev.runway.com/",
+     "variables": [
+      "RUNWAYML_API_SECRET"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits API",
+     "prix": 0.01,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "1 crédit = 0,01 $ ; 1 à 8 crédits par image",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "krea",
+   "nom": "Krea",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://www.krea.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://api.krea.ai/mcp",
+     "commande": "claude mcp add --transport http krea-ai https://api.krea.ai/mcp"
+    },
+    {
+     "type": "api",
+     "url": "https://www.krea.ai/settings/api-tokens",
+     "variables": [
+      "KREA_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Solde prépayé",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,03 à 0,06 $ par image",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "freepik",
+   "nom": "Freepik / Magnific",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://www.freepik.com/api",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.magnific.com",
+     "commande": "claude mcp add --transport http magnific https://mcp.magnific.com"
+    },
+    {
+     "type": "api",
+     "url": "https://docs.magnific.com/llms.txt",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 5,
+     "devise": "EUR",
+     "periode": null,
+     "quota": "≈ 5 € d'essai",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À la consommation",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": null,
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "≈ 5 € d'essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "adobe-firefly",
+   "nom": "Adobe Firefly",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://www.adobe.com/products/firefly.html",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developer.adobe.com/firefly-services/docs/firefly-api/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "App",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "25 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Engagement API",
+     "prix": 1000,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 1 000 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "App : 25 crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "midjourney",
+   "nom": "Midjourney",
+   "categorie": "images",
+   "sous_categorie": "generation",
+   "site": "https://www.midjourney.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://www.midjourney.com"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "fal",
+   "nom": "fal.ai",
+   "categorie": "images",
+   "sous_categorie": "plateformes",
+   "site": "https://fal.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://fal.ai/dashboard/keys",
+     "variables": [
+      "FAL_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Prépayé",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par image ou par seconde (vidéo : Kling 0,07 à 0,14 $/s)",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "replicate",
+   "nom": "Replicate",
+   "categorie": "images",
+   "sous_categorie": "plateformes",
+   "site": "https://replicate.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.replicate.com",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://replicate.com/docs/topics/security/api-tokens",
+     "variables": [
+      "REPLICATE_API_TOKEN"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Prépayé",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "à l'usage",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "picsart",
+   "nom": "Picsart API",
+   "categorie": "images",
+   "sous_categorie": "plateformes",
+   "site": "https://picsart.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://picsart.com/api-platform/docs/authentication",
+     "variables": [
+      "PICSART_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits",
+     "prix": 0.005,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,005 $ le crédit",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "recraft",
+   "nom": "Recraft",
+   "categorie": "images",
+   "sous_categorie": "retouche",
+   "site": "https://www.recraft.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.recraft.ai/app/api/api-keys",
+     "variables": [
+      "RECRAFT_API_TOKEN"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": 0.001,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,001 $ l'unité ; vecteur 0,09 à 0,33 $",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "App seulement",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "removebg",
+   "nom": "remove.bg",
+   "categorie": "images",
+   "sous_categorie": "retouche",
+   "site": "https://www.remove.bg",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.remove.bg/dashboard#api-key",
+     "variables": [
+      "REMOVEBG_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "basse résolution",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'image",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,08 à 0,20 $ l'image",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "Basse résolution",
+   "quota_lisible": "oui",
+   "lecteur": "removebg",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "photoroom",
+   "nom": "Photoroom",
+   "categorie": "images",
+   "sous_categorie": "retouche",
+   "site": "https://www.photoroom.com/api",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.photoroom.com/api-dashboard",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Bac à sable",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "dès 20 $/mois ; 0,02 à 0,10 $ l'image",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Bac à sable",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "topaz",
+   "nom": "Topaz",
+   "categorie": "images",
+   "sous_categorie": "retouche",
+   "site": "https://www.topazlabs.com",
+   "inscription": "https://docs.topazlabs.com/sales-account-licensing/your-account/how-to-create-a-topaz-labs-account",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.topazlabs.com/cloud-apps/developer/api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "100 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Crédits",
+     "prix": 0.12,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,12 $ le crédit",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "100 crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "clipdrop",
+   "nom": "Clipdrop",
+   "categorie": "images",
+   "sous_categorie": "retouche",
+   "site": "https://clipdrop.co",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developers.jasper.ai/docs/using-images",
+     "variables": []
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "autosprite",
+   "nom": "AutoSprite",
+   "categorie": "images",
+   "sous_categorie": "sprites",
+   "site": "https://www.autosprite.io",
+   "inscription": "https://www.autosprite.io/app",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://www.autosprite.io/app/api-keys",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "15 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Starter",
+     "prix": 12,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Pro",
+     "prix": 29,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "API et MCP",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Enterprise",
+     "prix": 99,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "15 crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "pixellab",
+   "nom": "PixelLab",
+   "categorie": "images",
+   "sous_categorie": "sprites",
+   "site": "https://www.pixellab.ai",
+   "inscription": "https://www.pixellab.ai/signup",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://www.pixellab.ai/docs",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 12,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "prix non confirmés",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "scenario",
+   "nom": "Scenario",
+   "categorie": "images",
+   "sous_categorie": "sprites",
+   "site": "https://www.scenario.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.scenario.com/",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://docs.scenario.com/get-started/documentation/quick-start-guide/step-1-obtain-your-api-key",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "jour",
+     "quota": "50 crédits/jour",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Starter",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "1 500 crédits",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Pro",
+     "prix": 45,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "50 crédits par jour",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "runway",
+   "nom": "Runway",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://runwayml.com",
+   "inscription": "https://dev.runway.com/",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://dev.runway.com/api",
+     "variables": [
+      "RUNWAYML_API_SECRET"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "App",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "125 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "API",
+     "prix": 0.01,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "1 crédit = 0,01 $ ; 5 à 30 crédits par seconde (donne aussi Veo, Kling, Seedance)",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "App : 125 crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "veo",
+   "nom": "Google Veo",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://deepmind.google/models/veo",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,05 à 0,60 $ par seconde",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "kling",
+   "nom": "Kling",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://kling.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://kling.ai/dev",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Forfaits prépayés",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,06 à 0,42 $/s",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "minimax-hailuo",
+   "nom": "MiniMax Hailuo",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://www.minimax.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://platform.minimax.io/console/home",
+     "variables": [
+      "MINIMAX_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,10 à 0,49 $ la vidéo de 6 s",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "luma",
+   "nom": "Luma",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://lumalabs.ai",
+   "inscription": "https://platform.lumalabs.ai/",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://platform.lumalabs.ai/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "à l'usage",
+     "tarif": "usage"
+    },
+    {
+     "nom": "App",
+     "prix": null,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "30 à 300 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "seedance",
+   "nom": "Seedance (ByteDance)",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://seed.bytedance.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "au million de jetons",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "wan",
+   "nom": "Wan",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://wan.video",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,05 à 0,80 $",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "ltx",
+   "nom": "LTX",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://ltx.io/studio",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,05 à 0,80 $",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "vidu",
+   "nom": "Vidu",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://www.vidu.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,05 à 0,80 $",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "pixverse",
+   "nom": "PixVerse",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://pixverse.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://platform.pixverse.ai/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,05 à 0,80 $",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "pika",
+   "nom": "Pika",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://pika.art",
+   "inscription": "https://create.pika.art/signup",
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://pika.art"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "sora",
+   "nom": "OpenAI Sora",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "video",
+   "site": "https://openai.com/sora",
+   "inscription": null,
+   "connexions": [],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "ferme",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "heygen",
+   "nom": "HeyGen",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://www.heygen.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://platform.heygen.com/api-keys",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Portefeuille API",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "dès 5 $ ; ≈ 1 à 4 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "Non (depuis février 2026)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "synthesia",
+   "nom": "Synthesia",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://www.synthesia.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.synthesia.io/docs/developers.md",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "10 min avec filigrane",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Starter",
+     "prix": 19,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Creator",
+     "prix": 89,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "10 min par mois avec filigrane",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "sync-labs",
+   "nom": "Sync Labs",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://sync.so",
+   "inscription": "https://sync.so/login",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://sync.so/settings/api-keys",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "3 générations de 15 s",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "5 à 249 $/mois + 0,04 à 0,13 $/s",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "3 générations de 15 s par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "did",
+   "nom": "D-ID",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://www.d-id.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.d-id.com/docs/api-keys.md",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 6,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "6 à 975 $/mois selon l'offre",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "tavus",
+   "nom": "Tavus",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://www.tavus.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.tavus.io/llms.txt",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 6,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "6 à 975 $/mois selon l'offre",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "hedra",
+   "nom": "Hedra",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "avatars",
+   "site": "https://www.hedra.com",
+   "inscription": "https://www.hedra.com/auth/start?flow=signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.hedra.com/docs",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 6,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "6 à 975 $/mois selon l'offre",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "json2video",
+   "nom": "JSON2Video",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "montage",
+   "site": "https://json2video.com",
+   "inscription": "https://json2video.com/login/",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://json2video.com/login/?redirect=%2Fdashboard%2Fapikeys",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Prix non confirmés",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": "600 crédits gratuits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "creatomate",
+   "nom": "Creatomate",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "montage",
+   "site": "https://creatomate.com",
+   "inscription": "https://creatomate.com/sign-in",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://creatomate.com/docs/fundamentals/getting-started/api-automation",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Prix non confirmés",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "shotstack",
+   "nom": "Shotstack",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "montage",
+   "site": "https://shotstack.io",
+   "inscription": "https://app.shotstack.io/register",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://dashboard.shotstack.io",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Prix non confirmés",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "meshy",
+   "nom": "Meshy",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.meshy.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://www.meshy.ai/developers/keys",
+     "variables": [
+      "MESHY_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "100 crédits, sans API",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 19,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": "API dès Pro",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Premium",
+     "prix": 38,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Ultra",
+     "prix": 95,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "100 crédits par mois, sans API",
+   "quota_lisible": "oui",
+   "lecteur": "meshy",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "tripo",
+   "nom": "Tripo",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.tripo3d.ai",
+   "inscription": "https://studio.tripo3d.ai/home",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developers.tripo3d.ai/",
+     "variables": [
+      "TRIPO_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": 0.01,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "1 crédit = 0,01 $ ; 10 à 30 crédits par modèle, auto-rig 25",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "rodin",
+   "nom": "Rodin / Hyper3D",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://hyper3d.ai",
+   "inscription": "https://hyper3d.ai/workspace/register",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://api.hyper3d.com/api/mcp",
+     "commande": "claude mcp add --transport http hyper3d-rodin --scope user https://api.hyper3d.com/api/mcp"
+    },
+    {
+     "type": "api",
+     "url": "https://hyper3d.ai/workspace/api-dashboard",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Creator",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Business",
+     "prix": 120,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "API",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Paiement au téléchargement",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "csm",
+   "nom": "CSM",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.csm.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "1 crédit",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "20 à 60 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "1 crédit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "stability-3d",
+   "nom": "Stability 3D",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://stability.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.stability.ai/getting-started.md",
+     "variables": [
+      "STABILITY_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "25 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'appel",
+     "prix": 0.1,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,10 $ par appel",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "25 crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "move-ai",
+   "nom": "Move.ai",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.move.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.move.ai/knowledge",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "30 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "API",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "par seconde de vidéo ; sur devis",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": "30 crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "deepmotion",
+   "nom": "DeepMotion",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.deepmotion.com",
+   "inscription": "https://www.deepmotion.com/sign-up",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.deepmotion.com/documentation",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis ou inconnu",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "kaedim",
+   "nom": "Kaedim",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.kaedim3d.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.kaedim3d.com/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis ou inconnu",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "hunyuan3d",
+   "nom": "Hunyuan3D",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://3d.hunyuan.tencent.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis ou inconnu",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "rokoko",
+   "nom": "Rokoko",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.rokoko.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://sdk.rokoko.com/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis ou inconnu",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "plask",
+   "nom": "Plask",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://plask.ai",
+   "inscription": "https://motion.plask.ai",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://plask.ai/en-US/docs/8",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis ou inconnu",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "mixamo",
+   "nom": "Mixamo",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://www.mixamo.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://www.mixamo.com"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "luma-capture",
+   "nom": "Luma (capture 3D)",
+   "categorie": "video-3d-avatars",
+   "sous_categorie": "3d",
+   "site": "https://lumalabs.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://lumalabs.ai"
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "deepl",
+   "nom": "DeepL",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://www.deepl.com",
+   "inscription": "https://www.deepl.com/en/signup?cta=checkout",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.deepl.com/your-account/keys",
+     "variables": [
+      "DEEPL_AUTH_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API Free",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "500 000 caractères",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "App",
+     "prix": 7.49,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": "7,49 à 49,99 €/mois",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "API Pro",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "prix non lu",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "API Free : 500 000 caractères par mois",
+   "quota_lisible": "oui",
+   "lecteur": "deepl",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "amazon-translate",
+   "nom": "Amazon Translate",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://aws.amazon.com/translate",
+   "inscription": "https://signin.aws.amazon.com/signup?request_type=builderId",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.aws.amazon.com/translate/latest/APIReference/Welcome.html",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "2 M caractères pendant 12 mois",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par million de caractères",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "2 M caractères par mois pendant 12 mois",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "azure-translator",
+   "nom": "Azure Translator",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://azure.microsoft.com/products/ai-services/ai-translator",
+   "inscription": "https://azure.microsoft.com/en-us/pricing/purchase-options/azure-account",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://learn.microsoft.com/en-us/azure/ai-services/translator/text-translation/reference/authentication",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "2 M caractères",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "prix non lu",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "2 M caractères par mois",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "google-translation",
+   "nom": "Google Translation",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://cloud.google.com/translate",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.cloud.google.com/translate/docs/authentication",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "≈ 500 000 caractères",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 20 $ par million (à vérifier)",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "≈ 500 000 caractères par mois",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "lokalise",
+   "nom": "Lokalise",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://lokalise.com",
+   "inscription": "https://app.lokalise.com/signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.lokalise.com/en/articles/1929556-api-tokens",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "14 jours",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 149,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "149 à 1 049 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai de 14 jours",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "phrase",
+   "nom": "Phrase",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://phrase.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.eu.phrase.com",
+     "commande": "claude mcp add --transport streamable-http phrase-mcp-prod-eu https://mcp.eu.phrase.com"
+    },
+    {
+     "type": "api",
+     "url": "https://developers.phrase.com/en/api/overview",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "14 jours",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 27,
+     "devise": null,
+     "periode": "mois",
+     "quota": "27 à 1 245 par mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai de 14 jours",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "crowdin",
+   "nom": "Crowdin",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "traduction",
+   "site": "https://crowdin.com",
+   "inscription": "https://accounts.crowdin.com/register",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://support.crowdin.com/developer/api/v2/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Open source",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "gratuit pour l'open source",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": null,
+     "devise": null,
+     "periode": "mois",
+     "quota": "prix non lus",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": "Gratuit pour l'open source",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "rev-ai",
+   "nom": "Rev AI",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "sous-titres",
+   "site": "https://www.rev.ai",
+   "inscription": "https://www.rev.ai/auth/signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.rev.ai/access-token",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "5 h de transcription",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 0.2,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,20 $/h ; humain 1,99 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "5 h de transcription",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "descript",
+   "nom": "Descript",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "sous-titres",
+   "site": "https://www.descript.com",
+   "inscription": "https://web.descript.com/?sign_up=true",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://web.descript.com/view/settings/account?active=api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "60 min",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 16,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "16 à 65 $/mois par personne",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "60 min par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "vizard",
+   "nom": "Vizard",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "sous-titres",
+   "site": "https://vizard.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://vizard.ai/settings/api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "60 min, filigrane",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": null,
+     "devise": null,
+     "periode": "mois",
+     "quota": "600 min/mois et plus (prix non lus)",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "60 min par mois, filigrane",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "opus-clip",
+   "nom": "Opus Clip",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "sous-titres",
+   "site": "https://www.opus.pro",
+   "inscription": "https://clip.opus.pro/dashboard",
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "exa",
+   "nom": "Exa",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://exa.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.exa.ai/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://dashboard.exa.ai/api-keys",
+     "variables": [
+      "EXA_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "10 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 4,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "dès 4 $ les 1 000 recherches",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 $ de crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "tavily",
+   "nom": "Tavily",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://tavily.com",
+   "inscription": "https://app.tavily.com",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.tavily.com/mcp/",
+     "commande": "claude mcp add tavily --transport http https://mcp.tavily.com/mcp/"
+    },
+    {
+     "type": "api",
+     "url": "https://app.tavily.com",
+     "variables": [
+      "TAVILY_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "1 000 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "4 000 crédits",
+     "tarif": "inclus"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 0.008,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "le crédit",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "1 000 crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "firecrawl",
+   "nom": "Firecrawl",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://www.firecrawl.dev",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.firecrawl.dev/v2/mcp",
+     "commande": "claude mcp add --transport http firecrawl https://mcp.firecrawl.dev/v2/mcp"
+    },
+    {
+     "type": "api",
+     "url": "https://www.firecrawl.dev/app/api-keys",
+     "variables": [
+      "FIRECRAWL_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "1 000 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 19,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "19 à 749 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "1 000 crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "brave-search",
+   "nom": "Brave Search",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://brave.com/search/api",
+   "inscription": "https://api-dashboard.search.brave.com/register",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://api-dashboard.search.brave.com/register",
+     "variables": [
+      "BRAVE_SEARCH_API_KEY",
+      "BRAVE_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "5 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "5 $ les 1 000 requêtes",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "5 $ de crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "jina",
+   "nom": "Jina Reader",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://jina.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "10 M de tokens",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Tokens",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": "tokens à l'achat",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 M de tokens",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "serpapi",
+   "nom": "SerpAPI",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://serpapi.com",
+   "inscription": "https://serpapi.com/users/sign_up",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://serpapi.com/dashboard",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "250 recherches",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 25,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "25 à 725 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "250 recherches par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "perplexity",
+   "nom": "Perplexity",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://www.perplexity.ai",
+   "inscription": "https://console.perplexity.ai",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://console.perplexity.ai",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "5 $ les 1 000 recherches",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "apify",
+   "nom": "Apify",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://apify.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.apify.com",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://console.apify.com/settings/integrations",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "5 $ d'usage",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 19,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "19 à 999 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "5 $ d'usage par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "browserbase",
+   "nom": "Browserbase",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "recherche-web",
+   "site": "https://www.browserbase.com",
+   "inscription": "https://browserbase.com/sign-up",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://browserbase.com/sign-up",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "1 h de navigateur",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "20 à 99 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "1 h de navigateur",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "vapi",
+   "nom": "Vapi",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://vapi.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://docs.vapi.ai/_mcp/server",
+     "commande": "claude mcp add --transport http fern_mcp_docs-vapi-ai https://docs.vapi.ai/_mcp/server"
+    },
+    {
+     "type": "api",
+     "url": "https://docs.vapi.ai/llms.txt",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits",
+     "prix": 0,
+     "devise": "USD",
+     "periode": null,
+     "quota": "5 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À la minute",
+     "prix": 0.05,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,05 $/min + modèles",
+     "tarif": "usage"
+    },
+    {
+     "nom": "Core",
+     "prix": 29,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "5 $ de crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "retell",
+   "nom": "Retell",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://www.retellai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.retellai.com/llms.txt",
+     "variables": [
+      "RETELL_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Crédits",
+     "prix": 0,
+     "devise": "USD",
+     "periode": null,
+     "quota": "10 $ de crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À la minute",
+     "prix": 0.07,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,07 à 0,31 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 $ de crédits",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "bland",
+   "nom": "Bland",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://www.bland.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Start",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Build",
+     "prix": 299,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Plan Start à 0 $",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "inworld",
+   "nom": "Inworld",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://inworld.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.inworld.ai/portal/authentication",
+     "variables": [
+      "INWORLD_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "70 min de voix",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 25,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "25 à 1 500 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "70 min de voix",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "hume",
+   "nom": "Hume",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://www.hume.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://dev.hume.ai",
+     "variables": [
+      "HUME_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "convai",
+   "nom": "Convai",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "agents-vocaux",
+   "site": "https://convai.com",
+   "inscription": "https://convai.com/auth/login",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.convai.com/api-docs",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openai-moderation",
+   "nom": "OpenAI Moderation",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "moderation",
+   "site": "https://developers.openai.com/api/docs/guides/moderation",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developers.openai.com/api/reference/resources/moderations",
+     "variables": [
+      "OPENAI_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "texte et image",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Gratuit (texte et image)",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "sightengine",
+   "nom": "Sightengine",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "moderation",
+   "site": "https://sightengine.com",
+   "inscription": "https://dashboard.sightengine.com/signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://sightengine.com/docs/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "2 000 opérations",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 29,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "29 à 99 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "2 000 opérations par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "hive",
+   "nom": "Hive / Deploy",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "moderation",
+   "site": "https://thehive.ai",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": 0.5,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,50 à 3 $ les 1 000 requêtes",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "reality-defender",
+   "nom": "Reality Defender",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "moderation",
+   "site": "https://www.realitydefender.com",
+   "inscription": "https://app.realitydefender.ai/auth/login",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.realitydefender.ai/auth/login",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "50 analyses",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Sur devis",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": "50 analyses par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "resemble-detect",
+   "nom": "Resemble Detect",
+   "categorie": "langue-web-agents",
+   "sous_categorie": "moderation",
+   "site": "https://www.resemble.ai",
+   "inscription": "https://app.resemble.ai/",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.resemble.ai/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À l'usage",
+     "prix": 0.04,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "≈ 0,04 $ par seconde d'audio",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "Contradictoire",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "unsplash",
+   "nom": "Unsplash",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://unsplash.com",
+   "inscription": "https://unsplash.com/oauth/applications",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://unsplash.com/oauth/applications",
+     "variables": [
+      "UNSPLASH_ACCESS_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Démo",
+     "prix": 0,
+     "devise": null,
+     "periode": "heure",
+     "quota": "50 requêtes/h",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Production",
+     "prix": 0,
+     "devise": null,
+     "periode": "heure",
+     "quota": "1 000 requêtes/h ; attribution obligatoire",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "50 requêtes/h en démo, 1 000 en production",
+   "quota_lisible": "oui",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "pexels",
+   "nom": "Pexels",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://www.pexels.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.pexels.com/api/documentation/",
+     "variables": [
+      "PEXELS_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "heure",
+     "quota": "200 requêtes/h, 20 000/mois",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "200 requêtes/h, 20 000 par mois",
+   "quota_lisible": "oui",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "pixabay",
+   "nom": "Pixabay",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://pixabay.com",
+   "inscription": "https://pixabay.com/accounts/register/?source=main_nav&next=/api/docs/&modal",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://pixabay.com/api/docs/",
+     "variables": [
+      "PIXABAY_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "minute",
+     "quota": "100 requêtes/min",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "100 requêtes/min",
+   "quota_lisible": "oui",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "freesound",
+   "nom": "Freesound",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://freesound.org",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://freesound.org/docs/api/authentication.html",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "jour",
+     "quota": "2 000 requêtes/jour",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "2 000 requêtes par jour",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openverse",
+   "nom": "Openverse",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://openverse.org",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "limites par heure et par jour",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Limites par heure et par jour",
+   "quota_lisible": "oui",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "epidemic-sound",
+   "nom": "Epidemic Sound",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://www.epidemicsound.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "API",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "gratuite pour prototyper",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "MCP",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "abonnement Epidemic",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "API gratuite pour prototyper",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "shutterstock",
+   "nom": "Shutterstock",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://www.shutterstock.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Compte test",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "500 licences",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Sur devis",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": "Compte test (500 licences par mois)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "getty",
+   "nom": "Getty Images",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://www.gettyimages.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://api.gettyimages.com/swagger",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "adobe-stock",
+   "nom": "Adobe Stock",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://stock.adobe.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developer.adobe.com/stock/docs/getting-started/02-register-app",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "artlist",
+   "nom": "Artlist",
+   "categorie": "medias-design",
+   "sous_categorie": "banques",
+   "site": "https://artlist.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur devis",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "iconify",
+   "nom": "Iconify",
+   "categorie": "medias-design",
+   "sous_categorie": "icones-polices",
+   "site": "https://iconify.design",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://iconify.design/docs/api/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "sans clé",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Gratuit",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "noun-project",
+   "nom": "Noun Project",
+   "categorie": "medias-design",
+   "sous_categorie": "icones-polices",
+   "site": "https://thenounproject.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://thenounproject.com/developers/apps/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "30 jours",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 25,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "dès 25 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai de 30 jours",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "google-fonts",
+   "nom": "Google Fonts",
+   "categorie": "medias-design",
+   "sous_categorie": "icones-polices",
+   "site": "https://fonts.google.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://console.cloud.google.com/apis/credentials",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "OFL / Apache, commercial permis",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Gratuit",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "flaticon",
+   "nom": "Flaticon",
+   "categorie": "medias-design",
+   "sous_categorie": "icones-polices",
+   "site": "https://www.flaticon.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "attribution",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 8,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 8 à 13 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Version gratuite",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "font-awesome",
+   "nom": "Font Awesome",
+   "categorie": "medias-design",
+   "sous_categorie": "icones-polices",
+   "site": "https://fontawesome.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 99,
+     "devise": "USD",
+     "periode": "an",
+     "quota": "≈ 99 à 120 $/an",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Version gratuite",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "poly-haven",
+   "nom": "Poly Haven",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://polyhaven.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://redocly.github.io/redoc/?url=https://api.polyhaven.com/api-docs/swagger.json&nocors",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "tout est CC0",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Tout gratuit (CC0)",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "ambientcg",
+   "nom": "ambientCG",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://ambientcg.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "tout est CC0",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Tout gratuit (CC0)",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "sketchfab",
+   "nom": "Sketchfab",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://sketchfab.com",
+   "inscription": "https://sketchfab.com/signup",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://sketchfab.com/developers/oauth",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "500 000 modèles CC",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 15 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "500 000 modèles CC",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "substance-3d",
+   "nom": "Adobe Substance 3D",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://www.adobe.com/products/substance3d.html",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://developer.adobe.com/console/servicesandapis",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Sur contrat",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "kenney",
+   "nom": "Kenney",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://kenney.nl",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://kenney.nl"
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "CC0",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Tout gratuit (CC0)",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "fab",
+   "nom": "Fab / Megascans",
+   "categorie": "medias-design",
+   "sous_categorie": "textures-3d",
+   "site": "https://www.fab.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://www.fab.com"
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit et payant",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "licence Fab",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "kiri-engine",
+   "nom": "KIRI Engine",
+   "categorie": "medias-design",
+   "sous_categorie": "scan-3d",
+   "site": "https://www.kiriengine.app",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "oui",
+   "lecteur": "kiri",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "polycam",
+   "nom": "Polycam",
+   "categorie": "medias-design",
+   "sous_categorie": "scan-3d",
+   "site": "https://poly.cam",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "offre gratuite",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 30 $/mois (contradictoire) ; API Entreprise seulement",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Offre gratuite",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "realityscan",
+   "nom": "RealityScan",
+   "categorie": "medias-design",
+   "sous_categorie": "scan-3d",
+   "site": "https://www.unrealengine.com/realityscan",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "studio",
+     "url": "https://www.unrealengine.com/realityscan"
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "sous 1 M$ de revenu",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Poste",
+     "prix": 1250,
+     "devise": "USD",
+     "periode": "an",
+     "quota": "1 250 $/poste/an",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Gratuit sous 1 M$ de revenu",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "sans_api",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "figma",
+   "nom": "Figma",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://www.figma.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.figma.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Lecture",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "20 appels MCP",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Siège Full",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "200 appels/jour (≈ 15 $)",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "20 appels MCP par mois (sièges lecture)",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "canva",
+   "nom": "Canva",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://www.canva.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://www.canva.dev/docs/apps/rest-apis/reference/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 13,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 13 à 18 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Plan gratuit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "gamma",
+   "nom": "Gamma",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://gamma.app",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.gamma.app/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://gamma.app/settings/api-keys",
+     "variables": [
+      "GAMMA_API_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "clé API avec crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Plus",
+     "prix": 9,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    },
+    {
+     "nom": "Pro",
+     "prix": 18,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Clé API dès le plan gratuit (crédits)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "framer",
+   "nom": "Framer",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://www.framer.com",
+   "inscription": "https://www.framer.com/r/signup/",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 10,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "≈ 10 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Plan gratuit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "penpot",
+   "nom": "Penpot",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://penpot.app",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://penpot.app/integrations-api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Open source",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Open source",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "tome",
+   "nom": "Tome",
+   "categorie": "medias-design",
+   "sous_categorie": "design",
+   "site": "https://tome.app",
+   "inscription": null,
+   "connexions": [],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "ferme",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "vercel",
+   "nom": "Vercel",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://vercel.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.vercel.com",
+     "commande": "claude mcp add --transport http vercel https://mcp.vercel.com"
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Hobby",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "non commercial",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Hobby (non commercial)",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "netlify",
+   "nom": "Netlify",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://www.netlify.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.netlify.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://open-api.netlify.com",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "300 crédits",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 9,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "9 à 20 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "300 crédits par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "cloudflare",
+   "nom": "Cloudflare (Pages, R2, Workers)",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://www.cloudflare.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.cloudflare.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://dash.cloudflare.com/profile/api-tokens",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "R2 : 10 Go, sortie gratuite",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "R2",
+     "prix": 0.015,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par Go et par mois",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "R2 : 10 Go, sortie gratuite",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "github-pages",
+   "nom": "GitHub Pages",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://pages.github.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Inclus",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "1 Go par site",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Inclus (1 Go par site)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "supabase",
+   "nom": "Supabase",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://supabase.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.supabase.com/mcp",
+     "commande": "claude mcp add --scope project --transport http supabase \"https://mcp.supabase.com/mcp\""
+    },
+    {
+     "type": "api",
+     "url": "https://supabase.com/dashboard/account/tokens",
+     "variables": [
+      "SUPABASE_ACCESS_TOKEN"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "500 Mo de base, 1 Go de fichiers",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Pro",
+     "prix": 25,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "500 Mo de base, 1 Go de fichiers",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "render",
+   "nom": "Render",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://render.com",
+   "inscription": "https://dashboard.render.com/register",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://dashboard.render.com/u/settings?add-api-key",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "750 h, mise en veille",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Professional",
+     "prix": 19,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "à revérifier",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "750 h par mois, mise en veille",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "railway",
+   "nom": "Railway",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://railway.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.railway.com",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://railway.com/account/tokens",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "1 $ de crédit",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "5 à 20 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "1 $ de crédit par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "fly-io",
+   "nom": "Fly.io",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://fly.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://docs.fly.io/flyctl/cmd/fly_tokens",
+     "variables": [
+      "FLY_API_TOKEN"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "À la seconde",
+     "prix": null,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "plus de plan gratuit",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "itch-io",
+   "nom": "itch.io",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "hebergement",
+   "site": "https://itch.io",
+   "inscription": "https://itch.io/register",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://itch.io/docs/api/overview",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Publication gratuite",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "partage de revenus ; envoi de builds par butler",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Publication gratuite",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "testmu",
+   "nom": "TestMu AI (ex-LambdaTest)",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "tests-appareils",
+   "site": "https://www.testmuai.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "100 min d'automatisation, 300 min HyperExecute",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 15,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "15 à 199 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "100 min d'automatisation",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "browserstack",
+   "nom": "BrowserStack",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "tests-appareils",
+   "site": "https://www.browserstack.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 12.5,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "12,50 à 225 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "sauce-labs",
+   "nom": "Sauce Labs",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "tests-appareils",
+   "site": "https://saucelabs.com",
+   "inscription": "https://saucelabs.com/sign-up",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.saucelabs.com/user-settings",
+     "variables": [
+      "SAUCE_USERNAME",
+      "SAUCE_ACCESS_KEY"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 39,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "39 à 299 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "firebase-test-lab",
+   "nom": "Firebase Test Lab",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "tests-appareils",
+   "site": "https://firebase.google.com/products/test-lab",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "jour",
+     "quota": "30 min d'appareils réels",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'heure",
+     "prix": 5,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "5 $/h réel, 1 $/h virtuel",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "30 min par jour d'appareils réels",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "aws-device-farm",
+   "nom": "AWS Device Farm",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "tests-appareils",
+   "site": "https://aws.amazon.com/device-farm",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "1 000 min",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À la minute",
+     "prix": 0.17,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "0,17 $/min",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "1 000 min d'essai",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "mapbox",
+   "nom": "Mapbox",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://www.mapbox.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://console.mapbox.com/account/access-tokens/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "50 000 chargements de carte",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": null,
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "50 000 chargements de carte par mois",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "google-maps",
+   "nom": "Google Maps",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://mapsplatform.google.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://console.cloud.google.com/projectselector/google/maps-apis/credentials?ref=/maps/documentation/javascript/get-api-key",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "1 000 à 10 000 appels par service",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 100,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "100 à 1 200 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "1 000 à 10 000 appels gratuits par service et par mois",
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "maptiler",
+   "nom": "MapTiler",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://www.maptiler.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://cloud.maptiler.com/account/keys/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "100 000 requêtes (non commercial)",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 30,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "100 000 requêtes (non commercial)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "stadia-maps",
+   "nom": "Stadia Maps",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://stadiamaps.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://client.stadiamaps.com/dashboard/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "200 000 crédits (non commercial)",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 20,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "20 à 250 $/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "200 000 crédits (non commercial)",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "openstreetmap",
+   "nom": "OpenStreetMap / Nominatim",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://www.openstreetmap.org",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://nominatim.org/release-docs/latest/api/Overview/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "1 requête/s, pas en masse",
+     "tarif": "gratuit"
+    }
+   ],
+   "gratuit": "Gratuit, 1 requête par seconde",
+   "quota_lisible": "non",
+   "illimite": true,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "quickchart",
+   "nom": "QuickChart",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://quickchart.io",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://quickchart.io/documentation/usage/parameters/",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "limite de débit",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 39,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": null,
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Gratuit avec limite de débit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "datawrapper",
+   "nom": "Datawrapper",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "cartes",
+   "site": "https://www.datawrapper.de",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://app.datawrapper.de/account/api-tokens",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Payant",
+     "prix": 21,
+     "devise": "EUR",
+     "periode": "mois",
+     "quota": "21 à 39 €/mois",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Gratuit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "github",
+   "nom": "GitHub",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://github.com",
+   "inscription": "https://github.com/signup",
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://github.com/settings/personal-access-tokens/new",
+     "variables": [
+      "GITHUB_PERSONAL_ACCESS_TOKEN"
+     ]
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "code, tickets, demandes de fusion",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "gitlab",
+   "nom": "GitLab",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://gitlab.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://gitlab.com/api/v4/mcp",
+     "commande": "claude mcp add -s user --transport http GitLab https://gitlab.com/api/v4/mcp"
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "MCP inclus dans le plan gratuit ; l'administrateur doit l'autoriser",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "linear",
+   "nom": "Linear",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://linear.app",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.linear.app/mcp",
+     "commande": "claude mcp add --transport http linear-server https://mcp.linear.app/mcp"
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "suivi des tâches",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "atlassian",
+   "nom": "Jira / Confluence (Atlassian)",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://www.atlassian.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.atlassian.com/v2/mcp",
+     "commande": "claude mcp add --transport http atlassian https://mcp.atlassian.com/v2/mcp"
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "suivi, documentation (Rovo)",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "notion",
+   "nom": "Notion",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://www.notion.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.notion.com/mcp",
+     "commande": "claude mcp add --transport http notion https://mcp.notion.com/mcp"
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "tous les plans",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "google-drive",
+   "nom": "Google Drive",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://drive.google.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://developers.google.com/workspace/guides/getstarted-overview",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "aussi Gmail, Agenda, Docs (préversion)",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "slack",
+   "nom": "Slack",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://slack.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.slack.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "réservé aux applications validées",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "trello",
+   "nom": "Trello",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://trello.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": null,
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://trello.com/apps/admin",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": null,
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "asana",
+   "nom": "Asana",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://asana.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.asana.com/v2/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Selon l'abonnement",
+     "prix": null,
+     "devise": null,
+     "periode": null,
+     "quota": "ancien point d'accès coupé depuis le 05/11/2026",
+     "tarif": "inconnu"
+    }
+   ],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "discord",
+   "nom": "Discord",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "equipe",
+   "site": "https://discord.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [],
+   "gratuit": null,
+   "quota_lisible": "non",
+   "illimite": false,
+   "statut": "restreint",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "cloudflare-r2",
+   "nom": "Cloudflare R2",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "stockage-stats",
+   "site": "https://www.cloudflare.com/developer-platform/products/r2",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.cloudflare.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": "https://dash.cloudflare.com/?to=/:account/r2/overview",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "10 Go, sortie gratuite",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 0.015,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par Go et par mois",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 Go, sortie gratuite",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "backblaze-b2",
+   "nom": "Backblaze B2",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "stockage-stats",
+   "site": "https://www.backblaze.com/cloud-storage",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://www.backblaze.com/apidocs/b2-authorize-account",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "10 Go",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": 6.95,
+     "devise": "USD",
+     "periode": "usage",
+     "quota": "par To et par mois",
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "10 Go",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "posthog",
+   "nom": "PostHog",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "stockage-stats",
+   "site": "https://posthog.com",
+   "inscription": null,
+   "connexions": [
+    {
+     "type": "mcp",
+     "url": "https://mcp.posthog.com/mcp",
+     "commande": null
+    },
+    {
+     "type": "api",
+     "url": null,
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Gratuit",
+     "prix": 0,
+     "devise": null,
+     "periode": "mois",
+     "quota": "allocations par produit",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "À l'usage",
+     "prix": null,
+     "devise": null,
+     "periode": "usage",
+     "quota": null,
+     "tarif": "usage"
+    }
+   ],
+   "gratuit": "Allocations mensuelles par produit",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "tiers",
+   "verifie_le": "2026-11-11"
+  },
+  {
+   "id": "plausible",
+   "nom": "Plausible",
+   "categorie": "mise-en-ligne-equipe",
+   "sous_categorie": "stockage-stats",
+   "site": "https://plausible.io",
+   "inscription": "https://plausible.io/register",
+   "connexions": [
+    {
+     "type": "api",
+     "url": "https://plausible.io/docs/stats-api",
+     "variables": []
+    }
+   ],
+   "plans": [
+    {
+     "nom": "Essai",
+     "prix": 0,
+     "devise": null,
+     "periode": null,
+     "quota": "30 jours",
+     "tarif": "gratuit"
+    },
+    {
+     "nom": "Business",
+     "prix": 9,
+     "devise": "USD",
+     "periode": "mois",
+     "quota": "9 à 19 $/mois (API : plan Business)",
+     "tarif": "inclus"
+    }
+   ],
+   "gratuit": "Essai de 30 jours",
+   "quota_lisible": "inconnu",
+   "illimite": false,
+   "statut": "actif",
+   "fiabilite": "officielle",
+   "verifie_le": "2026-11-11"
+  }
+ ]
+}

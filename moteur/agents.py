@@ -14,8 +14,11 @@ DELAI_AGENT_S = 1800
 ESSAIS = 2
 CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de départ dit qui tu es, ce que tu dois faire "
                   "et comment rendre compte. Travaille dans le dossier du projet avec les seuls outils qui te sont "
-                  "ouverts ; un outil refusé n'est pas une raison de chercher à le contourner : dis-le dans ton "
-                  "rapport (statut outil_refuse). Termine par le bloc ```json demandé.")
+                  "ouverts. Personne ne peut approuver une commande pendant que tu travailles : écris chaque fichier "
+                  "(scripts compris) avec l'outil Write, jamais par le shell (`cat >`, `<<EOF`, `echo >`), puis "
+                  "lance tes scripts par `python <chemin>.py` ; une commande refusée, reformule-la ainsi. Un outil "
+                  "qui reste refusé n'est pas une raison de chercher à le contourner : dis-le dans ton rapport "
+                  "(statut outil_refuse). Termine par le bloc ```json demandé.")
 USAGE_VIDE = {"modele": "", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
 
 

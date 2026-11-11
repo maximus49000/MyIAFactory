@@ -57,6 +57,15 @@ class ExecuterAgent(unittest.TestCase):
         lancer(a, fiche={**FICHE, "outils": "Read, Bash(py:*), Bash(git log:*)"})
         self.assertEqual(a.recus[1]["outils"], ["Read", "Bash(py:*)", "Bash(git log:*)"])
 
+    def test_la_consigne_dit_d_ecrire_les_fichiers_avec_write(self):
+        """Au passage en vrai, les agents écrivaient leurs scripts par `cat > … <<EOF` : refusé sans approbation possible,
+        rien n'était produit. Ceux qui passaient par Write puis `python script.py` réussissaient."""
+        a = Appels(sortie_ok())
+        lancer(a)
+        self.assertIn("outil Write", a.recus[0]["consigne"])
+        self.assertIn("python <chemin>.py", a.recus[0]["consigne"])
+        self.assertIn("Bash(python:*)", fiches.OUTILS_PAR_DEFAUT)
+
     def test_jamais_de_contournement_des_autorisations(self):
         a = Appels(sortie_ok())
         lancer(a)

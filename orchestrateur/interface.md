@@ -233,6 +233,15 @@ discussion (`message`, et celles jointes par l'utilisateur), les maquettes du ca
 captures d'une tâche (`tache`) y sont rangées d'office, avec l'agent, l'étape, la tâche et l'élément. Le relevé les
 montre dans `documents` de la fonctionnalité ; le bureau les sert depuis les racines `documents` de ses réglages.
 
+### `ecrire`
+
+Entrée : `{"fonctionnalite", "nom", "texte", "titre"?, "agent"?, "etape"?, "tache"?, "element"?, "sous_tache"?}` ou
+`{"brief": "<rôle>", "texte"}`. C'est le seul chemin par lequel le moteur écrit un texte du projet. Le premier écrit
+`<pièces>/<fonctionnalité>/<nom>` (`nom` : un fichier `.md`) et, si `titre` est donné, l'inscrit dans les documents de la
+fonctionnalité ; le second ajoute `texte` au brief du rôle (`<fiches>/briefs/<rôle>.md`, créé s'il manque ; un texte déjà
+présent n'est pas ajouté deux fois). Rend `{"chemin": "…"}` (relatif au fichier de factory). Aucun autre dossier n'est
+écrit.
+
 ### `memoire`
 
 Entrée : `{"role"}`. Rend les leçons de la mémoire qui touchent ce rôle (ou « tous ») :

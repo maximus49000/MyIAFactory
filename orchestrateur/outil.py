@@ -888,6 +888,46 @@ def cmd_document(ctx, e):
         return {"id": next(d["id"] for d in documents if d["chemin"] == chemin)}
 
 
+def _relatif_a_la_base(ctx, chemin):
+    try:
+        return chemin.resolve().relative_to(ctx.f["base"]).as_posix()
+    except ValueError:
+        return str(chemin)
+
+
+def cmd_ecrire(ctx, e):
+    """Écrit un texte Markdown du projet : le document d'une fonctionnalité (sous ses pièces, rangé dans ses documents)
+    ou le brief d'un rôle (`<fiches>/briefs/<rôle>.md` : un brief existant est gardé, le nouveau texte y est ajouté).
+    C'est par là que le moteur écrit une méthode : aucun autre chemin, aucun fichier hors de ces deux dossiers."""
+    contenu = texte(e, "texte")
+    if "brief" in e:
+        role = texte(e, "brief")
+        if not depart._ROLE_SUR.match(role):
+            raise Refus("« brief » doit être un nom de rôle (lettres, chiffres, - et _).")
+        chemin = Path(ctx.f["fiches"]) / "briefs" / f"{role}.md"
+        actuel = chemin.read_text(encoding="utf-8-sig").rstrip() if chemin.is_file() else ""
+        if contenu.strip() in actuel:   # déjà là : écrire deux fois ne change rien
+            return {"chemin": _relatif_a_la_base(ctx, chemin)}
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_text((actuel + "\n\n" if actuel else "") + contenu.strip() + "\n", encoding="utf-8",
+                          newline="\n")
+        return {"chemin": _relatif_a_la_base(ctx, chemin)}
+    nom = texte(e, "nom")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.md", nom) or ".." in nom:
+        raise Refus("« nom » doit être un nom de fichier .md (lettres, chiffres, - _ .).")
+    with ctx.suivi.transaction() as s:
+        f = _fonc(s, e.get("fonctionnalite"))
+        chemin = Path(ctx.f["pieces"]) / f["id"] / nom
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_text(contenu.strip() + "\n", encoding="utf-8", newline="\n")
+        relatif = _relatif_a_la_base(ctx, chemin)
+        if e.get("titre"):
+            ranger_documents(s, f, [relatif], texte(e, "titre"), **{k: texte(e, k, obligatoire=False)
+                                                                     for k in ORIGINE_DOCUMENT})
+        f["maj"] = su.maintenant()
+    return {"chemin": relatif}
+
+
 def cmd_file(ctx, e):
     elements = e.get("elements")
     if not isinstance(elements, list):
@@ -1864,7 +1904,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
-    "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
+    "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"),
 }
 

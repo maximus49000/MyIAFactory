@@ -7,7 +7,10 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "lecons": [{"texte", "roles", "etage_propose", "texte_general"?}],
      "controles": [{"texte", "origine"}], "retours_factory": [str],
      "verdicts": [{"element", "conforme", "points": [str]}],
-     "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?}
+     "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
+     "nom": str?, "cahier": {"maquette": [chemin], "etapes": [texte]}?, "methode_prete": bool?}
+Les trois derniers champs sont demandés par la matière des seuls agents qui en ont l'usage (cadrage : `nom`, `cahier` ;
+prototype : `methode_prete`), pas par la consigne de fin commune.
 Le texte libre qui entoure le bloc ne sert qu'au journal. Le moteur n'écrit rien lui-même : `commandes` rend les
 `(commande, entrée)` à passer à `lancer`.
 """
@@ -69,6 +72,16 @@ def lire(texte):
             raise RapportIllisible("« accord_requis » demande « accord » : quoi, partenaire, cout")
     if r["statut"] == "outil_refuse" and not _texte(r.get("outil")):
         raise RapportIllisible("« outil_refuse » demande le nom de l'« outil »")
+    if "nom" in r and not _texte(r["nom"]):
+        raise RapportIllisible("« nom » doit être un texte non vide")
+    if "cahier" in r:
+        c = r["cahier"]
+        if (not isinstance(c, dict) or not isinstance(c.get("maquette"), list) or not c["maquette"]
+                or not all(_texte(x) for x in c["maquette"]) or not isinstance(c.get("etapes"), list)
+                or not c["etapes"] or not all(_texte(x) for x in c["etapes"])):
+            raise RapportIllisible("« cahier » demande « maquette » et « etapes » (listes de textes non vides)")
+    if "methode_prete" in r and not isinstance(r["methode_prete"], bool):
+        raise RapportIllisible("« methode_prete » doit être vrai ou faux")
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")
     return r

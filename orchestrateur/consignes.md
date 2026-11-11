@@ -155,7 +155,7 @@ le bandeau du bureau montre.
    discussion et tu poses la décision `valider_methode`.
 5. **`methode`.** Sur `methode` `valider` : la méthode est écrite dans le dépôt du projet (son document, en
    Markdown `.md` sous une racine `documents` des réglages — le bureau l'écrit en entier dans le panneau —, le brief
-   de chaque rôle dans `<fiches>/briefs/<rôle>.md`, et les contrôles de départ dans le registre, `lancer controle`).
+   de chaque rôle dans `<fiches>/briefs/<rôle>.md` : `lancer ecrire` écrit l'un et l'autre, et les contrôles de départ dans le registre, `lancer controle`).
    Elle porte une **version** (1, puis 2…) : c'est la « passe » du catalogue. Inscris-la (`lancer fonctionnalite`,
    `methode: {version, chemin, validee_le}`), commit, push, puis passe à la série.
 6. **`serie`.** La factory applique la méthode à chaque élément de la file, **sans attendre l'utilisateur** :

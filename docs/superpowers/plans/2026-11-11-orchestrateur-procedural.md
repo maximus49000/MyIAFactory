@@ -191,11 +191,11 @@ def test_api_sans_cle_bascule_une_fois(self):
 - Chaque ligne de la table de la section 4.2 de la conception est une fonction `_sur_<type>` (`_sur_fonctionnalite`, `_sur_message`, `_sur_cahier`, `_sur_methode`, `_sur_lecon`, `_sur_genre`, `_sur_organisation`, `_sur_session_cloud`, `_sur_retour`, `_sur_retour_element`, `_sur_deplacer`, `_sur_bouton`, `_sur_partenaires`, `_sur_challenge`) ; un type inconnu ou un bouton du projet → `("juger", "conseil", …)`.
 - Chaque demande se termine par `demande-traitee` avec une `reponse` gabarit (ou celle du jugement).
 
-- [ ] **Étape 1 : tests qui échouent**, un par ligne de la table : `test_fonctionnalite_lance_le_cadrage`, `test_cahier_valider_juge_decouper`, `test_decoupage_ecrit_file_et_prototype`, `test_cahier_corriger_rouvre_cadrage`, `test_message_prototype_traduit_puis_transmet`, `test_methode_valider_ecrit_methode_briefs_controles`, `test_lecon_appliquee_sans_ia`, `test_refus_controle_juge_apres_refus`, `test_meme_controle_deux_elements_pose_methode_a_revoir` (sans IA), `test_seuil_methode_sans_ia`, `test_serie_deux_elements_au_plus`, `test_prototype_jamais_parallele`, `test_accord_requis_pose_une_decision`, `test_outil_refuse_pose_une_question`, `test_type_inconnu_demande_conseil`, `test_aucune_demande_sans_reponse` (pour chaque type, la dernière action est `demande-traitee`).
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** `moteur/regles.py`. La relecture croisée suit la section « La relecture croisée » de `consignes.md` en code ; « le même contrôle échoue sur deux éléments » se lit dans les `verdicts`.
-- [ ] **Étape 4 : lancer** : vert.
-- [ ] **Étape 5 : commit** `Moteur : la table de règles`.
+- [x] **Étape 1 : tests qui échouent**, un par ligne de la table : `test_fonctionnalite_lance_le_cadrage`, `test_cahier_valider_juge_decouper`, `test_decoupage_ecrit_file_et_prototype`, `test_cahier_corriger_rouvre_cadrage`, `test_message_prototype_traduit_puis_transmet`, `test_methode_valider_ecrit_methode_briefs_controles`, `test_lecon_appliquee_sans_ia`, `test_refus_controle_juge_apres_refus`, `test_meme_controle_deux_elements_pose_methode_a_revoir` (sans IA), `test_seuil_methode_sans_ia`, `test_serie_deux_elements_au_plus`, `test_prototype_jamais_parallele`, `test_accord_requis_pose_une_decision`, `test_outil_refuse_pose_une_question`, `test_type_inconnu_demande_conseil`, `test_aucune_demande_sans_reponse` (pour chaque type, la dernière action est `demande-traitee`).
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** `moteur/regles.py`. La relecture croisée suit la section « La relecture croisée » de `consignes.md` en code ; « le même contrôle échoue sur deux éléments » se lit dans les `verdicts`.
+- [x] **Étape 4 : lancer** : vert.
+- [x] **Étape 5 : commit** `Moteur : la table de règles`.
 
 ### Tâche 7 : la boucle
 

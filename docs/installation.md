@@ -1,6 +1,56 @@
 # Installer et configurer le bureau vivant
 
-> L'installation en tant que skill Claude arrivera avec le projet 4 ; ce manuel sera alors complété. Pour l'instant, on lance le bureau à la main, depuis une copie de ce dépôt.
+## Installer MyIAFactory sur un projet
+
+MyIAFactory est un plugin Claude Code. On l'ajoute **une fois par machine**, dans une conversation Claude Code :
+
+```
+/plugin marketplace add maximus49000/MyIAFactory
+```
+
+```
+/plugin install myiafactory@myiafactory
+```
+
+Puis, pour chaque projet, ouvrez une conversation Claude Code **dans le dossier du projet** (Sonnet suffit) et lancez :
+
+```
+/myiafactory:installer
+```
+
+La commande :
+
+1. crée ou met à jour le **dossier stable** `~/MyIAFactory` : une copie de la skill (`~/MyIAFactory/skill`, mise à jour
+   par `git pull` aux usages suivants), le fichier de bureau commun (`~/MyIAFactory/bureau.json`), les propositions en
+   attente et la clé d'accès du téléphone. Ce chemin ne bouge pas quand le plugin se met à jour ;
+2. regarde le dossier : **vide** (une question à la fois : le sujet, le livrable, ce qui serait faux, les outils, la
+   première fonctionnalité), **existant** (un sous-agent Haiku lit l'essentiel et en fait un résumé, que vous
+   corrigez), **déjà installé** (elle vérifie et répare sans refaire la discussion) ou doté de **sa propre factory**
+   (elle renvoie vers [`orchestrateur.md`](orchestrateur.md)) ;
+3. pose les questions communes : ordinateur et/ou téléphone, agents cloud ou local seulement, la facturation est-elle
+   un objectif, le genre du projet, ses mots interdits, et (projet vide) faut-il un dépôt GitHub privé ; elle mesure
+   la machine pour fixer la charge maximum et le nombre d'agents locaux en parallèle ;
+4. présente la **proposition** : ce qu'elle a compris, le paramétrage, les services et les agents, le workflow le plus
+   court qui tienne (chaque étape justifiée) et une fourchette de coût par élément. Vous corrigez autant de tours que
+   nécessaire. **Rien n'est écrit dans le projet avant votre « je valide »** ;
+5. met en place : `.factory/` (fichier de factory, réglages, fiches, briefs, consignes propres, contrôles), le
+   `.gitignore`, l'inscription au bureau commun, les accès du téléphone demandés, puis la vérification
+   (`verifier_interface.py`) ;
+6. donne la fin : les sessions cloud à créer (clé, rôle, modèle à régler, environnement), la commande du bureau et le
+   message qui ouvre la conversation orchestratrice. Le projet est prêt pour une première fonctionnalité, qui se lance
+   depuis le bureau (« + Nouvelle fonctionnalité »).
+
+Le bureau commun suit tous les projets installés sur la machine :
+
+```bash
+py -3.12 "$HOME/MyIAFactory/skill/lancer.py" serveur --bureau "$HOME/MyIAFactory/bureau.json"
+```
+
+(`$HOME` marche dans PowerShell comme dans bash ; hors Windows, `python3` à la place de `py -3.12`.) Il lit son fichier
+au lancement : après l'installation d'un nouveau projet, arrêtez-le et relancez-le.
+
+Sans le plugin, on peut toujours lancer le bureau à la main depuis une copie de ce dépôt : c'est ce que fait la suite
+de ce manuel.
 
 ## Ce qu'il faut
 
@@ -92,27 +142,36 @@ et la déclaration du catalogue sont dans [`releve.md`](releve.md) (« Le catalo
 
 ## L'orchestrateur générique
 
-Pour qu'une conversation Claude mène vos fonctionnalités du cadrage à la série avec les outils de la skill, suivez
-[`orchestrateur.md`](orchestrateur.md). Pour **démarrer un projet neuf**, copiez
-[`exemples/projet-neuf/`](../exemples/projet-neuf/) dans un dossier à vous, `git init`, mettez le chemin de ce dépôt
-dans `skill` (`factory.json`) et celui de `orchestrateur/outil.py` dans `reglages.json` et dans la déclaration du
-catalogue, puis :
+Une conversation Claude mène vos fonctionnalités du cadrage à la série avec les outils de la skill. Pour **démarrer un
+projet** (vide ou existant), le plus simple est la commande `/myiafactory:installer` (voir « Installer MyIAFactory sur
+un projet ») : elle écrit tout et donne le message qui ouvre la conversation orchestratrice. Pour passer à la main un
+projet qui a déjà sa propre factory, suivez [`orchestrateur.md`](orchestrateur.md).
 
-```bash
-py -3.12 <ce dépôt>/orchestrateur/verifier_interface.py --factory <votre dossier>/factory.json
-```
-
-```bash
-py -3.12 <ce dépôt>/lancer.py serveur --reglages <votre dossier>/reglages.json
-```
-
-et ouvrez la conversation orchestratrice avec le message de départ donné dans `orchestrateur.md`.
+L'orchestrateur regroupe les tâches **en lots par modèle** : un modèle fait d'une traite, dans une seule conversation,
+les tâches prêtes qu'il peut enchaîner (5 au plus, moins si les mesures du projet montrent qu'un lot plus long coûte
+plus cher), en les réordonnant seulement quand leurs dépendances (`depend_de`) le permettent ; une relecture n'est
+jamais mise en lot. Le coût d'un lot est réparti entre ses tâches (« estimé (part d'un lot) » dans la facturation).
+Pendant le cadrage d'une fonctionnalité, il peut aussi proposer au **Directeur** de faire évoluer l'organisation
+(un service, une étape, des agents de plus) : vous acceptez ou refusez au bureau.
 
 ## Brancher son projet
 
-Un projet réel se branche **depuis son propre dépôt** : rien n'est à modifier ici.
+Un projet réel se branche **depuis son propre dépôt** : rien n'est à modifier ici. La commande
+`/myiafactory:installer` fait tout ce qui suit ; cette section décrit le branchement à la main d'un relevé.
 
-1. Dans le dossier du projet, créez un dossier `.factory/` et ajoutez `.factory/` au `.gitignore` du projet (on n'y range que des choses propres à la machine et au projet : réglages, équipe, historiques).
+1. Dans le dossier du projet, créez un dossier `.factory/`. **La configuration y est versionnée** avec le projet
+   (fichier de factory, réglages, fiches, briefs, consignes propres, contrôles) ; seuls les fichiers que le bureau crée
+   pour la machine sont ignorés par git. Ajoutez au `.gitignore` du projet :
+
+   ```
+   # MyIAFactory : fichiers propres à la machine
+   .factory/equipe.json
+   .factory/*-historique.jsonl
+   ```
+
+   (Une ancienne règle `.factory/` qui ignorait tout le dossier est à retirer ; `reparer` le fait.) Dans les fichiers
+   versionnés, le chemin de la skill s'écrit `~/MyIAFactory/skill/...`, jamais en absolu : un clone du projet marche
+   alors sur toute machine où la skill est installée.
 2. Écrivez `.factory/reglages.json`. Le plus simple, un relevé tenu à jour dans un fichier :
 
    ```json
@@ -141,11 +200,11 @@ Fichier JSON ; toutes les clés sont facultatives sauf `releve`.
 
 | Clé | Défaut | Effet |
 |---|---|---|
-| `port` | `8770` | Port du serveur (il n'écoute que sur `127.0.0.1`). |
+| `port` | `8770` | Port du serveur (sur `127.0.0.1` ; voir « Le bureau sur le téléphone » pour les autres adresses). |
 | `charge_max` | `75` | Charge maximum (en %) sous laquelle on a le droit de lancer une nouvelle étape locale. Entre 30 et 95. Se règle aussi depuis la page. |
 | `fraicheur_min` | `30` | Minutes sans mise à jour au-delà desquelles un agent actif est « sans nouvelles ». Chaque titulaire du relevé peut avoir le sien (`fraicheur_min`). |
 | `releve.fichier` | — | Chemin du relevé, relu toutes les quelques secondes. |
-| `releve.commande` | — | Commande (liste de mots, sans shell, 10 s au plus) qui écrit le relevé sur sa sortie standard en UTF-8. |
+| `releve.commande` | — | Commande (liste de mots, sans shell, 10 s au plus) qui écrit le relevé sur sa sortie standard en UTF-8. Comme pour toute commande du bureau, un mot qui commence par `~/` est développé, et `python` ou `python3` en premier mot désigne le Python qui fait tourner le bureau (pas un autre Python de la machine). |
 | `releve.dossier` | dossier des réglages | Dossier où la commande est lancée. |
 | `actions.commande` | — | Commande d'actions (liste de mots, sans shell, 10 s au plus) : elle reçoit chaque demande en JSON UTF-8 sur son entrée standard. Voir « Faire agir le bureau ». |
 | `actions.dossier` | dossier des réglages | Dossier où la commande d'actions est lancée. |
@@ -264,12 +323,53 @@ Vos valeurs ne sont jamais réécrites. Le chef s'appelle « Chef » tant qu'on 
 
   > Avant de lancer une étape locale, exécute `py -3.12 <chemin du bureau>/lancer.py charge --reglages <chemin>/reglages.json`. Si le code de retour est 1, attends une minute et recommence ; ne lance l'étape que sur le code 0. Les étapes cloud ne sont pas concernées.
 
+## Le bureau sur le téléphone
+
+Le bureau s'ouvre au téléphone **sans rien exposer sur Internet** : ni tunnel public, ni hébergement. L'ordinateur
+garde `http://127.0.0.1:8770/` ; un ou deux accès s'y ajoutent, choisis pendant l'installation (question « ordinateur,
+mobile ») ou plus tard par la réparation :
+
+```bash
+py -3.12 "$HOME/MyIAFactory/skill/installation/outil.py" reparer "<dossier du projet>" --tailscale
+```
+
+(`--reseau-local` pour le Wi-Fi ; les deux ensemble sont permis.) Ces accès sont ceux de la machine : ils sont notés
+dans le fichier de bureau commun (`"acces": {"tailscale": true, "reseau_local": false}`), pas dans le projet.
+
+- **Tailscale (conseillé).** Un réseau privé gratuit, chiffré, joignable de partout (4G comprise). Installez
+  l'application sur l'ordinateur (tailscale.com/download) et sur le téléphone (son magasin d'applications), et
+  connectez-vous **avec le même compte** sur les deux. `outil.py acces` doit alors donner une adresse `tailscale`.
+- **Le Wi-Fi de la maison (secours).** Rien à installer, mais le téléphone doit être sur le même Wi-Fi que
+  l'ordinateur, et **le trafic n'y est pas chiffré** : quelqu'un sur ce Wi-Fi pourrait lire les pages et le cookie
+  d'accès. À éviter sur un réseau partagé.
+
+**Associer le téléphone (une fois).** Relancez le bureau : le terminal affiche chaque adresse ouverte (ou pourquoi un
+accès est ignoré : adresse introuvable, port pris). Ouvrez la page sur l'ordinateur et cliquez **« Associer un
+téléphone »** : un QR code par adresse ouverte. Scannez-le avec l'appareil photo du téléphone. Le code qu'il porte sert
+une seule fois et vit 10 minutes ; le bureau l'échange contre un cookie (`HttpOnly`, `SameSite=Strict`, un an) et le
+téléphone n'a plus rien à saisir. La page peut ensuite être ajoutée à l'écran d'accueil.
+
+**Ce qui est protégé.** Chaque requête qui arrive par Tailscale ou par le Wi-Fi exige le cookie, y compris depuis
+l'ordinateur lui-même : sans lui, 401 et aucune donnée. Seules les adresses ouvertes sont acceptées (en-tête `Host`).
+Le QR code et la révocation ne sont jamais servis au téléphone, seulement à `127.0.0.1`. La clé vit dans
+`~/MyIAFactory/acces.json`, hors de tout dépôt.
+
+**Révoquer.** « Associer un téléphone », puis **« Révoquer les téléphones »** : une nouvelle clé est créée et tous les
+téléphones associés devront scanner un nouveau QR code (téléphone perdu, Wi-Fi partagé par erreur).
+
+**Sur le téléphone.** La même page et la vue 3D, allégée : toucher pour choisir, pincer pour zoomer, glisser pour se
+déplacer ; les panneaux s'ouvrent en plein écran (« Fermer ») ; la barre défile. Tous les gestes de l'ordinateur y
+sont possibles (décisions du Directeur, déplacer un post-it, discussion), et une photo prise au téléphone est réduite
+et réencodée (JPEG, moins de 5 Mo) avant l'envoi ; un format que le navigateur ne sait pas lire (certains HEIC) donne
+un message clair.
+
 ## En cas de problème
 
 - **« Impossible de démarrer le serveur »** : le port est déjà pris (un autre bureau tourne, ou un autre programme). Fermez l'autre, ou mettez un autre `port` dans les réglages.
 - **Bandeau « Relevé indisponible »** : le relevé est absent, incomplet (fichier écrit à moitié) ou invalide, ou la commande a échoué ou dépassé 10 secondes. Le bandeau donne la raison. La scène garde sa dernière image ; elle repart toute seule dès que le relevé redevient lisible.
 - **Barre « Mesure indisponible »** : le système n'est pas Windows, ou la mesure a échoué. Le bureau fonctionne ; la commande `charge` laisse alors passer.
-- **Page blanche ou « Hôte refusé »** : ouvrez la page par `http://127.0.0.1:<port>/` ou `http://localhost:<port>/` ; toute autre adresse est refusée. Vérifiez aussi que le terminal du serveur est toujours ouvert.
+- **Page blanche ou « Hôte refusé »** : sur l'ordinateur, ouvrez la page par `http://127.0.0.1:<port>/` ou `http://localhost:<port>/` ; ailleurs, seules les adresses ouvertes pour le téléphone sont acceptées (voir « Le bureau sur le téléphone »). Vérifiez aussi que le terminal du serveur est toujours ouvert.
+- **Le téléphone reçoit « 401 » ou une page vide** : il n'est pas (ou plus) associé ; scannez un nouveau QR code depuis la page de l'ordinateur. Par Tailscale, vérifiez que l'application est connectée sur les deux appareils ; par le Wi-Fi, que le téléphone est bien sur le même réseau.
 - **Un agent n'a pas la bonne couleur ou le bon prénom** : voir « L'équipe ».
 - **Facturation : « prix inconnu » partout, ou « mise à jour impossible »** : le message en haut de l'onglet donne la raison. Certificat de la BCE non reconnu, nom de modèle sans correspondance (`alias_modeles`), ou prix automatiques coupés : voir « Les euros : d'où viennent les prix ».
 - **Un onglet du dossier manque** : le relevé n'est pas en version 3, ou ne donne pas le champ correspondant (`usage`, `kpi`, `connaissances` ou `challenges`).

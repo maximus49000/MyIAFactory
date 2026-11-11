@@ -56,7 +56,8 @@ def _prix_de(modele):
             continue
         p = prix.prix_effectif(prix.TablePrix(chemin.parent / "prix-historique.jsonl"), regl, modele, jour)[0]
         if p and p.get("entree") and p.get("sortie"):
-            return {"entree": p["entree"] / 1_000_000, "sortie": p["sortie"] / 1_000_000}
+            return {c: p[c] / 1_000_000 for c in ("entree", "sortie", "cache_lecture", "cache_ecriture")
+                    if p.get(c) is not None}
     return None
 
 

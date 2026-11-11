@@ -150,10 +150,13 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
     return "\n\n".join(parties) + "\n"
 
 
-COMPTE_RENDU_PAR_TACHE = (
-    "Enchaîne ces tâches d'une traite, dans cet ordre, avec ce même contexte. **À la fin de chaque tâche, rends "
-    "compte avant de passer à la suivante** : `lancer tache` avec son `id` (journal, `colonne`, `active: false`), "
-    "puis seulement ensuite la tâche suivante.")
+def compte_rendu_par_tache(cle):
+    """La consigne d'enchaînement d'un lot : chaque tâche est marquée active à son début et rendue à sa fin (sa durée
+    sert à répartir le coût du lot)."""
+    return ("Enchaîne ces tâches d'une traite, dans cet ordre, avec ce même contexte. La première est déjà marquée "
+            "comme la tienne. **À la fin de chaque tâche, rends compte avant de passer à la suivante** : `lancer tache` "
+            "avec son `id` (journal, `colonne`, `active: false`), puis marque aussitôt la suivante : `lancer tache` "
+            f'avec `{{"id": <son id>, "agent": "{cle}", "active": true}}`, et seulement ensuite commence-la.')
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=()):
@@ -165,7 +168,7 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=()):
     else:
         parties.append("## Les briefs des rôles de ce lot\n" + "\n\n".join(
             f"### Rôle : {role}\n{texte or '(pas de brief propre à ce rôle)'}" for role, texte in briefs))
-    lignes = [f"## Tes {len(taches)} tâches, dans l'ordre", COMPTE_RENDU_PAR_TACHE]
+    lignes = [f"## Tes {len(taches)} tâches, dans l'ordre", compte_rendu_par_tache(fiche["cle"])]
     for k, tache in enumerate(taches, 1):
         lignes.append(f"\n### Tâche {k} sur {len(taches)}")
         lignes += _bloc_tache(tache)

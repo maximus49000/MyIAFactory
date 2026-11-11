@@ -93,7 +93,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 8. La ligne de commande de l'installation
 - [x] 9. Le plugin et les consignes de la discussion
 - [x] 10. La décision et la commande « organisation »
-- [ ] 11. Les guides d'accord, relecture finale
+- [x] 11. Les guides d'accord, relecture finale
 - [ ] 12. Le vrai passage sur un projet vide et un projet existant
 - [ ] 13. Le projet pilote rejoint le nouveau rangement (dans son dépôt)
 - [x] 14. Le support de traitement dans la proposition et la mise en place
@@ -109,19 +109,20 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 
 ![Le catalogue d'une fonctionnalité : la fiche d'un élément et sa comparaison « Produit » / « Réel »](docs/img/catalogue.jpg)
 
-Essayer la démo : `py -3.12 lancer.py serveur --bureau exemples/bureau.json` (deux projets inventés, avec le sélecteur), ou `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json` (un seul), puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge, nouvelle fonctionnalité, discussion, validations, « Demander à modifier ») réécrivent ses fichiers : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/` ailleurs et lancez le bureau sur la copie. Pour démarrer un vrai projet avec l'orchestrateur générique : [docs/orchestrateur.md](docs/orchestrateur.md) et `exemples/projet-neuf/`.
+Essayer la démo : `py -3.12 lancer.py serveur --bureau exemples/bureau.json` (deux projets inventés, avec le sélecteur), ou `py -3.12 lancer.py serveur --reglages exemples/demo/reglages.json` (un seul), puis ouvrir `http://127.0.0.1:8770/`. Pour connaître les prix des modèles, le bureau lit deux adresses publiques (une liste de prix et le taux dollar-euro) ; `"prix_automatiques": false` dans les réglages l'en empêche. Les gestes de la démo (Pause, déplacer, retour, verdict, challenge, nouvelle fonctionnalité, discussion, validations, « Demander à modifier ») réécrivent ses fichiers : pour les essayer sans modifier le dépôt, copiez d'abord `exemples/` ailleurs et lancez le bureau sur la copie. Pour démarrer un vrai projet : ajoutez le plugin une fois par machine (`/plugin marketplace add maximus49000/MyIAFactory`, puis `/plugin install myiafactory@myiafactory`), et lancez `/myiafactory:installer` dans une conversation Claude Code ouverte dans le dossier du projet : la commande comprend le projet, propose une organisation chiffrée et configure tout après votre validation, téléphone compris (voir « Installer MyIAFactory sur un projet » et « Le bureau sur le téléphone » dans [docs/installation.md](docs/installation.md)). Passer à la main un projet qui a déjà sa factory : [docs/orchestrateur.md](docs/orchestrateur.md).
 
 Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bureau bureau.local.json`, où `bureau.local.json` vaut `{"port": 8770, "projets": ["<chemin>/.factory/reglages.json", …]}` (de 1 à 12 projets, chemins relatifs à ce fichier ; chaque entrée peut aussi être `{"chemin": …, "id": …}`). Chaque projet garde ses réglages sans changement.
 
 ## Ce qu'il reste à faire ensuite
 
 - **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : le vrai passage de bout en bout avec une conversation orchestratrice (phase G), puis le passage du projet pilote dans son dépôt (phases H à J) : terminé, vérifié sur le projet pilote.
-- **Projet 4, l'installation sur un projet** ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md)) : conçu et planifié ; la réalisation suit la [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md) : phase A faite (chemins `~`, limite d'agents locaux, leçon gardée en local), phase B ensuite.
+- **Projet 4, l'installation sur un projet** ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md)) : la réalisation suit la [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md) ; phases A à E faites (outils de l'installation, plugin et commande `/myiafactory:installer`, organisation qui évolue, lots par modèle, bureau au téléphone et vue mobile) ; phase F faite (guides et relecture finale) ; les essais réels (tâche 12) viennent après la fin de toute l'implémentation, puis la phase G, dans le dépôt du projet pilote.
 
 ## Documents
 
 - Conception : [docs/superpowers/specs/2026-11-10-bureau-vivant-design.md](docs/superpowers/specs/2026-11-10-bureau-vivant-design.md) ; le bureau qui agit : [docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md](docs/superpowers/specs/2026-11-10-bureau-qui-agit-design.md) ; les dossiers des services : [docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md](docs/superpowers/specs/2026-11-10-dossiers-des-services-design.md) ; le parcours d'une tâche : [docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)
 - Plan de réalisation : [docs/superpowers/plans/2026-11-10-bureau-vivant.md](docs/superpowers/plans/2026-11-10-bureau-vivant.md)
+- L'installation sur un projet : [conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md), [plan](docs/superpowers/plans/2026-11-11-installation-sur-un-projet.md), [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md)
 - Plan du parcours d'une tâche : [docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md](docs/superpowers/plans/2026-11-10-parcours-d-une-tache.md), sa passation : [docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)
 - Passation entre conversations (phases et modèles) : [docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md](docs/superpowers/plans/2026-11-10-bureau-vivant-passation.md)
 - Manuel d'installation et de configuration : [docs/installation.md](docs/installation.md)

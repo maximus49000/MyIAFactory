@@ -21,7 +21,8 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
   py -3.12 <skill>/orchestrateur/outil.py --factory <F> lancer <commande>
   ```
 
-  avec l'entrée JSON sur l'entrée standard quand la commande en prend une. Plus bas, `lancer <commande>` désigne
+  avec l'entrée JSON sur l'entrée standard quand la commande en prend une. Si `<skill>` commence par `~`, écris-le
+  en chemin absolu (ton message de départ le donne) : PowerShell ne développe pas `~` dans un argument. Plus bas, `lancer <commande>` désigne
   cet appel. `lancer` prend l'adaptateur du projet s'il en a déclaré un, sinon l'outil générique : n'appelle
   jamais une commande autrement, tu contournerais l'adaptateur. Le contrat de chaque commande (entrée, sortie,
   codes) est dans `<skill>/orchestrateur/interface.md`. Code `1` : refusé, lis `erreur` et corrige ; code `2` :
@@ -226,6 +227,8 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
 - En local : un sous-agent neuf avec ce message. En cloud : le message est envoyé à la session attitrée de l'agent ;
   il commence par « Tu repars de zéro ».
 - Marque la tâche (`lancer tache` avec `agent`, `colonne`, `active: true`) quand l'agent part, et rends-la à la fin.
+  Pour un lot, marque la première tâche : l'agent rend chacune à sa fin et marque aussitôt la suivante (son message
+  le lui dit), ce qui donne la durée de chacune.
 - **Le coût d'un lot** : à la fin du lot, `lancer usage` avec `lot` (l'identifiant) et le total que rend le sous-agent :
   l'outil le répartit entre les tâches (au temps passé, sinon à parts égales ; leur somme vaut exactement le total). Si tu
   peux relever les cumuls à chaque fin de tâche, fais plutôt un `lancer usage` par tâche avec `tache`, `lot` et le même

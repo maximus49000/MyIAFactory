@@ -5,6 +5,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -965,11 +966,23 @@ def developper(arg):
     return arg
 
 
+PYTHONS = ("python", "python3")
+
+
+def commande_python(cmd):
+    """`python` ou `python3` en tête d'une commande désigne le Python qui fait tourner le bureau : le mot peut viser un
+    autre Python sur la machine (une version trop ancienne, le raccourci du Microsoft Store). Le reste est inchangé."""
+    cmd = list(cmd)
+    if cmd and cmd[0] in PYTHONS and sys.executable:
+        cmd[0] = sys.executable
+    return cmd
+
+
 def _executer(cmd, cwd, entree=None):
     """(code, sortie, erreurs) ; lève TimeoutExpired si la commande ou un de ses descendants
     tient au-delà de DELAI_COMMANDE_S. Ne bloque jamais plus longtemps que ce délai (+ quelques s).
     `entree` (octets) est écrit sur l'entrée standard de la commande ; sans lui, l'entrée est fermée."""
-    cmd = [developper(a) for a in cmd]
+    cmd = commande_python(developper(a) for a in cmd)
     delai = DELAI_COMMANDE_S
     options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                else {"start_new_session": True})

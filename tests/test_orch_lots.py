@@ -43,6 +43,17 @@ class TestFormer(unittest.TestCase):
         base = [tache("a"), tache("r", role="relecteur", depend_de=["a"]), tache("b")]
         self.assertEqual(ids(lots.former(base)), [["a", "b"], ["r"]])
 
+    def test_chaine_d_un_meme_modele_en_un_lot(self):
+        # a -> b -> c, même modèle et même lieu : un lot les enchaîne dans l'ordre, une seule conversation
+        base = [tache("a"), tache("b", depend_de=["a"]), tache("c", depend_de=["b"])]
+        self.assertEqual(ids(lots.former(base)), [["a", "b", "c"]])
+        # la dépendance doit être placée plus tôt dans le lot : c avant b dans l'ordre d'origine reste correct
+        base = [tache("c", depend_de=["b"]), tache("a"), tache("b", depend_de=["a"])]
+        self.assertEqual(ids(lots.former(base)), [["a", "b", "c"]])
+        # une dépendance d'un autre modèle coupe toujours
+        base = [tache("a"), tache("o", "Opus", depend_de=["a"]), tache("b", depend_de=["o"])]
+        self.assertEqual(ids(lots.former(base)), [["a"], ["o"], ["b"]])
+
     def test_lot_de_cinq_au_plus(self):
         base = [tache(f"t{i}") for i in range(12)]
         r = lots.former(base)

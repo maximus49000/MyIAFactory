@@ -10,6 +10,7 @@ from installation import dossier
 from tests.inst_aide import AvecMaison, proposition_valide
 
 OUTIL = Path(__file__).resolve().parent.parent / "installation" / "outil.py"
+RACINE = Path(__file__).resolve().parent.parent
 
 
 class TestOutil(AvecMaison):
@@ -37,6 +38,11 @@ class TestOutil(AvecMaison):
         self.git("-c", "user.name=t", "-c", "user.email=t@exemple.invalid", "commit", "-q", "-m", "départ", cwd=origine)
         dossier.racine().mkdir(parents=True)
         self.git("clone", "-q", str(origine), str(dossier.skill()), cwd=dossier.racine())
+        # le code de la skill, par des jonctions vers ce dépôt : le bureau peut lancer la commande du relevé
+        for nom in ("orchestrateur", "bureau"):
+            lien = dossier.skill() / nom
+            dossier.creer_lien(RACINE / nom, lien)
+            self.addCleanup(os.rmdir, lien)   # retire la jonction seule
 
     def test_parcours_vide_bout_en_bout(self):
         self.skill_clonee()

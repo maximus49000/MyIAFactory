@@ -40,7 +40,8 @@ refus (`erreur`, parfois `erreurs`) : montre-le, corrige, recommence.
   (aucune : « tout est en ordre »), de `relancer_bureau` et de `pret`. Si l'utilisateur veut ouvrir le bureau au
   téléphone, ajoute `--tailscale` ou `--reseau-local` (section 4). Puis arrête-toi : les évolutions de
   l'organisation viennent des fonctionnalités, pas de cette commande.
-- `factory_propre` : le projet a déjà sa propre factory. Renvoie vers `<skill>/docs/orchestrateur.md` (adaptateurs,
+- `factory_propre` : le projet a déjà un `.factory/` fait à la main (sa propre factory, ou un branchement sans
+  fichier de factory). Renvoie vers `<skill>/docs/orchestrateur.md` (adaptateurs,
   liste de compatibilité) et arrête-toi.
 - `vide` : section 3a.
 - `existant` : section 3b.
@@ -72,7 +73,9 @@ toute zone d'ombre qui changerait l'organisation. Puis les questions communes (s
 
 ## 4. Les questions communes
 
-Une à la fois :
+Pour économiser des tours, pose **en un seul message** les questions fermées (support, cloud, facturation, dépôt
+GitHub), puis **en un second** ta proposition de genre et de mots interdits, à confirmer ou corriger. N'explique
+Tailscale et le Wi-Fi que si le mobile est retenu.
 
 - **Le support de traitement** : ordinateur, mobile, ou les deux (choix multiple). Avec le mobile, le bureau doit être
   joignable du téléphone comme de l'ordinateur, vue 3D comprise. Lance `outil.py acces`, puis propose :

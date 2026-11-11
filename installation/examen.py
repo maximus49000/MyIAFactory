@@ -1,9 +1,7 @@
 """L'examen du dossier d'un projet : vide, existant, déjà installé. Borné, sans réseau, n'écrit rien.
 
-Il ne lit aucun contenu, sauf la première ligne de `ProjectSettings/ProjectVersion.txt` et la présence de la
-clé « orchestrateur » dans `.factory/reglages.json`."""
+Il ne lit aucun contenu, sauf la première ligne de `ProjectSettings/ProjectVersion.txt`."""
 import fnmatch
-import json
 import os
 import re
 import time
@@ -33,14 +31,10 @@ def _correspond(nom, motifs):
 def _cas(d):
     if (d / ".factory" / "factory.json").is_file():
         return "installe"
-    reglages = d / ".factory" / "reglages.json"
-    if reglages.is_file():
-        try:
-            donnees = json.loads(reglages.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError):
-            donnees = None
-        if isinstance(donnees, dict) and "orchestrateur" not in donnees:
-            return "factory_propre"
+    if (d / ".factory").exists():
+        # une configuration faite à la main (sa propre factory, ou un branchement sans fichier de factory) :
+        # `appliquer` la refuserait, la discussion serait perdue ; c'est le guide de passage qui s'applique
+        return "factory_propre"
     try:
         noms = [p.name for p in d.iterdir()]
     except OSError:
@@ -70,9 +64,10 @@ def _est_lien(chemin):
         return True
 
 
-def _parcourir(d):
-    """(arbre, extensions, nombre) ; ne suit aucun lien, saute les dossiers lourds, s'arrête à DELAI_S."""
-    debut = time.monotonic()
+def _parcourir(d, horloge=time.monotonic):
+    """(arbre, extensions, nombre, tronque) ; ne suit aucun lien, saute les dossiers lourds, s'arrête à DELAI_S ou à
+    MAX_FICHIERS (`tronque` est alors vrai)."""
+    debut = horloge()
     arbre, ext, nombre = [], Counter(), 0
     pile = [(d, 0)]
     while pile:
@@ -82,8 +77,8 @@ def _parcourir(d):
         except OSError:
             continue
         for e in entrees:
-            if time.monotonic() - debut > DELAI_S or nombre >= MAX_FICHIERS:
-                return arbre, ext, nombre
+            if horloge() - debut > DELAI_S or nombre >= MAX_FICHIERS:
+                return arbre, ext, nombre, True
             chemin = Path(e.path)
             if _est_lien(chemin):
                 continue
@@ -105,7 +100,7 @@ def _parcourir(d):
                     ext[suffixe] += 1
                 if prof < PROFONDEUR_ARBRE and len(arbre) < MAX_ARBRE:
                     arbre.append(rel)
-    return arbre, ext, nombre
+    return arbre, ext, nombre, False
 
 
 def _fichiers_cles(d):
@@ -138,9 +133,9 @@ def _environnement(d, cles):
     return env
 
 
-def examiner(dossier):
+def examiner(dossier, horloge=time.monotonic):
     d = Path(dossier)
-    arbre, ext, nombre = _parcourir(d)
+    arbre, ext, nombre, tronque = _parcourir(d, horloge)
     cles = _fichiers_cles(d)
     return {
         "cas": _cas(d),
@@ -149,7 +144,8 @@ def examiner(dossier):
             "arbre": arbre,
             "fichiers_cles": cles,
             "extensions": [[e, n] for e, n in ext.most_common(10)],
-            "nb_fichiers": nombre if nombre < MAX_FICHIERS else f"{MAX_FICHIERS}+",
+            "nb_fichiers": f"{nombre}+" if tronque else nombre,
+            "tronque": tronque,
             "git": _git(d),
         },
         "environnement": _environnement(d, cles),

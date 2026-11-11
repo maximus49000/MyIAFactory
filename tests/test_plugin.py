@@ -54,5 +54,43 @@ class TestPlugin(unittest.TestCase):
                 self.assertIn("jamais", ligne.lower(), ligne)
 
 
+class TestGuides(unittest.TestCase):
+    """Les guides d'accord avec le plugin et la règle de versionnement (tâche 11)."""
+
+    def test_installation_commence_par_le_plugin(self):
+        texte = (RACINE / "docs" / "installation.md").read_text(encoding="utf-8")
+        debut = texte[:texte.index("## Essayer avec la démo")]
+        for mot in ("/plugin marketplace add maximus49000/MyIAFactory", "/plugin install myiafactory@myiafactory",
+                    "/myiafactory:installer"):
+            self.assertIn(mot, debut, mot)
+        self.assertNotIn("arrivera avec le projet 4", texte)
+
+    def test_regle_de_versionnement(self):
+        # Plus personne ne conseille de mettre `.factory/` entier hors de git.
+        for nom in ("installation.md", "orchestrateur.md"):
+            texte = (RACINE / "docs" / nom).read_text(encoding="utf-8")
+            self.assertNotRegex(texte, r"ajoutez `\.factory/` au `\.gitignore`", nom)
+        texte = (RACINE / "docs" / "installation.md").read_text(encoding="utf-8")
+        for regle in (".factory/equipe.json\n", ".factory/*-historique.jsonl\n"):
+            self.assertIn(regle, texte, regle)
+
+    def test_bureau_sur_le_telephone(self):
+        texte = (RACINE / "docs" / "installation.md").read_text(encoding="utf-8")
+        self.assertIn("## Le bureau sur le téléphone", texte)
+        section = texte.split("## Le bureau sur le téléphone", 1)[1].split("\n## ", 1)[0]
+        for mot in ("Tailscale", "Wi-Fi", "QR code", "Révoquer les téléphones", "pas chiffré", "--tailscale"):
+            self.assertIn(mot, section, mot)
+
+    def test_projet_neuf_renvoie_a_la_commande(self):
+        texte = (RACINE / "docs" / "orchestrateur.md").read_text(encoding="utf-8")
+        section = texte.split("## Démarrer un projet neuf", 1)[1]
+        self.assertIn("/myiafactory:installer", section)
+
+    def test_readme_projet_4(self):
+        texte = (RACINE / "README.md").read_text(encoding="utf-8")
+        self.assertIn("/myiafactory:installer", texte)
+        self.assertRegex(texte, r"- \[x\] 11\. Les guides d'accord")
+
+
 if __name__ == "__main__":
     unittest.main()

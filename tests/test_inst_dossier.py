@@ -59,13 +59,15 @@ class TestDossier(AvecMaison):
         self.faire_depot(dossier.skill())
         r = dossier.preparer(git=self.git())
         self.assertEqual(r["action"], "mise_a_jour")
-        self.assertEqual(self.appels[0][0], ["pull", "--ff-only"])
+        # --rebase : une leçon ou un genre gardés en local (push refusé) ne figent pas la copie
+        self.assertEqual(self.appels[0][0], ["pull", "--rebase"])
 
     def test_pull_echoue_continue(self):
         self.faire_depot(dossier.skill())
         r = dossier.preparer(git=self.git(1, "droits refusés"))
         self.assertEqual(r["action"], "mise_a_jour")
         self.assertIn("droits refusés", r["message"])
+        self.assertEqual(self.appels[-1][0], ["rebase", "--abort"])   # jamais laissée au milieu d'un rebase
 
     def test_lier_un_clone_existant(self):
         clone = Path(self._tmp.name) / "dev"
@@ -86,6 +88,17 @@ class TestDossier(AvecMaison):
         dossier.creer_lien(clone, dossier.skill())
         r = dossier.preparer(lier=clone, git=self.git(), lien=lambda c, l: self.fail("lien refait"))
         self.assertEqual(r["action"], "deja_lie")
+
+    def test_lier_refuse_quand_une_autre_copie_existe(self):
+        # La skill a déjà été clonée : --lier ne doit pas faire un pull en silence (deux copies)
+        clone = Path(self._tmp.name) / "dev"
+        (clone / "orchestrateur").mkdir(parents=True)
+        (clone / "orchestrateur" / "outil.py").write_text("", encoding="utf-8")
+        self.faire_depot(dossier.skill())
+        with self.assertRaises(dossier.Echec) as c:
+            dossier.preparer(lier=clone, git=self.git(), lien=lambda c, l: self.fail("lien créé"))
+        self.assertIn("renommez", str(c.exception))
+        self.assertEqual(self.appels, [])
 
     def test_lier_refuse_un_dossier_qui_n_est_pas_la_skill(self):
         autre = Path(self._tmp.name) / "autre"

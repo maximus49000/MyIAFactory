@@ -138,6 +138,28 @@ class TestLots(AvecTaches):
         self.ok("tache", entree={"id": a, "colonne": "fait"})
         self.assertEqual([l["taches"] for l in self.lots_()["lots"]], [[b]])
 
+    def test_dependance_en_cours_garde_la_tache_hors_des_lots(self):
+        # a est partie mais pas finie : b qui l'attend ne part pas, et ce qui attend b non plus
+        a = self.nt("A")
+        b = self.nt("B", depend_de=[a])
+        c = self.nt("C", depend_de=[b])
+        d = self.nt("D")
+        self.ok("tache", entree={"id": a, "active": True, "agent": "dev-1"})
+        sortie = self.lots_()
+        self.assertEqual([l["taches"] for l in sortie["lots"]], [[d]])
+        self.assertEqual(sorted(x["tache"] for x in sortie["ecartees"]), sorted([b, c]))
+        self.assertIn(a, next(x["raison"] for x in sortie["ecartees"] if x["tache"] == b))
+
+    def test_lot_parti_jamais_refait(self):
+        # t1, t2, t3 notés dans L1 (le lot est parti) : refaire les lots ne les reprend pas
+        t1, t2, t3 = self.nt("T1"), self.nt("T2"), self.nt("T3")
+        for rang, i in enumerate((t1, t2, t3), 1):
+            self.ok("tache", entree={"id": i, "lot": {"id": "L1", "rang": rang}})
+        self.ok("tache", entree={"id": t1, "active": True, "agent": "dev-1"})
+        t4 = self.nt("T4")
+        self.assertEqual([l["taches"] for l in self.lots_()["lots"]], [[t4]])
+        self.assertEqual(self.outil("lancer", "lots", entree={"taches": [t2]})[0], 1)
+
     def test_relecture_seule(self):
         a, r, b = self.nt("A"), self.nt("R", "relecteur"), self.nt("B")
         self.assertEqual([l["taches"] for l in self.lots_()["lots"]], [[a, b], [r]])
@@ -189,6 +211,17 @@ class TestDepartDUnLot(AvecTaches):
         self.assertIn("lancer tache", m)                                 # compte rendu à la fin de chaque tâche
         self.assertIn("avant de passer à la suivante", m)
         self.assertIn("## À la fin", m)
+        # chaque tâche est marquée active à son début (sa durée sert à répartir le coût du lot)
+        self.assertIn('"agent": "dev-1", "active": true', m)
+
+    def test_lot_enchaine_les_durees(self):
+        # le geste demandé par le message : active au début, inactive à la fin, tâche après tâche
+        a, b = self.nt("A"), self.nt("B")
+        for i in (a, b):
+            self.ok("tache", entree={"id": i, "agent": "dev-1", "active": True})
+            self.ok("tache", entree={"id": i, "active": False})
+        s = {x["id"]: x for x in self.suivi()["taches"]}
+        self.assertTrue(all(s[i]["debut"] and s[i]["fin"] for i in (a, b)))
 
     def test_depart_d_une_seule_tache_inchange(self):
         a = self.nt("Écrire le menu")

@@ -8,7 +8,8 @@ import socket
 import subprocess
 
 RESEAUX_PRIVES = tuple(ipaddress.ip_network(r) for r in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
-CIBLE_SANS_ENVOI = ("192.0.2.1", 9)   # adresse de documentation : connect() en UDP n'envoie rien
+PLAGE_TAILSCALE = ipaddress.ip_network("100.64.0.0/10")
+CIBLE_SANS_ENVOI =("192.0.2.1", 9)   # adresse de documentation : connect() en UDP n'envoie rien
 
 
 def _ipv4(texte):
@@ -27,7 +28,8 @@ def adresse_tailscale(executer=subprocess.run):
     if r.returncode != 0 or not r.stdout:
         return None
     a = _ipv4(r.stdout.splitlines()[0])
-    return str(a) if a is not None else None
+    # seule la plage de Tailscale : une autre sortie (0.0.0.0 surtout) ouvrirait un écouteur où il ne faut pas
+    return str(a) if a is not None and a in PLAGE_TAILSCALE else None
 
 
 def adresse_reseau_local(fabrique=socket.socket):

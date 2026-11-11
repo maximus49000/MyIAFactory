@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from bureau import reglages as regl
+from bureau import releve as releve_bureau
 from installation import acces as acces_inst
 from installation import dossier, proposition
 from installation.dossier import PREFIXE_SKILL, Echec
@@ -22,7 +23,6 @@ RACINE = Path(__file__).resolve().parent.parent
 OUTIL = PREFIXE_SKILL + "/orchestrateur/outil.py"
 DOSSIERS = ("pieces", "captures", "livrables", "methodes", "documents")
 BLOC_GITIGNORE = ("# MyIAFactory : fichiers propres à la machine", ".factory/equipe.json", ".factory/*-historique.jsonl")
-ANCIENNES_REGLES = (".factory/", ".factory", "/.factory/", "/.factory")
 PORT = 8770
 SERVICE_FACTURATION = {"id": "facturation", "nom": "Facturation"}
 
@@ -63,6 +63,19 @@ def _lire_octets(chemin):
 
 # --- Le .gitignore du projet.
 
+def _ancienne_regle(ligne):
+    """Une règle qui ignore tout `.factory/` : `.factory`, `/.factory/`, `.factory/*`, `**/.factory/**`…"""
+    x = ligne.strip()
+    if x.startswith("**/"):
+        x = x[3:]
+    x = x.lstrip("/")
+    for fin in ("/**", "/*", "/"):
+        if x.endswith(fin):
+            x = x[:-len(fin)]
+            break
+    return x == ".factory"
+
+
 def regler_gitignore(projet):
     """Retire l'ancienne règle `.factory/` et ajoute une fois le bloc des fichiers propres à la machine.
     Rend vrai si le fichier a changé."""
@@ -70,7 +83,7 @@ def regler_gitignore(projet):
     texte = chemin.read_text(encoding="utf-8-sig") if chemin.is_file() else ""
     fin = "\r\n" if "\r\n" in texte else "\n"
     lignes = texte.splitlines()
-    gardees = [x for x in lignes if x.strip() not in ANCIENNES_REGLES]
+    gardees = [x for x in lignes if not _ancienne_regle(x)]
     presentes = {x.strip() for x in gardees}
     manquantes = [x for x in BLOC_GITIGNORE[1:] if x not in presentes]
     if manquantes:
@@ -293,13 +306,28 @@ def verifier(factory_json):
             lignes.append(f"ÉCART {libelle} : {e}")
         except (KeyError, IndexError, TypeError) as e:
             lignes.append(f"ÉCART {libelle} : sortie inattendue ({type(e).__name__} {e})")
+    lignes.append(_ligne_bureau(chemin.parent / "reglages.json"))
     return lignes, not any(x.startswith("ÉCART") for x in lignes)
 
 
+def _ligne_bureau(reglages_json):
+    """Le bureau répond sur ce projet : il lance la commande du relevé telle qu'elle est déclarée dans les réglages
+    (même interpréteur, même développement de « ~ », même dossier) et la lit."""
+    libelle = "le bureau lit le relevé du projet"
+    try:
+        _, message = releve_bureau.obtenir(regl.charger(reglages_json))
+    except regl.ReglagesInvalides as e:
+        message = str(e)
+    return f"ok {libelle}" if message is None else f"ÉCART {libelle} : {message}"
+
+
 def message_orchestrateur(factory_json):
+    """Le message qui ouvre la conversation orchestratrice. Il n'est pas versionné : la skill y est en chemin absolu
+    (le fichier de factory note `~/MyIAFactory/skill`, que PowerShell ne développe pas dans un argument)."""
+    s = dossier.skill()
     return (f"Tu es l'orchestrateur du projet dont le fichier de factory est `{factory_json}`. Lis "
-            f"`{PREFIXE_SKILL}/orchestrateur/consignes.md`, puis les consignes propres du projet, et commence la "
-            "boucle de réveil.")
+            f"`{s / 'orchestrateur' / 'consignes.md'}`, puis les consignes propres du projet, et commence la "
+            f"boucle de réveil. Dans tes appels, `<skill>` vaut `{s}`.")
 
 
 def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adresses):

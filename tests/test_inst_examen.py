@@ -66,10 +66,23 @@ class TestExamen(Base):
         ecrire(self.d, ".factory/reglages.json", json.dumps({"images": {}}))
         self.assertEqual(examen.examiner(self.d)["cas"], "factory_propre")
 
-    def test_reglages_avec_orchestrateur_pas_propre(self):
-        ecrire(self.d, ".factory/reglages.json", json.dumps({"orchestrateur": "factory.json"}))
-        ecrire(self.d, "main.py", "x")
-        self.assertEqual(examen.examiner(self.d)["cas"], "existant")
+    def test_factory_sans_fichier_de_factory_renvoie_au_guide(self):
+        # `appliquer` refuserait ce dossier : l'examen le dit avant toute la discussion
+        for contenu in (json.dumps({"orchestrateur": "factory.json"}), "{illisible"):
+            ecrire(self.d, ".factory/reglages.json", contenu)
+            ecrire(self.d, "main.py", "x")
+            self.assertEqual(examen.examiner(self.d)["cas"], "factory_propre", contenu)
+        (self.d / ".factory" / "reglages.json").unlink()
+        self.assertEqual(examen.examiner(self.d)["cas"], "factory_propre")   # même un .factory/ vide
+
+    def test_delai_atteint_compte_marque(self):
+        for i in range(30):
+            ecrire(self.d, f"f{i}.txt", "")
+        instants = iter(range(0, 1000))   # chaque lecture de l'horloge avance d'une seconde
+        r = examen.examiner(self.d, horloge=lambda: next(instants))
+        self.assertTrue(str(r["inventaire"]["nb_fichiers"]).endswith("+"), r["inventaire"]["nb_fichiers"])
+        self.assertTrue(r["inventaire"]["tronque"])
+        self.assertFalse(examen.examiner(self.d)["inventaire"]["tronque"])
 
     def test_node_modules_saute(self):
         ecrire(self.d, "package.json", "{}")

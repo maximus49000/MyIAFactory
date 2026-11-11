@@ -56,11 +56,16 @@ def preparer(lier=None, git=executer_git, lien=creer_lien):
             raise Echec(f"« {lier} » n'est pas un clone de la skill (orchestrateur/outil.py introuvable).")
     if s.exists() and lier is not None and s.resolve() == lier.resolve():
         return {"skill": str(s), "action": "deja_lie", "message": f"Le dossier stable pointe déjà sur {lier}."}
+    if s.exists() and lier is not None:
+        raise Echec(f"{s} existe déjà et ne pointe pas sur {lier} : renommez-le (ou supprimez-le s'il ne garde aucune "
+                    "leçon à pousser), puis relancez `preparer --lier`.")
     if s.exists() and _est_depot(s):
-        code, sortie = git(["pull", "--ff-only"], s)
+        # --rebase : une leçon ou un genre gardés en local (push refusé) ne doivent pas figer la copie
+        code, sortie = git(["pull", "--rebase"], s)
         if code == 0:
             msg = "La skill est à jour."
         else:
+            git(["rebase", "--abort"], s)
             msg = "La skill n'a pas pu être mise à jour (la version présente est gardée) : " + sortie[:300]
         return {"skill": str(s), "action": "mise_a_jour", "message": msg}
     if lier is not None:

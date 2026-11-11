@@ -54,7 +54,8 @@ def former(taches, tailles=None, premier=1):
     d'origine. Rend `[{"lot": "L<n>", "modele", "lieu", "taches": [ids]}]`, numérotés à partir de `premier`.
 
     Glouton et stable : tant qu'il reste des tâches, on prend celles dont les dépendances sont formées dans un lot
-    *précédent* ; on continue le lot courant avec la première tâche prête de même modèle et même lieu (dans l'ordre
+    précédent ou placées plus tôt dans le lot courant (un lot s'exécute dans l'ordre, d'une traite : une chaîne d'un
+    même modèle reste une seule conversation) ; on continue le lot courant avec la première tâche prête de même modèle et même lieu (dans l'ordre
     d'origine), sinon on ouvre un lot sur la première tâche prête. Une relecture forme toujours un lot à elle seule ;
     un lot s'arrête à `tailles[modele]` (au plus `MAX_TACHES_LOT`). Lève `ValueError` sur un cycle ou une
     dépendance inconnue."""
@@ -70,7 +71,8 @@ def former(taches, tailles=None, premier=1):
     while restantes:
         courant, avant = None, set(formees)   # `avant` : ce que les lots précédents ont formé
         while True:
-            pretes = [t for t in restantes if all(d in avant for d in t.get("depend_de") or [])]
+            dispo = avant | set(courant["taches"]) if courant else avant
+            pretes = [t for t in restantes if all(d in dispo for d in t.get("depend_de") or [])]
             if courant is None:
                 if not pretes:
                     noms = ", ".join(t["id"] for t in restantes)

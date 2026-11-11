@@ -13,7 +13,7 @@ relatifs à lui. Partez du modèle [`orchestrateur/modeles/factory.json`](../orc
 
 | Clé | Obligatoire | Sens |
 |---|---|---|
-| `skill` | oui | le chemin du dépôt de la skill (ce dépôt) sur la machine |
+| `skill` | oui | le chemin de la skill sur la machine ; dans un fichier versionné, `~/MyIAFactory/skill` (le dossier stable de l'installation), jamais un chemin absolu |
 | `flux` | oui | les étapes de la série, dans l'ordre : `{id, nom, role, service}` ; elles donnent les colonnes du bureau (`cadrage` et `fait` sont ajoutées) |
 | `services` | non | les services du bureau, `{id, nom}` (chaque étape du flux en nomme un) ; un service `facturation` donne une pièce où l'onglet Facturation est toujours visible |
 | `nom` | non | le nom du projet (défaut : le nom du dossier) |
@@ -115,7 +115,9 @@ et le fichier de factory déclare un catalogue pour toutes ses fonctionnalités 
                                   "lancer", "catalogue", "{fonctionnalite}"]}}
 ```
 
-Pour plusieurs projets dans un même bureau, voir « Plusieurs projets » dans [`installation.md`](installation.md).
+`<skill>` s'y écrit `~/MyIAFactory/skill` : le bureau développe ce préfixe avant de lancer la commande. Pour plusieurs
+projets dans un même bureau, voir « Plusieurs projets » dans [`installation.md`](installation.md) ; l'installation
+inscrit chaque projet au bureau commun `~/MyIAFactory/bureau.json`.
 
 ## 7. Démarrer la conversation orchestratrice
 
@@ -131,7 +133,16 @@ discussion, les validations du Directeur, le catalogue.
 
 ## Démarrer un projet neuf
 
-Copiez [`exemples/projet-neuf/`](../exemples/projet-neuf/) dans un dossier à vous, `git init`, mettez dans
-`factory.json` le chemin de la skill (`skill`) et celui de `outil.py` dans la commande du catalogue
-(`catalogues["*"]`), et dans `reglages.json` celui de `outil.py` (relevé et actions), remplissez
-`mots_interdits` et les fiches (un agent par rôle), puis passez `verifier_interface.py` et ouvrez le bureau.
+Le plus simple : la commande `/myiafactory:installer` du plugin, lancée dans une conversation Claude Code ouverte dans
+le dossier du projet (voir « Installer MyIAFactory sur un projet » dans [`installation.md`](installation.md)). Elle
+mène la discussion, propose une organisation chiffrée, écrit tout après validation (fichier de factory, réglages,
+fiches, briefs, contrôles), inscrit le projet au bureau commun, passe `verifier_interface.py` et donne le message de la
+section 7.
+
+À la main, sans le plugin : copiez [`exemples/projet-neuf/`](../exemples/projet-neuf/) dans `.factory/` du projet,
+`git init`, mettez `~/MyIAFactory/skill` dans `skill` (`factory.json`) et
+`~/MyIAFactory/skill/orchestrateur/outil.py` dans la commande du catalogue (`catalogues["*"]`) et dans
+`reglages.json` (relevé et actions), remplissez `mots_interdits` et les fiches (un agent par rôle), puis passez
+`verifier_interface.py` et ouvrez le bureau. Un projet déjà branché à la main se met au nouveau rangement (dossier
+stable, versionnement, bureau commun, agents locaux en parallèle) par `installation/outil.py reparer <dossier>`, qui
+garde ses adaptateurs (`commandes`) tels quels.

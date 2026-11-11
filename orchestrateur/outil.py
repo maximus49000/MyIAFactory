@@ -632,6 +632,11 @@ def _controle_organisation(ctx, o):
     for a in o.get("agents") if isinstance(o.get("agents"), list) else []:
         if isinstance(a, dict) and _interdit(a.get("modele")):
             return ["Fable n'est jamais choisi par un outil (seulement sur demande expresse)."]
+    gardes = {x.get("id") for x in o.get("services") if isinstance(x, dict)} if isinstance(o.get("services"), list) else None
+    if gardes is not None:
+        occupes = sorted({x["service"] for x in existantes if x.get("service") and x["service"] not in gardes})
+        if occupes:
+            return [f"Un service qui a encore des agents n'est jamais retiré : {', '.join(occupes)}."]
     return proposition.verifier_organisation(
         o.get("services"), o.get("flux"), o.get("agents"), o.get("briefs"), cloud=True,
         roles_deja_pourvus={x["role"] for x in existantes}, cles_prises={x["cle"] for x in existantes},
@@ -1336,8 +1341,9 @@ def cmd_depart(ctx, e):
 
 
 def _partie(t):
-    """Une tâche déjà partie : active, faite, ou qui a déjà été prise un moment."""
-    return bool(t["active"] or t["colonne"] == "fait" or t.get("debut"))
+    """Une tâche déjà partie : active, faite, déjà prise un moment, ou notée dans un lot (le lot est noté juste avant
+    son départ : refaire les lots ne le touche jamais)."""
+    return bool(t["active"] or t["colonne"] == "fait" or t.get("debut") or isinstance(t.get("lot"), dict))
 
 
 def _modele_et_lieu(fiches_, t):
@@ -1380,8 +1386,19 @@ def cmd_lots(ctx, e):
                         "depend_de": list(t.get("depend_de") or [])})
     choisis = {t["id"] for t in choisies}
     par_id = {t["id"]: t for t in s["taches"]}
-    for x in entrees:   # une dépendance déjà partie ou faite est tenue ; les autres comptent dans l'ordre
-        x["depend_de"] = [d for d in x["depend_de"] if d in choisis or d not in par_id or not _partie(par_id[d])]
+    for x in entrees:   # une dépendance faite est tenue ; une dépendance partie mais pas finie fait attendre la tâche
+        x["depend_de"] = [d for d in x["depend_de"] if d in choisis or d not in par_id or par_id[d]["colonne"] != "fait"]
+    retenues = {x["id"] for x in entrees}
+    change = True
+    while change:   # attendre une tâche en cours, ou une tâche qui attend elle-même, écarte la tâche
+        change = False
+        for x in list(entrees):
+            attend = next((d for d in x["depend_de"] if d in par_id and d not in retenues), None)
+            if attend is not None:
+                entrees.remove(x)
+                retenues.discard(x["id"])
+                ecartees.append({"tache": x["id"], "raison": f"attend la fin de la tâche {attend}"})
+                change = True
     rangs = {t["id"]: t["lot"]["rang"] for t in s["taches"] if isinstance(t.get("lot"), dict)}
     mesures = [{**u, "rang": rangs.get(u.get("tache"))} for u in s.get("usage") or []]
     tailles = {m: lots.taille_conseillee(mesures, m) for m in {x["modele"] for x in entrees}}

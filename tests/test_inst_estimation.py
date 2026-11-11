@@ -62,6 +62,22 @@ class TestEstimation(unittest.TestCase):
             for d in r["detail"]:
                 self.assertLessEqual(d["tokens"][0], d["tokens"][1])
 
+    def test_mesures_chiffrees_compteur_par_compteur(self):
+        # une session d'agent est surtout faite de lectures en cache : elles ne coûtent pas le prix d'entrée
+        us = [{"id": f"c{i}", "modele": m, "entree": 10_000, "sortie": 5_000, "cache_lecture": 1_000_000,
+               "cache_ecriture": 20_000} for m in ("Sonnet", "Haiku") for i in range(5)]
+        r = estimation.estimer(FLUX, AGENTS, us, PRIX.get)
+        self.assertEqual(r["source"], "mesures")
+        attendu = 0
+        for m in ("Sonnet", "Sonnet", "Haiku"):   # cadrage, dev, relecture
+            p = PRIX[m]
+            attendu += (10_000 * p["entree"] + 5_000 * p["sortie"] + 1_000_000 * p["entree"] * 0.1
+                        + 20_000 * p["entree"] * 1.25)
+        self.assertAlmostEqual(r["euros"][1], round(attendu, 2), places=2)
+        # un prix de cache donné par la source l'emporte
+        avec = {m: {**p, "cache_lecture": 0} for m, p in PRIX.items()}
+        self.assertLess(estimation.estimer(FLUX, AGENTS, us, avec.get)["euros"][1], r["euros"][1])
+
     def test_role_sans_agent_refuse(self):
         with self.assertRaises(ValueError):
             estimation.estimer(FLUX, AGENTS[:1], [], PRIX.get)

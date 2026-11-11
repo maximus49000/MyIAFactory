@@ -1,5 +1,6 @@
 """La mise en place, le bureau commun, la réparation. HOME et USERPROFILE sont temporaires ; git est simulé."""
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,17 @@ RACINE = Path(__file__).resolve().parent.parent
 
 
 class Base(AvecMaison):
+    def lier_skill(self):
+        """Le dossier stable pointe sur ce dépôt (si le test n'a pas préparé sa propre skill) : la vérification lance
+        alors vraiment la commande du relevé du bureau. Le lien est retiré avant le dossier temporaire."""
+        s = dossier.skill()
+        if s.exists():
+            return
+        dossier.creer_lien(RACINE, s)
+        self.addCleanup(os.rmdir, s)   # retire la jonction seule, jamais ce qu'elle désigne
+
     def appliquer(self, **extra):
+        self.lier_skill()
         return mep.appliquer(proposition_valide(self.projet, **extra), MAINTENANT, git=self.git_simule,
                              adresses=self.adresses)
 
@@ -64,7 +75,10 @@ class TestAppliquer(Base):
         self.assertTrue(r["pret"], r["verification"])
         self.assertTrue(r["verification"])
         self.assertIn(str(self.projet / ".factory" / "factory.json"), r["message_orchestrateur"])
-        self.assertIn("~/MyIAFactory/skill/orchestrateur/consignes.md", r["message_orchestrateur"])
+        # le message n'est pas versionné : il donne la skill en chemin absolu (PowerShell ne développe pas « ~ »)
+        self.assertNotIn("~", r["message_orchestrateur"])
+        self.assertIn(str(dossier.skill() / "orchestrateur" / "consignes.md"), r["message_orchestrateur"])
+        self.assertIn(f"`<skill>` vaut `{dossier.skill()}`", r["message_orchestrateur"])
         self.assertEqual(r["agents_cloud"], [])
         self.assertFalse(r["relancer_bureau"])
         self.assertEqual(r["bureau"], str(dossier.bureau()))
@@ -131,6 +145,15 @@ class TestAppliquer(Base):
         b = reglages.lire_bureau(dossier.bureau())
         self.assertEqual(b["projets"][0]["chemin"].resolve(), (self.projet / ".factory" / "reglages.json").resolve())
         self.assertTrue(r["pret"], r["verification"])
+        # le bureau lance la commande du relevé telle qu'elle est déclarée (« ~ », espaces, accents) et la lit
+        self.assertIn("ok le bureau lit le relevé du projet", r["verification"])
+
+    def test_bureau_qui_ne_lit_pas_le_releve_pas_pret(self):
+        from unittest import mock
+        with mock.patch("bureau.releve.obtenir", return_value=(None, "La commande du relevé a échoué (code 9).")):
+            r = self.appliquer()
+        self.assertFalse(r["pret"])
+        self.assertTrue(any(x.startswith("ÉCART le bureau lit le relevé") and "code 9" in x for x in r["verification"]))
 
     def test_echec_au_milieu_rien_ne_reste(self):
         (self.projet / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
@@ -268,6 +291,16 @@ class TestGitignore(Base):
         self.assertIn("dist", lignes)
         self.assertIn("node_modules/", lignes)
         self.assertIn(".factory/equipe.json", lignes)
+
+    def test_gitignore_variantes_de_l_ancienne_regle(self):
+        variantes = [".factory/*", ".factory/**", "/.factory/*", "/.factory/**", "**/.factory", "**/.factory/",
+                     ".factory/ ", "  .factory"]
+        (self.projet / ".gitignore").write_text("\n".join(variantes + ["garde.txt"]) + "\n", encoding="utf-8")
+        self.assertTrue(mep.regler_gitignore(self.projet))
+        lignes = [x.strip() for x in self.lire().splitlines()]
+        for v in variantes:
+            self.assertNotIn(v.strip(), lignes, v)
+        self.assertIn("garde.txt", lignes)
 
     def test_gitignore_idempotent(self):
         (self.projet / ".gitignore").write_text("node_modules/", encoding="utf-8")

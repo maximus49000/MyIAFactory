@@ -971,6 +971,14 @@ class TestTilde(unittest.TestCase):
         self.addCleanup(env.stop)
         return home
 
+    def test_python_en_tete_est_celui_du_bureau(self):
+        # « python » peut désigner un autre Python (3.9, le stub du Microsoft Store) : le bureau prend le sien
+        for mot in ("python", "python3"):
+            code, sortie, _ = releve._executer([mot, "-c", "import sys; print(sys.executable)"], str(self.tmp))
+            self.assertEqual(code, 0)
+            self.assertEqual(os.path.normcase(sortie.decode().strip()), os.path.normcase(sys.executable))
+        self.assertEqual(releve.commande_python(["git", "python"]), ["git", "python"])
+
     def test_developper(self):
         home = self._home()
         for debut in ("~/", "~\\"):

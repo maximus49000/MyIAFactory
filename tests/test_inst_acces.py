@@ -49,6 +49,12 @@ class TestAcces(unittest.TestCase):
         self.assertEqual(vu["cmd"], ["tailscale", "ip", "-4"])
         self.assertEqual(vu["timeout"], 5)
 
+    def test_tailscale_hors_de_sa_plage_refusee(self):
+        # 0.0.0.0 ouvrirait un écouteur sur toutes les interfaces : seule la plage de Tailscale est acceptée
+        for sortie in ("0.0.0.0\n", "192.168.1.5\n", "100.128.0.1\n"):
+            rendu = lambda *a, s=sortie, **k: subprocess.CompletedProcess(a, 0, stdout=s, stderr="")
+            self.assertIsNone(acces.adresse_tailscale(executer=rendu), sortie)
+
     def test_adresse_reseau_local_privee(self):
         for a in ("192.168.1.20", "10.0.0.5", "172.16.3.4", "172.31.255.1"):
             self.assertEqual(acces.adresse_reseau_local(fabrique=FausseSocket(a)), a)

@@ -85,6 +85,14 @@ class TestOrganisation(AvecProjet):
         self.assertEqual(f["commandes"], {"etat": ["x"]})
         self.assertEqual(f["reglages"], "reglages.json")
 
+    def test_service_qui_a_encore_des_agents_jamais_retire(self):
+        # retirer « dev » laisserait la fiche dev-1 dans un service qui n'existe plus
+        o = organisation(services=[{"id": "metier", "nom": "Métier"}, {"id": "son", "nom": "Son"}],
+                         flux=[{"id": "son", "nom": "Sonorisation", "role": "son", "service": "son"}])
+        code, sortie = self.outil("lancer", "decision", entree=poser(o))
+        self.assertEqual(code, 1, sortie)
+        self.assertIn("dev", sortie["erreur"])
+
     def test_refus_etape_service_inconnu(self):
         i = self.poser()
         d = self.lire_factory()

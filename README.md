@@ -89,7 +89,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 4. Le dossier stable
 - [x] 5. L'examen du dossier
 - [x] 6. Le calibrage et l'estimation du coût
-- [ ] 7. La proposition, la mise en place, le bureau commun, la réparation
+- [x] 7. La proposition, la mise en place, le bureau commun, la réparation
 - [ ] 8. La ligne de commande de l'installation
 - [ ] 9. Le plugin et les consignes de la discussion
 - [ ] 10. La décision et la commande « organisation »

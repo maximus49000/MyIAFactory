@@ -8,7 +8,10 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "controles": [{"texte", "origine"}], "retours_factory": [str],
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
-     "nom": str?, "cahier": {"maquette": [chemin], "etapes": [texte]}?, "methode_prete": bool?}
+     "nom": str?, "cahier": {"maquette": [chemin], "etapes": [texte]}?, "methode_prete": bool?,
+     "usage_estime": int?}
+`usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
+moteur le note comme une estimation).
 Les trois derniers champs sont demandés par la matière des seuls agents qui en ont l'usage (cadrage : `nom`, `cahier` ;
 prototype : `methode_prete`), pas par la consigne de fin commune.
 Le texte libre qui entoure le bloc ne sert qu'au journal. Le moteur n'écrit rien lui-même : `commandes` rend les
@@ -82,6 +85,9 @@ def lire(texte):
             raise RapportIllisible("« cahier » demande « maquette » et « etapes » (listes de textes non vides)")
     if "methode_prete" in r and not isinstance(r["methode_prete"], bool):
         raise RapportIllisible("« methode_prete » doit être vrai ou faux")
+    if "usage_estime" in r and (not isinstance(r["usage_estime"], int) or isinstance(r["usage_estime"], bool)
+                                or r["usage_estime"] < 0):
+        raise RapportIllisible("« usage_estime » doit être un entier positif (tokens)")
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")
     return r

@@ -124,7 +124,17 @@ def cmd_proposer(a):
     chemin = dossier.propositions() / f"{_id_dossier(p['projet'])}.json"
     chemin.parent.mkdir(parents=True, exist_ok=True)
     mise_en_place._ecrire_json(chemin, p)
-    return {"proposition": str(chemin), "estimation": p["estimation"]}
+    return {"proposition": str(chemin), "estimation": p["estimation"], "prerequis_cloud": _prerequis_cloud(p)}
+
+
+def _prerequis_cloud(p):
+    """Quand le cloud est choisi : pourquoi il n'est pas encore possible (le projet n'est pas sur GitHub, `claude` n'est
+    pas installé), ou `None`. Ce n'est pas un refus : un projet vide peut créer son dépôt juste après ; sans eux, le moteur
+    prend l'agent local équivalent et le dit au bureau."""
+    if p.get("cloud") is not True:
+        return None
+    from moteur import cloud
+    return cloud.prerequis(p["projet"])
 
 
 def cmd_appliquer(a):

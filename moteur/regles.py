@@ -19,15 +19,17 @@ série, contrôles refusés. Elle se reconstruit en partie depuis le suivi aprè
 fois, éléments repris) ; ce qui s'y perd est dit dans la passation.
 """
 import re
+import time
 from pathlib import Path
 
-from moteur import agents, rapport
+from moteur import agents, cloud, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import outil
 from orchestrateur import suivi as su
 
+CLOUD_RELIRE_S = 300
 ROLE_CADRAGE = "cadrage"
 ROLE_RELECTURE = "relecteur"
 CHEF = "chef"                       # l'auteur des messages du moteur dans la discussion
@@ -36,6 +38,9 @@ RELECTEURS_PREMIER_TOUR = 2
 ETAPES_DE_FLUX = "flux:"
 ETAPES_SOLO = ("cadrage", "prototype", "relecture")   # jamais regroupées en lot
 ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande")
+ATTENDRE = "Attendre encore"
+RELANCER = "Relancer l'agent"
+ABANDONNER = "Abandonner la tâche"
 ACCEPTE = "J'accepte"
 REFUSE = "Je refuse"
 FAIT = "C'est fait, relancez l'agent"
@@ -56,10 +61,13 @@ class Projet:
     """Un projet tenu par le moteur : son fichier de factory et la couche d'appel des jugements.
     `feu_vert` (rien -> bool) remplace la mesure de charge (essais)."""
 
-    def __init__(self, factory, couche="claude", *, feu_vert=None):
+    def __init__(self, factory, couche="claude", *, feu_vert=None, cloud_max=3, prerequis=None):
         self.factory = Path(factory)
         self.couche = couche
         self._feu_vert = feu_vert
+        self.cloud_max = cloud_max        # sessions cloud en même temps (réglage `agents_cloud_max`)
+        self._prerequis = prerequis       # remplace `cloud.prerequis` (essais) : rien -> raison | None
+        self._cloud_raison = (None, 0.0)
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -67,6 +75,16 @@ class Projet:
     @property
     def nom(self):
         return self.dossier.name
+
+    def cloud_raison(self):
+        """Pourquoi le cloud n'est pas possible (le projet n'est pas sur GitHub, `claude` manque), ou `None`. Relu au
+        plus toutes les 5 minutes."""
+        raison, quand = self._cloud_raison
+        if quand and time.monotonic() - quand < CLOUD_RELIRE_S:
+            return raison
+        raison = self._prerequis() if self._prerequis else cloud.prerequis(self.dossier)
+        self._cloud_raison = (raison, time.monotonic())
+        return raison
 
     def feu_vert(self):
         if self._feu_vert is not None:
@@ -100,7 +118,7 @@ def a_agent(agent, taches, matiere):
 
 def nouvel_etat():
     return {"departs": {}, "en_cours": set(), "relancees": set(), "elements": {}, "controles_echoues": {},
-            "depend_de": {}, "prototype": {}, "liees": {}, "accords": {}, "a_lancer": []}
+            "depend_de": {}, "prototype": {}, "liees": {}, "accords": {}, "a_lancer": [], "cloud": {}}
 
 
 def _m(etat, cle, genre=dict):
@@ -556,6 +574,8 @@ def _reponse_a_une_question(projet, etat, demande, f, accord):
     texte = demande.get("texte") or ""
     del etat["accords"][f["id"]]
     tid = accord["tache"]
+    if accord.get("muette"):
+        return _reponse_session_muette(projet, etat, demande, f, tid, texte)
     if ACCEPTE in texte or FAIT in texte:
         lancer(projet, "tache", {"id": tid, "bloquee": None, "journal": ["Accord de l'utilisateur : "
                                                                          + accord["quoi"]]})
@@ -565,6 +585,40 @@ def _reponse_a_une_question(projet, etat, demande, f, accord):
         return _demarrer_en_attente(projet, etat, f["id"])
     lancer(projet, "tache", {"id": tid, "bloquee": "mise de côté sur décision de l'utilisateur", "active": False})
     _terminer(projet, {"demande": demande["id"]}, "C'est noté : cette tâche est mise de côté.")
+    return []
+
+
+def question_session_muette(projet, etat, tid, adresse):
+    """Une session cloud sans rapport depuis trop longtemps : la décision revient au Directeur."""
+    t = _tache(projet, tid)
+    fid = t.get("fonctionnalite")
+    texte = (f"La session cloud de la tâche « {t['titre']} » n'a rendu aucun rapport depuis deux heures"
+             + (f" ({adresse})." if adresse else "."))
+    lancer(projet, "tache", {"id": tid, "journal": [texte]})
+    if fid:
+        _m(etat, "accords")[fid] = {"tache": tid, "quoi": texte, "supplement": None, "muette": True}
+        _question(projet, fid, texte + " Que faire ?", [ATTENDRE, RELANCER, ABANDONNER])
+
+
+def _reponse_session_muette(projet, etat, demande, f, tid, texte):
+    info = _m(etat, "cloud").get(tid)
+    if ATTENDRE in texte:
+        if info is not None:
+            info["depuis"] = None          # la boucle repart de l'heure du moment
+            info["muette_dite"] = False
+        _terminer(projet, {"demande": demande["id"]}, "D'accord, j'attends encore.")
+        return []
+    if RELANCER in texte:
+        etat["cloud"].pop(tid, None)
+        etat["en_cours"].discard(tid)
+        lancer(projet, "tache", {"id": tid, "active": False, "journal": ["Relancée sur décision de l'utilisateur."]})
+        _m(etat, "a_lancer", list).append(tid)
+        _terminer(projet, {"demande": demande["id"]}, "Je relance l'agent dans une nouvelle session.")
+        return _demarrer_en_attente(projet, etat, f["id"])
+    etat.get("cloud", {}).pop(tid, None)
+    etat["en_cours"].discard(tid)
+    lancer(projet, "tache", {"id": tid, "bloquee": "abandonnée sur décision de l'utilisateur", "active": False})
+    _terminer(projet, {"demande": demande["id"]}, "C'est noté : la tâche est abandonnée.")
     return []
 
 
@@ -618,14 +672,38 @@ def _demarrer_en_attente(projet, etat, fid):
             if not libre.get("libre", False):
                 continue
         else:
-            r = lancer(projet, "agent-libre", {"role": premiere.get("role"), "lieu": "local",
-                                              **({"modele": lot["modele"]} if lot["modele"] else {})})
-            agent = r["agent"]
+            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"])
             if agent is None:
                 continue
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id))
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
     return actions
+
+
+def _choisir_agent(projet, etat, court, tache, modele):
+    """L'agent qui prend la tâche : un agent local libre du modèle voulu ; sinon, en renfort, un agent cloud libre (dans
+    la limite de `agents_cloud_max`, si le projet est sur GitHub) ; sinon, si le cloud est impossible, l'agent local
+    équivalent (un autre modèle du même rôle), en le disant au bureau."""
+    role = tache.get("role")
+    local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {})})
+    if local["agent"]:
+        return local["agent"]
+    clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
+    candidats = [a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]
+                 and (not modele or a["modele"] == modele)]
+    if not clouds or not candidats:
+        return None
+    raison = projet.cloud_raison()
+    if raison is None:
+        actifs = sum(1 for t in court["taches"] if t["active"] and t.get("agent") in clouds)
+        return candidats[0]["cle"] if actifs < projet.cloud_max else None
+    equivalent = lancer(projet, "agent-libre", {"role": role, "lieu": "local"})["agent"]
+    dits = _m(etat, "cloud_dit", set)
+    if equivalent and (tache.get("fonctionnalite"), role) not in dits and tache.get("fonctionnalite"):
+        dits.add((tache["fonctionnalite"], role))
+        _dire(projet, tache["fonctionnalite"], f"Les agents cloud ne sont pas disponibles ({raison}) : "
+                                               f"l'agent local {equivalent} prend la tâche « {tache['titre']} ».")
+    return equivalent
 
 
 def _partir(projet, etat, court, agent, ids, lot, par_id):
@@ -643,7 +721,8 @@ def _partir(projet, etat, court, agent, ids, lot, par_id):
         matiere += "\n\n" + supp
     if ids[0] in etat["a_lancer"]:
         etat["a_lancer"].remove(ids[0])
-    etat["departs"][ids[0]] = {"agent": agent, "taches": list(ids), "matiere": matiere, "modele": modele, "lot": lot}
+    etat["departs"][ids[0]] = {"agent": agent, "taches": list(ids), "matiere": matiere, "modele": modele, "lot": lot,
+                               "suite": supp}
     etat["en_cours"].add(ids[0])
     return a_agent(agent, ids, matiere)
 
@@ -941,6 +1020,10 @@ def _bloquer_element(projet, etat, fid, eid, raison):
             lancer(projet, "tache", {"id": t["id"], "bloquee": raison, "active": False})
 
 
+def fiche_cloud(court, cle):
+    return any(a["cle"] == cle and a["lieu"] == "cloud" for a in court["agents"])
+
+
 def orphelines(projet, etat):
     """À la reprise du moteur : une tâche active dont l'agent a disparu est relancée une fois (avec le reste de son lot).
     Une tâche relancée une fois n'est plus reprise."""
@@ -953,6 +1036,8 @@ def orphelines(projet, etat):
         if (not t["active"] or not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
                 or not (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
             continue
+        if fiche_cloud(court, t["agent"]):
+            continue      # sa session cloud vit encore : la boucle la retrouve et la relève
         relancees.add(t["id"])
         ids = [t["id"]]
         if isinstance(t.get("lot"), dict):

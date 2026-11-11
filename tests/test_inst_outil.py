@@ -103,6 +103,15 @@ class TestOutil(AvecMaison):
         self.assertIn("proposer", r["erreur"])
         self.assertFalse((self.projet / ".factory").exists())
 
+    def test_proposer_dit_les_prerequis_du_cloud(self):
+        code, r = self.lancer("proposer", entree=proposition_valide(self.projet, cloud=False))
+        self.assertEqual(code, 0, r)
+        self.assertIsNone(r["prerequis_cloud"])
+        code, r = self.lancer("proposer", entree=proposition_valide(self.projet, cloud=True))
+        self.assertEqual(code, 0, r)      # ce n'est pas un refus : le dépôt peut être créé juste après
+        self.assertIn(r["prerequis_cloud"], ("le projet n'est pas sur GitHub", "la commande claude n'est pas installée",
+                                              "git n'est pas utilisable"))
+
     def test_proposer_invalide_code_1(self):
         code, r = self.lancer("proposer", entree=proposition_valide(self.projet, modele_orchestrateur="Fable"))
         self.assertEqual(code, 1)

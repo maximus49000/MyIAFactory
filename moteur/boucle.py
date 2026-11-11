@@ -16,6 +16,7 @@ boucle : elle est dite au bureau (réponse de la demande, journal de la tâche) 
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -23,13 +24,15 @@ from datetime import datetime
 from pathlib import Path
 
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, jugement, regles
+from moteur import agents, appel, cloud, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
 
 PAS_S = 2
 QUOTA_TOUS_LES_S = 60
+CLOUD_TOUS_LES_S = 60            # le dépôt est relevé toutes les minutes
+CLOUD_MUETTE_S = 2 * 3600        # une session sans rapport au bout de deux heures : la décision revient au Directeur
 BUREAU_PAR_DEFAUT = "~/MyIAFactory/bureau.json"
 AGENT_ORCHESTRATEUR = "orchestrateur"
 ETAPE_ORCHESTRATION = "orchestration"
@@ -48,6 +51,10 @@ def ouvrir_projet(fichier_reglages, environ=None):
     couche, ligne = appel.choisir_couche(r if isinstance(r, dict) else {}, os.environ if environ is None else environ)
     projet = regles.Projet(fichier.parent / "factory.json", couche)
     projet.ligne_a_dire = ligne
+    try:
+        projet.cloud_max = reglages_bureau.charger(fichier)["agents_cloud_max"]
+    except reglages_bureau.ReglagesInvalides:
+        pass
     return projet
 
 
@@ -86,9 +93,10 @@ class Moteur:
     un fil) sont là pour les essais."""
 
     def __init__(self, projets, *, appeler=appel.appeler, horloge=time.time, bureau=None, environ=None,
-                 executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False):
+                 executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None):
         self.appeler, self.horloge, self.bureau, self.environ = appeler, horloge, bureau, environ
         self.executer_agent, self.commit, self.synchrone = executer_agent, commit, synchrone
+        self.cloud = session_cloud or cloud      # le module (ou un faux) qui parle aux sessions cloud
         self.projets, self.etats, self.retours, self.journal = [], {}, queue.Queue(), []
         self.dernier_quota = {}
         for p in projets:
@@ -137,6 +145,7 @@ class Moteur:
             etat["repris"] = True
             self._demarrage(projet, etat)
         self._demandes(projet, etat)
+        self._relever_le_cloud(projet, etat)
         self._retours_des_agents(projet, etat)
         self._executer(projet, regles.avancer(projet, etat))
         self._quota(projet)
@@ -154,6 +163,7 @@ class Moteur:
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"partenaires : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
+        self._retrouver_les_sessions(projet, etat)
 
     def _quota(self, projet):
         maintenant = self.horloge()
@@ -223,14 +233,116 @@ class Moteur:
         modele = (d.get("modele") or fiche["modele"]).lower()
 
         def travail():
-            e = self.executer_agent(depart, matiere, agent=fiche, modele=modele, dossier_projet=str(projet.dossier),
-                                    tache=taches[0], lot=d.get("lot"))
+            if fiche["lieu"] == "cloud":
+                e = self._partir_cloud(projet, etat, depart, fiche, modele, taches, d)
+                if e is None:
+                    return
+            else:
+                e = self.executer_agent(depart, matiere, agent=fiche, modele=modele,
+                                        dossier_projet=str(projet.dossier), tache=taches[0], lot=d.get("lot"))
             self.retours.put((projet, e))
 
         if self.synchrone:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{cle}", daemon=True).start()
+
+    # --- Les agents cloud : une session par départ, relevée par le dépôt.
+
+    def _partir_cloud(self, projet, etat, depart, fiche, modele, taches, d):
+        """Lance la session (ou envoie la suite à la même session). `None` si elle tourne ; sinon une `Execution` en
+        échec, que `regles.traiter_retour` reprend (un nouvel essai, puis la tâche bloquée)."""
+        tid = taches[0]
+        info = etat["cloud"].get(tid)
+        try:
+            if info and info.get("session") and d.get("suite"):
+                self.cloud.envoyer_suite(info["session"], d["suite"], dossier_projet=str(projet.dossier))
+                info["depuis"] = self.horloge()
+                return None
+            self.commit(projet.dossier, f"Factory : départ de {fiche['cle']}")
+            lancee = self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele)
+        except cloud.ErreurCloud as e:
+            return agents.Execution(tid, fiche["cle"], d.get("lot"), erreur=f"session cloud : {e.raison}", modele=modele)
+        etat["cloud_releve"] = self.horloge()      # la première relève, une minute après le départ
+        etat["cloud"][tid] = {"session": lancee["session"], "adresse": lancee["adresse"], "depuis": self.horloge(),
+                              "taches": list(taches), "agent": fiche["cle"], "modele": modele, "lot": d.get("lot"),
+                              "muette_dite": False, "vu": None}
+        try:
+            regles.lancer(projet, "tache", {"id": tid, "journal": [
+                f"Session cloud {lancee['session']} ({modele})" + (f" : {lancee['adresse']}" if lancee["adresse"] else "")]})
+            regles.lancer(projet, "session", {"agent": fiche["cle"], "session": lancee["adresse"] or lancee["session"]})
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"session cloud non notée : {e}")
+        return None
+
+    def _relever_le_cloud(self, projet, etat):
+        """Toutes les minutes : le dépôt est relevé ; un rapport trouvé est appliqué comme un rapport local, puis la
+        branche est fusionnée. Une session muette trop longtemps : la décision revient au Directeur."""
+        sessions = etat.get("cloud") or {}
+        if not sessions:
+            return
+        maintenant = self.horloge()
+        if maintenant - etat.get("cloud_releve", 0) < CLOUD_TOUS_LES_S:
+            return
+        etat["cloud_releve"] = maintenant
+        for info in list(sessions.values()):
+            if info.get("depuis") is None:
+                info["depuis"] = maintenant
+        try:
+            trouves = self.cloud.chercher_rapports(str(projet.dossier), list(sessions))
+        except cloud.ErreurCloud as e:
+            self._noter(projet, f"relève du cloud : {e.raison}")
+            trouves = {}
+        for tid, (branche, r) in trouves.items():
+            info = sessions[tid]
+            marque = json.dumps(r, sort_keys=True)
+            if info.get("vu") == marque:
+                continue                  # déjà appliqué : le fichier reste sur la branche
+            info["vu"] = marque
+            if r["statut"] == "fait":
+                del sessions[tid]
+            e = agents.Execution(tid, info["agent"], info.get("lot"), rapport=r, estime=r.get("usage_estime"),
+                                 modele=info["modele"])
+            e.branche, e.adresse = branche, info.get("adresse")
+            self.retours.put((projet, e))
+        for tid, info in list(sessions.items()):
+            if tid not in trouves and not info.get("muette_dite") and maintenant - info["depuis"] > CLOUD_MUETTE_S:
+                info["muette_dite"] = True
+                try:
+                    regles.question_session_muette(projet, etat, tid, info.get("adresse"))
+                except (regles.Refus, regles.ErreurMoteur) as ex:
+                    self._noter(projet, f"session muette : {ex}")
+
+    def _retrouver_les_sessions(self, projet, etat):
+        """Au redémarrage du moteur : une tâche cloud active garde sa session (lue dans son journal), le moteur la relève
+        de nouveau au lieu d'en lancer une autre."""
+        court = regles.lancer(projet, "etat")
+        for t in court["taches"]:
+            if not (t["active"] and t.get("agent") and regles.fiche_cloud(court, t["agent"])) or t["id"] in etat["cloud"]:
+                continue
+            journal = regles.lancer(projet, "detail", {"tache": t["id"]}).get("journal") or []
+            vu = next((m.group(1, 2) for j in reversed(journal)
+                       if (m := re.match(r"Session cloud (\S+) \((\w+)\)", j["texte"]))), None)
+            if vu:
+                etat["cloud"][t["id"]] = {"session": vu[0], "adresse": None, "depuis": self.horloge(),
+                                          "taches": [t["id"]], "agent": t["agent"], "modele": vu[1], "lot": None,
+                                          "muette_dite": False, "vu": None}
+
+    def _fusionner(self, projet, etat, e):
+        """Après un rapport « fait » venu d'une branche `claude/…` : la fusionner. Un conflit devient une question au
+        Directeur, avec la branche et l'adresse de la session."""
+        raison = self.cloud.fusionner(str(projet.dossier), e.branche)
+        if raison is None:
+            return
+        self._noter(projet, f"fusion de {e.branche} : {raison}")
+        t = regles.lancer(projet, "detail", {"tache": e.tache})
+        regles.lancer(projet, "tache", {"id": e.tache, "journal": [f"Fusion de la branche {e.branche} impossible : {raison}"]})
+        if t.get("fonctionnalite"):
+            regles._question(projet, t["fonctionnalite"],
+                             f"La branche « {e.branche} » de l'agent {e.agent} n'a pas pu être fusionnée ({raison})"
+                             + (f". Sa session : {e.adresse}." if e.adresse else ".")
+                             + " Réglez le conflit dans le dépôt, puis dites-moi de continuer.",
+                             ["C'est réglé, continuez", "Laissez cette branche de côté"])
 
     def _retours_des_agents(self, projet, etat):
         garde = []
@@ -243,6 +355,8 @@ class Moteur:
                 garde.append((p, e))
                 continue
             self._noter_usages(projet, e.usages, e.agent, None, tache=e.tache, lot=e.lot)
+            if e.estime is not None:      # un agent cloud : son estimation, notée comme telle (`total`)
+                self._noter_estimation(projet, e)
             try:
                 actions = regles.traiter_retour(projet, e, etat)
             except (regles.Refus, regles.ErreurMoteur) as ex:
@@ -251,8 +365,17 @@ class Moteur:
             self._executer(projet, actions)
             if e.rapport is not None:
                 self.commit(projet.dossier, "Factory : " + self._produit(e))
+                if getattr(e, "branche", None) and e.rapport["statut"] == "fait":
+                    self._fusionner(projet, etat, e)    # après le commit : l'arbre est propre
         for x in garde:
             self.retours.put(x)
+
+    def _noter_estimation(self, projet, e):
+        modele = appel.MODELES_API.get(e.modele or "", e.modele or "inconnu")
+        try:
+            regles.lancer(projet, "usage", {"modele": modele, "agent": e.agent, "tache": e.tache, "total": e.estime})
+        except (regles.Refus, regles.ErreurMoteur) as ex:
+            self._noter(projet, f"usage estimé non noté : {ex}")
 
     @staticmethod
     def _produit(e):

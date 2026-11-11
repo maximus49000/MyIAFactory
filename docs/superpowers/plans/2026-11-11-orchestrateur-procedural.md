@@ -260,11 +260,11 @@ def test_api_sans_cle_bascule_une_fois(self):
 - Usage d'un agent cloud : `lancer usage` avec `total` = `usage_estime` (estimé).
 - Avant d'écrire `lancer_session`, vérifier dans `claude --help` si `--cloud` accepte `--model` ; sinon noter le modèle par défaut sur la tâche et l'écrire dans la passation.
 
-- [ ] **Étape 1 : tests qui échouent** : `test_lancer_session_pousse_puis_lance`, `test_lancer_session_rend_session_et_adresse`, `test_rapport_trouve_sur_branche_claude`, `test_rapport_absent_rien_rendu`, `test_fusion_conflit_annule_et_rend_raison`, `test_retour_cloud_applique_puis_fusionne`, `test_conflit_pose_decision_avec_adresse`, `test_usage_cloud_estime`, `test_accord_cloud_envoie_suite_meme_session`, `test_limite_agents_cloud`, `test_session_muette_deux_heures_pose_decision`, `test_sans_github_bascule_en_local_et_le_dit`, `test_depart_cloud_demande_rapport_commite`.
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** `moteur/cloud.py` et les modifications.
-- [ ] **Étape 4 : lancer toute la suite** : verte.
-- [ ] **Étape 5 : commit** `Moteur : les agents cloud (sessions Claude Code, coût estimé)`.
+- [x] **Étape 1 : tests qui échouent** : `test_lancer_session_pousse_puis_lance`, `test_lancer_session_rend_session_et_adresse`, `test_rapport_trouve_sur_branche_claude`, `test_rapport_absent_rien_rendu`, `test_fusion_conflit_annule_et_rend_raison`, `test_retour_cloud_applique_puis_fusionne`, `test_conflit_pose_decision_avec_adresse`, `test_usage_cloud_estime`, `test_accord_cloud_envoie_suite_meme_session`, `test_limite_agents_cloud`, `test_session_muette_deux_heures_pose_decision`, `test_sans_github_bascule_en_local_et_le_dit`, `test_depart_cloud_demande_rapport_commite`.
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** `moteur/cloud.py` et les modifications.
+- [x] **Étape 4 : lancer toute la suite** : verte.
+- [x] **Étape 5 : commit** `Moteur : les agents cloud (sessions Claude Code, coût estimé)`.
 
 ## Étape 4 — le banc d'essai
 

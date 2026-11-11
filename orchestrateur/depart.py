@@ -118,6 +118,16 @@ Si une dépense ou un changement de partenaire ou le navigateur demande l'accord
 `statut: outil_refuse` avec `"outil": "<son nom>"`."""
 
 
+def fin_cloud(tache_id):
+    """La consigne d'un agent cloud : personne ne lit sa réponse, le moteur lit son dépôt."""
+    return (f"""## Rends ton rapport par le dépôt
+Ta réponse n'est lue par personne : le moteur relève ton travail dans le dépôt. Quand tu as fini (ou que tu dois
+t'arrêter, par exemple pour un accord de l'utilisateur), **écris le bloc JSON demandé ci-dessus dans le fichier
+`.factory/rapports/{tache_id}.json`** (le JSON seul, sans texte autour), **commite-le sur ta branche `claude/…` avec
+ton travail et pousse**. Ajoute-y `"usage_estime"` : ton estimation, en nombre entier, des tokens employés. Sans ce
+fichier poussé, ton travail n'existe pas pour la factory.""")
+
+
 def _bloc_tache(tache):
     t = [f"- Tâche : {tache.get('titre', '')} ({tache.get('id', '?')})"]
     for cle, nom in (("fonctionnalite", "Fonctionnalité"), ("element", "Élément"), ("etape", "Étape")):
@@ -177,6 +187,8 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
         parties.append(_regles_partenaires(regles))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE)
+    if fiche["lieu"] == "cloud":
+        parties.append(fin_cloud(tache.get("id", "?")))
     return "\n\n".join(parties) + "\n"
 
 
@@ -210,4 +222,6 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
                    .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))
+    if fiche["lieu"] == "cloud":
+        parties.append(fin_cloud(taches[0].get("id", "?")))
     return "\n\n".join(parties) + "\n"

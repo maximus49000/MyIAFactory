@@ -23,8 +23,10 @@ class Execution:
     """Le résultat d'un agent : `rapport` (lu) ou `erreur` (jamais les deux), `usages` (un par modèle, tous les appels
     cumulés), `usage` (le principal), `tache` et `lot` (ce que l'agent servait)."""
 
-    def __init__(self, tache, agent, lot=None, rapport=None, usages=None, erreur=None):
+    def __init__(self, tache, agent, lot=None, rapport=None, usages=None, erreur=None, estime=None, modele=None):
         self.tache, self.agent, self.lot, self.rapport, self.erreur = tache, agent, lot, rapport, erreur
+        self.estime = estime      # un agent cloud : le total de tokens qu'il déclare (une estimation, pas une mesure)
+        self.modele = modele      # le modèle demandé (« haiku », « sonnet », « opus »)
         self.usages = usages or []
         self.usage = self.usages[0] if self.usages else dict(USAGE_VIDE)
 

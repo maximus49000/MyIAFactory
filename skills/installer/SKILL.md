@@ -104,8 +104,11 @@ Tailscale et le Wi-Fi que si le mobile est retenu.
     trafic n'y est pas chiffré** : dis-le au moment du choix. `reseau_local` donne l'adresse (nulle : pas de réseau
     privé détecté).
   Les deux peuvent être ouverts. Sans mobile, rien n'est ouvert : le bureau reste sur l'ordinateur seul.
-- **Agents cloud, ou local seulement ?** Le cloud sert surtout aux tâches longues ou parallèles ; chaque session cloud
-  est créée par l'utilisateur.
+- **Agents cloud, ou local seulement ?** Le cloud sert surtout aux tâches longues ou parallèles ; le moteur lance
+  lui-même chaque session cloud de Claude Code (sur l'abonnement), qui travaille sur une branche `claude/…` du dépôt
+  GitHub du projet. Leur coût est une **estimation**. Il faut donc un projet **sur GitHub** et `claude` connecté au
+  compte claude.ai : `outil.py proposer` rend `prerequis_cloud` (la raison s'il manque quelque chose, sinon `null`) ;
+  dis-la, et propose de créer le dépôt (projet vide). Sans eux, le moteur prend l'agent local équivalent et le dit.
 - **Les décisions de l'orchestrateur : abonnement ou clé API ?** Le moteur de la factory décide par de petits appels
   à une IA. Par défaut ils passent par l'abonnement (`claude -p`), sans frais en plus ; l'API d'Anthropic est une
   option, **facturée à part**. Pose la question de `proposition.question_api()` (lis son texte dans

@@ -10,8 +10,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 
 | Phase | Modèle proposé | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|
-| A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | à faire : **c'est la prochaine phase** |
-| B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | à faire |
+| A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | **faite** le 2026-11-11 |
+| B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | à faire : **c'est la prochaine phase** |
 | C | Sonnet 5.5 | 8 à 10 : démarrage et option API, scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire |
 | D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire |
 
@@ -41,6 +41,30 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
 ## Notes laissées par les phases
 
 (Écarts au plan, choix faits, points à surveiller.)
+
+**Phase A (Opus 5.5).**
+- `moteur/appel.py` : en plus du contrat, `Reponse.usages` (un usage par modèle, le principal d'abord ; `Reponse.usage`
+  est le principal) et `Reponse.cout_usd` ; `ErreurAppel.usages` garde ce qu'un appel raté a coûté (point d'attention
+  2 : la tâche 5 le note quand même). **La boucle doit noter chaque élément de `usages`** (`lancer usage` ne prend
+  qu'un modèle par ligne ; un agent `claude -p` peut en employer plusieurs).
+- Commande d'un **agent** (`outils` non vide) : le prompt de Claude Code est gardé (`--append-system-prompt-file`
+  pour le départ), `--tools` reçoit les noms d'outils, `--allowedTools` les règles (`Bash(py:*)`), et
+  `--permission-prompts none` refuse tout le reste sans attendre ; session gardée pour la reprise ; pas de MCP, pas de
+  réglages. Essayé en vrai (Haiku, `Read`) : 0,0015 $, environ 13 700 tokens d'entrée. Sans `dossier_travail`, un
+  jugement tourne dans un dossier temporaire vide.
+- `ANTHROPIC_API_KEY` est **retirée de l'environnement de `claude -p`** : sinon Claude Code facturerait les agents
+  sur la clé API au lieu de l'abonnement dès que l'option API est activée.
+- `trouver_claude()` : PATH, puis l'installation de l'application Claude (voir « Mesures »). Le bureau
+  (`bureau/demarrage.py`) ne cherche que dans le PATH : à aligner en tâche 8.
+- `moteur/jugement.py` : `extraire_json` (dernier bloc ```json, sinon le texte, sinon les accolades) et `CLE_ERREUR`
+  (clé ajoutée au dossier pour le second essai) sont publics. Un `ErreurAppel` compte comme un essai raté. Le
+  docstring liste les clés de dossier attendues par type : la tâche 6 les remplit.
+- Conseil : `transmettre_agent` prend `{"consigne", "agent"?}`, `poser_decision` `{"texte"}`, `lancer`
+  `{"commande", "entree"}` (commande connue, hors commandes du bureau, `lecon` et `genre`). À l'essai, le modèle a mis
+  un **rôle** (« dev ») dans `agent` : la tâche 6 doit accepter une clé ou un rôle (`agent-libre`).
+- Essai réel des cinq consignes sur un petit dossier synthétique : toutes valides au premier essai ; 1 500 à 1 800
+  tokens d'entrée par appel ; `decouper` 713 tokens de sortie, `ecrire_methode` 2 310 (Sonnet). Ordre de grandeur
+  d'une fonctionnalité : moins de 0,05 $ de jugement.
 
 ## Messages à coller
 

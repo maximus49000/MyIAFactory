@@ -42,10 +42,10 @@
 
 Pas de test : c'est une mesure qui fixe la commande de la tâche 2.
 
-- [ ] **Étape 1 : lire `claude --help`** et retenir les options qui coupent les outils, le prompt système par défaut, les serveurs MCP et les réglages du dossier, et la sortie JSON (`--output-format json`, `--model`).
-- [ ] **Étape 2 : écrire `outils/mesurer_appel.py`** : lance 3 fois, sur Haiku puis Sonnet, `claude -p` avec la commande la plus dépouillée trouvée et le prompt « Réponds {"ok":true} », dans un dossier temporaire vide ; affiche par appel les tokens d'entrée, de cache (lecture, écriture), de sortie et `total_cost_usd`.
-- [ ] **Étape 3 : lancer** `py -3.12 outils/mesurer_appel.py` et noter dans la passation : la commande retenue, les tokens d'un appel vide, son coût. Règle : si un appel vide Haiku coûte plus de 0,004 $ (soit 25 appels pour 0,10 €), écrire « couche API conseillée » dans la passation.
-- [ ] **Étape 4 : commit** `git add outils/mesurer_appel.py docs/superpowers/plans/2026-11-11-orchestrateur-procedural-passation.md` puis `git commit -m "Moteur : mesure d'un appel claude -p vide"`.
+- [x] **Étape 1 : lire `claude --help`** et retenir les options qui coupent les outils, le prompt système par défaut, les serveurs MCP et les réglages du dossier, et la sortie JSON (`--output-format json`, `--model`).
+- [x] **Étape 2 : écrire `outils/mesurer_appel.py`** : lance 3 fois, sur Haiku puis Sonnet, `claude -p` avec la commande la plus dépouillée trouvée et le prompt « Réponds {"ok":true} », dans un dossier temporaire vide ; affiche par appel les tokens d'entrée, de cache (lecture, écriture), de sortie et `total_cost_usd`.
+- [x] **Étape 3 : lancer** `py -3.12 outils/mesurer_appel.py` et noter dans la passation : la commande retenue, les tokens d'un appel vide, son coût. Règle : si un appel vide Haiku coûte plus de 0,004 $ (soit 25 appels pour 0,10 €), écrire « couche API conseillée » dans la passation.
+- [x] **Étape 4 : commit** `git add outils/mesurer_appel.py docs/superpowers/plans/2026-11-11-orchestrateur-procedural-passation.md` puis `git commit -m "Moteur : mesure d'un appel claude -p vide"`.
 
 ### Tâche 2 : la couche d'appel
 
@@ -62,7 +62,7 @@ Pas de test : c'est une mesure qui fixe la commande de la tâche 2.
 - `modele` est `"haiku"`, `"sonnet"` ou `"opus"` ; `"fable"` lève `ErreurAppel` avant tout appel.
 - `executer(argv: list[str], entree: bytes, env: dict, cwd: str | None, delai_s: int) -> tuple[int, bytes]` pour `claude` ; pour l'API, `executer(url: str, corps: bytes, entetes: dict) -> tuple[int, bytes]`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent**
+- [x] **Étape 1 : écrire les tests qui échouent**
 
 ```python
 def test_claude_p_rend_texte_et_usage(self):
@@ -100,10 +100,10 @@ def test_api_sans_cle_bascule_une_fois(self):
     self.assertEqual(appel.choisir_couche({}, {"ANTHROPIC_API_KEY": "x"}), ("claude", None))
 ```
 
-- [ ] **Étape 2 : lancer** `py -3.12 -m unittest tests.test_moteur_appel -v` : échec (module absent).
-- [ ] **Étape 3 : écrire `moteur/appel.py`** : la commande `claude` est celle notée en tâche 1 ; la consigne passe en prompt système par fichier temporaire ou entrée standard, le dossier par l'entrée standard ; `reprendre` ajoute la reprise de session (pour l'agent seul du banc) ; `outils` vide = aucun outil. Modèles API : `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` ; la clé est lue dans `os.environ` au moment de l'appel. Si la forme exacte de `--output-format json` diffère du test (noms des champs d'usage), aligner le test sur la sortie réelle relevée en tâche 1.
-- [ ] **Étape 4 : lancer les tests** : verts.
-- [ ] **Étape 5 : commit** `Moteur : la couche d'appel (claude -p, API en option)`.
+- [x] **Étape 2 : lancer** `py -3.12 -m unittest tests.test_moteur_appel -v` : échec (module absent).
+- [x] **Étape 3 : écrire `moteur/appel.py`** : la commande `claude` est celle notée en tâche 1 ; la consigne passe en prompt système par fichier temporaire ou entrée standard, le dossier par l'entrée standard ; `reprendre` ajoute la reprise de session (pour l'agent seul du banc) ; `outils` vide = aucun outil. Modèles API : `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` ; la clé est lue dans `os.environ` au moment de l'appel. Si la forme exacte de `--output-format json` diffère du test (noms des champs d'usage), aligner le test sur la sortie réelle relevée en tâche 1.
+- [x] **Étape 4 : lancer les tests** : verts.
+- [x] **Étape 5 : commit** `Moteur : la couche d'appel (claude -p, API en option)`.
 
 ### Tâche 3 : les appels de jugement
 
@@ -125,11 +125,11 @@ def test_api_sans_cle_bascule_une_fois(self):
   - `apres_refus` : `{"suite": "corriger" | "methode_a_revoir" | "bloquer", "consigne": str | null, "raison": str}` ;
   - `conseil` : `{"action": une de ACTIONS_CONSEIL, "parametres": dict, "reponse": str}` ; `lancer` exige `parametres.commande` hors `COMMANDES_DU_BUREAU` et hors `lecon`/`genre`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** : une réponse valide par type rend `objet` ; `test_reponse_invalide_redemandee_une_fois` (premier appel invalide, second valide → `objet`, deux usages, le second dossier contient l'erreur) ; `test_reponse_invalide_deux_fois_devient_question` (→ `question` non vide, deux usages) ; `test_json_entoure_de_texte_est_lu` (le bloc ```json … ``` est extrait) ; `test_conseil_refuse_commande_lecon` ; `test_dossier_ne_contient_que_ses_cles` (le texte envoyé ne contient que les clés du dossier, sérialisées une fois).
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire `moteur/jugement.py` et les cinq consignes.** Chaque consigne fait au plus 40 lignes : ce qu'il faut décider (repris de la section concernée de `consignes.md`), la forme JSON exacte, « réponds seulement par ce JSON ». `decouper` et `ecrire_methode` reprennent mot pour mot les règles de `consignes.md` (élément qui se répète, groupes, méthode écrite, briefs, contrôles de départ). Aucune consigne ne nomme un projet.
-- [ ] **Étape 4 : lancer les tests** : verts.
-- [ ] **Étape 5 : commit** `Moteur : les appels de jugement et leurs consignes`.
+- [x] **Étape 1 : écrire les tests qui échouent** : une réponse valide par type rend `objet` ; `test_reponse_invalide_redemandee_une_fois` (premier appel invalide, second valide → `objet`, deux usages, le second dossier contient l'erreur) ; `test_reponse_invalide_deux_fois_devient_question` (→ `question` non vide, deux usages) ; `test_json_entoure_de_texte_est_lu` (le bloc ```json … ``` est extrait) ; `test_conseil_refuse_commande_lecon` ; `test_dossier_ne_contient_que_ses_cles` (le texte envoyé ne contient que les clés du dossier, sérialisées une fois).
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire `moteur/jugement.py` et les cinq consignes.** Chaque consigne fait au plus 40 lignes : ce qu'il faut décider (repris de la section concernée de `consignes.md`), la forme JSON exacte, « réponds seulement par ce JSON ». `decouper` et `ecrire_methode` reprennent mot pour mot les règles de `consignes.md` (élément qui se répète, groupes, méthode écrite, briefs, contrôles de départ). Aucune consigne ne nomme un projet.
+- [x] **Étape 4 : lancer les tests** : verts.
+- [x] **Étape 5 : commit** `Moteur : les appels de jugement et leurs consignes`.
 
 ## Étape 2 — les agents et la table de règles
 

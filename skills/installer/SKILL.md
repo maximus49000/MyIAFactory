@@ -11,7 +11,7 @@ en place après validation. Le projet doit être **prêt pour une première fonc
 ## Les règles
 
 - **Rien n'est écrit dans le projet avant que l'utilisateur ait validé la proposition.** Tes fichiers de travail
-  (JSON de la proposition) vont dans un dossier temporaire, hors du projet.
+  (JSON de la proposition) restent dans un dossier temporaire, hors du projet.
 - **Sobriété.** Une installation plus coûteuse en tokens qu'un néophyte gérant seul son projet avec Claude est un
   échec. Réponses courtes, une question à la fois, rien de lu sans raison.
 - **Viser juste.** Ne devine rien en silence : reformule, fais corriger. Une question de plus coûte moins que trois
@@ -77,7 +77,7 @@ Puis les questions communes (section 4).
 
 Confie la lecture à **un sous-agent Haiku**. Donne-lui le chemin du dossier et l'`inventaire` rendu par
 `examiner` (arbre, fichiers clés, extensions), et demande-lui : lire les fichiers clés, la documentation et un
-échantillon du code (quelques fichiers représentatifs, pas tout) ; rendre **un résumé du métier en 300 mots au plus** :
+échantillon du code (représentatif, pas tout) ; rendre **un résumé du métier en 300 mots au plus** :
 le domaine, ce que le projet produit et pour qui, ses outils, son état, ses conventions (tests, structure), et ce
 qu'un agent cloud devrait trouver dans son environnement (langage, version, dépendances, outils ; l'`environnement`
 rendu par `examiner` en donne une première liste). Ne lis pas le code toi-même.
@@ -97,24 +97,17 @@ Tailscale et le Wi-Fi que si le mobile est retenu.
 - **Le support de traitement** : ordinateur, mobile, ou les deux (choix multiple). Avec le mobile, le bureau doit être
   joignable du téléphone comme de l'ordinateur, vue 3D comprise. Lance `outil.py acces`, puis propose :
   - **Tailscale (par défaut)** : gratuit, chiffré, joignable de partout (4G comprise), rien d'exposé sur Internet.
-    L'utilisateur installe lui-même l'application sur l'ordinateur et sur le téléphone (tailscale.com/download, ou
-    le magasin d'applications du téléphone) et s'y connecte avec **le même compte** sur les deux. Tu n'installes
-    rien. Une fois fait, relance `outil.py acces` : `tailscale` doit donner une adresse.
-  - **Le Wi-Fi de la maison (secours)** : rien à installer, mais le téléphone doit être sur le même Wi-Fi, et **le
-    trafic n'y est pas chiffré** : dis-le au moment du choix. `reseau_local` donne l'adresse (nulle : pas de réseau
-    privé détecté).
-  Les deux peuvent être ouverts. Sans mobile, rien n'est ouvert : le bureau reste sur l'ordinateur seul.
-- **Agents cloud, ou local seulement ?** Le cloud sert surtout aux tâches longues ou parallèles ; le moteur lance
-  lui-même chaque session cloud de Claude Code (sur l'abonnement), qui travaille sur une branche `claude/…` du dépôt
-  GitHub du projet. Leur coût est une **estimation**. Il faut donc un projet **sur GitHub** et `claude` connecté au
-  compte claude.ai : `outil.py proposer` rend `prerequis_cloud` (la raison s'il manque quelque chose, sinon `null`) ;
-  dis-la, et propose de créer le dépôt (projet vide). Sans eux, le moteur prend l'agent local équivalent et le dit.
-- **Les décisions de l'orchestrateur : abonnement ou clé API ?** Le moteur de la factory décide par de petits appels
-  à une IA. Par défaut ils passent par l'abonnement (`claude -p`), sans frais en plus ; l'API d'Anthropic est une
-  option, **facturée à part**. Pose la question de `proposition.question_api()` (lis son texte dans
-  `<skill>/installation/proposition.py`), avec l'écart estimé, **défaut : non**. Ne demande jamais la clé dans la
-  discussion : si l'utilisateur dit oui, il la met lui-même dans la variable d'environnement `ANTHROPIC_API_KEY`
-  (sans elle, le moteur reste sur l'abonnement et le dit au bureau). Note la réponse dans `moteur` de la proposition.
+    L'utilisateur l'installe lui-même sur l'ordinateur (tailscale.com/download) et le téléphone (son magasin
+    d'applications), avec **le même compte** sur les deux ; tu n'installes rien. Puis relance `outil.py acces` :
+    `tailscale` doit donner une adresse.
+  - **Le Wi-Fi de la maison (secours)** : rien à installer, mais le téléphone doit être sur le même Wi-Fi et **le
+    trafic n'y est pas chiffré** : dis-le au choix. `reseau_local` donne l'adresse (nulle : pas de réseau privé).
+  Les deux peuvent être ouverts ; sans mobile, rien.
+- **Agents cloud, ou local seulement ?** Le cloud sert aux tâches longues ou parallèles ; le moteur lance les sessions
+  (abonnement, coût **estimé**) et exige un projet **sur GitHub** et `claude` connecté : `proposer` rend
+  `prerequis_cloud` (la raison) ; dis-la. Sans eux : un agent local.
+- **Clé API pour les décisions de l'orchestrateur ?** Pose `proposition.question_api()` (facturée à part), **défaut :
+  non**. Jamais la clé dans la discussion (l'utilisateur la met dans `ANTHROPIC_API_KEY`). Note `moteur` dans la proposition.
 - **La facturation est-elle un objectif du projet ?** Oui : une pièce Facturation et les prix automatiques. Non : pas
   de pièce dédiée.
 - **Projet vide : faut-il créer un dépôt GitHub ?** (Privé.)
@@ -185,18 +178,16 @@ Dis, sans plus :
 
 - **Si `pret` est faux** : l'installation n'est pas prête. Cite les lignes `ÉCART` de `verification` ; ne prétends
   pas le contraire.
-- **Les agents cloud** (`agents_cloud`), un par ligne : sa clé, son rôle, **le modèle sur lequel régler sa session**,
-  l'environnement (vide : environnement de base). C'est l'utilisateur qui crée chaque session et règle son modèle ;
-  tant qu'une session manque, l'orchestrateur le lui redemandera au bureau.
+- **Les agents cloud** (`agents_cloud`), un par ligne : sa clé, son rôle, son modèle, l'environnement (vide :
+  environnement de base). Rien à créer : le moteur lance leurs sessions.
 - **Le bureau** : lance-le toi-même, `outil.py bureau` (avec `--relancer` si `relancer_bureau` est vrai) ; il tourne
   en arrière-plan. Donne son `url` et ses `annonces`. Un refus (bureau lancé à la main) : dis-le tel quel.
 - **Avec le mobile** : ouvrir la page sur l'ordinateur ; « Associer un téléphone » ; scanner le QR code avec le
-  téléphone. Une adresse nulle dans `acces` veut dire qu'elle n'a pas été trouvée (Tailscale arrêté,
-  pas de Wi-Fi privé) : dis quoi vérifier.
-- **L'orchestrateur : démarre-le toi-même.** Si tu peux ouvrir une session, ouvre-la dans le dossier du projet,
-  sur le modèle de l'orchestrateur, avec `message_orchestrateur`. Sinon, `outil.py orchestrateur "<dossier>"` (une
-  fenêtre avec `claude`). S'il rend `a_copier`, donne ce message à coller dans une nouvelle conversation. Sans
-  orchestrateur, le bureau bloque les gestes.
+  téléphone. Une adresse nulle dans `acces` : non trouvée (Tailscale arrêté,
+  pas de Wi-Fi privé) ; dis quoi vérifier.
+- **L'orchestrateur : démarre-le toi-même**, `outil.py orchestrateur "<dossier>"` : le moteur démarre sans fenêtre
+  (un seul pour tous les projets). Refus : donne `message_orchestrateur` à coller dans une nouvelle
+  session. Sans orchestrateur, le bureau bloque les gestes.
 
 Le projet est prêt pour une première fonctionnalité : elle se lance depuis le bureau (« + Nouvelle fonctionnalité »).
 Arrête-toi là.

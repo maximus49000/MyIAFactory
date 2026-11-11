@@ -12,8 +12,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|
 | A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | **faite** le 2026-11-11 |
 | B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | **faite** le 2026-11-11 |
-| C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire : **c'est la prochaine phase** |
-| D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire |
+| C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | **faite** le 2026-11-11 |
+| D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire : **c'est la prochaine phase** |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
 
@@ -106,6 +106,50 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
   orphelines. La ligne « API sans clé » est dite dans la réponse de la première demande traitée du projet. Le verrou
   `moteur.pid` et le démarrage depuis le bureau sont en tâche 8 ; `py -3.12 -m moteur [--bureau …]` tourne déjà.
 
+**Phase C (Sonnet 5.5).**
+- **Démarrage** (`bureau/demarrage.py`, `moteur/verrou.py`) : « Lancer l'orchestrateur » lance `python -m moteur`
+  (l'interpréteur du bureau, sans fenêtre, détaché) une seule fois : le verrou `~/MyIAFactory/moteur.pid` porte le numéro
+  du processus (`pid_vivant` interroge le système, sous Windows `os.kill(pid, 0)` tuerait le processus). Fichier du
+  bureau s'il existe (`--bureau`), sinon ce seul projet (`--reglages`). Le moteur prend et rend le verrou lui-même ;
+  un second moteur refuse de démarrer (code 3). Sans `claude` (`appel.trouver_claude`) rien ne démarre.
+- **Réglages** (`bureau/reglages.py`) : `moteur.couche` (`claude` | `api`) et `agents_cloud_max` (1 à 16, 3) sont
+  contrôlés au chargement. L'installation pose la question de la clé API (`proposition.question_api()`, défaut non),
+  la proposition porte `moteur: {couche, ecart_estime}` (facultatif), la mise en place écrit `moteur.couche`.
+  **L'écart de coût donné par défaut** (`ECART_API_PAR_DEFAUT`, « environ 0,05 $ par fonctionnalité ») vient de l'essai de
+  la phase A : à remesurer en phase D.
+- **Facturation** (`bureau/cout.py`, page) : tout usage d'étape `orchestration` forme le groupe `orchestration`
+  (ligne « dont orchestration » dans « Tout le projet »), compté dans le total, hors direction. Le relevé efface
+  l'agent `orchestrateur` (agent inconnu) mais garde l'étape : c'est elle qui identifie ces usages.
+- **Agents cloud** (`moteur/cloud.py`, `boucle.py`, `regles.py`) : sessions Claude Code sur l'abonnement.
+  `lancer_session` pousse le dépôt puis `claude --cloud "<départ>" --model <m>` ; la session et l'adresse se lisent dans
+  la sortie (une adresse `https://claude.ai/code/…` ou un identifiant `session_…`/uuid). **Non essayé en vrai** : la
+  forme exacte de la sortie de `claude --cloud` et la prise en compte de `--model` par une session cloud (l'aide dit
+  « Model for the current session ») sont à vérifier au premier essai réel ; le modèle demandé est écrit au journal de la
+  tâche (« Session cloud <id> (<modèle>) »). Un départ de plus de 24 000 caractères est refusé (ligne de commande
+  Windows). Le rapport se relève toutes les minutes (`git fetch`, branches `claude/…`, `.factory/rapports/<tâche>.json`),
+  la branche est fusionnée après le commit du moteur, un conflit devient un **message à choix** (branche + adresse de la
+  session). Usage cloud = `usage_estime` du rapport, noté en `total` (estimation). Local d'abord, cloud en renfort (aucun
+  agent local libre du modèle voulu), dans la limite de `agents_cloud_max` ; sans GitHub ou sans `claude`, l'agent
+  local équivalent (autre modèle du rôle) prend la tâche et le bureau le lit une fois. Session muette depuis 2 heures :
+  message à choix (attendre, relancer, abandonner). L'accord en cours de tâche envoie la suite à la même session
+  (`claude -p … --cloud <session>`). Après un arrêt du moteur, la session d'une tâche cloud active est retrouvée
+  dans le journal de la tâche. Plus aucune décision `session_cloud` n'est posée (la demande reste acceptée).
+  L'installation (`outil.py proposer`) rend `prerequis_cloud` (la raison s'il manque GitHub ou `claude`, sinon `null`).
+- **Banc** (`banc/`) : `scenario.py` (format v1 ; `attend_l_utilisateur` = aucune tâche active ni en attente de départ),
+  `rejoueur.py` (clé `(étape, rôle, rang)`, rapports de même clé rendus dans l'ordre, fichiers écrits dans le projet du
+  banc, écart noté sans échec), `jouer.py` (le moteur sur le scénario : seuls les jugements sont réels), `construire.py`
+  (refuse une sortie dans le dépôt), `reference.py`, `agent_seul.py`, `rapport.py`, `mesures.py`, `__main__.py`
+  (`construire`, `reference`, `moteur`, `agent-seul`, `rapport`, sorties sous `~/MyIAFactory/bancs/<nom>/`).
+  Le scénario synthétique (`banc/exemples/synthetique.json`) tient en 10 tours et 3 appels de jugement (découpage,
+  méthode, après-refus). `moteur` et `agent-seul` appellent **vraiment** `claude -p` : ne les lancer qu'avec l'accord
+  de l'utilisateur (phase D).
+- **À savoir pour la phase D** : `construire` déduit l'étape de chaque rapport de l'essai par heuristique (voir son
+  docstring) et le verdict d'une relecture d'après les puces de son texte ; les images d'une demande sont reprises en
+  base64 seulement si leur fichier existe encore ; les rapports d'un lot de l'essai sont rangés tâche par tâche alors
+  que le moteur peut faire un lot (un seul rapport) : des écarts en résultent, ce n'est pas un échec. L'agent seul
+  reçoit chaque geste de l'essai comme message (verdicts traduits en phrases) ; une réponse qui finit par « ? » compte
+  comme une question. Ni l'un ni l'autre n'est essayé en vrai.
+
 ## Messages à coller
 
 **Phase A — Opus 5.5 — dans ce dépôt**
@@ -126,7 +170,7 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
 
 ## Fin de phase
 
-1. Toute la suite verte (`py -3.12 -m unittest discover -s tests -v`, `node --test "bureau/web/tests/*.test.js"`).
+1. Toute la suite verte : `py -3.12 outils/tests.py` (Python en parallèle et page, environ 70 s ; elle remplace `unittest discover` et `node --test`). **Seulement ici** : pendant le travail, chaque commit ne lance que les tests concernés, `py -3.12 outils/tests.py <mots>` (par exemple `moteur banc` pour les fichiers `tests/test_*moteur*.py` et `test_*banc*.py`).
 2. Cocher les tâches faites dans le plan, mettre à jour « Où on en est » et les notes.
 3. Commit (ses seuls fichiers) et push.
 4. Annoncer la phase suivante, son modèle et son message à coller.

@@ -12,7 +12,7 @@
 
 ## Contraintes globales
 
-- Python 3.12, bibliothèque standard seulement ; tests `py -3.12 -m unittest discover -s tests -v` et `node --test "bureau/web/tests/*.test.js"`, tous verts à chaque commit.
+- Python 3.12, bibliothèque standard seulement ; tests tous verts à chaque commit. **Pendant le travail**, chaque commit ne lance que les tests concernés : `py -3.12 outils/tests.py <mots>` (les fichiers `tests/test_*<mot>*.py`, par exemple `moteur banc`). **La suite complète**, `py -3.12 outils/tests.py` (Python en parallèle, page comprise, environ 70 s), ne tourne qu'**en fin de phase** (`MYIAFACTORY_TESTS_CLI=1` remet les vrais processus pour les commandes de l'outil).
 - Le moteur n'écrit dans un projet **que** par `lancer <commande>` (fonction `executer`), jamais par les fonctions internes de `outil.py` : un adaptateur de projet reste respecté.
 - **Aucun appel réel** à `claude` ni à l'API dans les tests : la couche d'appel et le lanceur d'agents prennent un exécuteur injectable.
 - Fable n'est jamais choisi par le moteur (refus en code avant tout appel).
@@ -295,8 +295,8 @@ def test_api_sans_cle_bascule_une_fois(self):
 - `rapport(resultats: dict, attendu: list[str]) -> str` (Markdown) : par façon de faire, appels, tokens, coût, part orchestration / production, questions, attendu coché, écarts ; et les trois objectifs (≤ 0,10 €, total moteur < agent seul, même résultat) marqués tenus ou non.
 - `py -3.12 -m banc construire|moteur|agent-seul|rapport …` ; sorties sous `~/MyIAFactory/bancs/<nom>/`.
 
-- [ ] **Étape 1 : tests qui échouent** : `test_construire_refuse_une_sortie_dans_le_depot`, `test_reference_exclut_les_sous_agents`, `test_reference_compte_un_appel_par_message`, `test_agent_seul_compte_les_questions`, `test_rapport_marque_les_objectifs`.
-- [ ] **Étape 2 à 5 : lancer (échec), écrire, lancer (vert), commit** `Banc : construire, référence, agent seul, rapport`.
+- [x] **Étape 1 : tests qui échouent** : `test_construire_refuse_une_sortie_dans_le_depot`, `test_reference_exclut_les_sous_agents`, `test_reference_compte_un_appel_par_message`, `test_agent_seul_compte_les_questions`, `test_rapport_marque_les_objectifs`.
+- [x] **Étape 2 à 5 : lancer (échec), écrire, lancer (vert), commit** `Banc : construire, référence, agent seul, rapport`.
 
 ## Étape 5 — le vrai passage (avec l'utilisateur)
 

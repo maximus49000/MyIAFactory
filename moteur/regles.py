@@ -28,6 +28,7 @@ from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import outil
 from orchestrateur import suivi as su
+from orchestrateur import workflows as wf
 
 CLOUD_RELIRE_S = 300
 ROLE_CADRAGE = "cadrage"
@@ -146,25 +147,49 @@ def _factory(projet):
         raise ErreurMoteur(str(e))
 
 
-def _production(projet):
-    """Les étapes du flux que le moteur enchaîne pour un élément (la relecture croisée tient lieu de l'étape du
-    relecteur)."""
-    flux = _factory(projet)["flux"]
+def _flux(projet, fid=None):
+    """Les étapes du workflow de la fonctionnalité `fid` (le principal sans fonctionnalité, ou si elle n'a pas le sien) ;
+    vide si le projet n'a aucun workflow."""
+    fonc = None
+    if fid:
+        try:
+            fonc = _fonc(projet, fid)
+        except Refus:
+            fonc = None
+    w = wf.de_la_fonctionnalite(_factory(projet), fonc)
+    return w["flux"] if w else []
+
+
+def _production(projet, fid=None):
+    """Les étapes du workflow de la fonctionnalité que le moteur enchaîne pour un élément (la relecture croisée tient
+    lieu de l'étape du relecteur)."""
+    flux = _flux(projet, fid)
     return [s for s in flux if s["role"] != ROLE_RELECTURE] or flux
 
 
-def _role_cadrage(projet):
+def _role_cadrage(projet, fid=None):
     """Le rôle qui cadre : `cadrage` si un agent l'a ; sinon celui d'un agent du service Métier ; sinon celui de la
-    première étape de production (un projet sans agent dédié : le spécialiste cadre lui-même)."""
+    première étape de production du workflow de la fonctionnalité (un projet sans agent dédié : le spécialiste cadre
+    lui-même)."""
     agents = _etat(projet)["agents"]
     if any(a["role"] == ROLE_CADRAGE for a in agents):
         return ROLE_CADRAGE
     metier = next((a["role"] for a in agents if a.get("service") == "metier"), None)
-    return metier or _production(projet)[0]["role"]
+    return metier or _role_production(projet, fid, agents)
 
 
-def _colonne_du_role(projet, role):
-    flux = _factory(projet)["flux"]
+def _role_production(projet, fid=None, agents=None):
+    """Le rôle de la première étape de production du workflow ; sans workflow, celui de cadrage."""
+    production = _production(projet, fid)
+    if production:
+        return production[0]["role"]
+    return next((a["role"] for a in agents if a["role"] != ROLE_RELECTURE), ROLE_CADRAGE) if agents else ROLE_CADRAGE
+
+
+def _colonne_du_role(projet, role, fid=None):
+    flux = _flux(projet, fid)
+    if not flux:
+        return "cadrage"
     return next((s["id"] for s in flux if s["role"] == role), flux[-1]["id"])
 
 
@@ -228,7 +253,7 @@ def _poser(projet, fid, genre, texte):
 
 def _creer_tache(projet, titre, fid, role, etape, *, element=None, journal=None, colonne=None, **plus):
     e = {"titre": titre, "fonctionnalite": fid, "role": role, "etape": etape, "active": False,
-         "colonne": colonne or _colonne_du_role(projet, role), **plus}
+         "colonne": colonne or _colonne_du_role(projet, role, fid), **plus}
     if element:
         e["element"] = element
     if journal:
@@ -302,7 +327,7 @@ def _sur_cahier(projet, demande, etat):
         _lever(projet, f, "valider_cahier")
         dossier = {"fonctionnalite": {"nom": f["nom"], "cahier": {"maquette": cahier.get("maquette"),
                                                                     "etapes": cahier.get("etapes")}},
-                   "flux": [{"id": s["id"], "nom": s["nom"], "role": s["role"]} for s in _production(projet)],
+                   "flux": [{"id": s["id"], "nom": s["nom"], "role": s["role"]} for s in _production(projet, fid)],
                    "methodes_validees": _methodes_validees(projet, fid),
                    "consignes_propres": _consignes_propres(projet)}
         return [a_juger("decouper", dossier, {"demande": demande["id"], "fonctionnalite": fid})]
@@ -317,8 +342,8 @@ def _sur_cahier(projet, demande, etat):
 
 def _methodes_validees(projet, fid):
     court = _etat(projet)
-    flux = [s["id"] for s in _factory(projet)["flux"]]
-    return [{"fonctionnalite": f["id"], "nom": f["nom"], "version": f["methode"].get("version"), "flux": flux}
+    return [{"fonctionnalite": f["id"], "nom": f["nom"], "version": f["methode"].get("version"),
+             "flux": [s["id"] for s in _flux(projet, f["id"])]}
             for f in court["fonctionnalites"] if f["id"] != fid and f.get("methode") and f["methode"].get("validee_le")]
 
 
@@ -334,7 +359,7 @@ def _sur_methode(projet, demande, etat):
         return []
     if verdict in ("valider", "adapter"):
         dossier = {"fonctionnalite": {"id": fid, "nom": f["nom"]}, "cahier": f.get("cahier"),
-                   "flux": [{"id": s["id"], "role": s["role"]} for s in _production(projet)],
+                   "flux": [{"id": s["id"], "role": s["role"]} for s in _production(projet, fid)],
                    "prototype": {"discussion": f["discussion"][-30:],
                                  "element": _element_du_prototype(projet, etat, f)},
                    "controles": _controles_du_registre(projet)}
@@ -437,7 +462,7 @@ def _sur_session_cloud(projet, demande, etat):
 
 def _sur_retour(projet, demande, etat):
     t = _tache(projet, demande["tache"])
-    _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"), t.get("role") or _production(projet)[0]["role"],
+    _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"), t.get("role") or _role_production(projet, t.get("fonctionnalite")),
                        "retour", element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
     _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")
     return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
@@ -445,7 +470,7 @@ def _sur_retour(projet, demande, etat):
 
 def _sur_retour_element(projet, demande, etat):
     fid = demande["fonctionnalite"]
-    role = _production(projet)[0]["role"]
+    role = _role_production(projet, fid)
     tid = _creer_tache(projet, f"Retour sur l'élément {demande['element']}", fid, role, "retour",
                        element=demande["element"], journal=["Retour de l'utilisateur : " + demande["texte"]])
     v = _m(etat, "elements").get(f"{fid}/{demande['element']}")
@@ -525,7 +550,7 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     court = _etat(projet)
     agent = f.get("agent_cadrage")
     if agent is None:
-        agent = lancer(projet, "agent-libre", {"role": _role_cadrage(projet), "lieu": "local"})["agent"]
+        agent = lancer(projet, "agent-libre", {"role": _role_cadrage(projet, fid), "lieu": "local"})["agent"]
         if agent is None:
             return []     # `avancer` réessaie tant que la fonctionnalité attend une réponse
         lancer(projet, "fonctionnalite", {"id": fid, "agent_cadrage": agent})
@@ -572,7 +597,7 @@ def _retoucher_prototype(projet, etat, fid, consigne, element_id=None):
     if element is None:
         raise Refus("je ne sais pas quel élément sert de prototype")
     _m(etat, "prototype")[fid] = element
-    role = _production(projet)[0]["role"]
+    role = _role_production(projet, fid)
     _creer_tache(projet, f"Prototype : {element['nom']}", fid, role, "prototype", element=element["id"],
                  journal=[consigne])
     return _demarrer_en_attente(projet, etat, fid)
@@ -772,8 +797,9 @@ def _matiere(projet, etat, t):
         parties += [f"Élément : {t.get('element')}", f"Étape du flux : {etape[len(ETAPES_DE_FLUX):]}",
                     "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
                     "Registre des contrôles : relis-le avant de rendre l'élément."]
-        derniere = _production(projet)[-1]
-        if etape == ETAPES_DE_FLUX + derniere["id"] and len(_production(projet)) > 1 and _sans_relecteur(projet):
+        production = _production(projet, fid)
+        if (production and etape == ETAPES_DE_FLUX + production[-1]["id"] and len(production) > 1
+                and _sans_relecteur(projet)):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
@@ -974,7 +1000,7 @@ def _etat_element(etat, fid, element):
 
 
 def _tache_de_flux(projet, etat, v):
-    pas = _production(projet)
+    pas = _production(projet, v["fid"])
     s = pas[v["pas"]]
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
                        element=v["element"]["id"], colonne=s["id"])
@@ -989,7 +1015,7 @@ def _sans_relecteur(projet):
 
 def _apres_flux(projet, etat, v, r=None):
     v["pas"] += 1
-    if v["pas"] < len(_production(projet)):
+    if v["pas"] < len(_production(projet, v["fid"])):
         _tache_de_flux(projet, etat, v)
         return []
     if _sans_relecteur(projet):
@@ -1005,12 +1031,12 @@ def _lancer_relecture(projet, etat, v):
     """Le premier tour : deux relecteurs à contexte neuf, qui ne se voient pas ; les tours suivants : un seul, qui ne
     vérifie que les points corrigés. Sans relecteur, la dernière étape du flux est refaite."""
     if _sans_relecteur(projet):
-        v["phase"], v["pas"] = "flux", len(_production(projet)) - 1
+        v["phase"], v["pas"] = "flux", len(_production(projet, v["fid"])) - 1
         _tache_de_flux(projet, etat, v)
         return []
     v["phase"], v["rapports"] = "relecture", []
     v["attendus"] = RELECTEURS_PREMIER_TOUR if v["tour"] == 0 and v["corrections"] == 0 else 1
-    colonne = _colonne_du_role(projet, ROLE_RELECTURE)
+    colonne = _colonne_du_role(projet, ROLE_RELECTURE, v["fid"])
     for k in range(1, v["attendus"] + 1):
         journal = ([f"Tour {v['corrections'] + 1} : ne vérifie que ces points, et que la correction n'a rien cassé :"
                     + "".join(f"\n- {p}" for p in v.get("points") or [])] if v["corrections"] else None)
@@ -1248,7 +1274,7 @@ def _apres_apres_refus(projet, o, ctx, etat):
     fid, eid = ctx["fonctionnalite"], ctx["element"]
     v = _m(etat, "elements").get(f"{fid}/{eid}")
     if o["suite"] == "corriger":
-        role = _production(projet)[0]["role"]
+        role = _role_production(projet, fid)
         tid = _creer_tache(projet, f"Correction : {v['element']['nom'] if v else eid}", fid, role, "correction",
                            element=eid, journal=[o["consigne"]])
         if v:
@@ -1271,7 +1297,7 @@ def _apres_conseil(projet, o, ctx, etat):
         agents_ = _etat(projet)["agents"]
         voulu = p.get("agent")
         fiche = next((a for a in agents_ if a["cle"] == voulu), None) or next((a for a in agents_ if a["role"] == voulu), None)
-        role = fiche["role"] if fiche else _production(projet)[0]["role"]
+        role = fiche["role"] if fiche else _role_production(projet, fid)
         tid = _creer_tache(projet, "Demande : " + p["consigne"][:60], fid, role, "demande", journal=[p["consigne"]])
         if fiche and fiche["cle"] == voulu:    # un agent précis : il garde sa tâche
             lancer(projet, "tache", {"id": tid, "agent": voulu})

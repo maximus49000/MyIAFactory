@@ -304,6 +304,83 @@ class Ecrire(Base):
             self.assertEqual(code, 1, entree)
 
 
+FICHE_NINA = ("Clé : sty-1\nPrénom : Nina\nRôle : style\nService : dev\nModèle : Sonnet\nLieu : local\n\n"
+              "Met en forme.\n\n## Leçons\n")
+FICHE_PAUL = FICHE_NINA.replace("sty-1", "liv-1").replace("Nina", "Paul").replace("style", "livreur")
+
+
+def etape(i, role, nom=None):
+    return {"id": i, "nom": nom or i, "role": role, "service": "dev"}
+
+
+class WorkflowParFonctionnalite(Base):
+    """Chaque fonctionnalité suit les étapes de son workflow (conception, section 5, point 5)."""
+
+    def deux_workflows(self):
+        (self.dossier / "fiches" / "nina.md").write_text(FICHE_NINA, encoding="utf-8")
+        (self.dossier / "fiches" / "paul.md").write_text(FICHE_PAUL, encoding="utf-8")
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["workflows"] = [
+            {"id": "w-f1", "fonctionnalite": "f1", "genre": "badges",
+             "flux": [etape("f1-dev", "dev"), etape("f1-style", "style")]},
+            {"id": "w-f2", "fonctionnalite": "f2", "genre": "jeu-android",
+             "flux": [etape("f2-dev", "dev"), etape("f2-livraison", "livreur", "Livraison")]}]
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+
+    def deux_fonctionnalites(self):
+        self.deux_workflows()
+        for texte in ("Des badges", "Un casse-briques"):
+            self.ok("actions", entree={"type": "fonctionnalite", "texte": texte})
+        for d in self.demande_en_attente():
+            self.ok("demande-traitee", entree={"id": d["id"]})
+        for fid, w, element in (("f1", "w-f1", "e1"), ("f2", "w-f2", "e2")):
+            self.ok("fonctionnalite", entree={"id": fid, "etape": "serie", "workflow": w, "agent_cadrage": "metier-1",
+                                              "methode": {"version": 1, "chemin": "pieces/m.md", "validee_le": "2026-11-12T10:00:00+01:00"}})
+            self.ok("file", entree={"fonctionnalite": fid, "elements": [{"id": element, "nom": element.upper(),
+                                                                          "groupe": "g"}]})
+
+    def etapes(self, fid):
+        return [t["etape"] for t in self.taches(fonctionnalite=fid) if str(t["etape"]).startswith("flux:")]
+
+    def test_serie_suit_le_workflow_de_la_fonctionnalite(self):
+        self.deux_fonctionnalites()
+        actions = regles.avancer(self.projet, self.etat)
+        premieres = {t["fonctionnalite"]: (t["role"], t["colonne"]) for t in self.taches()}
+        self.assertEqual(premieres, {"f1": ("dev", "f1-dev"), "f2": ("dev", "f2-dev")})
+        self.piloter(actions)
+        self.assertEqual(self.etapes("f1"), ["flux:f1-dev", "flux:f1-style"])
+        self.assertEqual(self.etapes("f2"), ["flux:f2-dev", "flux:f2-livraison"])
+        self.assertEqual({t["role"] for t in self.taches(fonctionnalite="f1", etape="flux:f1-style")}, {"style"})
+        self.assertEqual({t["role"] for t in self.taches(fonctionnalite="f2", etape="flux:f2-livraison")}, {"livreur"})
+
+    def test_decoupage_et_methodes_lisent_le_workflow_de_la_fonctionnalite(self):
+        self.deux_fonctionnalites()
+        self.ok("fonctionnalite", entree={"id": "f2", "etape": "cahier", "cahier": {"maquette": [PNG], "etapes": ["x"]}})
+        self.ok("decision", entree={"action": "poser", "portee": "f2", "genre": "valider_cahier", "texte": "ok ?"})
+        _, actions = self.traiter(type="cahier", fonctionnalite="f2", verdict="valider")
+        dossier = actions[0][2]
+        self.assertEqual([s["id"] for s in dossier["flux"]], ["f2-dev", "f2-livraison"])
+        self.assertEqual([m["flux"] for m in dossier["methodes_validees"]], [["f1-dev", "f1-style"]])
+
+    def test_cadrage_par_le_role_du_workflow(self):
+        self.deux_fonctionnalites()
+        (self.dossier / "fiches" / "hugo.md").unlink()      # personne ne cadre : le spécialiste de la 1re étape cadre
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["workflows"][0]["flux"][0]["role"] = "style"
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        self.assertEqual(regles._role_cadrage(self.projet, "f1"), "style")
+        self.assertEqual(regles._role_cadrage(self.projet, "f2"), "dev")
+        self.assertEqual(regles._role_cadrage(self.projet), "dev")       # sans fonctionnalité : le workflow principal
+
+    def test_projet_sans_workflow_ne_plante_pas(self):
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["flux"] = []
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        self.assertEqual(regles._production(self.projet, None), [])
+        self.assertEqual(regles._colonne_du_role(self.projet, "dev"), "cadrage")
+        self.assertEqual(regles._role_cadrage(self.projet, None), "cadrage")
+
+
 class Serie(Base):
     def test_serie_deux_elements_au_plus(self):
         self.serie(3)

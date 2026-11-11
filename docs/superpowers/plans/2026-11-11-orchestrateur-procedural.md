@@ -146,11 +146,11 @@ def test_api_sans_cle_bascule_une_fois(self):
   - `commandes(rapport: dict, *, fonctionnalite: str, tache: str, agent: str, etape: str) -> list[tuple[str, dict]]` : les `(commande, entree)` à passer à `lancer`, dans l'ordre : `message`, `document` (un par fichier), `controle`, `lecon` (`action: noter`).
 - `depart.message(...)` ajoute à sa consigne de fin le paragraphe « Termine ta réponse par un bloc ```json » avec cette forme, et : « Si une dépense ou un changement de partenaire ou le navigateur demande l'accord de l'utilisateur, arrête-toi et rends `statut: accord_requis` ».
 
-- [ ] **Étape 1 : tests qui échouent** : `test_lit_le_dernier_bloc_json`, `test_rapport_sans_bloc_illisible`, `test_commandes_dans_l_ordre` (message puis documents puis contrôles puis leçons, avec `auteur` = l'agent), `test_accord_requis_ne_rend_aucune_commande_de_production`, `test_depart_demande_le_bloc_json` (le message de `lancer depart` contient « bloc ```json » et « accord_requis »), `test_usage_accepte_orchestrateur` (`lancer usage` avec `agent: "orchestrateur"` sur un projet sans cette fiche : code 0).
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** `moteur/rapport.py`, la consigne de fin dans `depart.py`, l'exception `orchestrateur` dans `cmd_usage` (constante `AGENT_ORCHESTRATEUR = "orchestrateur"`).
-- [ ] **Étape 4 : lancer toute la suite** : verte (les tests existants de `depart` restent verts).
-- [ ] **Étape 5 : commit** `Moteur : le rapport structuré des agents`.
+- [x] **Étape 1 : tests qui échouent** : `test_lit_le_dernier_bloc_json`, `test_rapport_sans_bloc_illisible`, `test_commandes_dans_l_ordre` (message puis documents puis contrôles puis leçons, avec `auteur` = l'agent), `test_accord_requis_ne_rend_aucune_commande_de_production`, `test_depart_demande_le_bloc_json` (le message de `lancer depart` contient « bloc ```json » et « accord_requis »), `test_usage_accepte_orchestrateur` (`lancer usage` avec `agent: "orchestrateur"` sur un projet sans cette fiche : code 0).
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** `moteur/rapport.py`, la consigne de fin dans `depart.py`, l'exception `orchestrateur` dans `cmd_usage` (constante `AGENT_ORCHESTRATEUR = "orchestrateur"`).
+- [x] **Étape 4 : lancer toute la suite** : verte (les tests existants de `depart` restent verts).
+- [x] **Étape 5 : commit** `Moteur : le rapport structuré des agents`.
 
 ### Tâche 5 : lancer un agent
 

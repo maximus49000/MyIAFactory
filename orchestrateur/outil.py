@@ -46,6 +46,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "partenaire_regle", "partenaires_actualiser", "partenaires_maj")
+AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
 
@@ -983,7 +984,7 @@ def cmd_usage(ctx, e):
     cumuls : republier l'`id` avec des nombres plus grands, tant que l'exécution continue. Quand seul un `total` est
     connu (un sous-agent ne donne que lui), il compte comme des tokens d'entrée : le coût est alors une estimation basse."""
     agent, tache = e.get("agent"), e.get("tache")
-    if agent is not None and agent not in ctx.cles_agents():
+    if agent is not None and agent != AGENT_ORCHESTRATEUR and agent not in ctx.cles_agents():
         raise Refus(f"Agent inconnu : {agent}")
     if "agent_id" in e:   # les compteurs exacts du sous-agent, lus dans sa transcription locale
         e = {**e, **_compteurs_du_sous_agent(e["agent_id"])}

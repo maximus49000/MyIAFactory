@@ -12,7 +12,7 @@ BRUT = {
     "five_hour": {"utilization": 37.0, "resets_at": "2026-11-12T15:00:00+00:00"},
     "seven_day": {"utilization": 91.5, "resets_at": "2026-11-15T09:00:00+00:00"},
     "seven_day_fable": {"utilization": 12, "resets_at": None},
-    "extra_usage": None,
+    "extra_usage": {"utilization": 0.0, "resets_at": None},
     "seven_day_opus": {"utilization": "x"},
 }
 

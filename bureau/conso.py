@@ -19,6 +19,7 @@ DUREE_CACHE = 60.0
 LIBELLES = {"five_hour": "5 heures", "seven_day": "Semaine"}
 ORDRE = ("five_hour", "seven_day")
 PREFIXE_SEMAINE = "seven_day_"
+IGNOREES = ("extra_usage",)   # les crédits supplémentaires ne sont pas une fenêtre du forfait
 
 
 def _jeton(chemin):
@@ -56,7 +57,7 @@ def mettre_en_forme(brut):
     fenetres = []
     if isinstance(brut, dict):
         for cle, v in brut.items():
-            if not isinstance(v, dict) or isinstance(v.get("utilization"), bool):
+            if cle in IGNOREES or not isinstance(v, dict) or isinstance(v.get("utilization"), bool):
                 continue
             utilise = v.get("utilization")
             if not isinstance(utilise, (int, float)) or utilise != utilise:

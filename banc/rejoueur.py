@@ -14,7 +14,7 @@ import json
 from collections import defaultdict, deque
 from pathlib import Path
 
-from moteur import agents, rapport
+from moteur import agents, rapport, regles
 
 RIEN_A_REJOUER = "Rien à rejouer : le moteur a demandé un tour que l'essai de référence n'avait pas."
 
@@ -39,7 +39,10 @@ class Rejoueur:
     def __call__(self, depart, matiere, *, agent, modele, dossier_projet, tache=None, lot=None, **plus):
         t = self.decrire(tache)
         etape = t.get("etape") or ""
-        cle = (etape, t.get("role") or agent["role"], 0 if etape == "cadrage" else self.rang(t.get("element")))
+        if etape == "cadrage":    # le scénario range le cadrage sous le rôle `cadrage`, quel que soit l'agent qui cadre
+            cle = (etape, regles.ROLE_CADRAGE, 0)
+        else:
+            cle = (etape, t.get("role") or agent["role"], self.rang(t.get("element")))
         suivant = self.file[cle].popleft() if self.file[cle] else None
         if suivant is None:
             self.ecarts.append(f"Aucun rapport à rejouer pour {cle[0]} / {cle[1]} / rang {cle[2]} (tâche {tache}).")

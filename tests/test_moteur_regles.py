@@ -116,6 +116,16 @@ class Demandes(Base):
         self.assertEqual(self.fonc()["agent_cadrage"], "metier-1")
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
+    def test_sans_agent_de_cadrage_le_specialiste_de_la_premiere_etape_cadre(self):
+        """Un projet installé sans rôle `cadrage` ni service Métier (l'essai de référence) : le cadrage revient à
+        l'agent de la première étape de production, comme le faisait l'orchestrateur actuel."""
+        (self.dossier / "fiches" / "hugo.md").unlink()
+        _, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        self.assertEqual([a[0] for a in actions], ["agent"])
+        self.assertEqual(actions[0][1], "dev-1")
+        t = self.taches(etape="cadrage")[0]
+        self.assertEqual((t["agent"], t["colonne"], t["role"]), ("dev-1", "cadrage", "dev"))
+
     def test_cahier_valider_juge_decouper(self):
         self.cahier_a_valider()
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
@@ -428,11 +438,13 @@ class Arrets(Base):
         self.assertEqual(self.taches(etape="cadrage")[0]["colonne"], "fait")
 
     def test_agent_libre_manquant_attend(self):
-        (self.dossier / "fiches" / "hugo.md").unlink()
+        (self.dossier / "fiches" / "hugo.md").unlink()     # le cadrage revient à dev-1, qui est occupé
+        occupe = self.ok("tache", entree={"titre": "Autre chose", "role": "dev", "colonne": "dev", "agent": "dev-1",
+                                          "active": True})["id"]
         d, actions = self.traiter(type="fonctionnalite", texte="Des écrans")
         self.assertEqual(actions, [])
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
-        self.assertEqual(self.taches(), [])
+        self.assertEqual([t["id"] for t in self.taches()], [occupe])
 
 
 if __name__ == "__main__":

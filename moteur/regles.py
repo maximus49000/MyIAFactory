@@ -153,6 +153,16 @@ def _production(projet):
     return [s for s in flux if s["role"] != ROLE_RELECTURE] or flux
 
 
+def _role_cadrage(projet):
+    """Le rôle qui cadre : `cadrage` si un agent l'a ; sinon celui d'un agent du service Métier ; sinon celui de la
+    première étape de production (un projet sans agent dédié : le spécialiste cadre lui-même)."""
+    agents = _etat(projet)["agents"]
+    if any(a["role"] == ROLE_CADRAGE for a in agents):
+        return ROLE_CADRAGE
+    metier = next((a["role"] for a in agents if a.get("service") == "metier"), None)
+    return metier or _production(projet)[0]["role"]
+
+
 def _colonne_du_role(projet, role):
     flux = _factory(projet)["flux"]
     return next((s["id"] for s in flux if s["role"] == role), flux[-1]["id"])
@@ -509,7 +519,7 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     court = _etat(projet)
     agent = f.get("agent_cadrage")
     if agent is None:
-        agent = lancer(projet, "agent-libre", {"role": ROLE_CADRAGE, "lieu": "local"})["agent"]
+        agent = lancer(projet, "agent-libre", {"role": _role_cadrage(projet), "lieu": "local"})["agent"]
         if agent is None:
             return []     # `avancer` réessaie tant que la fonctionnalité attend une réponse
         lancer(projet, "fonctionnalite", {"id": fid, "agent_cadrage": agent})
@@ -520,7 +530,8 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     montee = ({"de": "Haiku", "a": dep.monter("Haiku"), "raison": "première analyse du besoin"}
               if premiere and fiche.get("modele") == "Haiku" else None)
     if tache is None:
-        tid = lancer(projet, "tache", {"titre": f"Cadrage : {f['nom']}", "fonctionnalite": fid, "role": ROLE_CADRAGE,
+        tid = lancer(projet, "tache", {"titre": f"Cadrage : {f['nom']}", "fonctionnalite": fid,
+                                       "role": fiche.get("role") or ROLE_CADRAGE,
                                        "colonne": "cadrage", "agent": agent, "etape": "cadrage", "active": False,
                                        "montee": montee})["id"]
     else:

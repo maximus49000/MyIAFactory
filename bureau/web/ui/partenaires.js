@@ -107,6 +107,26 @@ export function parties(donnees, filtre = "", tri = "catalogue") {
   return {connectes, conseilles, categories: parCategorie, total: toutes.size};
 }
 
+// Le tableau unique (essai réel) : tous les partenaires, chacun avec son état de connexion et ses conseils.
+// `type` : "tous", "connectes", "conseilles" ou une catégorie. Au tri du catalogue, les connectés puis les conseillés
+// viennent en tête ; au tri par popularité, l'ordre est celui de la popularité.
+export function lignes(donnees, {filtre = "", type = "tous", tri = "catalogue"} = {}) {
+  const p = parties(donnees, "", tri);
+  const conseils = new Map();
+  for (const x of p.conseilles) {
+    if (!conseils.has(x.carte.id)) conseils.set(x.carte.id, []);
+    conseils.get(x.carte.id).push({besoin: x.besoin, raison: x.raison});
+  }
+  let toutes = trier(p.categories.flatMap((g) => g.cartes), tri).map((c) => ({
+    carte: c, connecte: etatConnexion(donnees, c.id) === "connecte", conseils: conseils.get(c.id) || []}));
+  if (tri !== "popularite") {
+    const rang = (l) => (l.connecte ? 0 : l.conseils.length ? 1 : 2);
+    toutes = toutes.map((l, i) => [l, i]).sort((a, b) => rang(a[0]) - rang(b[0]) || a[1] - b[1]).map((x) => x[0]);
+  }
+  return toutes.filter((l) => (type === "connectes" ? l.connecte : type === "conseilles" ? l.conseils.length > 0
+    : type && type !== "tous" ? l.carte.categorie === type : true) && filtreOk(l.carte, filtre));
+}
+
 const bouton = (libelle, classe, surClic) => {
   const b = el("button", classe, libelle);
   b.type = "button";
@@ -190,16 +210,22 @@ function formulaireRegle(libelle, depart, vue, envoyer) {
   return f;
 }
 
-function carte(donnees, c, vue) {
+function carte(donnees, c, vue, conseils = []) {
   const racine = el("div", "partenaire-carte");
   const entete = el("div", "partenaire-entete");
   const ouverte = vue.ouvertes.has(c.id);
-  entete.append(bouton(ouverte ? "▾" : "▸", "bouton secondaire partenaire-deplier", () => {
+  racine.deplier = bouton(ouverte ? "▾" : "▸", "bouton secondaire partenaire-deplier", () => {
     if (vue.ouvertes.has(c.id)) vue.ouvertes.delete(c.id); else vue.ouvertes.add(c.id);
-    vue.redessiner();
-  }), el("strong", "partenaire-nom", c.nom), el("span", "partenaire-categorie", libelleCategorie(c.categorie)));
+    // Seule la carte est redessinée : le panneau garde son défilement (sur le téléphone, il remontait en haut),
+    // et le focus reste dans le panneau, ce qui suspend ses rafraîchissements pendant la lecture.
+    const neuve = carte(donnees, c, vue, conseils);
+    racine.replaceWith(neuve);
+    neuve.deplier.focus({preventScroll: true});
+  });
+  entete.append(racine.deplier, el("strong", "partenaire-nom", c.nom), el("span", "partenaire-categorie", libelleCategorie(c.categorie)));
   racine.append(entete);
   if (typeof c.description === "string" && c.description.trim()) racine.append(el("p", "partenaire-description", c.description));
+  for (const x of conseils) racine.append(el("div", "partenaire-conseil", `Conseillé : ${x.besoin}${x.raison ? " — " + x.raison : ""}`));
   const etat = etatConnexion(donnees, c.id);
   const connexion = objet(objet(donnees?.etat).connexions)[c.id];
   const lignes = el("div", "partenaire-resume");
@@ -241,18 +267,10 @@ function carte(donnees, c, vue) {
   return racine;
 }
 
-function section(titre, enfants, vide) {
-  const s = el("section", "partenaires-section");
-  s.append(el("h3", "", titre));
-  if (!enfants.length) s.append(el("p", "note", vide));
-  for (const e of enfants) s.append(e);
-  return s;
-}
-
 // Rend l'espace partenaire. `envoyer(demande)` rend une promesse {ok, message} (voir actions.js). `vue` garde ce
 // qui doit survivre à un nouveau dessin : filtre, cartes dépliées, confirmation, message.
 export function creerVue(options = {}) {
-  return {filtre: "", tri: "catalogue", ouvertes: new Set(), confirmation: false, message: "", edition: null, agir: options.agir !== false};
+  return {filtre: "", type: "tous", tri: "catalogue", ouvertes: new Set(), confirmation: false, message: "", edition: null, agir: options.agir !== false};
 }
 
 export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
@@ -282,42 +300,45 @@ export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
     }
     if (donnees?.maj_catalogue) racine.append(el("p", "note", `Catalogue mis à jour le ${dateFr(donnees.maj_catalogue) || donnees.maj_catalogue}.`));
     racine.append(etat);
-    racine.append(section(`Connectés (${p.connectes.length})`, p.connectes.map((c) => carte(donnees, c, vue)),
-      "Aucun partenaire connecté. Ce n'est pas un problème : la factory travaille sans."));
-    racine.append(section(`Conseillés pour ce projet (${p.conseilles.length})`, p.conseilles.map((x) => {
-      const bloc = el("div", "partenaire-conseil");
-      bloc.append(el("div", "ligne-detail", `Pour : ${x.besoin}${x.raison ? " — " + x.raison : ""}`), carte(donnees, x.carte, vue));
-      return bloc;
-    }), "Aucun conseil pour ce projet."));
-    const tous = el("section", "partenaires-section");
-    tous.append(el("h3", "", `Tous les partenaires (${p.total})`));
+    if (!p.connectes.length) racine.append(el("p", "note", "Aucun partenaire connecté. Ce n'est pas un problème : la factory travaille sans."));
+    const filtres = el("div", "partenaires-filtres");
+    const type = el("select", "partenaires-type");
+    type.setAttribute("aria-label", "Type de partenaire");
+    const options = [["tous", "Tous les types", p.total], ["connectes", "Connectés", p.connectes.length],
+                     ["conseilles", "Conseillés", lignes(donnees, {type: "conseilles"}).length],
+                     ...parties(donnees).categories.map((g) => [g.id, g.nom, g.cartes.length])];
+    for (const [valeur, libelle, n] of options) {
+      const o = el("option", "", `${libelle} (${n})`);
+      o.value = valeur;
+      type.append(o);
+    }
+    if (!options.some((o) => o[0] === vue.type)) vue.type = "tous";
+    type.value = vue.type;
     const saisie = el("input", "partenaires-filtre");
     saisie.type = "search";
     saisie.value = vue.filtre;
     saisie.setAttribute("placeholder", "Chercher un partenaire");
-    const liste = el("div", "partenaires-liste");
-    const remplir = () => {
-      liste.replaceChildren();
-      const q = parties(donnees, vue.filtre, vue.tri);
-      if (!q.categories.length) liste.append(el("p", "note", "Aucun partenaire ne correspond."));
-      for (const g of q.categories) {
-        liste.append(el("h4", "partenaires-categorie", `${g.nom} (${g.cartes.length})`));
-        for (const c of g.cartes) liste.append(carte(donnees, c, vue));
-      }
-    };
-    saisie.addEventListener("input", () => { vue.filtre = String(saisie.value || ""); remplir(); });
     const tri = el("select", "partenaires-tri");
     tri.setAttribute("aria-label", "Trier les partenaires");
-    for (const [valeur, libelle] of [["catalogue", "Tri : ordre du catalogue"], ["popularite", "Tri : popularité"]]) {
+    for (const [valeur, libelle] of [["catalogue", "Tri : connectés et conseillés d'abord"], ["popularite", "Tri : popularité"]]) {
       const o = el("option", "", libelle);
       o.value = valeur;
       tri.append(o);
     }
     tri.value = vue.tri;
+    const liste = el("div", "partenaires-liste");
+    const remplir = () => {
+      liste.replaceChildren();
+      const l = lignes(donnees, {filtre: vue.filtre, type: vue.type, tri: vue.tri});
+      if (!l.length) liste.append(el("p", "note", "Aucun partenaire ne correspond."));
+      for (const x of l) liste.append(carte(donnees, x.carte, vue, x.conseils));
+    };
+    type.addEventListener("change", () => { vue.type = String(type.value || "tous"); remplir(); });
+    saisie.addEventListener("input", () => { vue.filtre = String(saisie.value || ""); remplir(); });
     tri.addEventListener("change", () => { vue.tri = tri.value === "popularite" ? "popularite" : "catalogue"; remplir(); });
     remplir();
-    tous.append(saisie, tri, liste);
-    racine.append(tous);
+    filtres.append(type, saisie, tri);
+    racine.append(filtres, liste);
   };
   dessiner();
   return racine;

@@ -8,6 +8,8 @@
     py -3.12 installation/outil.py appliquer <dossier>
     py -3.12 installation/outil.py reparer <dossier> [--tailscale] [--reseau-local]
     py -3.12 installation/outil.py acces          (les adresses du téléphone : Tailscale, réseau local)
+    py -3.12 installation/outil.py bureau [--relancer]  (lance le bureau commun en arrière-plan)
+    py -3.12 installation/outil.py orchestrateur <dossier>  (ouvre `claude` sur l'orchestrateur, dans une fenêtre)
 
 Sortie JSON UTF-8. Codes : 0 fait, 1 refus (`{"erreur"}`), 2 appel invalide.
 Rien n'est écrit dans le dossier du projet avant `appliquer`.
@@ -25,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import charge, prix, reglages  # noqa: E402
-from installation import acces, calibrage, dossier, estimation, examen, mise_en_place, proposition  # noqa: E402
+from installation import acces, calibrage, dossier, estimation, examen, lanceur, mise_en_place, proposition  # noqa: E402
 from installation.dossier import Echec  # noqa: E402
 
 
@@ -192,6 +194,18 @@ def cmd_partenaires(a):
     return sortie
 
 
+def cmd_bureau(a):
+    return lanceur.lancer(relancer=a.relancer)
+
+
+def cmd_orchestrateur(a):
+    from bureau import demarrage
+    r = demarrage.demarrer(_dossier(a.dossier) / ".factory" / "reglages.json")
+    if not r["ok"] and "a_copier" not in r:
+        raise Echec(r["message"])
+    return r
+
+
 def _analyseur():
     p = argparse.ArgumentParser(prog="installation/outil.py", description="L'installation de MyIAFactory sur un projet.")
     s = p.add_subparsers(dest="commande", required=True)
@@ -200,13 +214,17 @@ def _analyseur():
     x.set_defaults(f=cmd_preparer)
     for nom, f, aide in (("examiner", cmd_examiner, "vide, existant ou déjà installé"),
                          ("appliquer", cmd_appliquer, "met en place la proposition enregistrée pour ce dossier"),
-                         ("reparer", cmd_reparer, "vérifie et répare une installation")):
+                         ("reparer", cmd_reparer, "vérifie et répare une installation"),
+                         ("orchestrateur", cmd_orchestrateur, "ouvre `claude` sur l'orchestrateur, dans une fenêtre")):
         x = s.add_parser(nom, help=aide)
         x.add_argument("dossier")
         x.set_defaults(f=f)
         if nom == "reparer":
             x.add_argument("--tailscale", action="store_true", help="ouvre le bureau au téléphone par Tailscale")
             x.add_argument("--reseau-local", action="store_true", help="ouvre le bureau au Wi-Fi de la maison")
+    x = s.add_parser("bureau", help="lance le bureau commun en arrière-plan (ou le relance)")
+    x.add_argument("--relancer", action="store_true", help="arrête le bureau lancé par l'installation, puis le relance")
+    x.set_defaults(f=cmd_bureau)
     x = s.add_parser("partenaires", help="partenaires déjà déclarés ; avec --besoins, ceux à proposer")
     x.add_argument("dossier")
     x.add_argument("--besoins", help="sous-catégories ou catégories du catalogue, séparées par des virgules")

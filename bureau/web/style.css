@@ -164,6 +164,11 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 /* --- Boutons de la factory --- */
 .barre-actions { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .barre-actions:empty { display: none; }
+/* Sur l'ordinateur, la barre passe à la ligne plutôt que de cacher des boutons ; la scène suit sa hauteur (ui/barre.js). */
+@media (min-width: 901px) {
+  html:not(.mobile) #barre { height: auto; min-height: 52px; flex-wrap: wrap; row-gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+  html:not(.mobile) .barre-actions { flex: none; overflow: visible; }
+}
 .bouton-barre {
   flex: none;
   padding: 5px 12px;
@@ -205,6 +210,17 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   font-weight: 600;
 }
 #bandeau[hidden] { display: none; }
+/* L'orchestrateur n'est pas lancé : les gestes sont bloqués, le bandeau propose de le lancer (ui/orchestrateur.js). */
+.bandeau-orchestrateur {
+  position: fixed; top: calc(var(--hauteur-barre) + 8px); left: 50%; transform: translateX(-50%); z-index: 9;
+  width: min(92vw, 640px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding: 10px 14px; border-radius: 10px; background: #fff4d6; color: #6b4a00; font-size: 14px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(61, 58, 75, 0.2);
+}
+.bandeau-orchestrateur[hidden] { display: none; }
+.bandeau-orchestrateur-retour { flex-basis: 100%; margin: 0; font-weight: 500; }
+.bandeau-orchestrateur-retour[hidden], .bandeau-orchestrateur-copie[hidden] { display: none; }
+.bandeau-orchestrateur-copie { flex-basis: 100%; min-height: 70px; font: 12px ui-monospace, monospace; }
 
 /* --- Pastille des décisions du Directeur --- */
 .pastille-porte { pointer-events: none; }
@@ -789,6 +805,10 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .partenaires-section { margin-top: 14px; }
 .partenaires-section h3, .partenaires-categorie { margin: 10px 0 6px; font-size: 14px; }
 .partenaires-filtre { width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 6px; font: inherit; }
+.partenaires-filtres { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+.partenaires-filtres .partenaires-filtre { flex: 1 1 180px; width: auto; margin-bottom: 0; }
+.partenaires-type, .partenaires-tri { padding: 6px; font: inherit; }
+.partenaire-conseil { color: #2f6b3f; font-size: 13px; font-weight: 700; }
 .partenaire-carte { border: 1px solid #d9d2c3; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fffdf8; }
 .partenaire-entete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .partenaire-deplier { min-width: 32px; min-height: 32px; padding: 0 6px; }

@@ -290,7 +290,7 @@ class TestGitignore(Base):
         self.appliquer()
         t = self.lire()
         self.assertIn("# MyIAFactory : fichiers propres à la machine\n.factory/equipe.json\n"
-                      ".factory/*-historique.jsonl\n.env\n", t)   # les clés des partenaires restent hors du dépôt
+                      ".factory/*-historique.jsonl\n.env\n.factory/presence.json\n", t)   # clés et présence : hors du dépôt
 
     def test_gitignore_ancienne_regle(self):
         (self.projet / ".gitignore").write_text("node_modules/\n.factory/\n/.factory\ndist", encoding="utf-8")

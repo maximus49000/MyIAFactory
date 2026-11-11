@@ -790,6 +790,18 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(fonctionnalites=[fonc(methode={"version": 1, "chemin": "m", "lien": "https://x.fr"})]), "methode")
         self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(methode={"version": 2, "chemin": "m.md"})])), [])
 
+    def test_orchestrateur_present(self):
+        self.assertEqual(releve.valider(v4(orchestrateur_present=True)), [])
+        self.assertEqual(releve.valider(v4(orchestrateur_present=False)), [])
+        self.refus(v4(orchestrateur_present="oui"), "orchestrateur_present")
+
+    def test_cahiers_precedents(self):
+        ancien = {"maquette": ["a.png"], "etapes": ["un"], "remplace_le": "2026-11-11T10:00:00"}
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(cahiers_precedents=[ancien])])), [])
+        self.refus(v4(fonctionnalites=[fonc(cahiers_precedents=[{"maquette": ["a.png"], "etapes": ["un"]}])]),
+                   "cahiers_precedents")
+        self.refus(v4(fonctionnalites=[fonc(cahiers_precedents={"x": 1})]), "cahiers_precedents")
+
     def test_livrable_de_fonctionnalite(self):
         self.refus(v4(fonctionnalites=[fonc(livrable={"libelle": "L", "date": "d"})]), "livrable")
 

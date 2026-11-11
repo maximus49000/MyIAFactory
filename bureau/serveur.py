@@ -1,6 +1,7 @@
 """Serveur local : la page, l'état, la charge, le conseil, le réglage de charge et la facturation."""
 import argparse
 import hashlib
+import html
 import json
 import mimetypes
 import os
@@ -13,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import acces, catalogue, charge, cout, demandes, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import acces, catalogue, charge, cout, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -24,6 +25,7 @@ PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit 
 ATTENTE_PREMIERS_PRIX_S = 25
 MAX_CORPS_DEMANDE = 28 * 1024 * 1024  # 4 images de 5 Mo en base64, plus le texte
 MAX_CORPS_REGLAGES = 4096
+DEMARRAGE_S = 90  # après « Lancer l'orchestrateur », un second clic ne relance rien pendant 90 s
 GARDE_DOUBLON_S = 10  # une même fonctionnalité ou un même message envoyé deux fois de suite : une seule demande
 GARDE_CHALLENGE_S = 120  # un challenge envoyé mais pas encore au relevé : pas de second envoi sur sa cible
 TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
@@ -56,6 +58,15 @@ PAGE_401 = ("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><met
             "content=\"width=device-width, initial-scale=1\"><title>Le bureau vivant</title></head><body "
             "style=\"font-family:sans-serif;padding:2em;text-align:center\"><h1>Accès protégé</h1><p>Scannez le QR "
             "code affiché sur l'ordinateur (« Associer un téléphone »).</p></body></html>").encode("utf-8")
+# Le lien du QR code montre un bouton ; seul le bouton (un POST depuis cette page) consomme le code. Un aperçu du lien
+# (appareil photo, messagerie) ne le gâche pas, et le cookie `SameSite=Strict` revient bien à la redirection.
+PAGE_ASSOCIER = ("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" "
+                 "content=\"width=device-width, initial-scale=1\"><title>Le bureau vivant</title></head><body "
+                 "style=\"font-family:sans-serif;padding:2em;text-align:center\"><h1>Associer ce téléphone</h1>"
+                 "<p>Ce téléphone pourra ouvrir le bureau sans nouveau code.</p>"
+                 "<form method=\"post\" action=\"/associer\"><input type=\"hidden\" name=\"code\" value=\"{code}\">"
+                 "<button type=\"submit\" style=\"font-size:1.2em;padding:.7em 1.4em;border-radius:999px\">"
+                 "Associer ce téléphone</button></form></body></html>")
 
 
 def images_declarees(regl):
@@ -68,8 +79,10 @@ def images_declarees(regl):
 class Projet:
     """Tout ce que le bureau tient pour un fichier de réglages : équipe, historiques, prix, état, demandes."""
 
-    def __init__(self, id_, chemin_reglages, ouvrir=None):
+    def __init__(self, id_, chemin_reglages, ouvrir=None, demarrer=None):
         self.id = id_
+        self.demarrer = demarrer or demarrage.demarrer   # « Lancer l'orchestrateur » ; remplacé dans les tests
+        self._lance_a = None   # heure (monotone) du dernier lancement de l'orchestrateur
         self.chemin_reglages = Path(chemin_reglages)
         dossier = self.chemin_reglages.parent
         self.equipe = equipe.Equipe(dossier / "equipe.json")
@@ -133,6 +146,8 @@ class Projet:
                 e["dossier"]["facturation"] = True
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
+            if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
+                e["orchestrateur_absent"], e["agir"] = True, False
             e["images_ok"] = images_declarees(regl)
             self._cache_etat = (time.monotonic(), e)
             return e
@@ -254,6 +269,8 @@ class Projet:
             r = self.dernier_releve
             if r is None:
                 return 409, {"erreur": "Relevé indisponible."}
+            if r.get("orchestrateur_present") is False:
+                return 409, {"erreur": "L'orchestrateur n'est pas lancé : lancez-le depuis le bureau, puis recommencez."}
             regl, _ = self.reglages()
             cibles = {}
             cible = demande.get("cible") if isinstance(demande, dict) and demande.get("type") == "challenge" else None
@@ -283,6 +300,19 @@ class Projet:
         if not ok:
             return 502, {"erreur": message}
         return 200, {"ok": True}
+
+    def lancer_orchestrateur(self):
+        """(code HTTP, objet JSON). Refusé s'il tourne déjà ; un second clic pendant le démarrage ne relance rien."""
+        self.etat(bloquant=True)
+        r = self.dernier_releve
+        if r is not None and r.get("orchestrateur_present") is True:
+            return 409, {"erreur": "L'orchestrateur est déjà en cours."}
+        if self._lance_a is not None and time.monotonic() - self._lance_a < DEMARRAGE_S:
+            return 200, {"ok": True, "message": "L'orchestrateur démarre : il apparaîtra d'ici une minute."}
+        resultat = self.demarrer(self.chemin_reglages)
+        if resultat.get("ok"):
+            self._lance_a = time.monotonic()
+        return 200, resultat
 
     @staticmethod
     def _empreinte_creation(demande):
@@ -439,7 +469,7 @@ class Bureau(ThreadingHTTPServer):
     daemon_threads = True
     distant = False
 
-    def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None):
+    def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None, demarrer=None):
         super().__init__(adresse, Handler)
         self.multi = multi
         self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
@@ -447,7 +477,7 @@ class Bureau(ThreadingHTTPServer):
         self.ecouteurs = []
         self.distants = []    # [{"genre", "url"}]
         self.annonces = []    # ce que le terminal dit au lancement
-        self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir) for id_, chemin in projets}
+        self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer) for id_, chemin in projets}
         self.sonde = charge.Sonde()
         self.lisseur = charge.Lisseur(60)
         self.mesure = None  # dernière lecture brute de la sonde
@@ -611,12 +641,26 @@ class Handler(BaseHTTPRequestHandler):
     def _refus_401(self):
         self._envoyer(401, PAGE_401, "text/html; charset=utf-8")
 
-    def _associer(self, requete):
+    def _page_associer(self, requete):
+        """Le lien du QR code : une page avec un bouton, sans consommer le code."""
         codes = parse_qs(requete, keep_blank_values=True).get("code", [])
+        if len(codes) != 1 or not self.server.cles.en_attente(codes[0]):
+            return self._refus_401()
+        self._envoyer(200, PAGE_ASSOCIER.format(code=html.escape(codes[0].upper(), quote=True)).encode("utf-8"),
+                      "text/html; charset=utf-8")
+
+    def _associer(self):
+        """Le bouton de la page : échange le code contre le cookie d'accès."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = 0
+        corps = self.rfile.read(n).decode("utf-8", "replace") if 0 < n <= 200 else ""
+        codes = parse_qs(corps, keep_blank_values=True).get("code", [])
         cle = self.server.cles.echanger(codes[0]) if len(codes) == 1 else None
         if cle is None:
             return self._refus_401()
-        self.send_response(302)
+        self.send_response(303)
         self.send_header("Location", "/")
         self.send_header("Set-Cookie", f"{COOKIE_ACCES}={cle}; HttpOnly; SameSite=Strict; Path=/; "
                                        f"Max-Age={DUREE_COOKIE_S}")
@@ -632,7 +676,13 @@ class Handler(BaseHTTPRequestHandler):
             return True
         morceaux = urlsplit(self.path)
         if not post and morceaux.path == "/associer":
-            self._associer(morceaux.query)
+            self._page_associer(morceaux.query)
+            return True
+        if post and morceaux.path == "/associer":
+            if self.headers.get("Origin") != f"http://{self.server.hote}":
+                self._json(403, {"erreur": "Origine refusée."})
+            else:
+                self._associer()
             return True
         if not self.server.cles.valide(self._cookie()):
             self._refus_401()
@@ -829,6 +879,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(403, {"erreur": "En-têtes requis manquants."})
             self.server.lancement.marquer()
             return self._json(200, {"vu": True})
+        if chemin == "/api/orchestrateur/lancer":
+            self._vider_corps()
+            if self.headers.get("X-Bureau") != "1":
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            projet = self._projet(morceaux.query)
+            if projet is None:
+                return self._json(404, {"erreur": "Projet inconnu."})
+            return self._json(*projet.lancer_orchestrateur())
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
@@ -867,7 +925,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=None, port_distant=None, cles=None,
-          lancement=None):
+          lancement=None, demarrer=None):
     """Un bureau sur un fichier de réglages (un projet d'id `projet`, sans sélecteur) ou sur un fichier de
     bureau (`bureau`, plusieurs projets). `ouvrir(url) -> str` remplace la lecture des sources de prix
     (les tests n'utilisent jamais Internet). Seul un fichier de bureau dont `acces` ouvre quelque chose ouvre des
@@ -880,7 +938,7 @@ def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=No
         conf = reglages.lire_bureau(bureau)
         projets = [(p["id"], p["chemin"]) for p in conf["projets"]]
         srv = Bureau(("127.0.0.1", conf["port"] if port is None else port), projets, ouvrir=ouvrir, multi=True,
-                     lancement=lancement)
+                     lancement=lancement, demarrer=demarrer)
         if any(conf["acces"].values()):
             try:
                 if adresses is None:
@@ -895,7 +953,7 @@ def creer(chemin_reglages=None, port=None, ouvrir=None, bureau=None, adresses=No
     if port is None:
         port = reglages.charger(chemin_reglages)["port"]
     return Bureau(("127.0.0.1", port), [("projet", Path(chemin_reglages))], ouvrir=ouvrir, multi=False,
-                  lancement=lancement)
+                  lancement=lancement, demarrer=demarrer)
 
 
 def _commande_charge(chemin):

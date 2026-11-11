@@ -68,6 +68,23 @@ class TestCles(unittest.TestCase):
         self.assertIsNone(self.cles.echanger(code))
         self.assertEqual(acces.Cles(self.chemin).cle(), nouvelle)
 
+    def test_en_attente_ne_consomme_pas(self):
+        code = self.cles.code_association()
+        self.assertTrue(self.cles.en_attente(code))
+        self.assertTrue(self.cles.en_attente(code.lower()))
+        self.assertEqual(self.cles.echanger(code), self.cles.cle())
+        self.assertFalse(self.cles.en_attente(code))
+        code = self.cles.code_association()
+        self.horloge.t += acces.DUREE_CODE_S + 1
+        self.assertFalse(self.cles.en_attente(code))
+
+    def test_en_attente_compte_les_rates(self):
+        """La page du lien dit si un code vaut : elle compte les ratés comme l'échange (pas d'essais à volonté)."""
+        code = self.cles.code_association()
+        for _ in range(acces.ESSAIS_MAX):
+            self.assertFalse(self.cles.en_attente("ZZZZZZZZ"))
+        self.assertIsNone(self.cles.echanger(code))
+
     def test_trop_d_essais_annulent_les_codes(self):
         code = self.cles.code_association()
         for _ in range(acces.ESSAIS_MAX):
@@ -123,9 +140,16 @@ class AvecBureauOuvert(unittest.TestCase):
     def local(self, methode, chemin, corps=None, entetes=None):
         return self.req(methode, chemin, corps, entetes, port=self.port)
 
+    def echanger(self, code, origine=True):
+        """Le bouton de la page d'association : un POST du formulaire, depuis la page elle-même."""
+        ent = {"Content-Type": "application/x-www-form-urlencoded"}
+        if origine:
+            ent["Origin"] = f"http://127.0.0.1:{self.distant}"
+        return self.req("POST", "/associer", f"code={code}".encode(), ent)
+
     def associer(self):
-        r, _ = self.req("GET", f"/associer?code={self.cles.code_association()}")
-        self.assertEqual(r.status, 302)
+        r, _ = self.echanger(self.cles.code_association())
+        self.assertEqual(r.status, 303)
         return r.getheader("Set-Cookie").split(";")[0]
 
 
@@ -156,9 +180,32 @@ class TestBureauOuvert(AvecBureauOuvert):
         r, _ = self.req("GET", "/api/projets", entetes={"Cookie": "myiafactory_acces=faux"})
         self.assertEqual(r.status, 401)
 
+    def test_lien_du_qr_ne_consomme_pas_le_code(self):
+        """Essai réel : l'aperçu du lien par l'appareil photo ou une redirection depuis une autre appli ne doit pas
+        coûter le code. Le lien montre une page avec un bouton ; le bouton (POST) fait l'échange."""
+        code = self.cles.code_association()
+        for _ in range(2):
+            r, data = self.req("GET", f"/associer?code={code}")
+            self.assertEqual(r.status, 200)
+            self.assertIsNone(r.getheader("Set-Cookie"))
+            page = data.decode("utf-8")
+            self.assertIn('method="post"', page)
+            self.assertIn(f'value="{code}"', page)
+        self.assertEqual(self.echanger(code)[0].status, 303)
+
+    def test_page_d_association_n_injecte_rien(self):
+        r, data = self.req("GET", "/associer?code=%22%3E%3Cscript%3E")
+        self.assertEqual(r.status, 401)
+        self.assertNotIn(b"<script>", data)
+
+    def test_echange_exige_l_origine(self):
+        code = self.cles.code_association()
+        self.assertEqual(self.echanger(code, origine=False)[0].status, 403)
+        self.assertEqual(self.echanger(code)[0].status, 303)   # le code n'a pas été consommé par le refus
+
     def test_associer_pose_le_cookie(self):
-        r, _ = self.req("GET", f"/associer?code={self.cles.code_association()}")
-        self.assertEqual(r.status, 302)
+        r, _ = self.echanger(self.cles.code_association())
+        self.assertEqual(r.status, 303)
         self.assertEqual(r.getheader("Location"), "/")
         cookie = r.getheader("Set-Cookie")
         for attendu in (f"myiafactory_acces={self.cles.cle()}", "HttpOnly", "SameSite=Strict", "Path=/",
@@ -170,16 +217,17 @@ class TestBureauOuvert(AvecBureauOuvert):
 
     def test_code_usage_unique(self):
         code = self.cles.code_association()
-        self.assertEqual(self.req("GET", f"/associer?code={code}")[0].status, 302)
-        r, _ = self.req("GET", f"/associer?code={code}")
+        self.assertEqual(self.echanger(code)[0].status, 303)
+        r, _ = self.echanger(code)
         self.assertEqual(r.status, 401)
         self.assertIsNone(r.getheader("Set-Cookie"))
+        self.assertEqual(self.req("GET", f"/associer?code={code}")[0].status, 401)   # déjà servi : plus de page
         self.assertEqual(self.req("GET", "/associer")[0].status, 401)
 
     def test_code_expire(self):
         code = self.cles.code_association()
         self.horloge.t += acces.DUREE_CODE_S + 1
-        r, _ = self.req("GET", f"/associer?code={code}")
+        r, _ = self.echanger(code)
         self.assertEqual(r.status, 401)
         self.assertIsNone(r.getheader("Set-Cookie"))
 
@@ -233,7 +281,7 @@ class TestBureauOuvert(AvecBureauOuvert):
         self.assertEqual(len(d["code"]), 8)
         self.assertTrue(d["expire"])
         self.assertNotEqual(json.loads(self.local("GET", "/api/acces")[1])["code"], d["code"])
-        self.assertEqual(self.req("GET", f"/associer?code={d['code']}")[0].status, 302)
+        self.assertEqual(self.echanger(d["code"])[0].status, 303)
 
     def test_local_sans_cookie_inchange(self):
         self.assertEqual(self.local("GET", "/api/projets")[0].status, 200)

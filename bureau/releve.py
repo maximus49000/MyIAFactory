@@ -370,13 +370,21 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
                 erreurs.append(f"{nom} : « discussion » : le message « {i} » : {probleme}")
 
 
+def _cahier_bien_forme(c):
+    return (_est_dict(c) and _liste_de_textes(c.get("maquette")) and isinstance(c.get("etapes"), list)
+            and all(isinstance(x, str) for x in c["etapes"]) and _texte_ou_nul(c.get("valide_le")))
+
+
 def _verifier_cahier_methode(f, nom, erreurs):
     c = f.get("cahier")
     if c is not None:
-        if (not _est_dict(c) or not _liste_de_textes(c.get("maquette")) or not isinstance(c.get("etapes"), list)
-                or not all(isinstance(x, str) for x in c["etapes"]) or not _texte_ou_nul(c.get("valide_le"))):
+        if not _cahier_bien_forme(c):
             erreurs.append(f"{nom} : « cahier » doit avoir une « maquette » (liste de chemins), des « etapes » "
                            "(liste de textes) et, si présent, un « valide_le » texte.")
+    precedents = f.get("cahiers_precedents")
+    if precedents is not None and (not isinstance(precedents, list) or not all(
+            _cahier_bien_forme(p) and isinstance(p.get("remplace_le"), str) and p["remplace_le"] for p in precedents)):
+        erreurs.append(f"{nom} : « cahiers_precedents » doit être une liste de cahiers, chacun avec « remplace_le ».")
     m = f.get("methode")
     if m is not None:
         version = m.get("version") if _est_dict(m) else None
@@ -481,6 +489,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     if r.get("livrable") is not None and not _livrable_ok(r["livrable"]):
         erreurs.append("« livrable » doit avoir un « libelle », une « date » et un seul de « lien » "
                        "(https, http ou claude) ou « chemin ».")
+    if "orchestrateur_present" in r and not isinstance(r["orchestrateur_present"], bool):
+        erreurs.append("« orchestrateur_present » doit être vrai ou faux.")
     m = r.get("agents_locaux_max")
     if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 1):
         erreurs.append("« agents_locaux_max » doit être un entier d'au moins 1 ou nul.")
@@ -655,7 +665,7 @@ def _normaliser_v4(n):
     else:
         n.pop("partenaires", None)
     for f in n.get("fonctionnalites") or []:
-        for c in ("discussion", "decisions", "documents"):
+        for c in ("discussion", "decisions", "documents", "cahiers_precedents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []
         f["attend_reponse"] = f.get("attend_reponse") is True
         f["catalogue"] = f.get("catalogue") is True

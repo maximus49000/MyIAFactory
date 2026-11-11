@@ -19,6 +19,12 @@ class TestConsignes(unittest.TestCase):
         titres = set(re.findall(r"^### `([a-z-]+)`", lire(ORCH / "interface.md"), re.M))
         self.assertEqual(titres, set(outil.COMMANDES))
 
+    def test_toute_demande_du_bureau_est_prise_par_l_outil(self):
+        # Essai réel : « Actualiser » et « Mettre à jour les offres » des partenaires étaient acceptés par le bureau
+        # puis refusés par l'outil (« Demande inconnue ») : le bouton ne faisait rien.
+        from bureau import demandes
+        self.assertEqual(sorted(set(demandes.CHAMPS) - set(outil.TYPES_DEMANDE)), [])
+
     def test_consignes_n_appellent_que_des_commandes_connues(self):
         texte = lire(ORCH / "consignes.md")
         appels = re.findall(r"\blancer ([a-z-]+)", texte)
@@ -60,6 +66,14 @@ class TestConsignes(unittest.TestCase):
         texte = lire(ORCH / "consignes.md")
         self.assertIn("première analyse du besoin", texte)
         self.assertIn("écrire le cahier des charges", texte)
+
+    def test_correction_du_cahier_rouvre_le_cadrage(self):
+        # Essai réel : « corriger » rouvre la discussion (étape cadrage), l'ancien cahier n'est plus montré comme
+        # valable, et le nouveau le remplace (l'ancien reste dans les versions précédentes).
+        texte = lire(ORCH / "consignes.md")
+        ligne = next(l for l in texte.splitlines() if l.startswith("| `cahier` |"))
+        for mot in ("`corriger`", "`action: lever`", "`etape: cadrage`", "cahiers_precedents", "`valider_cahier`"):
+            self.assertIn(mot, ligne, mot)
 
     def test_serie_en_parallele(self):
         # En série, la factory n'attend pas la relecture pour lancer le dev suivant ; les corrections passent d'abord.

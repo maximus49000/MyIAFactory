@@ -167,6 +167,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
 | `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) ou `organisation` (plus `organisation` : `{services, flux, agents, briefs, cout}`, l'organisation proposée ; `cout` = `{tokens: [a, b], euros: [a, b] ou null}`) |
 | `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
+| `orchestrateur_present` | racine | facultatif : vrai si le moniteur de l'orchestrateur (`guetter`) a noté sa présence il y a moins d'une minute ; faux : le bureau bloque les gestes et propose « Lancer l'orchestrateur » ; absent : rien n'est bloqué (adaptateur qui ne le dit pas) |
 | `partenaires` | racine | facultatif : l'espace partenaire (la pièce « Partenaires », voir ci-dessous) ; absent, la pièce n'existe pas |
 | `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
 | `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
@@ -179,6 +180,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
   récent, 1 000 messages au plus, `auteur` = `utilisateur` ou la clé d'un titulaire, `images` = chemins (règles des
   images) ; `attend_reponse` (vrai ou faux) ;
 - `cahier` : `{maquette: [chemins d'images], etapes: [textes], valide_le?}` ;
+- `cahiers_precedents` (facultatif) : les cahiers remplacés par une correction, du plus ancien au plus récent, chacun avec `remplace_le` ; une fonctionnalité revenue en `cadrage` alors qu'elle a un `cahier` est en correction (le bureau ne montre plus ce cahier comme valable) ;
 - `methode` : `{version, lien | chemin, validee_le?}` ;
 - `livrable` : `{libelle, lien | chemin, date}` ;
 - `catalogue` : vrai si le projet fournit un catalogue pour cette fonctionnalité (bouton « Catalogue ») ;

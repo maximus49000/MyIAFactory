@@ -172,6 +172,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     const surSaisie = panneauOuvert?.type === "fonctionnalite" && document.activeElement?.dataset?.saisie === "1"
       && panneau.contains(document.activeElement);
     const debut = surSaisie ? document.activeElement.selectionStart : 0;
+    // Le même panneau redessiné (relevé rafraîchi) garde son défilement : la lecture ne remonte pas en haut.
+    const memeVue = !panneau.hidden && panneauOuvert?.type === type && panneauOuvert?.id === id;
+    const defilement = memeVue ? panneau.scrollTop : 0;
     panneauOuvert = {type, id};
     signaturePanneau = signature(type, id, e);
     const contenu = el("div", "panneau-contenu");
@@ -222,6 +225,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     if (avecReglage) contenu.append(blocReglage());
 
     panneau.replaceChildren(fermer, contenu);
+    if (memeVue) panneau.scrollTop = defilement;
     panneau.hidden = false;
     if (type !== "catalogue") grand = false;
     document.body.classList.add("panneau-ouvert");

@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -24,6 +25,7 @@ from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
 from orchestrateur import depart  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
+from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
@@ -42,7 +44,7 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation")
+                 "organisation", "partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
 
@@ -359,6 +361,16 @@ def cmd_actions(ctx, e):
     return {"ok": True, "id": demande["id"]}
 
 
+def _presence(ctx):
+    return ctx.f["suivi"].with_name("presence.json")
+
+
+def cmd_guetter(ctx, e):
+    """Le moniteur de l'orchestrateur : ne rend jamais la main (il vit avec la conversation)."""
+    guetteur.guetter(ctx.f["suivi"].with_name("demandes.jsonl"), _presence(ctx))
+    return {}
+
+
 def cmd_reveil(ctx, e):
     with ctx.suivi.transaction() as s:
         s["reveil"] = su.maintenant()
@@ -504,6 +516,20 @@ def _verifier_livrable(v):
         raise Refus("« livrable » doit avoir un « libelle », une « date » et un seul de « lien » ou « chemin ».")
 
 
+CAHIERS_GARDES = 20
+
+
+def _archiver_cahier(f, nouveau):
+    """Un cahier corrigé (maquette ou étapes changées) remplace l'ancien, qui passe dans `cahiers_precedents` ;
+    le même cahier renvoyé avec `valide_le` n'en crée pas."""
+    ancien = f.get("cahier")
+    if not ancien or (nouveau and (nouveau["maquette"], nouveau["etapes"]) == (ancien["maquette"], ancien["etapes"])):
+        return
+    gardes = f.setdefault("cahiers_precedents", [])
+    gardes.append({**ancien, "remplace_le": su.maintenant()})
+    del gardes[:-CAHIERS_GARDES]
+
+
 def cmd_fonctionnalite(ctx, e):
     i = texte(e, "id")
     cles = ctx.cles_agents()
@@ -524,6 +550,8 @@ def cmd_fonctionnalite(ctx, e):
             if cle in e:
                 if e[cle] is not None:
                     controle(e[cle])
+                if cle == "cahier":
+                    _archiver_cahier(f, e[cle])
                 f[cle] = e[cle]
         if e.get("cahier"):
             ranger_documents(s, f, e["cahier"]["maquette"], agent=f["agent_cadrage"], etape="cahier")
@@ -1101,6 +1129,9 @@ def construire_releve(ctx):
             v["discussion"].append(m)
         if f["cahier"]:
             v["cahier"] = {**f["cahier"], "maquette": [chemin(c) for c in f["cahier"]["maquette"]]}
+        if f.get("cahiers_precedents"):
+            v["cahiers_precedents"] = [{**c, "maquette": [chemin(x) for x in c["maquette"]]}
+                                       for c in f["cahiers_precedents"]]
         if f["methode"] and f["methode"].get("chemin"):
             v["methode"] = {**f["methode"], "chemin": chemin(f["methode"]["chemin"])}
         if f["livrable"] and f["livrable"].get("chemin"):
@@ -1141,7 +1172,8 @@ def construire_releve(ctx):
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [dict(d) for d in s["decisions_projet"]],
-         "agents_locaux_max": ctx.f["agents_locaux_max"]}
+         "agents_locaux_max": ctx.f["agents_locaux_max"],
+         "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone())}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
     r["usage"] = [_usage_au_releve(u, ids_taches, cles_titulaires) if u.get("genre") == "partenaire" else
@@ -1766,7 +1798,7 @@ def cmd_lots(ctx, e):
 
 COMMANDES = {
     "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
-    "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"),
+    "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"), "guetter": (cmd_guetter, "aucune"),
     "demande-traitee": (cmd_demande_traitee, "obligatoire"), "etat": (cmd_etat, "aucune"),
     "fonctionnalite": (cmd_fonctionnalite, "obligatoire"), "message": (cmd_message, "obligatoire"),
     "decision": (cmd_decision, "obligatoire"), "tache": (cmd_tache, "obligatoire"), "file": (cmd_file, "obligatoire"),

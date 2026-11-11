@@ -6,6 +6,7 @@ import {voyant, libelleCharge, listeDisponible, dateFr} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
 import {urlProjet, livrables, projetCourant, memoriser} from "./projets.js";
 import {brancherAssociation} from "./associer.js";
+import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -56,6 +57,10 @@ export function creerBarre(entete, bandeau) {
   boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
   entete.append(titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
                 boutonTelephone, charge);
+  // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--hauteur-barre", entete.offsetHeight + "px");
+  }).observe(entete);
 
   // Message temporaire sous la barre : le résultat d'un envoi (jamais l'effet de la demande).
   const retour = el("div", "message-demande");
@@ -188,6 +193,7 @@ export function creerBarre(entete, bandeau) {
   const message = el("span", "bandeau-message");
   bandeau.append(message);
   bandeau.hidden = true;
+  const orchestrateur = creerBandeauOrchestrateur(bandeau);
 
   let factory = null, erreur = null, derniere = null, locauxMax = null;
 
@@ -236,6 +242,7 @@ export function creerBarre(entete, bandeau) {
   return {
     // Un état utilisable : voyant et nom du projet.
     majEtat(etat) {
+      orchestrateur.maj(etat);
       factory = etat.factory || null;
       locauxMax = etat.agents_locaux_max ?? null;
       afficherCharge();

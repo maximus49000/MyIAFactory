@@ -63,6 +63,14 @@ bureau la montre telle quelle à l'utilisateur.
 Sans entrée. Note l'heure du réveil du chef (c'est ce qui dit au bureau que l'orchestrateur tourne). Rend
 `{"reveil": "<date ISO>"}`.
 
+### `guetter`
+
+Sans entrée, **ne rend jamais la main** : c'est la commande du moniteur de l'orchestrateur. Elle écrit une ligne
+`demande <id> <type>` par demande ajoutée au journal (`demandes.jsonl`, à côté du suivi) après son lancement, et note
+toutes les 20 s sa présence dans `presence.json` (à côté du suivi, ignoré par git). Le relevé en tire
+`orchestrateur_present` (présence de moins d'une minute) ; sans lui, le bureau bloque les gestes et propose de lancer
+l'orchestrateur.
+
 ### `demandes`
 
 Sans entrée. Rend `{"demandes": [...]}` : les demandes « en attente », les plus anciennes d'abord. Chaque demande :

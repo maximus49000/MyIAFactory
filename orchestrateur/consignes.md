@@ -31,8 +31,9 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
   que tu viens de lire ; le projet, son genre, la pause, les fonctionnalités, les
   tâches, la file, les décisions, les leçons, les agents), puis la mémoire (voir « La mémoire »). Lis le registre des
   contrôles du projet. Puis commence la boucle de réveil.
-- **Surveille le journal des demandes** (`demandes.jsonl`, à côté du suivi) avec un moniteur : chaque geste de
-  l'utilisateur au bureau y ajoute une ligne, et c'est ce qui te réveille.
+- **Surveille le journal des demandes** avec un moniteur dont la commande est `lancer guetter` (elle ne rend jamais
+  la main) : chaque geste de l'utilisateur au bureau y devient une ligne, et c'est ce qui te réveille. Le moniteur dit
+  aussi au bureau que tu es là : sans lui, le bureau bloque les gestes et propose de démarrer un orchestrateur.
 
 ## La boucle de réveil
 
@@ -80,7 +81,7 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 |---|---|
 | `fonctionnalite` | Une fonctionnalité neuve, déjà créée à l'étape `cadrage` avec ce premier message. Choisis son agent de cadrage (`lancer agent-libre` avec le rôle de cadrage), inscris-le (`lancer fonctionnalite` avec `agent_cadrage` et un vrai `nom` court), puis fais-lui répondre (« Le cadrage »). |
 | `message` | Un message de l'utilisateur dans la discussion : l'agent de cadrage de la fonctionnalité y répond (même agent pendant toute la fonctionnalité). Pendant le prototype, c'est un retour sur le tour en cours. |
-| `cahier` | `valider` : renvoie le cahier entier avec `valide_le` (`lancer fonctionnalite`, `cahier: {maquette, etapes, valide_le}` : le champ remplace tout le cahier), lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et passe au `decoupage`. `corriger` : l'agent de cadrage corrige le cahier d'après `texte`, puis tu reposes la décision. |
+| `cahier` | `valider` : renvoie le cahier entier avec `valide_le` (`lancer fonctionnalite`, `cahier: {maquette, etapes, valide_le}` : le champ remplace tout le cahier), lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et passe au `decoupage`. `corriger` : lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et repasse la fonctionnalité en cadrage (`lancer fonctionnalite`, `etape: cadrage`) : la discussion se rouvre et le bureau ne montre plus l'ancien cahier comme valable. L'agent de cadrage pose ses questions s'il en a (sinon aucune), puis réécrit le cahier d'après `texte` (`cahier` : l'ancien passe de lui-même dans `cahiers_precedents`, toujours consultable) ; étape `cahier`, et tu reposes la décision. |
 | `methode` | `valider` : écris la méthode (voir l'étape `methode`). `revoir` : retour au `prototype` (nouvelle mise au point, ou « oui » à `methode_a_revoir`). `garder` : « non » à `methode_a_revoir` ; l'élément suit le traitement « bloqué » du projet (`lancer tache` avec `bloquee`). Lève la décision concernée (la demande ne porte pas d'identifiant de décision : ne pose donc qu'une `methode_a_revoir` à la fois par fonctionnalité). |
 | `genre` | Le genre confirmé (ou choisi) par l'utilisateur : `lancer genre` avec `action: fixer`, le `genre` et, s'il est nouveau, la `description`. Puis lève la décision `confirmer_genre` et relis la mémoire du genre. |
 | `organisation` | Le verdict de l'utilisateur sur une décision `organisation` (`decision`, `verdict` : `accepter` ou `refuser`). `accepter` : `lancer organisation` avec `action: appliquer` et la `decision` (services, flux, fiches et briefs sont écrits, la décision est levée) ; si l'outil refuse, dis pourquoi et pose une décision corrigée. `refuser` : lève la décision (`lancer decision`, `action: lever`) et poursuis avec l'organisation actuelle. |

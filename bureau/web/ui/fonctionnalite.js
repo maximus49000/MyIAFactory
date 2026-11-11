@@ -179,6 +179,15 @@ const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(c
 
 // Les documents de la fonctionnalité, rangés par étape : celles du parcours dans l'ordre, puis les colonnes du flux
 // (une tâche range ses captures sous sa colonne), puis « Autres » ; dans chaque groupe, les plus récents d'abord.
+// Le cahier des charges à montrer. Une correction demandée repasse la fonctionnalité en cadrage : l'ancien cahier
+// n'est plus montré comme valable (il rejoint les versions), le nouveau le remplacera. Versions : la plus récente d'abord.
+export function vueCahier(f) {
+  const precedents = Array.isArray(f?.cahiers_precedents) ? [...f.cahiers_precedents].reverse() : [];
+  const cahier = f?.cahier || null;
+  if (cahier && f.etape === "cadrage") return {courant: null, enCorrection: true, versions: [cahier, ...precedents]};
+  return {courant: cahier, enCorrection: false, versions: precedents};
+}
+
 export function documentsParEtape(f, colonnes) {
   const groupes = new Map();
   const libelle = (etape) => ETAPES_PARCOURS.find((x) => x.id === etape)?.libelle
@@ -1069,17 +1078,34 @@ export function contenuFonctionnalite(ctx, contenu, f) {
 
   // Les pièces du cahier des charges et de la méthode.
   const blocCahier = el("div", "bloc-cahier");
-  if (f.cahier) {
-    blocCahier.append(el("h3", "", "Cahier des charges"));
-    if ((f.cahier.maquette || []).length) blocCahier.append(vignettes(f.cahier.maquette, e));
+  const cahierVu = vueCahier(f);
+  const pieces = (c, parent) => {
+    if ((c.maquette || []).length) parent.append(vignettes(c.maquette, e));
     const etapes = el("ol", "etapes-cahier");
-    for (const t of f.cahier.etapes || []) {
+    for (const t of c.etapes || []) {
       const li = el("li", "");
       li.append(...texteAvecTermes("", t, glossaire).childNodes);
       etapes.append(li);
     }
-    blocCahier.append(etapes);
-    if (f.cahier.valide_le) blocCahier.append(el("p", "note", "Validé le " + dateFr(f.cahier.valide_le)));
+    parent.append(etapes);
+  };
+  if (cahierVu.courant || cahierVu.enCorrection) blocCahier.append(el("h3", "", "Cahier des charges"));
+  if (cahierVu.courant) {
+    pieces(cahierVu.courant, blocCahier);
+    if (cahierVu.courant.valide_le) blocCahier.append(el("p", "note", "Validé le " + dateFr(cahierVu.courant.valide_le)));
+  } else if (cahierVu.enCorrection) {
+    blocCahier.append(el("p", "note", "En cours de correction : la nouvelle version s'affichera ici."));
+  }
+  if (cahierVu.versions.length) {
+    const histo = el("details", "cahier-versions");
+    histo.append(el("summary", "", `Versions précédentes (${cahierVu.versions.length})`));
+    for (const c of cahierVu.versions) {
+      const bloc = el("div", "cahier-version");
+      bloc.append(el("p", "note", c.remplace_le ? "Remplacée le " + dateFr(c.remplace_le) : "En cours de correction"));
+      pieces(c, bloc);
+      histo.append(bloc);
+    }
+    blocCahier.append(histo);
   }
   const decisions = new Set((f.decisions || []).map((d) => d.genre));
   const gestes = el("div", "gestes");

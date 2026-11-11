@@ -206,6 +206,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         e["decisions_projet"] = [dict(d) for d in r["decisions_projet"]]
         e["fonctionnalites"] = [_fonctionnalite(f, prenoms, services) for f in r["fonctionnalites"]]
         e["orchestrateur_actif"] = any(a["chef"] and a["statut"] == "travail" for a in agents)
+        if isinstance(r.get("orchestrateur_present"), bool):   # absent : l'adaptateur ne le dit pas, rien n'est bloqué
+            e["orchestrateur_present"] = r["orchestrateur_present"]
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)
             e["partenaires"] = copy.deepcopy(r["partenaires"])
     return e

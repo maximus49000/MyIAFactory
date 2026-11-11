@@ -259,3 +259,20 @@ test("blocsMarkdown : titres, listes, paragraphes, code ; le texte reste du text
     {type: "code", texte: "py gen.py"}]);
   assert.deepEqual(blocsMarkdown(""), []);
 });
+
+test("vueCahier : en correction, l'ancien cahier n'est plus montré comme valable mais reste dans les versions", async () => {
+  const {vueCahier} = await import("../ui/fonctionnalite.js");
+  const v1 = {maquette: ["a.png"], etapes: ["un"], remplace_le: "2026-11-11T10:00:00"};
+  const v2 = {maquette: ["b.png"], etapes: ["un", "deux"]};
+  // Le cahier attend son verdict : il est montré, les versions précédentes de la plus récente à la plus ancienne.
+  assert.deepEqual(vueCahier({etape: "cahier", cahier: v2, cahiers_precedents: [v1]}),
+                   {courant: v2, enCorrection: false, versions: [v1]});
+  // Correction demandée (retour au cadrage) : plus de cahier courant, l'ancien rejoint les versions.
+  const c = vueCahier({etape: "cadrage", cahier: v2, cahiers_precedents: [v1]});
+  assert.equal(c.courant, null);
+  assert.equal(c.enCorrection, true);
+  assert.deepEqual(c.versions, [v2, v1]);
+  // Premier cadrage : rien.
+  assert.deepEqual(vueCahier({etape: "cadrage", cahier: null}), {courant: null, enCorrection: false, versions: []});
+  assert.deepEqual(vueCahier({etape: "serie", cahier: v2}), {courant: v2, enCorrection: false, versions: []});
+});

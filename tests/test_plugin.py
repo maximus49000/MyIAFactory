@@ -48,6 +48,31 @@ class TestPlugin(unittest.TestCase):
         mots = len(SKILL.read_text(encoding="utf-8").split())
         self.assertLessEqual(mots, 2000, f"{mots} mots")
 
+    def test_la_discussion_lance_le_bureau(self):
+        """Essai réel : à la fin, c'est la discussion qui lance (ou relance) le bureau, pas l'utilisateur."""
+        texte = SKILL.read_text(encoding="utf-8")
+        fin = texte.split("## 7. La fin", 1)[1]
+        self.assertIn("outil.py bureau", fin)
+        self.assertIn("--relancer", fin)
+        self.assertNotIn('lancer.py" serveur', texte)
+        installe = texte.split("- `installe`", 1)[1].split("\n- ", 1)[0]
+        self.assertIn("--relancer", installe)
+
+    def test_la_fin_lance_l_orchestrateur(self):
+        """Essai réel : la discussion ouvre elle-même la conversation orchestratrice (session de l'app, sinon
+        `outil.py orchestrateur`), et ne donne le message à coller qu'en dernier recours."""
+        fin = SKILL.read_text(encoding="utf-8").split("## 7. La fin", 1)[1]
+        self.assertIn('outil.py orchestrateur "<dossier>"', fin)
+        self.assertIn("message_orchestrateur", fin)
+        self.assertIn("session", fin)
+
+    def test_questions_fermees_sans_reponse_devinee(self):
+        """Essai réel : « les deux, locaux, facturation, non » a été lu « facturation : non ». Les questions groupées
+        sont numérotées avec leurs choix, chaque réponse est redite, une réponse ambiguë est reposée."""
+        section = SKILL.read_text(encoding="utf-8").split("## 4. Les questions communes", 1)[1].split("\n## ", 1)[0]
+        for mot in ("numérotées", "oui ou non", "Redis", "ambiguë"):
+            self.assertIn(mot, section, mot)
+
     def test_skill_cite_partenaires_detecter(self):
         texte = SKILL.read_text(encoding="utf-8")
         section = texte.split("### Les partenaires (facultatifs)", 1)[1].split("\n## ", 1)[0]

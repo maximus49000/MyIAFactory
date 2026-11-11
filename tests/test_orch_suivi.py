@@ -87,6 +87,17 @@ class TestSuivi(AvecProjet):
         self.assertEqual(r["file"]["visibles"], [])   # e1 est prise par la tâche
         self.assertEqual(len(r["decisions_projet"]), 2)
 
+    def test_releve_dit_si_l_orchestrateur_est_present(self):
+        """Essai réel : le bureau bloque les actions quand aucun orchestrateur ne tourne ; sa présence est notée par
+        son moniteur (`lancer guetter`) dans presence.json, à côté du suivi."""
+        from datetime import datetime
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        self.assertIs(r["orchestrateur_present"], False)
+        maj = datetime.now().astimezone().isoformat(timespec="seconds")
+        (self.dossier / "presence.json").write_text(json.dumps({"maj": maj}), encoding="utf-8")
+        self.assertIs(self.releve()["orchestrateur_present"], True)
+
     def test_releve_tache_de_cadrage_et_chef(self):
         f = self.nouvelle()
         self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})
@@ -284,6 +295,25 @@ class TestSuivi(AvecProjet):
         self.ok("tache", entree={"id": t["id"], "lignes": 120})          # le total de la tâche, remplacé
         self.assertEqual(next(x for x in self.releve()["taches"] if x["id"] == t["id"])["lignes"], 120)
         self.assertEqual(self.outil("tache", entree={"id": t["id"], "lignes": -3})[0], 1)
+
+    def test_cahier_corrige_garde_les_versions(self):
+        """Essai réel : un cahier corrigé remplace l'ancien, qui reste consultable ; le renvoyer validé ne crée
+        pas de version."""
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1", "etape": "cahier",
+                                          "cahier": {"maquette": ["pieces/m1.png"], "etapes": ["a"]}})
+        self.ok("fonctionnalite", entree={"id": f, "etape": "cadrage"})   # la correction rouvre la discussion
+        self.ok("fonctionnalite", entree={"id": f, "etape": "cahier",
+                                          "cahier": {"maquette": ["pieces/m2.png"], "etapes": ["a", "b"]}})
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m2.png"], "etapes": ["a", "b"],
+                                                               "valide_le": "2026-11-11T12:00:00+01:00"}})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        fonc = r["fonctionnalites"][0]
+        self.assertEqual(fonc["cahier"]["etapes"], ["a", "b"])
+        precedents = fonc["cahiers_precedents"]
+        self.assertEqual([c["maquette"] for c in precedents], [["pieces/m1.png"]])
+        self.assertTrue(precedents[0]["remplace_le"])
 
     def test_documents_de_la_fonctionnalite(self):
         # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :

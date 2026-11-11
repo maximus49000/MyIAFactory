@@ -86,22 +86,38 @@ class Cles:
         with self._verrou:
             return self._codes.get(code)
 
+    def _trouver(self, code):
+        trouve = None
+        if isinstance(code, str):
+            for c in list(self._codes):
+                if hmac.compare_digest(c.encode(), code.upper().encode()):
+                    trouve = c
+        return trouve
+
+    def _rate(self):
+        self._rates += 1
+        if self._rates >= ESSAIS_MAX:
+            self._codes.clear()
+            self._rates = 0
+
+    def en_attente(self, code):
+        """Vrai si le code vaut encore (rien n'est consommé) ; un faux compte comme un essai raté."""
+        with self._verrou:
+            trouve = self._trouver(code)
+            if trouve is not None and self._codes[trouve] > self.horloge():
+                return True
+            self._rate()
+            return False
+
     def echanger(self, code):
         """La clé contre un code valide (qui est alors consommé) ; sinon None."""
         with self._verrou:
             maintenant = self.horloge()
-            trouve = None
-            if isinstance(code, str):
-                for c in list(self._codes):
-                    if hmac.compare_digest(c.encode(), code.upper().encode()):
-                        trouve = c
+            trouve = self._trouver(code)
             if trouve is not None and self._codes.pop(trouve) > maintenant:
                 self._rates = 0
                 return self._charger()
-            self._rates += 1
-            if self._rates >= ESSAIS_MAX:
-                self._codes.clear()
-                self._rates = 0
+            self._rate()
             return None
 
     def valide(self, cookie):

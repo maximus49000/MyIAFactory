@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {libelleCategorie, popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, creerVue, rendrePartenaires,
+import {libelleCategorie, popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, lignes, creerVue, rendrePartenaires,
         MAX_REGLE} from "../ui/partenaires.js";
 import {lignesPartenaires, coutDePartenaire} from "../ui/facturation.js";
 import {creerPlan} from "../logique/plan.js";
@@ -16,8 +16,10 @@ class Noeud {
   set textContent(v) { this._texte = String(v); this.enfants = []; }
   get textContent() { return this._texte + this.enfants.map((e) => e.textContent).join(""); }
   set innerHTML(v) { throw new Error("innerHTML interdit"); }
-  append(...e) { this.enfants.push(...e); }
-  replaceChildren(...e) { this.enfants = [...e]; this._texte = ""; }
+  append(...e) { for (const x of e) if (x && typeof x === "object") x.parent = this; this.enfants.push(...e); }
+  replaceChildren(...e) { this.enfants = []; this._texte = ""; this.append(...e); }
+  replaceWith(n) { const p = this.parent; p.enfants[p.enfants.indexOf(this)] = n; n.parent = p; }
+  focus() { this.focalise = true; }
   setAttribute(k, v) { this.attributs[k] = String(v); }
   addEventListener(t, f) { (this.ecouteurs[t] ||= []).push(f); }
   async declencher(t) { for (const f of this.ecouteurs[t] || []) await f({}); }
@@ -103,17 +105,38 @@ test("parties : connectés, conseillés dans l'ordre avec leur raison, tous par 
   assert.deepEqual(parties(null).connectes, []);
 });
 
-test("rendu : les trois parties, sans rien de connecté ce n'est pas un problème", () => {
-  const {racine} = rendre();
+test("lignes : un seul tableau, connectés puis conseillés en tête, filtre par type et par texte", () => {
+  const ids = (o) => lignes(DONNEES, o).map((l) => l.carte.id);
+  assert.deepEqual(ids({}), ["vox", "echo", "tripo", "libre"]);
+  const vox = lignes(DONNEES, {})[0];
+  assert.equal(vox.connecte, true);
+  assert.deepEqual(vox.conseils, [{besoin: "voix", raison: "Voix naturelles."}]);
+  assert.deepEqual(ids({type: "connectes"}), ["vox"]);
+  assert.deepEqual(ids({type: "conseilles"}), ["vox", "echo"]);
+  assert.deepEqual(ids({type: "video-3d-avatars"}), ["tripo"]);
+  assert.deepEqual(ids({type: "voix-audio", filtre: "echo"}), ["echo"]);
+  assert.deepEqual(lignes({}, {}), []);
+  assert.deepEqual(lignes(null, {type: "connectes"}), []);
+});
+
+test("rendu : un seul tableau et un filtre par type en haut (essai réel)", () => {
+  const {racine, vue} = rendre();
   const t = racine.textContent;
-  assert.match(t, /Connectés \(1\)/);
-  assert.match(t, /Conseillés pour ce projet \(2\)/);
-  assert.match(t, /Tous les partenaires \(4\)/);
-  assert.match(t, /Voix naturelles\./);
+  assert.ok(!/Conseillés pour ce projet|Tous les partenaires \(/.test(t), "plus de sections séparées");
+  assert.match(t, /Conseillé : voix — Voix naturelles\./);
   assert.match(t, /facultatifs/);
+  const type = racine.tous((n) => n.className === "partenaires-type")[0];
+  const options = type.tous((n) => n.tagName === "option").map((o) => o.textContent);
+  assert.deepEqual(options.slice(0, 3), ["Tous les types (4)", "Connectés (1)", "Conseillés (2)"]);
+  assert.ok(options.includes("Vidéo, 3D, avatars (1)") || options.length === 6);
+  const liste = racine.tous((n) => n.className === "partenaires-liste")[0];
+  type.value = "connectes";
+  type.ecouteurs.change.forEach((f) => f());
+  assert.equal(vue.type, "connectes");
+  assert.match(liste.textContent, /Vox/);
+  assert.ok(!/Tripo/.test(liste.textContent));
   const vide = rendre({categories: {}}).racine.textContent;
   assert.match(vide, /Aucun partenaire connecté/);
-  assert.match(vide, /Aucun conseil/);
 });
 
 test("carte : illimité, quota inconnu, prix à vérifier, limite atteinte, abonnement", () => {
@@ -322,7 +345,7 @@ test("tri par popularité : les plus populaires d'abord, les non mesurés à la 
   assert.deepEqual(trier(d.categories["voix-audio"], "catalogue").map((c) => c.id), ["vox", "echo", "zeta"]);
   assert.deepEqual(parties(d, "", "popularite").categories[0].cartes.map((c) => c.id), ["zeta", "vox", "echo"]);
   const {racine, vue} = rendre(d);
-  const choix = racine.tous((n) => n.tagName === "select")[0];
+  const choix = racine.tous((n) => n.className === "partenaires-tri")[0];
   choix.value = "popularite";
   choix.ecouteurs.change.forEach((f) => f());
   assert.equal(vue.tri, "popularite");
@@ -351,4 +374,18 @@ test("les nouvelles catégories ont un libellé lisible", () => {
   for (const id of ["hubs-mcp", "ia-texte-code", "documents-donnees", "infrastructure", "jeu", "publication-sites", "agenda-messageries"]) {
     assert.notEqual(libelleCategorie(id), id, id);
   }
+});
+
+test("déplier une carte la redessine sur place : le reste du panneau (et son défilement) ne bouge pas", async () => {
+  const {racine} = rendre();
+  const titre = racine.enfants[0];
+  const cartes = () => racine.tous((n) => n.className === "partenaire-carte" && n.textContent.includes("Libre"));
+  const avant = cartes()[0];
+  const plie = avant.tous((n) => n.tagName === "button" && n.textContent === "▸")[0];
+  await plie.declencher("click");
+  assert.equal(racine.enfants[0], titre, "le panneau n'est pas reconstruit");
+  const apres = cartes()[0];
+  assert.notEqual(apres, avant);
+  assert.ok(apres.textContent.includes("Plans et prix"));
+  assert.ok(apres.tous((n) => n.textContent === "▾")[0].focalise, "le bouton garde le focus : pas de rafraîchissement en dessous");
 });

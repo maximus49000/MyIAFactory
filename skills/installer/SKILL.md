@@ -37,7 +37,7 @@ refus (`erreur`, parfois `erreurs`) : montre-le, corrige, recommence.
 `OUTIL` → `outil.py examiner "<dossier courant>"`. Selon `cas` :
 
 - `installe` : le projet est déjà installé. Lance `outil.py reparer "<dossier>"` et rends compte des `corrections`
-  (aucune : « tout est en ordre »), de `relancer_bureau` et de `pret`. Si l'utilisateur veut ouvrir le bureau au
+  (aucune : « tout est en ordre ») et de `pret` ; si `relancer_bureau` est vrai, lance `outil.py bureau --relancer`. Si l'utilisateur veut ouvrir le bureau au
   téléphone, ajoute `--tailscale` ou `--reseau-local` (section 4). Puis arrête-toi : les évolutions de
   l'organisation viennent des fonctionnalités, pas de cette commande.
 - `factory_propre` : le projet a déjà un `.factory/` fait à la main (sa propre factory, ou un branchement sans
@@ -89,7 +89,9 @@ toute zone d'ombre qui changerait l'organisation. Puis les questions communes (s
 ## 4. Les questions communes
 
 Pour économiser des tours, pose **en un seul message** les questions fermées (support, cloud, facturation, dépôt
-GitHub), puis **en un second** ta proposition de genre et de mots interdits, à confirmer ou corriger. N'explique
+GitHub), numérotées, chacune avec ses choix (oui ou non…), puis **en un second** ta
+proposition de genre et de mots interdits, à confirmer ou corriger. Redis chaque réponse comprise en une ligne
+(« Facturation : oui ») ; une réponse ambiguë se repose, jamais devinée. N'explique
 Tailscale et le Wi-Fi que si le mobile est retenu.
 
 - **Le support de traitement** : ordinateur, mobile, ou les deux (choix multiple). Avec le mobile, le bureau doit être
@@ -177,14 +179,15 @@ Dis, sans plus :
 - **Les agents cloud** (`agents_cloud`), un par ligne : sa clé, son rôle, **le modèle sur lequel régler sa session**,
   l'environnement (vide : environnement de base). C'est l'utilisateur qui crée chaque session et règle son modèle ;
   tant qu'une session manque, l'orchestrateur le lui redemandera au bureau.
-- **Le bureau** : `py -3.12 "<skill>/lancer.py" serveur --bureau "<bureau>"` (`bureau` est rendu par `appliquer`),
-  puis la page `http://127.0.0.1:8770` (ou le `port` du fichier de bureau). Si `relancer_bureau` est vrai : « le
-  bureau tourne déjà : arrêtez-le et relancez-le ».
-- **Avec le mobile** : relancer le bureau ; ouvrir la page sur l'ordinateur ; « Associer un téléphone » ; scanner le
-  QR code avec le téléphone. Une adresse nulle dans `acces` veut dire qu'elle n'a pas été trouvée (Tailscale arrêté,
+- **Le bureau** : lance-le toi-même, `outil.py bureau` (avec `--relancer` si `relancer_bureau` est vrai) ; il tourne
+  en arrière-plan. Donne son `url` et ses `annonces`. Un refus (bureau lancé à la main) : dis-le tel quel.
+- **Avec le mobile** : ouvrir la page sur l'ordinateur ; « Associer un téléphone » ; scanner le QR code avec le
+  téléphone. Une adresse nulle dans `acces` veut dire qu'elle n'a pas été trouvée (Tailscale arrêté,
   pas de Wi-Fi privé) : dis quoi vérifier.
-- **Le message qui ouvre la conversation orchestratrice** (`message_orchestrateur`), à coller dans une nouvelle
-  conversation Claude ouverte dans le dossier du projet, sur le modèle de l'orchestrateur.
+- **L'orchestrateur : démarre-le toi-même.** Si tu peux ouvrir une session, ouvre-la dans le dossier du projet,
+  sur le modèle de l'orchestrateur, avec `message_orchestrateur`. Sinon, `outil.py orchestrateur "<dossier>"` (une
+  fenêtre avec `claude`). S'il rend `a_copier`, donne ce message à coller dans une nouvelle conversation. Sans
+  orchestrateur, le bureau bloque les gestes.
 
 Le projet est prêt pour une première fonctionnalité : elle se lance depuis le bureau (« + Nouvelle fonctionnalité »).
 Arrête-toi là.

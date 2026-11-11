@@ -286,6 +286,18 @@ Conception : `docs/superpowers/specs/2026-11-11-bureau-partenaire-design.md`. R�
 - [ ] **Step 1 : tests** — `test_catalogue_livre_valide`, `test_ids_uniques`, `test_url_https`, `test_tarif_inconnu_refuse`, `test_fermes_marques` (LMNT, PlayHT, Sora, Tome : statut `ferme` ; Midjourney, Suno, Udio, Mixamo : `sans_api`), `test_au_moins_une_entree_par_categorie`, `test_aucun_mot_prive` (aucun nom du projet pilote ; le test lit les mots d'une variable d'environnement facultative et passe sans elle).
 - [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Le catalogue des partenaires ».
 
+### Task 18 bis : le catalogue complet, décrit et noté
+
+**Files:** Modify `partenaires/catalogue.json`, `partenaires/catalogue.py`, `bureau/web/ui/partenaires.js` ; Test `tests/test_part_catalogue.py`, `bureau/web/tests/partenaires.test.js`
+
+**Interfaces:**
+- Chaque entrée gagne `description` : une ou deux phrases en français, **à quoi sert le partenaire et ce qu'il contient** (ce qu'on peut lui demander, pour quel usage dans un projet), 280 caractères au plus ; `null` interdit pour une entrée active.
+- Le catalogue reprend **toutes** les entrées de `docs/recherche/partenaires-2026-11.md`, sections 7 à 12 comprises (hubs de connecteurs, annuaires MCP, autres IA, documents, recherche vectorielle, e-mail et SMS, paiement, comptes et bases, surveillance, intégration continue, boutiques, services pour le jeu, publication, CMS, agenda, messageries, compléments), avec de nouvelles catégories au besoin (`CATEGORIES` étendu) ; **la popularité** de la section 11 (et des tableaux) dans `popularite` (`niveau`, `base`, `date: "2026-11-11"`, « estimation » dans la base quand c'en est une) ; les fermés et sans API avec leur statut (Hathora fermé, Envato Elements sans API…). Liens d'inscription et de connexion relevés sur le site du partenaire, jamais inventés (`null` sinon).
+- La carte de partenaire montre la description sous le nom ; le filtre texte cherche aussi dans la description.
+
+- [ ] **Step 1 : tests** — `test_toute_entree_active_a_une_description`, `test_description_280_caracteres_au_plus`, `test_au_moins_350_partenaires`, `test_categories_nouvelles_presentes` (hubs, IA, paiement, jeu, publication…), `test_popularite_remplie_pour_les_notes_de_la_recherche` ; node : la description s'affiche et le filtre la trouve.
+- [ ] **Step 2–4 :** échec, coder, verts. **Step 5 :** commit « Le catalogue complet, décrit et noté ».
+
 ### Task 19 : connexions, quotas, règles, choix et usage
 
 **Files:** Create `partenaires/etat.py`, `partenaires/detection.py`, `partenaires/quota.py`, `partenaires/choix.py` ; Modify `orchestrateur/outil.py` (nouvelle commande `partenaires`, `construire_releve`), `orchestrateur/depart.py`, `bureau/usage.py`, `bureau/cout.py`, `orchestrateur/interface.md` ; Test `tests/test_part_etat.py`, `tests/test_part_detection.py`, `tests/test_part_quota.py`, `tests/test_part_choix.py`, `tests/test_orch_interface.py`

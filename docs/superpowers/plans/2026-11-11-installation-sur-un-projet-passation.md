@@ -17,6 +17,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | E | Sonnet 5.5 | ce dépôt | 10, 17 puis 16 : l'organisation qui évolue, les lots par modèle, la vue 3D adaptée au mobile | Commandes, algorithme et vue au contrat écrit, tests nommés, vue vérifiée au navigateur | fait |
 | F | Opus 5.5 | ce dépôt | 11 : guides et relecture finale | Relecture finale contre la conception sur un modèle fort | fait |
 | H | Sonnet 5.5 | ce dépôt | 18 puis 20 : le catalogue des partenaires, l'espace partenaire au bureau | Données et vue au contrat écrit (la tâche 20 s'appuie sur la forme du relevé donnée par le plan, pas sur le code de la 19) | fait |
+| H bis | Sonnet 5.5 | ce dépôt | 18 bis : le catalogue complet (toute la recherche élargie), une description de chaque partenaire, la popularité | Saisie de données au format écrit, contrôlée par les tests | à faire |
 | I | Opus 5.5 | ce dépôt | 19 puis 21 : connexions, quotas, règles, choix et usage ; les partenaires dans les consignes et l'installation | Clés secrètes jamais écrites ; consignes qui guident l'orchestrateur | à faire |
 | Essais réels | Opus 5.5 | ce dépôt (projets copiés hors dépôt) | 12 : le vrai passage sur un projet vide et un projet existant, téléphone compris, mené avec l'utilisateur | Diagnostic d'une installation réelle sur un modèle fort | à faire, **après la fin de toute l'implémentation** (le bureau partenaire, à concevoir, vient avant) |
 | G | Opus 5.5 | dépôt du projet pilote | 13 : le projet pilote rejoint le nouveau rangement | Dernier mot sur « rien n'est perdu » | à faire, après les essais réels |
@@ -158,6 +159,10 @@ Un message par conversation. L'utilisateur crée la conversation dans le dossier
 **Phase H — Sonnet 5.5 — dans ce dépôt**
 
 > Réalise la phase H de l'installation sur un projet (le bureau partenaire). Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : les conceptions et le plan sont validés, il n'y a rien à recadrer. Enchaîne d'une traite les tâches 18 puis 20 du plan. N'utilise pas le panneau navigateur de l'app (l'utilisateur suit souvent depuis son téléphone) : vérifie par les tests et par des requêtes HTTP. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase H bis — Sonnet 5.5 — dans ce dépôt**
+
+> Réalise la phase H bis de l'installation sur un projet. Lis `docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Fais la tâche 18 bis : le catalogue reprend toute la recherche `docs/recherche/partenaires-2026-11.md` (sections 1 à 12), chaque partenaire actif reçoit une description et sa popularité. Travaille par lots de catégories ; ne relance pas de recherche web sauf pour un lien d'inscription ou de connexion manquant. Termine par la fin de phase, sans lancer la suivante.
 
 **Phase I — Opus 5.5 — dans ce dépôt**
 

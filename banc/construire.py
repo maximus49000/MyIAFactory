@@ -269,6 +269,14 @@ def _rapport_structure(etape, element, texte):
     return brut
 
 
+def _avec_rangs(brut, rang_de):
+    """Chaque verdict porte le rang de son élément : le rejoueur le rend à l'élément du moteur de même rang."""
+    for v in brut.get("verdicts") or []:
+        if v["element"] in rang_de:
+            v["rang"] = rang_de[v["element"]]
+    return brut
+
+
 def _rapports(factory, suivi, dossier_transcriptions):
     taches, rangs, rapports = {t["id"]: t for t in suivi["taches"]}, _rangs(suivi), []
     roles = {s["role"] for s in factory["flux"]} | {t.get("role") for t in suivi["taches"] if t.get("role")}
@@ -289,6 +297,8 @@ def _rapports(factory, suivi, dossier_transcriptions):
         brut = _rapport_structure(etape, t.get("element"), final)
         if sans_relecteur and len(production) > 1 and etape == "flux:" + production[-1]["id"]:
             brut["verdicts"] = _verdicts_du_controle(final, _elements_du_depart(depart, taches, t))
+        _avec_rangs(brut, {x["element"]: rangs[x["id"]] for x in taches.values()
+                           if x.get("element") is not None and x.get("fonctionnalite") == t.get("fonctionnalite")})
         rapports.append({"etape": etape, "role": role, "rang": rang, "texte": final[:MAX_TEXTE],
                          "fichiers": [], "usage": _usage_principal(fichier), "rapport": brut, "_ordre": t["id"]})
     rapports = [r for r in rapports if r["role"]]

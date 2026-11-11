@@ -204,8 +204,9 @@ class Construire(AvecProjet):
         self.assertEqual(s.rapports[2]["texte"], "Fait.")
         # la dernière étape du flux, sans relecteur dans l'essai, rend des verdicts par élément du lot
         self.assertEqual(s.rapports[5]["rapport"]["verdicts"], [
-            {"element": "a3", "conforme": True, "points": []},
-            {"element": "a6", "conforme": False, "points": ["a6 ({b6}) | PASS | FAIL (boîte décalée)".format(**ids)]}])
+            {"element": "a3", "conforme": True, "points": [], "rang": 1},
+            {"element": "a6", "conforme": False, "points": ["a6 ({b6}) | PASS | FAIL (boîte décalée)".format(**ids)],
+             "rang": 2}])
         self.assertNotIn("verdicts", s.rapports[4]["rapport"])
         self.assertEqual(s.rapports[0]["usage"]["entree"], 101)
 

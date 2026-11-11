@@ -136,6 +136,25 @@ class Rejoue(unittest.TestCase):
         self.assertEqual([x.rapport["verdicts"][0]["conforme"] for x in (a, b, c)], [False, True, True])
         self.assertTrue(premier.rapport["message"]["texte"].startswith("Rien à rejouer"))   # e1 est le rang 0 : aucun
 
+    def test_verdicts_rendus_aux_elements_du_moteur(self):
+        """Le découpage du moteur nomme ses éléments à sa façon : un verdict rejoué désigne l'élément du même rang."""
+        rel = next(r for r in self.scenario.rapports if r["etape"] == "relecture" and r["rang"] == 1)
+        rel["rapport"]["verdicts"] = [{"element": "badge-essai", "rang": 1, "conforme": False, "points": ["Décalé"]},
+                                      {"element": "autre-essai", "rang": 4, "conforme": True, "points": []}]
+        self.jouer("t0", "prototype", "dev", "e1")
+        self.jouer("t2", "flux:dev", "dev", "e2")
+        e = self.jouer("t3", "relecture", "relecteur", "e2")
+        self.assertEqual([(v["element"], v["conforme"]) for v in e.rapport["verdicts"]],
+                         [("e2", False), ("autre-essai", True)])        # rang 4 : pas encore vu par le moteur
+        self.assertNotIn("rang", e.rapport["verdicts"][0])
+
+    def test_un_lot_donne_leur_rang_a_tous_ses_elements(self):
+        self.jouer("t0", "prototype", "dev", "e1")
+        self.taches["t2"] = {"etape": "flux:dev", "role": "dev", "element": "e2", "elements": ["e2", "e3"]}
+        self.rejoueur("départ", "matière", agent={"cle": "a-1", "role": "dev"}, modele="sonnet",
+                      dossier_projet=str(self.dossier), tache="t2", lot="L1")
+        self.assertEqual(self.rejoueur.rangs, {"e1": 0, "e2": 1, "e3": 2})
+
     def test_cadrage_toujours_au_rang_zero(self):
         for k in range(3):
             e = self.jouer(f"t{k}", "cadrage", "cadrage")

@@ -31,7 +31,13 @@ def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_T
 
     def decrire(tache):
         t = regles.lancer(projet, "detail", {"tache": tache})
-        return {"etape": t.get("etape"), "role": t.get("role"), "element": t.get("element")}
+        d = {"etape": t.get("etape"), "role": t.get("role"), "element": t.get("element")}
+        lot = (t.get("lot") or {}).get("id")
+        if lot:     # les éléments du lot, dans son ordre : le rejoueur leur donne leur rang
+            toutes = json.loads((dossier / "suivi.json").read_text(encoding="utf-8"))["taches"]
+            membres = sorted((x for x in toutes if (x.get("lot") or {}).get("id") == lot), key=lambda x: x["lot"]["rang"])
+            d["elements"] = [x["element"] for x in membres if x.get("element") is not None]
+        return d
 
     rejoueur = Rejoueur(scenario, decrire)
     compteur = Compteur(appeler)

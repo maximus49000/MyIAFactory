@@ -20,7 +20,8 @@ RIEN_A_REJOUER = "Rien à rejouer : le moteur a demandé un tour que l'essai de 
 
 
 class Rejoueur:
-    """`decrire(tache) -> {"etape", "role", "element"}` : ce que la tâche est (le banc le lit dans le suivi)."""
+    """`decrire(tache) -> {"etape", "role", "element", "elements"?}` : ce que la tâche est (le banc le lit dans le
+    suivi) ; `elements` : ceux de son lot, dans l'ordre du lot."""
 
     def __init__(self, scenario, decrire):
         self.decrire = decrire
@@ -39,6 +40,9 @@ class Rejoueur:
     def __call__(self, depart, matiere, *, agent, modele, dossier_projet, tache=None, lot=None, **plus):
         t = self.decrire(tache)
         etape = t.get("etape") or ""
+        self.rang(t.get("element"))
+        for e in t.get("elements") or []:     # un lot : chacun de ses éléments prend son rang, dans l'ordre du lot
+            self.rang(e)
         if etape == "cadrage":    # le scénario range le cadrage sous le rôle `cadrage`, quel que soit l'agent qui cadre
             cle = (etape, regles.ROLE_CADRAGE, 0)
         else:
@@ -53,6 +57,11 @@ class Rejoueur:
         for f in suivant.get("fichiers") or []:
             self._ecrire(Path(dossier_projet), f)
         brut = dict(suivant.get("rapport") or {"statut": "fait", "message": {"texte": suivant["texte"]}})
+        if brut.get("verdicts"):
+            # un verdict de l'essai désigne son élément par le rang : l'élément du moteur de même rang le remplace
+            par_rang = {r: e for e, r in self.rangs.items()}
+            brut["verdicts"] = [{**{k: x for k, x in v.items() if k != "rang"},
+                                 "element": par_rang.get(v.get("rang"), v.get("element"))} for v in brut["verdicts"]]
         if fichiers and not brut.get("fichiers"):
             brut["fichiers"] = fichiers
         lu = rapport.lire("```json\n" + json.dumps(brut, ensure_ascii=False) + "\n```")

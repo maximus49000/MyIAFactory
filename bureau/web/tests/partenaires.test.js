@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, creerVue, rendrePartenaires,
+import {popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, creerVue, rendrePartenaires,
         MAX_REGLE} from "../ui/partenaires.js";
 import {lignesPartenaires, coutDePartenaire} from "../ui/facturation.js";
 import {creerPlan} from "../logique/plan.js";
@@ -291,4 +291,41 @@ test("plan : la pièce « Partenaires » n'existe que si le relevé porte l'espa
     assert.ok(p.meubles.some((m) => m.piece === "partenaires"));
     assert.equal(p.aService("partenaires"), false);
   }
+});
+
+test("popularité : ●●●○○ avec les signaux en info-bulle, rien si non mesurée ou mal formée", () => {
+  const p = popularite({popularite: {niveau: 3, base: "Étoiles GitHub du SDK", date: "2026-11-12"}});
+  assert.equal(p.texte, "●●●○○");
+  assert.match(p.info, /Étoiles GitHub du SDK \(mesurée le/);
+  for (const v of [null, undefined, {niveau: 0, base: "x"}, {niveau: 6, base: "x"}, {niveau: 2.5}, "beaucoup"]) {
+    assert.equal(popularite({popularite: v}), null, JSON.stringify(v));
+  }
+  const {racine} = rendre(popDonnees());
+  const carteVox = racine.tous((n) => n.className === "partenaire-carte" && /Vox/.test(n.textContent))[0];
+  assert.match(carteVox.textContent, /Popularité : ●●●●○/);
+  const info = carteVox.tous((n) => n.className === "partenaire-popularite")[0];
+  assert.match(info.title, /Téléchargements npm/);
+  const echo = racine.tous((n) => n.className === "partenaire-carte" && /Echo/.test(n.textContent))[0];
+  assert.ok(!/Popularité/.test(echo.textContent));
+});
+
+const popDonnees = () => {
+  const d = JSON.parse(JSON.stringify(DONNEES));
+  d.categories["voix-audio"][0].popularite = {niveau: 4, base: "Téléchargements npm du SDK", date: "2026-11-12"};
+  d.categories["voix-audio"].push(carte("zeta", "Zeta", "voix-audio", {popularite: {niveau: 5, base: "Notoriété", date: "2026-11-12"}}));
+  return d;
+};
+
+test("tri par popularité : les plus populaires d'abord, les non mesurés à la fin dans l'ordre du catalogue", () => {
+  const d = popDonnees();
+  assert.deepEqual(trier(d.categories["voix-audio"], "popularite").map((c) => c.id), ["zeta", "vox", "echo"]);
+  assert.deepEqual(trier(d.categories["voix-audio"], "catalogue").map((c) => c.id), ["vox", "echo", "zeta"]);
+  assert.deepEqual(parties(d, "", "popularite").categories[0].cartes.map((c) => c.id), ["zeta", "vox", "echo"]);
+  const {racine, vue} = rendre(d);
+  const choix = racine.tous((n) => n.tagName === "select")[0];
+  choix.value = "popularite";
+  choix.ecouteurs.change.forEach((f) => f());
+  assert.equal(vue.tri, "popularite");
+  const liste = racine.tous((n) => n.className === "partenaires-liste")[0];
+  assert.ok(liste.textContent.indexOf("Zeta") < liste.textContent.indexOf("Vox"));
 });

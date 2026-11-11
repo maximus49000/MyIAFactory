@@ -56,6 +56,21 @@ export function quotaEnClair(donnees, carte) {
   return {texte, date: q && q.lu_le ? dateFr(q.lu_le) : "", limite: limite ? limite : null};
 }
 
+// La popularité mesurée : « ●●●○○ » (niveau 1 à 5) et les signaux publics utilisés en info-bulle ; rien si elle n'est pas mesurée.
+export function popularite(carte) {
+  const p = carte?.popularite;
+  if (!p || typeof p !== "object" || !Number.isInteger(p.niveau) || p.niveau < 1 || p.niveau > 5) return null;
+  const base = typeof p.base === "string" ? p.base : "";
+  const date = typeof p.date === "string" && p.date ? ` (mesurée le ${dateFr(p.date) || p.date})` : "";
+  return {niveau: p.niveau, texte: "●".repeat(p.niveau) + "○".repeat(5 - p.niveau), info: base + date};
+}
+
+// Trie des cartes : « catalogue » garde l'ordre reçu ; « popularite » met les plus populaires d'abord, les non mesurés à la fin.
+export function trier(cartes, tri) {
+  if (tri !== "popularite") return cartes;
+  return cartes.map((c, i) => [c, i]).sort((a, b) => (popularite(b[0])?.niveau || 0) - (popularite(a[0])?.niveau || 0) || a[1] - b[1]).map((x) => x[0]);
+}
+
 export function lignePlan(plan) {
   if (!plan || typeof plan.nom !== "string") return "";
   const prix = plan.tarif === "gratuit" || plan.prix === 0 ? "gratuit"
@@ -72,7 +87,7 @@ const filtreOk = (carte, filtre) => {
 };
 
 // Les trois parties de l'espace : connectés, conseillés pour ce projet (ordre et raison des conseils), tous par catégorie.
-export function parties(donnees, filtre = "") {
+export function parties(donnees, filtre = "", tri = "catalogue") {
   const categories = objet(donnees?.categories);
   const toutes = new Map();
   for (const [categorie, liste] of Object.entries(categories)) for (const c of tableau(liste)) toutes.set(c.id, {...c, categorie: c.categorie || categorie});
@@ -83,7 +98,7 @@ export function parties(donnees, filtre = "") {
   }
   const parCategorie = Object.entries(categories).map(([id, liste]) => ({
     id, nom: libelleCategorie(id),
-    cartes: tableau(liste).map((c) => toutes.get(c.id)).filter((c) => filtreOk(c, filtre)),
+    cartes: trier(tableau(liste).map((c) => toutes.get(c.id)).filter((c) => filtreOk(c, filtre)), tri),
   })).filter((g) => g.cartes.length);
   return {connectes, conseilles, categories: parCategorie, total: toutes.size};
 }
@@ -195,6 +210,12 @@ function carte(donnees, c, vue) {
     if (typeof q.limite.raison === "string") l.title = q.limite.raison;
     lignes.append(l);
   }
+  const pop = popularite(c);
+  if (pop) {
+    const s = el("span", "partenaire-popularite", `Popularité : ${pop.texte}`);
+    if (pop.info) s.title = pop.info;
+    lignes.append(s);
+  }
   if (c.fiabilite === "tiers") lignes.append(el("span", "partenaire-prix-incertain", "prix à vérifier"));
   racine.append(lignes);
   if (!ouverte) return racine;
@@ -226,7 +247,7 @@ function section(titre, enfants, vide) {
 // Rend l'espace partenaire. `envoyer(demande)` rend une promesse {ok, message} (voir actions.js). `vue` garde ce
 // qui doit survivre à un nouveau dessin : filtre, cartes dépliées, confirmation, message.
 export function creerVue(options = {}) {
-  return {filtre: "", ouvertes: new Set(), confirmation: false, message: "", edition: null, agir: options.agir !== false};
+  return {filtre: "", tri: "catalogue", ouvertes: new Set(), confirmation: false, message: "", edition: null, agir: options.agir !== false};
 }
 
 export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
@@ -272,7 +293,7 @@ export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
     const liste = el("div", "partenaires-liste");
     const remplir = () => {
       liste.replaceChildren();
-      const q = parties(donnees, vue.filtre);
+      const q = parties(donnees, vue.filtre, vue.tri);
       if (!q.categories.length) liste.append(el("p", "note", "Aucun partenaire ne correspond."));
       for (const g of q.categories) {
         liste.append(el("h4", "partenaires-categorie", `${g.nom} (${g.cartes.length})`));
@@ -280,8 +301,17 @@ export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
       }
     };
     saisie.addEventListener("input", () => { vue.filtre = String(saisie.value || ""); remplir(); });
+    const tri = el("select", "partenaires-tri");
+    tri.setAttribute("aria-label", "Trier les partenaires");
+    for (const [valeur, libelle] of [["catalogue", "Tri : ordre du catalogue"], ["popularite", "Tri : popularité"]]) {
+      const o = el("option", "", libelle);
+      o.value = valeur;
+      tri.append(o);
+    }
+    tri.value = vue.tri;
+    tri.addEventListener("change", () => { vue.tri = tri.value === "popularite" ? "popularite" : "catalogue"; remplir(); });
     remplir();
-    tous.append(saisie, liste);
+    tous.append(saisie, tri, liste);
     racine.append(tous);
   };
   dessiner();

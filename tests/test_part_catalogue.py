@@ -103,6 +103,28 @@ class TestCatalogue(unittest.TestCase):
                     self.assertTrue(cmd.startswith("claude mcp add"), p["id"])
                     self.assertNotRegex(cmd, r"(?i)(authorization|bearer|api[_-]?key=|token=)", p["id"])
 
+    def test_popularite_facultative(self):
+        """`popularite` : null tant qu'elle n'est pas mesurée, sinon {niveau 1 à 5, base, date}."""
+        self.assertTrue(all(p.get("popularite") is None for p in self.d["partenaires"]))
+        bonne = {"niveau": 4, "base": "Étoiles GitHub du SDK, téléchargements npm", "date": "2026-11-12"}
+        for valeur, attendu_ok in ((bonne, True), (None, True), ({**bonne, "niveau": 0}, False), ({**bonne, "niveau": 6}, False),
+                                   ({**bonne, "niveau": 3.5}, False), ({**bonne, "niveau": True}, False),
+                                   ({**bonne, "date": "2026-13-01"}, False), ({**bonne, "base": ""}, False),
+                                   ({**bonne, "base": 3}, False), ({"niveau": 3, "base": "x"}, False), ("beaucoup", False)):
+            d = copy.deepcopy(self.d)
+            d["partenaires"][0]["popularite"] = valeur
+            self.assertEqual(catalogue.verifier(d) == [], attendu_ok, valeur)
+        d = copy.deepcopy(self.d)   # un catalogue plus ancien, sans le champ, reste valide
+        del d["partenaires"][0]["popularite"]
+        self.assertEqual(catalogue.verifier(d), [])
+
+    def test_nouvelle_entree_et_sous_categorie_acceptees(self):
+        d = copy.deepcopy(self.d)
+        neuf = copy.deepcopy(d["partenaires"][0])
+        neuf.update(id="nouveau-hub", nom="Nouveau hub", sous_categorie="hub-de-connecteurs", popularite=None)
+        d["partenaires"].append(neuf)
+        self.assertEqual(catalogue.verifier(d), [])
+
     def test_fichier_a_jour_avec_son_format(self):
         brut = (RACINE / "partenaires" / "catalogue.json").read_text(encoding="utf-8")
         self.assertEqual(json.loads(brut), self.d)

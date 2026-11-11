@@ -86,7 +86,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "cartesia",
@@ -148,7 +149,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openai-audio",
@@ -189,7 +191,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "google-cloud-tts",
@@ -220,7 +223,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "azure-speech",
@@ -259,7 +263,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "amazon-polly",
@@ -298,7 +303,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "assemblyai",
@@ -347,7 +353,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "deepgram",
@@ -396,7 +403,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openai-transcription",
@@ -429,7 +437,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "murf",
@@ -460,7 +469,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "wellsaid",
@@ -491,7 +501,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "resemble",
@@ -522,7 +533,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "fish-audio",
@@ -553,7 +565,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "speechmatics",
@@ -584,7 +597,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "gladia",
@@ -615,7 +629,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "mubert",
@@ -654,7 +669,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "soundraw",
@@ -693,7 +709,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "stable-audio",
@@ -715,7 +732,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "lmnt",
@@ -731,7 +749,8 @@
    "illimite": false,
    "statut": "ferme",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "playht",
@@ -747,7 +766,8 @@
    "illimite": false,
    "statut": "ferme",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "suno",
@@ -768,7 +788,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "udio",
@@ -789,7 +810,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openai-images",
@@ -822,7 +844,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "gemini-image",
@@ -855,7 +878,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "bfl",
@@ -889,7 +913,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "stability",
@@ -931,7 +956,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "ideogram",
@@ -967,7 +993,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "leonardo",
@@ -1001,7 +1028,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "runway-images",
@@ -1039,7 +1067,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "krea",
@@ -1077,7 +1106,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "freepik",
@@ -1121,7 +1151,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "adobe-firefly",
@@ -1160,7 +1191,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "midjourney",
@@ -1181,7 +1213,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "fal",
@@ -1219,7 +1252,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "replicate",
@@ -1257,7 +1291,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "picsart",
@@ -1295,7 +1330,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "recraft",
@@ -1328,7 +1364,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "removebg",
@@ -1370,7 +1407,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "photoroom",
@@ -1409,7 +1447,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "topaz",
@@ -1448,7 +1487,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "clipdrop",
@@ -1470,7 +1510,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "autosprite",
@@ -1530,7 +1571,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "pixellab",
@@ -1574,7 +1616,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "scenario",
@@ -1626,7 +1669,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "runway",
@@ -1672,7 +1716,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "veo",
@@ -1703,7 +1748,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "kling",
@@ -1734,7 +1780,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "minimax-hailuo",
@@ -1767,7 +1814,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "luma",
@@ -1806,7 +1854,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "seedance",
@@ -1837,7 +1886,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "wan",
@@ -1868,7 +1918,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "ltx",
@@ -1899,7 +1950,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "vidu",
@@ -1930,7 +1982,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "pixverse",
@@ -1961,7 +2014,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "pika",
@@ -1982,7 +2036,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "sora",
@@ -1998,7 +2053,8 @@
    "illimite": false,
    "statut": "ferme",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "heygen",
@@ -2034,7 +2090,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "synthesia",
@@ -2081,7 +2138,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "sync-labs",
@@ -2120,7 +2178,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "did",
@@ -2159,7 +2218,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "tavus",
@@ -2198,7 +2258,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "hedra",
@@ -2237,7 +2298,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "json2video",
@@ -2268,7 +2330,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "creatomate",
@@ -2299,7 +2362,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "shotstack",
@@ -2330,7 +2394,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "meshy",
@@ -2393,7 +2458,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "tripo",
@@ -2426,7 +2492,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "rodin",
@@ -2470,7 +2537,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "csm",
@@ -2509,7 +2577,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "stability-3d",
@@ -2550,7 +2619,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "move-ai",
@@ -2589,7 +2659,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "deepmotion",
@@ -2620,7 +2691,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "kaedim",
@@ -2651,7 +2723,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "hunyuan3d",
@@ -2682,7 +2755,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "rokoko",
@@ -2713,7 +2787,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "plask",
@@ -2744,7 +2819,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "mixamo",
@@ -2765,7 +2841,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "luma-capture",
@@ -2786,7 +2863,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "deepl",
@@ -2836,7 +2914,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "amazon-translate",
@@ -2875,7 +2954,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "azure-translator",
@@ -2914,7 +2994,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "google-translation",
@@ -2953,7 +3034,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "lokalise",
@@ -2992,7 +3074,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "phrase",
@@ -3036,7 +3119,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "crowdin",
@@ -3075,7 +3159,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "rev-ai",
@@ -3114,7 +3199,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "descript",
@@ -3158,7 +3244,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "vizard",
@@ -3197,7 +3284,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "opus-clip",
@@ -3219,7 +3307,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "exa",
@@ -3265,7 +3354,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "tavily",
@@ -3319,7 +3409,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "firecrawl",
@@ -3365,7 +3456,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "brave-search",
@@ -3412,7 +3504,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "jina",
@@ -3456,7 +3549,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "serpapi",
@@ -3495,7 +3589,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "perplexity",
@@ -3526,7 +3621,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "apify",
@@ -3570,7 +3666,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "browserbase",
@@ -3609,7 +3706,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "vapi",
@@ -3661,7 +3759,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "retell",
@@ -3702,7 +3801,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "bland",
@@ -3741,7 +3841,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "inworld",
@@ -3782,7 +3883,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "hume",
@@ -3815,7 +3917,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "convai",
@@ -3846,7 +3949,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openai-moderation",
@@ -3879,7 +3983,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "sightengine",
@@ -3918,7 +4023,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "hive",
@@ -3949,7 +4055,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "reality-defender",
@@ -3988,7 +4095,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "resemble-detect",
@@ -4019,7 +4127,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "unsplash",
@@ -4060,7 +4169,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "pexels",
@@ -4093,7 +4203,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "pixabay",
@@ -4126,7 +4237,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "freesound",
@@ -4157,7 +4269,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openverse",
@@ -4188,7 +4301,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "epidemic-sound",
@@ -4232,7 +4346,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "shutterstock",
@@ -4271,7 +4386,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "getty",
@@ -4302,7 +4418,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "adobe-stock",
@@ -4333,7 +4450,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "artlist",
@@ -4364,7 +4482,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "iconify",
@@ -4395,7 +4514,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "noun-project",
@@ -4434,7 +4554,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "google-fonts",
@@ -4465,7 +4586,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "flaticon",
@@ -4504,7 +4626,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "font-awesome",
@@ -4543,7 +4666,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "poly-haven",
@@ -4574,7 +4698,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "ambientcg",
@@ -4605,7 +4730,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "sketchfab",
@@ -4644,7 +4770,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "substance-3d",
@@ -4675,7 +4802,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "kenney",
@@ -4705,7 +4833,8 @@
    "illimite": true,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "fab",
@@ -4735,7 +4864,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "kiri-engine",
@@ -4758,7 +4888,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "polycam",
@@ -4797,7 +4928,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "realityscan",
@@ -4835,7 +4967,8 @@
    "illimite": false,
    "statut": "sans_api",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "figma",
@@ -4879,7 +5012,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "canva",
@@ -4923,7 +5057,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "gamma",
@@ -4977,7 +5112,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "framer",
@@ -5021,7 +5157,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "penpot",
@@ -5052,7 +5189,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "tome",
@@ -5068,7 +5206,8 @@
    "illimite": false,
    "statut": "ferme",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "vercel",
@@ -5112,7 +5251,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "netlify",
@@ -5156,7 +5296,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "cloudflare",
@@ -5200,7 +5341,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "github-pages",
@@ -5236,7 +5378,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "supabase",
@@ -5282,7 +5425,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "render",
@@ -5326,7 +5470,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "railway",
@@ -5370,7 +5515,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "fly-io",
@@ -5403,7 +5549,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "itch-io",
@@ -5434,7 +5581,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "testmu",
@@ -5473,7 +5621,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "browserstack",
@@ -5512,7 +5661,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "sauce-labs",
@@ -5554,7 +5704,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "firebase-test-lab",
@@ -5593,7 +5744,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "aws-device-farm",
@@ -5632,7 +5784,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "mapbox",
@@ -5671,7 +5824,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "google-maps",
@@ -5710,7 +5864,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "maptiler",
@@ -5749,7 +5904,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "stadia-maps",
@@ -5788,7 +5944,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "openstreetmap",
@@ -5819,7 +5976,8 @@
    "illimite": true,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "quickchart",
@@ -5858,7 +6016,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "datawrapper",
@@ -5897,7 +6056,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "github",
@@ -5935,7 +6095,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "gitlab",
@@ -5971,7 +6132,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "linear",
@@ -6007,7 +6169,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "atlassian",
@@ -6043,7 +6206,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "notion",
@@ -6079,7 +6243,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "google-drive",
@@ -6115,7 +6280,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "slack",
@@ -6151,7 +6317,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "trello",
@@ -6187,7 +6354,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "asana",
@@ -6223,7 +6391,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "discord",
@@ -6245,7 +6414,8 @@
    "illimite": false,
    "statut": "restreint",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "cloudflare-r2",
@@ -6289,7 +6459,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "backblaze-b2",
@@ -6328,7 +6499,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "posthog",
@@ -6372,7 +6544,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "tiers",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   },
   {
    "id": "plausible",
@@ -6411,7 +6584,8 @@
    "illimite": false,
    "statut": "actif",
    "fiabilite": "officielle",
-   "verifie_le": "2026-11-11"
+   "verifie_le": "2026-11-11",
+   "popularite": null
   }
  ]
 }

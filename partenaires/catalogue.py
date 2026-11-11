@@ -37,6 +37,13 @@ def _date_ok(s):
         return False
 
 
+def popularite_ok(x):
+    """La popularité mesurée d'un partenaire : un niveau de 1 à 5, les signaux publics utilisés, la date de la mesure."""
+    return (isinstance(x, dict) and not isinstance(x.get("niveau"), bool) and isinstance(x.get("niveau"), int)
+            and 1 <= x["niveau"] <= 5 and isinstance(x.get("base"), str) and 0 < len(x["base"].strip()) <= 300
+            and _date_ok(x.get("date")))
+
+
 def verifier(d):
     """Les erreurs du catalogue `d` (liste vide s'il est valide)."""
     if not isinstance(d, dict) or d.get("version") != 1 or not isinstance(d.get("partenaires"), list):
@@ -72,6 +79,8 @@ def verifier(d):
             e("quota_lisible doit valoir oui, non ou inconnu")
         if p.get("lecteur") is not None and p.get("quota_lisible") != "oui":
             e("lecteur seulement si quota_lisible vaut oui")
+        if p.get("popularite") is not None and not popularite_ok(p["popularite"]):
+            e("popularite : null ou {niveau (1 à 5), base (texte court), date (AAAA-MM-JJ)}")
         if not isinstance(p.get("illimite"), bool):
             e("illimite doit être un booléen")
         if p.get("gratuit") is not None and not isinstance(p["gratuit"], str):

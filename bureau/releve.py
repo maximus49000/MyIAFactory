@@ -524,6 +524,10 @@ def _verifier_partenaires(p, erreurs):
                 ids.add(i)
             if x.get("verifie_le") is not None and not _date_iso(x["verifie_le"]):
                 erreurs.append(f"{nom} : « {i} » : « verifie_le » n'est pas une date.")
+            po = x.get("popularite")
+            if po is not None and not (_est_dict(po) and not isinstance(po.get("niveau"), bool) and isinstance(po.get("niveau"), int)
+                                       and 1 <= po["niveau"] <= 5 and _texte(po.get("base")) and _date_iso(po.get("date"))):
+                erreurs.append(f"{nom} : « {i} » : « popularite » doit être nulle ou {{niveau 1 à 5, base, date}}.")
     etat = p.get("etat", {})
     if not _est_dict(etat):
         erreurs.append(f"{nom} : « etat » doit être un objet.")

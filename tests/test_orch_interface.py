@@ -42,7 +42,7 @@ class TestVerificateur(AvecProjet):
         self.assertTrue(all(l.startswith("ok") or l.startswith("ignoré") for l in lignes), sortie)
         for commande in ("releve", "etat", "demandes", "memoire", "genre", "agent-libre", "depart", "catalogue", "actions",
                          "charge", "reveil", "demande-traitee", "fonctionnalite", "message", "decision", "tache", "file",
-                         "file-prendre", "session", "lecon", "controle"):
+                         "file-prendre", "session", "lecon", "controle", "organisation"):
             self.assertTrue(any(f" {commande}" in l for l in lignes), (commande, sortie))
 
     def test_sans_complet_ne_change_rien(self):

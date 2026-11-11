@@ -123,7 +123,11 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
 `portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`) ou
-`projet` (`confirmer_genre` avec `propose` et `genres_connus`, ou `session_cloud` avec `agent`). Poser deux fois la
+`projet` (`confirmer_genre` avec `propose` et `genres_connus`, `session_cloud` avec `agent`, ou `organisation` avec
+`organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+"flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
+(nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
+(Fable refusé, clés et rôles, briefs). Poser deux fois la
 même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 
 ### `tache`
@@ -134,6 +138,14 @@ Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise �
 par la tâche, son total : l'échelle de son coût au bureau). Un agent ne tient qu'une
 tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé (quelle que soit la casse)
 en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Haiku → Sonnet → Opus). Rend la tâche.
+
+### `organisation`
+
+Entrée : `{"action": "appliquer", "decision": id}`, pour une décision `organisation` du projet que l'utilisateur a
+acceptée (demande `organisation`, `verdict` : `accepter` ou `refuser`, version 4). Réécrit `services` et `flux` du
+fichier de factory (le reste est gardé), crée les fiches et les briefs nouveaux (un brief existant est gardé), lève la
+décision. Rend `{"ok": true, "services": [...], "flux": [...]}`. Refus (code 1) si la décision est inconnue ou n'est
+pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 
 ### `file`
 

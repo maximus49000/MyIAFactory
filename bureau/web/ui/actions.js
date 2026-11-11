@@ -114,7 +114,7 @@ export function resumeEnvoi(resultats) {
 // Les décisions qui attendent le Directeur, rangées par genre ; chaque décision d'une fonctionnalité garde
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
-  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], reponses: []};
+  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
     for (const d of f?.decisions || []) {
@@ -130,6 +130,7 @@ export function decisionsDirecteur(etat) {
   for (const d of Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : []) {
     if (d?.genre === "confirmer_genre") sortie.genres.push({...d});
     else if (d?.genre === "session_cloud") sortie.sessions.push({...d});
+    else if (d?.genre === "organisation") sortie.organisations.push({...d});
   }
   return sortie;
 }

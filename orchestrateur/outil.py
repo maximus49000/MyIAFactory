@@ -35,7 +35,8 @@ SIGNATURES = {".png": (b"\x89PNG\r\n\x1a\n", "image/png"), ".jpg": (b"\xff\xd8\x
 VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
-                 "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element")
+                 "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
+                 "organisation")
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
 
@@ -592,6 +593,8 @@ def cmd_decision(ctx, e):
                                                                    for g in connus)):
                     raise Refus("« confirmer_genre » demande « propose » et « genres_connus » (identifiants de genre).")
                 d.update(propose=e["propose"], genres_connus=connus)
+            elif genre == "organisation":
+                d["organisation"] = _organisation_decidee(ctx, e.get("organisation"))
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -609,6 +612,66 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _bornes_valides(v):
+    return (isinstance(v, list) and len(v) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                                                        and x >= 0 for x in v) and v[0] <= v[1])
+
+
+def _controle_organisation(ctx, o):
+    """Les erreurs (liste de textes) d'une organisation `{services, flux, agents, briefs}` face au projet actuel."""
+    from installation import proposition   # chargé à la demande : l'orchestrateur n'en dépend pas ailleurs
+    try:
+        existantes = fi.lire_toutes(ctx.f["fiches"])
+    except fi.FicheInvalide as ex:
+        return [f"Fiches illisibles : {ex}"]
+    dossier_briefs = ctx.f["fiches"] / "briefs"
+    briefs_existants = {c.stem for c in dossier_briefs.glob("*.md")} if dossier_briefs.is_dir() else set()
+    for a in o.get("agents") if isinstance(o.get("agents"), list) else []:
+        if isinstance(a, dict) and _interdit(a.get("modele")):
+            return ["Fable n'est jamais choisi par un outil (seulement sur demande expresse)."]
+    return proposition.verifier_organisation(
+        o.get("services"), o.get("flux"), o.get("agents"), o.get("briefs"), cloud=True,
+        roles_deja_pourvus={x["role"] for x in existantes}, cles_prises={x["cle"] for x in existantes},
+        briefs_existants=briefs_existants)
+
+
+def _organisation_decidee(ctx, o):
+    """L'organisation d'une décision, contrôlée comme une proposition ; `Refus` sinon."""
+    if not isinstance(o, dict):
+        raise Refus("« organisation » demande {services, flux, agents, briefs, cout}.")
+    erreurs = _controle_organisation(ctx, o)
+    cout = o.get("cout")
+    if not isinstance(cout, dict) or not _bornes_valides(cout.get("tokens")) or (
+            cout.get("euros") is not None and not _bornes_valides(cout.get("euros"))):
+        erreurs.append("« cout » demande « tokens » [a, b] et « euros » [a, b] ou null (a ≤ b).")
+    if erreurs:
+        raise Refus("Organisation refusée : " + " ; ".join(erreurs))
+    return {"services": [dict(x) for x in o["services"]], "flux": [dict(x) for x in o["flux"]],
+            "agents": [dict(x) for x in o["agents"]], "briefs": dict(o["briefs"]),
+            "cout": {"tokens": list(cout["tokens"]), "euros": None if cout.get("euros") is None
+                     else list(cout["euros"])}}
+
+
+def cmd_organisation(ctx, e):
+    """Applique une décision `organisation` acceptée : services, flux, fiches et briefs, puis lève la décision."""
+    from installation.dossier import Echec
+    from installation import mise_en_place
+    if e.get("action") != "appliquer":
+        raise Refus("« action » doit valoir appliquer.")
+    i = texte(e, "decision")
+    with ctx.suivi.transaction() as s:
+        d = next((x for x in s["decisions_projet"] if x["id"] == i and x.get("genre") == "organisation"), None)
+        if d is None:
+            raise Refus(f"Décision d'organisation inconnue : {i}")
+        o = d["organisation"]
+        try:
+            mise_en_place.ecrire_organisation(ctx.f["chemin"], o["services"], o["flux"], o["agents"], o["briefs"])
+        except Echec as ex:
+            raise Refus(str(ex))
+        s["decisions_projet"].remove(d)
+    return {"ok": True, "services": o["services"], "flux": o["flux"]}
 
 
 def genres_connus(ctx):
@@ -1136,7 +1199,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
-    "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
+    "organisation": (cmd_organisation, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
 }
 
 

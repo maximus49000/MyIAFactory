@@ -18,7 +18,7 @@ MAX_USAGE = 5000
 VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir")
-DECISIONS_PROJET = ("confirmer_genre", "session_cloud")
+DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -384,6 +384,39 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
         elif d.get("genre") == "session_cloud":
             if not _dans(d.get("agent"), cles_agents):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")
+        elif d.get("genre") == "organisation":
+            _verifier_organisation(d, nom, erreurs)
+
+
+MODELES_ORGANISATION = ("Haiku", "Sonnet", "Opus")
+
+
+def _bornes(v):
+    return (isinstance(v, list) and len(v) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                                                        and x >= 0 for x in v) and v[0] <= v[1])
+
+
+def _verifier_organisation(d, nom, erreurs):
+    """Une décision `organisation` : l'organisation complète après changement (contrôle de forme ; le contenu est
+    contrôlé en détail par l'outil de l'orchestrateur, qui l'a posée)."""
+    i, o = d.get("id"), d.get("organisation")
+    nom = f"{nom} : la décision « {i} » : « organisation »"
+    if not isinstance(o, dict):
+        erreurs.append(f"{nom} est obligatoire (objet).")
+        return
+    for champ in ("services", "flux", "agents"):
+        if not isinstance(o.get(champ), list) or not all(isinstance(x, dict) for x in o[champ]):
+            erreurs.append(f"{nom} : « {champ} » doit être une liste d'objets.")
+    if not isinstance(o.get("briefs"), dict):
+        erreurs.append(f"{nom} : « briefs » doit être un objet.")
+    cout = o.get("cout")
+    if (not isinstance(cout, dict) or not _bornes(cout.get("tokens"))
+            or (cout.get("euros") is not None and not _bornes(cout.get("euros")))):
+        erreurs.append(f"{nom} : « cout » doit porter « tokens » [a, b] et « euros » [a, b] ou null (a ≤ b).")
+    for a in o.get("agents") if isinstance(o.get("agents"), list) else []:
+        if a.get("modele") not in MODELES_ORGANISATION:
+            erreurs.append(f"{nom} : le modèle de l'agent « {a.get('cle')} » doit être Haiku, Sonnet ou Opus "
+                           "(Fable n'est jamais choisi par un outil).")
 
 
 def _verifier_lecons_v4(r, titulaires, erreurs):

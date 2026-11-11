@@ -5,6 +5,7 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession} from "./actions.js";
+import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
 const MOTIF_GENRE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -135,5 +136,8 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Méthode à revoir ?", "Aucune méthode à revoir", d.revoir.map((x) => decisionFonctionnalite(ctx, x, [
     boutonDemande(ctx, "Oui, revoir", "bouton", () => demandeMethode(x.fonctionnalite, "revoir")),
     boutonDemande(ctx, "Non, garder", "bouton secondaire", () => demandeMethode(x.fonctionnalite, "garder"))]))));
+  contenu.append(partie("Organisation à faire évoluer", "Aucun changement d'organisation proposé",
+    d.organisations.map((x) => rendreOrganisation(ctx, x, (libelle, classe, fabrique) =>
+      boutonDemande(ctx, libelle, classe, fabrique)))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));
 }

@@ -82,6 +82,7 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `cahier` | `valider` : renvoie le cahier entier avec `valide_le` (`lancer fonctionnalite`, `cahier: {maquette, etapes, valide_le}` : le champ remplace tout le cahier), lève la décision `valider_cahier` (`lancer decision`, `action: lever`) et passe au `decoupage`. `corriger` : l'agent de cadrage corrige le cahier d'après `texte`, puis tu reposes la décision. |
 | `methode` | `valider` : écris la méthode (voir l'étape `methode`). `revoir` : retour au `prototype` (nouvelle mise au point, ou « oui » à `methode_a_revoir`). `garder` : « non » à `methode_a_revoir` ; l'élément suit le traitement « bloqué » du projet (`lancer tache` avec `bloquee`). Lève la décision concernée (la demande ne porte pas d'identifiant de décision : ne pose donc qu'une `methode_a_revoir` à la fois par fonctionnalité). |
 | `genre` | Le genre confirmé (ou choisi) par l'utilisateur : `lancer genre` avec `action: fixer`, le `genre` et, s'il est nouveau, la `description`. Puis lève la décision `confirmer_genre` et relis la mémoire du genre. |
+| `organisation` | Le verdict de l'utilisateur sur une décision `organisation` (`decision`, `verdict` : `accepter` ou `refuser`). `accepter` : `lancer organisation` avec `action: appliquer` et la `decision` (services, flux, fiches et briefs sont écrits, la décision est levée) ; si l'outil refuse, dis pourquoi et pose une décision corrigée. `refuser` : lève la décision (`lancer decision`, `action: lever`) et poursuis avec l'organisation actuelle. |
 | `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision (retrouve-le avec `lancer etat`, dans `decisions`) et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
 | `retour_element` | Un « Demander à modifier » du catalogue : une tâche de correction sur cet élément (`lancer tache` avec `fonctionnalite`, `element`, le rôle de l'étape concernée), qui suit le flux et la relecture croisée comme les autres. Réponds dans la `reponse` de la demande ce qui sera fait. |
 | `lecon` | Le verdict de l'utilisateur sur une leçon (`cible` = son id, `verdict`, `etage?`) : `lancer lecon` avec `action: appliquer` (voir « Les leçons »). |
@@ -118,8 +119,13 @@ le bandeau du bureau montre.
    `etat`), décris le projet en une phrase (domaine, livrable, outils), compare-la aux genres connus
    (`lancer genre`, `action: lister`) et pose la décision `confirmer_genre` (`lancer decision`, `portee: projet`,
    `texte` = ta phrase et ta proposition, `propose` = le genre que tu proposes, existant ou nouveau, `genres_connus`).
-   L'identifiant d'un genre devient un nom de fichier public : jamais le nom du projet ni un de ses mots interdits. Quand le besoin est clair, passe à
-   l'étape suivante.
+   L'identifiant d'un genre devient un nom de fichier public : jamais le nom du projet ni un de ses mots interdits.
+   **Si l'organisation ne couvre pas la fonctionnalité** (un rôle, un service ou une étape manque), pose une décision
+   `organisation` (`lancer decision`, `portee: projet`, `genre: organisation`, `texte` = ce qui manque et pourquoi,
+   `organisation: {services, flux, agents, briefs, cout}`) : la plus petite qui suffise, `services` et `flux` complets
+   après changement, `agents` et `briefs` seulement les nouveaux, `cout` d'après `installation/outil.py` (commande `estimer`). Tu
+   n'y mets jamais Fable. Verdict `accepter` : `lancer organisation` ; `refuser` : la fonctionnalité continue avec
+   l'organisation actuelle, et tu le dis. Quand le besoin est clair, passe à l'étape suivante.
 2. **`cahier`.** L'agent de cadrage écrit le cahier des charges (si sa fiche est sur Haiku, monte d'un cran pour
    cette écriture-là, montée notée : « écrire le cahier des charges ») : **une maquette** (une ou plusieurs images qui
    montrent la compréhension du besoin) et **la liste des étapes à réaliser, dans l'ordre**. Range les images dans

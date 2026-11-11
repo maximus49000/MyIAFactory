@@ -157,7 +157,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `genre` | racine | l'identifiant du genre du projet (`^[a-z0-9][a-z0-9-]{0,39}$`), ou `null` s'il n'est pas encore choisi |
 | `livrable` | racine | le dernier livrable du projet : `{libelle, lien \| chemin, date}` (le bouton « Dernier livrable ») |
 | `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
-| `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) ou `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) |
+| `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) ou `organisation` (plus `organisation` : `{services, flux, agents, briefs, cout}`, l'organisation proposée ; `cout` = `{tokens: [a, b], euros: [a, b] ou null}`) |
 | `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
 | `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
 | `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
@@ -254,6 +254,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `methode` | `fonctionnalite`, `verdict` (`valider`, `revoir` ou `garder`), `texte?` | valider la méthode ; « méthode à revoir ? » : Oui = `revoir`, Non = `garder` |
 | `genre` | `decision`, `genre`, `description?` | le genre confirmé ou choisi ; `description` pour un nouveau genre |
 | `session_cloud` | `decision`, `session` | « C'est fait » : la session cloud demandée est créée, avec ce nom |
+| `organisation` | `decision`, `verdict` (`accepter` ou `refuser`) | « Accepter » ou « Refuser » une évolution de l'organisation |
 | `retour_element` | `fonctionnalite`, `element`, `texte` | « Demander à modifier » dans le catalogue (l'élément doit y être) |
 
 Textes : 3 500 caractères au plus. **Images jointes** : 4 au plus par demande, `{nom, type, donnees}` avec `donnees`

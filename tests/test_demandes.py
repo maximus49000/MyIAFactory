@@ -262,7 +262,10 @@ R4 = releve.normaliser({
     "decisions_projet": [
         {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
          "genres_connus": ["ville"]},
-        {"id": "s1", "genre": "session_cloud", "texte": "Session ?", "agent": "d1"}],
+        {"id": "s1", "genre": "session_cloud", "texte": "Session ?", "agent": "d1"},
+        {"id": "o1", "genre": "organisation", "texte": "Organisation ?",
+         "organisation": {"services": [{"id": "dev", "nom": "Dev"}], "flux": [], "agents": [], "briefs": {},
+                          "cout": {"tokens": [1, 2], "euros": None}}}],
     "lecons": [{"id": "l1", "agent": "d1", "texte": "t"},
                {"id": "l2", "agent": "d1", "texte": "t", "etage_propose": "genre", "texte_general": "G"},
                {"id": "l3", "agent": "d1", "texte": "t", "etage_propose": "projet"}]})
@@ -340,6 +343,16 @@ class TestVerifierV4(unittest.TestCase):
         self.refus({**d, "fonctionnalite": "f5"}, {"e1"})  # sans catalogue
         self.refus({**d, "fonctionnalite": "zz"}, {"e1"})
 
+    def test_demande_organisation(self):
+        self.ok({"type": "organisation", "decision": "o1", "verdict": "accepter"})
+        self.ok({"type": "organisation", "decision": "o1", "verdict": "refuser"})
+        self.refus({"type": "organisation", "decision": "g1", "verdict": "accepter"})   # une autre décision
+        self.refus({"type": "organisation", "decision": "zz", "verdict": "accepter"})
+
+    def test_demande_organisation_verdict_inconnu(self):
+        self.refus({"type": "organisation", "decision": "o1", "verdict": "peut-etre"})
+        self.refus({"type": "organisation", "decision": "o1"})
+
     def test_lecon_etage(self):
         self.ok({"type": "lecon", "id": "l2", "verdict": "valider", "etage": "genre"})
         self.ok({"type": "lecon", "id": "l2", "verdict": "valider", "etage": "skill"})
@@ -365,6 +378,13 @@ class TestVerifierV4(unittest.TestCase):
             self.assertTrue(m, d)
             self.assertIn("version 4", m)
         self.assertIsNone(demandes.verifier({"type": "lecon", "id": "l1", "verdict": "valider"}, r3))
+
+    def test_demande_organisation_v3_refusee(self):
+        r3 = releve.normaliser({**{k: v for k, v in R4.items() if k not in ("fonctionnalites", "decisions_projet",
+                                                                            "genre", "livrable")},
+                                "version": 3})
+        m = demandes.verifier({"type": "organisation", "decision": "o1", "verdict": "accepter"}, r3, frozenset())
+        self.assertIn("version 4", m)
 
     def test_images_refusees(self):
         gros = image("gros.png", PNG + b"\x00" * (6 * 1024 * 1024))

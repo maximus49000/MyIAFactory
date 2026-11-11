@@ -233,10 +233,34 @@ def verifier_complet(chemin, etat):
             raise Ignore("le projet n'a pas de genre : « genre fixer » n'est pas essayé")
         _ok(chemin, "genre", {"action": "fixer", "genre": courant}, {"genre": str})
 
+    def organisation():
+        f = fa.lire(chemin)
+        nouveau = "verification-organisation"
+        if any(x["id"] == nouveau for x in f["services"]):
+            raise Ignore("le scénario a déjà été joué sur cette copie")
+        o = {"services": [{"id": x["id"], "nom": x["nom"]} for x in f["services"]] + [{"id": nouveau, "nom": "Vérification"}],
+             "flux": [{c: x[c] for c in ("id", "nom", "role", "service")} for x in f["flux"]]
+                     + [{"id": nouveau, "nom": "Vérification", "role": nouveau, "service": nouveau}],
+             "agents": [{"cle": nouveau + "-1", "role": nouveau, "service": nouveau, "modele": "Haiku", "lieu": "local",
+                         "texte": "Agent de vérification."}],
+             "briefs": {nouveau: "# Brief de vérification"}, "cout": {"tokens": [1, 2], "euros": None}}
+        _refus(chemin, "organisation", {"action": "appliquer", "decision": "inconnue-verification"})
+        code, objet = lancer(chemin, "decision", {"action": "poser", "portee": "projet", "genre": "organisation",
+                                                  "texte": "Vérification", "organisation": o})
+        if code == 1:   # l'organisation actuelle du projet ne passe pas son propre contrôle (rôle sans agent ou brief)
+            raise Ignore("l'organisation actuelle ne passe pas le contrôle : " + str(objet.get("erreur"))[:100])
+        if code != 0:
+            raise Ecart(f"code {code} au lieu de 0 pour poser une décision d'organisation")
+        _ok(chemin, "organisation", {"action": "appliquer", "decision": objet["id"]},
+            {"ok": None, "services": list, "flux": list})
+        if any(d.get("genre") == "organisation" for d in lancer(chemin, "etat")[1].get("decisions", [])):
+            raise Ecart("la décision n'est pas levée après « appliquer »")
+
     return [("actions", actions), ("reveil", reveil), ("demande-traitee", demande_traitee),
             ("fonctionnalite", fonctionnalite), ("message", message), ("decision", decision), ("tache", tache),
             ("file", file), ("file-prendre", file_prendre), ("session", session), ("lecon", lecon),
-            ("controle", controle), ("charge", charge), ("genre fixer", genre_fixer)]
+            ("controle", controle), ("charge", charge), ("genre fixer", genre_fixer),
+            ("organisation", organisation)]
 
 
 def _dans_un_depot_git(dossier):

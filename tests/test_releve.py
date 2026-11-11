@@ -819,6 +819,26 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[base]), "agent")
         self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "agent": "d1"}])), [])
 
+    def test_decision_organisation_valide(self):
+        base = {"id": "o", "genre": "organisation", "texte": "Ajouter un service"}
+        org = {"services": [{"id": "dev", "nom": "Dev"}, {"id": "son", "nom": "Son"}],
+               "flux": [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}],
+               "agents": [{"cle": "son-1", "role": "son", "service": "son", "modele": "Sonnet", "lieu": "local"}],
+               "briefs": {"son": "# Brief"}, "cout": {"tokens": [1000, 2000], "euros": None}}
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "organisation": org}])), [])
+        self.assertEqual(releve.valider(v4(decisions_projet=[
+            {**base, "organisation": {**org, "cout": {"tokens": [1000, 2000], "euros": [1.5, 3.0]}}}])), [])
+        self.refus(v4(decisions_projet=[base]), "organisation")
+        self.refus(v4(decisions_projet=[{**base, "organisation": {**org, "services": "dev"}}]), "services")
+        self.refus(v4(decisions_projet=[{**base, "organisation": {**org, "cout": {"tokens": [3, 1]}}}]), "cout")
+
+    def test_decision_organisation_fable_refuse(self):
+        base = {"id": "o", "genre": "organisation", "texte": "T"}
+        org = {"services": [{"id": "dev", "nom": "Dev"}], "flux": [], "briefs": {},
+               "agents": [{"cle": "x-1", "role": "x", "service": "dev", "modele": "Fable", "lieu": "local"}],
+               "cout": {"tokens": [1, 2], "euros": None}}
+        self.refus(v4(decisions_projet=[{**base, "organisation": org}]), "Fable")
+
     def test_decision_projet_genre_inconnu(self):
         self.refus(v4(decisions_projet=[{"id": "s", "genre": "valider_cahier", "texte": "T"}]), "genre")
 

@@ -17,10 +17,12 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "fonctionnalite": ("texte",), "message": ("fonctionnalite", "texte"),
           "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
           "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
-          "retour_element": ("fonctionnalite", "element", "texte")}
+          "retour_element": ("fonctionnalite", "element", "texte"),
+          "organisation": ("decision", "verdict")}
 FACULTATIFS = {"challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",)}
-DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element")
+DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
+               "organisation")
 MAX_IMAGES = releve.MAX_IMAGES_MESSAGE
 MAX_OCTETS_IMAGE = 5 * 1024 * 1024
 MAX_NOM_IMAGE = 80
@@ -183,6 +185,12 @@ def _verifier_v4(demande, r, elements):
             return "Le nom de la session est vide."
         if len(demande["session"]) > MAX_SESSION:
             return f"Le nom de la session dépasse {MAX_SESSION} caractères."
+        return None
+    if genre == "organisation":
+        if _decision(r.get("decisions_projet", []), demande["decision"], "organisation") is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in ("accepter", "refuser"):
+            return "Verdict inconnu (accepter ou refuser)."
         return None
     f = _fonctionnalite(r, demande["fonctionnalite"])
     if f is None:

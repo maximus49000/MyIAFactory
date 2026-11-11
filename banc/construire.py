@@ -5,18 +5,24 @@ Ce qu'il reprend :
 - `gestes` : chaque demande du bureau rejouable (`demandes.jsonl`), dans l'ordre ; la première part tout de suite, les
   autres quand le moteur attend l'utilisateur. Les identifiants de fonctionnalité sont renumérotés (`f1`, `f2`…) comme
   le fera le moteur ; une image jointe est reprise en base64 si son fichier existe encore, sinon elle est laissée de côté ;
-- `rapports` : le texte final de chaque sous-agent (sa dernière réponse) et son usage exact, rangés par (étape, rôle,
-  rang). La tâche se retrouve dans son message de départ (« - Tâche : <titre> (<id>) »), l'étape se déduit de la
-  tâche : colonne `cadrage` → `cadrage` ; rôle `relecteur` → `relecture` ; titre commençant par « Correction » ou
-  « Retour » → `correction` ; élément de rang 0 → `prototype` ; sinon `flux:<étape du flux de son rôle>`. Un rapport de relecture dont le
-  texte parle d'un défaut devient un verdict non conforme (ses puces en points) : c'est une heuristique, pas une lecture
-  fine ;
+- `rapports` : le texte final de chaque sous-agent (ce qu'il a rendu par `SubagentHandback`, sinon sa dernière
+  réponse) et son usage exact, rangés par (étape, rôle, rang), dans l'ordre de leur départ. La tâche se retrouve dans
+  son message de départ, complété du fichier `depart_*.md` qu'il cite : « - Tâche : <titre> (<id>) », sinon le premier
+  identifiant de tâche connu (« tâche t2 », la liste d'un lot : le lot est rangé sous sa première tâche), sinon, si le
+  message parle de l'agent de cadrage, la tâche de cadrage. Le rôle est celui que le départ donne (« Rôle : … »,
+  « Tu es le … »), sinon celui de la tâche (une tâche passée dans le flux a pris le rôle de l'étape suivante). L'étape :
+  tâche de cadrage → `cadrage` (rôle `cadrage`, comme le moteur) ; rôle `relecteur` → `relecture` ; titre commençant
+  par « Correction » ou « Retour » → `correction` ; élément de rang 0 au rôle de la première étape → `prototype` ;
+  sinon `flux:<étape du flux de son rôle>`. Une réponse en JSON (`texte`, `questions`, `glossaire`, `maquette`,
+  `etapes`) devient le message et le cahier du rapport. Un rapport de relecture dont le texte parle d'un défaut devient
+  un verdict non conforme (ses puces en points) : c'est une heuristique, pas une lecture fine ;
 - `projet` : les services, le flux, les fiches et les briefs de l'essai ;
 - `attendu` : ce que le suivi montre d'obtenu (cahier validé, méthode, éléments faits, corrections, leçons).
 """
 import base64
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 from banc.scenario import RACINE, Scenario
@@ -27,6 +33,13 @@ from orchestrateur import transcriptions
 REJOUABLES = ("fonctionnalite", "message", "cahier", "methode", "genre", "organisation", "lecon", "retour")
 ROLE_RELECTURE = "relecteur"
 _TACHE = re.compile(r"- Tâche : .*?\((t\d+)\)")
+_TACHE_LIBRE = re.compile(r"\b(t\d+)\b")
+_DEPART = re.compile(r"(?:[A-Za-z]:)?[^\s«»\"'`(]*?depart_[\w-]+\.md")
+_CADRAGE = re.compile(r"agent de cadrage", re.I)
+_ROLE = re.compile(r"^Rôle : *(\S.*?) *$", re.M)
+_TU_ES = re.compile(r"tu es (?:le |la |l')([\w-]+)")
+ROLE_CADRAGE = "cadrage"
+RENDU = "SubagentHandback"
 _DEFAUT = re.compile(r"refus|défaut|a corriger|à corriger|non conforme|problème", re.I)
 _PUCE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$")
 MAX_POINTS = 5
@@ -109,20 +122,87 @@ def _rangs(suivi):
     return rangs
 
 
-def _etape(t, rang, flux):
-    """L'étape du scénario d'une tâche. Une tâche faite est dans la colonne « fait » : son étape de flux se retrouve par
-    son rôle (la première étape du flux qui a ce rôle)."""
+def _est_cadrage(t):
+    return t.get("colonne") == "cadrage" or t.get("etape") == "cadrage" or (t.get("titre") or "").lower().startswith(
+        "cadrage")
+
+
+def _etape(t, rang, flux, role=None):
+    """L'étape du scénario d'une tâche, faite par `role` (défaut : le rôle de la tâche). Une tâche faite est dans la
+    colonne « fait » : son étape de flux se retrouve par le rôle (la première étape du flux qui a ce rôle)."""
+    role = role or t.get("role")
     titre = (t.get("titre") or "").lower()
-    if t.get("colonne") == "cadrage" or titre.startswith("cadrage"):
+    if _est_cadrage(t):
         return "cadrage"
-    if t.get("role") == ROLE_RELECTURE:
+    if role == ROLE_RELECTURE:
         return "relecture"
     if titre.startswith(("correction", "retour")):
         return "correction"
-    if rang == 0 and t.get("element") is not None:
+    production = [s for s in flux if s["role"] != ROLE_RELECTURE] or flux
+    if rang == 0 and t.get("element") is not None and role == production[0]["role"]:
         return "prototype"
-    etape = next((s["id"] for s in flux if s["role"] == t.get("role")), None)
+    etape = next((s["id"] for s in flux if s["role"] == role), None)
     return f"flux:{etape or flux[0]['id']}"
+
+
+def _sans_accents(texte):
+    return unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode().lower()
+
+
+def _final(lignes):
+    """Ce que le sous-agent a rendu : le message de son dernier `SubagentHandback`, sinon son dernier texte."""
+    for d in reversed(lignes):
+        if d.get("type") != "assistant":
+            continue
+        c = (d.get("message") or {}).get("content")
+        for b in reversed(c if isinstance(c, list) else []):
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == RENDU:
+                texte = (b.get("input") or {}).get("message")
+                if isinstance(texte, str) and texte.strip():
+                    return texte
+    return next((_texte_du_message(d.get("message")) for d in reversed(lignes) if d.get("type") == "assistant"
+                 and _texte_du_message(d.get("message")).strip()), "")
+
+
+def _depart_complet(premier, factory):
+    """Le message de départ, suivi du contenu des fichiers `depart_*.md` qu'il cite (quand ils existent encore)."""
+    textes = [premier]
+    for m in _DEPART.finditer(premier):
+        nom = Path(m.group(0).replace("\\", "/"))
+        for chemin in (nom, Path(factory["pieces"]) / nom.name, Path(factory["base"]) / nom.name):
+            try:
+                if chemin.is_file():
+                    textes.append(chemin.read_text(encoding="utf-8-sig"))
+                    break
+            except OSError:
+                continue
+    return "\n".join(textes)
+
+
+def _tache_du_depart(texte, taches):
+    m = _TACHE.search(texte)
+    if m and m.group(1) in taches:
+        return taches[m.group(1)]
+    for m in _TACHE_LIBRE.finditer(texte):
+        if m.group(1) in taches:
+            return taches[m.group(1)]
+    if _CADRAGE.search(texte):
+        return next((t for t in taches.values() if _est_cadrage(t)), None)
+    return None
+
+
+def _role_du_depart(texte, t, roles):
+    m = _ROLE.search(texte)
+    if m and m.group(1) in roles:
+        return m.group(1)
+    for m in _TU_ES.finditer(_sans_accents(texte)):
+        if m.group(1) in roles:
+            return m.group(1)
+    return t.get("role") or ""
+
+
+def _heure(lignes):
+    return next((d["timestamp"] for d in lignes if isinstance(d.get("timestamp"), str)), "")
 
 
 def _usage_principal(fichier):
@@ -135,6 +215,19 @@ def _usage_principal(fichier):
 
 def _rapport_structure(etape, element, texte):
     brut = {"statut": "fait", "message": {"texte": texte[:MAX_TEXTE], "attend": etape in ("cadrage", "prototype")}}
+    try:
+        objet = json.loads(texte.strip()) if texte.strip().startswith("{") else None
+    except ValueError:
+        objet = None
+    if isinstance(objet, dict) and isinstance(objet.get("texte"), str) and objet["texte"].strip():
+        brut["message"]["texte"] = objet["texte"][:MAX_TEXTE]
+        for cle in ("questions", "glossaire"):
+            if isinstance(objet.get(cle), list) and objet[cle]:
+                brut["message"][cle] = objet[cle]
+        maquette, etapes = objet.get("maquette"), objet.get("etapes")
+        if (isinstance(maquette, list) and maquette and all(isinstance(x, str) and x.strip() for x in maquette)
+                and isinstance(etapes, list) and etapes and all(isinstance(x, str) and x.strip() for x in etapes)):
+            brut["cahier"] = {"maquette": maquette, "etapes": etapes}
     if etape == "relecture" and element is not None:
         points = [m.group(1) for ligne in texte.splitlines() if (m := _PUCE.match(ligne))][:MAX_POINTS]
         refus = bool(_DEFAUT.search(texte)) and bool(points)
@@ -144,22 +237,24 @@ def _rapport_structure(etape, element, texte):
 
 def _rapports(factory, suivi, dossier_transcriptions):
     taches, rangs, rapports = {t["id"]: t for t in suivi["taches"]}, _rangs(suivi), []
-    for fichier in sorted(Path(dossier_transcriptions).glob("**/subagents/agent-*.jsonl")):
-        lignes = _lignes_json(fichier)
+    roles = {s["role"] for s in factory["flux"]} | {t.get("role") for t in suivi["taches"] if t.get("role")}
+    fichiers = [(f, _lignes_json(f)) for f in sorted(Path(dossier_transcriptions).glob("**/subagents/agent-*.jsonl"))]
+    fichiers.sort(key=lambda x: _heure(x[1]))      # l'ordre des départs (le nom d'un fichier est un hasard)
+    for fichier, lignes in fichiers:
         premier = next((_texte_du_message(d.get("message")) for d in lignes if d.get("type") == "user"), "")
-        m = _TACHE.search(premier)
-        t = taches.get(m.group(1)) if m else None
-        final = next((_texte_du_message(d.get("message")) for d in reversed(lignes) if d.get("type") == "assistant"
-                      and _texte_du_message(d.get("message")).strip()), "")
+        depart = _depart_complet(premier, factory)
+        t = _tache_du_depart(depart, taches)
+        final = _final(lignes)
         if t is None or not final.strip():
             continue
         rang = rangs.get(t["id"], 0)
-        etape = _etape(t, rang, factory["flux"])
-        rapports.append({"etape": etape, "role": t.get("role") or "", "rang": rang, "texte": final[:MAX_TEXTE],
+        role = ROLE_CADRAGE if _est_cadrage(t) else _role_du_depart(depart, t, roles)
+        etape = _etape(t, rang, factory["flux"], role)
+        rapports.append({"etape": etape, "role": role, "rang": rang, "texte": final[:MAX_TEXTE],
                          "fichiers": [], "usage": _usage_principal(fichier),
                          "rapport": _rapport_structure(etape, t.get("element"), final), "_ordre": t["id"]})
     rapports = [r for r in rapports if r["role"]]
-    rapports.sort(key=lambda r: int(re.sub(r"\D", "", r.pop("_ordre")) or 0))
+    rapports.sort(key=lambda r: int(re.sub(r"\D", "", r.pop("_ordre")) or 0))     # stable : départs dans l'ordre
     return rapports
 
 

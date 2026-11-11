@@ -124,6 +124,76 @@ class Construire(AvecProjet):
         self.assertEqual(s.projet["factory"]["flux"][0]["id"], "dev")
         self.assertIn("lea.md", s.projet["fiches"])
 
+    def essai_reel(self):
+        """Les formes de l'orchestrateur actuel : réponse finale rendue par `SubagentHandback`, tâche nommée
+        « tâche t2 », départ d'un lot dans un fichier `depart_*.md`, cadrage sans identifiant de tâche."""
+        self.ok("actions", entree={"type": "fonctionnalite", "texte": "Des badges"})
+        self.ok("actions", entree={"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"})
+        flux = [{"id": "creation", "nom": "Création", "role": "graphiste", "service": "dev"},
+                {"id": "controle", "nom": "Contrôle", "role": "controleur", "service": "dev"}]
+        f = json.loads((self.dossier / "factory.json").read_text(encoding="utf-8"))
+        f["flux"] = flux
+        (self.dossier / "factory.json").write_text(json.dumps(f, ensure_ascii=False), encoding="utf-8")
+        ids = {}
+        for cle, titre, role, element in (("cad", "Cadrage : Des badges", "graphiste", None),
+                                          ("proto", "Prototype : Abo 1", "graphiste", "a1"),
+                                          ("c1", "Contrôle : Abo 1", "controleur", "a1"),
+                                          ("b3", "Création : Abo 3", "controleur", "a3"),
+                                          ("b6", "Création : Abo 6", "controleur", "a6"),
+                                          ("cor", "Correction : Abo 6", "graphiste", "a6")):
+            e = {"titre": titre, "fonctionnalite": "f1", "role": role, "colonne": "creation", "active": False}
+            if element:
+                e["element"] = element
+            ids[cle] = self.ok("tache", entree=e)["id"]
+            self.ok("tache", entree={"id": ids[cle], "colonne": "fait"})
+        pieces = self.dossier / "pieces"
+        pieces.mkdir(exist_ok=True)
+        (pieces / "depart_lot1.md").write_text(
+            f"# Projet\n\n## Ta fiche\nClé : graphiste\nRôle : graphiste\n\n## Tes 2 tâches\n- {ids['b3']}\n- {ids['b6']}\n",
+            encoding="utf-8")
+        (pieces / "depart_lot2.md").write_text(
+            f"# Projet\n\n## Ta fiche\nClé : ctrl\nRôle : controleur\n\n## Tes 2 tâches\n- {ids['b3']}\n- {ids['b6']}\n",
+            encoding="utf-8")
+
+        def rendu(texte):
+            return {"type": "assistant", "message": {"id": "h", "model": "claude-sonnet-5-5", "content": [
+                {"type": "tool_use", "id": "x", "name": "SubagentHandback", "input": {"message": texte}}],
+                "usage": {"input_tokens": 1, "output_tokens": 1}}}
+
+        cahier = json.dumps({"texte": "Voici la maquette.", "etapes": ["Abo 1", "Abo 3"],
+                             "maquette": ["pieces/f1/maquette.png"], "lecons": []}, ensure_ascii=False)
+        questions = json.dumps({"texte": "Quelques questions.", "questions": [{"texte": "Combien ?",
+                                                                               "choix": ["3", "5"]}]})
+        departs = (
+            ("1", "Tu es l'agent de CADRAGE pour cette fonctionnalité.", questions),
+            ("2", "Tu es l'agent de cadrage (graphiste) du projet. Écris le cahier.", cahier),
+            ("3", f"Tu es le graphiste du projet (tâche {ids['proto']}, élément a1). C'est le PROTOTYPE.", "Fait."),
+            ("4", f"Tu es le contrôleur du projet (tâche {ids['c1']}, élément a1).", "Tout passe."),
+            ("5", f"Tu repars de zéro. Lis {pieces / 'depart_lot1.md'} et suis-le.", "Lot fait."),
+            ("6", f"Tu repars de zéro. Lis {pieces / 'depart_lot2.md'} et suis-le.", "Lot contrôlé."),
+            ("7", f"Lis {pieces / 'depart_t9.md'} (tâche {ids['cor']}, élément a6, correction).", "Corrigé."))
+        for n, depart, final in departs:
+            # noms dans le désordre : l'ordre est celui de l'heure du départ
+            ecrire_jsonl(self.transcriptions / "session" / "subagents" / f"agent-{8 - int(n)}.jsonl", [
+                {"type": "user", "timestamp": f"2026-11-11T10:0{n}:00Z", "message": {"role": "user", "content": depart}},
+                message("m" + n, "claude-sonnet-5-5", 100, 50, texte="Je rends compte."), rendu(final)])
+        return ids
+
+    def test_construire_lit_les_formes_de_l_orchestrateur_actuel(self):
+        self.essai_reel()
+        s = scenario.charger(construire.construire(self.dossier, self.transcriptions, self.bancs / "reel.json"))
+        cles = [(r["etape"], r["role"], r["rang"]) for r in s.rapports]
+        self.assertEqual(cles, [("cadrage", "cadrage", 0), ("cadrage", "cadrage", 0), ("prototype", "graphiste", 0),
+                                ("flux:controle", "controleur", 0), ("flux:creation", "graphiste", 1),
+                                ("flux:controle", "controleur", 1), ("correction", "graphiste", 2)])
+        premier = s.rapports[0]["rapport"]["message"]
+        self.assertEqual(premier["texte"], "Quelques questions.")
+        self.assertEqual(premier["questions"][0]["choix"], ["3", "5"])
+        self.assertEqual(s.rapports[1]["rapport"]["cahier"], {"maquette": ["pieces/f1/maquette.png"],
+                                                              "etapes": ["Abo 1", "Abo 3"]})
+        self.assertEqual(s.rapports[2]["texte"], "Fait.")
+        self.assertEqual(s.rapports[0]["usage"]["entree"], 101)
+
     def test_construire_refuse_une_sortie_dans_le_depot(self):
         self.essai()
         dedans = Path(construire.RACINE) / "banc" / "essai-prive" / "scenario.json"

@@ -6,6 +6,7 @@ import {el} from "./dom.js";
 import {dateFr, tronquer, euros} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {urlProjet} from "./projets.js";
+import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
 export const MAX_TEXTE = 3500;
 const MAX_IMAGES = 4;
@@ -78,6 +79,70 @@ export async function lireImage(fichier) {
   let binaire = "";
   for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
   return {nom: fichier.name, type: fichier.type, donnees: btoa(binaire)};
+}
+
+// --- Les photos prises au téléphone : n'importe quelle image est acceptée au choix (HEIC, WebP, très grande
+// définition…), puis réduite et réencodée dans la page avant l'envoi. Jamais refusée en silence.
+const MAX_OCTETS_CHOISIS = 60 * 1024 * 1024;   // avant réduction : au-delà, la page ne tiendrait pas en mémoire
+const EXTENSIONS_IMAGE = /\.(png|jpe?g|webp|heic|heif|avif|gif|bmp)$/i;
+
+// Le contrôle à la sélection : 4 images au plus, de vraies images (le type, ou à défaut l'extension : certains
+// téléphones ne donnent pas de type aux HEIC). Rend le message d'erreur, ou null.
+export function verifierSelection(fichiers) {
+  const liste = Array.from(fichiers || []);
+  if (liste.length > MAX_IMAGES) return `${MAX_IMAGES} images au plus par message.`;
+  for (const f of liste) {
+    const nom = String(f?.name ?? "");
+    const type = String(f?.type ?? "");
+    if (!(type.startsWith("image/") || (type === "" && EXTENSIONS_IMAGE.test(nom)))) return `« ${tronquer(nom, 40)} » n'est pas une image.`;
+    if (!(f.size <= MAX_OCTETS_CHOISIS)) return `« ${tronquer(nom, 40)} » est trop lourde pour être préparée (${Math.round(f.size / 1048576)} Mo).`;
+  }
+  return null;
+}
+
+// Les moyens du navigateur : décoder une image et l'encoder avec un canvas.
+function moyensDuNavigateur() {
+  return {
+    decoder: (fichier) => createImageBitmap(fichier, {imageOrientation: "from-image"}),
+    encoder: (image, largeur, hauteur, type, qualite) => new Promise((resolve, reject) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = largeur; canvas.height = hauteur;
+      const c = canvas.getContext("2d");
+      if (type === "image/jpeg") { c.fillStyle = "#ffffff"; c.fillRect(0, 0, largeur, hauteur); }   // pas de fond noir
+      c.drawImage(image, 0, 0, largeur, hauteur);
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encodage impossible"))), type, qualite);
+    }),
+  };
+}
+
+// Une image choisie → {nom, type, donnees} prête à joindre : réduite à 2 048 px au plus, PNG gardé, tout le reste en
+// JPEG, sous 5 Mo. Lève une `Error` au message clair si l'image ne peut pas être lue ou reste trop lourde.
+export async function preparerImage(fichier, moyens = moyensDuNavigateur()) {
+  const nom = String(fichier?.name ?? "photo");
+  let image;
+  try { image = await moyens.decoder(fichier); }
+  catch { throw new Error(`« ${tronquer(nom, 40)} » : ce navigateur ne sait pas lire ce format d'image (essayez un JPEG ou un PNG).`); }
+  const [l, h] = dimensionsReduites(image.width, image.height);
+  let type = formatEnvoye(fichier.type);
+  let corps = fichier;
+  const inchangee = l === image.width && h === image.height && fichier.type === type && fichier.size <= MAX_OCTETS;
+  if (!inchangee) {
+    const qualite = qualitePour(fichier.size);
+    corps = await moyens.encoder(image, l, h, type, qualite);
+    if (corps.size > MAX_OCTETS && type === "image/png") {   // un PNG trop lourd, même réduit : en JPEG
+      type = "image/jpeg";
+      corps = await moyens.encoder(image, l, h, type, qualite);
+    }
+    for (const q of [0.7, 0.55, 0.4].filter((x) => x < qualite)) {   // encore trop lourd : on comprime davantage
+      if (corps.size <= MAX_OCTETS || type !== "image/jpeg") break;
+      corps = await moyens.encoder(image, l, h, type, q);
+    }
+  }
+  if (typeof image.close === "function") image.close();
+  if (!(corps.size <= MAX_OCTETS)) {
+    throw new Error(`« ${tronquer(nom, 40)} » dépasse 5 Mo même réduite : elle n'est pas envoyée.`);
+  }
+  return lireImage({name: nomEnvoye(nom, type, MAX_NOM), type, arrayBuffer: () => corps.arrayBuffer()});
 }
 
 // La ligne sous la discussion : l'agent écrit (l'orchestrateur tourne), ou on attend l'orchestrateur.
@@ -871,7 +936,7 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   joindre.type = "button";
   const fichier = document.createElement("input");
   fichier.type = "file";
-  fichier.accept = "image/png,image/jpeg";
+  fichier.accept = "image/*";
   fichier.multiple = true;
   fichier.hidden = true;
 
@@ -899,11 +964,13 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
     const choisis = Array.from(fichier.files);
     fichier.value = "";
     const dejaLa = brouillon.images.map((i) => ({name: i.nom, type: i.type, size: 0}));
-    const probleme = verifierPieces([...dejaLa, ...choisis]);
+    const probleme = verifierSelection([...dejaLa, ...choisis]);
     if (probleme) { erreur.textContent = probleme; return; }
-    erreur.textContent = "";
-    try { for (const f of choisis) brouillon.images.push(await lireImage(f)); }
-    catch { erreur.textContent = "Une image n'a pas pu être lue."; }
+    erreur.textContent = choisis.length ? "Préparation de l'image…" : "";
+    try {
+      for (const f of choisis) brouillon.images.push(await preparerImage(f));
+      erreur.textContent = "";
+    } catch (e) { erreur.textContent = e?.message || "Une image n'a pas pu être lue."; }
     dessinerMiniatures();
   });
   envoyer.addEventListener("click", async () => {

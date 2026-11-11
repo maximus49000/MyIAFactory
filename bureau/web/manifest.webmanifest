@@ -1,0 +1,13 @@
+{
+  "name": "MyIAFactory",
+  "short_name": "MyIAFactory",
+  "description": "Le bureau vivant de votre projet.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7efe2",
+  "theme_color": "#f7efe2",
+  "icons": [
+    {"src": "./icone.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+  ]
+}

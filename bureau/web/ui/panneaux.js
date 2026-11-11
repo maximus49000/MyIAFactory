@@ -171,7 +171,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     panneauOuvert = {type, id};
     signaturePanneau = signature(type, id, e);
     const contenu = el("div", "panneau-contenu");
-    const fermer = el("button", "panneau-fermer", "×");
+    const fermer = el("button", "panneau-fermer", document.documentElement.classList.contains("mobile") ? "Fermer" : "×");
     fermer.type = "button";
     fermer.setAttribute("aria-label", "Fermer");
     fermer.addEventListener("click", fermerPanneau);
@@ -309,7 +309,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   // --- Souris.
   let attente = null;
   conteneur.addEventListener("pointermove", (ev) => {
-    if (attente) return;
+    if (attente || ev.pointerType === "touch") return;   // au doigt, pas de survol : un toucher est un clic
     attente = requestAnimationFrame(() => {
       attente = null;
       const choix = sc.pointer(ev);

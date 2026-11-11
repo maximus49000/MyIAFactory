@@ -299,6 +299,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   .charge-valeur { min-width: 0; font-size: 12px; }
   .charge-etiquette { display: none; }
   .charge-piste { width: clamp(60px, 12vw, 120px); }
+  /* Une barre trop étroite se fait défiler au doigt : la charge et les boutons restent accessibles. */
+  #barre { overflow-x: auto; scrollbar-width: none; }
+  #barre::-webkit-scrollbar { display: none; }
+  #barre > * { flex: none; }
 }
 
 /* --- Détail d'une tâche, vue liste --- */
@@ -753,3 +757,27 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .associer-url { font-family: ui-monospace, monospace; font-size: 13px; overflow-wrap: anywhere; }
 .associer-mention { color: #b6401c; font-size: 13px; font-weight: 700; }
 .associer-revoquer, .associer-fermer { align-self: flex-start; }
+
+/* --- Téléphone et tablette (classe « mobile » posée par main.js : moins de 768 px, ou pointeur grossier) --- */
+#scene { touch-action: none; }   /* glisser et pincer sont gérés par la page (ui/gestes.js) */
+
+.mobile #barre { gap: 8px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
+.mobile #barre::-webkit-scrollbar { display: none; }
+.mobile #barre > * { flex: none; }
+.mobile .barre-logo { font-size: 15px; }
+.mobile .bouton-barre { min-height: 38px; }
+.mobile .charge { margin-left: 0; }
+.mobile .charge-etiquette { display: none; }
+.mobile .charge-valeur { min-width: 0; font-size: 12px; }
+
+/* Les panneaux prennent tout l'écran, sous la barre, avec un bouton « Fermer » bien visible. */
+.mobile .panneau { left: 0; right: 0; width: 100vw; padding-top: 56px; z-index: 30; }
+.mobile body.panneau-ouvert #scene { right: 0; }
+.mobile .panneau-fermer {
+  top: 10px; right: 12px; width: auto; height: 38px; padding: 0 16px;
+  border-radius: 999px; background: #efe8da; font-size: 15px; font-weight: 800;
+}
+.mobile .panneau h2 { padding-right: 96px; }
+.mobile .panneau input, .mobile .panneau textarea, .mobile .panneau select { font-size: 16px; }   /* pas de zoom à la saisie */
+.mobile .panneau .bouton { min-height: 40px; }
+.mobile .carte { display: none; }   /* pas de survol au doigt */

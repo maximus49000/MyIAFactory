@@ -174,6 +174,22 @@ class TestServeur(AvecServeur):
         self.assertTrue(r.getheader("Content-Type").startswith("text/html"))
         self.assertEqual(r.getheader("Cache-Control"), "no-store")
 
+    def test_page_installable_sur_le_telephone(self):
+        """Le manifeste et l'icône sont servis avec le bon type, et la page les annonce (tâche 16)."""
+        r, page = self.req("GET", "/")
+        html = page.decode("utf-8")
+        self.assertIn('rel="manifest"', html)
+        self.assertIn("manifest.webmanifest", html)
+        self.assertIn("width=device-width", html)
+        r, corps = self.req("GET", "/manifest.webmanifest")
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.getheader("Content-Type").startswith("application/manifest+json"))
+        m = json.loads(corps.decode("utf-8"))
+        self.assertEqual((m["name"], m["display"]), ("MyIAFactory", "standalone"))
+        r, icone = self.req("GET", "/" + m["icons"][0]["src"].lstrip("./"))
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/png"))
+        self.assertTrue(icone.startswith(b"\x89PNG"))
+
     def test_pas_de_sortie_du_dossier(self):
         for chemin in ("/../reglages.py", "/%2e%2e/lancer.py", "/..%5c..%5clancer.py", "/../../lancer.py",
                        "/%2e%2e/%2e%2e/lancer.py"):

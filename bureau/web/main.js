@@ -2,6 +2,7 @@
 
 import {changements, etatUtilisable} from "./logique/diff.js";
 import {creerPlan} from "./logique/plan.js";
+import {estMobile} from "./logique/mobile.js";
 import {Regie} from "./logique/regie.js";
 import {creerScene} from "./scene/scene.js";
 import {charger} from "./scene/modeles.js";
@@ -9,12 +10,21 @@ import {Personnages} from "./scene/personnages.js";
 import {Kanban} from "./scene/kanban.js";
 import {creerBarre} from "./ui/barre.js";
 import {creerPanneaux} from "./ui/panneaux.js";
+import {brancherGestes} from "./ui/gestes.js";
 import {lireProjets, projetInitial, definirProjet, memorise, memoriser, urlProjet, projetCourant} from "./ui/projets.js";
 
 const INTERVALLE = 3000;      // ms entre deux lectures de l'état
 const DELAI_LECTURE = 15000;  // ms : au-delà, la lecture est abandonnée (le serveur coupe le relevé à 10 s)
 const DT_MAX = 0.1;           // s : plafond d'un pas de temps
 const IMAGE_MOUVEMENT = 1 / 30, IMAGE_REPOS = 1 / 12;
+
+// Téléphone ou tablette : moins de 768 px de large, ou un doigt pour pointeur. La classe « mobile » règle la mise en page
+// (barre compacte, panneaux plein écran) ; sur ordinateur rien ne change.
+const requeteDoigt = window.matchMedia ? window.matchMedia("(pointer: coarse)") : null;
+const mobile = () => estMobile(window.innerWidth, requeteDoigt?.matches === true);
+function majMobile() { document.documentElement.classList.toggle("mobile", mobile()); }
+majMobile();
+window.addEventListener("resize", majMobile);
 
 const conteneur = document.getElementById("scene");
 const barre = creerBarre(document.getElementById("barre"), document.getElementById("bandeau"));
@@ -61,7 +71,7 @@ async function demarrer() {
 
   const plan = creerPlan(etat.services || [], etat.colonnes || []);
   const modeles = await charger("./modeles/manifeste.json");
-  const sc = creerScene(conteneur, plan, modeles);
+  const sc = creerScene(conteneur, plan, modeles, {mobile: mobile()});
   const regie = new Regie(plan);
   const personnages = new Personnages(sc, modeles);
   const kanban = new Kanban(sc, plan, modeles);
@@ -77,6 +87,7 @@ async function demarrer() {
     sc, plan, etat: () => dernier, barre,
     surFiltre: () => { besoin = true; },
   });
+  brancherGestes(conteneur, sc, () => { besoin = true; });
   barre.boutonListe.addEventListener("click", () => panneaux.basculerListe());
   panneaux.maj(etat);
 

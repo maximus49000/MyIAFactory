@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {CSS2DRenderer, CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {matiere} from "./modeles.js";
 import {tronquer} from "../ui/texte.js";
+import {decalageBorne, ZOOM_MIN, ZOOM_MAX} from "../logique/mobile.js";
 
 const SOLS_SERVICES = ["#cfe3d2", "#d5dcf0", "#f3dccb", "#ece3b5", "#d3ebee", "#eed5e2"];
 const SOL_CAFE = "#f0c7a2", SOL_DIRECTION = "#b8cdb0", SOL_OPEN = "#ead9bf";
@@ -46,12 +47,15 @@ function textureSol(lames) {
   return t;
 }
 
-export function creerScene(conteneur, plan, modeles) {
+// `options.mobile` : sur un téléphone ou une tablette, la définition reste plafonnée à 1,5 × et les ombres sont
+// coupées (la scène reste la même ; sur ordinateur rien ne change).
+export function creerScene(conteneur, plan, modeles, options = {}) {
+  const mobile = options.mobile === true;
   const scene = new THREE.Scene();
 
   const rendu3d = new THREE.WebGLRenderer({antialias: true, alpha: true, powerPreference: "low-power"});
   rendu3d.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-  rendu3d.shadowMap.enabled = true;
+  rendu3d.shadowMap.enabled = !mobile;
   rendu3d.shadowMap.type = THREE.PCFSoftShadowMap;
   rendu3d.shadowMap.autoUpdate = false;   // recalculées seulement quand quelqu'un se déplace (légèreté)
   rendu3d.outputColorSpace = THREE.SRGBColorSpace;
@@ -75,7 +79,7 @@ export function creerScene(conteneur, plan, modeles) {
   scene.add(hemi);
   const soleil = new THREE.DirectionalLight(LUMIERE.jour.teinte, LUMIERE.jour.soleil);
   soleil.position.set(-9, 22, 7);
-  soleil.castShadow = true;
+  soleil.castShadow = !mobile;
   const W = plan.batiment.largeur, H = plan.batiment.profondeur;
   const demi = Math.max(W, H) * 0.75;
   Object.assign(soleil.shadow.camera, {left: -demi, right: demi, top: demi, bottom: -demi, near: 1, far: 70});
@@ -220,6 +224,30 @@ export function creerScene(conteneur, plan, modeles) {
   // --- Cadrage : tout le bâtiment, avec une marge, quel que soit le format de la fenêtre.
   const coins = [];
   for (const x of [-W / 2 - 0.4, W / 2 + 0.4]) for (const z of [-H / 2 - 0.4, H / 2 + 0.4]) for (const y of [-0.5, HAUT_MUR + 0.8]) coins.push(new THREE.Vector3(x, y, z));
+  // La vue : le cadrage d'ensemble (`base`), puis le zoom et le décalage du doigt, bornés au bâtiment.
+  const vue = {zoom: 1, dx: 0, dy: 0};
+  let base = null;
+  function appliquerVue() {
+    if (!base) return;
+    [vue.dx, vue.dy] = decalageBorne([vue.dx, vue.dy], vue.zoom, [base.lv / 2, base.hv / 2]);
+    const lv = base.lv / vue.zoom, hv = base.hv / vue.zoom;
+    const cx = base.cx + vue.dx, cy = base.cy + vue.dy;
+    Object.assign(camera, {left: cx - lv / 2, right: cx + lv / 2, top: cy + hv / 2, bottom: cy - hv / 2});
+    camera.updateProjectionMatrix();
+  }
+  function zoomer(zoom) {
+    vue.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number.isFinite(zoom) ? zoom : vue.zoom));
+    appliquerVue();
+    return vue.zoom;
+  }
+  // Un glissement du doigt de (dxPx, dyPx) pixels : la scène suit le doigt.
+  function deplacer(dxPx, dyPx) {
+    if (!base) return;
+    const unite = (base.lv / vue.zoom) / (conteneur.clientWidth || 1);
+    vue.dx -= dxPx * unite;
+    vue.dy += dyPx * unite;
+    appliquerVue();
+  }
   function redimensionner() {
     const l = conteneur.clientWidth || 1, h = conteneur.clientHeight || 1;
     rendu3d.setSize(l, h);
@@ -233,8 +261,8 @@ export function creerScene(conteneur, plan, modeles) {
     const cx = (xmin + xmax) / 2, cy = (ymin + ymax) / 2;
     let lv = xmax - xmin, hv = ymax - ymin;
     if (lv / hv > l / h) hv = lv * h / l; else lv = hv * l / h;
-    Object.assign(camera, {left: cx - lv / 2, right: cx + lv / 2, top: cy + hv / 2, bottom: cy - hv / 2});
-    camera.updateProjectionMatrix();
+    base = {cx, cy, lv, hv};
+    appliquerVue();
   }
   redimensionner();
 
@@ -282,5 +310,6 @@ export function creerScene(conteneur, plan, modeles) {
       rendu2d.render(scene, camera);
     },
     redimensionner, assombrir, transition, pointer,
+    zoom: () => vue.zoom, zoomer, deplacer,
   };
 }

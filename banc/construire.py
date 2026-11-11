@@ -4,7 +4,9 @@ ses sous-agents. Le scénario **n'est jamais écrit dans le dépôt** : il conti
 Ce qu'il reprend :
 - `gestes` : chaque demande du bureau rejouable (`demandes.jsonl`), dans l'ordre ; la première part tout de suite, les
   autres quand le moteur attend l'utilisateur. Les identifiants de fonctionnalité sont renumérotés (`f1`, `f2`…) comme
-  le fera le moteur ; une image jointe est reprise en base64 si son fichier existe encore, sinon elle est laissée de côté ;
+  le fera le moteur. L'orchestrateur actuel posait certaines décisions en question dans la discussion : une réponse
+  « … → Valider la méthode … » devient le geste `methode` (`valider`) que le bureau envoie au moteur. Un `retour` sur une
+  tâche est écarté : l'identifiant d'une tâche de l'essai ne désigne rien dans le moteur ; une image jointe est reprise en base64 si son fichier existe encore, sinon elle est laissée de côté ;
 - `rapports` : le texte final de chaque sous-agent (ce qu'il a rendu par `SubagentHandback`, sinon sa dernière
   réponse) et son usage exact, rangés par (étape, rôle, rang), dans l'ordre de leur départ. La tâche se retrouve dans
   son message de départ, complété du fichier `depart_*.md` qu'il cite : « - Tâche : <titre> (<id>) », sinon le premier
@@ -14,7 +16,9 @@ Ce qu'il reprend :
   tâche de cadrage → `cadrage` (rôle `cadrage`, comme le moteur) ; rôle `relecteur` → `relecture` ; titre commençant
   par « Correction » ou « Retour » → `correction` ; élément de rang 0 au rôle de la première étape → `prototype` ;
   sinon `flux:<étape du flux de son rôle>`. Une réponse en JSON (`texte`, `questions`, `glossaire`, `maquette`,
-  `etapes`) devient le message et le cahier du rapport. Un rapport de relecture dont le texte parle d'un défaut devient
+  `etapes`) devient le message et le cahier du rapport. Sans relecteur dans l'essai, un rapport de la dernière étape
+  du flux (le contrôle, qui en tient lieu dans le moteur) reçoit un verdict par élément qu'il couvre : non conforme si
+  une ligne qui cite l'élément parle d'un échec (FAIL, non conforme, refusé). Un rapport de relecture dont le texte parle d'un défaut devient
   un verdict non conforme (ses puces en points) : c'est une heuristique, pas une lecture fine ;
 - `projet` : les services, le flux, les fiches et les briefs de l'essai ;
 - `attendu` : ce que le suivi montre d'obtenu (cahier validé, méthode, éléments faits, corrections, leçons).
@@ -30,7 +34,8 @@ from orchestrateur import factory as fa
 from orchestrateur import suivi as su
 from orchestrateur import transcriptions
 
-REJOUABLES = ("fonctionnalite", "message", "cahier", "methode", "genre", "organisation", "lecon", "retour")
+REJOUABLES = ("fonctionnalite", "message", "cahier", "methode", "genre", "organisation", "lecon")
+_VALIDER_METHODE = re.compile(r"→\s*valider la méthode", re.I)
 ROLE_RELECTURE = "relecteur"
 _TACHE = re.compile(r"- Tâche : .*?\((t\d+)\)")
 _TACHE_LIBRE = re.compile(r"\b(t\d+)\b")
@@ -42,7 +47,9 @@ ROLE_CADRAGE = "cadrage"
 RENDU = "SubagentHandback"
 _DEFAUT = re.compile(r"refus|défaut|a corriger|à corriger|non conforme|problème", re.I)
 _PUCE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$")
+_ECHEC = re.compile(r"\bFAIL\b|non conforme|refusé", re.I)
 MAX_POINTS = 5
+MAX_POINT = 300
 MAX_TEXTE = 4000
 
 
@@ -97,6 +104,8 @@ def _gestes(factory, suivi):
             e["fonctionnalite"] = ids.get(e["fonctionnalite"], e["fonctionnalite"])
         if "cible" in e:
             e["id"] = e.pop("cible")
+        if e["type"] == "message" and _VALIDER_METHODE.search(e.get("texte") or "") and e.get("fonctionnalite"):
+            e = {"type": "methode", "fonctionnalite": e["fonctionnalite"], "verdict": "valider"}
         images = []
         for chemin in d.get("images") or []:
             fichier = factory["base"] / str(chemin)
@@ -213,6 +222,31 @@ def _usage_principal(fichier):
     return {"modele": modele, **par_modele[modele]}
 
 
+def _element_cite(element):
+    return re.compile(r"(?<![\w-])" + re.escape(element) + r"(?![\w-])")
+
+
+def _verdicts_du_controle(texte, elements):
+    """Les verdicts d'un rapport de contrôle (la dernière étape d'un flux sans relecteur) : un élément est non conforme
+    si une ligne qui le cite parle d'un échec (FAIL, non conforme, refusé) ; ces lignes sont ses points."""
+    verdicts = []
+    for e in elements:
+        cite = _element_cite(e)
+        lignes = [x.strip()[:MAX_POINT] for x in texte.splitlines() if cite.search(x) and _ECHEC.search(x)]
+        verdicts.append({"element": e, "conforme": not lignes, "points": lignes[:MAX_POINTS]})
+    return verdicts
+
+
+def _elements_du_depart(texte, taches, premiere):
+    """Les éléments que couvre un départ : ceux des tâches qu'il cite (un lot), dans l'ordre, sinon celui de sa tâche."""
+    vus = []
+    for m in _TACHE_LIBRE.finditer(texte):
+        e = (taches.get(m.group(1)) or {}).get("element")
+        if e is not None and e not in vus:
+            vus.append(e)
+    return vus or ([premiere["element"]] if premiere.get("element") is not None else [])
+
+
 def _rapport_structure(etape, element, texte):
     brut = {"statut": "fait", "message": {"texte": texte[:MAX_TEXTE], "attend": etape in ("cadrage", "prototype")}}
     try:
@@ -238,6 +272,8 @@ def _rapport_structure(etape, element, texte):
 def _rapports(factory, suivi, dossier_transcriptions):
     taches, rangs, rapports = {t["id"]: t for t in suivi["taches"]}, _rangs(suivi), []
     roles = {s["role"] for s in factory["flux"]} | {t.get("role") for t in suivi["taches"] if t.get("role")}
+    production = [s for s in factory["flux"] if s["role"] != ROLE_RELECTURE] or factory["flux"]
+    sans_relecteur = ROLE_RELECTURE not in roles
     fichiers = [(f, _lignes_json(f)) for f in sorted(Path(dossier_transcriptions).glob("**/subagents/agent-*.jsonl"))]
     fichiers.sort(key=lambda x: _heure(x[1]))      # l'ordre des départs (le nom d'un fichier est un hasard)
     for fichier, lignes in fichiers:
@@ -250,9 +286,11 @@ def _rapports(factory, suivi, dossier_transcriptions):
         rang = rangs.get(t["id"], 0)
         role = ROLE_CADRAGE if _est_cadrage(t) else _role_du_depart(depart, t, roles)
         etape = _etape(t, rang, factory["flux"], role)
+        brut = _rapport_structure(etape, t.get("element"), final)
+        if sans_relecteur and len(production) > 1 and etape == "flux:" + production[-1]["id"]:
+            brut["verdicts"] = _verdicts_du_controle(final, _elements_du_depart(depart, taches, t))
         rapports.append({"etape": etape, "role": role, "rang": rang, "texte": final[:MAX_TEXTE],
-                         "fichiers": [], "usage": _usage_principal(fichier),
-                         "rapport": _rapport_structure(etape, t.get("element"), final), "_ordre": t["id"]})
+                         "fichiers": [], "usage": _usage_principal(fichier), "rapport": brut, "_ordre": t["id"]})
     rapports = [r for r in rapports if r["role"]]
     rapports.sort(key=lambda r: int(re.sub(r"\D", "", r.pop("_ordre")) or 0))     # stable : départs dans l'ordre
     return rapports

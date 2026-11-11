@@ -763,6 +763,11 @@ def _matiere(projet, etat, t):
         parties += [f"Élément : {t.get('element')}", f"Étape du flux : {etape[len(ETAPES_DE_FLUX):]}",
                     "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
                     "Registre des contrôles : relis-le avant de rendre l'élément."]
+        derniere = _production(projet)[-1]
+        if etape == ETAPES_DE_FLUX + derniere["id"] and len(_production(projet)) > 1 and _sans_relecteur(projet):
+            parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
+                           '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
+                           "un par élément. Un défaut devient un contrôle : sois précis.")
     elif etape == "relecture":
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
@@ -895,7 +900,7 @@ def _suite_de_tache(projet, etat, t, execution, r):
     if v is None:
         return []
     if etape.startswith(ETAPES_DE_FLUX):
-        return _apres_flux(projet, etat, v)
+        return _apres_flux(projet, etat, v, r)
     if etape == "relecture":
         return _apres_relecture(projet, etat, v, execution.agent, r)
     if etape in ("correction", "retour") and v["phase"] == "correction":
@@ -942,18 +947,32 @@ def _tache_de_flux(projet, etat, v):
     return tid
 
 
-def _apres_flux(projet, etat, v):
+def _sans_relecteur(projet):
+    """Aucun agent relecteur : la dernière étape du flux (un contrôle, le plus souvent) tient lieu de relecture."""
+    return not any(a["role"] == ROLE_RELECTURE for a in _etat(projet)["agents"])
+
+
+def _apres_flux(projet, etat, v, r=None):
     v["pas"] += 1
     if v["pas"] < len(_production(projet)):
         _tache_de_flux(projet, etat, v)
         return []
+    if _sans_relecteur(projet):
+        # les verdicts de la dernière étape sur cet élément (un lot en porte pour chacun) ; aucun = conforme
+        v["phase"], v["attendus"] = "relecture", 1
+        v["rapports"] = [[x for x in (r or {}).get("verdicts") or [] if x["element"] == v["element"]["id"]]]
+        return _conclure_relecture(projet, etat, v)
     v["phase"] = "relecture"
     return _lancer_relecture(projet, etat, v)
 
 
 def _lancer_relecture(projet, etat, v):
     """Le premier tour : deux relecteurs à contexte neuf, qui ne se voient pas ; les tours suivants : un seul, qui ne
-    vérifie que les points corrigés."""
+    vérifie que les points corrigés. Sans relecteur, la dernière étape du flux est refaite."""
+    if _sans_relecteur(projet):
+        v["phase"], v["pas"] = "flux", len(_production(projet)) - 1
+        _tache_de_flux(projet, etat, v)
+        return []
     v["phase"], v["rapports"] = "relecture", []
     v["attendus"] = RELECTEURS_PREMIER_TOUR if v["tour"] == 0 and v["corrections"] == 0 else 1
     colonne = _colonne_du_role(projet, ROLE_RELECTURE)
@@ -970,6 +989,10 @@ def _apres_relecture(projet, etat, v, agent, r):
     v["rapports"].append(r.get("verdicts") or [])
     if len(v["rapports"]) < v["attendus"]:
         return []
+    return _conclure_relecture(projet, etat, v)
+
+
+def _conclure_relecture(projet, etat, v):
     points = []
     for verdicts in v["rapports"]:
         mine = [x for x in verdicts if x["element"] == v["element"]["id"]] or verdicts

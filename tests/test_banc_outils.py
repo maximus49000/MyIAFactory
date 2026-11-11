@@ -129,6 +129,8 @@ class Construire(AvecProjet):
         « tâche t2 », départ d'un lot dans un fichier `depart_*.md`, cadrage sans identifiant de tâche."""
         self.ok("actions", entree={"type": "fonctionnalite", "texte": "Des badges"})
         self.ok("actions", entree={"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"})
+        self.ok("actions", entree={"type": "message", "fonctionnalite": "f1",
+                                   "texte": "Que fait-on de la méthode ? → Valider la méthode et lancer la série"})
         flux = [{"id": "creation", "nom": "Création", "role": "graphiste", "service": "dev"},
                 {"id": "controle", "nom": "Contrôle", "role": "controleur", "service": "dev"}]
         f = json.loads((self.dossier / "factory.json").read_text(encoding="utf-8"))
@@ -170,18 +172,26 @@ class Construire(AvecProjet):
             ("3", f"Tu es le graphiste du projet (tâche {ids['proto']}, élément a1). C'est le PROTOTYPE.", "Fait."),
             ("4", f"Tu es le contrôleur du projet (tâche {ids['c1']}, élément a1).", "Tout passe."),
             ("5", f"Tu repars de zéro. Lis {pieces / 'depart_lot1.md'} et suis-le.", "Lot fait."),
-            ("6", f"Tu repars de zéro. Lis {pieces / 'depart_lot2.md'} et suis-le.", "Lot contrôlé."),
+            ("6", f"Tu repars de zéro. Lis {pieces / 'depart_lot2.md'} et suis-le.",
+             "Badge | C1 | Global\na3 ({b3}) | PASS | PASS\na6 ({b6}) | PASS | FAIL (boîte décalée)\nLot contrôlé.".format(
+                 **ids)),
             ("7", f"Lis {pieces / 'depart_t9.md'} (tâche {ids['cor']}, élément a6, correction).", "Corrigé."))
         for n, depart, final in departs:
             # noms dans le désordre : l'ordre est celui de l'heure du départ
             ecrire_jsonl(self.transcriptions / "session" / "subagents" / f"agent-{8 - int(n)}.jsonl", [
                 {"type": "user", "timestamp": f"2026-11-11T10:0{n}:00Z", "message": {"role": "user", "content": depart}},
                 message("m" + n, "claude-sonnet-5-5", 100, 50, texte="Je rends compte."), rendu(final)])
+        self.ok("actions", entree={"type": "retour", "tache": ids["proto"], "texte": "La limite est levée"})
         return ids
 
     def test_construire_lit_les_formes_de_l_orchestrateur_actuel(self):
-        self.essai_reel()
+        ids = self.essai_reel()
         s = scenario.charger(construire.construire(self.dossier, self.transcriptions, self.bancs / "reel.json"))
+        # la réponse à une question sur la méthode devient le geste du bureau ; un retour sur une tâche de l'essai
+        # (son identifiant ne désigne rien dans le moteur) est écarté
+        self.assertEqual([g["demande"] for g in s.gestes[1:]], [
+            {"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"},
+            {"type": "methode", "fonctionnalite": "f1", "verdict": "valider"}])
         cles = [(r["etape"], r["role"], r["rang"]) for r in s.rapports]
         self.assertEqual(cles, [("cadrage", "cadrage", 0), ("cadrage", "cadrage", 0), ("prototype", "graphiste", 0),
                                 ("flux:controle", "controleur", 0), ("flux:creation", "graphiste", 1),
@@ -192,6 +202,11 @@ class Construire(AvecProjet):
         self.assertEqual(s.rapports[1]["rapport"]["cahier"], {"maquette": ["pieces/f1/maquette.png"],
                                                               "etapes": ["Abo 1", "Abo 3"]})
         self.assertEqual(s.rapports[2]["texte"], "Fait.")
+        # la dernière étape du flux, sans relecteur dans l'essai, rend des verdicts par élément du lot
+        self.assertEqual(s.rapports[5]["rapport"]["verdicts"], [
+            {"element": "a3", "conforme": True, "points": []},
+            {"element": "a6", "conforme": False, "points": ["a6 ({b6}) | PASS | FAIL (boîte décalée)".format(**ids)]}])
+        self.assertNotIn("verdicts", s.rapports[4]["rapport"])
         self.assertEqual(s.rapports[0]["usage"]["entree"], 101)
 
     def test_construire_refuse_une_sortie_dans_le_depot(self):

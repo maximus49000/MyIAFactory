@@ -335,6 +335,40 @@ class Serie(Base):
         self.assertEqual(len(self.taches(etape="relecture")), 3)
         self.assertTrue(self.fonc()["catalogue"])
 
+    def sans_relecteurs(self):
+        """Le projet de l'essai de référence : pas d'agent relecteur ; le flux finit par un contrôle."""
+        (self.dossier / "fiches" / "remi.md").unlink()
+        (self.dossier / "fiches" / "zoe.md").unlink()
+        (self.dossier / "fiches" / "ctrl.md").write_text(FICHE_REMI.replace("rel-1", "ctrl-1").replace(
+            "relecteur", "controleur"), encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["flux"] = [{"id": "dev", "nom": "Développement", "role": "dev", "service": "dev"},
+                     {"id": "controle", "nom": "Contrôle", "role": "controleur", "service": "dev"}]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def test_sans_relecteur_le_controle_du_flux_conclut(self):
+        self.sans_relecteurs()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écran fait."}}, verdict("e1")])
+        self.assertEqual(self.taches(etape="relecture"), [])
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        self.assertIn("Rends un `verdicts`", regles._matiere(self.projet, self.etat, self.taches(etape="flux:controle")[0]))
+        self.assertNotIn("verdicts", regles._matiere(self.projet, self.etat, self.taches(etape="flux:dev")[0]))
+
+    def test_sans_relecteur_un_refus_du_controle_est_corrige_puis_recontrole(self):
+        self.sans_relecteurs()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écran fait."}}, verdict("e1", ["Le titre est trop petit"]),
+            {"statut": "fait", "message": {"texte": "Corrigé."}}, verdict("e1")],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Agrandir le titre.", "raison": "trop petit"}})
+        self.assertEqual(self.taches(etape="relecture"), [])
+        self.assertEqual(len(self.taches(etape="correction")), 1)
+        self.assertEqual(len(self.taches(etape="flux:controle")), 2)       # le contrôle refait après la correction
+        v = self.etat["elements"]["f1/e1"]
+        self.assertEqual((v["phase"], v["corrections"]), ("fait", 1))
+
     def rendre_relectures(self, taches, rapports):
         actions = []
         for t, r in zip(taches, rapports):

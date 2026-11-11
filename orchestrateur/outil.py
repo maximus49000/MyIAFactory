@@ -1172,6 +1172,7 @@ def _usage_au_releve(u, ids_taches, cles):
 
 CHAMPS_AFFICHES = ("id", "nom", "categorie", "sous_categorie", "description", "site", "inscription", "connexions",
                    "plans", "gratuit", "quota_lisible", "illimite", "statut", "fiabilite", "verifie_le", "popularite")
+RAISON_RELEVE = "quota épuisé (relevé)"
 QUOTA_TOUTES_LES_S = 3600   # au plus une lecture par heure et par partenaire, sauf `force`
 TOKENS_PAR_FICHE = 20_000   # revérifier une fiche : deux pages lues et la fiche réécrite, sur Sonnet
 PART_SORTIE_FICHE = 0.2
@@ -1202,14 +1203,18 @@ def _etat_partenaires():
     return petat.Etat()
 
 
-def _lire_conseils(ctx):
+def _lire_conseils(ctx, strict=False):
+    """Les conseils du projet. Illisibles : un refus si `strict` (lecture demandée), sinon aucun conseil (le choix passe
+    alors au catalogue, rien ne bloque)."""
     chemin = petat.chemin_conseils(ctx.f["base"])
     try:
         d = json.loads(chemin.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
         return {"besoins": {}}
     except (OSError, ValueError) as ex:
-        raise Refus(f"Conseils des partenaires illisibles ({chemin.name}) : {ex}")
+        if strict:
+            raise Refus(f"Conseils des partenaires illisibles ({chemin.name}) : {ex}")
+        return {"besoins": {}}
     b = d.get("besoins") if isinstance(d, dict) else None
     return {"besoins": b if isinstance(b, dict) else {}}
 
@@ -1273,8 +1278,8 @@ def _p_quota(ctx, e, cat, par_id):
     instant = datetime.datetime.now().astimezone()
     lus, sautes, rates, a_noter = [], [], [], {}
     for i in ids:
-        lecteur = par_id[i].get("lecteur")
-        if not lecteur:
+        lien = pquota.lecteur_de(i)   # le lecteur et ses variables sont figés dans l'outil, jamais lus du catalogue
+        if not lien:
             sautes.append({"id": i, "raison": "quota non lisible par l'API"})
             continue
         derniere = d["lectures"].get(i)
@@ -1282,11 +1287,11 @@ def _p_quota(ctx, e, cat, par_id):
                 (instant - lire_date(derniere)).total_seconds() < QUOTA_TOUTES_LES_S:
             sautes.append({"id": i, "raison": "déjà lu il y a moins d'une heure"})
             continue
-        cle = pdet.cle(i, _projet(ctx), catalogue=cat)   # pour cet appel seulement
+        cle = pdet.cle_des_variables(lien[1], _projet(ctx))   # pour cet appel seulement
         if not cle:
-            sautes.append({"id": i, "raison": "aucune clé (variable d'environnement ou .env du projet)"})
+            sautes.append({"id": i, "raison": f"aucune clé ({' ou '.join(lien[1])} : environnement ou .env du projet)"})
             continue
-        res = pquota.lire(lecteur, cle)
+        res = pquota.lire(lien[0], cle)
         del cle
         a_noter[i] = res
         (lus if res is not None else rates).append(i)
@@ -1300,17 +1305,22 @@ def _p_quota(ctx, e, cat, par_id):
                 d["quotas"][i] = {**{k: res[k] for k in ("reste", "unite", "illimite") if k in res}, "lu_le": quand}
                 if res.get("abonnement") and i in d["connexions"]:
                     d["connexions"][i]["abonnement"] = res["abonnement"]
-                if res.get("illimite") or (res.get("reste") or 0) > 0:
-                    d["limites"].pop(i, None)
+                posee = (d["limites"].get(i) or {}).get("raison") == RAISON_RELEVE
+                if (res.get("illimite") or (res.get("reste") or 0) > 0) and posee:
+                    d["limites"].pop(i)   # seule une limite posée par un relevé est levée par un relevé
                 elif res.get("reste") == 0:
-                    d["limites"][i] = {"depuis": quand, "raison": "quota épuisé (relevé)"}
+                    d["limites"][i] = {"depuis": quand, "raison": RAISON_RELEVE}
     return {"lus": lus, "rates": rates, "sautes": sautes}
 
 
 def _p_choisir(ctx, e, cat, par_id):
     besoin = texte(e, "besoin")
     conseils = [x.get("id") for x in _lire_conseils(ctx)["besoins"].get(besoin) or [] if isinstance(x, dict)]
-    r = pchoix.ordonner(besoin, conseils, cat, _etat_partenaires().lire())
+    try:
+        d = _etat_partenaires().lire()
+    except petat.EtatIllisible as ex:   # rien ne bloque : aucun partenaire, le mode manuel prend le relais
+        return {"partenaires": [], "meilleur_non_connecte": None, "avertissement": str(ex)}
+    r = pchoix.ordonner(besoin, conseils, cat, d)
     for x in r["partenaires"]:
         x["nom"] = par_id[x["id"]]["nom"]
     return r
@@ -1357,7 +1367,7 @@ def _p_regle(ctx, e, cat, par_id):
 
 def _p_conseils(ctx, e, cat, par_id):
     if "besoins" not in e:
-        return _lire_conseils(ctx)
+        return _lire_conseils(ctx, strict=True)
     erreurs = pcat.verifier_conseils(e["besoins"], par_id)
     if erreurs:
         raise Refus(" ".join(erreurs[:5]))
@@ -1437,6 +1447,8 @@ def cmd_partenaires(ctx, e):
         return ACTIONS_PARTENAIRES[action](ctx, e, cat, par_id)
     except su.SuiviOccupe:
         raise
+    except petat.EtatIllisible as ex:
+        raise Refus(str(ex))
     except OSError as ex:
         raise Refus(f"Fichier des partenaires inaccessible : {ex}"[:300])
 
@@ -1464,8 +1476,8 @@ def _releve_partenaires(ctx):
         return None
     try:
         d = _etat_partenaires().lire()
-    except (OSError, ValueError):
-        d = petat.vide()
+    except (OSError, ValueError):   # illisible : rien d'affiché comme connu (ni la règle de départ déjà retirée)
+        d = {s: {} for s in petat.SECTIONS}
     ids = {p["id"] for p in cat["partenaires"]}
     categories = {c: [{k: p[k] for k in CHAMPS_AFFICHES if k in p} for p in liste]
                   for c, liste in pcat.par_categorie(cat).items() if liste}

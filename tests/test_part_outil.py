@@ -116,6 +116,30 @@ class TestPartenairesOutil(AvecPartenaires):
         self.assertIn("inconnu", self.refus({"action": "confirmer", "ids": ["inexistant"]}))
         self.assertIn("action", self.refus({"action": "pirater"}))
 
+    def test_fichier_corrompu_ne_bloque_pas(self):
+        chemin = self.maison / "MyIAFactory" / "partenaires.json"
+        chemin.parent.mkdir(parents=True)
+        chemin.write_text('{"connexions": {"x": "connecte", "elevenlabs": {"etat": "connecte"}}, "regles": {"tripo": 3}}',
+                          encoding="utf-8")
+        r = outil.construire_releve(outil.Contexte(self.factory))
+        self.assertEqual(releve.valider(r), [])
+        self.assertEqual(list(r["partenaires"]["etat"]["connexions"]), ["elevenlabs"])
+        chemin.write_text('{"connexions": {', encoding="utf-8")   # tronqué
+        r = outil.construire_releve(outil.Contexte(self.factory))
+        self.assertEqual(releve.valider(r), [])
+        self.assertEqual(r["partenaires"]["etat"]["regles"], {})   # la règle de départ ne revient pas
+        self.assertEqual(self.p({"action": "choisir", "besoin": "voix"})["partenaires"], [])
+        self.assertIn("illisible", self.refus({"action": "detecter"}))
+        (self.projet / "partenaires.json").write_text("{pas du json", encoding="utf-8")   # conseils illisibles
+        self.assertIn("illisibles", self.refus({"action": "conseils"}))
+
+    def test_limite_de_l_agent_tenue_malgre_un_reste(self):
+        os.environ["ELEVENLABS_API_KEY"] = CLE
+        self.p({"action": "confirmer", "ids": ["elevenlabs"]})
+        self.p({"action": "limite", "partenaire": "elevenlabs", "raison": "402 paiement requis"})
+        self.p({"action": "quota", "force": True})   # reste 9000
+        self.assertIn("elevenlabs", petat.Etat().lire()["limites"])
+
     def test_conseils_controles(self):
         e = self.refus({"action": "conseils", "besoins": {"voix": [{"id": "lmnt", "raison": "x"}]}})
         self.assertIn("inactif", e)   # fermé : jamais conseillé

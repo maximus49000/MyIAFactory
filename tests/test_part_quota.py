@@ -22,6 +22,26 @@ class TestQuota(unittest.TestCase):
         lecteurs = {p["lecteur"] for p in catalogue.lire()["partenaires"] if p.get("lecteur")}
         self.assertEqual(lecteurs, set(quota.LECTEURS))
 
+    def test_lecteur_attache_a_son_partenaire(self):
+        cat = catalogue.lire()
+        for p in cat["partenaires"]:
+            if p.get("lecteur"):
+                self.assertEqual(quota.LIENS[p["lecteur"]][0], p["id"])
+                variables = {v for c in p["connexions"] for v in c.get("variables") or []}
+                self.assertTrue(set(quota.LIENS[p["lecteur"]][1]) <= variables, p["id"])
+        # une fiche réécrite ne peut pas détourner un lecteur vers un autre partenaire
+        fiche = next(p for p in cat["partenaires"] if p["id"] == "tripo")
+        fiche.update(lecteur="elevenlabs", quota_lisible="oui")
+        self.assertTrue(any("lecteur" in e for e in catalogue.verifier(cat)))
+
+    def test_solde_negatif_borne(self):
+        o, _ = faux({"credits": -3})
+        self.assertEqual(quota.lire("bfl", CLE, o)["reste"], 0)
+
+    def test_redirection_refusee(self):
+        h = quota._SansRedirection()
+        self.assertIsNone(h.redirect_request(None, None, 302, "Found", {}, "http://ailleurs.example/"))
+
     def test_lecteur_deepl_illimite(self):
         o, appels = faux({"character_count": 5, "character_limit": 1_000_000_000_000})
         self.assertEqual(quota.lire("deepl", "abc:fx", o), {"illimite": True, "unite": "caractères"})

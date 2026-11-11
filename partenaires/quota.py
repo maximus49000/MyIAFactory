@@ -12,18 +12,31 @@ OCTETS_MAX = 1_000_000
 ILLIMITE_DEEPL = 1_000_000_000_000   # la valeur que DeepL donne pour « aucune limite »
 
 
+class _SansRedirection(urllib.request.HTTPRedirectHandler):
+    """Une redirection recopierait la clé (en-tête) vers une autre adresse : elle est refusée."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OUVREUR = urllib.request.build_opener(_SansRedirection)
+
+
 def _ouvrir(url, entetes):
-    """Le JSON d'un GET (délai 10 s, réponse bornée). Lève une exception en cas d'échec."""
+    """Le JSON d'un GET (délai 10 s, réponse bornée, aucune redirection suivie). Lève une exception en cas d'échec."""
     req = urllib.request.Request(url, headers={**entetes, "Accept": "application/json",
                                                 "User-Agent": "MyIAFactory-quota"})
-    with urllib.request.urlopen(req, timeout=DELAI_S) as r:
+    with _OUVREUR.open(req, timeout=DELAI_S) as r:
+        if r.status != 200:
+            raise ValueError(f"réponse {r.status}")
         return json.loads(r.read(OCTETS_MAX).decode("utf-8"))
 
 
 def _n(x):
-    if isinstance(x, bool) or not isinstance(x, (int, float)) or x != x:
+    """Un nombre lu, borné à zéro (un solde négatif se lit « reste 0 »)."""
+    if isinstance(x, bool) or not isinstance(x, (int, float)) or x != x or x in (float("inf"), float("-inf")):
         raise ValueError("nombre attendu")
-    return x
+    return max(0, x)
 
 
 def _elevenlabs(cle, ouvrir):
@@ -85,6 +98,17 @@ def _kiri(cle, ouvrir):
 _LECTEURS = {"elevenlabs": _elevenlabs, "bfl": _bfl, "stability": _stability, "leonardo": _leonardo,
              "meshy": _meshy, "removebg": _removebg, "deepl": _deepl, "kiri": _kiri}
 LECTEURS = frozenset(_LECTEURS)
+# Figé ici, jamais lu du catalogue : le partenaire de chaque lecteur et les seules variables dont il lit la clé.
+# Une fiche réécrite par « Mettre à jour les offres » ne peut donc pas faire partir une clé chez un autre partenaire.
+LIENS = {"elevenlabs": ("elevenlabs", ("ELEVENLABS_API_KEY",)), "bfl": ("bfl", ("BFL_API_KEY",)),
+         "stability": ("stability", ("STABILITY_API_KEY",)), "leonardo": ("leonardo", ("LEONARDO_API_KEY",)),
+         "meshy": ("meshy", ("MESHY_API_KEY",)), "removebg": ("removebg", ("REMOVEBG_API_KEY",)),
+         "deepl": ("deepl", ("DEEPL_AUTH_KEY",)), "kiri": ("kiri-engine", ("KIRI_API_KEY",))}
+
+
+def lecteur_de(id_):
+    """(lecteur, variables) du partenaire `id_`, ou None s'il n'a pas de lecteur."""
+    return next(((lec, v) for lec, (i, v) in LIENS.items() if i == id_), None)
 
 
 def lire(lecteur, cle, ouvrir=None):

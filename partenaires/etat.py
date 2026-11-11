@@ -30,6 +30,10 @@ def vide(aujourdhui=None):
             "regles": {"tripo": [{"id": "r1", "texte": REGLE_TRIPO, "cree_le": jour}]}}
 
 
+class EtatIllisible(ValueError):
+    """Le fichier des partenaires n'est pas du JSON lisible."""
+
+
 class Etat(su.Suivi):
     """`lire()` et `transaction()` comme le suivi, sur le fichier des partenaires."""
 
@@ -40,11 +44,21 @@ class Etat(su.Suivi):
         import json
         if not self.chemin.exists():
             return vide()
-        lu = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
+        try:
+            lu = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
+        except ValueError as e:
+            raise EtatIllisible(f"Fichier des partenaires illisible ({self.chemin}) : {e}. Corrigez-le, ou "
+                                "renommez-le pour repartir d'un fichier neuf (connexions et règles seront à refaire).")
         d = {"version": 1}
         for s in SECTIONS:
             v = lu.get(s) if isinstance(lu, dict) else None
-            d[s] = v if isinstance(v, dict) else {}
+            v = v if isinstance(v, dict) else {}
+            if s == "regles":   # une entrée abîmée est ignorée, jamais une raison de tout refuser
+                d[s] = {i: [r for r in x if isinstance(r, dict)] for i, x in v.items() if isinstance(x, list)}
+            elif s == "lectures":
+                d[s] = {i: x for i, x in v.items() if isinstance(x, str)}
+            else:
+                d[s] = {i: x for i, x in v.items() if isinstance(x, dict)}
         return d
 
 

@@ -159,6 +159,20 @@ def declares(projet, environ=None, config_utilisateur=None, catalogue=None):
     return sortie
 
 
+def cle_des_variables(variables, projet, environ=None):
+    """La valeur de la première de ces variables (environnement, puis `.env` du projet), pour un appel seulement."""
+    environ = os.environ if environ is None else environ
+    for v in variables:
+        if environ.get(v):
+            return environ[v]
+    trouvees = {nom: reste for nom, reste in _lignes_env(Path(projet) / ".env") if nom in variables}
+    for v in variables:
+        valeur = _valeur(trouvees[v]) if v in trouvees else None
+        if valeur:
+            return valeur
+    return None
+
+
 def cle(id_, projet, environ=None, catalogue=None):
     """La valeur de la clé d'un partenaire, **pour un appel seulement** : l'environnement d'abord, puis le `.env` du
     projet. Jamais gardée, jamais écrite, jamais rendue dans une sortie."""

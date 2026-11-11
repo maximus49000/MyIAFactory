@@ -5433,7 +5433,9 @@
     {
      "type": "api",
      "url": null,
-     "variables": []
+     "variables": [
+       "KIRI_API_KEY"
+      ]
     }
    ],
    "plans": [],

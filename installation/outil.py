@@ -175,7 +175,10 @@ def cmd_partenaires(a):
     from partenaires import catalogue as pcat, detection, etat
     projet = _dossier(a.dossier)
     cat = pcat.lire()
-    sortie = {"connexions": detection.mettre_a_jour(projet, cat, etat.Etat())}
+    try:
+        sortie = {"connexions": detection.mettre_a_jour(projet, cat, etat.Etat())}
+    except (etat.EtatIllisible, OSError) as e:   # rien ne bloque l'installation : on le dit et on continue
+        sortie = {"connexions": {}, "avertissement": str(e)}
     if not a.besoins:
         sortie["besoins"] = {c: sorted({p["sous_categorie"] for p in cat["partenaires"] if p["categorie"] == c})
                              for c in pcat.CATEGORIES}

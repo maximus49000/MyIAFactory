@@ -201,6 +201,7 @@ class TestCatalogue(unittest.TestCase):
         d = copy.deepcopy(self.d)
         neuf = copy.deepcopy(d["partenaires"][0])
         neuf.update(id="nouveau-hub", nom="Nouveau hub", sous_categorie="hub-de-connecteurs", popularite=None)
+        neuf.pop("lecteur", None)   # un lecteur est attaché à son seul partenaire (test_part_quota)
         d["partenaires"].append(neuf)
         self.assertEqual(catalogue.verifier(d), [])
 

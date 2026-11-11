@@ -9,6 +9,7 @@ import os
 import re
 import time
 from collections import Counter
+from urllib.parse import urlsplit
 from pathlib import Path
 
 IGNORES_VIDE = (".git", ".gitignore", ".gitattributes", "README*", "LICENSE*", ".claude", ".vscode", ".idea")
@@ -204,7 +205,9 @@ def _partenaires_declares(d):
     if isinstance(serveurs, dict):
         for nom, s in list(serveurs.items())[:50]:
             url = s.get("url") if isinstance(s, dict) else None
-            mcp.append({"nom": str(nom), "url": url if isinstance(url, str) else None})
+            # l'hôte seulement : un jeton peut se cacher dans le chemin ou la requête de l'adresse
+            hote = urlsplit(url).hostname if isinstance(url, str) else None
+            mcp.append({"nom": str(nom), "hote": hote})
     deps = _dependances(d)
     paquets = [{"paquet": p, "id": PAQUETS_PARTENAIRES[p]} for p in sorted(deps) if p in PAQUETS_PARTENAIRES]
     try:

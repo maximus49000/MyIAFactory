@@ -82,6 +82,10 @@ def verifier(d):
             e("quota_lisible doit valoir oui, non ou inconnu")
         if p.get("lecteur") is not None and p.get("quota_lisible") != "oui":
             e("lecteur seulement si quota_lisible vaut oui")
+        if p.get("lecteur") is not None:
+            from partenaires.quota import LIENS
+            if LIENS.get(p["lecteur"], (None,))[0] != i:
+                e(f"lecteur « {p['lecteur']} » inconnu ou attaché à un autre partenaire")
         d_ = p.get("description")
         if d_ is None and p.get("statut") == "actif":
             e("description manquante (une entrée active doit dire à quoi sert le partenaire)")

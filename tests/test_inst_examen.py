@@ -140,13 +140,15 @@ class TestPartenairesDeclares(Base):
     def test_partenaires_declares_mcp_paquets_env_exemple(self):
         ecrire(self.d, ".mcp.json", json.dumps({"mcpServers": {
             "stripe": {"type": "http", "url": "https://mcp.stripe.com", "headers": {"Authorization": f"Bearer {CLE}"}},
-            "local": {"command": "npx", "args": ["--token", CLE], "env": {"K": CLE}}}}))
+            "local": {"command": "npx", "args": ["--token", CLE], "env": {"K": CLE}},
+            "secret": {"url": f"https://mcp.exemple.org/s/{CLE}/sse?api_key={CLE}"}}}))
         ecrire(self.d, "package.json", json.dumps({"dependencies": {"elevenlabs": "^1", "react": "18"},
                                                    "devDependencies": {"@fal-ai/client": "1"}}))
         ecrire(self.d, "requirements.txt", "replicate==0.25  # images\nrequests\n")
         ecrire(self.d, ".env.example", "# clés\nELEVENLABS_API_KEY=\nexport AUTRE_VAR=x\n")
         r = examen.examiner(self.d)["partenaires_declares"]
-        self.assertEqual(r["mcp"], [{"nom": "stripe", "url": "https://mcp.stripe.com"}, {"nom": "local", "url": None}])
+        self.assertEqual(r["mcp"], [{"nom": "stripe", "hote": "mcp.stripe.com"}, {"nom": "local", "hote": None},
+                                    {"nom": "secret", "hote": "mcp.exemple.org"}])
         self.assertEqual(r["paquets"], [{"paquet": "@fal-ai/client", "id": "fal"},
                                         {"paquet": "elevenlabs", "id": "elevenlabs"},
                                         {"paquet": "replicate", "id": "replicate"}])

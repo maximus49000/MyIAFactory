@@ -1,6 +1,6 @@
 # Un genre et un workflow par fonctionnalité — conception
 
-Date : 2026-11-11. Statut : à valider par l'utilisateur.
+Date : 2026-11-11. Statut : **validé par l'utilisateur** le 2026-11-12. Plan : `docs/superpowers/plans/2026-11-12-genre-par-fonctionnalite.md`.
 
 ## 1. Pourquoi
 

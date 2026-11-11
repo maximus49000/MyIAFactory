@@ -8,6 +8,7 @@
     Lieu : local
     Session : (cloud seulement)
     Spécialité : écrans et mise en page
+    Outils : Read, Write, Edit, Bash(py:*)   (facultatif : les outils d'un agent lancé par le moteur)
 
     Texte libre…
 
@@ -20,10 +21,13 @@ import re
 import tempfile
 from pathlib import Path
 
-ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité")
+ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils")
+# Les outils d'un agent lancé sans fenêtre quand sa fiche n'en déclare pas : lire, écrire et modifier dans le dossier
+# du projet, lancer `py` et `git`. Jamais le mode qui contourne les autorisations.
+OUTILS_PAR_DEFAUT = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(py:*)", "Bash(git:*)"]
 MODELES = ("Haiku", "Sonnet", "Opus")
 ETATS = ("à valider", "validée")
-_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité)\s*:\s*(.*?)\s*$")
+_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils)\s*:\s*(.*?)\s*$")
 _LECON = re.compile(r"^-\s*\[(à valider|validée)\]\s*(\S+)\s*:\s*(.*)$")
 
 
@@ -68,6 +72,7 @@ def lire_fiche(chemin):
     return {"cle": champs["Clé"], "prenom": champs.get("Prénom") or None, "role": champs["Rôle"],
             "service": champs.get("Service") or None, "modele": champs["Modèle"], "lieu": champs["Lieu"],
             "session": champs.get("Session") or None, "specialite": champs.get("Spécialité") or None,
+            "outils": champs.get("Outils") or None,
             "texte": "\n".join(corps).strip(), "lecons": lecons, "chemin": chemin}
 
 
@@ -90,7 +95,7 @@ def ecrire_fiche(f):
     """Réécrit la fiche (le texte libre et les leçons sont gardés)."""
     lignes = [f"Clé : {f['cle']}"]
     for nom, cle in (("Prénom", "prenom"), ("Rôle", "role"), ("Service", "service"), ("Modèle", "modele"),
-                     ("Lieu", "lieu"), ("Session", "session"), ("Spécialité", "specialite")):
+                     ("Lieu", "lieu"), ("Session", "session"), ("Spécialité", "specialite"), ("Outils", "outils")):
         if f.get(cle):
             lignes.append(f"{nom} : {f[cle]}")
     lignes += ["", f["texte"], "", "## Leçons"] if f["texte"] else ["", "## Leçons"]
@@ -105,6 +110,24 @@ def ecrire_fiche(f):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+def outils(fiche):
+    """Les outils de l'agent : la ligne `Outils :` de sa fiche (séparée par des virgules, hors parenthèses : une règle
+    comme `Bash(py:*)` reste entière), sinon `OUTILS_PAR_DEFAUT`."""
+    brut = (fiche.get("outils") or "").strip()
+    if not brut:
+        return list(OUTILS_PAR_DEFAUT)
+    liste, courant, profondeur = [], "", 0
+    for c in brut:
+        profondeur += (c == "(") - (c == ")")
+        if c == "," and profondeur <= 0:
+            liste.append(courant.strip())
+            courant = ""
+        else:
+            courant += c
+    liste.append(courant.strip())
+    return [o for o in liste if o] or list(OUTILS_PAR_DEFAUT)
 
 
 def trouver(fiches, cle):

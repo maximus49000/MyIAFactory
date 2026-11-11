@@ -167,11 +167,11 @@ def test_api_sans_cle_bascule_une_fois(self):
   - `executer_agent(depart: str, matiere: str, *, agent: dict, modele: str, dossier_projet: str, appeler=appel.appeler) -> Execution` (synchrone ; la boucle le met dans un fil) ;
   - `fiches.outils(fiche: dict) -> list[str]` : la ligne `Outils :` séparée par des virgules, sinon `OUTILS_PAR_DEFAUT`.
 
-- [ ] **Étape 1 : tests qui échouent** : `test_agent_rend_son_rapport_et_son_usage` ; `test_outils_de_la_fiche_passent_a_l_appel` ; `test_jamais_de_contournement_des_autorisations` (aucun argument de l'appel ne contient `dangerously` ni `bypass`) ; `test_agent_sans_bloc_relance_puis_bloque` (deux sorties sans bloc → `erreur` non nul, deux usages cumulés) ; `test_usage_note_meme_en_echec` ; `test_fable_dans_la_fiche_refuse`.
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** `moteur/agents.py` et `fiches.outils`.
-- [ ] **Étape 4 : lancer** : vert.
-- [ ] **Étape 5 : commit** `Moteur : lancer un agent sans fenêtre`.
+- [x] **Étape 1 : tests qui échouent** : `test_agent_rend_son_rapport_et_son_usage` ; `test_outils_de_la_fiche_passent_a_l_appel` ; `test_jamais_de_contournement_des_autorisations` (aucun argument de l'appel ne contient `dangerously` ni `bypass`) ; `test_agent_sans_bloc_relance_puis_bloque` (deux sorties sans bloc → `erreur` non nul, deux usages cumulés) ; `test_usage_note_meme_en_echec` ; `test_fable_dans_la_fiche_refuse`.
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** `moteur/agents.py` et `fiches.outils`.
+- [x] **Étape 4 : lancer** : vert.
+- [x] **Étape 5 : commit** `Moteur : lancer un agent sans fenêtre`.
 
 ### Tâche 6 : la table de règles
 

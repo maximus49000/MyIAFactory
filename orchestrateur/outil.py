@@ -365,6 +365,18 @@ def _presence(ctx):
     return ctx.f["suivi"].with_name("presence.json")
 
 
+# Les commandes que le bureau lance lui-même (réglages `releve`, `actions`, `catalogues`, mesure de charge) : elles ne
+# disent rien de la présence de l'orchestrateur. `guetter` note la sienne.
+COMMANDES_DU_BUREAU = ("releve", "actions", "charge", "catalogue", "guetter")
+
+
+def noter_presence(ctx):
+    try:
+        guetteur.ecrire_presence(_presence(ctx), datetime.now().astimezone())
+    except OSError:
+        pass   # la présence est une aide : jamais une raison d'échouer
+
+
 def cmd_guetter(ctx, e):
     """Le moniteur de l'orchestrateur : ne rend jamais la main (il vit avec la conversation)."""
     guetteur.guetter(ctx.f["suivi"].with_name("demandes.jsonl"), _presence(ctx))
@@ -1851,6 +1863,8 @@ def executer(chemin_factory, argv, entree=None):
             raise Appel(f"La commande « {nom} » demande une entrée JSON sur l'entrée standard.")
         if entree is not None and not isinstance(entree, dict):
             raise Appel("L'entrée doit être un objet JSON.")
+        if nom not in COMMANDES_DU_BUREAU:   # l'orchestrateur travaille : il est là (son moniteur a pu expirer)
+            noter_presence(ctx)
         if declaree:
             return lancer_declaree(ctx, nom, entree, extra)
         return 0, fonction(ctx, entree or {})

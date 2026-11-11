@@ -32,7 +32,8 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
   tâches, la file, les décisions, les leçons, les agents), puis la mémoire (voir « La mémoire »). Lis le registre des
   contrôles du projet. Puis commence la boucle de réveil.
 - **Surveille le journal des demandes** avec un moniteur dont la commande est `lancer guetter` (elle ne rend jamais
-  la main) : chaque geste de l'utilisateur au bureau y devient une ligne, et c'est ce qui te réveille. Le moniteur dit
+  la main ; délai au maximum, et réarme-le dès qu'il expire) : chaque geste de l'utilisateur au bureau y devient une
+  ligne, et c'est ce qui te réveille. Le moniteur dit
   aussi au bureau que tu es là : sans lui, le bureau bloque les gestes et propose de démarrer un orchestrateur.
 
 ## La boucle de réveil

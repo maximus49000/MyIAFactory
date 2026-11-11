@@ -9,14 +9,14 @@ from datetime import datetime
 
 PAS_S = 2            # le journal des demandes est relu toutes les 2 s
 PRESENCE_S = 20      # la présence est notée toutes les 20 s
-FRAICHEUR_S = 60     # au-delà, l'orchestrateur n'est plus tenu pour présent
+FRAICHEUR_S = 120    # au-delà, l'orchestrateur n'est plus tenu pour présent (un moniteur réarmé, un outil appelé)
 
 
 def _maintenant():
     return datetime.now().astimezone()
 
 
-def _ecrire_presence(presence, quand):
+def ecrire_presence(presence, quand):
     tmp = presence.with_name(presence.name + ".tmp")
     tmp.write_text(json.dumps({"maj": quand.isoformat(timespec="seconds"), "pid": os.getpid()}), encoding="utf-8")
     os.replace(tmp, presence)
@@ -54,7 +54,7 @@ def guetter(journal, presence, dormir=time.sleep, horloge=_maintenant, tours=Non
     while tours is None or n < tours:
         maintenant = horloge()
         if derniere is None or (maintenant - derniere).total_seconds() >= PRESENCE_S:
-            _ecrire_presence(presence, maintenant)
+            ecrire_presence(presence, maintenant)
             derniere = maintenant
         pos = _annoncer(journal, pos, sortie)
         dormir(PAS_S)

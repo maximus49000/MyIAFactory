@@ -98,6 +98,16 @@ class TestSuivi(AvecProjet):
         (self.dossier / "presence.json").write_text(json.dumps({"maj": maj}), encoding="utf-8")
         self.assertIs(self.releve()["orchestrateur_present"], True)
 
+    def test_toute_commande_de_l_orchestrateur_dit_sa_presence(self):
+        """Essai réel : un moniteur expire au bout de 30 min ; s'il expire pendant un long travail, l'orchestrateur
+        reste présent tant qu'il appelle ses outils. Les commandes lancées par le bureau ne comptent pas."""
+        for commande in ("releve", "charge"):
+            self.ok(commande)
+        self.ok("actions", entree={"type": "bouton", "id": "pause"})
+        self.assertFalse((self.dossier / "presence.json").exists(), "le bureau ne fait pas croire à une présence")
+        self.ok("lancer", "reveil")
+        self.assertIs(self.releve()["orchestrateur_present"], True)
+
     def test_releve_tache_de_cadrage_et_chef(self):
         f = self.nouvelle()
         self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})

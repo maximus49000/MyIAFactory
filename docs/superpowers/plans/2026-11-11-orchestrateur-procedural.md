@@ -279,8 +279,8 @@ def test_api_sans_cle_bascule_une_fois(self):
 - `charger(chemin) -> Scenario` ; `Scenario.prochain_geste(etat) -> dict | None` ; `class Rejoueur(scenario)` avec la signature d'`agents.executer_agent` : rend le rapport de (étape, rôle, rang), sinon un rapport `fait` vide et note un **écart** (`Rejoueur.ecarts: list[str]`).
 - `banc/exemples/synthetique.json` : une fonctionnalité de 2 éléments, un cahier corrigé une fois, un contrôle refusé ; aucun mot d'un essai réel.
 
-- [ ] **Étape 1 : tests qui échouent** : `test_synthetique_charge`, `test_rejoueur_rend_le_rapport_par_rang`, `test_rejoueur_note_un_ecart`, `test_moteur_va_au_bout_du_synthetique` (moteur + rejoueur + jugements simulés : toutes les demandes traitées, fonctionnalité `terminee`).
-- [ ] **Étape 2 à 5 : lancer (échec), écrire, lancer (vert), commit** `Banc : scénario et rejoueur`.
+- [x] **Étape 1 : tests qui échouent** : `test_synthetique_charge`, `test_rejoueur_rend_le_rapport_par_rang`, `test_rejoueur_note_un_ecart`, `test_moteur_va_au_bout_du_synthetique` (moteur + rejoueur + jugements simulés : toutes les demandes traitées, fonctionnalité `terminee`).
+- [x] **Étape 2 à 5 : lancer (échec), écrire, lancer (vert), commit** `Banc : scénario et rejoueur`.
 
 ### Tâche 10 : construire un scénario d'essai réel, mesure de référence, agent seul, rapport
 

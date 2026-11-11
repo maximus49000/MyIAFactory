@@ -1,0 +1,376 @@
+{
+ "version": 1,
+ "projet": {
+  "factory": {
+   "nom": "Démonstration synthétique",
+   "services": [
+    {
+     "id": "metier",
+     "nom": "Métier"
+    },
+    {
+     "id": "dev",
+     "nom": "Dev"
+    }
+   ],
+   "flux": [
+    {
+     "id": "dev",
+     "nom": "Développement",
+     "role": "dev",
+     "service": "dev"
+    },
+    {
+     "id": "relecture",
+     "nom": "Relecture",
+     "role": "relecteur",
+     "service": "dev"
+    }
+   ],
+   "seuil_methode": 3,
+   "agents_locaux_max": 4
+  },
+  "fiches": {
+   "hugo.md": "Clé : metier-1\nPrénom : Hugo\nRôle : cadrage\nService : metier\nModèle : Sonnet\nLieu : local\n\nPose les questions de cadrage.\n\n## Leçons\n",
+   "lea.md": "Clé : dev-1\nPrénom : Léa\nRôle : dev\nService : dev\nModèle : Sonnet\nLieu : local\n\nDéveloppe les écrans.\n\n## Leçons\n",
+   "remi.md": "Clé : rel-1\nPrénom : Rémi\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\nRelit.\n\n## Leçons\n",
+   "zoe.md": "Clé : rel-2\nPrénom : Zoé\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\nRelit.\n\n## Leçons\n"
+  },
+  "briefs": {
+   "dev": "# Brief du rôle : dev\n\nFais l'écran demandé, comme dans la maquette.",
+   "relecteur": "# Brief du rôle : relecteur\n\nRelis l'écran contre la demande.",
+   "cadrage": "# Brief du rôle : cadrage\n\nPose peu de questions, à choix."
+  },
+  "reglages": {}
+ },
+ "gestes": [
+  {
+   "apres": "immediat",
+   "demande": {
+    "type": "fonctionnalite",
+    "texte": "Une petite application de démonstration avec des écrans."
+   }
+  },
+  {
+   "apres": "attente_utilisateur",
+   "demande": {
+    "type": "message",
+    "fonctionnalite": "f1",
+    "texte": "Deux écrans : un accueil et un profil."
+   }
+  },
+  {
+   "apres": "attente_utilisateur",
+   "demande": {
+    "type": "cahier",
+    "fonctionnalite": "f1",
+    "verdict": "corriger",
+    "texte": "Précisez la couleur du titre de l'accueil."
+   }
+  },
+  {
+   "apres": "attente_utilisateur",
+   "demande": {
+    "type": "cahier",
+    "fonctionnalite": "f1",
+    "verdict": "valider"
+   }
+  },
+  {
+   "apres": "attente_utilisateur",
+   "demande": {
+    "type": "methode",
+    "fonctionnalite": "f1",
+    "verdict": "valider"
+   }
+  }
+ ],
+ "rapports": [
+  {
+   "etape": "cadrage",
+   "role": "cadrage",
+   "rang": 0,
+   "texte": "Combien d'écrans ?",
+   "fichiers": [],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 700,
+    "sortie": 200,
+    "cache_lecture": 0,
+    "cache_ecriture": 3000
+   },
+   "rapport": {
+    "statut": "fait",
+    "nom": "Application de démonstration",
+    "message": {
+     "texte": "Je comprends une petite application. Combien d'écrans voulez-vous ?",
+     "attend": true,
+     "questions": [
+      {
+       "texte": "Combien d'écrans ?",
+       "choix": [
+        "Deux",
+        "Trois"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "etape": "cadrage",
+   "role": "cadrage",
+   "rang": 0,
+   "texte": "Voici le cahier.",
+   "fichiers": [
+    {
+     "chemin": "pieces/f1/maquette-1.png",
+     "contenu_base64": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"
+    }
+   ],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1200,
+    "sortie": 500,
+    "cache_lecture": 3000,
+    "cache_ecriture": 400
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Voici le cahier des charges : deux écrans.",
+     "attend": true
+    },
+    "cahier": {
+     "maquette": [
+      "pieces/f1/maquette-1.png"
+     ],
+     "etapes": [
+      "Écran d'accueil",
+      "Écran de profil"
+     ]
+    }
+   }
+  },
+  {
+   "etape": "cadrage",
+   "role": "cadrage",
+   "rang": 0,
+   "texte": "Cahier corrigé.",
+   "fichiers": [
+    {
+     "chemin": "pieces/f1/maquette-2.png",
+     "contenu_base64": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"
+    }
+   ],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1300,
+    "sortie": 450,
+    "cache_lecture": 3400,
+    "cache_ecriture": 300
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Le cahier est corrigé : le titre de l'accueil est bleu.",
+     "attend": true
+    },
+    "cahier": {
+     "maquette": [
+      "pieces/f1/maquette-2.png"
+     ],
+     "etapes": [
+      "Écran d'accueil (titre bleu)",
+      "Écran de profil"
+     ]
+    }
+   }
+  },
+  {
+   "etape": "prototype",
+   "role": "dev",
+   "rang": 0,
+   "texte": "Voici l'accueil.",
+   "fichiers": [
+    {
+     "chemin": "pieces/f1/accueil.png",
+     "contenu_base64": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"
+    }
+   ],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 2500,
+    "sortie": 1200,
+    "cache_lecture": 8000,
+    "cache_ecriture": 1500
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Voici l'écran d'accueil. La méthode me semble prête.",
+     "attend": true,
+     "images": [
+      "pieces/f1/accueil.png"
+     ]
+    },
+    "methode_prete": true
+   }
+  },
+  {
+   "etape": "flux:dev",
+   "role": "dev",
+   "rang": 1,
+   "texte": "Écran de profil fait.",
+   "fichiers": [
+    {
+     "chemin": "pieces/f1/profil.png",
+     "contenu_base64": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"
+    }
+   ],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 2000,
+    "sortie": 900,
+    "cache_lecture": 9000,
+    "cache_ecriture": 600
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "L'écran de profil est fait.",
+     "attend": false
+    },
+    "lecons": [
+     {
+      "texte": "Nommer les écrans comme dans la maquette.",
+      "roles": [
+       "dev"
+      ],
+      "etage_propose": "projet"
+     }
+    ],
+    "lignes": 42
+   }
+  },
+  {
+   "etape": "relecture",
+   "role": "relecteur",
+   "rang": 1,
+   "texte": "Un défaut.",
+   "fichiers": [],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1500,
+    "sortie": 400,
+    "cache_lecture": 6000,
+    "cache_ecriture": 300
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Un défaut sur le titre.",
+     "attend": false
+    },
+    "verdicts": [
+     {
+      "element": "e2",
+      "conforme": false,
+      "points": [
+       "Le titre du profil est trop petit"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "etape": "relecture",
+   "role": "relecteur",
+   "rang": 1,
+   "texte": "Conforme.",
+   "fichiers": [],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1400,
+    "sortie": 300,
+    "cache_lecture": 6000,
+    "cache_ecriture": 300
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Rien à signaler.",
+     "attend": false
+    },
+    "verdicts": [
+     {
+      "element": "e2",
+      "conforme": true,
+      "points": []
+     }
+    ]
+   }
+  },
+  {
+   "etape": "correction",
+   "role": "dev",
+   "rang": 1,
+   "texte": "Titre agrandi.",
+   "fichiers": [
+    {
+     "chemin": "pieces/f1/profil.png",
+     "contenu_base64": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAA"
+    }
+   ],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1800,
+    "sortie": 600,
+    "cache_lecture": 7000,
+    "cache_ecriture": 400
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Le titre du profil est agrandi.",
+     "attend": false
+    }
+   }
+  },
+  {
+   "etape": "relecture",
+   "role": "relecteur",
+   "rang": 1,
+   "texte": "Corrigé.",
+   "fichiers": [],
+   "usage": {
+    "modele": "claude-sonnet-5-5",
+    "entree": 1200,
+    "sortie": 250,
+    "cache_lecture": 5000,
+    "cache_ecriture": 200
+   },
+   "rapport": {
+    "statut": "fait",
+    "message": {
+     "texte": "Le défaut est corrigé.",
+     "attend": false
+    },
+    "verdicts": [
+     {
+      "element": "e2",
+      "conforme": true,
+      "points": []
+     }
+    ]
+   }
+  }
+ ],
+ "attendu": [
+  "Le cahier est validé après une correction",
+  "La méthode est écrite et validée",
+  "Les deux éléments sont faits",
+  "L'élément refusé est corrigé après la relecture",
+  "Une leçon est notée"
+ ]
+}

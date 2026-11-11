@@ -83,9 +83,9 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 
 Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md), [plan](docs/superpowers/plans/2026-11-11-installation-sur-un-projet.md), [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md)) :
 
-- [ ] 1. Les chemins `~`
-- [ ] 2. La limite d'agents locaux
-- [ ] 3. Une leçon gardée en local quand le push échoue
+- [x] 1. Les chemins `~`
+- [x] 2. La limite d'agents locaux
+- [x] 3. Une leçon gardée en local quand le push échoue
 - [ ] 4. Le dossier stable
 - [ ] 5. L'examen du dossier
 - [ ] 6. Le calibrage et l'estimation du coût
@@ -112,7 +112,7 @@ Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bu
 ## Ce qu'il reste à faire ensuite
 
 - **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : le vrai passage de bout en bout avec une conversation orchestratrice (phase G), puis le passage du projet pilote dans son dépôt (phases H à J) : terminé, vérifié sur le projet pilote.
-- **Projet 4, l'installation sur un projet** ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md)) : conçu et planifié ; la réalisation suit la [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md), phase A d'abord.
+- **Projet 4, l'installation sur un projet** ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md)) : conçu et planifié ; la réalisation suit la [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md) : phase A faite (chemins `~`, limite d'agents locaux, leçon gardée en local), phase B ensuite.
 
 ## Documents
 

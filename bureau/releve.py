@@ -415,6 +415,9 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     if r.get("livrable") is not None and not _livrable_ok(r["livrable"]):
         erreurs.append("« livrable » doit avoir un « libelle », une « date » et un seul de « lien » "
                        "(https, http ou claude) ou « chemin ».")
+    m = r.get("agents_locaux_max")
+    if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 1):
+        erreurs.append("« agents_locaux_max » doit être un entier d'au moins 1 ou nul.")
     ids_decisions = set()
     ids_fonc = _verifier_fonctionnalites(r, agents, erreurs, ids_decisions)
     _verifier_decisions_projet(r, agents, erreurs, ids_decisions)
@@ -434,7 +437,7 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     _verifier_lecons_v4(r, titulaires, erreurs)
 
 
-CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet")
+CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max")
 CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee")
 
 
@@ -914,10 +917,18 @@ def _tuer_arbre(p):
         pass
 
 
+def developper(arg):
+    """Un argument qui commence par « ~/ » ou « ~ » + antislash est développé (dossier de l'utilisateur) ; les autres restent tels quels."""
+    if isinstance(arg, str) and arg[:2] in ("~/", "~\\"):
+        return os.path.expanduser(arg)
+    return arg
+
+
 def _executer(cmd, cwd, entree=None):
     """(code, sortie, erreurs) ; lève TimeoutExpired si la commande ou un de ses descendants
     tient au-delà de DELAI_COMMANDE_S. Ne bloque jamais plus longtemps que ce délai (+ quelques s).
     `entree` (octets) est écrit sur l'entrée standard de la commande ; sans lui, l'entrée est fermée."""
+    cmd = [developper(a) for a in cmd]
     delai = DELAI_COMMANDE_S
     options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                else {"start_new_session": True})

@@ -46,6 +46,22 @@ class TestDepart(unittest.TestCase):
         self.assertEqual(depart.agent_libre(liste, [], "dev", modele="Opus")[0], "dev-2")
         self.assertEqual(depart.agent_libre(liste, [], "dev", modele="Haiku"), (None, "aucun dev libre sur Haiku"))
 
+    def test_limite_agents_locaux(self):
+        liste = [fiche("dev-1", "dev"), fiche("dev-2", "dev")]
+        taches = [{"agent": "dev-1", "active": True}]
+        self.assertEqual(depart.agent_libre(liste, taches, "dev", agents_locaux_max=1),
+                         (None, "limite de 1 agents locaux atteinte"))
+        self.assertEqual(depart.agent_libre(liste, taches, "dev", agents_locaux_max=2)[0], "dev-2")
+        self.assertEqual(depart.agent_libre(liste, taches, "dev")[0], "dev-2")   # sans limite donnée, comme avant
+
+    def test_limite_ne_compte_pas_le_cloud(self):
+        liste = [fiche("dev-1", "dev"), fiche("cl-1", "dev", "Sonnet", "cloud", "Session cl")]
+        taches = [{"agent": "cl-1", "active": True}]
+        self.assertEqual(depart.agent_libre(liste, taches, "dev", lieu="local", agents_locaux_max=1)[0], "dev-1")
+        # la limite ne bloque pas non plus un agent cloud libre
+        taches = [{"agent": "dev-1", "active": True}]
+        self.assertEqual(depart.agent_libre(liste, taches, "dev", lieu="cloud", agents_locaux_max=1)[0], "cl-1")
+
     def test_agent_libre_cloud_manquant(self):
         liste = [fiche("prep-1", "preparateur", "Sonnet", "cloud", "Session prep"), fiche("prep-2", "preparateur", "Opus", "cloud")]
         self.assertEqual(depart.agent_libre(liste, [], "preparateur", "Sonnet", "cloud")[0], "prep-1")

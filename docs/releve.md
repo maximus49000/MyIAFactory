@@ -158,6 +158,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `livrable` | racine | le dernier livrable du projet : `{libelle, lien \| chemin, date}` (le bouton « Dernier livrable ») |
 | `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
 | `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) ou `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) |
+| `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
 | `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
 | `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
 | `etage_propose`, `texte_general`, `roles` | chaque leçon | l'étage proposé (`projet`, `genre` ou `skill`), le texte réécrit en termes généraux (obligatoire si l'étage n'est pas `projet`), les rôles concernés |

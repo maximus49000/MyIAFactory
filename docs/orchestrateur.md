@@ -24,6 +24,7 @@ relatifs à lui. Partez du modèle [`orchestrateur/modeles/factory.json`](../orc
 | `consignes` | non | **les consignes propres du projet** (un document) |
 | `reglages` | non | les réglages du bureau du projet (pour `charge`) |
 | `modele_orchestrateur` | non | le modèle de la conversation orchestratrice : `Sonnet` (défaut), `Opus` ou `Haiku` (jamais Fable) |
+| `agents_locaux_max` | non | combien d'agents locaux travaillent en même temps, de 1 à 16 (2 par défaut) ; `agent-libre` n'en rend plus au-delà |
 | `seuil_methode` | non | le nombre de tours de corrections d'un élément avant « méthode à revoir ? » (défaut 3) |
 | `catalogues` | non | la source du catalogue de chaque fonctionnalité : `{<id>: {fichier} | {commande}}` ; la clé `"*"` vaut pour toutes, et `{fonctionnalite}` y est remplacé par l'identifiant |
 | `commandes` | non | **les adaptateurs** : `{<commande>: [arguments]}`, qui remplacent les outils génériques (section 2) |

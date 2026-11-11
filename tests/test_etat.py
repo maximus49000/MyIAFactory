@@ -477,6 +477,11 @@ class TestEtatV4(unittest.TestCase):
             r["taches"][-1]["active"] = False
         self.assertFalse(self.etat(minutes_chef=2, modif=avec)["orchestrateur_actif"])
 
+    def test_etat_agents_locaux_max(self):
+        self.assertEqual(self.etat(modif=lambda r: r.update(agents_locaux_max=3))["agents_locaux_max"], 3)
+        self.assertIsNone(self.etat()["agents_locaux_max"])
+        self.assertNotIn("agents_locaux_max", self.etat(version=3, modif=lambda r: r.update(agents_locaux_max=3)))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import sys
 import tempfile
 import time
@@ -934,6 +935,58 @@ class TestVersion4(unittest.TestCase):
                                "lecons": [{"id": "l", "agent": "d1", "texte": "T", "etage_propose": "genre"}]})
         for c in ("etage_propose", "texte_general", "roles"):
             self.assertNotIn(c, n["lecons"][0])
+
+
+class TestTilde(unittest.TestCase):
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.tmp = Path(self._t.name)
+
+    def _home(self, nom="home"):
+        home = self.tmp / nom
+        home.mkdir()
+        env = mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)})
+        env.start()
+        self.addCleanup(env.stop)
+        return home
+
+    def test_developper(self):
+        home = self._home()
+        for debut in ("~/", "~\\"):
+            self.assertEqual(releve.developper(debut + "s"), os.path.expanduser(debut + "s"))
+            self.assertTrue(releve.developper(debut + "s").startswith(str(home)))
+        for texte in ("a~b", "~x", "x/~/y", "", "py"):
+            self.assertEqual(releve.developper(texte), texte)
+
+    def test_commande_releve_tilde(self):
+        home = self._home()
+        (home / "s").mkdir()
+        (home / "s" / "ecrire.py").write_text("print('ecrit')", encoding="utf-8")
+        code, sortie, _ = releve._executer([sys.executable, "~/s/ecrire.py"], str(self.tmp))
+        self.assertEqual((code, sortie.strip()), (0, b"ecrit"))
+
+    def test_tilde_espaces_accents(self):
+        home = self._home("Zoé Martin")
+        (home / "s").mkdir()
+        (home / "s" / "ecrire.py").write_text("print('ok')", encoding="utf-8")
+        code, sortie, _ = releve._executer([sys.executable, "~/s/ecrire.py"], str(self.tmp))
+        self.assertEqual((code, sortie.strip()), (0, b"ok"))
+
+
+class TestAgentsLocauxMax(unittest.TestCase):
+    def test_agents_locaux_max_releve_v4(self):
+        self.assertEqual(releve.valider(v4(agents_locaux_max=3)), [])
+        self.assertEqual(releve.normaliser(v4(agents_locaux_max=3))["agents_locaux_max"], 3)
+        self.assertIsNone(releve.normaliser(v4())["agents_locaux_max"])
+        self.assertIsNone(releve.normaliser(v4(agents_locaux_max=None))["agents_locaux_max"])
+        for mauvais in (0, -1, True, "2", 1.5, []):
+            with self.subTest(mauvais):
+                self.assertTrue(releve.valider(v4(agents_locaux_max=mauvais)))
+
+    def test_agents_locaux_max_ignore_avant_v4(self):
+        n = releve.normaliser({**copy.deepcopy(BASE), "version": 3, "agents_locaux_max": 3})
+        self.assertNotIn("agents_locaux_max", n)
 
 
 if __name__ == "__main__":

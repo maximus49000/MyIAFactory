@@ -10,7 +10,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 
 | Phase | Modèle proposé | Où | Tâches du plan | Pourquoi ce modèle | État |
 |---|---|---|---|---|---|
-| A | Sonnet 5.5 | ce dépôt | 1 à 3 : chemins `~`, limite d'agents locaux, leçon gardée en local | Changements courts et cadrés, tests nommés | à faire |
+| A | Sonnet 5.5 | ce dépôt | 1 à 3 : chemins `~`, limite d'agents locaux, leçon gardée en local | Changements courts et cadrés, tests nommés | fait |
 | B | Sonnet 5.5 | ce dépôt | 4 à 6 : dossier stable, examen du dossier, calibrage et estimation | Fonctions au contrat écrit, tests en tableau | à faire |
 | C | Opus 5.5 | ce dépôt | 7 et 8 : proposition, mise en place, bureau commun, réparation, ligne de commande | Écritures atomiques sur plusieurs formats, réparation sans casser les adaptateurs | à faire |
 | D | Opus 5.5 | ce dépôt | 9 : le plugin et les consignes de la discussion | Les consignes guident toute l'installation : sobriété et justesse comptent plus que tout | à faire |
@@ -23,7 +23,13 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. Haiku n'est 
 
 Notes laissées par les phases précédentes (écarts au plan, choix faits, points à surveiller) :
 
-(aucune pour l'instant)
+Phase A (Sonnet 5.5) :
+
+- Les tâches 1 à 3 sont dans un seul commit (les mêmes fichiers, dont les consignes, sont modifiés par plusieurs tâches).
+- `releve.developper` n'accepte que `~/` et `~\` en début d'argument ; le même test vaut pour `factory.lire` (`~x` et `a~b` restent relatifs). Tout passe par `releve._executer`, donc le relevé, les actions, le catalogue et la demande en profitent sans autre changement.
+- `depart.agent_libre` : la limite ne compte que les tâches actives tenues par une fiche de lieu `local` ; avec `lieu` non précisé, un agent cloud libre reste rendu quand les locaux sont retenus. La raison « limite de {n} agents locaux atteinte » n'apparaît que si un agent local aurait été rendu sans la limite.
+- Relevé : `agents_locaux_max` est un champ de racine de la version 4 ; `libelleCharge(c, agentsLocauxMax)` (`bureau/web/ui/texte.js`) ajoute « {n} agents locaux au plus » à la bulle ; documenté dans `docs/releve.md` et `docs/orchestrateur.md`.
+- `test_echec_du_push_defait_tout` est remplacé par `test_push_refuse_garde_le_commit_local` ; `test_echec_du_commit_defait_tout` garde l'ancienne garantie pour les autres échecs.
 
 ## Ce que chaque conversation doit savoir
 

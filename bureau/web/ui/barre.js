@@ -184,7 +184,7 @@ export function creerBarre(entete, bandeau) {
   bandeau.append(message);
   bandeau.hidden = true;
 
-  let factory = null, erreur = null, derniere = null;
+  let factory = null, erreur = null, derniere = null, locauxMax = null;
 
   function afficherVoyant() {
     const v = voyant(factory, erreur);
@@ -194,7 +194,7 @@ export function creerBarre(entete, bandeau) {
 
   function afficherCharge() {
     const c = derniere;
-    charge.title = libelleCharge(c);
+    charge.title = libelleCharge(c, locauxMax);
     if (!c || !c.disponible) {
       remplissage.style.width = "0%";
       charge.classList.remove("depasse");
@@ -231,6 +231,8 @@ export function creerBarre(entete, bandeau) {
     // Un état utilisable : voyant et nom du projet.
     majEtat(etat) {
       factory = etat.factory || null;
+      locauxMax = etat.agents_locaux_max ?? null;
+      afficherCharge();
       projet.textContent = etat.projet || "";
       erreur = null;
       bandeau.hidden = true;

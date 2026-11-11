@@ -42,6 +42,10 @@ test("libelleCharge", () => {
   assert.equal(libelleCharge({disponible: true, charge: 62, cpu: 12.4, memoire: 61.6}), "Charge 62 % · processeur 12 %, mémoire 62 %");
   assert.equal(libelleCharge({disponible: false}), "Mesure indisponible");
   assert.equal(libelleCharge(null), "Mesure indisponible");
+  assert.equal(libelleCharge({disponible: true, charge: 62, cpu: 12.4, memoire: 61.6}, 3),
+    "Charge 62 % · processeur 12 %, mémoire 62 % · 3 agents locaux au plus");
+  assert.equal(libelleCharge(null, 2), "Mesure indisponible · 2 agents locaux au plus");
+  assert.equal(libelleCharge(null, null), "Mesure indisponible");
 });
 
 test("ilYA", () => {

@@ -47,9 +47,10 @@ export function voyant(factory, erreur, maintenant = new Date()) {
 }
 
 // L'infobulle de la barre de charge.
-export function libelleCharge(c) {
-  if (!c || !c.disponible) return "Mesure indisponible";
-  return `Charge ${Math.round(c.charge)} % · processeur ${Math.round(c.cpu)} %, mémoire ${Math.round(c.memoire)} %`;
+export function libelleCharge(c, agentsLocauxMax) {
+  const limite = Number.isInteger(agentsLocauxMax) && agentsLocauxMax >= 1 ? ` · ${agentsLocauxMax} agents locaux au plus` : "";
+  if (!c || !c.disponible) return "Mesure indisponible" + limite;
+  return `Charge ${Math.round(c.charge)} % · processeur ${Math.round(c.cpu)} %, mémoire ${Math.round(c.memoire)} %` + limite;
 }
 
 // Les identifiants des colonnes terminées (`terminee: true`).

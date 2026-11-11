@@ -13,7 +13,7 @@ MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
-        "modele_orchestrateur")
+        "modele_orchestrateur", "agents_locaux_max")
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 
 
@@ -51,6 +51,8 @@ def lire(chemin):
             v = defaut
         if not _texte(v):
             raise FactoryInvalide(f"Factory : « {cle} » doit être un chemin (texte non vide).")
+        if v[:2] in ("~/", "~\\"):   # le dossier de l'utilisateur ; « ~x » ou « a~b » restent relatifs
+            return Path(os.path.expanduser(v)).resolve()
         return (base / v).resolve()
 
     skill = chem("skill")
@@ -98,6 +100,9 @@ def lire(chemin):
     modele = d.get("modele_orchestrateur", "Sonnet")
     if modele not in MODELES_ORCHESTRATEUR:
         raise FactoryInvalide("Factory : « modele_orchestrateur » doit valoir Haiku, Sonnet ou Opus (Sonnet par défaut).")
+    locaux = d.get("agents_locaux_max", 2)
+    if isinstance(locaux, bool) or not isinstance(locaux, int) or not 1 <= locaux <= 16:
+        raise FactoryInvalide("Factory : « agents_locaux_max » doit être un entier de 1 à 16 (2 par défaut).")
     nom = d.get("nom")
     if nom is not None and not _texte(nom):
         raise FactoryInvalide("Factory : « nom » doit être un texte non vide.")
@@ -112,7 +117,7 @@ def lire(chemin):
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
-        "modele_orchestrateur": modele,
+        "modele_orchestrateur": modele, "agents_locaux_max": locaux,
     }
 
 

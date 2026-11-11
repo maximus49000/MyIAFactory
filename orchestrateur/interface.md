@@ -221,7 +221,8 @@ personne) est obligatoire. Rend `{"id": "<agent>:L1"}`.
 Entrée : `{"action": "appliquer", "id", "verdict": "valider"|"invalider", "etage"?}` : le verdict de l'utilisateur.
 `projet` : la leçon de la fiche passe « validée ». `genre` ou `skill` : le texte général est ajouté à la mémoire (mise à
 jour du dépôt, mots interdits, commit, push) ; la leçon ne passe « validée » que si l'ajout réussit, sinon code 1 et
-elle reste « à valider ». `invalider` : la leçon disparaît. Rend `{"ok": true, "etage": …}`.
+elle reste « à valider » (un échec du seul `git push` garde la leçon commitée dans la copie locale et le dit : elle n'est
+pas publiée). `invalider` : la leçon disparaît. Rend `{"ok": true, "etage": …}`.
 
 ### `controle`
 
@@ -238,6 +239,9 @@ attend sa session (l'orchestrateur pose alors une décision `session_cloud` qui 
 libre sur Sonnet » (les sessions existent, elles sont occupées : on attend) ; « aucune fiche cloud dev sur Sonnet :
 ajoutez-en une ». Pour le cloud, `sans_session` est toujours présent quand `agent` est nul.
 Choisir le modèle : on monte d'un cran au plus (Haiku → Sonnet → Opus) et jamais vers Fable.
+La limite `agents_locaux_max` du fichier de factory (de 1 à 16, 2 par défaut) borne les tâches actives tenues par des
+agents locaux : une fois atteinte, aucun agent local n'est rendu, la raison est « limite de {n} agents locaux
+atteinte » ; les agents cloud ne comptent pas. Le relevé (version 4) la publie en `agents_locaux_max`.
 
 ### `depart`
 

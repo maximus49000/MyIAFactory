@@ -958,7 +958,8 @@ def construire_releve(ctx):
          "actions": [{"id": "reprendre", "libelle": "Reprendre"} if en_pause else
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
-         "decisions_projet": [dict(d) for d in s["decisions_projet"]]}
+         "decisions_projet": [dict(d) for d in s["decisions_projet"]],
+         "agents_locaux_max": ctx.f["agents_locaux_max"]}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
     r["usage"] = [{"id": u["id"], "tache": u["tache"] if u.get("tache") in ids_taches else None,
@@ -1103,7 +1104,8 @@ def _fiches_avec_sessions(ctx):
 def cmd_agent_libre(ctx, e):
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
     fiches_ = _fiches_avec_sessions(ctx)
-    cle, raison = depart.agent_libre(fiches_, ctx.suivi.lire()["taches"], role, modele, lieu)
+    cle, raison = depart.agent_libre(fiches_, ctx.suivi.lire()["taches"], role, modele, lieu,
+                                     ctx.f["agents_locaux_max"])
     sortie = {"agent": cle, "raison": raison}
     if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
@@ -1141,7 +1143,7 @@ COMMANDES = {
 # --- Exécution : en processus, ou par la commande déclarée du projet (`lancer`).
 
 def lancer_declaree(ctx, nom, entree, extra):
-    argv = ctx.f["commandes"][nom] + list(extra)
+    argv = [rel.developper(a) for a in ctx.f["commandes"][nom] + list(extra)]
     corps = None if entree is None else json.dumps(entree, ensure_ascii=False).encode("utf-8")
     env = {**os.environ, "MYIAFACTORY_FACTORY": str(ctx.f["chemin"]), "PYTHONIOENCODING": "utf-8"}
     try:

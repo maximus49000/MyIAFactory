@@ -1,7 +1,9 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from orchestrateur import factory
 from tests.orch_aide import RACINE, factory_minimale
@@ -85,6 +87,42 @@ class TestFactory(unittest.TestCase):
         d = json.loads(chemin.read_text(encoding="utf-8"))
         self.assertEqual(d["genre"], "vitrine")
         self.assertEqual(d["reglages"], "reglages.json")
+
+    def _home(self, nom="home"):
+        home = self.dossier / nom
+        home.mkdir()
+        env = mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)})
+        env.start()
+        self.addCleanup(env.stop)
+        return home
+
+    def test_tilde_dans_skill(self):
+        home = self._home()
+        f = factory.lire(self.ecrire(skill="~/MyIAFactory/skill"))
+        self.assertEqual(f["skill"], (home / "MyIAFactory" / "skill").resolve())
+        self.assertEqual(f["memoire"], (home / "MyIAFactory" / "skill" / "orchestrateur" / "memoire").resolve())
+
+    def test_tilde_au_milieu_inchange(self):
+        self._home()
+        for texte in ("a~b", "~x"):
+            f = factory.lire(self.ecrire(skill=texte))
+            self.assertEqual(f["skill"], (self.dossier / texte).resolve())
+
+    def test_tilde_espaces_accents(self):
+        home = self._home("Zoé Martin")
+        f = factory.lire(self.ecrire(skill="~/MyIAFactory/skill"))
+        self.assertEqual(f["skill"], (home / "MyIAFactory" / "skill").resolve())
+
+    def test_agents_locaux_max_defaut_et_valide(self):
+        self.assertEqual(factory.lire(self.ecrire())["agents_locaux_max"], 2)
+        for bon in (1, 4, 16):
+            self.assertEqual(factory.lire(self.ecrire(agents_locaux_max=bon))["agents_locaux_max"], bon)
+
+    def test_agents_locaux_max_invalide(self):
+        for mauvais in (0, 17, True, "2", 1.5, [], -1):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)) as c:
+                factory.lire(self.ecrire(agents_locaux_max=mauvais))
+            self.assertIn("agents_locaux_max", str(c.exception))
 
 
 if __name__ == "__main__":

@@ -196,20 +196,40 @@ class TestMemoire(AvecDepots):
         git("pull", "-q", cwd=self.a)
         self.assertEqual((self.ma / "skill.md").read_text(encoding="utf-8"), texte)
 
-    def test_echec_du_push_defait_tout(self):
+    def test_push_refuse_garde_le_commit_local(self):
+        appels = []
+
+        def git_qui_echoue_au_push(args, cwd):
+            appels.append(args[0])
+            if args[0] == "push":
+                return 1, "rejeté (droits)"
+            return memoire.executer_git(args, cwd)
+
+        n = self.nb_commits(self.a)
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=git_qui_echoue_au_push)
+        self.assertTrue(ok, message)
+        self.assertIn("n'est pas publiée", message)
+        self.assertIn("rejeté (droits)", message)
+        self.assertLessEqual(len(message), 400)
+        self.assertNotIn("reset", appels)   # rien n'est défait
+        self.assertIn("## S", (self.ma / "skill.md").read_text(encoding="utf-8").split("Relire le travail")[-1])
+        self.assertEqual(self.nb_commits(self.a), n + 1)   # le commit local reste
+        self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
+
+    def test_echec_du_commit_defait_tout(self):
         avant = (self.ma / "skill.md").read_text(encoding="utf-8")
         tete = git("rev-parse", "HEAD", cwd=self.a)
 
-        def git_qui_echoue_au_push(args, cwd):
-            if args[0] == "push":
-                return 1, "rejeté"
+        def git_qui_echoue_au_commit(args, cwd):
+            if args[0] == "commit":
+                return 1, "refusé"
             return memoire.executer_git(args, cwd)
 
-        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=git_qui_echoue_au_push)
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=git_qui_echoue_au_commit)
         self.assertFalse(ok)
-        self.assertIn("git push", message)
+        self.assertIn("git commit", message)
         self.assertEqual((self.ma / "skill.md").read_text(encoding="utf-8"), avant)
-        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), tete)   # le commit est défait
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), tete)
         self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
 
     def test_depot_absent(self):

@@ -182,6 +182,8 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
 - **Le spécialiste libre du rôle de l'étape** : `lancer agent-libre` (`role`, et `modele`, `lieu` si besoin). Un
   agent ne tient qu'une tâche à la fois. S'il n'y en a pas de libre, la tâche attend (dis-le : « En attente de : un
   dev libre »).
+  `agent-libre` tient la limite d'agents locaux du projet : s'il répond « limite … atteinte », la tâche attend (ou
+  un agent cloud la prend).
 - **Le modèle de départ est celui de la fiche** de l'agent. Tu peux **monter d'un cran** si une tâche semble
   complexe (Haiku vers Sonnet, Sonnet vers Opus), jamais plus. Note toute montée sur la tâche (`lancer tache` avec
   `modele_depart` et `montee: {de, a, raison}`, la raison en une phrase) : elle se voit au bureau et dans la
@@ -265,6 +267,8 @@ mémoire d'un autre genre. `depart` donne à chaque agent les leçons de son rô
   (`git pull --rebase`), refus si le texte contient un des **mots interdits** du projet, ajout, commit et push. **En
   cas de conflit ou de mot interdit, l'outil s'arrête sans rien écrire** : ne force jamais, dis-le à l'utilisateur
   et laisse la leçon « à valider ».
+  **Si seul le `git push` échoue** (droits ou réseau), la leçon reste ajoutée et commitée dans la copie locale de la
+  skill : l'outil répond qu'elle n'est pas publiée. Dis-le à l'utilisateur.
 
 ## Commit et push
 

@@ -18,16 +18,27 @@ def monter(modele):
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 
-def agent_libre(fiches, taches, role, modele=None, lieu=None):
+def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None):
     """(clé, raison) du premier spécialiste du rôle sans tâche active, au modèle et au lieu demandés.
-    Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session."""
+    Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.
+    Quand `agents_locaux_max` tâches actives sont déjà tenues par des agents locaux, aucun agent local n'est rendu
+    (les agents cloud ne comptent pas dans la limite et ne la subissent pas)."""
     occupes = {t.get("agent") for t in taches if t.get("active") and t.get("agent")}
+    locales = {f["cle"] for f in fiches if f["lieu"] == "local"}
+    limite = (agents_locaux_max is not None
+              and sum(1 for t in taches if t.get("active") and t.get("agent") in locales) >= agents_locaux_max)
+    retenu_par_la_limite = False
     for f in fiches:
         if f["role"] != role or (modele and f["modele"] != modele) or (lieu and f["lieu"] != lieu):
             continue
         if f["cle"] in occupes or (f["lieu"] == "cloud" and not f.get("session")):
             continue
+        if limite and f["lieu"] == "local":
+            retenu_par_la_limite = True
+            continue
         return f["cle"], f"{f.get('prenom') or f['cle']} est libre"
+    if retenu_par_la_limite:
+        return None, f"limite de {agents_locaux_max} agents locaux atteinte"
     sur = f" sur {modele}" if modele else ""
     if lieu == "cloud":
         attend = sans_session(fiches, role, modele)

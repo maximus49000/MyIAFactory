@@ -123,7 +123,8 @@ def executer_git(args, cwd):
 
 
 def _ecrire_et_pousser(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, message_commit, git):
-    """Met à jour le dépôt, ajoute le contenu, commite et pousse. Tout échec remet le fichier tel quel."""
+    """Met à jour le dépôt, ajoute le contenu, commite et pousse. Tout échec remet le fichier tel quel, sauf celui
+    de `git push` : la leçon reste écrite et commitée dans la copie locale, et le message dit qu'elle n'est pas publiée."""
     dossier, chemin = Path(dossier), Path(chemin)
     trouves = mots_trouves(texte_controle, mots_interdits)
     if trouves:
@@ -151,6 +152,9 @@ def _ecrire_et_pousser(dossier, chemin, nouveau_texte, mots_interdits, texte_con
         for etape, args in (("git add", ["add", "--", str(chemin)]), ("git commit", ["commit", "-q", "-m", message_commit]),
                             ("git push", ["push", "-q"])):
             code, sortie = git(args, dossier)
+            if code != 0 and etape == "git push":
+                return True, ("Leçon ajoutée et commitée dans la copie locale ; « git push » a échoué (droits ou réseau) : "
+                              f"elle n'est pas publiée. {sortie}")[:400]
             if code != 0:
                 defaire()
                 return False, f"Arrêt : « {etape} » a échoué ; le fichier de mémoire est remis tel qu'il était. {sortie}"[:400]

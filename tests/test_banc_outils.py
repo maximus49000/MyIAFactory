@@ -298,6 +298,9 @@ class AgentSeul(unittest.TestCase):
         self.assertEqual(second["reprendre"], "s-seul")        # la même conversation, reprise
         self.assertEqual(premier["dossier_travail"], d)
         self.assertIn("Read", premier["outils"])                # les outils par défaut de Claude Code
+        # le premier message dit le projet, comme les agents du moteur le savent par leur fiche
+        self.assertTrue(premier["dossier"].startswith("Mon projet : "))
+        self.assertNotIn("Mon projet", second["dossier"])
         self.assertNotIn("dangerously", json.dumps({k: str(v) for k, v in premier.items()}).lower())
 
     def test_texte_du_geste(self):
@@ -312,6 +315,8 @@ class AgentSeul(unittest.TestCase):
         self.assertTrue(agent_seul.pose_une_question("Voici.\nUn titre bleu ?"))
         self.assertTrue(agent_seul.pose_une_question("Voici.\n**Un titre bleu ?**\n"))
         self.assertFalse(agent_seul.pose_une_question("Un titre bleu ? Oui, c'est fait."))
+        self.assertTrue(agent_seul.pose_une_question("Il me faut :\n1. Combien d'écrans ?\n2. Quel style ?\n\n"
+                                                     "Dites-moi ce qui vous convient."))
         self.assertFalse(agent_seul.pose_une_question(""))
 
     def test_un_appel_rate_arrete_le_passage_et_garde_ce_qu_il_a_coute(self):

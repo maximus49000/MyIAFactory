@@ -126,6 +126,22 @@ class Demandes(Base):
         t = self.taches(etape="cadrage")[0]
         self.assertEqual((t["agent"], t["colonne"], t["role"]), ("dev-1", "cadrage", "dev"))
 
+    def test_le_cadrage_pose_une_seule_serie_de_questions(self):
+        """Au passage en vrai, l'agent de cadrage reposait des questions à chaque tour et n'écrivait jamais le cahier."""
+        _, actions = self.traiter(type="fonctionnalite", texte="Des écrans pour l'appli")
+        matiere = actions[0][3]
+        self.assertIn("Une seule série de questions", matiere)
+        self.assertIn("rends le cahier corrigé", matiere)
+
+    def test_methode_validee_sans_prototype_n_ecrit_rien(self):
+        """Valider une méthode avant tout prototype (la fonctionnalité est encore en cadrage) : rien à écrire."""
+        self.fonctionnalite("cadrage")
+        d, actions = self.traiter(type="methode", fonctionnalite="f1", verdict="valider")
+        self.assertEqual(actions, [])
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertIn("prototype", self.statut(d["id"])["reponse"])
+        self.assertEqual(self.fonc()["etape"], "cadrage")
+
     def test_cahier_valider_juge_decouper(self):
         self.cahier_a_valider()
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")

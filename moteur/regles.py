@@ -326,6 +326,12 @@ def _sur_methode(projet, demande, etat):
     fid, verdict = demande["fonctionnalite"], demande.get("verdict")
     f = _fonc(projet, fid)
     suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if (verdict in ("valider", "adapter") and f["etape"] in ("cadrage", "cahier", "decoupage")
+            and not any(_a_decision(f, g) for g in ("valider_methode", "reprendre_methode", "methode_a_revoir"))):
+        # rien n'a été mis au point : écrire une méthode maintenant, ce serait l'inventer (vu au passage en vrai)
+        _terminer(projet, {"demande": demande["id"]}, "Il n'y a pas encore de méthode à valider : elle se met au point "
+                                                      "pendant le prototype, après le cahier des charges.")
+        return []
     if verdict in ("valider", "adapter"):
         dossier = {"fonctionnalite": {"id": fid, "nom": f["nom"]}, "cahier": f.get("cahier"),
                    "flux": [{"id": s["id"], "role": s["role"]} for s in _production(projet)],
@@ -749,9 +755,12 @@ def _matiere(projet, etat, t):
         parties += ["Discussion avec l'utilisateur :", _texte_discussion(f),
                     "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
                     "(`message.questions`, `attend: true`). Dès ta première réponse, donne un `nom` court à la "
-                    "fonctionnalité. Quand le besoin est clair, écris le cahier des charges : une maquette (images "
-                    "PNG ou JPEG, sous une racine d'images du projet) et la liste des étapes à réaliser, dans l'ordre : "
-                    'rends `"cahier": {"maquette": [chemins], "etapes": [textes]}`.']
+                    "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
+                    "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
+                    "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, sous une racine "
+                    "d'images du projet) et la liste des étapes à réaliser, dans l'ordre : "
+                    'rends `"cahier": {"maquette": [chemins], "etapes": [textes]}`. Une correction demandée par '
+                    "l'utilisateur : refais la maquette et rends le cahier corrigé."]
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
                     "Discussion récente :", _texte_discussion(f, 8),

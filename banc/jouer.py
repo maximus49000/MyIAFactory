@@ -8,6 +8,9 @@ from banc.rejoueur import Rejoueur
 from moteur import boucle, regles
 
 MAX_TOURS = 600
+# Une leçon validée de genre ou de skill s'écrit dans la skill (ce dépôt) : le banc n'en valide jamais. Les leçons
+# notées par les agents restent comptées dans le suivi.
+GESTES_IGNORES = ("lecon",)
 
 
 class Compteur:
@@ -65,7 +68,7 @@ def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_T
         moteur.tour()
         etat = regles.lancer(projet, "etat")
         geste = scenario.prochain_geste(etat)
-        if geste is not None:
+        if geste is not None and geste.get("type") not in GESTES_IGNORES:
             regles.lancer(projet, "actions", {**geste, "t": regles.su.maintenant()})
         change = avant != (len(compteur.appels), len(rejoueur.rendus), len(rejoueur.ecarts), scenario.suivant)
         calmes = 0 if (change or geste is not None) else calmes + 1

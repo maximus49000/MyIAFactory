@@ -28,9 +28,23 @@ def texte_du_geste(demande):
 
 
 def pose_une_question(texte):
-    """Vrai si la réponse attend l'utilisateur : sa dernière ligne non vide se termine par un point d'interrogation."""
+    """Vrai si la réponse attend l'utilisateur : une de ses lignes se termine par un point d'interrogation. Une liste de
+    questions finit souvent par « Dites-moi … », sans point d'interrogation : ne regarder que la dernière ligne manquait
+    ces questions au passage en vrai."""
     lignes = [x.strip() for x in (texte or "").strip().splitlines() if x.strip()]
-    return bool(lignes) and lignes[-1].rstrip("*_ \"»)").endswith("?")
+    return any(x.rstrip("*_ \"»)").endswith("?") for x in lignes)
+
+
+def contexte_du_projet(scenario):
+    """Ce que l'utilisateur dirait de son projet en commençant : ce que savent les agents du moteur (le nom du projet et
+    la description de chaque fiche, sans ses en-têtes ni ses leçons). Sans lui, l'agent seul a compris « badges à
+    imprimer » là où le projet faisait des badges Twitch."""
+    parties = [f"Mon projet : {scenario.projet['factory'].get('nom') or 'sans nom'}."]
+    for texte in (scenario.projet.get("fiches") or {}).values():
+        corps = texte.split("## Leçons")[0].split("\n\n", 1)
+        if len(corps) == 2 and corps[1].strip():
+            parties.append(corps[1].strip())
+    return "\n\n".join(parties)
 
 
 def agent_seul(scenario, dossier_vide, *, appeler=appel.appeler, couche="claude", max_appels=60):
@@ -40,6 +54,8 @@ def agent_seul(scenario, dossier_vide, *, appeler=appel.appeler, couche="claude"
         texte = texte_du_geste(geste["demande"])
         if not texte or appels >= max_appels:
             continue
+        if appels == 0:
+            texte = contexte_du_projet(scenario) + "\n\n" + texte
         try:
             r = appeler(CONSIGNE, texte, MODELE, couche=couche, outils=list(OUTILS_PAR_DEFAUT),
                         dossier_travail=str(dossier_vide), reprendre=session)

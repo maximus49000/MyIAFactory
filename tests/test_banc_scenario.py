@@ -205,6 +205,16 @@ class Passage(unittest.TestCase):
             self.assertIn("Fait par un vrai agent.", textes)
             self.assertFalse(any(t.startswith("Rien à rejouer") for t in textes))
 
+    def test_le_banc_ne_valide_jamais_une_lecon(self):
+        """Valider une leçon de genre ou de skill écrirait dans la skill (ce dépôt) : le geste est sauté."""
+        s = scenario.charger(SYNTHETIQUE)
+        s.gestes.append({"apres": "attente_utilisateur", "demande": {"type": "lecon", "verdict": "valider",
+                                                                       "id": "dev-1:L1"}})
+        with tempfile.TemporaryDirectory() as d:
+            r = jouer.jouer_moteur(s, d, Jugements())
+            self.assertFalse(any(x["type"] == "lecon" for x in r["suivi"]["demandes"]))
+            self.assertEqual(r["gestes_restants"], 0)
+
     def test_un_passage_en_vrai_demande_un_dossier_vide(self):
         from banc import __main__ as banc_main
         from banc.construire import ErreurBanc

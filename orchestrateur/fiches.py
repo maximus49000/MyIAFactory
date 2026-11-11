@@ -23,8 +23,10 @@ from pathlib import Path
 
 ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils")
 # Les outils d'un agent lancé sans fenêtre quand sa fiche n'en déclare pas : lire, écrire et modifier dans le dossier
-# du projet, lancer `py` et `git`. Jamais le mode qui contourne les autorisations.
-OUTILS_PAR_DEFAUT = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(py:*)", "Bash(git:*)"]
+# du projet, lancer Python (`py`, mais aussi `python`, que les agents emploient d'eux-mêmes : refusé, il bloquait toute
+# production à l'essai de la phase D), créer un dossier, `git`. Jamais le mode qui contourne les autorisations.
+OUTILS_PAR_DEFAUT = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(py:*)", "Bash(python:*)", "Bash(python3:*)",
+                     "Bash(mkdir:*)", "Bash(git:*)"]
 MODELES = ("Haiku", "Sonnet", "Opus")
 ETATS = ("à valider", "validée")
 _ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils)\s*:\s*(.*?)\s*$")

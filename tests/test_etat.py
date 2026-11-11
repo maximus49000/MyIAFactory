@@ -380,7 +380,7 @@ class TestEtatV4(unittest.TestCase):
             r["livrable"] = {"libelle": "L", "chemin": "a.png", "date": "2026-11-10"}
             r["decisions_projet"] = [{"id": "s", "genre": "session_cloud", "texte": "T", "agent": "c1"}]
             r["taches"][0].update(fonctionnalite="f1", element="e1", modele_depart="Haiku",
-                                  montee={"de": "Haiku", "a": "Sonnet", "raison": "R"})
+                                  montee={"de": "Haiku", "a": "Sonnet", "raison": "R"}, lot={"id": "L2", "rang": 3})
             r["fonctionnalites"] = [{"id": "f1", "nom": "N", "etape": "serie", "catalogue": True}]
             r["lecons"] = [{"id": "l1", "agent": "d1", "texte": "T", "etage_propose": "skill",
                             "texte_general": "G", "roles": ["dev"]}]
@@ -391,6 +391,7 @@ class TestEtatV4(unittest.TestCase):
         t = next(x for x in e["taches"] if x["id"] == "t1")
         self.assertEqual((t["fonctionnalite"], t["element"], t["modele_depart"], t["montee"]["a"]),
                          ("f1", "e1", "Haiku", "Sonnet"))
+        self.assertEqual(t["lot"], {"id": "L2", "rang": 3})
         self.assertEqual(e["fonctionnalites"][0]["etape"], "serie")
         self.assertEqual((e["lecons"][0]["etage_propose"], e["lecons"][0]["texte_general"], e["lecons"][0]["roles"]),
                          ("skill", "G", ["dev"]))

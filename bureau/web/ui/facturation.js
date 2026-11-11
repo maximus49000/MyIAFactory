@@ -20,12 +20,20 @@ export function lignesTaches(s, taches) {
   const titres = new Map((taches || []).map((t) => [t.id, t.titre]));
   return Object.entries(s?.taches || {})
     .map(([id, t]) => ({
-      id, total: t.total, sansPrix: t.sans_prix || 0,
+      id, total: t.total, sansPrix: t.sans_prix || 0, reparti: t.reparti === true,
       titre: id === "" ? "Hors tâche" : (titres.get(id) || id),
       etapes: Object.entries(t.etapes || {}).map(([nom, total]) => ({nom: nom === "" ? "Sans étape" : nom, total}))
         .sort((a, b) => b.total - a.total),
     }))
     .sort((a, b) => b.total - a.total);
+}
+
+export const MARQUE_LOT = "estimé (part d'un lot)";
+
+// Le coût d'une tâche : « estimé (part d'un lot) » quand sa part a été répartie entre les tâches d'un lot.
+export function coutDeTache(t) {
+  const c = coutEnClair({total: t.total, sans_prix: t.sansPrix});
+  return t.reparti ? `${c} · ${MARQUE_LOT}` : c;
 }
 
 // Un coût en clair qui ne passe jamais pour complet : `sans_prix` (nombre ou liste) dit que des usages
@@ -50,6 +58,7 @@ export function lignesDiscussions(s, etat) {
       tokens: Object.values(u.tokens || {}).reduce((n, v) => n + (typeof v === "number" ? v : 0), 0),
       cout: typeof u.cout === "number" ? u.cout : null,
       prixDu: u.prix_du ?? null, ancien: u.ancien === true,
+      ...(typeof u.reparti === "string" ? {reparti: u.reparti} : {}),
     }));
 }
 
@@ -115,7 +124,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     if (!taches.length) liste.append(el("li", "vide", "Aucune tâche"));
     for (const t of taches) {
       const li = el("li", "");
-      li.append(rangee(tronquer(t.titre, MAX_TITRE), coutEnClair({total: t.total, sans_prix: t.sansPrix}), "gras"));
+      li.append(rangee(tronquer(t.titre, MAX_TITRE), coutDeTache(t), "gras"));
       for (const e of t.etapes) li.append(rangee("↳ " + e.nom, euros(e.total), "etape"));
       liste.append(li);
     }
@@ -142,7 +151,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
                                : `Prix du ${dateFr(d.prixDu) || d.prixDu}`;
       }
       li.append(ligne, rangee(`↳ ${tronquer(d.tache, MAX_TITRE)} · ${tronquer(d.etape, 40)}`,
-                              `${tokens(d.tokens)} tokens`, "etape"));
+                              `${tokens(d.tokens)} tokens` + (d.reparti ? ` · ${MARQUE_LOT}` : ""), "etape"));
       ld.append(li);
     }
     if (discussions.length > MAX_DISCUSSIONS) {

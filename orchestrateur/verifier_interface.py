@@ -135,6 +135,11 @@ def verifier_lecture(chemin, etat):
             apres=lambda o: o["message"].strip() or (_ for _ in ()).throw(Ecart("« message » est vide")))
         _refus(chemin, "depart", {"agent": "inconnu-verification", "tache": "inconnue-verification"})
 
+    def lots():
+        _ok(chemin, "lots", {}, {"lots": list, "tailles": dict, "ecartees": list},
+            apres=_liste_de_dicts("lots", "lot", "modele", "lieu", "taches"))
+        _refus(chemin, "lots", {"taches": ["inconnue-verification"]})
+
     def catalogue():
         if not fonctionnalites:
             raise Ignore("aucune fonctionnalité dans le suivi")
@@ -143,7 +148,8 @@ def verifier_lecture(chemin, etat):
         _refus(chemin, "catalogue", {"fonctionnalite": "inconnue-verification"})
 
     return [("releve", releve), ("etat", etat_), ("demandes", demandes), ("memoire", memoire),
-            ("genre lister", genre), ("agent-libre", agent_libre), ("depart", depart_), ("catalogue", catalogue)]
+            ("genre lister", genre), ("agent-libre", agent_libre), ("depart", depart_), ("lots", lots),
+            ("catalogue", catalogue)]
 
 
 class Ignore(Exception):

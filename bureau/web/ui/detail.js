@@ -3,7 +3,7 @@
 
 import {el, ligne} from "./dom.js";
 import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
-import {lienSur, libelleMontee} from "./actions.js";
+import {lienSur, libelleMontee, libelleLot} from "./actions.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -107,6 +107,8 @@ export function contenuTache(ctx, contenu, t) {
   contenu.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
   const montee = libelleMontee(t);
   if (montee) contenu.append(ligne("Modèle", montee));
+  const lot = libelleLot(t, e.taches);
+  if (lot) contenu.append(ligne("Lot", lot));
   for (const n of notesValides(t)) {
     const p = el("p", "note-tache");
     p.append(el("strong", "", n.libelle + " : "), document.createTextNode(n.texte));

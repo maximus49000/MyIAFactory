@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, libelleMontee} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, libelleMontee, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -201,4 +201,14 @@ test("decisionsDirecteur : un compte rendu n'attend pas de réponse", () => {
     {id: "f4", nom: "D", etape: "cadrage", discussion: [m("Fait ? oui.", {attend: false})]},
     {id: "f5", nom: "E", etape: "cadrage", discussion: [m("Choisissez", {questions: [{texte: "T", choix: ["a", "b"]}]})]}]};
   assert.deepEqual(decisionsDirecteur(e).reponses.map((x) => x.fonctionnalite), ["f2", "f3", "f5"]);
+});
+
+test("libelleLot : « Lot L2, tâche 3 sur 4 »", () => {
+  const taches = [1, 2, 3, 4].map((rang) => ({lot: {id: "L2", rang}})).concat([{lot: {id: "L3", rang: 1}}, {lot: null}]);
+  assert.equal(libelleLot(taches[2], taches), "Lot L2, tâche 3 sur 4");
+  assert.equal(libelleLot(taches[4], taches), "Lot L3, tâche 1 sur 1");
+  assert.equal(libelleLot({lot: null}, taches), null);
+  assert.equal(libelleLot({}, taches), null);
+  assert.equal(libelleLot({lot: {id: "L2", rang: 0}}, taches), null);
+  assert.equal(libelleLot({lot: {id: "L9", rang: 2}}, undefined), "Lot L9, tâche 2 sur 2");
 });

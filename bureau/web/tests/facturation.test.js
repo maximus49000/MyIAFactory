@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, lignesDiscussions, totalProjet} from "../ui/facturation.js";
+import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet} from "../ui/facturation.js";
 
 const f = {
   services: {
@@ -79,4 +79,21 @@ test("totalProjet : le total général et la part de la direction", () => {
   assert.deepEqual(totalProjet(g), {total: 9, direction: 6, sansPrix: true});
   assert.deepEqual(totalProjet({total: 2, direction: {total: 0, sans_prix: []}, sans_prix: []}),
                    {total: 2, direction: 0, sansPrix: false});
+});
+
+test("coutDeTache : « estimé (part d'un lot) » seulement pour une part répartie", () => {
+  const l = lignesTaches({taches: {t1: {total: 1.2, etapes: {}, reparti: true}, t2: {total: 2, etapes: {}}}}, []);
+  const par = Object.fromEntries(l.map((x) => [x.id, x]));
+  assert.equal(coutDeTache(par.t1), `≈ 1,20 € · ${MARQUE_LOT}`);
+  assert.equal(coutDeTache(par.t2), "≈ 2,00 €");
+  assert.equal(coutDeTache({total: 0, sansPrix: 1, reparti: true}), `prix inconnu · ${MARQUE_LOT}`);
+  assert.equal(MARQUE_LOT, "estimé (part d'un lot)");
+});
+
+test("lignesDiscussions : la répartition d'un lot est portée", () => {
+  const u = {id: "u1", tache: "t1", agent: "p1", modele: "a", etape: "code", t: "2026-11-09T10:00:00",
+             tokens: {entree: 10}, cout: 1, reparti: "temps"};
+  const [x, y] = lignesDiscussions({usages: [u, {...u, id: "u2", reparti: undefined}]}, {});
+  assert.equal(x.reparti, "temps");
+  assert.equal("reparti" in y, false);
 });

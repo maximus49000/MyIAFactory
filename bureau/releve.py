@@ -177,6 +177,10 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
             erreurs.append(f"{nom} : « modele » est obligatoire (texte non vide).")
         if not _texte_ou_nul(u.get("etape")):
             erreurs.append(f"{nom} : « etape » doit être un texte.")
+        if not _texte_ou_nul(u.get("lot")):
+            erreurs.append(f"{nom} : « lot » doit être un texte.")
+        if u.get("reparti") is not None and u["reparti"] not in ("temps", "egal"):
+            erreurs.append(f"{nom} : « reparti » doit valoir temps ou egal.")
         if not _texte(u.get("t")) or lire_date(u.get("t")) == TRES_ANCIEN:
             erreurs.append(f"{nom} : « t » doit être une date ISO 8601 (texte).")
         for champ in ("entree", "sortie"):
@@ -464,6 +468,10 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         m = t.get("montee")
         if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("de", "a", "raison"))):
             erreurs.append(f"Tâche « {i} » : « montee » doit avoir « de », « a » et « raison » (textes non vides).")
+        lot = t.get("lot")
+        if lot is not None and (not _est_dict(lot) or not _texte_plein(lot.get("id")) or isinstance(lot.get("rang"), bool)
+                                or not isinstance(lot.get("rang"), int) or lot["rang"] < 1):
+            erreurs.append(f"Tâche « {i} » : « lot » doit avoir « id » (texte non vide) et « rang » (entier d'au moins 1).")
         n = t.get("lignes")
         if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
             erreurs.append(f"Tâche « {i} » : « lignes » doit être un entier positif ou nul (lignes produites).")
@@ -471,7 +479,7 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
 
 
 CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max")
-CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee")
+CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot")
 
 
 def _normaliser_v4(n):

@@ -59,6 +59,8 @@ def _ajouter(groupe, u, cout):
     """Range un usage dans son groupe. Sans prix, il ne compte pour aucun euro mais sa tâche le porte
     (`sans_prix` : nombre d'usages exclus), pour qu'un coût incomplet ne passe jamais pour complet."""
     tache = groupe["taches"].setdefault(u.get("tache") or SANS, {"total": 0.0, "etapes": {}, "sans_prix": 0})
+    if u.get("reparti"):   # une part de lot répartie au temps ou à parts égales : une estimation, pas une mesure
+        tache["reparti"] = True
     if cout is None:
         tache["sans_prix"] += 1
         s = groupe["sans_prix"].setdefault(u["modele"], {"modele": u["modele"], "tokens": 0, "usages": 0})
@@ -107,6 +109,7 @@ def facturation(usages, prix_de, r, periode, maintenant):
         groupe["usages"].append({
             "id": u["id"], "tache": u.get("tache"), "agent": u.get("agent"), "modele": u["modele"],
             "etape": u.get("etape"), "t": u.get("t"), "tokens": tokens,
+            **({"lot": u["lot"]} if u.get("lot") else {}), **({"reparti": u["reparti"]} if u.get("reparti") else {}),
             "cout": round(cout, 6) if cout is not None else None,
             "prix_du": date_prix if cout is not None else None, "ancien": bool(ancien and cout is not None)})
         if u.get("service"):

@@ -174,6 +174,15 @@ export function demandeSession(decision, session) {
   return {type: "session_cloud", decision, session};
 }
 
+// « Lot L2, tâche 3 sur 4 » ; null si la tâche n'est pas dans un lot. Le nombre de tâches du lot est celui des tâches
+// du relevé qui portent le même identifiant de lot (au moins le rang de celle-ci).
+export function libelleLot(tache, taches) {
+  const l = tache?.lot;
+  if (!l || typeof l.id !== "string" || !l.id || !Number.isInteger(l.rang) || l.rang < 1) return null;
+  const dansLeLot = (Array.isArray(taches) ? taches : []).filter((t) => t?.lot?.id === l.id).length;
+  return `Lot ${l.id}, tâche ${l.rang} sur ${Math.max(dansLeLot, l.rang)}`;
+}
+
 // « Sonnet, monté depuis Haiku : <raison> » ; null si la tâche n'a pas été montée de modèle.
 export function libelleMontee(tache) {
   const m = tache?.montee;

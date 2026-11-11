@@ -13,8 +13,9 @@ import threading
 from pathlib import Path
 
 COMPTEURS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
-TEXTES = ("tache", "agent", "service", "modele", "etape")
-CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "t", "t_prix") + COMPTEURS
+TEXTES = ("tache", "agent", "service", "modele", "etape", "lot", "reparti")
+FACULTATIFS = ("lot", "reparti")   # absents quand le relevé n'en porte pas
+CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "lot", "reparti", "t", "t_prix") + COMPTEURS
 
 
 def _entier_positif(v):
@@ -55,7 +56,7 @@ class HistoriqueUsage:
             except ValueError:
                 continue
             if _ligne_valide(d):
-                lignes[d["id"]] = {c: d.get(c) for c in CHAMPS}
+                lignes[d["id"]] = {c: d.get(c) for c in CHAMPS if c not in FACULTATIFS or d.get(c) is not None}
         return lignes
 
     def lire(self):
@@ -80,6 +81,7 @@ class HistoriqueUsage:
                     "modele": u.get("modele"), "etape": u.get("etape"), "t": u.get("t"),
                     "t_prix": ancienne["t_prix"] if ancienne else u.get("t"),
                 }
+                nouvelle.update({c: u[c] for c in FACULTATIFS if u.get(c) is not None})
                 for c in COMPTEURS:
                     nouvelle[c] = u.get(c) or 0
                 if not _ligne_valide(nouvelle):

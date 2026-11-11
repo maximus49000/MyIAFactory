@@ -24,6 +24,7 @@ from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
 from orchestrateur import depart  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
+from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 
@@ -681,6 +682,37 @@ def genres_connus(ctx):
         return []
 
 
+def _dependances(s, t, valeur):
+    """Les tâches dont `t` dépend : des identifiants de tâches connues, sans cycle."""
+    if not isinstance(valeur, list) or not all(isinstance(x, str) and x for x in valeur):
+        raise Refus("« depend_de » doit être une liste d'identifiants de tâches.")
+    voisines = {x["id"]: x.get("depend_de") or [] for x in s["taches"]}
+    for d in valeur:
+        if d not in voisines:
+            raise Refus(f"« depend_de » : tâche inconnue « {d} ».")
+        if d == t["id"]:
+            raise Refus(f"« depend_de » : la tâche {d} ne peut pas dépendre d'elle-même.")
+    voisines[t["id"]] = list(dict.fromkeys(valeur))
+    vus, pile = set(), list(voisines[t["id"]])
+    while pile:   # une dépendance qui ramène à `t` forme un cycle
+        courant = pile.pop()
+        if courant == t["id"]:
+            raise Refus(f"« depend_de » : cycle de dépendances qui passe par la tâche {t['id']}.")
+        if courant not in vus:
+            vus.add(courant)
+            pile += voisines.get(courant, [])
+    return voisines[t["id"]]
+
+
+def _lot_de_tache(valeur):
+    if valeur is None:
+        return None
+    if (not isinstance(valeur, dict) or not isinstance(valeur.get("id"), str) or not valeur["id"].strip()
+            or isinstance(valeur.get("rang"), bool) or not isinstance(valeur.get("rang"), int) or valeur["rang"] < 1):
+        raise Refus("« lot » doit valoir {\"id\": texte, \"rang\": entier d'au moins 1} ou null.")
+    return {"id": valeur["id"], "rang": valeur["rang"]}
+
+
 def cmd_tache(ctx, e):
     cles, colonnes = ctx.cles_agents(), ctx.colonnes()
     i = e.get("id")
@@ -688,12 +720,15 @@ def cmd_tache(ctx, e):
         if i is None:
             t = {"id": f"t{su.suivant(s, 't')}", "titre": texte(e, "titre"), "fonctionnalite": None, "element": None,
                  "role": None, "colonne": ctx.f["flux"][0]["id"], "agent": None, "etape": "", "modele_depart": None,
-                 "montee": None, "journal": [], "bloquee": None, "active": True, "captures": [], "maj": None}
+                 "montee": None, "journal": [], "bloquee": None, "active": True, "captures": [], "maj": None,
+                 "depend_de": [], "lot": None, "debut": None, "fin": None}
             s["taches"].append(t)
+            etait_active = False   # une tâche neuve part de « pas encore partie » : le début est noté si elle est active
         else:
             t = su.tache(s, i)
             if t is None:
                 raise Refus(f"Tâche inconnue : {i}")
+            etait_active = bool(t["active"])
             if "titre" in e:
                 t["titre"] = texte(e, "titre")
         if "fonctionnalite" in e:
@@ -735,6 +770,14 @@ def cmd_tache(ctx, e):
             t["montee"] = m
             if m and not t["modele_depart"]:
                 t["modele_depart"] = m["de"]
+        if "depend_de" in e:
+            t["depend_de"] = _dependances(s, t, e["depend_de"])
+        if "lot" in e:
+            t["lot"] = _lot_de_tache(e["lot"])
+        if t["active"] and not etait_active:   # le passage à « active » ouvre la durée que le coût d'un lot répartit
+            t["debut"], t["fin"] = su.maintenant(), None
+        elif etait_active and not t["active"]:
+            t["fin"] = su.maintenant()
         if "lignes" in e:   # les lignes produites par la tâche (son total, remplacé à chaque fois)
             t["lignes"] = _entier(e, "lignes") if e["lignes"] is not None else None
         if "captures" in e:
@@ -825,6 +868,53 @@ def _entier(e, cle, defaut=None):
     return v
 
 
+def _taches_du_lot(s, lot):
+    """Les tâches suivies d'un lot, par rang."""
+    return sorted((t for t in s["taches"] if isinstance(t.get("lot"), dict) and t["lot"].get("id") == lot),
+                  key=lambda t: t["lot"]["rang"])
+
+
+def _nouvelle_ligne_d_usage(s, t, lot, modele, agent, compteurs, estime, etape, **extra):
+    u = {"id": f"u{su.suivant(s, 'u')}", "t": su.maintenant(), "agent": agent or t.get("agent"), "tache": t["id"],
+         "modele": modele, **compteurs, "estime": estime, "lot": lot, **extra}
+    if etape:
+        u["etape"] = etape
+    return u
+
+
+def _usage_d_un_lot(s, usages, lot, modele, agent, total, estime, etape):
+    """Le total d'un lot réparti entre ses tâches : une ligne d'usage par tâche, dont la somme vaut le total."""
+    taches = _taches_du_lot(s, lot)
+    if not taches:
+        raise Refus(f"Lot inconnu : {lot} (aucune tâche suivie n'en porte l'identifiant).")
+    if any(u.get("lot") == lot for u in usages):
+        raise Refus(f"L'usage du lot {lot} est déjà noté.")
+    parts = lots.repartir(total, [{"id": t["id"], "debut": t.get("debut"), "fin": t.get("fin")} for t in taches])
+    mode = lots.mode_repartition(taches)
+    lignes = [_nouvelle_ligne_d_usage(s, t, lot, modele, agent, parts[t["id"]], estime, etape, reparti=mode)
+              for t in taches]
+    usages.extend(lignes)
+    return {"ids": [u["id"] for u in lignes], "reparti": mode}
+
+
+def _usage_cumule_d_un_lot(s, usages, lot, cumul, tache, modele, agent, compteurs, estime, etape):
+    """Un cumul relevé à la fin d'une tâche d'un lot : la ligne de la tâche est l'écart avec le cumul précédent."""
+    if tache is None:
+        raise Refus("Un cumul de lot demande aussi la « tache » qui vient de finir.")
+    t = su.tache(s, tache)
+    if not isinstance(t.get("lot"), dict) or t["lot"].get("id") != lot:
+        raise Refus(f"La tâche {tache} n'est pas dans le lot {lot}.")
+    cumuls = s.setdefault("usage_cumuls", {})
+    avant = cumuls.get(cumul) or dict.fromkeys(compteurs, 0)
+    ecart = {c: compteurs[c] - avant.get(c, 0) for c in compteurs}
+    if any(v < 0 for v in ecart.values()):
+        raise Refus(f"Le cumul « {cumul} » recule : les compteurs ne peuvent que croître.")
+    cumuls[cumul] = dict(compteurs)
+    u = _nouvelle_ligne_d_usage(s, t, lot, modele, agent, ecart, estime, etape)
+    usages.append(u)
+    return {"id": u["id"]}
+
+
 def cmd_usage(ctx, e):
     """Note les tokens d'une exécution d'agent (pour la facturation du bureau). Les compteurs d'un même `id` sont des
     cumuls : republier l'`id` avec des nombres plus grands, tant que l'exécution continue. Quand seul un `total` est
@@ -840,10 +930,19 @@ def cmd_usage(ctx, e):
     else:
         entree, sortie = _entier(e, "entree"), _entier(e, "sortie")
     caches = {c: _entier(e, c, 0) for c in ("cache_lecture", "cache_ecriture")}
+    lot = e.get("lot")
+    if lot is not None and (not isinstance(lot, str) or not lot.strip()):
+        raise Refus("« lot » doit être l'identifiant d'un lot (texte).")
     with ctx.suivi.transaction() as s:
         if tache is not None and su.tache(s, tache) is None:
             raise Refus(f"Tâche inconnue : {tache}")
         usages = s.setdefault("usage", [])
+        compteurs = {"entree": entree, "sortie": sortie, **caches}
+        if lot is not None and tache is None:
+            return _usage_d_un_lot(s, usages, lot, modele, agent, compteurs, "total" in e, texte(e, "etape", obligatoire=False))
+        if lot is not None and e.get("id") is not None:
+            return _usage_cumule_d_un_lot(s, usages, lot, e["id"], tache, modele, agent, compteurs, "total" in e,
+                                          texte(e, "etape", obligatoire=False))
         if e.get("id") is not None:
             u = next((x for x in usages if x["id"] == e["id"]), None)
             if u is None:
@@ -853,6 +952,8 @@ def cmd_usage(ctx, e):
             usages.append(u)
         u.update({"agent": agent, "tache": tache, "modele": modele, "entree": entree, "sortie": sortie, **caches,
                   "estime": "total" in e})
+        if lot is not None:
+            u["lot"] = lot
         etape = texte(e, "etape", obligatoire=False)
         if etape:
             u["etape"] = etape
@@ -959,7 +1060,8 @@ def construire_releve(ctx):
         v = {"id": t["id"], "titre": t["titre"], "colonne": t["colonne"], "active": t["active"],
              "titulaire": t["agent"] if t["agent"] in cles else None, "etape": t["etape"] or "", "maj": t["maj"],
              "journal": list(t["journal"]), "fonctionnalite": t["fonctionnalite"], "element": t["element"],
-             "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"]}
+             "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"],
+             "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None}
         if t.get("lignes") is not None:
             v["lignes"] = t["lignes"]
         if t.get("captures"):
@@ -1029,7 +1131,9 @@ def construire_releve(ctx):
                    "agent": u["agent"] if u.get("agent") in cles_titulaires else None, "modele": u["modele"],
                    "t": u["t"], "entree": u["entree"], "sortie": u["sortie"],
                    "cache_lecture": u.get("cache_lecture", 0), "cache_ecriture": u.get("cache_ecriture", 0),
-                   **({"etape": u["etape"]} if u.get("etape") else {})}
+                   **({"etape": u["etape"]} if u.get("etape") else {}),
+                   **({"lot": u["lot"]} if u.get("lot") else {}),
+                   **({"reparti": u["reparti"]} if u.get("reparti") else {})}
                   for u in (s.get("usage") or [])[-USAGES_AU_RELEVE:]]
     return r
 
@@ -1175,7 +1279,49 @@ def cmd_agent_libre(ctx, e):
     return sortie
 
 
+def _sans_doublon(elements):
+    vus, sortie = set(), []
+    for x in elements:
+        cle = json.dumps(x, sort_keys=True, ensure_ascii=False)
+        if cle not in vus:
+            vus.add(cle)
+            sortie.append(x)
+    return sortie
+
+
+def _depart_d_un_lot(ctx, e):
+    cle, ids = texte(e, "agent"), e.get("taches")
+    if "tache" in e:
+        raise Refus("Donnez « tache » ou « taches », pas les deux.")
+    if not isinstance(ids, list) or not ids or not all(isinstance(x, str) and x for x in ids):
+        raise Refus("« taches » doit être une liste non vide d'identifiants de tâches.")
+    fiche_agent = fi.trouver(_fiches_avec_sessions(ctx), cle)
+    if fiche_agent is None:
+        raise Refus(f"Agent inconnu : {cle}")
+    s = ctx.suivi.lire()
+    taches = []
+    for i in ids:
+        t = su.tache(s, i)
+        if t is None:
+            raise Refus(f"Tâche inconnue : {i}")
+        taches.append(t)
+    roles = list(dict.fromkeys(t.get("role") or fiche_agent["role"] for t in taches))
+    lecons_lot = {"skill": [], "genre": []}
+    for role in roles:
+        lues = memoire.lire(ctx.f["memoire"], ctx.f["genre"], role)
+        for genre in lecons_lot:
+            lecons_lot[genre] = _sans_doublon(lecons_lot[genre] + lues[genre])
+    glossaire = []
+    for t in taches:
+        fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
+        glossaire = _sans_doublon(glossaire + list((fonc or {}).get("glossaire") or []))
+    briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
+    return {"message": depart.message_lot(ctx.f, fiche_agent, taches, briefs, lecons_lot, glossaire)}
+
+
 def cmd_depart(ctx, e):
+    if "taches" in e:
+        return _depart_d_un_lot(ctx, e)
     cle, i = texte(e, "agent"), texte(e, "tache")
     fiche_agent = fi.trouver(_fiches_avec_sessions(ctx), cle)
     if fiche_agent is None:
@@ -1189,6 +1335,65 @@ def cmd_depart(ctx, e):
                                       (fonc or {}).get("glossaire") or [])}
 
 
+def _partie(t):
+    """Une tâche déjà partie : active, faite, ou qui a déjà été prise un moment."""
+    return bool(t["active"] or t["colonne"] == "fait" or t.get("debut"))
+
+
+def _modele_et_lieu(fiches_, t):
+    """(modèle, lieu) de la tâche : ceux de son agent, sinon de l'agent libre de son rôle (à défaut, d'une fiche du rôle)."""
+    if t.get("agent"):
+        f = fi.trouver(fiches_, t["agent"])
+        if f:
+            return f["modele"], f["lieu"]
+    candidates = [f for f in fiches_ if f["role"] == t.get("role")]
+    voulues = [f for f in candidates if f["modele"] == t.get("modele_depart")]
+    candidates = voulues or candidates
+    return (candidates[0]["modele"], candidates[0]["lieu"]) if candidates else None
+
+
+def cmd_lots(ctx, e):
+    """Regroupe les tâches pas encore parties en lots (un modèle, un lieu), selon la taille conseillée de chaque modèle."""
+    s = ctx.suivi.lire()
+    fiches_ = _fiches_avec_sessions(ctx)
+    if "taches" in e:
+        ids = e["taches"]
+        if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids):
+            raise Refus("« taches » doit être une liste d'identifiants de tâches.")
+        for i in ids:
+            t = su.tache(s, i)
+            if t is None:
+                raise Refus(f"Tâche inconnue : {i}")
+            if _partie(t):
+                raise Refus(f"La tâche {i} est déjà partie ou faite : elle n'est jamais remise en lot.")
+        choisies = [t for t in s["taches"] if t["id"] in ids]
+    else:
+        choisies = [t for t in s["taches"] if not _partie(t)]
+    entrees, ecartees = [], []
+    for t in choisies:
+        ml = _modele_et_lieu(fiches_, t)
+        if ml is None:
+            ecartees.append({"tache": t["id"], "raison": "aucun agent pour le rôle de la tâche" if t.get("role")
+                             else "la tâche n'a pas de rôle"})
+            continue
+        entrees.append({"id": t["id"], "modele": ml[0], "lieu": ml[1], "role": t.get("role"),
+                        "depend_de": list(t.get("depend_de") or [])})
+    choisis = {t["id"] for t in choisies}
+    par_id = {t["id"]: t for t in s["taches"]}
+    for x in entrees:   # une dépendance déjà partie ou faite est tenue ; les autres comptent dans l'ordre
+        x["depend_de"] = [d for d in x["depend_de"] if d in choisis or d not in par_id or not _partie(par_id[d])]
+    rangs = {t["id"]: t["lot"]["rang"] for t in s["taches"] if isinstance(t.get("lot"), dict)}
+    mesures = [{**u, "rang": rangs.get(u.get("tache"))} for u in s.get("usage") or []]
+    tailles = {m: lots.taille_conseillee(mesures, m) for m in {x["modele"] for x in entrees}}
+    numeros = [int(t["lot"]["id"][1:]) for t in s["taches"]
+               if isinstance(t.get("lot"), dict) and re.fullmatch(r"L\d+", t["lot"].get("id") or "")]
+    try:
+        formes = lots.former(entrees, tailles, premier=max(numeros, default=0) + 1)
+    except ValueError as ex:
+        raise Refus(str(ex))
+    return {"lots": formes, "tailles": tailles, "ecartees": ecartees}
+
+
 COMMANDES = {
     "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"),
@@ -1199,7 +1404,7 @@ COMMANDES = {
     "catalogue": (cmd_catalogue, "obligatoire"), "memoire": (cmd_memoire, "obligatoire"),
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
-    "organisation": (cmd_organisation, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
+    "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
 }
 
 

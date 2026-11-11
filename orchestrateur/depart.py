@@ -105,9 +105,18 @@ Rends, dans cet ordre :
    à corriger."""
 
 
-def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
-    """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
-    rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
+def _bloc_tache(tache):
+    t = [f"- Tâche : {tache.get('titre', '')} ({tache.get('id', '?')})"]
+    for cle, nom in (("fonctionnalite", "Fonctionnalité"), ("element", "Élément"), ("etape", "Étape")):
+        if tache.get(cle):
+            t.append(f"- {nom} : {tache[cle]}")
+    m = tache.get("montee")
+    if m:
+        t.append(f"- Modèle : {m['a']} (monté depuis {m['de']} : {m['raison']})")
+    return t
+
+
+def _entete(factory, fiche, lecons_memoire):
     parties = []
     if fiche["lieu"] == "cloud":
         parties.append("Tu repars de zéro. Rien de ce qui s'est dit dans cette session avant ce message ne compte : "
@@ -117,20 +126,53 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
     parties.append("## Ta fiche\n" + _texte_fiche(fiche))
     parties.append(_lecons("Leçons de la skill qui touchent ton rôle", lecons_memoire.get("skill") or []))
     parties.append(_lecons("Leçons du genre du projet qui touchent ton rôle", lecons_memoire.get("genre") or []))
+    return parties
+
+
+def _vocabulaire(glossaire):
+    """Le vocabulaire déjà défini : l'agent le reprend tel quel, sans le redéfinir."""
+    return ("## Vocabulaire de la fonctionnalité\n"
+            "Ces mots sont déjà définis : emploie-les dans ce sens et ne les redéfinis pas. Si tu emploies un "
+            "autre mot spécialisé, donne sa définition avec ton résultat (mot et définition courte).\n"
+            + "\n".join(f"- {g['mot']} : {g['definition']}" for g in glossaire))
+
+
+def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
+    """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
+    rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
+    parties = _entete(factory, fiche, lecons_memoire)
     parties.append("## Le brief de ton rôle\n" + (brief_du_role or "(pas de brief propre à ce rôle)"))
-    t = ["## Ta tâche", f"- Tâche : {tache.get('titre', '')} ({tache.get('id', '?')})"]
-    for cle, nom in (("fonctionnalite", "Fonctionnalité"), ("element", "Élément"), ("etape", "Étape")):
-        if tache.get(cle):
-            t.append(f"- {nom} : {tache[cle]}")
-    m = tache.get("montee")
-    if m:
-        t.append(f"- Modèle : {m['a']} (monté depuis {m['de']} : {m['raison']})")
-    parties.append("\n".join(t))
-    if glossaire:   # le vocabulaire déjà défini : l'agent le reprend tel quel, sans le redéfinir
-        parties.append("## Vocabulaire de la fonctionnalité\n"
-                       "Ces mots sont déjà définis : emploie-les dans ce sens et ne les redéfinis pas. Si tu emploies un "
-                       "autre mot spécialisé, donne sa définition avec ton résultat (mot et définition courte).\n"
-                       + "\n".join(f"- {g['mot']} : {g['definition']}" for g in glossaire))
+    parties.append("\n".join(["## Ta tâche"] + _bloc_tache(tache)))
+    if glossaire:
+        parties.append(_vocabulaire(glossaire))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE)
+    return "\n\n".join(parties) + "\n"
+
+
+COMPTE_RENDU_PAR_TACHE = (
+    "Enchaîne ces tâches d'une traite, dans cet ordre, avec ce même contexte. **À la fin de chaque tâche, rends "
+    "compte avant de passer à la suivante** : `lancer tache` avec son `id` (journal, `colonne`, `active: false`), "
+    "puis seulement ensuite la tâche suivante.")
+
+
+def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=()):
+    """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
+    `(rôle, texte | None)`, un par rôle présent dans le lot."""
+    parties = _entete(factory, fiche, lecons_memoire)
+    if len(briefs) == 1:
+        parties.append("## Le brief de ton rôle\n" + (briefs[0][1] or "(pas de brief propre à ce rôle)"))
+    else:
+        parties.append("## Les briefs des rôles de ce lot\n" + "\n\n".join(
+            f"### Rôle : {role}\n{texte or '(pas de brief propre à ce rôle)'}" for role, texte in briefs))
+    lignes = [f"## Tes {len(taches)} tâches, dans l'ordre", COMPTE_RENDU_PAR_TACHE]
+    for k, tache in enumerate(taches, 1):
+        lignes.append(f"\n### Tâche {k} sur {len(taches)}")
+        lignes += _bloc_tache(tache)
+    parties.append("\n".join(lignes))
+    if glossaire:
+        parties.append(_vocabulaire(glossaire))
+    parties.append(SOBRIETE)
+    parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
+                   .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))
     return "\n\n".join(parties) + "\n"

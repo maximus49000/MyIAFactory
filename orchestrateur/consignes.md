@@ -190,6 +190,13 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   dev libre »).
   `agent-libre` tient la limite d'agents locaux du projet : s'il répond « limite … atteinte », la tâche attend (ou
   un agent cloud la prend).
+- **Des lots par modèle.** Au découpage, note sur chaque tâche ce dont elle dépend (`lancer tache` avec `depend_de`).
+  Avant de lancer, `lancer lots` sur les tâches prêtes (sans `taches` : toutes celles qui ne sont pas parties, toutes
+  fonctionnalités confondues) : il regroupe les tâches d'un même modèle et d'un même lieu, applique la taille
+  conseillée de chaque modèle d'après les mesures du projet, garde chaque relecture seule et respecte `depend_de`.
+  **À chaque nouvelle fonctionnalité ou sollicitation qui ajoute des tâches, refais les lots de tout ce qui n'est pas
+  parti.** Note le lot sur chaque tâche (`lancer tache` avec `lot: {id, rang}`) avant le départ. Un lot = un agent, un
+  départ, enchaîné d'une traite.
 - **Le modèle de départ est celui de la fiche** de l'agent. Tu peux **monter d'un cran** si une tâche semble
   complexe (Haiku vers Sonnet, Sonnet vers Opus), jamais plus. Note toute montée sur la tâche (`lancer tache` avec
   `modele_depart` et `montee: {de, a, raison}`, la raison en une phrase) : elle se voit au bureau et dans la
@@ -209,14 +216,20 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
 
 ## Recréer un agent
 
-- À chaque tâche, l'agent repart d'un **contexte neuf**.
+- À chaque **lot** (ou tâche seule), l'agent repart d'un **contexte neuf**.
 - Son message de départ est **assemblé par `lancer depart`** (`agent`, `tache`), jamais à la main : le projet, la
   fiche entière, les leçons de genre et de skill qui touchent son rôle, le brief du rôle, la tâche et la consigne
   de fin d'étape (résultat, leçons, retours sur la factory). Tu peux y ajouter la matière de la tâche (la
-  discussion, les images, les fichiers à lire), pas en retirer.
+  discussion, les images, les fichiers à lire), pas en retirer. Pour un lot, `lancer depart` avec `agent` et `taches`
+  (dans l'ordre du lot) : un seul message, le brief de chaque rôle, et la consigne de rendre compte à la fin de chaque tâche
+  (`lancer tache`) avant de passer à la suivante.
 - En local : un sous-agent neuf avec ce message. En cloud : le message est envoyé à la session attitrée de l'agent ;
   il commence par « Tu repars de zéro ».
 - Marque la tâche (`lancer tache` avec `agent`, `colonne`, `active: true`) quand l'agent part, et rends-la à la fin.
+- **Le coût d'un lot** : à la fin du lot, `lancer usage` avec `lot` (l'identifiant) et le total que rend le sous-agent :
+  l'outil le répartit entre les tâches (au temps passé, sinon à parts égales ; leur somme vaut exactement le total). Si tu
+  peux relever les cumuls à chaque fin de tâche, fais plutôt un `lancer usage` par tâche avec `tache`, `lot` et le même
+  `id` : les écarts sont exacts. La relecture croisée reste un agent neuf par relecteur.
 
 ## Les documents
 

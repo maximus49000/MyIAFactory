@@ -135,7 +135,10 @@ même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise à jour. Champs : `titre`,
 `fonctionnalite`, `element`, `role`, `colonne`, `agent`, `etape`, `modele_depart`, `montee` (`{de, a, raison}`),
 `journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins), `lignes` (les lignes produites
-par la tâche, son total : l'échelle de son coût au bureau). Un agent ne tient qu'une
+par la tâche, son total : l'échelle de son coût au bureau), `depend_de` (liste d'identifiants de tâches connues : ce
+que la tâche attend ; refus d'une tâche inconnue, d'elle-même ou d'un cycle), `lot` (`{"id": "L2", "rang": 3}` ou
+`null` : le lot de la tâche et son rang). L'outil note `debut` au passage à `active: true` et `fin` au passage à
+`active: false` (ils servent à répartir le coût d'un lot). Un agent ne tient qu'une
 tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé (quelle que soit la casse)
 en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Haiku → Sonnet → Opus). Rend la tâche.
 
@@ -166,6 +169,14 @@ alors comme des tokens d'entrée, et le coût est une **estimation basse**). Not
 `id` absent : un nouvel usage, rendu `{"id": "u3"}` ; `id` donné : les compteurs de cet usage sont remplacés (des
 **cumuls**, tant que l'exécution continue). Le relevé donne les usages récents au bureau (`usage`), qui les convertit en
 euros estimés dans l'onglet Facturation ; une pièce `facturation` (service de ce nom) le garde toujours visible.
+
+**Un lot.** `lot` (identifiant) à la place de `tache` : le total du lot (`entree`/`sortie`, ou `total`) est réparti
+entre ses tâches au prorata de leur durée (`fin - debut`), à parts égales si une durée manque ou vaut 0, en entiers et par
+la méthode des plus forts restes : la somme des parts vaut exactement le total, compteur par compteur. Une ligne
+d'usage par tâche, avec `tache`, `lot` et `reparti` (`temps` ou `egal`) ; rend `{"ids": [...], "reparti": …}` ;
+refus d'un lot inconnu ou déjà noté. Avec `tache`, `lot` et un `id` **cumulatif** (le même pour tout le lot), chaque
+appel écrit l'écart avec le cumul précédent : exact, `reparti` absent (refus d'un cumul qui recule). Le bureau marque
+« estimé (part d'un lot) » le coût d'une tâche aux parts réparties ; les totaux ne changent pas.
 
 ### `session`
 
@@ -257,11 +268,26 @@ atteinte » ; les agents cloud ne comptent pas. Le relevé (version 4) la publie
 
 ### `depart`
 
-Entrée : `{"agent", "tache"}`. Assemble le **message de départ** de l'agent pour cette tâche : le projet et son
+Entrée : `{"agent", "tache"}` (ou `taches`, voir plus bas). Assemble le **message de départ** de l'agent pour cette tâche : le projet et son
 genre, la fiche entière, les leçons de la skill et du genre qui touchent son rôle (jamais celles d'un autre rôle ni
 d'un autre genre), le brief du rôle (`<fiches>/briefs/<rôle>.md`), la tâche, la consigne de fin d'étape (résultat,
 leçons avec étage proposé et texte général, retours sur la factory). Pour un agent cloud, le message commence par
 « Tu repars de zéro. ». Rend `{"message": "…"}`.
+
+**Un lot.** `taches` (liste d'identifiants, dans l'ordre du lot) à la place de `tache` : un seul message de départ
+pour l'agent, avec le brief de chaque rôle présent, les tâches dans l'ordre et la consigne de rendre compte à la fin de
+chaque tâche (`lancer tache`) avant de passer à la suivante.
+
+### `lots`
+
+Entrée : `{"taches": [ids]?}`, ou `{}` : **toutes les tâches pas encore parties du projet, toutes fonctionnalités
+confondues**. Regroupe ces tâches en lots d'un même modèle et d'un même lieu (ceux de leur agent, sinon de l'agent libre
+du rôle) et rend `{"lots": [{"lot": "L3", "modele", "lieu", "taches": [ids]}], "tailles": {modèle: n}, "ecartees":
+[{tache, raison}]}`. Une tâche déjà active, faite ou déjà prise n'est jamais remise en lot (refus si elle est nommée).
+Chaque lot a au plus la taille conseillée de son modèle (5 sans mesure ; sinon d'après le coût moyen d'une tâche au rang
+k d'un lot comparé à une tâche seule), une relecture est toujours seule, et un lot ne passe devant une tâche qui
+dépend d'une autre non encore formée. Les lots sont numérotés après les lots déjà notés sur les tâches. Refus (code 1)
+sur un cycle de `depend_de` ou une dépendance inconnue. La commande ne note rien : `lancer tache` (`lot`) le fait.
 
 ## Vérifier une implémentation
 

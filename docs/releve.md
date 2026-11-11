@@ -79,7 +79,7 @@ En version 3, cliquer un service ouvre son **dossier** : quatre onglets (Tâches
 
 Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau les convertit en euros **estimés** (toujours affichés avec « ≈ » : ce n'est pas une facture).
 
-`usage` : liste (**5 000 entrées au plus**) de `{id, tache, agent, modele, etape?, t, entree, sortie, cache_lecture?, cache_ecriture?}`, une entrée par discussion.
+`usage` : liste (**5 000 entrées au plus**) de `{id, tache, agent, modele, etape?, lot?, reparti?, t, entree, sortie, cache_lecture?, cache_ecriture?}`, une entrée par discussion. `lot` (texte) : le lot dont la tâche faisait partie ; `reparti` (`temps` ou `egal`) : la ligne est une part répartie du coût d'un lot, donc estimée (l'onglet Facturation la marque « estimé (part d'un lot) »).
 
 | Champ | Valeurs |
 |---|---|
@@ -161,6 +161,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
 | `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
 | `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
+| `lot` | chaque tâche | facultatif : `{id, rang}` (texte non vide, entier d'au moins 1) ou `null` ; le panneau de la tâche montre « Lot L2, tâche 3 sur 4 » |
 | `etage_propose`, `texte_general`, `roles` | chaque leçon | l'étage proposé (`projet`, `genre` ou `skill`), le texte réécrit en termes généraux (obligatoire si l'étage n'est pas `projet`), les rôles concernés |
 
 **Une fonctionnalité** : `id`, `nom`, `etape` (`cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie` ou

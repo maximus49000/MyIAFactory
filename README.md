@@ -79,7 +79,23 @@ Projet 3, le parcours d'une tâche ([plan](docs/superpowers/plans/2026-11-10-par
 - [x] 13. Les consignes génériques et le guide de passage
 - [x] 14. La démo à deux projets, la documentation, la relecture
 - [x] 15. Le vrai passage de bout en bout
-- [ ] Le passage du projet pilote (phases H à J, dans son dépôt)
+- [x] Le passage du projet pilote (phases H à J, dans son dépôt)
+
+Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md), [plan](docs/superpowers/plans/2026-11-11-installation-sur-un-projet.md), [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md)) :
+
+- [ ] 1. Les chemins `~`
+- [ ] 2. La limite d'agents locaux
+- [ ] 3. Une leçon gardée en local quand le push échoue
+- [ ] 4. Le dossier stable
+- [ ] 5. L'examen du dossier
+- [ ] 6. Le calibrage et l'estimation du coût
+- [ ] 7. La proposition, la mise en place, le bureau commun, la réparation
+- [ ] 8. La ligne de commande de l'installation
+- [ ] 9. Le plugin et les consignes de la discussion
+- [ ] 10. La décision et la commande « organisation »
+- [ ] 11. Les guides d'accord, relecture finale
+- [ ] 12. Le vrai passage sur un projet vide et un projet existant
+- [ ] 13. Le projet pilote rejoint le nouveau rangement (dans son dépôt)
 
 État : le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](docs/installation.md)). Le projet 3, le parcours d'une tâche, est réalisé dans ce dépôt : un bureau qui suit plusieurs projets, « + Nouvelle fonctionnalité » et la discussion de cadrage, le Directeur enrichi, le catalogue de chaque fonctionnalité, et un **orchestrateur générique** ([consignes](orchestrateur/consignes.md), [interface des commandes](orchestrateur/interface.md), [guide de passage](docs/orchestrateur.md)) avec sa mémoire à trois étages. Le vrai passage de bout en bout est fait (phase G). **Projet 3 terminé, vérifié sur le projet pilote** (voir la [passation](docs/superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)).
 
@@ -96,7 +112,7 @@ Suivre plusieurs projets dans un même bureau : `py -3.12 lancer.py serveur --bu
 ## Ce qu'il reste à faire ensuite
 
 - **Projet 3, le parcours d'une tâche** ([conception](docs/superpowers/specs/2026-11-10-parcours-d-une-tache-design.md)) : le vrai passage de bout en bout avec une conversation orchestratrice (phase G), puis le passage du projet pilote dans son dépôt (phases H à J) : terminé, vérifié sur le projet pilote.
-- **Projet 4, l'installation sur un projet** : scan, proposition de services, calibrage sur la machine, renfort cloud, emballage en skill.
+- **Projet 4, l'installation sur un projet** ([conception](docs/superpowers/specs/2026-11-11-installation-sur-un-projet-design.md)) : conçu et planifié ; la réalisation suit la [passation](docs/superpowers/plans/2026-11-11-installation-sur-un-projet-passation.md), phase A d'abord.
 
 ## Documents
 

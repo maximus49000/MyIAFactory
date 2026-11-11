@@ -30,6 +30,7 @@ from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
+from orchestrateur import workflows as wf  # noqa: E402
 from partenaires import catalogue as pcat  # noqa: E402
 from partenaires import choix as pchoix  # noqa: E402
 from partenaires import detection as pdet  # noqa: E402
@@ -90,7 +91,11 @@ class Contexte:
         return {x["cle"] for x in self.fiches()} | {"chef"}
 
     def colonnes(self):
-        return ["cadrage"] + [e["id"] for e in self.f["flux"]] + ["fait"]
+        return ["cadrage"] + wf.ids_etapes(self.f) + ["fait"]
+
+    def premiere_colonne(self, fonc=None):
+        """La première étape du workflow de la fonctionnalité (« cadrage » si le projet n'a aucun workflow)."""
+        return wf.premiere_etape(self.f, fonc) or "cadrage"
 
     def sessions(self):
         try:
@@ -348,7 +353,7 @@ def cmd_actions(ctx, e):
             if lecon is None:
                 raise Refus(f"Leçon inconnue : {e['cible'].get('id')}")
             t = {"id": f"t{su.suivant(s, 't')}", "titre": f"Challenge de la leçon {lecon['id']}", "fonctionnalite": None,
-                 "element": None, "role": None, "colonne": ctx.f["flux"][0]["id"], "agent": None, "etape": "Discussion",
+                 "element": None, "role": None, "colonne": ctx.premiere_colonne(), "agent": None, "etape": "Discussion",
                  "modele_depart": None, "montee": None, "journal": [{"t": demande["t"], "texte": "Leçon : " + lecon["texte"]}],
                  "bloquee": None, "active": True, "captures": [], "maj": demande["t"]}
             s["taches"].append(t)
@@ -429,7 +434,8 @@ def _fonc_compacte(f):
     dernier = d[-1] if d else None
     cahier, methode = f.get("cahier"), f.get("methode")
     return {
-        "id": f["id"], "nom": f["nom"], "etape": f["etape"], "agent_cadrage": f["agent_cadrage"],
+        "id": f["id"], "nom": f["nom"], "etape": f["etape"], "genre": f.get("genre"), "workflow": f.get("workflow"),
+        "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"],
         "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
         "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
                    "valide_le": cahier.get("valide_le")} if cahier else None,
@@ -560,6 +566,18 @@ def cmd_fonctionnalite(ctx, e):
             if e["etape"] not in rel.ETAPES:
                 raise Refus(f"Étape inconnue « {e['etape']} » ({', '.join(rel.ETAPES)}).")
             f["etape"] = e["etape"]
+        if "genre" in e:
+            if e["genre"] is not None and not (isinstance(e["genre"], str) and fa.MOTIF_GENRE.match(e["genre"])):
+                raise Refus("« genre » doit être nul ou un identifiant de genre "
+                            "(minuscules, chiffres et tirets, 40 caractères au plus).")
+            f["genre"] = e["genre"]
+        if "workflow" in e:
+            connus = [w["id"] for w in wf.tous(ctx.f)]
+            if e["workflow"] is not None and e["workflow"] not in connus:
+                raise Refus(f"Workflow inconnu « {e['workflow']} » ({', '.join(connus) or 'aucun'}).")
+            f["workflow"] = e["workflow"]
+        if "deplacee_vers" in e:   # le nom du projet où la fonctionnalité est partie (étape « deplacee »)
+            f["deplacee_vers"] = texte(e, "deplacee_vers", obligatoire=False)
         if "agent_cadrage" in e:
             if e["agent_cadrage"] is not None and e["agent_cadrage"] not in cles:
                 raise Refus(f"Agent de cadrage inconnu : {e['agent_cadrage']}")
@@ -776,7 +794,7 @@ def cmd_tache(ctx, e):
     with ctx.suivi.transaction() as s:
         if i is None:
             t = {"id": f"t{su.suivant(s, 't')}", "titre": texte(e, "titre"), "fonctionnalite": None, "element": None,
-                 "role": None, "colonne": ctx.f["flux"][0]["id"], "agent": None, "etape": "", "modele_depart": None,
+                 "role": None, "colonne": None, "agent": None, "etape": "", "modele_depart": None,
                  "montee": None, "journal": [], "bloquee": None, "active": True, "captures": [], "maj": None,
                  "depend_de": [], "lot": None, "debut": None, "fin": None}
             s["taches"].append(t)
@@ -792,6 +810,8 @@ def cmd_tache(ctx, e):
             if e["fonctionnalite"] is not None:
                 _fonc(s, e["fonctionnalite"])
             t["fonctionnalite"] = e["fonctionnalite"]
+        if t["colonne"] is None:   # une tâche neuve part de la première étape du workflow de sa fonctionnalité
+            t["colonne"] = ctx.premiere_colonne(su.fonctionnalite(s, t["fonctionnalite"]) if t["fonctionnalite"] else None)
         for cle in ("element", "role", "modele_depart", "bloquee"):
             if cle in e:
                 t[cle] = texte(e, cle, obligatoire=False)
@@ -1220,6 +1240,9 @@ def construire_releve(ctx):
              "attend_reponse": f["attend_reponse"], "discussion": [], "decisions": [dict(d) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
              "cahier": f["cahier"], "methode": f["methode"], "livrable": f["livrable"]}
+        for cle in ("genre", "workflow", "deplacee_vers"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
+            if f.get(cle):
+                v[cle] = f[cle]
         for m in f["discussion"]:
             m = dict(m)
             if m.get("images"):
@@ -1260,8 +1283,7 @@ def construire_releve(ctx):
     en_pause = s["factory"]["etat"] == "en pause"
     r = {"version": 4, "projet": ctx.f["nom"], "factory": dict(s["factory"]),
          "services": [dict(x) for x in ctx.f["services"]],
-         "colonnes": [{"id": "cadrage", "nom": "Cadrage"}] + [{"id": e["id"], "nom": e["nom"]} for e in ctx.f["flux"]]
-                     + [{"id": "fait", "nom": "Fait", "terminee": True}],
+         "colonnes": _colonnes_du_releve(ctx, s["fonctionnalites"]),
          "titulaires": titulaires, "taches": taches,
          "file": {"visibles": elements_file[:VISIBLES], "suite": elements_file[VISIBLES:VISIBLES + rel.MAX_SUITE],
                   "reste": max(0, len(elements_file) - VISIBLES)},
@@ -1287,6 +1309,18 @@ def construire_releve(ctx):
     if partenaires is not None:
         r["partenaires"] = partenaires
     return r
+
+
+def _colonnes_du_releve(ctx, fonctionnalites):
+    """Les colonnes du tableau, chacune avec son genre (s'il y en a un) ; l'identifiant du workflow n'est donné que
+    quand le projet en a plusieurs (un projet sans `workflows` garde son relevé d'avant)."""
+    colonnes = wf.colonnes(ctx.f, fonctionnalites)
+    for c in colonnes:
+        if c.get("genre") is None:
+            c.pop("genre", None)
+        if not ctx.f["workflows"]:
+            c.pop("workflow", None)
+    return colonnes
 
 
 def _usage_au_releve(u, ids_taches, cles):

@@ -18,7 +18,7 @@ MAX_IMAGES = 40
 MAX_SUITE = 500
 MAX_USAGE = 5000
 VERSIONS = (1, 2, 3, 4)
-ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee")
+ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation")
 ETAGES = ("projet", "genre", "skill")
@@ -269,6 +269,12 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
         for champ in ("attend_reponse", "catalogue"):
             if f.get(champ) is not None and not isinstance(f[champ], bool):
                 erreurs.append(f"{nom} : « {champ} » doit être vrai ou faux.")
+        if f.get("genre") is not None and not _genre_valide(f["genre"]):
+            erreurs.append(f"{nom} : « genre » doit être un identifiant de genre "
+                           "(minuscules, chiffres et tirets, 40 au plus).")
+        for champ in ("workflow", "deplacee_vers"):
+            if not _texte_ou_nul(f.get(champ)):
+                erreurs.append(f"{nom} : « {champ} » doit être un texte.")
         _verifier_discussion(f, nom, cles_agents, erreurs)
         _verifier_cahier_methode(f, nom, erreurs)
         if f.get("livrable") is not None and not _livrable_ok(f["livrable"]):
@@ -845,6 +851,11 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
         for el in elements:
             if not isinstance(el.get("nom"), str):
                 erreurs.append(f"{nom} « {el.get('id')} » : « nom » est obligatoire (texte).")
+    for el in colonnes:   # le genre et le workflow d'une colonne sont facultatifs
+        if el.get("genre") is not None and not _genre_valide(el["genre"]):
+            erreurs.append(f"Colonne « {el.get('id')} » : « genre » doit être un identifiant de genre.")
+        if not _texte_ou_nul(el.get("workflow")):
+            erreurs.append(f"Colonne « {el.get('id')} » : « workflow » doit être un texte.")
     for t in titulaires:
         cle = t.get("cle")
         if "modele" in t and not isinstance(t["modele"], str):

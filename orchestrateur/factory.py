@@ -12,7 +12,7 @@ MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
-        "flux", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
+        "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
         "modele_orchestrateur", "agents_locaux_max")
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 
@@ -28,6 +28,23 @@ def _texte(v):
 def _nom_du_projet(base):
     dossier = base.parent if base.name == ".factory" else base
     return dossier.name or "projet"
+
+
+def _controler_flux(flux, nom, ids_services, vus):
+    """Contrôle les étapes `{id, nom, role, service}` d'un flux ; `vus` : les identifiants déjà pris dans le projet."""
+    for e in flux:
+        if not isinstance(e, dict) or not all(_texte(e.get(c)) for c in ("id", "nom", "role", "service")):
+            raise FactoryInvalide(f"Factory : « {nom} » : chaque étape a un « id », un « nom », un « role » "
+                                  "et un « service » (textes non vides).")
+        if not MOTIF_ID.match(e["id"]) or e["id"] in RESERVES:
+            raise FactoryInvalide(f"Factory : « {nom} » : identifiant d'étape refusé « {e['id']} » "
+                                  f"(minuscules, chiffres et tirets ; ni « cadrage » ni « fait »).")
+        if e["id"] in vus:
+            raise FactoryInvalide(f"Factory : « {nom} » : identifiant d'étape en double « {e['id']} ».")
+        vus.add(e["id"])
+        if e["service"] not in ids_services:
+            raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » nomme un service inconnu "
+                                  f"« {e['service']} ».")
 
 
 def lire(chemin):
@@ -70,23 +87,37 @@ def lire(chemin):
     ids_services = [s["id"] for s in services]
     if len(ids_services) != len(set(ids_services)):
         raise FactoryInvalide("Factory : « services » : identifiant en double.")
+    vus = set()   # les identifiants d'étape sont uniques dans tout le projet (flux et workflows)
     flux = d.get("flux")
-    if not isinstance(flux, list) or not flux:
-        raise FactoryInvalide("Factory : « flux » doit lister au moins une étape {id, nom, role, service}.")
-    vus = set()
-    for e in flux:
-        if not isinstance(e, dict) or not all(_texte(e.get(c)) for c in ("id", "nom", "role", "service")):
-            raise FactoryInvalide("Factory : « flux » : chaque étape a un « id », un « nom », un « role » "
-                                  "et un « service » (textes non vides).")
-        if not MOTIF_ID.match(e["id"]) or e["id"] in RESERVES:
-            raise FactoryInvalide(f"Factory : « flux » : identifiant d'étape refusé « {e['id']} » "
-                                  f"(minuscules, chiffres et tirets ; ni « cadrage » ni « fait »).")
-        if e["id"] in vus:
-            raise FactoryInvalide(f"Factory : « flux » : identifiant d'étape en double « {e['id']} ».")
-        vus.add(e["id"])
-        if e["service"] not in ids_services:
-            raise FactoryInvalide(f"Factory : « flux » : l'étape « {e['id']} » nomme un service inconnu "
-                                  f"« {e['service']} ».")
+    if flux is None:
+        flux = []   # un projet créé sans workflow est valide : sa première demande en propose un
+    if not isinstance(flux, list):
+        raise FactoryInvalide("Factory : « flux » doit lister des étapes {id, nom, role, service} (ou rester vide).")
+    _controler_flux(flux, "flux", ids_services, vus)
+    workflows = d.get("workflows")
+    if workflows is None:
+        workflows = []
+    if not isinstance(workflows, list):
+        raise FactoryInvalide("Factory : « workflows » doit être une liste de {id, fonctionnalite, genre, flux}.")
+    ids_workflows = {"principal"}
+    for w in workflows:
+        if not isinstance(w, dict) or not _texte(w.get("id")) or not MOTIF_ID.match(w["id"]):
+            raise FactoryInvalide("Factory : « workflows » : chaque workflow a un « id » "
+                                  "(minuscules, chiffres et tirets, 40 caractères au plus).")
+        if w["id"] in ids_workflows:
+            raise FactoryInvalide(f"Factory : « workflows » : identifiant de workflow en double ou réservé « {w['id']} ».")
+        ids_workflows.add(w["id"])
+        if w.get("fonctionnalite") is not None and not _texte(w["fonctionnalite"]):
+            raise FactoryInvalide(f"Factory : le workflow « {w['id']} » : « fonctionnalite » est un identifiant ou nul.")
+        if w.get("genre") is not None and not (isinstance(w["genre"], str) and MOTIF_GENRE.match(w["genre"])):
+            raise FactoryInvalide(f"Factory : le workflow « {w['id']} » : « genre » doit être nul ou un identifiant "
+                                  f"de genre.")
+        if not isinstance(w.get("flux"), list):
+            raise FactoryInvalide(f"Factory : le workflow « {w['id']} » : « flux » doit lister des étapes.")
+        _controler_flux(w["flux"], f"workflows « {w['id']} »", ids_services, vus)
+    description = d.get("description")
+    if description is not None and not _texte(description):
+        raise FactoryInvalide("Factory : « description » doit être un texte non vide.")
     seuil = d.get("seuil_methode", 3)
     if isinstance(seuil, bool) or not isinstance(seuil, int) or seuil < 1:
         raise FactoryInvalide("Factory : « seuil_methode » doit être un entier d'au moins 1.")
@@ -112,7 +143,10 @@ def lire(chemin):
         "skill": skill, "genre": genre, "mots_interdits": list(mots),
         "fiches": chem("fiches", "fiches"), "controles": chem("controles", "controles.md"),
         "consignes": chem("consignes", facultatif=True), "reglages": chem("reglages", facultatif=True),
-        "services": [dict(s) for s in services], "flux": [dict(e) for e in flux], "seuil_methode": seuil,
+        "services": [dict(s) for s in services], "flux": [dict(e) for e in flux],
+        "workflows": [{"id": w["id"], "fonctionnalite": w.get("fonctionnalite"), "genre": w.get("genre"),
+                       "flux": [dict(e) for e in w["flux"]]} for w in workflows],
+        "description": description, "seuil_methode": seuil,
         "catalogues": catalogues, "sessions": chem("sessions", "sessions.json"),
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},

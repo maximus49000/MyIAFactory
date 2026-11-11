@@ -109,7 +109,8 @@ def tache(donnees, i):
 
 
 def nouvelle_fonctionnalite(donnees, nom, etape="cadrage"):
-    f = {"id": f"f{suivant(donnees, 'f')}", "nom": nom, "etape": etape, "agent_cadrage": None, "discussion": [],
+    f = {"id": f"f{suivant(donnees, 'f')}", "nom": nom, "etape": etape, "genre": None, "workflow": None,
+         "agent_cadrage": None, "discussion": [],
          "attend_reponse": False, "cahier": None, "methode": None, "livrable": None, "catalogue": False,
          "decisions": [], "file": [], "elements": {}, "maj": maintenant()}
     donnees["fonctionnalites"].append(f)

@@ -181,6 +181,8 @@ le bandeau du bureau montre.
    fois (les consignes propres du projet peuvent fixer un autre nombre) : au-delà, les corrections et les relectures
    s'empilent et coûtent plus qu'elles ne font gagner. Ce parallélisme ne vaut qu'en série,
    **jamais pendant le prototype** : la méthode n'y est pas encore validée, et ses défauts se propageraient.
+   (Une fonctionnalité à l'étape `deplacee` est partie dans un autre projet : n'y touche plus. Seul le moteur
+   procédural la pose.)
 7. **`terminee`** quand la file est vide (regarde `file` dans `lancer etat` : `file-prendre` retire l'élément qu'il
    rend, ne t'en sers pas pour tester) et que tous les éléments sont faits. Si la
    fonctionnalité produit un livrable, inscris-le (`lancer fonctionnalite`, `livrable: {libelle, chemin | lien,

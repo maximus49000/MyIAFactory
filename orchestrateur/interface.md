@@ -107,8 +107,12 @@ leur texte). Ce que `etat` compte, `detail` le donne, quand il sert. Code 1 si l
 
 ### `fonctionnalite`
 
-Entrée : `{"id", "nom"?, "etape"?, "agent_cadrage"?, "cahier"?, "methode"?, "livrable"?, "catalogue"?}`. Met à
-jour la fonctionnalité (`etape` : `cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie`, `terminee` ;
+Entrée : `{"id", "nom"?, "etape"?, "genre"?, "workflow"?, "deplacee_vers"?, "agent_cadrage"?, "cahier"?, "methode"?,
+"livrable"?, "catalogue"?}`. Met à
+jour la fonctionnalité (`etape` : `cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie`, `terminee`,
+`deplacee` (la fonctionnalité est partie dans un autre projet, dont `deplacee_vers` donne le nom : ni livrée ni
+comptée) ; `genre` : l'identifiant du genre de la fonctionnalité (ou `null`) ; `workflow` : l'identifiant du
+workflow du projet qu'elle suit (ou `null` : le workflow principal) ;
 `cahier` : `{maquette: [chemins], etapes: [textes], valide_le?}` ; `methode` : `{version, lien | chemin,
 validee_le?}` ; `livrable` : `{libelle, lien | chemin, date}`). Rend la fonctionnalité.
 

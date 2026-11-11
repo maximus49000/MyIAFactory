@@ -51,9 +51,16 @@ class TestFactory(unittest.TestCase):
                 factory.lire(self.ecrire(genre=mauvais))
         self.assertEqual(factory.lire(self.ecrire(genre="vitrine"))["genre"], "vitrine")
 
-    def test_factory_flux_vide(self):
+    def test_factory_flux_vide_ou_absent_valide(self):
+        # Un projet créé sans workflow est valide : sa première demande en propose un.
+        self.assertEqual(factory.lire(self.ecrire(flux=[]))["flux"], [])
+        chemin = self.ecrire()
+        brut = json.loads(chemin.read_text(encoding="utf-8"))
+        del brut["flux"]
+        chemin.write_text(json.dumps(brut), encoding="utf-8")
+        self.assertEqual(factory.lire(chemin)["flux"], [])
         with self.assertRaises(factory.FactoryInvalide) as c:
-            factory.lire(self.ecrire(flux=[]))
+            factory.lire(self.ecrire(flux="dev"))
         self.assertIn("flux", str(c.exception))
 
     def test_flux_refuse_les_colonnes_reservees_et_les_doublons(self):

@@ -258,7 +258,9 @@ R4 = releve.normaliser({
         {"id": "f3", "nom": "À revoir", "etape": "cadrage",
          "decisions": [{"id": "dr", "genre": "methode_a_revoir", "texte": "À revoir ?"}]},
         {"id": "f4", "nom": "Série", "etape": "serie", "catalogue": True},
-        {"id": "f5", "nom": "Simple", "etape": "cadrage"}],
+        {"id": "f5", "nom": "Simple", "etape": "cadrage"},
+        {"id": "f6", "nom": "Comme une autre", "etape": "decoupage",
+         "decisions": [{"id": "dp", "genre": "reprendre_methode", "texte": "Reprendre la méthode de « Badges » ?"}]}],
     "decisions_projet": [
         {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
          "genres_connus": ["ville"]},
@@ -315,6 +317,17 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "revoir"})  # décision « à revoir »
         self.refus({"type": "methode", "fonctionnalite": "f5", "verdict": "revoir"})
         self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "autre"})
+
+    def test_reprendre_une_methode(self):
+        # Essai réel : une fonctionnalité qui ressemble à une méthode déjà validée peut partir en série sans
+        # prototype : oui (reprendre), modifier le mode opératoire (adapter + texte) ou relancer le prototype (revoir).
+        self.ok({"type": "methode", "fonctionnalite": "f6", "verdict": "reprendre"})
+        self.ok({"type": "methode", "fonctionnalite": "f6", "verdict": "adapter", "texte": "Bordure plus fine"})
+        self.refus({"type": "methode", "fonctionnalite": "f6", "verdict": "adapter"})   # sans ce qui change
+        self.ok({"type": "methode", "fonctionnalite": "f6", "verdict": "revoir"})
+        for f in ("f2", "f5"):   # sans la question « reprendre ? »
+            self.refus({"type": "methode", "fonctionnalite": f, "verdict": "reprendre"})
+            self.refus({"type": "methode", "fonctionnalite": f, "verdict": "adapter", "texte": "x"})
 
     def test_genre(self):
         self.ok({"type": "genre", "decision": "g1", "genre": "ville"})

@@ -167,8 +167,9 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     retours = sum(1 for t in r["taches"] for x in t.get("retours") or []
                   if not (x.get("reponse") or "").strip())
     bloquees = sum(1 for t in r["taches"] if (t.get("bloquee") or "").strip())
-    directeur = {"lecons": len(lecons), "retours": retours, "bloquees": bloquees,
-                 "total": len(lecons) + retours + bloquees + r["decisions"]}
+    a_juger = sum(1 for le in lecons if not le.get("verdict_demande"))   # un verdict envoyé ne compte plus
+    directeur = {"lecons": a_juger, "retours": retours, "bloquees": bloquees,
+                 "total": a_juger + retours + bloquees + r["decisions"]}
     v4 = r.get("version", 1) >= 4
     if v4:
         directeur["fonctionnalites"] = sum(len(f["decisions"]) for f in r["fonctionnalites"])

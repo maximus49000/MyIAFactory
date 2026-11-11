@@ -263,10 +263,16 @@ def _verifier_v4(demande, r, elements):
     if verdict == "garder":
         return None if _a_decision(f, "methode_a_revoir") else "Aucune question « méthode à revoir ? » en attente."
     if verdict == "revoir":
-        if f["etape"] in ("methode", "serie") or _a_decision(f, "methode_a_revoir"):
+        if f["etape"] in ("methode", "serie") or _a_decision(f, "methode_a_revoir") or _a_decision(f, "reprendre_methode"):
             return None
         return "Cette fonctionnalité n'a pas encore de méthode à revoir."
-    return "Verdict inconnu (valider, revoir ou garder)."
+    if verdict in ("reprendre", "adapter"):   # une méthode déjà validée ailleurs, proposée d'emblée
+        if not _a_decision(f, "reprendre_methode"):
+            return "Aucune méthode existante n'est proposée pour cette fonctionnalité."
+        if verdict == "adapter":
+            return _texte_libre(texte, "texte") if texte is not None else "« texte » est obligatoire pour adapter."
+        return None
+    return "Verdict inconnu (valider, revoir, garder, reprendre ou adapter)."
 
 
 def _verifier_genre(demande, r):

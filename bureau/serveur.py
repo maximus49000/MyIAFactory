@@ -25,6 +25,7 @@ PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit 
 ATTENTE_PREMIERS_PRIX_S = 25
 MAX_CORPS_DEMANDE = 28 * 1024 * 1024  # 4 images de 5 Mo en base64, plus le texte
 MAX_CORPS_REGLAGES = 4096
+MAX_LOT = 50  # leçons au plus dans un « Tout valider »
 DEMARRAGE_S = 90  # après « Lancer l'orchestrateur », un second clic ne relance rien pendant 90 s
 GARDE_DOUBLON_S = 10  # une même fonctionnalité ou un même message envoyé deux fois de suite : une seule demande
 GARDE_CHALLENGE_S = 120  # un challenge envoyé mais pas encore au relevé : pas de second envoi sur sa cible
@@ -83,6 +84,7 @@ class Projet:
         self.id = id_
         self.demarrer = demarrer or demarrage.demarrer   # « Lancer l'orchestrateur » ; remplacé dans les tests
         self._lance_a = None   # heure (monotone) du dernier lancement de l'orchestrateur
+        self.envoyer = demandes.envoyer   # la commande d'actions du projet ; remplacée dans les tests
         self.chemin_reglages = Path(chemin_reglages)
         dossier = self.chemin_reglages.parent
         self.equipe = equipe.Equipe(dossier / "equipe.json")
@@ -258,6 +260,8 @@ class Projet:
     def demande(self, demande):
         """(code HTTP, objet JSON). Les demandes passent une à une ; chacune est vérifiée contre le
         dernier relevé, relu juste avant (une demande précédente a pu le changer)."""
+        if isinstance(demande, dict) and demande.get("type") == "lecons":
+            return self._lot_lecons(demande)
         demande = demandes.nettoyer(demande)
         with self._verrou_demandes:
             empreinte = self._empreinte_creation(demande)
@@ -291,7 +295,7 @@ class Projet:
                 constat = cibles.get(cle[1])
                 if constat:  # le bureau écrit lui-même le constat de ce qu'il a calculé
                     demande["texte"] = constat + (f"\n\n{demande['texte']}" if demande.get("texte") else "")
-            ok, message = demandes.envoyer(regl, demande)
+            ok, message = self.envoyer(regl, demande)
             if ok and cle:
                 self._challenges_envoyes[cle] = time.monotonic()
             if ok and empreinte is not None:
@@ -300,6 +304,37 @@ class Projet:
         if not ok:
             return 502, {"erreur": message}
         return 200, {"ok": True}
+
+    def _lot_lecons(self, lot):
+        """« Tout valider » / « Tout invalider » (essai réel) : une seule requête ; le serveur vérifie et envoie
+        chaque verdict contre un même relevé, jusqu'au bout même si la page a été fermée entre-temps."""
+        verdict, items = lot.get("verdict"), lot.get("lecons")
+        if (verdict not in ("valider", "invalider") or not isinstance(items, list) or not 1 <= len(items) <= MAX_LOT
+                or not all(isinstance(x, dict) and isinstance(x.get("id"), str) for x in items)):
+            return 400, {"erreur": f"Lot de leçons invalide (verdict valider ou invalider, 1 à {MAX_LOT} leçons)."}
+        with self._verrou_demandes:
+            self.etat(bloquant=True)
+            r = self.dernier_releve
+            if r is None:
+                return 409, {"erreur": "Relevé indisponible."}
+            if r.get("orchestrateur_present") is False:
+                return 409, {"erreur": "L'orchestrateur n'est pas lancé : lancez-le depuis le bureau, puis recommencez."}
+            regl, _ = self.reglages()
+            envoyees, refusees = 0, []
+            for x in items:
+                d = {"type": "lecon", "id": x["id"], "verdict": verdict}
+                if x.get("etage") is not None:
+                    d["etage"] = x["etage"]
+                d = demandes.nettoyer(d)
+                message = demandes.verifier(d, r, {}, None)
+                if not message:
+                    ok, message = self.envoyer(regl, d)
+                    if ok:
+                        envoyees += 1
+                        continue
+                refusees.append({"id": x["id"], "erreur": message})
+            self._cache_etat = (0.0, self._cache_etat[1])   # les verdicts paraissent au prochain relevé
+        return 200, {"ok": True, "envoyees": envoyees, "refusees": refusees}
 
     def lancer_orchestrateur(self):
         """(code HTTP, objet JSON). Refusé s'il tourne déjà ; un second clic pendant le démarrage ne relance rien."""

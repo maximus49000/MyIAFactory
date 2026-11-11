@@ -55,6 +55,18 @@ export function demandeMethode(fonc, verdict, texte) {
   return d;
 }
 
+// Une méthode déjà validée ressemble : la question « Reprendre ? » et ses trois réponses (null sans question ni droit).
+export function gestesReprise(f, agir) {
+  const d = agir === true ? (f?.decisions || []).find((x) => x.genre === "reprendre_methode") : null;
+  if (!d) return null;
+  return {question: d.texte, reponses: [
+    {libelle: "Oui, industrialiser", classe: "bouton", demande: () => demandeMethode(f.id, "reprendre")},
+    {libelle: "Modifier le mode opératoire", classe: "bouton secondaire", texte: true,
+     demande: (texte) => demandeMethode(f.id, "adapter", texte)},
+    {libelle: "Relancer le prototype", classe: "bouton secondaire", demande: () => demandeMethode(f.id, "revoir")},
+  ]};
+}
+
 // --- Les images jointes : mêmes règles que le serveur (4 au plus, 5 Mo, PNG ou JPEG, nom simple).
 const TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"};
 
@@ -1134,6 +1146,29 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   const blocMethode = el("div", "bloc-methode");
   if (f.methode) blocMethode.append(partieMethode(ctx, f));   // la méthode écrite en entier, pas seulement son chemin
   if (e.agir === true && decisions.has("valider_methode")) geste("Valider la méthode", "bouton", () => demandeMethode(f.id, "valider"));
+  const reprise = gestesReprise(f, e.agir);
+  if (reprise) {
+    blocMethode.append(el("p", "question-reprise", reprise.question));
+    for (const r of reprise.reponses) {
+      if (!r.texte) { geste(r.libelle, r.classe, r.demande); continue; }
+      // « Modifier le mode opératoire » : ce qui change s'écrit d'abord, puis s'envoie.
+      const zone = el("textarea", "saisie-reprise");
+      zone.setAttribute("rows", "2");
+      zone.setAttribute("placeholder", "Ce qui change dans le mode opératoire…");
+      zone.hidden = true;
+      const b = el("button", r.classe, r.libelle);
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        if (zone.hidden) { zone.hidden = false; zone.focus(); b.textContent = "Envoyer la modification"; return; }
+        const texte = String(zone.value || "").trim();
+        if (!texte) { zone.focus(); return; }
+        b.disabled = true;
+        const res = await ctx.barre.demander(r.demande(texte), b);
+        if (!res.ok) b.disabled = false;
+      });
+      gestes.append(b, zone);
+    }
+  }
   if (f.catalogue && typeof ctx.ouvrirCatalogue === "function") {
     const b = el("button", "bouton secondaire", "Catalogue");
     b.type = "button";

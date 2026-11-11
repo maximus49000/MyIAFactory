@@ -19,6 +19,14 @@ class TestConsignes(unittest.TestCase):
         titres = set(re.findall(r"^### `([a-z-]+)`", lire(ORCH / "interface.md"), re.M))
         self.assertEqual(titres, set(outil.COMMANDES))
 
+    def test_reprendre_une_methode_existante(self):
+        # Essai réel : une fonctionnalité qui ressemble à une méthode validée propose d'industrialiser d'emblée.
+        texte = lire(ORCH / "consignes.md")
+        self.assertIn("`reprendre_methode`", texte)
+        ligne = next(l for l in texte.splitlines() if l.startswith("| `methode` |"))
+        for mot in ("`reprendre`", "`adapter`", "`revoir`"):
+            self.assertIn(mot, ligne, mot)
+
     def test_toute_demande_du_bureau_est_prise_par_l_outil(self):
         # Essai réel : « Actualiser » et « Mettre à jour les offres » des partenaires étaient acceptés par le bureau
         # puis refusés par l'outil (« Demande inconnue ») : le bouton ne faisait rien.

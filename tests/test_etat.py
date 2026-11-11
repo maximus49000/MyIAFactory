@@ -289,6 +289,17 @@ class TestEtat(unittest.TestCase):
         self.assertEqual(e["directeur"], {"lecons": 1, "retours": 2, "bloquees": 1, "total": 6})
         self.assertEqual(len(e["lecons"]), 1)
 
+    def test_lecon_deja_jugee_ne_compte_plus(self):
+        # Essai réel : une leçon dont le verdict est envoyé (l'orchestrateur ne l'a pas encore traité) ne fait plus
+        # monter les pastilles.
+        def m(r):
+            r["decisions"] = 0
+            r["lecons"] = [{"id": "l1", "agent": "d1", "texte": "t", "verdict_demande": "valider"},
+                           {"id": "l2", "agent": "d1", "texte": "t"}]
+        e = self.v2(m)
+        self.assertEqual(e["directeur"]["lecons"], 1)
+        self.assertEqual(len(e["lecons"]), 2)   # toujours montrées, avec « Verdict envoyé »
+
     def test_directeur_total_exemple_de_la_spec(self):
         def m(r):
             r["decisions"] = 2

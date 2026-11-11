@@ -184,7 +184,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 - `methode` : `{version, lien | chemin, validee_le?}` ;
 - `livrable` : `{libelle, lien | chemin, date}` ;
 - `catalogue` : vrai si le projet fournit un catalogue pour cette fonctionnalité (bouton « Catalogue ») ;
-- `decisions` : `[{id, genre, texte}]` avec `genre` = `valider_cahier`, `valider_methode` ou `methode_a_revoir` ;
+- `decisions` : `[{id, genre, texte}]` avec `genre` = `valider_cahier`, `valider_methode`, `methode_a_revoir` ou `reprendre_methode` (une méthode déjà validée qui ressemble, proposée d'emblée) ;
 - `glossaire` : le vocabulaire de la fonctionnalité, `[{mot, definition}]` (500 mots au plus ; mot : 60 caractères,
   définition : 400) ; un message peut aussi porter son `glossaire`, et des `questions` à choix
   (`[{texte, choix: [2 à 12], multiple?}]`, 10 au plus) : le bureau met les mots en valeur (définition au survol) et
@@ -263,7 +263,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `fonctionnalite` | `texte`, `images?` | « + Nouvelle fonctionnalité » : son premier message |
 | `message` | `fonctionnalite`, `texte`, `images?` | un message de l'utilisateur dans la discussion |
 | `cahier` | `fonctionnalite`, `verdict` (`valider` ou `corriger`), `texte?` | « Valider le cahier des charges » ou « Demander une correction » |
-| `methode` | `fonctionnalite`, `verdict` (`valider`, `revoir` ou `garder`), `texte?` | valider la méthode ; « méthode à revoir ? » : Oui = `revoir`, Non = `garder` |
+| `methode` | `fonctionnalite`, `verdict` (`valider`, `revoir`, `garder`, `reprendre` ou `adapter`), `texte?` (obligatoire pour `adapter`) | valider la méthode ; « méthode à revoir ? » : Oui = `revoir`, Non = `garder` ; « reprendre la méthode ? » : « Oui, industrialiser » = `reprendre`, « Modifier le mode opératoire » = `adapter`, « Relancer le prototype » = `revoir` |
 | `genre` | `decision`, `genre`, `description?` | le genre confirmé ou choisi ; `description` pour un nouveau genre |
 | `session_cloud` | `decision`, `session` | « C'est fait » : la session cloud demandée est créée, avec ce nom |
 | `organisation` | `decision`, `verdict` (`accepter` ou `refuser`) | « Accepter » ou « Refuser » une évolution de l'organisation |

@@ -808,6 +808,9 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .partenaires-filtres { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
 .partenaires-filtres .partenaires-filtre { flex: 1 1 180px; width: auto; margin-bottom: 0; }
 .partenaires-type, .partenaires-tri { padding: 6px; font: inherit; }
+.question-reprise { margin: 8px 0 4px; font-weight: 700; }
+.saisie-reprise { flex-basis: 100%; min-height: 48px; font: inherit; }
+.saisie-reprise[hidden] { display: none; }
 .partenaire-conseil { color: #2f6b3f; font-size: 13px; font-weight: 700; }
 .partenaire-carte { border: 1px solid #d9d2c3; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fffdf8; }
 .partenaire-entete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

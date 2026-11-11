@@ -79,6 +79,35 @@ class TestPresent(AvecDemo):
         self.assertEqual(self.lances, [])
 
 
+class TestToutValider(AvecDemo):
+    """Essai réel : « Tout valider » est une seule requête ; le serveur envoie chaque verdict lui-même (la page peut
+    être fermée aussitôt)."""
+    PRESENT = True
+
+    def test_un_lot_de_verdicts(self):
+        envoyees = []
+        self.srv.projets["projet"].envoyer = lambda regl, d: envoyees.append(d) or (True, "")
+        code, r = self.req("POST", "/api/demande", {"type": "lecons", "verdict": "valider",
+                                                     "lecons": [{"id": "dev:1:L1"}]})
+        self.assertEqual((code, r["envoyees"], r["refusees"]), (200, 1, []))
+        self.assertEqual(envoyees, [{"type": "lecon", "id": "dev:1:L1", "verdict": "valider"}])
+
+    def test_lot_refuse_les_inconnues_sans_bloquer_les_autres(self):
+        envoyees = []
+        self.srv.projets["projet"].envoyer = lambda regl, d: envoyees.append(d) or (True, "")
+        code, r = self.req("POST", "/api/demande", {"type": "lecons", "verdict": "valider",
+                                                     "lecons": [{"id": "inconnue"}, {"id": "dev:1:L1"}]})
+        self.assertEqual(code, 200)
+        self.assertEqual(r["envoyees"], 1)
+        self.assertEqual([x["id"] for x in r["refusees"]], ["inconnue"])
+
+    def test_lot_mal_forme(self):
+        for corps in ({"type": "lecons", "verdict": "peut-etre", "lecons": [{"id": "dev:1:L1"}]},
+                      {"type": "lecons", "verdict": "valider", "lecons": []},
+                      {"type": "lecons", "verdict": "valider", "lecons": "dev:1:L1"}):
+            self.assertEqual(self.req("POST", "/api/demande", corps)[0], 400, corps)
+
+
 class TestDemarrage(unittest.TestCase):
     """Le lancement lui-même : jamais de vraie fenêtre ni de vrai `claude` dans les tests."""
 

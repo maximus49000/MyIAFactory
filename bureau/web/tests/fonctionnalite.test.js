@@ -276,3 +276,17 @@ test("vueCahier : en correction, l'ancien cahier n'est plus montré comme valabl
   assert.deepEqual(vueCahier({etape: "cadrage", cahier: null}), {courant: null, enCorrection: false, versions: []});
   assert.deepEqual(vueCahier({etape: "serie", cahier: v2}), {courant: v2, enCorrection: false, versions: []});
 });
+
+test("reprise d'une méthode : trois réponses, seulement quand la question est posée", async () => {
+  const {gestesReprise} = await import("../ui/fonctionnalite.js");
+  const f = {id: "f6", decisions: [{id: "dp", genre: "reprendre_methode", texte: "Reprendre « Badges » ?"}]};
+  const g = gestesReprise(f, true);
+  assert.equal(g.question, "Reprendre « Badges » ?");
+  assert.deepEqual(g.reponses.map((r) => r.libelle), ["Oui, industrialiser", "Modifier le mode opératoire", "Relancer le prototype"]);
+  assert.deepEqual(g.reponses[0].demande(), {type: "methode", fonctionnalite: "f6", verdict: "reprendre"});
+  assert.deepEqual(g.reponses[1].demande("Bordure fine"), {type: "methode", fonctionnalite: "f6", verdict: "adapter", texte: "Bordure fine"});
+  assert.equal(g.reponses[1].texte, true);
+  assert.deepEqual(g.reponses[2].demande(), {type: "methode", fonctionnalite: "f6", verdict: "revoir"});
+  assert.equal(gestesReprise(f, false), null);                  // sans le droit d'agir
+  assert.equal(gestesReprise({id: "f1", decisions: []}, true), null);
+});

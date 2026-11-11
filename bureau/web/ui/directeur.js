@@ -4,7 +4,7 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
-import {demandeLecon, demandesToutes, demandeChallengeLecon} from "./actions.js";
+import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
@@ -147,12 +147,9 @@ export function contenuDirecteur(ctx, contenu) {
         const boutons = [...section.querySelectorAll(".lecon-boutons button")];
         boutons.forEach((x) => { x.disabled = true; });
         const etages = new Map([...menus].map(([id, menu]) => [id, menu.value]));
-        let refus = 0;
-        for (const d of demandesToutes(e.lecons, verdict, etages)) {
-          const r = await ctx.barre.demander(d);
-          if (!r.ok) refus++;
-        }
-        if (refus) boutons.forEach((x) => { x.disabled = false; });   // au moins un refus : on peut réessayer
+        const d = demandeToutes(e.lecons, verdict, etages);
+        const r = d ? await ctx.barre.demander(d) : {ok: true};
+        if (!r.ok) boutons.forEach((x) => { x.disabled = false; });   // refusé : on peut réessayer
       });
       rangee.append(b);
     };

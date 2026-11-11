@@ -156,11 +156,15 @@ export function messageAttend(m) {
   return String(m.texte || "").includes("?");
 }
 
-// « Tout valider » / « Tout invalider » : un verdict par leçon encore en attente, chacune avec l'étage choisi dans son
-// menu (`etages` : id -> étage ; absent : l'étage proposé).
-export function demandesToutes(lecons, verdict, etages) {
-  return (lecons || []).filter((l) => !l.verdict_demande)
-    .map((l) => demandeLecon(l, verdict, etages?.get(l.id)));
+// « Tout valider » / « Tout invalider » : UNE demande groupée (le serveur envoie chaque verdict lui-même, même si la
+// page se ferme), chaque leçon encore en attente avec l'étage choisi dans son menu (`etages` : id -> étage).
+// null s'il ne reste rien à juger.
+export function demandeToutes(lecons, verdict, etages) {
+  const liste = (lecons || []).filter((l) => !l.verdict_demande).map((l) => {
+    const d = demandeLecon(l, verdict, etages?.get(l.id));
+    return d.etage ? {id: d.id, etage: d.etage} : {id: d.id};
+  });
+  return liste.length ? {type: "lecons", verdict, lecons: liste} : null;
 }
 
 // Le genre du projet : un genre connu, ou un nouveau (avec sa description).

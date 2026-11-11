@@ -173,17 +173,15 @@ test("decisionsDirecteur : les discussions qui attendent la réponse de l'utilis
   assert.deepEqual(decisionsDirecteur({}).reponses, []);
 });
 
-test("demandesToutes : un verdict par leçon en attente, chacune avec son étage choisi", async () => {
-  const {demandesToutes} = await import("../ui/actions.js");
+test("demandeToutes : chaque leçon en attente, avec son étage choisi s'il change", async () => {
+  const {demandeToutes} = await import("../ui/actions.js");
   const lecons = [{id: "a", etage_propose: "projet"}, {id: "b", etage_propose: "genre", texte_general: "G"},
                   {id: "c", etage_propose: "projet", verdict_demande: "valider"},            // déjà envoyée
                   {id: "d", etage_propose: "skill", texte_general: "S"}];
   const etages = new Map([["a", "projet"], ["b", "projet"], ["d", "skill"]]);           // b : changé par l'utilisateur
-  assert.deepEqual(demandesToutes(lecons, "valider", etages), [
-    {type: "lecon", id: "a", verdict: "valider"},
-    {type: "lecon", id: "b", verdict: "valider", etage: "projet"},
-    {type: "lecon", id: "d", verdict: "valider"}]);
-  assert.deepEqual(demandesToutes(lecons, "invalider", new Map()).map((d) => d.id), ["a", "b", "d"]);
+  assert.deepEqual(demandeToutes(lecons, "valider", etages),
+                   {type: "lecons", verdict: "valider", lecons: [{id: "a"}, {id: "b", etage: "projet"}, {id: "d"}]});
+  assert.deepEqual(demandeToutes(lecons, "invalider", new Map()).lecons.map((d) => d.id), ["a", "b", "d"]);
 });
 
 test("demandeChallengeLecon : la leçon visée et le texte", async () => {
@@ -211,4 +209,12 @@ test("libelleLot : « Lot L2, tâche 3 sur 4 »", () => {
   assert.equal(libelleLot({}, taches), null);
   assert.equal(libelleLot({lot: {id: "L2", rang: 0}}, taches), null);
   assert.equal(libelleLot({lot: {id: "L9", rang: 2}}, undefined), "Lot L9, tâche 2 sur 2");
+});
+
+test("Tout valider : une seule demande groupée, avec l'étage choisi de chaque leçon", async () => {
+  const {demandeToutes} = await import("../ui/actions.js");
+  const lecons = [{id: "a", etage_propose: "genre"}, {id: "b", verdict_demande: "valider"}, {id: "c"}];
+  assert.deepEqual(demandeToutes(lecons, "valider", new Map([["a", "projet"]])),
+                   {type: "lecons", verdict: "valider", lecons: [{id: "a", etage: "projet"}, {id: "c"}]});
+  assert.equal(demandeToutes([{id: "b", verdict_demande: "valider"}], "valider"), null);
 });

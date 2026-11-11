@@ -283,7 +283,8 @@ def _ecrire_configuration(base, p, genre, maintenant):
     reglages = {"releve": {"commande": _commande("releve")}, "actions": {"commande": _commande("actions")},
                 "images": modele["images"], "orchestrateur": "factory.json", "livrables": modele["livrables"],
                 "documents": modele["documents"], "alias_modeles": modele["alias_modeles"],
-                "charge_max": p["charge_max"], "prix_automatiques": p["facturation"]}
+                "charge_max": p["charge_max"], "prix_automatiques": p["facturation"],
+                "moteur": {"couche": (p.get("moteur") or {}).get("couche", "claude")}}
     _ecrire_json(base / "reglages.json", reglages)
     _ecrire(base / "consignes-projet.md", p["consignes"].strip() + "\n")
     registre = (RACINE / "orchestrateur" / "modeles" / "registre-controles.md").read_text(encoding="utf-8-sig")

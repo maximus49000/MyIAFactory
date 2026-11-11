@@ -6,6 +6,15 @@ faire perdre**. L'orchestrateur générique est une conversation Claude (sur Son
 [`orchestrateur/consignes.md`](../orchestrateur/consignes.md), puis les consignes propres du projet, et mène les
 fonctionnalités du cadrage jusqu'à la série. Une conversation orchestratrice par projet.
 
+> **Le moteur procédural remplace cette conversation.** « Lancer l'orchestrateur », au bureau, démarre sans fenêtre
+> `py -3.12 -m moteur` : un seul moteur pour tous les projets du bureau (verrou `~/MyIAFactory/moteur.pid`), qui
+> applique les mêmes consignes en code et n'appelle l'IA que pour le jugement (de petits appels `claude -p`, sur
+> l'abonnement). Les mêmes commandes `lancer` lui servent de contrat : un adaptateur de projet est respecté. En option,
+> les réglages du projet peuvent faire passer ces décisions par l'API d'Anthropic, **facturée à part** :
+> `{"moteur": {"couche": "api"}}` (la clé `ANTHROPIC_API_KEY` se met dans l'environnement, jamais dans un fichier ;
+> sans elle, le moteur reste sur `claude -p`). La facturation montre l'orchestration à part de la production. Le guide
+> qui suit reste le contrat de l'orchestrateur, que le moteur applique.
+
 ## 1. Le fichier de factory
 
 Un fichier JSON **versionné dans le dépôt du projet** (par exemple `.factory/factory.json`). Tous ses chemins sont

@@ -66,6 +66,7 @@ class TestAppliquer(Base):
         self.assertEqual(regl["charge_max"], 70)
         self.assertTrue(regl["prix_automatiques"])
         self.assertEqual(regl["orchestrateur"], "factory.json")
+        self.assertEqual(regl["moteur"], {"couche": "claude"})
         controles = (self.projet / ".factory" / "controles.md").read_text(encoding="utf-8")
         self.assertIn("- C1 · 2026-11-11 · installation : Le rangement ne perd aucun fichier.", controles)
         self.assertIn("- C2 · 2026-11-11 · installation : Un nom en double est signalé.", controles)

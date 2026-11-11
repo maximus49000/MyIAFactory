@@ -20,6 +20,15 @@ class TestConsignes(unittest.TestCase):
         titres = set(re.findall(r"^### `([a-z-]+)`", lire(ORCH / "interface.md"), re.M))
         self.assertEqual(titres, set(outil.COMMANDES))
 
+    def test_consignes_mentionnent_le_moteur(self):
+        # Le moteur procédural applique ces consignes ; la conversation orchestratrice n'est plus que le repli.
+        texte = lire(ORCH / "consignes.md")
+        debut = texte.split("## ")[0]
+        for mot in ("moteur procédural", "local comme en cloud", "adaptateur", "Orchestration"):
+            self.assertIn(mot, debut, mot)
+        self.assertIn("moteur procédural", lire(RACINE / "docs" / "orchestrateur.md"))
+        self.assertIn("ANTHROPIC_API_KEY", lire(RACINE / "docs" / "orchestrateur.md"))
+
     def test_reprendre_une_methode_existante(self):
         # Essai réel : une fonctionnalité qui ressemble à une méthode validée propose d'industrialiser d'emblée.
         texte = lire(ORCH / "consignes.md")

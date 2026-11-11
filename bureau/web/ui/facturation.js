@@ -64,7 +64,8 @@ export function lignesDiscussions(s, etat) {
 
 // Le total général du projet et la part « direction / hors service » (qui n'a pas de dossier).
 export function totalProjet(f) {
-  return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, sansPrix: (f?.sans_prix || []).length > 0};
+  return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, orchestration: f?.orchestration?.total ?? 0,
+          sansPrix: (f?.sans_prix || []).length > 0};
 }
 
 // Les partenaires dans la facturation : une ligne par partenaire (coût en euros ; le coût d'origine est en info-bulle).
@@ -222,6 +223,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   conteneur.append(rangee("Total, tous services", coutEnClair({total: projet.total, sans_prix: projet.sansPrix ? 1 : 0}), "gras"));
   conteneur.append(rangee("↳ dont direction / hors service",
                           coutEnClair(donnees.direction || {total: 0}), "etape"));
+  conteneur.append(rangee("↳ dont orchestration (les décisions du moteur)",
+                          coutEnClair(donnees.orchestration || {total: 0}), "etape"));
   conteneur.append(rangee("↳ dont gestion du bureau lui-même", euros(donnees.gestion ?? 0), "etape"));
   if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }

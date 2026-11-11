@@ -109,7 +109,7 @@ class TestToutValider(AvecDemo):
 
 
 class TestDemarrage(unittest.TestCase):
-    """Le lancement lui-même : jamais de vraie fenêtre ni de vrai `claude` dans les tests."""
+    """Le lancement du moteur : jamais de vrai processus ni de vrai `claude` dans les tests."""
 
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -118,34 +118,74 @@ class TestDemarrage(unittest.TestCase):
         (self.projet / ".factory").mkdir(parents=True)
         self.regl = self.projet / ".factory" / "reglages.json"
         self.regl.write_text("{}", encoding="utf-8")
-        (self.projet / ".factory" / "factory.json").write_text(json.dumps({"modele_orchestrateur": "Opus"}),
-                                                               encoding="utf-8")
-        self.ouverts = []
+        (self.projet / ".factory" / "factory.json").write_text("{}", encoding="utf-8")
+        self.verrou = Path(self._t.name) / "moteur.pid"
+        self.lances, self.vivants = [], set()
 
-    def demarrer(self, trouve="C:/outils/claude.exe"):
-        return demarrage.demarrer(self.regl, trouver=lambda nom: trouve, windows=True,
-                                  ouvrir=lambda *a: self.ouverts.append(a))
+    def lancer(self, argv, dossier):
+        self.lances.append((argv, dossier))
+        self.vivants.add(4242)
+        return 4242
 
-    def test_ouvre_claude_dans_le_projet_sur_le_modele_de_l_orchestrateur(self):
+    def demarrer(self, trouve="C:/outils/claude.exe", bureau=None):
+        return demarrage.demarrer(self.regl, trouver=lambda: trouve, lancer=self.lancer, fichier_verrou=self.verrou,
+                                  vivant=lambda pid: pid in self.vivants, bureau=bureau or Path(self._t.name) / "x.json")
+
+    def test_demarrer_lance_le_moteur_une_fois(self):
+        r = self.demarrer()
+        self.assertEqual(r, {"ok": True, "message": "L'orchestrateur démarre."})
+        argv, dossier = self.lances[0]
+        self.assertEqual(argv[1:4], ["-m", "moteur", "--reglages"])
+        self.assertEqual(Path(argv[4]), self.regl.resolve())
+        self.assertEqual(Path(dossier), demarrage.RACINE)
+        self.assertEqual(self.verrou.read_text(encoding="utf-8"), "4242")
         r = self.demarrer()
         self.assertTrue(r["ok"])
-        claude, modele, message, dossier = self.ouverts[0]
-        self.assertEqual((claude, modele, Path(dossier)), ("C:/outils/claude.exe", "opus", self.projet))
-        self.assertIn("factory.json", message)
-        self.assertIn("orchestrateur", message)
+        self.assertIn("déjà", r["message"])
+        self.assertEqual(len(self.lances), 1)                    # un seul moteur
 
-    def test_sans_claude_le_message_a_copier(self):
+    def test_verrou_d_un_moteur_mort_est_repris(self):
+        self.verrou.write_text("999", encoding="utf-8")          # personne ne tourne sous ce numéro
+        self.assertTrue(self.demarrer()["ok"])
+        self.assertEqual(len(self.lances), 1)
+
+    def test_le_fichier_du_bureau_sert_tous_les_projets(self):
+        bureau = Path(self._t.name) / "bureau.json"
+        bureau.write_text("{}", encoding="utf-8")
+        self.demarrer(bureau=bureau)
+        self.assertEqual(self.lances[0][0][3:], ["--bureau", str(bureau)])
+
+    def test_projet_cloud_passe_aussi_par_le_moteur(self):
+        (self.projet / ".factory" / "fiches").mkdir()
+        (self.projet / ".factory" / "fiches" / "dev-c.md").write_text(
+            "Clé : dev-c\nRôle : dev\nModèle : Sonnet\nLieu : cloud\nSession : s1\n", encoding="utf-8")
+        r = self.demarrer()
+        self.assertTrue(r["ok"])
+        self.assertEqual(len(self.lances), 1)                    # plus de console `claude` pour le cloud
+
+    def test_sans_claude_rien_ne_demarre(self):
         r = self.demarrer(trouve=None)
         self.assertFalse(r["ok"])
-        self.assertEqual(self.ouverts, [])
-        self.assertIn("factory.json", r["a_copier"])
+        self.assertEqual(self.lances, [])
         self.assertIn("claude", r["message"])
 
-    def test_sans_fichier_de_factory(self):
-        (self.projet / ".factory" / "factory.json").unlink()
-        r = self.demarrer()
-        self.assertFalse(r["ok"])
-        self.assertEqual(self.ouverts, [])
+    def test_le_moteur_refuse_un_second_moteur(self):
+        from moteur import verrou
+        self.vivants.add(77)
+        verrou.ecrire(self.verrou, 77)
+        self.assertFalse(verrou.prendre(self.verrou, vivant=lambda pid: pid in self.vivants, pid=5))
+        self.vivants.discard(77)
+        self.assertTrue(verrou.prendre(self.verrou, vivant=lambda pid: pid in self.vivants, pid=5))
+        self.assertEqual(verrou.lire(self.verrou), 5)
+        verrou.liberer(self.verrou, pid=5)
+        self.assertFalse(self.verrou.exists())
+
+    def test_pid_vivant_sans_rien_tuer(self):
+        import os
+        from moteur import verrou
+        self.assertTrue(verrou.pid_vivant(os.getpid()))
+        self.assertFalse(verrou.pid_vivant(0))
+        self.assertFalse(verrou.pid_vivant(None))
 
 
 if __name__ == "__main__":

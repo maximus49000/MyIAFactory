@@ -76,9 +76,10 @@ test("lignesDiscussions : la plus récente d'abord, prénom, titre, tokens, prix
 });
 
 test("totalProjet : le total général et la part de la direction", () => {
-  assert.deepEqual(totalProjet(g), {total: 9, direction: 6, sansPrix: true});
+  assert.deepEqual(totalProjet(g), {total: 9, direction: 6, orchestration: 0, sansPrix: true});
+  assert.equal(totalProjet({...g, orchestration: {total: 0.04}}).orchestration, 0.04);
   assert.deepEqual(totalProjet({total: 2, direction: {total: 0, sans_prix: []}, sans_prix: []}),
-                   {total: 2, direction: 0, sansPrix: false});
+                   {total: 2, direction: 0, orchestration: 0, sansPrix: false});
 });
 
 test("coutDeTache : « estimé (part d'un lot) » seulement pour une part répartie", () => {

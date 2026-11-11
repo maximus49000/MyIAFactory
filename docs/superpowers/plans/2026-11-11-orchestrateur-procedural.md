@@ -236,11 +236,11 @@ def test_api_sans_cle_bascule_une_fois(self):
 
 - La facturation du bureau montre l'orchestration à part : les usages de l'agent `orchestrateur` forment une ligne « Orchestration » distincte de la production (`bureau/cout.py`, `bureau/kpi.py` et la page s'ils ne le font pas déjà par agent).
 
-- [ ] **Étape 1 : tests qui échouent** : `test_facturation_isole_l_orchestration`, `test_demarrer_lance_le_moteur_une_fois`, `test_projet_cloud_passe_aussi_par_le_moteur`, `test_reglage_couche_valide` (refus d'une autre valeur), `test_proposition_pose_la_question_api_defaut_claude`, `test_consignes_mentionnent_le_moteur`.
-- [ ] **Étape 2 : lancer** : échec.
-- [ ] **Étape 3 : écrire** les modifications.
-- [ ] **Étape 4 : lancer toute la suite (Python et page)** : verte.
-- [ ] **Étape 5 : commit** `Moteur : démarrage depuis le bureau, option API au paramétrage`.
+- [x] **Étape 1 : tests qui échouent** : `test_facturation_isole_l_orchestration`, `test_demarrer_lance_le_moteur_une_fois`, `test_projet_cloud_passe_aussi_par_le_moteur`, `test_reglage_couche_valide` (refus d'une autre valeur), `test_proposition_pose_la_question_api_defaut_claude`, `test_consignes_mentionnent_le_moteur`.
+- [x] **Étape 2 : lancer** : échec.
+- [x] **Étape 3 : écrire** les modifications.
+- [x] **Étape 4 : lancer toute la suite (Python et page)** : verte.
+- [x] **Étape 5 : commit** `Moteur : démarrage depuis le bureau, option API au paramétrage`.
 
 ### Tâche 12 : les agents cloud
 

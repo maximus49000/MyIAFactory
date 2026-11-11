@@ -8,7 +8,10 @@ from pathlib import Path
 
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 
-DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True}
+DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True,
+           "moteur": {"couche": "claude"}, "agents_cloud_max": 3}
+COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
+AGENTS_CLOUD_MAX = (1, 16)
 
 
 class ReglagesInvalides(Exception):
@@ -26,8 +29,19 @@ def charger(chemin):
         if not isinstance(donnees, dict):
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : un objet JSON est attendu")
         r.update(donnees)
+    _verifier_moteur(r)
     r["dossier"] = str(chemin.parent)
     return r
+
+
+def _verifier_moteur(r):
+    """Les réglages du moteur : `moteur.couche` vaut claude ou api ; `agents_cloud_max` va de 1 à 16."""
+    m = r.get("moteur")
+    if not isinstance(m, dict) or m.get("couche", "claude") not in COUCHES_MOTEUR:
+        raise ReglagesInvalides("Réglages : « moteur.couche » doit valoir « claude » ou « api ».")
+    n = r.get("agents_cloud_max")
+    if type(n) is not int or not AGENTS_CLOUD_MAX[0] <= n <= AGENTS_CLOUD_MAX[1]:
+        raise ReglagesInvalides("Réglages : « agents_cloud_max » doit être un entier de 1 à 16.")
 
 
 MAX_PROJETS = 12

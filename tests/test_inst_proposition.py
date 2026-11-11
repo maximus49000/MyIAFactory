@@ -17,6 +17,20 @@ class TestProposition(unittest.TestCase):
     def test_proposition_valide(self):
         self.assertEqual(proposition.verifier(proposition_valide("/tmp/p")), [])
 
+    def test_proposition_pose_la_question_api_defaut_claude(self):
+        # sans « moteur » : l'abonnement (défaut) ; la question dit que l'API est facturée à part, avec l'écart
+        self.assertEqual(self.erreurs(), [])
+        q = proposition.question_api()
+        self.assertIn("clé API Anthropic", q)
+        self.assertIn("facturée à part", q)
+        self.assertIn(proposition.ECART_API_PAR_DEFAUT, q)
+        self.assertIn("écart estimé : 3 €", proposition.question_api("3 €"))
+        for couche in ("claude", "api"):
+            self.assertEqual(self.erreurs(moteur={"couche": couche, "ecart_estime": "0,05 $ par fonctionnalité"}), [])
+        for mauvais in ({"couche": "autre", "ecart_estime": "x"}, {"couche": "api"}, {"couche": "api", "ecart_estime": ""},
+                        "api"):
+            self.assertTrue(self.erreurs(moteur=mauvais), mauvais)
+
     def test_proposition_partenaire_inconnu_refuse(self):
         e = self.erreurs(partenaires_conseilles={"voix": [{"id": "inexistant", "raison": "x"}]})
         self.assertTrue(any("inexistant" in x for x in e), e)

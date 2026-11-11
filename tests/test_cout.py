@@ -136,6 +136,18 @@ class TestCalcul(unittest.TestCase):
         self.assertEqual(len(f["direction"]["usages"]), 2)
         self.assertAlmostEqual(f["total"], 4)
 
+    def test_facturation_isole_l_orchestration(self):
+        f = facturer([usage("u1"), usage("u2", service=None, agent="orchestrateur", tache=None, etape="orchestration",
+                                          modele="haiku"),
+                      usage("u3", service=None, agent=None, tache="t1", etape="orchestration", modele="haiku"),
+                      usage("u4", service=None, agent="chef", tache=None, etape="gestion")])
+        self.assertAlmostEqual(f["orchestration"]["total"], 2)           # deux millions de tokens d'entrée Haiku
+        self.assertEqual(len(f["orchestration"]["usages"]), 2)
+        self.assertAlmostEqual(f["direction"]["total"], 3)               # la gestion du chef reste à la direction
+        self.assertAlmostEqual(f["services"]["dev"]["total"], 3)         # la production n'est pas touchée
+        self.assertAlmostEqual(f["total"], 8)                            # tout compte dans le total
+        self.assertEqual(facturer([])["orchestration"]["total"], 0)
+
     def test_service_nomme_direction_ne_se_melange_pas(self):
         f = facturer([usage("u1", service="direction"), usage("u2", service=None)])
         self.assertAlmostEqual(f["services"]["direction"]["total"], 3)

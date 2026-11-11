@@ -106,6 +106,12 @@ Tailscale et le Wi-Fi que si le mobile est retenu.
   Les deux peuvent être ouverts. Sans mobile, rien n'est ouvert : le bureau reste sur l'ordinateur seul.
 - **Agents cloud, ou local seulement ?** Le cloud sert surtout aux tâches longues ou parallèles ; chaque session cloud
   est créée par l'utilisateur.
+- **Les décisions de l'orchestrateur : abonnement ou clé API ?** Le moteur de la factory décide par de petits appels
+  à une IA. Par défaut ils passent par l'abonnement (`claude -p`), sans frais en plus ; l'API d'Anthropic est une
+  option, **facturée à part**. Pose la question de `proposition.question_api()` (lis son texte dans
+  `<skill>/installation/proposition.py`), avec l'écart estimé, **défaut : non**. Ne demande jamais la clé dans la
+  discussion : si l'utilisateur dit oui, il la met lui-même dans la variable d'environnement `ANTHROPIC_API_KEY`
+  (sans elle, le moteur reste sur l'abonnement et le dit au bureau). Note la réponse dans `moteur` de la proposition.
 - **La facturation est-elle un objectif du projet ?** Oui : une pièce Facturation et les prix automatiques. Non : pas
   de pièce dédiée.
 - **Projet vide : faut-il créer un dépôt GitHub ?** (Privé.)

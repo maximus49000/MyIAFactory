@@ -7,9 +7,15 @@
      "flux": [{id, nom, role, service, justification}],
      "agents": [{cle, prenom?, role, service, modele, lieu, specialite?, texte, environnement?: [textes]}],
      "briefs": {role: texte}, "consignes": texte, "controles": [textes], "estimation": objet de `estimer`,
+     "moteur"?: {"couche": "claude" | "api", "ecart_estime": texte},
      "partenaires_conseilles"?: {besoin: [{"id" (actif du catalogue), "raison" (une phrase)}]}}
 
 `partenaires_conseilles` est facultatif (rien n'est obligatoire) ; la mise en place l'écrit dans `.factory/partenaires.json`.
+
+`moteur` est facultatif (défaut : `claude`). `couche` dit par où passent les décisions de l'orchestrateur : `claude`
+(`claude -p`, l'abonnement) ou `api` (l'API Messages d'Anthropic, **facturée à part**). L'API n'est jamais choisie
+d'office ; la clé (`ANTHROPIC_API_KEY`) n'est jamais demandée dans la discussion : l'utilisateur la met lui-même dans son
+environnement, et sans elle le moteur reste sur `claude -p`. `ecart_estime` : l'écart de coût dit à l'utilisateur.
 """
 from pathlib import Path
 
@@ -20,6 +26,24 @@ FABLE = "Fable n'est jamais choisi par l'installation."
 SERVICE_FACTURATION = "facturation"
 SUPPORTS = ("ordinateur", "mobile")
 ACCES = ("tailscale", "reseau_local")
+COUCHES = ("claude", "api")
+QUESTION_API = ("Utiliser une clé API Anthropic pour les décisions de l'orchestrateur ? Elle est facturée à part de "
+                "votre abonnement ; écart estimé : {ecart}")
+ECART_API_PAR_DEFAUT = ("environ 0,05 $ de décisions par fonctionnalité, facturés à part de l'abonnement (sans la clé, "
+                        "ces décisions passent par votre abonnement, sans frais en plus)")
+
+
+def question_api(ecart=None):
+    """La question du paramétrage sur la couche d'appel des décisions (défaut : non, l'abonnement)."""
+    return QUESTION_API.format(ecart=ecart or ECART_API_PAR_DEFAUT)
+
+
+def _verifier_moteur(m):
+    if m is None:
+        return []
+    if not (isinstance(m, dict) and m.get("couche") in COUCHES and _ligne(m.get("ecart_estime"))):
+        return ["« moteur » doit être {couche: claude ou api, ecart_estime: un texte d'une ligne}."]
+    return []
 
 
 def _texte(v):
@@ -173,6 +197,7 @@ def verifier(p):
         if not isinstance(p.get(champ), bool):
             e.append(f"« {champ} » doit valoir vrai ou faux.")
     e += verifier_supports(p.get("supports"), p.get("acces"))
+    e += _verifier_moteur(p.get("moteur"))
     flux = p.get("flux")
     if isinstance(flux, list):
         for x in flux:

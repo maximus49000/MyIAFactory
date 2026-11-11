@@ -21,19 +21,21 @@ Le plugin sert autant à **économiser** qu'à **montrer** : une factory qui co�
 - Une **estimation du coût** du workflow proposé, avant validation.
 - Une **organisation qui évolue** : pendant le cadrage d'une fonctionnalité, l'orchestrateur propose de créer un service et de modifier le workflow quand un secteur manque, comme une entreprise qui crée un service.
 - Une **mémoire privée par défaut**, sauf ce qui est universel, qui alimente le plugin public.
+- Le **support de traitement** de l'entreprise (ordinateur, mobile, ou les deux) : avec le mobile, l'entreprise est accessible sur le téléphone comme sur l'ordinateur, vue 3D comprise (section 13).
 
 **Non-buts.**
 - Passer sur l'orchestrateur générique un projet qui a **déjà sa propre factory** (ses consignes, ses outils, son relevé) : c'est le guide `docs/orchestrateur.md` (adaptateurs, liste de compatibilité), fait à la main comme pour le projet pilote. L'installation le détecte et renvoie vers ce guide **[choix]**.
 - Créer les sessions cloud : impossible sans un message de l'utilisateur. L'installation les prépare et dit quoi régler.
 - Lancer la première fonctionnalité : l'installation s'arrête quand tout est prêt.
-- Une IA d'un autre fournisseur ; l'accès depuis le téléphone.
+- Une IA d'un autre fournisseur ; une application mobile native ; un bureau exposé publiquement sur Internet (tunnel public) ou hébergé en ligne (section 13).
 
 **Contre-buts** (ce qui ferait un échec même si cela « marche »), par ordre d'importance donné par l'utilisateur.
 1. **Un workflow ou une gestion trop complexe ou trop coûteuse en tokens** — plus coûteuse que la gestion autonome d'un néophyte. C'est la cause d'échec numéro 1.
 2. **Des fonctionnalités à côté de la demande**, qui n'y répondent qu'à moitié ou presque pas. Il faut viser dans le mille en économisant les tokens.
 3. Une installation qui écrit dans le projet avant que l'utilisateur ait validé la proposition.
 4. Une mémoire liée à une personne ou à un projet précis qui part sur GitHub.
-5. Fable utilisé sans demande expresse de l'utilisateur (règle déjà en vigueur).
+5. Un bureau joignable depuis un autre appareil sans code d'accès, ou depuis Internet en dehors du réseau privé de l'utilisateur.
+6. Fable utilisé sans demande expresse de l'utilisateur (règle déjà en vigueur).
 
 ## 3. Les règles qui ne bougent pas
 
@@ -59,7 +61,7 @@ Le plugin sert autant à **économiser** qu'à **montrer** : une factory qui co�
 3. **Vide ou existant ?** La commande regarde si le dossier est vide (ou presque : pas de code, pas de documentation) ou si le projet existe déjà.
 4. **Projet vide** : une série de questions logique pour calibrer l'application et les agents (section 6).
 5. **Projet existant** : une lecture du dossier pour comprendre le métier, puis des questions de bonne compréhension et pour combler les zones d'ombre (section 7).
-6. **Les questions communes**, dans les deux cas : agents cloud ou local seulement ; la facturation est-elle un objectif ; pour un projet vide, faut-il créer un dépôt GitHub. Le calibrage de la machine se fait pendant la discussion (section 8).
+6. **Les questions communes**, dans les deux cas : le support de traitement de l'entreprise (ordinateur, mobile : choix multiple ; section 13) ; agents cloud ou local seulement ; la facturation est-elle un objectif ; pour un projet vide, faut-il créer un dépôt GitHub. Le calibrage de la machine se fait pendant la discussion (section 8).
 7. **La proposition** (section 8), corrigée dans la conversation Claude tant que le paramétrage n'est pas finalisé. **Rien n'est écrit dans le projet avant la validation.**
 8. **La mise en place** (section 11), puis la vérification.
 9. **La fin** : la liste des agents cloud à régler, le message qui ouvre la conversation orchestratrice, l'adresse du bureau. Le projet est prêt pour une première fonctionnalité.
@@ -143,7 +145,22 @@ Après validation, la skill écrit, en suivant les formats existants (`docs/orch
 - Chaque agent cloud est initialisé avec un **environnement de base**, sauf si la skill a détecté que l'environnement doit contenir des éléments spécifiques (langage, version, dépendances, outils).
 - La skill écrit, **dans un message**, pour chaque agent cloud : sa clé, son rôle, **le modèle sur lequel régler sa session**, et l'environnement à utiliser. **C'est l'utilisateur qui règle le modèle** et crée la session. Les fiches cloud sont écrites ; la décision `session_cloud` existante prend le relais tant qu'une session manque.
 
-## 13. Ce qui est laissé au constructeur
+## 13. L'accès mobile
+
+L'installation demande **sur quels supports l'entreprise est traitée : ordinateur, mobile** (choix multiple). Si le mobile est retenu, l'entreprise doit être accessible sur le téléphone **tout comme sur l'ordinateur**. L'utilisateur a choisi, parmi quatre solutions (réseau privé, Wi-Fi de la maison, tunnel public, bureau hébergé), les deux premières, et de **garder la vue 3D** pour gérer l'entreprise, adaptée au mobile.
+
+**Comment le téléphone atteint le bureau.**
+- **A. Le réseau privé Tailscale (par défaut).** Gratuit ; une application sur l'ordinateur et sur le téléphone, installées par l'utilisateur (la skill dit comment, elle n'installe rien elle-même). Le bureau écoute en plus sur l'adresse Tailscale de la machine : il est joignable de partout (4G, ailleurs), chiffré, et rien n'est exposé sur Internet.
+- **B. Le Wi-Fi de la maison (secours).** Rien à installer : le bureau écoute en plus sur l'adresse de la machine dans le réseau local. Le trafic n'y est pas chiffré : la skill le dit au moment du choix.
+- L'ordinateur garde `127.0.0.1` comme aujourd'hui. Les deux accès s'ajoutent, ils ne le remplacent pas.
+
+**Le code d'accès.** Toute requête qui ne vient pas de la machine elle-même exige un code d'accès, gestes compris. **[choix]** Le téléphone est associé une fois : la page du bureau sur l'ordinateur (et le terminal qui l'a lancé) montre un **QR code** qui porte l'adresse et le code ; le téléphone le scanne, le bureau lui pose un cookie (`HttpOnly`, `SameSite=Strict`) et il n'a plus rien à saisir. Le code vit dans le dossier stable, hors de tout dépôt ; un geste « Révoquer les téléphones » en crée un nouveau. Sans code ou avec un code faux : 401, aucune donnée. Le contrôle de l'en-tête `Host` accepte les adresses ouvertes, et elles seules.
+
+**Ce que le téléphone affiche.** La même page, la **vue 3D gardée** et adaptée au mobile **[choix pour le détail]** : toucher pour sélectionner, pincer pour zoomer, glisser pour se déplacer ; les panneaux (dossier d'un service, Directeur, fonctionnalité, catalogue) en plein écran ; une barre compacte ; le Kanban plein écran d'un geste ; dans la discussion, joindre une photo prise au téléphone ; rendu allégé (définition et ombres réduites) pour rester fluide. **Tous les gestes de l'ordinateur sont possibles sur le téléphone**, par les mêmes demandes : le bureau n'agit toujours pas lui-même. **[choix]** La page peut être ajoutée à l'écran d'accueil du téléphone (manifeste web).
+
+**La mise en place.** Les réglages d'accès sont ceux de la machine : ils vont dans le fichier de bureau commun (par exemple `acces: {"tailscale": bool, "reseau_local": bool}`), pas dans le projet. La skill vérifie l'adresse Tailscale quand elle est choisie (`tailscale ip -4`), et à la fin donne la marche à suivre : relancer le bureau, ouvrir la page sur l'ordinateur, scanner le QR code. Sans mobile, rien ne change : le bureau n'écoute que sur `127.0.0.1`.
+
+## 14. Ce qui est laissé au constructeur
 
 - Le nom exact de la commande, la structure du plugin et le mécanisme du dossier stable, dans les limites de la section 4.
 - Le format du nouveau réglage « agents locaux en parallèle » et la formule du calibrage.

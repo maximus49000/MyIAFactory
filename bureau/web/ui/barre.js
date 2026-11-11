@@ -7,6 +7,7 @@ import {boutons, envoyer} from "./actions.js";
 import {urlProjet, livrables, projetCourant, memoriser} from "./projets.js";
 import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
+import {creerConso} from "./conso.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -55,7 +56,7 @@ export function creerBarre(entete, bandeau) {
   const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
   boutonTelephone.type = "button";
   boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
-  entete.append(titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
+  entete.append(creerConso(), titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
                 boutonTelephone, charge);
   // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
   new ResizeObserver(() => {

@@ -438,6 +438,34 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 }
 .menu-livrables li { padding: 3px 0; }
 
+/* --- Le rond de consommation Claude Code (bandeau) et son panneau. */
+.conso { position: relative; flex: none; --ton: #8a8396; }
+.conso[data-ton="ok"] { --ton: #3f9d5a; }
+.conso[data-ton="attention"] { --ton: #d9962b; }
+.conso[data-ton="alerte"] { --ton: #d65a31; }
+.conso-rond {
+  display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: none; border: 0; border-radius: 16px;
+  cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: inherit;
+}
+.conso-rond:hover, .conso-rond:focus-visible { background: rgba(0,0,0,.07); }
+.conso-fond, .conso-arc { fill: none; stroke-width: 4; }
+.conso-fond { stroke: #d9d3c4; }
+.conso-arc { stroke: var(--ton); stroke-linecap: round; transition: stroke-dashoffset .4s; }
+.conso-panneau {
+  position: absolute; left: 0; top: 100%; z-index: 30; width: min(22em, 90vw); margin-top: 6px; padding: 10px 14px;
+  background: #fffdf7; color: #2d2a32; border: 1px solid #cfc6b4; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  font-weight: 400;
+}
+.conso-titre { font-weight: 700; margin-bottom: 8px; }
+.conso-ligne { margin-bottom: 10px; --ton: #3f9d5a; }
+.conso-ligne[data-ton="attention"] { --ton: #d9962b; }
+.conso-ligne[data-ton="alerte"] { --ton: #d65a31; }
+.conso-tete { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.conso-nom { font-weight: 700; }
+.conso-piste { height: 8px; margin: 4px 0; background: #e8e2d3; border-radius: 4px; overflow: hidden; }
+.conso-plein { height: 100%; background: var(--ton); }
+.conso-remise, .conso-vide { font-size: 12px; color: #6b6573; margin: 0; }
+
 /* --- Fonctionnalité et discussion. */
 .parcours { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12.5px; }
 .parcours .etape { padding: 2px 8px; border-radius: 10px; background: #efe8da; color: #6d6980; }

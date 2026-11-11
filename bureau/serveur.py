@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import acces, catalogue, charge, cout, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import acces, catalogue, charge, conso, cout, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -520,6 +520,7 @@ class Bureau(ThreadingHTTPServer):
         self.annonces = []    # ce que le terminal dit au lancement
         self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer) for id_, chemin in projets}
         self.sonde = charge.Sonde()
+        self.conso = conso.Conso()    # la consommation du forfait Claude Code (le rond du bandeau)
         self.lisseur = charge.Lisseur(60)
         self.mesure = None  # dernière lecture brute de la sonde
         self._dernier_historique = 0.0
@@ -790,6 +791,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.infos_acces())
         if chemin == "/api/lancement":
             return self._json(200, {"vu": self.server.lancement.vu()})
+        if chemin == "/api/conso":
+            return self._json(200, self.server.conso.lire())
         if chemin not in ROUTES_PROJET:
             return self._statique(chemin)
         projet = self._projet(morceaux.query)

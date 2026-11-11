@@ -277,7 +277,7 @@ Ce sont de simples lectures : rien de votre projet n'est envoyé. Pour n'avoir *
 **Rapprocher les noms de modèles** (`alias_modeles`). Le relevé écrit « Sonnet », la liste de prix dit autre chose : donnez la correspondance, nom du relevé → nom exact dans la liste.
 
 ```json
-{"alias_modeles": {"Sonnet": "claude-sonnet-5-5", "Haiku": "claude-haiku-4-5"}}
+{"alias_modeles": {"Sonnet": "claude-sonnet-5-5", "Haiku": "claude-haiku-5-5"}}
 ```
 
 Un modèle sans correspondance, ou absent de la liste, reste à « prix inconnu » : ses tokens sont montrés, il est exclu des euros, et chaque chiffre qui en dépend le dit (« ≈ 3,00 € + prix inconnu »). Il n'est jamais compté à zéro.

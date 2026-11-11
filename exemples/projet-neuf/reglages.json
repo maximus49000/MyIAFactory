@@ -43,6 +43,6 @@
   "alias_modeles": {
     "Opus": "claude-opus-5-5",
     "Sonnet": "claude-sonnet-5-5",
-    "Haiku": "claude-haiku-4-5"
+    "Haiku": "claude-haiku-5-5"
   }
 }

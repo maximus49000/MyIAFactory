@@ -11,6 +11,7 @@ Code de sortie : 0 tout est conforme, 1 au moins un écart, 2 appel invalide ou 
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,8 @@ def lancer(chemin, commande, entree=None, args=()):
     try:
         p = subprocess.run([sys.executable, str(OUTIL), "--factory", str(chemin), "lancer", commande, *args],
                            input=corps, stdin=None if corps is not None else subprocess.DEVNULL,
-                           capture_output=True, timeout=DELAI_S)
+                           capture_output=True, timeout=DELAI_S,
+                           env={**os.environ, "MYIAFACTORY_VERIFICATION": "1"})   # pas une présence d'orchestrateur
     except subprocess.TimeoutExpired:
         raise Ecart(f"plus de {DELAI_S} s sans réponse")
     sortie = p.stdout.decode("utf-8", "replace").strip()

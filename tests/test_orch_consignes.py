@@ -1,4 +1,5 @@
 """Les consignes génériques, l'interface et les modèles se tiennent entre eux."""
+import json
 import re
 import unittest
 from pathlib import Path
@@ -26,6 +27,15 @@ class TestConsignes(unittest.TestCase):
         ligne = next(l for l in texte.splitlines() if l.startswith("| `methode` |"))
         for mot in ("`reprendre`", "`adapter`", "`revoir`"):
             self.assertIn(mot, ligne, mot)
+
+    def test_cout_de_l_orchestrateur(self):
+        # Essai réel : l'orchestrateur coûtait plus que toute la production ; les tokens des sous-agents étaient
+        # estimés au rabais et le Haiku déclaré était l'ancien.
+        texte = lire(ORCH / "consignes.md")
+        self.assertIn("`agent_id`", texte)
+        self.assertIn("Une conversation par fonctionnalité", texte)
+        alias = json.loads((RACINE / "exemples" / "projet-neuf" / "reglages.json").read_text(encoding="utf-8"))
+        self.assertEqual(alias["alias_modeles"]["Haiku"], "claude-haiku-5-5")
 
     def test_toute_demande_du_bureau_est_prise_par_l_outil(self):
         # Essai réel : « Actualiser » et « Mettre à jour les offres » des partenaires étaient acceptés par le bureau

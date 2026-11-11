@@ -33,7 +33,7 @@ export function creerBandeauOrchestrateur(apres) {
   const bandeau = el("div", "bandeau-orchestrateur");
   bandeau.setAttribute("role", "alert");
   bandeau.hidden = true;
-  const texte = el("span", "", "L'orchestrateur n'est pas lancé : les gestes attendent qu'il soit là.");
+  const texte = el("span", "", "L'orchestrateur est arrêté (il s'arrête seul à la fin d'une fonctionnalité). Lancez-le pour agir : nouvelle fonctionnalité, réponses, validations.");
   const bouton = el("button", "bouton", "Lancer l'orchestrateur");
   bouton.type = "button";
   const retour = el("p", "bandeau-orchestrateur-retour");

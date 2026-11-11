@@ -173,8 +173,11 @@ file est vide.
 ### `usage`
 
 Entrée : `{"modele", "agent"?, "tache"?, "etape"?, "entree", "sortie", "cache_lecture"?, "cache_ecriture"?, "id"?}`, ou
-`total` à la place de `entree` et `sortie` quand seul le total est connu (un sous-agent ne donne que lui : il compte
-alors comme des tokens d'entrée, et le coût est une **estimation basse**). Note les tokens d'une exécution d'agent ;
+**`agent_id`** (l'identifiant d'un sous-agent) à la place des compteurs et du `modele` : l'outil lit les compteurs exacts
+et le modèle dans sa transcription locale (`~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, compteurs seulement,
+jamais le contenu) ; ou `total` à la place de `entree` et `sortie` quand seul le total est connu (il compte alors comme
+des tokens d'entrée, et le coût est une **estimation basse**). `reveil` note aussi la **gestion** : les tokens de la
+conversation orchestratrice (une ligne cumulée par conversation et modèle, `etape: gestion`, sans tâche). Note les tokens d'une exécution d'agent ;
 `id` absent : un nouvel usage, rendu `{"id": "u3"}` ; `id` donné : les compteurs de cet usage sont remplacés (des
 **cumuls**, tant que l'exécution continue). Le relevé donne les usages récents au bureau (`usage`), qui les convertit en
 euros estimés dans l'onglet Facturation ; une pièce `facturation` (service de ce nom) le garde toujours visible.

@@ -36,6 +36,11 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
   ligne, et c'est ce qui te réveille. Le moniteur dit
   aussi au bureau que tu es là : sans lui, le bureau bloque les gestes et propose de démarrer un orchestrateur.
 
+- **Une conversation par fonctionnalité.** Ton contexte grossit à chaque réveil, et chaque appel le relit : c'est le
+  premier coût de la factory. Quand une fonctionnalité passe à `terminee` et qu'aucune autre n'est en cours, dis-le
+  dans ta réponse, arrête ton moniteur et ne le réarme pas : la conversation s'arrête là. Le bureau propose alors
+  « Lancer l'orchestrateur », qui repart d'une conversation neuve (le suivi garde tout).
+
 ## La boucle de réveil
 
 À chaque réveil (le moniteur, un sous-agent qui rend son travail, un message de l'utilisateur), **dans cet ordre** :
@@ -57,8 +62,9 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
    nouvelle tâche : relecture de code par un agent à contexte neuf, fusion, puis annonce à chaque agent actif (dans
    son prochain message) avant qu'il ne prenne une nouvelle tâche.
 4. **Les retours des agents** : leur coût d'abord (`lancer usage` : le `modele` réellement employé, l'`agent`, la
-   `tache`, l'`etape`, et les tokens que l'exécution a consommés — `entree` et `sortie` si tu les as, sinon le `total`
-   que rend le sous-agent ; la facturation est un élément central du bureau, ne saute jamais cette ligne), leur
+   `tache`, l'`etape`, et les tokens : pour un sous-agent, son **`agent_id`** (l'identifiant que rend son lancement) —
+   l'outil lit alors ses compteurs exacts et son vrai modèle ; sinon `entree` et `sortie`, ou le `total` en dernier
+   recours ; la facturation est un élément central du bureau, ne saute jamais cette ligne), leur
    résultat (mets la tâche à jour avec `lancer tache` : colonne, `journal`, `captures`, et `lignes` : le total des
    lignes que la tâche a produites, par exemple les lignes ajoutées et modifiées du `git diff --shortstat` de son
    travail ; c'est l'échelle de son coût), leurs leçons (`lancer lecon` avec `action: noter`, voir « Les leçons ») et leurs retours sur la

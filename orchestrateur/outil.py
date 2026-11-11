@@ -26,6 +26,7 @@ from orchestrateur import depart  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import guetteur  # noqa: E402
+from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
@@ -386,7 +387,12 @@ def cmd_guetter(ctx, e):
 def cmd_reveil(ctx, e):
     with ctx.suivi.transaction() as s:
         s["reveil"] = su.maintenant()
-        return {"reveil": s["reveil"]}
+        reveil = s["reveil"]
+    try:
+        noter_gestion(ctx)   # la facturation compte aussi l'orchestrateur
+    except (OSError, ValueError):
+        pass
+    return {"reveil": reveil}
 
 
 def cmd_demandes(ctx, e):
@@ -976,10 +982,12 @@ def cmd_usage(ctx, e):
     """Note les tokens d'une exécution d'agent (pour la facturation du bureau). Les compteurs d'un même `id` sont des
     cumuls : republier l'`id` avec des nombres plus grands, tant que l'exécution continue. Quand seul un `total` est
     connu (un sous-agent ne donne que lui), il compte comme des tokens d'entrée : le coût est alors une estimation basse."""
-    modele = texte(e, "modele")
     agent, tache = e.get("agent"), e.get("tache")
     if agent is not None and agent not in ctx.cles_agents():
         raise Refus(f"Agent inconnu : {agent}")
+    if "agent_id" in e:   # les compteurs exacts du sous-agent, lus dans sa transcription locale
+        e = {**e, **_compteurs_du_sous_agent(e["agent_id"])}
+    modele = texte(e, "modele")
     if ("total" in e) == ("entree" in e or "sortie" in e):
         raise Refus("Donnez soit « entree » et « sortie », soit « total » (quand seul le total est connu).")
     if "total" in e:
@@ -1015,6 +1023,43 @@ def cmd_usage(ctx, e):
         if etape:
             u["etape"] = etape
         return {"id": u["id"]}
+
+
+def _compteurs_du_sous_agent(agent_id):
+    f = transcriptions.sous_agent(agent_id)
+    if f is None:
+        raise Refus(f"Transcription du sous-agent « {agent_id} » introuvable : donnez « total » (estimation).")
+    par_modele = transcriptions.compter(f)
+    if not par_modele:
+        raise Refus(f"La transcription du sous-agent « {agent_id} » ne porte aucun usage : donnez « total ».")
+    modele = max(par_modele, key=lambda m: sum(par_modele[m].values()))   # un sous-agent tourne sur un modèle
+    somme = {c: sum(x[c] for x in par_modele.values()) for c in ("entree", "sortie", "cache_lecture", "cache_ecriture")}
+    return {"modele": modele, **somme}
+
+
+def noter_gestion(ctx):
+    """Les tokens de la conversation orchestratrice (la « gestion »), lus dans ses transcriptions locales : une ligne
+    d'usage cumulée par conversation et par modèle, sans tâche (la Direction de la facturation)."""
+    projet = ctx.f["chemin"].parent.parent if ctx.f["chemin"].parent.name == ".factory" else ctx.f["chemin"].parent
+    fichiers = transcriptions.orchestrations(projet, ctx.f["chemin"])
+    if not fichiers:
+        return
+    lignes = {}
+    for f in fichiers:
+        for modele, c in transcriptions.compter(f).items():
+            lignes[f"g-{f.stem[:8]}-{re.sub(r'[^a-z0-9]', '', modele.lower())[-12:]}"] = (modele, c)
+    with ctx.suivi.transaction() as s:
+        usages = s.setdefault("usage", [])
+        for uid, (modele, c) in lignes.items():
+            u = next((x for x in usages if x["id"] == uid), None)
+            if u is not None and all(u.get(k) == v for k, v in c.items()):
+                continue
+            if u is not None:
+                usages.remove(u)   # remise en fin de liste : le relevé ne montre que les derniers usages
+            else:
+                u = {"id": uid, "t": su.maintenant()}
+            u.update({"agent": ctx.chef(), "tache": None, "modele": modele, **c, "estime": False, "etape": "gestion"})
+            usages.append(u)
 
 
 def cmd_session(ctx, e):
@@ -1863,7 +1908,8 @@ def executer(chemin_factory, argv, entree=None):
             raise Appel(f"La commande « {nom} » demande une entrée JSON sur l'entrée standard.")
         if entree is not None and not isinstance(entree, dict):
             raise Appel("L'entrée doit être un objet JSON.")
-        if nom not in COMMANDES_DU_BUREAU:   # l'orchestrateur travaille : il est là (son moniteur a pu expirer)
+        if nom not in COMMANDES_DU_BUREAU and not os.environ.get("MYIAFACTORY_VERIFICATION"):
+            # l'orchestrateur travaille : il est là (son moniteur a pu expirer) ; la vérification, elle, ne compte pas
             noter_presence(ctx)
         if declaree:
             return lancer_declaree(ctx, nom, entree, extra)

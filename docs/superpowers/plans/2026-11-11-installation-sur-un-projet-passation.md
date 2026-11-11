@@ -12,7 +12,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | ce dépôt | 1 à 3 : chemins `~`, limite d'agents locaux, leçon gardée en local | Changements courts et cadrés, tests nommés | fait |
 | B | Sonnet 5.5 | ce dépôt | 4 à 6 : dossier stable, examen du dossier, calibrage et estimation | Fonctions au contrat écrit, tests en tableau | fait |
-| C | Opus 5.5 | ce dépôt | 7 et 8 : proposition, mise en place, bureau commun, réparation, ligne de commande | Écritures atomiques sur plusieurs formats, réparation sans casser les adaptateurs | à faire |
+| C | Opus 5.5 | ce dépôt | 7 et 8 : proposition, mise en place, bureau commun, réparation, ligne de commande | Écritures atomiques sur plusieurs formats, réparation sans casser les adaptateurs | fait |
 | D | Opus 5.5 | ce dépôt | 9 : le plugin et les consignes de la discussion | Les consignes guident toute l'installation : sobriété et justesse comptent plus que tout | à faire |
 | E | Sonnet 5.5 | ce dépôt | 10 : l'organisation qui évolue | Décision, demande et commande sur le modèle de celles qui existent | à faire |
 | F | Opus 5.5 | ce dépôt | 11 : guides et relecture finale | Relecture finale sur un modèle fort | à faire |
@@ -38,6 +38,17 @@ Phase B (Sonnet 5.5) :
 - `examiner` rend en plus la clé `factory` (booléen) ; `nb_fichiers` vaut `"100000+"` au-delà de la borne ; `extensions` est une liste de `[extension, nombre]`.
 - `calibrer` : mesure indisponible → `charge_max` reste celui du `conseiller` ; avec historique, `agents_locaux_max` = `floor((85 - repos) / par_agent)` borné à 1..6 (6 si `par_agent` est nul).
 - `estimer` lève `ValueError` si un rôle du flux n'a pas d'agent (la proposition le refuse avant). `usages_du_genre` lit le genre de chaque projet du bureau par la clé `orchestrateur` de ses réglages ; un projet illisible est ignoré. Les euros comptent `PART_SORTIE` en sortie et ignorent les caches.
+
+Phase C (Opus 5.5) :
+
+- Deux commits (tâche 7, tâche 8). Aides de test communes dans `tests/inst_aide.py` (`AvecMaison`, `proposition_valide`, `instantane`).
+- `proposition.verifier_organisation(services, flux, agents, briefs, cloud, roles_deja_pourvus, cles_prises, briefs_existants)` est la partie « organisation » du contrôle, réutilisable telle quelle par la tâche 10. Les ids de services, d'étapes, de rôles et de clés d'agents suivent `MOTIF_ID` (ils deviennent des noms de fichiers) ; `prenom`, `specialite`, `nom`, chaque contrôle et chaque mot interdit tiennent sur une ligne. Un service `facturation` déclaré à la main est refusé dans les deux cas (vrai : la mise en place l'ajoute ; faux : pas de pièce).
+- `mise_en_place.appliquer(p, maintenant, git=executer_git)` : `git` en plus (pour `creer_genre`). Un genre ni connu ni décrit par `genre_nouveau` est refusé avant toute écriture. Le nouveau genre est créé **en dernier**, après la mise en place (il publie hors du projet) ; s'il échoue, le genre reste nul et le rendu porte `genre_raison`. Un `.factory/` sans `factory.json` est refusé (configuration faite à la main : `docs/orchestrateur.md`). `agents_cloud[].environnement` est une liste ; vide = environnement de base.
+- `ecrire_organisation` refuse sans rien écrire (clé ou fichier de fiche déjà pris, rôle sans agent ni fiche existante, brief manquant, Fable) ; un brief existant est gardé, jamais réécrit ; `justification` n'entre pas dans le fichier de factory.
+- La vérification se fait en processus (`mise_en_place.verifier`, qui joue `verifier_interface.verifier_lecture`) ; chaque commande reste un sous-processus de `outil.py`, d'où environ 1 s par test de mise en place.
+- `reparer` rend aussi `relancer_bureau`. Il contrôle le bureau avant d'écrire, ne crée que les dossiers manquants situés dans le projet (fiches, pièces, racines des réglages), et ne touche ni `commandes` ni un catalogue `{fichier}`.
+- `installation/outil.py proposer` **recalcule** l'estimation avec `estimer` (les usages du genre et les prix du bureau commun) et l'enregistre à la place de celle reçue. Le fichier de proposition s'appelle `<nom du dossier>-<empreinte du chemin>.json`. Un refus de `proposer` rend `{"erreur", "erreurs": [...]}` ; une entrée JSON illisible rend le code 2 avec `{"erreur"}`. `reparer` ajoute `calibrage` à sa sortie.
+- Pour la phase D : `git init` et `gh repo create` restent dans les consignes de la discussion (aucune commande de l'outil ne les fait).
 
 ## Ce que chaque conversation doit savoir
 

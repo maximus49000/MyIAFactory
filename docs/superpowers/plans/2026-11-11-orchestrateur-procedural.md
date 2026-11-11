@@ -230,17 +230,41 @@ def test_api_sans_cle_bascule_une_fois(self):
 - Test : `tests/test_serveur.py`, `tests/test_reglages.py`, `tests/test_inst_proposition.py`, `tests/test_orch_consignes.py` (ajouts)
 
 **Interfaces :**
-- `demarrage.demarrer(reglages, ...)` démarre `py -3.12 -m moteur` sans fenêtre s'il ne tourne pas (un seul moteur : verrou `~/MyIAFactory/moteur.pid`), et rend `{"ok": True, "message": "L'orchestrateur démarre."}` ; un projet dont les réglages sont en mode cloud garde l'ouverture de la console actuelle.
+- `demarrage.demarrer(reglages, ...)` démarre `py -3.12 -m moteur` sans fenêtre s'il ne tourne pas (un seul moteur : verrou `~/MyIAFactory/moteur.pid`), et rend `{"ok": True, "message": "L'orchestrateur démarre."}`, pour tous les projets, cloud compris. `claude` se cherche comme `moteur.appel.trouver_claude()` (PATH, puis l'installation de l'application).
 - La proposition d'installation porte `moteur: {"couche": "claude" | "api", "ecart_estime": str}` ; la question : « Utiliser une clé API Anthropic pour les décisions de l'orchestrateur ? Elle est facturée à part de votre abonnement ; écart estimé : … ». Défaut `claude`. Jamais de clé demandée dans la discussion : l'utilisateur la met lui-même dans son environnement.
-- `consignes.md` : un premier paragraphe dit que le moteur procédural applique ces consignes en mode local, et que la conversation orchestratrice ne sert plus qu'au mode cloud.
+- `consignes.md` : un premier paragraphe dit que le moteur procédural applique ces consignes (local et cloud), et que la conversation orchestratrice ne sert plus qu'aux projets à adaptateur pas encore passés au moteur.
 
 - La facturation du bureau montre l'orchestration à part : les usages de l'agent `orchestrateur` forment une ligne « Orchestration » distincte de la production (`bureau/cout.py`, `bureau/kpi.py` et la page s'ils ne le font pas déjà par agent).
 
-- [ ] **Étape 1 : tests qui échouent** : `test_facturation_isole_l_orchestration`, `test_demarrer_lance_le_moteur_une_fois`, `test_mode_cloud_garde_la_console`, `test_reglage_couche_valide` (refus d'une autre valeur), `test_proposition_pose_la_question_api_defaut_claude`, `test_consignes_mentionnent_le_moteur`.
+- [ ] **Étape 1 : tests qui échouent** : `test_facturation_isole_l_orchestration`, `test_demarrer_lance_le_moteur_une_fois`, `test_projet_cloud_passe_aussi_par_le_moteur`, `test_reglage_couche_valide` (refus d'une autre valeur), `test_proposition_pose_la_question_api_defaut_claude`, `test_consignes_mentionnent_le_moteur`.
 - [ ] **Étape 2 : lancer** : échec.
 - [ ] **Étape 3 : écrire** les modifications.
 - [ ] **Étape 4 : lancer toute la suite (Python et page)** : verte.
 - [ ] **Étape 5 : commit** `Moteur : démarrage depuis le bureau, option API au paramétrage`.
+
+### Tâche 12 : les agents cloud
+
+**Fichiers :**
+- Créer : `moteur/cloud.py`
+- Modifier : `moteur/boucle.py` (départs et retours cloud), `moteur/regles.py` (lieu `cloud` : plus de décision `session_cloud`), `orchestrateur/depart.py` (consigne de fin d'un agent cloud), `bureau/reglages.py` (`agents_cloud_max`, 3 par défaut), `installation/` (prérequis GitHub et `claude` connecté quand le cloud est choisi)
+- Test : `tests/test_moteur_cloud.py`, ajouts à `tests/test_moteur_boucle.py` et `tests/test_orch_depart.py`
+
+**Interfaces :**
+- Consomme : `appel.trouver_claude`, `rapport.lire`, `regles.lancer`.
+- Produit :
+  - `lancer_session(depart: str, *, dossier_projet: str, modele: str, executer=None) -> dict` : pousse le dépôt, lance `claude --cloud`, rend `{"session", "adresse"}` ; lève `ErreurCloud` ;
+  - `envoyer_suite(session: str, texte: str, *, executer=None) -> None` (`claude -p … --cloud <session>`) ;
+  - `chercher_rapports(dossier_projet: str, taches: list[str], *, executer=None) -> dict[str, tuple[str, dict]]` : après `git fetch`, pour chaque tâche dont `.factory/rapports/<tâche>.json` existe sur une branche `claude/…`, `(branche, rapport)` ;
+  - `fusionner(dossier_projet: str, branche: str, *, executer=None) -> str | None` : `None` si fusionnée et poussée, sinon la raison (conflit : fusion annulée, rien de cassé).
+- `depart.message` pour une fiche de lieu `cloud` : « Tu repars de zéro », puis la consigne de committer et pousser le rapport structuré dans `.factory/rapports/<tâche>.json`, avec `usage_estime` (tokens).
+- Usage d'un agent cloud : `lancer usage` avec `total` = `usage_estime` (estimé).
+- Avant d'écrire `lancer_session`, vérifier dans `claude --help` si `--cloud` accepte `--model` ; sinon noter le modèle par défaut sur la tâche et l'écrire dans la passation.
+
+- [ ] **Étape 1 : tests qui échouent** : `test_lancer_session_pousse_puis_lance`, `test_lancer_session_rend_session_et_adresse`, `test_rapport_trouve_sur_branche_claude`, `test_rapport_absent_rien_rendu`, `test_fusion_conflit_annule_et_rend_raison`, `test_retour_cloud_applique_puis_fusionne`, `test_conflit_pose_decision_avec_adresse`, `test_usage_cloud_estime`, `test_accord_cloud_envoie_suite_meme_session`, `test_limite_agents_cloud`, `test_session_muette_deux_heures_pose_decision`, `test_sans_github_bascule_en_local_et_le_dit`, `test_depart_cloud_demande_rapport_commite`.
+- [ ] **Étape 2 : lancer** : échec.
+- [ ] **Étape 3 : écrire** `moteur/cloud.py` et les modifications.
+- [ ] **Étape 4 : lancer toute la suite** : verte.
+- [ ] **Étape 5 : commit** `Moteur : les agents cloud (sessions Claude Code, coût estimé)`.
 
 ## Étape 4 — le banc d'essai
 

@@ -35,7 +35,7 @@ Environ 84 % du coût est du déterministe ou du bavardage, et le jugement lui-m
 
 **Non-buts.**
 - Changer le bureau, le relevé, la page, le parcours d'une fonctionnalité (cadrage → cahier → découpage → prototype → méthode → série → terminée), la mémoire à trois étages ou les règles des partenaires : le moteur les **applique** tels qu'ils sont.
-- Les agents en **cloud** dans cette version : une session cloud ne reçoit un message que par une conversation Claude ; le moteur ne sait pas lui écrire. Un projet en mode cloud garde l'orchestrateur conversationnel actuel **[choix]** (section 11).
+- Les agents cloud par **Managed Agents** (l'API hébergée, sur clé API) : écartés pour l'instant ; les agents cloud passent par les sessions cloud de Claude Code, sur l'abonnement (section 6 bis).
 - Passer le **projet pilote** (sa propre factory, son adaptateur) sur le moteur : ce sera un travail à part, après le banc.
 - Une IA d'un autre fournisseur.
 
@@ -131,6 +131,18 @@ Quand le moteur ne sait pas classer un événement (un message libre ambigu, une
 - **Ce que les agents écrivent eux-mêmes** **[choix]** : comme aujourd'hui, un agent d'un lot rend chaque tâche avec `lancer tache` avant la suivante (c'est ce qui donne la durée de chacune et la répartition exacte du coût), et note `partenaires usage` / `limite` après chaque appel payant. Tout le reste passe par son rapport structuré et c'est le moteur qui l'écrit. Les écritures simultanées dans le suivi existent déjà avec les agents en parallèle : l'outil les sérialise déjà.
 - Un agent qui échoue (sortie illisible, code d'erreur, délai dépassé) : la tâche reste active une fois de plus avec la même consigne, puis passe bloquée avec la raison au journal.
 
+## 6 bis. Les agents cloud
+
+Les sessions cloud sont **intégrées au moteur** : un projet en cloud (ou mixte) passe lui aussi entièrement par le moteur, sans conversation orchestratrice. Voie retenue par l'utilisateur : **les sessions cloud de Claude Code, sur l'abonnement** ; leur facturation est **une estimation** (« de l'à-peu-près »), accepté par l'utilisateur.
+
+- **Le départ.** Le moteur commit et pousse le dépôt du projet (la session clone la branche poussée), puis lance la session lui-même : `claude --cloud "<message de départ>"` dans le dossier du projet. Il n'y a plus de session à créer à la main ni de décision `session_cloud` à poser (la demande reste acceptée pour les projets existants). La sortie donne l'identifiant et l'adresse de la session, notés sur la tâche (le bureau peut les montrer).
+- **Le modèle** : celui de la fiche, si la commande accepte de le choisir ; sinon le modèle par défaut de la session, noté sur la tâche **[à vérifier par le constructeur]**.
+- **Le retour.** Aucune API ne rend la fin d'une session cloud, son texte ni ses tokens. Le message de départ d'un agent cloud lui demande donc de **committer son rapport structuré** (section 6) dans `.factory/rapports/<tâche>.json` sur sa branche `claude/…`, et de pousser. Le moteur fait un `git fetch` régulier (toutes les minutes **[choix]**), cherche ce fichier sur les branches `claude/…`, l'applique comme un rapport local, puis **fusionne la branche** dans la branche du projet ; un conflit devient une décision au Directeur (avec la branche et l'adresse de la session).
+- **L'accord en cours de tâche** : l'agent cloud rend `accord_requis` de la même façon ; sur l'accord, le moteur envoie la suite à la même session (`claude -p "<accord>" --cloud <session>`).
+- **La facturation** : l'agent déclare dans son rapport une estimation de ses tokens ; le moteur la note avec `lancer usage` (`total`, donc `estime: true`). Le bureau la montre comme une estimation.
+- **Les limites** : les sessions cloud ne comptent pas dans la charge de la machine ; un nombre maximal de sessions cloud en même temps (réglage `agents_cloud_max`, 3 par défaut **[choix]**). Une session sans rapport au bout de 2 heures **[choix]** : décision au Directeur avec son adresse (relancer, attendre, abandonner).
+- **Les prérequis** : le projet sur GitHub et `claude` connecté au compte claude.ai ; l'installation le vérifie quand le cloud est choisi. Sans eux, le moteur prend l'agent local équivalent si la charge le permet, et le dit au bureau.
+
 ## 7. La facturation
 
 - `claude -p` en sortie JSON rend l'usage exact de l'appel (tokens d'entrée, de sortie, de cache, modèle, coût). Le moteur note **chaque** appel avec `lancer usage` :
@@ -170,7 +182,7 @@ Fable jamais choisi sans demande expresse ; aucune valeur de clé lue ailleurs q
 ## 10. Ce qui est remplacé
 
 - `consignes.md` se réduit à ce que lisent les **appels de jugement** et les **agents** ; la boucle de réveil, la surveillance et la narration passent dans le code. `interface.md` reste le contrat des commandes.
-- `guetteur.py` et la consigne « une conversation par fonctionnalité » ne servent plus qu'au mode cloud (section 11).
+- `guetteur.py` et la consigne « une conversation par fonctionnalité » ne servent plus qu'aux projets à adaptateur restés sur l'orchestrateur conversationnel (le projet pilote, en attendant son passage).
 - `bureau/demarrage.py` démarre le moteur au lieu d'une console.
 
 ## 11. Ce qui est laissé au constructeur
@@ -178,5 +190,5 @@ Fable jamais choisi sans demande expresse ; aucune valeur de clé lue ailleurs q
 - La **commande exacte** de `claude -p` (options pour couper les outils, le prompt système, les serveurs MCP et les réglages du dossier, pour qu'un appel de jugement ne paie pas le gros prompt système de Claude Code). **À mesurer en premier** : le coût d'un appel vide décide si les appels de jugement restent sur `claude -p` ou passent par l'API (section 5.1).
 - Le **format** exact des dossiers d'appel, des réponses JSON et du rapport structuré des agents.
 - La façon dont le moteur **démarre et s'arrête** avec le bureau (même processus ou processus enfant), et la reprise après un arrêt (le suivi garde tout ; une tâche active dont l'agent a disparu est relancée une fois).
-- Le **mode cloud** reste sur l'orchestrateur conversationnel ; un projet en mode mixte : le moteur fait le local, et pose une décision au Directeur quand une étape doit partir en cloud **[choix]**.
+- Les options exactes de `claude --cloud` (choix du modèle, branche de départ, envoi d'une suite) et la façon de retrouver la branche d'une session (section 6 bis).
 - La **relecture croisée** et ses deux relecteurs : purement du code (qui lancer, quoi leur donner), ses comparaisons de rapports comprises quand les rapports sont structurés ; sinon un appel `apres_refus`.

@@ -12,7 +12,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|
 | A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | **faite** le 2026-11-11 |
 | B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | à faire : **c'est la prochaine phase** |
-| C | Sonnet 5.5 | 8 à 10 : démarrage et option API, scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire |
+| C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | à faire |
 | D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
@@ -78,7 +78,7 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
 
 **Phase C — Sonnet 5.5 — dans ce dépôt**
 
-> Réalise la phase C de l'orchestrateur procédural. Lis `docs/superpowers/plans/2026-11-11-orchestrateur-procedural-passation.md` et suis-le. Enchaîne d'une traite les tâches 8 à 10 du plan. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+> Réalise la phase C de l'orchestrateur procédural. Lis `docs/superpowers/plans/2026-11-11-orchestrateur-procedural-passation.md` et suis-le. Enchaîne d'une traite les tâches 8, 12, 9 puis 10 du plan (dans cet ordre). N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
 
 **Phase D — Opus 5.5 — dans ce dépôt**
 

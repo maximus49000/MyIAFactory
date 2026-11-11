@@ -13,7 +13,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | A | Opus 5.5 | 1 à 3 : mesure d'un appel vide, couche d'appel, appels de jugement et leurs consignes | Les consignes de jugement décident de la qualité et du coût ; la mesure décide de la couche | **faite** le 2026-11-11 |
 | B | Sonnet 5.5 | 4 à 7 : rapport structuré, lancer un agent, table de règles, boucle | Code au contrat écrit, tests nommés un par ligne de la table | **faite** le 2026-11-11 |
 | C | Sonnet 5.5 | 8, 12, 9 puis 10 : démarrage et option API, agents cloud (sessions Claude Code, coût estimé), scénario et rejoueur, outils du banc | Changements cadrés, tests nommés | **faite** le 2026-11-11 |
-| D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | à faire : **c'est la prochaine phase** |
+| D | Opus 5.5 | 11 : le banc sur l'essai de référence, avec l'utilisateur | Diagnostic du coût et réglage des consignes sur un modèle fort | **faite** le 2026-11-11 |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
 
@@ -150,7 +150,7 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
   reçoit chaque geste de l'essai comme message (verdicts traduits en phrases) ; une réponse qui finit par « ? » compte
   comme une question. Ni l'un ni l'autre n'est essayé en vrai.
 
-**Phase D (Opus 5.5), en cours.**
+**Phase D (Opus 5.5).**
 - **Mesure de référence** (`banc reference`, table de prix de l'essai) : 97 appels Sonnet, 13 577 727 tokens (13,4 M
   relus), **1,89 €** d'orchestration (le repère de 1,76 € venait d'une autre table de prix) ; production des
   sous-agents 1,56 €.
@@ -173,8 +173,8 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
     ses éléments). Le projet du scénario est celui du **départ** : leçons et méthodes écrites pendant l'essai retirées.
   - Banc : `moteur --vrais-agents` (projet gardé sous le banc, `moteur-vrai.json`), l'agent seul garde son projet ;
     le rapport lit le total et le résultat sur le passage en vrai quand il existe.
-- **Moteur avec rejoueur** (jugements réels) : **5 appels, 0,077 € d'orchestration** (`decouper` Sonnet 0,011 €,
-  `ecrire_methode` Sonnet ≈ 0,060 € dont 5 400 tokens de sortie, `traduire_retour` et deux `apres_refus` Haiku
+- **Moteur avec rejoueur** (jugements réels) : **5 appels, 0,077 € d'orchestration** (`decouper` Sonnet ≈ 0,010 €,
+  `ecrire_methode` Sonnet ≈ 0,065 € dont 5 400 tokens de sortie, `traduire_retour` et deux `apres_refus` Haiku
   ≈ 0,005 €). Objectif ≤ 0,10 € **tenu sans tour de réglage**. 4 attendus sur 5 : cahier validé après 2 corrections,
   méthode, 5 éléments, élément refusé corrigé ; les **leçons** manquent (le scénario ne rejoue pas les leçons de
   l'essai : elles étaient dans le texte libre des rapports). 7 questions (essai : 8). Écarts : le moteur fait des lots
@@ -182,6 +182,43 @@ Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.3
   tours n'ont pas de rapport à rejouer.
 - Marge : `ecrire_methode` fait l'essentiel du coût ; si un passage dépasse 0,10 €, c'est elle qu'il faut resserrer
   (longueur du document et des briefs).
+- **Passages en vrai** (accord de l'utilisateur à chacun ; projets gardés sous le banc, hors dépôt) :
+  - 1ᵉʳ passage (≈ 2,17 €), rien de produit : la règle `Bash(py:*)` refusait `python -c …` (agents du moteur et agent
+    seul) ; l'agent de cadrage reposait des questions à chaque tour ; une méthode a été écrite sans prototype ; l'outil a
+    tenté d'écrire les leçons validées dans la skill (ce dépôt : échec de `git pull`, rien d'écrit). Corrigé : outils
+    par défaut `python`, `python3`, `mkdir` ; une seule série de questions au cadrage ; pas de méthode avant le
+    prototype ; le banc ne valide jamais une leçon ; l'agent seul reçoit le projet (il avait compris « badges à
+    imprimer ») et ses questions sont comptées sur toute la réponse.
+  - 2ᵉ passage : l'agent seul **valable** (15 PNG, 3,01 €) ; le moteur 0,40 €, peu produit : les agents écrivaient
+    leurs scripts par le shell (`cat > … <<EOF`), refusé sans approbation possible, et chaque refus ouvrait une question
+    à laquelle le message rejoué suivant répondait « mettre de côté ». Corrigé : la consigne commune des agents dit
+    d'écrire les fichiers avec Write et de lancer `python <fichier>.py`.
+  - 3ᵉ passage, moteur seul : **5 badges livrés** (3 tailles chacun), deux refus du contrôle corrigés puis
+    recontrôlés, aucun outil refusé.
+
+**Bilan de la phase D**
+
+| | Appels de jugement | Orchestration | Production | Total | Questions |
+|---|---|---|---|---|---|
+| Orchestrateur actuel (essai) | 97 | 1,89 € | 1,56 € | 3,45 € | 8 |
+| Moteur, production rejouée | 5 | 0,077 € | 1,55 € | 1,63 € | 7 |
+| **Moteur, agents réels** | 5 | **0,05 €** | 0,98 € | **1,03 €** | 2 |
+| Agent seul | — | 0 € | 3,01 € | 3,01 € | 4 |
+
+- **Orchestration ≤ 0,10 € : tenu** (0,077 € rejoué, 0,05 € en vrai, contre 1,89 € : 25 à 38 fois moins), sans tour de
+  réglage.
+- **Total du moteur < agent seul : tenu** (1,03 € contre 3,01 €).
+- **Même résultat : tenu sur le fond, « non tenu » au critère strict du banc.** Cahier validé après 2 corrections,
+  méthode, 5 éléments, élément refusé corrigé : oui, et moins de questions que l'essai. Le critère des leçons demande
+  exactement « 4 leçon(s) notée(s) » : le moteur réel en a noté 28 (les agents notent beaucoup ; aucune n'est validée
+  au banc). À regarder : le tri des leçons notées par le moteur.
+- Coût réel de la phase : environ 6,6 € de passages en vrai, 0,2 € de jugements rejoués.
+- **Limites du banc** : les gestes rejoués sont ceux de l'essai ; avec de vrais agents, leurs questions ne sont pas
+  celles de l'essai (le 3ᵉ passage s'est bien déroulé, mais un passage peut dévier). L'agent seul n'a été joué qu'une
+  fois valablement.
+- **Suites possibles** (non faites) : le départ d'un lot (`orchestrateur/depart.py`) dit encore aux agents de rendre
+  compte par `lancer tache` (ancien orchestrateur) ; un agent l'a signalé comme indisponible : à aligner sur le moteur.
+  Le nombre de leçons notées par passage (28) mérite une consigne plus sélective.
 
 ## Messages à coller
 

@@ -304,8 +304,8 @@ def test_api_sans_cle_bascule_une_fois(self):
 
 Pas de code nouveau, sauf corrections ; chaque correction suit le cycle test → code → commit.
 
-- [ ] **Étape 1 : construire le scénario** de l'essai de référence (son suivi et ses transcriptions sont hors dépôt ; leurs chemins sont dans la passation, jamais dans le dépôt) : `py -3.12 -m banc construire …`.
-- [ ] **Étape 2 : mesure de référence** : `py -3.12 -m banc reference …` ; attendu : environ 97 appels et environ 1,76 €.
-- [ ] **Étape 3 : moteur avec rejoueur** : `py -3.12 -m banc moteur …` ; lire le rapport. Si l'orchestration dépasse 0,10 €, regarder quel type d'appel coûte, resserrer son dossier ou sa consigne, et recommencer (au plus 3 tours, chacun noté dans la passation) ; si l'appel vide est en cause, proposer à l'utilisateur la couche API.
-- [ ] **Étape 4 : passage complet en vrai, avec l'accord de l'utilisateur** (il coûte une vraie production) : moteur avec vrais agents, puis agent seul, sur une copie vide du projet. Rapport final.
-- [ ] **Étape 5 : écrire le bilan** dans la passation (chiffres, objectifs tenus ou non) ; commit des seules corrections et de la passation.
+- [x] **Étape 1 : construire le scénario** de l'essai de référence (son suivi et ses transcriptions sont hors dépôt ; leurs chemins sont dans la passation, jamais dans le dépôt) : `py -3.12 -m banc construire …`.
+- [x] **Étape 2 : mesure de référence** : `py -3.12 -m banc reference …` ; attendu : environ 97 appels et environ 1,76 €.
+- [x] **Étape 3 : moteur avec rejoueur** : `py -3.12 -m banc moteur …` ; lire le rapport. Si l'orchestration dépasse 0,10 €, regarder quel type d'appel coûte, resserrer son dossier ou sa consigne, et recommencer (au plus 3 tours, chacun noté dans la passation) ; si l'appel vide est en cause, proposer à l'utilisateur la couche API.
+- [x] **Étape 4 : passage complet en vrai, avec l'accord de l'utilisateur** (il coûte une vraie production) : moteur avec vrais agents, puis agent seul, sur une copie vide du projet. Rapport final.
+- [x] **Étape 5 : écrire le bilan** dans la passation (chiffres, objectifs tenus ou non) ; commit des seules corrections et de la passation.

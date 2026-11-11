@@ -14,3 +14,9 @@ Rôles : graphiste
 Date : 2026-11-11
 
 Dessine le pictogramme en demi-matrice puis mets-le en miroir : la symétrie est exacte sans vérification manuelle. Un motif asymétrique en hauteur doit être décalé verticalement pour que son centroïde, et pas seulement sa boîte englobante, soit à moins d une cellule du centre ; mesure les deux avant de rendre.
+
+## G3 — Exprime les seuils de centrage en cellules de la grille maît
+Rôles : graphiste
+Date : 2026-11-11
+
+Exprime les seuils de centrage en cellules de la grille maître, jamais en pixels de rendu. Dans une grille de côté pair, une forme de hauteur impaire se centre à 0,5 cellule près et une forme de hauteur paire exactement ; pour une forme déséquilibrée verticalement, calcule boîte et centroïde pour chaque décalage possible avant de choisir hauteur et position.

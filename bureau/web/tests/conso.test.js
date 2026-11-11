@@ -33,6 +33,12 @@ test("l'infobulle du rond", () => {
     "Il reste 9 % (Semaine)");
 });
 
+test("le panneau est fixe : la barre mobile défile et le rognerait", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const i = css.indexOf(".conso-panneau {");
+  assert.match(css.slice(i, css.indexOf("}", i)), /position:\s*fixed/);
+});
+
 test("le rond est dans le bandeau", () => {
   const barre = readFileSync(new URL("../ui/barre.js", import.meta.url), "utf8");
   assert.match(barre, /creerConso\(\)/);

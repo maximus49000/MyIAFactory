@@ -452,7 +452,8 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso-fond { stroke: #d9d3c4; }
 .conso-arc { stroke: var(--ton); stroke-linecap: round; transition: stroke-dashoffset .4s; }
 .conso-panneau {
-  position: absolute; left: 0; top: 100%; z-index: 30; width: min(22em, 90vw); margin-top: 6px; padding: 10px 14px;
+  /* fixe : la barre défile sur mobile (overflow-x) et rognerait un panneau positionné dans elle */
+  position: fixed; left: 10px; top: calc(var(--hauteur-barre, 52px) + 6px); z-index: 30; width: min(22em, calc(100vw - 20px)); padding: 10px 14px;
   background: #fffdf7; color: #2d2a32; border: 1px solid #cfc6b4; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15);
   font-weight: 400;
 }

@@ -48,6 +48,14 @@ class TestPlugin(unittest.TestCase):
         mots = len(SKILL.read_text(encoding="utf-8").split())
         self.assertLessEqual(mots, 2000, f"{mots} mots")
 
+    def test_skill_cite_partenaires_detecter(self):
+        texte = SKILL.read_text(encoding="utf-8")
+        section = texte.split("### Les partenaires (facultatifs)", 1)[1].split("\n## ", 1)[0]
+        for mot in ('outil.py partenaires "<dossier>"', "`detecter`", "partenaires_declares", "--besoins",
+                    "Rien n'est obligatoire", "partenaires_conseilles"):
+            self.assertIn(mot, section, mot)
+        self.assertLess(texte.index("### Les partenaires"), texte.index("## 3a."))   # au début, après l'examen
+
     def test_aucun_fable_choisi(self):
         for ligne in SKILL.read_text(encoding="utf-8").splitlines():
             if "fable" in ligne.lower():
@@ -86,10 +94,20 @@ class TestGuides(unittest.TestCase):
         section = texte.split("## Démarrer un projet neuf", 1)[1]
         self.assertIn("/myiafactory:installer", section)
 
+    def test_bureau_partenaire(self):
+        texte = (RACINE / "docs" / "installation.md").read_text(encoding="utf-8")
+        self.assertIn("## Le bureau partenaire", texte)
+        section = texte.split("## Le bureau partenaire", 1)[1].split("\n## ", 1)[0]
+        for mot in ("facultatif", "~/MyIAFactory/partenaires.json", ".factory/partenaires.json", "Mettre à jour les offres",
+                    ".env", "jamais", "Règles"):
+            self.assertIn(mot, section, mot)
+
     def test_readme_projet_4(self):
         texte = (RACINE / "README.md").read_text(encoding="utf-8")
         self.assertIn("/myiafactory:installer", texte)
         self.assertRegex(texte, r"- \[x\] 11\. Les guides d'accord")
+        for n in ("18", "19", "20", "21"):
+            self.assertRegex(texte, rf"- \[x\] {n}\. ")
 
 
 if __name__ == "__main__":

@@ -67,6 +67,19 @@ class TestConsignes(unittest.TestCase):
         for mot in ("En parallèle", "les corrections passent avant", "deux éléments en cours", "jamais pendant le prototype"):
             self.assertIn(mot, texte, mot)
 
+    def test_section_partenaires(self):
+        texte = lire(ORCH / "consignes.md")
+        self.assertIn("## Les partenaires", texte)
+        section = texte.split("## Les partenaires", 1)[1].split("\n## ", 1)[0]
+        for action in outil.ACTIONS_PARTENAIRES:
+            if action != "usage":   # l'agent la note ; elle est citée par son nom dans la section
+                self.assertIn(f"`{action}`", section, action)
+        for mot in ("facultatifs", "Aucune valeur de", "`meilleur_non_connecte`", "ne bloque pas", "`gratuit`",
+                    "`inclus`", "`usage` ou `inconnu`", "toujours son accord", "mode manuel", "mode navigateur",
+                    "`partenaire_regle`", "`partenaires_actualiser`", "`partenaires_maj`", "Sonnet", "mots interdits",
+                    "commit et push", "`verifie_le`", "`force: true`", "une fois par heure", "`partenaires`"):
+            self.assertIn(mot, section, mot)
+
     def test_modele_factory_lisible(self):
         f = factory.lire(ORCH / "modeles" / "factory.json")
         self.assertGreaterEqual(len(f["flux"]), 1)

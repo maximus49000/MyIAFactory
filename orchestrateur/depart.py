@@ -137,7 +137,22 @@ def _vocabulaire(glossaire):
             + "\n".join(f"- {g['mot']} : {g['definition']}" for g in glossaire))
 
 
-def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
+def _regles_partenaires(regles):
+    """Les règles d'usage des partenaires de la tâche, mot pour mot. `regles` : [(nom, [textes])]."""
+    lignes = ["## Règles de tes partenaires",
+              "Suis ces règles quand tu appelles ces partenaires. Une règle qui contredit une consigne explicite de "
+              "l'utilisateur pour cette tâche cède devant elle : dis-le dans ton résultat. La clé d'un partenaire se lit "
+              "dans l'environnement ou le `.env` du projet au moment de l'appel : ne l'écris, ne l'affiche et ne la "
+              "journalise jamais. Après chaque appel payant, note-le : `lancer partenaires` avec "
+              '`{"action": "usage", "partenaire", "tache", "quantite", "unite", "cout"?, "devise"?, "estime"?}` ; sur un '
+              'refus pour quota ou paiement, `{"action": "limite", "partenaire", "raison"}`, puis arrête-toi et dis-le.']
+    for nom, textes in regles:
+        lignes.append(f"\n### {nom}")
+        lignes += [f"- {x}" for x in textes] or ["(aucune règle)"]
+    return "\n".join(lignes)
+
+
+def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=()):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = _entete(factory, fiche, lecons_memoire)
@@ -145,6 +160,8 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=()):
     parties.append("\n".join(["## Ta tâche"] + _bloc_tache(tache)))
     if glossaire:
         parties.append(_vocabulaire(glossaire))
+    if regles:
+        parties.append(_regles_partenaires(regles))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE)
     return "\n\n".join(parties) + "\n"
@@ -159,7 +176,7 @@ def compte_rendu_par_tache(cle):
             f'avec `{{"id": <son id>, "agent": "{cle}", "active": true}}`, et seulement ensuite commence-la.')
 
 
-def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=()):
+def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=()):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot."""
     parties = _entete(factory, fiche, lecons_memoire)
@@ -175,6 +192,8 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=()):
     parties.append("\n".join(lignes))
     if glossaire:
         parties.append(_vocabulaire(glossaire))
+    if regles:
+        parties.append(_regles_partenaires(regles))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
                    .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))

@@ -78,6 +78,25 @@ class TestOutil(AvecMaison):
         self.assertTrue(r["pret"], r["verification"])
         self.assertIn("agents_locaux_max", r["calibrage"])
 
+    def test_partenaires_detecte_sans_rien_ecrire_dans_le_projet(self):
+        (self.projet / ".mcp.json").write_text(json.dumps({"mcpServers": {"stripe": {"url": "https://mcp.stripe.com",
+                                                          "headers": {"Authorization": "Bearer CLE-SECRETE-9"}}}}),
+                                               encoding="utf-8")
+        avant = sorted(x.name for x in self.projet.iterdir())
+        code, r = self.lancer("partenaires", str(self.projet))
+        self.assertEqual(code, 0, r)
+        self.assertEqual(r["connexions"]["stripe"]["etat"], "declare")
+        self.assertIn("synthese-vocale", r["besoins"]["voix-audio"])
+        self.assertNotIn("CLE-SECRETE-9", json.dumps(r))
+        self.assertEqual(sorted(x.name for x in self.projet.iterdir()), avant)
+        self.assertTrue((self.maison / "MyIAFactory" / "partenaires.json").is_file())
+        code, r = self.lancer("partenaires", str(self.projet), "--besoins", "synthese-vocale,3d")
+        self.assertEqual(code, 0, r)
+        self.assertEqual(len(r["suggestions"]["synthese-vocale"]), 5)
+        self.assertEqual(r["suggestions"]["synthese-vocale"][0]["id"], "elevenlabs")
+        self.assertTrue(all(x["description"] and x["inscription"] is None or x["inscription"].startswith("https://")
+                            for x in r["suggestions"]["3d"]))
+
     def test_appliquer_sans_proposition(self):
         code, r = self.lancer("appliquer", str(self.projet))
         self.assertEqual(code, 1)

@@ -137,7 +137,8 @@ Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise �
 `journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins), `lignes` (les lignes produites
 par la tâche, son total : l'échelle de son coût au bureau), `depend_de` (liste d'identifiants de tâches connues : ce
 que la tâche attend ; refus d'une tâche inconnue, d'elle-même ou d'un cycle), `lot` (`{"id": "L2", "rang": 3}` ou
-`null` : le lot de la tâche et son rang). L'outil note `debut` au passage à `active: true` et `fin` au passage à
+`null` : le lot de la tâche et son rang), `partenaires` (ids du catalogue des partenaires que la tâche appelle : le
+départ donne leurs règles ; refus d'un id inconnu). L'outil note `debut` au passage à `active: true` et `fin` au passage à
 `active: false` (ils servent à répartir le coût d'un lot). Un agent ne tient qu'une
 tâche active à la fois ; passer dans `fait` rend la tâche inactive ; `Fable` est refusé (quelle que soit la casse)
 en `modele_depart` comme en `montee` ; une `montee` va d'un cran exactement (Haiku → Sonnet → Opus). Rend la tâche.
@@ -272,11 +273,37 @@ Entrée : `{"agent", "tache"}` (ou `taches`, voir plus bas). Assemble le **messa
 genre, la fiche entière, les leçons de la skill et du genre qui touchent son rôle (jamais celles d'un autre rôle ni
 d'un autre genre), le brief du rôle (`<fiches>/briefs/<rôle>.md`), la tâche, la consigne de fin d'étape (résultat,
 leçons avec étage proposé et texte général, retours sur la factory). Pour un agent cloud, le message commence par
-« Tu repars de zéro. ». Rend `{"message": "…"}`.
+« Tu repars de zéro. ». Une tâche qui porte `partenaires` ajoute « Règles de tes partenaires » : les règles de chacun,
+mot pour mot, la clé jamais écrite ni affichée, et `lancer partenaires` `usage` / `limite` après chaque appel. Rend
+`{"message": "…"}`.
 
 **Un lot.** `taches` (liste d'identifiants, dans l'ordre du lot) à la place de `tache` : un seul message de départ
 pour l'agent, avec le brief de chaque rôle présent, les tâches dans l'ordre et la consigne de rendre compte à la fin de
 chaque tâche (`lancer tache`) avant de passer à la suivante.
+
+### `partenaires`
+
+Entrée : `{"action", …}`. Les partenaires (voix, images, 3D, traduction…) sont **facultatifs** : rien ne bloque sans
+eux. **Aucune valeur de clé** n'est jamais écrite, rendue ni journalisée. Trois fichiers : le catalogue de la skill
+(`partenaires/catalogue.json`), les connexions, quotas, limites et règles de la machine (`~/MyIAFactory/partenaires.json`,
+communs à tous les projets) et les conseils du projet (`partenaires.json` à côté du fichier de factory, donc
+`.factory/partenaires.json`).
+
+| `action` | Entrée | Effet, sortie |
+|---|---|---|
+| `detecter` | — | Serveurs MCP déclarés (`~/.claude.json` et `.mcp.json` du projet : nom et `url` seulement, jamais `headers`, `env`, `args`) et **présence** des variables du catalogue (environnement, `.env` du projet : noms seulement) → `declare` ; un `declare` qui n'est plus vu → `non_connecte` ; un `connecte` le reste. Rend `{"connexions": {id: {nom, etat, source}}}`. |
+| `confirmer` | `{ids, source?, retirer?}` | Les partenaires dont les outils sont vraiment disponibles (ou déclarés par l'utilisateur, comme un studio) → `connecte` ; `retirer: true` → `non_connecte`. |
+| `quota` | `{ids?, force?}` | Lit le reste chez les partenaires qui ont un lecteur (`connecte` ou `declare` par défaut), au plus une fois par heure chacun sauf `force`. La clé est lue (environnement, puis `.env` du projet) pour cet appel seulement. Un reste positif ou « illimité » lève la limite ; un reste nul la pose. Rend `{"lus", "rates", "sautes": [{id, raison}]}`. |
+| `choisir` | `{besoin}` | Les connectés utilisables (actifs, sans limite en cours), dans l'ordre des conseils du projet pour ce besoin puis les autres de la même sous-catégorie : `{"partenaires": [{id, nom, tarif, accord_requis}], "meilleur_non_connecte"}`. `accord_requis` : tarif à l'usage ou inconnu. Une liste vide : mode manuel, navigateur (avec l'accord) ou autre voie. |
+| `usage` | `{partenaire, tache?, agent?, quantite, unite, cout?, devise?, estime?}` | Une ligne d'usage partenaire dans le suivi (le relevé la donne au bureau, qui la facture). Sans `cout` : « non chiffré », jamais 0 ; un `cout` a sa `devise`. Rend `{"id"}`. |
+| `limite` | `{partenaire, raison}` | « Limite atteinte » : sauté par `choisir` jusqu'au prochain relevé de quota qui montre un reste, un jour au plus. |
+| `regle` | `{partenaire, operation: ajouter \| modifier \| supprimer, id?, texte?}` | Les règles d'usage de l'utilisateur (500 caractères au plus). À la création du fichier, la règle de départ de Tripo est proposée ; supprimée, elle ne revient pas. |
+| `conseils` | `{}` ou `{besoins: {besoin: [{id, raison}]}}` | Lit ou écrit les conseils du projet (ids actifs du catalogue, une raison d'une phrase). |
+| `a_refaire` | — | Les fiches que « Mettre à jour les offres » revérifie (actives, vérifiées il y a plus de 30 jours ou d'après une source tierce) et le coût estimé : `{"ids", "cout": {euros, texte}}`. |
+| `offres` | `{partenaires: [fiches complètes]}` | Remplace (ou ajoute) ces fiches dans le catalogue de la skill, le contrôle (`catalogue.verifier`, mots interdits du projet), puis commit et push comme une leçon de skill. |
+
+Le relevé porte `partenaires` (voir `docs/releve.md`) : le catalogue réduit aux champs affichés, l'état sans clé, les
+conseils, `maj_catalogue` et `cout_maj` ; et ses `usage` portent les lignes `genre: "partenaire"`.
 
 ### `lots`
 

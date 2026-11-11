@@ -17,6 +17,13 @@ class TestProposition(unittest.TestCase):
     def test_proposition_valide(self):
         self.assertEqual(proposition.verifier(proposition_valide("/tmp/p")), [])
 
+    def test_proposition_partenaire_inconnu_refuse(self):
+        e = self.erreurs(partenaires_conseilles={"voix": [{"id": "inexistant", "raison": "x"}]})
+        self.assertTrue(any("inexistant" in x for x in e), e)
+        e = self.erreurs(partenaires_conseilles={"voix": [{"id": "lmnt", "raison": "fermé"}]})
+        self.assertTrue(any("lmnt" in x for x in e), e)
+        self.assertEqual(self.erreurs(partenaires_conseilles={"voix": [{"id": "elevenlabs", "raison": "Voix."}]}), [])
+
     def test_fable_refuse(self):
         e = self.avec_agent(modele="Fable")
         self.assertIn("Fable n'est jamais choisi par l'installation.", " ".join(e))

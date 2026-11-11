@@ -84,15 +84,58 @@ def _arrondir(groupe):
     groupe["usages"].sort(key=lambda x: (x["t"], x["id"]))
 
 
-def facturation(usages, prix_de, r, periode, maintenant):
-    """Les coûts de la période. `prix_de(modele, date_iso) -> (prix | None, date, ancien)`."""
+def _noms_partenaires(r):
+    cats = (((r or {}).get("partenaires") or {}).get("categories")) or {}
+    return {p.get("id"): p.get("nom") for liste in cats.values() if isinstance(liste, list)
+            for p in liste if isinstance(p, dict)}
+
+
+def _ajouter_partenaire(partenaires, u, taux_de, noms):
+    """Range l'usage d'un partenaire : son coût d'origine est gardé ; un coût en dollars est converti au taux du jour
+    de l'usage (figé à sa première apparition) ; un coût absent, ou dans une devise sans taux, est « non chiffré »."""
+    g = partenaires.setdefault(u["partenaire"], {"nom": noms.get(u["partenaire"]) or u["partenaire"], "total": 0.0,
+                                                 "origine": {}, "estime": False, "non_chiffre": 0, "usages": 0,
+                                                 "taches": {}})
+    g["usages"] += 1
+    g["estime"] = g["estime"] or bool(u.get("estime"))
+    cout, devise, euros = u.get("cout"), u.get("devise"), None
+    if cout is not None and devise:
+        g["origine"][devise] = g["origine"].get(devise, 0) + cout
+        if devise == "EUR":
+            euros = cout
+        elif devise == "USD" and taux_de is not None:
+            taux, _ = taux_de(u.get("t_prix") or u.get("t"))
+            euros = cout * taux if taux else None
+    if euros is None:
+        g["non_chiffre"] += 1
+        return
+    g["total"] += euros
+    tache = u.get("tache") or SANS
+    g["taches"][tache] = g["taches"].get(tache, 0.0) + euros
+
+
+def _arrondir_partenaires(partenaires):
+    for g in partenaires.values():
+        g["total"] = round(g["total"], 6)
+        g["origine"] = [{"montant": round(m, 6), "devise": d} for d, m in sorted(g["origine"].items())]
+        g["taches"] = {k: round(v, 6) for k, v in g["taches"].items()}
+    return partenaires
+
+
+def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
+    """Les coûts de la période. `prix_de(modele, date_iso) -> (prix | None, date, ancien)` ;
+    `taux_de(date_iso) -> (euros pour un dollar | None, date)` convertit les coûts des partenaires en dollars."""
     if periode not in PERIODES:
         raise ValueError(f"période inconnue « {periode} »")
     services, direction = {}, _vide()
     sans_prix, dates, anciens = {}, [], 0
     lignes = []  # (service, usage, cout, prix)
+    partenaires, noms = {}, _noms_partenaires(r)
     for u in usages:
         if not _dans_la_periode(u.get("t"), periode, maintenant):
+            continue
+        if u.get("genre") == "partenaire":
+            _ajouter_partenaire(partenaires, u, taux_de, noms)
             continue
         p, date_prix, ancien = prix_de(u["modele"], u.get("t_prix") or u.get("t"))
         cout = _cout(u, p) if p else None
@@ -125,6 +168,7 @@ def facturation(usages, prix_de, r, periode, maintenant):
         "sources": _sources(services, lignes, r),
         "prix_du": max(dates) if dates else None,
         "avertissement": _avertissement(sans_prix, anciens),
+        "partenaires": _arrondir_partenaires(partenaires),
     }
 
 
@@ -231,7 +275,7 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
     taches = {t["id"]: t for t in r.get("taches") or [] if t.get("fonctionnalite") == fonctionnalite}
     lignes = {}
     for u in usages:
-        if u.get("tache") not in taches:
+        if u.get("tache") not in taches or u.get("genre") == "partenaire":   # des tokens seulement
             continue
         t = taches[u["tache"]]
         ligne = lignes.setdefault(u["tache"], {"id": u["tache"], "titre": t.get("titre") or u["tache"],

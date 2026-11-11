@@ -130,3 +130,52 @@ def par_categorie(d):
     for c in sortie:
         sortie[c].sort(key=lambda p: p.get("statut") != "actif")  # tri stable
     return sortie
+
+
+AGE_A_REFAIRE_J = 30   # une fiche vérifiée il y a plus longtemps est à revérifier
+
+
+def a_refaire(d, aujourdhui, age_max=AGE_A_REFAIRE_J):
+    """Les ids des fiches que « Mettre à jour les offres » revérifie : actives ou restreintes, et vérifiées il y a plus
+    de `age_max` jours ou d'après une source tierce. Les fermés et sans API ne sont pas refaits."""
+    sortie = []
+    for p in d["partenaires"]:
+        if p.get("statut") not in ("actif", "restreint"):
+            continue
+        try:
+            vieux = (aujourdhui - datetime.date.fromisoformat(p.get("verifie_le"))).days > age_max
+        except (TypeError, ValueError):
+            vieux = True
+        if vieux or p.get("fiabilite") == "tiers":
+            sortie.append(p["id"])
+    return sortie
+
+
+MAX_RAISON_CONSEIL = 300
+
+
+def verifier_conseils(besoins, par_id):
+    """Les erreurs des conseils `{besoin: [{"id", "raison"}]}` (ids actifs du catalogue)."""
+    if not isinstance(besoins, dict):
+        return ["« besoins » doit être un objet {besoin: [{id, raison}]}."]
+    erreurs = []
+    for b, liste in besoins.items():
+        if not (isinstance(b, str) and MOTIF_ID.match(b)):
+            erreurs.append(f"Besoin « {b} » : un identifiant (minuscules, chiffres, tirets).")
+            continue
+        if not isinstance(liste, list) or not all(isinstance(x, dict) for x in liste):
+            erreurs.append(f"Besoin « {b} » : une liste de {{id, raison}}.")
+            continue
+        vus = set()
+        for x in liste:
+            i = x.get("id")
+            if (par_id.get(i) or {}).get("statut") != "actif":
+                erreurs.append(f"Besoin « {b} » : partenaire inconnu ou inactif « {i} ».")
+            elif i in vus:
+                erreurs.append(f"Besoin « {b} » : « {i} » en double.")
+            vus.add(i)
+            r = x.get("raison")
+            if not (isinstance(r, str) and r.strip() and len(r) <= MAX_RAISON_CONSEIL and "\n" not in r):
+                erreurs.append(f"Besoin « {b} » : la raison de « {i} » tient en une phrase ({MAX_RAISON_CONSEIL} "
+                               "caractères au plus).")
+    return erreurs

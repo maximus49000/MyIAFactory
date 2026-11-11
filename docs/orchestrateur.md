@@ -63,6 +63,10 @@ Les commandes à regarder d'abord, parce qu'un projet en a souvent déjà une : 
 version 4), `actions` (votre commande d'actions, qui apprend les demandes nouvelles), `depart` (votre commande de
 message de départ), `lecon`, `controle`, `charge`, `catalogue` (votre catalogue, traduit au format de la skill).
 
+`partenaires` (connexions, quotas, choix, règles et usage des services extérieurs) reste générique : ses fichiers sont
+ceux de la machine (`~/MyIAFactory/partenaires.json`) et les conseils du projet (`partenaires.json` à côté du fichier
+de factory). Les partenaires sont facultatifs ; voir « Le bureau partenaire » dans [installation.md](installation.md).
+
 ## 3. Vérifier : `verifier_interface.py`
 
 ```

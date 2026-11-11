@@ -97,6 +97,14 @@ Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau le
 - La **date de prix** d'un usage (son `t` à la première apparition) et son **service** (celui de l'agent à ce moment-là) sont figés : un coût passé ne bouge ni quand un prix change, ni quand l'agent change de service ou quitte le relevé.
 - Un modèle dont le bureau ne connaît pas le prix n'est jamais compté à zéro : la discussion est montrée avec ses tokens et « prix inconnu », elle est exclue des euros, et les chiffres qui en dépendent le disent (« ≈ 3,00 € + prix inconnu », coût moyen « hors prix inconnus »).
 
+**Les partenaires.** Une entrée `{id, genre: "partenaire", partenaire, tache, agent?, t, quantite, unite, cout, devise, estime}`
+note un appel payant à un partenaire (voix, images…) : `quantite` et `unite` (« caractères », « crédits »…), `cout`
+(nombre ≥ 0, dans sa `devise` à trois lettres) ou `null` (« non chiffré », jamais compté zéro), `estime` (vrai si le
+coût n'est pas exact). Pas de `modele` ni de tokens. Le bureau convertit un coût en dollars au taux de la BCE du jour de
+l'usage (figé à sa première apparition, le coût d'origine reste noté) ; une autre devise sans taux reste non chiffrée.
+La facturation porte alors `partenaires` (voir la fin de ce fichier), à côté des tokens : le total des tokens n'en tient
+pas compte.
+
 Le bureau en tire aussi des **sources d'amélioration** (onglet Facturation) : les tâches qui coûtent plus de trois fois la médiane du service, une étape faite avec le modèle le plus cher du service quand les autres usages de cette étape sont en médiane moins chers, et la part du coût des tâches qui ont reçu au moins deux `retours`.
 
 ### Les KPI
@@ -343,4 +351,4 @@ Les partenaires (voix, images, vidéo, 3D, traduction…) sont **facultatifs** :
 
 `categories` est le catalogue réduit aux champs affichés (obligatoire) ; tout identifiant de `etat` et de `conseils` doit y figurer. `etat.connexions[id].etat` vaut `connecte`, `declare` (« déclaré, à vérifier ») ou `non_connecte`. Un quota absent s'affiche « quota inconnu », jamais zéro ; `illimite: true` s'affiche « illimité » ; les dates sont montrées avec le quota (rien n'est montré comme actuel sans sa date). Seuls les liens `https://` sont rendus. `cout_maj` (facultatif) est le coût estimé que la fenêtre de confirmation de « Mettre à jour les offres » affiche avant la demande `partenaires_maj`.
 
-La facturation peut porter `partenaires` : `{id: {nom, total (euros), origine: [{montant, devise}], estime, non_chiffre, usages}}`, une ligne par partenaire ; un coût absent compte « non chiffré », jamais zéro.
+La facturation peut porter `partenaires` : `{id: {nom, total (euros), origine: [{montant, devise}], estime, non_chiffre, usages, taches: {tache: euros}}}`, une ligne par partenaire ; un coût absent compte « non chiffré », jamais zéro.

@@ -158,6 +158,37 @@ def cmd_acces(a):
     return acces.adresses()
 
 
+SUGGESTIONS_PAR_BESOIN = 5
+
+
+def _suggestion(p):
+    connexions = sorted({c.get("type") for c in p.get("connexions") or [] if c.get("type")})
+    return {"id": p["id"], "nom": p["nom"], "description": p.get("description"), "gratuit": p.get("gratuit"),
+            "inscription": p.get("inscription") or p.get("site"), "connexions": connexions,
+            "popularite": (p.get("popularite") or {}).get("niveau")}
+
+
+def cmd_partenaires(a):
+    """Détecte les partenaires déjà déclarés (la même chose que `lancer partenaires` `detecter`, sans fichier de
+    factory) et, avec `--besoins`, propose les partenaires actifs les plus populaires de chaque besoin. N'écrit rien
+    dans le projet (seulement le fichier des connexions de la machine, hors de tout dépôt)."""
+    from partenaires import catalogue as pcat, detection, etat
+    projet = _dossier(a.dossier)
+    cat = pcat.lire()
+    sortie = {"connexions": detection.mettre_a_jour(projet, cat, etat.Etat())}
+    if not a.besoins:
+        sortie["besoins"] = {c: sorted({p["sous_categorie"] for p in cat["partenaires"] if p["categorie"] == c})
+                             for c in pcat.CATEGORIES}
+        return sortie
+    sortie["suggestions"] = {}
+    for besoin in [b.strip() for b in a.besoins.split(",") if b.strip()]:
+        actifs = [p for p in cat["partenaires"] if p.get("statut") == "actif"
+                  and besoin in (p.get("sous_categorie"), p.get("categorie"))]
+        actifs.sort(key=lambda p: -((p.get("popularite") or {}).get("niveau") or 0))   # tri stable : ordre du catalogue
+        sortie["suggestions"][besoin] = [_suggestion(p) for p in actifs[:SUGGESTIONS_PAR_BESOIN]]
+    return sortie
+
+
 def _analyseur():
     p = argparse.ArgumentParser(prog="installation/outil.py", description="L'installation de MyIAFactory sur un projet.")
     s = p.add_subparsers(dest="commande", required=True)
@@ -173,6 +204,10 @@ def _analyseur():
         if nom == "reparer":
             x.add_argument("--tailscale", action="store_true", help="ouvre le bureau au téléphone par Tailscale")
             x.add_argument("--reseau-local", action="store_true", help="ouvre le bureau au Wi-Fi de la maison")
+    x = s.add_parser("partenaires", help="partenaires déjà déclarés ; avec --besoins, ceux à proposer")
+    x.add_argument("dossier")
+    x.add_argument("--besoins", help="sous-catégories ou catégories du catalogue, séparées par des virgules")
+    x.set_defaults(f=cmd_partenaires)
     for nom, f, aide in (("calibrer", cmd_calibrer, "charge maximum et agents locaux en parallèle"),
                          ("estimer", cmd_estimer, "coût d'un élément (entrée JSON {flux, agents, genre})"),
                          ("proposer", cmd_proposer, "contrôle et enregistre une proposition (entrée JSON)"),

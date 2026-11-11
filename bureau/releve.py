@@ -175,6 +175,11 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
             erreurs.append(f"{nom} : tâche inconnue « {u.get('tache')} ».")
         if u.get("agent") is not None and not _dans(u.get("agent"), agents):
             erreurs.append(f"{nom} : agent inconnu « {u.get('agent')} ».")
+        if not _texte(u.get("t")) or lire_date(u.get("t")) == TRES_ANCIEN:
+            erreurs.append(f"{nom} : « t » doit être une date ISO 8601 (texte).")
+        if u.get("genre") is not None:
+            _verifier_usage_partenaire(u, nom, erreurs)
+            continue
         if not _texte(u.get("modele")) or not u.get("modele"):
             erreurs.append(f"{nom} : « modele » est obligatoire (texte non vide).")
         if not _texte_ou_nul(u.get("etape")):
@@ -183,14 +188,36 @@ def _verifier_usage(r, titulaires, taches, cles, erreurs):
             erreurs.append(f"{nom} : « lot » doit être un texte.")
         if u.get("reparti") is not None and u["reparti"] not in ("temps", "egal"):
             erreurs.append(f"{nom} : « reparti » doit valoir temps ou egal.")
-        if not _texte(u.get("t")) or lire_date(u.get("t")) == TRES_ANCIEN:
-            erreurs.append(f"{nom} : « t » doit être une date ISO 8601 (texte).")
         for champ in ("entree", "sortie"):
             if not _entier_positif(u.get(champ)):
                 erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
         for champ in ("cache_lecture", "cache_ecriture"):
             if u.get(champ) is not None and not _entier_positif(u[champ]):
                 erreurs.append(f"{nom} : « {champ} » doit être un nombre entier de tokens positif ou nul.")
+
+
+MOTIF_DEVISE = re.compile(r"^[A-Z]{3}\Z")
+
+
+def _verifier_usage_partenaire(u, nom, erreurs):
+    """Une ligne d'usage d'un partenaire : `{genre: "partenaire", partenaire, quantite, unite, cout?, devise?, estime?}`.
+    Un coût absent est « non chiffré » (jamais zéro) ; un coût a sa devise."""
+    if u["genre"] != "partenaire":
+        erreurs.append(f"{nom} : « genre » ne peut valoir que partenaire.")
+        return
+    if not _texte_plein(u.get("partenaire")):
+        erreurs.append(f"{nom} : « partenaire » est obligatoire (texte non vide).")
+    if not _nombre_positif(u.get("quantite")):
+        erreurs.append(f"{nom} : « quantite » doit être un nombre positif ou nul.")
+    if not _texte_plein(u.get("unite")):
+        erreurs.append(f"{nom} : « unite » est obligatoire (texte non vide).")
+    if u.get("cout") is not None:
+        if not _nombre_positif(u["cout"]):
+            erreurs.append(f"{nom} : « cout » doit être un nombre positif ou nul, ou null (non chiffré).")
+        if not (isinstance(u.get("devise"), str) and MOTIF_DEVISE.match(u["devise"])):
+            erreurs.append(f"{nom} : un « cout » a sa « devise » (USD, EUR…).")
+    if u.get("estime") is not None and not isinstance(u["estime"], bool):
+        erreurs.append(f"{nom} : « estime » doit être vrai ou faux.")
 
 
 def _genre_valide(v):
@@ -1071,6 +1098,11 @@ def _normaliser_connaissances(n, v3):
 def _usage_normalise(u):
     u.setdefault("tache", None)
     u.setdefault("agent", None)
+    if u.get("genre") == "partenaire":
+        u.setdefault("cout", None)
+        u.setdefault("devise", None)
+        u["estime"] = u.get("estime") is True
+        return u
     u.setdefault("etape", None)
     for champ in ("cache_lecture", "cache_ecriture"):
         if u.get(champ) is None:

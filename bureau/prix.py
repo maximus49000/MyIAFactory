@@ -225,6 +225,16 @@ class TablePrix:
             self._lignes = lignes
             self._memo = {}
 
+    def taux_a(self, date_iso):
+        """(euros pour un dollar | None, date du taux) : le dernier taux lu à la date ou avant ; avant le premier
+        taux, le premier (le coût d'un partenaire en dollars est converti comme les tokens)."""
+        jour = _jour(date_iso) or ""
+        with self._verrou:
+            lignes = [x for x in self._charger() if x["taux"]]
+        avant = [x for x in lignes if x["date"] <= jour]
+        x = avant[-1] if avant else (lignes[0] if lignes else None)
+        return (x["taux"], x["date"]) if x else (None, None)
+
     def prix_a(self, modele, date_iso):
         """(prix en euros par million | None, date du prix, ancien).
 

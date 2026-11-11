@@ -131,3 +131,32 @@ class TestExamen(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CLE = "CLE-SECRETE-RECONNAISSABLE-1234"
+
+
+class TestPartenairesDeclares(Base):
+    def test_partenaires_declares_mcp_paquets_env_exemple(self):
+        ecrire(self.d, ".mcp.json", json.dumps({"mcpServers": {
+            "stripe": {"type": "http", "url": "https://mcp.stripe.com", "headers": {"Authorization": f"Bearer {CLE}"}},
+            "local": {"command": "npx", "args": ["--token", CLE], "env": {"K": CLE}}}}))
+        ecrire(self.d, "package.json", json.dumps({"dependencies": {"elevenlabs": "^1", "react": "18"},
+                                                   "devDependencies": {"@fal-ai/client": "1"}}))
+        ecrire(self.d, "requirements.txt", "replicate==0.25  # images\nrequests\n")
+        ecrire(self.d, ".env.example", "# clés\nELEVENLABS_API_KEY=\nexport AUTRE_VAR=x\n")
+        r = examen.examiner(self.d)["partenaires_declares"]
+        self.assertEqual(r["mcp"], [{"nom": "stripe", "url": "https://mcp.stripe.com"}, {"nom": "local", "url": None}])
+        self.assertEqual(r["paquets"], [{"paquet": "@fal-ai/client", "id": "fal"},
+                                        {"paquet": "elevenlabs", "id": "elevenlabs"},
+                                        {"paquet": "replicate", "id": "replicate"}])
+        self.assertEqual(r["variables"], [{"nom": "ELEVENLABS_API_KEY", "id": "elevenlabs"},
+                                          {"nom": "AUTRE_VAR", "id": None}])
+        self.assertNotIn(CLE, json.dumps(r))
+
+    def test_env_jamais_lu_a_l_examen(self):
+        ecrire(self.d, ".env", f"ELEVENLABS_API_KEY={CLE}\n")
+        ecrire(self.d, "main.py", "print(1)\n")
+        r = examen.examiner(self.d)
+        self.assertNotIn(CLE, json.dumps(r))
+        self.assertEqual(r["partenaires_declares"], {"mcp": [], "paquets": [], "variables": []})

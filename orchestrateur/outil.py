@@ -27,6 +27,11 @@ from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
+from partenaires import catalogue as pcat  # noqa: E402
+from partenaires import choix as pchoix  # noqa: E402
+from partenaires import detection as pdet  # noqa: E402
+from partenaires import etat as petat  # noqa: E402
+from partenaires import quota as pquota  # noqa: E402
 
 MAX_IMAGES = 4
 MAX_OCTETS_IMAGE = 5 * 1024 * 1024
@@ -779,6 +784,13 @@ def cmd_tache(ctx, e):
             t["depend_de"] = _dependances(s, t, e["depend_de"])
         if "lot" in e:
             t["lot"] = _lot_de_tache(e["lot"])
+        if "partenaires" in e:   # les partenaires que la tâche appelle : le départ donne leurs règles
+            ids = liste_de_textes(e, "partenaires")
+            connus = {x["id"] for x in _catalogue(ctx)["partenaires"]}
+            inconnus = [x for x in ids if x not in connus]
+            if inconnus:
+                raise Refus(f"Partenaire inconnu du catalogue : {inconnus[0]}")
+            t["partenaires"] = list(dict.fromkeys(ids))
         if t["active"] and not etait_active:   # le passage à « active » ouvre la durée que le coût d'un lot répartit
             t["debut"], t["fin"] = su.maintenant(), None
         elif etait_active and not t["active"]:
@@ -950,7 +962,7 @@ def cmd_usage(ctx, e):
                                           texte(e, "etape", obligatoire=False))
         if e.get("id") is not None:
             u = next((x for x in usages if x["id"] == e["id"]), None)
-            if u is None:
+            if u is None or u.get("genre") == "partenaire":
                 raise Refus(f"Usage inconnu : {e['id']}")
         else:
             u = {"id": f"u{su.suivant(s, 'u')}", "t": su.maintenant()}
@@ -1132,7 +1144,8 @@ def construire_releve(ctx):
          "agents_locaux_max": ctx.f["agents_locaux_max"]}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
-    r["usage"] = [{"id": u["id"], "tache": u["tache"] if u.get("tache") in ids_taches else None,
+    r["usage"] = [_usage_au_releve(u, ids_taches, cles_titulaires) if u.get("genre") == "partenaire" else
+                  {"id": u["id"], "tache": u["tache"] if u.get("tache") in ids_taches else None,
                    "agent": u["agent"] if u.get("agent") in cles_titulaires else None, "modele": u["modele"],
                    "t": u["t"], "entree": u["entree"], "sortie": u["sortie"],
                    "cache_lecture": u.get("cache_lecture", 0), "cache_ecriture": u.get("cache_ecriture", 0),
@@ -1140,7 +1153,332 @@ def construire_releve(ctx):
                    **({"lot": u["lot"]} if u.get("lot") else {}),
                    **({"reparti": u["reparti"]} if u.get("reparti") else {})}
                   for u in (s.get("usage") or [])[-USAGES_AU_RELEVE:]]
+    partenaires = _releve_partenaires(ctx)
+    if partenaires is not None:
+        r["partenaires"] = partenaires
     return r
+
+
+def _usage_au_releve(u, ids_taches, cles):
+    """Une ligne d'usage d'un partenaire, au format du bureau (aucune clé : il n'y en a jamais dans le suivi)."""
+    return {"id": u["id"], "genre": "partenaire", "partenaire": u["partenaire"], "t": u["t"],
+            "tache": u["tache"] if u.get("tache") in ids_taches else None,
+            "agent": u["agent"] if u.get("agent") in cles else None,
+            "quantite": u["quantite"], "unite": u["unite"], "cout": u.get("cout"), "devise": u.get("devise"),
+            "estime": bool(u.get("estime"))}
+
+
+# --- Les partenaires : connexions, quotas, règles, choix, usage. Jamais une valeur de clé dans une sortie ou un fichier.
+
+CHAMPS_AFFICHES = ("id", "nom", "categorie", "sous_categorie", "description", "site", "inscription", "connexions",
+                   "plans", "gratuit", "quota_lisible", "illimite", "statut", "fiabilite", "verifie_le", "popularite")
+QUOTA_TOUTES_LES_S = 3600   # au plus une lecture par heure et par partenaire, sauf `force`
+TOKENS_PAR_FICHE = 20_000   # revérifier une fiche : deux pages lues et la fiche réécrite, sur Sonnet
+PART_SORTIE_FICHE = 0.2
+_DEVISE = re.compile(r"^[A-Z]{3}\Z")
+GIT = memoire.executer_git   # remplacé par les tests
+
+
+def _projet(ctx):
+    """Le dossier du projet : celui qui contient `.factory/`, sinon celui du fichier de factory."""
+    base = Path(ctx.f["base"])
+    return base.parent if base.name == ".factory" else base
+
+
+def _chemin_catalogue(ctx):
+    return Path(ctx.f["skill"]) / "partenaires" / "catalogue.json"
+
+
+def _catalogue(ctx):
+    """Le catalogue de la skill du projet (celui que « Mettre à jour les offres » réécrit), sinon celui du paquet."""
+    chemin = _chemin_catalogue(ctx)
+    try:
+        return pcat.lire(chemin if chemin.is_file() else None)
+    except (OSError, ValueError) as ex:
+        raise Refus(f"Catalogue des partenaires illisible : {ex}")
+
+
+def _etat_partenaires():
+    return petat.Etat()
+
+
+def _lire_conseils(ctx):
+    chemin = petat.chemin_conseils(ctx.f["base"])
+    try:
+        d = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        return {"besoins": {}}
+    except (OSError, ValueError) as ex:
+        raise Refus(f"Conseils des partenaires illisibles ({chemin.name}) : {ex}")
+    b = d.get("besoins") if isinstance(d, dict) else None
+    return {"besoins": b if isinstance(b, dict) else {}}
+
+
+def ecrire_json_atomique(chemin, objet):
+    chemin = Path(chemin)
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    tmp = chemin.with_name(chemin.name + ".tmp")
+    tmp.write_text(json.dumps(objet, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, chemin)
+
+
+def _partenaire(e, par_id, cle="partenaire"):
+    i = texte(e, cle)
+    if i not in par_id:
+        raise Refus(f"Partenaire inconnu du catalogue : {i}")
+    return i
+
+
+def _nombre(e, cle, obligatoire=True):
+    v = e.get(cle)
+    if v is None and not obligatoire:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v < 0 or v == float("inf"):
+        raise Refus(f"« {cle} » doit être un nombre positif ou nul.")
+    return v
+
+
+def _p_detecter(ctx, e, cat, par_id):
+    return {"connexions": pdet.mettre_a_jour(_projet(ctx), cat, _etat_partenaires())}
+
+
+def _p_confirmer(ctx, e, cat, par_id):
+    ids = liste_de_textes(e, "ids")
+    for i in ids:
+        if i not in par_id:
+            raise Refus(f"Partenaire inconnu du catalogue : {i}")
+    source = texte(e, "source", obligatoire=False)
+    retirer = e.get("retirer") is True
+    quand = su.maintenant()
+    with _etat_partenaires().transaction() as d:
+        for i in ids:
+            c = d["connexions"].setdefault(i, {})
+            c.update(etat="non_connecte" if retirer else "connecte", vu_le=quand,
+                     source=source or c.get("source") or "outils vus par l'orchestrateur")
+    return {"ok": True, "ids": ids}
+
+
+def _p_quota(ctx, e, cat, par_id):
+    """Relève les quotas lisibles (au plus une fois par heure et par partenaire, sauf `force`)."""
+    import datetime
+    force = e.get("force") is True
+    d = _etat_partenaires().lire()
+    if "ids" in e:
+        ids = liste_de_textes(e, "ids")
+        for i in ids:
+            if i not in par_id:
+                raise Refus(f"Partenaire inconnu du catalogue : {i}")
+    else:
+        ids = [i for i, c in d["connexions"].items() if c.get("etat") in ("connecte", "declare") and i in par_id]
+    instant = datetime.datetime.now().astimezone()
+    lus, sautes, rates, a_noter = [], [], [], {}
+    for i in ids:
+        lecteur = par_id[i].get("lecteur")
+        if not lecteur:
+            sautes.append({"id": i, "raison": "quota non lisible par l'API"})
+            continue
+        derniere = d["lectures"].get(i)
+        if not force and derniere and lire_date(derniere) != TRES_ANCIEN and \
+                (instant - lire_date(derniere)).total_seconds() < QUOTA_TOUTES_LES_S:
+            sautes.append({"id": i, "raison": "déjà lu il y a moins d'une heure"})
+            continue
+        cle = pdet.cle(i, _projet(ctx), catalogue=cat)   # pour cet appel seulement
+        if not cle:
+            sautes.append({"id": i, "raison": "aucune clé (variable d'environnement ou .env du projet)"})
+            continue
+        res = pquota.lire(lecteur, cle)
+        del cle
+        a_noter[i] = res
+        (lus if res is not None else rates).append(i)
+    if a_noter:
+        quand = su.maintenant()
+        with _etat_partenaires().transaction() as d:
+            for i, res in a_noter.items():
+                d["lectures"][i] = quand
+                if res is None:
+                    continue
+                d["quotas"][i] = {**{k: res[k] for k in ("reste", "unite", "illimite") if k in res}, "lu_le": quand}
+                if res.get("abonnement") and i in d["connexions"]:
+                    d["connexions"][i]["abonnement"] = res["abonnement"]
+                if res.get("illimite") or (res.get("reste") or 0) > 0:
+                    d["limites"].pop(i, None)
+                elif res.get("reste") == 0:
+                    d["limites"][i] = {"depuis": quand, "raison": "quota épuisé (relevé)"}
+    return {"lus": lus, "rates": rates, "sautes": sautes}
+
+
+def _p_choisir(ctx, e, cat, par_id):
+    besoin = texte(e, "besoin")
+    conseils = [x.get("id") for x in _lire_conseils(ctx)["besoins"].get(besoin) or [] if isinstance(x, dict)]
+    r = pchoix.ordonner(besoin, conseils, cat, _etat_partenaires().lire())
+    for x in r["partenaires"]:
+        x["nom"] = par_id[x["id"]]["nom"]
+    return r
+
+
+def _p_usage(ctx, e, cat, par_id):
+    i = _partenaire(e, par_id)
+    quantite, unite = _nombre(e, "quantite"), texte(e, "unite")
+    cout = _nombre(e, "cout", obligatoire=False)
+    devise = e.get("devise")
+    if cout is not None and not (isinstance(devise, str) and _DEVISE.match(devise)):
+        raise Refus("Un « cout » a sa « devise » (code à trois lettres : USD, EUR…).")
+    if "estime" in e and not isinstance(e["estime"], bool):
+        raise Refus("« estime » doit être vrai ou faux.")
+    agent, tache = e.get("agent"), e.get("tache")
+    if agent is not None and agent not in ctx.cles_agents():
+        raise Refus(f"Agent inconnu : {agent}")
+    with ctx.suivi.transaction() as s:
+        if tache is not None and su.tache(s, tache) is None:
+            raise Refus(f"Tâche inconnue : {tache}")
+        u = {"id": f"u{su.suivant(s, 'u')}", "genre": "partenaire", "t": su.maintenant(), "partenaire": i,
+             "tache": tache, "agent": agent, "quantite": quantite, "unite": unite, "cout": cout,
+             "devise": devise if cout is not None else None, "estime": e.get("estime") is True}
+        s.setdefault("usage", []).append(u)
+    return {"id": u["id"]}
+
+
+def _p_limite(ctx, e, cat, par_id):
+    i, raison = _partenaire(e, par_id), texte(e, "raison")
+    with _etat_partenaires().transaction() as d:
+        d["limites"][i] = {"depuis": su.maintenant(), "raison": raison[:200]}
+    return {"ok": True}
+
+
+def _p_regle(ctx, e, cat, par_id):
+    i = _partenaire(e, par_id)
+    with _etat_partenaires().transaction() as d:
+        try:
+            r = petat.regle(d, i, e.get("operation"), e.get("id"), e.get("texte"))
+        except ValueError as ex:
+            raise Refus(str(ex))
+    return {"regle": r}
+
+
+def _p_conseils(ctx, e, cat, par_id):
+    if "besoins" not in e:
+        return _lire_conseils(ctx)
+    erreurs = pcat.verifier_conseils(e["besoins"], par_id)
+    if erreurs:
+        raise Refus(" ".join(erreurs[:5]))
+    propre = {b: [{"id": x["id"], "raison": x["raison"].strip()} for x in liste] for b, liste in e["besoins"].items()}
+    ecrire_json_atomique(petat.chemin_conseils(ctx.f["base"]), {"besoins": propre})
+    return {"besoins": propre}
+
+
+def _prix_sonnet(ctx):
+    """Le prix de Sonnet en euros par million (entrée, sortie) d'après les prix enregistrés du bureau, ou None."""
+    if not ctx.f["reglages"]:
+        return None
+    try:
+        from bureau import prix
+        regl = json.loads(Path(ctx.f["reglages"]).read_text(encoding="utf-8-sig"))
+        table = prix.TablePrix(Path(ctx.f["reglages"]).parent / "prix-historique.jsonl")
+        p = prix.prix_effectif(table, regl, "Sonnet", su.maintenant())[0]
+    except Exception:   # noqa: BLE001 — un coût inconnu est dit « inconnu », jamais inventé
+        return None
+    return p if p and p.get("entree") is not None and p.get("sortie") is not None else None
+
+
+def cout_maj(ctx, cat):
+    """Le coût estimé de « Mettre à jour les offres » : les fiches à refaire, en lots sur Sonnet."""
+    import datetime
+    ids = pcat.a_refaire(cat, datetime.date.today())
+    tokens = len(ids) * TOKENS_PAR_FICHE
+    if not ids:
+        return {"euros": 0, "texte": "Aucune fiche à revérifier : toutes l'ont été depuis moins de "
+                                     f"{pcat.AGE_A_REFAIRE_J} jours."}
+    p = _prix_sonnet(ctx)
+    euros = None if p is None else round(tokens * ((1 - PART_SORTIE_FICHE) * p["entree"] + PART_SORTIE_FICHE * p["sortie"])
+                                         / 1_000_000, 2)
+    return {"euros": euros, "texte": f"{len(ids)} fiches à revérifier sur les sites des partenaires, en lots sur Sonnet "
+                                     f"(environ {tokens:,} tokens).".replace(",", " ")}
+
+
+def _p_a_refaire(ctx, e, cat, par_id):
+    import datetime
+    return {"ids": pcat.a_refaire(cat, datetime.date.today()), "cout": cout_maj(ctx, cat)}
+
+
+def _p_offres(ctx, e, cat, par_id):
+    """Réécrit des fiches du catalogue de la skill (après la recherche), contrôle, commit et push comme une leçon."""
+    nouvelles = e.get("partenaires")
+    if not isinstance(nouvelles, list) or not nouvelles or not all(isinstance(x, dict) for x in nouvelles):
+        raise Refus("« partenaires » doit être une liste non vide de fiches complètes du catalogue.")
+    par_nouvel_id = {x.get("id"): x for x in nouvelles}
+    neuf = {**cat, "partenaires": [par_nouvel_id.pop(p["id"], p) for p in cat["partenaires"]] + list(par_nouvel_id.values())}
+    erreurs = pcat.verifier(neuf)
+    if erreurs:
+        raise Refus("Catalogue refusé : " + " ; ".join(erreurs[:5]))
+    texte_neuf = json.dumps(neuf, ensure_ascii=False, indent=2) + "\n"
+    chemin = _chemin_catalogue(ctx)
+    ok, message = memoire._ecrire_et_pousser(
+        ctx.f["skill"], chemin, lambda _avant: texte_neuf, ctx.f["mots_interdits"],
+        json.dumps(nouvelles, ensure_ascii=False), f"Partenaires : {len(nouvelles)} fiche(s) mise(s) à jour", GIT)
+    message = (message.replace("Leçon ajoutée", "Catalogue mis à jour").replace("elle n'est pas publiée", "il n'est pas publié")
+               .replace("le fichier de mémoire", "le catalogue").replace("réécrire la leçon", "réécrire les fiches"))
+    if not ok:
+        raise Refus(message)
+    return {"ok": True, "message": message, "ids": [x["id"] for x in nouvelles]}
+
+
+ACTIONS_PARTENAIRES = {"detecter": _p_detecter, "confirmer": _p_confirmer, "quota": _p_quota, "choisir": _p_choisir,
+                       "usage": _p_usage, "limite": _p_limite, "regle": _p_regle, "conseils": _p_conseils,
+                       "a_refaire": _p_a_refaire, "offres": _p_offres}
+
+
+def cmd_partenaires(ctx, e):
+    action = e.get("action")
+    if action not in ACTIONS_PARTENAIRES:
+        raise Refus("« action » doit valoir " + ", ".join(ACTIONS_PARTENAIRES) + ".")
+    cat = _catalogue(ctx)
+    par_id = {p["id"]: p for p in cat["partenaires"]}
+    try:
+        return ACTIONS_PARTENAIRES[action](ctx, e, cat, par_id)
+    except su.SuiviOccupe:
+        raise
+    except OSError as ex:
+        raise Refus(f"Fichier des partenaires inaccessible : {ex}"[:300])
+
+
+def regles_des_partenaires(ctx, ids):
+    """[(nom, [textes])] des partenaires d'une tâche, leurs règles mot pour mot (une liste vide : aucune règle)."""
+    if not ids:
+        return []
+    try:
+        cat = _catalogue(ctx)
+        d = _etat_partenaires().lire()
+    except (Refus, OSError, ValueError):
+        return []
+    noms = {p["id"]: p["nom"] for p in cat["partenaires"]}
+    return [(noms.get(i, i), [r["texte"] for r in d["regles"].get(i) or [] if isinstance(r, dict) and r.get("texte")])
+            for i in ids]
+
+
+def _releve_partenaires(ctx):
+    """Le champ `partenaires` du relevé : le catalogue réduit aux champs affichés, l'état (sans clé), les conseils."""
+    try:
+        cat = _catalogue(ctx)
+        conseils = _lire_conseils(ctx)["besoins"]
+    except Refus:
+        return None
+    try:
+        d = _etat_partenaires().lire()
+    except (OSError, ValueError):
+        d = petat.vide()
+    ids = {p["id"] for p in cat["partenaires"]}
+    categories = {c: [{k: p[k] for k in CHAMPS_AFFICHES if k in p} for p in liste]
+                  for c, liste in pcat.par_categorie(cat).items() if liste}
+    etat = {s: {i: v for i, v in d[s].items() if i in ids} for s in ("connexions", "quotas", "limites", "regles")}
+    etat["limites"] = {i: v for i, v in etat["limites"].items() if petat.limite_active(v)}
+    etat["connexions"] = {i: {k: v[k] for k in ("etat", "source", "abonnement", "vu_le") if k in v}
+                          for i, v in etat["connexions"].items() if v.get("etat") in petat.ETATS}
+    dates = [p["verifie_le"] for p in cat["partenaires"] if isinstance(p.get("verifie_le"), str)]
+    return {"categories": categories, "etat": etat,
+            "conseils": {b: [{"id": x["id"], "raison": x.get("raison")} for x in liste
+                             if isinstance(x, dict) and x.get("id") in ids]
+                         for b, liste in conseils.items() if isinstance(liste, list)},
+            "maj_catalogue": max(dates) if dates else None, "cout_maj": cout_maj(ctx, cat)}
 
 
 # --- La mémoire, les genres, les leçons, le registre des contrôles.
@@ -1321,7 +1659,9 @@ def _depart_d_un_lot(ctx, e):
         fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
         glossaire = _sans_doublon(glossaire + list((fonc or {}).get("glossaire") or []))
     briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
-    return {"message": depart.message_lot(ctx.f, fiche_agent, taches, briefs, lecons_lot, glossaire)}
+    ids_partenaires = list(dict.fromkeys(i for t in taches for i in t.get("partenaires") or []))
+    return {"message": depart.message_lot(ctx.f, fiche_agent, taches, briefs, lecons_lot, glossaire,
+                                          regles_des_partenaires(ctx, ids_partenaires))}
 
 
 def cmd_depart(ctx, e):
@@ -1337,7 +1677,8 @@ def cmd_depart(ctx, e):
     lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], fiche_agent["role"])
     fonc = su.fonctionnalite(ctx.suivi.lire(), tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
     return {"message": depart.message(ctx.f, fiche_agent, tache_suivie, depart.brief(ctx.f, fiche_agent["role"]), lecons,
-                                      (fonc or {}).get("glossaire") or [])}
+                                      (fonc or {}).get("glossaire") or [],
+                                      regles_des_partenaires(ctx, tache_suivie.get("partenaires") or []))}
 
 
 def _partie(t):
@@ -1422,6 +1763,7 @@ COMMANDES = {
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
+    "partenaires": (cmd_partenaires, "obligatoire"),
 }
 
 

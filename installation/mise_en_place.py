@@ -22,7 +22,9 @@ from orchestrateur import verifier_interface as vi
 RACINE = Path(__file__).resolve().parent.parent
 OUTIL = PREFIXE_SKILL + "/orchestrateur/outil.py"
 DOSSIERS = ("pieces", "captures", "livrables", "methodes", "documents")
-BLOC_GITIGNORE = ("# MyIAFactory : fichiers propres à la machine", ".factory/equipe.json", ".factory/*-historique.jsonl")
+# `.env` : les clés des partenaires y vivent (lues au moment de l'appel) et ne partent jamais dans le dépôt.
+BLOC_GITIGNORE = ("# MyIAFactory : fichiers propres à la machine", ".factory/equipe.json", ".factory/*-historique.jsonl",
+                  ".env")
 PORT = 8770
 SERVICE_FACTURATION = {"id": "facturation", "nom": "Facturation"}
 
@@ -288,6 +290,10 @@ def _ecrire_configuration(base, p, genre, maintenant):
     jour = str(maintenant)[:10]
     lignes = [f"- C{n} · {jour} · installation : {' '.join(c.split())}" for n, c in enumerate(p["controles"], 1)]
     _ecrire(base / "controles.md", registre.rstrip("\n") + "\n" + ("\n" + "\n".join(lignes) + "\n" if lignes else ""))
+    if p.get("partenaires_conseilles"):   # les conseils du projet (`lancer partenaires` `conseils` les relit)
+        _ecrire_json(base / "partenaires.json", {"besoins": {b: [{"id": x["id"], "raison": x["raison"].strip()}
+                                                                 for x in liste]
+                                                             for b, liste in p["partenaires_conseilles"].items()}})
     for d in DOSSIERS:
         (base / d).mkdir()
 

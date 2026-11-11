@@ -6,7 +6,10 @@
      "acces": {"tailscale": bool, "reseau_local": bool}, "services": [{id, nom}],
      "flux": [{id, nom, role, service, justification}],
      "agents": [{cle, prenom?, role, service, modele, lieu, specialite?, texte, environnement?: [textes]}],
-     "briefs": {role: texte}, "consignes": texte, "controles": [textes], "estimation": objet de `estimer`}
+     "briefs": {role: texte}, "consignes": texte, "controles": [textes], "estimation": objet de `estimer`,
+     "partenaires_conseilles"?: {besoin: [{"id" (actif du catalogue), "raison" (une phrase)}]}}
+
+`partenaires_conseilles` est facultatif (rien n'est obligatoire) ; la mise en place l'écrit dans `.factory/partenaires.json`.
 """
 from pathlib import Path
 
@@ -183,6 +186,10 @@ def verifier(p):
     controles = p.get("controles")
     if not isinstance(controles, list) or not all(_ligne(c) for c in controles):
         e.append("« controles » doit être une liste de textes d'une ligne.")
+    if p.get("partenaires_conseilles") is not None:
+        from partenaires import catalogue
+        par_id = {x["id"]: x for x in catalogue.lire()["partenaires"]}
+        e += ["« partenaires_conseilles » : " + x for x in catalogue.verifier_conseils(p["partenaires_conseilles"], par_id)]
     if not (isinstance(p.get("estimation"), dict) and "tokens" in p["estimation"]):
         e.append("« estimation » doit être le résultat de « estimer ».")
     return list(dict.fromkeys(e))

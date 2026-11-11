@@ -16,13 +16,31 @@ COMPTEURS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
 TEXTES = ("tache", "agent", "service", "modele", "etape", "lot", "reparti")
 FACULTATIFS = ("lot", "reparti")   # absents quand le relevé n'en porte pas
 CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "lot", "reparti", "t", "t_prix") + COMPTEURS
+# Une ligne d'usage d'un partenaire (voix, images…) : sa quantité, son coût d'origine (ou null : non chiffré).
+CHAMPS_PARTENAIRE = ("id", "genre", "partenaire", "tache", "agent", "service", "quantite", "unite", "cout", "devise",
+                     "estime", "t", "t_prix")
 
 
 def _entier_positif(v):
     return isinstance(v, int) and not isinstance(v, bool) and v >= 0
 
 
+def _nombre(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and 0 <= v < float("inf")
+
+
+def _ligne_partenaire_valide(d):
+    return (isinstance(d, dict) and d.get("genre") == "partenaire" and isinstance(d.get("id"), str) and d["id"]
+            and isinstance(d.get("partenaire"), str) and d["partenaire"] and _nombre(d.get("quantite"))
+            and isinstance(d.get("unite"), str) and isinstance(d.get("t"), str) and isinstance(d.get("t_prix"), str)
+            and (d.get("cout") is None or (_nombre(d["cout"]) and isinstance(d.get("devise"), str)))
+            and isinstance(d.get("estime"), bool)
+            and all(d.get(c) is None or isinstance(d.get(c), str) for c in ("tache", "agent", "service")))
+
+
 def _ligne_valide(d):
+    if isinstance(d, dict) and d.get("genre") is not None:
+        return _ligne_partenaire_valide(d)
     return (isinstance(d, dict) and isinstance(d.get("id"), str) and d["id"]
             and isinstance(d.get("modele"), str) and d["modele"]
             and isinstance(d.get("t"), str) and isinstance(d.get("t_prix"), str)
@@ -55,7 +73,9 @@ class HistoriqueUsage:
                 d = json.loads(brut)
             except ValueError:
                 continue
-            if _ligne_valide(d):
+            if _ligne_valide(d) and d.get("genre") == "partenaire":
+                lignes[d["id"]] = {c: d.get(c) for c in CHAMPS_PARTENAIRE}
+            elif _ligne_valide(d):
                 lignes[d["id"]] = {c: d.get(c) for c in CHAMPS if c not in FACULTATIFS or d.get(c) is not None}
         return lignes
 
@@ -75,6 +95,15 @@ class HistoriqueUsage:
                 if not isinstance(u, dict) or not isinstance(u.get("id"), str):
                     continue
                 ancienne = lignes.get(u["id"])
+                if u.get("genre") == "partenaire":
+                    nouvelle = {c: u.get(c) for c in CHAMPS_PARTENAIRE}
+                    nouvelle["service"] = ancienne["service"] if ancienne else _service_de(r, u.get("agent"))
+                    nouvelle["t_prix"] = ancienne["t_prix"] if ancienne else u.get("t")   # le taux du jour, figé
+                    nouvelle["estime"] = u.get("estime") is True
+                    if _ligne_valide(nouvelle) and nouvelle != ancienne:
+                        lignes[u["id"]] = nouvelle
+                        change = True
+                    continue
                 nouvelle = {
                     "id": u["id"], "tache": u.get("tache"), "agent": u.get("agent"),
                     "service": ancienne["service"] if ancienne else _service_de(r, u.get("agent")),

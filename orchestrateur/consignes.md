@@ -86,7 +86,7 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `organisation` | Le verdict de l'utilisateur sur une décision `organisation` (`decision`, `verdict` : `accepter` ou `refuser`). `accepter` : `lancer organisation` avec `action: appliquer` et la `decision` (services, flux, fiches et briefs sont écrits, la décision est levée) ; si l'outil refuse, dis pourquoi et pose une décision corrigée. `refuser` : lève la décision (`lancer decision`, `action: lever`) et poursuis avec l'organisation actuelle. |
 | `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision (retrouve-le avec `lancer etat`, dans `decisions`) et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
 | `retour_element` | Un « Demander à modifier » du catalogue : une tâche de correction sur cet élément (`lancer tache` avec `fonctionnalite`, `element`, le rôle de l'étape concernée), qui suit le flux et la relecture croisée comme les autres. Réponds dans la `reponse` de la demande ce qui sera fait. |
-| `partenaire_regle`, `partenaires_actualiser`, `partenaires_maj` | Les demandes de l'espace partenaire du bureau (règles d'usage d'un partenaire, relevé des quotas, mise à jour des offres). Les partenaires sont facultatifs et rien ne bloque sans eux : tant que la commande `partenaires` n'existe pas dans l'outil, réponds dans la `reponse` que cette demande n'est pas encore prise en charge, et ne fais rien d'autre. Jamais de clé dans une réponse. |
+| `partenaire_regle`, `partenaires_actualiser`, `partenaires_maj` | Les demandes de l'espace partenaire du bureau (règles d'usage d'un partenaire, relevé des quotas, mise à jour des offres). Les partenaires sont facultatifs et rien ne bloque sans eux : voir « Les partenaires » : `lancer partenaires` avec `regle`, `quota` (`force: true`) ou `a_refaire` puis `offres`. Jamais de clé dans une réponse. |
 | `lecon` | Le verdict de l'utilisateur sur une leçon (`cible` = son id, `verdict`, `etage?`) : `lancer lecon` avec `action: appliquer` (voir « Les leçons »). |
 | `retour` | Un retour de l'utilisateur sur une tâche : transmets-le à l'agent qui la tient (ou au prochain qui la reprend) ; ta `reponse` dit ce qui sera fait. |
 | `deplacer` | Une tâche : `lancer tache` avec son `id` et la `colonne`. Un élément de la file (identifiant `<fonctionnalité>/<élément>`) : `lancer file-prendre` avec `fonctionnalite` et `element`, puis une tâche pour cet élément dans la colonne demandée (`lancer tache`). Les tâches `orchestration` et `cadrage:…` ne se déplacent pas (l'outil le refuse au bureau). |
@@ -234,6 +234,39 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   l'outil le répartit entre les tâches (au temps passé, sinon à parts égales ; leur somme vaut exactement le total). Si tu
   peux relever les cumuls à chaque fin de tâche, fais plutôt un `lancer usage` par tâche avec `tache`, `lot` et le même
   `id` : les écarts sont exacts. La relecture croisée reste un agent neuf par relecteur.
+
+## Les partenaires
+
+Des services extérieurs (voix, images, vidéo, 3D, traduction…) produisent ce que Claude ne génère pas. Ils sont
+**facultatifs** : rien ne bloque sans eux. Tout passe par `lancer partenaires` (`interface.md`). **Aucune valeur de
+clé** n'est écrite, affichée, journalisée ni envoyée ailleurs que chez son partenaire : elle se lit dans
+l'environnement ou le `.env` du projet, au moment de l'appel seulement.
+
+- **Au démarrage** : `lancer partenaires` `detecter`, puis `confirmer` ceux dont tu vois vraiment les outils (serveur
+  MCP connecté, connecteur du compte) ou que l'utilisateur dit utiliser (un studio). **À chaque réveil** : `quota`
+  (l'outil ne relit chaque partenaire qu'une fois par heure).
+- **Avant d'appeler** : `choisir` avec le `besoin` (celui des conseils du projet, ou une sous-catégorie du catalogue) ;
+  prends le premier rendu. Si `meilleur_non_connecte` n'est pas nul, dis seulement qu'on aurait pu utiliser celui-là
+  et lequel tu prends à la place : ne bloque pas.
+- **Les accords** : tarif `gratuit` ou `inclus` (`accord_requis` faux) : préviens seulement (quel partenaire,
+  combien) ; `usage` ou `inconnu` : l'accord de l'utilisateur, valable pour la tâche en cours (une décision au
+  Directeur ou la discussion) ; **passer à un autre partenaire que celui annoncé, ou agir dans le navigateur :
+  toujours son accord**. Aucune dépense sans cela.
+- **La tâche porte `partenaires`** (`lancer tache`) : le départ donne à l'agent les règles de chacun, mot pour mot, et
+  lui dit de noter `usage` après chaque appel payant (le coût exact si l'API le donne, sinon estimé avec `estime`,
+  sinon sans coût : « non chiffré ») et `limite` sur un refus pour quota ou paiement. Une limite : `choisir` de
+  nouveau et prendre le suivant (avec l'accord, puisque le partenaire change).
+- **Sans partenaire utilisable** : le **mode manuel** (tu écris le prompt et le mode d'emploi exact, chaque réglage ;
+  l'utilisateur le fait et te rend le résultat), le **mode navigateur** (seulement s'il l'accepte ; il s'y connecte
+  lui-même, puis tu mènes la suite), ou une autre voie sans partenaire.
+- **Les conseils du projet** (`conseils`) évoluent avec les fonctionnalités, comme l'organisation : une proposition à
+  l'utilisateur, jamais une obligation. Une règle dite dans la discussion : `regle`.
+- **Les demandes du bureau** : `partenaire_regle` → `regle` (mêmes champs) ; `partenaires_actualiser` → `quota` avec
+  `force: true` ; `partenaires_maj` (l'utilisateur a vu le coût estimé et confirmé) → `a_refaire`, puis une recherche
+  en lots sur **Sonnet** (des sous-agents qui relisent, sur le site de chaque partenaire, ses plans, prix, statut et
+  liens, deux pages au plus chacun ; un lien non trouvé reste `null`, rien n'est inventé), puis `offres` avec les
+  fiches refaites (`verifie_le` du jour) : l'outil contrôle le catalogue et les mots interdits, commit et push comme
+  une leçon de skill. Note le coût de la recherche (`lancer usage`, hors tâche).
 
 ## Les documents
 

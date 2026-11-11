@@ -107,6 +107,16 @@ class TestAppliquer(Base):
         regl = json.loads((self.projet / ".factory" / "reglages.json").read_text(encoding="utf-8"))
         self.assertFalse(regl["prix_automatiques"])
 
+    def test_conseils_ecrits_par_la_mise_en_place(self):
+        conseils = {"voix": [{"id": "elevenlabs", "raison": " Voix naturelles. "}]}
+        self.appliquer(partenaires_conseilles=conseils)
+        lu = json.loads((self.projet / ".factory" / "partenaires.json").read_text(encoding="utf-8"))
+        self.assertEqual(lu, {"besoins": {"voix": [{"id": "elevenlabs", "raison": "Voix naturelles."}]}})
+
+    def test_sans_conseils_aucun_fichier(self):
+        self.appliquer()
+        self.assertFalse((self.projet / ".factory" / "partenaires.json").exists())
+
     def test_agents_cloud_rendus(self):
         p = proposition_valide(self.projet, cloud=True)
         p["agents"][0].update(lieu="cloud", environnement=["Python"])
@@ -280,7 +290,7 @@ class TestGitignore(Base):
         self.appliquer()
         t = self.lire()
         self.assertIn("# MyIAFactory : fichiers propres à la machine\n.factory/equipe.json\n"
-                      ".factory/*-historique.jsonl\n", t)
+                      ".factory/*-historique.jsonl\n.env\n", t)   # les clés des partenaires restent hors du dépôt
 
     def test_gitignore_ancienne_regle(self):
         (self.projet / ".gitignore").write_text("node_modules/\n.factory/\n/.factory\ndist", encoding="utf-8")

@@ -219,7 +219,7 @@ class Projet:
 
         if usages is None:
             usages = self.usage.lire()
-        return cout.facturation(usages, prix_de, r, periode, datetime.now().astimezone())
+        return cout.facturation(usages, prix_de, r, periode, datetime.now().astimezone(), self.table_prix.taux_a)
 
     def cibles_calculees(self, r, regl):
         """Les cibles que le bureau recalcule (id -> constat en clair) : les sources d'amélioration et les

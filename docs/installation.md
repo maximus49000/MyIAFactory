@@ -167,7 +167,10 @@ Un projet réel se branche **depuis son propre dépôt** : rien n'est à modifie
    # MyIAFactory : fichiers propres à la machine
    .factory/equipe.json
    .factory/*-historique.jsonl
+   .env
    ```
+
+   (`.env` : les clés des partenaires, s'il y en a, n'entrent jamais dans le dépôt.)
 
    (Une ancienne règle `.factory/` qui ignorait tout le dossier est à retirer ; `reparer` le fait.) Dans les fichiers
    versionnés, le chemin de la skill s'écrit `~/MyIAFactory/skill/...`, jamais en absolu : un clone du projet marche
@@ -362,6 +365,41 @@ déplacer ; les panneaux s'ouvrent en plein écran (« Fermer ») ; la barre dé
 sont possibles (décisions du Directeur, déplacer un post-it, discussion), et une photo prise au téléphone est réduite
 et réencodée (JPEG, moins de 5 Mo) avant l'envoi ; un format que le navigateur ne sait pas lire (certains HEIC) donne
 un message clair.
+
+## Le bureau partenaire
+
+Des services extérieurs produisent ce que Claude ne génère pas : voix, images, vidéo, 3D, traduction, recherche web,
+paiement, publication… Ils sont **facultatifs** : la factory se débrouille sans eux (mode manuel, ou navigateur avec
+votre accord). La pièce **« Partenaires »** du bureau les montre tous, par catégorie, avec leurs plans et leurs prix,
+ce qui est connecté, ce qu'il reste chez chacun (avec la date du relevé) et ceux conseillés pour ce projet.
+
+**Trois fichiers.**
+
+- Le **catalogue** (`partenaires/catalogue.json`, dans la skill) : ce qui existe, sans rien de propre à un projet.
+- Les **connexions** (`~/MyIAFactory/partenaires.json`, hors de tout dépôt, communes à tous les projets) : connecté
+  ou non, le dernier quota lu, les limites atteintes, et vos **Règles** d'usage de chaque partenaire.
+- Les **conseils du projet** (`.factory/partenaires.json`, versionné) : par besoin, les partenaires conseillés et
+  pourquoi. L'installation les propose (projet existant : ceux déjà définis dans `.mcp.json`, les dépendances et
+  `.env.example` ; projet vide : un ensemble utile) ; vous gardez ce que vous voulez.
+
+**Connecter un partenaire, c'est vous.** La skill vérifie et propose : « S'inscrire » et « Se connecter » ouvrent les
+pages du partenaire ; pour un serveur MCP, copiez la commande `claude mcp add …` de sa carte ; pour une clé d'API,
+mettez-la dans une variable d'environnement ou dans le `.env` du projet (jamais versionné), sous le nom indiqué sur la
+carte. Une clé n'est **jamais** écrite, affichée ni journalisée : l'outil ne regarde que la présence du nom, et la lit
+au moment de l'appel seulement.
+
+**Les accords.** Un plan gratuit ou des crédits d'un abonnement payé : l'orchestrateur prévient seulement. Un appel
+facturé à l'usage (ou un tarif inconnu) : votre accord, pour la tâche en cours. Changer de partenaire ou agir dans le
+navigateur : toujours votre accord.
+
+**Les Règles.** Chaque carte montre ses règles (« générer en un seul prompt », un format…) : ajoutez, modifiez,
+supprimez ; l'orchestrateur les applique et les donne mot pour mot à l'agent qui appelle ce partenaire. Une règle de
+départ est proposée pour Tripo ; retirez-la si elle ne vous convient pas.
+
+**« Actualiser »** relit les quotas tout de suite (sinon une fois par heure au plus). **« Mettre à jour les offres »**
+annonce le coût estimé, puis, si vous confirmez, l'orchestrateur fait revérifier sur Sonnet les seules fiches anciennes
+ou de source tierce, réécrit le catalogue et le publie comme une leçon de skill. Le coût de chaque appel payant est
+noté et apparaît dans l'onglet Facturation, par partenaire et par tâche (« non chiffré » quand il n'est pas connu).
 
 ## En cas de problème
 

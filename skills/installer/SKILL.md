@@ -46,6 +46,21 @@ refus (`erreur`, parfois `erreurs`) : montre-le, corrige, recommence.
 - `vide` : section 3a.
 - `existant` : section 3b.
 
+### Les partenaires (facultatifs)
+
+Pour `vide` et `existant`, lance `outil.py partenaires "<dossier>"` : la détection (`detecter`) des serveurs MCP et
+des variables présentes, sans jamais lire une valeur de clé. Dis en une ligne ce qui est déjà connecté ou déclaré
+(`connexions`). Ensuite, au fil de la discussion :
+
+- **projet existant** : reprends les partenaires déjà définis (`partenaires_declares` d'`examiner` : serveurs de
+  `.mcp.json`, paquets, variables de `.env.example`) ;
+- **projet vide** : choisis dans `besoins` les sous-catégories utiles (voix, images, 3D…), lance
+  `outil.py partenaires "<dossier>" --besoins <a,b>` et propose deux ou trois partenaires par besoin, avec leur lien.
+
+Rien n'est obligatoire : l'utilisateur garde, retire ou ajoute ; pour un partenaire non connecté, donne le lien
+d'inscription (il se connecte lui-même). Les partenaires retenus, avec une raison d'une phrase, vont dans
+`partenaires_conseilles` (section 6).
+
 ## 3a. Projet vide : les questions
 
 Une question à la fois, dans cet ordre ; saute ce qui est déjà répondu :
@@ -123,7 +138,7 @@ Présente alors, en cinq parties courtes :
 
 1. **Ce que tu as compris du projet.**
 2. **Le paramétrage** : nom, genre, mots interdits, modèle de l'orchestrateur, charge maximum et agents locaux en
-   parallèle, supports et accès du téléphone, local seul ou local et cloud, facturation, dépôt GitHub (projet vide).
+   parallèle, supports et accès du téléphone, local seul ou local et cloud, facturation, dépôt GitHub (projet vide), partenaires conseillés.
 3. **L'organisation** : les services, et les agents (rôle, service, modèle, local ou cloud).
 4. **Le workflow** : les étapes dans l'ordre, chacune avec son rôle, son service et sa justification ; ce sont les
    colonnes du tableau du bureau (`cadrage` et `fait` s'y ajoutent).
@@ -140,7 +155,8 @@ Après « je valide » :
    `<skill>/installation/proposition.py` : lis cet en-tête, pas le reste. Le service `facturation` n'est pas déclaré
    à la main (la mise en place l'ajoute) ; `supports` liste `ordinateur` et/ou `mobile` ; `acces` vaut
    `{"tailscale": vrai ou faux, "reseau_local": vrai ou faux}` (tous deux faux sans mobile) ; `estimation` est le
-   résultat de `estimer` ; `briefs` donne un brief par rôle ; `texte` d'un agent est le corps de sa fiche.
+   résultat de `estimer` ; `briefs` donne un brief par rôle ; `texte` d'un agent est le corps de sa fiche ;
+   `partenaires_conseilles` (facultatif) vaut `{besoin: [{"id", "raison"}]}`.
 2. `outil.py proposer < <fichier>` : contrôle et enregistre. Un refus liste les erreurs : corrige et recommence.
 3. `outil.py appliquer "<dossier>"` : écrit la configuration dans `.factory/`, règle le `.gitignore`, inscrit le
    projet au bureau commun, ouvre les accès demandés, puis vérifie.

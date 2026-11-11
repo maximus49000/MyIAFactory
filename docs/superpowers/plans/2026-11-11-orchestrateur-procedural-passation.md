@@ -19,7 +19,24 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
 
 ## Mesures
 
-(La phase A note ici la commande `claude -p` retenue, les tokens et le coût d'un appel vide sur Haiku et Sonnet, et « couche API conseillée » si l'appel vide Haiku dépasse 0,004 $.)
+Mesuré le 2026-11-11 avec `py -3.12 outils/mesurer_appel.py` (Claude Code 2.1.321), consigne « Réponds {"ok":true} », dossier temporaire vide.
+
+**Commande retenue** (la consigne en fichier, le dossier par l'entrée standard) :
+
+    claude -p --output-format json --model <modele> --tools "" --system-prompt-file <consigne>
+           --strict-mcp-config --setting-sources "" --disable-slash-commands --no-session-persistence
+
+| Modèle | Commande | Tokens d'entrée (dont cache écrit) | Sortie | Coût d'un appel |
+|---|---|---|---|---|
+| Haiku 5.5 | dépouillée (3 appels) | ≈ 888 (≈ 886, aucun cache relu d'un appel à l'autre) | 9 | **0,00018 $** |
+| Sonnet 5.5 | dépouillée (3 appels) | ≈ 870 (≈ 868) | 9 | **0,0036 $** |
+| Haiku 5.5 | par défaut (`claude -p` seul) | ≈ 44 800 (29 600 relus, 15 200 écrits) | 135 | 0,0034 $ |
+| Sonnet 5.5 | par défaut | ≈ 44 000 | 9 | 0,061 $ |
+
+- Le texte de départ dépouillé est d'environ 880 tokens ; la commande par défaut en paie environ 44 000 (prompt système, outils, réglages). Le dépouillement divise le coût d'un appel vide par 19 (Haiku) à 17 (Sonnet).
+- `--bare` n'est pas utilisable : il exige `ANTHROPIC_API_KEY` (pas de connexion par abonnement).
+- L'appel vide Haiku (0,00018 $) est très sous le seuil de 0,004 $ : **couche API non conseillée**, `claude -p` reste la couche par défaut.
+- La commande `claude` n'est pas toujours dans le PATH : l'application Claude l'installe sous `%APPDATA%\Claude\claude-code\<version>\<id>\claude.exe` ; le moteur la cherche là en second.
 
 ## Notes laissées par les phases
 

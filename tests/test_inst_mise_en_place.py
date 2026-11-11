@@ -18,7 +18,11 @@ RACINE = Path(__file__).resolve().parent.parent
 
 class Base(AvecMaison):
     def appliquer(self, **extra):
-        return mep.appliquer(proposition_valide(self.projet, **extra), MAINTENANT, git=self.git_simule)
+        return mep.appliquer(proposition_valide(self.projet, **extra), MAINTENANT, git=self.git_simule,
+                             adresses=self.adresses)
+
+    def adresses(self):
+        return {"tailscale": "100.64.0.7", "reseau_local": "192.168.1.20"}
 
     def git_simule(self, args, cwd):
         return 0, ""
@@ -200,6 +204,49 @@ class TestBureau(Base):
             self.appliquer()
         self.assertEqual(dossier.bureau().read_text(encoding="utf-8"), "{pas du json")
         self.assertEqual(instantane(self.projet), {})
+
+
+class TestAcces(Base):
+    MOBILE = {"supports": ["ordinateur", "mobile"], "acces": {"tailscale": True, "reseau_local": False}}
+
+    def test_ordinateur_seul_rien_d_ouvert(self):
+        r = self.appliquer()
+        self.assertEqual(r["acces"], {"tailscale": None, "reseau_local": None})
+        self.assertNotIn("acces", json.loads(dossier.bureau().read_text(encoding="utf-8")))
+        self.assertEqual(reglages.lire_bureau(dossier.bureau())["acces"], {"tailscale": False, "reseau_local": False})
+
+    def test_acces_ecrit_dans_le_bureau(self):
+        r = self.appliquer(**self.MOBILE)
+        self.assertEqual(reglages.lire_bureau(dossier.bureau())["acces"], {"tailscale": True, "reseau_local": False})
+        self.assertEqual(r["acces"], {"tailscale": "100.64.0.7", "reseau_local": None})
+        self.assertFalse(r["relancer_bureau"])   # bureau neuf : il n'était pas lancé
+
+    def test_acces_fusionne(self):
+        autre = self.autre_projet("autre")
+        dossier.racine().mkdir(parents=True)
+        dossier.bureau().write_text(json.dumps({"projets": [str(autre)], "acces": {"reseau_local": True}}),
+                                    encoding="utf-8")
+        r = self.appliquer(**self.MOBILE)
+        self.assertEqual(reglages.lire_bureau(dossier.bureau())["acces"], {"tailscale": True, "reseau_local": True})
+        self.assertEqual(r["acces"], {"tailscale": "100.64.0.7", "reseau_local": "192.168.1.20"})
+        self.assertTrue(r["relancer_bureau"])
+
+    def test_acces_deja_ouvert_ne_relance_pas(self):
+        self.appliquer(**self.MOBILE)
+        r = mep.reparer(self.projet, TestReparer.CALIBRAGE, acces={"tailscale": True, "reseau_local": False},
+                        adresses=self.adresses)
+        self.assertEqual(r["corrections"], [])
+        self.assertFalse(r["relancer_bureau"])
+        self.assertEqual(r["acces"], {"tailscale": "100.64.0.7", "reseau_local": None})
+
+    def test_reparer_ouvre_un_acces(self):
+        self.appliquer()
+        r = mep.reparer(self.projet, TestReparer.CALIBRAGE, acces={"tailscale": False, "reseau_local": True},
+                        adresses=self.adresses)
+        self.assertEqual(reglages.lire_bureau(dossier.bureau())["acces"], {"tailscale": False, "reseau_local": True})
+        self.assertEqual(r["acces"], {"tailscale": None, "reseau_local": "192.168.1.20"})
+        self.assertTrue(r["relancer_bureau"])
+        self.assertTrue(any("réseau local" in c for c in r["corrections"]), r["corrections"])
 
 
 class TestGitignore(Base):

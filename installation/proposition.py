@@ -2,7 +2,8 @@
 
     {"version": 1, "projet": chemin absolu, "cas": "vide" | "existant", "nom", "comprehension",
      "genre": id | null, "genre_nouveau": {"description"}?, "mots_interdits": [textes], "modele_orchestrateur",
-     "charge_max", "agents_locaux_max", "cloud", "facturation", "services": [{id, nom}],
+     "charge_max", "agents_locaux_max", "cloud", "facturation", "supports": ["ordinateur" | "mobile"],
+     "acces": {"tailscale": bool, "reseau_local": bool}, "services": [{id, nom}],
      "flux": [{id, nom, role, service, justification}],
      "agents": [{cle, prenom?, role, service, modele, lieu, specialite?, texte, environnement?: [textes]}],
      "briefs": {role: texte}, "consignes": texte, "controles": [textes], "estimation": objet de `estimer`}
@@ -14,6 +15,8 @@ from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
 MODELES = ("Haiku", "Sonnet", "Opus")
 FABLE = "Fable n'est jamais choisi par l'installation."
 SERVICE_FACTURATION = "facturation"
+SUPPORTS = ("ordinateur", "mobile")
+ACCES = ("tailscale", "reseau_local")
 
 
 def _texte(v):
@@ -115,6 +118,20 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
     return e
 
 
+def verifier_supports(supports, acces):
+    """Le support de traitement (ordinateur, mobile) et les accès du téléphone qui vont avec."""
+    if not (isinstance(supports, list) and supports and all(s in SUPPORTS for s in supports)
+            and len(set(supports)) == len(supports)):
+        return ["« supports » doit lister, sans double, « ordinateur » et/ou « mobile »."]
+    if not (isinstance(acces, dict) and set(acces) == set(ACCES) and all(isinstance(v, bool) for v in acces.values())):
+        return ["« acces » doit valoir {\"tailscale\": vrai ou faux, \"reseau_local\": vrai ou faux}."]
+    if "mobile" in supports and not any(acces.values()):
+        return ["« acces » : avec le mobile, ouvrir Tailscale (par défaut) ou le Wi-Fi de la maison."]
+    if "mobile" not in supports and any(acces.values()):
+        return ["« acces » : sans le mobile, aucun accès distant n'est ouvert."]
+    return []
+
+
 def verifier(p):
     """Les erreurs de la proposition ; une liste vide si elle est valide."""
     if not isinstance(p, dict):
@@ -152,6 +169,7 @@ def verifier(p):
     for champ in ("cloud", "facturation"):
         if not isinstance(p.get(champ), bool):
             e.append(f"« {champ} » doit valoir vrai ou faux.")
+    e += verifier_supports(p.get("supports"), p.get("acces"))
     flux = p.get("flux")
     if isinstance(flux, list):
         for x in flux:

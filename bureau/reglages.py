@@ -94,7 +94,18 @@ def lire_bureau(chemin):
                 id_ = base[:40 - len(suffixe)].rstrip("-") + suffixe
             pris.add(id_)
         sortie.append({"id": id_, "chemin": c})
-    return {"port": port, "projets": sortie}
+    return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {}))}
+
+
+ACCES = ("tailscale", "reseau_local")
+
+
+def lire_acces(v):
+    """Les accès distants du bureau : `{"tailscale": bool, "reseau_local": bool}` (une clé absente vaut faux)."""
+    if not isinstance(v, dict) or not all(k in ACCES and isinstance(x, bool) for k, x in v.items()):
+        raise ReglagesInvalides("Fichier du bureau : « acces » doit valoir {\"tailscale\": vrai ou faux, "
+                                "\"reseau_local\": vrai ou faux}.")
+    return {k: v.get(k, False) for k in ACCES}
 
 
 def fixer_charge_max(chemin, valeur):

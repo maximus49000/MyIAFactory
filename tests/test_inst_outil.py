@@ -103,6 +103,24 @@ class TestOutil(AvecMaison):
         self.assertIn("erreur", r)
 
 
+class TestAccesEnProcessus(AvecMaison):
+    """Les accès du téléphone, sans lancer Tailscale ni toucher au réseau : l'outil est appelé en processus."""
+
+    def test_commande_acces(self):
+        from unittest import mock
+        from installation import outil
+        with mock.patch.object(outil.acces, "adresses", return_value={"tailscale": None, "reseau_local": "10.0.0.2"}):
+            self.assertEqual(outil.cmd_acces(outil._analyseur().parse_args(["acces"])),
+                             {"tailscale": None, "reseau_local": "10.0.0.2"})
+
+    def test_reparer_avec_acces(self):
+        from installation import outil
+        a = outil._analyseur().parse_args(["reparer", "x", "--tailscale"])
+        self.assertEqual(outil._acces_demandes(a), {"tailscale": True, "reseau_local": False})
+        a = outil._analyseur().parse_args(["reparer", "x"])
+        self.assertIsNone(outil._acces_demandes(a))
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

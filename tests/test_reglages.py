@@ -44,6 +44,21 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reglages.fixer_charge_max(self.tmp / "r.json", v)
 
+    def bureau(self, **extra):
+        (self.tmp / "p").mkdir(exist_ok=True)
+        (self.tmp / "p" / "r.json").write_text("{}", encoding="utf-8")
+        (self.tmp / "bureau.json").write_text(json.dumps({"projets": ["p/r.json"], **extra}), encoding="utf-8")
+        return reglages.lire_bureau(self.tmp / "bureau.json")
+
+    def test_lire_bureau_acces(self):
+        self.assertEqual(self.bureau()["acces"], {"tailscale": False, "reseau_local": False})
+        self.assertEqual(self.bureau(acces={"tailscale": True})["acces"], {"tailscale": True, "reseau_local": False})
+
+    def test_lire_bureau_acces_invalide(self):
+        for v in ([], "tailscale", {"tailscale": 1}, {"wifi": True}, None):
+            with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
+                self.bureau(acces=v)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ def proposition_valide(dossier_projet, **extra):
         "version": 1, "projet": str(Path(dossier_projet).resolve()), "cas": "vide", "nom": "Petit projet",
         "comprehension": "Un petit outil qui range des fichiers.", "genre": None, "mots_interdits": ["Petit projet"],
         "modele_orchestrateur": "Sonnet", "charge_max": 70, "agents_locaux_max": 2, "cloud": False,
-        "facturation": True,
+        "facturation": True, "supports": ["ordinateur"], "acces": {"tailscale": False, "reseau_local": False},
         "services": [{"id": "dev", "nom": "Dev"}, {"id": "qa", "nom": "QA"}],
         "flux": [{"id": "dev", "nom": "Développement", "role": "dev", "service": "dev",
                   "justification": "Il faut écrire le code."},

@@ -6,7 +6,8 @@
     py -3.12 installation/outil.py estimer        (entrée JSON : {"flux", "agents", "genre"})
     py -3.12 installation/outil.py proposer       (entrée JSON : la proposition)
     py -3.12 installation/outil.py appliquer <dossier>
-    py -3.12 installation/outil.py reparer <dossier>
+    py -3.12 installation/outil.py reparer <dossier> [--tailscale] [--reseau-local]
+    py -3.12 installation/outil.py acces          (les adresses du téléphone : Tailscale, réseau local)
 
 Sortie JSON UTF-8. Codes : 0 fait, 1 refus (`{"erreur"}`), 2 appel invalide.
 Rien n'est écrit dans le dossier du projet avant `appliquer`.
@@ -24,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import charge, prix, reglages  # noqa: E402
-from installation import calibrage, dossier, estimation, examen, mise_en_place, proposition  # noqa: E402
+from installation import acces, calibrage, dossier, estimation, examen, mise_en_place, proposition  # noqa: E402
 from installation.dossier import Echec  # noqa: E402
 
 
@@ -139,10 +140,21 @@ def cmd_appliquer(a):
     return rendu
 
 
+def _acces_demandes(a):
+    """Les accès du téléphone demandés à la réparation, ou None si aucun."""
+    if not (a.tailscale or a.reseau_local):
+        return None
+    return {"tailscale": a.tailscale, "reseau_local": a.reseau_local}
+
+
 def cmd_reparer(a):
     projet = _dossier(a.dossier)
     cal = calibrage.calibrer(charge.machine(), _historique())
-    return {**mise_en_place.reparer(projet, cal), "calibrage": cal}
+    return {**mise_en_place.reparer(projet, cal, acces=_acces_demandes(a)), "calibrage": cal}
+
+
+def cmd_acces(a):
+    return acces.adresses()
 
 
 def _analyseur():
@@ -157,9 +169,13 @@ def _analyseur():
         x = s.add_parser(nom, help=aide)
         x.add_argument("dossier")
         x.set_defaults(f=f)
+        if nom == "reparer":
+            x.add_argument("--tailscale", action="store_true", help="ouvre le bureau au téléphone par Tailscale")
+            x.add_argument("--reseau-local", action="store_true", help="ouvre le bureau au Wi-Fi de la maison")
     for nom, f, aide in (("calibrer", cmd_calibrer, "charge maximum et agents locaux en parallèle"),
                          ("estimer", cmd_estimer, "coût d'un élément (entrée JSON {flux, agents, genre})"),
-                         ("proposer", cmd_proposer, "contrôle et enregistre une proposition (entrée JSON)")):
+                         ("proposer", cmd_proposer, "contrôle et enregistre une proposition (entrée JSON)"),
+                         ("acces", cmd_acces, "adresses Tailscale et réseau local de la machine")):
         s.add_parser(nom, help=aide).set_defaults(f=f)
     return p
 

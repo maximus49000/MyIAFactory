@@ -82,5 +82,26 @@ class TestProposition(unittest.TestCase):
         self.assertTrue(proposition.verifier([]))
 
 
+class TestSupports(unittest.TestCase):
+    def erreurs(self, **extra):
+        return proposition.verifier(proposition_valide("/tmp/projet", **extra))
+
+    def test_supports_vides_refuses(self):
+        for s in ([], None, "mobile", ["tablette"], ["mobile", "mobile"]):
+            self.assertTrue([x for x in self.erreurs(supports=s) if "supports" in x], s)
+
+    def test_mobile_sans_acces_refuse(self):
+        e = self.erreurs(supports=["ordinateur", "mobile"], acces={"tailscale": False, "reseau_local": False})
+        self.assertTrue([x for x in e if "acces" in x], e)
+        self.assertEqual(self.erreurs(supports=["mobile"], acces={"tailscale": True, "reseau_local": False}), [])
+        self.assertTrue(self.erreurs(supports=["mobile"], acces={"tailscale": 1, "reseau_local": False}))
+        self.assertTrue(self.erreurs(supports=["mobile"], acces={"tailscale": True}))
+
+    def test_ordinateur_seul_acces_faux(self):
+        e = self.erreurs(supports=["ordinateur"], acces={"tailscale": True, "reseau_local": False})
+        self.assertTrue([x for x in e if "acces" in x], e)
+        self.assertEqual(self.erreurs(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

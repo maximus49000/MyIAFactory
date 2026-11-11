@@ -96,7 +96,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [ ] 11. Les guides d'accord, relecture finale
 - [ ] 12. Le vrai passage sur un projet vide et un projet existant
 - [ ] 13. Le projet pilote rejoint le nouveau rangement (dans son dépôt)
-- [ ] 14. Le support de traitement dans la proposition et la mise en place
+- [x] 14. Le support de traitement dans la proposition et la mise en place
 - [ ] 15. Le bureau ouvert au téléphone, avec un code d'accès
 - [ ] 16. La vue 3D adaptée au mobile
 - [ ] 17. Les lots par modèle dans l'orchestrateur

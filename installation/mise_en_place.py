@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from bureau import reglages as regl
+from installation import acces as acces_inst
 from installation import dossier, proposition
 from installation.dossier import PREFIXE_SKILL, Echec
 from orchestrateur import factory as fa
@@ -143,6 +144,46 @@ def inscrire(bureau_json, reglages, id_=None):
     return True
 
 
+NOMS_ACCES = {"tailscale": "Tailscale", "reseau_local": "le réseau local (Wi-Fi de la maison)"}
+
+
+def ouvrir_acces(bureau_json, acces):
+    """Ouvre dans le fichier de bureau les accès distants demandés ; un accès déjà ouvert le reste.
+    Rend la liste des accès nouvellement ouverts (vide : rien n'a changé)."""
+    bureau_json = Path(bureau_json)
+    d = _lire_bureau_brut(bureau_json)
+    if d is None:
+        raise Echec(f"Le fichier du bureau ({bureau_json}) n'existe pas : inscrivez d'abord un projet.")
+    try:
+        avant = regl.lire_acces(d.get("acces", {}))
+    except regl.ReglagesInvalides as e:
+        raise Echec(f"{e} Il n'a pas été modifié.")
+    apres = {k: avant[k] or acces.get(k) is True for k in regl.ACCES}
+    ouverts = [k for k in regl.ACCES if apres[k] and not avant[k]]
+    if not ouverts:
+        return []
+    d["acces"] = apres
+    octets = _lire_octets(bureau_json)
+    _ecrire_json(bureau_json, d)
+    try:
+        regl.lire_bureau(bureau_json)
+    except regl.ReglagesInvalides as e:
+        _remettre(bureau_json, octets)
+        raise Echec(f"Le fichier du bureau ne se relit pas après l'ouverture des accès ; il est remis tel qu'il "
+                    f"était. {e}")
+    return ouverts
+
+
+def adresses_ouvertes(bureau_json, adresses=acces_inst.adresses):
+    """Pour chaque accès distant : son adresse s'il est ouvert et trouvé, sinon None."""
+    try:
+        ouverts = regl.lire_bureau(bureau_json)["acces"]
+    except (regl.ReglagesInvalides, OSError):
+        ouverts = {}
+    trouvees = adresses() if any(ouverts.values()) else {}
+    return {k: trouvees.get(k) if ouverts.get(k) else None for k in regl.ACCES}
+
+
 # --- L'organisation : services, flux, fiches, briefs.
 
 def _fiche(a, chemin):
@@ -261,7 +302,7 @@ def message_orchestrateur(factory_json):
             "boucle de réveil.")
 
 
-def appliquer(p, maintenant, git=memoire.executer_git):
+def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adresses):
     """Écrit la configuration d'une proposition validée, règle le `.gitignore`, inscrit le projet au bureau commun,
     puis vérifie. `Echec` si la proposition est invalide ou le projet déjà installé."""
     erreurs = proposition.verifier(p)
@@ -295,6 +336,7 @@ def appliquer(p, maintenant, git=memoire.executer_git):
         renomme = True
         regler_gitignore(projet)
         ajoute = inscrire(bureau_json, fd / "reglages.json")
+        ouverts = ouvrir_acces(bureau_json, p["acces"])
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         if renomme:
@@ -314,7 +356,8 @@ def appliquer(p, maintenant, git=memoire.executer_git):
             genre_raison = f"Le genre « {genre} » n'a pas pu être créé ; l'orchestrateur le reproposera. {message}"
     ecrits = [str(c) for c in sorted(fd.rglob("*")) if c.is_file()] + [str(gitignore), str(bureau_json)]
     lignes, pret = verifier(factory_json)
-    return {"ecrits": ecrits, "bureau": str(bureau_json), "relancer_bureau": ajoute and bureau_avant is not None,
+    return {"ecrits": ecrits, "bureau": str(bureau_json), "relancer_bureau": bureau_avant is not None and bool(ajoute or ouverts),
+            "acces": adresses_ouvertes(bureau_json, adresses),
             "agents_cloud": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"],
                               "environnement": list(a.get("environnement") or [])}
                              for a in p["agents"] if a["lieu"] == "cloud"],
@@ -342,9 +385,10 @@ def _dans(chemin, dossier_):
         return False
 
 
-def reparer(projet, calibrage):
+def reparer(projet, calibrage, acces=None, adresses=acces_inst.adresses):
     """Vérifie et répare une installation : chemins vers le dossier stable, limite d'agents locaux, `.gitignore`,
-    dossiers manquants, inscription au bureau commun. Les adaptateurs (`commandes`) ne sont jamais touchés."""
+    dossiers manquants, inscription au bureau commun, accès du téléphone demandés (`acces`, comme dans une
+    proposition). Les adaptateurs (`commandes`) ne sont jamais touchés."""
     projet = Path(projet).resolve()
     factory_json = projet / ".factory" / "factory.json"
     if not factory_json.is_file():
@@ -405,5 +449,10 @@ def reparer(projet, calibrage):
     if reglages is not None and inscrire(dossier.bureau(), reglages):
         corrections.append(f"Projet inscrit au bureau commun ({dossier.bureau()}).")
         relancer = bureau_avant is not None
+    if reglages is not None and acces:
+        for k in ouvrir_acces(dossier.bureau(), acces):
+            corrections.append(f"Bureau commun : accès du téléphone ouvert par {NOMS_ACCES[k]}.")
+            relancer = relancer or bureau_avant is not None
     lignes, pret = verifier(factory_json)
-    return {"corrections": corrections, "verification": lignes, "pret": pret, "relancer_bureau": relancer}
+    return {"corrections": corrections, "verification": lignes, "pret": pret, "relancer_bureau": relancer,
+            "acces": adresses_ouvertes(dossier.bureau(), adresses)}

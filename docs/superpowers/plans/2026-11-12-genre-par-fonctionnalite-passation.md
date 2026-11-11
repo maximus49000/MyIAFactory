@@ -12,7 +12,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|
 | A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | à faire : **c'est la prochaine phase** |
 | B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | à faire |
-| C | Sonnet 5.5 | 4, 5, 6 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande | Table de règles au contrat écrit, un test par ligne | à faire |
+| C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | à faire |
 | D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire |
 | E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire |
 
@@ -34,7 +34,7 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
 
 **Phase C — Sonnet 5.5 — dans ce dépôt**
 
-> Réalise la phase C du chantier « un genre et un workflow par fonctionnalité ». Lis `docs/superpowers/plans/2026-11-12-genre-par-fonctionnalite-passation.md` et suis-le. Enchaîne d'une traite les tâches 4, 5 et 6 du plan. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+> Réalise la phase C du chantier « un genre et un workflow par fonctionnalité ». Lis `docs/superpowers/plans/2026-11-12-genre-par-fonctionnalite-passation.md` et suis-le. Enchaîne d'une traite les tâches 4, 5, 6 puis 10 du plan. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
 
 **Phase D — Sonnet 5.5 — dans ce dépôt**
 

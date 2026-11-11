@@ -164,6 +164,35 @@ seulement**. Les garde-fous actuels qui refusent Fable (`MODELES_INTERDITS` de `
 (champ de fiche, par exemple `Fable : accordé par le Directeur le <date>`). Le moteur ne choisit jamais Fable de
 lui-même (montée de modèle, jugements).
 
+## 5 bis. L'environnement du poste (décision de l'utilisateur, 2026-11-12)
+
+À l'analyse du besoin, on vérifie si **le poste sait déjà faire** chaque étape du workflow (exemple : un `.apk` demande
+un JDK, le SDK Android, Gradle, de quoi signer et de quoi tester). Ce qui est déjà là est montré **« déjà en place »** ;
+ce qui manque est installé **après validation**, pour que les agents soient **autonomes sur toutes les étapes**
+(générer l'`.apk`, lancer les tests…).
+
+1. **Ce qu'il faut** : la réponse de `proposer_organisation` gagne `environnement` : la liste des outils dont le workflow
+   a besoin, chacun `{"outil", "pour" (l'étape qui s'en sert), "executables": [noms], "installation": texte (comment
+   l'installer sur Windows, source officielle, taille approximative)}`.
+2. **Ce qui est déjà là** : vérifié **en code**, jamais par une commande écrite par l'IA : chaque exécutable est
+   cherché dans le `PATH` et aux emplacements usuels (`shutil.which`, variables comme `JAVA_HOME`, `ANDROID_HOME`) ;
+   trouvé, on lit sa version avec une option d'une liste fixe (`--version`, `-version`, `version`). Chaque outil est
+   marqué `en_place` (avec le chemin et la version) ou `a_installer`.
+3. **La proposition** (décision `organisation`) montre la liste : « déjà en place » ou « à installer » (source, taille).
+4. **Après validation**, le moteur ajoute en tête du workflow de la fonctionnalité une tâche **« Mise en place de
+   l'environnement »**, confiée à un agent dont la fiche ouvre les outils d'installation nécessaires (par exemple
+   `Bash(winget:*)`, `Bash(sdkmanager:*)` : les règles d'outils sont proposées avec l'organisation et validées avec
+   elle). Il installe de préférence **pour l'utilisateur seul** (sans droits d'administrateur) et depuis les sources
+   officielles ; il vérifie chaque outil après installation (même vérification qu'au point 2) et rend compte. Le
+   cadrage puis la production ne démarrent qu'après.
+5. **Ce qui est noté** : les outils en place et leurs chemins sont gardés dans les réglages du projet
+   (`environnement`), et donnés aux agents dans leur départ (« Outils du poste : … »). Une demande suivante qui a
+   besoin des mêmes outils les trouve « déjà en place ».
+6. **Ne jamais bloquer** : une installation qui échoue (droits d'administrateur requis, téléchargement refusé, outil
+   introuvable) devient une décision au Directeur qui dit ce qui manque, pourquoi, et **comment l'installer à la
+   main** ; « C'est fait » relance la vérification ; « Continuer sans » laisse la production démarrer (les étapes
+   qui en ont besoin le diront).
+
 ## 6. Créer un projet depuis le bureau
 
 **Deux entrées** : l'issue « Nouveau projet » de la décision `genre_fonctionnalite`, et l'entrée « Nouveau projet… » de
@@ -236,6 +265,7 @@ la liste déroulante des projets (`bureau/web/ui/barre.js:majProjets`).
 | Organisation refusée | Avec un texte : nouvelle proposition. Sans texte : le workflow le plus récent du même genre, sinon le principal, et le moteur le dit ; projet sans aucun workflow : la décision reste posée (proposer autre chose ou abandonner). |
 | Création du projet impossible (droits, nom pris, 12 projets) | Message clair dans le formulaire ; depuis une décision, l'issue « Dans ce projet » reste là. |
 | `git`/`gh` absent ou non connecté | Projet créé en local, GitHub expliqué. |
+| Un outil du poste ne s'installe pas | Décision au Directeur : ce qui manque, comment l'installer à la main ; « C'est fait » revérifie, « Continuer sans » laisse avancer (section 5 bis). |
 | Un rôle du workflow sans agent libre | Comportement actuel (attente d'un agent libre) ; jamais un rôle sans fiche : la mise en place refuse un workflow dont un rôle n'a pas d'agent. |
 
 ## 9. Le bureau
@@ -244,8 +274,9 @@ la liste déroulante des projets (`bureau/web/ui/barre.js:majProjets`).
 - **Décision `genre_fonctionnalite`** : texte, genre proposé (modifiable), issues « Nouveau projet », « Dans ce
   projet » (et « C'est le même genre » si incertain).
 - **Décision `organisation`** étendue : le workflow proposé (étapes, rôles, services), les nouveaux agents avec leur
-  modèle et sa justification, les nouveaux services, le coût estimé, et la case Fable par agent quand elle est
-  suggérée (section 5).
+  modèle et sa justification, les nouveaux services, le coût estimé, la case Fable par agent quand elle est
+  suggérée (section 5), et l'environnement du poste : chaque outil « déjà en place » (version) ou « à installer »
+  (source, taille) (section 5 bis).
 - **Tableau** : colonnes = `cadrage`, puis les étapes de chaque workflow dans l'ordre de réalisation (les workflows dans
   l'ordre de leur création, les étapes dans l'ordre du flux), puis `fait`. **Chaque colonne affiche son genre.** Le
   relevé (`outil.py`, `colonnes`) donne pour chaque colonne `{id, nom, genre, workflow}`. Toute la page qui lit

@@ -87,10 +87,10 @@
 **Interfaces :**
 - Produit :
   - `TYPES["classer_genre"] = "haiku"` ; dossier `{"demande": {texte, images}, "projet": {nom, description}, "genres_du_projet": [{id, domaine, livrable, outils}], "genres_connus": [...]}` ; réponse `{"verdict": "meme"|"proche"|"autre"|"incertain", "genre": id|null, "nouveau": {"id", "description"}|null, "raison": str}` ; règles : `meme`/`proche` exigent un `genre` connu ; `autre` exige `genre` connu ou `nouveau` (id au motif `MOTIF_GENRE`) ; `nouveau.id` jamais un mot interdit (le dossier les porte en `mots_interdits`).
-  - `TYPES["proposer_organisation"] = "sonnet"` ; dossier `{"demande", "genre", "projet": {nom, description}, "services", "agents": [{cle, role, modele, specialite}], "workflows_du_genre": [{id, flux}], "fonctionnalite": id, "refus": texte|null}` ; réponse `{"flux": [{"etape", "nom", "role", "service"}], "services": [{"id", "nom"}], "agents": [{"cle", "prenom"?, "role", "service", "modele", "justification", "fable_suggere"?: bool, "texte"}], "briefs": {role: texte}, "livrable": texte}` ; règles : `modele` dans Haiku/Sonnet/Opus (jamais Fable) ; chaque rôle du flux a un agent existant ou proposé ; la **dernière étape** produit ou remet le livrable (`livrable` non vide, et le nom de la dernière étape le dit) ; services du flux connus ou proposés.
+  - `TYPES["proposer_organisation"] = "sonnet"` ; dossier `{"demande", "genre", "projet": {nom, description}, "services", "agents": [{cle, role, modele, specialite}], "workflows_du_genre": [{id, flux}], "fonctionnalite": id, "refus": texte|null}` ; réponse `{"flux": [{"etape", "nom", "role", "service"}], "services": [{"id", "nom"}], "agents": [{"cle", "prenom"?, "role", "service", "modele", "justification", "fable_suggere"?: bool, "texte"}], "briefs": {role: texte}, "livrable": texte, "environnement": [{"outil", "pour", "executables": [str], "installation": texte}], "outils_installation": [règles d'outils, par exemple "Bash(winget:*)"]}` ; règles : `modele` dans Haiku/Sonnet/Opus (jamais Fable) ; chaque rôle du flux a un agent existant ou proposé ; la **dernière étape** produit ou remet le livrable (`livrable` non vide, et le nom de la dernière étape le dit) ; services du flux connus ou proposés.
 - Les consignes portent les décisions de l'utilisateur : *proche* = mêmes savoir-faire, mêmes outils, même sorte de livrable ; **dans le doute `incertain`, jamais élargir un genre** ; le workflow va de la demande au livrable remis (fabrication, qualité dès que c'est logique, livraison) ; reprendre tel quel le workflow le plus récent du même genre s'il convient ; le modèle selon la complexité (Haiku mécanique, Sonnet création et code courant, Opus conception difficile) ; Fable seulement en `fable_suggere`.
 
-- [ ] **Étape 1 : tests des validateurs** : `test_classer_genre_valide`, `test_classer_genre_nouveau_mot_interdit_refuse`, `test_proposer_organisation_sans_livraison_refuse`, `test_proposer_organisation_fable_refuse`, `test_proposer_organisation_role_sans_agent_refuse`.
+- [ ] **Étape 1 : tests des validateurs** : `test_proposer_organisation_environnement_valide` (chaque outil a `executables` non vide et `installation`), `test_classer_genre_valide`, `test_classer_genre_nouveau_mot_interdit_refuse`, `test_proposer_organisation_sans_livraison_refuse`, `test_proposer_organisation_fable_refuse`, `test_proposer_organisation_role_sans_agent_refuse`.
 - [ ] **Étape 2 : les lancer** : échec attendu.
 - [ ] **Étape 3 : écrire validateurs et consignes.**
 - [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py jugement` : vert.
@@ -151,6 +151,21 @@
 - [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur orch demandes banc` : vert.
 - [ ] **Étape 5 : commit** « Moteur : classer chaque demande, proposer son workflow, recruter ».
 
+### Tâche 10 : l'environnement du poste
+
+**Fichiers :**
+- Créer : `moteur/environnement.py`
+- Modifier : `moteur/regles.py` (la proposition `organisation` porte l'environnement vérifié ; à l'acceptation, tâche « Mise en place de l'environnement » en tête du workflow, cadrage après sa fin ; décision d'échec), `orchestrateur/outil.py` (réglage `environnement` du projet ; `depart` : « Outils du poste : … »), `installation/mise_en_place.py` (`ecrire_organisation` : fiche de l'agent d'environnement avec ses `outils_installation`)
+- Test : `tests/test_moteur_environnement.py`, `tests/test_moteur_regles.py`
+
+**Interfaces :**
+- Produit : `verifier(outils: list[dict], *, which=shutil.which, executer=..., env=os.environ) -> list[dict]` : chaque outil + `{"etat": "en_place"|"a_installer", "chemin"?, "version"?}` ; exécutables cherchés par `which` puis sous `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` ; version lue avec la première option de `("--version", "-version", "version")` qui répond (délai 10 s) ; **aucune commande venue de l'IA n'est exécutée**.
+- Consomme : `environnement` de `proposer_organisation` (tâche 3) ; parcours de la tâche 6.
+
+- [ ] **Étape 1 : tests** : `test_outil_present_en_place_avec_version`, `test_outil_absent_a_installer`, `test_android_home_trouve`, `test_jamais_de_commande_de_l_ia` (un exécutable nommé `rm -rf` ou avec espace/`;`/`&` est refusé sans être lancé), `test_tout_en_place_pas_de_tache_d_installation`, `test_acceptation_cree_la_tache_d_environnement_avant_le_cadrage`, `test_installation_ratee_devient_decision`, `test_c_est_fait_revérifie`, `test_continuer_sans_laisse_avancer`, `test_environnement_note_dans_les_reglages_et_au_depart`.
+- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur environnement orch`).
+- [ ] **Étape 5 : commit** « Moteur : vérifier et installer l'environnement du poste ».
+
 ## Étape 4 — créer un projet, le bureau
 
 ### Tâche 7 : créer un projet vide
@@ -170,14 +185,14 @@
 ### Tâche 8 : le bureau
 
 **Fichiers :**
-- Modifier : `bureau/serveur.py` (route `POST /api/projets/creer` : appelle `creation.creer_projet`, puis, si `decision` est donné, dépose la demande `genre_fonctionnalite` `nouveau_projet` dans le projet d'origine ; `GET /api/projets` ajoute `parents` suggérés), `bureau/web/ui/barre.js` (entrée « Nouveau projet… »), `bureau/web/ui/decisions.js` (décision `genre_fonctionnalite` ; décision `organisation` : workflow, agents avec modèle et justification, services, coût, case Fable par agent), créer `bureau/web/ui/creation.js` (formulaire : répertoire parent avec suggestions, nom, mots interdits et facturation pré-remplis, GitHub, description si pas de demande d'origine ; « Le genre vous sera proposé dans un instant »), `bureau/web/main.js` (après une création, le bureau bascule sur le nouveau projet : choix gardé dans `localStorage` comme aujourd'hui)
+- Modifier : `bureau/serveur.py` (route `POST /api/projets/creer` : appelle `creation.creer_projet`, puis, si `decision` est donné, dépose la demande `genre_fonctionnalite` `nouveau_projet` dans le projet d'origine ; `GET /api/projets` ajoute `parents` suggérés), `bureau/web/ui/barre.js` (entrée « Nouveau projet… »), `bureau/web/ui/decisions.js` (décision `genre_fonctionnalite` ; décision `organisation` : workflow, agents avec modèle et justification, services, coût, case Fable par agent, environnement « déjà en place » / « à installer » ; décision d'échec d'installation : « C'est fait », « Continuer sans »), créer `bureau/web/ui/creation.js` (formulaire : répertoire parent avec suggestions, nom, mots interdits et facturation pré-remplis, GitHub, description si pas de demande d'origine ; « Le genre vous sera proposé dans un instant »), `bureau/web/main.js` (après une création, le bureau bascule sur le nouveau projet : choix gardé dans `localStorage` comme aujourd'hui)
 - Test : `tests/test_bureau_serveur*.py`, `bureau/web/tests/*.test.js`
 
 **Interfaces :**
 - Consomme : `creation.creer_projet` (tâche 7) ; demandes de la tâche 6.
 - Produit : `POST /api/projets/creer` `{parent, nom, mots_interdits, facturation, github, description?, origine: <id projet>, decision?, fonctionnalite?}` → `{ok, projet: <id>, github, message}` ou `{erreur}` (code d'accès exigé comme les autres routes d'écriture).
 
-- [ ] **Étape 1 : tests** : `test_creer_projet_route` ; `test_creer_projet_depuis_une_decision_depose_la_demande` ; `test_creer_projet_erreur_lisible` ; `test_creer_exige_le_code_d_acces` ; page : `liste propose Nouveau projet`, `decision genre_fonctionnalite trois issues`, `organisation montre la case Fable seulement si suggeree`, `apres creation bascule sur le nouveau projet`.
+- [ ] **Étape 1 : tests** : `test_creer_projet_route` ; `test_creer_projet_depuis_une_decision_depose_la_demande` ; `test_creer_projet_erreur_lisible` ; `test_creer_exige_le_code_d_acces` ; page : `liste propose Nouveau projet`, `decision genre_fonctionnalite trois issues`, `organisation montre la case Fable seulement si suggeree`, `apres creation bascule sur le nouveau projet`, `organisation montre l environnement`.
 - [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py bureau serveur demandes` et `node --test bureau/web/tests`).
 - [ ] **Étape 5 : commit** « Bureau : créer un projet, choisir le genre d'une demande, valider son workflow ».
 

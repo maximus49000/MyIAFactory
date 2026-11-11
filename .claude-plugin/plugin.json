@@ -1,0 +1,6 @@
+{
+  "name": "myiafactory",
+  "version": "0.4.0",
+  "description": "Une usine d'agents Claude pour un projet : la commande /myiafactory:installer comprend le projet, propose une organisation chiffrée et configure le bureau et l'orchestrateur.",
+  "repository": "https://github.com/maximus49000/MyIAFactory"
+}

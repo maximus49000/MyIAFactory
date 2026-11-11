@@ -91,7 +91,7 @@ Projet 4, l'installation sur un projet ([conception](docs/superpowers/specs/2026
 - [x] 6. Le calibrage et l'estimation du coût
 - [x] 7. La proposition, la mise en place, le bureau commun, la réparation
 - [x] 8. La ligne de commande de l'installation
-- [ ] 9. Le plugin et les consignes de la discussion
+- [x] 9. Le plugin et les consignes de la discussion
 - [ ] 10. La décision et la commande « organisation »
 - [ ] 11. Les guides d'accord, relecture finale
 - [ ] 12. Le vrai passage sur un projet vide et un projet existant

@@ -1,0 +1,13 @@
+{
+  "name": "myiafactory",
+  "owner": {
+    "name": "MyIAFactory"
+  },
+  "plugins": [
+    {
+      "name": "myiafactory",
+      "source": "./",
+      "description": "Installe MyIAFactory sur un projet : discussion, proposition chiffrée, mise en place après validation."
+    }
+  ]
+}

@@ -44,7 +44,7 @@ async function lireEtat() {
   }
 }
 
-const structure = (e) => JSON.stringify([e.services, (e.colonnes || []).map((c) => c.id)]);
+const structure = (e) => JSON.stringify([e.services, (e.colonnes || []).map((c) => c.id), Boolean(e.partenaires)]);
 
 // Le Directeur (l'utilisateur) : un personnage fixe à son bureau. Ce n'est pas un agent du relevé.
 function acteurDirecteur(plan) {
@@ -69,7 +69,7 @@ async function demarrer() {
   barre.majEtat(etat);
   document.title = `${etat.projet} · le bureau vivant`;
 
-  const plan = creerPlan(etat.services || [], etat.colonnes || []);
+  const plan = creerPlan(etat.services || [], etat.colonnes || [], {partenaires: Boolean(etat.partenaires)});
   const modeles = await charger("./modeles/manifeste.json");
   const sc = creerScene(conteneur, plan, modeles, {mobile: mobile()});
   const regie = new Regie(plan);

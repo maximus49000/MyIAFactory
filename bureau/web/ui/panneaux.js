@@ -11,6 +11,8 @@ import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
+import {contenuPartenaires, creerVue} from "./partenaires.js";
+import {envoyer as envoyerDemande} from "./actions.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
@@ -30,6 +32,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   const vuesCatalogue = new Map();   // fonctionnalité -> filtres, page, fiche ouverte, zoom de la vue de haut
   const retoursEnvoyes = new Map();  // fonctionnalité + élément -> retours envoyés que le catalogue n'a pas repris
   let grand = false;                 // le catalogue en plein écran (« Agrandir », Échap pour revenir)
+  const vuePartenaires = creerVue();  // filtre, cartes dépliées, message : survit aux rafraîchissements
 
   const signature = (type, id, e) => {
     if (type === "service") {
@@ -38,6 +41,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         e.challenges, (e.savoir || []).filter((s) => s.service === id),
         (e.taches || []).filter((t) => t.active).map((t) => [t.id, t.titre, t.agent, t.etape])]));
     }
+    if (type === "partenaires") return JSON.stringify([e.partenaires, e.agir]);
     if (type === "tache") {
       return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir, e.images_ok,
         (e.agents || []).map((a) => [a.id, a.prenom]), retourListe]);
@@ -136,7 +140,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
   }
 
   const contexte = () => ({
-    etat: etat(), barre, brouillons, filtreListe, retourListe, envois, envoyes, nouvelle, corrections,
+    etat: etat(), barre, brouillons, vuePartenaires, filtreListe, retourListe, envois, envoyes, nouvelle, corrections,
     rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
     ouvrirCatalogue: (id) => ouvrirCatalogue(id),
@@ -204,6 +208,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       const f = (e.fonctionnalites || []).find((x) => x.id === id);
       if (!f || f.catalogue !== true) { fermerPanneau(); return; }
       contenuCatalogue(contexte(), contenu, f);
+    } else if (type === "partenaires") {
+      if (!e.partenaires) { fermerPanneau(); return; }
+      contenuPartenaires(contexte(), contenu, envoyerDemande);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id);
       if (!a) { fermerPanneau(); return; }
@@ -313,7 +320,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     attente = requestAnimationFrame(() => {
       attente = null;
       const choix = sc.pointer(ev);
-      const cliquable = ["agent", "postit", "file", "attente", "service", "direction", "kanban"].includes(choix.type);
+      const cliquable = ["agent", "postit", "file", "attente", "service", "direction", "partenaires", "kanban"].includes(choix.type);
       conteneur.style.cursor = cliquable ? "pointer" : "";
       if (choix.type === "agent") montrerCarte(choix, ev.clientX, ev.clientY);
       else cacherCarte();
@@ -329,6 +336,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     else if (choix.type === "file") ouvrirPanneau("file", choix.id);
     else if (choix.type === "attente") ouvrirPanneau("attente", null);
     else if (choix.type === "service" || choix.type === "direction") ouvrirPanneau(choix.type, choix.id);
+    else if (choix.type === "partenaires") ouvrirPanneau("partenaires", null);
     else if (choix.type === "kanban" && etat()) ouvrirKanban(etat(), (id) => { retourListe = false; ouvrirPanneau("tache", id); });
     else fermerPanneau();
   });
@@ -366,6 +374,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
         if ((type === "fonctionnalite" || type === "catalogue") && id !== null
             && !(e.fonctionnalites || []).some((f) => f.id === id)) fermerPanneau();
         else if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
+        else if (type === "partenaires" && !e.partenaires) fermerPanneau();
         else if (type === "agent" && !(e.agents || []).some((a) => a.id === id)) fermerPanneau();
         else if (type === "tache" && !(e.taches || []).some((t) => t.id === id)) fermerPanneau();
         else if (type === "file" && !(e.taches || []).some((t) => t.id === id)

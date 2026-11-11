@@ -18,11 +18,16 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
           "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
           "retour_element": ("fonctionnalite", "element", "texte"),
-          "organisation": ("decision", "verdict")}
-FACULTATIFS = {"challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
+          "organisation": ("decision", "verdict"),
+          "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
+          "partenaires_maj": ("confirme",)}
+FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",)}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation")
+DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
+MAX_REGLE = 500
+OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
 MAX_IMAGES = releve.MAX_IMAGES_MESSAGE
 MAX_OCTETS_IMAGE = 5 * 1024 * 1024
 MAX_NOM_IMAGE = 80
@@ -107,6 +112,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return "Type de demande inconnu."
     if genre in ("challenge", "solution", "verdict_solution"):
         return _verifier_challenge(demande, r, cibles_calculees)
+    if genre in DEMANDES_PARTENAIRES:
+        return _verifier_partenaires(demande, r)
     if r.get("version", 1) < 4 and (genre in DEMANDES_V4 or (genre == "lecon" and "etage" in demande)):
         return "Le relevé de ce projet ne gère pas cette demande (version 4)."
     for champ in CHAMPS[genre]:
@@ -140,6 +147,42 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
             return "Verdict inconnu (valider ou invalider)."
         if "etage" in demande:
             return _verifier_etage(demande, r)
+    return None
+
+
+def ids_partenaires(r):
+    """Les identifiants des partenaires du catalogue que porte le relevé (vide sans espace partenaire)."""
+    p = r.get("partenaires")
+    if not isinstance(p, dict):
+        return set()
+    return {x["id"] for liste in (p.get("categories") or {}).values() for x in liste}
+
+
+def _verifier_partenaires(demande, r):
+    """Les demandes de l'espace partenaire (relevé version 4 avec `partenaires`). Le bureau n'agit pas : il les remet."""
+    genre = demande["type"]
+    if r.get("version", 1) < 4 or not isinstance(r.get("partenaires"), dict):
+        return "Le relevé de ce projet n'a pas d'espace partenaire (version 4)."
+    if genre == "partenaires_actualiser":
+        return None
+    if genre == "partenaires_maj":
+        return None if demande.get("confirme") is True else "La mise à jour des offres demande une confirmation."
+    i, operation = demande.get("partenaire"), demande.get("operation")
+    if not isinstance(i, str) or i not in ids_partenaires(r):
+        return "Partenaire inconnu."
+    if not isinstance(operation, str) or operation not in OPERATIONS_REGLE:
+        return "Opération inconnue (ajouter, modifier ou supprimer)."
+    if operation != "ajouter":
+        regles = ((r["partenaires"].get("etat") or {}).get("regles") or {}).get(i) or []
+        if not isinstance(demande.get("id"), str) or demande["id"] not in {x.get("id") for x in regles}:
+            return "Règle inconnue."
+    if operation == "supprimer":
+        return None
+    texte = demande.get("texte")
+    if not isinstance(texte, str) or not texte.strip():
+        return "« texte » est obligatoire pour une règle."
+    if len(texte) > MAX_REGLE:
+        return f"La règle dépasse {MAX_REGLE} caractères."
     return None
 
 

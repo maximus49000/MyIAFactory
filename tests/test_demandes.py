@@ -435,5 +435,67 @@ class TestVerifierV4(unittest.TestCase):
         self.assertEqual(d["images"], "pas une liste")  # le contrôle le refusera
 
 
+
+def releve_base_v4():
+    return {"version": 4, "projet": "P", "factory": {"etat": "en marche"},
+            "services": [{"id": "dev", "nom": "Dev"}], "colonnes": [{"id": "a", "nom": "A"}],
+            "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
+            "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}]}
+
+
+class TestPartenairesDemandes(unittest.TestCase):
+    def setUp(self):
+        from tests.part_aide import partenaires_exemple
+        self.r = releve.normaliser({**releve_base_v4(), "partenaires": partenaires_exemple()})
+
+    def ok(self, d):
+        self.assertIsNone(demandes.verifier(d, self.r), d)
+
+    def refus(self, d):
+        m = demandes.verifier(d, self.r)
+        self.assertTrue(m, d)
+        return m
+
+    def test_regle(self):
+        self.ok({"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter", "texte": "Un seul prompt."})
+        self.ok({"type": "partenaire_regle", "partenaire": "tripo", "operation": "modifier", "id": "r1", "texte": "Autre."})
+        self.ok({"type": "partenaire_regle", "partenaire": "tripo", "operation": "supprimer", "id": "r1"})
+        self.refus({"type": "partenaire_regle", "partenaire": "zz", "operation": "ajouter", "texte": "x"})
+        self.refus({"type": "partenaire_regle", "partenaire": "tripo", "operation": "effacer", "id": "r1"})
+        self.refus({"type": "partenaire_regle", "partenaire": "tripo", "operation": "supprimer", "id": "zz"})
+        self.refus({"type": "partenaire_regle", "partenaire": "vox", "operation": "supprimer", "id": "r1"})
+        self.refus({"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter"})
+        self.refus({"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter", "texte": "  "})
+
+    def test_demande_regle_texte_trop_long(self):
+        base = {"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter"}
+        self.ok({**base, "texte": "x" * 500})
+        self.assertIn("500", self.refus({**base, "texte": "x" * 501}))
+        self.refus({**base, "texte": 12})
+
+    def test_actualiser(self):
+        self.ok({"type": "partenaires_actualiser"})
+
+    def test_demande_maj_sans_confirmation_refusee(self):
+        self.ok({"type": "partenaires_maj", "confirme": True})
+        for d in ({"type": "partenaires_maj"}, {"type": "partenaires_maj", "confirme": False},
+                  {"type": "partenaires_maj", "confirme": "true"}, {"type": "partenaires_maj", "confirme": 1}):
+            self.refus(d)
+
+    def test_sans_espace_partenaire_ou_avant_v4(self):
+        sans = releve.normaliser(releve_base_v4())
+        self.assertTrue(demandes.verifier({"type": "partenaires_actualiser"}, sans))
+        v3 = releve.normaliser({**releve_base_v4(), "version": 3})
+        self.assertTrue(demandes.verifier({"type": "partenaires_maj", "confirme": True}, v3))
+
+    def test_nettoyer(self):
+        d = demandes.nettoyer({"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter",
+                               "texte": "x", "cle": "SECRET", "autre": 1})
+        self.assertEqual(d, {"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter", "texte": "x"})
+        self.assertEqual(demandes.nettoyer({"type": "partenaires_maj", "confirme": True, "x": 1}),
+                         {"type": "partenaires_maj", "confirme": True})
+        self.assertEqual(demandes.nettoyer({"type": "partenaires_actualiser", "x": 1}), {"type": "partenaires_actualiser"})
+
+
 if __name__ == "__main__":
     unittest.main()

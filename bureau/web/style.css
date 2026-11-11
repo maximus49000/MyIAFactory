@@ -781,3 +781,33 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .mobile .panneau input, .mobile .panneau textarea, .mobile .panneau select { font-size: 16px; }   /* pas de zoom à la saisie */
 .mobile .panneau .bouton { min-height: 40px; }
 .mobile .carte { display: none; }   /* pas de survol au doigt */
+
+/* --- L'espace partenaire (pièce « Partenaires ») */
+.nom-partenaires { color: #3b4a6b; }
+.partenaires h2 { margin: 0 0 6px; }
+.partenaires-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.partenaires-section { margin-top: 14px; }
+.partenaires-section h3, .partenaires-categorie { margin: 10px 0 6px; font-size: 14px; }
+.partenaires-filtre { width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 6px; font: inherit; }
+.partenaire-carte { border: 1px solid #d9d2c3; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fffdf8; }
+.partenaire-entete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.partenaire-deplier { min-width: 32px; min-height: 32px; padding: 0 6px; }
+.partenaire-categorie { font-size: 12px; opacity: 0.7; }
+.partenaire-resume { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 4px; font-size: 13px; }
+.partenaire-etat { font-weight: 600; }
+.etat-connecte { color: #2f7d3b; }
+.etat-declare { color: #9a6b00; }
+.etat-non_connecte { color: #777; }
+.partenaire-limite { color: #b3261e; font-weight: 600; }
+.partenaire-prix-incertain { color: #9a6b00; font-style: italic; }
+.partenaire-corps { margin-top: 6px; }
+.partenaire-liens, .partenaire-connexions { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 6px 0; align-items: center; }
+.partenaire-commande { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; }
+.partenaire-commande code { overflow-wrap: anywhere; font-size: 12px; background: #f3efe6; padding: 3px 6px; border-radius: 4px; }
+.partenaire-regle { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+.partenaire-regle-texte { flex: 1 1 200px; overflow-wrap: anywhere; }
+.partenaire-formulaire { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.partenaire-saisie { width: 100%; box-sizing: border-box; font: inherit; padding: 6px; }
+.partenaires-confirmation { border: 2px solid #c9a227; border-radius: 8px; padding: 10px; margin: 8px 0; background: #fff8e0; display: flex; flex-direction: column; gap: 8px; }
+.partenaire-conseil { margin-bottom: 4px; }
+html.mobile .partenaires-actions .bouton, html.mobile .partenaire-regle .bouton { min-height: 44px; }

@@ -484,5 +484,29 @@ class TestEtatV4(unittest.TestCase):
         self.assertNotIn("agents_locaux_max", self.etat(version=3, modif=lambda r: r.update(agents_locaux_max=3)))
 
 
+
+class TestEtatPartenaires(unittest.TestCase):
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.eq = equipe.Equipe(Path(self._t.name) / "equipe.json")
+
+    def etat(self, version=4, avec=True):
+        from tests.part_aide import partenaires_exemple
+        r = {**copy.deepcopy(BASE), "version": version}
+        if avec:
+            r["partenaires"] = partenaires_exemple()
+        return etat.construire(releve.normaliser(r), self.eq, M, 30)
+
+    def test_partenaires_rendus_tels_quels(self):
+        from tests.part_aide import partenaires_exemple
+        attendu = releve.normaliser({**copy.deepcopy(BASE), "version": 4, "partenaires": partenaires_exemple()})
+        self.assertEqual(self.etat()["partenaires"], attendu["partenaires"])
+
+    def test_partenaires_absents_sans_champ_ou_avant_v4(self):
+        self.assertNotIn("partenaires", self.etat(avec=False))
+        self.assertNotIn("partenaires", self.etat(version=3))
+
+
 if __name__ == "__main__":
     unittest.main()

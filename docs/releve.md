@@ -159,6 +159,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
 | `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) ou `organisation` (plus `organisation` : `{services, flux, agents, briefs, cout}`, l'organisation proposée ; `cout` = `{tokens: [a, b], euros: [a, b] ou null}`) |
 | `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
+| `partenaires` | racine | facultatif : l'espace partenaire (la pièce « Partenaires », voir ci-dessous) ; absent, la pièce n'existe pas |
 | `fonctionnalite`, `element` | chaque tâche | la fonctionnalité et l'élément du catalogue de la tâche |
 | `modele_depart`, `montee` | chaque tâche | le modèle de départ et une montée de modèle `{de, a, raison}` (montrée dans le panneau de la tâche) |
 | `lot` | chaque tâche | facultatif : `{id, rang}` (texte non vide, entier d'au moins 1) ou `null` ; le panneau de la tâche montre « Lot L2, tâche 3 sur 4 » |
@@ -257,6 +258,9 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `session_cloud` | `decision`, `session` | « C'est fait » : la session cloud demandée est créée, avec ce nom |
 | `organisation` | `decision`, `verdict` (`accepter` ou `refuser`) | « Accepter » ou « Refuser » une évolution de l'organisation |
 | `retour_element` | `fonctionnalite`, `element`, `texte` | « Demander à modifier » dans le catalogue (l'élément doit y être) |
+| `partenaire_regle` | `partenaire`, `operation` (`ajouter`, `modifier` ou `supprimer`), `id?`, `texte?` | une règle d'usage d'un partenaire (500 caractères au plus ; `id` = la règle visée pour `modifier` et `supprimer`) |
+| `partenaires_actualiser` | aucun | « Actualiser » : relever de nouveau les quotas |
+| `partenaires_maj` | `confirme` (`true` obligatoire) | « Mettre à jour les offres » : l'utilisateur a vu le coût estimé et confirmé |
 
 Textes : 3 500 caractères au plus. **Images jointes** : 4 au plus par demande, `{nom, type, donnees}` avec `donnees`
 en base64, `type` = `image/png` ou `image/jpeg`, extension `.png`, `.jpg` ou `.jpeg` assortie, 5 Mo au plus une fois
@@ -313,3 +317,28 @@ Version minimale :
               "titulaire": "dev:1", "maj": "2026-11-10T09:12:00"}]
 }
 ```
+
+## L'espace partenaire (champ `partenaires`, version 4)
+
+Les partenaires (voix, images, vidéo, 3D, traduction…) sont **facultatifs** : le bureau ne fait qu'afficher ce champ et déposer des demandes ; il n'appelle aucun partenaire et ne connaît **aucune valeur de clé**. Une pièce « Partenaires » s'ajoute au bâtiment quand le champ est présent.
+
+```json
+"partenaires": {
+  "categories": {"voix-audio": [{"id": "elevenlabs", "nom": "ElevenLabs", "categorie": "voix-audio", "sous_categorie": "synthese-vocale",
+                                 "inscription": "https://…", "connexions": [{"type": "mcp", "url": "https://…", "commande": "claude mcp add …"}],
+                                 "plans": [{"nom": "Gratuit", "prix": 0, "devise": "USD", "periode": "mois", "quota": "…", "tarif": "gratuit"}],
+                                 "gratuit": "…", "quota_lisible": "oui", "illimite": false, "statut": "actif",
+                                 "fiabilite": "officielle", "verifie_le": "2026-11-11"}]},
+  "etat": {"connexions": {"elevenlabs": {"etat": "connecte", "source": "…", "abonnement": "Pro", "vu_le": "2026-11-11T10:00:00"}},
+           "quotas": {"elevenlabs": {"reste": 4200, "unite": "caractères", "lu_le": "2026-11-11T10:05:00"}},
+           "limites": {"echo": {"depuis": "2026-11-11T09:00:00", "raison": "quota épuisé"}},
+           "regles": {"tripo": [{"id": "r1", "texte": "…", "cree_le": "2026-11-11"}]}},
+  "conseils": {"voix": [{"id": "elevenlabs", "raison": "…"}]},
+  "maj_catalogue": "2026-11-11",
+  "cout_maj": {"euros": 0.4, "texte": "Environ 40 fiches sur Sonnet."}
+}
+```
+
+`categories` est le catalogue réduit aux champs affichés (obligatoire) ; tout identifiant de `etat` et de `conseils` doit y figurer. `etat.connexions[id].etat` vaut `connecte`, `declare` (« déclaré, à vérifier ») ou `non_connecte`. Un quota absent s'affiche « quota inconnu », jamais zéro ; `illimite: true` s'affiche « illimité » ; les dates sont montrées avec le quota (rien n'est montré comme actuel sans sa date). Seuls les liens `https://` sont rendus. `cout_maj` (facultatif) est le coût estimé que la fenêtre de confirmation de « Mettre à jour les offres » affiche avant la demande `partenaires_maj`.
+
+La facturation peut porter `partenaires` : `{id: {nom, total (euros), origine: [{montant, devise}], estime, non_chiffre, usages}}`, une ligne par partenaire ; un coût absent compte « non chiffré », jamais zéro.

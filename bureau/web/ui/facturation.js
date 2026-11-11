@@ -67,6 +67,31 @@ export function totalProjet(f) {
   return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, sansPrix: (f?.sans_prix || []).length > 0};
 }
 
+// Les partenaires dans la facturation : une ligne par partenaire (coût en euros ; le coût d'origine est en info-bulle).
+// Un coût absent compte « non chiffré », jamais zéro ; un coût estimé le dit.
+export function lignesPartenaires(f) {
+  return Object.entries(f?.partenaires || {})
+    .map(([id, p]) => {
+      const origine = (Array.isArray(p?.origine) ? p.origine : [])
+        .filter((o) => o && typeof o.montant === "number" && typeof o.devise === "string")
+        .map((o) => `${String(o.montant).replace(".", ",")} ${o.devise}`).join(" + ");
+      return {
+        id, nom: typeof p?.nom === "string" && p.nom ? p.nom : id,
+        total: typeof p?.total === "number" ? p.total : 0, origine,
+        estime: p?.estime === true, nonChiffre: typeof p?.non_chiffre === "number" ? p.non_chiffre : 0,
+        usages: typeof p?.usages === "number" ? p.usages : 0,
+      };
+    })
+    .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom));
+}
+
+export function coutDePartenaire(l) {
+  let texte = l.total > 0 ? euros(l.total) : (l.nonChiffre > 0 ? "non chiffré" : euros(0));
+  if (l.total > 0 && l.nonChiffre > 0) texte += " + non chiffré";
+  if (l.estime && l.total > 0) texte += " · estimé";
+  return texte;
+}
+
 export function lignesModeles(s) {
   return Object.entries(s?.modeles || {}).map(([nom, total]) => ({nom, total})).sort((a, b) => b.total - a.total);
 }
@@ -178,6 +203,19 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
       ls.append(li);
     }
     conteneur.append(ls);
+  }
+  const partenaires = lignesPartenaires(donnees);
+  if (partenaires.length) {
+    conteneur.append(el("div", "carte-sous-titre", "Partenaires"));
+    const lp = el("ul", "liste-cout");
+    for (const l of partenaires) {
+      const li = el("li", "");
+      const r = rangee(tronquer(l.nom, 40), coutDePartenaire(l));
+      if (l.origine) r.title = `Coût d'origine : ${l.origine}`;
+      li.append(r);
+      lp.append(li);
+    }
+    conteneur.append(lp);
   }
   const projet = totalProjet(donnees);
   conteneur.append(el("div", "carte-sous-titre", "Tout le projet"));

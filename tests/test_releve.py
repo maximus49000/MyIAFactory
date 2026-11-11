@@ -1017,5 +1017,68 @@ class TestAgentsLocauxMax(unittest.TestCase):
         self.assertNotIn("agents_locaux_max", n)
 
 
+
+class TestPartenaires(unittest.TestCase):
+    """Le champ facultatif `partenaires` (version 4) : l'espace partenaire du bureau."""
+
+    def r(self, p=None, version=4):
+        from tests.part_aide import partenaires_exemple
+        return {**copy.deepcopy(BASE), "version": version, "partenaires": p if p is not None else partenaires_exemple()}
+
+    def refus(self, p, mot):
+        erreurs = releve.valider(self.r(p))
+        self.assertTrue(any(mot in e for e in erreurs), (mot, erreurs))
+
+    def test_releve_partenaires_valide(self):
+        self.assertEqual(releve.valider(self.r()), [])
+        n = releve.normaliser(self.r())
+        self.assertEqual(n["partenaires"]["etat"]["limites"]["echo"]["raison"], "quota épuisé")
+
+    def test_releve_partenaires_minimal(self):
+        self.assertEqual(releve.valider(self.r({"categories": {}})), [])
+        n = releve.normaliser(self.r({"categories": {}}))
+        self.assertEqual(n["partenaires"]["etat"], {"connexions": {}, "quotas": {}, "limites": {}, "regles": {}})
+        self.assertEqual((n["partenaires"]["conseils"], n["partenaires"]["maj_catalogue"], n["partenaires"]["cout_maj"]),
+                         ({}, None, None))
+
+    def test_releve_partenaires_id_inconnu(self):
+        from tests.part_aide import partenaires_exemple
+        for section in ("connexions", "quotas", "limites", "regles"):
+            p = partenaires_exemple()
+            p["etat"][section]["inconnu"] = copy.deepcopy(next(iter(p["etat"][section].values())))
+            self.refus(p, "inconnu")
+        p = partenaires_exemple()
+        p["conseils"]["voix"].append({"id": "inconnu", "raison": "x"})
+        self.refus(p, "inconnu")
+
+    def test_releve_partenaires_mal_formes(self):
+        from tests.part_aide import partenaires_exemple
+        for modif, mot in (
+                (lambda p: p["etat"]["connexions"]["vox"].update(etat="bof"), "etat"),
+                (lambda p: p["etat"]["connexions"]["vox"].update(vu_le="hier"), "date"),
+                (lambda p: p["etat"]["quotas"]["vox"].update(reste="beaucoup"), "reste"),
+                (lambda p: p["etat"]["quotas"]["vox"].update(reste=True), "reste"),
+                (lambda p: p["etat"]["quotas"]["vox"].update(lu_le="2026-99-99"), "date"),
+                (lambda p: p["etat"]["limites"]["echo"].update(raison=3), "raison"),
+                (lambda p: p["etat"]["regles"]["tripo"].append({"id": "r1", "texte": "x", "cree_le": "2026-11-11"}), "double"),
+                (lambda p: p["etat"]["regles"]["tripo"][0].update(texte=""), "texte"),
+                (lambda p: p["categories"]["voix-audio"][0].update(verifie_le="demain"), "date"),
+                (lambda p: p["categories"]["voix-audio"].append({"id": "vox", "nom": "Bis"}), "double"),
+                (lambda p: p["categories"].update({"voix-audio": "x"}), "categories"),
+                (lambda p: p.update(maj_catalogue="bientôt"), "date"),
+                (lambda p: p["conseils"].update(voix="x"), "conseils"),
+                (lambda p: p.update(cout_maj={"euros": -1}), "cout_maj"),
+                (lambda p: p.update(categories=[]), "categories")):
+            p = partenaires_exemple()
+            modif(p)
+            self.refus(p, mot)
+        self.assertTrue(releve.valider(self.r("x")))
+
+    def test_partenaires_ignores_avant_la_version_4(self):
+        r = self.r(version=3)
+        self.assertEqual(releve.valider(r), [])
+        self.assertNotIn("partenaires", releve.normaliser(r))
+
+
 if __name__ == "__main__":
     unittest.main()

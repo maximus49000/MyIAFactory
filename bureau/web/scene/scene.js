@@ -7,7 +7,7 @@ import {tronquer} from "../ui/texte.js";
 import {decalageBorne, ZOOM_MIN, ZOOM_MAX} from "../logique/mobile.js";
 
 const SOLS_SERVICES = ["#cfe3d2", "#d5dcf0", "#f3dccb", "#ece3b5", "#d3ebee", "#eed5e2"];
-const SOL_CAFE = "#f0c7a2", SOL_DIRECTION = "#b8cdb0", SOL_OPEN = "#ead9bf";
+const SOL_CAFE = "#f0c7a2", SOL_DIRECTION = "#b8cdb0", SOL_PARTENAIRES = "#c3d0e6", SOL_OPEN = "#ead9bf";
 const MUR = "#f7f1e6", CHAPEAU = "#d9c7ad", SOCLE = "#c9b79d";
 const HAUT_MUR = 2.4, MI_MUR = 0.75, BAS_MUR = 0.22, EPAIS = 0.12;
 const MARGE = 1.6;
@@ -117,6 +117,7 @@ export function creerScene(conteneur, plan, modeles, options = {}) {
   for (const r of plan.pieces) {
     if (r.type === "service") sol(r, SOLS_SERVICES[iService++ % SOLS_SERVICES.length], texBruit, 3, "service", r.id);
     else if (r.type === "cafe") sol(r, SOL_CAFE, texBruit, 3, "cafe", r.id);
+    else if (r.type === "partenaires") sol(r, SOL_PARTENAIRES, texBruit, 3, "partenaires", r.id);
     else sol(r, SOL_DIRECTION, texBruit, 3, "direction", r.id);
   }
 

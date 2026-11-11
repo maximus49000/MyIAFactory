@@ -20,9 +20,11 @@ export const PAS_TABLEAU = 1.75, JEU_TABLEAU = 0.16;
 const capVers = (de, vers) => Math.atan2(vers.x - de.x, vers.z - de.z);
 const pt = (p) => ({x: p.x, z: p.z});
 
-export function creerPlan(services, colonnes) {
+// `options.partenaires` : le relevé porte un espace partenaire, une pièce « Partenaires » s'ajoute à la rangée du bas.
+export function creerPlan(services, colonnes, options = {}) {
   const n = services.length;
-  const C = Math.max(3, Math.ceil((n + 2) / 2));
+  const avecPartenaires = options.partenaires === true;
+  const C = Math.max(3, Math.ceil((n + 2 + (avecPartenaires ? 1 : 0)) / 2));
   const W = C * LP;
   const H = 2 * PP + PO;
   const z0 = -H / 2;
@@ -51,6 +53,7 @@ export function creerPlan(services, colonnes) {
   const haut = services.slice(0, C).map((s) => ({id: s.id, nom: s.nom, type: "service"}));
   const bas = [
     {id: "cafe", nom: "Café", type: "cafe"},
+    ...(avecPartenaires ? [{id: "partenaires", nom: "Partenaires", type: "partenaires"}] : []),
     ...services.slice(C).map((s) => ({id: s.id, nom: s.nom, type: "service"})),
     {id: "direction", nom: "Direction", type: "direction"},
   ];
@@ -132,6 +135,16 @@ export function creerPlan(services, colonnes) {
     const recul = 1.0 + 0.7 * Math.floor(j / 6) + (tour > 0 ? 0.3 * Math.cos(tour * 2.3) : 0);
     const p = {x: cafePiece.x + lx, z: cafePiece.porte.z + cafePiece.dir * recul};
     return {...p, cap: capVers(p, cafePiece.porte)};
+  }
+
+  // --- Partenaires : un comptoir d'accueil, un écran et des étagères (personne n'y travaille).
+  const part = pieces.find((p) => p.type === "partenaires");
+  if (part) {
+    meuble(part, "bureau", 0, 0.75, capPorte(part));
+    meuble(part, "ecran", 0, 0.55, capPorte(part));
+    meuble(part, "etagere", -2.75, 2.4, Math.PI / 2);
+    meuble(part, "etagere", 2.75, 2.4, -Math.PI / 2);
+    meuble(part, "plante", 2.6, 4.55, capPorte(part));
   }
 
   // --- Direction : le grand bureau ; le Directeur derrière, tourné vers le mur du fond

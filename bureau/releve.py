@@ -1,5 +1,6 @@
 """Le relevé : valider, normaliser, obtenir (fichier ou commande)."""
 import copy
+import datetime
 import json
 import os
 import re
@@ -477,6 +478,124 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
             erreurs.append(f"Tâche « {i} » : « lignes » doit être un entier positif ou nul (lignes produites).")
     _verifier_lecons_v4(r, titulaires, erreurs)
+    if r.get("partenaires") is not None:
+        _verifier_partenaires(r["partenaires"], erreurs)
+
+
+ETATS_CONNEXION = ("connecte", "declare", "non_connecte")
+
+
+def _date_iso(v):
+    """Une date AAAA-MM-JJ, avec ou sans heure."""
+    if not isinstance(v, str):
+        return False
+    try:
+        datetime.datetime.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
+
+
+def _nombre_positif(v):
+    return not isinstance(v, bool) and isinstance(v, (int, float)) and v == v and 0 <= v < float("inf")
+
+
+def _verifier_partenaires(p, erreurs):
+    """`partenaires` (version 4, facultatif) : l'espace partenaire. Le catalogue réduit aux champs affichés,
+    l'état des connexions (jamais une valeur de clé), les conseils du projet. Les identifiants de l'état et des
+    conseils doivent être ceux du catalogue reçu."""
+    nom = "« partenaires »"
+    if not _est_dict(p):
+        erreurs.append(f"{nom} doit être un objet.")
+        return
+    cats = p.get("categories")
+    if not _est_dict(cats) or not all(isinstance(v, list) and all(_est_dict(x) for x in v) for v in cats.values()):
+        erreurs.append(f"{nom} : « categories » doit être un objet de listes de partenaires.")
+        return
+    ids = set()
+    for liste in cats.values():
+        for x in liste:
+            i = x.get("id")
+            if not _texte_plein(i) or not _texte_plein(x.get("nom")):
+                erreurs.append(f"{nom} : chaque partenaire a un « id » et un « nom » (textes non vides).")
+            elif i in ids:
+                erreurs.append(f"{nom} : le partenaire « {i} » est en double.")
+            else:
+                ids.add(i)
+            if x.get("verifie_le") is not None and not _date_iso(x["verifie_le"]):
+                erreurs.append(f"{nom} : « {i} » : « verifie_le » n'est pas une date.")
+    etat = p.get("etat", {})
+    if not _est_dict(etat):
+        erreurs.append(f"{nom} : « etat » doit être un objet.")
+        etat = {}
+    for section in ("connexions", "quotas", "limites", "regles"):
+        s = etat.get(section, {})
+        if not _est_dict(s):
+            erreurs.append(f"{nom} : « etat.{section} » doit être un objet.")
+            continue
+        for i, v in s.items():
+            q = f"{nom} : « etat.{section} » « {i} »"
+            if i not in ids:
+                erreurs.append(f"{q} : partenaire inconnu du catalogue.")
+            elif section == "regles":
+                _verifier_regles(v, q, erreurs)
+            elif not _est_dict(v):
+                erreurs.append(f"{q} : doit être un objet.")
+            elif section == "connexions":
+                if v.get("etat") not in ETATS_CONNEXION:
+                    erreurs.append(f"{q} : « etat » doit valoir connecte, declare ou non_connecte.")
+                for c in ("source", "abonnement"):
+                    if not _texte_ou_nul(v.get(c)):
+                        erreurs.append(f"{q} : « {c} » doit être un texte.")
+                if v.get("vu_le") is not None and not _date_iso(v["vu_le"]):
+                    erreurs.append(f"{q} : « vu_le » n'est pas une date.")
+            elif section == "quotas":
+                if v.get("reste") is not None and not _nombre_positif(v["reste"]):
+                    erreurs.append(f"{q} : « reste » doit être un nombre positif.")
+                if not _texte_ou_nul(v.get("unite")):
+                    erreurs.append(f"{q} : « unite » doit être un texte.")
+                if "illimite" in v and not isinstance(v["illimite"], bool):
+                    erreurs.append(f"{q} : « illimite » doit être vrai ou faux.")
+                if v.get("lu_le") is not None and not _date_iso(v["lu_le"]):
+                    erreurs.append(f"{q} : « lu_le » n'est pas une date.")
+            else:
+                if not _texte(v.get("raison")):
+                    erreurs.append(f"{q} : « raison » doit être un texte.")
+                if v.get("depuis") is not None and not _date_iso(v["depuis"]):
+                    erreurs.append(f"{q} : « depuis » n'est pas une date.")
+    conseils = p.get("conseils", {})
+    if not _est_dict(conseils) or not all(isinstance(v, list) and all(_est_dict(x) for x in v) for v in conseils.values()):
+        erreurs.append(f"{nom} : « conseils » doit être un objet de listes de partenaires conseillés.")
+    else:
+        for besoin, liste in conseils.items():
+            for x in liste:
+                if x.get("id") not in ids:
+                    erreurs.append(f"{nom} : conseil « {besoin} » : partenaire inconnu « {x.get('id')} ».")
+                if not _texte_ou_nul(x.get("raison")):
+                    erreurs.append(f"{nom} : conseil « {besoin} » : « raison » doit être un texte.")
+    if p.get("maj_catalogue") is not None and not _date_iso(p["maj_catalogue"]):
+        erreurs.append(f"{nom} : « maj_catalogue » n'est pas une date.")
+    c = p.get("cout_maj")
+    if c is not None and (not _est_dict(c) or (c.get("euros") is not None and not _nombre_positif(c["euros"]))
+                          or not _texte_ou_nul(c.get("texte"))):
+        erreurs.append(f"{nom} : « cout_maj » doit avoir « euros » (nombre positif ou nul) et « texte ».")
+
+
+def _verifier_regles(regles, q, erreurs):
+    if not isinstance(regles, list) or not all(_est_dict(r) for r in regles):
+        erreurs.append(f"{q} : doit être une liste de règles.")
+        return
+    vus = set()
+    for r in regles:
+        if not _texte_plein(r.get("id")) or not _texte_plein(r.get("texte")):
+            erreurs.append(f"{q} : chaque règle a un « id » et un « texte » (textes non vides).")
+        elif r["id"] in vus:
+            erreurs.append(f"{q} : la règle « {r['id']} » est en double.")
+        else:
+            vus.add(r["id"])
+        for d in ("cree_le", "modifie_le"):
+            if r.get(d) is not None and not _date_iso(r[d]):
+                erreurs.append(f"{q} : « {d} » n'est pas une date.")
 
 
 CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max")
@@ -492,6 +611,16 @@ def _normaliser_v4(n):
             n[c] = n[c] if isinstance(n.get(c), list) else []
         else:
             n.setdefault(c, None)
+    if v4 and _est_dict(n.get("partenaires")):
+        pa = n["partenaires"]
+        etat = pa["etat"] = pa["etat"] if _est_dict(pa.get("etat")) else {}
+        for section in ("connexions", "quotas", "limites", "regles"):
+            etat[section] = etat[section] if _est_dict(etat.get(section)) else {}
+        pa["conseils"] = pa["conseils"] if _est_dict(pa.get("conseils")) else {}
+        pa.setdefault("maj_catalogue", None)
+        pa.setdefault("cout_maj", None)
+    else:
+        n.pop("partenaires", None)
     for f in n.get("fonctionnalites") or []:
         for c in ("discussion", "decisions", "documents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []

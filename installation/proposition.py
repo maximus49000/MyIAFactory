@@ -20,6 +20,7 @@ environnement, et sans elle le moteur reste sur `claude -p`. `ecart_estime` : l'
 from pathlib import Path
 
 from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
+from orchestrateur.fiches import ACCORD_FABLE
 
 MODELES = ("Haiku", "Sonnet", "Opus")
 FABLE = "Fable n'est jamais choisi par l'installation."
@@ -59,8 +60,12 @@ def _entier(v, bas, haut):
     return type(v) is int and bas <= v <= haut
 
 
-def _modele(v, ou):
+def _modele(v, ou, accord=None):
+    """Fable n'est accepté que pour un agent dont la fiche porte l'accord du Directeur (`accord`) ; jamais pour
+    l'orchestrateur."""
     if isinstance(v, str) and v.strip().lower() == "fable":
+        if v == "Fable" and isinstance(accord, str) and ACCORD_FABLE.match(accord):
+            return []
         return [f"{ou} : {FABLE}"]
     if v not in MODELES:
         return [f"{ou} : le modèle doit valoir Haiku, Sonnet ou Opus."]
@@ -120,7 +125,7 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
             roles.add(a["role"])
         if a.get("service") not in ids_services:
             e.append(f"Agent « {c} » : service inconnu « {a.get('service')} ».")
-        e += _modele(a.get("modele"), f"Agent « {c} »")
+        e += _modele(a.get("modele"), f"Agent « {c} »", a.get("fable"))
         if a.get("lieu") not in ("local", "cloud"):
             e.append(f"Agent « {c} » : le lieu doit valoir local ou cloud.")
         elif a["lieu"] == "cloud" and not cloud:

@@ -118,6 +118,80 @@ class ExecuterAgent(unittest.TestCase):
         self.assertEqual(len(a.recus), 1)
 
 
+ACCORD = "accordé par le Directeur le 2026-11-12"
+FICHE_FABLE = {"cle": "archi-1", "role": "archi", "modele": "Fable", "lieu": "local", "outils": None, "fable": ACCORD}
+
+
+class FableSurAccord(unittest.TestCase):
+    """Fable : jamais choisi par le moteur ; un agent n'y va que si sa fiche porte l'accord du Directeur."""
+
+    def test_fable_refuse_sans_accord(self):
+        a = Appels()
+        for fiche in (FICHE, {**FICHE_FABLE, "fable": None}, {**FICHE, "fable": ACCORD},   # Opus avec une ligne d'accord
+                      {**FICHE_FABLE, "fable": "accordé par moi"}):
+            e = lancer(a, fiche=fiche, modele="fable")
+            self.assertIn("Fable", e.erreur, fiche)
+        self.assertEqual(a.recus, [])
+        for modele in ("claude-fable-5-2", "fable-plus"):     # seul « fable » est un modèle
+            self.assertIn("Fable", lancer(a, fiche=FICHE_FABLE, modele=modele).erreur)
+        self.assertEqual(a.recus, [])
+
+    def test_fable_permis_avec_accord_pour_cet_agent_seulement(self):
+        a = Appels(sortie_ok(modele="claude-fable-5-2"))
+        e = lancer(a, fiche=FICHE_FABLE, modele="Fable")
+        self.assertIsNone(e.erreur)
+        self.assertEqual((a.recus[0]["modele"], a.recus[0]["fable_accorde"]), ("fable", True))
+        self.assertTrue(fiches.fable_accorde(FICHE_FABLE))
+        # un autre agent, sans l'accord, ne profite pas de celui-ci
+        autre = lancer(a, fiche={**FICHE, "cle": "dev-2"}, modele="fable")
+        self.assertIn("Fable", autre.erreur)
+        self.assertEqual(len(a.recus), 1)
+        # et un agent sans accord n'obtient pas l'indicateur sur ses autres modèles
+        b = Appels(sortie_ok())
+        lancer(b)
+        self.assertNotIn("fable_accorde", b.recus[0])
+
+    def test_jugement_jamais_fable(self):
+        from moteur import jugement
+        for modele in ("fable", "Fable"):
+            with self.assertRaises(appel.ErreurAppel):
+                jugement.juger("conseil", {}, couche="claude", appeler=lambda *a, **k: self.fail("appelé"),
+                               modele=modele)
+        for kw in ({}, {"fable_accorde": True}):     # même avec l'indicateur, un appel sans outils (jugement) refuse
+            with self.assertRaises(appel.ErreurAppel):
+                appel.appeler("c", "d", "fable", couche="claude", **kw)
+        with self.assertRaises(appel.ErreurAppel):
+            appel.appeler("c", "d", "fable", couche="api", outils=["Read"], fable_accorde=True)
+        self.assertEqual(appel._verifier_modele("fable", True), "fable")
+        with self.assertRaises(appel.ErreurAppel):
+            appel._verifier_modele("fable", False)
+
+    def test_montee_ne_va_jamais_a_fable(self):
+        from orchestrateur import depart
+        for modele in ("Haiku", "Sonnet", "Opus", "Fable"):
+            self.assertNotEqual(depart.monter(modele), "Fable" if modele != "Fable" else "")
+        self.assertNotIn("Fable", depart.ECHELLE)
+        self.assertEqual(depart.monter("Opus"), "Opus")
+
+    def test_fiche_fable_lue_ecrite_et_refusee_sans_accord(self):
+        with tempfile.TemporaryDirectory() as t:
+            p = Path(t) / "x.md"
+            p.write_text("Clé : x\nRôle : archi\nModèle : Fable\nLieu : local\nFable : " + ACCORD + "\n\nTexte.\n",
+                         encoding="utf-8")
+            f = fiches.lire_fiche(p)
+            self.assertTrue(fiches.fable_accorde(f))
+            fiches.ecrire_fiche(f)
+            self.assertEqual(fiches.lire_fiche(p)["fable"], ACCORD)
+            for entete in ("", "Fable : accordé par quelqu'un\n"):     # Fable sans accord, ou accord mal écrit
+                p.write_text("Clé : x\nRôle : archi\nModèle : Fable\nLieu : local\n" + entete + "\nTexte.\n",
+                             encoding="utf-8")
+                with self.assertRaises(fiches.FicheInvalide):
+                    fiches.lire_fiche(p)
+            p.write_text("Clé : x\nRôle : archi\nModèle : Opus\nLieu : local\nFable : " + ACCORD + "\n\nT.\n",
+                         encoding="utf-8")
+            self.assertFalse(fiches.fable_accorde(fiches.lire_fiche(p)))    # l'accord ne suffit pas : il faut la fiche sur Fable
+
+
 class OutilsDeFiche(unittest.TestCase):
     def test_ligne_outils_lue_dans_la_fiche(self):
         with tempfile.TemporaryDirectory() as t:

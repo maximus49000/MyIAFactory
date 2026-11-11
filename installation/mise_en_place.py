@@ -204,6 +204,7 @@ def adresses_ouvertes(bureau_json, adresses=acces_inst.adresses):
 def _fiche(a, chemin):
     return {"cle": a["cle"], "prenom": a.get("prenom"), "role": a["role"], "service": a["service"],
             "modele": a["modele"], "lieu": a["lieu"], "session": None, "specialite": a.get("specialite"),
+            "outils": a.get("outils"), "fable": a.get("fable"),
             "texte": a["texte"].strip(), "lecons": [], "chemin": chemin}
 
 

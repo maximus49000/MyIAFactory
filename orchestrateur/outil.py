@@ -56,6 +56,15 @@ def _interdit(modele):
     return isinstance(modele, str) and modele.strip().lower() in {m.lower() for m in MODELES_INTERDITS}
 
 
+def _fable_accorde_pour(ctx, t):
+    """Fable est permis comme modèle de départ d'une tâche seulement si son agent (à défaut, un agent de son rôle) a une
+    fiche qui porte l'accord du Directeur ; une montée ne va jamais à Fable."""
+    fiches_ = ctx.fiches()
+    if t.get("agent"):
+        return fi.fable_accorde(fi.trouver(fiches_, t["agent"]))
+    return any(fi.fable_accorde(x) for x in fiches_ if x["role"] == t.get("role"))
+
+
 class Refus(Exception):
     """Code 1 : la demande est lisible mais refusée."""
 
@@ -815,8 +824,6 @@ def cmd_tache(ctx, e):
         for cle in ("element", "role", "modele_depart", "bloquee"):
             if cle in e:
                 t[cle] = texte(e, cle, obligatoire=False)
-        if _interdit(t["modele_depart"]):
-            raise Refus("Fable n'est jamais choisi par un outil (seulement sur demande expresse).")
         if "etape" in e:
             t["etape"] = texte(e, "etape", vide_ok=True)
         if "colonne" in e:
@@ -829,6 +836,9 @@ def cmd_tache(ctx, e):
             if e["agent"] is not None and e["agent"] not in cles:
                 raise Refus(f"Agent inconnu : {e['agent']}")
             t["agent"] = e["agent"]
+        if _interdit(t["modele_depart"]) and not _fable_accorde_pour(ctx, t):
+            raise Refus("Fable n'est jamais choisi par un outil (seulement sur une fiche qui porte l'accord du "
+                        "Directeur).")
         if "active" in e:
             if not isinstance(e["active"], bool):
                 raise Refus("« active » doit être vrai ou faux.")

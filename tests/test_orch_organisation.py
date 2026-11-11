@@ -117,3 +117,19 @@ class TestOrganisation(AvecProjet):
         i = self.poser()
         r = self.ok("actions", entree={"type": "organisation", "decision": i, "verdict": "accepter"})
         self.assertTrue(r["ok"])
+
+
+class TestFableSurAccord(AvecProjet):
+    def test_tache_sur_fable_seulement_pour_un_agent_accorde(self):
+        t = self.ok("tache", entree={"titre": "A", "role": "dev", "colonne": "dev", "active": False})["id"]
+        for entree in ({"id": t, "modele_depart": "Fable"}, {"id": t, "modele_depart": "fable", "agent": "dev-1"},
+                       {"id": t, "montee": {"de": "Opus", "a": "Fable", "raison": "x"}}):
+            self.assertEqual(self.outil("tache", entree=entree)[0], 1, entree)
+        (self.dossier / "fiches" / "archi.md").write_text(
+            "Clé : archi-1\nRôle : archi\nModèle : Fable\nLieu : local\nFable : accordé par le Directeur le 2026-11-12\n\n"
+            "Conçoit.\n\n## Leçons\n", encoding="utf-8")
+        self.ok("tache", entree={"id": t, "role": "archi", "agent": "archi-1", "modele_depart": "Fable"})
+        # l'accord de l'un ne vaut pas pour un autre agent, ni pour une montée
+        self.assertEqual(self.outil("tache", entree={"id": t, "agent": "dev-1", "modele_depart": "Fable"})[0], 1)
+        self.assertEqual(self.outil("tache", entree={"id": t, "montee": {"de": "Opus", "a": "Fable",
+                                                                         "raison": "x"}})[0], 1)

@@ -9,6 +9,7 @@
     Session : (cloud seulement)
     Spécialité : écrans et mise en page
     Outils : Read, Write, Edit, Bash(py:*)   (facultatif : les outils d'un agent lancé par le moteur)
+    Fable : accordé par le Directeur le 2026-11-12   (facultatif : la seule façon d'avoir `Modèle : Fable`)
 
     Texte libre…
 
@@ -21,15 +22,18 @@ import re
 import tempfile
 from pathlib import Path
 
-ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils")
+ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils", "Fable")
 # Les outils d'un agent lancé sans fenêtre quand sa fiche n'en déclare pas : lire, écrire et modifier dans le dossier
 # du projet, lancer Python (`py`, mais aussi `python`, que les agents emploient d'eux-mêmes : refusé, il bloquait toute
 # production à l'essai de la phase D), créer un dossier, `git`. Jamais le mode qui contourne les autorisations.
 OUTILS_PAR_DEFAUT = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(py:*)", "Bash(python:*)", "Bash(python3:*)",
                      "Bash(mkdir:*)", "Bash(git:*)"]
 MODELES = ("Haiku", "Sonnet", "Opus")
+# Fable n'est jamais choisi par le moteur ni par un outil : une fiche l'a seulement si le Directeur l'a accordé, pour
+# cet agent seulement, et la fiche le dit (ligne `Fable :`).
+ACCORD_FABLE = re.compile(r"^accordé par le Directeur le \d{4}-\d{2}-\d{2}\Z")
 ETATS = ("à valider", "validée")
-_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils)\s*:\s*(.*?)\s*$")
+_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils|Fable)\s*:\s*(.*?)\s*$")
 _LECON = re.compile(r"^-\s*\[(à valider|validée)\]\s*(\S+)\s*:\s*(.*)$")
 
 
@@ -67,14 +71,18 @@ def lire_fiche(chemin):
     for c in ("Clé", "Rôle", "Modèle", "Lieu"):
         if not champs.get(c):
             raise FicheInvalide(f"Fiche {chemin.name} : « {c} » est obligatoire.")
-    if champs["Modèle"] not in MODELES:
-        raise FicheInvalide(f"Fiche {chemin.name} : « Modèle » doit valoir Haiku, Sonnet ou Opus.")
+    accord = champs.get("Fable") or None
+    if accord is not None and not ACCORD_FABLE.match(accord):
+        raise FicheInvalide(f"Fiche {chemin.name} : « Fable » doit dire « accordé par le Directeur le AAAA-MM-JJ ».")
+    if champs["Modèle"] not in MODELES and not (champs["Modèle"] == "Fable" and accord):
+        raise FicheInvalide(f"Fiche {chemin.name} : « Modèle » doit valoir Haiku, Sonnet ou Opus (Fable seulement "
+                            "avec l'accord du Directeur, ligne « Fable : »).")
     if champs["Lieu"] not in ("local", "cloud"):
         raise FicheInvalide(f"Fiche {chemin.name} : « Lieu » doit valoir local ou cloud.")
     return {"cle": champs["Clé"], "prenom": champs.get("Prénom") or None, "role": champs["Rôle"],
             "service": champs.get("Service") or None, "modele": champs["Modèle"], "lieu": champs["Lieu"],
             "session": champs.get("Session") or None, "specialite": champs.get("Spécialité") or None,
-            "outils": champs.get("Outils") or None,
+            "outils": champs.get("Outils") or None, "fable": accord,
             "texte": "\n".join(corps).strip(), "lecons": lecons, "chemin": chemin}
 
 
@@ -97,7 +105,8 @@ def ecrire_fiche(f):
     """Réécrit la fiche (le texte libre et les leçons sont gardés)."""
     lignes = [f"Clé : {f['cle']}"]
     for nom, cle in (("Prénom", "prenom"), ("Rôle", "role"), ("Service", "service"), ("Modèle", "modele"),
-                     ("Lieu", "lieu"), ("Session", "session"), ("Spécialité", "specialite"), ("Outils", "outils")):
+                     ("Lieu", "lieu"), ("Session", "session"), ("Spécialité", "specialite"), ("Outils", "outils"),
+                     ("Fable", "fable")):
         if f.get(cle):
             lignes.append(f"{nom} : {f[cle]}")
     lignes += ["", f["texte"], "", "## Leçons"] if f["texte"] else ["", "## Leçons"]
@@ -112,6 +121,13 @@ def ecrire_fiche(f):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+def fable_accorde(fiche):
+    """Vrai si la fiche est sur Fable ET porte l'accord du Directeur (ligne `Fable : accordé par le Directeur le …`).
+    Le moteur ne lance Fable que pour une telle fiche, pour cet agent seulement ; jamais pour un jugement."""
+    return (isinstance(fiche, dict) and str(fiche.get("modele") or "").strip().lower() == "fable"
+            and isinstance(fiche.get("fable"), str) and bool(ACCORD_FABLE.match(fiche["fable"])))
 
 
 def outils(fiche):

@@ -4,7 +4,8 @@
 la matière de la tâche. L'agent rend un rapport structuré (`rapport.lire`) ; sans rapport lisible (sortie libre, coupée,
 code d'erreur, délai), il est relancé une fois, puis l'`Execution` porte l'`erreur` (la tâche passe bloquée). Ce que
 chaque appel a coûté est gardé, réussi ou non : la boucle note chaque usage. Jamais le mode qui contourne les
-autorisations ; jamais Fable.
+autorisations. Fable : seulement pour un agent dont la fiche porte l'accord du Directeur (`fiches.fable_accorde`), pour
+cet agent seulement ; jamais choisi par le moteur (montée de modèle, jugements).
 """
 from moteur import appel, rapport
 from orchestrateur import fiches
@@ -52,15 +53,18 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
     """Lance l'agent (`agent` : sa fiche) sur `modele` (« haiku », « sonnet » ou « opus », casse libre)."""
     cle = agent["cle"]
     m = (modele or "").strip().lower()
-    if "fable" in m or m not in appel.MODELES:
-        return Execution(tache, cle, lot, erreur=("Le moteur ne choisit jamais Fable." if "fable" in m
+    fable = m == "fable" and fiches.fable_accorde(agent)
+    if not fable and ("fable" in m or m not in appel.MODELES):
+        return Execution(tache, cle, lot, erreur=("Le moteur ne choisit jamais Fable (sauf accord du Directeur sur "
+                                                  "la fiche de l'agent)." if "fable" in m
                                                   else f"Modèle inconnu : {modele}."))
     message = depart.rstrip() + ("\n\n" + matiere.strip() if matiere and matiere.strip() else "") + "\n"
     usages, erreur = [], "aucun essai"
     for _ in range(ESSAIS):
         try:
+            plus = {"fable_accorde": True} if fable else {}
             r = appeler(CONSIGNE_AGENT, message, m, couche="claude", outils=fiches.outils(agent),
-                        dossier_travail=str(dossier_projet), delai_s=delai_s)
+                        dossier_travail=str(dossier_projet), delai_s=delai_s, **plus)
         except appel.ErreurAppel as e:
             usages += e.usages
             erreur = f"l'appel a échoué : {e.raison}"

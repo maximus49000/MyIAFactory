@@ -65,10 +65,14 @@ def _total(u):
     return u["entree"] + u["sortie"] + u["cache_lecture"] + u["cache_ecriture"]
 
 
-def _verifier_modele(modele):
+def _verifier_modele(modele, fable_accorde=False):
+    """Le modèle voulu. Fable n'est permis que pour un agent dont la fiche porte l'accord du Directeur
+    (`fable_accorde`, posé par `agents.executer_agent`) ; jamais pour un jugement."""
     m = (modele or "").strip().lower()
     if "fable" in m:
-        raise ErreurAppel("Le moteur ne choisit jamais Fable.")
+        if m != "fable" or not fable_accorde:
+            raise ErreurAppel("Le moteur ne choisit jamais Fable.")
+        return m
     if m not in MODELES:
         raise ErreurAppel(f"Modèle inconnu : {modele} (attendu : {', '.join(MODELES)}).")
     return m
@@ -86,9 +90,11 @@ def choisir_couche(reglages, environ):
 
 
 def appeler(consigne, dossier, modele, *, couche="claude", executer=None, outils=None, dossier_travail=None,
-            reprendre=None, delai_s=600):
+            reprendre=None, delai_s=600, fable_accorde=False):
     """Un appel à contexte neuf : `consigne` (prompt système), `dossier` (le message). Lève `ErreurAppel`."""
-    m = _verifier_modele(modele)
+    m = _verifier_modele(modele, fable_accorde)
+    if m == "fable" and (couche != "claude" or not outils):
+        raise ErreurAppel("Fable ne sert qu'à un agent de production (claude -p, avec ses outils).")
     if couche == "claude":
         return _appeler_claude(consigne, dossier, m, executer or _executer_claude, outils or [], dossier_travail,
                                reprendre, delai_s)

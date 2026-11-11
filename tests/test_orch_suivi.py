@@ -29,7 +29,7 @@ class TestSuivi(AvecProjet):
         d = json.loads(self.factory.read_text(encoding="utf-8"))
         d["commandes"] = {"demandes": [sys.executable, "adaptateur.py"]}
         self.factory.write_text(json.dumps(d), encoding="utf-8")
-        code, sortie = self.outil("lancer", "demandes", entree={"x": 1})
+        code, sortie = self.outil("lancer", "demandes", entree={"x": 1}, processus=True)   # l'adaptateur lit l'entrée héritée
         self.assertEqual(code, 0)
         self.assertTrue(sortie["adapte"])
         self.assertEqual(json.loads(sortie["entree"]), {"x": 1})   # la même entrée

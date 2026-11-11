@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests import en_processus
+
 RACINE = Path(__file__).resolve().parent.parent
 OUTIL = RACINE / "orchestrateur" / "outil.py"
 PNG = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode()
@@ -62,17 +64,22 @@ class AvecProjet(unittest.TestCase):
         self.dossier = Path(self._t.name)
         self.factory = factory_minimale(self.dossier)
 
-    def outil(self, *commande, entree=None, factory=None):
-        """(code, objet) en lançant vraiment `outil.py`, comme un orchestrateur."""
+    def outil(self, *commande, entree=None, factory=None, processus=False):
+        """(code, objet) de `outil.py`, comme un orchestrateur : dans le processus des tests (voir `en_processus`), ou
+        dans un vrai processus avec `processus=True` (quand le test dépend de l'entrée standard héritée par un enfant)."""
         corps = None if entree is None else json.dumps(entree).encode("utf-8")
-        p = subprocess.run([sys.executable, str(OUTIL), "--factory", str(factory or self.factory), *commande],
-                           input=corps, stdin=None if corps else subprocess.DEVNULL,
-                           capture_output=True, timeout=60)
-        sortie = p.stdout.decode("utf-8")
+        argv = ["--factory", str(factory or self.factory), *commande]
+        if en_processus.actif() and not processus:   # le même `outil.main`, sans démarrer un nouveau Python
+            code, brut = en_processus.lancer(argv, corps)
+        else:
+            p = subprocess.run([sys.executable, str(OUTIL), *argv], input=corps,
+                               stdin=None if corps else subprocess.DEVNULL, capture_output=True, timeout=60)
+            code, brut = p.returncode, p.stdout
+        sortie = brut.decode("utf-8")
         try:
-            return p.returncode, json.loads(sortie)
+            return code, json.loads(sortie)
         except ValueError:
-            return p.returncode, sortie
+            return code, sortie
 
     def ok(self, *commande, entree=None):
         code, objet = self.outil(*commande, entree=entree)

@@ -4,6 +4,9 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from tests import en_processus
 
 
 def proposition_valide(dossier_projet, **extra):
@@ -53,6 +56,10 @@ class AvecMaison(unittest.TestCase):
         self.addCleanup(rendre)
         self.projet = self.base / "mes projets" / "Petit projet"
         self.projet.mkdir(parents=True)
+        if en_processus.actif():   # la vérification d'interface sans un nouveau Python par commande
+            patch = mock.patch("orchestrateur.verifier_interface.lancer", en_processus.lancer_verification)
+            patch.start()
+            self.addCleanup(patch.stop)
 
 
 def instantane(dossier):

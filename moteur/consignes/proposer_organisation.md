@@ -10,19 +10,19 @@ Ce qu'il faut proposer :
   La dernière étape produit ou remet le livrable et son nom le dit (« Livraison de l'apk signé »). Chaque étape :
   `etape`, `nom`, `role`, `service` ; `etape`, `role`, `service` et `cle` sont des ids en minuscules et tirets
   (`dev`, `testeur-jeu`), sans espace ni accent. Pas d'étape de cadrage : elle existe déjà.
-- Si le workflow le plus récent du même genre convient, reprends-le tel quel ; n'ajoute que ce que la demande exige.
+- Si le workflow le plus récent du même genre convient, reprends-le tel quel ; n'ajoute que ce que la demande exige
+  (chaque étape est refaite pour chaque élément). Si sa dernière étape ne dit pas le livrable, **renomme-la**
+  (« Contrôle et remise du lot ») plutôt que d'ajouter une étape. `livrable` : ce que l'utilisateur reçoit, une ligne.
 - Réutilise un agent du projet qui sait déjà faire une étape (son `role`) ; `agents` ne liste que les **nouveaux**
   agents, `services` que les **nouveaux** services, `briefs` le brief de chaque nouveau rôle.
 - Le modèle de chaque nouvel agent selon la complexité, avec une `justification` d'une ligne : Haiku pour un travail
   mécanique ou de vérification, Sonnet pour la création et le code courant, Opus pour une conception difficile ou un
   travail où l'erreur coûte cher. Toujours l'un des trois, jamais Fable ; si le modèle au-dessus d'Opus serait
   vraiment utile, mets Opus et `"fable_suggere": true` : le Directeur décidera.
-- Le `livrable` : ce que l'utilisateur reçoit à la fin, en une phrase.
 - L'`environnement` : chaque outil du poste dont une étape a besoin (`pour` : l'`etape`), les `executables` à chercher
-  (noms de programmes seulement : `java`, `gradle`), et l'`installation` sur Windows (source officielle, taille,
-  sans droits d'administrateur si possible). Un outil une seule fois ; le code vérifie ce qui est déjà là.
-- `outils_installation` : les règles d'outils qui permettront de les installer, précises (`Bash(winget:*)`).
-- Textes en français, sans jargon : l'utilisateur les lit au bureau.
+  (noms de programmes seulement : `java`, `gradle`), et l'`installation` sur Windows en une ligne (source officielle,
+  taille, sans droits d'administrateur si possible). Un outil une seule fois ; le code vérifie ce qui est déjà là.
+- `outils_installation` : les règles pour les installer, précises (`Bash(winget:*)`). Textes en français, **courts**.
 
 Forme de la réponse :
 

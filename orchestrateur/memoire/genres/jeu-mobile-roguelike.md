@@ -152,3 +152,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Pour des icônes de carte de progression, doubler la couleur par une silhouette distincte (pointes, anneau lisse, taille) garde les types de nœuds lisibles à petite taille et pour les daltoniens.
+
+## G26 — Pour un jeu à carte de nœuds, fournir un marqueur de sélecti
+Rôles : artiste, dev
+Date : 2026-11-12
+
+Pour un jeu à carte de nœuds, fournir un marqueur de sélection distinct des icônes et trois styles de liens (normal, actif, parcouru) évite au développeur de les redessiner et ne repose pas sur la seule couleur.

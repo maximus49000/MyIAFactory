@@ -700,6 +700,82 @@ class WorkflowDeCreation(AvecParcours):
         self.traiter(type="organisation", decision=decision["id"], verdict="refuser")
         self.assertEqual(self.fonc()["workflow"], "w-f1")      # une copie, jamais « w-badges » lui-même
 
+    # --- « Démarrer le projet » : la description du projet est la référence (2026-11-12).
+
+    def test_intentions_de_demarrage(self):
+        for texte in ("démarrer le projet", "Démarre le projet !", "on commence", "On commence.", "go", "Go !",
+                      "lance le développement", "Lancer le développement du jeu", "continue le projet",
+                      "c'est parti", "allons-y", "commencer le projet s'il te plaît", "reprends le projet"):
+            self.assertTrue(regles.est_intention_de_demarrage(texte), texte)
+        for texte in ("", "Un badge pour le chat", "Démarre le projet avec un menu de boutique",
+                      "ajouter un mode difficile", "on commence par le menu principal", "gogo gadget",
+                      "démarrer " + "le projet " * 20):
+            self.assertFalse(regles.est_intention_de_demarrage(texte), texte)
+
+    def test_demande_de_demarrage_sans_classement(self):
+        d, vus = self.demander({}, texte="Démarrer le projet")      # aucun juge fourni : tout appel IA ferait échouer
+        self.assertEqual(self.juges_vus(vus), [])
+        f = self.fonc()
+        self.assertEqual((f["genre"], f["workflow"], f["nom"]), ("badges", "w-f1", regles._factory(self.projet)["nom"]))
+        self.assertEqual(self.decisions("genre_fonctionnalite"), [])
+        self.assertEqual(self.decisions("organisation"), [])
+        self.assertEqual(len(self.taches(etape="cadrage")), 1)
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_demande_de_demarrage_longue_ou_sans_description_est_classee(self):
+        _, vus = self.demander({"classer_genre": CLASSER_MEME}, texte="Démarre le projet avec un menu de boutique")
+        self.assertEqual(self.juges_vus(vus), ["classer_genre"])
+        sans = self.lire_factory()
+        del sans["description"]
+        self.factory.write_text(json.dumps(sans), encoding="utf-8")
+        _, vus = self.demander({"classer_genre": CLASSER_MEME}, texte="Démarrer le projet")
+        self.assertEqual(self.juges_vus(vus), ["classer_genre"])
+
+    def test_demande_de_demarrage_sans_workflow_de_creation_est_classee(self):
+        self.reecrire(workflows=[])
+        _, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION},
+                               texte="Démarrer le projet")
+        self.assertEqual(self.juges_vus(vus), ["classer_genre", "proposer_organisation"])
+
+    def test_cadrage_recoit_la_description_du_projet(self):
+        self.demander({"classer_genre": CLASSER_MEME}, texte="Un autre badge pour Twitch")
+        (t,) = self.taches(etape="cadrage")
+        matiere = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("Des badges pour une chaîne de streaming", matiere)
+        self.assertIn("Un autre badge pour Twitch", matiere)
+        self.assertNotIn("porte sur la description", matiere)
+
+    def test_cadrage_d_une_simple_intention_porte_sur_la_description(self):
+        self.demander({}, texte="on commence")
+        (t,) = self.taches(etape="cadrage")
+        matiere = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("Des badges pour une chaîne de streaming", matiere)
+        self.assertIn("porte sur la description", matiere)
+
+    def test_meme_sur_un_classement_incertain_reprend_le_workflow_sans_elargir(self):
+        # le classement (ici forcé) est resté incertain sur « démarrer le projet » : la décision est posée à la main
+        self.reecrire(workflows=[])
+        self.demander({"classer_genre": CLASSER_INCERTAIN}, texte="Démarrer le projet")
+        self.reecrire(workflows=[CREATION])
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.assertEqual(q["propose"], "badges")                  # aucune autre piste que le genre du projet
+        d, actions = self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        self.assertEqual(self.juges_vus(self.piloter(actions)), [])         # pas de proposition de workflow
+        f = self.fonc()
+        self.assertEqual((f["genre"], f["workflow"]), ("badges", "w-f1"))
+        self.assertEqual(self.decisions("organisation"), [])
+        self.assertEqual(self.decisions("elargir_genre"), [])
+        self.assertEqual(self.decisions("genre_fonctionnalite"), [])
+        self.assertEqual(len(self.taches(etape="cadrage")), 1)
+
+    def test_meme_sur_une_autre_piste_propose_toujours_d_elargir(self):
+        self.demander({"classer_genre": dict(CLASSER_PROCHE, verdict="incertain", genre="stickers")},
+                      texte="Quelque chose de visuel")
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.assertEqual(q["propose"], "stickers")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        self.assertEqual(len(self.decisions("elargir_genre")), 1)
+
     def test_reprendre_refuse_un_workflow_de_fonctionnalite(self):
         self.demander({"classer_genre": CLASSER_MEME})
         self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION}, texte="Un sticker")

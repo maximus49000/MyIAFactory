@@ -22,6 +22,7 @@ import base64
 import json
 import re
 import time
+import unicodedata
 from pathlib import Path
 
 from installation import estimation
@@ -510,12 +511,52 @@ def genre_a_proposer(projet, etat):
                     {"sans_genre": True})]
 
 
+LONGUEUR_DEMARRAGE = 80          # au-delà, ce n'est plus une simple intention de démarrer
+_VERBES_DE_DEMARRAGE = (r"(?:demarr\w*|commenc\w*|lanc\w*|continu\w*|reprend\w*|reprenn\w*|debut\w*)")
+_COMPLEMENTS_DE_DEMARRAGE = (r"(?:le|la|l|les|ce|cette|mon|ma|notre|du|de|d|des|tout|ca|cela|projet|jeu|developpement|"
+                             r"dev|travail|production|creation|realisation|construction|app|application|maintenant|"
+                             r"alors|enfin|donc|ok|bon|allez|svp|stp|s|il|te|vous|plait)")
+INTENTION_DE_DEMARRAGE = re.compile(
+    rf"(?:(?:ok|bon|allez|alors|et)\s+)*(?:(?:on|nous|je|tu|vous)\s+)?(?:(?:peut|veux|voudrais|va|vais)\s+)?"
+    rf"{_VERBES_DE_DEMARRAGE}(?:\s+{_COMPLEMENTS_DE_DEMARRAGE})*"
+    r"|(?:ok\s+|bon\s+|allez\s+)?(?:go|gogo|start|c\s+est\s+parti|allons\s+y|on\s+y\s+va|on\s+s\s+y\s+met|let\s+s\s+go)"
+    r"(?:\s+(?:le|projet|maintenant|svp|stp|s\s+il\s+te\s+plait))*")
+
+
+def est_intention_de_demarrage(texte):
+    """Vrai si la demande n'est qu'une intention de lancer, commencer ou continuer le projet (« démarrer le projet »,
+    « on commence », « go »), sans aucune fonctionnalité nommée : courte, et composée de ces seuls mots."""
+    brut = unicodedata.normalize("NFKD", str(texte or "").lower())
+    brut = "".join(c for c in brut if not unicodedata.combining(c))
+    brut = " ".join(re.sub(r"[^a-z0-9]+", " ", brut).split())
+    return bool(brut) and len(str(texte).strip()) <= LONGUEUR_DEMARRAGE and INTENTION_DE_DEMARRAGE.fullmatch(brut) is not None
+
+
+def _demarrage_du_projet(projet, etat, fid, suite):
+    """Garde-fou sans appel IA : la demande d'un projet qui a une description et un workflow de création n'est qu'une
+    intention de démarrer. Elle vise le projet tel que décrit : genre du projet, workflow de création, cadrage. `None`
+    si la demande n'est pas de cette sorte."""
+    fac = _factory(projet)
+    demande = _demande_de(_fonc(projet, fid))
+    genre = _genre_du_projet(fac)
+    creation = wf.de_creation(fac, genre) if genre else None
+    if (creation is None or not str(fac.get("description") or "").strip() or demande["images"]
+            or not est_intention_de_demarrage(demande["texte"])):
+        return None
+    lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+    _nommer(projet, fid, " ".join(str(fac.get("nom") or "").split()) or _resume_de_la_demande(fac["description"]))
+    return _suivre_le_workflow_de_creation(projet, etat, fid, suite, creation)
+
+
 def _classer(projet, etat, fid, suite):
     """L'appel qui classe la demande (Haiku). Un projet sans genre classe sa description ; la fonctionnalité attend la
     réponse (`confirmer_genre`). Si ce genre est déjà proposé, la décision porte désormais la fonctionnalité (pas de
-    second classement)."""
+    second classement). Une simple intention de démarrer le projet n'est pas classée : voir `_demarrage_du_projet`."""
     fac = _factory(projet)
     f = _fonc(projet, fid)
+    demarrage = _demarrage_du_projet(projet, etat, fid, suite)
+    if demarrage is not None:
+        return demarrage
     demande = _demande_de(f)
     sans_genre = not _genres_du_projet(fac)
     if sans_genre:
@@ -678,9 +719,10 @@ def _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connu
 
 
 def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=None, decision=None,
-                force_elargir=False):
+                force_elargir=False, a_lever=None):
     """La fonctionnalité reste dans ce projet avec le genre `genre` (connu, ou nouveau avec sa description), puis son
-    workflow est proposé. Refus si un genre nouveau n'a pas de description (rien n'est alors changé)."""
+    workflow est proposé. Refus si un genre nouveau n'a pas de description (rien n'est alors changé). `decision` : la
+    question à lever, dont dépend l'élargissement ; `a_lever`, si elle est donnée sans `decision`, est levée seule."""
     fac = _factory(projet)
     nouveau = nouveau or {}
     if genre not in connus and genre not in _genres_du_projet(fac):
@@ -688,12 +730,16 @@ def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=No
         if not description:
             raise Refus(f"« {genre} » est un nouveau genre : il a besoin d'une description")
         suite = {**suite, "genre_nouveau": {"description": description}}
-    if decision is not None:
-        lancer(projet, "decision", {"action": "lever", "id": decision["id"]})
+    levee = decision if decision is not None else a_lever
+    if levee is not None:
+        lancer(projet, "decision", {"action": "lever", "id": levee["id"]})
     lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
     if decision is not None and (force_elargir or _gardee_hors_piste(decision, genre)):
         _proposer_elargissement(projet, fid, genre,
                                 decision.get("elargissement") if genre == _genre_du_projet(fac) else None)
+    creation = wf.de_creation(fac, genre)
+    if creation is not None and genre == _genre_du_projet(fac):    # le genre du projet : son workflow de création
+        return _suivre_le_workflow_de_creation(projet, etat, fid, suite, creation)
     return _proposer(projet, etat, fid, suite)
 
 
@@ -747,8 +793,11 @@ def _sur_genre_fonctionnalite(projet, demande, etat):
         genre = demande.get("genre") or d["propose"]
     else:
         raise Refus(f"choix inconnu : {choix}")
+    # « Démarrer le projet » ne décrit aucun travail qui sorte du genre : rien à élargir, ni à proposer de nouveau
+    sans_elargir = est_intention_de_demarrage(_demande_de(f)["texte"]) and genre == _genre_du_projet(fac)
     return _garder_ici(projet, etat, fid, suite, genre, d.get("genres_connus") or [], d.get("nouveau"),
-                       demande.get("description"), d, force_elargir=choix == "meme")
+                       demande.get("description"), None if sans_elargir else d, force_elargir=choix == "meme",
+                       a_lever=d)
 
 
 def _factory_du_projet_cree(chemin_reglages):
@@ -1721,6 +1770,12 @@ def _matiere(projet, etat, t):
     consignes = "\n".join(f"- {j['texte']}" for j in complet.get("journal") or [])
     parties = [f"## Matière de la tâche {t['id']} ({t['titre']})"]
     if etape == "cadrage":
+        description = " ".join(str(_factory(projet).get("description") or "").split())
+        if description:      # la référence d'une fonctionnalité : la description du projet, plus la demande
+            parties += ["Description du projet (la référence du cadrage, avec la demande de l'utilisateur) :", description]
+            if est_intention_de_demarrage(_demande_de(f)["texte"]):
+                parties.append("La demande ne décrit pas de fonctionnalité, elle demande de démarrer le projet : le "
+                               "cadrage porte sur la description du projet.")
         parties += ["Discussion avec l'utilisateur :", _texte_discussion(f),
                     "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
                     "(`message.questions`, `attend: true`; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "

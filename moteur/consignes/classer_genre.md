@@ -18,12 +18,13 @@ Le `verdict` :
   meilleure piste, ou null.
 
 Règle de l'utilisateur : dans le doute, `incertain`. N'élargis jamais un genre pour y faire entrer une demande qui
-n'en partage pas les outils ou le livrable : l'utilisateur tranchera.
+n'en partage pas les outils ou le livrable : l'utilisateur tranchera. Une demande qui ne décrit aucune fonctionnalité mais dit de démarrer, commencer ou continuer
+le projet (« démarrer le projet », « on commence », « go ») vise le projet tel que décrit : classe la description du
+projet, `meme` avec son genre, `coherente` true, et `intitule` tiré de la description (le nom court du projet).
 
 Donne aussi `coherente` (indépendante du genre) : la demande a-t-elle sa place dans ce projet, d'après sa description
 (ou son nom) ? `true` : logique pour ce projet, même d'un autre genre. `false` : illogique (un logo Twitch dans un projet
 de jeu vidéo roguelike) ; la `raison` dit alors pourquoi. `null` : impossible à juger. Au moindre doute, pas `false`.
-
 Donne aussi l'`intitule` : le nom court de la fonctionnalité demandée (3 à 6 mots, 60 caractères au plus, sans point
 final, par exemple « Casse-briques Android »), ou null si la demande est trop floue pour la nommer.
 
@@ -34,7 +35,6 @@ chaîne »), sans nom propre ni mot interdit ; sinon null. Donne toujours la `ra
 ```json
 {"verdict": "proche", "genre": "…", "nouveau": null, "coherente": true, "elargissement": null, "intitule": "…", "raison": "…"}
 ```
-
 `genre` ne cite qu'un id du dossier ; `nouveau` vaut null sauf pour `autre` ou `incertain` sans genre connu.
 
 Réponds seulement par ce JSON.

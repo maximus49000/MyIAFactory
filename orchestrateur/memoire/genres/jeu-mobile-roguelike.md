@@ -344,3 +344,9 @@ Rôles : designer, dev, equilibreur
 Date : 2026-11-12
 
 Pour une carte générée dont des règles valent sur chaque chemin, écrire un générateur de référence avec réparation, le vérifier sur des centaines de graines, et dire de combien la réparation éloigne la répartition voulue.
+
+## G58 — Quand les intentions d'un ennemi tournent en boucle avec un
+Rôles : designer, dev
+Date : 2026-11-12
+
+Quand les intentions d'un ennemi tournent en boucle avec un départ au hasard, vérifier qu'une intention qui n'a de sens qu'après une autre (fuite après un vol, coup après une préparation) ne peut pas tomber en premier.

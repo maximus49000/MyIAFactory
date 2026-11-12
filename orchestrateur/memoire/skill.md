@@ -165,3 +165,9 @@ Rôles : artiste, livreur
 Date : 2026-11-12
 
 Pour créer un keystore de signature, générer un mot de passe aléatoire, le passer à l'outil par variable d'environnement, le stocker hors du dépôt et masquer sa valeur dans toute sortie ; rendre le script idempotent : il ne recrée rien si le keystore existe.
+
+## S28 — Quand les tests automatiques ne peuvent pas échouer, équilib
+Rôles : designer
+Date : 2026-11-12
+
+Quand les tests automatiques ne peuvent pas échouer, équilibrer seulement ce qui se calcule (ressources, fréquences) et ne pas changer les valeurs de difficulté sans mesure.

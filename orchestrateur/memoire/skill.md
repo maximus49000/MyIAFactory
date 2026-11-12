@@ -183,3 +183,9 @@ Rôles : designer, dev
 Date : 2026-11-12
 
 Les textes affichés et les tests lisent les valeurs d'équilibrage au lieu de recopier leurs chiffres, pour qu'un réglage ne les casse pas.
+
+## S31 — Chaque journal de mesure note les valeurs avec lesquelles il
+Rôles : designer
+Date : 2026-11-12
+
+Chaque journal de mesure note les valeurs avec lesquelles il a été pris, et les outils qui le relisent ignorent ceux pris avec d'autres valeurs.

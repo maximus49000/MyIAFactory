@@ -87,3 +87,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Si le shell est refusé, reformuler la commande dans un script Python écrit avec l'outil Write puis lancé par python.
+
+## S15 — Pour valider des assets graphiques, lancer un script qui com
+Rôles : testeur
+Date : 2026-11-12
+
+Pour valider des assets graphiques, lancer un script qui compare chaque couleur opaque à la palette autorisée, puis une capture produite par le moteur qui prouve résolution et affichage.

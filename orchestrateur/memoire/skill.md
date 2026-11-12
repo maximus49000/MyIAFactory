@@ -243,3 +243,9 @@ Rôles : dev, artiste
 Date : 2026-11-12
 
 Dans une constante GDScript, utiliser l'operateur de formatage % plutot que str(), qui empeche la compilation.
+
+## S41 — Pour attribuer un avertissement de fuite a la fermeture, le
+Rôles : dev
+Date : 2026-11-12
+
+Pour attribuer un avertissement de fuite a la fermeture, le relancer avec --verbose avant de modifier du code.

@@ -75,3 +75,9 @@ Rôles : testeur, dev, livreur
 Date : 2026-11-12
 
 Lorsqu'aucune approbation n'est possible, évite les variables shell dans les commandes. Écris un script avec l'outil de fichier, puis lance-le avec des chemins guillemetés en slashs.
+
+## S13 — Quand une étape de design porte sur un élément d'assets, vér
+Rôles : designer
+Date : 2026-11-12
+
+Quand une étape de design porte sur un élément d'assets, vérifier seulement que chaque entité prévue a son asset nommé, puis déclarer l'étape non applicable.

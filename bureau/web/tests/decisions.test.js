@@ -80,6 +80,17 @@ test("environnement : ce qui manque, « C'est fait » et « Continuer sans »", 
   assert.deepEqual(demandes.map((d) => [d.type, d.verdict, d.fonctionnalite]), [["environnement", "fait", "f1"], ["environnement", "continuer", "f1"]]);
 });
 
+test("decision environnement de projet : sans fonctionnalite, la reponse n'en porte pas", async () => {
+  const {contenu, demandes} = rendre({agir: true, agents: [], fonctionnalites: [], decisions_projet: [
+    {id: "n1", genre: "environnement", texte: "Il manque encore des outils sur le poste.", environnement: [{outil: "JDK 17"}]}]});
+  assert.match(contenu.textContent, /Il manque : JDK 17\./);
+  assert.match(contenu.textContent, /Le projet/);
+  await bouton(contenu, "C'est fait").auteurs.click[0]();
+  await bouton(contenu, "Continuer sans").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "environnement", decision: "n1", verdict: "fait"},
+                              {type: "environnement", decision: "n1", verdict: "continuer"}]);
+});
+
 const ELARGIR = {id: "e1", genre: "elargir_genre", texte: "Élargir la description ?", cible: "badges",
   ancienne: "Badges de chat", propose: "Badges de chat, et aussi logos de chaîne", fonctionnalite: "f1"};
 

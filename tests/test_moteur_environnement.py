@@ -69,6 +69,56 @@ class Verifier(unittest.TestCase):
         (r,) = environnement.verifier([dict(JDK, version_min="11")], which=e.which, executer=e.executer, env={})
         self.assertEqual(r["etat"], "a_installer")
 
+    def test_version_suffisante(self):
+        suffisante = environnement.version_suffisante
+        self.assertFalse(suffisante('java version "1.8.0_381"', "17"))        # Java 1.8 est la version 8
+        self.assertTrue(suffisante('java version "1.8.0_381"', "8"))
+        self.assertTrue(suffisante('openjdk version "21.0.2"', "17"))
+        self.assertTrue(suffisante("17", "17"))
+        self.assertFalse(suffisante("17", "17.0.1"))
+        self.assertTrue(suffisante("8.7", "8.5"))
+        self.assertFalse(suffisante("8.4.2", "8.5"))
+        self.assertTrue(suffisante("Gradle 8.5", "8"))
+        for lue, minimale in ((None, "17"), ("17", None), ("sans nombre", "17"), ("17", "aucune"), ("", "")):
+            self.assertIsNone(suffisante(lue, minimale), (lue, minimale))
+
+    def test_java_trop_ancien_a_installer(self):
+        """La version minimale vient du champ `version_min` des jugements, pas du nom : « JDK » seul suffit."""
+        presents = {"java": "C:/jre/bin/java.exe", "javac": "C:/jre/bin/javac.exe"}
+        jdk = dict(JDK, outil="JDK", version_min="17")
+        for sortie, attendu in (('java version "1.8.0_381"', "a_installer"), ('openjdk version "11.0.2"', "a_installer"),
+                                ('openjdk version "17.0.9"', "en_place"), ('openjdk version "21.0.2"', "en_place")):
+            e = Enregistreur(presents, {"-version": (0, sortie)})
+            (r,) = environnement.verifier([jdk], which=e.which, executer=e.executer, env={})
+            self.assertEqual(r["etat"], attendu, sortie)
+            self.assertEqual(r["version_min"], "17")                  # le champ est gardé dans l'outil
+        e = Enregistreur(presents, {"-version": (0, 'java version "1.8.0_381"')})
+        (r,) = environnement.verifier([jdk], which=e.which, executer=e.executer, env={})
+        self.assertIn("1.8.0_381", r["raison"])
+
+    def test_agent_d_installation_pur(self):
+        flux = [{"id": "valid", "nom": "V", "validation": True}, {"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}]
+        services = [{"id": "facturation", "nom": "Facturation"}, {"id": "dev", "nom": "Dev"}]
+        agent, brief = environnement.agent_d_installation([{"cle": "env-1", "role": "dev"}], [], flux, services)
+        self.assertEqual((agent["cle"], agent["role"], agent["service"], agent["modele"], agent["lieu"]),
+                         ("env-2", "environnement", "dev", "Sonnet", "local"))   # clé libre, service de la première étape d'agent
+        self.assertNotIn("outils", agent)
+        self.assertIn("Mise en place de l'environnement", brief)
+        # avec des règles : les outils habituels, puis elles
+        agent, _ = environnement.agent_d_installation([], [], flux, services, ["Bash(winget:*)", "Bash(winget:*)"])
+        self.assertEqual(agent["cle"], "env-1")
+        self.assertEqual(fiches.outils(agent)[-1], "Bash(winget:*)")
+        self.assertEqual(fiches.outils(agent).count("Bash(winget:*)"), 1)
+        self.assertEqual(fiches.outils(agent)[:3], ["Read", "Write", "Edit"])
+        # sans flux : le premier service ; sans service : rien
+        self.assertEqual(environnement.agent_d_installation([], [], [], services)[0]["service"], "facturation")
+        self.assertEqual(environnement.agent_d_installation([], [], [], []), (None, None))
+        # un agent du rôle existe déjà (en place ou en cours de recrutement) : aucun autre
+        self.assertEqual(environnement.agent_d_installation([{"cle": "x", "role": "environnement"}], [], flux, services),
+                         (None, None))
+        self.assertEqual(environnement.agent_d_installation([], [{"cle": "x", "role": "environnement"}], flux, services),
+                         (None, None))
+
     def test_version_illisible_n_est_pas_dite_verifiee(self):
         jdk17 = dict(JDK, outil="JDK 17")
         presents = {"java": "C:/jdk/bin/java.exe", "javac": "C:/jdk/bin/javac.exe"}
@@ -313,6 +363,117 @@ class Poste(parcours.AvecParcours):
         self.assertIn("JDK 21 : C:/jdk/bin/java.exe (openjdk 21)", depart["message"])
         # une demande suivante qui a besoin des mêmes outils les trouve « déjà en place » : le projet les connaît
         self.assertEqual(self.ok("etat")["decisions"], [])
+
+
+class PosteDuProjet(parcours.AvecParcours):
+    """L'installation portée par le projet (créé au bureau avec son workflow) : sans fonctionnalité, jamais bloquante."""
+
+    def setUp(self):
+        super().setUp()
+        from installation import mise_en_place
+        self.etat_du_poste = "a_installer"
+        self.verifie = []
+
+        def verifier(outils):
+            self.verifie.append([o["outil"] for o in outils])
+            return [dict(o, etat=self.etat_du_poste) for o in outils]
+
+        self.projet.verifier_environnement = verifier
+        self.reecrire(environnement=[dict(JDK, etat="a_installer")])
+        agent, brief = environnement.agent_d_installation(
+            fiches.lire_toutes(self.dossier / "fiches"), [], [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}],
+            [{"id": "dev", "nom": "Dev"}])
+        fiche = mise_en_place._fiche(agent, self.dossier / "fiches" / f"{agent['cle']}.md")
+        fiches.ecrire_fiche(fiche)
+        self.ecrire(self.dossier / "fiches" / "briefs" / "environnement.md", brief)
+        self.tache = regles.lancer(self.projet, "tache", environnement.tache_d_installation_du_projet([JDK]))["id"]
+
+    def rendre(self, texte="Fait.", statut="fait"):
+        e = agents.Execution(self.tache, "env-1", rapport=_lu({"statut": statut, "message": {"texte": texte}}),
+                             usages=[usage()])
+        return regles.traiter_retour(self.projet, e, self.etat)
+
+    def decisions_du_projet(self):
+        return [d for d in self.ok("etat")["decisions"] if d["genre"] == "environnement"]
+
+    def test_la_tache_de_projet_est_lancee_seule(self):
+        t = next(x for x in self.taches() if x["id"] == self.tache)
+        self.assertEqual((t["fonctionnalite"], t["colonne"], t["etape"], t["role"]),
+                         (None, "cadrage", "environnement", "environnement"))
+        self.assertIn("JDK 21", " ".join(j["texte"] for j in t["journal"]))
+        actions = regles.avancer(self.projet, self.etat)
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "env-1")])
+        self.assertIn("Installe les outils du poste", actions[0][3])
+
+    def test_installation_de_projet_reussie(self):
+        regles.avancer(self.projet, self.etat)
+        self.etat_du_poste = "en_place"
+        suite = self.rendre("Java est installé.")
+        self.assertEqual(suite, [])
+        self.assertEqual(self.decisions_du_projet(), [])
+        self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
+        t = next(x for x in self.taches() if x["id"] == self.tache)
+        self.assertEqual(t["colonne"], "fait")
+        self.assertIn("poste est prêt", " ".join(j["texte"] for j in t["journal"]))      # une ligne au relevé
+
+    def test_installation_de_projet_ratee_decision_de_projet(self):
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.rendre("Droits insuffisants."), [])
+        (q,) = self.decisions_du_projet()
+        self.assertEqual(q["portee"], "projet")
+        self.assertIn("JDK 21", q["texte"])
+        self.assertIn("winget install", q["texte"])
+        self.assertEqual([x["outil"] for x in q["environnement"]], ["JDK 21"])
+        self.assertEqual(self.ok("etat")["decisions"][0]["id"], q["id"])
+        from bureau import releve
+        self.assertEqual(releve.valider(self.ok("releve")), [])
+        # un échec de l'agent donne la même décision, une seule
+        self.rendre("Non.", statut="echec")
+        self.assertEqual(len(self.decisions_du_projet()), 1)
+
+    def test_installation_de_projet_ne_retient_pas_le_cadrage(self):
+        regles.avancer(self.projet, self.etat)       # l'installation est en cours
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
+        (decision,) = self.decisions("organisation")
+        _, actions = self.accepter(decision)
+        self.assertIn("metier-1", [a[1] for a in actions])        # le cadrage part, sans attendre l'installation
+        self.assertEqual(self.taches(etape="cadrage")[0]["agent"], "metier-1")
+        # et l'installation ratée ne retient rien non plus
+        self.rendre("Non.")
+        self.assertEqual(len(self.decisions_du_projet()), 1)
+        self.assertEqual(self.fonc()["decisions"], [])
+
+    def test_demande_environnement_sans_fonctionnalite(self):
+        from bureau import demandes
+        regles.avancer(self.projet, self.etat)
+        self.rendre("Non.")
+        (q,) = self.decisions_du_projet()
+        r = self.ok("releve")
+        self.assertIsNone(demandes.verifier({"type": "environnement", "decision": q["id"], "verdict": "fait"}, r))
+        self.assertTrue(demandes.verifier({"type": "environnement", "decision": "d999", "verdict": "fait"}, r))
+        self.assertTrue(demandes.verifier({"type": "environnement", "decision": q["id"], "verdict": "autre"}, r))
+        # toujours rien : la décision reste, et le dit
+        d, actions = self.traiter(type="environnement", decision=q["id"], verdict="fait")
+        self.assertEqual(actions, [])
+        self.assertIn("Il manque encore", self.statut(d["id"])["reponse"])
+        self.assertEqual(len(self.decisions_du_projet()), 1)
+        # installé à la main : revérifié, la décision est levée
+        self.etat_du_poste = "en_place"
+        d, actions = self.traiter(type="environnement", decision=q["id"], verdict="fait")
+        self.assertEqual(self.decisions_du_projet(), [])
+        self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_continuer_sans_leve_la_decision_de_projet(self):
+        regles.avancer(self.projet, self.etat)
+        self.rendre("Non.")
+        (q,) = self.decisions_du_projet()
+        d, actions = self.traiter(type="environnement", decision=q["id"], verdict="continuer")
+        self.assertEqual((actions, self.decisions_du_projet()), ([], []))
+        self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "a_installer")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        d2, _ = self.traiter(type="environnement", decision=q["id"], verdict="fait")
+        self.assertIn("n'existe plus", self.statut(d2["id"])["reponse"])
 
 
 def releve_valider(r):

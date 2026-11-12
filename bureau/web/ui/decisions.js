@@ -24,6 +24,7 @@ function partie(titre, vide, elements) {
 }
 
 function lienFonctionnalite(ctx, d) {
+  if (!d.fonctionnalite) return el("span", "lien-tache", d.nom || "Le projet");   // une décision du projet
   const b = el("button", "lien-tache", d.nom || d.fonctionnalite);
   b.type = "button";
   b.addEventListener("click", () => ctx.ouvrirFonctionnalite(d.fonctionnalite));

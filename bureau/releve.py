@@ -21,7 +21,7 @@ VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
-DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape")
+DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -452,6 +452,11 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":
             _verifier_validation(d, nom, erreurs)
+        elif d.get("genre") == "environnement":
+            outils = d.get("environnement")
+            if not isinstance(outils, list) or not all(_est_dict(x) and _texte_plein(x.get("outil")) for x in outils):
+                erreurs.append(f"{nom} : la décision « {i} » : « environnement » est la liste des outils qui "
+                               "manquent (chacun avec un « outil »).")
 
 
 def _verifier_validation(d, nom, erreurs):

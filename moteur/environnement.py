@@ -20,6 +20,7 @@ import subprocess
 from pathlib import Path
 
 from moteur.jugement import MOTIF_EXECUTABLE
+from orchestrateur import fiches
 
 OPTIONS_DE_VERSION = ("--version", "-version", "version")   # la liste fixe : jamais une option venue de l'IA
 DELAI_VERSION_S = 10
@@ -107,6 +108,16 @@ def numeros_de_version(ligne):
     return n
 
 
+def version_suffisante(lue, minimale):
+    """La version lue (une ligne de sortie, ou un numéro) atteint-elle la version minimale ? `None` si l'une des deux
+    manque ou n'a aucun nombre. Les nombres se comparent dans l'ordre (`21.0.2` ≥ `17` ; `17` < `17.0.1`) ; une version
+    Java `1.x` vaut `x` quand la ligne dit java, jdk ou jre (`java version "1.8.0_381"` < `17`)."""
+    trouvee, voulue = numeros_de_version(lue), _numeros(minimale)
+    if trouvee is None or voulue is None:
+        return None
+    return trouvee + (0,) * (len(voulue) - len(trouvee)) >= voulue
+
+
 def verifier(outils, *, which=shutil.which, executer=executer_version, env=None):
     """Chaque outil de la proposition avec son état : `en_place` (`chemin`, `version`?) ou `a_installer`. Un outil est en
     place quand **tous** ses exécutables sont trouvés. Un exécutable est cherché une seule fois, même s'il sert à
@@ -132,11 +143,11 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
                 o["version"] = versions[valides[0]]
             minimale = version_minimale(outil)
             if minimale:
-                trouvee = numeros_de_version(versions[valides[0]])
                 texte_min = ".".join(str(x) for x in minimale)
-                if trouvee is None:
+                suffisante = version_suffisante(versions[valides[0]], texte_min)
+                if suffisante is None:
                     o["raison"] = f"version {texte_min} minimum demandée, version non vérifiée (illisible)"
-                elif trouvee + (0,) * (len(minimale) - len(trouvee)) < minimale:
+                elif not suffisante:
                     o["etat"] = "a_installer"
                     o["raison"] = f"version trouvée : {versions[valides[0]]} ; {texte_min} minimum demandée"
         else:
@@ -152,3 +163,48 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
 
 def a_installer(outils):
     return [o for o in outils if o.get("etat") != "en_place"]
+
+
+ROLE_INSTALLATION = "environnement"      # l'agent qui installe les outils du poste
+TITRE_INSTALLATION = "Mise en place de l'environnement"
+
+
+def journal_d_installation(manquants):
+    """Les consignes de la tâche d'installation : chaque outil qui manque, son programme et comment l'installer."""
+    journal = ["Outils à installer (de préférence sans droits d'administrateur, depuis les sources officielles) :"]
+    journal += [f"- {x['outil']} ({', '.join(x.get('executables') or [])}) : {x.get('installation', '')}"
+                for x in manquants]
+    journal.append("Vérifie chaque outil après son installation (chemin et version) et rends compte.")
+    return journal
+
+
+def tache_d_installation_du_projet(manquants):
+    """L'entrée `lancer tache` de l'installation portée par le projet (sans fonctionnalité, colonne « cadrage ») : le
+    moteur la lance seul, et son retour revérifie le poste sans retenir le cadrage d'aucune demande."""
+    return {"titre": TITRE_INSTALLATION, "etape": "environnement", "role": ROLE_INSTALLATION, "colonne": "cadrage",
+            "active": False, "journal": journal_d_installation(manquants)}
+
+
+def agent_d_installation(existants, nouveaux, flux, services, outils_installation=None):
+    """L'agent qui installe les outils du poste, et son brief : `(agent, brief)`, ou `(None, None)` si un agent du rôle
+    existe déjà (parmi `existants` et `nouveaux`, des fiches `{cle, role}`) ou si aucun service ne peut l'accueillir.
+    Son service : celui de la première étape d'agent du `flux` (pas le premier du projet, souvent la facturation), à
+    défaut le premier de `services`. Avec `outils_installation`, sa fiche porte ces règles d'outils (`outils` : les
+    outils habituels, puis les règles)."""
+    etapes = [e for e in flux if not e.get("validation")]
+    service = etapes[0]["service"] if etapes else (services[0]["id"] if services else None)
+    if any(a["role"] == ROLE_INSTALLATION for a in list(existants) + list(nouveaux)) or not service:
+        return None, None
+    pris = {a["cle"] for a in existants} | {a["cle"] for a in nouveaux}
+    cle = next(c for c in (f"env-{n}" for n in range(1, 100)) if c not in pris)
+    agent = {"cle": cle, "role": ROLE_INSTALLATION, "service": service, "modele": "Sonnet",
+             "lieu": "local", "justification": "Installer et vérifier les outils, avec soin.", "fable_suggere": False,
+             "texte": "Tu installes les outils du poste dont le workflow a besoin, puis tu vérifies chacun."}
+    if outils_installation:
+        agent["outils"] = ", ".join(dict.fromkeys(list(fiches.OUTILS_PAR_DEFAUT) + list(outils_installation)))
+    brief = ("Tu installes les outils du poste demandés par une tâche « Mise en place de l'environnement ». Installe "
+             "de préférence pour l'utilisateur seul (sans droits d'administrateur) et depuis les sources officielles. "
+             "Après chaque installation, vérifie l'outil (chemin et version) et rends compte. Si une installation "
+             "échoue (droits d'administrateur, téléchargement refusé, outil introuvable), dis ce qui manque, pourquoi "
+             "et comment l'installer à la main : n'insiste pas.")
+    return agent, brief

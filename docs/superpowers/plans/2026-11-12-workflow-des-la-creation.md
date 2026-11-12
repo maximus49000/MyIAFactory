@@ -153,9 +153,9 @@
   - `environnement.agent_d_installation(existants: list[dict], nouveaux: list[dict], flux: list[dict], services: list[dict], outils_installation: list[str] | None = None) -> (dict | None, str | None)` : même agent et même brief qu'aujourd'hui (clé `env-<n>`, Sonnet, local, service de la première étape d'agent), avec `outils` = les règles quand elles sont données ;
   - tâche d'installation de projet : `{"titre": "Mise en place de l'environnement", "etape": "environnement", "role": "environnement", "colonne": "cadrage", "journal": [...]}` sans `fonctionnalite` ; à sa fin, revérification ; tout est là → une ligne au relevé (journal de la tâche) ; sinon décision de projet `environnement` `{texte, environnement: [outils qui manquent]}` (« C'est fait », « Continuer sans »), **sans jamais retenir le cadrage d'une demande** ; demande `{"type": "environnement", "decision", "verdict"}` sans `fonctionnalite`.
 
-- [ ] **Étape 1 : tests** : `test_version_suffisante` (`1.8` contre `17`, `21.0.2` contre `17`, absentes) ; `test_java_trop_ancien_a_installer` ; `test_agent_d_installation_pur` ; `test_installation_de_projet_reussie` ; `test_installation_de_projet_ratee_decision_de_projet` ; `test_installation_de_projet_ne_retient_pas_le_cadrage` ; `test_demande_environnement_sans_fonctionnalite` ; page : `decision environnement de projet`, `organisation montre la version demandee`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur environnement orch demandes releve` et `node --test bureau/web/tests`).
-- [ ] **Étape 5 : commit** « Poste : versions comparées, installation portée par le projet ».
+- [x] **Étape 1 : tests** : `test_version_suffisante` (`1.8` contre `17`, `21.0.2` contre `17`, absentes) ; `test_java_trop_ancien_a_installer` ; `test_agent_d_installation_pur` ; `test_installation_de_projet_reussie` ; `test_installation_de_projet_ratee_decision_de_projet` ; `test_installation_de_projet_ne_retient_pas_le_cadrage` ; `test_demande_environnement_sans_fonctionnalite` ; page : `decision environnement de projet`, `organisation montre la version demandee`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur environnement orch demandes releve` et `node --test bureau/web/tests`).
+- [x] **Étape 5 : commit** « Poste : versions comparées, installation portée par le projet ».
 
 ## Étape 4 — la création en deux fenêtres
 

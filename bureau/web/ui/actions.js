@@ -136,6 +136,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "organisation") sortie.organisations.push({...d});
     else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
+    else if (d?.genre === "environnement") sortie.environnements.push({...d});   // l'installation portée par le projet
   }
   return sortie;
 }
@@ -210,7 +211,9 @@ export function demandeGenreFonctionnalite(decision, choix, {genre, description,
 
 // « C'est fait » (l'outil est installé à la main) ou « Continuer sans ».
 export function demandeEnvironnement(decision, verdict) {
-  return {type: "environnement", decision: decision.id, fonctionnalite: decision.fonctionnalite, verdict};
+  const d = {type: "environnement", decision: decision.id, verdict};
+  if (plein(decision.fonctionnalite)) d.fonctionnalite = decision.fonctionnalite;   // sans elle : la décision du projet
+  return d;
 }
 
 export function demandeSession(decision, session) {

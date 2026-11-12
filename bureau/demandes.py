@@ -19,13 +19,13 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
-          "environnement": ("decision", "fonctionnalite", "verdict"), "elargir_genre": ("decision", "verdict"),
+          "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
           "valider_etape": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",)}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable"), "valider_etape": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "organisation": ("texte", "fable"), "valider_etape": ("texte",), "environnement": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
@@ -258,10 +258,14 @@ def _verifier_v4(demande, r, elements):
             return f"« texte » dépasse {MAX_TEXTE} caractères."
         return None
     if genre == "environnement":
-        f = _fonctionnalite(r, demande["fonctionnalite"])
-        if f is None:
-            return "Fonctionnalité inconnue."
-        if _decision(f["decisions"], demande["decision"], "environnement") is None:
+        if demande.get("fonctionnalite") is None:      # l'installation portée par le projet : décision de projet
+            decisions = r.get("decisions_projet", [])
+        else:
+            f = _fonctionnalite(r, demande["fonctionnalite"])
+            if f is None:
+                return "Fonctionnalité inconnue."
+            decisions = f["decisions"]
+        if _decision(decisions, demande["decision"], "environnement") is None:
             return "Décision inconnue."
         return None if demande["verdict"] in ("fait", "continuer") else "Réponse inconnue (fait ou continuer)."
     if genre == "organisation":

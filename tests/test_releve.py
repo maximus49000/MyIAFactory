@@ -847,6 +847,13 @@ class TestVersion4(unittest.TestCase):
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
         self.refus(v4(colonnes=[{"id": "a", "nom": "A", "validation": "oui"}]), "validation")
 
+    def test_releve_decision_environnement_de_projet(self):
+        base = {"id": "e", "genre": "environnement", "texte": "Il manque Java.",
+                "environnement": [{"outil": "JDK 17", "etat": "a_installer"}]}
+        self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
+        self.refus(v4(decisions_projet=[{**base, "environnement": [{"etat": "a_installer"}]}]), "environnement")
+        self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "environnement"}]), "environnement")
+
     def test_decision_organisation_valide(self):
         base = {"id": "o", "genre": "organisation", "texte": "Ajouter un service"}
         org = {"services": [{"id": "dev", "nom": "Dev"}, {"id": "son", "nom": "Son"}],

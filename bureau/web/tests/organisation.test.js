@@ -161,6 +161,18 @@ test("organisation montre l environnement", () => {
   assert.match(li.textContent, /2\.45/);
 });
 
+test("organisation montre la version demandee", () => {
+  const l = lignesEnvironnement({organisation: {environnement: [
+    {outil: "JDK", etat: "a_installer", installation: "winget", version: 'java version "1.8.0_351"', version_min: "17",
+     raison: "version trouvée : java version \"1.8.0_351\" ; 17 minimum demandée"},
+    {outil: "Gradle", etat: "en_place", version: "Gradle 8.7", version_min: "8.5", chemin: "C:/gradle"},
+    {outil: "Android", etat: "a_installer", installation: "sdkmanager", version_min: "34"}]}});
+  assert.equal(l[0].detail, 'version lue : java version "1.8.0_351" · version demandée : 17 · winget');
+  assert.equal(l[1].detail, "version lue : Gradle 8.7 · version demandée : 8.5 · C:/gradle");
+  assert.equal(l[2].detail, "version demandée : 34 · sdkmanager");
+  assert.deepEqual([l[0].lue, l[0].demandee], ['java version "1.8.0_351"', "17"]);
+});
+
 test("demandeOrganisation : le texte du refus, Fable seulement avec accepter, abandonner", () => {
   assert.deepEqual(demandeOrganisation("d1", "refuser", {texte: "  plus court  "}), {type: "organisation", decision: "d1", verdict: "refuser", texte: "plus court"});
   assert.deepEqual(demandeOrganisation("d1", "refuser", {texte: "  "}), {type: "organisation", decision: "d1", verdict: "refuser"});

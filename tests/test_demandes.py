@@ -548,6 +548,22 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
     def refus(self, d):
         self.assertTrue(demandes.verifier(d, R5, frozenset(), None), d)
 
+    def test_environnement_d_une_fonctionnalite_ou_du_projet(self):
+        import copy
+        r = copy.deepcopy(R5)
+        r["fonctionnalites"][0]["decisions"].append({"id": "n1", "genre": "environnement", "texte": "Il manque Java.",
+                                                     "environnement": [{"outil": "JDK 17", "etat": "a_installer"}]})
+        r["decisions_projet"].append({"id": "n2", "genre": "environnement", "texte": "Il manque Java.",
+                                      "environnement": [{"outil": "JDK 17", "etat": "a_installer"}]})
+        ok = lambda d: self.assertIsNone(demandes.verifier(d, r, frozenset(), None), d)
+        refus = lambda d: self.assertTrue(demandes.verifier(d, r, frozenset(), None), d)
+        ok({"type": "environnement", "decision": "n1", "fonctionnalite": "f1", "verdict": "fait"})
+        ok({"type": "environnement", "decision": "n2", "verdict": "continuer"})          # sans fonctionnalité : le projet
+        refus({"type": "environnement", "decision": "n1", "verdict": "fait"})              # n1 est celle de f1
+        refus({"type": "environnement", "decision": "n2", "fonctionnalite": "f1", "verdict": "fait"})
+        refus({"type": "environnement", "decision": "n2", "verdict": "plus tard"})
+        refus({"type": "environnement", "decision": "zz", "verdict": "fait"})
+
     def test_genre_fonctionnalite(self):
         base = {"type": "genre_fonctionnalite", "decision": "q1", "fonctionnalite": "f1"}
         self.ok({**base, "choix": "ici"})

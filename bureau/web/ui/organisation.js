@@ -76,8 +76,14 @@ export function agentsOrganisation(decision) {
 export function lignesEnvironnement(decision) {
   return liste(decision?.organisation?.environnement).filter((x) => x && plein(x.outil)).map((x) => {
     const enPlace = x.etat === "en_place";
-    const details = enPlace ? [x.raison, x.version, x.chemin] : [x.raison, x.installation];
-    return {outil: x.outil, enPlace, pour: plein(x.pour) ? x.pour : null,
+    // la version lue et la version demandée côte à côte (elles disent déjà ce que dit la « raison » du moteur)
+    const lue = plein(x.version) ? x.version : null;
+    const demandee = plein(x.version_min) ? x.version_min : null;
+    const versions = lue && demandee ? `version lue : ${lue} · version demandée : ${demandee}`
+      : (demandee && !enPlace && !plein(x.raison) ? `version demandée : ${demandee}` : null);
+    const raison = lue && demandee ? null : x.raison;
+    const details = enPlace ? [raison, versions || x.version, x.chemin] : [raison, versions, x.installation];
+    return {outil: x.outil, enPlace, pour: plein(x.pour) ? x.pour : null, lue, demandee,
             libelle: `${x.outil} : ${enPlace ? "déjà en place" : "à installer"}`,
             detail: details.filter(plein).join(" · ") || null,
             refuse: liste(x.refuses).length > 0};

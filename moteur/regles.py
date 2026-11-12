@@ -987,20 +987,7 @@ def _agent_d_installation(projet, nouveaux, flux):
         fiches_ = fi.lire_toutes(fac["fiches"])
     except (fi.FicheInvalide, OSError):
         fiches_ = []
-    service = flux[0]["service"] if flux else (fac["services"][0]["id"] if fac["services"] else None)
-    if any(a["role"] == ROLE_ENVIRONNEMENT for a in fiches_ + nouveaux) or not service:
-        return None, None
-    pris = {a["cle"] for a in fiches_} | {a["cle"] for a in nouveaux}
-    cle = next(c for c in (f"env-{n}" for n in range(1, 100)) if c not in pris)
-    agent = {"cle": cle, "role": ROLE_ENVIRONNEMENT, "service": service, "modele": "Sonnet",
-             "lieu": "local", "justification": "Installer et vérifier les outils, avec soin.", "fable_suggere": False,
-             "texte": "Tu installes les outils du poste dont le workflow a besoin, puis tu vérifies chacun."}
-    brief = ("Tu installes les outils du poste demandés par une tâche « Mise en place de l'environnement ». Installe "
-             "de préférence pour l'utilisateur seul (sans droits d'administrateur) et depuis les sources officielles. "
-             "Après chaque installation, vérifie l'outil (chemin et version) et rends compte. Si une installation "
-             "échoue (droits d'administrateur, téléchargement refusé, outil introuvable), dis ce qui manque, pourquoi "
-             "et comment l'installer à la main : n'insiste pas.")
-    return agent, brief
+    return environnement.agent_d_installation(fiches_, nouveaux, flux, fac["services"])
 
 
 def _sur_organisation(projet, demande, etat):
@@ -1070,12 +1057,8 @@ def _apres_mise_en_place(projet, etat, fid, org):
     manquants = environnement.a_installer(org.get("environnement") or [])
     if not manquants:
         return _repondre_cadrage(projet, etat, fid)
-    journal = ["Outils à installer (de préférence sans droits d'administrateur, depuis les sources officielles) :"]
-    journal += [f"- {x['outil']} ({', '.join(x.get('executables') or [])}) : {x.get('installation', '')}"
-                for x in manquants]
-    journal.append("Vérifie chaque outil après son installation (chemin et version) et rends compte.")
-    _creer_tache(projet, "Mise en place de l'environnement", fid, ROLE_ENVIRONNEMENT, "environnement",
-                 colonne=org["workflow"]["flux"][0]["id"], journal=journal)
+    _creer_tache(projet, environnement.TITRE_INSTALLATION, fid, ROLE_ENVIRONNEMENT, "environnement",
+                 colonne=org["workflow"]["flux"][0]["id"], journal=environnement.journal_d_installation(manquants))
     _dire(projet, fid, "Avant le cadrage, j'installe les outils qui manquent sur le poste : "
                        + ", ".join(x["outil"] for x in manquants) + ".")
     return _demarrer_en_attente(projet, etat, fid)
@@ -1090,10 +1073,14 @@ def _verifier_le_poste(projet, fid):
     return environnement.a_installer(verifies)
 
 
-def _poste_pret_ou_decision(projet, etat, fid, intro=None):
+def _poste_pret_ou_decision(projet, etat, fid, intro=None, tache=None):
     """Après l'installation (ou son échec) : tout est en place, le cadrage démarre ; sinon une décision au Directeur dit ce
-    qui manque et comment l'installer à la main (« C'est fait » revérifie, « Continuer sans » laisse avancer)."""
+    qui manque et comment l'installer à la main (« C'est fait » revérifie, « Continuer sans » laisse avancer). Sans
+    fonctionnalité (l'installation portée par le projet, à sa création), la décision est celle du projet et aucun cadrage
+    n'est retenu ni démarré."""
     manquants = _verifier_le_poste(projet, fid)
+    if fid is None:
+        return _poste_du_projet(projet, manquants, intro, tache)
     f = _fonc(projet, fid)
     if not manquants:
         for d in f.get("decisions") or []:
@@ -1101,11 +1088,7 @@ def _poste_pret_ou_decision(projet, etat, fid, intro=None):
                 lancer(projet, "decision", {"action": "lever", "id": d["id"]})
         _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
         return _repondre_cadrage(projet, etat, fid)
-    lignes = [f"- {x['outil']} : {x.get('installation') or 'voir la documentation officielle'}" for x in manquants]
-    texte = ((intro + " ") if intro else "") + (
-        "Il manque encore des outils sur le poste, et je n'ai pas pu les installer. Voici ce qu'il faut, et comment "
-        "l'installer à la main :\n" + "\n".join(lignes) + "\nDites « C'est fait » quand c'est installé (je revérifie), "
-        "ou « Continuer sans » : les étapes qui en ont besoin le diront.")
+    texte = _texte_des_manquants(manquants, intro)
     if not _a_decision(f, "environnement"):
         lancer(projet, "decision", {"action": "poser", "portee": fid, "genre": "environnement", "texte": texte,
                                     "environnement": [dict(x) for x in manquants]})
@@ -1113,9 +1096,39 @@ def _poste_pret_ou_decision(projet, etat, fid, intro=None):
     return []
 
 
+def _texte_des_manquants(manquants, intro=None):
+    lignes = [f"- {x['outil']} : {x.get('installation') or 'voir la documentation officielle'}" for x in manquants]
+    return ((intro + " ") if intro else "") + (
+        "Il manque encore des outils sur le poste, et je n'ai pas pu les installer. Voici ce qu'il faut, et comment "
+        "l'installer à la main :\n" + "\n".join(lignes) + "\nDites « C'est fait » quand c'est installé (je revérifie), "
+        "ou « Continuer sans » : les étapes qui en ont besoin le diront.")
+
+
+def _decisions_d_environnement_du_projet(projet):
+    return [d for d in _etat(projet)["decisions"] if d["portee"] == "projet" and d["genre"] == "environnement"]
+
+
+def _poste_du_projet(projet, manquants, intro, tache):
+    """La fin de l'installation portée par le projet : une ligne au journal de la tâche si tout est là, sinon la décision
+    de projet `environnement` (une seule)."""
+    if not manquants:
+        for d in _decisions_d_environnement_du_projet(projet):
+            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        if tache:
+            lancer(projet, "tache", {"id": tache, "journal": ["Le poste est prêt : tous les outils sont en place."]})
+        return []
+    if not _decisions_d_environnement_du_projet(projet):
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "environnement",
+                                    "texte": _texte_des_manquants(manquants, intro),
+                                    "environnement": [dict(x) for x in manquants]})
+    return []
+
+
 def _sur_environnement(projet, demande, etat):
     """La réponse à « il manque des outils sur le poste » : « C'est fait » revérifie, « Continuer sans » laisse avancer."""
-    fid = demande["fonctionnalite"]
+    fid = demande.get("fonctionnalite")
+    if fid is None:
+        return _sur_environnement_du_projet(projet, demande)
     f = _fonc(projet, fid)
     d = _decision_de(f, demande["decision"], "environnement")
     if d is None:
@@ -1136,6 +1149,27 @@ def _sur_environnement(projet, demande, etat):
     _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
     _terminer(projet, suite, "Merci, les outils sont en place : le cadrage commence.")
     return _repondre_cadrage(projet, etat, fid)
+
+
+def _sur_environnement_du_projet(projet, demande):
+    """La même réponse pour la décision de projet : rien ne démarre ni ne s'arrête, le poste est seulement noté."""
+    d = next((x for x in _decisions_d_environnement_du_projet(projet) if x["id"] == demande["decision"]), None)
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    suite = {"demande": demande["id"]}
+    if demande["verdict"] == CONTINUER_SANS:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _terminer(projet, suite, "C'est noté : le projet continue sans ces outils.")
+        return []
+    if demande["verdict"] != C_EST_FAIT:
+        raise Refus(f"réponse inconnue : {demande['verdict']}")
+    manquants = _verifier_le_poste(projet, None)
+    if manquants:
+        _terminer(projet, suite, "Il manque encore : " + ", ".join(x["outil"] for x in manquants) + ".")
+        return []
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, suite, "Merci, les outils sont en place.")
+    return []
 
 
 def _sur_genre(projet, demande, etat):
@@ -1702,9 +1736,9 @@ def _agent_en_echec(projet, etat, execution, depart):
 def _apres_echec_d_installation(projet, etat, taches, raison):
     """Une installation qui échoue ne bloque pas la fonctionnalité : la décision au Directeur dit ce qui manque."""
     t = _tache(projet, taches[0])
-    if str(t.get("etape")) != "environnement" or not t.get("fonctionnalite"):
+    if str(t.get("etape")) != "environnement":
         return []
-    return _poste_pret_ou_decision(projet, etat, t["fonctionnalite"], intro=raison)
+    return _poste_pret_ou_decision(projet, etat, t.get("fonctionnalite"), intro=raison, tache=t["id"])
 
 
 def _bloquer_taches(projet, taches, raison):
@@ -1752,7 +1786,7 @@ def _suite_de_tache(projet, etat, t, execution, r):
     if etape == "prototype":
         return _suite_prototype(projet, etat, t, r)
     if etape == "environnement":
-        return _poste_pret_ou_decision(projet, etat, fid)
+        return _poste_pret_ou_decision(projet, etat, fid, tache=t["id"])
     cle = f"{fid}/{t.get('element')}"
     v = _m(etat, "elements").get(cle)
     if v is None:

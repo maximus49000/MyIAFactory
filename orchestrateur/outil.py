@@ -690,6 +690,8 @@ def cmd_decision(ctx, e):
                     d["fonctionnalite"] = e["fonctionnalite"]
             elif genre == "valider_etape":
                 d.update(_validation_decidee(ctx, s, e))
+            elif genre == "environnement":      # l'installation portée par le projet (sans fonctionnalité)
+                d["environnement"] = _outils_qui_manquent(e)
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -703,12 +705,7 @@ def cmd_decision(ctx, e):
             if genre == "genre_fonctionnalite":
                 d.update(_genre_fonctionnalite_decide(ctx, e))
             elif genre == "environnement":
-                outils = e.get("environnement")
-                if (not isinstance(outils, list) or not outils
-                        or not all(isinstance(x, dict) and isinstance(x.get("outil"), str) and x["outil"].strip()
-                                   for x in outils)):
-                    raise Refus("« environnement » demande la liste des outils qui manquent ({outil, installation, …}).")
-                d["environnement"] = [dict(x) for x in outils]
+                d["environnement"] = _outils_qui_manquent(e)
             liste = _fonc(s, portee)["decisions"]
         existante = next((x for x in liste if {k: v for k, v in x.items() if k != "id"} == d), None)
         if existante:   # poser deux fois la même décision n'en crée qu'une
@@ -716,6 +713,16 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _outils_qui_manquent(e):
+    """La liste des outils d'une décision `environnement` : `[{outil, installation, …}]`, jamais vide."""
+    outils = e.get("environnement")
+    if (not isinstance(outils, list) or not outils
+            or not all(isinstance(x, dict) and isinstance(x.get("outil"), str) and x["outil"].strip()
+                       for x in outils)):
+        raise Refus("« environnement » demande la liste des outils qui manquent ({outil, installation, …}).")
+    return [dict(x) for x in outils]
 
 
 def _validation_decidee(ctx, s, e):

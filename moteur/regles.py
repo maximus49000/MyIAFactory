@@ -1619,9 +1619,11 @@ def _sur_partenaires(projet, demande, etat):
     genre = demande["type"]
     if genre == "partenaire_regle":
         e = {"action": "regle", "partenaire": demande["partenaire"], "operation": demande["operation"]}
-        for cle in ("id", "texte"):
-            if demande.get(cle):
-                e[cle] = demande[cle]
+        # `actions` met l'identifiant de la demande dans `id` et celui de la règle visée dans `cible`
+        if demande.get("cible"):
+            e["id"] = demande["cible"]
+        if demande.get("texte"):
+            e["texte"] = demande["texte"]
         lancer(projet, "partenaires", e)
         reponse = "La règle est notée."
     elif genre == "partenaires_actualiser":

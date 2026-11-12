@@ -14,7 +14,7 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | **faite** le 2026-11-12 (1138 tests verts) |
 | C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | **faite** le 2026-11-12 (1202 tests verts) |
 | D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | **faite** le 2026-11-12 (1233 tests verts) |
-| E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire : **c'est la prochaine phase** |
+| E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | **faite** le 2026-11-12 (1247 tests verts) ; essai au bureau arrêté à la validation du workflow (outil à installer) |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
 
@@ -245,6 +245,77 @@ pour les décisions) et la route par des requêtes HTTP de test.
 - **À surveiller** : `ecrire_organisation` (installation) remplace la liste `services` (le moteur envoie tous les services) ;
   `creation.creer_projet` (tâche 7) doit écrire un `factory.json` valide sans `flux`, éventuellement avec `description` et `genre` ;
   `bureau/web/ui/organisation.js` lit encore les colonnes retirées du flux (note de la phase A).
+
+**Phase E (Opus 5.5, 2026-11-12)** : tâche 9 faite, suite complète verte (1247 tests, `node --test` compris). Dépenses
+réelles avec l'accord de l'utilisateur : environ **0,39 €** (banc 0,37 €, essai au bureau 0,02 €).
+
+- **Le banc a ses gestes** (`banc/jouer.py`, `banc/construire.py`) : le scénario garde le `genre` (et la `description`) du
+  projet de l'essai ; `Parcours` donne les gestes que l'essai n'avait pas, avant ceux du scénario : accepter un workflow
+  proposé, répondre « même genre » (`meme` si le jugement hésite, sinon `ici` avec le genre du projet), « Continuer avec
+  le workflow actuel » si la proposition rate. `vers_l_essai` ramène une étape du workflow de la fonctionnalité (`f1-…`)
+  à celle de l'essai (même id sans préfixe, puis même rôle, puis même rang ; chacune une fois) : une étape que l'essai
+  n'avait pas reste la sienne (un écart). `poste_pret` : le poste du banc est tenu pour prêt (aucun agent d'installation).
+  Le scénario synthétique a un genre (`ecrans-demo`).
+- **Scénario de référence** : l'essai a continué après la phase D (une seconde demande, un casse-briques, dans le même
+  projet) ; `construire` la reprend. Le scénario joué est donc celui de la phase D avec le genre du projet en plus
+  (le scénario reconstruit est gardé à côté, hors dépôt). Les anciens résultats sont rangés dans un sous-dossier du banc.
+- **Tours de réglage de `proposer_organisation`** (un seul fait) : au premier passage (0,117 €), le workflow repris
+  gagnait une étape « Livraison » (refaite pour chaque élément : sans rapport à rejouer au banc, mais un passage d'agent
+  par élément en vrai) et 1 212 tokens de sortie. Tour 1 : la consigne dit de **renommer la dernière étape** plutôt que
+  d'en ajouter une (« Contrôle et remise du lot »), textes courts. Ensuite : workflow repris tel quel (dernière étape
+  renommée), 700 à 880 tokens de sortie, 0,0095 à 0,0137 € ; le casse-briques garde qualité et « Livraison de l'apk
+  signé » (0,025 € au lieu de 0,036 à 0,043 €). `--effort low` essayé : sans effet notable (non retenu).
+- **Corrections de l'essai au bureau** (une par commit, testées) : le genre d'un projet créé au bureau avec une
+  description est proposé **dès le premier passage** (`regles.genre_a_proposer`, appelé au démarrage d'un projet par
+  la boucle ; une demande qui arrive ensuite reprend la décision posée, sans second classement ; rien si le projet a
+  déjà une fonctionnalité) ; l'agent d'installation rejoint le **service de la première étape** (il allait au premier
+  service du projet, la facturation dans un projet créé au bureau) ; ponctuation des textes (double point après le
+  livrable, point avant une parenthèse).
+
+**Bilan de la phase E**
+
+| Passage du banc (production rejouée) | Appels de jugement | Orchestration | Attendus |
+|---|---|---|---|
+| Phase D (sans le parcours) | 5 | 0,077 € | 4 / 5 |
+| Avant réglage | 5 + 2 nouveaux | 0,117 € | 3 / 5 (étape « Livraison » ajoutée) |
+| Tour 1, passage a | 5 + 2 | 0,103 € | 4 / 5 |
+| Tour 1, passage b | 5 + 2 | **0,090 €** | 4 / 5 |
+
+- Les deux appels nouveaux coûtent **0,010 à 0,014 €** (`classer_genre` Haiku 0,0002 à 0,0004 €, `proposer_organisation`
+  Sonnet 0,0095 à 0,0137 €). **Objectif ≤ 0,10 € : tenu en moyenne, à la marge** (0,090 et 0,103 €) : l'écart vient
+  d'`ecrire_methode` (Sonnet, 5 500 à 7 400 tokens de sortie, 0,067 à 0,086 €), comme la phase D l'annonçait. Si l'on veut
+  de la marge, c'est elle qu'il faut resserrer. Les leçons restent le seul attendu manqué (même cause qu'en phase D).
+- **Essai au bureau** (bureau et moteur relancés, pilotés par HTTP) :
+  1. Demande « petit jeu de casse-briques pour Android » dans le projet de l'essai : `classer_genre` → `autre`, genre
+     nouveau proposé (`developpement-jeu-mobile`), décision `genre_fonctionnalite` au bureau. Bien.
+  2. `POST /api/projets/creer` depuis la décision (GitHub non) : projet créé, inscrit, listé ; au passage suivant, la
+     demande recréée dans le nouveau projet (avec son genre et sa description) et « Partie dans le projet … » dans
+     l'origine. Bien.
+  3. Dans le nouveau projet : `proposer_organisation` direct (0,020 €) : Programmation, « Tests et essai du jeu »
+     (service Qualité, agent Haiku), « Livraison de l'apk signé » ; deux agents et deux services nouveaux, JDK et SDK
+     Android « déjà en place », **Gradle « à installer »**. **Arrêt ici** : accepter aurait lancé l'installation de
+     logiciels sur le poste (hors de l'accord, qui couvre les dépenses d'API). La décision reste posée au bureau.
+  4. « Nouveau projet… » avec une description : projet créé sans genre ; après la correction, le moteur propose son
+     genre au premier passage (`confirmer_genre`, `site-web-vitrine`). La décision reste posée (l'accepter écrit un genre
+     dans la mémoire de la skill).
+- **Ce qui accroche encore (non corrigé)** :
+  - La vérification du poste ne compare pas les versions : « JDK 17 » est noté « déjà en place » alors que le `java`
+    trouvé est un Java 8. À traiter (version minimale dans `environnement`, ou au moins la version lue montrée au
+    Directeur à côté de l'outil demandé).
+  - Le coût d'un workflow proposé n'a jamais d'euros (`_cout` passe des prix inconnus à `estimation.estimer`) : la page
+    ne montre que des tokens.
+  - Le nom d'une fonctionnalité reste le début du texte de la demande jusqu'au cadrage (« Je voudrais un petit jeu de
+    casse-brique ») : il apparaît tel quel dans la proposition de workflow.
+  - `bureau.pid` ne désignait plus le bureau qui tournait (cause inconnue) : `lanceur.lancer(relancer=True)` aurait
+    refusé ; le bon numéro a été remis à la main avant la relance.
+  - Avec une étape de livraison en dernière position et sans agent `relecteur`, c'est elle qui tient lieu de relecture
+    (règle de la phase D de l'orchestrateur) : à revoir quand un workflow réel en aura une (le casse-briques).
+  - Un test dépend de la charge de la machine (`test_bureau_multi.test_une_seule_sonde`) : il a échoué une fois dans
+    la suite complète, vert seul et au passage suivant.
+- **Ce qui reste à essayer** : accepter un workflow qui recrute et installe (sur un poste où l'installation est permise,
+  avec l'accord explicite de l'utilisateur), puis le cadrage dans le nouveau projet ; confirmer un genre proposé
+  d'après une description et voir la première demande qui suit ; le rendu réel de ces décisions sur la page et le
+  téléphone (non regardés : pas de panneau navigateur).
 
 ## Messages à coller
 

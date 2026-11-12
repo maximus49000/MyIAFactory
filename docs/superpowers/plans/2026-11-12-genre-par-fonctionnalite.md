@@ -203,6 +203,6 @@
 **Fichiers :**
 - Modifier : `banc/construire.py`, `banc/jouer.py` (gestes nouveaux : accepter l'organisation proposée ; la demande de l'essai est du genre du projet), `docs/superpowers/plans/2026-11-12-genre-par-fonctionnalite-passation.md`
 
-- [ ] **Étape 1 : banc moteur** sur l'essai de référence (`py -3.12 -m banc moteur …`, chemins donnés par l'utilisateur, hors dépôt) : orchestration ≤ 0,10 € avec les deux appels nouveaux ; sinon resserrer `proposer_organisation` (au plus 3 tours notés).
-- [ ] **Étape 2 : essai au bureau, avec l'accord de l'utilisateur** : relancer bureau et moteur ; une demande d'un autre genre (le casse-briques Android) → avertissement, « Nouveau projet », formulaire, projet créé et listé, workflow proposé avec qualité et livraison `.apk`, recrutement, cadrage ; puis « Nouveau projet… » depuis la liste avec une description ; noter ce qui accroche.
-- [ ] **Étape 3 : suite complète** `py -3.12 outils/tests.py`, bilan dans la passation, commit et push.
+- [x] **Étape 1 : banc moteur** sur l'essai de référence (`py -3.12 -m banc moteur …`, chemins donnés par l'utilisateur, hors dépôt) : orchestration ≤ 0,10 € avec les deux appels nouveaux ; sinon resserrer `proposer_organisation` (au plus 3 tours notés).
+- [x] **Étape 2 : essai au bureau, avec l'accord de l'utilisateur** : relancer bureau et moteur ; une demande d'un autre genre (le casse-briques Android) → avertissement, « Nouveau projet », formulaire, projet créé et listé, workflow proposé avec qualité et livraison `.apk`, recrutement, cadrage ; puis « Nouveau projet… » depuis la liste avec une description ; noter ce qui accroche. *(Arrêté à la décision `organisation` : Gradle était « à installer » ; recrutement et cadrage restent à essayer, voir la passation.)*
+- [x] **Étape 3 : suite complète** `py -3.12 outils/tests.py`, bilan dans la passation, commit et push.

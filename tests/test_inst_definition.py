@@ -384,3 +384,261 @@ class TestEnArriere(Base):
         self.assertEqual((v["tours"], v["tours_max"], v["tour"]), (1, 4, "libre"))
         self.assertGreater(v["cout"]["tokens"], 0)
         self.assertIsNotNone(v["cout"]["euros"])
+
+
+class Pont:
+    """Un exécuteur d'outil : les commandes de `simulees` rendent la réponse donnée, les autres vont à l'outil réel."""
+
+    def __init__(self, simulees=None):
+        self.appels, self.simulees = [], simulees or {}
+
+    def __call__(self, factory, argv, entree=None):
+        from orchestrateur import outil
+        self.appels.append((argv[1], entree))
+        if argv[1] in self.simulees:
+            return self.simulees[argv[1]]
+        return outil.executer(factory, argv, entree)
+
+
+class TestValider(Base):
+    def setUp(self):
+        super().setUp()
+        from bureau import reglages
+        from installation import dossier
+        from tests.test_inst_creation import Executeur
+        self.reglages = reglages
+        self.parent = self.base / "mes projets"
+        self.bureau = dossier.bureau()
+        self.git, self.gh = Executeur(), Executeur()
+        self.commun = self.base / "usage-creations.jsonl"
+
+    def pret(self, verifier=a_installer, nom="Casse-briques", **extra):
+        """Un brouillon avec une proposition du chef, écrit sur le disque."""
+        infos = dict(INFOS, parent=str(self.parent), nom=nom, **{k: v for k, v in extra.items() if k in INFOS})
+        b = brouillons.creer(infos, dossier=self.d, maintenant=T0)
+        o = proposition(**{k: v for k, v in extra.items() if k not in INFOS})
+        b = definition.tour(b, genres_connus=GENRES, couche="claude", appeler=Faux(o), verifier_environnement=verifier,
+                            maintenant=T0)
+        brouillons.ecrire(b, dossier=self.d, maintenant=T0)
+        return b
+
+    def valider(self, b, **kw):
+        kw.setdefault("bureau_json", self.bureau)
+        kw.setdefault("git", self.git)
+        kw.setdefault("gh", self.gh)
+        kw.setdefault("maintenant", T0)
+        kw.setdefault("dossier", self.d)
+        kw.setdefault("commun", self.commun)
+        return definition.valider(b, **kw)
+
+    def factory(self, nom="Casse-briques"):
+        return self.parent / nom / ".factory" / "factory.json"
+
+    def releve(self, nom="Casse-briques"):
+        from orchestrateur import outil
+        code, r = outil.executer(self.factory(nom), ["releve"])
+        self.assertEqual(code, 0, r)
+        return r
+
+    def test_rien_tant_que_rien_n_est_valide(self):
+        b = self.pret()
+        self.assertFalse((self.parent / "Casse-briques").exists())
+        self.assertFalse(self.bureau.exists())
+        self.assertEqual(sorted(p.name for p in self.parent.iterdir()), ["Petit projet"])
+        self.assertTrue((self.d / f"{b['id']}.json").is_file())
+
+    def test_creer_avec_organisation(self):
+        from orchestrateur import factory as fa, fiches, workflows
+        b = self.pret(facturation=True)
+        r = self.valider(b, installer=True, executer=Pont({"genre": (0, {"genre": "jeu-android", "cree": True})}))
+        f = fa.lire(self.factory())
+        w = next(x for x in f["workflows"] if x["id"] == "w-jeu-android")
+        self.assertEqual((w["genre"], w["fonctionnalite"]), ("jeu-android", None))
+        self.assertEqual([e["id"] for e in w["flux"]], ["dev", "essai", "livraison"])    # sans préfixe
+        self.assertTrue(workflows.est_validation(w["flux"][1]))
+        self.assertEqual(sorted(s["id"] for s in f["services"]), ["dev", "facturation"])
+        fs = {x["cle"]: x for x in fiches.lire_toutes(f["fiches"])}
+        self.assertEqual(sorted(fs), sorted(a["cle"] for a in b["proposition"]["agents"]))
+        self.assertEqual(fs["dev-1"]["modele"], "Sonnet")
+        self.assertTrue((f["fiches"] / "briefs" / "dev.md").is_file())
+        self.assertTrue((f["fiches"] / "briefs" / "environnement.md").is_file())
+        self.assertEqual(f["environnement"][0]["outil"], "JDK")
+        self.assertEqual(f["nom"], "Casse-briques")
+        self.assertEqual(r["id"], self.reglages.lire_bureau(self.bureau)["projets"][0]["id"])
+        self.assertIn("w-jeu-android", r["message"])
+        self.assertEqual(self.git.appels, [])    # GitHub non demandé
+
+    def test_genre_connu_fixe_a_la_creation(self):
+        from orchestrateur import factory as fa
+        b = self.pret(genre="jeu-web", nouveau=None)
+        pont = Pont()
+        self.valider(b, executer=pont)
+        f = fa.lire(self.factory())
+        self.assertEqual(f["genre"], "jeu-web")
+        self.assertEqual(f["workflows"][0]["id"], "w-jeu-web")
+        self.assertNotIn("genre", [c for c, _ in pont.appels])      # un genre connu n'est pas recréé
+
+    def test_organisation_refusee_ne_laisse_rien(self):
+        from installation import creation
+        b = self.pret()
+        org = definition._organisation(b["proposition"], b["infos"], True, [], "2026-11-12")
+        org["workflow"]["flux"][0]["service"] = "inconnu"
+        avant = sorted(p.name for p in self.parent.iterdir())
+        with self.assertRaises(Echec) as c:
+            creation.creer_projet(self.parent, "Casse-briques", organisation=org, bureau_json=self.bureau,
+                                  git=self.git, gh=self.gh)
+        self.assertIn("Organisation refusée", str(c.exception))
+        self.assertEqual(sorted(p.name for p in self.parent.iterdir()), avant)
+        self.assertFalse(self.bureau.exists())
+
+    def test_nom_pris_entre_temps_retour_infos(self):
+        b = self.pret()
+        (self.parent / "Casse-briques").mkdir()      # un autre projet du même nom est né pendant l'échange
+        with self.assertRaises(definition.InfosAChanger) as c:
+            self.valider(b)
+        self.assertIn("existe déjà", str(c.exception))
+        self.assertTrue(isinstance(c.exception, Echec))
+        self.assertTrue((self.d / f"{b['id']}.json").is_file())          # l'échange est gardé
+        self.assertEqual(brouillons.lire(b["id"], dossier=self.d)["proposition"]["workflow"]["id"], "w-jeu-android")
+        self.assertFalse(self.bureau.exists())
+        self.assertEqual(list((self.parent / "Casse-briques").iterdir()), [])
+        # Dossier parent disparu, nom devenu invalide : même retour.
+        for infos in ({"parent": str(self.base / "disparu")}, {"nom": "a:b"}):
+            c2 = brouillons.lire(b["id"], dossier=self.d)
+            c2["infos"].update(infos)
+            with self.assertRaises(definition.InfosAChanger):
+                self.valider(c2)
+
+    def test_bureau_plein_retour_infos(self):
+        from unittest import mock
+        b = self.pret()
+        with mock.patch.object(definition.mep, "_controler_bureau", side_effect=Echec("Le bureau est plein.")):
+            with self.assertRaises(definition.InfosAChanger):
+                self.valider(b)
+
+    def test_genre_nouveau_cree_par_l_outil(self):
+        b = self.pret()
+        pont = Pont({"genre": (0, {"genre": "jeu-android", "cree": True})})
+        self.valider(b, executer=pont, genre_description="  Jeux mobiles livrés en apk.  ")
+        genre = [e for c, e in pont.appels if c == "genre"]
+        self.assertEqual(genre, [{"action": "fixer", "genre": "jeu-android",
+                                  "description": "Jeux mobiles livrés en apk."}])
+        b2 = self.pret(nom="Autre jeu")
+        pont = Pont({"genre": (0, {})})
+        self.valider(b2, executer=pont)
+        self.assertEqual([e["description"] for c, e in pont.appels if c == "genre"],
+                         ["Un jeu pour Android livré en apk."])       # sans édition : celle du chef
+
+    def test_genre_nouveau_refuse_projet_garde(self):
+        from orchestrateur import factory as fa
+        b = self.pret()
+        r = self.valider(b, executer=Pont({"genre": (1, {"erreur": "mot interdit"})}))
+        self.assertTrue(self.factory().is_file())
+        fa.lire(self.factory())
+        self.assertIn("jeu-android", r["message"])
+        self.assertIn("mot interdit", r["message"])
+        self.assertFalse((self.d / f"{b['id']}.json").exists())     # l'échange est fini
+        self.assertEqual(len(self.reglages.lire_bureau(self.bureau)["projets"]), 1)
+
+    def test_usages_verses_au_releve(self):
+        b = self.pret()
+        b["usages"] = [dict(USAGE), dict(USAGE, entree=5)]
+        self.valider(b, executer=Pont({"genre": (0, {})}))
+        usages = self.releve()["usage"]
+        self.assertEqual(sorted(u["entree"] for u in usages), [2, 5])
+        self.assertEqual({u.get("etape") for u in usages}, {"orchestration"})
+        self.assertEqual(brouillons.usages_abandonnes(commun=self.commun), [])
+
+    def test_usage_non_verse_reste_compte(self):
+        b = self.pret()
+        b["usages"] = [dict(USAGE)]
+        r = self.valider(b, executer=Pont({"genre": (0, {}), "usage": (1, {"erreur": "occupé"})}))
+        self.assertIn("1 appel", r["message"])
+        self.assertEqual(len(brouillons.usages_abandonnes(commun=self.commun)), 1)
+
+    def test_installation_acceptee_tache_de_projet(self):
+        from orchestrateur import factory as fa, fiches
+        b = self.pret()
+        r = self.valider(b, installer=True, executer=Pont({"genre": (0, {})}))
+        taches = self.releve()["taches"]
+        t = next(x for x in taches if x["titre"] == "Mise en place de l'environnement")
+        self.assertEqual((t["colonne"], t["fonctionnalite"], t["etape"]), ("cadrage", None, "environnement"))
+        self.assertIn("JDK", json.dumps(t["journal"], ensure_ascii=False))
+        f = fa.lire(self.factory())
+        installateur = next(x for x in fiches.lire_toutes(f["fiches"]) if x["role"] == "environnement")
+        self.assertIn("Bash(winget:*)", installateur["outils"])
+        self.assertIn("installation du poste", r["message"])
+
+    def test_installation_refusee_pas_d_agent_d_installation(self):
+        from orchestrateur import factory as fa, fiches
+        b = self.pret()
+        pont = Pont({"genre": (0, {})})
+        self.valider(b, installer=False, executer=pont)
+        f = fa.lire(self.factory())
+        self.assertNotIn("environnement", [x["role"] for x in fiches.lire_toutes(f["fiches"])])
+        self.assertFalse((f["fiches"] / "briefs" / "environnement.md").exists())
+        self.assertNotIn("tache", [c for c, _ in pont.appels])
+        self.assertEqual([x for x in self.releve()["taches"] if x["titre"] == "Mise en place de l'environnement"], [])
+
+    def test_poste_en_place_pas_de_tache(self):
+        b = self.pret(verifier=en_place)
+        pont = Pont({"genre": (0, {})})
+        self.valider(b, installer=True, executer=pont)
+        self.assertNotIn("tache", [c for c, _ in pont.appels])
+
+    def test_fable_accorde_par_agent(self):
+        from orchestrateur import factory as fa, fiches
+        agents = proposition()["agents"]
+        agents[0].update(modele="Opus", fable_suggere=True)
+        b = self.pret(agents=agents)
+        self.valider(b, fable=["dev-1"], executer=Pont({"genre": (0, {})}))
+        fs = {x["cle"]: x for x in fiches.lire_toutes(fa.lire(self.factory())["fiches"])}
+        self.assertEqual(fs["dev-1"]["modele"], "Fable")
+        self.assertTrue(fiches.fable_accorde(fs["dev-1"]))
+        self.assertEqual(fs["livreur-1"]["modele"], "Haiku")
+        # Un agent dont Fable n'a pas été suggéré : refusé, rien n'est créé.
+        b2 = self.pret(nom="Autre jeu")
+        with self.assertRaises(Echec) as c:
+            self.valider(b2, fable=["livreur-1"], executer=Pont())
+        self.assertIn("Fable n'a pas été suggéré", str(c.exception))
+        self.assertFalse((self.parent / "Autre jeu").exists())
+
+    def test_github_apres_et_sans_rien_defaire(self):
+        from tests.test_inst_creation import Executeur
+        b = self.pret(github=True)
+        gh = Executeur({"auth": (1, "not logged in")})
+        r = self.valider(b, executer=Pont({"genre": (0, {})}), gh=gh)
+        self.assertTrue(self.factory().is_file())                        # le projet reste créé
+        self.assertIn("GitHub n'a pas été fait", r["github"])
+        self.assertIn("GitHub n'a pas été fait", r["message"])
+        self.assertEqual(self.git.appels, [])
+        self.assertFalse((self.d / f"{b['id']}.json").exists())
+        b2 = self.pret(github=True, nom="Autre jeu")
+        gh2 = Executeur()
+        r = self.valider(b2, executer=Pont({"genre": (0, {})}), gh=gh2)
+        self.assertEqual(r["github"], "fait")
+        self.assertEqual(gh2.appels[-1][0][:2], ["repo", "create"])
+        self.assertTrue((self.parent / "Autre jeu" / ".factory" / "factory.json").is_file())   # GitHub vient après
+
+    def test_brouillon_retire_apres_creation(self):
+        b = self.pret()
+        self.valider(b, executer=Pont({"genre": (0, {})}))
+        self.assertEqual(brouillons.lister(dossier=self.d), [])
+
+    def test_valider_sans_proposition_ou_pendant_un_tour(self):
+        b = brouillons.creer(dict(INFOS, parent=str(self.parent)), dossier=self.d, maintenant=T0)
+        with self.assertRaises(Echec):
+            self.valider(b)
+        c = self.pret(nom="Autre jeu")
+        brouillons.commencer_tour(c["id"], {}, dossier=self.d, maintenant=T0)
+        with self.assertRaises(brouillons.TourEnCours):
+            self.valider(brouillons.lire(c["id"], dossier=self.d))
+        self.assertFalse((self.parent / "Autre jeu").exists())
+
+    def test_demande_du_genre_reprend_le_workflow(self):
+        """Le projet créé porte le workflow `w-<genre>` et le genre du projet : le moteur peut le reprendre."""
+        from orchestrateur import factory as fa, workflows
+        b = self.pret(genre="jeu-web", nouveau=None)
+        self.valider(b, executer=Pont())
+        f = fa.lire(self.factory())
+        self.assertEqual(workflows.de_creation(f)["id"], "w-jeu-web")

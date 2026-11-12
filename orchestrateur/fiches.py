@@ -130,6 +130,17 @@ def fable_accorde(fiche):
             and isinstance(fiche.get("fable"), str) and bool(ACCORD_FABLE.match(fiche["fable"])))
 
 
+def accorder_fable(agents, cles, jour):
+    """Les agents (copies) dont la clé est dans `cles` passent sur Fable avec l'accord du Directeur daté de `jour`
+    (`AAAA-MM-JJ`). `ValueError` pour une clé dont l'agent n'a pas de `fable_suggere` vrai (ou qui n'existe pas)."""
+    suggerees = {a["cle"] for a in agents if a.get("fable_suggere") is True}
+    hors = [c for c in cles if c not in suggerees]
+    if hors:
+        raise ValueError("Fable n'a pas été suggéré pour : " + ", ".join(hors) + ".")
+    accord = f"accordé par le Directeur le {jour}"
+    return [dict(a, modele="Fable", fable=accord) if a["cle"] in cles else dict(a) for a in agents]
+
+
 def outils(fiche):
     """Les outils de l'agent : la ligne `Outils :` de sa fiche (séparée par des virgules, hors parenthèses : une règle
     comme `Bash(py:*)` reste entière), sinon `OUTILS_PAR_DEFAUT`."""

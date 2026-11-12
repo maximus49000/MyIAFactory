@@ -306,7 +306,10 @@ def _ecrire_configuration(base, p, genre, maintenant):
     if p.get("description"):
         factory["description"] = p["description"].strip()
     _ecrire_json(base / "factory.json", factory)
-    if p.get("flux") or p.get("agents"):
+    if p.get("workflow"):   # un projet créé avec l'organisation validée au bureau : son workflow de genre, son équipe
+        ecrire_organisation(base / "factory.json", services, p["workflow"]["flux"], p["agents"], p["briefs"],
+                            workflow={**p["workflow"], "fonctionnalite": None}, environnement=p.get("environnement"))
+    elif p.get("flux") or p.get("agents"):
         ecrire_organisation(base / "factory.json", services, p["flux"], p["agents"], p["briefs"])
     else:
         (base / "fiches" / "briefs").mkdir(parents=True)

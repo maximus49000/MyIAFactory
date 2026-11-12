@@ -1,7 +1,9 @@
 """La décision et la commande `organisation` : l'organisation qui évolue (tâche 10)."""
 import json
+import unittest
 
 from bureau import releve
+from orchestrateur import fiches
 from tests.orch_aide import AvecProjet
 
 FICHE_AUTRE = ("Clé : bruit-1\nPrénom : Zoé\nRôle : bruit\nService : dev\nModèle : Haiku\nLieu : local\n\n"
@@ -297,3 +299,21 @@ class TestEnvironnementDuPoste(AvecProjet):
         d["environnement"] = ["java"]
         self.factory.write_text(json.dumps(d), encoding="utf-8")
         self.assertEqual(self.outil("etat")[0], 2)        # un fichier de factory dont l'environnement est abîmé est refusé
+
+
+class TestAccorderFable(unittest.TestCase):
+    AGENTS = [{"cle": "a-1", "modele": "Opus", "fable_suggere": True}, {"cle": "b-1", "modele": "Sonnet"},
+              {"cle": "c-1", "modele": "Opus", "fable_suggere": False}]
+
+    def test_accord_par_agent(self):
+        sortie = fiches.accorder_fable(self.AGENTS, ["a-1"], "2026-11-12")
+        self.assertEqual((sortie[0]["modele"], sortie[0]["fable"]), ("Fable", "accordé par le Directeur le 2026-11-12"))
+        self.assertTrue(fiches.fable_accorde(sortie[0]))
+        self.assertEqual(sortie[1:], self.AGENTS[1:])
+        self.assertEqual(self.AGENTS[0]["modele"], "Opus")    # la liste d'origine n'est pas modifiée
+        self.assertEqual(fiches.accorder_fable(self.AGENTS, [], "2026-11-12"), self.AGENTS)
+
+    def test_accord_refuse_sans_suggestion(self):
+        for cles in (["b-1"], ["c-1"], ["inconnu"], ["a-1", "c-1"]):
+            with self.assertRaises(ValueError, msg=cles):
+                fiches.accorder_fable(self.AGENTS, cles, "2026-11-12")

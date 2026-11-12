@@ -944,16 +944,10 @@ def cmd_organisation(ctx, e):
         if d is None:
             raise Refus(f"Décision d'organisation inconnue : {i}")
         o = d["organisation"]
-        agents = [dict(a) for a in o["agents"]]
-        if fable:
-            suggerees = {a["cle"] for a in agents if a.get("fable_suggere") is True}
-            hors = [c for c in fable if c not in suggerees]
-            if hors:
-                raise Refus("Fable n'a pas été suggéré pour : " + ", ".join(hors) + ".")
-            accord = f"accordé par le Directeur le {su.maintenant()[:10]}"
-            for a in agents:
-                if a["cle"] in fable:
-                    a["modele"], a["fable"] = "Fable", accord
+        try:
+            agents = fi.accorder_fable(o["agents"], fable, su.maintenant()[:10])
+        except ValueError as ex:
+            raise Refus(str(ex))
         w = o.get("workflow")
         try:
             mise_en_place.ecrire_organisation(

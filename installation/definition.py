@@ -12,9 +12,13 @@ import copy
 import threading
 from datetime import datetime
 
-from installation import brouillons, estimation, mise_en_place as mep
+from pathlib import Path
+
+from installation import brouillons, creation, estimation, mise_en_place as mep
 from installation.dossier import Echec
 from moteur import appel, environnement, jugement
+from orchestrateur import fiches, outil
+from orchestrateur.memoire import executer_git
 
 TOURS_MAX = jugement.TOURS_MAX_DEFINITION
 LONGUEUR_REPONSE = 2000
@@ -22,6 +26,10 @@ LONGUEUR_CORRECTION = 2000
 INTERROMPU = ("Le tour précédent a été interrompu (le bureau a été relancé pendant l'appel). Renvoyez-le : "
               "vos réponses sont gardées.")
 _FILS = {}      # id du brouillon -> son fil d'arrière-plan (pour les essais)
+
+
+class InfosAChanger(Echec):
+    """Le nom, le dossier ou le bureau ne permettent plus la création : retour à la première fenêtre, échange gardé."""
 
 
 # --- Le dossier du chef.
@@ -311,3 +319,117 @@ def vue(b, prix_de=lambda modele: None):
             "proposition": b.get("proposition"), "erreur": None if etat == "en_cours" else erreur,
             "cout": cout_echange(b.get("usages") or [], prix_de), "tour": etat,
             "en_cours": b.get("en_cours") if etat == "en_cours" else None}
+
+
+# --- La validation finale : le projet naît.
+
+def _verifier_les_infos(infos, bureau_json):
+    """Les contrôles de la première fenêtre, refaits au dernier moment (un projet de même nom a pu naître entre-temps,
+    le dossier parent disparaître, le bureau se remplir). `InfosAChanger` sinon ; rien n'est écrit."""
+    try:
+        nom = creation.verifier_nom(infos.get("nom"))
+        parent = creation.verifier_parent(infos.get("parent"))
+        if (parent / nom).exists():
+            raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
+        mep._controler_bureau(Path(bureau_json), parent / nom / ".factory" / "reglages.json")
+    except Echec as e:
+        raise InfosAChanger(str(e)) from None
+
+
+def _organisation(p, infos, installer, fable, jour):
+    """L'organisation à écrire avec le projet : sans `installer`, ni agent d'installation ni son brief ; Fable accordé
+    par agent. La facturation est ajoutée par la configuration elle-même."""
+    cle = p.get("installateur")
+    agents = [a for a in p["agents"] if installer or a["cle"] != cle]
+    briefs = {r: t for r, t in p["briefs"].items()
+              if installer or cle is None or r != environnement.ROLE_INSTALLATION}
+    try:
+        agents = fiches.accorder_fable(agents, fable, jour)
+    except ValueError as e:
+        raise Echec(str(e)) from None
+    services = [s for s in p["services"]
+                if not (infos.get("facturation") and s["id"] == mep.SERVICE_FACTURATION["id"])]
+    return {"services": services, "agents": agents, "briefs": briefs,
+            "workflow": {"id": p["workflow"]["id"], "genre": p["workflow"]["genre"],
+                         "flux": copy.deepcopy(p["workflow"]["flux"])},
+            "environnement": copy.deepcopy(p["environnement"])}
+
+
+def _raison(r):
+    return (r.get("erreur") if isinstance(r, dict) else str(r)) or "raison inconnue"
+
+
+def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json, executer=outil.executer,
+            git=executer_git, gh=creation.executer_gh, maintenant=None, dossier=None, commun=None):
+    """L'utilisateur valide la proposition : le projet est créé avec son workflow, son équipe et son poste.
+
+    Dans l'ordre : les informations sont recontrôlées (`InfosAChanger`, rien n'est écrit) ; Fable est accordé par agent
+    (`fable`, les clés cochées) ; sans `installer`, ni agent d'installation ni son brief ; `creer_projet` écrit tout dans
+    une seule transaction (un refus ne laisse rien). **Ensuite seulement**, et sans rien défaire si un pas échoue (le
+    message le dit) : le genre nouveau (par `lancer genre`, avec `genre_description` si l'utilisateur l'a éditée), les
+    usages de l'échange versés au relevé du projet, la tâche d'installation du poste, GitHub, puis le brouillon retiré.
+    Rend {"reglages", "id", "projet", "github", "message"}."""
+    p = b.get("proposition")
+    if not p:
+        raise Echec("Il n'y a pas encore de proposition à valider.")
+    if brouillons.etat_du_tour(b) == "en_cours":
+        raise brouillons.TourEnCours("Un tour est en cours : attendez la réponse du chef avant de valider.")
+    infos = b["infos"]
+    t = maintenant or datetime.now()
+    _verifier_les_infos(infos, bureau_json)
+    organisation = _organisation(p, infos, installer, list(fable or []), t.date().isoformat())
+    nouveau = p["genre"]["nouveau"]
+    fait = creation.creer_projet(
+        infos["parent"], infos["nom"], mots_interdits=infos.get("mots_interdits") or [],
+        facturation=bool(infos.get("facturation")), github=False, description=infos.get("description"),
+        genre=None if nouveau else p["genre"]["id"], organisation=organisation, bureau_json=bureau_json, git=git,
+        gh=gh, maintenant=t)
+    factory = Path(fait["projet"]) / ".factory" / "factory.json"
+    notes = []
+
+    def lancer(commande, entree):
+        return executer(factory, ["lancer", commande], entree)
+    if nouveau:
+        description = (genre_description or "").strip() or p["genre"]["description"]
+        try:
+            code, r = lancer("genre", {"action": "fixer", "genre": p["genre"]["id"], "description": description})
+        except Exception as e:
+            code, r = 1, {"erreur": str(e)}
+        if code != 0:
+            notes.append(f"Le genre « {p['genre']['id']} » n'a pas pu être créé ({_raison(r)}) : le projet est créé, "
+                         "mais les demandes ne reprendront pas le workflow avant que le genre soit fixé.")
+    restes = []
+    for u in b.get("usages") or []:
+        try:
+            code, r = lancer("usage", {"modele": u["modele"], "agent": outil.AGENT_ORCHESTRATEUR,
+                                       "etape": "orchestration", "entree": u["entree"], "sortie": u["sortie"],
+                                       "cache_lecture": u.get("cache_lecture", 0),
+                                       "cache_ecriture": u.get("cache_ecriture", 0)})
+        except Exception:
+            code = 1
+        if code != 0:
+            restes.append(u)
+    if restes:      # ils ont coûté : ils restent comptés, au relevé du bureau commun
+        brouillons._ajouter_usages(restes, commun)
+        notes.append(f"{len(restes)} appel(s) de l'échange n'ont pas pu être versés au relevé du projet : ils sont "
+                     "comptés dans les échanges abandonnés.")
+    manquants = environnement.a_installer(p["environnement"])
+    installation = bool(installer and manquants and p.get("installateur"))
+    if installation:
+        try:
+            code, r = lancer("tache", environnement.tache_d_installation_du_projet(manquants))
+        except Exception as e:
+            code, r = 1, {"erreur": str(e)}
+        if code != 0:
+            notes.append(f"La tâche d'installation du poste n'a pas pu être créée ({_raison(r)}).")
+    sortie_github = "non demandé"
+    if infos.get("github"):
+        sortie_github = creation.github(fait["projet"], infos["nom"], git, gh)
+        if sortie_github != "fait":
+            notes.append(sortie_github)
+    brouillons.retirer(b["id"], dossier=dossier)
+    message = f"Le projet est créé dans {fait['projet']}, avec son workflow « {p['workflow']['id']} »."
+    if installation:
+        message += " L'installation du poste démarre au premier passage du moteur."
+    return {"reglages": fait["reglages"], "id": fait["id"], "projet": fait["projet"], "github": sortie_github,
+            "message": " ".join([message] + notes)}

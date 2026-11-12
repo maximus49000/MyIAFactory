@@ -98,7 +98,7 @@ def _consignes_par_defaut():
             "première demande.\n")
 
 
-def _github(projet, nom, git, gh):
+def github(projet, nom, git, gh=executer_gh):
     """Crée le dépôt privé et pousse. Rend « fait » ou la raison (et le geste pour le faire à la main)."""
     code, sortie = gh(["auth", "status"], projet)
     if code != 0:
@@ -119,13 +119,18 @@ def _github(projet, nom, git, gh):
     return "fait"
 
 
+_depot = github   # `creer_projet` a un paramètre `github`
+
+
 def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=False, github=False, description=None,
-                 genre=None, bureau_json, git=executer_git, gh=executer_gh, maintenant=None):
+                 genre=None, organisation=None, bureau_json, git=executer_git, gh=executer_gh, maintenant=None):
     """Crée `<parent>/<nom>/` avec sa configuration `.factory/` sans workflow ni agent, l'inscrit au bureau commun
     `bureau_json`, puis, si `github`, crée son dépôt privé.
 
     `origine` : le fichier de réglages du projet d'origine (charge, modèle de l'orchestrateur, agents locaux, couche du
-    moteur et consignes en sont repris), ou rien. Rend {"reglages": Path, "id": str, "projet": Path, "github":
+    moteur et consignes en sont repris), ou rien. `organisation` : l'organisation validée avec le chef, `{"services":
+    [nouveaux], "agents", "briefs", "workflow": {id, genre, flux}, "environnement"}`, écrite dans la même transaction que
+    la configuration (un refus n'écrit rien). Rend {"reglages": Path, "id": str, "projet": Path, "github":
     "fait" | "non demandé" | <la raison>}. `Echec(message)` : rien n'est créé."""
     from datetime import datetime
     nom = verifier_nom(nom)
@@ -154,6 +159,10 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
          "agents_locaux_max": repris.get("agents_locaux_max") or 2,
          "charge_max": repris.get("charge_max") or 70,
          "moteur": repris.get("moteur") or {"couche": "claude"}}
+    if organisation is not None:
+        p.update(services=[dict(s) for s in organisation["services"]], agents=[dict(a) for a in organisation["agents"]],
+                 briefs=dict(organisation["briefs"]), workflow=dict(organisation["workflow"]),
+                 environnement=[dict(x) for x in organisation.get("environnement") or []])
     bureau_avant = mep._lire_octets(bureau_json)
     try:
         projet.mkdir()
@@ -172,4 +181,4 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
     inscrit = next(x for x in regl.lire_bureau(bureau_json)["projets"]
                    if x["chemin"].resolve() == reglages_json.resolve())
     return {"reglages": reglages_json, "id": inscrit["id"], "projet": projet,
-            "github": _github(projet, nom, git, gh) if github else "non demandé"}
+            "github": _depot(projet, nom, git, gh) if github else "non demandé"}

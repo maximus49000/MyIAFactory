@@ -159,6 +159,33 @@ def dossiers_a_chercher(env, lire=lire_registre):
     yield from dossiers_d_installation(env)
 
 
+# Des programmes s'installent sous un nom versionné, sans exécutable du nom générique : nom générique -> motifs de fichiers.
+ALTERNATIVES = {"godot": ("Godot_v*_win64.exe", "Godot_v*_win64_console.exe")}
+
+
+def _alternatives(nom, env, lire):
+    """Les chemins des exécutables au nom versionné de `nom` (table `ALTERNATIVES`), dans les dossiers que `trouver`
+    parcourt (le `PATH` du processus compris) : la version la plus récente d'abord, la console après le programme."""
+    motifs = ALTERNATIVES.get(str(nom).lower())
+    if not motifs:
+        return []
+    dossiers = [Path(x.strip().strip('"')) for x in (_variable(env, "PATH") or "").split(os.pathsep) if x.strip()]
+    dossiers += list(dossiers_a_chercher(env, lire))
+    vus, fichiers = set(), []
+    for dossier in dossiers:
+        try:
+            if not dossier.is_dir():
+                continue
+            for rang, motif in enumerate(motifs):
+                for f in dossier.glob(motif):
+                    if f.is_file() and str(f).lower() not in vus:
+                        vus.add(str(f).lower())
+                        fichiers.append((_numeros(f.name) or (), -rang, str(f)))
+        except OSError:
+            continue
+    return [f for _, _, f in sorted(fichiers, reverse=True)]
+
+
 def trouver(nom, *, which=shutil.which, env=None, lire=None):
     """Le chemin du programme `nom` (un nom seul), ou `None` : le `PATH` du processus, les emplacements usuels, le `PATH` à
     jour du registre (Windows), puis les dossiers d'installation courants. Sans `env` (le vrai poste) le registre est lu ;
@@ -172,7 +199,8 @@ def trouver(nom, *, which=shutil.which, env=None, lire=None):
         chemin = which(nom, path=str(dossier))
         if chemin:
             return str(chemin)
-    return None
+    autres = _alternatives(nom, env, lire)
+    return autres[0] if autres else None
 
 
 def candidats(nom, *, which=shutil.which, env=None, lire=None):
@@ -181,7 +209,8 @@ def candidats(nom, *, which=shutil.which, env=None, lire=None):
     if env is None:
         env, lire = dict(os.environ), lire or lire_registre
     vus, sortie = set(), []
-    for chemin in [which(nom)] + [which(nom, path=str(d)) for d in dossiers_a_chercher(env, lire)]:
+    for chemin in [which(nom)] + [which(nom, path=str(d)) for d in dossiers_a_chercher(env, lire)] \
+            + _alternatives(nom, env, lire):
         if chemin and str(chemin).lower() not in vus:
             vus.add(str(chemin).lower())
             sortie.append(str(chemin))

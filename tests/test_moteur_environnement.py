@@ -282,6 +282,30 @@ class Verifier(unittest.TestCase):
                                            env=env)
             self.assertEqual(trouve.lower(), str(f).lower())
 
+    def test_executable_au_nom_versionne_est_trouve_le_plus_recent_d_abord(self):
+        sans_path = lambda n, path=None: shutil.which(n, path=path) if path else None
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            paquets = racine / "local/Microsoft/WinGet/Packages"
+            vieux = paquets / "GodotEngine.GodotEngine_x" / "Godot_v4.2.2-stable_win64.exe"
+            recent = paquets / "GodotEngine.GodotEngine_x" / "Godot_v4.3-stable_win64.exe"
+            console = paquets / "GodotEngine.GodotEngine_x" / "Godot_v4.3-stable_win64_console.exe"
+            for f in (vieux, recent, console):
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(b"x")
+                f.chmod(0o755)
+            env = {"LOCALAPPDATA": str(racine / "local")}
+            self.assertEqual(environnement.trouver("godot", which=sans_path, env=env).lower(), str(recent).lower())
+            self.assertEqual([Path(c).name for c in environnement.candidats("godot", which=sans_path, env=env)],
+                             [recent.name, console.name, vieux.name])
+            self.assertIsNone(environnement.trouver("godot", which=sans_path, env={}))
+            self.assertIsNone(environnement.trouver("gradle", which=sans_path, env=env))      # pas d'autre nom versionné
+            # le nom versionné d'un dossier du PATH, et la version lue comme pour les autres
+            e = Enregistreur({}, {"--version": (0, "4.3.stable.official")})
+            (o,) = environnement.verifier([{"outil": "Godot", "executables": ["godot"]}], which=sans_path,
+                                          executer=e.executer, env={**env, "PATH": str(recent.parent)})
+            self.assertEqual((o["etat"], o["version"]), ("en_place", "4.3.stable.official"))
+
     def test_constat_dit_ce_qui_a_ete_cherche(self):
         presents = {"java": "C:/jre/bin/java.exe", "javac": "C:/jre/bin/javac.exe"}
         e = Enregistreur(presents, {"-version": (0, 'java version "1.8.0_351"')})

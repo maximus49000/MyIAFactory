@@ -159,3 +159,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Quand un outil de signature affiche les détails du certificat, n'en recopier que le statut de vérification ; le détail peut contenir des données personnelles.
+
+## S27 — Pour créer un keystore de signature, générer un mot de passe
+Rôles : artiste, livreur
+Date : 2026-11-12
+
+Pour créer un keystore de signature, générer un mot de passe aléatoire, le passer à l'outil par variable d'environnement, le stocker hors du dépôt et masquer sa valeur dans toute sortie ; rendre le script idempotent : il ne recrée rien si le keystore existe.

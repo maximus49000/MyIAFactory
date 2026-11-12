@@ -239,6 +239,20 @@ test("valider_etape : au bureau, le résumé et « Ouvrir la validation » seule
   assert.deepEqual(demandes, []);
 });
 
+test("valider_etape envoyée : plus de bouton, « en cours de traitement », puis elle disparaît avec le relevé", async () => {
+  const V = await import("../ui/validation.js");
+  const etat = {...ETAT, fonctionnalites: [], decisions_projet: [{...VALIDATION, id: "v-envoyee"}]};
+  assert.ok(bouton(rendre(etat).contenu, "Ouvrir la validation"));
+  V.marquerEnvoyee("v-envoyee");
+  const apres = rendre(etat).contenu;                                         // l'état servi se rafraîchit : elle reste envoyée
+  assert.equal(bouton(apres, "Ouvrir la validation"), undefined);
+  assert.match(apres.textContent, /Envoyée, en cours de traitement/);
+  assert.match(apres.textContent, /Élément : Accueil/);
+  rendre({...etat, decisions_projet: []});                                    // le relevé ne l'a plus : oubliée
+  assert.equal(V.estEnvoyee("v-envoyee"), false);
+  assert.ok(bouton(rendre(etat).contenu, "Ouvrir la validation"));            // si elle revenait, elle serait de nouveau proposée
+});
+
 test("valider_etape rappelle l'objectif et ce qu'il y a à valider, avant le compte rendu", () => {
   const d = {...VALIDATION, objectif: "L'écran d'accueil, avec le logo et le bouton Jouer.",
              a_valider: "Validation de la direction artistique — le style avant de faire le jeu"};

@@ -304,7 +304,10 @@ en base64, `type` = `image/png` ou `image/jpeg`, extension `.png`, `.jpg` ou `.j
 décodée, contenu vérifié par sa signature, nom simple (ni dossier ni `..`). Le bureau ne les écrit nulle part : **votre
 commande d'actions les range** dans le projet (et les commite, si un agent cloud doit les lire), puis le relevé les
 montre par leur chemin. Un message envoyé reste affiché « en attente » tant que le relevé ne l'a pas repris ; un double
-clic ne crée qu'une demande (une demande identique dans les 10 secondes est ignorée).
+clic ne crée qu'une demande (une demande identique dans les 10 secondes est ignorée). Une décision `valider_etape` ou
+`elargir_genre` n'a qu'une réponse : une deuxième demande pour la même décision, pendant 10 minutes, est refusée par le
+bureau (409, « déjà reçu une réponse ») sans lancer la commande ; la page montre l'élément « envoyé, en cours de
+traitement » jusqu'à ce que le relevé ne porte plus la décision.
 
 Chaque demande porte aussi `t` (date ISO). Le bureau ne transmet une demande qu'après l'avoir comparée au dernier relevé valide : un bouton, une colonne, une tâche, une leçon, une cible, un challenge ou une solution qui n'y figure pas est refusé sans lancer la commande.
 

@@ -196,6 +196,33 @@ class TestTelecharger(AvecServeur):
         r, _ = self.req("GET", self.url("../x.mp3") + "&lecture=1")
         self.assertEqual(r.status, 404)
 
+    def reponse(self, decision="v1", verdict="valider"):
+        r, data = self.req("POST", "/api/demande", json.dumps({"type": "valider_etape", "decision": decision,
+                                                                "verdict": verdict}), TestServeur.ENT)
+        return r.status, json.loads(data.decode("utf-8"))
+
+    def test_une_seule_reponse_par_validation(self):
+        """Une validation déjà répondue (le moteur la traite encore, ou elle est levée) refuse une deuxième réponse, valider
+        ou renvoyer : 409, la commande d'actions n'est lancée qu'une fois."""
+        self.ecrire("build/jeu.apk")
+        notes = self.agir(releve=releve_avec(1, [{"chemin": "build/jeu.apk", "titre": "APK"}]))
+        self.assertEqual(self.reponse(), (200, {"ok": True}))
+        statut, corps = self.reponse()                                  # le relevé la montre encore : le moteur n'a pas fini
+        self.assertEqual(statut, 409)
+        self.assertIn("déjà", corps["erreur"])
+        self.assertEqual(self.reponse(verdict="renvoyer")[0], 409)
+        r = json.loads((self.dossier / "releve.json").read_text(encoding="utf-8"))
+        r["decisions_projet"] = []                                      # le moteur l'a levée : toujours refusée, en 409
+        (self.dossier / "releve.json").write_text(json.dumps(r), encoding="utf-8")
+        self.p._cache_etat = (0.0, None)
+        self.assertEqual(self.reponse()[0], 409)
+        self.assertEqual(notes.read_text(encoding="utf-8").count("valider_etape"), 1)
+
+    def test_reponse_refusee_par_la_commande_peut_etre_refaite(self):
+        self.agir(code=3, releve=releve_avec(1, []))
+        self.assertEqual(self.reponse()[0], 502)
+        self.assertEqual(self.reponse()[0], 502)          # rien n'a été pris : pas de 409
+
     def test_trop_gros(self):
         self.ecrire("build/jeu.apk")
         self.preparer(fichiers=[{"chemin": "build/jeu.apk", "titre": "APK"}])

@@ -205,6 +205,36 @@ test("son à écouter : libellé, lecteur audio par fichier audio (adresse de le
   assert.equal(V.estSon("x.mp4"), false);
 });
 
+test("envoi : marquée envoyée dès le départ, oubliée si l'envoi échoue, gardée si elle était déjà répondue", async () => {
+  const reponses = [{ok: false, message: "La commande a échoué."}, {ok: false, message: "Cette décision a déjà reçu une réponse : x"},
+    {ok: true}];
+  const vus = [];
+  const d = {...D, id: "v-essai"};
+  const ctx = {etat: {agir: true}, barre: {demander: async () => { vus.push(V.estEnvoyee("v-essai")); return reponses.shift(); }}};
+  const lancer = async () => {
+    const {boite} = V.contenuValidation(ctx, d, {fermer() {}, hotePage: "127.0.0.1", origine: null});
+    const radios = boite.tous((n) => n.tagName === "input" && n.type === "radio");
+    radios.filter((_, i) => i % 2 === 0).forEach((r) => r.auteurs.change[0]());
+    await boite.tous((n) => n.className.startsWith("bouton val-envoyer"))[0].auteurs.click[0]();
+    return boite;
+  };
+  await lancer();
+  assert.deepEqual([vus[0], V.estEnvoyee("v-essai")], [true, false]);        // échec : elle revient
+  await lancer();
+  assert.equal(V.estEnvoyee("v-essai"), true);                                // déjà répondue : elle reste envoyée
+  const rouverte = V.contenuValidation(ctx, d, {fermer() {}, hotePage: "127.0.0.1", origine: null}).boite;
+  assert.equal(rouverte.tous((n) => n.className.startsWith("bouton val-envoyer")).length, 0);
+  assert.match(rouverte.textContent, /Réponse envoyée/);
+  V.oublierEnvoyee("v-essai");
+  await lancer();
+  assert.equal(V.estEnvoyee("v-essai"), true);                                // succès : envoyée jusqu'à la disparition
+  // sécurité : oubliée au bout de 10 minutes
+  V.marquerEnvoyee("v-vieux", 1000);
+  assert.equal(V.estEnvoyee("v-vieux", 1000 + V.SECURITE_ENVOYEE_MS - 1), true);
+  assert.equal(V.estEnvoyee("v-vieux", 1000 + V.SECURITE_ENVOYEE_MS), false);
+  V.oublierEnvoyee("v-essai");
+});
+
 test("sans droit d'agir : la fenêtre se lit, rien ne s'envoie", () => {
   const {boite} = rendre(D, false);
   assert.equal(boite.tous((n) => n.className.startsWith("bouton val-envoyer")).length, 0);

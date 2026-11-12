@@ -26,6 +26,25 @@ const HOTES_LOCAUX = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 
+// Les validations déjà envoyées depuis la fenêtre : identifiant de décision -> heure d'envoi. Gardées en mémoire de la
+// page à travers les rafraîchissements de l'état servi, jusqu'à ce que la décision ait disparu du relevé (le moteur a
+// fini) ou, par sécurité, pendant 10 minutes. Tant que l'une y est, la liste la montre « envoyée » sans bouton.
+export const SECURITE_ENVOYEE_MS = 10 * 60 * 1000;
+const envoyees = new Map();
+export function marquerEnvoyee(id, maintenant = Date.now()) { if (plein(id)) envoyees.set(id, maintenant); }
+export function oublierEnvoyee(id) { envoyees.delete(id); }
+export function estEnvoyee(id, maintenant = Date.now()) {
+  const t = envoyees.get(id);
+  if (t === undefined) return false;
+  if (maintenant - t >= SECURITE_ENVOYEE_MS) { envoyees.delete(id); return false; }
+  return true;
+}
+// À chaque affichage de la liste : on oublie celles que le relevé n'a plus (ou dont le délai est passé).
+export function purgerEnvoyees(idsPresents, maintenant = Date.now()) {
+  const presents = new Set(idsPresents);
+  for (const id of [...envoyees.keys()]) if (!presents.has(id) || !estEnvoyee(id, maintenant)) envoyees.delete(id);
+}
+
 export function extension(chemin) {
   const nom = String(chemin || "").split(/[\\/]/).pop();
   const i = nom.lastIndexOf(".");
@@ -302,7 +321,8 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   const points = pointsDeValidation(d);
   const choix = {};
   const s4 = section("Points à vérifier");
-  const agir = ctx.etat?.agir === true;
+  const deja = estEnvoyee(d.id);
+  const agir = ctx.etat?.agir === true && !deja;
   const envoi = el("button", "bouton val-envoyer", libelleEnvoi(d, choix));
   envoi.type = "button";
   const libre = el("textarea", "val-libre");
@@ -332,7 +352,8 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   });
   boite.append(s4);
   if (!agir) {
-    boite.append(el("p", "val-meta", "Ce bureau ne peut pas agir sur le projet : la validation se lit seulement."));
+    boite.append(el("p", "val-meta", deja ? "Réponse envoyée : le moteur la traite, cet élément n'attend plus rien de vous."
+      : "Ce bureau ne peut pas agir sur le projet : la validation se lit seulement."));
     return {boite, fermer: bFermer, choix};
   }
   const s5 = section("Autre chose à signaler (facultatif)");
@@ -346,9 +367,14 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     const corps = corpsValidation(d, choix, libre.value);
     if (!corps) { erreur.textContent = "Choisissez OK ou À revoir pour chaque point."; return; }
     envoi.disabled = true;
+    marquerEnvoyee(d.id);       // dès l'envoi : la liste ne la propose plus, même si l'état servi se rafraîchit avant la réponse
     const r = await ctx.barre.demander(corps, envoi);
     if (r?.ok) fermer();
-    else { envoi.disabled = false; erreur.textContent = r?.message || "La demande n'est pas partie."; }
+    else {
+      if (!/déjà reçu/.test(r?.message || "")) oublierEnvoyee(d.id);    // refusée parce que déjà répondue : elle reste « envoyée »
+      envoi.disabled = false;
+      erreur.textContent = r?.message || "La demande n'est pas partie.";
+    }
   });
   maj();
   const pied = el("div", "val-pied");

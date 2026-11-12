@@ -47,7 +47,11 @@ LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancem
 ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
                  "/api/catalogue", "/api/livrable", "/api/telecharger")
 # La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
-TELECHARGEMENT_MAX_OCTETS = 500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
+# Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
+# pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
+REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre")
+GARDE_REPONSE_S = 600
+TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
 TELECHARGEABLES = {ext: (type_, True) for ext, type_ in releve.TELECHARGEABLES.items()}
 APERCU = "/apercu/"                     # /apercu/<projet>/<décision>/<chemin> -> http://127.0.0.1:<port>/<chemin>
 APERCU_DELAI_S = 20
@@ -149,6 +153,7 @@ class Projet:
         self._verrou_demandes = threading.Lock()
         self._derniere_creation = None  # (empreinte, heure monotone) de la dernière fonctionnalité ou du dernier message
         self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
+        self._reponses_envoyees = {}   # (type, décision) répondue -> heure d'envoi (monotone) : une seule réponse
         self._arret = threading.Event()
         self._fil_prix = None
         regl, err = self.reglages()
@@ -347,6 +352,13 @@ class Projet:
             elements = None
             if isinstance(demande, dict) and demande.get("type") == "retour_element":
                 elements = catalogue.ids(regl, demande.get("fonctionnalite"))  # None : catalogue illisible
+            une_fois = (demande.get("type"), demande.get("decision")) if isinstance(demande, dict) \
+                and demande.get("type") in REPONSES_UNE_FOIS and isinstance(demande.get("decision"), str) else None
+            if une_fois is not None:       # une décision n'a qu'une réponse : ni double traitement ni double renvoi
+                reponse = self._reponses_envoyees.get(une_fois)
+                if reponse is not None and time.monotonic() - reponse < GARDE_REPONSE_S:
+                    return 409, {"erreur": "Cette décision a déjà reçu une réponse : le moteur la traite, elle disparaîtra "
+                                           "de la liste dès qu'il aura fini."}
             message = demandes.verifier(demande, r, cibles, elements)
             if message:
                 return 400, {"erreur": message}
@@ -360,6 +372,8 @@ class Projet:
                 if constat:  # le bureau écrit lui-même le constat de ce qu'il a calculé
                     demande["texte"] = constat + (f"\n\n{demande['texte']}" if demande.get("texte") else "")
             ok, message = self.envoyer(regl, demande)
+            if ok and une_fois is not None:
+                self._reponses_envoyees[une_fois] = time.monotonic()
             if ok and cle:
                 self._challenges_envoyes[cle] = time.monotonic()
             if ok and empreinte is not None:

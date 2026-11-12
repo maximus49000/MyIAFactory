@@ -99,3 +99,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Quand un outil système affiche des libellés traduits, ne pas parser le texte d'un libellé fixe : utiliser un motif tolérant à la langue ou une sortie structurée.
+
+## S17 — Un contrôle de continuité de boucle audio fondé sur l'écart
+Rôles : artiste
+Date : 2026-11-12
+
+Un contrôle de continuité de boucle audio fondé sur l'écart entre premier et dernier échantillon donne de faux positifs avec des ondes carrées ; fixer un seuil large qui ne détecte que les vrais clics.

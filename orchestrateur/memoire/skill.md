@@ -15,3 +15,9 @@ Rôles : environnement
 Date : 2026-11-12
 
 Sous Git Bash, mettre les chemins Windows entre guillemets avec des slashs avant.
+
+## S3 — Quand aucune bibliothèque d'images n'est garantie, générer l
+Rôles : artiste
+Date : 2026-11-12
+
+Quand aucune bibliothèque d'images n'est garantie, générer les maquettes PNG avec le module standard zlib et struct, depuis un script écrit par l'outil Write puis lancé avec python.

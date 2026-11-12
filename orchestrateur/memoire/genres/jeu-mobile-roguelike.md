@@ -50,3 +50,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Pour prouver un rendu de jeu, instancie la scène depuis un script lancé par le moteur. Attends quelques images, enregistre la capture et affiche sa taille.
+
+## G9 — Quand les assets arrivent avant les scènes qui les utilisent
+Rôles : dev
+Date : 2026-11-12
+
+Quand les assets arrivent avant les scènes qui les utilisent, centraliser leur accès dans un catalogue nommé et vérifier le branchement avec une scène galerie capturée par le moteur.

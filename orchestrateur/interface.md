@@ -143,6 +143,11 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 ### `decision`
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
+`{"action": "completer", "id", "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?}` complète une
+décision `valider_etape` encore posée (au moins un champ, validés comme à la pose : `doit_marcher` 480 caractères au
+plus et non vide, `pas_encore` 480 au plus et peut être vide, `conclusion` 200 au plus ; `points_a_verifier` devient
+`points`, 1 à 8 phrases différentes de 160 au plus) et ne touche à rien d'autre ; refusée pour une décision inconnue
+ou levée, ou d'un autre genre. Les trois champs se posent aussi avec `poser` (`valider_etape`). Rend `{"ok": true}`.
 `portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`,
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
@@ -388,6 +393,12 @@ de 160 caractères au plus, vérifiables par l'utilisateur, tirées du cahier (d
 l'élément). Une forme fautive est écartée sans refuser le rapport ; sans points, le moteur en dérive de l'objectif.
 Sans image, livrable téléchargeable existant ni lien d'accès, la décision n'est pas posée : l'étape est refaite une fois
 avec la consigne d'ajouter de quoi vérifier, puis la tâche de validation est bloquée avec la raison.
+Le même agent dit aussi ce que le Directeur doit juger, en trois champs (dans un lot : dans le compte rendu de
+l'élément) : `doit_marcher` (1 à 3 phrases, 480 caractères au plus, obligatoire : ce qui doit fonctionner pour
+valider), `pas_encore` (480 au plus, peut être vide : ce qui n'est pas encore attendu à ce stade) et `conclusion`
+(une phrase, 200 au plus : « Validez si… »). Une forme fautive est écartée ; sans `doit_marcher`, même relance unique
+(un seul compteur avec « rien à valider »), puis tâche bloquée avec la raison. Ils sont stockés sur la décision
+`valider_etape`.
 
 La demande `valider_etape` venue de la fenêtre porte `reponses` `[{point, ok}]` : `lancer actions` refuse (code 1) une
 forme fautive ou un verdict qui n'en découle pas (tous OK = `valider`) ; le moteur vérifie en plus que les points sont

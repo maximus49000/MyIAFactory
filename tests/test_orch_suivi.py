@@ -331,6 +331,37 @@ class TestSuivi(AvecProjet):
         self.assertIn("date", apk)
         self.assertEqual([("taille" in x) for x in (absent, dehors)], [False, False])
         self.assertEqual((d["points"], d["acces"]["url"]), (["Le jeu se lance"], "http://127.0.0.1:5173/"))
+        # Ce que dit la validation : posé avec la décision, validé comme les points.
+        dit = {"doit_marcher": "L'apk s'ouvre.", "pas_encore": "Rien ne répond encore.", "conclusion": "Validez."}
+        code, dec = sortie("decision", entree={**valider, "element": {"id": "e3", "nom": "Dit"}, **dit})
+        self.assertEqual(code, 0, dec)
+        d3 = [x for x in sortie("etat")[1]["decisions"] if x.get("genre") == "valider_etape"][-1]
+        self.assertEqual({c: d3[c] for c in dit}, dit)
+        for mauvais in ({"doit_marcher": ""}, {"doit_marcher": "x" * 481}, {"pas_encore": 3},
+                        {"conclusion": "x" * 201}):
+            self.assertEqual(sortie("decision", entree={**valider, "element": {"id": "e4", "nom": "M"}, **mauvais})[0], 1)
+        # `completer` : une décision encore posée reçoit ces champs (et les points), rien d'autre ne bouge.
+        def decision(i):
+            return [x for x in sortie("etat")[1]["decisions"] if x["id"] == i][0]
+        nouveau = {"doit_marcher": "Le menu s'affiche.", "pas_encore": "", "conclusion": "Validez si le menu s'affiche."}
+        d5 = sortie("decision", entree={**valider, "element": {"id": "e5", "nom": "Ancienne"}})[1]["id"]
+        avant = decision(d5)
+        code, r = sortie("decision", entree={"action": "completer", "id": d5, **nouveau,
+                                             "points_a_verifier": ["Le jeu s'ouvre", "Le menu s'affiche"]})
+        self.assertEqual(code, 0, r)
+        self.assertEqual(decision(d5), {**avant, **nouveau, "points": ["Le jeu s'ouvre", "Le menu s'affiche"]})
+        sortie("decision", entree={"action": "lever", "id": d5})
+        avant = decision(d3["id"])
+        for mauvais in ({}, {"doit_marcher": ""}, {"conclusion": "x" * 201}, {"points_a_verifier": []},
+                        {"points_a_verifier": ["a", "a"]}):
+            self.assertEqual(sortie("decision", entree={"action": "completer", "id": d3["id"], **mauvais})[0], 1, mauvais)
+        self.assertEqual(decision(d3["id"]), avant)                         # un refus ne change rien
+        self.assertEqual(sortie("decision", entree={"action": "completer", "id": "d999", **dit})[0], 1)
+        sortie("decision", entree={"action": "lever", "id": d3["id"]})
+        self.assertEqual(sortie("decision", entree={"action": "completer", "id": d3["id"], **dit})[0], 1)   # levée
+        autre = sortie("decision", entree={"action": "poser", "portee": "projet", "genre": "confirmer_genre",
+                                           "texte": "Genre ?", "propose": "jeu", "genres_connus": ["jeu"]})[1]["id"]
+        self.assertEqual(sortie("decision", entree={"action": "completer", "id": autre, **dit})[0], 1)   # autre genre
         for mauvais in ({"points": []}, {"points": ["x" * 161]}, {"points": [f"p{i}" for i in range(9)]},
                         {"acces": {"url": "file:///c:/"}}, {"acces": {"url": "http://a.fr/", "autre": 1}}):
             code, err = sortie("decision", entree={**valider, **mauvais})

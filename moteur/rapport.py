@@ -9,7 +9,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
-     "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?}]?,
+     "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?}
 `points_a_verifier` et `acces` : rendus par l'étape qui précède une validation du Directeur (fenêtre de validation) ;
 une forme fautive est écartée, jamais une raison de refuser le rapport.
@@ -126,6 +126,12 @@ def _de_quoi_valider(x):
         x["points_a_verifier"] = points[:rel.MAX_POINTS]
     if "acces" in x and not rel.acces_ok(x["acces"]):
         del x["acces"]
+    for c, maximum, vide in rel.CHAMPS_DIT:      # ce que dit la validation ; une forme fautive est écartée
+        if c in x:
+            if rel.texte_dit_ok(x[c], maximum, vide):
+                x[c] = " ".join(x[c].split())
+            else:
+                del x[c]
     return x
 
 

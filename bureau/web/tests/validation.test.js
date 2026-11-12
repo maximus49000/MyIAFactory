@@ -139,6 +139,29 @@ test("une décision d'avant (sans points ni fichiers) s'ouvre aussi, avec un seu
   assert.equal(boite.tous((n) => n.tagName === "input").length, 2);
 });
 
+test("trois blocs en tête, après l'objectif et avant de quoi vérifier ; points ensuite", () => {
+  const dit = {doit_marcher: "L'apk s'installe et affiche le menu.", pas_encore: "Le jeu ne répond pas encore.",
+    conclusion: "Validez si l'application s'ouvre."};
+  const {boite} = rendre({...D, ...dit});
+  const texte = boite.textContent;
+  const ordre = ["Objectif : Le jeu complet", "Ce qui doit marcher", "L'apk s'installe et affiche le menu.",
+    "Pas encore attendu à ce stade", "Le jeu ne répond pas encore.", "À conclure", "Validez si l'application s'ouvre.",
+    "L'apk d'essai", "Le jeu se lance sur le téléphone"].map((x) => texte.indexOf(x));
+  assert.ok(ordre.every((x, i) => x >= 0 && (i === 0 || x > ordre[i - 1])), JSON.stringify(ordre));
+  assert.deepEqual(V.consignesDeValidation({...dit, pas_encore: ""}).map((b) => b.texte),
+    [dit.doit_marcher, "Tout est attendu à ce stade.", dit.conclusion]);
+});
+
+test("décision posée sans ces champs : « Ce qui doit marcher » par défaut et rien d'autre", () => {
+  for (const d of [D, {...D, doit_marcher: "  "}, {...D, pas_encore: "x", conclusion: "y"}]) {
+    assert.deepEqual(V.consignesDeValidation(d), [{cle: "doit_marcher", libelle: "Ce qui doit marcher",
+      texte: "L'élément correspond à son objectif"}]);
+  }
+  const {boite} = rendre(D);
+  assert.match(boite.textContent, /Ce qui doit marcher/);
+  assert.doesNotMatch(boite.textContent, /Pas encore attendu|À conclure/);
+});
+
 test("sans droit d'agir : la fenêtre se lit, rien ne s'envoie", () => {
   const {boite} = rendre(D, false);
   assert.equal(boite.tous((n) => n.className.startsWith("bouton val-envoyer")).length, 0);

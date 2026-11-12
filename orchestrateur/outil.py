@@ -809,8 +809,10 @@ def cmd_decision(ctx, e):
             raise Refus(f"Décision inconnue : {i}")
         if action == "verifier":
             return _noter_verification(s, e)
+        if action == "completer":
+            return _completer_validation(s, e)
         if action != "poser":
-            raise Refus("« action » doit valoir poser, lever ou verifier.")
+            raise Refus("« action » doit valoir poser, lever, verifier ou completer.")
         portee, genre, contenu = texte(e, "portee"), texte(e, "genre"), texte(e, "texte", vide_ok=True)
         if portee == "projet":
             if genre not in rel.DECISIONS_PROJET:
@@ -908,6 +910,42 @@ def _outils_qui_manquent(e):
     return [dict(x) for x in outils]
 
 
+def _dit_de_la_validation(e, cle_points="points"):
+    """Ce que dit une demande de validation, validé comme à la pose : `doit_marcher`, `pas_encore` (peut être vide),
+    `conclusion` et les points à vérifier (sous `cle_points`, ou `points_a_verifier` à la complétion). Rien d'autre."""
+    plus = {}
+    for c, m, vide in rel.CHAMPS_DIT:
+        v = e.get(c)
+        if v is not None:
+            if not rel.texte_dit_ok(v, m, vide):
+                raise Refus(f"« {c} » est un texte de {m} caractères au plus{'' if vide else ', non vide'}.")
+            plus[c] = " ".join(v.split())
+    points = e.get(cle_points) if e.get(cle_points) is not None else e.get("points_a_verifier")
+    if points is not None:
+        if not rel.points_ok(points):
+            raise Refus(f"« points » : 1 à {rel.MAX_POINTS} phrases différentes de {rel.MAX_POINT} caractères au plus.")
+        plus["points"] = [p.strip() for p in points]
+    return plus
+
+
+def _completer_validation(s, e):
+    """`{"action": "completer", "id": décision, "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?}` :
+    complète une décision `valider_etape` encore posée avec ce que dit une validation (les mêmes contrôles qu'à la pose).
+    Ne touche à rien d'autre ; refuse une décision levée ou d'un autre genre."""
+    i = texte(e, "id")
+    plus = _dit_de_la_validation(e)
+    if not plus:
+        raise Refus("« completer » demande au moins « doit_marcher », « pas_encore », « conclusion » ou "
+                    "« points_a_verifier ».")
+    for d in s["decisions_projet"] + [x for f in s["fonctionnalites"] for x in f["decisions"]]:
+        if d["id"] == i:
+            if d.get("genre") != "valider_etape":
+                raise Refus(f"La décision {i} n'est pas une décision « valider_etape ».")
+            d.update(plus)
+            return {"ok": True}
+    raise Refus(f"Décision inconnue : {i} (levée ou jamais posée).")
+
+
 def _validation_decidee(ctx, s, e):
     """Les champs de la décision `valider_etape` : l'élément qui attend le Directeur, l'étape de validation, la tâche qui
     la porte, le compte rendu de l'étape précédente et ses fichiers."""
@@ -937,10 +975,7 @@ def _validation_decidee(ctx, s, e):
             if not isinstance(v, str) or len(v) > 600:
                 raise Refus(f"« {cle} » est un texte de 600 caractères au plus.")
             plus[cle] = v
-    if e.get("points") is not None:       # les points à vérifier de la fenêtre de validation
-        if not rel.points_ok(e["points"]):
-            raise Refus(f"« points » : 1 à {rel.MAX_POINTS} phrases différentes de {rel.MAX_POINT} caractères au plus.")
-        plus["points"] = [p.strip() for p in e["points"]]
+    plus.update(_dit_de_la_validation(e))     # les points à vérifier et les trois choses que dit la validation
     if e.get("acces") is not None:        # le lien d'accès d'un site qui tourne
         if not rel.acces_ok(e["acces"]):
             raise Refus("« acces » est {url (http ou https), description? (200 caractères au plus)}.")

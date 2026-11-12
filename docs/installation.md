@@ -202,6 +202,14 @@ l'élément revient à la validation. Une validation posée avant cette fenêtre
 lien d'accès. S'il n'en donne pas, l'étape est refaite une fois avec cette consigne ; s'il échoue encore, la tâche de
 validation est bloquée avec la raison (faites un retour sur la tâche).
 
+**Ce que dit chaque demande de validation.** En tête de la fenêtre, après l'objectif, trois blocs : « Ce qui doit
+marcher » (`doit_marcher`, une à trois phrases), « Pas encore attendu à ce stade » (`pas_encore`, vide si tout est
+attendu) et « À conclure » (`conclusion`, une phrase, par exemple « Validez si l'application s'ouvre correctement,
+même si rien n'est encore jouable. »), puis les points à vérifier. Une demande sans `doit_marcher` n'est pas posée :
+l'étape est refaite une fois (le même essai que « jamais rien à valider »), puis la tâche est bloquée avec la raison.
+Une validation déjà posée sans ces champs n'affiche que « Ce qui doit marcher : l'élément correspond à son
+objectif ». On peut la compléter avec l'outil (`lancer decision {"action": "completer", "id": …}`).
+
 **Un site en cours de développement.** L'agent déclare son adresse (`http://127.0.0.1:5173/`, par exemple) et laisse
 le serveur tourner. Sur l'ordinateur, « Ouvrir » y va directement ; au téléphone, le bureau sert de relais
 (`/apercu/…`, derrière le même code d'accès). Limites du relais : une application qui écrit des adresses absolues

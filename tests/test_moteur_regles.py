@@ -31,6 +31,11 @@ def decision(objet):
 ACCES = {"url": "http://127.0.0.1:5173/", "description": "Le jeu qui tourne"}   # de quoi vérifier à la validation
 
 
+DIT = {"doit_marcher": "L'apk s'installe, s'ouvre en portrait et affiche le menu.",
+       "pas_encore": "Le jeu ne répond pas encore : combat, carte et magasin viennent ensuite.",
+       "conclusion": "Validez si l'application s'ouvre correctement, même si rien n'est encore jouable."}
+
+
 def verdict(element, points=()):
     return {"statut": "fait", "message": {"texte": "Relu."},
             "verdicts": [{"element": element, "conforme": not points, "points": list(points)}]}
@@ -859,7 +864,7 @@ class Validation(Base):
         self.projet_avec_validation(**plus)
         self.fichier("pieces/f1/essai.png")
         rapports = [{"statut": "fait", "message": {"texte": "Programmé."}},
-                    {**verdict("e1"), "message": {"texte": "Tout est vert, apk d'essai prêt."},
+                    {**verdict("e1"), **DIT, "message": {"texte": "Tout est vert, apk d'essai prêt."},
                      "fichiers": [{"chemin": "pieces/f1/essai.png", "titre": "Capture de l'essai", "element": "e1"},
                                   {"chemin": "pieces/f1/autre.png", "titre": "D'un autre élément", "element": "e9"}]}]
         return self.piloter(regles.avancer(self.projet, self.etat), rapports=rapports)
@@ -907,7 +912,7 @@ class Validation(Base):
                       regles._matiere(self.projet, self.etat, essais[-1]))
         self.assertEqual(self.etat["elements"]["f1/e1"]["pas"], 1)
         # l'étape refaite, l'élément revient à la validation : une nouvelle décision, avec le nouveau compte rendu
-        self.piloter(actions, rapports=[{**verdict("e1"), "message": {"texte": "Menu allégé."}, "acces": ACCES}])
+        self.piloter(actions, rapports=[{**verdict("e1"), "message": {"texte": "Menu allégé."}, "acces": ACCES, **DIT}])
         (nouvelle,) = self.decisions()
         self.assertEqual(nouvelle["compte_rendu"], "Menu allégé.")
         self.assertEqual(len(self.taches(etape="validation:valider")), 2)
@@ -934,7 +939,7 @@ class Validation(Base):
         points = ["Le jeu se lance sur le téléphone", "Le bouton Jouer ouvre la partie", "Le score s'affiche"]
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[
             {"statut": "fait", "message": {"texte": "Programmé."}},
-            {**verdict("e1"), "message": {"texte": "Apk prêt."}, "points_a_verifier": points,
+            {**verdict("e1"), **DIT, "message": {"texte": "Apk prêt."}, "points_a_verifier": points,
              "fichiers": [{"chemin": "build/jeu.apk", "titre": "L'apk d'essai", "element": "e1"}]}])
         (d,) = self.decisions()
         self.assertEqual(d["points"], points)
@@ -1017,7 +1022,7 @@ class Validation(Base):
         """Ni image, ni livrable, ni lien : l'étape précédente est refaite une fois ; au second échec, la tâche de
         validation est bloquée avec la raison, sans décision."""
         self.projet_avec_validation()
-        rien = {**verdict("e1"), "message": {"texte": "Testé."},
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Testé."},
                 "fichiers": [{"chemin": "pieces/f1/absent.png", "titre": "Introuvable", "element": "e1"},
                              {"chemin": "src/main.gd", "titre": "Le code", "element": "e1"}]}
         self.piloter(regles.avancer(self.projet, self.etat),
@@ -1030,11 +1035,52 @@ class Validation(Base):
         self.assertIn("Rien à valider", val["bloquee"])
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "bloque")
 
+    def test_ce_que_dit_la_validation_est_stocke_sur_la_decision(self):
+        self.jusqu_a_la_validation()
+        (d,) = self.decisions()
+        self.assertEqual({c: d[c] for c in DIT}, DIT)
+
+    def test_validation_sans_doit_marcher_relance_une_fois_puis_bloque(self):
+        self.projet_avec_validation()
+        self.fichier("pieces/f1/essai.png")
+        sans = {**verdict("e1"), "message": {"texte": "Testé."},
+                "fichiers": [{"chemin": "pieces/f1/essai.png", "titre": "Capture", "element": "e1"}],
+                "doit_marcher": "x" * 481}                      # trop long : écarté comme absent
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, sans, sans])
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertTrue(any(j["texte"].startswith("Validation sans consigne") for j in essais[-1]["journal"]))
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("doit_marcher", val["bloquee"])
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "bloque")
+
+    def test_doit_marcher_rendu_a_la_relance_pose_la_decision(self):
+        self.projet_avec_validation()
+        self.fichier("pieces/f1/essai.png")
+        sans = {**verdict("e1"), "message": {"texte": "Testé."},
+                "fichiers": [{"chemin": "pieces/f1/essai.png", "titre": "Capture", "element": "e1"}]}
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, sans, {**sans, **DIT, "pas_encore": ""}])
+        (d,) = self.decisions()
+        self.assertEqual((d["doit_marcher"], d["pas_encore"]), (DIT["doit_marcher"], ""))
+
+    def test_consigne_des_trois_champs_avant_la_validation(self):
+        self.projet_avec_validation()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[{"statut": "fait", "message": {"texte": "Ok."}}],
+                     limite=1)
+        (essai,) = self.taches(etape="flux:essai")
+        m = regles._matiere(self.projet, self.etat, essai)
+        for c in ("doit_marcher", "pas_encore", "conclusion"):
+            self.assertIn(f"`{c}`", m)
+        self.assertIn("480 caractères au plus", m)
+
     def test_rien_a_valider_puis_de_quoi_verifier(self):
         self.projet_avec_validation()
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[
             {"statut": "fait", "message": {"texte": "Programmé."}}, {**verdict("e1"), "message": {"texte": "Testé."}},
-            {**verdict("e1"), "message": {"texte": "Le site tourne."}, "acces": ACCES}])
+            {**verdict("e1"), "message": {"texte": "Le site tourne."}, "acces": ACCES, **DIT}])
         (d,) = self.decisions()
         self.assertEqual(d["acces"], ACCES)
         self.assertIn("Le site s'ouvre depuis le lien d'accès et répond sans erreur", d["points"])
@@ -1058,14 +1104,14 @@ class Validation(Base):
         Directeur : ils ne comptent plus parmi les éléments au travail, e3 part vers la validation (avant : il
         attendait)."""
         self.projet_avec_validation(elements=3)
-        deux = {"statut": "fait", "message": {"texte": "Testé."}, "acces": ACCES, "verdicts": [
+        deux = {"statut": "fait", "message": {"texte": "Testé."}, "acces": ACCES, **DIT, "verdicts": [
             {"element": e, "conforme": True, "points": []} for e in ("e1", "e2")]}
         rapports = [{"statut": "fait", "message": {"texte": "Programmé."}}, deux]    # un agent pour chaque lot de deux
         self.piloter(regles.avancer(self.projet, self.etat), rapports=rapports)
         self.assertEqual({d["element"]["id"] for d in self.decisions()}, {"e1", "e2"})
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[
             {"statut": "fait", "message": {"texte": "Programmé."}},
-            {**verdict("e3"), "message": {"texte": "Testé."}, "acces": ACCES}])
+            {**verdict("e3"), "message": {"texte": "Testé."}, "acces": ACCES, **DIT}])
         self.assertEqual(self.fonc()["file"], [])
         self.assertEqual({d["element"]["id"] for d in self.decisions()}, {"e1", "e2", "e3"})
         self.assertEqual(self.taches(etape="flux:livraison"), [])
@@ -1081,7 +1127,7 @@ class Validation(Base):
 
     def jusqu_aux_validations(self):
         """e1 et e2 programmés et testés ensemble (un lot à chaque étape)."""
-        deux = {"statut": "fait", "message": {"texte": "Testé."}, "acces": ACCES, "verdicts": [
+        deux = {"statut": "fait", "message": {"texte": "Testé."}, "acces": ACCES, **DIT, "verdicts": [
             {"element": e, "conforme": True, "points": []} for e in ("e1", "e2")]}
         return self.piloter(regles.avancer(self.projet, self.etat),
                             rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, deux])
@@ -1138,7 +1184,7 @@ class Validation(Base):
         self.ok("file", entree={"fonctionnalite": "f1", "elements": [dict(DECOUPAGE["elements"][0])]})
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[
             {"statut": "fait", "message": {"texte": "Programmé."}},
-            {**verdict("e1"), "message": {"texte": "Testé."}, "acces": ACCES}])
+            {**verdict("e1"), "message": {"texte": "Testé."}, "acces": ACCES, **DIT}])
         (d,) = self.decisions()
         self.assertEqual(d["objectif"], "Produire « Accueil » (écrans), jusqu'à l'étape « Tests et essai du jeu ».")
         self.assertEqual(d["a_valider"], "Validation du Directeur — voir l'apk d'essai avant de le livrer")
@@ -1149,7 +1195,7 @@ class Validation(Base):
             dict(DECOUPAGE["elements"][0], objectif="L'écran d'accueil, avec le logo et le bouton Jouer.")]})
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[
             {"statut": "fait", "message": {"texte": "Programmé."}},
-            {**verdict("e1"), "message": {"texte": "Testé."}, "acces": ACCES}])
+            {**verdict("e1"), "message": {"texte": "Testé."}, "acces": ACCES, **DIT}])
         self.assertEqual(self.decisions()[0]["objectif"], "L'écran d'accueil, avec le logo et le bouton Jouer.")
 
     def test_sous_chaque_element_seulement_son_compte_rendu(self):
@@ -1157,7 +1203,7 @@ class Validation(Base):
         self.projet_avec_validation(elements=2)
         for c in ("pieces/f1/e1-ecran.png", "pieces/f1/e2-ecran.png", "pieces/f1/e2.apk"):
             self.fichier(c)
-        lot = {"statut": "fait", "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
+        lot = {"statut": "fait", **DIT, "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
                "message": {"texte": "Accueil (e1) : tout est vert.\n\nProfil (e2) : un menu à revoir.",
                            "images": [{"chemin": "pieces/f1/e1-ecran.png", "legende": "Accueil"},
                                       {"chemin": "pieces/f1/e2-ecran.png", "legende": "Profil"}]},
@@ -1176,9 +1222,10 @@ class Validation(Base):
         self.fichier("pieces/f1/p.png")
         lot = {"statut": "fait", "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
                "message": {"texte": "Les deux écrans sont testés."},
-               "comptes_rendus": [{"element": "e1", "texte": "Accueil : vert.", "acces": ACCES},
+               "comptes_rendus": [{"element": "e1", "texte": "Accueil : vert.", "acces": ACCES, **DIT},
                                   {"element": "e2", "texte": "Profil : vert.",
-                                   "images": [{"chemin": "pieces/f1/p.png", "legende": "Le profil"}]}]}
+                                   "images": [{"chemin": "pieces/f1/p.png", "legende": "Le profil"}],
+                                   "doit_marcher": "Le profil s'affiche.", "pas_encore": "", "conclusion": "Validez."}]}
         self.piloter(regles.avancer(self.projet, self.etat),
                      rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, lot])
         par = {d["element"]["id"]: d for d in self.decisions()}

@@ -35,6 +35,17 @@ class Lire(unittest.TestCase):
         lot = depart.COMPTE_RENDU_MOTEUR
         self.assertIn("comptes_rendus", lot)
 
+    def test_ce_que_dit_la_validation(self):
+        r = rapport.lire(reponse({**FAIT, "doit_marcher": "  L'apk\ns'ouvre. ", "pas_encore": "", "conclusion": "x" * 201,
+                                  "comptes_rendus": [{"element": "e1", "texte": "v", "doit_marcher": 3,
+                                                      "pas_encore": "Rien ne répond.", "conclusion": "Validez."}]}))
+        self.assertEqual((r["doit_marcher"], r["pas_encore"]), ("L'apk s'ouvre.", ""))
+        self.assertNotIn("conclusion", r)                       # trop long : écarté, sans refuser le rapport
+        (c,) = r["comptes_rendus"]
+        self.assertNotIn("doit_marcher", c)
+        self.assertEqual((c["pas_encore"], c["conclusion"]), ("Rien ne répond.", "Validez."))
+        self.assertNotIn("doit_marcher", rapport.lire(reponse({**FAIT, "doit_marcher": "  "})))
+
     def test_points_a_verifier_et_acces_facultatifs(self):
         """La fenêtre de validation : une forme fautive est écartée, jamais une raison de refuser le rapport."""
         points = ["Le menu s'ouvre", "  Le son\nse coupe ", "x" * 161, 3, "Le menu s'ouvre"] + [f"p{i}" for i in range(9)]

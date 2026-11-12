@@ -42,6 +42,21 @@ export function enteteValidation(d) {
   return lignes;
 }
 
+// Ce que dit chaque demande de validation, en trois blocs : « Ce qui doit marcher », « Pas encore attendu à ce stade »
+// (vide : tout est attendu), « À conclure ». Une décision posée sans ces champs n'a que « Ce qui doit marcher : l'élément
+// correspond à son objectif » : rien n'est inventé.
+export const DOIT_MARCHER_PAR_DEFAUT = "L'élément correspond à son objectif";
+export function consignesDeValidation(d) {
+  if (!plein(d?.doit_marcher)) return [{cle: "doit_marcher", libelle: "Ce qui doit marcher", texte: DOIT_MARCHER_PAR_DEFAUT}];
+  const blocs = [{cle: "doit_marcher", libelle: "Ce qui doit marcher", texte: d.doit_marcher.trim()}];
+  if (typeof d.pas_encore === "string") {
+    blocs.push({cle: "pas_encore", libelle: "Pas encore attendu à ce stade",
+                texte: d.pas_encore.trim() || "Tout est attendu à ce stade."});
+  }
+  if (plein(d.conclusion)) blocs.push({cle: "conclusion", libelle: "À conclure", texte: d.conclusion.trim()});
+  return blocs;
+}
+
 // Les points à vérifier de la décision : ceux qu'elle porte (1 à 8 phrases de 160 caractères au plus, sans doublon),
 // sinon un seul : « L'élément correspond à l'objectif » (les décisions d'avant).
 export function pointsDeValidation(d) {
@@ -165,6 +180,11 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     s1.append(ligne);
   }
   if (!enteteValidation(d).length && plein(d.texte)) s1.append(el("p", "val-entete", d.texte));
+  for (const b of consignesDeValidation(d)) {
+    const bloc = el("div", "val-consigne val-consigne-" + b.cle);
+    bloc.append(el("h4", "", b.libelle), el("p", "", b.texte));
+    s1.append(bloc);
+  }
   boite.append(s1);
 
   // 2. De quoi vérifier.

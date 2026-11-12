@@ -876,6 +876,12 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[{**plein, "acces": {"url": "javascript:alert(1)"}}]), "acces")
         self.refus(v4(decisions_projet=[{**plein, "fichiers": [{"chemin": "a.apk", "titre": "A", "taille": "1"}]}]),
                    "taille")
+        dit = {"doit_marcher": "L'apk s'ouvre.", "pas_encore": "", "conclusion": "Validez si l'application s'ouvre."}
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**plein, **dit}])), [])
+        self.refus(v4(decisions_projet=[{**plein, "doit_marcher": ""}]), "doit_marcher")
+        self.refus(v4(decisions_projet=[{**plein, "doit_marcher": "x" * 481}]), "doit_marcher")
+        self.refus(v4(decisions_projet=[{**plein, "pas_encore": 3}]), "pas_encore")
+        self.refus(v4(decisions_projet=[{**plein, "conclusion": "x" * 201}]), "conclusion")
         colonnes = [{"id": "a", "nom": "A", "validation": True}]
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
 

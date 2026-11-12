@@ -47,6 +47,16 @@ mais jamais rien à valider. »
    existant et sans lien d'accès ne pose pas de décision : l'étape précédente est relancée une fois avec la consigne
    d'ajouter de quoi vérifier ; au second échec, la tâche de validation est bloquée avec la raison.
 
+9. **Ce que dit une validation** (ajout, constat : un apk qui affiche un menu sans rien de jouable, et l'utilisateur ne
+   savait pas s'il devait valider le fonctionnel ou seulement l'ouverture). Chaque demande dit trois choses, rendues par
+   l'agent qui précède la validation à côté de `points_a_verifier` et stockées sur la décision : `doit_marcher` (une
+   à trois phrases, obligatoire), `pas_encore` (ce qui n'est pas encore attendu ; peut être vide) et `conclusion` (une
+   phrase : « Validez si… »). La fenêtre les montre en tête, après l'objectif : « Ce qui doit marcher », « Pas encore
+   attendu à ce stade », « À conclure », puis les points. Sans `doit_marcher`, la demande n'est pas posée : même relance
+   unique que « jamais rien à valider » (un seul compteur), puis tâche bloquée avec la raison. Une décision déjà posée
+   sans ces champs n'affiche que « Ce qui doit marcher : l'élément correspond à son objectif » (rien d'inventé) ;
+   l'action `decision completer` de l'outil la complète sans toucher au reste.
+
 ## 3. Limites dites
 
 - Le relais sert l'application à la même origine que le bureau : une application qui écrit des URL absolues

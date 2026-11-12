@@ -329,6 +329,26 @@ def points_de_decision(d):
     return [x.strip() for x in p] if points_ok(p) else [POINT_PAR_DEFAUT]
 
 
+# Les trois choses que dit chaque demande de validation : ce qui doit marcher, ce qui n'est pas encore attendu, la
+# conclusion (conception de la fenêtre de validation, note « Ce que dit une validation »).
+MAX_DOIT_MARCHER = 480      # une à trois phrases
+MAX_PAS_ENCORE = 480        # peut être vide : tout est attendu à ce stade
+MAX_CONCLUSION = 200        # une phrase
+CHAMPS_DIT = (("doit_marcher", MAX_DOIT_MARCHER, False), ("pas_encore", MAX_PAS_ENCORE, True),
+              ("conclusion", MAX_CONCLUSION, False))
+DOIT_MARCHER_PAR_DEFAUT = "L'élément correspond à son objectif"      # une décision d'avant, sans ces champs
+
+
+def texte_dit_ok(t, maximum, vide=False):
+    """Un des trois textes d'une validation : un texte d'au plus `maximum` caractères (vide permis pour `pas_encore`)."""
+    return isinstance(t, str) and len(t.strip()) <= maximum and (vide or t.strip() != "")
+
+
+def champs_dit_ok(d):
+    """Vrai si chacun des trois champs présents (non `None`) dans `d` a la bonne forme."""
+    return all(d.get(c) is None or texte_dit_ok(d[c], m, v) for c, m, v in CHAMPS_DIT)
+
+
 def acces_ok(a):
     """Le lien d'accès d'un site qui tourne : `{url (http ou https, avec un hôte), description?}`."""
     if not isinstance(a, dict) or set(a) - {"url", "description"}:
@@ -622,6 +642,9 @@ def _verifier_validation(d, nom, erreurs):
         erreurs.append(f"{ici} : « points » : 1 à {MAX_POINTS} phrases de {MAX_POINT} caractères au plus.")
     if d.get("acces") is not None and not acces_ok(d["acces"]):
         erreurs.append(f"{ici} : « acces » est {{url (http ou https), description?}}.")
+    for c, m, v in CHAMPS_DIT:
+        if d.get(c) is not None and not texte_dit_ok(d[c], m, v):
+            erreurs.append(f"{ici} : « {c} » est un texte de {m} caractères au plus{'' if v else ', non vide'}.")
 
 
 def _verifier_genre_fonctionnalite(d, nom, erreurs):

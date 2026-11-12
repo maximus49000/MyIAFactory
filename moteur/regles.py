@@ -1566,7 +1566,8 @@ def _element_en_validation(projet, etat, d):
     v = _etat_element(etat, fid, element)
     v.update(phase="validation", pas=rang, taches=[d["tache"]] if d.get("tache") else [])
     v["dernier_rapport"] = {"compte_rendu": d.get("compte_rendu") or "", "fichiers": list(d.get("fichiers") or []),
-                            "points": list(d.get("points") or []), "acces": d.get("acces")}
+                            "points": list(d.get("points") or []), "acces": d.get("acces"),
+                            **{c: d[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in d}}
     return v
 
 
@@ -2100,7 +2101,14 @@ CONSIGNE_AVANT_VALIDATION = (
     '`acces`: {"url": "http://127.0.0.1:<port>/", "description": "…"} (laisse le serveur tourner). Rends aussi '
     f'`points_a_verifier` : 3 à {rel.MAX_POINTS} phrases de {rel.MAX_POINT} caractères au plus, chacune vérifiable '
     "par lui en regardant ou en essayant (pas de jargon), tirées du cahier. Dans un lot : dans le compte rendu de "
-    "l'élément (`comptes_rendus`).")
+    "l'élément (`comptes_rendus`). "
+    "Dis aussi, en trois champs courts, ce que le Directeur doit juger (sans eux, la demande n'est pas posée) : "
+    f"`doit_marcher` (1 à 3 phrases, {rel.MAX_DOIT_MARCHER} caractères au plus : ce qui doit fonctionner pour valider, "
+    'ex. « l\'apk s\'installe, s\'ouvre en portrait et affiche le menu »), '
+    f"`pas_encore` ({rel.MAX_PAS_ENCORE} caractères au plus : ce qui n'est pas encore attendu à ce stade, ex. « le jeu "
+    "ne répond pas encore : combat, carte et magasin viennent avec les éléments suivants » ; vide si tout est attendu) "
+    f"et `conclusion` (une phrase, {rel.MAX_CONCLUSION} caractères au plus, ex. « Validez si l'application s'ouvre "
+    "correctement, même si rien n'est encore jouable. »). Ne lui fais pas valider ce qui viendra plus tard.")
 
 
 def _matiere(projet, etat, t):
@@ -2470,8 +2478,10 @@ def _attendre_le_directeur(projet, etat, v, s):
     n'a pas répondu. Jamais rien à valider : sans image, sans livrable téléchargeable et sans lien d'accès, la décision
     n'est pas posée (voir `_rien_a_verifier`)."""
     precedent = v.get("dernier_rapport") or {}
-    if not _de_quoi_verifier(projet, precedent):
-        return _rien_a_verifier(projet, etat, v, s)
+    manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
+        + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"])
+    if manques:
+        return _rien_a_verifier(projet, etat, v, s, manques)
     v.pop("rien_a_verifier", None)
     v["phase"] = "validation"
     element = v["element"]
@@ -2490,6 +2500,9 @@ def _attendre_le_directeur(projet, etat, v, s):
               "points": precedent.get("points") or _points_derives(objectif, precedent)}
     if precedent.get("acces"):
         entree["acces"] = precedent["acces"]
+    for c in ("doit_marcher", "pas_encore", "conclusion"):
+        if isinstance(precedent.get(c), str) and (precedent[c].strip() or c == "pas_encore"):
+            entree[c] = precedent[c]
     lancer(projet, "decision", entree)
     return tid
 
@@ -2516,23 +2529,39 @@ def _de_quoi_verifier(projet, precedent):
                for x in precedent.get("fichiers") or [])
 
 
-def _rien_a_verifier(projet, etat, v, s):
-    """L'élément arrive à la validation sans rien à montrer : l'étape précédente est relancée une fois avec la consigne
-    d'ajouter de quoi vérifier ; au second échec, la tâche de validation est bloquée avec la raison (l'élément est
-    laissé de côté, il ne retient plus la barrière)."""
+CONSIGNE_DOIT_MARCHER = (
+    "Validation sans consigne : ton rapport n'a pas dit au Directeur ce qu'il doit juger. Refais l'étape en rendant "
+    f"`doit_marcher` (1 à 3 phrases, {rel.MAX_DOIT_MARCHER} caractères au plus : ce qui doit fonctionner pour valider), "
+    f"`pas_encore` ({rel.MAX_PAS_ENCORE} caractères au plus, vide si tout est attendu : ce qui n'est pas encore attendu à "
+    f"ce stade) et `conclusion` (une phrase, {rel.MAX_CONCLUSION} caractères au plus : « Validez si… »). Dans un lot : "
+    "dans le compte rendu de l'élément (`comptes_rendus`).")
+
+
+def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
+    """L'élément arrive à la validation sans rien à montrer (`rien`) ou sans dire ce qui doit marcher (`doit_marcher`) :
+    l'étape précédente est relancée une fois avec la consigne (un seul compteur pour les deux) ; au second échec, la
+    tâche de validation est bloquée avec la raison (l'élément est laissé de côté, il ne retient plus la barrière)."""
     production = _production(projet, v["fid"])
     avant = next((k for k in range(v["pas"] - 1, -1, -1) if not wf.est_validation(production[k])), None)
     if not v.get("rien_a_verifier") and avant is not None:
         v["rien_a_verifier"] = 1
         v["pas"] = avant
-        _dire(projet, v["fid"], f"« {v['element']['nom']} » arrive à « {s['nom']} » sans rien à vérifier : l'étape "
-                                f"« {production[avant]['nom']} » est refaite pour vous montrer le résultat.")
-        return _tache_de_flux(projet, etat, v, journal=[CONSIGNE_DE_QUOI_VERIFIER])
+        quoi = ("sans rien à vérifier" if "rien" in manques else "sans dire ce qui doit marcher")
+        _dire(projet, v["fid"], f"« {v['element']['nom']} » arrive à « {s['nom']} » {quoi} : l'étape "
+                                f"« {production[avant]['nom']} » est refaite.")
+        return _tache_de_flux(projet, etat, v, journal=[CONSIGNE_DE_QUOI_VERIFIER if m == "rien" else CONSIGNE_DOIT_MARCHER
+                                                        for m in manques])
     v.pop("rien_a_verifier", None)
     v["phase"] = "bloque"
     element = v["element"]
-    raison = (f"Rien à valider : l'étape précédente n'a rendu ni image, ni livrable téléchargeable, ni lien d'accès "
-              f"(deux fois). Demandez-les par un retour sur cette tâche.")
+    raisons = []
+    if "rien" in manques:
+        raisons.append("Rien à valider : l'étape précédente n'a rendu ni image, ni livrable téléchargeable, ni lien "
+                       "d'accès (deux fois). Demandez-les par un retour sur cette tâche.")
+    if "doit_marcher" in manques:
+        raisons.append("Validation sans consigne : l'étape précédente n'a pas dit ce qui doit marcher "
+                       "(`doit_marcher`, deux fois). Demandez-le par un retour sur cette tâche.")
+    raison = " ".join(raisons)
     tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
                                    "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
                                    "element": element["id"]})["id"]
@@ -2614,8 +2643,11 @@ def _retenir_le_rapport(v, r):
     # tourne sert tous les éléments d'un lot).
     points = (propre or {}).get("points_a_verifier") or r.get("points_a_verifier") or []
     acces = (propre or {}).get("acces") or r.get("acces")
+    # Ce que dit la validation : celui du compte rendu de l'élément s'il dit `doit_marcher`, sinon celui du rapport.
+    dit = propre if (propre or {}).get("doit_marcher") else r
     v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX],
-                            "points": list(points)[:rel.MAX_POINTS], "acces": acces}
+                            "points": list(points)[:rel.MAX_POINTS], "acces": acces,
+                            **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in dit}}
 
 
 def _texte_d_image(x):

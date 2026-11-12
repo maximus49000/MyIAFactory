@@ -122,3 +122,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Un script qui dessine du texte avec une police bitmap partielle doit lever une erreur sur tout caractère absent, plutôt que de l'ignorer.
+
+## G21 — Pour une musique en boucle, initialiser le filtre avec la fi
+Rôles : artiste
+Date : 2026-11-12
+
+Pour une musique en boucle, initialiser le filtre avec la fin du tampon et le faire passer deux fois, afin que la jonction reste continue.

@@ -20,6 +20,7 @@ fois, éléments repris) ; ce qui s'y perd est dit dans la passation.
 """
 import base64
 import json
+import os
 import re
 import time
 import unicodedata
@@ -1912,8 +1913,8 @@ def _matiere(projet, etat, t):
                     "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
                     "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                     "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
-                    "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, sous une racine "
-                    "d'images du projet) et la liste des étapes à réaliser, dans l'ordre : "
+                    "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
+                    f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
                     'rends `"cahier": {"maquette": [chemins], "etapes": [textes]}`. Une correction demandée par '
                     "l'utilisateur : refais la maquette et rends le cahier corrigé."]
     elif etape == "prototype":
@@ -1966,13 +1967,90 @@ def _chemin_du_projet(projet, chemin):
         return chemin
 
 
-def _chemins_du_projet(projet, r):
-    """Le rapport, ses chemins (images du message, maquette du cahier, fichiers) comptés depuis la factory."""
+IMAGE_RANGEE_MAX_OCTETS = 20 * 1024 * 1024     # ce que le bureau accepte de servir
+
+
+def _racines_d_images(projet):
+    """(dossier des réglages, racines d'images résolues, dossier `pieces`) : ce que le bureau sert (`images.racines`)."""
+    base, pieces, racines = projet.factory.resolve().parent, None, ["pieces", "captures"]
+    try:
+        f = fa.lire(projet.factory)
+        pieces = f["pieces"]
+        if f["reglages"]:
+            base = Path(f["reglages"]).resolve().parent
+            conf = json.loads(Path(f["reglages"]).read_text(encoding="utf-8-sig")).get("images")
+            if isinstance(conf, dict) and isinstance(conf.get("racines"), list):
+                racines = [x for x in conf["racines"] if isinstance(x, str) and x]
+    except (fa.FactoryInvalide, OSError, ValueError, AttributeError):
+        pass
+    return base, [(base / x).resolve() for x in racines], Path(pieces or base / "pieces").resolve()
+
+
+def _dossier_des_pieces(projet):
+    """Le dossier `pieces` compté depuis le dossier du projet (là où travaille l'agent), par exemple `.factory/pieces`."""
+    pieces = _racines_d_images(projet)[2]
+    try:
+        return pieces.relative_to(projet.dossier.resolve()).as_posix()
+    except ValueError:
+        return pieces.as_posix()
+
+
+def _est_dans(chemin, dossier):
+    try:
+        chemin.relative_to(dossier)
+        return True
+    except ValueError:
+        return False
+
+
+def _image_rangee(projet, chemin, fid):
+    """Une image citée par un agent, rangée là où le bureau la sert. Celle qui est déjà sous une racine d'images est
+    gardée ; celle qui existe ailleurs dans le dossier du projet est COPIÉE (l'agent peut s'en servir) dans
+    `pieces/<fid>/`, sans écraser, et son chemin est compté depuis la factory. Absente, hors du projet ou pas une image
+    (extension et début du contenu) : le chemin est gardé tel quel, rien n'est copié."""
+    if not fid or not isinstance(chemin, str) or not chemin.strip():
+        return chemin
+    p = Path(chemin.replace("\\", "/"))
+    signature = outil.SIGNATURES.get(p.suffix.lower())
+    if signature is None:
+        return chemin
+    base, racines, pieces = _racines_d_images(projet)
+    try:
+        candidats = [p] if p.is_absolute() else [base / p, projet.dossier / p]
+        source = next((c.resolve() for c in candidats if c.is_file()), None)
+        if source is None or not _est_dans(source, projet.dossier.resolve()):
+            return chemin
+        if any(_est_dans(source, r) for r in racines):
+            return chemin
+        if source.stat().st_size > IMAGE_RANGEE_MAX_OCTETS:
+            return chemin
+        octets = source.read_bytes()
+        if not octets.startswith(signature[0]):
+            return chemin
+        dossier = pieces / fid
+        dossier.mkdir(parents=True, exist_ok=True)
+        cible, n = dossier / source.name, 1
+        while cible.exists() and cible.read_bytes() != octets:     # la même image déjà rangée n'est pas doublée
+            n += 1
+            cible = dossier / f"{source.stem}-{n}{source.suffix}"
+        if not cible.exists():
+            cible.write_bytes(octets)
+        return Path(os.path.relpath(cible, base)).as_posix()
+    except OSError:
+        return chemin
+
+
+def _chemins_du_projet(projet, r, fid=None):
+    """Le rapport, ses chemins (images du message, maquette du cahier, fichiers) comptés depuis la factory. Les images
+    qui n'étaient pas sous une racine d'images sont copiées sous `pieces/<fid>/` (voir `_image_rangee`)."""
     r = dict(r)
+
+    def image(x):
+        return _image_rangee(projet, _chemin_du_projet(projet, x), fid)
     if isinstance(r.get("message"), dict) and isinstance(r["message"].get("images"), list):
-        r["message"] = {**r["message"], "images": [_chemin_du_projet(projet, x) for x in r["message"]["images"]]}
+        r["message"] = {**r["message"], "images": [image(x) for x in r["message"]["images"]]}
     if isinstance(r.get("cahier"), dict) and isinstance(r["cahier"].get("maquette"), list):
-        r["cahier"] = {**r["cahier"], "maquette": [_chemin_du_projet(projet, x) for x in r["cahier"]["maquette"]]}
+        r["cahier"] = {**r["cahier"], "maquette": [image(x) for x in r["cahier"]["maquette"]]}
     r["fichiers"] = [{**f, "chemin": _chemin_du_projet(projet, f.get("chemin"))} for f in r.get("fichiers") or []]
     return r
 
@@ -1986,11 +2064,11 @@ def traiter_retour(projet, execution, etat):
     r = execution.rapport
     if r is None:
         return _agent_en_echec(projet, etat, execution, depart)
-    r = _chemins_du_projet(projet, r)
     fid = None
     for tid in taches:
         t = _tache(projet, tid)
         fid = fid or t.get("fonctionnalite")
+    r = _chemins_du_projet(projet, r, fid)
     liee = _m(etat, "liees").pop(taches[0], None)
     reponse = ((r.get("message") or {}).get("texte")) or "C'est fait."
     if r["statut"] in ("accord_requis", "outil_refuse"):

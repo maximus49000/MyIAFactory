@@ -156,6 +156,50 @@ class Demandes(Base):
             self.assertEqual([x["chemin"] for x in n["fichiers"]], ["pieces/f2/x.md", "pieces/f2/y.md", "src/main.kt"])
             self.assertEqual(r["cahier"]["maquette"], [".factory\\pieces\\f2\\a.png"])     # le rapport lu n'est pas modifié
 
+    def test_images_hors_des_racines_copiees_sous_les_pieces_de_la_fonctionnalite(self):
+        """Vu en vrai : maquettes écrites sous `assets/maquette/` du projet, que le bureau ne sert pas."""
+        import tempfile
+        from pathlib import Path
+        from orchestrateur import outil
+        png = outil.SIGNATURES[".png"][0] + b"corps"
+        with tempfile.TemporaryDirectory() as d:
+            jeu = Path(d) / "jeu"
+            factory = jeu / ".factory"
+            (factory / "pieces" / "f1").mkdir(parents=True)
+            (jeu / "assets").mkdir()
+            (factory / "factory.json").write_text(json.dumps(
+                {"skill": str(Path(__file__).resolve().parent.parent), "genre": None, "mots_interdits": [],
+                 "services": [{"id": "dev", "nom": "Dev"}], "reglages": "reglages.json",
+                 "flux": [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}]}), encoding="utf-8")
+            (factory / "reglages.json").write_text(json.dumps({"images": {"racines": ["pieces"]}}), encoding="utf-8")
+            (jeu / "assets" / "a.png").write_bytes(png)
+            (jeu / "assets" / "b.png").write_bytes(png + b"2")
+            (jeu / "assets" / "faux.png").write_bytes(b"pas une image")
+            (jeu / "assets" / "note.txt").write_bytes(png)
+            (factory / "pieces" / "f1" / "a.png").write_bytes(b"deja la")      # un nom déjà pris : jamais écrasé
+            (factory / "pieces" / "f1" / "deja.png").write_bytes(png)
+            (Path(d) / "dehors.png").write_bytes(png)
+            projet = regles.Projet(factory / "factory.json")
+            r = {"statut": "fait", "message": {"texte": "v", "images": ["assets/a.png", "pieces/f1/deja.png"]},
+                 "cahier": {"maquette": ["assets\\b.png", "assets/faux.png", "assets/absente.png", "assets/note.txt",
+                                         str(Path(d) / "dehors.png"), "../dehors.png"], "etapes": ["x"]}}
+            n = regles._chemins_du_projet(projet, r, "f1")
+            self.assertEqual(n["message"]["images"], ["pieces/f1/a-2.png", "pieces/f1/deja.png"])
+            self.assertEqual(n["cahier"]["maquette"], ["pieces/f1/b.png", "assets/faux.png", "assets/absente.png",
+                                                       "assets/note.txt", str(Path(d) / "dehors.png"), "../dehors.png"])
+            self.assertEqual((factory / "pieces" / "f1" / "b.png").read_bytes(), png + b"2")
+            self.assertEqual((factory / "pieces" / "f1" / "a.png").read_bytes(), b"deja la")
+            self.assertTrue((jeu / "assets" / "a.png").is_file())              # copiée, pas déplacée
+            self.assertEqual(sorted(p.name for p in (factory / "pieces" / "f1").iterdir()),
+                             ["a-2.png", "a.png", "b.png", "deja.png"])
+            again = regles._chemins_du_projet(projet, r, "f1")                 # la même image n'est pas doublée
+            self.assertEqual(again["message"]["images"][0], "pieces/f1/a-2.png")
+            self.assertEqual(regles._dossier_des_pieces(projet), ".factory/pieces")
+
+    def test_le_cadrage_dit_ou_ecrire_les_maquettes(self):
+        _, actions = self.cadrer(texte="Des écrans pour l'appli")
+        self.assertIn("pieces/f1/", actions[0][3])
+
     def test_le_cadrage_pose_une_seule_serie_de_questions(self):
         """Au passage en vrai, l'agent de cadrage reposait des questions à chaque tour et n'écrivait jamais le cahier."""
         _, actions = self.cadrer(texte="Des écrans pour l'appli")

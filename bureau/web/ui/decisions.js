@@ -5,11 +5,12 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
-  demandeEnvironnement} from "./actions.js";
+  demandeEnvironnement, demandeElargirGenre} from "./actions.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
-const MOTIF_GENRE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const plein = (t) => typeof t === "string" && t.trim() !== "";
+const MOTIF_GENRE =/^[a-z0-9][a-z0-9-]{0,39}$/;
 
 function partie(titre, vide, elements) {
   const s = el("section", "partie");
@@ -56,6 +57,7 @@ function decisionFonctionnalite(ctx, d, boutons) {
 function decisionGenre(ctx, d) {
   const li = el("li", "decision-genre");
   li.append(el("div", "decision-texte", d.texte), el("div", "lecon-meta", "Genre proposé : " + d.propose));
+  if (plein(d.description)) li.append(el("div", "lecon-meta", "Description proposée : " + d.description));
   if (!ctx.etat.agir) return li;
   const connus = Array.isArray(d.genres_connus) ? d.genres_connus : [];
   const menu = el("select", "genre-choix");
@@ -76,6 +78,8 @@ function decisionGenre(ctx, d) {
   const maj = () => {
     identifiant.hidden = menu.value !== "";
     description.hidden = !nouveau();
+    // la phrase du genre nouveau est déjà rédigée : il n'y a qu'à valider (ou à corriger)
+    if (nouveau() && !description.value && plein(d.description) && genre() === d.propose) description.value = d.description;
   };
   menu.addEventListener("change", maj);
   identifiant.addEventListener("input", maj);
@@ -98,6 +102,7 @@ function decisionGenreFonctionnalite(ctx, d) {
   const li = el("li", "decision-genre");
   li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte),
             el("div", "lecon-meta", "Genre proposé : " + d.propose + (d.incertain ? " (le moteur hésite)" : "")));
+  if (plein(d.nouveau?.description)) li.append(el("div", "lecon-meta", "Description proposée : " + d.nouveau.description));
   const issues = issuesGenreFonctionnalite(d, ctx.etat.agir);
   if (!issues.length) return li;
   const connus = Array.isArray(d.genres_connus) ? d.genres_connus : [];
@@ -156,6 +161,27 @@ function decisionGenreFonctionnalite(ctx, d) {
   return li;
 }
 
+// « Élargir la description de ce genre ? » : l'ancienne et la nouvelle description (pré-remplie, modifiable). Valider
+// l'écrit dans la mémoire du genre ; refuser la laisse telle quelle. La fonctionnalité n'attend pas cette réponse.
+function decisionElargirGenre(ctx, d) {
+  const li = el("li", "decision-genre");
+  li.append(el("div", "decision-texte", d.texte), el("div", "lecon-meta", "Description actuelle : " + d.ancienne));
+  if (!ctx.etat.agir) return li;
+  const description = document.createElement("textarea");
+  description.rows = 2;
+  description.maxLength = 3500;
+  description.value = d.propose || "";
+  description.setAttribute("aria-label", "Nouvelle description du genre");
+  const erreur = el("p", "saisie-erreur", "");
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(
+    boutonDemande(ctx, "Valider la nouvelle description", "bouton", () => demandeElargirGenre(d, "valider", description.value),
+      () => { if (!description.value.trim()) { erreur.textContent = "La description ne peut pas être vide."; return false; } erreur.textContent = ""; return true; }),
+    boutonDemande(ctx, "Garder l'ancienne", "bouton secondaire", () => demandeElargirGenre(d, "refuser")));
+  li.append(description, erreur, rangee);
+  return li;
+}
+
 // Un outil du poste ne s'est pas installé : ce qui manque, puis « C'est fait » (revérifie) ou « Continuer sans ».
 function decisionEnvironnement(ctx, d) {
   const manque = Array.isArray(d.environnement) ? d.environnement : [];
@@ -209,6 +235,8 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Demandes d'un autre genre", "Aucune demande ne sort du genre du projet",
     d.genresDemandes.map((x) => decisionGenreFonctionnalite(ctx, x))));
   contenu.append(partie("Genres à confirmer", "Aucun genre à confirmer", d.genres.map((x) => decisionGenre(ctx, x))));
+  contenu.append(partie("Descriptions de genre à élargir", "Aucune description de genre à élargir",
+    d.elargissements.map((x) => decisionElargirGenre(ctx, x))));
   contenu.append(partie("Méthode à revoir ?", "Aucune méthode à revoir", d.revoir.map((x) => decisionFonctionnalite(ctx, x, [
     boutonDemande(ctx, "Oui, revoir", "bouton", () => demandeMethode(x.fonctionnalite, "revoir")),
     boutonDemande(ctx, "Non, garder", "bouton secondaire", () => demandeMethode(x.fonctionnalite, "garder"))]))));

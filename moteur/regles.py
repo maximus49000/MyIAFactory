@@ -514,7 +514,8 @@ def _classer(projet, etat, fid, suite):
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
             lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "confirmer_genre",
                                         "texte": d["texte"], "propose": d["propose"],
-                                        "genres_connus": d.get("genres_connus") or [], "fonctionnalite": fid})
+                                        "genres_connus": d.get("genres_connus") or [], "fonctionnalite": fid,
+                                        **({"description": d["description"]} if d.get("description") else {})})
             _dire(projet, fid, d["texte"])
             _terminer(projet, suite, "Le projet n'a pas encore de genre : confirmez celui que je vous propose.")
             return []
@@ -600,6 +601,8 @@ def _apres_classer_genre(projet, o, ctx, etat):
                  "choisir un autre ?")
         entree = {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": texte, "propose": piste,
                   "genres_connus": connus}
+        if nouveau and piste == nouveau["id"]:      # la phrase du genre nouveau est déjà rédigée : il n'y a qu'à valider
+            entree["description"] = nouveau["description"]
         if fid:
             entree["fonctionnalite"] = fid
         lancer(projet, "decision", entree)
@@ -614,7 +617,8 @@ def _apres_classer_genre(projet, o, ctx, etat):
         texte = (f"Cette demande ne semble pas cohérente avec le projet « {fac['nom']} » ({raison.strip().rstrip('.')}). "
                  "La faire dans un nouveau projet, ou dans ce projet quand même ?")
         return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus,
-                                           incertain=verdict in ("meme", "proche", "incertain"))
+                                           incertain=verdict in ("meme", "proche", "incertain"),
+                                           elargissement=o.get("elargissement"))
     if verdict in ("meme", "proche"):
         lancer(projet, "fonctionnalite", {"id": fid, "genre": o["genre"]})
         if verdict == "proche":
@@ -630,22 +634,26 @@ def _apres_classer_genre(projet, o, ctx, etat):
     else:
         texte = (f"Je ne suis pas sûr du genre de cette demande (le projet est de genre {du_projet}). {raison} "
                  "Est-ce le même genre, ou faut-il un autre projet ?")
-    return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain=verdict == "incertain")
+    return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain=verdict == "incertain",
+                                       elargissement=o.get("elargissement"))
 
 
-def _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain):
+def _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain, elargissement=None):
     """La question « nouveau projet, ou ce projet ? » : rien ne démarre avant la réponse."""
     entree = {"action": "poser", "portee": fid, "genre": "genre_fonctionnalite", "texte": texte, "propose": propose,
               "incertain": incertain, "genres_connus": connus}
     if nouveau:
         entree["nouveau"] = {"id": nouveau["id"], "description": nouveau["description"]}
+    if elargissement:      # la description du genre du projet, élargie à cette demande, si on la garde dans ce genre
+        entree["elargissement"] = elargissement
     lancer(projet, "decision", entree)
     _dire(projet, fid, texte)
     _terminer(projet, ctx, "Cette demande ne semble pas être du genre du projet : dites où la faire.")
     return []
 
 
-def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=None, decision=None):
+def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=None, decision=None,
+                force_elargir=False):
     """La fonctionnalité reste dans ce projet avec le genre `genre` (connu, ou nouveau avec sa description), puis son
     workflow est proposé. Refus si un genre nouveau n'a pas de description (rien n'est alors changé)."""
     fac = _factory(projet)
@@ -658,7 +666,37 @@ def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=No
     if decision is not None:
         lancer(projet, "decision", {"action": "lever", "id": decision["id"]})
     lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+    if decision is not None and (force_elargir or _gardee_hors_piste(decision, genre)):
+        _proposer_elargissement(projet, fid, genre,
+                                decision.get("elargissement") if genre == _genre_du_projet(fac) else None)
     return _proposer(projet, etat, fid, suite)
+
+
+def _gardee_hors_piste(decision, genre):
+    """Vrai si la demande, jugée d'un autre genre (ou illogique pour le projet), est gardée dans un genre existant qui
+    n'était pas la piste du moteur : la description de ce genre doit alors couvrir ce nouveau travail."""
+    return genre in (decision.get("genres_connus") or []) and genre != decision.get("propose")
+
+
+def _proposer_elargissement(projet, fid, genre, phrase):
+    """Au Directeur, sans bloquer la fonctionnalité : élargir la description du genre gardé (ancienne et nouvelle
+    description, la nouvelle pré-remplie). La phrase vient du classement ; sinon, une phrase déterministe."""
+    ancienne = next((g.get("domaine") for g in lancer(projet, "genre", {"action": "lister"})["genres"]
+                     if g["id"] == genre), None)
+    ancienne = " ".join(str(ancienne or "").split())
+    if not ancienne or ancienne.lower().startswith("à préciser"):
+        return
+    nom = " ".join(str(_fonc(projet, fid).get("nom") or "").split()).rstrip(" .")
+    nouvelle = " ".join((phrase or "").split()) or (
+        f"{ancienne.rstrip(' .')}, et aussi {nom[:1].lower() + nom[1:]}" if nom else "")
+    if not nouvelle or nouvelle == ancienne:
+        return
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "elargir_genre", "cible": genre,
+                                "ancienne": ancienne, "propose": nouvelle, "fonctionnalite": fid,
+                                "texte": f"Le genre « {genre} » garde cette fonctionnalité, qui sort un peu de sa "
+                                         f"description. Élargir la description en « {nouvelle} » ?"})
+    _dire(projet, fid, f"Le genre « {genre} » est gardé ; je propose d'en élargir la description : « {nouvelle} » "
+                       "(à valider au bureau de direction, sans attendre).")
 
 
 def _decision_de(f, i, genre):
@@ -685,7 +723,7 @@ def _sur_genre_fonctionnalite(projet, demande, etat):
     else:
         raise Refus(f"choix inconnu : {choix}")
     return _garder_ici(projet, etat, fid, suite, genre, d.get("genres_connus") or [], d.get("nouveau"),
-                       demande.get("description"), d)
+                       demande.get("description"), d, force_elargir=choix == "meme")
 
 
 def _factory_du_projet_cree(chemin_reglages):
@@ -1072,8 +1110,10 @@ def _sur_genre(projet, demande, etat):
     court = _etat(projet)
     d = next((x for x in court["decisions"] if x["id"] == demande["decision"]), None)
     e = {"action": "fixer", "genre": demande["genre"]}
-    if demande.get("description"):
-        e["description"] = demande["description"]
+    description = demande.get("description") or (
+        (d or {}).get("description") if demande["genre"] == (d or {}).get("propose") else None)
+    if description:      # la phrase de l'utilisateur, sinon celle qui était proposée
+        e["description"] = description
     lancer(projet, "genre", e)
     for x in court["decisions"]:
         if x["id"] == demande["decision"]:
@@ -1083,6 +1123,26 @@ def _sur_genre(projet, demande, etat):
     if fid:      # une fonctionnalité attendait ce genre : elle poursuit son parcours
         lancer(projet, "fonctionnalite", {"id": fid, "genre": demande["genre"]})
         return _proposer(projet, etat, fid, {"fonctionnalite": fid})
+    return []
+
+
+def _sur_elargir_genre(projet, demande, etat):
+    """La réponse du Directeur à « élargir la description de ce genre ? » : valider (éventuellement corrigée) ou refuser.
+    Dans les deux cas la fonctionnalité continue dans son genre."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == "elargir_genre"),
+             None)
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    if demande["verdict"] == "valider":
+        description = (demande.get("description") or "").strip() or d["propose"]
+        lancer(projet, "genre", {"action": "decrire", "genre": d["cible"], "description": description})
+        reponse = f"La description du genre « {d['cible']} » est élargie : {description}"
+    elif demande["verdict"] == "refuser":
+        reponse = f"La description du genre « {d['cible']} » ne change pas."
+    else:
+        raise Refus(f"réponse inconnue : {demande['verdict']}")
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, {"demande": demande["id"]}, reponse)
     return []
 
 
@@ -1175,6 +1235,7 @@ def _sur_challenge(projet, demande, etat):
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
+        "elargir_genre": _sur_elargir_genre,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
         "partenaires_actualiser": _sur_partenaires, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}

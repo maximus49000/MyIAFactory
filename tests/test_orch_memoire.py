@@ -248,6 +248,17 @@ class TestMemoire(AvecDepots):
         self.assertFalse(memoire.creer_genre(self.ma, "autre", "  ", [])[0])
         self.assertFalse(memoire.creer_genre(self.ma, "autre", "Ville-Lumière", ["ville lumiere"])[0])
 
+    def test_decrire_genre_remplace_le_domaine(self):
+        ok, message = memoire.decrire_genre(self.ma, "vitrine", "un site de présentation, et aussi des blogs", [])
+        self.assertTrue(ok, message)
+        g = {x["id"]: x for x in memoire.genres(self.ma)}["vitrine"]
+        self.assertEqual(g["domaine"], "un site de présentation, et aussi des blogs")
+        self.assertEqual(g["livrable"], "un site")
+        self.assertIn("Garder les textes d'accueil courts", (self.ma / "genres" / "vitrine.md").read_text(encoding="utf-8"))
+        self.assertFalse(memoire.decrire_genre(self.ma, "inconnu", "Un genre", [])[0])
+        self.assertFalse(memoire.decrire_genre(self.ma, "vitrine", "  ", [])[0])
+        self.assertFalse(memoire.decrire_genre(self.ma, "vitrine", "Ville-Lumière", ["ville lumiere"])[0])
+
     def test_creer_genre_identifiant_interdit(self):
         # L'identifiant devient un nom de fichier, un titre et un message de commit publics : il est contrôlé aussi.
         n = self.nb_commits(self.a)

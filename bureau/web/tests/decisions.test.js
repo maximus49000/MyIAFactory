@@ -79,3 +79,41 @@ test("environnement : ce qui manque, « C'est fait » et « Continuer sans »", 
   await bouton(contenu, "Continuer sans").auteurs.click[0]();
   assert.deepEqual(demandes.map((d) => [d.type, d.verdict, d.fonctionnalite]), [["environnement", "fait", "f1"], ["environnement", "continuer", "f1"]]);
 });
+
+const ELARGIR = {id: "e1", genre: "elargir_genre", texte: "Élargir la description ?", cible: "badges",
+  ancienne: "Badges de chat", propose: "Badges de chat, et aussi logos de chaîne", fonctionnalite: "f1"};
+
+test("élargir un genre : ancienne et nouvelle description pré-remplie, valider ou garder l'ancienne", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [ELARGIR]});
+  assert.match(contenu.textContent, /Description actuelle : Badges de chat/);
+  const zone = contenu.tous((n) => n.tagName === "textarea")[0];
+  assert.equal(zone.value, ELARGIR.propose);
+  await bouton(contenu, "Valider la nouvelle description").auteurs.click[0]();
+  zone.value = "Badges, emotes et logos";
+  await bouton(contenu, "Valider la nouvelle description").auteurs.click[0]();
+  await bouton(contenu, "Garder l'ancienne").auteurs.click[0]();
+  assert.deepEqual(demandes, [
+    {type: "elargir_genre", decision: "e1", verdict: "valider"},
+    {type: "elargir_genre", decision: "e1", verdict: "valider", description: "Badges, emotes et logos"},
+    {type: "elargir_genre", decision: "e1", verdict: "refuser"}]);
+});
+
+test("genre du projet : la phrase du genre nouveau est proposée et pré-remplie", async () => {
+  const sans = {id: "p1", genre: "confirmer_genre", texte: "Genre ?", propose: "jeu-mobile", genres_connus: ["jeu-web"],
+    description: "Jeux pour téléphone"};
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [sans]});
+  assert.match(contenu.textContent, /Description proposée : Jeux pour téléphone/);
+  const menu = contenu.tous((n) => n.tagName === "select" && n.className === "genre-choix")[0];
+  menu.value = "jeu-mobile";               // un vrai menu choisit d'emblée le genre proposé
+  menu.auteurs.change[0]();
+  const zone = contenu.tous((n) => n.tagName === "textarea")[0];
+  assert.equal(zone.value, "Jeux pour téléphone");
+  await bouton(contenu, "Confirmer le genre").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "genre", decision: "p1", genre: "jeu-mobile", description: "Jeux pour téléphone"}]);
+});
+
+test("décision d'un autre genre : la phrase du genre nouveau est montrée", () => {
+  const nouveau = {...GENRE, nouveau: {id: "jeu-mobile", description: "Jeux pour téléphone"}};
+  const {contenu} = rendre({...ETAT, fonctionnalites: [{...ETAT.fonctionnalites[0], decisions: [nouveau]}]});
+  assert.match(contenu.textContent, /Description proposée : Jeux pour téléphone/);
+});

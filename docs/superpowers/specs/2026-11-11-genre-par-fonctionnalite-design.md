@@ -325,3 +325,25 @@ Quand il est faux, la `raison` explique l'incohérence. Règles de `_apres_class
 
 Pour le faux, « C'est le même genre » est offert (`incertain` vrai) sauf pour `autre`. Le code de l'issue « Dans ce
 projet » est partagé (`_garder_ici`).
+
+## 13. Description d'un genre : proposée d'avance, élargie si on la garde (décision de l'utilisateur, 2026-11-12)
+
+**A. Un genre nouveau arrive avec sa phrase.** `classer_genre` exige déjà `nouveau.description` (une ligne) : cette
+phrase est posée sur les décisions (`confirmer_genre.description`, `genre_fonctionnalite.nouveau.description`, déjà
+dans `organisation.workflow.genre_nouveau`) et le bureau la montre (« Description proposée : … ») et la pré-remplit dans
+le champ. L'utilisateur n'a qu'à valider ou à corriger ; s'il ne change rien, c'est elle qui est enregistrée (plus de
+refus « a besoin d'une description » pour la piste du moteur). Une description reste demandée quand l'utilisateur
+choisit lui-même un autre genre nouveau. Aucun appel d'IA de plus.
+
+**B. Garder une demande hors piste élargit le genre, avec l'accord du Directeur.** Quand une demande jugée d'un autre
+genre (`autre`, `incertain`, `coherente` faux) est finalement rattachée à un genre existant (« C'est le même genre », ou
+« Dans ce projet » avec un genre connu différent de la piste), le moteur pose une décision de portée projet
+`elargir_genre` `{cible, ancienne, propose}` : l'ancienne description (`domaine`) et la nouvelle, pré-remplie. La
+fonctionnalité **n'attend pas** : son workflow est proposé tout de suite. Réponse : nouveau type de demande
+`elargir_genre` `{decision, verdict: valider | refuser, description?}`. Valider écrit la description dans la mémoire du
+genre (`orchestrateur/memoire.decrire_genre`, commande `genre` action `decrire`, même chemin git et mêmes contrôles de mot
+interdit que `creer_genre`) ; refuser la laisse telle quelle. La nouvelle phrase vient de `classer_genre`
+(`elargissement`, facultatif : la description du genre du projet réécrite pour couvrir la demande) quand le genre
+gardé est celui du projet, sinon elle est déterministe : « <ancienne>, et aussi <nom de la fonctionnalité> ». Une ligne
+de la discussion la montre. Rien n'est élargi pour une piste suivie, un genre nouveau, ni une demande cohérente d'un
+autre genre qui reste ici avec un genre nouveau.

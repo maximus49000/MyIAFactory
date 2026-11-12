@@ -219,6 +219,16 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(v(coherente="oui"))
         self.assertIsNotNone(v(coherente=1))
 
+    def test_classer_genre_elargissement_facultatif_sans_mot_interdit(self):
+        v = lambda **c: self._varie("classer_genre", **c)
+        self.assertIsNone(v(elargissement="Badges et emotes de chat, et aussi logos de chaîne."))
+        self.assertIsNone(v(elargissement=None))
+        self.assertIsNotNone(v(elargissement=""))
+        self.assertIsNotNone(v(elargissement="deux\nlignes"))
+        self.assertIsNotNone(v(elargissement="x" * 301))
+        self.assertIsNotNone(v(elargissement=3))
+        self.assertIsNotNone(v(elargissement="Les logos de Zorglub."))      # mot interdit : un genre est public
+
     def test_classer_genre_nouveau_mot_interdit_refuse(self):
         v = lambda **c: self._varie("classer_genre", verdict="autre", genre=None, **c)
         self.assertIsNotNone(v(nouveau={"id": "zorglub-jeux", "description": "Les jeux."}))

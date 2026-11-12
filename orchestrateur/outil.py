@@ -46,7 +46,7 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation", "genre_fonctionnalite", "environnement", "partenaire_regle", "partenaires_actualiser",
+                 "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "partenaire_regle", "partenaires_actualiser",
                  "partenaires_maj")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
@@ -674,11 +674,20 @@ def cmd_decision(ctx, e):
                                                                    for g in connus)):
                     raise Refus("« confirmer_genre » demande « propose » et « genres_connus » (identifiants de genre).")
                 d.update(propose=e["propose"], genres_connus=connus)
+                if e.get("description") is not None:      # la phrase proposée pour un genre nouveau
+                    d["description"] = _phrase(e, "description")
                 if e.get("fonctionnalite") is not None:   # la fonctionnalité qui attend le genre du projet
                     _fonc(s, e["fonctionnalite"])
                     d["fonctionnalite"] = e["fonctionnalite"]
             elif genre == "organisation":
                 d["organisation"] = _organisation_decidee(ctx, e.get("organisation"))
+            elif genre == "elargir_genre":
+                if not isinstance(e.get("cible"), str) or not fa.MOTIF_GENRE.match(e["cible"]):
+                    raise Refus("« elargir_genre » demande « cible » (identifiant du genre à décrire).")
+                d.update(cible=e["cible"], ancienne=_phrase(e, "ancienne"), propose=_phrase(e, "propose"))
+                if e.get("fonctionnalite") is not None:
+                    _fonc(s, e["fonctionnalite"])
+                    d["fonctionnalite"] = e["fonctionnalite"]
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -707,6 +716,13 @@ def cmd_decision(ctx, e):
         return {"id": d["id"]}
 
 
+def _phrase(e, cle):
+    v = e.get(cle)
+    if not isinstance(v, str) or not v.strip():
+        raise Refus(f"« {cle} » demande un texte.")
+    return " ".join(v.split())
+
+
 def _genre_fonctionnalite_decide(ctx, e):
     """Les champs de la décision `genre_fonctionnalite` : le genre proposé, le nouveau genre éventuel (`{id,
     description}`), si le moteur hésite, et les genres connus entre lesquels choisir."""
@@ -718,6 +734,8 @@ def _genre_fonctionnalite_decide(ctx, e):
         raise Refus("« genre_fonctionnalite » demande « propose » et « genres_connus » (identifiants de genre) "
                     "et « incertain » (vrai ou faux).")
     sortie = {"propose": e["propose"], "genres_connus": list(connus), "incertain": bool(e.get("incertain", False))}
+    if e.get("elargissement") is not None:      # la description du genre du projet, élargie à cette demande
+        sortie["elargissement"] = _phrase(e, "elargissement")
     if nouveau is not None:
         if (not isinstance(nouveau, dict) or not isinstance(nouveau.get("id"), str)
                 or not fa.MOTIF_GENRE.match(nouveau["id"]) or not isinstance(nouveau.get("description"), str)
@@ -1850,14 +1868,22 @@ def cmd_genre(ctx, e):
     action = e.get("action")
     if action == "lister":
         return {"genre": ctx.f["genre"], "genres": memoire.genres(ctx.f["memoire"])}
+    if action == "decrire":    # élargir la description d'un genre existant (après l'accord du Directeur)
+        genre = texte(e, "genre")
+        if genre not in {g["id"] for g in memoire.genres(ctx.f["memoire"])}:
+            raise Refus(f"Genre inconnu : « {genre} ».")
+        ok, message = memoire.decrire_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"], git=GIT)
+        if not ok:
+            raise Refus(message)
+        return {"genre": genre, "message": message}
     if action != "fixer":
-        raise Refus("« action » doit valoir lister ou fixer.")
+        raise Refus("« action » doit valoir lister, fixer ou decrire.")
     genre = texte(e, "genre")
     if not fa.MOTIF_GENRE.match(genre):
         raise Refus("Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus).")
     cree = genre not in {g["id"] for g in memoire.genres(ctx.f["memoire"])}
     if cree:   # un nouveau genre : son fichier de mémoire, avec sa description, avant de le noter au projet
-        ok, message = memoire.creer_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"])
+        ok, message = memoire.creer_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"], git=GIT)
         if not ok:
             raise Refus(message)
     fa.ecrire_genre(ctx.f["chemin"], genre)

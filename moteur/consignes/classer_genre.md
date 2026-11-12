@@ -27,12 +27,12 @@ de jeu vidéo roguelike) ; la `raison` dit alors pourquoi. `null` : impossible �
 Donne aussi l'`intitule` : le nom court de la fonctionnalité demandée (3 à 6 mots, 60 caractères au plus, sans point
 final, par exemple « Casse-briques Android »), ou null si la demande est trop floue pour la nommer.
 
-Donne toujours la `raison` en une phrase, en français, sans jargon : elle s'affiche au bureau.
-
-Forme de la réponse :
+`elargissement` : si le verdict n'est pas `meme`, la description du genre du projet (`domaine`) réécrite sur une ligne
+pour couvrir aussi cette demande, au cas où l'utilisateur la garderait là (« badges et emotes de chat, et aussi logos de
+chaîne »), sans nom propre ni mot interdit ; sinon null. Donne toujours la `raison` en une phrase, en français.
 
 ```json
-{"verdict": "proche", "genre": "…", "nouveau": null, "coherente": true, "intitule": "…", "raison": "…"}
+{"verdict": "proche", "genre": "…", "nouveau": null, "coherente": true, "elargissement": null, "intitule": "…", "raison": "…"}
 ```
 
 `genre` ne cite qu'un id du dossier ; `nouveau` vaut null sauf pour `autre` ou `incertain` sans genre connu.

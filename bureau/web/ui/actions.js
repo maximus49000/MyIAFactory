@@ -115,7 +115,7 @@ export function resumeEnvoi(resultats) {
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-                  genresDemandes: [], environnements: []};
+                  genresDemandes: [], environnements: [], elargissements: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -134,6 +134,7 @@ export function decisionsDirecteur(etat) {
     if (d?.genre === "confirmer_genre") sortie.genres.push({...d});
     else if (d?.genre === "session_cloud") sortie.sessions.push({...d});
     else if (d?.genre === "organisation") sortie.organisations.push({...d});
+    else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
   }
   return sortie;
 }
@@ -174,6 +175,16 @@ export function demandeToutes(lecons, verdict, etages) {
 export function demandeGenre(decision, genre, description) {
   const d = {type: "genre", decision, genre};
   if (plein(description)) d.description = description;
+  return d;
+}
+
+// Élargir la description d'un genre gardé : « valider » (avec la description corrigée si elle diffère de la phrase
+// proposée) ou « refuser » (le genre garde sa description).
+export function demandeElargirGenre(decision, verdict, description) {
+  const d = {type: "elargir_genre", decision: decision.id, verdict};
+  if (verdict === "valider" && plein(description) && description.trim() !== (decision.propose || "").trim()) {
+    d.description = description.trim();
+  }
   return d;
 }
 

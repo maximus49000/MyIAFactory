@@ -320,6 +320,7 @@ réelles avec l'accord de l'utilisateur : environ **0,39 €** (banc 0,37 €, e
   question « nouveau projet ou ce projet ? » est posée quel que soit le genre ; vrai : une demande d'un autre genre reste
   dans le projet avec un workflow dédié, sans question ; null ou absent : comportement d'avant (voir la spec, section 12).
   Non mesuré au banc avec un vrai modèle.
+- **Descriptions de genre (2026-11-12)** : la phrase d'un genre nouveau est proposée d'avance et pré-remplie au bureau (rien à retaper) ; garder une demande hors piste dans un genre existant pose une décision `elargir_genre` (ancienne et nouvelle description, validée au bureau de direction, sans bloquer la fonctionnalité) qui réécrit la description du genre dans la mémoire de la skill (voir la spec, section 13). Non mesuré au banc avec un vrai modèle ; `elargissement` est un champ de plus à rendre par `classer_genre`.
 
 ## Messages à coller
 

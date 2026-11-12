@@ -43,7 +43,8 @@ ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", 
 COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
 VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
-LONGUEUR_INTITULE = 60            # le nom court d'une fonctionnalité, rendu par le classement de la demande
+LONGUEUR_ELARGISSEMENT = 300      # la description d'un genre élargie à une demande, rendue par le classement
+LONGUEUR_INTITULE = 60           # le nom court d'une fonctionnalité, rendu par le classement de la demande
 MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
@@ -264,6 +265,13 @@ def _valider_classer_genre(o, d):
         return f"« intitule » est null ou un nom court de la fonctionnalité sur une ligne ({LONGUEUR_INTITULE} caractères au plus)."
     if o.get("coherente") is not None and not isinstance(o["coherente"], bool):
         return "« coherente » est vrai, faux ou null (la demande a-t-elle sa place dans ce projet ?)."
+    elargissement = o.get("elargissement")
+    if elargissement is not None:
+        if not (_ligne(elargissement) and len(elargissement.strip()) <= LONGUEUR_ELARGISSEMENT):
+            return (f"« elargissement » est null ou la description du genre du projet élargie à cette demande, sur une "
+                    f"ligne ({LONGUEUR_ELARGISSEMENT} caractères au plus).")
+        if mots_trouves(elargissement, d.get("mots_interdits") or []):
+            return "« elargissement » contient un mot interdit du projet : un genre est public, décris-le sans nom propre."
     du_projet = _ids_genres(d.get("genres_du_projet"))
     connus = du_projet + [g for g in _ids_genres(d.get("genres_connus")) if g not in du_projet]
     if genre is not None and genre not in connus:

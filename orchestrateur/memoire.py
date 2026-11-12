@@ -197,6 +197,30 @@ def ajouter(dossier, etage, genre, lecon, mots_interdits, git=executer_git):
                               "\n".join([titre, texte, " ".join(roles)]), f"Mémoire ({etage}) : {titre}", git)
 
 
+def decrire_genre(dossier, genre, description, mots_interdits, git=executer_git):
+    """Remplace la description (ligne « Domaine : ») d'un genre existant. Rend (ok, message)."""
+    if not (isinstance(genre, str) and MOTIF_GENRE.match(genre)):
+        return False, "Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus)."
+    description = " ".join(str(description or "").split())
+    if not description:
+        return False, "Une description de genre ne peut pas être vide."
+    chemin = _chemin_genre(dossier, genre)
+    if not chemin.is_file():
+        return False, f"Genre inconnu : « {genre} » (aucun fichier de mémoire)."
+
+    def nouveau(actuel):
+        lignes = actuel.split("\n")
+        i = next((k for k, ligne in enumerate(lignes) if ligne.startswith("Domaine :")), None)
+        if i is None:     # un fichier sans ligne de domaine : on l'ajoute sous le titre
+            i = 1 if lignes and lignes[0].startswith("# ") else 0
+            lignes.insert(i, "")
+        lignes[i] = f"Domaine : {description}"
+        return "\n".join(lignes)
+
+    return _ecrire_et_pousser(dossier, chemin, nouveau, mots_interdits, description,
+                              f"Mémoire (genre) : description de {genre} élargie", git)
+
+
 def creer_genre(dossier, genre, description, mots_interdits, git=executer_git):
     """Crée le fichier d'un nouveau genre, avec sa description en tête. Rend (ok, message)."""
     if not (isinstance(genre, str) and MOTIF_GENRE.match(genre)):

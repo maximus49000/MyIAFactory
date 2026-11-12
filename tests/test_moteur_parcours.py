@@ -32,6 +32,11 @@ SANS_NOUVEAU = {**PROPOSITION, "services": [], "agents": [], "briefs": {},
                          {"etape": "livraison", "nom": "Livraison des badges", "role": "dev", "service": "dev"}]}
 
 
+def outil_genres(test):
+    from orchestrateur import memoire
+    return memoire.genres(test.dossier / "memoire")
+
+
 class AvecParcours(Base):
     """Un projet de genre « badges » et de quoi mener une demande de fonctionnalité jusqu'à son workflow proposé."""
 
@@ -203,6 +208,101 @@ class Parcours(AvecParcours):
             self.demander({"classer_genre": c})
             (q,) = [x for x in self.decisions("genre_fonctionnalite") if x["portee"] == f"f{i}"]
             self.assertIn("n'est pas du genre du projet", q["texte"])
+
+    # --- La phrase d'un genre nouveau est proposée d'avance (2026-11-12).
+
+    def test_genre_du_projet_propose_avec_sa_phrase_et_valide_sans_la_retaper(self):
+        self.reecrire(genre=None)
+        self.demander({"classer_genre": CLASSER_AUTRE})
+        (c,) = self.decisions("confirmer_genre")
+        self.assertEqual((c["propose"], c["description"]), ("jeu-mobile", "Jeux pour téléphone"))
+        with mock.patch.object(outil, "GIT", lambda args, cwd: (0, "")):
+            d, actions = self.traiter(type="genre", decision=c["id"], genre="jeu-mobile")     # aucune description tapée
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertIn("Jeux pour téléphone", (self.dossier / "memoire" / "genres" / "jeu-mobile.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.lire_factory()["genre"], "jeu-mobile")
+
+    # --- Garder une demande dans un genre existant : sa description s'élargit, avec l'accord du Directeur.
+
+    def elargissements(self):
+        return self.decisions("elargir_genre")
+
+    def description_du_genre(self, genre="badges"):
+        return {g["id"]: g for g in outil_genres(self)}[genre]["domaine"]
+
+    def test_meme_genre_propose_d_elargir_la_description_sans_bloquer(self):
+        c = dict(CLASSER_INCERTAIN, elargissement="Genre badges, et aussi logos de chaîne")
+        self.demander({"classer_genre": c}, texte="Un logo de chaîne")
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.assertEqual(q["elargissement"], "Genre badges, et aussi logos de chaîne")
+        self.assertEqual(self.elargissements(), [])                       # rien tant que le Directeur n'a pas choisi
+        d, actions = self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "proposer_organisation")])     # la fonctionnalité avance
+        (e,) = self.elargissements()
+        self.assertEqual((e["portee"], e["cible"], e["ancienne"], e["propose"], e["fonctionnalite"]),
+                         ("projet", "badges", "Genre badges", "Genre badges, et aussi logos de chaîne", "f1"))
+        self.assertIn("Genre badges, et aussi logos de chaîne", self.fonc()["discussion"][-1]["texte"])
+        self.assertEqual(self.description_du_genre(), "Genre badges")      # pas appliquée avant la validation
+
+    def test_elargissement_sans_phrase_du_jugement_est_deterministe(self):
+        self.demander({"classer_genre": CLASSER_INCERTAIN}, texte="Un logo de chaîne")
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        (e,) = self.elargissements()
+        self.assertEqual(e["propose"], f"Genre badges, et aussi {self.fonc()['nom'][:1].lower()}{self.fonc()['nom'][1:]}")
+
+    def test_valider_l_elargissement_modifie_le_genre(self):
+        c = dict(CLASSER_INCERTAIN, elargissement="Genre badges, et aussi logos de chaîne")
+        self.demander({"classer_genre": c})
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        (e,) = self.elargissements()
+        appels = []
+        with mock.patch.object(outil, "GIT", lambda args, cwd: appels.append(args[0]) or (0, "")):
+            d, _ = self.traiter(type="elargir_genre", decision=e["id"], verdict="valider",
+                                description="Genre badges, et aussi logos")           # corrigée par l'utilisateur
+        self.assertEqual(self.description_du_genre(), "Genre badges, et aussi logos")
+        self.assertIn("commit", appels)
+        self.assertEqual(self.elargissements(), [])
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_valider_sans_correction_applique_la_phrase_proposee(self):
+        c = dict(CLASSER_INCERTAIN, elargissement="Genre badges, et aussi logos de chaîne")
+        self.demander({"classer_genre": c})
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        (e,) = self.elargissements()
+        with mock.patch.object(outil, "GIT", lambda args, cwd: (0, "")):
+            self.traiter(type="elargir_genre", decision=e["id"], verdict="valider")
+        self.assertEqual(self.description_du_genre(), "Genre badges, et aussi logos de chaîne")
+
+    def test_refuser_l_elargissement_garde_la_description_et_la_fonctionnalite(self):
+        self.demander({"classer_genre": CLASSER_INCERTAIN})
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="meme")
+        (e,) = self.elargissements()
+        d, _ = self.traiter(type="elargir_genre", decision=e["id"], verdict="refuser")
+        self.assertEqual(self.description_du_genre(), "Genre badges")
+        self.assertEqual(self.elargissements(), [])
+        self.assertEqual(self.fonc()["genre"], "badges")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_ici_avec_un_genre_connu_corrige_elargit_celui_ci(self):
+        self.demander({"classer_genre": CLASSER_AUTRE}, texte="Un sticker animé")
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="ici", genre="stickers")
+        (e,) = self.elargissements()
+        self.assertEqual((e["cible"], e["ancienne"]), ("stickers", "Genre stickers"))
+
+    def test_ici_avec_la_piste_ou_un_genre_nouveau_n_elargit_rien(self):
+        self.demander({"classer_genre": CLASSER_AUTRE}, texte="Un casse-briques")
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.traiter(type="genre_fonctionnalite", decision=q["id"], fonctionnalite="f1", choix="ici")
+        self.assertEqual(self.elargissements(), [])
+
+    def test_coherente_d_un_autre_genre_n_elargit_rien(self):
+        self.demander({"classer_genre": dict(CLASSER_AUTRE, coherente=True), "proposer_organisation": PROPOSITION})
+        self.assertEqual(self.elargissements(), [])
 
     # --- Les trois issues de l'avertissement.
 

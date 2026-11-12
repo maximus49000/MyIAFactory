@@ -21,7 +21,7 @@ VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
-DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation")
+DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -441,6 +441,10 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             if not isinstance(connus, list) or not all(_genre_valide(g) for g in connus):
                 erreurs.append(f"{nom} : la décision « {i} » : « genres_connus » est obligatoire "
                                "(liste d'identifiants de genre).")
+        elif d.get("genre") == "elargir_genre":
+            if not _genre_valide(d.get("cible")) or not _texte_plein(d.get("ancienne")) or not _texte_plein(d.get("propose")):
+                erreurs.append(f"{nom} : la décision « {i} » : « cible » (genre), « ancienne » et « propose » "
+                               "(descriptions) sont obligatoires.")
         elif d.get("genre") == "session_cloud":
             if not _dans(d.get("agent"), cles_agents):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")

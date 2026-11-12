@@ -529,7 +529,11 @@ R5 = releve.normaliser({
          "decisions": [{"id": "q2", "genre": "genre_fonctionnalite", "texte": "Même genre ?", "propose": "badges",
                         "genres_connus": ["badges"], "incertain": True}]}],
     "decisions_projet": [{"id": "o2", "genre": "organisation", "texte": "Workflow ?",
-                          "organisation": ORGANISATION_WORKFLOW}]})
+                          "organisation": ORGANISATION_WORKFLOW},
+                         {"id": "e1", "genre": "elargir_genre", "texte": "Élargir ?", "cible": "badges",
+                          "ancienne": "Badges", "propose": "Badges et logos", "fonctionnalite": "f1"},
+                         {"id": "c1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "jeu-mobile",
+                          "genres_connus": ["badges"], "description": "Jeux pour téléphone"}]})
 
 
 class TestVerifierGenreEtWorkflow(unittest.TestCase):
@@ -557,6 +561,23 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.refus({**base, "choix": "ici", "fonctionnalite": "zz"})
         self.refus({**base, "choix": "ici", "decision": "q2"})                        # la question d'une autre fonctionnalité
         self.ok({"type": "genre_fonctionnalite", "decision": "q2", "fonctionnalite": "f2", "choix": "meme"})
+
+    def test_genre_du_projet_avec_la_phrase_proposee(self):
+        base = {"type": "genre", "decision": "c1"}
+        self.ok({**base, "genre": "jeu-mobile"})                                      # la phrase proposée suffit
+        self.ok({**base, "genre": "jeu-mobile", "description": "Autre phrase"})
+        self.refus({**base, "genre": "jeu-de-role"})                                  # autre genre nouveau : sa phrase
+
+    def test_elargir_genre(self):
+        base = {"type": "elargir_genre", "decision": "e1"}
+        self.ok({**base, "verdict": "valider"})
+        self.ok({**base, "verdict": "valider", "description": "Badges, logos et emotes"})
+        self.ok({**base, "verdict": "refuser"})
+        self.refus({**base, "verdict": "peut-etre"})
+        self.refus({**base, "verdict": "valider", "decision": "zz"})
+        self.refus({**base, "verdict": "valider", "description": "x" * 3501})
+        self.assertEqual(demandes.nettoyer({**base, "verdict": "valider", "description": "d", "autre": 1}),
+                         {**base, "verdict": "valider", "description": "d"})
 
     def test_organisation_d_un_workflow(self):
         base = {"type": "organisation", "decision": "o2"}

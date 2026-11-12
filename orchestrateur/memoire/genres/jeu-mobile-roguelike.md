@@ -80,3 +80,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Dans un script de génération de sprites, imposer par assertion les seuls facteurs d'ombre et de reflet autorisés et fournir un script de vérification qui compare tous les pixels opaques à la palette évite les couleurs hors palette.
+
+## G14 — Pour un export Android signé d'un moteur de jeu, transmettre
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.

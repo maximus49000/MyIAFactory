@@ -607,27 +607,58 @@ def _apres_classer_genre(projet, o, ctx, etat):
             _dire(projet, fid, texte)
         _terminer(projet, ctx, "Le projet n'a pas encore de genre : je vous en propose un.")
         return []
+    coherente = o.get("coherente")
+    du_projet = _genre_du_projet(fac) or "aucun"
+    propose = piste or _genre_du_projet(fac) or "a-preciser"
+    if coherente is False:     # illogique pour ce projet : on prévient avant de continuer, quel que soit le genre
+        texte = (f"Cette demande ne semble pas cohérente avec le projet « {fac['nom']} » ({raison.strip().rstrip('.')}). "
+                 "La faire dans un nouveau projet, ou dans ce projet quand même ?")
+        return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus,
+                                           incertain=verdict in ("meme", "proche", "incertain"))
     if verdict in ("meme", "proche"):
         lancer(projet, "fonctionnalite", {"id": fid, "genre": o["genre"]})
         if verdict == "proche":
             _dire(projet, fid, f"Cette demande est proche du genre « {o['genre']} » : elle y est rattachée. {raison}")
         return _proposer(projet, etat, fid, ctx)
-    du_projet = _genre_du_projet(fac) or "aucun"
-    propose = piste or _genre_du_projet(fac) or "a-preciser"
+    if verdict == "autre" and coherente is True:     # cohérente : on part sur le fonctionnel, dans ce projet
+        _dire(projet, fid, f"Cette demande est d'un autre genre (« {propose} »), mais elle a sa place dans ce projet : "
+                           f"je propose un workflow dédié. {raison}")
+        return _garder_ici(projet, etat, fid, dict(ctx), propose, connus, nouveau)
     if verdict == "autre":
         texte = (f"Cette demande n'est pas du genre du projet ({du_projet}) : elle relève plutôt de « {propose} ». "
                  f"{raison} La faire dans un nouveau projet, ou dans ce projet ?")
     else:
         texte = (f"Je ne suis pas sûr du genre de cette demande (le projet est de genre {du_projet}). {raison} "
                  "Est-ce le même genre, ou faut-il un autre projet ?")
+    return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain=verdict == "incertain")
+
+
+def _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain):
+    """La question « nouveau projet, ou ce projet ? » : rien ne démarre avant la réponse."""
     entree = {"action": "poser", "portee": fid, "genre": "genre_fonctionnalite", "texte": texte, "propose": propose,
-              "incertain": verdict == "incertain", "genres_connus": connus}
+              "incertain": incertain, "genres_connus": connus}
     if nouveau:
         entree["nouveau"] = {"id": nouveau["id"], "description": nouveau["description"]}
     lancer(projet, "decision", entree)
     _dire(projet, fid, texte)
     _terminer(projet, ctx, "Cette demande ne semble pas être du genre du projet : dites où la faire.")
     return []
+
+
+def _garder_ici(projet, etat, fid, suite, genre, connus, nouveau, description=None, decision=None):
+    """La fonctionnalité reste dans ce projet avec le genre `genre` (connu, ou nouveau avec sa description), puis son
+    workflow est proposé. Refus si un genre nouveau n'a pas de description (rien n'est alors changé)."""
+    fac = _factory(projet)
+    nouveau = nouveau or {}
+    if genre not in connus and genre not in _genres_du_projet(fac):
+        description = description or (nouveau.get("description") if nouveau.get("id") == genre else None)
+        if not description:
+            raise Refus(f"« {genre} » est un nouveau genre : il a besoin d'une description")
+        suite = {**suite, "genre_nouveau": {"description": description}}
+    if decision is not None:
+        lancer(projet, "decision", {"action": "lever", "id": decision["id"]})
+    lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+    return _proposer(projet, etat, fid, suite)
 
 
 def _decision_de(f, i, genre):
@@ -653,15 +684,8 @@ def _sur_genre_fonctionnalite(projet, demande, etat):
         genre = demande.get("genre") or d["propose"]
     else:
         raise Refus(f"choix inconnu : {choix}")
-    nouveau = d.get("nouveau") or {}
-    if genre not in (d.get("genres_connus") or []) and genre not in _genres_du_projet(fac):
-        description = demande.get("description") or (nouveau.get("description") if nouveau.get("id") == genre else None)
-        if not description:
-            raise Refus(f"« {genre} » est un nouveau genre : il a besoin d'une description")
-        suite["genre_nouveau"] = {"description": description}
-    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
-    return _proposer(projet, etat, fid, suite)
+    return _garder_ici(projet, etat, fid, suite, genre, d.get("genres_connus") or [], d.get("nouveau"),
+                       demande.get("description"), d)
 
 
 def _factory_du_projet_cree(chemin_reglages):

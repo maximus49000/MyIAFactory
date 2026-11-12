@@ -262,6 +262,8 @@ def _valider_classer_genre(o, d):
     intitule = o.get("intitule")
     if intitule is not None and not (_ligne(intitule) and len(intitule.strip()) <= LONGUEUR_INTITULE):
         return f"« intitule » est null ou un nom court de la fonctionnalité sur une ligne ({LONGUEUR_INTITULE} caractères au plus)."
+    if o.get("coherente") is not None and not isinstance(o["coherente"], bool):
+        return "« coherente » est vrai, faux ou null (la demande a-t-elle sa place dans ce projet ?)."
     du_projet = _ids_genres(d.get("genres_du_projet"))
     connus = du_projet + [g for g in _ids_genres(d.get("genres_connus")) if g not in du_projet]
     if genre is not None and genre not in connus:

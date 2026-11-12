@@ -20,6 +20,10 @@ Le `verdict` :
 Règle de l'utilisateur : dans le doute, `incertain`. N'élargis jamais un genre pour y faire entrer une demande qui
 n'en partage pas les outils ou le livrable : l'utilisateur tranchera.
 
+Donne aussi `coherente` (indépendante du genre) : la demande a-t-elle sa place dans ce projet, d'après sa description
+(ou son nom) ? `true` : logique pour ce projet, même d'un autre genre. `false` : illogique (un logo Twitch dans un projet
+de jeu vidéo roguelike) ; la `raison` dit alors pourquoi. `null` : impossible à juger. Au moindre doute, pas `false`.
+
 Donne aussi l'`intitule` : le nom court de la fonctionnalité demandée (3 à 6 mots, 60 caractères au plus, sans point
 final, par exemple « Casse-briques Android »), ou null si la demande est trop floue pour la nommer.
 
@@ -28,7 +32,7 @@ Donne toujours la `raison` en une phrase, en français, sans jargon : elle s'aff
 Forme de la réponse :
 
 ```json
-{"verdict": "proche", "genre": "…", "nouveau": null, "intitule": "…", "raison": "…"}
+{"verdict": "proche", "genre": "…", "nouveau": null, "coherente": true, "intitule": "…", "raison": "…"}
 ```
 
 `genre` ne cite qu'un id du dossier ; `nouveau` vaut null sauf pour `autre` ou `incertain` sans genre connu.

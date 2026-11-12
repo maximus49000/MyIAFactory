@@ -210,6 +210,15 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(v(intitule="x" * 61))
         self.assertIsNotNone(v(intitule=3))
 
+    def test_classer_genre_coherente_booleen_ou_null_facultatif(self):
+        v = lambda **c: self._varie("classer_genre", **c)
+        self.assertIsNone(v(coherente=True))
+        self.assertIsNone(v(coherente=False))
+        self.assertIsNone(v(coherente=None))
+        self.assertIsNone(v())                                            # absent : compatible
+        self.assertIsNotNone(v(coherente="oui"))
+        self.assertIsNotNone(v(coherente=1))
+
     def test_classer_genre_nouveau_mot_interdit_refuse(self):
         v = lambda **c: self._varie("classer_genre", verdict="autre", genre=None, **c)
         self.assertIsNotNone(v(nouveau={"id": "zorglub-jeux", "description": "Les jeux."}))

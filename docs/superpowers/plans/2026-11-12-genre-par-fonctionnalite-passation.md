@@ -316,6 +316,10 @@ réelles avec l'accord de l'utilisateur : environ **0,39 €** (banc 0,37 €, e
   avec l'accord explicite de l'utilisateur), puis le cadrage dans le nouveau projet ; confirmer un genre proposé
   d'après une description et voir la première demande qui suit ; le rendu réel de ces décisions sur la page et le
   téléphone (non regardés : pas de panneau navigateur).
+- **Cohérence avec le projet (2026-11-12)** : `classer_genre` rend `coherente` (vrai, faux, null ou absent). Faux : la
+  question « nouveau projet ou ce projet ? » est posée quel que soit le genre ; vrai : une demande d'un autre genre reste
+  dans le projet avec un workflow dédié, sans question ; null ou absent : comportement d'avant (voir la spec, section 12).
+  Non mesuré au banc avec un vrai modèle.
 
 ## Messages à coller
 

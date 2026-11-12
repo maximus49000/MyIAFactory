@@ -307,3 +307,21 @@ la liste déroulante des projets (`bureau/web/ui/barre.js:majProjets`).
 - L'emplacement des nouveaux tests (un test nommé par règle, comme `tests/test_moteur_regles.py`).
 - La mise en page du formulaire et des décisions au bureau, dans le style existant.
 - Le découpage en phases par modèle, selon la norme du dépôt (`docs/superpowers/plans/*-passation.md`).
+
+## 12. Cohérence avec le projet (décision de l'utilisateur, 2026-11-12)
+
+Pour une nouvelle fonctionnalité, la référence est toujours **la description du projet + la fonctionnalité voulue**.
+Cohérente : on part sur le fonctionnel. Illogique (un logo Twitch dans un projet de jeu vidéo roguelike) : on le dit
+avant de continuer et on propose les choix habituels.
+
+`classer_genre` rend un champ de plus, `coherente` (vrai, faux, null ; facultatif, absent = null), sans appel de plus.
+Quand il est faux, la `raison` explique l'incohérence. Règles de `_apres_classer_genre` (hors projet sans genre) :
+
+| `coherente` | meme / proche | autre | incertain |
+|---|---|---|---|
+| faux | question `genre_fonctionnalite` (« ne semble pas cohérente avec le projet… »), rien ne démarre | idem | idem |
+| vrai | genre rattaché, workflow proposé | reste dans le projet avec le genre proposé (nouveau genre : `genre_nouveau`), une ligne le dit, workflow dédié proposé | question (le genre est flou) |
+| null / absent | comme avant | question comme avant | question comme avant |
+
+Pour le faux, « C'est le même genre » est offert (`incertain` vrai) sauf pour `autre`. Le code de l'issue « Dans ce
+projet » est partagé (`_garder_ici`).

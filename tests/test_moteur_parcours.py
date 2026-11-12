@@ -156,6 +156,54 @@ class Parcours(AvecParcours):
         self.assertEqual(self.fonc()["genre"], "badges")
         self.assertEqual(self.decisions("genre_fonctionnalite"), [])
 
+    # --- Cohérence avec le projet (2026-11-12).
+
+    def test_incoherente_previent_quel_que_soit_le_genre(self):
+        for i, classer in enumerate((CLASSER_MEME, CLASSER_PROCHE, CLASSER_AUTRE, CLASSER_INCERTAIN), 1):
+            c = dict(classer, coherente=False, raison="Un logo Twitch n'a rien à faire dans un jeu roguelike.")
+            d, vus = self.demander({"classer_genre": c}, texte="Un logo Twitch")
+            self.assertEqual([(a[0], a[1]) for a in vus], [("juger", "classer_genre")])    # rien ne démarre
+            (q,) = [x for x in self.decisions("genre_fonctionnalite") if x["portee"] == f"f{i}"]
+            self.assertIn("ne semble pas cohérente avec le projet", q["texte"])
+            self.assertIn("Un logo Twitch n'a rien à faire", q["texte"])
+            self.assertIn("nouveau projet", q["texte"])
+            self.assertEqual(q["incertain"], classer["verdict"] != "autre")    # « même genre » seulement s'il a un sens
+            self.assertIsNone(self.fonc(f"f{i}")["genre"])
+            self.assertEqual(self.decisions("organisation"), [])
+
+    def test_incoherente_propose_la_piste_de_genre(self):
+        self.demander({"classer_genre": dict(CLASSER_AUTRE, coherente=False)})
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.assertEqual((q["propose"], q["nouveau"]["id"]), ("jeu-mobile", "jeu-mobile"))
+
+    def test_coherente_d_un_autre_genre_reste_dans_le_projet(self):
+        d, vus = self.demander({"classer_genre": dict(CLASSER_AUTRE, coherente=True),
+                                "proposer_organisation": PROPOSITION}, texte="Un casse-briques pour Android")
+        self.assertEqual([(a[0], a[1]) for a in vus], [("juger", "classer_genre"), ("juger", "proposer_organisation")])
+        self.assertEqual(self.decisions("genre_fonctionnalite"), [])           # aucune question de projet
+        self.assertEqual(self.fonc()["genre"], "jeu-mobile")
+        w = self.decisions("organisation")[0]["organisation"]["workflow"]
+        self.assertEqual((w["genre"], w["genre_nouveau"]), ("jeu-mobile", {"description": "Jeux pour téléphone"}))
+        self.assertTrue(any("a sa place dans ce projet" in m["texte"] for m in self.fonc()["discussion"]))
+
+    def test_coherente_meme_ou_proche_comme_avant(self):
+        self.demander({"classer_genre": dict(CLASSER_PROCHE, coherente=True), "proposer_organisation": PROPOSITION})
+        self.assertEqual(self.fonc()["genre"], "stickers")
+        self.assertEqual(self.decisions("genre_fonctionnalite"), [])
+
+    def test_coherente_incertain_pose_la_question(self):
+        self.demander({"classer_genre": dict(CLASSER_INCERTAIN, coherente=True)})
+        (q,) = self.decisions("genre_fonctionnalite")
+        self.assertTrue(q["incertain"])
+        self.assertNotIn("cohérente", q["texte"])
+
+    def test_coherence_inconnue_comme_avant(self):
+        for i, coherente in enumerate((None, "absent"), 1):
+            c = dict(CLASSER_AUTRE) if coherente == "absent" else dict(CLASSER_AUTRE, coherente=None)
+            self.demander({"classer_genre": c})
+            (q,) = [x for x in self.decisions("genre_fonctionnalite") if x["portee"] == f"f{i}"]
+            self.assertIn("n'est pas du genre du projet", q["texte"])
+
     # --- Les trois issues de l'avertissement.
 
     def avertie(self):

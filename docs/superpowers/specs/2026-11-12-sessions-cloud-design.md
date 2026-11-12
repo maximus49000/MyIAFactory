@@ -10,7 +10,7 @@ Claude Code 2.1.321 (Windows), lancé par le moteur (détaché, sans console) :
 > run locally and would silently ignore --cloud. Drop --cloud, or run from a TTY.
 
 Tout départ cloud échoue donc ; `claude -p … --cloud <session>` (`envoyer_suite`) est, par construction, une invocation
-non interactive : refus attendu aussi (non vérifié, faute de session créée). Le moteur traduit ce refus en une raison
+non interactive, mais elle est acceptée sans terminal (vérifié au second essai du §3). Le moteur traduit ce refus en une raison
 claire (`cloud.SANS_TERMINAL`).
 
 ## 2. Le faux terminal (`moteur/pseudo_terminal.py`)
@@ -41,13 +41,40 @@ Quatre lancements de `claude --cloud … --model haiku` dans la pseudo-console ;
 4. Inconnu à ce jour : ce qui suit l'approbation (choix d'environnement cloud, accès GitHub, confirmation), si la
    commande rend la main après avoir affiché la session, et `envoyer_suite` sous pseudo-console.
 
-**Conclusion** : la création automatique ne marche pas telle quelle. Le faux terminal reste derrière un essai unique
-documenté : `cloud.essai_pseudo_terminal` (répond seulement aux écrans sans risque, s'arrête sur toute demande à
-l'utilisateur ou peu après l'adresse de la session) et `outils/essai_session_cloud.py <dossier>`, à relancer après avoir
-lancé une fois `claude` dans le dossier du projet et répondu « Yes, I trust this folder ». Il n'est pas branché dans
-`lancer_session` ; s'il crée un jour la session, le brancher avec repli sur la démarche ci-dessous.
+**Second essai (même jour, avec l'accord de l'utilisateur pour CE dossier seul : `essai-jeu-mobile`, dépôt GitHub privé)** :
+une session créée. Déroulé observé, mot pour mot (Claude Code 2.1.321, `--model haiku`) :
 
-## 4. La démarche simplifiée (secours, et seule voie aujourd'hui)
+- l'écran d'approbation affiche d'abord `❯ No, exit` ; une flèche vers le bas (`ESC [ B`) déplace `❯` sur
+  `Yes, I trust this folder` (l'écran est redessiné deux fois ; on ne tape Entrée que lorsque l'écran est stable **et**
+  que la ligne marquée `❯` est « Yes, I trust this folder ») ; Entrée valide. Premier essai raté : flèche + Entrée envoyés
+  trop vite, la commande est sortie avec le code 1 (« No, exit »).
+- Aucun choix d'environnement cloud, aucune demande d'accès GitHub, aucune confirmation : trois secondes plus tard, la
+  commande **rend la main d'elle-même** (code 0) en affichant :
+  `Created cloud session: <titre choisi par Claude>` / `View: https://claude.ai/code/session_<id>?from=cli&m=0` /
+  `Resume with: claude --teleport session_<id>`.
+- `claude -p "Reponds juste OK" --cloud session_<id>` lancé **directement** (sans terminal, stdin fermé) réussit :
+  `Sent to cloud session.` / `Session ID: session_<id>` / `View: https://claude.ai/code/session_<id>?from=cli&m=0`.
+  `envoyer_suite` n'a donc pas besoin du faux terminal. (`claude agents` exige un terminal ; `claude agents --json` ne
+  liste que les sessions locales : la session cloud se vérifie par son adresse.)
+
+**Conclusion** : la création marche par le faux terminal. `cloud.lancer_session` (sans `executer`, sur un poste qui a une
+pseudo-console) y lance `claude --cloud` ; la session et l'adresse sont lues dans la sortie (`essai_pseudo_terminal`).
+Toute erreur (pas de session, délai, faux terminal absent) reste une `ErreurCloud` : la démarche simplifiée ci-dessous
+prend alors le relais, comme avant. Écrans et réponses automatiques :
+
+| Écran | Réponse automatique |
+| --- | --- |
+| Accueil « Choose the text style… » (première utilisation) | Entrée (le thème proposé) |
+| « Security notes: … Press Enter to continue » | Entrée (à lire seulement) |
+| « Quick safety check: Is this a project you created or one you trust? » | **Seulement si `approuver_dossier`** (accordé par l'utilisateur pour ce dossier) : flèche bas, puis Entrée si `❯` est sur « Yes, I trust this folder ». Sinon : rien n'est tapé, `ErreurDossierAApprouver` (l'utilisateur lance `claude` une fois dans le dossier et répond lui-même ; Claude Code retient l'approbation) |
+| « Enter to confirm » (autre choix), « /login » | Rien : arrêt, raison claire (démarche simplifiée) |
+
+Le moteur ne passe pas encore `approuver_dossier` : l'accord par dossier (décision « Approuver ce dossier pour les
+sessions cloud », avec boutons, au bureau de direction, réservée aux dossiers de projets inscrits) reste à construire ;
+d'ici là, l'approbation du dossier est faite une fois à la main par l'utilisateur. `outils/essai_session_cloud.py
+<dossier> [--approuver-dossier]` rejoue l'essai.
+
+## 4. La démarche simplifiée (secours)
 
 - **Départ** : `lancer_session` échoue (raison claire) ; si l'agent a une session inscrite (`etat["sessions_cloud"]`, ou
   la table des sessions quand elle a la forme d'une session), le moteur y envoie le départ (`envoyer_suite`) et relève

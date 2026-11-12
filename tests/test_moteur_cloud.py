@@ -167,6 +167,74 @@ class EssaiFauxTerminal(unittest.TestCase):
             cloud.essai_pseudo_terminal(["claude"], "/p", lancer=indisponible)
 
 
+CONFIANCE_OUI = "  No, exit\n❯ Yes, I trust this folder\n"
+CREEE = ("Created cloud session: Analyse du projet\nView: " + ADRESSE + "?from=cli&m=0\n"
+         "Resume with: claude --teleport session_01AbCdEf\n")
+
+
+class ApprobationDuDossier(unittest.TestCase):
+    """L'approbation du dossier (« Is this a project you created or one you trust? ») n'est répondue que si le
+    dossier a été accordé par l'utilisateur."""
+
+    def setUp(self):
+        from unittest import mock
+        for nom, valeur in (("GRACE_APRES_ADRESSE_S", 0), ("PASSES_STABLES", 1)):
+            patch = mock.patch.object(cloud, nom, valeur)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_dossier_accorde_bas_puis_entree_puis_session(self):
+        faux = FauxTerminal([THEME, SECURITE, CONFIANCE, CONFIANCE_OUI, CREEE])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
+        self.assertEqual(faux.tape, ["\r", "\r", "\x1b[B", "\r"])
+        self.assertEqual((r["issue"], r["session"], r["adresse"]), ("session", "session_01AbCdEf", ADRESSE))
+
+    def test_jamais_entree_si_la_selection_n_est_pas_oui(self):
+        faux = FauxTerminal([THEME, SECURITE, CONFIANCE, CONFIANCE])      # la flèche n'a rien changé
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
+        self.assertEqual(faux.tape, ["\r", "\r", "\x1b[B"])
+        self.assertEqual(r["issue"], "delai")
+
+    def test_dossier_non_accorde_rien_n_est_tape(self):
+        faux = FauxTerminal([THEME, SECURITE, CONFIANCE])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux)
+        self.assertEqual(faux.tape, ["\r", "\r"])
+        self.assertEqual(r["issue"], "demande")
+
+    def test_commande_finie_seule_apres_la_session(self):
+        faux = FauxTerminal([CREEE, None])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
+        self.assertEqual((r["issue"], r["session"]), ("session", "session_01AbCdEf"))
+
+    def test_lancer_session_par_le_faux_terminal(self):
+        ex = Executeur()
+        faux = FauxTerminal([THEME, CREEE])
+        r = cloud.lancer_session("Fais l'écran.", dossier_projet="/p", modele="Haiku", executer=ex, trouver=CLAUDE,
+                                 terminal=faux)
+        self.assertEqual(r, {"session": "session_01AbCdEf", "adresse": ADRESSE})
+        self.assertEqual(ex.appels, [["git", "push"]])                      # la commande claude : dans le faux terminal
+
+    def test_lancer_session_dossier_a_approuver(self):
+        ex = Executeur()
+        with self.assertRaises(cloud.ErreurDossierAApprouver) as c:
+            cloud.lancer_session("x", dossier_projet="/p", modele="haiku", executer=ex, trouver=CLAUDE,
+                                 terminal=FauxTerminal([CONFIANCE]))
+        self.assertIsInstance(c.exception, cloud.ErreurCloud)
+        self.assertIn("approuver", c.exception.raison)
+
+    def test_lancer_session_dossier_accorde(self):
+        faux = FauxTerminal([CONFIANCE, CONFIANCE_OUI, CREEE])
+        r = cloud.lancer_session("x", dossier_projet="/p", modele="haiku", executer=Executeur(), trouver=CLAUDE,
+                                 terminal=faux, approuver_dossier=True)
+        self.assertEqual(r["session"], "session_01AbCdEf")
+        self.assertEqual(faux.tape, ["\x1b[B", "\r"])
+
+    def test_lancer_session_faux_terminal_sans_session_leve_une_erreur(self):
+        with self.assertRaises(cloud.ErreurCloud):
+            cloud.lancer_session("x", dossier_projet="/p", modele="haiku", executer=Executeur(), trouver=CLAUDE,
+                                 terminal=FauxTerminal(["Error: boom\n", None], code=1))
+
+
 class Releve(unittest.TestCase):
     def executeur(self, contenus):
         """`contenus` : {(branche, tâche): texte du fichier de rapport}."""

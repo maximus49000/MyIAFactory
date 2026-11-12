@@ -35,6 +35,11 @@ class ErreurCloud(Exception):
         self.raison = raison
 
 
+class ErreurDossierAApprouver(ErreurCloud):
+    """Claude Code demande d'approuver le dossier du projet (« Is this a project you created or one you trust? ») et
+    l'utilisateur ne l'a pas accordé : seul lui peut le faire (le moteur ne répond jamais de lui-même)."""
+
+
 ADRESSE_CODE = "https://claude.ai/code"
 _SESSION_SEULE = re.compile(r"(session_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 _ADRESSE_COLLEE = re.compile(r"https://claude\.ai/code/([A-Za-z0-9_-]+)/?(?:[?#].*)?")
@@ -95,8 +100,14 @@ def prerequis(dossier_projet, *, executer=None, trouver=appel.trouver_claude):
     return None
 
 
-def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=appel.trouver_claude):
-    """Pousse le dépôt puis lance la session cloud. Rend `{"session", "adresse"}`. Lève `ErreurCloud`."""
+def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=appel.trouver_claude, terminal=None,
+                   approuver_dossier=False):
+    """Pousse le dépôt puis lance la session cloud. Rend `{"session", "adresse"}`. Lève `ErreurCloud`.
+
+    `claude --cloud` exige un terminal : sans `executer` (le vrai moteur), la commande est lancée dans le faux terminal
+    (`terminal`, par défaut `pseudo_terminal.lancer`) quand le poste en a un ; `approuver_dossier` n'est vrai que si
+    l'utilisateur a accordé ce dossier (sinon `ErreurDossierAApprouver`). Sans faux terminal : la commande directe, qui
+    échoue avec une raison claire (la démarche manuelle prend alors le relais)."""
     if len(depart) > LONGUEUR_MAX_DEPART:
         raise ErreurCloud("le message de départ est trop long pour la ligne de commande")
     m = (modele or "").strip().lower()
@@ -108,7 +119,10 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     code, sortie = _git(executer, dossier_projet, "push")
     if code != 0:
         raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
-    code, sortie = _lancer(executer, [claude, "--cloud", depart, "--model", m], dossier_projet, DELAI_CLAUDE_S)
+    argv = [claude, "--cloud", depart, "--model", m]
+    if terminal is not None or (executer is None and _faux_terminal_possible()):
+        return _lancer_dans_le_faux_terminal(argv, dossier_projet, terminal, approuver_dossier)
+    code, sortie = _lancer(executer, argv, dossier_projet, DELAI_CLAUDE_S)
     texte = _texte(sortie)
     if code != 0:
         raise ErreurCloud(_sans_terminal(texte) or f"claude --cloud a rendu le code {code} : {texte[:200]}")
@@ -117,6 +131,24 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     if not session:
         raise ErreurCloud("la sortie de claude --cloud ne donne pas la session : " + texte[:200])
     return {"session": session.group(1), "adresse": adresse.group(0) if adresse else None}
+
+
+def _faux_terminal_possible():
+    from moteur import pseudo_terminal as pt
+    return pt.disponible()
+
+
+def _lancer_dans_le_faux_terminal(argv, dossier_projet, terminal, approuver_dossier):
+    from moteur import pseudo_terminal as pt
+    r = essai_pseudo_terminal(argv, dossier_projet, env=pt.environnement_sans(appel.VARIABLE_CLE),
+                              delai_s=DELAI_CLAUDE_S, lancer=terminal, approuver_dossier=approuver_dossier)
+    if r["issue"] == "session":
+        return {"session": r["session"], "adresse": r["adresse"]}
+    if r.get("dossier_a_approuver"):
+        raise ErreurDossierAApprouver(
+            "Claude Code demande d'approuver le dossier du projet pour les sessions cloud : à approuver une fois "
+            "(lancer claude dans le dossier et répondre « Yes, I trust this folder »)")
+    raise ErreurCloud((r["raison"] or "pas de session créée") + " (faux terminal)")
 
 
 def envoyer_suite(session, texte, *, executer=None, dossier_projet=".", trouver=appel.trouver_claude):
@@ -152,28 +184,56 @@ DEMANDES_A_L_UTILISATEUR = (("trust this folder", "Claude Code demande d'approuv
                             ("Enter to confirm", "Claude Code attend un choix"),
                             ("/login", "Claude Code demande de se connecter"))
 GRACE_APRES_ADRESSE_S = 3
+PASSES_STABLES = 8             # l'écran n'a pas changé pendant ce nombre de passages (0,1 s chacun) : il est complet
+MARQUE_DOSSIER = "trust this folder"
+OUI_DOSSIER = "Yes, I trust this folder"
+BAS = "\x1b[B"                  # la flèche vers le bas : « No, exit » est proposé d'abord
 
 
-def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None):
+def _oui_est_choisi(texte):
+    """Sur l'écran d'approbation, la ligne marquée par ❯ (après la dernière ligne « Enter to confirm ») est-elle « Yes » ?"""
+    apres = texte[texte.rfind("Enter to confirm"):]
+    marquees = [x.strip() for x in apres.split("\n") if x.strip().startswith("❯")]
+    return bool(marquees) and OUI_DOSSIER in marquees[-1]
+
+
+def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None, approuver_dossier=False):
     """Lance `argv` (`claude --cloud …`) dans la pseudo-console : répond seulement aux écrans sans risque
     (`ECRANS_SANS_RISQUE`, une fois chacun), s'arrête sur une demande à l'utilisateur, ou peu après l'adresse de la
-    session. Rend `{"issue": "session" | "demande" | "fini" | "delai", "session", "adresse", "raison", "ecran"}`
-    (`ecran` : la fin de la sortie nettoyée). Lève `ErreurCloud` si la pseudo-console manque."""
+    session. Rend `{"issue": "session" | "demande" | "fini" | "delai", "session", "adresse", "raison", "ecran",
+    "dossier_a_approuver"}` (`ecran` : la fin de la sortie nettoyée). Lève `ErreurCloud` si la pseudo-console manque.
+
+    `approuver_dossier` (vrai seulement si l'utilisateur a accordé CE dossier) : à l'écran d'approbation du dossier,
+    une flèche vers le bas puis Entrée, et Entrée seulement si « Yes, I trust this folder » est bien la ligne choisie.
+    Sinon cet écran est une demande à l'utilisateur et rien n'est tapé."""
     from moteur import pseudo_terminal as pt
     lancer = lancer or pt.lancer
     faits, vu = set(), {"adresse": None, "demande": None}
+    suivi = {"texte": None, "stables": 0, "bas": False}
     debut = time.monotonic()
 
     def apres_les_reponses(texte):
-        """Ce qui s'affiche après le dernier écran sans risque déjà répondu."""
-        coupe = max((texte.rfind(m) + len(m) for m, _ in ECRANS_SANS_RISQUE if m in faits), default=0)
+        """Ce qui s'affiche après le dernier écran déjà répondu."""
+        marques = [m for m in (*(m for m, _ in ECRANS_SANS_RISQUE), OUI_DOSSIER) if m in faits]
+        coupe = max((texte.rfind(m) + len(m) for m in marques), default=0)
         return texte[coupe:]
 
     def repondre(texte):
+        suivi["stables"] = suivi["stables"] + 1 if texte == suivi["texte"] else 0
+        suivi["texte"] = texte
         for marque, touches in ECRANS_SANS_RISQUE:
             if marque not in faits and marque in apres_les_reponses(texte):
                 faits.add(marque)
                 return touches
+        if (approuver_dossier and OUI_DOSSIER not in faits and MARQUE_DOSSIER in apres_les_reponses(texte)
+                and suivi["stables"] >= PASSES_STABLES):
+            if not suivi["bas"]:
+                suivi["bas"] = True
+                suivi["stables"] = 0
+                return BAS
+            if _oui_est_choisi(texte):
+                faits.add(OUI_DOSSIER)
+                return "\r"
         return None
 
     def arret(texte):
@@ -185,6 +245,8 @@ def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None):
             return time.monotonic() - vu["adresse"][1] >= GRACE_APRES_ADRESSE_S
         if any(m not in faits and m in reste for m, _ in ECRANS_SANS_RISQUE):
             return False
+        if approuver_dossier and OUI_DOSSIER not in faits and MARQUE_DOSSIER in reste:
+            return False                  # l'approbation accordée est en cours : le délai tranche si elle échoue
         vu["demande"] = next((raison for marque, raison in DEMANDES_A_L_UTILISATEUR if marque in reste), None)
         return vu["demande"] is not None
 
@@ -195,16 +257,21 @@ def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None):
     except OSError as e:
         raise ErreurCloud(f"{argv[0]} n'a pas pu être lancé dans le faux terminal : {e}")
     ecran = r.texte[-1500:]
+    if vu["adresse"] is None and r.fini:       # la commande a rendu la main avant que le suivi voie l'adresse
+        adresse = _ADRESSE.search(apres_les_reponses(r.texte))
+        if adresse:
+            vu["adresse"] = (adresse.group(0), 0)
     if vu["adresse"]:
         adresse = vu["adresse"][0]
         return {"issue": "session", "session": re.search(r"([A-Za-z0-9_-]+)$", adresse).group(1), "adresse": adresse,
-                "raison": None, "ecran": ecran}
+                "raison": None, "ecran": ecran, "dossier_a_approuver": False}
     if vu["demande"]:
-        return {"issue": "demande", "session": None, "adresse": None, "raison": vu["demande"], "ecran": ecran}
+        return {"issue": "demande", "session": None, "adresse": None, "raison": vu["demande"], "ecran": ecran,
+                "dossier_a_approuver": MARQUE_DOSSIER in apres_les_reponses(r.texte)}
     if r.fini:
-        return {"issue": "fini", "session": None, "adresse": None, "ecran": ecran,
+        return {"issue": "fini", "session": None, "adresse": None, "ecran": ecran, "dossier_a_approuver": False,
                 "raison": _sans_terminal(r.texte) or f"claude a rendu le code {r.code}"}
-    return {"issue": "delai", "session": None, "adresse": None, "ecran": ecran,
+    return {"issue": "delai", "session": None, "adresse": None, "ecran": ecran, "dossier_a_approuver": False,
             "raison": f"rien d'exploitable après {round(time.monotonic() - debut)} s"}
 
 

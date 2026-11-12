@@ -2,10 +2,9 @@
 
     py -3.12 outils/essai_session_cloud.py <dossier du projet> [--modele haiku] [--delai 180]
 
-Le moteur n'utilise pas encore cette voie (voir docs/superpowers/specs/2026-11-12-sessions-cloud-design.md) : le
-2026-11-12, `claude --cloud` (Claude Code 2.1.321) a accepté la pseudo-console mais s'est arrêté sur l'approbation du
-dossier, que seul l'utilisateur peut donner. Cet essai permet de le refaire après avoir lancé une fois `claude` dans le
-dossier du projet et répondu « Yes, I trust this folder ».
+Le moteur utilise cette voie (`cloud.lancer_session`, voir docs/superpowers/specs/2026-11-12-sessions-cloud-design.md) ;
+cet essai la rejoue seul. L'approbation du dossier (« Is this a project you created or one you trust? ») n'est répondue
+qu'avec `--approuver-dossier`, et seulement si l'utilisateur a accordé CE dossier ; sans l'option, l'essai s'arrête dessus.
 
 L'essai crée **une** session cloud (sur l'abonnement : la clé API est retirée de l'environnement) avec un message court
 qui ne modifie rien. Il répond seulement aux écrans sans risque de la première utilisation (thème proposé, notes de
@@ -35,6 +34,9 @@ def main(argv=None):
     p.add_argument("dossier")
     p.add_argument("--modele", default="haiku", choices=appel.MODELES)
     p.add_argument("--delai", type=int, default=180)
+    p.add_argument("--approuver-dossier", action="store_true",
+                   help="répond « Yes, I trust this folder » à l'approbation du dossier (seulement si l'utilisateur "
+                        "a accordé CE dossier)")
     a = p.parse_args(argv)
     if not pseudo_terminal.disponible():
         print("Pas de pseudo-console sur ce poste (Windows 10 1809 ou plus récent seulement).")
@@ -45,7 +47,8 @@ def main(argv=None):
         return 2
     try:
         r = cloud.essai_pseudo_terminal([claude, "--cloud", MESSAGE, "--model", a.modele], a.dossier,
-                                        env=pseudo_terminal.environnement_sans(appel.VARIABLE_CLE), delai_s=a.delai)
+                                        env=pseudo_terminal.environnement_sans(appel.VARIABLE_CLE), delai_s=a.delai,
+                                        approuver_dossier=a.approuver_dossier)
     except cloud.ErreurCloud as e:
         print(f"Essai impossible : {e.raison}")
         return 1

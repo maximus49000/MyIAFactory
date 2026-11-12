@@ -177,6 +177,24 @@ test("reponseComposee : les choix deviennent un message lisible ; passer demande
   assert.equal(questionsEnAttente({discussion: [{id: "m1", auteur: "a"}]}), null);
 });
 
+test("reponsesRapides : un agent qui attend sans questions à choix reçoit deux réponses rapides", async () => {
+  const {reponsesRapides, REPONSE_CONVIENT, PREFIXE_A_CORRIGER} = await import("../ui/fonctionnalite.js");
+  const attend = {id: "m1", auteur: "a", texte: "Le style vous convient ?", attend: true};
+  const r = reponsesRapides({discussion: [attend]});
+  assert.equal(r.message, "m1");
+  assert.deepEqual(r.reponses.map((x) => x.libelle), ["Ça me convient", "À corriger"]);
+  assert.equal(r.reponses[0].texte, REPONSE_CONVIENT);
+  assert.equal(r.reponses[1].prefixe, PREFIXE_A_CORRIGER);
+  assert.equal(PREFIXE_A_CORRIGER, "À corriger : ");
+  // Pas de réponses rapides : questions à choix (comportement actuel), pas d'attente, déjà répondu, message de l'utilisateur.
+  assert.equal(reponsesRapides({discussion: [{...attend, questions: [{texte: "Q", choix: ["a", "b"]}]}]}), null);
+  assert.equal(reponsesRapides({discussion: [{...attend, attend: false}]}), null);
+  assert.equal(reponsesRapides({discussion: [{id: "m1", auteur: "a", texte: "Voici"}]}), null);
+  assert.equal(reponsesRapides({discussion: [attend, {id: "m2", auteur: "utilisateur", texte: "oui"}]}), null);
+  assert.equal(reponsesRapides({discussion: []}), null);
+  assert.equal(reponsesRapides(null), null);
+});
+
 test("reponseComposee : « Autre » et sa valeur libre", async () => {
   const {reponseComposee} = await import("../ui/fonctionnalite.js");
   const q = [{texte: "Quelle taille ?", choix: ["28 px", "56 px"]},

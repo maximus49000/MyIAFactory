@@ -129,6 +129,12 @@ champs déjà servis (`taches[].fonctionnalite/agent/active/attente`, `agents[].
 fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
 méthode à la série.
 
+**Une réponse attendue a toujours des boutons.** Les consignes des agents (fin d'étape, consigne commune, prototype) leur
+font poser tout avis ou accord en `questions` à choix avec `attend: true`. Filet côté page : un message d'agent qui attend
+(`attend: true`, dernier message, sans `questions`) affiche quand même « Ça me convient » (envoyé tel quel), « À corriger »
+(le champ texte reçoit « À corriger : » et le focus) et « Autre » (écrire). Avec des `questions`, rien ne change ; les
+décisions du bureau de direction gardent leurs boutons.
+
 **Un agent dont la réponse est refusée n'est plus perdu.** Une question écrite `question`, `intitule` ou `libelle` au lieu de
 `texte`, ou des `options`/`reponses` au lieu de `choix`, est corrigée par le moteur avant l'envoi. Si l'outil refuse quand
 même le message, le moteur relance le même agent une fois, sur la même tâche, avec la raison du refus et son message à

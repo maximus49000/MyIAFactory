@@ -127,6 +127,17 @@ class Consigne(AvecProjet):
         self.assertIn("légende", depart.FIN_D_ETAPE)
         self.assertIn("légende", agents.CONSIGNE_AGENT)
 
+    def test_les_consignes_demandent_des_questions_a_choix_pour_un_avis(self):
+        from moteur import agents, regles
+        for texte in (depart.FIN_D_ETAPE, agents.CONSIGNE_AGENT):
+            self.assertIn("questions", texte)
+            self.assertIn("avis", texte)
+        self.assertLess(len(depart.FIN_D_ETAPE), 4200)
+        self.assertLess(len(agents.CONSIGNE_AGENT), 1500)
+        import inspect
+        source = inspect.getsource(regles._matiere)
+        self.assertIn("à choix", source.split('elif etape == "prototype"')[1].split("elif etape.startswith")[0])
+
     def test_usage_accepte_orchestrateur(self):
         code, _ = self.outil("usage", entree={"modele": "claude-haiku-5-5", "agent": "orchestrateur",
                                               "etape": "orchestration", "entree": 10, "sortie": 5})

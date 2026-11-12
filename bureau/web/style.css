@@ -789,7 +789,9 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 /* Les questions à choix d'un agent : un bouton par choix, « Passer » à part. */
 .questions { display: grid; gap: 8px; margin-bottom: 6px; }
 .question-texte { font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
-.question-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.question-choix, .reponses-rapides { display: flex; flex-wrap: wrap; gap: 6px; }
+.reponses-rapides { margin-bottom: 6px; }
+.reponses-rapides .choix { min-height: 40px; padding: 6px 14px; }
 .choix { border: 1px solid #cfc7b6; border-radius: 999px; padding: 4px 11px; background: #fff; color: inherit;
   font: inherit; font-size: 13px; cursor: pointer; }
 .choix[aria-pressed="true"] { background: #3f8f57; border-color: #3f8f57; color: #fff; }

@@ -1924,7 +1924,8 @@ def _matiere(projet, etat, t):
                     "Discussion récente :", _texte_discussion(f, 8),
                     "Montre tes images dans `message.images` (chacune avec sa légende : "
                     '`{"chemin": "…", "legende": "…"}`), avec `attend: true` pour recueillir le retour de '
-                    'l\'utilisateur. Quand la méthode te semble prête, résume-la dans ton message et rends '
+                    'l\'utilisateur, toujours par des questions à choix (`message.questions`, par ex. « Le style vous '
+                    'convient-il ? » → « Oui, on continue » / « À corriger (précisez) »). Quand la méthode te semble prête, résume-la dans ton message et rends '
                     '`"methode_prete": true`.']
     elif etape.startswith(ETAPES_DE_FLUX):
         methode = (f or {}).get("methode") or {}

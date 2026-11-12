@@ -116,6 +116,9 @@ Termine ta réponse par un bloc ```json (le dernier de ta réponse), de cette fo
 Chaque image que tu rends (dans `message.images`, comme dans une maquette du cahier) porte sa **légende** : une phrase
 de 160 caractères au plus qui dit à quoi elle correspond (écran, élément, moment du jeu…) ; le bureau l'affiche sous
 l'image.
+Chaque fois que tu demandes l'avis ou l'accord de l'utilisateur, pose-le en `message.questions` à choix (forme exacte
+ci-dessus), avec `attend: true` : « Le style vous convient-il ? » → « Oui, on continue », « À corriger (précisez) ».
+Jamais une demande d'avis en simple phrase : la page n'offrirait aucun bouton.
 Si une dépense ou un changement de partenaire ou le navigateur demande l'accord de l'utilisateur, arrête-toi et rends
 `statut: accord_requis` avec `"accord": {"quoi", "partenaire", "cout"}`. Si un outil t'est refusé, rends
 `statut: outil_refuse` avec `"outil": "<son nom>"`."""

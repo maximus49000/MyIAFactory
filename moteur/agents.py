@@ -20,7 +20,8 @@ CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de dép
                   "lance tes scripts par `python <chemin>.py` ; une commande refusée, reformule-la ainsi. Un outil "
                   "qui reste refusé n'est pas une raison de chercher à le contourner : dis-le dans ton rapport "
                   "(statut outil_refuse). Chaque image que tu rends porte sa légende, une phrase qui dit à quoi elle "
-                  "correspond. Termine par le bloc ```json demandé.")
+                  "correspond. Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
+                  "`attend: true`, jamais en simple phrase. Termine par le bloc ```json demandé.")
 USAGE_VIDE = {"modele": "", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
 
 

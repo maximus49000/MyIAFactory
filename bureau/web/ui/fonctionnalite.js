@@ -402,6 +402,18 @@ export function questionsEnAttente(f) {
     ? {message: m.id, questions: m.questions} : null;
 }
 
+// Filet : un agent qui attend une réponse (`attend: true`, dernier message) sans questions à choix : deux réponses
+// rapides ; « Autre » = écrire dans le champ. Rend {message, reponses: [{libelle, texte} | {libelle, prefixe}]} ou null.
+export const REPONSE_CONVIENT = "Ça me convient";
+export const PREFIXE_A_CORRIGER = "À corriger : ";
+export function reponsesRapides(f) {
+  const d = Array.isArray(f?.discussion) ? f.discussion : [];
+  const m = d[d.length - 1];
+  if (!m || m.auteur === "utilisateur" || m.attend !== true || (Array.isArray(m.questions) && m.questions.length)) return null;
+  return {message: m.id, reponses: [{libelle: REPONSE_CONVIENT, texte: REPONSE_CONVIENT},
+                                    {libelle: "À corriger", prefixe: PREFIXE_A_CORRIGER}]};
+}
+
 // La réponse envoyée : chaque question avec le choix fait (ou « passée »), puis le texte libre. Chaque question doit
 // avoir une réponse ou être passée, et passer une question demande de dire pourquoi dans le texte.
 // `reponses` : {rang: {choix: [..], autre?: "texte"} | {passee: true}} ; `autre` présent = « Autre » choisi (à préciser).
@@ -997,7 +1009,7 @@ function lienExterne(url, texte) {
 // La zone de saisie : texte, images jointes (vignettes avant envoi), envoi. Le brouillon survit aux rafraîchissements.
 // `envoyerDemande(texte, images, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
 function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, invite = "Écrire un message…",
-                                         questions = null} = {}) {
+                                         questions = null, rapides = null} = {}) {
   const brouillon = ctx.brouillons.get(cle) || {texte: "", images: []};
   ctx.brouillons.set(cle, brouillon);
   // Les réponses aux questions à choix du dernier message (oubliées quand un autre message en pose de nouvelles).
@@ -1085,6 +1097,34 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
     let questionnaire = blocQuestions(questions, brouillon.reponses, changer);
     bloc.append(questionnaire);
   }
+  if (rapides) {
+    const barre = el("div", "reponses-rapides");
+    for (const r of rapides.reponses) {
+      const b = el("button", "choix", r.libelle);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        if (r.prefixe) {   // « À corriger » : on écrit la correction dans le champ
+          if (!zone.value.startsWith(r.prefixe)) zone.value = r.prefixe + zone.value;
+          brouillon.texte = zone.value;
+          maj();
+          zone.focus();
+          zone.setSelectionRange(zone.value.length, zone.value.length);
+        } else {   // « Ça me convient » : envoyé tel quel
+          if (ctx.envois.has(cle)) return;
+          zone.value = r.texte;
+          brouillon.texte = r.texte;
+          maj();
+          envoyer.click();
+        }
+      });
+      barre.append(b);
+    }
+    const autre = el("button", "choix", "Autre");
+    autre.type = "button";
+    autre.addEventListener("click", () => zone.focus());
+    barre.append(autre);
+    bloc.append(barre);
+  }
   bloc.append(zone, conseil, miniatures, erreur, rangee, fichier);
   maj();
   return {bloc, texte: () => zone.value};
@@ -1150,7 +1190,8 @@ export function contenuFonctionnalite(ctx, contenu, f) {
           if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, images}]);
           if (!r.ok && !f) ctx.nouvelle.envoi = null;
           return r;
-        }, {questions: f ? questionsEnAttente(f) : null});
+        }, {questions: f ? questionsEnAttente(f) : null,
+            rapides: f && !questionsEnAttente(f) && !locaux.length ? reponsesRapides(f) : null});
     blocDiscussion.append(s.bloc);
   }
   if (!f) { contenu.append(blocDiscussion); return; }

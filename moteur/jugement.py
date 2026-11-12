@@ -525,6 +525,8 @@ def _valider_questions(o, d):
                 _ligne(c) and len(c) <= LONGUEUR_CHOIX for c in choix):
             return (f"Question « {q['id']} » : « choix » liste de 0 à {CHOIX_PAR_QUESTION_MAX} réponses courtes "
                     f"({LONGUEUR_CHOIX} caractères au plus), vide si la réponse est libre.")
+        if "multiple" in q and not isinstance(q["multiple"], bool):
+            return f"Question « {q['id']} » : « multiple » vaut true (plusieurs choix possibles) ou false."
     return None
 
 

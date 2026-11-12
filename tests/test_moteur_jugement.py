@@ -422,6 +422,18 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._def(self._questions(questions=[dict(q, choix=["x" * 81])])))
         self.assertIsNotNone(self._def(self._questions(type="question")))
 
+    def test_definir_workflow_multiple_booleen_facultatif(self):
+        q = QUESTIONS["questions"][0]
+        self.assertIsNone(self._def(self._questions(questions=[dict(q, multiple=True)])))
+        self.assertIsNone(self._def(self._questions(questions=[dict(q, multiple=False)])))
+        for faux in ("oui", 1, 0, None, []):
+            self.assertIsNotNone(self._def(self._questions(questions=[dict(q, multiple=faux)])), faux)
+
+    def test_consigne_definir_workflow_dit_quand_plusieurs_choix(self):
+        texte = jugement.consigne("definir_workflow")
+        self.assertIn('"multiple"', texte)
+        self.assertIn("plusieurs", texte)
+
     def test_definir_workflow_trop_de_questions_refuse(self):
         q = QUESTIONS["questions"][0]
         cinq = [dict(q, id=f"q{i}") for i in range(5)]

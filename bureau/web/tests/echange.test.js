@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  corpsInfos, verifierInfos, corpsTour, corpsCorrection, corpsProposerMaintenant, choisir, vueEchange, texteCout,
+  corpsInfos, verifierInfos, corpsTour, basculer, corpsCorrection, corpsProposerMaintenant, choisir, vueEchange, texteCout,
   lignesProposition, agentsFable, installationPossible, outilsAutonomes, outilsManquants, corpsValidation, suiteValidation, lignesBrouillons,
   texteAbandonnes, texteAttente, utiliseLeFormulaireActuel, envoyer, DELAI_RELECTURE_MS,
 } from "../ui/echange.js";
@@ -54,6 +54,33 @@ test("tour exige une reponse par question", () => {
   assert.deepEqual(corpsTour("c1", QUESTIONS, {style: " Néon ", niveaux: "10"}),
     {id: "c1", reponses: [{question: "style", texte: "Néon"}, {question: "niveaux", texte: "10"}]});
   assert.equal(corpsTour("c1", [], {}), null);
+});
+
+const MULTI = [{id: "attentes", texte: "Qu'attends-tu du jeu ?", choix: ["Fun", "Jouabilité", "Facile"], multiple: true},
+               {id: "style", texte: "Quel style ?", choix: ["Néon", "Rétro"]}];
+
+test("basculer ajoute et retire un choix sans modifier l'objet reçu", () => {
+  const a = basculer({}, "attentes", "Fun");
+  assert.deepEqual(a, {attentes: ["Fun"]});
+  const b = basculer(a, "attentes", "Jouabilité");
+  assert.deepEqual(b, {attentes: ["Fun", "Jouabilité"]});
+  assert.deepEqual(basculer(b, "attentes", "Fun"), {attentes: ["Jouabilité"]});
+  assert.deepEqual(a, {attentes: ["Fun"]});
+});
+
+test("question multiple : 1 à N choix, texte libre ajouté, refus si rien", () => {
+  const simple = {style: "Néon"};
+  assert.equal(corpsTour("c1", MULTI, simple, {}), null);
+  assert.equal(corpsTour("c1", MULTI, {...simple, attentes: "  "}, {attentes: []}), null);
+  assert.deepEqual(corpsTour("c1", MULTI, simple, {attentes: ["Fun", "Jouabilité"]}),
+    {id: "c1", reponses: [{question: "attentes", texte: "Fun ; Jouabilité"}, {question: "style", texte: "Néon"}]});
+  assert.deepEqual(corpsTour("c1", MULTI, {...simple, attentes: " du rythme "}, {attentes: ["Fun"]}).reponses[0],
+    {question: "attentes", texte: "Fun ; Autre : du rythme"});
+  // le texte seul suffit (réponse libre)
+  assert.deepEqual(corpsTour("c1", MULTI, {...simple, attentes: "rien de précis"}, {}).reponses[0],
+    {question: "attentes", texte: "Autre : rien de précis"});
+  // une question simple garde son comportement : le texte est la réponse, les choix cochés sont ignorés
+  assert.equal(corpsTour("c1", MULTI, {attentes: "x"}, {style: ["Néon"]}), null);
 });
 
 test("un choix remplit la reponse", () => {

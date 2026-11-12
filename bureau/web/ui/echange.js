@@ -30,11 +30,17 @@ export function corpsInfos(champs, id) {
 }
 
 // Les réponses aux questions ouvertes (`valeurs` : id de question -> texte), ou null s'il en manque une.
-export function corpsTour(id, questions, valeurs) {
+// Une question `multiple` prend aussi `choisis` (id -> liste de choix) : « Fun ; Jouabilité », le texte libre en plus
+// derrière « Autre : ». Une question simple ne lit que le texte.
+export function corpsTour(id, questions, valeurs, choisis = {}) {
   if (!Array.isArray(questions) || questions.length === 0) return null;
   const reponses = [];
   for (const q of questions) {
-    const texte = String(valeurs?.[q.id] ?? "").trim();
+    let texte = String(valeurs?.[q.id] ?? "").trim();
+    if (q.multiple === true) {
+      const libre = texte;
+      texte = [...(choisis?.[q.id] || []), ...(libre ? ["Autre : " + libre] : [])].join(" ; ");
+    }
     if (!texte) return null;
     reponses.push({question: q.id, texte});
   }
@@ -52,6 +58,12 @@ export function corpsProposerMaintenant(id) {
 // Un bouton de choix remplit le champ de sa question (sans modifier l'objet reçu).
 export function choisir(valeurs, question, choix) {
   return {...valeurs, [question]: choix};
+}
+
+// Question multiple : un clic ajoute le choix, un second le retire (sans modifier l'objet reçu).
+export function basculer(choisis, question, choix) {
+  const actuels = choisis?.[question] || [];
+  return {...choisis, [question]: actuels.includes(choix) ? actuels.filter((x) => x !== choix) : [...actuels, choix]};
 }
 
 export function corpsValidation(id, {fable = [], installer = false, genreDescription} = {}) {
@@ -269,6 +281,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
   let ferme = false;
   let attenteDepuis = null;
   let valeurs = {};         // les réponses tapées, gardées d'un affichage à l'autre
+  let choisis = {};         // les choix cochés des questions à plusieurs réponses (id -> liste)
   let correction = "";
   let descriptionGenre = null;
   let fable = new Set();
@@ -443,15 +456,24 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const champs = new Map();
     for (const q of questions) {
       const bloc = el("div", "creation-question");
-      const t = zone("Votre réponse", 2, valeurs[q.id], 1900);
+      const multiple = q.multiple === true;
+      const t = zone(multiple ? "Autre réponse (facultatif)" : "Votre réponse", 2, valeurs[q.id], 1900);
       t.addEventListener("input", () => { valeurs[q.id] = t.value; });
       champs.set(q.id, t);
-      bloc.append(el("div", "creation-libelle", q.texte));
+      bloc.append(el("div", "creation-libelle", q.texte + (multiple ? " (plusieurs choix possibles)" : "")));
       if ((q.choix || []).length) {
         const choix = el("div", "creation-choix");
         for (const c of q.choix) {
           const bt = bouton(c, true);
-          bt.addEventListener("click", () => { valeurs = choisir(valeurs, q.id, c); t.value = c; });
+          if (multiple) {
+            bt.setAttribute("aria-pressed", String((choisis[q.id] || []).includes(c)));
+            bt.addEventListener("click", () => {
+              choisis = basculer(choisis, q.id, c);
+              bt.setAttribute("aria-pressed", String(choisis[q.id].includes(c)));
+            });
+          } else {
+            bt.addEventListener("click", () => { valeurs = choisir(valeurs, q.id, c); t.value = c; });
+          }
           choix.append(bt);
         }
         bloc.append(choix);
@@ -467,9 +489,10 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     form.append(erreur, rangee);
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      const corps = corpsTour(b.id, questions, valeurs);
+      const corps = corpsTour(b.id, questions, valeurs, choisis);
       if (!corps) { erreur.textContent = "Répondez à chaque question (ou demandez au chef de proposer maintenant)."; return; }
       valeurs = {};
+      choisis = {};
       envoi.disabled = true;
       envoyerTour(corps);
     });

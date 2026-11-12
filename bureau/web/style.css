@@ -524,7 +524,9 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 @keyframes creation-pulse { 50% { opacity: .45; } }
 .creation-question { margin: 10px 0; }
 .creation-choix { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
-.creation-choix .bouton { margin: 0; padding: 6px 10px; font-size: 13px; }
+.creation-choix .bouton { margin: 0; padding: 6px 10px; font-size: 13px; min-height: 36px; }
+.creation-choix .bouton[aria-pressed="true"] { background: #3f8f57; border-color: #3f8f57; color: #fff; }
+.creation-choix .bouton[aria-pressed="true"]::before { content: "\2713\00a0"; }
 .creation-proposition { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: #f6f2e8; font: inherit; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 480px) {
   .creation-fond { padding: 6px; }

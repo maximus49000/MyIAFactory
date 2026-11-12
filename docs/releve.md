@@ -188,7 +188,8 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 - `glossaire` : le vocabulaire de la fonctionnalité, `[{mot, definition}]` (500 mots au plus ; mot : 60 caractères,
   définition : 400) ; un message peut aussi porter son `glossaire`, et des `questions` à choix
   (`[{texte, choix: [2 à 12], multiple?}]`, 10 au plus) : le bureau met les mots en valeur (définition au survol) et
-  montre un bouton par choix, « Autre » et « Passer » ;
+  montre un bouton par choix, « Autre » et « Passer » (avec `multiple`, les boutons sont basculables et la réponse
+  liste les choix retenus ; absent ou faux, un seul choix, comme avant) ;
 - `documents` : les fichiers produits pour la fonctionnalité, 2 000 au plus, chacun `{chemin, titre}` et, facultatifs,
   d'où il vient : `agent`, `etape`, `tache`, `element`, `sous_tache`, `date` (textes), et `livrable` (vrai : un fichier
   final de son élément, montré dans les « Livrables » du panneau avec « Demander une modification »). Le panneau de la fonctionnalité

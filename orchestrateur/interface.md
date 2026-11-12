@@ -124,7 +124,10 @@ agent. Un message d'agent remet `attend_reponse` à faux. `"attend": true` dit q
 contient une question en attend une. Un agent peut joindre des **questions à choix**,
 `"questions": [{"texte", "choix": [2 à 12 textes], "multiple"?: true}]` (10 au plus) : le bureau montre un bouton par
 choix, un bouton « Autre » (avec un champ pour la valeur voulue) et un bouton « Passer » ; la réponse revient en un `message` lisible (« question → choix », « (passée) »,
-puis le texte libre, obligatoire quand une question est passée). Un agent peut aussi définir les mots spécialisés
+puis le texte libre, obligatoire quand une question est passée). `multiple: true` (plusieurs réponses vraies
+ensemble ; absent ou faux = un seul choix) rend les boutons basculables : la réponse liste les choix retenus. À la
+création d'un projet, la même clé existe dans les questions du chef (`definir_workflow`) et la réponse arrive en
+`"Fun ; Jouabilité ; Autre : texte libre"`. Un agent peut aussi définir les mots spécialisés
 qu'il emploie : `"glossaire": [{"mot", "definition"}]` (60 et 400 caractères au plus). Ils entrent dans le
 **glossaire de la fonctionnalité** (un mot redéfini prend la définition la plus récente), qui est gardé par le suivi,
 écrit dans `<pieces>/<fonctionnalité>/glossaire.md` (rangé dans ses documents), donné par `etat`, joint au message

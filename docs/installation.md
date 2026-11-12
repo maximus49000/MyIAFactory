@@ -141,7 +141,10 @@ Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernièr
    (un objectif de facturation) et « dépôt GitHub privé ». **Valider** contrôle le nom et le dossier tout de suite :
    rien n'est écrit dans un projet.
 2. **Fenêtre 2, l'échange avec le chef.** Chaque message porte des questions : répondez dans le champ texte, ou d'un clic
-   sur un bouton de réponse quand le chef en propose. Le **coût de l'échange** s'affiche au fil de l'eau. Le chef pose
+   sur un bouton de réponse quand le chef en propose. Quand plusieurs réponses peuvent être vraies ensemble (« multiple »,
+   mention « plusieurs choix possibles »), les boutons s'allument et s'éteignent d'un clic : sélectionnez-en autant que
+   vous voulez, le champ texte ajoute une réponse libre ; il faut au moins un choix ou un texte. Il en va de même dans
+   la discussion d'une fonctionnalité. Le **coût de l'échange** s'affiche au fil de l'eau. Le chef pose
    **4 tours de questions au plus** (« Proposez maintenant » le fait s'arrêter avant), puis présente son workflow : le
    genre, les étapes avec leur raison, les validations du Directeur, les agents et leurs modèles, les outils du poste et
    le coût d'un élément. « Demander une correction » (texte libre) l'ajuste sans reposer toutes les questions.

@@ -178,3 +178,14 @@ Constat : un outil « à installer » n'était qu'une ligne de texte collée dan
 - **Sans clic, la liste attend.** À l'acceptation sans choix, à la création sans case, ou pour les outils non autonomes, la
   décision `environnement` (de la fonctionnalité, ou du projet) est posée ; la fin d'une tâche d'installation revérifie le poste
   et remplace la décision par la liste de ce qui manque encore.
+
+## 9. Questions à plusieurs réponses (2026-11-12)
+
+- Une question à choix porte `multiple` (booléen, absent = faux = un seul choix, comportement inchangé). Elle existait déjà
+  pour la discussion d'une fonctionnalité (relevé, `message.questions`) ; elle est ajoutée aux questions du chef de la
+  création (`definir_workflow` : validateur booléen, consigne, exemple) et à la consigne de cadrage.
+- Page : une question `multiple` montre des boutons bascule (`aria-pressed`, coche visible, sélection de 1 à N) ; le champ
+  texte reste, comme réponse libre ajoutée. L'envoi est refusé tant qu'aucun choix ni texte n'est donné.
+- Réponse transmise au chef : `"Fun ; Jouabilité ; Autre : texte libre"` (dans le `texte` de la réponse, sans changement
+  de serveur ni de format de stockage). La discussion garde son format « question → choix, choix ».
+- Anciennes questions et anciens brouillons (sans `multiple`) : lus comme des questions à un seul choix.

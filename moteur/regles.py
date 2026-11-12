@@ -1666,7 +1666,7 @@ def _matiere(projet, etat, t):
     if etape == "cadrage":
         parties += ["Discussion avec l'utilisateur :", _texte_discussion(f),
                     "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
-                    "(`message.questions`, `attend: true`). Dès ta première réponse, donne un `nom` court à la "
+                    "(`message.questions`, `attend: true`; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
                     "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                     "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
                     "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, sous une racine "

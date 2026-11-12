@@ -361,6 +361,19 @@ class Agents(Base):
         regles._partir(self.projet, etat, court, "dev-c1", [t], None, {t: tache}, modele_voulu="Sonnet")
         self.assertEqual(etat["departs"][t]["modele"], "Sonnet")
 
+    def test_le_modele_de_la_fiche_cloud_est_un_plafond(self):
+        """Une fiche Sonnet ne prend pas une tâche Opus ; une montée au-dessus de la fiche est ramenée à la fiche."""
+        t = self.tache()                                         # fiche dev-c1 : Sonnet
+        court = regles._etat(self.projet)
+        tache = next(x for x in court["taches"] if x["id"] == t)
+        etat = regles.nouvel_etat()
+        self.assertIsNone(regles._choisir_agent(self.projet, etat, court, tache, "Opus", local_ok=False, cloud_ok=True))
+        self.assertEqual(regles._choisir_agent(self.projet, etat, court, tache, "Haiku", local_ok=False, cloud_ok=True),
+                         "dev-c1")
+        regles._partir(self.projet, etat, court, "dev-c1", [t], None, {t: dict(tache, montee={"a": "Opus"})},
+                       modele_voulu="Haiku")
+        self.assertEqual(etat["departs"][t]["modele"], "Sonnet")
+
     def test_depart_d_un_lot_cloud_nomme_le_rapport_de_la_premiere_tache(self):
         a, b = self.tache("A"), self.tache("B")
         m = self.ok("depart", entree={"agent": "dev-c1", "taches": [a, b]})["message"]

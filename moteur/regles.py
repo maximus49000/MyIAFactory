@@ -2326,10 +2326,12 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
         if local["agent"]:
             return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
-    # Un agent cloud du rôle prend la tâche même si sa fiche porte un autre modèle que le lot : sa session tournera sur
-    # le modèle du lot (voir `_partir`). Celui dont la fiche porte déjà ce modèle d'abord.
-    candidats = sorted((a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]),
-                       key=lambda a: 0 if (not modele or a["modele"] == modele) else 1)
+    # Le modèle de la fiche d'un agent cloud est un plafond : il prend une tâche de ce modèle ou d'un modèle moindre, et
+    # sa session tourne sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus. Celui dont
+    # le plafond est le plus proche d'abord.
+    candidats = sorted((a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]
+                        and (not modele or rang_modele(a["modele"]) >= rang_modele(modele))),
+                       key=lambda a: rang_modele(a["modele"]) - (rang_modele(modele) if modele else 0))
     if not clouds or not candidats:
         return None
     raison = projet.cloud_raison()
@@ -2348,14 +2350,26 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     return equivalent
 
 
+ORDRE_DES_MODELES = ("haiku", "sonnet", "opus", "fable")
+
+
+def rang_modele(modele):
+    """Le rang d'un modèle (Haiku < Sonnet < Opus < Fable) ; un nom inconnu compte comme Sonnet."""
+    m = str(modele or "").lower()
+    return next((i for i, nom in enumerate(ORDRE_DES_MODELES) if nom in m), 1)
+
+
 def _partir(projet, etat, court, agent, ids, lot, par_id, modele_voulu=None):
     fiche = next(a for a in court["agents"] if a["cle"] == agent)
     premiere = par_id[ids[0]]
     montee = premiere.get("montee")
-    # Un agent cloud ouvre une session par départ : elle tourne sur le modèle que demande la tâche (celui du lot),
-    # pas forcément celui de sa fiche ; un agent local garde le modèle de sa fiche.
-    de_base = modele_voulu if (modele_voulu and fiche.get("lieu") == "cloud") else fiche["modele"]
-    modele = (montee or {}).get("a") or de_base
+    # Un agent cloud ouvre une session par départ : elle tourne sur le modèle que demande la tâche (celui du lot, ou sa
+    # montée), sans jamais dépasser le modèle de sa fiche, qui est son plafond ; un agent local garde le modèle de sa fiche.
+    if fiche.get("lieu") == "cloud":
+        voulu = (montee or {}).get("a") or modele_voulu or fiche["modele"]
+        modele = voulu if rang_modele(voulu) <= rang_modele(fiche["modele"]) else fiche["modele"]
+    else:
+        modele = (montee or {}).get("a") or fiche["modele"]
     if len(ids) > 1:
         for rang, i in enumerate(ids, 1):
             lancer(projet, "tache", {"id": i, "lot": {"id": lot, "rang": rang}})

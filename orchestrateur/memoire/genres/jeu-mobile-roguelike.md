@@ -236,3 +236,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour une signature Android, si plusieurs fichiers de clé existent, demander à l'utilisateur lequel utiliser et son alias avant de lancer l'export signé.
+
+## G40 — Dans un roguelike, tester chaque événement et chaque boutiqu
+Rôles : testeur
+Date : 2026-11-12
+
+Dans un roguelike, tester chaque événement et chaque boutique en appelant directement la fonction d'effet sur l'état de run. Faire de nombreux tirages pour les effets aléatoires et vérifier que le résultat est un cas exact connu. Vérifier aussi le taux observé contre la valeur d'équilibrage, et les bornes : plafond, solde jamais négatif.

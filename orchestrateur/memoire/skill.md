@@ -105,3 +105,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Un contrôle de continuité de boucle audio fondé sur l'écart entre premier et dernier échantillon donne de faux positifs avec des ondes carrées ; fixer un seuil large qui ne détecte que les vrais clics.
+
+## S18 — Quand une police bitmap générée par script ne couvre pas tou
+Rôles : artiste
+Date : 2026-11-12
+
+Quand une police bitmap générée par script ne couvre pas tous les caractères, documenter son jeu de caractères et rédiger les textes d'aperçu avec ses seuls glyphes, sinon un symbole manquant disparaît sans erreur.

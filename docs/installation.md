@@ -184,6 +184,13 @@ essai, réponse refusée), la question est ajoutée à sa matière ; sinon, sa t
 `claude -p` (lecture seule : Read, Grep, Glob) et répond dans la discussion. Sans agent au travail, un message suit son
 cours habituel ; les agents cloud ne changent pas.
 
+**Un retour sur une tâche bloquée la reprend.** Un retour posté sur une tâche bloquée (ou arrêtée : commencée, plus
+active, pas faite) ne crée pas de tâche « Retour » : la tâche est débloquée aussitôt (journal « Reprise sur votre
+retour : … »), et le même agent la reprend avec votre consigne ajoutée à sa matière. Le bureau répond « Je reprends la
+tâche bloquée avec votre consigne. » Finie, elle suit son cours habituel (étape suivante, validation). Un retour sur
+une tâche faite ouvre toujours une tâche « Retour », et sur une tâche dont l'agent travaille, il est transmis comme
+une question.
+
 Le **Directeur** montre en plus les cahiers et les méthodes à valider, les genres à confirmer, les « méthode à
 revoir ? » et les sessions cloud à créer (créez la session vous-même, puis donnez son nom et cliquez « C'est fait ») ;
 pour une leçon, il montre l'étage proposé (projet, genre ou skill) et le texte général, que vous validez mot pour mot.

@@ -1530,8 +1530,27 @@ def _sur_session_cloud(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, None) if reprises else []
 
 
+def _tache_a_reprendre(t):
+    """Vrai si un retour sur cette tâche la reprend : bloquée, ou arrêtée (commencée, plus active) sans être faite. Pas
+    les validations du Directeur, qui ne sont pas le travail d'un agent."""
+    if t["colonne"] == "fait" or str(t.get("etape") or "").startswith("validation"):
+        return False
+    return bool(t.get("bloquee")) or (not t["active"] and bool(t.get("debut")))
+
+
 def _sur_retour(projet, demande, etat):
     t = _tache(projet, demande["tache"])
+    fid = t.get("fonctionnalite")
+    travail = agent_au_travail(projet, etat, fid) if fid else None
+    if travail is not None and travail[0] == t["id"]:      # l'agent est en plein travail sur cette tâche
+        return _transmettre_a_l_agent(projet, demande, fid, *travail)
+    if _tache_a_reprendre(t) and t["id"] not in _m(etat, "en_cours"):
+        # le retour reprend CETTE tâche (même agent, même élément) : débloquée aussitôt, pas de tâche « Retour » à part
+        texte = " ".join(str(demande["texte"]).split())
+        _terminer(projet, {"demande": demande["id"]}, "Je reprends la tâche bloquée avec votre consigne.")
+        return _reprendre_la_tache(projet, etat, t["id"], fid,
+                                   "Consigne de l'utilisateur pour la reprise de cette tâche : " + demande["texte"],
+                                   "Reprise sur votre retour : " + texte)
     _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"), t.get("role") or _role_production(projet, t.get("fonctionnalite")),
                        "retour", element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
     _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")

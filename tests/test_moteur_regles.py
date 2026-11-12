@@ -684,6 +684,62 @@ class Serie(Base):
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
 
+class RetourSurTache(Base):
+    """Un retour de l'utilisateur sur une tâche bloquée la reprend ; sur une tâche faite, il crée une tâche de retour."""
+
+    def tache(self, **plus):
+        self.fonctionnalite()
+        t = self.ok("tache", entree={"titre": "Livraison", "fonctionnalite": "f1", "role": "dev", "colonne": "dev",
+                                     "agent": "dev-1", "active": True, "etape": "demande"})["id"]
+        self.ok("tache", entree={"id": t, "active": False, **plus})
+        return t
+
+    def retour(self, t, texte="Crée la variable et reprends"):
+        d, actions = self.traiter(type="retour", tache=t, texte=texte)
+        return d, actions
+
+    def test_retour_sur_bloquee_la_reprend_sans_nouvelle_tache(self):
+        t = self.tache(bloquee="L'agent n'a pas pu finir : mot de passe du keystore absent")
+        avant = len(self.taches())
+        d, actions = self.retour(t)
+        self.assertEqual(len(self.taches()), avant)
+        self.assertFalse(self.taches(titre="Retour : Livraison"))
+        fiche = self.taches(id=t)[0]
+        self.assertIsNone(fiche["bloquee"])
+        self.assertTrue(any("Reprise sur votre retour : Crée la variable et reprends" in j["texte"]
+                            for j in fiche["journal"]))
+        self.assertEqual(self.statut(d["id"])["reponse"], "Je reprends la tâche bloquée avec votre consigne.")
+        (action,) = actions
+        self.assertEqual((action[0], action[1], action[2]), ("agent", "dev-1", [t]))
+        self.assertIn("Crée la variable et reprends", action[3])      # la consigne est dans la matière de la reprise
+        self.assertTrue(self.taches(id=t)[0]["active"])
+
+    def test_retour_sur_arretee_la_reprend(self):
+        t = self.tache()              # commencée puis arrêtée, pas bloquée
+        _, actions = self.retour(t)
+        self.assertFalse(self.taches(titre="Retour : Livraison"))
+        self.assertEqual([a[0] for a in actions], ["agent"])
+        self.assertIn("Crée la variable", actions[0][3])
+
+    def test_retour_sur_faite_cree_une_tache_de_retour(self):
+        t = self.tache()
+        self.ok("tache", entree={"id": t, "colonne": "fait"})
+        d, _ = self.retour(t)
+        (retour,) = self.taches(titre="Retour : Livraison")
+        self.assertTrue(any("Retour de l'utilisateur" in j["texte"] for j in retour["journal"]))
+        self.assertEqual(self.statut(d["id"])["reponse"], "J'ai confié votre retour à un agent.")
+
+    def test_retour_sur_active_en_plein_travail_est_transmis(self):
+        t = self.tache()
+        self.ok("tache", entree={"id": t, "active": True})
+        self.etat["en_cours"].add(t)
+        d, actions = self.retour(t, "Où en es-tu ?")
+        self.assertEqual(actions, [])
+        self.assertFalse(self.taches(titre="Retour : Livraison"))
+        self.assertTrue(self.statut(d["id"])["reponse"].startswith("Question transmise à"))
+        self.assertTrue(self.taches(id=t)[0]["active"])
+
+
 class Arrets(Base):
     def depart_cadrage(self):
         d, actions = self.cadrer(texte="Des écrans pour l'appli")

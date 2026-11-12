@@ -928,16 +928,168 @@ class Validation(Base):
         self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
 
-    def test_validation_compte_parmi_les_elements_en_cours(self):
+    def test_un_element_en_attente_du_directeur_ne_retient_pas_le_suivant(self):
+        """Parallélisme (2026-11-12) : les places vont aux tâches qui mènent à la validation. Deux éléments attendent le
+        Directeur : ils ne comptent plus parmi les éléments au travail, e3 part vers la validation (avant : il
+        attendait)."""
         self.projet_avec_validation(elements=3)
         deux = {"statut": "fait", "message": {"texte": "Testé."}, "verdicts": [
             {"element": e, "conforme": True, "points": []} for e in ("e1", "e2")]}
         rapports = [{"statut": "fait", "message": {"texte": "Programmé."}}, deux]    # un agent pour chaque lot de deux
         self.piloter(regles.avancer(self.projet, self.etat), rapports=rapports)
         self.assertEqual({d["element"]["id"] for d in self.decisions()}, {"e1", "e2"})
-        self.piloter(regles.avancer(self.projet, self.etat))
-        self.assertEqual([q["id"] for q in self.fonc()["file"]], ["e3"])      # e3 attend : deux éléments en cours
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, {**verdict("e3"), "message": {"texte": "Testé."}}])
+        self.assertEqual(self.fonc()["file"], [])
+        self.assertEqual({d["element"]["id"] for d in self.decisions()}, {"e1", "e2", "e3"})
+        self.assertEqual(self.taches(etape="flux:livraison"), [])
         self.assertNotEqual(self.fonc()["etape"], "terminee")
+
+    # --- Parallélisme et barrières (conception 2026-11-12-parallelisme-design.md).
+
+    def file_avec(self, **validations):
+        """Deux éléments e1, e2 ; `validations` : l'élément -> les étapes de validation qui le concernent."""
+        elements = [dict(x, **({"validations": validations[x["id"]]} if x["id"] in validations else {}))
+                    for x in DECOUPAGE["elements"][:2]]
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": elements})
+
+    def jusqu_aux_validations(self):
+        """e1 et e2 programmés et testés ensemble (un lot à chaque étape)."""
+        deux = {"statut": "fait", "message": {"texte": "Testé."}, "verdicts": [
+            {"element": e, "conforme": True, "points": []} for e in ("e1", "e2")]}
+        return self.piloter(regles.avancer(self.projet, self.etat),
+                            rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, deux])
+
+    def test_barriere_retient_la_suite_tant_qu_un_element_concerne_attend(self):
+        self.projet_avec_validation(elements=2)
+        self.jusqu_aux_validations()
+        d1 = next(d for d in self.decisions() if d["element"]["id"] == "e1")
+        _, actions = self.traiter(type="valider_etape", decision=d1["id"], verdict="valider")
+        self.assertEqual([a for a in actions if a[0] == "agent"], [])          # e2 attend encore : rien après la barrière
+        (livraison,) = self.taches(etape="flux:livraison")
+        self.assertFalse(livraison["active"])
+        self.assertEqual([a for a in regles.avancer(self.projet, self.etat) if a[0] == "agent"], [])
+        self.assertEqual(self.etat["attente_validation"]["texte"],
+                         "2 places libres : en attente de votre validation « Validation du Directeur »")
+        d2 = self.decisions()[0]
+        _, actions = self.traiter(type="valider_etape", decision=d2["id"], verdict="valider")
+        agents_partis = [a for a in actions if a[0] == "agent"]
+        self.assertEqual(sorted(i for a in agents_partis for i in a[2]),
+                         sorted(t["id"] for t in self.taches(etape="flux:livraison")))
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 2)
+        regles.avancer(self.projet, self.etat)
+        self.assertNotIn("attente_validation", self.etat)
+
+    def test_element_non_concerne_passe_sans_arret_mais_attend_la_barriere(self):
+        self.projet_avec_validation(elements=0)
+        self.file_avec(e2=[])                                   # e1 : toutes (défaut), e2 : aucune
+        self.jusqu_aux_validations()
+        self.assertEqual([d["element"]["id"] for d in self.decisions()], ["e1"])
+        self.assertEqual(self.taches(etape="validation:valider", element="e2"), [])
+        (l2,) = self.taches(etape="flux:livraison", element="e2")
+        self.assertFalse(l2["active"])                          # retenue : e1 n'est pas encore validé
+        _, actions = self.traiter(type="valider_etape", decision=self.decisions()[0]["id"], verdict="valider")
+        self.assertEqual(sorted(i for a in actions if a[0] == "agent" for i in a[2]),
+                         sorted(t["id"] for t in self.taches(etape="flux:livraison")))
+
+    def test_validations_du_decoupage_filtrees_et_gardees_dans_la_file(self):
+        self.projet_avec_validation(elements=0)
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "decoupage"})
+        o = dict(DECOUPAGE, elements=[dict(DECOUPAGE["elements"][0], validations=["valider", "inconnue"],
+                                           objectif="L'écran d'accueil du jeu.")])
+        try:
+            regles._apres_decouper(self.projet, o, {"fonctionnalite": "f1"}, self.etat)
+        except regles.Refus:
+            pass
+        e1 = self.ok("detail", entree={"fonctionnalite": "f1"})["elements"]["e1"]
+        self.assertEqual((e1["validations"], e1["objectif"]), (["valider"], "L'écran d'accueil du jeu."))
+
+    def test_objectif_et_a_valider_en_tete_de_la_decision(self):
+        self.projet_avec_validation(elements=0)
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["flux"][2]["raison"] = "voir l'apk d'essai avant de le livrer"
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": [dict(DECOUPAGE["elements"][0])]})
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, {**verdict("e1"), "message": {"texte": "Testé."}}])
+        (d,) = self.decisions()
+        self.assertEqual(d["objectif"], "Produire « Accueil » (écrans), jusqu'à l'étape « Tests et essai du jeu ».")
+        self.assertEqual(d["a_valider"], "Validation du Directeur — voir l'apk d'essai avant de le livrer")
+
+    def test_objectif_du_decoupage_rappele(self):
+        self.projet_avec_validation(elements=0)
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": [
+            dict(DECOUPAGE["elements"][0], objectif="L'écran d'accueil, avec le logo et le bouton Jouer.")]})
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, {**verdict("e1"), "message": {"texte": "Testé."}}])
+        self.assertEqual(self.decisions()[0]["objectif"], "L'écran d'accueil, avec le logo et le bouton Jouer.")
+
+    def test_sous_chaque_element_seulement_son_compte_rendu(self):
+        """Vu en vrai : les rapports de deux éléments d'un même lot apparaissaient sous chacun."""
+        self.projet_avec_validation(elements=2)
+        lot = {"statut": "fait", "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
+               "message": {"texte": "Accueil (e1) : tout est vert.\n\nProfil (e2) : un menu à revoir.",
+                           "images": [{"chemin": "pieces/f1/e1-ecran.png", "legende": "Accueil"},
+                                      {"chemin": "pieces/f1/e2-ecran.png", "legende": "Profil"}]},
+               "fichiers": [{"chemin": "pieces/f1/commun.md", "titre": "Commun"},
+                            {"chemin": "pieces/f1/e2.apk", "titre": "Apk du profil", "element": "e2"}]}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, lot])
+        par = {d["element"]["id"]: d for d in self.decisions()}
+        self.assertEqual(par["e1"]["compte_rendu"], "Accueil (e1) : tout est vert.")
+        self.assertEqual(par["e2"]["compte_rendu"], "Profil (e2) : un menu à revoir.")
+        self.assertEqual([f["chemin"] for f in par["e1"]["fichiers"]], ["pieces/f1/e1-ecran.png"])
+        self.assertEqual([f["chemin"] for f in par["e2"]["fichiers"]], ["pieces/f1/e2.apk", "pieces/f1/e2-ecran.png"])
+
+    def test_comptes_rendus_par_element_l_emportent(self):
+        self.projet_avec_validation(elements=2)
+        lot = {"statut": "fait", "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
+               "message": {"texte": "Les deux écrans sont testés."},
+               "comptes_rendus": [{"element": "e1", "texte": "Accueil : vert."},
+                                  {"element": "e2", "texte": "Profil : vert.",
+                                   "images": [{"chemin": "pieces/f1/p.png", "legende": "Le profil"}]}]}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, lot])
+        par = {d["element"]["id"]: d for d in self.decisions()}
+        self.assertEqual((par["e1"]["compte_rendu"], par["e1"]["fichiers"]), ("Accueil : vert.", []))
+        self.assertEqual(par["e2"]["fichiers"], [{"chemin": "pieces/f1/p.png", "titre": "Le profil"}])
+
+    def test_les_taches_avant_une_validation_passent_d_abord(self):
+        self.projet_avec_validation(elements=2)
+        court = self.ok("etat")
+        barrieres, _ = regles._barrieres(self.projet, court)
+        self.assertEqual(barrieres["f1"]["premiere"], 2)
+        self.assertTrue(regles._avant_une_validation({"etape": "flux:essai", "fonctionnalite": "f1"}, barrieres))
+        self.assertFalse(regles._avant_une_validation({"etape": "flux:livraison", "fonctionnalite": "f1"}, barrieres))
+        self.assertTrue(regles._avant_une_validation({"etape": "cadrage", "fonctionnalite": "f2"}, barrieres))
+
+    def test_places_locales(self):
+        self.projet_avec_validation(elements=0)
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_locaux_max"] = 1
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        for titre, role, etape in (("A", "dev", "flux:dev"), ("B", "testeur", "flux:essai")):
+            self.ok("tache", entree={"titre": titre, "fonctionnalite": "f1", "role": role, "colonne": "dev",
+                                     "etape": etape, "active": False})
+        partis = [a for a in regles._demarrer_en_attente(self.projet, self.etat, None) if a[0] == "agent"]
+        self.assertEqual(len(partis), 1)
+        self.assertEqual(regles._places(self.projet, self.ok("etat"))["locaux"], 0)
+        self.assertEqual([a for a in regles._demarrer_en_attente(self.projet, self.etat, None) if a[0] == "agent"], [])
+
+    def test_pause_globale_au_dessus_de_tout(self):
+        self.projet_avec_validation(elements=1)
+        self.projet.pause_globale = "Pause : installation de Godot"
+        self.assertEqual(regles.avancer(self.projet, self.etat), [])
+        self.assertNotIn("attente_validation", self.etat)
+
+    def test_reglage_du_parallelisme(self):
+        d, _ = self.traiter(type="parallelisme", agents_locaux_max=3, agents_cloud_max=2)
+        self.assertIn("au plus 3 agents locaux et 2 agents cloud", self.statut(d["id"])["reponse"])
+        f = fa.lire(self.factory)
+        self.assertEqual((f["agents_locaux_max"], f["agents_cloud_max"]), (3, 2))
+        d, _ = self.traiter(type="parallelisme", agents_locaux_max=0, agents_cloud_max=2)
+        self.assertIn("agents_locaux_max", self.statut(d["id"])["reponse"])
+        self.assertEqual(fa.lire(self.factory)["agents_locaux_max"], 3)
 
     def test_relecture_sans_relecteur_ignore_la_validation(self):
         self.projet_avec_validation(flux=[

@@ -251,11 +251,83 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }
 
+// Les places du projet (le parallélisme) : bornes de la factory, vérifiées de nouveau par le serveur et l'outil.
+export const BORNES_PLACES = {locaux: [1, 16], cloud: [0, 16]};
+
+// La demande « parallelisme » ; null si une valeur sort des bornes ou n'est pas un entier.
+export function demandeParallelisme(locaux, cloud) {
+  const n = (v) => (typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : v);
+  const l = n(locaux), c = n(cloud);
+  const dans = (v, [bas, haut]) => Number.isInteger(v) && v >= bas && v <= haut;
+  if (!dans(l, BORNES_PLACES.locaux) || !dans(c, BORNES_PLACES.cloud)) return null;
+  return {type: "parallelisme", agents_locaux_max: l, agents_cloud_max: c};
+}
+
+// Ce que dit la partie « Parallélisme du projet » : les réglages, les agents recrutés de chaque lieu, et ce qui retient.
+export function resumeParallelisme(etat) {
+  const agents = (etat?.agents || []).filter((a) => !a.fixe && !a.chef && a.id !== "chef" && a.id !== "directeur");
+  const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud").length, cloud: agents.filter((a) => a.lieu === "cloud").length};
+  const locaux = Number.isInteger(etat?.agents_locaux_max) ? etat.agents_locaux_max : 2;
+  const cloud = Number.isInteger(etat?.agents_cloud_max) ? etat.agents_cloud_max : 0;
+  const notes = [];
+  if (cloud > 0 && !recrutes.cloud) notes.push("Aucun agent cloud recruté : les places cloud resteront vides.");
+  notes.push("Chaque place est tenue par un agent recruté : pour plusieurs tâches d'un même rôle en même temps, " +
+             "il faut plusieurs agents de ce rôle. Une place locale attend que la charge de l'ordinateur le permette ; " +
+             "une place cloud non. Les tâches qui mènent à une validation passent d'abord ; rien ne démarre après une " +
+             "validation qui vous attend.");
+  const attente = etat?.attente_validation?.texte;
+  return {locaux, cloud, recrutes, notes, attente: typeof attente === "string" && attente.trim() ? attente : null};
+}
+
+// La partie « Parallélisme du projet », en bas de l'onglet : deux nombres et « Enregistrer » (si l'on peut agir).
+export function partieParallelisme(ctx) {
+  const r = resumeParallelisme(ctx.etat);
+  const bloc = el("div", "parallelisme");
+  bloc.append(el("div", "carte-sous-titre", "Parallélisme du projet"));
+  bloc.append(el("p", "note", `Agents recrutés : ${r.recrutes.locaux} locaux, ${r.recrutes.cloud} cloud.`));
+  const champ = (libelle, valeur, [bas, haut]) => {
+    const label = el("label", "parallelisme-champ");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = String(bas);
+    input.max = String(haut);
+    input.step = "1";
+    input.value = String(valeur);
+    input.disabled = !ctx.etat?.agir;
+    label.append(el("span", "", libelle), input);
+    return {label, input};
+  };
+  const l = champ("Agents locaux en même temps", r.locaux, BORNES_PLACES.locaux);
+  const c = champ("Agents cloud en même temps", r.cloud, BORNES_PLACES.cloud);
+  bloc.append(l.label, c.label);
+  if (r.attente) bloc.append(el("p", "avertissement", r.attente));
+  for (const n of r.notes) bloc.append(el("p", "note", n));
+  if (ctx.etat?.agir && ctx.barre?.demander) {
+    const erreur = el("p", "saisie-erreur", "");
+    const b = el("button", "bouton", "Enregistrer");
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      const d = demandeParallelisme(l.input.value, c.input.value);
+      if (!d) { erreur.textContent = "Agents locaux : de 1 à 16 ; agents cloud : de 0 à 16 (nombres entiers)."; return; }
+      erreur.textContent = "";
+      b.disabled = true;
+      const res = await ctx.barre.demander(d, b);
+      if (!res?.ok) b.disabled = false;
+    });
+    bloc.append(erreur, b);
+  }
+  return bloc;
+}
+
 // contenuFacturation(contexte, conteneur, service, periode)
 export function contenuFacturation(ctx, conteneur, service, periode) {
   conteneur.append(el("p", "note", "Chargement…"));
   chargerFacturation(periode).then(
-    (d) => { if (conteneur.isConnected) dessinerFacturation(conteneur, d, service, periode, ctx.etat, ctx.challenger); },
+    (d) => {
+      if (!conteneur.isConnected) return;
+      dessinerFacturation(conteneur, d, service, periode, ctx.etat, ctx.challenger);
+      if (ctx.etat?.version >= 4 || ctx.etat?.agents_locaux_max !== undefined) conteneur.append(partieParallelisme(ctx));
+    },
     (err) => { if (conteneur.isConnected) conteneur.replaceChildren(el("p", "avertissement", err.message)); },
   );
 }

@@ -731,6 +731,33 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.outil("file", entree={"fonctionnalite": f, "elements": [{"id": "a", "nom": "A"},
                                                                                        {"id": "a", "nom": "B"}]})[0], 1)
 
+    def test_file_garde_objectif_et_validations(self):
+        f = self.nouvelle()
+        self.ok("file", entree={"fonctionnalite": f, "elements": [
+            {"id": "e1", "nom": "Un", "objectif": "L'accueil.", "validations": ["f1-da"]}, {"id": "e2", "nom": "Deux"}]})
+        self.assertEqual(self.ok("detail", entree={"fonctionnalite": f})["elements"]["e1"],
+                         {"nom": "Un", "objectif": "L'accueil.", "validations": ["f1-da"]})
+        self.assertEqual(self.ok("file-prendre", entree={"fonctionnalite": f})["element"],
+                         {"id": "e1", "nom": "Un", "objectif": "L'accueil.", "validations": ["f1-da"]})
+        self.assertEqual(releve.valider(self.releve()), [])
+        for mauvais in ({"objectif": 3}, {"objectif": "x" * 301}, {"validations": "f1-da"}, {"validations": [""]}):
+            self.assertEqual(self.outil("file", entree={"fonctionnalite": f, "elements": [
+                {"id": "e3", "nom": "Trois", **mauvais}]})[0], 1, mauvais)
+
+    def test_parallelisme_ecrit_et_publie(self):
+        r = self.releve()
+        self.assertEqual((r["agents_locaux_max"], r["agents_cloud_max"]), (2, 0))   # sans agent cloud : 0
+        self.assertEqual(self.ok("parallelisme", entree={"agents_locaux_max": 3, "agents_cloud_max": 1}),
+                         {"agents_locaux_max": 3, "agents_cloud_max": 1})
+        r = self.releve()
+        self.assertEqual((r["agents_locaux_max"], r["agents_cloud_max"]), (3, 1))
+        self.assertEqual(releve.valider(r), [])
+        for mauvais in ({"agents_locaux_max": 0, "agents_cloud_max": 1}, {"agents_locaux_max": 2},
+                        {"agents_locaux_max": 2, "agents_cloud_max": 17}):
+            self.assertEqual(self.outil("parallelisme", entree=mauvais)[0], 1, mauvais)
+        self.assertEqual(self.ok("actions", entree={"type": "parallelisme", "agents_locaux_max": 2,
+                                                    "agents_cloud_max": 0})["id"][0], "r")
+
     def test_file_prendre_un_element_precis(self):
         # Un « deplacer » du bureau sur un élément de la file (id « f1/e2 ») : l'orchestrateur prend cet élément-là.
         f = self.nouvelle()

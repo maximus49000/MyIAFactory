@@ -47,13 +47,17 @@ export function voyant(factory, erreur, maintenant = new Date()) {
 }
 
 // Ce qui retient le travail, dit par le moteur : la pause d'une installation d'outil (pour tous les projets du bureau),
-// puis les tâches prêtes que la charge retient. Rend une liste de {ton, texte} (vide si rien ne retient rien).
+// puis les tâches prêtes que la charge retient, puis les places libres qui attendent une validation du Directeur.
+// Rend une liste de {ton, texte} (vide si rien ne retient rien).
 export function retenues(etat) {
   const lignes = [];
   const pause = etat?.pause_installation;
   if (pause && typeof pause.texte === "string" && pause.texte.trim()) lignes.push({ton: "pause", texte: pause.texte});
   const attente = etat?.attente_charge;
   if (attente && typeof attente.texte === "string" && attente.texte.trim()) lignes.push({ton: "attente", texte: attente.texte});
+  // des places d'agents libres que rien ne peut prendre avant une validation du Directeur
+  const places = etat?.attente_validation;
+  if (places && typeof places.texte === "string" && places.texte.trim()) lignes.push({ton: "attente", texte: places.texte});
   return lignes;
 }
 

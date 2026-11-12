@@ -22,13 +22,17 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
           "valider_etape": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
-          "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil")}
+          "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
+          "parallelisme": ("agents_locaux_max", "agents_cloud_max")}
+AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
+AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte",), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil")
+               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
+               "parallelisme")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -120,6 +124,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_partenaires(demande, r)
     if r.get("version", 1) < 4 and (genre in DEMANDES_V4 or (genre == "lecon" and "etage" in demande)):
         return "Le relevé de ce projet ne gère pas cette demande (version 4)."
+    if genre == "parallelisme":       # des nombres, pas des textes
+        return _verifier_parallelisme(demande)
     for champ in CHAMPS[genre]:
         if not isinstance(demande.get(champ), str):
             return f"« {champ} » est obligatoire (texte)."
@@ -210,6 +216,15 @@ def _decision(decisions, i, genre):
 
 def _a_decision(f, genre):
     return any(d["genre"] == genre for d in f["decisions"])
+
+
+def _verifier_parallelisme(demande):
+    """Les places du projet : `agents_locaux_max` de 1 à 16, `agents_cloud_max` de 0 à 16 (entiers)."""
+    for champ, (bas, haut) in (("agents_locaux_max", AGENTS_LOCAUX), ("agents_cloud_max", AGENTS_CLOUD)):
+        v = demande.get(champ)
+        if isinstance(v, bool) or not isinstance(v, int) or not bas <= v <= haut:
+            return f"« {champ} » doit être un entier de {bas} à {haut}."
+    return None
 
 
 def _verifier_v4(demande, r, elements):

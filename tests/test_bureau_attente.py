@@ -76,6 +76,17 @@ class TestEtatServi(AvecServeur):
         attente.effacer(attente.chemin_charge(dossier))
         self.assertIsNone(self.etat()["attente_charge"])
 
+    def test_les_places_libres_qui_attendent_une_validation(self):
+        dossier = self.tmp / "demo"
+        self.assertIsNone(self.etat()["attente_validation"])
+        texte = "2 places libres : en attente de votre validation « Validation de la direction artistique »"
+        attente.ecrire(attente.chemin_places(dossier), {"texte": texte, "places": 2,
+                                                        "validation": "Validation de la direction artistique"})
+        self.assertEqual(self.etat()["attente_validation"], {"texte": texte, "places": 2,
+                                                             "validation": "Validation de la direction artistique"})
+        attente.ecrire(attente.chemin_places(dossier), {"texte": texte}, maintenant=0)     # le moteur s'est arrêté
+        self.assertIsNone(self.etat()["attente_validation"])
+
 
 if __name__ == "__main__":
     unittest.main()

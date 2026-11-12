@@ -538,6 +538,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .decision-validation textarea { box-sizing: border-box; display: block; width: 100%; margin: 6px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .decision-validation .lecon-boutons { flex-wrap: wrap; }
 .decision-image { display: block; max-width: 100%; max-height: 260px; margin: 6px 0 2px; border-radius: 8px; border: 1px solid #d6cfbf; }
+.decision-entete { margin: 4px 0; }
+.parallelisme { margin-top: 12px; }
+.parallelisme-champ { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+.parallelisme-champ input { width: 64px; padding: 4px 6px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 
 /* --- Le formulaire « Nouveau projet ». */
 .creation-fond { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(40, 36, 30, .45); }

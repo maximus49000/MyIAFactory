@@ -207,6 +207,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     if v4:
         e["genre"] = r["genre"]
         e["agents_locaux_max"] = r["agents_locaux_max"]
+        e["agents_cloud_max"] = r["agents_cloud_max"]
         e["livrable"] = r["livrable"]
         e["decisions_projet"] = [_avec_empreinte(d) for d in r["decisions_projet"]]
         e["fonctionnalites"] = [_fonctionnalite(f, prenoms, services) for f in r["fonctionnalites"]]

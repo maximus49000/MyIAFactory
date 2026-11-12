@@ -9,7 +9,9 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
-     "usage_estime": int?}
+     "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?}]?}
+`comptes_rendus` : dans un lot, le compte rendu de chaque élément à part (ce que le Directeur voit à sa validation) ;
+une entrée mal formée est écartée, jamais une raison de refuser le rapport.
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
 moteur le note comme une estimation).
 Les trois derniers champs sont demandés par la matière des seuls agents qui en ont l'usage (cadrage : `nom`, `cahier` ;
@@ -96,6 +98,10 @@ def lire(texte):
     if "usage_estime" in r and (not isinstance(r["usage_estime"], int) or isinstance(r["usage_estime"], bool)
                                 or r["usage_estime"] < 0):
         raise RapportIllisible("« usage_estime » doit être un entier positif (tokens)")
+    comptes = r.get("comptes_rendus")
+    if comptes is not None:      # facultatif : un compte rendu par élément d'un lot (une forme fautive est ignorée)
+        r["comptes_rendus"] = [x for x in comptes if isinstance(x, dict) and _texte(x.get("element"))
+                               and isinstance(x.get("texte", ""), str)] if isinstance(comptes, list) else []
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")
     return r

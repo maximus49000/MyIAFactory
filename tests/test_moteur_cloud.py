@@ -278,6 +278,29 @@ class Agents(Base):
         self.avancer()
         self.assertEqual(len(self.cloud.lancees), 2)
 
+    def regler_cloud(self, n):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_cloud_max"] = n
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def test_reglage_du_projet_l_emporte_sur_l_ancienne_limite(self):
+        (self.dossier / "fiches" / "cam2.md").write_text(FICHE_CLOUD.format(cle="dev-c2"), encoding="utf-8")
+        self.regler_cloud(1)                    # l'ancienne limite (3) ne compte plus
+        self.tache("A", etape="correction")
+        self.tache("B", etape="correction")
+        self.avancer()
+        self.assertEqual(len(self.cloud.lancees), 1)
+        self.regler_cloud(0)
+        self.avancer()
+        self.assertEqual(len(self.cloud.lancees), 1)
+
+    def test_un_agent_cloud_ne_compte_pas_dans_la_charge(self):
+        self.regler_cloud(2)
+        self.projet._feu_vert = lambda: False     # le poste est trop chargé : les places locales sont fermées
+        self.tache("A", etape="correction")
+        self.avancer()
+        self.assertEqual(len(self.cloud.lancees), 1)
+
     def test_session_muette_deux_heures_pose_decision(self):
         t = self.tache()
         self.avancer()

@@ -47,7 +47,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil")
+                 "partenaires_maj", "installer_outil", "parallelisme")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -609,7 +609,8 @@ def cmd_detail(ctx, e):
     une tâche entière (journal, captures), ou les leçons à valider avec leur texte."""
     s = ctx.suivi.lire()
     if e.get("fonctionnalite") is not None:
-        return _resume_fonc(_fonc(s, e["fonctionnalite"])) | {"file": list(_fonc(s, e["fonctionnalite"])["file"])}
+        f = _fonc(s, e["fonctionnalite"])
+        return _resume_fonc(f) | {"file": list(f["file"]), "elements": dict(f.get("elements") or {})}
     if e.get("tache") is not None:
         t = su.tache(s, e["tache"])
         if t is None:
@@ -910,8 +911,15 @@ def _validation_decidee(ctx, s, e):
                                                   and x["chemin"].strip() and isinstance(x.get("titre"), str)
                                                   and x["titre"].strip() for x in fichiers)):
         raise Refus("« fichiers » est une liste de {chemin, titre}.")
+    plus = {}
+    for cle in ("objectif", "a_valider"):     # ce que l'élément devait produire, ce qu'il y a à valider (une phrase)
+        v = e.get(cle)
+        if v is not None:
+            if not isinstance(v, str) or len(v) > 600:
+                raise Refus(f"« {cle} » est un texte de 600 caractères au plus.")
+            plus[cle] = v
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
-            "tache": tache, "compte_rendu": compte_rendu,
+            "tache": tache, "compte_rendu": compte_rendu, **plus,
             "fichiers": [{"chemin": ctx.image_rangee(x["chemin"], fid), "titre": x["titre"]} for x in fichiers]}
 
 
@@ -1378,6 +1386,11 @@ def cmd_ecrire(ctx, e):
     return {"chemin": relatif}
 
 
+# Un élément de la file : `objectif` (ce qu'il doit produire, rappelé à sa validation) et `validations` (les étapes de
+# validation du Directeur qui le concernent ; absent : toutes) viennent du découpage.
+CHAMPS_ELEMENT = ("id", "nom", "groupe", "objectif", "validations")
+
+
 def cmd_file(ctx, e):
     elements = e.get("elements")
     if not isinstance(elements, list):
@@ -1389,13 +1402,18 @@ def cmd_file(ctx, e):
             raise Refus("Chaque élément de la file a un « id » et un « nom » (textes), et au plus un « groupe ».")
         if q["id"] in vus:
             raise Refus(f"File : identifiant d'élément en double « {q['id']} ».")
+        if q.get("objectif") is not None and (not isinstance(q["objectif"], str) or len(q["objectif"]) > 300):
+            raise Refus(f"File : « objectif » de « {q['id']} » : un texte de 300 caractères au plus.")
+        if q.get("validations") is not None and not (isinstance(q["validations"], list)
+                                                     and all(isinstance(v, str) and v for v in q["validations"])):
+            raise Refus(f"File : « validations » de « {q['id']} » : une liste d'identifiants d'étapes.")
         vus.add(q["id"])
-        propres.append({k: q[k] for k in ("id", "nom", "groupe") if q.get(k) is not None})
+        propres.append({k: q[k] for k in CHAMPS_ELEMENT if q.get(k) is not None})
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
         f["file"] = propres
         for q in propres:
-            f["elements"][q["id"]] = {k: q[k] for k in ("nom", "groupe") if k in q}
+            f["elements"][q["id"]] = {k: q[k] for k in CHAMPS_ELEMENT[1:] if k in q}
         f["maj"] = su.maintenant()
         return {"elements": len(propres)}
 
@@ -1793,7 +1811,7 @@ def construire_releve(ctx):
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
-         "agents_locaux_max": ctx.f["agents_locaux_max"],
+         "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone())}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
@@ -2429,6 +2447,24 @@ def _fiches_avec_sessions(ctx):
     return [{**x, "session": sessions.get(x["cle"]) or x["session"]} for x in ctx.fiches()]
 
 
+def places_cloud_du_projet(ctx):
+    """Les places cloud effectives (voir `depart.places_cloud`)."""
+    return depart.places_cloud(ctx.f["agents_cloud_max"],
+                               depart.ancienne_limite_cloud(ctx.f["reglages"]) if ctx.f["reglages"] else None,
+                               any(x["lieu"] == "cloud" for x in ctx.fiches()))
+
+
+def cmd_parallelisme(ctx, e):
+    """`{agents_locaux_max: 1 à 16, agents_cloud_max: 0 à 16}` : les places du projet, écrites dans la factory (le
+    reste du fichier est gardé). Rend les valeurs écrites."""
+    locaux, cloud = e.get("agents_locaux_max"), e.get("agents_cloud_max")
+    try:
+        fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud)
+    except fa.FactoryInvalide as ex:
+        raise Refus(str(ex))
+    return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
+
+
 def cmd_agent_libre(ctx, e):
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
     fiches_ = _fiches_avec_sessions(ctx)
@@ -2590,7 +2626,7 @@ COMMANDES = {
     "genre": (cmd_genre, "obligatoire"), "lecon": (cmd_lecon, "obligatoire"), "controle": (cmd_controle, "obligatoire"),
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
-    "partenaires": (cmd_partenaires, "obligatoire"),
+    "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
 }
 
 

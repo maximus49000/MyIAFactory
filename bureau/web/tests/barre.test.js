@@ -35,6 +35,13 @@ test("la barre dit la pause d'une installation et l'attente de charge", async ()
   assert.match(barre, /retenues\(etat\)/);
 });
 
+test("la barre dit les places libres qui attendent une validation", async () => {
+  const {retenues} = await import("../ui/texte.js");
+  const texte = "2 places libres : en attente de votre validation « Validation de la direction artistique »";
+  assert.deepEqual(retenues({attente_validation: {texte, places: 2}}), [{ton: "attente", texte}]);
+  assert.deepEqual(retenues({attente_validation: {texte: "  "}}), []);
+});
+
 test("la carte et le panneau d'une tâche montrent son attente de charge", () => {
   assert.match(readFileSync(new URL("../ui/detail.js", import.meta.url), "utf8"), /t\.attente/);
   assert.match(readFileSync(new URL("../ui/kanban-plein.js", import.meta.url), "utf8"), /t\.attente/);

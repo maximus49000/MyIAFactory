@@ -860,6 +860,10 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "element"}]), "element")
         self.refus(v4(decisions_projet=[{**base, "fichiers": [{"chemin": "a.png"}]}]), "fichiers")
         self.refus(v4(decisions_projet=[{**base, "compte_rendu": 3}]), "compte_rendu")
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "objectif": "L'accueil.",
+                                                              "a_valider": "Validation du Directeur"}])), [])
+        self.refus(v4(decisions_projet=[{**base, "objectif": 3}]), "objectif")
+        self.refus(v4(decisions_projet=[{**base, "a_valider": ["x"]}]), "a_valider")
         colonnes = [{"id": "a", "nom": "A", "validation": True}]
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
         self.refus(v4(colonnes=[{"id": "a", "nom": "A", "validation": "oui"}]), "validation")
@@ -1063,6 +1067,14 @@ class TestAgentsLocauxMax(unittest.TestCase):
         for mauvais in (0, -1, True, "2", 1.5, []):
             with self.subTest(mauvais):
                 self.assertTrue(releve.valider(v4(agents_locaux_max=mauvais)))
+
+    def test_agents_cloud_max_releve_v4(self):
+        self.assertEqual(releve.valider(v4(agents_cloud_max=0)), [])
+        self.assertEqual(releve.normaliser(v4(agents_cloud_max=2))["agents_cloud_max"], 2)
+        self.assertIsNone(releve.normaliser(v4())["agents_cloud_max"])
+        for mauvais in (-1, True, "2", 1.5):
+            with self.subTest(mauvais):
+                self.assertTrue(releve.valider(v4(agents_cloud_max=mauvais)))
 
     def test_agents_locaux_max_ignore_avant_v4(self):
         n = releve.normaliser({**copy.deepcopy(BASE), "version": 3, "agents_locaux_max": 3})

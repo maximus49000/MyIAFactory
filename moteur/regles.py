@@ -372,8 +372,9 @@ def _sur_cahier(projet, demande, etat):
         _lever(projet, f, "valider_cahier")
         dossier = {"fonctionnalite": {"nom": f["nom"], "cahier": {"maquette": cahier.get("maquette"),
                                                                     "etapes": cahier.get("etapes")}},
-                   "flux": [{"id": s["id"], "nom": s["nom"], "role": s["role"]}
-                            for s in wf.etapes_d_agent(_production(projet, fid))],
+                   "flux": [{"id": s["id"], "nom": s["nom"], "validation": True} if wf.est_validation(s)
+                            else {"id": s["id"], "nom": s["nom"], "role": s["role"]}
+                            for s in _production(projet, fid)],
                    "methodes_validees": _methodes_validees(projet, fid),
                    "consignes_propres": _consignes_propres(projet)}
         return [a_juger("decouper", dossier, {"demande": demande["id"], "fonctionnalite": fid})]
@@ -960,8 +961,10 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
     fac = _factory(projet)
     f = _fonc(projet, fid)
     genre = f.get("genre") or _genre_du_projet(fac)
-    flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], **({"validation": True} if wf.est_validation(x)
-                                                              else {"role": x["role"], "service": x["service"]})}
+    flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], **(
+                {"validation": True, **({"raison": x["raison"]} if isinstance(x.get("raison"), str) and x["raison"].strip()
+                                        else {})} if wf.est_validation(x)
+                else {"role": x["role"], "service": x["service"]})}
             for x in o["flux"]]
     nouveaux = [dict(a, lieu="local") for a in o["agents"]]
     services = [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]] + [dict(s) for s in o["services"]]
@@ -1597,7 +1600,19 @@ def _sur_valider_etape(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, fid)
 
 
-_SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
+def _sur_parallelisme(projet, demande, etat):
+    """Les places du projet, réglées depuis l'onglet Facturation : écrites par l'outil (qui les vérifie de nouveau),
+    puis ce qui peut partir part."""
+    r = lancer(projet, "parallelisme", {"agents_locaux_max": demande.get("agents_locaux_max"),
+                                        "agents_cloud_max": demande.get("agents_cloud_max")})
+    locaux, nuage = r["agents_locaux_max"], r["agents_cloud_max"]
+    _terminer(projet, {"demande": demande["id"]},
+              f"C'est noté : au plus {locaux} {'agents locaux' if locaux > 1 else 'agent local'} et {nuage} "
+              f"{'agents cloud' if nuage > 1 else 'agent cloud'} travaillent en même temps sur ce projet.")
+    return _demarrer_en_attente(projet, etat, None)
+
+
+_SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
         "installer_outil": _sur_installer_outil,
@@ -1753,8 +1768,148 @@ def _attente(court, fid, etat):
     return attente
 
 
+# --- Les places d'agents et les validations-barrières (conception 2026-11-12-parallelisme-design.md).
+
+def _places(projet, court, fac=None):
+    """Les places du projet : `{locaux, cloud}` libres (le maximum moins les tâches actives tenues par un agent de ce
+    lieu) et `total` (les deux maximums). Les places cloud effectives : voir `depart.places_cloud`."""
+    fac = fac or _factory(projet)
+    lieux = {a["cle"]: a["lieu"] for a in court["agents"]}
+    actifs = [lieux[t["agent"]] for t in court["taches"] if t["active"] and t.get("agent") in lieux]
+    cloud_max = dep.places_cloud(fac.get("agents_cloud_max"), projet.cloud_max, "cloud" in lieux.values())
+    return {"locaux": max(0, fac["agents_locaux_max"] - actifs.count("local")),
+            "cloud": max(0, cloud_max - actifs.count("cloud")), "total": fac["agents_locaux_max"] + cloud_max}
+
+
+def _concerne(element, etape_id):
+    """Vrai si l'étape de validation concerne l'élément : `validations` du découpage, absent = toutes (comportement
+    d'avant)."""
+    v = (element or {}).get("validations")
+    return True if not isinstance(v, list) else etape_id in v
+
+
+def _rang_de_tache(t, rangs):
+    """Le rang (dans la production) d'une tâche de flux ou de validation, `None` pour une autre tâche."""
+    etape = str(t.get("etape") or "")
+    for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION):
+        if etape.startswith(prefixe):
+            return rangs.get(etape[len(prefixe):], len(rangs))     # une étape disparue du workflow : après tout
+    return None
+
+
+def _barrieres(projet, court, fac=None):
+    """Par fonctionnalité en série dont le workflow a des validations : `{fid: {"production", "ouvertes": {rang: nom},
+    "premiere": rang | None}}` (les barrières pas encore franchies) et l'ensemble `retenues` des tâches de flux
+    situées après l'une d'elles. Une barrière (étape de validation de rang k) est franchie quand aucun élément
+    qu'elle concerne n'est encore dans la file, avant k ou à k (en attente du Directeur) ; un élément bloqué ne retient
+    rien. Lu dans le suivi : juste après un redémarrage du moteur."""
+    fac = fac or _factory(projet)
+    sortie, retenues = {}, set()
+    for fc in court["fonctionnalites"]:
+        if fc["etape"] != "serie":
+            continue
+        w = wf.de_la_fonctionnalite(fac, fc)
+        flux = w["flux"] if w else []
+        production = [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+        validations = [k for k, s in enumerate(production) if wf.est_validation(s)]
+        if not validations:
+            continue
+        f = _fonc(projet, fc["id"])
+        rangs = {s["id"]: k for k, s in enumerate(production)}
+        connus = dict(f.get("elements") or {})
+        dans_la_file = {q["id"]: q for q in f.get("file") or []}
+        taches = [t for t in court["taches"] if t.get("fonctionnalite") == fc["id"]]
+        position = {}       # élément -> rang de sa dernière tâche de flux ou de validation (None : bloqué ou sans rang)
+        for t in taches:
+            r = _rang_de_tache(t, rangs)
+            if t.get("element") and r is not None:
+                attend = str(t.get("etape")).startswith(ETAPES_DE_VALIDATION) and t["colonne"] != "fait"
+                position[t["element"]] = (r, attend, bool(t.get("bloquee")) and t["colonne"] != "fait")
+        ouvertes = {}
+        for k in validations:
+            sid = production[k]["id"]
+            for eid in set(connus) | set(dans_la_file):
+                element = dans_la_file.get(eid) or connus.get(eid)
+                if not _concerne(element, sid):
+                    continue
+                if eid in dans_la_file:
+                    ouvertes[k] = production[k]["nom"]
+                    break
+                p = position.get(eid)
+                if p is None or p[2]:        # le prototype (sans tâche de flux), ou bloqué : ne retient rien
+                    continue
+                r, attend, _ = p
+                if r < k or (r == k and attend):
+                    ouvertes[k] = production[k]["nom"]
+                    break
+        premiere = min(ouvertes) if ouvertes else None
+        sortie[fc["id"]] = {"production": production, "ouvertes": ouvertes, "premiere": premiere, "rangs": rangs}
+        if premiere is not None:
+            for t in taches:
+                r = _rang_de_tache(t, rangs)
+                if r is not None and str(t.get("etape")).startswith(ETAPES_DE_FLUX) and r > premiere:
+                    retenues.add(t["id"])
+    return sortie, retenues
+
+
+def _avant_une_validation(t, barrieres):
+    """Vrai pour une tâche qui mène à une validation du Directeur pas encore faite : le cadrage (le cahier), le
+    prototype (la méthode), une étape de flux avant une barrière pas encore franchie."""
+    etape = str(t.get("etape") or "")
+    if etape in ("cadrage", "prototype"):
+        return True
+    b = barrieres.get(t.get("fonctionnalite"))
+    if not b or b["premiere"] is None:
+        return False
+    r = _rang_de_tache(t, b["rangs"])
+    return r is not None and r < b["premiere"]
+
+
+def _validation_en_attente(projet, court):
+    """Le nom de la première validation qui attend le Directeur (étape de validation d'un élément, cahier, méthode),
+    ou `None`."""
+    for d in court.get("decisions") or []:
+        if d.get("genre") == GENRE_VALIDATION:
+            etape = next((s for s in _production(projet, d.get("fonctionnalite")) if s["id"] == d.get("etape")), None)
+            return (etape or {}).get("nom") or "Validation du Directeur"
+    for f in court["fonctionnalites"]:
+        genres = {d["genre"] for d in f.get("decisions") or []}
+        if "valider_cahier" in genres:
+            return f"Validation du cahier des charges de « {f['nom']} »"
+        if "valider_methode" in genres:
+            return f"Validation de la méthode de « {f['nom']} »"
+    return None
+
+
+def texte_des_places_libres(n, validation):
+    """« 2 places libres : en attente de votre validation « … » »."""
+    s = "s" if n > 1 else ""
+    return f"{n} place{s} libre{s} : en attente de votre validation « {validation} »"
+
+
+def _noter_les_places_libres(projet, etat):
+    """Des places libres sans tâche permise alors qu'une validation attend le Directeur : noté pour le bureau
+    (`etat["attente_validation"]`), refait à chaque passage."""
+    court = _etat(projet)
+    validation = _validation_en_attente(projet, court)
+    if validation is None:
+        return
+    fac = _factory(projet)
+    _, retenues = _barrieres(projet, court, fac)
+    pretes = [t for t in _attente(court, None, etat) if t["id"] not in retenues and t.get("etape") != ETAPE_INSTALLATION]
+    if pretes:
+        return
+    places = _places(projet, court, fac)
+    libres = (places["locaux"] if projet.charge()["feu_vert"] else 0) + places["cloud"]
+    if libres > 0:
+        etat["attente_validation"] = {"texte": texte_des_places_libres(libres, validation), "places": libres,
+                                      "validation": validation}
+
+
 def _demarrer_en_attente(projet, etat, fid):
-    """Lance ce qui peut l'être : aucune étape en pause, feu vert de la charge, un agent libre. Rend les actions agent."""
+    """Lance ce qui peut l'être : aucune étape en pause, aucune tâche après une validation pas encore faite, une place
+    libre (locale sous la charge, ou cloud), un agent libre ; les tâches qui mènent à une validation d'abord. Rend les
+    actions agent."""
     court = _etat(projet)
     if court["pause"] or projet.pause_globale:      # la pause d'une installation prioritaire : aucun agent neuf ne part
         return []
@@ -1763,11 +1918,19 @@ def _demarrer_en_attente(projet, etat, fid):
         attente = [t for t in attente if t.get("etape") != ETAPE_INSTALLATION]
     if not attente:
         return []
+    fac = _factory(projet)
+    barrieres, retenues = _barrieres(projet, court, fac)
+    attente = [t for t in attente if t["id"] not in retenues]
+    if not attente:
+        return []
+    places = _places(projet, court, fac)
     mesure = projet.charge()
     if not mesure["feu_vert"]:
         etat["attente_charge"] = {"texte": texte_d_attente_de_charge(mesure), "charge": mesure["charge"],
                                   "plafond": mesure["plafond"], "taches": [t["id"] for t in attente]}
-        return []
+        places["locaux"] = 0        # un agent cloud ne compte pas dans la charge du poste
+        if not places["cloud"]:
+            return []
     actions, solos, en_flux = [], [], []
     for t in attente:
         (en_flux if str(t.get("etape")).startswith(ETAPES_DE_FLUX) and t["id"] not in etat["a_lancer"]
@@ -1779,18 +1942,25 @@ def _demarrer_en_attente(projet, etat, fid):
     par_id = {t["id"]: t for t in attente}
     for t in solos:
         lots.append({"ids": [t["id"]], "modele": None, "lot": None})
+    # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
+    lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     for lot in lots:
+        if not places["locaux"] and not places["cloud"]:
+            break
         premiere = par_id[lot["ids"][0]]
         agent = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
             else None
         if agent is not None:
             libre = next((a for a in court["agents"] if a["cle"] == agent), {})
-            if not libre.get("libre", False):
+            if not libre.get("libre", False) or not places["cloud" if libre.get("lieu") == "cloud" else "locaux"]:
                 continue
         else:
-            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"])
+            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"],
+                                   local_ok=places["locaux"] > 0, cloud_ok=places["cloud"] > 0)
             if agent is None:
                 continue
+        lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
+        places["cloud" if lieu == "cloud" else "locaux"] -= 1
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id))
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
     return actions
@@ -1845,14 +2015,16 @@ def demarrer_installation(projet, etat, tid):
     return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
 
 
-def _choisir_agent(projet, etat, court, tache, modele):
-    """L'agent qui prend la tâche : un agent local libre du modèle voulu ; sinon, en renfort, un agent cloud libre (dans
-    la limite de `agents_cloud_max`, si le projet est sur GitHub) ; sinon, si le cloud est impossible, l'agent local
-    équivalent (un autre modèle du même rôle), en le disant au bureau."""
+def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None):
+    """L'agent qui prend la tâche : un agent local libre du modèle voulu (s'il reste une place locale) ; sinon, en
+    renfort, un agent cloud libre (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur
+    GitHub) ; sinon, si le cloud est impossible, l'agent local équivalent (un autre modèle du même rôle), en le disant au
+    bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
     role = tache.get("role")
-    local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {})})
-    if local["agent"]:
-        return local["agent"]
+    if local_ok:
+        local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {})})
+        if local["agent"]:
+            return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
     candidats = [a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]
                  and (not modele or a["modele"] == modele)]
@@ -1860,8 +2032,11 @@ def _choisir_agent(projet, etat, court, tache, modele):
         return None
     raison = projet.cloud_raison()
     if raison is None:
-        actifs = sum(1 for t in court["taches"] if t["active"] and t.get("agent") in clouds)
-        return candidats[0]["cle"] if actifs < projet.cloud_max else None
+        if cloud_ok is None:
+            cloud_ok = _places(projet, court)["cloud"] > 0
+        return candidats[0]["cle"] if cloud_ok else None
+    if not local_ok:
+        return None
     equivalent = lancer(projet, "agent-libre", {"role": role, "lieu": "local"})["agent"]
     dits = _m(etat, "cloud_dit", set)
     if equivalent and (tache.get("fonctionnalite"), role) not in dits and tache.get("fonctionnalite"):
@@ -2006,6 +2181,9 @@ def _chemins_du_projet(projet, r, fid=None):
     if isinstance(r.get("cahier"), dict) and isinstance(r["cahier"].get("maquette"), list):
         r["cahier"] = {**r["cahier"], "maquette": [image(x) for x in r["cahier"]["maquette"]]}
     r["fichiers"] = [{**f, "chemin": image(f.get("chemin"))} for f in r.get("fichiers") or []]   # une image est rangée, le reste suit
+    if isinstance(r.get("comptes_rendus"), list):
+        r["comptes_rendus"] = [{**c, "images": [image(x) for x in c["images"]]} if isinstance(c.get("images"), list)
+                               else c for c in r["comptes_rendus"]]
     return r
 
 
@@ -2018,11 +2196,13 @@ def traiter_retour(projet, execution, etat):
     r = execution.rapport
     if r is None:
         return _agent_en_echec(projet, etat, execution, depart)
-    fid = None
+    fid, du_lot = None, {}
     for tid in taches:
         t = _tache(projet, tid)
         fid = fid or t.get("fonctionnalite")
+        du_lot[tid] = t.get("element")
     r = _chemins_du_projet(projet, r, fid)
+    r["_du_lot"] = du_lot      # tâche -> élément : le compte rendu de chaque élément est pris à part (`_retenir_le_rapport`)
     liee = _m(etat, "liees").pop(taches[0], None)
     reponse = ((r.get("message") or {}).get("texte")) or "C'est fait."
     if r["statut"] in ("accord_requis", "outil_refuse"):
@@ -2231,6 +2411,10 @@ def _etat_element(etat, fid, element):
 def _tache_de_flux(projet, etat, v, journal=None):
     pas = _production(projet, v["fid"])
     s = pas[v["pas"]]
+    if wf.est_validation(s) and not _concerne(v["element"], s["id"]) and v["pas"] + 1 < len(pas):
+        # l'élément n'est pas concerné : il passe sans arrêt, mais l'étape suivante attend la barrière (voir `_barrieres`)
+        v["pas"] += 1
+        return _tache_de_flux(projet, etat, v, journal)
     if wf.est_validation(s):
         return _attendre_le_directeur(projet, v, s)
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
@@ -2249,12 +2433,41 @@ def _attendre_le_directeur(projet, v, s):
                                    "element": element["id"]})["id"]
     v["taches"].append(tid)
     precedent = v.get("dernier_rapport") or {}
+    a_valider = s["nom"] + (f" — {s['raison'].strip()}" if isinstance(s.get("raison"), str) and s["raison"].strip()
+                            else "")
     entree = {"action": "poser", "portee": "projet", "genre": GENRE_VALIDATION, "fonctionnalite": v["fid"],
               "texte": f"L'élément « {element['nom']} » attend votre validation : « {s['nom']} ».",
               "element": {"id": element["id"], "nom": element["nom"]}, "etape": s["id"], "tache": tid,
+              "objectif": _objectif_de(projet, v, s)[:OBJECTIF_MAX], "a_valider": a_valider[:OBJECTIF_MAX],
               "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": list(precedent.get("fichiers") or [])}
     lancer(projet, "decision", entree)
     return tid
+
+
+OBJECTIF_MAX = 600
+
+
+def _objectif_de(projet, v, s):
+    """Ce que l'élément devait produire, en une ou deux phrases, sans appel d'IA : l'`objectif` du découpage s'il est
+    donné ; sinon son nom (et son groupe), l'étape qui précède la validation et la dernière consigne de sa tâche (une
+    remarque du Directeur, par exemple)."""
+    element = v["element"]
+    if isinstance(element.get("objectif"), str) and element["objectif"].strip():
+        return " ".join(element["objectif"].split())
+    production = _production(projet, v["fid"])
+    rang = next((k for k, x in enumerate(production) if x["id"] == s["id"]), 0)
+    avant = next((production[k] for k in range(rang - 1, -1, -1) if not wf.est_validation(production[k])), None)
+    groupe = f" ({element['groupe']})" if isinstance(element.get("groupe"), str) and element["groupe"].strip() else ""
+    texte = f"Produire « {element['nom']} »{groupe}"
+    texte += f", jusqu'à l'étape « {avant['nom']} »." if avant else "."
+    precedente = next((t for t in reversed(v.get("taches") or [])
+                       if str(_tache(projet, t).get("etape") or "").startswith(ETAPES_DE_FLUX)), None)
+    if precedente:
+        consignes = [j["texte"] for j in _tache(projet, precedente).get("journal") or []
+                     if str(j.get("texte") or "").startswith("Remarque du Directeur")]
+        if consignes:
+            texte += f" {consignes[-1].strip()}"
+    return texte
 
 
 def _retenir_le_rapport(v, r):
@@ -2262,11 +2475,52 @@ def _retenir_le_rapport(v, r):
     voit à la validation suivante."""
     if r is None:
         return
-    eid = v["element"]["id"]
-    texte = ((r.get("message") or {}).get("texte") or "").strip()
+    element = v["element"]
+    eid = element["id"]
+    du_lot = r.get("_du_lot") or {}
+    autres = {e for e in du_lot.values() if e and e != eid}       # les autres éléments du même lot
+    message = r.get("message") or {}
+    propre = next((c for c in r.get("comptes_rendus") or [] if c.get("element") == eid), None)
+    if propre is not None:
+        texte, images = str(propre.get("texte") or "").strip(), list(propre.get("images") or [])
+    else:
+        texte = str(message.get("texte") or "").strip()
+        images = list(message.get("images") or [])
+        if autres:      # un lot à plusieurs éléments sans compte rendu par élément : ce qui nomme celui-ci
+            mes_taches = [t for t, e in du_lot.items() if e == eid]
+            texte = _passages_de(texte, [eid, element.get("nom")] + mes_taches)
+            images = [x for x in images if _nomme(_texte_d_image(x), [eid, element.get("nom")] + mes_taches)]
     fichiers = [{"chemin": f["chemin"], "titre": f["titre"]} for f in r.get("fichiers") or []
-                if f.get("element") in (None, eid)]
+                if f.get("element") == eid or (f.get("element") is None and not autres)]
+    for x in images:
+        chemin = x.get("chemin") if isinstance(x, dict) else x
+        if isinstance(chemin, str) and chemin.strip() and all(f["chemin"] != chemin for f in fichiers):
+            titre = (x.get("legende") if isinstance(x, dict) else None) or chemin.replace("\\", "/").rsplit("/", 1)[-1]
+            fichiers.append({"chemin": chemin, "titre": titre})
     v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX]}
+
+
+def _texte_d_image(x):
+    return " ".join(str(x.get(c) or "") for c in ("chemin", "legende")) if isinstance(x, dict) else str(x)
+
+
+def _nomme(texte, mots):
+    """Vrai si `texte` nomme l'un des `mots` (un identifiant ou un nom, en mot entier, casse et accents ignorés)."""
+    propre = normaliser_mot(texte)
+    for m in mots:
+        m = normaliser_mot(str(m or "")).strip()
+        if m and re.search(r"(?<![a-z0-9])" + re.escape(m) + r"(?![a-z0-9])", propre):
+            return True
+    return False
+
+
+def _passages_de(texte, mots):
+    """Les paragraphes (ou, à défaut, les lignes) de `texte` qui nomment l'élément ; vide si aucun ne le nomme (le
+    texte d'un lot ne passe jamais pour celui d'un seul élément)."""
+    blocs = [b for b in re.split(r"\n\s*\n", texte) if b.strip()]
+    if len(blocs) <= 1:
+        blocs = [b for b in texte.splitlines() if b.strip()]
+    return "\n\n".join(b.strip() for b in blocs if _nomme(b, mots))
 
 
 def _sans_relecteur(projet):
@@ -2469,6 +2723,7 @@ def avancer(projet, etat):
     retient est noté dans `etat["attente_charge"]`, refait à chaque passage."""
     court = _etat(projet)
     etat.pop("attente_charge", None)
+    etat.pop("attente_validation", None)
     if court["pause"]:
         return []
     actions = []
@@ -2477,7 +2732,10 @@ def avancer(projet, etat):
             actions += _repondre_cadrage(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
-    return actions + _demarrer_en_attente(projet, etat, None)
+    actions += _demarrer_en_attente(projet, etat, None)
+    if not projet.pause_globale:
+        _noter_les_places_libres(projet, etat)
+    return actions
 
 
 def _avancer_serie(projet, etat, fid):
@@ -2495,10 +2753,17 @@ def _avancer_serie(projet, etat, fid):
             if v["phase"] == "attente_methode":   # la méthode a été revue : l'élément repart de son premier pas
                 v.update(phase="flux", pas=0, corrections=0, tour=0, taches=[], points=[])
                 _tache_de_flux(projet, etat, v)
-        vivants = sum(1 for v in mine if v["phase"] in ("flux", "relecture", "correction", "validation"))
+        court = _etat(projet)
+        fac = _factory(projet)
+        _, retenues = _barrieres(projet, court, fac)
+        # Au travail : ni en attente du Directeur, ni retenu par une barrière (sinon l'élément suivant, qui doit lui-même
+        # arriver à la validation, ne partirait jamais). Autant d'éléments que de places, deux au moins.
+        vivants = sum(1 for v in mine if v["phase"] in ("flux", "relecture", "correction")
+                      and not (v["taches"] and v["taches"][-1] in retenues))
+        plafond = max(ELEMENTS_EN_COURS_MAX, _places(projet, court, fac)["total"])
         fait = {v["element"]["id"] for v in mine if v["phase"] == "fait"}
         deps = _m(etat, "depend_de").get(fid, {})
-        while vivants < ELEMENTS_EN_COURS_MAX:
+        while vivants < plafond:
             file = _fonc(projet, fid)["file"]
             ids = {q["id"] for q in file}
             choisi = next((q for q in file if all(d in fait or d not in ids for d in deps.get(q["id"], []))), None)
@@ -2538,7 +2803,14 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
 
 def _apres_decouper(projet, o, ctx, etat):
     fid = ctx["fonctionnalite"]
-    lancer(projet, "file", {"fonctionnalite": fid, "elements": o["elements"]})
+    connues = {s["id"] for s in _production(projet, fid) if wf.est_validation(s)}
+    elements = []
+    for x in o["elements"]:       # les validations qui le concernent : seulement des étapes de validation du flux
+        x = dict(x)
+        if "validations" in x:
+            x["validations"] = [v for v in x["validations"] if v in connues]
+        elements.append(x)
+    lancer(projet, "file", {"fonctionnalite": fid, "elements": elements})
     _m(etat, "depend_de")[fid] = o["depend_de"]
     _dire(projet, fid, o["message"])
     reprise = o.get("reprendre_methode")

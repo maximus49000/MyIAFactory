@@ -150,6 +150,31 @@ class TestFactory(unittest.TestCase):
                 factory.lire(self.ecrire(agents_locaux_max=mauvais))
             self.assertIn("agents_locaux_max", str(c.exception))
 
+    def test_agents_cloud_max(self):
+        self.assertIsNone(factory.lire(self.ecrire())["agents_cloud_max"])      # absent : voir depart.places_cloud
+        for bon in (0, 3, 16):
+            self.assertEqual(factory.lire(self.ecrire(agents_cloud_max=bon))["agents_cloud_max"], bon)
+        for mauvais in (-1, 17, True, "2", 1.5):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
+                factory.lire(self.ecrire(agents_cloud_max=mauvais))
+
+    def test_ecrire_parallelisme_garde_le_reste(self):
+        chemin = self.ecrire(description="Un jeu")
+        factory.ecrire_parallelisme(chemin, 4, 1)
+        f = factory.lire(chemin)
+        self.assertEqual((f["agents_locaux_max"], f["agents_cloud_max"], f["description"]), (4, 1, "Un jeu"))
+        for locaux, cloud in ((0, 0), (2, 17), (True, 0)):
+            with self.assertRaises(factory.FactoryInvalide):
+                factory.ecrire_parallelisme(chemin, locaux, cloud)
+        self.assertEqual(factory.lire(chemin)["agents_locaux_max"], 4)
+
+    def test_places_cloud(self):
+        from orchestrateur import depart
+        self.assertEqual(depart.places_cloud(2, 3, False), 2)                   # réglé : la valeur du projet
+        self.assertEqual(depart.places_cloud(None, 5, True), 5)                 # absent, agents cloud : l'ancienne limite
+        self.assertEqual(depart.places_cloud(None, None, True), 3)
+        self.assertEqual(depart.places_cloud(None, 5, False), 0)                # absent, sans agent cloud : 0
+
 
 if __name__ == "__main__":
     unittest.main()

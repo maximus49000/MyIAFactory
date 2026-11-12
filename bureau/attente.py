@@ -5,6 +5,8 @@ passage et relus par le serveur du bureau (deux processus).
   installation d'outil, `{"t", "texte", "projet", "outils"}`. Absent quand rien n'est en pause.
 - `attente-charge.json`, dans le dossier `.factory` d'un projet : les tâches prêtes que la charge de l'ordinateur retient,
   `{"t", "texte", "taches": [ids], "charge", "plafond"}`. Absent quand rien n'attend la charge.
+- `attente-places.json`, dans le dossier `.factory` d'un projet : des places d'agents libres que rien ne peut prendre
+  tant que le Directeur n'a pas validé, `{"t", "texte", "places", "validation"}`. Absent sinon.
 
 Un fichier que le moteur n'a pas réécrit depuis `FRAICHEUR_S` secondes est ignoré (le moteur s'est arrêté : le bureau ne
 doit pas afficher une pause qui n'existe plus). Aucune donnée de clé ni de chemin n'y est."""
@@ -16,6 +18,21 @@ from pathlib import Path
 FRAICHEUR_S = 120
 FICHIER_PAUSE = "installation-prioritaire.json"
 FICHIER_CHARGE = "attente-charge.json"
+FICHIER_PLACES = "attente-places.json"
+
+
+def chemin_places(dossier_factory):
+    return Path(dossier_factory) / FICHIER_PLACES
+
+
+def attente_places(dossier_factory, maintenant=None):
+    """Les places libres qui attendent une validation du Directeur (`{texte, places, validation}`), ou `None`."""
+    o = lire(chemin_places(dossier_factory), maintenant)
+    if o is None:
+        return None
+    places = o.get("places")
+    return {"texte": o["texte"], "places": places if isinstance(places, int) and not isinstance(places, bool) else None,
+            "validation": o.get("validation") if isinstance(o.get("validation"), str) else None}
 
 
 def chemin_pause(fichier_bureau):

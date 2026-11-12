@@ -58,6 +58,7 @@ LONGUEUR_ID_QUESTION = 40
 FONCTIONNALITE_TYPE = "f999"      # les étapes du workflow de création doivent tenir une fois préfixées par `f999-`
 MOTIF_VERSION = re.compile(r"^\d+(?:\.\d+)*\Z")
 LONGUEUR_VERSION = 20
+OBJECTIF_MAX = 300                # l'objectif d'un élément du découpage : une phrase, rappelée à sa validation
 ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", "rien")
 COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
@@ -177,6 +178,11 @@ def _valider_decouper(o):
             return f"L'identifiant « {e['id']} » ne doit pas contenir « / »."
         if e["id"] in ids:
             return f"L'identifiant « {e['id']} » est en double."
+        if "validations" in e and not (isinstance(e["validations"], list) and all(_texte(x) for x in e["validations"])):
+            return (f"« validations » de « {e['id']} » : la liste des « id » des étapes de validation qui le concernent "
+                    "(vide si aucune).")
+        if "objectif" in e and not (_texte(e["objectif"]) and len(e["objectif"]) <= OBJECTIF_MAX):
+            return f"« objectif » de « {e['id']} » : une phrase de {OBJECTIF_MAX} caractères au plus."
         ids.append(e["id"])
     if o.get("prototype") not in ids:
         return "« prototype » doit être l'« id » d'un des éléments."

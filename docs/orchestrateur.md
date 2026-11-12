@@ -34,6 +34,7 @@ relatifs à lui. Partez du modèle [`orchestrateur/modeles/factory.json`](../orc
 | `reglages` | non | les réglages du bureau du projet (pour `charge`) |
 | `modele_orchestrateur` | non | le modèle de la conversation orchestratrice : `Sonnet` (défaut), `Opus` ou `Haiku` (jamais Fable) |
 | `agents_locaux_max` | non | combien d'agents locaux travaillent en même temps, de 1 à 16 (2 par défaut) ; `agent-libre` n'en rend plus au-delà |
+| `agents_cloud_max` | non | combien d'agents cloud travaillent en même temps, de 0 à 16 (0 par défaut ; absent sur un projet qui a des agents cloud : l'ancienne limite de `reglages.json`, 3 par défaut) ; réglé avec `agents_locaux_max` par `lancer parallelisme` (onglet Facturation) |
 | `seuil_methode` | non | le nombre de tours de corrections d'un élément avant « méthode à revoir ? » (défaut 3) |
 | `catalogues` | non | la source du catalogue de chaque fonctionnalité : `{<id>: {fichier} | {commande}}` ; la clé `"*"` vaut pour toutes, et `{fonctionnalite}` y est remplacé par l'identifiant |
 | `commandes` | non | **les adaptateurs** : `{<commande>: [arguments]}`, qui remplacent les outils génériques (section 2) |

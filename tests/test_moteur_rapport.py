@@ -26,6 +26,15 @@ class Lire(unittest.TestCase):
         self.assertEqual(r["statut"], "fait")
         self.assertEqual(r["fichiers"][0]["chemin"], "pieces/f1/a.png")
 
+    def test_comptes_rendus_par_element_facultatifs(self):
+        r = rapport.lire(reponse({**FAIT, "comptes_rendus": [{"element": "e1", "texte": "Vert."}, {"texte": "sans élément"},
+                                                             "pas un objet", {"element": "e2", "texte": 3}]}))
+        self.assertEqual(r["comptes_rendus"], [{"element": "e1", "texte": "Vert."}])   # le reste est écarté, sans refus
+        self.assertEqual(rapport.lire(reponse({**FAIT, "comptes_rendus": "non"}))["comptes_rendus"], [])
+        self.assertNotIn("comptes_rendus", rapport.lire(reponse(FAIT)))
+        lot = depart.COMPTE_RENDU_MOTEUR
+        self.assertIn("comptes_rendus", lot)
+
     def test_rapport_sans_bloc_illisible(self):
         for texte in ("Tout est fait.", "```json\n{pas du json\n```", reponse({"statut": "autre"}), ""):
             with self.subTest(texte=texte), self.assertRaises(rapport.RapportIllisible):

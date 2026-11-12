@@ -659,6 +659,18 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({**base, "verdict": "renvoyer", "texte": "t", "autre": 1}),
                          {**base, "verdict": "renvoyer", "texte": "t"})
 
+    def test_parallelisme(self):
+        base = {"type": "parallelisme"}
+        self.ok({**base, "agents_locaux_max": 1, "agents_cloud_max": 0})
+        self.ok({**base, "agents_locaux_max": 16, "agents_cloud_max": 16})
+        for mauvais in ({"agents_locaux_max": 0, "agents_cloud_max": 0}, {"agents_locaux_max": 17, "agents_cloud_max": 0},
+                        {"agents_locaux_max": 2, "agents_cloud_max": -1}, {"agents_locaux_max": 2, "agents_cloud_max": 17},
+                        {"agents_locaux_max": "2", "agents_cloud_max": 0}, {"agents_locaux_max": True, "agents_cloud_max": 0},
+                        {"agents_locaux_max": 2.0, "agents_cloud_max": 0}, {"agents_locaux_max": 2}):
+            self.refus({**base, **mauvais})
+        self.assertEqual(demandes.nettoyer({**base, "agents_locaux_max": 2, "agents_cloud_max": 1, "autre": 1}),
+                         {**base, "agents_locaux_max": 2, "agents_cloud_max": 1})
+
     def test_organisation_d_un_workflow(self):
         base = {"type": "organisation", "decision": "o2"}
         self.ok({**base, "verdict": "accepter"})

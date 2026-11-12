@@ -4,6 +4,7 @@ Le message est toujours assemblé par cette commande, jamais à la main : un age
 tâche, avec sa fiche entière, les leçons de la skill et du genre qui touchent son rôle, le brief du rôle, sa tâche
 et la consigne de fin d'étape.
 """
+import json
 import re
 from pathlib import Path
 
@@ -48,6 +49,27 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
             return None, f"aucune fiche cloud {role}{sur} : ajoutez-en une"
         return None, f"aucun agent cloud {role} libre{sur}"   # tous occupés : on attend
     return None, f"aucun {role} libre{sur}"
+
+
+CLOUD_PAR_DEFAUT = 3     # l'ancienne limite (réglage `agents_cloud_max` des réglages du projet), avant le réglage par projet
+
+
+def places_cloud(regle, ancienne, a_des_agents_cloud):
+    """Les places cloud effectives d'un projet : `agents_cloud_max` de la factory s'il est réglé ; sinon l'ancienne
+    limite des réglages (`ancienne`, 3 par défaut) pour un projet qui a déjà des agents cloud, et 0 pour les autres."""
+    if regle is not None:
+        return regle
+    return (ancienne if isinstance(ancienne, int) and not isinstance(ancienne, bool) else CLOUD_PAR_DEFAUT) \
+        if a_des_agents_cloud else 0
+
+
+def ancienne_limite_cloud(chemin_reglages):
+    """`agents_cloud_max` des réglages du projet (l'ancienne limite commune), 3 s'il manque ou s'il est illisible."""
+    try:
+        v = json.loads(Path(chemin_reglages).read_text(encoding="utf-8-sig")).get("agents_cloud_max")
+    except (OSError, ValueError, TypeError, AttributeError):
+        return CLOUD_PAR_DEFAUT
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else CLOUD_PAR_DEFAUT
 
 
 def sans_session(fiches, role, modele=None):
@@ -227,7 +249,9 @@ def compte_rendu_par_tache(cle):
 COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec ce même contexte. Ne lance aucune commande "
                        "de la factory (`lancer …`) : le moteur tient le suivi d'après ton rapport. Rends **un seul "
                        "rapport**, à la fin du lot : dans `message`, le résultat de chaque tâche (par son identifiant) ; "
-                       "l'`element` de chaque fichier et de chaque verdict.")
+                       "l'`element` de chaque fichier et de chaque verdict ; et, pour chaque élément, son compte rendu "
+                       'à part dans `comptes_rendus` : `[{"element": <id>, "texte": "…", "images": [{"chemin", '
+                       '"legende"}]}]` (le Directeur ne voit que celui de l\'élément qu\'il valide).')
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False):

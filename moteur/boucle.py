@@ -287,13 +287,14 @@ class Moteur:
         self.pause_installation = None if texte is None else {"texte": texte, "projet": cible[0].nom, "outils": outils}
 
     def _dire_l_attente_de_charge(self, projet, etat):
-        """Une tâche prête que la charge retient : le bureau le dit (carte de la tâche et barre), à chaque passage."""
-        fichier = attente.chemin_charge(projet.factory.parent)
-        a = etat.get("attente_charge")
-        if a:
-            self._ecrire(fichier, a)
-        else:
-            self._effacer(fichier)
+        """Une tâche prête que la charge retient, des places libres qui attendent une validation du Directeur : le bureau
+        le dit (carte de la tâche et barre), à chaque passage."""
+        for fichier, a in ((attente.chemin_charge(projet.factory.parent), etat.get("attente_charge")),
+                           (attente.chemin_places(projet.factory.parent), etat.get("attente_validation"))):
+            if a:
+                self._ecrire(fichier, a)
+            else:
+                self._effacer(fichier)
 
     def _ecrire(self, fichier, objet):
         """Écrit pour le bureau ; un contenu inchangé n'est réécrit que de temps en temps (il reste frais pour le bureau)."""

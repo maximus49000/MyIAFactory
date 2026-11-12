@@ -13,7 +13,9 @@ MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
-        "modele_orchestrateur", "agents_locaux_max", "environnement")
+        "modele_orchestrateur", "agents_locaux_max", "agents_cloud_max", "environnement")
+AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
+AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 
 
@@ -146,6 +148,9 @@ def lire(chemin):
     locaux = d.get("agents_locaux_max", 2)
     if isinstance(locaux, bool) or not isinstance(locaux, int) or not 1 <= locaux <= 16:
         raise FactoryInvalide("Factory : « agents_locaux_max » doit être un entier de 1 à 16 (2 par défaut).")
+    cloud = d.get("agents_cloud_max")
+    if cloud is not None and not _entier_borne(cloud, AGENTS_CLOUD):
+        raise FactoryInvalide("Factory : « agents_cloud_max » doit être un entier de 0 à 16 (0 par défaut).")
     environnement = d.get("environnement", [])
     if not isinstance(environnement, list) or not all(isinstance(x, dict) and _texte(x.get("outil"))
                                                       for x in environnement):
@@ -167,16 +172,33 @@ def lire(chemin):
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
-        "modele_orchestrateur": modele, "agents_locaux_max": locaux,
+        "modele_orchestrateur": modele, "agents_locaux_max": locaux, "agents_cloud_max": cloud,
         "environnement": [dict(x) for x in environnement],
     }
 
 
+def _entier_borne(v, bornes):
+    return isinstance(v, int) and not isinstance(v, bool) and bornes[0] <= v <= bornes[1]
+
+
 def ecrire_genre(chemin, genre):
     """Note le genre dans le fichier de factory (le reste du fichier est gardé tel quel)."""
+    _ecrire_cles(chemin, {"genre": genre})
+
+
+def ecrire_parallelisme(chemin, locaux, cloud):
+    """Note les places du projet (`agents_locaux_max` 1 à 16, `agents_cloud_max` 0 à 16) ; le reste est gardé."""
+    if not _entier_borne(locaux, AGENTS_LOCAUX):
+        raise FactoryInvalide("« agents_locaux_max » doit être un entier de 1 à 16.")
+    if not _entier_borne(cloud, AGENTS_CLOUD):
+        raise FactoryInvalide("« agents_cloud_max » doit être un entier de 0 à 16.")
+    _ecrire_cles(chemin, {"agents_locaux_max": locaux, "agents_cloud_max": cloud})
+
+
+def _ecrire_cles(chemin, cles):
     chemin = Path(chemin)
     d = json.loads(chemin.read_text(encoding="utf-8-sig"))
-    d["genre"] = genre
+    d.update(cles)
     fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

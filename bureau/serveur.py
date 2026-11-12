@@ -162,6 +162,8 @@ class Projet:
                 for t in e["taches"]:
                     if t["id"] in retenu["taches"]:
                         t["attente"] = retenu["texte"]
+            # Des places d'agents libres que rien ne peut prendre avant une validation du Directeur : dit dans la barre.
+            e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
             e["images_ok"] = images_declarees(regl)
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)

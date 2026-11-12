@@ -147,7 +147,7 @@ Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": 
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
-genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
@@ -210,8 +210,10 @@ fonctionnalité est inconnue ou a déjà un workflow, ou si le contrôle de l'or
 
 ### `file`
 
-Entrée : `{"fonctionnalite", "elements": [{"id", "nom", "groupe"?}]}`. Remplace la file des éléments à faire de la
-fonctionnalité. Rend `{"elements": n}`.
+Entrée : `{"fonctionnalite", "elements": [{"id", "nom", "groupe"?, "objectif"?, "validations"?}]}`. Remplace la file
+des éléments à faire de la fonctionnalité. `objectif` (300 caractères au plus) : ce que l'élément doit produire, rappelé
+à sa validation ; `validations` : les `id` des étapes de validation du Directeur qui le concernent (absent : toutes ;
+un élément non concerné passe l'étape sans arrêt, mais attend que la validation soit franchie). Rend `{"elements": n}`.
 
 ### `file-prendre`
 
@@ -359,6 +361,8 @@ Choisir le modèle : on monte d'un cran au plus (Haiku → Sonnet → Opus) et j
 La limite `agents_locaux_max` du fichier de factory (de 1 à 16, 2 par défaut) borne les tâches actives tenues par des
 agents locaux : une fois atteinte, aucun agent local n'est rendu, la raison est « limite de {n} agents locaux
 atteinte » ; les agents cloud ne comptent pas. Le relevé (version 4) la publie en `agents_locaux_max`.
+La limite des agents cloud est `agents_cloud_max` de la factory (de 0 à 16, 0 par défaut ; voir `parallelisme`) ; le
+moteur procédural l'applique lui-même (une tâche active tenue par un agent cloud prend une place cloud).
 
 ### `depart`
 
@@ -374,6 +378,23 @@ mot pour mot, la clé jamais écrite ni affichée, et `lancer partenaires` `usag
 pour l'agent, avec le brief de chaque rôle présent, les tâches dans l'ordre et la consigne de rendre compte à la fin de
 chaque tâche (`lancer tache`) avant de passer à la suivante. Avec `"moteur": true` (le moteur procédural lance le
 lot), aucune commande n'est demandée à l'agent : il rend un seul rapport à la fin du lot, le moteur tient le suivi.
+Ce rapport porte aussi, pour chaque élément, son compte rendu à part (`comptes_rendus` : `[{element, texte, images?}]`) :
+le Directeur ne voit, sous un élément à valider, que celui de cet élément.
+
+### `parallelisme`
+
+Entrée : `{"agents_locaux_max": 1 à 16, "agents_cloud_max": 0 à 16}` (entiers). Les **places** du projet, réglées par
+le Directeur dans l'onglet Facturation (demande `parallelisme`) : écrites dans le fichier de factory, le reste du
+fichier gardé. Rend les deux valeurs. Refus (code 1) hors bornes. Une place locale est soumise à la charge du poste,
+une place cloud non ; chaque place est tenue par un agent recruté (une fiche, une tâche à la fois). Clé
+`agents_cloud_max` absente : 0 pour un projet sans agent cloud, l'ancienne limite des réglages (`agents_cloud_max`,
+3 par défaut) pour un projet qui en a ; le relevé publie la valeur effective en `agents_cloud_max`.
+
+Le moteur procédural lance au plus (places locales libres sous la charge) + (places cloud libres) tâches prêtes ; les
+tâches qui mènent à une validation du Directeur passent d'abord, et aucune tâche située après une étape de validation
+pas encore franchie (un élément qu'elle concerne est encore avant elle ou en attente) ne démarre. Une installation
+prioritaire et la pause restent au-dessus de tout. Des places libres sans tâche permise pendant qu'une validation
+attend : `attente-places.json` dans `.factory` (« 2 places libres : en attente de votre validation « … » »).
 
 ### `partenaires`
 

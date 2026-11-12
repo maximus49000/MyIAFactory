@@ -15,7 +15,7 @@ class Noeud {
 globalThis.document = {createElement: (t) => new Noeud(t)};
 globalThis.Option = class extends Noeud { constructor(texte, valeur) { super("option"); this._texte = texte; this.value = valeur; } };
 
-const {contenuDecisionsV4, corpsValiderEtape} = await import("../ui/decisions.js");
+const {contenuDecisionsV4, corpsValiderEtape, enteteValidation} = await import("../ui/decisions.js");
 
 const GENRE = {id: "g1", genre: "genre_fonctionnalite", texte: "Ce n'est pas un jeu web.", propose: "jeu-mobile",
   genres_connus: ["jeu-web", "jeu-mobile"], incertain: true};
@@ -232,6 +232,18 @@ test("valider_etape montre le compte rendu et les fichiers", () => {
   assert.match(images[0].src, /\/api\/image\?chemin=pieces%2Ff1%2Fessai\.png/);
   assert.match(contenu.textContent, /L'apk d'essai : pieces\/f1\/jeu\.apk/);  // l'autre fichier : titre et chemin
   assert.ok(bouton(contenu, "Valider") && bouton(contenu, "Renvoyer avec une remarque"));
+});
+
+test("valider_etape rappelle l'objectif et ce qu'il y a à valider, avant le compte rendu", () => {
+  const d = {...VALIDATION, objectif: "L'écran d'accueil, avec le logo et le bouton Jouer.",
+             a_valider: "Validation de la direction artistique — le style avant de faire le jeu"};
+  assert.deepEqual(enteteValidation(d), [
+    {libelle: "Objectif", texte: "L'écran d'accueil, avec le logo et le bouton Jouer."},
+    {libelle: "À valider", texte: "Validation de la direction artistique — le style avant de faire le jeu"}]);
+  assert.deepEqual(enteteValidation(VALIDATION), []);                            // une décision d'avant : rien
+  const texte = rendre({...ETAT, fonctionnalites: [], decisions_projet: [d]}).contenu.textContent;
+  const [o, v, c] = ["Objectif : L'écran", "À valider : Validation de la direction", "Tout est vert"].map((x) => texte.indexOf(x));
+  assert.ok(o >= 0 && o < v && v < c, texte);
 });
 
 test("renvoyer exige une remarque", async () => {

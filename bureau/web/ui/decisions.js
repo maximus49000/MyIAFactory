@@ -234,12 +234,27 @@ export function corpsValiderEtape(decision, verdict, texte) {
 const EST_IMAGE = /\.(png|jpe?g)$/i;
 const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
 
-// Un élément attend votre validation : ce que l'étape précédente a rendu (compte rendu, fichiers : les images se voient,
-// les autres sont nommées avec leur chemin), puis « Valider » ou « Renvoyer avec une remarque » (texte obligatoire).
+// L'en-tête d'un élément à valider : « Objectif : … » (ce qu'il devait produire) puis « À valider : … » ; une ligne
+// absente (décision d'avant) n'est pas montrée.
+export function enteteValidation(d) {
+  const lignes = [];
+  if (plein(d?.objectif)) lignes.push({libelle: "Objectif", texte: d.objectif.trim()});
+  if (plein(d?.a_valider)) lignes.push({libelle: "À valider", texte: d.a_valider.trim()});
+  return lignes;
+}
+
+// Un élément attend votre validation : son objectif et ce qu'il y a à valider, puis ce que l'étape précédente a rendu
+// pour CET élément seulement (compte rendu, fichiers : les images se voient, les autres sont nommées avec leur chemin),
+// puis « Valider » ou « Renvoyer avec une remarque » (texte obligatoire).
 function decisionValidation(ctx, d) {
   const li = el("li", "decision-validation");
   li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte),
             el("div", "lecon-meta", `Élément : ${d.element?.nom || d.element?.id || "?"}`));
+  for (const x of enteteValidation(d)) {
+    const ligne = el("div", "decision-texte decision-entete");
+    ligne.append(el("strong", "", `${x.libelle} : `), el("span", "", x.texte));
+    li.append(ligne);
+  }
   if (plein(d.compte_rendu)) li.append(el("div", "decision-texte", d.compte_rendu));
   for (const f of Array.isArray(d.fichiers) ? d.fichiers : []) {
     if (!plein(f?.chemin)) continue;

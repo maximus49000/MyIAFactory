@@ -261,6 +261,19 @@ class AttenteDeCharge(Bureau):
         self.assertEqual(len(self.lances()), 1)
         self.assertIsNone(attente.attente_charge(self.racine / "a" / ".factory"))
 
+    def test_places_libres_en_attente_d_une_validation_dites_au_bureau(self):
+        from unittest import mock
+        texte = regles.texte_des_places_libres(2, "Validation de la direction artistique")
+        self.assertEqual(texte, "2 places libres : en attente de votre validation « Validation de la direction artistique »")
+        self.assertEqual(regles.texte_des_places_libres(1, "X"), "1 place libre : en attente de votre validation « X »")
+        noter = lambda projet, etat: etat.update(attente_validation={"texte": texte, "places": 2})   # noqa: E731
+        m = self.moteur()
+        with mock.patch.object(regles, "_noter_les_places_libres", side_effect=noter):
+            m.tour()
+        self.assertEqual(attente.attente_places(self.racine / "a" / ".factory")["texte"], texte)
+        m.tour()        # plus rien n'attend : le fichier est effacé
+        self.assertIsNone(attente.attente_places(self.racine / "a" / ".factory"))
+
     def test_charge_lue_de_la_ligne_de_l_outil(self):
         p = self.projets["a"]
         self.assertEqual(regles._MESURE.search("attendre : charge 90 % (max 70 %)").groups(), ("90", "70"))

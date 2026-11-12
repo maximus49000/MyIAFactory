@@ -518,6 +518,9 @@ def _verifier_validation(d, nom, erreurs):
         erreurs.append(f"{ici} : « fonctionnalite », « element » {{id, nom}}, « etape » et « tache » sont obligatoires.")
     if not _texte(d.get("compte_rendu", "")):
         erreurs.append(f"{ici} : « compte_rendu » doit être un texte.")
+    for c in ("objectif", "a_valider"):     # facultatifs : un relevé d'avant ne les a pas
+        if d.get(c) is not None and not isinstance(d[c], str):
+            erreurs.append(f"{ici} : « {c} » doit être un texte.")
     fichiers = d.get("fichiers", [])
     if not isinstance(fichiers, list) or not all(_est_dict(x) and _texte_plein(x.get("chemin"))
                                                  and _texte_plein(x.get("titre")) for x in fichiers):
@@ -604,6 +607,9 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     m = r.get("agents_locaux_max")
     if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 1):
         erreurs.append("« agents_locaux_max » doit être un entier d'au moins 1 ou nul.")
+    m = r.get("agents_cloud_max")
+    if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 0):
+        erreurs.append("« agents_cloud_max » doit être un entier positif ou nul.")
     ids_decisions = set()
     ids_fonc = _verifier_fonctionnalites(r, agents, erreurs, ids_decisions)
     _verifier_decisions_projet(r, agents, erreurs, ids_decisions)
@@ -751,7 +757,7 @@ def _verifier_regles(regles, q, erreurs):
                 erreurs.append(f"{q} : « {d} » n'est pas une date.")
 
 
-CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max")
+CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max", "agents_cloud_max")
 CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot")
 
 

@@ -503,6 +503,12 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._varie("decouper", elements=[{"id": "e1", "nom": "", "groupe": "g"}],
                                          prototype="e1", depend_de={}))
         self.assertIsNotNone(self._varie("decouper", message=""))
+        un = lambda **plus: [{"id": "e1", "nom": "A", "groupe": "g", **plus}]   # noqa: E731
+        self.assertIsNone(self._varie("decouper", elements=un(validations=["f1-da"], objectif="L'accueil."),
+                                      prototype="e1", depend_de={}))
+        self.assertIsNone(self._varie("decouper", elements=un(validations=[]), prototype="e1", depend_de={}))
+        for mauvais in ({"validations": "f1-da"}, {"validations": [""]}, {"objectif": ""}, {"objectif": "x" * 301}):
+            self.assertIsNotNone(self._varie("decouper", elements=un(**mauvais), prototype="e1", depend_de={}), mauvais)
         self.assertIsNotNone(self._varie("decouper", reprendre_methode={"fonctionnalite": "f1"}))
         self.assertIsNone(self._varie("decouper", reprendre_methode={"fonctionnalite": "f1", "version": 2,
                                                                      "pourquoi": "même élément, même flux"}))

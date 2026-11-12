@@ -1,6 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet} from "../ui/facturation.js";
+import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
+        demandeParallelisme, resumeParallelisme} from "../ui/facturation.js";
+
+test("demandeParallelisme : des entiers dans les bornes, sinon rien ne part", () => {
+  assert.deepEqual(demandeParallelisme("3", " 1 "), {type: "parallelisme", agents_locaux_max: 3, agents_cloud_max: 1});
+  assert.deepEqual(demandeParallelisme(16, 0), {type: "parallelisme", agents_locaux_max: 16, agents_cloud_max: 0});
+  for (const [l, c] of [[0, 0], [17, 0], [2, -1], [2, 17], ["2.5", 0], ["", 0], [2, "x"], [true, 0]]) {
+    assert.equal(demandeParallelisme(l, c), null, `${l} ${c}`);
+  }
+});
+
+test("resumeParallelisme : réglages, agents recrutés par lieu, attente d'une validation", () => {
+  const etat = {agents_locaux_max: 3, agents_cloud_max: 2, agents: [
+    {id: "chef", chef: true, lieu: "local"}, {id: "dev1", lieu: "local"}, {id: "qa1", lieu: "local"}],
+    attente_validation: {texte: "1 place libre : en attente de votre validation « DA »"}};
+  const r = resumeParallelisme(etat);
+  assert.deepEqual([r.locaux, r.cloud, r.recrutes], [3, 2, {locaux: 2, cloud: 0}]);
+  assert.match(r.notes[0], /Aucun agent cloud recruté/);
+  assert.equal(r.attente, "1 place libre : en attente de votre validation « DA »");
+  const defaut = resumeParallelisme({agents: []});
+  assert.deepEqual([defaut.locaux, defaut.cloud, defaut.attente], [2, 0, null]);
+  assert.doesNotMatch(defaut.notes.join(" "), /Aucun agent cloud/);
+});
 
 const f = {
   services: {

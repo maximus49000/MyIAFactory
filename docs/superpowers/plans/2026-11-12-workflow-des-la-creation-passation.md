@@ -1,0 +1,80 @@
+# Le workflow défini dès la création — passation entre conversations
+
+Le plan (`2026-11-12-workflow-des-la-creation.md`) est réalisé en phases, chacune dans sa propre conversation Claude, avec le modèle indiqué. **Une phase est un lot de modèle** : un même modèle fait d'une traite tout ce qu'il peut faire d'affilée. C'est l'utilisateur qui crée chaque conversation et choisit le modèle. Une conversation enchaîne toutes les tâches de sa phase sans s'arrêter, puis s'arrête et annonce la suivante. Même méthode que `2026-11-12-genre-par-fonctionnalite-passation.md`.
+
+La conception (`docs/superpowers/specs/2026-11-12-workflow-des-la-creation-design.md`, section 5 bis comprise) est **validée par l'utilisateur** le 2026-11-12 : rien à recadrer. Toutes les phases se font **dans ce dépôt**. Les données d'un essai réel restent **hors dépôt** ; leurs chemins sont donnés par l'utilisateur dans la conversation de la phase. Les sessions de phase n'utilisent pas le panneau navigateur de l'app : elles vérifient par les tests et par des requêtes HTTP. Une autre session peut travailler dans le même dossier : **ne committer que ses propres fichiers**, jamais de stash, reset ni changement de branche.
+
+**Dépenses** : les phases marquées **dépense** appellent un vrai modèle (`claude -p` ou l'API). Elles **attendent l'accord explicite de l'utilisateur** avant le premier appel réel, disent ce qu'elles vont lancer et combien cela coûtera à peu près, et notent le coût réel ici. Aucune phase n'installe de logiciel sur le poste sans accord explicite (l'accord sur une dépense d'API ne le couvre pas).
+
+## Où on en est
+
+Tenir cette section à jour à la fin de chaque phase (dernière action avant le dernier push).
+
+| Phase | Modèle proposé | Tâches du plan | Dépense réelle | Pourquoi ce modèle | État |
+|---|---|---|---|---|---|
+| A | Sonnet 5.5 | 1, 2, 3 : étape de validation du Directeur (données, moteur, page) | non | Données, table de règles et page au contrat écrit, tests nommés | à faire |
+| B | Opus 5.5 | 4 : jugement `definir_workflow`, validations dans `proposer_organisation`, consignes | **oui, étape 5** (essai réel de l'échange, quelques centimes, accord demandé) | Les consignes décident de la qualité des questions, du workflow et du coût | à faire |
+| C | Sonnet 5.5 | 5, 6 : reprise du workflow de création, poste (versions, installation portée par le projet) | non | Règles du moteur au contrat écrit | à faire |
+| D | Sonnet 5.5 | 7, 8, 9 : brouillon, déroulé de l'échange, création avec l'organisation | non (faux `appeler` seulement) | Installation au contrat écrit, tests nommés | à faire |
+| E | Sonnet 5.5 | 10, 11 : routes du bureau, page en deux fenêtres | non | Routes et page au contrat écrit | à faire |
+| F | Opus 5.5 | 12 : banc gratuit, essai réel au bureau, avec l'utilisateur | **oui** (échange réel au bureau ; production seulement si l'utilisateur l'accepte) | Diagnostic du coût, réglage des consignes, jugement de ce qui accroche | à faire |
+
+Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.** Ordre imposé : A avant B (le validateur s'appuie sur `workflows.est_validation`) ; B et C avant D (D appelle `definir_workflow` et `environnement.agent_d_installation`) ; D avant E ; F en dernier. C peut se faire avant B si l'utilisateur le préfère.
+
+## Ce que chaque phase doit vérifier avant de finir
+
+- **A** : un projet existant, sans étape de validation, a le même relevé, le même tableau et la même série qu'avant (`py -3.12 outils/tests.py orch moteur banc`) ; un élément s'arrête bien à une validation, repart sur « Valider », refait l'étape précédente sur « Renvoyer » ; « Renvoyer » sans texte est refusé au bureau comme au moteur ; la réponse marche après un redémarrage du moteur ; un workflow de genre n'a pas de colonnes au tableau.
+- **B** : les cinq anciens jugements et `classer_genre` n'ont pas bougé ; un 5ᵉ appel ou une correction qui rendrait des questions est refusé ; le nom du projet est refusé dans un genre nouveau. **Dépense** : essai réel d'un échange complet (jeu Android avec une validation avant la livraison) : validité au premier essai, questions non redondantes, tokens et coût par appel, **total < 0,10 €** ; au plus 3 tours de réglage, notés.
+- **C** : une demande `meme` dans un projet qui a un workflow de création ne fait **aucun** appel `proposer_organisation` ni décision `organisation`, et démarre le cadrage dans des colonnes `f<n>-…` ; une demande `proche`/`autre` suit le parcours actuel ; un projet sans workflow de création est inchangé ; un Java 8 n'est plus « déjà en place » quand le workflow demande un JDK 17 ; l'installation de projet ne retient jamais le cadrage.
+- **D** : rien sur le disque ni au bureau avant la validation finale ; un nom devenu invalide renvoie aux informations sans perdre l'échange ; le brouillon ne contient aucune clé ; un tour raté ne compte pas mais son coût, si ; les usages de l'échange sont versés au relevé du projet créé, ceux d'un brouillon abandonné ou purgé (30 jours) dans `~/MyIAFactory/usage-creations.jsonl` ; GitHub après, sans rien défaire.
+- **E** : routes protégées comme `POST /api/projets/creer` (en-têtes, code d'accès distant) ; un seul tour à la fois par brouillon ; la création depuis une décision `genre_fonctionnalite` garde l'ancien formulaire ; la page est vérifiée par `node --test` (pas de navigateur).
+- **F** : le banc gratuit ne bouge pas. **Dépense** : essai au bureau (voir le plan, tâche 12) : coût de l'échange relevé (< 0,10 €), projet créé avec son workflow, ses agents et ses services, première demande du genre sans proposition ni validation de workflow. Ne rien installer sur le poste sans accord ; aller jusqu'à la validation du Directeur seulement si l'utilisateur accepte la dépense de production.
+
+## Notes laissées par les phases
+
+(Écarts au plan, choix faits, points à surveiller.)
+
+**Points de la conception interprétés par le plan (2026-11-12)** — à confirmer ou corriger par l'utilisateur ; une phase qui s'en écarte le note ici :
+
+- **Où se font les appels de l'échange** : par le **bureau** (route `POST /api/creations/tour`, appel synchrone dans le fil de la requête), pas par la boucle du moteur, puisque le projet n'existe pas encore. La couche vient d'une clé facultative `moteur` du **fichier du bureau commun** (`bureau.json`, `claude` par défaut) ; les prix, de `estimation.prix_de_modele(<bureau commun>)`.
+- **« Relevé du bureau commun »** : il n'en existe pas aujourd'hui. Le plan crée `~/MyIAFactory/usage-creations.jsonl` (usages des échanges abandonnés ou purgés), dont le total est montré dans la liste des brouillons.
+- **Étape de validation** : interdite aussi en **dernière** position (la dernière étape remet le livrable, règle des jugements actuels). Un élément qui attend une validation **occupe une des deux places d'éléments en cours** : deux éléments en attente arrêtent la série (« le travail s'arrête »). Il apparaît aussi comme une tâche dans la colonne de l'étape.
+- **Workflow de création** : il n'a **pas de colonnes** au tableau (seules ses copies `w-<fid>` en ont), pour ne pas doubler les colonnes à chaque demande. Une fonctionnalité ne pointe jamais sur `w-<genre>` : les reprises de secours (`_classer_rate`, refus sans texte) le copient aussi.
+- **Tâche d'installation portée par le projet** : colonne `cadrage`, sans fonctionnalité ; son échec pose une décision de **projet** `environnement` ; elle **ne retient pas** le cadrage des demandes (le cadrage n'a pas besoin des outils), pour ne jamais bloquer.
+- **« Versions comparées »** : un champ facultatif `version_min` par outil, rendu par les jugements et comparé en code (corrige le défaut « Java 8 vu comme JDK 17 » de la phase E précédente) ; vaut aussi pour `proposer_organisation`.
+- **Forme des messages du chef** (laissée au constructeur) : 1 à 5 questions par tour, 0 à 6 choix par question ; chaque étape proposée porte une `raison`.
+- **Création depuis une décision** « cette demande n'est pas du genre du projet » → « Nouveau projet » : inchangée (formulaire actuel, projet vide, la demande déplacée y propose son workflow). Seul « Nouveau projet… » de la liste passe par les deux fenêtres.
+- **Un brouillon par projet en cours de définition** : identifiant `c` + 12 chiffres hexadécimaux, un fichier JSON par brouillon dans `~/MyIAFactory/creations/`.
+
+## Messages à coller
+
+**Phase A — Sonnet 5.5 — dans ce dépôt**
+
+> Réalise la phase A du chantier « le workflow défini dès la création ». Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md` et suis-le : la conception et le plan sont validés, il n'y a rien à recadrer. Enchaîne d'une traite les tâches 1, 2 et 3 du plan. N'utilise pas le panneau navigateur de l'app. Une autre session peut travailler dans le même dossier : ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase B — Opus 5.5 — dans ce dépôt (dépense : accord demandé)**
+
+> Réalise la phase B du chantier « le workflow défini dès la création ». Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md` et suis-le. Fais la tâche 4 du plan ; demande mon accord avant l'essai réel de l'échange. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase C — Sonnet 5.5 — dans ce dépôt**
+
+> Réalise la phase C du chantier « le workflow défini dès la création ». Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md` et suis-le. Enchaîne d'une traite les tâches 5 et 6 du plan. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase D — Sonnet 5.5 — dans ce dépôt**
+
+> Réalise la phase D du chantier « le workflow défini dès la création ». Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md` et suis-le. Enchaîne d'une traite les tâches 7, 8 et 9 du plan, sans aucun appel réel à un modèle. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase E — Sonnet 5.5 — dans ce dépôt**
+
+> Réalise la phase E du chantier « le workflow défini dès la création ». Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md` et suis-le. Enchaîne d'une traite les tâches 10 et 11 du plan, sans aucun appel réel à un modèle. N'utilise pas le panneau navigateur de l'app. Ne committe que tes fichiers. Termine par la fin de phase, sans lancer la suivante.
+
+**Phase F — Opus 5.5 — dans ce dépôt (dépense : accord demandé)**
+
+> Réalise la phase F du chantier « le workflow défini dès la création » : la tâche 12 du plan, avec moi. Lis `docs/superpowers/plans/2026-11-12-workflow-des-la-creation-passation.md`. Je te donnerai le dossier parent de l'essai (hors dépôt). Demande mon accord avant toute dépense réelle, et n'installe rien sur le poste sans mon accord. Ne committe que tes fichiers.
+
+## Fin de phase
+
+1. Toute la suite verte : `py -3.12 outils/tests.py` (environ 75 s). **Seulement ici** : pendant le travail, chaque commit ne lance que les tests concernés, `py -3.12 outils/tests.py <mots>`.
+2. Cocher les tâches faites dans le plan, mettre à jour « Où on en est » et les notes.
+3. Commit (ses seuls fichiers) et push.
+4. Annoncer la phase suivante, son modèle, si elle dépense, et son message à coller.

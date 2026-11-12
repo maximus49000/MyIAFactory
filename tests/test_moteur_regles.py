@@ -710,15 +710,20 @@ class Arrets(Base):
         self.assertIn("accord pour : Générer 5 images", relance[0][3])
         self.assertEqual(relance[0][2], [t["id"]])
 
-    def test_outil_refuse_pose_une_question(self):
+    def test_outil_refuse_pose_une_decision_au_bureau_de_direction(self):
+        # Le cas réel : la question n'était posée que dans la discussion de la fonctionnalité (invisible au bureau de
+        # direction une fois en série) et rien ne relançait la tâche. C'est maintenant une décision de projet.
         actions = self.depart_cadrage()
         refus = {"statut": "outil_refuse", "outil": "WebSearch", "message": {"texte": "Je ne peux pas chercher."}}
         self.piloter(actions, rapports=[refus])
-        derniere = self.fonc()["discussion"][-1]
-        self.assertTrue(derniere["attend"])
-        self.assertIn("WebSearch", derniere["texte"])
-        self.assertEqual(derniere["questions"][0]["choix"], [regles.FAIT, regles.ECARTE])
-        d, relance = self.traiter(type="message", fonctionnalite="f1", texte=regles.ECARTE)
+        decisions = [d for d in self.suivi()["decisions_projet"] if d["genre"] == "outil_agent"]
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual((decisions[0]["agent"], decisions[0]["outil"]), ("metier-1", "WebSearch"))
+        self.assertIn("WebSearch", decisions[0]["texte"])
+        t = self.taches(etape="cadrage")[0]
+        self.assertFalse(t["active"])
+        self.assertEqual(decisions[0]["tache"], t["id"])
+        d, relance = self.traiter(type="outil_agent", decision=decisions[0]["id"], verdict="refuser")
         self.assertEqual(relance, [])
         self.assertTrue(self.taches(etape="cadrage")[0]["bloquee"])
 

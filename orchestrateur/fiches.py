@@ -159,5 +159,40 @@ def outils(fiche):
     return [o for o in liste if o] or list(OUTILS_PAR_DEFAUT)
 
 
+MOTIF_PROGRAMME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")   # un nom de programme, rien d'autre
+_REGLE_BASH = re.compile(r"^Bash\(([A-Za-z0-9][A-Za-z0-9._+-]{0,63}):\*\)\Z")
+
+
+def regle_bash(programme):
+    """La règle qui ouvre un programme du shell : `Bash(<programme>:*)`. `ValueError` si ce n'est pas un nom de programme."""
+    if not isinstance(programme, str) or not MOTIF_PROGRAMME.match(programme):
+        raise ValueError(f"« {programme} » n'est pas un nom de programme.")
+    return f"Bash({programme}:*)"
+
+
+def programmes_ouverts(fiche):
+    """Les programmes du shell que la fiche ouvre (`Bash(<programme>:*)`), et si elle ouvre tout le shell (`Bash` seul)."""
+    ouverts, tout = [], False
+    for o in outils(fiche):
+        m = _REGLE_BASH.match(o)
+        if m:
+            ouverts.append(m.group(1))
+        tout = tout or o == "Bash"
+    return ouverts, tout
+
+
+def ouvrir_outil(fiche, outil):
+    """Ajoute `outil` à la ligne `Outils :` de la fiche (les outils par défaut s'il n'y en avait pas), sans l'écrire.
+    Seule une règle `Bash(<programme>:*)` s'ouvre ainsi : jamais `Bash` seul. Vrai si la fiche a changé ; `ValueError`
+    si la règle n'est pas de cette forme."""
+    if not isinstance(outil, str) or not _REGLE_BASH.match(outil):
+        raise ValueError("Seule une règle Bash(<programme>:*) peut être ouverte à un agent.")
+    actuelles = outils(fiche)
+    if outil in actuelles:
+        return False
+    fiche["outils"] = ", ".join(actuelles + [outil])
+    return True
+
+
 def trouver(fiches, cle):
     return next((f for f in fiches if f["cle"] == cle), None)

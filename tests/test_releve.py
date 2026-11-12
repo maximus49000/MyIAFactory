@@ -850,6 +850,14 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[base]), "agent")
         self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "agent": "d1"}])), [])
 
+    def test_decision_outil_agent(self):
+        base = {"id": "o", "genre": "outil_agent", "texte": "T", "agent": "d1", "tache": "t3", "outil": "Bash(curl:*)"}
+        self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "programme": "curl", "commande": "curl -O x"}])), [])
+        self.refus(v4(decisions_projet=[{**base, "agent": "zz"}]), "agent")
+        self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "tache"}]), "tache")
+        self.refus(v4(decisions_projet=[{**base, "programme": 3}]), "programme")
+
     def test_releve_decision_valider_etape(self):
         base = {"id": "v", "genre": "valider_etape", "texte": "Valider ?", "fonctionnalite": "f1",
                 "element": {"id": "e1", "nom": "Accueil"}, "etape": "f1-valider", "tache": "t3",

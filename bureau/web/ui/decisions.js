@@ -5,7 +5,7 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
-  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil} from "./actions.js";
+  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
@@ -279,6 +279,25 @@ function decisionSession(ctx, d) {
   return li;
 }
 
+// « Outils à ouvrir à un agent » : l'agent arrêté, la commande refusée (une ligne, déjà coupée par le moteur), puis
+// « Autoriser ce programme pour cet agent » (seulement si le moteur a pu nommer le programme) et « Refuser » ; sans
+// programme à nommer, « C'est fait, relancer » une fois la fiche complétée à la main.
+function decisionOutilAgent(ctx, d) {
+  const li = el("li", "decision-outil");
+  li.append(el("div", "decision-texte", d.texte));
+  if (plein(d.commande)) li.append(el("div", "lecon-meta", "Commande refusée : " + d.commande));
+  if (!ctx.etat.agir) return li;
+  const rangee = el("div", "lecon-boutons");
+  if (plein(d.programme)) {
+    rangee.append(boutonDemande(ctx, "Autoriser ce programme pour cet agent", "bouton", () => demandeOutilAgent(d, "autoriser")));
+  } else {
+    rangee.append(boutonDemande(ctx, "C'est fait, relancer", "bouton", () => demandeOutilAgent(d, "relancer")));
+  }
+  rangee.append(boutonDemande(ctx, "Refuser", "bouton secondaire", () => demandeOutilAgent(d, "refuser")));
+  li.append(rangee);
+  return li;
+}
+
 // Une discussion qui attend votre réponse : qui parle, ce qu'il a dit en dernier, et de quoi y aller.
 function reponseAttendue(ctx, x) {
   const li = el("li", "");
@@ -318,5 +337,7 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, libelle, classe, fabrique, avant)))));
   contenu.append(partie("Environnement du poste à compléter", "Aucun outil ne manque",
     d.environnements.map((x) => decisionEnvironnement(ctx, x))));
+  contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",
+    d.outils.map((x) => decisionOutilAgent(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));
 }

@@ -55,6 +55,7 @@ class Reponse:
         self.session = session
         self.cout_usd = cout_usd
         self.abonnement = None   # l'instantané d'abonnement lu au début de l'appel (`claude -p` seulement)
+        self.refus = []          # les gestes que la permission a refusés : [{outil, commande?}] (`claude -p` seulement)
 
     def __repr__(self):
         return f"Reponse({self.texte[:40]!r}, {self.usage})"
@@ -181,7 +182,23 @@ def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail
                           usages)
     rep = Reponse(r.get("result") or "", usages, r.get("session_id"), r.get("total_cost_usd"))
     rep.abonnement = snap
+    rep.refus = _refus_de(r)
     return rep
+
+
+def _refus_de(r):
+    """Les gestes refusés à l'agent, tels que la ligne `result` les rapporte (`permission_denials`) : l'outil et, pour
+    un geste du shell, la commande exacte. Une entrée mal formée est écartée."""
+    refus = []
+    for x in r.get("permission_denials") or []:
+        if not isinstance(x, dict) or not isinstance(x.get("tool_name"), str) or not x["tool_name"].strip():
+            continue
+        entree = x.get("tool_input") if isinstance(x.get("tool_input"), dict) else {}
+        d = {"outil": x["tool_name"].strip()}
+        if isinstance(entree.get("command"), str) and entree["command"].strip():
+            d["commande"] = entree["command"]
+        refus.append(d)
+    return refus[:50]
 
 
 def _lire_flux(sortie):

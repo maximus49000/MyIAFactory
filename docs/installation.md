@@ -142,6 +142,23 @@ corriger ; au deuxième refus la tâche est bloquée, avec la raison au bureau, 
 démarrage, une tâche restée muette après un « Refusé par l'outil (message) » (agent attribué, tâche inactive, rien dit depuis)
 est relancée de la même façon, une fois.
 
+**Un agent arrêté faute d'outil repart seul, ou le bureau de direction décide.** Quand un agent s'arrête parce que sa
+fiche (ligne « Outils : ») ne lui ouvre pas un outil, le moteur lit la **commande refusée exacte** dans la sortie de
+`claude -p` (`permission_denials`) et en tire le programme (le premier mot de chaque commande du shell, nom seul ; `cd`
+ne compte pas). Si c'est **un seul programme**, **déclaré dans l'environnement du projet** (`environnement[].executables`,
+installé ou non) ou **un outil de base** des agents (`py`, `python`, `python3`, `mkdir`, `git`), il ajoute
+`Bash(<programme>:*)` à la fiche de l'agent (`lancer fiche`), le note au journal de la tâche (« Outil ouvert à Atlas :
+Bash(godot:*) (programme déclaré du projet) ») et relance la même tâche, **une fois** par programme. Jamais `Bash` seul,
+jamais un programme qui n'est pas un nom simple (chemin, option, variable), jamais un programme non déclaré, jamais pour un
+agent cloud (sa session garde ses propres réglages). Dans tous les autres cas (programme inconnu, deux programmes à ouvrir,
+commande illisible, outil qui n'est pas le shell, second refus du même programme, agent cloud), le moteur pose une
+**décision au bureau de direction** (« Outils à ouvrir à un agent ») : l'agent, la commande refusée (une ligne, coupée,
+valeurs de mot de passe masquées) et deux boutons, « Autoriser ce programme pour cet agent » (ajoute la règle puis relance la
+tâche) et « Refuser » (la tâche est bloquée avec la raison) ; sans programme à nommer, « C'est fait, relancer » après avoir
+complété la fiche à la main. **Au démarrage du moteur**, une tâche inactive, agent attribué, ni faite ni bloquée, dont le
+dernier journal est cet arrêt et dont la fiche ouvre maintenant l'outil (la règle nommée par l'arrêt s'y trouve ; pour un
+arrêt qui dit seulement « Bash », la fiche a été modifiée depuis) est relancée, une fois, sortie de son lot.
+
 **Relancer le moteur n'interrompt plus les agents.** Un agent local (`claude -p`) tourne dans un processus détaché du
 moteur, sans fenêtre : son message est lu dans un fichier, sa sortie `stream-json` écrite dans
 `.factory/agents-en-cours/<tâche>.jsonl`, avec un petit état à côté (`<tâche>.json` : numéro du processus, tâche, agent,

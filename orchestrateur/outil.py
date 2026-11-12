@@ -48,7 +48,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git")
+                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -844,6 +844,8 @@ def cmd_decision(ctx, e):
                 d.update(_validation_decidee(ctx, s, e))
             elif genre == "environnement":      # l'installation portée par le projet (sans fonctionnalité)
                 d["environnement"] = _outils_qui_manquent(e)
+            elif genre == "outil_agent":
+                d.update(_outil_a_ouvrir(ctx, s, e))
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -899,6 +901,31 @@ def _noter_verification(s, e):
             d["environnement"], d["verifie_le"] = neuf, su.maintenant()
             return {"ok": True}
     raise Refus(f"Décision inconnue : {i}")
+
+
+def _outil_a_ouvrir(ctx, s, e):
+    """Les champs de la décision `outil_agent` : l'agent arrêté faute d'outil, sa tâche, l'outil que sa fiche ne lui ouvre
+    pas, et, si le moteur a pu le tirer de la commande refusée, le `programme` à ouvrir et la `commande` (coupée)."""
+    if e.get("agent") not in ctx.cles_agents():
+        raise Refus(f"« outil_agent » : agent inconnu « {e.get('agent')} ».")
+    tache = texte(e, "tache")
+    if su.tache(s, tache) is None:
+        raise Refus(f"« outil_agent » : tâche inconnue « {tache} ».")
+    d = {"agent": e["agent"], "tache": tache, "outil": _phrase_courte(e, "outil", 100)}
+    if e.get("programme") is not None:
+        if not isinstance(e["programme"], str) or not fi.MOTIF_PROGRAMME.match(e["programme"]):
+            raise Refus("« programme » est un nom de programme (lettres, chiffres, point, tiret).")
+        d["programme"] = e["programme"]
+    if e.get("commande") is not None:
+        d["commande"] = _phrase_courte(e, "commande", 300)
+    return d
+
+
+def _phrase_courte(e, cle, maximum):
+    v = texte(e, cle)
+    if len(v) > maximum:
+        raise Refus(f"« {cle} » est un texte de {maximum} caractères au plus.")
+    return v
 
 
 def _outils_qui_manquent(e):
@@ -2805,8 +2832,27 @@ def cmd_lots(ctx, e):
     return {"lots": formes, "tailles": tailles, "ecartees": ecartees}
 
 
+def cmd_fiche(ctx, e):
+    """`{"action": "ouvrir_outil", "cle", "outil"}` : ajoute `outil` à la ligne « Outils : » de la fiche de l'agent `cle`
+    (la ligne est créée avec les outils par défaut s'il n'y en avait pas). Seule une règle `Bash(<programme>:*)` s'ouvre
+    ainsi, jamais `Bash` seul. Rend `{ok, deja, outils}` ; `deja` vrai si la fiche l'ouvrait déjà."""
+    if e.get("action") != "ouvrir_outil":
+        raise Refus("« action » doit valoir ouvrir_outil.")
+    cle, regle = texte(e, "cle"), texte(e, "outil")
+    fiche = fi.trouver(ctx.fiches(), cle)
+    if fiche is None:
+        raise Refus(f"Agent inconnu : {cle}")
+    try:
+        change = fi.ouvrir_outil(fiche, regle.strip())
+    except ValueError as ex:
+        raise Refus(str(ex))
+    if change:
+        fi.ecrire_fiche(fiche)
+    return {"ok": True, "deja": not change, "outils": fi.outils(fiche)}
+
+
 COMMANDES = {
-    "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
+    "fiche": (cmd_fiche, "obligatoire"), "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"), "guetter": (cmd_guetter, "aucune"),
     "demande-traitee": (cmd_demande_traitee, "obligatoire"), "etat": (cmd_etat, "aucune"),
     "fonctionnalite": (cmd_fonctionnalite, "obligatoire"), "message": (cmd_message, "obligatoire"),

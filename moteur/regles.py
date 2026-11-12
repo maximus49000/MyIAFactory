@@ -24,10 +24,11 @@ import os
 import re
 import time
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 
 from installation import estimation
-from moteur import agents, cloud, detache, environnement, rapport
+from moteur import accord_outil, agents, cloud, detache, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import releve as rel
 from orchestrateur.memoire import normaliser_mot
@@ -2499,22 +2500,15 @@ def _agent_arrete(projet, etat, execution, depart, r, fid):
     au Directeur ; l'agent reprend la même tâche sur la réponse."""
     tid = depart["taches"][0]
     t = _tache(projet, tid)
-    if r["statut"] == "accord_requis":
-        a = r["accord"]
-        quoi = f"{a['quoi']} (chez {a['partenaire']}, {a['cout']})"
-        texte = f"L'agent {execution.agent} demande votre accord : {quoi}."
-        choix = [ACCEPTE, REFUSE]
-        supplement = f"L'utilisateur a donné son accord pour : {quoi}. Tu peux le faire."
-    else:
-        quoi = f"l'outil {r['outil']}"
-        texte = (f"L'agent {execution.agent} a besoin de {quoi}, que sa fiche ne lui ouvre pas. Pour le lui donner, "
-                 "ajoutez-le à la ligne « Outils : » de sa fiche.")
-        choix = [FAIT, ECARTE]
-        supplement = f"{quoi.capitalize()} est maintenant ouvert dans ta fiche."
+    if r["statut"] == "outil_refuse":
+        return _outil_refuse(projet, etat, execution, depart, r, fid or t.get("fonctionnalite"))
+    a = r["accord"]
+    quoi = f"{a['quoi']} (chez {a['partenaire']}, {a['cout']})"
+    texte = f"L'agent {execution.agent} demande votre accord : {quoi}."
+    choix = [ACCEPTE, REFUSE]
+    supplement = f"L'utilisateur a donné son accord pour : {quoi}. Tu peux le faire."
     lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
-    for autre in depart["taches"][1:]:    # le reste du lot n'a pas été fait : il repart seul plus tard
-        if _tache(projet, autre)["colonne"] != "fait":
-            lancer(projet, "tache", {"id": autre, "lot": None})
+    _liberer_le_lot(projet, depart)
     fid = fid or t.get("fonctionnalite")
     if fid:
         for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=execution.agent, etape=""):
@@ -2522,6 +2516,171 @@ def _agent_arrete(projet, etat, execution, depart, r, fid):
         _m(etat, "accords")[fid] = {"tache": tid, "quoi": quoi, "supplement": supplement}
         _question(projet, fid, texte, choix)
     return []
+
+
+def _liberer_le_lot(projet, depart):
+    for autre in depart["taches"][1:]:    # le reste du lot n'a pas été fait : il repart seul plus tard
+        if _tache(projet, autre)["colonne"] != "fait":
+            lancer(projet, "tache", {"id": autre, "lot": None})
+
+
+# --- Un agent arrêté faute d'outil : voir `moteur.accord_outil`.
+
+GENRE_OUTIL = "outil_agent"           # la décision de projet posée quand le moteur ne peut pas ouvrir l'outil seul
+AUTORISER, REFUSER_OUTIL, RELANCER_OUTIL = "autoriser", "refuser", "relancer"
+ARRET_OUTIL = re.compile(r"a besoin de l'outil (.+?), que sa fiche ne lui ouvre pas")   # la ligne de journal de l'arrêt
+OUVERT_A = "Outil ouvert à "          # la ligne de journal d'un outil ouvert (par le moteur ou sur accord du Directeur)
+REPRISE_OUTIL = "Le moteur a repris : l'outil"
+
+
+def _fiche_de(projet, cle):
+    try:
+        return fi.trouver(fi.lire_toutes(_factory(projet)["fiches"]), cle)
+    except (OSError, fi.FicheInvalide):
+        return None
+
+
+def _outil_deja_ouvert(projet, tid, regle):
+    """Le moteur (ou le Directeur) a déjà ouvert cette règle pour cette tâche : un second refus du même programme n'est
+    plus ouvert tout seul, il revient au Directeur."""
+    return any(j["texte"].startswith(OUVERT_A) and regle in j["texte"] for j in _tache(projet, tid).get("journal") or [])
+
+
+def _outil_refuse(projet, etat, execution, depart, r, fid):
+    """L'agent s'arrête faute d'un outil que sa fiche ne lui ouvre pas. Un programme du shell connu du projet est ouvert
+    tout de suite à cet agent (une fois par tâche) et la tâche repart ; sinon, une décision au bureau de direction."""
+    tid, cle = depart["taches"][0], execution.agent
+    outil = (r.get("outil") or "").strip()
+    fiche = _fiche_de(projet, cle)
+    prenom = (fiche or {}).get("prenom") or cle
+    lieu = (fiche or {}).get("lieu", "local")
+    programme = commande = None
+    if outil.split("(")[0].strip() == "Bash" and fiche is not None:
+        commandes = [x["commande"] for x in execution.refus if x.get("outil") == "Bash" and x.get("commande")]
+        programme, commande = accord_outil.programme_refuse(commandes, fi.outils(fiche))
+    regle = fi.regle_bash(programme) if programme else None
+    quoi = regle or outil
+    montree = accord_outil.montrer(commande)
+    texte = f"L'agent {cle} a besoin de l'outil {quoi}, que sa fiche ne lui ouvre pas."
+    if montree:
+        texte += f" Commande refusée : « {montree} »."
+    lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
+    _liberer_le_lot(projet, depart)
+    origine = accord_outil.origine(programme, _factory(projet).get("environnement")) if programme else None
+    if origine and lieu == "local" and not _outil_deja_ouvert(projet, tid, regle):
+        lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
+        return _reprendre_la_tache(projet, etat, tid, fid, f"{regle} est maintenant ouvert dans ta fiche : relance ta commande.",
+                                   f"{OUVERT_A}{prenom} : {regle} (programme {origine})")
+    t = _tache(projet, tid)
+    qui = f"{prenom} ({cle})"
+    if programme:
+        consigne = (f"{qui} est arrêté : il lui faut le programme « {programme} » (règle {regle}), que sa fiche ne lui "
+                    "ouvre pas" + (" ; ce programme n'est pas déclaré dans l'environnement du projet" if not origine else "")
+                    + (" ; c'est un agent cloud, sa session garde ses propres réglages" if lieu == "cloud" else "") + ".")
+    else:
+        consigne = (f"{qui} est arrêté : il lui faut l'outil « {outil} », que sa fiche ne lui ouvre pas. Ouvrez-le "
+                    "vous-même à la ligne « Outils : » de sa fiche, puis relancez l'agent.")
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_OUTIL, "agent": cle, "tache": tid,
+                                "outil": quoi[:100], **({"programme": programme} if programme else {}),
+                                **({"commande": montree} if montree else {}),
+                                "texte": consigne + f" Tâche : « {t['titre']} »."})
+    if fid:
+        for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=cle, etape=""):
+            try:
+                lancer(projet, commande, entree)      # ce que l'agent dit de son arrêt, dans la discussion
+            except Refus as e:
+                lancer(projet, "tache", {"id": tid, "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
+        _dire(projet, fid, f"{qui} est arrêté faute d'un outil : la décision est au bureau de direction.")
+    return []
+
+
+def _reprendre_la_tache(projet, etat, tid, fid, supplement, journal):
+    """La même tâche repart avec le même agent : débloquée, sortie de son lot, remise dans les départs à faire."""
+    lancer(projet, "tache", {"id": tid, "bloquee": None, "lot": None, "journal": [journal]})
+    if tid not in _m(etat, "a_lancer", list):
+        etat["a_lancer"].append(tid)
+    _m(etat, "supplements")[tid] = supplement
+    return _demarrer_en_attente(projet, etat, fid)
+
+
+def _sur_outil_agent(projet, demande, etat):
+    """La réponse du Directeur à « cet agent a besoin d'un outil » : autoriser le programme (ouvert à cet agent, la
+    tâche repart), refuser (la tâche est bloquée avec la raison) ou, la fiche ayant été complétée à la main, relancer."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == GENRE_OUTIL), None)
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    tid, cle, verdict = d["tache"], d["agent"], demande["verdict"]
+    t = _tache(projet, tid)
+    fid = t.get("fonctionnalite")
+    prenom = prenom_de(projet, cle)
+    if verdict == AUTORISER:
+        if not d.get("programme"):
+            raise Refus("cette décision ne nomme pas de programme à autoriser")
+        regle = fi.regle_bash(d["programme"])
+        lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
+        actions = _reprendre_la_tache(projet, etat, tid, fid, f"{regle} est maintenant ouvert dans ta fiche : relance ta commande.",
+                                      f"{OUVERT_A}{prenom} : {regle} (autorisé par le Directeur)")
+        reponse = f"{regle} est ouvert à {prenom} ; sa tâche repart."
+    elif verdict == RELANCER_OUTIL:
+        actions = _reprendre_la_tache(projet, etat, tid, fid, f"L'outil {d['outil']} est maintenant ouvert dans ta fiche.",
+                                      f"{REPRISE_OUTIL} {d['outil']} est ouvert dans la fiche, sur demande du Directeur : nouvel essai.")
+        reponse = f"La tâche de {prenom} repart."
+    elif verdict == REFUSER_OUTIL:
+        raison = f"L'outil {d['outil']} a été refusé à {prenom} par le Directeur."
+        _bloquer_taches(projet, [tid], raison)
+        if fid:
+            _dire(projet, fid, f"La tâche « {t['titre']} » est bloquée : {raison}")
+        actions, reponse = [], raison
+    else:
+        raise Refus(f"réponse inconnue : {verdict}")
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, {"demande": demande["id"]}, reponse)
+    return actions
+
+
+_SUR[GENRE_OUTIL] = _sur_outil_agent
+
+
+def reprendre_les_taches_sans_outil(projet, etat):
+    """Au démarrage du moteur : une tâche arrêtée faute d'outil (inactive, agent attribué, ni faite ni bloquée, dernière
+    ligne du journal = l'arrêt) dont la fiche ouvre maintenant l'outil repart, une fois. L'outil est ouvert quand la
+    règle nommée par l'arrêt est dans la fiche ou, si l'arrêt ne la nomme pas (« Bash »), quand la fiche a été
+    modifiée depuis. Rien tant qu'une décision attend le Directeur pour cette tâche."""
+    court = _etat(projet)
+    if court["pause"]:
+        return []
+    attendues = {d.get("tache") for d in court["decisions"] if d["genre"] == GENRE_OUTIL}
+    deja, actions = _m(etat, "reprises_outil", set), []
+    for t in court["taches"]:
+        if (t["active"] or not t.get("agent") or t["colonne"] == "fait" or t.get("bloquee") or t["id"] in deja
+                or t["id"] in attendues or t["id"] in etat["en_cours"] or fiche_cloud(court, t["agent"])):
+            continue
+        journal = _tache(projet, t["id"]).get("journal") or []
+        m = ARRET_OUTIL.search(journal[-1]["texte"]) if journal else None
+        fiche = _fiche_de(projet, t["agent"])
+        if m is None or fiche is None or not _fiche_ouvre(fiche, m.group(1), journal[-1]["t"]):
+            continue
+        if any(j["texte"].startswith(f"{REPRISE_OUTIL} {m.group(1)}") for j in journal):
+            continue      # déjà repris pour cet outil : le second arrêt revient au Directeur
+        deja.add(t["id"])
+        actions += _reprendre_la_tache(projet, etat, t["id"], t.get("fonctionnalite"),
+                                       f"L'outil {m.group(1)} est maintenant ouvert dans ta fiche.",
+                                       f"{REPRISE_OUTIL} {m.group(1)} est ouvert dans la fiche, nouvel essai.")
+    return actions
+
+
+def _fiche_ouvre(fiche, outil, depuis):
+    """La fiche ouvre l'outil de l'arrêt : sa règle y est ; ou, l'arrêt ne nommant que « Bash », la fiche a changé depuis
+    (la ligne « Outils : » complétée à la main)."""
+    if outil in fi.outils(fiche):
+        return True
+    if outil != "Bash":
+        return False
+    try:
+        arret = datetime.fromisoformat(depuis).timestamp()
+        return Path(fiche["chemin"]).stat().st_mtime > arret
+    except (ValueError, OSError):
+        return False
 
 
 def _suite_de_tache(projet, etat, t, execution, r):

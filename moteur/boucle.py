@@ -2,7 +2,8 @@
 
 Un passage, par projet, dans cet ordre (conception, section 4.1) :
 1. la présence (`presence.json`, comme `lancer guetter`) ; au premier passage : les partenaires (`detecter`) et les
-   tâches orphelines (active, mais plus d'agent) relancées une fois ;
+   tâches orphelines (active, mais plus d'agent) relancées une fois, tâches arrêtées faute d'outil que la fiche ouvre
+   maintenant relancées une fois ;
 2. les demandes du bureau, les messages de discussion d'abord, chacune une seule fois ;
 3. les retours des agents terminés : usage noté, rapport appliqué, commit et push ;
 4. `avancer` : ce que dit le parcours à chaque étape (rien en pause : les demandes, elles, sont toujours traitées) ;
@@ -212,6 +213,10 @@ class Moteur:
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
             self._noter(projet, f"agents en cours : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
+        try:    # arrêtée faute d'outil, dont la fiche l'ouvre maintenant : la tâche repart, une fois
+            self._executer(projet, regles.reprendre_les_taches_sans_outil(projet, etat))
+        except (regles.Refus, regles.ErreurMoteur, OSError) as e:
+            self._noter(projet, f"tâches sans outil : {e}")
         self._retrouver_les_sessions(projet, etat)
         try:    # un projet créé au bureau avec une description : son genre est proposé sans attendre une demande
             self._executer(projet, regles.genre_a_proposer(projet, etat))

@@ -155,7 +155,7 @@ la même façon, à la pose comme à la complétion, pour corriger une décision
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
-genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus, `points` (les points à vérifier de la fenêtre de validation : 1 à 8 phrases différentes de 160 caractères au plus) et `acces` `{url (http ou https), description? (200 au plus)}` ; un fichier image est rangé comme les autres images d'agent, un livrable téléchargeable (apk, zip, pdf, exe…) trouvé dans le projet reçoit `taille` et `date`, son chemin compté depuis la factory ou, hors de `.factory`, depuis le dossier du projet), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+genre), `session_cloud` avec `agent`, `outil_agent` (un agent est arrêté faute d'un outil que sa fiche ne lui ouvre pas et le moteur ne peut pas l'ouvrir seul : `agent` (clé), `tache`, `outil`, et facultatifs `programme` (le programme du shell à ouvrir, d'après la commande refusée) et `commande` (la commande refusée, une ligne, coupée, valeurs secrètes masquées) ; le Directeur répond « Autoriser ce programme pour cet agent » ou « Refuser » : seul le moteur procédural pose cette décision et y répond), `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus, `points` (les points à vérifier de la fenêtre de validation : 1 à 8 phrases différentes de 160 caractères au plus) et `acces` `{url (http ou https), description? (200 au plus)}` ; un fichier image est rangé comme les autres images d'agent, un livrable téléchargeable (apk, zip, pdf, exe…) trouvé dans le projet reçoit `taille` et `date`, son chemin compté depuis la factory ou, hors de `.factory`, depuis le dossier du projet), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
@@ -432,6 +432,17 @@ tâches qui mènent à une validation du Directeur passent d'abord, et aucune t�
 pas encore franchie (un élément qu'elle concerne est encore avant elle ou en attente) ne démarre. Une installation
 prioritaire et la pause restent au-dessus de tout. Des places libres sans tâche permise pendant qu'une validation
 attend : `attente-places.json` dans `.factory` (« 2 places libres : en attente de votre validation « … » »).
+
+### `fiche`
+
+Entrée : `{"action": "ouvrir_outil", "cle", "outil"}`. Ajoute `outil` à la ligne « Outils : » de la fiche de l'agent `cle` ;
+sans cette ligne, elle est créée avec les outils par défaut (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash(py:*)`,
+`Bash(python:*)`, `Bash(python3:*)`, `Bash(mkdir:*)`, `Bash(git:*)`) plus la règle. Seule une règle `Bash(<programme>:*)`
+(un nom de programme : lettres, chiffres, point, tiret) s'ouvre ainsi ; `Bash` seul, une autre forme ou un agent inconnu
+est refusé (code 1). Rend `{"ok": true, "deja": <vrai si la fiche l'ouvrait déjà>, "outils": [...]}`. C'est la commande du
+moteur quand un agent est arrêté faute d'outil (voir la décision `outil_agent`) : il lit la commande refusée dans la sortie
+de `claude -p` et n'ouvre que le programme d'un exécutable déclaré dans l'environnement du projet ou un outil de base des
+agents ; tout autre cas est une décision.
 
 ### `recruter`
 

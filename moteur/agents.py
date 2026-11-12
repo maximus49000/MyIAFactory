@@ -33,11 +33,12 @@ class Execution:
     cumulés), `usage` (le principal), `tache` et `lot` (ce que l'agent servait)."""
 
     def __init__(self, tache, agent, lot=None, rapport=None, usages=None, erreur=None, estime=None, modele=None,
-                 session=None):
+                 session=None, refus=None):
         self.tache, self.agent, self.lot, self.rapport, self.erreur = tache, agent, lot, rapport, erreur
         self.estime = estime      # un agent cloud : le total de tokens qu'il déclare (une estimation, pas une mesure)
         self.modele = modele      # le modèle demandé (« haiku », « sonnet », « opus »)
         self.session = session    # la session `claude -p` (local) : une question de l'utilisateur la reprend
+        self.refus = refus or []  # les gestes que la permission lui a refusés : [{outil, commande?}] (voir `appel`)
         self.reponse = None       # une réponse aux questions de l'utilisateur : `{fonctionnalite, questions}`
         self.usages = usages or []
         self.usage = self.usages[0] if self.usages else dict(USAGE_VIDE)
@@ -91,6 +92,7 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
         except rapport.RapportIllisible as e:
             erreur = f"rapport illisible : {e}"
             continue
-        return Execution(tache, cle, lot, rapport=lu, usages=cumuler(usages), session=getattr(r, "session", None))
+        return Execution(tache, cle, lot, rapport=lu, usages=cumuler(usages), session=getattr(r, "session", None),
+                         refus=getattr(r, "refus", None))
     return Execution(tache, cle, lot, usages=cumuler(usages),
                      erreur=f"{erreur} (deux essais sans rapport utilisable)")

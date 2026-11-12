@@ -535,6 +535,10 @@ R5 = releve.normaliser({
                           "compte_rendu": "", "fichiers": []},
                          {"id": "e1", "genre": "elargir_genre", "texte": "Élargir ?", "cible": "badges",
                           "ancienne": "Badges", "propose": "Badges et logos", "fonctionnalite": "f1"},
+                         {"id": "o1", "genre": "outil_agent", "texte": "Curl ?", "agent": "d1", "tache": "t1",
+                          "outil": "Bash(curl:*)", "programme": "curl"},
+                         {"id": "o2", "genre": "outil_agent", "texte": "WebSearch ?", "agent": "d1", "tache": "t1",
+                          "outil": "WebSearch"},
                          {"id": "c1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "jeu-mobile",
                           "genres_connus": ["badges"], "description": "Jeux pour téléphone"}]})
 
@@ -644,6 +648,16 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.refus({**base, "verdict": "valider", "description": "x" * 3501})
         self.assertEqual(demandes.nettoyer({**base, "verdict": "valider", "description": "d", "autre": 1}),
                          {**base, "verdict": "valider", "description": "d"})
+
+    def test_outil_agent(self):
+        base = {"type": "outil_agent", "decision": "o1"}
+        self.ok({**base, "verdict": "autoriser"})
+        self.ok({**base, "verdict": "refuser"})
+        self.refus({**base, "verdict": "peut-etre"})
+        self.refus({**base, "verdict": "autoriser", "decision": "zz"})
+        self.refus({**base, "verdict": "autoriser", "decision": "o2"})          # pas de programme à autoriser
+        self.ok({**base, "verdict": "relancer", "decision": "o2"})
+        self.assertEqual(demandes.nettoyer({**base, "verdict": "refuser", "autre": 1}), {**base, "verdict": "refuser"})
 
     def test_valider_etape(self):
         base = {"type": "valider_etape", "decision": "v1"}

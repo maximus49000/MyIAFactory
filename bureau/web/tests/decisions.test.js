@@ -198,6 +198,28 @@ test("élargir un genre : ancienne et nouvelle description pré-remplie, valider
     {type: "elargir_genre", decision: "e1", verdict: "refuser"}]);
 });
 
+const OUTIL = {id: "o1", genre: "outil_agent", texte: "Atlas (livreur) est arrêté : il lui faut le programme « curl ».",
+  agent: "livreur", tache: "t44", outil: "Bash(curl:*)", programme: "curl", commande: "curl -O https://exemple.test/x.zip"};
+
+test("outil à ouvrir à un agent : la commande refusée, puis autoriser le programme ou refuser", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [OUTIL]});
+  assert.match(contenu.textContent, /Outils à ouvrir à un agent/);
+  assert.match(contenu.textContent, /Commande refusée : curl -O https:\/\/exemple.test\/x.zip/);
+  await bouton(contenu, "Autoriser ce programme pour cet agent").auteurs.click[0]();
+  await bouton(contenu, "Refuser").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "outil_agent", decision: "o1", verdict: "autoriser"},
+    {type: "outil_agent", decision: "o1", verdict: "refuser"}]);
+});
+
+test("outil à ouvrir : sans programme à nommer, pas d'autorisation, mais « relancer » une fois la fiche complétée", async () => {
+  const sans = {...OUTIL, programme: undefined, commande: undefined, outil: "WebSearch"};
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [sans]});
+  assert.equal(boutons(contenu).filter((b) => /Autoriser/.test(b.textContent)).length, 0);
+  await bouton(contenu, "C'est fait, relancer").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "outil_agent", decision: "o1", verdict: "relancer"}]);
+  assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [OUTIL]}).contenu).length, 0);
+});
+
 test("genre du projet : la phrase du genre nouveau est proposée et pré-remplie", async () => {
   const sans = {id: "p1", genre: "confirmer_genre", texte: "Genre ?", propose: "jeu-mobile", genres_connus: ["jeu-web"],
     description: "Jeux pour téléphone"};

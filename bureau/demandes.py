@@ -20,7 +20,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
-          "valider_etape": ("decision", "verdict"),
+          "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
@@ -33,7 +33,8 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solu
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme", "recruter", "depot_git")
+               "parallelisme", "recruter", "depot_git", "outil_agent")
+VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -322,6 +323,15 @@ def _verifier_v4(demande, r, elements):
             return "Réponse inconnue (valider ou refuser)."
         if demande.get("description") and len(demande["description"]) > MAX_TEXTE:
             return f"« description » dépasse {MAX_TEXTE} caractères."
+        return None
+    if genre == "outil_agent":
+        d = _decision(r.get("decisions_projet", []), demande["decision"], "outil_agent")
+        if d is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in VERDICTS_OUTIL:
+            return f"Réponse inconnue ({', '.join(VERDICTS_OUTIL)})."
+        if demande["verdict"] == "autoriser" and not d.get("programme"):
+            return "Cette décision ne nomme pas de programme à autoriser."
         return None
     if genre == "valider_etape":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape")

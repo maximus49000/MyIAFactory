@@ -115,7 +115,7 @@ export function resumeEnvoi(resultats) {
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-                  genresDemandes: [], environnements: [], elargissements: [], validations: []};
+                  genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -135,6 +135,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "session_cloud") sortie.sessions.push({...d});
     else if (d?.genre === "organisation") sortie.organisations.push({...d});
     else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
+    else if (d?.genre === "outil_agent") sortie.outils.push({...d});
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
     else if (d?.genre === "environnement") sortie.environnements.push({...d});   // l'installation portée par le projet
   }
@@ -227,6 +228,12 @@ export function demandeInstallerOutil(decision, outil) {
 
 export function demandeSession(decision, session) {
   return {type: "session_cloud", decision, session};
+}
+
+// Un agent arrêté faute d'outil : « autoriser » le programme (ajouté à sa fiche, sa tâche repart), « refuser » (sa tâche
+// est bloquée) ou « relancer » (la fiche a été complétée à la main : seulement sans programme à nommer).
+export function demandeOutilAgent(decision, verdict) {
+  return {type: "outil_agent", decision: decision.id, verdict};
 }
 
 // « Lot L2, tâche 3 sur 4 » ; null si la tâche n'est pas dans un lot. Le nombre de tâches du lot est celui des tâches

@@ -314,3 +314,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export signé destiné à une livraison, ne jamais retenir le keystore de debug fourni par le moteur ou le SDK : demander à l'utilisateur sa clé de release, son chemin et son alias avant le build.
+
+## G53 — Quand un robot de test accélère le temps, vérifier l'écran d
+Rôles : testeur
+Date : 2026-11-12
+
+Quand un robot de test accélère le temps, vérifier l'écran de fin au moment où le journal signale la fin, car un retour automatique peut le faire disparaître avant le contrôle.

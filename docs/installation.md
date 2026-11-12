@@ -225,6 +225,23 @@ Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernièr
 
 Les routes et leur corps sont dans [`releve.md`](releve.md) (« Créer un projet depuis le bureau »).
 
+## Valider un cahier des charges ou une méthode : on l'ouvre d'abord
+
+Dans « Cahiers et méthodes à valider » (bureau de direction), chaque entrée n'a que son résumé (la fonctionnalité, ce qui
+est à valider, « 2 maquettes · 3 étapes ») et un seul bouton : **« Ouvrir le cahier des charges »** (ou **« Ouvrir la
+méthode »**). Plus aucun bouton Valider ni Corriger dans la liste, ni dans le panneau de la fonctionnalité (les boutons
+y ouvrent la même fenêtre). Elle se comporte comme la fenêtre de validation des éléments (plein écran au téléphone,
+Fermer, Échap ou un clic à côté, focus gardé, image agrandie au-dessus) et montre :
+
+- le **cahier** : les maquettes légendées (un toucher les agrandit), les étapes numérotées, les partenaires choisis
+  (appelé directement, à faire par vous sur son site, ou écarté) et les versions précédentes, repliées ;
+- la **méthode** : son contenu écrit (Markdown, tableaux compris) et son prototype (images, livrables à télécharger).
+
+En bas : **« Valider »**, ou **« Demander une correction »** (le texte est obligatoire ; sans lui rien ne part). Une seule
+réponse : l'entrée disparaît de la liste et du compteur dès l'envoi et ne revient que si l'envoi échoue. Les demandes
+sont celles d'avant : `cahier` (`valider` ou `corriger` + `texte`) et `methode` (`valider`, ou `revoir` + `texte` pour une
+correction ; le moteur reprend alors la mise au point de la méthode).
+
 ## Les validations du Directeur
 
 Un workflow peut contenir des étapes **« validation du Directeur »** (vous les demandez au chef, par exemple « je veux

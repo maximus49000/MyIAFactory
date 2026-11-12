@@ -1284,7 +1284,6 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     }
     blocCahier.append(histo);
   }
-  const decisions = new Set((f.decisions || []).map((d) => d.genre));
   const gestes = el("div", "gestes");
   const geste = (libelle, classe, demande) => {
     const b = el("button", classe, libelle);
@@ -1296,21 +1295,19 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     });
     gestes.append(b);
   };
-  if (e.agir === true && decisions.has("valider_cahier")) {
-    geste("Valider le cahier des charges", "bouton", () => demandeCahier(f.id, "valider"));
-    // La correction s'écrit dans la discussion, qui se rouvre ; « Envoyer la correction » l'envoie.
-    const corriger = el("button", "bouton secondaire", vue.envoiCorrection ? "Annuler la correction" : "Demander une correction");
-    corriger.type = "button";
-    corriger.addEventListener("click", () => {
-      if (ctx.corrections.has(f.id)) ctx.corrections.delete(f.id); else ctx.corrections.add(f.id);
-      ctx.rouvrir();
-      if (ctx.corrections.has(f.id)) requestAnimationFrame(() => document.querySelector(".panneau textarea[data-saisie]")?.focus());
-    });
-    gestes.append(corriger);
-  }
+  // Valider (ou corriger) le cahier des charges ou la méthode : jamais d'un clic aveugle, le bouton ouvre la fenêtre qui
+  // montre le contenu en entier (ui/cahier.js, fournie par la page dans `ctx.ouvrirCahier`).
+  const ouvrir = (libelle, decision) => {
+    const b = el("button", "bouton", libelle);
+    b.type = "button";
+    b.addEventListener("click", () => ctx.ouvrirCahier?.(ctx, {...decision, fonctionnalite: f.id, nom: f.nom}, b));
+    gestes.append(b);
+  };
+  const aOuvrir = (genre) => (f.decisions || []).find((d) => d.genre === genre);
+  if (e.agir === true && aOuvrir("valider_cahier")) ouvrir("Ouvrir le cahier des charges", aOuvrir("valider_cahier"));
   const blocMethode = el("div", "bloc-methode");
   if (f.methode) blocMethode.append(partieMethode(ctx, f));   // la méthode écrite en entier, pas seulement son chemin
-  if (e.agir === true && decisions.has("valider_methode")) geste("Valider la méthode", "bouton", () => demandeMethode(f.id, "valider"));
+  if (e.agir === true && aOuvrir("valider_methode")) ouvrir("Ouvrir la méthode", aOuvrir("valider_methode"));
   const reprise = gestesReprise(f, e.agir);
   if (reprise) {
     blocMethode.append(el("p", "question-reprise", reprise.question));

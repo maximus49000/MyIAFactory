@@ -9,9 +9,10 @@ import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGen
   demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
-import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
+import {demandeMethode} from "./fonctionnalite.js";
 import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation, urlTelechargement,
   lienAcces} from "./validation.js";
+import {ouvrirCahier, resumeCahier} from "./cahier.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2} from "./empreinte.js";
 import {projetCourant, urlProjet} from "./projets.js";
@@ -263,6 +264,20 @@ function decisionValidation(ctx, d) {
   const b = el("button", "bouton", "Ouvrir la validation");
   b.type = "button";
   b.addEventListener("click", () => (ctx.ouvrirValidation || ouvrirValidation)(ctx, d, b));
+  li.append(b);
+  return li;
+}
+
+// Un cahier des charges ou une méthode attend votre validation : au bureau, seulement son résumé et « Ouvrir … » ; la
+// validation (ou la correction) se fait dans la fenêtre (ui/cahier.js), contenu sous les yeux.
+function decisionAOuvrir(ctx, d, libelle) {
+  const li = el("li", "decision-cahier");
+  li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte));
+  const resume = resumeCahier(ctx.etat, d);
+  if (resume) li.append(el("div", "lecon-meta", resume));
+  const b = el("button", "bouton", libelle);
+  b.type = "button";
+  b.addEventListener("click", () => (ctx.ouvrirCahier || ouvrirCahier)(ctx, d, b));
   li.append(b);
   return li;
 }
@@ -585,10 +600,8 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Réponses attendues", "Aucune discussion n'attend votre réponse",
     d.reponses.map((x) => reponseAttendue(ctx, x))));
   const validations = [
-    ...d.cahiers.map((x) => decisionFonctionnalite(ctx, x, [
-      boutonDemande(ctx, "Valider le cahier", "bouton", () => demandeCahier(x.fonctionnalite, "valider"))])),
-    ...d.methodes.map((x) => decisionFonctionnalite(ctx, x, [
-      boutonDemande(ctx, "Valider la méthode", "bouton", () => demandeMethode(x.fonctionnalite, "valider"))])),
+    ...d.cahiers.filter((x) => !estEnvoyee(x.id)).map((x) => decisionAOuvrir(ctx, x, "Ouvrir le cahier des charges")),
+    ...d.methodes.filter((x) => !estEnvoyee(x.id)).map((x) => decisionAOuvrir(ctx, x, "Ouvrir la méthode")),
   ];
   contenu.append(partie("Cahiers et méthodes à valider", "Aucun cahier ni méthode à valider", validations));
   contenu.append(partie("Éléments à valider", "Aucun élément n'attend votre validation",

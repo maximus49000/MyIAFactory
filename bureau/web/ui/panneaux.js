@@ -14,6 +14,7 @@ import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
 import {envoyer as envoyerDemande} from "./actions.js";
 import {appliquerEnvoyees, surEnvoyees} from "./validation.js";
+import {ouvrirCahier} from "./cahier.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
@@ -149,6 +150,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
     ouvrirCatalogue: (id) => ouvrirCatalogue(id),
+    ouvrirCahier,
     estOuvert: (type, id) => panneauOuvert?.type === type && panneauOuvert.id === id,
     catalogues, vuesCatalogue, retoursEnvoyes,
     grand: () => grand,

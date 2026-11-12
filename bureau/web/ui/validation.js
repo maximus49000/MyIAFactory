@@ -84,18 +84,39 @@ export function purgerEnvoyees(idsPresents, maintenant = Date.now()) {
 // Pour les tests : comme un rechargement de la page (la mémoire de la page est perdue, le stockage local reste).
 export function oublierMemoireDePage() { memoire.clear(); }
 
-// L'état à afficher : sans les validations déjà envoyées (liste, compteur de la pastille). Appliquée à chaque rendu.
+// Les décisions qu'on répond depuis une fenêtre : validation d'un élément (décision du projet), cahier des charges et
+// méthode (décisions d'une fonctionnalité, ouvertes par ui/cahier.js).
+const GENRES_FENETRE = ["valider_etape", "valider_cahier", "valider_methode"];
+const envoyable = (d) => GENRES_FENETRE.includes(d?.genre);
+
+// L'état à afficher : sans les décisions déjà envoyées (listes, compteur de la pastille). Appliquée à chaque rendu.
 export function appliquerEnvoyees(etat, maintenant = Date.now()) {
-  const liste = Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : null;
-  if (!liste) return etat;
-  purgerEnvoyees(liste.filter((d) => d?.genre === "valider_etape").map((d) => d.id), maintenant);
-  const gardees = liste.filter((d) => !(d?.genre === "valider_etape" && estEnvoyee(d.id, maintenant)));
-  const n = liste.length - gardees.length;
+  const duProjet = Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : null;
+  const fonctionnalites = Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : null;
+  if (!duProjet && !fonctionnalites) return etat;
+  const presentes = [...(duProjet || []), ...(fonctionnalites || []).flatMap((f) => (Array.isArray(f?.decisions) ? f.decisions : []))];
+  purgerEnvoyees(presentes.filter(envoyable).map((d) => d.id), maintenant);
+  const garde = (d) => !(envoyable(d) && estEnvoyee(d.id, maintenant));
+  const gardees = duProjet ? duProjet.filter(garde) : null;
+  const nProjet = duProjet ? duProjet.length - gardees.length : 0;
+  let nFonctionnalites = 0;
+  const fonctionnalitesGardees = fonctionnalites && fonctionnalites.map((f) => {
+    if (!Array.isArray(f?.decisions) || f.decisions.every(garde)) return f;
+    const decisions = f.decisions.filter(garde);
+    nFonctionnalites += f.decisions.length - decisions.length;
+    return {...f, decisions};
+  });
+  const n = nProjet + nFonctionnalites;
   if (!n) return etat;
-  const sortie = {...etat, decisions_projet: gardees};
+  const sortie = {...etat};
+  if (gardees) sortie.decisions_projet = gardees;
+  if (fonctionnalitesGardees) sortie.fonctionnalites = fonctionnalitesGardees;
   if (etat.directeur && typeof etat.directeur === "object") {
-    const retire = (v) => (Number.isFinite(v) ? Math.max(0, v - n) : v);
-    sortie.directeur = {...etat.directeur, total: retire(etat.directeur.total), projet: retire(etat.directeur.projet)};
+    const retire = (v, k) => (Number.isFinite(v) ? Math.max(0, v - k) : v);
+    sortie.directeur = {...etat.directeur, total: retire(etat.directeur.total, n), projet: retire(etat.directeur.projet, nProjet)};
+    if (nFonctionnalites && "fonctionnalites" in etat.directeur) {
+      sortie.directeur.fonctionnalites = retire(etat.directeur.fonctionnalites, nFonctionnalites);
+    }
   }
   return sortie;
 }
@@ -447,8 +468,9 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   return {boite, fermer: bFermer, choix};
 }
 
-// Ouvre la fenêtre par-dessus le bureau. `declencheur` reprend le focus à la fermeture.
-export function ouvrirValidation(ctx, d, declencheur = null) {
+// Ouvre une fenêtre par-dessus le bureau : `construire(fermer)` rend `{boite, fermer: bouton}` (le contenu). Fermer / Échap /
+// clic hors fenêtre, focus piégé, visionneuse d'images au-dessus. `declencheur` reprend le focus à la fermeture.
+export function ouvrirFenetre(construire, declencheur = null) {
   fermerVisionneuse();
   document.querySelector(".val-fond")?.remove();     // une seule fenêtre à la fois
   const fond = el("div", "val-fond");
@@ -479,7 +501,7 @@ export function ouvrirValidation(ctx, d, declencheur = null) {
     document.body.classList.remove("val-ouverte");
     if (declencheur && declencheur.isConnected) declencheur.focus();
   }
-  const rendu = contenuValidation(ctx, d, {fermer: fermerFenetre});
+  const rendu = construire(fermerFenetre);
   boite = rendu.boite;
   fond.append(boite);
   fond.addEventListener("mousedown", (ev) => { if (ev.target === fond) fermerFenetre(); });
@@ -488,4 +510,9 @@ export function ouvrirValidation(ctx, d, declencheur = null) {
   document.body.append(fond);
   rendu.fermer.focus();
   return fermerFenetre;
+}
+
+// La fenêtre de validation d'un élément.
+export function ouvrirValidation(ctx, d, declencheur = null) {
+  return ouvrirFenetre((fermer) => contenuValidation(ctx, d, {fermer}), declencheur);
 }

@@ -374,3 +374,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Dans un roguelike de cartes, quand l'utilisateur retire une contrainte d'un tirage, vérifier chaque autre tirage qui l'appliquait avant de supposer qu'il veut la garder ailleurs.
+
+## G63 — Quand un prompt de génération peut produire plusieurs assets
+Rôles : designer
+Date : 2026-11-13
+
+Quand un prompt de génération peut produire plusieurs assets, le plan de génération compte séparément les générations (le coût) et les assets obtenus, et dit pour chaque génération quels fichiers elle donne.

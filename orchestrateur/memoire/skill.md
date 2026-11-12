@@ -129,3 +129,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Pour valider des assets graphiques, lancer un script qui compare chaque couleur opaque à la palette autorisée, puis une capture produite par le moteur qui prouve résolution et affichage.
+
+## S22 — Quand un outil système affiche des libellés traduits, ne pas
+Rôles : livreur
+Date : 2026-11-12
+
+Quand un outil système affiche des libellés traduits, ne pas parser le texte d'un libellé fixe : utiliser un motif tolérant à la langue ou une sortie structurée.

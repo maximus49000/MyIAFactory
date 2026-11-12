@@ -2056,6 +2056,10 @@ def _attente(court, fid, etat):
     """Les tâches du moteur qui n'ont pas encore démarré : pas actives, pas faites, jamais prises (hors cadrage, relancé
     par `a_lancer`)."""
     a_lancer = _m(etat, "a_lancer", list)
+    # (la session cloud à créer à la main n'en est pas une : le moteur réessaie lui-même de la créer)
+    attendues = {d.get("tache") for d in court.get("decisions") or []
+                 if d.get("tache") and d.get("genre") != "session_cloud"} \
+        | {a.get("tache") for a in _m(etat, "accords").values() if isinstance(a, dict)}
     attente = []
     for t in court["taches"]:
         if fid and t.get("fonctionnalite") != fid:
@@ -2068,7 +2072,8 @@ def _attente(court, fid, etat):
         explicite = t["id"] in a_lancer
         # Une étape du flux déjà commencée, ni active ni bloquée, ni suivie par le moteur : débloquée (à la main, une
         # session cloud inscrite) ou laissée par un moteur relancé ; elle repart aussi, sinon elle ne repartirait jamais.
-        reprise = bool(t.get("debut")) and etape.startswith(ETAPES_DE_FLUX)
+        # Jamais une tâche qui attend une décision (un accord, un outil…) : elle repart à la réponse du Directeur.
+        reprise = bool(t.get("debut")) and etape.startswith(ETAPES_DE_FLUX) and t["id"] not in attendues
         if explicite or reprise or (not t.get("debut") and (etape.startswith(ETAPES_DE_FLUX)
                                                             or etape in ETAPES_DU_MOTEUR)):
             attente.append(t)
@@ -2241,8 +2246,9 @@ def _demarrer_en_attente(projet, etat, fid):
             return []
     actions, solos, en_flux = [], [], []
     for t in attente:
+        # une étape déjà commencée (reprise) n'est jamais remise en lot : elle part seule
         (en_flux if str(t.get("etape")).startswith(ETAPES_DE_FLUX) and t["id"] not in etat["a_lancer"]
-         else solos).append(t)
+         and not t.get("debut") else solos).append(t)
     lots = []
     if en_flux:
         r = lancer(projet, "lots", {"taches": [t["id"] for t in en_flux]})

@@ -391,6 +391,9 @@ test("session cloud à créer à la main : lien, dépôt, message à copier, adr
   assert.deepEqual(copies, [SESSION.depart]);
   assert.equal(copier.textContent, "Copié");
   const champ = contenu.tous((n) => n.tagName === "input")[0];
+  await bouton(contenu, "C'est fait").auteurs.click[0]();            // champ vide : jamais un clic sans effet
+  assert.deepEqual(demandes, []);
+  assert.match(contenu.textContent, /Collez d'abord l'adresse/);
   champ.value = "Ma session";                                       // ni une adresse ni un identifiant
   await bouton(contenu, "C'est fait").auteurs.click[0]();
   assert.deepEqual(demandes, []);

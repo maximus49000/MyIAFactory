@@ -368,6 +368,14 @@ class Agents(Base):
                             dict(base, id="t3", debut="2026-11-12T23:46:06+01:00", bloquee=None, active=True)]}
         self.assertEqual([t["id"] for t in regles._attente(court, "f1", regles.nouvel_etat())], ["t1"])
 
+    def test_la_demarche_manuelle_est_levee_quand_le_moteur_cree_la_session(self):
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "session_cloud", "agent": "dev-c1",
+                                    "texte": "Créez la session."})
+        self.tache()
+        self.avancer()
+        self.assertEqual(len(self.cloud.lancees), 1)
+        self.assertFalse([d for d in self.suivi()["decisions_projet"] if d["genre"] == "session_cloud"])
+
     def test_reglage_dossier_approuve_lu_par_le_moteur(self):
         reglages = self.dossier / "reglages.json"
         reglages.write_text(json.dumps({"cloud_dossier_approuve": True}), encoding="utf-8")

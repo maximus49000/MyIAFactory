@@ -639,6 +639,10 @@ class Moteur:
             regles.lancer(projet, "tache", {"id": tid, "journal": [
                 f"Session cloud {lancee['session']} ({modele})" + (f" : {lancee['adresse']}" if lancee["adresse"] else "")]})
             regles.lancer(projet, "session", {"agent": fiche["cle"], "session": lancee["adresse"] or lancee["session"]})
+            # la démarche manuelle posée avant pour cet agent n'a plus lieu d'être : le moteur a créé la session
+            for dec in regles.lancer(projet, "etat", {})["decisions"]:
+                if dec.get("genre") == "session_cloud" and dec.get("agent") == fiche["cle"]:
+                    regles.lancer(projet, "decision", {"action": "lever", "id": dec["id"]})
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"session cloud non notée : {e}")
         return None

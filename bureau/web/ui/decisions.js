@@ -349,7 +349,11 @@ function decisionSession(ctx, d) {
   nom.setAttribute("aria-label", manuelle ? "Adresse ou identifiant de la session créée" : "Nom de la session créée");
   const erreur = el("p", "saisie-erreur", "");
   const valide = () => {
-    if (!nom.value.trim()) return false;
+    if (!nom.value.trim()) {      // jamais un clic sans effet : on dit ce qui manque
+      erreur.textContent = manuelle ? "Collez d'abord l'adresse de la session créée (https://claude.ai/code/…)."
+        : "Donnez d'abord le nom de la session créée.";
+      return false;
+    }
     if (manuelle && !lireSession(nom.value)) {
       erreur.textContent = "Collez l'adresse de la session (https://claude.ai/code/…) ou son identifiant (session_…).";
       return false;

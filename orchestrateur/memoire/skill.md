@@ -195,3 +195,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.
+
+## S33 — Mettre dans le document de cadrage la liste ordonnée des éta
+Rôles : designer
+Date : 2026-11-12
+
+Mettre dans le document de cadrage la liste ordonnée des étapes, pour que le rapport la reprenne sans la refaire.

@@ -117,3 +117,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Quand un générateur audio utilise des graines fixes, on peut ajouter des sons au script et le relancer sans altérer l'existant.
+
+## S20 — Appliquer systématiquement un filtre passe-bas (environ 2 à
+Rôles : artiste
+Date : 2026-11-12
+
+Appliquer systématiquement un filtre passe-bas (environ 2 à 3 kHz) au mixage final des musiques synthétisées, et le dire dans la vérification.

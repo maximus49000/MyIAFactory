@@ -147,7 +147,7 @@ export class Kanban {
       if (i > 0) { x.beginPath(); x.moveTo(gauche, 0.04 * px); x.lineTo(gauche, H - 0.04 * px); x.stroke(); }
       let nom = String(col.nom ?? col.id ?? "");
       while (nom.length > 1 && x.measureText(nom).width > lc - 12) nom = nom.slice(0, -2) + "…";
-      const genre = typeof col.genre === "string" ? col.genre : "";
+      const genre = col.validation === true ? "Validation du Directeur" : typeof col.genre === "string" ? col.genre : "";
       x.fillText(nom, gauche + lc / 2, genre ? k.entete * 0.34 * px : k.entete / 2 * px);
       if (genre) {   // le genre de la colonne, plus petit, sous son nom
         x.save();
@@ -202,7 +202,7 @@ export class Kanban {
   }
 
   synchroniser(colonnes, postits, taches, file, imagesOk = false) {
-    const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom, c.genre || null]));
+    const sigCol = JSON.stringify(colonnes.map((c) => [c.id, c.nom, c.genre || null, c.validation === true]));
     if (sigCol !== this.signatureColonnes) { this.signatureColonnes = sigCol; this._dessinerColonnes(colonnes); }
     const cases = this._disposition(colonnes, postits, taches, file);
     const sig = JSON.stringify(cases.map((c) => [c.cle, c.colonne, c.rang, c.texte, c.depliable]));

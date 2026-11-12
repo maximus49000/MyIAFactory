@@ -7,6 +7,7 @@ import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre} from "./actions.js";
 import {rendreOrganisation} from "./organisation.js";
+import {urlProjet} from "./projets.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -191,6 +192,55 @@ function decisionEnvironnement(ctx, d) {
     boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))]);
 }
 
+// La demande « valider » ou « renvoyer » d'un élément arrivé à une étape de validation. « Renvoyer » exige une remarque :
+// sans texte, rien ne part (`null`).
+export function corpsValiderEtape(decision, verdict, texte) {
+  const remarque = String(texte ?? "").trim();
+  if (verdict === "renvoyer") return remarque ? {type: "valider_etape", decision: decision.id, verdict, texte: remarque} : null;
+  return {type: "valider_etape", decision: decision.id, verdict: "valider"};
+}
+
+const EST_IMAGE = /\.(png|jpe?g)$/i;
+const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
+
+// Un élément attend votre validation : ce que l'étape précédente a rendu (compte rendu, fichiers : les images se voient,
+// les autres sont nommées avec leur chemin), puis « Valider » ou « Renvoyer avec une remarque » (texte obligatoire).
+function decisionValidation(ctx, d) {
+  const li = el("li", "decision-validation");
+  li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte),
+            el("div", "lecon-meta", `Élément : ${d.element?.nom || d.element?.id || "?"}`));
+  if (plein(d.compte_rendu)) li.append(el("div", "decision-texte", d.compte_rendu));
+  for (const f of Array.isArray(d.fichiers) ? d.fichiers : []) {
+    if (!plein(f?.chemin)) continue;
+    if (EST_IMAGE.test(f.chemin)) {
+      const image = el("img", "decision-image");
+      image.src = urlImage(f.chemin);
+      image.alt = f.titre || f.chemin;
+      li.append(image, el("div", "lecon-meta", f.titre || f.chemin));
+    } else {
+      li.append(el("div", "lecon-meta", `${f.titre || f.chemin} : ${f.chemin}`));
+    }
+  }
+  if (!ctx.etat.agir) return li;
+  const remarque = document.createElement("textarea");
+  remarque.rows = 2;
+  remarque.maxLength = 3500;
+  remarque.placeholder = "Ce qu'il faut changer (obligatoire pour renvoyer)";
+  remarque.setAttribute("aria-label", "Remarque pour renvoyer l'élément");
+  const erreur = el("p", "saisie-erreur", "");
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(
+    boutonDemande(ctx, "Valider", "bouton", () => corpsValiderEtape(d, "valider")),
+    boutonDemande(ctx, "Renvoyer avec une remarque", "bouton secondaire", () => corpsValiderEtape(d, "renvoyer", remarque.value),
+      () => {
+        if (corpsValiderEtape(d, "renvoyer", remarque.value) === null) { erreur.textContent = "Dites ce qu'il faut changer pour renvoyer l'élément."; return false; }
+        erreur.textContent = "";
+        return true;
+      }));
+  li.append(remarque, erreur, rangee);
+  return li;
+}
+
 function decisionSession(ctx, d) {
   const e = ctx.etat;
   const li = el("li", "decision-session");
@@ -232,6 +282,8 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, "Valider la méthode", "bouton", () => demandeMethode(x.fonctionnalite, "valider"))])),
   ];
   contenu.append(partie("Cahiers et méthodes à valider", "Aucun cahier ni méthode à valider", validations));
+  contenu.append(partie("Éléments à valider", "Aucun élément n'attend votre validation",
+    d.validations.map((x) => decisionValidation(ctx, x))));
   contenu.append(partie("Demandes d'un autre genre", "Aucune demande ne sort du genre du projet",
     d.genresDemandes.map((x) => decisionGenreFonctionnalite(ctx, x))));
   contenu.append(partie("Genres à confirmer", "Aucun genre à confirmer", d.genres.map((x) => decisionGenre(ctx, x))));

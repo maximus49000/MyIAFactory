@@ -42,3 +42,15 @@ test("colonne affiche son genre : le genre et le workflow du relevé suivent cha
   assert.equal(etiquetteColonne(c[2]), "jeu-android");
   assert.equal(etiquetteColonne(c[0]), "");
 });
+
+test("colonne de validation nommee : « Validation du Directeur » sous son nom", () => {
+  const etat = {colonnes: [{id: "cadrage", nom: "Cadrage"},
+                           {id: "f1-valider", nom: "Validation", genre: "jeu-android", workflow: "w-f1", validation: true},
+                           {id: "f1-dev", nom: "Dev", genre: "jeu-android", workflow: "w-f1"}],
+                taches: [{id: "t1", titre: "Validation du Directeur : Accueil", colonne: "f1-valider"}]};
+  const c = colonnesKanban(etat);
+  assert.deepEqual(c.map((x) => x.validation), [false, true, false]);
+  assert.equal(etiquetteColonne(c[1]), "Validation du Directeur");
+  assert.equal(etiquetteColonne(c[2]), "jeu-android");
+  assert.deepEqual(c[1].taches.map((t) => t.id), ["t1"]);
+});

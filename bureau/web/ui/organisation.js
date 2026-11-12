@@ -54,7 +54,9 @@ export function resumeWorkflow(decision, etat) {
     genre: o.workflow.genre || null,
     genreNouveau: plein(o.workflow.genre_nouveau?.description) ? o.workflow.genre_nouveau.description : null,
     livrable: plein(o.livrable) ? o.livrable : null,
-    etapes: liste(o.flux).map((e, i) => ({rang: i + 1, nom: e.nom, role: e.role, service: services.get(e.service) || e.service || null})),
+    etapes: liste(o.flux).map((e, i) => e?.validation === true
+      ? {rang: i + 1, nom: e.nom, role: null, service: null, validation: true}   // le Directeur valide : ni rôle ni service
+      : {rang: i + 1, nom: e.nom, role: e.role, service: services.get(e.service) || e.service || null}),
   };
 }
 
@@ -105,7 +107,8 @@ function liste_(titre, lignes) {
 }
 
 function blocWorkflow(w) {
-  const bloc = liste_("Workflow proposé", w.etapes.map((e) => `${e.rang}. ${e.nom}` + (e.role ? ` (${[e.role, e.service].filter(Boolean).join(", ")})` : "")));
+  const bloc = liste_("Workflow proposé", w.etapes.map((e) => `${e.rang}. ${e.nom}` + (e.validation ? " (validation du Directeur)"
+    : e.role ? ` (${[e.role, e.service].filter(Boolean).join(", ")})` : "")));
   if (w.livrable) bloc.append(el("div", "lecon-meta", "Livrable : " + w.livrable));
   if (w.genre) bloc.append(el("div", "lecon-meta", "Genre : " + w.genre + (w.genreNouveau ? " (nouveau : " + w.genreNouveau + ")" : "")));
   return bloc;

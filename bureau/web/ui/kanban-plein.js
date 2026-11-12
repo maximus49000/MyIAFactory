@@ -6,6 +6,7 @@ import {ilYA, tronquer} from "./texte.js";
 
 // Ce que la colonne dit de son genre (sous son nom) : le genre du workflow dont elle est une étape, ou rien.
 export function etiquetteColonne(col) {
+  if (col?.validation === true) return "Validation du Directeur";   // l'élément s'y arrête jusqu'à sa réponse
   return typeof col?.genre === "string" ? col.genre : "";
 }
 
@@ -13,7 +14,7 @@ export function etiquetteColonne(col) {
 export function colonnesKanban(etat) {
   const prenoms = new Map((etat?.agents || []).map((a) => [a.id, a.prenom]));
   const colonnes = (etat?.colonnes || []).map((c) => ({id: c.id, nom: c.nom, terminee: c.terminee === true,
-    genre: c.genre || null, workflow: c.workflow || null, taches: []}));
+    genre: c.genre || null, workflow: c.workflow || null, validation: c.validation === true, taches: []}));
   const parId = new Map(colonnes.map((c) => [c.id, c]));
   for (const t of etat?.taches || []) {
     const c = parId.get(t.colonne);

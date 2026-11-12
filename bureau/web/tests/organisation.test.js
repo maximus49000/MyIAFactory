@@ -167,3 +167,17 @@ test("demandeOrganisation : le texte du refus, Fable seulement avec accepter, ab
   assert.deepEqual(demandeOrganisation("d1", "refuser", {fable: ["a"]}), {type: "organisation", decision: "d1", verdict: "refuser"});
   assert.deepEqual(demandeOrganisation("d1", "abandonner"), {type: "organisation", decision: "d1", verdict: "abandonner"});
 });
+
+test("workflow montre l etape de validation", () => {
+  const avec = {...WORKFLOW, organisation: {...WORKFLOW.organisation, flux: [
+    {id: "f2-visuels", nom: "Visuels", role: "graphiste", service: "metier"},
+    {id: "f2-valider", nom: "Validation du Directeur", validation: true},
+    {id: "f2-apk", nom: "Livraison", role: "android", service: "android"}]}};
+  const w = resumeWorkflow(avec, ETAT);
+  assert.deepEqual(w.etapes.map((e) => [e.rang, e.nom, e.role, e.service, e.validation === true]),
+    [[1, "Visuels", "graphiste", "Métier", false], [2, "Validation du Directeur", null, null, true],
+     [3, "Livraison", "android", "Android", false]]);
+  const li = rendreOrganisation({etat: ETAT}, avec, () => new Noeud("button"));
+  assert.match(li.textContent, /2\. Validation du Directeur \(validation du Directeur\)/);
+  assert.match(li.textContent, /1\. Visuels \(graphiste, Métier\)/);
+});

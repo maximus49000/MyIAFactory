@@ -134,3 +134,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.
+
+## G23 — Un avertissement de format de keystore n'est pas un blocage
+Rôles : livreur
+Date : 2026-11-12
+
+Un avertissement de format de keystore n'est pas un blocage : vérifier le format attendu par l'outil de signature avant de migrer.

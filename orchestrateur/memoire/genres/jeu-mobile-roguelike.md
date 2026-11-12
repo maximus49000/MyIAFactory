@@ -230,3 +230,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Quand on déplace une valeur d'équilibrage vers une constante, brancher à la fois le libellé affiché et l'effet réel sur cette constante.
+
+## G39 — Pour une signature Android, si plusieurs fichiers de clé exi
+Rôles : livreur
+Date : 2026-11-12
+
+Pour une signature Android, si plusieurs fichiers de clé existent, demander à l'utilisateur lequel utiliser et son alias avant de lancer l'export signé.

@@ -151,7 +151,8 @@ le bandeau du bureau montre.
    montrent la compréhension du besoin) et **la liste des étapes à réaliser, dans l'ordre**. Range les images dans
    le dépôt du projet, **sous une des racines d'images des réglages**, **en PNG ou JPEG** (le bureau ne montre ni le SVG ni
    les autres formats : rends-les d'abord en PNG ; les outils refusent les autres), inscris le cahier (`lancer fonctionnalite`, `cahier: {maquette, etapes}`), dis-le dans la
-   discussion, et pose la décision `valider_cahier` (`portee` = la fonctionnalité). Attends le verdict (demande
+   discussion, **chaque maquette avec sa légende** (`{"chemin", "legende"}` : une phrase de 160 caractères au plus qui
+   dit à quoi elle correspond, écran, élément, moment du jeu… ; le bureau l'affiche sous l'image), et pose la décision `valider_cahier` (`portee` = la fonctionnalité). Attends le verdict (demande
    `cahier`).
 3. **`decoupage`.** Identifie l'élément qui se répète et les groupes, puis dresse la file des éléments
    (`lancer file`, chaque élément `{id, nom, groupe}`). Montre le découpage dans la discussion.

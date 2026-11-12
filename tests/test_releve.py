@@ -776,6 +776,23 @@ class TestVersion4(unittest.TestCase):
         self.assertEqual(releve.valider(v4(fonctionnalites=[
             fonc(discussion=[msg(images=[f"a{i}.png" for i in range(4)])])])), [])
 
+    def test_images_de_message_avec_legende(self):
+        ok = [{"chemin": "a.png", "legende": "L'écran d'accueil"}, "b.png", {"chemin": "c.png"}]
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(discussion=[msg(images=ok)])])), [])
+        for mauvais in ({"legende": "x"}, {"chemin": "a.png", "legende": ""}, {"chemin": "a.png", "legende": 3},
+                        {"chemin": "a.png", "legende": "x" * 161}, {"chemin": ""}):
+            self.refus(v4(fonctionnalites=[fonc(discussion=[msg(images=[mauvais])])]), "images")
+        self.assertEqual(releve.valider(v4(fonctionnalites=[
+            fonc(discussion=[msg(images=[{"chemin": "a.png", "legende": "x" * 160}])])])), [])
+
+    def test_maquette_du_cahier_avec_legende(self):
+        ok = {"maquette": ["a.png", {"chemin": "b.png", "legende": "Le combat"}], "etapes": ["un"]}
+        self.assertEqual(releve.valider(v4(fonctionnalites=[fonc(cahier=ok, cahiers_precedents=[
+            {**ok, "remplace_le": "2026-11-11T10:00:00"}])])), [])
+        self.refus(v4(fonctionnalites=[fonc(cahier={"maquette": [{"chemin": "b.png", "legende": 4}], "etapes": []})]),
+                   "cahier")
+        self.refus(v4(fonctionnalites=[fonc(cahier={"maquette": [{"legende": "x"}], "etapes": []})]), "cahier")
+
     def test_attend_reponse_et_catalogue_booleens(self):
         self.refus(v4(fonctionnalites=[fonc(attend_reponse="oui")]), "attend_reponse")
         self.refus(v4(fonctionnalites=[fonc(catalogue=1)]), "catalogue")

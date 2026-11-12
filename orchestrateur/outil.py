@@ -143,6 +143,26 @@ def liste_de_textes(e, cle):
 IMAGES_MONTREES = (".png", ".jpg", ".jpeg")   # ce que le bureau sert ; le reste n'apparaîtrait pas
 
 
+def liste_d_images(valeur, cle):
+    """Les images rendues par un agent : chacune est un chemin (ancienne forme) ou `{chemin, legende?}`, la légende
+    étant une phrase de 160 caractères au plus. Rend la liste normalisée : un chemin seul reste un texte, une image
+    légendée un objet `{chemin, legende}`."""
+    if not isinstance(valeur, list):
+        raise Refus(f"« {cle} » doit être une liste d'images.")
+    sortie = []
+    for x in valeur:
+        if not rel.image_legendee_ok(x):
+            raise Refus(f"« {cle} » : chaque image est un chemin (texte non vide) ou {{\"chemin\": \"…\", \"legende\": "
+                        f"\"…\"}} ; la « legende » est une phrase de {rel.MAX_LEGENDE} caractères au plus.")
+        legende = rel.legende_d_image(x)
+        sortie.append({"chemin": x["chemin"], "legende": legende.strip()} if legende else rel.chemin_d_image(x))
+    return sortie
+
+
+def chemins_d_images(images):
+    return [rel.chemin_d_image(x) for x in images or []]
+
+
 def images_montrables(chemins, cle):
     """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre."""
     for c in chemins:
@@ -157,20 +177,36 @@ ORIGINE_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache")
 
 def ranger_documents(donnees, f, chemins, titre=None, **origine):
     """Range des fichiers produits pour la fonctionnalité dans ses documents, avec leur origine (agent, étape, tâche,
-    élément, sous-tâche) et la date. Un chemin déjà rangé n'est pas doublé : son titre et son origine sont complétés."""
+    élément, sous-tâche) et la date. Un chemin déjà rangé n'est pas doublé : son titre et son origine sont complétés.
+    Une image peut être `{chemin, legende}` : sa légende tient lieu de titre tant que le document n'a que son nom de fichier."""
     documents = f.setdefault("documents", [])
-    for c in chemins or []:
+    for image in chemins or []:
+        c, legende = rel.chemin_d_image(image), rel.legende_d_image(image)
         d = next((x for x in documents if x["chemin"] == c), None)
         if d is None:
-            d = {"id": f"doc{su.suivant(donnees, 'doc')}", "chemin": c, "titre": titre or Path(c).name,
+            d = {"id": f"doc{su.suivant(donnees, 'doc')}", "chemin": c, "titre": titre or legende or Path(c).name,
                  "date": su.maintenant()}
             documents.append(d)
         elif titre:
             d["titre"] = titre
+        elif legende and d.get("titre") == Path(c).name:
+            d["titre"] = legende
         for cle in ORIGINE_DOCUMENT:
             if origine.get(cle):
                 d[cle] = origine[cle]
     return documents
+
+
+def _chemin_ou_image(x, chemin):
+    """Une image d'agent au relevé : son chemin compté depuis les réglages, avec sa légende si elle en a une."""
+    legende = rel.legende_d_image(x)
+    return {"chemin": chemin(rel.chemin_d_image(x)), "legende": legende} if legende else chemin(rel.chemin_d_image(x))
+
+
+def _image_au_releve(x, chemin):
+    """Une image de tâche au relevé : toujours `{chemin, legende?}`."""
+    legende = rel.legende_d_image(x)
+    return {"chemin": chemin(rel.chemin_d_image(x)), **({"legende": legende} if legende else {})}
 
 
 def _cle_mot(mot):
@@ -218,10 +254,12 @@ def documents_complets(f, taches):
     documents = [dict(d) for d in f.get("documents") or []]
     connus = {d["chemin"] for d in documents}
 
-    def ajouter(c, **origine):
+    def ajouter(image, **origine):
+        c = rel.chemin_d_image(image)
         if c not in connus:
             connus.add(c)
-            documents.append({"chemin": c, "titre": Path(c).name, **{k: v for k, v in origine.items() if v}})
+            documents.append({"chemin": c, "titre": rel.legende_d_image(image) or Path(c).name,
+                              **{k: v for k, v in origine.items() if v}})
     # Les origines les plus précises d'abord : le cahier, puis les captures des tâches, puis la discussion.
     for c in (f.get("cahier") or {}).get("maquette") or []:
         ajouter(c, agent=f.get("agent_cadrage"), etape="cahier")
@@ -519,10 +557,11 @@ def empreinte_consignes(f):
 
 def _verifier_cahier(c):
     if (not isinstance(c, dict) or not isinstance(c.get("maquette"), list)
-            or not all(isinstance(x, str) and x for x in c["maquette"])
             or not isinstance(c.get("etapes"), list) or not all(isinstance(x, str) for x in c["etapes"])):
-        raise Refus("« cahier » doit avoir une « maquette » (liste de chemins) et des « etapes » (liste de textes).")
-    images_montrables(c["maquette"], "cahier.maquette")
+        raise Refus("« cahier » doit avoir une « maquette » (liste de chemins, ou de {chemin, legende}) et des "
+                    "« etapes » (liste de textes).")
+    c["maquette"] = liste_d_images(c["maquette"], "cahier.maquette")
+    images_montrables(chemins_d_images(c["maquette"]), "cahier.maquette")
     if c.get("valide_le") is not None and not isinstance(c["valide_le"], str):
         raise Refus("« cahier.valide_le » doit être un texte.")
 
@@ -559,7 +598,8 @@ def _archiver_cahier(f, nouveau):
     """Un cahier corrigé (maquette ou étapes changées) remplace l'ancien, qui passe dans `cahiers_precedents` ;
     le même cahier renvoyé avec `valide_le` n'en crée pas."""
     ancien = f.get("cahier")
-    if not ancien or (nouveau and (nouveau["maquette"], nouveau["etapes"]) == (ancien["maquette"], ancien["etapes"])):
+    if not ancien or (nouveau and (chemins_d_images(nouveau["maquette"]), nouveau["etapes"])
+                      == (chemins_d_images(ancien["maquette"]), ancien["etapes"])):   # une légende seule n'est pas une version
         return
     gardes = f.setdefault("cahiers_precedents", [])
     gardes.append({**ancien, "remplace_le": su.maintenant()})
@@ -620,7 +660,8 @@ def cmd_message(ctx, e):
         raise Refus(f"Auteur inconnu : {auteur} (utilisateur ou un agent).")
     images = e.get("images")
     if images is not None:
-        images_montrables(liste_de_textes(e, "images"), "images")
+        images = liste_d_images(images, "images")
+        images_montrables(chemins_d_images(images), "images")
         if len(images) > MAX_IMAGES:
             raise Refus(f"Au plus {MAX_IMAGES} images par message.")
     questions = e.get("questions")
@@ -1154,7 +1195,8 @@ def cmd_tache(ctx, e):
         if "lignes" in e:   # les lignes produites par la tâche (son total, remplacé à chaque fois)
             t["lignes"] = _entier(e, "lignes") if e["lignes"] is not None else None
         if "captures" in e:
-            t["captures"] = images_montrables(liste_de_textes(e, "captures"), "captures")
+            t["captures"] = liste_d_images(e["captures"], "captures")
+            images_montrables(chemins_d_images(t["captures"]), "captures")
         if "journal" in e:
             ajouts = [e["journal"]] if isinstance(e["journal"], str) else e["journal"]
             if not isinstance(ajouts, list) or not all(isinstance(x, str) and x for x in ajouts):
@@ -1496,8 +1538,9 @@ def cmd_catalogue(ctx, e):
             el["groupe"] = info["groupe"]
         captures = [c for t in taches for c in t.get("captures") or []] if fait else []
         if captures:
-            el["captures"] = [{"chemin": ctx.chemin_relatif(c), **({"passe": version} if version else {})}
-                              for c in captures]
+            el["captures"] = [{"chemin": ctx.chemin_relatif(rel.chemin_d_image(c)),
+                               **({"legende": rel.legende_d_image(c)} if rel.legende_d_image(c) else {}),
+                               **({"passe": version} if version else {})} for c in captures]
         if fait and version:
             el["passes"] = [version]
         retours = [{"t": d["t"], "texte": d["texte"], "etat": "traité" if d["statut"] == "traitée" else "en attente",
@@ -1574,7 +1617,7 @@ def construire_releve(ctx):
         if t.get("lignes") is not None:
             v["lignes"] = t["lignes"]
         if t.get("captures"):
-            v["images"] = [{"chemin": chemin(c)} for c in t["captures"]]
+            v["images"] = [_image_au_releve(c, chemin) for c in t["captures"]]
         if t["id"] in retours:
             v["retours"] = retours[t["id"]]
         taches.append(v)
@@ -1596,12 +1639,12 @@ def construire_releve(ctx):
         for m in f["discussion"]:
             m = dict(m)
             if m.get("images"):
-                m["images"] = [chemin(c) for c in m["images"]]
+                m["images"] = [_chemin_ou_image(c, chemin) for c in m["images"]]
             v["discussion"].append(m)
         if f["cahier"]:
-            v["cahier"] = {**f["cahier"], "maquette": [chemin(c) for c in f["cahier"]["maquette"]]}
+            v["cahier"] = {**f["cahier"], "maquette": [_chemin_ou_image(c, chemin) for c in f["cahier"]["maquette"]]}
         if f.get("cahiers_precedents"):
-            v["cahiers_precedents"] = [{**c, "maquette": [chemin(x) for x in c["maquette"]]}
+            v["cahiers_precedents"] = [{**c, "maquette": [_chemin_ou_image(x, chemin) for x in c["maquette"]]}
                                        for c in f["cahiers_precedents"]]
         if f["methode"] and f["methode"].get("chemin"):
             v["methode"] = {**f["methode"], "chemin": chemin(f["methode"]["chemin"])}

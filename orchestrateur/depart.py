@@ -106,13 +106,16 @@ Rends, dans cet ordre :
 
 Termine ta réponse par un bloc ```json (le dernier de ta réponse), de cette forme, que le moteur lit pour tenir le suivi :
 ```json
-{"statut": "fait", "message": {"texte": "ce que tu dis dans la discussion", "images": [], "questions": [{"texte": "…", "choix": ["…", "…"], "multiple": false}], "glossaire": [], "attend": false},
+{"statut": "fait", "message": {"texte": "ce que tu dis dans la discussion", "images": [{"chemin": "relatif au projet", "legende": "une phrase : à quoi l'image fait référence"}], "questions": [{"texte": "…", "choix": ["…", "…"], "multiple": false}], "glossaire": [], "attend": false},
  "fichiers": [{"chemin": "relatif au projet", "titre": "…", "element": "…", "livrable": false}],
  "lecons": [{"texte": "…", "roles": ["dev"], "etage_propose": "projet", "texte_general": "…"}],
  "controles": [{"texte": "…", "origine": "…"}], "retours_factory": ["…"],
  "verdicts": [{"element": "…", "conforme": true, "points": []}], "lignes": 0}
 ```
 `statut` vaut `fait`, `accord_requis`, `outil_refuse` ou `echec`. Seul `statut` est obligatoire ; omets ce qui est vide.
+Chaque image que tu rends (dans `message.images`, comme dans une maquette du cahier) porte sa **légende** : une phrase
+de 160 caractères au plus qui dit à quoi elle correspond (écran, élément, moment du jeu…) ; le bureau l'affiche sous
+l'image.
 Si une dépense ou un changement de partenaire ou le navigateur demande l'accord de l'utilisateur, arrête-toi et rends
 `statut: accord_requis` avec `"accord": {"quoi", "partenaire", "cout"}`. Si un outil t'est refusé, rends
 `statut: outil_refuse` avec `"outil": "<son nom>"`."""

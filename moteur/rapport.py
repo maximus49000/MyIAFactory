@@ -2,13 +2,13 @@
 
 Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
     {"statut": "fait" | "accord_requis" | "outil_refuse" | "echec",
-     "message": {"texte", "images"?, "questions"?, "glossaire"?, "attend"}?,
+     "message": {"texte", "images"?, "questions"?, "glossaire"?, "attend"}?,   (image : chemin ou {chemin, legende})
      "fichiers": [{"chemin", "titre", "element"?, "livrable"?}],
      "lecons": [{"texte", "roles", "etage_propose", "texte_general"?}],
      "controles": [{"texte", "origine"}], "retours_factory": [str],
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
-     "nom": str?, "cahier": {"maquette": [chemin], "etapes": [texte]}?, "methode_prete": bool?,
+     "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
      "usage_estime": int?}
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
 moteur le note comme une estimation).
@@ -29,6 +29,13 @@ class RapportIllisible(Exception):
 
 def _texte(v):
     return isinstance(v, str) and v.strip() != ""
+
+
+def _image(x):
+    """Une image rendue par l'agent : un chemin, ou `{chemin, legende?}` (la longueur de la légende est jugée par l'outil)."""
+    if isinstance(x, dict):
+        return _texte(x.get("chemin")) and (x.get("legende") is None or _texte(x["legende"]))
+    return _texte(x)
 
 
 def _liste(rapport, cle, genre):
@@ -80,9 +87,10 @@ def lire(texte):
     if "cahier" in r:
         c = r["cahier"]
         if (not isinstance(c, dict) or not isinstance(c.get("maquette"), list) or not c["maquette"]
-                or not all(_texte(x) for x in c["maquette"]) or not isinstance(c.get("etapes"), list)
+                or not all(_image(x) for x in c["maquette"]) or not isinstance(c.get("etapes"), list)
                 or not c["etapes"] or not all(_texte(x) for x in c["etapes"])):
-            raise RapportIllisible("« cahier » demande « maquette » et « etapes » (listes de textes non vides)")
+            raise RapportIllisible("« cahier » demande « maquette » (chemins, ou {chemin, legende}) et « etapes » "
+                                   "(listes non vides)")
     if "methode_prete" in r and not isinstance(r["methode_prete"], bool):
         raise RapportIllisible("« methode_prete » doit être vrai ou faux")
     if "usage_estime" in r and (not isinstance(r["usage_estime"], int) or isinstance(r["usage_estime"], bool)

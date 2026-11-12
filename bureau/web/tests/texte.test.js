@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {COLS} from "./donnees.js";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, imageLegendee, imagesLegendees, altImage, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -70,6 +70,23 @@ test("filtrer", () => {
   assert.deepEqual([...filtrer(TACHES, {enCours: false, type: "inconnu"})], []);
   assert.deepEqual([...filtrer([], {enCours: true, type: null})], []);
   assert.deepEqual([...filtrer(TACHES, {})], ["a", "b", "c", "d"]);
+});
+
+test("imageLegendee : un chemin seul ou {chemin, legende}", () => {
+  assert.deepEqual(imageLegendee("a.png"), {chemin: "a.png", legende: ""});
+  assert.deepEqual(imageLegendee({chemin: "a.png", legende: "  La carte  "}), {chemin: "a.png", legende: "La carte"});
+  assert.deepEqual(imageLegendee({chemin: "a.png"}), {chemin: "a.png", legende: ""});
+  assert.deepEqual(imageLegendee({chemin: "a.png", legende: 3}), {chemin: "a.png", legende: ""});
+  assert.deepEqual(imageLegendee(null), {chemin: "", legende: ""});
+  assert.deepEqual(imagesLegendees(["a.png", {chemin: "b.png", legende: "B"}]),
+                   [{chemin: "a.png", legende: ""}, {chemin: "b.png", legende: "B"}]);
+  assert.deepEqual(imagesLegendees(undefined), []);
+});
+
+test("altImage : la légende, sinon le nom du fichier, sinon le défaut", () => {
+  assert.equal(altImage({chemin: "pieces/f1/a.png", legende: "La carte"}, "Image"), "La carte");
+  assert.equal(altImage({chemin: "pieces/f1/a.png", legende: ""}, "Image"), "a.png");
+  assert.equal(altImage({chemin: "", legende: ""}, "Image"), "Image");
 });
 
 test("imagesUrl encode &, espaces et #", () => {

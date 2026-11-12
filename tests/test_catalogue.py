@@ -232,6 +232,19 @@ class TestCatalogueModule(unittest.TestCase):
         self.assertIn("captures[0]", texte)
         self.assertIn("liens[0]", texte)
 
+    def test_legendes_des_images_du_catalogue(self):
+        el = {"id": "e1", "nom": "E",
+              "captures": [{"chemin": "images/a.png", "legende": "Vue de face"}, {"chemin": "images/b.png"}],
+              "comparaisons": [{"angle": "face", "reel": "images/r.jpg", "produit": "images/p.png",
+                                "legende_reel": "La pièce réelle", "legende_produit": "Notre modèle"}]}
+        propre, avertissements = catalogue.valider({"elements": [el]})
+        e = propre["elements"][0]
+        self.assertEqual(e["captures"][0]["legende"], "Vue de face")
+        self.assertNotIn("legende", e["captures"][1])
+        self.assertEqual((e["comparaisons"][0]["legende_reel"], e["comparaisons"][0]["legende_produit"]),
+                         ("La pièce réelle", "Notre modèle"))
+        self.assertEqual(avertissements, [])
+
     def test_avertissements_bornes(self):
         c = {"elements": [{"id": str(i), "nom": "n", "groupe": 1} for i in range(5000)]}
         propre, avertissements = catalogue.valider(c)

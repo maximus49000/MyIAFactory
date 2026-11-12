@@ -1915,12 +1915,15 @@ def _matiere(projet, etat, t):
                     "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
                     "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
                     f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
-                    'rends `"cahier": {"maquette": [chemins], "etapes": [textes]}`. Une correction demandée par '
+                    'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
+                    "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
+                    "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
                     "l'utilisateur : refais la maquette et rends le cahier corrigé."]
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
                     "Discussion récente :", _texte_discussion(f, 8),
-                    "Montre tes images dans `message.images`, avec `attend: true` pour recueillir le retour de "
+                    "Montre tes images dans `message.images` (chacune avec sa légende : "
+                    '`{"chemin": "…", "legende": "…"}`), avec `attend: true` pour recueillir le retour de '
                     'l\'utilisateur. Quand la méthode te semble prête, résume-la dans ton message et rends '
                     '`"methode_prete": true`.']
     elif etape.startswith(ETAPES_DE_FLUX):
@@ -2045,7 +2048,9 @@ def _chemins_du_projet(projet, r, fid=None):
     qui n'étaient pas sous une racine d'images sont copiées sous `pieces/<fid>/` (voir `_image_rangee`)."""
     r = dict(r)
 
-    def image(x):
+    def image(x):    # un chemin, ou {chemin, legende} : la légende reste avec son image
+        if isinstance(x, dict):
+            return {**x, "chemin": image(x.get("chemin"))}
         return _image_rangee(projet, _chemin_du_projet(projet, x), fid)
     if isinstance(r.get("message"), dict) and isinstance(r["message"].get("images"), list):
         r["message"] = {**r["message"], "images": [image(x) for x in r["message"]["images"]]}

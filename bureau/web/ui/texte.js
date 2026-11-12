@@ -104,6 +104,23 @@ export function filtreDeListe(etat, filtreListe) {
   return {enCours: choix === "en_cours", nonTerminees: choix === "non_terminees", type: filtreListe?.type ?? null};
 }
 
+// Une image rendue par un agent : un chemin seul (ancien relevé) ou `{chemin, legende?}`. Toujours `{chemin, legende}`,
+// la légende vide quand il n'y en a pas.
+export function imageLegendee(x) {
+  const chemin = typeof x === "string" ? x : (typeof x?.chemin === "string" ? x.chemin : "");
+  const legende = typeof x?.legende === "string" ? x.legende.trim() : "";
+  return {chemin, legende};
+}
+
+export function imagesLegendees(liste) {
+  return Array.isArray(liste) ? liste.map(imageLegendee) : [];
+}
+
+// Le texte alternatif d'une image : sa légende, sinon le nom du fichier, sinon `defaut`.
+export function altImage(image, defaut = "Image") {
+  return image.legende || String(image.chemin || "").split(/[\\/]/).pop() || defaut;
+}
+
 // Les vignettes d'une tâche : l'adresse porte la date de mise à jour, pour que le cache suive une image refaite.
 export function imagesUrl(tache) {
   const maj = encodeURIComponent(tache?.maj ?? "");

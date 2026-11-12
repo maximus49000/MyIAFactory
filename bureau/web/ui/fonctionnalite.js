@@ -3,7 +3,7 @@
 // tout texte venu du relevé passe par textContent.
 
 import {el} from "./dom.js";
-import {dateFr, tronquer, euros} from "./texte.js";
+import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
@@ -672,10 +672,15 @@ function partieLivrables(ctx, f) {
     const art = el("article", "livrable-element");
     art.append(el("h4", "", g.element ? "Élément : " + g.element : "Sans élément"));
     const versions = versionsDe(g.documents);
-    const images = versions.map((v) => v.dernier.chemin).filter((c) => EST_IMAGE.test(c));
+    const nomDe = (c) => String(c).split(/[\\/]/).pop();
+    // Le titre d'un document image dit à quoi il correspond (sa légende) tant qu'il n'est pas le nom du fichier.
+    const legendeDe = (d) => (d.titre && d.titre !== nomDe(d.chemin) ? d.titre : "");
+    const images = versions.map((v) => v.dernier).filter((d) => EST_IMAGE.test(d.chemin))
+      .map((d) => ({chemin: d.chemin, legende: legendeDe(d)}));
     const rangee = el("div", "livrable-fichiers");
     for (const d of versions.map((v) => v.dernier)) {
       if (EST_IMAGE.test(d.chemin)) {
+        const vignette = el("figure", "livrable-image");
         const b = el("button", "document-vignette");
         b.type = "button";
         b.title = d.titre;
@@ -685,8 +690,10 @@ function partieLivrables(ctx, f) {
         img.src = url(d.chemin);
         img.alt = d.titre;
         b.append(img);
-        b.addEventListener("click", () => ouvrirVisionneuse(images, images.indexOf(d.chemin), url));
-        rangee.append(b);
+        b.addEventListener("click", () => ouvrirVisionneuse(images, images.findIndex((x) => x.chemin === d.chemin), url));
+        vignette.append(b);
+        if (legendeDe(d)) vignette.append(el("figcaption", "vignette-legende", legendeDe(d)));
+        rangee.append(vignette);
       } else {
         const a = el("a", "document-lien", d.titre);
         a.href = url(d.chemin);
@@ -799,7 +806,9 @@ export function voisine(n, i, sens) {
 }
 
 // La visionneuse plein écran : une image à la fois, flèches gauche et droite (ou boutons), Échap pour fermer.
-function ouvrirVisionneuse(chemins, depart, url = urlImage) {
+// `images` : des chemins ou des `{chemin, legende}` ; la légende s'affiche sous l'image (et sert d'`alt`).
+function ouvrirVisionneuse(images, depart, url = urlImage) {
+  const liste = imagesLegendees(images);
   let i = depart;
   const fond = el("div", "visionneuse");
   fond.setAttribute("role", "dialog");
@@ -814,13 +823,16 @@ function ouvrirVisionneuse(chemins, depart, url = urlImage) {
     b.type = "button";
     b.setAttribute("aria-label", nom);
   }
+  const legende = el("p", "visionneuse-legende", "");
   const montrer = () => {
-    img.src = url(chemins[i]);
-    img.alt = `Image ${i + 1} sur ${chemins.length}`;
-    compteur.textContent = chemins.length > 1 ? `${i + 1} / ${chemins.length}` : "";
-    avant.hidden = apres.hidden = chemins.length < 2;
+    img.src = url(liste[i].chemin);
+    img.alt = liste[i].legende || `Image ${i + 1} sur ${liste.length}`;
+    legende.textContent = liste[i].legende;
+    legende.hidden = !liste[i].legende;
+    compteur.textContent = liste.length > 1 ? `${i + 1} / ${liste.length}` : "";
+    avant.hidden = apres.hidden = liste.length < 2;
   };
-  const aller = (sens) => { i = voisine(chemins.length, i, sens); montrer(); };
+  const aller = (sens) => { i = voisine(liste.length, i, sens); montrer(); };
   const clavier = (ev) => {   // capturé avant le panneau : Échap ferme la visionneuse, pas le panneau
     if (ev.key === "Escape") { ev.stopPropagation(); ev.preventDefault(); clore(); }
     else if (ev.key === "ArrowLeft") { ev.stopPropagation(); aller(-1); }
@@ -832,21 +844,25 @@ function ouvrirVisionneuse(chemins, depart, url = urlImage) {
   apres.addEventListener("click", () => aller(1));
   fond.addEventListener("click", (ev) => { if (ev.target === fond) clore(); });
   document.addEventListener("keydown", clavier, true);
-  fond.append(img, avant, apres, compteur, fermer);
+  fond.append(img, legende, avant, apres, compteur, fermer);
   document.body.append(fond);
   montrer();
   fermer.focus();
 }
 
-function vignettes(chemins, etat) {
+// Les images d'un message ou du cahier : chacune est un chemin ou `{chemin, legende}` ; la légende (une phrase de
+// l'agent qui dit à quoi l'image fait référence) se lit sous l'image.
+function vignettes(images, etat) {
   const zone = el("div", "vignettes");
-  (chemins || []).forEach((chemin, n) => {
+  const liste = imagesLegendees(images);
+  liste.forEach((image, n) => {
+    const chemin = image.chemin;
     const fig = el("figure", "vignette");
     if (etat.images_ok === true) {
       const img = document.createElement("img");
       img.loading = "lazy";
       img.src = urlImage(chemin);
-      img.alt = "Image jointe";
+      img.alt = altImage(image, "Image jointe");
       // Au survol : agrandir dans la discussion, ou voir en plein écran (avec les autres images du message).
       const outils = el("div", "vignette-outils");
       const agrandir = el("button", "vignette-bouton", "Agrandir");
@@ -857,9 +873,13 @@ function vignettes(chemins, etat) {
         fig.classList.toggle("agrandie");
         agrandir.textContent = fig.classList.contains("agrandie") ? "Réduire" : "Agrandir";
       });
-      plein.addEventListener("click", (ev) => { ev.stopPropagation(); ouvrirVisionneuse(chemins, n); });
+      plein.addEventListener("click", (ev) => { ev.stopPropagation(); ouvrirVisionneuse(liste, n); });
       outils.append(agrandir, plein);
       fig.append(img, outils);
+      if (image.legende) {
+        fig.classList.add("avec-legende");
+        fig.append(el("figcaption", "vignette-legende", image.legende));
+      }
     } else {
       fig.append(el("figcaption", "", "Image non affichable (aucune racine d'images déclarée)"));
     }
@@ -908,7 +928,8 @@ export function texteACopier(m) {
   const parties = [String(m?.texte || "")];
   const q = Array.isArray(m?.questions) ? m.questions : [];
   if (q.length) parties.push(q.map((x) => `${x.texte} (${(x.choix || []).join(" / ")})`).join("\n"));
-  if ((m?.images || []).length) parties.push("Images :\n" + m.images.map((c) => "- " + c).join("\n"));
+  if ((m?.images || []).length) parties.push("Images :\n" + imagesLegendees(m.images)
+    .map((i) => "- " + i.chemin + (i.legende ? " : " + i.legende : "")).join("\n"));
   return parties.filter(Boolean).join("\n\n");
 }
 

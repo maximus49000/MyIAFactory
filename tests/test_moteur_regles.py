@@ -156,6 +156,34 @@ class Demandes(Base):
             self.assertEqual([x["chemin"] for x in n["fichiers"]], ["pieces/f2/x.md", "pieces/f2/y.md", "src/main.kt"])
             self.assertEqual(r["cahier"]["maquette"], [".factory\\pieces\\f2\\a.png"])     # le rapport lu n'est pas modifié
 
+    def test_la_legende_suit_son_image(self):
+        import tempfile
+        from pathlib import Path
+        from orchestrateur import outil
+        png = outil.SIGNATURES[".png"][0] + b"corps"
+        with tempfile.TemporaryDirectory() as d:
+            jeu = Path(d) / "jeu"
+            factory = jeu / ".factory"
+            (factory / "pieces" / "f1").mkdir(parents=True)
+            (jeu / "assets").mkdir()
+            (factory / "factory.json").write_text(json.dumps(
+                {"skill": str(Path(__file__).resolve().parent.parent), "genre": None, "mots_interdits": [],
+                 "services": [{"id": "dev", "nom": "Dev"}], "reglages": "reglages.json",
+                 "flux": [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}]}), encoding="utf-8")
+            (factory / "reglages.json").write_text(json.dumps({"images": {"racines": ["pieces"]}}), encoding="utf-8")
+            (jeu / "assets" / "a.png").write_bytes(png)
+            projet = regles.Projet(factory / "factory.json")
+            r = {"statut": "fait",
+                 "message": {"texte": "v", "images": [{"chemin": "assets/a.png", "legende": "L'accueil"}, "pieces/f1/z.png"]},
+                 "cahier": {"maquette": [{"chemin": ".factory\\pieces\\f1\\b.png", "legende": "Le combat"}, "assets/a.png"],
+                            "etapes": ["x"]}}
+            n = regles._chemins_du_projet(projet, r, "f1")
+            self.assertEqual(n["message"]["images"], [{"chemin": "pieces/f1/a.png", "legende": "L'accueil"},
+                                                      "pieces/f1/z.png"])
+            self.assertEqual(n["cahier"]["maquette"], [{"chemin": "pieces/f1/b.png", "legende": "Le combat"},
+                                                       "pieces/f1/a.png"])
+            self.assertEqual(r["message"]["images"][0], {"chemin": "assets/a.png", "legende": "L'accueil"})
+
     def test_images_hors_des_racines_copiees_sous_les_pieces_de_la_fonctionnalite(self):
         """Vu en vrai : maquettes écrites sous `assets/maquette/` du projet, que le bureau ne sert pas."""
         import tempfile
@@ -199,6 +227,11 @@ class Demandes(Base):
     def test_le_cadrage_dit_ou_ecrire_les_maquettes(self):
         _, actions = self.cadrer(texte="Des écrans pour l'appli")
         self.assertIn("pieces/f1/", actions[0][3])
+
+    def test_le_cadrage_demande_une_legende_par_maquette(self):
+        _, actions = self.cadrer(texte="Des écrans pour l'appli")
+        self.assertIn('"legende"', actions[0][3])
+        self.assertIn("légende", actions[0][3])
 
     def test_le_cadrage_pose_une_seule_serie_de_questions(self):
         """Au passage en vrai, l'agent de cadrage reposait des questions à chaque tour et n'écrivait jamais le cahier."""

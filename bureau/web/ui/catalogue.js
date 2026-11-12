@@ -156,6 +156,8 @@ function lienExterne(url, texte) {
   return a;
 }
 
+const legendeDe = (c) => (typeof c?.legende === "string" ? c.legende.trim() : "");
+
 const derniereCapture = (e) => {
   const c = liste(e.captures);
   if (!c.length) return null;
@@ -619,7 +621,8 @@ function contenuFiche(ctx, contenu, f, cat, e, ui) {
   const principale = derniereCapture(e);
   if (principale) {
     const fig = el("figure", "cat-figure cat-principale");
-    fig.append(image(ctx, principale.chemin, "Capture : " + e.nom));
+    fig.append(image(ctx, principale.chemin, legendeDe(principale) || "Capture : " + e.nom));
+    if (legendeDe(principale)) fig.append(el("figcaption", "vignette-legende", legendeDe(principale)));
     const nPasses = Math.max(new Set(captures.map((c) => c.passe).filter((x) => x !== undefined)).size,
                              new Set(liste(e.passes)).size);
     const badge = [principale.passe !== undefined ? `Passe ${principale.passe}` : null,
@@ -635,8 +638,9 @@ function contenuFiche(ctx, contenu, f, cat, e, ui) {
         const grille = el("div", "cat-evo");
         for (const c of [...captures].sort((a, b) => (a.passe ?? 0) - (b.passe ?? 0))) {
           const fg = el("figure", "");
-          fg.append(image(ctx, c.chemin, `Capture, passe ${c.passe ?? "?"} : ${e.nom}`));
-          fg.append(el("figcaption", "", c.passe !== undefined ? `Passe ${c.passe}` : "Capture"));
+          fg.append(image(ctx, c.chemin, legendeDe(c) || `Capture, passe ${c.passe ?? "?"} : ${e.nom}`));
+          fg.append(el("figcaption", "", (c.passe !== undefined ? `Passe ${c.passe}` : "Capture")
+            + (legendeDe(c) ? " · " + legendeDe(c) : "")));
           grille.append(fg);
         }
         d.append(grille);
@@ -758,9 +762,9 @@ function comparaison(ctx, e, vues) {
     const cadre = el("div", "cat-compare");
     if (v.reel && v.produit) {
       const reel = el("div", "cat-calque");
-      reel.append(image(ctx, v.reel, "Référence réelle : " + e.nom));
+      reel.append(image(ctx, v.reel, v.legende_reel || "Référence réelle : " + e.nom));
       const produit = el("div", "cat-calque produit");
-      produit.append(image(ctx, v.produit, "Produit : " + e.nom));
+      produit.append(image(ctx, v.produit, v.legende_produit || "Produit : " + e.nom));
       const curseur = document.createElement("input");
       curseur.type = "range";
       curseur.min = "0"; curseur.max = "100"; curseur.value = String(position);
@@ -771,10 +775,15 @@ function comparaison(ctx, e, vues) {
       cadre.append(reel, produit, el("span", "cat-etiquette gauche", "Produit"), el("span", "cat-etiquette droite", "Réel"), curseur);
     } else {
       const seule = el("div", "cat-calque");
-      seule.append(image(ctx, v.reel || v.produit, (v.reel ? "Référence réelle : " : "Produit : ") + e.nom));
+      const legendeSeule = v.reel ? v.legende_reel : v.legende_produit;
+      seule.append(image(ctx, v.reel || v.produit, legendeSeule || (v.reel ? "Référence réelle : " : "Produit : ") + e.nom));
       cadre.append(seule, el("span", "cat-etiquette gauche", v.reel ? "Réel" : "Produit"));
     }
     zone.append(cadre);
+    // Sous les images : ce que chacune montre (une phrase de l'agent), s'il en a écrit une.
+    const legendes = [v.reel && v.legende_reel ? "Réel : " + v.legende_reel : null,
+                      v.produit && v.legende_produit ? "Produit : " + v.legende_produit : null].filter(Boolean);
+    for (const l of legendes) zone.append(el("p", "cat-compare-legende", l));
     if (v.credit || (v.lien && lienSur(v.lien))) {
       const credit = el("p", "cat-credit", v.credit || "");
       if (v.lien && lienSur(v.lien)) { if (v.credit) credit.append(" · "); credit.append(lienExterne(v.lien, "source")); }

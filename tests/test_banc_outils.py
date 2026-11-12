@@ -36,6 +36,17 @@ def ecrire_jsonl(chemin, lignes):
     chemin.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in lignes) + "\n", encoding="utf-8")
 
 
+class Legendes(unittest.TestCase):
+    def test_la_maquette_legendee_d_une_reponse_enregistree_garde_sa_legende(self):
+        maquette = ["pieces/f1/a.png", {"chemin": "pieces/f1/b.png", "legende": "Le combat"}]
+        brut = construire._rapport_structure("cadrage", None, json.dumps(
+            {"texte": "Voici", "maquette": maquette, "etapes": ["x"]}))
+        self.assertEqual(brut["cahier"]["maquette"], maquette)
+        brut = construire._rapport_structure("cadrage", None, json.dumps(
+            {"texte": "Voici", "maquette": [{"legende": "sans chemin"}], "etapes": ["x"]}))
+        self.assertNotIn("cahier", brut)
+
+
 class Reference(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

@@ -247,6 +247,10 @@ def _elements_du_depart(texte, taches, premiere):
     return vus or ([premiere["element"]] if premiere.get("element") is not None else [])
 
 
+def _chemin_ok(x):
+    return isinstance(x, str) and bool(x.strip())
+
+
 def _rapport_structure(etape, element, texte):
     brut = {"statut": "fait", "message": {"texte": texte[:MAX_TEXTE], "attend": etape in ("cadrage", "prototype")}}
     try:
@@ -259,7 +263,8 @@ def _rapport_structure(etape, element, texte):
             if isinstance(objet.get(cle), list) and objet[cle]:
                 brut["message"][cle] = objet[cle]
         maquette, etapes = objet.get("maquette"), objet.get("etapes")
-        if (isinstance(maquette, list) and maquette and all(isinstance(x, str) and x.strip() for x in maquette)
+        if (isinstance(maquette, list) and maquette   # chaque image : un chemin, ou {chemin, legende} (la légende reste)
+                and all(_chemin_ok(x.get("chemin") if isinstance(x, dict) else x) for x in maquette)
                 and isinstance(etapes, list) and etapes and all(isinstance(x, str) and x.strip() for x in etapes)):
             brut["cahier"] = {"maquette": maquette, "etapes": etapes}
     if etape == "relecture" and element is not None:

@@ -179,9 +179,9 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 **Une fonctionnalité** : `id`, `nom`, `etape` (`cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie` ou
 `terminee`), et facultativement :
 - `agent_cadrage` (clé d'un titulaire) ; `discussion` : `[{id, t, auteur, texte, images?}]`, du plus ancien au plus
-  récent, 1 000 messages au plus, `auteur` = `utilisateur` ou la clé d'un titulaire, `images` = chemins (règles des
-  images) ; `attend_reponse` (vrai ou faux) ;
-- `cahier` : `{maquette: [chemins d'images], etapes: [textes], valide_le?}` ;
+  récent, 1 000 messages au plus, `auteur` = `utilisateur` ou la clé d'un titulaire, `images` = 4 au plus, chacune un
+  chemin (règles des images) ou `{chemin, legende?}` (voir « Les légendes ») ; `attend_reponse` (vrai ou faux) ;
+- `cahier` : `{maquette: [images], etapes: [textes], valide_le?}`, chaque image de la maquette étant un chemin ou `{chemin, legende?}` ;
 - `cahiers_precedents` (facultatif) : les cahiers remplacés par une correction, du plus ancien au plus récent, chacun avec `remplace_le` ; une fonctionnalité revenue en `cadrage` alors qu'elle a un `cahier` est en correction (le bureau ne montre plus ce cahier comme valable) ;
 - `methode` : `{version, lien | chemin, validee_le?}` ;
 - `livrable` : `{libelle, lien | chemin, date}` ;
@@ -306,6 +306,20 @@ Une image d'une tâche est un fichier du projet. Les réglages disent d'où le b
 ```
 
 Les racines sont relatives au dossier des réglages. Le champ `chemin` d'une image est relatif à ce même dossier. Le bureau ne sert que les fichiers `.png`, `.jpg` et `.jpeg` qui, une fois le chemin résolu (liens symboliques compris), sont dans une de ces racines ; tout le reste est refusé (404). Sans `images` dans les réglages, les tâches n'ont pas de vignettes. La première image d'une tâche sert aussi de vignette sur son post-it du Kanban (au plus une par post-it visible, chargée en différé, libérée quand le post-it disparaît ou que l'image change ; aucune requête sans `images`). Les autres images sont chargées quand elles deviennent visibles dans le panneau ; l'adresse porte la `maj` de la tâche : mettez-la à jour quand une image est refaite sous le même nom.
+
+### Les légendes
+
+Une image produite par un agent peut porter sa **légende** : une phrase (160 caractères au plus, texte non vide) qui dit à quoi
+l'image fait référence (écran, élément, moment du jeu…). Le bureau l'affiche en petit sous l'image, et s'en sert comme texte
+alternatif (`alt`) ; sans légende, il n'affiche rien de plus. Où elle se porte :
+
+- une image de message de la discussion (`images`), une image de la `maquette` d'un `cahier` ou d'un cahier précédent : un chemin
+  seul (ancienne forme, toujours acceptée) **ou** `{"chemin": "…", "legende": "…"}` ; les deux formes se mélangent dans une liste ;
+- une image de tâche (`images` : `{chemin, legende?}`) ;
+- un élément du catalogue : `captures[].legende`, et `comparaisons[].legende_reel` / `legende_produit`.
+
+Les images jointes par l'utilisateur n'ont pas de légende. Le titre d'un document image (`documents[].titre`) tient lieu de
+légende dans les listes de documents ; l'outil y reprend celle de l'image quand le document n'avait que son nom de fichier.
 
 Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'ils sont longs.
 

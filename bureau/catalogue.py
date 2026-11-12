@@ -236,9 +236,9 @@ OBJ_LECON = {"id": (_texte, True), "titre": (_texte, False), "texte": (_texte, F
 OBJ_KIT = {"id": (_texte, True), "nom": (_texte, False), "description": (_texte, False)}
 OBJ_TRACE = {"nom": (_texte, False), "points": (_liste_de(_point), True), "groupe": (_texte, False)}
 OBJ_CARAC = {"libelle": (_texte, True), "valeur": (_texte_ou_nombre, True)}
-OBJ_CAPTURE = {"chemin": (_chemin, True), "passe": (_entier, False)}
+OBJ_CAPTURE = {"chemin": (_chemin, True), "passe": (_entier, False), "legende": (_texte, False)}
 OBJ_COMPARAISON = {"angle": (_texte, False), "reel": (_chemin, False), "produit": (_chemin, False),
-                   "credit": (_texte, False), "lien": (releve.lien_valide, False)}
+                   "legende_reel": (_texte, False), "legende_produit": (_texte, False), "credit": (_texte, False), "lien": (releve.lien_valide, False)}
 OBJ_LIEN = {"libelle": (_texte, False), "url": (releve.lien_valide, True)}
 OBJ_DOUTE = {"date": (_texte, False), "raison": (_texte, False), "leve_par": (_texte, False)}
 OBJ_RETOUR = {"t": (_texte, False), "texte": (_texte, True), "etat": (_texte, False), "reponse": (_texte, False)}

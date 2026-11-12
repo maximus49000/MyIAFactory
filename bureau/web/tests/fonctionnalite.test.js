@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {ETAPES_PARCOURS, bandeau, demandeNouvelle, demandeMessage, demandeCahier, demandeMethode,
         verifierPieces, lireImage, ecrit, ecritDetail, nouvelleApparue, genreEtWorkflow, libelleEtape,
-        documentsParEtape} from "../ui/fonctionnalite.js";
+        documentsParEtape, texteACopier} from "../ui/fonctionnalite.js";
 
 const Mo = 1024 * 1024;
 const png = (nom = "a.png", size = 100) => ({name: nom, type: "image/png", size});
@@ -47,6 +47,11 @@ test("lireImage rend nom, type et base64", async () => {
   const fichier = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], {type: "image/png"});
   fichier.name = "a.png";
   assert.deepEqual(await lireImage(fichier), {nom: "a.png", type: "image/png", donnees: "iVBORw=="});
+});
+
+test("texteACopier : les images avec leur légende", () => {
+  const m = {texte: "Voici", images: ["pieces/a.png", {chemin: "pieces/b.png", legende: "Le combat"}]};
+  assert.equal(texteACopier(m), "Voici\n\nImages :\n- pieces/a.png\n- pieces/b.png : Le combat");
 });
 
 test("ecrit : trois cas", () => {

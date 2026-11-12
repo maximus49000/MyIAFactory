@@ -32,6 +32,7 @@ MAX_QUESTIONS, MAX_CHOIX = 10, 12   # les questions à choix d'un message d'agen
 MAX_GLOSSAIRE, MAX_MOT, MAX_DEFINITION = 500, 60, 400   # le vocabulaire défini par les agents
 CHAMPS_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache", "date", "remplace")   # d'où vient un document
 MAX_IMAGES_MESSAGE = 4
+MAX_LEGENDE = 160   # la légende d'une image rendue par un agent : une phrase
 SCHEMAS_LIENS = ("https", "http", "claude")
 DELAI_COMMANDE_S = 10
 
@@ -244,6 +245,29 @@ def _liste_de_textes(v, max_n=None):
             and (max_n is None or len(v) <= max_n))
 
 
+def chemin_d_image(x):
+    """Le chemin d'une image rendue par un agent : le texte lui-même (ancienne forme) ou la clé « chemin »."""
+    return x.get("chemin") if isinstance(x, dict) else x
+
+
+def legende_d_image(x):
+    """Sa légende (une phrase), ou `None` pour une image sans légende."""
+    return x.get("legende") if isinstance(x, dict) else None
+
+
+def image_legendee_ok(x):
+    """Une image d'agent : un chemin (texte non vide) ou `{chemin, legende?}` (légende : 1 à 160 caractères)."""
+    if isinstance(x, dict):
+        leg = x.get("legende")
+        return (_texte_plein(x.get("chemin")) and set(x) <= {"chemin", "legende"}
+                and (leg is None or (_texte_plein(leg) and len(leg) <= MAX_LEGENDE)))
+    return _texte_plein(x)
+
+
+def _liste_d_images(v, max_n=None):
+    return isinstance(v, list) and all(image_legendee_ok(x) for x in v) and (max_n is None or len(v) <= max_n)
+
+
 def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
     fonctionnalites = r.get("fonctionnalites")
     if fonctionnalites is None:
@@ -372,9 +396,10 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
                            f"« {m.get('auteur')} » (utilisateur ou un titulaire).")
         if not _texte(m.get("texte")):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » doit avoir un « texte ».")
-        if m.get("images") is not None and not _liste_de_textes(m["images"], MAX_IMAGES_MESSAGE):
+        if m.get("images") is not None and not _liste_d_images(m["images"], MAX_IMAGES_MESSAGE):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
-                           f"d'au plus {MAX_IMAGES_MESSAGE} chemins (textes non vides).")
+                           f"d'au plus {MAX_IMAGES_MESSAGE} images : un chemin (texte non vide) ou "
+                           f"{{chemin, legende?}} (légende : {MAX_LEGENDE} caractères au plus).")
         if m.get("attend") is not None and not isinstance(m["attend"], bool):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « attend » doit être vrai ou faux.")
         if m.get("glossaire") is not None:
@@ -388,7 +413,7 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
 
 
 def _cahier_bien_forme(c):
-    return (_est_dict(c) and _liste_de_textes(c.get("maquette")) and isinstance(c.get("etapes"), list)
+    return (_est_dict(c) and _liste_d_images(c.get("maquette")) and isinstance(c.get("etapes"), list)
             and all(isinstance(x, str) for x in c["etapes"]) and _texte_ou_nul(c.get("valide_le")))
 
 
@@ -396,7 +421,8 @@ def _verifier_cahier_methode(f, nom, erreurs):
     c = f.get("cahier")
     if c is not None:
         if not _cahier_bien_forme(c):
-            erreurs.append(f"{nom} : « cahier » doit avoir une « maquette » (liste de chemins), des « etapes » "
+            erreurs.append(f"{nom} : « cahier » doit avoir une « maquette » (liste de chemins ou de "
+                           f"{{chemin, legende?}}, légende de {MAX_LEGENDE} caractères au plus), des « etapes » "
                            "(liste de textes) et, si présent, un « valide_le » texte.")
     precedents = f.get("cahiers_precedents")
     if precedents is not None and (not isinstance(precedents, list) or not all(
@@ -1108,7 +1134,8 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
         if len(images) > MAX_IMAGES:
             erreurs.append(f"Tâche « {i} » : « images » : au plus {MAX_IMAGES} images.")
         for e in images:
-            if not _texte(e.get("chemin")) or not e.get("chemin") or not _texte_ou_nul(e.get("legende")):
+            if (not _texte(e.get("chemin")) or not e.get("chemin") or not _texte_ou_nul(e.get("legende"))
+                    or len(e.get("legende") or "") > MAX_LEGENDE):
                 erreurs.append(f"Tâche « {i} » : « images » : chaque image a un « chemin » "
                                "(et une « legende » en texte).")
         for e in _liste_facultative(t.get("liens"), f"Tâche « {i} » : « liens »", erreurs):

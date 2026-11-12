@@ -333,6 +333,63 @@ class TestSuivi(AvecProjet):
         self.assertEqual([c["maquette"] for c in precedents], [["pieces/m1.png"]])
         self.assertTrue(precedents[0]["remplace_le"])
 
+    def test_images_legendees_cahier_message_et_capture(self):
+        """Chaque image rendue par un agent peut porter sa légende (une phrase) ; un chemin seul reste accepté."""
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1", "etape": "cahier", "cahier": {
+            "maquette": ["pieces/a.png", {"chemin": "pieces/b.png", "legende": "Le combat : tir et ennemis"}],
+            "etapes": ["x"]}})
+        self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "Voici", "images": [
+            {"chemin": "pieces/c.png", "legende": "L'écran d'accueil"}, "pieces/d.png"]})
+        t = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": f, "agent": "dev-1", "colonne": "dev",
+                                     "captures": [{"chemin": "captures/e.png", "legende": "Le résultat"}, "captures/g.png"]})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        fonc = r["fonctionnalites"][0]
+        self.assertEqual(fonc["cahier"]["maquette"],
+                         ["pieces/a.png", {"chemin": "pieces/b.png", "legende": "Le combat : tir et ennemis"}])
+        self.assertEqual(fonc["discussion"][-1]["images"],
+                         [{"chemin": "pieces/c.png", "legende": "L'écran d'accueil"}, "pieces/d.png"])
+        tache = next(x for x in r["taches"] if x["id"] == t["id"])
+        self.assertEqual(tache["images"], [{"chemin": "captures/e.png", "legende": "Le résultat"},
+                                           {"chemin": "captures/g.png"}])
+        docs = sorted(x["chemin"] for x in fonc["documents"])
+        self.assertEqual(docs, ["captures/e.png", "captures/g.png", "pieces/a.png", "pieces/b.png", "pieces/c.png",
+                                "pieces/d.png"])
+        titres = {x["chemin"]: x["titre"] for x in fonc["documents"]}     # la légende tient lieu de titre
+        self.assertEqual((titres["pieces/b.png"], titres["pieces/c.png"], titres["pieces/a.png"]),
+                         ("Le combat : tir et ennemis", "L'écran d'accueil", "a.png"))
+        # Des légendes ajoutées plus tard à une maquette déjà rangée remplacent le nom de fichier du document.
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": [
+            {"chemin": "pieces/a.png", "legende": "Le menu"}], "etapes": ["x"]}})
+        titres = {x["chemin"]: x["titre"] for x in self.releve()["fonctionnalites"][0]["documents"]}
+        self.assertEqual(titres["pieces/a.png"], "Le menu")
+
+    def test_ajouter_les_legendes_ne_cree_pas_de_version_du_cahier(self):
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1", "etape": "cahier",
+                                          "cahier": {"maquette": ["pieces/a.png"], "etapes": ["x"]}})
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {
+            "maquette": [{"chemin": "pieces/a.png", "legende": "L'accueil"}], "etapes": ["x"]}})
+        fonc = self.releve()["fonctionnalites"][0]
+        self.assertNotIn("cahiers_precedents", fonc)
+        self.assertEqual(fonc["cahier"]["maquette"], [{"chemin": "pieces/a.png", "legende": "L'accueil"}])
+
+    def test_legende_refusee(self):
+        f = self.nouvelle()
+        for legende in ("", "x" * 161, 3):
+            image = {"chemin": "pieces/a.png", "legende": legende}
+            code, sortie = self.outil("fonctionnalite", entree={"id": f, "cahier": {"maquette": [image], "etapes": []}})
+            self.assertEqual(code, 1, legende)
+            self.assertIn("legende", sortie["erreur"])
+            code, sortie = self.outil("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "x",
+                                                         "images": [image]})
+            self.assertEqual(code, 1, legende)
+        code, _ = self.outil("fonctionnalite", entree={"id": f, "cahier": {"maquette": [{"legende": "x"}], "etapes": []}})
+        self.assertEqual(code, 1)
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": [{"chemin": "pieces/a.png", "legende": "x" * 160}],
+                                                              "etapes": []}})
+
     def test_documents_de_la_fonctionnalite(self):
         # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :
         # images de la discussion, maquettes du cahier, captures d'une tâche, et ce que l'orchestrateur y inscrit.

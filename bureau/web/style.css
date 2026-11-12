@@ -756,6 +756,14 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .visionneuse-fermer { top: 14px; right: 16px; width: 40px; height: 40px; font-size: 26px; }
 .visionneuse-fleche:hover, .visionneuse-fermer:hover { background: rgba(255, 255, 255, 0.28); }
 .visionneuse-compteur { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font-weight: 700; }
+/* La légende d'une image rendue par un agent : une phrase, sous l'image (lisible au téléphone). */
+.visionneuse-legende { position: absolute; bottom: 52px; left: 0; right: 0; margin: 0 auto; width: fit-content; max-width: min(92vw, 640px); padding: 6px 12px; border-radius: 8px; text-align: center; color: #fff; background: rgba(0, 0, 0, 0.6); font-size: 15px; line-height: 1.35; }
+.visionneuse-legende[hidden] { display: none; }
+.vignette.avec-legende { width: min(100%, 200px); }
+.vignette.avec-legende.agrandie { width: 100%; }
+.vignette .vignette-legende, .livrable-image .vignette-legende, .cat-figure .vignette-legende, .cat-compare-legende { margin-top: 3px; font-size: 13px; line-height: 1.35; color: #4f4b61; overflow-wrap: anywhere; }
+.livrable-image { margin: 0; max-width: 150px; }
+.cat-compare-legende { margin: 4px 0 0; }
 
 /* Les documents d'une fonctionnalité. */
 .documents { margin-top: 12px; }

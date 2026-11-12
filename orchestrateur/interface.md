@@ -116,12 +116,15 @@ jour la fonctionnalité (`etape` : `cadrage`, `cahier`, `decoupage`, `prototype`
 `deplacee` (la fonctionnalité est partie dans un autre projet, dont `deplacee_vers` donne le nom : ni livrée ni
 comptée) ; `genre` : l'identifiant du genre de la fonctionnalité (ou `null`) ; `workflow` : l'identifiant du
 workflow du projet qu'elle suit (ou `null` : le workflow principal) ;
-`cahier` : `{maquette: [chemins], etapes: [textes], valide_le?}` ; `methode` : `{version, lien | chemin,
+`cahier` : `{maquette: [images], etapes: [textes], valide_le?}` (une image : un chemin, ou `{"chemin", "legende"}` ;
+la légende est une phrase de 160 caractères au plus qui dit à quoi l'image correspond, affichée sous elle ; ajouter ou
+changer des légendes seules ne crée pas de version du cahier) ; `methode` : `{version, lien | chemin,
 validee_le?}` ; `livrable` : `{libelle, lien | chemin, date}`). Rend la fonctionnalité.
 
 ### `message`
 
-Entrée : `{"fonctionnalite", "auteur", "texte", "images"?: [chemins]}`. `auteur` : `utilisateur` ou la clé d'un
+Entrée : `{"fonctionnalite", "auteur", "texte", "images"?: [chemins ou {"chemin", "legende"}]}` (la légende d'une image d'agent :
+une phrase de 160 caractères au plus). `auteur` : `utilisateur` ou la clé d'un
 agent. Un message d'agent remet `attend_reponse` à faux. `"attend": true` dit qu'il demande une réponse de l'utilisateur
 (le Directeur le liste dans « Réponses attendues »), `false` que c'est un compte rendu ; sans lui, un message qui
 contient une question en attend une. Un agent peut joindre des **questions à choix**,
@@ -158,7 +161,7 @@ même décision rend la même. Rend `{"id": "d2"}` ou `{"ok": true}`.
 
 Entrée : sans `id`, une création (`titre` obligatoire) ; avec `id`, une mise à jour. Champs : `titre`,
 `fonctionnalite`, `element`, `role`, `colonne`, `agent`, `etape`, `modele_depart`, `montee` (`{de, a, raison}`),
-`journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins), `lignes` (les lignes produites
+`journal` (un texte, ou une liste, ajoutés), `bloquee`, `active`, `captures` (chemins, ou `{chemin, legende}`), `lignes` (les lignes produites
 par la tâche, son total : l'échelle de son coût au bureau), `depend_de` (liste d'identifiants de tâches connues : ce
 que la tâche attend ; refus d'une tâche inconnue, d'elle-même ou d'un cycle), `lot` (`{"id": "L2", "rang": 3}` ou
 `null` : le lot de la tâche et son rang), `partenaires` (ids du catalogue des partenaires que la tâche appelle : le

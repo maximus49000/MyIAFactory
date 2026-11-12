@@ -31,6 +31,21 @@ class Lire(unittest.TestCase):
             with self.subTest(texte=texte), self.assertRaises(rapport.RapportIllisible):
                 rapport.lire(texte)
 
+    def test_maquette_legendee_ou_non(self):
+        cahier = {"maquette": ["pieces/f1/a.png", {"chemin": "pieces/f1/b.png", "legende": "Le combat"}],
+                  "etapes": ["Faire"]}
+        r = rapport.lire(reponse(dict(FAIT, cahier=cahier)))
+        self.assertEqual(r["cahier"]["maquette"][1], {"chemin": "pieces/f1/b.png", "legende": "Le combat"})
+        for mauvaise in ({"legende": "x"}, {"chemin": "", "legende": "x"}, {"chemin": "a.png", "legende": 3}, 3):
+            with self.subTest(mauvaise=mauvaise), self.assertRaises(rapport.RapportIllisible):
+                rapport.lire(reponse(dict(FAIT, cahier={"maquette": [mauvaise], "etapes": ["Faire"]})))
+
+    def test_message_a_images_legendees_passe_tel_quel(self):
+        images = [{"chemin": "pieces/f1/a.png", "legende": "L'écran d'accueil"}, "pieces/f1/b.png"]
+        cmds = rapport.commandes(rapport.lire(reponse({"statut": "fait", "message": {"texte": "Voici", "images": images}})),
+                                 fonctionnalite="f1", tache="t3", agent="dev-1", etape="dev")
+        self.assertEqual(cmds[0][1]["images"], images)
+
     def test_valeurs_vides_completees(self):
         r = rapport.lire(reponse({"statut": "fait"}))
         self.assertEqual((r["fichiers"], r["lecons"], r["controles"], r["verdicts"], r["retours_factory"]),
@@ -105,6 +120,12 @@ class Consigne(AvecProjet):
         self.assertIn("bloc ```json", m)
         self.assertIn("accord_requis", m)
         self.assertIn("```json", depart.FIN_D_ETAPE)
+
+    def test_les_consignes_demandent_une_legende_par_image(self):
+        from moteur import agents
+        self.assertIn('"legende"', depart.FIN_D_ETAPE)
+        self.assertIn("légende", depart.FIN_D_ETAPE)
+        self.assertIn("légende", agents.CONSIGNE_AGENT)
 
     def test_usage_accepte_orchestrateur(self):
         code, _ = self.outil("usage", entree={"modele": "claude-haiku-5-5", "agent": "orchestrateur",

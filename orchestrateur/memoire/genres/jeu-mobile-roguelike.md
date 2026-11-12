@@ -320,3 +320,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Quand un robot de test accélère le temps, vérifier l'écran de fin au moment où le journal signale la fin, car un retour automatique peut le faire disparaître avant le contrôle.
+
+## G54 — Avant un export signé d'un moteur de jeu, si seule une clé d
+Rôles : livreur
+Date : 2026-11-12
+
+Avant un export signé d'un moteur de jeu, si seule une clé de debug est trouvée, la présenter comme choix explicite et ne jamais l'utiliser par défaut pour une release.

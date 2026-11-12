@@ -68,3 +68,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export Godot signé, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset.
+
+## G12 — Comparer par script les pixels de chaque sprite à la palette
+Rôles : testeur
+Date : 2026-11-12
+
+Comparer par script les pixels de chaque sprite à la palette documentée, avec les variantes d'ombre et de reflet calculées, avant de valider un lot d'assets.

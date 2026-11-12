@@ -368,3 +368,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand une contrainte de tirage de récompense est retirée, recalculer ce que son repli garantissait : un type absent à certaines raretés peut disparaître des offres.
+
+## G62 — Dans un roguelike de cartes, quand l'utilisateur retire une
+Rôles : designer
+Date : 2026-11-13
+
+Dans un roguelike de cartes, quand l'utilisateur retire une contrainte d'un tirage, vérifier chaque autre tirage qui l'appliquait avant de supposer qu'il veut la garder ailleurs.

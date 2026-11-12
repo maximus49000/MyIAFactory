@@ -332,3 +332,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Dans un roguelike, quand un nouveau type d'ennemi donne une récompense qui ressemble à un tirage existant, lui donner un stock à lui plutôt que de piocher dans le stock commun, pour ne pas fausser le contrôle du tirage au pire cas.
+
+## G56 — Dans un roguelike à plusieurs personnages, le point faible d
+Rôles : designer
+Date : 2026-11-12
+
+Dans un roguelike à plusieurs personnages, le point faible d'un ennemi commun doit pouvoir être atteint avec des moyens que tous les personnages ont, jamais avec la mécanique propre d'un seul.

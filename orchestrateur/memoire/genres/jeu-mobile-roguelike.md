@@ -86,3 +86,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.
+
+## G15 — Pour un jeu à musique en boucle, générer sons et musiques pa
+Rôles : artiste
+Date : 2026-11-12
+
+Pour un jeu à musique en boucle, générer sons et musiques par un script en Python pur (module wave, oscillateurs, bruit) évite toute licence externe, et un script de vérification contrôle format, niveau, écrêtage et continuité de boucle.

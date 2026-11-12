@@ -224,3 +224,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Dans un roguelike, un robot de test avec un taux d'erreur faible produit à la fois victoires et défaites, et vérifie les deux écrans de fin.
+
+## G38 — Quand on déplace une valeur d'équilibrage vers une constante
+Rôles : dev
+Date : 2026-11-12
+
+Quand on déplace une valeur d'équilibrage vers une constante, brancher à la fois le libellé affiché et l'effet réel sur cette constante.

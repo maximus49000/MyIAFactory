@@ -178,6 +178,8 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .jauge-detail { font-size: 11px; color: #6d6980; white-space: nowrap; }
 /* La part estimée d'un coût : approximative, donc discrète. */
 .cout-part { font-size: 12px; color: #6d6980; cursor: help; }
+/* L'empreinte carbone estimée (EcoLogits) : le lien vers sa méthode reste discret. */
+.lien-methode { font-size: 11px; color: inherit; opacity: 0.75; text-decoration: underline; cursor: pointer; }
 
 /* --- Boutons de la factory --- */
 .barre-actions { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; }

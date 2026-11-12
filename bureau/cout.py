@@ -7,6 +7,7 @@ euros, et un avertissement le dit.
 import statistics
 from datetime import timedelta
 
+from .empreinte import Cumul
 from .statuts import TRES_ANCIEN, lire_date
 
 PERIODES = ("aujourdhui", "7j", "30j")
@@ -53,7 +54,19 @@ def _niveau(p):
 
 
 def _vide():
-    return {"total": 0.0, "taches": {}, "modeles": {}, "usages": [], "sans_prix": {}}
+    return {"total": 0.0, "taches": {}, "modeles": {}, "usages": [], "sans_prix": {},
+            "_co2": Cumul(), "_modeles_co2": {}}
+
+
+def _ajouter_co2(groupe, u):
+    """Range l'empreinte estimée d'un usage (ses tokens de sortie) dans son groupe, sa tâche, son étape et son modèle.
+    Elle ne dépend pas du prix : un modèle sans prix a quand même son empreinte."""
+    groupe["_co2"].ajouter(u["modele"], u.get("sortie") or 0)
+    tache = groupe["taches"].setdefault(u.get("tache") or SANS, {"total": 0.0, "etapes": {}, "sans_prix": 0})
+    tache.setdefault("_co2", Cumul()).ajouter(u["modele"], u.get("sortie") or 0)
+    etape = u.get("etape") or SANS
+    tache.setdefault("_etapes_co2", {}).setdefault(etape, Cumul()).ajouter(u["modele"], u.get("sortie") or 0)
+    groupe["_modeles_co2"].setdefault(u["modele"], Cumul()).ajouter(u["modele"], u.get("sortie") or 0)
 
 
 def _ajouter(groupe, u, cout):
@@ -81,6 +94,22 @@ def _arrondir(groupe):
         t["total"] = round(t["total"], 6)
         t["etapes"] = {k: round(v, 6) for k, v in t["etapes"].items()}
     groupe["modeles"] = {k: round(v, 6) for k, v in groupe["modeles"].items()}
+    # L'empreinte estimée : une clé n'existe que s'il y a une valeur (jamais zéro à la place d'un inconnu).
+    co2 = groupe.pop("_co2").vue()
+    if co2:
+        groupe["co2"] = co2
+    modeles_co2 = {k: v.vue() for k, v in groupe.pop("_modeles_co2").items()}
+    modeles_co2 = {k: v for k, v in modeles_co2.items() if v}
+    if modeles_co2:
+        groupe["modeles_co2"] = modeles_co2
+    for t in groupe["taches"].values():
+        c = t.pop("_co2", None)
+        if c and c.vue():
+            t["co2"] = c.vue()
+        etapes = {k: v.vue() for k, v in (t.pop("_etapes_co2", None) or {}).items()}
+        etapes = {k: v for k, v in etapes.items() if v}
+        if etapes:
+            t["etapes_co2"] = etapes
     groupe["sans_prix"] = sorted(groupe["sans_prix"].values(), key=lambda x: x["modele"])
     groupe["usages"].sort(key=lambda x: (x["t"], x["id"]))
 
@@ -132,6 +161,7 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
     sans_prix, dates, anciens = {}, [], 0
     lignes = []  # (service, usage, cout, prix)
     partenaires, noms = {}, _noms_partenaires(r)
+    total_co2 = Cumul()   # l'empreinte estimée de tout (voir empreinte.py)
     for u in usages:
         if not _dans_la_periode(u.get("t"), periode, maintenant):
             continue
@@ -153,7 +183,11 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
         else:
             groupe = services.setdefault(u["service"], _vide()) if u.get("service") else direction
         _ajouter(groupe, u, cout)
-        groupe["usages"].append({
+        _ajouter_co2(groupe, u)
+        total_co2.ajouter(u["modele"], u.get("sortie") or 0)
+        un_co2 = Cumul()
+        un_co2.ajouter(u["modele"], u.get("sortie") or 0)
+        groupe["usages"].append({**({"co2": un_co2.vue()} if un_co2.vue() else {}),
             "id": u["id"], "tache": u.get("tache"), "agent": u.get("agent"), "modele": u["modele"],
             "etape": u.get("etape"), "t": u.get("t"), "tokens": tokens,
             **({"lot": u["lot"]} if u.get("lot") else {}), **({"reparti": u["reparti"]} if u.get("reparti") else {}),
@@ -166,6 +200,7 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
     gestion = 0.0  # le bureau ne consomme aucun token ; ses requêtes de prix ne coûtent que du temps
     total = sum(g["total"] for g in services.values()) + direction["total"] + orchestration["total"] + gestion
     return {
+        **({"co2": total_co2.vue()} if total_co2.vue() else {}),
         "total": round(total, 6), "gestion": gestion,
         "sans_prix": sorted(sans_prix.values(), key=lambda x: x["modele"]),
         "services": services, "direction": direction, "orchestration": orchestration,
@@ -280,7 +315,7 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
     if any(isinstance(f, dict) and f.get("id") == fonctionnalite and f.get("etape") == "deplacee"
            for f in r.get("fonctionnalites") or []):
         taches = {}   # partie dans un autre projet : ce qui y a été fait n'est pas un coût de livraison ici
-    lignes = {}
+    lignes, total_co2 = {}, Cumul()
     for u in usages:
         if u.get("tache") not in taches or u.get("genre") == "partenaire":   # des tokens seulement
             continue
@@ -289,6 +324,8 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
                                               "total": 0.0, "sans_prix": 0, "modeles": {}, "tokens": 0,
                                               "lignes": t.get("lignes") if isinstance(t.get("lignes"), int) else None})
         ligne["tokens"] += sum(u.get(c) or 0 for c in COMPTEURS)   # l'échelle, même sans prix connu
+        ligne.setdefault("_co2", Cumul()).ajouter(u["modele"], u.get("sortie") or 0)
+        total_co2.ajouter(u["modele"], u.get("sortie") or 0)
         p, _, _ = prix_de(u["modele"], u.get("t_prix") or u.get("t"))
         if not p:
             ligne["sans_prix"] += 1
@@ -301,7 +338,12 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
     for x in sortie:
         x["total"] = round(x["total"], 6)
         x["modeles"] = {k: round(v, 6) for k, v in x["modeles"].items()}
-    return {"total": round(sum(x["total"] for x in sortie), 6), "taches": sortie,
+        c = x.pop("_co2").vue()
+        if c:
+            x["co2"] = c
+    co2 = total_co2.vue()
+    return {**({"co2": co2} if co2 else {}),
+            "total": round(sum(x["total"] for x in sortie), 6), "taches": sortie,
             "sans_prix": sum(x["sans_prix"] for x in sortie), "tokens": sum(x["tokens"] for x in sortie),
             # aucune ligne notée : inconnu, pas zéro
             "lignes": sum(x["lignes"] for x in sortie if x["lignes"] is not None)

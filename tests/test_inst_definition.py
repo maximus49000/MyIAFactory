@@ -239,8 +239,25 @@ class TestTour(Base):
         self.assertEqual(c["tokens"], 8200)
         un = 1000 * 3e-6 + 100 * 15e-6 + 1000 * 0.3e-6 + 2000 * 3.75e-6
         self.assertAlmostEqual(c["euros"], round(2 * un, 4), places=6)
-        self.assertEqual(definition.cout_echange([u], lambda m: None), {"tokens": 4100, "euros": None})
+        sans_prix = definition.cout_echange([u], lambda m: None)
+        self.assertEqual((sans_prix["tokens"], sans_prix["euros"]), (4100, None))
         self.assertEqual(definition.cout_echange([], prix), {"tokens": 0, "euros": 0.0})
+
+    def test_cout_echange_porte_l_empreinte_des_tokens_de_sortie(self):
+        from bureau import empreinte
+        u = {"modele": "sonnet", "entree": 1000, "sortie": 1000, "cache_lecture": 0, "cache_ecriture": 0}
+        c = definition.cout_echange([u, u], prix)
+        self.assertAlmostEqual(c["co2"]["min"], 2 * empreinte.estimer("sonnet", 1000)["min"], places=5)
+        # le prix inconnu n'empêche pas l'empreinte ; un modèle inconnu n'a pas de valeur
+        self.assertIn("co2", definition.cout_echange([u], lambda m: None))
+        inconnu = dict(u, modele="gpt-x")
+        self.assertNotIn("co2", definition.cout_echange([inconnu], prix))
+
+    def test_la_proposition_porte_l_empreinte_estimee(self):
+        b = self.tour(self.brouillon(), Faux(proposition()), verifier_environnement=en_place)
+        c = b["proposition"]["cout"]
+        self.assertLess(c["co2"]["min"], c["co2"]["max"])
+        self.assertIn("CO₂e", b["proposition"]["texte"])
 
     def test_la_cle_n_est_jamais_dans_le_brouillon(self):
         import os

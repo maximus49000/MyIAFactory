@@ -14,6 +14,8 @@ from datetime import datetime
 
 from pathlib import Path
 
+from bureau import empreinte
+from bureau.empreinte import Cumul
 from installation import brouillons, creation, estimation, mise_en_place as mep
 from installation.dossier import Echec
 from moteur import appel, environnement, jugement
@@ -98,13 +100,18 @@ def cout_echange(usages, prix_de):
     """{"tokens": int, "euros": float | None} : compteur par compteur ; `None` si le prix d'un modèle est inconnu."""
     usages = [u for u in usages if isinstance(u, dict)]
     tokens = sum(estimation._total(u) for u in usages)
-    euros = 0.0
+    euros, co2 = 0.0, Cumul()   # l'empreinte (tokens de sortie, voir bureau/empreinte.py) ne dépend pas des prix
     for u in usages:
+        co2.ajouter(u.get("modele"), u.get("sortie") or 0)
         prix = prix_de(u.get("modele"))
         if not prix or not prix.get("entree") or not prix.get("sortie"):
-            return {"tokens": tokens, "euros": None}
-        euros += estimation._euros_usage(u, prix)
-    return {"tokens": tokens, "euros": round(euros, 4)}
+            euros = None
+        elif euros is not None:
+            euros += estimation._euros_usage(u, prix)
+    sortie = {"tokens": tokens, "euros": None if euros is None else round(euros, 4)}
+    if co2.vue():
+        sortie["co2"] = co2.vue()
+    return sortie
 
 
 # --- La proposition.
@@ -144,7 +151,7 @@ def proposition_calculee(o, infos, *, verifier_environnement=environnement.verif
     estime = estimation.estimer(
         flux, [dict(a, modele="Opus" if a["modele"] == "Fable" else a["modele"]) for a in agents],
         list(usages_du_genre), prix_de)
-    cout = {"tokens": estime["tokens"], "euros": estime["euros"]}
+    cout = {"tokens": estime["tokens"], "euros": estime["euros"], **({"co2": estime["co2"]} if estime.get("co2") else {})}
     p = {"message": o["message"].strip(), "genre": genre, "workflow": {"id": f"w-{genre['id']}", "genre": genre["id"],
                                                                          "flux": flux},
          "raisons": raisons, "services": services, "agents": agents, "briefs": briefs, "livrable": o["livrable"].strip(),
@@ -183,6 +190,9 @@ def texte_de_la_proposition(p):
     lignes.append("Coût estimé d'un élément passé par ce workflow : " + f"{_milliers(c['tokens'][0])} à "
                   f"{_milliers(c['tokens'][1])} tokens" + (f", soit {_euros(c['euros'][0])} à {_euros(c['euros'][1])} €."
                                                             if c["euros"] else " (prix inconnu)."))
+    if c.get("co2"):
+        lignes.append(f"Empreinte carbone estimée : {empreinte.texte(c['co2'])} (estimation EcoLogits : tailles de "
+                      "modèles estimées, tokens de sortie seulement, électricité des États-Unis).")
     return "\n".join(lignes)
 
 

@@ -8,6 +8,7 @@ import {el} from "./dom.js";
 import {blocOutil} from "./outils.js";
 import {verifierCreation, motsInterdits} from "./verifs.js";
 import {etiquettePart, etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
+import {etiquetteCO2} from "./empreinte.js";
 
 export const DELAI_RELECTURE_MS = 2500;
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -83,9 +84,9 @@ export function texteCout(cout) {
   if (!cout) return "";
   if (typeof cout.euros === "number") {
     const montant = cout.euros > 0 && cout.euros < 0.005 ? "moins de 0,01 €" : euros(cout.euros) + " €";
-    return avecPart("Coût de l'échange : " + montant, etiquettePart(cout.euros));
+    return avecPart(avecPart("Coût de l'échange : " + montant, etiquettePart(cout.euros)), etiquetteCO2(cout.co2));
   }
-  if (cout.tokens > 0) return `Coût de l'échange : ${milliers(cout.tokens)} tokens (prix inconnu)`;
+  if (cout.tokens > 0) return avecPart(`Coût de l'échange : ${milliers(cout.tokens)} tokens (prix inconnu)`, etiquetteCO2(cout.co2));
   return "";
 }
 
@@ -156,7 +157,13 @@ export function lignesProposition(p) {
     let t = `Coût estimé d'un élément passé par ce workflow : ${milliers(c.tokens[0])} à ${milliers(c.tokens[1])} tokens`;
     t += Array.isArray(c.euros) ? `, soit ${euros(c.euros[0])} à ${euros(c.euros[1])} €.` : " (prix inconnu).";
     const part = Array.isArray(c.euros) ? etiquettePlage(c.euros[0], c.euros[1]) : "";
-    if (part) t = t.replace(/\.$/, "") + ` (${part}).`;
+    const co2 = etiquetteCO2(c.co2);
+    if (Array.isArray(c.euros)) {
+      const marques = [part, co2].filter(Boolean).join(" · ");
+      if (marques) t = t.replace(/\.$/, "") + ` (${marques}).`;
+    } else if (co2) {
+      t = t.replace(/\.$/, "") + ` · ${co2}.`;
+    }
     lignes.push(t);
   }
   return lignes;
@@ -201,13 +208,16 @@ export function lignesBrouillons(liste) {
       const part = etiquettePart(b.euros, {court: true});
       if (part) morceaux.push(part);
     }
+    const co2 = etiquetteCO2(b.co2);
+    if (co2) morceaux.push(co2);
     return {id: b.id, titre: plein(b.nom) ? b.nom : "Projet sans nom", detail: morceaux.join(" · ")};
   });
 }
 
 export function texteAbandonnes(abandonnes) {
   return typeof abandonnes?.euros === "number" && abandonnes.euros > 0
-    ? avecPart(`Échanges abandonnés : ${euros(abandonnes.euros)} €`, etiquettePart(abandonnes.euros, {court: true})) : "";
+    ? avecPart(avecPart(`Échanges abandonnés : ${euros(abandonnes.euros)} €`, etiquettePart(abandonnes.euros, {court: true})),
+               etiquetteCO2(abandonnes.co2)) : "";
 }
 
 // Depuis une décision « cette demande n'est pas du genre du projet », le formulaire actuel (projet vide) reste.

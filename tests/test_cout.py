@@ -259,3 +259,46 @@ class TestCoutsFonctionnalite(unittest.TestCase):
         self.assertEqual((t1["tokens"], t1["lignes"]), (1550, 85))
         self.assertEqual((t2["tokens"], t2["lignes"]), (15, None))      # les tokens comptent même sans prix
         self.assertEqual((c["tokens"], c["lignes"]), (1565, 85))
+
+
+class TestEmpreinte(unittest.TestCase):
+    """L'empreinte estimée à côté des euros : calculée sur les tokens de sortie, jamais inventée."""
+
+    def test_facturation_porte_l_empreinte_a_chaque_niveau(self):
+        from bureau import empreinte
+        un = empreinte.estimer("sonnet", 1000)
+        f = facturer([usage("u1", sortie=1000), usage("u2", sortie=1000, etape="qa", tache="t2")])
+        dev = f["services"]["dev"]
+        self.assertAlmostEqual(f["co2"]["min"], 2 * un["min"], places=5)
+        self.assertAlmostEqual(dev["co2"]["max"], 2 * un["max"], places=5)
+        self.assertAlmostEqual(dev["taches"]["t1"]["co2"]["min"], un["min"], places=5)
+        self.assertAlmostEqual(dev["taches"]["t2"]["etapes_co2"]["qa"]["wh_max"], un["wh_max"], places=5)
+        self.assertAlmostEqual(dev["modeles_co2"]["sonnet"]["min"], 2 * un["min"], places=5)
+        self.assertAlmostEqual(dev["usages"][0]["co2"]["min"], un["min"], places=5)
+
+    def test_sans_tokens_de_sortie_rien_a_montrer(self):
+        f = facturer([usage("u1", sortie=0)])
+        self.assertAlmostEqual(f["co2"]["max"], 0.0)
+
+    def test_modele_sans_famille_connue_pas_de_valeur_et_euros_inchanges(self):
+        f = facturer([usage("u1", modele="inconnu", sortie=1000)])
+        self.assertNotIn("co2", f)
+        self.assertNotIn("co2", f["services"]["dev"])
+        self.assertNotIn("co2", f["services"]["dev"]["usages"][0])
+
+    def test_partiel_est_signale_incomplet(self):
+        f = facturer([usage("u1", sortie=1000), usage("u2", modele="inconnu", sortie=1000)])
+        self.assertTrue(f["co2"]["incomplet"])
+
+    def test_un_modele_sans_prix_a_quand_meme_son_empreinte(self):
+        f = cout.facturation([usage("u1", modele="haiku-sans-prix", sortie=1000)], lambda m, d: (None, None, False),
+                             RELEVE, "7j", MAINTENANT)
+        self.assertGreater(f["co2"]["max"], 0)
+
+    def test_fonctionnalite(self):
+        from bureau import empreinte
+        r = {"version": 4, "taches": [{"id": "t1", "titre": "Dev", "fonctionnalite": "f1"}]}
+        c = cout.couts_fonctionnalite([usage("u1", sortie=1000), usage("u2", sortie=1000)], prix_de, r, "f1")
+        un = empreinte.estimer("sonnet", 1000)
+        self.assertAlmostEqual(c["co2"]["min"], 2 * un["min"], places=5)
+        self.assertAlmostEqual(c["taches"][0]["co2"]["max"], 2 * un["max"], places=5)

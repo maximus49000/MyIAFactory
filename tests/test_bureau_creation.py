@@ -294,6 +294,7 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual([q["id"] for q in v["echange"][-1]["questions"]], ["style", "niveaux"])
         self.assertGreater(v["cout"]["tokens"], 0)
         self.assertGreater(v["cout"]["euros"], 0)
+        self.assertGreater(v["cout"]["co2"]["max"], 0)
         v = self.attendre(b["id"])
         self.srv.appeler_jugement = Faux(proposition(genre="jeu-web", nouveau=None))
         self.tour(b["id"], reponses=[{"question": "style", "texte": "Néon"}, {"question": "niveaux", "texte": "10"}])
@@ -305,6 +306,7 @@ class TestRoutesCreations(AvecCreations):
         liste = self.json("/api/creations")
         self.assertEqual([x["id"] for x in liste["brouillons"]], [b["id"]])
         self.assertGreater(liste["brouillons"][0]["euros"], 0)
+        self.assertGreater(liste["brouillons"][0]["co2"]["max"], 0)   # l'empreinte estimée de l'échange
         self.assertEqual(liste["brouillons"][0]["etat"], "proposition")
 
     def test_tour_refus_de_demande(self):
@@ -413,6 +415,7 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual(apres["brouillons"], [])
         self.assertAlmostEqual(apres["abandonnes"]["euros"], avant["brouillons"][0]["euros"], places=4)
         self.assertGreater(apres["abandonnes"]["euros"], 0)
+        self.assertGreater(apres["abandonnes"]["co2"]["max"], 0)
         statut, r = self.post("/api/creations/supprimer", {"id": v["id"]})
         self.assertEqual(statut, 400)
 

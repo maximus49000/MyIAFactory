@@ -1,6 +1,7 @@
 """L'état servi à la page : relevé + équipe + horloge."""
 import copy
 
+from . import empreinte as modempreinte
 from . import kpi as modkpi
 from . import releve as modreleve
 from . import statuts
@@ -206,7 +207,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         e["genre"] = r["genre"]
         e["agents_locaux_max"] = r["agents_locaux_max"]
         e["livrable"] = r["livrable"]
-        e["decisions_projet"] = [dict(d) for d in r["decisions_projet"]]
+        e["decisions_projet"] = [_avec_empreinte(d) for d in r["decisions_projet"]]
         e["fonctionnalites"] = [_fonctionnalite(f, prenoms, services) for f in r["fonctionnalites"]]
         e["orchestrateur_actif"] = any(a["chef"] and a["statut"] == "travail" for a in agents)
         if isinstance(r.get("orchestrateur_present"), bool):   # absent : l'adaptateur ne le dit pas, rien n'est bloqué
@@ -214,6 +215,27 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)
             e["partenaires"] = copy.deepcopy(r["partenaires"])
     return e
+
+
+def _avec_empreinte(d):
+    """La décision, copiée ; une organisation proposée y gagne l'empreinte estimée de son coût : ses tokens [bas, haut]
+    répartis à parts égales entre les étapes (le modèle de l'agent de chaque rôle), un cinquième en sortie. Rien si un
+    modèle n'a pas de valeur (jamais de chiffre inventé). Le relevé lu n'est pas modifié."""
+    d = dict(d)
+    o = d.get("organisation")
+    if d.get("genre") != "organisation" or not isinstance(o, dict) or not isinstance(o.get("cout"), dict):
+        return d
+    modele_du_role = {}
+    for a in o.get("agents") or []:
+        if isinstance(a, dict):
+            modele_du_role.setdefault(a.get("role"), a.get("modele"))
+    modeles = [modele_du_role.get(e.get("role")) for e in o.get("flux") or []
+               if isinstance(e, dict) and e.get("validation") is not True]
+    co2 = modempreinte.plage(o["cout"].get("tokens"), modeles)
+    if co2:
+        d["organisation"] = dict(o, cout=dict(o["cout"], co2={k: round(v, 4) if isinstance(v, float) else v
+                                                              for k, v in co2.items()}))
+    return d
 
 
 def _fonctionnalite(f, prenoms, services):

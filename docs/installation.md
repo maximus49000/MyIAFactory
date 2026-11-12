@@ -419,6 +419,14 @@ Vos valeurs ne sont jamais réécrites. Le chef s'appelle « Chef » tant qu'on 
 - **Prudence** : vos autres sessions font aussi monter le compteur, chaque mesure est donc un majorant. L'estimation est la médiane de la moitié la plus basse des mesures, d'au moins 3 mesures ; en dessous, « part estimée : en cours d'étalonnage ».
 - La part est toujours approximative (infobulle : « estimation : les % du compte comptent aussi vos autres sessions Claude »).
 
+## L'empreinte carbone estimée
+
+- **Où** : à côté des coûts en euros, sous la forme « ≈ a à b g CO₂e » (en kg au-delà de 1000 g) : onglet Facturation (par tâche, étape, modèle, discussion et en total), coût de chaque fonctionnalité, échange de création avec le chef (et brouillons), workflow proposé et organisation proposée. Rien n'est affiché quand aucun modèle n'a pu être estimé.
+- **Méthode** : celle d'[EcoLogits](https://ecologits.ai/latest/methodology/llm_inference/) (genai-impact, licence MPL-2.0), lue dans son code source le 2026-11-12 et réécrite en Python standard dans `bureau/empreinte.py` (aucun code d'EcoLogits n'est repris). L'énergie d'une requête vient du nombre de tokens de sortie, de la taille active du modèle, de sa vitesse et de son délai de premier token ; les GPU nécessaires viennent de sa taille totale ; le centre de données ajoute un PUE ; l'électricité est celle des États-Unis (0,3844 kgCO₂e/kWh) ; la fabrication des serveurs, amortie sur trois ans, est comptée avec l'usage. Le résultat est une fourchette (taille active min/max du modèle, PUE 1,09 à 1,14), avec l'énergie en Wh dans l'infobulle.
+- **Limites** (dites dans l'infobulle : « estimation EcoLogits : tailles de modèles estimées, tokens de sortie seulement, électricité des États-Unis ») : seuls les tokens de sortie comptent (ni l'entrée ni le cache) ; les tailles, vitesses et délais des modèles Claude sont des **estimations d'EcoLogits**, Anthropic ne les publie pas ; chaque usage compte pour une requête ; l'estimation reste un ordre de grandeur, pas une mesure.
+- **Modèle inconnu** : l'entrée de la table la plus proche de la même famille (haiku, sonnet, opus), la plus récente si seule la famille est connue. Famille inconnue, ou sans donnée (Fable : EcoLogits n'en donne ni vitesse ni délai) : aucune valeur, jamais de chiffre inventé ; un cumul où un usage manque est marqué « (partiel) ».
+- **Contrôle** : 1000 tokens de sortie Sonnet 5.5 donnent 1,13 à 1,80 Wh et 0,43 à 0,69 gCO₂e d'usage, plus 0,031 g de fabrication.
+
 ## Le bureau sur le téléphone
 
 Le bureau s'ouvre au téléphone **sans rien exposer sur Internet** : ni tunnel public, ni hébergement. L'ordinateur

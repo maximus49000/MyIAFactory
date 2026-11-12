@@ -54,6 +54,30 @@ class TestEstimation(unittest.TestCase):
         self.assertIsNone(r["euros"])
         self.assertIn("prix inconnu", r["explication"])
 
+    def test_empreinte_estimee_en_fourchette_sur_les_tokens_de_sortie(self):
+        from bureau import empreinte
+        r = estimation.estimer(FLUX, AGENTS, [], lambda m: None)   # l'empreinte ne dépend pas du prix
+        co2 = r["co2"]
+        self.assertLess(co2["min"], co2["max"])
+        # valeurs par défaut : un cinquième des tokens en sortie, une requête par étape (cadrage Sonnet, dev Sonnet, relecture Haiku)
+        bas = sum(empreinte.estimer(m, estimation.DEFAUTS_TOKENS[m][0] * estimation.PART_SORTIE)["min"]
+                  for m in ("Sonnet", "Sonnet", "Haiku"))
+        self.assertAlmostEqual(co2["min"], bas, places=3)
+
+    def test_empreinte_depuis_les_tokens_de_sortie_mesures(self):
+        us = [usage("Sonnet", t, i) for i, t in enumerate((1000, 2000, 3000, 4000, 5000))]
+        mesure = estimation.estimer(FLUX, AGENTS, us, PRIX.get)["co2"]
+        defauts = estimation.estimer(FLUX, AGENTS, [], PRIX.get)["co2"]
+        self.assertNotEqual(mesure["min"], defauts["min"])
+
+    def test_pas_d_empreinte_pour_un_modele_sans_donnees(self):
+        agents = [{"cle": "dev-1", "role": "dev", "modele": "Sonnet"}, {"cle": "rel-1", "role": "relecteur", "modele": "Fable"}]
+        estimation.DEFAUTS_TOKENS.setdefault("Fable", (80_000, 300_000))
+        try:
+            self.assertNotIn("co2", estimation.estimer(FLUX, agents, [], lambda m: None))
+        finally:
+            estimation.DEFAUTS_TOKENS.pop("Fable", None)
+
     def test_fourchette_ordonnee(self):
         for us in ([], [usage("Sonnet", t, i) for i, t in enumerate((9, 1, 5, 3, 7))]):
             r = estimation.estimer(FLUX, AGENTS, us, PRIX.get)

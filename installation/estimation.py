@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from bureau import prix as prix_bureau
+from bureau.empreinte import Cumul
 from bureau import reglages
 from bureau.usage import HistoriqueUsage
 
@@ -135,6 +136,22 @@ def estimer(flux, agents, usages, prix_de):
                 b, h = _euros(d["tokens"], p)
             bas, haut = bas + b, haut + h
         euros = [round(bas, 2), round(haut, 2)]
+    # L'empreinte (EcoLogits, tokens de sortie seulement) : une requête par étape, indépendante des prix.
+    bas_co2, haut_co2 = Cumul(), Cumul()
+    for d in detail:
+        if d["_mesures"]:
+            s_bas, s_haut = _quartiles([u.get("sortie") or 0 for u in d["_mesures"]])
+        else:
+            s_bas, s_haut = d["tokens"][0] * PART_SORTIE, d["tokens"][1] * PART_SORTIE
+        bas_co2.ajouter(d["modele"], s_bas)
+        haut_co2.ajouter(d["modele"], s_haut)
+    co2 = None
+    if not (bas_co2.incomplet or haut_co2.incomplet) and bas_co2.n == len(detail):
+        b, h = bas_co2.vue(), haut_co2.vue()
+        co2 = {"min": round(b["min"], 4), "max": round(h["max"], 4),
+               "wh_min": round(b["wh_min"], 4), "wh_max": round(h["wh_max"], 4)}
+        if b.get("assimile") or h.get("assimile"):
+            co2["assimile"] = True
     for d in detail:
         del d["_mesures"]
     base = {"mesures": "d'après les usages déjà mesurés sur cette machine",
@@ -143,4 +160,5 @@ def estimer(flux, agents, usages, prix_de):
     explication = f"Estimation par élément passé par le workflow, {base}."
     if euros is None:
         explication += " Euros : prix inconnu pour au moins un modèle."
-    return {"tokens": tokens, "euros": euros, "source": source, "detail": detail, "explication": explication}
+    return {"tokens": tokens, "euros": euros, "source": source, "detail": detail, "explication": explication,
+            **({"co2": co2} if co2 else {})}

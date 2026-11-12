@@ -7,6 +7,7 @@ import {el} from "./dom.js";
 import {euros, tokens} from "./texte.js";
 import {blocOutil} from "./outils.js";
 import {etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
+import {etiquetteCO2} from "./empreinte.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -17,7 +18,7 @@ export function libelleCout(cout) {
   const jetons = t.length === 2 ? `${tokens(t[0])} à ${tokens(t[1])} tokens` : "tokens inconnus";
   const e = liste(cout?.euros);
   const texte = `${jetons}, ${e.length === 2 ? `${euros(e[0])} à ${euros(e[1])}` : "prix inconnu"}`;
-  return e.length === 2 ? avecPart(texte, etiquettePlage(e[0], e[1])) : texte;
+  return avecPart(e.length === 2 ? avecPart(texte, etiquettePlage(e[0], e[1])) : texte, etiquetteCO2(cout?.co2));
 }
 
 // Les colonnes que le projet avait avant : celles de son workflow principal (une colonne d'un workflow de

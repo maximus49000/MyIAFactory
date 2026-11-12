@@ -319,6 +319,14 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 
 `GET /api/etat` porte `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
 
+## L'empreinte carbone estimée (champ `co2` des coûts servis)
+
+Le relevé ne porte rien de plus : l'empreinte est calculée par le bureau (`bureau/empreinte.py`, méthode EcoLogits) à partir des `sortie` de chaque usage et de son `modele`. Là où le bureau sert un coût en euros, il ajoute un champ `co2` (absent quand rien n'a pu être estimé, jamais `0` à la place d'un inconnu) :
+
+`co2 = {min, max, wh_min, wh_max, assimile?, incomplet?}` : `min` et `max` en **gCO2e** (usage + fabrication), `wh_min` et `wh_max` en **Wh** ; `assimile: true` quand un modèle a pris l'entrée la plus proche de sa famille ; `incomplet: true` quand un usage chargé en tokens n'a pu être estimé.
+
+Où : `/api/facturation` (`co2` au total, dans `services.<id>`, `direction` et `orchestration`, leurs `taches.<id>.co2`, `taches.<id>.etapes_co2`, `modeles_co2` et `usages[].co2`), `/api/couts?fonctionnalite=` (total et par tâche), `/api/creations` et le brouillon (`cout.co2`, `brouillons[].co2`, `abandonnes.co2`), `cout.co2` d'une proposition du chef et d'une décision `organisation` dans `decisions_projet` (estimé alors sans détail : un cinquième des tokens en sortie, réparti à parts égales entre les étapes). Un modèle de la famille Fable n'a pas de valeur.
+
 ## Exemple complet
 
 Voir [`exemples/demo/releve.json`](../exemples/demo/releve.json) (projet inventé « Démo », version 4 : boutons, détail d'une tâche, leçon à valider, retour sans réponse, tâche bloquée, usage sur plusieurs modèles, KPI dont un en alerte, connaissances partagées, un challenge avec trois solutions, une fonctionnalité en série avec son catalogue [`catalogue-magasin.json`](../exemples/demo/catalogue-magasin.json), une montée de modèle, un dernier livrable) et [`exemples/demo-b/releve.json`](../exemples/demo-b/releve.json) (une fonctionnalité en cadrage avec une image dans la discussion, un genre à confirmer, une session cloud à créer).

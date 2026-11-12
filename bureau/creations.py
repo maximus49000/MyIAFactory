@@ -104,9 +104,12 @@ def liste(srv, id_=None):
             usages = brouillons.lire(x["id"], dossier=srv.dossier_creations).get("usages") or []
         except Echec:
             continue
-        lignes.append(dict(x, euros=definition.cout_echange(usages, prix_de)["euros"]))
+        c = definition.cout_echange(usages, prix_de)
+        lignes.append(dict(x, euros=c["euros"], **({"co2": c["co2"]} if c.get("co2") else {})))
     abandonnes = definition.cout_echange(brouillons.usages_abandonnes(commun=srv.commun_creations), prix_de)
-    return 200, {"brouillons": lignes, "abandonnes": {"euros": abandonnes["euros"], "tokens": abandonnes["tokens"]}}
+    return 200, {"brouillons": lignes,
+                 "abandonnes": {"euros": abandonnes["euros"], "tokens": abandonnes["tokens"],
+                                **({"co2": abandonnes["co2"]} if abandonnes.get("co2") else {})}}
 
 
 # --- POST.

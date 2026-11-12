@@ -385,6 +385,26 @@ class TestEtatV4(unittest.TestCase):
         e = self.etat(version=3, modif=avec)
         self.assertEqual(e["lecons"], [{"id": "l1", "agent": "d1", "texte": "T"}])
 
+    def test_organisation_proposee_porte_son_empreinte_estimee(self):
+        organisation = {"services": [], "flux": [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"},
+                                                 {"id": "val", "nom": "Essai", "validation": True},
+                                                 {"id": "son", "nom": "Son", "role": "son", "service": "dev"}],
+                        "agents": [{"cle": "dev-1", "role": "dev", "modele": "Sonnet"},
+                                   {"cle": "son-1", "role": "son", "modele": "Haiku"}],
+                        "briefs": {}, "cout": {"tokens": [20000, 60000], "euros": None}}
+
+        def avec(r):
+            r["decisions_projet"] = [{"id": "o", "genre": "organisation", "texte": "T", "organisation": organisation}]
+        e = self.etat(modif=avec)
+        co2 = e["decisions_projet"][0]["organisation"]["cout"]["co2"]
+        self.assertGreater(co2["min"], 0)
+        self.assertGreater(co2["max"], co2["min"])
+        self.assertNotIn("co2", organisation["cout"])            # le relevé lu n'est pas modifié
+        # un modèle sans donnée (ou un coût illisible) : pas de valeur
+        organisation["agents"][1]["modele"] = "Fable"
+        e = self.etat(modif=avec)
+        self.assertNotIn("co2", e["decisions_projet"][0]["organisation"]["cout"])
+
     def test_champs_v4_servis(self):
         def avec(r):
             r["genre"] = "ville"

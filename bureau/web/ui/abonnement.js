@@ -3,6 +3,8 @@
 // les autres sessions Claude de l'utilisateur. Une valeur absente n'est jamais remplacée par un chiffre inventé.
 // Tout texte passe par textContent.
 
+import {INFOBULLE_CO2, lienMethode} from "./empreinte.js";
+
 export const INFOBULLE_PART = "estimation : les % du compte comptent aussi vos autres sessions Claude";
 export const TEXTE_ETALONNAGE = "part estimée : en cours d'étalonnage";
 export const SEUIL_ORANGE = 80;
@@ -86,9 +88,17 @@ export function avecPart(texte, part) {
   return part ? `${texte} · ${part}` : texte;
 }
 
-// Pose l'infobulle d'avertissement sur un élément dont le texte porte une part estimée.
+// Pose l'infobulle d'avertissement sur un élément dont le texte porte une part estimée, une empreinte carbone estimée
+// (avec le lien vers sa méthode), ou les deux.
 export function marquerPart(element) {
-  if (/% semaine|étalonnage/.test(element.textContent || "")) element.title = INFOBULLE_PART;
+  const texte = element.textContent || "";
+  const infos = [];
+  if (/% semaine|étalonnage/.test(texte)) infos.push(INFOBULLE_PART);
+  if (/CO₂e/.test(texte)) {
+    infos.push(INFOBULLE_CO2);
+    if (!element.querySelector?.(".lien-methode")) element.append(lienMethode());
+  }
+  if (infos.length) element.title = infos.join(" — ");
   return element;
 }
 

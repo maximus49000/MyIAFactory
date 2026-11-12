@@ -5,7 +5,8 @@ import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
 import {challengeDe} from "./actions.js";
 import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
-import {etiquettePart, marquerPart} from "./abonnement.js";
+import {etiquettePart, marquerPart, avecPart} from "./abonnement.js";
+import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
 
 const MAX_TITRE = 90;
 const MAX_DISCUSSIONS = 200;  // au-delà, la liste dit combien elle n'en montre pas
@@ -21,19 +22,23 @@ export function lignesTaches(s, taches) {
   const titres = new Map((taches || []).map((t) => [t.id, t.titre]));
   return Object.entries(s?.taches || {})
     .map(([id, t]) => ({
-      id, total: t.total, sansPrix: t.sans_prix || 0, reparti: t.reparti === true,
+      id, total: t.total, sansPrix: t.sans_prix || 0, reparti: t.reparti === true, ...avec(t.co2),
       titre: id === "" ? "Hors tâche" : (titres.get(id) || id),
-      etapes: Object.entries(t.etapes || {}).map(([nom, total]) => ({nom: nom === "" ? "Sans étape" : nom, total}))
+      etapes: Object.entries(t.etapes || {})
+        .map(([nom, total]) => ({nom: nom === "" ? "Sans étape" : nom, total, ...avec(t.etapes_co2?.[nom])}))
         .sort((a, b) => b.total - a.total),
     }))
     .sort((a, b) => b.total - a.total);
 }
 
+// `{co2}` quand le serveur a une empreinte estimée pour la ligne, rien sinon (jamais de zéro à la place d'un inconnu).
+const avec = (co2) => (co2 ? {co2} : {});
+
 export const MARQUE_LOT = "estimé (part d'un lot)";
 
 // Le coût d'une tâche : « estimé (part d'un lot) » quand sa part a été répartie entre les tâches d'un lot.
 export function coutDeTache(t) {
-  const c = coutEnClair({total: t.total, sans_prix: t.sansPrix});
+  const c = avecPart(coutEnClair({total: t.total, sans_prix: t.sansPrix}), etiquetteCO2(t.co2));
   return t.reparti ? `${c} · ${MARQUE_LOT}` : c;
 }
 
@@ -57,7 +62,7 @@ export function lignesDiscussions(s, etat) {
       tache: u.tache ? (titres.get(u.tache) || u.tache) : "Hors tâche",
       modele: u.modele, etape: u.etape || "Sans étape",
       tokens: Object.values(u.tokens || {}).reduce((n, v) => n + (typeof v === "number" ? v : 0), 0),
-      cout: typeof u.cout === "number" ? u.cout : null,
+      cout: typeof u.cout === "number" ? u.cout : null, ...avec(u.co2),
       prixDu: u.prix_du ?? null, ancien: u.ancien === true,
       ...(typeof u.reparti === "string" ? {reparti: u.reparti} : {}),
     }));
@@ -66,7 +71,9 @@ export function lignesDiscussions(s, etat) {
 // Le total général du projet et la part « direction / hors service » (qui n'a pas de dossier).
 export function totalProjet(f) {
   return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, orchestration: f?.orchestration?.total ?? 0,
-          sansPrix: (f?.sans_prix || []).length > 0};
+          sansPrix: (f?.sans_prix || []).length > 0,
+          ...avec(f?.co2), ...(f?.direction?.co2 ? {co2Direction: f.direction.co2} : {}),
+          ...(f?.orchestration?.co2 ? {co2Orchestration: f.orchestration.co2} : {})};
 }
 
 // Les partenaires dans la facturation : une ligne par partenaire (coût en euros ; le coût d'origine est en info-bulle).
@@ -95,7 +102,8 @@ export function coutDePartenaire(l) {
 }
 
 export function lignesModeles(s) {
-  return Object.entries(s?.modeles || {}).map(([nom, total]) => ({nom, total})).sort((a, b) => b.total - a.total);
+  return Object.entries(s?.modeles || {}).map(([nom, total]) => ({nom, total, ...avec(s.modeles_co2?.[nom])}))
+    .sort((a, b) => b.total - a.total);
 }
 
 // Récupère la facturation de la période ; lève une erreur lisible en cas d'échec.
@@ -111,11 +119,15 @@ export async function chargerFacturation(periode) {
   return r.json();
 }
 
-function rangee(nom, valeur, classe = "") {
+// Une ligne « nom — valeur » ; `co2` (l'empreinte estimée de la ligne) pose l'infobulle quand la valeur la porte.
+function rangee(nom, valeur, classe = "", co2 = null) {
   const l = el("div", "ligne-cout " + classe);
   l.append(el("span", "cout-nom", nom), el("span", "cout-val", valeur));
-  return l;
+  return co2 ? marquerTitreCO2(l, co2) : l;
 }
+
+// Un montant en euros suivi de l'empreinte estimée de la ligne.
+const avecCO2 = (texte, co2) => avecPart(texte, etiquetteCO2(co2));
 
 // Dessine la facturation du service. `donnees` vient de chargerFacturation ;
 // `challenger(cible, constat, taches)` ouvre le volet « Challenger » (bouton grisé sans lui).
@@ -131,6 +143,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   conteneur.append(el("div", "carte-sous-titre", `Coût estimé · ${libellePeriode(periode)}`), total);
   const part = etiquettePart(s?.total);   // la part de l'abonnement ; « en cours d'étalonnage » tant que le ratio manque
   if (part) conteneur.append(marquerPart(el("div", "cout-part", part)));
+  const empreinte = etiquetteCO2(s?.co2);   // l'empreinte carbone estimée du service (EcoLogits), avec le lien vers la méthode
+  if (empreinte) conteneur.append(marquerPart(el("div", "cout-part cout-empreinte", empreinte)));
   conteneur.append(el("p", "note", "Estimation d'après les tokens et les prix des modèles, jamais une facture."));
   if (donnees.message) conteneur.append(el("p", "avertissement", donnees.message));
   if ((s?.sans_prix || []).length) {  // ce qui manque aux euros de CE service
@@ -153,8 +167,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     if (!taches.length) liste.append(el("li", "vide", "Aucune tâche"));
     for (const t of taches) {
       const li = el("li", "");
-      li.append(rangee(tronquer(t.titre, MAX_TITRE), coutDeTache(t), "gras"));
-      for (const e of t.etapes) li.append(rangee("↳ " + e.nom, euros(e.total), "etape"));
+      li.append(rangee(tronquer(t.titre, MAX_TITRE), coutDeTache(t), "gras", t.co2));
+      for (const e of t.etapes) li.append(rangee("↳ " + e.nom, avecCO2(euros(e.total), e.co2), "etape", e.co2));
       liste.append(li);
     }
     conteneur.append(liste);
@@ -164,7 +178,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     if (!modeles.length) lm.append(el("li", "vide", "Aucun modèle compté"));
     for (const m of modeles) {
       const li = el("li", "");
-      li.append(rangee(m.nom, euros(m.total)));
+      li.append(rangee(m.nom, avecCO2(euros(m.total), m.co2), "", m.co2));
       lm.append(li);
     }
     conteneur.append(lm);
@@ -180,7 +194,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
                                : `Prix du ${dateFr(d.prixDu) || d.prixDu}`;
       }
       li.append(ligne, rangee(`↳ ${tronquer(d.tache, MAX_TITRE)} · ${tronquer(d.etape, 40)}`,
-                              `${tokens(d.tokens)} tokens` + (d.reparti ? ` · ${MARQUE_LOT}` : ""), "etape"));
+                              avecCO2(`${tokens(d.tokens)} tokens`, d.co2) + (d.reparti ? ` · ${MARQUE_LOT}` : ""),
+                              "etape", d.co2));
       ld.append(li);
     }
     if (discussions.length > MAX_DISCUSSIONS) {
@@ -223,11 +238,15 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   }
   const projet = totalProjet(donnees);
   conteneur.append(el("div", "carte-sous-titre", "Tout le projet"));
-  conteneur.append(rangee("Total, tous services", coutEnClair({total: projet.total, sans_prix: projet.sansPrix ? 1 : 0}), "gras"));
+  conteneur.append(rangee("Total, tous services",
+                          avecCO2(coutEnClair({total: projet.total, sans_prix: projet.sansPrix ? 1 : 0}), projet.co2), "gras", projet.co2));
   conteneur.append(rangee("↳ dont direction / hors service",
-                          coutEnClair(donnees.direction || {total: 0}), "etape"));
+                          avecCO2(coutEnClair(donnees.direction || {total: 0}), projet.co2Direction), "etape", projet.co2Direction));
   conteneur.append(rangee("↳ dont orchestration (les décisions du moteur)",
-                          coutEnClair(donnees.orchestration || {total: 0}), "etape"));
+                          avecCO2(coutEnClair(donnees.orchestration || {total: 0}), projet.co2Orchestration), "etape",
+                          projet.co2Orchestration));
+  const noteEmpreinte = projet.co2 ? marquerPart(el("p", "note", `Empreinte carbone estimée : ${etiquetteCO2(projet.co2)}`)) : null;
+  if (noteEmpreinte) conteneur.append(noteEmpreinte);
   conteneur.append(rangee("↳ dont gestion du bureau lui-même", euros(donnees.gestion ?? 0), "etape"));
   if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }

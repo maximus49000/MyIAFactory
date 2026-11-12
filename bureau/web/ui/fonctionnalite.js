@@ -6,6 +6,7 @@ import {el} from "./dom.js";
 import {dateFr, tronquer, euros} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
+import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
 import {urlProjet} from "./projets.js";
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
@@ -757,8 +758,8 @@ function partieCouts(f) {
     } catch { titre.textContent = "Coût : indisponible"; return; }
     if (!c?.disponible) { bloc.remove(); return; }
     const incomplet = c.sans_prix ? " + prix inconnu" : "";
-    titre.textContent = avecPart(`Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : ""),
-                                 etiquettePart(c.total));
+    titre.textContent = avecPart(avecPart(`Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : ""),
+                                          etiquettePart(c.total)), etiquetteCO2(c.co2));
     marquerPart(titre);
     if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
     const ul = el("ul", "liste-couts");
@@ -766,8 +767,8 @@ function partieCouts(f) {
       const li = el("li", "");
       const modeles = Object.entries(t.modeles).map(([m, v]) => `${m} ${euros(v)}`).join(" · ");
       li.append(el("span", "cout-tache", t.titre), el("strong", "cout-montant", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
-      const detail = [echelle(t), modeles].filter(Boolean).join(" · ");
-      if (detail) li.append(el("div", "note", detail));
+      const detail = [echelle(t), modeles, etiquetteCO2(t.co2)].filter(Boolean).join(" · ");
+      if (detail) li.append(marquerTitreCO2(el("div", "note", detail), t.co2));
       ul.append(li);
     }
     corps.append(ul, el("p", "note", "Estimation d'après les tokens notés par l'orchestrateur (au plus bas quand seul un total est connu)."));

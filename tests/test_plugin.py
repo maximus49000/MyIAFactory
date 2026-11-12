@@ -128,8 +128,8 @@ class TestGuides(unittest.TestCase):
             self.assertIn(mot, section, mot)
 
     def test_readme_projet_4(self):
-        texte = (RACINE / "README.md").read_text(encoding="utf-8")
-        self.assertIn("/myiafactory:installer", texte)
+        self.assertIn("/myiafactory:installer", (RACINE / "README.md").read_text(encoding="utf-8"))
+        texte = (RACINE / "docs" / "avancement.md").read_text(encoding="utf-8")
         self.assertRegex(texte, r"- \[x\] 11\. Les guides d'accord")
         for n in ("18", "19", "20", "21"):
             self.assertRegex(texte, rf"- \[x\] {n}\. ")

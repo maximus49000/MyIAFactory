@@ -138,7 +138,7 @@ Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": 
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
-genre), `session_cloud` avec `agent`, `valider_etape` (voir plus bas), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
@@ -180,6 +180,7 @@ peut porter `objectif`, `telechargement` (URL https officielle ou nul), `etapes`
 Entrée `{"action": "installateur", "agent": {cle, role: environnement, service, modele, lieu, texte, outils?}, "brief"}` :
 recrute l'agent qui installe les outils du poste (rien si un agent de ce rôle existe ; jamais Fable) ; c'est ce que fait
 le moteur au clic « Installer en autonomie » quand le projet n'en a pas encore.
+Le clic « Installer en autonomie » arrive au projet comme une demande `installer_outil` (`decision`, `outil`, `fonctionnalite`?) : jamais d'installation sans ce clic, un outil à la fois ; seul le moteur la traite.
 Entrée `{"action": "reprendre", "fonctionnalite": fid, "workflow": id}` : la fonctionnalité suit un workflow de genre du
 projet (défini à la création, sans fonctionnalité, ni le principal) : sa copie `w-<fid>` (étapes préfixées `<fid>-`) est
 ajoutée, sans service, agent ni brief nouveau, et la fonctionnalité prend son `genre` et son `workflow`. Rend
@@ -281,6 +282,7 @@ Entrée : `{"action": "lister"}` → `{"genre": …, "genres": [{id, domaine, li
 `{"action": "fixer", "genre", "description"?}` : écrit le genre dans le fichier de factory. Un genre inconnu demande
 une `description` : son fichier de mémoire est alors créé, commité et poussé (rien n'est changé si cela échoue).
 Rend `{"genre": "…", "cree": true|false}`.
+`{"action": "decrire", "genre", "description"}` : élargit la description d'un genre existant, avec l'accord du Directeur (décision `elargir_genre`) ; même chemin git et mêmes contrôles de mot interdit que la création.
 
 ### `lecon`
 

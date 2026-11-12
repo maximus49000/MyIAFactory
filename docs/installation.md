@@ -130,6 +130,85 @@ Le **Directeur** montre en plus les cahiers et les méthodes à valider, les gen
 revoir ? » et les sessions cloud à créer (créez la session vous-même, puis donnez son nom et cliquez « C'est fait ») ;
 pour une leçon, il montre l'étage proposé (projet, genre ou skill) et le texte général, que vous validez mot pour mot.
 
+## Créer un projet depuis le bureau
+
+Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernière entrée de la liste des projets,
+**« Nouveau projet… »**, définit le projet **avec le chef** avant de le créer. Conception :
+[`2026-11-12-workflow-des-la-creation-design.md`](superpowers/specs/2026-11-12-workflow-des-la-creation-design.md).
+
+1. **Fenêtre 1, les informations.** Dossier parent, nom (il devient le nom du dossier), mots interdits (le nom du projet
+   y est ajouté), description (obligatoire : le chef s'en sert pour vous poser les bonnes questions), « suivre les coûts »
+   (un objectif de facturation) et « dépôt GitHub privé ». **Valider** contrôle le nom et le dossier tout de suite :
+   rien n'est écrit dans un projet.
+2. **Fenêtre 2, l'échange avec le chef.** Chaque message porte des questions : répondez dans le champ texte, ou d'un clic
+   sur un bouton de réponse quand le chef en propose. Le **coût de l'échange** s'affiche au fil de l'eau. Le chef pose
+   **4 tours de questions au plus** (« Proposez maintenant » le fait s'arrêter avant), puis présente son workflow : le
+   genre, les étapes avec leur raison, les validations du Directeur, les agents et leurs modèles, les outils du poste et
+   le coût d'un élément. « Demander une correction » (texte libre) l'ajuste sans reposer toutes les questions.
+3. **Brouillons.** L'échange est gardé tant que vous ne validez pas : fermer la fenêtre ne crée rien, et « Nouveau
+   projet… » propose de **reprendre** (ou supprimer) les brouillons, même depuis un autre appareil. Un brouillon
+   abandonné est purgé après 30 jours ; son coût reste compté.
+4. **« Valider et créer le projet ».** Le projet est créé **avec** son workflow, ses services, ses agents, ses fiches et
+   son genre (un genre nouveau reçoit la phrase que vous avez validée), inscrit au bureau, qui bascule dessus. Fable
+   n'est donné qu'agent par agent, sur votre case cochée. La case « Installer en autonomie » ne concerne que les outils
+   du poste (voir « Les outils du poste »). Si `git` ou `gh` manque, ou si `gh` n'est pas connecté, le projet est créé en
+   local et le bureau dit comment faire GitHub à la main.
+
+Les routes et leur corps sont dans [`releve.md`](releve.md) (« Créer un projet depuis le bureau »).
+
+## Les validations du Directeur
+
+Un workflow peut contenir des étapes **« validation du Directeur »** (vous les demandez au chef, par exemple « je veux
+essayer la version de test avant la livraison »). Quand un élément y arrive, le travail de cet élément s'arrête et
+l'élément apparaît au bureau de direction avec le compte rendu et les fichiers de l'étape précédente. Deux gestes :
+
+- **Valider** : l'élément passe à l'étape suivante ;
+- **Renvoyer avec une remarque** (texte obligatoire) : l'étape précédente est refaite pour cet élément, avec votre
+  remarque, puis il revient à la validation.
+
+Ces étapes ne coûtent rien en agents. Elles s'ajoutent aux validations fixes (cahier des charges, méthode).
+
+## Une nouvelle demande : genre et workflow
+
+Chaque « + Nouvelle fonctionnalité » est d'abord **classée par genre** (un petit appel de jugement, sur le modèle le
+plus économe) en comparant la demande à la **description du projet**. Conception :
+[`2026-11-11-genre-par-fonctionnalite-design.md`](superpowers/specs/2026-11-11-genre-par-fonctionnalite-design.md).
+
+- **Du genre du projet** : la demande **reprend le workflow validé à la création**, sans nouvelle proposition ni
+  validation. Le cadrage commence.
+- **D'un autre genre** : le bureau le dit et pose une question (« Dans ce projet », « Dans un nouveau projet », ou « C'est
+  le même genre » quand le chef hésite). Dans le projet, un **workflow dédié** est proposé pour la fonctionnalité : vous
+  l'acceptez, le refusez avec un texte, ou abandonnez la demande.
+- **Illogique avec le projet** : si la demande ne cadre pas avec la description du projet (un logo de plateforme de
+  streaming dans un projet de jeu, par exemple), le bureau **prévient avant de continuer** et propose les choix habituels,
+  sans rien démarrer. La demande n'attend alors que votre réponse.
+- **Un genre nouveau** arrive avec sa **description pré-remplie** (une phrase courte, à corriger si besoin) ; rien à
+  retaper.
+- **Élargir un genre.** Quand une demande hors piste est gardée dans un genre existant, le bureau de direction propose
+  d'**élargir la description** du genre (l'ancienne et la nouvelle, modifiable) : « Valider la nouvelle description », ou
+  la laisser telle quelle. La fonctionnalité n'attend pas cette réponse.
+
+## Les outils du poste
+
+Un workflow demande parfois des logiciels (un moteur de jeu, un SDK, un JDK…) installés sur **cet ordinateur**.
+
+- **Vérification.** Le bureau cherche chaque outil sur le poste et **compare la version trouvée à la version minimale
+  demandée** : un outil trop ancien est « à installer », avec les deux versions affichées. La proposition de workflow et
+  la création d'un projet montrent déjà ce qui est en place et ce qui manque.
+- **« Environnement du poste à compléter »** (bureau de direction). Pour chaque outil qui manque : son **objectif** dans
+  ce projet, le **lien officiel** de téléchargement (jamais autre chose qu'une adresse https, ouverte dans un nouvel
+  onglet) et le **mode opératoire** numéroté.
+- **« Installer en autonomie »** : si un agent peut installer l'outil seul, ce bouton le lui confie, **un outil à la
+  fois et jamais sans votre clic** (ni à l'acceptation d'un workflow, ni d'elle-même ; à la création d'un projet, la case
+  correspondante tient lieu de clic). L'installation est une tâche comme les autres, visible au bureau ; à sa fin, le
+  poste est revérifié.
+- **« C'est fait »** : vous avez installé l'outil à la main, le bureau revérifie (versions comparées).
+  **« Continuer sans »** : la décision est levée, le workflow continue sans cet outil.
+
+Les champs de chaque outil (`objectif`, `telechargement`, `etapes`, `autonome`) sont décrits dans
+[`releve.md`](releve.md) ; la conception est la section 8 de la conception du
+[workflow dès la création](superpowers/specs/2026-11-12-workflow-des-la-creation-design.md).
+
 ## Le catalogue
 
 Le catalogue d'une fonctionnalité s'ouvre depuis son panneau (« Catalogue ») ou depuis le menu « Dernier livrable ».
@@ -239,7 +318,7 @@ Pour essayer sans rien brancher (les gestes de la démo réécrivent son `releve
 
 Le serveur reste réservé à votre machine : `POST /api/demande` exige les mêmes en-têtes que le réglage de charge, et les demandes passent une à une.
 
-**Créer un projet depuis le bureau** : sur un bureau qui suit plusieurs projets (fichier du bureau commun), la dernière entrée de la liste des projets, « Nouveau projet… », ouvre un formulaire (dossier parent, nom, mots interdits, facturation, dépôt GitHub privé, description). Le projet est créé vide (`.factory/` sans workflow ni agent), inscrit au bureau, et le bureau bascule dessus ; son workflow est proposé à sa première demande. `POST /api/projets/creer` (mêmes en-têtes et même code d'accès que les autres écritures) fait ce travail ; la commande `py -3.12 installation/outil.py creer <parent> <nom>` aussi. Si `git` ou `gh` manque, ou si `gh` n'est pas connecté, le projet est créé en local et le bureau dit comment faire GitHub à la main.
+**Créer un projet depuis le bureau** : voir « Créer un projet depuis le bureau » plus haut (`POST /api/creations*`, mêmes en-têtes et même code d'accès que les autres écritures). La commande `py -3.12 installation/outil.py creer <parent> <nom>` crée toujours un projet vide, sans workflow ni agent.
 
 ## Les dossiers des services
 

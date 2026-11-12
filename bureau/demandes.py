@@ -19,13 +19,14 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
+          "environnement": ("decision", "fonctionnalite", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",)}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable"), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-               "organisation", "genre_fonctionnalite")
+               "organisation", "genre_fonctionnalite", "environnement")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -233,6 +234,13 @@ def _verifier_v4(demande, r, elements):
         return None
     if genre == "genre_fonctionnalite":
         return _verifier_genre_fonctionnalite(demande, r)
+    if genre == "environnement":
+        f = _fonctionnalite(r, demande["fonctionnalite"])
+        if f is None:
+            return "Fonctionnalité inconnue."
+        if _decision(f["decisions"], demande["decision"], "environnement") is None:
+            return "Décision inconnue."
+        return None if demande["verdict"] in ("fait", "continuer") else "Réponse inconnue (fait ou continuer)."
     if genre == "organisation":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "organisation")
         if d is None:

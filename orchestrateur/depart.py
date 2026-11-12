@@ -139,6 +139,16 @@ def _bloc_tache(tache):
     return t
 
 
+def outils_du_poste(factory):
+    """« Outils du poste : … » : les outils déjà en place (nom, chemin, version), tels que le projet les a notés. Rien
+    s'il n'y en a pas."""
+    lignes = []
+    for o in factory.get("environnement") or []:
+        if isinstance(o, dict) and o.get("etat") == "en_place" and o.get("outil"):
+            lignes.append(f"- {o['outil']} : {o.get('chemin') or '(sur le PATH)'}" + (f" ({o['version']})" if o.get("version") else ""))
+    return ("## Outils du poste\nDéjà installés ; sers-t'en directement, sans les réinstaller :\n" + "\n".join(lignes)) if lignes else ""
+
+
 def _entete(factory, fiche, lecons_memoire):
     parties = []
     if fiche["lieu"] == "cloud":
@@ -146,6 +156,9 @@ def _entete(factory, fiche, lecons_memoire):
                        "tout ce qu'il te faut est ci-dessous.")
     genre = factory.get("genre")
     parties.append(f"# Projet : {factory['nom']}" + (f" (genre : {genre})" if genre else ""))
+    poste = outils_du_poste(factory)
+    if poste:
+        parties.append(poste)
     parties.append("## Ta fiche\n" + _texte_fiche(fiche))
     parties.append(_lecons("Leçons de la skill qui touchent ton rôle", lecons_memoire.get("skill") or []))
     parties.append(_lecons("Leçons du genre du projet qui touchent ton rôle", lecons_memoire.get("genre") or []))

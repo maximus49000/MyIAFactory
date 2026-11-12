@@ -135,7 +135,7 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
 `portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`,
-`reprendre_methode`, `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
+`reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
 genre), `session_cloud` avec `agent`, ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
@@ -171,8 +171,11 @@ le workflow s'ajoute à `workflows`, la fonctionnalité prend son `genre` et son
 notés (`environnement`), et un genre nouveau est créé dans la mémoire de la skill (en dernier : un échec est dit dans
 `genre_raison`, il ne bloque rien). `fable` : les agents que le Directeur a cochés ; ils doivent avoir été suggérés
 (`fable_suggere`), et leur fiche porte alors `Fable : accordé par le Directeur le <date>`. Rend `{"ok": true,
-"services": [...], "flux": [...]}` (et, pour un workflow, `workflow`, `fonctionnalite`, `genre`, `genre_raison`?). Refus (code 1) si la décision est inconnue ou n'est
+"services": [...], "flux": [...]}` (et, pour un workflow, `workflow`, `fonctionnalite`, `genre`, `genre_raison`?).
+Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
+Entrée `{"action": "environnement", "outils": [{outil, etat: en_place | a_installer, chemin?, version?, …}]}` : note l'état
+des outils du poste dans le fichier de factory (clé `environnement` ; un outil de même nom est remplacé).
 
 ### `file`
 

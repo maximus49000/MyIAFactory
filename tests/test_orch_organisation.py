@@ -274,3 +274,26 @@ class TestWorkflowDeFonctionnalite(AvecProjet):
         r = self.ok("actions", entree={"type": "genre_fonctionnalite", "decision": "d1", "fonctionnalite": "f1",
                                        "choix": "ici"})
         self.assertTrue(r["ok"])
+
+
+class TestEnvironnementDuPoste(AvecProjet):
+    def test_noter_l_environnement_remplace_par_nom(self):
+        a = {"outil": "Java", "etat": "a_installer", "executables": ["java"]}
+        self.ok("lancer", "organisation", entree={"action": "environnement", "outils": [a]})
+        self.ok("lancer", "organisation", entree={"action": "environnement", "outils": [
+            dict(a, etat="en_place", chemin="C:/jdk/java.exe"), {"outil": "Gradle", "etat": "a_installer"}]})
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        self.assertEqual([(x["outil"], x["etat"]) for x in f["environnement"]],
+                         [("Java", "en_place"), ("Gradle", "a_installer")])
+        from orchestrateur import factory as fa
+        self.assertEqual(len(fa.lire(self.factory)["environnement"]), 2)
+
+    def test_environnement_refuse(self):
+        for outils in (None, [], ["java"], [{"outil": "x"}], [{"outil": "x", "etat": "peut-etre"}],
+                       [{"outil": "", "etat": "en_place"}]):
+            code, r = self.outil("lancer", "organisation", entree={"action": "environnement", "outils": outils})
+            self.assertEqual(code, 1, (outils, r))
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["environnement"] = ["java"]
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        self.assertEqual(self.outil("etat")[0], 2)        # un fichier de factory dont l'environnement est abîmé est refusé

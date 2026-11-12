@@ -20,7 +20,7 @@ MAX_USAGE = 5000
 VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
-                            "genre_fonctionnalite")
+                            "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
@@ -290,6 +290,11 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
             _verifier_decision(d, DECISIONS_FONCTIONNALITE, f"{nom} : « decisions »", ids_decisions, erreurs)
             if d.get("genre") == "genre_fonctionnalite":
                 _verifier_genre_fonctionnalite(d, f"{nom} : « decisions »", erreurs)
+            elif d.get("genre") == "environnement":
+                outils = d.get("environnement")
+                if not isinstance(outils, list) or not all(_est_dict(x) and _texte_plein(x.get("outil")) for x in outils):
+                    erreurs.append(f"{nom} : « decisions » : la décision « {d.get('id')} » : « environnement » est la "
+                                   "liste des outils qui manquent (chacun avec un « outil »).")
         _verifier_documents(f, nom, erreurs)
         if f.get("glossaire") is not None:
             probleme = erreur_glossaire(f["glossaire"])

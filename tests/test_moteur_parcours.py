@@ -32,7 +32,9 @@ SANS_NOUVEAU = {**PROPOSITION, "services": [], "agents": [], "briefs": {},
                          {"etape": "livraison", "nom": "Livraison des badges", "role": "dev", "service": "dev"}]}
 
 
-class Parcours(Base):
+class AvecParcours(Base):
+    """Un projet de genre « badges » et de quoi mener une demande de fonctionnalité jusqu'à son workflow proposé."""
+
     def setUp(self):
         super().setUp()
         self.reecrire(genre="badges", description="Des badges pour une chaîne de streaming", mots_interdits=["Secret"])
@@ -67,6 +69,9 @@ class Parcours(Base):
     def accepter(self, decision, **champs):
         return self.traiter(type="organisation", decision=decision["id"], verdict="accepter", **champs)
 
+
+
+class Parcours(AvecParcours):
     # --- Classer la demande.
 
     def test_demande_du_meme_genre_propose_son_workflow(self):

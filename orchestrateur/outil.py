@@ -46,7 +46,7 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation", "genre_fonctionnalite", "partenaire_regle", "partenaires_actualiser",
+                 "organisation", "genre_fonctionnalite", "environnement", "partenaire_regle", "partenaires_actualiser",
                  "partenaires_maj")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
@@ -691,6 +691,13 @@ def cmd_decision(ctx, e):
             d = {"genre": genre, "texte": contenu}
             if genre == "genre_fonctionnalite":
                 d.update(_genre_fonctionnalite_decide(ctx, e))
+            elif genre == "environnement":
+                outils = e.get("environnement")
+                if (not isinstance(outils, list) or not outils
+                        or not all(isinstance(x, dict) and isinstance(x.get("outil"), str) and x["outil"].strip()
+                                   for x in outils)):
+                    raise Refus("« environnement » demande la liste des outils qui manquent ({outil, installation, …}).")
+                d["environnement"] = [dict(x) for x in outils]
             liste = _fonc(s, portee)["decisions"]
         existante = next((x for x in liste if {k: v for k, v in x.items() if k != "id"} == d), None)
         if existante:   # poser deux fois la même décision n'en crée qu'une
@@ -808,14 +815,43 @@ def _workflow_decide(ctx, o):
             "environnement": [dict(x) for x in env], "outils_installation": list(regles)}
 
 
+def _ouvrir_les_outils_d_installation(ctx, regles):
+    """Les règles d'outils proposées avec le workflow (et validées avec lui) s'ajoutent à la ligne « Outils : » de la
+    fiche de l'agent d'environnement, celui qui installe ce qui manque ; rien ne s'ouvre à un autre agent."""
+    agent = next((a for a in ctx.fiches() if a["role"] == "environnement"), None)
+    if agent is None:
+        return
+    actuelles = fi.outils(agent)
+    agent["outils"] = ", ".join(actuelles + [r for r in dict.fromkeys(regles) if r not in actuelles])
+    fi.ecrire_fiche(agent)
+
+
+def _noter_environnement(ctx, e):
+    """`{"action": "environnement", "outils": [{outil, etat, chemin?, version?, …}]}` : note l'état des outils du poste
+    dans le fichier de factory (un outil de même nom est remplacé, les autres sont gardés)."""
+    from installation import mise_en_place
+    outils = e.get("outils")
+    if (not isinstance(outils, list) or not outils
+            or not all(isinstance(x, dict) and isinstance(x.get("outil"), str) and x["outil"].strip()
+                       and x.get("etat") in ("en_place", "a_installer") for x in outils)):
+        raise Refus("« outils » est la liste des outils du poste {outil, etat: en_place | a_installer, …}.")
+    with ctx.suivi.transaction():   # le même verrou que le suivi : un seul écrivain du fichier de factory
+        brut = json.loads(ctx.f["chemin"].read_text(encoding="utf-8-sig"))
+        brut["environnement"] = mise_en_place.fusionner_environnement(brut.get("environnement"), outils)
+        mise_en_place._ecrire_json(ctx.f["chemin"], brut)
+    return {"ok": True, "environnement": brut["environnement"]}
+
+
 def cmd_organisation(ctx, e):
     """Applique une décision `organisation` acceptée : services, flux (ou workflow d'une fonctionnalité), fiches et
     briefs, puis lève la décision. `fable` : les clés des agents que le Directeur a cochés pour Fable (parmi ceux dont la
     proposition le suggérait) ; leur fiche porte alors l'accord."""
     from installation.dossier import Echec
     from installation import mise_en_place
+    if e.get("action") == "environnement":
+        return _noter_environnement(ctx, e)
     if e.get("action") != "appliquer":
-        raise Refus("« action » doit valoir appliquer.")
+        raise Refus("« action » doit valoir appliquer (ou environnement).")
     i = texte(e, "decision")
     fable = e.get("fable", [])
     if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):
@@ -844,6 +880,8 @@ def cmd_organisation(ctx, e):
                 environnement=o.get("environnement") if w and o.get("environnement") else None)
         except Echec as ex:
             raise Refus(str(ex))
+        if w and o.get("outils_installation") and any(x.get("etat") != "en_place" for x in o.get("environnement") or []):
+            _ouvrir_les_outils_d_installation(ctx, o["outils_installation"])
         if w:
             fonc = su.fonctionnalite(s, o["fonctionnalite"])
             if fonc is not None:

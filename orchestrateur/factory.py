@@ -13,7 +13,7 @@ MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
-        "modele_orchestrateur", "agents_locaux_max")
+        "modele_orchestrateur", "agents_locaux_max", "environnement")
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 
 
@@ -134,6 +134,10 @@ def lire(chemin):
     locaux = d.get("agents_locaux_max", 2)
     if isinstance(locaux, bool) or not isinstance(locaux, int) or not 1 <= locaux <= 16:
         raise FactoryInvalide("Factory : « agents_locaux_max » doit être un entier de 1 à 16 (2 par défaut).")
+    environnement = d.get("environnement", [])
+    if not isinstance(environnement, list) or not all(isinstance(x, dict) and _texte(x.get("outil"))
+                                                      for x in environnement):
+        raise FactoryInvalide("Factory : « environnement » doit être une liste d'outils {outil, etat, chemin?, version?}.")
     nom = d.get("nom")
     if nom is not None and not _texte(nom):
         raise FactoryInvalide("Factory : « nom » doit être un texte non vide.")
@@ -152,6 +156,7 @@ def lire(chemin):
         "commandes": {k: list(v) for k, v in commandes.items()},
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
         "modele_orchestrateur": modele, "agents_locaux_max": locaux,
+        "environnement": [dict(x) for x in environnement],
     }
 
 

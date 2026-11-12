@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from installation import estimation
-from moteur import agents, cloud, rapport
+from moteur import agents, cloud, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
@@ -42,7 +42,10 @@ ELEMENTS_EN_COURS_MAX = 2           # « deux éléments au plus en cours » en 
 RELECTEURS_PREMIER_TOUR = 2
 ETAPES_DE_FLUX = "flux:"
 ETAPES_SOLO = ("cadrage", "prototype", "relecture")   # jamais regroupées en lot
-ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande")
+ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande", "environnement")
+ROLE_ENVIRONNEMENT = "environnement"      # l'agent qui installe les outils du poste
+CONTINUER_SANS = "continuer"
+C_EST_FAIT = "fait"
 ATTENDRE = "Attendre encore"
 RELANCER = "Relancer l'agent"
 ABANDONNER = "Abandonner la tâche"
@@ -69,13 +72,17 @@ class Projet:
     """Un projet tenu par le moteur : son fichier de factory et la couche d'appel des jugements.
     `feu_vert` (rien -> bool) remplace la mesure de charge (essais)."""
 
-    def __init__(self, factory, couche="claude", *, feu_vert=None, cloud_max=3, prerequis=None):
+    def __init__(self, factory, couche="claude", *, feu_vert=None, cloud_max=3, prerequis=None,
+                 verifier_environnement=None, bureau=None):
         self.factory = Path(factory)
         self.couche = couche
         self._feu_vert = feu_vert
         self.cloud_max = cloud_max        # sessions cloud en même temps (réglage `agents_cloud_max`)
         self._prerequis = prerequis       # remplace `cloud.prerequis` (essais) : rien -> raison | None
         self._cloud_raison = (None, 0.0)
+        # ce que le poste a déjà (outils.py de l'environnement) ; les essais le remplacent
+        self.verifier_environnement = verifier_environnement or environnement.verifier
+        self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -469,7 +476,7 @@ def _en_parcours(projet, etat, fid):
     if fid in _m(etat, "proposition_ratee"):
         return True
     return any(t.get("fonctionnalite") == fid and t.get("etape") == "environnement" and t["colonne"] != "fait"
-               for t in court["taches"])
+               and not t.get("bloquee") for t in court["taches"])
 
 
 def _classer(projet, etat, fid, suite):
@@ -700,15 +707,22 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
         w = {"id": f"w-{fid}", "genre": genre, "flux": [dict(x) for x in flux]}
         if ctx.get("genre_nouveau"):
             w["genre_nouveau"] = ctx["genre_nouveau"]
-        organisation = {"services": services, "flux": flux, "agents": nouveaux, "briefs": dict(o["briefs"]),
+        poste = _verifier_poste(projet, o["environnement"])
+        briefs = dict(o["briefs"])
+        if environnement.a_installer(poste):       # un agent pour installer ce qui manque
+            installateur, brief = _agent_d_installation(projet, nouveaux)
+            if installateur:
+                nouveaux.append(installateur)
+                briefs[ROLE_ENVIRONNEMENT] = brief
+        organisation = {"services": services, "flux": flux, "agents": nouveaux, "briefs": briefs,
                         "cout": cout, "fonctionnalite": fid, "workflow": w, "livrable": o["livrable"],
-                        "environnement": _verifier_poste(projet, o["environnement"]),
-                        "outils_installation": list(o["outils_installation"])}
+                        "environnement": poste, "outils_installation": list(o["outils_installation"])}
         etapes = " puis ".join(x["nom"] for x in flux)
         texte = (f"Voici le workflow que je propose pour « {f['nom']} » : {etapes}. Livrable : {o['livrable']}. "
                  + (f"Agents à recruter : {', '.join(a.get('prenom') or a['cle'] for a in nouveaux)}. " if nouveaux
                     else "Aucun agent à recruter : ceux du projet suffisent. ")
-                 + (f"Services à créer : {', '.join(s['nom'] for s in o['services'])}. " if o["services"] else ""))
+                 + (f"Services à créer : {', '.join(s['nom'] for s in o['services'])}. " if o["services"] else "")
+                 + _texte_du_poste(poste))
         lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "organisation",
                                     "texte": texte.strip(), "organisation": organisation})
     except (Refus, ValueError) as e:
@@ -785,8 +799,31 @@ def _reprendre_un_workflow(projet, etat, fid, ctx):
 
 
 def _verifier_poste(projet, outils):
-    """Les outils du poste et ce qui est déjà en place (tâche 10)."""
-    return [dict(x) for x in outils]
+    """Les outils du poste, chacun marqué `en_place` ou `a_installer` (vérifié en code, jamais par l'IA)."""
+    return projet.verifier_environnement(list(outils)) if outils else []
+
+
+def _agent_d_installation(projet, nouveaux):
+    """L'agent qui installe les outils du poste : sa fiche ouvre les outils d'installation (ajoutés à l'acceptation).
+    Rien si un agent du rôle existe déjà (il reçoit alors les nouvelles règles) ; sinon une fiche et un brief."""
+    fac = _factory(projet)
+    try:
+        fiches_ = fi.lire_toutes(fac["fiches"])
+    except (fi.FicheInvalide, OSError):
+        fiches_ = []
+    if any(a["role"] == ROLE_ENVIRONNEMENT for a in fiches_ + nouveaux) or not fac["services"]:
+        return None, None
+    pris = {a["cle"] for a in fiches_} | {a["cle"] for a in nouveaux}
+    cle = next(c for c in (f"env-{n}" for n in range(1, 100)) if c not in pris)
+    agent = {"cle": cle, "role": ROLE_ENVIRONNEMENT, "service": fac["services"][0]["id"], "modele": "Sonnet",
+             "lieu": "local", "justification": "Installer et vérifier les outils, avec soin.", "fable_suggere": False,
+             "texte": "Tu installes les outils du poste dont le workflow a besoin, puis tu vérifies chacun."}
+    brief = ("Tu installes les outils du poste demandés par une tâche « Mise en place de l'environnement ». Installe "
+             "de préférence pour l'utilisateur seul (sans droits d'administrateur) et depuis les sources officielles. "
+             "Après chaque installation, vérifie l'outil (chemin et version) et rends compte. Si une installation "
+             "échoue (droits d'administrateur, téléchargement refusé, outil introuvable), dis ce qui manque, pourquoi "
+             "et comment l'installer à la main : n'insiste pas.")
+    return agent, brief
 
 
 def _sur_organisation(projet, demande, etat):
@@ -840,8 +877,87 @@ def _sur_organisation_de_fonctionnalite(projet, demande, etat, d, org):
     return _repondre_cadrage(projet, etat, fid)
 
 
+def _texte_du_poste(poste):
+    """Ce que le Directeur lit des outils du poste : ce qui est déjà en place, ce qui sera installé."""
+    if not poste:
+        return ""
+    en_place = [x["outil"] for x in poste if x.get("etat") == "en_place"]
+    manque = [x["outil"] for x in poste if x.get("etat") != "en_place"]
+    return ((f"Déjà en place sur le poste : {', '.join(en_place)}. " if en_place else "")
+            + (f"À installer : {', '.join(manque)}. " if manque else ""))
+
+
 def _apres_mise_en_place(projet, etat, fid, org):
-    """Le workflow est en place : le cadrage démarre."""
+    """Le workflow est en place. Des outils manquent : une tâche « Mise en place de l'environnement » ouvre le workflow,
+    le cadrage vient après sa fin. Sinon le cadrage démarre tout de suite."""
+    manquants = environnement.a_installer(org.get("environnement") or [])
+    if not manquants:
+        return _repondre_cadrage(projet, etat, fid)
+    journal = ["Outils à installer (de préférence sans droits d'administrateur, depuis les sources officielles) :"]
+    journal += [f"- {x['outil']} ({', '.join(x.get('executables') or [])}) : {x.get('installation', '')}"
+                for x in manquants]
+    journal.append("Vérifie chaque outil après son installation (chemin et version) et rends compte.")
+    _creer_tache(projet, "Mise en place de l'environnement", fid, ROLE_ENVIRONNEMENT, "environnement",
+                 colonne=org["workflow"]["flux"][0]["id"], journal=journal)
+    _dire(projet, fid, "Avant le cadrage, j'installe les outils qui manquent sur le poste : "
+                       + ", ".join(x["outil"] for x in manquants) + ".")
+    return _demarrer_en_attente(projet, etat, fid)
+
+
+def _verifier_le_poste(projet, fid):
+    """Revérifie les outils encore à installer, note le résultat dans les réglages, rend ceux qui manquent."""
+    a_refaire = [x for x in _factory(projet)["environnement"] if x.get("etat") != "en_place"]
+    verifies = _verifier_poste(projet, a_refaire)
+    if verifies:
+        lancer(projet, "organisation", {"action": "environnement", "outils": verifies})
+    return environnement.a_installer(verifies)
+
+
+def _poste_pret_ou_decision(projet, etat, fid, intro=None):
+    """Après l'installation (ou son échec) : tout est en place, le cadrage démarre ; sinon une décision au Directeur dit ce
+    qui manque et comment l'installer à la main (« C'est fait » revérifie, « Continuer sans » laisse avancer)."""
+    manquants = _verifier_le_poste(projet, fid)
+    f = _fonc(projet, fid)
+    if not manquants:
+        for d in f.get("decisions") or []:
+            if d["genre"] == "environnement":
+                lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
+        return _repondre_cadrage(projet, etat, fid)
+    lignes = [f"- {x['outil']} : {x.get('installation') or 'voir la documentation officielle'}" for x in manquants]
+    texte = ((intro + " ") if intro else "") + (
+        "Il manque encore des outils sur le poste, et je n'ai pas pu les installer. Voici ce qu'il faut, et comment "
+        "l'installer à la main :\n" + "\n".join(lignes) + "\nDites « C'est fait » quand c'est installé (je revérifie), "
+        "ou « Continuer sans » : les étapes qui en ont besoin le diront.")
+    if not _a_decision(f, "environnement"):
+        lancer(projet, "decision", {"action": "poser", "portee": fid, "genre": "environnement", "texte": texte,
+                                    "environnement": [dict(x) for x in manquants]})
+        _dire(projet, fid, texte)
+    return []
+
+
+def _sur_environnement(projet, demande, etat):
+    """La réponse à « il manque des outils sur le poste » : « C'est fait » revérifie, « Continuer sans » laisse avancer."""
+    fid = demande["fonctionnalite"]
+    f = _fonc(projet, fid)
+    d = _decision_de(f, demande["decision"], "environnement")
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if demande["verdict"] == CONTINUER_SANS:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _dire(projet, fid, "Je continue sans ces outils : les étapes qui en ont besoin le diront.")
+        _terminer(projet, suite, "C'est noté : le cadrage commence sans ces outils.")
+        return _repondre_cadrage(projet, etat, fid)
+    if demande["verdict"] != C_EST_FAIT:
+        raise Refus(f"réponse inconnue : {demande['verdict']}")
+    manquants = _verifier_le_poste(projet, fid)
+    if manquants:
+        _terminer(projet, suite, "Il manque encore : " + ", ".join(x["outil"] for x in manquants) + ".")
+        return []
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
+    _terminer(projet, suite, "Merci, les outils sont en place : le cadrage commence.")
     return _repondre_cadrage(projet, etat, fid)
 
 
@@ -951,7 +1067,7 @@ def _sur_challenge(projet, demande, etat):
 
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
-        "genre_fonctionnalite": _sur_genre_fonctionnalite,
+        "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
         "partenaires_actualiser": _sur_partenaires, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}
@@ -1225,6 +1341,11 @@ def _matiere(projet, etat, t):
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
                     "Un défaut devient un contrôle : sois précis."]
+    elif etape == "environnement":
+        parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
+                    "(son chemin et sa version). Dans ton message, dis pour chaque outil : en place (chemin, version) ou "
+                    "pas installé (pourquoi, et comment l'installer à la main). Si une installation échoue, n'insiste "
+                    "pas : rends `statut: fait` avec ce constat."]
     elif etape in ("correction", "retour", "demande", "challenge"):
         parties.append(f"Élément : {t.get('element') or '(aucun)'}")
     if consignes:
@@ -1280,7 +1401,7 @@ def traiter_retour(projet, execution, etat):
     if r["statut"] == "echec":
         _bloquer_taches(projet, taches, "L'agent n'a pas pu finir : " + reponse[:300])
         _terminer(projet, {"demande": liee}, "L'agent n'a pas pu finir : " + reponse[:300])
-        return []
+        return _apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
     t0 = _tache(projet, taches[0])
     for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=taches[0], agent=execution.agent,
                                               etape=str(t0.get("etape") or "")):
@@ -1326,7 +1447,15 @@ def _agent_en_echec(projet, etat, execution, depart):
     if t.get("fonctionnalite"):
         _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
-    return []
+    return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
+
+
+def _apres_echec_d_installation(projet, etat, taches, raison):
+    """Une installation qui échoue ne bloque pas la fonctionnalité : la décision au Directeur dit ce qui manque."""
+    t = _tache(projet, taches[0])
+    if str(t.get("etape")) != "environnement" or not t.get("fonctionnalite"):
+        return []
+    return _poste_pret_ou_decision(projet, etat, t["fonctionnalite"], intro=raison)
 
 
 def _bloquer_taches(projet, taches, raison):
@@ -1373,6 +1502,8 @@ def _suite_de_tache(projet, etat, t, execution, r):
         return _suite_cadrage(projet, etat, t, r)
     if etape == "prototype":
         return _suite_prototype(projet, etat, t, r)
+    if etape == "environnement":
+        return _poste_pret_ou_decision(projet, etat, fid)
     cle = f"{fid}/{t.get('element')}"
     v = _m(etat, "elements").get(cle)
     if v is None:

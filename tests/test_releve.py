@@ -808,8 +808,8 @@ class TestVersion4(unittest.TestCase):
     def test_decision_genre_inconnu(self):
         self.refus(v4(fonctionnalites=[fonc(decisions=[{"id": "d", "genre": "x", "texte": "T"}])]), "genre")
         for g in releve.DECISIONS_FONCTIONNALITE:
-            extra = ({"propose": "jeu-mobile", "genres_connus": ["badges"], "incertain": False}
-                     if g == "genre_fonctionnalite" else {})
+            extra = {"genre_fonctionnalite": {"propose": "jeu-mobile", "genres_connus": ["badges"], "incertain": False},
+                     "environnement": {"environnement": [{"outil": "Java", "etat": "a_installer"}]}}.get(g, {})
             self.assertEqual(releve.valider(v4(fonctionnalites=[
                 fonc(decisions=[{"id": "d", "genre": g, "texte": "T", **extra}])])), [], g)
 

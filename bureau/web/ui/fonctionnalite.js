@@ -7,7 +7,8 @@ import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage} from 
 import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
-import {urlProjet} from "./projets.js";
+import {urlProjet, projetCourant} from "./projets.js";
+import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
 import {reessayerImage} from "./reessai.js";
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
@@ -671,6 +672,17 @@ export function demandeRetourLivrable(f, element, texte) {
     : {type: "message", fonctionnalite: f.id, texte: `Retour sur le livrable de « ${element || "la fonctionnalité"} » : ${texte}`};
 }
 
+// « Télécharger » un livrable : /api/telecharger le sert toujours en pièce jointe (un apk s'installe depuis le
+// téléphone) ; l'adresse est complète, celle du bureau que la page a ouverte.
+function lienTelecharger(f, d) {
+  let origine = null;
+  try { origine = globalThis.location?.origin || null; } catch { /* hors navigateur */ }
+  const a = el("a", "document-telecharger", "Télécharger");
+  a.href = urlTelechargement(f.id, d.chemin, projetCourant(), origine);
+  a.setAttribute("download", String(d.chemin).split(/[\\/]/).pop());
+  return a;
+}
+
 // La partie « Livrables » du panneau : par élément, ses fichiers finaux et « Demander une modification ».
 function partieLivrables(ctx, f) {
   const groupes = livrablesParElement(f);
@@ -708,6 +720,7 @@ function partieLivrables(ctx, f) {
         b.addEventListener("click", () => ouvrirVisionneuse(images, images.findIndex((x) => x.chemin === d.chemin), url));
         vignette.append(b);
         if (legendeDe(d)) vignette.append(el("figcaption", "vignette-legende", legendeDe(d)));
+        vignette.append(lienTelecharger(f, d));
         rangee.append(vignette);
       } else {
         const a = el("a", "document-lien", d.titre);
@@ -715,6 +728,7 @@ function partieLivrables(ctx, f) {
         a.target = "_blank";
         a.rel = "noopener";
         rangee.append(a);
+        if (EXTENSIONS_TELECHARGEABLES.includes(extension(d.chemin))) rangee.append(lienTelecharger(f, d));
       }
     }
     art.append(rangee);

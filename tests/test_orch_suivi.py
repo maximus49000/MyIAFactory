@@ -313,6 +313,38 @@ class TestSuivi(AvecProjet):
         self.assertEqual(code, 0, dec)
         decisions = [x for x in sortie("etat")[1]["decisions"] if x.get("genre") == "valider_etape"]
         self.assertEqual(decisions[-1]["fichiers"], [{"chemin": f"pieces/{f}/g.png", "titre": "Icône du jeu"}])
+        # La fenêtre de validation : un apk trouvé dans le projet (hors de `.factory`) garde son chemin, avec sa taille
+        # et sa date ; un apk absent ou hors du projet n'en a pas. Points et lien d'accès vérifiés.
+        (jeu / "build").mkdir()
+        (jeu / "build" / "jeu.apk").write_bytes(b"PK" + b"\x00" * 8)
+        (self.dossier / "dehors.apk").write_bytes(b"PK")
+        valider = {"action": "poser", "portee": "projet", "genre": "valider_etape", "fonctionnalite": f,
+                   "texte": "Valider", "element": {"id": "e2", "nom": "Apk"}, "etape": "dev", "tache": t["id"],
+                   "fichiers": [{"chemin": "build/jeu.apk", "titre": "L'apk"}, {"chemin": "build/absent.apk", "titre": "A"},
+                                {"chemin": "../dehors.apk", "titre": "D"}],
+                   "points": ["Le jeu se lance"], "acces": {"url": "http://127.0.0.1:5173/", "description": "Le site"}}
+        code, dec = sortie("decision", entree=valider)
+        self.assertEqual(code, 0, dec)
+        d = [x for x in sortie("etat")[1]["decisions"] if x.get("genre") == "valider_etape"][-1]
+        apk, absent, dehors = d["fichiers"]
+        self.assertEqual((apk["chemin"], apk["taille"]), ("build/jeu.apk", 10))
+        self.assertIn("date", apk)
+        self.assertEqual([("taille" in x) for x in (absent, dehors)], [False, False])
+        self.assertEqual((d["points"], d["acces"]["url"]), (["Le jeu se lance"], "http://127.0.0.1:5173/"))
+        for mauvais in ({"points": []}, {"points": ["x" * 161]}, {"points": [f"p{i}" for i in range(9)]},
+                        {"acces": {"url": "file:///c:/"}}, {"acces": {"url": "http://a.fr/", "autre": 1}}):
+            code, err = sortie("decision", entree={**valider, **mauvais})
+            self.assertEqual(code, 1, mauvais)
+        # Les réponses de la fenêtre : une par point, le verdict en découle (vérifié dès l'outil).
+        base = {"type": "valider_etape", "decision": d["id"]}
+        self.assertEqual(sortie("actions", entree={**base, "verdict": "valider",
+                                                   "reponses": [{"point": "Le jeu se lance", "ok": True}]})[0], 0)
+        for mauvais in ({"verdict": "renvoyer", "reponses": [{"point": "Le jeu se lance", "ok": True}]},
+                        {"verdict": "valider", "reponses": []},
+                        {"verdict": "valider", "reponses": [{"point": "a", "ok": True}, {"point": "a", "ok": True}]},
+                        {"verdict": "valider", "reponses": [{"point": "a", "ok": 1}]},
+                        {"verdict": "valider", "reponses": [{"point": "a", "ok": True, "x": 1}]}):
+            self.assertEqual(sortie("actions", entree={**base, **mauvais})[0], 1, mauvais)
         # Réparer : redonner l'ancien chemin d'un document déjà rangé le déplace vers la copie (pas de doublon).
         (jeu / "assets" / "s" / "f.png").write_bytes(png + b"f")
         docs = json.loads((jeu / ".factory" / "suivi.json").read_text(encoding="utf-8"))

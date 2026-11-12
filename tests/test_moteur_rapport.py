@@ -35,6 +35,19 @@ class Lire(unittest.TestCase):
         lot = depart.COMPTE_RENDU_MOTEUR
         self.assertIn("comptes_rendus", lot)
 
+    def test_points_a_verifier_et_acces_facultatifs(self):
+        """La fenêtre de validation : une forme fautive est écartée, jamais une raison de refuser le rapport."""
+        points = ["Le menu s'ouvre", "  Le son\nse coupe ", "x" * 161, 3, "Le menu s'ouvre"] + [f"p{i}" for i in range(9)]
+        r = rapport.lire(reponse({**FAIT, "points_a_verifier": points,
+                                  "acces": {"url": "http://127.0.0.1:5173/", "description": "Le site"},
+                                  "comptes_rendus": [{"element": "e1", "texte": "Vert.", "points_a_verifier": "non",
+                                                      "acces": {"url": "javascript:x"}}]}))
+        self.assertEqual(r["points_a_verifier"], ["Le menu s'ouvre", "Le son se coupe"] + [f"p{i}" for i in range(6)])
+        self.assertEqual(r["acces"], {"url": "http://127.0.0.1:5173/", "description": "Le site"})
+        self.assertEqual(r["comptes_rendus"], [{"element": "e1", "texte": "Vert.", "points_a_verifier": []}])
+        self.assertNotIn("acces", rapport.lire(reponse({**FAIT, "acces": "http://127.0.0.1"})))
+        self.assertNotIn("points_a_verifier", rapport.lire(reponse(FAIT)))
+
     def test_rapport_sans_bloc_illisible(self):
         for texte in ("Tout est fait.", "```json\n{pas du json\n```", reponse({"statut": "autre"}), ""):
             with self.subTest(texte=texte), self.assertRaises(rapport.RapportIllisible):

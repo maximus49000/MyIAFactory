@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import abonnement as modabonnement
 from .statuts import TRES_ANCIEN, lire_date
@@ -266,6 +267,94 @@ def image_legendee_ok(x):
 
 def _liste_d_images(v, max_n=None):
     return isinstance(v, list) and all(image_legendee_ok(x) for x in v) and (max_n is None or len(v) <= max_n)
+
+
+# --- La fenêtre de validation (conception 2026-11-12-fenetre-de-validation-design.md) : les points à vérifier, le lien
+# d'accès d'un site qui tourne, les livrables téléchargeables. Partagé par l'outil, le moteur et le bureau.
+MAX_POINTS = 8          # les points à vérifier d'une validation : 3 à 8 demandés à l'agent, 1 à 8 acceptés
+MAX_POINT = 160         # chacun : une phrase courte
+POINT_PAR_DEFAUT = "L'élément correspond à l'objectif"   # une décision d'avant, sans points
+MAX_ACCES_URL = 500
+MAX_ACCES_DESCRIPTION = 200
+HOTES_LOCAUX = ("127.0.0.1", "localhost", "::1")
+# Ce qui se télécharge depuis la fenêtre de validation et la partie « Livrables » : extension -> type servi (toujours en
+# pièce jointe). Les images PNG/JPEG se montrent aussi, les autres ne s'ouvrent jamais dans la page.
+TELECHARGEABLES = {
+    ".apk": "application/vnd.android.package-archive", ".aab": "application/octet-stream",
+    ".zip": "application/zip", ".7z": "application/x-7z-compressed", ".gz": "application/gzip",
+    ".tgz": "application/gzip", ".tar": "application/x-tar", ".pdf": "application/pdf",
+    ".exe": "application/vnd.microsoft.portable-executable", ".msi": "application/x-msi",
+    ".msix": "application/octet-stream", ".appx": "application/octet-stream", ".ipa": "application/octet-stream",
+    ".dmg": "application/x-apple-diskimage", ".deb": "application/vnd.debian.binary-package",
+    ".appimage": "application/octet-stream", ".pck": "application/octet-stream", ".glb": "model/gltf-binary",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
+    ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".epub": "application/epub+zip",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain; charset=utf-8", ".md": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8",
+    ".html": "text/html; charset=utf-8"}
+EXTENSIONS_IMAGES = (".png", ".jpg", ".jpeg")
+
+
+def extension(chemin):
+    """L'extension en minuscules (`.apk`), « » si le chemin n'en a pas."""
+    nom = str(chemin or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return ("." + nom.rsplit(".", 1)[1].lower()) if "." in nom.strip(".") else ""
+
+
+def est_image(chemin):
+    return extension(chemin) in EXTENSIONS_IMAGES
+
+
+def est_telechargeable(chemin):
+    """Un livrable à télécharger (pas une image : celles-là se montrent)."""
+    e = extension(chemin)
+    return e in TELECHARGEABLES and e not in EXTENSIONS_IMAGES
+
+
+def point_ok(p):
+    return isinstance(p, str) and p.strip() != "" and len(p.strip()) <= MAX_POINT
+
+
+def points_ok(points):
+    """Les points d'une décision : 1 à 8 phrases de 160 caractères au plus, sans doublon."""
+    return (isinstance(points, list) and 1 <= len(points) <= MAX_POINTS and all(point_ok(p) for p in points)
+            and len({p.strip() for p in points}) == len(points))
+
+
+def points_de_decision(d):
+    """Les points à vérifier d'une décision `valider_etape` ; une décision d'avant n'en a qu'un."""
+    p = (d or {}).get("points")
+    return [x.strip() for x in p] if points_ok(p) else [POINT_PAR_DEFAUT]
+
+
+def acces_ok(a):
+    """Le lien d'accès d'un site qui tourne : `{url (http ou https, avec un hôte), description?}`."""
+    if not isinstance(a, dict) or set(a) - {"url", "description"}:
+        return False
+    url, description = a.get("url"), a.get("description")
+    if not isinstance(url, str) or not 0 < len(url) <= MAX_ACCES_URL or any(c.isspace() or ord(c) < 32 for c in url):
+        return False
+    try:
+        morceaux = urlsplit(url)
+        port = morceaux.port
+    except ValueError:
+        return False
+    if morceaux.scheme not in ("http", "https") or not morceaux.hostname or morceaux.username or port == 0:
+        return False
+    return description is None or (isinstance(description, str) and len(description) <= MAX_ACCES_DESCRIPTION)
+
+
+def acces_local(url):
+    """`(hôte, port)` si l'URL vise un serveur de l'ordinateur que le bureau peut relayer (http, 127.0.0.1, localhost
+    ou ::1, port explicite) ; sinon `None` (un lien direct, ou rien)."""
+    if not acces_ok({"url": url}):
+        return None
+    morceaux = urlsplit(url)
+    if morceaux.scheme != "http" or (morceaux.hostname or "").lower() not in HOTES_LOCAUX or morceaux.port is None:
+        return None
+    return morceaux.hostname.lower(), morceaux.port
 
 
 def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
@@ -525,6 +614,14 @@ def _verifier_validation(d, nom, erreurs):
     if not isinstance(fichiers, list) or not all(_est_dict(x) and _texte_plein(x.get("chemin"))
                                                  and _texte_plein(x.get("titre")) for x in fichiers):
         erreurs.append(f"{ici} : « fichiers » doit être une liste de {{chemin, titre}}.")
+    elif not all((x.get("taille") is None or (isinstance(x["taille"], int) and not isinstance(x["taille"], bool)
+                                              and x["taille"] >= 0))
+                 and (x.get("date") is None or isinstance(x["date"], str)) for x in fichiers):
+        erreurs.append(f"{ici} : la « taille » d'un fichier est un entier d'octets, sa « date » un texte.")
+    if d.get("points") is not None and not points_ok(d["points"]):      # facultatifs : la fenêtre de validation
+        erreurs.append(f"{ici} : « points » : 1 à {MAX_POINTS} phrases de {MAX_POINT} caractères au plus.")
+    if d.get("acces") is not None and not acces_ok(d["acces"]):
+        erreurs.append(f"{ici} : « acces » est {{url (http ou https), description?}}.")
 
 
 def _verifier_genre_fonctionnalite(d, nom, erreurs):

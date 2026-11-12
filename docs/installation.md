@@ -179,11 +179,35 @@ Les routes et leur corps sont dans [`releve.md`](releve.md) (« Créer un projet
 
 Un workflow peut contenir des étapes **« validation du Directeur »** (vous les demandez au chef, par exemple « je veux
 essayer la version de test avant la livraison »). Quand un élément y arrive, le travail de cet élément s'arrête et
-l'élément apparaît au bureau de direction avec le compte rendu et les fichiers de l'étape précédente. Deux gestes :
+l'élément apparaît au bureau de direction : son objectif, ce qu'il y a à valider, ce que vous aurez à vérifier (« 1
+livrable · 3 points à vérifier ») et un seul bouton, **« Ouvrir la validation »**. On ne valide plus depuis la liste.
 
-- **Valider** : l'élément passe à l'étape suivante ;
-- **Renvoyer avec une remarque** (texte obligatoire) : l'étape précédente est refaite pour cet élément, avec votre
-  remarque, puis il revient à la validation.
+**La fenêtre de validation** (plein écran au téléphone ; Fermer, Échap ou un clic à côté la referment) :
+
+1. l'objectif de l'élément et ce qu'il y a à valider ;
+2. de quoi le vérifier : chaque livrable avec son nom, sa taille, sa date et **« Télécharger »** (un `.apk` se
+   télécharge et s'installe depuis le téléphone, par Tailscale comme depuis l'ordinateur), le **lien d'accès** d'un site
+   qui tourne (**« Ouvrir »**), les images légendées (un toucher les agrandit) ;
+3. le compte rendu de cet élément ;
+4. les **points à vérifier** (3 à 8 phrases tirées du cahier, rendues par l'agent de l'étape précédente ; à défaut,
+   tirées de l'objectif) : pour chacun, **OK** ou **À revoir** — tous doivent être choisis ;
+5. un champ libre, facultatif, pour signaler ce qui sort de ces points.
+
+Un seul envoi : tout OK, l'élément passe à l'étape suivante (votre texte libre est noté et transmis à l'agent suivant) ;
+au moins un « À revoir », l'étape précédente est refaite avec la liste des points refusés et votre texte, puis
+l'élément revient à la validation. Une validation posée avant cette fenêtre s'ouvre aussi, avec un seul point :
+« L'élément correspond à l'objectif ».
+
+**Jamais rien à valider.** L'agent qui précède une validation doit donner des images, un livrable téléchargeable ou un
+lien d'accès. S'il n'en donne pas, l'étape est refaite une fois avec cette consigne ; s'il échoue encore, la tâche de
+validation est bloquée avec la raison (faites un retour sur la tâche).
+
+**Un site en cours de développement.** L'agent déclare son adresse (`http://127.0.0.1:5173/`, par exemple) et laisse
+le serveur tourner. Sur l'ordinateur, « Ouvrir » y va directement ; au téléphone, le bureau sert de relais
+(`/apercu/…`, derrière le même code d'accès). Limites du relais : une application qui écrit des adresses absolues
+(`/src/main.js`, `/api/…`) les fait partir hors du relais — il faut la lancer avec une base relative (Vite : `--base ./`
+sur un `build` puis `preview`) ; le rechargement à chaud (WebSocket) ne passe pas : rechargez la page ; les cookies du
+site ne sont pas transmis (une connexion au site ne tient pas) ; seuls GET, HEAD et POST passent.
 
 Ces étapes ne coûtent rien en agents. Elles s'ajoutent aux validations fixes (cahier des charges, méthode).
 

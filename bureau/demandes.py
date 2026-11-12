@@ -28,7 +28,7 @@ AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte",), "environnement": ("fonctionnalite", "outil"),
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
@@ -53,6 +53,9 @@ def nettoyer(demande):
     d = {k: demande[k] for k in ("type",) + CHAMPS[genre] + FACULTATIFS.get(genre, ()) if k in demande}
     if isinstance(d.get("cible"), dict):
         d["cible"] = {k: d["cible"][k] for k in ("type", "id") if k in d["cible"]}
+    if genre == "valider_etape" and isinstance(d.get("reponses"), list):   # rien d'autre que le point et la réponse
+        d["reponses"] = [{k: x[k] for k in ("point", "ok") if k in x} if isinstance(x, dict) else x
+                         for x in d["reponses"]]
     if isinstance(d.get("images"), list):  # rien d'autre que le nom, le type et les données n'est transmis
         d["images"] = [{k: i[k] for k in ("nom", "type", "donnees") if k in i} if isinstance(i, dict) else i
                        for i in d["images"]]
@@ -261,11 +264,14 @@ def _verifier_v4(demande, r, elements):
             return f"« description » dépasse {MAX_TEXTE} caractères."
         return None
     if genre == "valider_etape":
-        if _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape") is None:
+        d = _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape")
+        if d is None:
             return "Décision inconnue."
         if demande["verdict"] not in ("valider", "renvoyer"):
             return "Réponse inconnue (valider ou renvoyer)."
         remarque = demande.get("texte")
+        if "reponses" in demande:      # la fenêtre de validation : une réponse par point, le texte libre facultatif
+            return _verifier_reponses(demande, d)
         if demande["verdict"] == "renvoyer":
             if remarque is None or not isinstance(remarque, str) or not remarque.strip():
                 return "Pour renvoyer l'élément, dites ce qu'il faut changer (une remarque est obligatoire)."
@@ -437,6 +443,25 @@ def _verifier_genre_fonctionnalite(demande, r):
         return f"« description » dépasse {MAX_TEXTE} caractères."
     if choix == "nouveau_projet" and not (demande.get("projet_cree") or "").strip():
         return "Le nouveau projet n'est pas indiqué."
+    return None
+
+
+def _verifier_reponses(demande, d):
+    """Les réponses de la fenêtre de validation : exactement une par point de la décision (un seul point pour une
+    décision d'avant), chacune OK ou à revoir ; le verdict en découle ; le texte libre est facultatif."""
+    reponses = demande["reponses"]
+    if (not isinstance(reponses, list) or not all(isinstance(x, dict) and set(x) == {"point", "ok"}
+                                                  and isinstance(x["point"], str) and isinstance(x["ok"], bool)
+                                                  for x in reponses)):
+        return "« reponses » : une réponse {point, ok} par point à vérifier."
+    if sorted(x["point"].strip() for x in reponses) != sorted(releve.points_de_decision(d)):
+        return "Répondez à chaque point à vérifier de cette validation (OK ou À revoir), et à eux seuls."
+    attendu = "valider" if all(x["ok"] for x in reponses) else "renvoyer"
+    if demande["verdict"] != attendu:
+        return f"Le verdict doit être « {attendu} » : il découle des réponses point par point."
+    texte = demande.get("texte")
+    if texte is not None and len(texte) > MAX_TEXTE:
+        return f"« texte » dépasse {MAX_TEXTE} caractères."
     return None
 
 

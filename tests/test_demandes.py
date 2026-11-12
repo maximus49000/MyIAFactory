@@ -659,6 +659,33 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({**base, "verdict": "renvoyer", "texte": "t", "autre": 1}),
                          {**base, "verdict": "renvoyer", "texte": "t"})
 
+    def test_valider_etape_depuis_la_fenetre(self):
+        """Une réponse par point ; une décision d'avant (sans points) n'en a qu'un ; le verdict en découle ; renvoyer
+        n'exige plus de texte (les points à revoir en tiennent lieu)."""
+        import copy
+        r = copy.deepcopy(R5)
+        r["decisions_projet"].append({"id": "v2", "genre": "valider_etape", "texte": "Valider ?", "fonctionnalite": "f1",
+                                      "element": {"id": "e2", "nom": "Jeu"}, "etape": "a", "tache": "t1",
+                                      "compte_rendu": "", "fichiers": [], "points": ["Le jeu se lance", "Le son marche"]})
+        ok = lambda d: self.assertIsNone(demandes.verifier(d, r, frozenset(), None), d)            # noqa: E731
+        refus = lambda d: self.assertTrue(demandes.verifier(d, r, frozenset(), None), d)           # noqa: E731
+        ancien = {"type": "valider_etape", "decision": "v1"}
+        ok({**ancien, "verdict": "valider", "reponses": [{"point": "L'élément correspond à l'objectif", "ok": True}]})
+        refus({**ancien, "verdict": "valider", "reponses": [{"point": "Autre chose", "ok": True}]})
+        base = {"type": "valider_etape", "decision": "v2"}
+        tous = [{"point": "Le jeu se lance", "ok": True}, {"point": "Le son marche", "ok": True}]
+        ok({**base, "verdict": "valider", "reponses": tous})
+        ok({**base, "verdict": "valider", "reponses": tous, "texte": "Une note hors validation"})
+        ok({**base, "verdict": "renvoyer", "reponses": [tous[0], {"point": "Le son marche", "ok": False}]})
+        refus({**base, "verdict": "renvoyer", "reponses": tous})                          # le verdict ne découle pas
+        refus({**base, "verdict": "valider", "reponses": tous[:1]})                       # un point sans réponse
+        refus({**base, "verdict": "valider", "reponses": tous + [{"point": "En plus", "ok": True}]})
+        refus({**base, "verdict": "valider", "reponses": [{"point": "Le jeu se lance", "ok": "oui"}, tous[1]]})
+        refus({**base, "verdict": "valider", "reponses": "tout"})
+        refus({**base, "verdict": "valider", "reponses": tous, "texte": "x" * 3501})
+        self.assertEqual(demandes.nettoyer({**base, "verdict": "valider", "reponses": [{**tous[0], "x": 1}], "y": 2}),
+                         {**base, "verdict": "valider", "reponses": [tous[0]]})
+
     def test_parallelisme(self):
         base = {"type": "parallelisme"}
         self.ok({**base, "agents_locaux_max": 1, "agents_cloud_max": 0})

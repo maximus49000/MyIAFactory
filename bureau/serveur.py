@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import html
+import http.client
 import json
 import mimetypes
 import os
@@ -16,6 +17,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import releve
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -42,7 +44,21 @@ IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
 LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancement, hors de tout dépôt
 ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
-                 "/api/catalogue", "/api/livrable")
+                 "/api/catalogue", "/api/livrable", "/api/telecharger")
+# La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
+TELECHARGEMENT_MAX_OCTETS = 500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
+TELECHARGEABLES = {ext: (type_, True) for ext, type_ in releve.TELECHARGEABLES.items()}
+APERCU = "/apercu/"                     # /apercu/<projet>/<décision>/<chemin> -> http://127.0.0.1:<port>/<chemin>
+APERCU_DELAI_S = 20
+APERCU_MAX_CORPS = 10 * 1024 * 1024     # un formulaire envoyé au site
+APERCU_MAX_REPONSE = 200 * 1024 * 1024
+APERCU_METHODES = ("GET", "HEAD", "POST")
+# En-têtes transmis : rien qui identifie le bureau (ni cookie, ni Origin, ni X-Bureau), pas de compression (le
+# relais ne décode rien) ; du site, rien qui pose un cookie ou une politique sur l'origine du bureau.
+APERCU_ENTETES_REQUETE = ("Accept", "Accept-Language", "Content-Type", "User-Agent", "If-None-Match",
+                          "If-Modified-Since", "Range")
+APERCU_ENTETES_REPONSE = ("content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag",
+                          "content-disposition", "content-language", "location")
 # Le dernier livrable : extensions servies, type, et s'il part en pièce jointe. `.html` et `.txt` sont servis
 # en bac à sable (aucun script, aucune requête au nom du bureau).
 LIVRABLES = {".png": ("image/png", False), ".jpg": ("image/jpeg", False), ".jpeg": ("image/jpeg", False),
@@ -75,11 +91,35 @@ PAGE_ASSOCIER = ("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"
                  "Associer ce téléphone</button></form></body></html>")
 
 
+def _sous(chemin, dossier):
+    try:
+        chemin.relative_to(dossier)
+        return True
+    except ValueError:
+        return False
+
+
 def images_declarees(regl):
     """Vrai si les réglages déclarent au moins une racine d'images (sinon les tâches n'ont pas de vignettes)."""
     conf = regl.get("images")
     racines = conf.get("racines") if isinstance(conf, dict) else None
     return isinstance(racines, list) and any(isinstance(r, str) and r for r in racines)
+
+
+def _location_relayee(valeur, hote, port, prefixe):
+    """La redirection d'un site relayé, ramenée sous le préfixe du relais : une URL absolue vers le site lui-même, ou un
+    chemin depuis sa racine. Tout le reste (relatif, autre site) passe tel quel."""
+    try:
+        morceaux = urlsplit(valeur)
+        cible_port = morceaux.port
+    except ValueError:
+        return valeur
+    if (morceaux.scheme == "http" and (morceaux.hostname or "").lower() in releve.HOTES_LOCAUX
+            and cible_port == port):
+        return prefixe + (morceaux.path or "/") + (f"?{morceaux.query}" if morceaux.query else "")
+    if not morceaux.scheme and not morceaux.netloc and valeur.startswith("/"):
+        return prefixe + valeur
+    return valeur
 
 
 class Projet:
@@ -503,6 +543,60 @@ class Projet:
         except (OSError, ValueError):
             pass
         return None
+
+    def telechargeable(self, fonctionnalite, brut):
+        """Le fichier à télécharger (fenêtre de validation, partie « Livrables »), sinon `None`. Il doit avoir une
+        extension de `releve.TELECHARGEABLES`, être un fichier ordinaire DANS le projet (lien résolu ; jamais dans `.git`),
+        et être soit sous une racine `livrables` ou `documents` des réglages, soit déclaré pour cette fonctionnalité :
+        document `livrable`, ou fichier d'une décision `valider_etape`. Chemin relatif, sans `..` ni lecteur. Cherché
+        depuis le dossier des réglages, puis (réglages dans `.factory`) depuis le dossier du projet."""
+        self.etat()
+        r = self.dernier_releve
+        if r is None or r.get("version", 1) < 4 or not isinstance(brut, str) or not isinstance(fonctionnalite, str):
+            return None
+        f = next((x for x in r["fonctionnalites"] if x.get("id") == fonctionnalite), None)
+        p = Path(brut.replace("\\", "/"))
+        if (f is None or not brut or "\x00" in brut or brut[0] in "/\\" or p.is_absolute() or p.drive or p.anchor
+                or ".." in p.parts or releve.extension(brut) not in releve.TELECHARGEABLES):
+            return None
+        declares = {d.get("chemin") for d in f.get("documents") or [] if isinstance(d, dict) and d.get("livrable") is True}
+        declares |= {x.get("chemin") for d in r.get("decisions_projet") or []
+                     if isinstance(d, dict) and d.get("genre") == "valider_etape" and d.get("fonctionnalite") == fonctionnalite
+                     for x in d.get("fichiers") or [] if isinstance(x, dict)}
+        regl, _ = self.reglages()
+        try:
+            base = Path(regl["dossier"]).resolve()
+            projet = base.parent if base.name == ".factory" else base
+            racines = []
+            for cle in ("livrables", "documents"):
+                conf = regl.get(cle)
+                if isinstance(conf, dict) and isinstance(conf.get("racines"), list):
+                    racines += [(base / x).resolve() for x in conf["racines"] if isinstance(x, str) and x]
+            for candidat in [base / p] + ([projet / p] if projet != base else []):
+                cible = candidat.resolve()
+                if not cible.is_file() or not _sous(cible, projet):
+                    continue
+                if ".git" in [x.lower() for x in cible.relative_to(projet).parts]:
+                    continue
+                if releve.extension(cible.name) not in releve.TELECHARGEABLES:   # un lien peut viser autre chose
+                    continue
+                if brut in declares or any(_sous(cible, x) for x in racines):
+                    return cible
+        except (OSError, ValueError, KeyError):
+            pass
+        return None
+
+    def apercu(self, decision):
+        """`(hôte, port)` du site en cours qu'une décision `valider_etape` encore posée déclare (`acces`), seulement s'il
+        est sur l'ordinateur (http, 127.0.0.1, localhost ou ::1, port explicite) ; sinon `None`."""
+        self.etat()
+        r = self.dernier_releve
+        if r is None or r.get("version", 1) < 4:
+            return None
+        d = next((x for x in r.get("decisions_projet") or [] if isinstance(x, dict) and x.get("id") == decision
+                  and x.get("genre") == "valider_etape"), None)
+        lien = (d or {}).get("acces")
+        return releve.acces_local(lien.get("url")) if isinstance(lien, dict) else None
 
     def resume(self):
         """La ligne du projet dans `/api/projets`. Sert le dernier état connu, même périmé, et le relit en
@@ -1001,6 +1095,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"erreur": "Hôte refusé."})
         morceaux = urlsplit(self.path)
         chemin = morceaux.path
+        if chemin.startswith(APERCU):
+            return self._apercu(morceaux)
         if chemin == "/api/projets":
             return self._json(200, self.server.liste())
         if chemin == "/api/acces":   # jamais atteint depuis un écouteur distant
@@ -1031,6 +1127,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(404, {"erreur": "Projet inconnu."})
         if chemin == "/api/image":
             return self._image(projet, morceaux.query)
+        if chemin == "/api/telecharger":
+            return self._telecharger(projet, morceaux.query)
         if chemin == "/api/etat":
             return self._json(200, self.server.etat_du_projet(projet))
         if chemin == "/api/charge":
@@ -1157,6 +1255,106 @@ class Handler(BaseHTTPRequestHandler):
             if self.command != "HEAD":
                 shutil.copyfileobj(f, self.wfile, 1024 * 1024)
 
+    def _telecharger(self, projet, requete):
+        """Un livrable à télécharger (voir `Projet.telechargeable`), toujours en pièce jointe, 500 Mo au plus."""
+        q = parse_qs(requete, keep_blank_values=True)
+        fonc, chemins = q.get("fonctionnalite", []), q.get("chemin", [])
+        if len(fonc) != 1 or len(chemins) != 1:
+            return self._json(404, {"erreur": "Introuvable."})
+        cible = projet.telechargeable(fonc[0], chemins[0])
+        if cible is None:
+            return self._json(404, {"erreur": "Introuvable."})
+        try:
+            if cible.stat().st_size > TELECHARGEMENT_MAX_OCTETS:
+                return self._json(413, {"erreur": f"Fichier trop gros pour le bureau (plus de "
+                                                  f"{TELECHARGEMENT_MAX_OCTETS // (1024 * 1024)} Mo)."})
+        except OSError:
+            return self._json(404, {"erreur": "Introuvable."})
+        return self._livrable(cible, {cible.suffix.lower(): TELECHARGEABLES[releve.extension(cible.name)]},
+                              (".html",))
+
+    # -- le relais vers le site en cours (fenêtre de validation) -----------
+    def _ports_du_bureau(self):
+        b = self.server.bureau if getattr(self.server, "distant", False) else self.server
+        return {b.server_address[1]} | {e.server_address[1] for e in getattr(b, "ecouteurs", [])}
+
+    def _apercu(self, morceaux):
+        """`/apercu/<projet>/<décision>/<chemin>` : relaie GET, HEAD et POST vers le site qu'une décision `valider_etape`
+        déclare sur l'ordinateur (`Projet.apercu`). Même garde que tout le bureau (code d'accès au téléphone). Pas de
+        WebSocket (501), pas de cookie dans un sens ni dans l'autre, `Location` réécrite sous le préfixe."""
+        if self.command not in APERCU_METHODES:
+            self._vider_corps()
+            return self._json(405, {"erreur": "Méthode non relayée."})
+        morceaux_chemin = morceaux.path.split("/", 4)        # ['', 'apercu', projet, décision, reste]
+        if len(morceaux_chemin) < 4 or not morceaux_chemin[2] or not morceaux_chemin[3]:
+            self._vider_corps()
+            return self._json(404, {"erreur": "Introuvable."})
+        id_ = unquote(morceaux_chemin[2])
+        projet = self.server.projet(None if id_ == "-" else id_)       # « - » : le projet d'un bureau à un seul projet
+        cible = projet.apercu(unquote(morceaux_chemin[3])) if projet is not None else None
+        if cible is None or cible[1] in self._ports_du_bureau():
+            self._vider_corps()
+            return self._json(404, {"erreur": "Aucun site à relayer pour cette validation."})
+        prefixe = f"{APERCU}{morceaux_chemin[2]}/{morceaux_chemin[3]}"
+        if len(morceaux_chemin) == 4:       # sans « / » final : les liens relatifs du site partiraient du mauvais dossier
+            self._vider_corps()
+            self.send_response(308)
+            self.send_header("Location", prefixe + "/" + (f"?{morceaux.query}" if morceaux.query else ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return None
+        if self.headers.get("Upgrade"):
+            self._vider_corps()
+            return self._json(501, {"erreur": "Le relais du bureau ne transmet pas les WebSocket (rechargement à chaud)."})
+        corps = None
+        if self.command == "POST":
+            if self.headers.get("Transfer-Encoding"):
+                return self._json(411, {"erreur": "Longueur du corps requise."})
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = -1
+            if not 0 <= n <= APERCU_MAX_CORPS:
+                return self._json(413, {"erreur": "Corps trop gros pour le relais."})
+            corps = self.rfile.read(n)
+        hote, port = cible
+        entetes = {k: self.headers[k] for k in APERCU_ENTETES_REQUETE if self.headers.get(k)}
+        entetes["Host"] = f"[{hote}]:{port}" if ":" in hote else f"{hote}:{port}"
+        entetes["Accept-Encoding"] = "identity"
+        chemin = "/" + morceaux_chemin[4] + (f"?{morceaux.query}" if morceaux.query else "")
+        connexion = http.client.HTTPConnection(hote, port, timeout=APERCU_DELAI_S)
+        try:
+            connexion.request(self.command, chemin, body=corps, headers=entetes)
+            reponse = connexion.getresponse()
+        except (OSError, http.client.HTTPException):
+            connexion.close()
+            return self._json(502, {"erreur": f"Le site ne répond pas sur le port {port} de l'ordinateur : est-il "
+                                              "lancé ?"})
+        try:
+            self.send_response(reponse.status)
+            for nom, valeur in reponse.getheaders():
+                if nom.lower() not in APERCU_ENTETES_REPONSE:
+                    continue
+                if nom.lower() == "location":
+                    valeur = _location_relayee(valeur, hote, port, prefixe)
+                self.send_header(nom, valeur)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command == "HEAD":
+                return None
+            reste = APERCU_MAX_REPONSE
+            while reste > 0:
+                bloc = reponse.read(min(64 * 1024, reste))
+                if not bloc:
+                    break
+                self.wfile.write(bloc)
+                reste -= len(bloc)
+        except (OSError, http.client.HTTPException):
+            pass
+        finally:
+            connexion.close()
+        return None
+
     def _statique(self, chemin):
         brut = unquote(chemin)
         if "\x00" in brut or "\\" in brut:
@@ -1192,6 +1390,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"erreur": "Hôte refusé."})
         morceaux = urlsplit(self.path)
         chemin = morceaux.path
+        if chemin.startswith(APERCU):
+            return self._apercu(morceaux)
         if chemin == "/api/acces/revoquer":   # jamais atteint depuis un écouteur distant
             self._vider_corps()
             if self.headers.get("X-Bureau") != "1":

@@ -8,9 +8,8 @@ import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnal
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
-import {urlProjet} from "./projets.js";
-import {reessayerImage} from "./reessai.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
+import {aVerifier, enteteValidation, ouvrirValidation, pointsDeValidation} from "./validation.js";
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 const MOTIF_GENRE =/^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -224,68 +223,42 @@ function heureDeVerification(iso) {
   return `${p(t.getDate())}/${p(t.getMonth() + 1)}/${t.getFullYear()} ${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 
-// La demande « valider » ou « renvoyer » d'un élément arrivé à une étape de validation. « Renvoyer » exige une remarque :
-// sans texte, rien ne part (`null`).
+// La demande « valider » ou « renvoyer » sans réponses par point (la forme d'avant la fenêtre de validation, que le
+// moteur accepte toujours). « Renvoyer » exige une remarque : sans texte, rien ne part (`null`). La page n'envoie plus
+// que `corpsValidation` (ui/validation.js).
 export function corpsValiderEtape(decision, verdict, texte) {
   const remarque = String(texte ?? "").trim();
   if (verdict === "renvoyer") return remarque ? {type: "valider_etape", decision: decision.id, verdict, texte: remarque} : null;
   return {type: "valider_etape", decision: decision.id, verdict: "valider"};
 }
 
-const EST_IMAGE = /\.(png|jpe?g)$/i;
-const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
+export {enteteValidation};
 
-// L'en-tête d'un élément à valider : « Objectif : … » (ce qu'il devait produire) puis « À valider : … » ; une ligne
-// absente (décision d'avant) n'est pas montrée.
-export function enteteValidation(d) {
-  const lignes = [];
-  if (plein(d?.objectif)) lignes.push({libelle: "Objectif", texte: d.objectif.trim()});
-  if (plein(d?.a_valider)) lignes.push({libelle: "À valider", texte: d.a_valider.trim()});
-  return lignes;
+// Ce que la fenêtre de validation montrera, en une ligne : « 1 livrable · un lien d'accès · 2 images · 3 points ».
+export function resumeAVerifier(d) {
+  const v = aVerifier(d, {hotePage: "127.0.0.1", projet: null});
+  const n = (k, un, plusieurs) => (k ? `${k} ${k > 1 ? plusieurs : un}` : null);
+  return [n(v.livrables.length, "livrable", "livrables"), v.acces ? "un lien d'accès" : null,
+    n(v.images.length, "image", "images"), n(pointsDeValidation(d).length, "point à vérifier", "points à vérifier")]
+    .filter(Boolean).join(" · ");
 }
 
-// Un élément attend votre validation : son objectif et ce qu'il y a à valider, puis ce que l'étape précédente a rendu
-// pour CET élément seulement (compte rendu, fichiers : les images se voient, les autres sont nommées avec leur chemin),
-// puis « Valider » ou « Renvoyer avec une remarque » (texte obligatoire).
+// Un élément attend votre validation : au bureau, seulement son résumé (élément, objectif, « À valider », ce qu'il y a
+// à vérifier) et « Ouvrir la validation ». On ne valide plus hors de la fenêtre de validation.
 function decisionValidation(ctx, d) {
   const li = el("li", "decision-validation");
-  li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte),
-            el("div", "lecon-meta", `Élément : ${d.element?.nom || d.element?.id || "?"}`));
+  li.append(lienFonctionnalite(ctx, d), el("div", "lecon-meta", `Élément : ${d.element?.nom || d.element?.id || "?"}`));
   for (const x of enteteValidation(d)) {
     const ligne = el("div", "decision-texte decision-entete");
-    ligne.append(el("strong", "", `${x.libelle} : `), el("span", "", x.texte));
+    ligne.append(el("strong", "", `${x.libelle} : `), el("span", "", tronquer(x.texte, 220)));
     li.append(ligne);
   }
-  if (plein(d.compte_rendu)) li.append(el("div", "decision-texte", d.compte_rendu));
-  for (const f of Array.isArray(d.fichiers) ? d.fichiers : []) {
-    if (!plein(f?.chemin)) continue;
-    if (EST_IMAGE.test(f.chemin)) {
-      const image = el("img", "decision-image");
-      image.src = urlImage(f.chemin);
-      image.alt = f.titre || f.chemin;
-      reessayerImage(image);
-      li.append(image, el("div", "lecon-meta", f.titre || f.chemin));
-    } else {
-      li.append(el("div", "lecon-meta", `${f.titre || f.chemin} : ${f.chemin}`));
-    }
-  }
-  if (!ctx.etat.agir) return li;
-  const remarque = document.createElement("textarea");
-  remarque.rows = 2;
-  remarque.maxLength = 3500;
-  remarque.placeholder = "Ce qu'il faut changer (obligatoire pour renvoyer)";
-  remarque.setAttribute("aria-label", "Remarque pour renvoyer l'élément");
-  const erreur = el("p", "saisie-erreur", "");
-  const rangee = el("div", "lecon-boutons");
-  rangee.append(
-    boutonDemande(ctx, "Valider", "bouton", () => corpsValiderEtape(d, "valider")),
-    boutonDemande(ctx, "Renvoyer avec une remarque", "bouton secondaire", () => corpsValiderEtape(d, "renvoyer", remarque.value),
-      () => {
-        if (corpsValiderEtape(d, "renvoyer", remarque.value) === null) { erreur.textContent = "Dites ce qu'il faut changer pour renvoyer l'élément."; return false; }
-        erreur.textContent = "";
-        return true;
-      }));
-  li.append(remarque, erreur, rangee);
+  if (!enteteValidation(d).length) li.append(el("div", "decision-texte", d.texte));
+  li.append(el("div", "lecon-meta", resumeAVerifier(d)));
+  const b = el("button", "bouton", "Ouvrir la validation");
+  b.type = "button";
+  b.addEventListener("click", () => (ctx.ouvrirValidation || ouvrirValidation)(ctx, d, b));
+  li.append(b);
   return li;
 }
 

@@ -48,6 +48,7 @@ Pour essayer la démo sans rien brancher : `py -3.12 lancer.py serveur --bureau 
 - **Mémoire à trois étages et leçons** : ce qui est appris se garde au niveau du projet, du genre ou de la skill, après validation de l'utilisateur.
 - **Lots par modèle et choix du modèle** : un modèle fait d'une traite ce qu'il peut enchaîner ; la montée de modèle se décide, Fable seulement sur accord.
 - **Bureau au téléphone** : accès privé par Tailscale ou Wi-Fi, code d'accès, vue 3D adaptée.
+- **Fenêtre de validation** : chaque élément à valider s'ouvre dans une fenêtre qui dit quoi vérifier, avec le livrable à télécharger (un apk s'installe depuis le téléphone), le lien du site qui tourne (relayé par le bureau au téléphone) ou des images, des points à cocher « OK » / « À revoir » et un champ libre ; jamais une validation sans rien à vérifier.
 - **Installation guidée** : le plugin et la commande `/myiafactory:installer`, organisation chiffrée, réparation d'une installation existante.
 
 ![Le dossier d'un service : alerte, KPI, connaissances, facturation](docs/img/dossier.jpg)

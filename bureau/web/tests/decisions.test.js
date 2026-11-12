@@ -23,13 +23,13 @@ const ETAT = {agir: true, agents: [], fonctionnalites: [
   {id: "f1", nom: "Casse-briques", etape: "cadrage", decisions: [GENRE,
     {id: "e1", genre: "environnement", texte: "Le JDK ne s'est pas installé.", environnement: [{outil: "JDK"}, "Gradle"]}]}]};
 
-function rendre(etat, barre) {
+function rendre(etat, barre, plus = {}) {
   const demandes = [];
-  const ctx = {etat, ouvrirFonctionnalite() {},
+  const ctx = {etat, ouvrirFonctionnalite() {}, ...plus,
     barre: {demander: async (d) => { demandes.push(d); return {ok: true}; }, nouveauProjet: barre?.nouveauProjet || (() => false)}};
   const contenu = new Noeud("div");
   contenuDecisionsV4(ctx, contenu);
-  return {contenu, demandes};
+  return {contenu, demandes, ctx};
 }
 const boutons = (c) => c.tous((n) => n.tagName === "button");
 const bouton = (c, libelle) => boutons(c).find((b) => b.textContent === libelle);
@@ -223,15 +223,20 @@ const VALIDATION = {id: "v1", genre: "valider_etape", texte: "L'élément « Acc
   compte_rendu: "Tout est vert, apk d'essai prêt.",
   fichiers: [{chemin: "pieces/f1/essai.png", titre: "Capture de l'essai"}, {chemin: "pieces/f1/jeu.apk", titre: "L'apk d'essai"}]};
 
-test("valider_etape montre le compte rendu et les fichiers", () => {
-  const {contenu} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [VALIDATION]});
+test("valider_etape : au bureau, le résumé et « Ouvrir la validation » seulement", () => {
+  const ouvertes = [];
+  const {contenu, demandes, ctx} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [VALIDATION]}, null,
+    {ouvrirValidation: (c, d, b) => ouvertes.push([c, d, b])});
   assert.match(contenu.textContent, /Élément : Accueil/);
-  assert.match(contenu.textContent, /Tout est vert, apk d'essai prêt\./);
-  const images = contenu.tous((n) => n.tagName === "img");
-  assert.equal(images.length, 1);                                              // l'image se voit
-  assert.match(images[0].src, /\/api\/image\?chemin=pieces%2Ff1%2Fessai\.png/);
-  assert.match(contenu.textContent, /L'apk d'essai : pieces\/f1\/jeu\.apk/);  // l'autre fichier : titre et chemin
-  assert.ok(bouton(contenu, "Valider") && bouton(contenu, "Renvoyer avec une remarque"));
+  assert.match(contenu.textContent, /1 livrable · 1 image · 1 point à vérifier/);
+  assert.doesNotMatch(contenu.textContent, /Tout est vert/);                   // le compte rendu est dans la fenêtre
+  assert.equal(contenu.tous((n) => n.tagName === "img").length, 0);
+  assert.equal(bouton(contenu, "Valider"), undefined);                         // plus de validation hors de la fenêtre
+  assert.equal(bouton(contenu, "Renvoyer avec une remarque"), undefined);
+  const b = bouton(contenu, "Ouvrir la validation");
+  b.auteurs.click[0]();
+  assert.deepEqual(ouvertes, [[ctx, VALIDATION, b]]);
+  assert.deepEqual(demandes, []);
 });
 
 test("valider_etape rappelle l'objectif et ce qu'il y a à valider, avant le compte rendu", () => {
@@ -242,23 +247,15 @@ test("valider_etape rappelle l'objectif et ce qu'il y a à valider, avant le com
     {libelle: "À valider", texte: "Validation de la direction artistique — le style avant de faire le jeu"}]);
   assert.deepEqual(enteteValidation(VALIDATION), []);                            // une décision d'avant : rien
   const texte = rendre({...ETAT, fonctionnalites: [], decisions_projet: [d]}).contenu.textContent;
-  const [o, v, c] = ["Objectif : L'écran", "À valider : Validation de la direction", "Tout est vert"].map((x) => texte.indexOf(x));
-  assert.ok(o >= 0 && o < v && v < c, texte);
+  const [o, v, b] = ["Objectif : L'écran", "À valider : Validation de la direction", "Ouvrir la validation"]
+    .map((x) => texte.indexOf(x));
+  assert.ok(o >= 0 && o < v && v < b, texte);
 });
 
-test("renvoyer exige une remarque", async () => {
+test("la forme d'avant (sans réponses par point) : renvoyer exige une remarque", () => {
   assert.equal(corpsValiderEtape(VALIDATION, "renvoyer", "   "), null);
   assert.equal(corpsValiderEtape(VALIDATION, "renvoyer"), null);
   assert.deepEqual(corpsValiderEtape(VALIDATION, "renvoyer", " Le menu est trop chargé. "),
     {type: "valider_etape", decision: "v1", verdict: "renvoyer", texte: "Le menu est trop chargé."});
   assert.deepEqual(corpsValiderEtape(VALIDATION, "valider", "ignoré"), {type: "valider_etape", decision: "v1", verdict: "valider"});
-  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [VALIDATION]});
-  await bouton(contenu, "Renvoyer avec une remarque").auteurs.click[0]();
-  assert.deepEqual(demandes, []);                                              // sans remarque, rien ne part
-  assert.match(contenu.textContent, /Dites ce qu'il faut changer/);
-  contenu.tous((n) => n.tagName === "textarea")[0].value = "Le menu est trop chargé.";
-  await bouton(contenu, "Renvoyer avec une remarque").auteurs.click[0]();
-  await bouton(contenu, "Valider").auteurs.click[0]();
-  assert.deepEqual(demandes, [{type: "valider_etape", decision: "v1", verdict: "renvoyer", texte: "Le menu est trop chargé."},
-                              {type: "valider_etape", decision: "v1", verdict: "valider"}]);
 });

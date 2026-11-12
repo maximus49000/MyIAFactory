@@ -444,6 +444,21 @@ def _empreinte_demande(d):
     return {k: v for k, v in d.items() if k not in ("id", "statut", "reponse")}
 
 
+def erreur_reponses(reponses, verdict):
+    """Les réponses de la fenêtre de validation : `[{point, ok}]`, un point au plus une fois, 1 à 8 ; le verdict en
+    découle (tous OK : « valider », sinon « renvoyer »). Le message d'erreur, ou `None`."""
+    if (not isinstance(reponses, list) or not 1 <= len(reponses) <= rel.MAX_POINTS
+            or not all(isinstance(x, dict) and set(x) == {"point", "ok"} and rel.point_ok(x["point"])
+                       and isinstance(x["ok"], bool) for x in reponses)
+            or len({x["point"].strip() for x in reponses}) != len(reponses)):
+        return (f"« reponses » : une réponse {{point, ok (vrai ou faux)}} par point à vérifier, {rel.MAX_POINTS} au "
+                "plus.")
+    attendu = "valider" if all(x["ok"] for x in reponses) else "renvoyer"
+    if verdict != attendu:
+        return f"Le verdict doit être « {attendu} » : il découle des réponses point par point."
+    return None
+
+
 def cmd_actions(ctx, e):
     """Une demande du bureau : elle devient une ligne « en attente » du suivi et du journal."""
     genre = e.get("type")
@@ -453,6 +468,10 @@ def cmd_actions(ctx, e):
     if genre == "deplacer" and isinstance(cible, str) and (cible == "orchestration" or cible.startswith("cadrage:")):
         # Ces deux tâches ne sont montrées qu'au relevé (le chef qui orchestre, un cadrage en cours) : rien à déplacer.
         raise Refus("Cette tâche suit l'orchestrateur et ne se déplace pas.")
+    if genre == "valider_etape" and "reponses" in e:     # la fenêtre de validation : une réponse par point
+        probleme = erreur_reponses(e["reponses"], e.get("verdict"))
+        if probleme:
+            raise Refus(probleme)
     with ctx.suivi.transaction() as s:
         demande = {k: v for k, v in e.items() if k != "images"}
         demande["t"] = e["t"] if _date_valide(e.get("t")) else su.maintenant()
@@ -918,9 +937,58 @@ def _validation_decidee(ctx, s, e):
             if not isinstance(v, str) or len(v) > 600:
                 raise Refus(f"« {cle} » est un texte de 600 caractères au plus.")
             plus[cle] = v
+    if e.get("points") is not None:       # les points à vérifier de la fenêtre de validation
+        if not rel.points_ok(e["points"]):
+            raise Refus(f"« points » : 1 à {rel.MAX_POINTS} phrases différentes de {rel.MAX_POINT} caractères au plus.")
+        plus["points"] = [p.strip() for p in e["points"]]
+    if e.get("acces") is not None:        # le lien d'accès d'un site qui tourne
+        if not rel.acces_ok(e["acces"]):
+            raise Refus("« acces » est {url (http ou https), description? (200 caractères au plus)}.")
+        plus["acces"] = {k: v for k, v in e["acces"].items() if v is not None}
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
             "tache": tache, "compte_rendu": compte_rendu, **plus,
-            "fichiers": [{"chemin": ctx.image_rangee(x["chemin"], fid), "titre": x["titre"]} for x in fichiers]}
+            "fichiers": [_fichier_a_valider(ctx, x, fid) for x in fichiers]}
+
+
+def _fichier_a_valider(ctx, x, fid):
+    """Un fichier de la décision `valider_etape` : une image est rangée là où le bureau la sert ; un livrable
+    téléchargeable trouvé dans le projet reçoit sa `taille` (octets) et sa `date` (modification), et son chemin compté
+    depuis la factory (ou, hors de `.factory`, depuis le dossier du projet), ce que la route de téléchargement attend."""
+    chemin = x["chemin"]
+    if rel.est_image(chemin):
+        return {"chemin": ctx.image_rangee(chemin, fid), "titre": x["titre"]}
+    sortie = {"chemin": chemin, "titre": x["titre"]}
+    if rel.est_telechargeable(chemin):
+        base = Path(ctx.f["base"]).resolve()
+        projet = base.parent if base.name == ".factory" else base     # comme le moteur et le bureau
+        trouve = fichier_du_projet(ctx.f, projet, chemin)
+        if trouve is not None:
+            sortie["chemin"] = (trouve.relative_to(base) if _sous(trouve, base) else trouve.relative_to(projet)).as_posix()
+            stat = trouve.stat()
+            sortie["taille"] = stat.st_size
+            sortie["date"] = datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(timespec="seconds")
+    return sortie
+
+
+def fichier_du_projet(f, dossier_projet, chemin):
+    """Le fichier (résolu) que cite un agent, s'il existe DANS le dossier du projet : cherché depuis la factory, les
+    réglages, puis le dossier du projet (comme `image_rangee`). `None` sinon : absent, hors du projet (lien compris),
+    « .. », caractère nul ou dans `.git`."""
+    if not isinstance(chemin, str) or not chemin.strip() or "\x00" in chemin:
+        return None
+    p = Path(chemin.replace("\\", "/"))
+    if ".." in p.parts:
+        return None
+    projet = Path(dossier_projet).resolve()
+    base = racines_servies(f)[0]
+    try:
+        for c in ([p] if p.is_absolute() else [f["base"] / p, base / p, projet / p]):
+            r = c.resolve()
+            if r.is_file() and _sous(r, projet) and ".git" not in r.relative_to(projet).parts:
+                return r
+    except (OSError, ValueError):
+        return None
+    return None
 
 
 def _phrase(e, cle):

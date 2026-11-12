@@ -9,7 +9,10 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
-     "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?}]?}
+     "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?}]?,
+     "points_a_verifier": [str]?, "acces": {"url", "description"?}?}
+`points_a_verifier` et `acces` : rendus par l'étape qui précède une validation du Directeur (fenêtre de validation) ;
+une forme fautive est écartée, jamais une raison de refuser le rapport.
 `comptes_rendus` : dans un lot, le compte rendu de chaque élément à part (ce que le Directeur voit à sa validation) ;
 une entrée mal formée est écartée, jamais une raison de refuser le rapport.
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
@@ -19,6 +22,7 @@ prototype : `methode_prete`), pas par la consigne de fin commune.
 Le texte libre qui entoure le bloc ne sert qu'au journal. Le moteur n'écrit rien lui-même : `commandes` rend les
 `(commande, entrée)` à passer à `lancer`.
 """
+from bureau import releve as rel
 from moteur.jugement import extraire_json
 
 STATUTS = ("fait", "accord_requis", "outil_refuse", "echec")
@@ -100,11 +104,29 @@ def lire(texte):
         raise RapportIllisible("« usage_estime » doit être un entier positif (tokens)")
     comptes = r.get("comptes_rendus")
     if comptes is not None:      # facultatif : un compte rendu par élément d'un lot (une forme fautive est ignorée)
-        r["comptes_rendus"] = [x for x in comptes if isinstance(x, dict) and _texte(x.get("element"))
+        r["comptes_rendus"] = [_de_quoi_valider(x) for x in comptes if isinstance(x, dict) and _texte(x.get("element"))
                                and isinstance(x.get("texte", ""), str)] if isinstance(comptes, list) else []
+    r = _de_quoi_valider(r)
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")
     return r
+
+
+def _de_quoi_valider(x):
+    """`points_a_verifier` et `acces` (fenêtre de validation), facultatifs, dans le rapport ou le compte rendu d'un
+    élément : une forme fautive est écartée sans refuser le rapport (le moteur dérive alors des points de l'objectif).
+    Points : les phrases valides (160 caractères au plus, sans doublon), 8 au plus."""
+    x = dict(x)
+    if "points_a_verifier" in x:
+        points, vus = [], set()
+        for p in x["points_a_verifier"] if isinstance(x["points_a_verifier"], list) else []:
+            if rel.point_ok(p) and p.strip() not in vus:
+                vus.add(p.strip())
+                points.append(" ".join(p.split()))
+        x["points_a_verifier"] = points[:rel.MAX_POINTS]
+    if "acces" in x and not rel.acces_ok(x["acces"]):
+        del x["acces"]
+    return x
 
 
 ALIAS_TEXTE = ("question", "intitule", "libelle")       # ce que les agents écrivent à la place de « texte »

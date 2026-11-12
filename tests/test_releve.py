@@ -864,8 +864,40 @@ class TestVersion4(unittest.TestCase):
                                                               "a_valider": "Validation du Directeur"}])), [])
         self.refus(v4(decisions_projet=[{**base, "objectif": 3}]), "objectif")
         self.refus(v4(decisions_projet=[{**base, "a_valider": ["x"]}]), "a_valider")
+        # La fenêtre de validation : points, lien d'accès, taille et date des fichiers (tous facultatifs).
+        plein = {**base, "points": ["Le menu s'ouvre", "Le son se coupe"],
+                 "acces": {"url": "http://127.0.0.1:5173/", "description": "Le site en cours"},
+                 "fichiers": [{"chemin": "build/jeu.apk", "titre": "APK", "taille": 1234, "date": "2026-11-12T10:00"}]}
+        self.assertEqual(releve.valider(v4(decisions_projet=[plein])), [])
+        self.refus(v4(decisions_projet=[{**plein, "points": []}]), "points")
+        self.refus(v4(decisions_projet=[{**plein, "points": ["x" * 161]}]), "points")
+        self.refus(v4(decisions_projet=[{**plein, "points": [f"p{i}" for i in range(9)]}]), "points")
+        self.refus(v4(decisions_projet=[{**plein, "points": ["a", "a"]}]), "points")
+        self.refus(v4(decisions_projet=[{**plein, "acces": {"url": "javascript:alert(1)"}}]), "acces")
+        self.refus(v4(decisions_projet=[{**plein, "fichiers": [{"chemin": "a.apk", "titre": "A", "taille": "1"}]}]),
+                   "taille")
         colonnes = [{"id": "a", "nom": "A", "validation": True}]
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
+
+    def test_fenetre_de_validation_aides(self):
+        self.assertEqual(releve.points_de_decision({}), [releve.POINT_PAR_DEFAUT])
+        self.assertEqual(releve.points_de_decision({"points": [" a ", "b"]}), ["a", "b"])
+        self.assertEqual(releve.points_de_decision({"points": ["x" * 161]}), [releve.POINT_PAR_DEFAUT])
+        self.assertTrue(releve.est_telechargeable("build/Jeu.APK"))
+        self.assertFalse(releve.est_telechargeable("pieces/a.png"))
+        self.assertFalse(releve.est_telechargeable("src/main.gd"))
+        self.assertTrue(releve.est_image("a/b.JPG"))
+        self.assertEqual(releve.acces_local("http://127.0.0.1:5173/app"), ("127.0.0.1", 5173))
+        self.assertEqual(releve.acces_local("http://localhost:8080"), ("localhost", 8080))
+        self.assertEqual(releve.acces_local("http://[::1]:3000/"), ("::1", 3000))
+        for pas_relaye in ("http://127.0.0.1/", "https://127.0.0.1:5173/", "http://192.168.1.4:5173/",
+                           "http://exemple.fr:80/", "http://127.0.0.1.exemple.fr:80/", "ftp://127.0.0.1:21/",
+                           "http://user@127.0.0.1:5173/", "http://127.0.0.1:99999/"):
+            self.assertIsNone(releve.acces_local(pas_relaye), pas_relaye)
+        self.assertTrue(releve.acces_ok({"url": "https://essai.exemple.fr/"}))
+        self.assertFalse(releve.acces_ok({"url": "https://a b/"}))
+        self.assertFalse(releve.acces_ok({"url": "https://a.fr/", "autre": 1}))
+        self.assertFalse(releve.acces_ok({"url": "https://a.fr/", "description": "x" * 201}))
         self.refus(v4(colonnes=[{"id": "a", "nom": "A", "validation": "oui"}]), "validation")
 
     def test_releve_decision_environnement_de_projet(self):

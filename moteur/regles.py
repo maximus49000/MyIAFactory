@@ -29,6 +29,7 @@ from pathlib import Path
 from installation import estimation
 from moteur import agents, cloud, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
+from bureau import releve as rel
 from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
@@ -1564,13 +1565,33 @@ def _element_en_validation(projet, etat, d):
         return None
     v = _etat_element(etat, fid, element)
     v.update(phase="validation", pas=rang, taches=[d["tache"]] if d.get("tache") else [])
-    v["dernier_rapport"] = {"compte_rendu": d.get("compte_rendu") or "", "fichiers": list(d.get("fichiers") or [])}
+    v["dernier_rapport"] = {"compte_rendu": d.get("compte_rendu") or "", "fichiers": list(d.get("fichiers") or []),
+                            "points": list(d.get("points") or []), "acces": d.get("acces")}
     return v
+
+
+def _remarque_des_reponses(d, demande):
+    """La fenêtre de validation : `(verdict, remarque)` tirés des réponses point par point. Les points doivent être
+    exactement ceux de la décision (un seul, « L'élément correspond à l'objectif », pour une décision d'avant) ; le
+    verdict de la demande doit en découler. Tous OK : la remarque est le texte libre (une note, peut-être vide) ; sinon
+    la remarque structurée : les points à revoir, puis le texte libre."""
+    reponses, texte = demande.get("reponses"), " ".join(str(demande.get("texte") or "").split())
+    probleme = outil.erreur_reponses(reponses, demande.get("verdict"))
+    if probleme:
+        raise Refus(probleme)
+    if sorted(x["point"].strip() for x in reponses) != sorted(rel.points_de_decision(d)):
+        raise Refus("les réponses ne portent pas sur les points de cette validation : rouvrez-la")
+    refuses = [x["point"].strip() for x in reponses if not x["ok"]]
+    if not refuses:
+        return VALIDER, texte
+    return RENVOYER, f"points à revoir : {' ; '.join(refuses)}." + (f" {texte}" if texte else "")
 
 
 def _sur_valider_etape(projet, demande, etat):
     """La réponse du Directeur à « cet élément attend votre validation » : valider fait passer l'élément à l'étape
-    suivante ; renvoyer (avec une remarque obligatoire) lui fait refaire l'étape précédente, puis revenir ici."""
+    suivante (le texte libre, s'il y en a, est noté et joint à la tâche suivante) ; renvoyer lui fait refaire l'étape
+    précédente, puis revenir ici. Depuis la fenêtre de validation, la demande porte une réponse par point
+    (`reponses`) ; sans elle (une page d'avant), renvoyer exige une remarque."""
     d = next((x for x in _etat(projet)["decisions"]
               if x["id"] == demande["decision"] and x["genre"] == GENRE_VALIDATION), None)
     if d is None:
@@ -1578,7 +1599,9 @@ def _sur_valider_etape(projet, demande, etat):
     verdict, remarque = demande.get("verdict"), (demande.get("texte") or "").strip()
     if verdict not in (VALIDER, RENVOYER):
         raise Refus(f"réponse inconnue : {verdict}")
-    if verdict == RENVOYER and not remarque:
+    if "reponses" in demande:
+        verdict, remarque = _remarque_des_reponses(d, demande)
+    elif verdict == RENVOYER and not remarque:
         raise Refus("pour renvoyer l'élément, dites ce qu'il faut changer (une remarque est obligatoire)")
     fid, element = d["fonctionnalite"], d["element"]
     v = _element_en_validation(projet, etat, d)
@@ -1586,11 +1609,15 @@ def _sur_valider_etape(projet, demande, etat):
         raise Refus("l'étape de validation n'est plus dans le workflow de cette fonctionnalité")
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     if d.get("tache"):
-        journal = "Validé." if verdict == VALIDER else f"Renvoyé : {remarque}"
+        journal = (("Validé." + (f" Note du Directeur : {remarque}" if remarque else "")) if verdict == VALIDER
+                   else f"Renvoyé : {remarque}")
         lancer(projet, "tache", {"id": d["tache"], "colonne": "fait", "active": False, "journal": [journal]})
     v["phase"] = "flux"
     if verdict == VALIDER:
-        _dire(projet, fid, f"« {element['nom']} » est validé : l'élément continue.")
+        if remarque:      # hors du champ de la validation : transmis à l'agent de l'étape suivante
+            v["journal_suivant"] = [f"Note du Directeur à la validation « {element['nom']} » : {remarque}"]
+        _dire(projet, fid, f"« {element['nom']} » est validé : l'élément continue."
+                           + (f" Votre note : {remarque}" if remarque else ""))
         _terminer(projet, {"demande": demande["id"]}, "C'est validé : l'élément continue.")
         return _apres_flux(projet, etat, v) + _demarrer_en_attente(projet, etat, fid)
     v["pas"] -= 1
@@ -2067,6 +2094,15 @@ def _partir(projet, etat, court, agent, ids, lot, par_id):
     return a_agent(agent, ids, matiere)
 
 
+CONSIGNE_AVANT_VALIDATION = (
+    "Après toi, le Directeur valide cet élément dans sa fenêtre de validation. Donne-lui de quoi vérifier : des "
+    "captures légendées, le livrable lui-même dans `fichiers` (apk, zip, pdf, exe…) ou, pour un site, "
+    '`acces`: {"url": "http://127.0.0.1:<port>/", "description": "…"} (laisse le serveur tourner). Rends aussi '
+    f'`points_a_verifier` : 3 à {rel.MAX_POINTS} phrases de {rel.MAX_POINT} caractères au plus, chacune vérifiable '
+    "par lui en regardant ou en essayant (pas de jargon), tirées du cahier. Dans un lot : dans le compte rendu de "
+    "l'élément (`comptes_rendus`).")
+
+
 def _matiere(projet, etat, t):
     """Ce que l'agent doit savoir de la tâche, en plus de son message de départ (la discussion, les retours, l'élément)."""
     etape, fid = str(t.get("etape") or ""), t.get("fonctionnalite")
@@ -2108,6 +2144,10 @@ def _matiere(projet, etat, t):
                     "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
                     "Registre des contrôles : relis-le avant de rendre l'élément."]
         production = _production(projet, fid)
+        rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
+        if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
+                and _concerne(((f or {}).get("elements") or {}).get(t.get("element")), production[rang + 1]["id"])):
+            parties.append(CONSIGNE_AVANT_VALIDATION)
         if (production and len(production) > 1 and _sans_relecteur(projet)
                 and etape == ETAPES_DE_FLUX + production[_etape_de_relecture(projet, fid)]["id"]):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
@@ -2416,35 +2456,108 @@ def _tache_de_flux(projet, etat, v, journal=None):
         v["pas"] += 1
         return _tache_de_flux(projet, etat, v, journal)
     if wf.est_validation(s):
-        return _attendre_le_directeur(projet, v, s)
+        return _attendre_le_directeur(projet, etat, v, s)
+    journal = list(journal or []) + v.pop("journal_suivant", [])     # la note du Directeur jointe à sa validation
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
-                       element=v["element"]["id"], colonne=s["id"], journal=journal)
+                       element=v["element"]["id"], colonne=s["id"], journal=journal or None)
     v["taches"].append(tid)
     return tid
 
 
-def _attendre_le_directeur(projet, v, s):
+def _attendre_le_directeur(projet, etat, v, s):
     """L'élément arrive à une étape de validation : une tâche sans agent et une décision de projet, avec le compte rendu
-    et les fichiers de l'étape précédente. Rien ne part tant que le Directeur n'a pas répondu."""
+    et les fichiers de l'étape précédente, ses points à vérifier et son lien d'accès. Rien ne part tant que le Directeur
+    n'a pas répondu. Jamais rien à valider : sans image, sans livrable téléchargeable et sans lien d'accès, la décision
+    n'est pas posée (voir `_rien_a_verifier`)."""
+    precedent = v.get("dernier_rapport") or {}
+    if not _de_quoi_verifier(projet, precedent):
+        return _rien_a_verifier(projet, etat, v, s)
+    v.pop("rien_a_verifier", None)
     v["phase"] = "validation"
     element = v["element"]
     tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
                                    "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
                                    "element": element["id"]})["id"]
     v["taches"].append(tid)
-    precedent = v.get("dernier_rapport") or {}
     a_valider = s["nom"] + (f" — {s['raison'].strip()}" if isinstance(s.get("raison"), str) and s["raison"].strip()
                             else "")
+    objectif = _objectif_de(projet, v, s)[:OBJECTIF_MAX]
     entree = {"action": "poser", "portee": "projet", "genre": GENRE_VALIDATION, "fonctionnalite": v["fid"],
               "texte": f"L'élément « {element['nom']} » attend votre validation : « {s['nom']} ».",
               "element": {"id": element["id"], "nom": element["nom"]}, "etape": s["id"], "tache": tid,
-              "objectif": _objectif_de(projet, v, s)[:OBJECTIF_MAX], "a_valider": a_valider[:OBJECTIF_MAX],
-              "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": list(precedent.get("fichiers") or [])}
+              "objectif": objectif, "a_valider": a_valider[:OBJECTIF_MAX],
+              "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": list(precedent.get("fichiers") or []),
+              "points": precedent.get("points") or _points_derives(objectif, precedent)}
+    if precedent.get("acces"):
+        entree["acces"] = precedent["acces"]
     lancer(projet, "decision", entree)
     return tid
 
 
 OBJECTIF_MAX = 600
+CONSIGNE_DE_QUOI_VERIFIER = (
+    "Rien à valider : ton rapport n'a donné au Directeur ni image, ni livrable téléchargeable, ni lien d'accès. "
+    "Refais l'étape en rendant de quoi vérifier : des captures PNG ou JPEG légendées (`message.images`), le "
+    "livrable lui-même dans `fichiers` (apk, zip, pdf, exe… avec son `element`), ou, pour un site qui tourne, "
+    "`acces` : {\"url\": \"http://127.0.0.1:<port>/\", \"description\": \"…\"} (le serveur laissé en marche).")
+
+
+def _de_quoi_verifier(projet, precedent):
+    """Vrai si le Directeur aura de quoi vérifier : un lien d'accès, ou une image ou un livrable téléchargeable qui
+    existent dans le projet."""
+    if rel.acces_ok(precedent.get("acces")):
+        return True
+    try:
+        f = fa.lire(projet.factory)
+    except fa.FactoryInvalide:
+        return False
+    return any((rel.est_image(x.get("chemin")) or rel.est_telechargeable(x.get("chemin")))
+               and outil.fichier_du_projet(f, projet.dossier, x.get("chemin")) is not None
+               for x in precedent.get("fichiers") or [])
+
+
+def _rien_a_verifier(projet, etat, v, s):
+    """L'élément arrive à la validation sans rien à montrer : l'étape précédente est relancée une fois avec la consigne
+    d'ajouter de quoi vérifier ; au second échec, la tâche de validation est bloquée avec la raison (l'élément est
+    laissé de côté, il ne retient plus la barrière)."""
+    production = _production(projet, v["fid"])
+    avant = next((k for k in range(v["pas"] - 1, -1, -1) if not wf.est_validation(production[k])), None)
+    if not v.get("rien_a_verifier") and avant is not None:
+        v["rien_a_verifier"] = 1
+        v["pas"] = avant
+        _dire(projet, v["fid"], f"« {v['element']['nom']} » arrive à « {s['nom']} » sans rien à vérifier : l'étape "
+                                f"« {production[avant]['nom']} » est refaite pour vous montrer le résultat.")
+        return _tache_de_flux(projet, etat, v, journal=[CONSIGNE_DE_QUOI_VERIFIER])
+    v.pop("rien_a_verifier", None)
+    v["phase"] = "bloque"
+    element = v["element"]
+    raison = (f"Rien à valider : l'étape précédente n'a rendu ni image, ni livrable téléchargeable, ni lien d'accès "
+              f"(deux fois). Demandez-les par un retour sur cette tâche.")
+    tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
+                                   "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
+                                   "element": element["id"]})["id"]
+    v["taches"].append(tid)
+    _bloquer_taches(projet, [tid], raison)
+    _dire(projet, v["fid"], f"« {element['nom']} » est arrêté avant « {s['nom']} » : {raison}")
+    return tid
+
+
+def _points_derives(objectif, precedent):
+    """Les points à vérifier quand l'agent n'en a pas rendu : tirés de l'objectif et de ce qu'il y a à vérifier, sans
+    appel d'IA (chacun tient en 160 caractères)."""
+    debut = "Le résultat correspond à l'objectif : "
+    reste = rel.MAX_POINT - len(debut)
+    objectif = " ".join(str(objectif or "").split())
+    points = [debut + (objectif if len(objectif) <= reste else objectif[:reste - 1].rstrip() + "…")
+              if objectif else rel.POINT_PAR_DEFAUT]
+    fichiers = [x.get("chemin") for x in precedent.get("fichiers") or []]
+    if any(rel.est_telechargeable(c) for c in fichiers):
+        points.append("Le livrable se télécharge, s'installe et s'ouvre sans erreur")
+    if precedent.get("acces"):
+        points.append("Le site s'ouvre depuis le lien d'accès et répond sans erreur")
+    if any(rel.est_image(c) for c in fichiers):
+        points.append("Les images montrent ce qui est attendu, sans défaut visible")
+    return points
 
 
 def _objectif_de(projet, v, s):
@@ -2497,7 +2610,12 @@ def _retenir_le_rapport(v, r):
         if isinstance(chemin, str) and chemin.strip() and all(f["chemin"] != chemin for f in fichiers):
             titre = (x.get("legende") if isinstance(x, dict) else None) or chemin.replace("\\", "/").rsplit("/", 1)[-1]
             fichiers.append({"chemin": chemin, "titre": titre})
-    v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX]}
+    # Les points à vérifier et le lien d'accès : ceux du compte rendu de l'élément, sinon ceux du rapport (un site qui
+    # tourne sert tous les éléments d'un lot).
+    points = (propre or {}).get("points_a_verifier") or r.get("points_a_verifier") or []
+    acces = (propre or {}).get("acces") or r.get("acces")
+    v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX],
+                            "points": list(points)[:rel.MAX_POINTS], "acces": acces}
 
 
 def _texte_d_image(x):

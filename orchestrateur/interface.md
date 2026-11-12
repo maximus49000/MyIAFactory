@@ -147,7 +147,7 @@ Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": 
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
-genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+genre), `session_cloud` avec `agent`, `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus, `points` (les points à vérifier de la fenêtre de validation : 1 à 8 phrases différentes de 160 caractères au plus) et `acces` `{url (http ou https), description? (200 au plus)}` ; un fichier image est rangé comme les autres images d'agent, un livrable téléchargeable (apk, zip, pdf, exe…) trouvé dans le projet reçoit `taille` et `date`, son chemin compté depuis la factory ou, hors de `.factory`, depuis le dossier du projet), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
@@ -380,6 +380,19 @@ chaque tâche (`lancer tache`) avant de passer à la suivante. Avec `"moteur": t
 lot), aucune commande n'est demandée à l'agent : il rend un seul rapport à la fin du lot, le moteur tient le suivi.
 Ce rapport porte aussi, pour chaque élément, son compte rendu à part (`comptes_rendus` : `[{element, texte, images?}]`) :
 le Directeur ne voit, sous un élément à valider, que celui de cet élément.
+
+**Avant une validation du Directeur** (fenêtre de validation) : la matière de l'étape qui précède une validation qui
+concerne l'élément demande de quoi vérifier (captures légendées, le livrable dans `fichiers`, ou `acces`
+`{url: "http://127.0.0.1:<port>/", description}` pour un site laissé en marche) et `points_a_verifier` : 3 à 8 phrases
+de 160 caractères au plus, vérifiables par l'utilisateur, tirées du cahier (dans un lot : dans le compte rendu de
+l'élément). Une forme fautive est écartée sans refuser le rapport ; sans points, le moteur en dérive de l'objectif.
+Sans image, livrable téléchargeable existant ni lien d'accès, la décision n'est pas posée : l'étape est refaite une fois
+avec la consigne d'ajouter de quoi vérifier, puis la tâche de validation est bloquée avec la raison.
+
+La demande `valider_etape` venue de la fenêtre porte `reponses` `[{point, ok}]` : `lancer actions` refuse (code 1) une
+forme fautive ou un verdict qui n'en découle pas (tous OK = `valider`) ; le moteur vérifie en plus que les points sont
+ceux de la décision. Validé : le texte libre est noté sur la tâche de validation et joint à la tâche suivante
+(« Note du Directeur à la validation … ») ; renvoyé : « Remarque du Directeur : points à revoir : … ; … » suivie du texte.
 
 ### `parallelisme`
 

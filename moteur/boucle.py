@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from bureau import attente
 from bureau import reglages as reglages_bureau
 from moteur import agents, appel, cloud, jugement, regles
 from orchestrateur import factory as fa
@@ -37,6 +38,8 @@ BUREAU_PAR_DEFAUT = "~/MyIAFactory/bureau.json"
 AGENT_ORCHESTRATEUR = "orchestrateur"
 ETAPE_ORCHESTRATION = "orchestration"
 DELAI_GIT_S = 60
+ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
+REECRIRE_TOUS_LES_S = 20         # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
 
 
 def ouvrir_projet(fichier_reglages, environ=None):
@@ -99,12 +102,18 @@ class Moteur:
         self.cloud = session_cloud or cloud      # le module (ou un faux) qui parle aux sessions cloud
         self.projets, self.etats, self.retours, self.journal = [], {}, queue.Queue(), []
         self.dernier_quota = {}
+        self.file_installations = []       # (clé du projet, tâche) des installations prêtes, dans l'ordre d'arrivée
+        self.pause_installation = None     # {texte, projet, outils} quand une installation retient tout le bureau
+        self._installation_vue = False     # une installation était en cours ou attendue au passage d'avant
+        self._ecrits = {}                  # fichier -> (contenu, heure) : un fichier inchangé n'est pas réécrit à chaque passage
+        self._echecs_installation = {}
         for p in projets:
             self._ajouter(p)
 
     def _ajouter(self, projet):
         if getattr(projet, "bureau", None) is None:
             projet.bureau = self.bureau     # les mesures d'usage des projets du bureau servent à estimer un workflow
+        projet.installations_a_part = True  # les installations sont lancées par `_installations`, avant tout le reste
         self.projets.append(projet)
         self.etats[str(projet.factory)] = regles.nouvel_etat()
 
@@ -118,6 +127,7 @@ class Moteur:
 
     def tour(self):
         self._prendre_les_projets_ajoutes()
+        self._installations()
         for projet in list(self.projets):
             try:
                 self._tour_projet(projet)
@@ -150,6 +160,7 @@ class Moteur:
         self._relever_le_cloud(projet, etat)
         self._retours_des_agents(projet, etat)
         self._executer(projet, regles.avancer(projet, etat))
+        self._dire_l_attente_de_charge(projet, etat)
         self._quota(projet)
 
     def _presence(self, projet):
@@ -170,6 +181,16 @@ class Moteur:
             self._executer(projet, regles.genre_a_proposer(projet, etat))
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"genre du projet : {e}")
+        self._outils_manquants(projet, etat)
+
+    def _outils_manquants(self, projet, etat):
+        """Un outil à installer qui n'a plus rien à l'écran (ni décision, ni tâche) y revient."""
+        try:
+            if regles.reafficher_les_outils_manquants(projet, etat):
+                self._noter(projet, "des outils manquent sur le poste : la décision « Environnement du poste à "
+                                    "compléter » est reposée")
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"outils manquants : {e}")
 
     def _quota(self, projet):
         maintenant = self.horloge()
@@ -180,6 +201,95 @@ class Moteur:
             regles.lancer(projet, "partenaires", {"action": "quota"})
         except (regles.Refus, regles.ErreurMoteur):
             pass    # les partenaires sont facultatifs : rien ne bloque sans eux
+
+    # --- Les installations d'outils : prioritaires sur tout le bureau.
+
+    def _installations(self):
+        """Dès qu'une installation d'outil est prête dans un projet : plus aucun agent neuf ne part nulle part (la pause
+        globale, que chaque projet lit dans `pause_globale`), et elle part tout de suite, sans condition de charge ; une
+        seule à la fois, dans l'ordre d'arrivée. Les agents déjà au travail finissent ; les jugements et les demandes
+        continuent. La pause se lève d'elle-même quand plus aucune installation n'est prête ni en cours ; le poste est
+        alors revérifié pour chaque projet (un outil qui manque encore revient dans une décision)."""
+        pretes, en_cours = {}, None
+        for projet in list(self.projets):
+            cle, etat = str(projet.factory), self._etat(projet)
+            try:
+                for t in regles.installations_pretes(projet, etat):
+                    if self._echecs_installation.get((cle, t["id"]), 0) < ESSAIS_INSTALLATION:
+                        pretes[(cle, t["id"])] = projet
+                vues = regles.installations_en_cours(projet, etat)
+                if vues and en_cours is None:
+                    en_cours = (projet, vues[0]["id"])
+            except Exception as e:     # un projet illisible ne retient pas les autres
+                self._noter(projet, f"installations : {e}")
+        self.file_installations = ([x for x in self.file_installations if x in pretes]
+                                   + [x for x in pretes if x not in self.file_installations])
+        if en_cours is None and self.file_installations:
+            cle, tid = self.file_installations[0]
+            projet = pretes[(cle, tid)]
+            try:
+                actions = regles.demarrer_installation(projet, self._etat(projet), tid)
+            except Exception as e:
+                actions = []
+                self._echecs_installation[(cle, tid)] = self._echecs_installation.get((cle, tid), 0) + 1
+                self._noter(projet, f"installation {tid} : {e}")
+            if actions:
+                self.file_installations.pop(0)
+                en_cours = (projet, tid)
+                self._executer(projet, actions)
+        self._poser_la_pause(pretes, en_cours)
+
+    def _poser_la_pause(self, pretes, en_cours):
+        """Le texte de la pause (l'installation en cours, sinon la première de la file) pour tous les projets, dans le
+        fichier que lit le bureau ; levée, elle fait revérifier le poste partout."""
+        cible = en_cours
+        if cible is None and self.file_installations:
+            cle, tid = self.file_installations[0]
+            cible = (pretes[(cle, tid)], tid)
+        texte = outils = None
+        if cible is not None:
+            projet, tid = cible
+            try:
+                outils = regles.outils_de_la_tache(projet, tid)
+            except (regles.Refus, regles.ErreurMoteur):
+                outils = []
+            texte = f"Pause : installation de {', '.join(outils) or 'l’environnement du poste'} ({projet.nom})"
+        for p in self.projets:
+            p.pause_globale = texte
+        if self.bureau is not None:
+            fichier = attente.chemin_pause(self.bureau)
+            if texte is None:
+                self._effacer(fichier)
+            else:
+                self._ecrire(fichier, {"texte": texte, "projet": cible[0].nom, "outils": outils})
+        vue = texte is not None
+        if self._installation_vue and not vue:
+            for projet in list(self.projets):
+                self._outils_manquants(projet, self._etat(projet))
+        self._installation_vue = vue
+        self.pause_installation = None if texte is None else {"texte": texte, "projet": cible[0].nom, "outils": outils}
+
+    def _dire_l_attente_de_charge(self, projet, etat):
+        """Une tâche prête que la charge retient : le bureau le dit (carte de la tâche et barre), à chaque passage."""
+        fichier = attente.chemin_charge(projet.factory.parent)
+        a = etat.get("attente_charge")
+        if a:
+            self._ecrire(fichier, a)
+        else:
+            self._effacer(fichier)
+
+    def _ecrire(self, fichier, objet):
+        """Écrit pour le bureau ; un contenu inchangé n'est réécrit que de temps en temps (il reste frais pour le bureau)."""
+        contenu, maintenant = json.dumps(objet, sort_keys=True), self.horloge()
+        avant = self._ecrits.get(str(fichier))
+        if avant and avant[0] == contenu and maintenant - avant[1] < REECRIRE_TOUS_LES_S:
+            return
+        attente.ecrire(fichier, objet)
+        self._ecrits[str(fichier)] = (contenu, maintenant)
+
+    def _effacer(self, fichier):
+        if self._ecrits.pop(str(fichier), None) is not None or Path(fichier).exists():
+            attente.effacer(fichier)
 
     # --- Les demandes.
 

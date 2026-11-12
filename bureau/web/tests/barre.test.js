@@ -23,6 +23,23 @@ test("les boutons du projet ne sont jamais écrasés", () => {
   assert.match(regle("html:not(.mobile) .barre-actions"), /flex:\s*none/);
 });
 
+test("la barre dit la pause d'une installation et l'attente de charge", async () => {
+  const {retenues} = await import("../ui/texte.js");
+  assert.deepEqual(retenues({}), []);
+  assert.deepEqual(retenues({pause_installation: null, attente_charge: null}), []);
+  assert.deepEqual(retenues({
+    pause_installation: {texte: "Pause : installation de Godot Engine (CasseBrickReborn)"},
+    attente_charge: {texte: "En attente : charge 90 % (plafond 70 %)"}}), [
+    {ton: "pause", texte: "Pause : installation de Godot Engine (CasseBrickReborn)"},
+    {ton: "attente", texte: "En attente : charge 90 % (plafond 70 %)"}]);
+  assert.match(barre, /retenues\(etat\)/);
+});
+
+test("la carte et le panneau d'une tâche montrent son attente de charge", () => {
+  assert.match(readFileSync(new URL("../ui/detail.js", import.meta.url), "utf8"), /t\.attente/);
+  assert.match(readFileSync(new URL("../ui/kanban-plein.js", import.meta.url), "utf8"), /t\.attente/);
+});
+
 test("la hauteur réelle de la barre est reportée sur la scène", () => {
   assert.match(barre, /ResizeObserver/);
   assert.match(barre, /--hauteur-barre/);

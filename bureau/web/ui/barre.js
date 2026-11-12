@@ -2,7 +2,7 @@
 // Plus, sous la barre, le bandeau d'erreur quand le relevé est indisponible.
 // Tout texte venu du serveur passe par textContent.
 
-import {voyant, libelleCharge, listeDisponible, dateFr} from "./texte.js";
+import {voyant, libelleCharge, listeDisponible, dateFr, retenues} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
 import {urlProjet, livrables, projetCourant, memoriser, optionsProjets, ENTREE_NOUVEAU} from "./projets.js";
 import {brancherAssociation} from "./associer.js";
@@ -35,6 +35,15 @@ export function creerBarre(entete, bandeau) {
   const leVoyant = el("div", "voyant");
   leVoyant.setAttribute("role", "status");
   leVoyant.append(lampe, libelle);
+  // Ce que le moteur dit retenir le travail (pause d'une installation, attente de charge), sous le voyant.
+  const retenue = el("div", "barre-retenue");
+  retenue.setAttribute("role", "status");
+  retenue.hidden = true;
+  function majRetenue(etat) {
+    const lignes = retenues(etat);
+    retenue.hidden = lignes.length === 0;
+    retenue.replaceChildren(...lignes.map((l) => { const s = el("span", "retenue", l.texte); s.dataset.ton = l.ton; return s; }));
+  }
 
   const charge = el("div", "charge");
   const etiquette = el("span", "charge-etiquette", "Charge");
@@ -64,7 +73,7 @@ export function creerBarre(entete, bandeau) {
   const blocAbonnement = el("div", "bloc-abonnement");
   blocAbonnement.append(creerConso(), jauges);
   surConso(() => jauges.maj());
-  entete.append(blocAbonnement, titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
+  entete.append(blocAbonnement, titre, leVoyant, retenue, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
                 boutonTelephone, charge);
   // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
   new ResizeObserver(() => {
@@ -270,6 +279,7 @@ export function creerBarre(entete, bandeau) {
       erreur = null;
       bandeau.hidden = true;
       afficherVoyant();
+      majRetenue(etat);
       boutonListe.hidden = !listeDisponible(etat);
       majActions(etat);
       const v4 = (etat.version ?? 1) >= 4 && etat.agir === true;

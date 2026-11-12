@@ -42,7 +42,10 @@ $ outil.py --factory F releve
 ### `charge`
 
 Sans entrée. Lance `lancer.py charge --reglages <réglages>` du dépôt de la skill. Rend
-`{"feu_vert": true|false, "texte": "ok : charge 12 % (max 75 %)"}` ; code 1 si la mesure ne peut pas se faire.
+`{"feu_vert": true|false, "texte": "ok : charge 12 % (max 75 %)"}` ; code 1 si la mesure ne peut pas se faire. Le moteur lit
+dans `texte` la charge et le plafond (`charge N % (max M %)`) pour dire au bureau « En attente : charge 90 % (plafond
+70 %) » quand une tâche prête est retenue : ce format du texte est donc un contrat. (Les installations d'outils ne passent
+pas par cette mesure : elles partent sans condition de charge.)
 
 ### `actions`
 

@@ -12,8 +12,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from bureau import reglages as regl
-from installation import dossier, mise_en_place as mep
+from bureau import charge, reglages as regl
+from installation import calibrage, dossier, mise_en_place as mep
 from installation.dossier import Echec
 from orchestrateur import factory as fa
 from orchestrateur.memoire import executer_git
@@ -23,6 +23,7 @@ LONGUEUR_MAX_NOM = 100
 INTERDITS = set('<>:"/\\|?*')
 RESERVES = {"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)), *(f"LPT{n}" for n in range(1, 10))}
 MESSAGE_PREMIER_COMMIT = "Création du projet avec MyIAFactory"
+CHARGE_MAX_DEFAUT = 70      # si le poste ne peut pas être mesuré
 
 
 def executer_gh(args, cwd):
@@ -123,13 +124,27 @@ def github(projet, nom, git, gh=executer_gh):
 _depot = github   # `creer_projet` a un paramètre `github`
 
 
+def calibrer_le_poste(bureau_json):
+    """La charge maximum conseillée pour ce poste, comme le fait l'installation par la skill (`calibrage.calibrer` : la
+    machine et, une fois assez de mesures, l'historique de charge du bureau). 70 si rien n'a pu être mesuré."""
+    try:
+        projets = regl.lire_bureau(bureau_json)["projets"]
+        historique = charge.Historique(projets[0]["chemin"].parent / "charge-historique.jsonl").lire() if projets else []
+        return int(calibrage.calibrer(charge.machine(), historique)["charge_max"])
+    except Exception:    # le plafond est un confort : rien ne doit empêcher de créer le projet
+        return CHARGE_MAX_DEFAUT
+
+
 def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=False, github=False, description=None,
-                 genre=None, organisation=None, bureau_json, git=executer_git, gh=executer_gh, maintenant=None):
+                 genre=None, organisation=None, bureau_json, git=executer_git, gh=executer_gh, maintenant=None,
+                 calibrer=calibrer_le_poste):
     """Crée `<parent>/<nom>/` avec sa configuration `.factory/` sans workflow ni agent, l'inscrit au bureau commun
     `bureau_json`, puis, si `github`, crée son dépôt privé.
 
     `origine` : le fichier de réglages du projet d'origine (charge, modèle de l'orchestrateur, agents locaux, couche du
-    moteur et consignes en sont repris), ou rien. `organisation` : l'organisation validée avec le chef, `{"services":
+    moteur et consignes en sont repris), ou rien. Sans origine, la charge maximum est celle que `calibrer(bureau_json)`
+    conseille pour ce poste (jamais un 70 fixe : sur un poste dont la mémoire reste haute, un plafond trop bas retiendrait
+    tout le travail). `organisation` : l'organisation validée avec le chef, `{"services":
     [nouveaux], "agents", "briefs", "workflow": {id, genre, flux}, "environnement"}`, écrite dans la même transaction que
     la configuration (un refus n'écrit rien). Rend {"reglages": Path, "id": str, "projet": Path, "github":
     "fait" | "non demandé" | <la raison>}. `Echec(message)` : rien n'est créé."""
@@ -158,7 +173,7 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
          "consignes": repris.get("consignes") or _consignes_par_defaut(),
          "modele_orchestrateur": repris.get("modele_orchestrateur") or "Sonnet",
          "agents_locaux_max": repris.get("agents_locaux_max") or 2,
-         "charge_max": repris.get("charge_max") or 70,
+         "charge_max": repris.get("charge_max") or calibrer(bureau_json),
          "moteur": repris.get("moteur") or {"couche": "claude"}}
     if organisation is not None:
         p.update(services=[dict(s) for s in organisation["services"]], agents=[dict(a) for a in organisation["agents"]],

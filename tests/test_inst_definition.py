@@ -488,6 +488,12 @@ class TestValider(Base):
         self.assertIn("w-jeu-android", r["message"])
         self.assertEqual(self.git.appels, [])    # GitHub non demandé
 
+    def test_la_charge_max_du_projet_cree_vient_du_calibrage_du_poste(self):
+        b = self.pret()
+        self.valider(b, calibrer=lambda bureau: 45)
+        regl = json.loads((self.parent / "Casse-briques" / ".factory" / "reglages.json").read_text(encoding="utf-8"))
+        self.assertEqual(regl["charge_max"], 45)
+
     def test_genre_connu_fixe_a_la_creation(self):
         from orchestrateur import factory as fa
         b = self.pret(genre="jeu-web", nouveau=None)

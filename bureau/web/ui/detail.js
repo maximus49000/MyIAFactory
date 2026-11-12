@@ -117,6 +117,7 @@ export function contenuTache(ctx, contenu, t) {
   const type = (e.types || []).find((x) => x.id === t.type);
   if (t.type) contenu.append(ligne("Type", type ? type.nom : t.type));
   contenu.append(ligne("Mise à jour", ilYA(t.maj)));
+  if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge du poste (dit par le moteur)
   if (t.bloquee) {
     const b = el("p", "bloquee");
     b.append(el("strong", "", "Bloquée : "), document.createTextNode(t.bloquee));

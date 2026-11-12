@@ -328,6 +328,19 @@ Ces routes concernent **tout le bureau commun** (pas de `?projet=`). Le format d
 
 Les jauges et le rond lisent la même mesure, servie par `GET /api/conso` (le compte, sinon le dernier appel du moteur : `source` vaut `"compte"` ou `"moteur"`, `mesure` est l'instant de la mesure en secondes epoch, `part` la part estimée). Le format du relevé ne change pas. `GET /api/etat` porte de son côté `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
 
+## Ce qui retient le travail (état servi à la page)
+
+Le format du relevé ne change pas. Le moteur dit ce qui retient le travail par deux petits fichiers que le serveur du bureau
+relit (les deux processus sont séparés) et ajoute à `GET /api/etat` :
+
+- `pause_installation` : `{texte, projet, outils}` ou `null`. Une installation d'outil, dans un projet quelconque du
+  bureau, met tous les projets en pause (« Pause : installation de Godot Engine (CasseBrickReborn) ») ; la barre l'affiche
+  pour tous. Lu dans `installation-prioritaire.json`, à côté du fichier du bureau.
+- `attente_charge` : `{texte, taches: [ids], charge, plafond}` ou `null`, et sur chaque tâche concernée `attente` (le même
+  texte : « En attente : charge 90 % (plafond 70 %) »). Lu dans `.factory/attente-charge.json` du projet.
+
+Un fichier non réécrit depuis deux minutes est ignoré (le moteur s'est arrêté). Aucun chemin ni clé n'y figure.
+
 ## L'empreinte carbone estimée (champ `co2` des coûts servis)
 
 Le relevé ne porte rien de plus : l'empreinte est calculée par le bureau (`bureau/empreinte.py`, méthode EcoLogits) à partir des `sortie` de chaque usage et de son `modele`. Là où le bureau sert un coût en euros, il ajoute un champ `co2` (absent quand rien n'a pu être estimé, jamais `0` à la place d'un inconnu) :

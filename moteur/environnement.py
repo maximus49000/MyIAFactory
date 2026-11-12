@@ -405,6 +405,16 @@ def installe_par(journal_ou_lignes, outil):
     return any(str(x).startswith(f"- {outil} (") for x in journal_ou_lignes or [])
 
 
+def outils_du_journal(journal_ou_lignes):
+    """Les noms des outils nommés par les lignes `- <outil> (…` du journal d'une tâche d'installation, dans l'ordre."""
+    noms = []
+    for x in journal_ou_lignes or []:
+        m = re.match(r"- (.+?) \(", str(x))
+        if m and m.group(1) not in noms:
+            noms.append(m.group(1))
+    return noms
+
+
 ROLE_INSTALLATION = "environnement"      # l'agent qui installe les outils du poste
 TITRE_INSTALLATION = "Mise en place de l'environnement"
 

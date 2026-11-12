@@ -53,6 +53,7 @@ FICHIERS_MAX = 20
 ETAPES_SOLO = ("cadrage", "prototype", "relecture")   # jamais regroupées en lot
 ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande", "environnement")
 ROLE_ENVIRONNEMENT = "environnement"      # l'agent qui installe les outils du poste
+ETAPE_INSTALLATION = "environnement"      # l'étape de la tâche d'installation, prioritaire sur tout le bureau
 REGLES_D_INSTALLATION = ("Bash(winget:*)",)   # ce que reçoit l'installateur recruté au clic (winget, en portée utilisateur)
 CONTINUER_SANS = "continuer"
 C_EST_FAIT = "fait"
@@ -69,6 +70,7 @@ FAIT = "C'est fait, relancez l'agent"
 ECARTE = "Laissez cette tâche de côté"
 _REPRISE = re.compile(r"\(méthode de (\S+), version (\d+)\)")
 _ELEMENT = re.compile(r"\(élément (\S+)\)")
+_MESURE = re.compile(r"charge (\d+) % \(max (\d+) %\)")     # la ligne de `lancer charge` : « attendre : charge 90 % (max 70 %) »
 
 
 class Refus(Exception):
@@ -81,13 +83,20 @@ class ErreurMoteur(Exception):
 
 class Projet:
     """Un projet tenu par le moteur : son fichier de factory et la couche d'appel des jugements.
-    `feu_vert` (rien -> bool) remplace la mesure de charge (essais)."""
+    `feu_vert` (rien -> bool) ou `mesure` (rien -> {feu_vert, charge, plafond}) remplace la mesure de charge (essais).
+
+    Deux réglages que le moteur pose à chaque passage : `pause_globale` (le texte de la pause d'une installation
+    prioritaire, dans un projet ou un autre : aucun agent neuf ne part) et `installations_a_part` (les tâches
+    d'installation ne passent plus par le départ ordinaire, le moteur les lance lui-même, sans condition de charge)."""
 
     def __init__(self, factory, couche="claude", *, feu_vert=None, cloud_max=3, prerequis=None,
-                 verifier_environnement=None, bureau=None):
+                 verifier_environnement=None, bureau=None, mesure=None):
         self.factory = Path(factory)
         self.couche = couche
         self._feu_vert = feu_vert
+        self._mesure = mesure
+        self.pause_globale = None
+        self.installations_a_part = False
         self.cloud_max = cloud_max        # sessions cloud en même temps (réglage `agents_cloud_max`)
         self._prerequis = prerequis       # remplace `cloud.prerequis` (essais) : rien -> raison | None
         self._cloud_raison = (None, 0.0)
@@ -112,13 +121,23 @@ class Projet:
         self._cloud_raison = (raison, time.monotonic())
         return raison
 
-    def feu_vert(self):
+    def charge(self):
+        """La charge du poste contre le plafond du projet : `{feu_vert, charge, plafond}` (les deux nombres sont `None`
+        quand la mesure ne les donne pas)."""
         if self._feu_vert is not None:
-            return bool(self._feu_vert())
+            return {"feu_vert": bool(self._feu_vert()), "charge": None, "plafond": None}
+        if self._mesure is not None:
+            return self._mesure()
         try:
-            return bool(lancer(self, "charge").get("feu_vert"))
+            r = lancer(self, "charge")
         except Refus:
-            return True    # une mesure impossible ne bloque pas le travail (elle est dite par l'outil)
+            return {"feu_vert": True, "charge": None, "plafond": None}   # une mesure impossible ne bloque pas le travail
+        m = _MESURE.search(str(r.get("texte") or ""))
+        return {"feu_vert": bool(r.get("feu_vert")), "charge": int(m.group(1)) if m else None,
+                "plafond": int(m.group(2)) if m else None}
+
+    def feu_vert(self):
+        return bool(self.charge()["feu_vert"])
 
 
 def lancer(projet, nom, entree=None):
@@ -1180,6 +1199,35 @@ def _poste_pret_ou_decision(projet, etat, fid, intro=None, tache=None):
     return []
 
 
+def reafficher_les_outils_manquants(projet, etat):
+    """Un outil que l'environnement noté du projet dit à installer ne doit jamais disparaître de l'écran : revérifié en
+    code, s'il manque toujours et qu'aucune décision d'environnement n'est ouverte (du projet ou d'une fonctionnalité) ni
+    aucune tâche d'installation en attente ou en cours pour lui, la décision « Environnement du poste à compléter » est
+    (re)posée pour le projet, avec ses champs (objectif, lien, étapes, autonome). Rend vrai si elle l'a été. Appelée au
+    démarrage du moteur et après toute fin d'installation : jamais de doublon."""
+    notes = [x for x in _factory(projet).get("environnement") or [] if isinstance(x, dict) and x.get("etat") != "en_place"]
+    if not notes:
+        return False
+    court = _etat(projet)
+    if (any(d["portee"] == "projet" and d["genre"] == "environnement" for d in court["decisions"])
+            or any(d["genre"] == "environnement" for f in court["fonctionnalites"] for d in f["decisions"])):
+        return False
+    couverts, tout = set(), False
+    for t in court["taches"]:
+        if t.get("etape") == ETAPE_INSTALLATION and t["colonne"] != "fait" and not t.get("bloquee"):
+            noms = outils_de_la_tache(projet, t["id"])
+            couverts.update(noms)
+            tout = tout or not noms
+    if tout:
+        return False
+    verifies = _verifier_poste(projet, notes)
+    lancer(projet, "organisation", {"action": "environnement", "outils": verifies})
+    manquants = [x for x in environnement.a_installer(verifies) if x["outil"] not in couverts]
+    if not manquants:
+        return False
+    return _poser_la_decision_du_poste(projet, "projet", [], manquants, _texte_des_manquants(manquants))
+
+
 def _poser_la_decision_du_poste(projet, portee, anciennes, manquants, texte):
     """Pose la décision `environnement` (de la fonctionnalité `portee`, ou du projet si `portee` vaut `"projet"`) avec
     les outils qui manquent. Une décision déjà posée pour les mêmes outils reste ; pour d'autres, elle est remplacée
@@ -1682,10 +1730,17 @@ def _attente(court, fid, etat):
 def _demarrer_en_attente(projet, etat, fid):
     """Lance ce qui peut l'être : aucune étape en pause, feu vert de la charge, un agent libre. Rend les actions agent."""
     court = _etat(projet)
-    if court["pause"]:
+    if court["pause"] or projet.pause_globale:      # la pause d'une installation prioritaire : aucun agent neuf ne part
         return []
     attente = _attente(court, fid, etat)
-    if not attente or not projet.feu_vert():
+    if projet.installations_a_part:      # le moteur lance lui-même les installations, avant tout le reste
+        attente = [t for t in attente if t.get("etape") != ETAPE_INSTALLATION]
+    if not attente:
+        return []
+    mesure = projet.charge()
+    if not mesure["feu_vert"]:
+        etat["attente_charge"] = {"texte": texte_d_attente_de_charge(mesure), "charge": mesure["charge"],
+                                  "plafond": mesure["plafond"], "taches": [t["id"] for t in attente]}
         return []
     actions, solos, en_flux = [], [], []
     for t in attente:
@@ -1713,6 +1768,55 @@ def _demarrer_en_attente(projet, etat, fid):
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id))
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
     return actions
+
+
+def texte_d_attente_de_charge(mesure):
+    """« En attente : charge 90 % (plafond 70 %) » : ce que le bureau montre d'une tâche prête que la charge retient."""
+    if mesure.get("charge") is None or mesure.get("plafond") is None:
+        return "En attente : la charge de l'ordinateur dépasse le plafond du projet"
+    return f"En attente : charge {mesure['charge']} % (plafond {mesure['plafond']} %)"
+
+
+# --- Les installations d'outils : prioritaires sur tout le bureau (le moteur les lance, voir `boucle.Moteur`).
+
+def installations_pretes(projet, etat):
+    """Les tâches d'installation du projet prêtes à partir (même règle que le départ ordinaire : ni active, ni faite, ni
+    bloquée, pas déjà prise), sans l'attente d'un agent libre. Rien si le projet est en pause à la main (le Directeur
+    l'a voulu : son installation attend la reprise, et ne retient pas les autres projets) ou s'il n'a aucun agent
+    d'installation (rien ne pourrait partir : la pause ne durerait pas moins que toujours)."""
+    court = _etat(projet)
+    if court["pause"] or not any(a["role"] == ROLE_ENVIRONNEMENT for a in court["agents"]):
+        return []
+    return [t for t in _attente(court, None, etat) if t.get("etape") == ETAPE_INSTALLATION]
+
+
+def installations_en_cours(projet, etat):
+    """Les tâches d'installation du projet dont l'agent travaille (celles que ce moteur a lancées)."""
+    en_cours = _m(etat, "en_cours")
+    return [t for t in _etat(projet)["taches"] if t.get("etape") == ETAPE_INSTALLATION and t["id"] in en_cours]
+
+
+def outils_de_la_tache(projet, tid):
+    """Les noms des outils qu'une tâche d'installation doit installer (lus dans ses consignes)."""
+    return environnement.outils_du_journal([j["texte"] for j in _tache(projet, tid).get("journal") or []])
+
+
+def demarrer_installation(projet, etat, tid):
+    """Lance la tâche d'installation `tid` tout de suite, sans condition de charge ni de plafond. Rend les actions
+    agent ([] si elle n'est plus prête ou si l'agent d'installation n'est pas libre)."""
+    court = _etat(projet)
+    t = next((x for x in installations_pretes(projet, etat) if x["id"] == tid), None)
+    if t is None:
+        return []
+    if tid in _m(etat, "a_lancer", list):
+        agent = t.get("agent")
+        if not next((a for a in court["agents"] if a["cle"] == agent), {}).get("libre", False):
+            return []
+    else:
+        agent = _choisir_agent(projet, etat, court, t, None)
+        if agent is None:
+            return []
+    return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
 
 
 def _choisir_agent(projet, etat, court, tache, modele):
@@ -2225,8 +2329,10 @@ def orphelines(projet, etat):
 
 
 def avancer(projet, etat):
-    """Ce que le parcours demande à chaque étape : rien en pause (les demandes, elles, sont traitées)."""
+    """Ce que le parcours demande à chaque étape : rien en pause (les demandes, elles, sont traitées). Ce que la charge
+    retient est noté dans `etat["attente_charge"]`, refait à chaque passage."""
     court = _etat(projet)
+    etat.pop("attente_charge", None)
     if court["pause"]:
         return []
     actions = []

@@ -20,7 +20,8 @@ export function colonnesKanban(etat) {
     const c = parId.get(t.colonne);
     if (!c || t.postit === false) continue;   // sans post-it (le chef qui orchestre) : pas sur le Kanban, comme dans la scène
     c.taches.push({id: t.id, titre: t.titre, prenom: t.agent ? prenoms.get(t.agent) || t.agent : null,
-                   etape: t.etape || "", maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null});
+                   etape: t.etape || "", maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null,
+                   attente: t.attente || null});
   }
   for (const c of colonnes) c.taches.sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
   colonnes.file = {elements: [...(etat?.file?.visibles || []), ...(etat?.file?.suite || [])]
@@ -60,6 +61,7 @@ export function ouvrirKanban(etat, ouvrirTache) {
       carte.append(el("strong", "", tronquer(t.titre, 120)));
       const meta = [t.prenom, t.etape, t.maj ? ilYA(t.maj) : null].filter(Boolean).join(" · ");
       if (meta) carte.append(el("span", "kanban-carte-meta", meta));
+      if (t.attente) carte.append(el("span", "kanban-carte-attente", t.attente));
       if (t.bloquee) carte.append(el("span", "kanban-carte-bloquee", "Bloquée : " + tronquer(t.bloquee, 90)));
       carte.addEventListener("click", () => { clore(); ouvrirTache(t.id); });
       c.append(carte);

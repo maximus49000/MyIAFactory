@@ -46,6 +46,17 @@ export function voyant(factory, erreur, maintenant = new Date()) {
   return {libelle: "Relevé indisponible", ton: "alerte"};
 }
 
+// Ce qui retient le travail, dit par le moteur : la pause d'une installation d'outil (pour tous les projets du bureau),
+// puis les tâches prêtes que la charge retient. Rend une liste de {ton, texte} (vide si rien ne retient rien).
+export function retenues(etat) {
+  const lignes = [];
+  const pause = etat?.pause_installation;
+  if (pause && typeof pause.texte === "string" && pause.texte.trim()) lignes.push({ton: "pause", texte: pause.texte});
+  const attente = etat?.attente_charge;
+  if (attente && typeof attente.texte === "string" && attente.texte.trim()) lignes.push({ton: "attente", texte: attente.texte});
+  return lignes;
+}
+
 // L'infobulle de la barre de charge.
 export function libelleCharge(c, agentsLocauxMax) {
   const limite = Number.isInteger(agentsLocauxMax) && agentsLocauxMax >= 1 ? ` · ${agentsLocauxMax} agents locaux au plus` : "";

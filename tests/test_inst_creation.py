@@ -102,6 +102,31 @@ class TestCreation(Base):
         self.assertEqual(r["charge_max"], 55)
         self.assertEqual(r["moteur"], {"couche": "api"})
 
+    def reglages_du_projet(self, nom="Casse-briques"):
+        return json.loads((self.parent / nom / ".factory" / "reglages.json").read_text(encoding="utf-8"))
+
+    def test_charge_max_vient_du_calibrage_du_poste_et_non_d_un_70_fixe(self):
+        vus = []
+        self.creer(calibrer=lambda bureau: vus.append(bureau) or 45)
+        self.assertEqual(self.reglages_du_projet()["charge_max"], 45)
+        self.assertEqual(vus, [self.bureau])
+
+    def test_charge_max_de_l_origine_prime_sur_le_calibrage(self):
+        self.creer(origine=self.origine(), calibrer=lambda bureau: 45)
+        self.assertEqual(self.reglages_du_projet()["charge_max"], 55)
+
+    def test_calibrage_du_poste_par_defaut_est_celui_de_la_skill(self):
+        """Sans calibrage donné : `calibrage.calibrer` sur la machine et l'historique de charge du bureau (30 à 95)."""
+        self.creer()
+        self.assertTrue(30 <= self.reglages_du_projet()["charge_max"] <= 95)
+        from installation import calibrage
+        from unittest import mock
+        with mock.patch.object(calibrage, "calibrer", return_value={"charge_max": 50}) as c:
+            self.assertEqual(creation.calibrer_le_poste(self.bureau), 50)
+        c.assert_called_once()
+        with mock.patch.object(calibrage, "calibrer", side_effect=OSError("mesure")):
+            self.assertEqual(creation.calibrer_le_poste(self.bureau), creation.CHARGE_MAX_DEFAUT)
+
     def test_origine_illisible_refusee(self):
         o = self.origine()
         o.write_text("pas du json", encoding="utf-8")

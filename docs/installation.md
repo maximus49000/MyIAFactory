@@ -208,6 +208,53 @@ Un workflow demande parfois des logiciels (un moteur de jeu, un SDK, un JDK…) 
 - **« C'est fait »** : vous avez installé l'outil à la main, le bureau revérifie (versions comparées).
   **« Continuer sans »** : la décision est levée, le workflow continue sans cet outil.
 
+### L'installation d'un outil est prioritaire sur tout le bureau
+
+Règle du Directeur : « Quand une installation doit démarrer, on met tous les projets en pause, et on lance l'installation
+de l'outil. On traite toujours cette demande en priorité. » Le moteur (un seul pour tous les projets) l'applique ainsi,
+dès qu'une tâche d'installation (étape `environnement`, de projet ou de fonctionnalité) est prête à partir dans **un**
+projet du bureau :
+
+- **Pause globale.** Aucun agent neuf ne part, dans aucun projet. Les agents déjà au travail finissent ; les jugements et
+  les demandes du bureau continuent d'être traités. La barre du bureau, pour tous les projets, dit la pause et sa
+  raison : « Pause : installation de Godot Engine (CasseBrickReborn) ».
+- **Départ immédiat.** L'installation part tout de suite, **sans condition de charge ni de plafond**. Une seule
+  installation à la fois, dans l'ordre d'arrivée (les autres attendent, la pause reste).
+- **Fin, réussie ou non.** Le poste est revérifié (le `PATH` à jour, les noms versionnés comme `Godot_v4.3-stable_win64.exe`,
+  une version récente installée à côté d'une ancienne), la décision d'environnement est levée ou mise à jour, et la pause
+  se lève d'elle-même quand plus aucune installation n'est prête ni en cours. Le poste est alors revu pour **chaque**
+  projet (voir « Un outil qui manque ne disparaît jamais »).
+- **La pause manuelle (bouton Pause) reste.** Les deux pauses coexistent. Choix pour une installation dans un projet mis
+  en pause **à la main** : elle **attend la reprise** de ce projet (vous l'avez voulu), et elle **ne met pas les autres
+  projets en pause** tant qu'elle ne peut pas partir. Les installations des autres projets, elles, partent normalement.
+- Si le projet n'a pas d'agent d'installation, rien ne peut partir : il ne met pas le bureau en pause. Un départ qui
+  échoue trois fois est laissé de côté.
+
+Le moteur et le serveur du bureau sont deux processus : le moteur écrit `installation-prioritaire.json` à côté du fichier
+du bureau (pour tous les projets), le serveur le relit et l'ajoute à l'état servi à la page (`pause_installation`, voir
+[`releve.md`](releve.md)). Un fichier que le moteur n'a pas réécrit depuis deux minutes est ignoré.
+
+### Attente de charge
+
+Une tâche prête que la charge du poste retient affiche sur sa carte (panneau de la tâche, Kanban plein écran) et dans la
+barre : « En attente : charge 90 % (plafond 70 %) », mis à jour à chaque passage du moteur. Les installations n'y sont
+jamais retenues (elles sont prioritaires).
+
+### Le plafond d'un projet créé au bureau
+
+Un projet créé au bureau n'a plus un plafond de charge fixe à 70 % : `charge_max` est réglé d'après le poste, comme le fait
+l'installation par la skill (`installation/calibrage.py` : la machine, puis l'historique de charge du bureau quand il y a
+assez de mesures ; entre 40 et 85 %). Le plafond d'un projet d'origine, quand on en copie un, reste prioritaire. Il se
+règle ensuite depuis la page.
+
+### Un outil qui manque ne disparaît jamais
+
+Au démarrage du moteur et après toute fin d'installation, pour chaque projet : si l'environnement noté du projet contient
+un outil `a_installer` (revérifié en code) qui n'a ni décision d'environnement ouverte ni tâche d'installation en attente
+ou en cours, la décision « Environnement du poste à compléter » est reposée (objectif, lien officiel, étapes, `autonome`),
+sans doublon. « Continuer sans » lève la décision, mais l'outil reste noté « à installer » : elle revient donc au prochain
+démarrage du moteur ou à la fin d'une installation.
+
 Les champs de chaque outil (`objectif`, `telechargement`, `etapes`, `autonome`) sont décrits dans
 [`releve.md`](releve.md) ; la conception est la section 8 de la conception du
 [workflow dès la création](superpowers/specs/2026-11-12-workflow-des-la-creation-design.md).

@@ -370,8 +370,9 @@ def _raison(r):
 
 
 def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json, executer=outil.executer,
-            git=executer_git, gh=creation.executer_gh, maintenant=None, dossier=None, commun=None):
-    """L'utilisateur valide la proposition : le projet est créé avec son workflow, son équipe et son poste.
+            git=executer_git, gh=creation.executer_gh, maintenant=None, dossier=None, commun=None, calibrer=None):
+    """L'utilisateur valide la proposition : le projet est créé avec son workflow, son équipe et son poste. Sa charge
+    maximum est celle que le calibrage conseille pour ce poste (`creation.calibrer_le_poste`, ou `calibrer` pour les essais).
 
     Dans l'ordre : les informations sont recontrôlées (`InfosAChanger`, rien n'est écrit) ; Fable est accordé par agent
     (`fable`, les clés cochées) ; sans `installer`, ni agent d'installation ni son brief ; `creer_projet` écrit tout dans
@@ -393,7 +394,7 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
         infos["parent"], infos["nom"], mots_interdits=infos.get("mots_interdits") or [],
         facturation=bool(infos.get("facturation")), github=False, description=infos.get("description"),
         genre=None if nouveau else p["genre"]["id"], organisation=organisation, bureau_json=bureau_json, git=git,
-        gh=gh, maintenant=t)
+        gh=gh, maintenant=t, **({"calibrer": calibrer} if calibrer else {}))
     factory = Path(fait["projet"]) / ".factory" / "factory.json"
     notes = []
 

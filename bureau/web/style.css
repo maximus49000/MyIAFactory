@@ -127,6 +127,11 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .barre-projet:not(:empty)::before { content: "· "; }
 
 .voyant { flex: none; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.barre-retenue { flex: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; }
+.retenue { padding: 3px 9px; border-radius: 8px; background: #fbf0d4; color: #7a5a0c; overflow-wrap: anywhere; }
+.retenue[data-ton="attente"] { background: #e8eefb; color: #2f4a86; }
+.carte-attente { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #e8eefb; color: #2f4a86; overflow-wrap: anywhere; }
+.kanban-carte-attente { color: #2f4a86; font-size: 12px; }
 .voyant-lampe { width: 12px; height: 12px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
 .voyant[data-ton="ok"] .voyant-lampe { background: #3aa65b; box-shadow: 0 0 0 3px rgba(58, 166, 91, 0.25); }
 .voyant[data-ton="pause"] .voyant-lampe { background: #e0a21b; box-shadow: 0 0 0 3px rgba(224, 162, 27, 0.28); }

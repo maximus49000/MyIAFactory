@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
-from . import acces, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -155,6 +155,13 @@ class Projet:
             e["agir"] = demandes.commande_declaree(regl)
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
+            # Ce que le moteur dit retenir ce projet (la charge) : sur la carte de chaque tâche retenue et dans la barre.
+            retenu = attente.attente_charge(self.chemin_reglages.parent)
+            e["attente_charge"] = retenu
+            if retenu:
+                for t in e["taches"]:
+                    if t["id"] in retenu["taches"]:
+                        t["attente"] = retenu["texte"]
             e["images_ok"] = images_declarees(regl)
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)
@@ -585,6 +592,12 @@ class Bureau(ThreadingHTTPServer):
             for p in conf["projets"]:
                 if p["id"] not in self.projets:
                     self.projets[p["id"]] = Projet(p["id"], p["chemin"], ouvrir=self._ouvrir, demarrer=self._demarrer)
+
+    def etat_du_projet(self, projet):
+        """L'état servi à la page : celui du projet, plus la pause globale du bureau (une installation d'outil, dans
+        n'importe quel projet, retient tous les départs) : `pause_installation` vaut `{texte, projet, outils}` ou `None`."""
+        e = projet.etat()
+        return {**e, "pause_installation": attente.pause_installation(self.fichier_bureau)}
 
     def projet(self, id_=None):
         """Le projet d'id donné ; `None` → le premier ; inconnu → `None`."""
@@ -1017,7 +1030,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/image":
             return self._image(projet, morceaux.query)
         if chemin == "/api/etat":
-            return self._json(200, projet.etat())
+            return self._json(200, self.server.etat_du_projet(projet))
         if chemin == "/api/charge":
             return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":

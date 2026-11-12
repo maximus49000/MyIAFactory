@@ -291,3 +291,9 @@ Rôles : dev, artiste
 Date : 2026-11-12
 
 Dans un test automatique avec écran de fin qui revient au menu, désactiver le pilote automatique dès la fin de run, laisser la scène s'installer quelques images, puis seulement arrêter l'audio et quitter.
+
+## S49 — Après tout await dans une scène pouvant être remplacée en co
+Rôles : dev
+Date : 2026-11-12
+
+Après tout await dans une scène pouvant être remplacée en cours de route, tester que le nœud est toujours dans l'arbre avant d'utiliser get_tree() ou de poursuivre.

@@ -249,3 +249,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Pour attribuer un avertissement de fuite a la fermeture, le relancer avec --verbose avant de modifier du code.
+
+## S42 — Quand un document de conception est corrigé, ajouter en tête
+Rôles : designer
+Date : 2026-11-12
+
+Quand un document de conception est corrigé, ajouter en tête la liste de ce qui a changé et reporter chaque correction dans tous les tableaux, règles, prompts et maquettes qu'elle touche.

@@ -1,5 +1,6 @@
 """La consommation du forfait Claude Code. Aucun appel réseau réel : le téléchargement est injecté."""
 import json
+import subprocess
 import tempfile
 import time
 import unittest
@@ -79,6 +80,98 @@ class Lire(unittest.TestCase):
 
             self.assertIn("renouveler", conso.Conso(identifiants(t), refuse).lire()["raison"])
             self.assertIn("réseau", conso.Conso(identifiants(t), coupe).lire()["raison"])
+
+
+class Renouvellement(unittest.TestCase):
+    """Jeton périmé : le bureau demande à Claude Code de renouveler (faux exécuteur, faux fichier, jamais le vrai)."""
+
+    def monter(self, t, expire_dans, effet=None):
+        chemin, heure, appels = identifiants(t, expire_dans=expire_dans), [0.0], []
+
+        def renouveler():
+            appels.append(heure[0])
+            if effet:
+                effet(chemin)
+        return chemin, heure, appels, renouveler
+
+    def test_expire_renouvele_puis_relit_et_lit_l_usage(self):
+        with tempfile.TemporaryDirectory() as t:
+            vus = []
+            chemin, heure, appels, ren = self.monter(t, -60, lambda p: identifiants(t, "neuf", 28800))
+            r = conso.Conso(chemin, lambda j: vus.append(j) or BRUT, horloge=lambda: heure[0], renouveler=ren).lire()
+            self.assertTrue(r["disponible"])
+            self.assertEqual((len(appels), vus), (1, ["neuf"]))
+            self.assertNotIn("neuf", json.dumps(r))
+
+    def test_expirant_dans_moins_de_5_minutes_renouvelle(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin, heure, appels, ren = self.monter(t, 120, lambda p: identifiants(t, "neuf", 28800))
+            vus = []
+            conso.Conso(chemin, lambda j: vus.append(j) or BRUT, renouveler=ren).lire()
+            self.assertEqual((len(appels), vus), (1, ["neuf"]))
+
+    def test_jeton_valide_ne_renouvelle_pas(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin, heure, appels, ren = self.monter(t, 3600)
+            conso.Conso(chemin, lambda j: BRUT, renouveler=ren).lire()
+            self.assertEqual(appels, [])
+
+    def test_echec_du_renouvellement_garde_le_comportement_actuel(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin, heure, appels, ren = self.monter(t, -60)
+            r = conso.Conso(chemin, lambda j: self.fail("pas d'appel"), renouveler=ren).lire()
+            self.assertFalse(r["disponible"])
+            self.assertIn("renouveler", r["raison"])
+
+            def casse():
+                raise OSError("claude absent")
+            r = conso.Conso(chemin, lambda j: self.fail("pas d'appel"), renouveler=casse).lire()
+            self.assertIn("renouveler", r["raison"])
+
+    def test_expirant_bientot_et_renouvellement_en_echec_lit_avec_le_jeton_encore_valide(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin, heure, appels, ren = self.monter(t, 120)
+            vus = []
+            r = conso.Conso(chemin, lambda j: vus.append(j) or BRUT, renouveler=ren).lire()
+            self.assertTrue(r["disponible"])
+            self.assertEqual((len(appels), vus), (1, ["secret"]))
+
+    def test_au_plus_un_renouvellement_toutes_les_5_minutes_lecture_chaque_minute(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin, heure, appels, ren = self.monter(t, -60)
+            c = conso.Conso(chemin, lambda j: self.fail("pas d'appel"), horloge=lambda: heure[0], renouveler=ren)
+            for h in (0, 61, 122, 183, 244):
+                heure[0] = h
+                c.lire()
+            self.assertEqual(appels, [0])
+            heure[0] = 305
+            c.lire()
+            self.assertEqual(appels, [0, 305])
+
+    def test_par_defaut_aucun_lancement(self):
+        with tempfile.TemporaryDirectory() as t:
+            r = conso.Conso(identifiants(t, expire_dans=-60), lambda j: self.fail("pas d'appel")).lire()
+            self.assertIn("renouveler", r["raison"])
+
+    def test_la_commande_lancee(self):
+        from unittest import mock
+        with mock.patch("moteur.appel.trouver_claude", return_value="C:/x/claude.exe"), \
+                mock.patch("subprocess.run") as run:
+            self.assertTrue(conso.renouveler_connexion())
+        argv, kw = run.call_args[0][0], run.call_args[1]
+        self.assertEqual(argv, ["C:/x/claude.exe", "auth", "status"])
+        self.assertEqual((kw["stdin"], kw["stdout"], kw["stderr"], kw["timeout"]),
+                         (subprocess.DEVNULL, subprocess.DEVNULL, subprocess.DEVNULL, 30))
+        self.assertTrue(kw["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+    def test_commande_absente_ou_delai_ne_leve_pas(self):
+        from unittest import mock
+        with mock.patch("moteur.appel.trouver_claude", return_value=None), mock.patch("subprocess.run") as run:
+            self.assertFalse(conso.renouveler_connexion())
+            run.assert_not_called()
+        with mock.patch("moteur.appel.trouver_claude", return_value="c"), \
+                mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("c", 30)):
+            self.assertFalse(conso.renouveler_connexion())
 
 
 MAINTENANT = 1794480000   # 2026-11-12 environ ; les remises du compte sont tirées de là

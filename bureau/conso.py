@@ -11,6 +11,7 @@ et est versée à l'historique d'abonnement ; sinon, on se rabat sur le dernier 
 « indisponible ». Ici les pourcentages sont en « utilisé » (`utilise`) et en « reste » (`reste`).
 """
 import json
+import subprocess
 import threading
 import time
 import urllib.error
@@ -23,14 +24,35 @@ from . import abonnement
 URL = "https://api.anthropic.com/api/oauth/usage"
 IDENTIFIANTS = Path.home() / ".claude" / ".credentials.json"
 DUREE_CACHE = 60.0
+MARGE_JETON = 300.0               # un jeton qui expire dans moins de 5 min est déjà à renouveler
+INTERVALLE_RENOUVELLEMENT = 300.0  # au plus un renouvellement toutes les 5 min
+DELAI_RENOUVELLEMENT = 30
 LIBELLES = {"five_hour": "5 heures", "seven_day": "Semaine"}
 ORDRE = ("five_hour", "seven_day")
 PREFIXE_SEMAINE = "seven_day_"
 IGNOREES = ("extra_usage",)   # les crédits supplémentaires ne sont pas une fenêtre du forfait
 
 
-def _jeton(chemin):
-    """(jeton, raison) : le jeton d'accès valide, ou la raison de son absence."""
+def renouveler_connexion():
+    """Demande à Claude Code de renouveler sa connexion : `claude auth status`, commande officielle sans appel au modèle
+    (donc gratuite), qui rafraîchit le jeton sous le verrou que Claude Code partage entre ses processus. Le bureau ne
+    renouvelle ni n'écrit jamais le fichier lui-même. La sortie contient l'adresse e-mail du compte : jetée, jamais
+    journalisée. Ne lève jamais ; rend True si la commande s'est terminée."""
+    from moteur import appel
+    try:
+        claude = appel.trouver_claude()
+        if not claude:
+            return False
+        subprocess.run([claude, "auth", "status"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=DELAI_RENOUVELLEMENT,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return True
+    except Exception:   # absente, délai dépassé, refus du système : on se rabat, sans lever
+        return False
+
+
+def _jeton(chemin, marge=0):
+    """(jeton, raison) : le jeton d'accès valide encore `marge` secondes, ou la raison de son absence."""
     try:
         d = json.loads(Path(chemin).read_text(encoding="utf-8"))["claudeAiOauth"]
         jeton, expire = d["accessToken"], d.get("expiresAt")
@@ -38,7 +60,7 @@ def _jeton(chemin):
         return None, "Connexion Claude Code introuvable."
     if not isinstance(jeton, str) or not jeton:
         return None, "Connexion Claude Code introuvable."
-    if isinstance(expire, (int, float)) and expire / 1000 < time.time():
+    if isinstance(expire, (int, float)) and expire / 1000 < time.time() + marge:
         return None, "Connexion à renouveler : utilisez Claude Code un instant."
     return jeton, None
 
@@ -126,13 +148,29 @@ class Conso:
     rend ce que `abonnement.pour_la_page` rend (ou None) pour y lire la part estimée des coûts."""
 
     def __init__(self, identifiants=IDENTIFIANTS, telecharger=_telecharger, horloge=time.monotonic,
-                 memoire=False, part=None, maintenant=time.time):
+                 memoire=False, part=None, maintenant=time.time, renouveler=None):
         self.identifiants, self._telecharger, self._horloge = identifiants, telecharger, horloge
         self.memoire, self._part, self._maintenant = memoire, part, maintenant
+        self._renouveler, self._dernier_renouvellement = renouveler, None
         self._verrou, self._cache, self._a = threading.Lock(), None, 0.0
 
+    def _jeton_renouvele(self):
+        """Le jeton à utiliser : s'il expire dans moins de `MARGE_JETON`, on demande à Claude Code de le renouveler (au
+        plus une fois par `INTERVALLE_RENOUVELLEMENT`) puis on relit le fichier ; en cas d'échec, l'état de la lecture."""
+        jeton, raison = _jeton(self.identifiants, MARGE_JETON)
+        if jeton is not None or "renouveler" not in raison or self._renouveler is None:
+            return _jeton(self.identifiants) if self._renouveler is None else (jeton, raison)
+        t = self._horloge()
+        if self._dernier_renouvellement is None or t - self._dernier_renouvellement >= INTERVALLE_RENOUVELLEMENT:
+            self._dernier_renouvellement = t
+            try:
+                self._renouveler()
+            except Exception:
+                pass
+        return _jeton(self.identifiants)
+
     def _lecture(self):
-        jeton, raison = _jeton(self.identifiants)
+        jeton, raison = self._jeton_renouvele()
         if jeton is None:
             return {"disponible": False, "raison": raison}
         try:

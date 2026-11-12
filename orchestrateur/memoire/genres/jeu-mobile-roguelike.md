@@ -296,3 +296,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Dans un roguelike difficile, un robot de test même peu fautif peut ne jamais gagner. Prévoir un mode robot parfait pour exercer la victoire en run complète, en plus de la vérification des écrans de fin par un script d'état.
+
+## G50 — Pour tester l'écran de victoire d'un roguelike avec un robot
+Rôles : dev
+Date : 2026-11-12
+
+Pour tester l'écran de victoire d'un roguelike avec un robot imparfait, faire passer le robot en mode sans erreur et sans risque quand il lui reste une seule vie.

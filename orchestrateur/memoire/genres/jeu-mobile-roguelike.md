@@ -140,3 +140,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Un avertissement de format de keystore n'est pas un blocage : vérifier le format attendu par l'outil de signature avant de migrer.
+
+## G24 — Pour un jeu à musique en boucle, générer sons et musiques pa
+Rôles : artiste
+Date : 2026-11-12
+
+Pour un jeu à musique en boucle, générer sons et musiques par un script en Python pur (module wave, oscillateurs, bruit) évite toute licence externe, et un script de vérification contrôle format, niveau, écrêtage et continuité de boucle.

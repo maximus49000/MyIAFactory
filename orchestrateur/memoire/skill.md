@@ -171,3 +171,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Quand les tests automatiques ne peuvent pas échouer, équilibrer seulement ce qui se calcule (ressources, fréquences) et ne pas changer les valeurs de difficulté sans mesure.
+
+## S29 — Après avoir changé une valeur d'équilibrage, chercher les te
+Rôles : designer, dev
+Date : 2026-11-12
+
+Après avoir changé une valeur d'équilibrage, chercher les textes affichés qui la répètent en dur et les mettre à jour.

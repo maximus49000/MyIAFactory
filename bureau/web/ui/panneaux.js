@@ -13,12 +13,15 @@ import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
 import {envoyer as envoyerDemande} from "./actions.js";
+import {appliquerEnvoyees, surEnvoyees} from "./validation.js";
 
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
 const MAX_TITRE = 90;
 
 // opts : {conteneur, carte, panneau, sc, plan, etat: () => état courant, barre, surFiltre: () => void}
-export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre, surFiltre = () => {}}) {
+export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBrut, barre, surFiltre = () => {}}) {
+  // Partout l'état affiché est l'état servi SANS les validations déjà envoyées (liste, compteur, signature).
+  const etat = () => appliquerEnvoyees(etatBrut());
   let panneauOuvert = null;    // {type, id}
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
   let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
@@ -354,7 +357,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     fermerPanneau();
   });
 
-  return {
+  const api = {
     // À chaque nouvel état : pastille et panneau ouvert tenus à jour (sauf pendant la saisie du réglage).
     // Ouvre la vue liste, ou la ferme si elle est déjà ouverte.
     basculerListe() {
@@ -362,6 +365,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
     },
     filtre: filtreActif,
     maj(e) {
+      e = appliquerEnvoyees(e);
       // Une discussion neuve : dès que le relevé montre la fonctionnalité créée, on l'ouvre.
       if (panneauOuvert?.type === "fonctionnalite" && panneauOuvert.id === null && nouvelle.envoi) {
         const id = nouvelleApparue(nouvelle.envoi.avant, e, nouvelle.envoi.texte);
@@ -387,4 +391,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       }
     },
   };
+  // Une validation envoyée (ou dont l'envoi a échoué) : liste et compteur redessinés tout de suite, sans attendre la relecture.
+  surEnvoyees(() => { const e = etatBrut(); if (e) api.maj(e); });
+  return api;
 }

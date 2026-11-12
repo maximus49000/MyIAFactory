@@ -239,18 +239,17 @@ test("valider_etape : au bureau, le résumé et « Ouvrir la validation » seule
   assert.deepEqual(demandes, []);
 });
 
-test("valider_etape envoyée : plus de bouton, « en cours de traitement », puis elle disparaît avec le relevé", async () => {
+test("valider_etape envoyée : retirée de la liste (plus d'« Envoyée »), même si l'état servi la contient encore", async () => {
   const V = await import("../ui/validation.js");
   const etat = {...ETAT, fonctionnalites: [], decisions_projet: [{...VALIDATION, id: "v-envoyee"}]};
   assert.ok(bouton(rendre(etat).contenu, "Ouvrir la validation"));
   V.marquerEnvoyee("v-envoyee");
-  const apres = rendre(etat).contenu;                                         // l'état servi se rafraîchit : elle reste envoyée
+  const apres = rendre(etat).contenu;                                         // état servi rafraîchi : toujours masquée
   assert.equal(bouton(apres, "Ouvrir la validation"), undefined);
-  assert.match(apres.textContent, /Envoyée, en cours de traitement/);
-  assert.match(apres.textContent, /Élément : Accueil/);
-  rendre({...etat, decisions_projet: []});                                    // le relevé ne l'a plus : oubliée
-  assert.equal(V.estEnvoyee("v-envoyee"), false);
-  assert.ok(bouton(rendre(etat).contenu, "Ouvrir la validation"));            // si elle revenait, elle serait de nouveau proposée
+  assert.doesNotMatch(apres.textContent, /Envoyée|Accueil/);
+  assert.match(apres.textContent, /Aucun élément n'attend votre validation/);
+  V.oublierEnvoyee("v-envoyee");
+  assert.ok(bouton(rendre(etat).contenu, "Ouvrir la validation"));            // l'envoi a échoué : elle revient
 });
 
 test("valider_etape rappelle l'objectif et ce qu'il y a à valider, avant le compte rendu", () => {

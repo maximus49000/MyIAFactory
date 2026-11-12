@@ -15,6 +15,8 @@ class Noeud {
 }
 globalThis.document = {createElement: (t) => new Noeud(t)};
 
+const memoireLocale = new Map();    // le « stockage local » du navigateur, partagé entre « rechargements »
+globalThis.localStorage = {getItem: (k) => (memoireLocale.has(k) ? memoireLocale.get(k) : null), setItem: (k, v) => memoireLocale.set(k, String(v))};
 const V = await import("../ui/validation.js");
 
 const D = {id: "v7", genre: "valider_etape", texte: "L'élément « Jeu » attend votre validation.", fonctionnalite: "f1",
@@ -228,7 +230,7 @@ test("envoi : marquée envoyée dès le départ, oubliée si l'envoi échoue, ga
   V.oublierEnvoyee("v-essai");
   await lancer();
   assert.equal(V.estEnvoyee("v-essai"), true);                                // succès : envoyée jusqu'à la disparition
-  // sécurité : oubliée au bout de 10 minutes
+  // sécurité : oubliée au bout de 30 minutes
   V.marquerEnvoyee("v-vieux", 1000);
   assert.equal(V.estEnvoyee("v-vieux", 1000 + V.SECURITE_ENVOYEE_MS - 1), true);
   assert.equal(V.estEnvoyee("v-vieux", 1000 + V.SECURITE_ENVOYEE_MS), false);
@@ -247,4 +249,73 @@ test("les extensions téléchargeables sont celles du bureau", () => {
   const python = [...bloc.matchAll(/"(\.[a-z0-9]+)":/g)].map((m) => m[1]).sort();
   assert.deepEqual([...V.EXTENSIONS_TELECHARGEABLES].sort(), python);
   assert.ok(V.estTelechargeable("build/Jeu.APK") && !V.estTelechargeable("a.png") && !V.estTelechargeable("main.gd"));
+});
+
+const ETAT_SERVI = (...ids) => ({decisions_projet: [...ids.map((id) => ({id, genre: "valider_etape"})), {id: "s1", genre: "session_cloud"}],
+  directeur: {total: 3, projet: 2}});
+
+test("appliquerEnvoyees : retrait immédiat, état servi qui la contient encore, compteur ajusté", () => {
+  V.marquerEnvoyee("va");
+  const e = ETAT_SERVI("va", "vb");
+  const vu = V.appliquerEnvoyees(e);
+  assert.deepEqual(vu.decisions_projet.map((d) => d.id), ["vb", "s1"]);
+  assert.deepEqual([vu.directeur.total, vu.directeur.projet], [2, 1]);
+  assert.equal(e.decisions_projet.length, 3);                                  // l'état servi n'est pas modifié
+  assert.deepEqual(V.appliquerEnvoyees(e).decisions_projet.map((d) => d.id), ["vb", "s1"]);   // à chaque rendu
+  assert.equal(V.appliquerEnvoyees(ETAT_SERVI("vb")).decisions_projet.length, 2);              // rien de masqué : l'état tel quel
+  assert.equal(V.estEnvoyee("va"), false);          // « va » n'est plus servie : purgée
+  V.oublierEnvoyee("va");
+});
+
+test("appliquerEnvoyees : l'écouteur est prévenu à l'envoi et à l'échec ; 409 reste masquée, échec revient", async () => {
+  let n = 0;
+  const arret = V.surEnvoyees(() => { n += 1; });
+  const reponses = [{ok: false, message: "Réseau coupé."}, {ok: false, message: "Cette décision a déjà reçu une réponse : x"}];
+  const d = {...D, id: "v-409"};
+  const e = ETAT_SERVI("v-409");
+  const vus = [];
+  const ctx = {etat: {agir: true}, barre: {demander: async () => { vus.push(V.appliquerEnvoyees(e).decisions_projet.length); return reponses.shift(); }}};
+  const lancer = async () => {
+    const {boite} = V.contenuValidation(ctx, d, {fermer() {}, hotePage: "127.0.0.1", origine: null});
+    boite.tous((n2) => n2.tagName === "input" && n2.type === "radio").filter((_, i) => i % 2 === 0).forEach((r) => r.auteurs.change[0]());
+    await boite.tous((n2) => n2.className.startsWith("bouton val-envoyer"))[0].auteurs.click[0]();
+    return boite;
+  };
+  const boite = await lancer();
+  assert.equal(vus[0], 1);                                                     // pendant l'envoi : déjà retirée
+  assert.equal(V.appliquerEnvoyees(e).decisions_projet.length, 2);             // échec : elle revient
+  assert.match(boite.textContent, /Réseau coupé/);                             // avec le message d'erreur
+  await lancer();
+  assert.equal(V.appliquerEnvoyees(e).decisions_projet.length, 1);             // 409 : reste masquée
+  assert.equal(n, 3);                                                        // envoi, échec, envoi
+  arret();
+  V.oublierEnvoyee("v-409");
+});
+
+test("mémoire des envois : survit au rechargement, par projet, purgée à la disparition", async () => {
+  const P = await import("../ui/projets.js");
+  P.definirProjet("alpha");
+  V.marquerEnvoyee("vr");
+  V.oublierMemoireDePage();                                                    // la page est rechargée
+  assert.equal(V.estEnvoyee("vr"), true);
+  P.definirProjet("beta");
+  assert.equal(V.estEnvoyee("vr"), false);                                     // une clé par projet
+  P.definirProjet("alpha");
+  V.oublierMemoireDePage();
+  V.appliquerEnvoyees({decisions_projet: []});                                 // disparue de l'état servi
+  V.oublierMemoireDePage();
+  assert.equal(V.estEnvoyee("vr"), false);
+  globalThis.localStorage.setItem("bureau.validations-envoyees.alpha", "pas du json");
+  V.oublierMemoireDePage();
+  assert.equal(V.estEnvoyee("vr"), false);                                     // stockage illisible : sans effet
+  P.definirProjet(null);
+});
+
+test("« À revoir » : l'ancienne décision levée disparaît, la nouvelle (autre identifiant) s'affiche", () => {
+  V.marquerEnvoyee("v1");
+  const apres = V.appliquerEnvoyees({decisions_projet: [{id: "v1", genre: "valider_etape"}]});
+  assert.equal(apres.decisions_projet.length, 0);
+  V.appliquerEnvoyees({decisions_projet: []});                                 // le moteur a levé la décision
+  const nouvelle = V.appliquerEnvoyees({decisions_projet: [{id: "v2", genre: "valider_etape"}]});
+  assert.deepEqual(nouvelle.decisions_projet.map((d) => d.id), ["v2"]);        // l'élément corrigé : nouvelle décision visible
 });

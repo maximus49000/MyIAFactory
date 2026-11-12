@@ -9,7 +9,7 @@ import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnal
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
-import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation, purgerEnvoyees} from "./validation.js";
+import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation} from "./validation.js";
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 const MOTIF_GENRE =/^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -254,10 +254,6 @@ function decisionValidation(ctx, d) {
     li.append(ligne);
   }
   if (!enteteValidation(d).length) li.append(el("div", "decision-texte", d.texte));
-  if (estEnvoyee(d.id)) {      // déjà répondue : plus de bouton, l'élément disparaît quand le relevé ne l'a plus
-    li.append(el("div", "lecon-meta decision-envoyee", "Envoyée, en cours de traitement"));
-    return li;
-  }
   li.append(el("div", "lecon-meta", resumeAVerifier(d)));
   const b = el("button", "bouton", "Ouvrir la validation");
   b.type = "button";
@@ -307,9 +303,8 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, "Valider la méthode", "bouton", () => demandeMethode(x.fonctionnalite, "valider"))])),
   ];
   contenu.append(partie("Cahiers et méthodes à valider", "Aucun cahier ni méthode à valider", validations));
-  purgerEnvoyees(d.validations.map((x) => x.id));
   contenu.append(partie("Éléments à valider", "Aucun élément n'attend votre validation",
-    d.validations.map((x) => decisionValidation(ctx, x))));
+    d.validations.filter((x) => !estEnvoyee(x.id)).map((x) => decisionValidation(ctx, x))));   // déjà répondue : retirée
   contenu.append(partie("Demandes d'un autre genre", "Aucune demande ne sort du genre du projet",
     d.genresDemandes.map((x) => decisionGenreFonctionnalite(ctx, x))));
   contenu.append(partie("Genres à confirmer", "Aucun genre à confirmer", d.genres.map((x) => decisionGenre(ctx, x))));

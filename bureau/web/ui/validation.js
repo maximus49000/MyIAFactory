@@ -27,23 +27,76 @@ const HOTES_LOCAUX = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 
-// Les validations déjà envoyées depuis la fenêtre : identifiant de décision -> heure d'envoi. Gardées en mémoire de la
-// page à travers les rafraîchissements de l'état servi, jusqu'à ce que la décision ait disparu du relevé (le moteur a
-// fini) ou, par sécurité, pendant 10 minutes. Tant que l'une y est, la liste la montre « envoyée » sans bouton.
-export const SECURITE_ENVOYEE_MS = 10 * 60 * 1000;
-const envoyees = new Map();
-export function marquerEnvoyee(id, maintenant = Date.now()) { if (plein(id)) envoyees.set(id, maintenant); }
-export function oublierEnvoyee(id) { envoyees.delete(id); }
+// Les validations déjà envoyées depuis la fenêtre : identifiant de décision -> heure d'envoi. Dès l'envoi (avant même la
+// réponse du serveur) l'élément disparaît de la liste « Éléments à valider » et du compteur ; il ne revient que si
+// l'envoi échoue. La mémoire est appliquée à CHAQUE rendu (`appliquerEnvoyees`), survit au rechargement de la page
+// (stockage local du navigateur, une clé par projet) et s'efface quand la décision n'est plus dans l'état servi (le
+// moteur l'a levée) ou, par sécurité, après 30 minutes. Une « À revoir » repart avec une NOUVELLE décision (nouvel
+// identifiant, posé quand l'agent a corrigé) : l'ancien identifiant masqué ne la touche pas.
+export const SECURITE_ENVOYEE_MS = 30 * 60 * 1000;
+const CLE_ENVOYEES = "bureau.validations-envoyees.";
+const memoire = new Map();            // projet -> (identifiant -> heure d'envoi)
+const ecouteurs = new Set();
+const cleDuProjet = () => CLE_ENVOYEES + (projetCourant() || "-");
+function table() {
+  const cle = cleDuProjet();
+  let t = memoire.get(cle);
+  if (!t) {
+    t = new Map();
+    try {
+      const brut = JSON.parse(globalThis.localStorage?.getItem(cle) || "{}");
+      for (const [id, h] of Object.entries(brut && typeof brut === "object" ? brut : {})) if (Number.isFinite(h)) t.set(id, h);
+    } catch { /* stockage indisponible ou illisible : mémoire de la page seulement */ }
+    memoire.set(cle, t);
+  }
+  return t;
+}
+function sauver() {
+  try { globalThis.localStorage?.setItem(cleDuProjet(), JSON.stringify(Object.fromEntries(table()))); } catch { /* idem */ }
+}
+const prevenir = () => { for (const f of [...ecouteurs]) { try { f(); } catch { /* un écouteur ne bloque pas les autres */ } } };
+// `f()` est appelée quand la mémoire change (envoi, échec) : la page redessine alors la liste et le compteur.
+export function surEnvoyees(f) { ecouteurs.add(f); return () => ecouteurs.delete(f); }
+export function marquerEnvoyee(id, maintenant = Date.now()) {
+  if (!plein(id)) return;
+  table().set(id, maintenant);
+  sauver();
+  prevenir();
+}
+export function oublierEnvoyee(id) {
+  if (table().delete(id)) sauver();
+  prevenir();
+}
 export function estEnvoyee(id, maintenant = Date.now()) {
-  const t = envoyees.get(id);
+  const t = table().get(id);
   if (t === undefined) return false;
-  if (maintenant - t >= SECURITE_ENVOYEE_MS) { envoyees.delete(id); return false; }
+  if (maintenant - t >= SECURITE_ENVOYEE_MS) { table().delete(id); sauver(); return false; }
   return true;
 }
-// À chaque affichage de la liste : on oublie celles que le relevé n'a plus (ou dont le délai est passé).
+// On oublie celles que l'état servi n'a plus (ou dont le délai est passé).
 export function purgerEnvoyees(idsPresents, maintenant = Date.now()) {
-  const presents = new Set(idsPresents);
-  for (const id of [...envoyees.keys()]) if (!presents.has(id) || !estEnvoyee(id, maintenant)) envoyees.delete(id);
+  const presents = new Set(idsPresents), t = table();
+  let change = false;
+  for (const id of [...t.keys()]) if (!presents.has(id) || !estEnvoyee(id, maintenant)) { change = t.delete(id) || change; }
+  if (change) sauver();
+}
+// Pour les tests : comme un rechargement de la page (la mémoire de la page est perdue, le stockage local reste).
+export function oublierMemoireDePage() { memoire.clear(); }
+
+// L'état à afficher : sans les validations déjà envoyées (liste, compteur de la pastille). Appliquée à chaque rendu.
+export function appliquerEnvoyees(etat, maintenant = Date.now()) {
+  const liste = Array.isArray(etat?.decisions_projet) ? etat.decisions_projet : null;
+  if (!liste) return etat;
+  purgerEnvoyees(liste.filter((d) => d?.genre === "valider_etape").map((d) => d.id), maintenant);
+  const gardees = liste.filter((d) => !(d?.genre === "valider_etape" && estEnvoyee(d.id, maintenant)));
+  const n = liste.length - gardees.length;
+  if (!n) return etat;
+  const sortie = {...etat, decisions_projet: gardees};
+  if (etat.directeur && typeof etat.directeur === "object") {
+    const retire = (v) => (Number.isFinite(v) ? Math.max(0, v - n) : v);
+    sortie.directeur = {...etat.directeur, total: retire(etat.directeur.total), projet: retire(etat.directeur.projet)};
+  }
+  return sortie;
 }
 
 const urlImageValidation = (chemin) => avecProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`, projetCourant());
@@ -367,7 +420,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     const corps = corpsValidation(d, choix, libre.value);
     if (!corps) { erreur.textContent = "Choisissez OK ou À revoir pour chaque point."; return; }
     envoi.disabled = true;
-    marquerEnvoyee(d.id);       // dès l'envoi : la liste ne la propose plus, même si l'état servi se rafraîchit avant la réponse
+    marquerEnvoyee(d.id);       // dès l'envoi : retirée de la liste et du compteur, même si l'état servi se rafraîchit avant la réponse
     const r = await ctx.barre.demander(corps, envoi);
     if (r?.ok) fermer();
     else {

@@ -285,3 +285,9 @@ Rôles : testeur, dev
 Date : 2026-11-12
 
 Quand un avertissement de fuite à la sortie apparaît dans tous les tests, chercher l'objet commun (autoload, singleton) au lieu de le répéter élément par élément.
+
+## S48 — Dans un test automatique avec écran de fin qui revient au me
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Dans un test automatique avec écran de fin qui revient au menu, désactiver le pilote automatique dès la fin de run, laisser la scène s'installer quelques images, puis seulement arrêter l'audio et quitter.

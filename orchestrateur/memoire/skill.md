@@ -315,3 +315,9 @@ Rôles : designer, dev
 Date : 2026-11-12
 
 Faire tourner dès le premier élément un contrôle qui parcourt tous les fichiers de valeurs et signale tout chiffre écrit en dur dans un texte à trous ; il trouve aussi les oublis des éléments déjà validés.
+
+## S53 — Un test qui donne une donnée fausse à un contrôle ne compte
+Rôles : designer, dev, qa
+Date : 2026-11-12
+
+Un test qui donne une donnée fausse à un contrôle ne compte que si une erreur nouvelle apparaît par rapport aux données justes.

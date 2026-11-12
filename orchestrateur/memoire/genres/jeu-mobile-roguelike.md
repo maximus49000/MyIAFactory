@@ -260,3 +260,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Pour des maquettes cartoon pas enfantines : expressions exagérées (sourcils, dents, yeux mi-clos), silhouettes anguleuses, contours épais et ombres décalées ; éviter les formes rondes et les grands yeux.
+
+## G44 — Pour un export signé d'un moteur de jeu, passer le chemin, l
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export signé d'un moteur de jeu, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, puis contrôler le code retour, la date et la taille du paquet produit.

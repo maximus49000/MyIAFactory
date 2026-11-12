@@ -56,3 +56,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Quand les assets arrivent avant les scènes qui les utilisent, centraliser leur accès dans un catalogue nommé et vérifier le branchement avec une scène galerie capturée par le moteur.
+
+## G10 — Pour signer une APK Godot, créer le keystore avec keytool en
+Rôles : livreur
+Date : 2026-11-12
+
+Pour signer une APK Godot, créer le keystore avec keytool en -storetype JKS, car apksigner ne lit pas le PKCS12 par défaut du JDK 17.

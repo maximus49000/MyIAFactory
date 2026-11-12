@@ -111,3 +111,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Quand une police bitmap générée par script ne couvre pas tous les caractères, documenter son jeu de caractères et rédiger les textes d'aperçu avec ses seuls glyphes, sinon un symbole manquant disparaît sans erreur.
+
+## S19 — Quand un générateur audio utilise des graines fixes, on peut
+Rôles : artiste
+Date : 2026-11-12
+
+Quand un générateur audio utilise des graines fixes, on peut ajouter des sons au script et le relancer sans altérer l'existant.

@@ -279,3 +279,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Contrôler la console de chaque outil de test séparément : une fuite ou une erreur peut n'apparaître que dans la run complète.
+
+## S47 — Quand un avertissement de fuite à la sortie apparaît dans to
+Rôles : testeur, dev
+Date : 2026-11-12
+
+Quand un avertissement de fuite à la sortie apparaît dans tous les tests, chercher l'objet commun (autoload, singleton) au lieu de le répéter élément par élément.

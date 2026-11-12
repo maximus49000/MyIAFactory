@@ -178,7 +178,10 @@ def _sans_terminal(texte):
 # `lancer_session` : voir docs/superpowers/specs/2026-11-12-sessions-cloud-design.md et `outils/essai_session_cloud.py`.
 
 ECRANS_SANS_RISQUE = (("Choose the text style", "\r"),          # le thème proposé par défaut
-                      ("Press Enter to continue", "\r"))        # les notes de sécurité, à lire seulement
+                      ("Press Enter to continue", "\r"),        # les notes de sécurité, à lire seulement
+                      # « Claude in Chrome extension detected » : Échap garde les outils navigateur coupés (le choix
+                      # proposé par défaut, le plus prudent ; un agent n'utilise jamais le navigateur du Directeur)
+                      ("Esc to keep browser tools off", "\x1b"))
 DEMANDES_A_L_UTILISATEUR = (("trust this folder", "Claude Code demande d'approuver le dossier du projet (« Is this a "
                                                   "project you created or one you trust? »)"),
                             ("Enter to confirm", "Claude Code attend un choix"),
@@ -272,7 +275,13 @@ def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None, appr
         return {"issue": "fini", "session": None, "adresse": None, "ecran": ecran, "dossier_a_approuver": False,
                 "raison": _sans_terminal(r.texte) or f"claude a rendu le code {r.code}"}
     return {"issue": "delai", "session": None, "adresse": None, "ecran": ecran, "dossier_a_approuver": False,
-            "raison": f"rien d'exploitable après {round(time.monotonic() - debut)} s"}
+            "raison": f"rien d'exploitable après {round(time.monotonic() - debut)} s" + _fin_d_ecran(r.texte)}
+
+
+def _fin_d_ecran(texte, n=3):
+    """« ; dernier écran : … » (les dernières lignes non vides, sans les traits) : de quoi savoir où il a attendu."""
+    lignes = [x.strip() for x in texte.splitlines() if x.strip() and set(x.strip()) - set("─━-")]
+    return ("; dernier écran : " + " / ".join(lignes[-n:]))[:300] if lignes else ""
 
 
 def chercher_rapports(dossier_projet, taches, *, executer=None):

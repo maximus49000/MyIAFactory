@@ -155,8 +155,19 @@ class EssaiFauxTerminal(unittest.TestCase):
         r = cloud.essai_pseudo_terminal(["claude"], "/p", lancer=FauxTerminal(
             ["Error: --cloud requires an interactive terminal.\n", None], code=1))
         self.assertEqual((r["issue"], r["raison"]), ("fini", cloud.SANS_TERMINAL))
-        r = cloud.essai_pseudo_terminal(["claude"], "/p", lancer=FauxTerminal(["Chargement…\n"]))
+        r = cloud.essai_pseudo_terminal(["claude"], "/p", lancer=FauxTerminal(["Chargement…\n─────\n"]))
         self.assertEqual(r["issue"], "delai")
+        self.assertIn("dernier écran : Chargement…", r["raison"])      # de quoi savoir où il a attendu
+
+    def test_outils_navigateur_gardes_coupes(self):
+        """Essai réel : après l'approbation du dossier, Claude Code propose d'utiliser Chrome ; Échap garde ses outils
+        navigateur coupés (le choix par défaut), puis la session est créée."""
+        chrome = ("Claude in Chrome extension detected\n❯ No, keep browser tools off\nYes, use my browser\n"
+                  "Enter to confirm · Esc to keep browser tools off\n")
+        faux = FauxTerminal([chrome, "Cloud session created: " + ADRESSE + "\n"])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux)
+        self.assertEqual(faux.tape, ["\x1b"])
+        self.assertEqual(r["issue"], "session")
 
     def test_sans_pseudo_console(self):
         from moteur import pseudo_terminal as pt

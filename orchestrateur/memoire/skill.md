@@ -177,3 +177,9 @@ Rôles : designer, dev
 Date : 2026-11-12
 
 Après avoir changé une valeur d'équilibrage, chercher les textes affichés qui la répètent en dur et les mettre à jour.
+
+## S30 — Les textes affichés et les tests lisent les valeurs d'équili
+Rôles : designer, dev
+Date : 2026-11-12
+
+Les textes affichés et les tests lisent les valeurs d'équilibrage au lieu de recopier leurs chiffres, pour qu'un réglage ne les casse pas.

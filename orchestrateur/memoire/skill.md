@@ -153,3 +153,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Quand un générateur audio utilise des graines fixes, on peut ajouter des sons au script et le relancer sans altérer l'existant.
+
+## S26 — Quand un outil de signature affiche les détails du certifica
+Rôles : livreur
+Date : 2026-11-12
+
+Quand un outil de signature affiche les détails du certificat, n'en recopier que le statut de vérification ; le détail peut contenir des données personnelles.

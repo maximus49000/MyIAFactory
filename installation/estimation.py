@@ -1,8 +1,10 @@
 """L'estimation du coût d'un élément passé par le workflow : une fourchette, pas un chiffre."""
 import json
 import statistics
+from datetime import date
 from pathlib import Path
 
+from bureau import prix as prix_bureau
 from bureau import reglages
 from bureau.usage import HistoriqueUsage
 
@@ -21,6 +23,28 @@ def _genres_du_projet(factory):
     genres |= {w.get("genre") for w in factory.get("workflows") or [] if isinstance(w, dict)}
     genres.discard(None)
     return genres
+
+
+def prix_de_modele(bureau_json, modele):
+    """Le prix d'un modèle en euros par token, d'après le premier projet du bureau commun qui le connaît, ou `None`
+    (bureau absent ou illisible, modèle sans prix). La source des prix de l'installation et du moteur."""
+    if not bureau_json:
+        return None
+    try:
+        projets = [p["chemin"] for p in reglages.lire_bureau(bureau_json)["projets"]]
+    except (reglages.ReglagesInvalides, OSError):
+        return None
+    jour = date.today().isoformat()
+    for chemin in projets:
+        try:
+            regl = reglages.charger(chemin)
+        except reglages.ReglagesInvalides:
+            continue
+        p = prix_bureau.prix_effectif(prix_bureau.TablePrix(chemin.parent / "prix-historique.jsonl"), regl, modele, jour)[0]
+        if p and p.get("entree") and p.get("sortie"):
+            return {c: p[c] / 1_000_000 for c in ("entree", "sortie", "cache_lecture", "cache_ecriture")
+                    if p.get(c) is not None}
+    return None
 
 
 def usages_du_genre(bureau_json, genre):

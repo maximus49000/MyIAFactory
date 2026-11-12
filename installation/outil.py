@@ -23,12 +23,12 @@ import os
 import re
 import sys
 import unicodedata
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bureau import charge, prix, reglages  # noqa: E402
+from bureau import charge, reglages  # noqa: E402
 from installation import acces, calibrage, creation, dossier, estimation, examen, lanceur, mise_en_place, proposition  # noqa: E402
 from installation.dossier import Echec  # noqa: E402
 
@@ -51,18 +51,8 @@ def _historique():
 
 
 def _prix_de(modele):
-    """Le prix d'un modèle en euros par token, d'après le premier projet du bureau commun qui le connaît."""
-    jour = date.today().isoformat()
-    for chemin in _projets_du_bureau():
-        try:
-            regl = reglages.charger(chemin)
-        except reglages.ReglagesInvalides:
-            continue
-        p = prix.prix_effectif(prix.TablePrix(chemin.parent / "prix-historique.jsonl"), regl, modele, jour)[0]
-        if p and p.get("entree") and p.get("sortie"):
-            return {c: p[c] / 1_000_000 for c in ("entree", "sortie", "cache_lecture", "cache_ecriture")
-                    if p.get(c) is not None}
-    return None
+    """Le prix d'un modèle en euros par token, d'après le bureau commun (source partagée avec le moteur)."""
+    return estimation.prix_de_modele(dossier.bureau(), modele)
 
 
 def _estimer(flux, agents, genre):

@@ -728,7 +728,8 @@ def _cout(projet, flux, agents, genre):
         except Exception:      # une estimation d'après les mesures est une aide : jamais une raison d'échouer
             usages = []
     agents = [dict(a, modele="Opus" if a["modele"] == "Fable" else a["modele"]) for a in agents]   # Fable : tarif d'Opus
-    e = estimation.estimer(flux, agents, usages, lambda modele: None)
+    bureau = getattr(projet, "bureau", None)
+    e = estimation.estimer(flux, agents, usages, lambda modele: estimation.prix_de_modele(bureau, modele))
     return {"tokens": e["tokens"], "euros": e["euros"]}
 
 

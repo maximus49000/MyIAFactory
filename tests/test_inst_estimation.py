@@ -142,3 +142,43 @@ class TestUsagesDuGenre(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPrixDesModeles(unittest.TestCase):
+    """La source des prix d'un modèle est partagée par l'installation et le moteur (`estimation.prix_de_modele`)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.base = Path(self._tmp.name)
+        d = self.base / "p" / ".factory"
+        d.mkdir(parents=True)
+        (d / "reglages.json").write_text(json.dumps({"prix": {
+            "Sonnet": {"entree": 3, "sortie": 15, "date": "2026-01-01"}}}), encoding="utf-8")
+        self.bureau = self.base / "bureau.json"
+        self.bureau.write_text(json.dumps({"projets": ["p/.factory/reglages.json"]}), encoding="utf-8")
+
+    def test_prix_par_token_d_apres_le_premier_projet_qui_le_connait(self):
+        p = estimation.prix_de_modele(self.bureau, "Sonnet")
+        self.assertAlmostEqual(p["entree"], 3e-6)
+        self.assertAlmostEqual(p["sortie"], 15e-6)
+        self.assertIsNone(estimation.prix_de_modele(self.bureau, "Inconnu"))
+
+    def test_bureau_absent_ou_illisible_aucun_prix(self):
+        self.assertIsNone(estimation.prix_de_modele(self.base / "absent.json", "Sonnet"))
+        self.assertIsNone(estimation.prix_de_modele(None, "Sonnet"))
+        self.bureau.write_text("pas du json", encoding="utf-8")
+        self.assertIsNone(estimation.prix_de_modele(self.bureau, "Sonnet"))
+
+    def test_le_cout_d_un_workflow_propose_est_chiffre_en_euros(self):
+        from moteur import regles
+        projet = type("P", (), {"bureau": self.bureau})()
+        agents = [dict(a, modele="Sonnet") for a in AGENTS]
+        c = regles._cout(projet, FLUX, agents, "jeu")
+        self.assertEqual(len(c["euros"]), 2)
+        self.assertGreater(c["euros"][1], 0)
+        # aucun prix connu : le comportement d'avant (tokens seulement, pas d'échec)
+        projet.bureau = self.base / "absent.json"
+        c = regles._cout(projet, FLUX, agents, "jeu")
+        self.assertIsNone(c["euros"])
+        self.assertEqual(len(c["tokens"]), 2)

@@ -200,3 +200,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export signé, demander à l'utilisateur le chemin et l'alias du keystore avant de lancer le build ; ne jamais deviner l'emplacement d'une clé de signature.
+
+## G34 — Dans un roguelike d'action, équilibrer avec un robot de test
+Rôles : designer, testeur
+Date : 2026-11-12
+
+Dans un roguelike d'action, équilibrer avec un robot de test imparfait (taux d'erreur réglable), mesurer le coût réel d'un combat, puis caler une simulation de runs sur ces mesures pour comparer les réglages.

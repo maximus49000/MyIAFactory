@@ -196,6 +196,27 @@ class TestTelecharger(AvecServeur):
         r, _ = self.req("GET", self.url("../x.mp3") + "&lecture=1")
         self.assertEqual(r.status, 404)
 
+    def test_markdown_lu_dans_la_page(self):
+        """`lecture=1` sert un .md déclaré en texte brut isolé, sans pièce jointe ; au-delà de 512 Ko : 413 (le
+        téléchargement reste) ; mêmes gardes que le téléchargement ; sans lecture : la pièce jointe d'avant."""
+        self.ecrire("docs/notes.md", b"# Notes\n<script>x</script>")
+        self.ecrire("docs/gros.md", b"x" * (serveur.LECTURE_TEXTE_MAX_OCTETS + 1))
+        self.ecrire("docs/hors.md", b"# non declare")
+        self.preparer(fichiers=[{"chemin": c, "titre": "x"} for c in ("docs/notes.md", "docs/gros.md")])
+        r, data = self.req("GET", self.url("docs/notes.md") + "&lecture=1")
+        self.assertEqual((r.status, data.decode("utf-8")), (200, "# Notes\n<script>x</script>"))
+        self.assertEqual(r.getheader("Content-Type"), "text/plain; charset=utf-8")
+        self.assertIsNone(r.getheader("Content-Disposition"))
+        self.assertEqual((r.getheader("X-Content-Type-Options"), r.getheader("Content-Security-Policy")), ("nosniff", "sandbox"))
+        r, _ = self.req("GET", self.url("docs/notes.md"))
+        self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        r, _ = self.req("GET", self.url("docs/gros.md") + "&lecture=1")
+        self.assertEqual(r.status, 413)
+        r, _ = self.req("GET", self.url("docs/hors.md") + "&lecture=1")    # non déclaré : mêmes gardes
+        self.assertEqual(r.status, 404)
+        r, _ = self.req("GET", self.url("../notes.md") + "&lecture=1")
+        self.assertEqual(r.status, 404)
+
     def reponse(self, decision="v1", verdict="valider"):
         r, data = self.req("POST", "/api/demande", json.dumps({"type": "valider_etape", "decision": decision,
                                                                 "verdict": verdict}), TestServeur.ENT)

@@ -9,6 +9,7 @@ class Noeud {
   set textContent(v) { this._texte = String(v); this.enfants = []; }
   get textContent() { return this._texte + this.enfants.map((e) => e.textContent).join(""); }
   append(...e) { this.enfants.push(...e); }
+  replaceChildren(...e) { this._texte = ""; this.enfants = e; }
   setAttribute(k, v) { this.attributs[k] = String(v); }
   addEventListener(nom, f) { (this.auteurs[nom] ||= []).push(f); }
   tous(pred) { return [...(pred(this) ? [this] : []), ...this.enfants.flatMap((e) => e.tous(pred))]; }
@@ -318,4 +319,19 @@ test("« À revoir » : l'ancienne décision levée disparaît, la nouvelle (aut
   V.appliquerEnvoyees({decisions_projet: []});                                 // le moteur a levé la décision
   const nouvelle = V.appliquerEnvoyees({decisions_projet: [{id: "v2", genre: "valider_etape"}]});
   assert.deepEqual(nouvelle.decisions_projet.map((d) => d.id), ["v2"]);        // l'élément corrigé : nouvelle décision visible
+});
+
+test("un .md joint se lit dans la fenêtre (bloc repliable) et reste téléchargeable", () => {
+  const d = {...D, fichiers: [{chemin: "docs/Notes.MD", titre: "Les notes"}]};
+  const v = V.aVerifier(d, {hotePage: "127.0.0.1", projet: "demo"});
+  assert.deepEqual(v.livrables, []);
+  assert.deepEqual(v.documents.map((m) => [m.nom, m.titre, m.url, m.telechargement]), [["Notes.MD", "Les notes",
+    "/api/telecharger?fonctionnalite=f1&chemin=docs%2FNotes.MD&lecture=1&projet=demo",
+    "/api/telecharger?fonctionnalite=f1&chemin=docs%2FNotes.MD&projet=demo"]]);
+  globalThis.fetch = async () => ({ok: false, status: 404, headers: {get: () => null}, text: async () => ""});
+  const {boite} = V.contenuValidation({etat: {agir: true}, barre: {}}, d, {fermer() {}, hotePage: "127.0.0.1", origine: null});
+  assert.equal(boite.tous((n) => n.className === "md-bascule").length, 1);
+  assert.equal(boite.tous((n) => n.tagName === "a" && n.textContent === "Télécharger").length, 1);
+  assert.doesNotMatch(boite.textContent, /Rien à télécharger/);
+  delete globalThis.fetch;
 });

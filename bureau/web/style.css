@@ -1157,3 +1157,18 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 }
 .livrable-fichiers .document-telecharger, .document-telecharger { display: inline-block; padding: 6px 10px; border-radius: 6px;
   background: #3f8f56; color: #fff; font-weight: 700; text-decoration: none; font-size: 13px; }
+
+/* --- Documents .md lus dans la page (ui/markdown.js) --- */
+.md-bloc { margin: 8px 0; border: 1px solid #d9d6e3; border-radius: 8px; background: #fff; max-width: 100%; }
+.md-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; }
+.md-bascule { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: 0; font: inherit; font-weight: 600; cursor: pointer; padding: 6px 4px; overflow-wrap: anywhere; }
+.md-corps { padding: 0 12px 10px; overflow-wrap: anywhere; line-height: 1.45; }
+.md-bloc.ouvert .md-corps { max-height: 60vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+.md-corps h4, .md-corps h5, .md-corps h6 { margin: 10px 0 4px; }
+.md-para { margin: 6px 0; }
+.md-liste { margin: 6px 0; padding-left: 22px; }
+.md-citation { margin: 6px 0; padding-left: 10px; border-left: 3px solid #cfcbe0; color: #5b5870; }
+.md-pre { margin: 6px 0; padding: 8px; background: #f3f1f8; border-radius: 6px; overflow: auto; font-size: 13px; }
+.md-code { padding: 0 3px; background: #f3f1f8; border-radius: 3px; font-size: 0.92em; }
+.md-lien { color: #2f4a86; }
+.md-tout { margin-top: 6px; }

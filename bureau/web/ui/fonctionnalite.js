@@ -9,6 +9,7 @@ import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
 import {urlProjet, projetCourant} from "./projets.js";
 import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
+import {blocMarkdown, estMarkdown} from "./markdown.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, voisine} from "./visionneuse.js";
 export {voisine};
@@ -320,6 +321,7 @@ function ligneDocument(ctx, d, url, images) {
     d.date ? dateFr(d.date) : null].filter(Boolean).join(" · ");
   if (origine) texte.append(el("div", "note", origine));
   texte.append(el("div", "document-chemin", d.chemin));
+  if (estMarkdown(d.chemin)) texte.append(blocMarkdown({titre: "Lire", adresse: url(d.chemin)}));   // lu dans la page
   li.append(texte);
   return li;
 }
@@ -729,6 +731,10 @@ function partieLivrables(ctx, f) {
         a.href = url(d.chemin);
         a.target = "_blank";
         a.rel = "noopener";
+        if (estMarkdown(d.chemin)) {      // un .md se lit dans la page (repliable) ; « Télécharger » reste à côté
+          rangee.append(blocMarkdown({titre: d.titre, adresse: url(d.chemin), lien: lienTelecharger(f, d)}));
+          continue;
+        }
         rangee.append(a);
         if (EXTENSIONS_TELECHARGEABLES.includes(extension(d.chemin))) rangee.append(lienTelecharger(f, d));
       }

@@ -11,6 +11,7 @@ import {dateFr} from "./texte.js";
 import {avecProjet, projetCourant} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, fermerVisionneuse, visionneuseOuverte} from "./visionneuse.js";
+import {blocMarkdown, estMarkdown} from "./markdown.js";
 
 export const POINT_PAR_DEFAUT = "L'élément correspond à l'objectif";   // une décision posée avant la fenêtre
 export const MAX_POINTS = 8;
@@ -197,7 +198,7 @@ export function lienAcces(d, {hotePage = "127.0.0.1", projet = projetCourant(), 
 // Ce qu'il y a à vérifier : les images (montrées, agrandissables), les sons (lus dans la page, téléchargeables aussi),
 // les livrables téléchargeables (nom, taille, date), les autres fichiers (nommés) et le lien d'accès.
 export function aVerifier(d, options = {}) {
-  const images = [], sons = [], livrables = [], autres = [];
+  const images = [], sons = [], livrables = [], autres = [], documents = [];
   for (const f of Array.isArray(d?.fichiers) ? d.fichiers : []) {
     if (!plein(f?.chemin)) continue;
     const nom = f.chemin.split(/[\\/]/).pop();
@@ -208,13 +209,17 @@ export function aVerifier(d, options = {}) {
       sons.push({chemin: f.chemin, nom, titre, taille: tailleLisible(f.taille),
                  url: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine, true),
                  telechargement: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine)});
+    } else if (estMarkdown(f.chemin)) {      // lu dans la page (repliable), téléchargeable en plus
+      documents.push({chemin: f.chemin, nom, titre, taille: tailleLisible(f.taille),
+                      url: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine, true),
+                      telechargement: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine)});
     } else if (estTelechargeable(f.chemin)) {
       livrables.push({chemin: f.chemin, nom, titre, taille: tailleLisible(f.taille), date: plein(f.date) ? f.date : "",
                       url: urlTelechargement(d.fonctionnalite, f.chemin, options.projet ?? projetCourant(),
                                              options.origine || null)});
     } else autres.push({chemin: f.chemin, titre});
   }
-  return {images, sons, livrables, autres, acces: lienAcces(d, options)};
+  return {images, sons, livrables, documents, autres, acces: lienAcces(d, options)};
 }
 
 // La demande envoyée : `null` tant qu'un point n'a pas sa réponse ; sinon une réponse par point (dans l'ordre), le
@@ -356,8 +361,14 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     ligne.append(texte, lecteur, a);
     s2.append(ligne);
   }
+  for (const m of v.documents) {
+    const lien = el("a", "bouton secondaire val-telecharger", "Télécharger");
+    lien.href = m.telechargement;
+    lien.setAttribute("download", m.nom);
+    s2.append(blocMarkdown({titre: m.titre, adresse: m.url, lien}));
+  }
   for (const f of v.autres) s2.append(el("p", "val-meta", `${f.titre} : ${f.chemin}`));
-  if (!v.livrables.length && !v.acces && !v.images.length && !v.sons.length) {
+  if (!v.livrables.length && !v.acces && !v.images.length && !v.sons.length && !v.documents.length) {
     s2.append(el("p", "val-meta", "Rien à télécharger ni à ouvrir pour cet élément (posé avant la fenêtre de "
       + "validation) : jugez-le sur son compte rendu, ou renvoyez-le en demandant de quoi le vérifier."));
   }

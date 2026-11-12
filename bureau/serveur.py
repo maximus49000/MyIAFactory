@@ -52,6 +52,8 @@ ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/a
 REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre")
 GARDE_REPONSE_S = 600
 TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
+LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé
+LECTURE_TEXTE_MAX_OCTETS = 512 * 1024    # au-delà : 413, le téléchargement reste
 TELECHARGEABLES = {ext: (type_, True) for ext, type_ in releve.TELECHARGEABLES.items()}
 APERCU = "/apercu/"                     # /apercu/<projet>/<décision>/<chemin> -> http://127.0.0.1:<port>/<chemin>
 APERCU_DELAI_S = 20
@@ -1323,6 +1325,13 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             return self._json(404, {"erreur": "Introuvable."})
         type_, piece_jointe = TELECHARGEABLES[releve.extension(cible.name)]
+        if q.get("lecture") == ["1"] and cible.suffix.lower() in LECTURE_TEXTE:    # un .md se lit dans la page
+            try:
+                if cible.stat().st_size > LECTURE_TEXTE_MAX_OCTETS:
+                    return self._json(413, {"erreur": "Document trop long pour être lu dans la page : téléchargez-le."})
+            except OSError:
+                return self._json(404, {"erreur": "Introuvable."})
+            return self._livrable(cible, {cible.suffix.lower(): ("text/plain; charset=utf-8", False)}, (".md", ".txt"))
         lecture = q.get("lecture") == ["1"] and releve.est_son(cible.name)    # un son se lit dans la page, rien d'autre
         return self._livrable(cible, {cible.suffix.lower(): (type_, piece_jointe and not lecture)}, (".html",),
                               par_tranches=lecture)

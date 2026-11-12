@@ -492,6 +492,59 @@ class Serie(Base):
         v = self.etat["elements"]["f1/e1"]
         self.assertEqual((v["phase"], v["corrections"]), ("fait", 1))
 
+    def casse_briques(self, flux=None):
+        """Sans relecteur : programmation, tests et essai par le service Qualité, livraison de l'apk."""
+        (self.dossier / "fiches" / "remi.md").unlink()
+        (self.dossier / "fiches" / "zoe.md").unlink()
+        for cle, role, service in (("test-1", "testeur", "qualite"), ("liv-1", "livreur", "livraison")):
+            (self.dossier / "fiches" / f"{cle}.md").write_text(
+                FICHE_REMI.replace("rel-1", cle).replace("relecteur", role).replace("Service : dev", f"Service : {service}"),
+                encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["services"] += [{"id": "qualite", "nom": "Qualité"}, {"id": "livraison", "nom": "Livraison"}]
+        f["flux"] = flux or [{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
+                             {"id": "essai", "nom": "Tests et essai du jeu", "role": "testeur", "service": "qualite"},
+                             {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "livraison"}]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def test_sans_relecteur_la_qualite_juge_et_la_livraison_suit_un_verdict_favorable(self):
+        self.casse_briques()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Livré."}}])
+        v = self.etat["elements"]["f1/e1"]
+        self.assertEqual((v["phase"], v["corrections"]), ("fait", 0))
+        self.assertEqual([len(self.taches(etape=f"flux:{e}")) for e in ("dev", "essai", "livraison")], [1, 1, 1])
+        self.assertIn("Rends un `verdicts`", regles._matiere(self.projet, self.etat, self.taches(etape="flux:essai")[0]))
+        self.assertNotIn("verdicts", regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0]))
+
+    def test_sans_relecteur_un_refus_de_la_qualite_refait_la_qualite_pas_la_livraison(self):
+        self.casse_briques()
+        self.serie(1)
+        vus = self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, verdict("e1", ["La balle traverse la raquette"]),
+            {"statut": "fait", "message": {"texte": "Corrigé."}}, verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Livré."}}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Corriger la collision.", "raison": "défaut"}})
+        self.assertEqual(len(self.taches(etape="flux:essai")), 2)           # les tests refaits après la correction
+        self.assertEqual(len(self.taches(etape="correction")), 1)
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)       # et la livraison une seule fois, après
+        ordre = [t["etape"] for t in sorted(self.taches(), key=lambda t: int(t["id"][1:]))
+                 if str(t["etape"]).startswith(("flux:", "correction"))]
+        self.assertEqual(ordre, ["flux:dev", "flux:essai", "correction", "flux:essai", "flux:livraison"])
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
+    def test_sans_relecteur_ni_etape_de_qualite_la_derniere_etape_juge(self):
+        self.casse_briques(flux=[{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
+                                 {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur",
+                                  "service": "livraison"}])
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, verdict("e1")])
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        self.assertIn("Rends un `verdicts`", regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0]))
+
     def rendre_relectures(self, taches, rapports):
         actions = []
         for t, r in zip(taches, rapports):

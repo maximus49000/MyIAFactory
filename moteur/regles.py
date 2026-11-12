@@ -27,6 +27,7 @@ from pathlib import Path
 from installation import estimation
 from moteur import agents, cloud, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
+from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
@@ -37,6 +38,7 @@ from orchestrateur import workflows as wf
 CLOUD_RELIRE_S = 300
 ROLE_CADRAGE = "cadrage"
 ROLE_RELECTURE = "relecteur"
+MOTS_DE_QUALITE = ("qualit", "test", "controle", "verif", "recette")   # le début des mots d'une équipe de qualité
 CHEF = "chef"                       # l'auteur des messages du moteur dans la discussion
 ELEMENTS_EN_COURS_MAX = 2           # « deux éléments au plus en cours » en série
 RELECTEURS_PREMIER_TOUR = 2
@@ -1412,8 +1414,8 @@ def _matiere(projet, etat, t):
                     "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
                     "Registre des contrôles : relis-le avant de rendre l'élément."]
         production = _production(projet, fid)
-        if (production and etape == ETAPES_DE_FLUX + production[-1]["id"] and len(production) > 1
-                and _sans_relecteur(projet)):
+        if (production and len(production) > 1 and _sans_relecteur(projet)
+                and etape == ETAPES_DE_FLUX + production[_etape_de_relecture(projet, fid)]["id"]):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
@@ -1638,29 +1640,51 @@ def _tache_de_flux(projet, etat, v):
 
 
 def _sans_relecteur(projet):
-    """Aucun agent relecteur : la dernière étape du flux (un contrôle, le plus souvent) tient lieu de relecture."""
+    """Aucun agent relecteur : une étape du flux (un contrôle, des tests, le plus souvent) tient lieu de relecture."""
     return not any(a["role"] == ROLE_RELECTURE for a in _etat(projet)["agents"])
+
+
+def _est_de_qualite(etape, services):
+    """Vrai si l'étape est tenue par une équipe de qualité : son id, son nom, son rôle ou son service (id ou nom) parle de
+    qualité, de tests, de contrôle ou de vérification."""
+    mots = re.findall(r"[a-z0-9]+", normaliser_mot(" ".join(
+        [str(etape.get(c) or "") for c in ("id", "nom", "role", "service")] + [services.get(etape.get("service"), "")])))
+    return any(m == "qa" or m.startswith(MOTS_DE_QUALITE) for m in mots)
+
+
+def _etape_de_relecture(projet, fid=None):
+    """Sans relecteur, le rang (dans la production du workflow) de l'étape qui tient lieu de relecture : la dernière
+    étape tenue par un service ou un rôle de qualité (les tests avant la livraison), à défaut la dernière du flux."""
+    production = _production(projet, fid)
+    services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
+    for rang in range(len(production) - 1, -1, -1):
+        if _est_de_qualite(production[rang], services):
+            return rang
+    return max(len(production) - 1, 0)
 
 
 def _apres_flux(projet, etat, v, r=None):
     v["pas"] += 1
-    if v["pas"] < len(_production(projet, v["fid"])):
-        _tache_de_flux(projet, etat, v)
-        return []
-    if _sans_relecteur(projet):
-        # les verdicts de la dernière étape sur cet élément (un lot en porte pour chacun) ; aucun = conforme
+    sans = _sans_relecteur(projet)
+    if sans and v["pas"] - 1 == _etape_de_relecture(projet, v["fid"]):
+        # les verdicts de l'étape de qualité sur cet élément (un lot en porte pour chacun) ; aucun = conforme
         v["phase"], v["attendus"] = "relecture", 1
         v["rapports"] = [[x for x in (r or {}).get("verdicts") or [] if x["element"] == v["element"]["id"]]]
         return _conclure_relecture(projet, etat, v)
+    if v["pas"] < len(_production(projet, v["fid"])):
+        _tache_de_flux(projet, etat, v)
+        return []
+    if sans:       # la livraison, venue après un verdict favorable
+        return _element_fait(projet, etat, v)
     v["phase"] = "relecture"
     return _lancer_relecture(projet, etat, v)
 
 
 def _lancer_relecture(projet, etat, v):
     """Le premier tour : deux relecteurs à contexte neuf, qui ne se voient pas ; les tours suivants : un seul, qui ne
-    vérifie que les points corrigés. Sans relecteur, la dernière étape du flux est refaite."""
+    vérifie que les points corrigés. Sans relecteur, l'étape de qualité du flux est refaite."""
     if _sans_relecteur(projet):
-        v["phase"], v["pas"] = "flux", len(_production(projet, v["fid"])) - 1
+        v["phase"], v["pas"] = "flux", _etape_de_relecture(projet, v["fid"])
         _tache_de_flux(projet, etat, v)
         return []
     v["phase"], v["rapports"] = "relecture", []
@@ -1691,6 +1715,10 @@ def _conclure_relecture(projet, etat, v):
                 points += [p for p in (x.get("points") or ["(refus sans détail)"]) if p not in points]
     v["tour"] += 1
     if not points:
+        if _sans_relecteur(projet) and v["pas"] < len(_production(projet, v["fid"])):
+            v["phase"] = "flux"        # verdict favorable : les étapes suivantes (la livraison) viennent maintenant
+            _tache_de_flux(projet, etat, v)
+            return []
         return _element_fait(projet, etat, v)
     v["points"] = points
     for p in points:

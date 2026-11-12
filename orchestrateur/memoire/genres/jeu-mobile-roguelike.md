@@ -20,3 +20,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Pour vérifier un projet de jeu sans écran, importer les ressources puis lancer quelques images en mode sans interface, et lire le code de retour et la console.
+
+## G4 — Pour vérifier un rendu de jeu, un script lancé avec le moteu
+Rôles : dev, testeur
+Date : 2026-11-12
+
+Pour vérifier un rendu de jeu, un script lancé avec le moteur instancie la scène, attend quelques images et enregistre la capture, ce qui prouve la résolution et l'affichage.

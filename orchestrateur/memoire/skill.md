@@ -45,3 +45,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Avant une étape d'équilibrage, vérifier qu'il existe du code de gameplay et un fichier de valeurs ; sinon, déclarer l'étape non applicable en une ligne au lieu de produire un livrable vide.
+
+## S8 — Quand un outil externe est refusé au shell sans possibilité
+Rôles : dev
+Date : 2026-11-12
+
+Quand un outil externe est refusé au shell sans possibilité d'approbation, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.

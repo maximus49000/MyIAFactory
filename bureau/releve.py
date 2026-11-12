@@ -620,6 +620,12 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
         elif d.get("genre") == "session_cloud":
             if not _dans(d.get("agent"), cles_agents):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")
+            for c in ("tache", "depart", "modele"):      # la démarche simplifiée : facultatifs
+                if c in d and not _texte_plein(d.get(c)):
+                    erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
+            for c in ("lien", "depot"):
+                if c in d and not (isinstance(d.get(c), str) and d[c].startswith("https://")):
+                    erreurs.append(f"{nom} : la décision « {i} » : « {c} » est une adresse https.")
         elif d.get("genre") == "outil_agent":
             if not _dans(d.get("agent"), cles_agents) or not _texte_plein(d.get("tache")) or not _texte_plein(d.get("outil")):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » (connu), « tache » et « outil » sont obligatoires.")

@@ -4,7 +4,7 @@
 import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
-import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
+import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
@@ -262,6 +262,36 @@ function decisionValidation(ctx, d) {
   return li;
 }
 
+// Un lien qui s'ouvre dans un nouvel onglet ; seulement une adresse https (sinon le texte seul).
+function lienExterne(adresse, texte) {
+  if (!(typeof adresse === "string" && adresse.startsWith("https://"))) return el("span", "", texte || String(adresse ?? ""));
+  const a = document.createElement("a");
+  a.href = adresse;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = texte || adresse;
+  return a;
+}
+
+// Copie dans le presse-papiers ; repli quand l'API n'est pas permise (bureau ouvert en http depuis un téléphone).
+async function copierTexte(texte, bouton, libelle) {
+  try {
+    await globalThis.navigator.clipboard.writeText(texte);
+  } catch {
+    const zone = document.createElement("textarea");
+    zone.value = texte;
+    zone.style = "position: fixed; opacity: 0";
+    document.body?.append(zone);
+    zone.select?.();
+    try { document.execCommand?.("copy"); } finally { zone.remove?.(); }
+  }
+  bouton.textContent = "Copié";
+  setTimeout(() => { bouton.textContent = libelle; }, 1500);
+}
+
+// « Sessions cloud à créer ». La démarche simplifiée (la décision porte `depart`) : le lien claude.ai/code, le dépôt,
+// le modèle, le message de départ complet (« Copier le message »), puis l'adresse ou l'identifiant de la session créée
+// et « C'est fait ». Une décision d'avant (sans `depart`) garde son champ de nom.
 function decisionSession(ctx, d) {
   const e = ctx.etat;
   const li = el("li", "decision-session");
@@ -269,13 +299,44 @@ function decisionSession(ctx, d) {
   const service = agent?.service ? (e.services || []).find((s) => s.id === agent.service)?.nom : null;
   li.append(el("div", "decision-texte", d.texte));
   li.append(el("div", "lecon-meta", [nomAgent(e, d.agent), agent?.modele, service].filter(Boolean).join(" · ")));
+  const manuelle = plein(d.depart);
+  if (manuelle) {
+    const etapes = el("ol", "session-etapes");
+    const ouvrir = el("li", "");
+    ouvrir.append(el("span", "", "Ouvrir : "), lienExterne(d.lien, d.lien === "https://claude.ai/code" ? "claude.ai/code" : d.lien));
+    const depot = el("li", "");
+    depot.append(el("span", "", "Dépôt à choisir : "), lienExterne(d.depot, d.depot || "le dépôt GitHub du projet"));
+    etapes.append(ouvrir, depot);
+    if (plein(d.modele)) etapes.append(el("li", "", "Modèle : " + d.modele));
+    li.append(etapes);
+    const message = document.createElement("textarea");
+    message.className = "session-depart";
+    message.readOnly = true;
+    message.rows = 6;
+    message.value = d.depart;
+    message.setAttribute("aria-label", "Message de départ à coller dans la session");
+    const copier = el("button", "bouton secondaire", "Copier le message");
+    copier.type = "button";
+    copier.addEventListener("click", () => copierTexte(d.depart, copier, "Copier le message"));
+    li.append(el("div", "lecon-meta", "Message de départ à coller dans la session :"), message, copier);
+  }
   if (!e.agir) return li;
   const nom = document.createElement("input");
-  nom.type = "text";
+  nom.type = manuelle ? "url" : "text";
   nom.maxLength = 200;
-  nom.placeholder = "Nom de la session créée";
-  nom.setAttribute("aria-label", "Nom de la session créée");
-  li.append(nom, boutonDemande(ctx, "C'est fait", "bouton", () => demandeSession(d.id, nom.value.trim()), () => nom.value.trim() !== ""));
+  nom.placeholder = manuelle ? "Adresse de la session (https://claude.ai/code/…) ou son identifiant" : "Nom de la session créée";
+  nom.setAttribute("aria-label", manuelle ? "Adresse ou identifiant de la session créée" : "Nom de la session créée");
+  const erreur = el("p", "saisie-erreur", "");
+  const valide = () => {
+    if (!nom.value.trim()) return false;
+    if (manuelle && !lireSession(nom.value)) {
+      erreur.textContent = "Collez l'adresse de la session (https://claude.ai/code/…) ou son identifiant (session_…).";
+      return false;
+    }
+    erreur.textContent = "";
+    return true;
+  };
+  li.append(nom, erreur, boutonDemande(ctx, "C'est fait", "bouton", () => demandeSession(d.id, nom.value.trim()), valide));
   return li;
 }
 

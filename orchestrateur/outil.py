@@ -850,6 +850,7 @@ def cmd_decision(ctx, e):
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
                 d["agent"] = e["agent"]
+                d.update(_session_a_creer(s, e))
             liste = s["decisions_projet"]
         else:
             if genre not in rel.DECISIONS_FONCTIONNALITE:
@@ -867,6 +868,28 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _session_a_creer(s, e):
+    """La démarche manuelle d'une décision `session_cloud` (facultative) : `tache` (connue) dont le `depart` (le message
+    de départ complet) est à coller dans une session créée sur `lien` (claude.ai/code), sur le dépôt `depot`, au
+    `modele` de l'agent."""
+    d = {}
+    if e.get("tache") is not None:
+        if su.tache(s, e["tache"]) is None:
+            raise Refus(f"« session_cloud » : tâche inconnue « {e['tache']} ».")
+        d["tache"] = e["tache"]
+    for champ, maxi in (("depart", 24000), ("modele", 40)):
+        if e.get(champ) is not None:
+            if not isinstance(e[champ], str) or not e[champ].strip() or len(e[champ]) > maxi:
+                raise Refus(f"« session_cloud » : « {champ} » est un texte de {maxi} caractères au plus.")
+            d[champ] = e[champ]
+    for champ in ("lien", "depot"):
+        if e.get(champ) is not None:
+            if not isinstance(e[champ], str) or not e[champ].startswith("https://") or len(e[champ]) > 500:
+                raise Refus(f"« session_cloud » : « {champ} » est une adresse https.")
+            d[champ] = e[champ]
+    return d
 
 
 def _noter_verification(s, e):

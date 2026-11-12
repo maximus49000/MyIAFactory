@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, libelleMontee, libelleLot} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -140,6 +140,14 @@ test("demandeGenre : existant, et nouveau avec description", () => {
 
 test("demandeSession", () => {
   assert.deepEqual(demandeSession("p2", "Session dev 1"), {type: "session_cloud", decision: "p2", session: "Session dev 1"});
+  // la session collée : l'adresse claude.ai/code ou l'identifiant (comme moteur/cloud.py, lire_session)
+  assert.deepEqual(lireSession(" https://claude.ai/code/session_01AbC?x=1 "),
+    {session: "session_01AbC", adresse: "https://claude.ai/code/session_01AbC"});
+  assert.equal(lireSession("session_01AbC").adresse, "https://claude.ai/code/session_01AbC");
+  assert.equal(lireSession("0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b").session, "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b");
+  for (const x of ["Ma session", "", "https://example.com/code/session_1", "https://claude.ai/code/", "session_", null]) {
+    assert.equal(lireSession(x), null, String(x));
+  }
 });
 
 test("libelleMontee", () => {

@@ -265,6 +265,8 @@ R4 = releve.normaliser({
         {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
          "genres_connus": ["ville"]},
         {"id": "s1", "genre": "session_cloud", "texte": "Session ?", "agent": "d1"},
+        {"id": "s2", "genre": "session_cloud", "texte": "Session ?", "agent": "d1", "tache": "t1",
+         "depart": "Tu repars de zéro.", "lien": "https://claude.ai/code"},
         {"id": "o1", "genre": "organisation", "texte": "Organisation ?",
          "organisation": {"services": [{"id": "dev", "nom": "Dev"}], "flux": [], "agents": [], "briefs": {},
                           "cout": {"tokens": [1, 2], "euros": None}}}],
@@ -346,6 +348,14 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "session_cloud", "decision": "s1", "session": "x" * 200})
         self.refus({"type": "session_cloud", "decision": "g1", "session": "S"})
         self.refus({"type": "session_cloud", "decision": "zz", "session": "S"})
+
+    def test_session_cloud_creee_a_la_main(self):
+        # La démarche simplifiée : l'adresse claude.ai/code ou l'identifiant de la session, rien d'autre.
+        for bon in ("https://claude.ai/code/session_01AbC", " session_01AbC ",
+                    "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", "https://claude.ai/code/session_01AbC?tab=1"):
+            self.ok({"type": "session_cloud", "decision": "s2", "session": bon})
+        for mauvais in ("Ma session", "https://example.com/code/session_1", "https://claude.ai/code/", "session_"):
+            self.assertIn("claude.ai/code", self.refus({"type": "session_cloud", "decision": "s2", "session": mauvais}))
 
     def test_retour_element(self):
         d = {"type": "retour_element", "fonctionnalite": "f4", "element": "e1", "texte": "Plus haut"}

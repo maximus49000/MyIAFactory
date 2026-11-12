@@ -850,6 +850,15 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[base]), "agent")
         self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "agent": "d1"}])), [])
 
+    def test_session_cloud_a_creer_a_la_main(self):
+        base = {"id": "s", "genre": "session_cloud", "texte": "T", "agent": "d1", "tache": "t3",
+                "depart": "Tu repars de zéro.", "lien": "https://claude.ai/code", "depot": "https://github.com/moi/p",
+                "modele": "Sonnet"}
+        self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
+        for champ, valeur in (("depart", ""), ("depart", 3), ("lien", "javascript:x"), ("depot", "http://x"),
+                              ("tache", 4), ("modele", "")):
+            self.refus(v4(decisions_projet=[{**base, champ: valeur}]), champ)
+
     def test_decision_outil_agent(self):
         base = {"id": "o", "genre": "outil_agent", "texte": "T", "agent": "d1", "tache": "t3", "outil": "Bash(curl:*)"}
         self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])

@@ -360,6 +360,48 @@ class Moteur(Base):
         self.assertIn("repartent", self.statut(d["id"])["reponse"])
         self.assertNotIn(decision["id"], [x["id"] for x in s["decisions_projet"]])
 
+    def bloquer_un_depart_cloud(self):
+        ecrire_origine(self.dossier, "https://github.com/moi/jeu")
+        self.ok("parallelisme", entree={"agents_locaux_max": 2, "agents_cloud_max": 1})
+        cle = self.ok("recruter", entree={"mode": "manuel", "agents": [
+            {"role": "dev", "modele": "Sonnet", "lieu": "cloud"}]})["agents"][0]["cle"]
+        tid = self.ok("tache", entree={"titre": "Écran", "role": "dev", "agent": cle, "active": True})["id"]
+        depart = {"agent": cle, "taches": [tid], "matiere": "m", "modele": "sonnet", "lot": None}
+        self.etat["departs"][tid] = depart
+        self.etat["relancees"].add(tid)
+        e = agents.Execution(tid, cle, None, erreur="session cloud : --cloud requires an interactive terminal")
+        regles._agent_en_echec(self.projet, self.etat, e, depart)
+        s = json.loads((self.dossier / "suivi.json").read_text(encoding="utf-8"))
+        return cle, tid, next(x for x in s["decisions_projet"] if x["genre"] == "session_cloud")
+
+    def test_la_decision_porte_le_lien_le_depot_et_le_message_de_depart(self):
+        cle, tid, decision = self.bloquer_un_depart_cloud()
+        self.assertEqual(decision["lien"], "https://claude.ai/code")
+        self.assertEqual(decision["depot"], "https://github.com/moi/jeu")
+        self.assertEqual((decision["tache"], decision["modele"]), (tid, "Sonnet"))
+        self.assertTrue(decision["depart"].startswith("Tu repars de zéro."))
+        self.assertIn(f".factory/rapports/{tid}.json", decision["depart"])
+        self.assertIn("interactive terminal", decision["texte"])
+
+    def test_c_est_fait_avec_la_session_la_releve_sans_relancer(self):
+        cle, tid, decision = self.bloquer_un_depart_cloud()
+        d, actions = self.traiter(type="session_cloud", decision=decision["id"],
+                                  session="https://claude.ai/code/session_01AbC")
+        self.assertEqual([a for a in actions if a[0] == "agent" and tid in a[2]], [])   # pas de nouveau lancement
+        s = json.loads((self.dossier / "suivi.json").read_text(encoding="utf-8"))
+        t = next(t for t in s["taches"] if t["id"] == tid)
+        self.assertIsNone(t["bloquee"])
+        self.assertTrue(t["active"])
+        self.assertTrue(any(j["texte"].startswith("Session cloud session_01AbC (sonnet)") for j in t["journal"]))
+        info = self.etat["cloud"][tid]
+        self.assertEqual((info["session"], info["adresse"], info["agent"]),
+                         ("session_01AbC", "https://claude.ai/code/session_01AbC", cle))
+        self.assertIn(tid, self.etat["en_cours"])
+        self.assertEqual(self.etat["departs"][tid]["agent"], cle)
+        self.assertEqual(self.etat["sessions_cloud"][cle], "session_01AbC")
+        self.assertIn("relevée", self.statut(d["id"])["reponse"])
+        self.assertNotIn(decision["id"], [x["id"] for x in s["decisions_projet"]])
+
 
 if __name__ == "__main__":
     unittest.main()

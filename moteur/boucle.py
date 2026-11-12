@@ -556,7 +556,7 @@ class Moteur:
                 info["depuis"] = self.horloge()
                 return None
             self.commit(projet.dossier, f"Factory : départ de {fiche['cle']}")
-            lancee = self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele)
+            lancee = self._lancer_ou_envoyer(projet, etat, depart, fiche, modele)
         except cloud.ErreurCloud as e:
             return agents.Execution(tid, fiche["cle"], d.get("lot"), erreur=f"session cloud : {e.raison}", modele=modele)
         etat["cloud_releve"] = self.horloge()      # la première relève, une minute après le départ
@@ -570,6 +570,32 @@ class Moteur:
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"session cloud non notée : {e}")
         return None
+
+    def _lancer_ou_envoyer(self, projet, etat, depart, fiche, modele):
+        """Une nouvelle session ; si le moteur ne peut pas la créer et que le Directeur a inscrit une session pour cet
+        agent (la démarche manuelle), le départ est envoyé à cette session. Lève `ErreurCloud` si rien ne marche."""
+        try:
+            return self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele)
+        except cloud.ErreurCloud as e:
+            session = etat.get("sessions_cloud", {}).get(fiche["cle"]) or self._session_inscrite(projet, fiche["cle"])
+            if not session:
+                raise
+            try:
+                self.cloud.envoyer_suite(session, depart, dossier_projet=str(projet.dossier))
+            except cloud.ErreurCloud as e2:
+                raise cloud.ErreurCloud(e.raison if e2.raison == e.raison
+                                        else f"{e.raison} ; envoi à la session {session} : {e2.raison}")
+            return {"session": session, "adresse": f"{cloud.ADRESSE_CODE}/{session}"}
+
+    @staticmethod
+    def _session_inscrite(projet, cle):
+        """L'identifiant de la session inscrite pour l'agent (table des sessions), s'il a la forme d'une session."""
+        try:
+            agent = next((a for a in regles.lancer(projet, "etat")["agents"] if a["cle"] == cle), {})
+        except (regles.Refus, regles.ErreurMoteur):
+            return None
+        lue = cloud.lire_session(agent.get("session") or "")
+        return lue["session"] if lue else None
 
     def _relever_le_cloud(self, projet, etat):
         """Toutes les minutes : le dépôt est relevé ; un rapport trouvé est appliqué comme un rapport local, puis la

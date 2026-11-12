@@ -6,6 +6,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+from moteur import cloud
+
 from . import releve
 
 MAX_RETOUR = 3500
@@ -307,12 +309,15 @@ def _verifier_v4(demande, r, elements):
     if genre == "genre":
         return _verifier_genre(demande, r)
     if genre == "session_cloud":
-        if _decision(r.get("decisions_projet", []), demande["decision"], "session_cloud") is None:
+        d = _decision(r.get("decisions_projet", []), demande["decision"], "session_cloud")
+        if d is None:
             return "Décision inconnue."
         if not demande["session"].strip():
             return "Le nom de la session est vide."
         if len(demande["session"]) > MAX_SESSION:
             return f"Le nom de la session dépasse {MAX_SESSION} caractères."
+        if d.get("tache") and cloud.lire_session(demande["session"]) is None:   # la démarche simplifiée
+            return ("Collez l'adresse de la session (https://claude.ai/code/…) ou son identifiant (session_…).")
         return None
     if genre == "genre_fonctionnalite":
         return _verifier_genre_fonctionnalite(demande, r)

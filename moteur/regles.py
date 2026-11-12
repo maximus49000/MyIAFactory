@@ -1515,17 +1515,40 @@ def _sur_session_cloud(projet, demande, etat):
     d = next((x for x in court["decisions"] if x["id"] == demande["decision"]), None)
     if d is None or not d.get("agent"):
         raise Refus("la décision de cette session n'existe plus")
-    lancer(projet, "session", {"agent": d["agent"], "session": demande["session"]})
+    from moteur import cloud
+    agent, lue = d["agent"], cloud.lire_session(demande["session"])
+    lancer(projet, "session", {"agent": agent, "session": lue["adresse"] if lue else demande["session"]})
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    # Les tâches de cet agent bloquées faute de session cloud repartent : le moteur relance lui-même la session.
-    reprises = [t for t in court["taches"] if t.get("agent") == d["agent"] and t["colonne"] != "fait"
-                and ERREUR_CLOUD in str(t.get("bloquee") or "")]
+    suivie = None
+    if lue:
+        _m(etat, "sessions_cloud")[agent] = lue["session"]    # les tâches suivantes de l'agent y seront envoyées
+        suivie = next((t for t in court["taches"] if t["id"] == d.get("tache") and t["colonne"] != "fait"), None)
+    if suivie is not None:
+        # La session créée à la main porte le départ de cette tâche : le moteur la relève, sans en lancer d'autre.
+        tid = suivie["id"]
+        fiche = next((a for a in court["agents"] if a["cle"] == agent), {})
+        modele = str(d.get("modele") or fiche.get("modele") or "sonnet").lower()
+        lancer(projet, "tache", {"id": tid, "bloquee": None, "active": True, "agent": agent, "journal": [
+            f"Session cloud {lue['session']} ({modele}) : {lue['adresse']}",
+            "Session créée par le Directeur : le moteur la relève."]})
+        etat["departs"][tid] = {"agent": agent, "taches": [tid], "matiere": "", "modele": modele, "lot": None,
+                                "suite": None}
+        etat["en_cours"].add(tid)
+        _m(etat, "relancees", set).discard(tid)
+        _m(etat, "cloud")[tid] = {"session": lue["session"], "adresse": lue["adresse"], "depuis": None,
+                                  "taches": [tid], "agent": agent, "modele": modele, "lot": None,
+                                  "muette_dite": False, "vu": None}
+    # Les autres tâches de cet agent bloquées faute de session cloud repartent : le moteur relance lui-même la session
+    # (ou, s'il ne le peut pas, les envoie à la session inscrite).
+    reprises = [t for t in court["taches"] if t.get("agent") == agent and t["colonne"] != "fait"
+                and ERREUR_CLOUD in str(t.get("bloquee") or "") and t is not suivie]
     for t in reprises:
         lancer(projet, "tache", {"id": t["id"], "bloquee": None,
                                  "journal": ["Session cloud créée par le Directeur : nouvel essai."]})
         _m(etat, "relancees", set).discard(t["id"])
     projet._cloud_raison = (None, 0.0)
     _terminer(projet, {"demande": demande["id"]}, "La session est inscrite."
+              + (f" La tâche « {suivie['titre']} » y est relevée." if suivie is not None else "")
               + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else ""))
     return _demarrer_en_attente(projet, etat, None) if reprises else []
 
@@ -2461,17 +2484,35 @@ def _agent_en_echec(projet, etat, execution, depart):
         _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
     if str(execution.erreur or "").startswith(ERREUR_CLOUD):
-        _session_a_creer(projet, depart["agent"], str(execution.erreur)[len(ERREUR_CLOUD):].strip(" :"))
+        _session_a_creer(projet, depart["agent"], str(execution.erreur)[len(ERREUR_CLOUD):].strip(" :"), tid,
+                         session=_m(etat, "sessions_cloud").get(depart["agent"]))
     return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
 
 
 ERREUR_CLOUD = "session cloud"       # le début de l'erreur d'un départ cloud (`boucle._partir_cloud`)
 
 
-def texte_session_a_creer(fiche, raison, url):
-    """La démarche de la décision « Sessions cloud à créer », quand le moteur n'a pas pu lancer la session lui-même."""
+ADRESSE_CODE = "https://claude.ai/code"
+
+
+def texte_session_a_creer(fiche, raison, url, *, avec_depart=False, session_ouverte=False):
+    """La démarche de la décision « Sessions cloud à créer », quand le moteur n'a pas pu lancer la session lui-même.
+    `avec_depart` : la décision porte le message de départ à coller (la démarche simplifiée) ; `session_ouverte` : le
+    lien est celui de la session déjà inscrite pour l'agent."""
     nom = fiche.get("prenom") or fiche["cle"]
     depot = url or "le dépôt GitHub du projet"
+    if avec_depart and session_ouverte:
+        return (f"Le moteur n'a pas pu envoyer sa tâche suivante à la session cloud de {nom} ({fiche['role']}, "
+                f"{fiche['modele']}) : {raison}. Envoyez-la vous-même : 1. ouvrez la session de {nom} (lien ci-dessous) "
+                f"ou créez-en une nouvelle sur claude.ai/code, dépôt {depot}, modèle {fiche['modele']} ; 2. collez le "
+                "message de départ ci-dessous et envoyez-le ; 3. collez ici l'adresse (ou l'identifiant) de la session "
+                "et cliquez « C'est fait » : le moteur la relève.")
+    if avec_depart:
+        return (f"Le moteur n'a pas pu lancer la session cloud de {nom} ({fiche['role']}, {fiche['modele']}) : {raison}. "
+                f"Créez-la vous-même : 1. ouvrez claude.ai/code ; 2. choisissez le dépôt {depot} et le modèle "
+                f"{fiche['modele']} ; 3. collez le message de départ ci-dessous et envoyez-le ; 4. collez ici l'adresse "
+                "(ou l'identifiant) de la session créée et cliquez « C'est fait » : le moteur la relève et lui envoie "
+                "les tâches suivantes de cet agent.")
     return (f"Le moteur n'a pas pu lancer la session cloud de {nom} ({fiche['role']}, {fiche['modele']}) : {raison}. "
             "Démarche : 1. vérifiez que la commande claude est installée et connectée à votre compte (lancez « claude », "
             "puis /login) ; 2. sur claude.ai/code, connectez GitHub et donnez à Claude l'accès à "
@@ -2480,8 +2521,10 @@ def texte_session_a_creer(fiche, raison, url):
             "relance lui-même ses sessions.")
 
 
-def _session_a_creer(projet, cle, raison):
-    """Pose (une fois par agent) la décision `session_cloud` avec la démarche."""
+def _session_a_creer(projet, cle, raison, tache=None, session=None):
+    """Pose (une fois par agent) la décision `session_cloud` avec la démarche ; avec `tache`, la démarche simplifiée :
+    le lien claude.ai/code (celui de la session déjà inscrite pour l'agent, s'il y en a une), le dépôt et le message de
+    départ complet de cette tâche, à coller dans la session."""
     court = _etat(projet)
     if any(d.get("genre") == "session_cloud" and d.get("agent") == cle for d in court.get("decisions") or []):
         return
@@ -2495,8 +2538,27 @@ def _session_a_creer(projet, cle, raison):
                                          if x["cle"] == cle), None))
     except (OSError, fi.FicheInvalide):
         url = None
+    plus = {}
+    if tache:
+        try:
+            message = lancer(projet, "depart", {"agent": cle, "tache": tache})["message"]
+        except (Refus, ErreurMoteur):
+            message = None
+        from moteur import cloud
+        inscrite = cloud.lire_session(session or fiche.get("session") or "")
+        if message and len(message) <= LONGUEUR_MAX_DEPART:
+            plus = {"tache": tache, "depart": message, "lien": inscrite["adresse"] if inscrite else ADRESSE_CODE,
+                    "modele": fiche["modele"]}
+            if url and url.startswith("https://"):
+                plus["depot"] = url
     lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "session_cloud", "agent": cle,
-                                "texte": texte_session_a_creer(fiche, raison or "raison inconnue", url)})
+                                "texte": texte_session_a_creer(fiche, raison or "raison inconnue", url,
+                                                               avec_depart=bool(plus),
+                                                               session_ouverte=bool(plus) and plus["lien"] != ADRESSE_CODE),
+                                **plus})
+
+
+LONGUEUR_MAX_DEPART = 24000      # comme `cloud.LONGUEUR_MAX_DEPART`
 
 
 def _apres_echec_d_installation(projet, etat, taches, raison):

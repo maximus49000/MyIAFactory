@@ -533,6 +533,9 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .decision-genre input, .decision-genre textarea, .decision-session input { box-sizing: border-box; display: block; width: 100%; margin: 4px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .decision-genre [hidden], .decision-session [hidden] { display: none; }
 .decision-session .bouton, .decision-genre .bouton { margin-top: 4px; }
+.decision-session .session-depart { box-sizing: border-box; display: block; width: 100%; max-height: 40vh; margin: 4px 0; padding: 6px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: 0.85em/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; resize: vertical; }
+.decision-session .session-etapes { margin: 6px 0; padding-left: 20px; overflow-wrap: anywhere; }
+.decision-session .session-etapes a { overflow-wrap: anywhere; }
 .decision-organisation textarea { box-sizing: border-box; display: block; width: 100%; margin: 6px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .organisation-fable { display: block; margin: 2px 0; }
 .decision-genre .lecon-boutons { flex-wrap: wrap; }

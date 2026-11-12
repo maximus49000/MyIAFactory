@@ -230,6 +230,19 @@ export function demandeSession(decision, session) {
   return {type: "session_cloud", decision, session};
 }
 
+// La session collée par le Directeur : l'adresse https://claude.ai/code/<id> ou l'identifiant (session_… ou un UUID).
+// {session, adresse}, ou null. Même règle que le moteur (moteur/cloud.py, lire_session).
+const SESSION_SEULE = /^(session_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const ADRESSE_COLLEE = /^https:\/\/claude\.ai\/code\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/;
+export function lireSession(texte) {
+  const t = typeof texte === "string" ? texte.trim() : "";
+  if (t.length > 200) return null;
+  const m = ADRESSE_COLLEE.exec(t);
+  const id = m ? m[1] : (SESSION_SEULE.test(t) ? t : null);
+  if (!id || id === "session_") return null;
+  return {session: id, adresse: "https://claude.ai/code/" + id};
+}
+
 // Un agent arrêté faute d'outil : « autoriser » le programme (ajouté à sa fiche, sa tâche repart), « refuser » (sa tâche
 // est bloquée) ou « relancer » (la fiche a été complétée à la main : seulement sans programme à nommer).
 export function demandeOutilAgent(decision, verdict) {

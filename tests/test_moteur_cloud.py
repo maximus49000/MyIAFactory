@@ -73,6 +73,26 @@ class Session(unittest.TestCase):
         cloud.envoyer_suite("session_01", "Accord donné.", executer=ex, trouver=CLAUDE)
         self.assertEqual(ex.appels, [["claude", "-p", "Accord donné.", "--cloud", "session_01"]])
 
+    def test_lire_session_collee(self):
+        self.assertEqual(cloud.lire_session(" https://claude.ai/code/session_01AbCdEf?x=1 "),
+                         {"session": "session_01AbCdEf", "adresse": ADRESSE})
+        self.assertEqual(cloud.lire_session("session_01AbCdEf"), {"session": "session_01AbCdEf", "adresse": ADRESSE})
+        uuid = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"
+        self.assertEqual(cloud.lire_session(uuid)["session"], uuid)
+        for mauvais in ("Ma session", "", "https://example.com/code/session_1", "https://claude.ai/code/",
+                        "session_", "x" * 300):
+            self.assertIsNone(cloud.lire_session(mauvais), mauvais)
+
+    def test_sans_terminal_raison_claire(self):
+        refus = (1, b"Error: --cloud requires an interactive terminal. Non-interactive invocations run locally.")
+        with self.assertRaises(cloud.ErreurCloud) as e:
+            cloud.lancer_session("x", dossier_projet="/p", modele="haiku", executer=Executeur({"claude --cloud": refus}),
+                                 trouver=CLAUDE)
+        self.assertEqual(e.exception.raison, cloud.SANS_TERMINAL)
+        with self.assertRaises(cloud.ErreurCloud) as e:
+            cloud.envoyer_suite("session_1", "x", executer=Executeur({"claude -p": refus}), trouver=CLAUDE)
+        self.assertEqual(e.exception.raison, cloud.SANS_TERMINAL)
+
     def test_prerequis(self):
         github = Executeur({"git remote": (0, b"https://github.com/moi/projet.git\n")})
         self.assertIsNone(cloud.prerequis("/p", executer=github, trouver=CLAUDE))
@@ -80,6 +100,71 @@ class Session(unittest.TestCase):
         ailleurs = Executeur({"git remote": (0, b"https://gitlab.com/moi/projet.git\n")})
         self.assertIn("GitHub", cloud.prerequis("/p", executer=ailleurs, trouver=CLAUDE))
         self.assertIn("GitHub", cloud.prerequis("/p", executer=Executeur({"git remote": (128, b"")}), trouver=CLAUDE))
+
+
+class FauxTerminal:
+    """Un faux `pseudo_terminal.lancer` : affiche des écrans l'un après l'autre (chacun ajouté à la sortie), note ce que
+    `repondre` tape, s'arrête quand `arret` le dit. Un écran `None` : le processus se termine."""
+
+    def __init__(self, ecrans, code=0):
+        self.ecrans, self.code, self.tape = ecrans, code, []
+
+    def __call__(self, argv, *, cwd, delai_s, env=None, arret=None, repondre=None):
+        from moteur import pseudo_terminal as pt
+        texte = ""
+        for ecran in self.ecrans:
+            if ecran is None:
+                return pt.Resultat(code=self.code, texte=texte, brut=texte, fini=True)
+            texte += ecran
+            for _ in range(2):       # deux passages de la boucle par écran
+                if arret(texte):
+                    return pt.Resultat(code=None, texte=texte, brut=texte, fini=False, arrete=True)
+                touches = repondre(texte)
+                if touches:
+                    self.tape.append(touches)
+        return pt.Resultat(code=None, texte=texte, brut=texte, fini=False)
+
+
+THEME = "Let's get started.\nChoose the text style that looks best with your terminal\n❯ ✔ Dark mode\n"
+SECURITE = "Security notes:\n2. only use it with code you trust\nPress Enter to continue…\n"
+CONFIANCE = ("Accessing workspace:\nQuick safety check: Is this a project you created or one you trust?\n❯ No, exit\n"
+             "Yes, I trust this folder\nEnter to confirm · Esc to cancel\n")
+
+
+class EssaiFauxTerminal(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        patch = mock.patch.object(cloud, "GRACE_APRES_ADRESSE_S", 0)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_accueil_repondu_puis_approbation_du_dossier_demandee(self):
+        faux = FauxTerminal([THEME, SECURITE, CONFIANCE])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux)
+        self.assertEqual(faux.tape, ["\r", "\r"])                  # thème et notes : jamais l'approbation
+        self.assertEqual(r["issue"], "demande")
+        self.assertIn("approuver le dossier", r["raison"])
+        self.assertIn("trust this folder", r["ecran"])
+
+    def test_session_creee(self):
+        faux = FauxTerminal([THEME, SECURITE, "Cloud session created: " + ADRESSE + "\n"])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux)
+        self.assertEqual((r["issue"], r["session"], r["adresse"]), ("session", "session_01AbCdEf", ADRESSE))
+
+    def test_refus_sans_terminal_ou_delai(self):
+        r = cloud.essai_pseudo_terminal(["claude"], "/p", lancer=FauxTerminal(
+            ["Error: --cloud requires an interactive terminal.\n", None], code=1))
+        self.assertEqual((r["issue"], r["raison"]), ("fini", cloud.SANS_TERMINAL))
+        r = cloud.essai_pseudo_terminal(["claude"], "/p", lancer=FauxTerminal(["Chargement…\n"]))
+        self.assertEqual(r["issue"], "delai")
+
+    def test_sans_pseudo_console(self):
+        from moteur import pseudo_terminal as pt
+
+        def indisponible(*a, **k):
+            raise pt.PseudoTerminalIndisponible("hors Windows")
+        with self.assertRaises(cloud.ErreurCloud):
+            cloud.essai_pseudo_terminal(["claude"], "/p", lancer=indisponible)
 
 
 class Releve(unittest.TestCase):
@@ -137,7 +222,11 @@ class FauxCloud:
         n = len(self.lancees)
         return {"session": f"session_{n}", "adresse": f"https://claude.ai/code/session_{n}"}
 
+    panne_suite = None
+
     def envoyer_suite(self, session, texte, **kw):
+        if self.panne_suite:
+            raise cloud.ErreurCloud(self.panne_suite)
         self.suites.append((session, texte))
 
     def chercher_rapports(self, dossier, taches, **kw):
@@ -346,6 +435,58 @@ class Agents(Base):
         tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
         self.assertIn("deux essais", tache["bloquee"])
         self.assertEqual(self.cloud.lancees, [])
+
+    def decision_session(self):
+        return next(x for x in self.suivi()["decisions_projet"] if x["genre"] == "session_cloud")
+
+    def test_secours_manuel_de_bout_en_bout(self):
+        t = self.tache()
+        self.cloud.panne = cloud.SANS_TERMINAL
+        self.avancer()
+        self.avancer(5)
+        d = self.decision_session()
+        self.assertEqual((d["tache"], d["lien"]), (t, "https://claude.ai/code"))
+        self.assertIn(f".factory/rapports/{t}.json", d["depart"])
+        self.assertIn("terminal interactif", d["texte"])
+        # Le Directeur crée la session sur claude.ai/code, colle le message, puis l'adresse de la session.
+        self.ok("actions", entree={"type": "session_cloud", "decision": d["id"],
+                                   "session": "https://claude.ai/code/session_01Manuel"})
+        self.avancer(5)
+        self.assertEqual(self.cloud.lancees, [])                               # pas de nouvelle session lancée
+        self.assertNotIn(d["id"], [x["id"] for x in self.suivi()["decisions_projet"]])
+        tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+        self.assertTrue(tache["active"])
+        self.assertIsNone(tache["bloquee"])
+        self.cloud.rapports[t] = ("claude/manuel", {**RAPPORT_FAIT, "fichiers": [], "lecons": [], "controles": [],
+                                                    "retours_factory": [], "verdicts": []})
+        self.avancer(70)
+        self.assertEqual(self.cloud.fusions, ["claude/manuel"])
+        tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+        self.assertEqual(tache["colonne"], "fait")
+        # La tâche suivante de l'agent part dans la session inscrite (le lancement automatique échoue toujours).
+        t2 = self.tache("Écran 2", element="e2")
+        self.avancer(5)
+        self.assertEqual(self.cloud.lancees, [])
+        self.assertEqual(len(self.cloud.suites), 1)
+        session, texte = self.cloud.suites[0]
+        self.assertEqual(session, "session_01Manuel")
+        self.assertIn(f".factory/rapports/{t2}.json", texte)
+        tache2 = next(x for x in self.suivi()["taches"] if x["id"] == t2)
+        self.assertTrue(any("Session cloud session_01Manuel (sonnet)" in j["texte"] for j in tache2["journal"]))
+        self.assertEqual(self.moteur.etats[str(self.projet.factory)]["cloud"][t2]["session"], "session_01Manuel")
+
+    def test_secours_la_session_inscrite_refuse_aussi(self):
+        etat = self.moteur.etats[str(self.projet.factory)]
+        etat["sessions_cloud"] = {"dev-c1": "session_01Manuel"}
+        self.cloud.panne, self.cloud.panne_suite = cloud.SANS_TERMINAL, cloud.SANS_TERMINAL
+        t = self.tache()
+        self.avancer()
+        self.avancer(5)
+        tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+        self.assertIn("deux essais", tache["bloquee"])
+        d = self.decision_session()
+        self.assertEqual(d["lien"], "https://claude.ai/code/session_01Manuel")   # la session de l'agent, à reprendre
+        self.assertIn(f".factory/rapports/{t}.json", d["depart"])
 
     def test_sans_github_bascule_en_local_et_le_dit(self):
         (self.dossier / "fiches" / "local.md").write_text(FICHE_LOCAL_HAIKU, encoding="utf-8")

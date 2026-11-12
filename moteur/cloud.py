@@ -14,6 +14,7 @@ clé n'est lue ni transmise : `ANTHROPIC_API_KEY` est retirée de l'environnemen
 import os
 import re
 import subprocess
+import time
 
 from moteur import appel, rapport
 
@@ -32,6 +33,24 @@ class ErreurCloud(Exception):
     def __init__(self, raison):
         super().__init__(raison)
         self.raison = raison
+
+
+ADRESSE_CODE = "https://claude.ai/code"
+_SESSION_SEULE = re.compile(r"(session_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+_ADRESSE_COLLEE = re.compile(r"https://claude\.ai/code/([A-Za-z0-9_-]+)/?(?:[?#].*)?")
+
+
+def lire_session(texte):
+    """L'identifiant ou l'adresse claude.ai/code d'une session, collé par l'utilisateur : `{"session", "adresse"}`,
+    ou `None` si ce n'est ni l'un ni l'autre."""
+    t = (texte or "").strip() if isinstance(texte, str) else ""
+    if len(t) > 200:
+        return None
+    m = _ADRESSE_COLLEE.fullmatch(t)
+    ident = m.group(1) if m else (t if _SESSION_SEULE.fullmatch(t) else None)
+    if not ident or ident == "session_":
+        return None
+    return {"session": ident, "adresse": f"{ADRESSE_CODE}/{ident}"}
 
 
 def chemin_rapport(tache):
@@ -92,7 +111,7 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     code, sortie = _lancer(executer, [claude, "--cloud", depart, "--model", m], dossier_projet, DELAI_CLAUDE_S)
     texte = _texte(sortie)
     if code != 0:
-        raise ErreurCloud(f"claude --cloud a rendu le code {code} : {texte[:200]}")
+        raise ErreurCloud(_sans_terminal(texte) or f"claude --cloud a rendu le code {code} : {texte[:200]}")
     adresse = _ADRESSE.search(texte)
     session = _SESSION.search(texte) or (re.search(r"([A-Za-z0-9_-]+)$", adresse.group(0)) if adresse else None)
     if not session:
@@ -107,7 +126,86 @@ def envoyer_suite(session, texte, *, executer=None, dossier_projet=".", trouver=
         raise ErreurCloud("la commande claude n'est pas installée")
     code, sortie = _lancer(executer, [claude, "-p", texte, "--cloud", session], dossier_projet, DELAI_CLAUDE_S)
     if code != 0:
-        raise ErreurCloud(f"la suite n'a pas pu être envoyée : {_texte(sortie)[:200]}")
+        raise ErreurCloud(_sans_terminal(_texte(sortie)) or f"la suite n'a pas pu être envoyée : {_texte(sortie)[:200]}")
+
+
+SANS_TERMINAL = ("claude --cloud exige un terminal interactif : le moteur, qui tourne sans terminal, ne peut pas "
+                 "créer ni joindre la session lui-même")
+
+
+def _sans_terminal(texte):
+    """La raison claire quand `claude` refuse `--cloud` hors d'un terminal (Claude Code 2.1.321 : « --cloud requires an
+    interactive terminal »), sinon `None`."""
+    return SANS_TERMINAL if "interactive terminal" in (texte or "") else None
+
+
+# --- L'essai du faux terminal (`moteur.pseudo_terminal`) : `claude --cloud` lancé dans une pseudo-console invisible.
+# Essai réel du 2026-11-12 (Claude Code 2.1.321) : la commande accepte la pseudo-console, mais s'arrête d'abord sur
+# l'accueil d'une première utilisation (thème, notes de sécurité), puis sur l'approbation du dossier (« Is this a
+# project you created or one you trust? ») ; aucune session n'est créée sans ces réponses. Pas branché dans
+# `lancer_session` : voir docs/superpowers/specs/2026-11-12-sessions-cloud-design.md et `outils/essai_session_cloud.py`.
+
+ECRANS_SANS_RISQUE = (("Choose the text style", "\r"),          # le thème proposé par défaut
+                      ("Press Enter to continue", "\r"))        # les notes de sécurité, à lire seulement
+DEMANDES_A_L_UTILISATEUR = (("trust this folder", "Claude Code demande d'approuver le dossier du projet (« Is this a "
+                                                  "project you created or one you trust? »)"),
+                            ("Enter to confirm", "Claude Code attend un choix"),
+                            ("/login", "Claude Code demande de se connecter"))
+GRACE_APRES_ADRESSE_S = 3
+
+
+def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None):
+    """Lance `argv` (`claude --cloud …`) dans la pseudo-console : répond seulement aux écrans sans risque
+    (`ECRANS_SANS_RISQUE`, une fois chacun), s'arrête sur une demande à l'utilisateur, ou peu après l'adresse de la
+    session. Rend `{"issue": "session" | "demande" | "fini" | "delai", "session", "adresse", "raison", "ecran"}`
+    (`ecran` : la fin de la sortie nettoyée). Lève `ErreurCloud` si la pseudo-console manque."""
+    from moteur import pseudo_terminal as pt
+    lancer = lancer or pt.lancer
+    faits, vu = set(), {"adresse": None, "demande": None}
+    debut = time.monotonic()
+
+    def apres_les_reponses(texte):
+        """Ce qui s'affiche après le dernier écran sans risque déjà répondu."""
+        coupe = max((texte.rfind(m) + len(m) for m, _ in ECRANS_SANS_RISQUE if m in faits), default=0)
+        return texte[coupe:]
+
+    def repondre(texte):
+        for marque, touches in ECRANS_SANS_RISQUE:
+            if marque not in faits and marque in apres_les_reponses(texte):
+                faits.add(marque)
+                return touches
+        return None
+
+    def arret(texte):
+        reste = apres_les_reponses(texte)
+        adresse = _ADRESSE.search(reste)
+        if adresse and vu["adresse"] is None:
+            vu["adresse"] = (adresse.group(0), time.monotonic())
+        if vu["adresse"]:
+            return time.monotonic() - vu["adresse"][1] >= GRACE_APRES_ADRESSE_S
+        if any(m not in faits and m in reste for m, _ in ECRANS_SANS_RISQUE):
+            return False
+        vu["demande"] = next((raison for marque, raison in DEMANDES_A_L_UTILISATEUR if marque in reste), None)
+        return vu["demande"] is not None
+
+    try:
+        r = lancer(argv, cwd=str(cwd), delai_s=delai_s, env=env, arret=arret, repondre=repondre)
+    except pt.PseudoTerminalIndisponible as e:
+        raise ErreurCloud(f"pas de faux terminal sur ce poste : {e}")
+    except OSError as e:
+        raise ErreurCloud(f"{argv[0]} n'a pas pu être lancé dans le faux terminal : {e}")
+    ecran = r.texte[-1500:]
+    if vu["adresse"]:
+        adresse = vu["adresse"][0]
+        return {"issue": "session", "session": re.search(r"([A-Za-z0-9_-]+)$", adresse).group(1), "adresse": adresse,
+                "raison": None, "ecran": ecran}
+    if vu["demande"]:
+        return {"issue": "demande", "session": None, "adresse": None, "raison": vu["demande"], "ecran": ecran}
+    if r.fini:
+        return {"issue": "fini", "session": None, "adresse": None, "ecran": ecran,
+                "raison": _sans_terminal(r.texte) or f"claude a rendu le code {r.code}"}
+    return {"issue": "delai", "session": None, "adresse": None, "ecran": ecran,
+            "raison": f"rien d'exploitable après {round(time.monotonic() - debut)} s"}
 
 
 def chercher_rapports(dossier_projet, taches, *, executer=None):

@@ -240,6 +240,52 @@ test("décision d'un autre genre : la phrase du genre nouveau est montrée", () 
   assert.match(contenu.textContent, /Description proposée : Jeux pour téléphone/);
 });
 
+const SESSION = {id: "s1", genre: "session_cloud", agent: "dev-1", tache: "t7", modele: "Sonnet",
+  texte: "Le moteur n'a pas pu lancer la session cloud de Lucas : terminal. Créez-la vous-même.",
+  lien: "https://claude.ai/code", depot: "https://github.com/moi/jeu",
+  depart: "Tu repars de zéro.\nÉcris ton rapport dans .factory/rapports/t7.json."};
+
+test("session cloud à créer à la main : lien, dépôt, message à copier, adresse à coller, « C'est fait »", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [SESSION]});
+  const liens = contenu.tous((n) => n.tagName === "a");
+  assert.deepEqual(liens.map((a) => [a.href, a.target, a.rel]), [
+    ["https://claude.ai/code", "_blank", "noopener noreferrer"], ["https://github.com/moi/jeu", "_blank", "noopener noreferrer"]]);
+  assert.match(contenu.textContent, /Modèle : Sonnet/);
+  const message = contenu.tous((n) => n.tagName === "textarea")[0];
+  assert.equal(message.value, SESSION.depart);
+  assert.equal(message.readOnly, true);
+  const copies = [];
+  const avant = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {configurable: true,
+    value: {clipboard: {writeText: async (t) => { copies.push(t); }}}});
+  const copier = bouton(contenu, "Copier le message");
+  try {
+    await copier.auteurs.click[0]();
+  } finally {
+    if (avant) Object.defineProperty(globalThis, "navigator", avant); else delete globalThis.navigator;
+  }
+  assert.deepEqual(copies, [SESSION.depart]);
+  assert.equal(copier.textContent, "Copié");
+  const champ = contenu.tous((n) => n.tagName === "input")[0];
+  champ.value = "Ma session";                                       // ni une adresse ni un identifiant
+  await bouton(contenu, "C'est fait").auteurs.click[0]();
+  assert.deepEqual(demandes, []);
+  assert.match(contenu.textContent, /claude\.ai\/code/);
+  champ.value = " https://claude.ai/code/session_01AbC ";
+  await bouton(contenu, "C'est fait").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "session_cloud", decision: "s1", session: "https://claude.ai/code/session_01AbC"}]);
+});
+
+test("session cloud : une adresse qui n'est pas https n'est pas un lien ; la forme d'avant garde son champ de nom", async () => {
+  const {contenu} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [{...SESSION, lien: "javascript:x", depot: "http://x"}]});
+  assert.equal(contenu.tous((n) => n.tagName === "a").length, 0);
+  const avant = rendre({...ETAT, fonctionnalites: [], decisions_projet: [{id: "s0", genre: "session_cloud", agent: "dev-1", texte: "T"}]});
+  avant.contenu.tous((n) => n.tagName === "input")[0].value = "Ma session";
+  await bouton(avant.contenu, "C'est fait").auteurs.click[0]();
+  assert.deepEqual(avant.demandes, [{type: "session_cloud", decision: "s0", session: "Ma session"}]);
+  assert.equal(avant.contenu.tous((n) => n.tagName === "textarea").length, 0);
+});
+
 const VALIDATION = {id: "v1", genre: "valider_etape", texte: "L'élément « Accueil » attend votre validation : « Validation du Directeur ».",
   fonctionnalite: "f1", element: {id: "e1", nom: "Accueil"}, etape: "f1-valider", tache: "t4",
   compte_rendu: "Tout est vert, apk d'essai prêt.",

@@ -58,6 +58,20 @@ class TestSuivi(AvecProjet):
         self.assertEqual([t["cle"] for t in r["titulaires"] if not t.get("chef")], ["metier-1", "dev-1"])
         self.assertEqual([a["id"] for a in r["actions"]], ["pause"])
 
+    def test_session_cloud_a_creer_a_la_main(self):
+        t0 = self.ok("tache", entree={"titre": "Partir en ligne", "role": "dev"})["id"]
+        manuelle = {"action": "poser", "portee": "projet", "genre": "session_cloud", "texte": "À créer à la main",
+                    "agent": "dev-1", "tache": t0, "depart": "Tu repars de zéro.", "lien": "https://claude.ai/code",
+                    "depot": "https://github.com/moi/p", "modele": "Sonnet"}
+        self.ok("decision", entree=manuelle)
+        for champ, valeur in (("tache", "t999"), ("lien", "http://claude.ai"), ("depart", " "), ("depot", 3)):
+            code, _ = self.outil("decision", entree={**manuelle, champ: valeur})
+            self.assertNotEqual(code, 0, champ)
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        d = next(x for x in r["decisions_projet"] if x["genre"] == "session_cloud")
+        self.assertEqual((d["tache"], d["lien"], d["depart"]), (t0, "https://claude.ai/code", "Tu repars de zéro."))
+
     def test_releve_est_un_releve_v4_valide(self):
         f = self.nouvelle("Une page d'accueil", images=[{"nom": "ref.png", "type": "image/png", "donnees": PNG}])
         self.ok("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1", "catalogue": True,

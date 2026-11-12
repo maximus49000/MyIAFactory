@@ -97,6 +97,11 @@ class Parcours(AvecParcours):
         self.assertEqual(self.taches(etape="cadrage"), [])          # le cadrage attend la validation du workflow
         self.assertEqual(self.demande_en_attente(), [])
 
+    def test_texte_de_la_proposition_sans_double_point(self):
+        _, decision = self.vers_l_organisation({**PROPOSITION, "livrable": "Les badges en PNG."})
+        self.assertIn("Livrable : Les badges en PNG. ", decision["texte"])
+        self.assertNotIn("..", decision["texte"])
+
     def test_demande_proche_rattachee(self):
         d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION})
         self.assertEqual(self.fonc()["genre"], "stickers")

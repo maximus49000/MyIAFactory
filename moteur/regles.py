@@ -753,7 +753,8 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
                         "cout": cout, "fonctionnalite": fid, "workflow": w, "livrable": o["livrable"],
                         "environnement": poste, "outils_installation": list(o["outils_installation"])}
         etapes = " puis ".join(x["nom"] for x in flux)
-        texte = (f"Voici le workflow que je propose pour « {f['nom']} » : {etapes}. Livrable : {o['livrable']}. "
+        livrable = o["livrable"].strip().rstrip(".")
+        texte = (f"Voici le workflow que je propose pour « {f['nom']} » : {etapes}. Livrable : {livrable}. "
                  + (f"Agents à recruter : {', '.join(a.get('prenom') or a['cle'] for a in nouveaux)}. " if nouveaux
                     else "Aucun agent à recruter : ceux du projet suffisent. ")
                  + (f"Services à créer : {', '.join(s['nom'] for s in o['services'])}. " if o["services"] else "")

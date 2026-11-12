@@ -327,3 +327,9 @@ Rôles : designer, dev, qa
 Date : 2026-11-13
 
 Un contrôle qui cherche des secrets par mots-clés doit viser un motif de valeur (mot suivi d'un séparateur et d'une valeur), pas le mot seul, pour ne pas bloquer des noms de contenu légitimes.
+
+## S55 — Quand un élément d'équilibrage est conçu avant que le jeu ex
+Rôles : designer, equilibreur
+Date : 2026-11-13
+
+Quand un élément d'équilibrage est conçu avant que le jeu existe, livrer le plan de mesure et des indicateurs calculés depuis les fichiers de valeurs, sans changer aucune valeur.

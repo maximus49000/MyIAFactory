@@ -201,3 +201,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Mettre dans le document de cadrage la liste ordonnée des étapes, pour que le rapport la reprenne sans la refaire.
+
+## S34 — Pour vérifier l'environnement d'un build, lancer en une seul
+Rôles : livreur
+Date : 2026-11-12
+
+Pour vérifier l'environnement d'un build, lancer en une seule fois un script qui contrôle la version de l'outil, les modèles d'export, les outils de signature et la présence des variables secrètes, sans afficher leur valeur.

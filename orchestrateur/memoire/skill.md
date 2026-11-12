@@ -273,3 +273,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Produire les tableaux et les images de design par un script qui lit le fichier de valeurs, et garder dans la fiche écrite les règles et l'intention sans recopier les chiffres.
+
+## S46 — Contrôler la console de chaque outil de test séparément : un
+Rôles : testeur
+Date : 2026-11-12
+
+Contrôler la console de chaque outil de test séparément : une fuite ou une erreur peut n'apparaître que dans la run complète.

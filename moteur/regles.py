@@ -1907,7 +1907,9 @@ def _matiere(projet, etat, t):
                                "cadrage porte sur la description du projet.")
         parties += ["Discussion avec l'utilisateur :", _texte_discussion(f),
                     "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
-                    "(`message.questions`, `attend: true`; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
+                    "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
+                    '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
+                    "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
                     "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                     "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
                     "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, sous une racine "
@@ -1998,12 +2000,22 @@ def traiter_retour(projet, execution, etat):
         _terminer(projet, {"demande": liee}, "L'agent n'a pas pu finir : " + reponse[:300])
         return _apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
     t0 = _tache(projet, taches[0])
+    message_refuse = None
     for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=taches[0], agent=execution.agent,
                                               etape=str(t0.get("etape") or "")):
         try:
             lancer(projet, commande, entree)
         except Refus as e:
-            lancer(projet, "tache", {"id": taches[0], "journal": [f"Refusé par l'outil ({commande}) : {e}"]})
+            lancer(projet, "tache", {"id": taches[0], "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
+            if commande == "message":     # la réponse de l'agent est perdue : il la rend de nouveau, ou la tâche est bloquée
+                message_refuse = str(e)
+                break
+    refus = _m(etat, "refus_relances", set)
+    if message_refuse:
+        if liee:
+            _m(etat, "liees")[taches[0]] = liee
+        return _message_refuse(projet, etat, execution, depart, r, message_refuse)
+    refus.discard(taches[0])
     for retour in r.get("retours_factory") or []:
         lancer(projet, "controle", {"texte": retour, "origine": f"retour de {execution.agent}"})
     for tid in taches:
@@ -2024,6 +2036,48 @@ def traiter_retour(projet, execution, etat):
     for tid in taches:
         actions += _suite_de_tache(projet, etat, _tache(projet, tid), execution, r)
     return actions + _demarrer_en_attente(projet, etat, fid)
+
+
+JOURNAL_REFUS = "Refusé par l'outil"
+FORME_DES_QUESTIONS = '{"texte": "…", "choix": ["…", "…"], "multiple": false}'
+
+
+def _supplement_de_refus(raison, message=None):
+    s = f"Ta réponse a été refusée : {raison} Rends-la au bon format, sans refaire le travail."
+    if message:
+        s += ("\n\nTon message refusé, à reprendre tel quel une fois corrigé :\n```json\n"
+              + json.dumps(message, ensure_ascii=False)[:4000] + "\n```")
+    if "questions" in raison:
+        s += f"\nUne question : `{FORME_DES_QUESTIONS}`."
+    return s
+
+
+def _relancer_apres_refus(projet, etat, depart, raison, message=None):
+    """Le même agent, sur la même tâche, avec la raison du refus. Sa session n'est pas reprise (le départ la rejoue en
+    entier) : son message refusé est redonné dans la matière, il n'a rien à refaire."""
+    tid = depart["taches"][0]
+    _m(etat, "refus_relances", set).add(tid)
+    matiere = (depart.get("matiere") or "").rstrip() + "\n\n" + _supplement_de_refus(raison, message)
+    lancer(projet, "tache", {"id": tid, "active": True,
+                             "journal": ["Réponse refusée par l'outil : l'agent la rend de nouveau."]})
+    etat["departs"][tid] = {**depart, "matiere": matiere}
+    etat["en_cours"].add(tid)
+    return [a_agent(depart["agent"], depart["taches"], matiere)]
+
+
+def _message_refuse(projet, etat, execution, depart, r, raison):
+    """Le message d'un agent refusé par l'outil : l'agent le rend de nouveau une fois, puis la tâche est bloquée."""
+    tid = depart["taches"][0]
+    if tid not in _m(etat, "refus_relances", set):
+        return _relancer_apres_refus(projet, etat, depart, raison, r.get("message"))
+    _m(etat, "refus_relances", set).discard(tid)
+    raison = f"La réponse de l'agent a été refusée par l'outil deux fois : {raison}"
+    _bloquer_taches(projet, depart["taches"], raison)
+    t = _tache(projet, tid)
+    if t.get("fonctionnalite"):
+        _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
+    _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
+    return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
 
 
 def _agent_en_echec(projet, etat, execution, depart):
@@ -2330,11 +2384,16 @@ def orphelines(projet, etat):
     actions, relancees = [], _m(etat, "relancees", set)
     for t in court["taches"]:
         etape = str(t.get("etape") or "")
-        if (not t["active"] or not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
+        if (not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
                 or not (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
             continue
         if fiche_cloud(court, t["agent"]):
             continue      # sa session cloud vit encore : la boucle la retrouve et la relève
+        refus = None
+        if not t["active"]:
+            refus = _refus_sans_suite(projet, t)      # un message refusé par l'outil, perdu, la tâche muette
+            if not refus:
+                continue
         relancees.add(t["id"])
         ids = [t["id"]]
         if isinstance(t.get("lot"), dict):
@@ -2345,12 +2404,32 @@ def orphelines(projet, etat):
         fiche = next(a for a in court["agents"] if a["cle"] == t["agent"])
         modele = (t.get("montee") or {}).get("a") or fiche["modele"]
         matiere = (chr(10) * 2).join(_matiere(projet, etat, par_id[i]) for i in ids)
+        depart = {"agent": t["agent"], "taches": ids, "matiere": matiere, "modele": modele,
+                  "lot": (t.get("lot") or {}).get("id")}
+        if refus:
+            actions += _relancer_apres_refus(projet, etat, depart, refus)
+            continue
         lancer(projet, "tache", {"id": t["id"], "journal": ["Le moteur a repris : l'agent avait disparu, nouvel essai."]})
-        etat["departs"][ids[0]] = {"agent": t["agent"], "taches": ids, "matiere": matiere, "modele": modele,
-                                   "lot": (t.get("lot") or {}).get("id")}
+        etat["departs"][ids[0]] = depart
         etat["en_cours"].add(ids[0])
         actions.append(a_agent(t["agent"], ids, matiere))
     return actions
+
+
+def _refus_sans_suite(projet, t):
+    """La raison du dernier refus de l'outil sur le message d'un agent, quand la tâche attend toujours (inactive, agent
+    attribué, ni faite ni bloquée) et que l'agent n'a rien dit depuis. `None` sinon."""
+    if t["colonne"] == "fait" or t.get("bloquee"):
+        return None
+    refus = [j for j in _tache(projet, t["id"]).get("journal") or [] if j["texte"].startswith(f"{JOURNAL_REFUS} (message)")]
+    if not refus or not t.get("fonctionnalite"):
+        return None
+    dernier = max(refus, key=lambda j: j["t"])
+    depuis = [m for m in _fonc(projet, t["fonctionnalite"]).get("discussion") or []
+              if m["auteur"] == t["agent"] and m["t"] >= dernier["t"]]
+    if depuis:
+        return None
+    return dernier["texte"].split(" : ", 1)[-1]
 
 
 def avancer(projet, etat):

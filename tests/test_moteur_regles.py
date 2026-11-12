@@ -163,6 +163,10 @@ class Demandes(Base):
         self.assertIn("Une seule série de questions", matiere)
         self.assertIn("rends le cahier corrigé", matiere)
 
+    def test_le_cadrage_donne_la_forme_exacte_d_une_question(self):
+        _, actions = self.cadrer(texte="Des écrans pour l'appli")
+        self.assertIn('{"texte": "…", "choix": ["…", "…"], "multiple": false}', actions[0][3])
+
     def test_methode_validee_sans_prototype_n_ecrit_rien(self):
         """Valider une méthode avant tout prototype (la fonctionnalité est encore en cadrage) : rien à écrire."""
         self.fonctionnalite("cadrage")
@@ -638,6 +642,84 @@ class Arrets(Base):
         self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
         t = self.taches(id=tid)[0]
         self.assertIn("deux essais", t["bloquee"])
+
+    # Le cas réel : l'agent de cadrage rend des questions mal formées, l'outil refuse son message.
+    MAL_FORME = {"statut": "fait", "message": {"texte": "Quatre questions.", "attend": True,
+                                                 "questions": [{"enonce": "Quel style ?", "choix": ["a", "b"]}]}}
+
+    def execution(self, tid, r):
+        return agents.Execution(tid, "metier-1", rapport=_lu(r), usages=[usage()])
+
+    def test_un_message_refuse_relance_l_agent_avec_la_raison(self):
+        tid = self.depart_cadrage()[0][2][0]
+        again = regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), self.etat)
+        self.assertEqual([(a[0], a[1], a[2]) for a in again], [("agent", "metier-1", [tid])])
+        matiere = again[0][3]
+        self.assertIn("Ta réponse a été refusée", matiere)
+        self.assertIn("la question 1 doit avoir un « texte »", matiere)
+        self.assertIn("sans refaire le travail", matiere)
+        self.assertIn("Quel style ?", matiere)                       # son message n'est pas perdu
+        self.assertIn("Matière de la tâche", matiere)
+        t = self.taches(id=tid)[0]
+        self.assertTrue(t["active"])
+        self.assertIsNone(t["bloquee"])
+        self.assertIn(tid, self.etat["en_cours"])
+        self.assertNotIn("metier-1", [m["auteur"] for m in self.fonc()["discussion"]])      # rien n'est passé
+        # L'agent rend le bon format : le message passe, la tâche attend la réponse de l'utilisateur.
+        bon = {"statut": "fait", "message": {"texte": "Quatre questions.", "attend": True,
+                                              "questions": [{"texte": "Quel style ?", "choix": ["a", "b"]}]}}
+        self.assertEqual(regles.traiter_retour(self.projet, self.execution(tid, bon), self.etat), [])
+        self.assertEqual(self.fonc()["discussion"][-1]["questions"][0]["texte"], "Quel style ?")
+        self.assertFalse(self.taches(id=tid)[0]["active"])
+
+    def test_un_message_refuse_deux_fois_bloque_la_tache(self):
+        tid = self.depart_cadrage()[0][2][0]
+        regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), self.etat)
+        self.assertEqual(regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), self.etat), [])
+        t = self.taches(id=tid)[0]
+        self.assertFalse(t["active"])
+        self.assertIn("refusée", t["bloquee"])
+        self.assertIn("la question 1 doit avoir un « texte »", t["bloquee"])
+        self.assertNotIn(tid, self.etat["en_cours"])
+        self.assertIn("est bloquée", self.fonc()["discussion"][-1]["texte"])
+
+    def test_le_refus_d_un_tour_n_use_pas_l_essai_du_tour_suivant(self):
+        tid = self.depart_cadrage()[0][2][0]
+        bon = {"statut": "fait", "message": {"texte": "Ok.", "attend": True}}
+        regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), self.etat)
+        regles.traiter_retour(self.projet, self.execution(tid, bon), self.etat)
+        again = regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), self.etat)
+        self.assertEqual([a[0] for a in again], ["agent"])      # un nouveau tour : un nouvel essai
+
+    def etat_t2(self, avec_reponse_apres=False):
+        """L'état réel du projet bloqué : agent attribué, tâche inactive, « Refusé par l'outil » au journal."""
+        tid = self.depart_cadrage()[0][2][0]
+        self.ok("tache", entree={"id": tid, "active": False, "journal": [
+            "Refusé par l'outil (message) : message : « questions » : la question 1 doit avoir un « texte ».",
+            "Quatre questions courtes avant d'écrire le cahier."]})
+        if avec_reponse_apres:
+            self.ok("message", entree={"fonctionnalite": "f1", "auteur": "metier-1", "texte": "Quatre questions."})
+        return tid
+
+    def test_au_demarrage_une_tache_au_message_refuse_est_relancee_une_fois(self):
+        tid = self.etat_t2()
+        etat = regles.nouvel_etat()
+        actions = regles.orphelines(self.projet, etat)
+        self.assertEqual([(a[0], a[1], a[2]) for a in actions], [("agent", "metier-1", [tid])])
+        self.assertIn("Ta réponse a été refusée", actions[0][3])
+        self.assertIn("la question 1 doit avoir un « texte »", actions[0][3])
+        self.assertTrue(self.taches(id=tid)[0]["active"])
+        self.assertEqual(regles.orphelines(self.projet, etat), [])         # une seule fois
+        # L'agent se trompe encore : la tâche est bloquée, avec la raison.
+        self.assertEqual(regles.traiter_retour(self.projet, self.execution(tid, self.MAL_FORME), etat), [])
+        t = self.taches(id=tid)[0]
+        self.assertFalse(t["active"])
+        self.assertIn("la question 1 doit avoir un « texte »", t["bloquee"])
+        self.assertEqual(regles.orphelines(self.projet, regles.nouvel_etat()), [])    # bloquée : plus reprise
+
+    def test_au_demarrage_une_tache_dont_l_agent_a_repondu_depuis_n_est_pas_relancee(self):
+        self.etat_t2(avec_reponse_apres=True)
+        self.assertEqual(regles.orphelines(self.projet, regles.nouvel_etat()), [])
 
     def test_cadrage_rend_cahier_et_nom(self):
         actions = self.depart_cadrage()

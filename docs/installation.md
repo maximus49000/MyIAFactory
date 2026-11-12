@@ -126,6 +126,13 @@ active pendant ce délai. Dans la démo, les réponses sont
 fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
 méthode à la série.
 
+**Un agent dont la réponse est refusée n'est plus perdu.** Une question écrite `question`, `intitule` ou `libelle` au lieu de
+`texte`, ou des `options`/`reponses` au lieu de `choix`, est corrigée par le moteur avant l'envoi. Si l'outil refuse quand
+même le message, le moteur relance le même agent une fois, sur la même tâche, avec la raison du refus et son message à
+corriger ; au deuxième refus la tâche est bloquée, avec la raison au bureau, et l'agent n'est plus « au travail ». Au
+démarrage, une tâche restée muette après un « Refusé par l'outil (message) » (agent attribué, tâche inactive, rien dit depuis)
+est relancée de la même façon, une fois.
+
 Le **Directeur** montre en plus les cahiers et les méthodes à valider, les genres à confirmer, les « méthode à
 revoir ? » et les sessions cloud à créer (créez la session vous-même, puis donnez son nom et cliquez « C'est fait ») ;
 pour une leçon, il montre l'étage proposé (projet, genre ou skill) et le texte général, que vous validez mot pour mot.

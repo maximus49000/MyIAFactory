@@ -106,7 +106,7 @@ Rends, dans cet ordre :
 
 Termine ta réponse par un bloc ```json (le dernier de ta réponse), de cette forme, que le moteur lit pour tenir le suivi :
 ```json
-{"statut": "fait", "message": {"texte": "ce que tu dis dans la discussion", "images": [], "questions": [], "glossaire": [], "attend": false},
+{"statut": "fait", "message": {"texte": "ce que tu dis dans la discussion", "images": [], "questions": [{"texte": "…", "choix": ["…", "…"], "multiple": false}], "glossaire": [], "attend": false},
  "fichiers": [{"chemin": "relatif au projet", "titre": "…", "element": "…", "livrable": false}],
  "lecons": [{"texte": "…", "roles": ["dev"], "etage_propose": "projet", "texte_general": "…"}],
  "controles": [{"texte": "…", "origine": "…"}], "retours_factory": ["…"],

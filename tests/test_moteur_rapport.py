@@ -70,6 +70,28 @@ class Commandes(unittest.TestCase):
         cmds = self.appel(r)
         self.assertEqual([c for c, _ in cmds], ["message"])
 
+    def questions(self, questions):
+        cmds = self.appel({"statut": "fait", "message": {"texte": "Alors ?", "attend": True, "questions": questions}})
+        return cmds[0][1]["questions"]
+
+    def test_une_question_au_mauvais_nom_est_normalisee(self):
+        """Le cas réel : `{"question": ..., "choix": [...]}` au lieu de `texte`."""
+        for alias in ("question", "intitule", "libelle"):
+            q = self.questions([{alias: "Quel style ?", "choix": ["Pixel", "Vectoriel"], "multiple": False}])
+            self.assertEqual(q, [{"texte": "Quel style ?", "choix": ["Pixel", "Vectoriel"], "multiple": False}])
+
+    def test_des_choix_donnes_comme_options_ou_reponses_sont_normalises(self):
+        for alias in ("options", "reponses"):
+            q = self.questions([{"texte": "Style ?", alias: ["Pixel", "Vectoriel"]}])
+            self.assertEqual(q, [{"texte": "Style ?", "choix": ["Pixel", "Vectoriel"]}])
+
+    def test_la_normalisation_n_invente_rien(self):
+        bonne = {"texte": "Style ?", "choix": ["a", "b"], "multiple": True}
+        self.assertEqual(self.questions([bonne, {"question": "Sans choix"}]),
+                         [bonne, {"texte": "Sans choix"}])       # pas de choix inventés : l'outil refusera
+        self.assertEqual(self.questions([{"texte": "T", "question": "Autre", "choix": ["a", "b"]}])[0]["texte"], "T")
+        self.assertEqual(self.questions(["pas une question", {"question": 3}]), ["pas une question", {"question": 3}])
+
     def test_sans_fonctionnalite_ni_message_ni_document(self):
         cmds = rapport.commandes(rapport.lire(reponse(FAIT)), fonctionnalite=None, tache="t3", agent="dev-1",
                                  etape="dev")

@@ -93,6 +93,34 @@ def lire(texte):
     return r
 
 
+ALIAS_TEXTE = ("question", "intitule", "libelle")       # ce que les agents écrivent à la place de « texte »
+ALIAS_CHOIX = ("options", "reponses")
+
+
+def normaliser_questions(questions):
+    """Les questions d'un message, dans la forme de l'outil : `texte` pour `question`/`intitule`/`libelle`, `choix` pour
+    `options`/`reponses`. Rien d'autre n'est inventé : ce qui reste mal formé est refusé par l'outil."""
+    if not isinstance(questions, list):
+        return questions
+    sortie = []
+    for q in questions:
+        if not isinstance(q, dict):
+            sortie.append(q)
+            continue
+        q = dict(q)
+        for champ, alias in (("texte", ALIAS_TEXTE), ("choix", ALIAS_CHOIX)):
+            if champ in q:
+                for a in alias:
+                    q.pop(a, None)
+                continue
+            bon = next((a for a in alias if (_texte(q.get(a)) if champ == "texte" else isinstance(q.get(a), list))),
+                       None)
+            if bon:
+                q[champ] = q.pop(bon)
+        sortie.append(q)
+    return sortie
+
+
 def commandes(rapport, *, fonctionnalite, tache, agent, etape):
     """Les `(commande, entrée)` à passer à `lancer`, dans l'ordre : message, documents, contrôles, leçons.
     Un rapport qui n'est pas « fait » ne rend que son message : rien n'est produit ni noté tant que l'accord n'est pas
@@ -103,7 +131,7 @@ def commandes(rapport, *, fonctionnalite, tache, agent, etape):
         e = {"fonctionnalite": fonctionnalite, "auteur": agent, "texte": m["texte"]}
         for cle in ("images", "questions", "glossaire", "attend"):
             if m.get(cle):
-                e[cle] = m[cle]
+                e[cle] = normaliser_questions(m[cle]) if cle == "questions" else m[cle]
         if "attend" in m and isinstance(m["attend"], bool):
             e["attend"] = m["attend"]
         sortie.append(("message", e))

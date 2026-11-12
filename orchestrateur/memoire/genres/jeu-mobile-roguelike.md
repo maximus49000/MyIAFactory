@@ -212,3 +212,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Avant un export signé, lister les clés de signature candidates sans lire leurs secrets, puis demander à l'utilisateur quelle clé et quel alias utiliser.
+
+## G36 — Quand plusieurs clés de signature candidates existent, deman
+Rôles : livreur
+Date : 2026-11-12
+
+Quand plusieurs clés de signature candidates existent, demander à l'utilisateur laquelle utiliser (chemin et alias) avant tout export signé ; ne jamais en supprimer aucune.

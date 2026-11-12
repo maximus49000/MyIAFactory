@@ -2066,7 +2066,11 @@ def _attente(court, fid, etat):
             continue
         etape = str(t.get("etape") or "")
         explicite = t["id"] in a_lancer
-        if explicite or (not t.get("debut") and (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
+        # Une étape du flux déjà commencée, ni active ni bloquée, ni suivie par le moteur : débloquée (à la main, une
+        # session cloud inscrite) ou laissée par un moteur relancé ; elle repart aussi, sinon elle ne repartirait jamais.
+        reprise = bool(t.get("debut")) and etape.startswith(ETAPES_DE_FLUX)
+        if explicite or reprise or (not t.get("debut") and (etape.startswith(ETAPES_DE_FLUX)
+                                                            or etape in ETAPES_DU_MOTEUR)):
             attente.append(t)
     attente.sort(key=lambda t: (t.get("etape") != "correction", t["id"]))
     return attente

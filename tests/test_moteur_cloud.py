@@ -359,6 +359,15 @@ class Agents(Base):
         self.avancer()
         self.assertEqual([l["approuver_dossier"] for l in self.cloud.lancees], [True])
 
+    def test_etape_debloquee_apres_son_debut_repart(self):
+        """Essai réel : une tâche bloquée faute de session cloud, débloquée ensuite, ne repartait jamais (elle avait
+        déjà un début et n'était plus dans la mémoire du moteur)."""
+        base = {"fonctionnalite": "f1", "active": False, "colonne": "dev", "etape": "flux:dev", "lot": None}
+        court = {"taches": [dict(base, id="t1", debut="2026-11-12T23:46:06+01:00", bloquee=None),
+                            dict(base, id="t2", debut="2026-11-12T23:46:06+01:00", bloquee="session cloud : x"),
+                            dict(base, id="t3", debut="2026-11-12T23:46:06+01:00", bloquee=None, active=True)]}
+        self.assertEqual([t["id"] for t in regles._attente(court, "f1", regles.nouvel_etat())], ["t1"])
+
     def test_reglage_dossier_approuve_lu_par_le_moteur(self):
         reglages = self.dossier / "reglages.json"
         reglages.write_text(json.dumps({"cloud_dossier_approuve": True}), encoding="utf-8")

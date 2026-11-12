@@ -242,3 +242,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Dans un roguelike, tester chaque événement et chaque boutique en appelant directement la fonction d'effet sur l'état de run. Faire de nombreux tirages pour les effets aléatoires et vérifier que le résultat est un cas exact connu. Vérifier aussi le taux observé contre la valeur d'équilibrage, et les bornes : plafond, solde jamais négatif.
+
+## G41 — Pour tester des bonus temporaires dans un jeu, un script lan
+Rôles : testeur
+Date : 2026-11-12
+
+Pour tester des bonus temporaires dans un jeu, un script lancé par le moteur manipule l'état de la partie. Il vérifie ajout, cumul, plafond, usure et remise à zéro, puis instancie la scène de jeu pour lire les valeurs réellement appliquées.

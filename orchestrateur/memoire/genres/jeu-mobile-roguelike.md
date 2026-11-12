@@ -272,3 +272,9 @@ Rôles : designer, dev
 Date : 2026-11-12
 
 Dans un roguelike de cartes, vérifier automatiquement que le pool de chaque personnage contient, à chaque rareté proposée, de quoi remplir chaque contrainte de tirage des récompenses.
+
+## G46 — Quand on ajoute un type de récompense pendant le design d'un
+Rôles : designer
+Date : 2026-11-12
+
+Quand on ajoute un type de récompense pendant le design d'un roguelike, le distinguer d'abord des récompenses existantes, réutiliser un nœud existant de la carte plutôt que d'en créer un, et dire dans quelle étape il entre et quelles autres étapes il touche.

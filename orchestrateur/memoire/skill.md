@@ -231,3 +231,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Un script de test lancé par le moteur doit toujours être appelé avec un délai maximal. En cas d'erreur de script, le moteur peut rester actif sans jamais quitter. Le lanceur doit alors afficher la sortie partielle plutôt que d'attendre.
+
+## S39 — Dans un script de test Godot sans interface, les warnings «
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Dans un script de test Godot sans interface, les warnings « ObjectDB instances were leaked » et « resources still in use » viennent souvent de lectures audio encore actives à quit(). Arrêter les lecteurs, vider leurs flux, attendre un court délai en temps réel pour que le serveur audio libère les lectures, puis quitter, en s'assurant qu'aucune scène en cours de chargement ne relance un son après l'arrêt.

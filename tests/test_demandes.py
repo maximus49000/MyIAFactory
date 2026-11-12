@@ -564,6 +564,53 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         refus({"type": "environnement", "decision": "n2", "verdict": "plus tard"})
         refus({"type": "environnement", "decision": "zz", "verdict": "fait"})
 
+    def test_installer_outil_en_autonomie(self):
+        import copy
+        r = copy.deepcopy(R5)
+        auto = {"outil": "JDK 17", "etat": "a_installer", "autonome": True, "etapes": ["a", "b"],
+                "telechargement": "https://adoptium.net/", "objectif": "Compiler le jeu."}
+        r["fonctionnalites"][0]["decisions"].append({"id": "n1", "genre": "environnement", "texte": "Il manque.",
+                                                     "environnement": [auto, {"outil": "Gradle", "etat": "a_installer"},
+                                                                       dict(auto, outil="Pris", en_cours=True)]})
+        r["decisions_projet"].append({"id": "n2", "genre": "environnement", "texte": "Il manque.",
+                                      "environnement": [auto]})
+        ok = lambda d: self.assertIsNone(demandes.verifier(d, r, frozenset(), None), d)
+        refus = lambda d: self.assertTrue(demandes.verifier(d, r, frozenset(), None), d)
+        ok({"type": "installer_outil", "decision": "n1", "fonctionnalite": "f1", "outil": "JDK 17"})
+        ok({"type": "installer_outil", "decision": "n2", "outil": "JDK 17"})                 # celle du projet
+        refus({"type": "installer_outil", "decision": "n1", "fonctionnalite": "f1", "outil": "Gradle"})   # pas autonome
+        refus({"type": "installer_outil", "decision": "n1", "fonctionnalite": "f1", "outil": "Pris"})     # déjà en cours
+        refus({"type": "installer_outil", "decision": "n1", "fonctionnalite": "f1", "outil": "Inconnu"})
+        refus({"type": "installer_outil", "decision": "n1", "outil": "JDK 17"})                # n1 est celle de f1
+        refus({"type": "installer_outil", "decision": "n2", "fonctionnalite": "f1", "outil": "JDK 17"})
+        refus({"type": "installer_outil", "decision": "n1", "fonctionnalite": "zz", "outil": "JDK 17"})
+        refus({"type": "installer_outil", "decision": "zz", "outil": "JDK 17"})
+        refus({"type": "installer_outil", "decision": "n2", "outil": 3})
+        refus({"type": "installer_outil", "decision": "n2"})
+        self.assertEqual(demandes.nettoyer({"type": "installer_outil", "decision": "n2", "outil": "JDK 17", "x": 1}),
+                         {"type": "installer_outil", "decision": "n2", "outil": "JDK 17"})
+
+    def test_acceptation_avec_installation_en_autonomie(self):
+        import copy
+        r = copy.deepcopy(R5)
+        org = copy.deepcopy(r["decisions_projet"][0]["organisation"])
+        org["environnement"] = [{"outil": "JDK 17", "etat": "a_installer", "autonome": True},
+                                {"outil": "Gradle", "etat": "a_installer"}, {"outil": "Git", "etat": "en_place",
+                                                                              "autonome": True}]
+        r["decisions_projet"][0]["organisation"] = org
+        base = {"type": "organisation", "decision": "o2", "verdict": "accepter"}
+        ok = lambda d: self.assertIsNone(demandes.verifier(d, r, frozenset(), None), d)
+        refus = lambda d: self.assertTrue(demandes.verifier(d, r, frozenset(), None), d)
+        ok({**base, "installer": ["JDK 17"]})
+        ok({**base, "installer": []})
+        refus({**base, "installer": ["Gradle"]})            # pas autonome
+        refus({**base, "installer": ["Git"]})               # déjà en place
+        refus({**base, "installer": ["JDK 17", "Inconnu"]})
+        refus({**base, "installer": "JDK 17"})
+        refus({**base, "installer": [3]})
+        refus({**base, "verdict": "refuser", "installer": ["JDK 17"]})
+        self.assertEqual(demandes.nettoyer({**base, "installer": ["JDK 17"], "x": 1}), {**base, "installer": ["JDK 17"]})
+
     def test_genre_fonctionnalite(self):
         base = {"type": "genre_fonctionnalite", "decision": "q1", "fonctionnalite": "f1"}
         self.ok({**base, "choix": "ici"})

@@ -216,6 +216,31 @@ def fusionner_environnement(actuel, outils):
     return gardes + [dict(x) for x in outils if isinstance(x, dict) and x.get("outil")]
 
 
+def ajouter_agent(factory_json, agent, brief):
+    """Recrute un seul agent dans un projet en place (sa fiche, et le brief de son rôle s'il n'existe pas) sans toucher
+    ni aux services ni aux flux. Refus (`Echec`) si sa clé ou son service ne vont pas, ou si le rôle est déjà pourvu."""
+    factory_json = Path(factory_json)
+    try:
+        f = fa.lire(factory_json)
+        existantes = fiches.lire_toutes(f["fiches"])
+    except (fa.FactoryInvalide, fiches.FicheInvalide, OSError) as e:
+        raise Echec(f"Recrutement refusé : {e}")
+    if any(x["role"] == agent["role"] for x in existantes):
+        raise Echec(f"Recrutement refusé : le rôle « {agent['role']} » est déjà pourvu.")
+    if any(x["cle"] == agent["cle"] for x in existantes) or (f["fiches"] / f"{agent['cle']}.md").exists():
+        raise Echec(f"Recrutement refusé : la clé « {agent['cle']} » est déjà prise.")
+    if agent["service"] not in {s["id"] for s in f["services"]}:
+        raise Echec(f"Recrutement refusé : service « {agent['service']} » inconnu.")
+    chemin = f["fiches"] / f"{agent['cle']}.md"
+    dossier_briefs = f["fiches"] / "briefs"
+    dossier_briefs.mkdir(parents=True, exist_ok=True)
+    chemin_brief = dossier_briefs / f"{agent['role']}.md"
+    brief_ecrit = not chemin_brief.exists()
+    fiches.ecrire_fiche(_fiche(agent, chemin))
+    if brief_ecrit:
+        _ecrire(chemin_brief, brief.strip() + "\n")
+
+
 def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=None, environnement=None):
     """Réécrit `services` et `flux` du fichier de factory (le reste est gardé) et écrit les fiches et les briefs
     nouveaux (un brief existant est gardé). Contrôlé comme une proposition ; un refus n'écrit rien.

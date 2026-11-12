@@ -175,7 +175,11 @@ notés (`environnement`), et un genre nouveau est créé dans la mémoire de la 
 Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 Entrée `{"action": "environnement", "outils": [{outil, etat: en_place | a_installer, chemin?, version?, …}]}` : note l'état
-des outils du poste dans le fichier de factory (clé `environnement` ; un outil de même nom est remplacé).
+des outils du poste dans le fichier de factory (clé `environnement` ; un outil de même nom est remplacé). Chaque outil
+peut porter `objectif`, `telechargement` (URL https officielle ou nul), `etapes` (mode opératoire) et `autonome`.
+Entrée `{"action": "installateur", "agent": {cle, role: environnement, service, modele, lieu, texte, outils?}, "brief"}` :
+recrute l'agent qui installe les outils du poste (rien si un agent de ce rôle existe ; jamais Fable) ; c'est ce que fait
+le moteur au clic « Installer en autonomie » quand le projet n'en a pas encore.
 Entrée `{"action": "reprendre", "fonctionnalite": fid, "workflow": id}` : la fonctionnalité suit un workflow de genre du
 projet (défini à la création, sans fonctionnalité, ni le principal) : sa copie `w-<fid>` (étapes préfixées `<fid>-`) est
 ajoutée, sans service, agent ni brief nouveau, et la fonctionnalité prend son `genre` et son `workflow`. Rend

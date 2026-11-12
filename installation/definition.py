@@ -135,7 +135,7 @@ def proposition_calculee(o, infos, *, verifier_environnement=environnement.verif
     poste = verifier_environnement(list(o.get("environnement") or [])) if o.get("environnement") else []
     regles = list(o.get("outils_installation") or [])
     installateur = None
-    if environnement.a_installer(poste):
+    if environnement.autonomes_a_installer(poste):       # l'agent n'existe que pour ce qu'il peut installer seul
         agent, brief = environnement.agent_d_installation([], agents, flux, services, regles)
         if agent:
             agents.append(agent)
@@ -414,14 +414,26 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
         notes.append(f"{len(restes)} appel(s) de l'échange n'ont pas pu être versés au relevé du projet : ils sont "
                      "comptés dans les échanges abandonnés.")
     manquants = environnement.a_installer(p["environnement"])
-    installation = bool(installer and manquants and p.get("installateur"))
-    if installation:
+    autonomes = environnement.autonomes_a_installer(p["environnement"])
+    installation = bool(installer and autonomes and p.get("installateur"))
+    if installation:       # la case « installer » : seuls les outils `autonome` sont confiés à l'agent
         try:
-            code, r = lancer("tache", environnement.tache_d_installation_du_projet(manquants))
+            code, r = lancer("tache", environnement.tache_d_installation_du_projet(autonomes))
         except Exception as e:
             code, r = 1, {"erreur": str(e)}
         if code != 0:
             notes.append(f"La tâche d'installation du poste n'a pas pu être créée ({_raison(r)}).")
+            installation = False
+    restants = [x for x in manquants if not (installation and x.get("autonome") is True)]
+    if restants:       # le reste (ou tout, sans la case) attend dans la décision « Environnement du poste à compléter »
+        try:
+            code, r = lancer("decision", {"action": "poser", "portee": "projet", "genre": "environnement",
+                                          "texte": environnement.texte_des_manquants(restants),
+                                          "environnement": [dict(x) for x in restants]})
+        except Exception as e:
+            code, r = 1, {"erreur": str(e)}
+        if code != 0:
+            notes.append(f"La liste des outils à installer n'a pas pu être posée au bureau ({_raison(r)}).")
     sortie_github = "non demandé"
     if infos.get("github"):
         sortie_github = creation.github(fait["projet"], infos["nom"], git, gh)

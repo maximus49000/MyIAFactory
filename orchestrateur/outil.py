@@ -47,7 +47,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj")
+                 "partenaires_maj", "installer_outil")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -897,6 +897,28 @@ def _noter_environnement(ctx, e):
     return {"ok": True, "environnement": brut["environnement"]}
 
 
+def _recruter_l_installateur(ctx, e):
+    """`{"action": "installateur", "agent": {cle, role: environnement, service, modele, lieu, texte, outils?}, "brief"}` :
+    recrute l'agent qui installe les outils du poste quand le projet n'en a pas (rien à faire s'il existe). Seul ce rôle
+    peut être recruté ainsi, jamais sur Fable."""
+    from installation.dossier import Echec
+    from installation import mise_en_place
+    a, brief = e.get("agent"), e.get("brief")
+    if not (isinstance(a, dict) and a.get("role") == "environnement" and isinstance(brief, str) and brief.strip()
+            and all(isinstance(a.get(c), str) and a[c].strip() for c in ("cle", "service", "modele", "texte"))
+            and a.get("lieu") in ("local", "cloud")):
+        raise Refus("« installateur » demande « agent » (rôle environnement : cle, service, modele, lieu, texte) et « brief ».")
+    if _interdit(a["modele"]):
+        raise Refus("Fable n'est jamais choisi par un outil.")
+    if any(x["role"] == "environnement" for x in ctx.fiches()):
+        return {"ok": True, "deja": True}
+    try:
+        mise_en_place.ajouter_agent(ctx.f["chemin"], a, brief)
+    except Echec as ex:
+        raise Refus(str(ex))
+    return {"ok": True, "deja": False, "agent": a["cle"]}
+
+
 def _reprendre_le_workflow_de_creation(ctx, e):
     """`{"action": "reprendre", "fonctionnalite", "workflow"}` : la fonctionnalité suit le workflow de genre du projet
     (défini à la création) : sa copie `w-<fid>` est ajoutée sans service, agent ni brief nouveau, sans décision."""
@@ -933,8 +955,10 @@ def cmd_organisation(ctx, e):
         return _noter_environnement(ctx, e)
     if e.get("action") == "reprendre":
         return _reprendre_le_workflow_de_creation(ctx, e)
+    if e.get("action") == "installateur":
+        return _recruter_l_installateur(ctx, e)
     if e.get("action") != "appliquer":
-        raise Refus("« action » doit valoir appliquer (ou environnement, ou reprendre).")
+        raise Refus("« action » doit valoir appliquer (ou environnement, reprendre ou installateur).")
     i = texte(e, "decision")
     fable = e.get("fable", [])
     if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):
@@ -1491,7 +1515,8 @@ def construire_releve(ctx):
     fonctionnalites = []
     for f in s["fonctionnalites"]:
         v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"], "agent_cadrage": f["agent_cadrage"],
-             "attend_reponse": f["attend_reponse"], "discussion": [], "decisions": [dict(d) for d in f["decisions"]],
+             "attend_reponse": f["attend_reponse"], "discussion": [],
+             "decisions": [_decision_au_releve(d, s) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
              "cahier": f["cahier"], "methode": f["methode"], "livrable": f["livrable"]}
         for cle in ("genre", "workflow", "deplacee_vers"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
@@ -1548,7 +1573,7 @@ def construire_releve(ctx):
          "actions": [{"id": "reprendre", "libelle": "Reprendre"} if en_pause else
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
-         "decisions_projet": [dict(d) for d in s["decisions_projet"]],
+         "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
          "agents_locaux_max": ctx.f["agents_locaux_max"],
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone())}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
@@ -1567,6 +1592,19 @@ def construire_releve(ctx):
     if partenaires is not None:
         r["partenaires"] = partenaires
     return r
+
+
+def _decision_au_releve(d, s):
+    """Une décision telle que le bureau la lit : celle de l'environnement marque `en_cours` chaque outil qu'une tâche
+    d'installation pas encore finie couvre (le bouton « Installer en autonomie » n'est plus offert)."""
+    d = dict(d)
+    if d.get("genre") == "environnement" and isinstance(d.get("environnement"), list):
+        en_cours = [t for t in s["taches"] if t.get("etape") == "environnement" and t["colonne"] != "fait"
+                    and not t.get("bloquee")]
+        d["environnement"] = [dict(x, en_cours=True) if any(str(j["texte"]).startswith(f"- {x.get('outil')} (")
+                                                  for t in en_cours for j in t["journal"])
+                              else dict(x) for x in d["environnement"]]
+    return d
 
 
 def _colonnes_du_releve(ctx, fonctionnalites):

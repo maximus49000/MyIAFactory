@@ -22,12 +22,13 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
           "valider_etape": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
-          "partenaires_maj": ("confirme",)}
+          "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil")}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable"), "valider_etape": ("texte",), "environnement": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte",), "environnement": ("fonctionnalite",),
+               "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape")
+               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -268,6 +269,8 @@ def _verifier_v4(demande, r, elements):
         if _decision(decisions, demande["decision"], "environnement") is None:
             return "Décision inconnue."
         return None if demande["verdict"] in ("fait", "continuer") else "Réponse inconnue (fait ou continuer)."
+    if genre == "installer_outil":
+        return _verifier_installer_outil(demande, r)
     if genre == "organisation":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "organisation")
         if d is None:
@@ -290,6 +293,16 @@ def _verifier_v4(demande, r, elements):
                 return "Fable ne se coche qu'avec l'acceptation."
             if any(c not in proposes for c in fable):
                 return "Fable n'a pas été suggéré pour cet agent."
+        if "installer" in demande:
+            installer = demande["installer"]
+            if not isinstance(installer, list) or not all(isinstance(c, str) and c.strip() for c in installer):
+                return "« installer » doit être la liste des noms d'outils à installer en autonomie."
+            if demande["verdict"] != "accepter" and installer:
+                return "L'installation en autonomie ne se choisit qu'avec l'acceptation."
+            autonomes = {x.get("outil") for x in (d.get("organisation") or {}).get("environnement") or []
+                         if isinstance(x, dict) and x.get("autonome") is True and x.get("etat") != "en_place"}
+            if any(c not in autonomes for c in installer):
+                return "Cet outil ne s'installe pas en autonomie (ou il est déjà en place)."
         return None
     f = _fonctionnalite(r, demande["fonctionnalite"])
     if f is None:
@@ -344,6 +357,31 @@ def _verifier_genre(demande, r):
             return "Un nouveau genre a besoin d'une description."
         if len(demande.get("description", "")) > MAX_TEXTE:
             return f"« description » dépasse {MAX_TEXTE} caractères."
+    return None
+
+
+def _verifier_installer_outil(demande, r):
+    """« Installer en autonomie » : l'outil est dans la décision `environnement` (de la fonctionnalité, ou du projet
+    sans `fonctionnalite`), encore à installer, sans installation en cours, et marqué `autonome`."""
+    if demande.get("fonctionnalite") is None:
+        decisions = r.get("decisions_projet", [])
+    else:
+        f = _fonctionnalite(r, demande["fonctionnalite"])
+        if f is None:
+            return "Fonctionnalité inconnue."
+        decisions = f["decisions"]
+    d = _decision(decisions, demande["decision"], "environnement")
+    if d is None:
+        return "Décision inconnue."
+    if not isinstance(demande["outil"], str) or not demande["outil"].strip():
+        return "« outil » doit être le nom d'un outil de la liste."
+    x = next((o for o in d.get("environnement") or [] if isinstance(o, dict) and o.get("outil") == demande["outil"]), None)
+    if x is None:
+        return "Outil inconnu dans cette décision."
+    if x.get("autonome") is not True:
+        return "Cet outil ne s'installe pas en autonomie : suivez le lien et le mode opératoire."
+    if x.get("en_cours") is True:
+        return "L'installation de cet outil est déjà en cours."
     return None
 
 

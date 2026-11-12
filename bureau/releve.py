@@ -291,10 +291,7 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
             if d.get("genre") == "genre_fonctionnalite":
                 _verifier_genre_fonctionnalite(d, f"{nom} : « decisions »", erreurs)
             elif d.get("genre") == "environnement":
-                outils = d.get("environnement")
-                if not isinstance(outils, list) or not all(_est_dict(x) and _texte_plein(x.get("outil")) for x in outils):
-                    erreurs.append(f"{nom} : « decisions » : la décision « {d.get('id')} » : « environnement » est la "
-                                   "liste des outils qui manquent (chacun avec un « outil »).")
+                _verifier_outils_a_installer(d, f"{nom} : « decisions » : la décision « {d.get('id')} »", erreurs)
         _verifier_documents(f, nom, erreurs)
         if f.get("glossaire") is not None:
             probleme = erreur_glossaire(f["glossaire"])
@@ -453,10 +450,29 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
         elif d.get("genre") == "valider_etape":
             _verifier_validation(d, nom, erreurs)
         elif d.get("genre") == "environnement":
-            outils = d.get("environnement")
-            if not isinstance(outils, list) or not all(_est_dict(x) and _texte_plein(x.get("outil")) for x in outils):
-                erreurs.append(f"{nom} : la décision « {i} » : « environnement » est la liste des outils qui "
-                               "manquent (chacun avec un « outil »).")
+            _verifier_outils_a_installer(d, f"{nom} : la décision « {i} »", erreurs)
+
+
+def _verifier_outils_a_installer(d, ici, erreurs):
+    """Les outils d'une décision `environnement` : chacun a un « outil » ; l'aide à l'installation, si elle est donnée,
+    est bien formée (`objectif` texte, `telechargement` https ou nul, `etapes` liste de textes, `autonome` et `en_cours`
+    vrai ou faux). Un ancien relevé sans ces champs reste valide."""
+    outils = d.get("environnement")
+    if not isinstance(outils, list) or not all(_est_dict(x) and _texte_plein(x.get("outil")) for x in outils):
+        erreurs.append(f"{ici} : « environnement » est la liste des outils qui manquent (chacun avec un « outil »).")
+        return
+    for x in outils:
+        url = x.get("telechargement")
+        if not (url is None or (isinstance(url, str) and url.startswith("https://"))):
+            erreurs.append(f"{ici} : l'outil « {x['outil']} » : « telechargement » est une adresse https ou nul.")
+        if not (x.get("objectif") is None or isinstance(x["objectif"], str)):
+            erreurs.append(f"{ici} : l'outil « {x['outil']} » : « objectif » doit être un texte.")
+        e = x.get("etapes")
+        if e is not None and not (isinstance(e, list) and all(isinstance(v, str) for v in e)):
+            erreurs.append(f"{ici} : l'outil « {x['outil']} » : « etapes » est une liste de textes.")
+        for c in ("autonome", "en_cours"):
+            if c in x and not isinstance(x[c], bool):
+                erreurs.append(f"{ici} : l'outil « {x['outil']} » : « {c} » doit être vrai ou faux.")
 
 
 def _verifier_validation(d, nom, erreurs):

@@ -168,13 +168,16 @@ def a_installer(outils):
 def avec_aide(outil):
     """L'outil avec ses trois champs d'aide à l'installation, valeurs par défaut comprises (un ancien résultat n'en a
     pas) : `telechargement` (URL https officielle ou `None`), `etapes` (le mode opératoire, une liste de textes) et
-    `autonome` (vrai si un agent peut l'installer seul, sans clic ni droits d'administrateur)."""
+    `autonome` (vrai si un agent peut l'installer seul, sans clic ni droits d'administrateur) ; `objectif` s'ajoute
+    (à quoi l'outil sert dans ce projet, `None` pour un ancien résultat : l'étape `pour` le remplace à l'affichage)."""
     o = dict(outil)
     url = o.get("telechargement")
     o["telechargement"] = url if isinstance(url, str) and url.startswith("https://") else None
     etapes = o.get("etapes")
     o["etapes"] = [x for x in etapes if isinstance(x, str) and x.strip()] if isinstance(etapes, list) else []
     o["autonome"] = o.get("autonome") is True
+    objectif = o.get("objectif")
+    o["objectif"] = objectif.strip() if isinstance(objectif, str) and objectif.strip() else None
     return o
 
 
@@ -196,9 +199,21 @@ def journal_d_installation(manquants):
     """Les consignes de la tâche d'installation : chaque outil qui manque, son programme et comment l'installer."""
     journal = ["Outils à installer (de préférence sans droits d'administrateur, depuis les sources officielles) :"]
     journal += [f"- {x['outil']} ({', '.join(x.get('executables') or [])}) : {x.get('installation', '')}"
+                + (f" Objectif : {x['objectif']}" if x.get("objectif") else "")
+                + (f" Page officielle : {x['telechargement']}" if x.get("telechargement") else "")
                 for x in manquants]
     journal.append("Vérifie chaque outil après son installation (chemin et version) et rends compte.")
     return journal
+
+
+def texte_des_manquants(manquants, intro=None):
+    """Le texte de la décision `environnement` : les noms seulement ; l'objectif, le lien officiel, le mode opératoire et
+    le bouton d'installation en autonomie de chaque outil sont montrés par le bureau, outil par outil."""
+    return ((intro + " ") if intro else "") + (
+        "Il manque encore des outils sur le poste : " + ", ".join(x["outil"] for x in manquants) + ". Pour chacun, "
+        "à quoi il sert, le lien de téléchargement officiel et le mode opératoire ; un bouton l'installe en autonomie "
+        "quand un agent peut le faire seul. Dites « C'est fait » quand c'est installé (je revérifie), ou « Continuer "
+        "sans » : les étapes qui en ont besoin le diront.")
 
 
 def tache_d_installation_du_projet(manquants):

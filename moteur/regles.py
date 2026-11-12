@@ -52,6 +52,7 @@ FICHIERS_MAX = 20
 ETAPES_SOLO = ("cadrage", "prototype", "relecture")   # jamais regroupées en lot
 ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande", "environnement")
 ROLE_ENVIRONNEMENT = "environnement"      # l'agent qui installe les outils du poste
+REGLES_D_INSTALLATION = ("Bash(winget:*)",)   # ce que reçoit l'installateur recruté au clic (winget, en portée utilisateur)
 CONTINUER_SANS = "continuer"
 C_EST_FAIT = "fait"
 ATTENDRE = "Attendre encore"
@@ -877,7 +878,7 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
             w["genre_nouveau"] = ctx["genre_nouveau"]
         poste = _verifier_poste(projet, o["environnement"])
         briefs = dict(o["briefs"])
-        if environnement.a_installer(poste):       # un agent pour installer ce qui manque
+        if environnement.autonomes_a_installer(poste):       # un agent pour installer ce qu'il peut installer seul
             installateur, brief = _agent_d_installation(projet, nouveaux, flux)
             if installateur:
                 nouveaux.append(installateur)
@@ -978,7 +979,7 @@ def _verifier_poste(projet, outils):
     return projet.verifier_environnement(list(outils)) if outils else []
 
 
-def _agent_d_installation(projet, nouveaux, flux):
+def _agent_d_installation(projet, nouveaux, flux, regles=None):
     """L'agent qui installe les outils du poste : sa fiche ouvre les outils d'installation (ajoutés à l'acceptation).
     Rien si un agent du rôle existe déjà (il reçoit alors les nouvelles règles) ; sinon une fiche et un brief. Son
     service : celui de la première étape du workflow (pas le premier du projet, souvent la facturation)."""
@@ -987,7 +988,7 @@ def _agent_d_installation(projet, nouveaux, flux):
         fiches_ = fi.lire_toutes(fac["fiches"])
     except (fi.FicheInvalide, OSError):
         fiches_ = []
-    return environnement.agent_d_installation(fiches_, nouveaux, flux, fac["services"])
+    return environnement.agent_d_installation(fiches_, nouveaux, flux, fac["services"], regles)
 
 
 def _sur_organisation(projet, demande, etat):
@@ -1018,8 +1019,8 @@ def _sur_organisation_de_fonctionnalite(projet, demande, etat, d, org):
             entree["fable"] = demande["fable"]
         r = lancer(projet, "organisation", entree)
         _dire(projet, fid, "Le workflow est en place" + (" ; " + r["genre_raison"] if r.get("genre_raison") else "."))
-        actions = _apres_mise_en_place(projet, etat, fid, org)
-        _terminer(projet, suite, "Le workflow est en place : le cadrage commence.")
+        actions = _apres_mise_en_place(projet, etat, fid, org, demande.get("installer") or [])
+        _terminer(projet, suite, "Le workflow est en place.")
         return actions
     if verdict == "abandonner":
         lancer(projet, "decision", {"action": "lever", "id": d["id"]})
@@ -1051,17 +1052,43 @@ def _texte_du_poste(poste):
             + (f"À installer : {', '.join(manque)}. " if manque else ""))
 
 
-def _apres_mise_en_place(projet, etat, fid, org):
-    """Le workflow est en place. Des outils manquent : une tâche « Mise en place de l'environnement » ouvre le workflow,
-    le cadrage vient après sa fin. Sinon le cadrage démarre tout de suite."""
+def _apres_mise_en_place(projet, etat, fid, org, choisis=()):
+    """Le workflow est en place. Rien ne manque : le cadrage démarre. Des outils manquent : l'utilisateur a pu choisir
+    (`choisis`, les noms) d'en faire installer en autonomie ; ceux-là, et eux seuls (s'ils sont `autonome`), vont dans une
+    tâche « Mise en place de l'environnement » qui ouvre le workflow, le cadrage vient après sa fin. Sans choix, jamais
+    d'installation d'elle-même : une décision `environnement` donne pour chaque outil le lien officiel, le mode
+    opératoire et, s'il peut l'être, le bouton qui l'installe en autonomie."""
     manquants = environnement.a_installer(org.get("environnement") or [])
     if not manquants:
         return _repondre_cadrage(projet, etat, fid)
+    voulus = [x for x in environnement.autonomes_a_installer(manquants) if x["outil"] in choisis]
+    if not voulus:
+        return _poste_pret_ou_decision(projet, etat, fid)
+    if not _assurer_l_installateur(projet, fid):
+        return _poste_pret_ou_decision(projet, etat, fid, intro="Je n'ai pas pu recruter l'agent qui installe les outils.")
     _creer_tache(projet, environnement.TITRE_INSTALLATION, fid, ROLE_ENVIRONNEMENT, "environnement",
-                 colonne=org["workflow"]["flux"][0]["id"], journal=environnement.journal_d_installation(manquants))
-    _dire(projet, fid, "Avant le cadrage, j'installe les outils qui manquent sur le poste : "
-                       + ", ".join(x["outil"] for x in manquants) + ".")
+                 colonne=org["workflow"]["flux"][0]["id"], journal=environnement.journal_d_installation(voulus))
+    _dire(projet, fid, "Avant le cadrage, j'installe en autonomie : " + ", ".join(x["outil"] for x in voulus) + ".")
     return _demarrer_en_attente(projet, etat, fid)
+
+
+def _assurer_l_installateur(projet, fid):
+    """L'agent qui installe les outils existe-t-il (le recruter sinon, dans le service de la première étape d'agent du
+    workflow de la fonctionnalité) ? Faux si le recrutement a été refusé."""
+    fac = _factory(projet)
+    try:
+        if any(a["role"] == ROLE_ENVIRONNEMENT for a in fi.lire_toutes(fac["fiches"])):
+            return True
+    except (fi.FicheInvalide, OSError):
+        return False
+    agent, brief = _agent_d_installation(projet, [], _flux(projet, fid), REGLES_D_INSTALLATION)
+    if agent is None:
+        return False
+    try:
+        lancer(projet, "organisation", {"action": "installateur", "agent": agent, "brief": brief})
+    except Refus:
+        return False
+    return True
 
 
 def _verifier_le_poste(projet, fid):
@@ -1089,19 +1116,28 @@ def _poste_pret_ou_decision(projet, etat, fid, intro=None, tache=None):
         _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
         return _repondre_cadrage(projet, etat, fid)
     texte = _texte_des_manquants(manquants, intro)
-    if not _a_decision(f, "environnement"):
-        lancer(projet, "decision", {"action": "poser", "portee": fid, "genre": "environnement", "texte": texte,
-                                    "environnement": [dict(x) for x in manquants]})
+    ancienne = [d for d in f.get("decisions") or [] if d["genre"] == "environnement"]
+    if _poser_la_decision_du_poste(projet, fid, ancienne, manquants, texte):
         _dire(projet, fid, texte)
     return []
 
 
+def _poser_la_decision_du_poste(projet, portee, anciennes, manquants, texte):
+    """Pose la décision `environnement` (de la fonctionnalité `portee`, ou du projet si `portee` vaut `"projet"`) avec
+    les outils qui manquent. Une décision déjà posée pour les mêmes outils reste ; pour d'autres, elle est remplacée
+    (un outil installé entre-temps disparaît de la liste). Vrai si une décision neuve a été posée."""
+    noms = [x["outil"] for x in manquants]
+    if any([x.get("outil") for x in d.get("environnement") or []] == noms for d in anciennes):
+        return False
+    for d in anciennes:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    lancer(projet, "decision", {"action": "poser", "portee": portee, "genre": "environnement", "texte": texte,
+                                "environnement": [dict(x) for x in manquants]})
+    return True
+
+
 def _texte_des_manquants(manquants, intro=None):
-    lignes = [f"- {x['outil']} : {x.get('installation') or 'voir la documentation officielle'}" for x in manquants]
-    return ((intro + " ") if intro else "") + (
-        "Il manque encore des outils sur le poste, et je n'ai pas pu les installer. Voici ce qu'il faut, et comment "
-        "l'installer à la main :\n" + "\n".join(lignes) + "\nDites « C'est fait » quand c'est installé (je revérifie), "
-        "ou « Continuer sans » : les étapes qui en ont besoin le diront.")
+    return environnement.texte_des_manquants(manquants, intro)
 
 
 def _decisions_d_environnement_du_projet(projet):
@@ -1117,10 +1153,8 @@ def _poste_du_projet(projet, manquants, intro, tache):
         if tache:
             lancer(projet, "tache", {"id": tache, "journal": ["Le poste est prêt : tous les outils sont en place."]})
         return []
-    if not _decisions_d_environnement_du_projet(projet):
-        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "environnement",
-                                    "texte": _texte_des_manquants(manquants, intro),
-                                    "environnement": [dict(x) for x in manquants]})
+    _poser_la_decision_du_poste(projet, "projet", _decisions_d_environnement_du_projet(projet), manquants,
+                                _texte_des_manquants(manquants, intro))
     return []
 
 
@@ -1149,6 +1183,42 @@ def _sur_environnement(projet, demande, etat):
     _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
     _terminer(projet, suite, "Merci, les outils sont en place : le cadrage commence.")
     return _repondre_cadrage(projet, etat, fid)
+
+
+def _sur_installer_outil(projet, demande, etat):
+    """Le clic « Installer en autonomie » d'un outil de la décision `environnement` : seul un outil `autonome`, encore
+    absent du poste (revérifié en code), sans tâche d'installation en cours, reçoit sa tâche ; l'agent d'installation est
+    recruté s'il n'existe pas. Jamais deux tâches pour le même outil. La décision reste : la fin de la tâche revérifie."""
+    fid = demande.get("fonctionnalite")
+    if fid is None:
+        d = next((x for x in _decisions_d_environnement_du_projet(projet) if x["id"] == demande["decision"]), None)
+    else:
+        d = _decision_de(_fonc(projet, fid), demande["decision"], "environnement")
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    nom = demande["outil"]
+    x = next((o for o in d.get("environnement") or [] if o.get("outil") == nom), None)
+    if x is None:
+        raise Refus(f"« {nom} » n'est pas dans cette liste")
+    suite = {"demande": demande["id"]}
+    if x.get("autonome") is not True:
+        raise Refus(f"« {nom} » ne s'installe pas en autonomie : voir le lien et le mode opératoire")
+    verifie = _verifier_poste(projet, [x])[0]
+    if verifie.get("etat") == "en_place":
+        _terminer(projet, suite, f"« {nom} » est déjà en place : rien à installer.")
+        return _poste_pret_ou_decision(projet, etat, fid)
+    if any(environnement.installe_par([j["texte"] for j in lancer(projet, "detail", {"tache": t["id"]})["journal"]], nom)
+           for t in _etat(projet)["taches"]
+           if t.get("etape") == "environnement" and t["colonne"] != "fait" and not t.get("bloquee")):
+        raise Refus(f"l'installation de « {nom} » est déjà en cours")
+    if not _assurer_l_installateur(projet, fid):
+        raise Refus("je n'ai pas pu recruter l'agent qui installe les outils")
+    _creer_tache(projet, environnement.TITRE_INSTALLATION, fid, ROLE_ENVIRONNEMENT, "environnement",
+                 colonne=None if fid else "cadrage", journal=environnement.journal_d_installation([verifie]))
+    if fid:
+        _dire(projet, fid, f"J'installe « {nom} » en autonomie.")
+    _terminer(projet, suite, f"L'installation de « {nom} » est lancée.")
+    return _demarrer_en_attente(projet, etat, fid)
 
 
 def _sur_environnement_du_projet(projet, demande):
@@ -1350,6 +1420,7 @@ def _sur_valider_etape(projet, demande, etat):
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
+        "installer_outil": _sur_installer_outil,
         "elargir_genre": _sur_elargir_genre,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,

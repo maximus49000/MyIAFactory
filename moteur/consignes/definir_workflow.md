@@ -22,6 +22,7 @@ Proposition (`"type": "proposition"`), comme une organisation de fonctionnalité
 - Modèle et `justification` d'une ligne : Haiku pour le mécanique, Sonnet pour la création et le code, Opus pour une
   conception difficile ; jamais Fable : au besoin Opus et `"fable_suggere": true`.
 - `environnement` : outils du poste (`pour` : l'`etape`), `executables` (noms), `installation` Windows en une ligne,
+  `objectif` : à quoi l'outil servira dans CE projet et à quelle étape (une phrase concrète, pas générique),
   `version_min` (« 17 ») ou null ; `telechargement` : URL https **officielle** de l'éditeur, jamais un miroir ni
   inventée (sinon null) ; `etapes` : mode opératoire Windows, 2 à 8 lignes courtes, jusqu'à la vérification ;
   `autonome` : true si un agent l'installe seul sans clic ni droits d'administrateur, sinon false (`installation` dit
@@ -34,6 +35,6 @@ Textes en français, **courts**. L'une des deux formes :
  "services": [{"id": "…", "nom": "…"}], "agents": [{"cle": "…", "prenom": "…", "role": "…", "service": "…",
  "modele": "Sonnet", "justification": "…", "fable_suggere": false, "texte": "sa fiche"}], "briefs": {"dev": "…"},
  "livrable": "…", "environnement": [{"outil": "…", "version_min": null, "pour": "dev", "executables": ["…"],
- "installation": "…", "telechargement": null, "etapes": ["…", "…"], "autonome": false}], "outils_installation": []}
+ "installation": "…", "objectif": "…", "telechargement": null, "etapes": ["…", "…"], "autonome": false}], "outils_installation": []}
 ```
 Réponds seulement par ce JSON.

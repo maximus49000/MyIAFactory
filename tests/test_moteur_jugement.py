@@ -377,6 +377,9 @@ class Valider(unittest.TestCase):
         self.assertIsNone(self._orga(environnement=[dict(bon, etapes=["a"] * 8)]))
         for a in ("oui", 1, None, "true"):
             self.assertIn("autonome", self._orga(environnement=[dict(bon, autonome=a)]), repr(a))
+        self.assertIsNone(self._orga(environnement=[dict(bon, objectif="Compiler le jeu à l'étape « Livraison ».")]))
+        for obj in ("", "deux\nlignes", 3, "x" * 251, "  "):
+            self.assertIn("objectif", self._orga(environnement=[dict(bon, objectif=obj)]), repr(obj))
         self.assertIsNone(self._varie("definir_workflow"))
         o = json.loads(json.dumps(VALIDES["definir_workflow"]))
         o["environnement"][0].update(telechargement="http://x.org/", etapes=etapes, autonome=False)

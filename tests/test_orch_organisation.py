@@ -290,6 +290,24 @@ class TestEnvironnementDuPoste(AvecProjet):
         from orchestrateur import factory as fa
         self.assertEqual(len(fa.lire(self.factory)["environnement"]), 2)
 
+    def test_recruter_l_installateur(self):
+        service = json.loads(self.factory.read_text(encoding="utf-8"))["services"][0]["id"]
+        agent = {"cle": "env-1", "role": "environnement", "service": service, "modele": "Sonnet", "lieu": "local",
+                 "texte": "Tu installes les outils.", "outils": "Read, Write, Edit, Bash(winget:*)"}
+        for faux in (dict(agent, role="dev"), dict(agent, modele="Fable"), dict(agent, lieu="ailleurs"),
+                     dict(agent, texte=""), dict(agent, service="inconnu")):
+            code, _ = self.outil("lancer", "organisation", entree={"action": "installateur", "agent": faux, "brief": "x"})
+            self.assertEqual(code, 1, faux)
+        self.assertEqual(self.outil("lancer", "organisation", entree={"action": "installateur", "agent": agent})[0], 1)
+        r = self.ok("lancer", "organisation", entree={"action": "installateur", "agent": agent, "brief": "Installe."})
+        self.assertEqual((r["deja"], r["agent"]), (False, "env-1"))
+        fs = {x["cle"]: x for x in fiches.lire_toutes(self.dossier / "fiches")}
+        self.assertIn("Bash(winget:*)", fiches.outils(fs["env-1"]))
+        self.assertTrue((self.dossier / "fiches" / "briefs" / "environnement.md").is_file())
+        r = self.ok("lancer", "organisation", entree={"action": "installateur", "agent": dict(agent, cle="env-2"),
+                                                       "brief": "Installe."})
+        self.assertTrue(r["deja"])                                      # un seul agent de ce rôle
+
     def test_environnement_refuse(self):
         for outils in (None, [], ["java"], [{"outil": "x"}], [{"outil": "x", "etat": "peut-etre"}],
                        [{"outil": "", "etat": "en_place"}]):

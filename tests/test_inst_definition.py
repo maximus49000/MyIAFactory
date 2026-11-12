@@ -38,7 +38,10 @@ def proposition(**extra):
          "briefs": {"dev": "Écris le code du jeu.", "livreur": "Remets l'apk."},
          "livrable": "Un apk signé",
          "environnement": [{"outil": "JDK", "version_min": "17", "pour": "dev", "executables": ["java"],
-                            "installation": "winget install Microsoft.OpenJDK.17"}],
+                            "installation": "winget install Microsoft.OpenJDK.17", "autonome": True,
+                            "objectif": "Compiler le jeu à l'étape « dev ».",
+                            "telechargement": "https://adoptium.net/temurin/releases/",
+                            "etapes": ["Ouvrir la page.", "Télécharger le .zip.", "L'extraire.", "Lancer java -version."]}],
          "outils_installation": ["Bash(winget:*)"]}
     o.update(copy.deepcopy(extra))
     return o
@@ -579,6 +582,27 @@ class TestValider(Base):
         self.assertFalse((f["fiches"] / "briefs" / "environnement.md").exists())
         self.assertNotIn("tache", [c for c, _ in pont.appels])
         self.assertEqual([x for x in self.releve()["taches"] if x["titre"] == "Mise en place de l'environnement"], [])
+
+    def test_outil_non_autonome_pas_d_installateur_et_decision_de_projet(self):
+        from orchestrateur import factory as fa, fiches
+        env = dict(proposition()["environnement"][0], autonome=False)
+        b = self.pret(environnement=[env])
+        self.assertIsNone(b["proposition"]["installateur"])                     # rien à confier à un agent
+        pont = Pont({"genre": (0, {})})
+        self.valider(b, installer=True, executer=pont)                          # même cochée : rien ne part
+        f = fa.lire(self.factory())
+        self.assertNotIn("environnement", [x["role"] for x in fiches.lire_toutes(f["fiches"])])
+        self.assertNotIn("tache", [c for c, _ in pont.appels])
+        (d,) = [x for x in self.releve()["decisions_projet"] if x["genre"] == "environnement"]
+        self.assertEqual((d["environnement"][0]["outil"], d["environnement"][0]["autonome"]), ("JDK", False))
+        self.assertEqual(d["environnement"][0]["etapes"][0], "Ouvrir la page.")
+
+    def test_sans_la_case_la_liste_attend_au_bureau(self):
+        b = self.pret()
+        self.valider(b, installer=False, executer=Pont({"genre": (0, {})}))
+        (d,) = [x for x in self.releve()["decisions_projet"] if x["genre"] == "environnement"]
+        self.assertTrue(d["environnement"][0]["autonome"])                      # le bouton « Installer en autonomie »
+        self.assertIn("JDK", d["texte"])
 
     def test_poste_en_place_pas_de_tache(self):
         b = self.pret(verifier=en_place)

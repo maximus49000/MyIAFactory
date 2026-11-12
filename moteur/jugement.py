@@ -460,7 +460,7 @@ def _valider_proposer_organisation(o, d):
     return None
 
 
-ETAPES_MIN, ETAPES_MAX, LONGUEUR_ETAPE, LONGUEUR_URL = 2, 8, 200, 300
+ETAPES_MIN, ETAPES_MAX, LONGUEUR_ETAPE, LONGUEUR_URL, LONGUEUR_OBJECTIF = 2, 8, 200, 300, 250
 
 
 def _url_officielle(v):
@@ -484,6 +484,9 @@ def _aide_d_installation(x):
                 and all(_ligne(v) and len(v) <= LONGUEUR_ETAPE for v in e)):
             return (f"Outil « {nom} » : « etapes » est le mode opératoire sous Windows, {ETAPES_MIN} à {ETAPES_MAX} "
                     f"lignes courtes ({LONGUEUR_ETAPE} caractères au plus), dans l'ordre, jusqu'à la vérification.")
+    if x.get("objectif") is not None and not (_ligne(x["objectif"]) and len(x["objectif"]) <= LONGUEUR_OBJECTIF):
+        return (f"Outil « {nom} » : « objectif » est une phrase concrète sur ce que l'outil fera dans ce projet et à "
+                f"quelle étape ({LONGUEUR_OBJECTIF} caractères au plus).")
     if "autonome" in x and not isinstance(x["autonome"], bool):
         return f"Outil « {nom} » : « autonome » vaut true ou false."
     return None

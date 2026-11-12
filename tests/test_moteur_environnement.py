@@ -13,7 +13,10 @@ from tests.test_moteur_regles import _lu, usage
 CLASSER_MEME, PROPOSITION = parcours.CLASSER_MEME, parcours.PROPOSITION
 
 JDK = {"outil": "JDK 21", "pour": "dev", "executables": ["java", "javac"],
-       "installation": "winget install EclipseAdoptium.Temurin.21.JDK (environ 200 Mo, sans droits d'administrateur)"}
+       "installation": "winget install EclipseAdoptium.Temurin.21.JDK (environ 200 Mo, sans droits d'administrateur)",
+       "telechargement": "https://adoptium.net/temurin/releases/", "autonome": True,
+       "objectif": "Compiler le jeu et signer l'apk à l'étape « dev ».",
+       "etapes": ["Ouvrir la page.", "Télécharger le .zip du JDK 21.", "L'extraire dans le profil.", "Lancer java -version."]}
 GRADLE = {"outil": "Gradle", "pour": "dev", "executables": ["gradle"], "installation": "gradle.org (environ 130 Mo)"}
 
 
@@ -146,9 +149,10 @@ class Verifier(unittest.TestCase):
     def test_aide_a_l_installation_valeurs_par_defaut_et_gardees(self):
         e = Enregistreur()
         ancien, complet = environnement.verifier(
-            [JDK, dict(GRADLE, telechargement="https://gradle.org/install/", etapes=["Télécharger.", "Extraire."],
+            [{k: v for k, v in JDK.items() if k not in ("telechargement", "etapes", "autonome", "objectif")}, dict(GRADLE, telechargement="https://gradle.org/install/", etapes=["Télécharger.", "Extraire."],
                        autonome=True)], which=e.which, executer=e.executer, env={})
-        self.assertEqual((ancien["telechargement"], ancien["etapes"], ancien["autonome"]), (None, [], False))
+        self.assertEqual((ancien["telechargement"], ancien["etapes"], ancien["autonome"], ancien["objectif"]),
+                         (None, [], False, None))
         self.assertEqual((complet["telechargement"], complet["etapes"], complet["autonome"]),
                          ("https://gradle.org/install/", ["Télécharger.", "Extraire."], True))
         self.assertEqual(environnement.autonomes_a_installer([ancien, complet]), [complet])
@@ -274,7 +278,7 @@ class Poste(parcours.AvecParcours):
 
     def test_acceptation_cree_la_tache_d_environnement_avant_le_cadrage(self):
         decision = self.vers_le_poste()
-        d, actions = self.accepter(decision)
+        d, actions = self.accepter(decision, installer=["JDK 21"])
         (t,) = self.taches(etape="environnement")
         self.assertEqual((t["titre"], t["role"], t["colonne"], t["agent"], t["fonctionnalite"]),
                          ("Mise en place de l'environnement", "environnement", "f1-dev", "env-1", "f1"))
@@ -298,16 +302,95 @@ class Poste(parcours.AvecParcours):
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
         self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
 
-    def test_installation_ratee_devient_decision(self):
+    def test_sans_choix_rien_ne_s_installe_d_elle_meme(self):
+        decision = self.vers_le_poste()
+        _, actions = self.accepter(decision)              # « Accepter » sans choisir d'installer en autonomie
+        self.assertEqual((actions, self.taches(etape="environnement"), self.taches(etape="cadrage")), ([], [], []))
+        (q,) = self.decisions("environnement")
+        self.assertEqual((q["portee"], [x["outil"] for x in q["environnement"]]), ("f1", ["JDK 21"]))
+        self.assertTrue(q["environnement"][0]["autonome"])
+        self.assertEqual(self.ok("releve")["fonctionnalites"][0]["decisions"][0]["environnement"][0]["etapes"][0],
+                         "Ouvrir la page.")
+        self.assertEqual(releve_valider(self.ok("releve")), [])
+
+    def test_un_choix_hors_liste_ou_non_autonome_n_installe_rien(self):
+        decision = self.vers_le_poste()
+        self.accepter(decision, installer=["Gradle"])      # pas dans la proposition
+        self.assertEqual(self.taches(etape="environnement"), [])
+        self.assertEqual(len(self.decisions("environnement")), 1)
+
+    def test_bouton_installer_en_autonomie_une_seule_tache_par_outil(self):
         decision = self.vers_le_poste()
         self.accepter(decision)
+        (q,) = self.decisions("environnement")
+        d, actions = self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="JDK 21")
+        (t,) = self.taches(etape="environnement")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "env-1")])
+        self.assertEqual((t["fonctionnalite"], t["agent"], t["active"]), ("f1", "env-1", True))
+        self.assertIn("Objectif : Compiler le jeu", " ".join(j["texte"] for j in self.ok("detail", entree={"tache": t["id"]})["journal"]))
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(len(self.decisions("environnement")), 1)             # la décision reste jusqu'à la revérification
+        r = self.ok("releve")["fonctionnalites"][0]["decisions"][0]["environnement"][0]
+        self.assertTrue(r["en_cours"])                                         # le bouton disparaît
+        d2, actions2 = self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="JDK 21")
+        self.assertIn("déjà en cours", self.statut(d2["id"])["reponse"])
+        self.assertEqual(len(self.taches(etape="environnement")), 1)
+        # fin de la tâche : tout est en place, la décision est levée et le cadrage démarre
+        self.etat_du_poste = "en_place"
+        suite = self.rendre(t["id"], "env-1", {"statut": "fait", "message": {"texte": "Installé."}})
+        self.assertEqual(self.decisions("environnement"), [])
+        self.assertEqual([(a[0], a[1]) for a in suite], [("agent", "metier-1")])
+
+    def test_bouton_recrute_l_installateur_s_il_manque(self):
+        decision = self.vers_le_poste()
+        self.accepter(decision)
+        (q,) = self.decisions("environnement")
+        (self.dossier / "fiches" / "env-1.md").unlink()
+        (self.dossier / "fiches" / "briefs" / "environnement.md").unlink()
+        self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="JDK 21")
+        fiche = next(a for a in fiches.lire_toutes(self.dossier / "fiches") if a["role"] == "environnement")
+        self.assertIn("Bash(winget:*)", fiches.outils(fiche))
+        self.assertTrue((self.dossier / "fiches" / "briefs" / "environnement.md").exists())
+        self.assertEqual(len(self.taches(etape="environnement")), 1)
+
+    def test_bouton_refuse_un_outil_non_autonome_ou_deja_en_place(self):
+        decision = self.vers_le_poste()
+        self.accepter(decision)
+        (q,) = self.decisions("environnement")
+        d, _ = self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="Inconnu")
+        self.assertIn("pas dans cette liste", self.statut(d["id"])["reponse"])
+        self.etat_du_poste = "en_place"          # installé à la main entre-temps : rien à lancer
+        d, actions = self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="JDK 21")
+        self.assertIn("déjà en place", self.statut(d["id"])["reponse"])
+        self.assertEqual(self.taches(etape="environnement"), [])
+        self.assertEqual(self.decisions("environnement"), [])
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "metier-1")])
+
+    def test_outil_non_autonome_pas_d_agent_ni_de_bouton(self):
+        manuel = dict(JDK, autonome=False)
+        decision = self.vers_le_poste_avec(manuel)
+        self.assertFalse(any(a["role"] == "environnement" for a in decision["organisation"]["agents"]))
+        self.accepter(decision, installer=["JDK 21"])                      # même coché : refusé, il n'est pas autonome
+        self.assertEqual(self.taches(etape="environnement"), [])
+        (q,) = self.decisions("environnement")
+        d, _ = self.traiter(type="installer_outil", decision=q["id"], fonctionnalite="f1", outil="JDK 21")
+        self.assertIn("ne s'installe pas en autonomie", self.statut(d["id"])["reponse"])
+
+    def vers_le_poste_avec(self, outil):
+        self.etat_du_poste = "a_installer"
+        return self.vers_l_organisation({**POSTE, "environnement": [outil]}, CLASSER_MEME)[1]
+
+    def test_installation_ratee_devient_decision(self):
+        decision = self.vers_le_poste()
+        self.accepter(decision, installer=["JDK 21"])
         (t,) = self.taches(etape="environnement")
         suite = self.rendre(t["id"], "env-1", {"statut": "fait", "message": {"texte": "Droits insuffisants."}})
         self.assertEqual(suite, [])                                                    # rien ne démarre en silence
         (q,) = self.decisions("environnement")
         self.assertEqual(q["portee"], "f1")
         self.assertIn("JDK 21", q["texte"])
-        self.assertIn("winget install", q["texte"])                                    # comment l'installer à la main
+        self.assertNotIn("winget install", q["texte"])                                 # le détail est par outil
+        self.assertEqual(q["environnement"][0]["etapes"][0], "Ouvrir la page.")
         self.assertIn("C'est fait", q["texte"])
         self.assertEqual([x["outil"] for x in q["environnement"]], ["JDK 21"])
         self.assertEqual(self.taches(etape="cadrage"), [])
@@ -320,7 +403,7 @@ class Poste(parcours.AvecParcours):
 
     def test_agent_d_installation_en_echec_devient_decision(self):
         decision = self.vers_le_poste()
-        self.accepter(decision)
+        self.accepter(decision, installer=["JDK 21"])
         (t,) = self.taches(etape="environnement")
         self.rendre(t["id"], "env-1", {"statut": "echec", "message": {"texte": "Téléchargement refusé."}})
         (q,) = self.decisions("environnement")
@@ -329,7 +412,7 @@ class Poste(parcours.AvecParcours):
 
     def test_c_est_fait_revérifie(self):
         decision = self.vers_le_poste()
-        self.accepter(decision)
+        self.accepter(decision, installer=["JDK 21"])
         (t,) = self.taches(etape="environnement")
         self.rendre(t["id"], "env-1", {"statut": "fait", "message": {"texte": "Non."}})
         (q,) = self.decisions("environnement")
@@ -350,7 +433,7 @@ class Poste(parcours.AvecParcours):
 
     def test_continuer_sans_laisse_avancer(self):
         decision = self.vers_le_poste()
-        self.accepter(decision)
+        self.accepter(decision, installer=["JDK 21"])
         (t,) = self.taches(etape="environnement")
         self.rendre(t["id"], "env-1", {"statut": "fait", "message": {"texte": "Non."}})
         (q,) = self.decisions("environnement")
@@ -434,7 +517,7 @@ class PosteDuProjet(parcours.AvecParcours):
         (q,) = self.decisions_du_projet()
         self.assertEqual(q["portee"], "projet")
         self.assertIn("JDK 21", q["texte"])
-        self.assertIn("winget install", q["texte"])
+        self.assertNotIn("winget install", q["texte"])
         self.assertEqual([x["outil"] for x in q["environnement"]], ["JDK 21"])
         self.assertEqual(self.ok("etat")["decisions"][0]["id"], q["id"])
         from bureau import releve
@@ -475,6 +558,20 @@ class PosteDuProjet(parcours.AvecParcours):
         self.assertEqual(self.decisions_du_projet(), [])
         self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_bouton_installer_en_autonomie_de_projet(self):
+        regles.avancer(self.projet, self.etat)
+        self.rendre("Non.")
+        (q,) = self.decisions_du_projet()
+        d, actions = self.traiter(type="installer_outil", decision=q["id"], outil="JDK 21")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "env-1")])
+        neuves = [t for t in self.taches(etape="environnement") if t["colonne"] != "fait"]
+        self.assertEqual(len(neuves), 1)
+        self.assertEqual((neuves[0]["fonctionnalite"], neuves[0]["colonne"]), (None, "cadrage"))
+        self.assertTrue(self.ok("releve")["decisions_projet"][0]["environnement"][0]["en_cours"])
+        d2, _ = self.traiter(type="installer_outil", decision=q["id"], outil="JDK 21")
+        self.assertIn("déjà en cours", self.statut(d2["id"])["reponse"])
+        self.assertEqual(releve_valider(self.ok("releve")), [])
 
     def test_continuer_sans_leve_la_decision_de_projet(self):
         regles.avancer(self.projet, self.etat)

@@ -182,3 +182,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Un robot de test qui gagne toujours prouve l'enchaînement du jeu, pas sa difficulté ; l'équilibrage demande un humain ou un robot imparfait.
+
+## G31 — Pour un export Android signé, localiser l'outil de signature
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export Android signé, localiser l'outil de signature dans le SDK plutôt que supposer qu'il est sur le PATH, puis vérifier la signature de l'APK (schémas v2/v3).

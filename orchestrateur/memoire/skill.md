@@ -303,3 +303,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Quand un script référence les constantes d'une classe globale et que le cache de classes peut être périmé, préférer une constante locale initialisée par preload du script.
+
+## S51 — Un contrôle d'environnement de signature liste les clés par
+Rôles : livreur
+Date : 2026-11-12
+
+Un contrôle d'environnement de signature liste les clés par chemin et taille, vérifie la présence des variables secrètes sans afficher leurs valeurs, et ne les ouvre pas.

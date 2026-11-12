@@ -45,6 +45,47 @@ export function valeurA(points, t) {
   return v;
 }
 
+// --- Le rythme idéal : la droite de la consommation parfaite, 0 % utilisé au début de la fenêtre (remise − 7 jours) et
+// 100 % à la seconde de la remise. Au-dessus de la droite, on consomme plus vite que ce rythme.
+
+export const RYTHME_COULEUR = "#d03b3b";
+export const SEMAINE_S = 7 * 86400;
+
+const debutDe = (semaine) => (nombre(semaine?.debut) ? semaine.debut : semaine.remise - SEMAINE_S);
+
+// Le pourcentage utilisé qu'il faudrait avoir à l'instant t (0 à 100, borné à la fenêtre).
+export function rythmeA(semaine, t) {
+  const d = debutDe(semaine);
+  return Math.min(100, Math.max(0, ((t - d) / (semaine.remise - d)) * 100));
+}
+
+// L'écart de la courbe à la droite à l'instant t, en points de pourcentage (> 0 : en avance sur le rythme), ou null sans mesure.
+export function ecartRythme(semaine, points, t) {
+  const v = valeurA(points, t);
+  return v === null ? null : v - rythmeA(semaine, t);
+}
+
+const dec = (v) => (Math.round(v * 10) / 10).toString().replace(".", ",");
+const libPoints = (v) => `${dec(v)} point${Math.abs(v) >= 2 ? "s" : ""}`;
+const nul = (e) => Math.round(Math.abs(e) * 10) === 0;
+
+// « Au-dessus de X points » / « En dessous de X points » (vide sans écart connu).
+export function phraseEcart(ecart) {
+  if (!nombre(ecart)) return "";
+  if (nul(ecart)) return "Sur le rythme idéal";
+  return ecart > 0 ? `Au-dessus du rythme de ${libPoints(ecart)}` : `En dessous de ${libPoints(-ecart)}`;
+}
+
+// Sous le petit graphique, pour la semaine en cours seulement.
+export function ligneRythme(semaine, pts, maintenant) {
+  if (!semaine?.courante) return "";
+  const t = Math.min(maintenant, semaine.remise);
+  const e = ecartRythme(semaine, pts, t);
+  if (e === null) return "";
+  if (nul(e)) return "Rythme : sur le rythme idéal";
+  return `Rythme : en ${e > 0 ? "avance" : "retard"} de ${libPoints(Math.abs(e))}`;
+}
+
 // Jusqu'où la courbe est tracée : maintenant pour la semaine en cours, la dernière lecture sinon (au plus la remise).
 export function finDeCourbe(semaine, maintenant) {
   if (!semaine) return null;
@@ -182,7 +223,8 @@ export function resume(semaine, points, maintenant) {
   if (!points?.length) return "Quota de la semaine : aucune mesure.";
   const dernier = points[points.length - 1].pourcent;
   const fin = semaine.courante ? `à ${heureLocale(Math.min(maintenant, semaine.remise))}` : "en fin de semaine";
-  return `Quota de la semaine : ${pct(dernier)} utilisé ${fin}, remise à zéro ${heureLocale(semaine.remise)}.`;
+  return `Quota de la semaine : ${pct(dernier)} utilisé ${fin}, remise à zéro ${heureLocale(semaine.remise)}. ` +
+    "Une droite rouge en tirets montre le rythme idéal, de 0 % au début à 100 % à la remise.";
 }
 
 // Le graphique. `opts` : {semaine: {debut, remise, courante, vu}, points, maintenant, largeur, hauteur, compact,
@@ -194,14 +236,14 @@ export function dessiner(opts) {
   const t0 = semaine.debut, t1 = semaine.remise;
   const fin = finDeCourbe(semaine, maintenant);
   const serie = paliers(points, fin);
-  const haut = plafond(Math.max(0, ...points.map((p) => p.pourcent)));
+  const haut = 100;   // la droite du rythme idéal monte jusqu'à 100 % à la remise
   const X = (t) => marges.g + ((Math.min(t1, Math.max(t0, t)) - t0) / (t1 - t0)) * w;
   const Y = (p) => marges.h + h - (Math.min(haut, Math.max(0, p)) / haut) * h;
 
   const svg = noeud("svg", {viewBox: `0 0 ${largeur} ${hauteur}`, width: largeur, height: hauteur, class: "sem-svg", role: "img",
                             "aria-label": opts.titre || resume(semaine, points, maintenant)});
-  // grille horizontale (0, milieu, haut) : discrète
-  for (const v of [0, haut / 2, haut]) {
+  // grille horizontale (0, 50, 100 ; tous les quarts sur le grand graphique) : discrète
+  for (const v of compact ? [0, 50, 100] : [0, 25, 50, 75, 100]) {
     svg.append(noeud("line", {x1: marges.g, x2: marges.g + w, y1: Y(v), y2: Y(v), class: v === 0 ? "sem-axe" : "sem-grille"}),
       noeud("text", {x: marges.g - 4, y: Y(v) + 4, class: "sem-etiquette", "text-anchor": "end"}, `${Math.round(v * 10) / 10}`.replace(".", ",") + " %"));
   }
@@ -228,6 +270,8 @@ export function dessiner(opts) {
     svg.append(noeud("path", {d: `${d} L${X(dernier[0]).toFixed(1)} ${Y(0)} L${X(premier[0]).toFixed(1)} ${Y(0)} Z`, class: "sem-aire"}),
       noeud("path", {d, class: "sem-ligne"}));
   }
+  // le rythme idéal : de (début, 0 %) à (remise, 100 %), en tirets rouges, sans remplissage
+  svg.append(noeud("line", {x1: X(t0), y1: Y(0), x2: X(t1), y2: Y(100), class: "sem-rythme", stroke: RYTHME_COULEUR}));
   // maintenant (pointillé) et remise à zéro (bord droit)
   if (semaine.courante && maintenant >= t0 && maintenant <= t1) {
     svg.append(noeud("line", {x1: X(maintenant), x2: X(maintenant), y1: marges.h, y2: marges.h + h, class: "sem-maintenant"}),

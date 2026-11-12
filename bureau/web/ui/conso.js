@@ -8,7 +8,7 @@
 
 import {tonReste, agePhrase, lignePart, definirConsoCourante} from "./mesure.js";
 import {heureRemise} from "./abonnement.js";
-import {dessiner} from "./semaine.js";
+import {dessiner, ligneRythme} from "./semaine.js";
 import {ouvrirSemaines, lireSemaines, lireSerie} from "./semaine-vue.js";
 
 export {tonReste};
@@ -128,6 +128,12 @@ export function creerConso(url = "/api/conso") {
       zone.append(el("p", "conso-vide", chargee ? "Pas encore de courbe pour cette semaine." : "Chargement de la courbe…"));
     }
     panneau.append(zone);
+    const rythme = courbe ? ligneRythme(courbe.semaine, courbe.points, Date.now() / 1000) : "";
+    if (rythme) {
+      const p = el("p", "conso-rythme", rythme);
+      p.title = "Rythme idéal : 0 % utilisé au début de la semaine, 100 % à l'instant exact de la remise à zéro";
+      panneau.append(p);
+    }
     const semaine = c.fenetres.find((f) => f.cle === "seven_day");
     const raz = semaine ? Date.parse(semaine.remise) / 1000 : NaN;
     if (Number.isFinite(raz) && raz > Date.now() / 1000) panneau.append(el("p", "conso-remise", `Remise à zéro ${heureRemise(raz, true)}`));

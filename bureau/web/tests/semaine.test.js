@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {SEP, plafond, paliers, valeurA, finDeCourbe, graduationsJours, chemin, niveaux, apresChoix, marquesDe,
-        marquesSelection, totalSelection, lignesListe, bandes, dessiner, trouver} from "../ui/semaine.js";
-import {ouvrirSemaines, ligneTotal, LEGENDE} from "../ui/semaine-vue.js";
+        marquesSelection, totalSelection, lignesListe, bandes, dessiner, trouver, rythmeA, ecartRythme, phraseEcart, ligneRythme, RYTHME_COULEUR} from "../ui/semaine.js";
+import {ouvrirSemaines, ligneTotal, LEGENDE, LEGENDE_RYTHME} from "../ui/semaine-vue.js";
 import {definirAbonnement} from "../ui/abonnement.js";
 
 // Un DOM minimal : assez pour construire la fenêtre, la fermer au clavier et vérifier que les textes passent par textContent.
@@ -162,12 +162,60 @@ test("le dessin : aire, ligne, maintenant en pointillé, bandes de la sélection
   assert.equal(classes.filter((c) => c === "sem-bande-discrete").length, 2);
   for (const c of ["sem-aire", "sem-ligne", "sem-maintenant", "sem-raz"]) assert.ok(classes.includes(c), c);
   assert.match(svg.attributs["aria-label"], /Quota de la semaine : 9 % utilisé/);
-  assert.equal(svg.geometrie.haut, 10);       // 9 % : le palier 10
+  assert.equal(svg.geometrie.haut, 100);      // l'axe va toujours jusqu'à 100 % (la droite du rythme idéal)
   // une semaine passée n'a pas de ligne « maintenant »
   const passee = dessiner({semaine: {...SEMAINE, courante: false}, points: pts, largeur: 600, hauteur: 260});
   assert.ok(!passee.tous((n) => n.attributs.class === "sem-maintenant").length);
   // sans mesure : pas de courbe, pas d'erreur
   assert.doesNotThrow(() => dessiner({semaine: SEMAINE, points: [], largeur: 300, hauteur: 120, compact: true}));
+});
+
+test("le rythme idéal : de 0 % au début à 100 % à la remise", () => {
+  assert.equal(rythmeA(SEMAINE, T0), 0);
+  assert.equal(rythmeA(SEMAINE, T1), 100);
+  assert.equal(rythmeA(SEMAINE, T0 + 3.5 * 86400), 50);
+  assert.equal(rythmeA(SEMAINE, T0 - 100), 0);
+  assert.equal(rythmeA(SEMAINE, T1 + 100), 100);
+  // début absent : remise − 7 jours
+  assert.equal(rythmeA({remise: T1}, T1 - 3.5 * 86400), 50);
+});
+
+test("l'écart au rythme et ses phrases", () => {
+  const pts = [{t: T0 + 100, pourcent: 60}];
+  assert.equal(ecartRythme(SEMAINE, pts, T0 + 3.5 * 86400), 10);
+  assert.equal(ecartRythme(SEMAINE, pts, T0 + 7 * 86400 - 1) < 0, true);
+  assert.equal(ecartRythme(SEMAINE, pts, T0 + 50), null);   // avant la première mesure
+  assert.equal(phraseEcart(12.34), "Au-dessus du rythme de 12,3 points");
+  assert.equal(phraseEcart(-4), "En dessous de 4 points");
+  assert.equal(phraseEcart(-1), "En dessous de 1 point");
+  assert.equal(phraseEcart(0.02), "Sur le rythme idéal");
+  assert.equal(phraseEcart(null), "");
+  assert.equal(ligneRythme(SEMAINE, pts, T0 + 3.5 * 86400), "Rythme : en avance de 10 points");
+  assert.equal(ligneRythme(SEMAINE, [{t: T0 + 100, pourcent: 30}], T0 + 3.5 * 86400), "Rythme : en retard de 20 points");
+  assert.equal(ligneRythme(SEMAINE, [{t: T0 + 100, pourcent: 50}], T0 + 3.5 * 86400), "Rythme : sur le rythme idéal");
+  assert.equal(ligneRythme(SEMAINE, [], T0 + 3.5 * 86400), "");
+  assert.equal(ligneRythme({...SEMAINE, courante: false}, pts, T0 + 3.5 * 86400), "");
+});
+
+test("le dessin : une droite rouge en tirets, sans remplissage, de (début, 0) à (remise, 100), graduée jusqu'à 100 %", () => {
+  for (const compact of [false, true]) {
+    const svg = dessiner({semaine: SEMAINE, points: [{t: T0 + 100, pourcent: 2}], maintenant: T0 + 86400, largeur: 600, hauteur: 260, compact});
+    const l = svg.tous((n) => n.attributs.class === "sem-rythme");
+    assert.equal(l.length, 1);
+    assert.equal(l[0].tagName, "line");
+    const g = svg.geometrie;
+    assert.equal(Number(l[0].attributs.x1), g.X(T0));
+    assert.equal(Number(l[0].attributs.y1), g.Y(0));
+    assert.equal(Number(l[0].attributs.x2), g.X(T1));
+    assert.equal(Number(l[0].attributs.y2), g.Y(100));
+    assert.equal(g.haut, 100);
+    const etiquettes = svg.tous((n) => n.attributs.class === "sem-etiquette" && /%$/.test(n.textContent)).map((n) => n.textContent);
+    assert.ok(etiquettes.includes("100 %") && etiquettes.includes("0 %") && etiquettes.length >= 3, etiquettes.join());
+  }
+  // sur une semaine passée aussi
+  const passee = dessiner({semaine: {...SEMAINE, courante: false}, points: [], largeur: 300, hauteur: 120, compact: true});
+  assert.equal(passee.tous((n) => n.attributs.class === "sem-rythme").length, 1);
+  assert.equal(RYTHME_COULEUR, "#d03b3b");
 });
 
 test("la ligne de total : euros, part de la semaine, CO₂, appels", () => {
@@ -245,6 +293,28 @@ test("« Voir plus » : fenêtre modale, graphique, listes, légende, total ; la
   assert.equal(bandesFortes(fond), 3);
   ligne("Alpha").declencher("click");
   assert.equal(bandesFortes(fond), 5);
+  v.fermer();
+});
+
+test("la fenêtre : légende du rythme idéal et écart au rythme à l'instant survolé", async () => {
+  simulerReseau();
+  const v = ouvrirSemaines({});
+  await attendre();
+  assert.ok(v.fond.textContent.includes(LEGENDE_RYTHME));
+  assert.equal(LEGENDE_RYTHME, "Rythme idéal (0 % restant à la remise)");
+  const svg = v.fond.tous((n) => n.tagName === "svg")[0];
+  const bulle = v.fond.tous((n) => n.className === "sem-bulle")[0];
+  const g = svg.geometrie;
+  // au 2e jour (largeur du faux DOM 640 = viewBox)
+  svg.declencher("pointermove", {clientX: ((g.marges.g + g.w * 2 / 7) / g.largeur) * 640});
+  assert.equal(bulle.hidden, false);
+  assert.match(bulle.textContent, /En dessous de 19,6 points/);   // 9 % mesurés, 28,6 % attendus
+  // au-delà de la courbe (après maintenant) : pas d'écart
+  svg.declencher("pointermove", {clientX: ((g.marges.g + g.w * 6 / 7) / g.largeur) * 640});
+  assert.doesNotMatch(bulle.textContent, /points/);
+  // avant la première mesure : pas d'écart
+  svg.declencher("pointermove", {clientX: (g.marges.g / g.largeur) * 640});
+  assert.doesNotMatch(bulle.textContent, /du rythme|points/);
   v.fermer();
 });
 

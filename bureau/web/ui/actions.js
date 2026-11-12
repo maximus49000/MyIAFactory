@@ -115,11 +115,16 @@ export function resumeEnvoi(resultats) {
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-                  genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: []};
+                  genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [],
+                  series: [], terminees: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
     if (f?.etape === "deplacee") continue;   // partie ailleurs (ou abandonnée) : plus rien à décider ici
+    // Terminée et pas encore vue : l'avis de fin (non bloquant, fermé par « Vu »).
+    if (f?.etape === "terminee" && f.fin && typeof f.fin === "object" && f.fin.vu !== true) {
+      sortie.terminees.push({fonctionnalite: f.id, nom: f.nom, catalogue: f.catalogue === true, ...f.fin});
+    }
     for (const d of f?.decisions || []) {
       if (rang[d?.genre]) sortie[rang[d.genre]].push({...d, fonctionnalite: f.id, nom: f.nom});
     }
@@ -138,6 +143,10 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "outil_agent") sortie.outils.push({...d});
     else if (d?.genre === "accord_agent") sortie.accords.push({...d});
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
+    else if (d?.genre === "serie_arretee") {   // une série qui ne progresse plus : avec le nom de sa fonctionnalité
+      const f = (Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []).find((x) => x?.id === d.fonctionnalite);
+      sortie.series.push({...d, nom: f?.nom || d.fonctionnalite});
+    }
     else if (d?.genre === "environnement") sortie.environnements.push({...d});   // l'installation portée par le projet
   }
   return sortie;
@@ -246,6 +255,16 @@ export function lireSession(texte) {
 
 // Un agent arrêté faute d'outil : « autoriser » le programme (ajouté à sa fiche, sa tâche repart), « refuser » (sa tâche
 // est bloquée) ou « relancer » (la fiche a été complétée à la main : seulement sans programme à nommer).
+// « Relancer la série » sur une série qui ne progresse plus.
+export function demandeSerieArretee(decision) {
+  return {type: "serie_arretee", decision: decision.id, verdict: "relancer"};
+}
+
+// « Vu » sur l'avis de fin d'une fonctionnalité : l'avis se ferme.
+export function demandeFinVue(fonctionnalite) {
+  return {type: "fin_vue", fonctionnalite};
+}
+
 export function demandeOutilAgent(decision, verdict) {
   return {type: "outil_agent", decision: decision.id, verdict};
 }

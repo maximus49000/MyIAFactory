@@ -2,15 +2,19 @@
 // « méthode à revoir ? », sessions cloud à créer. Chaque bouton envoie une demande au projet, jamais un changement direct.
 
 import {el} from "./dom.js";
-import {tronquer} from "./texte.js";
+import {tronquer, dateFr, euros} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
-  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET} from "./actions.js";
+  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
-import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation} from "./validation.js";
+import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation, urlTelechargement,
+  lienAcces} from "./validation.js";
+import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
+import {etiquetteCO2} from "./empreinte.js";
+import {projetCourant, urlProjet} from "./projets.js";
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 const MOTIF_GENRE =/^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -490,8 +494,94 @@ function reglesDuProjet(ctx) {
   return s;
 }
 
+// « La série de … ne progresse plus » : la raison, et « Relancer la série » (le moteur la relit depuis le suivi).
+function decisionSerieArretee(ctx, d) {
+  const li = el("li", "decision-serie");
+  li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte));
+  if (ctx.etat.agir) {
+    const rangee = el("div", "lecon-boutons");
+    rangee.append(boutonDemande(ctx, "Relancer la série", "bouton", () => demandeSerieArretee(d)));
+    li.append(rangee);
+  }
+  return li;
+}
+
+// L'avis de fin d'une fonctionnalité, en données : ses livrables à télécharger, le lien d'accès de son site (relayé par
+// le bureau au téléphone : `/apercu/<projet>/fin-<fonctionnalité>/`) et les éléments laissés de côté.
+export function avisDeFin(x, {hotePage = globalThis.location?.hostname || "127.0.0.1", projet = projetCourant(),
+                              origine = null} = {}) {
+  const livrables = (Array.isArray(x?.livrables) ? x.livrables : []).filter((l) => plein(l?.chemin)).map((l) => ({
+    chemin: l.chemin, titre: plein(l.titre) ? l.titre : l.chemin.split(/[\\/]/).pop(),
+    url: urlTelechargement(x.fonctionnalite, l.chemin, projet, origine)}));
+  const acces = x?.acces ? lienAcces({id: "fin-" + x.fonctionnalite, acces: x.acces}, {hotePage, projet, origine}) : null;
+  const laisses = (Array.isArray(x?.laisses) ? x.laisses : []).filter(plein);
+  return {livrables, acces, laisses};
+}
+
+// La ligne de coût de l'avis de fin : « Coût : ≈ 1,20 € · ≈ 3 % semaine · CO₂ … » (ce que dit déjà le panneau).
+export function texteCoutDeFin(c) {
+  if (!c?.disponible) return "";
+  return avecPart(avecPart(`Coût : ${euros(c.total)}${c.sans_prix ? " + prix inconnu" : ""}`, etiquettePart(c.total)),
+                  etiquetteCO2(c.co2));
+}
+
+// « Fonctionnalités terminées » : nom, date, coût, livrables, site, catalogue ; « Vu » ferme l'avis (non bloquant).
+function decisionFin(ctx, x) {
+  const li = el("li", "decision-fin");
+  const a = avisDeFin(x);
+  li.append(lienFonctionnalite(ctx, x), el("div", "lecon-meta", "Terminée" + (plein(x.date) ? " le " + dateFr(x.date) : "")));
+  const cout = el("div", "lecon-meta", "");
+  li.append(cout);
+  if (typeof globalThis.fetch === "function") {
+    (async () => {
+      try {
+        const r = await globalThis.fetch(urlProjet(`/api/couts?fonctionnalite=${encodeURIComponent(x.fonctionnalite)}`),
+                                         {cache: "no-store"});
+        cout.textContent = texteCoutDeFin(await r.json());
+        if (cout.textContent) marquerPart(cout);
+      } catch { cout.textContent = ""; }
+    })();
+  }
+  const liens = el("div", "fin-liens");
+  for (const l of a.livrables) {
+    const lien = el("a", "bouton secondaire val-telecharger", "Télécharger : " + l.titre);
+    lien.href = l.url;
+    liens.append(lien);
+  }
+  if (a.acces) {
+    const lien = el("a", "bouton secondaire", "Ouvrir le site" + (a.acces.description ? " : " + a.acces.description : ""));
+    lien.href = a.acces.url;
+    lien.target = "_blank";
+    lien.rel = "noopener noreferrer";
+    liens.append(lien);
+  }
+  if (x.catalogue && typeof ctx.ouvrirCatalogue === "function") {
+    const b = el("button", "bouton secondaire", "Ouvrir le catalogue");
+    b.type = "button";
+    b.addEventListener("click", () => ctx.ouvrirCatalogue(x.fonctionnalite));
+    liens.append(b);
+  }
+  if (!a.livrables.length && !a.acces && !(x.catalogue && typeof ctx.ouvrirCatalogue === "function")) {
+    liens.append(el("span", "note", "Aucun livrable ni lien d'accès noté : ouvrez la fonctionnalité pour ses documents."));
+  }
+  li.append(liens);
+  if (a.laisses.length) li.append(el("div", "lecon-meta", "Laissés de côté : " + a.laisses.join(", ")));
+  if (ctx.etat.agir) {
+    const rangee = el("div", "lecon-boutons");
+    rangee.append(boutonDemande(ctx, "Vu", "bouton", () => demandeFinVue(x.fonctionnalite)));
+    li.append(rangee);
+  }
+  return li;
+}
+
 export function contenuDecisionsV4(ctx, contenu) {
   const d = decisionsDirecteur(ctx.etat);
+  if (d.terminees.length) {     // non bloquant : en tête, seulement quand il y en a
+    contenu.append(partie("Fonctionnalités terminées", "", d.terminees.map((x) => decisionFin(ctx, x))));
+  }
+  if (d.series.length) {
+    contenu.append(partie("Séries qui ne progressent plus", "", d.series.map((x) => decisionSerieArretee(ctx, x))));
+  }
   contenu.append(partie("Réponses attendues", "Aucune discussion n'attend votre réponse",
     d.reponses.map((x) => reponseAttendue(ctx, x))));
   const validations = [

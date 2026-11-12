@@ -49,7 +49,8 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet")
+                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
+                 "serie_arretee", "fin_vue")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -631,7 +632,10 @@ def cmd_detail(ctx, e):
     s = ctx.suivi.lire()
     if e.get("fonctionnalite") is not None:
         f = _fonc(s, e["fonctionnalite"])
-        return _resume_fonc(f) | {"file": list(f["file"]), "elements": dict(f.get("elements") or {})}
+        sortie = _resume_fonc(f) | {"file": list(f["file"]), "elements": dict(f.get("elements") or {})}
+        if e.get("taches") is True:      # toutes ses tâches, faites comprises (le moteur relancé reprend sa série)
+            sortie["taches"] = [_tache_compacte(t) for t in s["taches"] if t.get("fonctionnalite") == f["id"]]
+        return sortie
     if e.get("tache") is not None:
         t = su.tache(s, e["tache"])
         if t is None:
@@ -752,11 +756,43 @@ def cmd_fonctionnalite(ctx, e):
             if not isinstance(e["catalogue"], bool):
                 raise Refus("« catalogue » doit être vrai ou faux.")
             f["catalogue"] = e["catalogue"]
+        if "fin" in e:       # la fin de la fonctionnalité, annoncée au bureau de direction
+            f["fin"] = {**_fin_verifiee(e["fin"]), "date": su.maintenant(), "vu": False}
+        if e.get("fin_vue") is True:    # « Vu » : l'avis de fin se ferme
+            if not isinstance(f.get("fin"), dict):
+                raise Refus("Cette fonctionnalité n'a pas d'avis de fin.")
+            f["fin"]["vu"] = True
         glossaire = _glossaire_entree(e, None)
         if glossaire:
             fusionner_glossaire(ctx, s, f, glossaire, None)
         f["maj"] = su.maintenant()
         return _resume_fonc(f)
+
+
+MAX_LIVRABLES_FIN = 10
+
+
+def _fin_verifiee(fin):
+    """La fin d'une fonctionnalité : `livrables` [{chemin, titre}] (10 au plus), `acces` {url http(s), description?}
+    facultatif, `laisses` (les noms des éléments laissés de côté) facultatif."""
+    if not isinstance(fin, dict):
+        raise Refus("« fin » est un objet {livrables, acces?, laisses?}.")
+    livrables = fin.get("livrables", [])
+    if (not isinstance(livrables, list) or len(livrables) > MAX_LIVRABLES_FIN
+            or not all(isinstance(x, dict) and isinstance(x.get("chemin"), str) and x["chemin"].strip()
+                       and "\x00" not in x["chemin"] and isinstance(x.get("titre"), str) and x["titre"].strip()
+                       for x in livrables)):
+        raise Refus(f"« fin.livrables » : au plus {MAX_LIVRABLES_FIN} fichiers {{chemin, titre}}.")
+    sortie = {"livrables": [{"chemin": x["chemin"].strip(), "titre": x["titre"].strip()[:200]} for x in livrables]}
+    if fin.get("acces") is not None:
+        if not rel.acces_ok(fin["acces"]):
+            raise Refus("« fin.acces » est {url (http ou https), description? (200 caractères au plus)}.")
+        sortie["acces"] = {k: v for k, v in fin["acces"].items() if k in ("url", "description") and v is not None}
+    if fin.get("laisses") is not None:
+        if not isinstance(fin["laisses"], list) or not all(isinstance(x, str) for x in fin["laisses"]):
+            raise Refus("« fin.laisses » est une liste de noms d'éléments.")
+        sortie["laisses"] = [x[:200] for x in fin["laisses"][:50]]
+    return sortie
 
 
 def cmd_message(ctx, e):
@@ -849,6 +885,9 @@ def cmd_decision(ctx, e):
                 d.update(_outil_a_ouvrir(ctx, s, e))
             elif genre == "accord_agent":
                 d.update(_accord_a_donner(ctx, s, e))
+            elif genre == "serie_arretee":      # une série qui ne progresse plus : dite au Directeur
+                _fonc(s, e.get("fonctionnalite"))
+                d["fonctionnalite"] = e["fonctionnalite"]
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -1977,6 +2016,9 @@ def construire_releve(ctx):
         if f["livrable"] and f["livrable"].get("chemin"):
             v["livrable"] = {**f["livrable"], "chemin": chemin(f["livrable"]["chemin"])}
         v["documents"] = [{**d, "chemin": chemin(d["chemin"])} for d in documents_complets(f, s["taches"])]
+        if isinstance(f.get("fin"), dict):     # l'avis de fin (« Fonctionnalités terminées » au bureau de direction)
+            v["fin"] = {**f["fin"], "livrables": [{**x, "chemin": chemin(x["chemin"])}
+                                                  for x in f["fin"].get("livrables") or []]}
         if f.get("glossaire"):
             v["glossaire"] = [dict(g) for g in f["glossaire"]]
         fonctionnalites.append(v)

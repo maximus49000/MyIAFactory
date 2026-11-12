@@ -337,6 +337,19 @@ class TestApercu(AvecServeur):
             self.assertEqual(r.status, 404, chemin)
         self.assertEqual(VUS, [])
 
+    def test_site_d_une_fonctionnalite_terminee_relaye(self):
+        """L'avis « Fonctionnalité terminée » : `/apercu/<projet>/fin-<fonctionnalité>/` relaie le lien noté à la fin."""
+        r = releve_avec(self.site, [])
+        r["decisions_projet"] = []
+        r["fonctionnalites"][0]["fin"] = {"date": "2026-11-12T20:00:00+01:00", "vu": False, "livrables": [],
+                                          "acces": {"url": f"http://127.0.0.1:{self.site}/", "description": "Le jeu"}}
+        self.agir(releve=r)
+        reponse, data = self.req("GET", "/apercu/-/fin-f1/")
+        self.assertEqual((reponse.status, data), (200, b"<html>Accueil</html>"))
+        for chemin in ("/apercu/-/fin-f9/", "/apercu/-/fin-/"):
+            reponse, _ = self.req("GET", chemin)
+            self.assertEqual(reponse.status, 404, chemin)
+
     def test_site_eteint_502(self):
         r = releve_avec(self.site, [])
         r["decisions_projet"][0]["acces"]["url"] = "http://127.0.0.1:9/"

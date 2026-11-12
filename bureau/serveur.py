@@ -50,13 +50,14 @@ ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/a
 # La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
-REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre", "outil_agent", "accord_agent")
+REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre", "outil_agent", "accord_agent", "serie_arretee")
 GARDE_REPONSE_S = 600
 TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
 LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé
 LECTURE_TEXTE_MAX_OCTETS = 512 * 1024    # au-delà : 413, le téléchargement reste
 TELECHARGEABLES = {ext: (type_, True) for ext, type_ in releve.TELECHARGEABLES.items()}
 APERCU = "/apercu/"                     # /apercu/<projet>/<décision>/<chemin> -> http://127.0.0.1:<port>/<chemin>
+APERCU_FIN = "fin-"                     # /apercu/<projet>/fin-<fonctionnalité>/… : le site d'une fonctionnalité terminée
 APERCU_DELAI_S = 20
 APERCU_MAX_CORPS = 10 * 1024 * 1024     # un formulaire envoyé au site
 APERCU_MAX_REPONSE = 200 * 1024 * 1024
@@ -615,6 +616,11 @@ class Projet:
             return None
         d = next((x for x in r.get("decisions_projet") or [] if isinstance(x, dict) and x.get("id") == decision
                   and x.get("genre") == "valider_etape"), None)
+        if d is None and isinstance(decision, str) and decision.startswith(APERCU_FIN):
+            # l'avis « Fonctionnalité terminée » : le lien d'accès noté à la fin de la fonctionnalité
+            f = next((x for x in r.get("fonctionnalites") or [] if isinstance(x, dict)
+                      and x.get("id") == decision[len(APERCU_FIN):]), None)
+            d = (f or {}).get("fin") if isinstance((f or {}).get("fin"), dict) else None
         lien = (d or {}).get("acces")
         return releve.acces_local(lien.get("url")) if isinstance(lien, dict) else None
 

@@ -1192,3 +1192,7 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .regle-projet-texte { overflow-wrap: anywhere; }
 .regle-projet-ajout { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 html.mobile .regle-projet .bouton, html.mobile .regle-projet-ajout .bouton, html.mobile .decision-accord .bouton { min-height: 44px; }
+
+/* « Fonctionnalités terminées » au bureau de direction : les liens d'accès (livrables, site, catalogue). */
+.fin-liens { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.fin-liens a.bouton { text-decoration: none; }

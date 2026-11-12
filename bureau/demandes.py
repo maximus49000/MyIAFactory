@@ -26,7 +26,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
-          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",)}
+          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",),
+          "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",)}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
@@ -35,7 +36,8 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solu
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet")
+               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet", "serie_arretee",
+               "fin_vue")
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
@@ -364,6 +366,17 @@ def _verifier_v4(demande, r, elements):
             return f"Réponse inconnue ({', '.join(VERDICTS_OUTIL)})."
         if demande["verdict"] == "autoriser" and not d.get("programme"):
             return "Cette décision ne nomme pas de programme à autoriser."
+        return None
+    if genre == "serie_arretee":     # « Relancer la série »
+        if _decision(r.get("decisions_projet", []), demande["decision"], "serie_arretee") is None:
+            return "Décision inconnue."
+        return None if demande["verdict"] == "relancer" else "Réponse inconnue (relancer)."
+    if genre == "fin_vue":           # « Vu » sur l'avis de fin d'une fonctionnalité
+        f = _fonctionnalite(r, demande["fonctionnalite"])
+        if f is None:
+            return "Fonctionnalité inconnue."
+        if not isinstance(f.get("fin"), dict):
+            return "Cette fonctionnalité n'a pas d'avis de fin."
         return None
     if genre == "accord_agent":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "accord_agent")

@@ -671,6 +671,21 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.ok({**base, "verdict": "relancer", "decision": "o2"})
         self.assertEqual(demandes.nettoyer({**base, "verdict": "refuser", "autre": 1}), {**base, "verdict": "refuser"})
 
+    def test_serie_arretee_et_fin_vue(self):
+        r = copy.deepcopy(R5)
+        r["decisions_projet"].append({"id": "s1", "genre": "serie_arretee", "texte": "La série ne progresse plus",
+                                      "fonctionnalite": "f1"})
+        r["fonctionnalites"][0]["fin"] = {"date": "2026-11-12T20:00:00+01:00", "vu": False, "livrables": []}
+        verifier = lambda d: demandes.verifier(d, r, frozenset(), None)     # noqa: E731
+        self.assertIsNone(verifier({"type": "serie_arretee", "decision": "s1", "verdict": "relancer"}))
+        self.assertTrue(verifier({"type": "serie_arretee", "decision": "s1", "verdict": "garder"}))
+        self.assertTrue(verifier({"type": "serie_arretee", "decision": "a1", "verdict": "relancer"}))
+        self.assertIsNone(verifier({"type": "fin_vue", "fonctionnalite": "f1"}))
+        self.assertTrue(verifier({"type": "fin_vue", "fonctionnalite": "f2"}))       # sans avis de fin
+        self.assertTrue(verifier({"type": "fin_vue", "fonctionnalite": "f9"}))
+        self.assertEqual(demandes.nettoyer({"type": "fin_vue", "fonctionnalite": "f1", "autre": 1}),
+                         {"type": "fin_vue", "fonctionnalite": "f1"})
+
     def test_accord_agent(self):
         base = {"type": "accord_agent", "decision": "a1"}
         self.ok({**base, "verdict": "accepter"})

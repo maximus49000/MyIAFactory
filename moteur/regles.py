@@ -1587,7 +1587,8 @@ def _sur_retour(projet, demande, etat):
 def _sur_retour_element(projet, demande, etat):
     fid = demande["fonctionnalite"]
     role = _role_production(projet, fid)
-    tid = _creer_tache(projet, f"Retour sur l'élément {demande['element']}", fid, role, "retour",
+    reprendre_la_serie(projet, etat, fid)
+    tid = _creer_tache(projet, f"{TITRE_RETOUR_ELEMENT} {demande['element']}", fid, role, "retour",
                        element=demande["element"], journal=["Retour de l'utilisateur : " + demande["texte"]])
     v = _m(etat, "elements").get(f"{fid}/{demande['element']}")
     if v is not None and v["phase"] == "fait":   # la correction passe par la relecture croisée comme les autres
@@ -2405,6 +2406,8 @@ def traiter_retour(projet, execution, etat):
         t = _tache(projet, tid)
         fid = fid or t.get("fonctionnalite")
         du_lot[tid] = t.get("element")
+    if fid:     # le moteur relancé pendant le travail de l'agent : les éléments du lot sont repris avant son rapport
+        reprendre_la_serie(projet, etat, fid)
     r = _chemins_du_projet(projet, r, fid)
     r["_du_lot"] = du_lot      # tâche -> élément : le compte rendu de chaque élément est pris à part (`_retenir_le_rapport`)
     liee = _m(etat, "liees").pop(taches[0], None)
@@ -2997,6 +3000,10 @@ def _attendre_le_directeur(projet, etat, v, s):
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
+    if v.pop("rapport_du_suivi", False):
+        # le rapport a été perdu pendant l'arrêt du moteur (relu dans le suivi) : la validation est posée avec ce qu'il y
+        # a à vérifier, l'étape n'est refaite que s'il n'y a rien du tout
+        manques = [m for m in manques if m == "rien"]
     if manques:
         return _rien_a_verifier(projet, etat, v, s, manques)
     v.pop("rien_a_verifier", None)
@@ -3180,6 +3187,7 @@ def _retenir_le_rapport(v, r):
     voit à la validation suivante."""
     if r is None:
         return
+    v.pop("rapport_du_suivi", None)      # un vrai rapport : la validation suivante exige tout ce qu'elle exige
     element = v["element"]
     eid = element["id"]
     du_lot = r.get("_du_lot") or {}
@@ -3463,6 +3471,8 @@ def _avancer_serie(projet, etat, fid):
     for d in _etat(projet)["decisions"]:     # le moteur relancé : les éléments qui attendent le Directeur reviennent
         if d["portee"] == "projet" and d["genre"] == GENRE_VALIDATION and d.get("fonctionnalite") == fid:
             _element_en_validation(projet, etat, d)
+    if not revoir:      # le moteur relancé : les autres éléments repartent de là où le suivi les montre
+        reprendre_la_serie(projet, etat, fid)
     mine = [v for v in elements.values() if v["fid"] == fid]
     if not revoir:
         for v in mine:
@@ -3489,12 +3499,236 @@ def _avancer_serie(projet, etat, fid):
             _tache_de_flux(projet, etat, _etat_element(etat, fid, element))
             vivants += 1
         mine = [v for v in elements.values() if v["fid"] == fid]
-        if not _fonc(projet, fid)["file"] and mine and all(v["phase"] in ("fait", "bloque") for v in mine):
+        ouvertes = any(t.get("fonctionnalite") == fid and t["colonne"] != "fait" and not t.get("bloquee")
+                       for t in _etat(projet)["taches"])
+        if (not _fonc(projet, fid)["file"] and mine and all(v["phase"] in ("fait", "bloque") for v in mine)
+                and not ouvertes and not _m(etat, "serie_perdue").get(fid)):
             bloques = [v["element"]["nom"] for v in mine if v["phase"] == "bloque"]
-            lancer(projet, "fonctionnalite", {"id": fid, "etape": "terminee"})
+            _fin_de_fonctionnalite(projet, etat, fid, bloques)
             _dire(projet, fid, "La série est terminée." + (f" Éléments laissés de côté : {', '.join(bloques)}."
                                                            if bloques else ""))
+            return []
+    _signaler_une_serie_muette(projet, etat, fid)
     return []
+
+
+# --- La série reprise depuis le suivi : la mémoire du moteur (`etat["elements"]`) est perdue à chaque redémarrage, et
+# les agents détachés finissent pendant qu'il est arrêté. Chaque élément repart de là où ses tâches le montrent.
+
+TITRE_RETOUR_ELEMENT = "Retour sur l'élément"      # le titre de la correction d'un élément fini (`_sur_retour_element`)
+SERIE_ARRETEE = "serie_arretee"                    # la décision de projet : une série qui ne progresse plus
+RELANCER_SERIE = "relancer"
+
+
+def _numero(tid):
+    n = re.sub(r"\D", "", str(tid))
+    return int(n) if n else 0
+
+
+def _pas_de_serie(t):
+    """Vrai si la tâche est un pas de la série de son élément : une étape du flux ou une validation, une correction, une
+    relecture, ou la correction d'un élément fini. Un retour sur une tâche (« Retour : … ») ou une demande n'en est pas un :
+    il ne dit pas où en est l'élément."""
+    e = str(t.get("etape") or "")
+    return (e.startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION)) or e in ("correction", "relecture")
+            or (e == "retour" and str(t.get("titre") or "").startswith(TITRE_RETOUR_ELEMENT)))
+
+
+def reprendre_la_serie(projet, etat, fid):
+    """Les éléments de la fonctionnalité en série que la mémoire du moteur ne connaît pas (il a été relancé) : chacun est
+    reconstruit depuis ses tâches et repart de là où il en est, sans rien refaire. Une étape faite dont la suite n'a
+    jamais été créée (le rapport est arrivé pendant l'arrêt) est suivie maintenant. Un élément qui ne peut pas repartir
+    est noté dans `etat["serie_perdue"]` (dit au bureau par `_signaler_une_serie_muette`)."""
+    f = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True})
+    if f.get("etape") != "serie":
+        return
+    elements, perdus = _m(etat, "elements"), _m(etat, "serie_perdue").setdefault(fid, {})
+    dans_la_file = {q["id"] for q in f.get("file") or []}
+    a_reprendre = [eid for eid in f.get("elements") or {} if f"{fid}/{eid}" not in elements and eid not in dans_la_file]
+    if not a_reprendre:
+        return
+    par_element = {}
+    for t in f.get("taches") or []:
+        if t.get("element"):
+            par_element.setdefault(t["element"], []).append(t)
+    for eid in a_reprendre:
+        if eid not in par_element:
+            continue      # jamais commencé (un ancien découpage) : rien à reprendre
+        connu = f["elements"][eid]
+        element = {"id": eid, **(connu if isinstance(connu, dict) else {})}
+        element.setdefault("nom", eid)
+        raison = _reprendre_l_element(projet, etat, f, element, sorted(par_element[eid], key=lambda t: _numero(t["id"])))
+        if raison:
+            perdus[eid] = f"« {element['nom']} » : {raison}"
+        else:
+            perdus.pop(eid, None)
+
+
+def _reprendre_l_element(projet, etat, f, element, taches):
+    """L'état d'un élément d'après ses tâches (dans l'ordre de création) ; la suite d'une étape faite est lancée. Rend la
+    raison pour laquelle il ne peut pas repartir, ou `None`."""
+    fid = f["id"]
+    rangs = {s["id"]: k for k, s in enumerate(_production(projet, fid))}
+    pas = [t for t in taches if _pas_de_serie(t)]
+    if not pas:
+        if any(str(t.get("etape")) == "prototype" for t in taches) or all(t["colonne"] == "fait" for t in taches):
+            _etat_element(etat, fid, element)["phase"] = "fait"     # l'élément du prototype, fait avec la méthode
+        return None       # sinon une tâche à part, encore ouverte : il sera repris quand elle sera faite
+    etapes = [str(t["etape"]).split(":", 1)[1] for t in pas
+              if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION))]
+    if etapes and etapes[-1] not in rangs:
+        return f"son étape « {etapes[-1]} » n'est plus dans le workflow de la fonctionnalité"
+    v = _etat_element(etat, fid, element)
+    v.update(taches=[t["id"] for t in pas], pas=rangs[etapes[-1]] if etapes else 0)
+    dernier = pas[-1]
+    etape, ouverte = str(dernier["etape"]), dernier["colonne"] != "fait"
+    texte = str(dernier.get("dernier_journal") or "")
+    if etape.startswith(ETAPES_DE_FLUX):
+        v["phase"] = "flux"
+        if not ouverte:      # faite, sa suite jamais créée : elle l'est maintenant (le rapport, relu dans le suivi)
+            _rapport_du_suivi(projet, etat, v, dernier, f)
+            _apres_flux(projet, etat, v)
+    elif etape.startswith(ETAPES_DE_VALIDATION):
+        if ouverte:
+            v["phase"] = "bloque" if dernier.get("bloquee") else "validation"
+        elif texte.startswith("Renvoyé"):
+            v.update(phase="flux", pas=v["pas"] - 1)
+            remarque = texte.split(":", 1)[-1].strip() if ":" in texte else texte
+            _tache_de_flux(projet, etat, v, journal=[f"Remarque du Directeur : {remarque}"])
+        else:
+            v["phase"] = "flux"
+            note = texte.split("Note du Directeur :", 1)[1].strip() if "Note du Directeur :" in texte else ""
+            if note:
+                v["journal_suivant"] = [f"Note du Directeur à la validation « {element['nom']} » : {note}"]
+            _apres_flux(projet, etat, v)
+    elif etape == "relecture":
+        suite = []
+        for t in reversed(pas):
+            if str(t["etape"]) != "relecture":
+                break
+            suite.append(t)
+        faites = [t for t in suite if t["colonne"] == "fait"]
+        v.update(phase="relecture", attendus=len(suite) if ouverte else 1, rapports=[[] for _ in faites])
+        if not ouverte:      # les verdicts sont perdus : rien n'a été refusé que l'on sache
+            v["rapports"] = [[]]
+            _conclure_relecture(projet, etat, v)
+    else:       # une correction (ou la correction d'un élément fini)
+        v.update(phase="correction", corrections=1)
+        if not ouverte:
+            _lancer_relecture(projet, etat, v)
+    return None
+
+
+def _rapport_du_suivi(projet, etat, v, t, f):
+    """Le rapport d'une étape faite pendant l'arrêt du moteur, relu dans le suivi : le compte rendu (le journal de la
+    tâche, celui de la tête du lot pour ses autres tâches) et les fichiers rangés pour l'élément à cette étape. Marqué
+    `rapport_du_suivi` : la validation qui suit est posée avec ce qu'il y a à vérifier (rien n'est refait pour ce que
+    le rapport perdu disait en plus)."""
+    eid = v["element"]["id"]
+    texte = str(t.get("dernier_journal") or "")
+    lot = t.get("lot") if isinstance(t.get("lot"), dict) else None
+    if lot and lot.get("rang", 1) > 1:
+        tete = next((x for x in f.get("taches") or [] if isinstance(x.get("lot"), dict)
+                     and x["lot"].get("id") == lot.get("id") and x["lot"].get("rang") == 1), None)
+        texte = str((tete or {}).get("dernier_journal") or texte)
+    if texte.startswith(("Le moteur a repris", JOURNAL_REFUS, "Reprise sur")) or texte == "Terminé.":
+        texte = ""
+    fichiers = []
+    for d in f.get("documents") or []:
+        if (d.get("element") == eid and d.get("etape") == t["etape"]) or (d.get("tache") == t["id"] and not d.get("element")):
+            if all(x["chemin"] != d["chemin"] for x in fichiers):
+                fichiers.append({"chemin": d["chemin"], "titre": d.get("titre") or d["chemin"].rsplit("/", 1)[-1]})
+    v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[-FICHIERS_MAX:], "points": [],
+                            "acces": None}
+    v["rapport_du_suivi"] = True
+
+
+def _signaler_une_serie_muette(projet, etat, fid):
+    """Le garde-fou : une fonctionnalité en série sans aucune tâche ouverte, ni décision, ni agent au travail ne progresse
+    plus ; elle est dite au bureau de direction (décision `serie_arretee`), jamais laissée muette."""
+    f = _fonc(projet, fid)
+    if f.get("etape") != "serie":
+        return
+    court = _etat(projet)
+    if any(d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") == fid for d in court["decisions"]):
+        return        # déjà dite
+    raisons = list(_m(etat, "serie_perdue").get(fid, {}).values())
+    siennes = [t for t in court["taches"] if t.get("fonctionnalite") == fid]
+    # un élément qui ne peut pas repartir est dit tout de suite, même si d'autres avancent ; sinon, seulement quand
+    # plus rien ne bouge (ni tâche ouverte, ni décision, ni agent au travail)
+    if not raisons and (f.get("decisions") or any(t["colonne"] != "fait" for t in siennes)
+                        or any(t["id"] in etat["en_cours"] for t in siennes)
+                        or any(d["portee"] == "projet" and d.get("fonctionnalite") == fid for d in court["decisions"])):
+        return
+    occupes = {t.get("element") for t in siennes if t["colonne"] != "fait"}
+    for v in _m(etat, "elements").values():
+        if v["fid"] == fid and v["phase"] not in ("fait", "bloque") and v["element"]["id"] not in occupes:
+            raisons.append(f"« {v['element']['nom']} » attend sans aucune tâche ({v['phase']})")
+    if f.get("file") and not occupes:
+        raisons.append(f"{len(f['file'])} élément(s) restent dans la file sans pouvoir partir (dépendances)")
+    if not raisons:
+        raisons.append("aucun élément n'est en cours et la série n'est pas finie")
+    texte = (f"La série de « {f['nom']} » ne progresse plus : " + " ; ".join(raisons)
+             + ". « Relancer la série » la relit depuis le suivi ; sinon, envoyez un retour sur la tâche concernée.")
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": SERIE_ARRETEE, "fonctionnalite": fid,
+                                "texte": texte[:2000]})
+
+
+def _sur_serie_arretee(projet, demande, etat):
+    """« Relancer la série » : la décision est levée et la série est relue depuis le suivi au passage suivant."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande.get("decision")
+              and x["genre"] == SERIE_ARRETEE), None)
+    if d is None:
+        raise Refus("cette décision n'existe plus")
+    if demande.get("verdict") != RELANCER_SERIE:
+        raise Refus(f"réponse inconnue : {demande.get('verdict')}")
+    fid = d["fonctionnalite"]
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    elements = _m(etat, "elements")
+    for cle in [c for c, v in elements.items() if v["fid"] == fid and v["phase"] not in ("fait", "bloque")]:
+        del elements[cle]
+    _m(etat, "serie_perdue").pop(fid, None)
+    _terminer(projet, {"demande": demande["id"]}, "La série est relue depuis le suivi : chaque élément repart de là où "
+                                                  "il en est.")
+    return []
+
+
+# --- La fin d'une fonctionnalité : annoncée au Directeur (« Fonctionnalités terminées »), avec ses liens d'accès.
+
+LIVRABLES_A_LA_FIN = 10
+
+
+def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
+    """L'étape passe à « terminee » et la fin est notée pour le bureau de direction (`fin`, non bloquante, fermée par
+    « Vu ») : les livrables déclarés de la fonctionnalité (téléchargeables), le dernier lien d'accès d'un site rendu par
+    ses éléments, les éléments laissés de côté. Le coût se lit au bureau (`/api/couts`)."""
+    f = _fonc(projet, fid)
+    livrables = []
+    for d in reversed(f.get("documents") or []):
+        if d.get("livrable") is True and all(x["chemin"] != d["chemin"] for x in livrables):
+            livrables.append({"chemin": d["chemin"], "titre": d.get("titre") or d["chemin"].rsplit("/", 1)[-1]})
+    acces = None
+    for v in _m(etat, "elements").values():
+        a = (v.get("dernier_rapport") or {}).get("acces") if v["fid"] == fid else None
+        if a and rel.acces_ok(a):
+            acces = a
+    fin = {"livrables": list(reversed(livrables[:LIVRABLES_A_LA_FIN]))}
+    if acces:
+        fin["acces"] = {k: acces[k] for k in ("url", "description") if acces.get(k)}
+    if bloques:
+        fin["laisses"] = list(bloques)
+    lancer(projet, "fonctionnalite", {"id": fid, "etape": "terminee", "fin": fin})
+
+
+def _sur_fin_vue(projet, demande, etat):
+    """« Vu » sur l'avis de fin d'une fonctionnalité : l'avis se ferme, la fonctionnalité reste terminée."""
+    lancer(projet, "fonctionnalite", {"id": demande["fonctionnalite"], "fin_vue": True})
+    _terminer(projet, {"demande": demande["id"]}, "C'est noté.")
+    return []
+
+
+_SUR[SERIE_ARRETEE] = _sur_serie_arretee
+_SUR["fin_vue"] = _sur_fin_vue
 
 
 # --- Les jugements : leur décision revient ici.
@@ -3585,6 +3819,7 @@ def _apres_ecrire_methode(projet, o, ctx, etat):
 
 def _apres_apres_refus(projet, o, ctx, etat):
     fid, eid = ctx["fonctionnalite"], ctx["element"]
+    reprendre_la_serie(projet, etat, fid)
     v = _m(etat, "elements").get(f"{fid}/{eid}")
     if o["suite"] == "corriger":
         role = _role_production(projet, fid)

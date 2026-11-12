@@ -299,6 +299,29 @@ ajouté d'office.
 « Valider toutes les leçons » est un lot : une seule synchronisation du dépôt et un seul push pour tout le lot, chaque
 leçon gardant son résultat dans la réponse de sa demande.
 
+## La série après un redémarrage du moteur, et la fin d'une fonctionnalité
+
+**Relancer le moteur ne fige plus la série.** Le moteur garde en mémoire où en est chaque élément de la série ; cette
+mémoire se perd à chaque redémarrage, et les agents détachés finissent souvent pendant l'arrêt. Au démarrage (et dès
+qu'un agent rend son travail), chaque élément est donc **relu dans le suivi** : sa dernière étape faite, validée ou
+corrigée dit d'où il repart, sans rien refaire. Un retour sur une tâche (« Retour : … ») ou une demande à un agent ne
+compte pas comme une étape : l'élément continue après. L'élément du prototype est fait avec la méthode. Quand l'étape
+qui précède une validation a été rendue pendant l'arrêt, son compte rendu et ses fichiers sont relus dans le suivi et la
+validation est posée avec ce qu'il y a à vérifier ; l'étape n'est refaite que s'il n'y a rien du tout à montrer.
+
+**Une série ne reste jamais muette.** Une fonctionnalité en série sans aucune tâche ouverte, ni décision, ni agent au
+travail est signalée au bureau de direction, partie « Séries qui ne progressent plus » : « La série de « … » ne
+progresse plus : » suivi de la raison, élément par élément (par exemple une étape qui n'est plus dans le workflow).
+**« Relancer la série »** la fait relire depuis le suivi ; si elle ne repart toujours pas, la décision revient.
+
+**Une fonctionnalité terminée est annoncée.** Quand tous ses éléments sont faits (ou laissés de côté), son étape passe
+à « terminée » et le bureau de direction l'annonce en tête, partie **« Fonctionnalités terminées »** (non bloquante :
+elle ne compte pas dans les décisions qui vous attendent) : son nom, la date, son coût total (€, « ≈ % semaine », CO₂
+estimé, comme dans son panneau), puis les liens d'accès : **« Télécharger »** pour chaque livrable déclaré (un `.apk`
+s'installe depuis le téléphone, par Tailscale), **« Ouvrir le site »** quand un élément a rendu le lien d'un site qui
+tourne (relayé par le bureau au téléphone), et **« Ouvrir le catalogue »** si la fonctionnalité en a un. Les éléments
+laissés de côté sont nommés. **« Vu »** ferme l'avis ; la fonctionnalité reste terminée.
+
 ## Une nouvelle demande : genre et workflow
 
 Chaque « + Nouvelle fonctionnalité » est d'abord **classée par genre** (un petit appel de jugement, sur le modèle le

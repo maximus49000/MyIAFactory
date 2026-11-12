@@ -464,3 +464,53 @@ test("la forme d'avant (sans réponses par point) : renvoyer exige une remarque"
     {type: "valider_etape", decision: "v1", verdict: "renvoyer", texte: "Le menu est trop chargé."});
   assert.deepEqual(corpsValiderEtape(VALIDATION, "valider", "ignoré"), {type: "valider_etape", decision: "v1", verdict: "valider"});
 });
+
+// --- Fonctionnalités terminées et séries arrêtées.
+
+const {avisDeFin, texteCoutDeFin} = await import("../ui/decisions.js");
+
+const FIN = {date: "2026-11-12T20:00:00+01:00", vu: false, livrables: [{chemin: "build/jeu.apk", titre: "APK signé"}],
+  acces: {url: "http://127.0.0.1:5173/", description: "Le jeu"}, laisses: ["Sons"]};
+
+test("avisDeFin : livrables téléchargeables, site direct sur l'ordinateur et relayé au téléphone", () => {
+  const x = {fonctionnalite: "f1", ...FIN};
+  const a = avisDeFin(x, {hotePage: "127.0.0.1", projet: "p1"});
+  assert.deepEqual(a.livrables.map((l) => [l.titre, l.url]),
+    [["APK signé", "/api/telecharger?fonctionnalite=f1&chemin=build%2Fjeu.apk&projet=p1"]]);
+  assert.equal(a.acces.url, "http://127.0.0.1:5173/");
+  assert.deepEqual(a.laisses, ["Sons"]);
+  const t = avisDeFin(x, {hotePage: "100.64.0.2", projet: "p1"});
+  assert.equal(t.acces.url, "/apercu/p1/fin-f1/");
+  assert.deepEqual(avisDeFin({fonctionnalite: "f2"}), {livrables: [], acces: null, laisses: []});
+});
+
+test("texteCoutDeFin : le coût total, rien quand il n'est pas disponible", () => {
+  assert.match(texteCoutDeFin({disponible: true, total: 1.2, sans_prix: 0}), /^Coût : ≈ 1,20 €/);
+  assert.equal(texteCoutDeFin({disponible: false}), "");
+});
+
+test("bureau de direction : l'avis de fin (Vu) et la série arrêtée (Relancer la série)", async () => {
+  globalThis.fetch = async () => ({json: async () => ({disponible: true, total: 2, sans_prix: 0})});
+  const ouverts = [];
+  const etat = {agir: true, agents: [], fonctionnalites: [
+    {id: "f1", nom: "Casse-briques", etape: "terminee", catalogue: true, decisions: [], fin: FIN},
+    {id: "f2", nom: "Boutique", etape: "serie", decisions: []}],
+    decisions_projet: [{id: "s1", genre: "serie_arretee", texte: "La série de « Boutique » ne progresse plus : …",
+                        fonctionnalite: "f2"}]};
+  const {contenu, demandes} = rendre(etat, null, {ouvrirCatalogue: (id) => ouverts.push(id)});
+  const texte = contenu.textContent;
+  assert.match(texte, /Fonctionnalités terminées/);
+  assert.match(texte, /Casse-briques/);
+  assert.match(texte, /Télécharger : APK signé/);
+  assert.match(texte, /Ouvrir le site : Le jeu/);
+  assert.match(texte, /Laissés de côté : Sons/);
+  assert.match(texte, /Séries qui ne progressent plus/);
+  bouton(contenu, "Ouvrir le catalogue").auteurs.click[0]();
+  assert.deepEqual(ouverts, ["f1"]);
+  await bouton(contenu, "Vu").auteurs.click[0]();
+  await bouton(contenu, "Relancer la série").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "fin_vue", fonctionnalite: "f1"},
+                              {type: "serie_arretee", decision: "s1", verdict: "relancer"}]);
+  const vu = rendre({...etat, fonctionnalites: [{...etat.fonctionnalites[0], fin: {...FIN, vu: true}}], decisions_projet: []});
+  assert.doesNotMatch(vu.contenu.textContent, /Fonctionnalités terminées/);
+});

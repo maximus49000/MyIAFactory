@@ -24,7 +24,7 @@ ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "te
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
-                    "outil_agent", "accord_agent")
+                    "outil_agent", "accord_agent", "serie_arretee")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100

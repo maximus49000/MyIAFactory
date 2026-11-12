@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleLot} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -119,7 +119,21 @@ test("decisionsDirecteur : chaque entrée garde sa fonctionnalité", () => {
   assert.equal(d.genres[0].propose, "vitrine");
   assert.deepEqual(d.sessions.map((x) => [x.id, x.agent]), [["p2", "dev:1"]]);
   assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-    genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: []});
+    genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [], series: [], terminees: []});
+});
+
+test("decisionsDirecteur : fonctionnalités terminées pas encore vues et séries arrêtées", () => {
+  const fin = {date: "2026-11-12T20:00:00+01:00", vu: false, livrables: [{chemin: "build/jeu.apk", titre: "APK"}]};
+  const d = decisionsDirecteur({
+    fonctionnalites: [{id: "f1", nom: "Jeu", etape: "terminee", catalogue: true, decisions: [], fin},
+                      {id: "f2", nom: "Vu", etape: "terminee", decisions: [], fin: {...fin, vu: true}},
+                      {id: "f3", nom: "Sans avis", etape: "terminee", decisions: []},
+                      {id: "f4", nom: "En série", etape: "serie", decisions: []}],
+    decisions_projet: [{id: "s1", genre: "serie_arretee", texte: "La série ne progresse plus", fonctionnalite: "f4"}]});
+  assert.deepEqual(d.terminees.map((x) => [x.fonctionnalite, x.nom, x.catalogue, x.livrables.length]), [["f1", "Jeu", true, 1]]);
+  assert.deepEqual(d.series.map((x) => [x.id, x.fonctionnalite, x.nom]), [["s1", "f4", "En série"]]);
+  assert.deepEqual(demandeSerieArretee({id: "s1"}), {type: "serie_arretee", decision: "s1", verdict: "relancer"});
+  assert.deepEqual(demandeFinVue("f1"), {type: "fin_vue", fonctionnalite: "f1"});
 });
 
 test("demandeLecon : étage changé, inchangé", () => {

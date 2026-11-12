@@ -181,17 +181,32 @@ export async function preparerImage(fichier, moyens = moyensDuNavigateur()) {
 }
 
 // La ligne sous la discussion : l'agent écrit (l'orchestrateur tourne), ou on attend l'orchestrateur.
-export function ecrit(fonc, etat) {
+// Règle : une tâche active de la fonctionnalité (l'agent est au travail) → « <Prénom> est en train d'écrire… » ; la
+// demande pas encore prise par le moteur (`nonPrise`) → « En attente de l'orchestrateur » ; un agent qui va partir mais
+// attend (pause d'installation, charge) → « <Prénom> va répondre — <raison> » ; sans orchestrateur → « En attente de
+// l'orchestrateur » ; sinon l'agent va répondre. Rend {texte, actif} (actif : l'agent écrit, le point s'anime) ou null.
+export function ecritDetail(fonc, etat, nonPrise = false) {
   if (!fonc || fonc.attend_reponse !== true) return null;
-  if (etat?.orchestrateur_actif !== true) return "En attente de l'orchestrateur";
-  // Celui qui travaille sur la fonctionnalité : l'agent de sa tâche active la plus récente, sinon le dernier agent
-  // qui a parlé dans la discussion, sinon l'agent de cadrage.
-  const actives = (etat.taches || []).filter((t) => t.fonctionnalite === fonc.id && t.active && t.agent)
+  const taches = (etat?.taches || []).filter((t) => t.fonctionnalite === fonc.id)
     .sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
+  const prenomDe = (qui) => (etat?.agents || []).find((a) => a.id === qui)?.prenom;
+  const active = taches.find((t) => t.active && t.agent);
+  if (active && !nonPrise) return {texte: `${prenomDe(active.agent) || active.agent} est en train d'écrire…`, actif: true};
+  if (nonPrise) return {texte: "En attente de l'orchestrateur", actif: false};
+  // Celui qui va répondre : l'agent d'une tâche de la fonctionnalité, sinon le dernier agent qui a parlé, sinon le cadrage.
+  const retenue = taches.find((t) => typeof t.attente === "string" && t.attente.trim());
   const dernier = [...(fonc.discussion || [])].reverse().find((m) => m.auteur && m.auteur !== "utilisateur");
-  const qui = actives[0]?.agent || dernier?.auteur || fonc.agent_cadrage;
-  const prenom = (etat.agents || []).find((a) => a.id === qui)?.prenom;
-  return `${prenom || "L'agent de cadrage"} est en train d'écrire…`;
+  const qui = retenue?.agent || taches.find((t) => t.agent)?.agent || dernier?.auteur || fonc.agent_cadrage;
+  const prenom = prenomDe(qui) || "L'agent de cadrage";
+  const pause = etat?.pause_installation;
+  const raison = (typeof pause?.texte === "string" && pause.texte.trim()) || (retenue ? retenue.attente.trim() : "");
+  if (etat?.orchestrateur_actif !== true && !retenue) return {texte: "En attente de l'orchestrateur", actif: false};
+  if (raison) return {texte: `${prenom} va répondre — ${raison}`, actif: false};
+  return {texte: `${prenom} est en train d'écrire…`, actif: true};
+}
+
+export function ecrit(fonc, etat, nonPrise = false) {
+  return ecritDetail(fonc, etat, nonPrise)?.texte ?? null;
 }
 
 // La fonctionnalité apparue entre deux états dont le premier message est ce texte (sinon null).
@@ -1091,9 +1106,11 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   // On arrive sur le dernier message, pas en haut de la discussion.
   requestAnimationFrame(() => { discussion.scrollTop = discussion.scrollHeight; });
 
-  const phrase = ecrit(f, e) || (locaux.length ? ecrit({attend_reponse: true, agent_cadrage: f?.agent_cadrage}, e) : null);
-  if (phrase) {
-    const p = el("p", "ecrit", phrase);
+  // Un message envoyé que le relevé n'a pas encore repris : le moteur ne l'a pas pris.
+  const detail = locaux.length ? ecritDetail({id: f?.id, attend_reponse: true, agent_cadrage: f?.agent_cadrage}, e, true)
+                               : ecritDetail(f, e);
+  if (detail) {
+    const p = el("p", "ecrit" + (detail.actif ? " actif" : ""), detail.texte);
     p.setAttribute("aria-live", "polite");
     blocDiscussion.append(p);
   }

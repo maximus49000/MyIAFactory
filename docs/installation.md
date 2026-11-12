@@ -119,10 +119,13 @@ maquette et les étapes du cahier des charges, « Valider le cahier des charges 
 méthode et « Valider la méthode », et « Catalogue ». Au survol d'une image de la discussion : « Agrandir », ou « Plein écran » (une visionneuse qui passe d'une image à l'autre du message avec les flèches). En bas, « **Coût** » donne le coût estimé de la fonctionnalité depuis son début, tâche par tâche et modèle par modèle (d'après les usages du relevé, comme l'onglet Facturation) ; « **Documents** » range tout ce qui a été produit pour la fonctionnalité (images, maquettes, captures, méthode, rapports…) par étape, avec l'agent, la tâche et l'élément d'où chacun vient ; déclarez les dossiers que le bureau peut servir : `{"documents": {"racines": ["pieces", "captures"]}}`. Quand le cahier des charges attend votre verdict, la discussion se replie pour le laisser lire ; « Demander une correction » la rouvre pour écrire la correction. Le Directeur liste aussi les **réponses attendues** : chaque discussion où un agent attend votre réponse.
 
 Le bureau ne parle à aucune IA : votre message devient une demande `message` pour le projet, et la réponse de
-l'agent de cadrage n'apparaît qu'au relevé suivant. Tant qu'elle n'est pas là, la page affiche « <prénom> est en
-train d'écrire… » si l'orchestrateur tourne, sinon « En attente de l'orchestrateur ». « Tourne » se juge à la
-fraîcheur du chef (30 minutes par défaut) : une conversation orchestratrice fermée à l'instant compte encore comme
-active pendant ce délai. Dans la démo, les réponses sont
+l'agent de cadrage n'apparaît qu'au relevé suivant. Tant qu'elle n'est pas là, la page dit qui va répondre :
+« <prénom> est en train d'écrire… » (points qui pulsent) dès qu'une tâche de la fonctionnalité est active, que le
+chef soit en marche ou non ; « <prénom> va répondre — <raison> » quand l'agent attend (charge du poste, pause d'une
+installation d'outil) ; « En attente de l'orchestrateur » tant que votre message n'est pas repris par le relevé, ou si
+aucun orchestrateur ne tourne et qu'aucun agent n'est prêt. « Tourne » se juge à la
+fraîcheur du chef (30 minutes par défaut). Aucun format du relevé ni de l'état servi ne change : la page lit les
+champs déjà servis (`taches[].fonctionnalite/agent/active/attente`, `agents[].prenom`, `pause_installation`). Dans la démo, les réponses sont
 fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
 méthode à la série.
 

@@ -515,7 +515,9 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .message-local { opacity: 0.75; }
 .message-tete { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #6d6980; }
 .message-texte { white-space: pre-wrap; overflow-wrap: anywhere; }
-.ecrit { margin: 0 0 8px; font-style: italic; color: #6d6980; }
+.ecrit { margin: 0 0 8px; font-style: italic; color: #6d6980; overflow-wrap: anywhere; }
+.ecrit.actif { animation: creation-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ecrit.actif { animation: none; } }
 .saisie-discussion textarea { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; resize: vertical; }
 .saisie-erreur { margin: 4px 0; color: #b3261e; font-size: 12.5px; }
 .vignette { position: relative; }

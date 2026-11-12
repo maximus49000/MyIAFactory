@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {ETAPES_PARCOURS, bandeau, demandeNouvelle, demandeMessage, demandeCahier, demandeMethode,
-        verifierPieces, lireImage, ecrit, nouvelleApparue, genreEtWorkflow, libelleEtape,
+        verifierPieces, lireImage, ecrit, ecritDetail, nouvelleApparue, genreEtWorkflow, libelleEtape,
         documentsParEtape} from "../ui/fonctionnalite.js";
 
 const Mo = 1024 * 1024;
@@ -75,6 +75,28 @@ test("ecrit : celui qui travaille sur la fonctionnalité, pas toujours l'agent d
   assert.equal(ecrit(f2, {agents, orchestrateur_actif: true, taches: []}), "Noé est en train d'écrire…");
   // Personne d'autre : l'agent de cadrage.
   assert.equal(ecrit({...f, discussion: []}, {agents, orchestrateur_actif: true}), "Camille est en train d'écrire…");
+});
+
+test("ecrit : l'agent au travail écrit même si le chef est inactif ; l'attente est dite", () => {
+  const agents = [{id: "lyra", prenom: "Lyra"}, {id: "noe", prenom: "Noé"}];
+  const f = {id: "f1", agent_cadrage: "lyra", attend_reponse: true, discussion: [{auteur: "utilisateur"}]};
+  const t = (extra = {}) => ({id: "t1", agent: "lyra", fonctionnalite: "f1", active: true, maj: "2026-11-12T10:00:00", ...extra});
+  // Tâche active, chef sans nouvelles : Lyra écrit.
+  const travail = {agents, orchestrateur_actif: false, taches: [t()]};
+  assert.equal(ecrit(f, travail), "Lyra est en train d'écrire…");
+  assert.equal(ecritDetail(f, travail).actif, true);
+  // Demande pas encore prise par le moteur : l'orchestrateur, même si une tâche est active.
+  assert.equal(ecrit(f, travail, true), "En attente de l'orchestrateur");
+  assert.equal(ecritDetail(f, travail, true).actif, false);
+  // Agent qui attend la charge, ou une pause d'installation.
+  const charge = {agents, orchestrateur_actif: true, taches: [t({active: false, attente: "La charge est à 92 %."})]};
+  assert.equal(ecrit(f, charge), "Lyra va répondre — La charge est à 92 %.");
+  const pause = {agents, orchestrateur_actif: true, pause_installation: {texte: "Installation de Godot en cours."}, taches: []};
+  assert.equal(ecrit(f, pause), "Lyra va répondre — Installation de Godot en cours.");
+  assert.equal(ecritDetail(f, pause).actif, false);
+  // Une tâche d'une autre fonctionnalité ne compte pas ; rien n'est attendu : rien.
+  assert.equal(ecrit(f, {agents, orchestrateur_actif: false, taches: [t({fonctionnalite: "f2"})]}), "En attente de l'orchestrateur");
+  assert.equal(ecrit({...f, attend_reponse: false}, travail), null);
 });
 
 test("nouvelleApparue", () => {

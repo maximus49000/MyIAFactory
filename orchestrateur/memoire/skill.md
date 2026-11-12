@@ -309,3 +309,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Un contrôle d'environnement de signature liste les clés par chemin et taille, vérifie la présence des variables secrètes sans afficher leurs valeurs, et ne les ouvre pas.
+
+## S52 — Faire tourner dès le premier élément un contrôle qui parcour
+Rôles : designer, dev
+Date : 2026-11-12
+
+Faire tourner dès le premier élément un contrôle qui parcourt tous les fichiers de valeurs et signale tout chiffre écrit en dur dans un texte à trous ; il trouve aussi les oublis des éléments déjà validés.

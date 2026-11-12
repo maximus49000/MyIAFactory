@@ -32,6 +32,7 @@ from moteur import accord_outil, agents, cloud, detache, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
 from bureau import releve as rel
+from bureau import reglages as reglages_du_bureau
 from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
@@ -101,6 +102,7 @@ class Projet:
         self._feu_vert = feu_vert
         self._mesure = mesure
         self.pause_globale = None
+        self.mesure_commune = None        # posée par le moteur : projet -> mesure (une seule par tour pour tout le bureau)
         self.installations_a_part = False
         self.cloud_max = cloud_max        # sessions cloud en même temps (réglage `agents_cloud_max`)
         self._prerequis = prerequis       # remplace `cloud.prerequis` (essais) : rien -> raison | None
@@ -133,6 +135,23 @@ class Projet:
             return {"feu_vert": bool(self._feu_vert()), "charge": None, "plafond": None}
         if self._mesure is not None:
             return self._mesure()
+        if self.mesure_commune is not None:      # une seule mesure par tour du moteur, pour tous les projets
+            return self.mesure_commune(self)
+        return self.mesurer()
+
+    def plafond_charge(self):
+        """Le plafond de charge de CE projet (`charge_max` de ses réglages), ou `None` s'il n'est pas lisible."""
+        try:
+            reglages = fa.lire(self.factory)["reglages"]
+            if reglages is None:
+                return None
+            valeur = reglages_du_bureau.charger(reglages)["charge_max"]
+        except Exception:
+            return None
+        return valeur if isinstance(valeur, int) and not isinstance(valeur, bool) else None
+
+    def mesurer(self):
+        """La vraie mesure : un sous-processus `lancer.py charge` (≈ 5 s)."""
         try:
             r = lancer(self, "charge")
         except Refus:
@@ -2307,8 +2326,10 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
         if local["agent"]:
             return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
-    candidats = [a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]
-                 and (not modele or a["modele"] == modele)]
+    # Un agent cloud du rôle prend la tâche même si son modèle n'est pas celui du lot (le Directeur l'a recruté avec ce
+    # modèle) : celui du même modèle d'abord, sinon un autre.
+    candidats = sorted((a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]),
+                       key=lambda a: 0 if (not modele or a["modele"] == modele) else 1)
     if not clouds or not candidats:
         return None
     raison = projet.cloud_raison()

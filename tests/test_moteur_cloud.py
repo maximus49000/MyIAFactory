@@ -347,6 +347,16 @@ class Agents(Base):
         self.assertNotIn(".factory/rapports", local)
         self.assertIn("fin_cloud", dir(depart))
 
+    def test_agent_cloud_d_un_autre_modele_que_le_lot_prend_la_tache(self):
+        """Essai réel : des designers cloud recrutés en Opus restaient inemployés parce que le lot était en Sonnet."""
+        (self.dossier / "fiches" / "cam.md").write_text(FICHE_CLOUD.format(cle="dev-c1").replace(
+            "Modèle : Sonnet", "Modèle : Opus"), encoding="utf-8")
+        t = self.tache()
+        court = regles._etat(self.projet)
+        tache = next(x for x in court["taches"] if x["id"] == t)
+        self.assertEqual(regles._choisir_agent(self.projet, regles.nouvel_etat(), court, tache, "Sonnet",
+                                               local_ok=False, cloud_ok=True), "dev-c1")
+
     def test_depart_d_un_lot_cloud_nomme_le_rapport_de_la_premiere_tache(self):
         a, b = self.tache("A"), self.tache("B")
         m = self.ok("depart", entree={"agent": "dev-c1", "taches": [a, b]})["message"]

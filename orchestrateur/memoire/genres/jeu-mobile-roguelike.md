@@ -92,3 +92,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Pour un jeu à musique en boucle, générer sons et musiques par un script en Python pur (module wave, oscillateurs, bruit) évite toute licence externe, et un script de vérification contrôle format, niveau, écrêtage et continuité de boucle.
+
+## G16 — Pour des icônes de carte de progression, doubler la couleur
+Rôles : artiste
+Date : 2026-11-12
+
+Pour des icônes de carte de progression, doubler la couleur par une silhouette distincte (pointes, anneau lisse, taille) garde les types de nœuds lisibles à petite taille et pour les daltoniens.

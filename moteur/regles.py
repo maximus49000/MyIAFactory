@@ -745,7 +745,7 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
         poste = _verifier_poste(projet, o["environnement"])
         briefs = dict(o["briefs"])
         if environnement.a_installer(poste):       # un agent pour installer ce qui manque
-            installateur, brief = _agent_d_installation(projet, nouveaux)
+            installateur, brief = _agent_d_installation(projet, nouveaux, flux)
             if installateur:
                 nouveaux.append(installateur)
                 briefs[ROLE_ENVIRONNEMENT] = brief
@@ -838,19 +838,21 @@ def _verifier_poste(projet, outils):
     return projet.verifier_environnement(list(outils)) if outils else []
 
 
-def _agent_d_installation(projet, nouveaux):
+def _agent_d_installation(projet, nouveaux, flux):
     """L'agent qui installe les outils du poste : sa fiche ouvre les outils d'installation (ajoutés à l'acceptation).
-    Rien si un agent du rôle existe déjà (il reçoit alors les nouvelles règles) ; sinon une fiche et un brief."""
+    Rien si un agent du rôle existe déjà (il reçoit alors les nouvelles règles) ; sinon une fiche et un brief. Son
+    service : celui de la première étape du workflow (pas le premier du projet, souvent la facturation)."""
     fac = _factory(projet)
     try:
         fiches_ = fi.lire_toutes(fac["fiches"])
     except (fi.FicheInvalide, OSError):
         fiches_ = []
-    if any(a["role"] == ROLE_ENVIRONNEMENT for a in fiches_ + nouveaux) or not fac["services"]:
+    service = flux[0]["service"] if flux else (fac["services"][0]["id"] if fac["services"] else None)
+    if any(a["role"] == ROLE_ENVIRONNEMENT for a in fiches_ + nouveaux) or not service:
         return None, None
     pris = {a["cle"] for a in fiches_} | {a["cle"] for a in nouveaux}
     cle = next(c for c in (f"env-{n}" for n in range(1, 100)) if c not in pris)
-    agent = {"cle": cle, "role": ROLE_ENVIRONNEMENT, "service": fac["services"][0]["id"], "modele": "Sonnet",
+    agent = {"cle": cle, "role": ROLE_ENVIRONNEMENT, "service": service, "modele": "Sonnet",
              "lieu": "local", "justification": "Installer et vérifier les outils, avec soin.", "fable_suggere": False,
              "texte": "Tu installes les outils du poste dont le workflow a besoin, puis tu vérifies chacun."}
     brief = ("Tu installes les outils du poste demandés par une tâche « Mise en place de l'environnement ». Installe "

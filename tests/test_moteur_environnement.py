@@ -158,6 +158,13 @@ class Poste(parcours.AvecParcours):
         self.assertEqual(self.ok("releve")["decisions_projet"][0]["organisation"]["environnement"][0]["etat"],
                          "a_installer")
 
+    def test_l_installateur_rejoint_le_service_de_la_premiere_etape(self):
+        """Pas le premier service du projet (souvent la facturation, dans un projet créé au bureau) : celui qui ouvre le
+        workflow."""
+        o = self.vers_le_poste()["organisation"]
+        self.assertEqual([s["id"] for s in o["services"]][0], "metier")
+        self.assertEqual(next(a for a in o["agents"] if a["role"] == "environnement")["service"], "dev")
+
     def test_tout_en_place_pas_de_tache_d_installation(self):
         decision = self.vers_le_poste("en_place")
         self.assertIn("Déjà en place sur le poste : JDK 21", decision["texte"])

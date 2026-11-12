@@ -27,3 +27,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Produire les visuels pixel art par un script versionné évite les licences externes et permet de régénérer tout le lot quand la palette change.
+
+## S5 — Quand aucune approbation n'est possible, mets les enchaîneme
+Rôles : artiste, dev
+Date : 2026-11-12
+
+Quand aucune approbation n'est possible, mets les enchaînements de commandes dans un script lancé par une seule commande.

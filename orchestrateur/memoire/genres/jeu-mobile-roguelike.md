@@ -188,3 +188,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export Android signé, localiser l'outil de signature dans le SDK plutôt que supposer qu'il est sur le PATH, puis vérifier la signature de l'APK (schémas v2/v3).
+
+## G32 — Pour contrôler qu'aucun mot de passe n'est écrit dans un fic
+Rôles : livreur
+Date : 2026-11-12
+
+Pour contrôler qu'aucun mot de passe n'est écrit dans un fichier livré, afficher seulement le nom de la clé concernée et jamais sa valeur.

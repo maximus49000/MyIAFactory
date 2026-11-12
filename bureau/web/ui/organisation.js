@@ -6,6 +6,7 @@
 import {el} from "./dom.js";
 import {euros, tokens} from "./texte.js";
 import {blocOutil} from "./outils.js";
+import {etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -15,7 +16,8 @@ export function libelleCout(cout) {
   const t = liste(cout?.tokens);
   const jetons = t.length === 2 ? `${tokens(t[0])} à ${tokens(t[1])} tokens` : "tokens inconnus";
   const e = liste(cout?.euros);
-  return `${jetons}, ${e.length === 2 ? `${euros(e[0])} à ${euros(e[1])}` : "prix inconnu"}`;
+  const texte = `${jetons}, ${e.length === 2 ? `${euros(e[0])} à ${euros(e[1])}` : "prix inconnu"}`;
+  return e.length === 2 ? avecPart(texte, etiquettePlage(e[0], e[1])) : texte;
 }
 
 // Les colonnes que le projet avait avant : celles de son workflow principal (une colonne d'un workflow de
@@ -181,7 +183,7 @@ export function rendreOrganisation(ctx, d, bouton) {
   }
   const environnement = blocEnvironnement(ctx, d);
   if (environnement.bloc) li.append(environnement.bloc);
-  li.append(el("div", "lecon-meta", "Coût estimé : " + r.cout));
+  li.append(marquerPart(el("div", "lecon-meta", "Coût estimé : " + r.cout)));
   const fable = casesFable(agents);
   if (fable.bloc) li.append(fable.bloc);
   if (ctx.etat.agir) {

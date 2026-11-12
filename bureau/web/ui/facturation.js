@@ -5,6 +5,7 @@ import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
 import {challengeDe} from "./actions.js";
 import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
+import {etiquettePart, marquerPart} from "./abonnement.js";
 
 const MAX_TITRE = 90;
 const MAX_DISCUSSIONS = 200;  // au-delà, la liste dit combien elle n'en montre pas
@@ -128,6 +129,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   const total = el("div", "cout-total", coutEnClair(s || {total: 0}));
   if (donnees.prix_du) total.title = `Prix du ${dateFr(donnees.prix_du) || donnees.prix_du}`;
   conteneur.append(el("div", "carte-sous-titre", `Coût estimé · ${libellePeriode(periode)}`), total);
+  const part = etiquettePart(s?.total);   // la part de l'abonnement ; « en cours d'étalonnage » tant que le ratio manque
+  if (part) conteneur.append(marquerPart(el("div", "cout-part", part)));
   conteneur.append(el("p", "note", "Estimation d'après les tokens et les prix des modèles, jamais une facture."));
   if (donnees.message) conteneur.append(el("p", "avertissement", donnees.message));
   if ((s?.sans_prix || []).length) {  // ce qui manque aux euros de CE service

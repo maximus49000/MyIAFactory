@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from bureau import prix, serveur
+from bureau import abonnement, prix, serveur
 from tests import copie_demo
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -46,6 +46,8 @@ class AvecServeur(unittest.TestCase):
         self.tmp = Path(self._t.name)
         copie_demo(self.tmp / "demo")
         self.regl = self.tmp / "demo" / "reglages.json"
+        abonnement.DOSSIER = self.tmp / "commun"   # jamais le vrai dossier commun
+        self.addCleanup(setattr, abonnement, "DOSSIER", None)
         self.demarrer()
 
     def demarrer(self, source=None):
@@ -263,6 +265,20 @@ class TestServeur(AvecServeur):
         r, data = self.image("images/faux.png")
         self.assertEqual(r.status, 404)
         self.assertNotIn(b"secret", data)
+
+    def test_etat_porte_les_jauges_d_abonnement(self):
+        sans = self.json("/api/etat")["abonnement"]
+        self.assertIsNone(sans["instantane"])                       # « pas encore mesuré »
+        self.assertEqual(sans["pourcent_par_euro"], {"five_hour": None, "seven_day": None})
+        for i in range(6):                                          # 3 points par dollar, six appels d'un dollar
+            abonnement.noter({"seven_day": {"pourcent": 3.0 * i, "remise": 5000}, "t": 100 + i}, 1.0)
+        self.p.table_prix.dernier_taux = lambda: 0.8                # 0,8 € le dollar
+        regl, _ = self.p.reglages()
+        ab = self.p._abonnement(regl)
+        self.assertEqual(ab["instantane"]["seven_day"]["pourcent"], 15.0)
+        self.assertAlmostEqual(ab["pourcent_par_euro"]["seven_day"], 3.0 / 0.8)
+        self.assertIsNone(ab["pourcent_par_euro"]["five_hour"])
+        self.assertIsNone(self.p._abonnement({"moteur": {"couche": "api"}}))   # la couche API n'use pas l'abonnement
 
     def test_etat_images_ok(self):
         self.assertIs(self.json("/api/etat")["images_ok"], True)  # la démonstration déclare des racines d'images

@@ -61,7 +61,8 @@ class ClaudeP(unittest.TestCase):
         argv = vu.appels[0]["argv"]
         self.assertEqual(argv[1:2], ["-p"])
         self.assertEqual(argv[argv.index("--model") + 1], "sonnet")
-        self.assertEqual(argv[argv.index("--output-format") + 1], "json")
+        self.assertEqual(argv[argv.index("--output-format") + 1], "stream-json")
+        self.assertIn("--verbose", argv)
         self.assertEqual(argv[argv.index("--tools") + 1], "")
         self.assertEqual(argv[argv.index("--setting-sources") + 1], "")
         for option in ("--system-prompt-file", "--strict-mcp-config", "--disable-slash-commands",

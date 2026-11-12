@@ -45,6 +45,8 @@ def cumuler(usages):
         t = par_modele.setdefault(u["modele"], {**USAGE_VIDE, "modele": u["modele"]})
         for c in ("entree", "sortie", "cache_lecture", "cache_ecriture"):
             t[c] += u[c]
+        if u.get("abonnement") and "abonnement" not in t:   # l'instantané du début du premier appel est gardé
+            t["abonnement"] = u["abonnement"]
     return list(par_modele.values())
 
 

@@ -41,6 +41,7 @@ Pour essayer la démo sans rien brancher : `py -3.12 lancer.py serveur --bureau 
 - **Création d'un projet avec le chef** : depuis le bureau, en deux fenêtres (informations, puis échange de quelques tours), avec brouillons à reprendre et coût affiché ; le projet naît avec son workflow, ses services, ses agents et son genre.
 - **Validations du Directeur** : des étapes du workflow où l'élément attend « Valider » ou « Renvoyer avec une remarque ».
 - **Outils du poste** : vérification des versions, objectif, lien officiel et mode opératoire de chaque outil manquant, installation en autonomie uniquement sur clic.
+- **Jauges d'abonnement Claude** : deux jauges (fenêtre de 5 h, semaine) dans la barre du haut, et à côté de chaque coût en euros la part estimée de l'abonnement (≈ x % semaine), étalonnée sur les appels réels.
 - **Partenaires** : catalogue de services extérieurs (voix, images, 3D, recherche…), connexions, quotas, règles d'usage et coûts, tous facultatifs.
 - **Mémoire à trois étages et leçons** : ce qui est appris se garde au niveau du projet, du genre ou de la skill, après validation de l'utilisateur.
 - **Lots par modèle et choix du modèle** : un modèle fait d'une traite ce qu'il peut enchaîner ; la montée de modèle se décide, Fable seulement sur accord.

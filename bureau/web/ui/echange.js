@@ -7,6 +7,7 @@
 import {el} from "./dom.js";
 import {blocOutil} from "./outils.js";
 import {verifierCreation, motsInterdits} from "./verifs.js";
+import {etiquettePart, etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
 
 export const DELAI_RELECTURE_MS = 2500;
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -81,7 +82,8 @@ const milliers = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "
 export function texteCout(cout) {
   if (!cout) return "";
   if (typeof cout.euros === "number") {
-    return "Coût de l'échange : " + (cout.euros > 0 && cout.euros < 0.005 ? "moins de 0,01 €" : euros(cout.euros) + " €");
+    const montant = cout.euros > 0 && cout.euros < 0.005 ? "moins de 0,01 €" : euros(cout.euros) + " €";
+    return avecPart("Coût de l'échange : " + montant, etiquettePart(cout.euros));
   }
   if (cout.tokens > 0) return `Coût de l'échange : ${milliers(cout.tokens)} tokens (prix inconnu)`;
   return "";
@@ -153,6 +155,8 @@ export function lignesProposition(p) {
   if (c && Array.isArray(c.tokens)) {
     let t = `Coût estimé d'un élément passé par ce workflow : ${milliers(c.tokens[0])} à ${milliers(c.tokens[1])} tokens`;
     t += Array.isArray(c.euros) ? `, soit ${euros(c.euros[0])} à ${euros(c.euros[1])} €.` : " (prix inconnu).";
+    const part = Array.isArray(c.euros) ? etiquettePlage(c.euros[0], c.euros[1]) : "";
+    if (part) t = t.replace(/\.$/, "") + ` (${part}).`;
     lignes.push(t);
   }
   return lignes;
@@ -192,13 +196,18 @@ export function lignesBrouillons(liste) {
     if (b.tours > 0) morceaux.push(b.tours === 1 ? "1 tour" : `${b.tours} tours`);
     if (b.tour === "en_cours") morceaux.push("le chef réfléchit (en cours)");
     if (b.tour === "interrompu") morceaux.push("tour interrompu");
-    if (typeof b.euros === "number") morceaux.push(euros(b.euros) + " €");
+    if (typeof b.euros === "number") {
+      morceaux.push(euros(b.euros) + " €");
+      const part = etiquettePart(b.euros, {court: true});
+      if (part) morceaux.push(part);
+    }
     return {id: b.id, titre: plein(b.nom) ? b.nom : "Projet sans nom", detail: morceaux.join(" · ")};
   });
 }
 
 export function texteAbandonnes(abandonnes) {
-  return typeof abandonnes?.euros === "number" && abandonnes.euros > 0 ? `Échanges abandonnés : ${euros(abandonnes.euros)} €` : "";
+  return typeof abandonnes?.euros === "number" && abandonnes.euros > 0
+    ? avecPart(`Échanges abandonnés : ${euros(abandonnes.euros)} €`, etiquettePart(abandonnes.euros, {court: true})) : "";
 }
 
 // Depuis une décision « cette demande n'est pas du genre du projet », le formulaire actuel (projet vide) reste.
@@ -303,7 +312,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const corps = [el("h2", "", "Nouveau projet"), el("p", "lecon-meta", "Des projets sont en cours de définition avec le chef. Reprenez-en un, ou commencez-en un nouveau.")];
     for (const l of lignesBrouillons(r.brouillons)) {
       const carte = el("div", "creation-brouillon");
-      carte.append(el("strong", "", l.titre), el("span", "lecon-meta", l.detail));
+      carte.append(el("strong", "", l.titre), marquerPart(el("span", "lecon-meta", l.detail)));
       const rangee = el("div", "lecon-boutons");
       const reprendre = bouton("Reprendre");
       reprendre.addEventListener("click", () => reprendreBrouillon(l.id));
@@ -321,7 +330,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
       corps.push(carte);
     }
     const total = texteAbandonnes(r.abandonnes);
-    if (total) corps.push(el("p", "lecon-meta", total));
+    if (total) corps.push(marquerPart(el("p", "lecon-meta", total)));
     const rangee = el("div", "lecon-boutons");
     const nouveau = bouton("Nouveau projet");
     nouveau.addEventListener("click", () => { etat = {ecran: "infos", brouillon: null, message: ""}; afficher(); });
@@ -419,7 +428,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const flux = el("div", "creation-echange");
     for (const m of v.messages) flux.append(el("div", "creation-message " + (m.auteur === "chef" ? "chef" : "utilisateur"), m.texte));
     corps.push(flux);
-    const cout = el("p", "lecon-meta creation-cout", v.cout);
+    const cout = marquerPart(el("p", "lecon-meta creation-cout", v.cout));
     corps.push(cout);
     if (v.enCours) {
       const attente = el("p", "creation-attente", texteAttente(attenteDepuis ? (Date.now() - attenteDepuis) / 1000 : 0));
@@ -502,7 +511,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
   function blocProposition(b, p) {
     const sortie = [el("h3", "creation-sous-titre", "La proposition du chef")];
     sortie.push(el("p", "creation-message chef", p.message || ""));
-    sortie.push(el("pre", "creation-proposition", lignesProposition(p).join("\n")));
+    sortie.push(marquerPart(el("pre", "creation-proposition", lignesProposition(p).join("\n"))));
     const manquants = outilsManquants(p);
     if (manquants.length) {
       const bloc = el("div", "creation-outils");

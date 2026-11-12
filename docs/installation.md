@@ -411,6 +411,14 @@ Vos valeurs ne sont jamais réécrites. Le chef s'appelle « Chef » tant qu'on 
 
   > Avant de lancer une étape locale, exécute `py -3.12 <chemin du bureau>/lancer.py charge --reglages <chemin>/reglages.json`. Si le code de retour est 1, attends une minute et recommence ; ne lance l'étape que sur le code 0. Les étapes cloud ne sont pas concernées.
 
+## Les jauges d'abonnement et la part estimée
+
+- **Les jauges** de la barre du haut (« 5 h » et « Semaine ») montrent le pourcentage de l'abonnement Claude, l'heure de remise à zéro (heure locale) et l'âge de la mesure ; orange à 80 %, rouge à 95 %. Elles viennent de la ligne `rate_limit_event` de `claude -p --output-format stream-json --verbose` et sont gardées dans `~/MyIAFactory/abonnement.json` (rien tant qu'aucun appel n'a eu lieu ; rien du tout avec la couche API).
+- **Ces % sont ceux du compte** : ils comptent aussi vos autres sessions Claude (conversations Claude Code comprises), pas seulement ce que fait le bureau.
+- **La part estimée** (« ≈ 2 % semaine » à côté d'un coût en euros) convertit un coût en pourcentage. Chaque appel ajoute son instantané et son coût à `~/MyIAFactory/abonnement-historique.jsonl` ; sur une même fenêtre (même remise à zéro), dès que le compteur a monté d'au moins 2 points, on note « points gagnés ÷ dollars dépensés par nos appels » (une mesure).
+- **Prudence** : vos autres sessions font aussi monter le compteur, chaque mesure est donc un majorant. L'estimation est la médiane de la moitié la plus basse des mesures, d'au moins 3 mesures ; en dessous, « part estimée : en cours d'étalonnage ».
+- La part est toujours approximative (infobulle : « estimation : les % du compte comptent aussi vos autres sessions Claude »).
+
 ## Le bureau sur le téléphone
 
 Le bureau s'ouvre au téléphone **sans rien exposer sur Internet** : ni tunnel public, ni hébergement. L'ordinateur

@@ -404,7 +404,8 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
             code, r = lancer("usage", {"modele": u["modele"], "agent": outil.AGENT_ORCHESTRATEUR,
                                        "etape": "orchestration", "entree": u["entree"], "sortie": u["sortie"],
                                        "cache_lecture": u.get("cache_lecture", 0),
-                                       "cache_ecriture": u.get("cache_ecriture", 0)})
+                                       "cache_ecriture": u.get("cache_ecriture", 0),
+                                       **({"abonnement": u["abonnement"]} if u.get("abonnement") else {})})
         except Exception:
             code = 1
         if code != 0:

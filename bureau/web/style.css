@@ -161,6 +161,24 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .charge-valeur { min-width: 110px; white-space: nowrap; }
 .charge.depasse .charge-valeur { color: #b6401c; }
 
+/* --- Les jauges de l'abonnement Claude (5 h, semaine) : orange à 80 %, rouge à 95 %. --- */
+.jauges { flex: none; display: flex; align-items: center; gap: 12px; font-size: 12px; cursor: default; }
+.jauges[hidden], .jauges-vide[hidden], .jauge[hidden] { display: none; }
+.jauges-vide { font-weight: 700; color: #6d6980; white-space: nowrap; }
+.jauge { --ton: #3f9d5a; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.jauge[data-ton="attention"] { --ton: #d9962b; }
+.jauge[data-ton="alerte"] { --ton: #d65a31; }
+.jauge[data-ton="inconnu"] { --ton: #8a8396; }
+.jauge-tete { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.jauge-nom { white-space: nowrap; }
+.jauge-piste { width: 54px; height: 8px; border-radius: 999px; background: #e6dfd2; overflow: hidden; flex: none; }
+.jauge-plein { display: block; height: 100%; background: var(--ton); transition: width 0.6s ease, background 0.3s; }
+.jauge-valeur { min-width: 34px; text-align: right; color: var(--ton); white-space: nowrap; }
+.jauge[data-ton="attention"] .jauge-valeur, .jauge[data-ton="alerte"] .jauge-valeur { filter: brightness(0.8); }
+.jauge-detail { font-size: 11px; color: #6d6980; white-space: nowrap; }
+/* La part estimée d'un coût : approximative, donc discrète. */
+.cout-part { font-size: 12px; color: #6d6980; cursor: help; }
+
 /* --- Boutons de la factory --- */
 .barre-actions { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .barre-actions:empty { display: none; }

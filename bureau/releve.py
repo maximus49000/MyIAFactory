@@ -11,6 +11,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import abonnement as modabonnement
 from .statuts import TRES_ANCIEN, lire_date
 
 MAX_SERVICES = 8
@@ -1197,6 +1198,12 @@ def _usage_normalise(u):
         u["estime"] = u.get("estime") is True
         return u
     u.setdefault("etape", None)
+    if u.get("abonnement") is not None:   # facultatif : un instantané mal formé est ignoré, il n'invalide pas le relevé
+        ab = modabonnement.valider(u["abonnement"])
+        if ab:
+            u["abonnement"] = ab
+        else:
+            u.pop("abonnement")
     for champ in ("cache_lecture", "cache_ecriture"):
         if u.get(champ) is None:
             u[champ] = 0

@@ -1292,6 +1292,35 @@ def _usage_cumule_d_un_lot(s, usages, lot, cumul, tache, modele, agent, compteur
     return {"id": u["id"]}
 
 
+def _abonnement_de(e):
+    """L'instantané d'abonnement noté avec un usage (facultatif) : bien formé, ou ignoré (jamais un refus)."""
+    ab = e.get("abonnement")
+    if not isinstance(ab, dict):
+        return None
+
+    def nombre(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
+
+    sortie = {}
+    for nom in ("five_hour", "seven_day"):
+        f = ab.get(nom)
+        if (isinstance(f, dict) and nombre(f.get("pourcent")) and 0 <= f["pourcent"] <= 100
+                and nombre(f.get("remise")) and f["remise"] > 0):
+            sortie[nom] = {"pourcent": round(float(f["pourcent"]), 1), "remise": int(f["remise"])}
+    if not sortie or not nombre(ab.get("t")) or ab["t"] <= 0:
+        return None
+    sortie["t"] = int(ab["t"])
+    return sortie
+
+
+def _poser_abonnement(usages, ids, ab):
+    """L'instantané de l'appel suit les lignes d'usage nées de cet appel (le premier vu est gardé)."""
+    if ab:
+        for u in usages:
+            if u["id"] in ids:
+                u.setdefault("abonnement", ab)
+
+
 def cmd_usage(ctx, e):
     """Note les tokens d'une exécution d'agent (pour la facturation du bureau). Les compteurs d'un même `id` sont des
     cumuls : republier l'`id` avec des nombres plus grands, tant que l'exécution continue. Quand seul un `total` est
@@ -1320,11 +1349,13 @@ def cmd_usage(ctx, e):
         if lot is not None and tache is None:
             r = _usage_d_un_lot(s, usages, lot, modele, agent, compteurs, "total" in e, texte(e, "etape", obligatoire=False))
             _noter_genres_des_usages(ctx, s, usages, r["ids"])
+            _poser_abonnement(usages, r["ids"], _abonnement_de(e))
             return r
         if lot is not None and e.get("id") is not None:
             r = _usage_cumule_d_un_lot(s, usages, lot, e["id"], tache, modele, agent, compteurs, "total" in e,
                                        texte(e, "etape", obligatoire=False))
             _noter_genres_des_usages(ctx, s, usages, [r["id"]])
+            _poser_abonnement(usages, [r["id"]], _abonnement_de(e))
             return r
         if e.get("id") is not None:
             u = next((x for x in usages if x["id"] == e["id"]), None)
@@ -1336,6 +1367,7 @@ def cmd_usage(ctx, e):
         u.update({"agent": agent, "tache": tache, "modele": modele, "entree": entree, "sortie": sortie, **caches,
                   "estime": "total" in e})
         _noter_genre_de_l_usage(ctx, s, u, su.tache(s, tache) if tache else None)
+        _poser_abonnement(usages, [u["id"]], _abonnement_de(e))
         if lot is not None:
             u["lot"] = lot
         etape = texte(e, "etape", obligatoire=False)
@@ -1586,7 +1618,8 @@ def construire_releve(ctx):
                    **({"etape": u["etape"]} if u.get("etape") else {}),
                    **({"genre_fonctionnalite": u["genre_fonctionnalite"]} if u.get("genre_fonctionnalite") else {}),
                    **({"lot": u["lot"]} if u.get("lot") else {}),
-                   **({"reparti": u["reparti"]} if u.get("reparti") else {})}
+                   **({"reparti": u["reparti"]} if u.get("reparti") else {}),
+                   **({"abonnement": u["abonnement"]} if u.get("abonnement") else {})}
                   for u in (s.get("usage") or [])[-USAGES_AU_RELEVE:]]
     partenaires = _releve_partenaires(ctx)
     if partenaires is not None:

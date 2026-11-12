@@ -8,6 +8,7 @@ import {urlProjet, livrables, projetCourant, memoriser, optionsProjets, ENTREE_N
 import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 import {creerConso} from "./conso.js";
+import {creerJauges, definirAbonnement} from "./abonnement.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -56,8 +57,9 @@ export function creerBarre(entete, bandeau) {
   const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
   boutonTelephone.type = "button";
   boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
+  const jauges = creerJauges();   // les deux jauges de l'abonnement Claude (cachées si la couche est l'API)
   entete.append(creerConso(), titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
-                boutonTelephone, charge);
+                boutonTelephone, jauges, charge);
   // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
   new ResizeObserver(() => {
     document.documentElement.style.setProperty("--hauteur-barre", entete.offsetHeight + "px");
@@ -246,11 +248,14 @@ export function creerBarre(entete, bandeau) {
   setInterval(() => { if (!document.hidden) rafraichirCharge(); }, INTERVALLE_CHARGE);
   // Le voyant dit « sans activité depuis… » : on le remet à jour même sans nouvel état.
   setInterval(afficherVoyant, 30000);
+  setInterval(() => jauges.maj(), 30000);   // l'âge de la mesure avance même sans nouvel état
   afficherVoyant();
 
   return {
     // Un état utilisable : voyant et nom du projet.
     majEtat(etat) {
+      definirAbonnement(etat.abonnement);
+      jauges.maj();
       orchestrateur.maj(etat);
       factory = etat.factory || null;
       locauxMax = etat.agents_locaux_max ?? null;

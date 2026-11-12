@@ -33,21 +33,35 @@ def trouver_claude():
 
 
 def argv_depouille(claude, modele, fichier_consigne):
-    return [claude, "-p", "--output-format", "json", "--model", modele,
+    return [claude, "-p", "--output-format", "stream-json", "--verbose", "--model", modele,
             "--tools", "", "--system-prompt-file", fichier_consigne,
             "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands",
             "--no-session-persistence"]
 
 
 def argv_defaut(claude, modele):
-    return [claude, "-p", "--output-format", "json", "--model", modele, "--no-session-persistence"]
+    return [claude, "-p", "--output-format", "stream-json", "--verbose", "--model", modele, "--no-session-persistence"]
+
+
+def ligne_resultat(texte):
+    """La dernière ligne `{"type": "result", …}` du flux `stream-json` (ou {}), comme le fait moteur/appel.py."""
+    sortie = {}
+    for brut in texte.splitlines():
+        try:
+            d = json.loads(brut)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("type") == "result":
+            sortie = d
+    return sortie
 
 
 def lancer(argv, dossier):
-    fini = subprocess.run(argv, input=PROMPT.encode("utf-8"), cwd=dossier, capture_output=True, timeout=300)
+    fini = subprocess.run(argv, input=PROMPT.encode("utf-8"), cwd=dossier, capture_output=True, timeout=300,
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if fini.returncode != 0:
         return {"erreur": fini.stderr.decode("utf-8", "replace")[:300] or fini.stdout.decode("utf-8", "replace")[:300]}
-    sortie = json.loads(fini.stdout.decode("utf-8"))
+    sortie = ligne_resultat(fini.stdout.decode("utf-8"))
     u = sortie.get("usage", {})
     return {"entree": u.get("input_tokens", 0), "cache_lecture": u.get("cache_read_input_tokens", 0),
             "cache_ecriture": u.get("cache_creation_input_tokens", 0), "sortie": u.get("output_tokens", 0),

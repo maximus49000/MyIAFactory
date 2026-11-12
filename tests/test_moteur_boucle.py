@@ -109,6 +109,14 @@ class Passage(Base):
                          ("orchestration", "claude-haiku-5-5", 100, 20, 5, 7))
         self.assertEqual(self.statut(i)["reponse"], "Rien à faire.")
 
+    def test_l_instantane_d_abonnement_suit_l_usage_du_jugement(self):
+        ab = {"seven_day": {"pourcent": 43.0, "remise": 1794639600}, "t": 1794480000}
+        self.moteur.appeler = lambda c, d, m, **o: appel.Reponse(json.dumps(CONSEIL_RIEN), [dict(USAGE, abonnement=ab)])
+        self.demande(type="bouton", id="exporter")
+        self.moteur.tour()
+        [u] = [u for u in self.suivi()["usage"] if u.get("agent") == "orchestrateur"]
+        self.assertEqual(u["abonnement"], ab)
+
     def test_usage_d_un_agent_note_sur_sa_tache(self):
         self.demande(type="fonctionnalite", texte="Des écrans")
         self.moteur.tour()

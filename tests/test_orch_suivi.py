@@ -188,9 +188,17 @@ class TestSuivi(AvecProjet):
                                  "entree": 3000, "sortie": 500, "cache_lecture": 10})
         # Seul un total est connu (sous-agent) : il compte comme des tokens d'entrée (estimation basse).
         v = self.ok("usage", entree={"agent": "metier-1", "modele": "Opus", "total": 4200})
+        ab = {"five_hour": {"pourcent": 25.0, "remise": 1794485400}, "seven_day": {"pourcent": 43.0, "remise": 1794639600},
+              "t": 1794480000}
+        a = self.ok("usage", entree={"agent": "dev-1", "modele": "Sonnet", "entree": 5, "sortie": 5, "abonnement": ab})
+        b = self.ok("usage", entree={"agent": "dev-1", "modele": "Sonnet", "entree": 5, "sortie": 5,
+                                     "abonnement": {"five_hour": {"pourcent": 900, "remise": 1}, "t": 1}})
         r = self.releve()
         self.assertEqual(releve.valider(r), [], releve.valider(r))
         us = {x["id"]: x for x in r["usage"]}
+        self.assertEqual(us[a["id"]]["abonnement"], ab)
+        self.assertNotIn("abonnement", us[b["id"]])      # un instantané mal formé est ignoré, jamais un refus
+        self.assertNotIn("abonnement", us[u["id"]])
         self.assertEqual((us[u["id"]]["entree"], us[u["id"]]["sortie"], us[u["id"]]["cache_lecture"]), (3000, 500, 10))
         self.assertEqual((us[u["id"]]["tache"], us[u["id"]]["agent"], us[u["id"]]["etape"]), (t["id"], "dev-1", "Développement"))
         self.assertEqual((us[v["id"]]["entree"], us[v["id"]]["sortie"], us[v["id"]]["tache"]), (4200, 0, None))

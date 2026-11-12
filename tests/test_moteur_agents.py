@@ -49,6 +49,13 @@ class ExecuterAgent(unittest.TestCase):
         self.assertEqual(a.recus[0]["dossier_travail"], "/projet")
         self.assertEqual(a.recus[0]["couche"], "claude")
 
+    def test_cumul_garde_le_premier_instantane_d_abonnement(self):
+        a = {"five_hour": {"pourcent": 10.0, "remise": 5}, "t": 1}
+        b = {"five_hour": {"pourcent": 12.0, "remise": 5}, "t": 2}
+        [u] = agents.cumuler([dict(usage(1, 1), abonnement=a), dict(usage(2, 2), abonnement=b)])
+        self.assertEqual((u["entree"], u["abonnement"]), (3, a))
+        self.assertNotIn("abonnement", agents.cumuler([usage()])[0])
+
     def test_outils_de_la_fiche_passent_a_l_appel(self):
         a = Appels(sortie_ok(), sortie_ok())
         lancer(a)

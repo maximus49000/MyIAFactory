@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
+from . import abonnement as modabonnement
 from . import acces, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from .usage import HistoriqueUsage
 
@@ -153,10 +154,19 @@ class Projet:
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
             e["images_ok"] = images_declarees(regl)
+            e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)
             return e
         finally:
             self._verrou.release()
+
+    def _abonnement(self, regl):
+        """Les jauges d'abonnement et le taux de la part estimée (voir bureau/abonnement.py) ; rien si la couche est l'API."""
+        try:
+            couche = (regl.get("moteur") or {}).get("couche") or "claude"
+            return modabonnement.pour_la_page(euros_par_dollar=self.table_prix.dernier_taux(), couche=couche)
+        except Exception:   # les jauges ne font jamais tomber l'état
+            return None
 
     # -- facturation ------------------------------------------------------
     def _integrer_usage(self, r):

@@ -18,8 +18,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
+
+from bureau import abonnement
 
 MODELES = ("haiku", "sonnet", "opus")
 MODELES_API = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
@@ -51,6 +54,7 @@ class Reponse:
         self.usage = usages[0] if usages else _usage("", 0, 0, 0, 0)
         self.session = session
         self.cout_usd = cout_usd
+        self.abonnement = None   # l'instantané d'abonnement lu au début de l'appel (`claude -p` seulement)
 
     def __repr__(self):
         return f"Reponse({self.texte[:40]!r}, {self.usage})"
@@ -119,7 +123,7 @@ def trouver_claude(which=shutil.which, environ=None):
 
 
 def _argv(claude, modele, fichier_consigne, outils, reprendre):
-    argv = [claude, "-p", "--output-format", "json", "--model", modele]
+    argv = [claude, "-p", "--output-format", "stream-json", "--verbose", "--model", modele]
     if outils:
         noms = []
         for o in outils:
@@ -162,32 +166,60 @@ def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail
             raise ErreurAppel(f"délai dépassé ({delai_s} s)")
         except OSError as e:
             raise ErreurAppel(f"claude n'a pas pu être lancé : {e}")
+    r, evenements = _lire_flux(sortie)
+    snap = abonnement.instantane_depuis(evenements, time.time())
     if code != 0:
-        raise ErreurAppel(f"claude a rendu le code {code} : {_extrait(sortie)}", _usages_claude(sortie))
-    try:
-        r = json.loads(sortie.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ErreurAppel(f"claude a rendu le code {code} : {_extrait(sortie)}", _usages_de(r or {}, snap))
+    if r is None:
         raise ErreurAppel(f"sortie de claude illisible : {_extrait(sortie)}")
-    usages = _usages_de(r)
+    usages = _usages_de(r, snap)
+    if executer is _executer_claude:   # jamais un exécuteur injecté (tests) : le dossier commun reste intact
+        abonnement.noter(snap, r.get("total_cost_usd"))
     if r.get("is_error") or r.get("subtype", "success") != "success":
         raise ErreurAppel(f"claude signale une erreur ({r.get('subtype')}) : {str(r.get('result', ''))[:200]}",
                           usages)
-    return Reponse(r.get("result") or "", usages, r.get("session_id"), r.get("total_cost_usd"))
+    rep = Reponse(r.get("result") or "", usages, r.get("session_id"), r.get("total_cost_usd"))
+    rep.abonnement = snap
+    return rep
 
 
-def _usages_de(r):
+def _lire_flux(sortie):
+    """(la ligne `result`, les lignes `rate_limit_event`) de la sortie `stream-json` ; `(None, [])` si aucune ligne
+    `result` n'est lisible. Une sortie d'un seul objet JSON (ancien format) reste comprise."""
+    try:
+        texte = sortie.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        return None, []
+    resultat, evenements = None, []
+    for brut in texte.splitlines():
+        try:
+            d = json.loads(brut)
+        except ValueError:
+            continue
+        if not isinstance(d, dict):
+            continue
+        if d.get("type") == "result":
+            resultat = d
+        elif d.get("type") == "rate_limit_event":
+            evenements.append(d)
+    if resultat is None:
+        try:
+            d = json.loads(texte)
+        except ValueError:
+            return None, evenements
+        resultat = d if isinstance(d, dict) and "result" in d else None
+    return resultat, evenements
+
+
+def _usages_de(r, snap=None):
     usages = [_usage(nom, u.get("inputTokens"), u.get("outputTokens"), u.get("cacheReadInputTokens"),
                      u.get("cacheCreationInputTokens"))
               for nom, u in (r.get("modelUsage") or {}).items()]
     usages.sort(key=_total, reverse=True)
+    if snap:   # l'instantané lu au début de l'appel suit chaque usage enregistré
+        for u in usages:
+            u["abonnement"] = snap
     return usages
-
-
-def _usages_claude(sortie):
-    try:
-        return _usages_de(json.loads(sortie.decode("utf-8")))
-    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
-        return []
 
 
 def _extrait(octets):

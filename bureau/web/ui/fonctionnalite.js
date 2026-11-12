@@ -5,6 +5,7 @@
 import {el} from "./dom.js";
 import {dateFr, tronquer, euros} from "./texte.js";
 import {lienSur} from "./actions.js";
+import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {urlProjet} from "./projets.js";
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
@@ -756,7 +757,9 @@ function partieCouts(f) {
     } catch { titre.textContent = "Coût : indisponible"; return; }
     if (!c?.disponible) { bloc.remove(); return; }
     const incomplet = c.sans_prix ? " + prix inconnu" : "";
-    titre.textContent = `Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : "");
+    titre.textContent = avecPart(`Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : ""),
+                                 etiquettePart(c.total));
+    marquerPart(titre);
     if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
     const ul = el("ul", "liste-couts");
     for (const t of c.taches) {

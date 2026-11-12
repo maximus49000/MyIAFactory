@@ -57,6 +57,16 @@ class TestHistoriqueUsage(unittest.TestCase):
         self.assertEqual(lignes["u1"]["genre_fonctionnalite"], "jeu-web")
         self.assertNotIn("genre_fonctionnalite", lignes["u2"])   # un usage ancien n'en a pas
 
+    def test_l_instantane_d_abonnement_du_debut_de_l_appel_est_garde(self):
+        premier = {"five_hour": {"pourcent": 25.0, "remise": 1794485400}, "t": 1794480000}
+        plus_tard = {"five_hour": {"pourcent": 30.0, "remise": 1794485400}, "t": 1794481000}
+        self.h.integrer(releve_avec(usage(abonnement=premier), usage(id="u2", abonnement={"bizarre": 1})))
+        self.h.integrer(releve_avec(usage(abonnement=plus_tard, entree=2000)))
+        lignes = {x["id"]: x for x in self.h.lire()}
+        self.assertEqual(lignes["u1"]["abonnement"], premier)    # figé à la première apparition
+        self.assertEqual(lignes["u1"]["entree"], 2000)
+        self.assertNotIn("abonnement", lignes["u2"])             # mal formé : ignoré, le relevé reste valide
+
     def test_compteurs_mis_a_jour_date_inchangee(self):
         self.h.integrer(releve_avec(usage()))
         self.h.integrer(releve_avec(usage(t="2026-11-10T09:00:00", entree=5000, sortie=900)))

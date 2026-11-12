@@ -396,6 +396,8 @@ class Moteur:
                       "cache_lecture": u["cache_lecture"], "cache_ecriture": u["cache_ecriture"]}
             if etape:
                 entree["etape"] = etape
+            if u.get("abonnement"):   # l'instantané d'abonnement lu au début de l'appel
+                entree["abonnement"] = u["abonnement"]
             try:
                 if lot:
                     try:

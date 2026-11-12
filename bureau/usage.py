@@ -12,13 +12,16 @@ import os
 import threading
 from pathlib import Path
 
+from . import abonnement as modabonnement
+
 COMPTEURS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
 TEXTES = ("tache", "agent", "service", "modele", "etape", "lot", "reparti", "genre_fonctionnalite")
 # Absents quand le relevé n'en porte pas. `genre_fonctionnalite` : le genre de la fonctionnalité de la tâche (le champ
 # `genre` d'un usage est réservé aux partenaires) ; un usage ancien n'en a pas et compte pour le genre de son projet.
-FACULTATIFS = ("lot", "reparti", "genre_fonctionnalite")
+FACULTATIFS = ("lot", "reparti", "genre_fonctionnalite", "abonnement")
+# `abonnement` : l'instantané d'abonnement lu au début de l'appel (voir `abonnement.py`), figé à la première apparition.
 CHAMPS = ("id", "tache", "agent", "service", "modele", "etape", "lot", "reparti", "genre_fonctionnalite", "t",
-          "t_prix") + COMPTEURS
+          "t_prix", "abonnement") + COMPTEURS
 # Une ligne d'usage d'un partenaire (voix, images…) : sa quantité, son coût d'origine (ou null : non chiffré).
 CHAMPS_PARTENAIRE = ("id", "genre", "partenaire", "tache", "agent", "service", "quantite", "unite", "cout", "devise",
                      "estime", "t", "t_prix")
@@ -48,7 +51,8 @@ def _ligne_valide(d):
             and isinstance(d.get("modele"), str) and d["modele"]
             and isinstance(d.get("t"), str) and isinstance(d.get("t_prix"), str)
             and all(_entier_positif(d.get(c)) for c in COMPTEURS)
-            and all(d.get(c) is None or isinstance(d.get(c), str) for c in TEXTES))
+            and all(d.get(c) is None or isinstance(d.get(c), str) for c in TEXTES)
+            and (d.get("abonnement") is None or modabonnement.valider(d["abonnement"]) is not None))
 
 
 def _service_de(r, agent):
@@ -113,7 +117,10 @@ class HistoriqueUsage:
                     "modele": u.get("modele"), "etape": u.get("etape"), "t": u.get("t"),
                     "t_prix": ancienne["t_prix"] if ancienne else u.get("t"),
                 }
-                nouvelle.update({c: u[c] for c in FACULTATIFS if u.get(c) is not None})
+                nouvelle.update({c: u[c] for c in FACULTATIFS if u.get(c) is not None and c != "abonnement"})
+                ab = (ancienne or {}).get("abonnement") or modabonnement.valider(u.get("abonnement"))
+                if ab:   # le premier instantané vu est gardé : celui du début de l'appel
+                    nouvelle["abonnement"] = ab
                 for c in COMPTEURS:
                     nouvelle[c] = u.get(c) or 0
                 if not _ligne_valide(nouvelle):

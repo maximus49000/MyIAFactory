@@ -91,6 +91,7 @@ Le bureau ne compte pas les tokens : le projet les donne, bruts, et le bureau le
 | `t` | date ISO 8601 de la discussion |
 | `entree`, `sortie` | tokens, entiers ≥ 0 |
 | `cache_lecture`, `cache_ecriture` | tokens de cache, entiers ≥ 0 (0 par défaut) |
+| `abonnement` | facultatif : l'instantané d'abonnement Claude lu au début de l'appel, `{five_hour?: {pourcent, remise}, seven_day?: {pourcent, remise}, t}` (`pourcent` de 0 à 100 pour le **compte entier**, `remise` et `t` en secondes epoch). Posé par le moteur (`claude -p`) ; mal formé, il est ignoré sans invalider le relevé ; le premier instantané vu d'un `id` est gardé |
 
 - Les compteurs d'un `id` sont des **cumuls** : republiez le même `id` avec des compteurs plus grands tant que la discussion continue, le bureau garde les derniers. Ne changez pas d'`id` en cours de discussion (elle serait comptée deux fois).
 - Le relevé n'a besoin de porter que les usages **récents** : le bureau les range dans son historique (`usage-historique.jsonl`, à côté des réglages) et ne les oublie pas quand le projet les retire. Quand une tâche ou un agent quitte le relevé, retirez aussi ses usages : un usage qui cite une tâche ou un agent absent rend tout le relevé invalide.
@@ -313,6 +314,10 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 - **Libre** : aucune tâche active — l'agent va au café. Après 24 h sans activité, et s'il n'est ni permanent ni chef, il quitte le bureau.
 - Quand une tâche **change de colonne** entre deux lectures, l'agent qui la tenait avant va déplacer son post-it sur le Kanban.
 - Si la factory est **en pause**, le voyant le dit et les agents dont la tâche n'est plus à jour vont au café.
+
+## Les jauges d'abonnement (état servi à la page)
+
+`GET /api/etat` porte `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
 
 ## Exemple complet
 

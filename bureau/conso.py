@@ -4,6 +4,11 @@ Source : le point d'usage du compte (`/api/oauth/usage`), lu avec le jeton que C
 `~/.claude/.credentials.json`. Le jeton n'est que lu, jamais rafraîchi ni écrit (Claude Code le renouvelle quand il
 tourne) et ne sort jamais du serveur : le navigateur ne reçoit que des pourcentages et des heures de remise à zéro.
 Un jeton absent ou périmé, ou un réseau en panne : `{"disponible": false, "raison": …}`, sans faire tomber le bureau.
+
+Dans le bureau (`memoire=True`), le rond est la source unique des jauges : une lecture réussie porte `source: "compte"`
+et est versée à l'historique d'abonnement ; sinon, on se rabat sur le dernier instantané des appels du moteur
+(`source: "moteur"`, avec la `raison` de l'échec et `mesure`, l'instant de cet instantané) plutôt que d'afficher
+« indisponible ». Ici les pourcentages sont en « utilisé » (`utilise`) et en « reste » (`reste`).
 """
 import json
 import threading
@@ -12,6 +17,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+from . import abonnement
 
 URL = "https://api.anthropic.com/api/oauth/usage"
 IDENTIFIANTS = Path.home() / ".claude" / ".credentials.json"
@@ -74,27 +81,92 @@ def mettre_en_forme(brut):
             "t": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
 
-class Conso:
-    """La consommation, mise en cache `DUREE_CACHE` secondes (le navigateur interroge souvent)."""
+def _epoch(iso):
+    """Les secondes epoch d'une date ISO 8601 du compte, ou None."""
+    try:
+        return round(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+    except (AttributeError, ValueError, OverflowError):
+        return None
 
-    def __init__(self, identifiants=IDENTIFIANTS, telecharger=_telecharger, horloge=time.monotonic):
+
+def instantane_du_compte(forme, maintenant):
+    """L'instantané d'abonnement (pourcentages **utilisés**, remise en epoch) d'une lecture réussie du compte : les deux
+    fenêtres du forfait seulement, et seulement celles dont la remise à zéro est lisible. None sans fenêtre."""
+    sortie = {}
+    for f in forme.get("fenetres") or []:
+        if f["cle"] in abonnement.FENETRES and (r := _epoch(f["remise"])):
+            sortie[f["cle"]] = {"pourcent": f["utilise"], "remise": r}
+    return {**sortie, "t": int(maintenant)} if sortie else None
+
+
+def depuis_le_moteur(instantane, raison, maintenant):
+    """La même forme qu'une lecture du compte, tirée du dernier instantané des appels du moteur (`source: "moteur"`) :
+    les fenêtres déjà remises à zéro depuis sont écartées (leur pourcentage ne dit plus rien). `raison` : pourquoi la
+    lecture directe a manqué. Sans rien de lisible, `{"disponible": False, "raison"}`."""
+    fenetres = []
+    for cle in abonnement.FENETRES:
+        f = (instantane or {}).get(cle)
+        if f and f["remise"] > maintenant:
+            fenetres.append({"cle": cle, "libelle": LIBELLES[cle], "utilise": f["pourcent"],
+                             "reste": round(100.0 - f["pourcent"], 1),
+                             "remise": datetime.fromtimestamp(f["remise"], timezone.utc).isoformat(timespec="seconds")})
+    if not fenetres:
+        return {"disponible": False, "raison": raison}
+    pire = min(fenetres, key=lambda f: f["reste"])
+    return {"disponible": True, "fenetres": fenetres, "pire": pire["cle"], "reste": pire["reste"], "source": "moteur",
+            "mesure": instantane["t"], "raison": raison,
+            "t": datetime.fromtimestamp(instantane["t"], timezone.utc).isoformat(timespec="seconds")}
+
+
+class Conso:
+    """La consommation, mise en cache `DUREE_CACHE` secondes (le navigateur interroge souvent).
+
+    `memoire=True` (le bureau) : chaque lecture réussie est versée comme instantané à l'historique d'abonnement (sans
+    coût) et, quand elle échoue, on se rabat sur le dernier instantané des appels du moteur. `part` : une fonction qui
+    rend ce que `abonnement.pour_la_page` rend (ou None) pour y lire la part estimée des coûts."""
+
+    def __init__(self, identifiants=IDENTIFIANTS, telecharger=_telecharger, horloge=time.monotonic,
+                 memoire=False, part=None, maintenant=time.time):
         self.identifiants, self._telecharger, self._horloge = identifiants, telecharger, horloge
+        self.memoire, self._part, self._maintenant = memoire, part, maintenant
         self._verrou, self._cache, self._a = threading.Lock(), None, 0.0
+
+    def _lecture(self):
+        jeton, raison = _jeton(self.identifiants)
+        if jeton is None:
+            return {"disponible": False, "raison": raison}
+        try:
+            return mettre_en_forme(self._telecharger(jeton))
+        except urllib.error.HTTPError as e:
+            return {"disponible": False, "raison": "Connexion à renouveler : utilisez Claude Code un instant."
+                    if e.code in (401, 403) else f"Consommation indisponible (code {e.code})."}
+        except (OSError, ValueError):
+            return {"disponible": False, "raison": "Consommation indisponible (réseau)."}
 
     def lire(self):
         with self._verrou:
             if self._cache is not None and self._horloge() - self._a < DUREE_CACHE:
                 return self._cache
-            jeton, raison = _jeton(self.identifiants)
-            if jeton is None:
-                resultat = {"disponible": False, "raison": raison}
-            else:
-                try:
-                    resultat = mettre_en_forme(self._telecharger(jeton))
-                except urllib.error.HTTPError as e:
-                    resultat = {"disponible": False, "raison": "Connexion à renouveler : utilisez Claude Code un instant."
-                                if e.code in (401, 403) else f"Consommation indisponible (code {e.code})."}
-                except (OSError, ValueError):
-                    resultat = {"disponible": False, "raison": "Consommation indisponible (réseau)."}
+            resultat, maintenant = self._lecture(), self._maintenant()
+            if self.memoire:
+                if resultat["disponible"]:
+                    resultat["source"], resultat["mesure"] = "compte", int(maintenant)
+                    snap = instantane_du_compte(resultat, maintenant)
+                    if snap:
+                        abonnement.noter(snap, source=abonnement.SOURCE_COMPTE)
+                else:   # le jeton manque, est périmé ou le réseau coupe : le dernier instantané du moteur, dit comme tel
+                    resultat = depuis_le_moteur(abonnement.lire(), resultat["raison"], maintenant)
+                resultat["part"] = self._lire_part()
             self._cache, self._a = resultat, self._horloge()
             return resultat
+
+    def _lire_part(self):
+        """{"pourcent_par_euro" (semaine, ou None), "mesures", "minimum"} ; None sans état d'abonnement (couche API)."""
+        try:
+            page = self._part() if self._part else None
+            if not page:
+                return None
+            return {"pourcent_par_euro": page["pourcent_par_euro"]["seven_day"], "mesures": page["mesures"]["seven_day"],
+                    "minimum": page["minimum"]}
+        except Exception:   # la part ne fait jamais tomber le rond
+            return None

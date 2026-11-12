@@ -317,7 +317,7 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 
 ## Les jauges d'abonnement (état servi à la page)
 
-`GET /api/etat` porte `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
+Les jauges et le rond lisent la même mesure, servie par `GET /api/conso` (le compte, sinon le dernier appel du moteur : `source` vaut `"compte"` ou `"moteur"`, `mesure` est l'instant de la mesure en secondes epoch, `part` la part estimée). Le format du relevé ne change pas. `GET /api/etat` porte de son côté `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
 
 ## L'empreinte carbone estimée (champ `co2` des coûts servis)
 

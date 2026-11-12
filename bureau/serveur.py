@@ -551,7 +551,9 @@ class Bureau(ThreadingHTTPServer):
         self.annonces = []    # ce que le terminal dit au lancement
         self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer) for id_, chemin in projets}
         self.sonde = charge.Sonde()
-        self.conso = conso.Conso()    # la consommation du forfait Claude Code (le rond du bandeau)
+        # la consommation du forfait Claude Code (le rond du bandeau, source unique des jauges), avec repli sur le dernier
+        # appel du moteur, versement à l'historique d'abonnement et part estimée des coûts
+        self.conso = conso.Conso(memoire=True, part=self._part_abonnement)
         self.lisseur = charge.Lisseur(60)
         self.mesure = None  # dernière lecture brute de la sonde
         self._dernier_historique = 0.0
@@ -588,6 +590,11 @@ class Bureau(ThreadingHTTPServer):
         if id_ is None:
             return next(iter(self.projets.values()))
         return self.projets.get(id_)
+
+    def _part_abonnement(self):
+        """Le taux de la part estimée, lu avec le premier projet (le taux dollar-euro et la couche sont ceux de ses réglages)."""
+        p = self.projet()
+        return p._abonnement(p.reglages()[0])
 
     def _boucle_sonde(self):
         try:

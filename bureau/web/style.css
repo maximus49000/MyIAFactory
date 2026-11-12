@@ -486,6 +486,18 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso-piste { height: 8px; margin: 4px 0; background: #e8e2d3; border-radius: 4px; overflow: hidden; }
 .conso-plein { height: 100%; background: var(--ton); }
 .conso-remise, .conso-vide { font-size: 12px; color: #6b6573; margin: 0; }
+.conso-source, .conso-part { font-size: 12px; color: #6b6573; margin: 0 0 8px; }
+.conso-part { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid #e8e2d3; }
+.conso-sous-titre { font-size: 12px; font-weight: 700; color: #6b6573; margin: 2px 0 6px; }
+/* Une mesure reprise du dernier appel du moteur (lecture directe indisponible) : l'arc est atténué. */
+.conso[data-source="moteur"] .conso-arc { opacity: .6; }
+/* Le rond et les jauges font un seul bloc ; les fenêtres 5 h / semaine ne sont dans le panneau que sans la place des jauges. */
+.bloc-abonnement { flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.conso-principales { display: none; }
+@media (max-width: 700px) {
+  .bloc-abonnement .jauges { display: none; }
+  .conso-principales { display: block; }
+}
 
 /* --- Fonctionnalité et discussion. */
 .parcours { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12.5px; }

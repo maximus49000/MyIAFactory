@@ -9,6 +9,7 @@ import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 import {creerConso} from "./conso.js";
 import {creerJauges, definirAbonnement} from "./abonnement.js";
+import {surConso} from "./mesure.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -57,9 +58,14 @@ export function creerBarre(entete, bandeau) {
   const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
   boutonTelephone.type = "button";
   boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
-  const jauges = creerJauges();   // les deux jauges de l'abonnement Claude (cachées si la couche est l'API)
-  entete.append(creerConso(), titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
-                boutonTelephone, jauges, charge);
+  // Le rond (synthèse) et les deux jauges (détail 5 h / semaine) forment un seul bloc, qui lit une seule lecture ; sur
+  // un écran étroit les jauges se replient dans le panneau du rond (style.css).
+  const jauges = creerJauges();   // cachées si la couche est l'API
+  const blocAbonnement = el("div", "bloc-abonnement");
+  blocAbonnement.append(creerConso(), jauges);
+  surConso(() => jauges.maj());
+  entete.append(blocAbonnement, titre, leVoyant, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
+                boutonTelephone, charge);
   // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
   new ResizeObserver(() => {
     document.documentElement.style.setProperty("--hauteur-barre", entete.offsetHeight + "px");

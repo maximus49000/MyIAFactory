@@ -9,10 +9,12 @@ Ces pourcentages sont ceux du **compte** : ils comptent aussi les autres session
 
 Gardé dans le dossier commun (`~/MyIAFactory`) :
 - `abonnement.json` : le dernier instantané (écriture atomique) ;
-- `abonnement-historique.jsonl` : un instantané par appel, avec son coût en dollars (équivalent tarif API), pour étalonner.
+- `abonnement-historique.jsonl` : un instantané par appel, avec son coût en dollars (équivalent tarif API), pour étalonner ;
+  plus, quand elle a changé, chaque lecture directe du compte faite par le rond (`"source": "compte"`, sans coût).
+  Unités : ici tout est en « utilisé » (0 à 100) ; le rond de `conso.py` travaille en « reste » (100 − utilisé).
 
-Étalonnage : sur une même fenêtre (même heure de remise à zéro), on suit les instantanés successifs et le coût de nos
-appels entre deux ; dès que le compteur a monté d'au moins `ECART_MIN` points, une mesure « points par dollar » est
+Étalonnage : sur une même fenêtre (même heure de remise à zéro), on suit les instantanés successifs, rangés par date, et
+le coût de nos appels datés entre deux (une lecture du compte compte pour 0 $) ; dès que le compteur a monté d'au moins `ECART_MIN` points, une mesure « points par dollar » est
 prise. Les autres sessions font aussi monter le compteur : chaque mesure est un majorant. L'estimation est donc la
 médiane de la moitié la plus basse des mesures, et il en faut au moins `MIN_MESURES`.
 """
@@ -29,6 +31,8 @@ LIBELLES = {"five_hour": "5 h", "seven_day": "Semaine"}
 MIN_MESURES = 3
 ECART_MIN = 2.0       # points de pourcentage au moins pour qu'une mesure compte (le compteur monte par paliers)
 COUT_MIN_USD = 0.01   # et au moins ce coût de nos appels (sinon le bruit des autres sessions domine)
+TOLERANCE_REMISE = 120   # secondes : deux remises à zéro si proches sont la même fenêtre
+SOURCE_COMPTE = "compte"
 MAX_HISTORIQUE = 3000
 TAILLE_MAX = 600_000   # au-delà, l'historique est ramené à ses `MAX_HISTORIQUE` dernières lignes
 NOM_INSTANTANE = "abonnement.json"
@@ -113,20 +117,40 @@ def _ecrire_atomique(chemin, texte):
     os.replace(tmp, chemin)
 
 
-def noter(instantane, cout_usd=None, dossier=None):
+def _meme_mesure(a, b):
+    """Deux instantanés disent-ils la même chose (mêmes fenêtres, mêmes pourcentages, mêmes remises à `TOLERANCE_REMISE`) ?"""
+    for nom in FENETRES:
+        fa, fb = a.get(nom), b.get(nom)
+        if (fa is None) != (fb is None):
+            return False
+        if fa is not None and (fa["pourcent"] != fb["pourcent"] or abs(fa["remise"] - fb["remise"]) > TOLERANCE_REMISE):
+            return False
+    return True
+
+
+def noter(instantane, cout_usd=None, dossier=None, source=None):
     """Garde `instantane` comme le plus récent et l'ajoute à l'historique avec le coût de l'appel. Sans instantané lisible,
-    rien n'est écrit. Ne lève jamais (le disque ne doit pas faire échouer un appel)."""
+    rien n'est écrit. Ne lève jamais (le disque ne doit pas faire échouer un appel).
+
+    `source="compte"` : lecture directe du compte (le rond du bandeau), sans coût ; la ligne d'historique n'est ajoutée
+    que si la mesure a changé depuis la dernière ligne (sinon une lecture par minute noierait les lignes des appels)."""
     ab = valider(instantane)
     if ab is None:
         return
     d = racine(dossier)
     ligne = dict(ab)
-    if _nombre(cout_usd) and cout_usd >= 0:
+    if source == SOURCE_COMPTE:
+        ligne["source"] = SOURCE_COMPTE
+    elif _nombre(cout_usd) and cout_usd >= 0:
         ligne["cout_usd"] = float(cout_usd)
     try:
         with _VERROU:
             _ecrire_atomique(d / NOM_INSTANTANE, json.dumps(ab, ensure_ascii=False))
             h = d / NOM_HISTORIQUE
+            if source == SOURCE_COMPTE:
+                avant = lire_historique(dossier)
+                if avant and _meme_mesure(avant[-1], ab):
+                    return
             with h.open("a", encoding="utf-8", newline="\n") as f:
                 f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
             if h.stat().st_size > TAILLE_MAX:
@@ -153,6 +177,8 @@ def lire_historique(dossier=None):
             continue
         c = d.get("cout_usd")
         ab["cout_usd"] = float(c) if _nombre(c) and c >= 0 else None
+        if d.get("source") == SOURCE_COMPTE:
+            ab["source"] = SOURCE_COMPTE   # une lecture du compte : aucun appel de nous derrière, donc un coût nul
         sortie.append(ab)
     return sortie
 
@@ -163,11 +189,16 @@ def mesures(historique, fenetre):
     """Les mesures « points de pourcentage par dollar » d'une fenêtre, à partir des instantanés successifs."""
     sortie = []
     suite = []   # les lignes de la même fenêtre de remise à zéro, qui se suivent
+    # Rangées par date (une ligne d'appel est écrite à sa fin mais datée de son début) : le coût entre deux instantanés
+    # est alors la somme des appels datés entre eux. Une lecture du compte n'a pas de coût propre : 0.
+    historique = sorted(historique, key=lambda x: x.get("t") or 0)
 
     def parcourir(suite):
         debut, cout = 0, 0.0
         for k in range(1, len(suite)):
             c = suite[k - 1]["cout_usd"]
+            if c is None and suite[k - 1].get("source") == SOURCE_COMPTE:
+                c = 0.0
             if c is None:
                 debut, cout = k, 0.0
                 continue
@@ -186,12 +217,12 @@ def mesures(historique, fenetre):
             parcourir(suite)
             suite, cle = [], None
             continue
-        c = f["remise"] // 60
-        if suite and c != cle:
+        # même fenêtre : même remise à zéro, à quelques secondes près (le compte la donne à la fraction de seconde)
+        if suite and abs(f["remise"] - cle) > TOLERANCE_REMISE:
             parcourir(suite)
             suite = []
         suite.append(ligne)
-        cle = c
+        cle = f["remise"]
     parcourir(suite)
     return sortie
 

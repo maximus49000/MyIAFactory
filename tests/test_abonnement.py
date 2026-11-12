@@ -98,6 +98,14 @@ class Dossier(unittest.TestCase):
         self.assertEqual(list(self.d.iterdir()), [])
         self.assertIsNone(abonnement.lire(self.d))
 
+    def test_lecture_du_compte_sans_cout_et_sans_doublon(self):
+        abonnement.noter(self.snap(10.0, t=1), 0.5, self.d)
+        abonnement.noter(self.snap(10.0, remise=1001, t=2), source="compte", dossier=self.d)   # identique : pas de ligne
+        abonnement.noter(self.snap(11.0, t=3), 9.9, source="compte", dossier=self.d)           # le coût donné est ignoré
+        h = abonnement.lire_historique(self.d)
+        self.assertEqual([(x["cout_usd"], x.get("source")) for x in h], [(0.5, None), (None, "compte")])
+        self.assertEqual(abonnement.lire(self.d)["t"], 3)
+
     def test_fichier_illisible_ignore(self):
         (self.d / abonnement.NOM_INSTANTANE).write_text("{pas du json", encoding="utf-8")
         (self.d / abonnement.NOM_HISTORIQUE).write_text("n'importe quoi\n", encoding="utf-8")
@@ -135,6 +143,34 @@ class Etalonnage(unittest.TestCase):
         h.append(ligne(p, 1.0))
         # mesures triées : 2, 3, 4, 10, 20 -> moitié basse 2, 3, 4 -> médiane 3
         self.assertEqual(abonnement.points_par_dollar(h, "five_hour"), (3.0, 5))
+
+    def test_des_instantanes_sans_cout_ne_perdent_pas_le_cout_des_appels(self):
+        # appel (t=1, 1 $, 10 %), lecture du compte (t=2, 10,5 %), appel (t=3, 1 $, 12 %), lecture (t=4, 14 %) :
+        # 2 points pour le premier appel (1 $, cumulé à travers la lecture du compte), puis 2 points pour le second
+        def compte(p, t):
+            return {"five_hour": {"pourcent": p, "remise": 1000}, "t": t, "cout_usd": None, "source": "compte"}
+        h = [ligne(10.0, 1.0), compte(10.5, 2), ligne(12.0, 1.0), compte(14.0, 4)]
+        for i, x in enumerate(h):
+            x["t"] = i + 1
+        self.assertEqual(abonnement.mesures(h, "five_hour"), [2.0, 2.0])
+
+    def test_l_ordre_du_fichier_ne_compte_pas_c_est_la_date(self):
+        # l'appel est écrit à sa fin (après la lecture du compte) mais daté de son début
+        a, c, b = ligne(10.0, 1.0), {"five_hour": {"pourcent": 10.0, "remise": 1000}, "cout_usd": None, "source": "compte"}, \
+            {"five_hour": {"pourcent": 13.0, "remise": 1000}, "cout_usd": None, "source": "compte"}
+        a["t"], c["t"], b["t"] = 100, 120, 200
+        self.assertEqual(abonnement.mesures([c, b, a], "five_hour"), abonnement.mesures([a, c, b], "five_hour"))
+        self.assertEqual(abonnement.mesures([c, b, a], "five_hour"), [3.0])
+
+    def test_un_appel_de_cout_inconnu_reste_une_coupure_meme_entre_des_lectures(self):
+        c1 = {"five_hour": {"pourcent": 10.0, "remise": 1000}, "t": 1, "cout_usd": None, "source": "compte"}
+        inconnu = {"five_hour": {"pourcent": 10.0, "remise": 1000}, "t": 2, "cout_usd": None}
+        c2 = {"five_hour": {"pourcent": 20.0, "remise": 1000}, "t": 3, "cout_usd": None, "source": "compte"}
+        self.assertEqual(abonnement.mesures([c1, inconnu, c2], "five_hour"), [])
+
+    def test_la_remise_du_compte_a_la_seconde_pres_reste_la_meme_fenetre(self):
+        h = [ligne(10.0, 1.0, remise=1000), ligne(14.0, 1.0, remise=1001), ligne(18.0, 1.0, remise=999)]
+        self.assertEqual(abonnement.mesures(h, "five_hour"), [4.0, 4.0])
 
     def test_pour_la_page(self):
         with tempfile.TemporaryDirectory() as tmp:

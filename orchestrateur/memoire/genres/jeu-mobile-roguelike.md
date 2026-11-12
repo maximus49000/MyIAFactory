@@ -290,3 +290,9 @@ Rôles : testeur, dev
 Date : 2026-11-12
 
 Dans un roguelike, vérifier qu'un événement qui termine la run (mort par piège) ne lance pas de temporisation ni d'accès à l'arbre de scène après la libération du nœud ; la console doit rester sans erreur.
+
+## G49 — Dans un roguelike difficile, un robot de test même peu fauti
+Rôles : testeur
+Date : 2026-11-12
+
+Dans un roguelike difficile, un robot de test même peu fautif peut ne jamais gagner. Prévoir un mode robot parfait pour exercer la victoire en run complète, en plus de la vérification des écrans de fin par un script d'état.

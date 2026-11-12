@@ -1315,7 +1315,11 @@ def cmd_document(ctx, e):
         if chemin != original:   # le même document, rangé : l'ancienne entrée prend le nouveau chemin (ou disparaît si déjà là)
             ancien = next((x for x in f.get("documents") or [] if x["chemin"] == original), None)
             if ancien is not None:
-                if any(x["chemin"] == chemin for x in f["documents"]):
+                cible = next((x for x in f["documents"] if x["chemin"] == chemin), None)
+                if cible is not None:   # déjà inscrit sous le nouveau chemin : il garde ce que l'ancien disait de plus
+                    for cle in (*ORIGINE_DOCUMENT, "livrable"):
+                        if ancien.get(cle) and not cible.get(cle):
+                            cible[cle] = ancien[cle]
                     f["documents"].remove(ancien)
                 else:
                     ancien["chemin"] = chemin

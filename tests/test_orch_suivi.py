@@ -324,6 +324,16 @@ class TestSuivi(AvecProjet):
         self.assertEqual([x["chemin"] for x in liste if x["id"] == "doc99"], [f"pieces/{f}/f.png"])
         self.assertTrue(next(x for x in liste if x["id"] == "doc99")["livrable"])
         self.assertNotIn("assets/s/f.png", [x["chemin"] for x in liste])
+        # Déjà inscrit sous le nouveau chemin : l'ancienne entrée disparaît mais lègue son livrable et son élément.
+        docs = json.loads((jeu / ".factory" / "suivi.json").read_text(encoding="utf-8"))
+        docs["fonctionnalites"][0]["documents"].append({"id": "doc98", "chemin": "assets/s/a.png", "titre": "Doublon",
+                                                        "livrable": True, "element": "e7"})
+        (jeu / ".factory" / "suivi.json").write_text(json.dumps(docs), encoding="utf-8")
+        self.assertEqual(sortie("document", entree={"fonctionnalite": f, "chemin": "assets/s/a.png", "titre": "Aperçu"})[0], 0)
+        liste = sortie("releve")[1]["fonctionnalites"][0]["documents"]
+        a = [x for x in liste if x["chemin"] == f"pieces/{f}/a.png"]
+        self.assertEqual(len(a), 1)
+        self.assertEqual((a[0].get("livrable"), a[0].get("element")), (True, "e7"))
 
     def test_document_qui_en_remplace_un_autre(self):
         f = self.nouvelle()

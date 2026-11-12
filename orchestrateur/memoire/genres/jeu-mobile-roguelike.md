@@ -326,3 +326,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Avant un export signé d'un moteur de jeu, si seule une clé de debug est trouvée, la présenter comme choix explicite et ne jamais l'utiliser par défaut pour une release.
+
+## G55 — Dans un roguelike, quand un nouveau type d'ennemi donne une
+Rôles : designer
+Date : 2026-11-12
+
+Dans un roguelike, quand un nouveau type d'ennemi donne une récompense qui ressemble à un tirage existant, lui donner un stock à lui plutôt que de piocher dans le stock commun, pour ne pas fausser le contrôle du tirage au pire cas.

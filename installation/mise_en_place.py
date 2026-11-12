@@ -297,13 +297,19 @@ def _ecrire_configuration(base, p, genre, maintenant):
         "nom": p["nom"], "skill": PREFIXE_SKILL, "genre": genre, "mots_interdits": list(p["mots_interdits"]),
         "fiches": "fiches", "controles": "controles.md", "consignes": "consignes-projet.md",
         "reglages": "reglages.json", "services": services,
-        "flux": [{c: e[c] for c in ("id", "nom", "role", "service")} for e in p["flux"]],
         "seuil_methode": 3, "catalogues": {"*": {"commande": _commande("catalogue", "{fonctionnalite}")}},
         "commandes": {}, "modele_orchestrateur": p["modele_orchestrateur"],
         "agents_locaux_max": p["agents_locaux_max"],
     }
+    if p.get("flux"):   # un projet créé vide n'a ni flux ni agent : sa première demande en fait proposer un
+        factory["flux"] = [{c: e[c] for c in ("id", "nom", "role", "service")} for e in p["flux"]]
+    if p.get("description"):
+        factory["description"] = p["description"].strip()
     _ecrire_json(base / "factory.json", factory)
-    ecrire_organisation(base / "factory.json", services, p["flux"], p["agents"], p["briefs"])
+    if p.get("flux") or p.get("agents"):
+        ecrire_organisation(base / "factory.json", services, p["flux"], p["agents"], p["briefs"])
+    else:
+        (base / "fiches" / "briefs").mkdir(parents=True)
     modele = _modele_reglages()
     reglages = {"releve": {"commande": _commande("releve")}, "actions": {"commande": _commande("actions")},
                 "images": modele["images"], "orchestrateur": "factory.json", "livrables": modele["livrables"],

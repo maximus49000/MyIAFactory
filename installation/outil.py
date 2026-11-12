@@ -7,6 +7,8 @@
     py -3.12 installation/outil.py proposer       (entrée JSON : la proposition)
     py -3.12 installation/outil.py appliquer <dossier>
     py -3.12 installation/outil.py reparer <dossier> [--tailscale] [--reseau-local]
+    py -3.12 installation/outil.py creer <parent> <nom> [--origine <réglages>] [--mots-interdits a,b] [--facturation]
+                                         [--github] [--description <texte>] [--genre <id>]   (un projet vide)
     py -3.12 installation/outil.py acces          (les adresses du téléphone : Tailscale, réseau local)
     py -3.12 installation/outil.py bureau [--relancer]  (lance le bureau commun en arrière-plan)
     py -3.12 installation/outil.py orchestrateur <dossier>  (ouvre `claude` sur l'orchestrateur, dans une fenêtre)
@@ -27,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import charge, prix, reglages  # noqa: E402
-from installation import acces, calibrage, dossier, estimation, examen, lanceur, mise_en_place, proposition  # noqa: E402
+from installation import acces, calibrage, creation, dossier, estimation, examen, lanceur, mise_en_place, proposition  # noqa: E402
 from installation.dossier import Echec  # noqa: E402
 
 
@@ -166,6 +168,14 @@ def cmd_reparer(a):
     return {**mise_en_place.reparer(projet, cal, acces=_acces_demandes(a)), "calibrage": cal}
 
 
+def cmd_creer(a):
+    mots = [m.strip() for m in (a.mots_interdits or "").split(",") if m.strip()]
+    r = creation.creer_projet(a.parent, a.nom, origine=a.origine, mots_interdits=mots, facturation=a.facturation,
+                              github=a.github, description=a.description, genre=a.genre,
+                              bureau_json=dossier.bureau())
+    return {**r, "reglages": str(r["reglages"]), "projet": str(r["projet"])}
+
+
 def cmd_acces(a):
     return acces.adresses()
 
@@ -232,6 +242,16 @@ def _analyseur():
         if nom == "reparer":
             x.add_argument("--tailscale", action="store_true", help="ouvre le bureau au téléphone par Tailscale")
             x.add_argument("--reseau-local", action="store_true", help="ouvre le bureau au Wi-Fi de la maison")
+    x = s.add_parser("creer", help="crée un projet vide (sans workflow ni agent) et l'inscrit au bureau commun")
+    x.add_argument("parent")
+    x.add_argument("nom")
+    x.add_argument("--origine", help="les réglages (reglages.json) d'un projet dont on reprend les réglages")
+    x.add_argument("--mots-interdits", help="mots interdits, séparés par des virgules")
+    x.add_argument("--facturation", action="store_true")
+    x.add_argument("--github", action="store_true", help="crée un dépôt GitHub privé (gh)")
+    x.add_argument("--description")
+    x.add_argument("--genre")
+    x.set_defaults(f=cmd_creer)
     x = s.add_parser("bureau", help="lance le bureau commun en arrière-plan (ou le relance)")
     x.add_argument("--relancer", action="store_true", help="arrête le bureau lancé par l'installation, puis le relance")
     x.set_defaults(f=cmd_bureau)

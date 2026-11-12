@@ -178,9 +178,9 @@
 **Interfaces :**
 - Produit : `creer_projet(parent: Path, nom: str, *, origine: Path | None, mots_interdits: list[str], facturation: bool, github: bool, description: str | None, genre: str | None, bureau_json: Path, git=..., gh=...) -> {"reglages": Path, "github": "fait"|"non demandé"|<raison>}` ; lève `Echec(message)` ; réglages repris de `origine` (charge, modèle de l'orchestrateur, agents locaux, couche du moteur, consignes du projet) ; `nom` ajouté aux `mots_interdits` ; pas de `flux` ; `regler_gitignore`, `inscrire`.
 
-- [ ] **Étape 1 : tests** : `test_cree_l_arborescence_complete` (mêmes dossiers et fichiers que `appliquer`, sans fiche ni flux) ; `test_reglages_repris_de_l_origine` ; `test_nom_ajoute_aux_mots_interdits` ; `test_nom_refuse` (vide, existant, `..`, `/`, `:`, `CON`, `NUL`) ; `test_parent_absent_ou_dans_la_skill_refuse` ; `test_echec_ne_laisse_rien` ; `test_bureau_plein_refuse` ; `test_github_fait` (git et gh simulés : `git init`, premier commit, `gh repo create <nom> --private --source . --push`) ; `test_github_sans_gh_projet_local`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py installation creation`).
-- [ ] **Étape 5 : commit** « Installation : créer un projet vide depuis le bureau ».
+- [x] **Étape 1 : tests** : `test_cree_l_arborescence_complete` (mêmes dossiers et fichiers que `appliquer`, sans fiche ni flux) ; `test_reglages_repris_de_l_origine` ; `test_nom_ajoute_aux_mots_interdits` ; `test_nom_refuse` (vide, existant, `..`, `/`, `:`, `CON`, `NUL`) ; `test_parent_absent_ou_dans_la_skill_refuse` ; `test_echec_ne_laisse_rien` ; `test_bureau_plein_refuse` ; `test_github_fait` (git et gh simulés : `git init`, premier commit, `gh repo create <nom> --private --source . --push`) ; `test_github_sans_gh_projet_local`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py installation creation`).
+- [x] **Étape 5 : commit** « Installation : créer un projet vide depuis le bureau ».
 
 ### Tâche 8 : le bureau
 

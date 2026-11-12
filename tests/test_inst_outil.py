@@ -97,6 +97,15 @@ class TestOutil(AvecMaison):
         self.assertTrue(all(x["description"] and x["inscription"] is None or x["inscription"].startswith("https://")
                             for x in r["suggestions"]["3d"]))
 
+    def test_creer_un_projet_vide(self):
+        code, r = self.lancer("creer", str(self.projet.parent), "Casse-briques", "--description", "Un jeu.",
+                              "--mots-interdits", "secret")
+        self.assertEqual((code, r["github"]), (0, "non demandé"), r)
+        self.assertTrue((Path(r["reglages"])).is_file())
+        code, r = self.lancer("creer", str(self.projet.parent), "Casse-briques")
+        self.assertEqual(code, 1)
+        self.assertIn("existe déjà", r["erreur"])
+
     def test_appliquer_sans_proposition(self):
         code, r = self.lancer("appliquer", str(self.projet))
         self.assertEqual(code, 1)

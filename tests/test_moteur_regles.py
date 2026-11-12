@@ -1115,6 +1115,15 @@ class Validation(Base):
         self.assertEqual(len(self.taches(etape="validation:valider")), 2)
         self.assertEqual(self.taches(etape="flux:livraison"), [])
 
+    def test_apres_un_renvoi_ce_qui_doit_marcher_vient_des_points_renvoyes(self):
+        """Essai réel : l'agent, jugeant la correction déjà faite, ne disait pas ce qui doit marcher (deux fois) ; la
+        validation restait bloquée. Après un renvoi, ce sont les points que le Directeur a demandé de revoir."""
+        self.jusqu_a_la_validation()
+        _, actions = self.repondre(verdict="renvoyer", texte="Le menu est trop chargé.")
+        self.piloter(actions, rapports=[{**verdict("e1"), "message": {"texte": "Rien à changer."}, "acces": ACCES}])
+        (nouvelle,) = self.decisions()
+        self.assertEqual(nouvelle["doit_marcher"], "Les points renvoyés sont corrigés : Le menu est trop chargé.")
+
     def test_renvoyer_sans_remarque_refuse(self):
         self.jusqu_a_la_validation()
         for texte in (None, "   "):

@@ -3282,6 +3282,12 @@ def _attendre_le_directeur(projet, etat, v, s):
     if nature in ("visuel", "son", "mecanique"):      # jamais l'apk pour juger un visuel, un son ou une mécanique
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
+    if not rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER):
+        # Après un renvoi, ce qui doit marcher est connu : les points que le Directeur a demandé de revoir (essai réel :
+        # l'agent, jugeant la correction déjà faite ailleurs, ne le disait pas, deux fois, et la validation restait bloquée).
+        renvoi = _remarque_du_renvoi(projet, v)
+        if renvoi:
+            precedent = {**precedent, "doit_marcher": renvoi}
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
@@ -3318,6 +3324,25 @@ def _attendre_le_directeur(projet, etat, v, s):
             entree[c] = precedent[c]
     lancer(projet, "decision", entree)
     return tid
+
+
+def _remarque_du_renvoi(projet, v):
+    """« Les points renvoyés sont corrigés : … » d'après la dernière « Remarque du Directeur » portée par une étape du
+    flux de l'élément (son renvoi), ou `None`."""
+    for tid in reversed(v.get("taches") or []):
+        t = _tache(projet, tid)
+        if not str(t.get("etape") or "").startswith(ETAPES_DE_FLUX):
+            continue
+        for j in reversed(t.get("journal") or []):
+            texte = str(j.get("texte") or "")
+            if texte.startswith("Remarque du Directeur"):
+                points = texte.split(":", 1)[1].strip()
+                if points.lower().startswith("points à revoir"):
+                    points = points.split(":", 1)[1].strip() if ":" in points else ""
+                if points:
+                    phrase = "Les points renvoyés sont corrigés : " + points
+                    return phrase if len(phrase) <= rel.MAX_DOIT_MARCHER else phrase[:rel.MAX_DOIT_MARCHER - 1] + "…"
+    return None
 
 
 OBJECTIF_MAX = 600

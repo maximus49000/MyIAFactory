@@ -169,7 +169,7 @@ class Memoire(unittest.TestCase):
 
     def test_le_jeton_ne_sort_pas_meme_avec_la_memoire(self):
         r = self.conso(lambda j: brut()).lire()
-        self.assertNotIn("secret", json.dumps(r) + "".join(p.read_text() for p in (self.d / "commun").iterdir()))
+        self.assertNotIn("secret", json.dumps(r) + "".join(p.read_text() for p in (self.d / "commun").rglob("*") if p.is_file()))
 
 
 if __name__ == "__main__":

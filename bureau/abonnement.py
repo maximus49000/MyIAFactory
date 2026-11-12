@@ -12,6 +12,7 @@ Gardé dans le dossier commun (`~/MyIAFactory`) :
 - `abonnement-historique.jsonl` : un instantané par appel, avec son coût en dollars (équivalent tarif API), pour étalonner ;
   plus, quand elle a changé, chaque lecture directe du compte faite par le rond (`"source": "compte"`, sans coût).
   Unités : ici tout est en « utilisé » (0 à 100) ; le rond de `conso.py` travaille en « reste » (100 − utilisé).
+- `abonnement-semaines/` : chaque semaine du forfait, archivée pour toujours hors du fichier rogné (voir `semaines.py`).
 
 Étalonnage : sur une même fenêtre (même heure de remise à zéro), on suit les instantanés successifs, rangés par date, et
 le coût de nos appels datés entre deux (une lecture du compte compte pour 0 $) ; dès que le compteur a monté d'au moins `ECART_MIN` points, une mesure « points par dollar » est
@@ -25,6 +26,8 @@ import statistics
 import threading
 import time
 from pathlib import Path
+
+from . import semaines
 
 FENETRES = ("five_hour", "seven_day")
 LIBELLES = {"five_hour": "5 h", "seven_day": "Semaine"}
@@ -138,6 +141,7 @@ def noter(instantane, cout_usd=None, dossier=None, source=None):
     if ab is None:
         return
     d = racine(dossier)
+    semaines.noter(ab, "compte" if source == SOURCE_COMPTE else "moteur", d)   # l'archive des semaines, pour toujours
     ligne = dict(ab)
     if source == SOURCE_COMPTE:
         ligne["source"] = SOURCE_COMPTE

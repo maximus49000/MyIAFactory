@@ -112,6 +112,31 @@ def liste(srv, id_=None):
                                 **({"co2": abandonnes["co2"]} if abandonnes.get("co2") else {})}}
 
 
+def lignes_sujets(srv, debut, fin):
+    """Les usages des échanges de création (brouillons vivants, puis abandonnés) datés dans [debut, fin], placés dans
+    l'arbre des sujets (voir `sujets.py`). Rien sans fichier de bureau commun."""
+    from . import sujets
+    if srv.fichier_bureau is None:
+        return []
+    brouillons, _, estimation = _outils(srv)
+    prix_de = _prix(srv)
+
+    def euros_de(u):
+        p = prix_de(u.get("modele"))
+        return estimation._euros_usage(u, p) if p and p.get("entree") and p.get("sortie") else None
+
+    lignes = []
+    for x in brouillons.lister(dossier=srv.dossier_creations):
+        try:
+            usages = brouillons.lire(x["id"], dossier=srv.dossier_creations).get("usages") or []
+        except Exception:
+            continue
+        lignes += sujets.lignes_creation(x["id"], x["nom"] or "Projet en création", usages, euros_de, debut, fin)
+    lignes += sujets.lignes_creation("abandonnes", "Échanges abandonnés",
+                                     brouillons.usages_abandonnes(commun=srv.commun_creations), euros_de, debut, fin)
+    return lignes
+
+
 # --- POST.
 
 def infos(srv, corps):

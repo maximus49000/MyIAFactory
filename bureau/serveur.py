@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
 from . import acces, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import semaines as modsemaines
+from . import sujets as modsujets
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -596,6 +598,45 @@ class Bureau(ThreadingHTTPServer):
         p = self.projet()
         return p._abonnement(p.reglages()[0])
 
+    # -- les semaines du forfait et les sujets qui les ont consommées (tous les projets du bureau) --
+    def liste_semaines(self):
+        """Les semaines archivées (la plus récente d'abord). Au premier appel, l'archive est amorcée avec l'historique."""
+        racine, maintenant = modabonnement.racine(), time.time()
+        if not modsemaines.existe(racine):
+            modsemaines.importer(modabonnement.lire_historique(), racine)
+        return {"semaines": modsemaines.lister(racine, maintenant), "maintenant": int(maintenant)}
+
+    def serie_semaine(self, identifiant):
+        s = modsemaines.lire(modabonnement.racine(), identifiant, time.time())
+        return (200, s) if s is not None else (404, {"erreur": "Semaine inconnue."})
+
+    def sujets_semaine(self, identifiant):
+        """(code, objet) : l'arbre des sujets ayant utilisé Claude pendant la semaine, projets du bureau et échanges de
+        création confondus (voir `sujets.py`)."""
+        s = modsemaines.lire(modabonnement.racine(), identifiant, time.time())
+        if s is None:
+            return 404, {"erreur": "Semaine inconnue."}
+        debut, fin = s["debut"], s["remise"]
+        lignes = []
+        self.actualiser_projets()
+        for p in list(self.projets.values()):
+            try:
+                p.etat()
+                regl, _ = p.reglages()
+                p._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
+                r = p.dernier_releve or {}
+                lignes += modsujets.lignes_projet(
+                    p.id, r.get("projet") if isinstance(r.get("projet"), str) and r.get("projet") else p.id,
+                    p.usage.lire(), r, lambda m, d, p=p, regl=regl: prix.prix_effectif(p.table_prix, regl, m, d),
+                    debut, fin)
+            except Exception:   # un projet en panne n'empêche pas de compter les autres
+                continue
+        try:
+            lignes += creations.lignes_sujets(self, debut, fin)
+        except Exception:
+            pass
+        return 200, {"semaine": identifiant, "debut": debut, "remise": fin, **modsujets.arbre(lignes)}
+
     def _boucle_sonde(self):
         try:
             self.mesure = self.sonde.lire()  # première lecture : sert de repère
@@ -958,6 +999,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*creations.liste(self.server, ids[0] if ids else None))
         if chemin == "/api/conso":
             return self._json(200, self.server.conso.lire())
+        if chemin in ("/api/semaines", "/api/semaine", "/api/sujets"):   # tous les projets du bureau : pas de `?projet=`
+            q = parse_qs(morceaux.query, keep_blank_values=True)
+            cle = "semaine" if chemin == "/api/sujets" else "id"
+            ids = q.get(cle, [])
+            if chemin == "/api/semaines":
+                return self._json(200, self.server.liste_semaines())
+            if len(ids) != 1:
+                return self._json(404, {"erreur": "Aucune semaine demandée."})
+            return self._json(*(self.server.sujets_semaine(ids[0]) if chemin == "/api/sujets"
+                                else self.server.serie_semaine(ids[0])))
         if chemin not in ROUTES_PROJET:
             return self._statique(chemin)
         projet = self._projet(morceaux.query)

@@ -21,7 +21,7 @@ VERSIONS = (1, 2, 3, 4)
 ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "terminee", "deplacee")
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
-DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre")
+DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -450,6 +450,23 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » inconnu « {d.get('agent')} ».")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
+        elif d.get("genre") == "valider_etape":
+            _verifier_validation(d, nom, erreurs)
+
+
+def _verifier_validation(d, nom, erreurs):
+    """Une décision `valider_etape` : l'élément, l'étape et la tâche de validation, le compte rendu et les fichiers."""
+    ici = f"{nom} : la décision « {d.get('id')} »"
+    e = d.get("element")
+    if not (_texte_plein(d.get("fonctionnalite")) and _est_dict(e) and _texte_plein(e.get("id"))
+            and _texte_plein(e.get("nom")) and _texte_plein(d.get("etape")) and _texte_plein(d.get("tache"))):
+        erreurs.append(f"{ici} : « fonctionnalite », « element » {{id, nom}}, « etape » et « tache » sont obligatoires.")
+    if not _texte(d.get("compte_rendu", "")):
+        erreurs.append(f"{ici} : « compte_rendu » doit être un texte.")
+    fichiers = d.get("fichiers", [])
+    if not isinstance(fichiers, list) or not all(_est_dict(x) and _texte_plein(x.get("chemin"))
+                                                 and _texte_plein(x.get("titre")) for x in fichiers):
+        erreurs.append(f"{ici} : « fichiers » doit être une liste de {{chemin, titre}}.")
 
 
 def _verifier_genre_fonctionnalite(d, nom, erreurs):
@@ -888,6 +905,8 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
             erreurs.append(f"Colonne « {el.get('id')} » : « genre » doit être un identifiant de genre.")
         if not _texte_ou_nul(el.get("workflow")):
             erreurs.append(f"Colonne « {el.get('id')} » : « workflow » doit être un texte.")
+        if el.get("validation") is not None and not isinstance(el["validation"], bool):
+            erreurs.append(f"Colonne « {el.get('id')} » : « validation » doit être vrai ou faux.")
     for t in titulaires:
         cle = t.get("cle")
         if "modele" in t and not isinstance(t["modele"], str):

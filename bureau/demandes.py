@@ -20,13 +20,14 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "fonctionnalite", "verdict"), "elargir_genre": ("decision", "verdict"),
+          "valider_etape": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",)}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable"), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "organisation": ("texte", "fable"), "valider_etape": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre")
+               "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -218,7 +219,7 @@ def _verifier_v4(demande, r, elements):
             return message
     for champ in ("texte", "description", "projet_cree"):
         if (champ in demande and genre in ("cahier", "methode", "genre", "organisation", "genre_fonctionnalite",
-                                           "elargir_genre")
+                                           "elargir_genre", "valider_etape")
                 and not isinstance(demande[champ], str)):
             return f"« {champ} » doit être un texte."
     if genre == "fonctionnalite":
@@ -242,6 +243,19 @@ def _verifier_v4(demande, r, elements):
             return "Réponse inconnue (valider ou refuser)."
         if demande.get("description") and len(demande["description"]) > MAX_TEXTE:
             return f"« description » dépasse {MAX_TEXTE} caractères."
+        return None
+    if genre == "valider_etape":
+        if _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape") is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in ("valider", "renvoyer"):
+            return "Réponse inconnue (valider ou renvoyer)."
+        remarque = demande.get("texte")
+        if demande["verdict"] == "renvoyer":
+            if remarque is None or not isinstance(remarque, str) or not remarque.strip():
+                return "Pour renvoyer l'élément, dites ce qu'il faut changer (une remarque est obligatoire)."
+            return _texte_libre(remarque, "texte")
+        if remarque is not None and len(remarque) > MAX_TEXTE:
+            return f"« texte » dépasse {MAX_TEXTE} caractères."
         return None
     if genre == "environnement":
         f = _fonctionnalite(r, demande["fonctionnalite"])

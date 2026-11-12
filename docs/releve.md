@@ -31,7 +31,7 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 | `factory.etat` | oui | `"en marche"` ou `"en pause"` |
 | `factory.depuis` | non | date ISO 8601 |
 | `services` | oui | liste de `{id, nom}` ; **8 au plus**, identifiants uniques |
-| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; à partir de la v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) |
+| `colonnes` | oui | liste de `{id, nom}` dans l'ordre du Kanban ; à partir de la v2, `terminee` (vrai/faux, facultatif, `null` = absent) marque une colonne terminée (voir ci-dessous) ; `validation: true` (facultatif) marque la colonne d'une étape de validation du Directeur |
 | `titulaires` | oui | voir ci-dessous |
 | `taches` | oui | voir ci-dessous |
 | `file` | non | `{"visibles": [{id, titre}], "reste": n}` — vide par défaut ; en v2, `suite` facultatif (voir ci-dessous) |
@@ -165,7 +165,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 | `genre` | racine | l'identifiant du genre du projet (`^[a-z0-9][a-z0-9-]{0,39}$`), ou `null` s'il n'est pas encore choisi |
 | `livrable` | racine | le dernier livrable du projet : `{libelle, lien \| chemin, date}` (le bouton « Dernier livrable ») |
 | `fonctionnalites` | racine | la liste des fonctionnalités (ci-dessous), 100 au plus |
-| `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session) ou `organisation` (plus `organisation` : `{services, flux, agents, briefs, cout}`, l'organisation proposée ; `cout` = `{tokens: [a, b], euros: [a, b] ou null}`) |
+| `decisions_projet` | racine | ce qui attend l'utilisateur pour le projet : `{id, genre, texte, ...}` avec `genre` = `confirmer_genre` (plus `propose` et `genres_connus`) `session_cloud` (plus `agent`, la clé du titulaire qui attend sa session), `organisation` (plus `organisation` : `{services, flux, agents, briefs, cout}`, l'organisation proposée ; `cout` = `{tokens: [a, b], euros: [a, b] ou null}`) ou `valider_etape` (un élément attend le Directeur à une étape de validation : plus `fonctionnalite`, `element` `{id, nom}`, `etape` (l'étape de validation), `tache` (la tâche « Validation du Directeur »), `compte_rendu` (2000 caractères au plus) et `fichiers` `[{chemin, titre}]` de l'étape précédente) |
 | `agents_locaux_max` | racine | facultatif : le nombre d'agents locaux au plus travaillant en même temps (entier ≥ 1 ou nul) ; la bulle de la barre de charge l'affiche |
 | `orchestrateur_present` | racine | facultatif : vrai si le moniteur de l'orchestrateur (`guetter`) (ou une de ses commandes) a noté sa présence il y a moins de 2 minutes ; faux : le bureau bloque les gestes et propose « Lancer l'orchestrateur » ; absent : rien n'est bloqué (adaptateur qui ne le dit pas) |
 | `partenaires` | racine | facultatif : l'espace partenaire (la pièce « Partenaires », voir ci-dessous) ; absent, la pièce n'existe pas |
@@ -268,6 +268,7 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 | `session_cloud` | `decision`, `session` | « C'est fait » : la session cloud demandée est créée, avec ce nom |
 | `organisation` | `decision`, `verdict` (`accepter`, `refuser` ou `abandonner`) ; facultatifs : `texte` (ce qu'il faut changer à une proposition refusée), `fable` (les clés des agents cochés pour Fable) | « Accepter » ou « Refuser » une évolution de l'organisation, ou le workflow d'une fonctionnalité (« Abandonner » la demande) |
 | `genre_fonctionnalite` | `decision`, `fonctionnalite`, `choix` (`ici`, `meme` si le moteur hésitait, ou `nouveau_projet`) ; facultatifs : `genre`, `description` (un genre nouveau), `projet_cree` (les réglages du projet créé, pour `nouveau_projet`) | La réponse à « cette demande n'est pas du genre du projet » |
+| `valider_etape` | `decision`, `verdict` (`valider` ou `renvoyer`), `texte` (obligatoire avec `renvoyer` : la remarque) | un élément arrivé à une étape de validation du Directeur : « Valider » le fait passer à l'étape suivante, « Renvoyer » lui fait refaire l'étape précédente avec la remarque |
 | `retour_element` | `fonctionnalite`, `element`, `texte` | « Demander à modifier » dans le catalogue (l'élément doit y être) |
 | `partenaire_regle` | `partenaire`, `operation` (`ajouter`, `modifier` ou `supprimer`), `id?`, `texte?` | une règle d'usage d'un partenaire (500 caractères au plus ; `id` = la règle visée pour `modifier` et `supprimer`) |
 | `partenaires_actualiser` | aucun | « Actualiser » : relever de nouveau les quotas |

@@ -43,6 +43,12 @@ CHEF = "chef"                       # l'auteur des messages du moteur dans la di
 ELEMENTS_EN_COURS_MAX = 2           # « deux éléments au plus en cours » en série
 RELECTEURS_PREMIER_TOUR = 2
 ETAPES_DE_FLUX = "flux:"
+ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
+GENRE_VALIDATION = "valider_etape"     # la décision de projet posée quand un élément attend le Directeur
+VALIDER = "valider"
+RENVOYER = "renvoyer"
+COMPTE_RENDU_MAX = 2000
+FICHIERS_MAX = 20
 ETAPES_SOLO = ("cadrage", "prototype", "relecture")   # jamais regroupées en lot
 ETAPES_DU_MOTEUR = ("cadrage", "prototype", "relecture", "correction", "retour", "demande", "environnement")
 ROLE_ENVIRONNEMENT = "environnement"      # l'agent qui installe les outils du poste
@@ -180,7 +186,7 @@ def _production(projet, fid=None):
     """Les étapes du workflow de la fonctionnalité que le moteur enchaîne pour un élément (la relecture croisée tient
     lieu de l'étape du relecteur)."""
     flux = _flux(projet, fid)
-    return [s for s in flux if s["role"] != ROLE_RELECTURE] or flux
+    return [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
 
 
 def _role_cadrage(projet, fid=None):
@@ -196,7 +202,7 @@ def _role_cadrage(projet, fid=None):
 
 def _role_production(projet, fid=None, agents=None):
     """Le rôle de la première étape de production du workflow ; sans workflow, celui de cadrage."""
-    production = _production(projet, fid)
+    production = wf.etapes_d_agent(_production(projet, fid))
     if production:
         return production[0]["role"]
     return next((a["role"] for a in agents if a["role"] != ROLE_RELECTURE), ROLE_CADRAGE) if agents else ROLE_CADRAGE
@@ -206,7 +212,7 @@ def _colonne_du_role(projet, role, fid=None):
     flux = _flux(projet, fid)
     if not flux:
         return "cadrage"
-    return next((s["id"] for s in flux if s["role"] == role), flux[-1]["id"])
+    return next((s["id"] for s in flux if s.get("role") == role), flux[-1]["id"])
 
 
 def _texte_discussion(f, derniers=20):
@@ -343,7 +349,8 @@ def _sur_cahier(projet, demande, etat):
         _lever(projet, f, "valider_cahier")
         dossier = {"fonctionnalite": {"nom": f["nom"], "cahier": {"maquette": cahier.get("maquette"),
                                                                     "etapes": cahier.get("etapes")}},
-                   "flux": [{"id": s["id"], "nom": s["nom"], "role": s["role"]} for s in _production(projet, fid)],
+                   "flux": [{"id": s["id"], "nom": s["nom"], "role": s["role"]}
+                            for s in wf.etapes_d_agent(_production(projet, fid))],
                    "methodes_validees": _methodes_validees(projet, fid),
                    "consignes_propres": _consignes_propres(projet)}
         return [a_juger("decouper", dossier, {"demande": demande["id"], "fonctionnalite": fid})]
@@ -359,7 +366,7 @@ def _sur_cahier(projet, demande, etat):
 def _methodes_validees(projet, fid):
     court = _etat(projet)
     return [{"fonctionnalite": f["id"], "nom": f["nom"], "version": f["methode"].get("version"),
-             "flux": [s["id"] for s in _flux(projet, f["id"])]}
+             "flux": [s["id"] for s in wf.etapes_d_agent(_flux(projet, f["id"]))]}
             for f in court["fonctionnalites"] if f["id"] != fid and f.get("methode") and f["methode"].get("validee_le")]
 
 
@@ -375,7 +382,8 @@ def _sur_methode(projet, demande, etat):
         return []
     if verdict in ("valider", "adapter"):
         dossier = {"fonctionnalite": {"id": fid, "nom": f["nom"]}, "cahier": f.get("cahier"),
-                   "flux": [{"id": s["id"], "role": s["role"]} for s in _production(projet, fid)],
+                   "flux": [{"id": s["id"], "role": s["role"]}
+                           for s in wf.etapes_d_agent(_production(projet, fid))],
                    "prototype": {"discussion": f["discussion"][-30:],
                                  "element": _element_du_prototype(projet, etat, f)},
                    "controles": _controles_du_registre(projet)}
@@ -812,7 +820,8 @@ def _proposer(projet, etat, fid, suite, refus=None):
             prefixe = f"{w['fonctionnalite']}-" if w.get("fonctionnalite") else ""
             anterieurs.append({"id": w["id"], "flux": [
                 {"etape": e["id"][len(prefixe):] if prefixe and e["id"].startswith(prefixe) else e["id"],
-                 "nom": e["nom"], "role": e["role"], "service": e["service"]} for e in w["flux"]]})
+                 "nom": e["nom"], **{c: v for c, v in wf.etape_ecrite(e).items() if c not in ("id", "nom")}}
+                for e in w["flux"]]})
     dossier = {"demande": _demande_de(f), "genre": genre, "projet": {"nom": fac["nom"], "description": fac["description"]},
                "services": [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]],
                "agents": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"], "specialite": a.get("specialite")}
@@ -840,7 +849,9 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
     fac = _factory(projet)
     f = _fonc(projet, fid)
     genre = f.get("genre") or _genre_du_projet(fac)
-    flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], "role": x["role"], "service": x["service"]} for x in o["flux"]]
+    flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], **({"validation": True} if wf.est_validation(x)
+                                                              else {"role": x["role"], "service": x["service"]})}
+            for x in o["flux"]]
     nouveaux = [dict(a, lieu="local") for a in o["agents"]]
     services = [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]] + [dict(s) for s in o["services"]]
     existants = [{"role": a["role"], "modele": a["modele"]} for a in _etat(projet)["agents"]]
@@ -1232,13 +1243,62 @@ def _sur_challenge(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, None)
 
 
+def _element_en_validation(projet, etat, d):
+    """L'état de l'élément que la décision `valider_etape` attend ; reconstruit depuis la décision quand le moteur a été
+    relancé (sa mémoire était perdue). `None` si l'étape n'est plus dans le workflow."""
+    fid, element = d["fonctionnalite"], d["element"]
+    cle = f"{fid}/{element['id']}"
+    v = _m(etat, "elements").get(cle)
+    if v is not None and v["phase"] == "validation":
+        return v
+    rang = next((k for k, s in enumerate(_production(projet, fid)) if s["id"] == d["etape"]), None)
+    if rang is None:
+        return None
+    v = _etat_element(etat, fid, element)
+    v.update(phase="validation", pas=rang, taches=[d["tache"]] if d.get("tache") else [])
+    v["dernier_rapport"] = {"compte_rendu": d.get("compte_rendu") or "", "fichiers": list(d.get("fichiers") or [])}
+    return v
+
+
+def _sur_valider_etape(projet, demande, etat):
+    """La réponse du Directeur à « cet élément attend votre validation » : valider fait passer l'élément à l'étape
+    suivante ; renvoyer (avec une remarque obligatoire) lui fait refaire l'étape précédente, puis revenir ici."""
+    d = next((x for x in _etat(projet)["decisions"]
+              if x["id"] == demande["decision"] and x["genre"] == GENRE_VALIDATION), None)
+    if d is None:
+        raise Refus("cette validation n'existe plus")
+    verdict, remarque = demande.get("verdict"), (demande.get("texte") or "").strip()
+    if verdict not in (VALIDER, RENVOYER):
+        raise Refus(f"réponse inconnue : {verdict}")
+    if verdict == RENVOYER and not remarque:
+        raise Refus("pour renvoyer l'élément, dites ce qu'il faut changer (une remarque est obligatoire)")
+    fid, element = d["fonctionnalite"], d["element"]
+    v = _element_en_validation(projet, etat, d)
+    if v is None:
+        raise Refus("l'étape de validation n'est plus dans le workflow de cette fonctionnalité")
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    if d.get("tache"):
+        journal = "Validé." if verdict == VALIDER else f"Renvoyé : {remarque}"
+        lancer(projet, "tache", {"id": d["tache"], "colonne": "fait", "active": False, "journal": [journal]})
+    v["phase"] = "flux"
+    if verdict == VALIDER:
+        _dire(projet, fid, f"« {element['nom']} » est validé : l'élément continue.")
+        _terminer(projet, {"demande": demande["id"]}, "C'est validé : l'élément continue.")
+        return _apres_flux(projet, etat, v) + _demarrer_en_attente(projet, etat, fid)
+    v["pas"] -= 1
+    _tache_de_flux(projet, etat, v, journal=[f"Remarque du Directeur : {remarque}"])
+    _dire(projet, fid, f"« {element['nom']} » est renvoyé : l'étape précédente est refaite.")
+    _terminer(projet, {"demande": demande["id"]}, "C'est renvoyé : l'étape précédente est refaite avec votre remarque.")
+    return _demarrer_en_attente(projet, etat, fid)
+
+
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
         "elargir_genre": _sur_elargir_genre,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
-        "partenaires_actualiser": _sur_partenaires, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}
+        "partenaires_actualiser": _sur_partenaires, "valider_etape": _sur_valider_etape, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}
 
 
 # --- Le cadrage et le prototype.
@@ -1715,13 +1775,45 @@ def _etat_element(etat, fid, element):
         "attendus": 0, "rapports": []})
 
 
-def _tache_de_flux(projet, etat, v):
+def _tache_de_flux(projet, etat, v, journal=None):
     pas = _production(projet, v["fid"])
     s = pas[v["pas"]]
+    if wf.est_validation(s):
+        return _attendre_le_directeur(projet, v, s)
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
-                       element=v["element"]["id"], colonne=s["id"])
+                       element=v["element"]["id"], colonne=s["id"], journal=journal)
     v["taches"].append(tid)
     return tid
+
+
+def _attendre_le_directeur(projet, v, s):
+    """L'élément arrive à une étape de validation : une tâche sans agent et une décision de projet, avec le compte rendu
+    et les fichiers de l'étape précédente. Rien ne part tant que le Directeur n'a pas répondu."""
+    v["phase"] = "validation"
+    element = v["element"]
+    tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
+                                   "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
+                                   "element": element["id"]})["id"]
+    v["taches"].append(tid)
+    precedent = v.get("dernier_rapport") or {}
+    entree = {"action": "poser", "portee": "projet", "genre": GENRE_VALIDATION, "fonctionnalite": v["fid"],
+              "texte": f"L'élément « {element['nom']} » attend votre validation : « {s['nom']} ».",
+              "element": {"id": element["id"], "nom": element["nom"]}, "etape": s["id"], "tache": tid,
+              "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": list(precedent.get("fichiers") or [])}
+    lancer(projet, "decision", entree)
+    return tid
+
+
+def _retenir_le_rapport(v, r):
+    """Le compte rendu (2000 caractères au plus) et les fichiers du dernier rapport pour cet élément : ce que le Directeur
+    voit à la validation suivante."""
+    if r is None:
+        return
+    eid = v["element"]["id"]
+    texte = ((r.get("message") or {}).get("texte") or "").strip()
+    fichiers = [{"chemin": f["chemin"], "titre": f["titre"]} for f in r.get("fichiers") or []
+                if f.get("element") in (None, eid)]
+    v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX]}
 
 
 def _sans_relecteur(projet):
@@ -1743,12 +1835,13 @@ def _etape_de_relecture(projet, fid=None):
     production = _production(projet, fid)
     services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
     for rang in range(len(production) - 1, -1, -1):
-        if _est_de_qualite(production[rang], services):
+        if not wf.est_validation(production[rang]) and _est_de_qualite(production[rang], services):
             return rang
-    return max(len(production) - 1, 0)
+    return next((r for r in range(len(production) - 1, -1, -1) if not wf.est_validation(production[r])), 0)
 
 
 def _apres_flux(projet, etat, v, r=None):
+    _retenir_le_rapport(v, r)
     v["pas"] += 1
     sans = _sans_relecteur(projet)
     if sans and v["pas"] - 1 == _etape_de_relecture(projet, v["fid"]):
@@ -1913,13 +2006,16 @@ def _avancer_serie(projet, etat, fid):
     f = _fonc(projet, fid)
     revoir = _a_decision(f, "methode_a_revoir")
     elements = _m(etat, "elements")
+    for d in _etat(projet)["decisions"]:     # le moteur relancé : les éléments qui attendent le Directeur reviennent
+        if d["portee"] == "projet" and d["genre"] == GENRE_VALIDATION and d.get("fonctionnalite") == fid:
+            _element_en_validation(projet, etat, d)
     mine = [v for v in elements.values() if v["fid"] == fid]
     if not revoir:
         for v in mine:
             if v["phase"] == "attente_methode":   # la méthode a été revue : l'élément repart de son premier pas
                 v.update(phase="flux", pas=0, corrections=0, tour=0, taches=[], points=[])
                 _tache_de_flux(projet, etat, v)
-        vivants = sum(1 for v in mine if v["phase"] in ("flux", "relecture", "correction"))
+        vivants = sum(1 for v in mine if v["phase"] in ("flux", "relecture", "correction", "validation"))
         fait = {v["element"]["id"] for v in mine if v["phase"] == "fait"}
         deps = _m(etat, "depend_de").get(fid, {})
         while vivants < ELEMENTS_EN_COURS_MAX:

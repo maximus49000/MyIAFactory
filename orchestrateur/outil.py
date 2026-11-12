@@ -46,7 +46,7 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "partenaire_regle", "partenaires_actualiser",
+                 "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
                  "partenaires_maj")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
@@ -688,6 +688,8 @@ def cmd_decision(ctx, e):
                 if e.get("fonctionnalite") is not None:
                     _fonc(s, e["fonctionnalite"])
                     d["fonctionnalite"] = e["fonctionnalite"]
+            elif genre == "valider_etape":
+                d.update(_validation_decidee(ctx, s, e))
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -714,6 +716,33 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _validation_decidee(ctx, s, e):
+    """Les champs de la décision `valider_etape` : l'élément qui attend le Directeur, l'étape de validation, la tâche qui
+    la porte, le compte rendu de l'étape précédente et ses fichiers."""
+    fid = e.get("fonctionnalite")
+    _fonc(s, fid)
+    element = e.get("element")
+    if not (isinstance(element, dict) and isinstance(element.get("id"), str) and element["id"].strip()
+            and isinstance(element.get("nom"), str) and element["nom"].strip()):
+        raise Refus("« valider_etape » demande « element » {id, nom}.")
+    if e.get("etape") not in ctx.colonnes():
+        raise Refus(f"« valider_etape » : étape inconnue « {e.get('etape')} ».")
+    tache = texte(e, "tache")
+    if su.tache(s, tache) is None:
+        raise Refus(f"« valider_etape » : tâche inconnue « {tache} ».")
+    compte_rendu = e.get("compte_rendu", "")
+    fichiers = e.get("fichiers", [])
+    if not isinstance(compte_rendu, str) or len(compte_rendu) > 2000:
+        raise Refus("« compte_rendu » est un texte de 2000 caractères au plus.")
+    if (not isinstance(fichiers, list) or not all(isinstance(x, dict) and isinstance(x.get("chemin"), str)
+                                                  and x["chemin"].strip() and isinstance(x.get("titre"), str)
+                                                  and x["titre"].strip() for x in fichiers)):
+        raise Refus("« fichiers » est une liste de {chemin, titre}.")
+    return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
+            "tache": tache, "compte_rendu": compte_rendu,
+            "fichiers": [{"chemin": x["chemin"], "titre": x["titre"]} for x in fichiers]}
 
 
 def _phrase(e, cle):

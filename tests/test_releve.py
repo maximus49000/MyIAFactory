@@ -833,6 +833,20 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[base]), "agent")
         self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "agent": "d1"}])), [])
 
+    def test_releve_decision_valider_etape(self):
+        base = {"id": "v", "genre": "valider_etape", "texte": "Valider ?", "fonctionnalite": "f1",
+                "element": {"id": "e1", "nom": "Accueil"}, "etape": "f1-valider", "tache": "t3",
+                "compte_rendu": "Tout est vert.", "fichiers": [{"chemin": "pieces/a.png", "titre": "Capture"}]}
+        self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
+        self.assertEqual(releve.valider(v4(decisions_projet=[{k: v for k, v in base.items()
+                                                                if k not in ("compte_rendu", "fichiers")}])), [])
+        self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "element"}]), "element")
+        self.refus(v4(decisions_projet=[{**base, "fichiers": [{"chemin": "a.png"}]}]), "fichiers")
+        self.refus(v4(decisions_projet=[{**base, "compte_rendu": 3}]), "compte_rendu")
+        colonnes = [{"id": "a", "nom": "A", "validation": True}]
+        self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
+        self.refus(v4(colonnes=[{"id": "a", "nom": "A", "validation": "oui"}]), "validation")
+
     def test_decision_organisation_valide(self):
         base = {"id": "o", "genre": "organisation", "texte": "Ajouter un service"}
         org = {"services": [{"id": "dev", "nom": "Dev"}, {"id": "son", "nom": "Son"}],

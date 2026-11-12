@@ -138,7 +138,7 @@ Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": 
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
-genre), `session_cloud` avec `agent`, ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
+genre), `session_cloud` avec `agent`, `valider_etape` (voir plus bas) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
 "flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi

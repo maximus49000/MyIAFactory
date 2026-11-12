@@ -3,6 +3,8 @@ import json
 import unittest
 
 from moteur import agents, appel, jugement, regles
+from orchestrateur import factory as fa
+from orchestrateur import workflows as wf
 from tests.orch_aide import AvecProjet
 
 FICHE_REMI = ("Clé : rel-1\nPrénom : Rémi\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\n"
@@ -655,6 +657,161 @@ class Arrets(Base):
         self.assertEqual(actions, [])
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
         self.assertEqual([t["id"] for t in self.taches()], [occupe])
+
+
+class Validation(Base):
+    """Une étape de validation du Directeur dans le flux : l'élément s'arrête, le Directeur valide ou renvoie."""
+
+    VAL = {"id": "valider", "nom": "Validation du Directeur", "validation": True}
+
+    def projet_avec_validation(self, flux=None, elements=1):
+        """Sans relecteur : programmation, tests, validation du Directeur, livraison de l'apk."""
+        (self.dossier / "fiches" / "remi.md").unlink()
+        (self.dossier / "fiches" / "zoe.md").unlink()
+        for cle, role, service in (("test-1", "testeur", "qualite"), ("liv-1", "livreur", "livraison")):
+            (self.dossier / "fiches" / f"{cle}.md").write_text(
+                FICHE_REMI.replace("rel-1", cle).replace("relecteur", role).replace("Service : dev", f"Service : {service}"),
+                encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["services"] += [{"id": "qualite", "nom": "Qualité"}, {"id": "livraison", "nom": "Livraison"}]
+        f["flux"] = flux or [{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
+                             {"id": "essai", "nom": "Tests et essai du jeu", "role": "testeur", "service": "qualite"},
+                             self.VAL,
+                             {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur",
+                              "service": "livraison"}]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        self.serie(elements)
+
+    def jusqu_a_la_validation(self, **plus):
+        self.projet_avec_validation(**plus)
+        rapports = [{"statut": "fait", "message": {"texte": "Programmé."}},
+                    {**verdict("e1"), "message": {"texte": "Tout est vert, apk d'essai prêt."},
+                     "fichiers": [{"chemin": "pieces/f1/essai.png", "titre": "Capture de l'essai", "element": "e1"},
+                                  {"chemin": "pieces/f1/autre.png", "titre": "D'un autre élément", "element": "e9"}]}]
+        return self.piloter(regles.avancer(self.projet, self.etat), rapports=rapports)
+
+    def decisions(self):
+        return [d for d in self.ok("etat")["decisions"] if d["genre"] == "valider_etape"]
+
+    def repondre(self, **champs):
+        d = self.decisions()[0]
+        return self.traiter(type="valider_etape", decision=d["id"], **champs)
+
+    def test_element_s_arrete_a_la_validation(self):
+        vus = self.jusqu_a_la_validation()
+        self.assertEqual([a[0] for a in vus].count("agent"), 2)        # la programmation et les tests, rien de plus
+        (d,) = self.decisions()
+        self.assertEqual((d["portee"], d["fonctionnalite"], d["etape"]), ("projet", "f1", "valider"))
+        self.assertEqual(d["element"], {"id": "e1", "nom": "Accueil"})
+        self.assertEqual(d["compte_rendu"], "Tout est vert, apk d'essai prêt.")
+        self.assertEqual(d["fichiers"], [{"chemin": "pieces/f1/essai.png", "titre": "Capture de l'essai"}])
+        (t,) = self.taches(etape="validation:valider")
+        self.assertEqual((t["colonne"], t["role"], t["agent"], t["active"], d["tache"]), ("valider", None, None, False, t["id"]))
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "validation")
+        self.assertEqual(self.taches(etape="flux:livraison"), [])
+        self.assertEqual(regles.avancer(self.projet, self.etat), [])    # rien ne part tant que le Directeur n'a pas répondu
+
+    def test_valider_passe_a_l_etape_suivante(self):
+        self.jusqu_a_la_validation()
+        d, actions = self.repondre(verdict="valider")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(self.decisions(), [])
+        self.assertEqual(self.taches(etape="validation:valider")[0]["colonne"], "fait")
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Livré."}}])
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
+    def test_renvoyer_refait_l_etape_precedente_avec_la_remarque(self):
+        self.jusqu_a_la_validation()
+        d, actions = self.repondre(verdict="renvoyer", texte="Le menu est trop chargé.")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertIn("Remarque du Directeur : Le menu est trop chargé.", [j["texte"] for j in essais[-1]["journal"]])
+        self.assertIn("Remarque du Directeur : Le menu est trop chargé.",
+                      regles._matiere(self.projet, self.etat, essais[-1]))
+        self.assertEqual(self.etat["elements"]["f1/e1"]["pas"], 1)
+        # l'étape refaite, l'élément revient à la validation : une nouvelle décision, avec le nouveau compte rendu
+        self.piloter(actions, rapports=[{**verdict("e1"), "message": {"texte": "Menu allégé."}}])
+        (nouvelle,) = self.decisions()
+        self.assertEqual(nouvelle["compte_rendu"], "Menu allégé.")
+        self.assertEqual(len(self.taches(etape="validation:valider")), 2)
+        self.assertEqual(self.taches(etape="flux:livraison"), [])
+
+    def test_renvoyer_sans_remarque_refuse(self):
+        self.jusqu_a_la_validation()
+        for texte in (None, "   "):
+            champs = {} if texte is None else {"texte": texte}
+            d = self.decisions()[0]
+            i = self.ok("actions", entree={"type": "valider_etape", "decision": d["id"], "verdict": "renvoyer", **champs})["id"]
+            demande = next(x for x in self.demande_en_attente() if x["id"] == i)
+            self.assertEqual(regles.traiter_demande(self.projet, demande, self.etat), [])
+            self.assertIn("remarque", self.statut(i)["reponse"])
+        self.assertEqual(len(self.decisions()), 1)                      # l'élément reste en attente
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "validation")
+        self.assertEqual(len(self.taches(etape="flux:essai")), 1)
+
+    def test_validation_apres_redemarrage(self):
+        self.jusqu_a_la_validation()
+        self.etat = regles.nouvel_etat()                                # le moteur est relancé : sa mémoire est perdue
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "validation")   # il retrouve l'élément qui attend
+        self.assertEqual(self.taches(etape="flux:livraison"), [])
+        self.etat = regles.nouvel_etat()
+        d, actions = self.repondre(verdict="valider")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Livré."}}])
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
+    def test_validation_compte_parmi_les_elements_en_cours(self):
+        self.projet_avec_validation(elements=3)
+        deux = {"statut": "fait", "message": {"texte": "Testé."}, "verdicts": [
+            {"element": e, "conforme": True, "points": []} for e in ("e1", "e2")]}
+        rapports = [{"statut": "fait", "message": {"texte": "Programmé."}}, deux]    # un agent pour chaque lot de deux
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=rapports)
+        self.assertEqual({d["element"]["id"] for d in self.decisions()}, {"e1", "e2"})
+        self.piloter(regles.avancer(self.projet, self.etat))
+        self.assertEqual([q["id"] for q in self.fonc()["file"]], ["e3"])      # e3 attend : deux éléments en cours
+        self.assertNotEqual(self.fonc()["etape"], "terminee")
+
+    def test_relecture_sans_relecteur_ignore_la_validation(self):
+        self.projet_avec_validation(flux=[
+            {"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"}, self.VAL,
+            {"id": "livraison", "nom": "Livraison", "role": "livreur", "service": "livraison"}])
+        production = regles._production(self.projet, "f1")
+        self.assertEqual(len(production), 3)
+        self.assertEqual(regles._etape_de_relecture(self.projet, "f1"), 2)    # la livraison, jamais la validation
+        self.assertEqual([s["id"] for s in wf.etapes_d_agent(production)], ["dev", "livraison"])
+        self.assertEqual(regles._role_production(self.projet, "f1"), "dev")
+        self.assertEqual(regles._colonne_du_role(self.projet, "livreur", "f1"), "livraison")
+
+    def test_proposition_avec_validation_prefixee(self):
+        """La décision `organisation` d'une fonctionnalité dont le workflow a une validation : acceptée, puis suivie."""
+        flux = [{"id": "f1-dev", "nom": "Programmation", "role": "dev", "service": "dev"},
+                {"id": "f1-valider", "nom": "Validation du Directeur", "validation": True},
+                {"id": "f1-livraison", "nom": "Livraison", "role": "dev", "service": "dev"}]
+        self.fonctionnalite("cadrage")
+        o = {"services": [{"id": "metier", "nom": "Métier"}, {"id": "dev", "nom": "Dev"}], "flux": flux, "agents": [],
+             "briefs": {}, "cout": {"tokens": [1, 2], "euros": None}, "fonctionnalite": "f1",
+             "workflow": {"id": "w-f1", "genre": None, "flux": flux}, "livrable": "L'apk.", "environnement": [],
+             "outils_installation": []}
+        o["briefs"] = {"dev": "# Brief du rôle : dev"}
+        d = self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "organisation", "texte": "ok ?",
+                                        "organisation": o})
+        self.ok("organisation", entree={"action": "appliquer", "decision": d["id"]})
+        f = fa.lire(self.factory)
+        w = next(x for x in f["workflows"] if x["id"] == "w-f1")
+        self.assertEqual(w["flux"][1], {"id": "f1-valider", "nom": "Validation du Directeur", "validation": True})
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie", "workflow": "w-f1",
+                                          "methode": {"version": 1, "chemin": "pieces/f1/m.md"}})
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": DECOUPAGE["elements"][:1]})
+        self.piloter(regles.avancer(self.projet, self.etat))
+        self.assertEqual([t["etape"] for t in self.taches(fonctionnalite="f1") if t["etape"] != "cadrage"][:1],
+                         ["flux:f1-dev"])
+        cols = [c["id"] for c in self.ok("releve")["colonnes"]]
+        self.assertIn("f1-valider", cols)
 
 
 if __name__ == "__main__":

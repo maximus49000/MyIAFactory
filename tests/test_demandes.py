@@ -530,6 +530,9 @@ R5 = releve.normaliser({
                         "genres_connus": ["badges"], "incertain": True}]}],
     "decisions_projet": [{"id": "o2", "genre": "organisation", "texte": "Workflow ?",
                           "organisation": ORGANISATION_WORKFLOW},
+                         {"id": "v1", "genre": "valider_etape", "texte": "Valider ?", "fonctionnalite": "f1",
+                          "element": {"id": "e1", "nom": "Accueil"}, "etape": "a", "tache": "t1",
+                          "compte_rendu": "", "fichiers": []},
                          {"id": "e1", "genre": "elargir_genre", "texte": "Élargir ?", "cible": "badges",
                           "ancienne": "Badges", "propose": "Badges et logos", "fonctionnalite": "f1"},
                          {"id": "c1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "jeu-mobile",
@@ -578,6 +581,20 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.refus({**base, "verdict": "valider", "description": "x" * 3501})
         self.assertEqual(demandes.nettoyer({**base, "verdict": "valider", "description": "d", "autre": 1}),
                          {**base, "verdict": "valider", "description": "d"})
+
+    def test_valider_etape(self):
+        base = {"type": "valider_etape", "decision": "v1"}
+        self.ok({**base, "verdict": "valider"})
+        self.ok({**base, "verdict": "valider", "texte": "Bravo"})
+        self.ok({**base, "verdict": "renvoyer", "texte": "Le menu est trop chargé"})
+        self.refus({**base, "verdict": "renvoyer"})                                  # une remarque est obligatoire
+        self.refus({**base, "verdict": "renvoyer", "texte": "   "})
+        self.refus({**base, "verdict": "renvoyer", "texte": "x" * 3501})
+        self.refus({**base, "verdict": "peut-etre"})
+        self.refus({**base, "verdict": "valider", "decision": "zz"})
+        self.refus({**base, "verdict": "valider", "decision": "o2"})                 # la décision d'un autre genre
+        self.assertEqual(demandes.nettoyer({**base, "verdict": "renvoyer", "texte": "t", "autre": 1}),
+                         {**base, "verdict": "renvoyer", "texte": "t"})
 
     def test_organisation_d_un_workflow(self):
         base = {"type": "organisation", "decision": "o2"}

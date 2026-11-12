@@ -9,7 +9,10 @@ from pathlib import Path
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 
 DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True,
-           "moteur": {"couche": "claude"}, "agents_cloud_max": 3}
+           "moteur": {"couche": "claude"}, "agents_cloud_max": 3,
+           # Vrai quand le Directeur a accordé le dossier du projet pour les sessions cloud : le moteur répond alors
+           # lui-même « Yes, I trust this folder » à Claude Code (jamais sans cet accord).
+           "cloud_dossier_approuve": False}
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
 
@@ -42,6 +45,8 @@ def _verifier_moteur(r):
     n = r.get("agents_cloud_max")
     if type(n) is not int or not AGENTS_CLOUD_MAX[0] <= n <= AGENTS_CLOUD_MAX[1]:
         raise ReglagesInvalides("Réglages : « agents_cloud_max » doit être un entier de 1 à 16.")
+    if type(r.get("cloud_dossier_approuve")) is not bool:
+        raise ReglagesInvalides("Réglages : « cloud_dossier_approuve » doit valoir true ou false.")
 
 
 MAX_PROJETS = 12

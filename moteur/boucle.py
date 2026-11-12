@@ -79,7 +79,9 @@ def ouvrir_projet(fichier_reglages, environ=None):
     projet = regles.Projet(fichier.parent / "factory.json", couche)
     projet.ligne_a_dire = ligne
     try:
-        projet.cloud_max = reglages_bureau.charger(fichier)["agents_cloud_max"]
+        lus = reglages_bureau.charger(fichier)
+        projet.cloud_max = lus["agents_cloud_max"]
+        projet.cloud_dossier_approuve = lus["cloud_dossier_approuve"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet
@@ -645,7 +647,8 @@ class Moteur:
         """Une nouvelle session ; si le moteur ne peut pas la créer et que le Directeur a inscrit une session pour cet
         agent (la démarche manuelle), le départ est envoyé à cette session. Lève `ErreurCloud` si rien ne marche."""
         try:
-            return self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele)
+            return self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele,
+                                             approuver_dossier=getattr(projet, "cloud_dossier_approuve", False))
         except cloud.ErreurCloud as e:
             session = etat.get("sessions_cloud", {}).get(fiche["cle"]) or self._session_inscrite(projet, fiche["cle"])
             if not session:

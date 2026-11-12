@@ -283,10 +283,10 @@ class FauxCloud:
         self.lancees, self.suites, self.fusions, self.rapports, self.conflit = [], [], [], {}, None
         self.panne = None
 
-    def lancer_session(self, depart, *, dossier_projet, modele):
+    def lancer_session(self, depart, *, dossier_projet, modele, approuver_dossier=False):
         if self.panne:
             raise cloud.ErreurCloud(self.panne)
-        self.lancees.append({"depart": depart, "modele": modele})
+        self.lancees.append({"depart": depart, "modele": modele, "approuver_dossier": approuver_dossier})
         n = len(self.lancees)
         return {"session": f"session_{n}", "adresse": f"https://claude.ai/code/session_{n}"}
 
@@ -346,6 +346,25 @@ class Agents(Base):
         local = self.ok("depart", entree={"agent": "metier-1", "tache": t})["message"]
         self.assertNotIn(".factory/rapports", local)
         self.assertIn("fin_cloud", dir(depart))
+
+    def test_dossier_approuve_seulement_avec_l_accord_du_directeur(self):
+        """Le moteur ne répond à « trust this folder » que si les réglages du projet le disent."""
+        self.tache()
+        self.avancer()
+        self.assertEqual([l["approuver_dossier"] for l in self.cloud.lancees], [False])
+
+    def test_dossier_approuve_quand_le_directeur_l_a_accorde(self):
+        self.projet.cloud_dossier_approuve = True
+        self.tache()
+        self.avancer()
+        self.assertEqual([l["approuver_dossier"] for l in self.cloud.lancees], [True])
+
+    def test_reglage_dossier_approuve_lu_par_le_moteur(self):
+        reglages = self.dossier / "reglages.json"
+        reglages.write_text(json.dumps({"cloud_dossier_approuve": True}), encoding="utf-8")
+        self.assertTrue(boucle.ouvrir_projet(reglages).cloud_dossier_approuve)
+        reglages.write_text("{}", encoding="utf-8")
+        self.assertFalse(boucle.ouvrir_projet(reglages).cloud_dossier_approuve)
 
     def test_agent_cloud_d_un_autre_modele_que_le_lot_prend_la_tache(self):
         """Essai réel : des designers cloud recrutés en Opus restaient inemployés parce que le lot était en Sonnet."""

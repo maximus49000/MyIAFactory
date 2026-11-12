@@ -313,7 +313,8 @@ def cmd_charge(ctx, e):
     lanceur = ctx.f["skill"] / "lancer.py"
     try:
         p = subprocess.run([sys.executable, str(lanceur), "charge", "--reglages", str(ctx.f["reglages"])],
-                           capture_output=True, timeout=120)
+                           capture_output=True, timeout=120, stdin=subprocess.DEVNULL,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))   # jamais de fenêtre noire
     except (OSError, subprocess.TimeoutExpired) as ex:
         raise Refus(f"La mesure de charge n'a pas pu être lancée : {ex}")
     ligne = (p.stdout.decode("utf-8", "replace").strip().splitlines() or [""])[0]
@@ -2236,7 +2237,8 @@ def lancer_declaree(ctx, nom, entree, extra):
     env = {**os.environ, "MYIAFACTORY_FACTORY": str(ctx.f["chemin"]), "PYTHONIOENCODING": "utf-8"}
     try:
         p = subprocess.run(argv, cwd=str(ctx.f["base"]), input=corps, capture_output=True, env=env,
-                           timeout=DELAI_COMMANDE_DECLAREE_S)
+                           timeout=DELAI_COMMANDE_DECLAREE_S,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as ex:
         raise Refus(f"La commande déclarée « {nom} » n'a pas pu s'exécuter : {ex}"[:300])
     sortie = p.stdout.decode("utf-8", "replace").strip()

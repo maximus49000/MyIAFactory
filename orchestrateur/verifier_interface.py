@@ -274,7 +274,8 @@ def verifier_complet(chemin, etat):
 
 def _dans_un_depot_git(dossier):
     try:
-        p = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=str(dossier), capture_output=True, timeout=30)
+        p = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=str(dossier), capture_output=True, timeout=30,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired):
         return False
     return p.returncode == 0 and p.stdout.strip() == b"true"

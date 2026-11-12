@@ -29,7 +29,8 @@ def executer_gh(args, cwd):
     """(code, sortie) d'une commande gh. Jamais de question posée au clavier."""
     env = {**os.environ, "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"}
     try:
-        p = subprocess.run(["gh", *args], cwd=str(cwd), capture_output=True, timeout=DELAI_GH_S, env=env)
+        p = subprocess.run(["gh", *args], cwd=str(cwd), capture_output=True, timeout=DELAI_GH_S, env=env,
+                           stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as e:
         return 1, f"gh n'a pas pu s'exécuter : {e}"
     return p.returncode, (p.stdout + p.stderr).decode("utf-8", "replace").strip()

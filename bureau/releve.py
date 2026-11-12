@@ -1192,7 +1192,7 @@ def _tuer_arbre(p):
     try:
         if os.name == "nt":
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)],
-                           capture_output=True, timeout=5)
+                           capture_output=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
         else:
             os.killpg(p.pid, signal.SIGKILL)
     except (OSError, subprocess.SubprocessError):
@@ -1228,7 +1228,7 @@ def _executer(cmd, cwd, entree=None):
     `entree` (octets) est écrit sur l'entrée standard de la commande ; sans lui, l'entrée est fermée."""
     cmd = commande_python(developper(a) for a in cmd)
     delai = DELAI_COMMANDE_S
-    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if os.name == "nt"
                else {"start_new_session": True})
     p = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL if entree is None else subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, **options)

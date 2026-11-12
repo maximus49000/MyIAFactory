@@ -116,7 +116,8 @@ def executer_git(args, cwd):
     """(code, sortie) d'une commande git. Jamais de question posée au clavier."""
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C", "GIT_EDITOR": "true"}
     try:
-        p = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, timeout=DELAI_GIT_S, env=env)
+        p = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, timeout=DELAI_GIT_S, env=env,
+                           stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as e:
         return 1, f"git n'a pas pu s'exécuter : {e}"
     return p.returncode, (p.stdout + p.stderr).decode("utf-8", "replace").strip()

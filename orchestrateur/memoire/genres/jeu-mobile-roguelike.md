@@ -116,3 +116,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Construire les emblèmes pixel art à partir d'un masque de pixels, puis calculer contour, reflet et ombre depuis les voisins, garantit des couleurs conformes à la palette sans retouche manuelle.
+
+## G20 — Un script qui dessine du texte avec une police bitmap partie
+Rôles : artiste
+Date : 2026-11-12
+
+Un script qui dessine du texte avec une police bitmap partielle doit lever une erreur sur tout caractère absent, plutôt que de l'ignorer.

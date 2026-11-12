@@ -278,3 +278,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Quand on ajoute un type de récompense pendant le design d'un roguelike, le distinguer d'abord des récompenses existantes, réutiliser un nœud existant de la carte plutôt que d'en créer un, et dire dans quelle étape il entre et quelles autres étapes il touche.
+
+## G47 — Dans un tirage sans remise d'effets qui se cumulent sur une
+Rôles : designer
+Date : 2026-11-12
+
+Dans un tirage sans remise d'effets qui se cumulent sur une partie, vérifier automatiquement que le pool remplit chaque offre au pire cas : effets déjà pris plus effets qu'ils excluent, dans chaque famille.

@@ -626,5 +626,93 @@ class Parcours(AvecParcours):
         self.assertEqual(sorted(a["cle"] for a in vus[1][2]["agents"]), ["dev-1", "metier-1", "rel-1", "rel-2"])
 
 
+CREATION = {"id": "w-badges", "fonctionnalite": None, "genre": "badges", "flux": [
+    {"id": "faire", "nom": "Création des badges", "role": "dev", "service": "dev"},
+    {"id": "valider", "nom": "Validation du style", "validation": True},
+    {"id": "livrer", "nom": "Livraison des badges", "role": "dev", "service": "dev"}]}
+
+
+class WorkflowDeCreation(AvecParcours):
+    """Le projet a un workflow de genre défini à sa création : une demande du genre le reprend sans proposition."""
+
+    def setUp(self):
+        super().setUp()
+        self.reecrire(workflows=[CREATION])
+
+    def juges_vus(self, vus):
+        return [a[1] for a in vus if a[0] == "juger"]
+
+    def refus(self, commande, entree):
+        code, objet = self.outil("lancer", commande, entree=entree)
+        self.assertEqual(code, 1, objet)
+        return objet["erreur"]
+
+    def test_demande_meme_reprend_le_workflow_de_creation(self):
+        d, vus = self.demander({"classer_genre": CLASSER_MEME})
+        self.assertEqual(self.juges_vus(vus), ["classer_genre"])      # aucun proposer_organisation
+        self.assertEqual(self.decisions("organisation"), [])
+        f = self.fonc()
+        self.assertEqual((f["workflow"], f["genre"]), ("w-f1", "badges"))
+        w = next(x for x in self.lire_factory()["workflows"] if x["id"] == "w-f1")
+        self.assertEqual([e["id"] for e in w["flux"]], ["f1-faire", "f1-valider", "f1-livrer"])
+        self.assertTrue(w["flux"][1]["validation"])
+        self.assertEqual(len(self.taches(etape="cadrage")), 1)          # le cadrage démarre
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertTrue(any("workflow du projet" in m["texte"] for m in f["discussion"]))
+
+    def test_deuxieme_demande_meme_reprend_aussi(self):
+        self.demander({"classer_genre": CLASSER_MEME})
+        d, vus = self.demander({"classer_genre": CLASSER_MEME}, texte="Un autre badge pour Twitch")
+        self.assertEqual(self.juges_vus(vus), ["classer_genre"])
+        self.assertEqual(self.fonc("f2")["workflow"], "w-f2")
+        self.assertEqual(self.decisions("organisation"), [])
+
+    def test_demande_proche_propose_comme_avant(self):
+        d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION})
+        self.assertEqual(self.juges_vus(vus), ["classer_genre", "proposer_organisation"])
+        self.assertEqual(len(self.decisions("organisation")), 1)
+        self.assertIsNone(self.fonc()["workflow"])
+        dossier = vus[1][2]
+        self.assertEqual(dossier["workflows_du_genre"], [])             # genre « stickers » : celui de badges n'y est pas
+
+    def test_workflow_de_creation_inspire_les_propositions_du_meme_genre(self):
+        d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION})
+        self.reecrire(genre="stickers")        # le genre du projet change : la piste « stickers » devient « meme »
+        # le workflow de badges reste donné en exemple pour une demande rattachée à badges
+        _, vus = self.demander({"classer_genre": dict(CLASSER_PROCHE, genre="badges"),
+                                "proposer_organisation": PROPOSITION}, texte="Un badge de plus")
+        self.assertEqual(vus[1][2]["workflows_du_genre"][0]["id"], "w-badges")
+
+    def test_projet_sans_workflow_de_creation_inchange(self):
+        self.reecrire(workflows=[])
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
+        self.assertEqual(self.juges_vus(vus), ["classer_genre", "proposer_organisation"])
+        self.assertEqual(len(self.decisions("organisation")), 1)
+
+    def test_classer_rate_copie_le_workflow_de_creation(self):
+        self.cadrer(texte="Un badge")
+        self.assertEqual(self.fonc()["workflow"], "w-f1")
+        self.assertEqual(self.fonc()["genre"], "badges")
+        self.assertEqual(len(self.taches(etape="cadrage")), 1)
+
+    def test_refus_sans_texte_copie_le_workflow_de_creation(self):
+        _, decision = self.vers_l_organisation(classer=dict(CLASSER_PROCHE, genre="badges"))
+        self.traiter(type="organisation", decision=decision["id"], verdict="refuser")
+        self.assertEqual(self.fonc()["workflow"], "w-f1")      # une copie, jamais « w-badges » lui-même
+
+    def test_reprendre_refuse_un_workflow_de_fonctionnalite(self):
+        self.demander({"classer_genre": CLASSER_MEME})
+        self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION}, texte="Un sticker")
+        refus = self.refus("organisation", {"action": "reprendre", "fonctionnalite": "f2", "workflow": "w-f1"})
+        self.assertIn("workflow de genre", refus)
+        refus = self.refus("organisation", {"action": "reprendre", "fonctionnalite": "f2", "workflow": "principal"})
+        self.assertIn("workflow de genre", refus)
+
+    def test_reprendre_refuse_une_fonctionnalite_qui_a_deja_son_workflow(self):
+        self.demander({"classer_genre": CLASSER_MEME})
+        refus = self.refus("organisation", {"action": "reprendre", "fonctionnalite": "f1", "workflow": "w-badges"})
+        self.assertIn("déjà un workflow", refus)
+
+
 if __name__ == "__main__":
     unittest.main()

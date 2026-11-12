@@ -136,9 +136,9 @@
 - Produit : `lancer organisation {"action": "reprendre", "fonctionnalite": <fid>, "workflow": <id du workflow de genre>}` → copie `w-<fid>` ajoutée par `mise_en_place.ecrire_organisation` (services inchangés, aucun agent, aucun brief), la fonctionnalité prend `genre` et `workflow` ; rend `{"ok": True, "workflow": "w-<fid>"}` ; refus si le workflow n'est pas un workflow de genre du projet ou si la fonctionnalité a déjà un workflow.
 - Parcours : `classer_genre` → `meme` **et** `de_creation(fac)` existe → `reprendre`, une phrase au chef (« Cette demande suit le workflow du projet. »), puis cadrage : **aucun appel `proposer_organisation`, aucune décision `organisation`**. Sans workflow de création : comportement actuel. `proche`/`autre`/`incertain`, `coherente: false` : comportement actuel. `_reprendre_un_workflow` et `_classer_rate` copient aussi le workflow de création quand c'est lui qu'ils reprennent (une fonctionnalité ne pointe jamais sur `w-<genre>`).
 
-- [ ] **Étape 1 : tests** : `test_demande_meme_reprend_le_workflow_de_creation` (aucun jugement `proposer_organisation`, aucune décision, cadrage lancé, colonnes `f1-…`) ; `test_deuxieme_demande_meme_reprend_aussi` ; `test_demande_proche_propose_comme_avant` ; `test_projet_sans_workflow_de_creation_inchange` ; `test_classer_rate_copie_le_workflow_de_creation` ; `test_reprendre_refuse_un_workflow_de_fonctionnalite`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur orch banc`).
-- [ ] **Étape 5 : commit** « Moteur : une demande du genre du projet reprend le workflow de création ».
+- [x] **Étape 1 : tests** : `test_demande_meme_reprend_le_workflow_de_creation` (aucun jugement `proposer_organisation`, aucune décision, cadrage lancé, colonnes `f1-…`) ; `test_deuxieme_demande_meme_reprend_aussi` ; `test_demande_proche_propose_comme_avant` ; `test_projet_sans_workflow_de_creation_inchange` ; `test_classer_rate_copie_le_workflow_de_creation` ; `test_reprendre_refuse_un_workflow_de_fonctionnalite`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur orch banc`).
+- [x] **Étape 5 : commit** « Moteur : une demande du genre du projet reprend le workflow de création ».
 
 ### Tâche 6 : le poste (versions comparées, installation portée par le projet)
 

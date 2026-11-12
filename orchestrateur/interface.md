@@ -176,6 +176,11 @@ Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 Entrée `{"action": "environnement", "outils": [{outil, etat: en_place | a_installer, chemin?, version?, …}]}` : note l'état
 des outils du poste dans le fichier de factory (clé `environnement` ; un outil de même nom est remplacé).
+Entrée `{"action": "reprendre", "fonctionnalite": fid, "workflow": id}` : la fonctionnalité suit un workflow de genre du
+projet (défini à la création, sans fonctionnalité, ni le principal) : sa copie `w-<fid>` (étapes préfixées `<fid>-`) est
+ajoutée, sans service, agent ni brief nouveau, et la fonctionnalité prend son `genre` et son `workflow`. Rend
+`{"ok": true, "workflow": "w-<fid>"}`. Refus si le workflow n'est pas un workflow de genre du projet, si la
+fonctionnalité est inconnue ou a déjà un workflow, ou si le contrôle de l'organisation échoue (rien n'est écrit).
 
 ### `file`
 

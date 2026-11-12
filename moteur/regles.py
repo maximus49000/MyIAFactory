@@ -585,6 +585,9 @@ def _sur_fonctionnalite(projet, demande, etat):
         connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
         if demande["genre"] not in connus and demande.get("description"):
             suite["genre_nouveau"] = {"description": demande["description"]}
+        creation = wf.de_creation(_factory(projet), demande["genre"])
+        if creation is not None:      # ce projet a déjà le workflow de ce genre, validé à sa création
+            return _suivre_le_workflow_de_creation(projet, etat, fid, suite, creation)
         return _proposer(projet, etat, fid, suite)
     return _classer(projet, etat, fid, suite)
 
@@ -629,6 +632,9 @@ def _apres_classer_genre(projet, o, ctx, etat):
                                            elargissement=o.get("elargissement"))
     if verdict in ("meme", "proche"):
         lancer(projet, "fonctionnalite", {"id": fid, "genre": o["genre"]})
+        creation = wf.de_creation(fac, o["genre"]) if verdict == "meme" else None
+        if creation is not None:      # le genre du projet : le workflow validé à la création, sans nouvelle proposition
+            return _suivre_le_workflow_de_creation(projet, etat, fid, ctx, creation)
         if verdict == "proche":
             _dire(projet, fid, f"Cette demande est proche du genre « {o['genre']} » : elle y est rattachée. {raison}")
         return _proposer(projet, etat, fid, ctx)
@@ -644,6 +650,15 @@ def _apres_classer_genre(projet, o, ctx, etat):
                  "Est-ce le même genre, ou faut-il un autre projet ?")
     return _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain=verdict == "incertain",
                                        elargissement=o.get("elargissement"))
+
+
+def _suivre_le_workflow_de_creation(projet, etat, fid, ctx, creation):
+    """La demande est du genre du projet : elle reprend le workflow défini à la création (une copie `w-<fid>`), sans
+    proposition ni validation de workflow, et le cadrage démarre."""
+    lancer(projet, "organisation", {"action": "reprendre", "fonctionnalite": fid, "workflow": creation["id"]})
+    _dire(projet, fid, "Cette demande suit le workflow du projet.")
+    _terminer(projet, ctx, "Cette demande suit le workflow du projet : le cadrage commence.")
+    return _repondre_cadrage(projet, etat, fid)
 
 
 def _poser_genre_fonctionnalite(projet, ctx, fid, texte, propose, nouveau, connus, incertain, elargissement=None):
@@ -917,6 +932,9 @@ def _classer_rate(projet, etat, fid, ctx):
     genre = _genre_du_projet(_factory(projet))
     if genre:
         lancer(projet, "fonctionnalite", {"id": fid, "genre": genre})
+        creation = wf.de_creation(_factory(projet), genre)
+        if creation is not None:
+            lancer(projet, "organisation", {"action": "reprendre", "fonctionnalite": fid, "workflow": creation["id"]})
     _dire(projet, fid, "Je n'ai pas réussi à classer le genre de cette demande"
                        + (f" : je la traite avec le genre du projet (« {genre} »)." if genre else "."))
     _terminer(projet, ctx, "Le genre de la demande n'a pas pu être classé : je la traite avec celui du projet.")
@@ -942,11 +960,14 @@ def _reprendre_un_workflow(projet, etat, fid, ctx):
     w = _workflow_de_repli(projet, fid)
     if w is None:
         return False
-    entree = {"id": fid, "workflow": w["id"]}
     f = _fonc(projet, fid)
-    if not f.get("genre") and w.get("genre"):
-        entree["genre"] = w["genre"]
-    lancer(projet, "fonctionnalite", entree)
+    if w.get("fonctionnalite") is None and w["id"] != wf.PRINCIPAL:    # un workflow de genre : on en prend une copie
+        lancer(projet, "organisation", {"action": "reprendre", "fonctionnalite": fid, "workflow": w["id"]})
+    else:
+        entree = {"id": fid, "workflow": w["id"]}
+        if not f.get("genre") and w.get("genre"):
+            entree["genre"] = w["genre"]
+        lancer(projet, "fonctionnalite", entree)
     _dire(projet, fid, "Je garde le workflow existant "
                        + ("du même genre." if w["id"] != wf.PRINCIPAL else "du projet."))
     return True

@@ -889,6 +889,32 @@ def _noter_environnement(ctx, e):
     return {"ok": True, "environnement": brut["environnement"]}
 
 
+def _reprendre_le_workflow_de_creation(ctx, e):
+    """`{"action": "reprendre", "fonctionnalite", "workflow"}` : la fonctionnalité suit le workflow de genre du projet
+    (défini à la création) : sa copie `w-<fid>` est ajoutée sans service, agent ni brief nouveau, sans décision."""
+    from installation.dossier import Echec
+    from installation import mise_en_place
+    fid, voulu = texte(e, "fonctionnalite"), texte(e, "workflow")
+    with ctx.suivi.transaction() as s:
+        fonc = su.fonctionnalite(s, fid)
+        if fonc is None:
+            raise Refus(f"Fonctionnalité inconnue : {fid}")
+        if fonc.get("workflow"):
+            raise Refus(f"La fonctionnalité {fid} a déjà un workflow ({fonc['workflow']}).")
+        w = next((x for x in wf.tous(ctx.f) if x["id"] == voulu and x["fonctionnalite"] is None
+                  and x["id"] != wf.PRINCIPAL), None)
+        if w is None:
+            raise Refus(f"« {voulu} » n'est pas un workflow de genre du projet.")
+        copie = wf.copie_pour(w, fid)
+        try:
+            mise_en_place.ecrire_organisation(
+                ctx.f["chemin"], [dict(x) for x in ctx.f["services"]], copie["flux"], [], {}, workflow=copie)
+        except Echec as ex:
+            raise Refus(str(ex))
+        fonc["genre"], fonc["workflow"], fonc["maj"] = copie["genre"], copie["id"], su.maintenant()
+    return {"ok": True, "workflow": copie["id"]}
+
+
 def cmd_organisation(ctx, e):
     """Applique une décision `organisation` acceptée : services, flux (ou workflow d'une fonctionnalité), fiches et
     briefs, puis lève la décision. `fable` : les clés des agents que le Directeur a cochés pour Fable (parmi ceux dont la
@@ -897,8 +923,10 @@ def cmd_organisation(ctx, e):
     from installation import mise_en_place
     if e.get("action") == "environnement":
         return _noter_environnement(ctx, e)
+    if e.get("action") == "reprendre":
+        return _reprendre_le_workflow_de_creation(ctx, e)
     if e.get("action") != "appliquer":
-        raise Refus("« action » doit valoir appliquer (ou environnement).")
+        raise Refus("« action » doit valoir appliquer (ou environnement, ou reprendre).")
     i = texte(e, "decision")
     fable = e.get("fable", [])
     if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):

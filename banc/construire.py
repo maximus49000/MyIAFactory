@@ -357,12 +357,14 @@ def construire(dossier_factory, transcriptions_, sortie):
     briefs_dossier = Path(factory["fiches"]) / "briefs"
     briefs = {p.stem: _brief_de_depart(p.read_text(encoding="utf-8-sig")) for p in sorted(briefs_dossier.glob("*.md"))} \
         if briefs_dossier.is_dir() else {}
+    projet = {"nom": factory["nom"], "services": factory["services"], "flux": factory["flux"],
+              "seuil_methode": factory["seuil_methode"], "agents_locaux_max": factory["agents_locaux_max"]}
+    for cle in ("genre", "description"):     # la demande de l'essai est du genre du projet : le moteur la classe ainsi
+        if factory.get(cle):
+            projet[cle] = factory[cle]
     donnees = {
         "version": 1,
-        "projet": {"factory": {"nom": factory["nom"], "services": factory["services"], "flux": factory["flux"],
-                               "seuil_methode": factory["seuil_methode"],
-                               "agents_locaux_max": factory["agents_locaux_max"]},
-                   "fiches": fiches, "briefs": briefs, "reglages": {}},
+        "projet": {"factory": projet, "fiches": fiches, "briefs": briefs, "reglages": {}},
         "gestes": gestes, "rapports": _rapports(factory, suivi, transcriptions_),
         "attendu": _attendu(suivi, gestes),
         "essai": {"questions": sum(1 for f in suivi["fonctionnalites"] for m in f["discussion"]

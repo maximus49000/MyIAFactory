@@ -3,6 +3,7 @@
  "projet": {
   "factory": {
    "nom": "Démonstration synthétique",
+   "genre": "ecrans-demo",
    "services": [
     {
      "id": "metier",

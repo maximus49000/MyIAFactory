@@ -18,23 +18,31 @@ METHODE = {"document": "# Méthode\n\n1. Faire l'écran comme la maquette.", "br
            "controles": [{"texte": "Le titre fait au moins 24 px.", "origine": "prototype"}]}
 APRES_REFUS = {"suite": "corriger", "consigne": "Agrandir le titre du profil.", "raison": "Titre trop petit."}
 USAGE_JUGEMENT = {"modele": "claude-haiku-5-5", "entree": 1500, "sortie": 200, "cache_lecture": 0, "cache_ecriture": 0}
+GENRE = "ecrans-demo"           # le genre du projet synthétique
+CLASSER = {"verdict": "meme", "genre": GENRE, "nouveau": None, "raison": "Des écrans, comme le reste du projet."}
+
+
+def organisation(dev="dev", relecture="relecture", environnement=()):
+    """Une proposition de workflow : celui du projet repris (ses rôles), les étapes nommées à volonté."""
+    return {"flux": [{"etape": dev, "nom": "Développement", "role": "dev", "service": "dev"},
+                     {"etape": relecture, "nom": "Relecture", "role": "relecteur", "service": "dev"}],
+            "services": [], "agents": [], "briefs": {}, "livrable": "Les écrans, après relecture.",
+            "environnement": list(environnement), "outils_installation": []}
 
 
 class Jugements:
-    """Un faux `appeler` de jugement : la réponse du type d'appel reconnu à sa consigne."""
+    """Un faux `appeler` de jugement : la réponse du type d'appel reconnu à sa consigne (une exception est levée)."""
 
     def __init__(self, **reponses):
-        self.reponses = {"decouper": DECOUPAGE, "ecrire_methode": METHODE, "apres_refus": APRES_REFUS, **reponses}
+        self.reponses = {"decouper": DECOUPAGE, "ecrire_methode": METHODE, "apres_refus": APRES_REFUS,
+                         "classer_genre": CLASSER, "proposer_organisation": organisation(), **reponses}
         self.types = []
 
     def __call__(self, consigne, dossier, modele, **options):
         type_ = next(t for t in jugement.TYPES if jugement.consigne(t) == consigne)
-        if type_ in ("classer_genre", "proposer_organisation"):
-            # le banc n'a pas encore les gestes du parcours d'une nouvelle fonctionnalité (phase E de « un genre et un
-            # workflow par fonctionnalité ») : l'appel échoue, le moteur prend son issue de secours (le genre du
-            # projet, puis le cadrage) et le passage reste celui d'avant
-            raise appel.ErreurAppel("banc : pas de geste pour ce jugement")
         self.types.append(type_)
+        if isinstance(self.reponses[type_], Exception):
+            raise self.reponses[type_]
         return appel.Reponse(json.dumps(self.reponses[type_], ensure_ascii=False), [dict(USAGE_JUGEMENT)])
 
 
@@ -229,6 +237,65 @@ class Passage(unittest.TestCase):
             with self.assertRaises(ErreurBanc):
                 banc_main.projet_vide(Path(d), "projet-moteur")
 
+    def jouer(self, jugements, d):
+        """Le synthétique joué jusqu'au bout ; rend (résultat, fonctionnalité f1)."""
+        r = jouer.jouer_moteur(scenario.charger(SYNTHETIQUE), d, jugements)
+        f = next(x for x in r["suivi"]["fonctionnalites"] if x["id"] == "f1")
+        self.assertEqual(f["etape"], "terminee")
+        self.assertEqual(r["demandes_en_attente"], [])
+        self.assertEqual(r["gestes_restants"], 0)
+        self.assertEqual(r["ecarts"], [])
+        self.assertEqual(f["decisions"], [])
+        self.assertTrue(all(t["colonne"] == "fait" for t in r["suivi"]["taches"]))
+        return r, f
+
+    def test_le_banc_accepte_le_workflow_propose(self):
+        """Le moteur classe la demande (du genre du projet), propose son workflow ; le banc l'accepte, et la production
+        rejouée suit ce workflow : ses étapes (`f1-…`) désignent celles de l'essai."""
+        jugements = Jugements()
+        with tempfile.TemporaryDirectory() as d:
+            r, f = self.jouer(jugements, d)
+            self.assertEqual(jugements.types[:2], ["classer_genre", "proposer_organisation"])
+            self.assertEqual((f["genre"], f["workflow"]), (GENRE, "w-f1"))
+            orga = [x for x in r["suivi"]["demandes"] if x["type"] == "organisation"]
+            self.assertEqual([(x["verdict"], x["statut"]) for x in orga], [("accepter", "traitée")])
+            from orchestrateur import factory as fa
+            self.assertEqual([e["id"] for e in fa.lire(Path(d) / "factory.json")["workflows"][0]["flux"]],
+                             ["f1-dev", "f1-relecture"])
+            self.assertEqual(r["gestes_restants"], 0)
+
+    def test_etapes_renommees_rejouees_par_role(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.jouer(Jugements(proposer_organisation=organisation(dev="ecrans", relecture="verif")), d)
+
+    def test_le_poste_du_banc_est_pret(self):
+        """Le banc rejoue un essai fait : les outils du poste sont tenus pour en place, aucun agent d'installation."""
+        outil = {"outil": "Outil absent", "pour": "dev", "executables": ["outil-introuvable-du-banc"],
+                 "installation": "À la main."}
+        jugements = Jugements(proposer_organisation=organisation(environnement=[outil]))
+        with tempfile.TemporaryDirectory() as d:
+            r, _ = self.jouer(jugements, d)
+            self.assertFalse(any(t.get("etape") == "environnement" for t in r["suivi"]["taches"]))
+
+    def test_une_demande_d_un_autre_genre_reste_dans_le_projet(self):
+        """La demande de l'essai est du genre du projet : si le jugement en doute, le banc répond qu'elle l'est."""
+        for classer in ({"verdict": "incertain", "genre": None, "nouveau": None, "raison": "Je ne sais pas."},
+                        {"verdict": "autre", "genre": None, "nouveau": {"id": "autre-chose", "description": "Autre."},
+                         "raison": "Autre chose."}):
+            jugements = Jugements(classer_genre=classer)
+            with self.subTest(classer["verdict"]), tempfile.TemporaryDirectory() as d:
+                r, f = self.jouer(jugements, d)
+                self.assertEqual(f["genre"], GENRE)
+                choix = [x for x in r["suivi"]["demandes"] if x["type"] == "genre_fonctionnalite"]
+                self.assertEqual(len(choix), 1)
+                self.assertIn("proposer_organisation", jugements.types)
+
+    def test_proposition_ratee_le_banc_continue(self):
+        jugements = Jugements(proposer_organisation=appel.ErreurAppel("banc : en panne"))
+        with tempfile.TemporaryDirectory() as d:
+            r, f = self.jouer(jugements, d)
+            self.assertEqual(f.get("workflow"), "principal")
+
     def test_moteur_va_au_bout_du_synthetique(self):
         s = scenario.charger(SYNTHETIQUE)
         jugements = Jugements()
@@ -240,15 +307,17 @@ class Passage(unittest.TestCase):
             self.assertEqual(r["demandes_en_attente"], [])
             self.assertEqual(r["gestes_restants"], 0)
             self.assertEqual(r["ecarts"], [])
-            self.assertEqual([x["statut"] for x in suivi["demandes"]], ["traitée"] * 5)
+            # les gestes de l'essai, et l'acceptation du workflow proposé (un geste du banc)
+            self.assertEqual([x["statut"] for x in suivi["demandes"]], ["traitée"] * 6)
             self.assertEqual(f["nom"], "Application de démonstration")
             self.assertEqual(f["methode"]["version"], 1)
             self.assertTrue(f["cahier"]["valide_le"])
             self.assertEqual(f["decisions"], [])
             self.assertEqual(len(f["file"]), 0)
-            # le jugement : un découpage, une méthode, un refus ; rien d'autre (aucun appel de conseil)
-            self.assertEqual(sorted(jugements.types), ["apres_refus", "decouper", "ecrire_methode"])
-            self.assertEqual(len(r["usages_jugement"]), 3)
+            # le jugement : classer, proposer le workflow, un découpage, une méthode, un refus ; aucun appel de conseil
+            self.assertEqual(sorted(jugements.types), ["apres_refus", "classer_genre", "decouper", "ecrire_methode",
+                                                       "proposer_organisation"])
+            self.assertEqual(len(r["usages_jugement"]), 5)
             self.assertTrue(all(u["agent"] == "orchestrateur" for u in r["usages_jugement"]))
             # la production est celle de l'essai, rejouée
             self.assertGreaterEqual(len(r["usages_production"]), 9)

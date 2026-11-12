@@ -124,6 +124,22 @@ class Construire(AvecProjet):
         self.assertEqual(s.projet["factory"]["flux"][0]["id"], "dev")
         self.assertIn("lea.md", s.projet["fiches"])
 
+    def test_le_scenario_garde_le_genre_du_projet(self):
+        """La demande de l'essai est du genre du projet : sans lui, le moteur classerait la description d'un projet sans
+        genre et poserait une décision que l'essai n'a jamais eue."""
+        self.essai()
+        sans = construire.construire(self.dossier, self.transcriptions, self.bancs / "a" / "scenario.json")
+        self.assertNotIn("genre", scenario.charger(sans).projet["factory"])
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        self.factory.write_text(json.dumps({**f, "genre": "ecrans-mobiles", "description": "Des écrans."}),
+                                encoding="utf-8")
+        s = scenario.charger(construire.construire(self.dossier, self.transcriptions, self.bancs / "b" / "scenario.json"))
+        self.assertEqual(s.projet["factory"]["genre"], "ecrans-mobiles")
+        self.assertEqual(s.projet["factory"]["description"], "Des écrans.")
+        with tempfile.TemporaryDirectory() as d:
+            from orchestrateur import factory as fa
+            self.assertEqual(fa.lire(s.materialiser(d))["genre"], "ecrans-mobiles")
+
     def test_le_projet_du_scenario_est_celui_du_depart(self):
         """Les leçons notées et les méthodes écrites pendant l'essai n'existaient pas à son départ : un passage en vrai
         repart sans elles."""
@@ -400,7 +416,7 @@ class Mesures(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             r = jouer.jouer_moteur(s, d, Jugements())
         m = mesures.mesure_moteur(r, s, prix_de, "2026-11-10")
-        self.assertEqual(m["appels"], 3)
+        self.assertEqual(m["appels"], 5)        # classer, proposer le workflow, découper, méthode, après-refus
         self.assertGreater(m["euros_production"], m["euros_orchestration"])
         self.assertAlmostEqual(m["euros_total"], m["euros_orchestration"] + m["euros_production"], places=6)
         self.assertEqual(m["questions"], 4)       # quatre messages d'agents attendent l'utilisateur

@@ -284,3 +284,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Dans un tirage sans remise d'effets qui se cumulent sur une partie, vérifier automatiquement que le pool remplit chaque offre au pire cas : effets déjà pris plus effets qu'ils excluent, dans chaque famille.
+
+## G48 — Dans un roguelike, vérifier qu'un événement qui termine la r
+Rôles : testeur, dev
+Date : 2026-11-12
+
+Dans un roguelike, vérifier qu'un événement qui termine la run (mort par piège) ne lance pas de temporisation ni d'accès à l'arbre de scène après la libération du nœud ; la console doit rester sans erreur.

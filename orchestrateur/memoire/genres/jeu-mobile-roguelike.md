@@ -338,3 +338,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Dans un roguelike à plusieurs personnages, le point faible d'un ennemi commun doit pouvoir être atteint avec des moyens que tous les personnages ont, jamais avec la mécanique propre d'un seul.
+
+## G57 — Pour une carte générée dont des règles valent sur chaque che
+Rôles : designer, dev, equilibreur
+Date : 2026-11-12
+
+Pour une carte générée dont des règles valent sur chaque chemin, écrire un générateur de référence avec réparation, le vérifier sur des centaines de graines, et dire de combien la réparation éloigne la répartition voulue.

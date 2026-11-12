@@ -308,3 +308,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Quand plusieurs clés de signature candidates existent, lister leurs noms, tailles et dates sans les ouvrir, puis demander à l'utilisateur laquelle utiliser et son alias.
+
+## G52 — Pour un export signé destiné à une livraison, ne jamais rete
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export signé destiné à une livraison, ne jamais retenir le keystore de debug fourni par le moteur ou le SDK : demander à l'utilisateur sa clé de release, son chemin et son alias avant le build.

@@ -356,3 +356,9 @@ Rôles : designer, qa
 Date : 2026-11-13
 
 Dans un roguelike, chaque événement à choix doit garder au moins un choix sans risque qui ne demande aucune ressource, et un contrôle automatique le vérifie.
+
+## G60 — Quand une ligne du cahier regroupe plusieurs cartes, les com
+Rôles : designer
+Date : 2026-11-13
+
+Quand une ligne du cahier regroupe plusieurs cartes, les compter une à une avant de remplir une réserve de taille fixée, et signaler le choix fait pour rester dans la taille.

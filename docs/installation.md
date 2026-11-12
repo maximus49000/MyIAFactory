@@ -210,13 +210,14 @@ l'étape est refaite une fois (le même essai que « jamais rien à valider »),
 Une validation déjà posée sans ces champs n'affiche que « Ce qui doit marcher : l'élément correspond à son
 objectif ». On peut la compléter avec l'outil (`lancer decision {"action": "completer", "id": …}`).
 
-**Ce qu'on vous fait valider : en jeu, visuel ou mécanique.** Chaque demande dit sa nature, en tête de la fenêtre.
+**Ce qu'on vous fait valider : en jeu, visuel, son ou mécanique.** Chaque demande dit sa nature, en tête de la fenêtre.
 « À essayer en jeu » : vous recevez le livrable (apk, exe, zip…) ou le lien du site, et le mode opératoire numéroté juste
-après « Télécharger » (installer, lancer, quoi faire, quoi observer). « Visuel à juger » (images, sprites, sons) :
-vous recevez les images, jamais l'apk. « Mécanique à lire » : vous recevez le document explicatif (et des schémas si
+après « Télécharger » (installer, lancer, quoi faire, quoi observer). « Visuel à juger » (images, sprites) :
+vous recevez les images, jamais l'apk. « Son à écouter » (bruitages, musique) : vous recevez les fichiers audio (mp3, ogg, wav, flac), que la fenêtre vous fait
+écouter avec un lecteur, au téléphone comme sur l'ordinateur, jamais l'apk. « Mécanique à lire » : vous recevez le document explicatif (et des schémas si
 utile), jamais l'apk tant que la mécanique n'est pas jouable. L'apk n'est donc joint qu'à ce qui est vraiment en jeu.
 Une demande qui ne joint pas ce qui convient à sa nature est refaite une fois, puis la tâche de validation est bloquée avec
-la raison ; un apk joint par erreur à un visuel ou une mécanique est simplement retiré. Pour corriger une décision
+la raison ; un apk joint par erreur à un visuel, un son ou une mécanique est simplement retiré. Pour corriger une décision
 déjà posée : `lancer decision {"action": "completer", "id": …, "nature": …, "mode_operatoire": […], "fichiers": […]}`.
 
 **Un site en cours de développement.** L'agent déclare son adresse (`http://127.0.0.1:5173/`, par exemple) et laisse

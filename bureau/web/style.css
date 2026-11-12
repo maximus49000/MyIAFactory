@@ -1122,6 +1122,10 @@ body.val-ouverte { overflow: hidden; }
   padding: 8px 10px; margin: 6px 0; border: 1px solid #d6cfbf; border-radius: 10px; }
 .val-livrable-texte { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .val-livrable .bouton, .val-acces .bouton { flex: none; text-decoration: none; padding: 10px 16px; }
+.val-son { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin: 6px 0; border: 1px solid #d6cfbf;
+  border-radius: 10px; }
+.val-son .val-lecteur { width: 100%; min-height: 44px; }
+.val-son .bouton { align-self: flex-start; text-decoration: none; padding: 8px 14px; }
 .val-images { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
 .val-image { margin: 0; max-width: 220px; }
 .val-vignette { display: block; padding: 0; border: 1px solid #d6cfbf; border-radius: 8px; background: none; cursor: zoom-in; }

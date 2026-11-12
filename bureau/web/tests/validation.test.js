@@ -183,6 +183,28 @@ test("nature : libellé en tête, mode opératoire numéroté juste après « T�
   assert.doesNotMatch(rendre(D).boite.textContent, /À essayer en jeu|Visuel à juger|Mode opératoire/);
 });
 
+test("son à écouter : libellé, lecteur audio par fichier audio (adresse de lecture), téléchargement en plus", () => {
+  const d = {...D, nature: "son", fichiers: [{chemin: "sons/coup épique.mp3", titre: "Le coup"}, {chemin: "sons/fond.flac", titre: "fond.flac"},
+    {chemin: "pieces/f1/menu.png", titre: "Le menu"}, {chemin: "build/jeu.apk", titre: "Apk"}]};
+  assert.equal(V.natureDeValidation({nature: "son"}).libelle, "Son à écouter");
+  const v = V.aVerifier(d, {projet: "demo", origine: "http://100.64.1.2:8765"});
+  assert.deepEqual(v.sons.map((s) => [s.nom, s.titre]), [["coup épique.mp3", "Le coup"], ["fond.flac", "fond.flac"]]);
+  assert.equal(v.sons[0].url, "http://100.64.1.2:8765/api/telecharger?fonctionnalite=f1&chemin=sons%2Fcoup%20%C3%A9pique.mp3"
+    + "&lecture=1&projet=demo");
+  assert.deepEqual(v.livrables.map((l) => l.nom), ["jeu.apk"]);          // un son n'est pas un livrable à télécharger seul
+  const {boite} = rendre(d);
+  const lecteurs = boite.tous((n) => n.tagName === "audio");
+  assert.equal(lecteurs.length, 2);
+  assert.ok(lecteurs.every((a) => a.controls === true && a.preload === "none"));
+  assert.match(lecteurs[0].src, /\/api\/telecharger\?.*&lecture=1/);
+  assert.match(boite.textContent, /Son à écouter/);
+  assert.match(boite.textContent, /Le coup/);
+  assert.equal(boite.tous((n) => n.tagName === "a" && n.textContent === "Télécharger" && /\.(mp3|flac)$/.test(n.attributs.download)).length, 2);
+  assert.doesNotMatch(boite.textContent, /Rien à télécharger/);
+  assert.equal(V.estSon("a/B.FLAC") && V.estSon("x.wav") && V.estSon("x.ogg") && V.estSon("x.mp3"), true);
+  assert.equal(V.estSon("x.mp4"), false);
+});
+
 test("sans droit d'agir : la fenêtre se lit, rien ne s'envoie", () => {
   const {boite} = rendre(D, false);
   assert.equal(boite.tous((n) => n.className.startsWith("bouton val-envoyer")).length, 0);

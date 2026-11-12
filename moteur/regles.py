@@ -2113,8 +2113,9 @@ CONSIGNE_AVANT_VALIDATION = (
     "Déclare aussi la `nature` de ce que tu lui fais valider et ne joins que les preuves qui conviennent : "
     "`en_jeu` (à essayer dans le livrable : apk, exe, site) → le livrable (ou le lien d'accès) ET `mode_operatoire`, "
     f"{rel.MIN_ETAPES_MODE} à {rel.MAX_ETAPES_MODE} étapes courtes ({rel.MAX_ETAPE_MODE} caractères au plus : "
-    "installer, lancer, quoi faire, quoi observer) ; `visuel` (images, sprites, sons) → les images légendées, jamais "
-    "l'apk ; `mecanique` (règles, équilibrage) → un document explicatif md ou pdf, et si utile des schémas, jamais "
+    "installer, lancer, quoi faire, quoi observer) ; `visuel` (images, sprites) → les images légendées (et les sons "
+    "s'il y en a), jamais l'apk ; `son` (bruitages, musique) → les fichiers audio mp3, ogg, wav ou flac dans `fichiers`, "
+    "jamais l'apk ; `mecanique` (règles, équilibrage) → un document explicatif md ou pdf, et si utile des schémas, jamais "
     "l'apk (sauf si déjà jouable : alors `en_jeu`) ; `autre` → de quoi juger, expliqué. Le Directeur n'installe un apk "
     "que pour ce qui est en jeu ; tes points à vérifier suivent cette nature.")
 
@@ -2487,7 +2488,7 @@ def _attendre_le_directeur(projet, etat, v, s):
     n'est pas posée (voir `_rien_a_verifier`)."""
     precedent = v.get("dernier_rapport") or {}
     nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
-    if nature in ("visuel", "mecanique"):      # jamais l'apk pour juger un visuel ou une mécanique : il n'est pas montré
+    if nature in ("visuel", "son", "mecanique"):      # jamais l'apk pour juger un visuel, un son ou une mécanique
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
@@ -2551,13 +2552,15 @@ def _fichier_existe(projet, precedent, convient):
 
 def _manques_de_nature(projet, nature, precedent):
     """Ce que la nature déclarée de la validation exige et que le rapport n'a pas donné : en jeu, un livrable à essayer
-    (ou un lien d'accès) et son mode opératoire ; un visuel, une image (ou un son) ; une mécanique, un document
-    explicatif. Sans nature (ou `autre`), rien de plus."""
+    (ou un lien d'accès) et son mode opératoire ; un visuel, une image (plus les sons) ; un son, un fichier audio ;
+    une mécanique, un document explicatif. Sans nature (ou `autre`), rien de plus."""
     if nature == "en_jeu":
         return ([] if rel.acces_ok(precedent.get("acces")) or _fichier_existe(projet, precedent, rel.est_executable)
                 else ["livrable"]) + ([] if rel.mode_operatoire_ok(precedent.get("mode_operatoire")) else ["mode_operatoire"])
     if nature == "visuel":
-        return [] if _fichier_existe(projet, precedent, lambda c: rel.est_image(c) or rel.est_son(c)) else ["image"]
+        return [] if _fichier_existe(projet, precedent, rel.est_image) else ["image"]
+    if nature == "son":
+        return [] if _fichier_existe(projet, precedent, rel.est_son) else ["son"]
     if nature == "mecanique":
         return [] if _fichier_existe(projet, precedent, rel.est_document) else ["document"]
     return []
@@ -2571,13 +2574,15 @@ CONSIGNES_DE_NATURE = {
                        "l'utilisateur : installer, lancer, quoi faire, quoi observer.",
     "image": "Validation visuelle sans image : joins les images concernées (captures PNG ou JPEG légendées, "
              "`message.images`), jamais l'apk.",
+    "son": "Validation d'un son sans fichier audio : joins le son à écouter dans `fichiers` (mp3, ogg, wav ou flac, "
+           "avec son `element`), jamais l'apk.",
     "document": "Validation d'une mécanique sans document explicatif : écris un document (md ou pdf) qui explique la "
                 "mécanique, joins-le dans `fichiers` (avec, si utile, images ou schémas), jamais l'apk (sauf si la "
                 "mécanique est déjà jouable : alors `nature: en_jeu`).",
 }
 QUOI_MANQUE = {"rien": "sans rien à vérifier", "doit_marcher": "sans dire ce qui doit marcher",
                "livrable": "sans livrable à essayer", "mode_operatoire": "sans mode opératoire",
-               "image": "sans image", "document": "sans document explicatif"}
+               "image": "sans image", "son": "sans son", "document": "sans document explicatif"}
 
 
 CONSIGNE_DOIT_MARCHER = (

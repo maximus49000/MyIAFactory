@@ -1167,6 +1167,50 @@ class Validation(Base):
         self.assertNotIn("mode_operatoire", d)                  # le mode opératoire ne sert qu'à une validation en jeu
         self.assertNotIn("Le livrable se télécharge", " ".join(d["points"]))
 
+    def test_visuel_exige_une_image_un_son_seul_ne_suffit_plus(self):
+        self.fichier("sons/coup.mp3", b"ID3")
+        sans = self.rendu("visuel", ["sons/coup.mp3"])
+        self.valider_nature(sans, sans)
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertTrue(any("Validation visuelle sans image" in j["texte"] for j in essais[-1]["journal"]))
+
+    def test_visuel_avec_image_et_son_pose_les_deux(self):
+        self.fichier("sons/coup.mp3", b"ID3")
+        self.fichier("pieces/f1/essai.png")
+        self.valider_nature(self.rendu("visuel", ["pieces/f1/essai.png", "sons/coup.mp3"]))
+        (d,) = self.decisions()
+        self.assertEqual(sorted(f["chemin"] for f in d["fichiers"]), ["pieces/f1/essai.png", "sons/coup.mp3"])
+
+    def test_son_demande_un_fichier_audio_une_image_ne_suffit_pas(self):
+        self.fichier("pieces/f1/essai.png")
+        sans = self.rendu("son", ["pieces/f1/essai.png"])
+        self.valider_nature(sans, sans)
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertTrue(any("sans fichier audio" in j["texte"] for j in essais[-1]["journal"]))
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("sans son", val["bloquee"])
+
+    def test_son_avec_audio_pose_sans_apk_ni_mode_operatoire(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        for audio in ("sons/coup.flac", "sons/musique.ogg"):
+            self.fichier(audio, b"fLaC")
+        self.valider_nature(self.rendu("son", ["build/jeu.apk", "sons/coup.flac", "sons/musique.ogg"],
+                                       mode_operatoire=self.MODE))
+        (d,) = self.decisions()
+        self.assertEqual(d["nature"], "son")
+        self.assertEqual(sorted(f["chemin"] for f in d["fichiers"]), ["sons/coup.flac", "sons/musique.ogg"])
+        self.assertNotIn("mode_operatoire", d)
+
+    def test_son_dans_un_compte_rendu_de_lot(self):
+        self.fichier("sons/coup.wav", b"RIFF")
+        r = self.rendu(None, ["sons/coup.wav"], comptes_rendus=[{"element": "e1", "texte": "Sons.", "nature": "son"}])
+        self.valider_nature(r)
+        (d,) = self.decisions()
+        self.assertEqual(d["nature"], "son")
+
     def test_mecanique_demande_un_document_et_retire_l_apk(self):
         self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
         self.fichier("pieces/f1/schema.png")
@@ -1223,7 +1267,7 @@ class Validation(Base):
         self.assertNotIn("mode_operatoire", regles._matiere(self.projet, self.etat, dev))
         (essai,) = self.taches(etape="flux:essai")
         m = regles._matiere(self.projet, self.etat, essai)
-        for mot in ("`nature`", "`en_jeu`", "`visuel`", "`mecanique`", "`autre`", "`mode_operatoire`", "2 à 10 étapes",
+        for mot in ("`nature`", "`en_jeu`", "`visuel`", "`son`", "`mecanique`", "`autre`", "`mode_operatoire`", "2 à 10 étapes",
                     "200 caractères au plus"):
             self.assertIn(mot, m)
         self.assertLess(len(regles.CONSIGNE_AVANT_VALIDATION), 3200)

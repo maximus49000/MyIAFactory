@@ -11,7 +11,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,
-     "nature": "en_jeu" | "visuel" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
+     "nature": "en_jeu" | "visuel" | "son" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
 `points_a_verifier` et `acces` : rendus par l'étape qui précède une validation du Directeur (fenêtre de validation) ;
 une forme fautive est écartée, jamais une raison de refuser le rapport.
 `comptes_rendus` : dans un lot, le compte rendu de chaque élément à part (ce que le Directeur voit à sa validation) ;

@@ -892,7 +892,7 @@ class TestVersion4(unittest.TestCase):
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
 
     def test_nature_de_validation_aides(self):
-        self.assertEqual(releve.NATURES, ("en_jeu", "visuel", "mecanique", "autre"))
+        self.assertEqual(releve.NATURES, ("en_jeu", "visuel", "son", "mecanique", "autre"))
         self.assertTrue(releve.est_executable("build/jeu.APK"))
         self.assertFalse(any(releve.est_executable(c) for c in ("a.png", "regles.md", "doc.pdf", "son.ogg", "src/main.gd")))
         self.assertTrue(releve.est_document("docs/regles.md") and releve.est_document("x.pdf"))

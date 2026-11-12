@@ -19,8 +19,9 @@ export const MAX_TEXTE = 3500;
 // un test) ; les images se montrent en plus.
 export const EXTENSIONS_TELECHARGEABLES = [".apk", ".aab", ".zip", ".7z", ".gz", ".tgz", ".tar", ".pdf", ".exe", ".msi",
   ".msix", ".appx", ".ipa", ".dmg", ".deb", ".appimage", ".pck", ".glb", ".png", ".jpg", ".jpeg", ".mp4", ".webm", ".mp3",
-  ".ogg", ".wav", ".epub", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".html"];
+  ".ogg", ".wav", ".flac", ".epub", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".html"];
 const IMAGES = [".png", ".jpg", ".jpeg"];
+const SONS = [".mp3", ".ogg", ".wav", ".flac"];
 const HOTES_LOCAUX = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -31,6 +32,7 @@ export function extension(chemin) {
   return i > 0 ? nom.slice(i).toLowerCase() : "";
 }
 export const estImage = (chemin) => IMAGES.includes(extension(chemin));
+export const estSon = (chemin) => SONS.includes(extension(chemin));
 export const estTelechargeable = (chemin) => EXTENSIONS_TELECHARGEABLES.includes(extension(chemin)) && !estImage(chemin);
 
 // L'en-tête d'un élément à valider : « Objectif : … » (ce qu'il devait produire) puis « À valider : … » ; une ligne
@@ -59,8 +61,8 @@ export function consignesDeValidation(d) {
 
 // La nature de ce que le Directeur valide (en jeu, visuel, mécanique, autre) : son libellé, `null` si absente ou inconnue
 // (une décision d'avant). Le mode opératoire (2 à 10 étapes) n'est montré que pour une validation en jeu.
-export const NATURES = {en_jeu: "À essayer en jeu", visuel: "Visuel à juger", mecanique: "Mécanique à lire",
-  autre: "À examiner"};
+export const NATURES = {en_jeu: "À essayer en jeu", visuel: "Visuel à juger", son: "Son à écouter",
+  mecanique: "Mécanique à lire", autre: "À examiner"};
 export function natureDeValidation(d) {
   return typeof d?.nature === "string" && Object.hasOwn(NATURES, d.nature) ? {cle: d.nature, libelle: NATURES[d.nature]} : null;
 }
@@ -93,9 +95,10 @@ export const estHoteLocal = (hote) => HOTES_LOCAUX.includes(String(hote || "").t
 
 // L'adresse de téléchargement d'un livrable (relative au bureau, avec le projet courant), et sa forme absolue quand la
 // page connaît son origine (le téléphone, via Tailscale : l'adresse du bureau qu'il a ouverte).
-export function urlTelechargement(fonctionnalite, chemin, projet = projetCourant(), origine = null) {
+// Avec `lecture`, l'adresse sert un son pour le lecteur de la page (type audio, sans pièce jointe, par tranches).
+export function urlTelechargement(fonctionnalite, chemin, projet = projetCourant(), origine = null, lecture = false) {
   const relative = avecProjet(`/api/telecharger?fonctionnalite=${encodeURIComponent(fonctionnalite)}`
-    + `&chemin=${encodeURIComponent(chemin)}`, projet);
+    + `&chemin=${encodeURIComponent(chemin)}${lecture ? "&lecture=1" : ""}`, projet);
   return origine ? origine.replace(/\/$/, "") + relative : relative;
 }
 
@@ -116,22 +119,27 @@ export function lienAcces(d, {hotePage = "127.0.0.1", projet = projetCourant(), 
   return {url, description, relaye: true, cible: u.href};
 }
 
-// Ce qu'il y a à vérifier : les images (montrées, agrandissables), les livrables téléchargeables (nom, taille, date),
-// les autres fichiers (nommés) et le lien d'accès.
+// Ce qu'il y a à vérifier : les images (montrées, agrandissables), les sons (lus dans la page, téléchargeables aussi),
+// les livrables téléchargeables (nom, taille, date), les autres fichiers (nommés) et le lien d'accès.
 export function aVerifier(d, options = {}) {
-  const images = [], livrables = [], autres = [];
+  const images = [], sons = [], livrables = [], autres = [];
   for (const f of Array.isArray(d?.fichiers) ? d.fichiers : []) {
     if (!plein(f?.chemin)) continue;
     const nom = f.chemin.split(/[\\/]/).pop();
     const titre = plein(f.titre) ? f.titre : nom;
+    const projet = options.projet ?? projetCourant(), origine = options.origine || null;
     if (estImage(f.chemin)) images.push({chemin: f.chemin, legende: titre !== nom ? titre : ""});
-    else if (estTelechargeable(f.chemin)) {
+    else if (estSon(f.chemin)) {
+      sons.push({chemin: f.chemin, nom, titre, taille: tailleLisible(f.taille),
+                 url: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine, true),
+                 telechargement: urlTelechargement(d.fonctionnalite, f.chemin, projet, origine)});
+    } else if (estTelechargeable(f.chemin)) {
       livrables.push({chemin: f.chemin, nom, titre, taille: tailleLisible(f.taille), date: plein(f.date) ? f.date : "",
                       url: urlTelechargement(d.fonctionnalite, f.chemin, options.projet ?? projetCourant(),
                                              options.origine || null)});
     } else autres.push({chemin: f.chemin, titre});
   }
-  return {images, livrables, autres, acces: lienAcces(d, options)};
+  return {images, sons, livrables, autres, acces: lienAcces(d, options)};
 }
 
 // La demande envoyée : `null` tant qu'un point n'a pas sa réponse ; sinon une réponse par point (dans l'ordre), le
@@ -261,8 +269,23 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     }
     s2.append(galerie);
   }
+  for (const s of v.sons) {
+    const ligne = el("div", "val-son");
+    const texte = el("div", "val-livrable-texte");
+    texte.append(el("strong", "", s.titre), el("span", "val-meta", [s.nom, s.taille].filter(Boolean).join(" · ")));
+    const lecteur = el("audio", "val-lecteur");
+    lecteur.controls = true;
+    lecteur.preload = "none";
+    lecteur.src = s.url;
+    lecteur.setAttribute("aria-label", "Écouter : " + s.titre);
+    const a = el("a", "bouton secondaire val-telecharger", "Télécharger");
+    a.href = s.telechargement;
+    a.setAttribute("download", s.nom);
+    ligne.append(texte, lecteur, a);
+    s2.append(ligne);
+  }
   for (const f of v.autres) s2.append(el("p", "val-meta", `${f.titre} : ${f.chemin}`));
-  if (!v.livrables.length && !v.acces && !v.images.length) {
+  if (!v.livrables.length && !v.acces && !v.images.length && !v.sons.length) {
     s2.append(el("p", "val-meta", "Rien à télécharger ni à ouvrir pour cet élément (posé avant la fenêtre de "
       + "validation) : jugez-le sur son compte rendu, ou renvoyez-le en demandant de quoi le vérifier."));
   }

@@ -288,7 +288,7 @@ TELECHARGEABLES = {
     ".dmg": "application/x-apple-diskimage", ".deb": "application/vnd.debian.binary-package",
     ".appimage": "application/octet-stream", ".pck": "application/octet-stream", ".glb": "model/gltf-binary",
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
-    ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".epub": "application/epub+zip",
+    ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".flac": "audio/flac", ".epub": "application/epub+zip",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -340,12 +340,12 @@ DOIT_MARCHER_PAR_DEFAUT = "L'élément correspond à son objectif"      # une d�
 
 # La nature de ce que le Directeur valide, et donc les preuves à joindre (règle de l'utilisateur : l'apk seulement pour
 # ce qui est en jeu ; pour du visuel ou une mécanique, l'image ou le document explicatif).
-NATURES = ("en_jeu", "visuel", "mecanique", "autre")
+NATURES = ("en_jeu", "visuel", "son", "mecanique", "autre")
 MIN_ETAPES_MODE = 2         # le mode opératoire d'une validation en jeu : 2 à 10 étapes courtes
 MAX_ETAPES_MODE = 10
 MAX_ETAPE_MODE = 200
 EXTENSIONS_DOCUMENTS = (".md", ".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv", ".epub")
-EXTENSIONS_SONS = (".mp3", ".ogg", ".wav")
+EXTENSIONS_SONS = (".mp3", ".ogg", ".wav", ".flac")
 EXTENSIONS_MEDIAS = EXTENSIONS_SONS + (".mp4", ".webm")
 
 

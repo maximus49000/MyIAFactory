@@ -925,7 +925,7 @@ def _dit_de_la_validation(e, cle_points="points"):
         if not rel.points_ok(points):
             raise Refus(f"« points » : 1 à {rel.MAX_POINTS} phrases différentes de {rel.MAX_POINT} caractères au plus.")
         plus["points"] = [p.strip() for p in points]
-    if e.get("nature") is not None:      # ce que le Directeur valide : en_jeu, visuel, mecanique ou autre
+    if e.get("nature") is not None:      # ce que le Directeur valide : en_jeu, visuel, son, mecanique ou autre
         if not rel.nature_ok(e["nature"]):
             raise Refus(f"« nature » vaut {', '.join(rel.NATURES)}.")
         plus["nature"] = e["nature"]

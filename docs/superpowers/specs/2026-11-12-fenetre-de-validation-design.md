@@ -61,16 +61,19 @@ mais jamais rien à valider. »
     mettras l'apk à installer (ainsi que le mode opératoire pour le valider). Si c'est seulement du visuel, une
     mécanique ou autre, tu mettras l'image, le document explicatif de la mécanique, etc. » ; constat : une validation de
     sprites joignait l'apk alors que les sprites n'étaient pas en jeu). L'agent qui précède la validation déclare la
-    `nature` : `en_jeu`, `visuel`, `mecanique` ou `autre`, et ne joint que les preuves qui conviennent.
+    `nature` : `en_jeu`, `visuel`, `son`, `mecanique` ou `autre`, et ne joint que les preuves qui conviennent.
     - `en_jeu` : le livrable téléchargeable exécutable (apk, exe, zip…) ou le lien d'accès d'un site, ET `mode_operatoire`
       (2 à 10 étapes de 200 caractères au plus : installer, lancer, quoi faire, quoi observer) ;
-    - `visuel` : les images (ou sons) concernés, légendés ; jamais l'apk ;
+    - `visuel` : les images concernées (et les sons s'il y en a), légendées ; jamais l'apk ;
+    - `son` : au moins un fichier audio (mp3, ogg, wav, flac), lu dans la fenêtre par un lecteur `<audio controls>` servi
+      par `/api/telecharger?lecture=1` (type audio, sans pièce jointe, par tranches `Range` pour le téléphone, mêmes gardes
+      de chemin) ; jamais l'apk ;
     - `mecanique` : un document explicatif (md, pdf…), et si utile images ou schémas ; jamais l'apk, sauf si la mécanique
       est déjà jouable (alors `en_jeu`) ;
     - `autre` : de quoi juger, expliqué.
     Contrôle du moteur avant de poser la décision, même relance unique et même compteur que « jamais rien à valider »,
-    puis blocage : `en_jeu` sans livrable ni lien, ou sans mode opératoire ; `visuel` sans image (ni son) ; `mecanique`
-    sans document. Un livrable exécutable joint à un `visuel` ou une `mecanique` est retiré des fichiers montrés (pas une
+    puis blocage : `en_jeu` sans livrable ni lien, ou sans mode opératoire ; `visuel` sans image ; `son` sans fichier audio ; `mecanique`
+    sans document. Un livrable exécutable joint à un `visuel`, un `son` ou une `mecanique` est retiré des fichiers montrés (pas une
     erreur) ; le mode opératoire n'est gardé que pour `en_jeu`. Nature absente ou inconnue : comportement d'avant. La
     fenêtre affiche la nature (« À essayer en jeu », « Visuel à juger », « Mécanique à lire », « À examiner ») après
     l'objectif et, pour `en_jeu`, le mode opératoire numéroté juste après le bouton « Télécharger ». Les points à vérifier

@@ -6,6 +6,7 @@ import http.client
 import json
 import mimetypes
 import os
+import re
 import shutil
 import threading
 import time
@@ -1228,8 +1229,22 @@ class Handler(BaseHTTPRequestHandler):
         signature = b"\x89PNG\r\n\x1a\n" if type_ == "image/png" else b"\xff\xd8\xff"
         return (octets, type_) if octets.startswith(signature) else None
 
-    def _livrable(self, cible, types=LIVRABLES, bac_a_sable=BAC_A_SABLE):
-        """Envoie le fichier par morceaux (un livrable peut être gros) avec les en-têtes de son extension."""
+    def _tranche(self, taille):
+        """La tranche `(début, fin)` demandée par `Range: bytes=a-b` (une seule), `None` si l'en-tête est absent ou
+        illisible (le fichier entier est alors envoyé), `"hors"` si elle est hors du fichier."""
+        m = re.fullmatch(r"bytes=(\d*)-(\d*)", (self.headers.get("Range") or "").strip())
+        if not m or (m.group(1) == "" and m.group(2) == ""):
+            return None
+        if m.group(1) == "":                       # les n derniers octets
+            n = int(m.group(2))
+            return "hors" if n == 0 or taille == 0 else (max(taille - n, 0), taille - 1)
+        debut = int(m.group(1))
+        fin = min(int(m.group(2)), taille - 1) if m.group(2) else taille - 1
+        return "hors" if debut >= taille or fin < debut else (debut, fin)
+
+    def _livrable(self, cible, types=LIVRABLES, bac_a_sable=BAC_A_SABLE, par_tranches=False):
+        """Envoie le fichier par morceaux (un livrable peut être gros) avec les en-têtes de son extension. Avec
+        `par_tranches` (la lecture d'un son dans la page), `Range` est honoré : le téléphone ne lit pas sans cela."""
         if cible is None:
             return self._json(404, {"erreur": "Introuvable."})
         ext = cible.suffix.lower()
@@ -1240,9 +1255,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(404, {"erreur": "Introuvable."})
         with f:
             taille = os.fstat(f.fileno()).st_size
-            self.send_response(200)
+            tranche = self._tranche(taille) if par_tranches else None
+            if tranche == "hors":
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{taille}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(200 if tranche is None else 206)
             self.send_header("Content-Type", type_)
-            self.send_header("Content-Length", str(taille))
+            if par_tranches:
+                self.send_header("Accept-Ranges", "bytes")
+            if tranche is not None:
+                self.send_header("Content-Range", f"bytes {tranche[0]}-{tranche[1]}/{taille}")
+                self.send_header("Content-Length", str(tranche[1] - tranche[0] + 1))
+            else:
+                self.send_header("Content-Length", str(taille))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             if ext in bac_a_sable:
@@ -1253,7 +1281,17 @@ class Handler(BaseHTTPRequestHandler):
                                  f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(cible.name)}")
             self.end_headers()
             if self.command != "HEAD":
-                shutil.copyfileobj(f, self.wfile, 1024 * 1024)
+                if tranche is None:
+                    shutil.copyfileobj(f, self.wfile, 1024 * 1024)
+                else:
+                    f.seek(tranche[0])
+                    reste = tranche[1] - tranche[0] + 1
+                    while reste > 0:
+                        morceau = f.read(min(reste, 1024 * 1024))
+                        if not morceau:
+                            break
+                        self.wfile.write(morceau)
+                        reste -= len(morceau)
 
     def _telecharger(self, projet, requete):
         """Un livrable à télécharger (voir `Projet.telechargeable`), toujours en pièce jointe, 500 Mo au plus."""
@@ -1270,8 +1308,10 @@ class Handler(BaseHTTPRequestHandler):
                                                   f"{TELECHARGEMENT_MAX_OCTETS // (1024 * 1024)} Mo)."})
         except OSError:
             return self._json(404, {"erreur": "Introuvable."})
-        return self._livrable(cible, {cible.suffix.lower(): TELECHARGEABLES[releve.extension(cible.name)]},
-                              (".html",))
+        type_, piece_jointe = TELECHARGEABLES[releve.extension(cible.name)]
+        lecture = q.get("lecture") == ["1"] and releve.est_son(cible.name)    # un son se lit dans la page, rien d'autre
+        return self._livrable(cible, {cible.suffix.lower(): (type_, piece_jointe and not lecture)}, (".html",),
+                              par_tranches=lecture)
 
     # -- le relais vers le site en cours (fenêtre de validation) -----------
     def _ports_du_bureau(self):

@@ -163,6 +163,39 @@ class TestTelecharger(AvecServeur):
         r, _ = self.req("GET", self.url("build/lien.apk"))
         self.assertEqual(r.status, 404)
 
+    def test_son_lu_dans_la_page_sans_piece_jointe(self):
+        """`lecture=1` sert un son déclaré avec son type, sans pièce jointe, par tranches (le téléphone en a besoin) ;
+        mêmes gardes que le téléchargement ; un non-son reste une pièce jointe."""
+        self.ecrire("sons/coup.mp3", b"0123456789")
+        self.ecrire("sons/chant.flac", b"fLaC0123")
+        self.ecrire("sons/hors.ogg", b"OggS")
+        self.ecrire("build/jeu.apk")
+        self.preparer(fichiers=[{"chemin": c, "titre": "x"} for c in ("sons/coup.mp3", "sons/chant.flac", "build/jeu.apk")])
+        r, data = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1")
+        self.assertEqual((r.status, data, r.getheader("Content-Type")), (200, b"0123456789", "audio/mpeg"))
+        self.assertIsNone(r.getheader("Content-Disposition"))
+        self.assertEqual((r.getheader("Accept-Ranges"), r.getheader("X-Content-Type-Options")), ("bytes", "nosniff"))
+        r, data = self.req("GET", self.url("sons/chant.flac") + "&lecture=1")
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.getheader("Content-Disposition")), (200, "audio/flac", None))
+        r, _ = self.req("GET", self.url("sons/coup.mp3"))                   # sans lecture : la pièce jointe d'avant
+        self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        r, data = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1", entetes={"Range": "bytes=2-4"})
+        self.assertEqual((r.status, data, r.getheader("Content-Range")), (206, b"234", "bytes 2-4/10"))
+        r, data = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1", entetes={"Range": "bytes=7-"})
+        self.assertEqual((r.status, data, r.getheader("Content-Range")), (206, b"789", "bytes 7-9/10"))
+        r, data = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1", entetes={"Range": "bytes=-3"})
+        self.assertEqual((r.status, data), (206, b"789"))
+        r, _ = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1", entetes={"Range": "bytes=50-60"})
+        self.assertEqual((r.status, r.getheader("Content-Range")), (416, "bytes */10"))
+        r, data = self.req("GET", self.url("sons/coup.mp3") + "&lecture=1", entetes={"Range": "n'importe quoi"})
+        self.assertEqual((r.status, data), (200, b"0123456789"))
+        r, _ = self.req("GET", self.url("build/jeu.apk") + "&lecture=1")    # pas un son : toujours en pièce jointe
+        self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        r, _ = self.req("GET", self.url("sons/hors.ogg") + "&lecture=1")    # non déclaré : mêmes gardes
+        self.assertEqual(r.status, 404)
+        r, _ = self.req("GET", self.url("../x.mp3") + "&lecture=1")
+        self.assertEqual(r.status, 404)
+
     def test_trop_gros(self):
         self.ecrire("build/jeu.apk")
         self.preparer(fichiers=[{"chemin": "build/jeu.apk", "titre": "APK"}])

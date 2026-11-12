@@ -1884,12 +1884,16 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
 
 
 def _element_du_prototype(projet, etat, f):
+    """L'élément du prototype : la mémoire du moteur, sinon (moteur redémarré) la dernière tâche de prototype de la
+    fonctionnalité, faite comprise (l'état court ne montre que les tâches ouvertes)."""
     e = _m(etat, "prototype").get(f["id"])
     if e is None:
-        court = _etat(projet)
-        t = next((t for t in reversed(court["taches"]) if t.get("fonctionnalite") == f["id"]
-                  and str(t.get("etape")) == "prototype" and t.get("element")), None)
-        e = {"id": t["element"], "nom": t["element"]} if t else None
+        detail = lancer(projet, "detail", {"fonctionnalite": f["id"], "taches": True})
+        t = next((t for t in reversed(detail.get("taches") or []) if str(t.get("etape")) == "prototype"
+                  and t.get("element")), None)
+        if t:
+            nom = ((detail.get("elements") or {}).get(t["element"]) or {}).get("nom") or t["element"]
+            e = {"id": t["element"], "nom": nom}
     return e
 
 
@@ -1905,6 +1909,56 @@ def _retoucher_prototype(projet, etat, fid, consigne, element_id=None):
     _creer_tache(projet, f"Prototype : {element['nom']}", fid, role, "prototype", element=element["id"],
                  journal=[consigne])
     return _demarrer_en_attente(projet, etat, fid)
+
+
+def _reponse_de_l_agent_en_route(projet, fid):
+    """Une réponse de l'agent aux questions de l'utilisateur (`<tache>.reponse`, détachée) est en route pour `fid`."""
+    try:
+        for f in sorted(detache.dossier(projet.factory.parent).glob("*.json")):
+            if f.name.endswith(".questions.json"):
+                continue
+            try:
+                info = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(info, dict) and info.get("genre") == "reponse" and info.get("fonctionnalite") == fid:
+                return True
+    except OSError:
+        pass
+    return False
+
+
+MARQUE_REPRISE = "Reprise du message"
+
+
+def _rejouer_le_retour(projet, etat, fid):
+    """Le garde-fou du prototype : le dernier mot de la discussion est celui de l'utilisateur, et rien ne le traite (ni
+    demande en cours, ni tâche ouverte, ni agent au travail ou en train de répondre, ni décision) : sa réponse s'est
+    perdue (moteur redémarré, relance refusée). Elle est rejouée, une fois (la tâche de reprise porte le numéro du message,
+    ce qui tient après un redémarrage) ; si l'agent n'a rien répondu après cela, c'est dit dans la discussion."""
+    f = _fonc(projet, fid)
+    discussion = f.get("discussion") or []
+    if not discussion or discussion[-1]["auteur"] != "utilisateur" or f.get("decisions"):
+        return []
+    if any(d.get("fonctionnalite") == fid for d in lancer(projet, "demandes")["demandes"]):
+        return []
+    siennes = [t for t in _etat(projet)["taches"] if t.get("fonctionnalite") == fid]
+    if any(t["colonne"] != "fait" or t["id"] in etat["en_cours"] for t in siennes)             or _reponse_de_l_agent_en_route(projet, fid):
+        return []
+    message = discussion[-1]
+    marque = f"{MARQUE_REPRISE} {message['id']} "
+    toutes = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True}).get("taches") or []
+    if any(marque in j["texte"] for t in toutes if str(t.get("etape")) == "prototype"
+           for j in _tache(projet, t["id"]).get("journal") or []):
+        _dire(projet, fid, "Votre dernier message a été redonné à l'agent du prototype, mais il n'a pas répondu : écrivez-moi "
+                           "de nouveau, ou demandez un retour sur sa dernière tâche.")
+        return []
+    if _element_du_prototype(projet, etat, f) is None:
+        _dire(projet, fid, "Je ne sais pas quel élément sert de prototype : votre dernier message n'a pas pu être donné à "
+                           "l'agent. Dites-moi l'élément concerné.")
+        return []
+    texte = str(message.get("texte") or "").strip() or "(message sans texte)"
+    return _retoucher_prototype(projet, etat, fid, f"{marque}de l'utilisateur, resté sans suite :\n{texte}")
 
 
 def _prototype_fait(projet, etat, f):
@@ -3629,6 +3683,8 @@ def avancer(projet, etat):
     for f in court["fonctionnalites"]:
         if f["etape"] in ("cadrage", "cahier") and f["attend_reponse"]:
             actions += _repondre_cadrage(projet, etat, f["id"])
+        elif f["etape"] == "prototype" and f["attend_reponse"]:
+            actions += _rejouer_le_retour(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
     actions += _demarrer_en_attente(projet, etat, None)
@@ -3968,8 +4024,9 @@ def _apres_traduire_retour(projet, o, ctx, etat):
         _dire(projet, fid, "Le prototype est validé : il reste à valider la méthode pour passer à la série.")
         _terminer(projet, ctx, "C'est noté : validez la méthode pour passer à la série.")
         return []
+    actions = _retoucher_prototype(projet, etat, fid, o["consigne"])     # d'abord : un refus ne dit pas « transmis »
     _terminer(projet, ctx, "J'ai transmis votre retour à l'agent du prototype.")
-    return _retoucher_prototype(projet, etat, fid, o["consigne"])
+    return actions
 
 
 def _apres_ecrire_methode(projet, o, ctx, etat):

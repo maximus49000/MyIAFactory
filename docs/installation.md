@@ -331,6 +331,11 @@ travail est signalée au bureau de direction, partie « Séries qui ne progresse
 progresse plus : » suivi de la raison, élément par élément (par exemple une étape qui n'est plus dans le workflow).
 **« Relancer la série »** la fait relire depuis le suivi ; si elle ne repart toujours pas, la décision revient.
 
+**Une réponse au prototype ne se perd pas.** Quand vous répondez à l'agent du prototype et qu'aucun agent ne travaille,
+une nouvelle tâche de prototype part avec votre réponse, même après un redémarrage du moteur. Si votre dernier message
+reste sans suite (ni demande en cours, ni tâche ouverte, ni agent au travail), le moteur le rejoue une fois ; si l'agent
+n'a toujours rien répondu, ou si l'élément du prototype est introuvable, il le dit dans la discussion.
+
 **Une fonctionnalité terminée est annoncée.** Quand tous ses éléments sont faits (ou laissés de côté), son étape passe
 à « terminée » et le bureau de direction l'annonce en tête, partie **« Fonctionnalités terminées »** (non bloquante :
 elle ne compte pas dans les décisions qui vous attendent) : son nom, la date, son coût total (€, « ≈ % semaine », CO₂

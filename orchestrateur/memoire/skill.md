@@ -225,3 +225,9 @@ Rôles : dev, artiste
 Date : 2026-11-12
 
 Avant une correction guidée par des numéros de ligne, relire les lignes ciblées ; si le défaut n'y est plus, le signaler plutôt que de modifier le fichier.
+
+## S38 — Un script de test lancé par le moteur doit toujours être app
+Rôles : testeur
+Date : 2026-11-12
+
+Un script de test lancé par le moteur doit toujours être appelé avec un délai maximal. En cas d'erreur de script, le moteur peut rester actif sans jamais quitter. Le lanceur doit alors afficher la sortie partielle plutôt que d'attendre.

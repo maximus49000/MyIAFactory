@@ -194,3 +194,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour contrôler qu'aucun mot de passe n'est écrit dans un fichier livré, afficher seulement le nom de la clé concernée et jamais sa valeur.
+
+## G33 — Pour un export signé, demander à l'utilisateur le chemin et
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export signé, demander à l'utilisateur le chemin et l'alias du keystore avant de lancer le build ; ne jamais deviner l'emplacement d'une clé de signature.

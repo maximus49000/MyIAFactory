@@ -345,3 +345,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand une remarque reformule une règle déjà appliquée, rendre la règle visible à l'écran et la contrôler automatiquement plutôt que de la modifier.
+
+## S58 — Quand une étape de conception porte sur des tests d'applicat
+Rôles : designer
+Date : 2026-11-13
+
+Quand une étape de conception porte sur des tests d'application (émulateur, paquet installable), vérifier d'abord qu'un projet compilable existe ; sinon, déclarer l'étape non applicable en une ligne, sans produire de livrable vide.

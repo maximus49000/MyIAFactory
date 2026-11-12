@@ -468,5 +468,10 @@ def agent_d_installation(existants, nouveaux, flux, services, outils_installatio
              "de préférence pour l'utilisateur seul (sans droits d'administrateur) et depuis les sources officielles. "
              "Après chaque installation, vérifie l'outil (chemin et version) et rends compte. Si une installation "
              "échoue (droits d'administrateur, téléchargement refusé, outil introuvable), dis ce qui manque, pourquoi "
-             "et comment l'installer à la main : n'insiste pas.")
+             "et comment l'installer à la main : n'insiste pas. Avant une installation ou une commande qui ouvre une "
+             "fenêtre sur le poste (pare-feu Windows pour adb.exe, un émulateur ou un serveur local ; droits "
+             "d'administrateur (UAC) ; pilote ; débogage USB sur le téléphone), mets en tête de ton compte rendu "
+             "(message.texte, attend: true) quelle fenêtre va s'ouvrir, pourquoi et quoi choisir, et arrête-toi "
+             "avant l'action. Ne réponds jamais à ces fenêtres à sa place ; si une commande attend, bloquée par une "
+             "fenêtre, dis-le.")
     return agent, brief

@@ -147,6 +147,21 @@ class Consigne(AvecProjet):
         source = inspect.getsource(regles._matiere)
         self.assertIn("à choix", source.split('elif etape == "prototype"')[1].split("elif etape.startswith")[0])
 
+    def test_les_consignes_font_prevenir_avant_une_fenetre_windows(self):
+        """L'utilisateur est prévenu avant qu'une fenêtre (pare-feu, UAC, pilote, débogage USB) s'ouvre sur son poste."""
+        from moteur import agents, environnement
+        brief = environnement.agent_d_installation([], [], [{"id": "d", "nom": "D", "role": "dev", "service": "d"}],
+                                                   [{"id": "d", "nom": "D"}])[1]
+        for texte in (depart.FIN_D_ETAPE, agents.CONSIGNE_AGENT, brief):
+            self.assertIn("pare-feu", texte)
+            self.assertIn("fenêtre", texte)
+            self.assertIn("jamais", texte)
+        self.assertIn("pare-feu Windows pour adb.exe", depart.FIN_D_ETAPE)
+        self.assertIn("attend", depart.FIN_D_ETAPE)
+        self.assertIn("bloquée", depart.FIN_D_ETAPE)
+        self.assertLess(len(depart.FIN_D_ETAPE), 4200)
+        self.assertLess(len(agents.CONSIGNE_AGENT), 1500)
+
     def test_usage_accepte_orchestrateur(self):
         code, _ = self.outil("usage", entree={"modele": "claude-haiku-5-5", "agent": "orchestrateur",
                                               "etape": "orchestration", "entree": 10, "sortie": 5})

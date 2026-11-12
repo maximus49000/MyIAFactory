@@ -143,7 +143,13 @@ ci-dessus), avec `attend: true` : « Le style vous convient-il ? » → « Oui, 
 Jamais une demande d'avis en simple phrase : la page n'offrirait aucun bouton.
 Si une dépense ou un changement de partenaire ou le navigateur demande l'accord de l'utilisateur, arrête-toi et rends
 `statut: accord_requis` avec `"accord": {"quoi", "partenaire", "cout"}`. Si un outil t'est refusé, rends
-`statut: outil_refuse` avec `"outil": "<son nom>"`."""
+`statut: outil_refuse` avec `"outil": "<son nom>"`.
+Avant une action qui fait apparaître une fenêtre sur l'ordinateur de l'utilisateur (pare-feu Windows pour adb.exe, un
+émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote ; autorisation sur le téléphone comme le
+débogage USB), arrête-toi : mets en tête de ton `message.texte` quelle fenêtre va s'ouvrir, pourquoi et quoi choisir
+(« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez Réseaux privés. »), avec `attend: true`, et
+n'agis qu'après sa réponse. Ne réponds jamais à ces fenêtres à sa place. Si une commande attend, bloquée par une
+fenêtre, dis-le dans ton compte rendu."""
 
 
 def fin_cloud(tache_id):

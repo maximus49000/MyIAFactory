@@ -255,3 +255,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Quand un document de conception est corrigé, ajouter en tête la liste de ce qui a changé et reporter chaque correction dans tous les tableaux, règles, prompts et maquettes qu'elle touche.
+
+## S43 — Pour vérifier une signature Android, considérer valide un AP
+Rôles : livreur
+Date : 2026-11-12
+
+Pour vérifier une signature Android, considérer valide un APK dont les schémas v2 ou v3 sont à true, même si v1 est à false.

@@ -339,3 +339,9 @@ Rôles : designer, dev
 Date : 2026-11-13
 
 Un script qui produit des images et vérifie la présence des images référencées doit exclure de la vérification celles qu'il produit lui-même.
+
+## S57 — Quand une remarque reformule une règle déjà appliquée, rendr
+Rôles : designer
+Date : 2026-11-13
+
+Quand une remarque reformule une règle déjà appliquée, rendre la règle visible à l'écran et la contrôler automatiquement plutôt que de la modifier.

@@ -230,6 +230,12 @@ class Passage(Base):
         self.moteur.tour()
         self.assertEqual(self.commits, [(str(self.projet.dossier), "Factory : Voilà.")])
 
+    def test_le_projet_connait_le_bureau_pour_estimer(self):
+        bureau = self.dossier / "bureau.json"
+        moteur = self.fabriquer([], bureau=bureau)
+        moteur._ajouter(self.projet)
+        self.assertEqual(self.projet.bureau, bureau)
+
     def test_erreur_d_un_projet_n_arrete_pas_la_boucle(self):
         with mock.patch.object(regles, "avancer", side_effect=RuntimeError("boum")):
             self.moteur.tour()

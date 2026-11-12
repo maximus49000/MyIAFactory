@@ -109,11 +109,11 @@
 - Consomme : `workflows.de_la_fonctionnalite` (tâche 1).
 - Produit : `_production(projet, fid=None) -> list[dict]` (le workflow de la fonctionnalité `fid`, sans les étapes `relecteur`) ; idem `_colonne_du_role`, `_role_cadrage` avec `fid`.
 
-- [ ] **Étape 1 : tests** : `test_serie_suit_le_workflow_de_la_fonctionnalite` (deux fonctionnalités, deux workflows : chaque élément passe par les étapes de sa fonctionnalité) ; `test_cadrage_par_le_role_du_workflow` ; les tests existants inchangés (workflow principal).
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire le code.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur banc` : vert.
-- [ ] **Étape 5 : commit** « Moteur : chaque fonctionnalité suit son workflow ».
+- [x] **Étape 1 : tests** : `test_serie_suit_le_workflow_de_la_fonctionnalite` (deux fonctionnalités, deux workflows : chaque élément passe par les étapes de sa fonctionnalité) ; `test_cadrage_par_le_role_du_workflow` ; les tests existants inchangés (workflow principal).
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire le code.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur banc` : vert.
+- [x] **Étape 5 : commit** « Moteur : chaque fonctionnalité suit son workflow ».
 
 ### Tâche 5 : Fable sur accord du Directeur
 
@@ -124,9 +124,9 @@
 **Interfaces :**
 - Produit : `fiches.fable_accorde(fiche: dict) -> bool` ; `agents.executer_agent` lance Fable seulement si `fable_accorde(agent)`.
 
-- [ ] **Étape 1 : tests** : `test_fable_refuse_sans_accord`, `test_fable_permis_avec_accord_pour_cet_agent_seulement`, `test_jugement_jamais_fable`, `test_montee_ne_va_jamais_a_fable`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur orch installation`).
-- [ ] **Étape 5 : commit** « Fable : seulement sur accord du Directeur, agent par agent ».
+- [x] **Étape 1 : tests** : `test_fable_refuse_sans_accord`, `test_fable_permis_avec_accord_pour_cet_agent_seulement`, `test_jugement_jamais_fable`, `test_montee_ne_va_jamais_a_fable`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur orch installation`).
+- [x] **Étape 5 : commit** « Fable : seulement sur accord du Directeur, agent par agent ».
 
 ### Tâche 6 : le parcours d'une nouvelle fonctionnalité
 
@@ -145,11 +145,11 @@
 - Projet sans genre (créé au bureau) : au premier passage, `classer_genre` sur `description`, décision `confirmer_genre` existante.
 - Issues de secours (conception, section 8) : `classer_genre` raté → genre du projet, cadrage, une phrase ; `proposer_organisation` raté → question au Directeur avec l'issue « continuer avec le workflow actuel ».
 
-- [ ] **Étape 1 : tests** (un par ligne du parcours) : `test_demande_du_meme_genre_propose_son_workflow`, `test_demande_proche_rattachee`, `test_demande_d_un_autre_genre_avertit`, `test_incertain_demande_a_l_utilisateur`, `test_choix_ici_propose_le_workflow`, `test_choix_nouveau_projet_deplace_la_demande`, `test_nouveau_projet_impossible_reste_ici`, `test_organisation_acceptee_recrute_et_lance_le_cadrage`, `test_agent_existant_reutilise`, `test_refus_avec_texte_nouvelle_proposition`, `test_refus_sans_texte_reprend_le_workflow_du_genre`, `test_projet_sans_workflow_refus_reste_pose`, `test_classer_rate_continue_avec_le_genre_du_projet`, `test_proposer_rate_question_au_directeur`, `test_fable_coche_recrute_sur_fable`, `test_projet_sans_genre_confirme_d_apres_la_description`.
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire le code.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur orch demandes banc` : vert.
-- [ ] **Étape 5 : commit** « Moteur : classer chaque demande, proposer son workflow, recruter ».
+- [x] **Étape 1 : tests** (un par ligne du parcours) : `test_demande_du_meme_genre_propose_son_workflow`, `test_demande_proche_rattachee`, `test_demande_d_un_autre_genre_avertit`, `test_incertain_demande_a_l_utilisateur`, `test_choix_ici_propose_le_workflow`, `test_choix_nouveau_projet_deplace_la_demande`, `test_nouveau_projet_impossible_reste_ici`, `test_organisation_acceptee_recrute_et_lance_le_cadrage`, `test_agent_existant_reutilise`, `test_refus_avec_texte_nouvelle_proposition`, `test_refus_sans_texte_reprend_le_workflow_du_genre`, `test_projet_sans_workflow_refus_reste_pose`, `test_classer_rate_continue_avec_le_genre_du_projet`, `test_proposer_rate_question_au_directeur`, `test_fable_coche_recrute_sur_fable`, `test_projet_sans_genre_confirme_d_apres_la_description`.
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire le code.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur orch demandes banc` : vert.
+- [x] **Étape 5 : commit** « Moteur : classer chaque demande, proposer son workflow, recruter ».
 
 ### Tâche 10 : l'environnement du poste
 
@@ -162,9 +162,9 @@
 - Produit : `verifier(outils: list[dict], *, which=shutil.which, executer=..., env=os.environ) -> list[dict]` : chaque outil + `{"etat": "en_place"|"a_installer", "chemin"?, "version"?}` ; exécutables cherchés par `which` puis sous `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` ; version lue avec la première option de `("--version", "-version", "version")` qui répond (délai 10 s) ; **aucune commande venue de l'IA n'est exécutée**.
 - Consomme : `environnement` de `proposer_organisation` (tâche 3) ; parcours de la tâche 6.
 
-- [ ] **Étape 1 : tests** : `test_outil_present_en_place_avec_version`, `test_outil_absent_a_installer`, `test_android_home_trouve`, `test_jamais_de_commande_de_l_ia` (un exécutable nommé `rm -rf` ou avec espace/`;`/`&` est refusé sans être lancé), `test_tout_en_place_pas_de_tache_d_installation`, `test_acceptation_cree_la_tache_d_environnement_avant_le_cadrage`, `test_installation_ratee_devient_decision`, `test_c_est_fait_revérifie`, `test_continuer_sans_laisse_avancer`, `test_environnement_note_dans_les_reglages_et_au_depart`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur environnement orch`).
-- [ ] **Étape 5 : commit** « Moteur : vérifier et installer l'environnement du poste ».
+- [x] **Étape 1 : tests** : `test_outil_present_en_place_avec_version`, `test_outil_absent_a_installer`, `test_android_home_trouve`, `test_jamais_de_commande_de_l_ia` (un exécutable nommé `rm -rf` ou avec espace/`;`/`&` est refusé sans être lancé), `test_tout_en_place_pas_de_tache_d_installation`, `test_acceptation_cree_la_tache_d_environnement_avant_le_cadrage`, `test_installation_ratee_devient_decision`, `test_c_est_fait_revérifie`, `test_continuer_sans_laisse_avancer`, `test_environnement_note_dans_les_reglages_et_au_depart`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py moteur environnement orch`).
+- [x] **Étape 5 : commit** « Moteur : vérifier et installer l'environnement du poste ».
 
 ## Étape 4 — créer un projet, le bureau
 

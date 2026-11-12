@@ -12,8 +12,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 |---|---|---|---|---|
 | A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | **faite** le 2026-11-12 (1121 tests verts) |
 | B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | **faite** le 2026-11-12 (1138 tests verts) |
-| C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | à faire : **c'est la prochaine phase** |
-| D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire |
+| C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | **faite** le 2026-11-12 (1202 tests verts) |
+| D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire : **c'est la prochaine phase** |
 | E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
@@ -100,6 +100,112 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
   passage, avant le réglage) : dédoublonner par exécutable pour la vérification du poste. `nouveau.id` varie : la
   décision `genre_fonctionnalite` doit le laisser corriger. Les jugements ne choisissent jamais Fable (`juger` le
   refuse toujours ; aucun agent proposé n'a eu `fable_suggere: true` à l'essai).
+
+**Phase C (Sonnet 5.5, 2026-11-12)** : tâches 4, 5, 6 et 10 faites, suite complète verte (1202 tests, `node --test` compris).
+Quatre commits : `Moteur : chaque fonctionnalité suit son workflow`, `Fable : seulement sur accord…`, `Moteur : classer
+chaque demande, proposer son workflow, recruter`, `Moteur : vérifier et installer l'environnement du poste`.
+
+- **Tâche 4** : `regles._flux/_production/_role_cadrage/_colonne_du_role(projet, …, fid)` lisent le workflow de la
+  fonctionnalité (`workflows.de_la_fonctionnalite`), le principal sans fonctionnalité. Nouveau : `_role_production`
+  (rôle de la première étape, ou `cadrage` si le projet n'a aucun workflow : plus d'`IndexError`) ; sans workflow,
+  `_colonne_du_role` rend `cadrage`. Le dossier de `decouper` et `methodes_validees` portent le flux de chaque fonctionnalité.
+- **Tâche 5** : une fiche porte `Fable : accordé par le Directeur le AAAA-MM-JJ` (en-tête `Fable`, motif
+  `fiches.ACCORD_FABLE`) ; `Modèle : Fable` n'est lisible qu'avec cette ligne. `fiches.fable_accorde(fiche)`.
+  `agents.executer_agent` lance Fable (modèle `fable`) seulement pour une telle fiche, avec `fable_accorde=True` passé à
+  `appel.appeler` (qui le refuse sans outils, donc pour tout jugement, et hors couche `claude`). `outil` : `modele_depart`
+  Fable permis pour l'agent accordé seulement ; une `montee` ne va jamais à Fable ; la décision `organisation` refuse
+  toujours `modele: Fable` (l'accord se donne à l'acceptation). `proposition._modele` accepte `Fable` + accord. Les
+  agents cloud restent refusés sur Fable (`moteur/cloud.py` inchangé) : les agents recrutés sont locaux.
+- **Tâche 6 — le parcours** (`regles._sur_fonctionnalite` → `_classer` → `classer_genre`) :
+  - demande `fonctionnalite` : `classer_genre` (Haiku) ; le dossier est préparé comme le docstring de `moteur/jugement.py`.
+    Une demande recréée dans un autre projet porte `genre` (et `description` si le genre est nouveau) : le classement est
+    sauté, étape 3 directement.
+  - `meme`/`proche` : `fonctionnalite.genre` noté (un message du chef dit « proche »), puis `proposer_organisation`
+    (Sonnet). `autre`/`incertain` : décision de fonctionnalité `genre_fonctionnalite`, la fonctionnalité attend.
+  - **Projet sans genre** (`factory.genre` et genres des workflows vides, même sans description) : `classer_genre`
+    sur la description (à défaut le texte de la demande), puis décision de projet `confirmer_genre` qui porte en plus
+    `fonctionnalite` ; la réponse (demande `genre`) fixe le genre du projet et de la fonctionnalité, puis la
+    proposition de workflow. Sans aucune piste du jugement : proposition de workflow sans genre.
+  - `proposer_organisation` rend une décision de projet `organisation` (voir formats ci-dessous). Le moteur préfixe les
+    étapes (`f2-dev`), fixe `lieu: local`, calcule le coût par `estimation.estimer` (prix inconnus : `euros` nul ; les
+    mesures du bureau servent si `projet.bureau` est posé, ce que `boucle.Moteur._ajouter` fait), l'id du workflow est
+    `w-<fid>`. Un workflow du même genre est donné au jugement sans le préfixe de sa fonctionnalité.
+  - acceptation : `lancer organisation appliquer` (+ `fable`) puis cadrage (ou la tâche d'environnement). Le workflow
+    s'ajoute à `workflows`, `flux` du projet intact ; la fonctionnalité prend `genre` et `workflow`. Un genre nouveau
+    (`workflow.genre_nouveau.description`) est créé dans la mémoire **en dernier** (`outil.GIT`, remplacé par les tests) ;
+    un échec est dit (`genre_raison`) et ne bloque rien.
+  - refus : avec `texte`, `proposer_organisation` relancé avec `refus` ; sans texte, la fonctionnalité prend le workflow
+    le plus récent du même genre, sinon le principal, et le dit ; **projet sans aucun workflow : la décision reste posée**
+    (réponse « ce projet n'a encore aucun workflow… »). Verdict ajouté : `abandonner` (lève la décision, la fonctionnalité
+    passe `deplacee` avec `deplacee_vers: "(demande abandonnée)"` : pas d'étape « abandonnée » dans le relevé, à afficher
+    comme tel côté page, ou à remplacer si l'utilisateur veut une autre étape).
+  - `nouveau_projet` : le moteur lit `projet_cree` (chemin des réglages du projet créé ; sa factory = clé `orchestrateur`
+    des réglages, sinon `factory.json` à côté), recrée la demande (texte, images relues sur le disque en base64, `genre`,
+    `description`) par `outil.executer(<factory>, ["lancer", "actions"], …)`, puis la fonctionnalité passe `deplacee`
+    (`deplacee_vers` = nom du projet) avec le message « Partie dans le projet <nom> ». **Projet introuvable ou illisible :
+    rien ne bouge, la décision reste** et la réponse dit que « Dans ce projet » reste possible.
+  - **Issues de secours** : `classer_genre` raté (deux essais) → `_classer_rate` : genre du projet, une phrase au chef,
+    cadrage ; `proposer_organisation` raté (ou refusé par `lancer decision`) → question de discussion avec les choix
+    `regles.CONTINUER` (« Continuer avec le workflow actuel ») et `regles.JE_PRECISE` ; la réponse arrive comme un
+    `message` : `CONTINUER` → workflow de repli puis cadrage, un texte libre → nouvelle proposition (`refus`). Cet état est
+    en mémoire (`etat["proposition_ratee"]`) : après un arrêt du moteur, un message de l'utilisateur ouvre simplement le
+    cadrage (le plus sûr pour ne rien bloquer).
+  - **Le cadrage ne démarre pas** tant que la fonctionnalité attend : décision `genre_fonctionnalite` ou `environnement`
+    posée, décision `organisation`/`confirmer_genre` de projet qui la nomme (`fonctionnalite`), question `proposition_ratee`,
+    tâche d'environnement en cours (`_en_parcours`) ; un message de l'utilisateur pendant l'attente reçoit « répondez
+    d'abord à la question posée dans les décisions ».
+  - Tests existants adaptés : `Base.cadrer()` (le classement raté mène au cadrage), `test_aucune_demande_sans_reponse`
+    donne une réponse à `classer_genre`, `tests/test_banc_scenario.py` (`Jugements` fait échouer les deux nouveaux appels :
+    **le banc n'a pas encore ses gestes, c'est la phase E** ; un passage réel du banc ne rendrait la main qu'après la
+    décision d'organisation).
+- **Tâche 10** (`moteur/environnement.py`) : `verifier(outils, *, which, executer, env)` ; un outil est `en_place` quand
+  tous ses exécutables sont trouvés (`PATH`, puis `JAVA_HOME/bin`, `ANDROID_HOME`/`ANDROID_SDK_ROOT` : `cmdline-tools/latest/bin`,
+  `cmdline-tools/bin`, `platform-tools`, `tools/bin`, `emulator`, `build-tools/*`), avec `chemin` (du premier) et `version`
+  (première option de `--version`, `-version`, `version` qui répond, 10 s). Un nom qui n'a pas la forme d'un nom de
+  programme (`MOTIF_EXECUTABLE`) n'est ni cherché ni lancé : l'outil reste `a_installer` avec `refuses`. Un exécutable
+  commun à deux outils n'est cherché qu'une fois. `Projet.verifier_environnement` (injectable) l'appelle à la proposition.
+  - Si quelque chose manque, la proposition porte un agent d'installation (rôle `environnement`, clé `env-<n>`, Sonnet,
+    local, service = le premier du projet ; brief `environnement`) sauf si un agent de ce rôle existe ; à l'acceptation,
+    `outil._ouvrir_les_outils_d_installation` ajoute les `outils_installation` à sa ligne `Outils :` (et à lui seul), puis
+    la tâche « Mise en place de l'environnement » (étape `environnement`, colonne = première étape du workflow, rôle
+    `environnement`) part ; le cadrage vient à sa fin. Elle finie : revérification (`_verifier_le_poste`), outils notés par
+    `lancer organisation {"action": "environnement", "outils": […]}` ; tout est là → cadrage ; sinon (ou agent en échec,
+    ou sans rapport) → décision de fonctionnalité `environnement`, jamais de blocage.
+  - Réglage `environnement` du projet (`factory.json`, liste `{outil, etat, chemin?, version?, executables, installation, pour}`) ;
+    `factory.lire` le rend ; `depart` ajoute « ## Outils du poste » (les outils `en_place`, avec chemin et version).
+
+**Formats exacts pour la phase D (route de création et décisions au bureau)** :
+
+- Demande `{"type": "genre_fonctionnalite", "decision": <id>, "fonctionnalite": <fid>, "choix": "ici" | "meme" | "nouveau_projet",
+  "genre"?: <id>, "description"?: <texte d'un genre nouveau>, "projet_cree"?: <chemin des réglages du projet créé>}`.
+  `meme` n'est accepté que si la décision a `incertain: true` ; `nouveau_projet` exige `projet_cree` ; `ici` prend `genre`
+  sinon le `propose` de la décision (un genre absent de `genres_connus` demande une `description`, sauf si c'est le
+  `nouveau.id` de la décision). **La route du bureau (tâche 8) dépose cette demande avec `choix: "nouveau_projet"` et
+  `projet_cree` = le chemin des réglages (`chemin` inscrit dans `bureau.json`) du projet qu'elle vient de créer ; c'est le
+  moteur du projet d'origine qui recrée la demande dans le nouveau projet — la route ne le fait pas** (ajuster le texte du
+  plan, tâche 8, qui disait « dépose la demande dans le projet d'origine » : c'est bien cela, mais le moteur fait le déplacement).
+  Le projet créé doit être lisible par `factory.lire` (flux vide permis) ; son genre peut être celui de la demande.
+- Décision de fonctionnalité `genre_fonctionnalite` (dans `fonctionnalites[i].decisions`) : `{id, genre, texte, propose, genres_connus: [ids],
+  incertain: bool, nouveau?: {id, description}}`. Trois boutons : « Nouveau projet » (`nouveau_projet`), « Dans ce projet » (`ici`, avec
+  un genre modifiable : liste `genres_connus` + « nouveau genre… » avec description), « C'est le même genre » (`meme`) si `incertain`.
+- Demande `{"type": "organisation", "decision", "verdict": "accepter" | "refuser" | "abandonner", "texte"?, "fable"?: [clés]}`.
+  `texte` : ce qu'il faut changer (refus) ; `fable` : les clés des agents cochés, parmi ceux dont `fable_suggere` est vrai
+  (seulement avec `accepter`) ; `abandonner` seulement pour une décision qui porte un `workflow`.
+- Décision de projet `organisation` d'un workflow : `{id, genre: "organisation", texte, organisation: {services (tous, après changement),
+  flux (les étapes du workflow, ids `<fid>-<étape>`), agents (les nouveaux : {cle, prenom?, role, service, modele, lieu: "local",
+  justification, fable_suggere?, texte}), briefs, cout: {tokens: [a, b], euros: [a, b] | null}, fonctionnalite, workflow: {id, genre,
+  flux, genre_nouveau?: {description}}, livrable, environnement: [{outil, pour, executables, installation, etat: "en_place" | "a_installer",
+  chemin?, version?, refuses?}], outils_installation: [règles]}}`. Si des outils manquent, `agents` comprend l'agent d'installation
+  (rôle `environnement`). Une décision `organisation` sans `workflow` est l'ancienne (évolution d'organisation).
+- Décision de projet `confirmer_genre` : porte en plus `fonctionnalite` (facultatif) ; la demande reste `{"type": "genre", "decision", "genre", "description"?}`.
+- Décision de fonctionnalité `environnement` : `{id, genre, texte, environnement: [outils qui manquent]}` ; demande
+  `{"type": "environnement", "decision", "fonctionnalite", "verdict": "fait" | "continuer"}` (« C'est fait », « Continuer sans »).
+- Relevé : `DECISIONS_FONCTIONNALITE` gagne `genre_fonctionnalite` et `environnement` (champs contrôlés) ; la page doit les afficher,
+  ainsi que l'étape `deplacee` d'une demande abandonnée (`deplacee_vers: "(demande abandonnée)"`). `bureau/demandes.py` vérifie les
+  trois types (`organisation` étendue, `genre_fonctionnalite`, `environnement`) ; `docs/releve.md` et `orchestrateur/interface.md` les décrivent.
+- **À surveiller** : `ecrire_organisation` (installation) remplace la liste `services` (le moteur envoie tous les services) ;
+  `creation.creer_projet` (tâche 7) doit écrire un `factory.json` valide sans `flux`, éventuellement avec `description` et `genre` ;
+  `bureau/web/ui/organisation.js` lit encore les colonnes retirées du flux (note de la phase A).
 
 ## Messages à coller
 

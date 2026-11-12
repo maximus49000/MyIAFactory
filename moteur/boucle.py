@@ -103,6 +103,8 @@ class Moteur:
             self._ajouter(p)
 
     def _ajouter(self, projet):
+        if getattr(projet, "bureau", None) is None:
+            projet.bureau = self.bureau     # les mesures d'usage des projets du bureau servent à estimer un workflow
         self.projets.append(projet)
         self.etats[str(projet.factory)] = regles.nouvel_etat()
 

@@ -934,9 +934,17 @@ def _completer_validation(s, e):
     Ne touche à rien d'autre ; refuse une décision levée ou d'un autre genre."""
     i = texte(e, "id")
     plus = _dit_de_la_validation(e)
+    if "fichiers" in e:      # ce qu'il y a à vérifier, remplacé (ex. les images d'un style au lieu d'un apk)
+        fichiers = e["fichiers"]
+        if (not isinstance(fichiers, list) or not fichiers
+                or not all(isinstance(x, dict) and isinstance(x.get("chemin"), str) and x["chemin"].strip()
+                           and isinstance(x.get("titre"), str) and x["titre"].strip() and len(x["titre"]) <= 200
+                           for x in fichiers)):
+            raise Refus("« fichiers » est une liste non vide de {chemin, titre}.")
+        plus["fichiers"] = [{"chemin": x["chemin"].strip(), "titre": x["titre"].strip()} for x in fichiers]
     if not plus:
-        raise Refus("« completer » demande au moins « doit_marcher », « pas_encore », « conclusion » ou "
-                    "« points_a_verifier ».")
+        raise Refus("« completer » demande au moins « doit_marcher », « pas_encore », « conclusion », "
+                    "« points_a_verifier » ou « fichiers ».")
     for d in s["decisions_projet"] + [x for f in s["fonctionnalites"] for x in f["decisions"]]:
         if d["id"] == i:
             if d.get("genre") != "valider_etape":

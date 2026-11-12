@@ -350,6 +350,13 @@ class TestSuivi(AvecProjet):
                                              "points_a_verifier": ["Le jeu s'ouvre", "Le menu s'affiche"]})
         self.assertEqual(code, 0, r)
         self.assertEqual(decision(d5), {**avant, **nouveau, "points": ["Le jeu s'ouvre", "Le menu s'affiche"]})
+        # les fichiers à vérifier peuvent être remplacés (des images de style au lieu d'un apk)
+        images = [{"chemin": "pieces/f1/boss.png", "titre": "Sprite du boss"}]
+        self.assertEqual(sortie("decision", entree={"action": "completer", "id": d5, "fichiers": images})[0], 0)
+        self.assertEqual(decision(d5)["fichiers"], images)
+        for mauvais in ([], [{"chemin": "a.png"}], [{"chemin": "", "titre": "x"}], "a.png"):
+            self.assertEqual(sortie("decision", entree={"action": "completer", "id": d5, "fichiers": mauvais})[0], 1)
+        self.assertEqual(decision(d5)["fichiers"], images)
         sortie("decision", entree={"action": "lever", "id": d5})
         avant = decision(d3["id"])
         for mauvais in ({}, {"doit_marcher": ""}, {"conclusion": "x" * 201}, {"points_a_verifier": []},

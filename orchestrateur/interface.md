@@ -143,10 +143,11 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 ### `decision`
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
-`{"action": "completer", "id", "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?}` complète une
+`{"action": "completer", "id", "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?, "fichiers"?}` complète une
 décision `valider_etape` encore posée (au moins un champ, validés comme à la pose : `doit_marcher` 480 caractères au
 plus et non vide, `pas_encore` 480 au plus et peut être vide, `conclusion` 200 au plus ; `points_a_verifier` devient
-`points`, 1 à 8 phrases différentes de 160 au plus) et ne touche à rien d'autre ; refusée pour une décision inconnue
+`points`, 1 à 8 phrases différentes de 160 au plus ; `fichiers`, liste non vide de `{chemin, titre}`, remplace ce qu'il y
+a à vérifier, par exemple les images d'un style au lieu d'un apk qui ne les montre pas encore) et ne touche à rien d'autre ; refusée pour une décision inconnue
 ou levée, ou d'un autre genre. Les trois champs se posent aussi avec `poser` (`valider_etape`). Rend `{"ok": true}`.
 `portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`,
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai

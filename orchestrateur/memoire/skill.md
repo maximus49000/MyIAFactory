@@ -213,3 +213,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Pour un test long, le lancer en tâche de fond avec un délai généreux et ne lire la sortie qu'à la fin.
+
+## S36 — Quand une édition multi-lignes échoue sur l'indentation, la
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Quand une édition multi-lignes échoue sur l'indentation, la découper en remplacements d'une seule ligne, puis relire le bloc pour vérifier les tabulations.

@@ -1622,6 +1622,8 @@ def construire_releve(ctx):
             le["tache"] = x["tache"]
         if x.get("texte_general"):
             le["texte_general"] = x["texte_general"]
+        if isinstance(x.get("refus"), dict) and x["refus"].get("raison"):   # le dernier refus d'écrire, dit sur la leçon
+            le["refus"] = x["refus"]["raison"]
         for d in en_attente.values():
             if d.get("cible") == x["id"]:
                 le["verdict_demande"] = d.get("verdict")
@@ -1630,6 +1632,13 @@ def construire_releve(ctx):
                 le["challenge_tache"] = d.get("tache")
         lecons.append(le)
 
+    # Validées, mais pas encore écrites dans la mémoire de la skill : elles ont quitté la liste « à valider ».
+    lecons_en_attente = [{"id": x["id"], "agent": x["agent"] if x["agent"] in cles else chef, "texte": x["texte"],
+                          "etage": x.get("etage_applique") or x.get("etage_propose") or "projet",
+                          "raison": x["ecriture"].get("raison") or "", "depuis": x["ecriture"].get("depuis"),
+                          "essais": x["ecriture"].get("essais", 1)}
+                         for x in s["lecons"] if x["etat"] == "validée" and isinstance(x.get("ecriture"), dict)]
+
     en_pause = s["factory"]["etat"] == "en pause"
     r = {"version": 4, "projet": ctx.f["nom"], "factory": dict(s["factory"]),
          "services": [dict(x) for x in ctx.f["services"]],
@@ -1637,7 +1646,7 @@ def construire_releve(ctx):
          "titulaires": titulaires, "taches": taches,
          "file": {"visibles": elements_file[:VISIBLES], "suite": elements_file[VISIBLES:VISIBLES + rel.MAX_SUITE],
                   "reste": max(0, len(elements_file) - VISIBLES)},
-         "decisions": 0, "lecons": lecons,
+         "decisions": 0, "lecons": lecons, "lecons_en_attente": lecons_en_attente,
          "actions": [{"id": "reprendre", "libelle": "Reprendre"} if en_pause else
                      {"id": "pause", "libelle": "Pause", "confirmer": "Mettre la factory en pause ?"}],
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
@@ -2066,7 +2075,9 @@ def cmd_lecon(ctx, e):
         return _noter_lecon(ctx, e)
     if action == "appliquer":
         return _appliquer_lecon(ctx, e)
-    raise Refus("« action » doit valoir noter ou appliquer.")
+    if action == "reessayer":
+        return _reessayer_ecritures(ctx)
+    raise Refus("« action » doit valoir noter, appliquer ou reessayer.")
 
 
 def _noter_lecon(ctx, e):
@@ -2111,44 +2122,149 @@ def _genre_de_la_lecon(ctx, s, lecon):
 
 
 def _appliquer_lecon(ctx, e):
-    i, verdict = texte(e, "id"), e.get("verdict")
-    if verdict not in ("valider", "invalider"):
-        raise Refus("« verdict » doit valoir valider ou invalider.")
+    """Le verdict de l'utilisateur sur une leçon ; `lot` (une liste de `{id, verdict, etage?}`) : plusieurs verdicts, le
+    dépôt de la skill n'étant mis à jour et poussé qu'une fois. Un verdict seul refuse (code 1) ce qu'un lot rend en
+    `refus` de la leçon."""
+    lot = e.get("lot")
+    if lot is None:
+        items = [{"id": texte(e, "id"), "verdict": e.get("verdict"), "etage": e.get("etage")}]
+    else:
+        if not isinstance(lot, list) or not lot:
+            raise Refus("« lot » doit être une liste non vide de verdicts.")
+        items = []
+        for x in lot:
+            if not isinstance(x, dict) or not isinstance(x.get("id"), str) or not x["id"].strip():
+                raise Refus("Chaque verdict du lot a un « id » (texte).")
+            items.append({"id": x["id"], "verdict": x.get("verdict"), "etage": x.get("etage")})
+    resultats = _appliquer_verdicts(ctx, items)
+    if lot is not None:
+        return {"resultats": resultats}
+    r = resultats[0]
+    if not r["ok"]:
+        raise Refus(r["refus"])
+    sortie = {"ok": True, "etage": r["etage"]}
+    if r.get("en_attente"):
+        sortie.update(en_attente=True, raison=r["raison"])
+    return sortie
+
+
+def _lecon_pour_la_memoire(lecon):
+    general = lecon["texte_general"].strip()
+    return {"titre": general.split(".")[0].strip()[:60] or general[:60], "texte": general,
+            "roles": lecon.get("roles") or ["tous"]}
+
+
+def _appliquer_verdicts(ctx, items):
+    """Un résultat par verdict : `{id, ok, etage}` plus `refus` (la leçon reste « à valider », avec la raison), ou
+    `en_attente` et `raison` (validée, mais son écriture dans la mémoire est à refaire : le moteur la réessaie)."""
     s = ctx.suivi.lire()
-    lecon = next((x for x in s["lecons"] if x["id"] == i and x["etat"] == "à valider"), None)
-    if lecon is None:
-        raise Refus(f"Leçon inconnue ou déjà traitée : {i}")
-    etage = e.get("etage") or lecon["etage_propose"]
-    if etage not in rel.ETAGES:
-        raise Refus(f"Étage inconnu « {etage} » ({', '.join(rel.ETAGES)}).")
-    if verdict == "valider" and etage != "projet":
-        if not (lecon.get("texte_general") or "").strip():
-            raise Refus("Cette leçon n'a pas de texte général : elle ne peut aller qu'à l'étage projet.")
-        general = lecon["texte_general"].strip()
-        titre = general.split(".")[0].strip()[:60] or general[:60]
-        ok, message = memoire.ajouter(ctx.f["memoire"], etage, _genre_de_la_lecon(ctx, s, lecon),
-                                      {"titre": titre, "texte": general, "roles": lecon.get("roles") or ["tous"]},
-                                      ctx.f["mots_interdits"])
-        if not ok:   # la leçon reste « à valider » : rien n'a changé
-            raise Refus(message)
-    fiche_agent = fi.trouver(ctx.fiches(), lecon["agent"])
+    resultats, ecritures, vus = [], [], set()
+    for x in items:
+        i, verdict = x["id"], x["verdict"]
+        r = {"id": i, "ok": True, "etage": None}
+        resultats.append(r)
+        if verdict not in ("valider", "invalider"):
+            r.update(ok=False, refus="« verdict » doit valoir valider ou invalider.")
+            continue
+        lecon = next((y for y in s["lecons"] if y["id"] == i and y["etat"] == "à valider"), None)
+        if lecon is None or i in vus:
+            r.update(ok=False, refus=f"Leçon inconnue ou déjà traitée : {i}")
+            continue
+        vus.add(i)
+        etage = x.get("etage") or lecon["etage_propose"]
+        if etage not in rel.ETAGES:
+            r.update(ok=False, refus=f"Étage inconnu « {etage} » ({', '.join(rel.ETAGES)}).")
+            continue
+        r["etage"] = etage if verdict == "valider" else None
+        r["_lecon"], r["_verdict"] = lecon, verdict
+        if verdict == "valider" and etage != "projet":
+            if not (lecon.get("texte_general") or "").strip():
+                r.update(ok=False, refus="Cette leçon n'a pas de texte général : elle ne peut aller qu'à l'étage projet.")
+                del r["_lecon"], r["_verdict"]
+                continue
+            ecritures.append((r, (etage, _genre_de_la_lecon(ctx, s, lecon), _lecon_pour_la_memoire(lecon))))
+    if ecritures:   # une seule mise à jour du dépôt de la skill, un seul push, pour tout le lot
+        ecrites = memoire.ecrire_lecons(ctx.f["memoire"], [p for _, p in ecritures], ctx.f["mots_interdits"], git=GIT)
+        for (r, _), m in zip(ecritures, ecrites):
+            r["_memoire"] = m
+    fiches = ctx.fiches()
     with ctx.suivi.transaction() as s2:
-        courante = next((x for x in s2["lecons"] if x["id"] == i and x["etat"] == "à valider"), None)
-        if courante is None:
-            raise Refus(f"La leçon {i} vient d'être traitée.")
-        if verdict == "valider":
-            courante["etat"], courante["etage_applique"] = "validée", etage
-        else:
-            s2["lecons"].remove(courante)
-        if fiche_agent:
+        for r in resultats:
+            lecon, verdict = r.pop("_lecon", None), r.pop("_verdict", None)
+            m = r.pop("_memoire", None)
+            if lecon is None:
+                continue
+            i = r["id"]
+            courante = next((y for y in s2["lecons"] if y["id"] == i and y["etat"] == "à valider"), None)
+            if courante is None:
+                r.update(ok=False, refus=f"La leçon {i} vient d'être traitée.")
+                continue
+            if m is not None and not m.ok and not m.transitoire:   # refusée : elle reste « à valider », avec la raison
+                courante["refus"] = {"raison": m.message, "t": su.maintenant()}
+                r.update(ok=False, refus=m.message)
+                continue
+            fiche_agent = fi.trouver(fiches, lecon["agent"])
+            courante.pop("refus", None)
             if verdict == "valider":
-                for x in fiche_agent["lecons"]:
-                    if x["id"] == i:
-                        x["etat"] = "validée"
+                courante["etat"], courante["etage_applique"] = "validée", r["etage"]
+                if m is not None and not (m.ok and m.publie):   # à écrire ou à pousser plus tard
+                    maintenant = su.maintenant()
+                    courante["ecriture"] = {"etat": "en attente", "raison": m.message, "depuis": maintenant,
+                                            "essais": 1, "dernier_essai": maintenant, "commitee": m.commite}
+                    r.update(en_attente=True, raison=m.message)
             else:
-                fiche_agent["lecons"] = [x for x in fiche_agent["lecons"] if x["id"] != i]
-            fi.ecrire_fiche(fiche_agent)
-    return {"ok": True, "etage": etage if verdict == "valider" else None}
+                s2["lecons"].remove(courante)
+            if fiche_agent:
+                if verdict == "valider":
+                    for y in fiche_agent["lecons"]:
+                        if y["id"] == i:
+                            y["etat"] = "validée"
+                else:
+                    fiche_agent["lecons"] = [y for y in fiche_agent["lecons"] if y["id"] != i]
+                fi.ecrire_fiche(fiche_agent)
+    return resultats
+
+
+def _reessayer_ecritures(ctx):
+    """Reprend les leçons validées dont l'écriture dans la mémoire de la skill n'a pas abouti : celles pas encore
+    écrites le sont (une seule mise à jour du dépôt), celles seulement commitées en local sont poussées. Sans leçon en
+    attente, le dépôt n'est pas touché."""
+    s = ctx.suivi.lire()
+    attente = [x for x in s["lecons"] if x["etat"] == "validée" and x.get("ecriture")]
+    if not attente:
+        return {"ecrites": 0, "en_attente": 0, "resultats": []}
+    a_ecrire = [x for x in attente if not x["ecriture"].get("commitee")]
+    deja = [x for x in attente if x["ecriture"].get("commitee")]
+    issue = {}
+    publication = None
+    if a_ecrire:
+        plans = [(x["etage_applique"], _genre_de_la_lecon(ctx, s, x), _lecon_pour_la_memoire(x)) for x in a_ecrire]
+        for x, m in zip(a_ecrire, memoire.ecrire_lecons(ctx.f["memoire"], plans, ctx.f["mots_interdits"], git=GIT)):
+            issue[x["id"]] = m
+            if m.ok and m.commite:
+                publication = publication or m
+    if deja:
+        pub = publication or memoire.republier(ctx.f["memoire"], git=GIT)
+        for x in deja:
+            issue[x["id"]] = pub
+    ecrites = 0
+    with ctx.suivi.transaction() as s2:
+        for x in attente:
+            courante = next((y for y in s2["lecons"] if y["id"] == x["id"] and y.get("ecriture")), None)
+            m = issue[x["id"]]
+            if courante is None:
+                continue
+            if m.ok and m.publie:
+                del courante["ecriture"]
+                ecrites += 1
+            else:
+                en = courante["ecriture"]
+                en.update(raison=m.message, essais=en.get("essais", 1) + 1, dernier_essai=su.maintenant(),
+                          commitee=bool(en.get("commitee") or m.commite))
+        restantes = sum(1 for y in s2["lecons"] if y.get("ecriture"))
+    return {"ecrites": ecrites, "en_attente": restantes,
+            "resultats": [{"id": x["id"], "ok": issue[x["id"]].ok and issue[x["id"]].publie,
+                           "raison": issue[x["id"]].message} for x in attente]}
 
 
 def cmd_controle(ctx, e):

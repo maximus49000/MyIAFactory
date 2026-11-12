@@ -56,6 +56,7 @@ function carteLecon(ctx, l, etages) {
     const lien = lienTache(ctx, l.challenge_tache, "Challengée : ouvrir la discussion");
     c.append(lien);
   }
+  if (l.refus) c.append(el("div", "bloquee-raison", "Pas écrite dans la mémoire : " + l.refus));   // la raison du dernier refus
   if (l.verdict_demande) {
     c.append(el("div", "lecon-verdict", `Verdict envoyé : ${l.verdict_demande}`));
   } else if (e.agir) {
@@ -159,6 +160,16 @@ export function contenuDirecteur(ctx, contenu) {
     section.querySelector("h3").after(rangee);
   }
   contenu.append(section);
+
+  // Validées, mais pas encore écrites dans la mémoire de la skill : le moteur les réessaie seul.
+  const enEcriture = (e.lecons_en_attente || []).map((l) => {
+    const li = el("li", "lecon");
+    li.append(el("div", "lecon-texte", l.texte),
+              el("div", "lecon-etat", "Validée, écriture en attente : le moteur réessaie seul"),
+              el("div", "bloquee-raison", l.raison || "Raison inconnue"));
+    return li;
+  });
+  if (enEcriture.length) contenu.append(partie("Leçons validées, écriture en attente", "", enEcriture));
 
   const retours = [];
   for (const t of e.taches || []) {

@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bureau import releve
 from orchestrateur import fiches, memoire
@@ -284,6 +285,218 @@ class TestMemoire(AvecDepots):
             self.assertEqual(memoire.mots_trouves(fichier.read_text(encoding="utf-8"), mots), [], fichier.name)
 
 
+def espion(appels, echecs=None):
+    """Un `git` qui note chaque commande (`appels`), et en fait échouer certaines : {commande: sortie}."""
+    echecs = echecs or {}
+
+    def git_espion(args, cwd):
+        appels.append(list(args))
+        if args[0] in echecs:
+            return 1, echecs[args[0]]
+        return memoire.executer_git(args, cwd)
+
+    return git_espion
+
+
+class AvecArbreModifie(AvecDepots):
+    """Le dépôt de la skill est celui où l'on développe : des fichiers modifiés n'empêchent jamais d'écrire une leçon."""
+
+    def setUp(self):
+        super().setUp()
+        (self.a / "autre.txt").write_text("v1\n", encoding="utf-8")
+        (self.a / "deux.txt").write_text("v1\n", encoding="utf-8")
+        git("add", "-A", cwd=self.a)
+        git("commit", "-q", "-m", "autres fichiers", cwd=self.a)
+        git("push", "-q", cwd=self.a)
+        git("pull", "-q", cwd=self.b)
+
+    def salir(self):
+        """Une modification non commitée, une autre déjà indexée, un fichier neuf : le travail d'un autre agent."""
+        (self.a / "autre.txt").write_text("v2\n", encoding="utf-8")
+        (self.a / "deux.txt").write_text("v2\n", encoding="utf-8")
+        git("add", "deux.txt", cwd=self.a)
+        (self.a / "neuf.txt").write_text("neuf\n", encoding="utf-8")
+
+    def etat_du_travail(self):
+        return git("status", "--porcelain", cwd=self.a)
+
+
+class TestMemoireArbreModifie(AvecArbreModifie):
+    def test_arbre_modifie_ecrit_sans_toucher_aux_autres_fichiers(self):
+        self.salir()
+        avant = self.etat_du_travail()
+        n = self.nb_commits(self.a)
+        appels = []
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=espion(appels))
+        self.assertTrue(ok, message)
+        self.assertIn("poussée", message)
+        self.assertEqual(self.nb_commits(self.a), n + 1)
+        self.assertEqual(git("show", "--name-only", "--format=", "HEAD", cwd=self.a), "memoire/skill.md")
+        self.assertEqual(self.etat_du_travail(), avant)   # autre.txt, deux.txt (indexé) et neuf.txt : intacts
+        self.assertEqual((self.a / "autre.txt").read_text(encoding="utf-8"), "v2\n")
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+        self.assertFalse({"stash", "reset", "checkout", "restore"} & {c[0] for c in appels}, appels)
+        self.assertNotIn(["add", "-A"], appels)
+        self.assertEqual(git("stash", "list", cwd=self.a), "")
+
+    def test_distant_sans_nouveau_pas_de_pull(self):
+        self.salir()
+        appels = []
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=espion(appels))
+        self.assertTrue(ok, message)
+        verbes = [c[0] for c in appels]
+        self.assertEqual(verbes.count("fetch"), 1)
+        self.assertNotIn("pull", verbes)
+        self.assertNotIn("rebase", verbes)
+
+    def test_distant_en_avance_arbre_modifie_garde_le_commit_local(self):
+        ok, _ = memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        self.assertTrue(ok)
+        self.salir()
+        avant = self.etat_du_travail()
+        tete = git("rev-parse", "HEAD", cwd=self.a)
+        appels = []
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon("Leçon de A", "Texte de A."), [],
+                                      git=espion(appels))
+        self.assertTrue(ok, message)
+        self.assertIn("n'est pas publiée", message)
+        self.assertIn("nouveau", message)
+        self.assertNotIn("pull", [c[0] for c in appels])   # pas de rebase : les autres modifications ne sont pas touchées
+        self.assertEqual(git("rev-parse", "HEAD~1", cwd=self.a), tete)   # le commit local est posé sur l'ancien
+        self.assertEqual(self.etat_du_travail(), avant)
+        self.assertNotEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+
+class TestMemoireRepublication(AvecArbreModifie):
+    def test_republier_attend_que_l_arbre_soit_propre(self):
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        self.salir()
+        memoire.ajouter(self.ma, "genre", "vitrine", self.lecon("Leçon de A", "Texte de A."), [])
+        r = memoire.republier(self.ma)   # l'arbre a toujours des modifications : on réessaie plus tard
+        self.assertTrue(r.ok)
+        self.assertFalse(r.publie)
+        self.assertIn("nouveau", r.message)
+        git("add", "-A", cwd=self.a)   # l'autre agent a fini : il commite
+        git("commit", "-q", "-m", "travail de l'autre agent", cwd=self.a)
+        r = memoire.republier(self.ma)
+        self.assertTrue(r.publie, r.message)
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+        self.assertIn("Leçon de A", (self.ma / "genres" / "vitrine.md").read_text(encoding="utf-8"))
+        self.assertIn("Leçon de B", (self.ma / "skill.md").read_text(encoding="utf-8"))
+
+    def test_republier_conflit_abandonne_le_rebase(self):
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        self.salir()
+        memoire.ajouter(self.ma, "skill", None, self.lecon("Leçon de A", "Texte de A."), [])   # même fin de fichier
+        git("add", "-A", cwd=self.a)
+        git("commit", "-q", "-m", "travail de l'autre agent", cwd=self.a)
+        r = memoire.republier(self.ma)
+        self.assertFalse(r.publie)
+        self.assertTrue(r.transitoire)
+        self.assertIn("pull --rebase", r.message)
+        self.assertFalse((self.a / ".git" / "rebase-merge").exists())
+        self.assertFalse((self.a / ".git" / "rebase-apply").exists())
+        self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
+
+    def test_republier_sans_rien_a_publier(self):
+        r = memoire.republier(self.ma)
+        self.assertTrue(r.ok and r.publie, r.message)
+
+    def test_republier_push_refuse(self):
+        memoire.ajouter(self.ma, "skill", None, self.lecon(), [], git=espion([], {"push": "rejeté (droits)"}))
+        r = memoire.republier(self.ma, git=espion([], {"push": "rejeté (droits)"}))
+        self.assertTrue(r.ok)
+        self.assertFalse(r.publie)
+        self.assertIn("rejeté (droits)", r.message)
+        r = memoire.republier(self.ma)
+        self.assertTrue(r.publie, r.message)
+
+class TestMemoireLot(AvecArbreModifie):
+    def test_fichier_de_memoire_modifie_refuse(self):
+        (self.ma / "skill.md").write_text(SKILL + "\nUne retouche à la main.\n", encoding="utf-8")
+        n = self.nb_commits(self.a)
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [])
+        self.assertFalse(ok)
+        self.assertIn("modifications non commitées", message)
+        self.assertIn("skill.md", message)
+        self.assertEqual(self.nb_commits(self.a), n)
+        self.assertTrue((self.ma / "skill.md").read_text(encoding="utf-8").endswith("Une retouche à la main.\n"))
+        r = memoire.ecrire_lecons(self.ma, [("skill", None, self.lecon())], [])[0]
+        self.assertFalse(r.ok)
+        self.assertFalse(r.transitoire)   # pas de réessai tout seul : il faut une main
+
+    def test_fichier_de_memoire_indexe_refuse(self):
+        (self.ma / "skill.md").write_text(SKILL + "\nIndexé.\n", encoding="utf-8")
+        git("add", "memoire/skill.md", cwd=self.a)
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [])
+        self.assertFalse(ok)
+        self.assertIn("modifications non commitées", message)
+
+    def test_lot_une_seule_synchronisation(self):
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        git("pull", "-q", cwd=self.a)
+        n = self.nb_commits(self.a)
+        appels = []
+        lecons = [("skill", None, self.lecon(f"Leçon {i}", f"Texte {i}.")) for i in range(3)]
+        lecons.append(("genre", "vitrine", self.lecon("Leçon de genre", "Texte de genre.")))
+        resultats = memoire.ecrire_lecons(self.ma, lecons, [], git=espion(appels))
+        self.assertEqual([r.ok for r in resultats], [True] * 4, [r.message for r in resultats])
+        self.assertEqual([r.publie for r in resultats], [True] * 4)
+        verbes = [c[0] for c in appels]
+        self.assertEqual(verbes.count("fetch"), 1)
+        self.assertLessEqual(verbes.count("pull"), 1)
+        self.assertEqual(verbes.count("push"), 1)
+        self.assertEqual(self.nb_commits(self.a), n + 4)
+        ids = [x["id"] for x in memoire.lire(self.ma, None, "dev")["skill"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+
+    def test_lot_distant_en_avance_arbre_propre_un_seul_pull(self):
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        appels = []
+        lecons = [("skill", None, self.lecon(f"Leçon {i}", f"Texte {i}.")) for i in range(3)]
+        resultats = memoire.ecrire_lecons(self.ma, lecons, [], git=espion(appels))
+        self.assertTrue(all(r.ok and r.publie for r in resultats))
+        self.assertEqual([c[0] for c in appels].count("pull"), 1)
+        self.assertIn("Leçon de B", (self.ma / "skill.md").read_text(encoding="utf-8"))
+
+    def test_lot_chaque_lecon_garde_son_resultat(self):
+        lecons = [("skill", None, self.lecon("Bonne", "Un texte général.")),
+                  ("skill", None, self.lecon("Interdite", "Les rues de ville lumiere.")),
+                  ("genre", "inconnu", self.lecon("Sans genre", "Texte.")),
+                  ("skill", None, self.lecon("Autre bonne", "Un autre texte."))]
+        r = memoire.ecrire_lecons(self.ma, lecons, ["ville lumiere"])
+        self.assertEqual([x.ok for x in r], [True, False, False, True])
+        self.assertIn("mot interdit", r[1].message)
+        self.assertIn("Genre inconnu", r[2].message)
+        self.assertFalse(r[1].transitoire)
+        self.assertTrue(r[3].publie)
+
+    def test_lot_push_refuse_toutes_les_lecons_ecrites_sont_en_attente(self):
+        lecons = [("skill", None, self.lecon(f"Leçon {i}", f"Texte {i}.")) for i in range(2)]
+        appels = []
+        r = memoire.ecrire_lecons(self.ma, lecons, [], git=espion(appels, {"push": "rejeté (droits)"}))
+        self.assertEqual([(x.ok, x.commite, x.publie) for x in r], [(True, True, False)] * 2)
+        self.assertEqual([c[0] for c in appels].count("push"), 1)
+        self.assertIn("rejeté (droits)", r[0].message)
+
+    def test_fetch_impossible_ecrit_en_local(self):
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [],
+                                      git=espion([], {"fetch": "réseau coupé", "push": "réseau coupé"}))
+        self.assertTrue(ok, message)
+        self.assertIn("n'est pas publiée", message)
+        self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
+
+    def test_pull_en_echec_rien_n_est_ecrit_et_se_reessaie(self):
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        n = self.nb_commits(self.a)
+        r = memoire.ecrire_lecons(self.ma, [("skill", None, self.lecon())], [],
+                                  git=espion([], {"pull": "conflit"}))[0]
+        self.assertFalse(r.ok)
+        self.assertTrue(r.transitoire)
+        self.assertIn("pull --rebase", r.message)
+        self.assertEqual(self.nb_commits(self.a), n)
+
+
 class TestMemoireCommandes(AvecProjet, AvecDepots):
     """Les commandes `memoire`, `genre`, `lecon`, `controle` de l'outil."""
 
@@ -380,6 +593,142 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         code, sortie = self.outil("lecon", entree={"action": "appliquer", "id": i, "verdict": "valider"})
         self.assertEqual(code, 1)
         self.assertIn("genre", sortie["erreur"])
+
+    # --- Le dépôt de la skill est un dépôt de développement : valider une leçon ne dépend pas de son état.
+
+    def depot_en_travail(self):
+        """Un fichier suivi, puis modifié sans commit : le travail d'un autre agent dans le dépôt de la skill."""
+        (self.a / "autre.txt").write_text("v1\n", encoding="utf-8")
+        git("add", "-A", cwd=self.a)
+        git("commit", "-q", "-m", "autre", cwd=self.a)
+        git("push", "-q", cwd=self.a)
+        git("pull", "-q", cwd=self.b)
+        (self.a / "autre.txt").write_text("v2\n", encoding="utf-8")
+
+    def generale(self, texte="Un conseil général.", etage="skill", **extra):
+        return self.noter(etage_propose=etage, texte_general=texte, **extra)["id"]
+
+    def verdict(self, i, verdict="valider", **extra):
+        return self.outil("lecon", entree={"action": "appliquer", "id": i, "verdict": verdict, **extra})
+
+    def commiter_tout(self):
+        git("add", "-A", cwd=self.a)
+        git("commit", "-q", "-m", "travail de l'autre agent", cwd=self.a)
+
+    def test_valider_avec_un_depot_en_travail(self):
+        self.depot_en_travail()
+        i = self.generale()
+        code, r = self.verdict(i)
+        self.assertEqual(code, 0, r)
+        self.assertNotIn("en_attente", r)
+        self.assertIn("Un conseil général.", [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]])
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+        self.assertEqual((self.a / "autre.txt").read_text(encoding="utf-8"), "v2\n")
+        self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
+        releve_ = self.ok("releve")
+        self.assertEqual(releve_["lecons"], [])
+        self.assertEqual(releve_["lecons_en_attente"], [])
+        self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
+
+    def test_distant_en_avance_arbre_modifie_attend_puis_s_ecrit_seule(self):
+        self.depot_en_travail()
+        memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
+        i = self.generale("Un conseil du genre.", etage="genre")
+        code, r = self.verdict(i)
+        self.assertEqual(code, 0, r)
+        self.assertTrue(r["en_attente"])
+        self.assertIn("nouveau", r["raison"])
+        releve_ = self.ok("releve")
+        self.assertEqual(releve_["lecons"], [])   # elle a quitté la liste « à valider »
+        self.assertEqual([(x["id"], x["etage"]) for x in releve_["lecons_en_attente"]], [(i, "genre")])
+        self.assertIn("nouveau", releve_["lecons_en_attente"][0]["raison"])
+        self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
+        self.assertEqual([x["id"] for x in self.ok("etat")["lecons"]], [])
+        self.assertEqual(self.verdict(i)[0], 1)   # elle n'est plus à valider
+        # Tant que l'arbre a d'autres modifications, le réessai ne change rien et garde la raison.
+        r = self.ok("lecon", entree={"action": "reessayer"})
+        self.assertEqual((r["ecrites"], r["en_attente"]), (0, 1))
+        self.assertEqual(len(self.ok("releve")["lecons_en_attente"]), 1)
+        self.commiter_tout()
+        r = self.ok("lecon", entree={"action": "reessayer"})
+        self.assertEqual((r["ecrites"], r["en_attente"]), (1, 0))
+        self.assertEqual(self.ok("releve")["lecons_en_attente"], [])
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+        self.assertIn("Un conseil du genre.", [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev")["genre"]])
+        self.assertIn("Texte de B.", [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]])
+        self.assertEqual(self.ok("lecon", entree={"action": "reessayer"})["en_attente"], 0)
+
+    def test_push_refuse_met_la_lecon_en_attente_et_elle_s_ecrit_au_reessai(self):
+        i = self.generale()
+        with mock.patch("orchestrateur.outil.GIT", espion([], {"push": "rejeté (droits)"})):
+            code, r = self.verdict(i)
+        self.assertEqual(code, 0, r)
+        self.assertTrue(r["en_attente"])
+        self.assertIn("rejeté (droits)", r["raison"])
+        self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
+        en_attente = self.ok("releve")["lecons_en_attente"]
+        self.assertEqual([x["id"] for x in en_attente], [i])
+        self.assertIn("rejeté (droits)", en_attente[0]["raison"])
+        nb = self.nb_commits(self.a)
+        r = self.ok("lecon", entree={"action": "reessayer"})   # le dépôt a déjà la leçon : il ne reste qu'à pousser
+        self.assertEqual((r["ecrites"], r["en_attente"]), (1, 0))
+        self.assertEqual(self.nb_commits(self.a), nb)   # pas de second commit de la même leçon
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+
+    def test_fichier_de_memoire_modifie_la_lecon_reste_a_valider_avec_la_raison(self):
+        (self.ma / "skill.md").write_text(SKILL + "\nUne retouche.\n", encoding="utf-8")
+        i = self.generale()
+        code, r = self.verdict(i)
+        self.assertEqual(code, 1)
+        self.assertIn("modifications non commitées", r["erreur"])
+        releve_ = self.ok("releve")
+        self.assertEqual([x["id"] for x in releve_["lecons"]], [i])
+        self.assertIn("modifications non commitées", releve_["lecons"][0]["refus"])
+        self.assertEqual(releve_["lecons_en_attente"], [])
+        self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
+        git("checkout", "--", "memoire/skill.md", cwd=self.a)   # la main extérieure a fini : la leçon passe
+        self.assertEqual(self.verdict(i)[0], 0)
+        self.assertNotIn("refus", json.dumps(self.ok("releve")["lecons"]))
+
+    def test_lot_une_synchronisation_et_un_resultat_par_lecon(self):
+        self.depot_en_travail()
+        a = self.generale("Premier conseil.")
+        b = self.generale("Deuxième conseil.", etage="genre")
+        c = self.generale("Les rues de la ville lumiere sont étroites.")
+        d = self.noter(texte="Locale")["id"]
+        e = self.generale("Cinquième conseil.")
+        appels = []
+        lot = [{"id": x, "verdict": "valider"} for x in (a, b, c, d, e)] + [{"id": "inconnue:L9", "verdict": "valider"}]
+        with mock.patch("orchestrateur.outil.GIT", espion(appels)):
+            r = self.ok("lecon", entree={"action": "appliquer", "lot": lot})
+        par_id = {x["id"]: x for x in r["resultats"]}
+        self.assertEqual([x["id"] for x in r["resultats"]], [x["id"] for x in lot])
+        self.assertTrue(all(par_id[x]["ok"] for x in (a, b, d, e)), r)
+        self.assertFalse(par_id[c]["ok"])
+        self.assertIn("mot interdit", par_id[c]["refus"])
+        self.assertFalse(par_id["inconnue:L9"]["ok"])
+        verbes = [x[0] for x in appels]
+        self.assertEqual((verbes.count("fetch"), verbes.count("pull"), verbes.count("push")), (1, 0, 1))
+        self.assertEqual([x["id"] for x in self.ok("releve")["lecons"]], [c])   # la refusée reste, avec sa raison
+        self.assertIn("mot interdit", self.ok("releve")["lecons"][0]["refus"])
+        textes = [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]]
+        self.assertIn("Premier conseil.", textes)
+        self.assertIn("Cinquième conseil.", textes)
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
+
+    def test_lot_deux_fois_la_meme_lecon(self):
+        a = self.generale()
+        r = self.ok("lecon", entree={"action": "appliquer", "lot": [{"id": a, "verdict": "valider"},
+                                                                     {"id": a, "verdict": "valider"}]})
+        self.assertEqual([x["ok"] for x in r["resultats"]], [True, False])
+        self.assertEqual(sum(1 for x in memoire.lire(self.ma, None, "dev")["skill"] if x["texte"] == "Un conseil général."), 1)
+
+    def test_reessayer_sans_attente_ne_touche_pas_au_depot(self):
+        appels = []
+        with mock.patch("orchestrateur.outil.GIT", espion(appels)):
+            r = self.ok("lecon", entree={"action": "reessayer"})
+        self.assertEqual((r["ecrites"], r["en_attente"]), (0, 0))
+        self.assertEqual(appels, [])
 
     def test_genre_lister_et_fixer(self):
         self.ok("genre", entree={"action": "fixer", "genre": "jeu-web"})   # un genre connu, sans description

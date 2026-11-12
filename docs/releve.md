@@ -38,7 +38,8 @@ Au-delà de 10 secondes, le bureau arrête la commande et tous les processus qu'
 | `decisions` | non | nombre de décisions qui attendent le Directeur — `0` par défaut |
 | `actions` | non, v2 | les boutons de la factory (voir « Faire agir le bureau ») |
 | `types` | non, v2 | liste de `{id, nom}` : les types de tâches, pour le filtre de la vue liste |
-| `lecons` | non, v2 | les leçons **à valider** : liste de `{id, agent, texte, tache?, date?, verdict_demande?}` ; `id` unique, `agent` = clé d'un titulaire, `verdict_demande` = `"valider"` ou `"invalider"` (verdict envoyé, pas encore appliqué : le bureau affiche « Verdict envoyé ») |
+| `lecons` | non, v2 | les leçons **à valider** : liste de `{id, agent, texte, tache?, date?, verdict_demande?}` ; `id` unique, `agent` = clé d'un titulaire, `verdict_demande` = `"valider"` ou `"invalider"` (verdict envoyé, pas encore appliqué : le bureau affiche « Verdict envoyé ») ; `refus` (texte, facultatif) = pourquoi la dernière validation n'a pas pu être écrite dans la mémoire de la skill (mot interdit, fichier de mémoire modifié à la main…) : la leçon reste à valider et le bureau dit la raison |
+| `lecons_en_attente` | non, v4 | les leçons **validées** dont l'écriture dans la mémoire de la skill est en attente (push refusé, dépôt occupé…) : liste de `{id, agent, texte, etage?, raison?, depuis?, essais?}`. Elles ont quitté `lecons` ; le moteur les réessaie seul et elles disparaissent une fois écrites. Le bureau les montre avec leur `raison` |
 
 **Titulaire** (un agent) : `cle` (stable, unique), `lieu` (`"local"` ou `"cloud"`) et `service` (sauf pour le chef) sont obligatoires. Facultatifs : `modele` (`"?"` par défaut), `permanent` (ne quitte jamais le bureau), `chef` (le chef d'atelier ; un seul au plus, le bureau en ajoute un de clé `"chef"` s'il n'y en a aucun), `fraicheur_min` (délai de fraîcheur propre à cet agent, pour les travaux longs et silencieux).
 

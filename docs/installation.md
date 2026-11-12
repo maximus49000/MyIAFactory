@@ -171,6 +171,26 @@ l'élément apparaît au bureau de direction avec le compte rendu et les fichier
 
 Ces étapes ne coûtent rien en agents. Elles s'ajoutent aux validations fixes (cahier des charges, méthode).
 
+### Valider une leçon de genre ou de skill
+
+La leçon est écrite dans la mémoire de la skill (`orchestrateur/memoire/`), puis commitée et poussée. Ce dépôt est
+souvent celui où l'on développe la skill (la skill installée y est une jonction) : **ses autres fichiers modifiés ne
+bloquent rien**. Seul le fichier de mémoire est commité (`git commit -- <fichier>`) ; rien n'est mis de côté, annulé ni
+ajouté d'office.
+
+- Le dépôt distant n'a rien de neuf : pas de `pull`, la leçon est poussée.
+- Il a du neuf et l'arbre est propre : `git pull --rebase`, puis push.
+- Il a du neuf et l'arbre a d'autres fichiers modifiés : pas de rebase (il toucherait à ces fichiers). La leçon est
+  commitée en local et **validée, écriture en attente** : elle quitte la liste « à valider » et paraît dans la
+  section « Leçons validées, écriture en attente » du bureau de direction, avec la raison. Le moteur la repousse seul
+  toutes les 5 minutes (sans nouveau clic), dès que l'arbre est propre ou que le réseau revient ; elle disparaît une
+  fois publiée. Un push refusé (droits, réseau) suit le même chemin.
+- Le fichier de mémoire lui-même a des modifications non commitées d'une autre main : la leçon n'est pas écrite, elle
+  reste « à valider » et dit pourquoi sur sa carte. Commitez ou annulez ces modifications, puis validez de nouveau.
+
+« Valider toutes les leçons » est un lot : une seule synchronisation du dépôt et un seul push pour tout le lot, chaque
+leçon gardant son résultat dans la réponse de sa demande.
+
 ## Une nouvelle demande : genre et workflow
 
 Chaque « + Nouvelle fonctionnalité » est d'abord **classée par genre** (un petit appel de jugement, sur le modèle le

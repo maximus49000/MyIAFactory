@@ -310,10 +310,33 @@ leçon sur la fiche de l'agent, « à valider » ; `etage_propose` vaut `projet`
 personne) est obligatoire. Rend `{"id": "<agent>:L1"}`.
 
 Entrée : `{"action": "appliquer", "id", "verdict": "valider"|"invalider", "etage"?}` : le verdict de l'utilisateur.
-`projet` : la leçon de la fiche passe « validée ». `genre` ou `skill` : le texte général est ajouté à la mémoire (mise à
-jour du dépôt, mots interdits, commit, push) ; la leçon ne passe « validée » que si l'ajout réussit, sinon code 1 et
-elle reste « à valider » (un échec du seul `git push` garde la leçon commitée dans la copie locale et le dit : elle n'est
-pas publiée). `invalider` : la leçon disparaît. Rend `{"ok": true, "etage": …}`.
+`projet` : la leçon de la fiche passe « validée ». `genre` ou `skill` : le texte général est ajouté à la mémoire. Le
+dépôt de la skill est celui où l'on développe : **ses autres fichiers modifiés ne bloquent jamais l'écriture**. Seul le
+fichier de mémoire est commité (`git commit -- <fichier>` ; jamais `add -A`, pile ni `reset` sur le travail des autres).
+Synchronisation : `git fetch` ; rien de neuf au distant, pas de pull ; du neuf et un arbre propre, `git pull --rebase` ;
+du neuf et d'autres fichiers modifiés, pas de rebase : le commit reste local et sa publication est réessayée plus tard.
+Issues :
+- écrite et poussée : la leçon passe « validée » ;
+- refusée (mot interdit, genre inconnu, **fichier de mémoire lui-même modifié et non commité** par une autre main) :
+  code 1, la leçon reste « à valider » et porte la raison (`refus` dans le relevé) ;
+- validée, écriture en attente (push refusé, distant injoignable, distant en avance avec un arbre modifié, `pull --rebase`
+  en échec) : elle passe « validée » et **quitte la liste « à valider »** ; le suivi garde `ecriture` (`etat`
+  `"en attente"`, `raison`, `depuis`, `essais`, `dernier_essai`, `commitee`). Rend alors
+  `{"ok": true, "etage": …, "en_attente": true, "raison": "…"}`.
+
+`invalider` : la leçon disparaît. Rend `{"ok": true, "etage": …}`.
+
+Entrée : `{"action": "appliquer", "lot": [{"id", "verdict", "etage"?}, …]}` : plusieurs verdicts d'un coup (« Valider
+toutes les leçons »), avec **une seule synchronisation et un seul push** pour tout le lot. Ne refuse jamais le lot pour
+une leçon : rend `{"resultats": [{"id", "ok", "etage", "refus"?, "en_attente"?, "raison"?}]}`, un par verdict, dans
+l'ordre (`ok` faux et `refus` : la leçon reste « à valider » ; `en_attente` : voir plus haut). Un même `id` deux fois dans
+le lot : le second est refusé.
+
+Entrée : `{"action": "reessayer"}` : reprend les leçons validées dont l'écriture est en attente (celles pas encore écrites,
+avec une seule synchronisation ; celles seulement commitées en local, par un seul push). Sans leçon en attente, le dépôt
+n'est pas touché. Rend `{"ecrites": n, "en_attente": restantes, "resultats": [{"id", "ok", "raison"}]}`. Le moteur
+l'appelle seul toutes les 5 minutes (`ECRITURE_LECONS_TOUS_LES_S`), sans nouveau clic ; une leçon écrite cesse d'être
+signalée. Un `pull --rebase` qui bute sur un conflit est abandonné (rien n'est laissé à moitié) et la raison est redite.
 
 ### `controle`
 

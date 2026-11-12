@@ -343,11 +343,14 @@ mémoire d'un autre genre. `depart` donne à chaque agent les leçons de son rô
   `lecon`).
 - Sur le verdict, `lancer lecon` avec `action: appliquer`. Une leçon de projet passe sur la fiche de l'agent. Une
   leçon de genre ou de skill est ajoutée par l'outil au fichier de mémoire de la skill : mise à jour du dépôt local
-  (`git pull --rebase`), refus si le texte contient un des **mots interdits** du projet, ajout, commit et push. **En
-  cas de conflit ou de mot interdit, l'outil s'arrête sans rien écrire** : ne force jamais, dis-le à l'utilisateur
-  et laisse la leçon « à valider ».
-  **Si seul le `git push` échoue** (droits ou réseau), la leçon reste ajoutée et commitée dans la copie locale de la
-  skill : l'outil répond qu'elle n'est pas publiée. Dis-le à l'utilisateur.
+  (`git fetch`, `git pull --rebase` seulement si le distant a du neuf et que l'arbre est propre), refus si le texte
+  contient un des **mots interdits** du projet, ajout, commit **de ce seul fichier** et push. Les autres fichiers
+  modifiés du dépôt de la skill ne bloquent rien et ne sont jamais touchés. **Si le texte contient un mot interdit ou
+  si le fichier de mémoire lui-même est modifié à la main, l'outil s'arrête sans rien écrire** : ne force jamais, dis-le
+  à l'utilisateur et laisse la leçon « à valider ».
+  **Si l'écriture ou le push échoue autrement** (droits, réseau, distant en avance avec un arbre modifié, conflit), la
+  leçon est « validée, écriture en attente » : elle quitte la liste à valider, l'outil répond `en_attente` avec la raison,
+  et le moteur la réessaie seul (`lecon` `action: reessayer`). Dis-le à l'utilisateur.
 
 ## Commit et push
 

@@ -21,5 +21,5 @@ Date : AAAA-MM-JJ
 ```
 
 Les leçons sont numérotées `G1`, `G2`… dans l'ordre d'arrivée. Une leçon n'est ajoutée que par la commande
-`lecon appliquer` : mise à jour du dépôt (`git pull --rebase`), refus si le texte contient un mot interdit du
+`lecon appliquer` : mise à jour du dépôt (`git fetch`, puis `git pull --rebase` seulement si le distant a du neuf et que l'arbre est propre ; seul le fichier de mémoire est commité), refus si le texte contient un mot interdit du
 projet, ajout, commit, push. En cas de conflit, l'orchestrateur s'arrête et le signale.

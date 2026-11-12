@@ -39,7 +39,8 @@ AGENT_ORCHESTRATEUR = "orchestrateur"
 ETAPE_ORCHESTRATION = "orchestration"
 DELAI_GIT_S = 60
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
-REECRIRE_TOUS_LES_S = 20         # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
+ECRITURE_LECONS_TOUS_LES_S = 300  # une leçon validée mais pas encore écrite dans la mémoire de la skill est réessayée ainsi
+REECRIRE_TOUS_LES_S = 20        # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
 
 
 def ouvrir_projet(fichier_reglages, environ=None):
@@ -157,6 +158,7 @@ class Moteur:
             etat["repris"] = True
             self._demarrage(projet, etat)
         self._demandes(projet, etat)
+        self._ecritures_en_attente(projet, etat)
         self._relever_le_cloud(projet, etat)
         self._retours_des_agents(projet, etat)
         self._executer(projet, regles.avancer(projet, etat))
@@ -191,6 +193,21 @@ class Moteur:
                                     "compléter » est reposée")
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"outils manquants : {e}")
+
+    def _ecritures_en_attente(self, projet, etat):
+        """Les leçons validées dont l'écriture dans la mémoire de la skill n'a pas abouti (dépôt occupé, push refusé) :
+        réessayées toutes les 5 minutes, sans nouveau clic. L'outil ne touche pas au dépôt quand rien n'attend."""
+        maintenant = self.horloge()
+        if maintenant - etat.get("lecons_essayees", float("-inf")) < ECRITURE_LECONS_TOUS_LES_S:
+            return
+        etat["lecons_essayees"] = maintenant
+        try:
+            r = regles.lancer(projet, "lecon", {"action": "reessayer"})
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"leçons en attente : {e}")
+            return
+        if r.get("ecrites"):
+            self._noter(projet, f"{r['ecrites']} leçon(s) en attente enfin écrite(s) dans la mémoire de la skill")
 
     def _quota(self, projet):
         maintenant = self.horloge()
@@ -297,6 +314,15 @@ class Moteur:
         prises = etat.setdefault("prises", set())
         en_attente = regles.lancer(projet, "demandes")["demandes"]
         en_attente.sort(key=lambda d: d.get("type") != "message")     # la discussion reste vivante : messages d'abord
+        lecons = [d for d in en_attente if d.get("type") == "lecon" and d["id"] not in prises]
+        if len(lecons) >= 2:     # « Valider toutes les leçons » : une seule synchronisation du dépôt de la skill
+            prises.update(d["id"] for d in lecons)
+            try:
+                regles.traiter_lecons(projet, lecons, etat)
+            except Exception as e:
+                for d in lecons:
+                    regles._terminer(projet, {"demande": d["id"]}, f"Le moteur a rencontré une erreur : {e}")
+                self._noter(projet, f"leçons : {e}")
         for d in en_attente:
             if d["id"] in prises:
                 continue

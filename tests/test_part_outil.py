@@ -264,7 +264,7 @@ class TestOffres(AvecPartenaires):
         self.assertIn("texte", r["cout"])
         o = self.p({"action": "offres", "partenaires": [self.fiche(gratuit="20 crédits")]})
         self.assertEqual(o["ids"], ["tripo"])
-        self.assertEqual(self.git, ["pull", "add", "commit", "push"])
+        self.assertEqual(self.git, ["status", "status", "fetch", "rev-list", "add", "commit", "push"])   # sans pull : rien de neuf
         cat = json.loads((self.skill / "partenaires" / "catalogue.json").read_text(encoding="utf-8"))
         tripo = next(p for p in cat["partenaires"] if p["id"] == "tripo")
         self.assertEqual((tripo["gratuit"], tripo["verifie_le"]), ("20 crédits", "2026-12-01"))

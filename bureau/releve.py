@@ -1064,6 +1064,17 @@ def _verifier_v2(r, titulaires, taches, cles, erreurs):
         if le.get("verdict_demande") not in (None, "valider", "invalider"):
             erreurs.append(f"« lecons » : la leçon « {i} » : « verdict_demande » doit valoir "
                            "« valider » ou « invalider ».")
+        if not _texte_ou_nul(le.get("refus")):
+            erreurs.append(f"« lecons » : la leçon « {i} » : « refus » doit être un texte.")
+    for le in _liste_facultative(r.get("lecons_en_attente"), "« lecons_en_attente »", erreurs):
+        i = le.get("id")
+        if not _texte(i) or not i or not _texte(le.get("texte")):
+            erreurs.append("« lecons_en_attente » : chaque leçon a un « id » (non vide) et un « texte » (textes).")
+        if not _dans(le.get("agent"), cles):
+            erreurs.append(f"« lecons_en_attente » : la leçon « {i} » vient d'un agent inconnu « {le.get('agent')} ».")
+        for champ in ("etage", "raison", "depuis"):
+            if not _texte_ou_nul(le.get(champ)):
+                erreurs.append(f"« lecons_en_attente » : la leçon « {i} » : « {champ} » doit être un texte.")
     for ti in titulaires:
         cle = ti.get("cle")
         for champ in ("prenom", "specialite"):

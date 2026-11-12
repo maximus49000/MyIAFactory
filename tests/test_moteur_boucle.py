@@ -264,5 +264,82 @@ class Passage(Base):
         self.assertTrue(any("boum" in ligne for ligne in self.moteur.journal))
 
 
+class Lecons(Base):
+    """Les verdicts sur des leçons : « Valider toutes » est un lot, et une écriture en attente se réessaie seule."""
+
+    def noter(self, texte):
+        return self.ok("lecon", entree={"action": "noter", "agent": "dev-1", "texte": texte, "etage_propose": "projet",
+                                        "roles": ["dev"]})["id"]
+
+    def espionner(self, **faux):
+        """Note chaque `lancer lecon` ; `faux[nom]` remplace la réponse de l'outil (nom : valeur ou fonction)."""
+        vus, vrai = [], regles.lancer
+
+        def lancer(projet, nom, entree=None):
+            if nom == "lecon":
+                vus.append(entree)
+            if nom == "lecon" and "lecon" in faux:
+                return faux["lecon"](entree)
+            return vrai(projet, nom, entree)
+
+        return vus, mock.patch.object(regles, "lancer", lancer)
+
+    def test_plusieurs_verdicts_un_seul_appel_en_lot(self):
+        ids = [self.noter(f"Leçon {n}.") for n in range(3)]
+        demandes = [self.demande(type="lecon", id=i, verdict="valider") for i in ids]
+        vus, patch = self.espionner()
+        with patch:
+            self.moteur.tour()
+        appliques = [e for e in vus if e.get("action") == "appliquer"]
+        self.assertEqual(len(appliques), 1)
+        self.assertEqual([x["id"] for x in appliques[0]["lot"]], ids)
+        for d in demandes:
+            self.assertEqual((self.statut(d)["statut"], self.statut(d)["reponse"]), ("traitée", "La leçon est retenue."))
+        self.assertEqual(self.ok("etat")["lecons"], [])
+
+    def test_chaque_demande_du_lot_garde_son_resultat(self):
+        i = self.noter("Une leçon.")
+        bonne = self.demande(type="lecon", id=i, verdict="valider")
+        inconnue = self.demande(type="lecon", id="dev-1:L99", verdict="valider")
+        self.moteur.tour()
+        self.assertEqual(self.statut(bonne)["reponse"], "La leçon est retenue.")
+        self.assertTrue(self.statut(inconnue)["reponse"].startswith("Je n'ai pas pu le faire"))
+
+    def test_une_seule_demande_reste_un_appel_simple(self):
+        i = self.noter("Une leçon.")
+        d = self.demande(type="lecon", id=i, verdict="invalider")
+        self.moteur.tour()
+        self.assertEqual(self.statut(d)["reponse"], "La leçon est écartée.")
+
+    def test_ecriture_en_attente_dite_dans_la_reponse(self):
+        a, b = self.noter("Une."), self.noter("Deux.")
+        da, db = (self.demande(type="lecon", id=i, verdict="valider") for i in (a, b))
+        faux = lambda e: {"resultats": [  # noqa: E731
+            {"id": a, "ok": True, "etage": "skill", "en_attente": True, "raison": "le dépôt est occupé."},
+            {"id": b, "ok": True, "etage": "projet"}]}
+        _, patch = self.espionner(lecon=faux)
+        with patch:
+            self.moteur.tour()
+        self.assertIn("en attente", self.statut(da)["reponse"])
+        self.assertIn("le dépôt est occupé.", self.statut(da)["reponse"])
+        self.assertEqual(self.statut(db)["reponse"], "La leçon est retenue.")
+
+    def test_les_ecritures_en_attente_sont_reessayees_toutes_les_cinq_minutes(self):
+        heure = [1000.0]
+        self.moteur = self.fabriquer([self.projet], horloge=lambda: heure[0])
+        vus, patch = self.espionner()
+        with patch:
+            self.moteur.tour()
+            self.moteur.tour()
+            self.assertEqual([e["action"] for e in vus], ["reessayer"])    # au premier passage, une fois
+            heure[0] += boucle.ECRITURE_LECONS_TOUS_LES_S - 1
+            self.moteur.tour()
+            self.assertEqual(len(vus), 1)
+            heure[0] += 2
+            self.moteur.tour()
+            self.assertEqual([e["action"] for e in vus], ["reessayer", "reessayer"])
+        self.assertEqual(self.moteur.journal, [])
+
+
 if __name__ == "__main__":
     unittest.main()

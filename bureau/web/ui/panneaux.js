@@ -67,7 +67,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat, barre,
       return JSON.stringify([(e.agents || []).find((a) => a.id === id),
         (e.taches || []).map((t) => [t.id, t.titre]), e.services, e.agir, retourListe]);
     }
-    return JSON.stringify([e.decisions, e.lecons, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
+    return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
       e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,
       (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours])]);
   };

@@ -462,12 +462,37 @@ def _controles_du_registre(projet):
 
 
 def _sur_lecon(projet, demande, etat):
-    e = {"action": "appliquer", "id": demande["cible"], "verdict": demande["verdict"]}
-    if demande.get("etage"):
-        e["etage"] = demande["etage"]
-    lancer(projet, "lecon", e)
-    _terminer(projet, {"demande": demande["id"]},
-              "La leçon est retenue." if demande["verdict"] == "valider" else "La leçon est écartée.")
+    return traiter_lecons(projet, [demande], etat)
+
+
+def traiter_lecons(projet, demandes, etat):
+    """Les verdicts sur des leçons, pris ensemble : un seul appel `lecon appliquer` avec `lot`, donc une seule mise à
+    jour du dépôt de la skill et un seul push ; chaque demande reçoit le résultat de sa leçon. Une leçon validée dont
+    l'écriture n'a pas abouti est dite « retenue » : elle quitte la liste à valider et le moteur la réécrit seul."""
+    lot = []
+    for d in demandes:
+        x = {"id": d["cible"], "verdict": d["verdict"]}
+        if d.get("etage"):
+            x["etage"] = d["etage"]
+        lot.append(x)
+    try:
+        resultats = {x["id"]: x for x in lancer(projet, "lecon", {"action": "appliquer", "lot": lot})["resultats"]}
+    except Refus as e:
+        for d in demandes:
+            _terminer(projet, {"demande": d["id"]}, f"Je n'ai pas pu le faire : {e}")
+        return []
+    for d in demandes:
+        x = resultats.get(d["cible"]) or {}
+        if not x.get("ok"):
+            reponse = f"Je n'ai pas pu le faire : {x.get('refus') or 'leçon inconnue'}"
+        elif d["verdict"] != "valider":
+            reponse = "La leçon est écartée."
+        elif x.get("en_attente"):
+            reponse = ("La leçon est retenue, mais son écriture dans la mémoire de la skill est en attente : "
+                       f"{x.get('raison')} Je réessaie seul.")
+        else:
+            reponse = "La leçon est retenue."
+        _terminer(projet, {"demande": d["id"]}, reponse)
     return []
 
 

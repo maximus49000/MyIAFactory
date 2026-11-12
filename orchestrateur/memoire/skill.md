@@ -219,3 +219,9 @@ Rôles : dev, artiste
 Date : 2026-11-12
 
 Quand une édition multi-lignes échoue sur l'indentation, la découper en remplacements d'une seule ligne, puis relire le bloc pour vérifier les tabulations.
+
+## S37 — Avant une correction guidée par des numéros de ligne, relire
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Avant une correction guidée par des numéros de ligne, relire les lignes ciblées ; si le défaut n'y est plus, le signaler plutôt que de modifier le fichier.

@@ -176,3 +176,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Quand un rapport est limité à un nombre d'images par message, n'y mettre que les plus parlantes et répartir les autres dans les comptes rendus par élément.
+
+## G30 — Un robot de test qui gagne toujours prouve l'enchaînement du
+Rôles : dev
+Date : 2026-11-12
+
+Un robot de test qui gagne toujours prouve l'enchaînement du jeu, pas sa difficulté ; l'équilibrage demande un humain ou un robot imparfait.

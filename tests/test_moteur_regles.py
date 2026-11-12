@@ -798,6 +798,98 @@ class Arrets(Base):
         self.assertIn("émulateur", relance[0][3])
         self.assertFalse(self.taches(etape="cadrage")[0].get("bloquee"))
 
+    APPAREIL = {**ACCORD, "message": {"texte": "Je lance adb devices puis adb install sur le téléphone branché."},
+                "accord": {"quoi": "adb install de l'apk sur le téléphone", "partenaire": "aucun", "cout": "0"}}
+    REGLE_APPAREIL = ("Pas d'installation ni de test sur un appareil physique : tests automatiques sur émulateur, "
+                      "validation de version par la fenêtre de validation.")
+
+    def test_accord_sur_appareil_propose_la_case_regle_du_projet_sauf_si_elle_existe(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.APPAREIL])
+        d, = self.decisions_accord()
+        self.assertEqual(d["regle_proposee"], self.REGLE_APPAREIL)      # la case cochée, texte pré-rempli
+        self.assertNotIn("regles_touchees", d)                          # aucune règle n'existe encore
+        self.assertEqual(self.ok("regles", entree={"action": "lister"})["regles"], [])     # rien n'est créé d'office
+
+    def test_une_demande_qui_touche_une_regle_la_rappelle_sans_rien_refuser(self):
+        self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_APPAREIL})
+        self.ok("regles", entree={"action": "ajouter", "texte": "Les images viennent toujours du partenaire Tripo."})
+        self.piloter(self.depart_cadrage(), rapports=[self.APPAREIL])
+        d, = self.decisions_accord()            # toujours posée : le Directeur statue
+        self.assertEqual([x["id"] for x in d["regles_touchees"]], ["r1"])
+        self.assertEqual(d["regles_touchees"][0]["texte"], self.REGLE_APPAREIL)
+        self.assertNotIn("regle_proposee", d)                            # la règle existe déjà : pas reproposée
+
+    def test_accord_sans_rapport_avec_les_regles(self):
+        self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_APPAREIL})
+        self.piloter(self.depart_cadrage(), rapports=[self.ACCORD])
+        d, = self.decisions_accord()
+        self.assertNotIn("regles_touchees", d)
+        self.assertNotIn("regle_proposee", d)
+
+    def test_retenir_comme_regle_en_repondant(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.APPAREIL])
+        d, = self.decisions_accord()
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="refuser",
+                                        texte="Utilise l'émulateur.", regle=self.REGLE_APPAREIL)
+        self.assertEqual([a[0] for a in relance], ["agent"])             # l'agent reprend comme avant
+        r, = self.ok("regles", entree={"action": "lister"})["regles"]
+        self.assertEqual((r["texte"], r["origine"]), (self.REGLE_APPAREIL, {"decision": d["id"], "agent": "metier-1"}))
+
+    def test_sans_la_case_aucune_regle_n_est_creee(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.APPAREIL])
+        d, = self.decisions_accord()
+        self.traiter(type="accord_agent", decision=d["id"], verdict="refuser", texte="Utilise l'émulateur.")
+        self.assertEqual(self.ok("regles", entree={"action": "lister"})["regles"], [])
+
+    def test_regle_refusee_par_l_outil_ne_bloque_pas_la_reponse(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.ACCORD])
+        d, = self.decisions_accord()
+        for i in range(40):
+            self.ok("regles", entree={"action": "ajouter", "texte": f"Règle {i}."})
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="accepter", regle="De trop.")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        t = self.taches(etape="cadrage")[0]
+        self.assertTrue(any("règle du projet n'a pas été notée" in j["texte"] for j in t["journal"]))
+
+    AVEC_CHOIX = {**ACCORD, "message": {"texte": "Je peux tester sur votre téléphone branché (adb install).", "attend": True,
+                  "questions": [{"texte": "Que faire ?", "choix": ["Oui, je branche le téléphone", "Non, livrer sans ce test",
+                                                                    "Oui, je branche le téléphone", " "], "multiple": False}]},
+                  "accord": {"quoi": "adb install de l'apk", "partenaire": "aucun", "cout": "0"}}
+
+    def test_choix_de_l_agent_deviennent_les_boutons_de_la_decision(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.AVEC_CHOIX])
+        d, = self.decisions_accord()
+        self.assertEqual(d["choix"], ["Oui, je branche le téléphone", "Non, livrer sans ce test"])
+        self.assertTrue(d["appareil"])                                    # le rappel de règle reste
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="choisir",
+                                        choix="Non, livrer sans ce test", texte="Merci.", regle="Livrer sans test sur téléphone.")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        self.assertIn("a choisi : « Non, livrer sans ce test »", relance[0][3])
+        self.assertIn("Sa consigne : Merci.", relance[0][3])
+        self.assertEqual(self.decisions_accord(), [])
+        self.assertEqual(self.ok("regles", entree={"action": "lister"})["regles"][0]["texte"], "Livrer sans test sur téléphone.")
+
+    def test_choix_inconnu_refuse_et_sans_choix_comme_avant(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.AVEC_CHOIX])
+        d, = self.decisions_accord()
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="choisir", choix="Autre chose")
+        self.assertEqual(relance, [])
+        self.assertIn("pas l'un de ceux", self.statut(demande["id"])["reponse"])
+        self.assertEqual(len(self.decisions_accord()), 1)                  # rien n'est écarté
+        self.assertNotIn("choix", self.ACCORD["message"])
+
+    def test_demande_de_regle_du_bureau(self):
+        d, relance = self.traiter(type="regle_projet", operation="ajouter", texte="Pas de Docker.")
+        self.assertEqual(relance, [])
+        self.assertEqual(self.statut(d["id"])["reponse"], "La règle est notée.")
+        r, = self.ok("regles", entree={"action": "lister"})["regles"]
+        d, _ = self.traiter(type="regle_projet", operation="modifier", id=r["id"], texte="Pas de Docker ni de WSL.")
+        self.assertEqual(self.ok("regles", entree={"action": "lister"})["regles"][0]["texte"], "Pas de Docker ni de WSL.")
+        d, _ = self.traiter(type="regle_projet", operation="supprimer", id=r["id"])
+        self.assertEqual(self.ok("regles", entree={"action": "lister"})["regles"], [])
+        d, _ = self.traiter(type="regle_projet", operation="supprimer", id="r9")     # déjà partie : dit, pas une erreur
+        self.assertIn("La règle n'a pas été notée", self.statut(d["id"])["reponse"])
+
     def test_refus_dans_la_discussion_avec_consigne_ne_met_pas_la_tache_de_cote(self):
         actions = self.depart_cadrage()
         tid = actions[0][2][0]

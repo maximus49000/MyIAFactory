@@ -35,7 +35,7 @@ Pour essayer la démo sans rien brancher : `py -3.12 lancer.py serveur --bureau 
 - **Plusieurs projets dans un même bureau**, avec un sélecteur et la pastille de ce qui attend l'utilisateur.
 - **Parcours d'une fonctionnalité** : « + Nouvelle fonctionnalité », discussion de cadrage avec questions à boutons et images, cahier des charges, découpage, prototype, méthode, série, coût et documents de la fonctionnalité.
 - **Catalogue d'une fonctionnalité** : vue de haut, fiches, comparaison « Produit » / « Réel », demandes de modification.
-- **Le Directeur** : décisions, leçons, cahiers et méthodes à valider, sessions à créer.
+- **Le Directeur** : décisions, leçons, cahiers et méthodes à valider, sessions à créer ; **règles du projet** : les phrases qu'il retient (à la main ou en répondant à une demande d'accord d'un agent) sont rappelées à chaque départ d'agent et pour proposer un workflow, et signalées quand une demande les touche.
 - **Moteur procédural et banc** : `py -3.12 -m moteur` applique les consignes de l'orchestrateur sans conversation orchestratrice et ne fait appel à l'IA que pour juger ; un banc rejoue un scénario pour mesurer le coût et régler les consignes.
 - **Un genre et un workflow par fonctionnalité** : chaque demande est classée par genre et jugée cohérente ou non avec la description du projet ; elle reprend le workflow du genre du projet, ou reçoit un workflow dédié proposé ; description de genre proposée d'avance et élargie avec l'accord du Directeur.
 - **Création d'un projet avec le chef** : depuis le bureau, en deux fenêtres (informations, puis échange de quelques tours), avec brouillons à reprendre et coût affiché ; le projet naît avec son workflow, ses services, ses agents et son genre.

@@ -252,10 +252,30 @@ export function demandeOutilAgent(decision, verdict) {
 
 // Une demande d'accord d'un agent : « accepter » (il reprend avec l'accord) ou « refuser » (il reprend sans l'action, avec
 // la consigne facultative, un texte libre).
-export function demandeAccordAgent(decision, verdict, consigne) {
+// `regle` (facultative) : le texte à retenir comme règle du projet (la case « Retenir comme règle du projet »).
+// Quand l'agent a proposé des choix : `verdict` « choisir » et `choix` (le texte du bouton retenu).
+export function demandeAccordAgent(decision, verdict, consigne, regle, choix) {
   const d = {type: "accord_agent", decision: decision.id, verdict};
+  if (verdict === "choisir") d.choix = choix;
   if (typeof consigne === "string" && consigne.trim() !== "") d.texte = consigne.trim();
+  if (typeof regle === "string" && regle.trim() !== "") d.regle = regle.trim();
   return d;
+}
+
+// Les règles du projet : « ajouter » (texte), « modifier » (id, texte) ou « supprimer » (id). 500 caractères au plus.
+export const MAX_REGLE_PROJET = 500;
+export function demandeRegleProjet(operation, id, texte) {
+  const d = {type: "regle_projet", operation};
+  if (operation !== "ajouter") d.id = id;
+  if (operation !== "supprimer") d.texte = String(texte ?? "").trim();
+  return d;
+}
+
+// Le texte que « Retenir comme règle du projet » propose : celui du moteur (`regle_proposee`), sinon « Pas de : <ce que
+// l'agent voulait faire> ». Jamais plus de 500 caractères.
+export function regleProposee(decision) {
+  const t = plein(decision?.regle_proposee) ? decision.regle_proposee : plein(decision?.quoi) ? `Pas de : ${decision.quoi}` : "";
+  return t.trim().slice(0, MAX_REGLE_PROJET);
 }
 
 // « Lot L2, tâche 3 sur 4 » ; null si la tâche n'est pas dans un lot. Le nombre de tâches du lot est celui des tâches

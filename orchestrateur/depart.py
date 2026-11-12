@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 
+from orchestrateur import regles_projet as rp
+
 ECHELLE = ("Haiku", "Sonnet", "Opus")   # on monte d'un cran au plus ; Fable n'en fait jamais partie
 _ROLE_SUR = re.compile(r"^[A-Za-z0-9_-]+\Z")
 
@@ -192,13 +194,16 @@ def outils_du_poste(factory):
     return ("## Outils du poste\nDéjà installés ; sers-t'en directement, sans les réinstaller :\n" + "\n".join(lignes)) if lignes else ""
 
 
-def _entete(factory, fiche, lecons_memoire):
+def _entete(factory, fiche, lecons_memoire, regles_projet=()):
     parties = []
     if fiche["lieu"] == "cloud":
         parties.append("Tu repars de zéro. Rien de ce qui s'est dit dans cette session avant ce message ne compte : "
                        "tout ce qu'il te faut est ci-dessous.")
     genre = factory.get("genre")
     parties.append(f"# Projet : {factory['nom']}" + (f" (genre : {genre})" if genre else ""))
+    regles = rp.en_tete(regles_projet)
+    if regles:
+        parties.append(regles)       # en tête : ce que le Directeur a décidé pour ce projet
     poste = outils_du_poste(factory)
     if poste:
         parties.append(poste)
@@ -231,10 +236,10 @@ def _regles_partenaires(regles):
     return "\n".join(lignes)
 
 
-def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=()):
+def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=()):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
-    parties = _entete(factory, fiche, lecons_memoire)
+    parties = _entete(factory, fiche, lecons_memoire, regles_projet)
     parties.append("## Le brief de ton rôle\n" + (brief_du_role or "(pas de brief propre à ce rôle)"))
     parties.append("\n".join(["## Ta tâche"] + _bloc_tache(tache)))
     if glossaire:
@@ -265,11 +270,12 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
                        '"legende"}]}]` (le Directeur ne voit que celui de l\'élément qu\'il valide).')
 
 
-def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False):
+def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
+                regles_projet=()):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
-    parties = _entete(factory, fiche, lecons_memoire)
+    parties = _entete(factory, fiche, lecons_memoire, regles_projet)
     if len(briefs) == 1:
         parties.append("## Le brief de ton rôle\n" + (briefs[0][1] or "(pas de brief propre à ce rôle)"))
     else:

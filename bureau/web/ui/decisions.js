@@ -5,7 +5,8 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
-  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent} from "./actions.js";
+  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
+  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
@@ -369,16 +370,48 @@ function decisionAccordAgent(ctx, d) {
   if (plein(d.pourquoi)) li.append(el("div", "decision-texte", "Pourquoi : " + d.pourquoi));
   if (plein(d.implique)) li.append(el("div", "lecon-meta", "Ce que cela implique : " + d.implique));
   if (plein(d.regle)) li.append(el("div", "decision-regle", d.regle));
+  for (const r of Array.isArray(d.regles_touchees) ? d.regles_touchees : []) {     // un rappel : le Directeur statue
+    if (plein(r?.texte)) li.append(el("div", "decision-regle", "Cette demande contredit la règle du projet : " + r.texte));
+  }
   if (!ctx.etat.agir) return li;
   const consigne = document.createElement("input");
   consigne.type = "text";
   consigne.maxLength = 500;
   consigne.placeholder = "Consigne pour l'agent (facultative)";
   consigne.setAttribute("aria-label", "Consigne pour l'agent");
+  li.append(consigne);
+  // « Retenir comme règle du projet » : le texte proposé est modifiable ; coché, la réponse le note au projet (les agents
+  // le reçoivent ensuite à chaque départ). Cochée d'emblée quand le moteur propose une règle (l'appareil physique).
+  let retenir = null, regle = null;
+  if (Array.isArray(ctx.etat.regles_projet)) {
+    retenir = document.createElement("input");
+    retenir.type = "checkbox";
+    retenir.checked = plein(d.regle_proposee);
+    retenir.setAttribute("aria-label", "Retenir comme règle du projet");
+    const etiquette = el("label", "decision-retenir");
+    etiquette.append(retenir, el("span", "", " Retenir comme règle du projet"));
+    regle = document.createElement("textarea");
+    regle.value = regleProposee(d);
+    regle.maxLength = MAX_REGLE_PROJET;
+    regle.rows = 2;
+    regle.setAttribute("aria-label", "Texte de la règle du projet");
+    regle.hidden = !retenir.checked;
+    retenir.addEventListener("change", () => { regle.hidden = !retenir.checked; });
+    li.append(etiquette, regle);
+  }
+  const retenue = () => (retenir && retenir.checked ? regle.value : undefined);
+  const avant = () => (retenir && retenir.checked ? regleValide(ctx, regle.value) : true);   // coché mais vide : rien ne part
   const rangee = el("div", "lecon-boutons");
-  rangee.append(boutonDemande(ctx, "J'accepte", "bouton", () => demandeAccordAgent(d, "accepter", consigne.value)),
-                boutonDemande(ctx, "Je refuse", "bouton secondaire", () => demandeAccordAgent(d, "refuser", consigne.value)));
-  li.append(consigne, rangee);
+  const choix = (Array.isArray(d.choix) ? d.choix : []).filter(plein);
+  if (choix.length) {     // l'agent a proposé des choix : ses boutons, la demande n'est pas écartée
+    for (const c of choix) {
+      rangee.append(boutonDemande(ctx, c, "bouton secondaire", () => demandeAccordAgent(d, "choisir", consigne.value, retenue(), c), avant));
+    }
+  } else {
+    rangee.append(boutonDemande(ctx, "J'accepte", "bouton", () => demandeAccordAgent(d, "accepter", consigne.value, retenue()), avant),
+                  boutonDemande(ctx, "Je refuse", "bouton secondaire", () => demandeAccordAgent(d, "refuser", consigne.value, retenue()), avant));
+  }
+  li.append(rangee);
   return li;
 }
 
@@ -393,6 +426,68 @@ function reponseAttendue(ctx, x) {
   b.addEventListener("click", () => ctx.ouvrirFonctionnalite(x.fonctionnalite));
   li.append(b);
   return li;
+}
+
+// « Règles du projet » : celles que le Directeur a retenues, que chaque agent reçoit en tête de son départ. Chaque geste
+// (ajouter, modifier, supprimer après confirmation) est une demande au projet.
+function regleDuProjet(ctx, r) {
+  const li = el("li", "regle-projet");
+  const texte = el("span", "regle-projet-texte", r.texte);
+  li.append(texte);
+  if (r.origine && plein(r.origine.agent)) li.append(el("span", "lecon-meta", " · demandée par " + nomAgent(ctx.etat, r.origine.agent)));
+  if (!ctx.etat.agir) return li;
+  const rangee = el("div", "lecon-boutons");
+  const modifier = el("button", "bouton secondaire", "Modifier");
+  modifier.type = "button";
+  modifier.addEventListener("click", () => {
+    modifier.hidden = true;
+    texte.hidden = true;
+    const zone = saisieRegle(r.texte);
+    const edition = el("div", "lecon-boutons");
+    const annuler = el("button", "bouton secondaire", "Annuler");
+    annuler.type = "button";
+    annuler.addEventListener("click", () => { zone.hidden = edition.hidden = true; modifier.hidden = texte.hidden = false; });
+    edition.append(boutonDemande(ctx, "Enregistrer", "bouton", () => demandeRegleProjet("modifier", r.id, zone.value),
+      () => regleValide(ctx, zone.value)), annuler);
+    li.append(zone, edition);
+  });
+  const supprimer = boutonDemande(ctx, "Supprimer", "bouton secondaire", () => demandeRegleProjet("supprimer", r.id),
+    () => (typeof globalThis.confirm === "function"
+      ? globalThis.confirm("Supprimer cette règle du projet ? Les agents ne la recevront plus.") : true));
+  rangee.append(modifier, supprimer);
+  li.append(rangee);
+  return li;
+}
+
+function saisieRegle(depart) {
+  const zone = document.createElement("textarea");
+  zone.value = depart;
+  zone.maxLength = MAX_REGLE_PROJET;
+  zone.rows = 2;
+  zone.placeholder = "Une règle que chaque agent respecte dans ce projet";
+  zone.setAttribute("aria-label", "Texte de la règle du projet");
+  return zone;
+}
+
+function regleValide(ctx, texte) {
+  const t = String(texte || "").trim();
+  const probleme = t === "" ? "La règle est vide." : t.length > MAX_REGLE_PROJET ? `La règle dépasse ${MAX_REGLE_PROJET} caractères.` : "";
+  if (probleme && typeof ctx.barre.dire === "function") ctx.barre.dire(probleme);
+  return probleme === "";
+}
+
+function reglesDuProjet(ctx) {
+  const liste = ctx.etat.regles_projet.filter((r) => plein(r?.id) && plein(r?.texte)).map((r) => regleDuProjet(ctx, r));
+  const s = partie("Règles du projet", "Aucune règle pour l'instant", liste);
+  if (ctx.etat.agir) {
+    const zone = saisieRegle("");
+    const ajouter = boutonDemande(ctx, "Ajouter la règle", "bouton", () => demandeRegleProjet("ajouter", null, zone.value),
+      () => regleValide(ctx, zone.value));
+    const rangee = el("div", "regle-projet-ajout");
+    rangee.append(zone, ajouter);
+    s.append(rangee);
+  }
+  return s;
 }
 
 export function contenuDecisionsV4(ctx, contenu) {
@@ -426,4 +521,5 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",
     d.outils.map((x) => decisionOutilAgent(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));
+  if (Array.isArray(ctx.etat.regles_projet)) contenu.append(reglesDuProjet(ctx));   // absent : le projet ne les gère pas
 }

@@ -1187,3 +1187,8 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .md-lien { color: #2f4a86; }
 .md-tout { margin-top: 6px; }
 .decision-regle { margin-top: 4px; padding: 6px 8px; background: #fff4d6; border-radius: 6px; font-size: 13px; }
+.decision-retenir { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.decision-accord textarea, .regle-projet-ajout textarea, .regle-projet textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px; margin-top: 4px; }
+.regle-projet-texte { overflow-wrap: anywhere; }
+.regle-projet-ajout { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+html.mobile .regle-projet .bouton, html.mobile .regle-projet-ajout .bouton, html.mobile .decision-accord .bouton { min-height: 44px; }

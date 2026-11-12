@@ -216,6 +216,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         e["orchestrateur_actif"] = any(a["chef"] and a["statut"] == "travail" for a in agents)
         if isinstance(r.get("orchestrateur_present"), bool):   # absent : l'adaptateur ne le dit pas, rien n'est bloqué
             e["orchestrateur_present"] = r["orchestrateur_present"]
+        if isinstance(r.get("regles_projet"), list):    # les règles du projet : rendues telles quelles
+            e["regles_projet"] = copy.deepcopy(r["regles_projet"])
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)
             e["partenaires"] = copy.deepcopy(r["partenaires"])
     return e

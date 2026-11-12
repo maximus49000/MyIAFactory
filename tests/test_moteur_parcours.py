@@ -675,6 +675,14 @@ class WorkflowDeCreation(AvecParcours):
         dossier = vus[1][2]
         self.assertEqual(dossier["workflows_du_genre"], [])             # genre « stickers » : celui de badges n'y est pas
 
+    def test_proposition_de_workflow_recoit_les_regles_du_projet(self):
+        d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION})
+        self.assertNotIn("regles_projet", vus[1][2])                    # aucune règle : rien dans le dossier
+        self.ok("regles", entree={"action": "ajouter", "texte": "Pas de test sur un appareil physique."})
+        d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION},
+                               texte="Un autre badge")
+        self.assertEqual(vus[1][2]["regles_projet"], ["Pas de test sur un appareil physique."])
+
     def test_workflow_de_creation_inspire_les_propositions_du_meme_genre(self):
         d, vus = self.demander({"classer_genre": CLASSER_PROCHE, "proposer_organisation": PROPOSITION})
         self.reecrire(genre="stickers")        # le genre du projet change : la piste « stickers » devient « meme »

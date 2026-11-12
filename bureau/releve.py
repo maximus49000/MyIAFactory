@@ -640,6 +640,17 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
                     erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
             if d.get("appareil") is not None and not isinstance(d.get("appareil"), bool):
                 erreurs.append(f"{nom} : la décision « {i} » : « appareil » est vrai ou faux.")
+            if d.get("regle_proposee") is not None and not (_texte_plein(d["regle_proposee"])
+                                                            and len(d["regle_proposee"]) <= MAX_REGLE_PROJET):
+                erreurs.append(f"{nom} : la décision « {i} » : « regle_proposee » est un texte de {MAX_REGLE_PROJET} "
+                               "caractères au plus.")
+            if d.get("choix") is not None and (not isinstance(d["choix"], list) or not 1 <= len(d["choix"]) <= 6 or not all(
+                    _texte_plein(x) and len(x) <= 120 for x in d["choix"])):
+                erreurs.append(f"{nom} : la décision « {i} » : « choix » est une liste de 1 à 6 textes de 120 caractères au plus.")
+            touchees = d.get("regles_touchees")
+            if touchees is not None and (not isinstance(touchees, list) or not all(
+                    _est_dict(x) and _texte_plein(x.get("id")) and _texte_plein(x.get("texte")) for x in touchees)):
+                erreurs.append(f"{nom} : la décision « {i} » : « regles_touchees » est une liste de règles {{id, texte}}.")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":
@@ -819,6 +830,37 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     _verifier_lecons_v4(r, titulaires, erreurs)
     if r.get("partenaires") is not None:
         _verifier_partenaires(r["partenaires"], erreurs)
+    if r.get("regles_projet") is not None:
+        _verifier_regles_projet(r["regles_projet"], erreurs)
+
+
+MAX_REGLE_PROJET = 500
+
+
+def _verifier_regles_projet(regles, erreurs):
+    """`regles_projet` (version 4, facultatif) : `[{id, texte (500 caractères au plus), cree_le?, modifie_le?,
+    origine?: {decision, agent}}]`, les règles que le Directeur a retenues pour le projet."""
+    nom = "« regles_projet »"
+    if not isinstance(regles, list):
+        erreurs.append(f"{nom} doit être une liste de règles.")
+        return
+    vus = set()
+    for k, x in enumerate(regles, 1):
+        q = f"{nom} : la règle {k}"
+        if not _est_dict(x) or not _texte_plein(x.get("id")) or not _texte_plein(x.get("texte")):
+            erreurs.append(f"{q} : « id » et « texte » (textes non vides) sont obligatoires.")
+            continue
+        if x["id"] in vus:
+            erreurs.append(f"{q} : identifiant en double « {x['id']} ».")
+        vus.add(x["id"])
+        if len(x["texte"]) > MAX_REGLE_PROJET:
+            erreurs.append(f"{q} : « texte » dépasse {MAX_REGLE_PROJET} caractères.")
+        for d in ("cree_le", "modifie_le"):
+            if x.get(d) is not None and not _date_iso(x[d]):
+                erreurs.append(f"{q} : « {d} » n'est pas une date.")
+        o = x.get("origine")
+        if o is not None and (not _est_dict(o) or not _texte_plein(o.get("decision")) or not _texte_plein(o.get("agent"))):
+            erreurs.append(f"{q} : « origine » est {{decision, agent}}.")
 
 
 ETATS_CONNEXION = ("connecte", "declare", "non_connecte")
@@ -1006,6 +1048,8 @@ def _normaliser_v4(n):
         pa.setdefault("cout_maj", None)
     else:
         n.pop("partenaires", None)
+    if not v4 or not isinstance(n.get("regles_projet"), list):
+        n.pop("regles_projet", None)      # absent : l'adaptateur ne les dit pas (le bureau n'en montre pas)
     for f in n.get("fonctionnalites") or []:
         for c in ("discussion", "decisions", "documents", "cahiers_precedents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []

@@ -17,7 +17,7 @@ Dossiers attendus (préparés par la table de règles) :
   description), `genres_du_projet` ([{id, domaine, livrable, outils}], ceux de ses workflows), `genres_connus`
   (`memoire.genres` de la skill), `mots_interdits` du projet ;
 - `proposer_organisation` : `demande`, `genre`, `projet` (nom, description), `services` ([{id, nom}]), `agents`
-  ([{cle, role, modele, specialite}]), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
+  ([{cle, role, modele, specialite}]), `regles_projet` (les textes des règles du projet, absent sans règle), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
   (son id : le moteur préfixe chaque `etape` par `<id>-`), `refus` (texte du Directeur ou null) ;
 - `definir_workflow` (appelé par le bureau, avant que le projet n'existe) : `projet` (nom, description, facturation,
   github), `genres_connus`, `mots_interdits` (le nom du projet en fait partie), `services` ([{id, nom}], la facturation
@@ -60,7 +60,7 @@ MOTIF_VERSION = re.compile(r"^\d+(?:\.\d+)*\Z")
 LONGUEUR_VERSION = 20
 OBJECTIF_MAX = 300                # l'objectif d'un élément du découpage : une phrase, rappelée à sa validation
 ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", "rien")
-COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre", "fiche"}
+COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre", "fiche", "regles"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
 VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
 LONGUEUR_ELARGISSEMENT = 300      # la description d'un genre élargie à une demande, rendue par le classement

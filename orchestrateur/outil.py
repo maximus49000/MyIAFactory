@@ -30,6 +30,7 @@ from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import recrutement as rc  # noqa: E402
+from orchestrateur import regles_projet as rp  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 from orchestrateur import workflows as wf  # noqa: E402
 from partenaires import catalogue as pcat  # noqa: E402
@@ -48,7 +49,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent")
+                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -959,6 +960,20 @@ def _accord_a_donner(ctx, s, e):
     for cle, maximum in (("partenaire", 200), ("cout", 200), ("pourquoi", 800), ("implique", 800), ("regle", 400)):
         if e.get(cle) is not None:
             d[cle] = _phrase_courte(e, cle, maximum)
+    if e.get("choix") is not None:      # les choix proposés par l'agent : des boutons au bureau
+        c = e["choix"]
+        if not isinstance(c, list) or not 1 <= len(c) <= 6 or not all(isinstance(x, str) and x.strip() and len(x) <= 120 for x in c):
+            raise Refus("« choix » est une liste de 1 à 6 textes de 120 caractères au plus.")
+        d["choix"] = c
+    if e.get("regle_proposee") is not None:      # la règle que la case « Retenir comme règle du projet » propose
+        d["regle_proposee"] = _phrase_courte(e, "regle_proposee", rp.MAX_TEXTE)
+    touchees = e.get("regles_touchees")
+    if touchees is not None:     # les règles du projet que la demande touche : [{id, texte}]
+        if (not isinstance(touchees, list) or len(touchees) > rp.MAX_TOUCHEES
+                or not all(isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("texte"), str)
+                           and x["texte"].strip() and len(x["texte"]) <= rp.MAX_TEXTE for x in touchees)):
+            raise Refus(f"« regles_touchees » est une liste de {rp.MAX_TOUCHEES} règles {{id, texte}} au plus.")
+        d["regles_touchees"] = [{"id": x["id"], "texte": x["texte"]} for x in touchees]
     if e.get("appareil") is not None:
         if not isinstance(e["appareil"], bool):
             raise Refus("« appareil » est vrai ou faux.")
@@ -2007,6 +2022,7 @@ def construire_releve(ctx):
          "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
+         "regles_projet": rp.lire(ctx.f),
          "recrutement": releve_recrutement(ctx, s, fiches)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
@@ -2781,7 +2797,7 @@ def _depart_d_un_lot(ctx, e):
     factory = {**ctx.f, "genre": ", ".join(g for g in genres if g) or None}
     return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire,
                                           regles_des_partenaires(ctx, ids_partenaires),
-                                          par_le_moteur=e.get("moteur", False))}
+                                          par_le_moteur=e.get("moteur", False), regles_projet=rp.lire(ctx.f))}
 
 
 def cmd_depart(ctx, e):
@@ -2803,7 +2819,23 @@ def cmd_depart(ctx, e):
     return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie,
                                       depart.brief(ctx.f, fiche_agent["role"]), lecons,
                                       (fonc or {}).get("glossaire") or [],
-                                      regles_des_partenaires(ctx, tache_suivie.get("partenaires") or []))}
+                                      regles_des_partenaires(ctx, tache_suivie.get("partenaires") or []),
+                                      regles_projet=rp.lire(ctx.f))}
+
+
+def cmd_regles(ctx, e):
+    """Les règles du projet (`.factory/regles-projet.json`) : `lister`, `ajouter` (texte, origine?), `modifier` (id, texte),
+    `supprimer` (id). Seul écrivain du fichier."""
+    action = e.get("action")
+    if action == "lister":
+        return {"regles": rp.lire(ctx.f)}
+    if action not in rp.OPERATIONS:
+        raise Refus("« action » doit valoir lister, ajouter, modifier ou supprimer.")
+    try:
+        r, deja = rp.appliquer(ctx.f, action, e.get("id"), e.get("texte"), e.get("origine"))
+    except ValueError as ex:
+        raise Refus(str(ex))
+    return {"regle": r, "deja": deja}
 
 
 def _partie(t):
@@ -2908,7 +2940,7 @@ COMMANDES = {
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
-    "recruter": (cmd_recruter, "obligatoire"), "depot": (cmd_depot, "obligatoire"),
+    "recruter": (cmd_recruter, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
 }
 
 

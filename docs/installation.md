@@ -700,6 +700,35 @@ test sur appareil, la demande arrive au bureau de direction, partie « Demandes 
 cette règle : « J'accepte », ou « Je refuse » avec une consigne facultative ; l'agent reprend alors sans ce test, sa
 tâche n'est pas mise de côté.
 
+## Les règles du projet
+
+Une règle du projet est une phrase courte (500 caractères au plus) que vous avez retenue pour **ce** projet : « Pas
+d'installation ni de test sur un appareil physique… », « Les textes du jeu restent en français ». Elles vivent dans le
+projet, jamais dans la mémoire de la skill : le fichier `.factory/regles-projet.json`
+(`[{id, texte, cree_le, modifie_le?, origine?: {decision, agent}}]`, 40 règles au plus), que seule la commande
+`lancer regles` écrit (`ajouter`, `modifier`, `supprimer`, `lister`). Aucune règle n'est créée d'office.
+
+- **Où les gérer** : au bureau de direction, partie « Règles du projet » (en bas des décisions) : la liste, un champ pour
+  ajouter, « Modifier » et « Supprimer » (après confirmation) sur chaque règle. Cette partie est dans le panneau du
+  Directeur, donc utilisable au téléphone comme les autres décisions (boutons agrandis).
+- **Les retenir en répondant** : dans « Demandes d'accord des agents », la case « Retenir comme règle du projet » ouvre
+  un texte proposé que vous pouvez corriger ; coché, votre réponse (« J'accepte » ou « Je refuse ») note aussi la règle,
+  avec l'agent et la décision d'origine. Pour une demande d'installation ou de test sur un appareil physique, la case
+  est cochée d'emblée avec : « Pas d'installation ni de test sur un appareil physique : tests automatiques sur
+  émulateur, validation de version par la fenêtre de validation. » (elle n'est plus proposée une fois la règle notée).
+- **Ce que les agents en reçoivent** : le message de départ de chaque agent, local comme cloud, un agent seul ou un lot,
+  commence par « Règles du projet, à respecter : » suivi d'une ligne par règle (2 400 caractères au plus). Le jugement
+  qui propose le workflow d'une fonctionnalité les reçoit aussi (`regles_projet` dans son dossier).
+- **Quand l'agent propose des choix** : sa demande d'accord affiche ces choix comme boutons (« Oui, je branche le
+  téléphone… », « Non, livrer sans ce test ») à la place de « J'accepte » / « Je refuse », avec le champ de consigne et la
+  case de règle ; l'agent reprend avec le choix retenu. La demande n'est jamais écartée d'office.
+- **Le rappel** : quand une demande d'accord d'un agent touche une règle, la décision affiche « Cette demande contredit
+  la règle du projet : … ». La correspondance est volontairement simple : on compare les racines (4 premières lettres,
+  sans accents ni casse) des mots de 4 lettres ou plus, hors mots courants, avec quelques synonymes (téléphone, `adb`,
+  USB, appareil… ramenés à une seule racine) ; la règle est touchée quand la demande partage au moins deux racines avec
+  elle (une seule si la règle n'en a qu'une), trois règles au plus sont rappelées. C'est un rappel : la demande reste
+  posée et vous statuez toujours, rien n'est refusé automatiquement.
+
 ## En cas de problème
 
 - **« Impossible de démarrer le serveur »** : le port est déjà pris (un autre bureau tourne, ou un autre programme). Fermez l'autre, ou mettez un autre `port` dans les réglages.

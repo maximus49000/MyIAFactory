@@ -26,16 +26,16 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
-          "recruter": ("mode", "agents"), "depot_git": ("confirme",)}
+          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",)}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte",), "environnement": ("fonctionnalite", "outil"),
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent")
+               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet")
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
@@ -140,6 +140,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_recrutement(demande, r)
     if genre == "depot_git":
         return _verifier_depot(demande, r)
+    if genre == "regle_projet":
+        return _verifier_regle_projet(demande, r)
     for champ in CHAMPS[genre]:
         if not isinstance(demande.get(champ), str):
             return f"« {champ} » est obligatoire (texte)."
@@ -205,6 +207,31 @@ def _verifier_partenaires(demande, r):
     texte = demande.get("texte")
     if not isinstance(texte, str) or not texte.strip():
         return "« texte » est obligatoire pour une règle."
+    if len(texte) > MAX_REGLE:
+        return f"La règle dépasse {MAX_REGLE} caractères."
+    return None
+
+
+def _verifier_regle_projet(demande, r):
+    """Une règle du projet : `operation` ajouter, modifier ou supprimer ; `id` d'une règle du relevé pour les deux
+    dernières ; `texte` (1 à 500 caractères) pour les deux premières."""
+    operation = demande.get("operation")
+    if not isinstance(operation, str) or operation not in OPERATIONS_REGLE:
+        return "Opération inconnue (ajouter, modifier ou supprimer)."
+    regles = r.get("regles_projet")
+    if not isinstance(regles, list):
+        return "Le relevé de ce projet ne gère pas les règles du projet (mettez à jour l'orchestrateur)."
+    if operation != "ajouter":
+        if not isinstance(demande.get("id"), str) or demande["id"] not in {x.get("id") for x in regles if isinstance(x, dict)}:
+            return "Règle inconnue."
+    if operation == "supprimer":
+        return None
+    return _verifier_texte_regle(demande.get("texte"), "texte")
+
+
+def _verifier_texte_regle(texte, nom):
+    if not isinstance(texte, str) or not texte.strip():
+        return f"« {nom} » est obligatoire pour une règle (la règle, en clair)."
     if len(texte) > MAX_REGLE:
         return f"La règle dépasse {MAX_REGLE} caractères."
     return None
@@ -339,12 +366,19 @@ def _verifier_v4(demande, r, elements):
             return "Cette décision ne nomme pas de programme à autoriser."
         return None
     if genre == "accord_agent":
-        if _decision(r.get("decisions_projet", []), demande["decision"], "accord_agent") is None:
+        d = _decision(r.get("decisions_projet", []), demande["decision"], "accord_agent")
+        if d is None:
             return "Décision inconnue."
-        if demande["verdict"] not in ("accepter", "refuser"):
-            return "Réponse inconnue (accepter ou refuser)."
+        if demande["verdict"] not in ("accepter", "refuser", "choisir"):
+            return "Réponse inconnue (accepter, refuser ou choisir)."
+        if demande["verdict"] == "choisir" and demande.get("choix") not in (d.get("choix") or []):
+            return "Ce choix n'est pas l'un de ceux que l'agent a proposés."
         if len(demande.get("texte") or "") > MAX_TEXTE:
             return f"« texte » dépasse {MAX_TEXTE} caractères."
+        if "regle" in demande:      # « Retenir comme règle du projet » : le texte de la règle
+            if not isinstance(r.get("regles_projet"), list):
+                return "Le relevé de ce projet ne gère pas les règles du projet (mettez à jour l'orchestrateur)."
+            return _verifier_texte_regle(demande["regle"], "regle")
         return None
     if genre == "valider_etape":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape")

@@ -36,6 +36,7 @@ from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import outil
+from orchestrateur import regles_projet as rp
 from orchestrateur import suivi as su
 from orchestrateur import workflows as wf
 
@@ -984,6 +985,9 @@ def _proposer(projet, etat, fid, suite, refus=None):
                "agents": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"], "specialite": a.get("specialite")}
                           for a in fiches_],
                "workflows_du_genre": anterieurs, "fonctionnalite": fid, "refus": refus}
+    regles = [x["texte"] for x in rp.lire(fac)]
+    if regles:      # ce que le Directeur a retenu pour ce projet : le workflow proposé les respecte
+        dossier["regles_projet"] = regles
     return [a_juger("proposer_organisation", dossier, {k: v for k, v in suite.items() if k != "sans_genre"})]
 
 
@@ -1630,6 +1634,24 @@ def _sur_partenaires(projet, demande, etat):
     return []
 
 
+def _sur_regle_projet(projet, demande, etat):
+    """Une règle du projet ajoutée, modifiée ou supprimée depuis le bureau de direction (`lancer regles`)."""
+    e = {"action": demande["operation"]}
+    if demande.get("cible"):          # l'`id` de la règle visée : la demande a gardé le sien, l'ancien est devenu `cible`
+        e["id"] = demande["cible"]
+    if demande.get("texte"):
+        e["texte"] = demande["texte"]
+    try:
+        lancer(projet, "regles", e)
+    except Refus as ex:
+        _terminer(projet, {"demande": demande["id"]}, f"La règle n'a pas été notée : {ex}")
+        return []
+    _terminer(projet, {"demande": demande["id"]},
+              {"ajouter": "La règle est notée.", "modifier": "La règle est modifiée.",
+               "supprimer": "La règle est supprimée."}[demande["operation"]])
+    return []
+
+
 def _sur_challenge(projet, demande, etat):
     cible = demande.get("cible")
     if not (isinstance(cible, dict) and cible.get("type") == "lecon" and demande.get("tache")):
@@ -1766,7 +1788,8 @@ _SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme
         "elargir_genre": _sur_elargir_genre,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
-        "partenaires_actualiser": _sur_partenaires, "valider_etape": _sur_valider_etape, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge}
+        "partenaires_actualiser": _sur_partenaires, "valider_etape": _sur_valider_etape, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge,
+        "regle_projet": _sur_regle_projet}
 
 
 # --- Le cadrage et le prototype.
@@ -2597,6 +2620,8 @@ REGLE_APPAREIL = ("Règle du projet : tests automatiques sur émulateur (machine
                   "fenêtre de validation. Jamais d'installation ni de test sur votre téléphone.")
 CONSIGNE_APPAREIL = ("Pas de test sur appareil : émulateur pour les tests automatiques, fenêtre de validation pour la "
                      "version. Continue ta tâche sans ce test.")
+REGLE_PROJET_APPAREIL = ("Pas d'installation ni de test sur un appareil physique : tests automatiques sur émulateur, "
+                         "validation de version par la fenêtre de validation.")
 MOTIFS_APPAREIL = re.compile(r"adb\s+(install|devices|push|shell)|d[ée]bogage\s+usb|usb\s+debugging|"
                              r"t[ée]l[ée]phone\s+branch[ée]|appareil\s+(physique|branch[ée])|device\s+connect",
                              re.IGNORECASE)
@@ -2605,6 +2630,20 @@ MOTIFS_APPAREIL = re.compile(r"adb\s+(install|devices|push|shell)|d[ée]bogage\s
 def _vise_un_appareil(*textes):
     """La demande d'accord vise une installation ou un test sur un appareil physique de l'utilisateur."""
     return any(MOTIFS_APPAREIL.search(t) for t in textes if isinstance(t, str))
+
+
+def _choix_de_l_agent(r):
+    """Les choix que l'agent a proposés avec sa demande (la première question à choix de son message) : 6 au plus,
+    120 caractères chacun, sans doublon."""
+    for q in (r.get("message") or {}).get("questions") or []:
+        if isinstance(q, dict) and isinstance(q.get("choix"), list):
+            vus = []
+            for c in q["choix"]:
+                if isinstance(c, str) and c.strip() and c.strip()[:120] not in vus:
+                    vus.append(c.strip()[:120])
+            if vus:
+                return vus[:6]
+    return []
 
 
 def _accord_demande(projet, etat, execution, depart, r, fid, t):
@@ -2627,9 +2666,18 @@ def _accord_demande(projet, etat, execution, depart, r, fid, t):
         champs["pourquoi"] = pourquoi.strip()[:800]
     if implique.strip():
         champs["implique"] = implique.strip()[:800]
+    regles = rp.lire(_factory(projet))
+    choix = _choix_de_l_agent(r)
+    if choix:      # l'agent a proposé des choix : le bureau les montre comme boutons
+        champs["choix"] = choix
     if appareil:
         champs["appareil"] = True
         champs["regle"] = REGLE_APPAREIL
+        if not any(x["texte"].casefold() == REGLE_PROJET_APPAREIL.casefold() for x in regles):
+            champs["regle_proposee"] = REGLE_PROJET_APPAREIL      # la case « Retenir comme règle du projet », cochée
+    touchees = rp.touchees(regles, a["quoi"], pourquoi, implique, message)
+    if touchees:      # un rappel : le Directeur statue toujours, rien n'est refusé d'office
+        champs["regles_touchees"] = [{"id": x["id"], "texte": x["texte"]} for x in touchees]
     lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_ACCORD, "texte": texte, **champs})
     fid = fid or t.get("fonctionnalite")
     if fid:
@@ -2656,23 +2704,46 @@ def _reprise_apres_accord(projet, etat, tid, fid, quoi, accepte, consigne=""):
                                f"Accord refusé par l'utilisateur : {quoi}" + (f" — consigne : {consigne}" if consigne else ""))
 
 
+def _retenir_la_regle(projet, d, demande, verdict, consigne):
+    """La case « Retenir comme règle du projet » : le texte de la réponse devient une règle du projet (origine : la
+    décision et l'agent). Un refus de la règle (liste pleine, texte invalide) est dit dans le journal de la tâche ; la
+    réponse à l'agent n'en dépend pas."""
+    texte = (demande.get("regle") or "").strip()
+    if not texte:
+        return
+    try:
+        lancer(projet, "regles", {"action": "ajouter", "texte": texte, "origine": {"decision": d["id"], "agent": d["agent"]}})
+    except Refus as e:
+        lancer(projet, "tache", {"id": d["tache"], "journal": [f"La règle du projet n'a pas été notée : {e}"]})
+
+
 def _sur_accord_agent(projet, demande, etat):
     """La réponse du Directeur à une demande d'accord : accepter ou refuser (avec une consigne facultative)."""
     d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == GENRE_ACCORD), None)
     if d is None:
         raise Refus("cette demande n'existe plus")
     tid, verdict = d["tache"], demande["verdict"]
-    if verdict not in ("accepter", "refuser"):
+    if verdict not in ("accepter", "refuser", "choisir"):
         raise Refus(f"réponse inconnue : {verdict}")
+    choix = demande.get("choix")
+    if verdict == "choisir" and choix not in (d.get("choix") or []):
+        raise Refus("ce choix n'est pas l'un de ceux que l'agent a proposés")
     t = _tache(projet, tid)
     consigne = (demande.get("texte") or "").strip()
     if verdict == "refuser" and not consigne and d.get("appareil"):
         consigne = CONSIGNE_APPAREIL
     prenom = prenom_de(projet, d["agent"])
-    actions = _reprise_apres_accord(projet, etat, tid, t.get("fonctionnalite"), d["quoi"], verdict == "accepter", consigne)
+    _retenir_la_regle(projet, d, demande, verdict, consigne)
+    if verdict == "choisir":     # la réponse transmise à l'agent est le choix retenu (et la consigne)
+        supplement = f"Sur ta demande ({d['quoi']}), l'utilisateur a choisi : « {choix} »." + (f" Sa consigne : {consigne}" if consigne else "")
+        actions = _reprendre_la_tache(projet, etat, tid, t.get("fonctionnalite"), supplement,
+                                      f"Choix de l'utilisateur : {choix}" + (f" — consigne : {consigne}" if consigne else ""))
+    else:
+        actions = _reprise_apres_accord(projet, etat, tid, t.get("fonctionnalite"), d["quoi"], verdict == "accepter", consigne)
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _terminer(projet, {"demande": demande["id"]},
               f"{prenom} reprend sa tâche avec votre accord." if verdict == "accepter"
+              else f"{prenom} reprend sa tâche selon votre choix." if verdict == "choisir"
               else f"{prenom} reprend sa tâche sans cette action.")
     return actions
 

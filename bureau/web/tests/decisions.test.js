@@ -238,6 +238,112 @@ test("demande d'accord d'un agent : partie dédiée, règle rappelée, accepter 
     {type: "accord_agent", decision: "a1", verdict: "refuser", texte: "Utilise l'émulateur."}]);
 });
 
+const APPAREIL = "Pas d'installation ni de test sur un appareil physique : tests automatiques sur émulateur, validation de version par la fenêtre de validation.";
+const AVEC_REGLES = {...ETAT, fonctionnalites: [], regles_projet: []};
+
+test("accord d'un appareil physique : case « Retenir comme règle du projet » cochée, texte proposé modifiable, envoyé avec la réponse", async () => {
+  const accord = {...ACCORD, regle_proposee: APPAREIL};
+  const {contenu, demandes} = rendre({...AVEC_REGLES, decisions_projet: [accord]});
+  const [consigne, case_] = contenu.tous((n) => n.tagName === "input");
+  assert.equal(case_.type, "checkbox");
+  assert.equal(case_.checked, true);
+  const zone = contenu.tous((n) => n.tagName === "textarea" && n.value === APPAREIL)[0];
+  assert.ok(zone);
+  assert.equal(zone.hidden, false);
+  zone.value = "  Pas de téléphone branché.  ";
+  consigne.value = "Utilise l'émulateur.";
+  await bouton(contenu, "Je refuse").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "accord_agent", decision: "a1", verdict: "refuser", texte: "Utilise l'émulateur.", regle: "Pas de téléphone branché."}]);
+});
+
+test("accord sans proposition du moteur : case décochée, texte « Pas de : … », rien n'est retenu tant qu'elle n'est pas cochée", async () => {
+  const {contenu, demandes} = rendre({...AVEC_REGLES, decisions_projet: [{...ACCORD, appareil: undefined}]});
+  const case_ = contenu.tous((n) => n.tagName === "input" && n.type === "checkbox")[0];
+  const zone = contenu.tous((n) => n.tagName === "textarea")[0];
+  assert.equal(case_.checked, false);
+  assert.equal(zone.hidden, true);
+  assert.equal(zone.value, "Pas de : adb install de l'apk");
+  await bouton(contenu, "J'accepte").auteurs.click[0]();
+  case_.checked = true;
+  case_.auteurs.change[0]();
+  assert.equal(zone.hidden, false);
+  zone.value = "   ";           // cochée mais vide : rien ne part
+  await bouton(contenu, "J'accepte").auteurs.click[0]();
+  zone.value = "x".repeat(501);
+  await bouton(contenu, "J'accepte").auteurs.click[0]();
+  zone.value = "Autorisé : adb sur l'émulateur.";
+  await bouton(contenu, "J'accepte").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "accord_agent", decision: "a1", verdict: "accepter"},
+    {type: "accord_agent", decision: "a1", verdict: "accepter", regle: "Autorisé : adb sur l'émulateur."}]);
+});
+
+test("accord : la règle du projet touchée est rappelée, rien n'est refusé d'office", () => {
+  const touchee = {...ACCORD, regles_touchees: [{id: "r1", texte: APPAREIL}]};
+  const {contenu} = rendre({...AVEC_REGLES, regles_projet: [{id: "r1", texte: APPAREIL}], decisions_projet: [touchee]});
+  assert.match(contenu.textContent, /Cette demande contredit la règle du projet : Pas d'installation ni de test sur un appareil physique/);
+  assert.ok(bouton(contenu, "J'accepte"));
+  assert.ok(bouton(contenu, "Je refuse"));
+});
+
+test("accord avec des choix de l'agent : ses boutons remplacent J'accepte / Je refuse, avec consigne et règle", async () => {
+  const accord = {...ACCORD, choix: ["Oui, je branche le téléphone", "Non, livrer sans ce test"], regles_touchees: [{id: "r1", texte: APPAREIL}]};
+  const {contenu, demandes} = rendre({...AVEC_REGLES, decisions_projet: [accord]});
+  assert.equal(bouton(contenu, "J'accepte"), undefined);
+  assert.equal(bouton(contenu, "Je refuse"), undefined);
+  assert.match(contenu.textContent, /Cette demande contredit la règle du projet/);
+  contenu.tous((n) => n.tagName === "input")[0].value = "Merci.";
+  const case_ = contenu.tous((n) => n.tagName === "input" && n.type === "checkbox")[0];
+  case_.checked = true;
+  contenu.tous((n) => n.tagName === "textarea")[0].value = "Livrer sans test sur téléphone.";
+  await bouton(contenu, "Non, livrer sans ce test").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "accord_agent", decision: "a1", verdict: "choisir", choix: "Non, livrer sans ce test",
+    texte: "Merci.", regle: "Livrer sans test sur téléphone."}]);
+});
+
+test("projet sans règles au relevé : ni case ni partie « Règles du projet »", () => {
+  const {contenu} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [ACCORD]});
+  assert.doesNotMatch(contenu.textContent, /Règles du projet/);
+  assert.doesNotMatch(contenu.textContent, /Retenir comme règle/);
+});
+
+test("Règles du projet : liste, ajouter, modifier, supprimer après confirmation", async () => {
+  const regles = [{id: "r1", texte: "Pas de Docker."}, {id: "r2", texte: APPAREIL, origine: {decision: "d3", agent: "livreur"}}];
+  const {contenu, demandes} = rendre({...AVEC_REGLES, regles_projet: regles});
+  assert.match(contenu.textContent, /Règles du projet/);
+  assert.match(contenu.textContent, /Pas de Docker\./);
+  // ajouter : une règle vide ou trop longue ne part pas
+  const ajout = contenu.tous((n) => n.tagName === "textarea")[0];
+  await bouton(contenu, "Ajouter la règle").auteurs.click[0]();
+  ajout.value = "x".repeat(501);
+  await bouton(contenu, "Ajouter la règle").auteurs.click[0]();
+  ajout.value = "  Textes en français.  ";
+  await bouton(contenu, "Ajouter la règle").auteurs.click[0]();
+  // modifier : un champ s'ouvre avec le texte actuel
+  contenu.tous((n) => n.tagName === "button" && n.textContent === "Modifier")[0].auteurs.click[0]();
+  const edition = contenu.tous((n) => n.tagName === "textarea" && n.value === "Pas de Docker.")[0];
+  edition.value = "Pas de Docker ni de WSL.";
+  await bouton(contenu, "Enregistrer").auteurs.click[0]();
+  // supprimer : demande confirmée, puis refusée
+  const bouton_ = contenu.tous((n) => n.tagName === "button" && n.textContent === "Supprimer")[1];
+  globalThis.confirm = () => false;
+  await bouton_.auteurs.click[0]();
+  assert.equal(demandes.length, 2);
+  globalThis.confirm = () => true;
+  await bouton_.auteurs.click[0]();
+  delete globalThis.confirm;
+  assert.deepEqual(demandes, [
+    {type: "regle_projet", operation: "ajouter", texte: "Textes en français."},
+    {type: "regle_projet", operation: "modifier", id: "r1", texte: "Pas de Docker ni de WSL."},
+    {type: "regle_projet", operation: "supprimer", id: "r2"}]);
+});
+
+test("Règles du projet en lecture seule : aucune saisie ni bouton", () => {
+  const {contenu} = rendre({...AVEC_REGLES, agir: false, regles_projet: [{id: "r1", texte: "Pas de Docker."}]});
+  assert.match(contenu.textContent, /Pas de Docker/);
+  assert.equal(boutons(contenu).length, 0);
+  assert.equal(contenu.tous((n) => n.tagName === "textarea").length, 0);
+});
+
 test("genre du projet : la phrase du genre nouveau est proposée et pré-remplie", async () => {
   const sans = {id: "p1", genre: "confirmer_genre", texte: "Genre ?", propose: "jeu-mobile", genres_connus: ["jeu-web"],
     description: "Jeux pour téléphone"};

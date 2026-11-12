@@ -181,13 +181,15 @@ Dis, sans plus :
 - **Les agents cloud** (`agents_cloud`), un par ligne : sa clé, son rôle, son modèle, l'environnement (vide :
   environnement de base). Rien à créer : le moteur lance leurs sessions.
 - **Le bureau** : lance-le toi-même, `outil.py bureau` (avec `--relancer` si `relancer_bureau` est vrai) ; il tourne
-  en arrière-plan. Donne son `url` et ses `annonces`. Un refus (bureau lancé à la main) : dis-le tel quel.
+  en arrière-plan. Donne son `url` et ses `annonces`. Refus (lancé à la main) : dis-le.
 - **Avec le mobile** : ouvrir la page sur l'ordinateur ; « Associer un téléphone » ; scanner le QR code avec le
   téléphone. Une adresse nulle dans `acces` : non trouvée (Tailscale arrêté,
   pas de Wi-Fi privé) ; dis quoi vérifier.
 - **L'orchestrateur : démarre-le toi-même**, `outil.py orchestrateur "<dossier>"` : le moteur démarre sans fenêtre
-  (un seul pour tous les projets). Refus : donne `message_orchestrateur` à coller dans une nouvelle
+  (un seul pour tous). Refus : donne `message_orchestrateur` à coller dans une nouvelle
   session. Sans orchestrateur, le bureau bloque les gestes.
+
+`outil.py creer <parent> <nom>` crée un projet vide.
 
 Le projet est prêt pour une première fonctionnalité : elle se lance depuis le bureau (« + Nouvelle fonctionnalité »).
 Arrête-toi là.

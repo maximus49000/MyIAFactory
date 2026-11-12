@@ -13,8 +13,8 @@ Tenir cette section à jour à la fin de chaque phase (dernière action avant le
 | A | Sonnet 5.5 | 1, 2 : workflows du projet, genre de la fonctionnalité ; relevé, tableau, départ et mémoire | Données et lecture au contrat écrit, tests nommés | **faite** le 2026-11-12 (1121 tests verts) |
 | B | Opus 5.5 | 3 : jugements `classer_genre` et `proposer_organisation` | Les consignes décident de la qualité (genres précis, workflow complet jusqu'au livrable) et du coût | **faite** le 2026-11-12 (1138 tests verts) |
 | C | Sonnet 5.5 | 4, 5, 6, 10 : le moteur suit le workflow de la fonctionnalité, Fable sur accord, parcours d'une nouvelle demande, environnement du poste | Table de règles au contrat écrit, un test par ligne | **faite** le 2026-11-12 (1202 tests verts) |
-| D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | à faire : **c'est la prochaine phase** |
-| E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire |
+| D | Sonnet 5.5 | 7, 8 : créer un projet vide, le bureau | Installation et page au contrat écrit | **faite** le 2026-11-12 (1233 tests verts) |
+| E | Opus 5.5 | 9 : banc et essai réel, avec l'utilisateur | Diagnostic du coût et réglage des consignes | à faire : **c'est la prochaine phase** |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.**
 
@@ -173,6 +173,45 @@ chaque demande, proposer son workflow, recruter`, `Moteur : vérifier et install
     ou sans rapport) → décision de fonctionnalité `environnement`, jamais de blocage.
   - Réglage `environnement` du projet (`factory.json`, liste `{outil, etat, chemin?, version?, executables, installation, pour}`) ;
     `factory.lire` le rend ; `depart` ajoute « ## Outils du poste » (les outils `en_place`, avec chemin et version).
+
+**Phase D (Sonnet 5.5, 2026-11-12)** : tâches 7 et 8 faites, suite complète verte (1233 tests, `node --test` compris).
+Deux commits : `Installation : créer un projet vide depuis le bureau`, `Bureau : créer un projet, choisir le genre d'une demande,
+valider son workflow`. Rien n'a été regardé dans un navigateur (consigne) : la page est vérifiée par `node --test` (faux DOM
+pour les décisions) et la route par des requêtes HTTP de test.
+
+- **`installation/creation.py`** : `creer_projet(parent, nom, *, origine, mots_interdits, facturation, github, description, genre,
+  bureau_json, git, gh, maintenant)` rend `{reglages, id, projet, github}` (`github` : `"fait"`, `"non demandé"` ou la raison, avec le
+  geste à la main). `origine` = le `reglages.json` du projet d'origine (charge, couche du moteur ; si ses réglages ont une clé
+  `orchestrateur` : modèle de l'orchestrateur, agents locaux et consignes du projet). Un projet d'origine sans orchestrateur
+  (la démo) ne bloque pas. `git`/`gh` : `(args, cwd) -> (code, sortie)` ; l'absence d'un outil se reconnaît à « pas pu s'exécuter ».
+  Ordre GitHub : `gh auth status`, puis `git init`, `git add .`, `git commit`, `gh repo create <nom> --private --source . --push`.
+  `mise_en_place._ecrire_configuration` accepte un projet sans `flux` ni agent (dossiers `fiches/briefs`, pas de `flux` dans
+  `factory.json`, `description` écrite). Commande `installation/outil.py creer` (citée dans `skills/installer/SKILL.md`, dont le test
+  de longueur est à 2000 mots : deux phrases raccourcies pour la loger).
+- **Route** : `POST /api/projets/creer` (`Bureau.creer_projet`), mêmes en-têtes que les autres écritures, code d'accès exigé sur un
+  écouteur distant (garde commune). Corps : `{parent, nom, mots_interdits, facturation, github, description?, origine?, decision?,
+  fonctionnalite?, genre?, genre_description?}` → `{ok, projet, github, message, demande_deposee?}`. **Un genre inconnu de la mémoire
+  de la skill n'est jamais écrit dans le projet créé** : il part dans `genre_description` (et sert de description du projet) ; la
+  demande `nouveau_projet` porte `genre` et `description`. Depuis une décision, la demande est **vérifiée avant la création**
+  (un refus ne laisse pas de projet orphelin) puis déposée par le projet d'origine ; si le dépôt échoue après coup, le projet
+  reste créé et le message le dit (`demande_deposee: false`). Le serveur refuse sans fichier de bureau commun (409, bureau lancé
+  sur un seul `reglages.json`).
+- `GET /api/projets` (bureau multi seulement) ajoute `parents` (dossiers où l'on range déjà des projets) et, par projet,
+  `mots_interdits` et `facturation` (service « facturation ») pour pré-remplir le formulaire. Le bureau à un seul projet est inchangé.
+- **Page** : `ui/creation.js` (formulaire, fonctions pures testées), dernière entrée « Nouveau projet… » de la liste
+  (`projets.optionsProjets`), décisions `genre_fonctionnalite` et `environnement` au bureau du Directeur (`decisions.js`), décision
+  `organisation` d'un workflow (étapes, livrable, agents avec justification, case Fable seulement si `fable_suggere`, environnement
+  « déjà en place »/« à installer », texte du refus, « Abandonner la demande »). `organisation.js` aligné sur la décision d'un workflow :
+  ses étapes sont toutes « ajoutées », et une évolution du principal ne « retire » plus les colonnes des autres workflows. Une
+  fonctionnalité `deplacee` n'apparaît plus dans les décisions du Directeur ; `deplacee_vers: "(demande abandonnée)"` s'affiche
+  « Demande abandonnée ».
+- **Pour la phase E (essai au bureau)** : relancer le bureau et le moteur (le bureau relit `bureau.json` mais pas son code). La
+  première création écrit dans le vrai `~/MyIAFactory/bureau.json` : prévoir un dossier parent d'essai. Le formulaire propose en
+  suggestions les dossiers parents des projets déjà inscrits. Après la création depuis une décision, le **moteur du projet d'origine**
+  recrée la demande dans le nouveau projet à son prochain passage (il lit `projet_cree`) : le nouveau projet apparaît tout de suite,
+  la demande après un tour de moteur. Le nouveau projet est pris par le moteur au passage suivant (il relit le bureau). Non vérifié
+  autrement qu'en test : l'affichage réel du formulaire (superposition `.creation-fond`), le rendu mobile des décisions, le
+  `gh repo create` réel. Le banc n'a toujours pas ses gestes (phase E).
 
 **Formats exacts pour la phase D (route de création et décisions au bureau)** :
 

@@ -268,6 +268,21 @@ class Passage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.jouer(Jugements(proposer_organisation=organisation(dev="ecrans", relecture="verif")), d)
 
+    def test_etapes_du_workflow_ramenees_a_l_essai(self):
+        """Même id d'abord, puis même rôle (une étape de l'essai ne sert qu'une fois), puis même rang ; une étape que
+        l'essai n'avait pas reste la sienne (le rejoueur n'a rien pour elle : un écart)."""
+        fac = {"flux": [{"id": "creation", "role": "graphiste"}, {"id": "controle", "role": "controleur"}],
+               "workflows": [{"id": "w-f1", "fonctionnalite": "f1", "genre": "g", "flux": [
+                   {"id": "f1-dessin", "role": "illustrateur"}, {"id": "f1-controle", "role": "controleur"},
+                   {"id": "f1-livraison", "role": "controleur"}]}]}
+        fonc = {"id": "f1", "workflow": "w-f1"}
+        self.assertEqual(jouer.vers_l_essai(fac, fonc, "flux:f1-dessin", "illustrateur"), ("flux:creation", "graphiste"))
+        self.assertEqual(jouer.vers_l_essai(fac, fonc, "flux:f1-controle", "controleur"), ("flux:controle", "controleur"))
+        self.assertEqual(jouer.vers_l_essai(fac, fonc, "flux:f1-livraison", "controleur"),
+                         ("flux:f1-livraison", "controleur"))
+        self.assertEqual(jouer.vers_l_essai(fac, fonc, "prototype", "illustrateur"), ("prototype", "graphiste"))
+        self.assertEqual(jouer.vers_l_essai(fac, {"id": "f2"}, "flux:creation", "graphiste"), ("flux:creation", "graphiste"))
+
     def test_le_poste_du_banc_est_pret(self):
         """Le banc rejoue un essai fait : les outils du poste sont tenus pour en place, aucun agent d'installation."""
         outil = {"outil": "Outil absent", "pour": "dev", "executables": ["outil-introuvable-du-banc"],

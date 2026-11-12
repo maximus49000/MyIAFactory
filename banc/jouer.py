@@ -57,23 +57,28 @@ class Parcours:
 
 def vers_l_essai(fac, fonc, etape, role):
     """L'étape et le rôle d'une tâche, ramenés au flux de l'essai : le workflow proposé à la fonctionnalité (`f1-…`) n'a
-    pas les identifiants de l'essai. Une étape va à celle de l'essai de même rôle, sinon de même rang."""
+    pas les identifiants de l'essai. Une étape va à celle de l'essai de même id (sans le préfixe), sinon de même rôle,
+    sinon de même rang ; chaque étape de l'essai ne sert qu'une fois. Une étape que l'essai n'avait pas reste la sienne."""
     w = wf.de_la_fonctionnalite(fac, fonc)
     flux = fac["flux"]
     if not w or w["id"] == wf.PRINCIPAL or not flux:
         return etape, role
-    etapes = w["flux"]
-
-    def correspondante(i):
-        x = etapes[i]
-        return next((s for s in flux if s["role"] == x["role"]), flux[i] if i < len(flux) else None)
-
-    roles = {x["role"]: c["role"] for i, x in enumerate(etapes) if (c := correspondante(i))}
-    if etape and etape.startswith(regles.ETAPES_DE_FLUX):
-        i = next((i for i, x in enumerate(etapes) if x["id"] == etape[len(regles.ETAPES_DE_FLUX):]), None)
-        c = correspondante(i) if i is not None else None
-        if c:
-            etape = regles.ETAPES_DE_FLUX + c["id"]
+    prefixe = f"{w.get('fonctionnalite')}-" if w.get("fonctionnalite") else ""
+    etapes = [dict(x, court=x["id"][len(prefixe):] if prefixe and x["id"].startswith(prefixe) else x["id"])
+              for x in w["flux"]]
+    paires, pris = {}, set()
+    for regle in (lambda i, x, s: s["id"] == x["court"], lambda i, x, s: s["role"] == x["role"],
+                  lambda i, x, s: flux.index(s) == i):
+        for i, x in enumerate(etapes):
+            if x["id"] in paires:
+                continue
+            s = next((s for s in flux if s["id"] not in pris and regle(i, x, s)), None)
+            if s:
+                paires[x["id"]] = s
+                pris.add(s["id"])
+    roles = {x["role"]: paires[x["id"]]["role"] for x in etapes if x["id"] in paires}
+    if etape and etape.startswith(regles.ETAPES_DE_FLUX) and etape[len(regles.ETAPES_DE_FLUX):] in paires:
+        etape = regles.ETAPES_DE_FLUX + paires[etape[len(regles.ETAPES_DE_FLUX):]]["id"]
     return etape, roles.get(role, role)
 
 

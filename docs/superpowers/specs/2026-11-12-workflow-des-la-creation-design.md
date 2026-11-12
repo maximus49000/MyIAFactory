@@ -151,3 +151,30 @@ cohérence, workflow dédié proposé).
 - Le banc gratuit (rejoueur) ne doit pas bouger pour les projets existants.
 - Un essai réel au bureau : création d'un projet de jeu Android avec une validation du Directeur avant la livraison ;
   coût de l'échange relevé (cible : moins de 0,10 € pour l'échange complet).
+
+## 8. Outils à installer : lien, mode opératoire, autonomie (2026-11-12)
+
+Constat : un outil « à installer » n'était qu'une ligne de texte collée dans une phrase, et l'installation partait d'elle-même
+à l'acceptation du workflow. Désormais :
+
+- **Données.** Chaque outil de `environnement` (rendu par `proposer_organisation` et `definir_workflow`) porte en plus
+  `objectif` (à quoi il sert dans CE projet et à quelle étape, une phrase concrète ; absent d'un ancien résultat, l'étape
+  `pour` le remplace à l'affichage), `telechargement` (URL https de la page officielle de l'éditeur, jamais un miroir, nulle
+  si inconnue), `etapes` (mode opératoire Windows, 2 à 8 lignes, jusqu'à la vérification) et `autonome` (un agent peut
+  l'installer seul, sans clic ni droits d'administrateur). Les validateurs refusent une URL non https, des étapes mal
+  bornées, un `autonome` non booléen ; les anciens résultats restent acceptés (valeurs par défaut `null`, `[]`, `false`).
+- **Un seul endroit durable : la partie existante « Environnement du poste à compléter »** (décision `environnement`, boutons
+  « C'est fait » et « Continuer sans »). Aucune nouvelle partie n'a été créée : la décision montre, pour chaque outil qui
+  manque, l'objectif, le lien (nouvel onglet, `rel="noopener noreferrer"`), le mode opératoire numéroté et, si l'outil est
+  `autonome`, « Installer en autonomie ». « C'est fait » garde son rôle (revérification en code, versions comparées),
+  « Continuer sans » est inchangé. Le texte de la décision ne porte plus que les noms ; la ligne `installation` brute en est
+  retirée. La même présentation sert à la proposition de workflow d'une fonctionnalité et à la proposition du chef à la création.
+- **Jamais d'installation d'elle-même.** Trois clics possibles : le bouton de la décision (nouvelle demande `installer_outil`,
+  `{decision, outil, fonctionnalite?}`), le choix « Installer en autonomie » par outil dans la proposition de workflow (envoyé
+  avec « Accepter » : `installer`), la case « installer » de la création (limitée aux outils `autonome`). L'agent
+  d'installation ne reçoit que les outils autonomes choisis ; il n'est proposé que s'il y en a, et recruté au clic s'il manque
+  (`lancer organisation` avec `action: installateur`, règle `Bash(winget:*)`). Une tâche par outil : le relevé marque
+  `en_cours` l'outil qu'une tâche non finie couvre, et le moteur refuse un second clic.
+- **Sans clic, la liste attend.** À l'acceptation sans choix, à la création sans case, ou pour les outils non autonomes, la
+  décision `environnement` (de la fonctionnalité, ou du projet) est posée ; la fin d'une tâche d'installation revérifie le poste
+  et remplace la décision par la liste de ce qui manque encore.

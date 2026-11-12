@@ -964,3 +964,14 @@ html.mobile .lancement-cote, html.mobile .lancement-droite, html.mobile .lanceme
 html.mobile .lancement-outils { width: auto; }
 html.mobile .lancement-fil { padding: 20px 16px 110px; }
 .lancement-fil { box-sizing: border-box; min-height: 100%; justify-content: flex-end; }   /* le dernier message en bas, toujours visible */
+
+/* --- Outils à installer : objectif, lien officiel, mode opératoire, installation en autonomie --- */
+.outils-a-installer, .creation-outils { margin-top: 6px; display: grid; gap: 8px; }
+.outil-a-installer { padding: 8px 10px; border: 1px solid #e3dccb; border-radius: 8px; background: #fffdf8; overflow-wrap: anywhere; }
+.outil-nom { display: block; }
+.outil-objectif { margin-top: 2px; }
+.outil-ligne { margin-top: 4px; }
+.outil-lien { color: #3b6aa8; font-weight: 700; }
+.outil-etapes { margin: 2px 0 0; padding-left: 22px; font-size: 13px; }
+.outil-a-installer .bouton { margin-top: 6px; }
+.outil-en-cours { font-weight: 700; }

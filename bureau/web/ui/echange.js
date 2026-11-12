@@ -5,6 +5,7 @@
 // Utilisable au téléphone : une seule colonne, des boutons larges, des champs en 16 px (voir style.css).
 
 import {el} from "./dom.js";
+import {blocOutil} from "./outils.js";
 import {verifierCreation, motsInterdits} from "./verifs.js";
 
 export const DELAI_RELECTURE_MS = 2500;
@@ -150,9 +151,19 @@ export function agentsFable(p) {
   return (p?.agents || []).filter((a) => a.fable_suggere === true);
 }
 
-// « Installer ce qui manque » n'a de sens que si un outil manque et qu'un agent peut l'installer.
+// Les outils qui manquent et qu'un agent peut installer seul (les seuls que la case « installer » lui confie).
+export function outilsAutonomes(p) {
+  return (p?.environnement || []).filter((x) => x.etat !== "en_place" && x.autonome === true);
+}
+
+// Les outils qui manquent, tous (l'utilisateur les installe à la main avec le lien et le mode opératoire).
+export function outilsManquants(p) {
+  return (p?.environnement || []).filter((x) => x && x.etat !== "en_place");
+}
+
+// « Installer en autonomie » n'a de sens que si un outil autonome manque et qu'un agent peut l'installer.
 export function installationPossible(p) {
-  return Boolean(p?.installateur) && (p.environnement || []).some((x) => x.etat !== "en_place");
+  return Boolean(p?.installateur) && outilsAutonomes(p).length > 0;
 }
 
 // La fenêtre d'après une réponse à « Valider et créer » : un refus qui touche aux informations ramène à la fenêtre 1
@@ -469,6 +480,13 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const sortie = [el("h3", "creation-sous-titre", "La proposition du chef")];
     sortie.push(el("p", "creation-message chef", p.message || ""));
     sortie.push(el("pre", "creation-proposition", lignesProposition(p).join("\n")));
+    const manquants = outilsManquants(p);
+    if (manquants.length) {
+      const bloc = el("div", "creation-outils");
+      bloc.append(el("strong", "", "Outils à installer sur ce poste"));
+      for (const x of manquants) bloc.append(blocOutil(x));
+      sortie.push(bloc);
+    }
     if (p.genre?.nouveau) {
       if (descriptionGenre === null) descriptionGenre = p.genre.description || "";
       const t = zone("Description du genre", 3, descriptionGenre, 900);
@@ -486,7 +504,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
       const c = saisie("checkbox", installer);
       c.addEventListener("change", () => { installer = c.checked; });
       const l = el("label", "creation-case");
-      l.append(c, el("span", "", " Installer ce qui manque sur ce poste (un agent s'en charge au premier passage du moteur)"));
+      l.append(c, el("span", "", ` Installer en autonomie : ${outilsAutonomes(p).map((x) => x.outil).join(", ")} (un agent s'en charge au premier passage du moteur ; rien d'autre n'est installé)`));
       sortie.push(l);
     }
     const erreur = dire("");

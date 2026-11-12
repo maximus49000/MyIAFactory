@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   corpsInfos, verifierInfos, corpsTour, corpsCorrection, corpsProposerMaintenant, choisir, vueEchange, texteCout,
-  lignesProposition, agentsFable, installationPossible, corpsValidation, suiteValidation, lignesBrouillons,
+  lignesProposition, agentsFable, installationPossible, outilsAutonomes, outilsManquants, corpsValidation, suiteValidation, lignesBrouillons,
   texteAbandonnes, texteAttente, utiliseLeFormulaireActuel, envoyer, DELAI_RELECTURE_MS,
 } from "../ui/echange.js";
 
@@ -27,7 +27,7 @@ const PROPOSITION = {
   agents: [{cle: "dev-1", prenom: "Noé", role: "dev", modele: "Sonnet", justification: "Il écrit du code.", fable_suggere: false},
            {cle: "livreur-1", role: "livreur", modele: "Haiku", fable_suggere: true}],
   livrable: "Un apk signé.",
-  environnement: [{outil: "JDK", version_min: "17", etat: "a_installer", raison: "pour compiler"},
+  environnement: [{outil: "JDK", version_min: "17", etat: "a_installer", raison: "pour compiler", autonome: true},
                   {outil: "Node", etat: "en_place", version: "v20.1"},
                   {outil: "Java", version_min: "17", etat: "a_installer", version: "1.8"}],
   installateur: "environnement-1",
@@ -154,6 +154,12 @@ test("installer seulement si un outil manque et qu'un agent peut l'installer", (
   assert.equal(installationPossible({...PROPOSITION, installateur: null}), false);
   assert.equal(installationPossible({...PROPOSITION, environnement: [{outil: "Node", etat: "en_place"}]}), false);
   assert.equal(installationPossible(null), false);
+  // la case « installer » est limitée aux outils autonomes : sans eux, rien à confier à l'agent
+  assert.deepEqual(outilsAutonomes(PROPOSITION).map((x) => x.outil), ["JDK"]);
+  assert.deepEqual(outilsManquants(PROPOSITION).map((x) => x.outil), ["JDK", "Java"]);
+  const manuel = {...PROPOSITION, environnement: PROPOSITION.environnement.map((x) => ({...x, autonome: false}))};
+  assert.equal(installationPossible(manuel), false);
+  assert.deepEqual(outilsAutonomes(null), []);
 });
 
 test("corpsValidation : Fable coché, installer, description du genre nouveau", () => {

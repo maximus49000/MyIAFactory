@@ -5,7 +5,8 @@ import {libelleCout, resumeOrganisation, demandeOrganisation, rendreOrganisation
 import {decisionsDirecteur} from "../ui/actions.js";
 
 class Noeud {
-  constructor(tag) { this.tagName = tag; this.enfants = []; this.className = ""; this._texte = ""; }
+  constructor(tag) { this.tagName = tag; this.enfants = []; this.className = ""; this._texte = ""; this.auteurs = {}; }
+  addEventListener(nom, f) { (this.auteurs[nom] ||= []).push(f); }
   set textContent(v) { this._texte = String(v); this.enfants = []; }
   get textContent() { return this._texte + this.enfants.map((e) => e.textContent).join(""); }
   set innerHTML(v) { throw new Error("innerHTML interdit"); }
@@ -156,7 +157,7 @@ test("organisation montre l environnement", () => {
   const ancien = lignesEnvironnement({organisation: {environnement: [{outil: "JDK 17", etat: "a_installer", installation: "winget", raison: "version trouvée : java version \"1.8.0_351\" ; 17 minimum demandée"}]}});
   assert.match(ancien[0].detail, /1\.8\.0_351.*winget/);
   const li = rendreOrganisation({etat: ETAT}, WORKFLOW, () => new Noeud("button"));
-  assert.match(li.textContent, /JDK : à installer/);
+  assert.match(li.textContent, /JDK.*Utilisé à l'étape/);          // l'objectif retombe sur l'étape pour un ancien résultat
   assert.match(li.textContent, /Git : déjà en place/);
   assert.match(li.textContent, /2\.45/);
 });
@@ -192,4 +193,35 @@ test("workflow montre l etape de validation", () => {
   const li = rendreOrganisation({etat: ETAT}, avec, () => new Noeud("button"));
   assert.match(li.textContent, /2\. Validation du Directeur \(validation du Directeur\)/);
   assert.match(li.textContent, /1\. Visuels \(graphiste, Métier\)/);
+});
+
+test("proposition de workflow : lien, mode opératoire, objectif, et « Installer en autonomie » choisi part avec Accepter", () => {
+  const riche = {outil: "JDK 17", etat: "a_installer", pour: "f2-apk", autonome: true,
+    objectif: "Compiler le jeu et signer l'apk à l'étape « Livraison de l'apk signé ».",
+    telechargement: "https://adoptium.net/temurin/releases/", etapes: ["Ouvrir la page.", "Télécharger.", "Extraire."]};
+  const manuel = {outil: "Android Studio", etat: "a_installer", pour: "f2-apk", autonome: false,
+    telechargement: "http://miroir.example/studio", etapes: ["Télécharger.", "Installer."]};
+  const dec = {...WORKFLOW, organisation: {...WORKFLOW.organisation, environnement: [riche, manuel]}};
+  const faits = [];
+  const bouton = (libelle, classe, fabrique) => { const n = new Noeud("button"); faits.push([libelle, fabrique]); return n; };
+  const li = rendreOrganisation({etat: ETAT}, dec, bouton);
+  assert.match(li.textContent, /Compiler le jeu et signer l'apk/);
+  assert.deepEqual(li.tous((n) => n.tagName === "a").map((a) => [a.href, a.target, a.rel]),
+    [["https://adoptium.net/temurin/releases/", "_blank", "noopener noreferrer"]]);   // http (miroir) : jamais un lien
+  assert.equal(li.tous((n) => n.tagName === "ol").length, 2);
+  const choix = li.tous((n) => n.tagName === "button" && n.textContent === "Installer en autonomie");
+  assert.equal(choix.length, 1);                                     // seulement pour l'outil autonome
+  const accepter = () => faits.find((f) => f[0] === "Accepter")[1]();
+  assert.deepEqual(accepter(), {type: "organisation", decision: "d12", verdict: "accepter"});   // rien sans choix
+  choix[0].auteurs.click[0]();
+  assert.match(choix[0].textContent, /choisie/);
+  assert.deepEqual(accepter(), {type: "organisation", decision: "d12", verdict: "accepter", installer: ["JDK 17"]});
+  choix[0].auteurs.click[0]();                                       // un second clic annule
+  assert.deepEqual(accepter(), {type: "organisation", decision: "d12", verdict: "accepter"});
+});
+
+test("demandeOrganisation : installer seulement avec accepter", () => {
+  assert.deepEqual(demandeOrganisation("d1", "accepter", {installer: ["JDK"]}), {type: "organisation", decision: "d1", verdict: "accepter", installer: ["JDK"]});
+  assert.deepEqual(demandeOrganisation("d1", "refuser", {installer: ["JDK"]}), {type: "organisation", decision: "d1", verdict: "refuser"});
+  assert.deepEqual(demandeOrganisation("d1", "accepter", {installer: []}), {type: "organisation", decision: "d1", verdict: "accepter"});
 });

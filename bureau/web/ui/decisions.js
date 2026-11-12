@@ -5,7 +5,8 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
-  demandeEnvironnement, demandeElargirGenre} from "./actions.js";
+  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil} from "./actions.js";
+import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {urlProjet} from "./projets.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
@@ -45,9 +46,10 @@ export function boutonDemande(ctx, libelle, classe, fabrique, avant = () => true
   return b;
 }
 
-function decisionFonctionnalite(ctx, d, boutons) {
+function decisionFonctionnalite(ctx, d, boutons, corps = null) {
   const li = el("li", "");
   li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte));
+  if (corps) li.append(corps);
   if (ctx.etat.agir) {
     const rangee = el("div", "lecon-boutons");
     rangee.append(...boutons);
@@ -184,13 +186,21 @@ function decisionElargirGenre(ctx, d) {
   return li;
 }
 
-// Un outil du poste ne s'est pas installé : ce qui manque, puis « C'est fait » (revérifie) ou « Continuer sans ».
+// « Environnement du poste à compléter » : pour chaque outil qui manque, son objectif dans le projet, le lien officiel
+// (nouvel onglet), le mode opératoire numéroté et, si un agent peut l'installer seul, « Installer en autonomie » ;
+// puis « C'est fait » (revérifie en code, versions comparées) ou « Continuer sans ».
 function decisionEnvironnement(ctx, d) {
-  const manque = Array.isArray(d.environnement) ? d.environnement : [];
-  const noms = manque.map((x) => (typeof x === "string" ? x : x?.outil)).filter(Boolean);
-  return decisionFonctionnalite(ctx, {...d, texte: d.texte + (noms.length ? " Il manque : " + noms.join(", ") + "." : "")}, [
+  const manque = (Array.isArray(d.environnement) ? d.environnement : []).map((x) => (typeof x === "string" ? {outil: x} : x))
+    .filter((x) => x && plein(x.outil));
+  const outils = el("div", "outils-a-installer");
+  for (const x of manque) {
+    const action = ctx.etat.agir && x.autonome === true && x.en_cours !== true
+      ? boutonDemande(ctx, "Installer en autonomie", "bouton secondaire", () => demandeInstallerOutil(d, x.outil)) : null;
+    outils.append(blocOutil({...x, etat: "a_installer"}, {action}));
+  }
+  return decisionFonctionnalite(ctx, d, [
     boutonDemande(ctx, "C'est fait", "bouton", () => demandeEnvironnement(d, "fait")),
-    boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))]);
+    boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))], outils);
 }
 
 // La demande « valider » ou « renvoyer » d'un élément arrivé à une étape de validation. « Renvoyer » exige une remarque :

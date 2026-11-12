@@ -74,7 +74,8 @@ test("un genre nouveau demande sa description avant l'envoi", async () => {
 
 test("environnement : ce qui manque, « C'est fait » et « Continuer sans »", async () => {
   const {contenu, demandes} = rendre(ETAT);
-  assert.match(contenu.textContent, /Il manque : JDK, Gradle\./);
+  assert.match(contenu.textContent, /JDK/);
+  assert.match(contenu.textContent, /Gradle/);
   await bouton(contenu, "C'est fait").auteurs.click[0]();
   await bouton(contenu, "Continuer sans").auteurs.click[0]();
   assert.deepEqual(demandes.map((d) => [d.type, d.verdict, d.fonctionnalite]), [["environnement", "fait", "f1"], ["environnement", "continuer", "f1"]]);
@@ -83,12 +84,61 @@ test("environnement : ce qui manque, « C'est fait » et « Continuer sans »", 
 test("decision environnement de projet : sans fonctionnalite, la reponse n'en porte pas", async () => {
   const {contenu, demandes} = rendre({agir: true, agents: [], fonctionnalites: [], decisions_projet: [
     {id: "n1", genre: "environnement", texte: "Il manque encore des outils sur le poste.", environnement: [{outil: "JDK 17"}]}]});
-  assert.match(contenu.textContent, /Il manque : JDK 17\./);
+  assert.match(contenu.textContent, /JDK 17/);
   assert.match(contenu.textContent, /Le projet/);
   await bouton(contenu, "C'est fait").auteurs.click[0]();
   await bouton(contenu, "Continuer sans").auteurs.click[0]();
   assert.deepEqual(demandes, [{type: "environnement", decision: "n1", verdict: "fait"},
                               {type: "environnement", decision: "n1", verdict: "continuer"}]);
+});
+
+const OUTIL_RICHE = {outil: "JDK 17", etat: "a_installer", pour: "livraison", autonome: true,
+  objectif: "Compiler le jeu et signer l'apk à l'étape « Livraison de l'apk signé ».",
+  telechargement: "https://adoptium.net/temurin/releases/",
+  etapes: ["Ouvrir la page.", "Télécharger le .zip.", "L'extraire dans le profil.", "Lancer java -version."]};
+const decisionDuPoste = (outils, ...reste) => ({agir: true, agents: [], fonctionnalites: [{id: "f1", nom: "Casse-briques", decisions: [
+  {id: "e1", genre: "environnement", texte: "Il manque encore des outils sur le poste : JDK 17.", environnement: outils}]}],
+  decisions_projet: reste});
+
+test("environnement : par outil, l'objectif, le lien officiel, le mode opératoire et le bouton d'autonomie", async () => {
+  const manuel = {outil: "Android Studio", etat: "a_installer", pour: "dev", autonome: false,
+    telechargement: "https://developer.android.com/studio", etapes: ["Télécharger.", "Installer."]};
+  const {contenu, demandes} = rendre(decisionDuPoste([OUTIL_RICHE, manuel]));
+  const texte = contenu.textContent;
+  assert.match(texte, /Compiler le jeu et signer l'apk/);                 // l'objectif en tête, concret
+  assert.match(texte, /Utilisé à l'étape « dev »/);                       // repli : l'étape, sans objectif
+  const liens = contenu.tous((n) => n.tagName === "a");
+  assert.deepEqual(liens.map((a) => [a.href, a.target, a.rel]), [
+    ["https://adoptium.net/temurin/releases/", "_blank", "noopener noreferrer"],
+    ["https://developer.android.com/studio", "_blank", "noopener noreferrer"]]);
+  assert.deepEqual(contenu.tous((n) => n.tagName === "ol")[0].enfants.map((li) => li.textContent),
+    ["Ouvrir la page.", "Télécharger le .zip.", "L'extraire dans le profil.", "Lancer java -version."]);
+  const autonomes = boutons(contenu).filter((b) => b.textContent === "Installer en autonomie");
+  assert.equal(autonomes.length, 1);                                       // seulement pour l'outil autonome
+  await autonomes[0].auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "installer_outil", decision: "e1", fonctionnalite: "f1", outil: "JDK 17"}]);
+  assert.ok(bouton(contenu, "C'est fait") && bouton(contenu, "Continuer sans"));   // inchangés
+  assert.doesNotMatch(texte, /Il manque : /);                              // plus de ligne brute collée dans une phrase
+});
+
+test("environnement : une adresse qui n'est pas https n'est jamais un lien ; un outil en cours n'a plus de bouton", () => {
+  const {contenu} = rendre(decisionDuPoste([{...OUTIL_RICHE, telechargement: "javascript:alert(1)", en_cours: true}]));
+  assert.equal(contenu.tous((n) => n.tagName === "a").length, 0);
+  assert.equal(bouton(contenu, "Installer en autonomie"), undefined);
+  assert.match(contenu.textContent, /en cours/);
+  const http = rendre(decisionDuPoste([{...OUTIL_RICHE, telechargement: "http://adoptium.net/"}]));
+  assert.equal(http.contenu.tous((n) => n.tagName === "a").length, 0);
+});
+
+test("environnement de projet : le bouton d'autonomie n'envoie pas de fonctionnalité ; lecture seule sans bouton", async () => {
+  const etat = {agir: true, agents: [], fonctionnalites: [], decisions_projet: [
+    {id: "n1", genre: "environnement", texte: "Il manque.", environnement: [OUTIL_RICHE]}]};
+  const {contenu, demandes} = rendre(etat);
+  await bouton(contenu, "Installer en autonomie").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "installer_outil", decision: "n1", outil: "JDK 17"}]);
+  const lecture = rendre({...etat, agir: false}).contenu;
+  assert.equal(boutons(lecture).length, 0);
+  assert.equal(lecture.tous((n) => n.tagName === "a").length, 1);          // le lien reste lisible
 });
 
 const ELARGIR = {id: "e1", genre: "elargir_genre", texte: "Élargir la description ?", cible: "badges",

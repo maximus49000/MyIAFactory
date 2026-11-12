@@ -216,6 +216,13 @@ export function demandeEnvironnement(decision, verdict) {
   return d;
 }
 
+// « Installer en autonomie » un outil d'une décision `environnement` : l'agent d'installation le fait seul.
+export function demandeInstallerOutil(decision, outil) {
+  const d = {type: "installer_outil", decision: decision.id, outil};
+  if (plein(decision.fonctionnalite)) d.fonctionnalite = decision.fonctionnalite;   // sans elle : la décision du projet
+  return d;
+}
+
 export function demandeSession(decision, session) {
   return {type: "session_cloud", decision, session};
 }

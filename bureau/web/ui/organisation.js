@@ -5,6 +5,7 @@
 
 import {el} from "./dom.js";
 import {euros, tokens} from "./texte.js";
+import {blocOutil} from "./outils.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -90,12 +91,39 @@ export function lignesEnvironnement(decision) {
   });
 }
 
-// `fable` : les clés des agents cochés (avec « accepter » seulement) ; `texte` : ce qu'il faut changer (« refuser »).
-export function demandeOrganisation(decision, verdict, {texte, fable} = {}) {
+// `fable` : les clés des agents cochés (avec « accepter » seulement) ; `texte` : ce qu'il faut changer (« refuser ») ;
+// `installer` : les noms des outils choisis pour une installation en autonomie (avec « accepter » seulement).
+export function demandeOrganisation(decision, verdict, {texte, fable, installer} = {}) {
   const d = {type: "organisation", decision, verdict};
   if (verdict === "refuser" && plein(texte)) d.texte = texte.trim();
   if (verdict === "accepter" && liste(fable).length) d.fable = [...fable];
+  if (verdict === "accepter" && liste(installer).length) d.installer = [...installer];
   return d;
+}
+
+// L'environnement du poste d'une proposition de workflow, outil par outil (objectif, lien officiel, mode opératoire) ;
+// pour un outil `autonome`, « Installer en autonomie » se choisit ici et part avec « Accepter » (rien n'est installé
+// sans ce choix). Rend {bloc, choisis()} (`choisis()` : les noms choisis).
+function blocEnvironnement(ctx, d) {
+  const outils = liste(d?.organisation?.environnement).filter((x) => x && plein(x.outil));
+  const choisis = new Set();
+  const bloc = el("div", "organisation-bloc");
+  if (!outils.length) return {bloc: null, choisis: () => []};
+  bloc.append(el("strong", "", "Environnement du poste"));
+  for (const x of outils) {
+    let action = null;
+    if (ctx.etat.agir && x.autonome === true && x.etat !== "en_place") {
+      action = el("button", "bouton secondaire", "Installer en autonomie");
+      action.type = "button";
+      action.addEventListener("click", () => {
+        if (choisis.has(x.outil)) choisis.delete(x.outil); else choisis.add(x.outil);
+        action.textContent = choisis.has(x.outil) ? "Installation en autonomie choisie (annuler)" : "Installer en autonomie";
+        action.setAttribute("aria-pressed", choisis.has(x.outil) ? "true" : "false");
+      });
+    }
+    bloc.append(blocOutil(x, {action}));
+  }
+  return {bloc, choisis: () => outils.filter((x) => choisis.has(x.outil)).map((x) => x.outil)};
 }
 
 function liste_(titre, lignes) {
@@ -151,10 +179,8 @@ export function rendreOrganisation(ctx, d, bouton) {
   if (agents.length) {
     li.append(liste_(w ? "Agents recrutés" : "Agents", agents.map((a) => [a.ligne, a.justification])));
   }
-  const environnement = lignesEnvironnement(d);
-  if (environnement.length) {
-    li.append(liste_("Environnement du poste", environnement.map((x) => [x.libelle, x.detail])));
-  }
+  const environnement = blocEnvironnement(ctx, d);
+  if (environnement.bloc) li.append(environnement.bloc);
   li.append(el("div", "lecon-meta", "Coût estimé : " + r.cout));
   const fable = casesFable(agents);
   if (fable.bloc) li.append(fable.bloc);
@@ -165,7 +191,7 @@ export function rendreOrganisation(ctx, d, bouton) {
     precision.placeholder = "Ce qu'il faut changer (pour « Refuser »)";
     precision.setAttribute("aria-label", "Ce qu'il faut changer");
     const rangee = el("div", "lecon-boutons");
-    rangee.append(bouton("Accepter", "bouton", () => demandeOrganisation(d.id, "accepter", {fable: fable.cochees()})),
+    rangee.append(bouton("Accepter", "bouton", () => demandeOrganisation(d.id, "accepter", {fable: fable.cochees(), installer: environnement.choisis()})),
                   bouton("Refuser", "bouton secondaire", () => demandeOrganisation(d.id, "refuser", {texte: precision.value})));
     if (w) rangee.append(bouton("Abandonner la demande", "bouton secondaire", () => demandeOrganisation(d.id, "abandonner")));
     li.append(precision, rangee);

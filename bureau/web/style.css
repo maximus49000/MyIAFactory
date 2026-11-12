@@ -508,6 +508,30 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .creation-libelle { display: block; margin-bottom: 2px; font-size: 13px; font-weight: 600; }
 .creation input[type="text"], .creation textarea { box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .creation-case { display: block; margin: 6px 0; }
+/* --- « Nouveau projet… » en deux fenêtres (informations, puis échange avec le chef) ; utilisable à 375 px. */
+.creation-chef { width: min(640px, 100%); }
+.creation-chef h3 { margin: 12px 0 4px; font-size: 15px; }
+.creation-chef .lecon-boutons { flex-wrap: wrap; }
+.creation-chef .bouton { min-height: 40px; }
+.creation-brouillon { margin: 8px 0; padding: 8px 10px; border: 1px solid #d6cfbf; border-radius: 10px; }
+.creation-brouillon strong { display: block; }
+.creation-echange { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.creation-message { padding: 8px 10px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.creation-message.chef { background: #efe8da; align-self: flex-start; max-width: 94%; }
+.creation-message.utilisateur { background: #dfeadf; align-self: flex-end; max-width: 94%; }
+.creation-cout { margin: 2px 0 6px; }
+.creation-attente { margin: 6px 0; font-style: italic; color: #6d6980; animation: creation-pulse 1.4s ease-in-out infinite; }
+@keyframes creation-pulse { 50% { opacity: .45; } }
+.creation-question { margin: 10px 0; }
+.creation-choix { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.creation-choix .bouton { margin: 0; padding: 6px 10px; font-size: 13px; }
+.creation-proposition { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: #f6f2e8; font: inherit; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .creation-fond { padding: 6px; }
+  .creation { padding: 14px 12px; }
+  .creation input[type="text"], .creation textarea { font-size: 16px; }   /* pas de zoom automatique au toucher */
+  .creation-chef .lecon-boutons .bouton { flex: 1 1 100%; }
+}
 
 /* --- Catalogue d'une fonctionnalité : fiches à plaque émaillée sur papier, carte vue de haut, filtres ardoise --- */
 body.panneau-catalogue { --largeur-panneau: 620px; }

@@ -231,9 +231,9 @@
   - `POST /api/creations/supprimer` `{id}` → `brouillons.abandonner` → `{"ok": true}` ;
   - vue d'un brouillon : `{id, infos, echange, tours, tours_max, proposition, erreur, cout: {tokens, euros}}`.
 
-- [ ] **Étape 1 : tests** : `test_infos_controle_et_cree_le_brouillon` ; `test_infos_description_obligatoire` ; `test_tour_rend_les_questions_et_le_cout` ; `test_tour_deja_en_cours_refuse` ; `test_valider_cree_et_liste_le_projet` ; `test_valider_renvoie_aux_infos` ; `test_supprimer_garde_le_cout` ; `test_routes_exigent_le_code_d_acces` ; `test_aucun_projet_tant_que_rien_n_est_valide`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py bureau_creation serveur`).
-- [ ] **Étape 5 : commit** « Bureau : les routes de la création en deux fenêtres ».
+- [x] **Étape 1 : tests** : `test_infos_controle_et_cree_le_brouillon` ; `test_infos_description_obligatoire` ; `test_tour_rend_les_questions_et_le_cout` ; `test_tour_deja_en_cours_refuse` ; `test_valider_cree_et_liste_le_projet` ; `test_valider_renvoie_aux_infos` ; `test_supprimer_garde_le_cout` ; `test_routes_exigent_le_code_d_acces` ; `test_aucun_projet_tant_que_rien_n_est_valide`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py bureau_creation serveur`).
+- [x] **Étape 5 : commit** « Bureau : les routes de la création en deux fenêtres ».
 
 ### Tâche 11 : la page « Nouveau projet… » en deux fenêtres
 
@@ -246,9 +246,9 @@
 - Produit (fonctions pures exportées, testées) : `corpsInfos(champs, id)`, `verifierInfos(champs) -> message | null` (description obligatoire), `corpsTour(id, questions, valeurs) -> objet | null` (`null` si une question est sans réponse), `corpsCorrection(id, texte)`, `vueEchange(brouillon) -> {messages, questions, proposition, erreur, cout}`, `texteCout(cout) -> str` (« Coût de l'échange : 0,03 € » ; tokens si les prix manquent), `lignesProposition(proposition) -> [str]` (genre, étapes avec rôle, service et raison, « Validation du Directeur », agents, poste avec versions, coût d'un élément), `corpsValidation(id, {fable, installer, genreDescription})`.
 - Parcours : « Nouveau projet… » propose d'abord les brouillons existants (« Reprendre », « Supprimer », coût de chacun) ; fenêtre 1 (champs actuels + description obligatoire, bouton « Valider ») ; fenêtre 2 (messages du chef, un champ texte par question et les `choix` en boutons qui le remplissent, « Envoyer mes réponses », coût au fil de l'eau, un indicateur pendant l'appel) ; proposition (texte expliqué, description du genre nouveau pré-remplie et modifiable, case Fable par agent seulement si suggéré, case « Installer ce qui manque » si des outils sont à installer, « Valider et créer le projet », « Demander une correction » avec un texte) ; `retour: "infos"` ramène à la fenêtre 1 avec le message, l'échange gardé ; succès → `apresCreation`.
 
-- [ ] **Étape 1 : tests** : `infos exige la description` ; `tour exige une reponse par question` ; `un choix remplit la reponse` ; `cout affiche en euros ou en tokens` ; `proposition montre les validations et les raisons` ; `fable seulement si suggere` ; `retour infos garde l echange` ; `depuis une decision le formulaire actuel reste`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`node --test bureau/web/tests`).
-- [ ] **Étape 5 : commit** « Bureau : créer un projet en définissant son workflow avec le chef ».
+- [x] **Étape 1 : tests** : `infos exige la description` ; `tour exige une reponse par question` ; `un choix remplit la reponse` ; `cout affiche en euros ou en tokens` ; `proposition montre les validations et les raisons` ; `fable seulement si suggere` ; `retour infos garde l echange` ; `depuis une decision le formulaire actuel reste`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`node --test bureau/web/tests`).
+- [x] **Étape 5 : commit** « Bureau : créer un projet en définissant son workflow avec le chef ».
 
 ## Étape 6 — la vérification (avec l'utilisateur)
 

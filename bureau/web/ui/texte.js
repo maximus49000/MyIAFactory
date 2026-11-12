@@ -31,6 +31,32 @@ export function ilYA(date, maintenant = new Date()) {
   return "il y a " + dureeEnClair(m);
 }
 
+// Un agent local au travail (`travail` servi par le bureau : {depuis, agent, action, action_t}, heures ISO) :
+// {depuis: « 23 min » | « 1 h 05 », action: « dernière action il y a 2 min : modifie scenes/combat.gd » | null}, ou
+// null si on ne sait pas depuis quand. Calculé à chaque dessin : la durée suit chaque relecture de l'état.
+export function auTravail(travail, maintenant = new Date()) {
+  const m = minutesDepuis(travail?.depuis, maintenant);
+  if (m === null) return null;
+  const depuis = m < 1 ? "moins d'une minute"
+    : m < 60 ? `${Math.floor(m)} min` : `${Math.floor(m / 60)} h ${String(Math.floor(m % 60)).padStart(2, "0")}`;
+  let action = null;
+  if (typeof travail.action === "string" && travail.action.trim()) {
+    const a = minutesDepuis(travail.action_t, maintenant);
+    const quand = a === null ? "" : a < 1 ? " à l'instant" : " il y a " + dureeEnClair(a);
+    action = `dernière action${quand} : ${tronquer(travail.action.trim(), 80)}`;
+  }
+  return {depuis, action};
+}
+
+// Ce qui change dans ce que montre une tâche au travail (la minute qui passe, une nouvelle action) : la signature des
+// panneaux s'en sert pour se redessiner. null sans agent au travail.
+export function cleTravail(tache, maintenant = new Date()) {
+  const t = tache?.travail;
+  const m = minutesDepuis(t?.depuis, maintenant);
+  if (m === null) return null;
+  return [Math.floor(m), t.action || null, t.action_t || null];
+}
+
 // Le voyant de la factory : {libelle, ton} avec ton parmi ok | pause | alerte.
 export function voyant(factory, erreur, maintenant = new Date()) {
   if (erreur) return {libelle: "Relevé indisponible", ton: "alerte"};

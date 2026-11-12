@@ -104,6 +104,25 @@ test("ecrit : l'agent au travail écrit même si le chef est inactif ; l'attente
   assert.equal(ecrit({...f, attend_reponse: false}, travail), null);
 });
 
+test("ecrit : l'agent détaché au travail dit depuis quand et sa dernière action, même sans message attendu", () => {
+  const agents = [{id: "orion", prenom: "Orion"}];
+  const maintenant = new Date("2026-11-12T10:23:30+01:00");
+  const travail = {depuis: "2026-11-12T10:00:00+01:00", agent: "orion", action: "modifie scenes/combat.gd",
+                   action_t: "2026-11-12T10:21:10+01:00"};
+  const t = {id: "t1", agent: "orion", fonctionnalite: "f1", active: true, maj: "2026-11-12T10:00:00", travail};
+  const etat = {agents, orchestrateur_actif: true, taches: [t]};
+  const f = {id: "f1", attend_reponse: false, discussion: []};
+  assert.deepEqual(ecritDetail(f, etat, false, maintenant),
+                   {texte: "Orion est au travail depuis 23 min · dernière action il y a 2 min : modifie scenes/combat.gd",
+                    actif: true});
+  assert.equal(ecritDetail({...f, attend_reponse: true}, etat, false, maintenant).texte.startsWith("Orion est au travail"), true);
+  // Sans action encore connue : seulement depuis quand.
+  const seul = {...etat, taches: [{...t, travail: {...travail, action: null, action_t: null}}]};
+  assert.equal(ecritDetail(f, seul, false, maintenant).texte, "Orion est au travail depuis 23 min");
+  // Le message pas encore pris par le moteur : l'orchestrateur d'abord.
+  assert.equal(ecritDetail({...f, attend_reponse: true}, etat, true, maintenant).texte, "En attente de l'orchestrateur");
+});
+
 test("nouvelleApparue", () => {
   const avant = {fonctionnalites: [{id: "f1", discussion: [{texte: "Ancien"}]}]};
   const apres = {fonctionnalites: [{id: "f1", discussion: [{texte: "Ancien"}]},

@@ -87,6 +87,23 @@ class TestEtatServi(AvecServeur):
         attente.ecrire(attente.chemin_places(dossier), {"texte": texte}, maintenant=0)     # le moteur s'est arrêté
         self.assertIsNone(self.etat()["attente_validation"])
 
+    def test_l_agent_au_travail_dit_depuis_quand_et_sa_derniere_action(self):
+        import os
+        from moteur import detache
+        sans = self.etat()
+        self.assertTrue(all("travail" not in t for t in sans["taches"]))
+        tid = sans["taches"][0]["id"]
+        d = detache.dossier(self.tmp / "demo")
+        d.mkdir()
+        (d / f"{tid}.json").write_text(json.dumps({"tache": tid, "taches": [tid], "agent": "dev-1", "pid": os.getpid(),
+                                                   "debut": time.time() - 600}), encoding="utf-8")
+        (d / f"{tid}.jsonl").write_text(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Write", "input": {"file_path": "scenes/combat.gd", "content": "x"}}]}}) + "\n",
+            encoding="utf-8")
+        t = next(t for t in self.etat()["taches"] if t["id"] == tid)
+        self.assertEqual((t["travail"]["agent"], t["travail"]["action"]), ("dev-1", "écrit scenes/combat.gd"))
+        self.assertIn("depuis", t["travail"])
+
 
 if __name__ == "__main__":
     unittest.main()

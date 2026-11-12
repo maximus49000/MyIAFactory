@@ -22,6 +22,7 @@ from . import releve
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
+from moteur import detache
 
 WEB = Path(__file__).resolve().parent / "web"
 DELAI_ETAT_S = 2.0
@@ -212,6 +213,8 @@ class Projet:
                         t["attente"] = retenu["texte"]
             # Des places d'agents libres que rien ne peut prendre avant une validation du Directeur : dit dans la barre.
             e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
+            # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
+            detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
             e["images_ok"] = images_declarees(regl)
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)

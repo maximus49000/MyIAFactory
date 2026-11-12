@@ -124,8 +124,8 @@ l'agent de cadrage n'apparaît qu'au relevé suivant. Tant qu'elle n'est pas là
 chef soit en marche ou non ; « <prénom> va répondre — <raison> » quand l'agent attend (charge du poste, pause d'une
 installation d'outil) ; « En attente de l'orchestrateur » tant que votre message n'est pas repris par le relevé, ou si
 aucun orchestrateur ne tourne et qu'aucun agent n'est prêt. « Tourne » se juge à la
-fraîcheur du chef (30 minutes par défaut). Aucun format du relevé ni de l'état servi ne change : la page lit les
-champs déjà servis (`taches[].fonctionnalite/agent/active/attente`, `agents[].prenom`, `pause_installation`). Dans la démo, les réponses sont
+fraîcheur du chef (30 minutes par défaut). Le format du relevé ne change pas : la page lit les champs servis
+(`taches[].fonctionnalite/agent/active/attente/travail`, `agents[].prenom`, `pause_installation`). Dans la démo, les réponses sont
 fixes : un message de cadrage fait passer au cahier des charges, sa validation au prototype, la validation de la
 méthode à la série.
 
@@ -141,6 +141,31 @@ même le message, le moteur relance le même agent une fois, sur la même tâche
 corriger ; au deuxième refus la tâche est bloquée, avec la raison au bureau, et l'agent n'est plus « au travail ». Au
 démarrage, une tâche restée muette après un « Refusé par l'outil (message) » (agent attribué, tâche inactive, rien dit depuis)
 est relancée de la même façon, une fois.
+
+**Relancer le moteur n'interrompt plus les agents.** Un agent local (`claude -p`) tourne dans un processus détaché du
+moteur, sans fenêtre : son message est lu dans un fichier, sa sortie `stream-json` écrite dans
+`.factory/agents-en-cours/<tâche>.jsonl`, avec un petit état à côté (`<tâche>.json` : numéro du processus, tâche, agent,
+modèle, début, lot). Arrêter le moteur (Ctrl+C, mise à jour) laisse l'agent finir. Au redémarrage, le moteur relit ce
+dossier : un agent qui travaille encore est attendu (journal : « Le moteur a repris : l'agent travaille encore, son
+résultat sera lu. ») puis traité comme avant (usage, rapport, suite de la tâche) ; un agent qui a fini pendant l'arrêt
+voit son résultat lu ; un agent mort sans résultat donne l'ancien comportement (« l'agent avait disparu, nouvel essai »).
+Une tâche dont l'agent vit encore n'est jamais lancée deux fois. Les fichiers d'un agent sont effacés quand son résultat
+est appliqué. Un agent lancé par un moteur d'avant cette version (enfant du moteur, sortie par un tuyau) n'est pas
+retrouvé : il s'arrête avec son moteur et la tâche repart comme avant.
+
+**Depuis quand l'agent travaille.** Pendant qu'un agent local travaille, sa carte du Kanban, le panneau de la tâche et la
+discussion de la fonctionnalité disent « Orion est au travail depuis 23 min · dernière action il y a 2 min : modifie
+scenes/combat.gd », relu à chaque rafraîchissement. La dernière action se lit dans le flux de l'agent, en lecture seule :
+le nom de l'outil et du fichier (« lit », « modifie », « écrit », « lance python », « cherche dans les fichiers »,
+« rédige »), jamais le contenu d'une commande ou d'un fichier.
+
+**Une question à un agent en plein travail lui est transmise.** Un message dans la discussion d'une fonctionnalité dont
+un agent local travaille sur une tâche active n'ouvre plus de tâche « Retour » : la discussion répond « Question
+transmise à Orion : il répondra à la fin de sa tâche en cours. » (la question attend dans
+`.factory/agents-en-cours/<tâche>.questions.json`, elle survit à une relance du moteur). Quand la tâche repart (nouvel
+essai, réponse refusée), la question est ajoutée à sa matière ; sinon, sa tâche finie, l'agent reprend sa session
+`claude -p` (lecture seule : Read, Grep, Glob) et répond dans la discussion. Sans agent au travail, un message suit son
+cours habituel ; les agents cloud ne changent pas.
 
 Le **Directeur** montre en plus les cahiers et les méthodes à valider, les genres à confirmer, les « méthode à
 revoir ? » et les sessions cloud à créer (créez la session vous-même, puis donnez son nom et cliquez « C'est fait ») ;

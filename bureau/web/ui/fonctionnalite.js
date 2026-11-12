@@ -3,7 +3,7 @@
 // tout texte venu du relevé passe par textContent.
 
 import {el} from "./dom.js";
-import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage} from "./texte.js";
+import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage, auTravail} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
@@ -190,12 +190,20 @@ export async function preparerImage(fichier, moyens = moyensDuNavigateur()) {
 // demande pas encore prise par le moteur (`nonPrise`) → « En attente de l'orchestrateur » ; un agent qui va partir mais
 // attend (pause d'installation, charge) → « <Prénom> va répondre — <raison> » ; sans orchestrateur → « En attente de
 // l'orchestrateur » ; sinon l'agent va répondre. Rend {texte, actif} (actif : l'agent écrit, le point s'anime) ou null.
-export function ecritDetail(fonc, etat, nonPrise = false) {
-  if (!fonc || fonc.attend_reponse !== true) return null;
+// Un agent local au travail (`travail` servi par le bureau) : « Orion est au travail depuis 23 min · dernière action il y
+// a 2 min : modifie scenes/combat.gd », même sans message en attente de réponse.
+export function ecritDetail(fonc, etat, nonPrise = false, maintenant = new Date()) {
+  if (!fonc) return null;
   const taches = (etat?.taches || []).filter((t) => t.fonctionnalite === fonc.id)
     .sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
   const prenomDe = (qui) => (etat?.agents || []).find((a) => a.id === qui)?.prenom;
   const active = taches.find((t) => t.active && t.agent);
+  const travail = active && !nonPrise ? auTravail(active.travail, maintenant) : null;
+  if (travail) {
+    return {texte: `${prenomDe(active.agent) || active.agent} est au travail depuis ${travail.depuis}`
+      + (travail.action ? ` · ${travail.action}` : ""), actif: true};
+  }
+  if (fonc.attend_reponse !== true) return null;
   if (active && !nonPrise) return {texte: `${prenomDe(active.agent) || active.agent} est en train d'écrire…`, actif: true};
   if (nonPrise) return {texte: "En attente de l'orchestrateur", actif: false};
   // Celui qui va répondre : l'agent d'une tâche de la fonctionnalité, sinon le dernier agent qui a parlé, sinon le cadrage.

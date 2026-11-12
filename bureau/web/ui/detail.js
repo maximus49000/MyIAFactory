@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
+import {tronquer, ilYA, auTravail, dateFr,filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 
@@ -119,6 +119,8 @@ export function contenuTache(ctx, contenu, t) {
   const type = (e.types || []).find((x) => x.id === t.type);
   if (t.type) contenu.append(ligne("Type", type ? type.nom : t.type));
   contenu.append(ligne("Mise à jour", ilYA(t.maj)));
+  const travail = auTravail(t.travail);      // l'agent local au travail (dit par le bureau, relu à chaque état)
+  if (travail) contenu.append(ligne("Au travail", "depuis " + travail.depuis + (travail.action ? " · " + travail.action : "")));
   if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge du poste (dit par le moteur)
   if (t.bloquee) {
     const b = el("p", "bloquee");

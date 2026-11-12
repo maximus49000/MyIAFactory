@@ -2,7 +2,7 @@
 // Lecture seule, sauf le réglage de la charge maximum. Tout texte venu du serveur passe par textContent.
 
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
-import {tronquer, filtrer, filtreDeListe} from "./texte.js";
+import {tronquer, filtrer, filtreDeListe, cleTravail} from "./texte.js";
 import {el, ligne} from "./dom.js";
 import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
@@ -46,7 +46,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     }
     if (type === "partenaires") return JSON.stringify([e.partenaires, e.agir]);
     if (type === "tache") {
-      return JSON.stringify([(e.taches || []).find((t) => t.id === id), e.colonnes, e.types, e.agir, e.images_ok,
+      const t = (e.taches || []).find((x) => x.id === id);
+      return JSON.stringify([t, cleTravail(t), e.colonnes, e.types, e.agir, e.images_ok,
         (e.agents || []).map((a) => [a.id, a.prenom]), retourListe]);
     }
     if (type === "file") return JSON.stringify([(e.file?.visibles || []).find((q) => q.id === id), e.colonnes, e.agir]);
@@ -55,7 +56,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       return JSON.stringify([(e.fonctionnalites || []).find((f) => f.id === id), e.agir, e.images_ok,
         e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte, e.pause_installation?.texte,
         // Une tâche de la fonctionnalité qui bouge (un agent a fini) : le panneau se redessine et relit le coût.
-        (e.taches || []).filter((t) => t.fonctionnalite === id).map((t) => [t.id, t.maj, t.colonne, t.active, t.agent, t.attente])]);
+        (e.taches || []).filter((t) => t.fonctionnalite === id).map((t) => [t.id, t.maj, t.colonne, t.active, t.agent, t.attente,
+          cleTravail(t)])]);     // l'agent au travail : « depuis X min » suit la minute qui passe
     }
     if (type === "fonctionnalites") return JSON.stringify([e.fonctionnalites, e.agir]);
     if (type === "catalogue") {

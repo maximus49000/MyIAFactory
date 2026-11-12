@@ -20,6 +20,14 @@ test("colonnesKanban : une colonne par colonne du relevé, les tâches les plus 
   assert.deepEqual(colonnesKanban({}).length, 0);
 });
 
+test("colonnesKanban : la carte d'un agent au travail porte depuis quand et sa dernière action", () => {
+  const travail = {depuis: "2026-11-12T10:00:00+01:00", agent: "dev-1", action: "lit a.py", action_t: null};
+  const etat = {colonnes: [{id: "b", nom: "En cours"}],
+                taches: [{id: "t1", titre: "Un", colonne: "b", active: true, travail}, {id: "t2", titre: "Deux", colonne: "b"}]};
+  const [c] = colonnesKanban(etat);
+  assert.deepEqual(c.taches.map((t) => [t.id, t.travail]), [["t1", travail], ["t2", null]]);
+});
+
 test("colonnesKanban : une tâche sans post-it (le chef qui orchestre) n'est pas sur le Kanban, comme dans la scène", () => {
   const etat = {colonnes: [{id: "cadrage", nom: "Cadrage"}],
                 taches: [{id: "orchestration", titre: "Orchestration", colonne: "cadrage", postit: false},

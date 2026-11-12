@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {COLS} from "./donnees.js";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, filtrer, imagesUrl, imageLegendee, imagesLegendees, altImage, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, auTravail, cleTravail,filtrer, imagesUrl, imageLegendee, imagesLegendees, altImage, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -24,6 +24,20 @@ test("tronquer garde le texte hostile tel quel", () => {
 test("dureeEnClair", () => {
   assert.deepEqual([45, 60, 125, 47 * 60, 48 * 60, 5000].map(dureeEnClair),
                    ["45 min", "1 h", "2 h", "47 h", "2 j", "3 j"]);
+});
+
+test("auTravail : depuis quand l'agent travaille, et sa dernière action", () => {
+  const t = {depuis: ilYa(23), action: "modifie scenes/combat.gd", action_t: ilYa(2)};
+  assert.deepEqual(auTravail(t, MAINTENANT), {depuis: "23 min", action: "dernière action il y a 2 min : modifie scenes/combat.gd"});
+  assert.deepEqual(auTravail({...t, depuis: ilYa(65), action_t: ilYa(0.2)}, MAINTENANT),
+                   {depuis: "1 h 05", action: "dernière action à l'instant : modifie scenes/combat.gd"});
+  assert.deepEqual(auTravail({depuis: ilYa(0.5), action: null}, MAINTENANT), {depuis: "moins d'une minute", action: null});
+  assert.equal(auTravail({...t, action_t: null}, MAINTENANT).action, "dernière action : modifie scenes/combat.gd");
+  assert.equal(auTravail(null, MAINTENANT), null);
+  assert.equal(auTravail({depuis: "n'importe quoi"}, MAINTENANT), null);
+  // Ce qui redessine un panneau : la minute qui passe ou une nouvelle action.
+  assert.notDeepEqual(cleTravail({travail: t}, MAINTENANT), cleTravail({travail: t}, new Date(MAINTENANT.getTime() + 60000)));
+  assert.equal(cleTravail({}, MAINTENANT), null);
 });
 
 test("voyant", () => {

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from moteur import agents, appel, boucle, jugement, regles
+from moteur import agents, appel, boucle, detache, jugement, regles
 from tests.orch_aide import AvecProjet, factory_minimale
 
 FICHE_REMI = ("Clé : rel-1\nPrénom : Rémi\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\n"
@@ -34,10 +34,11 @@ class Agents:
 
     def __call__(self, depart, matiere, *, agent, modele, dossier_projet, tache=None, lot=None, **plus):
         self.lances.append({"agent": agent["cle"], "tache": tache, "modele": modele, "depart": depart,
-                            "matiere": matiere, "dossier": dossier_projet})
+                            "matiere": matiere, "dossier": dossier_projet, "fiche": agent, **plus})
         from moteur import rapport
         return agents.Execution(tache, agent["cle"], lot, rapport=rapport.lire(self.rapport) if self.rapport else None,
-                                usages=[dict(USAGE, modele="claude-opus-5-5")], erreur=None if self.rapport else "x")
+                                usages=[dict(USAGE, modele="claude-opus-5-5")], erreur=None if self.rapport else "x",
+                                session="s-1" if self.rapport else None)
 
 
 class Base(AvecProjet):
@@ -262,6 +263,129 @@ class Passage(Base):
         with mock.patch.object(regles, "avancer", side_effect=RuntimeError("boum")):
             self.moteur.tour()
         self.assertTrue(any("boum" in ligne for ligne in self.moteur.journal))
+
+
+class Detaches(Base):
+    """Les agents locaux détachés : le moteur relancé les retrouve ; une question de l'utilisateur leur est transmise."""
+
+    def setUp(self):
+        super().setUp()
+        self.vivants = set()
+        self.moteur = self.fabriquer([self.projet], registre=lambda d: detache.Registre(
+            d, vivant=lambda e: e.get("pid") in self.vivants, noter_abonnement=False))
+        self.ok("demande-traitee", entree={"id": self.demande(type="fonctionnalite", texte="Des écrans")})
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        self.tache = self.ok("tache", entree={"titre": "Développement : Accueil", "fonctionnalite": "f1", "role": "dev",
+                                              "colonne": "dev", "etape": "flux:dev", "element": "e1", "agent": "dev-1",
+                                              "active": True})["id"]
+        self.registre = detache.dossier(self.dossier)
+
+    def agent_en_cours(self, pid=4242, resultat=False):
+        self.registre.mkdir(exist_ok=True)
+        (self.registre / f"{self.tache}.json").write_text(json.dumps(
+            {"genre": "tache", "tache": self.tache, "taches": [self.tache], "agent": "dev-1", "modele": "sonnet",
+             "lot": None, "matiere": "Matière d'avant", "pid": pid, "debut": 1.0}), encoding="utf-8")
+        (self.registre / f"{self.tache}.jsonl").write_text(
+            '{"type": "result", "result": "x"}\n' if resultat else '{"type": "system"}\n', encoding="utf-8")
+
+    def journal(self):
+        return [j["texte"] for j in next(x for x in self.suivi()["taches"] if x["id"] == self.tache)["journal"]]
+
+    def tache_suivie(self):
+        return next(x for x in self.suivi()["taches"] if x["id"] == self.tache)
+
+    def test_un_agent_vivant_est_attendu_au_lieu_d_etre_relance(self):
+        self.agent_en_cours()
+        self.vivants.add(4242)
+        self.moteur.tour()
+        (lance,) = self.agents.lances
+        self.assertEqual((lance["tache"], lance["agent"], lance["matiere"]), (self.tache, "dev-1", "Matière d'avant"))
+        self.assertTrue(lance["executeur"].rattacher)
+        self.assertFalse(any("avait disparu" in j for j in self.journal()))
+        self.assertTrue(any("travaille encore" in j for j in self.journal()))
+        self.moteur.tour()                        # son résultat lu : la tâche est finie, l'agent oublié
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+        self.assertFalse((self.registre / f"{self.tache}.json").exists())
+        self.assertEqual(len(self.agents.lances), 1)
+
+    def test_un_agent_mort_avec_son_resultat_est_lu(self):
+        self.agent_en_cours(resultat=True)
+        self.moteur.tour()
+        (lance,) = self.agents.lances
+        self.assertTrue(lance["executeur"].rattacher)
+        self.assertTrue(any("avait fini" in j for j in self.journal()))
+
+    def test_un_agent_mort_sans_resultat_nouvel_essai(self):
+        self.agent_en_cours()
+        self.moteur.tour()
+        (lance,) = self.agents.lances
+        self.assertFalse(lance["executeur"].rattacher)
+        self.assertTrue(any("avait disparu" in j for j in self.journal()))
+
+    def test_le_depart_passe_par_le_registre_du_projet(self):
+        self.moteur.tour()
+        (lance,) = self.agents.lances          # la tâche orpheline (aucun agent connu) repart
+        self.assertFalse(lance["executeur"].rattacher)
+        self.assertEqual(lance["executeur"].registre.dossier, self.registre)
+
+    def test_une_question_pendant_le_travail_est_transmise_a_l_agent(self):
+        self.agent_en_cours()
+        self.vivants.add(4242)
+        self.moteur.synchrone = False
+        fini = __import__("threading").Event()
+        vrai = self.agents.__call__
+
+        def lent(*a, **k):
+            fini.wait(10)
+            return vrai(*a, **k)
+        self.moteur.executer_agent = lent
+        self.moteur.tour()                        # l'agent est attendu (dans un fil)
+        i = self.demande(type="message", fonctionnalite="f1", texte="Où en es-tu ?")
+        self.moteur.tour()
+        self.assertEqual(self.statut(i)["statut"], "traitée")
+        self.assertEqual([t["titre"] for t in self.suivi()["taches"] if t["titre"].startswith("Retour")], [])
+        dit = "Question transmise à Léa : il répondra à la fin de sa tâche en cours."
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertEqual(f["discussion"][-1]["texte"], dit)
+        self.assertEqual(detache.questions(self.dossier, self.tache), ["Où en es-tu ?"])
+        self.moteur.synchrone = True
+        self.moteur.executer_agent = self.agents
+        fini.set()
+        for _ in range(100):
+            if not self.moteur.retours.empty():
+                break
+            __import__("time").sleep(0.05)
+        self.moteur.tour()                        # la tâche finie : l'agent reprend sa session pour répondre
+        reponse = self.agents.lances[-1]
+        self.assertEqual(reponse["reprendre"], "s-1")
+        self.assertIn("Où en es-tu ?", reponse["depart"])
+        self.assertEqual(reponse["fiche"]["outils"], "Read, Grep, Glob")      # il répond, il ne travaille plus
+        self.assertEqual(detache.questions(self.dossier, self.tache), [])
+        self.moteur.tour()
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertEqual((f["discussion"][-1]["auteur"], f["discussion"][-1]["texte"]), ("dev-1", "Voilà."))
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+
+    def test_la_question_suit_la_tache_relancee(self):
+        """L'agent rend sans rapport : la tâche repart, la question va dans la matière de ce nouvel essai."""
+        self.agents.rapport = None
+        self.agent_en_cours()
+        self.vivants.add(4242)
+        detache.ajouter_question(self.dossier, self.tache, "Et le menu ?")
+        self.moteur.tour()
+        self.moteur.tour()
+        relance = self.agents.lances[-1]
+        self.assertEqual(relance["tache"], self.tache)
+        self.assertIn("Et le menu ?", relance["matiere"])
+        self.assertNotIn("reprendre", relance)
+
+    def test_sans_agent_au_travail_le_message_suit_son_cours(self):
+        self.ok("tache", entree={"id": self.tache, "active": False})
+        self.ok("tache", entree={"id": self.tache, "colonne": "fait"})
+        with mock.patch.object(regles, "_conseil", return_value=("lancer", "etat", None)) as conseil:
+            self.demande(type="message", fonctionnalite="f1", texte="Une idée")
+            self.moteur.tour()
+        self.assertEqual(conseil.call_count, 1)
 
 
 class Lecons(Base):

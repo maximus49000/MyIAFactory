@@ -381,6 +381,11 @@ relit (les deux processus sont séparés) et ajoute à `GET /api/etat` :
 
 Un fichier non réécrit depuis deux minutes est ignoré (le moteur s'est arrêté). Aucun chemin ni clé n'y figure.
 
+Une tâche dont l'agent local travaille (son processus vit, lu dans `.factory/agents-en-cours/`) porte aussi
+`travail` : `{depuis, agent, action, action_t}` (`depuis` : début du travail, heure ISO ; `action` : la dernière action
+de l'agent en quelques mots, « modifie scenes/combat.gd », ou `null` ; `action_t` : son heure ISO, ou `null`). Le reste
+d'un lot porte le même `travail`. Absent quand aucun agent local ne travaille sur la tâche.
+
 ## L'empreinte carbone estimée (champ `co2` des coûts servis)
 
 Le relevé ne porte rien de plus : l'empreinte est calculée par le bureau (`bureau/empreinte.py`, méthode EcoLogits) à partir des `sortie` de chaque usage et de son `modele`. Là où le bureau sert un coût en euros, il ajoute un champ `co2` (absent quand rien n'a pu être estimé, jamais `0` à la place d'un inconnu) :

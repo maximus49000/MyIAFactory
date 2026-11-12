@@ -1,0 +1,12 @@
+# Agents détachés du moteur — conception courte (2026-11-12)
+
+1. Un agent local (`claude -p`) part dans un processus détaché (`moteur/detache.py`, `lancer_processus`) : sans fenêtre (`CREATE_NO_WINDOW`), son propre groupe, hors du groupe de tâches du moteur quand Windows le permet ; entrée lue dans un fichier, sortie `stream-json` et erreurs écrites dans des fichiers : aucun tuyau que l'arrêt du moteur couperait.
+2. Tout est dans `.factory/agents-en-cours/` : `<tâche>.json` (pid, heure de création du processus, début, tâche, lot, agent, modèle, matière, genre), `<tâche>.jsonl`, `.err`, `.entree`, `.consigne.md`, `<tâche>.questions.json`.
+3. Le point d'entrée ne change pas : `agents.executer_agent` → `appel.appeler(executer=…)` ; l'exécuteur du `Registre` lance (ou rejoint) le processus, l'attend en relisant le fichier toutes les 2 s, et rend `(code, sortie)` lue dans le `.jsonl` : usages, instantané d'abonnement, rapport et `traiter_retour` sont inchangés.
+4. Plus de double lancement : un départ pour une tâche dont l'agent vit encore rejoint cet agent. Le délai de 30 min se compte depuis le début écrit dans l'état ; dépassé, l'agent est arrêté (`taskkill /T`).
+5. Au démarrage (`Moteur._rattacher_les_agents`, avant `orphelines`) : vivant → attendu (tâche remise « en cours ») ; mort avec sa ligne `result` → lu ; mort sans résultat → oublié, la tâche active repart par `orphelines` (« nouvel essai »).
+6. Un pid repris par un autre processus n'est pas pris pour l'agent : l'heure de création du processus est comparée.
+7. Le moteur arrêté proprement ne tue rien (fils démons, aucun lien vers l'agent) ; les fichiers d'un agent sont effacés dès son résultat appliqué.
+8. Le bureau (`serveur.etat`) ajoute à chaque tâche dont l'agent vit `travail` = `{depuis, agent, action, action_t}` ; la dernière action se lit dans les 64 derniers Ko du flux : outil et fichier seulement, jamais le contenu. La page en tire « au travail depuis X min » (carte, panneau, discussion), recalculé à chaque relecture.
+9. Un message de l'utilisateur pendant qu'un agent local travaille sur une tâche active de la fonctionnalité devient une question en attente (pas de tâche « Retour ») ; la discussion dit « Question transmise à Orion… ».
+10. À la fin de la tâche : si elle repart (nouvel essai, refus), la question entre dans sa matière ; sinon l'agent reprend sa session (`--resume`, outils de lecture seule) et sa réponse est posée dans la discussion. Agents cloud, plafond, charge et pause d'installation : inchangés.

@@ -8,8 +8,9 @@ Un passage, par projet, dans cet ordre (conception, section 4.1) :
 4. `avancer` : ce que dit le parcours à chaque étape (rien en pause : les demandes, elles, sont toujours traitées) ;
 5. les quotas des partenaires (l'outil ne relit qu'une fois par heure chacun).
 
-Tout passe par `regles` donc par `lancer`. Un appel de jugement est synchrone ; un agent tourne dans un fil (un par
-exécution) et rend son `Execution` dans une file lue au passage suivant. Chaque appel, de jugement ou d'agent, est noté
+Tout passe par `regles` donc par `lancer`. Un appel de jugement est synchrone ; un agent est attendu dans un fil (un par
+exécution) et rend son `Execution` dans une file lue au passage suivant. Un agent local tourne dans un processus détaché
+du moteur (`moteur.detache`) : relancer le moteur ne l'interrompt pas, le moteur suivant le retrouve et l'attend. Chaque appel, de jugement ou d'agent, est noté
 par `lancer usage` (le coût de l'orchestration reste ainsi à part de la production). Une erreur n'arrête jamais la
 boucle : elle est dite au bureau (réponse de la demande, journal de la tâche) ou, à défaut, gardée dans `journal`.
 """
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from bureau import attente
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, jugement, regles
+from moteur import agents, appel, cloud, detache, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
@@ -41,6 +42,26 @@ DELAI_GIT_S = 60
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
 ECRITURE_LECONS_TOUS_LES_S = 300  # une leçon validée mais pas encore écrite dans la mémoire de la skill est réessayée ainsi
 REECRIRE_TOUS_LES_S = 20        # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
+OUTILS_DE_REPONSE = "Read, Grep, Glob"   # l'agent qui répond à une question lit, il ne modifie rien
+
+
+def texte_des_questions(questions):
+    """Les questions de l'utilisateur posées pendant la tâche, pour la matière de l'agent."""
+    return ("Pendant que tu travaillais, l'utilisateur t'a écrit dans la discussion :\n"
+            + "\n".join(f"- « {q} »" for q in questions)
+            + "\nRéponds-lui dans `message.texte` de ton rapport, en plus de ton compte rendu.")
+
+
+def depart_de_reponse(tache, questions, session, rendu=None):
+    """Le message de l'agent qui répond, sa tâche finie : sa session reprise, sinon de quoi se souvenir."""
+    parties = [f"Ta tâche {tache} est terminée. Pendant que tu y travaillais, l'utilisateur t'a écrit dans la "
+               "discussion :", "\n".join(f"- « {q} »" for q in questions)]
+    if not session and rendu:
+        parties.append("Ton compte rendu de la tâche : " + " ".join(str(rendu).split())[:1500])
+    parties.append("Réponds-lui maintenant, en quelques phrases, à partir de ce que tu as fait : ne refais rien et ne "
+                   "modifie aucun fichier. Termine par le bloc ```json "
+                   '{"statut": "fait", "message": {"texte": "ta réponse", "attend": false}}.')
+    return "\n\n".join(parties)
 
 
 def ouvrir_projet(fichier_reglages, environ=None):
@@ -97,10 +118,13 @@ class Moteur:
     un fil) sont là pour les essais."""
 
     def __init__(self, projets, *, appeler=appel.appeler, horloge=time.time, bureau=None, environ=None,
-                 executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None):
+                 executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None,
+                 registre=None):
         self.appeler, self.horloge, self.bureau, self.environ = appeler, horloge, bureau, environ
         self.executer_agent, self.commit, self.synchrone = executer_agent, commit, synchrone
         self.cloud = session_cloud or cloud      # le module (ou un faux) qui parle aux sessions cloud
+        self.registre_de = registre or detache.Registre    # dossier de la factory -> les agents détachés du projet
+        self._registres = {}
         self.projets, self.etats, self.retours, self.journal = [], {}, queue.Queue(), []
         self.dernier_quota = {}
         self.file_installations = []       # (clé du projet, tâche) des installations prêtes, dans l'ordre d'arrivée
@@ -120,6 +144,12 @@ class Moteur:
 
     def _etat(self, projet):
         return self.etats[str(projet.factory)]
+
+    def _registre(self, projet):
+        cle = str(projet.factory)
+        if cle not in self._registres:
+            self._registres[cle] = self.registre_de(projet.factory.parent)
+        return self._registres[cle]
 
     def _noter(self, projet, texte):
         self.journal.append(f"{projet.nom} : {texte}")
@@ -177,6 +207,10 @@ class Moteur:
             regles.lancer(projet, "partenaires", {"action": "detecter"})
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"partenaires : {e}")
+        try:
+            self._rattacher_les_agents(projet, etat)
+        except (regles.Refus, regles.ErreurMoteur, OSError) as e:
+            self._noter(projet, f"agents en cours : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
         self._retrouver_les_sessions(projet, etat)
         try:    # un projet créé au bureau avec une description : son genre est proposé sans attendre une demande
@@ -374,21 +408,135 @@ class Moteur:
         if fiche is None:
             raise regles.Refus(f"agent inconnu : {cle}")
         modele = (d.get("modele") or fiche["modele"]).lower()
+        if fiche["lieu"] != "cloud":
+            infos = {"genre": "tache", "tache": taches[0], "taches": list(taches), "agent": cle, "modele": modele,
+                     "lot": d.get("lot"), "matiere": matiere}
+            self._lancer_local(projet, fiche, modele, taches[0], infos, depart, matiere, tache=taches[0],
+                               lot=d.get("lot"))
+            return
 
         def travail():
-            if fiche["lieu"] == "cloud":
-                e = self._partir_cloud(projet, etat, depart, fiche, modele, taches, d)
-                if e is None:
-                    return
-            else:
-                e = self.executer_agent(depart, matiere, agent=fiche, modele=modele,
-                                        dossier_projet=str(projet.dossier), tache=taches[0], lot=d.get("lot"))
-            self.retours.put((projet, e))
+            e = self._partir_cloud(projet, etat, depart, fiche, modele, taches, d)
+            if e is not None:
+                self.retours.put((projet, e))
 
         if self.synchrone:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{cle}", daemon=True).start()
+
+    # --- Les agents locaux : détachés du moteur (`moteur.detache`), retrouvés quand il redémarre.
+
+    def _lancer_local(self, projet, fiche, modele, cle_registre, infos, depart, matiere, *, tache, lot,
+                      rattacher=False, reprendre=None, reponse=None):
+        """L'agent local, dans son processus détaché (ou celui qui tourne déjà pour cette tâche) ; son `Execution`
+        revient par la file `retours`. `reponse` : une réponse aux questions de l'utilisateur, pas une tâche."""
+        executeur = self._registre(projet).executeur(cle_registre, infos, rattacher=rattacher)
+        executeur.rattacher, executeur.registre = rattacher, self._registre(projet)
+        plus = {"reprendre": reprendre} if reprendre else {}
+
+        def travail():
+            e = self.executer_agent(depart, matiere, agent=fiche, modele=modele, dossier_projet=str(projet.dossier),
+                                    tache=tache, lot=lot, executeur=executeur, **plus)
+            if reponse is not None:
+                e.reponse = reponse
+            self.retours.put((projet, e))
+
+        if self.synchrone:
+            travail()
+        else:
+            threading.Thread(target=travail, name=f"agent-{fiche['cle']}", daemon=True).start()
+
+    def _rattacher_les_agents(self, projet, etat):
+        """Au démarrage : les agents détachés laissés par le moteur d'avant. Vivant, il est attendu ; mort avec son
+        résultat, ce résultat est lu ; mort sans résultat, il est oublié (la tâche, active, repart par `orphelines`)."""
+        registre = self._registre(projet)
+        entrees = registre.entrees()
+        if not entrees:
+            return
+        fiches = fi.lire_toutes(fa.lire(projet.factory)["fiches"])
+        for info in entrees:
+            cle = info["cle"]
+            issue = registre.issue(cle)
+            fiche = fi.trouver(fiches, info.get("agent")) if info.get("agent") else None
+            if fiche is None or (issue not in ("vivant", "resultat") and info.get("genre") != "reponse"):
+                registre.effacer(cle)
+                continue
+            tid = info.get("tache") or cle
+            modele = (info.get("modele") or fiche["modele"]).lower()
+            if info.get("genre") == "reponse":     # une réponse aux questions : attendue, ou redemandée
+                questions = [q for q in info.get("questions") or [] if isinstance(q, str)]
+                if issue not in ("vivant", "resultat"):
+                    registre.effacer(cle)
+                    if questions:
+                        self._repondre(projet, etat, tid, fiche["cle"], questions, info.get("session"), modele=modele)
+                    continue
+                self._lancer_local(projet, self._fiche_de_reponse(fiche), modele, cle, info, "", "", tache=tid,
+                                   lot=None, rattacher=True, reponse={"fonctionnalite": info.get("fonctionnalite"),
+                                                                      "questions": questions, "cle": cle})
+                continue
+            taches = [x for x in info.get("taches") or [tid] if isinstance(x, str)] or [tid]
+            etat["departs"][tid] = {"agent": fiche["cle"], "taches": taches, "matiere": info.get("matiere") or "",
+                                    "modele": modele, "lot": info.get("lot"), "suite": None}
+            etat["en_cours"].add(tid)
+            try:
+                regles.lancer(projet, "tache", {"id": tid, "journal": [
+                    "Le moteur a repris : l'agent travaille encore, son résultat sera lu." if issue == "vivant"
+                    else "Le moteur a repris : l'agent avait fini, son résultat est lu."]})
+            except (regles.Refus, regles.ErreurMoteur) as e:
+                self._noter(projet, f"agent repris ({tid}) : {e}")
+            self._lancer_local(projet, fiche, modele, cle, info, "", info.get("matiere") or "", tache=tid,
+                               lot=info.get("lot"), rattacher=True)
+
+    @staticmethod
+    def _fiche_de_reponse(fiche):
+        """L'agent qui répond à une question ne travaille plus : il lit, il ne modifie rien."""
+        return {**fiche, "outils": OUTILS_DE_REPONSE}
+
+    def _transmettre_les_questions(self, projet, etat, e, actions):
+        """Les questions posées pendant la tâche : dans la matière de la tâche si elle repart (nouvel essai, réponse
+        refusée), sinon l'agent reprend sa session pour y répondre."""
+        questions = detache.prendre_questions(projet.factory.parent, e.tache)
+        if not questions:
+            return actions
+        bloc = texte_des_questions(questions)
+        for i, a in enumerate(actions):
+            if a[0] == "agent" and a[2] and a[2][0] == e.tache:
+                matiere = (a[3] or "").rstrip() + "\n\n" + bloc
+                actions[i] = (a[0], a[1], a[2], matiere)
+                if e.tache in etat["departs"]:
+                    etat["departs"][e.tache]["matiere"] = matiere
+                return actions
+        modele = (etat["departs"].get(e.tache) or {}).get("modele")
+        self._repondre(projet, etat, e.tache, e.agent, questions, e.session, modele=modele,
+                       rendu=((e.rapport or {}).get("message") or {}).get("texte"))
+        return actions
+
+    def _repondre(self, projet, etat, tid, agent, questions, session, *, modele=None, rendu=None):
+        fiche = fi.trouver(fi.lire_toutes(fa.lire(projet.factory)["fiches"]), agent)
+        fid = regles.lancer(projet, "detail", {"tache": tid}).get("fonctionnalite")
+        if fiche is None or fiche["lieu"] == "cloud" or not fid:
+            self._noter(projet, f"questions pour {agent} sans réponse possible : {' / '.join(questions)}")
+            return
+        modele = (modele or fiche["modele"]).lower()
+        cle = f"{tid}.reponse"
+        infos = {"genre": "reponse", "tache": tid, "agent": fiche["cle"], "modele": modele, "fonctionnalite": fid,
+                 "questions": questions, "session": session}
+        self._lancer_local(projet, self._fiche_de_reponse(fiche), modele, cle, infos,
+                           depart_de_reponse(tid, questions, session, rendu), "", tache=tid, lot=None,
+                           reprendre=session, reponse={"fonctionnalite": fid, "questions": questions, "cle": cle})
+
+    def _poser_la_reponse(self, projet, e):
+        """La réponse de l'agent aux questions de l'utilisateur, dans la discussion (sinon pourquoi elle manque)."""
+        fid = e.reponse.get("fonctionnalite")
+        texte = ((e.rapport or {}).get("message") or {}).get("texte") if e.rapport else None
+        if not fid:
+            return
+        if isinstance(texte, str) and texte.strip():
+            regles.lancer(projet, "message", {"fonctionnalite": fid, "auteur": e.agent, "texte": texte.strip()})
+            return
+        regles._dire(projet, fid, f"{regles.prenom_de(projet, e.agent)} n'a pas pu répondre à votre question "
+                                  f"({e.erreur or 'réponse vide'}) : posez-la de nouveau si elle tient toujours.")
 
     # --- Les agents cloud : une session par départ, relevée par le dépôt.
 
@@ -497,6 +645,14 @@ class Moteur:
             if p is not projet:
                 garde.append((p, e))
                 continue
+            if getattr(e, "reponse", None) is not None:     # la réponse aux questions de l'utilisateur
+                self._noter_usages(projet, e.usages, e.agent, None, tache=e.tache)
+                try:
+                    self._poser_la_reponse(projet, e)
+                except (regles.Refus, regles.ErreurMoteur) as ex:
+                    self._noter(projet, f"réponse de {e.agent} : {ex}")
+                self._registre(projet).effacer(e.reponse.get("cle") or f"{e.tache}.reponse")
+                continue
             self._noter_usages(projet, e.usages, e.agent, None, tache=e.tache, lot=e.lot)
             if e.estime is not None:      # un agent cloud : son estimation, notée comme telle (`total`)
                 self._noter_estimation(projet, e)
@@ -505,6 +661,13 @@ class Moteur:
             except (regles.Refus, regles.ErreurMoteur) as ex:
                 self._noter(projet, f"retour de {e.agent} : {ex}")
                 continue
+            finally:
+                if e.estime is None:      # un agent local : son résultat est appliqué, ses fichiers sont oubliés
+                    self._registre(projet).effacer(e.tache)
+            try:
+                actions = self._transmettre_les_questions(projet, etat, e, list(actions))
+            except (regles.Refus, regles.ErreurMoteur, OSError) as ex:
+                self._noter(projet, f"questions pour {e.agent} : {ex}")
             self._executer(projet, actions)
             if e.rapport is not None:
                 self.commit(projet.dossier, "Factory : " + self._produit(e))

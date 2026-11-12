@@ -27,7 +27,7 @@ import unicodedata
 from pathlib import Path
 
 from installation import estimation
-from moteur import agents, cloud, environnement, rapport
+from moteur import agents, cloud, detache, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import releve as rel
 from orchestrateur.memoire import normaliser_mot
@@ -338,12 +338,55 @@ def _conseil(projet, etat, evenement, fid, **plus):
     return a_juger("conseil", dossier, {"demande": evenement.get("id"), "fonctionnalite": fid})
 
 
+def prenom_de(projet, cle):
+    """Le prénom de l'agent (sa fiche), sinon sa clé."""
+    try:
+        fiche = fi.trouver(fi.lire_toutes(_factory(projet)["fiches"]), cle)
+    except (OSError, fi.FicheInvalide, ErreurMoteur):
+        fiche = None
+    return (fiche or {}).get("prenom") or cle
+
+
+def agent_au_travail(projet, etat, fid):
+    """`(tâche, agent)` : l'agent local en plein travail sur une tâche active de la fonctionnalité, ou `None`."""
+    en_cours = _m(etat, "en_cours", set)
+    if not en_cours:
+        return None
+    court = _etat(projet)
+    for t in court["taches"]:
+        if (t.get("fonctionnalite") == fid and t.get("active") and t.get("agent") and t["id"] in en_cours
+                and not fiche_cloud(court, t["agent"])):
+            return t["id"], t["agent"]
+    return None
+
+
+def texte_question_transmise(prenom):
+    return f"Question transmise à {prenom} : il répondra à la fin de sa tâche en cours."
+
+
+def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
+    """Un message de l'utilisateur pendant qu'un agent travaille : il lui est transmis (pas de tâche « Retour ») ; le
+    moteur le lui donne à la fin de sa tâche (`boucle.Moteur._transmettre_les_questions`)."""
+    texte = " ".join(str(demande.get("texte") or "").split())
+    n = len(demande.get("images") or [])
+    if n:
+        texte += f" (avec {n} image{'s' if n > 1 else ''}, visible{'s' if n > 1 else ''} dans la discussion)"
+    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)")
+    dit = texte_question_transmise(prenom_de(projet, agent))
+    _dire(projet, fid, dit)
+    _terminer(projet, {"demande": demande["id"]}, dit)
+    return []
+
+
 def _sur_message(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
     accord = _m(etat, "accords").get(fid)
     if accord is not None and f["etape"] in ("cadrage", "cahier", "prototype", "serie"):
         return _reponse_a_une_question(projet, etat, demande, f, accord)
+    travail = agent_au_travail(projet, etat, fid)
+    if travail is not None:
+        return _transmettre_a_l_agent(projet, demande, fid, *travail)
     if f["etape"] == "cadrage" and fid in _m(etat, "proposition_ratee"):
         return _reponse_proposition_ratee(projet, etat, demande, fid)
     if f["etape"] == "cadrage" and _en_parcours(projet, etat, fid):

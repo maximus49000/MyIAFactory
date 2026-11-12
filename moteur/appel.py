@@ -173,7 +173,8 @@ def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail
     if r is None:
         raise ErreurAppel(f"sortie de claude illisible : {_extrait(sortie)}")
     usages = _usages_de(r, snap)
-    if executer is _executer_claude:   # jamais un exécuteur injecté (tests) : le dossier commun reste intact
+    # jamais un exécuteur injecté (tests) : le dossier commun reste intact ; l'agent détaché (`moteur.detache`) le dit
+    if executer is _executer_claude or getattr(executer, "noter_abonnement", False) is True:
         abonnement.noter(snap, r.get("total_cost_usd"))
     if r.get("is_error") or r.get("subtype", "success") != "success":
         raise ErreurAppel(f"claude signale une erreur ({r.get('subtype')}) : {str(r.get('result', ''))[:200]}",

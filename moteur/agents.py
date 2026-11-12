@@ -32,10 +32,13 @@ class Execution:
     """Le résultat d'un agent : `rapport` (lu) ou `erreur` (jamais les deux), `usages` (un par modèle, tous les appels
     cumulés), `usage` (le principal), `tache` et `lot` (ce que l'agent servait)."""
 
-    def __init__(self, tache, agent, lot=None, rapport=None, usages=None, erreur=None, estime=None, modele=None):
+    def __init__(self, tache, agent, lot=None, rapport=None, usages=None, erreur=None, estime=None, modele=None,
+                 session=None):
         self.tache, self.agent, self.lot, self.rapport, self.erreur = tache, agent, lot, rapport, erreur
         self.estime = estime      # un agent cloud : le total de tokens qu'il déclare (une estimation, pas une mesure)
         self.modele = modele      # le modèle demandé (« haiku », « sonnet », « opus »)
+        self.session = session    # la session `claude -p` (local) : une question de l'utilisateur la reprend
+        self.reponse = None       # une réponse aux questions de l'utilisateur : `{fonctionnalite, questions}`
         self.usages = usages or []
         self.usage = self.usages[0] if self.usages else dict(USAGE_VIDE)
 
@@ -56,8 +59,10 @@ def cumuler(usages):
 
 
 def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=appel.appeler, tache=None, lot=None,
-                   delai_s=DELAI_AGENT_S):
-    """Lance l'agent (`agent` : sa fiche) sur `modele` (« haiku », « sonnet » ou « opus », casse libre)."""
+                   delai_s=DELAI_AGENT_S, executeur=None, reprendre=None):
+    """Lance l'agent (`agent` : sa fiche) sur `modele` (« haiku », « sonnet » ou « opus », casse libre).
+    `executeur` : celui d'un agent détaché (`moteur.detache.Registre.executeur`) ; `reprendre` : la session à
+    poursuivre (une réponse aux questions de l'utilisateur)."""
     cle = agent["cle"]
     m = (modele or "").strip().lower()
     fable = m == "fable" and fiches.fable_accorde(agent)
@@ -70,6 +75,10 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
     for _ in range(ESSAIS):
         try:
             plus = {"fable_accorde": True} if fable else {}
+            if executeur is not None:
+                plus["executer"] = executeur
+            if reprendre:
+                plus["reprendre"] = reprendre
             r = appeler(CONSIGNE_AGENT, message, m, couche="claude", outils=fiches.outils(agent),
                         dossier_travail=str(dossier_projet), delai_s=delai_s, **plus)
         except appel.ErreurAppel as e:
@@ -82,6 +91,6 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
         except rapport.RapportIllisible as e:
             erreur = f"rapport illisible : {e}"
             continue
-        return Execution(tache, cle, lot, rapport=lu, usages=cumuler(usages))
+        return Execution(tache, cle, lot, rapport=lu, usages=cumuler(usages), session=getattr(r, "session", None))
     return Execution(tache, cle, lot, usages=cumuler(usages),
                      erreur=f"{erreur} (deux essais sans rapport utilisable)")

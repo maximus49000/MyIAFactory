@@ -114,6 +114,11 @@ class Contexte:
             return {}
         return {k: v for k, v in d.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(d, dict) else {}
 
+    def image_rangee(self, image, fid, servie="images"):
+        """Une image rendue par un agent (chemin ou `{chemin, legende}`), rangée là où le bureau la sert (voir
+        `image_rangee`) : le seul point par où passent les images d'un agent, quel que soit le champ."""
+        return image_d_agent_rangee(self.f, self.f["base"].parent, image, fid, servie)
+
     def chemin_relatif(self, chemin):
         """Un chemin relatif au fichier de factory, vu depuis le dossier des réglages (ce que le bureau attend)."""
         absolu = os.path.join(str(self.f["base"]), str(chemin))
@@ -170,6 +175,80 @@ def images_montrables(chemins, cle):
             raise Refus(f"« {cle} » : « {c} » n'est pas une image PNG ou JPEG, et le bureau ne montre que celles-là. "
                         "Convertissez-la en PNG (par exemple une capture de son rendu), puis donnez ce chemin.")
     return chemins
+
+
+IMAGE_RANGEE_MAX_OCTETS = 20 * 1024 * 1024     # ce que le bureau accepte de servir
+RACINES_PAR_DEFAUT = {"images": ["pieces", "captures"], "livrables": ["livrables"]}
+
+
+def racines_servies(f, cle="images"):
+    """(dossier des réglages, racines résolues de `cle` (`images` ou `livrables`) dans les réglages, dossier `pieces`) :
+    ce que le bureau sert pour ce genre de fichier. `f` est le fichier de factory lu par `factory.lire`."""
+    base, racines = f["base"], list(RACINES_PAR_DEFAUT[cle])
+    try:
+        if f["reglages"]:
+            base = Path(f["reglages"]).resolve().parent
+            conf = json.loads(Path(f["reglages"]).read_text(encoding="utf-8-sig")).get(cle)
+            if isinstance(conf, dict) and isinstance(conf.get("racines"), list):
+                racines = [x for x in conf["racines"] if isinstance(x, str) and x]
+    except (OSError, ValueError, AttributeError):
+        pass
+    return base, [(base / x).resolve() for x in racines], Path(f["pieces"] or base / "pieces").resolve()
+
+
+def _sous(chemin, dossier):
+    try:
+        chemin.relative_to(dossier)
+        return True
+    except ValueError:
+        return False
+
+
+def image_rangee(f, dossier_projet, chemin, fid, servie="images"):
+    """LE point où une image citée par un agent est rangée là où le bureau la sert (`f` : le fichier de factory lu,
+    `dossier_projet` : le parent de `.factory`, où travaille l'agent). Une image PNG ou JPEG (extension et début du
+    contenu vérifiés, 20 Mo au plus) qui existe dans le dossier du projet est rendue comptée depuis le fichier de
+    factory ; si elle n'est pas sous une racine de `servie` (`images` : `pieces/<fid>/` ; `livrables` : la première
+    racine de livrables, `<fid>/`), elle y est COPIÉE (jamais déplacée, jamais écrasée : suffixe -2, -3 ; la même
+    image déjà rangée n'est pas doublée). Absente, hors du projet, lien sortant ou pas une image : le chemin est
+    gardé tel quel et rien n'est copié."""
+    if (not isinstance(fid, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", fid) or not isinstance(chemin, str)
+            or not chemin.strip() or "\x00" in chemin):
+        return chemin
+    p = Path(chemin.replace("\\", "/"))
+    signature = SIGNATURES.get(p.suffix.lower())
+    if signature is None:
+        return chemin
+    base, racines, pieces = racines_servies(f, servie)
+    projet = Path(dossier_projet).resolve()
+    try:
+        candidats = [p] if p.is_absolute() else [f["base"] / p, base / p, projet / p]
+        source = next((c.resolve() for c in candidats if c.is_file()), None)
+        if source is None or not _sous(source, projet) or source.stat().st_size > IMAGE_RANGEE_MAX_OCTETS:
+            return chemin
+        octets = source.read_bytes()
+        if not octets.startswith(signature[0]):
+            return chemin
+        cible = source
+        if not any(_sous(source, r) for r in racines):
+            dossier = (racines[0] if servie == "livrables" and racines else pieces) / fid
+            dossier.mkdir(parents=True, exist_ok=True)
+            cible, n = dossier / source.name, 1
+            while cible.exists() and cible.read_bytes() != octets:
+                n += 1
+                cible = dossier / f"{source.stem}-{n}{source.suffix}"
+            if not cible.exists():
+                cible.write_bytes(octets)
+        return Path(os.path.relpath(cible, f["base"])).as_posix()
+    except OSError:
+        return chemin
+
+
+def image_d_agent_rangee(f, dossier_projet, image, fid, servie="images"):
+    """Une image `chemin` ou `{chemin, legende}` passée par `image_rangee` ; la légende reste avec son image."""
+    if isinstance(image, dict):
+        return {**image, "chemin": image_rangee(f, dossier_projet, image.get("chemin"), fid, servie)}
+    return image_rangee(f, dossier_projet, image, fid, servie)
 
 
 ORIGINE_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache")
@@ -638,6 +717,10 @@ def cmd_fonctionnalite(ctx, e):
             if cle in e:
                 if e[cle] is not None:
                     controle(e[cle])
+                    if cle == "cahier":
+                        e[cle]["maquette"] = [ctx.image_rangee(x, f["id"]) for x in e[cle]["maquette"]]
+                    elif cle == "livrable" and e[cle].get("chemin"):
+                        e[cle]["chemin"] = ctx.image_rangee(e[cle]["chemin"], f["id"], "livrables")
                 if cle == "cahier":
                     _archiver_cahier(f, e[cle])
                 f[cle] = e[cle]
@@ -664,6 +747,8 @@ def cmd_message(ctx, e):
         images_montrables(chemins_d_images(images), "images")
         if len(images) > MAX_IMAGES:
             raise Refus(f"Au plus {MAX_IMAGES} images par message.")
+        if e.get("auteur") != "utilisateur":
+            images = [ctx.image_rangee(x, e.get("fonctionnalite")) for x in images]
     questions = e.get("questions")
     if questions is not None:   # des questions à choix : le bureau montre un bouton par choix
         if auteur == "utilisateur":
@@ -827,7 +912,7 @@ def _validation_decidee(ctx, s, e):
         raise Refus("« fichiers » est une liste de {chemin, titre}.")
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
             "tache": tache, "compte_rendu": compte_rendu,
-            "fichiers": [{"chemin": x["chemin"], "titre": x["titre"]} for x in fichiers]}
+            "fichiers": [{"chemin": ctx.image_rangee(x["chemin"], fid), "titre": x["titre"]} for x in fichiers]}
 
 
 def _phrase(e, cle):
@@ -1197,6 +1282,7 @@ def cmd_tache(ctx, e):
         if "captures" in e:
             t["captures"] = liste_d_images(e["captures"], "captures")
             images_montrables(chemins_d_images(t["captures"]), "captures")
+            t["captures"] = [ctx.image_rangee(x, t["fonctionnalite"]) for x in t["captures"]]
         if "journal" in e:
             ajouts = [e["journal"]] if isinstance(e["journal"], str) else e["journal"]
             if not isinstance(ajouts, list) or not all(isinstance(x, str) and x for x in ajouts):
@@ -1215,7 +1301,9 @@ def cmd_tache(ctx, e):
 
 def cmd_document(ctx, e):
     """Inscrit un fichier produit pour une fonctionnalité dans ses documents, avec son origine."""
-    chemin = texte(e, "chemin")
+    chemin = original = texte(e, "chemin")
+    if "\x00" not in chemin:
+        chemin = ctx.image_rangee(chemin, e.get("fonctionnalite"))   # une image hors des racines est copiée dans les pièces
     if "\x00" in chemin or Path(chemin).is_absolute() or chemin[0] in "/\\":
         raise Refus("« chemin » doit être relatif au fichier de factory.")
     origine = {cle: texte(e, cle, obligatoire=False) for cle in ORIGINE_DOCUMENT}
@@ -1224,6 +1312,13 @@ def cmd_document(ctx, e):
         raise Refus("« livrable » doit être vrai ou faux.")
     with ctx.suivi.transaction() as s:
         f = _fonc(s, e.get("fonctionnalite"))
+        if chemin != original:   # le même document, rangé : l'ancienne entrée prend le nouveau chemin (ou disparaît si déjà là)
+            ancien = next((x for x in f.get("documents") or [] if x["chemin"] == original), None)
+            if ancien is not None:
+                if any(x["chemin"] == chemin for x in f["documents"]):
+                    f["documents"].remove(ancien)
+                else:
+                    ancien["chemin"] = chemin
         documents = ranger_documents(s, f, [chemin], texte(e, "titre"), **origine)
         d = next(x for x in documents if x["chemin"] == chemin)
         remplace = texte(e, "remplace", obligatoire=False)

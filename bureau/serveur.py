@@ -1097,9 +1097,34 @@ class Handler(BaseHTTPRequestHandler):
                 type_ = IMAGES.get(cible.suffix.lower())  # la cible d'un lien symbolique peut n'être pas une image
                 if type_ and cible.is_file() and cible.stat().st_size <= IMAGE_MAX_OCTETS:
                     return self._envoyer(200, cible.read_bytes(), type_, cache="max-age=300")
+            trouvee = self._image_du_projet(base, brut)
+            if trouvee is not None:
+                return self._envoyer(200, trouvee[0], trouvee[1], cache="max-age=300")
         except (OSError, ValueError):
             pass
         return introuvable()
+
+    @staticmethod
+    def _image_du_projet(base, brut):
+        """Le filet : une image citée par un agent depuis la racine du PROJET (le parent de `.factory`, quand les
+        réglages sont dans un dossier `.factory`) et jamais rangée sous une racine. `(octets, type)` ou `None`. Refus :
+        « .. », chemin qui sort du projet (lien compris), extension hors PNG/JPEG, contenu qui n'en est pas un, fichier
+        dans `.factory` lui-même (seules ses racines déclarées s'y servent) ou dans `.git`."""
+        if base.name != ".factory" or ".." in Path(brut.replace("\\", "/")).parts:
+            return None
+        projet = base.parent.resolve()
+        cible = (projet / brut).resolve()
+        type_ = IMAGES.get(cible.suffix.lower())
+        try:
+            interne = cible.relative_to(projet).parts
+        except ValueError:
+            return None
+        if (not type_ or not interne or interne[0].lower() in (".factory", ".git") or not cible.is_file()
+                or cible.stat().st_size > IMAGE_MAX_OCTETS):
+            return None
+        octets = cible.read_bytes()
+        signature = b"\x89PNG\r\n\x1a\n" if type_ == "image/png" else b"\xff\xd8\xff"
+        return (octets, type_) if octets.startswith(signature) else None
 
     def _livrable(self, cible, types=LIVRABLES, bac_a_sable=BAC_A_SABLE):
         """Envoie le fichier par morceaux (un livrable peut être gros) avec les en-têtes de son extension."""

@@ -256,6 +256,75 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.outil("actions", entree={"type": "challenge", "cible": {"type": "lecon", "id": "inconnue"},
                                                        "texte": "x"})[0], 1)
 
+    def test_toute_image_d_agent_hors_des_racines_est_copiee_dans_celle_qui_la_sert(self):
+        """Vu en vrai : un agent cite `assets/sprites/…` (racine du projet) dans un document, une capture, un message, le
+        cahier ou le livrable ; le bureau ne sert que les racines des réglages. Un seul point les range."""
+        from tests.orch_aide import factory_minimale
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        jeu = self.dossier / "jeu"
+        factory = factory_minimale(jeu / ".factory")
+        (jeu / ".factory" / "reglages.json").write_text(json.dumps(
+            {"images": {"racines": ["pieces", "captures"]}, "livrables": {"racines": ["livrables"]}}), encoding="utf-8")
+        (jeu / "assets" / "s").mkdir(parents=True)
+        for nom in ("a", "b", "c", "d", "e"):
+            (jeu / "assets" / "s" / f"{nom}.png").write_bytes(png + nom.encode())
+        (jeu / "assets" / "s" / "faux.png").write_bytes(b"pas une image")
+        (jeu / "assets" / "s" / "code.tscn").write_bytes(b"[gd_scene]")
+        (self.dossier / "dehors.png").write_bytes(png)
+        sortie = lambda *a, **k: self.outil(*a, factory=factory, **k)   # noqa: E731
+        code, f = sortie("actions", entree={"type": "fonctionnalite", "texte": "Un jeu", "t": "2026-11-10T10:00:00+01:00"})
+        self.assertEqual(code, 0, f)
+        f = sortie("etat")[1]["fonctionnalites"][-1]["id"]
+        self.assertEqual(sortie("fonctionnalite", entree={"id": f, "agent_cadrage": "metier-1"})[0], 0)
+        # document (livrable de e7) : le chemin est réécrit, la copie existe, la source reste.
+        r = sortie("document", entree={"fonctionnalite": f, "chemin": "assets/s/a.png", "titre": "Aperçu",
+                                       "element": "e7", "livrable": True})
+        self.assertEqual(r[0], 0, r)
+        self.assertEqual((jeu / ".factory" / "pieces" / f / "a.png").read_bytes(), png + b"a")
+        self.assertTrue((jeu / "assets" / "s" / "a.png").is_file())
+        # non-image, faux contenu, hors du projet : chemin gardé, rien copié.
+        for chemin in ("assets/s/code.tscn", "assets/s/faux.png", "assets/s/absente.png", "../dehors.png"):
+            self.assertEqual(sortie("document", entree={"fonctionnalite": f, "chemin": chemin, "titre": "x"})[0], 0)
+        # capture de tâche, message d'agent (avec légende), cahier, livrable.
+        t = sortie("tache", entree={"titre": "Dev : e7", "fonctionnalite": f, "element": "e7", "agent": "dev-1",
+                                    "colonne": "dev", "captures": [{"chemin": "assets/s/b.png", "legende": "Le boss"}]})[1]
+        self.assertEqual(t["captures"], [{"chemin": f"pieces/{f}/b.png", "legende": "Le boss"}])
+        m = sortie("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "v",
+                                      "images": [{"chemin": "assets/s/c.png", "legende": "Le menu"}]})
+        self.assertEqual(m[0], 0, m)
+        sortie("fonctionnalite", entree={"id": f, "etape": "cahier", "cahier": {"maquette": [
+            {"chemin": "assets/s/d.png", "legende": "L'écran"}, "assets/s/c.png"], "etapes": ["x"]}})
+        sortie("fonctionnalite", entree={"id": f, "livrable": {"libelle": "Le jeu", "chemin": "assets/s/e.png"}})
+        etat = sortie("releve")[1]["fonctionnalites"][0]
+        self.assertEqual(etat["cahier"]["maquette"], [{"chemin": f"pieces/{f}/d.png", "legende": "L'écran"},
+                                                       f"pieces/{f}/c.png"])
+        self.assertEqual(etat["livrable"]["chemin"], f"livrables/{f}/e.png")
+        self.assertEqual((jeu / ".factory" / "livrables" / f / "e.png").read_bytes(), png + b"e")
+        self.assertEqual(sorted(x["chemin"] for x in etat["documents"] if x["chemin"].endswith(".png")),
+                         sorted([f"pieces/{f}/{n}.png" for n in "abcd"] + ["assets/s/faux.png", "assets/s/absente.png",
+                                                                          "../dehors.png"]))
+        self.assertEqual(sorted(p.name for p in (jeu / ".factory" / "pieces" / f).iterdir()), ["a.png", "b.png", "c.png", "d.png"])
+        # décision « valider_etape » : les fichiers du livrable précédent (l'icône vue en vrai) sont rangés aussi.
+        (jeu / "assets" / "s" / "g.png").write_bytes(png + b"g")
+        code, dec = sortie("decision", entree={
+            "action": "poser", "portee": "projet", "genre": "valider_etape", "fonctionnalite": f, "texte": "Valider",
+            "element": {"id": "e1", "nom": "Mise en place"}, "etape": "dev", "tache": t["id"],
+            "compte_rendu": "ok", "fichiers": [{"chemin": "assets/s/g.png", "titre": "Icône du jeu"}]})
+        self.assertEqual(code, 0, dec)
+        decisions = [x for x in sortie("etat")[1]["decisions"] if x.get("genre") == "valider_etape"]
+        self.assertEqual(decisions[-1]["fichiers"], [{"chemin": f"pieces/{f}/g.png", "titre": "Icône du jeu"}])
+        # Réparer : redonner l'ancien chemin d'un document déjà rangé le déplace vers la copie (pas de doublon).
+        (jeu / "assets" / "s" / "f.png").write_bytes(png + b"f")
+        docs = json.loads((jeu / ".factory" / "suivi.json").read_text(encoding="utf-8"))
+        docs["fonctionnalites"][0]["documents"].append({"id": "doc99", "chemin": "assets/s/f.png", "titre": "Ancien",
+                                                        "livrable": True, "element": "e7"})
+        (jeu / ".factory" / "suivi.json").write_text(json.dumps(docs), encoding="utf-8")
+        self.assertEqual(sortie("document", entree={"fonctionnalite": f, "chemin": "assets/s/f.png", "titre": "Ancien"})[0], 0)
+        liste = sortie("releve")[1]["fonctionnalites"][0]["documents"]
+        self.assertEqual([x["chemin"] for x in liste if x["id"] == "doc99"], [f"pieces/{f}/f.png"])
+        self.assertTrue(next(x for x in liste if x["id"] == "doc99")["livrable"])
+        self.assertNotIn("assets/s/f.png", [x["chemin"] for x in liste])
+
     def test_document_qui_en_remplace_un_autre(self):
         f = self.nouvelle()
         self.ok("document", entree={"fonctionnalite": f, "chemin": "pieces/v1.png", "titre": "Maquette"})

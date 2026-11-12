@@ -220,6 +220,10 @@ class Demandes(Base):
             self.assertTrue((jeu / "assets" / "a.png").is_file())              # copiée, pas déplacée
             self.assertEqual(sorted(p.name for p in (factory / "pieces" / "f1").iterdir()),
                              ["a-2.png", "a.png", "b.png", "deja.png"])
+            n = regles._chemins_du_projet(projet, {**r, "fichiers": [
+                {"chemin": "assets/b.png", "titre": "B", "livrable": True}, {"chemin": "assets/note.txt", "titre": "N"}]}, "f1")
+            self.assertEqual([x["chemin"] for x in n["fichiers"]], ["pieces/f1/b.png", "assets/note.txt"])   # les fichiers aussi
+            self.assertTrue(n["fichiers"][0]["livrable"])
             again = regles._chemins_du_projet(projet, r, "f1")                 # la même image n'est pas doublée
             self.assertEqual(again["message"]["images"][0], "pieces/f1/a-2.png")
             self.assertEqual(regles._dossier_des_pieces(projet), ".factory/pieces")

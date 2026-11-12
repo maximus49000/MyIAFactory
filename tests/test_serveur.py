@@ -256,6 +256,38 @@ class TestServeur(AvecServeur):
         self.assertEqual(r.status, 404)
         self.assertNotIn(b"secret", data)
 
+    def test_image_du_projet_hors_des_racines_servie_mais_rien_d_autre(self):
+        """Le filet : le projet est le parent d'un dossier `.factory` ; seules les vraies images PNG/JPEG y sont servies."""
+        jeu = self.tmp / "jeu"
+        (jeu / ".factory" / "pieces").mkdir(parents=True)
+        (jeu / "assets").mkdir()
+        (jeu / ".git").mkdir()
+        (jeu / "assets" / "ok.png").write_bytes(self.PNG)
+        (jeu / "assets" / "photo.jpg").write_bytes(bytes.fromhex("ffd8ffe0") + b"jpeg")
+        (jeu / "assets" / "faux.png").write_bytes(b"secret")
+        (jeu / "assets" / "notes.txt").write_bytes(self.PNG)
+        (jeu / ".factory" / "autre.png").write_bytes(self.PNG)       # dans .factory mais hors des racines
+        (jeu / ".git" / "x.png").write_bytes(self.PNG)
+        (self.tmp / "dehors.png").write_bytes(self.PNG)
+        (jeu / ".factory" / "reglages.json").write_text(json.dumps({"images": {"racines": ["pieces"]}}), encoding="utf-8")
+        self.regl = jeu / ".factory" / "reglages.json"
+        self.redemarrer()
+        r, data = self.image("assets/ok.png")
+        self.assertEqual((r.status, data, r.getheader("Content-Type")), (200, self.PNG, "image/png"))
+        self.assertEqual(self.image("assets/photo.jpg")[0].status, 200)
+        absolu = str(self.tmp / "dehors.png").replace("\\", "/")
+        for chemin in ("assets/faux.png", "assets/notes.txt", "assets/absente.png", "../dehors.png", "assets/../../dehors.png",
+                       "assets/%2e%2e/%2e%2e/dehors.png", "assets%5C..%5C..%5Cdehors.png", absolu, ".factory/autre.png",
+                       "autre.png", ".git/x.png", "assets", "assets/ok.png%00.png"):
+            r, data = self.image(chemin)
+            self.assertEqual(r.status, 404, chemin)
+            self.assertNotEqual(data, self.PNG, chemin)
+        try:
+            os.symlink(self.tmp / "dehors.png", jeu / "assets" / "lien.png")
+        except (OSError, NotImplementedError):
+            return
+        self.assertEqual(self.image("assets/lien.png")[0].status, 404)    # un lien qui sort du projet
+
     def test_image_lien_vers_non_image(self):
         self.images()
         try:

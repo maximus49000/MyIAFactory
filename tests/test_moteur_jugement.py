@@ -361,6 +361,29 @@ class Valider(unittest.TestCase):
                 self.assertIsNotNone(v(flux[:1] + [dict(val, role="dev", service="jeu")] + flux[1:]))
                 self.assertIsNotNone(v(flux[:1] + [dict(val, validation="oui", role=None)] + flux[1:]))
 
+    def test_aide_d_installation_telechargement_etapes_autonome(self):
+        env = VALIDES["proposer_organisation"]["environnement"][0]
+        etapes = ["Ouvrir la page.", "Télécharger l'archive.", "L'extraire dans le profil.", "Lancer java -version."]
+        bon = dict(env, telechargement="https://adoptium.net/temurin/releases/", etapes=etapes, autonome=True)
+        self.assertIsNone(self._orga(environnement=[bon]))
+        self.assertIsNone(self._orga(environnement=[dict(bon, telechargement=None)]))
+        self.assertIsNone(self._orga(environnement=[env]))               # les anciens résultats restent acceptés
+        for url in ("http://adoptium.net/", "adoptium.net", "ftp://x.org/a", "https://", "https://u:p@x.org/a",
+                    "https://x.org/a b", "https://x.org/" + "a" * 300, 5, ""):
+            self.assertIn("telechargement", self._orga(environnement=[dict(bon, telechargement=url)]), repr(url))
+        for e in ([], ["une seule"], etapes[:1], ["a"] * 9, ["a", ""], ["a", 3], ["a", "b\nc"], "a. b.", None,
+                  ["a", "b" * 201]):
+            self.assertIn("etapes", self._orga(environnement=[dict(bon, etapes=e)]), repr(e))
+        self.assertIsNone(self._orga(environnement=[dict(bon, etapes=["a"] * 8)]))
+        for a in ("oui", 1, None, "true"):
+            self.assertIn("autonome", self._orga(environnement=[dict(bon, autonome=a)]), repr(a))
+        self.assertIsNone(self._varie("definir_workflow"))
+        o = json.loads(json.dumps(VALIDES["definir_workflow"]))
+        o["environnement"][0].update(telechargement="http://x.org/", etapes=etapes, autonome=False)
+        self.assertIn("telechargement", self._def(o))
+        o["environnement"][0].update(telechargement="https://x.org/jdk", autonome="oui")
+        self.assertIn("autonome", self._def(o))
+
     def test_version_min_lue(self):
         env = VALIDES["proposer_organisation"]["environnement"][0]
         for version in ("17", "8.7", "1.8.0"):

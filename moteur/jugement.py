@@ -34,6 +34,7 @@ proposer.
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from moteur import appel
 from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
@@ -449,10 +450,42 @@ def _valider_proposer_organisation(o, d):
         if v is not None and not (isinstance(v, str) and MOTIF_VERSION.match(v) and len(v) <= LONGUEUR_VERSION):
             return (f"Outil « {x['outil']} » : « version_min » est null ou la version minimale en chiffres et points "
                     "(« 17 », « 8.7 »).")
+        erreur = _aide_d_installation(x)
+        if erreur:
+            return erreur
     regles = o.get("outils_installation")
     if not isinstance(regles, list) or not all(isinstance(r, str) and MOTIF_REGLE_OUTIL.match(r) for r in regles):
         return ("« outils_installation » liste des règles d'outils précises, par exemple « Bash(winget:*) » ; ni "
                 "« Bash » seul ni « Bash(*) ».")
+    return None
+
+
+ETAPES_MIN, ETAPES_MAX, LONGUEUR_ETAPE, LONGUEUR_URL = 2, 8, 200, 300
+
+
+def _url_officielle(v):
+    """Une adresse https sans espace ni identifiant embarqué (`https://hote/chemin`)."""
+    if not (isinstance(v, str) and len(v) <= LONGUEUR_URL and v.isprintable() and " " not in v):
+        return False
+    p = urlsplit(v)
+    return p.scheme == "https" and bool(p.hostname) and "@" not in p.netloc
+
+
+def _aide_d_installation(x):
+    """Message d'erreur sur les trois champs d'aide d'un outil (`telechargement`, `etapes`, `autonome`), ou `None` ;
+    absents, ils sont acceptés (anciens résultats)."""
+    nom = x["outil"]
+    if x.get("telechargement") is not None and not _url_officielle(x["telechargement"]):
+        return (f"Outil « {nom} » : « telechargement » est l'adresse https de la page de téléchargement officielle de "
+                "l'éditeur, ou null si tu ne la connais pas avec certitude (n'invente jamais d'adresse).")
+    if "etapes" in x:
+        e = x["etapes"]
+        if not (isinstance(e, list) and ETAPES_MIN <= len(e) <= ETAPES_MAX
+                and all(_ligne(v) and len(v) <= LONGUEUR_ETAPE for v in e)):
+            return (f"Outil « {nom} » : « etapes » est le mode opératoire sous Windows, {ETAPES_MIN} à {ETAPES_MAX} "
+                    f"lignes courtes ({LONGUEUR_ETAPE} caractères au plus), dans l'ordre, jusqu'à la vérification.")
+    if "autonome" in x and not isinstance(x["autonome"], bool):
+        return f"Outil « {nom} » : « autonome » vaut true ou false."
     return None
 
 

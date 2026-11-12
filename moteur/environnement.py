@@ -127,7 +127,7 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
     versions = {}
     sortie = []
     for outil in outils:
-        o = dict(outil)
+        o = avec_aide(outil)
         noms = [n for n in outil.get("executables") or [] if isinstance(n, str)]
         valides = [n for n in noms if MOTIF_EXECUTABLE.match(n)]
         refuses = [n for n in noms if not MOTIF_EXECUTABLE.match(n)]
@@ -163,6 +163,29 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
 
 def a_installer(outils):
     return [o for o in outils if o.get("etat") != "en_place"]
+
+
+def avec_aide(outil):
+    """L'outil avec ses trois champs d'aide à l'installation, valeurs par défaut comprises (un ancien résultat n'en a
+    pas) : `telechargement` (URL https officielle ou `None`), `etapes` (le mode opératoire, une liste de textes) et
+    `autonome` (vrai si un agent peut l'installer seul, sans clic ni droits d'administrateur)."""
+    o = dict(outil)
+    url = o.get("telechargement")
+    o["telechargement"] = url if isinstance(url, str) and url.startswith("https://") else None
+    etapes = o.get("etapes")
+    o["etapes"] = [x for x in etapes if isinstance(x, str) and x.strip()] if isinstance(etapes, list) else []
+    o["autonome"] = o.get("autonome") is True
+    return o
+
+
+def autonomes_a_installer(outils):
+    """Les outils qui manquent et qu'un agent peut installer seul : les seuls qu'il reçoit."""
+    return [o for o in a_installer(outils) if o.get("autonome") is True]
+
+
+def installe_par(journal_ou_lignes, outil):
+    """Vrai si une ligne du journal d'une tâche d'installation nomme cet outil (`- <outil> (…`)."""
+    return any(str(x).startswith(f"- {outil} (") for x in journal_ou_lignes or [])
 
 
 ROLE_INSTALLATION = "environnement"      # l'agent qui installe les outils du poste

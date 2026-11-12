@@ -143,6 +143,18 @@ class Verifier(unittest.TestCase):
         self.assertEqual(a["installation"], JDK["installation"])      # le reste de la proposition est gardé
         self.assertEqual(environnement.a_installer([a, b]), [a, b])
 
+    def test_aide_a_l_installation_valeurs_par_defaut_et_gardees(self):
+        e = Enregistreur()
+        ancien, complet = environnement.verifier(
+            [JDK, dict(GRADLE, telechargement="https://gradle.org/install/", etapes=["Télécharger.", "Extraire."],
+                       autonome=True)], which=e.which, executer=e.executer, env={})
+        self.assertEqual((ancien["telechargement"], ancien["etapes"], ancien["autonome"]), (None, [], False))
+        self.assertEqual((complet["telechargement"], complet["etapes"], complet["autonome"]),
+                         ("https://gradle.org/install/", ["Télécharger.", "Extraire."], True))
+        self.assertEqual(environnement.autonomes_a_installer([ancien, complet]), [complet])
+        faux = environnement.avec_aide({"outil": "X", "telechargement": "http://x", "etapes": "a", "autonome": "oui"})
+        self.assertEqual((faux["telechargement"], faux["etapes"], faux["autonome"]), (None, [], False))
+
     def test_android_home_trouve(self):
         with tempfile.TemporaryDirectory() as t:
             racine = Path(t)

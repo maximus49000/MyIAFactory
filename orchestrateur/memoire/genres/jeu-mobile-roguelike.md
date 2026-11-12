@@ -170,3 +170,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Construire les emblèmes pixel art à partir d'un masque de pixels, puis calculer contour, reflet et ombre depuis les voisins, garantit des couleurs conformes à la palette sans retouche manuelle.
+
+## G29 — Quand un rapport est limité à un nombre d'images par message
+Rôles : dev
+Date : 2026-11-12
+
+Quand un rapport est limité à un nombre d'images par message, n'y mettre que les plus parlantes et répartir les autres dans les comptes rendus par élément.

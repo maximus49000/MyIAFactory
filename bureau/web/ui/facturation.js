@@ -328,6 +328,16 @@ export function partieParallelisme(ctx) {
 // l'outil revérifient tout (rôles, modèles, dépôt GitHub, places).
 
 export const MODELES_RECRUE = ["Haiku", "Sonnet", "Opus"];
+// Le modèle de la fiche d'une recrue est son plafond (conception 2026-11-12-modele-par-tache-design.md).
+export const PLAFOND_PAR_DEFAUT = "Opus";
+export const REGLE_PLAFOND = "Le modèle d'un agent est son plafond : il fait tourner chaque tâche sur le modèle " +
+  "qu'elle demande (celui de son étape), jamais au-dessus ; Opus par défaut, Fable avec votre accord.";
+
+// Une ligne de l'aperçu automatique : « dev · plafond Opus · tâches en Sonnet · cloud — raison ».
+export function ligneApercu(p) {
+  return [p.role, `plafond ${p.modele}`, ...(p.modele_necessaire ? [`tâches en ${p.modele_necessaire}`] : []), p.lieu]
+    .join(" · ") + ` — ${p.raison}`;
+}
 export const LIEUX_AUTO = ["mieux", "cloud", "local"];     // « Au mieux », « Cloud », « Local »
 const LIBELLE_LIEU = {mieux: "Au mieux", cloud: "Cloud", local: "Local"};
 
@@ -470,11 +480,7 @@ export function partieRecrutement(ctx) {
   const manuel = el("div", "recrutement-manuel");
   const role = choix(r.roles.map((x) => [x.role, `${x.nom || x.role} (${x.agents} agent${x.agents > 1 ? "s" : ""})`]));
   const modele = choix(MODELES_RECRUE.map((m) => [m, m]).concat([["Fable", "Fable (votre accord)", true]]),
-                       r.roles[0]?.modele);
-  role.addEventListener("change", () => {
-    const x = r.roles.find((y) => y.role === role.value);
-    if (x && MODELES_RECRUE.includes(x.modele)) modele.value = x.modele;
-  });
+                       PLAFOND_PAR_DEFAUT);
   const accord = document.createElement("input");
   accord.type = "checkbox";
   accord.addEventListener("change", () => {
@@ -485,7 +491,8 @@ export function partieRecrutement(ctx) {
                      "local");
   const etiquetteAccord = el("label", "organisation-fable");
   etiquetteAccord.append(accord, el("span", "", " J'accorde Fable à cet agent (plus capable, plus cher)"));
-  for (const [libelle, champ] of [["Rôle", role], ["Modèle", modele], ["Lieu", lieu]]) {
+  manuel.append(el("p", "note", REGLE_PLAFOND));
+  for (const [libelle, champ] of [["Rôle", role], ["Plafond", modele], ["Lieu", lieu]]) {
     const label = el("label", "parallelisme-champ");
     champ.disabled = !agir;
     label.append(el("span", "", libelle), champ);
@@ -503,9 +510,9 @@ export function partieRecrutement(ctx) {
   // En automatique.
   const auto = el("div", "recrutement-auto");
   auto.append(el("p", "note", "Attribution automatique : les rôles qui ont le plus de travail prêt ou en file (sans " +
-                              "compter ce qu'une validation retient), le modèle le plus logique pour le travail que " +
-                              "chaque agent prend (conception : Opus ; code et création : Sonnet ; tests, livraison, " +
-                              "rangement : Haiku ; un cran de plus après un échec ; jamais Fable), le lieu demandé " +
+                              "compter ce qu'une validation retient), le plafond Opus, et le modèle que demandent les " +
+                              "tâches que chaque agent prend (conception : Opus ; code et création : Sonnet ; tests, " +
+                              "livraison, rangement : Haiku ; un cran de plus après un échec ; jamais Fable), le lieu demandé " +
                               "(« Au mieux » : cloud d'abord s'il reste des places), jamais au-delà des places."));
   if (agir) {
     const label = el("label", "parallelisme-champ");
@@ -529,7 +536,7 @@ export function partieRecrutement(ctx) {
     voir.type = "button";
     voir.addEventListener("click", () => {
       apercu = apercuAuto(r, nombre.value, ou.value);
-      liste.replaceChildren(...apercu.map((p) => el("li", "", `${p.role} · ${p.modele} · ${p.lieu} — ${p.raison}`)));
+      liste.replaceChildren(...apercu.map((p) => el("li", "", ligneApercu(p))));
       const limite = limiteAuto(r, nombre.value, ou.value);
       infos.replaceChildren(...(limite ? [el("p", "avertissement", limite)] : []),
                             ...(!apercu.length ? (r.notesParLieu[ou.value] || r.notes).map((n) => el("p", "note", n)) : []));

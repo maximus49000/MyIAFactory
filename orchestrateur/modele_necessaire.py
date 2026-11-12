@@ -1,0 +1,127 @@
+"""Le modèle nécessaire d'une tâche, et le modèle de la fiche d'un agent comme plafond (conception
+`2026-11-12-modele-par-tache-design.md`). Fonctions pures, sans IA.
+
+Le modèle nécessaire est une propriété de l'étape du workflow : `modele` (Haiku, Sonnet ou Opus, jamais Fable) posé
+avec sa `justification` quand le workflow est proposé ; à défaut, déduit de la nature de l'étape (la table du
+recrutement) ; nature inconnue : le modèle du rôle. Un agent prend toute tâche de son rôle dont le modèle nécessaire est
+au plus son plafond (le modèle de sa fiche) et la fait tourner exactement sur ce modèle.
+"""
+from orchestrateur import recrutement as rc
+from orchestrateur import workflows as wf
+
+MODELES = rc.MODELES                       # les modèles qu'une étape peut demander (jamais Fable)
+ORDRE = ("haiku", "sonnet", "opus", "fable")
+PLAFOND_PAR_DEFAUT = rc.PLAFOND_PAR_DEFAUT  # un nouvel agent : Opus (Fable seulement avec l'accord du Directeur)
+ETAPES_DE_FLUX = "flux:"
+# Les tâches que le moteur crée hors du flux et qui refont le travail d'un rôle : le modèle de l'étape de ce rôle.
+ETAPES_DU_ROLE = ("relecture", "correction", "retour", "demande")
+# Cadrage, prototype, installation : le modèle de la fiche de l'agent, comme avant (`None`).
+
+
+def rang(modele):
+    """Le rang d'un modèle (Haiku < Sonnet < Opus < Fable) ; un nom inconnu compte comme Sonnet."""
+    m = str(modele or "").lower()
+    return next((i for i, n in enumerate(ORDRE) if n in m), 1)
+
+
+def nom(modele):
+    """Le nom affiché d'un modèle (`sonnet` → `Sonnet`)."""
+    return ORDRE[rang(modele)].capitalize()
+
+
+def plafonne(modele, plafond):
+    """Le modèle, ramené au plafond s'il le dépasse."""
+    return modele if rang(modele) <= rang(plafond) else plafond
+
+
+def de_l_etape(e, fiches=()):
+    """`{modele, raison, source}` d'une étape d'agent (`None` pour une validation du Directeur). `source` : `workflow`
+    (posé avec le workflow), `deduit` (nature de l'étape ou du rôle) ou `role` (nature inconnue : le modèle du rôle,
+    d'après `fiches`, Sonnet sans fiche)."""
+    if not isinstance(e, dict) or wf.est_validation(e):
+        return None
+    if isinstance(e.get("modele"), str) and e["modele"] in MODELES:
+        j = e.get("justification")
+        return {"modele": e["modele"], "source": "workflow",
+                "raison": j.strip() if isinstance(j, str) and j.strip() else "fixé avec le workflow"}
+    n = rc._nature(f"{e.get('nom') or ''} {e.get('id') or ''}") or rc._nature(str(e.get("role") or ""))
+    if n:
+        return {"modele": n[0], "source": "deduit", "raison": f"déduit de l'étape : {n[1]}"}
+    modele, raison = rc.modele_du_role([x for x in fiches if x.get("role") == e.get("role")])
+    return {"modele": modele, "source": "role", "raison": f"nature de l'étape inconnue : {raison}"}
+
+
+def _etape(f, t, fonctionnalites):
+    etape = str(t.get("etape") or "")
+    if etape.startswith(ETAPES_DE_FLUX):
+        sid = etape[len(ETAPES_DE_FLUX):]
+        return next((e for w in wf.tous(f) for e in w["flux"] if e.get("id") == sid), None)
+    if etape in ETAPES_DU_ROLE and t.get("role"):
+        fonc = next((x for x in fonctionnalites if x.get("id") == t.get("fonctionnalite")), None)
+        w = wf.de_la_fonctionnalite(f, fonc)
+        return next((e for e in (w or {}).get("flux") or [] if not wf.est_validation(e) and e.get("role") == t["role"]),
+                    None)
+    return None
+
+
+def de_la_tache(f, t, fiches, fonctionnalites=()):
+    """`{modele, raison, source, ramene}` : le modèle nécessaire de la tâche `t` (montée comprise), ou `None` quand
+    c'est le modèle de la fiche de l'agent qui vaut (cadrage, prototype, installation, tâche sans étape connue). Si aucun
+    agent du rôle n'a un plafond suffisant, le modèle est ramené au plus haut plafond du rôle (`ramene`) : la tâche part
+    au lieu d'attendre."""
+    e = _etape(f, t, fonctionnalites)
+    m = de_l_etape(e, fiches) if e is not None else None
+    if m is None:
+        return None
+    m = dict(m, ramene=False)
+    montee = t.get("montee")
+    if isinstance(montee, dict) and isinstance(montee.get("a"), str) and montee["a"].strip():
+        m.update(modele=nom(montee["a"]) if rang(montee["a"]) < len(MODELES) else montee["a"], source="montee",
+                 raison=f"monté depuis {montee.get('de') or '?'} : {montee.get('raison') or 'montée de modèle'}")
+    du_role = [x for x in fiches if x.get("role") == t.get("role")]
+    if du_role:
+        haut = max((x["modele"] for x in du_role), key=rang)
+        if rang(haut) < rang(m["modele"]):
+            m.update(modele=nom(haut), ramene=True,
+                     raison=f"{m['raison']} ; ramené au plafond de l'équipe ({nom(haut)}) : aucun agent du rôle au-dessus")
+    return m
+
+
+def modeles_sur_les_etapes(flux, nouveaux):
+    """`(flux, agents)` d'un workflow proposé : les nouveaux agents ont le plafond Opus (`PLAFOND_PAR_DEFAUT`) ; le
+    modèle justifié d'un nouvel agent (une proposition à l'ancienne forme) va sur les étapes de son rôle qui n'ont pas
+    déjà le leur. Les étapes gardent `modele` et `justification` ; rien n'est modifié en place."""
+    par_role = {}
+    for a in nouveaux:
+        if a.get("modele") in MODELES:
+            j = a.get("justification")
+            par_role.setdefault(a.get("role"), (a["modele"], j.strip() if isinstance(j, str) and j.strip()
+                                                else "le modèle proposé pour le rôle"))
+    sortie = []
+    for e in flux:
+        e = dict(e)
+        if not wf.est_validation(e) and e.get("modele") not in MODELES and e.get("role") in par_role:
+            e["modele"], e["justification"] = par_role[e["role"]]
+        sortie.append(e)
+    return sortie, [dict(a, modele=PLAFOND_PAR_DEFAUT) for a in nouveaux]
+
+
+def estime(e, agents):
+    """Le modèle d'une étape pour l'estimation d'un workflow pas encore en place : son modèle nécessaire (posé, sinon
+    déduit ; nature inconnue : celui du premier agent du rôle), ramené au plus haut plafond des `agents` du rôle. `None`
+    pour une validation, ou sans agent du rôle."""
+    du_role = [a for a in agents if isinstance(a, dict) and a.get("role") == (e or {}).get("role")]
+    m = de_l_etape(e)
+    if m is None or not du_role:
+        return None
+    modele = m["modele"] if m["source"] != "role" else du_role[0].get("modele")
+    return plafonne(modele, max((a.get("modele") for a in du_role), key=rang))
+
+
+def possibles(fiches, role, modele):
+    """Les fiches du rôle dont le plafond suffit au modèle nécessaire, le plus petit plafond d'abord (à égalité, l'ordre
+    des fiches) ; sans modèle, toutes les fiches du rôle dans leur ordre."""
+    du_role = [x for x in fiches if x.get("role") == role]
+    if not modele:
+        return du_role
+    return sorted((x for x in du_role if rang(x.get("modele")) >= rang(modele)), key=lambda x: rang(x.get("modele")))

@@ -18,8 +18,9 @@ Proposition (`"type": "proposition"`), comme une organisation de fonctionnalité
   `raison` (une ligne). Une validation du Directeur, là où l'utilisateur veut valider : `{"etape", "nom",
   "validation": true, "raison"}`, sans rôle ni service ; ni première, ni dernière, ni deux de suite.
 - Tout est nouveau : `services`, `agents` (un par rôle), `briefs` (un par rôle). Ids en minuscules et tirets.
-- Modèle et `justification` d'une ligne : Haiku pour le mécanique, Sonnet pour la création et le code, Opus pour une
-  conception difficile ; jamais Fable : au besoin Opus et `"fable_suggere": true`.
+- Sur chaque étape d'agent, le `modele` que demande son travail et sa `justification` (une ligne, 160 caractères au
+  plus) : Haiku pour le mécanique, Sonnet pour la création et le code, Opus pour une conception difficile ;
+  jamais Fable. Les agents, sans modèle, ont le plafond Opus ; au besoin `"fable_suggere": true`.
 - `environnement` : outils du poste (`pour` : l'`etape`), `executables` (noms), `installation` Windows en une ligne,
   `objectif` : à quoi l'outil servira dans CE projet et à quelle étape (une phrase concrète, pas générique),
   `version_min` (« 17 ») ou null ; `telechargement` : URL https **officielle** de l'éditeur, jamais un miroir ni
@@ -30,9 +31,9 @@ Textes en français, **courts**. L'une des deux formes :
 ```json
 {"type": "questions", "message": "…", "questions": [{"id": "q1", "texte": "…", "choix": ["…"], "multiple": false}]}
 {"type": "proposition", "message": "…", "genre": null, "nouveau": {"id": "…", "description": "…"},
- "flux": [{"etape": "dev", "nom": "…", "role": "dev", "service": "…", "raison": "…"}],
+ "flux": [{"etape": "dev", "nom": "…", "role": "dev", "service": "…", "raison": "…", "modele": "Haiku", "justification": "…"}],
  "services": [{"id": "…", "nom": "…"}], "agents": [{"cle": "…", "prenom": "…", "role": "…", "service": "…",
- "modele": "Sonnet", "justification": "…", "fable_suggere": false, "texte": "sa fiche"}], "briefs": {"dev": "…"},
+ "fable_suggere": false, "texte": "sa fiche"}], "briefs": {"dev": "…"},
  "livrable": "…", "environnement": [{"outil": "…", "version_min": null, "pour": "dev", "executables": ["…"],
  "installation": "…", "objectif": "…", "telechargement": null, "etapes": ["…", "…"], "autonome": false}], "outils_installation": []}
 ```

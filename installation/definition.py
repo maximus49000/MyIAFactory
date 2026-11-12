@@ -19,7 +19,7 @@ from bureau.empreinte import Cumul
 from installation import brouillons, creation, estimation, mise_en_place as mep
 from installation.dossier import Echec
 from moteur import appel, environnement, jugement
-from orchestrateur import fiches, outil
+from orchestrateur import fiches, modele_necessaire, outil
 from orchestrateur.memoire import executer_git
 
 TOURS_MAX = jugement.TOURS_MAX_DEFINITION
@@ -133,11 +133,13 @@ def proposition_calculee(o, infos, *, verifier_environnement=environnement.verif
     genre = {"id": o["genre"], "nouveau": False} if o.get("genre") else \
         {"id": nouveau["id"], "nouveau": True, "description": nouveau["description"]}
     flux = [{"id": x["etape"], "nom": x["nom"], "validation": True} if x.get("validation") is True else
-            {"id": x["etape"], "nom": x["nom"], "role": x["role"], "service": x["service"]} for x in o["flux"]]
+            {"id": x["etape"], "nom": x["nom"], "role": x["role"], "service": x["service"],
+             **{c: x[c] for c in ("modele", "justification") if c in x}} for x in o["flux"]]
     raisons = {x["etape"]: x["raison"] for x in o["flux"] if x.get("raison")}
     services = ([dict(mep.SERVICE_FACTURATION)] if infos.get("facturation") else []) + \
         [{"id": s["id"], "nom": s["nom"]} for s in o["services"]]
-    agents = [dict(a, lieu="local") for a in o["agents"]]
+    # Les agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (2026-11-12-modele-par-tache-design).
+    flux, agents = modele_necessaire.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
     briefs = dict(o["briefs"])
     poste = verifier_environnement(list(o.get("environnement") or [])) if o.get("environnement") else []
     regles = list(o.get("outils_installation") or [])
@@ -170,15 +172,16 @@ def texte_de_la_proposition(p):
     roles = {x["id"]: x for x in p["workflow"]["flux"]}
     for k, e in enumerate(p["workflow"]["flux"], 1):
         qui = "validation du Directeur : vous regardez et vous décidez" if e.get("validation") else \
-            f"{e['role']}, service {_nom_du_service(p, e['service'])}"
+            f"{e['role']}, service {_nom_du_service(p, e['service'])}" + (
+                f", modèle nécessaire {e['modele']}" if e.get("modele") else "")
         raison = p["raisons"].get(e["id"])
         lignes.append(f"{k}. {e['nom']} ({qui})" + (f" : {raison}" if raison else ""))
     lignes.append(f"Livrable : {p['livrable'].rstrip('.')}.")
     if p["agents"]:
-        lignes.append("Équipe à recruter :")
+        lignes.append("Équipe à recruter (chaque agent fait tourner une tâche sur le modèle de son étape, jamais "
+                      "au-dessus de son plafond) :")
         for a in p["agents"]:
-            lignes.append(f"- {a.get('prenom') or a['cle']}, {a['role']}, {a['modele']}"
-                          + (f" : {a['justification']}" if a.get("justification") else ""))
+            lignes.append(f"- {a.get('prenom') or a['cle']}, {a['role']}, plafond {a['modele']}")
     en_place = [_outil_en_place(x) for x in p["environnement"] if x.get("etat") == "en_place"]
     manque = [f"{x['outil']} ({x['raison']})" if x.get("raison") else x["outil"]
               for x in p["environnement"] if x.get("etat") != "en_place"]

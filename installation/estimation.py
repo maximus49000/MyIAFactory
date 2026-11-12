@@ -8,6 +8,7 @@ from bureau import prix as prix_bureau
 from bureau.empreinte import Cumul
 from bureau import reglages
 from bureau.usage import HistoriqueUsage
+from orchestrateur import modele_necessaire as mn
 
 # (bas, haut) en tokens par étape d'un élément, tant qu'aucune mesure ne les remplace.
 DEFAUTS_TOKENS = {"Haiku": (40_000, 150_000), "Sonnet": (80_000, 300_000), "Opus": (80_000, 300_000)}
@@ -116,7 +117,8 @@ def estimer(flux, agents, usages, prix_de):
             continue   # une validation du Directeur ne coûte rien
         if e["role"] not in modele_du_role:
             raise ValueError(f"Aucun agent pour le rôle « {e['role']} » (étape « {e['id']} »).")
-        etapes.append((e["id"], modele_du_role[e["role"]]))
+        # le modèle nécessaire de l'étape, pas celui de l'agent (conception 2026-11-12-modele-par-tache-design.md)
+        etapes.append((e["id"], mn.estime(e, agents)))
     detail = []
     for nom, modele in etapes:
         tokens, source, mesures = _tokens(modele, usages)

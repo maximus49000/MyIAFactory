@@ -106,6 +106,23 @@ class TestEstimation(unittest.TestCase):
         avec = [FLUX[0], {"id": "val", "nom": "Validation", "validation": True}, FLUX[1]]
         self.assertEqual(estimation.estimer(avec, AGENTS, [], PRIX.get), estimation.estimer(FLUX, AGENTS, [], PRIX.get))
 
+    def test_modele_necessaire_des_etapes(self):
+        """Le coût suit le modèle nécessaire de chaque étape (posé, sinon déduit), jamais au-dessus du plafond du rôle."""
+        flux = [{"id": "dev", "nom": "Développement", "role": "dev", "service": "dev", "modele": "Haiku",
+                 "justification": "Petits écrans."},
+                {"id": "tests", "nom": "Tests", "role": "dev", "service": "dev"},
+                {"id": "archi", "nom": "Architecture", "role": "dev", "service": "dev", "modele": "Opus",
+                 "justification": "Difficile."},
+                {"id": "relecture", "nom": "Relecture", "role": "relecteur", "service": "dev"}]
+        opus = [{"cle": "dev-1", "role": "dev", "modele": "Opus"}, {"cle": "rel-1", "role": "relecteur", "modele": "Opus"}]
+        r = estimation.estimer(flux, opus, [], PRIX.get)
+        self.assertEqual([(d["etape"], d["modele"]) for d in r["detail"]],
+                         [("cadrage", "Sonnet"), ("dev", "Haiku"), ("tests", "Haiku"), ("archi", "Opus"),
+                          ("relecture", "Opus")])        # nature inconnue : le modèle du rôle
+        sonnet = [dict(a, modele="Sonnet") for a in opus]
+        r = estimation.estimer(flux, sonnet, [], PRIX.get)
+        self.assertEqual(r["detail"][3]["modele"], "Sonnet")       # ramené au plafond de l'équipe
+
     def test_role_sans_agent_refuse(self):
         with self.assertRaises(ValueError):
             estimation.estimer(FLUX, AGENTS[:1], [], PRIX.get)

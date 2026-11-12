@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 
+from orchestrateur import modele_necessaire as mn
 from orchestrateur import regles_projet as rp
 
 ECHELLE = ("Haiku", "Sonnet", "Opus")   # on monte d'un cran au plus ; Fable n'en fait jamais partie
@@ -22,8 +23,9 @@ def monter(modele):
 
 
 def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None):
-    """(clé, raison) du premier spécialiste du rôle sans tâche active, au modèle et au lieu demandés.
-    Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.
+    """(clé, raison) du premier spécialiste du rôle sans tâche active, au lieu demandé, dont le plafond (le modèle de sa
+    fiche) suffit au `modele` nécessaire de la tâche : le plus petit plafond suffisant d'abord (il fera tourner la tâche
+    sur ce modèle, jamais au-dessus de son plafond). Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.
     Quand `agents_locaux_max` tâches actives sont déjà tenues par des agents locaux, aucun agent local n'est rendu
     (les agents cloud ne comptent pas dans la limite et ne la subissent pas)."""
     occupes = {t.get("agent") for t in taches if t.get("active") and t.get("agent")}
@@ -31,8 +33,8 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
     limite = (agents_locaux_max is not None
               and sum(1 for t in taches if t.get("active") and t.get("agent") in locales) >= agents_locaux_max)
     retenu_par_la_limite = False
-    for f in fiches:
-        if f["role"] != role or (modele and f["modele"] != modele) or (lieu and f["lieu"] != lieu):
+    for f in mn.possibles(fiches, role, modele):
+        if lieu and f["lieu"] != lieu:
             continue
         if f["cle"] in occupes or (f["lieu"] == "cloud" and not f.get("session")):
             continue
@@ -47,7 +49,7 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
         attend = sans_session(fiches, role, modele)
         if attend:   # une fiche existe mais n'a pas de session : c'est elle que la décision nommera
             return None, f"aucun agent cloud {role}{sur} : session à créer pour {attend}"
-        if not any(f["role"] == role and f["lieu"] == "cloud" and (not modele or f["modele"] == modele) for f in fiches):
+        if not any(f["lieu"] == "cloud" for f in mn.possibles(fiches, role, modele)):
             return None, f"aucune fiche cloud {role}{sur} : ajoutez-en une"
         return None, f"aucun agent cloud {role} libre{sur}"   # tous occupés : on attend
     return None, f"aucun {role} libre{sur}"
@@ -75,10 +77,10 @@ def ancienne_limite_cloud(chemin_reglages):
 
 
 def sans_session(fiches, role, modele=None):
-    """La clé de la première fiche cloud du rôle (et du modèle) qui n'a pas de session attitrée, ou `None`."""
-    for f in fiches:
-        if (f["role"] == role and f["lieu"] == "cloud" and not f.get("session")
-                and (not modele or f["modele"] == modele)):
+    """La clé de la première fiche cloud du rôle (au plafond suffisant pour `modele`, le plus petit d'abord) qui n'a pas
+    de session attitrée, ou `None`."""
+    for f in mn.possibles(fiches, role, modele):
+        if f["lieu"] == "cloud" and not f.get("session"):
             return f["cle"]
     return None
 

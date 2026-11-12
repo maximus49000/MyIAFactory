@@ -3,7 +3,7 @@
 
 import {el, ligne} from "./dom.js";
 import {tronquer, ilYA, auTravail, dateFr,filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
-import {lienSur, libelleMontee, libelleLot} from "./actions.js";
+import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
 
@@ -108,8 +108,10 @@ export function contenuTache(ctx, contenu, t) {
   contenu.append(ligne("Colonne", tronquer(nomColonne(e, t.colonne), 30)));
   contenu.append(ligne("Agent", prenomAgent(e, t.agent)));
   contenu.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
+  const necessaire = libelleModeleNecessaire(t);   // la montée y est comprise ; sans lui, la montée seule
   const montee = libelleMontee(t);
-  if (montee) contenu.append(ligne("Modèle", montee));
+  if (necessaire) contenu.append(ligne("Modèle nécessaire", necessaire));
+  else if (montee) contenu.append(ligne("Modèle", montee));
   const lot = libelleLot(t, e.taches);
   if (lot) contenu.append(ligne("Lot", lot));
   for (const n of notesValides(t)) {

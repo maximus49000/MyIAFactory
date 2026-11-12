@@ -16,11 +16,20 @@ def est_validation(etape):
     return isinstance(etape, dict) and etape.get(CLE_VALIDATION) is True
 
 
+MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus")   # le modèle nécessaire d'une étape : jamais Fable
+
+
 def etape_ecrite(e):
-    """L'étape telle que la factory la garde : `{id, nom, validation}` ou `{id, nom, role, service}`."""
+    """L'étape telle que la factory la garde : `{id, nom, validation}` ou `{id, nom, role, service}`, avec le modèle
+    nécessaire de l'étape (`modele`) et sa `justification` quand le workflow les a posés."""
     if est_validation(e):
         return {"id": e["id"], "nom": e["nom"], CLE_VALIDATION: True}
-    return {c: e[c] for c in ("id", "nom", "role", "service")}
+    sortie = {c: e[c] for c in ("id", "nom", "role", "service")}
+    if isinstance(e.get("modele"), str) and e["modele"] in MODELES_D_ETAPE:
+        sortie["modele"] = e["modele"]
+        if isinstance(e.get("justification"), str) and e["justification"].strip():
+            sortie["justification"] = e["justification"].strip()
+    return sortie
 
 
 def etapes_d_agent(flux):

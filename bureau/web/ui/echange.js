@@ -139,14 +139,15 @@ export function lignesProposition(p) {
   const services = p.services || [];
   (p.workflow?.flux || []).forEach((e, k) => {
     const qui = e.validation ? "Validation du Directeur : vous regardez et vous décidez"
-      : `${e.role}, service ${services.find((s) => s.id === e.service)?.nom || e.service}`;
+      : `${e.role}, service ${services.find((s) => s.id === e.service)?.nom || e.service}`
+        + (e.modele ? `, modèle nécessaire ${e.modele}` : "");
     const raison = p.raisons?.[e.id];
     lignes.push(`${k + 1}. ${e.nom} (${qui})` + (raison ? ` : ${raison}` : ""));
   });
   if (p.livrable) lignes.push(`Livrable : ${String(p.livrable).replace(/\.$/, "")}.`);
   if ((p.agents || []).length) {
-    lignes.push("Équipe à recruter :");
-    for (const a of p.agents) lignes.push(`- ${a.prenom || a.cle}, ${a.role}, ${a.modele}` + (a.justification ? ` : ${a.justification}` : ""));
+    lignes.push("Équipe à recruter (chaque tâche tourne sur le modèle de son étape, jamais au-dessus du plafond) :");
+    for (const a of p.agents) lignes.push(`- ${a.prenom || a.cle}, ${a.role}, plafond ${a.modele}`);
   }
   if ((p.environnement || []).length) {
     lignes.push("Poste de travail :");

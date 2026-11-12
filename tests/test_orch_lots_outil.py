@@ -178,6 +178,39 @@ class TestLots(AvecTaches):
         self.assertEqual([l["taches"] for l in sortie["lots"]], [[b]])
         self.assertEqual([x["tache"] for x in sortie["ecartees"]], [a])
 
+    def flux_a_modeles(self, opus=False):
+        """Le flux du projet avec une étape de tests (déduite Haiku) et une conception posée en Opus ; `opus` : un dev
+        de plafond Opus en plus de Léa (Sonnet)."""
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["flux"] = [{"id": "archi", "nom": "Architecture", "role": "dev", "service": "dev", "modele": "Opus",
+                      "justification": "Conception difficile."},
+                     {"id": "dev", "nom": "Développement", "role": "dev", "service": "dev"},
+                     {"id": "tests", "nom": "Tests", "role": "dev", "service": "dev"},
+                     {"id": "relecture", "nom": "Relecture", "role": "relecteur", "service": "dev"}]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        if opus:
+            (self.dossier / "fiches" / "max.md").write_text(FICHE_SON.replace("son-1", "dev-2").replace(
+                "Rôle : son", "Rôle : dev").replace("Mia", "Max").replace("Sonnet", "Opus"), encoding="utf-8")
+
+    def test_lot_par_modele_necessaire_de_l_etape(self):
+        """Un lot regroupe des tâches du même modèle nécessaire, celui de leur étape, pas celui de l'agent."""
+        self.flux_a_modeles()
+        a, b, c = self.nt("A", etape="flux:dev"), self.nt("B", etape="flux:tests"), self.nt("C", etape="flux:dev")
+        self.assertEqual([(l["modele"], l["taches"]) for l in self.lots_()["lots"]],
+                         [("Sonnet", [a, c]), ("Haiku", [b])])
+        # une montée s'applique à la tâche : B rejoint le lot Sonnet
+        self.ok("tache", entree={"id": b, "montee": {"de": "Haiku", "a": "Sonnet", "raison": "deux échecs"}})
+        self.assertEqual([(l["modele"], l["taches"]) for l in self.lots_()["lots"]], [("Sonnet", [a, b, c])])
+
+    def test_modele_au_dessus_de_l_equipe_ramene_au_plafond(self):
+        """Étape en Opus, seul Léa (Sonnet) au rôle : la tâche part en Sonnet au lieu d'attendre ; avec un dev Opus,
+        elle forme son lot Opus."""
+        self.flux_a_modeles()
+        a, d = self.nt("A", etape="flux:dev"), self.nt("D", etape="flux:archi")
+        self.assertEqual([(l["modele"], l["taches"]) for l in self.lots_()["lots"]], [("Sonnet", [a, d])])
+        self.flux_a_modeles(opus=True)
+        self.assertEqual([(l["modele"], l["taches"]) for l in self.lots_()["lots"]], [("Sonnet", [a]), ("Opus", [d])])
+
     def test_taille_du_modele_d_apres_les_mesures(self):
         # 10 tâches seules à 100 k, 6 lots dont le rang 2 coûte plus que seul : Sonnet est coupé à 1
         a, b, c = self.nt("A"), self.nt("B"), self.nt("C")

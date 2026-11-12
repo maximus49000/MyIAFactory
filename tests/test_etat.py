@@ -400,8 +400,10 @@ class TestEtatV4(unittest.TestCase):
         self.assertGreater(co2["min"], 0)
         self.assertGreater(co2["max"], co2["min"])
         self.assertNotIn("co2", organisation["cout"])            # le relevé lu n'est pas modifié
-        # un modèle sans donnée (ou un coût illisible) : pas de valeur
-        organisation["agents"][1]["modele"] = "Fable"
+        # un modèle sans donnée (ou un coût illisible) : pas de valeur ; l'étape « Son » demande Sonnet (déduit de sa
+        # nature), une étape de nature inconnue prend le modèle de l'agent du rôle
+        organisation["flux"][2] = {"id": "poesie", "nom": "Poésie", "role": "barde", "service": "dev"}
+        organisation["agents"][1].update(role="barde", modele="Fable")
         e = self.etat(modif=avec)
         self.assertNotIn("co2", e["decisions_projet"][0]["organisation"]["cout"])
 

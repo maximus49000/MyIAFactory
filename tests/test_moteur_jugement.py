@@ -324,6 +324,31 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._orga(agents=self._agents(fable_suggere="oui")))
         self.assertIn("Fable", self._orga(agents=self._agents(modele="Fable")))
 
+    def test_modele_necessaire_par_etape(self):
+        """Chaque étape d'agent porte le modèle que demande son travail, avec sa justification d'une ligne (bornée) ;
+        les agents n'ont plus besoin de modèle : ils sont recrutés avec le plafond Opus."""
+        flux = json.loads(json.dumps(VALIDES["proposer_organisation"]["flux"]))
+        avec = lambda k, **x: [dict(e, **x) if i == k else e for i, e in enumerate(flux)]   # noqa: E731
+        j = "Vérification mécanique."
+        self.assertIsNone(self._orga(flux=avec(1, modele="Haiku", justification=j)))
+        self.assertIsNone(self._orga(flux=avec(1, modele="Opus", justification="x" * jugement.LONGUEUR_JUSTIFICATION)))
+        self.assertIsNotNone(self._orga(flux=avec(1, modele="Opus", justification="x" * (jugement.LONGUEUR_JUSTIFICATION + 1))))
+        self.assertIsNotNone(self._orga(flux=avec(1, modele="Haiku")))                    # sans justification
+        self.assertIsNotNone(self._orga(flux=avec(1, modele="Haiku", justification="a\nb")))
+        self.assertIn("Fable", self._orga(flux=avec(1, modele="Fable", justification=j)))
+        self.assertIsNotNone(self._orga(flux=avec(1, modele="GPT", justification=j)))
+        sans = [{k: v for k, v in a.items() if k not in ("modele", "justification")}
+                for a in VALIDES["proposer_organisation"]["agents"]]
+        self.assertIsNone(self._orga(agents=sans))
+        val = {"etape": "essai", "nom": "Essai par le Directeur", "validation": True, "modele": "Haiku",
+               "justification": j}
+        self.assertIsNotNone(self._orga(flux=[flux[0], val] + flux[1:]))
+        o = json.loads(json.dumps(VALIDES["definir_workflow"]))
+        o["flux"][1].update(modele="Haiku", justification=j)
+        self.assertIsNone(self._def(o))
+        o["flux"][1]["modele"] = "Fable"
+        self.assertIsNotNone(self._def(o))
+
     def test_proposer_organisation_role_sans_agent_refuse(self):
         agents = VALIDES["proposer_organisation"]["agents"]
         self.assertIsNotNone(self._orga(agents=agents[1:]))              # testeur sans agent
@@ -610,6 +635,13 @@ class Consignes(unittest.TestCase):
         self.assertIn("jamais Fable", texte)
         self.assertIn('"validation": true', texte)
         self.assertIn("version_min", texte)
+
+    def test_modele_par_etape_et_plafond_opus_dans_les_deux_consignes(self):
+        for type_ in ("proposer_organisation", "definir_workflow"):
+            texte = jugement.consigne(type_)
+            self.assertIn('"modele": "Haiku", "justification"', texte, type_)    # sur l'étape, dans l'exemple
+            self.assertIn("plafond Opus", texte, type_)
+            self.assertLess(len(texte), 4600, type_)                             # une consigne reste courte
 
     def test_definir_workflow_porte_les_decisions_de_l_utilisateur(self):
         texte = jugement.consigne("definir_workflow")

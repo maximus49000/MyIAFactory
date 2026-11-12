@@ -66,6 +66,7 @@ VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
 LONGUEUR_ELARGISSEMENT = 300      # la description d'un genre élargie à une demande, rendue par le classement
 LONGUEUR_INTITULE = 60           # le nom court d'une fonctionnalité, rendu par le classement de la demande
 MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
+LONGUEUR_JUSTIFICATION = 160      # la justification du modèle nécessaire d'une étape : une ligne courte
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
                      "mise en ligne")
@@ -373,8 +374,8 @@ def _valider_proposer_organisation(o, d):
         if "validation" in x and x["validation"] is not True:
             return f"Étape « {e} » : « validation » vaut true (une validation du Directeur), sinon ne la mets pas."
         if x.get("validation") is True:
-            if x.get("role") is not None or x.get("service") is not None:
-                return f"Étape « {e} » : une validation du Directeur n'a ni « role » ni « service »."
+            if x.get("role") is not None or x.get("service") is not None or "modele" in x:
+                return f"Étape « {e} » : une validation du Directeur n'a ni « role », ni « service », ni « modele »."
             if k == 0:
                 return f"Étape « {e} » : une validation du Directeur ne peut pas être la première étape."
             if k == len(flux) - 1:
@@ -391,6 +392,14 @@ def _valider_proposer_organisation(o, d):
             roles_du_flux.append(x["role"])
         if x.get("service") not in tous_services:
             return f"Étape « {e} » : service « {x.get('service')} » ni au projet ni proposé dans « services »."
+        if "modele" in x:      # le modèle que demande le travail de l'étape (facultatif : sinon déduit de sa nature)
+            if isinstance(x["modele"], str) and "fable" in x["modele"].lower():
+                return f"Étape « {e} » : jamais Fable comme modèle d'étape ; au plus Opus."
+            if x["modele"] not in MODELES_AGENT:
+                return f"Étape « {e} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
+            if not (_ligne(x.get("justification")) and len(x["justification"]) <= LONGUEUR_JUSTIFICATION):
+                return (f"Étape « {e} » : « justification » du modèle, une ligne de {LONGUEUR_JUSTIFICATION} "
+                        "caractères au plus.")
     if not _texte(o.get("livrable")):
         return "« livrable » (ce qui est remis à l'utilisateur à la fin) est obligatoire."
     if not _dit_le_livrable(flux[-1]["nom"], o["livrable"]):
@@ -409,10 +418,12 @@ def _valider_proposer_organisation(o, d):
         if c in cles:
             return f"Agent « {c} » : clé déjà prise."
         cles.append(c)
+        # Un agent proposé est recruté avec le plafond Opus (les modèles justifiés vont sur les étapes) : son
+        # « modele » est facultatif, mais jamais Fable ni un nom inconnu.
         if isinstance(a.get("modele"), str) and "fable" in a["modele"].lower():
             return (f"Agent « {c} » : jamais Fable comme modèle ; mets Opus et « fable_suggere »: true si Fable "
                     "serait vraiment utile (le Directeur décidera).")
-        if a.get("modele") not in MODELES_AGENT:
+        if "modele" in a and a["modele"] not in MODELES_AGENT:
             return f"Agent « {c} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
         if not (isinstance(a.get("role"), str) and MOTIF_ID.match(a["role"])):
             return f"Agent « {c} » : un « role » (minuscules, chiffres, tirets) est attendu."
@@ -421,8 +432,8 @@ def _valider_proposer_organisation(o, d):
             roles_nouveaux.append(a["role"])
         if a.get("service") not in tous_services:
             return f"Agent « {c} » : service « {a.get('service')} » ni au projet ni proposé."
-        if not _ligne(a.get("justification")):
-            return f"Agent « {c} » : « justification » du modèle, en une ligne."
+        if "justification" in a and not _ligne(a["justification"]):
+            return f"Agent « {c} » : « justification » en une ligne."
         if not _texte(a.get("texte")):
             return f"Agent « {c} » : le « texte » de sa fiche est vide."
         if a.get("prenom") is not None and not _ligne(a["prenom"]):

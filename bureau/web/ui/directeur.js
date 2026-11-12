@@ -208,7 +208,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   const service = a.chef ? "Chef d'atelier" : ((e.services || []).find((s) => s.id === a.service)?.nom || "—");
   contenu.append(ligne("Service", service));
   if (a.specialite) contenu.append(ligne("Spécialité", a.specialite));
-  contenu.append(ligne("Modèle", a.modele || "?"));
+  contenu.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
   contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
   contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
 

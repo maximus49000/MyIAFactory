@@ -132,9 +132,9 @@ le bandeau du bureau montre.
 1. **`cadrage`.** L'agent de cadrage (service Métier) pose ses questions dans la discussion jusqu'à ce que le besoin
    et la solution soient clairs. **Le cadrage coûte une exécution par réponse ; la compréhension se joue à la
    première.** La **première réponse** à une nouvelle fonctionnalité (la première analyse du besoin : ce qui est
-   compris, ce qui est flou, les vraies questions) se fait un cran au-dessus d'une fiche Haiku (montée notée :
-   « première analyse du besoin ») ; les **questions et reformulations suivantes** se font sur le modèle de la fiche
-   (Haiku conseillé). Donne à l'agent la discussion et rien d'autre, et demande des réponses courtes, avec des
+   compris, ce qui est flou, les vraies questions) soigne la compréhension ; elle et les **questions et
+   reformulations suivantes** se font sur le modèle de la fiche de l'agent de cadrage, jamais au-dessus (le modèle
+   d'une fiche est un plafond). Donne à l'agent la discussion et rien d'autre, et demande des réponses courtes, avec des
    questions à choix quand c'est possible (moins d'allers-retours). Crée une fois la tâche de cadrage : `lancer tache` avec `titre` « Cadrage :
    <nom> », `fonctionnalite`, `role` (celui de l'agent), `colonne: cadrage`, `agent` = l'agent de cadrage,
    `active: true` ; elle reste active jusqu'à la fin du cahier des charges. Pour chaque réponse : `lancer depart`
@@ -228,13 +228,17 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   un agent cloud la prend).
 - **Des lots par modèle.** Au découpage, note sur chaque tâche ce dont elle dépend (`lancer tache` avec `depend_de`).
   Avant de lancer, `lancer lots` sur les tâches prêtes (sans `taches` : toutes celles qui ne sont pas parties, toutes
-  fonctionnalités confondues) : il regroupe les tâches d'un même modèle et d'un même lieu, applique la taille
+  fonctionnalités confondues) : il regroupe les tâches d'un même modèle nécessaire et d'un même lieu, applique la taille
   conseillée de chaque modèle d'après les mesures du projet, garde chaque relecture seule et respecte `depend_de`.
   **À chaque nouvelle fonctionnalité ou sollicitation qui ajoute des tâches, refais les lots de tout ce qui n'est pas
   parti.** Note le lot sur chaque tâche (`lancer tache` avec `lot: {id, rang}`) avant le départ. Un lot = un agent, un
   départ, enchaîné d'une traite.
-- **Le modèle de départ est celui de la fiche** de l'agent. Tu peux **monter d'un cran** si une tâche semble
-  complexe (Haiku vers Sonnet, Sonnet vers Opus), jamais plus. Note toute montée sur la tâche (`lancer tache` avec
+- **Le modèle de départ est le modèle nécessaire de la tâche** : celui de son étape (`modele` posé avec le
+  workflow, sinon déduit de la nature de l'étape ; `lancer lots` le donne). **Le modèle de la fiche est un
+  plafond** : un agent prend toute tâche de son rôle dont le modèle nécessaire ne le dépasse pas, et la fait tourner
+  exactement sur ce modèle (`agent-libre` avec `modele` : le plus petit plafond suffisant). Cadrage et prototype :
+  le modèle de la fiche. Tu peux **monter d'un cran** si une tâche semble complexe (Haiku vers Sonnet, Sonnet vers
+  Opus), jamais plus ni au-dessus du plafond de l'agent. Note toute montée sur la tâche (`lancer tache` avec
   `modele_depart` et `montee: {de, a, raison}`, la raison en une phrase) : elle se voit au bureau et dans la
   facturation.
 - **Fable n'est jamais choisi** sans une demande expresse de l'utilisateur pour cette tâche : l'outil refuse de le
@@ -242,8 +246,8 @@ la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance 
   écris-le dans le `journal` de la tâche, avec sa demande.
 - **En local**, un sous-agent neuf avec le modèle choisi.
 - **En cloud**, le modèle d'une session est fixé à sa création, et seule une demande de l'utilisateur peut en créer
-  une : le projet déclare donc une fiche par couple rôle et modèle, chacune avec sa session attitrée. S'il manque
-  l'agent cloud du bon rôle et du bon modèle (`agent-libre` le dit : « session à créer »), pose la décision
+  une : le moteur ouvre une session par départ, sur le modèle nécessaire de la tâche (jamais au-dessus du plafond de
+  la fiche). S'il manque l'agent cloud du bon rôle au plafond suffisant (`agent-libre` le dit : « session à créer »), pose la décision
   `session_cloud` (`portee: projet`, `agent` = la clé de la fiche qui attend sa session, et dans le `texte` le
   modèle et le rôle attendus) au lieu de bloquer en silence ; `agent-libre` donne cette clé dans `sans_session`.
   S'il répond « aucun agent cloud … libre », les sessions existent mais sont occupées : attends, ne demande rien. S'il

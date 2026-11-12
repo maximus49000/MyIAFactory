@@ -82,6 +82,15 @@ class TestFactory(unittest.TestCase):
         with self.assertRaises(factory.FactoryInvalide):   # une validation n'a ni rôle ni service
             factory.lire(self.ecrire(flux=[dev, {**v1, "role": "dev"}, fin]))
 
+    def test_modele_necessaire_d_une_etape(self):
+        dev = {"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}
+        f = factory.lire(self.ecrire(flux=[{**dev, "modele": "Haiku", "justification": "Mécanique."}]))
+        self.assertEqual((f["flux"][0]["modele"], f["flux"][0]["justification"]), ("Haiku", "Mécanique."))
+        for mauvais in ({"modele": "Fable"}, {"modele": "GPT"}, {"modele": 3}, {"modele": "Opus", "justification": 3}):
+            with self.assertRaises(factory.FactoryInvalide, msg=str(mauvais)) as c:
+                factory.lire(self.ecrire(flux=[{**dev, **mauvais}]))
+            self.assertIn("modele", str(c.exception))
+
     def test_flux_refuse_les_colonnes_reservees_et_les_doublons(self):
         etape = {"nom": "X", "role": "dev", "service": "dev"}
         for flux in ([{"id": "cadrage", **etape}], [{"id": "fait", **etape}],

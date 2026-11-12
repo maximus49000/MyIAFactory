@@ -479,7 +479,9 @@ class TestValider(Base):
         self.assertEqual(sorted(s["id"] for s in f["services"]), ["dev", "facturation"])
         fs = {x["cle"]: x for x in fiches.lire_toutes(f["fiches"])}
         self.assertEqual(sorted(fs), sorted(a["cle"] for a in b["proposition"]["agents"]))
-        self.assertEqual(fs["dev-1"]["modele"], "Sonnet")
+        self.assertEqual(fs["dev-1"]["modele"], "Opus")                 # le plafond d'un nouvel agent
+        self.assertEqual(w["flux"][0]["modele"], "Sonnet")               # le modèle justifié, sur l'étape
+        self.assertTrue(w["flux"][0]["justification"])
         self.assertTrue((f["fiches"] / "briefs" / "dev.md").is_file())
         self.assertTrue((f["fiches"] / "briefs" / "environnement.md").is_file())
         self.assertEqual(f["environnement"][0]["outil"], "JDK")
@@ -642,7 +644,7 @@ class TestValider(Base):
         fs = {x["cle"]: x for x in fiches.lire_toutes(fa.lire(self.factory())["fiches"])}
         self.assertEqual(fs["dev-1"]["modele"], "Fable")
         self.assertTrue(fiches.fable_accorde(fs["dev-1"]))
-        self.assertEqual(fs["livreur-1"]["modele"], "Haiku")
+        self.assertEqual(fs["livreur-1"]["modele"], "Opus")              # plafond par défaut, sans Fable
         # Un agent dont Fable n'a pas été suggéré : refusé, rien n'est créé.
         b2 = self.pret(nom="Autre jeu")
         with self.assertRaises(Echec) as c:

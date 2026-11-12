@@ -11,7 +11,8 @@ from bureau.equipe import PRENOMS
 from orchestrateur import workflows as wf
 
 MODELES = ("Haiku", "Sonnet", "Opus")     # Fable : seulement avec l'accord du Directeur (case cochée), jamais en auto
-MODELE_PAR_DEFAUT = "Sonnet"
+MODELE_PAR_DEFAUT = "Sonnet"              # le modèle d'un rôle sans agent (le travail d'une nature inconnue)
+PLAFOND_PAR_DEFAUT = "Opus"               # le modèle de la fiche d'une recrue : son plafond (2026-11-12-modele-par-tache)
 MAX_PAR_DEMANDE = 16
 HORS_PLACES = ("chef",)                   # le chef d'atelier ne tient pas de place
 ROLE_RELECTURE = "relecteur"              # comme `moteur.regles` : la relecture croisée tient lieu de son étape
@@ -214,7 +215,8 @@ def _travail(f, s):
                 if e.get("role"):
                     compte[e["role"]] = compte.get(e["role"], 0) + 1
                     unites.setdefault(e["role"], []).append(
-                        {"texte": f"{e.get('nom') or ''} {e.get('id') or ''}".strip(), "difficile": False})
+                        {"texte": f"{e.get('nom') or ''} {e.get('id') or ''}".strip(), "difficile": False,
+                         "modele": e.get("modele")})
     for t in s.get("taches") or []:
         if (t.get("colonne") == "fait" or t.get("active") or t.get("bloquee") or not t.get("role")
                 or t["id"] in retenues):
@@ -222,7 +224,8 @@ def _travail(f, s):
         compte[t["role"]] = compte.get(t["role"], 0) + 1
         e = _etape_de_tache(t, etapes)
         texte = f"{e.get('nom') or ''} {e.get('id') or ''}".strip() if e else str(t.get("titre") or "")
-        unites.setdefault(t["role"], []).append({"texte": texte, "difficile": _signal_difficulte(t)})
+        unites.setdefault(t["role"], []).append({"texte": texte, "difficile": _signal_difficulte(t),
+                                                 "modele": (e or {}).get("modele")})
     return compte, unites
 
 
@@ -261,11 +264,13 @@ def _nature(texte):
 
 def modeles_du_travail(unites, nom_role, role):
     """Les groupes de travail d'un rôle, du plus gros au plus exigeant : `[{modele, raison, nombre}]`. Chaque unité
-    prend le modèle de sa nature (étape ou titre, puis nom du rôle) ; une tâche déjà relancée après échec ou renvoyée
+    prend le modèle posé sur son étape (`modele`), sinon celui de sa nature (étape ou titre, puis nom du rôle) : c'est
+    le modèle nécessaire de ses tâches, pas le plafond de la recrue ; une tâche déjà relancée après échec ou renvoyée
     « À revoir » plusieurs fois monte d'un cran (Opus au plus). Vide si aucune nature n'est reconnue."""
     groupes = {}
     for u in unites:
-        n = _nature(u["texte"]) or _nature(f"{nom_role} {role}")
+        n = ((u["modele"], "modèle posé avec le workflow") if u.get("modele") in MODELES
+             else _nature(u["texte"]) or _nature(f"{nom_role} {role}"))
         if n is None:
             continue
         modele, libelle = n
@@ -353,13 +358,16 @@ def proposer(f, s, fiches, places_cloud, github, maximum=MAX_PAR_DEMANDE, lieu="
         g = groupes[r]
         if g:
             choisi = g[recrues[r]] if recrues[r] < len(g) else g[0]
-            modele, raison_modele = choisi["modele"], choisi["raison"]
+            necessaire, raison_modele = choisi["modele"], choisi["raison"]
         else:
-            modele, raison_modele = info["modele"], f"{info['modele']} : {info['raison_modele']}"
+            necessaire, raison_modele = info["modele"], f"{info['modele']} : {info['raison_modele']}"
+        # La recrue a le plafond Opus ; le modèle le plus logique pour son travail est celui que ses tâches demandent
+        # (conception 2026-11-12-modele-par-tache-design.md).
         propositions.append({
-            "role": r, "modele": modele, "lieu": ou,
+            "role": r, "modele": PLAFOND_PAR_DEFAUT, "modele_necessaire": necessaire, "lieu": ou,
             "raison": (f"{info['nom']} : {_pluriel(travail.get(r, 0), 'tâche')} prête(s) ou en file pour "
-                       f"{_pluriel(info['agents'] + recrues[r], 'agent')} ; modèle {raison_modele} ; {raison_lieu}")})
+                       f"{_pluriel(info['agents'] + recrues[r], 'agent')} ; plafond {PLAFOND_PAR_DEFAUT}, tâches en "
+                       f"{raison_modele} ; {raison_lieu}")})
         recrues[r] += 1
     return {"propositions": propositions, "places": places, "notes": notes, "travail": travail}
 

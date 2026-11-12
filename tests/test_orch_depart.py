@@ -44,7 +44,12 @@ class TestDepart(unittest.TestCase):
     def test_agent_libre_modele_et_lieu(self):
         liste = [fiche("dev-1", "dev", "Sonnet"), fiche("dev-2", "dev", "Opus")]
         self.assertEqual(depart.agent_libre(liste, [], "dev", modele="Opus")[0], "dev-2")
-        self.assertEqual(depart.agent_libre(liste, [], "dev", modele="Haiku"), (None, "aucun dev libre sur Haiku"))
+        # le modèle de la fiche est un plafond : une tâche Haiku va au plus petit plafond suffisant (Sonnet)
+        self.assertEqual(depart.agent_libre(liste, [], "dev", modele="Haiku")[0], "dev-1")
+        self.assertEqual(depart.agent_libre(liste[::-1], [], "dev", modele="Haiku")[0], "dev-1")
+        self.assertEqual(depart.agent_libre(liste, [{"agent": "dev-1", "active": True}], "dev", modele="Haiku")[0],
+                         "dev-2")
+        self.assertEqual(depart.agent_libre(liste[:1], [], "dev", modele="Opus"), (None, "aucun dev libre sur Opus"))
 
     def test_limite_agents_locaux(self):
         liste = [fiche("dev-1", "dev"), fiche("dev-2", "dev")]
@@ -65,21 +70,26 @@ class TestDepart(unittest.TestCase):
     def test_agent_libre_cloud_manquant(self):
         liste = [fiche("prep-1", "preparateur", "Sonnet", "cloud", "Session prep"), fiche("prep-2", "preparateur", "Opus", "cloud")]
         self.assertEqual(depart.agent_libre(liste, [], "preparateur", "Sonnet", "cloud")[0], "prep-1")
-        # Aucune fiche de ce rôle et de ce modèle : il faut d'abord en écrire une (pas de session à demander).
-        cle, raison = depart.agent_libre(liste, [], "preparateur", "Haiku", "cloud")
+        # Une tâche Haiku : le plafond Sonnet de prep-1 suffit.
+        self.assertEqual(depart.agent_libre(liste, [], "preparateur", "Haiku", "cloud")[0], "prep-1")
+        # Aucune fiche de ce rôle au plafond suffisant : il faut d'abord en écrire une (pas de session à demander).
+        cle, raison = depart.agent_libre(liste[:1], [], "preparateur", "Opus", "cloud")
         self.assertIsNone(cle)
-        self.assertEqual(raison, "aucune fiche cloud preparateur sur Haiku : ajoutez-en une")
-        self.assertIsNone(depart.sans_session(liste, "preparateur", "Haiku"))
+        self.assertEqual(raison, "aucune fiche cloud preparateur sur Opus : ajoutez-en une")
+        self.assertIsNone(depart.sans_session(liste[:1], "preparateur", "Opus"))
         # La fiche existe, sans session : c'est elle qui attend sa session (la décision la nomme).
         cle, raison = depart.agent_libre(liste, [], "preparateur", "Opus", "cloud")
         self.assertIsNone(cle)
         self.assertEqual(raison, "aucun agent cloud preparateur sur Opus : session à créer pour prep-2")
         self.assertEqual(depart.sans_session(liste, "preparateur", "Opus"), "prep-2")
         # Occupé n'est pas « sans session » : on attend, on ne redemande pas une session qui existe.
-        cle, raison = depart.agent_libre(liste, [{"agent": "prep-1", "active": True}], "preparateur", "Sonnet", "cloud")
+        seul = liste[:1]
+        cle, raison = depart.agent_libre(seul, [{"agent": "prep-1", "active": True}], "preparateur", "Sonnet", "cloud")
         self.assertIsNone(cle)
         self.assertEqual(raison, "aucun agent cloud preparateur libre sur Sonnet")
-        self.assertIsNone(depart.sans_session(liste, "preparateur", "Sonnet"))
+        self.assertIsNone(depart.sans_session(seul, "preparateur", "Sonnet"))
+        # prep-1 occupé, prep-2 (plafond Opus) pourrait prendre la tâche Sonnet : c'est sa session qui manque.
+        self.assertEqual(depart.sans_session(liste, "preparateur", "Sonnet"), "prep-2")
 
     def test_agent_libre_local_ignore_le_cloud(self):
         liste = [fiche("prep-1", "preparateur", "Sonnet", "cloud", "S")]

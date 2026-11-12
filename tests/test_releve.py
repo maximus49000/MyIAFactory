@@ -996,6 +996,16 @@ class TestVersion4(unittest.TestCase):
         r["taches"][0]["montee"] = {"de": "Haiku", "a": "Sonnet", "raison": "trop dur"}
         self.assertEqual(releve.valider(r), [])
 
+    def test_modele_necessaire_d_une_tache(self):
+        r = v4()
+        r["taches"][0]["modele_necessaire"] = {"modele": "Haiku", "raison": "déduit de l'étape : tests", "ramene": False}
+        self.assertEqual(releve.valider(r), [])
+        for mauvais in ({"modele": "Haiku"}, {"modele": "", "raison": "x", "ramene": False}, "Haiku",
+                        {"modele": "Haiku", "raison": "x", "ramene": "non"}):
+            r["taches"][0]["modele_necessaire"] = mauvais
+            self.refus(r, "modele_necessaire")
+        self.assertIsNone(releve.normaliser(v4())["taches"][0]["modele_necessaire"])
+
     def test_questions_a_choix(self):
         q = [{"texte": "Quelle taille ?", "choix": ["28 px", "56 px"]},
              {"texte": "Quels fonds ?", "choix": ["Clair", "Sombre", "Les deux"], "multiple": True}]

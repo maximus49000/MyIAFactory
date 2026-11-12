@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
-        limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot} from "../ui/facturation.js";
+        limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot, PLAFOND_PAR_DEFAUT, REGLE_PLAFOND,
+        ligneApercu} from "../ui/facturation.js";
 
 const REC = (extra = {}) => ({recrutement: {
   roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
@@ -11,6 +12,15 @@ const REC = (extra = {}) => ({recrutement: {
                  {role: "dev", modele: "Sonnet", lieu: "local", raison: "c"}],
   notes: [], depot: {git: true, github: true, url: "https://github.com/moi/jeu", creable: false}, cloud_impossible: null,
   ...extra}});
+
+test("recrutement : plafond Opus par défaut, la règle en une ligne, l'aperçu dit plafond et modèle des tâches", () => {
+  assert.equal(PLAFOND_PAR_DEFAUT, "Opus");
+  assert.match(REGLE_PLAFOND, /plafond/);
+  assert.ok(!REGLE_PLAFOND.includes("\n"));
+  assert.equal(ligneApercu({role: "dev", modele: "Opus", modele_necessaire: "Sonnet", lieu: "cloud", raison: "r"}),
+               "dev · plafond Opus · tâches en Sonnet · cloud — r");
+  assert.equal(ligneApercu({role: "dev", modele: "Opus", lieu: "local", raison: "r"}), "dev · plafond Opus · local — r");
+});
 
 test("resumeRecrutement : sans dépôt GitHub, le cloud est impossible et le dépôt se crée", () => {
   assert.equal(resumeRecrutement({}), null);

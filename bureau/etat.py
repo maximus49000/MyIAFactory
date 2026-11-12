@@ -5,6 +5,7 @@ from . import empreinte as modempreinte
 from . import kpi as modkpi
 from . import releve as modreleve
 from . import statuts
+from orchestrateur import modele_necessaire
 
 
 def dossier(r):
@@ -180,7 +181,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         directeur["reponses"] = sum(1 for f in presentes if attend_utilisateur(f))
         directeur["total"] += directeur["fonctionnalites"] + directeur["projet"] + directeur["reponses"]
         for t, brut in zip(taches, r["taches"]):
-            for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot"):
+            for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire"):
                 t[c] = brut.get(c)
 
     e = {
@@ -231,11 +232,9 @@ def _avec_empreinte(d):
     o = d.get("organisation")
     if d.get("genre") != "organisation" or not isinstance(o, dict) or not isinstance(o.get("cout"), dict):
         return d
-    modele_du_role = {}
-    for a in o.get("agents") or []:
-        if isinstance(a, dict):
-            modele_du_role.setdefault(a.get("role"), a.get("modele"))
-    modeles = [modele_du_role.get(e.get("role")) for e in o.get("flux") or []
+    agents = [a for a in o.get("agents") or [] if isinstance(a, dict)]
+    # le modèle nécessaire de chaque étape, ramené au plafond des agents du rôle (comme l'estimation du coût)
+    modeles = [modele_necessaire.estime(e, agents) for e in o.get("flux") or []
                if isinstance(e, dict) and e.get("validation") is not True]
     co2 = modempreinte.plage(o["cout"].get("tokens"), modeles)
     if co2:

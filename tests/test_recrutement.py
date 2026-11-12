@@ -163,34 +163,44 @@ class ModeleLogique(unittest.TestCase):
         props = self.proposer([tache(i, "testeur", "tests") for i in range(6)]
                               + [tache(7, "architecte", "concept"), tache(8, "architecte", "concept")]
                               + [tache(i, "dev", "dev") for i in range(10, 13)])
-        par_role = {p["role"]: p for p in props}
-        self.assertEqual(par_role["testeur"]["modele"], "Haiku")
-        self.assertIn("Haiku : tests et vérifications mécaniques de 6 éléments", par_role["testeur"]["raison"])
+        par_role = {p["role"]: {**p, "modele": p["modele_necessaire"]} for p in props}
+        self.assertEqual({p["modele"] for p in props}, {"Opus"})     # chaque recrue a le plafond Opus
+        self.assertEqual(par_role["testeur"]["modele"], "Haiku")      # … et ses tâches tournent sur leur modèle
+        self.assertIn("plafond Opus, tâches en Haiku : tests et vérifications mécaniques de 6 éléments",
+                      par_role["testeur"]["raison"])
         self.assertEqual(par_role["architecte"]["modele"], "Opus")
         self.assertIn("conception et architecture", par_role["architecte"]["raison"])
         self.assertEqual(par_role["dev"]["modele"], "Sonnet")       # Léa est sur Opus : le travail décide, pas la fiche
-        self.assertNotIn("Fable", {p["modele"] for p in props})
+        self.assertNotIn("Fable", {p["modele_necessaire"] for p in props})
+
+    def test_modele_pose_sur_l_etape_d_abord(self):
+        self.f = {"flux": [dict(FLUX_TRIPLE[2], modele="Sonnet", justification="Tests d'intégration lourds.")],
+                  "agents_locaux_max": 16}
+        props = self.proposer([tache(i, "testeur", "tests") for i in range(2)])
+        self.assertEqual(props[0]["modele_necessaire"], "Sonnet")
+        self.assertIn("modèle posé avec le workflow", props[0]["raison"])
 
     def test_echec_ou_a_revoir_monte_d_un_cran_pas_au_dela_d_opus(self):
         relancee = tache(1, "testeur", "tests", journal=[{"t": "x", "texte": "Échec : relancée"}])
         revue = tache(2, "dev", "dev", journal=[{"t": "x", "texte": "À revoir"}, {"t": "y", "texte": "Renvoyée à revoir"}])
         autre = tache(5, "dev", "dev")
         une_fois = tache(3, "architecte", "concept", journal=[{"t": "x", "texte": "À revoir"}])
-        par_role = {p["role"]: p for p in self.proposer([relancee, revue, autre, une_fois])}
+        par_role = {p["role"]: {**p, "modele": p["modele_necessaire"]}
+                    for p in self.proposer([relancee, revue, autre, une_fois])}
         self.assertEqual(par_role["testeur"]["modele"], "Sonnet")
         self.assertIn("monté d'un cran", par_role["testeur"]["raison"])
         self.assertEqual(par_role["dev"]["modele"], "Opus")
         self.assertEqual(par_role["architecte"]["modele"], "Opus")
         self.assertNotIn("monté", par_role["architecte"]["raison"])       # une seule fois « à revoir » ne suffit pas
         montee = tache(4, "testeur", "tests", montee={"de": "Haiku", "a": "Sonnet", "raison": "r"})
-        self.assertEqual(self.proposer([montee])[0]["modele"], "Sonnet")
+        self.assertEqual(self.proposer([montee])[0]["modele_necessaire"], "Sonnet")
         # Opus ne monte pas : jamais Fable.
         self.assertEqual(rc.modeles_du_travail([{"texte": "Conception", "difficile": True}], "", "x")[0]["modele"], "Opus")
         self.assertEqual(rc.modeles_du_travail([{"texte": "Tests", "difficile": False}], "", "x")[0]["modele"], "Haiku")
 
     def test_nature_inconnue_garde_le_modele_du_role(self):
         props = self.proposer([tache(1, "inconnu", "etape"), tache(2, "inconnu", "etape")])
-        self.assertEqual(props[0]["modele"], "Haiku")
+        self.assertEqual((props[0]["modele"], props[0]["modele_necessaire"]), ("Opus", "Haiku"))
         self.assertIn("celui de Hugo, du même rôle", props[0]["raison"])
 
     def test_deterministe(self):

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleLot} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleModeleNecessaire, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -170,6 +170,15 @@ test("libelleMontee", () => {
   assert.equal(libelleMontee({}), null);
   assert.equal(libelleMontee(null), null);
   assert.equal(libelleMontee({montee: {de: "Haiku", a: "Sonnet"}}), "Sonnet, monté depuis Haiku");
+});
+
+test("libelleModeleNecessaire : le modèle de la tâche et sa raison", () => {
+  assert.equal(libelleModeleNecessaire({modele_necessaire: {modele: "Haiku", raison: "déduit de l'étape : tests", ramene: false}}),
+               "Haiku — déduit de l'étape : tests");
+  assert.equal(libelleModeleNecessaire({modele_necessaire: {modele: "Sonnet", raison: "", ramene: false}}), "Sonnet");
+  for (const t of [{}, null, {modele_necessaire: null}, {modele_necessaire: {modele: ""}}, {modele_necessaire: "Haiku"}]) {
+    assert.equal(libelleModeleNecessaire(t), null);
+  }
 });
 
 test("nomAgent : le prénom, sinon la clé (un agent pas encore au bureau)", async () => {

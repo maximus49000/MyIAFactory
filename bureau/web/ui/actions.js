@@ -307,6 +307,14 @@ export function libelleLot(tache, taches) {
   return `Lot ${l.id}, tâche ${l.rang} sur ${Math.max(dansLeLot, l.rang)}`;
 }
 
+// « Haiku — déduit de l'étape : tests » : le modèle nécessaire de la tâche (celui sur lequel elle tourne, jamais
+// au-dessus du plafond de l'agent) ; null si la tâche n'en a pas (cadrage, prototype : le modèle de la fiche).
+export function libelleModeleNecessaire(tache) {
+  const m = tache?.modele_necessaire;
+  if (!m || typeof m !== "object" || !plein(m.modele)) return null;
+  return m.modele + (plein(m.raison) ? ` — ${m.raison}` : "");
+}
+
 // « Sonnet, monté depuis Haiku : <raison> » ; null si la tâche n'a pas été montée de modèle.
 export function libelleMontee(tache) {
   const m = tache?.montee;

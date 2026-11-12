@@ -464,7 +464,10 @@ class Parcours(AvecParcours):
         self.assertEqual([s["id"] for s in f["services"]], ["metier", "dev", "livraison"])
         self.assertEqual(f["flux"][0]["id"], "dev")                          # le flux du projet n'est pas touché
         fiche = (self.dossier / "fiches" / "liv-1.md").read_text(encoding="utf-8")
-        self.assertIn("Modèle : Haiku", fiche)
+        self.assertIn("Modèle : Opus", fiche)                   # le plafond d'un nouvel agent
+        livraison = w["flux"][1]
+        self.assertEqual(livraison["modele"], "Haiku")          # le modèle justifié va sur l'étape de son rôle
+        self.assertTrue(livraison["justification"])
         self.assertNotIn("Fable", fiche)
         self.assertTrue((self.dossier / "fiches" / "briefs" / "livreur.md").is_file())
         self.assertEqual((self.fonc()["genre"], self.fonc()["workflow"]), ("badges", "w-f1"))

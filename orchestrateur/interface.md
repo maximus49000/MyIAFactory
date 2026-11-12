@@ -170,7 +170,8 @@ la même façon, à la pose comme à la complétion, pour corriger une décision
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
 `projet` (`confirmer_genre` avec `propose`, `genres_connus` et, facultatif, `fonctionnalite` (celle qui attend ce
 genre), `session_cloud` avec `agent`, `outil_agent` (un agent est arrêté faute d'un outil que sa fiche ne lui ouvre pas et le moteur ne peut pas l'ouvrir seul : `agent` (clé), `tache`, `outil`, et facultatifs `programme` (le programme du shell à ouvrir, d'après la commande refusée) et `commande` (la commande refusée, une ligne, coupée, valeurs secrètes masquées) ; le Directeur répond « Autoriser ce programme pour cet agent » ou « Refuser » : seul le moteur procédural pose cette décision et y répond), `faire_chez_partenaire` (« À faire chez <partenaire> » : l'utilisateur est inscrit chez ce partenaire, sans liaison directe, et fait lui-même la génération sur son site ; `agent` (clé), `tache`, `partenaire` (id du catalogue), `quoi`, `prompt` (prêt à copier), `reglages` (liste), `mode_operatoire` (étapes, où cliquer), `a_rapporter` `{description, nom?}` (le fichier attendu au retour), et facultatifs `elements` (ce que groupe le prompt), `site` (https, rempli par l'outil d'après le catalogue), `nom_partenaire` (rempli par l'outil), `apres` (l'identifiant de la demande à faire avant : une génération à la fois chez un partenaire) ; l'utilisateur répond « Fait » (avec le résultat en pièces jointes et/ou un mot) ou « Je n'ai pas pu » : seul le moteur procédural pose cette décision et y répond), `accord_agent` (un agent demande l'accord de l'utilisateur : `agent` (clé), `tache`, `quoi`, et facultatifs `partenaire`, `cout`, `pourquoi`, `implique`, `regle` (rappel de la règle du projet), `appareil` (vrai : installation ou test sur un appareil physique), `regle_proposee` (le texte que la case « Retenir comme règle du projet » propose, 500 caractères au plus) `choix` (les choix que l'agent a proposés avec sa demande, 1 à 6 textes de 120 caractères au plus : le bureau les montre comme boutons) et `regles_touchees` (les règles du projet que la demande touche, `[{id, texte}]`, 3 au plus) ; « J'accepte » ou « Je refuse » avec une consigne : seul le moteur procédural pose cette décision et y répond), `elargir_genre` (élargir la description d'un genre gardé : `cible` le genre, `ancienne`, `propose`, `fonctionnalite` la demande qui l'a provoquée), `serie_arretee` (une série qui ne progresse plus, sans tâche ouverte ni décision ni agent : `fonctionnalite`, et le `texte` qui dit pourquoi ; « Relancer la série » : seul le moteur procédural pose cette décision et y répond), `valider_etape` (un élément attend le Directeur à une étape de validation : `fonctionnalite`, `element` `{id, nom}`, `etape`, `tache`, `compte_rendu`, `fichiers`, et facultatifs `objectif` (ce que l'élément devait produire) et `a_valider` (le nom de l'étape, et sa raison), 600 caractères au plus, `points` (les points à vérifier de la fenêtre de validation : 1 à 8 phrases différentes de 160 caractères au plus) et `acces` `{url (http ou https), description? (200 au plus)}` ; un fichier image est rangé comme les autres images d'agent, un livrable téléchargeable (apk, zip, pdf, exe…) trouvé dans le projet reçoit `taille` et `date`, son chemin compté depuis la factory ou, hors de `.factory`, depuis le dossier du projet), `environnement` avec `environnement` (comme pour une fonctionnalité : l'installation portée par le projet, à sa création, a échoué) ou `organisation` avec `organisation`). Une décision `organisation` porte `{"services": [{id, nom}] (la liste complète après changement),
-"flux": [{id, nom, role, service}] (complet), "agents": [fiches] (les nouveaux seulement), "briefs": {rôle: texte}
+"flux": [{id, nom, role, service, modele?, justification?}] (complet ; `modele` : Haiku, Sonnet ou Opus, le modèle
+nécessaire de l'étape, gardé dans le fichier de factory), "agents": [fiches] (les nouveaux seulement, au plafond Opus), "briefs": {rôle: texte}
 (nouveaux rôles), "cout": {"tokens": [a, b], "euros": [a, b] | null}}` ; elle est contrôlée comme une proposition
 (Fable refusé, clés et rôles, briefs). Quand elle propose le workflow d'une fonctionnalité, elle porte aussi
 `"fonctionnalite"` (son id), `"workflow": {"id", "genre", "flux", "genre_nouveau"?: {"description"}}` (le `flux` est celui
@@ -372,8 +373,9 @@ texte`). Rend `{"numero": n}`.
 
 ### `agent-libre`
 
-Entrée : `{"role", "modele"?, "lieu"?}`. Cherche le premier spécialiste du rôle (fiches) sans tâche active, au
-modèle et au lieu demandés. Rend `{"agent": "<clé>"|null, "raison": "…"}` (code 0 même s'il n'y en a pas). Raisons
+Entrée : `{"role", "modele"?, "lieu"?}`. Cherche le spécialiste du rôle (fiches) sans tâche active, au lieu demandé,
+dont le **plafond** (le modèle de sa fiche) suffit au `modele` nécessaire de la tâche, le plus petit plafond suffisant
+d'abord (à égalité, l'ordre des fiches) : il fera tourner la tâche sur ce modèle, jamais au-dessus de son plafond. Rend `{"agent": "<clé>"|null, "raison": "…"}` (code 0 même s'il n'y en a pas). Raisons
 sans agent : « aucun dev libre » ; pour le cloud (un agent cloud n'est utilisable qu'avec une session attitrée) :
 « aucun agent cloud dev sur Sonnet : session à créer pour dev-3 », avec `"sans_session": "dev-3"`, la fiche qui
 attend sa session (l'orchestrateur pose alors une décision `session_cloud` qui la nomme) ; « aucun agent cloud dev
@@ -539,13 +541,18 @@ Refusée, la demande est rendue une fois de nouveau par l'agent, avec la raison 
 ### `lots`
 
 Entrée : `{"taches": [ids]?}`, ou `{}` : **toutes les tâches pas encore parties du projet, toutes fonctionnalités
-confondues**. Regroupe ces tâches en lots d'un même modèle et d'un même lieu (ceux de leur agent, sinon de l'agent libre
-du rôle) et rend `{"lots": [{"lot": "L3", "modele", "lieu", "taches": [ids]}], "tailles": {modèle: n}, "ecartees":
+confondues**. Regroupe ces tâches en lots d'un même modèle et d'un même lieu et rend `{"lots": [{"lot": "L3", "modele", "lieu", "taches": [ids]}], "tailles": {modèle: n}, "ecartees":
 [{tache, raison}]}`. Une tâche déjà active, faite ou déjà prise n'est jamais remise en lot (refus si elle est nommée).
 Chaque lot a au plus la taille conseillée de son modèle (5 sans mesure ; sinon d'après le coût moyen d'une tâche au rang
 k d'un lot comparé à une tâche seule), une relecture est toujours seule, et un lot ne passe devant une tâche qui
 dépend d'une autre non encore formée. Les lots sont numérotés après les lots déjà notés sur les tâches. Refus (code 1)
 sur un cycle de `depend_de` ou une dépendance inconnue. La commande ne note rien : `lancer tache` (`lot`) le fait.
+Le modèle d'une tâche d'étape de workflow (`etape` `flux:<id>`, et relecture, correction, retour, demande : l'étape de
+son rôle) est son **modèle nécessaire** : `modele` de l'étape (posé avec le workflow), sinon déduit de sa nature
+(conception → Opus, code et création → Sonnet, tests, livraison, rangement → Haiku ; inconnue : le modèle du rôle),
+montée comprise, ramené au plafond de son agent s'il en a un, sinon au plus haut plafond des agents du rôle ; le lieu
+est celui du plus petit plafond suffisant. Les autres tâches (cadrage, prototype…) : le modèle et le lieu de leur agent,
+sinon de l'agent libre du rôle. Le relevé publie ce modèle par tâche (`modele_necessaire`).
 
 ## Vérifier une implémentation
 

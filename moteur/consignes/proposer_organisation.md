@@ -13,9 +13,10 @@ proposition précédente s'il y en a un (le respecter), et les `regles_projet` d
   (chaque étape est refaite pour chaque élément). Si sa dernière étape ne dit pas le livrable, **renomme-la**
   (« Contrôle et remise du lot ») plutôt que d'ajouter une étape. `livrable` : ce que l'utilisateur reçoit, une ligne.
 - Réutilise un agent du projet qui sait faire une étape ; `agents`, `services` : les **nouveaux** ; `briefs` : un par rôle neuf.
-- Le modèle de chaque nouvel agent, avec une `justification` d'une ligne : Haiku pour le mécanique ou la vérification,
-  Sonnet pour la création et le code courant, Opus pour une conception difficile ou un travail où l'erreur coûte cher.
-  Toujours l'un des trois, jamais Fable ; s'il serait vraiment utile, mets Opus et `"fable_suggere": true`.
+- Sur **chaque étape d'agent**, le `modele` que demande son travail et sa `justification` (une ligne, 160 caractères au
+  plus) : Haiku pour le mécanique ou la vérification, Sonnet pour la création et le code courant, Opus pour une
+  conception difficile ou un travail où l'erreur coûte cher ; jamais Fable. Un nouvel agent, sans modèle, a le
+  plafond Opus (au besoin `"fable_suggere": true`) : il fait tourner chaque tâche sur le modèle de son étape.
 - L'`environnement` : chaque outil du poste dont une étape a besoin (`pour` : l'`etape`), les `executables` à chercher
   (noms de programmes : `java`, `gradle`), l'`installation` sur Windows en une ligne (source officielle, taille), une
   fois chacun ; `objectif` : une phrase concrète sur ce que l'outil fera dans CE projet et à quelle étape (pas une
@@ -26,12 +27,11 @@ proposition précédente s'il y en a un (le respecter), et les `regles_projet` d
   pourquoi. `outils_installation` : les règles pour l'installer (`Bash(winget:*)`). Tests automatisés d'une app mobile : l'émulateur Android (AVD sans fenêtre) ici, jamais le téléphone de l'utilisateur. Textes **courts**, en français.
 
 ```json
-{"flux": [{"etape": "dev", "nom": "…", "role": "…", "service": "…"}],
+{"flux": [{"etape": "dev", "nom": "…", "role": "…", "service": "…", "modele": "Haiku", "justification": "…"}],
  "services": [{"id": "…", "nom": "…"}],
- "agents": [{"cle": "…", "prenom": "…", "role": "…", "service": "…", "modele": "Sonnet", "justification": "…",
-             "fable_suggere": false, "texte": "fiche de l'agent : qui il est, ce qu'il fait"}],
- "briefs": {"role": "…"},
- "livrable": "…",
+ "agents": [{"cle": "…", "prenom": "…", "role": "…", "service": "…", "fable_suggere": false,
+             "texte": "fiche de l'agent : qui il est, ce qu'il fait"}],
+ "briefs": {"role": "…"}, "livrable": "…",
  "environnement": [{"outil": "…", "version_min": null, "pour": "dev", "executables": ["…"], "installation": "…", "objectif": "…",
                   "telechargement": null, "etapes": ["…", "…"], "autonome": false}],
  "outils_installation": ["Bash(winget:*)"]}

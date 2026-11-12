@@ -864,6 +864,11 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         m = t.get("montee")
         if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("de", "a", "raison"))):
             erreurs.append(f"Tâche « {i} » : « montee » doit avoir « de », « a » et « raison » (textes non vides).")
+        m = t.get("modele_necessaire")
+        if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("modele", "raison"))
+                              or not isinstance(m.get("ramene"), bool)):
+            erreurs.append(f"Tâche « {i} » : « modele_necessaire » doit avoir « modele », « raison » (textes non vides) "
+                           "et « ramene » (vrai ou faux).")
         lot = t.get("lot")
         if lot is not None and (not _est_dict(lot) or not _texte_plein(lot.get("id")) or isinstance(lot.get("rang"), bool)
                                 or not isinstance(lot.get("rang"), int) or lot["rang"] < 1):
@@ -1086,7 +1091,7 @@ def _verifier_recrutement(x, erreurs):
         erreurs.append(f"{q} : « depot.essai » demande « fait » (vrai ou faux) et « texte ».")
     if not _texte_ou_nul(x.get("cloud_impossible")):
         erreurs.append(f"{q} : « cloud_impossible » est un texte ou nul.")
-CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot")
+CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire")
 
 
 def _normaliser_v4(n):

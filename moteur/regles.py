@@ -37,6 +37,7 @@ from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
+from orchestrateur import modele_necessaire as mn
 from orchestrateur import outil
 from orchestrateur import regles_projet as rp
 from orchestrateur import suivi as su
@@ -1069,9 +1070,12 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
     flux = [{"id": f"{fid}-{x['etape']}", "nom": x["nom"], **(
                 {"validation": True, **({"raison": x["raison"]} if isinstance(x.get("raison"), str) and x["raison"].strip()
                                         else {})} if wf.est_validation(x)
-                else {"role": x["role"], "service": x["service"]})}
+                else {"role": x["role"], "service": x["service"],
+                      **{c: x[c] for c in ("modele", "justification") if c in x}})}
             for x in o["flux"]]
-    nouveaux = [dict(a, lieu="local") for a in o["agents"]]
+    # Les nouveaux agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (conception
+    # 2026-11-12-modele-par-tache-design.md).
+    flux, nouveaux = mn.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
     services = [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]] + [dict(s) for s in o["services"]]
     existants = [{"role": a["role"], "modele": a["modele"]} for a in _etat(projet)["agents"]]
     try:
@@ -1879,10 +1883,10 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
         lancer(projet, "fonctionnalite", {"id": fid, "agent_cadrage": agent})
     tache = next((t for t in court["taches"] if t.get("fonctionnalite") == fid and t.get("etape") == "cadrage"
                   and t["colonne"] != "fait"), None)
-    premiere = not any(m["auteur"] == agent for m in f["discussion"])
     fiche = next((a for a in court["agents"] if a["cle"] == agent), {})
-    montee = ({"de": "Haiku", "a": dep.monter("Haiku"), "raison": "première analyse du besoin"}
-              if premiere and fiche.get("modele") == "Haiku" else None)
+    # Le cadrage tourne sur le modèle de la fiche de son agent. La première analyse du besoin ne monte plus au-dessus
+    # d'une fiche Haiku : le modèle de la fiche est un plafond, jamais dépassé (conception 2026-11-12-modele-par-tache).
+    montee = None
     if tache is None:
         tid = lancer(projet, "tache", {"titre": f"Cadrage : {f['nom']}", "fonctionnalite": fid,
                                        "role": fiche.get("role") or ROLE_CADRAGE,
@@ -2240,8 +2244,8 @@ def _demarrer_en_attente(projet, etat, fid):
         r = lancer(projet, "lots", {"taches": [t["id"] for t in en_flux]})
         lots = [{"ids": x["taches"], "modele": x["modele"], "lot": x["lot"]} for x in r["lots"]]
     par_id = {t["id"]: t for t in attente}
-    for t in solos:
-        lots.append({"ids": [t["id"]], "modele": None, "lot": None})
+    for t in solos:      # une correction, un retour… : le modèle de l'étape de son rôle ; un cadrage : celui de la fiche
+        lots.append({"ids": [t["id"]], "modele": _modele_necessaire(projet, court, t), "lot": None})
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     for lot in lots:
@@ -2316,22 +2320,21 @@ def demarrer_installation(projet, etat, tid):
 
 
 def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None):
-    """L'agent qui prend la tâche : un agent local libre du modèle voulu (s'il reste une place locale) ; sinon, en
-    renfort, un agent cloud libre (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur
-    GitHub) ; sinon, si le cloud est impossible, l'agent local équivalent (un autre modèle du même rôle), en le disant au
-    bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
+    """L'agent qui prend la tâche de modèle nécessaire `modele` : un agent local libre dont le plafond (le modèle de sa
+    fiche) suffit, le plus petit d'abord (s'il reste une place locale) ; sinon, en renfort, un agent cloud libre au
+    plafond suffisant (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur GitHub) ; sinon, si
+    le cloud est impossible, l'agent local équivalent (un autre du même rôle, la tâche ramenée à son plafond), en le
+    disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
     role = tache.get("role")
     if local_ok:
         local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {})})
         if local["agent"]:
             return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
-    # Le modèle de la fiche d'un agent cloud est un plafond : il prend une tâche de ce modèle ou d'un modèle moindre, et
-    # sa session tourne sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus. Celui dont
-    # le plafond est le plus proche d'abord.
-    candidats = sorted((a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]
-                        and (not modele or rang_modele(a["modele"]) >= rang_modele(modele))),
-                       key=lambda a: rang_modele(a["modele"]) - (rang_modele(modele) if modele else 0))
+    # Le modèle de la fiche est un plafond (local comme cloud) : l'agent prend une tâche de ce modèle ou d'un modèle
+    # moindre, et la fait tourner sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus.
+    # Le plus petit plafond suffisant d'abord.
+    candidats = [a for a in mn.possibles(court["agents"], role, modele) if a["lieu"] == "cloud" and a["libre"]]
     if not clouds or not candidats:
         return None
     raison = projet.cloud_raison()
@@ -2350,26 +2353,30 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     return equivalent
 
 
-ORDRE_DES_MODELES = ("haiku", "sonnet", "opus", "fable")
+ORDRE_DES_MODELES = mn.ORDRE
+rang_modele = mn.rang     # Haiku < Sonnet < Opus < Fable ; un nom inconnu compte comme Sonnet
 
 
-def rang_modele(modele):
-    """Le rang d'un modèle (Haiku < Sonnet < Opus < Fable) ; un nom inconnu compte comme Sonnet."""
-    m = str(modele or "").lower()
-    return next((i for i, nom in enumerate(ORDRE_DES_MODELES) if nom in m), 1)
+def _modele_necessaire(projet, court, t):
+    """Le modèle nécessaire de la tâche (`modele_necessaire.de_la_tache`, montée comprise), ou `None` : celui de la
+    fiche de l'agent (cadrage, prototype, installation)."""
+    m = mn.de_la_tache(_factory(projet), t, court["agents"], court.get("fonctionnalites") or [])
+    return m["modele"] if m else None
+
+
+def _modele_de_depart(projet, court, agent, t, modele_voulu=None):
+    """Le modèle sur lequel l'agent fait tourner la tâche `t` : sa montée, sinon le modèle voulu (celui du lot), sinon
+    son modèle nécessaire, sinon celui de la fiche ; jamais au-dessus du modèle de la fiche, qui est le plafond de
+    l'agent, local comme cloud."""
+    fiche = next(a for a in court["agents"] if a["cle"] == agent)
+    voulu = ((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
+             or fiche["modele"])
+    return mn.plafonne(voulu, fiche["modele"])
 
 
 def _partir(projet, etat, court, agent, ids, lot, par_id, modele_voulu=None):
-    fiche = next(a for a in court["agents"] if a["cle"] == agent)
-    premiere = par_id[ids[0]]
-    montee = premiere.get("montee")
-    # Un agent cloud ouvre une session par départ : elle tourne sur le modèle que demande la tâche (celui du lot, ou sa
-    # montée), sans jamais dépasser le modèle de sa fiche, qui est son plafond ; un agent local garde le modèle de sa fiche.
-    if fiche.get("lieu") == "cloud":
-        voulu = (montee or {}).get("a") or modele_voulu or fiche["modele"]
-        modele = voulu if rang_modele(voulu) <= rang_modele(fiche["modele"]) else fiche["modele"]
-    else:
-        modele = (montee or {}).get("a") or fiche["modele"]
+    # Une tâche tourne sur le modèle qu'elle demande (celui du lot, ou sa montée), jamais au-dessus du plafond de l'agent.
+    modele = _modele_de_depart(projet, court, agent, par_id[ids[0]], modele_voulu)
     if len(ids) > 1:
         for rang, i in enumerate(ids, 1):
             lancer(projet, "tache", {"id": i, "lot": {"id": lot, "rang": rang}})
@@ -3678,8 +3685,7 @@ def orphelines(projet, etat):
                      and x["lot"]["rang"] > t["lot"]["rang"] and x["colonne"] != "fait"]
             ids += [x["id"] for x in sorted(reste, key=lambda x: x["lot"]["rang"])]
         par_id = {x["id"]: x for x in court["taches"]}
-        fiche = next(a for a in court["agents"] if a["cle"] == t["agent"])
-        modele = (t.get("montee") or {}).get("a") or fiche["modele"]
+        modele = _modele_de_depart(projet, court, t["agent"], t)
         matiere = (chr(10) * 2).join(_matiere(projet, etat, par_id[i]) for i in ids)
         depart = {"agent": t["agent"], "taches": ids, "matiere": matiere, "modele": modele,
                   "lot": (t.get("lot") or {}).get("id")}

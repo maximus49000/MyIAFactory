@@ -30,6 +30,7 @@ from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
+from orchestrateur import modele_necessaire as mn  # noqa: E402
 from orchestrateur import recrutement as rc  # noqa: E402
 from orchestrateur import regles_projet as rp  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
@@ -2089,7 +2090,8 @@ def construire_releve(ctx):
              "titulaire": t["agent"] if t["agent"] in cles else None, "etape": t["etape"] or "", "maj": t["maj"],
              "journal": list(t["journal"]), "fonctionnalite": t["fonctionnalite"], "element": t["element"],
              "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"],
-             "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None}
+             "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None,
+             "modele_necessaire": mn.de_la_tache(ctx.f, t, fiches, s["fonctionnalites"])}
         if t.get("lignes") is not None:
             v["lignes"] = t["lignes"]
         if t.get("captures"):
@@ -3108,8 +3110,18 @@ def _partie(t):
     return bool(t["active"] or t["colonne"] == "fait" or t.get("debut") or isinstance(t.get("lot"), dict))
 
 
-def _modele_et_lieu(fiches_, t):
-    """(modèle, lieu) de la tâche : ceux de son agent, sinon de l'agent libre de son rôle (à défaut, d'une fiche du rôle)."""
+def _modele_et_lieu(ctx, s, fiches_, t):
+    """(modèle, lieu) de la tâche. Une tâche d'une étape de workflow (ou qui refait le travail d'un rôle) : son modèle
+    nécessaire (`modele_necessaire.de_la_tache`, montée comprise, ramené au plafond de son agent ou de l'équipe du
+    rôle) et le lieu de l'agent qui la prendrait (le plus petit plafond suffisant). Sinon (cadrage, prototype…) : ceux
+    de son agent, sinon de l'agent libre de son rôle (à défaut, d'une fiche du rôle)."""
+    m = mn.de_la_tache(ctx.f, t, fiches_, s.get("fonctionnalites") or [])
+    if m is not None:
+        f = fi.trouver(fiches_, t["agent"]) if t.get("agent") else None
+        if f:
+            return mn.plafonne(m["modele"], f["modele"]), f["lieu"]
+        possibles = mn.possibles(fiches_, t.get("role"), m["modele"])
+        return (m["modele"], possibles[0]["lieu"]) if possibles else None
     if t.get("agent"):
         f = fi.trouver(fiches_, t["agent"])
         if f:
@@ -3139,7 +3151,7 @@ def cmd_lots(ctx, e):
         choisies = [t for t in s["taches"] if not _partie(t)]
     entrees, ecartees = [], []
     for t in choisies:
-        ml = _modele_et_lieu(fiches_, t)
+        ml = _modele_et_lieu(ctx, s, fiches_, t)
         if ml is None:
             ecartees.append({"tache": t["id"], "raison": "aucun agent pour le rôle de la tâche" if t.get("role")
                              else "la tâche n'a pas de rôle"})

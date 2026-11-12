@@ -120,6 +120,14 @@ test("resumeWorkflow : étapes dans l'ordre avec rôle et service, livrable, gen
   assert.equal(resumeWorkflow(DECISION, ETAT), null);
 });
 
+test("organisation : chaque étape dit son modèle nécessaire, chaque agent son plafond", () => {
+  const flux = [{...WORKFLOW.organisation.flux[0], modele: "Haiku", justification: "Petits visuels."},
+                WORKFLOW.organisation.flux[1]];
+  const d = {...WORKFLOW, organisation: {...WORKFLOW.organisation, flux}};
+  assert.deepEqual(resumeWorkflow(d, ETAT).etapes.map((e) => e.modele), ["Haiku", null]);
+  assert.equal(agentsOrganisation(d)[0].ligne, "Léa · android · plafond Sonnet · local");
+});
+
 test("organisation montre la case Fable seulement si suggeree", () => {
   const a = agentsOrganisation(WORKFLOW);
   assert.deepEqual(a.map((x) => [x.cle, x.fableSuggere]), [["android-1", true], ["env-1", false]]);

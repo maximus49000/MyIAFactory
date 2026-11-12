@@ -100,7 +100,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     const service = a.chef ? "Chef d'atelier" : ((e.services || []).find((s) => s.id === a.service)?.nom || "—");
     c.append(ligne("Service", service));
     if (a.specialite) c.append(ligne("Spécialité", a.specialite));
-    c.append(ligne("Modèle", a.modele || "?"));
+    c.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
     c.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
     c.append(ligne("Statut", STATUTS[a.statut] || a.statut || "—"));
     if (resumeLecons(a)) c.append(ligne("Leçons", resumeLecons(a)));

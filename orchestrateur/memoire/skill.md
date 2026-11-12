@@ -333,3 +333,9 @@ Rôles : designer, equilibreur
 Date : 2026-11-13
 
 Quand un élément d'équilibrage est conçu avant que le jeu existe, livrer le plan de mesure et des indicateurs calculés depuis les fichiers de valeurs, sans changer aucune valeur.
+
+## S56 — Un script qui produit des images et vérifie la présence des
+Rôles : designer, dev
+Date : 2026-11-13
+
+Un script qui produit des images et vérifie la présence des images référencées doit exclure de la vérification celles qu'il produit lui-même.

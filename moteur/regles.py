@@ -1854,6 +1854,11 @@ def _reponse_a_une_question(projet, etat, demande, f, accord):
         _m(etat, "supplements")[tid] = accord["supplement"]
         _terminer(projet, {"demande": demande["id"]}, "Merci, l'agent reprend sa tâche.")
         return _demarrer_en_attente(projet, etat, f["id"])
+    if REFUSE in texte:       # « … → Je refuse » suivi d'une consigne : l'agent reprend sans l'action refusée
+        consigne = texte.split(REFUSE, 1)[1].strip(" \t\n:—–-")
+        actions = _reprise_apres_accord(projet, etat, tid, f["id"], accord["quoi"], False, consigne)
+        _terminer(projet, {"demande": demande["id"]}, "C'est noté : l'agent reprend sa tâche sans cette action.")
+        return actions
     lancer(projet, "tache", {"id": tid, "bloquee": "mise de côté sur décision de l'utilisateur", "active": False})
     _terminer(projet, {"demande": demande["id"]}, "C'est noté : cette tâche est mise de côté.")
     return []
@@ -2235,7 +2240,8 @@ CONSIGNE_AVANT_VALIDATION = (
     "s'il y en a), jamais l'apk ; `son` (bruitages, musique) → les fichiers audio mp3, ogg, wav ou flac dans `fichiers`, "
     "jamais l'apk ; `mecanique` (règles, équilibrage) → un document explicatif md ou pdf, et si utile des schémas, jamais "
     "l'apk (sauf si déjà jouable : alors `en_jeu`) ; `autre` → de quoi juger, expliqué. Le Directeur n'installe un apk "
-    "que pour ce qui est en jeu ; tes points à vérifier suivent cette nature.")
+    "que pour ce qui est en jeu ; tes points à vérifier suivent cette nature. Ne teste jamais l'apk sur un appareil "
+    "physique de l'utilisateur : c'est lui qui l'installe, par cette fenêtre.")
 
 
 def _matiere(projet, etat, t):
@@ -2583,20 +2589,95 @@ def _agent_arrete(projet, etat, execution, depart, r, fid):
     t = _tache(projet, tid)
     if r["statut"] == "outil_refuse":
         return _outil_refuse(projet, etat, execution, depart, r, fid or t.get("fonctionnalite"))
+    return _accord_demande(projet, etat, execution, depart, r, fid, t)
+
+
+GENRE_ACCORD = "accord_agent"       # la décision de projet « Demandes d'accord des agents » (bureau de direction)
+REGLE_APPAREIL = ("Règle du projet : tests automatiques sur émulateur (machine virtuelle), validation de version par la "
+                  "fenêtre de validation. Jamais d'installation ni de test sur votre téléphone.")
+CONSIGNE_APPAREIL = ("Pas de test sur appareil : émulateur pour les tests automatiques, fenêtre de validation pour la "
+                     "version. Continue ta tâche sans ce test.")
+MOTIFS_APPAREIL = re.compile(r"adb\s+(install|devices|push|shell)|d[ée]bogage\s+usb|usb\s+debugging|"
+                             r"t[ée]l[ée]phone\s+branch[ée]|appareil\s+(physique|branch[ée])|device\s+connect",
+                             re.IGNORECASE)
+
+
+def _vise_un_appareil(*textes):
+    """La demande d'accord vise une installation ou un test sur un appareil physique de l'utilisateur."""
+    return any(MOTIFS_APPAREIL.search(t) for t in textes if isinstance(t, str))
+
+
+def _accord_demande(projet, etat, execution, depart, r, fid, t):
+    """Une demande d'accord d'un agent : une décision au bureau de direction (agent, tâche, quoi, pourquoi, ce que ça
+    implique, rappel de la règle d'un appareil physique), pas seulement une question dans la discussion."""
+    tid, cle = depart["taches"][0], execution.agent
     a = r["accord"]
+    prenom = prenom_de(projet, cle)
     quoi = f"{a['quoi']} (chez {a['partenaire']}, {a['cout']})"
-    texte = f"L'agent {execution.agent} demande votre accord : {quoi}."
-    choix = [ACCEPTE, REFUSE]
-    supplement = f"L'utilisateur a donné son accord pour : {quoi}. Tu peux le faire."
-    lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
+    message = (r.get("message") or {}).get("texte") or ""
+    pourquoi = a.get("pourquoi") if isinstance(a.get("pourquoi"), str) and a["pourquoi"].strip() else message
+    implique = a.get("implique") if isinstance(a.get("implique"), str) and a["implique"].strip() else ""
+    appareil = _vise_un_appareil(a["quoi"], pourquoi, implique, message)
+    texte = f"{prenom} ({cle}) demande votre accord, tâche « {t['titre']} » : {a['quoi']}."
+    lancer(projet, "tache", {"id": tid, "active": False, "journal": [f"L'agent {cle} demande votre accord : {quoi}."]})
     _liberer_le_lot(projet, depart)
+    champs = {"agent": cle, "tache": tid, "quoi": a["quoi"][:600], "partenaire": a["partenaire"][:200],
+              "cout": a["cout"][:200]}
+    if pourquoi.strip():
+        champs["pourquoi"] = pourquoi.strip()[:800]
+    if implique.strip():
+        champs["implique"] = implique.strip()[:800]
+    if appareil:
+        champs["appareil"] = True
+        champs["regle"] = REGLE_APPAREIL
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_ACCORD, "texte": texte, **champs})
     fid = fid or t.get("fonctionnalite")
     if fid:
-        for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=execution.agent, etape=""):
-            lancer(projet, commande, entree)
-        _m(etat, "accords")[fid] = {"tache": tid, "quoi": quoi, "supplement": supplement}
-        _question(projet, fid, texte, choix)
+        for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=cle, etape=""):
+            try:
+                lancer(projet, commande, entree)
+            except Refus as e:
+                lancer(projet, "tache", {"id": tid, "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
+        _dire(projet, fid, f"{prenom} demande votre accord : la décision est au bureau de direction.")
     return []
+
+
+def _reprise_apres_accord(projet, etat, tid, fid, quoi, accepte, consigne=""):
+    """L'agent reprend la même tâche : avec l'accord, ou, refusé, sans l'action refusée mais avec la consigne du
+    Directeur (la tâche n'est pas mise de côté)."""
+    if accepte:
+        return _reprendre_la_tache(projet, etat, tid, fid, f"L'utilisateur a donné son accord pour : {quoi}. Tu peux le faire.",
+                                   f"Accord de l'utilisateur : {quoi}")
+    supplement = (f"L'utilisateur refuse : {quoi}. Ne le fais pas : continue ta tâche sans cette action (dis dans ton "
+                  "résultat qu'elle n'est pas faite).")
+    if consigne:
+        supplement += f" Sa consigne : {consigne}"
+    return _reprendre_la_tache(projet, etat, tid, fid, supplement,
+                               f"Accord refusé par l'utilisateur : {quoi}" + (f" — consigne : {consigne}" if consigne else ""))
+
+
+def _sur_accord_agent(projet, demande, etat):
+    """La réponse du Directeur à une demande d'accord : accepter ou refuser (avec une consigne facultative)."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == GENRE_ACCORD), None)
+    if d is None:
+        raise Refus("cette demande n'existe plus")
+    tid, verdict = d["tache"], demande["verdict"]
+    if verdict not in ("accepter", "refuser"):
+        raise Refus(f"réponse inconnue : {verdict}")
+    t = _tache(projet, tid)
+    consigne = (demande.get("texte") or "").strip()
+    if verdict == "refuser" and not consigne and d.get("appareil"):
+        consigne = CONSIGNE_APPAREIL
+    prenom = prenom_de(projet, d["agent"])
+    actions = _reprise_apres_accord(projet, etat, tid, t.get("fonctionnalite"), d["quoi"], verdict == "accepter", consigne)
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, {"demande": demande["id"]},
+              f"{prenom} reprend sa tâche avec votre accord." if verdict == "accepter"
+              else f"{prenom} reprend sa tâche sans cette action.")
+    return actions
+
+
+_SUR[GENRE_ACCORD] = _sur_accord_agent
 
 
 def _liberer_le_lot(projet, depart):

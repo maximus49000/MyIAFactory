@@ -186,6 +186,23 @@ class Consigne(AvecProjet):
         source = inspect.getsource(regles._matiere)
         self.assertIn("à choix", source.split('elif etape == "prototype"')[1].split("elif etape.startswith")[0])
 
+    def test_jamais_de_test_sur_l_appareil_de_l_utilisateur(self):
+        """Pas de `adb install` vers un téléphone branché : émulateur pour les tests, fenêtre de validation pour la version."""
+        from pathlib import Path
+        from moteur import agents, regles
+        for texte in (depart.FIN_D_ETAPE, agents.CONSIGNE_AGENT):
+            self.assertIn("émulateur", texte)
+            self.assertIn("fenêtre de validation", texte)
+            self.assertIn("adb", texte)
+        self.assertIn("emulator -no-window", depart.FIN_D_ETAPE)
+        self.assertIn("accord_requis", depart.FIN_D_ETAPE)
+        self.assertLess(len(depart.FIN_D_ETAPE), 4200)
+        self.assertIn("appareil", regles.CONSIGNE_AVANT_VALIDATION)
+        for nom in ("proposer_organisation.md", "definir_workflow.md"):
+            texte = (Path(regles.__file__).parent / "consignes" / nom).read_text(encoding="utf-8")
+            self.assertIn("émulateur", texte)
+            self.assertIn("environnement", texte)
+
     def test_les_consignes_font_prevenir_avant_une_fenetre_windows(self):
         """L'utilisateur est prévenu avant qu'une fenêtre (pare-feu, UAC, pilote, débogage USB) s'ouvre sur son poste."""
         from moteur import agents, environnement

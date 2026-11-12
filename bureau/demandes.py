@@ -22,7 +22,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
-          "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"),
+          "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
@@ -31,11 +31,11 @@ AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "environnement": ("fonctionnalite", "outil"),
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte",), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme", "recruter", "depot_git", "outil_agent")
+               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent")
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
@@ -337,6 +337,14 @@ def _verifier_v4(demande, r, elements):
             return f"Réponse inconnue ({', '.join(VERDICTS_OUTIL)})."
         if demande["verdict"] == "autoriser" and not d.get("programme"):
             return "Cette décision ne nomme pas de programme à autoriser."
+        return None
+    if genre == "accord_agent":
+        if _decision(r.get("decisions_projet", []), demande["decision"], "accord_agent") is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in ("accepter", "refuser"):
+            return "Réponse inconnue (accepter ou refuser)."
+        if len(demande.get("texte") or "") > MAX_TEXTE:
+            return f"« texte » dépasse {MAX_TEXTE} caractères."
         return None
     if genre == "valider_etape":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape")

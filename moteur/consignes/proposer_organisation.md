@@ -23,7 +23,7 @@ proposition précédente s'il y en a un (le respecter). Ce qu'il faut proposer :
   jamais un miroir ni inventée (null si inconnue). `etapes` : mode opératoire Windows, 2 à 8 lignes courtes, sans
   droits d'administrateur si possible, jusqu'à la vérification. `autonome` : true si un agent l'installe seul, sans clic
   ni droits d'administrateur (winget en portée utilisateur, archive à extraire), sinon false et `installation` dit
-  pourquoi. `outils_installation` : les règles pour l'installer (`Bash(winget:*)`). Textes **courts**, en français.
+  pourquoi. `outils_installation` : les règles pour l'installer (`Bash(winget:*)`). Tests automatisés d'une app mobile : l'émulateur Android (AVD sans fenêtre) ici, jamais le téléphone de l'utilisateur. Textes **courts**, en français.
 
 ```json
 {"flux": [{"etape": "dev", "nom": "…", "role": "…", "service": "…"}],

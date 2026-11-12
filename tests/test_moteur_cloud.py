@@ -345,10 +345,10 @@ class Agents(Base):
                                                   "accord": {"quoi": "Générer 5 images", "partenaire": "studio",
                                                              "cout": "2 $"}})
         self.avancer(70)
-        derniere = self.discussion()[-1]
-        self.assertEqual(derniere["questions"][0]["choix"], [regles.ACCEPTE, regles.REFUSE])
+        accords = [d for d in self.suivi()["decisions_projet"] if d["genre"] == "accord_agent"]
+        self.assertEqual([d["quoi"] for d in accords], ["Générer 5 images"])     # la décision est au bureau de direction
         self.assertEqual(self.cloud.fusions, [])                              # une tâche à moitié faite n'est pas fusionnée
-        self.ok("actions", entree={"type": "message", "fonctionnalite": "f1", "texte": regles.ACCEPTE})
+        self.ok("actions", entree={"type": "accord_agent", "decision": accords[0]["id"], "verdict": "accepter"})
         self.avancer(5)
         self.assertEqual(len(self.cloud.lancees), 1)                          # pas de seconde session
         self.assertEqual(len(self.cloud.suites), 1)

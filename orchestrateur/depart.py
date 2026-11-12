@@ -145,11 +145,16 @@ Si une dépense ou un changement de partenaire ou le navigateur demande l'accord
 `statut: accord_requis` avec `"accord": {"quoi", "partenaire", "cout"}`. Si un outil t'est refusé, rends
 `statut: outil_refuse` avec `"outil": "<son nom>"`.
 Avant une action qui fait apparaître une fenêtre sur l'ordinateur de l'utilisateur (pare-feu Windows pour adb.exe, un
-émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote ; autorisation sur le téléphone comme le
-débogage USB), arrête-toi : mets en tête de ton `message.texte` quelle fenêtre va s'ouvrir, pourquoi et quoi choisir
-(« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez Réseaux privés. »), avec `attend: true`, et
+émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote), arrête-toi : mets en tête de ton `message.texte` quelle fenêtre va s'ouvrir,
+pourquoi et quoi choisir (« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez Réseaux privés. »), avec `attend: true`, et
 n'agis qu'après sa réponse. Ne réponds jamais à ces fenêtres à sa place. Si une commande attend, bloquée par une
-fenêtre, dis-le dans ton compte rendu."""
+fenêtre, dis-le dans ton compte rendu.
+**Jamais d'installation ni de test sur un appareil physique de l'utilisateur** : pas d'`adb devices` ni d'`adb install`
+vers un téléphone branché, pas de demande de brancher un téléphone ni d'activer le débogage USB. Les tests automatiques
+d'une application mobile se font sur un émulateur (AVD sans fenêtre : `emulator -no-window`) ; s'il manque, déclare-le
+comme outil du poste à installer. La version, c'est l'utilisateur qui la valide dans la fenêtre de validation
+(`nature: en_jeu`, apk à télécharger et mode opératoire). Si tu juges quand même nécessaire un test sur appareil, rends
+`accord_requis` : c'est le Directeur qui statue, et s'il refuse, continue sans ce test (installation non faite)."""
 
 
 def fin_cloud(tache_id):

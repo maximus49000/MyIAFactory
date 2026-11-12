@@ -115,7 +115,7 @@ export function resumeEnvoi(resultats) {
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-                  genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: []};
+                  genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -136,6 +136,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "organisation") sortie.organisations.push({...d});
     else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
     else if (d?.genre === "outil_agent") sortie.outils.push({...d});
+    else if (d?.genre === "accord_agent") sortie.accords.push({...d});
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
     else if (d?.genre === "environnement") sortie.environnements.push({...d});   // l'installation portée par le projet
   }
@@ -247,6 +248,14 @@ export function lireSession(texte) {
 // est bloquée) ou « relancer » (la fiche a été complétée à la main : seulement sans programme à nommer).
 export function demandeOutilAgent(decision, verdict) {
   return {type: "outil_agent", decision: decision.id, verdict};
+}
+
+// Une demande d'accord d'un agent : « accepter » (il reprend avec l'accord) ou « refuser » (il reprend sans l'action, avec
+// la consigne facultative, un texte libre).
+export function demandeAccordAgent(decision, verdict, consigne) {
+  const d = {type: "accord_agent", decision: decision.id, verdict};
+  if (typeof consigne === "string" && consigne.trim() !== "") d.texte = consigne.trim();
+  return d;
 }
 
 // « Lot L2, tâche 3 sur 4 » ; null si la tâche n'est pas dans un lot. Le nombre de tâches du lot est celui des tâches

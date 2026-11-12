@@ -5,7 +5,7 @@ import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
-  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent} from "./actions.js";
+  demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
@@ -359,6 +359,29 @@ function decisionOutilAgent(ctx, d) {
   return li;
 }
 
+// « Demandes d'accord des agents » : l'agent, ce qu'il veut faire et pourquoi, ce que ça implique (fenêtres, branchement,
+// coût), le rappel de la règle quand il vise un appareil physique ; « J'accepte », « Je refuse » et une consigne facultative.
+function decisionAccordAgent(ctx, d) {
+  const li = el("li", "decision-accord");
+  li.append(el("div", "decision-texte", d.texte));
+  li.append(el("div", "lecon-meta", [nomAgent(ctx.etat, d.agent), d.partenaire && "chez " + d.partenaire, d.cout && "coût : " + d.cout]
+    .filter(plein).join(" · ")));
+  if (plein(d.pourquoi)) li.append(el("div", "decision-texte", "Pourquoi : " + d.pourquoi));
+  if (plein(d.implique)) li.append(el("div", "lecon-meta", "Ce que cela implique : " + d.implique));
+  if (plein(d.regle)) li.append(el("div", "decision-regle", d.regle));
+  if (!ctx.etat.agir) return li;
+  const consigne = document.createElement("input");
+  consigne.type = "text";
+  consigne.maxLength = 500;
+  consigne.placeholder = "Consigne pour l'agent (facultative)";
+  consigne.setAttribute("aria-label", "Consigne pour l'agent");
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(boutonDemande(ctx, "J'accepte", "bouton", () => demandeAccordAgent(d, "accepter", consigne.value)),
+                boutonDemande(ctx, "Je refuse", "bouton secondaire", () => demandeAccordAgent(d, "refuser", consigne.value)));
+  li.append(consigne, rangee);
+  return li;
+}
+
 // Une discussion qui attend votre réponse : qui parle, ce qu'il a dit en dernier, et de quoi y aller.
 function reponseAttendue(ctx, x) {
   const li = el("li", "");
@@ -398,6 +421,8 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, libelle, classe, fabrique, avant)))));
   contenu.append(partie("Environnement du poste à compléter", "Aucun outil ne manque",
     d.environnements.map((x) => decisionEnvironnement(ctx, x))));
+  contenu.append(partie("Demandes d'accord des agents", "Aucun agent n'attend votre accord",
+    d.accords.map((x) => decisionAccordAgent(ctx, x))));
   contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",
     d.outils.map((x) => decisionOutilAgent(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));

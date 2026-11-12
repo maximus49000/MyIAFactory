@@ -1186,3 +1186,4 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .md-code { padding: 0 3px; background: #f3f1f8; border-radius: 3px; font-size: 0.92em; }
 .md-lien { color: #2f4a86; }
 .md-tout { margin-top: 6px; }
+.decision-regle { margin-top: 4px; padding: 6px 8px; background: #fff4d6; border-radius: 6px; font-size: 13px; }

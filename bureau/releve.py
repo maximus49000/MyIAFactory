@@ -24,7 +24,7 @@ ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "te
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
-                    "outil_agent")
+                    "outil_agent", "accord_agent")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -632,6 +632,14 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             for c in ("programme", "commande"):
                 if d.get(c) is not None and not _texte_plein(d.get(c)):
                     erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
+        elif d.get("genre") == "accord_agent":
+            if not _dans(d.get("agent"), cles_agents) or not _texte_plein(d.get("tache")) or not _texte_plein(d.get("quoi")):
+                erreurs.append(f"{nom} : la décision « {i} » : « agent » (connu), « tache » et « quoi » sont obligatoires.")
+            for c in ("partenaire", "cout", "pourquoi", "implique", "regle"):
+                if d.get(c) is not None and not isinstance(d.get(c), str):
+                    erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
+            if d.get("appareil") is not None and not isinstance(d.get("appareil"), bool):
+                erreurs.append(f"{nom} : la décision « {i} » : « appareil » est vrai ou faux.")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":

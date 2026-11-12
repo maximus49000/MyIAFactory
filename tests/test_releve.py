@@ -867,6 +867,16 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "tache"}]), "tache")
         self.refus(v4(decisions_projet=[{**base, "programme": 3}]), "programme")
 
+    def test_decision_accord_agent(self):
+        base = {"id": "a", "genre": "accord_agent", "texte": "T", "agent": "d1", "tache": "t3", "quoi": "Générer 5 images"}
+        self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
+        plein = {**base, "partenaire": "studio", "cout": "2 $", "pourquoi": "p", "implique": "i", "regle": "r", "appareil": True}
+        self.assertEqual(releve.valider(v4(decisions_projet=[plein])), [])
+        self.refus(v4(decisions_projet=[{**base, "agent": "zz"}]), "agent")
+        self.refus(v4(decisions_projet=[{k: v for k, v in base.items() if k != "quoi"}]), "quoi")
+        self.refus(v4(decisions_projet=[{**base, "appareil": "oui"}]), "appareil")
+        self.refus(v4(decisions_projet=[{**base, "pourquoi": 3}]), "pourquoi")
+
     def test_releve_decision_valider_etape(self):
         base = {"id": "v", "genre": "valider_etape", "texte": "Valider ?", "fonctionnalite": "f1",
                 "element": {"id": "e1", "nom": "Accueil"}, "etape": "f1-valider", "tache": "t3",

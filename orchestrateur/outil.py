@@ -48,7 +48,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent")
+                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -846,6 +846,8 @@ def cmd_decision(ctx, e):
                 d["environnement"] = _outils_qui_manquent(e)
             elif genre == "outil_agent":
                 d.update(_outil_a_ouvrir(ctx, s, e))
+            elif genre == "accord_agent":
+                d.update(_accord_a_donner(ctx, s, e))
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -941,6 +943,26 @@ def _outil_a_ouvrir(ctx, s, e):
         d["programme"] = e["programme"]
     if e.get("commande") is not None:
         d["commande"] = _phrase_courte(e, "commande", 300)
+    return d
+
+
+def _accord_a_donner(ctx, s, e):
+    """Les champs de la décision `accord_agent` : l'agent arrêté, sa tâche, `quoi` (ce qu'il veut faire), et facultatifs
+    `partenaire`, `cout`, `pourquoi`, `implique` (fenêtres, branchement, coût), `regle` (rappel d'une règle du projet) et
+    `appareil` (vrai : une installation ou un test sur l'appareil physique de l'utilisateur)."""
+    if e.get("agent") not in ctx.cles_agents():
+        raise Refus(f"« accord_agent » : agent inconnu « {e.get('agent')} ».")
+    tache = texte(e, "tache")
+    if su.tache(s, tache) is None:
+        raise Refus(f"« accord_agent » : tâche inconnue « {tache} ».")
+    d = {"agent": e["agent"], "tache": tache, "quoi": _phrase_courte(e, "quoi", 600)}
+    for cle, maximum in (("partenaire", 200), ("cout", 200), ("pourquoi", 800), ("implique", 800), ("regle", 400)):
+        if e.get(cle) is not None:
+            d[cle] = _phrase_courte(e, cle, maximum)
+    if e.get("appareil") is not None:
+        if not isinstance(e["appareil"], bool):
+            raise Refus("« appareil » est vrai ou faux.")
+        d["appareil"] = e["appareil"]
     return d
 
 

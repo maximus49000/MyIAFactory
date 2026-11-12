@@ -25,7 +25,7 @@ Proposition (`"type": "proposition"`), comme une organisation de fonctionnalité
   `version_min` (« 17 ») ou null ; `telechargement` : URL https **officielle** de l'éditeur, jamais un miroir ni
   inventée (sinon null) ; `etapes` : mode opératoire Windows, 2 à 8 lignes courtes, jusqu'à la vérification ;
   `autonome` : true si un agent l'installe seul sans clic ni droits d'administrateur, sinon false (`installation` dit
-  pourquoi) ; `outils_installation` : règles précises (`Bash(winget:*)`). `message` : le workflow en quelques phrases.
+  pourquoi) ; `outils_installation` : règles précises (`Bash(winget:*)`). Tests automatisés d'une app mobile : l'émulateur Android (AVD sans fenêtre) ici, jamais le téléphone de l'utilisateur. `message` : le workflow en quelques phrases.
 Textes en français, **courts**. L'une des deux formes :
 ```json
 {"type": "questions", "message": "…", "questions": [{"id": "q1", "texte": "…", "choix": ["…"], "multiple": false}]}

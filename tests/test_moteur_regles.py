@@ -745,26 +745,70 @@ class Arrets(Base):
         d, actions = self.cadrer(texte="Des écrans pour l'appli")
         return actions
 
-    def test_accord_requis_pose_une_decision(self):
+    ACCORD = {"statut": "accord_requis", "message": {"texte": "Il me faut un accord."},
+              "fichiers": [{"chemin": "pieces/f1/x.png", "titre": "Ne doit pas être inscrit"}],
+              "accord": {"quoi": "Générer 5 images", "partenaire": "studio", "cout": "2 $"}}
+
+    def decisions_accord(self):
+        return [d for d in self.suivi()["decisions_projet"] if d["genre"] == "accord_agent"]
+
+    def test_accord_requis_pose_une_decision_au_bureau_de_direction(self):
         actions = self.depart_cadrage()
-        accord = {"statut": "accord_requis", "message": {"texte": "Il me faut un accord."},
-                  "fichiers": [{"chemin": "pieces/f1/x.png", "titre": "Ne doit pas être inscrit"}],
-                  "accord": {"quoi": "Générer 5 images", "partenaire": "studio", "cout": "2 $"}}
-        suite = self.piloter(actions, rapports=[accord])
+        suite = self.piloter(actions, rapports=[self.ACCORD])
         self.assertEqual(suite[-1][0], "agent")
-        f = self.fonc()
-        derniere = f["discussion"][-1]
-        self.assertTrue(derniere["attend"])
-        self.assertEqual(derniere["questions"][0]["choix"], [regles.ACCEPTE, regles.REFUSE])
-        self.assertEqual(f.get("documents") or [], [])
+        d, = self.decisions_accord()
+        self.assertEqual((d["agent"], d["quoi"], d["partenaire"], d["cout"]), ("metier-1", "Générer 5 images", "studio", "2 $"))
+        self.assertEqual(d["pourquoi"], "Il me faut un accord.")
+        self.assertNotIn("appareil", d)
         t = self.taches(etape="cadrage")[0]
+        self.assertEqual(d["tache"], t["id"])
         self.assertFalse(t["active"])
-        self.assertIn("f1", self.etat["accords"])
-        # Sur « J'accepte », l'agent reprend la même tâche avec l'accord dans son départ.
-        d, relance = self.traiter(type="message", fonctionnalite="f1", texte="Générer 5 images ? → " + regles.ACCEPTE)
+        self.assertEqual(self.fonc().get("documents") or [], [])
+        self.assertIn("bureau de direction", self.fonc()["discussion"][-1]["texte"])
+        # Sur « accepter », l'agent reprend la même tâche avec l'accord dans son départ.
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="accepter")
         self.assertEqual([a[0] for a in relance], ["agent"])
         self.assertIn("accord pour : Générer 5 images", relance[0][3])
         self.assertEqual(relance[0][2], [t["id"]])
+        self.assertEqual(self.decisions_accord(), [])
+
+    def test_accord_refuse_avec_consigne_l_agent_reprend_sans_l_action(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.ACCORD])
+        d, = self.decisions_accord()
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="refuser",
+                                        texte="Prends des images libres de droits.")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        self.assertIn("refuse : Générer 5 images", relance[0][3])
+        self.assertIn("Prends des images libres de droits.", relance[0][3])
+        t = self.taches(etape="cadrage")[0]
+        self.assertFalse(t.get("bloquee"))
+        self.assertEqual(self.decisions_accord(), [])
+
+    def test_accord_sur_appareil_physique_remonte_au_directeur_avec_la_regle(self):
+        accord = {**self.ACCORD, "message": {"texte": "Je lance adb devices puis adb install sur le téléphone branché."},
+                  "accord": {"quoi": "adb install de l'apk sur le téléphone", "partenaire": "aucun", "cout": "0"}}
+        self.piloter(self.depart_cadrage(), rapports=[accord])
+        d, = self.decisions_accord()      # jamais refusé tout seul : le Directeur statue
+        self.assertTrue(d["appareil"])
+        self.assertIn("émulateur", d["regle"])
+        self.assertIn("fenêtre de validation", d["regle"])
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="refuser")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        self.assertIn("Pas de test sur appareil", relance[0][3])
+        self.assertIn("émulateur", relance[0][3])
+        self.assertFalse(self.taches(etape="cadrage")[0].get("bloquee"))
+
+    def test_refus_dans_la_discussion_avec_consigne_ne_met_pas_la_tache_de_cote(self):
+        actions = self.depart_cadrage()
+        tid = actions[0][2][0]
+        self.etat["accords"]["f1"] = {"tache": tid, "quoi": "Générer 5 images", "supplement": "ok"}
+        self.etat["en_cours"].discard(tid)
+        regles.lancer(self.projet, "tache", {"id": tid, "active": False})
+        d, relance = self.traiter(type="message", fonctionnalite="f1",
+                                  texte="Générer 5 images ? → " + regles.REFUSE + " : fais-le avec des formes simples")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        self.assertIn("fais-le avec des formes simples", relance[0][3])
+        self.assertFalse(self.taches(id=tid)[0].get("bloquee"))
 
     def test_outil_refuse_pose_une_decision_au_bureau_de_direction(self):
         # Le cas réel : la question n'était posée que dans la discussion de la fonctionnalité (invisible au bureau de

@@ -690,6 +690,16 @@ annonce le coût estimé, puis, si vous confirmez, l'orchestrateur fait revérif
 ou de source tierce, réécrit le catalogue et le publie comme une leçon de skill. Le coût de chaque appel payant est
 noté et apparaît dans l'onglet Facturation, par partenaire et par tâche (« non chiffré » quand il n'est pas connu).
 
+## Applications mobiles : jamais sur votre téléphone
+
+Les agents n'installent ni ne testent rien sur votre téléphone (ni `adb devices`, ni `adb install`, ni débogage USB
+à activer). Les tests automatiques d'une application mobile se font sur un émulateur Android (machine virtuelle, sans
+fenêtre) : s'il manque, il apparaît comme un outil à installer de l'environnement du poste. Vous validez une version
+par la fenêtre de validation (apk à télécharger, mode opératoire). Si un agent demande quand même un accord pour un
+test sur appareil, la demande arrive au bureau de direction, partie « Demandes d'accord des agents », avec le rappel de
+cette règle : « J'accepte », ou « Je refuse » avec une consigne facultative ; l'agent reprend alors sans ce test, sa
+tâche n'est pas mise de côté.
+
 ## En cas de problème
 
 - **« Impossible de démarrer le serveur »** : le port est déjà pris (un autre bureau tourne, ou un autre programme). Fermez l'autre, ou mettez un autre `port` dans les réglages.

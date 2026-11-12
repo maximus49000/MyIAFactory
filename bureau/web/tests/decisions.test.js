@@ -220,6 +220,24 @@ test("outil à ouvrir : sans programme à nommer, pas d'autorisation, mais « re
   assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [OUTIL]}).contenu).length, 0);
 });
 
+const ACCORD = {id: "a1", genre: "accord_agent", texte: "Atlas (livreur) demande votre accord, tâche « Livrer » : adb install de l'apk.",
+  agent: "livreur", tache: "t9", quoi: "adb install de l'apk", partenaire: "aucun", cout: "0", pourquoi: "Tester sur le téléphone.",
+  implique: "Brancher le téléphone, débogage USB.", appareil: true,
+  regle: "Règle du projet : tests automatiques sur émulateur, validation de version par la fenêtre de validation."};
+
+test("demande d'accord d'un agent : partie dédiée, règle rappelée, accepter ou refuser avec consigne facultative", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [ACCORD]});
+  assert.match(contenu.textContent, /Demandes d'accord des agents/);
+  assert.match(contenu.textContent, /Pourquoi : Tester sur le téléphone/);
+  assert.match(contenu.textContent, /Ce que cela implique : Brancher le téléphone/);
+  assert.match(contenu.textContent, /émulateur, validation de version par la fenêtre de validation/);
+  await bouton(contenu, "J'accepte").auteurs.click[0]();
+  contenu.tous((n) => n.tagName === "input")[0].value = "  Utilise l'émulateur.  ";
+  await bouton(contenu, "Je refuse").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "accord_agent", decision: "a1", verdict: "accepter"},
+    {type: "accord_agent", decision: "a1", verdict: "refuser", texte: "Utilise l'émulateur."}]);
+});
+
 test("genre du projet : la phrase du genre nouveau est proposée et pré-remplie", async () => {
   const sans = {id: "p1", genre: "confirmer_genre", texte: "Genre ?", propose: "jeu-mobile", genres_connus: ["jeu-web"],
     description: "Jeux pour téléphone"};

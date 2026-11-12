@@ -22,9 +22,11 @@ CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de dép
                   "(statut outil_refuse). Chaque image que tu rends porte sa légende, une phrase qui dit à quoi elle "
                   "correspond. Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
                   "`attend: true`, jamais en simple phrase. Avant une action qui ouvre une fenêtre sur le poste "
-                  "(pare-feu, UAC, pilote, débogage USB), dis dans `message.texte` laquelle, pourquoi et quoi "
+                  "(pare-feu, UAC, pilote), dis dans `message.texte` laquelle, pourquoi et quoi "
                   "choisir, avec `attend: true`, et n'agis qu'après la réponse ; ne réponds jamais à ces fenêtres "
-                  "à sa place ; une commande bloquée par une fenêtre se dit dans ton rapport. Termine par le bloc ```json demandé.")
+                  "à sa place ; une commande bloquée par une fenêtre se dit dans ton rapport. Jamais d'installation ni de test "
+                  "sur le téléphone de l'utilisateur (`adb`, débogage USB) : tests automatiques sur émulateur, "
+                  "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Termine par le bloc ```json demandé.")
 USAGE_VIDE = {"modele": "", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
 
 

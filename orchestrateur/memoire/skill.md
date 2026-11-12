@@ -189,3 +189,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Chaque journal de mesure note les valeurs avec lesquelles il a été pris, et les outils qui le relisent ignorent ceux pris avec d'autres valeurs.
+
+## S32 — Quand un message est limité en nombre d'images, montrer les
+Rôles : designer
+Date : 2026-11-12
+
+Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.

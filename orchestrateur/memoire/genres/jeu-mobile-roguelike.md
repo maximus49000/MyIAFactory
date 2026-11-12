@@ -206,3 +206,9 @@ Rôles : designer, testeur
 Date : 2026-11-12
 
 Dans un roguelike d'action, équilibrer avec un robot de test imparfait (taux d'erreur réglable), mesurer le coût réel d'un combat, puis caler une simulation de runs sur ces mesures pour comparer les réglages.
+
+## G35 — Avant un export signé, lister les clés de signature candidat
+Rôles : livreur
+Date : 2026-11-12
+
+Avant un export signé, lister les clés de signature candidates sans lire leurs secrets, puis demander à l'utilisateur quelle clé et quel alias utiliser.

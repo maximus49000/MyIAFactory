@@ -32,3 +32,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Pour des personnages jouables aux particularités différentes, garder une silhouette et une zone de collision identiques et varier seulement couleurs et détails, pour ne pas fausser l'équilibrage.
+
+## G6 — Lancer un export de test (headless) dès la mise en place du
+Rôles : dev, testeur
+Date : 2026-11-12
+
+Lancer un export de test (headless) dès la mise en place du projet : les prérequis de compression de textures et de signature ne se voient pas dans les fichiers de configuration, seulement à l'export.

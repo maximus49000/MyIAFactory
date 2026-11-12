@@ -5,6 +5,7 @@
 import {el} from "./dom.js";
 import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage, auTravail} from "./texte.js";
 import {lienSur} from "./actions.js";
+import {creerAccuses} from "./accuse.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2, ligneEquivalences} from "./empreinte.js";
 import {urlProjet, projetCourant} from "./projets.js";
@@ -1183,6 +1184,7 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoi
     bloc.append(barre);
   }
   bloc.append(zone, conseil, miniatures, erreur, rangee, fichier);
+  if (cle.startsWith("f:")) bloc.append(creerAccuses("message:" + cle.slice(2)).racine);   // « Reçu, en cours de traitement… »
   maj();
   return {bloc, texte: () => zone.value};
 }

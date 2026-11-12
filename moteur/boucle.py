@@ -33,6 +33,7 @@ from orchestrateur import fiches as fi
 from orchestrateur import guetteur
 
 PAS_S = 2
+REVEIL_VERIFIE_S = 0.2           # pendant l'attente, le fichier de réveil de chaque projet est regardé cinq fois par seconde
 QUOTA_TOUS_LES_S = 60
 CLOUD_TOUS_LES_S = 60            # le dépôt est relevé toutes les minutes
 CLOUD_MUETTE_S = 2 * 3600        # une session sans rapport au bout de deux heures : la décision revient au Directeur
@@ -133,6 +134,10 @@ class Moteur:
         self._installation_vue = False     # une installation était en cours ou attendue au passage d'avant
         self._ecrits = {}                  # fichier -> (contenu, heure) : un fichier inchangé n'est pas réécrit à chaque passage
         self._echecs_installation = {}
+        self._mesure_tour = None           # la mesure de charge du tour en cours, partagée par tous les projets
+        self.mesures_de_charge = 0         # combien de vraies mesures (sous-processus) ont été faites
+        self.duree_dernier_tour_s = None
+        self._reveils_vus = {}             # dossier du projet -> dernier horodatage du fichier de réveil traité
         for p in projets:
             self._ajouter(p)
 
@@ -140,6 +145,8 @@ class Moteur:
         if getattr(projet, "bureau", None) is None:
             projet.bureau = self.bureau     # les mesures d'usage des projets du bureau servent à estimer un workflow
         projet.installations_a_part = True  # les installations sont lancées par `_installations`, avant tout le reste
+        if getattr(projet, "mesure_commune", None) is None:
+            projet.mesure_commune = self._mesure_du_tour    # une seule mesure de charge par tour pour tout le bureau
         self.projets.append(projet)
         self.etats[str(projet.factory)] = regles.nouvel_etat()
 
@@ -158,18 +165,78 @@ class Moteur:
     # --- Un passage.
 
     def tour(self):
+        debut = time.monotonic()
+        self._mesure_tour = None        # la charge du poste est mesurée au plus une fois par tour (si un projet la demande)
         self._prendre_les_projets_ajoutes()
         self._installations()
+        self._traiter_les_reveils()
         for projet in list(self.projets):
+            self._traiter_les_reveils()
             try:
                 self._tour_projet(projet)
             except Exception as e:      # une erreur d'un projet n'arrête ni la boucle ni les autres projets
                 self._noter(projet, f"erreur au passage : {e}")
+        self.duree_dernier_tour_s = time.monotonic() - debut
 
     def tourner(self, arret):
         while not arret.is_set():
             self.tour()
-            arret.wait(PAS_S)
+            self.attendre(arret)
+
+    def attendre(self, arret, duree_s=PAS_S):
+        """L'attente entre deux tours : tranches de `REVEIL_VERIFIE_S`, à chacune le fichier de réveil de chaque projet est
+        regardé (le bureau le touche en posant une demande) ; les demandes des projets signalés sont traitées aussitôt."""
+        fin = time.monotonic() + duree_s
+        while not arret.is_set():
+            reste = fin - time.monotonic()
+            if reste <= 0:
+                return
+            arret.wait(min(reste, REVEIL_VERIFIE_S))
+            self._traiter_les_reveils()
+
+    # --- Une seule mesure de charge par tour.
+
+    def _mesure_du_tour(self, projet):
+        """La charge du poste, mesurée une fois (le premier projet qui la demande dans le tour) puis partagée ; chaque
+        projet compare cette valeur à son propre plafond."""
+        if self._mesure_tour is None:
+            self._mesure_tour = projet.mesurer()
+            self.mesures_de_charge += 1
+        m = self._mesure_tour
+        if m.get("charge") is None:         # mesure indisponible : la réponse de la mesure vaut pour tous
+            return dict(m)
+        plafond = projet.plafond_charge()
+        if plafond is None:
+            plafond = m.get("plafond")
+        if plafond is None:
+            return dict(m)
+        return {"feu_vert": m["charge"] <= plafond, "charge": m["charge"], "plafond": plafond}
+
+    # --- Le réveil : une demande posée par le bureau passe avant le reste du tour.
+
+    def _projets_reveilles(self):
+        """Les projets dont le fichier de réveil a changé depuis la dernière fois."""
+        sortie = []
+        for projet in list(self.projets):
+            cle = str(projet.factory)
+            date = attente.date_du_reveil(projet.factory.parent)
+            if date is not None and date != self._reveils_vus.get(cle):
+                self._reveils_vus[cle] = date
+                sortie.append(projet)
+        return sortie
+
+    def _traiter_les_reveils(self):
+        """Les demandes en attente des projets signalés, tout de suite (celles de ce projet seulement, puis le tour
+        reprend). Une demande n'est jamais traitée deux fois (`prises`). Un projet pas encore démarré attend son premier
+        passage, qui lit ses demandes de toute façon."""
+        for projet in self._projets_reveilles():
+            etat = self._etat(projet)
+            if not etat.get("repris"):
+                continue
+            try:
+                self._demandes(projet, etat)
+            except Exception as e:
+                self._noter(projet, f"demandes (réveil) : {e}")
 
     def _prendre_les_projets_ajoutes(self):
         if self.bureau is None:
@@ -191,9 +258,12 @@ class Moteur:
         self._demandes(projet, etat)
         self._ecritures_en_attente(projet, etat)
         self._relever_le_cloud(projet, etat)
+        self._traiter_les_reveils()
         self._retours_des_agents(projet, etat)
+        self._traiter_les_reveils()
         self._executer(projet, regles.avancer(projet, etat))
         self._dire_l_attente_de_charge(projet, etat)
+        self._traiter_les_reveils()
         self._quota(projet)
 
     def _presence(self, projet):

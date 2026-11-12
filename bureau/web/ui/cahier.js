@@ -10,6 +10,7 @@ import {dateFr} from "./texte.js";
 import {avecProjet, projetCourant, urlProjet} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse} from "./visionneuse.js";
+import {creerAccuses} from "./accuse.js";
 import {rendreTexte} from "./markdown.js";
 import {demandeCahier, demandeMethode, vueCahier, versionsDe} from "./fonctionnalite.js";
 import {estEnvoyee, marquerEnvoyee, oublierEnvoyee, ouvrirFenetre, estImage, estTelechargeable, urlTelechargement,
@@ -214,6 +215,7 @@ export function contenuCahierMethode(ctx, d, {fermer = () => {}} = {}) {
   if (ctx.etat?.agir !== true || deja) {
     boite.append(el("p", "val-meta", deja ? "Réponse envoyée : le moteur la traite, rien n'attend plus de vous ici."
       : "Ce bureau ne peut pas agir sur le projet : le contenu se lit seulement."));
+    if (deja) boite.append(creerAccuses((methode ? "methode:" : "cahier:") + d.fonctionnalite).racine);   // « Reçu, en cours de traitement… »
     return {boite, fermer: bFermer};
   }
   const s = section("Votre réponse");

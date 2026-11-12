@@ -10,6 +10,7 @@ import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 import {creerConso} from "./conso.js";
 import {creerJauges, definirAbonnement} from "./abonnement.js";
 import {surConso} from "./mesure.js";
+import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -85,6 +86,9 @@ export function creerBarre(entete, bandeau) {
   retour.setAttribute("role", "status");
   retour.hidden = true;
   entete.after(retour);
+  // L'accusé de réception : « Reçu, en cours de traitement… » jusqu'à ce que le relevé montre la demande traitée.
+  const accuses = creerAccuses();
+  retour.after(accuses.racine);
   let minuteur = null;
   function dire(texte, ok) {
     retour.textContent = texte;
@@ -102,6 +106,7 @@ export function creerBarre(entete, bandeau) {
     try {
       const r = await envoyer(demande);
       dire(r.message, r.ok);
+      if (r.ok) { const a = accuseDe(demande, dernierEtat); if (a) { noterAccuse(a); majEtatAccuses(null); } }
       return r;
     } finally {
       enCours--;
@@ -263,12 +268,14 @@ export function creerBarre(entete, bandeau) {
   setInterval(() => { if (!document.hidden) rafraichirCharge(); }, INTERVALLE_CHARGE);
   // Le voyant dit « sans activité depuis… » : on le remet à jour même sans nouvel état.
   setInterval(afficherVoyant, 30000);
+  setInterval(() => majEtatAccuses(null), 15000);   // « le moteur n'a pas encore traité » arrive avec l'heure
   setInterval(() => jauges.maj(), 30000);   // l'âge de la mesure avance même sans nouvel état
   afficherVoyant();
 
   return {
     // Un état utilisable : voyant et nom du projet.
     majEtat(etat) {
+      majEtatAccuses(etat);
       definirAbonnement(etat.abonnement);
       jauges.maj();
       orchestrateur.maj(etat);

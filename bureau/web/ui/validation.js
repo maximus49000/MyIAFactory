@@ -12,6 +12,7 @@ import {avecProjet, projetCourant} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, fermerVisionneuse, visionneuseOuverte} from "./visionneuse.js";
 import {blocMarkdown, estMarkdown, rendreTexte} from "./markdown.js";
+import {creerAccuses} from "./accuse.js";
 
 export const POINT_PAR_DEFAUT = "L'élément correspond à l'objectif";   // une décision posée avant la fenêtre
 export const MAX_POINTS = 8;
@@ -439,6 +440,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   if (!agir) {
     boite.append(el("p", "val-meta", deja ? "Réponse envoyée : le moteur la traite, cet élément n'attend plus rien de vous."
       : "Ce bureau ne peut pas agir sur le projet : la validation se lit seulement."));
+    if (deja) boite.append(creerAccuses("decision:" + d.id).racine);   // « Reçu, en cours de traitement… »
     return {boite, fermer: bFermer, choix};
   }
   const s5 = section("Autre chose à signaler (facultatif)");

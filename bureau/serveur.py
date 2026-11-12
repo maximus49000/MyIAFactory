@@ -381,6 +381,8 @@ class Projet:
                 if constat:  # le bureau écrit lui-même le constat de ce qu'il a calculé
                     demande["texte"] = constat + (f"\n\n{demande['texte']}" if demande.get("texte") else "")
             ok, message = self.envoyer(regl, demande)
+            if ok:
+                attente.reveiller(self.chemin_reglages.parent)   # le moteur traite la demande tout de suite
             if ok and une_fois is not None:
                 self._reponses_envoyees[une_fois] = time.monotonic()
             if ok and cle:
@@ -418,6 +420,7 @@ class Projet:
                     ok, message = self.envoyer(regl, d)
                     if ok:
                         envoyees += 1
+                        attente.reveiller(self.chemin_reglages.parent)
                         continue
                 refusees.append({"id": x["id"], "erreur": message})
             self._cache_etat = (0.0, self._cache_etat[1])   # les verdicts paraissent au prochain relevé

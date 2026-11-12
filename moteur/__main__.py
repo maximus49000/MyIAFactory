@@ -35,13 +35,19 @@ def main(argv=None):
         return 3
     arret = threading.Event()
     deja = 0
+
+    def dire():
+        nonlocal deja
+        for ligne in moteur.journal[deja:]:
+            print(ligne, flush=True)
+        deja = len(moteur.journal)
+
     try:
         while not arret.is_set():
             moteur.tour()
-            for ligne in moteur.journal[deja:]:
-                print(ligne, flush=True)
-            deja = len(moteur.journal)
-            arret.wait(boucle.PAS_S)
+            dire()
+            moteur.attendre(arret)      # une demande posée par le bureau réveille le moteur, qui la traite aussitôt
+            dire()
     except KeyboardInterrupt:
         arret.set()
     finally:

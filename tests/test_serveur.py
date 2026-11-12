@@ -462,6 +462,25 @@ class TestServeur(AvecServeur):
         statut, corps = self.demande({"type": "bouton", "id": "pause"})
         self.assertEqual((statut, corps), (409, {"erreur": "Relevé indisponible."}))
 
+    def test_demande_envoyee_reveille_le_moteur(self):
+        from bureau import attente
+        self.agir()
+        self.json("/api/etat")
+        dossier = self.regl.parent
+        self.assertIsNone(attente.date_du_reveil(dossier))
+        self.assertEqual(self.demande({"type": "bouton", "id": "pause"})[0], 200)
+        premiere = attente.date_du_reveil(dossier)
+        self.assertIsNotNone(premiere)
+        self.assertEqual(self.demande({"type": "bouton", "id": "pause"})[0], 200)
+        self.assertNotEqual(attente.date_du_reveil(dossier), premiere)       # chaque demande touche le fichier
+
+    def test_demande_refusee_ne_reveille_pas_le_moteur(self):
+        from bureau import attente
+        self.agir(code=3)
+        self.json("/api/etat")
+        self.assertEqual(self.demande({"type": "bouton", "id": "pause"})[0], 502)
+        self.assertIsNone(attente.date_du_reveil(self.regl.parent))
+
     def test_demande_commande_en_echec(self):
         notes = self.agir(code=3)
         self.json("/api/etat")

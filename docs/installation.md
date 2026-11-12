@@ -411,7 +411,20 @@ du bureau (pour tous les projets), le serveur le relit et l'ajoute à l'état se
 
 Une tâche prête que la charge du poste retient affiche sur sa carte (panneau de la tâche, Kanban plein écran) et dans la
 barre : « En attente : charge 90 % (plafond 70 %) », mis à jour à chaque passage du moteur. Les installations n'y sont
-jamais retenues (elles sont prioritaires).
+jamais retenues (elles sont prioritaires). La charge du poste est mesurée **une seule fois par tour** du moteur, pour tous
+les projets (c'est le même ordinateur) ; chaque projet compare cette valeur à son propre plafond.
+
+### Une demande envoyée est traitée tout de suite
+
+Un tour complet du moteur peut durer plus d'une minute avec plusieurs projets. Pour que votre réponse (valider une méthode,
+un message, une décision) ne l'attende pas, le bureau, une fois la demande écrite, touche le fichier `moteur-reveil` du
+dossier du projet (à côté de son fichier de réglages). Le moteur le regarde cinq fois par seconde pendant son attente, et
+entre deux étapes de son tour : il traite alors les demandes en attente de ce projet seulement, puis reprend son tour. Une
+demande n'est jamais traitée deux fois. Sans ce fichier (bureau ancien), rien ne change : la demande est lue au tour suivant.
+
+Dès l'envoi, la page affiche « Reçu, en cours de traitement… » (sous la barre, et dans la discussion ou la fenêtre
+concernée) jusqu'à ce que le relevé montre la demande traitée. Au bout de 3 minutes sans effet : « Le moteur n'a pas encore
+traité votre demande », avec le motif connu (moteur arrêté, pause d'installation, tour en cours).
 
 ### Le plafond d'un projet créé au bureau
 

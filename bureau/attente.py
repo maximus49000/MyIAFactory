@@ -97,3 +97,30 @@ def attente_charge(dossier_factory, maintenant=None):
     taches = [x for x in o.get("taches") or [] if isinstance(x, str)]
     entier = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None  # noqa: E731
     return {"texte": o["texte"], "taches": taches, "charge": entier(o.get("charge")), "plafond": entier(o.get("plafond"))}
+
+
+# --- Le réveil du moteur : une demande posée par le bureau est traitée tout de suite.
+
+FICHIER_REVEIL = "moteur-reveil"
+
+
+def chemin_reveil(dossier_reglages):
+    """Le fichier de réveil d'un projet, à côté de son fichier de réglages (là où le bureau et le moteur se retrouvent)."""
+    return Path(dossier_reglages) / FICHIER_REVEIL
+
+
+def reveiller(dossier_reglages):
+    """Le bureau vient de poser une demande : touche le fichier de réveil du projet (le moteur compare son horodatage).
+    Le contenu change à chaque appel ; une erreur d'écriture n'arrête rien (le moteur lira la demande à son prochain tour)."""
+    try:
+        Path(chemin_reveil(dossier_reglages)).write_text(str(time.time_ns()), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def date_du_reveil(dossier_reglages):
+    """L'horodatage (ns) du dernier réveil du projet, ou `None` s'il n'y en a jamais eu."""
+    try:
+        return Path(chemin_reveil(dossier_reglages)).stat().st_mtime_ns
+    except OSError:
+        return None

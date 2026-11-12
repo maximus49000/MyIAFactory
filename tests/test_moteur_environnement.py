@@ -72,6 +72,30 @@ class Verifier(unittest.TestCase):
         (r,) = environnement.verifier([dict(JDK, version_min="11")], which=e.which, executer=e.executer, env={})
         self.assertEqual(r["etat"], "a_installer")
 
+    def test_version_recente_installee_a_cote_d_une_ancienne(self):
+        """Un JDK récent installé hors du PATH, alors qu'un vieux Java passe avant : l'outil est en place, avec le bon chemin."""
+        ancien, recent = "C:/Program Files/OpenJDK/jdk8/bin/java.exe", "C:/Program Files/Eclipse Adoptium/jdk-25/bin/java.exe"
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d) / "ProgramFiles"
+            (base / "Eclipse Adoptium" / "jdk-25" / "bin").mkdir(parents=True)
+
+            def which(nom, path=None):
+                if path is None:
+                    return {"java": ancien, "javac": ancien.replace("java.exe", "javac.exe")}.get(nom)
+                return recent if nom == "java" and "Eclipse Adoptium" in path else None
+
+            def executer(argv, delai_s):
+                return (0, 'openjdk version "25.0.5"') if argv[0] == recent else (0, 'java version "1.8.0_302"')
+
+            (r,) = environnement.verifier([dict(JDK, outil="JDK 17")], which=which, executer=executer,
+                                          env={"ProgramFiles": str(base)})
+        self.assertEqual((r["etat"], r["chemin"]), ("en_place", recent))
+        self.assertIn("25.0.5", r["version"])
+        self.assertIn("hors du PATH", r["raison"])
+        # sans autre exemplaire, il reste à installer
+        (r,) = environnement.verifier([dict(JDK, outil="JDK 17")], which=which, executer=executer, env={})
+        self.assertEqual(r["etat"], "a_installer")
+
     def test_version_suffisante(self):
         suffisante = environnement.version_suffisante
         self.assertFalse(suffisante('java version "1.8.0_381"', "17"))        # Java 1.8 est la version 8

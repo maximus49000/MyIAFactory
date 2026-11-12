@@ -175,6 +175,19 @@ def trouver(nom, *, which=shutil.which, env=None, lire=None):
     return None
 
 
+def candidats(nom, *, which=shutil.which, env=None, lire=None):
+    """Tous les chemins distincts du programme `nom`, dans l'ordre de `trouver` (le premier est celui que `trouver` rend) :
+    pour retrouver une version récente installée à côté d'une plus ancienne qui passe avant dans le `PATH`."""
+    if env is None:
+        env, lire = dict(os.environ), lire or lire_registre
+    vus, sortie = set(), []
+    for chemin in [which(nom)] + [which(nom, path=str(d)) for d in dossiers_a_chercher(env, lire)]:
+        if chemin and str(chemin).lower() not in vus:
+            vus.add(str(chemin).lower())
+            sortie.append(str(chemin))
+    return sortie
+
+
 def lire_version(chemin, executer=executer_version):
     """La première ligne de la sortie de la première option de la liste fixe qui répond (code 0), sinon `None`."""
     for option in OPTIONS_DE_VERSION:
@@ -223,6 +236,17 @@ def version_suffisante(lue, minimale):
     return trouvee + (0,) * (len(voulue) - len(trouvee)) >= voulue
 
 
+def _version_suffisante_ailleurs(nom, premier, minimale, *, which, executer, env, lire):
+    """(chemin, version) d'un autre exemplaire de `nom` qui atteint `minimale`, ou `None`."""
+    for chemin in candidats(nom, which=which, env=env, lire=lire):
+        if chemin.lower() == str(premier).lower():
+            continue
+        version = lire_version(chemin, executer)
+        if version_suffisante(version, minimale):
+            return chemin, version
+    return None
+
+
 def verifier(outils, *, which=shutil.which, executer=executer_version, env=None, lire=None):
     """Chaque outil de la proposition avec son état : `en_place` (`chemin`, `version`?) ou `a_installer`. Un outil est en
     place quand **tous** ses exécutables sont trouvés. Un exécutable est cherché une seule fois, même s'il sert à
@@ -256,8 +280,15 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None,
                 if suffisante is None:
                     o["raison"] = f"version {texte_min} minimum demandée, version non vérifiée (illisible)"
                 elif not suffisante:
-                    o["etat"] = "a_installer"
-                    o["raison"] = f"version trouvée : {versions[valides[0]]} ; {texte_min} minimum demandée"
+                    autre = _version_suffisante_ailleurs(valides[0], chemins[0], texte_min, which=which,
+                                                         executer=executer, env=env, lire=lire)
+                    if autre:
+                        o["chemin"], o["version"] = autre
+                        o["raison"] = (f"version {texte_min} minimum trouvée hors du PATH : {autre[0]} (« {valides[0]} » "
+                                       f"du PATH est {versions[valides[0]]}) ; utiliser ce chemin, ou JAVA_HOME pour un JDK")
+                    else:
+                        o["etat"] = "a_installer"
+                        o["raison"] = f"version trouvée : {versions[valides[0]]} ; {texte_min} minimum demandée"
         else:
             o["etat"] = "a_installer"
             o.pop("chemin", None)

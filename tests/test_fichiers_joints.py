@@ -38,7 +38,9 @@ def fichier(nom, contenu, type_="application/octet-stream"):
 EXEMPLES = {".png": PNG, ".jpg": JPEG, ".jpeg": JPEG, ".gif": GIF, ".webp": WEBP, ".mp4": MP4, ".webm": WEBM,
             ".mp3": b"ID3\x03\x00\x00\x00", ".ogg": b"OggS\x00\x02", ".wav": WAV, ".flac": b"fLaC\x00\x00",
             ".pdf": PDF, ".md": "# Titre\n".encode(), ".txt": b"bonjour", ".csv": b"a,b\n1,2\n", ".json": b"{}",
-            ".docx": zip_octets(), ".xlsx": zip_octets(), ".pptx": zip_octets(), ".zip": zip_octets()}
+            ".docx": zip_octets(), ".xlsx": zip_octets(), ".pptx": zip_octets(), ".zip": zip_octets(),
+            ".glb": b"glTF\x02\x00\x00\x00", ".gltf": b'{"asset": {"version": "2.0"}}', ".fbx": b"Kaydara FBX Binary  \x00",
+            ".obj": b"v 0 0 0\nv 1 0 0\n", ".mtl": b"newmtl matiere\n"}
 
 
 class TestRegles(unittest.TestCase):
@@ -59,7 +61,8 @@ class TestRegles(unittest.TestCase):
 
     def test_signature_du_contenu(self):
         faux = {"a.zip": PNG, "a.pdf": b"PK\x03\x04", "a.png": GIF, "a.gif": PNG, "a.mp4": PDF, "a.webp": WAV, "a.wav": WEBP,
-                "a.docx": PDF, "a.mp3": PNG, "a.txt": b"abc\x00def", "a.json": b"\x00\x01"}
+                "a.docx": PDF, "a.mp3": PNG, "a.txt": b"abc\x00def", "a.json": b"\x00\x01",
+                "a.glb": PNG, "a.fbx": b"MZ\x90\x00", "a.obj": b"\x00\x01binaire"}
         for nom, contenu in faux.items():
             self.assertIn("contenu", fj.verifier([fichier(nom, contenu)]), nom)
 

@@ -6,9 +6,10 @@ import {TYPES, ACCEPT, MAX_FICHIERS, MAX_OCTETS_FICHIER, MAX_OCTETS_TOTAL, exten
 const Mo = 1024 * 1024;
 const f = (name, size = 100, type = "") => ({name, type, size});
 
-test("la liste blanche : images, vidéos, sons, documents, archives", () => {
-  assert.deepEqual(Object.keys(TYPES).sort(), [".csv", ".docx", ".flac", ".gif", ".jpeg", ".jpg", ".json", ".md", ".mp3", ".mp4",
-    ".ogg", ".pdf", ".png", ".pptx", ".txt", ".wav", ".webm", ".webp", ".xlsx", ".zip"]);
+test("la liste blanche : images, vidéos, sons, documents, archives, modèles 3D", () => {
+  assert.deepEqual(Object.keys(TYPES).sort(), [".csv", ".docx", ".fbx", ".flac", ".gif", ".glb", ".gltf", ".jpeg", ".jpg", ".json",
+    ".md", ".mp3", ".mp4", ".mtl", ".obj", ".ogg", ".pdf", ".png", ".pptx", ".txt", ".wav", ".webm", ".webp", ".xlsx", ".zip"]);
+  assert.ok(ACCEPT.includes(".glb") && ACCEPT.includes(".fbx") && ACCEPT.includes(".obj"));
   assert.equal(MAX_FICHIERS, 8);
   assert.equal(MAX_OCTETS_FICHIER, 25 * Mo);
   assert.equal(MAX_OCTETS_TOTAL, 40 * Mo);

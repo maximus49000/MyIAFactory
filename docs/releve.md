@@ -376,6 +376,8 @@ par le bureau puis par l'outil, par l'extension **et** par le début du contenu 
 | documents | `.pdf` `.docx` `.xlsx` `.pptx` | `%PDF` ; `PK` (un document bureautique est une archive zip) |
 | textes | `.md` `.txt` `.csv` `.json` | du texte : aucun octet nul |
 | archives | `.zip` | `PK` |
+| modèles 3D | `.glb`, `.fbx` | `glTF` ; `Kaydara FBX Binary` ou `; FBX` |
+| modèles 3D (texte) | `.gltf`, `.obj`, `.mtl` | aucun octet nul |
 
 Plafonds : **8 fichiers au plus par envoi**, dont **4 images PNG ou JPEG** au plus ; **25 Mo par fichier** (**5 Mo** pour une image
 fixe : png, jpg, jpeg, webp) ; **40 Mo en tout**, une fois décodés. Un nom de fichier fait 80 caractères au plus, sans séparateur,

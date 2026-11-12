@@ -48,6 +48,12 @@ TYPES = {
     ".xlsx": (_OFFICE + "spreadsheetml.sheet", "document", _PK),
     ".pptx": (_OFFICE + "presentationml.presentation", "document", _PK),
     ".zip": ("application/zip", "archive", _PK),
+    # modèles 3D (sorties de Tripo et des outils 3D) : jamais ouverts par le bureau, seulement rangés et téléchargés
+    ".glb": ("model/gltf-binary", "3d", (0, (b"glTF",))),
+    ".gltf": ("model/gltf+json", "3d", None),
+    ".fbx": ("application/octet-stream", "3d", (0, (b"Kaydara FBX Binary", b"; FBX"))),
+    ".obj": ("model/obj", "3d", None),
+    ".mtl": ("model/mtl", "3d", None),
 }
 IMAGES_FIXES = (".png", ".jpg", ".jpeg")          # celles que le bureau montre par /api/image et que les agents voient
 EXTENSIONS = tuple(TYPES)
@@ -110,7 +116,8 @@ def verifier_un(fichier, quoi):
     ext = extension(nom)
     if ext not in TYPES:
         return None, (f"{quoi} : « {ext or nom} » n'est pas un type accepté (images png, jpg, gif, webp ; vidéos mp4, webm ; "
-                      "sons mp3, ogg, wav, flac ; documents pdf, md, txt, csv, json, docx, xlsx, pptx ; archives zip).")
+                      "sons mp3, ogg, wav, flac ; documents pdf, md, txt, csv, json, docx, xlsx, pptx ; archives zip ; "
+                      "modèles 3D glb, gltf, fbx, obj, mtl).")
     if not isinstance(donnees, str):
         return None, f"{quoi} : « donnees » doit être du texte base64."
     plafond = MAX_OCTETS_IMAGE_FIXE if ext in IMAGES_FIXES + (".webp",) else MAX_OCTETS_FICHIER

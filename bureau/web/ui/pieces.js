@@ -21,13 +21,15 @@ export const TYPES = {
   ".pptx": ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "document"],
   ".md": ["text/markdown", "texte"], ".txt": ["text/plain", "texte"], ".csv": ["text/csv", "texte"], ".json": ["application/json", "texte"],
   ".zip": ["application/zip", "archive"],
+  ".glb": ["model/gltf-binary", "3d"], ".gltf": ["model/gltf+json", "3d"], ".fbx": ["application/octet-stream", "3d"],
+  ".obj": ["model/obj", "3d"], ".mtl": ["model/mtl", "3d"],
 };
 // Une photo (au choix : HEIC, WebP, très grande définition…) est réduite et réencodée dans la page avant l'envoi.
 const TYPES_PHOTO = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif", "image/avif", "image/bmp"];
 const EXTENSIONS_PHOTO = /\.(png|jpe?g|webp|heic|heif|avif|bmp)$/i;
 // Ce que propose le sélecteur de fichiers : toutes les images, les vidéos, les sons et les extensions de la liste blanche.
 export const ACCEPT = ["image/*", ...Object.keys(TYPES)].join(",");
-export const LISTE_BLANCHE = "images (png, jpg, gif, webp), vidéos (mp4, webm), sons (mp3, ogg, wav, flac), documents (pdf, md, txt, csv, json, docx, xlsx, pptx) et archives (zip)";
+export const LISTE_BLANCHE = "images (png, jpg, gif, webp), vidéos (mp4, webm), sons (mp3, ogg, wav, flac), documents (pdf, md, txt, csv, json, docx, xlsx, pptx), archives (zip) et modèles 3D (glb, gltf, fbx, obj, mtl)";
 
 export function extension(nom) {
   const n = String(nom ?? "").split(/[\\/]/).pop();

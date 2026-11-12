@@ -100,6 +100,26 @@ def _consignes_par_defaut():
             "première demande.\n")
 
 
+def regler_identite(projet, git, gh=executer_gh):
+    """Sans identité git sur ce poste (`user.email` vide), le premier commit échoue (« Author identity unknown »). On
+    la règle **dans ce dépôt seulement** (jamais la configuration globale) avec le compte GitHub connecté à gh : son nom
+    (ou son identifiant) et son adresse sans réponse GitHub `<id>+<login>@users.noreply.github.com`. Rien si une identité
+    existe déjà ; rien non plus si gh ne répond pas (le commit dira alors pourquoi)."""
+    code, sortie = git(["config", "user.email"], projet)
+    if code == 0 and sortie.strip():
+        return
+    code, sortie = gh(["api", "user"], projet)
+    try:
+        compte = json.loads(sortie) if code == 0 else None
+        login, ident = compte["login"], compte["id"]
+    except (ValueError, TypeError, KeyError):
+        return
+    if not (isinstance(login, str) and login.strip() and isinstance(ident, int)):
+        return
+    git(["config", "user.name", (compte.get("name") or login).strip()], projet)
+    git(["config", "user.email", f"{ident}+{login}@users.noreply.github.com"], projet)
+
+
 def github(projet, nom, git, gh=executer_gh):
     """Crée le dépôt privé et pousse. Rend « fait » ou la raison (et le geste pour le faire à la main)."""
     code, sortie = gh(["auth", "status"], projet)
@@ -109,6 +129,8 @@ def github(projet, nom, git, gh=executer_gh):
                 "GitHub n'a pas été fait : gh n'est pas connecté à votre compte. Lancez « gh auth login », puis, dans "
                 f"le dossier du projet : gh repo create {nom} --private --source . --push.")
     for args in (["init"], ["add", "."], ["commit", "-m", MESSAGE_PREMIER_COMMIT]):
+        if args[0] == "commit":
+            regler_identite(projet, git, gh)
         code, sortie = git(args, projet)
         if code != 0 and "pas pu s'exécuter" in sortie:
             return ("GitHub n'a pas été fait : git n'est pas installé sur ce poste. Installez git, puis, dans le "
@@ -171,6 +193,7 @@ def depot_github(projet, nom, git, gh=executer_gh):
         a_un_commit = git(["rev-parse", "--verify", "HEAD"], projet)[0] == 0
         a_commiter = git(["diff", "--cached", "--quiet"], projet)[0] != 0
         if a_commiter or not a_un_commit:
+            regler_identite(projet, git, gh)
             code, sortie = git(["commit", "-m", MESSAGE_PREMIER_COMMIT] + ([] if a_commiter else ["--allow-empty"]),
                                projet)
             if code != 0:

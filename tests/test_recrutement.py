@@ -215,7 +215,7 @@ class Depot_git(Base):
         self.assertEqual(code, 0, r)
         self.assertTrue(r["fait"])
         self.assertEqual(r["url"], "https://github.com/moi/projet")
-        self.assertEqual([a[0] for a in git.appels[:3]], ["init", "add", "commit"])
+        self.assertEqual([a[0] for a in git.appels if a[0] != "config"][:3], ["init", "add", "commit"])
         creer = [a for a in gh.appels if a[:2] == ["repo", "create"]]
         self.assertEqual(len(creer), 1)
         self.assertIn("--private", creer[0])

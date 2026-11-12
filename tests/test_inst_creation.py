@@ -24,6 +24,27 @@ class Executeur:
         return self.reponses.get(" ".join(args[:2]), self.reponses.get(args[0], (0, "")))
 
 
+class Identite(AvecMaison):
+    """Sans identité git sur le poste, le premier commit échouait : elle est réglée dans le dépôt seul, d'après gh."""
+
+    def test_identite_reglee_dans_le_depot_depuis_le_compte_github(self):
+        git = Executeur({"config user.email": (1, "")})
+        gh = Executeur({"api user": (0, json.dumps({"login": "auteur", "id": 42, "name": "Un Auteur"}))})
+        creation.regler_identite(self.base, git, gh)
+        self.assertIn(["config", "user.name", "Un Auteur"], [a for a, _ in git.appels])
+        self.assertIn(["config", "user.email", "42+auteur@users.noreply.github.com"], [a for a, _ in git.appels])
+        self.assertFalse(any("--global" in a for a, _ in git.appels))
+
+    def test_identite_existante_ou_gh_muet_rien_n_est_change(self):
+        git = Executeur({"config user.email": (0, "deja@exemple.fr\n")})
+        gh = Executeur()
+        creation.regler_identite(self.base, git, gh)
+        self.assertEqual(gh.appels, [])
+        git = Executeur({"config user.email": (1, "")})
+        creation.regler_identite(self.base, git, Executeur({"api user": (1, "pas connecté")}))
+        self.assertEqual([a for a, _ in git.appels], [["config", "user.email"]])
+
+
 class Base(AvecMaison):
     def setUp(self):
         super().setUp()
@@ -228,7 +249,8 @@ class TestCreation(Base):
         self.assertEqual(r["github"], "fait")
         projet = str(self.parent / "Casse-briques")
         self.assertEqual([a for a, _ in self.git.appels][:2], [["init"], ["add", "."]])
-        self.assertEqual(self.git.appels[2][0][:1], ["commit"])
+        sans_identite = [a for a in self.git.appels if a[0][0] != "config"]    # l'identité git est réglée avant
+        self.assertEqual(sans_identite[2][0][:1], ["commit"])
         self.assertTrue(all(c == projet for _, c in self.git.appels + self.gh.appels))
         creer = [a for a, _ in self.gh.appels if a[:2] == ["repo", "create"]]
         self.assertEqual(creer, [["repo", "create", "Casse-briques", "--private", "--source", ".", "--push"]])

@@ -116,12 +116,12 @@
   - `environnement[i].version_min` facultatif : texte de 1 à 20 caractères, chiffres et points (`"17"`, `"8.7"`).
 - La consigne porte les décisions de l'utilisateur : ne jamais reposer ce que la description ou une réponse dit déjà ; chercher le besoin, les livrables et leur forme, les validations voulues, l'exigence de qualité et de tests, les zones d'ombre qui changent le workflow ; s'arrêter dès qu'on en sait assez ; proposer des `choix` quand les réponses probables sont peu nombreuses ; workflow complet jusqu'au livrable remis ; modèle selon la complexité ; Fable seulement en `fable_suggere` ; textes courts (coût).
 
-- [ ] **Étape 1 : tests des validateurs** : `test_definir_workflow_questions_valides` ; `test_definir_workflow_trop_de_questions_refuse` ; `test_cinquieme_appel_exige_une_proposition` ; `test_correction_exige_une_proposition` ; `test_definir_workflow_proposition_valide` (avec une validation avant la livraison) ; `test_definir_workflow_genre_nouveau_mot_interdit_refuse` (le nom du projet) ; `test_etape_sans_raison_refusee` ; `test_validation_premiere_ou_double_refusee` (les deux jugements) ; `test_version_min_lue`.
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire validateurs et consignes.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py jugement consignes` : vert.
-- [ ] **Étape 5 : essai réel, avec l'accord de l'utilisateur** (quelques centimes) : un échange complet joué par un script hors dépôt (comme en phase B du chantier précédent), projet synthétique « jeu Android » avec une validation voulue avant la livraison : questions utiles et non redondantes, proposition valide, tokens et coût de chaque appel notés dans la passation ; **cible : moins de 0,10 € l'échange complet** ; au plus 3 tours de réglage de la consigne.
-- [ ] **Étape 6 : commit** « Jugement : définir le workflow d'un projet avec le chef ».
+- [x] **Étape 1 : tests des validateurs** : `test_definir_workflow_questions_valides` ; `test_definir_workflow_trop_de_questions_refuse` ; `test_cinquieme_appel_exige_une_proposition` ; `test_correction_exige_une_proposition` ; `test_definir_workflow_proposition_valide` (avec une validation avant la livraison) ; `test_definir_workflow_genre_nouveau_mot_interdit_refuse` (le nom du projet) ; `test_etape_sans_raison_refusee` ; `test_validation_premiere_ou_double_refusee` (les deux jugements) ; `test_version_min_lue`.
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire validateurs et consignes.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py jugement consignes` : vert.
+- [x] **Étape 5 : essai réel, avec l'accord de l'utilisateur** (quelques centimes) : un échange complet joué par un script hors dépôt (comme en phase B du chantier précédent), projet synthétique « jeu Android » avec une validation voulue avant la livraison : questions utiles et non redondantes, proposition valide, tokens et coût de chaque appel notés dans la passation ; **cible : moins de 0,10 € l'échange complet** ; au plus 3 tours de réglage de la consigne.
+- [x] **Étape 6 : commit** « Jugement : définir le workflow d'un projet avec le chef ».
 
 ## Étape 3 — le moteur après la création
 

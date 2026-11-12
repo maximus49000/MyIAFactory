@@ -248,3 +248,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Pour tester des bonus temporaires dans un jeu, un script lancé par le moteur manipule l'état de la partie. Il vérifie ajout, cumul, plafond, usure et remise à zéro, puis instancie la scène de jeu pour lire les valeurs réellement appliquées.
+
+## G42 — Pour tester une navigation d'écrans sans interface, émettre
+Rôles : dev
+Date : 2026-11-12
+
+Pour tester une navigation d'écrans sans interface, émettre le signal des boutons, attendre quelques images, puis vérifier le chemin de la scène courante et que l'ancienne instance n'est plus valide.

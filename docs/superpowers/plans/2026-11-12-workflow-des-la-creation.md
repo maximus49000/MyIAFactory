@@ -54,11 +54,11 @@
 - `factory.lire` : une étape de validation est valide sans `role` ni `service` ; refus « une étape de validation ne peut pas être la première », « … la dernière », « … deux étapes de validation de suite ».
 - `proposition.verifier_organisation` et `estimation.estimer` ignorent les étapes de validation (aucun rôle à pourvoir, aucun coût).
 
-- [ ] **Étape 1 : tests** : `test_etape_de_validation_lue` ; `test_validation_premiere_derniere_ou_double_refusee` (factory) ; `test_workflow_de_creation_trouve` (`de_creation`) ; `test_copie_pour_prefixe_les_etapes` (validation gardée) ; `test_workflow_de_genre_sans_colonnes` (sa copie en a, la colonne de validation porte `validation`) ; `test_organisation_avec_validation_valide` (proposition) ; `test_estimation_ignore_la_validation` (même fourchette avec ou sans) ; `test_ecrire_organisation_garde_la_validation`.
-- [ ] **Étape 2 : les lancer**, `py -3.12 outils/tests.py workflows orch_factory inst_proposition inst_estimation inst_mise` : échec attendu.
-- [ ] **Étape 3 : écrire le code** décrit ci-dessus.
-- [ ] **Étape 4 : relancer** les mêmes et `py -3.12 outils/tests.py orch banc` : vert.
-- [ ] **Étape 5 : commit** « Données : étape de validation du Directeur, workflow de genre ».
+- [x] **Étape 1 : tests** : `test_etape_de_validation_lue` ; `test_validation_premiere_derniere_ou_double_refusee` (factory) ; `test_workflow_de_creation_trouve` (`de_creation`) ; `test_copie_pour_prefixe_les_etapes` (validation gardée) ; `test_workflow_de_genre_sans_colonnes` (sa copie en a, la colonne de validation porte `validation`) ; `test_organisation_avec_validation_valide` (proposition) ; `test_estimation_ignore_la_validation` (même fourchette avec ou sans) ; `test_ecrire_organisation_garde_la_validation`.
+- [x] **Étape 2 : les lancer**, `py -3.12 outils/tests.py workflows orch_factory inst_proposition inst_estimation inst_mise` : échec attendu.
+- [x] **Étape 3 : écrire le code** décrit ci-dessus.
+- [x] **Étape 4 : relancer** les mêmes et `py -3.12 outils/tests.py orch banc` : vert.
+- [x] **Étape 5 : commit** « Données : étape de validation du Directeur, workflow de genre ».
 
 ### Tâche 2 : le moteur arrête l'élément à une étape de validation
 
@@ -77,11 +77,11 @@
   - si l'élément n'est plus dans `etat["elements"]` (moteur relancé), il est reconstruit depuis la décision (`element`, rang de `etape` dans la production) ;
   - `_proposer` (workflows antérieurs donnés au jugement) et `_apres_proposer_organisation` (étapes préfixées `<fid>-`) gardent une étape de validation telle quelle, par `workflows.etape_ecrite` (plus de `x["role"]` sur une étape qui n'en a pas).
 
-- [ ] **Étape 1 : tests** : `test_element_s_arrete_a_la_validation` (tâche de validation, décision posée avec compte rendu et fichiers, aucun agent lancé) ; `test_valider_passe_a_l_etape_suivante` ; `test_renvoyer_refait_l_etape_precedente_avec_la_remarque` (puis revient à la validation) ; `test_renvoyer_sans_remarque_refuse` (moteur et `bureau/demandes.py`) ; `test_validation_apres_redemarrage` ; `test_validation_compte_parmi_les_elements_en_cours` ; `test_relecture_sans_relecteur_ignore_la_validation` ; `test_releve_decision_valider_etape` ; `test_proposition_avec_validation_prefixee` (décision `organisation` d'une fonctionnalité dont le workflow a une validation, acceptée puis suivie) ; les tests existants inchangés.
-- [ ] **Étape 2 : les lancer** : échec attendu.
-- [ ] **Étape 3 : écrire le code.**
-- [ ] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur orch releve demandes banc` : vert.
-- [ ] **Étape 5 : commit** « Moteur : l'élément attend la validation du Directeur ».
+- [x] **Étape 1 : tests** : `test_element_s_arrete_a_la_validation` (tâche de validation, décision posée avec compte rendu et fichiers, aucun agent lancé) ; `test_valider_passe_a_l_etape_suivante` ; `test_renvoyer_refait_l_etape_precedente_avec_la_remarque` (puis revient à la validation) ; `test_renvoyer_sans_remarque_refuse` (moteur et `bureau/demandes.py`) ; `test_validation_apres_redemarrage` ; `test_validation_compte_parmi_les_elements_en_cours` ; `test_relecture_sans_relecteur_ignore_la_validation` ; `test_releve_decision_valider_etape` ; `test_proposition_avec_validation_prefixee` (décision `organisation` d'une fonctionnalité dont le workflow a une validation, acceptée puis suivie) ; les tests existants inchangés.
+- [x] **Étape 2 : les lancer** : échec attendu.
+- [x] **Étape 3 : écrire le code.**
+- [x] **Étape 4 : relancer** `py -3.12 outils/tests.py moteur orch releve demandes banc` : vert.
+- [x] **Étape 5 : commit** « Moteur : l'élément attend la validation du Directeur ».
 
 ### Tâche 3 : la page (décision de validation, colonnes, workflow)
 
@@ -93,9 +93,9 @@
 - Consomme : décision et demande `valider_etape` (tâche 2), colonne `validation` (tâche 1).
 - Produit : `corpsValiderEtape(decision, verdict, texte) -> objet | null` (pure, exportée de `decisions.js` ; `null` si `renvoyer` sans texte).
 
-- [ ] **Étape 1 : tests** : `valider_etape montre le compte rendu et les fichiers` ; `renvoyer exige une remarque` ; `colonne de validation nommee` ; `workflow montre l etape de validation`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`node --test bureau/web/tests`).
-- [ ] **Étape 5 : commit** « Bureau : valider ou renvoyer un élément ».
+- [x] **Étape 1 : tests** : `valider_etape montre le compte rendu et les fichiers` ; `renvoyer exige une remarque` ; `colonne de validation nommee` ; `workflow montre l etape de validation`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`node --test bureau/web/tests`).
+- [x] **Étape 5 : commit** « Bureau : valider ou renvoyer un élément ».
 
 ## Étape 2 — le jugement de l'échange
 

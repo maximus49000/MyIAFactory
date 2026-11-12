@@ -51,3 +51,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Quand un outil externe est refusé au shell sans possibilité d'approbation, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.
+
+## S9 — Quand une étape est relancée sur un élément déjà traité, rep
+Rôles : designer
+Date : 2026-11-12
+
+Quand une étape est relancée sur un élément déjà traité, repartir du livrable existant et noter seulement ce qui a changé, sans tout refaire.

@@ -297,3 +297,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Après tout await dans une scène pouvant être remplacée en cours de route, tester que le nœud est toujours dans l'arbre avant d'utiliser get_tree() ou de poursuivre.
+
+## S50 — Quand un script référence les constantes d'une classe global
+Rôles : dev
+Date : 2026-11-12
+
+Quand un script référence les constantes d'une classe globale et que le cache de classes peut être périmé, préférer une constante locale initialisée par preload du script.

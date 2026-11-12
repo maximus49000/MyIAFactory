@@ -261,3 +261,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour vérifier une signature Android, considérer valide un APK dont les schémas v2 ou v3 sont à true, même si v1 est à false.
+
+## S44 — Pour contrôler les fuites à la fermeture d'un jeu Godot avec
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Pour contrôler les fuites à la fermeture d'un jeu Godot avec audio, ne pas se fier à l'option de sortie automatique, qui court-circuite la demande de fermeture. Simuler la notification de fermeture de fenêtre et intercepter celle-ci dans l'autoload audio : couper les lecteurs, attendre environ 0,5 s, puis quitter.

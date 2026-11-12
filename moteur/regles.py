@@ -2261,7 +2261,7 @@ def _demarrer_en_attente(projet, etat, fid):
                 continue
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
         places["cloud" if lieu == "cloud" else "locaux"] -= 1
-        actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id))
+        actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id, modele_voulu=lot["modele"]))
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
     return actions
 
@@ -2326,8 +2326,8 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
         if local["agent"]:
             return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
-    # Un agent cloud du rôle prend la tâche même si son modèle n'est pas celui du lot (le Directeur l'a recruté avec ce
-    # modèle) : celui du même modèle d'abord, sinon un autre.
+    # Un agent cloud du rôle prend la tâche même si sa fiche porte un autre modèle que le lot : sa session tournera sur
+    # le modèle du lot (voir `_partir`). Celui dont la fiche porte déjà ce modèle d'abord.
     candidats = sorted((a for a in court["agents"] if a["lieu"] == "cloud" and a["role"] == role and a["libre"]),
                        key=lambda a: 0 if (not modele or a["modele"] == modele) else 1)
     if not clouds or not candidats:
@@ -2348,11 +2348,14 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     return equivalent
 
 
-def _partir(projet, etat, court, agent, ids, lot, par_id):
+def _partir(projet, etat, court, agent, ids, lot, par_id, modele_voulu=None):
     fiche = next(a for a in court["agents"] if a["cle"] == agent)
     premiere = par_id[ids[0]]
     montee = premiere.get("montee")
-    modele = (montee or {}).get("a") or fiche["modele"]
+    # Un agent cloud ouvre une session par départ : elle tourne sur le modèle que demande la tâche (celui du lot),
+    # pas forcément celui de sa fiche ; un agent local garde le modèle de sa fiche.
+    de_base = modele_voulu if (modele_voulu and fiche.get("lieu") == "cloud") else fiche["modele"]
+    modele = (montee or {}).get("a") or de_base
     if len(ids) > 1:
         for rang, i in enumerate(ids, 1):
             lancer(projet, "tache", {"id": i, "lot": {"id": lot, "rang": rang}})

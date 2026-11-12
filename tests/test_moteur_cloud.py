@@ -354,8 +354,12 @@ class Agents(Base):
         t = self.tache()
         court = regles._etat(self.projet)
         tache = next(x for x in court["taches"] if x["id"] == t)
-        self.assertEqual(regles._choisir_agent(self.projet, regles.nouvel_etat(), court, tache, "Sonnet",
+        etat = regles.nouvel_etat()
+        self.assertEqual(regles._choisir_agent(self.projet, etat, court, tache, "Sonnet",
                                                local_ok=False, cloud_ok=True), "dev-c1")
+        # … et sa session tourne sur le modèle de la tâche (Sonnet), pas sur celui de sa fiche (Opus)
+        regles._partir(self.projet, etat, court, "dev-c1", [t], None, {t: tache}, modele_voulu="Sonnet")
+        self.assertEqual(etat["departs"][t]["modele"], "Sonnet")
 
     def test_depart_d_un_lot_cloud_nomme_le_rapport_de_la_premiere_tache(self):
         a, b = self.tache("A"), self.tache("B")

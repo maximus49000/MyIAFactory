@@ -487,9 +487,12 @@ def _genre_deja_propose(projet):
 
 def genre_a_proposer(projet, etat):
     """Au premier passage du moteur sur un projet sans genre qui a une description (créé au bureau) : le classement de
-    sa description, pour proposer son genre sans attendre une première demande. Rien si le genre est déjà proposé."""
+    sa description, pour proposer son genre sans attendre une première demande. Rien si le genre est déjà proposé, ou
+    si le projet a déjà une fonctionnalité (sa demande suit son parcours : créée depuis une demande déplacée, elle porte
+    le genre choisi par le Directeur)."""
     fac = _factory(projet)
-    if _genres_du_projet(fac) or not fac["description"] or _genre_deja_propose(projet):
+    if _genres_du_projet(fac) or not fac["description"] or _genre_deja_propose(projet) \
+            or _etat(projet)["fonctionnalites"]:
         return []
     return [a_juger("classer_genre", _dossier_classer(projet, fac, {"texte": fac["description"], "images": []}),
                     {"sans_genre": True})]

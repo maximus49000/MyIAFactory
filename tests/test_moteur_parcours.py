@@ -265,6 +265,10 @@ class Parcours(AvecParcours):
         self.reecrire(genre=None, description=None)
         self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])           # ni genre ni description
         self.reecrire(description="Des badges")
+        # un projet créé depuis une demande déplacée : la demande porte son genre (choisi par le Directeur), aucune
+        # proposition de genre du projet en plus
+        self.traiter(type="fonctionnalite", texte="Un jeu", genre="jeu-mobile", description="Jeux pour téléphone")
+        self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])
         regles.appliquer_jugement(self.projet, "classer_genre", jugement.Decision(question="Raté."),
                                   {"sans_genre": True}, self.etat)                       # un classement raté : silence
         self.assertEqual(self.decisions(), [])

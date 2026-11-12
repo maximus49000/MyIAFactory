@@ -88,3 +88,73 @@ test("lecture : au-delà de 512 Ko ou refusée en 413 -> téléchargement seulem
   assert.equal(M.estMarkdown("a/B.MD"), true);
   assert.equal(M.estMarkdown("a/b.mdx"), false);
 });
+
+// --- Les tableaux (GFM), les sauts de ligne des comptes rendus, le tableau aplati -----------------------------------
+
+const lignesDe = (tr) => tr.enfants.map((c) => c.textContent);
+const tableau = (source, options) => racine(M.rendreMarkdown(source, options)).tous((n) => n.tagName === "table")[0];
+
+test("tableau : en-tête, séparation, lignes de données, dans un conteneur qui défile", () => {
+  const r = racine(M.rendreMarkdown("Avant\n\n| Valeur | Avant | Après |\n|---|---|---|\n| COUT | 20 | 40 |\n| VIE | 3 | 5 |\n\nAprès"));
+  const t = r.tous((n) => n.tagName === "table")[0];
+  assert.ok(t);
+  assert.equal(r.tous((n) => n.className === "md-tableau")[0].enfants[0], t);      // le conteneur défile (téléphone)
+  assert.deepEqual(t.tous((n) => n.tagName === "th").map((n) => n.textContent), ["Valeur", "Avant", "Après"]);
+  const corps = t.tous((n) => n.tagName === "tbody")[0];
+  assert.deepEqual(corps.enfants.map(lignesDe), [["COUT", "20", "40"], ["VIE", "3", "5"]]);
+  assert.deepEqual(r.tous((n) => n.tagName === "p").map((n) => n.textContent), ["Avant", "Après"]);
+});
+
+test("tableau : alignements, cellules manquantes ou en trop, pipe échappé, texte en ligne", () => {
+  const t = tableau("| a | b | c |\n| :-- | :-: | --: |\n| 1 | **2** |\n| x \\| y | 5 | 6 | 7 |");
+  const classes = (tr) => tr.enfants.map((c) => c.className);
+  assert.deepEqual(classes(t.tous((n) => n.tagName === "thead")[0].enfants[0]), ["md-gauche", "md-centre", "md-droite"]);
+  const lignes = t.tous((n) => n.tagName === "tbody")[0].enfants;
+  assert.deepEqual(lignes.map(lignesDe), [["1", "2", ""], ["x | y", "5", "6"]]);
+  assert.equal(lignes[0].enfants[1].tous((n) => n.tagName === "strong").length, 1);
+  assert.deepEqual(classes(lignes[1]), ["md-gauche", "md-centre", "md-droite"]);
+});
+
+test("tableau sûr : une cellule avec du HTML reste du texte", () => {
+  const r = racine(M.rendreMarkdown("| a |\n|---|\n| <script>alert(1)</script> |\n| [x](javascript:alert(1)) |"));
+  assert.equal(r.tous((n) => n.tagName === "script").length, 0);
+  assert.match(r.textContent, /<script>alert\(1\)<\/script>/);
+  assert.equal(r.tous((n) => n.tagName === "a").length, 0);
+});
+
+test("ce qui n'est pas un tableau reste un paragraphe", () => {
+  assert.equal(tableau("a | b\nsans séparation"), undefined);
+  assert.equal(tableau("| a | b |\n|---|\n| 1 | 2 |"), undefined);      // pas le même nombre de colonnes
+  assert.equal(tableau("```\n| a |\n|---|\n| 1 |\n```"), undefined);       // dans un bloc de code
+});
+
+test("tableau aplati (retours à la ligne perdus) : reconstruit au mieux", () => {
+  const plat = "Ajustements appliqués (scripts/jeu/equilibrage.gd) | Valeur | Avant | Après | Pourquoi | |---|---|---|---| "
+    + "| EVENEMENT_ANOMALIE_COUT | 20 | 40 | La vie reste haute | | Texte de l'anomalie | … | Plus clair |";
+  const r = racine(M.rendreMarkdown(plat));
+  const t = r.tous((n) => n.tagName === "table")[0];
+  assert.ok(t);
+  assert.deepEqual(t.tous((n) => n.tagName === "th").map((n) => n.textContent), ["Valeur", "Avant", "Après", "Pourquoi"]);
+  assert.deepEqual(t.tous((n) => n.tagName === "tbody")[0].enfants.map(lignesDe),
+    [["EVENEMENT_ANOMALIE_COUT", "20", "40", "La vie reste haute"], ["Texte de l'anomalie", "…", "Plus clair", ""]]);
+  assert.equal(r.tous((n) => n.tagName === "p")[0].textContent, "Ajustements appliqués (scripts/jeu/equilibrage.gd)");
+  assert.deepEqual(M.deplierTableau("Pas de tableau ici | juste une barre"), ["Pas de tableau ici | juste une barre"]);
+  assert.deepEqual(M.deplierTableau("|---|---|"), ["|---|---|"]);
+});
+
+test("sauts de ligne : conservés dans un compte rendu, un paragraphe sinon", () => {
+  const source = "Ligne un\nLigne deux\n\nAutre";
+  assert.equal(racine(M.rendreMarkdown(source)).tous((n) => n.tagName === "p")[0].textContent, "Ligne un Ligne deux");
+  const p = racine(M.rendreMarkdown(source, {sauts: true})).tous((n) => n.tagName === "p");
+  assert.equal(p[0].textContent, "Ligne un\nLigne deux");
+  assert.match(p[0].className, /md-sauts/);
+  const d = M.rendreTexte("val-compte-rendu", source);
+  assert.match(d.className, /val-compte-rendu/);
+  assert.match(d.className, /md-rendu/);
+  assert.equal(d.textContent, "Ligne un\nLigne deuxAutre");
+});
+
+test("le crochet de texte : chaque morceau de texte brut passe par lui (termes du glossaire)", () => {
+  const r = racine(M.rendreMarkdown("Un **mot** ici", {texte: (t) => [Object.assign(new Noeud("i"), {_texte: t.toUpperCase()})]}));
+  assert.equal(r.textContent, "UN MOT ICI");
+});

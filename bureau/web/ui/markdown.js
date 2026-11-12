@@ -21,6 +21,8 @@ export function lienSur(adresse) {
 }
 
 const brut = (t) => el("span", "", t);      // du texte, jamais du HTML
+let texteVers = null;      // le crochet de la page en cours de rendu : le texte brut -> des éléments (termes du glossaire…)
+const brutes = (t) => (texteVers ? texteVers(t) : [brut(t)]);
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+?\*\*|__[^_\n]+?__)|(\*[^*\s][^*\n]*?\*|(?<![\w])_[^_\s][^_\n]*?_(?![\w]))|(\[[^\]\n]+\]\((?:[^()\s]|\([^()\s]*\))+\))/;
 
 // Le texte d'une ligne en éléments : code, gras, italique, lien. Tout le reste est du texte brut.
@@ -29,8 +31,8 @@ export function inline(texte, profondeur = 0) {
   let reste = String(texte);
   while (reste) {
     const m = INLINE.exec(reste);
-    if (!m) { sortie.push(brut(reste)); break; }
-    if (m.index > 0) sortie.push(brut(reste.slice(0, m.index)));
+    if (!m) { sortie.push(...brutes(reste)); break; }
+    if (m.index > 0) sortie.push(...brutes(reste.slice(0, m.index)));
     const [tout] = m;
     if (m[1]) sortie.push(el("code", "md-code", tout.slice(1, -1)));
     else if (m[2]) sortie.push(profondeur ? el("strong", "", tout.slice(2, -2)) : noeud("strong", tout.slice(2, -2), profondeur));
@@ -60,9 +62,101 @@ function ajouter(parent, morceaux) {
 }
 const ligneEl = (balise, classe, texte) => { const n = el(balise, classe); ajouter(n, inline(texte)); return n; };
 
-// Le Markdown en éléments : titres, paragraphes, listes (à puces ou numérotées), citations, blocs de code, filet.
-export function rendreMarkdown(source) {
-  const lignes = String(source ?? "").replace(/\r\n?/g, "\n").split("\n");
+// --- Les tableaux (GFM) ------------------------------------------------------------------------------------------------
+
+// Les cellules d'une ligne de tableau : barres de bord facultatives, `\|` est une barre dans la cellule.
+function cellules(ligne) {
+  let t = ligne.trim();
+  if (t.startsWith("|")) t = t.slice(1);
+  if (t.endsWith("|") && !t.endsWith("\\|")) t = t.slice(0, -1);
+  const sortie = [];
+  let cellule = "";
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === "\\" && t[i + 1] === "|") { cellule += "|"; i += 1; }
+    else if (t[i] === "|") { sortie.push(cellule.trim()); cellule = ""; }
+    else cellule += t[i];
+  }
+  sortie.push(cellule.trim());
+  return sortie;
+}
+const estSeparateur = (ligne) => ligne.includes("|") && ligne.includes("-") && cellules(ligne).every((c) => /^:?-+:?$/.test(c));
+// Un tableau commence ici : une ligne d'en-tête, puis la ligne de séparation `|---|---|` avec le même nombre de colonnes.
+const debutTableau = (lignes, i) => i + 1 < lignes.length && lignes[i].includes("|") && estSeparateur(lignes[i + 1])
+  && cellules(lignes[i]).length === cellules(lignes[i + 1]).length;
+const alignement = (c) => (/^:-+:$/.test(c) ? "md-centre" : /-:$/.test(c) ? "md-droite" : /^:/.test(c) ? "md-gauche" : "");
+
+// Un tableau aplati : quand les retours à la ligne d'un compte rendu ont été perdus (projet existant), le tableau tient sur
+// UNE ligne : « Titre | A | B | |---|---| | 1 | 2 | | 3 | 4 | ». Heuristique : une ligne qui porte, après une barre, une
+// séparation `|---|…|` (3 tirets au moins par colonne) est découpée en titre, en-tête (les n dernières cellules avant la
+// séparation, n étant le nombre de colonnes de la séparation), séparation, puis les lignes de données, coupées sur
+// « | | » (la barre qui ferme une ligne, un espace, celle qui ouvre la suivante). Une cellule vide entre deux barres
+// séparées d'un espace est donc prise pour une fin de ligne : on reconstruit au mieux, sans rien promettre.
+const SEPARATION_PLATE = /(?:\|\s*:?-{3,}:?\s*)+\|/;
+export function deplierTableau(ligne) {
+  const m = SEPARATION_PLATE.exec(ligne);
+  if (!m) return [ligne];
+  const avant = ligne.slice(0, m.index).trimEnd();
+  const n = m[0].split("|").length - 2;
+  if (!avant.endsWith("|")) return [ligne];
+  const morceaux = avant.split("|");
+  if (morceaux.length - 1 < n) return [ligne];
+  const titre = morceaux.slice(0, morceaux.length - 1 - n).join("|").trim();
+  const entete = morceaux.slice(morceaux.length - 1 - n, -1).map((c) => c.trim());
+  let reste = ligne.slice(m.index + m[0].length).trim();
+  const sortie = titre ? [titre, ""] : [];
+  sortie.push("| " + entete.join(" | ") + " |", m[0].trim());
+  if (reste.startsWith("|")) {
+    reste = reste.slice(1);
+    if (reste.endsWith("|")) reste = reste.slice(0, -1);
+    for (const r of reste.split(/\|\s+\|/)) if (r.trim()) sortie.push("| " + r.trim() + " |");
+  } else if (reste) sortie.push("", reste);
+  return sortie;
+}
+
+function tableauEl(lignes) {
+  const colonnes = cellules(lignes[0]).length;
+  const classes = cellules(lignes[1]).map(alignement);
+  const rangee = (balise, texte) => {
+    const tr = el("tr", "");
+    const c = cellules(texte);
+    for (let k = 0; k < colonnes; k++) tr.append(ligneEl(balise, classes[k], c[k] ?? ""));
+    return tr;
+  };
+  const tete = el("thead", ""), corps = el("tbody", ""), table = el("table", "md-table");
+  tete.append(rangee("th", lignes[0]));
+  for (const l of lignes.slice(2)) corps.append(rangee("td", l));
+  table.append(tete, corps);
+  const defile = el("div", "md-tableau");      // au téléphone, un tableau large défile au lieu de déborder
+  defile.append(table);
+  return defile;
+}
+
+// Le Markdown en éléments : titres, paragraphes, listes (à puces ou numérotées), citations, blocs de code, filet,
+// tableaux. Options : `sauts` garde les retours à la ligne d'un paragraphe (un compte rendu) ; `texte` : crochet qui
+// transforme chaque morceau de texte brut en éléments (les termes du glossaire).
+export function rendreMarkdown(source, options = {}) {
+  const avant = texteVers;
+  texteVers = options.texte || null;
+  try { return rendre(source, options.sauts === true); } finally { texteVers = avant; }
+}
+
+// Un texte venu d'un agent (compte rendu, message, journal) rendu comme un document .md, en gardant ses retours à la ligne :
+// un bloc `<div class="classe md-rendu">`. Même rendu sûr ; `options` comme `rendreMarkdown`.
+export function rendreTexte(classe, source, options = {}) {
+  const bloc = el("div", (classe ? classe + " " : "") + "md-rendu");
+  bloc.append(...rendreMarkdown(source, {...options, sauts: true}));
+  return bloc;
+}
+
+function rendre(source, sauts) {
+  const brutes_ = String(source ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const lignes = [];
+  let dedans = null;
+  for (const l of brutes_) {      // les tableaux aplatis sont dépliés, hors blocs de code
+    const f = /^\s*(```|~~~)/.exec(l);
+    if (f && (!dedans || l.trim().startsWith(dedans))) dedans = dedans ? null : f[1];
+    if (dedans || f) lignes.push(l); else lignes.push(...deplierTableau(l));
+  }
   const sortie = [];
   let i = 0;
   const vide = (l) => l.trim() === "";
@@ -108,10 +202,18 @@ export function rendreMarkdown(source) {
       sortie.push(liste);
       continue;
     }
+    if (debutTableau(lignes, i)) {
+      const t = [lignes[i], lignes[i + 1]];
+      i += 2;
+      while (i < lignes.length && !vide(lignes[i]) && lignes[i].includes("|")) t.push(lignes[i++]);
+      sortie.push(tableauEl(t));
+      continue;
+    }
     const para = [];
-    while (i < lignes.length && !vide(lignes[i]) && !/^\s*(```|~~~|#{1,6}\s|>|([-*+]|\d+[.)])\s)/.test(lignes[i])) para.push(lignes[i++].trim());
+    while (i < lignes.length && !vide(lignes[i]) && !/^\s*(```|~~~|#{1,6}\s|>|([-*+]|\d+[.)])\s)/.test(lignes[i])
+           && !(para.length && debutTableau(lignes, i))) para.push(lignes[i++].trim());
     if (!para.length) { para.push(lignes[i++].trim()); }
-    sortie.push(ligneEl("p", "md-para", para.join(" ")));
+    sortie.push(ligneEl("p", sauts ? "md-para md-sauts" : "md-para", para.join(sauts ? "\n" : " ")));
   }
   return sortie;
 }

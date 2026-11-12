@@ -5,6 +5,7 @@ import {el, ligne} from "./dom.js";
 import {tronquer, ilYA, auTravail, dateFr,filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
+import {rendreTexte} from "./markdown.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -133,7 +134,7 @@ export function contenuTache(ctx, contenu, t) {
   if (!t.journal.length) journal.append(el("li", "vide", "Aucune entrée"));
   for (const j of t.journal) {
     const li = el("li", "");
-    li.append(el("span", "date", dateFr(j.t)), el("span", "texte-journal", j.texte));
+    li.append(el("span", "date", dateFr(j.t)), rendreTexte("texte-journal", j.texte));      // Markdown sûr
     journal.append(li);
   }
   contenu.append(journal);

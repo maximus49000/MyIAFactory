@@ -1581,6 +1581,22 @@ class Validation(Base):
             {**verdict("e1"), "message": {"texte": "Testé."}, "acces": ACCES, **DIT}])
         self.assertEqual(self.decisions()[0]["objectif"], "L'écran d'accueil, avec le logo et le bouton Jouer.")
 
+    def test_compte_rendu_garde_ses_sauts_de_ligne_et_son_tableau(self):
+        """Vu en vrai : un tableau Markdown du compte rendu s'affichait sur une seule ligne. Les sauts de ligne vont du
+        rapport à la décision, pour le compte rendu de l'élément comme pour le texte d'un lot réparti par élément."""
+        tableau = "Ajustements (equilibrage.gd)\n\n| Valeur | Avant | Après |\n|---|---|---|\n| COUT | 20 | 40 |"
+        self.projet_avec_validation(elements=2)
+        self.fichier("pieces/f1/e1.apk")
+        self.fichier("pieces/f1/e2.apk")
+        lot = {"statut": "fait", **DIT, "verdicts": [{"element": e, "conforme": True, "points": []} for e in ("e1", "e2")],
+               "fichiers": [{"chemin": f"pieces/f1/{e}.apk", "titre": f"Apk {e}", "element": e} for e in ("e1", "e2")],
+               "message": {"texte": "Accueil (e1) : vert\n| e1 | 1 |\nProfil (e2) : rien."},
+               "comptes_rendus": [{"element": "e2", "texte": tableau}]}
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, lot])
+        par = {d["element"]["id"]: d for d in self.decisions()}
+        self.assertEqual(par["e2"]["compte_rendu"], tableau)
+        self.assertEqual(par["e1"]["compte_rendu"], "Accueil (e1) : vert\n| e1 | 1 |")      # les lignes restent des lignes
+
     def test_sous_chaque_element_seulement_son_compte_rendu(self):
         """Vu en vrai : les rapports de deux éléments d'un même lot apparaissaient sous chacun."""
         self.projet_avec_validation(elements=2)

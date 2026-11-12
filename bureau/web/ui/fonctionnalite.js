@@ -9,7 +9,7 @@ import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2, ligneEquivalences} from "./empreinte.js";
 import {urlProjet, projetCourant} from "./projets.js";
 import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
-import {blocMarkdown, estMarkdown} from "./markdown.js";
+import {blocMarkdown, estMarkdown, rendreTexte} from "./markdown.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, voisine} from "./visionneuse.js";
 export {voisine};
@@ -903,10 +903,11 @@ function montrerDefinition(mot) {
 }
 function cacherDefinition() { if (bulle) bulle.hidden = true; }
 
-function texteAvecTermes(classe, texte, glossaire) {
-  const bloc = el("div", classe);
+// Les morceaux d'un texte en éléments : le texte brut, et chaque terme du glossaire en terme survolable.
+function noeudsDeTermes(texte, glossaire) {
+  const sortie = [];
   for (const m of decouperTermes(texte, glossaire)) {
-    if (!m.definition) { bloc.append(m.texte); continue; }
+    if (!m.definition) { sortie.push(el("span", "", m.texte)); continue; }
     const t = el("span", "terme", m.texte);
     t.dataset.definition = m.definition;
     t.tabIndex = 0;
@@ -916,8 +917,13 @@ function texteAvecTermes(classe, texte, glossaire) {
     t.addEventListener("click", () => montrerDefinition(t));   // au toucher
     t.addEventListener("mouseleave", cacherDefinition);
     t.addEventListener("blur", cacherDefinition);
-    bloc.append(t);
+    sortie.push(t);
   }
+  return sortie;
+}
+function texteAvecTermes(classe, texte, glossaire) {
+  const bloc = el("div", classe);
+  bloc.append(...noeudsDeTermes(texte, glossaire));
   return bloc;
 }
 
@@ -948,7 +954,7 @@ async function copier(texte, bouton) {
   setTimeout(() => { bouton.textContent = "Copier"; }, 1500);
 }
 
-function messageDe(m, etat, glossaire = []) {
+export function messageDe(m, etat, glossaire = []) {
   const li = el("li", "message");
   const utilisateur = m.auteur === "utilisateur";
   li.classList.add(utilisateur ? "message-utilisateur" : "message-agent");
@@ -959,7 +965,9 @@ function messageDe(m, etat, glossaire = []) {
   bouton.setAttribute("aria-label", "Copier le contenu du message");
   bouton.addEventListener("click", () => copier(texteACopier(m), bouton));
   tete.append(el("strong", "", qui), el("span", "date", m.t ? dateFr(m.t) : ""), bouton);
-  li.append(tete, texteAvecTermes("message-texte", m.texte, glossaire));
+  // Un message d'agent est du Markdown sûr (tableaux, listes, retours à la ligne), ses termes du glossaire restent survolables.
+  li.append(tete, utilisateur ? texteAvecTermes("message-texte", m.texte, glossaire)
+    : rendreTexte("message-texte", m.texte, {texte: (t) => noeudsDeTermes(t, glossaire)}));
   if ((m.images || []).length) li.append(vignettes(m.images, etat));
   return li;
 }

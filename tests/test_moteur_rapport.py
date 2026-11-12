@@ -35,6 +35,15 @@ class Lire(unittest.TestCase):
         lot = depart.COMPTE_RENDU_MOTEUR
         self.assertIn("comptes_rendus", lot)
 
+    def test_sauts_de_ligne_gardes_dans_le_message_et_les_comptes_rendus(self):
+        """Un tableau Markdown ne tient que sur plusieurs lignes : le rapport ne les aplatit pas."""
+        tableau = "Ajustements\n\n| Valeur | Avant |\n|---|---|\n| COUT | 20 |\n| VIE | 3 |"
+        r = rapport.lire(reponse({**FAIT, "message": {"texte": tableau}, "comptes_rendus": [{"element": "e1", "texte": tableau}]}))
+        self.assertEqual(r["message"]["texte"], tableau)
+        self.assertEqual(r["comptes_rendus"][0]["texte"], tableau)
+        (_, entree), *_ = rapport.commandes(r, fonctionnalite="f1", tache="t1", agent="dev-1", etape="programmation")
+        self.assertEqual(entree["texte"], tableau)
+
     def test_ce_que_dit_la_validation(self):
         r = rapport.lire(reponse({**FAIT, "doit_marcher": "  L'apk\ns'ouvre. ", "pas_encore": "", "conclusion": "x" * 201,
                                   "comptes_rendus": [{"element": "e1", "texte": "v", "doit_marcher": 3,

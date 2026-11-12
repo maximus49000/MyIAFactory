@@ -3244,9 +3244,11 @@ def _passages_de(texte, mots):
     """Les paragraphes (ou, à défaut, les lignes) de `texte` qui nomment l'élément ; vide si aucun ne le nomme (le
     texte d'un lot ne passe jamais pour celui d'un seul élément)."""
     blocs = [b for b in re.split(r"\n\s*\n", texte) if b.strip()]
-    if len(blocs) <= 1:
+    lignes = len(blocs) <= 1
+    if lignes:
         blocs = [b for b in texte.splitlines() if b.strip()]
-    return "\n\n".join(b.strip() for b in blocs if _nomme(b, mots))
+    # Les lignes retenues restent des lignes (un tableau Markdown ne se coupe pas), les paragraphes restent des paragraphes.
+    return ("\n" if lignes else "\n\n").join(b.strip() for b in blocs if _nomme(b, mots))
 
 
 def _sans_relecteur(projet):

@@ -11,7 +11,7 @@ import {dateFr} from "./texte.js";
 import {avecProjet, projetCourant} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, fermerVisionneuse, visionneuseOuverte} from "./visionneuse.js";
-import {blocMarkdown, estMarkdown} from "./markdown.js";
+import {blocMarkdown, estMarkdown, rendreTexte} from "./markdown.js";
 
 export const POINT_PAR_DEFAUT = "L'élément correspond à l'objectif";   // une décision posée avant la fenêtre
 export const MAX_POINTS = 8;
@@ -377,7 +377,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   // 3. Le compte rendu de l'élément.
   if (plein(d.compte_rendu)) {
     const s3 = section("Compte rendu");
-    s3.append(el("p", "val-compte-rendu", d.compte_rendu));
+    s3.append(rendreTexte("val-compte-rendu", d.compte_rendu));      // Markdown sûr : tableaux, listes, retours à la ligne
     boite.append(s3);
   }
 

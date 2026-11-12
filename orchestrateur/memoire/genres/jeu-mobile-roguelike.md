@@ -350,3 +350,9 @@ Rôles : designer, dev
 Date : 2026-11-12
 
 Quand les intentions d'un ennemi tournent en boucle avec un départ au hasard, vérifier qu'une intention qui n'a de sens qu'après une autre (fuite après un vol, coup après une préparation) ne peut pas tomber en premier.
+
+## G59 — Dans un roguelike, chaque événement à choix doit garder au m
+Rôles : designer, qa
+Date : 2026-11-13
+
+Dans un roguelike, chaque événement à choix doit garder au moins un choix sans risque qui ne demande aucune ressource, et un contrôle automatique le vérifie.

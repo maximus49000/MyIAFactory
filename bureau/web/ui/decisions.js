@@ -8,6 +8,7 @@ import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGen
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
   demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue} from "./actions.js";
 import {blocOutil} from "./outils.js";
+import {decisionChezPartenaire} from "./chez-partenaire.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeMethode} from "./fonctionnalite.js";
 import {aVerifier, enteteValidation, estEnvoyee, ouvrirValidation, pointsDeValidation, urlTelechargement,
@@ -599,6 +600,10 @@ export function contenuDecisionsV4(ctx, contenu) {
   }
   contenu.append(partie("Réponses attendues", "Aucune discussion n'attend votre réponse",
     d.reponses.map((x) => reponseAttendue(ctx, x))));
+  if (d.chezPartenaires.length) {     // seulement quand il y en a : l'utilisateur fait la génération chez le partenaire
+    contenu.append(partie("À faire chez un partenaire", "", d.chezPartenaires.map((x) =>
+      decisionChezPartenaire(ctx, x, (libelle, classe, fabrique, avant) => boutonDemande(ctx, libelle, classe, fabrique, avant)))));
+  }
   const validations = [
     ...d.cahiers.filter((x) => !estEnvoyee(x.id)).map((x) => decisionAOuvrir(ctx, x, "Ouvrir le cahier des charges")),
     ...d.methodes.filter((x) => !estEnvoyee(x.id)).map((x) => decisionAOuvrir(ctx, x, "Ouvrir la méthode")),

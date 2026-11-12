@@ -136,7 +136,7 @@ Termine ta réponse par un bloc ```json (le dernier de ta réponse), de cette fo
  "controles": [{"texte": "…", "origine": "…"}], "retours_factory": ["…"],
  "verdicts": [{"element": "…", "conforme": true, "points": []}], "lignes": 0}
 ```
-`statut` vaut `fait`, `accord_requis`, `outil_refuse` ou `echec`. Seul `statut` est obligatoire ; omets ce qui est vide.
+`statut` vaut `fait`, `accord_requis`, `outil_refuse`, `a_faire_chez_partenaire` ou `echec`. Seul `statut` est obligatoire ; omets ce qui est vide.
 Chaque image que tu rends (dans `message.images`, comme dans une maquette du cahier) porte sa **légende** : une phrase
 de 160 caractères au plus qui dit à quoi elle correspond (écran, élément, moment du jeu…) ; le bureau l'affiche sous
 l'image.
@@ -146,6 +146,9 @@ Jamais une demande d'avis en simple phrase : la page n'offrirait aucun bouton.
 Si une dépense ou un changement de partenaire ou le navigateur demande l'accord de l'utilisateur, arrête-toi et rends
 `statut: accord_requis` avec `"accord": {"quoi", "partenaire", "cout"}`. Si un outil t'est refusé, rends
 `statut: outil_refuse` avec `"outil": "<son nom>"`.
+Partenaire **inscrit** (compte, pas de liaison directe) : ne l'appelle pas ; rends `statut: a_faire_chez_partenaire` avec
+`"chez_partenaire": {"partenaire" (id), "quoi", "prompt" (prêt à copier, selon ses règles), "reglages" (chacun), "mode_operatoire" (où
+cliquer), "a_rapporter": {"description", "nom"}, "elements" (groupés en une génération)}`. L'utilisateur le fait et te rapporte le résultat.
 Avant une action qui fait apparaître une fenêtre sur l'ordinateur de l'utilisateur (pare-feu Windows pour adb.exe, un
 émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote), arrête-toi : mets en tête de ton `message.texte` quelle fenêtre va s'ouvrir,
 pourquoi et quoi choisir (« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez Réseaux privés. »), avec `attend: true`, et
@@ -236,7 +239,36 @@ def _regles_partenaires(regles):
     return "\n".join(lignes)
 
 
-def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=()):
+def _partenaires_inscrits(inscrits, ecartes):
+    """Les partenaires où l'utilisateur est inscrit (hors liaison directe) : l'agent ne les appelle pas, il prépare ce que
+    l'utilisateur fait chez eux. `inscrits` : [{nom, site?, note?, regles: [textes], prompt_max?, reglages: bool}] ;
+    `ecartes` : les noms que le cadrage a écartés."""
+    lignes = []
+    if inscrits:
+        lignes += ["## Partenaires où l'utilisateur est inscrit",
+                   "Il a un compte chez eux, sans liaison directe : n'appelle ni leur API ni leur MCP, ne dépense rien chez eux. "
+                   "Quand ta tâche en a besoin, prépare ce qu'il fera lui-même sur leur site et rends `statut: "
+                   "a_faire_chez_partenaire` (forme en fin d'étape) : le prompt prêt à copier qui respecte leurs règles, chacun de "
+                   "leurs réglages, où cliquer, le fichier à te rapporter et son nom. Groupe les éléments en une seule "
+                   "génération quand c'est possible ; une génération à la fois par partenaire. Il te rend le résultat, "
+                   "tu reprends."]
+        for p in inscrits:
+            lignes.append(f"\n### {p['nom']}" + (f" ({p['site']})" if p.get("site") else "")
+                          + (f" — compte : {p['note']}" if p.get("note") else ""))
+            if p.get("prompt_max"):
+                lignes.append(f"- Prompt : {p['prompt_max']} caractères au plus (l'outil refuse au-delà).")
+            if p.get("reglages"):
+                lignes.append("- Donne chacun des réglages du partenaire (au moins un : l'outil refuse sans).")
+            lignes += [f"- {x}" for x in p.get("regles") or []]
+    if ecartes:
+        lignes += ["" if lignes else None, "## Partenaires écartés au cadrage",
+                   "L'utilisateur a décidé de ne pas utiliser : " + ", ".join(ecartes) + ". N'en appelle aucun et ne prépare "
+                   "rien pour eux."]
+    return "\n".join(x for x in lignes if x is not None)
+
+
+def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=(), inscrits=(),
+            ecartes=()):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = _entete(factory, fiche, lecons_memoire, regles_projet)
@@ -246,6 +278,8 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
         parties.append(_vocabulaire(glossaire))
     if regles:
         parties.append(_regles_partenaires(regles))
+    if inscrits or ecartes:
+        parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE)
     if fiche["lieu"] == "cloud":
@@ -271,7 +305,7 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
-                regles_projet=()):
+                regles_projet=(), inscrits=(), ecartes=()):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
@@ -291,6 +325,8 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
         parties.append(_vocabulaire(glossaire))
     if regles:
         parties.append(_regles_partenaires(regles))
+    if inscrits or ecartes:
+        parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
                    .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))

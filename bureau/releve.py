@@ -25,7 +25,7 @@ ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "te
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
-                    "outil_agent", "accord_agent", "serie_arretee")
+                    "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -566,9 +566,24 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
                 erreurs.append(f"{nom} : « discussion » : le message « {i} » : {probleme}")
 
 
+MODES_PARTENAIRE = ("direct", "inscrit", "aucun")     # décidés au cadrage : appelé directement, fait par l'utilisateur sur son site, écarté
+MAX_PARTENAIRES_CAHIER = 20
+
+
+def partenaires_cahier_ok(v):
+    """Les partenaires décidés au cadrage : `[{id, mode}]` (rien d'autre dans chaque entrée), `mode` valant direct (liaison
+    directe), inscrit (l'utilisateur fait la génération sur le site du partenaire) ou aucun (pas de partenaire pour ce besoin) ;
+    un partenaire au plus une fois."""
+    return (isinstance(v, list) and len(v) <= MAX_PARTENAIRES_CAHIER
+            and all(_est_dict(x) and set(x) == {"id", "mode"} and _texte_plein(x["id"]) and x["mode"] in MODES_PARTENAIRE
+                    for x in v)
+            and len({x["id"] for x in v}) == len(v))
+
+
 def _cahier_bien_forme(c):
     return (_est_dict(c) and _liste_d_images(c.get("maquette")) and isinstance(c.get("etapes"), list)
-            and all(isinstance(x, str) for x in c["etapes"]) and _texte_ou_nul(c.get("valide_le")))
+            and all(isinstance(x, str) for x in c["etapes"]) and _texte_ou_nul(c.get("valide_le"))
+            and (c.get("partenaires") is None or partenaires_cahier_ok(c["partenaires"])))
 
 
 def _verifier_cahier_methode(f, nom, erreurs):
@@ -577,7 +592,8 @@ def _verifier_cahier_methode(f, nom, erreurs):
         if not _cahier_bien_forme(c):
             erreurs.append(f"{nom} : « cahier » doit avoir une « maquette » (liste de chemins ou de "
                            f"{{chemin, legende?}}, légende de {MAX_LEGENDE} caractères au plus), des « etapes » "
-                           "(liste de textes) et, si présent, un « valide_le » texte.")
+                           "(liste de textes) et, si présents, un « valide_le » texte et des « partenaires » "
+                           "[{id, mode (direct, inscrit ou aucun)}].")
     precedents = f.get("cahiers_precedents")
     if precedents is not None and (not isinstance(precedents, list) or not all(
             _cahier_bien_forme(p) and isinstance(p.get("remplace_le"), str) and p["remplace_le"] for p in precedents)):
@@ -657,12 +673,34 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             if touchees is not None and (not isinstance(touchees, list) or not all(
                     _est_dict(x) and _texte_plein(x.get("id")) and _texte_plein(x.get("texte")) for x in touchees)):
                 erreurs.append(f"{nom} : la décision « {i} » : « regles_touchees » est une liste de règles {{id, texte}}.")
+        elif d.get("genre") == "faire_chez_partenaire":
+            _verifier_chez_partenaire(d, f"{nom} : la décision « {i} »", cles_agents, erreurs)
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":
             _verifier_validation(d, nom, erreurs)
         elif d.get("genre") == "environnement":
             _verifier_outils_a_installer(d, f"{nom} : la décision « {i} »", erreurs)
+
+
+def _verifier_chez_partenaire(d, ici, cles_agents, erreurs):
+    """Une décision `faire_chez_partenaire` (« À faire chez <partenaire> ») : l'agent et sa tâche, le partenaire, ce qu'il faut
+    générer (`quoi`), le `prompt` prêt à copier, les `reglages`, le `mode_operatoire`, ce qu'il faut rapporter
+    (`a_rapporter`), et facultatifs `elements`, `site` (https), `nom_partenaire`, `apres` (la demande à faire avant)."""
+    if not _dans(d.get("agent"), cles_agents) or not all(_texte_plein(d.get(c)) for c in ("tache", "partenaire", "quoi", "prompt")):
+        erreurs.append(f"{ici} : « agent » (connu), « tache », « partenaire », « quoi » et « prompt » sont obligatoires.")
+    for c, minimum in (("reglages", 0), ("mode_operatoire", 1), ("elements", 0)):
+        v = d.get(c, [] if c != "mode_operatoire" else None)
+        if not isinstance(v, list) or len(v) < minimum or not all(_texte_plein(x) for x in v):
+            erreurs.append(f"{ici} : « {c} » est une liste de textes" + (" non vide." if minimum else "."))
+    a = d.get("a_rapporter")
+    if not _est_dict(a) or not _texte_plein(a.get("description")) or not _texte_ou_nul(a.get("nom")):
+        erreurs.append(f"{ici} : « a_rapporter » est {{description, nom?}}.")
+    if d.get("site") is not None and not (isinstance(d["site"], str) and d["site"].startswith("https://")):
+        erreurs.append(f"{ici} : « site » est une adresse https.")
+    for c in ("nom_partenaire", "apres"):
+        if d.get(c) is not None and not _texte_plein(d.get(c)):
+            erreurs.append(f"{ici} : « {c} » est un texte.")
 
 
 def _verifier_outils_a_installer(d, ici, erreurs):
@@ -870,6 +908,7 @@ def _verifier_regles_projet(regles, erreurs):
 
 
 ETATS_CONNEXION = ("connecte", "declare", "non_connecte")
+MAX_NOTE_INSCRIPTION = 200
 
 
 def _date_iso(v):
@@ -921,7 +960,7 @@ def _verifier_partenaires(p, erreurs):
     if not _est_dict(etat):
         erreurs.append(f"{nom} : « etat » doit être un objet.")
         etat = {}
-    for section in ("connexions", "quotas", "limites", "regles"):
+    for section in ("connexions", "quotas", "limites", "regles", "inscriptions"):
         s = etat.get(section, {})
         if not _est_dict(s):
             erreurs.append(f"{nom} : « etat.{section} » doit être un objet.")
@@ -942,6 +981,11 @@ def _verifier_partenaires(p, erreurs):
                         erreurs.append(f"{q} : « {c} » doit être un texte.")
                 if v.get("vu_le") is not None and not _date_iso(v["vu_le"]):
                     erreurs.append(f"{q} : « vu_le » n'est pas une date.")
+            elif section == "inscriptions":    # le fait d'être inscrit : jamais un identifiant ni un mot de passe
+                if v.get("depuis") is not None and not _date_iso(v["depuis"]):
+                    erreurs.append(f"{q} : « depuis » n'est pas une date.")
+                if v.get("note") is not None and not (_texte(v["note"]) and len(v["note"]) <= MAX_NOTE_INSCRIPTION):
+                    erreurs.append(f"{q} : « note » doit être un texte de {MAX_NOTE_INSCRIPTION} caractères au plus.")
             elif section == "quotas":
                 if v.get("reste") is not None and not _nombre_positif(v["reste"]):
                     erreurs.append(f"{q} : « reste » doit être un nombre positif.")
@@ -1059,6 +1103,8 @@ def _normaliser_v4(n):
         etat = pa["etat"] = pa["etat"] if _est_dict(pa.get("etat")) else {}
         for section in ("connexions", "quotas", "limites", "regles"):
             etat[section] = etat[section] if _est_dict(etat.get(section)) else {}
+        if "inscriptions" in etat and not _est_dict(etat["inscriptions"]):   # facultatif : absent, l'état d'avant est inchangé
+            etat["inscriptions"] = {}
         pa["conseils"] = pa["conseils"] if _est_dict(pa.get("conseils")) else {}
         pa.setdefault("maj_catalogue", None)
         pa.setdefault("cout_maj", None)

@@ -23,23 +23,26 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
           "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
-          "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
+          "partenaire_regle": ("partenaire", "operation"), "partenaire_inscrit": ("partenaire", "inscrit"),
+          "faire_chez_partenaire": ("decision", "verdict"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
           "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",)}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
-FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
+FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
+               "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet", "serie_arretee",
-               "fin_vue")
+               "fin_vue", "faire_chez_partenaire")
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
-DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
+DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
+VERDICTS_CHEZ_PARTENAIRE = ("fait", "impossible")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
 MAX_IMAGES = releve.MAX_IMAGES_MESSAGE
@@ -201,6 +204,8 @@ def _verifier_partenaires(demande, r):
     i, operation = demande.get("partenaire"), demande.get("operation")
     if not isinstance(i, str) or i not in ids_partenaires(r):
         return "Partenaire inconnu."
+    if genre == "partenaire_inscrit":
+        return _verifier_inscription(demande, r, i)
     if not isinstance(operation, str) or operation not in OPERATIONS_REGLE:
         return "Opération inconnue (ajouter, modifier ou supprimer)."
     if operation != "ajouter":
@@ -214,6 +219,50 @@ def _verifier_partenaires(demande, r):
         return "« texte » est obligatoire pour une règle."
     if len(texte) > MAX_REGLE:
         return f"La règle dépasse {MAX_REGLE} caractères."
+    return None
+
+
+def _verifier_inscription(demande, r, i):
+    """« Je suis inscrit » / « Je ne suis plus inscrit » : `inscrit` vrai ou faux et une `note` facultative (le nom du compte,
+    l'offre : jamais un mot de passe ni une clé)."""
+    if not isinstance(demande.get("inscrit"), bool):
+        return "« inscrit » doit être vrai ou faux."
+    if demande["inscrit"]:
+        carte = next((x for liste in (r["partenaires"].get("categories") or {}).values() for x in liste if x.get("id") == i), {})
+        if carte.get("statut") == "ferme":
+            return "Ce partenaire est fermé : on ne s'y inscrit plus."
+    if "note" in demande:
+        from partenaires import etat as petat
+        try:
+            petat.note_inscription(demande["note"])
+        except ValueError as e:
+            return str(e)
+    return None
+
+
+def _verifier_chez_partenaire(demande, r):
+    """Le retour de « À faire chez <partenaire> » : « fait » (avec, si l'utilisateur le veut, le résultat en pièces jointes et
+    un texte) ou « impossible » (avec ce qui a bloqué). Une génération à la fois chez un partenaire : une demande placée
+    derrière une autre n'a pas encore de retour."""
+    decisions = r.get("decisions_projet", [])
+    d = _decision(decisions, demande["decision"], "faire_chez_partenaire")
+    if d is None:
+        return "Décision inconnue."
+    if demande["verdict"] not in VERDICTS_CHEZ_PARTENAIRE:
+        return "Réponse inconnue (fait ou impossible)."
+    if d.get("apres") and any(x.get("id") == d["apres"] for x in decisions):
+        return (f"Une génération à la fois chez ce partenaire : faites d'abord la demande {d['apres']}, celle-ci vient après.")
+    texte = demande.get("texte")
+    if texte is not None and not isinstance(texte, str):
+        return "« texte » doit être un texte."
+    if len(texte or "") > MAX_TEXTE:
+        return f"« texte » dépasse {MAX_TEXTE} caractères."
+    if demande["verdict"] == "impossible" and not (texte or "").strip():
+        return "Dites ce qui a bloqué (le texte est obligatoire pour « impossible »)."
+    if "fichiers" in demande:
+        if demande["verdict"] != "fait":
+            return "Des fichiers ne se joignent qu'avec « fait »."
+        return fichiers_joints.verifier(demande["fichiers"], 0, 0)
     return None
 
 
@@ -406,6 +455,8 @@ def _verifier_v4(demande, r, elements):
                 return "Le relevé de ce projet ne gère pas les règles du projet (mettez à jour l'orchestrateur)."
             return _verifier_texte_regle(demande["regle"], "regle")
         return None
+    if genre == "faire_chez_partenaire":
+        return _verifier_chez_partenaire(demande, r)
     if genre == "valider_etape":
         d = _decision(r.get("decisions_projet", []), demande["decision"], "valider_etape")
         if d is None:

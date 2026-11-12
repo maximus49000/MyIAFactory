@@ -112,6 +112,8 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `outil_agent` | La réponse du Directeur à une décision `outil_agent' (un agent est arrêté faute d'un outil que sa fiche ne lui ouvre pas) : seul le moteur procédural pose cette décision et y répond (il lit la commande refusée, ouvre lui-même avec `lancer fiche` un programme déclaré du projet, et ne pose la décision que pour un programme inconnu ou un autre outil) ; ne la traite pas toi-même. |
 | `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision (retrouve-le avec `lancer etat`, dans `decisions`) et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
 | `retour_element` | Un « Demander à modifier » du catalogue : une tâche de correction sur cet élément (`lancer tache` avec `fonctionnalite`, `element`, le rôle de l'étape concernée), qui suit le flux et la relecture croisée comme les autres. Réponds dans la `reponse` de la demande ce qui sera fait. |
+| `partenaire_inscrit` | « Je suis inscrit » / « Je ne suis plus inscrit » sur la carte d'un partenaire (`partenaire`, `inscrit`, `note?`) : `lancer partenaires` avec `inscrire` (mêmes champs), puis `demande-traitee`. Le moteur procédural s'en charge. Jamais un identifiant ni un mot de passe dans la note. |
+| `faire_chez_partenaire` | Le retour de « À faire chez <partenaire> » (`fait` avec le résultat en pièces jointes et/ou un mot, ou `impossible`) : seul le moteur procédural pose cette décision et y répond (l'agent reprend sa tâche avec ce que l'utilisateur rapporte) ; ne la traite pas toi-même. |
 | `partenaire_regle`, `partenaires_actualiser`, `partenaires_maj` | Les demandes de l'espace partenaire du bureau (règles d'usage d'un partenaire, relevé des quotas, mise à jour des offres). Les partenaires sont facultatifs et rien ne bloque sans eux : voir « Les partenaires » : `lancer partenaires` avec `regle`, `quota` (`force: true`) ou `a_refaire` puis `offres`. Jamais de clé dans une réponse. |
 | `lecon` | Le verdict de l'utilisateur sur une leçon (`cible` = son id, `verdict`, `etage?`) : `lancer lecon` avec `action: appliquer` (voir « Les leçons »). |
 | `retour` | Un retour de l'utilisateur sur une tâche : transmets-le à l'agent qui la tient (ou au prochain qui la reprend) ; ta `reponse` dit ce qui sera fait. |
@@ -288,6 +290,21 @@ l'environnement ou le `.env` du projet, au moment de l'appel seulement.
   lui dit de noter `usage` après chaque appel payant (le coût exact si l'API le donne, sinon estimé avec `estime`,
   sinon sans coût : « non chiffré ») et `limite` sur un refus pour quota ou paiement. Une limite : `choisir` de
   nouveau et prendre le suivant (avec l'accord, puisque le partenaire change).
+- **Un partenaire inscrit** (`inscrits` dans le retour de `choisir` : un compte chez lui, sans liaison directe) :
+  **l'agent ne l'appelle pas**. Il prépare ce que l'utilisateur fait sur le site du partenaire, et le départ le lui dit
+  (section « Partenaires où l'utilisateur est inscrit ») : `statut: a_faire_chez_partenaire` avec `chez_partenaire`
+  `{partenaire, quoi, prompt, reglages, mode_operatoire, a_rapporter: {description, nom?}, elements?}`. Le prompt est prêt
+  à copier et respecte les règles du partenaire (Tripo : 1 000 caractères au plus, chaque réglage donné, les éléments
+  groupés en une seule génération sauf besoin de détail ou d'animation) ; une génération à la fois par partenaire. Le
+  moteur en fait une demande « À faire chez … » au bureau de direction (bouton « Copier le prompt », lien du site, retour
+  « Fait » avec le fichier joint, ou « Je n'ai pas pu ») et l'agent reprend sur le retour. L'utilisateur règle
+  « Je suis inscrit » depuis la carte du partenaire (demande `partenaire_inscrit` → `inscrire`).
+- **Le cadrage décide** si la fonctionnalité utilise un partenaire : `disponibles` donne les connectés (`direct`) et les
+  inscrits (`inscrit`) ; quand un besoin correspond, l'agent de cadrage pose la question (choix : « Utiliser <Nom>
+  (connecté…) », « Utiliser <Nom> (inscrit : vous ferez la génération sur son site avec le prompt préparé) », « Ne pas
+  utiliser de partenaire ») et inscrit la réponse dans `cahier.partenaires` (`[{id, mode: direct | inscrit | aucun}]`,
+  contrôlé par `verifier_cadrage` avant d'être gardé). Les étapes suivantes s'y conforment : le départ appelle les `direct`, fait préparer
+  les `inscrit`, et n'utilise pas les `aucun`.
 - **Sans partenaire utilisable** : le **mode manuel** (tu écris le prompt et le mode d'emploi exact, chaque réglage ;
   l'utilisateur le fait et te rend le résultat), le **mode navigateur** (seulement s'il l'accepte ; il s'y connecte
   lui-même, puis tu mènes la suite), ou une autre voie sans partenaire.

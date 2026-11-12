@@ -5,15 +5,22 @@ seulement l'état de chaque connexion, le dernier quota lu avec sa date, les lim
 que l'utilisateur a fixées. Écriture atomique sous verrou (le même mécanisme que le suivi).
 """
 import datetime
+import re
 from pathlib import Path
 
 from orchestrateur import suivi as su
 
 ETATS = ("connecte", "declare", "non_connecte")
-SECTIONS = ("connexions", "quotas", "limites", "regles", "lectures")
+SECTIONS = ("connexions", "quotas", "limites", "regles", "lectures", "inscriptions")
 REGLE_TRIPO = ("Si plusieurs éléments sont nécessaires, les générer au maximum en un seul prompt, "
                "sauf besoin de détail très précis ou d'animation.")
 TEXTE_REGLE_MAX = 500
+NOTE_INSCRIPTION_MAX = 200
+# Le prompt qu'un partenaire accepte au plus (en caractères), quand on le sait : l'agent le respecte en préparant ce que
+# l'utilisateur fait chez lui. Tripo : 1 000 caractères.
+PROMPT_MAX = {"tripo": 1000}
+# Les partenaires dont chaque réglage doit être donné avec le prompt (l'utilisateur les saisit à la main, sur le site).
+REGLAGES_OBLIGATOIRES = ("tripo",)
 DUREE_LIMITE = datetime.timedelta(hours=24)   # une limite sans nouveau relevé tombe d'elle-même au bout d'un jour
 
 
@@ -26,7 +33,7 @@ def vide(aujourdhui=None):
     """L'état d'un fichier qui n'existe pas encore : la règle de départ de Tripo est proposée (une seule fois :
     dès que le fichier est écrit, ce qu'il contient fait foi)."""
     jour = aujourdhui or datetime.date.today().isoformat()
-    return {"version": 1, "connexions": {}, "quotas": {}, "limites": {}, "lectures": {},
+    return {"version": 1, "connexions": {}, "quotas": {}, "limites": {}, "lectures": {}, "inscriptions": {},
             "regles": {"tripo": [{"id": "r1", "texte": REGLE_TRIPO, "cree_le": jour}]}}
 
 
@@ -115,3 +122,51 @@ def _texte_regle(texte):
 def chemin_conseils(base):
     """Les conseils du projet : `.factory/partenaires.json` (à côté du fichier de factory)."""
     return Path(base) / "partenaires.json"
+
+
+_SECRET = re.compile(r"(mot\s*[-_ ]?de\s*[-_ ]?passe|passw(or)?d|\bmdp\b|\bpwd\b|passphrase|secret|token|api[-_ ]?key|"
+                     r"cl[ée]\s*(d['’ ]?)?api|\bcl[ée]\s*[:=])", re.IGNORECASE)
+_JETON = re.compile(r"[A-Za-z0-9_\-]{24,}")
+
+
+def note_inscription(note):
+    """La note libre facultative d'une inscription (le nom du compte, l'offre) : un texte d'une ligne de 200 caractères
+    au plus, **jamais un mot de passe ni une clé** : un texte qui en parle ou qui ressemble à un jeton est refusé.
+    Rend la note nettoyée, ou `None`. Lève ValueError."""
+    if note is None:
+        return None
+    if not isinstance(note, str):
+        raise ValueError("« note » doit être un texte.")
+    note = " ".join(note.split())
+    if not note:
+        return None
+    if len(note) > NOTE_INSCRIPTION_MAX:
+        raise ValueError(f"La note tient en {NOTE_INSCRIPTION_MAX} caractères au plus.")
+    if _SECRET.search(note) or _JETON.search(note):
+        raise ValueError("La note ne garde jamais un mot de passe, une clé ni un jeton : seulement le nom du compte "
+                         "ou l'offre.")
+    return note
+
+
+def inscrire(d, partenaire, inscrit, note=None, quand=None):
+    """Note que l'utilisateur a (ou n'a plus) un compte chez `partenaire`, sans liaison directe : seulement le fait, la
+    date et une note facultative. Rend l'inscription (ou `None` si elle est retirée). Lève ValueError sur un refus."""
+    if not isinstance(inscrit, bool):
+        raise ValueError("« inscrit » doit être vrai ou faux.")
+    inscriptions = d.setdefault("inscriptions", {})
+    if not inscrit:
+        inscriptions.pop(partenaire, None)
+        return None
+    note = note_inscription(note)
+    ligne = {"depuis": quand or maintenant()}
+    if note:
+        ligne["note"] = note
+    inscriptions[partenaire] = ligne
+    return ligne
+
+
+def est_inscrit(d, partenaire):
+    """Vrai si l'utilisateur a un compte chez ce partenaire **et** n'y est pas connecté en direct (un partenaire connecté
+    s'appelle directement : l'inscription ne sert pas)."""
+    return (partenaire in (d.get("inscriptions") or {})
+            and (d.get("connexions", {}).get(partenaire) or {}).get("etat") != "connecte")

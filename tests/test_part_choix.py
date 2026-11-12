@@ -71,6 +71,29 @@ class TestChoix(unittest.TestCase):
         e["connexions"]["a"] = {"etat": "declare"}
         self.assertEqual(choix.ordonner("voix", ["a", "g"], CATALOGUE, e)["partenaires"], [])
 
+    def test_inscrits_ni_appeles_ni_oublies(self):
+        e = etat_avec(["b"])
+        etat.inscrire(e, "a", True)                       # un compte chez a : l'utilisateur peut y passer
+        etat.inscrire(e, "b", True)                       # connecté aussi : on l'appelle directement
+        etat.inscrire(e, "g", True)                       # fermé : jamais proposé
+        etat.inscrire(e, "f", True)                       # autre sous-catégorie
+        r = choix.ordonner("voix", ["a", "b"], CATALOGUE, e)
+        self.assertEqual([x["id"] for x in r["partenaires"]], ["b"])
+        self.assertEqual(r["inscrits"], [{"id": "a"}])
+        self.assertIsNone(r["meilleur_non_connecte"])     # a est déjà accessible : rien à regretter
+        r = choix.ordonner("voix", ["a"], CATALOGUE, etat_avec([]))
+        self.assertNotIn("inscrits", r)                   # présent seulement quand il y en a
+        e = etat_avec([])
+        etat.inscrire(e, "c", True)
+        r = choix.ordonner("synthese-vocale", [], CATALOGUE, e)
+        self.assertEqual((r["partenaires"], r["inscrits"]), ([], [{"id": "c"}]))
+        self.assertEqual(r["meilleur_non_connecte"], "d")  # les autres non connectés restent à regretter
+
+    def test_inscrit_sans_la_section(self):
+        e = etat_avec(["a"])
+        del e["inscriptions"]                              # un état d'avant : rien ne casse
+        self.assertEqual([x["id"] for x in choix.ordonner("voix", ["a"], CATALOGUE, e)["partenaires"]], ["a"])
+
 
 if __name__ == "__main__":
     unittest.main()

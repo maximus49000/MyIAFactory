@@ -511,6 +511,58 @@ class TestPartenairesDemandes(unittest.TestCase):
         v3 = releve.normaliser({**releve_base_v4(), "version": 3})
         self.assertTrue(demandes.verifier({"type": "partenaires_maj", "confirme": True}, v3))
 
+    def test_inscrit(self):
+        base = {"type": "partenaire_inscrit", "partenaire": "tripo"}
+        self.ok({**base, "inscrit": True})
+        self.ok({**base, "inscrit": False})
+        self.ok({**base, "inscrit": True, "note": "compte gratuit, offre Pro"})
+        self.refus({**base, "inscrit": "oui"})
+        self.refus({**base})
+        self.refus({**base, "partenaire": "zz", "inscrit": True})
+        self.assertIn("mot de passe", self.refus({**base, "inscrit": True, "note": "mot de passe : abc"}))
+        self.refus({**base, "inscrit": True, "note": "x" * 201})
+        self.refus({**base, "inscrit": True, "note": 3})
+        self.assertEqual(demandes.nettoyer({**base, "inscrit": True, "note": "n", "cle": "SECRET"}),
+                         {**base, "inscrit": True, "note": "n"})
+        self.r["partenaires"]["categories"]["video-3d-avatars"][0]["statut"] = "ferme"
+        self.refus({**base, "inscrit": True})
+        self.ok({**base, "inscrit": False})       # on peut toujours retirer son inscription
+
+    def test_sans_espace_partenaire_pour_l_inscription(self):
+        sans = releve.normaliser(releve_base_v4())
+        self.assertTrue(demandes.verifier({"type": "partenaire_inscrit", "partenaire": "tripo", "inscrit": True}, sans))
+
+    def test_faire_chez_partenaire(self):
+        import base64
+        r = releve.normaliser({**releve_base_v4(), "partenaires": self.r["partenaires"], "decisions_projet": [
+            {"id": "d1", "genre": "faire_chez_partenaire", "texte": "À faire chez Tripo", "agent": "d1", "tache": "t1",
+             "partenaire": "tripo", "quoi": "Un dragon", "prompt": "Un dragon", "reglages": [], "mode_operatoire": ["Ouvrir"],
+             "a_rapporter": {"description": "Le .glb"}},
+            {"id": "d2", "genre": "faire_chez_partenaire", "texte": "À faire chez Tripo", "agent": "d1", "tache": "t1",
+             "partenaire": "tripo", "quoi": "Un loup", "prompt": "Un loup", "reglages": [], "mode_operatoire": ["Ouvrir"],
+             "a_rapporter": {"description": "Le .glb"}, "apres": "d1"}]})
+        png = base64.b64encode(PNG).decode()
+        fichier = {"nom": "dragon.png", "type": "image/png", "donnees": png}
+
+        def v(d):
+            return demandes.verifier({"type": "faire_chez_partenaire", **d}, r)
+        self.assertIsNone(v({"decision": "d1", "verdict": "fait"}))
+        self.assertIsNone(v({"decision": "d1", "verdict": "fait", "texte": "Fait, en haute qualité.", "fichiers": [fichier]}))
+        self.assertIsNone(v({"decision": "d1", "verdict": "impossible", "texte": "Plus de crédits."}))
+        self.assertTrue(v({"decision": "d1", "verdict": "impossible"}))                       # dire pourquoi
+        self.assertTrue(v({"decision": "d1", "verdict": "impossible", "texte": "x", "fichiers": [fichier]}))
+        self.assertTrue(v({"decision": "d1", "verdict": "peut-être"}))
+        self.assertTrue(v({"decision": "zz", "verdict": "fait"}))
+        self.assertTrue(v({"decision": "d1", "verdict": "fait", "texte": "x" * 3501}))
+        self.assertTrue(v({"decision": "d1", "verdict": "fait", "fichiers": [{**fichier, "nom": "x.exe"}]}))
+        self.assertTrue(v({"decision": "d1", "verdict": "fait", "fichiers": [{**fichier, "donnees": "AAAA"}]}))
+        self.assertIn("d1", v({"decision": "d2", "verdict": "fait"}))      # une génération à la fois : après d1
+        r["decisions_projet"] = r["decisions_projet"][1:]
+        self.assertIsNone(v({"decision": "d2", "verdict": "fait"}))        # d1 est faite : d2 vient
+        self.assertEqual(demandes.nettoyer({"type": "faire_chez_partenaire", "decision": "d1", "verdict": "fait", "texte": "t",
+                                            "fichiers": [{**fichier, "x": 1}], "autre": 1}),
+                         {"type": "faire_chez_partenaire", "decision": "d1", "verdict": "fait", "texte": "t", "fichiers": [fichier]})
+
     def test_nettoyer(self):
         d = demandes.nettoyer({"type": "partenaire_regle", "partenaire": "tripo", "operation": "ajouter",
                                "texte": "x", "cle": "SECRET", "autre": 1})

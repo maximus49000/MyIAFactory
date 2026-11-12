@@ -49,7 +49,7 @@ VISIBLES = 5
 DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
-                 "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
+                 "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
@@ -534,6 +534,12 @@ def cmd_actions(ctx, e):
                 demande["images"] = images
             if fichiers:
                 demande["fichiers"] = fichiers
+        elif genre == "faire_chez_partenaire":      # le retour de « À faire chez … » : le résultat rangé comme une pièce jointe
+            d = next((x for x in s["decisions_projet"] if x["id"] == e.get("decision") and x.get("genre") == genre), None)
+            if d is None:
+                raise Refus(f"Décision inconnue : {e.get('decision')}")
+            if e.get("fichiers"):
+                demande["fichiers"] = ranger_fichiers(ctx, e["fichiers"], f"partenaires/{d['id']}")
         elif genre == "challenge" and isinstance(e.get("cible"), dict) and e["cible"].get("type") == "lecon":
             # Challenger une leçon ouvre une tâche : la discussion y a lieu (ce texte, puis les réponses et retours).
             lecon = next((x for x in s["lecons"] if x["id"] == e["cible"].get("id")), None)
@@ -702,6 +708,9 @@ def _verifier_cahier(c):
             or not isinstance(c.get("etapes"), list) or not all(isinstance(x, str) for x in c["etapes"])):
         raise Refus("« cahier » doit avoir une « maquette » (liste de chemins, ou de {chemin, legende}) et des "
                     "« etapes » (liste de textes).")
+    if "partenaires" in c and not rel.partenaires_cahier_ok(c["partenaires"]):
+        raise Refus("« cahier.partenaires » est une liste de {id, mode} (mode : direct, inscrit ou aucun), un partenaire au "
+                    "plus une fois.")
     c["maquette"] = liste_d_images(c["maquette"], "cahier.maquette")
     images_montrables(chemins_d_images(c["maquette"]), "cahier.maquette")
     if c.get("valide_le") is not None and not isinstance(c["valide_le"], str):
@@ -781,6 +790,8 @@ def cmd_fonctionnalite(ctx, e):
                 if e[cle] is not None:
                     controle(e[cle])
                     if cle == "cahier":
+                        if e[cle].get("partenaires"):
+                            verifier_partenaires_cadrage(ctx, e[cle]["partenaires"])
                         e[cle]["maquette"] = [ctx.image_rangee(x, f["id"]) for x in e[cle]["maquette"]]
                     elif cle == "livrable" and e[cle].get("chemin"):
                         e[cle]["chemin"] = ctx.image_rangee(e[cle]["chemin"], f["id"], "livrables")
@@ -922,6 +933,8 @@ def cmd_decision(ctx, e):
                 d.update(_outil_a_ouvrir(ctx, s, e))
             elif genre == "accord_agent":
                 d.update(_accord_a_donner(ctx, s, e))
+            elif genre == "faire_chez_partenaire":      # l'utilisateur fait la génération chez le partenaire où il est inscrit
+                d.update(_chez_partenaire_a_faire(ctx, s, e))
             elif genre == "serie_arretee":      # une série qui ne progresse plus : dite au Directeur
                 _fonc(s, e.get("fonctionnalite"))
                 d["fonctionnalite"] = e["fonctionnalite"]
@@ -1054,6 +1067,67 @@ def _accord_a_donner(ctx, s, e):
         if not isinstance(e["appareil"], bool):
             raise Refus("« appareil » est vrai ou faux.")
         d["appareil"] = e["appareil"]
+    return d
+
+
+PROMPT_PARTENAIRE_MAX = 4000   # le plafond général ; certains partenaires en ont un plus bas (`partenaires.etat.PROMPT_MAX`)
+MAX_REGLAGES, MAX_ETAPES_CHEZ, MAX_ELEMENTS_CHEZ = 12, 10, 12
+
+
+def _liste_chez(e, cle, maximum, longueur, minimum=0):
+    v = e.get(cle, [])
+    if (not isinstance(v, list) or not minimum <= len(v) <= maximum
+            or not all(isinstance(x, str) and x.strip() and len(x) <= longueur for x in v)):
+        raise Refus(f"« {cle} » est une liste de {minimum} à {maximum} textes de {longueur} caractères au plus.")
+    return [x.strip() for x in v]
+
+
+def _chez_partenaire_a_faire(ctx, s, e):
+    """Les champs de la décision `faire_chez_partenaire` (« À faire chez <partenaire> ») : un agent prépare ce que l'utilisateur
+    fait lui-même sur le site d'un partenaire où il est inscrit, sans liaison directe. `agent`, `tache`, `partenaire` (du
+    catalogue), `quoi`, `prompt` (prêt à copier ; le plafond du partenaire est tenu : 1 000 caractères chez Tripo),
+    `reglages` (chacun des réglages du partenaire ; obligatoires chez Tripo), `mode_operatoire` (où cliquer), `a_rapporter`
+    `{description, nom?}`, `elements` (ce que groupe le prompt). Une génération à la fois chez un partenaire : une demande
+    posée alors qu'une autre attend vient `apres` elle. Le site vient du catalogue, jamais de l'agent."""
+    if e.get("agent") not in ctx.cles_agents():
+        raise Refus(f"« faire_chez_partenaire » : agent inconnu « {e.get('agent')} ».")
+    tache = texte(e, "tache")
+    if su.tache(s, tache) is None:
+        raise Refus(f"« faire_chez_partenaire » : tâche inconnue « {tache} ».")
+    par_id = {p["id"]: p for p in _catalogue(ctx)["partenaires"]}
+    i = _partenaire(e, par_id)
+    p = par_id[i]
+    if p.get("statut") == "ferme":
+        raise Refus(f"{p['nom']} est fermé : choisis un autre partenaire ou une autre voie.")
+    prompt = _phrase_courte(e, "prompt", PROMPT_PARTENAIRE_MAX).strip()
+    plafond = petat.PROMPT_MAX.get(i)
+    if plafond and len(prompt) > plafond:
+        raise Refus(f"Le prompt pour {p['nom']} tient en {plafond} caractères au plus (le tien en a {len(prompt)}) : "
+                    "raccourcis-le, ou groupe moins d'éléments.")
+    reglages = _liste_chez(e, "reglages", MAX_REGLAGES, 200, 1 if i in petat.REGLAGES_OBLIGATOIRES else 0)
+    a_rapporter = e.get("a_rapporter")
+    if (not isinstance(a_rapporter, dict) or not isinstance(a_rapporter.get("description"), str)
+            or not a_rapporter["description"].strip() or len(a_rapporter["description"]) > 300
+            or (a_rapporter.get("nom") is not None and not (isinstance(a_rapporter["nom"], str)
+                                                            and a_rapporter["nom"].strip() and len(a_rapporter["nom"]) <= 80))):
+        raise Refus("« a_rapporter » est {description (300 caractères au plus), nom? (80 au plus)} : ce que l'utilisateur "
+                    "rapporte, et le nom attendu.")
+    quoi = _phrase_courte(e, "quoi", 600).strip()
+    d = {"texte": f"À faire chez {p['nom']} : {quoi}"[:200], "agent": e["agent"], "tache": tache, "partenaire": i,
+         "nom_partenaire": p["nom"], "quoi": quoi, "prompt": prompt, "reglages": reglages,
+         "mode_operatoire": _liste_chez(e, "mode_operatoire", MAX_ETAPES_CHEZ, 300, 1),
+         "a_rapporter": {k: a_rapporter[k].strip() for k in ("description", "nom") if a_rapporter.get(k)}}
+    if e.get("elements") is not None:
+        d["elements"] = _liste_chez(e, "elements", MAX_ELEMENTS_CHEZ, 80)
+    if isinstance(p.get("site"), str) and p["site"].startswith("https://"):
+        d["site"] = p["site"]
+    attente = [x for x in s["decisions_projet"] if x.get("genre") == "faire_chez_partenaire" and x.get("partenaire") == i]
+    deja = next((x for x in attente if {k: v for k, v in x.items() if k not in ("id", "apres", "genre")} == d), None)
+    if deja is not None:        # la même demande reposée : la même décision (avec sa place dans la file)
+        if "apres" in deja:
+            d["apres"] = deja["apres"]
+    elif attente:
+        d["apres"] = attente[-1]["id"]      # une génération à la fois chez ce partenaire
     return d
 
 
@@ -2311,9 +2385,29 @@ def _p_choisir(ctx, e, cat, par_id):
     except petat.EtatIllisible as ex:   # rien ne bloque : aucun partenaire, le mode manuel prend le relais
         return {"partenaires": [], "meilleur_non_connecte": None, "avertissement": str(ex)}
     r = pchoix.ordonner(besoin, conseils, cat, d)
-    for x in r["partenaires"]:
+    for x in r["partenaires"] + r.get("inscrits", []):
         x["nom"] = par_id[x["id"]]["nom"]
+    for x in r.get("inscrits", []):
+        x["site"] = par_id[x["id"]].get("site")      # là où l'utilisateur fait la génération
     return r
+
+
+def _p_inscrire(ctx, e, cat, par_id):
+    """« Je suis inscrit » / « Je ne suis plus inscrit » : l'utilisateur a (ou n'a plus) un compte chez ce partenaire, hors
+    liaison directe. Seulement le fait, la date et une note facultative (nom du compte, offre) : jamais un identifiant ni
+    un mot de passe."""
+    i = _partenaire(e, par_id)
+    inscrit = e.get("inscrit")
+    if not isinstance(inscrit, bool):
+        raise Refus("« inscrit » doit être vrai ou faux.")
+    if inscrit and par_id[i].get("statut") == "ferme":
+        raise Refus(f"{par_id[i]['nom']} est fermé : on ne s'y inscrit plus.")
+    with _etat_partenaires().transaction() as d:
+        try:
+            ligne = petat.inscrire(d, i, inscrit, e.get("note"))
+        except ValueError as ex:
+            raise Refus(str(ex))
+    return {"ok": True, "partenaire": i, "inscrit": inscrit, **({"inscription": ligne} if ligne else {})}
 
 
 def _p_usage(ctx, e, cat, par_id):
@@ -2353,6 +2447,53 @@ def _p_regle(ctx, e, cat, par_id):
         except ValueError as ex:
             raise Refus(str(ex))
     return {"regle": r}
+
+
+def _etat_partenaires_lisible():
+    """L'état des partenaires, ou un état vide s'il est illisible : rien ne bloque sans partenaire."""
+    try:
+        return _etat_partenaires().lire()
+    except (petat.EtatIllisible, OSError):
+        return petat.vide()
+
+
+def verifier_partenaires_cadrage(ctx, liste):
+    """Les partenaires décidés au cadrage (`cahier.partenaires`, `[{id, mode}]`) contre le catalogue et l'état : un partenaire
+    du catalogue ; `direct` seulement s'il est connecté, `inscrit` seulement si l'utilisateur a dit l'être. Refus sinon."""
+    par_id = {p["id"]: p for p in _catalogue(ctx)["partenaires"]}
+    d = _etat_partenaires_lisible()
+    for x in liste:
+        i, mode = x["id"], x["mode"]
+        if i not in par_id:
+            raise Refus(f"Partenaire inconnu du catalogue : {i}")
+        if mode == "direct" and (d["connexions"].get(i) or {}).get("etat") != "connecte":
+            raise Refus(f"{par_id[i]['nom']} n'est pas connecté : le mode « direct » ne s'y applique pas (« inscrit » s'il a "
+                        "un compte, ou « aucun »).")
+        if mode == "inscrit" and i not in (d.get("inscriptions") or {}):
+            raise Refus(f"L'utilisateur n'a pas dit être inscrit chez {par_id[i]['nom']} : le mode « inscrit » ne s'y applique "
+                        "pas (« aucun » si on n'utilise pas ce partenaire).")
+
+
+def _p_verifier_cadrage(ctx, e, cat, par_id):
+    liste = e.get("partenaires")
+    if not rel.partenaires_cahier_ok(liste):
+        raise Refus("« partenaires » est une liste de {id, mode} (mode : direct, inscrit ou aucun), un partenaire au plus une fois.")
+    verifier_partenaires_cadrage(ctx, liste)
+    return {"ok": True}
+
+
+def _p_disponibles(ctx, e, cat, par_id):
+    """Les partenaires que le cadrage peut proposer à l'utilisateur : ceux qu'il a connectés (`direct`) et ceux où il est
+    inscrit (`inscrit`), avec de quoi les reconnaître (catégorie, à quoi ils servent). Jamais un fermé."""
+    d = _etat_partenaires_lisible()
+    sortie = []
+    for p in cat["partenaires"]:
+        i = p["id"]
+        modes = ([] if (d["connexions"].get(i) or {}).get("etat") != "connecte" or p.get("statut") != "actif" else ["direct"])             + (["inscrit"] if i in (d.get("inscriptions") or {}) and p.get("statut") != "ferme" else [])
+        if modes:
+            sortie.append({"id": i, "nom": p["nom"], "categorie": p.get("categorie"), "sous_categorie": p.get("sous_categorie"),
+                           "description": p.get("description"), "modes": modes})
+    return {"partenaires": sortie}
 
 
 def _p_conseils(ctx, e, cat, par_id):
@@ -2423,7 +2564,7 @@ def _p_offres(ctx, e, cat, par_id):
 
 
 ACTIONS_PARTENAIRES = {"detecter": _p_detecter, "confirmer": _p_confirmer, "quota": _p_quota, "choisir": _p_choisir,
-                       "usage": _p_usage, "limite": _p_limite, "regle": _p_regle, "conseils": _p_conseils,
+                       "usage": _p_usage, "limite": _p_limite, "regle": _p_regle, "inscrire": _p_inscrire, "disponibles": _p_disponibles, "verifier_cadrage": _p_verifier_cadrage, "conseils": _p_conseils,
                        "a_refaire": _p_a_refaire, "offres": _p_offres}
 
 
@@ -2457,6 +2598,41 @@ def regles_des_partenaires(ctx, ids):
             for i in ids]
 
 
+def partenaires_du_depart(ctx, s, taches):
+    """Les partenaires du départ d'un agent, d'après ses tâches : `(directs, inscrits, ecartes)`. Ceux que la tâche porte
+    (`partenaires`) et ceux que le cadrage a décidés (`cahier.partenaires` de sa fonctionnalité). Un partenaire écarté au
+    cadrage (`aucun`) n'est ni appelé ni préparé ; `inscrit` (décidé, ou, sans décision, un compte sans liaison directe) :
+    l'agent prépare ce que l'utilisateur fait, il n'appelle pas. `directs` : `[(nom, [règles])]` ; `inscrits` : `[{nom, site,
+    note, regles, prompt_max, reglages}]` ; `ecartes` : les noms."""
+    ids, decides = [], {}
+    for t in taches:
+        ids += t.get("partenaires") or []
+        fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
+        for x in ((fonc or {}).get("cahier") or {}).get("partenaires") or []:
+            decides[x["id"]] = x["mode"]
+    ids = list(dict.fromkeys(ids + [i for i, m in decides.items() if m != "aucun"]))
+    ecartes = [i for i, m in decides.items() if m == "aucun"]
+    if not ids and not ecartes:
+        return [], [], []
+    try:
+        cat = {p["id"]: p for p in _catalogue(ctx)["partenaires"]}
+        etat = _etat_partenaires().lire()
+    except (Refus, OSError, ValueError):
+        return regles_des_partenaires(ctx, [i for i in ids if i not in ecartes]), [], []
+    directs, inscrits = [], []
+    for i in ids:
+        if i in ecartes:
+            continue
+        mode = decides.get(i) or ("inscrit" if petat.est_inscrit(etat, i) else "direct")
+        if mode != "inscrit":
+            directs.append(i)
+        elif i in cat:
+            inscrits.append({"nom": cat[i]["nom"], "site": cat[i].get("site"), "note": (etat["inscriptions"].get(i) or {}).get("note"),
+                             "regles": [r["texte"] for r in etat["regles"].get(i) or [] if isinstance(r, dict) and r.get("texte")],
+                             "prompt_max": petat.PROMPT_MAX.get(i), "reglages": i in petat.REGLAGES_OBLIGATOIRES})
+    return regles_des_partenaires(ctx, directs), inscrits, [cat[i]["nom"] for i in ecartes if i in cat]
+
+
 def _releve_partenaires(ctx):
     """Le champ `partenaires` du relevé : le catalogue réduit aux champs affichés, l'état (sans clé), les conseils."""
     try:
@@ -2471,7 +2647,8 @@ def _releve_partenaires(ctx):
     ids = {p["id"] for p in cat["partenaires"]}
     categories = {c: [{k: p[k] for k in CHAMPS_AFFICHES if k in p} for p in liste]
                   for c, liste in pcat.par_categorie(cat).items() if liste}
-    etat = {s: {i: v for i, v in d[s].items() if i in ids} for s in ("connexions", "quotas", "limites", "regles")}
+    etat = {s: {i: v for i, v in d.get(s, {}).items() if i in ids}
+            for s in ("connexions", "quotas", "limites", "regles", "inscriptions")}
     etat["limites"] = {i: v for i, v in etat["limites"].items() if petat.limite_active(v)}
     etat["connexions"] = {i: {k: v[k] for k in ("etat", "source", "abonnement", "vu_le") if k in v}
                           for i, v in etat["connexions"].items() if v.get("etat") in petat.ETATS}
@@ -2880,11 +3057,11 @@ def _depart_d_un_lot(ctx, e):
         fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
         glossaire = _sans_doublon(glossaire + list((fonc or {}).get("glossaire") or []))
     briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
-    ids_partenaires = list(dict.fromkeys(i for t in taches for i in t.get("partenaires") or []))
+    regles, inscrits, ecartes = partenaires_du_depart(ctx, s, taches)
     factory = {**ctx.f, "genre": ", ".join(g for g in genres if g) or None}
-    return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire,
-                                          regles_des_partenaires(ctx, ids_partenaires),
-                                          par_le_moteur=e.get("moteur", False), regles_projet=rp.lire(ctx.f))}
+    return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire, regles,
+                                          par_le_moteur=e.get("moteur", False), regles_projet=rp.lire(ctx.f),
+                                          inscrits=inscrits, ecartes=ecartes)}
 
 
 def cmd_depart(ctx, e):
@@ -2903,11 +3080,11 @@ def cmd_depart(ctx, e):
     fonc = su.fonctionnalite(s, tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
     genre = wf.genre_de(ctx.f, fonc)   # les leçons du genre de la fonctionnalité de la tâche
     lecons = memoire.lire(ctx.f["memoire"], genre, fiche_agent["role"])
+    partenaires = partenaires_du_depart(ctx, s, [tache_suivie])
     return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie,
                                       depart.brief(ctx.f, fiche_agent["role"]), lecons,
-                                      (fonc or {}).get("glossaire") or [],
-                                      regles_des_partenaires(ctx, tache_suivie.get("partenaires") or []),
-                                      regles_projet=rp.lire(ctx.f))}
+                                      (fonc or {}).get("glossaire") or [], partenaires[0],
+                                      regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2])}
 
 
 def cmd_regles(ctx, e):

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {libelleCategorie, popularite, trier, lienHttps, etatConnexion, libelleConnexion, quotaEnClair, lignePlan, parties, lignes, creerVue, rendrePartenaires,
-        MAX_REGLE} from "../ui/partenaires.js";
+        MAX_REGLE, MAX_NOTE_INSCRIPTION, estInscrit, etatPartenaire, libelleEtat, inscriptionNotee} from "../ui/partenaires.js";
 import {lignesPartenaires, coutDePartenaire} from "../ui/facturation.js";
 import {creerPlan} from "../logique/plan.js";
 import {COLS} from "./donnees.js";
@@ -388,4 +388,78 @@ test("déplier une carte la redessine sur place : le reste du panneau (et son d�
   assert.notEqual(apres, avant);
   assert.ok(apres.textContent.includes("Plans et prix"));
   assert.ok(apres.tous((n) => n.textContent === "▾")[0].focalise, "le bouton garde le focus : pas de rafraîchissement en dessous");
+});
+
+// --- « Inscrit » : un compte chez le partenaire, hors liaison directe.
+const AVEC_COMPTE = {...DONNEES, etat: {...DONNEES.etat, inscriptions: {
+  tripo: {depuis: "2026-11-12T10:00:00+01:00", note: "compte gratuit"}, vox: {depuis: "2026-11-12T10:00:00+01:00"}}}};
+
+test("inscrit : un compte sans liaison directe ; un partenaire connecté reste connecté", () => {
+  assert.equal(estInscrit(AVEC_COMPTE, "tripo"), true);
+  assert.equal(estInscrit(AVEC_COMPTE, "vox"), false);          // connecté : on l'appelle directement
+  assert.equal(estInscrit(AVEC_COMPTE, "echo"), false);
+  assert.equal(estInscrit(DONNEES, "tripo"), false);            // état d'avant : aucune inscription
+  assert.equal(estInscrit(null, "tripo"), false);
+  assert.deepEqual(["vox", "tripo", "echo"].map((i) => etatPartenaire(AVEC_COMPTE, i)), ["connecte", "inscrit", "non_connecte"]);
+  assert.equal(libelleEtat(AVEC_COMPTE, "tripo"), "inscrit (hors liaison directe)");
+  assert.equal(libelleEtat(AVEC_COMPTE, "vox"), "connecté");
+  assert.equal(libelleEtat(DONNEES, "tripo"), "déclaré, à vérifier");     // déclaré sans compte : comme avant
+  assert.deepEqual(inscriptionNotee(AVEC_COMPTE, "tripo"), AVEC_COMPTE.etat.inscriptions.tripo);
+  assert.equal(inscriptionNotee({etat: {inscriptions: {x: 3}}}, "x"), null);
+});
+
+test("inscrit : les parties et le tableau le rangent après les connectés, filtre « Inscrits » seulement s'il y en a", () => {
+  assert.deepEqual(parties(AVEC_COMPTE).inscrits.map((c) => c.id), ["tripo"]);
+  const ids = (o) => lignes(AVEC_COMPTE, o).map((l) => l.carte.id);
+  assert.deepEqual(ids({}), ["vox", "tripo", "echo", "libre"]);       // connecté, inscrit, conseillé, autres
+  assert.deepEqual(ids({type: "inscrits"}), ["tripo"]);
+  assert.equal(lignes(AVEC_COMPTE, {})[1].inscrit, true);
+  const options = (d) => rendre(d).racine.tous((n) => n.className === "partenaires-type")[0].tous((n) => n.tagName === "option").map((o) => o.textContent);
+  assert.ok(options(AVEC_COMPTE).includes("Inscrits (compte, sans liaison directe) (1)"));
+  assert.ok(!options(DONNEES).some((t) => /Inscrits/.test(t)));
+});
+
+test("carte inscrite : l'état, la note du compte et « Je ne suis plus inscrit »", async () => {
+  const {racine, envoyes} = rendre(AVEC_COMPTE);
+  const t = racine.textContent;
+  assert.match(t, /inscrit \(hors liaison directe\)/);
+  assert.match(t, /compte : compte gratuit/);
+  const retirer = racine.tous((n) => n.tagName === "button" && n.textContent === "Je ne suis plus inscrit");
+  assert.equal(retirer.length, 2);                                       // vox (connecté et inscrit) puis tripo
+  await retirer[1].declencher("click");
+  assert.deepEqual(envoyes, [{type: "partenaire_inscrit", partenaire: "tripo", inscrit: false}]);
+});
+
+test("« Je suis inscrit » envoie le fait, sans note ; un partenaire connecté peut aussi l'être", async () => {
+  const {racine, envoyes} = rendre(AVEC_COMPTE);
+  const boutons = racine.tous((n) => n.tagName === "button" && n.textContent === "Je suis inscrit");
+  assert.equal(boutons.length, 2);                                      // echo et libre
+  await boutons[0].declencher("click");
+  assert.deepEqual(envoyes, [{type: "partenaire_inscrit", partenaire: "echo", inscrit: true}]);
+  assert.match(racine.textContent, /connectéinscrit/);                  // vox : connecté ET inscrit
+});
+
+test("la note du compte : enregistrée avec l'inscription, 200 caractères au plus", async () => {
+  const vue = creerVue();
+  vue.ouvertes.add("tripo");
+  const {racine, envoyes} = rendre(AVEC_COMPTE, vue);
+  const zone = racine.tous((n) => n.attributs["aria-label"] === "Note sur mon compte")[0];
+  assert.equal(zone.value, "compte gratuit");
+  assert.equal(zone.attributs.maxlength, String(MAX_NOTE_INSCRIPTION));
+  zone.value = "  offre Pro  ";
+  await bouton(racine, "Enregistrer la note").declencher("click");
+  assert.deepEqual(envoyes, [{type: "partenaire_inscrit", partenaire: "tripo", inscrit: true, note: "offre Pro"}]);
+  zone.value = "x".repeat(MAX_NOTE_INSCRIPTION + 1);
+  await bouton(racine, "Enregistrer la note").declencher("click");
+  assert.equal(envoyes.length, 1);                                       // trop long : rien ne part
+  zone.value = "";
+  await bouton(racine, "Enregistrer la note").declencher("click");
+  assert.deepEqual(envoyes[1], {type: "partenaire_inscrit", partenaire: "tripo", inscrit: true});   // note vidée
+});
+
+test("sans le droit d'agir, aucun bouton d'inscription ; un partenaire fermé ne propose pas de s'inscrire", () => {
+  const sans = rendre(AVEC_COMPTE, creerVue({agir: false})).racine;
+  assert.equal(sans.tous((n) => /inscrit/.test(n.textContent) && n.tagName === "button").length, 0);
+  const ferme = {...AVEC_COMPTE, categories: {...AVEC_COMPTE.categories, "voix-audio": [carte("vox", "Vox", "voix-audio"), carte("echo", "Echo", "voix-audio", {statut: "ferme"})]}};
+  assert.equal(rendre(ferme).racine.tous((n) => n.tagName === "button" && n.textContent === "Je suis inscrit").length, 1);   // libre seulement
 });

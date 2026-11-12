@@ -170,6 +170,33 @@ class TestPartenairesOutil(AvecPartenaires):
         code, objet = outil.executer(self.factory, ["tache"], {"id": t, "partenaires": ["inexistant"]})
         self.assertEqual(code, 1, objet)
 
+    def test_inscrire_le_fait_seulement(self):
+        r = self.p({"action": "inscrire", "partenaire": "tripo", "inscrit": True, "note": "compte gratuit, offre Pro"})
+        self.assertEqual((r["inscrit"], r["inscription"]["note"]), (True, "compte gratuit, offre Pro"))
+        self.assertEqual(list(petat.Etat().lire()["inscriptions"]), ["tripo"])
+        self.assertIn("inscrit", self.refus({"action": "inscrire", "partenaire": "tripo", "inscrit": "oui"}))
+        self.assertIn("inconnu", self.refus({"action": "inscrire", "partenaire": "inexistant", "inscrit": True}))
+        self.assertIn("mot de passe", self.refus({"action": "inscrire", "partenaire": "tripo", "inscrit": True,
+                                                  "note": "mot de passe : hunter2"}))
+        self.assertIn("fermé", self.refus({"action": "inscrire", "partenaire": "lmnt", "inscrit": True}))
+        self.assertEqual(list(petat.Etat().lire()["inscriptions"]), ["tripo"])   # les refus n'ont rien changé
+        r = outil.construire_releve(outil.Contexte(self.factory))
+        self.assertEqual(releve.valider(r), [])
+        self.assertEqual(list(r["partenaires"]["etat"]["inscriptions"]), ["tripo"])
+        self.assertIn("depuis", r["partenaires"]["etat"]["inscriptions"]["tripo"])
+        self.assertIn("inscriptions", releve.normaliser(r)["partenaires"]["etat"])
+        self.p({"action": "inscrire", "partenaire": "tripo", "inscrit": False})
+        self.assertEqual(petat.Etat().lire()["inscriptions"], {})
+
+    def test_choisir_dit_les_inscrits(self):
+        self.p({"action": "conseils", "besoins": {"3d": [{"id": "tripo", "raison": "Modèles 3D."}]}})
+        self.p({"action": "inscrire", "partenaire": "tripo", "inscrit": True})
+        r = self.p({"action": "choisir", "besoin": "3d"})
+        self.assertEqual(r["partenaires"], [])
+        self.assertEqual(r["inscrits"][0]["id"], "tripo")
+        self.assertEqual(r["inscrits"][0]["nom"], "Tripo")
+        self.assertTrue(r["inscrits"][0]["site"].startswith("https://"))
+
     def test_releve_v4_partenaires(self):
         self.p({"action": "confirmer", "ids": ["elevenlabs"]})
         self.p({"action": "conseils", "besoins": {"voix": [{"id": "elevenlabs", "raison": "Voix naturelles."}]}})

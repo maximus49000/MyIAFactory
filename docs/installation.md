@@ -723,6 +723,25 @@ mettez-la dans une variable d'environnement ou dans le `.env` du projet (jamais 
 carte. Une clé n'est **jamais** écrite, affichée ni journalisée : l'outil ne regarde que la présence du nom, et la lit
 au moment de l'appel seulement.
 
+**Inscrit : un compte, sans liaison directe.** Sur la carte d'un partenaire, « Je suis inscrit » dit que vous avez un
+compte chez lui, sans le connecter à la factory (pas de clé, pas de serveur MCP) ; « Je ne suis plus inscrit » le
+retire. La factory ne garde que le fait, sa date et une note facultative (le nom du compte, l'offre) : jamais un
+identifiant ni un mot de passe. Un partenaire inscrit n'est pas appelé par les agents : l'agent prépare ce que **vous**
+faites sur son site et la demande arrive au bureau de direction, partie **« À faire chez un partenaire »** : le prompt
+prêt à copier (« Copier le prompt »), un lien vers le site, les réglages à choisir, le mode opératoire (où cliquer) et ce
+qu'il faut rapporter. Le prompt respecte les règles du partenaire (chez Tripo : 1 000 caractères au plus, chaque
+réglage donné, les éléments groupés en une seule génération) ; une génération à la fois par partenaire (la suivante
+attend que vous ayez fait la première). Vous répondez **« Fait »** (en joignant le résultat si vous voulez : un
+type de fichier que la page n'accepte pas, comme un `.glb`, se joint dans un `.zip` ou se dépose dans le dossier du
+projet, en le disant dans le mot) ou **« Je n'ai pas pu »** (en disant pourquoi) ; l'agent reprend sa tâche avec ce que
+vous rapportez.
+
+**Le cadrage décide d'utiliser un partenaire, ou non.** Quand un besoin de la fonctionnalité correspond à un
+partenaire connecté ou inscrit (génération 3D, images, voix…), l'agent de cadrage vous pose la question : utiliser ce
+partenaire (connecté : les agents l'appellent ; inscrit : vous faites la génération avec le prompt préparé) ou ne pas
+en utiliser. Votre réponse est inscrite dans le cahier des charges (`partenaires`) et les étapes suivantes s'y
+conforment : un partenaire écarté n'est ni appelé ni préparé.
+
 **Les accords.** Un plan gratuit ou des crédits d'un abonnement payé : l'orchestrateur prévient seulement. Un appel
 facturé à l'usage (ou un tarif inconnu) : votre accord, pour la tâche en cours. Changer de partenaire ou agir dans le
 navigateur : toujours votre accord.

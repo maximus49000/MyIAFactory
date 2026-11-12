@@ -4,7 +4,7 @@ Rien ne bloque sans partenaire : une liste vide veut dire « mode manuel, naviga
 """
 import unicodedata
 
-from partenaires.etat import limite_active
+from partenaires.etat import est_inscrit, limite_active
 
 SYNONYMES = {"free": "gratuit", "gratuite": "gratuit"}
 
@@ -55,14 +55,25 @@ def ordonner(besoin, conseils, catalogue, etat, instant=None):
     for i in choisis:
         t = tarif(par_id[i], etat["connexions"].get(i))
         sortie.append({"id": i, "tarif": t, "accord_requis": t in ("usage", "inconnu")})
-    return {"partenaires": sortie, "meilleur_non_connecte": _meilleur_non_connecte(conseils, choisis, ordre, par_id, etat)}
+    r = {"partenaires": sortie, "meilleur_non_connecte": _meilleur_non_connecte(conseils, choisis, ordre, par_id, etat)}
+    inscrits = [{"id": i} for i in ordre if _inscrit_utilisable(i, par_id, etat)]
+    if inscrits:   # un compte chez eux, sans liaison directe : l'agent ne les appelle pas, il prépare ce que l'utilisateur fait
+        r["inscrits"] = inscrits
+    return r
+
+
+def _inscrit_utilisable(i, par_id, etat):
+    """Inscrit (compte, pas de liaison directe) chez un partenaire qui n'est pas fermé."""
+    p = par_id.get(i)
+    return p is not None and p.get("statut") != "ferme" and est_inscrit(etat, i)
 
 
 def _meilleur_non_connecte(conseils, choisis, ordre, par_id, etat):
     """Le partenaire qu'on aurait mieux fait d'utiliser : le premier conseil non connecté placé avant le premier choisi ;
     sans conseil, le plus populaire des actifs non connectés du besoin, s'il n'y a aucun choisi."""
     def non_connecte(i):
-        return par_id[i].get("statut") == "actif" and (etat["connexions"].get(i) or {}).get("etat") != "connecte"
+        return (par_id[i].get("statut") == "actif" and (etat["connexions"].get(i) or {}).get("etat") != "connecte"
+                and not est_inscrit(etat, i))   # un compte chez lui : déjà accessible, on n'a rien à regretter
     for i in conseils:
         if choisis and i == choisis[0]:
             return None

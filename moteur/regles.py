@@ -440,6 +440,8 @@ def _sur_cahier(projet, demande, etat):
     f = _fonc(projet, fid)
     if demande.get("verdict") == "valider":
         cahier = {k: (f.get("cahier") or {}).get(k) for k in ("maquette", "etapes")}
+        if (f.get("cahier") or {}).get("partenaires") is not None:     # décidés au cadrage : le cahier validé les garde
+            cahier["partenaires"] = f["cahier"]["partenaires"]
         cahier["valide_le"] = su.maintenant()
         lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "decoupage"})
         _lever(projet, f, "valider_cahier")
@@ -1653,6 +1655,16 @@ def _sur_partenaires(projet, demande, etat):
             e["texte"] = demande["texte"]
         lancer(projet, "partenaires", e)
         reponse = "La règle est notée."
+    elif genre == "partenaire_inscrit":     # « Je suis inscrit » / « Je ne suis plus inscrit » : le fait, jamais un identifiant
+        e = {"action": "inscrire", "partenaire": demande["partenaire"], "inscrit": demande["inscrit"]}
+        if demande.get("note"):
+            e["note"] = demande["note"]
+        try:
+            lancer(projet, "partenaires", e)
+        except Refus as ex:
+            _terminer(projet, {"demande": demande["id"]}, f"L'inscription n'a pas été notée : {ex}")
+            return []
+        reponse = "C'est noté : vous êtes inscrit." if demande["inscrit"] else "C'est noté : vous n'êtes plus inscrit."
     elif genre == "partenaires_actualiser":
         r = lancer(projet, "partenaires", {"action": "quota", "force": True})
         reponse = f"Quotas relus ({len(r.get('lus') or [])} partenaire(s))."
@@ -1819,6 +1831,7 @@ _SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme
         "elargir_genre": _sur_elargir_genre,
         "session_cloud": _sur_session_cloud, "retour": _sur_retour, "retour_element": _sur_retour_element,
         "deplacer": _sur_deplacer, "bouton": _sur_bouton, "partenaire_regle": _sur_partenaires,
+        "partenaire_inscrit": _sur_partenaires,
         "partenaires_actualiser": _sur_partenaires, "valider_etape": _sur_valider_etape, "partenaires_maj": _sur_partenaires, "challenge": _sur_challenge,
         "regle_projet": _sur_regle_projet}
 
@@ -2298,6 +2311,33 @@ CONSIGNE_AVANT_VALIDATION = (
     "physique de l'utilisateur : c'est lui qui l'installe, par cette fenêtre.")
 
 
+MODES_DU_CADRAGE = {"direct": "connecté (les agents l'appellent directement)",
+                    "inscrit": "inscrit (l'utilisateur fait la génération sur son site, avec le prompt préparé)"}
+
+
+def _partenaires_au_cadrage(projet):
+    """Le cadrage décide si la fonctionnalité utilise un partenaire : les partenaires de l'utilisateur (connectés ou inscrits)
+    et la consigne de lui poser la question, puis d'inscrire sa réponse dans le cahier. Vide sans partenaire (rien à demander)."""
+    try:
+        dispo = lancer(projet, "partenaires", {"action": "disponibles"})["partenaires"]
+    except (Refus, OSError, ValueError, KeyError):
+        return ""
+    if not dispo:
+        return ""
+    lignes = ["## Partenaires de l'utilisateur", "Il les a connectés ou y a un compte ; propose-les quand un besoin du cahier "
+              "(génération 3D, images, voix…) leur correspond :"]
+    for p in dispo:
+        lignes.append(f"- {p['id']} ({p['nom']}, {p.get('sous_categorie') or p.get('categorie')}) : "
+                      + " ; ".join(MODES_DU_CADRAGE[m] for m in p["modes"]))
+    lignes.append("Pour chaque partenaire dont un besoin relève, pose la question dans ta série de questions, à choix : "
+                  "« Utiliser <Nom> (connecté : appelé directement par les agents) » ou « Utiliser <Nom> (inscrit : vous ferez "
+                  "la génération sur son site avec le prompt préparé) » selon ses modes, et « Ne pas utiliser de partenaire ». "
+                  'Inscris sa réponse dans le cahier : `"partenaires": [{"id": "<id>", "mode": "direct" | "inscrit" | "aucun"}]`, '
+                  "un par partenaire concerné ; les étapes suivantes s'y conforment. Aucun besoin ne leur correspond : ne pose "
+                  "pas la question et ne mets pas `partenaires`.")
+    return "\n".join(lignes)
+
+
 def _matiere(projet, etat, t):
     """Ce que l'agent doit savoir de la tâche, en plus de son message de départ (la discussion, les retours, l'élément)."""
     etape, fid = str(t.get("etape") or ""), t.get("fonctionnalite")
@@ -2325,6 +2365,9 @@ def _matiere(projet, etat, t):
                     "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
                     "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
                     "l'utilisateur : refais la maquette et rends le cahier corrigé."]
+        partenaires = _partenaires_au_cadrage(projet)
+        if partenaires:
+            parties.append(partenaires)
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
                     "Discussion récente :", _texte_discussion(f, 8, projet),
@@ -2444,14 +2487,21 @@ def traiter_retour(projet, execution, etat):
     reponse = ((r.get("message") or {}).get("texte")) or "C'est fait."
     if r["statut"] in ("accord_requis", "outil_refuse"):
         return _agent_arrete(projet, etat, execution, depart, r, fid)
+    if r["statut"] == "a_faire_chez_partenaire":
+        return _chez_partenaire_demande(projet, etat, execution, depart, r, fid, liee)
     if r["statut"] == "echec":
         _bloquer_taches(projet, taches, "L'agent n'a pas pu finir : " + reponse[:300])
         _terminer(projet, {"demande": liee}, "L'agent n'a pas pu finir : " + reponse[:300])
         return _apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
     t0 = _tache(projet, taches[0])
     message_refuse = None
-    for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=taches[0], agent=execution.agent,
-                                              etape=str(t0.get("etape") or "")):
+    if isinstance(r.get("cahier"), dict) and r["cahier"].get("partenaires"):
+        try:      # les partenaires décidés au cadrage : connus, connecté pour « direct », inscrit pour « inscrit »
+            lancer(projet, "partenaires", {"action": "verifier_cadrage", "partenaires": r["cahier"]["partenaires"]})
+        except Refus as e:
+            message_refuse = str(e)      # avant tout : rien du rapport n'est appliqué, l'agent le rend de nouveau
+    for commande, entree in ([] if message_refuse else rapport.commandes(
+            r, fonctionnalite=fid, tache=taches[0], agent=execution.agent, etape=str(t0.get("etape") or ""))):
         try:
             lancer(projet, commande, entree)
         except Refus as e:
@@ -2784,6 +2834,89 @@ def _sur_accord_agent(projet, demande, etat):
 _SUR[GENRE_ACCORD] = _sur_accord_agent
 
 
+# --- Un partenaire où l'utilisateur est inscrit (hors liaison directe) : l'agent prépare, l'utilisateur fait.
+
+GENRE_CHEZ = "faire_chez_partenaire"      # la décision de projet « À faire chez <partenaire> » (bureau de direction)
+
+
+def _chez_partenaire_demande(projet, etat, execution, depart, r, fid, liee):
+    """Un agent a préparé ce que l'utilisateur fait chez un partenaire (prompt, réglages, mode opératoire, ce qu'il doit
+    rapporter) : une décision « À faire chez … » au bureau de direction. L'agent reprend la même tâche sur le retour (le
+    résultat joint, ou « Fait »). L'outil juge la demande (partenaire connu, plafond du prompt, réglages) : refusée, l'agent
+    la rend une fois de nouveau, puis la tâche est bloquée."""
+    tid, cle = depart["taches"][0], execution.agent
+    c = r["chez_partenaire"]
+    t = _tache(projet, tid)
+    prenom = prenom_de(projet, cle)
+    champs = {k: c[k] for k in ("partenaire", "quoi", "prompt", "reglages", "mode_operatoire", "a_rapporter", "elements") if k in c}
+    try:
+        decision = lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_CHEZ,
+                                               "texte": "À faire chez un partenaire", "agent": cle, "tache": tid, **champs})
+    except Refus as e:
+        if liee:
+            _m(etat, "liees")[tid] = liee
+        return _message_refuse(projet, etat, execution, depart, {"message": c}, str(e))
+    _m(etat, "refus_relances", set).discard(tid)
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == decision["id"]), {})
+    nom = d.get("nom_partenaire") or c["partenaire"]
+    lancer(projet, "tache", {"id": tid, "active": False, "journal": [f"{prenom} ({cle}) a préparé ce qu'il y a à faire chez {nom} : "
+                                                                     f"{c['quoi'][:200]}."]})
+    _liberer_le_lot(projet, depart)
+    if fid:
+        for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=cle, etape=""):
+            try:
+                lancer(projet, commande, entree)
+            except Refus as e:
+                lancer(projet, "tache", {"id": tid, "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
+        _dire(projet, fid, f"{prenom} a préparé une génération à faire chez {nom} : « À faire chez {nom} » est au bureau de "
+                           "direction (prompt prêt à copier, réglages et mode opératoire).")
+    _terminer(projet, {"demande": liee}, f"{prenom} a préparé ce que vous avez à faire chez {nom} : c'est au bureau de direction.")
+    return []
+
+
+def _sur_faire_chez_partenaire(projet, demande, etat):
+    """Le retour de « À faire chez … » : « fait » (le résultat joint et/ou un texte) ou « impossible » (ce qui a bloqué).
+    L'agent reprend la même tâche avec ce que l'utilisateur rapporte."""
+    from bureau import fichiers_joints as fj
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == GENRE_CHEZ), None)
+    if d is None:
+        raise Refus("cette demande n'existe plus")
+    verdict = demande["verdict"]
+    if verdict not in ("fait", "impossible"):
+        raise Refus(f"réponse inconnue : {verdict}")
+    tid = d["tache"]
+    t = _tache(projet, tid)
+    prenom, nom = prenom_de(projet, d["agent"]), d.get("nom_partenaire") or d["partenaire"]
+    dit = (demande.get("texte") or "").strip()
+    if verdict == "fait":
+        fichiers = [{**x, "chemin": _chemin_pour_agent(projet, x["chemin"])} for x in demande.get("fichiers") or []
+                    if isinstance(x, dict) and "chemin" in x]
+        supplement = f"L'utilisateur a fait ce que tu as préparé chez {nom} ({d['quoi']})."
+        if dit:
+            supplement += f" Il dit : {dit}"
+        if fichiers:      # ce qu'il rapporte : chemin, type, taille de chacun
+            supplement += (" Fichiers rapportés :\n" + "\n".join(fj.lignes_pour_agent(fichiers)) + "\n" + fj.CONSIGNE_LECTURE
+                           + f" Attendu : {d['a_rapporter']['description']}"
+                           + (f" (nom attendu : {d['a_rapporter']['nom']})" if d["a_rapporter"].get("nom") else "") + ".")
+        else:
+            supplement += (" Il n'a joint aucun fichier : ce qu'il dit fait foi (il a pu déposer le résultat dans le dossier "
+                           "du projet) ; s'il te manque quelque chose, redemande-le-lui.")
+        journal = f"Fait chez {nom} par l'utilisateur" + (f" ({len(fichiers)} fichier(s) rapporté(s))" if fichiers else "")
+        reponse = f"{prenom} reprend sa tâche avec ce que vous avez rapporté de chez {nom}."
+    else:
+        supplement = (f"L'utilisateur n'a pas pu le faire chez {nom} ({d['quoi']}) : {dit} Continue sans (dis dans ton résultat "
+                      "que ce n'est pas fait) ou propose-lui une autre voie.")
+        journal = f"Pas faisable chez {nom} : {dit[:200]}"
+        reponse = f"{prenom} reprend sa tâche sans ce que vous deviez faire chez {nom}."
+    actions = _reprendre_la_tache(projet, etat, tid, t.get("fonctionnalite"), supplement, journal)
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, {"demande": demande["id"]}, reponse)
+    return actions
+
+
+_SUR[GENRE_CHEZ] = _sur_faire_chez_partenaire
+
+
 def _liberer_le_lot(projet, depart):
     for autre in depart["taches"][1:]:    # le reste du lot n'a pas été fait : il repart seul plus tard
         if _tache(projet, autre)["colonne"] != "fait":
@@ -2978,8 +3111,10 @@ def _suite_cadrage(projet, etat, t, r):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
         lancer(projet, "tache", {"id": t["id"], "titre": f"Cadrage : {r['nom'][:80]}"})
     if r.get("cahier"):
-        lancer(projet, "fonctionnalite", {"id": fid, "cahier": {"maquette": r["cahier"]["maquette"],
-                                                                "etapes": r["cahier"]["etapes"]}, "etape": "cahier"})
+        cahier = {"maquette": r["cahier"]["maquette"], "etapes": r["cahier"]["etapes"]}
+        if "partenaires" in r["cahier"]:      # les partenaires décidés au cadrage (la réponse de l'utilisateur)
+            cahier["partenaires"] = r["cahier"]["partenaires"]
+        lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "cahier"})
         _poser(projet, fid, "valider_cahier", "Le cahier des charges est prêt : le valider, ou le faire corriger ?")
     return []
 

@@ -26,6 +26,37 @@ class Lire(unittest.TestCase):
         self.assertEqual(r["statut"], "fait")
         self.assertEqual(r["fichiers"][0]["chemin"], "pieces/f1/a.png")
 
+    CHEZ = {"statut": "a_faire_chez_partenaire", "message": {"texte": "À vous chez Tripo."},
+            "chez_partenaire": {"partenaire": "tripo", "quoi": "Le dragon et son œuf", "prompt": " Un dragon vert et son œuf. ",
+                                "reglages": ["Qualité : ultra", "Texture : oui"],
+                                "mode_operatoire": ["Ouvrir tripo3d.ai", "Coller le prompt", "Cliquer sur Generate"],
+                                "a_rapporter": {"description": "Le modèle en .glb", "nom": "dragon.glb"},
+                                "elements": ["dragon", "œuf"]}}
+
+    def test_a_faire_chez_partenaire(self):
+        r = rapport.lire(reponse(self.CHEZ))
+        c = r["chez_partenaire"]
+        self.assertEqual((r["statut"], c["partenaire"], c["prompt"]), ("a_faire_chez_partenaire", "tripo", "Un dragon vert et son œuf."))
+        self.assertEqual(c["a_rapporter"], {"description": "Le modèle en .glb", "nom": "dragon.glb"})
+        self.assertEqual((c["reglages"], c["elements"]), (["Qualité : ultra", "Texture : oui"], ["dragon", "œuf"]))
+        court = {k: v for k, v in self.CHEZ["chez_partenaire"].items() if k not in ("reglages", "elements")}
+        court["a_rapporter"] = {"description": "Le fichier"}
+        c = rapport.lire(reponse({**self.CHEZ, "chez_partenaire": court}))["chez_partenaire"]
+        self.assertEqual((c["reglages"], c["a_rapporter"], "elements" in c), ([], {"description": "Le fichier"}, False))
+
+    def test_a_faire_chez_partenaire_mal_forme_refuse(self):
+        base = self.CHEZ["chez_partenaire"]
+        mauvais = [None, "x", {k: v for k, v in base.items() if k != "prompt"}, {**base, "prompt": "  "},
+                   {**base, "partenaire": 3}, {**base, "mode_operatoire": []}, {**base, "mode_operatoire": "ouvrir"},
+                   {**base, "mode_operatoire": ["ok", 3]}, {**base, "reglages": "qualité"}, {**base, "a_rapporter": "fichier"},
+                   {**base, "a_rapporter": {"nom": "x.glb"}}, {**base, "a_rapporter": {"description": "d", "nom": 3}},
+                   {**base, "elements": [1]}]
+        for c in mauvais:
+            with self.assertRaises(rapport.RapportIllisible, msg=str(c)):
+                rapport.lire(reponse({**self.CHEZ, "chez_partenaire": c}))
+        with self.assertRaises(rapport.RapportIllisible):
+            rapport.lire(reponse({"statut": "a_faire_chez_partenaire"}))
+
     def test_comptes_rendus_par_element_facultatifs(self):
         r = rapport.lire(reponse({**FAIT, "comptes_rendus": [{"element": "e1", "texte": "Vert."}, {"texte": "sans élément"},
                                                              "pas un objet", {"element": "e2", "texte": 3}]}))

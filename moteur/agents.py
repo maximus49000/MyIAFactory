@@ -26,7 +26,7 @@ CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de dép
                   "choisir, avec `attend: true`, et n'agis qu'après la réponse ; ne réponds jamais à ces fenêtres "
                   "à sa place ; une commande bloquée par une fenêtre se dit dans ton rapport. Jamais d'installation ni de test "
                   "sur le téléphone de l'utilisateur (`adb`, débogage USB) : tests automatiques sur émulateur, "
-                  "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Termine par le bloc ```json demandé.")
+                  "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Un partenaire inscrit ne s'appelle pas : statut a_faire_chez_partenaire. Termine par le bloc ```json demandé.")
 USAGE_VIDE = {"modele": "", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
 
 

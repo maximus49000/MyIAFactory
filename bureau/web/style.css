@@ -957,6 +957,8 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .etat-connecte { color: #2f7d3b; }
 .etat-declare { color: #9a6b00; }
 .etat-non_connecte { color: #777; }
+.etat-inscrit { color: #1f5fa8; }                 /* un compte chez le partenaire, sans liaison directe */
+.partenaire-note-compte { color: #555; font-size: 13px; }
 .partenaire-limite { color: #b3261e; font-weight: 600; }
 .partenaire-prix-incertain { color: #9a6b00; font-style: italic; }
 .partenaire-corps { margin-top: 6px; }
@@ -1213,6 +1215,12 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .regle-projet-texte { overflow-wrap: anywhere; }
 .regle-projet-ajout { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 html.mobile .regle-projet .bouton, html.mobile .regle-projet-ajout .bouton, html.mobile .decision-accord .bouton { min-height: 44px; }
+/* « À faire chez <partenaire> » : le prompt à copier, les réglages et le mode opératoire, le retour avec le résultat joint */
+.decision-chez-partenaire .chez-prompt, .decision-chez-partenaire .chez-texte { width: 100%; box-sizing: border-box; font: inherit; padding: 6px; margin: 4px 0; }
+.decision-chez-partenaire .chez-prompt { font-family: ui-monospace, Consolas, monospace; font-size: 13px; resize: vertical; }
+.decision-chez-partenaire .chez-reglages, .decision-chez-partenaire .chez-etapes { margin: 2px 0 6px 18px; padding: 0; }
+.decision-chez-partenaire .chez-fichiers { display: block; margin: 4px 0; max-width: 100%; }
+html.mobile .decision-chez-partenaire .bouton { min-height: 44px; }
 
 /* « Fonctionnalités terminées » au bureau de direction : les liens d'accès (livrables, site, catalogue). */
 .fin-liens { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }

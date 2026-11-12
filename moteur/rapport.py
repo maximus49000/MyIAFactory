@@ -1,14 +1,16 @@
 """Le rapport structuré d'un agent : le dernier bloc ```json de sa réponse, lu et traduit en commandes `lancer`.
 
 Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
-    {"statut": "fait" | "accord_requis" | "outil_refuse" | "echec",
+    {"statut": "fait" | "accord_requis" | "outil_refuse" | "a_faire_chez_partenaire" | "echec",
      "message": {"texte", "images"?, "questions"?, "glossaire"?, "attend"}?,   (image : chemin ou {chemin, legende})
      "fichiers": [{"chemin", "titre", "element"?, "livrable"?}],
      "lecons": [{"texte", "roles", "etage_propose", "texte_general"?}],
      "controles": [{"texte", "origine"}], "retours_factory": [str],
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
-     "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte]}?, "methode_prete": bool?,
+     "chez_partenaire": {"partenaire", "quoi", "prompt", "reglages"?, "mode_operatoire", "a_rapporter", "elements"?}?,
+     "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?}?,
+     "methode_prete": bool?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,
      "nature": "en_jeu" | "visuel" | "son" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
@@ -26,7 +28,7 @@ Le texte libre qui entoure le bloc ne sert qu'au journal. Le moteur n'écrit rie
 from bureau import releve as rel
 from moteur.jugement import extraire_json
 
-STATUTS = ("fait", "accord_requis", "outil_refuse", "echec")
+STATUTS = ("fait", "accord_requis", "outil_refuse", "a_faire_chez_partenaire", "echec")
 ETAGES = ("projet", "genre", "skill")
 
 
@@ -87,6 +89,8 @@ def lire(texte):
         a = r.get("accord")
         if not isinstance(a, dict) or not all(_texte(a.get(c)) for c in ("quoi", "partenaire", "cout")):
             raise RapportIllisible("« accord_requis » demande « accord » : quoi, partenaire, cout")
+    if r["statut"] == "a_faire_chez_partenaire":
+        r["chez_partenaire"] = _chez_partenaire(r.get("chez_partenaire"))
     if r["statut"] == "outil_refuse" and not _texte(r.get("outil")):
         raise RapportIllisible("« outil_refuse » demande le nom de l'« outil »")
     if "nom" in r and not _texte(r["nom"]):
@@ -98,6 +102,10 @@ def lire(texte):
                 or not c["etapes"] or not all(_texte(x) for x in c["etapes"])):
             raise RapportIllisible("« cahier » demande « maquette » (chemins, ou {chemin, legende}) et « etapes » "
                                    "(listes non vides)")
+    if isinstance(r.get("cahier"), dict) and "partenaires" in r["cahier"]:
+        if not rel.partenaires_cahier_ok(r["cahier"]["partenaires"]):
+            raise RapportIllisible("« cahier.partenaires » est une liste de {id, mode} (mode : direct, inscrit ou aucun), un "
+                                   "partenaire au plus une fois")
     if "methode_prete" in r and not isinstance(r["methode_prete"], bool):
         raise RapportIllisible("« methode_prete » doit être vrai ou faux")
     if "usage_estime" in r and (not isinstance(r["usage_estime"], int) or isinstance(r["usage_estime"], bool)
@@ -111,6 +119,32 @@ def lire(texte):
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")
     return r
+
+
+def _liste_de_textes(v, quoi, minimum=0):
+    if not isinstance(v, list) or len(v) < minimum or not all(_texte(x) for x in v):
+        raise RapportIllisible(f"« {quoi} » doit être une liste de textes" + (" non vide" if minimum else ""))
+    return [x.strip() for x in v]
+
+
+def _chez_partenaire(c):
+    """La demande « À faire chez <partenaire> » d'un agent : l'utilisateur est inscrit chez ce partenaire (hors liaison
+    directe), l'agent ne l'appelle pas : il prépare ce que l'utilisateur fait sur son site. `partenaire` (identifiant du
+    catalogue), `quoi`, `prompt` (prêt à copier), `reglages` (chacun des réglages du partenaire), `mode_operatoire` (où
+    cliquer), `a_rapporter` `{description, nom?}` (le fichier attendu au retour), `elements` (ce que groupe le prompt).
+    Les longueurs et le partenaire sont jugés par l'outil, qui pose la décision."""
+    if (not isinstance(c, dict) or not all(_texte(c.get(k)) for k in ("partenaire", "quoi", "prompt"))
+            or not isinstance(c.get("a_rapporter"), dict) or not _texte(c["a_rapporter"].get("description"))
+            or (c["a_rapporter"].get("nom") is not None and not _texte(c["a_rapporter"]["nom"]))):
+        raise RapportIllisible("« a_faire_chez_partenaire » demande « chez_partenaire » : partenaire, quoi, prompt, "
+                               "mode_operatoire, a_rapporter {description, nom?}")
+    sortie = {"partenaire": c["partenaire"].strip(), "quoi": c["quoi"].strip(), "prompt": c["prompt"].strip(),
+              "mode_operatoire": _liste_de_textes(c.get("mode_operatoire"), "mode_operatoire", 1),
+              "reglages": _liste_de_textes(c.get("reglages", []), "reglages"),
+              "a_rapporter": {k: c["a_rapporter"][k].strip() for k in ("description", "nom") if c["a_rapporter"].get(k)}}
+    if c.get("elements") is not None:
+        sortie["elements"] = _liste_de_textes(c["elements"], "elements")
+    return sortie
 
 
 def _de_quoi_valider(x):

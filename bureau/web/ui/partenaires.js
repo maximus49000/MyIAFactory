@@ -7,7 +7,11 @@ import {el} from "./dom.js";
 import {dateFr} from "./texte.js";
 
 export const MAX_REGLE = 500;
+export const MAX_NOTE_INSCRIPTION = 200;
 const LIBELLES_CONNEXION = {connecte: "connecté", declare: "déclaré, à vérifier", non_connecte: "non connecté"};
+// « inscrit » : un compte chez le partenaire, sans liaison directe. L'agent ne l'appelle pas, il prépare ce que l'utilisateur
+// fait sur son site (une demande « À faire chez … »).
+const LIBELLE_INSCRIT = "inscrit (hors liaison directe)";
 const LIBELLES_STATUT = {ferme: "fermé", sans_api: "sans API", restreint: "accès restreint"};
 const LIBELLES_CATEGORIE = {
   "voix-audio": "Voix et audio", "images": "Images et graphisme", "video-3d-avatars": "Vidéo, 3D et avatars",
@@ -44,6 +48,28 @@ export function etatConnexion(donnees, id) {
 
 export function libelleConnexion(donnees, id) {
   return LIBELLES_CONNEXION[etatConnexion(donnees, id)];
+}
+
+// L'inscription notée pour ce partenaire (`{depuis, note?}`), ou null.
+export function inscriptionNotee(donnees, id) {
+  const i = objet(objet(donnees?.etat).inscriptions)[id];
+  return i && typeof i === "object" && !Array.isArray(i) ? i : null;
+}
+
+// Inscrit « hors liaison directe » : un compte, et pas connecté (un partenaire connecté s'appelle directement).
+export function estInscrit(donnees, id) {
+  return inscriptionNotee(donnees, id) !== null && etatConnexion(donnees, id) !== "connecte";
+}
+
+// L'état affiché : connecté, inscrit, déclaré (à vérifier) ou non connecté.
+export function etatPartenaire(donnees, id) {
+  const e = etatConnexion(donnees, id);
+  return e === "connecte" ? e : estInscrit(donnees, id) ? "inscrit" : e;
+}
+
+export function libelleEtat(donnees, id) {
+  const e = etatPartenaire(donnees, id);
+  return e === "inscrit" ? LIBELLE_INSCRIT : LIBELLES_CONNEXION[e];
 }
 
 // Ce qu'il reste chez un partenaire : « reste N unité », « illimité » ou « quota inconnu », toujours avec la date du
@@ -96,6 +122,7 @@ export function parties(donnees, filtre = "", tri = "catalogue") {
   const toutes = new Map();
   for (const [categorie, liste] of Object.entries(categories)) for (const c of tableau(liste)) toutes.set(c.id, {...c, categorie: c.categorie || categorie});
   const connectes = [...toutes.values()].filter((c) => etatConnexion(donnees, c.id) === "connecte");
+  const inscrits = [...toutes.values()].filter((c) => estInscrit(donnees, c.id));
   const conseilles = [];
   for (const [besoin, liste] of Object.entries(objet(donnees?.conseils))) {
     for (const x of tableau(liste)) if (toutes.has(x?.id)) conseilles.push({besoin, carte: toutes.get(x.id), raison: typeof x.raison === "string" ? x.raison : ""});
@@ -104,7 +131,7 @@ export function parties(donnees, filtre = "", tri = "catalogue") {
     id, nom: libelleCategorie(id),
     cartes: trier(tableau(liste).map((c) => toutes.get(c.id)).filter((c) => filtreOk(c, filtre)), tri),
   })).filter((g) => g.cartes.length);
-  return {connectes, conseilles, categories: parCategorie, total: toutes.size};
+  return {connectes, inscrits, conseilles, categories: parCategorie, total: toutes.size};
 }
 
 // Le tableau unique (essai réel) : tous les partenaires, chacun avec son état de connexion et ses conseils.
@@ -118,12 +145,14 @@ export function lignes(donnees, {filtre = "", type = "tous", tri = "catalogue"} 
     conseils.get(x.carte.id).push({besoin: x.besoin, raison: x.raison});
   }
   let toutes = trier(p.categories.flatMap((g) => g.cartes), tri).map((c) => ({
-    carte: c, connecte: etatConnexion(donnees, c.id) === "connecte", conseils: conseils.get(c.id) || []}));
+    carte: c, connecte: etatConnexion(donnees, c.id) === "connecte", inscrit: estInscrit(donnees, c.id),
+    conseils: conseils.get(c.id) || []}));
   if (tri !== "popularite") {
-    const rang = (l) => (l.connecte ? 0 : l.conseils.length ? 1 : 2);
+    const rang = (l) => (l.connecte ? 0 : l.inscrit ? 1 : l.conseils.length ? 2 : 3);
     toutes = toutes.map((l, i) => [l, i]).sort((a, b) => rang(a[0]) - rang(b[0]) || a[1] - b[1]).map((x) => x[0]);
   }
-  return toutes.filter((l) => (type === "connectes" ? l.connecte : type === "conseilles" ? l.conseils.length > 0
+  return toutes.filter((l) => (type === "connectes" ? l.connecte : type === "inscrits" ? l.inscrit
+    : type === "conseilles" ? l.conseils.length > 0
     : type && type !== "tous" ? l.carte.categorie === type : true) && filtreOk(l.carte, filtre));
 }
 
@@ -167,6 +196,34 @@ function blocConnexions(carte, vue) {
     const variables = tableau(c.variables).filter((v) => typeof v === "string");
     if (variables.length) bloc.append(el("div", "ligne-detail", `Variable d'environnement : ${variables.join(", ")}`));
   }
+  return bloc;
+}
+
+// L'inscription : ce que le bureau garde (le fait d'être inscrit, depuis quand, une note). Une note facultative (le nom du compte,
+// l'offre) s'enregistre sur un partenaire où l'on est inscrit ; jamais un mot de passe ni une clé.
+function blocInscription(compte, carte, vue) {
+  const bloc = el("div", "partenaire-inscription");
+  bloc.append(el("div", "carte-sous-titre", "Mon compte"));
+  if (!compte) {
+    bloc.append(el("div", "ligne-detail", "Pas inscrit. Inscrit (hors liaison directe) : les agents n'appellent pas ce partenaire, "
+      + "ils préparent le prompt et vous le faites sur son site."));
+    return bloc;
+  }
+  bloc.append(el("div", "ligne-detail", `Inscrit${compte.depuis ? " depuis le " + (dateFr(compte.depuis) || compte.depuis) : ""}.`));
+  if (!vue.agir) return bloc;
+  const f = el("div", "partenaire-formulaire");
+  const zone = el("input", "partenaire-saisie");
+  zone.type = "text";
+  zone.value = typeof compte.note === "string" ? compte.note : "";
+  zone.setAttribute("maxlength", String(MAX_NOTE_INSCRIPTION));
+  zone.setAttribute("placeholder", "Le nom du compte ou l'offre (jamais un mot de passe)");
+  zone.setAttribute("aria-label", "Note sur mon compte");
+  f.append(zone, bouton("Enregistrer la note", "bouton secondaire", () => {
+    const note = String(zone.value || "").trim();
+    if (note.length > MAX_NOTE_INSCRIPTION) { vue.dire(`La note dépasse ${MAX_NOTE_INSCRIPTION} caractères.`); return; }
+    vue.envoyer({type: "partenaire_inscrit", partenaire: carte.id, inscrit: true, ...(note ? {note} : {})});
+  }));
+  bloc.append(f);
   return bloc;
 }
 
@@ -226,10 +283,19 @@ function carte(donnees, c, vue, conseils = []) {
   racine.append(entete);
   if (typeof c.description === "string" && c.description.trim()) racine.append(el("p", "partenaire-description", c.description));
   for (const x of conseils) racine.append(el("div", "partenaire-conseil", `Conseillé : ${x.besoin}${x.raison ? " — " + x.raison : ""}`));
-  const etat = etatConnexion(donnees, c.id);
+  const etat = etatPartenaire(donnees, c.id);
   const connexion = objet(objet(donnees?.etat).connexions)[c.id];
+  const compte = inscriptionNotee(donnees, c.id);
   const lignes = el("div", "partenaire-resume");
-  lignes.append(el("span", `partenaire-etat etat-${etat}`, LIBELLES_CONNEXION[etat]));
+  lignes.append(el("span", `partenaire-etat etat-${etat}`, libelleEtat(donnees, c.id)));
+  if (compte && etat === "connecte") lignes.append(el("span", "partenaire-etat etat-inscrit", "inscrit"));
+  if (compte && typeof compte.note === "string" && compte.note) lignes.append(el("span", "partenaire-note-compte", `compte : ${compte.note}`));
+  if (vue.agir && (compte || c.statut !== "ferme")) {
+    // « Je suis inscrit » / « Je ne suis plus inscrit » : seulement le fait (et une note facultative dans la carte dépliée),
+    // jamais un identifiant ni un mot de passe.
+    lignes.append(bouton(compte ? "Je ne suis plus inscrit" : "Je suis inscrit", "bouton secondaire", () => vue.envoyer(
+      {type: "partenaire_inscrit", partenaire: c.id, inscrit: !compte})));
+  }
   if (LIBELLES_STATUT[c.statut]) lignes.append(el("span", "partenaire-statut", LIBELLES_STATUT[c.statut]));
   if (etat === "connecte" && typeof connexion?.abonnement === "string" && connexion.abonnement) {
     lignes.append(el("span", "partenaire-abonnement", `abonnement : ${connexion.abonnement}`));
@@ -262,7 +328,7 @@ function carte(donnees, c, vue, conseils = []) {
   const liens = el("div", "partenaire-liens");
   const inscription = lienHttps(c.inscription);
   if (inscription) liens.append(lien("S'inscrire", inscription));
-  corps.append(liens, blocConnexions(c, vue), blocRegles(donnees, c, vue));
+  corps.append(liens, blocConnexions(c, vue), blocInscription(compte, c, vue), blocRegles(donnees, c, vue));
   racine.append(corps);
   return racine;
 }
@@ -305,6 +371,7 @@ export function rendrePartenaires(donnees, envoyer, vue = creerVue()) {
     const type = el("select", "partenaires-type");
     type.setAttribute("aria-label", "Type de partenaire");
     const options = [["tous", "Tous les types", p.total], ["connectes", "Connectés", p.connectes.length],
+                     ...(p.inscrits.length ? [["inscrits", "Inscrits (compte, sans liaison directe)", p.inscrits.length]] : []),
                      ["conseilles", "Conseillés", lignes(donnees, {type: "conseilles"}).length],
                      ...parties(donnees).categories.map((g) => [g.id, g.nom, g.cartes.length])];
     for (const [valeur, libelle, n] of options) {

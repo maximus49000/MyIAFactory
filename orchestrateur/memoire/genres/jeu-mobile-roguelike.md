@@ -266,3 +266,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour un export signé d'un moteur de jeu, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, puis contrôler le code retour, la date et la taille du paquet produit.
+
+## G45 — Dans un roguelike de cartes, vérifier automatiquement que le
+Rôles : designer, dev
+Date : 2026-11-12
+
+Dans un roguelike de cartes, vérifier automatiquement que le pool de chaque personnage contient, à chaque rareté proposée, de quoi remplir chaque contrainte de tirage des récompenses.

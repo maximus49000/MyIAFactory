@@ -1009,6 +1009,8 @@ html.mobile .lancement-fil { padding: 20px 16px 110px; }
 .outil-etapes { margin: 2px 0 0; padding-left: 22px; font-size: 13px; }
 .outil-a-installer .bouton { margin-top: 6px; }
 .outil-en-cours { font-weight: 700; }
+.outil-non-trouve { border-color: #d9a79b; }
+.outil-non-trouve .outil-nom { color: #9b3a2a; }
 
 /* --- La semaine du forfait Claude : la petite courbe du panneau du rond et la fenêtre « Voir plus ». */
 .conso-courbe { margin: 0 0 6px; }

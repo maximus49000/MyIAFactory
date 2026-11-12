@@ -179,7 +179,19 @@ Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 Entrée `{"action": "environnement", "outils": [{outil, etat: en_place | a_installer, chemin?, version?, …}]}` : note l'état
 des outils du poste dans le fichier de factory (clé `environnement` ; un outil de même nom est remplacé). Chaque outil
-peut porter `objectif`, `telechargement` (URL https officielle ou nul), `etapes` (mode opératoire) et `autonome`.
+peut porter `objectif`, `telechargement` (URL https officielle ou nul), `etapes` (mode opératoire) et `autonome` ; un outil
+que le Directeur a forcé porte `declare: true` et `note` (« déclaré installé par le Directeur (non vérifié) ») : le message
+de départ des agents le dit, et le moteur ne le revérifie pas.
+Entrée `{"action": "verifier", "id": décision, "outils": [{outil, etat, verification: {trouve, cherche, introuvables,
+version_demandee, version_trouvee}, chemin?, version?, raison?, declare?, note?}]}` (sous la commande `decision`, avec
+`poser` et `lever`) : note dans une décision `environnement` le résultat de la dernière vérification de chaque outil nommé,
+et l'heure (`verifie_le`) ; les autres outils sont gardés. Refus si la décision est inconnue, d'un autre genre, ou si un outil
+n'y est pas.
+La réponse « C'est fait » à une décision `environnement` est une demande `environnement` : `verdict` `fait` (le moteur
+revérifie en code chaque outil de la décision, le `PATH` à jour du registre Windows compris ; tout trouvé, la décision est
+levée ; sinon elle reste, chaque outil marqué trouvé ou non trouvé), `continuer`, ou `forcer` (avec `outil` : un outil non
+trouvé ; sans lui, tous) : le Directeur affirme que c'est installé, l'outil est noté déclaré (non vérifié) et la décision levée
+s'il ne reste rien à trouver. Seul le moteur la traite.
 Entrée `{"action": "installateur", "agent": {cle, role: environnement, service, modele, lieu, texte, outils?}, "brief"}` :
 recrute l'agent qui installe les outils du poste (rien si un agent de ce rôle existe ; jamais Fable) ; c'est ce que fait
 le moteur au clic « Installer en autonomie » quand le projet n'en a pas encore.

@@ -141,6 +141,45 @@ test("environnement de projet : le bouton d'autonomie n'envoie pas de fonctionna
   assert.equal(lecture.tous((n) => n.tagName === "a").length, 1);          // le lien reste lisible
 });
 
+test("environnement revérifié : trouvé / non trouvé par outil, ce qui a été cherché, l'heure, et « Forcer » confirmé", async () => {
+  const trouve = {outil: "Gradle", etat: "en_place", chemin: "C:/g/gradle.exe", verification: {trouve: true, cherche: ["gradle"], introuvables: []}};
+  const absent = {...OUTIL_RICHE, outil: "JDK 17", version_min: "17", verification: {trouve: false, cherche: ["java", "javac"],
+    introuvables: ["java", "javac"], version_demandee: "17", version_trouvee: null}};
+  const ancien = {...OUTIL_RICHE, outil: "Java 8", verification: {trouve: false, cherche: ["java"], introuvables: [],
+    version_demandee: "17", version_trouvee: "java version \"1.8.0\""}};
+  const etat = decisionDuPoste([trouve, absent, ancien]);
+  etat.fonctionnalites[0].decisions[0].verifie_le = "2026-11-12T14:05:09+01:00";
+  const {contenu, demandes} = rendre(etat);
+  const texte = contenu.textContent;
+  assert.match(texte, /Gradle : trouvé/);
+  assert.match(texte, /JDK 17 : non trouvé/);
+  assert.match(texte, /Cherché : java, javac/);
+  assert.match(texte, /version 17 minimum demandée/);
+  assert.match(texte, /version trouvée : java version "1.8.0"/);
+  assert.match(texte, /Dernière vérification : \d\d\/\d\d\/\d{4} \d\d:\d\d/);
+  const forcer = boutons(contenu).filter((b) => b.textContent === "Forcer : c'est installé");
+  assert.equal(forcer.length, 2);                                        // un par outil non trouvé, pas pour celui qui est trouvé
+  const questions = [];
+  globalThis.confirm = (m) => { questions.push(m); return questions.length > 1; };
+  await forcer[0].auteurs.click[0]();
+  assert.deepEqual(demandes, []);                                        // refusé à la confirmation : rien ne part
+  await forcer[0].auteurs.click[0]();
+  assert.match(questions[0], /JDK 17/);
+  assert.deepEqual(demandes, [{type: "environnement", decision: "e1", fonctionnalite: "f1", verdict: "forcer", outil: "JDK 17"}]);
+  await bouton(contenu, "Forcer : tout est installé").auteurs.click[0]();
+  assert.deepEqual(demandes[1], {type: "environnement", decision: "e1", fonctionnalite: "f1", verdict: "forcer"});
+  delete globalThis.confirm;
+  // jamais de bouton « Forcer » avant qu'une vérification ait dit « non trouvé », ni en lecture seule
+  assert.equal(bouton(rendre(decisionDuPoste([OUTIL_RICHE])).contenu, "Forcer : c'est installé"), undefined);
+  assert.equal(bouton(rendre(decisionDuPoste([OUTIL_RICHE])).contenu, "Forcer : tout est installé"), undefined);
+  assert.equal(boutons(rendre({...etat, agir: false}).contenu).filter((b) => /Forcer|C'est fait|Continuer/.test(b.textContent)).length, 0);
+});
+
+test("environnement : un outil déclaré installé par le Directeur le dit", () => {
+  const {contenu} = rendre(decisionDuPoste([{outil: "Gradle", etat: "en_place", declare: true}]));
+  assert.match(contenu.textContent, /Gradle : déclaré installé par le Directeur \(non vérifié\)/);
+});
+
 const ELARGIR = {id: "e1", genre: "elargir_genre", texte: "Élargir la description ?", cible: "badges",
   ancienne: "Badges de chat", propose: "Badges de chat, et aussi logos de chaîne", fonctionnalite: "f1"};
 

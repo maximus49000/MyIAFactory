@@ -209,10 +209,12 @@ export function demandeGenreFonctionnalite(decision, choix, {genre, description,
   return d;
 }
 
-// « C'est fait » (l'outil est installé à la main) ou « Continuer sans ».
-export function demandeEnvironnement(decision, verdict) {
+// « C'est fait » (l'outil est installé à la main : le moteur le cherche), « Continuer sans », ou « forcer » (le Directeur
+// affirme que c'est installé : un outil, ou toute la décision sans `outil`).
+export function demandeEnvironnement(decision, verdict, outil = null) {
   const d = {type: "environnement", decision: decision.id, verdict};
   if (plein(decision.fonctionnalite)) d.fonctionnalite = decision.fonctionnalite;   // sans elle : la décision du projet
+  if (plein(outil)) d.outil = outil;
   return d;
 }
 

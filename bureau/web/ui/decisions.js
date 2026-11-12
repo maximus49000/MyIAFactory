@@ -193,14 +193,34 @@ function decisionEnvironnement(ctx, d) {
   const manque = (Array.isArray(d.environnement) ? d.environnement : []).map((x) => (typeof x === "string" ? {outil: x} : x))
     .filter((x) => x && plein(x.outil));
   const outils = el("div", "outils-a-installer");
+  if (plein(d.verifie_le)) outils.append(el("div", "lecon-meta", "Dernière vérification : " + heureDeVerification(d.verifie_le)));
+  const sur = (message) => () => (typeof globalThis.confirm === "function" ? globalThis.confirm(message) : true);
   for (const x of manque) {
-    const action = ctx.etat.agir && x.autonome === true && x.en_cours !== true
+    const trouve = x.etat === "en_place";
+    const action = ctx.etat.agir && !trouve && x.autonome === true && x.en_cours !== true
       ? boutonDemande(ctx, "Installer en autonomie", "bouton secondaire", () => demandeInstallerOutil(d, x.outil)) : null;
-    outils.append(blocOutil({...x, etat: "a_installer"}, {action}));
+    const forcer = ctx.etat.agir && x.verification?.trouve === false && !trouve
+      ? boutonDemande(ctx, "Forcer : c'est installé", "bouton secondaire", () => demandeEnvironnement(d, "forcer", x.outil),
+        sur(`Confirmer que « ${x.outil} » est bien installé ? Il ne sera pas vérifié : les étapes qui en ont besoin se fieront à vous.`))
+      : null;
+    outils.append(blocOutil({...x, etat: trouve ? "en_place" : "a_installer"}, {action, forcer, libelleEnPlace: "trouvé"}));
   }
-  return decisionFonctionnalite(ctx, d, [
+  const boutons = [
     boutonDemande(ctx, "C'est fait", "bouton", () => demandeEnvironnement(d, "fait")),
-    boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))], outils);
+    boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))];
+  if (manque.some((x) => x.etat !== "en_place" && x.verification?.trouve === false)) {
+    boutons.push(boutonDemande(ctx, "Forcer : tout est installé", "bouton secondaire", () => demandeEnvironnement(d, "forcer"),
+      sur("Confirmer que tous les outils non trouvés sont bien installés ? Ils ne seront pas vérifiés.")));
+  }
+  return decisionFonctionnalite(ctx, d, boutons, outils);
+}
+
+// « 12/11/2026 14:05 » (heure locale) pour la date ISO de la dernière vérification ; le texte brut si elle est illisible.
+function heureDeVerification(iso) {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return iso;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(t.getDate())}/${p(t.getMonth() + 1)}/${t.getFullYear()} ${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 
 // La demande « valider » ou « renvoyer » d'un élément arrivé à une étape de validation. « Renvoyer » exige une remarque :

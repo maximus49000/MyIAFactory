@@ -34,6 +34,12 @@ export function detailOutil(x) {
     enCours: x?.en_cours === true,
     raison: plein(x?.raison) ? x.raison : null,
     versionMin: plein(x?.version_min) ? x.version_min : null,
+    declare: x?.declare === true,
+    nonTrouve: x?.etat !== "en_place" && x?.verification?.trouve === false,
+    cherche: liste(x?.verification?.cherche).filter(plein),
+    introuvables: liste(x?.verification?.introuvables).filter(plein),
+    versionDemandee: plein(x?.verification?.version_demandee) ? x.verification.version_demandee : null,
+    versionTrouvee: plein(x?.verification?.version_trouvee) ? x.verification.version_trouvee : null,
   };
 }
 
@@ -51,16 +57,27 @@ export function lignesOutil(x) {
 
 // Le bloc d'un outil. `action` (facultatif) : {libelle, fabrique} ou un élément déjà prêt, ajouté si l'outil est
 // autonome et pas déjà en cours d'installation. `enPlace` : une seule ligne, rien à installer.
-export function blocOutil(x, {action = null} = {}) {
+// `libelleEnPlace` (« trouvé » dans une décision revérifiée) remplace « déjà en place » ; `forcer` (élément prêt, facultatif)
+// est ajouté pour un outil qu'une vérification n'a pas trouvé : « Forcer : c'est installé ».
+export function blocOutil(x, {action = null, forcer = null, libelleEnPlace = "déjà en place"} = {}) {
   const d = detailOutil(x);
-  const bloc = el("div", "outil-a-installer");
-  bloc.append(el("strong", "outil-nom", d.nom + (d.enPlace ? " : déjà en place" : "")));
+  const bloc = el("div", "outil-a-installer" + (d.nonTrouve ? " outil-non-trouve" : ""));
+  const etat = d.enPlace ? (d.declare ? "déclaré installé par le Directeur (non vérifié)" : libelleEnPlace)
+    : (d.nonTrouve ? "non trouvé" : null);
+  bloc.append(el("strong", "outil-nom", d.nom + (etat ? " : " + etat : "")));
   if (d.enPlace) {
     if (plein(x.version)) bloc.append(el("div", "lecon-meta", x.version));
     return bloc;
   }
+  if (d.nonTrouve) {
+    const cherche = d.cherche.length ? `Cherché : ${d.cherche.join(", ")}` + (d.introuvables.length && d.introuvables.join() !== d.cherche.join()
+      ? ` (introuvable : ${d.introuvables.join(", ")})` : "") : "";
+    const versions = [d.versionDemandee ? `version ${d.versionDemandee} minimum demandée` : "",
+      d.versionTrouvee ? `version trouvée : ${d.versionTrouvee}` : ""].filter(Boolean).join(" ; ");
+    bloc.append(el("div", "lecon-meta", [cherche, versions].filter(Boolean).join(" ; ") || "Rien n'a été trouvé sur le poste."));
+  }
   if (d.objectif) bloc.append(el("div", "outil-objectif", d.objectif));
-  if (d.raison) bloc.append(el("div", "lecon-meta", d.raison));
+  if (d.raison && !(d.nonTrouve && d.versionTrouvee)) bloc.append(el("div", "lecon-meta", d.raison));
   if (d.lien) {
     const a = el("a", "outil-lien", "Page de téléchargement officielle");
     a.href = d.lien;
@@ -84,5 +101,6 @@ export function blocOutil(x, {action = null} = {}) {
   } else if (!d.autonome && (d.etapes.length || d.repli || d.lien)) {
     bloc.append(el("div", "lecon-meta", "Pas d'installation en autonomie : suivez le mode opératoire."));
   }
+  if (forcer && d.nonTrouve) bloc.append(forcer);
   return bloc;
 }

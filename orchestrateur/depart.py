@@ -145,6 +145,10 @@ def outils_du_poste(factory):
     lignes = []
     for o in factory.get("environnement") or []:
         if isinstance(o, dict) and o.get("etat") == "en_place" and o.get("outil"):
+            if o.get("declare") is True:      # le Directeur l'affirme installé, on ne l'a pas trouvé : l'agent doit le savoir
+                lignes.append(f"- {o['outil']} : {o.get('note') or 'déclaré installé par le Directeur (non vérifié)'} ;"
+                              " s'il est introuvable, dis-le plutôt que de le réinstaller")
+                continue
             lignes.append(f"- {o['outil']} : {o.get('chemin') or '(sur le PATH)'}" + (f" ({o['version']})" if o.get("version") else ""))
     return ("## Outils du poste\nDéjà installés ; sers-t'en directement, sans les réinstaller :\n" + "\n".join(lignes)) if lignes else ""
 

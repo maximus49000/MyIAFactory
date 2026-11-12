@@ -189,6 +189,91 @@ class Verifier(unittest.TestCase):
             r = environnement.verifier(outils[:1], which=seulement_les_emplacements, executer=lambda a, d: (0, "v"), env={})
             self.assertEqual(r[0]["etat"], "a_installer")
 
+    def test_path_relu_dans_le_registre_apres_le_demarrage(self):
+        """Un logiciel installé après le démarrage du moteur n'est pas dans le PATH du processus : le PATH à jour est relu
+        dans le registre (système puis utilisateur, variables développées). Registre et fichiers simulés."""
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            for sous in ("Outils/jdk/bin", "profil/bin", "ailleurs"):
+                (racine / sous).mkdir(parents=True)
+            for sous, nom in (("Outils/jdk/bin", "java.exe"), ("Outils/jdk/bin", "javac.exe"), ("profil/bin", "gradle.exe")):
+                f = racine / sous / nom
+                f.write_bytes(b"x")
+                f.chmod(0o755)
+            lus = []
+            valeurs = {("HKEY_LOCAL_MACHINE", "Path"): f"{racine / 'ailleurs'};%RACINE%\\Outils\\jdk\\bin;",
+                       ("HKEY_CURRENT_USER", "Path"): '"%PROFIL%\\bin"'}
+
+            def registre(r, sous_cle, nom):
+                lus.append((r, sous_cle, nom))
+                return valeurs.get((r, nom))
+
+            seulement_les_dossiers = lambda nom, path=None: shutil.which(nom, path=path) if path else None
+            env = {"RACINE": str(racine), "PROFIL": str(racine / "profil")}
+            outils = [JDK, GRADLE]
+            # sans registre (un processus qui a démarré avant l'installation) : rien n'est trouvé
+            r = environnement.verifier(outils, which=seulement_les_dossiers, executer=lambda a, d: (0, "v 21"), env=env)
+            self.assertEqual([x["etat"] for x in r], ["a_installer", "a_installer"])
+            self.assertEqual(r[0]["introuvables"], ["java", "javac"])
+            # avec le registre à jour : trouvé, chemins développés, sans aucune commande lancée pour le lire
+            r = environnement.verifier(outils, which=seulement_les_dossiers, executer=lambda a, d: (0, "v 21"), env=env,
+                                       lire=registre)
+            self.assertEqual([x["etat"] for x in r], ["en_place", "en_place"])
+            self.assertIn("jdk", r[0]["chemin"])
+            self.assertIn("profil", r[1]["chemin"])
+            self.assertTrue(any(c[0] == "HKEY_LOCAL_MACHINE" and c[1].endswith("Session Manager\\Environment") for c in lus))
+            self.assertTrue(any(c[:2] == ("HKEY_CURRENT_USER", "Environment") for c in lus))
+
+    def test_variables_du_registre_priment_sur_celles_du_processus(self):
+        with tempfile.TemporaryDirectory() as t:
+            neuf, vieux = Path(t) / "neuf", Path(t) / "vieux"
+            for d in (neuf / "bin", vieux / "bin"):
+                d.mkdir(parents=True)
+            (neuf / "bin" / "java.exe").write_bytes(b"x")
+            (neuf / "bin" / "java.exe").chmod(0o755)
+            registre = lambda r, s, nom: str(neuf) if (r, nom) == ("HKEY_CURRENT_USER", "JAVA_HOME") else None
+            trouve = environnement.trouver("java", which=lambda n, path=None: shutil.which(n, path=path) if path else None,
+                                           env={"JAVA_HOME": str(vieux)}, lire=registre)
+            self.assertEqual(trouve.lower(), str(neuf / "bin" / "java.exe").lower())
+
+    def test_dossiers_d_installation_de_winget_et_des_jdk(self):
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            attendus = ["local/Microsoft/WinGet/Links", "local/Microsoft/WinGet/Packages/Gradle.Gradle_x/gradle-8.5/bin",
+                        "pf/Eclipse Adoptium/jdk-21.0.4.7-hotspot/bin", "pf/Microsoft/jdk-17.0.9.8-hotspot/bin",
+                        "pf/Java/jdk-11/bin"]
+            for a in attendus + ["pf/Autre/bin"]:
+                (racine / a).mkdir(parents=True)
+            env = {"LOCALAPPDATA": str(racine / "local"), "ProgramFiles": str(racine / "pf")}
+            vus = {p.relative_to(racine).as_posix() for p in environnement.dossiers_d_installation(env)}
+            for a in attendus:
+                self.assertIn(a, vus)
+            self.assertNotIn("pf/Autre/bin", vus)
+            self.assertEqual(list(environnement.dossiers_d_installation({})), [])       # rien sans ces variables
+            # et un programme y est trouvé
+            f = racine / attendus[2] / "java.exe"
+            f.write_bytes(b"x")
+            f.chmod(0o755)
+            trouve = environnement.trouver("java", which=lambda n, path=None: shutil.which(n, path=path) if path else None,
+                                           env=env)
+            self.assertEqual(trouve.lower(), str(f).lower())
+
+    def test_constat_dit_ce_qui_a_ete_cherche(self):
+        presents = {"java": "C:/jre/bin/java.exe", "javac": "C:/jre/bin/javac.exe"}
+        e = Enregistreur(presents, {"-version": (0, 'java version "1.8.0_351"')})
+        (vieux,) = environnement.verifier([dict(JDK, outil="JDK 17")], which=e.which, executer=e.executer, env={})
+        c = environnement.constat(vieux)
+        self.assertEqual((c["trouve"], c["cherche"], c["version_demandee"]), (False, ["java", "javac"], "17"))
+        self.assertIn("1.8.0_351", c["version_trouvee"])
+        self.assertIn("version trouvée", environnement.texte_du_constat("JDK 17", c))
+        (absent,) = environnement.verifier([JDK], which=Enregistreur({"java": "x"}).which, env={})
+        c = environnement.constat(absent)
+        self.assertEqual(c["introuvables"], ["javac"])
+        self.assertEqual(environnement.texte_du_constat("JDK 21", c),
+                         "JDK 21 : non trouvé (cherché : java, javac ; introuvable : javac ; version 21 minimum demandée)")
+        (bon,) = environnement.verifier([JDK], which=Enregistreur(presents).which, executer=lambda a, d: (0, "21"), env={})
+        self.assertEqual(environnement.texte_du_constat("JDK 21", environnement.constat(bon)), "JDK 21 : trouvé")
+
     def test_jamais_de_commande_de_l_ia(self):
         e = Enregistreur({"java": "C:/jdk/bin/java.exe"}, {"--version": (0, "21")})
         mauvais = ["rm -rf", "java;calc", "a&b", "../x", "--version", "java x", "$(calc)", "a|b", "", "x" * 80,
@@ -431,6 +516,120 @@ class Poste(parcours.AvecParcours):
         self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
+    def _c_est_fait_avec_reglages(self, reglages):
+        decision = self.vers_le_poste()
+        self.accepter(decision)
+        (q,) = self.decisions("environnement")
+        self.reecrire(environnement=reglages)
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="fait")
+        self.assertEqual(actions, [])
+        self.assertIn("JDK 21", self.verifie[-1])               # l'outil de la décision est bien regardé
+        self.assertEqual(len(self.decisions("environnement")), 1)
+        self.assertIn("non trouvé", self.statut(d["id"])["reponse"])
+
+    def test_c_est_fait_verifie_meme_si_les_reglages_ne_connaissent_pas_l_outil(self):
+        """Cause du bug : « C'est fait » ne revérifiait que les outils notés « à installer » dans les réglages du projet.
+        Un outil absent des réglages n'était jamais regardé : la décision se levait sans rien vérifier."""
+        self._c_est_fait_avec_reglages([])
+
+    def test_c_est_fait_verifie_meme_si_les_reglages_disent_en_place(self):
+        self._c_est_fait_avec_reglages([dict(JDK, etat="en_place", chemin="C:/vieux/java.exe")])
+
+    def test_c_est_fait_decision_ancienne_sans_champs_d_aide(self):
+        """Une décision posée avant l'objectif, le lien et les étapes ne porte que le nom et le texte de l'outil."""
+        self.vers_le_poste("en_place")          # une fonctionnalité f1 existe
+        regles.lancer(self.projet, "decision", {"action": "poser", "portee": "f1", "genre": "environnement",
+                                                "texte": "Il manque Java.",
+                                                "environnement": [{"outil": "JDK 21", "installation": "x"}]})
+        self.etat_du_poste = "a_installer"
+        (q,) = self.decisions("environnement")
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="fait")
+        self.assertEqual(len(self.decisions("environnement")), 1)
+        self.assertEqual(actions, [])
+
+    def deux_outils(self, trouves=("JDK 21",)):
+        self.projet.verifier_environnement = lambda outils: [
+            dict(o, etat="en_place" if o["outil"] in trouves else "a_installer",
+                 **({"chemin": "C:/jdk/bin/java.exe"} if o["outil"] in trouves else {"introuvables": o.get("executables")}))
+            for o in outils]
+        self.etat_du_poste = "a_installer"
+        decision = self.vers_l_organisation({**POSTE, "environnement": [JDK, GRADLE]}, CLASSER_MEME)[1]
+        self.accepter(decision)
+        (q,) = self.decisions("environnement")
+        return q
+
+    def test_c_est_fait_marque_chaque_outil_trouve_ou_non_trouve(self):
+        q = self.deux_outils(trouves=())
+        self.assertEqual([x["outil"] for x in q["environnement"]], ["JDK 21", "Gradle"])
+        self.projet.verifier_environnement = lambda outils: [
+            dict(o, etat="en_place" if o["outil"] == "JDK 21" else "a_installer", chemin="C:/jdk/bin/java.exe",
+                 **({} if o["outil"] == "JDK 21" else {"introuvables": ["gradle"]})) for o in outils]
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="fait")
+        self.assertEqual(actions, [])                                    # Gradle manque : la décision reste, rien ne démarre
+        (apres,) = self.decisions("environnement")
+        jdk, gradle = apres["environnement"]
+        self.assertEqual((jdk["etat"], jdk["verification"]["trouve"]), ("en_place", True))
+        self.assertEqual((gradle["etat"], gradle["verification"]["trouve"], gradle["verification"]["cherche"],
+                          gradle["verification"]["introuvables"]), ("a_installer", False, ["gradle"], ["gradle"]))
+        self.assertTrue(apres["verifie_le"])                             # l'heure de la dernière vérification
+        reponse = self.statut(d["id"])["reponse"]
+        self.assertIn("Gradle : non trouvé (cherché : gradle", reponse)
+        self.assertNotIn("JDK 21 : non trouvé", reponse)
+        self.assertEqual(releve_valider(self.ok("releve")), [])
+        self.assertEqual(self.ok("releve")["fonctionnalites"][0]["decisions"][0]["environnement"][1]["verification"]["trouve"],
+                         False)
+        # Gradle installé à la main : tout est trouvé, la décision disparaît et le cadrage reprend
+        self.projet.verifier_environnement = lambda outils: [dict(o, etat="en_place") for o in outils]
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="fait")
+        self.assertEqual(self.decisions("environnement"), [])
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "metier-1")])
+
+    def test_forcer_un_outil_le_declare_installe_sans_le_verifier(self):
+        q = self.deux_outils(trouves=("JDK 21",))
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="forcer", outil="Gradle")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "metier-1")])          # le seul manquant est forcé
+        self.assertEqual(self.decisions("environnement"), [])
+        gradle = next(x for x in self.lire_factory()["environnement"] if x["outil"] == "Gradle")
+        self.assertEqual((gradle["etat"], gradle["declare"], gradle["note"]),
+                         ("en_place", True, "déclaré installé par le Directeur (non vérifié)"))
+        self.assertTrue(any("non vérifié" in m["texte"] and "Gradle" in m["texte"] for m in self.fonc()["discussion"]))
+        # l'agent qui part le sait : le message de départ le dit
+        depart = regles.lancer(self.projet, "depart", {"agent": "metier-1", "tache": self.taches(etape="cadrage")[0]["id"]})
+        self.assertIn("Gradle", depart["message"])
+        self.assertIn("déclaré installé par le Directeur (non vérifié)", depart["message"])
+        # et il n'est plus revérifié : un autre passage le garde en place
+        self.assertEqual(regles._verifier_poste(self.projet, [GRADLE])[0]["etat"], "en_place")
+
+    def test_forcer_un_outil_laisse_la_decision_s_il_en_reste(self):
+        q = self.deux_outils(trouves=())
+        d, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="forcer", outil="Gradle")
+        self.assertEqual(actions, [])
+        (apres,) = self.decisions("environnement")
+        jdk, gradle = apres["environnement"]
+        self.assertEqual((jdk["etat"], gradle["etat"], gradle["declare"]), ("a_installer", "en_place", True))
+        self.assertIn("JDK 21", self.statut(d["id"])["reponse"])
+        self.assertEqual(releve_valider(self.ok("releve")), [])
+        # un outil déjà déclaré ne se force plus ; un inconnu non plus
+        d2, _ = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="forcer", outil="Gradle")
+        self.assertIn("pas à forcer", self.statut(d2["id"])["reponse"])
+        # forcer toute la décision : tout ce qui n'est pas trouvé est déclaré
+        d3, actions = self.traiter(type="environnement", decision=q["id"], fonctionnalite="f1", verdict="forcer")
+        self.assertEqual(self.decisions("environnement"), [])
+        self.assertEqual([(a[0], a[1]) for a in actions], [("agent", "metier-1")])
+        self.assertTrue(all(x.get("declare") for x in self.lire_factory()["environnement"]))
+
+    def test_demande_forcer_validee_par_le_bureau(self):
+        from bureau import demandes
+        q = self.deux_outils(trouves=("JDK 21",))
+        r = self.ok("releve")
+        base = {"type": "environnement", "decision": q["id"], "fonctionnalite": "f1", "verdict": "forcer"}
+        self.assertIsNone(demandes.verifier(dict(base, outil="Gradle"), r))
+        self.assertIsNone(demandes.verifier(dict(base), r))
+        self.assertTrue(demandes.verifier(dict(base, outil="JDK 21"), r))          # déjà trouvé
+        self.assertTrue(demandes.verifier(dict(base, outil="Inconnu"), r))
+        self.assertTrue(demandes.verifier(dict(base, verdict="fait", outil="Gradle"), r))
+        self.assertEqual(demandes.nettoyer(dict(base, outil="Gradle", x=1))["outil"], "Gradle")
+
     def test_continuer_sans_laisse_avancer(self):
         decision = self.vers_le_poste()
         self.accepter(decision, installer=["JDK 21"])
@@ -557,6 +756,23 @@ class PosteDuProjet(parcours.AvecParcours):
         d, actions = self.traiter(type="environnement", decision=q["id"], verdict="fait")
         self.assertEqual(self.decisions_du_projet(), [])
         self.assertEqual(self.lire_factory()["environnement"][0]["etat"], "en_place")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_c_est_fait_de_projet_verifie_la_decision_et_forcer_la_leve(self):
+        regles.avancer(self.projet, self.etat)
+        self.rendre("Non.")
+        (q,) = self.decisions_du_projet()
+        self.reecrire(environnement=[])          # les réglages ne connaissent plus l'outil : il est quand même regardé
+        d, _ = self.traiter(type="environnement", decision=q["id"], verdict="fait")
+        self.assertIn("non trouvé", self.statut(d["id"])["reponse"])
+        self.assertIn("JDK 21", self.verifie[-1])
+        (apres,) = self.decisions_du_projet()
+        self.assertFalse(apres["environnement"][0]["verification"]["trouve"])
+        self.assertEqual(releve_valider(self.ok("releve")), [])
+        d, actions = self.traiter(type="environnement", decision=q["id"], verdict="forcer", outil="JDK 21")
+        self.assertEqual((actions, self.decisions_du_projet()), ([], []))
+        (jdk,) = self.lire_factory()["environnement"]
+        self.assertEqual((jdk["etat"], jdk["declare"]), ("en_place", True))
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
     def test_bouton_installer_en_autonomie_de_projet(self):

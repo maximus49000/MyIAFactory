@@ -25,7 +25,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil")}
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte",), "environnement": ("fonctionnalite",),
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte",), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil")
@@ -266,9 +266,21 @@ def _verifier_v4(demande, r, elements):
             if f is None:
                 return "Fonctionnalité inconnue."
             decisions = f["decisions"]
-        if _decision(decisions, demande["decision"], "environnement") is None:
+        d = _decision(decisions, demande["decision"], "environnement")
+        if d is None:
             return "Décision inconnue."
-        return None if demande["verdict"] in ("fait", "continuer") else "Réponse inconnue (fait ou continuer)."
+        if demande["verdict"] not in ("fait", "continuer", "forcer"):
+            return "Réponse inconnue (fait, continuer ou forcer)."
+        if "outil" in demande and demande["verdict"] != "forcer":
+            return "« outil » ne va qu'avec « forcer »."
+        if demande["verdict"] == "forcer":
+            outils = [o for o in d.get("environnement") or [] if isinstance(o, dict) and o.get("etat") != "en_place"]
+            if "outil" in demande:
+                if not isinstance(demande["outil"], str) or not any(o.get("outil") == demande["outil"] for o in outils):
+                    return "Cet outil n'est pas dans la liste de ceux qui ne sont pas trouvés."
+            elif not outils:
+                return "Tous les outils sont déjà trouvés : rien à forcer."
+        return None
     if genre == "installer_outil":
         return _verifier_installer_outil(demande, r)
     if genre == "organisation":

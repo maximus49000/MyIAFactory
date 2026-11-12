@@ -55,6 +55,7 @@ ROLE_ENVIRONNEMENT = "environnement"      # l'agent qui installe les outils du p
 REGLES_D_INSTALLATION = ("Bash(winget:*)",)   # ce que reçoit l'installateur recruté au clic (winget, en portée utilisateur)
 CONTINUER_SANS = "continuer"
 C_EST_FAIT = "fait"
+FORCER = "forcer"      # « Forcer : c'est installé » : le Directeur affirme que l'outil est là, sans qu'on l'ait trouvé
 ATTENDRE = "Attendre encore"
 RELANCER = "Relancer l'agent"
 ABANDONNER = "Abandonner la tâche"
@@ -975,8 +976,16 @@ def _reprendre_un_workflow(projet, etat, fid, ctx):
 
 
 def _verifier_poste(projet, outils):
-    """Les outils du poste, chacun marqué `en_place` ou `a_installer` (vérifié en code, jamais par l'IA)."""
-    return projet.verifier_environnement(list(outils)) if outils else []
+    """Les outils du poste, chacun marqué `en_place` ou `a_installer` (vérifié en code, jamais par l'IA). Un outil que le
+    Directeur a déclaré installé reste `en_place` (`declare`, avec sa note) : il n'est pas revérifié."""
+    if not outils:
+        return []
+    declares = {x.get("outil"): x for x in _factory(projet).get("environnement") or []
+                if isinstance(x, dict) and x.get("declare") is True and x.get("etat") == "en_place"}
+    a_verifier = [o for o in outils if o.get("outil") not in declares]
+    verifies = iter(projet.verifier_environnement(a_verifier) if a_verifier else [])
+    return [dict(o, etat="en_place", declare=True, note=declares[o["outil"]].get("note") or environnement.NOTE_DECLARE)
+            if o.get("outil") in declares else next(verifies) for o in outils]
 
 
 def _agent_d_installation(projet, nouveaux, flux, regles=None):
@@ -1158,31 +1167,100 @@ def _poste_du_projet(projet, manquants, intro, tache):
     return []
 
 
+def _verifier_la_decision(projet, d):
+    """Revérifie, en code, **chaque outil de la décision** (pas ceux que les réglages du projet croient à installer : ils
+    peuvent ne pas les connaître, ou les croire en place). Un outil d'une ancienne décision sans exécutables reprend
+    ceux des réglages, s'ils le connaissent. Le résultat est noté dans les réglages du projet et dans la décision (état,
+    ce qui a été cherché, version trouvée, heure). Rend les outils vérifiés."""
+    connus = {x.get("outil"): x for x in _factory(projet).get("environnement") or [] if isinstance(x, dict)}
+    outils = []
+    for x in d.get("environnement") or []:
+        x = {k: v for k, v in x.items() if k not in ("en_cours", "verification")}
+        for cle in ("executables", "version_min"):
+            if not x.get(cle) and (connus.get(x.get("outil")) or {}).get(cle):
+                x[cle] = connus[x["outil"]][cle]
+        outils.append(x)
+    verifies = _verifier_poste(projet, outils)
+    if verifies:
+        lancer(projet, "organisation", {"action": "environnement", "outils": verifies})
+        lancer(projet, "decision", {"action": "verifier", "id": d["id"],
+                                    "outils": [dict(o, verification=environnement.constat(o)) for o in verifies]})
+    return verifies
+
+
+def _constats_en_clair(verifies):
+    return " ; ".join(environnement.texte_du_constat(o["outil"], environnement.constat(o))
+                      for o in environnement.a_installer(verifies))
+
+
+def _forcer(projet, d, nom):
+    """L'outil `nom` (ou tous ceux qui ne sont pas trouvés) que le Directeur affirme installés : noté « déclaré installé
+    par le Directeur (non vérifié) » dans les réglages du projet et dans la décision. Rend (déclarés, restants)."""
+    cibles = [x for x in d.get("environnement") or [] if x.get("etat") != "en_place" and (nom is None or x.get("outil") == nom)]
+    if not cibles:
+        raise Refus(f"« {nom} » n'est pas à forcer : absent de cette liste ou déjà trouvé." if nom
+                    else "rien à forcer : tous les outils sont déjà trouvés.")
+    declares = [environnement.declare(x) for x in cibles]
+    lancer(projet, "organisation", {"action": "environnement", "outils": declares})
+    lancer(projet, "decision", {"action": "verifier", "id": d["id"], "outils": declares})
+    noms = {x["outil"] for x in cibles}
+    restants = [x for x in d.get("environnement") or [] if x.get("etat") != "en_place" and x.get("outil") not in noms]
+    return declares, restants
+
+
 def _sur_environnement(projet, demande, etat):
-    """La réponse à « il manque des outils sur le poste » : « C'est fait » revérifie, « Continuer sans » laisse avancer."""
+    """La réponse à « il manque des outils sur le poste » (de la fonctionnalité, ou du projet sans `fonctionnalite`) :
+    « C'est fait » revérifie chaque outil de la décision (la décision reste, outil par outil « trouvé » ou « non trouvé »,
+    tant qu'un seul manque), « Forcer » déclare installés un outil (`outil`) ou tous ceux qui ne sont pas trouvés,
+    « Continuer sans » laisse avancer."""
     fid = demande.get("fonctionnalite")
     if fid is None:
-        return _sur_environnement_du_projet(projet, demande)
-    f = _fonc(projet, fid)
-    d = _decision_de(f, demande["decision"], "environnement")
+        d = next((x for x in _decisions_d_environnement_du_projet(projet) if x["id"] == demande["decision"]), None)
+    else:
+        d = _decision_de(_fonc(projet, fid), demande["decision"], "environnement")
     if d is None:
         raise Refus("cette question n'existe plus")
-    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    suite = {"demande": demande["id"], **({"fonctionnalite": fid} if fid else {})}
+
+    def finir(dit_projet, dit_fonctionnalite):
+        """La décision est levée : le cadrage de la fonctionnalité commence, rien ne démarre pour le projet."""
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        if fid is None:
+            _terminer(projet, suite, dit_projet)
+            return []
+        _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
+        _terminer(projet, suite, dit_fonctionnalite)
+        return _repondre_cadrage(projet, etat, fid)
+
     if demande["verdict"] == CONTINUER_SANS:
         lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        if fid is None:
+            _terminer(projet, suite, "C'est noté : le projet continue sans ces outils.")
+            return []
         _dire(projet, fid, "Je continue sans ces outils : les étapes qui en ont besoin le diront.")
         _terminer(projet, suite, "C'est noté : le cadrage commence sans ces outils.")
         return _repondre_cadrage(projet, etat, fid)
+    if demande["verdict"] == FORCER:
+        declares, restants = _forcer(projet, d, demande.get("outil"))
+        noms = ", ".join(x["outil"] for x in declares)
+        if fid:
+            _dire(projet, fid, f"{noms} : {environnement.NOTE_DECLARE}. Les étapes qui en ont besoin le sauront.")
+        if not restants:
+            return finir(f"C'est noté : {noms} {'est' if len(declares) == 1 else 'sont'} {environnement.NOTE_DECLARE}.",
+                         f"C'est noté : {noms} {'est' if len(declares) == 1 else 'sont'} {environnement.NOTE_DECLARE}. "
+                         "Le cadrage commence.")
+        _terminer(projet, suite, f"C'est noté : {noms} ({environnement.NOTE_DECLARE}). Il reste : "
+                                 + ", ".join(x["outil"] for x in restants) + ".")
+        return []
     if demande["verdict"] != C_EST_FAIT:
         raise Refus(f"réponse inconnue : {demande['verdict']}")
-    manquants = _verifier_le_poste(projet, fid)
+    verifies = _verifier_la_decision(projet, d)
+    manquants = environnement.a_installer(verifies)
     if manquants:
-        _terminer(projet, suite, "Il manque encore : " + ", ".join(x["outil"] for x in manquants) + ".")
+        _terminer(projet, suite, "Il manque encore : " + ", ".join(x["outil"] for x in manquants) + ". "
+                  + _constats_en_clair(verifies) + ".")
         return []
-    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    _dire(projet, fid, "Le poste est prêt : le cadrage commence.")
-    _terminer(projet, suite, "Merci, les outils sont en place : le cadrage commence.")
-    return _repondre_cadrage(projet, etat, fid)
+    return finir("Merci, les outils sont en place.", "Merci, les outils sont en place : le cadrage commence.")
 
 
 def _sur_installer_outil(projet, demande, etat):
@@ -1219,27 +1297,6 @@ def _sur_installer_outil(projet, demande, etat):
         _dire(projet, fid, f"J'installe « {nom} » en autonomie.")
     _terminer(projet, suite, f"L'installation de « {nom} » est lancée.")
     return _demarrer_en_attente(projet, etat, fid)
-
-
-def _sur_environnement_du_projet(projet, demande):
-    """La même réponse pour la décision de projet : rien ne démarre ni ne s'arrête, le poste est seulement noté."""
-    d = next((x for x in _decisions_d_environnement_du_projet(projet) if x["id"] == demande["decision"]), None)
-    if d is None:
-        raise Refus("cette question n'existe plus")
-    suite = {"demande": demande["id"]}
-    if demande["verdict"] == CONTINUER_SANS:
-        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-        _terminer(projet, suite, "C'est noté : le projet continue sans ces outils.")
-        return []
-    if demande["verdict"] != C_EST_FAIT:
-        raise Refus(f"réponse inconnue : {demande['verdict']}")
-    manquants = _verifier_le_poste(projet, None)
-    if manquants:
-        _terminer(projet, suite, "Il manque encore : " + ", ".join(x["outil"] for x in manquants) + ".")
-        return []
-    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    _terminer(projet, suite, "Merci, les outils sont en place.")
-    return []
 
 
 def _sur_genre(projet, demande, etat):

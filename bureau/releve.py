@@ -471,9 +471,16 @@ def _verifier_outils_a_installer(d, ici, erreurs):
         e = x.get("etapes")
         if e is not None and not (isinstance(e, list) and all(isinstance(v, str) for v in e)):
             erreurs.append(f"{ici} : l'outil « {x['outil']} » : « etapes » est une liste de textes.")
-        for c in ("autonome", "en_cours"):
+        for c in ("autonome", "en_cours", "declare"):
             if c in x and not isinstance(x[c], bool):
                 erreurs.append(f"{ici} : l'outil « {x['outil']} » : « {c} » doit être vrai ou faux.")
+        v = x.get("verification")
+        if v is not None and not (_est_dict(v) and isinstance(v.get("trouve"), bool)
+                                  and all(isinstance(v.get(c, []), list) for c in ("cherche", "introuvables"))):
+            erreurs.append(f"{ici} : l'outil « {x['outil']} » : « verification » est {{trouve, cherche, introuvables, "
+                           "version_demandee, version_trouvee}}.")
+    if d.get("verifie_le") is not None and not isinstance(d["verifie_le"], str):
+        erreurs.append(f"{ici} : « verifie_le » doit être une date.")
 
 
 def _verifier_validation(d, nom, erreurs):

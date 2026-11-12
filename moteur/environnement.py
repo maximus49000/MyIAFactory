@@ -57,13 +57,118 @@ def _dossiers_usuels(env):
                 yield Path(racine) / sous
 
 
-def trouver(nom, *, which=shutil.which, env=None):
-    """Le chemin du programme `nom` (un nom seul), ou `None` : le `PATH`, puis les emplacements usuels."""
-    env = os.environ if env is None else env
+# Le `PATH` d'un poste Windows se lit dans le registre : un logiciel installé après le démarrage du moteur y est, mais pas
+# dans l'environnement du processus (Windows n'actualise pas l'environnement d'un processus déjà lancé). Le système
+# d'abord, puis l'utilisateur, comme Windows les assemble pour un nouveau processus.
+REGISTRE = (("HKEY_LOCAL_MACHINE", r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+            ("HKEY_CURRENT_USER", "Environment"))
+VARIABLES_RELUES = tuple(v for v, _ in EMPLACEMENTS)       # JAVA_HOME, ANDROID_HOME… peuvent aussi être posées après coup
+# Où les installateurs courants déposent leurs programmes : (variable du dossier de base, motif relatif ; `*` = un niveau).
+INSTALLATIONS = (("LOCALAPPDATA", "Microsoft/WinGet/Links"),
+                 ("LOCALAPPDATA", "Microsoft/WinGet/Packages/*"),
+                 ("LOCALAPPDATA", "Microsoft/WinGet/Packages/*/*"),
+                 ("LOCALAPPDATA", "Microsoft/WinGet/Packages/*/bin"),
+                 ("LOCALAPPDATA", "Microsoft/WinGet/Packages/*/*/bin"),
+                 *((base, f"{sous}/bin") for base in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)")
+                   for sous in ("Eclipse Adoptium/*", "Microsoft/jdk-*", "Java/*")))
+
+
+def lire_registre(racine, sous_cle, nom):
+    """La valeur texte `nom` de `racine\\sous_cle` (`winreg`, aucune commande lancée), ou `None` : pas Windows, clé ou valeur
+    absente."""
+    try:
+        import winreg
+        with winreg.OpenKey(getattr(winreg, racine), sous_cle) as cle:
+            valeur, _ = winreg.QueryValueEx(cle, nom)
+    except (ImportError, OSError, AttributeError):
+        return None
+    return valeur if isinstance(valeur, str) else None
+
+
+def _variable(env, nom):
+    if nom in env:
+        return env[nom]
+    return next((v for k, v in env.items() if str(k).upper() == nom.upper()), None)
+
+
+def developper(texte, env):
+    """`texte` avec ses `%VARIABLES%` remplacées par celles de `env` (sans tenir compte de la casse) ; une variable
+    inconnue reste telle quelle."""
+    def remplacer(m):
+        v = _variable(env, m.group(1))
+        return str(v) if v not in (None, "") else m.group(0)
+    return re.sub(r"%([^%=]+)%", remplacer, str(texte or ""))
+
+
+def environnement_a_jour(env, lire=lire_registre):
+    """`env` complété par le registre : les variables du système puis de l'utilisateur (`JAVA_HOME`…, développées) priment
+    sur celles du processus, qui peuvent dater d'avant l'installation."""
+    a_jour = dict(env)
+    for racine, sous_cle in REGISTRE:
+        for variable in VARIABLES_RELUES:
+            valeur = lire(racine, sous_cle, variable)
+            if valeur and valeur.strip():
+                a_jour[variable] = developper(valeur.strip(), a_jour)
+    return a_jour
+
+
+def dossiers_du_path_a_jour(env, lire=lire_registre):
+    """Les dossiers du `PATH` tel que Windows le donne à un nouveau processus (registre système puis utilisateur, variables
+    développées), dans l'ordre, sans doublon."""
+    vus, dossiers = set(), []
+    for racine, sous_cle in REGISTRE:
+        brut = lire(racine, sous_cle, "Path") or lire(racine, sous_cle, "PATH")
+        for morceau in developper(brut or "", env).split(";"):
+            morceau = morceau.strip().strip('"')
+            if morceau and morceau.lower() not in vus:
+                vus.add(morceau.lower())
+                dossiers.append(Path(morceau))
+    return dossiers
+
+
+def _developper_motif(base, motif):
+    """Les dossiers existants qui répondent à `base/motif` (`*` et `?` valent pour un niveau), les plus récents d'abord."""
+    racine = Path(base)
+    if not racine.is_dir():
+        return []
+    return sorted((p for p in racine.glob(motif) if p.is_dir()), key=lambda p: str(p), reverse=True)
+
+
+def dossiers_d_installation(env):
+    """Les dossiers où winget (`WinGet\\Links`, `WinGet\\Packages\\…`) et les JDK (`Eclipse Adoptium`, `Microsoft\\jdk-*`,
+    `Java`) s'installent d'ordinaire, quand ils existent."""
+    vus, dossiers = set(), []
+    for variable, motif in INSTALLATIONS:
+        base = (_variable(env, variable) or "").strip()
+        if not base:
+            continue
+        for d in _developper_motif(base, motif):
+            if str(d).lower() not in vus:
+                vus.add(str(d).lower())
+                dossiers.append(d)
+    return dossiers
+
+
+def dossiers_a_chercher(env, lire=lire_registre):
+    """Après le `PATH` du processus : les emplacements usuels (variables relues dans le registre), le `PATH` à jour, puis les
+    dossiers d'installation courants."""
+    env = environnement_a_jour(env, lire) if lire else env
+    yield from _dossiers_usuels(env)
+    if lire:
+        yield from dossiers_du_path_a_jour(env, lire)
+    yield from dossiers_d_installation(env)
+
+
+def trouver(nom, *, which=shutil.which, env=None, lire=None):
+    """Le chemin du programme `nom` (un nom seul), ou `None` : le `PATH` du processus, les emplacements usuels, le `PATH` à
+    jour du registre (Windows), puis les dossiers d'installation courants. Sans `env` (le vrai poste) le registre est lu ;
+    avec un `env` donné, seulement si `lire` l'est (les essais ne lisent pas le vrai registre)."""
+    if env is None:
+        env, lire = dict(os.environ), lire or lire_registre
     chemin = which(nom)
     if chemin:
         return str(chemin)
-    for dossier in _dossiers_usuels(env):
+    for dossier in dossiers_a_chercher(env, lire):
         chemin = which(nom, path=str(dossier))
         if chemin:
             return str(chemin)
@@ -118,11 +223,12 @@ def version_suffisante(lue, minimale):
     return trouvee + (0,) * (len(voulue) - len(trouvee)) >= voulue
 
 
-def verifier(outils, *, which=shutil.which, executer=executer_version, env=None):
+def verifier(outils, *, which=shutil.which, executer=executer_version, env=None, lire=None):
     """Chaque outil de la proposition avec son état : `en_place` (`chemin`, `version`?) ou `a_installer`. Un outil est en
     place quand **tous** ses exécutables sont trouvés. Un exécutable est cherché une seule fois, même s'il sert à
     plusieurs outils. Un nom refusé (pas un nom de programme) n'est ni cherché ni lancé : l'outil reste à installer et
-    le dit dans `refuses`."""
+    le dit dans `refuses`. Un outil à installer porte aussi `introuvables` (les exécutables qu'on n'a pas trouvés) ;
+    trop ancien, il garde la `version` trouvée."""
     trouves = {}      # nom -> chemin | None, pour ne chercher (et ne lancer) qu'une fois chaque exécutable
     versions = {}
     sortie = []
@@ -133,10 +239,12 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
         refuses = [n for n in noms if not MOTIF_EXECUTABLE.match(n)]
         for n in valides:
             if n not in trouves:
-                trouves[n] = trouver(n, which=which, env=env)
+                trouves[n] = trouver(n, which=which, env=env, lire=lire)
         chemins = [trouves[n] for n in valides]
         if valides and not refuses and all(chemins):
             o["etat"], o["chemin"] = "en_place", chemins[0]
+            for ancien in ("version", "raison", "introuvables", "refuses"):
+                o.pop(ancien, None)
             if valides[0] not in versions:
                 versions[valides[0]] = lire_version(chemins[0], executer)
             if versions[valides[0]]:
@@ -155,6 +263,7 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
             o.pop("chemin", None)
             o.pop("version", None)
             o.pop("raison", None)
+            o["introuvables"] = [n for n in valides if not trouves[n]]
             if refuses:
                 o["refuses"] = refuses
         sortie.append(o)
@@ -163,6 +272,51 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
 
 def a_installer(outils):
     return [o for o in outils if o.get("etat") != "en_place"]
+
+
+NOTE_DECLARE = "déclaré installé par le Directeur (non vérifié)"
+CHAMPS_DE_CONSTAT = ("verification", "raison", "refuses", "introuvables", "chemin", "version")   # ce qu'une vérification pose
+
+
+def constat(outil_verifie):
+    """Ce qu'une vérification a trouvé pour un outil (sortie de `verifier`), en clair, pour le bureau : `{trouve,
+    cherche: [exécutables], introuvables: [exécutables], version_demandee, version_trouvee, raison?}`."""
+    trouve = outil_verifie.get("etat") == "en_place"
+    cherche = [n for n in outil_verifie.get("executables") or [] if isinstance(n, str)]
+    introuvables = [n for n in outil_verifie.get("introuvables") or [] if isinstance(n, str)] if not trouve else []
+    if not trouve and not introuvables and not outil_verifie.get("raison"):
+        introuvables = list(cherche)
+    minimale = version_minimale(outil_verifie)
+    c = {"trouve": trouve, "cherche": cherche, "introuvables": introuvables,
+         "version_demandee": ".".join(str(x) for x in minimale) if minimale else None,
+         "version_trouvee": outil_verifie.get("version") if isinstance(outil_verifie.get("version"), str) else None}
+    if outil_verifie.get("raison"):
+        c["raison"] = str(outil_verifie["raison"])
+    return c
+
+
+def declare(outil):
+    """L'outil que le Directeur affirme installé : `en_place`, `declare` vrai et la note, sans rien qu'une vérification ait
+    posé (chemin, version, raison) : on ne l'a pas trouvé."""
+    o = {k: v for k, v in outil.items() if k not in CHAMPS_DE_CONSTAT and k != "en_cours"}
+    o.update(etat="en_place", declare=True, note=NOTE_DECLARE)
+    return o
+
+
+def texte_du_constat(outil, constat_):
+    """« JDK 21 : non trouvé (cherché : java, javac ; version 17 minimum ; trouvée : …) » ou « JDK 21 : trouvé »."""
+    if constat_.get("trouve"):
+        return f"{outil} : trouvé"
+    morceaux = []
+    if constat_.get("cherche"):
+        morceaux.append("cherché : " + ", ".join(constat_["cherche"]))
+    if constat_.get("introuvables") and constat_["introuvables"] != constat_.get("cherche"):
+        morceaux.append("introuvable : " + ", ".join(constat_["introuvables"]))
+    if constat_.get("version_demandee"):
+        morceaux.append(f"version {constat_['version_demandee']} minimum demandée")
+    if constat_.get("version_trouvee"):
+        morceaux.append(f"version trouvée : {constat_['version_trouvee']}")
+    return f"{outil} : non trouvé" + (f" ({' ; '.join(morceaux)})" if morceaux else "")
 
 
 def avec_aide(outil):

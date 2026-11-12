@@ -661,8 +661,10 @@ def cmd_decision(ctx, e):
                         liste.remove(d)
                         return {"ok": True}
             raise Refus(f"Décision inconnue : {i}")
+        if action == "verifier":
+            return _noter_verification(s, e)
         if action != "poser":
-            raise Refus("« action » doit valoir poser ou lever.")
+            raise Refus("« action » doit valoir poser, lever ou verifier.")
         portee, genre, contenu = texte(e, "portee"), texte(e, "genre"), texte(e, "texte", vide_ok=True)
         if portee == "projet":
             if genre not in rel.DECISIONS_PROJET:
@@ -714,6 +716,40 @@ def cmd_decision(ctx, e):
         d = {"id": f"d{su.suivant(s, 'd')}", **d}
         liste.append(d)
         return {"id": d["id"]}
+
+
+def _noter_verification(s, e):
+    """`{"action": "verifier", "id": décision, "outils": [{outil, etat, verification, …}]}` : note, dans une décision
+    `environnement`, le résultat de la dernière vérification de chaque outil nommé (`etat`, `verification` {trouve, cherche,
+    introuvables, version_demandee, version_trouvee}, `chemin`, `version`, `raison`, `declare`, `note`) et l'heure
+    (`verifie_le`). Les outils non nommés sont gardés tels quels ; un outil absent de la liste est refusé."""
+    i, outils = texte(e, "id"), e.get("outils")
+    if (not isinstance(outils, list) or not outils
+            or not all(isinstance(x, dict) and isinstance(x.get("outil"), str) and x.get("etat") in ("en_place", "a_installer")
+                       for x in outils)):
+        raise Refus("« outils » est la liste des outils vérifiés {outil, etat: en_place | a_installer, verification?, …}.")
+    for liste in [f["decisions"] for f in s["fonctionnalites"]] + [s["decisions_projet"]]:
+        for d in liste:
+            if d["id"] != i:
+                continue
+            if d.get("genre") != "environnement":
+                raise Refus(f"La décision {i} n'est pas une décision « environnement ».")
+            par_nom = {x["outil"]: x for x in outils}
+            inconnus = [n for n in par_nom if n not in {o.get("outil") for o in d.get("environnement") or []}]
+            if inconnus:
+                raise Refus(f"« {inconnus[0]} » n'est pas dans cette décision.")
+            neuf = []
+            for o in d["environnement"]:
+                if o.get("outil") in par_nom:
+                    gardes = {k: v for k, v in o.items() if k not in ("verification", "raison", "refuses", "introuvables",
+                                                                      "chemin", "version", "declare", "note")}
+                    o = {**gardes, **{k: v for k, v in par_nom[o["outil"]].items()
+                                      if k in ("etat", "verification", "raison", "refuses", "introuvables", "chemin",
+                                               "version", "declare", "note")}}
+                neuf.append(o)
+            d["environnement"], d["verifie_le"] = neuf, su.maintenant()
+            return {"ok": True}
+    raise Refus(f"Décision inconnue : {i}")
 
 
 def _outils_qui_manquent(e):

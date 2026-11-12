@@ -48,6 +48,42 @@ class Verifier(unittest.TestCase):
         self.assertNotIn("version", r)
         self.assertEqual([a[1] for a in e.lances], ["--version", "-version", "version"])    # la liste fixe, rien d'autre
 
+    def test_version_trop_ancienne_a_installer(self):
+        jdk17 = dict(JDK, outil="JDK 17")
+        presents = {"java": "C:/jre/bin/java.exe", "javac": "C:/jre/bin/javac.exe"}
+        # java 8 écrit sur la sortie d'erreur « 1.8.0_351 » : c'est la version 8, trop ancienne pour un JDK 17
+        e = Enregistreur(presents, {"--version": (1, "Unrecognized option: --version"),
+                                    "-version": (0, "java version \"1.8.0_351\"\nJava(TM) SE Runtime Environment")})
+        (r,) = environnement.verifier([jdk17], which=e.which, executer=e.executer, env={})
+        self.assertEqual(r["etat"], "a_installer")
+        self.assertIn("1.8.0_351", r["raison"])
+        self.assertIn("17", r["raison"])
+        self.assertEqual(environnement.a_installer([r]), [r])
+        # 17.0.9 convient, 21 aussi ; la version minimale peut aussi venir d'un champ explicite
+        for sortie, attendu in (("openjdk version \"17.0.9\" 2023-10-17", "en_place"), ("openjdk version \"21.0.4\"", "en_place"),
+                                ("openjdk version \"11.0.2\"", "a_installer")):
+            e = Enregistreur(presents, {"--version": (1, "x"), "-version": (0, sortie)})
+            (r,) = environnement.verifier([jdk17], which=e.which, executer=e.executer, env={})
+            self.assertEqual(r["etat"], attendu, sortie)
+        e = Enregistreur(presents, {"-version": (0, "java version \"1.8.0_351\"")})
+        (r,) = environnement.verifier([dict(JDK, version_min="11")], which=e.which, executer=e.executer, env={})
+        self.assertEqual(r["etat"], "a_installer")
+
+    def test_version_illisible_n_est_pas_dite_verifiee(self):
+        jdk17 = dict(JDK, outil="JDK 17")
+        presents = {"java": "C:/jdk/bin/java.exe", "javac": "C:/jdk/bin/javac.exe"}
+        for versions in ({}, {"--version": (0, "bizarre sans chiffre")}):
+            e = Enregistreur(presents, versions)
+            (r,) = environnement.verifier([jdk17], which=e.which, executer=e.executer, env={})
+            self.assertEqual(r["etat"], "en_place")
+            self.assertIn("non vérifiée", r["raison"])
+        # sans version minimale, rien à dire
+        e = Enregistreur(presents, {})
+        for nom in ("JDK", "Android SDK 34 complet"):
+            (r,) = environnement.verifier([dict(JDK, outil=nom)], which=e.which, executer=e.executer, env={})
+            self.assertEqual(r["etat"], "en_place")
+            self.assertNotIn("raison", r)
+
     def test_outil_absent_a_installer(self):
         e = Enregistreur({"java": "C:/jdk/bin/java.exe"})          # javac manque : le JDK n'est pas complet
         a, b = environnement.verifier([JDK, GRADLE], which=e.which, executer=e.executer, env={})

@@ -153,6 +153,8 @@ test("organisation montre l environnement", () => {
   assert.deepEqual(l.map((x) => [x.outil, x.enPlace, x.libelle]),
     [["JDK", false, "JDK : à installer"], ["Git", true, "Git : déjà en place"]]);
   assert.equal(l[1].detail, "2.45 · C:/git");
+  const ancien = lignesEnvironnement({organisation: {environnement: [{outil: "JDK 17", etat: "a_installer", installation: "winget", raison: "version trouvée : java version \"1.8.0_351\" ; 17 minimum demandée"}]}});
+  assert.match(ancien[0].detail, /1\.8\.0_351.*winget/);
   const li = rendreOrganisation({etat: ETAT}, WORKFLOW, () => new Noeud("button"));
   assert.match(li.textContent, /JDK : à installer/);
   assert.match(li.textContent, /Git : déjà en place/);

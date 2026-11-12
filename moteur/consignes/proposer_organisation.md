@@ -21,7 +21,7 @@ Ce qu'il faut proposer :
   vraiment utile, mets Opus et `"fable_suggere": true` : le Directeur décidera.
 - L'`environnement` : chaque outil du poste dont une étape a besoin (`pour` : l'`etape`), les `executables` à chercher
   (noms de programmes seulement : `java`, `gradle`), et l'`installation` sur Windows en une ligne (source officielle,
-  taille, sans droits d'administrateur si possible). Un outil une seule fois ; le code vérifie ce qui est déjà là.
+  taille, sans droits d'administrateur si possible). Un outil une seule fois ; le code vérifie ce qui est déjà là. Une version minimale se met dans le nom (« JDK 17 »).
 - `outils_installation` : les règles pour les installer, précises (`Bash(winget:*)`). Textes en français, **courts**.
 
 Forme de la réponse :

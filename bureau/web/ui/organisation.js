@@ -74,7 +74,7 @@ export function agentsOrganisation(decision) {
 export function lignesEnvironnement(decision) {
   return liste(decision?.organisation?.environnement).filter((x) => x && plein(x.outil)).map((x) => {
     const enPlace = x.etat === "en_place";
-    const details = enPlace ? [x.version, x.chemin] : [x.installation];
+    const details = enPlace ? [x.raison, x.version, x.chemin] : [x.raison, x.installation];
     return {outil: x.outil, enPlace, pour: plein(x.pour) ? x.pour : null,
             libelle: `${x.outil} : ${enPlace ? "déjà en place" : "à installer"}`,
             detail: details.filter(plein).join(" · ") || null,

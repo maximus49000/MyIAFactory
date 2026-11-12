@@ -924,7 +924,7 @@ def _texte_du_poste(poste):
     if not poste:
         return ""
     en_place = [x["outil"] for x in poste if x.get("etat") == "en_place"]
-    manque = [x["outil"] for x in poste if x.get("etat") != "en_place"]
+    manque = [f"{x['outil']} ({x['raison']})" if x.get("raison") else x["outil"] for x in poste if x.get("etat") != "en_place"]
     return ((f"Déjà en place sur le poste : {', '.join(en_place)}. " if en_place else "")
             + (f"À installer : {', '.join(manque)}. " if manque else ""))
 

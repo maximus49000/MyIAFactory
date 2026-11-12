@@ -8,8 +8,13 @@ nom de programme (espace, `;`, `&`, chemin, option) est refusé sans être cherc
 que pour lire sa version, avec une option d'une liste fixe (`--version`, `-version`, `version`), délai de 10 s.
 
 Chaque outil rendu porte son `etat` : `en_place` (avec `chemin` et, si lisible, `version`) ou `a_installer`.
+
+Un outil peut porter une **version minimale** (champ `version_min`, ou le nombre qui suit son nom : « JDK 17 »). La
+version lue est alors comparée : trop ancienne (Java 8 pour un JDK 17), l'outil est `a_installer` et `raison` dit ce
+qui a été trouvé ; illisible, il reste `en_place` mais `raison` dit que la version n'a pas pu être vérifiée.
 """
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -74,6 +79,34 @@ def lire_version(chemin, executer=executer_version):
     return None
 
 
+def _numeros(texte):
+    m = re.search(r"\d+(?:\.\d+)*", str(texte or ""))
+    return tuple(int(x) for x in m.group(0).split(".")) if m else None
+
+
+def version_minimale(outil):
+    """La version minimale demandée par un outil, en nombres (`(17,)`), ou `None` : le champ `version_min`, sinon le
+    nombre qui suit un nom d'un seul mot (« JDK 17 », « Gradle 8.5 ») ; « Android SDK 34 complet » n'en porte pas."""
+    explicite = outil.get("version_min")
+    if explicite not in (None, ""):
+        return _numeros(explicite)
+    m = re.fullmatch(r"\S+ v?(\d+(?:\.\d+)*)\+?", str(outil.get("outil") or "").strip())
+    return _numeros(m.group(1)) if m else None
+
+
+def numeros_de_version(ligne):
+    """Les nombres de la version lue dans une ligne (`(8,)` pour « java version "1.8.0_351" », `(21, 0, 4)` pour
+    « openjdk version "21.0.4" »), ou `None` si rien de lisible. Java 1.x est la version x."""
+    texte = str(ligne or "")
+    m = re.search(r'"(\d+(?:\.\d+)*)', texte) or re.search(r"\d+(?:\.\d+)+", texte) or re.search(r"\d+", texte)
+    if not m:
+        return None
+    n = tuple(int(x) for x in re.findall(r"\d+", m.group(0) if m.lastindex is None else m.group(1)))
+    if re.search(r"java|jdk|jre", texte, re.I) and len(n) > 1 and n[0] == 1:
+        n = n[1:]
+    return n
+
+
 def verifier(outils, *, which=shutil.which, executer=executer_version, env=None):
     """Chaque outil de la proposition avec son état : `en_place` (`chemin`, `version`?) ou `a_installer`. Un outil est en
     place quand **tous** ses exécutables sont trouvés. Un exécutable est cherché une seule fois, même s'il sert à
@@ -97,10 +130,20 @@ def verifier(outils, *, which=shutil.which, executer=executer_version, env=None)
                 versions[valides[0]] = lire_version(chemins[0], executer)
             if versions[valides[0]]:
                 o["version"] = versions[valides[0]]
+            minimale = version_minimale(outil)
+            if minimale:
+                trouvee = numeros_de_version(versions[valides[0]])
+                texte_min = ".".join(str(x) for x in minimale)
+                if trouvee is None:
+                    o["raison"] = f"version {texte_min} minimum demandée, version non vérifiée (illisible)"
+                elif trouvee + (0,) * (len(minimale) - len(trouvee)) < minimale:
+                    o["etat"] = "a_installer"
+                    o["raison"] = f"version trouvée : {versions[valides[0]]} ; {texte_min} minimum demandée"
         else:
             o["etat"] = "a_installer"
             o.pop("chemin", None)
             o.pop("version", None)
+            o.pop("raison", None)
             if refuses:
                 o["refuses"] = refuses
         sortie.append(o)

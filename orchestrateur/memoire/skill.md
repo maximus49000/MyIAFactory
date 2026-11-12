@@ -21,3 +21,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Quand aucune bibliothèque d'images n'est garantie, générer les maquettes PNG avec le module standard zlib et struct, depuis un script écrit par l'outil Write puis lancé avec python.
+
+## S4 — Produire les visuels pixel art par un script versionné évite
+Rôles : artiste
+Date : 2026-11-12
+
+Produire les visuels pixel art par un script versionné évite les licences externes et permet de régénérer tout le lot quand la palette change.

@@ -62,3 +62,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour signer une APK Godot, créer le keystore avec keytool en -storetype JKS, car apksigner ne lit pas le PKCS12 par défaut du JDK 17.
+
+## G11 — Pour un export Godot signé, passer le chemin, l'alias et le
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export Godot signé, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset.

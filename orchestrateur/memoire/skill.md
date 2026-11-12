@@ -57,3 +57,9 @@ Rôles : designer
 Date : 2026-11-12
 
 Quand une étape est relancée sur un élément déjà traité, repartir du livrable existant et noter seulement ce qui a changé, sans tout refaire.
+
+## S10 — Quand aucune approbation n'est possible, utiliser les outils
+Rôles : artiste
+Date : 2026-11-12
+
+Quand aucune approbation n'est possible, utiliser les outils de lecture dédiés, un par fichier, plutôt qu'un enchaînement de commandes shell.

@@ -1607,9 +1607,12 @@ def _sur_session_cloud(projet, demande, etat):
     reprises = [t for t in court["taches"] if t.get("agent") == agent and t["colonne"] != "fait"
                 and ERREUR_CLOUD in str(t.get("bloquee") or "") and t is not suivie]
     for t in reprises:
-        lancer(projet, "tache", {"id": t["id"], "bloquee": None,
+        # sortie de son lot (une tâche en lot ne repart jamais seule) et remise dans les départs à faire
+        lancer(projet, "tache", {"id": t["id"], "bloquee": None, "lot": None,
                                  "journal": ["Session cloud créée par le Directeur : nouvel essai."]})
         _m(etat, "relancees", set).discard(t["id"])
+        if t["id"] not in _m(etat, "a_lancer", list):
+            etat["a_lancer"].append(t["id"])
     projet._cloud_raison = (None, 0.0)
     _terminer(projet, {"demande": demande["id"]}, "La session est inscrite."
               + (f" La tâche « {suivie['titre']} » y est relevée." if suivie is not None else "")

@@ -1473,8 +1473,17 @@ def _sur_session_cloud(projet, demande, etat):
         raise Refus("la décision de cette session n'existe plus")
     lancer(projet, "session", {"agent": d["agent"], "session": demande["session"]})
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
-    _terminer(projet, {"demande": demande["id"]}, "La session est inscrite.")
-    return []
+    # Les tâches de cet agent bloquées faute de session cloud repartent : le moteur relance lui-même la session.
+    reprises = [t for t in court["taches"] if t.get("agent") == d["agent"] and t["colonne"] != "fait"
+                and ERREUR_CLOUD in str(t.get("bloquee") or "")]
+    for t in reprises:
+        lancer(projet, "tache", {"id": t["id"], "bloquee": None,
+                                 "journal": ["Session cloud créée par le Directeur : nouvel essai."]})
+        _m(etat, "relancees", set).discard(t["id"])
+    projet._cloud_raison = (None, 0.0)
+    _terminer(projet, {"demande": demande["id"]}, "La session est inscrite."
+              + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else ""))
+    return _demarrer_en_attente(projet, etat, None) if reprises else []
 
 
 def _sur_retour(projet, demande, etat):
@@ -1641,7 +1650,30 @@ def _sur_parallelisme(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, None)
 
 
-_SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
+def _sur_recruter(projet, demande, etat):
+    """Des agents recrutés depuis « Parallélisme du projet » (manuel ou répartition automatique confirmée) : les fiches
+    sont écrites par l'outil, qui vérifie de nouveau rôles, modèles, dépôt GitHub et places ; puis ce qui peut partir
+    part (un agent cloud prend une tâche au départ suivant : le moteur lance sa session)."""
+    r = lancer(projet, "recruter", {"mode": demande.get("mode"), "agents": demande.get("agents")})
+    noms = ", ".join(f"{a['prenom']} ({a['role']}, {a['modele']}, {a['lieu']})" for a in r["agents"])
+    cloud = any(a["lieu"] == "cloud" for a in r["agents"])
+    _terminer(projet, {"demande": demande["id"]},
+              f"Recruté{'s' if len(r['agents']) > 1 else ''} : {noms}."
+              + (" Le moteur lancera la session cloud au départ de sa première tâche." if cloud else ""))
+    projet._cloud_raison = (None, 0.0)       # le dépôt a pu changer : relu au prochain choix d'agent
+    return _demarrer_en_attente(projet, etat, None)
+
+
+def _sur_depot_git(projet, demande, etat):
+    """Le clic « Créer le dépôt Git » : dépôt local si besoin, dépôt GitHub privé et poussée (`lancer depot`)."""
+    r = lancer(projet, "depot", {"action": "creer", "confirme": True})
+    _terminer(projet, {"demande": demande["id"]}, r["texte"])
+    projet._cloud_raison = (None, 0.0)
+    return []
+
+
+_SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme, "recruter": _sur_recruter,
+        "depot_git": _sur_depot_git, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
         "installer_outil": _sur_installer_outil,
@@ -2365,7 +2397,43 @@ def _agent_en_echec(projet, etat, execution, depart):
     if t.get("fonctionnalite"):
         _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
+    if str(execution.erreur or "").startswith(ERREUR_CLOUD):
+        _session_a_creer(projet, depart["agent"], str(execution.erreur)[len(ERREUR_CLOUD):].strip(" :"))
     return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
+
+
+ERREUR_CLOUD = "session cloud"       # le début de l'erreur d'un départ cloud (`boucle._partir_cloud`)
+
+
+def texte_session_a_creer(fiche, raison, url):
+    """La démarche de la décision « Sessions cloud à créer », quand le moteur n'a pas pu lancer la session lui-même."""
+    nom = fiche.get("prenom") or fiche["cle"]
+    depot = url or "le dépôt GitHub du projet"
+    return (f"Le moteur n'a pas pu lancer la session cloud de {nom} ({fiche['role']}, {fiche['modele']}) : {raison}. "
+            "Démarche : 1. vérifiez que la commande claude est installée et connectée à votre compte (lancez « claude », "
+            "puis /login) ; 2. sur claude.ai/code, connectez GitHub et donnez à Claude l'accès à "
+            f"{depot} ; 3. créez-y une session sur ce dépôt, modèle {fiche['modele']}, pour vérifier qu'elle démarre ; "
+            "4. donnez son nom ici et cliquez « C'est fait » : les tâches bloquées de cet agent repartent, et le moteur "
+            "relance lui-même ses sessions.")
+
+
+def _session_a_creer(projet, cle, raison):
+    """Pose (une fois par agent) la décision `session_cloud` avec la démarche."""
+    court = _etat(projet)
+    if any(d.get("genre") == "session_cloud" and d.get("agent") == cle for d in court.get("decisions") or []):
+        return
+    fiche = next((a for a in court["agents"] if a["cle"] == cle), None)
+    if fiche is None:
+        return
+    try:
+        from orchestrateur import recrutement
+        url = recrutement.depot(projet.dossier)["url"]
+        fiche = dict(fiche, prenom=next((x.get("prenom") for x in fi.lire_toutes(_factory(projet)["fiches"])
+                                         if x["cle"] == cle), None))
+    except (OSError, fi.FicheInvalide):
+        url = None
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "session_cloud", "agent": cle,
+                                "texte": texte_session_a_creer(fiche, raison or "raison inconnue", url)})
 
 
 def _apres_echec_d_installation(projet, etat, taches, raison):

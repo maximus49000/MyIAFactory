@@ -270,7 +270,8 @@ export function resumeParallelisme(etat) {
   const locaux = Number.isInteger(etat?.agents_locaux_max) ? etat.agents_locaux_max : 2;
   const cloud = Number.isInteger(etat?.agents_cloud_max) ? etat.agents_cloud_max : 0;
   const notes = [];
-  if (cloud > 0 && !recrutes.cloud) notes.push("Aucun agent cloud recruté : les places cloud resteront vides.");
+  if (cloud > 0 && !recrutes.cloud) notes.push("Aucun agent cloud recruté : les places cloud resteront vides " +
+                                                "(recrutez-en ci-dessous).");
   notes.push("Chaque place est tenue par un agent recruté : pour plusieurs tâches d'un même rôle en même temps, " +
              "il faut plusieurs agents de ce rôle. Une place locale attend que la charge de l'ordinateur le permette ; " +
              "une place cloud non. Les tâches qui mènent à une validation passent d'abord ; rien ne démarre après une " +
@@ -316,6 +317,191 @@ export function partieParallelisme(ctx) {
     });
     bloc.append(erreur, b);
   }
+  const rec = partieRecrutement(ctx);
+  if (rec) bloc.append(rec);
+  return bloc;
+}
+
+// --- Recruter des agents (conception 2026-11-12-recrutement-design.md). Le relevé publie `recrutement` ; le serveur et
+// l'outil revérifient tout (rôles, modèles, dépôt GitHub, places).
+
+export const MODELES_RECRUE = ["Haiku", "Sonnet", "Opus"];
+
+// Ce que montre la partie « Recruter » ; null si le relevé ne publie pas `recrutement` (orchestrateur d'avant).
+export function resumeRecrutement(etat) {
+  const rec = etat?.recrutement;
+  if (!rec || typeof rec !== "object") return null;
+  const depot = rec.depot || {};
+  const places = {cloud: Number.isInteger(rec.places?.cloud) ? rec.places.cloud : 0,
+                  locaux: Number.isInteger(rec.places?.locaux) ? rec.places.locaux : 0};
+  const github = depot.github === true;
+  let raisonCloud = null;
+  if (!github) raisonCloud = rec.cloud_impossible || "Le projet n'est pas sur GitHub.";
+  else if (!places.cloud) raisonCloud = "Aucune place cloud sans agent : augmentez « Agents cloud en même temps ».";
+  return {roles: Array.isArray(rec.roles) ? rec.roles : [], places, github, raisonCloud,
+          cloudPossible: raisonCloud === null, propositions: Array.isArray(rec.propositions) ? rec.propositions : [],
+          notes: Array.isArray(rec.notes) ? rec.notes : [], url: typeof depot.url === "string" ? depot.url : null,
+          creable: depot.creable === true && !github, essai: depot.essai && typeof depot.essai === "object" ? depot.essai : null};
+}
+
+// La demande « recruter » d'un agent choisi à la main ; {erreur} si le choix ne va pas (rien ne part).
+export function demandeRecrutementManuel(resume, {role, modele, lieu, fable = false}) {
+  if (!resume) return {erreur: "Le relevé ne permet pas encore de recruter."};
+  if (!resume.roles.some((r) => r.role === role)) return {erreur: "Choisissez un rôle du workflow du projet."};
+  if (modele === "Fable" ? fable !== true : !MODELES_RECRUE.includes(modele)) {
+    return {erreur: modele === "Fable" ? "Fable demande votre accord : cochez « J'accorde Fable »." : "Choisissez un modèle."};
+  }
+  if (lieu !== "local" && lieu !== "cloud") return {erreur: "Choisissez local ou cloud."};
+  if (lieu === "cloud" && !resume.cloudPossible) return {erreur: resume.raisonCloud};
+  const agent = {role, modele, lieu};
+  if (modele === "Fable") agent.fable = true;
+  return {type: "recruter", mode: "manuel", agents: [agent]};
+}
+
+// Les N premières propositions de la répartition automatique (elles ne dépendent pas de N) ; [] si N ne va pas.
+export function apercuAuto(resume, n) {
+  const v = typeof n === "string" && /^\s*\d+\s*$/.test(n) ? Number(n) : n;
+  if (!resume || !Number.isInteger(v) || v < 1 || v > resume.propositions.length) return [];
+  return resume.propositions.slice(0, v);
+}
+
+// La demande « recruter » d'une répartition automatique confirmée ; null si l'aperçu est vide.
+export function demandeRecrutementAuto(apercu) {
+  if (!Array.isArray(apercu) || !apercu.length) return null;
+  return {type: "recruter", mode: "auto", agents: apercu.map((p) => ({role: p.role, modele: p.modele, lieu: p.lieu}))};
+}
+
+// Le clic « Créer le dépôt Git » : le seul consentement à la création du dépôt GitHub privé.
+export function demandeDepot() {
+  return {type: "depot_git", confirme: true};
+}
+
+function choix(options, valeur) {
+  const s = document.createElement("select");
+  for (const [v, libelle, inactif] of options) {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = libelle;
+    if (inactif) o.disabled = true;
+    s.append(o);
+  }
+  if (valeur !== undefined) s.value = valeur;
+  return s;
+}
+
+function boutonDemande(ctx, libelle, fabrique, erreur) {
+  const b = el("button", "bouton", libelle);
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    const d = fabrique();
+    if (!d || d.erreur) { erreur.textContent = d?.erreur || "Rien à envoyer."; return; }
+    erreur.textContent = "";
+    b.disabled = true;
+    const res = await ctx.barre.demander(d, b);
+    if (!res?.ok) b.disabled = false;
+  });
+  return b;
+}
+
+// La partie « Recruter » : à la main (rôle, modèle, lieu), en automatique (N agents, aperçu puis confirmation), et le
+// dépôt Git (sans GitHub, pas d'agent cloud : « Créer le dépôt Git »).
+export function partieRecrutement(ctx) {
+  const r = resumeRecrutement(ctx.etat);
+  if (!r) return null;
+  const agir = !!(ctx.etat?.agir && ctx.barre?.demander);
+  const bloc = el("div", "recrutement");
+  bloc.append(el("div", "carte-sous-titre", "Recruter des agents"));
+  // Le dépôt.
+  if (r.github) {
+    const p = el("p", "note", "Dépôt GitHub : ");
+    if (r.url) {
+      const a = el("a", "", r.url);
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      p.append(a);
+    } else p.append("en place");
+    bloc.append(p);
+  } else {
+    bloc.append(el("p", "avertissement", `Agents cloud impossibles : ${r.raisonCloud}`));
+    if (r.creable && agir) {
+      const erreur = el("p", "saisie-erreur", "");
+      bloc.append(el("p", "note", "« Créer le dépôt Git » crée un dépôt git local si besoin (premier commit), puis un " +
+                                  "dépôt GitHub privé, et y pousse le projet (gh doit être installé et connecté). Les " +
+                                  "clés (.env) et les fichiers propres à ce poste n'y partent pas."));
+      bloc.append(boutonDemande(ctx, "Créer le dépôt Git", demandeDepot, erreur), erreur);
+    }
+  }
+  if (r.essai && !r.github) bloc.append(el("p", r.essai.fait ? "note" : "avertissement", r.essai.texte || ""));
+  if (!r.roles.length) {
+    bloc.append(el("p", "note", "Le projet n'a pas encore de workflow : rien à recruter."));
+    return bloc;
+  }
+  // À la main.
+  const manuel = el("div", "recrutement-manuel");
+  const role = choix(r.roles.map((x) => [x.role, `${x.nom || x.role} (${x.agents} agent${x.agents > 1 ? "s" : ""})`]));
+  const modele = choix(MODELES_RECRUE.map((m) => [m, m]).concat([["Fable", "Fable (votre accord)", true]]),
+                       r.roles[0]?.modele);
+  role.addEventListener("change", () => {
+    const x = r.roles.find((y) => y.role === role.value);
+    if (x && MODELES_RECRUE.includes(x.modele)) modele.value = x.modele;
+  });
+  const accord = document.createElement("input");
+  accord.type = "checkbox";
+  accord.addEventListener("change", () => {
+    modele.querySelector('option[value="Fable"]').disabled = !accord.checked;
+    if (!accord.checked && modele.value === "Fable") modele.value = "Opus";
+  });
+  const lieu = choix([["local", "local"], ["cloud", r.cloudPossible ? "cloud" : "cloud (impossible)", !r.cloudPossible]],
+                     "local");
+  const etiquetteAccord = el("label", "organisation-fable");
+  etiquetteAccord.append(accord, el("span", "", " J'accorde Fable à cet agent (plus capable, plus cher)"));
+  for (const [libelle, champ] of [["Rôle", role], ["Modèle", modele], ["Lieu", lieu]]) {
+    const label = el("label", "parallelisme-champ");
+    champ.disabled = !agir;
+    label.append(el("span", "", libelle), champ);
+    manuel.append(label);
+  }
+  accord.disabled = !agir;
+  manuel.append(etiquetteAccord);
+  if (!r.cloudPossible) manuel.append(el("p", "note", `Cloud : ${r.raisonCloud}`));
+  if (agir) {
+    const erreur = el("p", "saisie-erreur", "");
+    manuel.append(boutonDemande(ctx, "Recruter un agent", () => demandeRecrutementManuel(
+      r, {role: role.value, modele: modele.value, lieu: lieu.value, fable: accord.checked}), erreur), erreur);
+  }
+  bloc.append(manuel);
+  // En automatique.
+  const auto = el("div", "recrutement-auto");
+  auto.append(el("p", "note", "Attribution automatique : les rôles qui ont le plus de travail prêt ou en file (sans " +
+                              "compter ce qu'une validation retient), le modèle déjà choisi pour ce rôle, le cloud " +
+                              "d'abord s'il reste des places cloud, jamais au-delà des places."));
+  for (const n of r.notes) auto.append(el("p", "note", n));
+  if (agir && r.propositions.length) {
+    const label = el("label", "parallelisme-champ");
+    const nombre = document.createElement("input");
+    nombre.type = "number";
+    nombre.min = "1";
+    nombre.max = String(r.propositions.length);
+    nombre.step = "1";
+    nombre.value = "1";
+    label.append(el("span", "", `Nombre d'agents (1 à ${r.propositions.length})`), nombre);
+    const liste = el("ul", "recrutement-apercu");
+    const erreur = el("p", "saisie-erreur", "");
+    let apercu = [];
+    const confirmer = boutonDemande(ctx, "Confirmer le recrutement", () => demandeRecrutementAuto(apercu), erreur);
+    confirmer.hidden = true;
+    const voir = el("button", "bouton", "Recruter N agents : voir la répartition");
+    voir.type = "button";
+    voir.addEventListener("click", () => {
+      apercu = apercuAuto(r, nombre.value);
+      liste.replaceChildren(...apercu.map((p) => el("li", "", `${p.role} · ${p.modele} · ${p.lieu} — ${p.raison}`)));
+      erreur.textContent = apercu.length ? "" : `Un nombre de 1 à ${r.propositions.length}.`;
+      confirmer.hidden = !apercu.length;
+    });
+    auto.append(label, voir, liste, confirmer, erreur);
+  }
+  bloc.append(auto);
   return bloc;
 }
 

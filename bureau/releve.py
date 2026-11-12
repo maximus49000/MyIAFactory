@@ -773,6 +773,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     m = r.get("agents_cloud_max")
     if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 0):
         erreurs.append("« agents_cloud_max » doit être un entier positif ou nul.")
+    if r.get("recrutement") is not None:
+        _verifier_recrutement(r["recrutement"], erreurs)
     ids_decisions = set()
     ids_fonc = _verifier_fonctionnalites(r, agents, erreurs, ids_decisions)
     _verifier_decisions_projet(r, agents, erreurs, ids_decisions)
@@ -920,7 +922,47 @@ def _verifier_regles(regles, q, erreurs):
                 erreurs.append(f"{q} : « {d} » n'est pas une date.")
 
 
-CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max", "agents_cloud_max")
+CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max", "agents_cloud_max",
+                    "recrutement")
+LIEUX = ("local", "cloud")
+
+
+def _entier_nn(v):
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+
+def _verifier_recrutement(x, erreurs):
+    """`recrutement` : `{roles: [{role, nom, modele, agents, cloud, travail}], places: {cloud, locaux},
+    propositions: [{role, modele, lieu, raison}], notes: [textes], depot: {git, github, url, creable, essai?},
+    cloud_impossible: texte | null}` (voir docs/releve.md)."""
+    q = "« recrutement »"
+    if not _est_dict(x):
+        erreurs.append(f"{q} doit être un objet.")
+        return
+    roles = x.get("roles")
+    if not isinstance(roles, list) or not all(
+            _est_dict(r) and _texte_plein(r.get("role")) and _texte_plein(r.get("modele")) and _texte(r.get("nom", ""))
+            and all(_entier_nn(r.get(c)) for c in ("agents", "cloud", "travail")) for r in roles):
+        erreurs.append(f"{q} : « roles » est une liste de {{role, nom, modele, agents, cloud, travail}}.")
+    p = x.get("places")
+    if not _est_dict(p) or not all(_entier_nn(p.get(c)) for c in ("cloud", "locaux")):
+        erreurs.append(f"{q} : « places » demande « cloud » et « locaux » (entiers positifs ou nuls).")
+    props = x.get("propositions")
+    if not isinstance(props, list) or not all(
+            _est_dict(a) and _texte_plein(a.get("role")) and _texte_plein(a.get("modele")) and a.get("lieu") in LIEUX
+            and _texte(a.get("raison", "")) for a in props):
+        erreurs.append(f"{q} : « propositions » est une liste de {{role, modele, lieu (local ou cloud), raison}}.")
+    if not isinstance(x.get("notes", []), list) or not all(_texte(n) for n in x.get("notes", [])):
+        erreurs.append(f"{q} : « notes » est une liste de textes.")
+    d = x.get("depot")
+    if not _est_dict(d) or not all(isinstance(d.get(c), bool) for c in ("git", "github", "creable")) \
+            or not _texte_ou_nul(d.get("url")):
+        erreurs.append(f"{q} : « depot » demande « git », « github », « creable » (vrai ou faux) et « url ».")
+    elif d.get("essai") is not None and not (_est_dict(d["essai"]) and isinstance(d["essai"].get("fait"), bool)
+                                             and _texte(d["essai"].get("texte", ""))):
+        erreurs.append(f"{q} : « depot.essai » demande « fait » (vrai ou faux) et « texte ».")
+    if not _texte_ou_nul(x.get("cloud_impossible")):
+        erreurs.append(f"{q} : « cloud_impossible » est un texte ou nul.")
 CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot")
 
 

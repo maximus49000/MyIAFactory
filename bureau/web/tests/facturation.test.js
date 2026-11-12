@@ -1,7 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
-        demandeParallelisme, resumeParallelisme} from "../ui/facturation.js";
+        demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
+        demandeRecrutementAuto, demandeDepot} from "../ui/facturation.js";
+
+const REC = (extra = {}) => ({recrutement: {
+  roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
+  places: {cloud: 2, locaux: 1},
+  propositions: [{role: "dev", modele: "Sonnet", lieu: "cloud", raison: "a"}, {role: "dev", modele: "Sonnet", lieu: "cloud", raison: "b"},
+                 {role: "dev", modele: "Sonnet", lieu: "local", raison: "c"}],
+  notes: [], depot: {git: true, github: true, url: "https://github.com/moi/jeu", creable: false}, cloud_impossible: null,
+  ...extra}});
+
+test("resumeRecrutement : sans dépôt GitHub, le cloud est impossible et le dépôt se crée", () => {
+  assert.equal(resumeRecrutement({}), null);
+  const ok = resumeRecrutement(REC());
+  assert.deepEqual([ok.github, ok.cloudPossible, ok.creable, ok.url], [true, true, false, "https://github.com/moi/jeu"]);
+  const sans = resumeRecrutement(REC({depot: {git: false, github: false, url: null, creable: true},
+                                      cloud_impossible: "Le projet n'est pas un dépôt git."}));
+  assert.deepEqual([sans.cloudPossible, sans.creable, sans.raisonCloud], [false, true, "Le projet n'est pas un dépôt git."]);
+  const plein = resumeRecrutement(REC({places: {cloud: 0, locaux: 0}}));
+  assert.match(plein.raisonCloud, /Agents cloud en même temps/);
+});
+
+test("demandeRecrutementManuel : rôle du projet, modèle, Fable avec l'accord, cloud seulement s'il est possible", () => {
+  const r = resumeRecrutement(REC());
+  assert.deepEqual(demandeRecrutementManuel(r, {role: "dev", modele: "Opus", lieu: "cloud"}),
+                   {type: "recruter", mode: "manuel", agents: [{role: "dev", modele: "Opus", lieu: "cloud"}]});
+  assert.ok(demandeRecrutementManuel(r, {role: "x", modele: "Opus", lieu: "local"}).erreur);
+  assert.match(demandeRecrutementManuel(r, {role: "dev", modele: "Fable", lieu: "local"}).erreur, /accord/);
+  assert.deepEqual(demandeRecrutementManuel(r, {role: "dev", modele: "Fable", lieu: "local", fable: true}).agents,
+                   [{role: "dev", modele: "Fable", lieu: "local", fable: true}]);
+  const sans = resumeRecrutement(REC({depot: {git: false, github: false, url: null, creable: true}, cloud_impossible: "Pas de dépôt."}));
+  assert.equal(demandeRecrutementManuel(sans, {role: "dev", modele: "Opus", lieu: "cloud"}).erreur, "Pas de dépôt.");
+  assert.equal(demandeRecrutementManuel(sans, {role: "dev", modele: "Opus", lieu: "local"}).type, "recruter");
+});
+
+test("apercuAuto : les N premières propositions, puis la demande confirmée ; le dépôt sur clic", () => {
+  const r = resumeRecrutement(REC());
+  assert.deepEqual(apercuAuto(r, "2").map((p) => p.raison), ["a", "b"]);
+  for (const n of [0, 4, "x", 1.5]) assert.deepEqual(apercuAuto(r, n), [], String(n));
+  assert.deepEqual(demandeRecrutementAuto(apercuAuto(r, 3)), {type: "recruter", mode: "auto", agents: [
+    {role: "dev", modele: "Sonnet", lieu: "cloud"}, {role: "dev", modele: "Sonnet", lieu: "cloud"},
+    {role: "dev", modele: "Sonnet", lieu: "local"}]});
+  assert.equal(demandeRecrutementAuto([]), null);
+  assert.deepEqual(demandeDepot(), {type: "depot_git", confirme: true});
+});
 
 test("demandeParallelisme : des entiers dans les bornes, sinon rien ne part", () => {
   assert.deepEqual(demandeParallelisme("3", " 1 "), {type: "parallelisme", agents_locaux_max: 3, agents_cloud_max: 1});

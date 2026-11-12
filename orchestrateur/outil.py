@@ -29,6 +29,7 @@ from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
+from orchestrateur import recrutement as rc  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 from orchestrateur import workflows as wf  # noqa: E402
 from partenaires import catalogue as pcat  # noqa: E402
@@ -47,7 +48,7 @@ DELAI_COMMANDE_DECLAREE_S = 300
 TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution", "verdict_solution",
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaires_actualiser",
-                 "partenaires_maj", "installer_outil", "parallelisme")
+                 "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -1933,7 +1934,8 @@ def construire_releve(ctx):
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
-         "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone())}
+         "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
+         "recrutement": releve_recrutement(ctx, s, fiches)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
     r["usage"] = [_usage_au_releve(u, ids_taches, cles_titulaires) if u.get("genre") == "partenaire" else
@@ -2586,6 +2588,73 @@ def cmd_parallelisme(ctx, e):
     return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
 
 
+# --- Le recrutement depuis le bureau (conception 2026-11-12-recrutement-design.md).
+
+GH = None    # remplacé par les tests : (args, cwd) -> (code, sortie) ; None : le vrai `gh` (installation.creation)
+
+
+def _fichier_depot(ctx):
+    """Le dernier essai de « Créer le dépôt Git » : son résultat, montré au bureau."""
+    return ctx.f["suivi"].with_name("depot-git.json")
+
+
+def releve_recrutement(ctx, s, fiches):
+    """Ce que la partie « Parallélisme du projet » montre pour recruter : les rôles, les places sans agent, le dépôt,
+    la raison qui empêche le cloud et la répartition automatique proposée (voir `recrutement.proposer`)."""
+    d = rc.depot(_projet(ctx))
+    raison = rc.raison_sans_cloud(d)
+    p = rc.proposer(ctx.f, s, fiches, places_cloud_du_projet(ctx), d["github"])
+    try:
+        essai = json.loads(_fichier_depot(ctx).read_text(encoding="utf-8"))
+        essai = {k: essai[k] for k in ("t", "fait", "texte", "url") if k in essai} if isinstance(essai, dict) else None
+    except (OSError, ValueError):
+        essai = None
+    roles = rc.roles_du_projet(ctx.f, fiches)
+    return {"roles": [{k: r[k] for k in ("role", "nom", "modele", "agents", "cloud")} | {"travail": p["travail"].get(r["role"], 0)}
+                      for r in roles],
+            "places": p["places"], "propositions": p["propositions"], "notes": p["notes"],
+            "depot": {"git": d["git"], "github": d["github"], "url": d["url"],
+                      "creable": not d["github"] and not d["origine"], **({"essai": essai} if essai else {})},
+            "cloud_impossible": raison}
+
+
+def cmd_recruter(ctx, e):
+    """`{mode: manuel | auto, agents: [{role, modele, lieu, fable?}]}` : écrit les fiches des recrues (tout ou rien) ;
+    chaque recrue a le prénom libre suivant de l'équipe, le service, le texte et les outils d'une fiche du même rôle,
+    et suit le brief du rôle. Cloud : projet sur GitHub et place cloud libre ; auto : jamais au-delà des places."""
+    fiches_ = ctx.fiches()
+    try:
+        nouvelles = rc.fiches_a_recruter(ctx.f, fiches_, e.get("mode"), e.get("agents"), places_cloud_du_projet(ctx),
+                                         rc.depot(_projet(ctx)), su.maintenant()[:10])
+    except rc.RecrutementRefuse as ex:
+        raise Refus(str(ex))
+    ecrites = []
+    with ctx.suivi.transaction():     # un seul écrivain à la fois (l'outil et le bureau)
+        try:
+            for x in nouvelles:
+                ecrites.append(x["chemin"])
+                fi.ecrire_fiche(x)
+            fi.lire_toutes(ctx.f["fiches"])
+        except BaseException:
+            for c in ecrites:
+                Path(c).unlink(missing_ok=True)
+            raise
+    return {"ok": True, "agents": [{k: x[k] for k in ("cle", "prenom", "role", "modele", "lieu")} for x in nouvelles]}
+
+
+def cmd_depot(ctx, e):
+    """`{action: creer, confirme: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui). Dépôt git
+    local si besoin, puis dépôt GitHub privé et poussée (`creation.depot_github`). Le résultat est noté pour le
+    bureau et rendu `{fait, url, texte}`."""
+    from installation import creation
+    if e.get("action") != "creer" or e.get("confirme") is not True:
+        raise Refus("« depot » demande action: creer et confirme: vrai (le clic du Directeur).")
+    projet = _projet(ctx)
+    r = creation.depot_github(projet, rc.nom_de_depot(ctx.f.get("nom") or projet.name), GIT, GH or creation.executer_gh)
+    ecrire_json_atomique(_fichier_depot(ctx), {"t": su.maintenant(), **r})
+    return r
+
+
 def cmd_agent_libre(ctx, e):
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
     fiches_ = _fiches_avec_sessions(ctx)
@@ -2748,6 +2817,7 @@ COMMANDES = {
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
+    "recruter": (cmd_recruter, "obligatoire"), "depot": (cmd_depot, "obligatoire"),
 }
 
 

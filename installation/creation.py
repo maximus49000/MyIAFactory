@@ -124,6 +124,66 @@ def github(projet, nom, git, gh=executer_gh):
 _depot = github   # `creer_projet` a un paramètre `github`
 
 
+def depot_github(projet, nom, git, gh=executer_gh):
+    """Le dépôt GitHub **privé** d'un projet qui existe déjà (le bouton « Créer le dépôt Git » du bureau ; le clic est
+    le consentement). Règle d'abord le `.gitignore` (convention de l'installation : `.env` et les fichiers propres au
+    poste restent hors du dépôt, `.factory` est versionné) ; sans `.git`, c'est `github` (init, premier commit, dépôt,
+    poussée) ; avec un `.git` sans origine, un commit si besoin puis le dépôt. Une origine existante n'est jamais
+    remplacée. Rend `{"fait": bool, "url": str | None, "texte": str}` (le texte dit le résultat ou la raison, et la
+    commande à lancer)."""
+    from orchestrateur import recrutement
+    projet = Path(projet)
+    try:
+        mep.regler_gitignore(projet)
+    except OSError as e:
+        return {"fait": False, "url": None, "texte": f"Le .gitignore n'a pas pu être réglé : {e}"}
+
+    def origine():
+        code, sortie = git(["remote", "get-url", "origin"], projet)
+        return sortie.strip().splitlines()[-1].strip() if code == 0 and sortie.strip() else None
+
+    def fait(url, texte):
+        return {"fait": True, "url": url, "texte": texte}
+
+    if (projet / ".git").exists():
+        actuelle = origine()
+        if actuelle and "github.com" in actuelle:
+            url = recrutement.adresse_web(actuelle)
+            return fait(url, f"Le projet est déjà sur GitHub : {url}")
+        if actuelle:
+            return {"fait": False, "url": None, "texte": f"Le dépôt a déjà une origine qui n'est pas sur GitHub "
+                    f"({actuelle}) : rien n'a été changé."}
+    code, sortie = gh(["auth", "status"], projet)
+    if code != 0:
+        absent = "pas pu s'exécuter" in sortie
+        return {"fait": False, "url": None, "texte": (
+            "Le dépôt n'a pas été créé : gh (l'outil GitHub, cli.github.com) n'est pas installé sur ce poste." if absent
+            else "Le dépôt n'a pas été créé : gh n'est pas connecté à votre compte. Lancez « gh auth login », puis "
+                 "cliquez de nouveau « Créer le dépôt Git ».")}
+    if not (projet / ".git").exists():
+        r = github(projet, nom, git, gh)
+        if r != "fait":
+            return {"fait": False, "url": None, "texte": r.replace("GitHub n'a pas été fait", "Le dépôt n'a pas été créé")}
+    else:
+        code, sortie = git(["add", "."], projet)
+        if code != 0:
+            return {"fait": False, "url": None, "texte": f"Le dépôt n'a pas été créé : git add a échoué. {sortie}"[:400]}
+        a_un_commit = git(["rev-parse", "--verify", "HEAD"], projet)[0] == 0
+        a_commiter = git(["diff", "--cached", "--quiet"], projet)[0] != 0
+        if a_commiter or not a_un_commit:
+            code, sortie = git(["commit", "-m", MESSAGE_PREMIER_COMMIT] + ([] if a_commiter else ["--allow-empty"]),
+                               projet)
+            if code != 0:
+                return {"fait": False, "url": None,
+                        "texte": f"Le dépôt n'a pas été créé : git commit a échoué. {sortie}"[:400]}
+        code, sortie = gh(["repo", "create", nom, "--private", "--source", ".", "--push"], projet)
+        if code != 0:
+            return {"fait": False, "url": None,
+                    "texte": f"Le dépôt n'a pas été créé : gh repo create a échoué. {sortie}"[:400]}
+    url = recrutement.adresse_web(origine() or "") or None
+    return fait(url, f"Dépôt GitHub privé créé et poussé{' : ' + url if url else ''}.")
+
+
 def calibrer_le_poste(bureau_json):
     """La charge maximum conseillée pour ce poste, comme le fait l'installation par la skill (`calibrage.calibrer` : la
     machine et, une fois assez de mesures, l'historique de charge du bureau). 70 si rien n'a pu être mesuré."""

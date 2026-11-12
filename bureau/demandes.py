@@ -23,7 +23,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "valider_etape": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
-          "parallelisme": ("agents_locaux_max", "agents_cloud_max")}
+          "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
+          "recruter": ("mode", "agents"), "depot_git": ("confirme",)}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
@@ -32,7 +33,7 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solu
                "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme")
+               "parallelisme", "recruter", "depot_git")
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaires_actualiser", "partenaires_maj")
 MAX_REGLE = 500
 OPERATIONS_REGLE = ("ajouter", "modifier", "supprimer")
@@ -56,6 +57,9 @@ def nettoyer(demande):
     if genre == "valider_etape" and isinstance(d.get("reponses"), list):   # rien d'autre que le point et la réponse
         d["reponses"] = [{k: x[k] for k in ("point", "ok") if k in x} if isinstance(x, dict) else x
                          for x in d["reponses"]]
+    if genre == "recruter" and isinstance(d.get("agents"), list):   # rien d'autre que le rôle, le modèle, le lieu
+        d["agents"] = [{k: a[k] for k in ("role", "modele", "lieu", "fable") if k in a} if isinstance(a, dict) else a
+                       for a in d["agents"]]
     if isinstance(d.get("images"), list):  # rien d'autre que le nom, le type et les données n'est transmis
         d["images"] = [{k: i[k] for k in ("nom", "type", "donnees") if k in i} if isinstance(i, dict) else i
                        for i in d["images"]]
@@ -129,6 +133,10 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return "Le relevé de ce projet ne gère pas cette demande (version 4)."
     if genre == "parallelisme":       # des nombres, pas des textes
         return _verifier_parallelisme(demande)
+    if genre == "recruter":
+        return _verifier_recrutement(demande, r)
+    if genre == "depot_git":
+        return _verifier_depot(demande, r)
     for champ in CHAMPS[genre]:
         if not isinstance(demande.get(champ), str):
             return f"« {champ} » est obligatoire (texte)."
@@ -227,6 +235,58 @@ def _verifier_parallelisme(demande):
         v = demande.get(champ)
         if isinstance(v, bool) or not isinstance(v, int) or not bas <= v <= haut:
             return f"« {champ} » doit être un entier de {bas} à {haut}."
+    return None
+
+
+MODELES_RECRUE = ("Haiku", "Sonnet", "Opus")
+
+
+def _verifier_recrutement(demande, r):
+    """`recruter` contre le relevé : rôles du projet, modèle (Fable seulement avec la case d'accord, en manuel), lieu ;
+    cloud seulement sur un projet GitHub et dans les places cloud sans agent ; auto jamais au-delà des places."""
+    rec = r.get("recrutement")
+    if not isinstance(rec, dict):
+        return "Le relevé de ce projet ne permet pas encore de recruter (mettez à jour l'orchestrateur)."
+    mode, agents = demande.get("mode"), demande.get("agents")
+    if mode not in ("manuel", "auto"):
+        return "« mode » vaut manuel ou auto."
+    if not isinstance(agents, list) or not 1 <= len(agents) <= (1 if mode == "manuel" else 16):
+        return "« agents » : un agent en manuel, de 1 à 16 en auto."
+    roles = {x.get("role") for x in rec.get("roles") or [] if isinstance(x, dict)}
+    for a in agents:
+        if not isinstance(a, dict) or a.get("role") not in roles:
+            return "Chaque agent a un « role » du workflow du projet."
+        if "fable" in a and not isinstance(a["fable"], bool):
+            return "« fable » vaut vrai ou faux."
+        if a.get("modele") == "Fable":
+            if a.get("fable") is not True or mode != "manuel":
+                return "Fable demande votre accord (la case « J'accorde Fable »), en recrutement manuel."
+        elif a.get("modele") not in MODELES_RECRUE:
+            return "« modele » vaut Haiku, Sonnet ou Opus."
+        if a.get("lieu") not in ("local", "cloud"):
+            return "« lieu » vaut local ou cloud."
+    places = rec.get("places") or {}
+    n_cloud = sum(1 for a in agents if a["lieu"] == "cloud")
+    if n_cloud and not (rec.get("depot") or {}).get("github"):
+        return (rec.get("cloud_impossible") or "Le projet n'est pas sur GitHub.") + " Créez d'abord le dépôt Git."
+    if n_cloud > places.get("cloud", 0):
+        return "Pas assez de places cloud sans agent : augmentez « Agents cloud en même temps »."
+    if mode == "auto" and len(agents) - n_cloud > places.get("locaux", 0):
+        return "Pas assez de places locales sans agent : la répartition automatique ne les dépasse jamais."
+    return None
+
+
+def _verifier_depot(demande, r):
+    """`depot_git` : le clic « Créer le dépôt Git » (`confirme` vrai) sur un projet qui n'est pas encore sur GitHub."""
+    if demande.get("confirme") is not True:
+        return "« confirme » doit être vrai : le dépôt n'est créé que sur votre clic."
+    depot = (r.get("recrutement") or {}).get("depot")
+    if not isinstance(depot, dict):
+        return "Le relevé de ce projet ne permet pas encore de créer le dépôt (mettez à jour l'orchestrateur)."
+    if depot.get("github"):
+        return "Le projet est déjà sur GitHub."
+    if not depot.get("creable"):
+        return "Le dépôt a déjà une origine qui n'est pas sur GitHub : changez-la vous-même."
     return None
 
 

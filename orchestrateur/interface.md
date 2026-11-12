@@ -433,6 +433,33 @@ pas encore franchie (un élément qu'elle concerne est encore avant elle ou en a
 prioritaire et la pause restent au-dessus de tout. Des places libres sans tâche permise pendant qu'une validation
 attend : `attente-places.json` dans `.factory` (« 2 places libres : en attente de votre validation « … » »).
 
+### `recruter`
+
+Entrée : `{"mode": "manuel" | "auto", "agents": [{"role", "modele", "lieu", "fable"?}]}` (un agent en manuel, 1 à 16
+en auto ; demande `recruter` du bureau). Écrit une fiche par recrue, tout ou rien : clé `<rôle>-<n>` libre, le prénom
+libre suivant de l'équipe, le service, le texte, la spécialité et les outils d'une fiche du même rôle (sinon le service
+de l'étape), le même brief (`briefs/<rôle>.md`, exigé). Refus (code 1) : rôle hors des étapes d'agent des workflows,
+modèle hors Haiku/Sonnet/Opus (Fable seulement en manuel avec `fable: true`, la fiche porte alors « accordé par le
+Directeur le … »), cloud sans dépôt GitHub (origine `origin` sur github.com, lue dans `.git/config`) ou au-delà des
+places cloud sans agent (`agents_cloud_max` effectif moins les agents cloud), auto au-delà des places locales sans agent
+(`agents_locaux_max` moins les agents locaux, chef exclu). Rend `{"ok": true, "agents": [{cle, prenom, role, modele,
+lieu}]}`. Le relevé publie `recrutement` (rôles, places, dépôt, répartition automatique proposée, sans appel d'IA).
+
+Après le recrutement d'un agent cloud, tout est automatique tant que le projet est sur GitHub et que `claude` est
+installé et connecté : quand une tâche de son rôle part, le moteur pousse, lance `claude --cloud`, relève le rapport
+par le dépôt et fusionne. Si le lancement échoue deux fois, la tâche est bloquée et le moteur pose la décision
+`session_cloud` (« Sessions cloud à créer ») avec la démarche ; « C'est fait » inscrit la session et remet en route
+les tâches de cet agent bloquées faute de session.
+
+### `depot`
+
+Entrée : `{"action": "creer", "confirme": true}` (demande `depot_git` : le clic « Créer le dépôt Git » du Directeur,
+jamais sans lui). Règle le `.gitignore` (convention de l'installation : `.env` et les fichiers propres au poste restent
+hors du dépôt, `.factory` est versionné), crée le dépôt git local si besoin (premier commit, ou un commit de ce qui
+n'est pas encore commité), puis le dépôt GitHub **privé** avec `gh repo create <nom> --private --source . --push`.
+Une origine existante n'est jamais remplacée. Rend `{"fait", "url", "texte"}` (le lien, ou la raison : gh absent, gh
+non connecté — « gh auth login » —, git absent, commit refusé) ; noté dans `depot-git.json` (relevé : `recrutement.depot.essai`).
+
 ### `partenaires`
 
 Entrée : `{"action", …}`. Les partenaires (voix, images, 3D, traduction…) sont **facultatifs** : rien ne bloque sans

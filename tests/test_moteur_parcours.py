@@ -253,6 +253,13 @@ class Parcours(AvecParcours):
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
         self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])
 
+    def test_genre_propose_sans_point_avant_la_parenthese(self):
+        self.reecrire(genre=None)
+        classer = {**CLASSER_AUTRE, "nouveau": {"id": "jeu-mobile", "description": "Jeux pour téléphone."}}
+        self.piloter(regles.genre_a_proposer(self.projet, self.etat), juges={"classer_genre": classer})
+        (c,) = self.decisions("confirmer_genre")
+        self.assertIn("« jeu-mobile » (Jeux pour téléphone).", c["texte"])
+
     def test_rien_a_proposer_au_demarrage(self):
         self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])           # le projet a un genre
         self.reecrire(genre=None, description=None)

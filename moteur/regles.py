@@ -552,7 +552,8 @@ def _apres_classer_genre(projet, o, ctx, etat):
             _terminer(projet, ctx, "Je n'ai pas pu deviner le genre du projet ; je propose un workflow quand même.")
             return _proposer(projet, etat, fid, {"fonctionnalite": fid})
         texte = (f"Le projet n'a pas encore de genre. D'après sa description, je propose « {piste} » "
-                 f"({(nouveau or {}).get('description') or 'un genre déjà connu'}). {raison} Le confirmer, ou en "
+                 f"({((nouveau or {}).get('description') or 'un genre déjà connu').strip().rstrip('.')}). {raison} "
+                 "Le confirmer, ou en "
                  "choisir un autre ?")
         entree = {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": texte, "propose": piste,
                   "genres_connus": connus}

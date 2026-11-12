@@ -71,6 +71,20 @@ class Passage(Base):
         self.assertIn("pid", p)
         self.assertEqual(self.moteur.journal, [])
 
+    def test_premier_passage_propose_le_genre_d_un_projet_cree_au_bureau(self):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        self.factory.write_text(json.dumps({**f, "genre": None, "description": "Un site d'une page pour un café."}),
+                                encoding="utf-8")
+        self.appels.objet = {"verdict": "autre", "genre": None, "raison": "Un site web.",
+                             "nouveau": {"id": "site-vitrine", "description": "Sites web d'une page"}}
+        self.moteur.tour()
+        self.assertEqual([json.loads(x)["demande"]["texte"] for _, x in self.appels.recus],
+                         ["Un site d'une page pour un café."])
+        (c,) = self.suivi()["decisions_projet"]
+        self.assertEqual((c["genre"], c["propose"]), ("confirmer_genre", "site-vitrine"))
+        self.moteur.tour()
+        self.assertEqual(len(self.appels.recus), 1)                 # une seule fois
+
     def test_tour_traite_les_messages_d_abord(self):
         self.demande(type="fonctionnalite", texte="Des écrans")
         self.ok("demande-traitee", entree={"id": "r1"})

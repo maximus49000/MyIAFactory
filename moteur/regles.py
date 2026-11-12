@@ -479,23 +479,52 @@ def _en_parcours(projet, etat, fid):
                and not t.get("bloquee") for t in court["taches"])
 
 
+def _genre_deja_propose(projet):
+    """La décision `confirmer_genre` du projet déjà posée, s'il y en a une."""
+    return next((d for d in _etat(projet)["decisions"] if d["portee"] == "projet" and d["genre"] == "confirmer_genre"),
+                None)
+
+
+def genre_a_proposer(projet, etat):
+    """Au premier passage du moteur sur un projet sans genre qui a une description (créé au bureau) : le classement de
+    sa description, pour proposer son genre sans attendre une première demande. Rien si le genre est déjà proposé."""
+    fac = _factory(projet)
+    if _genres_du_projet(fac) or not fac["description"] or _genre_deja_propose(projet):
+        return []
+    return [a_juger("classer_genre", _dossier_classer(projet, fac, {"texte": fac["description"], "images": []}),
+                    {"sans_genre": True})]
+
+
 def _classer(projet, etat, fid, suite):
     """L'appel qui classe la demande (Haiku). Un projet sans genre classe sa description ; la fonctionnalité attend la
-    réponse (`confirmer_genre`)."""
+    réponse (`confirmer_genre`). Si ce genre est déjà proposé, la décision porte désormais la fonctionnalité (pas de
+    second classement)."""
     fac = _factory(projet)
     f = _fonc(projet, fid)
     demande = _demande_de(f)
     sans_genre = not _genres_du_projet(fac)
     if sans_genre:
+        d = _genre_deja_propose(projet)
+        if d is not None and not d.get("fonctionnalite"):
+            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+            lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "confirmer_genre",
+                                        "texte": d["texte"], "propose": d["propose"],
+                                        "genres_connus": d.get("genres_connus") or [], "fonctionnalite": fid})
+            _dire(projet, fid, d["texte"])
+            _terminer(projet, suite, "Le projet n'a pas encore de genre : confirmez celui que je vous propose.")
+            return []
         suite = {**suite, "sans_genre": True}
         demande = {"texte": fac["description"] or demande["texte"], "images": []}
+    return [a_juger("classer_genre", _dossier_classer(projet, fac, demande), suite)]
+
+
+def _dossier_classer(projet, fac, demande):
     connus = lancer(projet, "genre", {"action": "lister"})["genres"]
     par_id = {g["id"]: g for g in connus}
     du_projet = [par_id.get(i) or {"id": i, "domaine": None, "livrable": None, "outils": None}
                  for i in _genres_du_projet(fac)]
-    dossier = {"demande": demande, "projet": {"nom": fac["nom"], "description": fac["description"]},
-               "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
-    return [a_juger("classer_genre", dossier, suite)]
+    return {"demande": demande, "projet": {"nom": fac["nom"], "description": fac["description"]},
+            "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
 
 
 def _sur_fonctionnalite(projet, demande, etat):
@@ -511,21 +540,27 @@ def _sur_fonctionnalite(projet, demande, etat):
 
 
 def _apres_classer_genre(projet, o, ctx, etat):
-    fid = ctx["fonctionnalite"]
+    fid = ctx.get("fonctionnalite")    # absente : le genre d'un projet créé au bureau, proposé au premier passage
     fac = _factory(projet)
     nouveau, piste = o.get("nouveau"), o.get("genre") or (o.get("nouveau") or {}).get("id")
     verdict, raison = o["verdict"], o["raison"]
     connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
     if ctx.get("sans_genre"):
         if not piste:        # aucune piste : on continue sans genre, la proposition de workflow en dira plus
+            if not fid:
+                return []
             _terminer(projet, ctx, "Je n'ai pas pu deviner le genre du projet ; je propose un workflow quand même.")
             return _proposer(projet, etat, fid, {"fonctionnalite": fid})
         texte = (f"Le projet n'a pas encore de genre. D'après sa description, je propose « {piste} » "
                  f"({(nouveau or {}).get('description') or 'un genre déjà connu'}). {raison} Le confirmer, ou en "
                  "choisir un autre ?")
-        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": texte,
-                                    "propose": piste, "genres_connus": connus, "fonctionnalite": fid})
-        _dire(projet, fid, texte)
+        entree = {"action": "poser", "portee": "projet", "genre": "confirmer_genre", "texte": texte, "propose": piste,
+                  "genres_connus": connus}
+        if fid:
+            entree["fonctionnalite"] = fid
+        lancer(projet, "decision", entree)
+        if fid:
+            _dire(projet, fid, texte)
         _terminer(projet, ctx, "Le projet n'a pas encore de genre : je vous en propose un.")
         return []
     if verdict in ("meme", "proche"):
@@ -1756,6 +1791,8 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
         fid = contexte.get("fonctionnalite")
         if type_ == "classer_genre" and fid:
             return _classer_rate(projet, etat, fid, contexte)
+        if type_ == "classer_genre":       # le genre d'un projet sans demande : il sera proposé à la première demande
+            return []
         if type_ == "proposer_organisation" and fid:
             return _proposition_ratee(projet, etat, contexte, decision.question)
         _question(projet, fid, decision.question, ["Je précise", "Plus tard"], contexte)

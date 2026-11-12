@@ -230,6 +230,47 @@ class Parcours(AvecParcours):
         self.assertEqual(self.decisions("confirmer_genre"), [])
         self.assertEqual(self.statut(d2["id"])["statut"], "traitée")
 
+    def test_projet_cree_sans_genre_propose_son_genre_au_demarrage(self):
+        """Un projet créé au bureau avec une description : dès le premier passage du moteur, sans attendre une demande,
+        son genre est proposé (« Le genre vous sera proposé dans un instant »)."""
+        self.reecrire(genre=None)
+        actions = regles.genre_a_proposer(self.projet, self.etat)
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "classer_genre")])
+        self.assertEqual(actions[0][2]["demande"]["texte"], "Des badges pour une chaîne de streaming")
+        self.piloter(actions, juges={"classer_genre": CLASSER_PROCHE})
+        (c,) = self.decisions("confirmer_genre")
+        self.assertEqual((c["portee"], c["propose"], c.get("fonctionnalite")), ("projet", "stickers", None))
+        self.assertIn("stickers", c["texte"])
+        self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])        # déjà proposé : rien de plus
+        d, actions = self.traiter(type="genre", decision=c["id"], genre="stickers")
+        self.assertEqual(actions, [])
+        self.assertEqual(self.lire_factory()["genre"], "stickers")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])
+
+    def test_rien_a_proposer_au_demarrage(self):
+        self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])           # le projet a un genre
+        self.reecrire(genre=None, description=None)
+        self.assertEqual(regles.genre_a_proposer(self.projet, self.etat), [])           # ni genre ni description
+        self.reecrire(description="Des badges")
+        regles.appliquer_jugement(self.projet, "classer_genre", jugement.Decision(question="Raté."),
+                                  {"sans_genre": True}, self.etat)                       # un classement raté : silence
+        self.assertEqual(self.decisions(), [])
+
+    def test_demande_pendant_la_proposition_du_genre_l_attend(self):
+        """Une demande arrive alors que le genre du projet est déjà proposé : pas de second classement, la décision
+        porte désormais la fonctionnalité, et la confirmer propose son workflow."""
+        self.reecrire(genre=None)
+        self.piloter(regles.genre_a_proposer(self.projet, self.etat), juges={"classer_genre": CLASSER_PROCHE})
+        d, vus = self.demander({})
+        self.assertEqual(vus, [])
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        (c,) = self.decisions("confirmer_genre")
+        self.assertEqual((c["propose"], c["fonctionnalite"]), ("stickers", "f1"))
+        self.assertEqual(self.taches(etape="cadrage"), [])
+        _, actions = self.traiter(type="genre", decision=c["id"], genre="stickers")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "proposer_organisation")])
+
     # --- Valider le workflow proposé.
 
     def test_organisation_acceptee_recrute_et_lance_le_cadrage(self):

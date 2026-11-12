@@ -166,6 +166,10 @@ class Moteur:
             self._noter(projet, f"partenaires : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
         self._retrouver_les_sessions(projet, etat)
+        try:    # un projet créé au bureau avec une description : son genre est proposé sans attendre une demande
+            self._executer(projet, regles.genre_a_proposer(projet, etat))
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"genre du projet : {e}")
 
     def _quota(self, projet):
         maintenant = self.horloge()

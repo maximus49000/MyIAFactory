@@ -74,3 +74,9 @@ Rôles : testeur
 Date : 2026-11-12
 
 Comparer par script les pixels de chaque sprite à la palette documentée, avec les variantes d'ombre et de reflet calculées, avant de valider un lot d'assets.
+
+## G13 — Dans un script de génération de sprites, imposer par asserti
+Rôles : artiste
+Date : 2026-11-12
+
+Dans un script de génération de sprites, imposer par assertion les seuls facteurs d'ombre et de reflet autorisés et fournir un script de vérification qui compare tous les pixels opaques à la palette évite les couleurs hors palette.

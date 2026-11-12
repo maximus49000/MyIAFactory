@@ -44,3 +44,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Pour un export mobile de test, désactiver la signature tant qu'aucun keystore n'est fourni.
+
+## G8 — Pour prouver un rendu de jeu, instancie la scène depuis un s
+Rôles : testeur
+Date : 2026-11-12
+
+Pour prouver un rendu de jeu, instancie la scène depuis un script lancé par le moteur. Attends quelques images, enregistre la capture et affiche sa taille.

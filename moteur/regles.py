@@ -1567,7 +1567,8 @@ def _element_en_validation(projet, etat, d):
     v.update(phase="validation", pas=rang, taches=[d["tache"]] if d.get("tache") else [])
     v["dernier_rapport"] = {"compte_rendu": d.get("compte_rendu") or "", "fichiers": list(d.get("fichiers") or []),
                             "points": list(d.get("points") or []), "acces": d.get("acces"),
-                            **{c: d[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in d}}
+                            **{c: d[c] for c in ("doit_marcher", "pas_encore", "conclusion", "nature",
+                                                 "mode_operatoire") if c in d}}
     return v
 
 
@@ -2108,7 +2109,14 @@ CONSIGNE_AVANT_VALIDATION = (
     f"`pas_encore` ({rel.MAX_PAS_ENCORE} caractères au plus : ce qui n'est pas encore attendu à ce stade, ex. « le jeu "
     "ne répond pas encore : combat, carte et magasin viennent avec les éléments suivants » ; vide si tout est attendu) "
     f"et `conclusion` (une phrase, {rel.MAX_CONCLUSION} caractères au plus, ex. « Validez si l'application s'ouvre "
-    "correctement, même si rien n'est encore jouable. »). Ne lui fais pas valider ce qui viendra plus tard.")
+    "correctement, même si rien n'est encore jouable. »). Ne lui fais pas valider ce qui viendra plus tard. "
+    "Déclare aussi la `nature` de ce que tu lui fais valider et ne joins que les preuves qui conviennent : "
+    "`en_jeu` (à essayer dans le livrable : apk, exe, site) → le livrable (ou le lien d'accès) ET `mode_operatoire`, "
+    f"{rel.MIN_ETAPES_MODE} à {rel.MAX_ETAPES_MODE} étapes courtes ({rel.MAX_ETAPE_MODE} caractères au plus : "
+    "installer, lancer, quoi faire, quoi observer) ; `visuel` (images, sprites, sons) → les images légendées, jamais "
+    "l'apk ; `mecanique` (règles, équilibrage) → un document explicatif md ou pdf, et si utile des schémas, jamais "
+    "l'apk (sauf si déjà jouable : alors `en_jeu`) ; `autre` → de quoi juger, expliqué. Le Directeur n'installe un apk "
+    "que pour ce qui est en jeu ; tes points à vérifier suivent cette nature.")
 
 
 def _matiere(projet, etat, t):
@@ -2478,8 +2486,13 @@ def _attendre_le_directeur(projet, etat, v, s):
     n'a pas répondu. Jamais rien à valider : sans image, sans livrable téléchargeable et sans lien d'accès, la décision
     n'est pas posée (voir `_rien_a_verifier`)."""
     precedent = v.get("dernier_rapport") or {}
+    nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
+    if nature in ("visuel", "mecanique"):      # jamais l'apk pour juger un visuel ou une mécanique : il n'est pas montré
+        precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
+                                               if not rel.est_executable(x.get("chemin"))]}
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
-        + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"])
+        + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
+        + _manques_de_nature(projet, nature, precedent)
     if manques:
         return _rien_a_verifier(projet, etat, v, s, manques)
     v.pop("rien_a_verifier", None)
@@ -2500,6 +2513,10 @@ def _attendre_le_directeur(projet, etat, v, s):
               "points": precedent.get("points") or _points_derives(objectif, precedent)}
     if precedent.get("acces"):
         entree["acces"] = precedent["acces"]
+    if nature:
+        entree["nature"] = nature
+        if nature == "en_jeu":
+            entree["mode_operatoire"] = list(precedent["mode_operatoire"])
     for c in ("doit_marcher", "pas_encore", "conclusion"):
         if isinstance(precedent.get(c), str) and (precedent[c].strip() or c == "pas_encore"):
             entree[c] = precedent[c]
@@ -2518,15 +2535,49 @@ CONSIGNE_DE_QUOI_VERIFIER = (
 def _de_quoi_verifier(projet, precedent):
     """Vrai si le Directeur aura de quoi vérifier : un lien d'accès, ou une image ou un livrable téléchargeable qui
     existent dans le projet."""
-    if rel.acces_ok(precedent.get("acces")):
-        return True
+    return rel.acces_ok(precedent.get("acces")) or _fichier_existe(
+        projet, precedent, lambda c: rel.est_image(c) or rel.est_telechargeable(c))
+
+
+def _fichier_existe(projet, precedent, convient):
+    """Vrai si un fichier du rapport, dont le chemin `convient`, existe dans le projet."""
     try:
         f = fa.lire(projet.factory)
     except fa.FactoryInvalide:
         return False
-    return any((rel.est_image(x.get("chemin")) or rel.est_telechargeable(x.get("chemin")))
-               and outil.fichier_du_projet(f, projet.dossier, x.get("chemin")) is not None
+    return any(convient(x.get("chemin")) and outil.fichier_du_projet(f, projet.dossier, x.get("chemin")) is not None
                for x in precedent.get("fichiers") or [])
+
+
+def _manques_de_nature(projet, nature, precedent):
+    """Ce que la nature déclarée de la validation exige et que le rapport n'a pas donné : en jeu, un livrable à essayer
+    (ou un lien d'accès) et son mode opératoire ; un visuel, une image (ou un son) ; une mécanique, un document
+    explicatif. Sans nature (ou `autre`), rien de plus."""
+    if nature == "en_jeu":
+        return ([] if rel.acces_ok(precedent.get("acces")) or _fichier_existe(projet, precedent, rel.est_executable)
+                else ["livrable"]) + ([] if rel.mode_operatoire_ok(precedent.get("mode_operatoire")) else ["mode_operatoire"])
+    if nature == "visuel":
+        return [] if _fichier_existe(projet, precedent, lambda c: rel.est_image(c) or rel.est_son(c)) else ["image"]
+    if nature == "mecanique":
+        return [] if _fichier_existe(projet, precedent, rel.est_document) else ["document"]
+    return []
+
+
+CONSIGNES_DE_NATURE = {
+    "livrable": "Validation en jeu sans livrable : joins le livrable à essayer dans `fichiers` (apk, exe, zip… avec son "
+                "`element`) ou, pour un site qui tourne, `acces` (le serveur laissé en marche).",
+    "mode_operatoire": f"Validation en jeu sans mode opératoire : rends `mode_operatoire`, {rel.MIN_ETAPES_MODE} à "
+                       f"{rel.MAX_ETAPES_MODE} étapes courtes ({rel.MAX_ETAPE_MODE} caractères au plus chacune) pour "
+                       "l'utilisateur : installer, lancer, quoi faire, quoi observer.",
+    "image": "Validation visuelle sans image : joins les images concernées (captures PNG ou JPEG légendées, "
+             "`message.images`), jamais l'apk.",
+    "document": "Validation d'une mécanique sans document explicatif : écris un document (md ou pdf) qui explique la "
+                "mécanique, joins-le dans `fichiers` (avec, si utile, images ou schémas), jamais l'apk (sauf si la "
+                "mécanique est déjà jouable : alors `nature: en_jeu`).",
+}
+QUOI_MANQUE = {"rien": "sans rien à vérifier", "doit_marcher": "sans dire ce qui doit marcher",
+               "livrable": "sans livrable à essayer", "mode_operatoire": "sans mode opératoire",
+               "image": "sans image", "document": "sans document explicatif"}
 
 
 CONSIGNE_DOIT_MARCHER = (
@@ -2546,11 +2597,11 @@ def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
     if not v.get("rien_a_verifier") and avant is not None:
         v["rien_a_verifier"] = 1
         v["pas"] = avant
-        quoi = ("sans rien à vérifier" if "rien" in manques else "sans dire ce qui doit marcher")
+        quoi = " et ".join(QUOI_MANQUE[m] for m in manques)
         _dire(projet, v["fid"], f"« {v['element']['nom']} » arrive à « {s['nom']} » {quoi} : l'étape "
                                 f"« {production[avant]['nom']} » est refaite.")
-        return _tache_de_flux(projet, etat, v, journal=[CONSIGNE_DE_QUOI_VERIFIER if m == "rien" else CONSIGNE_DOIT_MARCHER
-                                                        for m in manques])
+        consignes = {"rien": CONSIGNE_DE_QUOI_VERIFIER, "doit_marcher": CONSIGNE_DOIT_MARCHER, **CONSIGNES_DE_NATURE}
+        return _tache_de_flux(projet, etat, v, journal=[consignes[m] for m in manques])
     v.pop("rien_a_verifier", None)
     v["phase"] = "bloque"
     element = v["element"]
@@ -2561,6 +2612,10 @@ def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
     if "doit_marcher" in manques:
         raisons.append("Validation sans consigne : l'étape précédente n'a pas dit ce qui doit marcher "
                        "(`doit_marcher`, deux fois). Demandez-le par un retour sur cette tâche.")
+    for m in manques:
+        if m in CONSIGNES_DE_NATURE:
+            raisons.append(f"Validation incomplète : l'étape précédente est restée {QUOI_MANQUE[m]} "
+                           f"(deux fois). Demandez-le par un retour sur cette tâche.")
     raison = " ".join(raisons)
     tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
                                    "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
@@ -2645,9 +2700,12 @@ def _retenir_le_rapport(v, r):
     acces = (propre or {}).get("acces") or r.get("acces")
     # Ce que dit la validation : celui du compte rendu de l'élément s'il dit `doit_marcher`, sinon celui du rapport.
     dit = propre if (propre or {}).get("doit_marcher") else r
+    # La nature et le mode opératoire vont ensemble : ceux du compte rendu de l'élément s'il déclare sa nature.
+    nat = propre if (propre or {}).get("nature") else r
     v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX],
                             "points": list(points)[:rel.MAX_POINTS], "acces": acces,
-                            **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in dit}}
+                            **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in dit},
+                            **{c: nat[c] for c in ("nature", "mode_operatoire") if c in nat}}
 
 
 def _texte_d_image(x):

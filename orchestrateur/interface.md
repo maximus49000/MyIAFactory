@@ -143,12 +143,14 @@ aussi `glossaire` (mêmes entrées). Rend `{"id": "m3"}`.
 ### `decision`
 
 Entrée : `{"action": "poser", "portee", "genre", "texte", ...}` ou `{"action": "lever", "id"}`.
-`{"action": "completer", "id", "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?, "fichiers"?}` complète une
+`{"action": "completer", "id", "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?, "nature"?, "mode_operatoire"?, "fichiers"?}` complète une
 décision `valider_etape` encore posée (au moins un champ, validés comme à la pose : `doit_marcher` 480 caractères au
 plus et non vide, `pas_encore` 480 au plus et peut être vide, `conclusion` 200 au plus ; `points_a_verifier` devient
 `points`, 1 à 8 phrases différentes de 160 au plus ; `fichiers`, liste non vide de `{chemin, titre}`, remplace ce qu'il y
 a à vérifier, par exemple les images d'un style au lieu d'un apk qui ne les montre pas encore) et ne touche à rien d'autre ; refusée pour une décision inconnue
-ou levée, ou d'un autre genre. Les trois champs se posent aussi avec `poser` (`valider_etape`). Rend `{"ok": true}`.
+ou levée, ou d'un autre genre. Les trois champs se posent aussi avec `poser` (`valider_etape`). `nature` (`en_jeu`,
+`visuel`, `mecanique` ou `autre`) et `mode_operatoire` (2 à 10 textes non vides de 200 caractères au plus) sont validés de
+la même façon, à la pose comme à la complétion, pour corriger une décision déjà posée. Rend `{"ok": true}`.
 `portee` = l'id d'une fonctionnalité (`genre` : `valider_cahier`, `valider_methode`, `methode_a_revoir`,
 `reprendre_methode`, `environnement` avec `environnement` (la liste des outils du poste qui manquent), `genre_fonctionnalite` avec `propose` (le genre proposé), `genres_connus`, `incertain` (vrai
 quand le moteur hésite) et, facultatif, `nouveau` `{id, description}`) ou
@@ -400,6 +402,15 @@ valider), `pas_encore` (480 au plus, peut être vide : ce qui n'est pas encore a
 (une phrase, 200 au plus : « Validez si… »). Une forme fautive est écartée ; sans `doit_marcher`, même relance unique
 (un seul compteur avec « rien à valider »), puis tâche bloquée avec la raison. Ils sont stockés sur la décision
 `valider_etape`.
+Il déclare aussi la `nature` de ce qu'il fait valider (rapport, ou compte rendu de l'élément dans un lot) et ne joint que
+les preuves qui conviennent : `en_jeu` (à essayer dans le livrable exécutable) → le livrable téléchargeable (apk, exe, zip…)
+ou le lien d'accès d'un site, et `mode_operatoire` (2 à 10 étapes courtes de 200 caractères au plus : installer, lancer, quoi
+faire, quoi observer) ; `visuel` (images, sprites, sons) → les images légendées (ou sons), jamais l'apk ; `mecanique` →
+un document explicatif (md, pdf…) et, si utile, des schémas, jamais l'apk sauf si la mécanique est déjà jouable (alors
+`en_jeu`) ; `autre` → de quoi juger, expliqué. Le moteur contrôle avant de poser la décision (même relance unique, même
+compteur, puis blocage) : `en_jeu` sans livrable ni lien, ou sans mode opératoire ; `visuel` sans image ni son ; `mecanique`
+sans document. Un livrable exécutable joint à une validation `visuel` ou `mecanique` est retiré des fichiers montrés (ce
+n'est pas une erreur). Une nature absente ou inconnue : comportement d'avant.
 
 La demande `valider_etape` venue de la fenêtre porte `reponses` `[{point, ok}]` : `lancer actions` refuse (code 1) une
 forme fautive ou un verdict qui n'en découle pas (tous OK = `valider`) ; le moteur vérifie en plus que les points sont

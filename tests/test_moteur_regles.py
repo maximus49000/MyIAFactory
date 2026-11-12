@@ -1086,6 +1086,148 @@ class Validation(Base):
         self.assertIn("Le site s'ouvre depuis le lien d'accès et répond sans erreur", d["points"])
         self.assertEqual(self.taches(etape="validation:valider")[0].get("bloquee"), None)
 
+    # --- La nature de ce qu'on fait valider : les preuves qui conviennent (règle de l'utilisateur).
+
+    MODE = ["Installez l'apk sur le téléphone.", "Ouvrez le jeu.", "Touchez Jouer et observez le menu."]
+
+    def valider_nature(self, *rapports):
+        """Programmation, puis les rapports des tests donnés (le dernier pose la décision ou bloque)."""
+        self.projet_avec_validation()
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, *rapports])
+
+    def rendu(self, nature=None, fichiers=(), **plus):
+        r = {**verdict("e1"), **DIT, "message": {"texte": "Testé."},
+             "fichiers": [{"chemin": c, "titre": c.rsplit("/", 1)[-1], "element": "e1"} for c in fichiers], **plus}
+        if nature:
+            r["nature"] = nature
+        return r
+
+    def test_en_jeu_avec_apk_et_mode_operatoire_pose_la_decision(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.valider_nature(self.rendu("en_jeu", ["build/jeu.apk"], mode_operatoire=self.MODE))
+        (d,) = self.decisions()
+        self.assertEqual((d["nature"], d["mode_operatoire"]), ("en_jeu", self.MODE))
+        self.assertEqual([f["chemin"] for f in d["fichiers"]], ["build/jeu.apk"])
+
+    def test_en_jeu_avec_lien_d_acces_suffit_sans_livrable(self):
+        self.valider_nature(self.rendu("en_jeu", acces=ACCES, mode_operatoire=self.MODE))
+        (d,) = self.decisions()
+        self.assertEqual((d["nature"], d["acces"]), ("en_jeu", ACCES))
+
+    def test_en_jeu_sans_mode_operatoire_relance_puis_pose(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        sans = self.rendu("en_jeu", ["build/jeu.apk"])
+        self.valider_nature(sans, {**sans, "mode_operatoire": self.MODE})
+        (d,) = self.decisions()
+        self.assertEqual(d["mode_operatoire"], self.MODE)
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertTrue(any("mode opératoire" in j["texte"] for j in essais[-1]["journal"]))
+
+    def test_en_jeu_mode_operatoire_mal_forme_compte_comme_absent(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        mauvais = self.rendu("en_jeu", ["build/jeu.apk"], mode_operatoire=["une seule étape"])
+        self.valider_nature(mauvais, mauvais)
+        self.assertEqual(self.decisions(), [])
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("mode opératoire", val["bloquee"])
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "bloque")
+
+    def test_en_jeu_sans_livrable_relance_une_fois_puis_bloque(self):
+        self.fichier("pieces/f1/essai.png")
+        sans = self.rendu("en_jeu", ["pieces/f1/essai.png"], mode_operatoire=self.MODE)    # une image n'est pas un livrable
+        self.valider_nature(sans, sans)
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertTrue(any("sans livrable" in j["texte"] for j in essais[-1]["journal"]))
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("sans livrable", val["bloquee"])
+
+    def test_visuel_sans_image_relance_et_l_apk_n_est_pas_une_preuve(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        sans = self.rendu("visuel", ["build/jeu.apk"])
+        self.valider_nature(sans, sans)
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        self.assertTrue(any("Validation visuelle sans image" in j["texte"] for j in essais[-1]["journal"]))
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("sans image", val["bloquee"])
+
+    def test_visuel_retire_l_apk_des_fichiers_montres(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.fichier("pieces/f1/essai.png")
+        self.valider_nature(self.rendu("visuel", ["build/jeu.apk", "pieces/f1/essai.png"],
+                                       mode_operatoire=self.MODE, acces=ACCES))
+        (d,) = self.decisions()
+        self.assertEqual([f["chemin"] for f in d["fichiers"]], ["pieces/f1/essai.png"])
+        self.assertEqual(d["nature"], "visuel")
+        self.assertNotIn("mode_operatoire", d)                  # le mode opératoire ne sert qu'à une validation en jeu
+        self.assertNotIn("Le livrable se télécharge", " ".join(d["points"]))
+
+    def test_mecanique_demande_un_document_et_retire_l_apk(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.fichier("pieces/f1/schema.png")
+        sans = self.rendu("mecanique", ["build/jeu.apk", "pieces/f1/schema.png"])
+        self.valider_nature(sans, sans)
+        self.assertEqual(self.decisions(), [])
+        essais = self.taches(etape="flux:essai")
+        self.assertTrue(any("document explicatif" in j["texte"] for j in essais[-1]["journal"]))
+
+    def test_mecanique_avec_document_pose_sans_apk(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.fichier("docs/equilibrage.md", b"# Equilibrage\n")
+        self.fichier("pieces/f1/schema.png")
+        self.valider_nature(self.rendu("mecanique", ["build/jeu.apk", "docs/equilibrage.md", "pieces/f1/schema.png"]))
+        (d,) = self.decisions()
+        self.assertEqual(sorted(f["chemin"] for f in d["fichiers"]), ["docs/equilibrage.md", "pieces/f1/schema.png"])
+        self.assertEqual(d["nature"], "mecanique")
+
+    def test_nature_autre_et_absente_gardent_le_comportement_actuel(self):
+        self.fichier("pieces/f1/essai.png")
+        self.valider_nature(self.rendu("autre", ["pieces/f1/essai.png"]))
+        (d,) = self.decisions()
+        self.assertEqual(d["nature"], "autre")
+        self.assertNotIn("mode_operatoire", d)
+
+    def test_nature_absente_ou_inconnue_n_ajoute_rien(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.valider_nature(self.rendu("sprites", ["build/jeu.apk"]))          # nature inconnue : écartée par le rapport
+        (d,) = self.decisions()
+        self.assertNotIn("nature", d)
+        self.assertEqual([f["chemin"] for f in d["fichiers"]], ["build/jeu.apk"])
+
+    def test_nature_du_compte_rendu_d_un_lot(self):
+        self.fichier("pieces/f1/essai.png")
+        r = self.rendu(None, [], comptes_rendus=[{"element": "e1", "texte": "Sprites.", "nature": "visuel",
+                                                  "images": [{"chemin": "pieces/f1/essai.png", "legende": "Sprite"}]}])
+        self.valider_nature(r)
+        (d,) = self.decisions()
+        self.assertEqual(d["nature"], "visuel")
+
+    def test_nature_retrouvee_apres_redemarrage(self):
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        self.valider_nature(self.rendu("en_jeu", ["build/jeu.apk"], mode_operatoire=self.MODE))
+        self.etat = regles.nouvel_etat()
+        regles.avancer(self.projet, self.etat)
+        v = self.etat["elements"]["f1/e1"]["dernier_rapport"]
+        self.assertEqual((v["nature"], v["mode_operatoire"]), ("en_jeu", self.MODE))
+
+    def test_consigne_de_nature_courte_et_avant_la_validation_seulement(self):
+        self.projet_avec_validation()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[{"statut": "fait", "message": {"texte": "Ok."}}],
+                     limite=1)
+        (dev,) = self.taches(etape="flux:dev")
+        self.assertNotIn("mode_operatoire", regles._matiere(self.projet, self.etat, dev))
+        (essai,) = self.taches(etape="flux:essai")
+        m = regles._matiere(self.projet, self.etat, essai)
+        for mot in ("`nature`", "`en_jeu`", "`visuel`", "`mecanique`", "`autre`", "`mode_operatoire`", "2 à 10 étapes",
+                    "200 caractères au plus"):
+            self.assertIn(mot, m)
+        self.assertLess(len(regles.CONSIGNE_AVANT_VALIDATION), 3200)
+
     def test_validation_apres_redemarrage(self):
         self.jusqu_a_la_validation()
         self.etat = regles.nouvel_etat()                                # le moteur est relancé : sa mémoire est perdue

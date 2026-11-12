@@ -57,6 +57,25 @@ mais jamais rien à valider. »
    sans ces champs n'affiche que « Ce qui doit marcher : l'élément correspond à son objectif » (rien d'inventé) ;
    l'action `decision completer` de l'outil la complète sans toucher au reste.
 
+10. **Nature de ce qu'on valide** (ajout, règle de l'utilisateur : « Si tu souhaites valider un élément in game, tu
+    mettras l'apk à installer (ainsi que le mode opératoire pour le valider). Si c'est seulement du visuel, une
+    mécanique ou autre, tu mettras l'image, le document explicatif de la mécanique, etc. » ; constat : une validation de
+    sprites joignait l'apk alors que les sprites n'étaient pas en jeu). L'agent qui précède la validation déclare la
+    `nature` : `en_jeu`, `visuel`, `mecanique` ou `autre`, et ne joint que les preuves qui conviennent.
+    - `en_jeu` : le livrable téléchargeable exécutable (apk, exe, zip…) ou le lien d'accès d'un site, ET `mode_operatoire`
+      (2 à 10 étapes de 200 caractères au plus : installer, lancer, quoi faire, quoi observer) ;
+    - `visuel` : les images (ou sons) concernés, légendés ; jamais l'apk ;
+    - `mecanique` : un document explicatif (md, pdf…), et si utile images ou schémas ; jamais l'apk, sauf si la mécanique
+      est déjà jouable (alors `en_jeu`) ;
+    - `autre` : de quoi juger, expliqué.
+    Contrôle du moteur avant de poser la décision, même relance unique et même compteur que « jamais rien à valider »,
+    puis blocage : `en_jeu` sans livrable ni lien, ou sans mode opératoire ; `visuel` sans image (ni son) ; `mecanique`
+    sans document. Un livrable exécutable joint à un `visuel` ou une `mecanique` est retiré des fichiers montrés (pas une
+    erreur) ; le mode opératoire n'est gardé que pour `en_jeu`. Nature absente ou inconnue : comportement d'avant. La
+    fenêtre affiche la nature (« À essayer en jeu », « Visuel à juger », « Mécanique à lire », « À examiner ») après
+    l'objectif et, pour `en_jeu`, le mode opératoire numéroté juste après le bouton « Télécharger ». Les points à vérifier
+    suivent la nature (consigne). `decision completer` accepte `nature` et `mode_operatoire` (mêmes contrôles de forme).
+
 ## 3. Limites dites
 
 - Le relais sert l'application à la même origine que le bureau : une application qui écrit des URL absolues

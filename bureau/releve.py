@@ -338,6 +338,44 @@ CHAMPS_DIT = (("doit_marcher", MAX_DOIT_MARCHER, False), ("pas_encore", MAX_PAS_
               ("conclusion", MAX_CONCLUSION, False))
 DOIT_MARCHER_PAR_DEFAUT = "L'élément correspond à son objectif"      # une décision d'avant, sans ces champs
 
+# La nature de ce que le Directeur valide, et donc les preuves à joindre (règle de l'utilisateur : l'apk seulement pour
+# ce qui est en jeu ; pour du visuel ou une mécanique, l'image ou le document explicatif).
+NATURES = ("en_jeu", "visuel", "mecanique", "autre")
+MIN_ETAPES_MODE = 2         # le mode opératoire d'une validation en jeu : 2 à 10 étapes courtes
+MAX_ETAPES_MODE = 10
+MAX_ETAPE_MODE = 200
+EXTENSIONS_DOCUMENTS = (".md", ".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv", ".epub")
+EXTENSIONS_SONS = (".mp3", ".ogg", ".wav")
+EXTENSIONS_MEDIAS = EXTENSIONS_SONS + (".mp4", ".webm")
+
+
+def nature_ok(n):
+    return isinstance(n, str) and n in NATURES
+
+
+def mode_operatoire_ok(m):
+    """Le mode opératoire : 2 à 10 étapes, chacune un texte non vide de 200 caractères au plus."""
+    return (isinstance(m, list) and MIN_ETAPES_MODE <= len(m) <= MAX_ETAPES_MODE
+            and all(isinstance(x, str) and x.strip() != "" and len(x.strip()) <= MAX_ETAPE_MODE for x in m))
+
+
+def mode_operatoire_propre(m):
+    return [" ".join(x.split()) for x in m]
+
+
+def est_document(chemin):
+    """Un document explicatif (md, pdf, docx…) : ce qui se lit."""
+    return extension(chemin) in EXTENSIONS_DOCUMENTS
+
+
+def est_son(chemin):
+    return extension(chemin) in EXTENSIONS_SONS
+
+
+def est_executable(chemin):
+    """Un livrable à essayer en jeu (apk, exe, zip, ipa, pck…) : téléchargeable, ni document ni image ni son ni vidéo."""
+    return est_telechargeable(chemin) and extension(chemin) not in EXTENSIONS_DOCUMENTS + EXTENSIONS_MEDIAS
+
 
 def texte_dit_ok(t, maximum, vide=False):
     """Un des trois textes d'une validation : un texte d'au plus `maximum` caractères (vide permis pour `pas_encore`)."""
@@ -645,6 +683,11 @@ def _verifier_validation(d, nom, erreurs):
     for c, m, v in CHAMPS_DIT:
         if d.get(c) is not None and not texte_dit_ok(d[c], m, v):
             erreurs.append(f"{ici} : « {c} » est un texte de {m} caractères au plus{'' if v else ', non vide'}.")
+    if d.get("nature") is not None and not nature_ok(d["nature"]):
+        erreurs.append(f"{ici} : « nature » vaut {', '.join(NATURES)}.")
+    if d.get("mode_operatoire") is not None and not mode_operatoire_ok(d["mode_operatoire"]):
+        erreurs.append(f"{ici} : « mode_operatoire » : {MIN_ETAPES_MODE} à {MAX_ETAPES_MODE} étapes de "
+                       f"{MAX_ETAPE_MODE} caractères au plus.")
 
 
 def _verifier_genre_fonctionnalite(d, nom, erreurs):

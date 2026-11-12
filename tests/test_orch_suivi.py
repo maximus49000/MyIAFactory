@@ -357,6 +357,22 @@ class TestSuivi(AvecProjet):
         for mauvais in ([], [{"chemin": "a.png"}], [{"chemin": "", "titre": "x"}], "a.png"):
             self.assertEqual(sortie("decision", entree={"action": "completer", "id": d5, "fichiers": mauvais})[0], 1)
         self.assertEqual(decision(d5)["fichiers"], images)
+        # nature et mode opératoire : posés avec la décision ou ajoutés par `completer`, validés de la même façon
+        mode = ["Installez l'apk.", "Lancez le jeu.", "Touchez Jouer."]
+        code, r = sortie("decision", entree={"action": "completer", "id": d5, "nature": "en_jeu", "mode_operatoire": mode})
+        self.assertEqual(code, 0, r)
+        self.assertEqual((decision(d5)["nature"], decision(d5)["mode_operatoire"]), ("en_jeu", mode))
+        self.assertEqual(sortie("decision", entree={"action": "completer", "id": d5, "nature": "visuel"})[0], 0)
+        self.assertEqual(decision(d5)["nature"], "visuel")
+        for mauvais in ({"nature": "sprites"}, {"nature": 3}, {"mode_operatoire": ["une seule"]},
+                        {"mode_operatoire": ["a"] * 11}, {"mode_operatoire": ["a", " "]}, {"mode_operatoire": "x"}):
+            self.assertEqual(sortie("decision", entree={"action": "completer", "id": d5, **mauvais})[0], 1, mauvais)
+            self.assertEqual(sortie("decision", entree={**valider, "element": {"id": "e6", "nom": "N"}, **mauvais})[0], 1)
+        self.assertEqual(decision(d5)["mode_operatoire"], mode)
+        code, dec = sortie("decision", entree={**valider, "element": {"id": "e7", "nom": "Nature"}, "nature": "en_jeu",
+                                               "mode_operatoire": mode})
+        self.assertEqual(code, 0, dec)
+        self.assertEqual((decision(dec["id"])["nature"], decision(dec["id"])["mode_operatoire"]), ("en_jeu", mode))
         sortie("decision", entree={"action": "lever", "id": d5})
         avant = decision(d3["id"])
         for mauvais in ({}, {"doit_marcher": ""}, {"conclusion": "x" * 201}, {"points_a_verifier": []},

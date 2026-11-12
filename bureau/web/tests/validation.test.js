@@ -162,6 +162,27 @@ test("décision posée sans ces champs : « Ce qui doit marcher » par défaut e
   assert.doesNotMatch(boite.textContent, /Pas encore attendu|À conclure/);
 });
 
+test("nature : libellé en tête, mode opératoire numéroté juste après « Télécharger » (en jeu seulement)", () => {
+  const mode = ["Installez l'apk.", "Ouvrez le jeu en portrait.", "Touchez Jouer.", "Observez le menu."];
+  const {boite} = rendre({...D, nature: "en_jeu", mode_operatoire: mode});
+  const texte = boite.textContent;
+  const ordre = ["Objectif : Le jeu complet", "À essayer en jeu", "L'apk d'essai", "Télécharger", "Mode opératoire",
+    "Installez l'apk.", "Observez le menu.", "Le jeu dans le navigateur", "Compte rendu"].map((x) => texte.indexOf(x));
+  assert.ok(ordre.every((x, i) => x >= 0 && (i === 0 || x > ordre[i - 1])), JSON.stringify(ordre));
+  const liste = boite.tous((n) => n.tagName === "ol")[0];
+  assert.deepEqual(liste.enfants.map((e) => e.textContent), mode);
+  assert.equal(V.natureDeValidation({nature: "visuel"}).libelle, "Visuel à juger");
+  assert.equal(V.natureDeValidation({nature: "mecanique"}).libelle, "Mécanique à lire");
+  assert.equal(V.natureDeValidation({nature: "constructor"}), null);
+  assert.equal(V.natureDeValidation(D), null);
+  // pas de mode opératoire hors « en jeu », ni mal formé
+  assert.deepEqual(V.modeOperatoire({nature: "visuel", mode_operatoire: mode}), []);
+  assert.deepEqual(V.modeOperatoire({nature: "en_jeu", mode_operatoire: ["une seule"]}), []);
+  assert.deepEqual(V.modeOperatoire({nature: "en_jeu", mode_operatoire: ["a", "b", " "]}), []);
+  assert.equal(rendre({...D, nature: "visuel", mode_operatoire: mode}).boite.tous((n) => n.tagName === "ol").length, 0);
+  assert.doesNotMatch(rendre(D).boite.textContent, /À essayer en jeu|Visuel à juger|Mode opératoire/);
+});
+
 test("sans droit d'agir : la fenêtre se lit, rien ne s'envoie", () => {
   const {boite} = rendre(D, false);
   assert.equal(boite.tous((n) => n.className.startsWith("bouton val-envoyer")).length, 0);

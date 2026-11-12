@@ -882,8 +882,21 @@ class TestVersion4(unittest.TestCase):
         self.refus(v4(decisions_projet=[{**plein, "doit_marcher": "x" * 481}]), "doit_marcher")
         self.refus(v4(decisions_projet=[{**plein, "pas_encore": 3}]), "pas_encore")
         self.refus(v4(decisions_projet=[{**plein, "conclusion": "x" * 201}]), "conclusion")
+        mode = {"nature": "en_jeu", "mode_operatoire": ["Installez l'apk.", "Lancez le jeu."]}
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**plein, **dit, **mode}])), [])
+        self.refus(v4(decisions_projet=[{**plein, "nature": "sprites"}]), "nature")
+        self.refus(v4(decisions_projet=[{**plein, "mode_operatoire": ["une seule"]}]), "mode_operatoire")
+        self.refus(v4(decisions_projet=[{**plein, "mode_operatoire": ["a"] * 11}]), "mode_operatoire")
+        self.refus(v4(decisions_projet=[{**plein, "mode_operatoire": ["a", "x" * 201]}]), "mode_operatoire")
         colonnes = [{"id": "a", "nom": "A", "validation": True}]
         self.assertEqual(releve.valider(v4(colonnes=colonnes)), [])
+
+    def test_nature_de_validation_aides(self):
+        self.assertEqual(releve.NATURES, ("en_jeu", "visuel", "mecanique", "autre"))
+        self.assertTrue(releve.est_executable("build/jeu.APK"))
+        self.assertFalse(any(releve.est_executable(c) for c in ("a.png", "regles.md", "doc.pdf", "son.ogg", "src/main.gd")))
+        self.assertTrue(releve.est_document("docs/regles.md") and releve.est_document("x.pdf"))
+        self.assertFalse(releve.est_document("jeu.apk"))
 
     def test_fenetre_de_validation_aides(self):
         self.assertEqual(releve.points_de_decision({}), [releve.POINT_PAR_DEFAUT])

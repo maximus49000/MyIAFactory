@@ -57,6 +57,20 @@ export function consignesDeValidation(d) {
   return blocs;
 }
 
+// La nature de ce que le Directeur valide (en jeu, visuel, mécanique, autre) : son libellé, `null` si absente ou inconnue
+// (une décision d'avant). Le mode opératoire (2 à 10 étapes) n'est montré que pour une validation en jeu.
+export const NATURES = {en_jeu: "À essayer en jeu", visuel: "Visuel à juger", mecanique: "Mécanique à lire",
+  autre: "À examiner"};
+export function natureDeValidation(d) {
+  return typeof d?.nature === "string" && Object.hasOwn(NATURES, d.nature) ? {cle: d.nature, libelle: NATURES[d.nature]} : null;
+}
+export function modeOperatoire(d) {
+  const m = d?.mode_operatoire;
+  const ok = d?.nature === "en_jeu" && Array.isArray(m) && m.length >= 2 && m.length <= 10
+    && m.every((x) => plein(x) && x.trim().length <= 200);
+  return ok ? m.map((x) => x.trim()) : [];
+}
+
 // Les points à vérifier de la décision : ceux qu'elle porte (1 à 8 phrases de 160 caractères au plus, sans doublon),
 // sinon un seul : « L'élément correspond à l'objectif » (les décisions d'avant).
 export function pointsDeValidation(d) {
@@ -180,6 +194,8 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     s1.append(ligne);
   }
   if (!enteteValidation(d).length && plein(d.texte)) s1.append(el("p", "val-entete", d.texte));
+  const nature = natureDeValidation(d);
+  if (nature) s1.append(el("p", "val-nature val-nature-" + nature.cle, nature.libelle));
   for (const b of consignesDeValidation(d)) {
     const bloc = el("div", "val-consigne val-consigne-" + b.cle);
     bloc.append(el("h4", "", b.libelle), el("p", "", b.texte));
@@ -200,6 +216,15 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     a.setAttribute("download", l.nom);
     ligne.append(texte, a);
     s2.append(ligne);
+  }
+  const etapes = modeOperatoire(d);
+  if (etapes.length) {
+    const mode = el("div", "val-mode");
+    mode.append(el("h4", "", "Mode opératoire"));
+    const liste = el("ol", "val-mode-etapes");
+    for (const e of etapes) liste.append(el("li", "", e));
+    mode.append(liste);
+    s2.append(mode);
   }
   if (v.acces) {
     const ligne = el("div", "val-acces");

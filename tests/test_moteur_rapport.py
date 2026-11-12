@@ -46,6 +46,21 @@ class Lire(unittest.TestCase):
         self.assertEqual((c["pas_encore"], c["conclusion"]), ("Rien ne répond.", "Validez."))
         self.assertNotIn("doit_marcher", rapport.lire(reponse({**FAIT, "doit_marcher": "  "})))
 
+    def test_nature_et_mode_operatoire(self):
+        mode = ["  Installez\nl'apk. ", "Lancez le jeu."]
+        r = rapport.lire(reponse({**FAIT, "nature": "en_jeu", "mode_operatoire": mode,
+                                  "comptes_rendus": [{"element": "e1", "texte": "v", "nature": "sprites",
+                                                      "mode_operatoire": ["une seule étape"]},
+                                                     {"element": "e2", "texte": "v", "nature": "visuel"}]}))
+        self.assertEqual((r["nature"], r["mode_operatoire"]), ("en_jeu", ["Installez l'apk.", "Lancez le jeu."]))
+        c1, c2 = r["comptes_rendus"]
+        self.assertNotIn("nature", c1)                          # forme fautive : écartée, sans refuser le rapport
+        self.assertNotIn("mode_operatoire", c1)
+        self.assertEqual(c2["nature"], "visuel")
+        for mauvais in (["a"], ["a"] * 11, ["a", ""], ["a", "x" * 201], "non", [1, 2]):
+            self.assertNotIn("mode_operatoire", rapport.lire(reponse({**FAIT, "mode_operatoire": mauvais})))
+        self.assertEqual(len(rapport.lire(reponse({**FAIT, "mode_operatoire": ["a"] * 10}))["mode_operatoire"]), 10)
+
     def test_points_a_verifier_et_acces_facultatifs(self):
         """La fenêtre de validation : une forme fautive est écartée, jamais une raison de refuser le rapport."""
         points = ["Le menu s'ouvre", "  Le son\nse coupe ", "x" * 161, 3, "Le menu s'ouvre"] + [f"p{i}" for i in range(9)]

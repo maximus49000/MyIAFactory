@@ -925,11 +925,21 @@ def _dit_de_la_validation(e, cle_points="points"):
         if not rel.points_ok(points):
             raise Refus(f"« points » : 1 à {rel.MAX_POINTS} phrases différentes de {rel.MAX_POINT} caractères au plus.")
         plus["points"] = [p.strip() for p in points]
+    if e.get("nature") is not None:      # ce que le Directeur valide : en_jeu, visuel, mecanique ou autre
+        if not rel.nature_ok(e["nature"]):
+            raise Refus(f"« nature » vaut {', '.join(rel.NATURES)}.")
+        plus["nature"] = e["nature"]
+    if e.get("mode_operatoire") is not None:      # les étapes à suivre pour essayer le livrable en jeu
+        if not rel.mode_operatoire_ok(e["mode_operatoire"]):
+            raise Refus(f"« mode_operatoire » : {rel.MIN_ETAPES_MODE} à {rel.MAX_ETAPES_MODE} étapes courtes "
+                        f"({rel.MAX_ETAPE_MODE} caractères au plus chacune).")
+        plus["mode_operatoire"] = rel.mode_operatoire_propre(e["mode_operatoire"])
     return plus
 
 
 def _completer_validation(s, e):
-    """`{"action": "completer", "id": décision, "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?}` :
+    """`{"action": "completer", "id": décision, "doit_marcher"?, "pas_encore"?, "conclusion"?, "points_a_verifier"?,
+    "nature"?, "mode_operatoire"?, "fichiers"?}` :
     complète une décision `valider_etape` encore posée avec ce que dit une validation (les mêmes contrôles qu'à la pose).
     Ne touche à rien d'autre ; refuse une décision levée ou d'un autre genre."""
     i = texte(e, "id")
@@ -944,7 +954,7 @@ def _completer_validation(s, e):
         plus["fichiers"] = [{"chemin": x["chemin"].strip(), "titre": x["titre"].strip()} for x in fichiers]
     if not plus:
         raise Refus("« completer » demande au moins « doit_marcher », « pas_encore », « conclusion », "
-                    "« points_a_verifier » ou « fichiers ».")
+                    "« points_a_verifier », « nature », « mode_operatoire » ou « fichiers ».")
     for d in s["decisions_projet"] + [x for f in s["fonctionnalites"] for x in f["decisions"]]:
         if d["id"] == i:
             if d.get("genre") != "valider_etape":

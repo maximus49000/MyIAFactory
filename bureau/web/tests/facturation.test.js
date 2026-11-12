@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
-        demandeRecrutementAuto, demandeDepot} from "../ui/facturation.js";
+        limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot} from "../ui/facturation.js";
 
 const REC = (extra = {}) => ({recrutement: {
   roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
@@ -39,8 +39,9 @@ test("demandeRecrutementManuel : rôle du projet, modèle, Fable avec l'accord, 
 test("apercuAuto : les N premières propositions, puis la demande confirmée ; le dépôt sur clic", () => {
   const r = resumeRecrutement(REC());
   assert.deepEqual(apercuAuto(r, "2").map((p) => p.raison), ["a", "b"]);
-  for (const n of [0, 4, "x", 1.5]) assert.deepEqual(apercuAuto(r, n), [], String(n));
-  assert.deepEqual(demandeRecrutementAuto(apercuAuto(r, 3)), {type: "recruter", mode: "auto", agents: [
+  for (const n of [0, "x", 1.5]) assert.deepEqual(apercuAuto(r, n), [], String(n));
+  assert.equal(apercuAuto(r, 4).length, 3);       // au-delà du possible : toutes celles possibles
+  assert.deepEqual(demandeRecrutementAuto(apercuAuto(r, 3)), {type: "recruter", mode: "auto", lieu: "mieux", agents: [
     {role: "dev", modele: "Sonnet", lieu: "cloud"}, {role: "dev", modele: "Sonnet", lieu: "cloud"},
     {role: "dev", modele: "Sonnet", lieu: "local"}]});
   assert.equal(demandeRecrutementAuto([]), null);
@@ -163,4 +164,26 @@ test("lignesDiscussions : la répartition d'un lot est portée", () => {
   const [x, y] = lignesDiscussions({usages: [u, {...u, id: "u2", reparti: undefined}]}, {});
   assert.equal(x.reparti, "temps");
   assert.equal("reparti" in y, false);
+});
+
+test("lieu de la répartition : Cloud et Local limités à leurs places, avec ce qui est possible et la raison", () => {
+  const cloud = [{role: "dev", modele: "Opus", lieu: "cloud", raison: "x"}, {role: "dev", modele: "Haiku", lieu: "cloud", raison: "y"}];
+  const r = resumeRecrutement(REC({propositions_par_lieu: {mieux: REC().recrutement.propositions, cloud, local: [cloud[0]]},
+                                   notes_par_lieu: {mieux: [], cloud: ["Plus de place cloud libre."], local: []}}));
+  assert.deepEqual(apercuAuto(r, 3, "cloud").map((p) => p.raison), ["x", "y"]);
+  assert.equal(propositionsDuLieu(r, "local").length, 1);
+  assert.match(limiteAuto(r, 3, "cloud"), /Seulement 2 agents cloud possibles \(3 demandés\)\. Plus de place cloud libre/);
+  assert.equal(limiteAuto(r, 2, "cloud"), "");
+  assert.deepEqual(demandeRecrutementAuto(apercuAuto(r, 2, "cloud"), "cloud"),
+                   {type: "recruter", mode: "auto", lieu: "cloud", agents: [
+                     {role: "dev", modele: "Opus", lieu: "cloud"}, {role: "dev", modele: "Haiku", lieu: "cloud"}]});
+  // Sans GitHub : aucune proposition cloud, la raison est dite.
+  const sans = resumeRecrutement(REC({depot: {git: false, github: false, url: null, creable: true},
+                                      cloud_impossible: "Le projet n'est pas un dépôt git.",
+                                      propositions_par_lieu: {mieux: [], cloud: [], local: []}}));
+  assert.deepEqual(apercuAuto(sans, 3, "cloud"), []);
+  assert.match(limiteAuto(sans, 3, "cloud"), /Aucun agent cloud possible : Le projet n'est pas un dépôt git/);
+  // Un relevé d'avant (sans propositions_par_lieu) : « au mieux » garde les propositions, cloud/local rien.
+  assert.equal(apercuAuto(resumeRecrutement(REC()), 2).length, 2);
+  assert.deepEqual(apercuAuto(resumeRecrutement(REC()), 2, "cloud"), []);
 });

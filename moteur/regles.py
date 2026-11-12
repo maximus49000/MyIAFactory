@@ -1765,7 +1765,8 @@ def _sur_recruter(projet, demande, etat):
     """Des agents recrutés depuis « Parallélisme du projet » (manuel ou répartition automatique confirmée) : les fiches
     sont écrites par l'outil, qui vérifie de nouveau rôles, modèles, dépôt GitHub et places ; puis ce qui peut partir
     part (un agent cloud prend une tâche au départ suivant : le moteur lance sa session)."""
-    r = lancer(projet, "recruter", {"mode": demande.get("mode"), "agents": demande.get("agents")})
+    r = lancer(projet, "recruter", {"mode": demande.get("mode"), "agents": demande.get("agents"),
+                                    **({"lieu": demande["lieu"]} if "lieu" in demande else {})})
     noms = ", ".join(f"{a['prenom']} ({a['role']}, {a['modele']}, {a['lieu']})" for a in r["agents"])
     cloud = any(a["lieu"] == "cloud" for a in r["agents"])
     _terminer(projet, {"demande": demande["id"]},

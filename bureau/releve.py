@@ -1015,6 +1015,16 @@ def _verifier_recrutement(x, erreurs):
             _est_dict(a) and _texte_plein(a.get("role")) and _texte_plein(a.get("modele")) and a.get("lieu") in LIEUX
             and _texte(a.get("raison", "")) for a in props):
         erreurs.append(f"{q} : « propositions » est une liste de {{role, modele, lieu (local ou cloud), raison}}.")
+    pl = x.get("propositions_par_lieu")
+    if pl is not None and not (_est_dict(pl) and all(
+            isinstance(pl.get(k), list) and all(_est_dict(a) and _texte_plein(a.get("role")) and _texte_plein(a.get("modele"))
+                                                and a.get("lieu") in LIEUX and _texte(a.get("raison", "")) for a in pl[k])
+            for k in ("mieux", "cloud", "local"))):
+        erreurs.append(f"{q} : « propositions_par_lieu » demande « mieux », « cloud » et « local » (listes comme « propositions »).")
+    nl = x.get("notes_par_lieu")
+    if nl is not None and not (_est_dict(nl) and all(
+            isinstance(nl.get(k), list) and all(_texte(n) for n in nl[k]) for k in ("mieux", "cloud", "local"))):
+        erreurs.append(f"{q} : « notes_par_lieu » demande « mieux », « cloud » et « local » (listes de textes).")
     if not isinstance(x.get("notes", []), list) or not all(_texte(n) for n in x.get("notes", [])):
         erreurs.append(f"{q} : « notes » est une liste de textes.")
     d = x.get("depot")

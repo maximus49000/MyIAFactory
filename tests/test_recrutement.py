@@ -110,7 +110,7 @@ class Repartition(Base):
         self.assertEqual([(p["role"], p["lieu"]) for p in r["propositions"]],
                          [("dev", "cloud"), ("dev", "cloud"), ("dev", "local"), ("dev", "local")])
         self.assertIn("5 tâches", r["propositions"][0]["raison"])
-        self.assertIn("celui de Léa", r["propositions"][0]["raison"])
+        self.assertIn("Sonnet : code courant de 5 éléments", r["propositions"][0]["raison"])
         self.assertEqual(r["depot"]["url"], "https://github.com/moi/jeu")
 
     def test_les_premieres_propositions_ne_dependent_pas_du_nombre(self):
@@ -131,6 +131,87 @@ class Repartition(Base):
                                  "etape": "flux:dev", "active": False})
         travail = {x["role"]: x["travail"] for x in self.releve()["recrutement"]["roles"]}
         self.assertEqual(travail, {"graphiste": 2, "dev": 0})
+
+
+FLUX_TRIPLE = [{"id": "concept", "nom": "Conception du niveau", "role": "architecte", "service": "dev"},
+               {"id": "dev", "nom": "Développement", "role": "dev", "service": "dev"},
+               {"id": "tests", "nom": "Tests", "role": "testeur", "service": "dev"},
+               {"id": "etape", "nom": "Étape", "role": "inconnu", "service": "dev"}]
+
+
+def tache(i, role, etape, **extra):
+    return {"id": f"t{i}", "titre": f"Tâche {i}", "fonctionnalite": "f1", "element": f"e{i}", "role": role,
+            "colonne": "a_faire", "active": False, "bloquee": None, "etape": f"flux:{etape}", "journal": [],
+            "montee": None, **extra}
+
+
+class ModeleLogique(unittest.TestCase):
+    """Le modèle de chaque recrue vient du travail qu'elle va prendre ; jamais Fable ; la raison dit pourquoi."""
+
+    def setUp(self):
+        self.f = {"flux": FLUX_TRIPLE, "agents_locaux_max": 16}
+        self.fiches = [{"cle": "x-1", "role": "dev", "lieu": "local", "modele": "Opus", "prenom": "Léa"},
+                       {"cle": "x-2", "role": "inconnu", "lieu": "local", "modele": "Haiku", "prenom": "Hugo"}]
+
+    def etat(self, taches):
+        return {"fonctionnalites": [{"id": "f1", "etape": "serie", "file": [], "elements": {}}], "taches": taches}
+
+    def proposer(self, taches, **kw):
+        return rc.proposer(self.f, self.etat(taches), self.fiches, 0, False, **kw)["propositions"]
+
+    def test_nature_du_travail(self):
+        props = self.proposer([tache(i, "testeur", "tests") for i in range(6)]
+                              + [tache(7, "architecte", "concept"), tache(8, "architecte", "concept")]
+                              + [tache(i, "dev", "dev") for i in range(10, 13)])
+        par_role = {p["role"]: p for p in props}
+        self.assertEqual(par_role["testeur"]["modele"], "Haiku")
+        self.assertIn("Haiku : tests et vérifications mécaniques de 6 éléments", par_role["testeur"]["raison"])
+        self.assertEqual(par_role["architecte"]["modele"], "Opus")
+        self.assertIn("conception et architecture", par_role["architecte"]["raison"])
+        self.assertEqual(par_role["dev"]["modele"], "Sonnet")       # Léa est sur Opus : le travail décide, pas la fiche
+        self.assertNotIn("Fable", {p["modele"] for p in props})
+
+    def test_echec_ou_a_revoir_monte_d_un_cran_pas_au_dela_d_opus(self):
+        relancee = tache(1, "testeur", "tests", journal=[{"t": "x", "texte": "Échec : relancée"}])
+        revue = tache(2, "dev", "dev", journal=[{"t": "x", "texte": "À revoir"}, {"t": "y", "texte": "Renvoyée à revoir"}])
+        autre = tache(5, "dev", "dev")
+        une_fois = tache(3, "architecte", "concept", journal=[{"t": "x", "texte": "À revoir"}])
+        par_role = {p["role"]: p for p in self.proposer([relancee, revue, autre, une_fois])}
+        self.assertEqual(par_role["testeur"]["modele"], "Sonnet")
+        self.assertIn("monté d'un cran", par_role["testeur"]["raison"])
+        self.assertEqual(par_role["dev"]["modele"], "Opus")
+        self.assertEqual(par_role["architecte"]["modele"], "Opus")
+        self.assertNotIn("monté", par_role["architecte"]["raison"])       # une seule fois « à revoir » ne suffit pas
+        montee = tache(4, "testeur", "tests", montee={"de": "Haiku", "a": "Sonnet", "raison": "r"})
+        self.assertEqual(self.proposer([montee])[0]["modele"], "Sonnet")
+        # Opus ne monte pas : jamais Fable.
+        self.assertEqual(rc.modeles_du_travail([{"texte": "Conception", "difficile": True}], "", "x")[0]["modele"], "Opus")
+        self.assertEqual(rc.modeles_du_travail([{"texte": "Tests", "difficile": False}], "", "x")[0]["modele"], "Haiku")
+
+    def test_nature_inconnue_garde_le_modele_du_role(self):
+        props = self.proposer([tache(1, "inconnu", "etape"), tache(2, "inconnu", "etape")])
+        self.assertEqual(props[0]["modele"], "Haiku")
+        self.assertIn("celui de Hugo, du même rôle", props[0]["raison"])
+
+    def test_deterministe(self):
+        taches = [tache(i, "testeur", "tests") for i in range(4)] + [tache(9, "dev", "dev")]
+        self.assertEqual(self.proposer(taches), self.proposer(list(taches)))
+
+    def test_lieu_cloud_et_local(self):
+        s = self.etat([tache(i, "testeur", "tests") for i in range(6)])
+        cloud = rc.proposer(self.f, s, self.fiches, 2, True, lieu="cloud")
+        self.assertEqual([p["lieu"] for p in cloud["propositions"]], ["cloud", "cloud"])
+        self.assertTrue(any("Plus de place cloud libre" in n for n in cloud["notes"]))
+        sans = rc.proposer(self.f, s, self.fiches, 2, False, lieu="cloud")
+        self.assertEqual(sans["propositions"], [])
+        self.assertIn("pas sur GitHub", sans["notes"][0])
+        local = rc.proposer(self.f, s, self.fiches, 2, True, lieu="local")
+        self.assertEqual({p["lieu"] for p in local["propositions"]}, {"local"})
+        self.assertEqual(len(local["propositions"]), 6)
+        mieux = rc.proposer(self.f, s, self.fiches, 2, True)
+        self.assertEqual([p["lieu"] for p in mieux["propositions"]][:3], ["cloud", "cloud", "local"])
+        with self.assertRaises(rc.RecrutementRefuse):
+            rc.proposer(self.f, s, self.fiches, 2, True, lieu="lune")
 
 
 class Outil(Base):
@@ -199,6 +280,37 @@ class Outil(Base):
                                                                     for p in props]})
         self.assertEqual(len(r["agents"]), 2)
         self.assertEqual(self.releve()["recrutement"]["places"], {"cloud": 0, "locaux": 0})
+
+    def test_releve_par_lieu_et_refus_du_mauvais_lieu(self):
+        self.serie(5)
+        ecrire_origine(self.dossier, "https://github.com/moi/jeu")
+        self.ok("parallelisme", entree={"agents_locaux_max": 4, "agents_cloud_max": 2})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [])
+        par_lieu = r["recrutement"]["propositions_par_lieu"]
+        self.assertEqual([p["lieu"] for p in par_lieu["cloud"]], ["cloud", "cloud"])
+        self.assertEqual([p["lieu"] for p in par_lieu["local"]], ["local", "local"])
+        self.assertEqual(par_lieu["mieux"], r["recrutement"]["propositions"])
+        self.assertTrue(r["recrutement"]["notes_par_lieu"]["cloud"])
+        agents = [{k: p[k] for k in ("role", "modele", "lieu")} for p in par_lieu["cloud"]]
+        # Lieu « cloud » demandé : un agent local est refusé par l'outil, rien n'est écrit.
+        code, sortie = self.outil("recruter", entree={"mode": "auto", "lieu": "cloud", "agents": [
+            agents[0], {**agents[1], "lieu": "local"}]})
+        self.assertEqual(code, 1)
+        self.assertIn("uniquement des agents cloud", sortie["erreur"])
+        self.assertEqual(self.outil("recruter", entree={"mode": "manuel", "lieu": "cloud", "agents": agents[:1]})[0], 1)
+        ecrits = self.ok("recruter", entree={"mode": "auto", "lieu": "cloud", "agents": agents})
+        self.assertEqual({a["lieu"] for a in ecrits["agents"]}, {"cloud"})
+
+    def test_sans_github_le_cloud_demande_est_vide_et_refuse(self):
+        self.serie(3)
+        r = self.releve()["recrutement"]
+        self.assertEqual(r["propositions_par_lieu"]["cloud"], [])
+        self.assertTrue(r["notes_par_lieu"]["cloud"])
+        code, sortie = self.outil("recruter", entree={"mode": "auto", "lieu": "cloud", "agents": [
+            {"role": "dev", "modele": "Sonnet", "lieu": "cloud"}]})
+        self.assertEqual(code, 1)
+        self.assertIn("Créez d'abord le dépôt", sortie["erreur"])
 
 
 class Depot_git(Base):
@@ -287,6 +399,13 @@ class Bureau(unittest.TestCase):
         self.assertIsNone(self.verifier(nuage, sur_github))
         sur_github["recrutement"]["places"]["cloud"] = 0
         self.assertIn("places cloud", self.verifier(nuage, sur_github))
+        # Le lieu demandé à la répartition : tous les agents y vont, et seulement en automatique.
+        mixte = {**auto, "lieu": "cloud", "agents": [{"role": "dev", "modele": "Opus", "lieu": "local"}]}
+        self.assertIn("uniquement des agents cloud", self.verifier(mixte, sur_github))
+        self.assertIsNone(self.verifier({**auto, "lieu": "local", "agents": auto["agents"][:1]}, sur_github))
+        self.assertIn("lieu", self.verifier({**auto, "lieu": "lune"}))
+        self.assertIn("lieu", self.verifier({**ok, "lieu": "local"}))
+        self.assertEqual(demandes.nettoyer({**auto, "lieu": "local", "x": 1})["lieu"], "local")
         # Le nettoyage ne laisse passer que rôle, modèle, lieu et accord Fable.
         d = demandes.nettoyer({**ok, "agents": [{"role": "dev", "modele": "Opus", "lieu": "local", "cle": "pirate"}]})
         self.assertEqual(d["agents"], [{"role": "dev", "modele": "Opus", "lieu": "local"}])

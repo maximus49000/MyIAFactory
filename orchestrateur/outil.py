@@ -2733,7 +2733,9 @@ def releve_recrutement(ctx, s, fiches):
     la raison qui empêche le cloud et la répartition automatique proposée (voir `recrutement.proposer`)."""
     d = rc.depot(_projet(ctx))
     raison = rc.raison_sans_cloud(d)
-    p = rc.proposer(ctx.f, s, fiches, places_cloud_du_projet(ctx), d["github"])
+    places_c = places_cloud_du_projet(ctx)
+    p = rc.proposer(ctx.f, s, fiches, places_c, d["github"])
+    par_lieu = {k: rc.proposer(ctx.f, s, fiches, places_c, d["github"], lieu=k) for k in ("cloud", "local")}
     try:
         essai = json.loads(_fichier_depot(ctx).read_text(encoding="utf-8"))
         essai = {k: essai[k] for k in ("t", "fait", "texte", "url") if k in essai} if isinstance(essai, dict) else None
@@ -2743,19 +2745,23 @@ def releve_recrutement(ctx, s, fiches):
     return {"roles": [{k: r[k] for k in ("role", "nom", "modele", "agents", "cloud")} | {"travail": p["travail"].get(r["role"], 0)}
                       for r in roles],
             "places": p["places"], "propositions": p["propositions"], "notes": p["notes"],
+            "propositions_par_lieu": {"mieux": p["propositions"], "cloud": par_lieu["cloud"]["propositions"],
+                                      "local": par_lieu["local"]["propositions"]},
+            "notes_par_lieu": {"mieux": p["notes"], "cloud": par_lieu["cloud"]["notes"],
+                               "local": par_lieu["local"]["notes"]},
             "depot": {"git": d["git"], "github": d["github"], "url": d["url"],
                       "creable": not d["github"] and not d["origine"], **({"essai": essai} if essai else {})},
             "cloud_impossible": raison}
 
 
 def cmd_recruter(ctx, e):
-    """`{mode: manuel | auto, agents: [{role, modele, lieu, fable?}]}` : écrit les fiches des recrues (tout ou rien) ;
+    """`{mode: manuel | auto, agents: [{role, modele, lieu, fable?}], lieu?: mieux | cloud | local}` : écrit les fiches des recrues (tout ou rien) ;
     chaque recrue a le prénom libre suivant de l'équipe, le service, le texte et les outils d'une fiche du même rôle,
     et suit le brief du rôle. Cloud : projet sur GitHub et place cloud libre ; auto : jamais au-delà des places."""
     fiches_ = ctx.fiches()
     try:
         nouvelles = rc.fiches_a_recruter(ctx.f, fiches_, e.get("mode"), e.get("agents"), places_cloud_du_projet(ctx),
-                                         rc.depot(_projet(ctx)), su.maintenant()[:10])
+                                         rc.depot(_projet(ctx)), su.maintenant()[:10], e.get("lieu"))
     except rc.RecrutementRefuse as ex:
         raise Refus(str(ex))
     ecrites = []

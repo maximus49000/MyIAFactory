@@ -328,6 +328,8 @@ export function partieParallelisme(ctx) {
 // l'outil revérifient tout (rôles, modèles, dépôt GitHub, places).
 
 export const MODELES_RECRUE = ["Haiku", "Sonnet", "Opus"];
+export const LIEUX_AUTO = ["mieux", "cloud", "local"];     // « Au mieux », « Cloud », « Local »
+const LIBELLE_LIEU = {mieux: "Au mieux", cloud: "Cloud", local: "Local"};
 
 // Ce que montre la partie « Recruter » ; null si le relevé ne publie pas `recrutement` (orchestrateur d'avant).
 export function resumeRecrutement(etat) {
@@ -342,6 +344,9 @@ export function resumeRecrutement(etat) {
   else if (!places.cloud) raisonCloud = "Aucune place cloud sans agent : augmentez « Agents cloud en même temps ».";
   return {roles: Array.isArray(rec.roles) ? rec.roles : [], places, github, raisonCloud,
           cloudPossible: raisonCloud === null, propositions: Array.isArray(rec.propositions) ? rec.propositions : [],
+          parLieu: LIEUX_AUTO.reduce((o, k) => ({...o, [k]: Array.isArray(rec.propositions_par_lieu?.[k]) ? rec.propositions_par_lieu[k]
+                                                                  : (k === "mieux" && Array.isArray(rec.propositions) ? rec.propositions : [])}), {}),
+          notesParLieu: LIEUX_AUTO.reduce((o, k) => ({...o, [k]: Array.isArray(rec.notes_par_lieu?.[k]) ? rec.notes_par_lieu[k] : []}), {}),
           notes: Array.isArray(rec.notes) ? rec.notes : [], url: typeof depot.url === "string" ? depot.url : null,
           creable: depot.creable === true && !github, essai: depot.essai && typeof depot.essai === "object" ? depot.essai : null};
 }
@@ -360,17 +365,39 @@ export function demandeRecrutementManuel(resume, {role, modele, lieu, fable = fa
   return {type: "recruter", mode: "manuel", agents: [agent]};
 }
 
-// Les N premières propositions de la répartition automatique (elles ne dépendent pas de N) ; [] si N ne va pas.
-export function apercuAuto(resume, n) {
+// Les propositions du lieu demandé (« mieux », « cloud » ou « local » ; elles ne dépendent pas de N).
+export function propositionsDuLieu(resume, lieu = "mieux") {
+  return resume?.parLieu?.[lieu] || (lieu === "mieux" ? resume?.propositions || [] : []);
+}
+
+// Les N premières propositions du lieu (« mieux » par défaut) ; si N dépasse ce qui est possible, toutes celles
+// possibles ; [] si N ne va pas.
+export function apercuAuto(resume, n, lieu = "mieux") {
   const v = typeof n === "string" && /^\s*\d+\s*$/.test(n) ? Number(n) : n;
-  if (!resume || !Number.isInteger(v) || v < 1 || v > resume.propositions.length) return [];
-  return resume.propositions.slice(0, v);
+  if (!resume || !Number.isInteger(v) || v < 1) return [];
+  return propositionsDuLieu(resume, lieu).slice(0, v);
+}
+
+// Ce que dit la répartition quand le lieu ne permet pas N agents : combien sont possibles et pourquoi ; "" sinon.
+export function limiteAuto(resume, n, lieu = "mieux") {
+  const v = typeof n === "string" && /^\s*\d+\s*$/.test(n) ? Number(n) : n;
+  if (!resume || !Number.isInteger(v) || v < 1) return "";
+  const possibles = propositionsDuLieu(resume, lieu).length;
+  if (v <= possibles) return "";
+  const ou = lieu === "cloud" ? " cloud" : lieu === "local" ? " locaux" : "";
+  if (lieu === "cloud" && !resume.cloudPossible && !possibles) {
+    return `Aucun agent cloud possible : ${resume.raisonCloud}`;
+  }
+  const raisons = (resume.notesParLieu?.[lieu] || []).join(" ");
+  return `${possibles ? `Seulement ${possibles} agent${possibles > 1 ? "s" : ""}${ou} possible${possibles > 1 ? "s" : ""}` :
+                        `Aucun agent${ou} possible`} (${v} demandé${v > 1 ? "s" : ""}).${raisons ? " " + raisons : ""}`;
 }
 
 // La demande « recruter » d'une répartition automatique confirmée ; null si l'aperçu est vide.
-export function demandeRecrutementAuto(apercu) {
+export function demandeRecrutementAuto(apercu, lieu = "mieux") {
   if (!Array.isArray(apercu) || !apercu.length) return null;
-  return {type: "recruter", mode: "auto", agents: apercu.map((p) => ({role: p.role, modele: p.modele, lieu: p.lieu}))};
+  return {type: "recruter", mode: "auto", lieu,
+          agents: apercu.map((p) => ({role: p.role, modele: p.modele, lieu: p.lieu}))};
 }
 
 // Le clic « Créer le dépôt Git » : le seul consentement à la création du dépôt GitHub privé.
@@ -476,33 +503,42 @@ export function partieRecrutement(ctx) {
   // En automatique.
   const auto = el("div", "recrutement-auto");
   auto.append(el("p", "note", "Attribution automatique : les rôles qui ont le plus de travail prêt ou en file (sans " +
-                              "compter ce qu'une validation retient), le modèle déjà choisi pour ce rôle, le cloud " +
-                              "d'abord s'il reste des places cloud, jamais au-delà des places."));
-  for (const n of r.notes) auto.append(el("p", "note", n));
-  if (agir && r.propositions.length) {
+                              "compter ce qu'une validation retient), le modèle le plus logique pour le travail que " +
+                              "chaque agent prend (conception : Opus ; code et création : Sonnet ; tests, livraison, " +
+                              "rangement : Haiku ; un cran de plus après un échec ; jamais Fable), le lieu demandé " +
+                              "(« Au mieux » : cloud d'abord s'il reste des places), jamais au-delà des places."));
+  if (agir) {
     const label = el("label", "parallelisme-champ");
     const nombre = document.createElement("input");
     nombre.type = "number";
     nombre.min = "1";
-    nombre.max = String(r.propositions.length);
+    nombre.max = "16";
     nombre.step = "1";
     nombre.value = "1";
-    label.append(el("span", "", `Nombre d'agents (1 à ${r.propositions.length})`), nombre);
+    label.append(el("span", "", "Nombre d'agents (1 à 16)"), nombre);
+    const ou = choix(LIEUX_AUTO.map((k) => [k, LIBELLE_LIEU[k]]), "mieux");
+    const labelLieu = el("label", "parallelisme-champ");
+    labelLieu.append(el("span", "", "Lieu"), ou);
     const liste = el("ul", "recrutement-apercu");
     const erreur = el("p", "saisie-erreur", "");
+    const infos = el("div", "recrutement-infos");
     let apercu = [];
-    const confirmer = boutonDemande(ctx, "Confirmer le recrutement", () => demandeRecrutementAuto(apercu), erreur);
+    const confirmer = boutonDemande(ctx, "Confirmer le recrutement", () => demandeRecrutementAuto(apercu, ou.value), erreur);
     confirmer.hidden = true;
     const voir = el("button", "bouton", "Recruter N agents : voir la répartition");
     voir.type = "button";
     voir.addEventListener("click", () => {
-      apercu = apercuAuto(r, nombre.value);
+      apercu = apercuAuto(r, nombre.value, ou.value);
       liste.replaceChildren(...apercu.map((p) => el("li", "", `${p.role} · ${p.modele} · ${p.lieu} — ${p.raison}`)));
-      erreur.textContent = apercu.length ? "" : `Un nombre de 1 à ${r.propositions.length}.`;
+      const limite = limiteAuto(r, nombre.value, ou.value);
+      infos.replaceChildren(...(limite ? [el("p", "avertissement", limite)] : []),
+                            ...(!apercu.length ? (r.notesParLieu[ou.value] || r.notes).map((n) => el("p", "note", n)) : []));
+      erreur.textContent = apercu.length || limite ? "" : "Un nombre de 1 à 16.";
       confirmer.hidden = !apercu.length;
     });
-    auto.append(label, voir, liste, confirmer, erreur);
-  }
+    for (const k of [nombre, ou]) k.addEventListener("change", () => { confirmer.hidden = true; liste.replaceChildren(); infos.replaceChildren(); apercu = []; });
+    auto.append(label, labelLieu, voir, liste, infos, confirmer, erreur);
+  } else for (const n of r.notes) auto.append(el("p", "note", n));
   bloc.append(auto);
   return bloc;
 }

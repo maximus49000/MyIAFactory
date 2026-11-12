@@ -171,17 +171,39 @@ def _retenues(f, fonc, taches):
             and (_rang(t, rangs) or 0) > premiere}, production
 
 
-def travail_par_role(f, s):
-    """`{rôle: nombre}` : les tâches prêtes (ni faites, ni actives, ni bloquées, ni retenues par une validation) et,
-    pour chaque élément encore dans la file, chaque étape d'agent qu'il passera avant la première validation."""
-    compte = {}
+def _etape_de_tache(t, etapes):
+    """L'étape du workflow d'une tâche (`flux:<id>`), ou `None`."""
+    e = str(t.get("etape") or "")
+    return etapes.get(e[len(ETAPES_DE_FLUX):]) if e.startswith(ETAPES_DE_FLUX) else None
+
+
+def _signal_difficulte(t):
+    """Vrai si la tâche a déjà été relancée après un échec, montée d'un cran, ou renvoyée « À revoir » plusieurs fois."""
+    if t.get("montee"):
+        return True
+    revoirs = 0
+    for j in t.get("journal") or []:
+        texte = (j.get("texte") if isinstance(j, dict) else str(j)).lower()
+        if _ECHEC.search(texte):
+            return True
+        if _A_REVOIR.search(texte):
+            revoirs += 1
+    return revoirs >= 2
+
+
+def _travail(f, s):
+    """`(compte, unites)` : `compte` = `{rôle: nombre}` (voir `travail_par_role`) ; `unites` = `{rôle: [{texte, difficile}]}`,
+    une unité par tâche prête ou par élément en file (`texte` : l'étape ou le titre, d'où se lit la nature du travail)."""
+    compte, unites = {}, {}
     retenues = set()
+    etapes = {}
     for fonc in s.get("fonctionnalites") or []:
         if fonc.get("etape") in wf.ETAPES_CACHANT_LES_COLONNES:
             continue
         taches = [t for t in s.get("taches") or [] if t.get("fonctionnalite") == fonc["id"]]
         r, production = _retenues(f, fonc, taches)
         retenues |= r
+        etapes.update({e["id"]: e for e in production})
         avant = []
         for e in production:
             if wf.est_validation(e):
@@ -191,12 +213,75 @@ def travail_par_role(f, s):
             for e in avant:
                 if e.get("role"):
                     compte[e["role"]] = compte.get(e["role"], 0) + 1
+                    unites.setdefault(e["role"], []).append(
+                        {"texte": f"{e.get('nom') or ''} {e.get('id') or ''}".strip(), "difficile": False})
     for t in s.get("taches") or []:
         if (t.get("colonne") == "fait" or t.get("active") or t.get("bloquee") or not t.get("role")
                 or t["id"] in retenues):
             continue
         compte[t["role"]] = compte.get(t["role"], 0) + 1
-    return compte
+        e = _etape_de_tache(t, etapes)
+        texte = f"{e.get('nom') or ''} {e.get('id') or ''}".strip() if e else str(t.get("titre") or "")
+        unites.setdefault(t["role"], []).append({"texte": texte, "difficile": _signal_difficulte(t)})
+    return compte, unites
+
+
+def travail_par_role(f, s):
+    """`{rôle: nombre}` : les tâches prêtes (ni faites, ni actives, ni bloquées, ni retenues par une validation) et,
+    pour chaque élément encore dans la file, chaque étape d'agent qu'il passera avant la première validation."""
+    return _travail(f, s)[0]
+
+
+# --- Le modèle le plus logique pour le travail qu'un agent va prendre (déterministe, expliqué ; jamais Fable).
+# Premier motif qui va : (motif, modèle, ce que c'est). Conception avant vérification avant le reste.
+
+_NATURES = (
+    (re.compile(r"conception|concevoir|architectur|spécification|specification|stratég|refonte|débogage|debogage|"
+                r"correction difficile|algorithm", re.I), "Opus", "conception et architecture"),
+    (re.compile(r"\btests?\b|testeur|recette|\bqa\b|vérif|verif|contrôle|controle|lint|\bqualité", re.I),
+     "Haiku", "tests et vérifications mécaniques"),
+    (re.compile(r"livraison|livrer|déploi|deploi|export|publi|empaquet", re.I), "Haiku", "livraison"),
+    (re.compile(r"rangement|ranger|nettoy|archiv|classement|renomm", re.I), "Haiku", "rangement"),
+    (re.compile(r"développ|developp|\bdev\b|code|codage|implément|implement|intégration|integration|programm|corr",
+                re.I), "Sonnet", "code courant"),
+    (re.compile(r"création|creation|créer|dessin|graph|illustr|rédaction|rédig|contenu|texte|écriture|narrat|"
+                r"musique|\bson\b|modélis|animation|niveau|écran", re.I), "Sonnet", "création et contenu"),
+)
+_ECHEC = re.compile(r"échec|echec|relanc|a échoué|a echoue|erreur", re.I)
+_A_REVOIR = re.compile(r"à revoir|a revoir|renvoy", re.I)
+_RANG = {m: k for k, m in enumerate(MODELES)}
+
+
+def _nature(texte):
+    for motif, modele, libelle in _NATURES:
+        if motif.search(texte or ""):
+            return modele, libelle
+    return None
+
+
+def modeles_du_travail(unites, nom_role, role):
+    """Les groupes de travail d'un rôle, du plus gros au plus exigeant : `[{modele, raison, nombre}]`. Chaque unité
+    prend le modèle de sa nature (étape ou titre, puis nom du rôle) ; une tâche déjà relancée après échec ou renvoyée
+    « À revoir » plusieurs fois monte d'un cran (Opus au plus). Vide si aucune nature n'est reconnue."""
+    groupes = {}
+    for u in unites:
+        n = _nature(u["texte"]) or _nature(f"{nom_role} {role}")
+        if n is None:
+            continue
+        modele, libelle = n
+        monte = u["difficile"] and _RANG[modele] < len(MODELES) - 1
+        if monte:
+            modele = MODELES[_RANG[modele] + 1]
+        g = groupes.setdefault((modele, libelle, monte), 0)
+        groupes[(modele, libelle, monte)] = g + 1
+    sortie = []
+    for (modele, libelle, monte), n in groupes.items():
+        sujet = _pluriel(n, "élément") if n > 1 else "1 élément"
+        raison = f"{modele} : {libelle} de {sujet}"
+        if monte:
+            raison += " (monté d'un cran : tâche déjà relancée après un échec ou renvoyée à revoir)"
+        sortie.append({"modele": modele, "raison": raison, "nombre": n})
+    return sorted(sortie, key=lambda g: (-g["nombre"], -_RANG[g["modele"]], g["raison"]))
 
 
 def places_libres(f, fiches, places_cloud):
@@ -211,42 +296,70 @@ def _pluriel(n, mot):
     return f"{n} {mot}{'s' if n > 1 else ''}"
 
 
-def proposer(f, s, fiches, places_cloud, github, maximum=MAX_PAR_DEMANDE):
+LIEUX_AUTO = ("mieux", "cloud", "local")     # « Au mieux » (cloud d'abord, puis local), « Cloud », « Local »
+
+
+def proposer(f, s, fiches, places_cloud, github, maximum=MAX_PAR_DEMANDE, lieu="mieux"):
     """La répartition automatique, une recrue à la fois (les N premières valent pour « Recruter N agents ») :
-    `{propositions: [{role, modele, lieu, raison}], places, notes}`."""
+    `{propositions: [{role, modele, lieu, raison}], places, notes}`. `lieu` : `mieux` (cloud tant qu'il reste des
+    places cloud et que le projet est sur GitHub, puis local), `cloud` ou `local` (ce lieu seulement, jamais au-delà
+    de ses places). Le modèle de chaque recrue vient du travail qu'elle va prendre (`modeles_du_travail`), à défaut du
+    modèle déjà choisi pour le rôle."""
+    if lieu not in LIEUX_AUTO:
+        raise RecrutementRefuse("« lieu » vaut mieux, cloud ou local.")
     roles = roles_du_projet(f, fiches)
     ordre = [r["role"] for r in roles]
     par_role = {r["role"]: r for r in roles}
-    travail = travail_par_role(f, s)
+    travail, unites = _travail(f, s)
+    groupes = {r: modeles_du_travail(unites.get(r, []), par_role[r]["nom"], r) for r in ordre}
     places = places_libres(f, fiches, places_cloud)
-    cloud, locaux = places["cloud"] if github else 0, places["locaux"]
+    cloud = places["cloud"] if github and lieu != "local" else 0
+    locaux = places["locaux"] if lieu != "cloud" else 0
     recrues = {r: 0 for r in ordre}
     propositions, notes = [], []
+    if lieu == "cloud" and not github:
+        notes.append("Le projet n'est pas sur GitHub : aucun agent cloud possible tant que le dépôt n'est pas créé.")
     while len(propositions) < maximum:
         manque = {r: travail.get(r, 0) - par_role[r]["agents"] - recrues[r] for r in ordre}
         candidats = [r for r in ordre if manque[r] > 0]
         if not candidats:
             if not propositions:
                 notes.append("Aucun rôle n'a plus de travail prêt ou en file que d'agents : rien à recruter.")
+            else:
+                notes.append(f"Le travail prêt ou en file ne justifie pas plus de {_pluriel(len(propositions), 'agent')}"
+                             f"{'' if lieu == 'mieux' else ' ' + lieu}.")
             break
         if cloud > 0:
-            lieu, cloud = "cloud", cloud - 1
+            ou, cloud = "cloud", cloud - 1
             raison_lieu = f"cloud : place cloud libre (encore {cloud})"
         elif locaux > 0:
-            lieu, locaux = "local", locaux - 1
-            raison_lieu = (f"local : {'projet pas sur GitHub' if not github else 'plus de place cloud'}, place locale "
-                           f"libre (encore {locaux})")
+            ou, locaux = "local", locaux - 1
+            pourquoi = ("lieu demandé" if lieu == "local" else "projet pas sur GitHub" if not github
+                        else "plus de place cloud")
+            raison_lieu = f"local : {pourquoi}, place locale libre (encore {locaux})"
         else:
-            notes.append("Plus de place libre : augmentez « Agents locaux en même temps » ou « Agents cloud en même "
-                         "temps » (le cloud demande aussi un projet sur GitHub).")
+            if lieu == "cloud":
+                if github:
+                    notes.append(f"Plus de place cloud libre{'' if not propositions else ' au-delà de ' + _pluriel(len(propositions), 'agent')} :"
+                                 " augmentez « Agents cloud en même temps ».")
+            elif lieu == "local":
+                notes.append("Plus de place locale libre : augmentez « Agents locaux en même temps ».")
+            else:
+                notes.append("Plus de place libre : augmentez « Agents locaux en même temps » ou « Agents cloud en même "
+                             "temps » (le cloud demande aussi un projet sur GitHub).")
             break
         r = max(candidats, key=lambda x: (manque[x], -ordre.index(x)))
         info = par_role[r]
+        g = groupes[r]
+        if g:
+            choisi = g[recrues[r]] if recrues[r] < len(g) else g[0]
+            modele, raison_modele = choisi["modele"], choisi["raison"]
+        else:
+            modele, raison_modele = info["modele"], f"{info['modele']} : {info['raison_modele']}"
         propositions.append({
-            "role": r, "modele": info["modele"], "lieu": lieu,
+            "role": r, "modele": modele, "lieu": ou,
             "raison": (f"{info['nom']} : {_pluriel(travail.get(r, 0), 'tâche')} prête(s) ou en file pour "
-                       f"{_pluriel(info['agents'] + recrues[r], 'agent')} ; modèle {info['modele']} "
-                       f"({info['raison_modele']}) ; {raison_lieu}")})
+                       f"{_pluriel(info['agents'] + recrues[r], 'agent')} ; modèle {raison_modele} ; {raison_lieu}")})
         recrues[r] += 1
     return {"propositions": propositions, "places": places, "notes": notes, "travail": travail}
 
@@ -270,7 +383,7 @@ def _prenom_libre(pris):
     return f"Agent {n}"
 
 
-def fiches_a_recruter(f, fiches, mode, agents, places_cloud, depot_, jour):
+def fiches_a_recruter(f, fiches, mode, agents, places_cloud, depot_, jour, lieu=None):
     """Les fiches à écrire (dicts de `fiches.ecrire_fiche`), ou `RecrutementRefuse` avec la raison. `mode` : `manuel`
     (un agent ; les places locales ne le limitent pas) ou `auto` (1 à 16 ; jamais au-delà des places libres)."""
     if mode not in ("manuel", "auto"):
@@ -296,6 +409,11 @@ def fiches_a_recruter(f, fiches, mode, agents, places_cloud, depot_, jour):
             raise RecrutementRefuse("« modele » vaut Haiku, Sonnet ou Opus.")
         if a.get("lieu") not in ("local", "cloud"):
             raise RecrutementRefuse("« lieu » vaut local ou cloud.")
+    if lieu is not None:     # le lieu demandé à la répartition automatique : tous les agents y vont
+        if mode != "auto" or lieu not in LIEUX_AUTO:
+            raise RecrutementRefuse("« lieu » (mieux, cloud ou local) ne se donne qu'en recrutement automatique.")
+        if lieu != "mieux" and any(a["lieu"] != lieu for a in agents):
+            raise RecrutementRefuse(f"Vous avez demandé uniquement des agents {lieu} : un agent est dans l'autre lieu.")
     places = places_libres(f, fiches, places_cloud)
     n_cloud = sum(1 for a in agents if a["lieu"] == "cloud")
     n_locaux = len(agents) - n_cloud

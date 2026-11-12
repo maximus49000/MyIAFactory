@@ -33,7 +33,7 @@ AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
-               "installer_outil": ("fonctionnalite",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet", "serie_arretee",
@@ -285,6 +285,9 @@ def _verifier_recrutement(demande, r):
     if not isinstance(agents, list) or not 1 <= len(agents) <= (1 if mode == "manuel" else 16):
         return "« agents » : un agent en manuel, de 1 à 16 en auto."
     roles = {x.get("role") for x in rec.get("roles") or [] if isinstance(x, dict)}
+    lieu = demande.get("lieu")
+    if "lieu" in demande and (mode != "auto" or lieu not in ("mieux", "cloud", "local")):
+        return "« lieu » (mieux, cloud ou local) ne se donne qu'en recrutement automatique."
     for a in agents:
         if not isinstance(a, dict) or a.get("role") not in roles:
             return "Chaque agent a un « role » du workflow du projet."
@@ -297,6 +300,8 @@ def _verifier_recrutement(demande, r):
             return "« modele » vaut Haiku, Sonnet ou Opus."
         if a.get("lieu") not in ("local", "cloud"):
             return "« lieu » vaut local ou cloud."
+    if lieu in ("cloud", "local") and any(a["lieu"] != lieu for a in agents):
+        return f"Vous avez demandé uniquement des agents {lieu} : un agent est dans l'autre lieu."
     places = rec.get("places") or {}
     n_cloud = sum(1 for a in agents if a["lieu"] == "cloud")
     if n_cloud and not (rec.get("depot") or {}).get("github"):

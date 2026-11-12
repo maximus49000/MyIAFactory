@@ -363,3 +363,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand seul le rapport d'une étape a été refusé pour sa forme, reprendre le livrable déjà produit, relancer ses contrôles et rendre un rapport complet au lieu de refaire le travail.
+
+## S61 — Quand des prompts de génération d'assets sont regroupés pour
+Rôles : designer
+Date : 2026-11-13
+
+Quand des prompts de génération d'assets sont regroupés pour réduire le nombre de générations, limiter chaque groupe à quelques sujets de même gabarit et du même lot, les numéroter dans un ordre fixe lié à leurs identifiants, faire vérifier la numérotation par un contrôle et prévoir de régénérer seul un sujet raté.

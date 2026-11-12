@@ -51,8 +51,15 @@ pas par cette mesure : elles partent sans condition de charge.)
 
 Entrée : une **demande du bureau** (JSON, avec son `type` et son `t`). C'est la commande d'actions des réglages du
 bureau. La demande est ajoutée au suivi comme « en attente » (identifiant `r<n>`) et au journal `demandes.jsonl` à
-côté du suivi. Les images jointes sont décodées dans `pieces/<fonctionnalité>/<date>-<nom>` et remplacées par leurs
-chemins. `fonctionnalite` crée tout de suite la fonctionnalité (étape `cadrage`, nom provisoire de 40 caractères,
+côté du suivi. Les images jointes (`images`) sont décodées dans `pieces/<fonctionnalité>/<date>-<nom>` et remplacées par leurs
+chemins. Les **fichiers joints** (`fichiers: [{nom, type?, donnees}]`, de `fonctionnalite` et de `message` : images, gif,
+vidéos mp4/webm, sons, documents pdf/md/txt/csv/json/docx/xlsx/pptx, zip ; 8 au plus dont 4 images PNG ou JPEG, 25 Mo chacun,
+40 Mo en tout ; liste blanche vérifiée par l'extension et le début du contenu, voir `bureau/fichiers_joints.py` et
+« Les fichiers joints » de `docs/releve.md`) sont rangés de même, sous un nom sûr, sans jamais être ouverts ni décompressés ;
+le message de la discussion (et la demande du suivi) garde `fichiers: [{chemin, nom, type, taille}]`, et les PNG et JPEG joints
+figurent aussi dans `images`. Un fichier refusé fait refuser toute la demande (rien n'est écrit). Quand l'agent reçoit la
+discussion, chaque fichier joint y est listé (chemin compté depuis le dossier du projet, type, taille) avec la consigne de les
+lire : un zip s'ouvre avec le module `zipfile` de Python, en lecture seule. `fonctionnalite` crée tout de suite la fonctionnalité (étape `cadrage`, nom provisoire de 40 caractères,
 son message en première ligne de discussion) ; `message` ajoute le message à la discussion et met `attend_reponse` ;
 le bouton `pause` ou `reprendre` change l'état de la factory (demande aussitôt « traitée ») ; un `deplacer` des
 tâches `orchestration` ou `cadrage:<fonctionnalité>` (montrées seulement au relevé) est refusé. Rend

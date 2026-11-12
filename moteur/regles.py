@@ -30,6 +30,7 @@ from pathlib import Path
 from installation import estimation
 from moteur import accord_outil, agents, cloud, detache, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
+from bureau import fichiers_joints
 from bureau import releve as rel
 from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
@@ -241,8 +242,29 @@ def _colonne_du_role(projet, role, fid=None):
     return next((s["id"] for s in flux if s.get("role") == role), flux[-1]["id"])
 
 
-def _texte_discussion(f, derniers=20):
-    return "\n".join(f"- {m['auteur']} : {m['texte']}" for m in (f.get("discussion") or [])[-derniers:]) or "(vide)"
+def _chemin_pour_agent(projet, chemin):
+    """Un chemin du suivi (compté depuis le dossier de la factory) compté depuis le dossier du projet, là où travaille l'agent."""
+    try:
+        base = Path(fa.lire(projet.factory)["base"]).resolve()
+        return (base / chemin).resolve().relative_to(projet.dossier.resolve()).as_posix()
+    except (fa.FactoryInvalide, ValueError, OSError):
+        return chemin
+
+
+def _texte_discussion(f, derniers=20, projet=None):
+    """La discussion en texte pour l'agent ; sous un message, ses fichiers joints (chemin, type, taille) et, une fois, la
+    consigne de les lire. Avec `projet`, les chemins sont comptés depuis le dossier du projet."""
+    lignes, joints = [], False
+    for m in (f.get("discussion") or [])[-derniers:]:
+        lignes.append(f"- {m['auteur']} : {m['texte']}")
+        fichiers = [{**x, "chemin": _chemin_pour_agent(projet, x["chemin"]) if projet else x["chemin"]}
+                    for x in m.get("fichiers") or [] if isinstance(x, dict) and "chemin" in x]
+        for ligne in fichiers_joints.lignes_pour_agent(fichiers):
+            lignes.append(ligne)
+            joints = True
+    if joints:
+        lignes.append(fichiers_joints.CONSIGNE_LECTURE)
+    return "\n".join(lignes) or "(vide)"
 
 
 def _consignes_propres(projet):
@@ -373,6 +395,11 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
     n = len(demande.get("images") or [])
     if n:
         texte += f" (avec {n} image{'s' if n > 1 else ''}, visible{'s' if n > 1 else ''} dans la discussion)"
+    joints = [{**x, "chemin": _chemin_pour_agent(projet, x["chemin"])} for x in demande.get("fichiers") or []
+              if isinstance(x, dict) and "chemin" in x]
+    if joints:      # tu peux les lire : chemin, type, taille de chacun
+        texte += (" Fichiers joints (à lire si utile) :\n" + "\n".join(fichiers_joints.lignes_pour_agent(joints)) + "\n"
+                  + fichiers_joints.CONSIGNE_LECTURE)
     detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)")
     dit = texte_question_transmise(prenom_de(projet, agent))
     _dire(projet, fid, dit)
@@ -2285,7 +2312,7 @@ def _matiere(projet, etat, t):
             if est_intention_de_demarrage(_demande_de(f)["texte"]):
                 parties.append("La demande ne décrit pas de fonctionnalité, elle demande de démarrer le projet : le "
                                "cadrage porte sur la description du projet.")
-        parties += ["Discussion avec l'utilisateur :", _texte_discussion(f),
+        parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
                     "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
                     "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
                     '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
@@ -2300,7 +2327,7 @@ def _matiere(projet, etat, t):
                     "l'utilisateur : refais la maquette et rends le cahier corrigé."]
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
-                    "Discussion récente :", _texte_discussion(f, 8),
+                    "Discussion récente :", _texte_discussion(f, 8, projet),
                     "Montre tes images dans `message.images` (chacune avec sa légende : "
                     '`{"chemin": "…", "legende": "…"}`), avec `attend: true` pour recueillir le retour de '
                     'l\'utilisateur, toujours par des questions à choix (`message.questions`, par ex. « Le style vous '

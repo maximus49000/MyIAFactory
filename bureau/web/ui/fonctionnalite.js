@@ -14,11 +14,12 @@ import {reessayerImage} from "./reessai.js";
 import {ouvrirVisionneuse, voisine} from "./visionneuse.js";
 export {voisine};
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
+import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEnvoye, estPhoto, verifierChoix, tailleBase64,
+        tailleLisible, badge, affichage, fichiersAMontrer} from "./pieces.js";
+export {verifierChoix};
 
 export const MAX_TEXTE = 3500;
-const MAX_IMAGES = 4;
-const MAX_OCTETS = 5 * 1024 * 1024;
-const MAX_NOM = 80;
+const MAX_OCTETS = MAX_OCTETS_IMAGE;   // une image fixe, une fois réduite
 
 export const ETAPES_PARCOURS = [
   {id: "cadrage", libelle: "Cadrage"},
@@ -59,15 +60,16 @@ export function bandeau(etape) {
 // --- Les demandes (champs exacts de la spec, §8.2).
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 
-export function demandeNouvelle(texte, images) {
+// `fichiers` : les fichiers joints `{nom, type, donnees}` (images, gif, vidéos, sons, documents, zip : voir `pieces.js`).
+export function demandeNouvelle(texte, fichiers) {
   const d = {type: "fonctionnalite", texte};
-  if (images && images.length) d.images = images;
+  if (fichiers && fichiers.length) d.fichiers = fichiers;
   return d;
 }
 
-export function demandeMessage(fonc, texte, images) {
+export function demandeMessage(fonc, texte, fichiers) {
   const d = {type: "message", fonctionnalite: fonc, texte};
-  if (images && images.length) d.images = images;
+  if (fichiers && fichiers.length) d.fichiers = fichiers;
   return d;
 }
 
@@ -95,50 +97,17 @@ export function gestesReprise(f, agir) {
   ]};
 }
 
-// --- Les images jointes : mêmes règles que le serveur (4 au plus, 5 Mo, PNG ou JPEG, nom simple).
-const TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"};
-
-export function verifierPieces(fichiers) {
-  const liste = Array.from(fichiers || []);
-  if (liste.length > MAX_IMAGES) return `${MAX_IMAGES} images au plus par message.`;
-  for (const f of liste) {
-    const nom = String(f?.name ?? "");
-    const point = nom.lastIndexOf(".");
-    const attendu = point >= 0 ? TYPES[nom.slice(point).toLowerCase()] : undefined;
-    if (!attendu || (f.type !== "image/png" && f.type !== "image/jpeg")) return `« ${tronquer(nom, 40)} » doit être une image PNG ou JPEG.`;
-    if (f.type !== attendu) return `Le type de « ${tronquer(nom, 40)} » ne correspond pas à son extension.`;
-    if (!(f.size <= MAX_OCTETS)) return `« ${tronquer(nom, 40)} » dépasse 5 Mo.`;
-    if (nom.length > MAX_NOM || /[\/\\:\u0000-\u001f]/.test(nom) || nom.includes("..")) return `Le nom de « ${tronquer(nom, 40)} » n'est pas valide.`;
-  }
-  return null;
-}
-
+// --- Les fichiers joints : mêmes règles que le serveur (voir `pieces.js`).
 // Un fichier choisi → {nom, type, donnees} (base64), prêt à joindre à une demande.
 export async function lireImage(fichier) {
   const octets = new Uint8Array(await fichier.arrayBuffer());
-  let binaire = "";
-  for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
-  return {nom: fichier.name, type: fichier.type, donnees: btoa(binaire)};
+  const morceaux = [];   // par morceaux : un fichier de 25 Mo ne se concatène pas octet par octet
+  for (let i = 0; i < octets.length; i += 0x8000) morceaux.push(String.fromCharCode(...octets.subarray(i, i + 0x8000)));
+  return {nom: fichier.name, type: fichier.type, donnees: btoa(morceaux.join(""))};
 }
 
 // --- Les photos prises au téléphone : n'importe quelle image est acceptée au choix (HEIC, WebP, très grande
 // définition…), puis réduite et réencodée dans la page avant l'envoi. Jamais refusée en silence.
-const MAX_OCTETS_CHOISIS = 60 * 1024 * 1024;   // avant réduction : au-delà, la page ne tiendrait pas en mémoire
-const EXTENSIONS_IMAGE = /\.(png|jpe?g|webp|heic|heif|avif|gif|bmp)$/i;
-
-// Le contrôle à la sélection : 4 images au plus, de vraies images (le type, ou à défaut l'extension : certains
-// téléphones ne donnent pas de type aux HEIC). Rend le message d'erreur, ou null.
-export function verifierSelection(fichiers) {
-  const liste = Array.from(fichiers || []);
-  if (liste.length > MAX_IMAGES) return `${MAX_IMAGES} images au plus par message.`;
-  for (const f of liste) {
-    const nom = String(f?.name ?? "");
-    const type = String(f?.type ?? "");
-    if (!(type.startsWith("image/") || (type === "" && EXTENSIONS_IMAGE.test(nom)))) return `« ${tronquer(nom, 40)} » n'est pas une image.`;
-    if (!(f.size <= MAX_OCTETS_CHOISIS)) return `« ${tronquer(nom, 40)} » est trop lourde pour être préparée (${Math.round(f.size / 1048576)} Mo).`;
-  }
-  return null;
-}
 
 // Les moyens du navigateur : décoder une image et l'encoder avec un canvas.
 function moyensDuNavigateur() {
@@ -183,6 +152,24 @@ export async function preparerImage(fichier, moyens = moyensDuNavigateur()) {
     throw new Error(`« ${tronquer(nom, 40)} » dépasse 5 Mo même réduite : elle n'est pas envoyée.`);
   }
   return lireImage({name: nomEnvoye(nom, type, MAX_NOM), type, arrayBuffer: () => corps.arrayBuffer()});
+}
+
+// Un fichier choisi → le fichier prêt à joindre `{nom, type, donnees, taille, categorie}`. Une photo est réduite (voir
+// `preparerImage`) ; tout le reste part tel quel, sous le type de sa liste blanche (le type annoncé par le navigateur varie
+// d'un téléphone à l'autre). Lève une `Error` au message clair si le fichier ne peut pas être lu.
+export async function preparerFichier(fichier, moyens) {
+  const nom = String(fichier?.name ?? "fichier");
+  if (estPhoto(fichier)) {
+    const p = await preparerImage(fichier, moyens);
+    return {...p, taille: tailleBase64(p.donnees), categorie: "image"};
+  }
+  const type = typeEnvoye(nom);
+  if (!type) throw new Error(`« ${tronquer(nom, 40)} » : ce type de fichier n'est pas accepté.`);
+  if (!(fichier.size <= MAX_OCTETS_FICHIER)) throw new Error(`« ${tronquer(nom, 40)} » dépasse ${MAX_OCTETS_FICHIER / 1048576} Mo.`);
+  let lu;
+  try { lu = await lireImage(fichier); }
+  catch { throw new Error(`« ${tronquer(nom, 40)} » n'a pas pu être lu.`); }
+  return {nom, type, donnees: lu.donnees, taille: tailleBase64(lu.donnees), categorie: categorie(nom)};
 }
 
 // La ligne sous la discussion : l'agent écrit (l'orchestrateur tourne), ou on attend l'orchestrateur.
@@ -934,6 +921,8 @@ export function texteACopier(m) {
   if (q.length) parties.push(q.map((x) => `${x.texte} (${(x.choix || []).join(" / ")})`).join("\n"));
   if ((m?.images || []).length) parties.push("Images :\n" + imagesLegendees(m.images)
     .map((i) => "- " + i.chemin + (i.legende ? " : " + i.legende : "")).join("\n"));
+  const joints = fichiersAMontrer(m);
+  if (joints.length) parties.push("Fichiers joints :\n" + joints.map((x) => "- " + x.chemin).join("\n"));
   return parties.filter(Boolean).join("\n\n");
 }
 
@@ -954,7 +943,74 @@ async function copier(texte, bouton) {
   setTimeout(() => { bouton.textContent = "Copier"; }, 1500);
 }
 
-export function messageDe(m, etat, glossaire = []) {
+// Une pastille de fichier : le badge d'extension (« ZIP »), le nom, la taille.
+function puce(nom, taille) {
+  const p = el("span", "fichier-puce");
+  p.append(el("span", "fichier-icone", badge(nom)), el("span", "fichier-nom", nom));
+  const t = tailleLisible(taille);
+  if (t) p.append(el("span", "fichier-taille", t));
+  return p;
+}
+
+const urlLecture = (fonctionnalite, chemin) => urlTelechargement(fonctionnalite, chemin, projetCourant(), null, true);
+
+function boutonTelecharger(fonctionnalite, x) {
+  const a = el("a", "bouton secondaire petit fichier-telecharger", "Télécharger");
+  a.href = urlTelechargement(fonctionnalite, x.chemin);
+  a.setAttribute("download", x.nom);
+  a.setAttribute("aria-label", "Télécharger " + x.nom);
+  return a;
+}
+
+// Les fichiers joints d'un message (hors PNG et JPEG, montrés avec les images) : un GIF ou un WebP en vignette (visionneuse au
+// clic), une vidéo avec son lecteur, un son avec le sien, un .md lu en ligne, tout le reste avec « Télécharger ».
+// `fonctionnalite` : l'identifiant qui garde la route de téléchargement. Rend null s'il n'y a rien à montrer.
+export function fichiersDuMessage(m, fonctionnalite) {
+  const liste = fichiersAMontrer(m);
+  if (!liste.length || !fonctionnalite) return null;
+  const zone = el("div", "fichiers-joints");
+  const animees = liste.filter((x) => affichage(x.nom) === "vignette");
+  const vues = animees.map((x) => ({chemin: x.chemin, legende: x.nom}));
+  for (const x of liste) {
+    const genre = affichage(x.nom);
+    if (genre === "vignette") {
+      const fig = el("figure", "vignette fichier-vignette");
+      const b = el("button", "fichier-vignette-bouton");
+      b.type = "button";
+      b.setAttribute("aria-label", "Agrandir : " + x.nom);
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.src = urlLecture(fonctionnalite, x.chemin);
+      img.alt = x.nom;
+      reessayerImage(img);
+      b.append(img);
+      b.addEventListener("click", () => ouvrirVisionneuse(vues, animees.indexOf(x), (c) => urlLecture(fonctionnalite, c), b));
+      fig.append(b, el("figcaption", "", [x.nom, tailleLisible(x.taille)].filter(Boolean).join(" · ")), boutonTelecharger(fonctionnalite, x));
+      zone.append(fig);
+    } else if (genre === "video" || genre === "son") {
+      const bloc = el("div", "fichier-media fichier-" + genre);
+      const lecteur = document.createElement(genre === "video" ? "video" : "audio");
+      lecteur.controls = true;
+      lecteur.preload = "none";
+      if (genre === "video") lecteur.setAttribute("playsinline", "");
+      lecteur.src = urlLecture(fonctionnalite, x.chemin);
+      lecteur.setAttribute("aria-label", (genre === "video" ? "Voir : " : "Écouter : ") + x.nom);
+      const pied = el("div", "fichier-pied");
+      pied.append(puce(x.nom, x.taille), boutonTelecharger(fonctionnalite, x));
+      bloc.append(lecteur, pied);
+      zone.append(bloc);
+    } else if (genre === "markdown") {
+      zone.append(blocMarkdown({titre: x.nom, adresse: urlLecture(fonctionnalite, x.chemin), lien: boutonTelecharger(fonctionnalite, x)}));
+    } else {
+      const ligne = el("div", "fichier-ligne");
+      ligne.append(puce(x.nom, x.taille), boutonTelecharger(fonctionnalite, x));
+      zone.append(ligne);
+    }
+  }
+  return zone;
+}
+
+export function messageDe(m, etat, glossaire = [], fonctionnalite = null) {
   const li = el("li", "message");
   const utilisateur = m.auteur === "utilisateur";
   li.classList.add(utilisateur ? "message-utilisateur" : "message-agent");
@@ -969,24 +1025,32 @@ export function messageDe(m, etat, glossaire = []) {
   li.append(tete, utilisateur ? texteAvecTermes("message-texte", m.texte, glossaire)
     : rendreTexte("message-texte", m.texte, {texte: (t) => noeudsDeTermes(t, glossaire)}));
   if ((m.images || []).length) li.append(vignettes(m.images, etat));
+  const joints = fichiersDuMessage(m, fonctionnalite);
+  if (joints) li.append(joints);
   return li;
 }
 
+// L'aperçu d'un fichier prêt à partir : une vignette pour une image ou un GIF, sinon l'icône, le nom et la taille.
 function miniature(i) {
-  const fig = el("figure", "vignette");
-  const img = document.createElement("img");
-  img.src = `data:${i.type};base64,${i.donnees}`;
-  img.alt = i.nom;
-  fig.append(img);
+  if (String(i.type).startsWith("image/")) {
+    const fig = el("figure", "vignette");
+    const img = document.createElement("img");
+    img.src = `data:${i.type};base64,${i.donnees}`;
+    img.alt = i.nom;
+    fig.append(img);
+    return fig;
+  }
+  const fig = el("figure", "vignette fichier-apercu");
+  fig.append(puce(i.nom, i.taille));
   return fig;
 }
 
 function messageLocal(envoi) {
   const li = el("li", "message message-utilisateur message-local");
   li.append(el("div", "message-tete", "Vous"), el("div", "message-texte", envoi.texte));
-  if (envoi.images.length) {
+  if (envoi.fichiers.length) {
     const zone = el("div", "vignettes");
-    for (const i of envoi.images) zone.append(miniature(i));
+    for (const i of envoi.fichiers) zone.append(miniature(i));
     li.append(zone);
   }
   return li;
@@ -1000,11 +1064,11 @@ function lienExterne(url, texte) {
   return a;
 }
 
-// La zone de saisie : texte, images jointes (vignettes avant envoi), envoi. Le brouillon survit aux rafraîchissements.
-// `envoyerDemande(texte, images, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
-function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, invite = "Écrire un message…",
+// La zone de saisie : texte, fichiers joints (aperçus avant envoi), envoi. Le brouillon survit aux rafraîchissements.
+// `envoyerDemande(texte, fichiers, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
+function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoindre = true, invite = "Écrire un message…",
                                          questions = null, rapides = null} = {}) {
-  const brouillon = ctx.brouillons.get(cle) || {texte: "", images: []};
+  const brouillon = ctx.brouillons.get(cle) || {texte: "", fichiers: []};
   ctx.brouillons.set(cle, brouillon);
   // Les réponses aux questions à choix du dernier message (oubliées quand un autre message en pose de nouvelles).
   if (questions && brouillon.reponsesDe !== questions.message) { brouillon.reponsesDe = questions.message; brouillon.reponses = {}; }
@@ -1022,11 +1086,11 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   erreur.setAttribute("aria-live", "polite");
   const envoyer = el("button", "bouton", libelle);
   envoyer.type = "button";
-  const joindre = el("button", "bouton secondaire", "Joindre une image");
+  const joindre = el("button", "bouton secondaire", "Joindre un fichier");
   joindre.type = "button";
   const fichier = document.createElement("input");
   fichier.type = "file";
-  fichier.accept = "image/*";
+  fichier.accept = ACCEPT;
   fichier.multiple = true;
   fichier.hidden = true;
 
@@ -1038,12 +1102,12 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   };
   function dessinerMiniatures() {
     miniatures.replaceChildren();
-    brouillon.images.forEach((i, n) => {
+    brouillon.fichiers.forEach((i, n) => {
       const fig = miniature(i);
       const retirer = el("button", "vignette-retirer", "×");
       retirer.type = "button";
       retirer.setAttribute("aria-label", `Retirer ${i.nom}`);
-      retirer.addEventListener("click", () => { brouillon.images.splice(n, 1); dessinerMiniatures(); });
+      retirer.addEventListener("click", () => { brouillon.fichiers.splice(n, 1); dessinerMiniatures(); });
       fig.append(retirer);
       miniatures.append(fig);
     });
@@ -1053,14 +1117,13 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
   fichier.addEventListener("change", async () => {
     const choisis = Array.from(fichier.files);
     fichier.value = "";
-    const dejaLa = brouillon.images.map((i) => ({name: i.nom, type: i.type, size: 0}));
-    const probleme = verifierSelection([...dejaLa, ...choisis]);
+    const probleme = verifierChoix(brouillon.fichiers, choisis);
     if (probleme) { erreur.textContent = probleme; return; }
-    erreur.textContent = choisis.length ? "Préparation de l'image…" : "";
+    erreur.textContent = choisis.length ? (choisis.length > 1 ? "Préparation des fichiers…" : "Préparation du fichier…") : "";
     try {
-      for (const f of choisis) brouillon.images.push(await preparerImage(f));
+      for (const f of choisis) brouillon.fichiers.push(await preparerFichier(f));
       erreur.textContent = "";
-    } catch (e) { erreur.textContent = e?.message || "Une image n'a pas pu être lue."; }
+    } catch (e) { erreur.textContent = e?.message || "Un fichier n'a pas pu être lu."; }
     dessinerMiniatures();
   });
   envoyer.addEventListener("click", async () => {
@@ -1068,16 +1131,16 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", images = true, i
     if (ctx.envois.has(cle) || pr.erreur !== undefined) return;   // un double clic ne crée qu'une demande
     ctx.envois.add(cle);
     envoyer.disabled = true;
-    const texte = pr.texte, images = brouillon.images.slice();
+    const texte = pr.texte, fichiers = brouillon.fichiers.slice();
     let r;
-    try { r = await envoyerDemande(texte, images, envoyer); } finally { ctx.envois.delete(cle); }
-    if (r?.ok) { brouillon.texte = ""; brouillon.images = []; brouillon.reponses = {}; ctx.rouvrir(); }
+    try { r = await envoyerDemande(texte, fichiers, envoyer); } finally { ctx.envois.delete(cle); }
+    if (r?.ok) { brouillon.texte = ""; brouillon.fichiers = []; brouillon.reponses = {}; ctx.rouvrir(); }
     else maj();
   });
   maj();
   dessinerMiniatures();
   const rangee = el("div", "retour-pied");
-  if (images) rangee.append(joindre);
+  if (peutJoindre) rangee.append(joindre);
   rangee.append(envoyer);
   if (questions) {
     const changer = (focusAutre = false, redessin = true) => {
@@ -1150,7 +1213,7 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   const discussion = el("ul", "discussion");
   const messages = f ? f.discussion || [] : [];
   const glossaire = glossaireDe(f);
-  for (const m of messages) discussion.append(messageDe(m, e, glossaire));
+  for (const m of messages) discussion.append(messageDe(m, e, glossaire, f?.id));
   const repris = new Set(messages.filter((m) => m.auteur === "utilisateur").map((m) => m.texte));
   const locaux = f ? (ctx.envoyes.get(f.id) || []).filter((x) => !repris.has(x.texte))
                    : (ctx.nouvelle.envoi ? [ctx.nouvelle.envoi] : []);
@@ -1172,16 +1235,16 @@ export function contenuFonctionnalite(ctx, contenu, f) {
 
   if (e.agir === true) {
     const s = vue.envoiCorrection
-      ? saisie(ctx, cle + ":correction", async (texte, images, bouton) => {
+      ? saisie(ctx, cle + ":correction", async (texte, fichiers, bouton) => {
           const r = await ctx.barre.demander(demandeCahier(f.id, "corriger", texte), bouton);
           if (r.ok) ctx.corrections.delete(f.id);
           return r;
-        }, {libelle: "Envoyer la correction", images: false, invite: "Ce qu'il faut corriger dans le cahier des charges…"})
-      : saisie(ctx, cle, async (texte, images, bouton) => {
-          const joints = images.map(({nom, type, donnees}) => ({nom, type, donnees}));
-          if (!f) ctx.nouvelle.envoi = {avant: e, texte, images};
+        }, {libelle: "Envoyer la correction", joindre: false, invite: "Ce qu'il faut corriger dans le cahier des charges…"})
+      : saisie(ctx, cle, async (texte, fichiers, bouton) => {
+          const joints = fichiers.map(({nom, type, donnees}) => ({nom, type, donnees}));
+          if (!f) ctx.nouvelle.envoi = {avant: e, texte, fichiers};
           const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints) : demandeNouvelle(texte, joints), bouton);
-          if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, images}]);
+          if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, fichiers}]);
           if (!r.ok && !f) ctx.nouvelle.envoi = null;
           return r;
         }, {questions: f ? questionsEnAttente(f) : null,

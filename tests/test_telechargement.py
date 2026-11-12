@@ -217,6 +217,57 @@ class TestTelecharger(AvecServeur):
         r, _ = self.req("GET", self.url("../notes.md") + "&lecture=1")
         self.assertEqual(r.status, 404)
 
+    def avec_joints(self, fichiers):
+        """Un relevé dont la discussion de f1 porte ces fichiers joints (`fichiers`)."""
+        r = releve_avec(1, [], [])
+        r["fonctionnalites"][0]["discussion"] = [{"id": "m1", "t": "2026-11-10T10:00:00+01:00", "auteur": "utilisateur",
+                                                  "texte": "Voici", "fichiers": fichiers}]
+        self.agir(releve=r)
+
+    def joint(self, chemin, contenu, type_):
+        self.ecrire(chemin, contenu)
+        return {"chemin": chemin, "nom": chemin.rsplit("/", 1)[-1], "type": type_, "taille": len(contenu)}
+
+    def test_fichiers_joints_a_la_discussion(self):
+        """Un fichier joint à la discussion de la fonctionnalité se télécharge (zip, gif, json…) ; la page lit en ligne
+        (`lecture=1`) l'image animée, la vidéo (par tranches), le son et le texte ; jamais un json ; rien d'autre."""
+        gif, mp4 = b"GIF89a" + b"\x00" * 8, b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 8
+        self.avec_joints([self.joint("pieces/f1/1-a.zip", b"PK\x03\x04zip", "application/zip"),
+                          self.joint("pieces/f1/2-b.gif", gif, "image/gif"),
+                          self.joint("pieces/f1/3-c.json", b"{}", "application/json"),
+                          self.joint("pieces/f1/4-d.mp4", mp4, "video/mp4"),
+                          self.joint("pieces/f1/5-e.md", b"# e", "text/markdown")])
+        self.ecrire("pieces/f1/6-nonjoint.gif", gif)
+        r, data = self.req("GET", self.url("pieces/f1/1-a.zip"))
+        self.assertEqual((r.status, data), (200, b"PK\x03\x04zip"))
+        self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        for lecture in ("", "&lecture=1"):      # un json part toujours en pièce jointe
+            r, _ = self.req("GET", self.url("pieces/f1/3-c.json") + lecture)
+            self.assertEqual(r.status, 200)
+            self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        r, _ = self.req("GET", self.url("pieces/f1/2-b.gif") + "&lecture=1")
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.getheader("Content-Disposition")), (200, "image/gif", None))
+        self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
+        r, _ = self.req("GET", self.url("pieces/f1/2-b.gif"))
+        self.assertTrue(r.getheader("Content-Disposition").startswith("attachment"))
+        r, data = self.req("GET", self.url("pieces/f1/4-d.mp4") + "&lecture=1", entetes={"Range": "bytes=0-3"})
+        self.assertEqual((r.status, r.getheader("Content-Type"), data), (206, "video/mp4", mp4[:4]))
+        r, data = self.req("GET", self.url("pieces/f1/5-e.md") + "&lecture=1")
+        self.assertEqual((r.status, data, r.getheader("Content-Type")), (200, b"# e", "text/plain; charset=utf-8"))
+        r, _ = self.req("GET", self.url("pieces/f1/6-nonjoint.gif"))        # un gif qui n'est pas joint : introuvable
+        self.assertEqual(r.status, 404)
+        r, _ = self.req("GET", self.url("pieces/f1/1-a.zip", "f9"))         # une autre fonctionnalité : introuvable
+        self.assertEqual(r.status, 404)
+
+    def test_un_fichier_joint_n_ouvre_pas_autre_chose(self):
+        self.ecrire("pieces/f1/x.exe", b"MZ")
+        self.avec_joints([{"chemin": "pieces/f1/x.exe", "nom": "x.exe", "type": "application/octet-stream", "taille": 2},
+                          {"chemin": "../secret.zip", "nom": "secret.zip", "type": "application/zip", "taille": 2}])
+        (self.tmp / "secret.zip").write_bytes(b"PK")
+        for chemin in ("pieces/f1/x.exe", "../secret.zip"):
+            r, _ = self.req("GET", self.url(chemin))
+            self.assertEqual(r.status, 404, chemin)
+
     def reponse(self, decision="v1", verdict="valider"):
         r, data = self.req("POST", "/api/demande", json.dumps({"type": "valider_etape", "decision": decision,
                                                                 "verdict": verdict}), TestServeur.ENT)

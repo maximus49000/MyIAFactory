@@ -8,7 +8,7 @@ from pathlib import Path
 
 from moteur import cloud
 
-from . import releve
+from . import fichiers_joints, releve
 
 MAX_RETOUR = 3500
 MAX_TEXTE = MAX_RETOUR
@@ -30,7 +30,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",)}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
-FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images",), "message": ("images",),
+FACULTATIFS = {"partenaire_regle": ("id", "texte"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
@@ -68,6 +68,9 @@ def nettoyer(demande):
     if isinstance(d.get("images"), list):  # rien d'autre que le nom, le type et les données n'est transmis
         d["images"] = [{k: i[k] for k in ("nom", "type", "donnees") if k in i} if isinstance(i, dict) else i
                        for i in d["images"]]
+    if isinstance(d.get("fichiers"), list):   # idem pour les fichiers joints : nom, type annoncé, données
+        d["fichiers"] = [{k: i[k] for k in ("nom", "type", "donnees") if k in i} if isinstance(i, dict) else i
+                         for i in d["fichiers"]]
     return d
 
 
@@ -331,6 +334,11 @@ def _verifier_v4(demande, r, elements):
     genre = demande["type"]
     if genre in ("fonctionnalite", "message") and "images" in demande:
         message = verifier_images(demande["images"])
+        if message:
+            return message
+    if genre in ("fonctionnalite", "message") and "fichiers" in demande:   # images, gif, vidéos, sons, documents, zip
+        images = demande.get("images") if isinstance(demande.get("images"), list) else []
+        message = fichiers_joints.verifier(demande["fichiers"], len(images), len(images))
         if message:
             return message
     for champ in ("texte", "description", "projet_cree"):

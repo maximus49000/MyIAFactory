@@ -896,9 +896,9 @@ class TestDemandesV4(AvecServeur):
         self.assertEqual(self.lignes(notes), [])  # la commande n'est jamais lancée
         self.assertFalse(notes.exists())
 
-    def test_corps_28_mo(self):
+    def test_corps_60_mo(self):    # 40 Mo de fichiers joints en base64, plus le texte
         notes = self.preparer()
-        limite = 28 * 1024 * 1024
+        limite = 60 * 1024 * 1024
         base = json.dumps({"type": "message", "fonctionnalite": "f1", "texte": "Gros"}).encode("utf-8")
         juste = base + b" " * (limite - len(base))  # du blanc JSON : valide, et pile à la limite
         self.assertEqual(len(juste), limite)

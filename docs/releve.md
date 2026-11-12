@@ -181,9 +181,12 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
 
 **Une fonctionnalité** : `id`, `nom`, `etape` (`cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie` ou
 `terminee`), et facultativement :
-- `agent_cadrage` (clé d'un titulaire) ; `discussion` : `[{id, t, auteur, texte, images?}]`, du plus ancien au plus
+- `agent_cadrage` (clé d'un titulaire) ; `discussion` : `[{id, t, auteur, texte, images?, fichiers?}]`, du plus ancien au plus
   récent, 1 000 messages au plus, `auteur` = `utilisateur` ou la clé d'un titulaire, `images` = 4 au plus, chacune un
-  chemin (règles des images) ou `{chemin, legende?}` (voir « Les légendes ») ; `attend_reponse` (vrai ou faux) ;
+  chemin (règles des images) ou `{chemin, legende?}` (voir « Les légendes ») ; `fichiers` = 8 au plus, les fichiers
+  joints par l'utilisateur (voir « Les fichiers joints ») : `[{chemin, nom, type, taille}]`, `chemin` relatif au dossier des
+  réglages comme les images, `nom` le nom d'origine, `type` le type servi, `taille` en octets (les images PNG et JPEG
+  jointes figurent dans `images` **et** dans `fichiers`) ; `attend_reponse` (vrai ou faux) ;
 - `cahier` : `{maquette: [images], etapes: [textes], valide_le?}`, chaque image de la maquette étant un chemin ou `{chemin, legende?}` ;
 - `cahiers_precedents` (facultatif) : les cahiers remplacés par une correction, du plus ancien au plus récent, chacun avec `remplace_le` ; une fonctionnalité revenue en `cadrage` alors qu'elle a un `cahier` est en correction (le bureau ne montre plus ce cahier comme valable) ;
 - `methode` : `{version, lien | chemin, validee_le?}` ;
@@ -284,8 +287,8 @@ Le bureau lance cette commande (sans shell, 10 secondes au plus, dans `dossier`,
 
 | `type` | Champs | Quand |
 |---|---|---|
-| `fonctionnalite` | `texte`, `images?` | « + Nouvelle fonctionnalité » : son premier message |
-| `message` | `fonctionnalite`, `texte`, `images?` | un message de l'utilisateur dans la discussion |
+| `fonctionnalite` | `texte`, `images?`, `fichiers?` | « + Nouvelle fonctionnalité » : son premier message |
+| `message` | `fonctionnalite`, `texte`, `images?`, `fichiers?` | un message de l'utilisateur dans la discussion |
 | `cahier` | `fonctionnalite`, `verdict` (`valider` ou `corriger`), `texte?` | « Valider le cahier des charges » ou « Demander une correction » |
 | `methode` | `fonctionnalite`, `verdict` (`valider`, `revoir`, `garder`, `reprendre` ou `adapter`), `texte?` (obligatoire pour `adapter`) | valider la méthode ; « méthode à revoir ? » : Oui = `revoir`, Non = `garder` ; « reprendre la méthode ? » : « Oui, industrialiser » = `reprendre`, « Modifier le mode opératoire » = `adapter`, « Relancer le prototype » = `revoir` |
 | `genre` | `decision`, `genre`, `description?` | le genre confirmé ou choisi ; `description` pour un nouveau genre |
@@ -354,6 +357,40 @@ Les images jointes par l'utilisateur n'ont pas de légende. Le titre d'un docume
 légende dans les listes de documents ; l'outil y reprend celle de l'image quand le document n'avait que son nom de fichier.
 
 Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'ils sont longs.
+
+## Les fichiers joints
+
+L'utilisateur peut joindre des fichiers à « + Nouvelle fonctionnalité » (`fonctionnalite`) et à tout message de la discussion
+(`message`), par le champ `fichiers: [{nom, type?, donnees}]` (`donnees` : le contenu en base64 ; `type` est ignoré, le type
+vient de l'extension). Le champ `images` d'avant (PNG ou JPEG, 4 au plus, 5 Mo) reste accepté tel quel. Liste blanche, vérifiée
+par le bureau puis par l'outil, par l'extension **et** par le début du contenu :
+
+| Famille | Extensions | Début du contenu |
+|---|---|---|
+| images | `.png` `.jpg` `.jpeg` `.webp` | signature PNG, JPEG (`FFD8FF`), `RIFF….WEBP` |
+| image animée | `.gif` | `GIF87a` ou `GIF89a` |
+| vidéos courtes | `.mp4` `.webm` | `ftyp` à l'octet 4 ; en-tête EBML (`1A45DFA3`) |
+| sons | `.mp3` `.ogg` `.wav` `.flac` | `ID3` ou une trame MPEG ; `OggS` ; `RIFF….WAVE` ; `fLaC` |
+| documents | `.pdf` `.docx` `.xlsx` `.pptx` | `%PDF` ; `PK` (un document bureautique est une archive zip) |
+| textes | `.md` `.txt` `.csv` `.json` | du texte : aucun octet nul |
+| archives | `.zip` | `PK` |
+
+Plafonds : **8 fichiers au plus par envoi**, dont **4 images PNG ou JPEG** au plus ; **25 Mo par fichier** (**5 Mo** pour une image
+fixe : png, jpg, jpeg, webp) ; **40 Mo en tout**, une fois décodés. Un nom de fichier fait 80 caractères au plus, sans séparateur,
+sans `..`, sans caractère de contrôle ni `* ? " < > |`. Tout autre type, un contenu qui ne correspond pas à l'extension, un
+fichier vide, un dépassement : la demande est refusée avec la raison (en français).
+
+L'outil range chaque fichier tel quel sous `pieces/<fonctionnalité>/<date>-<nom sûr>` (le nom sûr garde les lettres, chiffres,
+tirets et la ligne basse ; un nom réservé de Windows est préfixé) et le message garde `fichiers: [{chemin, nom, type, taille}]`
+(`nom` : le nom d'origine, `type` : celui de la liste blanche, `taille` : en octets). Les PNG et JPEG joints sont aussi dans
+`images`, comme avant (documents, visionneuse). **Rien n'est jamais ouvert, décompressé ni exécuté par le bureau ou l'outil.**
+
+Dans la page : une image ou un GIF en vignette (visionneuse au clic) ; une vidéo (`<video controls preload="none">`) ; un son
+(`<audio controls preload="none">`) ; un `.md` lu en ligne ; tout le reste avec « Télécharger ». Le bureau sert ces fichiers par
+`/api/telecharger` **seulement** s'ils sont joints à un message de la discussion de la fonctionnalité demandée et d'une extension de
+la liste blanche (toujours en pièce jointe, sauf la lecture en ligne `lecture=1` d'un gif, webp, mp4, webm, son ou texte `.md`/`.txt` ;
+un `.json` n'est jamais lu en ligne). Le moteur donne à l'agent la liste de ces fichiers (chemin depuis le dossier du projet,
+type, taille) dans la discussion qu'il reçoit, avec la consigne de les lire.
 
 ## Ce que le bureau en déduit
 

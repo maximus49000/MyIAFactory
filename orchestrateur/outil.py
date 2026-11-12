@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from bureau import fichiers_joints as fj  # noqa: E402
 from bureau import releve as rel  # noqa: E402
 from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
 from orchestrateur import depart  # noqa: E402
@@ -421,6 +422,38 @@ def ranger_images(ctx, images, sous_dossier):
     return chemins
 
 
+def ranger_fichiers(ctx, fichiers, sous_dossier, deja=0):
+    """Écrit les fichiers joints (base64) sous `pieces/<sous_dossier>/` et rend `[{chemin, nom, type, taille}]` (chemin relatif au
+    fichier de factory). Mêmes règles que le bureau (`bureau.fichiers_joints`) : liste blanche d'extensions, signature du contenu,
+    plafonds ; le nom de fichier rangé est un nom sûr, le nom d'origine reste dans `nom`. Rien n'est ouvert ni décompressé."""
+    probleme = fj.verifier(fichiers, deja, deja)   # `deja` : les images d'avant (champ `images`), toutes PNG ou JPEG
+    if probleme:
+        raise Refus(probleme)
+    horodatage = su.maintenant()[:19].replace("-", "").replace(":", "").replace("T", "-")
+    dossier = ctx.f["pieces"] / sous_dossier
+    sortie = []
+    for f in fichiers:
+        octets, _ = fj.verifier_un(f, "Fichier")
+        dossier.mkdir(parents=True, exist_ok=True)
+        sur = fj.nom_sur(f["nom"])
+        cible, n = dossier / f"{horodatage}-{sur}", 1
+        while cible.exists():
+            n += 1
+            cible = dossier / f"{horodatage}-{n}-{sur}"
+        cible.write_bytes(octets)
+        sortie.append({"chemin": Path(os.path.relpath(cible, ctx.f["base"])).as_posix(), "nom": f["nom"],
+                       "type": fj.type_de(f["nom"]), "taille": len(octets)})
+    return sortie
+
+
+def _pieces_jointes(ctx, e, sous_dossier):
+    """`(images, fichiers)` d'une demande : les chemins des images PNG ou JPEG (champ `images` d'avant, plus celles du champ
+    `fichiers`) et la liste `{chemin, nom, type, taille}` de tout ce que le champ `fichiers` joint."""
+    images = ranger_images(ctx, e["images"], sous_dossier) if e.get("images") else []
+    fichiers = ranger_fichiers(ctx, e["fichiers"], sous_dossier, len(images)) if e.get("fichiers") else []
+    return images + [x["chemin"] for x in fichiers if rel.est_image(x["chemin"])], fichiers
+
+
 # --- Les commandes. Chacune : (ctx, entrée) -> objet ; Refus ou Appel en cas de problème.
 
 def cmd_releve(ctx, e):
@@ -476,7 +509,7 @@ def cmd_actions(ctx, e):
         if probleme:
             raise Refus(probleme)
     with ctx.suivi.transaction() as s:
-        demande = {k: v for k, v in e.items() if k != "images"}
+        demande = {k: v for k, v in e.items() if k not in ("images", "fichiers")}
         demande["t"] = e["t"] if _date_valide(e.get("t")) else su.maintenant()
         if "id" in demande:   # l'id d'un bouton ou d'une leçon visée ne doit pas écraser celui de la demande
             demande["cible"] = demande.pop("id")
@@ -484,19 +517,23 @@ def cmd_actions(ctx, e):
         demande["statut"], demande["reponse"] = "en attente", None
         if genre == "fonctionnalite":
             f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40])
-            images = ranger_images(ctx, e["images"], f["id"]) if e.get("images") else []
-            su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"])
+            images, fichiers = _pieces_jointes(ctx, e, f["id"])
+            su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
             demande["fonctionnalite"] = f["id"]
             if images:
                 demande["images"] = images
+            if fichiers:
+                demande["fichiers"] = fichiers
         elif genre == "message":
             f = _fonc(s, e.get("fonctionnalite"))
-            images = ranger_images(ctx, e["images"], f["id"]) if e.get("images") else []
-            su.ajouter_message(s, f, "utilisateur", texte(e, "texte"), images, demande["t"])
+            images, fichiers = _pieces_jointes(ctx, e, f["id"])
+            su.ajouter_message(s, f, "utilisateur", texte(e, "texte"), images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
             if images:
                 demande["images"] = images
+            if fichiers:
+                demande["fichiers"] = fichiers
         elif genre == "challenge" and isinstance(e.get("cible"), dict) and e["cible"].get("type") == "lecon":
             # Challenger une leçon ouvre une tâche : la discussion y a lieu (ce texte, puis les réponses et retours).
             lecon = next((x for x in s["lecons"] if x["id"] == e["cible"].get("id")), None)
@@ -2005,6 +2042,8 @@ def construire_releve(ctx):
             m = dict(m)
             if m.get("images"):
                 m["images"] = [_chemin_ou_image(c, chemin) for c in m["images"]]
+            if m.get("fichiers"):
+                m["fichiers"] = [{**x, "chemin": chemin(x["chemin"])} for x in m["fichiers"]]
             v["discussion"].append(m)
         if f["cahier"]:
             v["cahier"] = {**f["cahier"], "maquette": [_chemin_ou_image(c, chemin) for c in f["cahier"]["maquette"]]}

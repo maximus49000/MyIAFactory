@@ -117,10 +117,12 @@ def nouvelle_fonctionnalite(donnees, nom, etape="cadrage"):
     return f
 
 
-def ajouter_message(donnees, f, auteur, texte, images=None, t=None):
+def ajouter_message(donnees, f, auteur, texte, images=None, t=None, fichiers=None):
     m = {"id": f"m{suivant(donnees, 'm')}", "t": t or maintenant(), "auteur": auteur, "texte": texte}
     if images:
         m["images"] = list(images)
+    if fichiers:    # les fichiers joints : [{chemin, nom, type, taille}]
+        m["fichiers"] = [dict(x) for x in fichiers]
     f["discussion"].append(m)
     f["attend_reponse"] = auteur == "utilisateur"
     f["maj"] = maintenant()

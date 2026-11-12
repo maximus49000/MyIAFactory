@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {verifierSelection, preparerImage} from "../ui/fonctionnalite.js";
+import {preparerImage} from "../ui/fonctionnalite.js";
 
 const Mo = 1024 * 1024;
 
@@ -20,17 +20,6 @@ function moyens(largeur, hauteur, poids) {
     },
   };
 }
-
-test("verifierSelection : de vraies images, 4 au plus, HEIC sans type reconnu à l'extension", () => {
-  assert.equal(verifierSelection([fichier("a.heic", "image/heic", 12 * Mo)]), null);
-  assert.equal(verifierSelection([fichier("a.webp", "image/webp", 3 * Mo), fichier("b.png", "image/png", 1)]), null);
-  assert.equal(verifierSelection([fichier("IMG_1.HEIC", "", 9 * Mo)]), null);
-  assert.equal(verifierSelection([]), null);
-  assert.match(verifierSelection([fichier("a.pdf", "application/pdf", 10)]), /n'est pas une image/);
-  assert.match(verifierSelection([fichier("a.txt", "", 10)]), /n'est pas une image/);
-  assert.match(verifierSelection(Array.from({length: 5}, (_, i) => fichier(`${i}.png`, "image/png", 1))), /4 images/);
-  assert.match(verifierSelection([fichier("énorme.jpg", "image/jpeg", 200 * Mo)]), /trop lourde/);
-});
 
 test("preparerImage : une photo HEIC de 12 Mo en 4032 × 3024 devient un JPEG de 2048 × 1536 sous 5 Mo", async () => {
   const m = moyens(4032, 3024, 1.4 * Mo);

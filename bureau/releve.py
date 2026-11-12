@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import abonnement as modabonnement
+from . import fichiers_joints as modfichiers
 from .statuts import TRES_ANCIEN, lire_date
 
 MAX_SERVICES = 8
@@ -548,6 +549,11 @@ def _verifier_discussion(f, nom, cles_agents, erreurs):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « images » doit être une liste "
                            f"d'au plus {MAX_IMAGES_MESSAGE} images : un chemin (texte non vide) ou "
                            f"{{chemin, legende?}} (légende : {MAX_LEGENDE} caractères au plus).")
+        if m.get("fichiers") is not None and not (
+                isinstance(m["fichiers"], list) and len(m["fichiers"]) <= modfichiers.MAX_FICHIERS
+                and all(modfichiers.fichier_au_releve_ok(x) for x in m["fichiers"])):
+            erreurs.append(f"{nom} : « discussion » : le message « {i} » : « fichiers » doit être une liste d'au plus "
+                           f"{modfichiers.MAX_FICHIERS} fichiers {{chemin, nom, type, taille (octets)}}.")
         if m.get("attend") is not None and not isinstance(m["attend"], bool):
             erreurs.append(f"{nom} : « discussion » : le message « {i} » : « attend » doit être vrai ou faux.")
         if m.get("glossaire") is not None:

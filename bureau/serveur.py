@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
-from . import releve
+from . import fichiers_joints, releve
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -30,7 +30,7 @@ PAS_SONDE_S = 5
 PAS_HISTORIQUE_S = 60
 PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit les sources qu'une fois par jour
 ATTENTE_PREMIERS_PRIX_S = 25
-MAX_CORPS_DEMANDE = 28 * 1024 * 1024  # 4 images de 5 Mo en base64, plus le texte
+MAX_CORPS_DEMANDE = 60 * 1024 * 1024  # 40 Mo de fichiers joints en base64 (voir `fichiers_joints`), plus le texte
 MAX_CORPS_REGLAGES = 4096
 MAX_CORPS_CREATIONS = 64 * 1024   # la description et les réponses de l'échange avec le chef
 ROUTES_CREATIONS = {f"/api/creations/{n}": n for n in ("infos", "tour", "valider", "supprimer")}
@@ -56,6 +56,9 @@ TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-de
 LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé
 LECTURE_TEXTE_MAX_OCTETS = 512 * 1024    # au-delà : 413, le téléchargement reste
 TELECHARGEABLES = {ext: (type_, True) for ext, type_ in releve.TELECHARGEABLES.items()}
+# Les fichiers joints à une discussion (gif, webp, json en plus) : pièce jointe, sauf ce que la page lit en ligne.
+TELECHARGEABLES_JOINTS = {**{ext: (t[0], True) for ext, t in fichiers_joints.TYPES.items()}, **TELECHARGEABLES}
+LECTURE_MEDIAS = tuple(e for e in fichiers_joints.EXTENSIONS_EN_LIGNE if e not in LECTURE_TEXTE)   # image animée, vidéo, son
 APERCU = "/apercu/"                     # /apercu/<projet>/<décision>/<chemin> -> http://127.0.0.1:<port>/<chemin>
 APERCU_FIN = "fin-"                     # /apercu/<projet>/fin-<fonctionnalité>/… : le site d'une fonctionnalité terminée
 APERCU_DELAI_S = 20
@@ -578,9 +581,16 @@ class Projet:
         f = next((x for x in r["fonctionnalites"] if x.get("id") == fonctionnalite), None)
         p = Path(brut.replace("\\", "/"))
         if (f is None or not brut or "\x00" in brut or brut[0] in "/\\" or p.is_absolute() or p.drive or p.anchor
-                or ".." in p.parts or releve.extension(brut) not in releve.TELECHARGEABLES):
+                or ".." in p.parts or releve.extension(brut) not in TELECHARGEABLES_JOINTS):
+            return None
+        # Les fichiers joints à la discussion de cette fonctionnalité (liste blanche de `fichiers_joints`).
+        joints = {x.get("chemin") for m in f.get("discussion") or [] if isinstance(m, dict)
+                  for x in m.get("fichiers") or [] if isinstance(x, dict)
+                  and releve.extension(x.get("chemin")) in fichiers_joints.TYPES}
+        if releve.extension(brut) not in releve.TELECHARGEABLES and brut not in joints:
             return None
         declares = {d.get("chemin") for d in f.get("documents") or [] if isinstance(d, dict) and d.get("livrable") is True}
+        declares |= joints
         declares |= {x.get("chemin") for d in r.get("decisions_projet") or []
                      if isinstance(d, dict) and d.get("genre") == "valider_etape" and d.get("fonctionnalite") == fonctionnalite
                      for x in d.get("fichiers") or [] if isinstance(x, dict)}
@@ -599,8 +609,9 @@ class Projet:
                     continue
                 if ".git" in [x.lower() for x in cible.relative_to(projet).parts]:
                     continue
-                if releve.extension(cible.name) not in releve.TELECHARGEABLES:   # un lien peut viser autre chose
-                    continue
+                ext = releve.extension(cible.name)
+                if ext not in releve.TELECHARGEABLES and not (brut in joints and ext in TELECHARGEABLES_JOINTS):
+                    continue                                                   # un lien peut viser autre chose
                 if brut in declares or any(_sous(cible, x) for x in racines):
                     return cible
         except (OSError, ValueError, KeyError):
@@ -1333,7 +1344,7 @@ class Handler(BaseHTTPRequestHandler):
                                                   f"{TELECHARGEMENT_MAX_OCTETS // (1024 * 1024)} Mo)."})
         except OSError:
             return self._json(404, {"erreur": "Introuvable."})
-        type_, piece_jointe = TELECHARGEABLES[releve.extension(cible.name)]
+        type_, piece_jointe = TELECHARGEABLES_JOINTS[releve.extension(cible.name)]
         if q.get("lecture") == ["1"] and cible.suffix.lower() in LECTURE_TEXTE:    # un .md se lit dans la page
             try:
                 if cible.stat().st_size > LECTURE_TEXTE_MAX_OCTETS:
@@ -1341,7 +1352,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._json(404, {"erreur": "Introuvable."})
             return self._livrable(cible, {cible.suffix.lower(): ("text/plain; charset=utf-8", False)}, (".md", ".txt"))
-        lecture = q.get("lecture") == ["1"] and releve.est_son(cible.name)    # un son se lit dans la page, rien d'autre
+        lecture = q.get("lecture") == ["1"] and releve.extension(cible.name) in LECTURE_MEDIAS   # lu dans la page, rien d'autre
         return self._livrable(cible, {cible.suffix.lower(): (type_, piece_jointe and not lecture)}, (".html",),
                               par_tranches=lecture)
 

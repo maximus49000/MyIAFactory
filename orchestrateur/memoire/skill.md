@@ -9,3 +9,9 @@ Rôles : environnement
 Date : 2026-11-12
 
 Quand aucun humain ne peut approuver les commandes, éviter les variables shell : passer par un script avec des chemins absolus en slashs avant.
+
+## S2 — Sous Git Bash, mettre les chemins Windows entre guillemets a
+Rôles : environnement
+Date : 2026-11-12
+
+Sous Git Bash, mettre les chemins Windows entre guillemets avec des slashs avant.

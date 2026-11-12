@@ -302,3 +302,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Pour tester l'écran de victoire d'un roguelike avec un robot imparfait, faire passer le robot en mode sans erreur et sans risque quand il lui reste une seule vie.
+
+## G51 — Quand plusieurs clés de signature candidates existent, liste
+Rôles : livreur
+Date : 2026-11-12
+
+Quand plusieurs clés de signature candidates existent, lister leurs noms, tailles et dates sans les ouvrir, puis demander à l'utilisateur laquelle utiliser et son alias.

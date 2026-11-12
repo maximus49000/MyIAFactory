@@ -38,3 +38,9 @@ Rôles : dev, testeur
 Date : 2026-11-12
 
 Lancer un export de test (headless) dès la mise en place du projet : les prérequis de compression de textures et de signature ne se voient pas dans les fichiers de configuration, seulement à l'export.
+
+## G7 — Pour un export mobile de test, désactiver la signature tant
+Rôles : dev
+Date : 2026-11-12
+
+Pour un export mobile de test, désactiver la signature tant qu'aucun keystore n'est fourni.

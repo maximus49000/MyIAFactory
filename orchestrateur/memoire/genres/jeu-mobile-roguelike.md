@@ -158,3 +158,9 @@ Rôles : artiste, dev
 Date : 2026-11-12
 
 Pour un jeu à carte de nœuds, fournir un marqueur de sélection distinct des icônes et trois styles de liens (normal, actif, parcouru) évite au développeur de les redessiner et ne repose pas sur la seule couleur.
+
+## G27 — Pour une barre d'état d'objets, utiliser un gabarit d'emplac
+Rôles : artiste
+Date : 2026-11-12
+
+Pour une barre d'état d'objets, utiliser un gabarit d'emplacement unique par taille d'icône, avec la couleur de bordure comme seul signal d'état.

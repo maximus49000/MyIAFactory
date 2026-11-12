@@ -173,9 +173,9 @@
   - `creer(infos: dict, *, dossier=None, maintenant=None) -> dict` ; `lire(id_: str, *, dossier=None) -> dict` (`Echec` : id refusé, introuvable, illisible) ; `ecrire(b: dict, *, dossier=None) -> None` (écriture atomique, `maj` mise à jour) ; `lister(*, dossier=None) -> list[dict]` (`{id, nom, maj, etat: "questions" | "proposition", tours}`, le plus récent d'abord, illisibles ignorés) ; `abandonner(id_, *, dossier=None, commun=None) -> None` (ses usages ajoutés au fichier des échanges abandonnés, puis le brouillon supprimé) ; `retirer(id_, *, dossier=None) -> None` (après une création : usages déjà versés au projet) ; `purger(*, maintenant, dossier=None, commun=None) -> list[str]` (abandonne ceux dont `maj` a plus de 30 jours) ; `usages_abandonnes(*, commun=None) -> list[dict]`.
 - `reglages.lire_bureau(...)["moteur"]` : la couche des appels faits avant le projet (`appel.choisir_couche(lire_bureau(...), environ)`).
 
-- [ ] **Étape 1 : tests** : `test_creer_lire_ecrire` ; `test_id_refuse_jamais_un_chemin` (`../x`, `c123`, absolu) ; `test_lister_plus_recent_d_abord_illisible_ignore` ; `test_abandonner_garde_les_usages` ; `test_purge_apres_30_jours` ; `test_brouillon_sans_cle` (la clé de l'environnement n'apparaît nulle part dans le fichier) ; `test_bureau_couche_par_defaut_et_api`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py brouillons reglages`).
-- [ ] **Étape 5 : commit** « Création : le brouillon de l'échange avec le chef ».
+- [x] **Étape 1 : tests** : `test_creer_lire_ecrire` ; `test_id_refuse_jamais_un_chemin` (`../x`, `c123`, absolu) ; `test_lister_plus_recent_d_abord_illisible_ignore` ; `test_abandonner_garde_les_usages` ; `test_purge_apres_30_jours` ; `test_brouillon_sans_cle` (la clé de l'environnement n'apparaît nulle part dans le fichier) ; `test_bureau_couche_par_defaut_et_api`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py brouillons reglages`).
+- [x] **Étape 5 : commit** « Création : le brouillon de l'échange avec le chef ».
 
 ### Tâche 8 : le déroulé de l'échange
 
@@ -191,9 +191,9 @@
   - `proposition_calculee(o: dict, infos: dict, *, verifier_environnement, prix_de) -> dict` : `{"message", "genre": {"id", "nouveau": bool, "description"?}, "workflow": {"id": "w-<genre>", "genre", "flux"}, "raisons": {etape: raison}, "services" (tous : facturation + nouveaux), "agents" (nouveaux, `lieu: "local"`, + l'agent d'installation s'il manque des outils, avec `outils` = `outils_installation`), "briefs", "livrable", "environnement" (vérifié), "outils_installation", "cout": {"tokens", "euros"}, "texte"}` ; `texte` : la proposition expliquée (genre, étapes avec rôle, service et raison, validations du Directeur, agents avec modèle et justification, poste « déjà en place » / « à installer » avec versions, coût d'un élément) ; coût par `estimation.estimer` sur `workflows.etapes_d_agent`, Fable au tarif d'Opus ;
   - `cout_echange(usages: list[dict], prix_de) -> {"tokens": int, "euros": float | None}` (compteur par compteur, comme `estimation._euros_usage`).
 
-- [ ] **Étape 1 : tests** (faux `appeler`) : `test_premier_tour_pose_des_questions` ; `test_reponses_ajoutees_avant_l_appel` ; `test_cinquieme_appel_demande_la_proposition` (dossier `proposer_maintenant`) ; `test_proposition_calculee_poste_et_cout` (outil à installer → agent d'installation avec ses outils ; euros quand les prix sont connus, `null` sinon) ; `test_correction_hors_des_quatre_tours` ; `test_tour_rate_ne_compte_pas` (usages gardés, `erreur` posée, `tours` inchangé) ; `test_cout_echange_cumule`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py definition`).
-- [ ] **Étape 5 : commit** « Création : l'échange avec le chef, tour par tour ».
+- [x] **Étape 1 : tests** (faux `appeler`) : `test_premier_tour_pose_des_questions` ; `test_reponses_ajoutees_avant_l_appel` ; `test_cinquieme_appel_demande_la_proposition` (dossier `proposer_maintenant`) ; `test_proposition_calculee_poste_et_cout` (outil à installer → agent d'installation avec ses outils ; euros quand les prix sont connus, `null` sinon) ; `test_correction_hors_des_quatre_tours` ; `test_tour_rate_ne_compte_pas` (usages gardés, `erreur` posée, `tours` inchangé) ; `test_cout_echange_cumule`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py definition`).
+- [x] **Étape 5 : commit** « Création : l'échange avec le chef, tour par tour ».
 
 ### Tâche 9 : créer le projet avec son organisation
 
@@ -209,9 +209,9 @@
   - `class InfosAChanger(Echec)` (dans `definition.py`) : le nom, le dossier ou le bureau ne permettent plus la création ;
   - `definition.valider(b: dict, *, fable: list[str], installer: bool, genre_description: str | None, bureau_json, executer=outil.executer, git=..., gh=..., maintenant=None) -> {"reglages", "id", "projet", "github", "message"}`, dans cet ordre : revérifier les infos (`verifier_nom`, `verifier_parent`, dossier libre, bureau pas plein ; sinon `InfosAChanger`) ; Fable accordé ; sans `installer`, ni agent d'installation ni outils ; `creer_projet(..., genre=<genre connu> ou None, organisation=…, github=False)` ; **ensuite seulement**, et sans rien défaire en cas d'échec (le message le dit) : genre nouveau par `lancer genre {"action": "fixer", "genre", "description"}` (description éditée par l'utilisateur, sinon celle proposée), usages versés par `lancer usage` (agent `orchestrateur`, étape `orchestration`), tâche d'installation de projet (tâche 6) si `installer` et des outils manquent, GitHub par `creation.github` si demandé, `brouillons.retirer`.
 
-- [ ] **Étape 1 : tests** : `test_creer_avec_organisation` (workflow `w-<genre>` sans préfixe, fiches, briefs, services, environnement ; `factory.lire` valide) ; `test_organisation_refusee_ne_laisse_rien` ; `test_nom_pris_entre_temps_retour_infos` ; `test_genre_nouveau_cree_par_l_outil` ; `test_genre_nouveau_refuse_projet_garde` ; `test_usages_verses_au_releve` ; `test_installation_acceptee_tache_de_projet` ; `test_installation_refusee_pas_d_agent_d_installation` ; `test_fable_accorde_par_agent` ; `test_github_apres_et_sans_rien_defaire` ; `test_brouillon_retire_apres_creation`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py creation definition organisation`).
-- [ ] **Étape 5 : commit** « Création : le projet naît avec son workflow et son équipe ».
+- [x] **Étape 1 : tests** : `test_creer_avec_organisation` (workflow `w-<genre>` sans préfixe, fiches, briefs, services, environnement ; `factory.lire` valide) ; `test_organisation_refusee_ne_laisse_rien` ; `test_nom_pris_entre_temps_retour_infos` ; `test_genre_nouveau_cree_par_l_outil` ; `test_genre_nouveau_refuse_projet_garde` ; `test_usages_verses_au_releve` ; `test_installation_acceptee_tache_de_projet` ; `test_installation_refusee_pas_d_agent_d_installation` ; `test_fable_accorde_par_agent` ; `test_github_apres_et_sans_rien_defaire` ; `test_brouillon_retire_apres_creation`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py creation definition organisation`).
+- [x] **Étape 5 : commit** « Création : le projet naît avec son workflow et son équipe ».
 
 ## Étape 5 — le bureau
 

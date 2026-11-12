@@ -512,6 +512,14 @@ def _sur_methode(projet, demande, etat):
         if element:
             return _retoucher_prototype(projet, etat, fid, "Revois la méthode sur cet élément : " + texte,
                                         element_id=element.group(1))
+        correction = (demande.get("texte") or "").strip()
+        if correction:      # la correction écrite dans la fenêtre de la méthode : l'agent reprend avec elle
+            try:
+                return _retoucher_prototype(projet, etat, fid, "Correction de la méthode demandée par l'utilisateur : "
+                                            + correction)
+            except Refus:
+                _dire(projet, fid, "Correction de la méthode demandée : " + correction, attend=False)
+                return []
         _dire(projet, fid, "Nous reprenons la mise au point : dites-moi ce qu'il faut changer.", attend=True)
         return []
     if verdict == "garder":

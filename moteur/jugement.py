@@ -18,10 +18,18 @@ Dossiers attendus (préparés par la table de règles) :
   (`memoire.genres` de la skill), `mots_interdits` du projet ;
 - `proposer_organisation` : `demande`, `genre`, `projet` (nom, description), `services` ([{id, nom}]), `agents`
   ([{cle, role, modele, specialite}]), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
-  (son id : le moteur préfixe chaque `etape` par `<id>-`), `refus` (texte du Directeur ou null).
+  (son id : le moteur préfixe chaque `etape` par `<id>-`), `refus` (texte du Directeur ou null) ;
+- `definir_workflow` (appelé par le bureau, avant que le projet n'existe) : `projet` (nom, description, facturation,
+  github), `genres_connus`, `mots_interdits` (le nom du projet en fait partie), `services` ([{id, nom}], la facturation
+  si elle est demandée), `echange` ([{auteur: chef, message, questions} | {auteur: utilisateur, reponses: [{question,
+  texte}]}]), `tours_de_questions`, `tours_max`, `proposer_maintenant`, `proposition_precedente`, `correction`.
 
-La validation de `classer_genre` et de `proposer_organisation` lit le dossier (genres connus, mots interdits, agents et
-services du projet) : la réponse ne peut citer que ce qui existe, ou le proposer.
+Une étape de flux peut être une validation du Directeur, `{etape, nom, validation: true, raison?}` : ni rôle ni
+service, ni première, ni dernière, ni deux de suite.
+
+La validation de `classer_genre`, `proposer_organisation` et `definir_workflow` lit le dossier (genres connus, mots
+interdits, agents et services du projet, tours de questions) : la réponse ne peut citer que ce qui existe, ou le
+proposer.
 """
 import json
 import re
@@ -34,11 +42,21 @@ from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
-         "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet"}
+         "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
             "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
-            "proposer_organisation": "proposer le workflow de cette fonctionnalité"}
+            "proposer_organisation": "proposer le workflow de cette fonctionnalité",
+            "definir_workflow": "définir le workflow du projet"}
+# L'échange de la création d'un projet (`definir_workflow`) : au plus 4 tours de questions, puis une proposition.
+TOURS_MAX_DEFINITION = 4
+QUESTIONS_PAR_TOUR_MAX = 5
+CHOIX_PAR_QUESTION_MAX = 6
+LONGUEUR_CHOIX = 80               # une réponse proposée tient sur un bouton
+LONGUEUR_ID_QUESTION = 40
+FONCTIONNALITE_TYPE = "f999"      # les étapes du workflow de création doivent tenir une fois préfixées par `f999-`
+MOTIF_VERSION = re.compile(r"^\d+(?:\.\d+)*\Z")
+LONGUEUR_VERSION = 20
 ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", "rien")
 COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
@@ -330,18 +348,35 @@ def _valider_proposer_organisation(o, d):
     flux = o.get("flux")
     if not isinstance(flux, list) or not flux or not all(isinstance(x, dict) for x in flux):
         return "« flux » doit lister les étapes {etape, nom, role, service}, de la demande au livrable remis."
-    etapes, noms, roles_du_flux = [], [], []
-    for x in flux:
+    etapes, noms, roles_du_flux = [], [], []      # étapes d'agent seulement (les validations n'ont ni rôle ni outil)
+    deja = []
+    for k, x in enumerate(flux):
         e = x.get("etape")
         if not (isinstance(e, str) and MOTIF_ID.match(e) and MOTIF_ID.match(f"{fonc}-{e}" if fonc else e)) \
                 or e in RESERVES:
             return (f"Étape {e!r} : un id court (minuscules, chiffres, tirets), ni « cadrage » ni « fait » ; le "
                     "moteur le préfixe par l'id de la fonctionnalité (40 caractères au plus en tout).")
-        if e in etapes:
+        if e in deja:
             return f"Étape « {e} » en double."
-        etapes.append(e)
+        deja.append(e)
         if not _ligne(x.get("nom")):
             return f"Étape « {e} » : un « nom » est attendu."
+        if x.get("raison") is not None and not _ligne(x["raison"]):
+            return f"Étape « {e} » : la « raison » tient sur une ligne."
+        if "validation" in x and x["validation"] is not True:
+            return f"Étape « {e} » : « validation » vaut true (une validation du Directeur), sinon ne la mets pas."
+        if x.get("validation") is True:
+            if x.get("role") is not None or x.get("service") is not None:
+                return f"Étape « {e} » : une validation du Directeur n'a ni « role » ni « service »."
+            if k == 0:
+                return f"Étape « {e} » : une validation du Directeur ne peut pas être la première étape."
+            if k == len(flux) - 1:
+                return (f"Étape « {e} » : une validation du Directeur ne peut pas être la dernière étape ; la "
+                        "dernière remet le livrable.")
+            if flux[k - 1].get("validation") is True:
+                return f"Étape « {e} » : pas deux validations du Directeur de suite."
+            continue
+        etapes.append(e)
         noms.append(x["nom"])
         if not (isinstance(x.get("role"), str) and MOTIF_ID.match(x["role"])):
             return f"Étape « {e} » : un « role » (minuscules, chiffres, tirets) est attendu."
@@ -410,6 +445,10 @@ def _valider_proposer_organisation(o, d):
                     "« java »), sans chemin ni option.")
         if not _texte(x.get("installation")):
             return f"Outil « {x['outil']} » : « installation » dit comment l'installer sur Windows."
+        v = x.get("version_min")
+        if v is not None and not (isinstance(v, str) and MOTIF_VERSION.match(v) and len(v) <= LONGUEUR_VERSION):
+            return (f"Outil « {x['outil']} » : « version_min » est null ou la version minimale en chiffres et points "
+                    "(« 17 », « 8.7 »).")
     regles = o.get("outils_installation")
     if not isinstance(regles, list) or not all(isinstance(r, str) and MOTIF_REGLE_OUTIL.match(r) for r in regles):
         return ("« outils_installation » liste des règles d'outils précises, par exemple « Bash(winget:*) » ; ni "
@@ -417,8 +456,83 @@ def _valider_proposer_organisation(o, d):
     return None
 
 
-_VALIDEURS = {"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
+def _entier(v, defaut=0):
+    return v if isinstance(v, int) and not isinstance(v, bool) else defaut
+
+
+def _valider_questions(o, d):
+    tours = _entier(d.get("tours_de_questions"))
+    tours_max = min(_entier(d.get("tours_max"), TOURS_MAX_DEFINITION), TOURS_MAX_DEFINITION)
+    if _texte(d.get("correction")):
+        return ("L'utilisateur demande une correction de ta proposition : rends la proposition corrigée "
+                "(« type » : « proposition »), sans nouvelle question.")
+    if d.get("proposer_maintenant") is True:
+        return "L'utilisateur veut la proposition maintenant : rends une proposition (« type » : « proposition »)."
+    if tours >= tours_max:
+        return (f"Les {tours_max} tours de questions sont faits : rends une proposition (« type » : « proposition ») "
+                "avec ce que tu sais.")
+    if not _texte(o.get("message")):
+        return "« message » (ce que tu dis à l'utilisateur avant tes questions) est obligatoire."
+    questions = o.get("questions")
+    if not isinstance(questions, list) or not 1 <= len(questions) <= QUESTIONS_PAR_TOUR_MAX:
+        return f"« questions » liste de 1 à {QUESTIONS_PAR_TOUR_MAX} questions {{id, texte, choix}}."
+    ids = []
+    for q in questions:
+        if not isinstance(q, dict) or not (_ligne(q.get("id")) and len(q["id"]) <= LONGUEUR_ID_QUESTION) \
+                or not _texte(q.get("texte")):
+            return "Chaque question a un « id » court et un « texte »."
+        if q["id"] in ids:
+            return f"La question « {q['id']} » est en double."
+        ids.append(q["id"])
+        choix = q.get("choix")
+        if not isinstance(choix, list) or len(choix) > CHOIX_PAR_QUESTION_MAX or not all(
+                _ligne(c) and len(c) <= LONGUEUR_CHOIX for c in choix):
+            return (f"Question « {q['id']} » : « choix » liste de 0 à {CHOIX_PAR_QUESTION_MAX} réponses courtes "
+                    f"({LONGUEUR_CHOIX} caractères au plus), vide si la réponse est libre.")
+    return None
+
+
+def _valider_definir_workflow(o, d):
+    type_ = o.get("type")
+    if type_ == "questions":
+        return _valider_questions(o, d)
+    if type_ != "proposition":
+        return "« type » vaut questions ou proposition."
+    if not _texte(o.get("message")):
+        return "« message » (le workflow expliqué à l'utilisateur) est obligatoire."
+    connus = _ids_genres(d.get("genres_connus"))
+    genre, nouveau = o.get("genre"), o.get("nouveau")
+    if (genre is None) == (nouveau is None):
+        return "Donne soit « genre » (un genre connu), soit « nouveau » (un genre à créer), pas les deux ni aucun."
+    if genre is not None and genre not in connus:
+        return (f"« genre » doit être l'id d'un genre connu ({', '.join(connus) or 'aucun'}) ou null, pas « {genre} » ; "
+                "un genre qui n'existe pas encore va dans « nouveau ».")
+    if nouveau is not None:
+        if not (isinstance(nouveau, dict) and isinstance(nouveau.get("id"), str) and MOTIF_GENRE.match(nouveau["id"])
+                and _ligne(nouveau.get("description"))):
+            return ("« nouveau » est null ou {id (minuscules, chiffres, tirets, 40 caractères au plus), "
+                    "description (une ligne)}.")
+        if nouveau["id"] in connus:
+            return f"Le genre « {nouveau['id']} » existe déjà : mets-le dans « genre » et « nouveau » à null."
+        projet = d.get("projet") if isinstance(d.get("projet"), dict) else {}
+        mots = list(d.get("mots_interdits") or []) + ([projet["nom"]] if _texte(projet.get("nom")) else [])
+        interdits = mots_trouves(f"{nouveau['id']} {nouveau['description']}", mots)
+        if interdits:
+            return (f"« nouveau » contient un mot interdit ({', '.join(interdits)}) : un genre est public, décris-le "
+                    "sans nom propre ni nom du projet.")
+    flux = o.get("flux")
+    if isinstance(flux, list):
+        for x in flux:
+            if isinstance(x, dict) and not _ligne(x.get("raison")):
+                return f"Étape {x.get('etape')!r} : sa « raison » d'être, en une ligne, est obligatoire."
+    services = [s for s in d.get("services") or [] if isinstance(s, dict)]
+    return _valider_proposer_organisation(o, {"services": services, "agents": [],
+                                              "fonctionnalite": FONCTIONNALITE_TYPE})
+
+
+_VALIDEURS ={"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
               "ecrire_methode": _valider_ecrire_methode, "apres_refus": _valider_apres_refus,
               "conseil": _valider_conseil}
 _VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
-                           "proposer_organisation": _valider_proposer_organisation}
+                           "proposer_organisation": _valider_proposer_organisation,
+                           "definir_workflow": _valider_definir_workflow}

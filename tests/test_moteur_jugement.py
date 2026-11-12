@@ -36,6 +36,35 @@ VALIDES = {
         "outils_installation": ["Bash(winget:*)", "Bash(sdkmanager:*)"]},
 }
 
+# Une proposition de `definir_workflow` : le workflow du projet, avec une validation du Directeur avant la livraison.
+VALIDES["definir_workflow"] = {
+    "type": "proposition", "message": "Voici le workflow : le jeu est codé, testé, vous le validez, puis il est livré.",
+    "genre": None, "nouveau": {"id": "jeu-mobile-arcade", "description": "Petits jeux d'arcade pour téléphone."},
+    "flux": [{"etape": "dev", "nom": "Développement", "role": "dev", "service": "jeu",
+              "raison": "Le jeu est écrit en Kotlin."},
+             {"etape": "qualite", "nom": "Contrôle qualité", "role": "testeur", "service": "qualite",
+              "raison": "Les tests et un essai sur émulateur."},
+             {"etape": "validation", "nom": "Essai par le Directeur", "validation": True,
+              "raison": "Vous voulez essayer le jeu avant qu'il soit livré."},
+             {"etape": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "jeu",
+              "raison": "L'apk signé est déposé dans les livrables."}],
+    "services": [{"id": "jeu", "nom": "Jeu"}, {"id": "qualite", "nom": "Qualité"}],
+    "agents": [{"cle": "dev", "role": "dev", "service": "jeu", "modele": "Sonnet",
+                "justification": "Code courant.", "texte": "Tu écris le jeu."},
+               {"cle": "testeur", "role": "testeur", "service": "qualite", "modele": "Haiku",
+                "justification": "Vérification mécanique.", "texte": "Tu testes le jeu."},
+               {"cle": "livreur", "role": "livreur", "service": "jeu", "modele": "Sonnet",
+                "justification": "Construction et signature.", "texte": "Tu construis l'apk."}],
+    "briefs": {"dev": "Écris le jeu.", "testeur": "Teste le jeu.", "livreur": "Construis et signe l'apk."},
+    "livrable": "Le jeu en fichier .apk signé.",
+    "environnement": [{"outil": "JDK", "version_min": "17", "pour": "livraison", "executables": ["java"],
+                       "installation": "winget install Microsoft.OpenJDK.17 (source officielle)."}],
+    "outils_installation": ["Bash(winget:*)"]}
+
+QUESTIONS = {"type": "questions", "message": "Quelques questions avant de proposer le workflow.",
+             "questions": [{"id": "q1", "texte": "Le jeu doit-il fonctionner hors ligne ?", "choix": ["Oui", "Non"]},
+                           {"id": "q2", "texte": "Quelles étapes voulez-vous valider vous-même ?", "choix": []}]}
+
 # Les jugements dont la validation lit le dossier (genres connus, agents et services du projet).
 DOSSIERS = {
     "classer_genre": {"demande": {"texte": "Un logo pour le chat", "images": []},
@@ -49,6 +78,13 @@ DOSSIERS = {
                               "services": [{"id": "jeu", "nom": "Jeu"}],
                               "agents": [{"cle": "dev", "role": "dev", "modele": "Sonnet", "specialite": "code"}],
                               "workflows_du_genre": [], "fonctionnalite": "f2", "refus": None},
+    "definir_workflow": {"projet": {"nom": "Projet d'essai", "description": "Un casse-briques pour Android.",
+                                    "facturation": False, "github": False},
+                         "genres_connus": [{"id": "jeu-android", "domaine": "jeux", "livrable": "apk",
+                                            "outils": "gradle"}],
+                         "mots_interdits": ["Zorglub"], "services": [], "echange": [], "tours_de_questions": 0,
+                         "tours_max": 4, "proposer_maintenant": False, "proposition_precedente": None,
+                         "correction": None},
 }
 
 
@@ -87,7 +123,10 @@ class Juger(unittest.TestCase):
     def test_modeles_par_type(self):
         self.assertEqual(jugement.TYPES, {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet",
                                           "apres_refus": "haiku", "conseil": "haiku", "classer_genre": "haiku",
-                                          "proposer_organisation": "sonnet"})
+                                          "proposer_organisation": "sonnet", "definir_workflow": "sonnet"})
+        self.assertEqual(jugement.LIBELLES["definir_workflow"], "définir le workflow du projet")
+        self.assertEqual((jugement.TOURS_MAX_DEFINITION, jugement.QUESTIONS_PAR_TOUR_MAX,
+                          jugement.CHOIX_PAR_QUESTION_MAX), (4, 5, 6))
 
     def test_la_validation_lit_le_dossier(self):
         """Un genre inconnu du dossier est refusé, puis redemandé avec l'erreur."""
@@ -306,6 +345,115 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._orga(agents=self._agents(texte="")))
         self.assertIsNotNone(self._orga(agents=self._agents(service="inconnu")))
 
+    def test_validation_premiere_ou_double_refusee(self):
+        """Les deux jugements : une validation du Directeur ni en première, ni en dernière, ni deux de suite, sans rôle."""
+        val = {"etape": "essai", "nom": "Essai par le Directeur", "validation": True, "raison": "Vous essayez."}
+        flux_orga = VALIDES["proposer_organisation"]["flux"]
+        self.assertIsNone(self._orga(flux=flux_orga[:2] + [val] + flux_orga[2:]))
+        self.assertIsNone(self._orga(flux=flux_orga[:1] + [dict(val, raison=None)] + flux_orga[1:]))
+        flux_def = VALIDES["definir_workflow"]["flux"]                     # dev, qualite, validation, livraison
+        for type_, flux in (("proposer_organisation", flux_orga), ("definir_workflow", flux_def)):
+            with self.subTest(type_=type_):
+                v = lambda f: self._varie(type_, flux=f)
+                self.assertIn("première", v([val] + flux))
+                self.assertIn("dernière", v(flux + [val]))
+                self.assertIn("de suite", v(flux[:1] + [val, dict(val, etape="essai-2")] + flux[1:]))
+                self.assertIsNotNone(v(flux[:1] + [dict(val, role="dev", service="jeu")] + flux[1:]))
+                self.assertIsNotNone(v(flux[:1] + [dict(val, validation="oui", role=None)] + flux[1:]))
+
+    def test_version_min_lue(self):
+        env = VALIDES["proposer_organisation"]["environnement"][0]
+        for version in ("17", "8.7", "1.8.0"):
+            self.assertIsNone(self._orga(environnement=[dict(env, version_min=version)]), version)
+        self.assertIsNone(self._orga(environnement=[dict(env, version_min=None)]))
+        for version in ("", "17+", "v17", "dix-sept", 17, "1" * 21):
+            self.assertIsNotNone(self._orga(environnement=[dict(env, version_min=version)]), version)
+        self.assertIsNone(self._varie("definir_workflow"))                 # sa proposition porte version_min « 17 »
+
+    # --- definir_workflow
+
+    def _def(self, objet=None, **dossier):
+        d = dict(DOSSIERS["definir_workflow"], **dossier)
+        return jugement.valider("definir_workflow", objet if objet is not None else VALIDES["definir_workflow"], d)
+
+    def _questions(self, **changements):
+        o = json.loads(json.dumps(QUESTIONS))
+        o.update(changements)
+        return o
+
+    def test_definir_workflow_questions_valides(self):
+        self.assertIsNone(self._def(QUESTIONS))
+        self.assertIsNone(self._def(QUESTIONS, tours_de_questions=3))
+        q = QUESTIONS["questions"][0]
+        self.assertIsNone(self._def(self._questions(questions=[dict(q, choix=[f"c{i}" for i in range(6)])])))
+        self.assertIsNotNone(self._def(self._questions(message="")))
+        self.assertIsNotNone(self._def(self._questions(questions=[])))
+        self.assertIsNotNone(self._def(self._questions(questions=[q, q])))                 # ids en double
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, texte="")])))
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, id="")])))
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, choix=None)])))
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, choix=[""])])))
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, choix=["x" * 81])])))
+        self.assertIsNotNone(self._def(self._questions(type="question")))
+
+    def test_definir_workflow_trop_de_questions_refuse(self):
+        q = QUESTIONS["questions"][0]
+        cinq = [dict(q, id=f"q{i}") for i in range(5)]
+        self.assertIsNone(self._def(self._questions(questions=cinq)))
+        self.assertIsNotNone(self._def(self._questions(questions=cinq + [dict(q, id="q9")])))
+        self.assertIsNotNone(self._def(self._questions(questions=[dict(q, choix=[f"c{i}" for i in range(7)])])))
+
+    def test_cinquieme_appel_exige_une_proposition(self):
+        """Après 4 tours de questions (ou quand l'utilisateur demande la proposition), des questions sont refusées."""
+        self.assertIn("proposition", self._def(QUESTIONS, tours_de_questions=4))
+        self.assertIn("proposition", self._def(QUESTIONS, proposer_maintenant=True))
+        self.assertIsNone(self._def(tours_de_questions=4))
+        self.assertIsNone(self._def(proposer_maintenant=True))
+
+    def test_correction_exige_une_proposition(self):
+        self.assertIn("proposition", self._def(QUESTIONS, correction="Ajoute une validation après le développement.",
+                                                proposition_precedente=VALIDES["definir_workflow"]))
+        self.assertIsNone(self._def(correction="Ajoute une validation après le développement.",
+                                    proposition_precedente=VALIDES["definir_workflow"]))
+
+    def test_definir_workflow_proposition_valide(self):
+        o = VALIDES["definir_workflow"]
+        self.assertIsNone(self._def())
+        self.assertIsNone(self._def(dict(o, genre="jeu-android", nouveau=None)))
+        self.assertIsNotNone(self._def(dict(o, genre="jeu-inconnu", nouveau=None)))       # genre hors du dossier
+        self.assertIsNotNone(self._def(dict(o, genre=None, nouveau=None)))                 # ni l'un ni l'autre
+        self.assertIsNotNone(self._def(dict(o, genre="jeu-android")))                      # les deux
+        self.assertIsNotNone(self._def(dict(o, nouveau={"id": "jeu-android", "description": "x"})))  # déjà connu
+        self.assertIsNotNone(self._def(dict(o, nouveau={"id": "Jeu Mobile", "description": "x"})))
+        self.assertIsNotNone(self._def(dict(o, message="")))
+        self.assertIsNotNone(self._def(dict(o, agents=o["agents"][1:])))                   # dev sans agent
+        self.assertIsNotNone(self._def(dict(o, flux=o["flux"][:3])))                       # finit par une validation
+        self.assertIsNotNone(self._def(dict(o, type="organisation")))
+        etape_longue = dict(o["flux"][0], etape="x" * 37)                                  # trop longue une fois préfixée
+        self.assertIsNotNone(self._def(dict(o, flux=[etape_longue] + o["flux"][1:])))
+        self.assertIsNone(self._def(dict(o, flux=[dict(o["flux"][0], etape="x" * 35)] + o["flux"][1:])))
+
+    def test_definir_workflow_genre_nouveau_mot_interdit_refuse(self):
+        o = VALIDES["definir_workflow"]
+        self.assertIsNotNone(self._def(dict(o, nouveau={"id": "zorglub-jeux", "description": "Des jeux."})))
+        # Le nom du projet est interdit dès la fenêtre 1, même absent de la liste des mots interdits.
+        self.assertIsNotNone(self._def(dict(o, nouveau={"id": "jeu-mobile", "description": "Les jeux du Projet d'essai."}),
+                                       mots_interdits=[]))
+        self.assertIsNone(self._def(dict(o, nouveau={"id": "jeu-mobile", "description": "Jeux pour téléphone."}),
+                                    mots_interdits=[]))
+
+    def test_etape_sans_raison_refusee(self):
+        o = VALIDES["definir_workflow"]
+        for k in range(len(o["flux"])):
+            with self.subTest(etape=k):
+                flux = json.loads(json.dumps(o["flux"]))
+                flux[k]["raison"] = ""
+                self.assertIn("raison", self._def(dict(o, flux=flux)))
+                flux[k]["raison"] = "deux\nlignes"
+                self.assertIsNotNone(self._def(dict(o, flux=flux)))
+                del flux[k]["raison"]
+                self.assertIsNotNone(self._def(dict(o, flux=flux)))
+
     def test_decouper(self):
         self.assertIsNotNone(self._varie("decouper", elements=[]))
         self.assertIsNotNone(self._varie("decouper", prototype="e9"))
@@ -416,6 +564,19 @@ class Consignes(unittest.TestCase):
         for modele in ("Haiku", "Sonnet", "Opus"):
             self.assertIn(modele, texte)
         self.assertIn("jamais Fable", texte)
+        self.assertIn('"validation": true', texte)
+        self.assertIn("version_min", texte)
+
+    def test_definir_workflow_porte_les_decisions_de_l_utilisateur(self):
+        texte = jugement.consigne("definir_workflow")
+        for attendu in ("ne repose jamais", "livrables", "valider", "tests", "assez", "choix",
+                        "de la demande au livrable remis", '"validation": true', "jamais Fable", "fable_suggere",
+                        "raison", "4", "proposer_maintenant", "correction", "courts"):
+            self.assertIn(attendu, texte)
+        for modele in ("Haiku", "Sonnet", "Opus"):
+            self.assertIn(modele, texte)
+        for cle in QUESTIONS["questions"][0]:
+            self.assertIn(f'"{cle}"', texte)
 
 
 if __name__ == "__main__":

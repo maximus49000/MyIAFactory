@@ -9,7 +9,9 @@ Ce qu'il faut proposer :
   (service et rôle) vérifie la bonne exécution (tests, essai du livrable, conformité au cahier) dès que c'est logique.
   La dernière étape produit ou remet le livrable et son nom le dit (« Livraison de l'apk signé »). Chaque étape :
   `etape`, `nom`, `role`, `service` ; `etape`, `role`, `service` et `cle` sont des ids en minuscules et tirets
-  (`dev`, `testeur-jeu`), sans espace ni accent. Pas d'étape de cadrage : elle existe déjà.
+  (`dev`, `testeur-jeu`), sans espace ni accent. Pas d'étape de cadrage : elle existe déjà. Une **validation du
+  Directeur** (il examine le travail avant la suite) s'écrit `{"etape", "nom", "validation": true}`, sans rôle ni
+  service ; seulement si la demande ou le `refus` la demande ; ni première, ni dernière, ni deux de suite.
 - Si le workflow le plus récent du même genre convient, reprends-le tel quel ; n'ajoute que ce que la demande exige
   (chaque étape est refaite pour chaque élément). Si sa dernière étape ne dit pas le livrable, **renomme-la**
   (« Contrôle et remise du lot ») plutôt que d'ajouter une étape. `livrable` : ce que l'utilisateur reçoit, une ligne.
@@ -21,10 +23,8 @@ Ce qu'il faut proposer :
   vraiment utile, mets Opus et `"fable_suggere": true` : le Directeur décidera.
 - L'`environnement` : chaque outil du poste dont une étape a besoin (`pour` : l'`etape`), les `executables` à chercher
   (noms de programmes seulement : `java`, `gradle`), et l'`installation` sur Windows en une ligne (source officielle,
-  taille, sans droits d'administrateur si possible). Un outil une seule fois ; le code vérifie ce qui est déjà là. Une version minimale se met dans le nom (« JDK 17 »).
-- `outils_installation` : les règles pour les installer, précises (`Bash(winget:*)`). Textes en français, **courts**.
-
-Forme de la réponse :
+  taille, sans droits d'administrateur si possible), une fois chacun ; `version_min` : la version minimale (« 17 »)
+  ou null. `outils_installation` : les règles pour les installer (`Bash(winget:*)`). Textes en français, **courts**.
 
 ```json
 {"flux": [{"etape": "dev", "nom": "…", "role": "…", "service": "…"}],
@@ -33,7 +33,7 @@ Forme de la réponse :
              "fable_suggere": false, "texte": "fiche de l'agent : qui il est, ce qu'il fait"}],
  "briefs": {"role": "…"},
  "livrable": "…",
- "environnement": [{"outil": "…", "pour": "dev", "executables": ["…"], "installation": "…"}],
+ "environnement": [{"outil": "…", "version_min": null, "pour": "dev", "executables": ["…"], "installation": "…"}],
  "outils_installation": ["Bash(winget:*)"]}
 ```
 

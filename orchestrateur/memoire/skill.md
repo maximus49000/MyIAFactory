@@ -123,3 +123,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Appliquer systématiquement un filtre passe-bas (environ 2 à 3 kHz) au mixage final des musiques synthétisées, et le dire dans la vérification.
+
+## S21 — Pour valider des assets graphiques, lancer un script qui com
+Rôles : testeur
+Date : 2026-11-12
+
+Pour valider des assets graphiques, lancer un script qui compare chaque couleur opaque à la palette autorisée, puis une capture produite par le moteur qui prouve résolution et affichage.

@@ -118,7 +118,8 @@ test("decisionsDirecteur : chaque entrée garde sa fonctionnalité", () => {
   assert.deepEqual(d.genres.map((x) => x.id), ["p1"]);
   assert.equal(d.genres[0].propose, "vitrine");
   assert.deepEqual(d.sessions.map((x) => [x.id, x.agent]), [["p2", "dev:1"]]);
-  assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: []});
+  assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
+    genresDemandes: [], environnements: []});
 });
 
 test("demandeLecon : étage changé, inchangé", () => {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {libelleCout, resumeOrganisation, demandeOrganisation, rendreOrganisation} from "../ui/organisation.js";
+import {libelleCout, resumeOrganisation, demandeOrganisation, rendreOrganisation, resumeWorkflow, agentsOrganisation,
+  lignesEnvironnement} from "../ui/organisation.js";
 import {decisionsDirecteur} from "../ui/actions.js";
 
 class Noeud {
@@ -9,6 +10,7 @@ class Noeud {
   get textContent() { return this._texte + this.enfants.map((e) => e.textContent).join(""); }
   set innerHTML(v) { throw new Error("innerHTML interdit"); }
   append(...e) { this.enfants.push(...e); }
+  setAttribute() {}
   tous(pred) { return [...(pred(this) ? [this] : []), ...this.enfants.flatMap((e) => e.tous(pred))]; }
 }
 globalThis.document = {createElement: (t) => new Noeud(t)};
@@ -72,4 +74,94 @@ test("rendreOrganisation : textes hostiles littéraux, deux boutons, rien sans a
   const sans = [];
   rendreOrganisation({etat: {...ETAT, agir: false}}, DECISION, (...a) => { sans.push(a); return new Noeud("button"); });
   assert.equal(sans.length, 0);
+});
+
+// --- La décision d'organisation d'un workflow de fonctionnalité (phase D).
+
+const WORKFLOW = {
+  id: "d12", genre: "organisation", texte: "Un workflow pour « Casse-briques »",
+  organisation: {
+    services: [{id: "metier", nom: "Métier"}, {id: "dev", nom: "Dev"}, {id: "android", nom: "Android"}],
+    flux: [{id: "f2-visuels", nom: "Visuels", role: "graphiste", service: "metier"},
+           {id: "f2-apk", nom: "Livraison de l'apk signé", role: "android", service: "android"}],
+    agents: [
+      {cle: "android-1", prenom: "Léa", role: "android", service: "android", modele: "Sonnet", lieu: "local",
+       justification: "Il faut signer l'apk.", fable_suggere: true},
+      {cle: "env-1", role: "environnement", service: "dev", modele: "Sonnet", lieu: "local", justification: "Installe le JDK."}],
+    cout: {tokens: [100000, 300000], euros: [0.5, 1.5]}, livrable: "Un apk signé",
+    workflow: {id: "w-f2", genre: "jeu-mobile", flux: [], genre_nouveau: {description: "Jeux pour mobiles"}},
+    environnement: [{outil: "JDK", pour: "f2-apk", executables: ["java"], installation: "Bash(curl:*)", etat: "a_installer"},
+                    {outil: "Git", pour: "f2-apk", executables: ["git"], installation: "", etat: "en_place", version: "2.45", chemin: "C:/git"}],
+  },
+};
+const ETAT_WF = {...ETAT, colonnes: [...ETAT.colonnes, {id: "f1-dev", nom: "Développement", workflow: "w-f1", genre: "x"}]};
+
+test("resumeOrganisation : un workflow de fonctionnalité n'enlève aucune colonne des autres", () => {
+  const r = resumeOrganisation(WORKFLOW, ETAT_WF);
+  assert.deepEqual(r.colonnes.map((c) => [c.id, c.etat]), [["f2-visuels", "ajoutée"], ["f2-apk", "ajoutée"]]);
+  assert.deepEqual(r.services, [{id: "android", nom: "Android"}]);
+});
+
+test("resumeOrganisation : une évolution du principal ne retire pas les colonnes d'un autre workflow", () => {
+  const d = {...DECISION, organisation: {...DECISION.organisation, flux: [{id: "dev", nom: "Développement"}]}};
+  const etat = {...ETAT, colonnes: [{id: "cadrage", nom: "Cadrage", workflow: null}, {id: "dev", nom: "Développement", workflow: "principal"},
+    {id: "f1-dev", nom: "Dev", workflow: "w-f1"}, {id: "fait", nom: "Fait", terminee: true}]};
+  assert.deepEqual(resumeOrganisation(d, etat).colonnes, []);
+});
+
+test("resumeWorkflow : étapes dans l'ordre avec rôle et service, livrable, genre nouveau", () => {
+  const w = resumeWorkflow(WORKFLOW, ETAT);
+  assert.deepEqual(w.etapes.map((e) => [e.rang, e.nom, e.role, e.service]),
+    [[1, "Visuels", "graphiste", "Métier"], [2, "Livraison de l'apk signé", "android", "Android"]]);
+  assert.equal(w.livrable, "Un apk signé");
+  assert.equal(w.genre, "jeu-mobile");
+  assert.equal(w.genreNouveau, "Jeux pour mobiles");
+  assert.equal(resumeWorkflow(DECISION, ETAT), null);
+});
+
+test("organisation montre la case Fable seulement si suggeree", () => {
+  const a = agentsOrganisation(WORKFLOW);
+  assert.deepEqual(a.map((x) => [x.cle, x.fableSuggere]), [["android-1", true], ["env-1", false]]);
+  const faits = [];
+  const bouton = (libelle, classe, fabrique) => { const n = new Noeud("button"); faits.push([libelle, fabrique]); return n; };
+  const li = rendreOrganisation({etat: ETAT}, WORKFLOW, bouton);
+  const cases = li.tous((n) => n.tagName === "input" && n.type === "checkbox");
+  assert.equal(cases.length, 1);                                  // une seule, pour l'agent suggéré
+  assert.match(li.textContent, /Léa : utiliser Fable/);
+  assert.doesNotMatch(li.textContent, /env-1 : utiliser Fable/);
+  // sans suggestion : aucune case
+  const sans = {...WORKFLOW, organisation: {...WORKFLOW.organisation, agents: [WORKFLOW.organisation.agents[1]]}};
+  assert.equal(rendreOrganisation({etat: ETAT}, sans, bouton).tous((n) => n.type === "checkbox").length, 0);
+  // cocher la case envoie la clé de l'agent avec « accepter »
+  cases[0].checked = true;
+  assert.deepEqual(faits.find((f) => f[0] === "Accepter")[1](), {type: "organisation", decision: "d12", verdict: "accepter", fable: ["android-1"]});
+  cases[0].checked = false;
+  assert.deepEqual(faits.find((f) => f[0] === "Accepter")[1](), {type: "organisation", decision: "d12", verdict: "accepter"});
+});
+
+test("organisation : la justification de chaque agent et trois issues pour un workflow", () => {
+  const faits = [];
+  const bouton = (libelle) => { faits.push(libelle); return new Noeud("button"); };
+  const li = rendreOrganisation({etat: ETAT}, WORKFLOW, bouton);
+  assert.match(li.textContent, /Il faut signer l'apk\./);
+  assert.match(li.textContent, /Livraison de l'apk signé \(android, Android\)/);
+  assert.deepEqual(faits, ["Accepter", "Refuser", "Abandonner la demande"]);
+});
+
+test("organisation montre l environnement", () => {
+  const l = lignesEnvironnement(WORKFLOW);
+  assert.deepEqual(l.map((x) => [x.outil, x.enPlace, x.libelle]),
+    [["JDK", false, "JDK : à installer"], ["Git", true, "Git : déjà en place"]]);
+  assert.equal(l[1].detail, "2.45 · C:/git");
+  const li = rendreOrganisation({etat: ETAT}, WORKFLOW, () => new Noeud("button"));
+  assert.match(li.textContent, /JDK : à installer/);
+  assert.match(li.textContent, /Git : déjà en place/);
+  assert.match(li.textContent, /2\.45/);
+});
+
+test("demandeOrganisation : le texte du refus, Fable seulement avec accepter, abandonner", () => {
+  assert.deepEqual(demandeOrganisation("d1", "refuser", {texte: "  plus court  "}), {type: "organisation", decision: "d1", verdict: "refuser", texte: "plus court"});
+  assert.deepEqual(demandeOrganisation("d1", "refuser", {texte: "  "}), {type: "organisation", decision: "d1", verdict: "refuser"});
+  assert.deepEqual(demandeOrganisation("d1", "refuser", {fable: ["a"]}), {type: "organisation", decision: "d1", verdict: "refuser"});
+  assert.deepEqual(demandeOrganisation("d1", "abandonner"), {type: "organisation", decision: "d1", verdict: "abandonner"});
 });

@@ -4,7 +4,8 @@
 import {el} from "./dom.js";
 import {tronquer} from "./texte.js";
 import {nomAgent} from "./detail.js";
-import {decisionsDirecteur, demandeGenre, demandeSession} from "./actions.js";
+import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
+  demandeEnvironnement} from "./actions.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
@@ -29,7 +30,7 @@ function lienFonctionnalite(ctx, d) {
 
 // Un bouton qui envoie une demande ; grisé jusqu'à la réponse, et de nouveau actif si elle est refusée.
 // `avant` (facultatif) peut empêcher l'envoi (saisie incomplète).
-function boutonDemande(ctx, libelle, classe, fabrique, avant = () => true) {
+export function boutonDemande(ctx, libelle, classe, fabrique, avant = () => true) {
   const b = el("button", classe, libelle);
   b.type = "button";
   b.addEventListener("click", async () => {
@@ -91,6 +92,79 @@ function decisionGenre(ctx, d) {
   return li;
 }
 
+// « Cette demande n'est pas du genre du projet » : le genre se corrige (liste des genres connus, ou un nouveau avec sa
+// description), puis trois issues : un nouveau projet (formulaire), rester ici, ou « c'est le même genre ».
+function decisionGenreFonctionnalite(ctx, d) {
+  const li = el("li", "decision-genre");
+  li.append(lienFonctionnalite(ctx, d), el("div", "decision-texte", d.texte),
+            el("div", "lecon-meta", "Genre proposé : " + d.propose + (d.incertain ? " (le moteur hésite)" : "")));
+  const issues = issuesGenreFonctionnalite(d, ctx.etat.agir);
+  if (!issues.length) return li;
+  const connus = Array.isArray(d.genres_connus) ? d.genres_connus : [];
+  const menu = el("select", "genre-choix");
+  menu.setAttribute("aria-label", "Genre de la demande");
+  for (const g of new Set([d.propose, ...connus].filter(Boolean))) menu.append(new Option(g, g));
+  menu.append(new Option("Nouveau genre…", ""));
+  const identifiant = document.createElement("input");
+  identifiant.type = "text";
+  identifiant.placeholder = "Identifiant du genre (minuscules, chiffres, tirets)";
+  identifiant.maxLength = 40;
+  const description = document.createElement("textarea");
+  description.rows = 2;
+  description.maxLength = 3500;
+  description.placeholder = "Décrire ce genre de projet en une phrase";
+  if (d.nouveau?.id && d.nouveau.id === d.propose) description.value = d.nouveau.description || "";
+  const erreur = el("p", "saisie-erreur", "");
+  const genre = () => (menu.value === "" ? identifiant.value.trim() : menu.value);
+  const nouveau = () => !connus.includes(genre());   // un genre inconnu demande sa description
+  const maj = () => {
+    identifiant.hidden = menu.value !== "";
+    description.hidden = !nouveau();
+    if (nouveau() && !description.value && d.nouveau?.id === genre()) description.value = d.nouveau.description || "";
+  };
+  menu.addEventListener("change", maj);
+  identifiant.addEventListener("input", maj);
+  maj();
+  const valide = () => {
+    if (!MOTIF_GENRE.test(genre())) { erreur.textContent = "Identifiant de genre invalide (minuscules, chiffres, tirets ; 40 caractères au plus)."; return false; }
+    if (nouveau() && !description.value.trim()) { erreur.textContent = "Un nouveau genre demande une description."; return false; }
+    erreur.textContent = "";
+    return true;
+  };
+  const choisi = () => ({genre: genre(), description: nouveau() ? description.value : undefined});
+  li.append(menu, identifiant, description, erreur);
+  const rangee = el("div", "lecon-boutons");
+  for (const issue of issues) {
+    if (issue.choix === "nouveau_projet") {
+      const b = el("button", "bouton", issue.libelle);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        if (!valide()) return;
+        const c = choisi();
+        const ouvert = ctx.barre.nouveauProjet({decision: {id: d.id, fonctionnalite: d.fonctionnalite, nom: d.nom},
+                                                genre: c.genre, genreDescription: c.description, nomPropose: d.nom});
+        if (!ouvert) erreur.textContent = "La création d'un projet n'est pas disponible dans ce bureau : choisissez « Dans ce projet ».";
+      });
+      rangee.append(b);
+    } else if (issue.choix === "meme") {
+      rangee.append(boutonDemande(ctx, issue.libelle, "bouton secondaire", () => demandeGenreFonctionnalite(d, "meme")));
+    } else {
+      rangee.append(boutonDemande(ctx, issue.libelle, "bouton secondaire", () => demandeGenreFonctionnalite(d, "ici", choisi()), valide));
+    }
+  }
+  li.append(rangee);
+  return li;
+}
+
+// Un outil du poste ne s'est pas installé : ce qui manque, puis « C'est fait » (revérifie) ou « Continuer sans ».
+function decisionEnvironnement(ctx, d) {
+  const manque = Array.isArray(d.environnement) ? d.environnement : [];
+  const noms = manque.map((x) => (typeof x === "string" ? x : x?.outil)).filter(Boolean);
+  return decisionFonctionnalite(ctx, {...d, texte: d.texte + (noms.length ? " Il manque : " + noms.join(", ") + "." : "")}, [
+    boutonDemande(ctx, "C'est fait", "bouton", () => demandeEnvironnement(d, "fait")),
+    boutonDemande(ctx, "Continuer sans", "bouton secondaire", () => demandeEnvironnement(d, "continuer"))]);
+}
+
 function decisionSession(ctx, d) {
   const e = ctx.etat;
   const li = el("li", "decision-session");
@@ -132,12 +206,16 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, "Valider la méthode", "bouton", () => demandeMethode(x.fonctionnalite, "valider"))])),
   ];
   contenu.append(partie("Cahiers et méthodes à valider", "Aucun cahier ni méthode à valider", validations));
+  contenu.append(partie("Demandes d'un autre genre", "Aucune demande ne sort du genre du projet",
+    d.genresDemandes.map((x) => decisionGenreFonctionnalite(ctx, x))));
   contenu.append(partie("Genres à confirmer", "Aucun genre à confirmer", d.genres.map((x) => decisionGenre(ctx, x))));
   contenu.append(partie("Méthode à revoir ?", "Aucune méthode à revoir", d.revoir.map((x) => decisionFonctionnalite(ctx, x, [
     boutonDemande(ctx, "Oui, revoir", "bouton", () => demandeMethode(x.fonctionnalite, "revoir")),
     boutonDemande(ctx, "Non, garder", "bouton secondaire", () => demandeMethode(x.fonctionnalite, "garder"))]))));
-  contenu.append(partie("Organisation à faire évoluer", "Aucun changement d'organisation proposé",
-    d.organisations.map((x) => rendreOrganisation(ctx, x, (libelle, classe, fabrique) =>
-      boutonDemande(ctx, libelle, classe, fabrique)))));
+  contenu.append(partie("Organisation à valider", "Aucune organisation à valider",
+    d.organisations.map((x) => rendreOrganisation(ctx, x, (libelle, classe, fabrique, avant) =>
+      boutonDemande(ctx, libelle, classe, fabrique, avant)))));
+  contenu.append(partie("Environnement du poste à compléter", "Aucun outil ne manque",
+    d.environnements.map((x) => decisionEnvironnement(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));
 }

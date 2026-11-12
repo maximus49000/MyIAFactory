@@ -492,6 +492,20 @@ class Projet:
         return {"id": self.id, "nom": e.get("projet") or self.id,
                 "attente": e.get("directeur", {}).get("total", 0), "erreur": e.get("erreur") or None}
 
+    def pour_creation(self):
+        """Ce que le formulaire « Nouveau projet » reprend de ce projet : ses mots interdits et sa facturation."""
+        try:
+            from orchestrateur import factory as fa
+            f = fa.lire(self._chemin_factory())
+        except Exception:
+            return {"mots_interdits": [], "facturation": False}
+        return {"mots_interdits": f["mots_interdits"],
+                "facturation": any(x.get("id") == "facturation" for x in f["services"])}
+
+    def _chemin_factory(self):
+        regl, _ = self.reglages()
+        return self.chemin_reglages.parent / (regl.get("orchestrateur") or "factory.json")
+
     def fermer(self):
         self._arret.set()
         if self._fil_prix is not None:
@@ -511,6 +525,7 @@ class Bureau(ThreadingHTTPServer):
         self.fichier_bureau = Path(fichier_bureau) if fichier_bureau else None
         self.projets_vus_a = self._date_fichier_bureau()
         self._ouvrir, self._demarrer = ouvrir, demarrer
+        self.executer_git = self.executer_gh = None   # remplacés dans les tests : jamais de git ni de gh réels
         self._verrou_projets = threading.Lock()
         self.multi = multi
         self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
@@ -609,7 +624,120 @@ class Bureau(ThreadingHTTPServer):
             f.start()
         for f in fils:
             f.join()
-        return {"multi": self.multi, "projets": lignes}
+        if not self.multi:   # un seul projet, sans fichier de bureau commun : on n'y crée pas de projet
+            return {"multi": False, "projets": lignes}
+        for ligne, p in zip(lignes, projets):
+            ligne.update(p.pour_creation())
+        return {"multi": True, "projets": lignes, "parents": self.parents_suggeres()}
+
+    def parents_suggeres(self):
+        """Les dossiers où l'on range déjà des projets (le parent du dossier de chaque projet inscrit), sans doublon."""
+        vus = []
+        for p in list(self.projets.values()):
+            dossier = p.chemin_reglages.resolve().parent
+            if dossier.name == ".factory":
+                dossier = dossier.parent
+            parent = str(dossier.parent)
+            if parent not in vus and dossier.parent.is_dir():
+                vus.append(parent)
+        return vus
+
+    def creer_projet(self, corps):
+        """(code HTTP, objet JSON) de `POST /api/projets/creer`. Le projet est créé vide et inscrit au bureau commun ;
+        depuis une décision, la demande « nouveau projet » est déposée dans le projet d'origine, dont le moteur déplace
+        la fonctionnalité (le bureau ne recrée rien lui-même)."""
+        from installation import creation
+        from installation.dossier import Echec
+        if not isinstance(corps, dict):
+            return 400, {"erreur": "Demande illisible."}
+        if self.fichier_bureau is None:
+            return 409, {"erreur": "Ce bureau n'est pas lancé sur le fichier du bureau commun : on ne peut pas y créer "
+                                   "de projet."}
+        for cle, type_ in (("parent", str), ("nom", str)):
+            if not isinstance(corps.get(cle), type_):
+                return 400, {"erreur": f"« {cle} » est obligatoire."}
+        mots = corps.get("mots_interdits", [])
+        if not isinstance(mots, list) or not all(isinstance(m, str) for m in mots):
+            return 400, {"erreur": "« mots_interdits » doit être une liste de textes."}
+        for cle in ("facturation", "github"):
+            if not isinstance(corps.get(cle, False), bool):
+                return 400, {"erreur": f"« {cle} » doit valoir vrai ou faux."}
+        for cle in ("description", "genre", "genre_description", "origine", "decision", "fonctionnalite"):
+            if corps.get(cle) is not None and not isinstance(corps[cle], str):
+                return 400, {"erreur": f"« {cle} » doit être un texte."}
+        origine = None
+        if corps.get("origine"):
+            origine = self.projet(corps["origine"])
+            if origine is None:
+                return 404, {"erreur": "Projet inconnu."}
+        depuis_decision = bool(corps.get("decision") or corps.get("fonctionnalite"))
+        if depuis_decision and (origine is None or not (corps.get("decision") and corps.get("fonctionnalite"))):
+            return 400, {"erreur": "Une création depuis une décision donne le projet, la décision et la fonctionnalité."}
+        genre, description = corps.get("genre") or None, (corps.get("description") or "").strip() or None
+        nouveau = (corps.get("genre_description") or "").strip() or None
+        demande = None
+        if depuis_decision:
+            demande = {"type": "genre_fonctionnalite", "decision": corps["decision"],
+                       "fonctionnalite": corps["fonctionnalite"], "choix": "nouveau_projet"}
+            if genre:
+                demande["genre"] = genre
+            if nouveau:
+                demande["description"] = nouveau
+            # La demande est vérifiée avant toute création : un refus ne laisse pas un projet orphelin.
+            origine.etat(bloquant=True)
+            r = origine.dernier_releve
+            if r is None:
+                return 409, {"erreur": "Relevé indisponible."}
+            if r.get("orchestrateur_present") is False:
+                return 409, {"erreur": "L'orchestrateur n'est pas lancé : lancez-le depuis le bureau, puis recommencez."}
+            message = demandes.verifier(demandes.nettoyer(dict(demande, projet_cree="(à créer)")), r, {}, None)
+            if message:
+                return 400, {"erreur": message}
+        genre_projet = genre if genre and not nouveau and genre in self._genres_connus() else None
+        try:
+            fait = creation.creer_projet(
+                corps["parent"], corps["nom"], origine=origine.chemin_reglages if origine else None,
+                mots_interdits=mots, facturation=corps.get("facturation", False), github=corps.get("github", False),
+                description=description or nouveau, genre=genre_projet, bureau_json=self.fichier_bureau,
+                **({"git": self.executer_git} if self.executer_git else {}),
+                **({"gh": self.executer_gh} if self.executer_gh else {}))
+        except Echec as e:
+            return 400, {"erreur": str(e)}
+        except Exception as e:   # jamais une connexion coupée sans réponse lisible
+            return 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
+        self.projets_vus_a = None
+        self.actualiser_projets()
+        sortie = {"ok": True, "projet": fait["id"], "github": fait["github"], "message": self._message_creation(fait)}
+        if demande is not None:
+            demande["projet_cree"] = str(fait["reglages"])
+            try:
+                code, objet = origine.demande(demande)
+            except Exception as e:
+                code, objet = 500, {"erreur": str(e)}
+            if code != 200:
+                sortie["message"] += (" La demande n'a pas pu être déplacée dans ce projet (" + str(objet.get("erreur"))
+                                      + ") : refaites « Nouveau projet » depuis la décision, ou gardez-la ici.")
+                sortie["demande_deposee"] = False
+            else:
+                sortie["demande_deposee"] = True
+        return 200, sortie
+
+    def _genres_connus(self):
+        from orchestrateur import memoire
+        try:
+            from installation import dossier as dossier_inst
+            return {g["id"] for g in memoire.genres(dossier_inst.skill() / "orchestrateur" / "memoire")}
+        except Exception:
+            return set()
+
+    @staticmethod
+    def _message_creation(fait):
+        message = f"Le projet est créé dans {fait['projet']}."
+        if fait["github"] not in ("fait", "non demandé"):
+            message += " " + fait["github"]
+        elif fait["github"] == "fait":
+            message += " Son dépôt GitHub privé est créé."
+        return message
 
     def ouvrir_distants(self, ouverts, adresses, cles, port_distant=None):
         """Un écouteur par accès ouvert dont l'adresse est trouvée (même port que 127.0.0.1, sauf `port_distant`).
@@ -956,6 +1084,22 @@ class Handler(BaseHTTPRequestHandler):
             if projet is None:
                 return self._json(404, {"erreur": "Projet inconnu."})
             return self._json(*projet.lancer_orchestrateur())
+        if chemin == "/api/projets/creer":
+            if (self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= MAX_CORPS_REGLAGES * 4:
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*self.server.creer_projet(corps))
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)

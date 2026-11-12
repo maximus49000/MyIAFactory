@@ -192,9 +192,9 @@
 - Consomme : `creation.creer_projet` (tâche 7) ; demandes de la tâche 6.
 - Produit : `POST /api/projets/creer` `{parent, nom, mots_interdits, facturation, github, description?, origine: <id projet>, decision?, fonctionnalite?}` → `{ok, projet: <id>, github, message}` ou `{erreur}` (code d'accès exigé comme les autres routes d'écriture).
 
-- [ ] **Étape 1 : tests** : `test_creer_projet_route` ; `test_creer_projet_depuis_une_decision_depose_la_demande` ; `test_creer_projet_erreur_lisible` ; `test_creer_exige_le_code_d_acces` ; page : `liste propose Nouveau projet`, `decision genre_fonctionnalite trois issues`, `organisation montre la case Fable seulement si suggeree`, `apres creation bascule sur le nouveau projet`, `organisation montre l environnement`.
-- [ ] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py bureau serveur demandes` et `node --test bureau/web/tests`).
-- [ ] **Étape 5 : commit** « Bureau : créer un projet, choisir le genre d'une demande, valider son workflow ».
+- [x] **Étape 1 : tests** : `test_creer_projet_route` ; `test_creer_projet_depuis_une_decision_depose_la_demande` ; `test_creer_projet_erreur_lisible` ; `test_creer_exige_le_code_d_acces` ; page : `liste propose Nouveau projet`, `decision genre_fonctionnalite trois issues`, `organisation montre la case Fable seulement si suggeree`, `apres creation bascule sur le nouveau projet`, `organisation montre l environnement`.
+- [x] **Étapes 2 à 4 : échec, code, vert** (`py -3.12 outils/tests.py bureau serveur demandes` et `node --test bureau/web/tests`).
+- [x] **Étape 5 : commit** « Bureau : créer un projet, choisir le genre d'une demande, valider son workflow ».
 
 ## Étape 5 — la vérification (avec l'utilisateur)
 

@@ -493,6 +493,18 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .decision-genre input, .decision-genre textarea, .decision-session input { box-sizing: border-box; display: block; width: 100%; margin: 4px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
 .decision-genre [hidden], .decision-session [hidden] { display: none; }
 .decision-session .bouton, .decision-genre .bouton { margin-top: 4px; }
+.decision-organisation textarea { box-sizing: border-box; display: block; width: 100%; margin: 6px 0; padding: 5px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+.organisation-fable { display: block; margin: 2px 0; }
+.decision-genre .lecon-boutons { flex-wrap: wrap; }
+
+/* --- Le formulaire « Nouveau projet ». */
+.creation-fond { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(40, 36, 30, .45); }
+.creation { box-sizing: border-box; width: min(520px, 100%); max-height: 100%; overflow-y: auto; padding: 18px 20px; border-radius: 14px; background: var(--papier); box-shadow: 0 10px 40px rgba(0, 0, 0, .3); }
+.creation h2 { margin: 0 0 10px; font-size: 18px; }
+.creation-champ { display: block; margin: 8px 0; }
+.creation-libelle { display: block; margin-bottom: 2px; font-size: 13px; font-weight: 600; }
+.creation input[type="text"], .creation textarea { box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; }
+.creation-case { display: block; margin: 6px 0; }
 
 /* --- Catalogue d'une fonctionnalité : fiches à plaque émaillée sur papier, carte vue de haut, filtres ardoise --- */
 body.panneau-catalogue { --largeur-panneau: 620px; }

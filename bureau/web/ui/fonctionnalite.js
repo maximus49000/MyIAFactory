@@ -30,10 +30,16 @@ export function genreEtWorkflow(f) {
   return parties.join(" · ");
 }
 
+// Ce que le moteur note quand le Directeur abandonne la demande plutôt que d'en valider le workflow.
+export const DEMANDE_ABANDONNEE = "(demande abandonnée)";
+
 // L'étape d'une fonctionnalité en clair (la liste et la page).
 export function libelleEtape(f) {
   if (f?.etape === "terminee") return "Terminée";
-  if (f?.etape === "deplacee") return f.deplacee_vers ? "Partie dans le projet " + f.deplacee_vers : "Partie dans un autre projet";
+  if (f?.etape === "deplacee") {
+    if (f.deplacee_vers === DEMANDE_ABANDONNEE) return "Demande abandonnée";   // le moteur n'a pas déplacé : le Directeur a renoncé
+    return f.deplacee_vers ? "Partie dans le projet " + f.deplacee_vers : "Partie dans un autre projet";
+  }
   return ETAPES_PARCOURS.find((x) => x.id === f?.etape)?.libelle || f?.etape || "";
 }
 

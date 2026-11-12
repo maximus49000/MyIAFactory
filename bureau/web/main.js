@@ -76,7 +76,8 @@ async function demarrer() {
   if (liste.multi) {
     const id = projetInitial(liste.projets, memorise());
     definirProjet(id);
-    barre.majProjets(true, liste.projets, id);
+    barre.majProjets(true, liste.projets, id, liste.parents);
+    barre.surCreation((options) => import("./ui/creation.js").then((m) => m.ouvrirCreation(options)));
   }
   let etat = await lireEtat();
   while (!etatUtilisable(etat)) {
@@ -122,7 +123,7 @@ async function demarrer() {
     barre.majEtat(e);
     if (liste.multi) {   // les pastilles des autres projets suivent (lecture du dernier état connu côté serveur)
       const l = await lireProjets();
-      if (l.multi) { liste = l; barre.majProjets(true, l.projets, projetCourant()); }
+      if (l.multi) { liste = l; barre.majProjets(true, l.projets, projetCourant(), l.parents); }
     }
     if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
     if (document.hidden) { dernier = e; aRemettre = true; return; }

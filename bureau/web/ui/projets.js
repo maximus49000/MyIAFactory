@@ -21,6 +21,18 @@ export function projetInitial(liste, memorise) {
   return liste.some((p) => p?.id === memorise) ? memorise : liste[0].id;
 }
 
+// La valeur de la dernière entrée de la liste déroulante : elle ouvre le formulaire au lieu de changer de projet.
+export const ENTREE_NOUVEAU = "__nouveau_projet__";
+
+// Les entrées de la liste déroulante : un choix par projet (avec sa pastille d'attente), puis « Nouveau projet… ».
+export function optionsProjets(projets, id) {
+  const options = (Array.isArray(projets) ? projets : []).map((p) => ({
+    value: p.id, selected: p.id === id,
+    libelle: (p.nom || p.id) + (p.attente > 0 ? ` (${p.attente})` : "") + (p.erreur ? " ⚠" : "")}));
+  options.push({value: ENTREE_NOUVEAU, selected: false, libelle: "Nouveau projet…"});
+  return options;
+}
+
 // Les livrables du projet et des fonctionnalités, le plus récent d'abord (sans date : à la fin).
 // Un `lien` non sûr est écarté ; un `chemin` passe par /api/livrable.
 export function livrables(etat, projet) {
@@ -55,15 +67,16 @@ export function memoriser(id) {
   try { localStorage.setItem(CLE, id); } catch { /* stockage indisponible : le choix ne sera pas retenu */ }
 }
 
-// Lit la liste des projets. Rend {multi, projets} ; en cas d'échec, un seul projet sans sélecteur.
+// Lit la liste des projets. Rend {multi, projets, parents} ; en cas d'échec, un seul projet sans sélecteur.
 export async function lireProjets(fetchFn = fetch) {
   try {
     const r = await fetchFn("/api/projets", {cache: "no-store", signal: AbortSignal.timeout(15000)});
-    if (!r.ok) return {multi: false, projets: []};
+    if (!r.ok) return {multi: false, projets: [], parents: []};
     const j = await r.json();
     return {multi: j?.multi === true && Array.isArray(j.projets) && j.projets.length > 0,
-            projets: Array.isArray(j?.projets) ? j.projets : []};
+            projets: Array.isArray(j?.projets) ? j.projets : [],
+            parents: Array.isArray(j?.parents) ? j.parents.filter((x) => typeof x === "string") : []};
   } catch {
-    return {multi: false, projets: []};
+    return {multi: false, projets: [], parents: []};
   }
 }

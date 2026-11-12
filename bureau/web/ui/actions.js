@@ -114,9 +114,12 @@ export function resumeEnvoi(resultats) {
 // Les décisions qui attendent le Directeur, rangées par genre ; chaque décision d'une fonctionnalité garde
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
-  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: []};
-  const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir"};
+  const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
+                  genresDemandes: [], environnements: []};
+  const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
+                genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
+    if (f?.etape === "deplacee") continue;   // partie ailleurs (ou abandonnée) : plus rien à décider ici
     for (const d of f?.decisions || []) {
       if (rang[d?.genre]) sortie[rang[d.genre]].push({...d, fonctionnalite: f.id, nom: f.nom});
     }
@@ -172,6 +175,30 @@ export function demandeGenre(decision, genre, description) {
   const d = {type: "genre", decision, genre};
   if (plein(description)) d.description = description;
   return d;
+}
+
+// Les issues de « cette demande n'est pas du genre du projet » : « Nouveau projet » et « Dans ce projet » toujours,
+// « C'est le même genre » seulement quand le moteur hésitait (`incertain`). Sans le droit d'agir : aucune.
+export function issuesGenreFonctionnalite(decision, agir) {
+  if (agir !== true) return [];
+  const issues = [{choix: "nouveau_projet", libelle: "Nouveau projet"}, {choix: "ici", libelle: "Dans ce projet"}];
+  if (decision?.incertain === true) issues.push({choix: "meme", libelle: "C'est le même genre"});
+  return issues;
+}
+
+// La réponse à cette décision. `genre` et `description` (d'un genre nouveau) ne partent que s'ils sont donnés ;
+// `projetCree` (le chemin des réglages du projet créé) accompagne « nouveau_projet ».
+export function demandeGenreFonctionnalite(decision, choix, {genre, description, projetCree} = {}) {
+  const d = {type: "genre_fonctionnalite", decision: decision.id, fonctionnalite: decision.fonctionnalite, choix};
+  if (plein(genre)) d.genre = genre;
+  if (plein(description)) d.description = description;
+  if (plein(projetCree)) d.projet_cree = projetCree;
+  return d;
+}
+
+// « C'est fait » (l'outil est installé à la main) ou « Continuer sans ».
+export function demandeEnvironnement(decision, verdict) {
+  return {type: "environnement", decision: decision.id, fonctionnalite: decision.fonctionnalite, verdict};
 }
 
 export function demandeSession(decision, session) {

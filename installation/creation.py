@@ -80,12 +80,17 @@ def _lire_origine(reglages_origine):
     chemin = Path(reglages_origine)
     try:
         r = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        f = fa.lire(chemin.parent / r.get("orchestrateur", "factory.json"))
-        consignes = f["consignes"].read_text(encoding="utf-8-sig") if f["consignes"] and f["consignes"].is_file() else None
-    except (OSError, ValueError, AttributeError, fa.FactoryInvalide) as e:
+        if not isinstance(r, dict):
+            raise ValueError("un objet JSON est attendu")
+        repris = {"charge_max": r.get("charge_max"), "moteur": r.get("moteur")}
+        if r.get("orchestrateur"):   # un projet sans orchestrateur n'a ni modèle ni consignes à reprendre
+            f = fa.lire(chemin.parent / r["orchestrateur"])
+            repris.update(modele_orchestrateur=f["modele_orchestrateur"], agents_locaux_max=f["agents_locaux_max"],
+                          consignes=f["consignes"].read_text(encoding="utf-8-sig")
+                          if f["consignes"] and f["consignes"].is_file() else None)
+    except (OSError, ValueError, fa.FactoryInvalide) as e:
         raise Echec(f"Les réglages du projet d'origine sont illisibles ; le projet n'a pas été créé. {e}")
-    return {"charge_max": r.get("charge_max"), "moteur": r.get("moteur"), "modele_orchestrateur": f["modele_orchestrateur"],
-            "agents_locaux_max": f["agents_locaux_max"], "consignes": consignes}
+    return repris
 
 
 def _consignes_par_defaut():

@@ -4,7 +4,7 @@
 
 import {voyant, libelleCharge, listeDisponible, dateFr} from "./texte.js";
 import {boutons, envoyer} from "./actions.js";
-import {urlProjet, livrables, projetCourant, memoriser} from "./projets.js";
+import {urlProjet, livrables, projetCourant, memoriser, optionsProjets, ENTREE_NOUVEAU} from "./projets.js";
 import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 import {creerConso} from "./conso.js";
@@ -169,24 +169,32 @@ export function creerBarre(entete, bandeau) {
     }
   }
 
-  // Le sélecteur de projets (mode `multi`) : un choix par projet, avec sa pastille d'attente.
+  // Le sélecteur de projets (mode `multi`) : un choix par projet, avec sa pastille d'attente, puis « Nouveau projet… ».
   let signatureProjets = "";
-  function majProjets(multi, projets, id) {
+  let derniersProjets = {projets: [], parents: [], id: null};
+  let ouvrirCreation = null;
+  function majProjets(multi, projets, id, parents = []) {
     choixProjet.hidden = !multi;
     projet.hidden = multi;
     if (!multi) return;
+    derniersProjets = {projets, parents, id};
     const signature = JSON.stringify([projets, id]);
     if (signature === signatureProjets) return;
     signatureProjets = signature;
     choixProjet.replaceChildren();
-    for (const p of projets) {
-      const o = el("option", "", (p.nom || p.id) + (p.attente > 0 ? ` (${p.attente})` : "") + (p.erreur ? " ⚠" : ""));
-      o.value = p.id;
-      o.selected = p.id === id;
+    for (const x of optionsProjets(projets, id)) {
+      const o = el("option", "", x.libelle);
+      o.value = x.value;
+      o.selected = x.selected;
       choixProjet.append(o);
     }
   }
   choixProjet.addEventListener("change", () => {
+    if (choixProjet.value === ENTREE_NOUVEAU) {   // le formulaire s'ouvre ; le projet affiché reste le même
+      choixProjet.value = derniersProjets.id;
+      if (ouvrirCreation) ouvrirCreation({...derniersProjets});
+      return;
+    }
     memoriser(choixProjet.value);
     location.reload();     // la scène est reconstruite pour les services du nouveau projet
   });
@@ -270,6 +278,14 @@ export function creerBarre(entete, bandeau) {
     // Le panneau donne de quoi ouvrir un catalogue ; la barre l'offre alors avec les livrables.
     surCatalogue(fn) { ouvrirCatalogue = fn; signatureLivrables = ""; if (dernierEtat) majLivrables(dernierEtat); },
     majProjets,
+    // La page donne de quoi ouvrir le formulaire « Nouveau projet » ; la liste déroulante l'offre alors en dernière entrée.
+    surCreation(fn) { ouvrirCreation = fn; },
+    // Ouvre ce formulaire depuis une décision (`options` : la décision, le genre choisi) ; faux s'il n'est pas disponible.
+    nouveauProjet(options) {
+      if (!ouvrirCreation) return false;
+      ouvrirCreation({...derniersProjets, ...options});
+      return true;
+    },
     majActions,
     demander,
     dire,

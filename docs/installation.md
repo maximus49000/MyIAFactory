@@ -239,6 +239,8 @@ Pour essayer sans rien brancher (les gestes de la démo réécrivent son `releve
 
 Le serveur reste réservé à votre machine : `POST /api/demande` exige les mêmes en-têtes que le réglage de charge, et les demandes passent une à une.
 
+**Créer un projet depuis le bureau** : sur un bureau qui suit plusieurs projets (fichier du bureau commun), la dernière entrée de la liste des projets, « Nouveau projet… », ouvre un formulaire (dossier parent, nom, mots interdits, facturation, dépôt GitHub privé, description). Le projet est créé vide (`.factory/` sans workflow ni agent), inscrit au bureau, et le bureau bascule dessus ; son workflow est proposé à sa première demande. `POST /api/projets/creer` (mêmes en-têtes et même code d'accès que les autres écritures) fait ce travail ; la commande `py -3.12 installation/outil.py creer <parent> <nom>` aussi. Si `git` ou `gh` manque, ou si `gh` n'est pas connecté, le projet est créé en local et le bureau dit comment faire GitHub à la main.
+
 ## Les dossiers des services
 
 Avec un relevé `version` 3 (voir « Version 3 » dans [releve.md](releve.md)), cliquer une pièce ouvre le **dossier** du service : un sélecteur de période (aujourd'hui, 7 jours, 30 jours) et jusqu'à quatre onglets. Un onglet n'apparaît que si le relevé donne de quoi le remplir.

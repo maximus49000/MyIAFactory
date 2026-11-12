@@ -39,3 +39,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Dans un environnement sans approbation possible, éviter les variables d'environnement dans les commandes shell. Mettre la logique dans un script lancé par l'interpréteur, avec des chemins explicites.
+
+## S7 — Avant une étape d'équilibrage, vérifier qu'il existe du code
+Rôles : designer
+Date : 2026-11-12
+
+Avant une étape d'équilibrage, vérifier qu'il existe du code de gameplay et un fichier de valeurs ; sinon, déclarer l'étape non applicable en une ligne au lieu de produire un livrable vide.

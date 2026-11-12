@@ -614,6 +614,12 @@ Vos valeurs ne sont jamais réécrites. Le chef s'appelle « Chef » tant qu'on 
 - **Limites** (dites dans l'infobulle : « estimation EcoLogits : tailles de modèles estimées, tokens de sortie seulement, électricité des États-Unis ») : seuls les tokens de sortie comptent (ni l'entrée ni le cache) ; les tailles, vitesses et délais des modèles Claude sont des **estimations d'EcoLogits**, Anthropic ne les publie pas ; chaque usage compte pour une requête ; l'estimation reste un ordre de grandeur, pas une mesure.
 - **Modèle inconnu** : l'entrée de la table la plus proche de la même famille (haiku, sonnet, opus), la plus récente si seule la famille est connue. Famille inconnue, ou sans donnée (Fable : EcoLogits n'en donne ni vitesse ni délai) : aucune valeur, jamais de chiffre inventé ; un cumul où un usage manque est marqué « (partiel) ».
 - **Contrôle** : 1000 tokens de sortie Sonnet 5.5 donnent 1,13 à 1,80 Wh et 0,43 à 0,69 gCO₂e d'usage, plus 0,031 g de fabrication.
+- **Équivalences** (« Équivaut à ≈ 12 km en voiture thermique · ≈ 3 recharges de smartphone · … ») : sous l'empreinte de chaque fonctionnalité (bloc Coût) et du projet entier (Facturation, « Tout le projet »). Ordres de grandeur sur le **milieu de la fourchette**, la fourchette de chaque repère étant dans l'infobulle ; le serveur choisit 3 ou 4 repères et, pour chacun, l'unité où la valeur est lisible (m ou km, secondes, minutes ou heures, % de charge ou recharges…). Facteurs, relevés le 2026-11-12 (constantes commentées dans `bureau/empreinte.py`) :
+  - voiture thermique : **0,218 kgCO₂e/km** (ADEME, Base Empreinte, via [impactco2.fr](https://impactco2.fr)) ;
+  - vidéo en streaming : **≈ 31,6 gCO₂e par heure** (impactco2.fr, usage numérique, d'après la Base Empreinte ADEME : 11,5 kgCO₂e pour 364 h par an, valeur recalculée à partir du bilan annuel affiché) ;
+  - e-mail : **≈ 0,104 gCO₂e** (même page : 0,27 kgCO₂e pour 2600 e-mails par an, recalculé) ;
+  - côté énergie (Wh) : recharge complète d'un smartphone **≈ 12,5 Wh** (milieu de 10 à 15 Wh, **à confirmer** auprès de l'ADEME), ampoule LED **10 W**, bouilloire : 1 L de 15 à 100 °C = 4,186 J/(g·K) × 85 K ≈ **0,099 kWh** (calcul physique, sans perte, pas une donnée ADEME).
+  Seules la voiture, le streaming et l'e-mail ont été relus sur le site d'impactco2.fr ; les valeurs d'énergie ne viennent pas de la Base Empreinte et sont à confirmer. Aucun repère ne s'affiche quand il n'y a pas d'empreinte.
 
 ## Le bureau sur le téléphone
 

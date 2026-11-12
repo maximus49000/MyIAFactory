@@ -302,3 +302,12 @@ class TestEmpreinte(unittest.TestCase):
         un = empreinte.estimer("sonnet", 1000)
         self.assertAlmostEqual(c["co2"]["min"], 2 * un["min"], places=5)
         self.assertAlmostEqual(c["taches"][0]["co2"]["max"], 2 * un["max"], places=5)
+
+    def test_equivalences_pour_la_fonctionnalite_et_le_projet(self):
+        r = {"version": 4, "taches": [{"id": "t1", "titre": "Dev", "fonctionnalite": "f1"}]}
+        c = cout.couts_fonctionnalite([usage("u1", sortie=20000, tache="t1")], prix_de, r, "f1")
+        f = facturer([usage("u1", sortie=20000)])
+        for co2 in (c["co2"], f["co2"]):
+            self.assertIn(len(co2["equivalences"]), (3, 4))
+            self.assertEqual({"cle", "valeur", "unite", "libelle", "min", "max"}, set(co2["equivalences"][0]))
+        self.assertNotIn("equivalences", f["services"]["dev"]["co2"])   # seulement le total, pas chaque ligne

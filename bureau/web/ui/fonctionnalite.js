@@ -6,7 +6,7 @@ import {el} from "./dom.js";
 import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage, auTravail} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
-import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
+import {etiquetteCO2, marquerTitreCO2, ligneEquivalences} from "./empreinte.js";
 import {urlProjet, projetCourant} from "./projets.js";
 import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
 import {blocMarkdown, estMarkdown} from "./markdown.js";
@@ -828,6 +828,8 @@ function partieCouts(f) {
     titre.textContent = avecPart(avecPart(`Coût : ${euros(c.total)}${incomplet}` + (echelle(c) ? ` (${echelle(c)})` : ""),
                                           etiquettePart(c.total)), etiquetteCO2(c.co2));
     marquerPart(titre);
+    const equivalences = ligneEquivalences(c.co2);   // « Équivaut à ≈ … » : de quoi se rendre compte
+    if (equivalences) corps.append(equivalences);
     if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
     const ul = el("ul", "liste-couts");
     for (const t of c.taches) {

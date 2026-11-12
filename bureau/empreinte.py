@@ -227,3 +227,74 @@ def texte(co2):
     if a == b:
         return f"{'' if a.startswith('<') else '≈ '}{a} {unite} CO₂e"
     return f"≈ {a} à {b} {unite} CO₂e"
+
+
+# --- Équivalences concrètes (pour prendre conscience de ce que l'empreinte représente) -------------------------------
+# Des ordres de grandeur, calculés sur le milieu de la fourchette ; les facteurs viennent de sources publiques, relevés le
+# 2026-11-12. Les valeurs marquées « à confirmer » n'ont pas pu être relues dans la Base Empreinte de l'ADEME elle-même.
+SOURCE_EQUIVALENCES = ("ADEME (Base Empreinte, via impactco2.fr) pour la voiture, le streaming et les e-mails ; "
+                       "énergie : recharge de smartphone et ampoule LED d'usage courant, bouilloire par calcul physique")
+VOITURE_G_PAR_KM = 218.0        # voiture thermique : 0,218 kgCO2e/km (impactco2.fr, Base Empreinte ADEME)
+STREAMING_G_PAR_HEURE = 31.6    # vidéo en streaming : 11,5 kgCO2e pour 364 h par an (impactco2.fr, usage numérique, ADEME)
+EMAIL_G = 0.104                 # un e-mail : 0,27 kgCO2e pour 2600 e-mails par an (impactco2.fr, usage numérique, ADEME)
+SMARTPHONE_WH = 12.5            # une recharge complète : 10 à 15 Wh (ordre de grandeur courant ; à confirmer par l'ADEME)
+LED_W = 10.0                    # une ampoule LED de 10 W
+BOUILLOIRE_WH = 100.0           # 1 L d'eau de 15 à 100 °C : 4,186 J/(g·K) x 85 K = 0,099 kWh (physique, sans perte)
+
+# clé : (grandeur, [(quantité d'une unité en g CO2e ou en Wh, unité, singulier, pluriel)], de la plus petite à la plus grande)
+_EQUIVALENCES = [
+    ("voiture", "g", [(VOITURE_G_PAR_KM / 1000, "m", "m en voiture thermique", "m en voiture thermique"),
+                      (VOITURE_G_PAR_KM, "km", "km en voiture thermique", "km en voiture thermique")]),
+    ("smartphone", "wh", [(SMARTPHONE_WH / 100, "%", "% de charge de smartphone", "% de charge de smartphone"),
+                          (SMARTPHONE_WH, "recharge", "recharge complète de smartphone",
+                           "recharges complètes de smartphone")]),
+    ("streaming", "g", [(STREAMING_G_PAR_HEURE / 3600, "s", "seconde de vidéo en streaming",
+                         "secondes de vidéo en streaming"),
+                        (STREAMING_G_PAR_HEURE / 60, "min", "minute de vidéo en streaming", "minutes de vidéo en streaming"),
+                        (STREAMING_G_PAR_HEURE, "h", "heure de vidéo en streaming", "heures de vidéo en streaming")]),
+    ("led", "wh", [(LED_W / 60, "min", "minute d'ampoule LED 10 W", "minutes d'ampoule LED 10 W"),
+                   (LED_W, "h", "heure d'ampoule LED 10 W", "heures d'ampoule LED 10 W")]),
+    ("email", "g", [(EMAIL_G, "e-mail", "e-mail envoyé", "e-mails envoyés")]),
+    ("bouilloire", "wh", [(BOUILLOIRE_WH, "bouilloire", "bouilloire d'eau (1 L) portée à ébullition",
+                           "bouilloires d'eau (1 L) portées à ébullition")]),
+]
+MAX_EQUIVALENCES = 4
+
+
+def _arrondi(v):
+    """Entier à partir de 10, une décimale en dessous : 12, 230, 1,4 (jamais « 0,0001 » : l'unité est choisie avant)."""
+    return round(v) if v >= 10 else round(v, 1)
+
+
+def equivalences(co2):
+    """Les repères parlants de l'empreinte `co2` ({min, max, wh_min, wh_max}), sur le milieu de la fourchette :
+    [{cle, valeur, unite, libelle, min, max}] (`min` et `max` : la fourchette dans la même unité), de 3 ou 4 au plus.
+    Pour chaque repère, l'unité choisie est la plus grande où la valeur vaut au moins 1 ; un repère trop petit même dans
+    sa plus petite unité est écarté. Liste vide sans valeur."""
+    if not isinstance(co2, dict):
+        return []
+    mesures = {}
+    for grandeur, bas, haut in (("g", "min", "max"), ("wh", "wh_min", "wh_max")):
+        a, b = co2.get(bas), co2.get(haut)
+        if _nombre(a) and _nombre(b) and b > 0:
+            mesures[grandeur] = (a, b, (a + b) / 2)
+    sortie = []
+    for cle, grandeur, unites in _EQUIVALENCES:
+        if grandeur not in mesures or len(sortie) >= MAX_EQUIVALENCES:
+            continue
+        a, b, milieu = mesures[grandeur]
+        choix = [u for u in unites if milieu / u[0] >= 1]
+        if not choix:
+            continue
+        quantite, unite, singulier, pluriel = choix[-1]
+        valeur = _arrondi(milieu / quantite)
+        sortie.append({"cle": cle, "valeur": valeur, "unite": unite,
+                       "libelle": singulier if valeur < 2 else pluriel,
+                       "min": _arrondi(a / quantite), "max": _arrondi(b / quantite)})
+    return sortie
+
+
+def avec_equivalences(co2):
+    """Une copie de `co2` portant `equivalences` quand il y en a ; `co2` tel quel sinon (ou `None`)."""
+    eq = equivalences(co2)
+    return dict(co2, equivalences=eq) if eq else co2

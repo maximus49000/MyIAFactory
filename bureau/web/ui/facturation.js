@@ -6,7 +6,7 @@ import {challengeDe} from "./actions.js";
 import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
 import {etiquettePart, marquerPart, avecPart} from "./abonnement.js";
-import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
+import {etiquetteCO2, marquerTitreCO2, ligneEquivalences} from "./empreinte.js";
 
 const MAX_TITRE = 90;
 const MAX_DISCUSSIONS = 200;  // au-delà, la liste dit combien elle n'en montre pas
@@ -247,6 +247,8 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
                           projet.co2Orchestration));
   const noteEmpreinte = projet.co2 ? marquerPart(el("p", "note", `Empreinte carbone estimée : ${etiquetteCO2(projet.co2)}`)) : null;
   if (noteEmpreinte) conteneur.append(noteEmpreinte);
+  const equivalences = ligneEquivalences(projet.co2);   // « Équivaut à ≈ … » pour tout le projet
+  if (equivalences) conteneur.append(equivalences);
   conteneur.append(rangee("↳ dont gestion du bureau lui-même", euros(donnees.gestion ?? 0), "etape"));
   if (donnees.maj) conteneur.append(el("p", "note", `Prix mis à jour le ${dateFr(donnees.maj) || donnees.maj}`));
 }

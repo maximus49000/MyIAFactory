@@ -116,3 +116,44 @@ class TestPlage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEquivalences(unittest.TestCase):
+    def _eq(self, g, wh=None):
+        wh = g * 2.5 if wh is None else wh
+        return empreinte.equivalences({"min": g * 0.8, "max": g * 1.2, "wh_min": wh * 0.8, "wh_max": wh * 1.2})
+
+    def test_trois_ou_quatre_reperes_lisibles_a_toutes_les_echelles(self):
+        for g in (0.5, 5, 50, 500, 5000, 50000):
+            eq = self._eq(g)
+            self.assertIn(len(eq), (3, 4), g)
+            for e in eq:
+                self.assertGreaterEqual(e["valeur"], 1, (g, e))   # jamais « 0,0001 km »
+                self.assertLess(e["valeur"], 20000, (g, e))
+                self.assertTrue(e["libelle"] and e["unite"] and e["cle"])
+                self.assertLessEqual(e["min"], e["valeur"])
+                self.assertGreaterEqual(e["max"], e["valeur"])
+
+    def test_facteurs_sources(self):
+        eq = {e["cle"]: e for e in empreinte.equivalences({"min": 218, "max": 218, "wh_min": 100, "wh_max": 100})}
+        self.assertEqual((eq["voiture"]["valeur"], eq["voiture"]["unite"]), (1, "km"))     # 0,218 kg/km (ADEME)
+        self.assertEqual((eq["led"]["valeur"], eq["led"]["unite"]), (10, "h"))             # 100 Wh / 10 W
+        self.assertEqual((eq["smartphone"]["valeur"], eq["smartphone"]["unite"]), (8, "recharge"))   # 100 / 12,5
+
+    def test_pluriel_et_singulier(self):
+        un = {e["cle"]: e for e in empreinte.equivalences({"min": 218, "max": 218, "wh_min": 100, "wh_max": 100})}
+        self.assertEqual(un["voiture"]["libelle"], "km en voiture thermique")
+        self.assertTrue(self._eq(500)[1]["libelle"].startswith("recharges"))
+
+    def test_rien_sans_valeur_ou_a_zero(self):
+        for co2 in (None, {}, "x", {"min": 0, "max": 0, "wh_min": 0, "wh_max": 0}, {"min": 0.0003, "max": 0.0004}):
+            self.assertEqual(empreinte.equivalences(co2), [])
+        self.assertEqual(empreinte.avec_equivalences(None), None)
+        self.assertNotIn("equivalences", empreinte.avec_equivalences({"min": 0, "max": 0}))
+
+    def test_avec_equivalences_ne_modifie_pas_l_entree(self):
+        c = {"min": 4, "max": 6, "wh_min": 10, "wh_max": 14}
+        r = empreinte.avec_equivalences(c)
+        self.assertNotIn("equivalences", c)
+        self.assertEqual(r["equivalences"], empreinte.equivalences(c))
+        self.assertEqual(r["min"], 4)

@@ -7,7 +7,7 @@ euros, et un avertissement le dit.
 import statistics
 from datetime import timedelta
 
-from .empreinte import Cumul
+from .empreinte import Cumul, avec_equivalences
 from .statuts import TRES_ANCIEN, lire_date
 
 PERIODES = ("aujourdhui", "7j", "30j")
@@ -200,7 +200,7 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
     gestion = 0.0  # le bureau ne consomme aucun token ; ses requêtes de prix ne coûtent que du temps
     total = sum(g["total"] for g in services.values()) + direction["total"] + orchestration["total"] + gestion
     return {
-        **({"co2": total_co2.vue()} if total_co2.vue() else {}),
+        **({"co2": avec_equivalences(total_co2.vue())} if total_co2.vue() else {}),
         "total": round(total, 6), "gestion": gestion,
         "sans_prix": sorted(sans_prix.values(), key=lambda x: x["modele"]),
         "services": services, "direction": direction, "orchestration": orchestration,
@@ -341,7 +341,7 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
         c = x.pop("_co2").vue()
         if c:
             x["co2"] = c
-    co2 = total_co2.vue()
+    co2 = avec_equivalences(total_co2.vue())
     return {**({"co2": co2} if co2 else {}),
             "total": round(sum(x["total"] for x in sortie), 6), "taches": sortie,
             "sans_prix": sum(x["sans_prix"] for x in sortie), "tokens": sum(x["tokens"] for x in sortie),

@@ -1,7 +1,7 @@
 // L'empreinte carbone estimée : mise en forme, jamais de chiffre sans valeur ; affichée aux endroits des coûts.
 import {test, beforeEach} from "node:test";
 import assert from "node:assert/strict";
-import {etiquetteCO2, energie, infobulleCO2, INFOBULLE_CO2, URL_METHODE} from "../ui/empreinte.js";
+import {etiquetteCO2, energie, infobulleCO2, INFOBULLE_CO2, URL_METHODE, texteEquivalences, infobulleEquivalences, nombreFr} from "../ui/empreinte.js";
 import {definirAbonnement} from "../ui/abonnement.js";
 import {texteCout, lignesBrouillons, lignesProposition, texteAbandonnes} from "../ui/echange.js";
 import {libelleCout} from "../ui/organisation.js";
@@ -69,4 +69,26 @@ test("la facturation : par tâche, par étape, par modèle, par discussion et en
   assert.deepEqual(lignesDiscussions(s, {})[0].co2, CO2);
   assert.deepEqual(totalProjet({total: 2, co2: CO2, direction: {total: 0, co2: {min: 1, max: 2}}}).co2, CO2);
   assert.equal(lignesTaches({taches: {t1: {total: 1, etapes: {}}}}, [])[0].co2, undefined);   // pas de zéro inventé
+});
+
+const EQ = [{cle: "voiture", valeur: 1.4, unite: "km", libelle: "km en voiture thermique", min: 1.1, max: 1.7},
+            {cle: "smartphone", valeur: 12500, unite: "recharge", libelle: "recharges complètes de smartphone", min: 10000, max: 15000},
+            {cle: "led", valeur: 230, unite: "h", libelle: "heures d'ampoule LED 10 W", min: 200, max: 260}];
+
+test("les équivalences : écrites telles que le serveur les sert, avec la fourchette en infobulle", () => {
+  const co2 = {min: 300, max: 400, equivalences: EQ};
+  assert.equal(texteEquivalences(co2),
+    "Équivaut à ≈ 1,4 km en voiture thermique · ≈ 12 500 recharges complètes de smartphone · ≈ 230 heures d'ampoule LED 10 W");
+  const t = infobulleEquivalences(co2);
+  assert.match(t, /Ordre de grandeur/);
+  assert.match(t, /ADEME/);
+  assert.match(t, /km en voiture thermique : 1,1 à 1,7/);
+  assert.equal(nombreFr(0.5), "0,5");
+});
+
+test("pas d'équivalence : rien, jamais de chiffre inventé", () => {
+  for (const co2 of [null, {}, {min: 1, max: 2}, {equivalences: []}, {equivalences: [{libelle: "x"}]}]) {
+    assert.equal(texteEquivalences(co2), "");
+  }
+  assert.equal(totalProjet({total: 1, co2: {min: 1, max: 2, equivalences: EQ}}).co2.equivalences.length, 3);
 });

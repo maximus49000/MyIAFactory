@@ -1073,7 +1073,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _image(self, projet, requete):
         """Sert une image du projet, seulement depuis les racines déclarées (`images.racines`)."""
-        introuvable = lambda: self._json(404, {"erreur": "Introuvable."})  # noqa: E731
+        # Jamais en cache : l'image peut être en cours de copie vers sa racine, la page la redemande.
+        introuvable = lambda: self._envoyer(  # noqa: E731
+            404, json.dumps({"erreur": "Introuvable."}).encode("utf-8"), cache="no-store")
         valeurs = parse_qs(requete, keep_blank_values=True).get("chemin", [])
         if len(valeurs) != 1:
             return introuvable()

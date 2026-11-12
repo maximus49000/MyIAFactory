@@ -8,6 +8,7 @@ import {lienSur} from "./actions.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
 import {urlProjet} from "./projets.js";
+import {reessayerImage} from "./reessai.js";
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
 export const MAX_TEXTE = 3500;
@@ -298,6 +299,7 @@ function ligneDocument(ctx, d, url, images) {
     img.loading = "lazy";
     img.src = url(d.chemin);
     img.alt = d.titre;
+    reessayerImage(img);
     b.append(img);
     b.addEventListener("click", () => ouvrirVisionneuse(images, Math.max(0, images.indexOf(d.chemin)), url));
     li.append(b);
@@ -701,6 +703,7 @@ function partieLivrables(ctx, f) {
         img.loading = "lazy";
         img.src = url(d.chemin);
         img.alt = d.titre;
+        reessayerImage(img);
         b.append(img);
         b.addEventListener("click", () => ouvrirVisionneuse(images, images.findIndex((x) => x.chemin === d.chemin), url));
         vignette.append(b);
@@ -827,6 +830,7 @@ function ouvrirVisionneuse(images, depart, url = urlImage) {
   fond.setAttribute("aria-modal", "true");
   fond.setAttribute("aria-label", "Images du message");
   const img = document.createElement("img");
+  reessayerImage(img);
   const compteur = el("div", "visionneuse-compteur", "");
   const fermer = el("button", "visionneuse-fermer", "×");
   const avant = el("button", "visionneuse-fleche gauche", "‹");
@@ -875,6 +879,7 @@ function vignettes(images, etat) {
       img.loading = "lazy";
       img.src = urlImage(chemin);
       img.alt = altImage(image, "Image jointe");
+      reessayerImage(img);
       // Au survol : agrandir dans la discussion, ou voir en plein écran (avec les autres images du message).
       const outils = el("div", "vignette-outils");
       const agrandir = el("button", "vignette-bouton", "Agrandir");

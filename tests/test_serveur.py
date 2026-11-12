@@ -236,6 +236,13 @@ class TestServeur(AvecServeur):
         r, data = self.image("images/photo.JPG")
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/jpeg"))
 
+    def test_image_introuvable_jamais_mise_en_cache(self):
+        """Une image demandée pendant sa copie répond 404 : le navigateur ne doit pas garder ce 404."""
+        self.images()
+        r, _ = self.image("images/pas_encore.png")
+        self.assertEqual(r.status, 404)
+        self.assertEqual(r.getheader("Cache-Control"), "no-store")
+
     def test_image_hors_racine_refusee(self):
         self.images()
         absolu = str(self.tmp / "demo" / "secret.png").replace("\\", "/")

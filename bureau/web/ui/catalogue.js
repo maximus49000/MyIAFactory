@@ -8,6 +8,7 @@ import {el} from "./dom.js";
 import {dateFr} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {urlProjet} from "./projets.js";
+import {reessayerImage} from "./reessai.js";
 import {cadrage, creerVueDeHaut} from "./vue-de-haut.js";
 
 export {cadrage};
@@ -144,7 +145,7 @@ function image(ctx, chemin, alt) {
   img.decoding = "async";
   img.src = urlImage(chemin);
   img.alt = alt;
-  img.addEventListener("error", () => img.replaceWith(el("div", "cat-sans-image", "Image introuvable")), {once: true});
+  reessayerImage(img, {apresEchec: () => img.replaceWith(el("div", "cat-sans-image", "Image introuvable"))});
   return img;
 }
 

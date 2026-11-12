@@ -9,6 +9,7 @@ import {decisionsDirecteur, demandeGenre, demandeSession, issuesGenreFonctionnal
 import {blocOutil} from "./outils.js";
 import {rendreOrganisation} from "./organisation.js";
 import {urlProjet} from "./projets.js";
+import {reessayerImage} from "./reessai.js";
 import {demandeCahier, demandeMethode} from "./fonctionnalite.js";
 
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -262,6 +263,7 @@ function decisionValidation(ctx, d) {
       const image = el("img", "decision-image");
       image.src = urlImage(f.chemin);
       image.alt = f.titre || f.chemin;
+      reessayerImage(image);
       li.append(image, el("div", "lecon-meta", f.titre || f.chemin));
     } else {
       li.append(el("div", "lecon-meta", `${f.titre || f.chemin} : ${f.chemin}`));

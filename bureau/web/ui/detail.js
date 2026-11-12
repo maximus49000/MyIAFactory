@@ -4,6 +4,7 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, ilYA, dateFr, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleLot} from "./actions.js";
+import {reessayerImage} from "./reessai.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -85,6 +86,7 @@ function blocImages(t) {
     img.loading = "lazy";
     img.src = i.url;
     img.alt = i.legende || "Image de la tâche";
+    reessayerImage(img);
     fig.addEventListener("click", () => fig.classList.toggle("agrandie"));
     fig.append(img);
     if (i.legende) fig.append(el("figcaption", "", i.legende));

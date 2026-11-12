@@ -128,3 +128,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Pour une musique en boucle, initialiser le filtre avec la fin du tampon et le faire passer deux fois, afin que la jonction reste continue.
+
+## G22 — Pour un export Android signé d'un moteur de jeu, transmettre
+Rôles : livreur
+Date : 2026-11-12
+
+Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.

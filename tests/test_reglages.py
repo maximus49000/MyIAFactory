@@ -76,6 +76,16 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
                 self.bureau(acces=v)
 
+    def test_bureau_couche_par_defaut_et_api(self):
+        self.assertEqual(self.bureau()["moteur"], {"couche": "claude"})
+        self.assertEqual(self.bureau(moteur={"couche": "api"})["moteur"], {"couche": "api"})
+        self.assertEqual(self.bureau(moteur={})["moteur"], {"couche": "claude"})
+
+    def test_bureau_couche_invalide(self):
+        for v in ([], "api", {"couche": "gpt"}, {"couche": 1}, None):
+            with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
+                self.bureau(moteur=v)
+
 
 if __name__ == "__main__":
     unittest.main()

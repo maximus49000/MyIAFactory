@@ -108,7 +108,16 @@ def lire_bureau(chemin):
                 id_ = base[:40 - len(suffixe)].rstrip("-") + suffixe
             pris.add(id_)
         sortie.append({"id": id_, "chemin": c})
-    return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {}))}
+    return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
+            "moteur": lire_moteur_du_bureau(donnees.get("moteur", {}))}
+
+
+def lire_moteur_du_bureau(v):
+    """La couche des appels faits avant qu'un projet n'existe (l'échange de la création) : `{"couche": claude | api}`,
+    `claude` par défaut ; une clé absente vaut le défaut."""
+    if not isinstance(v, dict) or v.get("couche", "claude") not in COUCHES_MOTEUR:
+        raise ReglagesInvalides("Fichier du bureau : « moteur.couche » doit valoir « claude » ou « api ».")
+    return {"couche": v.get("couche", "claude")}
 
 
 ACCES = ("tailscale", "reseau_local")

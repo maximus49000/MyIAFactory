@@ -26,3 +26,9 @@ Rôles : dev, testeur
 Date : 2026-11-12
 
 Pour vérifier un rendu de jeu, un script lancé avec le moteur instancie la scène, attend quelques images et enregistre la capture, ce qui prouve la résolution et l'affichage.
+
+## G5 — Pour des personnages jouables aux particularités différentes
+Rôles : artiste
+Date : 2026-11-12
+
+Pour des personnages jouables aux particularités différentes, garder une silhouette et une zone de collision identiques et varier seulement couleurs et détails, pour ne pas fausser l'équilibrage.

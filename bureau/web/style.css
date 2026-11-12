@@ -751,13 +751,13 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .vignette:hover .vignette-outils, .vignette:focus-within .vignette-outils { display: flex; }
 .vignette-bouton { border: 0; border-radius: 6px; padding: 2px 7px; font: 700 11px/1.4 inherit; color: #fff; background: rgba(61, 58, 75, 0.85); cursor: pointer; }
 .vignette-bouton:hover { background: rgba(61, 58, 75, 1); }
-.visionneuse { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(20, 20, 28, 0.88); }
+.visionneuse { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(20, 20, 28, 0.88); }
 .visionneuse img { width: min(86vh, 92vw); height: auto; max-height: 86vh; object-fit: contain; border-radius: 6px; background: #fff; }
 .visionneuse-fleche, .visionneuse-fermer { position: absolute; border: 0; color: #fff; background: rgba(255, 255, 255, 0.14); cursor: pointer; border-radius: 50%; }
 .visionneuse-fleche { top: 50%; width: 52px; height: 52px; margin-top: -26px; font-size: 34px; line-height: 1; }
 .visionneuse-fleche.gauche { left: 16px; } .visionneuse-fleche.droite { right: 16px; }
 .visionneuse-fleche[hidden] { display: none; }
-.visionneuse-fermer { top: 14px; right: 16px; width: 40px; height: 40px; font-size: 26px; }
+.visionneuse-fermer { top: max(14px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: 52px; height: 52px; font-size: 32px; line-height: 1; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.85); z-index: 1; }
 .visionneuse-fleche:hover, .visionneuse-fermer:hover { background: rgba(255, 255, 255, 0.28); }
 .visionneuse-compteur { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font-weight: 700; }
 /* La légende d'une image rendue par un agent : une phrase, sous l'image (lisible au téléphone). */
@@ -1092,7 +1092,7 @@ body.sem-ouverte { overflow: hidden; }
 }
 
 /* La fenêtre de validation (ui/validation.js) : modale, plein écran sous 700 px. */
-body.val-ouverte { overflow: hidden; }
+body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .val-fond { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
   background: rgba(61, 58, 75, 0.55); }
 .val-boite { width: min(760px, 96vw); max-height: 94vh; overflow-y: auto; padding: 16px 18px; border-radius: 14px;
@@ -1131,11 +1131,6 @@ body.val-ouverte { overflow: hidden; }
 .val-vignette { display: block; padding: 0; border: 1px solid #d6cfbf; border-radius: 8px; background: none; cursor: zoom-in; }
 .val-vignette img { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; }
 .val-legende { font-size: 12.5px; color: #4a4655; margin-top: 2px; }
-.val-image.agrandie { position: fixed; inset: 0; z-index: 70; max-width: none; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; background: rgba(20, 18, 26, 0.92); padding: 12px; }
-.val-image.agrandie .val-vignette { cursor: zoom-out; border: 0; }
-.val-image.agrandie .val-vignette img { max-width: 96vw; max-height: 86vh; }
-.val-image.agrandie .val-legende { color: #fff; }
 .val-compte-rendu { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .val-point { border: 1px solid #d6cfbf; border-radius: 10px; margin: 0 0 8px; padding: 8px 10px; }
 .val-point legend { padding: 0 4px; font-weight: 700; overflow-wrap: anywhere; }

@@ -10,6 +10,7 @@ import {el} from "./dom.js";
 import {dateFr} from "./texte.js";
 import {avecProjet, projetCourant} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
+import {ouvrirVisionneuse, fermerVisionneuse, visionneuseOuverte} from "./visionneuse.js";
 
 export const POINT_PAR_DEFAUT = "L'élément correspond à l'objectif";   // une décision posée avant la fenêtre
 export const MAX_POINTS = 8;
@@ -44,6 +45,8 @@ export function purgerEnvoyees(idsPresents, maintenant = Date.now()) {
   const presents = new Set(idsPresents);
   for (const id of [...envoyees.keys()]) if (!presents.has(id) || !estEnvoyee(id, maintenant)) envoyees.delete(id);
 }
+
+const urlImageValidation = (chemin) => avecProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`, projetCourant());
 
 export function extension(chemin) {
   const nom = String(chemin || "").split(/[\\/]/).pop();
@@ -267,25 +270,22 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   }
   if (v.images.length) {
     const galerie = el("div", "val-images");
-    for (const im of v.images) {
+    v.images.forEach((im, n) => {
       const fig = el("figure", "val-image");
       const b = el("button", "val-vignette");
       b.type = "button";
       b.setAttribute("aria-label", "Agrandir : " + (im.legende || im.chemin));
       const img = el("img", "");
-      img.src = avecProjet(`/api/image?chemin=${encodeURIComponent(im.chemin)}`, projetCourant());
+      img.src = urlImageValidation(im.chemin);
       img.alt = im.legende || im.chemin;
       reessayerImage(img);
       b.append(img);
-      b.addEventListener("click", () => {
-        fig.classList?.toggle("agrandie");
-        b.setAttribute("aria-label", (fig.classList?.contains("agrandie") ? "Réduire : " : "Agrandir : ")
-          + (im.legende || im.chemin));
-      });
+      // La visionneuse plein écran (au-dessus de cette fenêtre, avec son bouton Fermer) ; le focus revient sur la vignette.
+      b.addEventListener("click", () => ouvrirVisionneuse(v.images, n, urlImageValidation, b));
       fig.append(b);
       if (im.legende) fig.append(el("figcaption", "val-legende", im.legende));
       galerie.append(fig);
-    }
+    });
     s2.append(galerie);
   }
   for (const s of v.sons) {
@@ -385,6 +385,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
 
 // Ouvre la fenêtre par-dessus le bureau. `declencheur` reprend le focus à la fermeture.
 export function ouvrirValidation(ctx, d, declencheur = null) {
+  fermerVisionneuse();
   document.querySelector(".val-fond")?.remove();     // une seule fenêtre à la fois
   const fond = el("div", "val-fond");
   let boite = null;
@@ -392,11 +393,10 @@ export function ouvrirValidation(ctx, d, declencheur = null) {
     "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled])")]
     .filter((x) => !x.hidden && x.offsetParent !== null);
   const clavier = (ev) => {
+    if (visionneuseOuverte()) return;   // l'image agrandie est au-dessus : Échap, Tab et flèches sont à elle, pas à la fenêtre
     if (ev.key === "Escape") {
       ev.preventDefault();
       ev.stopPropagation();
-      const grande = boite.querySelector(".val-image.agrandie");
-      if (grande) { grande.classList.remove("agrandie"); return; }   // d'abord l'image agrandie
       fermerFenetre();
       return;
     }
@@ -409,6 +409,7 @@ export function ouvrirValidation(ctx, d, declencheur = null) {
     else if (!ev.shiftKey && document.activeElement === dernier) { ev.preventDefault(); premier.focus(); }
   };
   function fermerFenetre() {
+    fermerVisionneuse();       // fermée avec la fenêtre qui la portait
     document.removeEventListener("keydown", clavier, true);
     fond.remove();
     document.body.classList.remove("val-ouverte");

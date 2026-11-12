@@ -10,6 +10,8 @@ import {etiquetteCO2, marquerTitreCO2} from "./empreinte.js";
 import {urlProjet, projetCourant} from "./projets.js";
 import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
 import {reessayerImage} from "./reessai.js";
+import {ouvrirVisionneuse, voisine} from "./visionneuse.js";
+export {voisine};
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 
 export const MAX_TEXTE = 3500;
@@ -829,57 +831,6 @@ function partieCouts(f) {
 
 const nomAgentDe = (e, cle) => (e.agents || []).find((a) => a.id === cle)?.prenom || cle;
 
-// L'image voisine dans une série de n images (on fait le tour : après la dernière, la première).
-export function voisine(n, i, sens) {
-  return n > 0 ? (i + sens + n) % n : 0;
-}
-
-// La visionneuse plein écran : une image à la fois, flèches gauche et droite (ou boutons), Échap pour fermer.
-// `images` : des chemins ou des `{chemin, legende}` ; la légende s'affiche sous l'image (et sert d'`alt`).
-function ouvrirVisionneuse(images, depart, url = urlImage) {
-  const liste = imagesLegendees(images);
-  let i = depart;
-  const fond = el("div", "visionneuse");
-  fond.setAttribute("role", "dialog");
-  fond.setAttribute("aria-modal", "true");
-  fond.setAttribute("aria-label", "Images du message");
-  const img = document.createElement("img");
-  reessayerImage(img);
-  const compteur = el("div", "visionneuse-compteur", "");
-  const fermer = el("button", "visionneuse-fermer", "×");
-  const avant = el("button", "visionneuse-fleche gauche", "‹");
-  const apres = el("button", "visionneuse-fleche droite", "›");
-  for (const [b, nom] of [[fermer, "Fermer"], [avant, "Image précédente"], [apres, "Image suivante"]]) {
-    b.type = "button";
-    b.setAttribute("aria-label", nom);
-  }
-  const legende = el("p", "visionneuse-legende", "");
-  const montrer = () => {
-    img.src = url(liste[i].chemin);
-    img.alt = liste[i].legende || `Image ${i + 1} sur ${liste.length}`;
-    legende.textContent = liste[i].legende;
-    legende.hidden = !liste[i].legende;
-    compteur.textContent = liste.length > 1 ? `${i + 1} / ${liste.length}` : "";
-    avant.hidden = apres.hidden = liste.length < 2;
-  };
-  const aller = (sens) => { i = voisine(liste.length, i, sens); montrer(); };
-  const clavier = (ev) => {   // capturé avant le panneau : Échap ferme la visionneuse, pas le panneau
-    if (ev.key === "Escape") { ev.stopPropagation(); ev.preventDefault(); clore(); }
-    else if (ev.key === "ArrowLeft") { ev.stopPropagation(); aller(-1); }
-    else if (ev.key === "ArrowRight") { ev.stopPropagation(); aller(1); }
-  };
-  const clore = () => { document.removeEventListener("keydown", clavier, true); fond.remove(); };
-  fermer.addEventListener("click", clore);
-  avant.addEventListener("click", () => aller(-1));
-  apres.addEventListener("click", () => aller(1));
-  fond.addEventListener("click", (ev) => { if (ev.target === fond) clore(); });
-  document.addEventListener("keydown", clavier, true);
-  fond.append(img, legende, avant, apres, compteur, fermer);
-  document.body.append(fond);
-  montrer();
-  fermer.focus();
-}
-
 // Les images d'un message ou du cahier : chacune est un chemin ou `{chemin, legende}` ; la légende (une phrase de
 // l'agent qui dit à quoi l'image fait référence) se lit sous l'image.
 function vignettes(images, etat) {
@@ -904,7 +855,7 @@ function vignettes(images, etat) {
         fig.classList.toggle("agrandie");
         agrandir.textContent = fig.classList.contains("agrandie") ? "Réduire" : "Agrandir";
       });
-      plein.addEventListener("click", (ev) => { ev.stopPropagation(); ouvrirVisionneuse(liste, n); });
+      plein.addEventListener("click", (ev) => { ev.stopPropagation(); ouvrirVisionneuse(liste, n, urlImage, plein); });
       outils.append(agrandir, plein);
       fig.append(img, outils);
       if (image.legende) {

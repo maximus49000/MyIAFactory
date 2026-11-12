@@ -351,3 +351,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand une étape de conception porte sur des tests d'application (émulateur, paquet installable), vérifier d'abord qu'un projet compilable existe ; sinon, déclarer l'étape non applicable en une ligne, sans produire de livrable vide.
+
+## S59 — Quand une regénération d'images ne vient d'aucun changement
+Rôles : designer
+Date : 2026-11-13
+
+Quand une regénération d'images ne vient d'aucun changement de données, annuler ces modifications binaires plutôt que de les commiter, pour garder un historique lisible.

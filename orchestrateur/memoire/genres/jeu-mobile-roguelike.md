@@ -110,3 +110,9 @@ Rôles : artiste
 Date : 2026-11-12
 
 Pour une barre d'état d'objets, utiliser un gabarit d'emplacement unique par taille d'icône, avec la couleur de bordure comme seul signal d'état.
+
+## G19 — Construire les emblèmes pixel art à partir d'un masque de pi
+Rôles : artiste
+Date : 2026-11-12
+
+Construire les emblèmes pixel art à partir d'un masque de pixels, puis calculer contour, reflet et ombre depuis les voisins, garantit des couleurs conformes à la palette sans retouche manuelle.

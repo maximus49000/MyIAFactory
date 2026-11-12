@@ -74,6 +74,23 @@ class AvecParcours(Base):
 class Parcours(AvecParcours):
     # --- Classer la demande.
 
+    def test_nom_de_la_fonctionnalite_l_intitule_du_jugement(self):
+        longue = "Je voudrais un petit jeu de casse-briques pour Android, avec des niveaux et un score"
+        d, vus = self.demander({"classer_genre": dict(CLASSER_AUTRE, intitule="Casse-briques Android"),
+                                "proposer_organisation": PROPOSITION}, texte=longue)
+        self.assertEqual(self.fonc()["nom"], "Casse-briques Android")
+        self.assertEqual(self.fonc()["discussion"][0]["texte"], longue)       # la demande reste dite telle quelle
+
+    def test_nom_de_la_fonctionnalite_sans_intitule_resume_aux_mots(self):
+        longue = "Je voudrais un petit jeu de casse-briques pour Android, avec des niveaux et un score."
+        self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION}, texte=longue)
+        nom = self.fonc()["nom"]
+        self.assertEqual(nom, "Je voudrais un petit jeu de casse-briques pour Android")
+        self.assertFalse(nom[-1] in ",;:.-", nom)
+        # une demande courte garde son texte, sans point final
+        self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION}, texte="Un badge pour le chat.")
+        self.assertEqual(self.fonc("f2")["nom"], "Un badge pour le chat")
+
     def test_demande_du_meme_genre_propose_son_workflow(self):
         d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
         self.assertEqual([(a[0], a[1]) for a in vus], [("juger", "classer_genre"), ("juger", "proposer_organisation")])

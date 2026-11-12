@@ -201,6 +201,15 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(v(verdict="autre", genre=None, nouveau={"id": "jeu-web", "description": ""}))
         self.assertIsNotNone(v(verdict="autre", genre=None, nouveau={"id": "jeu-android", "description": "x"}))
 
+    def test_classer_genre_intitule_facultatif_court_sur_une_ligne(self):
+        v = lambda **c: self._varie("classer_genre", **c)
+        self.assertIsNone(v(intitule="Casse-briques Android"))
+        self.assertIsNone(v(intitule=None))
+        self.assertIsNotNone(v(intitule=""))
+        self.assertIsNotNone(v(intitule="deux\nlignes"))
+        self.assertIsNotNone(v(intitule="x" * 61))
+        self.assertIsNotNone(v(intitule=3))
+
     def test_classer_genre_nouveau_mot_interdit_refuse(self):
         v = lambda **c: self._varie("classer_genre", verdict="autre", genre=None, **c)
         self.assertIsNotNone(v(nouveau={"id": "zorglub-jeux", "description": "Les jeux."}))

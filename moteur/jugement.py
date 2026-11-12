@@ -43,6 +43,7 @@ ACTIONS_CONSEIL = ("repondre", "transmettre_agent", "poser_decision", "lancer", 
 COMMANDES_INTERDITES_AU_CONSEIL = frozenset(COMMANDES_DU_BUREAU) | {"lecon", "genre"}
 SUITES_APRES_REFUS = ("corriger", "methode_a_revoir", "bloquer")
 VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
+LONGUEUR_INTITULE = 60            # le nom court d'une fonctionnalité, rendu par le classement de la demande
 MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
@@ -258,6 +259,9 @@ def _valider_classer_genre(o, d):
         return f"« verdict » doit être l'un de : {', '.join(VERDICTS_GENRE)}."
     if not _texte(o.get("raison")):
         return "« raison » (une phrase pour l'utilisateur) est obligatoire."
+    intitule = o.get("intitule")
+    if intitule is not None and not (_ligne(intitule) and len(intitule.strip()) <= LONGUEUR_INTITULE):
+        return f"« intitule » est null ou un nom court de la fonctionnalité sur une ligne ({LONGUEUR_INTITULE} caractères au plus)."
     du_projet = _ids_genres(d.get("genres_du_projet"))
     connus = du_projet + [g for g in _ids_genres(d.get("genres_connus")) if g not in du_projet]
     if genre is not None and genre not in connus:

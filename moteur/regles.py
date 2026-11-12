@@ -530,9 +530,45 @@ def _dossier_classer(projet, fac, demande):
             "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
 
 
+MOTS_DE_LIAISON = ("de", "du", "des", "la", "le", "les", "un", "une", "d", "l", "et", "ou", "à", "a", "au", "aux", "pour",
+                   "avec", "sur", "en", "dans", "qui", "que")
+LONGUEUR_NOM = 60
+BORD_DE_PHRASE = r"(?<=[.!?])\s|\n"            # la fin d'une phrase, ou d'une ligne
+BORDS_DE_MOT = r"^\W+|\W+$"                    # la ponctuation d'un mot (« d' » donne « d »)
+PONCTUATION_DE_NOM = " ,;:.!?-–—…'\"("
+
+
+def _resume_de_la_demande(texte):
+    """Un nom court et propre tiré du texte d'une demande : sa première phrase, coupée aux mots, sans ponctuation ni mot
+    de liaison à la fin."""
+    phrase = re.split(BORD_DE_PHRASE, str(texte or "").strip(), maxsplit=1)[0]
+    phrase = " ".join(phrase.split())
+    if len(phrase) > LONGUEUR_NOM:
+        coupee = phrase[:LONGUEUR_NOM + 1]
+        phrase = coupee[:coupee.rfind(" ")] if " " in coupee else phrase[:LONGUEUR_NOM]
+    mots = phrase.split(" ")
+    while len(mots) > 1 and re.sub(BORDS_DE_MOT, "", mots[-1]).lower() in MOTS_DE_LIAISON:
+        mots.pop()
+    nom = " ".join(mots).strip(PONCTUATION_DE_NOM)
+    return nom[:1].upper() + nom[1:] if nom else "Nouvelle fonctionnalité"
+
+
+def _nommer(projet, fid, intitule=None):
+    """Le nom provisoire d'une nouvelle fonctionnalité est le début brut de la demande : il est remplacé par l'intitulé
+    du classement, sinon par un résumé de la demande. Un nom déjà changé (par le cadrage, le Directeur) est gardé."""
+    f = _fonc(projet, fid)
+    texte = " ".join(_demande_de(f)["texte"].split())
+    nom = " ".join((f.get("nom") or "").split())
+    provisoire = not nom or texte.startswith(nom) or nom == _resume_de_la_demande(texte)
+    propre = (intitule or "").strip().rstrip(" .") or _resume_de_la_demande(texte)
+    if provisoire and propre and propre != f.get("nom"):
+        lancer(projet, "fonctionnalite", {"id": fid, "nom": propre})
+
+
 def _sur_fonctionnalite(projet, demande, etat):
     fid = demande["fonctionnalite"]
     suite = {"demande": demande["id"], "fonctionnalite": fid}
+    _nommer(projet, fid)
     if demande.get("genre"):      # recréée depuis un autre projet : son genre est déjà connu
         lancer(projet, "fonctionnalite", {"id": fid, "genre": demande["genre"]})
         connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
@@ -548,6 +584,8 @@ def _apres_classer_genre(projet, o, ctx, etat):
     nouveau, piste = o.get("nouveau"), o.get("genre") or (o.get("nouveau") or {}).get("id")
     verdict, raison = o["verdict"], o["raison"]
     connus = [g["id"] for g in lancer(projet, "genre", {"action": "lister"})["genres"]]
+    if fid and not ctx.get("sans_genre") and o.get("intitule"):
+        _nommer(projet, fid, o["intitule"])
     if ctx.get("sans_genre"):
         if not piste:        # aucune piste : on continue sans genre, la proposition de workflow en dira plus
             if not fid:

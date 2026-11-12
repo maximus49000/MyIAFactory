@@ -362,3 +362,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand une ligne du cahier regroupe plusieurs cartes, les compter une à une avant de remplir une réserve de taille fixée, et signaler le choix fait pour rester dans la taille.
+
+## G61 — Quand une contrainte de tirage de récompense est retirée, re
+Rôles : designer
+Date : 2026-11-13
+
+Quand une contrainte de tirage de récompense est retirée, recalculer ce que son repli garantissait : un type absent à certaines raretés peut disparaître des offres.

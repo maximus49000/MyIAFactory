@@ -207,3 +207,9 @@ Rôles : livreur
 Date : 2026-11-12
 
 Pour vérifier l'environnement d'un build, lancer en une seule fois un script qui contrôle la version de l'outil, les modèles d'export, les outils de signature et la présence des variables secrètes, sans afficher leur valeur.
+
+## S35 — Pour un test long, le lancer en tâche de fond avec un délai
+Rôles : testeur
+Date : 2026-11-12
+
+Pour un test long, le lancer en tâche de fond avec un délai généreux et ne lire la sortie qu'à la fin.

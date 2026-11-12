@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import acces, catalogue, charge, conso, cout, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import acces, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from .usage import HistoriqueUsage
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -25,7 +25,9 @@ PAS_PRIX_S = 3600  # le fil des prix se réveille toutes les heures ; il ne lit 
 ATTENTE_PREMIERS_PRIX_S = 25
 MAX_CORPS_DEMANDE = 28 * 1024 * 1024  # 4 images de 5 Mo en base64, plus le texte
 MAX_CORPS_REGLAGES = 4096
-MAX_LOT = 50  # leçons au plus dans un « Tout valider »
+MAX_CORPS_CREATIONS = 64 * 1024   # la description et les réponses de l'échange avec le chef
+ROUTES_CREATIONS = {f"/api/creations/{n}": n for n in ("infos", "tour", "valider", "supprimer")}
+MAX_LOT = 50 # leçons au plus dans un « Tout valider »
 DEMARRAGE_S = 90  # après « Lancer l'orchestrateur », un second clic ne relance rien pendant 90 s
 GARDE_DOUBLON_S = 10  # une même fonctionnalité ou un même message envoyé deux fois de suite : une seule demande
 GARDE_CHALLENGE_S = 120  # un challenge envoyé mais pas encore au relevé : pas de second envoi sur sa cible
@@ -526,6 +528,10 @@ class Bureau(ThreadingHTTPServer):
         self.projets_vus_a = self._date_fichier_bureau()
         self._ouvrir, self._demarrer = ouvrir, demarrer
         self.executer_git = self.executer_gh = None   # remplacés dans les tests : jamais de git ni de gh réels
+        # La création en deux fenêtres (`creations.py`) : tout ce qui s'injecte dans les essais (jamais de vrai modèle,
+        # jamais le dossier des brouillons de l'utilisateur).
+        self.dossier_creations = self.commun_creations = None
+        self.appeler_jugement = self.verifier_environnement = self.executer_outil = self.prix_de_modele = None
         self._verrou_projets = threading.Lock()
         self.multi = multi
         self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
@@ -730,6 +736,15 @@ class Bureau(ThreadingHTTPServer):
         except Exception:
             return set()
 
+    def _genres_pour_le_chef(self):
+        """Les genres de la mémoire de la skill, tels que le chef les lit : [{id, domaine, livrable, outils}]."""
+        from orchestrateur import memoire
+        try:
+            from installation import dossier as dossier_inst
+            return list(memoire.genres(dossier_inst.skill() / "orchestrateur" / "memoire"))
+        except Exception:
+            return []
+
     @staticmethod
     def _message_creation(fait):
         message = f"Le projet est créé dans {fait['projet']}."
@@ -919,6 +934,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, self.server.infos_acces())
         if chemin == "/api/lancement":
             return self._json(200, {"vu": self.server.lancement.vu()})
+        if chemin == "/api/creations":
+            ids = parse_qs(morceaux.query, keep_blank_values=True).get("id")
+            if ids is not None and len(ids) != 1:
+                return self._json(404, {"erreur": "Ce brouillon n'existe pas."})
+            return self._json(*creations.liste(self.server, ids[0] if ids else None))
         if chemin == "/api/conso":
             return self._json(200, self.server.conso.lire())
         if chemin not in ROUTES_PROJET:
@@ -1100,6 +1120,24 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*self.server.creer_projet(corps))
+        if chemin in ROUTES_CREATIONS:
+            if (self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= MAX_CORPS_CREATIONS:
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            if not isinstance(corps, dict):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*getattr(creations, ROUTES_CREATIONS[chemin])(self.server, corps))
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)

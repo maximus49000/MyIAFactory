@@ -78,6 +78,10 @@ class TestEstimation(unittest.TestCase):
         avec = {m: {**p, "cache_lecture": 0} for m, p in PRIX.items()}
         self.assertLess(estimation.estimer(FLUX, AGENTS, us, avec.get)["euros"][1], r["euros"][1])
 
+    def test_estimation_ignore_la_validation(self):
+        avec = [FLUX[0], {"id": "val", "nom": "Validation", "validation": True}, FLUX[1]]
+        self.assertEqual(estimation.estimer(avec, AGENTS, [], PRIX.get), estimation.estimer(FLUX, AGENTS, [], PRIX.get))
+
     def test_role_sans_agent_refuse(self):
         with self.assertRaises(ValueError):
             estimation.estimer(FLUX, AGENTS[:1], [], PRIX.get)

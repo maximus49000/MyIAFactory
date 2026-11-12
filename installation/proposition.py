@@ -90,7 +90,7 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
     if not isinstance(flux, list) or not flux or not all(isinstance(x, dict) for x in flux):
         return e + ["« flux » doit lister au moins une étape {id, nom, role, service, justification}."]
     vus, roles_du_flux = set(), []
-    for x in flux:
+    for k, x in enumerate(flux):
         i = x.get("id")
         if not (isinstance(i, str) and MOTIF_ID.match(i)) or i in RESERVES:
             e.append(f"Étape refusée {i!r} : minuscules, chiffres et tirets ; ni « cadrage » ni « fait ».")
@@ -100,6 +100,18 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
         vus.add(i)
         if not _ligne(x.get("nom")):
             e.append(f"Étape « {i} » : un « nom » est attendu.")
+        if x.get("validation") is True:   # une validation du Directeur : ni rôle, ni service, ni agent
+            if "role" in x or "service" in x:
+                e.append(f"Étape « {i} » : une validation du Directeur n'a ni rôle ni service.")
+            if k == 0:
+                e.append(f"Étape « {i} » : une validation du Directeur ne peut pas être la première étape.")
+            if k == len(flux) - 1:
+                e.append(f"Étape « {i} » : une validation du Directeur ne peut pas être la dernière étape.")
+            if k and isinstance(flux[k - 1], dict) and flux[k - 1].get("validation") is True:
+                e.append(f"Étape « {i} » : deux validations du Directeur de suite sont refusées.")
+            if "justification" in x and not _texte(x.get("justification")):
+                e.append(f"Étape « {i} » : la justification est vide.")
+            continue
         if not (isinstance(x.get("role"), str) and MOTIF_ID.match(x["role"])):
             e.append(f"Étape « {i} » : un « role » (minuscules, chiffres, tirets) est attendu.")
         elif x["role"] not in roles_du_flux:

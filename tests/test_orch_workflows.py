@@ -19,6 +19,54 @@ def etape(i, nom=None, role="dev", service="dev"):
     return {"id": i, "nom": nom or i.capitalize(), "role": role, "service": service}
 
 
+class TestDonneesValidation(unittest.TestCase):
+    """Étape de validation du Directeur et workflow de genre : fonctions pures sur le dict de la factory."""
+    VAL = {"id": "valider", "nom": "Validation du Directeur", "validation": True}
+    FLUX = [etape("dev"), VAL, etape("livre", "Livraison")]
+
+    def f(self, **champs):
+        base = {"genre": "jeu", "flux": [], "workflows": []}
+        base.update(champs)
+        return base
+
+    def test_est_validation_et_etape_ecrite(self):
+        self.assertTrue(wf.est_validation(self.VAL))
+        self.assertFalse(wf.est_validation(etape("dev")))
+        self.assertEqual(wf.etape_ecrite({**self.VAL, "raison": "x"}), self.VAL)
+        self.assertEqual(wf.etape_ecrite({**etape("dev"), "justification": "x"}), etape("dev"))
+        self.assertEqual([e["id"] for e in wf.etapes_d_agent(self.FLUX)], ["dev", "livre"])
+
+    def test_workflow_de_creation_trouve(self):
+        w = {"id": "w-jeu", "fonctionnalite": None, "genre": "jeu", "flux": self.FLUX}
+        autre = {"id": "w-f1", "fonctionnalite": "f1", "genre": "jeu", "flux": [etape("f1-dev")]}
+        f = self.f(workflows=[autre, w])
+        self.assertEqual(wf.de_creation(f)["id"], "w-jeu")
+        self.assertEqual(wf.de_creation(f, "jeu")["id"], "w-jeu")
+        self.assertIsNone(wf.de_creation(f, "site"))
+        self.assertIsNone(wf.de_creation(self.f(workflows=[autre])))
+        self.assertIsNone(wf.de_creation(self.f(genre=None, workflows=[w])))
+        # le principal n'est jamais un workflow de création
+        self.assertIsNone(wf.de_creation(self.f(flux=PRINCIPAL)))
+
+    def test_copie_pour_prefixe_les_etapes(self):
+        w = {"id": "w-jeu", "fonctionnalite": None, "genre": "jeu", "flux": self.FLUX}
+        c = wf.copie_pour(w, "f3")
+        self.assertEqual((c["id"], c["fonctionnalite"], c["genre"]), ("w-f3", "f3", "jeu"))
+        self.assertEqual([e["id"] for e in c["flux"]], ["f3-dev", "f3-valider", "f3-livre"])
+        self.assertTrue(c["flux"][1]["validation"])
+        self.assertEqual(self.FLUX[0]["id"], "dev")   # l'original n'a pas bougé
+
+    def test_workflow_de_genre_sans_colonnes(self):
+        w = {"id": "w-jeu", "fonctionnalite": None, "genre": "jeu", "flux": self.FLUX}
+        f = self.f(workflows=[w])
+        self.assertEqual([c["id"] for c in wf.colonnes(f, [])], ["cadrage", "fait"])
+        f = self.f(workflows=[w, wf.copie_pour(w, "f1")])
+        cols = wf.colonnes(f, [{"id": "f1", "etape": "cadrage"}])
+        self.assertEqual([c["id"] for c in cols], ["cadrage", "f1-dev", "f1-valider", "f1-livre", "fait"])
+        self.assertTrue(cols[2]["validation"])
+        self.assertNotIn("validation", cols[1])
+
+
 class AvecWorkflows(AvecProjet):
     def reecrire(self, **champs):
         d = json.loads(self.factory.read_text(encoding="utf-8"))

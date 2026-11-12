@@ -62,6 +62,17 @@ class TestProposition(unittest.TestCase):
         e = proposition.verifier(p)
         self.assertTrue(any("justification" in x for x in e), e)
 
+    def test_organisation_avec_validation_valide(self):
+        p = proposition_valide("/tmp/p")
+        p["flux"] = [p["flux"][0], {"id": "valider", "nom": "Validation du Directeur", "validation": True,
+                                    "justification": "Le Directeur valide."}, p["flux"][1]]
+        self.assertEqual(proposition.verifier(p), [])
+        for flux in ([p["flux"][1], p["flux"][0], p["flux"][2]], [p["flux"][0], p["flux"][2], p["flux"][1]],
+                     [p["flux"][0], p["flux"][1], dict(p["flux"][1], id="v2"), p["flux"][2]]):
+            q = proposition_valide("/tmp/p")
+            q["flux"] = flux
+            self.assertTrue(proposition.verifier(q), [x["id"] for x in flux])
+
     def test_brief_manquant(self):
         p = proposition_valide("/tmp/p")
         del p["briefs"]["relecteur"]

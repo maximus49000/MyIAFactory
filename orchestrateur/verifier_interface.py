@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import releve as rel  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
+from orchestrateur import workflows as wf  # noqa: E402
 
 OUTIL = Path(__file__).resolve().parent / "outil.py"
 MARQUE = ".copie-de-verification"
@@ -247,7 +248,7 @@ def verifier_complet(chemin, etat):
         if any(x["id"] == nouveau for x in f["services"]):
             raise Ignore("le scénario a déjà été joué sur cette copie")
         o = {"services": [{"id": x["id"], "nom": x["nom"]} for x in f["services"]] + [{"id": nouveau, "nom": "Vérification"}],
-             "flux": [{c: x[c] for c in ("id", "nom", "role", "service")} for x in f["flux"]]
+             "flux": [wf.etape_ecrite(x) for x in f["flux"]]
                      + [{"id": nouveau, "nom": "Vérification", "role": nouveau, "service": nouveau}],
              "agents": [{"cle": nouveau + "-1", "role": nouveau, "service": nouveau, "modele": "Haiku", "lieu": "local",
                          "texte": "Agent de vérification."}],

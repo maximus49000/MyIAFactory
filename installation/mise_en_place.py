@@ -246,7 +246,7 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=N
         raise Echec("Organisation refusée : " + " ; ".join(erreurs))
     d = json.loads(brut)
     d["services"] = [{"id": s["id"], "nom": s["nom"]} for s in services]
-    etapes = [{c: e[c] for c in ("id", "nom", "role", "service")} for e in flux]
+    etapes = [wf.etape_ecrite(e) for e in flux]
     if workflow is None:
         d["flux"] = etapes
     else:
@@ -302,7 +302,7 @@ def _ecrire_configuration(base, p, genre, maintenant):
         "agents_locaux_max": p["agents_locaux_max"],
     }
     if p.get("flux"):   # un projet créé vide n'a ni flux ni agent : sa première demande en fait proposer un
-        factory["flux"] = [{c: e[c] for c in ("id", "nom", "role", "service")} for e in p["flux"]]
+        factory["flux"] = [wf.etape_ecrite(e) for e in p["flux"]]
     if p.get("description"):
         factory["description"] = p["description"].strip()
     _ecrire_json(base / "factory.json", factory)

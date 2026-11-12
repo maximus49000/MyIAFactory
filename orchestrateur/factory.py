@@ -31,9 +31,14 @@ def _nom_du_projet(base):
 
 
 def _controler_flux(flux, nom, ids_services, vus):
-    """Contrôle les étapes `{id, nom, role, service}` d'un flux ; `vus` : les identifiants déjà pris dans le projet."""
+    """Contrôle les étapes `{id, nom, role, service}` d'un flux, ou `{id, nom, validation: true}` (validation du
+    Directeur, ni première, ni dernière, ni deux de suite) ; `vus` : les identifiants déjà pris dans le projet."""
     for e in flux:
-        if not isinstance(e, dict) or not all(_texte(e.get(c)) for c in ("id", "nom", "role", "service")):
+        if isinstance(e, dict) and e.get("validation") is True:
+            if not all(_texte(e.get(c)) for c in ("id", "nom")) or "role" in e or "service" in e:
+                raise FactoryInvalide(f"Factory : « {nom} » : une étape de validation a un « id » et un « nom » "
+                                      "(textes non vides), sans « role » ni « service ».")
+        elif not isinstance(e, dict) or not all(_texte(e.get(c)) for c in ("id", "nom", "role", "service")):
             raise FactoryInvalide(f"Factory : « {nom} » : chaque étape a un « id », un « nom », un « role » "
                                   "et un « service » (textes non vides).")
         if not MOTIF_ID.match(e["id"]) or e["id"] in RESERVES:
@@ -42,9 +47,16 @@ def _controler_flux(flux, nom, ids_services, vus):
         if e["id"] in vus:
             raise FactoryInvalide(f"Factory : « {nom} » : identifiant d'étape en double « {e['id']} ».")
         vus.add(e["id"])
-        if e["service"] not in ids_services:
+        if e.get("validation") is not True and e["service"] not in ids_services:
             raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » nomme un service inconnu "
                                   f"« {e['service']} ».")
+    est_val = [isinstance(e, dict) and e.get("validation") is True for e in flux]
+    if est_val and est_val[0]:
+        raise FactoryInvalide(f"Factory : « {nom} » : une étape de validation ne peut pas être la première.")
+    if est_val and est_val[-1]:
+        raise FactoryInvalide(f"Factory : « {nom} » : une étape de validation ne peut pas être la dernière.")
+    if any(a and b for a, b in zip(est_val, est_val[1:])):
+        raise FactoryInvalide(f"Factory : « {nom} » : deux étapes de validation de suite sont refusées.")
 
 
 def lire(chemin):

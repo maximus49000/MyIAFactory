@@ -7,7 +7,25 @@ Fonctions pures sur le dict rendu par `factory.lire`.
 """
 
 PRINCIPAL = "principal"
+CLE_VALIDATION = "validation"   # `{"id", "nom", "validation": true}` : une étape où le Directeur valide, sans agent
 ETAPES_CACHANT_LES_COLONNES = ("terminee", "deplacee")   # une fonctionnalité finie ou partie ailleurs n'a plus de colonnes
+
+
+def est_validation(etape):
+    """Vrai pour une étape de validation du Directeur (sans rôle ni service)."""
+    return isinstance(etape, dict) and etape.get(CLE_VALIDATION) is True
+
+
+def etape_ecrite(e):
+    """L'étape telle que la factory la garde : `{id, nom, validation}` ou `{id, nom, role, service}`."""
+    if est_validation(e):
+        return {"id": e["id"], "nom": e["nom"], CLE_VALIDATION: True}
+    return {c: e[c] for c in ("id", "nom", "role", "service")}
+
+
+def etapes_d_agent(flux):
+    """Les étapes du flux qui sont tenues par un agent (sans les validations du Directeur)."""
+    return [e for e in flux if not est_validation(e)]
 
 
 def tous(f):
@@ -28,6 +46,22 @@ def de_la_fonctionnalite(f, fonc):
         if w is not None:
             return w
     return next((x for x in ws if x["id"] == PRINCIPAL), None)
+
+
+def de_creation(f, genre=None):
+    """Le workflow de genre du projet (défini à sa création) : sans fonctionnalité, ni le principal ; `genre` ou, à
+    défaut, le genre du projet. None s'il n'y en a pas."""
+    voulu = genre or f.get("genre")
+    if not voulu:
+        return None
+    return next((w for w in tous(f) if w["fonctionnalite"] is None and w["id"] != PRINCIPAL
+                 and w.get("genre") == voulu), None)
+
+
+def copie_pour(w, fid):
+    """La copie d'un workflow de genre pour la fonctionnalité `fid` : étapes préfixées par `<fid>-`."""
+    return {"id": f"w-{fid}", "fonctionnalite": fid, "genre": w["genre"],
+            "flux": [{**e, "id": f"{fid}-{e['id']}"} for e in w["flux"]]}
 
 
 def genre_de(f, fonc):
@@ -55,7 +89,12 @@ def colonnes(f, fonctionnalites):
         fonc = par_id.get(w["fonctionnalite"]) if w["fonctionnalite"] else None
         if fonc is not None and fonc.get("etape") in ETAPES_CACHANT_LES_COLONNES:
             continue
+        if w["fonctionnalite"] is None and w["id"] != PRINCIPAL:
+            continue   # un workflow de genre n'a pas de colonnes : ses copies par fonctionnalité en ont
         for e in w["flux"]:
-            sortie.append({"id": e["id"], "nom": e["nom"], "genre": w.get("genre"), "workflow": w["id"]})
+            c = {"id": e["id"], "nom": e["nom"], "genre": w.get("genre"), "workflow": w["id"]}
+            if est_validation(e):
+                c[CLE_VALIDATION] = True
+            sortie.append(c)
     sortie.append({"id": "fait", "nom": "Fait", "terminee": True})
     return sortie

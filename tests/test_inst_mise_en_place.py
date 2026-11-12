@@ -414,6 +414,17 @@ class TestOrganisation(Base):
         self.assertIn("mixeur-1", [x["cle"] for x in fiches.lire_toutes(f["fiches"])])
         self.assertTrue((f["fiches"] / "briefs" / "mixeur.md").is_file())
 
+    def test_ecrire_organisation_garde_la_validation(self):
+        self.appliquer()
+        chemin = self.projet / ".factory" / "factory.json"
+        services = fa.lire(chemin)["services"]
+        flux = fa.lire(chemin)["flux"]
+        avec = flux[:1] + [{"id": "valider", "nom": "Validation du Directeur", "validation": True,
+                            "raison": "à garder hors du fichier"}] + flux[1:]
+        mep.ecrire_organisation(chemin, services, avec, [], {})
+        f = fa.lire(chemin)
+        self.assertEqual(f["flux"][1], {"id": "valider", "nom": "Validation du Directeur", "validation": True})
+
     def test_ecrire_organisation_refuse_sans_rien_ecrire(self):
         self.appliquer()
         chemin = self.projet / ".factory" / "factory.json"

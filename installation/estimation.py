@@ -111,6 +111,8 @@ def estimer(flux, agents, usages, prix_de):
         modele_du_role.setdefault(a["role"], a["modele"])
     etapes = [("cadrage", MODELE_CADRAGE)]
     for e in flux:
+        if e.get("validation") is True:
+            continue   # une validation du Directeur ne coûte rien
         if e["role"] not in modele_du_role:
             raise ValueError(f"Aucun agent pour le rôle « {e['role']} » (étape « {e['id']} »).")
         etapes.append((e["id"], modele_du_role[e["role"]]))

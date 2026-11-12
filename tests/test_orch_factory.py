@@ -63,6 +63,25 @@ class TestFactory(unittest.TestCase):
             factory.lire(self.ecrire(flux="dev"))
         self.assertIn("flux", str(c.exception))
 
+    def test_etape_de_validation_lue(self):
+        flux = [{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"},
+                {"id": "val", "nom": "Validation du Directeur", "validation": True},
+                {"id": "livre", "nom": "Livraison", "role": "dev", "service": "dev"}]
+        f = factory.lire(self.ecrire(flux=flux))
+        self.assertEqual(f["flux"][1], {"id": "val", "nom": "Validation du Directeur", "validation": True})
+
+    def test_validation_premiere_derniere_ou_double_refusee(self):
+        dev = {"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}
+        v1 = {"id": "v1", "nom": "V1", "validation": True}
+        v2 = {"id": "v2", "nom": "V2", "validation": True}
+        fin = {"id": "fin", "nom": "Fin", "role": "dev", "service": "dev"}
+        for flux, mot in (([v1, dev], "première"), ([dev, v1], "dernière"), ([dev, v1, v2, fin], "de suite")):
+            with self.assertRaises(factory.FactoryInvalide, msg=str(flux)) as c:
+                factory.lire(self.ecrire(flux=flux))
+            self.assertIn(mot, str(c.exception))
+        with self.assertRaises(factory.FactoryInvalide):   # une validation n'a ni rôle ni service
+            factory.lire(self.ecrire(flux=[dev, {**v1, "role": "dev"}, fin]))
+
     def test_flux_refuse_les_colonnes_reservees_et_les_doublons(self):
         etape = {"nom": "X", "role": "dev", "service": "dev"}
         for flux in ([{"id": "cadrage", **etape}], [{"id": "fait", **etape}],

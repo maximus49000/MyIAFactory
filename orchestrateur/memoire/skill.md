@@ -357,3 +357,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand une regénération d'images ne vient d'aucun changement de données, annuler ces modifications binaires plutôt que de les commiter, pour garder un historique lisible.
+
+## S60 — Quand seul le rapport d'une étape a été refusé pour sa forme
+Rôles : designer
+Date : 2026-11-13
+
+Quand seul le rapport d'une étape a été refusé pour sa forme, reprendre le livrable déjà produit, relancer ses contrôles et rendre un rapport complet au lieu de refaire le travail.

@@ -315,6 +315,14 @@ Les textes sont affichés comme du texte, jamais comme du HTML, et tronqués s'i
 - Quand une tâche **change de colonne** entre deux lectures, l'agent qui la tenait avant va déplacer son post-it sur le Kanban.
 - Si la factory est **en pause**, le voyant le dit et les agents dont la tâche n'est plus à jour vont au café.
 
+## Les semaines du forfait et leurs sujets (routes du bureau)
+
+Ces routes concernent **tout le bureau commun** (pas de `?projet=`). Le format du relevé ne change pas.
+
+- `GET /api/semaines` : `{semaines: [{id, debut, remise, courante, max, n}], maintenant}`, la plus récente d'abord. `id` est `AAAA-MM-JJ` (date UTC de la remise à zéro, avec `-2`… si deux semaines tombent le même jour) ; `debut` et `remise` sont en secondes epoch ; `max` est le plus haut % utilisé et `n` le nombre de points archivés. Le premier appel amorce l'archive avec l'historique d'abonnement.
+- `GET /api/semaine?id=<id>` : `{id, debut, remise, vu, points: [{t, pourcent, source}]}` (la série archivée, `pourcent` utilisé de 0 à 100 pour le compte entier, `source` : `compte` ou `moteur`) ; 404 si l'`id` est inconnu ou mal formé.
+- `GET /api/sujets?semaine=<id>` : `{semaine, debut, remise, euros, sans_prix, n, co2?, sujets: [nœud]}`. Un nœud : `{id, nom, genre (projet, fonctionnalite, tache, etape, groupe, echange, creation), euros, sans_prix, n, co2?, marques: [{t, euros, modele, duree}], enfants: [nœud]}` ; chaque nœud cumule ses descendants, les enfants sont triés par coût, et seul le nœud où s'arrête un usage porte ses `marques` (instants d'appel en secondes epoch ; `duree` en secondes ou `null`). Projet → fonctionnalité (« Hors fonctionnalité ») → tâche → étape (« Sans étape »), plus par projet « Orchestration », « Direction », « Hors tâche », et à la racine « Échanges de création » (un nœud par brouillon, plus « Échanges abandonnés »). Un usage sans prix est compté dans `sans_prix`, jamais pour zéro euro ; les usages de partenaires n'y figurent pas. La part estimée (≈ % semaine) est calculée par la page avec le taux de `/api/conso`.
+
 ## Les jauges d'abonnement (état servi à la page)
 
 Les jauges et le rond lisent la même mesure, servie par `GET /api/conso` (le compte, sinon le dernier appel du moteur : `source` vaut `"compte"` ou `"moteur"`, `mesure` est l'instant de la mesure en secondes epoch, `part` la part estimée). Le format du relevé ne change pas. `GET /api/etat` porte de son côté `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.

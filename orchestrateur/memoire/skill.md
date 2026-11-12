@@ -237,3 +237,9 @@ Rôles : dev, artiste
 Date : 2026-11-12
 
 Dans un script de test Godot sans interface, les warnings « ObjectDB instances were leaked » et « resources still in use » viennent souvent de lectures audio encore actives à quit(). Arrêter les lecteurs, vider leurs flux, attendre un court délai en temps réel pour que le serveur audio libère les lectures, puis quitter, en s'assurant qu'aucune scène en cours de chargement ne relance un son après l'arrêt.
+
+## S40 — Dans une constante GDScript, utiliser l'operateur de formata
+Rôles : dev, artiste
+Date : 2026-11-12
+
+Dans une constante GDScript, utiliser l'operateur de formatage % plutot que str(), qui empeche la compilation.

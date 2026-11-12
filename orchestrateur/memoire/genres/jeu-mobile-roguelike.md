@@ -254,3 +254,9 @@ Rôles : dev
 Date : 2026-11-12
 
 Pour tester une navigation d'écrans sans interface, émettre le signal des boutons, attendre quelques images, puis vérifier le chemin de la scène courante et que l'ancienne instance n'est plus valide.
+
+## G43 — Pour des maquettes cartoon pas enfantines : expressions exag
+Rôles : designer
+Date : 2026-11-12
+
+Pour des maquettes cartoon pas enfantines : expressions exagérées (sourcils, dents, yeux mi-clos), silhouettes anguleuses, contours épais et ombres décalées ; éviter les formes rondes et les grands yeux.

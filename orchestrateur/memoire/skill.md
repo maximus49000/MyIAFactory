@@ -321,3 +321,9 @@ Rôles : designer, dev, qa
 Date : 2026-11-12
 
 Un test qui donne une donnée fausse à un contrôle ne compte que si une erreur nouvelle apparaît par rapport aux données justes.
+
+## S54 — Un contrôle qui cherche des secrets par mots-clés doit viser
+Rôles : designer, dev, qa
+Date : 2026-11-13
+
+Un contrôle qui cherche des secrets par mots-clés doit viser un motif de valeur (mot suivi d'un séparateur et d'une valeur), pas le mot seul, pour ne pas bloquer des noms de contenu légitimes.

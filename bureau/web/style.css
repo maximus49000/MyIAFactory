@@ -1,4 +1,5 @@
 :root {
+  color-scheme: only light;   /* pas de mode sombre forcé par le navigateur du téléphone */
   --fond-1: #f7efe2;
   --fond-2: #e6d6c0;
   --encre: #3d3a4b;

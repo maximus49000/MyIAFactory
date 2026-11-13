@@ -43,7 +43,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       return JSON.stringify((e.agents || []).filter((a) => a.service === id)
         .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]).concat([e.dossier, e.agir,
         e.challenges, (e.savoir || []).filter((s) => s.service === id),
-        (e.taches || []).filter((t) => t.active).map((t) => [t.id, t.titre, t.agent, t.etape])]));
+        (e.taches || []).map((t) => [t.id, t.titre, t.agent, t.etape, t.active, t.colonne, cleTravail(t)])]));
     }
     if (type === "partenaires") return JSON.stringify([e.partenaires, e.agir]);
     if (type === "tache") {

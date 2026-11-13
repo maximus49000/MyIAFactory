@@ -36,3 +36,18 @@ test("les tâches refaites au même titre : Retour 1, Retour 2 (renvoi du Direct
   assert.equal(p.get("t50"), "Reprise 1");
   assert.equal(titreAffiche(e, e.taches[4], p), "Unique");
 });
+
+import {tachesDuService} from "../ui/dossier.js";
+
+test("les tâches d'un service : en cours puis réalisées, d'après ses agents ou le service de la tâche", () => {
+  const e = {agents: [{id: "dev", service: "developpement"}, {id: "chef", chef: true, service: "developpement"}],
+    taches: [{id: "orchestration", agent: "chef", active: true, colonne: "cadrage"},
+      {id: "t1", agent: "dev", active: true, colonne: "dev", maj: "2026-11-13T11:00"},
+      {id: "t2", agent: "dev", colonne: "fait", maj: "2026-11-12T10:00"},
+      {id: "t3", agent: "dev", colonne: "fait", maj: "2026-11-13T09:00"},
+      {id: "t4", agent: null, service: "developpement", colonne: "fait", maj: "2026-11-11T09:00"},
+      {id: "t5", agent: "qa", colonne: "fait"}]};
+  const {enCours, faites} = tachesDuService(e, "developpement");
+  assert.deepEqual(enCours.map((t) => t.id), ["t1"]);
+  assert.deepEqual(faites.map((t) => t.id), ["t3", "t2", "t4"]);
+});

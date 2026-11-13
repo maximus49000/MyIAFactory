@@ -3,11 +3,13 @@
 
 import {el} from "./dom.js";
 import {tronquer, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
-import {contenuFacturation, chargerFacturation, serviceFacture, coutEnClair} from "./facturation.js";
+import {contenuFacturation} from "./facturation.js";
 import {challengesDuService} from "./actions.js";
 import {contenuConnaissances} from "./connaissances.js";
 import {contenuKpi, rappelAlertes} from "./kpi.js";
 import {contenuChallenge} from "./challenge.js";
+import {coutsDesTaches, libelleCout} from "./couts.js";
+import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 
 const MAX_TITRE = 90;
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
@@ -46,35 +48,45 @@ function contenuTaches(ctx, conteneur, service) {
     }
     conteneur.append(lc);
   }
-  const ids = new Set((e.agents || []).filter((a) => a.service === service).map((a) => a.id));
-  const taches = (e.taches || []).filter((t) => t.active && ids.has(t.agent));
-  conteneur.append(el("div", "carte-sous-titre", `Tâches en cours (${taches.length})`));
-  const liste = el("ul", "liste-taches");
-  if (!taches.length) liste.append(el("li", "vide", "Aucune tâche en cours"));
+  // Les tâches du service : en cours, puis réalisées (les plus récentes d'abord), chacune avec son coût (en cours : il
+  // évolue ; finie : son total) et ouvrable.
+  const {enCours, faites} = tachesDuService(e, service);
+  const prefixes = prefixesDeRepetition(e);
   const couts = [];
-  for (const t of taches) {
-    const agent = (e.agents || []).find((a) => a.id === t.agent);
-    const li = el("li", "");
-    const b = el("button", "ligne-tache");
-    b.type = "button";
-    const cout = el("span", "ligne-cout-tache", "");
-    b.append(el("span", "ligne-titre", tronquer(t.titre, MAX_TITRE)),
-             el("span", "ligne-detail", `${agent?.prenom || "?"}${t.etape ? " · " + tronquer(t.etape, 30) : ""} · ${ilYA(t.maj)}`),
-             cout);
-    b.addEventListener("click", () => ctx.ouvrirTache(t.id));
-    li.append(b);
-    liste.append(li);
-    couts.push([t.id, cout]);
+  function liste(titre, taches, vide) {
+    conteneur.append(el("div", "carte-sous-titre", `${titre} (${taches.length})`));
+    const ul = el("ul", "liste-taches");
+    if (!taches.length) ul.append(el("li", "vide", vide));
+    for (const t of taches) {
+      const agent = (e.agents || []).find((a) => a.id === t.agent);
+      const li = el("li", "");
+      const b = el("button", "ligne-tache");
+      b.type = "button";
+      const cout = el("span", "ligne-cout-tache", "…");
+      b.append(el("span", "ligne-titre", tronquer(titreAffiche(e, t, prefixes), MAX_TITRE)),
+               el("span", "ligne-detail", `${agent?.prenom || "?"}${t.etape ? " · " + tronquer(t.etape, 30) : ""} · ${ilYA(t.maj)}`),
+               cout);
+      b.addEventListener("click", () => ctx.ouvrirTache(t.id));
+      li.append(b);
+      ul.append(li);
+      couts.push([t, cout]);
+    }
+    conteneur.append(ul);
   }
-  conteneur.append(liste);
-  if (e.dossier?.facturation && taches.length) {
-    chargerFacturation(choix.periode).then((f) => {
-      const s = serviceFacture(f, service);
-      for (const [id, cible] of couts) {
-        if (s && s.taches[id] && cible.isConnected) cible.textContent = coutEnClair(s.taches[id]);
-      }
-    }, () => { /* le coût manque, la liste reste */ });
+  liste("Tâches en cours", enCours, "Aucune tâche en cours");
+  liste("Tâches réalisées", faites, "Aucune tâche réalisée pour l'instant");
+  if (couts.length) {
+    coutsDesTaches().then((c) => { for (const [t, cible] of couts) if (cible.isConnected) cible.textContent = libelleCout(t, c); });
   }
+}
+
+// Les tâches d'un service de production : celles de ses agents (ou marquées de ce service), en cours puis faites. Pur.
+export function tachesDuService(etat, service) {
+  const ids = new Set((etat?.agents || []).filter((a) => a.service === service && !a.chef).map((a) => a.id));
+  const siennes = (etat?.taches || []).filter((t) => t.id !== "orchestration" && (t.service === service || ids.has(t.agent)));
+  const recent = (x, y) => String(y.maj || "").localeCompare(String(x.maj || ""));
+  return {enCours: siennes.filter((t) => t.colonne !== "fait" && (t.active || t.travail)).sort(recent),
+          faites: siennes.filter((t) => t.colonne === "fait").sort(recent)};
 }
 
 // contenuDossier(contexte, conteneur, service, onglet) — `onglet` force l'onglet ; sinon le dernier choisi.

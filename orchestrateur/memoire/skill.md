@@ -561,3 +561,9 @@ Rôles : dev, designer
 Date : 2026-11-13
 
 Dans un moteur où une étiquette s'agrandit toute seule à son texte, un contrôle de débordement compare le texte au cadre visible qui le contient, jamais à la taille de l'étiquette.
+
+## S94 — Mesurer le contraste de chaque texte contre le fond réelleme
+Rôles : designer, dev
+Date : 2026-11-13
+
+Mesurer le contraste de chaque texte contre le fond réellement rendu derrière lui, et compter le contour du texte quand il est assez épais.

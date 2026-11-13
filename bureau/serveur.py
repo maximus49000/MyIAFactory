@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
-from . import fichiers_joints, releve
+from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -219,6 +219,7 @@ class Projet:
             e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
+            statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
             e["images_ok"] = images_declarees(regl)
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)

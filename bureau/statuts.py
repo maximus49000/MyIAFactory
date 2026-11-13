@@ -55,6 +55,21 @@ def statut(taches, maintenant, fraicheur_min, en_pause):
     return {"statut": "sans_nouvelles", "bulle": "sans nouvelles depuis " + duree_en_clair(age)}
 
 
+def agents_au_travail(agents, taches):
+    """Un agent dont le processus local tourne sur une de ses tâches (`travail`, ajouté par le bureau) est au travail,
+    même si le suivi n'a pas bougé depuis longtemps (essai réel : Hugo lançait les tests, sa bulle disait « sans
+    nouvelles depuis 31 min »). Modifie `agents` en place."""
+    par_id = {t.get("id"): t for t in taches if isinstance(t, dict)}
+    for a in agents:
+        if a.get("statut") != "sans_nouvelles":
+            continue
+        vivantes = [par_id[i] for i in a.get("taches") or [] if i in par_id and par_id[i].get("travail")]
+        if vivantes:
+            a["statut"] = "travail"
+            a["bulle"] = _tronquer(vivantes[0].get("titre")) + (f" (+{len(vivantes) - 1})" if len(vivantes) > 1 else "")
+    return agents
+
+
 def present(titulaire, taches, maintenant):
     if titulaire.get("permanent") or titulaire.get("chef"):
         return True

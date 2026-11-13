@@ -185,7 +185,10 @@ def derniere_action(lignes, dossier_projet):
                     chemin = entree.get("file_path") or entree.get("notebook_path") or entree.get("path")
                     return f"{VERBES_FICHIER[nom]} {_fichier_court(chemin, dossier_projet)}"[:MAX_ACTION]
                 if nom in ("Bash", "PowerShell"):
-                    mot = (str(entree.get("command") or "").split() or [""])[0]
+                    # le programme lancé, pas le « cd dossier && » qui le précède (essai réel : « lance cd »)
+                    morceaux = [m.split() for m in re.split(r"&&|\|\||;|\|", str(entree.get("command") or ""))]
+                    utiles = [m for m in morceaux if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
+                    mot = utiles[0][0] if utiles else ""
                     mot = re.sub(r"[^\w.-]", "", Path(mot.strip("\"'").replace("\\", "/")).name)[:20]
                     return f"lance {mot}" if mot else "lance une commande"
                 if nom in VERBES:

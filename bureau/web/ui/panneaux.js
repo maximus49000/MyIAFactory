@@ -340,7 +340,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   conteneur.addEventListener("pointerleave", cacherCarte);
 
   conteneur.addEventListener("click", (ev) => {
-    const choix = sc.pointer(ev);
+    const etiquette = ev.target?.closest?.(".etiquette[data-type]");     // le prénom d'un agent, au-dessus de sa tête
+    const choix = etiquette ? {type: etiquette.dataset.type, id: etiquette.dataset.id} : sc.pointer(ev);
     cacherCarte();
     if (choix.type === "agent") ouvrirPanneau("agent", choix.id);
     else if (choix.type === "postit") ouvrirPanneau("tache", choix.id);

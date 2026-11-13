@@ -67,6 +67,9 @@ export class Personnages {
 
     const etiquette = document.createElement("div");
     etiquette.className = "etiquette";
+    // L'étiquette ouvre le même panneau que la figurine (au doigt, la figurine est trop petite à viser).
+    etiquette.dataset.type = g.userData.choix.type;
+    etiquette.dataset.id = g.userData.choix.id;
     const nom = document.createElement("span");
     nom.className = "prenom";
     const nuage = document.createElement("span");

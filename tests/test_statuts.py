@@ -50,6 +50,17 @@ class TestStatuts(unittest.TestCase):
         self.assertEqual(statuts.statut([t(1, active=False)], M, 30, False), {"statut": "libre", "bulle": ""})
         self.assertEqual(statuts.statut([], M, 30, False), {"statut": "libre", "bulle": ""})
 
+    def test_agent_local_qui_tourne_est_au_travail(self):
+        agents = [{"id": "dev", "statut": "sans_nouvelles", "bulle": "sans nouvelles depuis 31 min", "taches": ["t81"]},
+                  {"id": "art", "statut": "sans_nouvelles", "bulle": "sans nouvelles depuis 2 h", "taches": ["t9"]},
+                  {"id": "qa", "statut": "libre", "bulle": "", "taches": []}]
+        taches = [{"id": "t81", "titre": "Prototype jouable", "travail": {"depuis": "2026-11-13T09:45:00+01:00"}},
+                  {"id": "t9", "titre": "Planches"}]
+        statuts.agents_au_travail(agents, taches)
+        self.assertEqual((agents[0]["statut"], agents[0]["bulle"]), ("travail", "Prototype jouable"))
+        self.assertEqual(agents[1]["statut"], "sans_nouvelles")     # aucun processus : rien ne change
+        self.assertEqual(agents[2]["statut"], "libre")
+
     def test_present(self):
         self.assertTrue(statuts.present({"cle": "a"}, [t(23 * 60, active=False)], M))
         self.assertFalse(statuts.present({"cle": "a"}, [t(25 * 60, active=False)], M))

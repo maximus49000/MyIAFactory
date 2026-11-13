@@ -6,6 +6,7 @@ import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js"
 import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
+import {blocPoint} from "./point.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -211,6 +212,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   contenu.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
   contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
   contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
+  if (a.chef) contenu.append(blocPoint(e, ctx.ouvrirTache));      // « où en est-on ? » : la réponse immédiate
 
   contenu.append(el("div", "carte-sous-titre", "Tâches en cours"));
   const taches = el("ul", "liste-partie");

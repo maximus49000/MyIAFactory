@@ -71,6 +71,8 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   font-weight: 700;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(61, 58, 75, 0.2);
+  pointer-events: auto;   /* cliquable : ouvre le panneau de l'agent */
+  cursor: pointer;
 }
 .etiquette.chef::before { content: "★"; color: #d39b17; }
 .etiquette.directeur { border-style: double; border-width: 3px; }

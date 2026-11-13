@@ -230,6 +230,8 @@ class AuTravail(Base):
     def test_une_commande_est_dite_sans_son_contenu(self):
         lignes = [self.outil("Bash", {"command": "python outils/build.py --token=abc123"})]
         self.assertEqual(detache.derniere_action(lignes, None), "lance python")
+        cd = [self.outil("Bash", {"command": "cd C:/projet && python tools/lancer_tests.py 2>&1 | tail -40"})]
+        self.assertEqual(detache.derniere_action(cd, None), "lance python")       # pas « lance cd »
         self.assertEqual(detache.derniere_action([self.outil("Write", {"file_path": "/ailleurs/x.txt"})], "/projet"),
                          "écrit x.txt")
         self.assertEqual(detache.derniere_action([self.outil("Grep", {"pattern": "secret"})], None),

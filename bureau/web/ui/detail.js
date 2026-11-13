@@ -6,6 +6,7 @@ import {tronquer, ilYA, auTravail, dateFr,filtrer, filtresEtat, filtreEtatEffect
 import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
+import {coutsDesTaches, libelleCout} from "./couts.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -145,6 +146,12 @@ export function contenuTache(ctx, contenu, t) {
   const type = (e.types || []).find((x) => x.id === t.type);
   if (t.type) contenu.append(ligne("Type", type ? type.nom : t.type));
   contenu.append(ligne("Mise à jour", ilYA(t.maj)));
+  // Son coût : en cours, il évolue à chaque relecture ; fini, celui noté dans l'historique d'usage.
+  const cout = ligne("Coût", t.travail?.cout ? libelleCout(t, {}) : "…");
+  contenu.append(cout);
+  if (!t.travail?.cout) {
+    coutsDesTaches().then((c) => { const v = cout.lastChild; if (v) v.textContent = libelleCout(t, c); });
+  }
   const travail = auTravail(t.travail);      // l'agent local au travail (dit par le bureau, relu à chaque état)
   if (travail) contenu.append(ligne("Au travail", "depuis " + travail.depuis + (travail.action ? " · " + travail.action : "")));
   if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge du poste (dit par le moteur)

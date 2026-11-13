@@ -1267,3 +1267,6 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 .accuse[data-phase="tarde"] { background: #fbe3d6; color: #8a3b1e; }
 /* Dans une fenêtre ou un panneau : à sa place, pas flottant. */
 .val-boite .accuses, .saisie-discussion .accuses, .accuses.en-ligne { position: static; max-width: none; }
+
+/* L'historique d'un agent : le coût de chaque tâche, sous son titre */
+.historique-agent .cout-montant { display: block; font-size: 12px; font-weight: 600; color: #5b5868; margin-top: 2px; }

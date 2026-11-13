@@ -222,6 +222,8 @@ class Projet:
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
+            if not err:
+                self._cout_en_cours(e.get("taches") or [], regl)
             e["images_ok"] = images_declarees(regl)
             e["echanges_vus"] = self.echanges_vus()      # les échanges avec le Chef masqués de la direction (« Vu »)
             e["abonnement"] = self._abonnement(regl)
@@ -283,6 +285,34 @@ class Projet:
             message = None if self.etat_prix["ok"] else self.etat_prix["message"]
         return 200, {**f, "disponible": True, "periode": periode, "maj": self.table_prix.derniere_maj(),
                      "message": message}
+
+    def _cout_en_cours(self, taches, regl):
+        """Le coût d'une tâche dont l'agent local travaille encore (`travail.cout`, `{total, sans_prix, tokens}`),
+        d'après ce qu'il a consommé jusqu'ici ; il évolue à chaque relecture. Ne fait jamais tomber l'état."""
+        maintenant = datetime.now().astimezone().isoformat(timespec="seconds")
+        for t in taches:
+            tr = t.get("travail")
+            if not isinstance(tr, dict):
+                continue
+            conso = tr.pop("conso", None)
+            if not conso:
+                continue
+            try:
+                tr["cout"] = cout.cout_des_usages(
+                    conso, lambda m, d: prix.prix_effectif(self.table_prix, regl, m, d), maintenant)
+            except Exception:      # le coût en cours est une aide : jamais une raison d'échouer
+                pass
+
+    def couts_taches(self):
+        """(code HTTP, objet JSON) : le coût de chaque tâche du projet (`{disponible, taches: {id: {total, …}}}`)."""
+        e = self.etat()
+        r = self.dernier_releve
+        if e.get("erreur") or r is None or r.get("version", 1) < 4:
+            return 200, {"disponible": False}
+        regl, _ = self.reglages()
+        self._premiers_prix.wait(ATTENTE_PREMIERS_PRIX_S)
+        return 200, {"disponible": True, "taches": cout.couts_taches(
+            self.usage.lire(), lambda m, d: prix.prix_effectif(self.table_prix, regl, m, d), r)}
 
     def couts(self, fonctionnalite):
         """(code HTTP, objet JSON) : le coût de chaque tâche d'une fonctionnalité, depuis toujours."""
@@ -1206,6 +1236,8 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/conseil":
             return self._json(200, projet.conseil())
         if chemin == "/api/couts":
+            if parse_qs(morceaux.query).get("taches") == ["tout"]:     # le coût de chaque tâche du projet
+                return self._json(*projet.couts_taches())
             fonc = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite", [])
             if len(fonc) != 1:
                 return self._json(404, {"erreur": "Aucune fonctionnalité demandée."})

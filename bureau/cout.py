@@ -348,3 +348,27 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
             # aucune ligne notée : inconnu, pas zéro
             "lignes": sum(x["lignes"] for x in sortie if x["lignes"] is not None)
                       if any(x["lignes"] is not None for x in sortie) else None}
+
+
+def cout_des_usages(usages, prix_de, date_iso=None):
+    """`{total, sans_prix, tokens}` de quelques usages (un usage sans prix connu n'est compté dans aucun euro)."""
+    total, sans_prix, tokens = 0.0, 0, 0
+    for u in usages:
+        tokens += sum(u.get(c) or 0 for c in COMPTEURS)
+        p, _, _ = prix_de(u["modele"], u.get("t_prix") or u.get("t") or date_iso)
+        if not p:
+            sans_prix += 1
+            continue
+        total += _cout(u, p)
+    return {"total": round(total, 6), "sans_prix": sans_prix, "tokens": tokens}
+
+
+def couts_taches(usages, prix_de, r):
+    """Le coût de chaque tâche du projet, depuis toujours : `{id: {total, sans_prix, tokens}}` (les tâches sans usage
+    noté n'y sont pas). Les tokens d'un partenaire ne sont pas des euros ici."""
+    ids = {t["id"] for t in r.get("taches") or []}
+    par_tache = {}
+    for u in usages:
+        if u.get("tache") in ids and u.get("genre") != "partenaire":
+            par_tache.setdefault(u["tache"], []).append(u)
+    return {tid: cout_des_usages(us, prix_de) for tid, us in par_tache.items()}

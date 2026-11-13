@@ -74,7 +74,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       // Le Chef : son point de l'atelier et ses échanges suivent l'état (réponse arrivée, minute qui passe…).
       const chef = a?.chef ? [e.agents, (e.taches || []).map((t) => [t.id, t.bloquee, t.attente, t.retours, cleTravail(t)]),
         e.decisions_projet, (e.fonctionnalites || []).map((f) => f.decisions), e.attente_charge] : null;
-      return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre]), e.services, e.agir, retourListe, chef]);
+      return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent]), e.services, e.agir,
+        retourListe, chef]);
     }
     return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
       e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,
@@ -346,7 +347,12 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     const etiquette = ev.target?.closest?.(".etiquette[data-type]");     // le prénom d'un agent, au-dessus de sa tête
     const choix = etiquette ? {type: etiquette.dataset.type, id: etiquette.dataset.id} : sc.pointer(ev);
     cacherCarte();
-    if (choix.type === "agent") ouvrirPanneau("agent", choix.id);
+    if (choix.type === "agent") {
+      // au travail : directement sa tâche ; libre (ou le Chef) : sa fiche, avec l'historique de ses tâches
+      const a = (etat()?.agents || []).find((x) => x.id === choix.id);
+      const tache = a && !a.chef && a.statut !== "libre" ? (a.taches || [])[0] : null;
+      if (tache) ouvrirPanneau("tache", tache); else ouvrirPanneau("agent", choix.id);
+    }
     else if (choix.type === "postit") ouvrirPanneau("tache", choix.id);
     else if (choix.type === "file") ouvrirPanneau("file", choix.id);
     else if (choix.type === "attente") ouvrirPanneau("attente", null);

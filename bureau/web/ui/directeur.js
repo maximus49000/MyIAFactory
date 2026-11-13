@@ -7,6 +7,7 @@ import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
+import {coutsDesTaches, libelleCout} from "./couts.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
@@ -251,6 +252,25 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   }
   contenu.append(taches);
 
+  if (!a.chef) {
+    // L'historique : toutes les tâches qu'il a faites (service – tâche), chacune avec son coût, chacune ouvrable.
+    const faites = tachesFaites(e, a.id);
+    contenu.append(el("div", "carte-sous-titre", `Tâches réalisées (${faites.length})`));
+    const histo = el("ul", "liste-partie historique-agent");
+    if (!faites.length) histo.append(el("li", "vide", "Aucune tâche réalisée pour l'instant"));
+    const montants = [];
+    for (const t of faites) {
+      const li = el("li", "");
+      li.append(lienTache(ctx, t.id, tronquer(`${serviceDeTache(e, t, a)} – ${t.titre}`, MAX_TITRE)));
+      const m = el("span", "cout-montant", "…");
+      li.append(m);
+      montants.push([t, m]);
+      histo.append(li);
+    }
+    contenu.append(histo);
+    if (montants.length) coutsDesTaches().then((c) => { for (const [t, m] of montants) m.textContent = libelleCout(t, c); });
+  }
+
   contenu.append(el("div", "carte-sous-titre", "Leçons"));
   const lecons = el("ul", "liste-partie");
   if (!(a.lecons || []).length) lecons.append(el("li", "vide", "Aucune leçon"));
@@ -260,4 +280,16 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     lecons.append(li);
   }
   contenu.append(lecons);
+}
+
+// Les tâches faites par un agent, les plus récentes d'abord. Pur.
+export function tachesFaites(etat, idAgent) {
+  return (etat?.taches || []).filter((t) => t.agent === idAgent && t.colonne === "fait")
+    .sort((x, y) => String(y.maj || "").localeCompare(String(x.maj || "")));
+}
+
+// Le service d'une tâche : le sien s'il est connu (agents polyvalents), sinon celui de l'agent. Pur.
+export function serviceDeTache(etat, t, agent) {
+  const id = t?.service || agent?.service;
+  return (etat?.services || []).find((s) => s.id === id)?.nom || "—";
 }

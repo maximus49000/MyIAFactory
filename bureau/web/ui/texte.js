@@ -60,7 +60,8 @@ export function cleTravail(tache, maintenant = new Date()) {
   const m = minutesDepuis(t?.depuis, maintenant);
   if (m === null) return null;
   const v = minutesDepuis(t.vie_t, maintenant);
-  return [Math.floor(m), t.action || null, t.action_t || null, v === null ? null : Math.floor(v)];
+  return [Math.floor(m), t.action || null, t.action_t || null, v === null ? null : Math.floor(v),
+          typeof t.cout?.total === "number" ? Math.round(t.cout.total * 100) : null];
 }
 
 // Le voyant de la factory : {libelle, ton} avec ton parmi ok | pause | alerte.

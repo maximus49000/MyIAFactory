@@ -222,9 +222,52 @@ def moment_de_la_derniere_action(lignes):
     return None
 
 
+_CONSO = {}     # chemin du flux -> (octets lus, {id de message: (modèle, usage)}) : le flux n'est relu que pour la suite
+
+
+def conso_en_cours(flux):
+    """Ce que l'agent a consommé jusqu'ici, d'après les messages de son flux (un message compté une fois, sa dernière
+    valeur) : `[{modele, entree, sortie, cache_lecture, cache_ecriture}]`, un par modèle, au format des usages du
+    relevé. Le coût d'une tâche en cours se calcule ainsi avant son rapport."""
+    cle = str(flux)
+    lu, messages = _CONSO.get(cle, (0, {}))
+    try:
+        taille = flux.stat().st_size
+        if taille < lu:                       # un nouveau flux (essai suivant) : on repart de zéro
+            lu, messages = 0, {}
+        with open(flux, "rb") as f:
+            f.seek(lu)
+            bloc = f.read()
+    except OSError:
+        return []
+    fin = bloc.rfind(b"\n")
+    if fin >= 0:
+        for brute in bloc[:fin].split(b"\n"):
+            try:
+                d = json.loads(brute)
+            except ValueError:
+                continue
+            m = d.get("message") if isinstance(d, dict) and d.get("type") == "assistant" else None
+            u = m.get("usage") if isinstance(m, dict) else None
+            if isinstance(u, dict) and isinstance(m.get("id"), str) and str(m.get("model", "")).startswith("claude"):
+                messages[m["id"]] = (m["model"], u)
+        lu += fin + 1
+    _CONSO[cle] = (lu, messages)
+    par_modele = {}
+    for modele, u in messages.values():
+        c = par_modele.setdefault(modele, {"modele": modele, "entree": 0, "sortie": 0, "cache_lecture": 0,
+                                          "cache_ecriture": 0})
+        for nom, champ in (("entree", "input_tokens"), ("sortie", "output_tokens"),
+                           ("cache_lecture", "cache_read_input_tokens"), ("cache_ecriture", "cache_creation_input_tokens")):
+            v = u.get(champ)
+            c[nom] += v if isinstance(v, int) and not isinstance(v, bool) else 0
+    return list(par_modele.values())
+
+
 def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
     """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t,
-    vie_t}` (heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris). Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
+    vie_t, conso}` (heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris ;
+    `conso` : voir `conso_en_cours`). Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
     try:
         d = dossier(dossier_factory)
         if not d.is_dir():
@@ -254,7 +297,7 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
             if _iso(debut) is None:
                 continue
             info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
-                    "vie_t": vie_t}
+                    "vie_t": vie_t, "conso": conso_en_cours(flux)}
             for tid in etat.get("taches") or [etat.get("tache")]:
                 if isinstance(tid, str):
                     travail[tid] = info

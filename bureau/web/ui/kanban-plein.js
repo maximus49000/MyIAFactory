@@ -21,7 +21,7 @@ export function colonnesKanban(etat) {
     if (!c || t.postit === false) continue;   // sans post-it (le chef qui orchestre) : pas sur le Kanban, comme dans la scène
     c.taches.push({id: t.id, titre: t.titre, prenom: t.agent ? prenoms.get(t.agent) || t.agent : null,
                    etape: t.etape || "", maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null,
-                   attente: t.attente || null, travail: t.travail || null});
+                   attente: t.attente || null, travail: t.travail || null, resume: t.resume || null});
   }
   for (const c of colonnes) c.taches.sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
   colonnes.file = {elements: [...(etat?.file?.visibles || []), ...(etat?.file?.suite || [])]
@@ -59,6 +59,7 @@ export function ouvrirKanban(etat, ouvrirTache) {
       const carte = el("button", "kanban-carte" + (t.bloquee ? " bloquee" : "") + (t.active ? "" : " inactive"));
       carte.type = "button";
       carte.append(el("strong", "", tronquer(t.titre, 120)));
+      if (t.resume) carte.append(el("span", "kanban-carte-resume", tronquer(t.resume, 90)));   // l'objectif, sur une ligne (pas de surcharge)
       const meta = [t.prenom, t.etape, t.maj ? ilYA(t.maj) : null].filter(Boolean).join(" · ");
       if (meta) carte.append(el("span", "kanban-carte-meta", meta));
       if (t.attente) carte.append(el("span", "kanban-carte-attente", t.attente));

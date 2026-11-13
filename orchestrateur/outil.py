@@ -2109,6 +2109,9 @@ def construire_releve(ctx):
              "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"],
              "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None,
              "modele_necessaire": mn.de_la_tache(ctx.f, t, fiches, s["fonctionnalites"])}
+        resume = resume_de_tache(t, s["fonctionnalites"])
+        if resume:
+            v["resume"] = resume
         if t.get("lignes") is not None:
             v["lignes"] = t["lignes"]
         if t.get("captures"):
@@ -3045,6 +3048,34 @@ GH = None    # remplacé par les tests : (args, cwd) -> (code, sortie) ; None : 
 def _fichier_depot(ctx):
     """Le dernier essai de « Créer le dépôt Git » : son résultat, montré au bureau."""
     return ctx.f["suivi"].with_name("depot-git.json")
+
+
+MAX_RESUME_TACHE = 600       # le même plafond que le bureau (`bureau.releve.MAX_RESUME_TACHE`)
+CONSIGNES_DU_JOURNAL = ("Remarque du Directeur", "Consigne de l'utilisateur", "Note du Directeur",
+                        "Retour de l'utilisateur", "Reprise sur votre retour")
+
+
+def resume_de_tache(t, fonctionnalites):
+    """Ce que la tâche doit produire, en clair et sans appel d'IA, pour le Directeur : l'objectif de son élément (écrit
+    au découpage), sinon la première entrée de son journal (la consigne qui l'a ouverte) ; puis la dernière consigne du
+    Directeur, s'il y en a une. `None` si on ne sait rien de plus que le titre."""
+    objectif = None
+    f = next((x for x in fonctionnalites if x["id"] == t.get("fonctionnalite")), None)
+    element = ((f or {}).get("elements") or {}).get(t.get("element")) if t.get("element") else None
+    if isinstance(element, dict) and isinstance(element.get("objectif"), str) and element["objectif"].strip():
+        objectif = " ".join(element["objectif"].split())
+    journal = [str(j.get("texte") or "").strip() for j in t.get("journal") or [] if isinstance(j, dict)]
+    journal = [j for j in journal if j]
+    if objectif is None and journal and journal[0] != "Terminé.":
+        objectif = " ".join(journal[0].split())
+    # une relance par le bouton du bureau (« … (même consigne). ») n'est pas une consigne
+    consigne = next((j for j in reversed(journal) if j.startswith(CONSIGNES_DU_JOURNAL) and "(même consigne)" not in j),
+                    None)
+    texte = " ".join(x for x in (objectif, None if consigne is None or consigne == objectif
+                                 else "Dernière consigne : " + " ".join(consigne.split())) if x)
+    if not texte:
+        return None
+    return texte if len(texte) <= MAX_RESUME_TACHE else texte[:MAX_RESUME_TACHE - 1] + "…"
 
 
 def releve_recrutement(ctx, s, fiches):

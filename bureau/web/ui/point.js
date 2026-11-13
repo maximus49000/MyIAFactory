@@ -20,7 +20,7 @@ export function pointAtelier(etat, maintenant = new Date()) {
       if (!t) continue;
       const travail = auTravail(t.travail, maintenant);
       agents.push({prenom: a.prenom || a.id || "?", tache: t.id, titre: tronquer(t.titre || "", MAX_TITRE),
-                   cloud: a.lieu === "cloud",
+                   resume: t.resume ? tronquer(t.resume, 90) : null, cloud: a.lieu === "cloud",
                    etat: travail ? `au travail depuis ${travail.depuis}` + (travail.action ? ` · ${travail.action}` : "")
                      : t.attente ? t.attente
                      : a.statut === "sans_nouvelles" ? (a.bulle || "sans nouvelles")
@@ -47,7 +47,9 @@ export function blocPoint(etat, ouvrirTache, maintenant = new Date()) {
     const lien = el("button", "lien-tache", `${a.prenom}${a.cloud ? " ☁" : ""} — ${a.titre}`);
     lien.type = "button";
     lien.addEventListener("click", () => ouvrirTache(a.tache));
-    li.append(lien, el("div", "lecon-meta", a.etat));
+    li.append(lien);
+    if (a.resume) li.append(el("div", "resume-tache", a.resume));
+    li.append(el("div", "lecon-meta", a.etat));
     ul.append(li);
   }
   bloc.append(ul);

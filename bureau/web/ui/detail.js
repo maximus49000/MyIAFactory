@@ -123,6 +123,11 @@ export function contenuTache(ctx, contenu, t) {
     contenu.append(retour);
   }
   contenu.append(el("h2", "", t.titre));
+  if (t.resume) {          // l'objectif de la tâche : élément, étape, dernière consigne (servi par le relevé)
+    const r = el("p", "resume-tache");
+    r.append(el("strong", "", "Objectif : "), document.createTextNode(t.resume));
+    contenu.append(r);
+  }
   contenu.append(ligne("Colonne", tronquer(nomColonne(e, t.colonne), 30)));
   contenu.append(ligne("Agent", prenomAgent(e, t.agent)));
   contenu.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));

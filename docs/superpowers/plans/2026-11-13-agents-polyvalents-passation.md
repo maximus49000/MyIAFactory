@@ -13,7 +13,7 @@ Tenir ce tableau à jour à la fin de chaque phase (dernière action avant le de
 | Phase | Modèle proposé | Tâches du plan | Dépense réelle | Pourquoi ce modèle | État |
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | 1, 2, 3 : métier (brief enrichi), fiche polyvalente, leçons par métier | non | Formats et lecture au contrat écrit, tests nommés | **faite 2026-11-13** |
-| B | Opus 5.5 | 4, 5, 6 : choix de l'agent et liens amont, modèle par tâche et Fable sur accord, départ par métier | non | Cœur du moteur : chemins de départ multiples, garde Fable, risque de régression | à faire |
+| B | Opus 5.5 | 4, 5, 6 : choix de l'agent et liens amont, modèle par tâche et Fable sur accord, départ par métier | non | Cœur du moteur : chemins de départ multiples, garde Fable, risque de régression | **faite 2026-11-13** |
 | C | Sonnet 5.5 | 7, 8, 9 : équipe = places, création au nouveau format, reprise des projets | non (banc gratuit seulement) | Commandes et installation au contrat écrit | à faire |
 | D | Sonnet 5.5 | 10 : bureau vivant (pièce de la tâche, panneaux, leçons par métier) | non | Page et relevé au contrat écrit | à faire |
 | E | Opus 5.5 | 11 : essai réel sur ZooRunner, avec l'utilisateur | **oui** (quelques tâches réelles, sur accord) | Jugement de ce qui accroche en vrai | à faire |
@@ -57,3 +57,45 @@ Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'es
 - Message de départ (`depart.py`, `outil.py`) : `message` et `message_lot` prennent `metiers_=None` ; pour un agent polyvalent `cmd_depart` met « ## Ton métier : <role> » (service, spécialité, outils, leçons validées du métier) à la place de « ## Ta fiche », et « Le brief de ton rôle » prend le texte du brief **sans** en-tête ni leçons (pas de doublon). Les leçons genre/skill sont lues pour le rôle de la **tâche**. Un rôle sans brief donne un métier vide. Le lot est traité de la même façon (un bloc par métier) mais **la tâche 6 reste à faire** (session cloud, `message_lot` en multi-métiers testé de bout en bout). Un agent à fiche ancienne : message strictement inchangé (test `test_fiche_ancienne_message_inchange`).
 - Tests ajoutés : `test_orch_metiers.py` (5), `test_orch_fiches.py` (4), `test_orch_lecons_metier.py` (6).
 - Pour la phase B : `fiches.est_polyvalente` est le test à utiliser ; `metiers.lire_metier(...)["lieu"]` vaut `indifférent`/`local`/`cloud` et `["modele"]` le modèle par défaut du métier. `outil._metier_de(ctx, role)` rend toujours un dict de métier (vide si pas de brief).
+
+**Phase B (2026-11-13, Opus 5.5)** — tâches 4, 5, 6 faites, sans appel réel. Commits `1ce321a`, `33f0932`, `551a7e5`.
+Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test_bureau_creation`, passe seul) ; `node --test` 514/514.
+
+- **Choix de l'agent** : `modele_necessaire.possibles` ajoute les polyvalents (fiche sans rôle) **après** les spécialistes du
+  rôle, sans plafond ; un projet sans polyvalent choisit exactement comme avant (test `test_projet_non_repris_choisit_comme_avant`,
+  avec un brief à en-tête `Lieu : cloud` / `Modèle : Haiku` ignoré). Le lieu réservé du métier (`Lieu :` du brief) n'est lu
+  **que si le projet a des polyvalents** (`outil.lieu_reserve`, `regles._lieu_reserve`) ; `depart.agent_libre` a un argument
+  `lieu_reserve`. Un lot dont un métier est réservé au local ne prend pas de place cloud.
+- **Reprise** : une tâche commencée (ou dans `a_lancer`) revient à son agent polyvalent s'il est libre, sinon à un autre ;
+  le cadrage garde son agent attitré ; un spécialiste à l'ancienne est attendu comme avant. Reprise par un autre agent : l'entrée
+  `etat["cloud"][tid]` de l'ancien est oubliée.
+- **Liens amont** : `regles._amont_pret(projet, etat, tache, court, barrieres, cache)` = `depend_de` faites, barrières
+  (`_barrieres`) levées et, pour une étape de flux d'un élément, aucune tâche d'avant du même élément pas faite (une tâche
+  **bloquée** ne retient rien, comme dans `_barrieres`) ni décision `valider_etape` d'une étape d'avant. Appelé par
+  `_demarrer_en_attente` (lot, `a_lancer`, retour, reprise), `_noter_les_places_libres` (la barre « places libres »),
+  `orphelines` (une tâche active dont l'amont attend est rendue inactive, elle repartira par le départ ordinaire),
+  `_sur_session_cloud` (la tâche n'est pas relevée : elle passe dans `a_lancer`) et `demarrer_installation`.
+- **Modèle** : agent polyvalent = `regles._modele_voulu` (montée, modèle du lot, `de_la_tache`, modèle du métier, Sonnet), sans
+  plafond. cmd_lots (`_modele_et_lieu`) fait de même. Les fiches à l'ancienne gardent `plafonne`/`ramene`.
+- **Fable** : `MODELES_D_ETAPE` (factory, workflows, `modele_necessaire`) et le validateur d'étape de `jugement` acceptent
+  `Fable` (écart : les **consignes** `proposer_organisation`/`definir_workflow` disent toujours « jamais Fable », leurs tests
+  l'exigent ; à revoir en phase C si le Chef doit pouvoir le proposer). La montée Opus → Fable n'est acceptée par `lancer tache`
+  **que dans un projet qui a des polyvalents** (`depart.monter(m, fable=True)`), pour garder l'ancien format intact. Dans un projet
+  polyvalent, avant le départ : décision de projet `fable_tache {tache, raison}` (posée une fois), la tâche attend ; demande
+  `fable_tache {decision, verdict: autoriser|refuser}` → `fable_accordee` vrai/faux sur la tâche. `_modele_de_depart` rend Opus
+  pour toute tâche Fable sans `fable_accordee` (tous chemins, orphelines comprises). Une tâche Fable n'est jamais mise en lot et
+  part **en local seulement** (`cloud.lancer_session` refuse Fable) ; la boucle lance l'agent avec une fiche qui porte l'accord
+  pour ce départ seulement (`Moteur._fiche_avec_accord`, `fable_accorde` noté aussi au registre détaché). Estimation : Fable compté
+  Opus (`mn.estime`). Bureau : carte « Tâches qui demandent Fable » (`decisions.js`), demande vérifiée (`bureau/demandes.py`),
+  réponse unique (`serveur.REPONSES_UNE_FOIS`), consignes de l'orchestrateur à jour.
+- **Départ** : la boucle ajoute aux outils de l'agent polyvalent ceux du métier de chaque tâche (`Outils :` du brief, des règles
+  comme dans les fiches) ; la décision `session_cloud` d'un polyvalent nomme le modèle de la tâche. Une session inscrite sert
+  toutes les tâches de l'agent, tous métiers (`sessions_cloud[cle]`).
+- Rôles tenus par un polyvalent quand le métier a son brief : cadrage (`_role_cadrage`), relecture (`_sans_relecteur`),
+  installation (`installations_pretes` : tout polyvalent).
+- Tests anciens adaptés (spec) : étape Fable désormais permise (`test_orch_factory`, `test_orch_workflows`, `test_moteur_jugement`,
+  `test_modele_necessaire`) ; deux tests d'empreinte qui prenaient « Fable » comme modèle sans donnée utilisent un nom inventé
+  (`test_inst_estimation`, `test_etat`).
+- **Pour la phase C** : `recruter`, `parallelisme`, la reprise et la création ne connaissent pas encore les polyvalents. Un projet
+  mixte (anciennes fiches + polyvalents) fonctionne (spécialistes d'abord) mais n'est pas un cas visé. Non vérifié en vrai
+  (aucun agent lancé) : la sortie réelle de `claude` avec une fiche « accord par tâche ».

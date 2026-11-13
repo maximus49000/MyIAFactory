@@ -566,3 +566,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Appeler l'émulateur par son nom (« emulator ») et non par son chemin complet : l'outil ouvert ne couvre que le nom, et le chemin Windows est refusé.
+
+## G95 — Des captures uniformes sur émulateur ne prouvent aucun succè
+Rôles : release
+Date : 2026-11-13
+
+Des captures uniformes sur émulateur ne prouvent aucun succès : avant de tester, vérifier que le rendu du projet est compatible mobile (mode compatibilité) et que l'orientation déclarée correspond à celle du jeu.

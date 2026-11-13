@@ -465,3 +465,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une commande shell simple est refusée faute d'approbation, passer par un lanceur Python du projet qui trouve l'outil à sa place.
+
+## S78 — Un taux de victoire mesuré avec un robot qui ignore une part
+Rôles : equilibreur
+Date : 2026-11-13
+
+Un taux de victoire mesuré avec un robot qui ignore une partie des décisions du jeu (soin, achats) ne représente pas un joueur : régler les combats isolés et signaler que le niveau de run reste non mesuré.

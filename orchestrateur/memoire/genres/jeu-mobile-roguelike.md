@@ -512,3 +512,9 @@ Rôles : release
 Date : 2026-11-13
 
 Un paquet destiné à la publication doit être signé avec une clé fournie par son propriétaire ; sans elle, le dire et signaler le paquet comme version de débogage.
+
+## G86 — Un paquet signé avec une clé de débogage n'est pas une versi
+Rôles : release
+Date : 2026-11-13
+
+Un paquet signé avec une clé de débogage n'est pas une version de publication : la clé de publication est fournie par le propriétaire du projet, hors du dépôt.

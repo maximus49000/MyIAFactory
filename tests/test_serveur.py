@@ -151,6 +151,18 @@ class TestServeur(AvecServeur):
         self.assertEqual(d["charge_max"], 60)
         self.assertIn("releve", d)
 
+    def test_reglage_lecons_auto_ecrit_et_visible_dans_l_etat(self):
+        self.assertIs(self.json("/api/etat")["lecons_auto"], False)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"lecons_auto": True}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(data.decode("utf-8"))["lecons_auto"], True)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["lecons_auto"], True)
+        self.assertIs(self.json("/api/etat")["lecons_auto"], True)
+        for corps in ('{"lecons_auto": "oui"}', '{"lecons_auto": 1}'):
+            r, _ = self.req("POST", "/api/reglages", corps, self.ENT)
+            self.assertEqual(r.status, 400, corps)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["lecons_auto"], True)
+
     def test_reglage_sans_entete(self):
         avant = self.regl.read_text(encoding="utf-8")
         corps = json.dumps({"charge_max": 60})

@@ -78,10 +78,12 @@ def ouvrir_projet(fichier_reglages, environ=None):
     couche, ligne = appel.choisir_couche(r if isinstance(r, dict) else {}, os.environ if environ is None else environ)
     projet = regles.Projet(fichier.parent / "factory.json", couche)
     projet.ligne_a_dire = ligne
+    projet.fichier_reglages = fichier
     try:
         lus = reglages_bureau.charger(fichier)
         projet.cloud_max = lus["agents_cloud_max"]
         projet.cloud_dossier_approuve = lus["cloud_dossier_approuve"]
+        projet.lecons_auto = lus["lecons_auto"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet
@@ -262,6 +264,7 @@ class Moteur:
             etat["repris"] = True
             self._demarrage(projet, etat)
         self._demandes(projet, etat)
+        self._valider_les_lecons(projet, etat)
         self._ecritures_en_attente(projet, etat)
         self._relever_le_cloud(projet, etat)
         self._traiter_les_reveils()
@@ -311,6 +314,36 @@ class Moteur:
                                     "compléter » est reposée")
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"outils manquants : {e}")
+
+    def _valider_les_lecons(self, projet, etat):
+        """Réglage `lecons_auto` (relu à chaque passage) : les leçons « à valider » sont validées d'elles-mêmes à l'étage
+        qu'elles proposent, comme un « Valider » du Directeur (même appel `lecon appliquer`, en un seul lot). Une leçon
+        que l'outil refuse reste « à valider » et n'est pas réessayée avant un redémarrage : rien n'est bloqué."""
+        if projet.fichier_reglages is not None:
+            try:
+                projet.lecons_auto = reglages_bureau.charger(projet.fichier_reglages)["lecons_auto"]
+            except reglages_bureau.ReglagesInvalides:
+                pass        # des réglages illisibles ne changent pas le dernier état connu
+        if not projet.lecons_auto:
+            return
+        essayees = etat.setdefault("lecons_auto_essayees", set())
+        try:
+            en_attente = regles.lancer(projet, "detail", {"lecons": True})["lecons"]
+            lot = [{"id": x["id"], "verdict": "valider", "etage": x.get("etage_propose") or "projet"}
+                   for x in en_attente if x["id"] not in essayees]
+            if not lot:
+                return
+            essayees.update(x["id"] for x in lot)
+            r = regles.lancer(projet, "lecon", {"action": "appliquer", "lot": lot})
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"leçons automatiques : {e}")
+            return
+        faites = [x for x in r["resultats"] if x.get("ok")]
+        if faites:
+            self._noter(projet, f"{len(faites)} leçon(s) validée(s) automatiquement")
+        for x in r["resultats"]:
+            if not x.get("ok"):
+                self._noter(projet, f"leçon {x['id']} laissée à valider : {x.get('refus')}")
 
     def _ecritures_en_attente(self, projet, etat):
         """Les leçons validées dont l'écriture dans la mémoire de la skill n'a pas abouti (dépôt occupé, push refusé) :

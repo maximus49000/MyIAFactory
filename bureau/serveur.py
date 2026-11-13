@@ -208,6 +208,7 @@ class Projet:
                 e["dossier"]["facturation"] = True
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
+            e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
             # Ce que le moteur dit retenir ce projet (la charge) : sur la carte de chaque tâche retenue et dans la barre.
@@ -1679,12 +1680,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, objet)
         try:
             corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
-            if not isinstance(corps, dict) or "charge_max" not in corps:
-                raise ValueError("Le corps doit contenir « charge_max ».")
-            nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
+            if isinstance(corps, dict) and "lecons_auto" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_lecons_auto(projet.chemin_reglages, corps["lecons_auto"])
+            else:
+                if not isinstance(corps, dict) or "charge_max" not in corps:
+                    raise ValueError("Le corps doit contenir « charge_max » ou « lecons_auto ».")
+                nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})
         nouveau.pop("dossier", None)
+        projet._cache_etat = (0.0, projet._cache_etat[1])   # le prochain état relit le réglage
         self._json(200, nouveau)
 
 

@@ -113,6 +113,8 @@ class Projet:
         # ce que le poste a déjà (outils.py de l'environnement) ; les essais le remplacent
         self.verifier_environnement = verifier_environnement or environnement.verifier
         self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
+        self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
+        self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base

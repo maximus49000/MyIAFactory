@@ -12,7 +12,9 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            "moteur": {"couche": "claude"}, "agents_cloud_max": 3,
            # Vrai quand le Directeur a accordé le dossier du projet pour les sessions cloud : le moteur répond alors
            # lui-même « Yes, I trust this folder » à Claude Code (jamais sans cet accord).
-           "cloud_dossier_approuve": False}
+           "cloud_dossier_approuve": False,
+           # Vrai quand le Directeur laisse le moteur valider lui-même les leçons proposées, au niveau qu'elles proposent.
+           "lecons_auto": False}
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
 
@@ -47,6 +49,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « agents_cloud_max » doit être un entier de 1 à 16.")
     if type(r.get("cloud_dossier_approuve")) is not bool:
         raise ReglagesInvalides("Réglages : « cloud_dossier_approuve » doit valoir true ou false.")
+    if type(r.get("lecons_auto")) is not bool:
+        raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
 
 
 MAX_PROJETS = 12
@@ -139,6 +143,17 @@ def lire_acces(v):
 def fixer_charge_max(chemin, valeur):
     if type(valeur) is not int or not 30 <= valeur <= 95:
         raise ValueError("La charge maximum doit être un entier entre 30 et 95.")
+    return _ecrire_cle(chemin, "charge_max", valeur)
+
+
+def fixer_lecons_auto(chemin, valeur):
+    """Note si le moteur valide lui-même les leçons proposées (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« lecons_auto » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "lecons_auto", valeur)
+
+
+def _ecrire_cle(chemin, cle, valeur):
     chemin = Path(chemin)
     donnees = {}
     if chemin.exists():
@@ -146,7 +161,7 @@ def fixer_charge_max(chemin, valeur):
             donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
         except (ValueError, OSError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
-    donnees["charge_max"] = valeur
+    donnees[cle] = valeur
     fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

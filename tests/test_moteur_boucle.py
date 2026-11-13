@@ -464,6 +464,77 @@ class Lecons(Base):
             self.assertEqual([e["action"] for e in vus], ["reessayer", "reessayer"])
         self.assertEqual(self.moteur.journal, [])
 
+    def etats(self):
+        return {x["id"]: x["etat"] for x in self.suivi()["lecons"]}
+
+    def test_decoche_la_lecon_reste_a_valider(self):
+        i = self.noter("Une leçon.")
+        vus, patch = self.espionner()
+        with patch:
+            self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "à valider"})
+        self.assertFalse([e for e in vus if e.get("action") == "appliquer"])
+
+    def test_coche_la_lecon_proposee_passe_validee_au_passage_suivant(self):
+        self.projet.lecons_auto = True
+        i = self.noter("Une leçon.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "validée"})
+        self.assertEqual(next(x for x in self.suivi()["lecons"] if x["id"] == i)["etage_applique"], "projet")
+        self.assertEqual(self.ok("etat")["lecons"], [])
+
+    def test_coche_les_lecons_deja_en_attente_sont_validees_au_niveau_propose(self):
+        a, b = self.noter("Une."), self.noter("Deux.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {a: "à valider", b: "à valider"})
+        self.projet.lecons_auto = True
+        vus, patch = self.espionner()
+        with patch:
+            self.moteur.tour()
+        (lot,) = [e["lot"] for e in vus if e.get("action") == "appliquer"]
+        self.assertEqual(lot, [{"id": a, "verdict": "valider", "etage": "projet"},
+                               {"id": b, "verdict": "valider", "etage": "projet"}])
+        self.assertEqual(self.etats(), {a: "validée", b: "validée"})
+
+    def test_l_etage_propose_est_celui_de_la_validation(self):
+        self.projet.lecons_auto = True
+        a = self.noter("Une.")
+        faux = lambda e: {"resultats": [{"id": a, "ok": True, "etage": "skill"}]}  # noqa: E731
+        vus, patch = self.espionner(lecon=faux)
+        s = self.suivi()
+        s["lecons"][0].update(etage_propose="skill", texte_general="Une règle générale.")
+        (self.dossier / "suivi.json").write_text(json.dumps(s), encoding="utf-8")
+        with patch:
+            self.moteur.tour()
+        (lot,) = [e["lot"] for e in vus if e.get("action") == "appliquer"]
+        self.assertEqual(lot, [{"id": a, "verdict": "valider", "etage": "skill"}])
+
+    def test_une_lecon_refusee_reste_a_valider_sans_etre_reessayee_ni_bloquer_les_autres(self):
+        self.projet.lecons_auto = True
+        a, b = self.noter("Une."), self.noter("Deux.")
+        faux = lambda e: {"resultats": [  # noqa: E731
+            {"id": a, "ok": False, "refus": "texte invalide"}, {"id": b, "ok": True, "etage": "projet"}]}
+        vus, patch = self.espionner(lecon=faux)
+        with patch:
+            self.moteur.tour()
+            self.moteur.tour()
+        self.assertEqual(len([e for e in vus if e.get("action") == "appliquer"]), 1)
+        self.assertTrue(any("texte invalide" in x for x in self.moteur.journal))
+
+    def test_le_reglage_est_relu_a_chaque_passage_et_a_l_ouverture(self):
+        reglages = self.dossier / "reglages.json"
+        reglages.write_text("{}", encoding="utf-8")
+        ouvert = boucle.ouvrir_projet(reglages)
+        self.assertEqual((ouvert.lecons_auto, ouvert.fichier_reglages), (False, reglages))
+        self.projet.fichier_reglages = ouvert.fichier_reglages
+        i = self.noter("Une leçon.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "à valider"})
+        reglages.write_text(json.dumps({"lecons_auto": True}), encoding="utf-8")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "validée"})
+        self.assertTrue(boucle.ouvrir_projet(reglages).lecons_auto)
+
 
 if __name__ == "__main__":
     unittest.main()

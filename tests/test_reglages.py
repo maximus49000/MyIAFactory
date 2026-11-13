@@ -40,6 +40,25 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
                 reglages.charger(self.tmp / "r.json")
 
+    def test_lecons_auto_faux_par_defaut_et_booleen_seulement(self):
+        self.assertIs(reglages.charger(self.tmp / "absent.json")["lecons_auto"], False)
+        (self.tmp / "r.json").write_text('{"lecons_auto": true}', encoding="utf-8")
+        self.assertIs(reglages.charger(self.tmp / "r.json")["lecons_auto"], True)
+        for v in (1, "true", None, 0):
+            (self.tmp / "r.json").write_text(json.dumps({"lecons_auto": v}), encoding="utf-8")
+            with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
+                reglages.charger(self.tmp / "r.json")
+
+    def test_fixer_lecons_auto_ecrit_et_conserve_le_reste(self):
+        (self.tmp / "r.json").write_text('{"port": 9000}', encoding="utf-8")
+        self.assertIs(reglages.fixer_lecons_auto(self.tmp / "r.json", True)["lecons_auto"], True)
+        d = json.loads((self.tmp / "r.json").read_text(encoding="utf-8"))
+        self.assertEqual(d, {"port": 9000, "lecons_auto": True})
+        for v in (1, "oui", None):
+            with self.assertRaises(ValueError):
+                reglages.fixer_lecons_auto(self.tmp / "r.json", v)
+        self.assertIs(json.loads((self.tmp / "r.json").read_text(encoding="utf-8"))["lecons_auto"], True)
+
     def test_fichier_avec_bom(self):
         # PowerShell 5.1 écrit un BOM avec -Encoding utf8.
         (self.tmp / "r.json").write_bytes(bytes([0xEF, 0xBB, 0xBF]) + b'{"charge_max": 60}')

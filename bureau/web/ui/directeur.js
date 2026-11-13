@@ -4,6 +4,7 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
+import {urlProjet} from "./projets.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
 import {sectionLieux} from "./lieux.js";
@@ -28,6 +29,50 @@ function lienTache(ctx, id, texte) {
   b.type = "button";
   b.addEventListener("click", () => ctx.ouvrirTache(id));
   return b;
+}
+
+export const AIDE_LECONS_AUTO = "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre " +
+  "ou skill). Les leçons genre et skill vont dans la skill partagée.";
+
+// Le réglage « Valider les leçons automatiquement » : une écriture des réglages du projet. Rend {ok, message} ; ne lève jamais.
+export async function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
+  try {
+    const r = await fetchFn(urlProjet("/api/reglages"), {
+      method: "POST",
+      headers: {"X-Bureau": "1", "Content-Type": "application/json"},
+      body: JSON.stringify({lecons_auto: valeur === true}),
+    });
+    if (r.ok) return {ok: true, message: valeur === true ? "Les leçons seront validées automatiquement." : "Les leçons attendent de nouveau le Directeur."};
+    let erreur = "";
+    try { erreur = (await r.json())?.erreur || ""; } catch { /* corps illisible */ }
+    return {ok: false, message: `Refusé : ${erreur || "le serveur a répondu " + r.status}`};
+  } catch {
+    return {ok: false, message: "Serveur du bureau injoignable."};
+  }
+}
+
+// La case, son aide et son message ; n'agit que par le serveur du bureau.
+function caseLeconsAuto(ctx) {
+  const e = ctx.etat;
+  const bloc = el("div", "lecons-auto");
+  const label = el("label", "lecons-auto-label");
+  const case_ = document.createElement("input");
+  case_.type = "checkbox";
+  case_.checked = e.lecons_auto === true;
+  label.append(case_, el("span", "", " Valider les leçons automatiquement"));
+  const message = el("p", "note", "");
+  message.setAttribute("aria-live", "polite");
+  case_.addEventListener("change", async () => {
+    const voulu = case_.checked;
+    case_.disabled = true;
+    const r = await enregistrerLeconsAuto(voulu);
+    case_.disabled = false;
+    if (r.ok) { e.lecons_auto = voulu; ctx.rouvrir?.(); }
+    else case_.checked = !voulu;   // refus : la case redit l'état réel
+    message.textContent = r.message;
+  });
+  bloc.append(label, el("p", "note", AIDE_LECONS_AUTO), message);
+  return bloc;
 }
 
 function carteLecon(ctx, l, etages) {
@@ -65,6 +110,8 @@ function carteLecon(ctx, l, etages) {
   if (l.refus) c.append(el("div", "bloquee-raison", "Pas écrite dans la mémoire : " + l.refus));   // la raison du dernier refus
   if (l.verdict_demande) {
     c.append(el("div", "lecon-verdict", `Verdict envoyé : ${l.verdict_demande}`));
+  } else if (e.lecons_auto === true) {
+    c.append(el("div", "lecon-verdict", "validée automatiquement"));
   } else if (e.agir) {
     const rangee = el("div", "lecon-boutons");
     const valider = el("button", "bouton", "Valider");
@@ -170,8 +217,9 @@ export function contenuDirecteur(ctx, contenu) {
   const menus = new Map();   // id de leçon -> son menu d'étage
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
+  if ((e.version ?? 1) >= 4 || e.lecons_auto === true) section.querySelector("h3").after(caseLeconsAuto(ctx));
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
-  if (e.agir && enAttente.length >= 2) {
+  if (e.agir && e.lecons_auto !== true && enAttente.length >= 2) {
     // Tout valider ou tout invalider, chaque leçon avec l'étage montré dans son menu (même s'il a été changé).
     const rangee = el("div", "lecon-boutons tout");
     const tout = (libelle, classe, verdict, question) => {

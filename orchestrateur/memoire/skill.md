@@ -375,3 +375,9 @@ Rôles : designer, dev
 Date : 2026-11-13
 
 Un test qui donne une donnée fausse à un contrôle doit vérifier que l'erreur visée apparaît (par un motif), pas seulement qu'une erreur nouvelle quelconque apparaît.
+
+## S63 — Quand une consigne interdit une catégorie de contenu, ajoute
+Rôles : dev
+Date : 2026-11-13
+
+Quand une consigne interdit une catégorie de contenu, ajouter un test automatique sur les noms et descriptions avec une liste de mots interdits, plutôt que de renommer à la main.

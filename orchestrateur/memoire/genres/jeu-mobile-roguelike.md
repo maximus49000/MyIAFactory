@@ -410,3 +410,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand un retour dit qu'une version améliorée d'une carte n'a pas d'effet, comparer pour chaque carte le texte de l'amélioration à ce que le moteur applique à ce niveau, et tester la version de base et l'améliorée avec les mêmes données.
+
+## G69 — Quand une version doit être validée par une personne, vérifi
+Rôles : dev
+Date : 2026-11-13
+
+Quand une version doit être validée par une personne, vérifier ce qu'elle voit au premier lancement avec une sauvegarde vide, pas avec le profil de test ; si du contenu est verrouillé par progression, prévoir un réglage d'essai dans les données qui le rend accessible.

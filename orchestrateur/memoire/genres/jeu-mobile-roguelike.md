@@ -446,3 +446,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand un contrôle impose un ordre entre catégories d'adversaires (normal < élite < champion < boss), lire cet ordre avant de régler un adversaire : une baisse du dernier de la chaîne oblige à baisser les précédents.
+
+## G75 — Une capture d'écran d'un moteur de jeu doit se faire dans un
+Rôles : dev
+Date : 2026-11-13
+
+Une capture d'écran d'un moteur de jeu doit se faire dans une fenêtre sans bordure, à la résolution cible, réimposée après les premières images ; le plein écran du système peut réduire la hauteur.

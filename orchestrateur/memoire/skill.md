@@ -483,3 +483,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une commande shell vers un outil externe est refusée sans approbation possible, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.
+
+## S81 — Quand les commandes composées exigent une approbation imposs
+Rôles : graphiste, equilibreur
+Date : 2026-11-13
+
+Quand les commandes composées exigent une approbation impossible, écrire un petit lanceur dans le langage du projet et l'appeler seul.

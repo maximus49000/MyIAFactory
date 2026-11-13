@@ -7,6 +7,7 @@ import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./act
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
 import {coutsDesTaches, libelleCout} from "./couts.js";
+import {titreAffiche} from "./repetitions.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -123,7 +124,7 @@ export function contenuTache(ctx, contenu, t) {
     retour.addEventListener("click", ctx.ouvrirListe);
     contenu.append(retour);
   }
-  contenu.append(el("h2", "", t.titre));
+  contenu.append(el("h2", "", titreAffiche(e, t)));      // « Retour 2 – … » pour une étape refaite
   if (t.resume) {          // l'objectif de la tâche : élément, étape, dernière consigne (servi par le relevé)
     const r = el("p", "resume-tache");
     r.append(el("strong", "", "Objectif : "), document.createTextNode(t.resume));

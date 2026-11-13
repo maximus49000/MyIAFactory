@@ -18,3 +18,21 @@ test("l'historique d'un agent : ses tâches faites, les plus récentes d'abord, 
   assert.deepEqual(tachesFaites(e, "dev").map((t) => t.id), ["b", "a"]);
   assert.equal(serviceDeTache(e, {}, {service: "dev"}), "Développement");
 });
+
+import {prefixesDeRepetition, titreAffiche} from "../ui/repetitions.js";
+
+test("les tâches refaites au même titre : Retour 1, Retour 2 (renvoi du Directeur), Reprise sinon", () => {
+  const titre = "Conception des personnages et cartes : 2e passe graphique Tripo";
+  const e = {taches: [
+    {id: "t30", titre, journal: [{texte: "L'agent n'a pas rendu de rapport"}]},
+    {id: "t43", titre, journal: [{texte: "Remarque du Directeur : points à revoir : …"}]},
+    {id: "t46", titre, journal: [{texte: "Remarque du Directeur : points à revoir : …"}]},
+    {id: "t50", titre, journal: [{texte: "Reprise après une panne"}]},
+    {id: "t9", titre: "Unique"}]};
+  const p = prefixesDeRepetition(e);
+  assert.equal(p.get("t30"), undefined);
+  assert.equal(titreAffiche(e, e.taches[1], p), "Retour 1 – " + titre);
+  assert.equal(titreAffiche(e, e.taches[2], p), "Retour 2 – " + titre);
+  assert.equal(p.get("t50"), "Reprise 1");
+  assert.equal(titreAffiche(e, e.taches[4], p), "Unique");
+});

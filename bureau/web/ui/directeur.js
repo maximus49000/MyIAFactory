@@ -8,6 +8,7 @@ import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout} from "./couts.js";
+import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
@@ -259,9 +260,10 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     const histo = el("ul", "liste-partie historique-agent");
     if (!faites.length) histo.append(el("li", "vide", "Aucune tâche réalisée pour l'instant"));
     const montants = [];
+    const prefixes = prefixesDeRepetition(e);
     for (const t of faites) {
       const li = el("li", "");
-      li.append(lienTache(ctx, t.id, tronquer(`${serviceDeTache(e, t, a)} – ${t.titre}`, MAX_TITRE)));
+      li.append(lienTache(ctx, t.id, tronquer(`${serviceDeTache(e, t, a)} – ${titreAffiche(e, t, prefixes)}`, MAX_TITRE)));
       const m = el("span", "cout-montant", "…");
       li.append(m);
       montants.push([t, m]);
@@ -293,3 +295,4 @@ export function serviceDeTache(etat, t, agent) {
   const id = t?.service || agent?.service;
   return (etat?.services || []).find((s) => s.id === id)?.nom || "—";
 }
+

@@ -416,3 +416,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une version doit être validée par une personne, vérifier ce qu'elle voit au premier lancement avec une sauvegarde vide, pas avec le profil de test ; si du contenu est verrouillé par progression, prévoir un réglage d'essai dans les données qui le rend accessible.
+
+## G70 — Un titre de calque modal ne doit pas recouvrir la barre d'en
+Rôles : dev
+Date : 2026-11-13
+
+Un titre de calque modal ne doit pas recouvrir la barre d'en-tête de l'écran ; à vérifier sur capture réelle.

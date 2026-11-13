@@ -459,3 +459,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.
+
+## S77 — Quand une commande shell simple est refusée faute d'approbat
+Rôles : dev
+Date : 2026-11-13
+
+Quand une commande shell simple est refusée faute d'approbation, passer par un lanceur Python du projet qui trouve l'outil à sa place.

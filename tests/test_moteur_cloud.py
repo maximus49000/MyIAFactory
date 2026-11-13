@@ -44,7 +44,7 @@ class Session(unittest.TestCase):
 
     def test_lancer_session_refus(self):
         ok = Executeur({"claude --cloud": (0, ADRESSE.encode())})
-        for depart, modele, ex in (("x" * 30000, "sonnet", ok), ("x", "fable", ok),
+        for depart, modele, ex in (("x", "fable", ok),
                                    ("x", "sonnet", Executeur({"git push": (1, b"rejected")})),
                                    ("x", "sonnet", Executeur({"claude --cloud": (0, b"rien d'utile")})),
                                    ("x", "sonnet", Executeur({"claude --cloud": (1, b"boum")}))):
@@ -53,6 +53,24 @@ class Session(unittest.TestCase):
         self.assertNotIn(["claude"], [a[:1] for a in Executeur().appels])
         with self.assertRaises(cloud.ErreurCloud):
             cloud.lancer_session("x", dossier_projet="/p", modele="sonnet", executer=ok, trouver=lambda: None)
+
+    def test_un_message_trop_long_passe_par_un_fichier_du_depot(self):
+        """Essai réel : le départ d'un agent polyvalent (consigne du métier et leçons) dépassait la ligne de commande et
+        tombait sur la démarche manuelle. Il va maintenant dans `.factory/departs/`, commité et poussé avec le dépôt."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            ex = Executeur({"claude --cloud": (0, ADRESSE.encode())})
+            long = "Consigne du métier. " * 2000
+            cloud.lancer_session(long, dossier_projet=d, modele="sonnet", executer=ex, trouver=CLAUDE)
+            fichiers = list((Path(d) / ".factory" / "departs").glob("depart-*.md"))
+            self.assertEqual(len(fichiers), 1)
+            self.assertEqual(fichiers[0].read_text(encoding="utf-8"), long)
+            commandes = [" ".join(a[:3]) for a in ex.appels]
+            self.assertLess(commandes.index("git add --"), commandes.index("git push"))
+            depart = next(a for a in ex.appels if a[:2] == ["claude", "--cloud"])[2]
+            self.assertLess(len(depart), 400)
+            self.assertIn(".factory/departs/depart-", depart)
 
     def test_la_cle_api_n_est_pas_transmise(self):
         import os

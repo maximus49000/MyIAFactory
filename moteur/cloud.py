@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import time
+from pathlib import Path
 
 from moteur import appel, rapport
 
@@ -100,6 +101,28 @@ def prerequis(dossier_projet, *, executer=None, trouver=appel.trouver_claude):
     return None
 
 
+DOSSIER_DEPARTS = ".factory/departs"
+
+
+def _depart_en_fichier(executer, dossier_projet, depart):
+    """Écrit le message de départ dans `.factory/departs/depart-<empreinte>.md` du projet, le commite seul et rend la
+    consigne courte qui le remplace en ligne de commande. `ErreurCloud` si le fichier ne peut pas être commité."""
+    import hashlib
+    nom = f"depart-{hashlib.sha256(depart.encode('utf-8')).hexdigest()[:12]}.md"
+    relatif = f"{DOSSIER_DEPARTS}/{nom}"
+    chemin = Path(dossier_projet) / DOSSIER_DEPARTS / nom
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(depart, encoding="utf-8", newline="\n")
+    code, sortie = _git(executer, dossier_projet, "add", "--", relatif)
+    if code == 0:
+        code, sortie = _git(executer, dossier_projet, "commit", "-q", "-m", "Départ d'une session cloud (message long)",
+                            "--", relatif)
+    if code != 0 and "nothing to commit" not in _texte(sortie) and "rien à valider" not in _texte(sortie):
+        raise ErreurCloud("le message de départ, trop long, n'a pas pu être mis dans le dépôt : " + _texte(sortie)[:200])
+    return (f"Ton message de départ complet est dans le fichier `{relatif}` de ce dépôt : lis-le entièrement maintenant, "
+            "puis fais exactement ce qu'il demande (consignes, tâche, rapport attendu).")
+
+
 def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=appel.trouver_claude, terminal=None,
                    approuver_dossier=False):
     """Pousse le dépôt puis lance la session cloud. Rend `{"session", "adresse"}`. Lève `ErreurCloud`.
@@ -108,9 +131,11 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     (`terminal`, par défaut `pseudo_terminal.lancer`) quand le poste en a un ; `approuver_dossier` n'est vrai que si
     l'utilisateur a accordé ce dossier (sinon `ErreurDossierAApprouver`). Sans faux terminal : la commande directe, qui
     échoue avec une raison claire (la démarche manuelle prend alors le relais)."""
-    if len(depart) > LONGUEUR_MAX_DEPART:
-        raise ErreurCloud("le message de départ est trop long pour la ligne de commande")
     m = (modele or "").strip().lower()
+    if "fable" not in m and m in appel.MODELES and len(depart) > LONGUEUR_MAX_DEPART:
+        # Trop long pour la ligne de commande (essai réel : la consigne complète du métier et ses leçons d'un agent
+        # polyvalent) : le message va dans un fichier du dépôt, poussé avec lui ; la session reçoit l'ordre de le lire.
+        depart = _depart_en_fichier(executer, dossier_projet, depart)
     if "fable" in m or m not in appel.MODELES:
         raise ErreurCloud("le moteur ne choisit jamais Fable" if "fable" in m else f"modèle inconnu : {modele}")
     claude = trouver()

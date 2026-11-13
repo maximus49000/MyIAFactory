@@ -6,7 +6,7 @@ import {tronquer, dateFr, euros} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
-  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache} from "./actions.js";
+  demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
@@ -438,17 +438,17 @@ function decisionAccordAgent(ctx, d) {
     retenir.addEventListener("change", () => { regle.hidden = !retenir.checked; });
     li.append(etiquette, regle);
   }
-  const retenue = () => (retenir && retenir.checked ? regle.value : undefined);
+  const retenue = (verdict, c) => (retenir && retenir.checked ? regleSelonLaReponse(d, regle.value, verdict, c) : undefined);
   const avant = () => (retenir && retenir.checked ? regleValide(ctx, regle.value) : true);   // coché mais vide : rien ne part
   const rangee = el("div", "lecon-boutons");
   const choix = (Array.isArray(d.choix) ? d.choix : []).filter(plein);
   if (choix.length) {     // l'agent a proposé des choix : ses boutons, la demande n'est pas écartée
     for (const c of choix) {
-      rangee.append(boutonDemande(ctx, c, "bouton secondaire", () => demandeAccordAgent(d, "choisir", consigne.value, retenue(), c), avant));
+      rangee.append(boutonDemande(ctx, c, "bouton secondaire", () => demandeAccordAgent(d, "choisir", consigne.value, retenue("choisir", c), c), avant));
     }
   } else {
-    rangee.append(boutonDemande(ctx, "J'accepte", "bouton", () => demandeAccordAgent(d, "accepter", consigne.value, retenue()), avant),
-                  boutonDemande(ctx, "Je refuse", "bouton secondaire", () => demandeAccordAgent(d, "refuser", consigne.value, retenue()), avant));
+    rangee.append(boutonDemande(ctx, "J'accepte", "bouton", () => demandeAccordAgent(d, "accepter", consigne.value, retenue("accepter")), avant),
+                  boutonDemande(ctx, "Je refuse", "bouton secondaire", () => demandeAccordAgent(d, "refuser", consigne.value, retenue("refuser")), avant));
   }
   li.append(rangee);
   return li;

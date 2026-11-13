@@ -304,6 +304,19 @@ export function regleProposee(decision) {
   return t.trim().slice(0, MAX_REGLE_PROJET);
 }
 
+// La règle retenue suit la réponse du Directeur quand il n'a pas réécrit le texte proposé (essai réel : il répond
+// « Oui, lancer le test sur émulateur » et la règle notée disait « Pas de : Lancer le test… ») : accepter → « Autorisé :
+// … », refuser → « Pas de : … », un choix → « <quoi> : <choix> ». Un texte réécrit par le Directeur est gardé tel quel.
+export function regleSelonLaReponse(decision, texte, verdict, choix) {
+  const quoi = plein(decision?.quoi) ? decision.quoi.trim() : "";
+  if (!quoi || plein(decision?.regle_proposee) || String(texte ?? "").trim() !== regleProposee(decision)) {
+    return String(texte ?? "").trim();      // une règle proposée par le moteur, ou un texte réécrit : gardé tel quel
+  }
+  const t = verdict === "accepter" ? `Autorisé : ${quoi}` : verdict === "choisir" && plein(choix) ? `${quoi} : ${choix.trim()}`
+    : `Pas de : ${quoi}`;
+  return t.slice(0, MAX_REGLE_PROJET);
+}
+
 // « Lot L2, tâche 3 sur 4 » ; null si la tâche n'est pas dans un lot. Le nombre de tâches du lot est celui des tâches
 // du relevé qui portent le même identifiant de lot (au moins le rang de celle-ci).
 export function libelleLot(tache, taches) {

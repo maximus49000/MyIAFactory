@@ -531,3 +531,19 @@ test("bureau de direction : l'avis de fin (Vu) et la série arrêtée (Relancer 
   const vu = rendre({...etat, fonctionnalites: [{...etat.fonctionnalites[0], fin: {...FIN, vu: true}}], decisions_projet: []});
   assert.doesNotMatch(vu.contenu.textContent, /Fonctionnalités terminées/);
 });
+
+import {regleSelonLaReponse} from "../ui/actions.js";
+
+test("la règle retenue suit la réponse (essai réel : « Oui » notait « Pas de : … »)", () => {
+  const d = {quoi: "Lancer le test sur émulateur"};
+  const propose = "Pas de : Lancer le test sur émulateur";
+  assert.equal(regleSelonLaReponse(d, propose, "accepter"), "Autorisé : Lancer le test sur émulateur");
+  assert.equal(regleSelonLaReponse(d, propose, "refuser"), "Pas de : Lancer le test sur émulateur");
+  assert.equal(regleSelonLaReponse(d, propose, "choisir", "Oui, lancer le test"), "Lancer le test sur émulateur : Oui, lancer le test");
+  assert.equal(regleSelonLaReponse(d, "Mon texte à moi", "accepter"), "Mon texte à moi");     // réécrit : gardé
+});
+
+test("une règle proposée par le moteur reste telle quelle", () => {
+  const d = {quoi: "adb install", regle_proposee: "Pas de test sur appareil : émulateur."};
+  assert.equal(regleSelonLaReponse(d, "Pas de test sur appareil : émulateur.", "accepter"), "Pas de test sur appareil : émulateur.");
+});

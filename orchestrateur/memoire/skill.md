@@ -531,3 +531,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Un journal de mesures périmé sans changement de valeurs se régénère avant de conclure ; sans cible chiffrée, on ne change aucune valeur.
+
+## S89 — Avant de refaire un habillage graphique demandé, chercher da
+Rôles : graphiste
+Date : 2026-11-13
+
+Avant de refaire un habillage graphique demandé, chercher dans l'historique si un commit l'a déjà livré ; si oui, relire la capture, signaler les défauts mineurs, ne rien régénérer.

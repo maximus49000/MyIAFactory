@@ -51,3 +51,18 @@ test("les tâches d'un service : en cours puis réalisées, d'après ses agents 
   assert.deepEqual(enCours.map((t) => t.id), ["t1"]);
   assert.deepEqual(faites.map((t) => t.id), ["t3", "t2", "t4"]);
 });
+
+import {minutesDeTache, libelleDuree, totalDesTaches, libelleTotal} from "../ui/couts.js";
+
+test("le temps d'une tâche : de son départ à sa fin ; en cours, jusqu'ici", () => {
+  const maintenant = new Date("2026-11-13T12:00:00+01:00");
+  const finie = {id: "a", colonne: "fait", debut: "2026-11-13T10:00:00+01:00", fin: "2026-11-13T11:05:00+01:00"};
+  assert.equal(minutesDeTache(finie, maintenant), 65);
+  assert.equal(libelleDuree(finie, maintenant), "1 h 05");
+  const enCours = {id: "b", colonne: "dev", travail: {depuis: "2026-11-13T11:48:00+01:00"}};
+  assert.equal(libelleDuree(enCours, maintenant), "12 min jusqu'ici");
+  assert.equal(libelleDuree({id: "c", colonne: "fait"}, maintenant), null);
+  const tot = totalDesTaches([finie, enCours, {id: "c", colonne: "fait"}], {a: {total: 1, sans_prix: 0}, c: {total: 0.5, sans_prix: 0}}, maintenant);
+  assert.deepEqual(tot, {euros: 1.5, sans_prix: 0, minutes: 77, inconnues: 1});
+  assert.equal(libelleTotal(tot), "Total : ≈ 1,50 € · 1 h 17 (dont 1 sans durée connue)");
+});

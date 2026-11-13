@@ -8,7 +8,7 @@ import {challengesDuService} from "./actions.js";
 import {contenuConnaissances} from "./connaissances.js";
 import {contenuKpi, rappelAlertes} from "./kpi.js";
 import {contenuChallenge} from "./challenge.js";
-import {coutsDesTaches, libelleCout} from "./couts.js";
+import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 
 const MAX_TITRE = 90;
@@ -53,8 +53,14 @@ function contenuTaches(ctx, conteneur, service) {
   const {enCours, faites} = tachesDuService(e, service);
   const prefixes = prefixesDeRepetition(e);
   const couts = [];
+  const totaux = [];
   function liste(titre, taches, vide) {
     conteneur.append(el("div", "carte-sous-titre", `${titre} (${taches.length})`));
+    if (taches.length) {      // le total de la liste : en euros et en temps
+      const total = el("p", "total-taches", "…");
+      conteneur.append(total);
+      totaux.push([taches, total]);
+    }
     const ul = el("ul", "liste-taches");
     if (!taches.length) ul.append(el("li", "vide", vide));
     for (const t of taches) {
@@ -76,7 +82,10 @@ function contenuTaches(ctx, conteneur, service) {
   liste("Tâches en cours", enCours, "Aucune tâche en cours");
   liste("Tâches réalisées", faites, "Aucune tâche réalisée pour l'instant");
   if (couts.length) {
-    coutsDesTaches().then((c) => { for (const [t, cible] of couts) if (cible.isConnected) cible.textContent = libelleCout(t, c); });
+    coutsDesTaches().then((c) => {
+      for (const [t, cible] of couts) if (cible.isConnected) cible.textContent = [libelleCout(t, c), libelleDuree(t)].filter(Boolean).join(" · ");
+      for (const [taches, cible] of totaux) if (cible.isConnected) cible.textContent = libelleTotal(totalDesTaches(taches, c));
+    });
   }
 }
 

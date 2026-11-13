@@ -7,7 +7,7 @@ import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
-import {coutsDesTaches, libelleCout} from "./couts.js";
+import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 
@@ -257,6 +257,8 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     // L'historique : toutes les tâches qu'il a faites (service – tâche), chacune avec son coût, chacune ouvrable.
     const faites = tachesFaites(e, a.id);
     contenu.append(el("div", "carte-sous-titre", `Tâches réalisées (${faites.length})`));
+    const total = el("p", "total-taches", faites.length ? "…" : "");
+    if (faites.length) contenu.append(total);
     const histo = el("ul", "liste-partie historique-agent");
     if (!faites.length) histo.append(el("li", "vide", "Aucune tâche réalisée pour l'instant"));
     const montants = [];
@@ -270,7 +272,12 @@ export function contenuAgent(ctx, contenu, a, statuts) {
       histo.append(li);
     }
     contenu.append(histo);
-    if (montants.length) coutsDesTaches().then((c) => { for (const [t, m] of montants) m.textContent = libelleCout(t, c); });
+    if (montants.length) {
+      coutsDesTaches().then((c) => {
+        for (const [t, m] of montants) m.textContent = [libelleCout(t, c), libelleDuree(t)].filter(Boolean).join(" · ");
+        if (total.isConnected) total.textContent = libelleTotal(totalDesTaches(faites, c));
+      });
+    }
   }
 
   contenu.append(el("div", "carte-sous-titre", "Leçons"));

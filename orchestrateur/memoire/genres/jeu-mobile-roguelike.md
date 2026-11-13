@@ -530,3 +530,9 @@ Rôles : tous
 Date : 2026-11-13
 
 Un test sur émulateur n'est réussi que si ses captures montrent l'application : une capture noire, uniforme ou d'une invite système est un échec, à détecter par le test lui-même. Sur un émulateur sans fenêtre, un rendu Vulkan peut rester noir : préférer un rendu OpenGL de compatibilité et confirmer les invites système par adb avant le lancement.
+
+## G89 — Pour contrôler un paquet d'application, comparer chaque fich
+Rôles : release
+Date : 2026-11-13
+
+Pour contrôler un paquet d'application, comparer chaque fichier de données du dépôt au contenu décompressé de chaque entrée du paquet, octet par octet, et ne pas se fier à la seule présence des fichiers.

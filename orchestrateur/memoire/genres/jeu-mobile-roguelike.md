@@ -524,3 +524,9 @@ Rôles : release
 Date : 2026-11-13
 
 Un paquet signé avec la clé de débogage du poste n'est pas une version de publication : la clé vient du propriétaire du projet, hors du dépôt, et l'agent ne la crée jamais.
+
+## G88 — Un test sur émulateur n'est réussi que si ses captures montr
+Rôles : tous
+Date : 2026-11-13
+
+Un test sur émulateur n'est réussi que si ses captures montrent l'application : une capture noire, uniforme ou d'une invite système est un échec, à détecter par le test lui-même. Sur un émulateur sans fenêtre, un rendu Vulkan peut rester noir : préférer un rendu OpenGL de compatibilité et confirmer les invites système par adb avant le lancement.

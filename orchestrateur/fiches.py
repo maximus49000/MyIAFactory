@@ -68,22 +68,47 @@ def lire_fiche(chemin):
                 lecons.append({"etat": m.group(1), "id": m.group(2), "texte": m.group(3)})
         else:
             corps.append(ligne)
-    for c in ("Clé", "Rôle", "Modèle", "Lieu"):
-        if not champs.get(c):
-            raise FicheInvalide(f"Fiche {chemin.name} : « {c} » est obligatoire.")
+    polyvalente = not champs.get("Rôle")
+    if polyvalente:
+        # Une fiche polyvalente n'a que l'identité : le métier, le service, le modèle et les leçons sont ceux de la tâche.
+        for c in ("Clé", "Lieu"):
+            if not champs.get(c):
+                raise FicheInvalide(f"Fiche {chemin.name} : « {c} » est obligatoire.")
+        for c in ("Modèle", "Service", "Fable"):
+            if champs.get(c):
+                raise FicheInvalide(f"Fiche {chemin.name} : un agent polyvalent n'a pas de « {c} » (le modèle suit la "
+                                    "tâche, le service suit son métier).")
+        if lecons:
+            raise FicheInvalide(f"Fiche {chemin.name} : un agent polyvalent n'a pas de leçons (elles sont dans le "
+                                "brief du métier).")
+    else:
+        for c in ("Clé", "Rôle", "Modèle", "Lieu"):
+            if not champs.get(c):
+                raise FicheInvalide(f"Fiche {chemin.name} : « {c} » est obligatoire.")
     accord = champs.get("Fable") or None
     if accord is not None and not ACCORD_FABLE.match(accord):
         raise FicheInvalide(f"Fiche {chemin.name} : « Fable » doit dire « accordé par le Directeur le AAAA-MM-JJ ».")
-    if champs["Modèle"] not in MODELES and not (champs["Modèle"] == "Fable" and accord):
+    if not polyvalente and champs["Modèle"] not in MODELES and not (champs["Modèle"] == "Fable" and accord):
         raise FicheInvalide(f"Fiche {chemin.name} : « Modèle » doit valoir Haiku, Sonnet ou Opus (Fable seulement "
                             "avec l'accord du Directeur, ligne « Fable : »).")
     if champs["Lieu"] not in ("local", "cloud"):
         raise FicheInvalide(f"Fiche {chemin.name} : « Lieu » doit valoir local ou cloud.")
-    return {"cle": champs["Clé"], "prenom": champs.get("Prénom") or None, "role": champs["Rôle"],
-            "service": champs.get("Service") or None, "modele": champs["Modèle"], "lieu": champs["Lieu"],
+    return {"cle": champs["Clé"], "prenom": champs.get("Prénom") or None, "role": champs.get("Rôle") or None,
+            "service": champs.get("Service") or None, "modele": champs.get("Modèle") or None, "lieu": champs["Lieu"],
             "session": champs.get("Session") or None, "specialite": champs.get("Spécialité") or None,
             "outils": champs.get("Outils") or None, "fable": accord,
             "texte": "\n".join(corps).strip(), "lecons": lecons, "chemin": chemin}
+
+
+def est_polyvalente(fiche):
+    """Vrai pour une fiche sans rôle : un agent qui prend n'importe quelle tâche, en spécialiste du métier de la tâche."""
+    return isinstance(fiche, dict) and not fiche.get("role")
+
+
+def nouvelle_fiche(cle, prenom, lieu, session=None):
+    """Une fiche d'agent polyvalent (à compléter de `chemin` avant `ecrire_fiche`)."""
+    return {"cle": cle, "prenom": prenom, "role": None, "service": None, "modele": None, "lieu": lieu,
+            "session": session, "specialite": None, "outils": None, "fable": None, "texte": "", "lecons": []}
 
 
 def lire_toutes(dossier):

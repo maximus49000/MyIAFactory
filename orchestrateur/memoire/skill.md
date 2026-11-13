@@ -417,3 +417,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une nouvelle consigne annule une consigne précédente sur le même point, remplacer l'ancien comportement, son texte affiché et sa documentation, puis noter l'interprétation retenue pour la faire confirmer.
+
+## S70 — Quand un seul test de données de mesure périmées échoue dans
+Rôles : dev
+Date : 2026-11-13
+
+Quand un seul test de données de mesure périmées échoue dans une suite, le signaler comme dette de l'étape d'équilibrage plutôt que de modifier l'élément en cours ; relancer la mesure suffit à le résoudre.

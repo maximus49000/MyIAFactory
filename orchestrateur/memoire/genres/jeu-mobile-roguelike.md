@@ -476,3 +476,9 @@ Rôles : graphiste
 Date : 2026-11-13
 
 Pour un habillage 2D généré par code, regrouper les icônes dans une classe de dessin à repère normalisé associée à une table id→forme ; pour des captures sans écran, lancer le moteur sous un écran virtuel avec rendu OpenGL logiciel.
+
+## G80 — Un jeu testé seulement par ses tests unitaires peut passer s
+Rôles : qa
+Date : 2026-11-13
+
+Un jeu testé seulement par ses tests unitaires peut passer sans que ses écrans, ses textes ou son orientation soient vérifiés ; ces points demandent un parcours complet sur appareil ou émulateur.

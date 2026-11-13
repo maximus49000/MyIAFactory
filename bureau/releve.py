@@ -1366,7 +1366,7 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
         cle = t.get("cle")
         if "modele" in t and not isinstance(t["modele"], str):
             erreurs.append(f"Titulaire « {cle} » : « modele » doit être un texte.")
-        for champ in ("permanent", "chef", "polyvalent", "retrait_prevu"):
+        for champ in ("permanent", "chef", "polyvalent", "retrait_prevu", "retire"):
             if champ in t and not isinstance(t[champ], bool):
                 erreurs.append(f"Titulaire « {cle} » : « {champ} » doit être vrai ou faux.")
         f = t.get("fraicheur_min")

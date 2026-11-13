@@ -245,7 +245,9 @@ class TestReprise(Base):
         tache = next(t for t in su.Suivi(self.suivi_chemin()).lire()["taches"] if t["agent"] == "graphiste-1")
         self.ok("tache", entree={"id": tache["id"], "colonne": "fait", "active": False})
         self.ok("equipe")
-        self.assertEqual(sorted(x["cle"] for x in self.equipe() if x["lieu"] == "local"), ["designer-1", "dev-1"])
+        self.assertEqual(sorted(x["cle"] for x in self.equipe() if x["lieu"] == "local" and not x["retire"]),
+                         ["designer-1", "dev-1"])
+        self.assertTrue(fiches.trouver(self.equipe(), "graphiste-1")["retire"])     # gardé pour l'historique
 
     def test_aucun_agent_cloud_au_dela_des_places(self):
         self.reprendre()

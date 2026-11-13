@@ -240,7 +240,8 @@ class RetraitPrevu(Base):
         self.assertTrue((self.dossier / "fiches" / "agent-2.md").is_file())
         self.ok("tache", entree={"id": t, "colonne": "fait", "active": False})
         self.demarrer()
-        self.assertFalse((self.dossier / "fiches" / "agent-2.md").exists())
+        # retiré, mais gardé (il a une tâche au suivi) : Retrait : fait
+        self.assertIn("Retrait : fait", (self.dossier / "fiches" / "agent-2.md").read_text(encoding="utf-8"))
         self.assertTrue((self.dossier / "fiches" / "agent-1.md").is_file())
 
     def test_agent_marque_ne_prend_pas_la_tache(self):

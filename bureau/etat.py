@@ -101,10 +101,15 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         taches_de.setdefault(t.get("titulaire"), []).append(t)
 
     agents = []
+    anciens_agents = []      # retirés de l'équipe : gardés pour l'historique de leurs tâches, jamais dessinés
     presents = set()
     for ti in r["titulaires"]:
         cle = ti["cle"]
         siennes = taches_de.get(cle, [])
+        if ti.get("retire") is True:
+            fiche = eq.agent(cle, chef=False, prenom=ti.get("prenom") or None)
+            anciens_agents.append({"id": cle, "prenom": fiche["prenom"], "couleur": fiche["couleur"], "lieu": ti["lieu"]})
+            continue
         if not statuts.present(ti, siennes, maintenant):
             continue
         presents.add(cle)
@@ -207,6 +212,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         "lecons_en_attente": list(r.get("lecons_en_attente") or []),
         "directeur": directeur,
         "agents": agents,
+        "anciens_agents": anciens_agents,
         "taches": taches,
         "dossier": dossier(r),
         "challenges": list(r.get("challenges") or []),

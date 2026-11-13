@@ -35,7 +35,7 @@ class Base(AvecProjet):
         return self.ok("parallelisme", entree={"agents_locaux_max": locaux, "agents_cloud_max": cloud})
 
     def compte(self, lieu):
-        return sorted(x["cle"] for x in self.equipe() if x["lieu"] == lieu)
+        return sorted(x["cle"] for x in self.equipe() if x["lieu"] == lieu and not x["retire"])
 
     def tache_active(self, agent):
         return self.ok("tache", entree={"titre": "Travail", "role": "dev", "agent": agent, "active": True})["id"]

@@ -472,15 +472,17 @@ def equipe_pure(fiches):
     agents = _sans_chef(fiches)
     if not agents or any(x.get("role") for x in agents):
         return None
-    return agents
+    return [x for x in agents if not x.get("retire")]      # un agent retiré n'est plus de l'équipe
 
 
-def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True):
+def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True, avec_taches=frozenset()):
     """Ce qu'il faut faire pour que l'équipe soit égale aux places : `{creer: [lieu…], retirer: [clé…], marquer: [clé…],
     demarquer: [clé…]}`. Un agent au travail (`occupes`) n'est jamais retiré : il est marqué (`retrait_prevu`), plus
     choisi, et retiré une fois sa tâche finie. Les agents libres partent d'abord (sans session cloud d'abord, les
     derniers de la liste d'abord) ; une place remontée annule d'abord les retraits prévus avant de créer un agent.
-    `creer` faux : rien n'est créé ni démarqué (le moteur ne fait que retirer). Rejouable sans effet."""
+    `creer` faux : rien n'est créé ni démarqué (le moteur ne fait que retirer). Rejouable sans effet. Les agents déjà
+    retirés (`Retrait : fait`) ne comptent pas. `avec_taches` : les clés qui ont au moins une tâche au suivi ; on retire
+    d'abord ceux qui n'en ont aucune (leur fiche part), puis les autres (gardés, retirés)."""
     plan = {"creer": [], "retirer": [], "marquer": [], "demarquer": []}
     agents = equipe_pure(fiches)
     if agents is None:
@@ -493,7 +495,9 @@ def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True):
         marques = [x for x in restants if x.get("retrait_prevu")]
         if len(gardes) > voulu:
             en_trop = len(gardes) - voulu
-            libres = sorted((x for x in reversed(gardes) if x["cle"] not in occupes), key=lambda x: bool(x.get("session")))
+            # d'abord ceux qui n'ont réalisé aucune tâche (leur fiche sera supprimée), puis les autres (gardés, retirés)
+            libres = sorted((x for x in reversed(gardes) if x["cle"] not in occupes),
+                            key=lambda x: (x["cle"] in avec_taches, bool(x.get("session"))))
             for x in libres[:en_trop]:
                 plan["retirer"].append(x["cle"])
             en_trop -= min(en_trop, len(libres))

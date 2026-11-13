@@ -620,6 +620,8 @@ def _agents(ctx, s, fiches):
     sessions, occupes = ctx.sessions(), {t["agent"] for t in s["taches"] if t.get("active") and t.get("agent")}
     sortie = []
     for x in fiches:
+        if x.get("retire"):      # retiré de l'équipe : gardé pour l'historique, jamais libre ni compté
+            continue
         retrait = bool(x.get("retrait_prevu"))     # l'équipe a perdu sa place : il finit sa tâche, rien d'autre
         sortie.append({"cle": x["cle"], "role": x["role"], "service": x["service"], "modele": x["modele"],
                        "lieu": x["lieu"], "session": sessions.get(x["cle"]) or x["session"],
@@ -2136,6 +2138,8 @@ def construire_releve(ctx):
             t["chef"] = True
         elif fi.est_polyvalente(x):      # ni service ni modèle : ceux de la tâche qu'il tient
             t["polyvalent"] = True
+            if x.get("retire"):      # retiré de l'équipe : gardé pour l'historique de ses tâches, jamais libre
+                t["retire"] = True
             t["service"] = en_cours.get(x["cle"])
             if x.get("retrait_prevu"):
                 t["retrait_prevu"] = True
@@ -3118,6 +3122,15 @@ def places_cloud_du_projet(ctx):
                                any(x["lieu"] == "cloud" for x in ctx.fiches()))
 
 
+def retirer_l_agent(fiche, a_des_taches):
+    """Retire un agent de l'équipe : avec au moins une tâche au suivi, sa fiche est gardée, inactive (`Retrait : fait`),
+    pour l'historique de ses tâches ; sans tâche, elle est supprimée. Rejouable."""
+    if not a_des_taches:
+        Path(fiche["chemin"]).unlink(missing_ok=True)
+        return
+    fi.ecrire_fiche(dict(fiche, retire=True, retrait_prevu=False))
+
+
 def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
@@ -3129,11 +3142,13 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
         if rc.equipe_pure(fiches_) is None:
             return vide
         occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
-        plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer)
+        avec_taches = {t["agent"] for t in suivi["taches"] if t.get("agent")}
+        plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer,
+                                 avec_taches)
         plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
         par_cle = {x["cle"]: x for x in fiches_}
         for cle in plan["retirer"]:
-            Path(par_cle[cle]["chemin"]).unlink(missing_ok=True)
+            retirer_l_agent(par_cle[cle], cle in avec_taches)
         for cle in plan["marquer"]:
             if not par_cle[cle].get("retrait_prevu"):
                 par_cle[cle]["retrait_prevu"] = True
@@ -3472,7 +3487,7 @@ def _modele_et_lieu(ctx, s, fiches_, t):
     candidates = voulues or candidates
     if candidates:
         return candidates[0]["modele"], candidates[0]["lieu"]
-    polyvalents = [x for x in fiches_ if fi.est_polyvalente(x)]
+    polyvalents = [x for x in fiches_ if fi.est_polyvalente(x) and not x.get("retire")]
     if not polyvalents:
         return None
     return modele_du_metier(ctx, t.get("role")), reserve or polyvalents[0]["lieu"]

@@ -159,18 +159,28 @@ def _priorite(x, occupes, cadrage, sessions):
 def ramener_l_equipe(ctx, locaux, cloud):
     """Les fiches deviennent polyvalentes, autant que de places par lieu (les agents au travail d'abord) ; les autres sont
     retirées, ou marquées `Retrait : prévu` quand elles travaillent. Rend `(gardes, retires, retraits_prevus)` (clés)."""
+    from orchestrateur import outil
     s = ctx.suivi.lire()
-    agents = [x for x in ctx.fiches() if x["role"] != "chef"]
+    agents = [x for x in ctx.fiches() if x["role"] != "chef" and not x.get("retire")]
     occupes = {t["agent"] for t in s["taches"] if t.get("active") and t.get("agent")}
+    avec_taches = {t["agent"] for t in s["taches"] if t.get("agent")}
     cadrage = {f["agent_cadrage"] for f in s["fonctionnalites"] if f.get("etape") == "cadrage" and f.get("agent_cadrage")}
     sessions = ctx.sessions()
     gardes, retires, retraits = [], [], []
     for lieu, voulu in (("local", locaux), ("cloud", cloud)):
-        ordre = sorted((x for x in agents if x["lieu"] == lieu), key=lambda x: _priorite(x, occupes, cadrage, sessions))
+        # on garde d'abord les agents au travail, puis ceux qui ont déjà réalisé une tâche (leurs fiches sont les seules
+        # qu'il faudrait de toute façon garder pour l'historique), puis le reste de l'ordre de priorité
+        ordre = sorted((x for x in agents if x["lieu"] == lieu),
+                       key=lambda x: (x["cle"] not in occupes, x["cle"] not in avec_taches,
+                                      _priorite(x, occupes, cadrage, sessions)))
         for rang, x in enumerate(ordre):
             garde = rang < voulu
             if not garde and x["cle"] not in occupes:
-                Path(x["chemin"]).unlink(missing_ok=True)
+                # sans aucune tâche : supprimé ; sinon gardé, inactif (fiche polyvalente `Retrait : fait`, identité gardée)
+                neuve = fi.nouvelle_fiche(x["cle"], x["prenom"], x["lieu"], session=x["session"])
+                neuve["chemin"] = x["chemin"]
+                neuve["retire"] = True
+                outil.retirer_l_agent(neuve, x["cle"] in avec_taches)
                 retires.append(x["cle"])
                 continue
             (gardes if garde else retraits).append(x["cle"])
@@ -181,6 +191,30 @@ def ramener_l_equipe(ctx, locaux, cloud):
             neuve["retrait_prevu"] = not garde
             fi.ecrire_fiche(neuve)
     return gardes, retires, retraits
+
+
+def restaurer_les_retires(ctx):
+    """Rejouée sur un projet déjà repris : un agent dont la fiche manque (supprimée par une reprise qui ne gardait pas les
+    agents retirés) et qui a au moins une tâche au suivi revient, retiré, depuis sa fiche d'origine
+    (`avant-polyvalents/<clé>.md`) : clé, prénom, lieu et session gardés. Sans tâche, rien ne revient. Rend les clés."""
+    dossier = Path(ctx.f["fiches"]) / DOSSIER_AVANT
+    if not dossier.is_dir():
+        return []
+    presentes = {x["cle"] for x in ctx.fiches()}
+    avec_taches = {t["agent"] for t in ctx.suivi.lire()["taches"] if t.get("agent")}
+    sessions, restaures = ctx.sessions(), []
+    for chemin in sorted(dossier.glob("*.md")):
+        origine = fi.lire_fiche(chemin)
+        cible = Path(ctx.f["fiches"]) / chemin.name
+        if origine["role"] == "chef" or origine["cle"] in presentes or origine["cle"] not in avec_taches or cible.exists():
+            continue
+        neuve = fi.nouvelle_fiche(origine["cle"], origine["prenom"], origine["lieu"],
+                                  session=sessions.get(origine["cle"]) or origine["session"])
+        neuve["chemin"] = cible
+        neuve["retire"] = True
+        fi.ecrire_fiche(neuve)
+        restaures.append(origine["cle"])
+    return restaures
 
 
 def _texte_du_compte_rendu(metiers_, regroupees, doublons, gardes, retires, retraits, crees, rien_a_faire):
@@ -214,10 +248,19 @@ def reprendre(ctx):
     for role in _par_role(anciennes):       # un brief illisible arrête tout avant la première écriture
         _lire_metier(ctx, role)
     if not anciennes:
-        gardes = [x["cle"] for x in ctx.fiches() if x["role"] != "chef"]
-        return {"metiers": [], "lecons_regroupees": 0, "doublons": 0, "agents_gardes": gardes, "agents_retires": [],
+        restaures = restaurer_les_retires(ctx)
+        gardes = [x["cle"] for x in ctx.fiches() if x["role"] != "chef" and not x.get("retire")]
+        compte_rendu = _texte_du_compte_rendu([], 0, 0, gardes, [], [], [], True)
+        if restaures:
+            compte_rendu += (f" {len(restaures)} agent{'s' if len(restaures) > 1 else ''} retiré"
+                             f"{'s' if len(restaures) > 1 else ''} de l'équipe remis en historique ({', '.join(restaures)}).")
+            journal = Path(ctx.f["suivi"]).with_name(JOURNAL)
+            ancien = journal.read_text(encoding="utf-8") if journal.is_file() else "# Passage aux agents polyvalents\n"
+            journal.write_text(ancien.rstrip("\n") + f"\n\n## {su.maintenant()}\n\n{compte_rendu}\n", encoding="utf-8",
+                               newline="\n")
+        return {"metiers": [], "lecons_regroupees": 0, "doublons": 0, "agents_gardes": gardes, "agents_retires": restaures,
                 "retraits_prevus": [x["cle"] for x in ctx.fiches() if x.get("retrait_prevu")], "agents_crees": [],
-                "deja": True, "compte_rendu": _texte_du_compte_rendu([], 0, 0, gardes, [], [], [], True)}
+                "deja": not restaures, "compte_rendu": compte_rendu}
     locaux, cloud = ctx.f["agents_locaux_max"], outil.places_cloud_du_projet(ctx)
     mettre_de_cote(ctx)
     metiers_, _ = fixer_les_metiers(ctx)

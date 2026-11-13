@@ -603,3 +603,9 @@ Rôles : designer, dev
 Date : 2026-11-13
 
 Avant de modifier un outil de mesure, enregistrer un petit résultat de référence sur un jeu d'entrées fixe, garder l'ancien comportement en option et vérifier qu'il reproduit cette référence chiffre pour chiffre.
+
+## S101 — Un test de capture d'écran doit mesurer le contenu de l'imag
+Rôles : qa
+Date : 2026-11-13
+
+Un test de capture d'écran doit mesurer le contenu de l'image (écart de luminance) et échouer si elle est uniforme ou identique à une autre.

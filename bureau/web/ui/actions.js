@@ -116,7 +116,7 @@ export function resumeEnvoi(resultats) {
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
                   genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [],
-                  series: [], terminees: [], chezPartenaires: [], fables: []};
+                  series: [], terminees: [], chezPartenaires: [], fables: [], blocages: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -143,6 +143,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "outil_agent") sortie.outils.push({...d});
     else if (d?.genre === "accord_agent") sortie.accords.push({...d});
     else if (d?.genre === "fable_tache") sortie.fables.push({...d});   // une tâche demande Fable : l'autoriser ?
+    else if (d?.genre === "blocage_analyse") sortie.blocages.push({...d});   // un blocage analysé par le Chef
     else if (d?.genre === "faire_chez_partenaire") sortie.chezPartenaires.push({...d});   // « À faire chez <partenaire> »
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
     else if (d?.genre === "serie_arretee") {   // une série qui ne progresse plus : avec le nom de sa fonctionnalité
@@ -274,6 +275,18 @@ export function demandeFableTache(decision, verdict) {
 
 export function demandeOutilAgent(decision, verdict) {
   return {type: "outil_agent", decision: decision.id, verdict};
+}
+
+// La réponse à un blocage analysé par le Chef : « suivre » sa recommandation, « preciser » (un texte), ou « laisser ».
+export function demandeBlocageAnalyse(decision, verdict, texte) {
+  const d = {type: "blocage_analyse", decision: decision.id, verdict};
+  if (verdict === "preciser") d.texte = String(texte ?? "").trim();
+  return d;
+}
+
+// « Vu » ou « Réglée » sur une anomalie du logiciel.
+export function demandeAnomalie(anomalie, etat) {
+  return {type: "anomalie", anomalie: anomalie.id, etat};
 }
 
 // Une demande d'accord d'un agent : « accepter » (il reprend avec l'accord) ou « refuser » (il reprend sans l'action, avec

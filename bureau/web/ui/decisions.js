@@ -6,7 +6,8 @@ import {tronquer, dateFr, euros} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
-  demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache} from "./actions.js";
+  demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache,
+  demandeBlocageAnalyse} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
@@ -369,19 +370,54 @@ function decisionSession(ctx, d) {
 // « Outils à ouvrir à un agent » : l'agent arrêté, la commande refusée (une ligne, déjà coupée par le moteur), puis
 // « Autoriser ce programme pour cet agent » (seulement si le moteur a pu nommer le programme) et « Refuser » ; sans
 // programme à nommer, « C'est fait, relancer » une fois la fiche complétée à la main.
+// Avec l'analyse du Chef (`analyse`, `recommandation`, `verdict_recommande`) : elle est montrée, et le bouton qu'il
+// recommande vient en premier, marqué « recommandé ».
 function decisionOutilAgent(ctx, d) {
   const li = el("li", "decision-outil");
   li.append(el("div", "decision-texte", d.texte));
   if (plein(d.commande)) li.append(el("div", "lecon-meta", "Commande refusée : " + d.commande));
+  analyseDuChef(li, d);
   if (!ctx.etat.agir) return li;
   const rangee = el("div", "lecon-boutons");
-  if (plein(d.programme)) {
-    rangee.append(boutonDemande(ctx, "Autoriser ce programme pour cet agent", "bouton", () => demandeOutilAgent(d, "autoriser")));
-  } else {
-    rangee.append(boutonDemande(ctx, "C'est fait, relancer", "bouton", () => demandeOutilAgent(d, "relancer")));
-  }
-  rangee.append(boutonDemande(ctx, "Refuser", "bouton secondaire", () => demandeOutilAgent(d, "refuser")));
+  const oui = plein(d.programme)
+    ? ["Autoriser ce programme pour cet agent", "autoriser"] : ["C'est fait, relancer", "relancer"];
+  const options = [[...oui, "autoriser"], ["Refuser", "refuser", "refuser"]];
+  if (d.verdict_recommande === "refuser") options.reverse();
+  options.forEach(([libelle, verdict, sens], k) => {
+    const recommande = d.verdict_recommande === sens;
+    rangee.append(boutonDemande(ctx, recommande ? `${libelle} (recommandé)` : libelle,
+      k === 0 ? "bouton" : "bouton secondaire", () => demandeOutilAgent(d, verdict)));
+  });
   li.append(rangee);
+  return li;
+}
+
+// L'analyse du Chef d'un blocage : la cause probable et, s'il y en a une, sa recommandation.
+export function analyseDuChef(li, d) {
+  if (plein(d.analyse)) li.append(el("div", "decision-analyse", "Analyse du Chef : " + d.analyse));
+  if (plein(d.recommandation)) li.append(el("div", "decision-recommandation", "Recommandation du Chef : " + d.recommandation));
+}
+
+// « Blocages analysés par le Chef » : une tâche bloquée que le Chef ne peut pas débloquer seul. Sa question, son
+// analyse ; « Suivre la recommandation » en premier (la tâche repart avec ce texte), « Répondre autrement » (un texte)
+// ou « Laisser bloquée ».
+function decisionBlocage(ctx, d) {
+  const li = el("li", "decision-blocage");
+  li.append(el("div", "decision-texte", d.texte));
+  analyseDuChef(li, d);
+  if (!ctx.etat.agir) return li;
+  const texte = document.createElement("input");
+  texte.type = "text";
+  texte.maxLength = 3500;
+  texte.placeholder = "Votre réponse, si vous ne suivez pas la recommandation";
+  texte.setAttribute("aria-label", "Votre réponse au Chef");
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(
+    boutonDemande(ctx, "Suivre la recommandation (recommandé)", "bouton", () => demandeBlocageAnalyse(d, "suivre")),
+    boutonDemande(ctx, "Répondre autrement", "bouton secondaire", () => demandeBlocageAnalyse(d, "preciser", texte.value),
+      () => plein(texte.value)),
+    boutonDemande(ctx, "Laisser bloquée", "bouton secondaire", () => demandeBlocageAnalyse(d, "laisser")));
+  li.append(texte, rangee);
   return li;
 }
 
@@ -653,6 +689,9 @@ export function contenuDecisionsV4(ctx, contenu) {
   }
   contenu.append(partie("Demandes d'accord des agents", "Aucun agent n'attend votre accord",
     d.accords.map((x) => decisionAccordAgent(ctx, x))));
+  if (d.blocages.length) {     // seulement quand il y en a : le Chef n'a pas pu débloquer une tâche seul
+    contenu.append(partie("Blocages analysés par le Chef", "", d.blocages.map((x) => decisionBlocage(ctx, x))));
+  }
   contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",
     d.outils.map((x) => decisionOutilAgent(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));

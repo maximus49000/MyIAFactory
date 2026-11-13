@@ -5,7 +5,7 @@ import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
 import {urlProjet} from "./projets.js";
-import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
+import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
 import {sectionLieux} from "./lieux.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
@@ -34,15 +34,19 @@ function lienTache(ctx, id, texte) {
 export const AIDE_LECONS_AUTO = "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre " +
   "ou skill). Les leçons genre et skill vont dans la skill partagée.";
 
-// Le réglage « Valider les leçons automatiquement » : une écriture des réglages du projet. Rend {ok, message} ; ne lève jamais.
-export async function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
+export const AIDE_ANALYSE_BLOCAGES = "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance " +
+  "avec une consigne, confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. " +
+  "Il n'ouvre jamais un outil et ne dépense rien sans vous.";
+
+// Une case des réglages du projet (une écriture par le serveur du bureau). Rend {ok, message} ; ne lève jamais.
+async function enregistrerReglage(cle, valeur, messages, fetchFn) {
   try {
     const r = await fetchFn(urlProjet("/api/reglages"), {
       method: "POST",
       headers: {"X-Bureau": "1", "Content-Type": "application/json"},
-      body: JSON.stringify({lecons_auto: valeur === true}),
+      body: JSON.stringify({[cle]: valeur === true}),
     });
-    if (r.ok) return {ok: true, message: valeur === true ? "Les leçons seront validées automatiquement." : "Les leçons attendent de nouveau le Directeur."};
+    if (r.ok) return {ok: true, message: valeur === true ? messages[0] : messages[1]};
     let erreur = "";
     try { erreur = (await r.json())?.erreur || ""; } catch { /* corps illisible */ }
     return {ok: false, message: `Refusé : ${erreur || "le serveur a répondu " + r.status}`};
@@ -51,28 +55,83 @@ export async function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
   }
 }
 
-// La case, son aide et son message ; n'agit que par le serveur du bureau.
-function caseLeconsAuto(ctx) {
-  const e = ctx.etat;
-  const bloc = el("div", "lecons-auto");
+// Le réglage « Valider les leçons automatiquement ».
+export function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
+  return enregistrerReglage("lecons_auto", valeur, ["Les leçons seront validées automatiquement.",
+    "Les leçons attendent de nouveau le Directeur."], fetchFn);
+}
+
+// Le réglage « Analyse intelligente des blocages » (coché par défaut).
+export function enregistrerAnalyseBlocages(valeur, fetchFn = fetch) {
+  return enregistrerReglage("analyse_blocages", valeur, ["Le Chef analysera chaque blocage avant vous.",
+    "Les blocages vous reviennent directement, sans analyse du Chef."], fetchFn);
+}
+
+// Une case, son aide et son message ; n'agit que par le serveur du bureau. `coche` : l'état lu dans l'état du bureau.
+function caseReglage(ctx, {classe, libelle, aide, coche, enregistrer, noter}) {
+  const bloc = el("div", classe);
   const label = el("label", "lecons-auto-label");
   const case_ = document.createElement("input");
   case_.type = "checkbox";
-  case_.checked = e.lecons_auto === true;
-  label.append(case_, el("span", "", " Valider les leçons automatiquement"));
+  case_.checked = coche;
+  label.append(case_, el("span", "", " " + libelle));
   const message = el("p", "note", "");
   message.setAttribute("aria-live", "polite");
   case_.addEventListener("change", async () => {
     const voulu = case_.checked;
     case_.disabled = true;
-    const r = await enregistrerLeconsAuto(voulu);
+    const r = await enregistrer(voulu);
     case_.disabled = false;
-    if (r.ok) { e.lecons_auto = voulu; ctx.rouvrir?.(); }
+    if (r.ok) { noter(voulu); ctx.rouvrir?.(); }
     else case_.checked = !voulu;   // refus : la case redit l'état réel
     message.textContent = r.message;
   });
-  bloc.append(label, el("p", "note", AIDE_LECONS_AUTO), message);
+  bloc.append(label, el("p", "note", aide), message);
   return bloc;
+}
+
+function caseLeconsAuto(ctx) {
+  const e = ctx.etat;
+  return caseReglage(ctx, {classe: "lecons-auto", libelle: "Valider les leçons automatiquement", aide: AIDE_LECONS_AUTO,
+    coche: e.lecons_auto === true, enregistrer: (v) => enregistrerLeconsAuto(v), noter: (v) => { e.lecons_auto = v; }});
+}
+
+// À côté de « Valider les leçons automatiquement » ; absente de l'état (un ancien bureau) : cochée, comme le défaut.
+function caseAnalyseBlocages(ctx) {
+  const e = ctx.etat;
+  return caseReglage(ctx, {classe: "lecons-auto analyse-blocages", libelle: "Analyse intelligente des blocages",
+    aide: AIDE_ANALYSE_BLOCAGES, coche: e.analyse_blocages !== false, enregistrer: (v) => enregistrerAnalyseBlocages(v),
+    noter: (v) => { e.analyse_blocages = v; }});
+}
+
+const ETATS_ANOMALIE = {nouvelle: "nouvelle", vue: "vue", reglee: "réglée"};
+
+// Les anomalies du logiciel à montrer : les plus récentes d'abord, les réglées à la fin. Pur.
+export function anomaliesAMontrer(etat) {
+  const liste = Array.isArray(etat?.anomalies_logiciel) ? etat.anomalies_logiciel.filter((x) => x && x.id) : [];
+  return [...liste].reverse().sort((a, b) => (a.etat === "reglee") - (b.etat === "reglee"));
+}
+
+// « Anomalies du logiciel » : ce que le Chef attribue au logiciel lui-même (pas au projet) en analysant un blocage.
+// Date, projet, tâche, titre, description, état ; « Vu » et « Réglée » (une demande au projet).
+function sectionAnomalies(ctx) {
+  const e = ctx.etat;
+  if (!Array.isArray(e.anomalies_logiciel)) return null;      // absent : le relevé ne les publie pas
+  const items = anomaliesAMontrer(e).map((a) => {
+    const li = el("li", "anomalie");
+    li.append(el("div", "lecon-texte", a.titre));
+    li.append(el("div", "lecon-meta", [a.t && dateFr(a.t), a.projet, a.titre_tache || a.tache,
+      ETATS_ANOMALIE[a.etat] || a.etat].filter(Boolean).join(" · ")));
+    if (a.description) li.append(el("div", "decision-texte", a.description));
+    if (e.agir && a.etat !== "reglee") {
+      const rangee = el("div", "lecon-boutons");
+      if (a.etat === "nouvelle") rangee.append(boutonDemande(ctx, "Vu", "bouton secondaire", () => demandeAnomalie(a, "vue")));
+      rangee.append(boutonDemande(ctx, "Réglée", "bouton", () => demandeAnomalie(a, "reglee")));
+      li.append(rangee);
+    }
+    return li;
+  });
+  return partie("Anomalies du logiciel", "Aucune anomalie du logiciel", items);
 }
 
 function carteLecon(ctx, l, etages) {
@@ -217,7 +276,9 @@ export function contenuDirecteur(ctx, contenu) {
   const menus = new Map();   // id de leçon -> son menu d'étage
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
-  if ((e.version ?? 1) >= 4 || e.lecons_auto === true) section.querySelector("h3").after(caseLeconsAuto(ctx));
+  if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
+    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx));
+  }
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
   if (e.agir && e.lecons_auto !== true && enAttente.length >= 2) {
     // Tout valider ou tout invalider, chaque leçon avec l'étage montré dans son menu (même s'il a été changé).
@@ -292,6 +353,8 @@ export function contenuDirecteur(ctx, contenu) {
     blocBloquees.querySelector("h3").after(tout);
   }
   contenu.append(blocBloquees);
+  const anomalies = sectionAnomalies(ctx);
+  if (anomalies) contenu.append(anomalies);
   const anciens = sectionAnciensAgents(ctx);
   if (anciens) contenu.append(anciens);
 }

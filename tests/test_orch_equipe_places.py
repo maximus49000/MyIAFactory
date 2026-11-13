@@ -152,15 +152,14 @@ class TestEquipePlaces(Base):
             if fiches.est_polyvalente(x):
                 x["chemin"].unlink()
         r = self.places(5, 3)
-        self.assertEqual(r["crees"], [])
+        self.assertEqual(r, {"agents_locaux_max": 5, "agents_cloud_max": 3})      # la réponse d'avant
         self.assertEqual([x["cle"] for x in self.equipe()], ["dev-1"])
-        self.assertEqual(r["agents_locaux_max"], 5)
 
     def test_projet_mixte_pas_touche(self):
         (self.fiches / "dev-1.md").write_text("Clé : dev-1\nPrénom : Léa\nRôle : dev\nService : dev\nModèle : Sonnet\n"
                                               "Lieu : local\n\nTexte.\n\n## Leçons\n", encoding="utf-8")
         r = self.places(5, 3)
-        self.assertEqual(r["crees"], [])
+        self.assertEqual(r, {"agents_locaux_max": 5, "agents_cloud_max": 3})
         self.assertEqual(len(self.equipe()), 3)
 
     def test_chef_ne_compte_pas(self):

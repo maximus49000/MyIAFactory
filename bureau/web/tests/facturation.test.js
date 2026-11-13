@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
         limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot, PLAFOND_PAR_DEFAUT, REGLE_PLAFOND,
-        ligneApercu, partieRecrutement} from "../ui/facturation.js";
+        ligneApercu, partieRecrutement, partieReprise, reprisePossible, demandePasserPolyvalent,
+        CONFIRMATION_REPRISE} from "../ui/facturation.js";
 
 const REC = (extra = {}) => ({recrutement: {
   roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
@@ -214,4 +215,16 @@ test("bloc recruter caché si polyvalent : l'équipe suit les places, la note le
   assert.equal(ancien.polyvalent, false);
   assert.equal(resumeRecrutement(REC()).polyvalent, false);
   assert.match(ancien.notes.join(" "), /plusieurs agents de ce rôle/);
+});
+
+test("passer aux agents polyvalents : le bouton se montre tant que des fiches par rôle restent", () => {
+  assert.deepEqual(demandePasserPolyvalent(), {type: "passer_polyvalent", confirme: true});
+  assert.equal(reprisePossible({recrutement: {reprise_possible: true}}), true);
+  assert.equal(reprisePossible({recrutement: {reprise_possible: false, polyvalent: true}}), false);
+  assert.equal(reprisePossible({recrutement: {}}), false);       // un orchestrateur d'avant : rien
+  assert.equal(reprisePossible({}), false);
+  assert.equal(partieReprise({etat: {recrutement: {reprise_possible: false}}}), null);
+  assert.equal(partieReprise({etat: {}}), null);
+  assert.match(CONFIRMATION_REPRISE, /Aucune tâche n'est touchée/);
+  assert.match(CONFIRMATION_REPRISE, /fiches d'origine/);
 });

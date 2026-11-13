@@ -53,7 +53,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
-                 "serie_arretee", "fin_vue", "fable_tache")
+                 "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -2175,7 +2175,8 @@ def construire_releve(ctx):
     elements_file = [{"id": f"{f['id']}/{q['id']}", "titre": q["nom"]} for f in s["fonctionnalites"] for q in f["file"]]
     fonctionnalites = []
     for f in s["fonctionnalites"]:
-        v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"], "agent_cadrage": f["agent_cadrage"],
+        v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"],
+             "agent_cadrage": f["agent_cadrage"] if f["agent_cadrage"] in cles else None,    # un agent retiré : plus d'agent
              "attend_reponse": f["attend_reponse"], "discussion": [],
              "decisions": [_decision_au_releve(d, s) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
@@ -3081,10 +3082,11 @@ def places_cloud_du_projet(ctx):
                                any(x["lieu"] == "cloud" for x in ctx.fiches()))
 
 
-def synchroniser_equipe(ctx, creer=True):
+def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
-    Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet."""
+    Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet.
+    `cloud_aussi` faux : aucun agent cloud n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
     vide = {"crees": [], "retires": [], "retraits_prevus": []}
     with ctx.suivi.transaction() as suivi:     # un seul écrivain à la fois (l'outil, le moteur et le bureau)
         fiches_ = ctx.fiches()
@@ -3092,6 +3094,7 @@ def synchroniser_equipe(ctx, creer=True):
             return vide
         occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
         plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer)
+        plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
         par_cle = {x["cle"]: x for x in fiches_}
         for cle in plan["retirer"]:
             Path(par_cle[cle]["chemin"]).unlink(missing_ok=True)
@@ -3126,17 +3129,33 @@ def cmd_equipe(ctx, e):
     return synchroniser_equipe(ctx, creer=False)
 
 
+def cmd_polyvalents(ctx, e):
+    """`{confirme: true}` : le clic « Passer aux agents polyvalents » du Directeur (jamais sans lui). Reprend le projet
+    (voir `orchestrateur/reprise_polyvalents.py`) : un métier par rôle, les leçons regroupées par métier, l'équipe ramenée
+    aux places, aucune tâche touchée ; rejouable sans effet. Rend le compte rendu `{metiers, lecons_regroupees, doublons,
+    agents_gardes, agents_retires, retraits_prevus, agents_crees, deja, compte_rendu}`."""
+    from orchestrateur import reprise_polyvalents
+    if e.get("confirme") is not True:
+        raise Refus("« polyvalents » demande confirme: vrai (le clic du Directeur).")
+    try:
+        return reprise_polyvalents.reprendre(ctx)
+    except reprise_polyvalents.RepriseImpossible as ex:
+        raise Refus(str(ex))
+
+
 def cmd_parallelisme(ctx, e):
     """`{agents_locaux_max: 1 à 16, agents_cloud_max: 0 à 16}` : les places du projet, écrites dans la factory (le
     reste du fichier est gardé). Dans un projet d'agents polyvalents, l'équipe suit : un agent de plus par place
     ajoutée, un agent libre de moins par place retirée (un agent au travail finit sa tâche, voir `synchroniser_equipe`).
-    Rend les valeurs écrites et `{crees, retires, retraits_prevus}`."""
+    Rend les valeurs écrites et, pour un projet polyvalent seulement, `{crees, retires, retraits_prevus}`."""
     locaux, cloud = e.get("agents_locaux_max"), e.get("agents_cloud_max")
     try:
         fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud)
     except fa.FactoryInvalide as ex:
         raise Refus(str(ex))
     ctx.f = fa.lire(ctx.f["chemin"])     # les places qui viennent d'être écrites
+    if rc.equipe_pure(ctx.fiches()) is None:      # un projet à l'ancienne (ou mixte) : la réponse d'avant, rien d'autre
+        return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
     return {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **synchroniser_equipe(ctx)}
 
 
@@ -3184,8 +3203,9 @@ def releve_recrutement(ctx, s, fiches):
     d = rc.depot(_projet(ctx))
     raison = rc.raison_sans_cloud(d)
     places_c = places_cloud_du_projet(ctx)
+    reprise_possible = any(x["role"] and x["role"] != "chef" for x in fiches)     # des fiches à l'ancienne
     if rc.a_des_polyvalents(fiches):     # l'équipe suit les places : rien à recruter, ni rôle ni répartition
-        return {"polyvalent": True, "roles": [], "places": {"cloud": 0, "locaux": 0}, "propositions": [], "notes": [],
+        return {"polyvalent": True, "reprise_possible": reprise_possible, "roles": [], "places": {"cloud": 0, "locaux": 0}, "propositions": [], "notes": [],
                 "propositions_par_lieu": {"mieux": [], "cloud": [], "local": []},
                 "notes_par_lieu": {"mieux": [], "cloud": [], "local": []},
                 "depot": {"git": d["git"], "github": d["github"], "url": d["url"],
@@ -3208,7 +3228,7 @@ def releve_recrutement(ctx, s, fiches):
                                "local": par_lieu["local"]["notes"]},
             "depot": {"git": d["git"], "github": d["github"], "url": d["url"],
                       "creable": not d["github"] and not d["origine"], **({"essai": essai} if essai else {})},
-            "cloud_impossible": raison}
+            "cloud_impossible": raison, "reprise_possible": reprise_possible}
 
 
 def cmd_recruter(ctx, e):
@@ -3506,7 +3526,8 @@ COMMANDES = {
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
-    "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
+    "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
 }
 
 

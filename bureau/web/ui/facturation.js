@@ -329,8 +329,48 @@ export function partieParallelisme(ctx) {
     });
     bloc.append(erreur, b);
   }
+  const reprise = partieReprise(ctx);
+  if (reprise) bloc.append(reprise);
   const rec = partieRecrutement(ctx);
   if (rec) bloc.append(rec);
+  return bloc;
+}
+
+// --- Passer aux agents polyvalents (conception 2026-11-13-agents-polyvalents-design.md) : le relevé dit
+// `recrutement.reprise_possible` tant que le projet a des fiches d'agents par rôle.
+
+export const CONFIRMATION_REPRISE = "Passer ce projet aux agents polyvalents ? Un métier est créé pour chaque rôle, les " +
+  "leçons des agents sont regroupées par métier, et l'équipe est ramenée aux places ci-dessus (un agent au travail finit " +
+  "sa tâche). Aucune tâche n'est touchée ; les fiches d'origine sont gardées.";
+
+// Le bouton se montre tant que des fiches à l'ancienne restent.
+export function reprisePossible(etat) {
+  return etat?.recrutement?.reprise_possible === true;
+}
+
+// La demande « passer_polyvalent » : le clic du Directeur est son consentement.
+export function demandePasserPolyvalent() {
+  return {type: "passer_polyvalent", confirme: true};
+}
+
+export function partieReprise(ctx) {
+  if (!reprisePossible(ctx.etat)) return null;
+  const bloc = el("div", "reprise-polyvalents");
+  bloc.append(el("div", "carte-sous-titre", "Agents polyvalents"));
+  bloc.append(el("p", "note", "Chaque agent prend n'importe quelle tâche prête, en spécialiste du métier de la tâche ; " +
+                              "les leçons deviennent celles du métier, et le nombre d'agents suit les places. Ce projet " +
+                              "a encore un agent par rôle."));
+  if (ctx.etat?.agir && ctx.barre?.demander) {
+    const b = el("button", "bouton", "Passer aux agents polyvalents");
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      if (typeof globalThis.confirm === "function" && !globalThis.confirm(CONFIRMATION_REPRISE)) return;
+      b.disabled = true;
+      const res = await ctx.barre.demander(demandePasserPolyvalent(), b);
+      if (!res?.ok) b.disabled = false;
+    });
+    bloc.append(b);
+  }
   return bloc;
 }
 

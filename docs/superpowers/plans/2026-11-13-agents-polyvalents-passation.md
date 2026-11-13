@@ -14,7 +14,7 @@ Tenir ce tableau à jour à la fin de chaque phase (dernière action avant le de
 |---|---|---|---|---|---|
 | A | Sonnet 5.5 | 1, 2, 3 : métier (brief enrichi), fiche polyvalente, leçons par métier | non | Formats et lecture au contrat écrit, tests nommés | **faite 2026-11-13** |
 | B | Opus 5.5 | 4, 5, 6 : choix de l'agent et liens amont, modèle par tâche et Fable sur accord, départ par métier | non | Cœur du moteur : chemins de départ multiples, garde Fable, risque de régression | **faite 2026-11-13** |
-| C | Sonnet 5.5 | 7, 8, 9 : équipe = places, création au nouveau format, reprise des projets | non (banc gratuit seulement) | Commandes et installation au contrat écrit | à faire |
+| C | Sonnet 5.5 | 7, 8, 9 : équipe = places, création au nouveau format, reprise des projets | non (banc gratuit seulement) | Commandes et installation au contrat écrit | **faite 2026-11-13** |
 | D | Sonnet 5.5 | 10 : bureau vivant (pièce de la tâche, panneaux, leçons par métier) | non | Page et relevé au contrat écrit | à faire |
 | E | Opus 5.5 | 11 : essai réel sur ZooRunner, avec l'utilisateur | **oui** (quelques tâches réelles, sur accord) | Jugement de ce qui accroche en vrai | à faire |
 
@@ -99,3 +99,57 @@ Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test
 - **Pour la phase C** : `recruter`, `parallelisme`, la reprise et la création ne connaissent pas encore les polyvalents. Un projet
   mixte (anciennes fiches + polyvalents) fonctionne (spécialistes d'abord) mais n'est pas un cas visé. Non vérifié en vrai
   (aucun agent lancé) : la sortie réelle de `claude` avec une fiche « accord par tâche ».
+
+**Phase C (2026-11-13, Sonnet 5.5)** — tâches 7, 8, 9 faites, sans appel réel (banc gratuit vert). Commits `740f2ed` (7), `5eb33b1` (8) et celui de la tâche 9.
+
+- **Tâche 7, équipe = places.** `parallelisme` rend en plus `crees`, `retires`, `retraits_prevus` (clés ; vides pour un projet à
+  l'ancienne ou mixte). La fiche d'un agent au travail à retirer porte la ligne d'en-tête `Retrait : prévu` (`retrait_prevu` dans
+  le dict de la fiche) : jamais choisi (`modele_necessaire.possibles`), jamais libre (`etat.agents[].libre` faux,
+  `retrait_prevu` vrai). Nouvelle commande `equipe` (sans entrée, `outil.synchroniser_equipe`) : retire les agents marqués dont la
+  tâche est finie ; le moteur la lance en tête de `_demarrer_en_attente` tant qu'un agent est marqué. Seul `parallelisme` crée des
+  agents (clé `agent-<n>`, prénom tiré dans `bureau/equipe.PRENOMS`) ; la couleur est tirée par le bureau à la première vue. Ordre
+  de retrait : libres sans session d'abord, derniers de la liste d'abord ; puis, faute de libres, les derniers au travail sont
+  marqués. Une place remontée annule d'abord les retraits prévus. `recruter` refuse dès qu'il y a un polyvalent (« L'équipe suit
+  les places de l'onglet Facturation. ») ; le relevé met `recrutement.polyvalent` (roles/propositions vides) et la page cache le
+  bloc Recruter. Un projet mixte (ancien + polyvalents, reprise interrompue) n'est jamais ajusté.
+- **Relevé (hors plan, nécessaire).** Un titulaire polyvalent n'a ni `service` ni `modele` : le validateur du relevé refusait tout
+  projet polyvalent. Le relevé porte maintenant `polyvalent: true` (et `retrait_prevu: true`) sans service ni modèle, le validateur
+  l'accepte, et `agent_cadrage` d'une fonctionnalité dont l'agent a été retiré est publié `null`. **Phase D** : la page ne sait pas
+  encore placer un titulaire sans service (pièce de la tâche), ni afficher son modèle ; c'est exactement la tâche 10.
+- **Tâche 8, nouveau format d'organisation.** `{metiers: [{role, service, modele?, lieu?, specialite?, outils?, brief}], agents:
+  {locaux, cloud}}` remplace `agents` (liste) + `briefs` ; `proposition.verifier_organisation(..., metiers=, equipe_en_place=)`,
+  `proposition.est_polyvalente`, `verifier_metiers`, `verifier_equipe`, `agents_pour_estimer` (estimation sans plafond :
+  `mn.estime` ignore le plafond des agents `sans_plafond`). `mise_en_place.ecrire_organisation(..., metiers=)` écrit les briefs
+  enrichis (`metiers.ecrire_metier`) ; un projet sans équipe reçoit `n + m` fiches polyvalentes et ses places (`agents_locaux_max`,
+  `agents_cloud_max`) sont réglées à `n` et `m` ; un projet qui a déjà son équipe la garde (`agents` absent). Le contrôle refuse
+  des agents par rôle dans un projet polyvalent et des métiers dans un projet qui a encore des agents par rôle ; l'ancien format
+  reste accepté partout ailleurs (tests `test_ancienne_organisation_acceptee`, `test_projet_a_l_ancienne_refuse_les_metiers`).
+  Le chef (`definir_workflow`) ne propose plus que le nouveau format ; `proposer_organisation` suit le dossier : s'il porte
+  `metiers`, il propose des métiers. L'agent d'installation devient un métier `environnement` (ses règles d'outils vont dans son
+  brief). Fable ne se coche plus par agent dans le nouveau format (refusé par `appliquer`). Fenêtre du chef et décision
+  d'organisation : lignes « Métiers » et « Équipe : N agents locaux, M agents cloud » (`echange.js`, `organisation.js`).
+- **Écarts au plan (tâche 8).** Les tests de longueur des consignes (`test_moteur_jugement` : 40 lignes, 4600 caractères) portent
+  maintenant 56 lignes et 5600 caractères (`proposer_organisation` décrit les deux formats) ; la consigne de `definir_workflow` ne
+  dit plus « plafond Opus » ni `fable_suggere`, son exemple de test est au nouveau format. Le nombre d'agents cloud proposé par
+  le chef n'est pas confronté à GitHub (la consigne dit 0 sans GitHub, non vérifié en code). L'estimation du coût en
+  euros compte les métiers du projet existants par leur modèle de brief ; sans brief de modèle : Sonnet.
+- **Tâche 9, la reprise.** `orchestrateur/reprise_polyvalents.py` (`reprendre`, et les étapes `mettre_de_cote`,
+  `fixer_les_metiers`, `regrouper_les_lecons`, `ramener_l_equipe`, chacune rejouable) ; commande `polyvalents` (`{confirme: true}`),
+  demande `passer_polyvalent` (bureau, outil, moteur, bouton « Passer aux agents polyvalents » avec confirmation dans
+  « Parallélisme du projet », visible tant que `recrutement.reprise_possible`). Choix : (a) l'original de chaque fiche est copié
+  dans `<fiches>/avant-polyvalents/` avant toute réécriture (jamais écrasé) ; (b) le « journal du projet » n'existant pas, le compte
+  rendu est ajouté à `.factory/reprise-polyvalents.md` et rendu en réponse de la demande ; (c) gardés d'abord : agents au travail,
+  agent de cadrage d'une fonctionnalité en cadrage, session cloud, puis ordre des noms de fichier ; (d) la reprise **ne crée jamais
+  d'agent cloud** et ajoute seulement des agents locaux si les places en demandent plus que de fiches locales ; (e) les places
+  cloud sans réglage valent l'ancienne limite (3) pour un projet qui a des agents cloud (`depart.places_cloud`) ; (f) un brief de
+  métier illisible arrête la reprise avant toute écriture ; (g) les leçons « à valider » du suivi portent `metier`, les validées
+  sont déjà dans le brief ; une validation ultérieure par l'ancien id va au métier (test `test_validation_apres_reprise_va_au_metier`).
+  Le chef (fiche de rôle `chef`) n'est pas repris.
+- **Pour la phase D.** Le relevé d'un projet repris : titulaires `polyvalent: true`, sans `service` ni `modele` ; la tâche porte
+  `role`, `modele_depart`, `etape`, le service de la tâche est celui de son étape (workflow) ou du brief du métier
+  (`metiers.lire_metier(...)["service"]`, non publié au relevé aujourd'hui) ; `recrutement.polyvalent` et `reprise_possible`
+  sont publiés. Les leçons des agents polyvalents n'existent plus dans leur fiche : elles sont dans les briefs (le relevé ne les
+  publie pas encore par métier ; `titulaires[].lecons` est vide pour un polyvalent).
+- **Non vérifié.** Aucune reprise lancée sur ZooRunner ni sur un vrai projet ; le moteur en marche pendant une reprise (une fiche
+  réécrite sous un agent au travail) est raisonné, pas essayé : lancer la reprise de préférence quand aucun agent ne travaille.
+  La page (`node --test` seulement), jamais ouverte dans un navigateur.

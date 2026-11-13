@@ -1109,6 +1109,9 @@ def _verifier_recrutement(x, erreurs):
         erreurs.append(f"{q} : « depot.essai » demande « fait » (vrai ou faux) et « texte ».")
     if not _texte_ou_nul(x.get("cloud_impossible")):
         erreurs.append(f"{q} : « cloud_impossible » est un texte ou nul.")
+    for champ in ("polyvalent", "reprise_possible"):
+        if champ in x and not isinstance(x[champ], bool):
+            erreurs.append(f"{q} : « {champ} » doit être vrai ou faux.")
 CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume")
 
 

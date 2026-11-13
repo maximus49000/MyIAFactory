@@ -27,7 +27,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "faire_chez_partenaire": ("decision", "verdict"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
-          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",),
+          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "passer_polyvalent": ("confirme",),
+          "regle_projet": ("operation",),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",),
           "fable_tache": ("decision", "verdict")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
@@ -39,8 +40,8 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note
                "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
-               "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet", "serie_arretee",
-               "fin_vue", "faire_chez_partenaire", "fable_tache")
+               "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
+               "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
@@ -150,6 +151,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_recrutement(demande, r)
     if genre == "depot_git":
         return _verifier_depot(demande, r)
+    if genre == "passer_polyvalent":
+        return _verifier_passer_polyvalent(demande, r)
     if genre == "regle_projet":
         return _verifier_regle_projet(demande, r)
     for champ in CHAMPS[genre]:
@@ -378,6 +381,18 @@ def _verifier_depot(demande, r):
         return "Le projet est déjà sur GitHub."
     if not depot.get("creable"):
         return "Le dépôt a déjà une origine qui n'est pas sur GitHub : changez-la vous-même."
+    return None
+
+
+def _verifier_passer_polyvalent(demande, r):
+    """`passer_polyvalent` : le clic « Passer aux agents polyvalents » (`confirme` vrai), tant que le projet a des agents par rôle."""
+    if demande.get("confirme") is not True:
+        return "« confirme » doit être vrai : le projet ne change d'équipe que sur votre clic."
+    rec = r.get("recrutement")
+    if not isinstance(rec, dict) or "reprise_possible" not in rec:
+        return "Le relevé de ce projet ne permet pas encore le passage aux agents polyvalents (mettez à jour l'orchestrateur)."
+    if rec["reprise_possible"] is not True:
+        return "Le projet est déjà passé aux agents polyvalents."
     return None
 
 

@@ -450,7 +450,7 @@ une place cloud non ; chaque place est tenue par un agent recruté (une fiche, u
 d'agents polyvalents (fiches sans rôle), l'équipe **est** les places : l'outil crée une fiche polyvalente (clé
 `agent-<n>`, prénom libre) par place ajoutée et retire un agent libre par place retirée ; un agent au travail n'est jamais
 retiré, il porte « Retrait : prévu » (plus choisi) jusqu'à la fin de sa tâche (voir `equipe`). La sortie ajoute `crees`,
-`retires` et `retraits_prevus` (listes de clés, vides pour un projet à l'ancienne). Clé
+`retires` et `retraits_prevus` (listes de clés, seulement pour un projet polyvalent). Clé
 `agents_cloud_max` absente : 0 pour un projet sans agent cloud, l'ancienne limite des réglages (`agents_cloud_max`,
 3 par défaut) pour un projet qui en a ; le relevé publie la valeur effective en `agents_cloud_max`.
 
@@ -477,6 +477,24 @@ est refusé (code 1). Rend `{"ok": true, "deja": <vrai si la fiche l'ouvrait dé
 moteur quand un agent est arrêté faute d'outil (voir la décision `outil_agent`) : il lit la commande refusée dans la sortie
 de `claude -p` et n'ouvre que le programme d'un exécutable déclaré dans l'environnement du projet ou un outil de base des
 agents ; tout autre cas est une décision.
+
+### `polyvalents`
+
+Entrée : `{"confirme": true}` (demande `passer_polyvalent` : le clic « Passer aux agents polyvalents » du Directeur, jamais sans
+lui ; refus code 1 sans `confirme`). **Reprise** d'un projet ouvert au nouveau standard, rejouable sans effet : (1) un métier par
+rôle des fiches (`briefs/<rôle>.md` : le brief existant est gardé, sinon créé depuis le texte d'une fiche du rôle ; spécialité,
+outils, service et modèle d'une fiche du rôle ; `Lieu : local` si toutes les fiches du rôle étaient locales et déclaraient des
+outils) ; (2) les leçons des fiches, validées et « à valider », vont dans le métier de leur rôle (ids gardés, doublons exacts
+fusionnés), et une leçon « à valider » du suivi porte son `metier` ; (3) l'équipe est ramenée aux places effectives
+(`agents_locaux_max`, et pour le cloud `agents_cloud_max` ou l'ancienne limite) : on garde d'abord les agents au travail, puis
+l'agent de cadrage d'une fonctionnalité en cadrage, puis ceux qui ont une session cloud, les autres sont retirés ; un agent au
+travail au-delà des places porte `Retrait : prévu` et part à la fin de sa tâche (voir `equipe`) ; les fiches gardées deviennent
+polyvalentes, aucun agent cloud n'est créé, des agents locaux sont ajoutés si les places en demandent plus ; (4) aucune tâche
+n'est touchée. L'original de chaque fiche est copié dans `<fiches>/avant-polyvalents/`, le compte rendu est ajouté à
+`.factory/reprise-polyvalents.md`. Rend `{metiers: [{role, cree}], lecons_regroupees, doublons, agents_gardes, agents_retires,
+retraits_prevus, agents_crees, deja, compte_rendu}` (`deja` : le projet était déjà passé, rien n'a changé). Refus (code 1) si un
+brief de métier est illisible (rien n'est changé). Le relevé dit `recrutement.reprise_possible` tant que des fiches à l'ancienne
+restent.
 
 ### `recruter`
 

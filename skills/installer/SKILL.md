@@ -128,11 +128,9 @@ Prépare l'organisation la plus petite qui tienne :
 - **Le workflow le plus court qui tienne** : le moins d'étapes et de relectures possible, adapté au métier (pars de ce
   que le genre a appris quand il est connu). Le cadrage validé par l'utilisateur est déjà fait par l'orchestrateur
   avant chaque fonctionnalité : ne l'ajoute pas. Chaque étape a une **justification** d'une phrase.
-- **Les métiers** : un par rôle du workflow, chacun avec son service, son modèle par défaut (le plus petit capable),
-  son lieu (`local` seulement s'il ne peut se faire que sur le poste), sa spécialité, ses outils et son `brief` (la
-  consigne complète du spécialiste). **Les agents** sont polyvalents : chacun devient le spécialiste du métier de sa
-  tâche. Tu ne proposes que **leur nombre**, `{"locaux": n, "cloud": m}` (n ne dépasse pas `agents_locaux_max`) : ce
-  sont les places de l'onglet Facturation, réglables ensuite. L'ancien format (une fiche par rôle) reste accepté.
+- **Les métiers** : un par rôle du workflow, avec service, modèle par défaut (le plus petit capable), `local` s'il ne
+  se fait que sur le poste, et `brief` (la consigne du spécialiste). Les agents sont polyvalents : tu ne
+  proposes que leur nombre `{"locaux": n, "cloud": m}`, les places de Facturation.
 - **Les contrôles** : ce que l'utilisateur a dit qui serait faux ou raté, une phrase par contrôle.
 - **L'orchestrateur** : Sonnet, sauf projet exigeant (Opus).
 
@@ -145,7 +143,7 @@ Présente alors, en cinq parties courtes :
 1. **Ce que tu as compris du projet.**
 2. **Le paramétrage** : nom, genre, mots interdits, modèle de l'orchestrateur, charge maximum et agents locaux en
    parallèle, supports et accès du téléphone, local seul ou local et cloud, facturation, dépôt GitHub (projet vide), partenaires conseillés.
-3. **L'organisation** : les services, les métiers (rôle, service, modèle par défaut) et le nombre d'agents locaux et cloud.
+3. **L'organisation** : les services, les métiers et le nombre d'agents locaux et cloud.
 4. **Le workflow** : les étapes dans l'ordre, chacune avec son rôle, son service et sa justification ; ce sont les
    colonnes du tableau du bureau (`cadrage` et `fait` s'y ajoutent).
 5. **L'estimation** du coût d'un élément passé par ce workflow, avec ce sur quoi elle s'appuie.
@@ -161,10 +159,7 @@ Après « je valide » :
    `<skill>/installation/proposition.py` : lis cet en-tête, pas le reste. Le service `facturation` n'est pas déclaré
    à la main (la mise en place l'ajoute) ; `supports` liste `ordinateur` et/ou `mobile` ; `acces` vaut
    `{"tailscale": vrai ou faux, "reseau_local": vrai ou faux}` (tous deux faux sans mobile) ; `estimation` est le
-   résultat de `estimer` (donne-lui `{"flux", "metiers", "agents", "genre"}`) ; `metiers` donne un métier par rôle
-   (`{role, service, modele?, lieu?, specialite?, outils?, brief}`) et `agents` vaut `{"locaux": n, "cloud": m}`
-   (`agents_locaux_max` vaut `n`) ; à l'ancienne, `agents` est la liste des fiches (`texte` : le corps d'une fiche) et
-   `briefs` un brief par rôle ;
+   résultat de `estimer` (avec `metiers`) ; `metiers` (un par rôle) et `agents` (`{"locaux": n, "cloud": m}`, `n` = `agents_locaux_max`) remplacent `agents` et `briefs` ;
    `partenaires_conseilles` (facultatif) vaut `{besoin: [{"id", "raison"}]}`.
 2. `outil.py proposer < <fichier>` : contrôle et enregistre. Un refus liste les erreurs : corrige et recommence.
 3. `outil.py appliquer "<dossier>"` : écrit la configuration dans `.factory/`, règle le `.gitignore`, inscrit le
@@ -185,8 +180,6 @@ Dis, sans plus :
   pas le contraire.
 - **Les agents cloud** (`agents_cloud`), un par ligne : sa clé, son rôle, son modèle, l'environnement (vide :
   environnement de base). Rien à créer : le moteur lance leurs sessions.
-  Avec des agents polyvalents, `agents_cloud` est vide : les agents cloud (`agents.cloud`) n'ont pas encore de session ;
-  le moteur pose la décision « Sessions cloud à créer » au premier départ d'une tâche cloud.
 - **Le bureau** : lance-le toi-même, `outil.py bureau` (avec `--relancer` si `relancer_bureau` est vrai) ; il tourne
   en arrière-plan. Donne son `url` et ses `annonces`. Refus (lancé à la main) : dis-le.
 - **Avec le mobile** : ouvrir la page sur l'ordinateur ; « Associer un téléphone » ; scanner le QR code avec le

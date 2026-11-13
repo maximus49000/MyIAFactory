@@ -1982,6 +1982,14 @@ def _sur_recruter(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, None)
 
 
+def _sur_passer_polyvalent(projet, demande, etat):
+    """Le clic « Passer aux agents polyvalents » (confirmé par le Directeur) : un métier par rôle, les leçons regroupées, l'équipe
+    ramenée aux places, aucune tâche touchée (`lancer polyvalents`). Rejouable sans effet."""
+    r = lancer(projet, "polyvalents", {"confirme": True})
+    _terminer(projet, {"demande": demande["id"]}, r["compte_rendu"])
+    return _demarrer_en_attente(projet, etat, None)
+
+
 def _sur_depot_git(projet, demande, etat):
     """Le clic « Créer le dépôt Git » : dépôt local si besoin, dépôt GitHub privé et poussée (`lancer depot`)."""
     r = lancer(projet, "depot", {"action": "creer", "confirme": True})
@@ -1991,7 +1999,7 @@ def _sur_depot_git(projet, demande, etat):
 
 
 _SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme, "recruter": _sur_recruter,
-        "depot_git": _sur_depot_git, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
+        "depot_git": _sur_depot_git, "passer_polyvalent": _sur_passer_polyvalent, "message": _sur_message, "cahier": _sur_cahier, "methode": _sur_methode,
         "lecon": _sur_lecon, "genre": _sur_genre, "organisation": _sur_organisation,
         "genre_fonctionnalite": _sur_genre_fonctionnalite, "environnement": _sur_environnement,
         "installer_outil": _sur_installer_outil,

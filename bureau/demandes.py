@@ -33,19 +33,23 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "fable_tache": ("decision", "verdict"),
           # le lieu des étapes (conception 2026-11-13-etapes-locales-design.md)
           "proposer_decoupage": (), "decoupage_lieux": ("decision", "verdict"), "lieu_etape": ("etape", "lieu"),
-          "regroupement_etape": ("etape", "regroupement")}
+          "regroupement_etape": ("etape", "regroupement"),
+          # l'analyse des blocages par le Chef : sa question au Directeur, et les anomalies du logiciel
+          "blocage_analyse": ("decision", "verdict"), "anomalie": ("anomalie", "etat")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
                "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
-               "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "blocage_analyse": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
-               "lieu_etape", "regroupement_etape")
+               "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie")
+VERDICTS_BLOCAGE = ("suivre", "preciser", "laisser")   # suivre la recommandation du Chef, répondre autrement, laisser
+ETATS_ANOMALIE = ("vue", "reglee")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_DECOUPAGE = ("valider", "refuser")    # « refuser » : rien ne change
 LIEUX_D_ETAPE = ("local", "cloud", "indifférent")       # ou null : le lieu du métier décide
@@ -485,6 +489,21 @@ def _verifier_v4(demande, r, elements):
         if demande["verdict"] == "autoriser" and not d.get("programme"):
             return "Cette décision ne nomme pas de programme à autoriser."
         return None
+    if genre == "blocage_analyse":   # « Suivre la recommandation », « Répondre autrement » ou « Laisser bloquée »
+        if _decision(r.get("decisions_projet", []), demande["decision"], "blocage_analyse") is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in VERDICTS_BLOCAGE:
+            return f"Réponse inconnue ({', '.join(VERDICTS_BLOCAGE)})."
+        texte = demande.get("texte")
+        if demande["verdict"] == "preciser" and not (isinstance(texte, str) and texte.strip()):
+            return "Écrivez votre réponse."
+        if len(texte or "") > MAX_TEXTE:
+            return f"« texte » dépasse {MAX_TEXTE} caractères."
+        return None
+    if genre == "anomalie":          # « Vu » ou « Réglée » sur une anomalie du logiciel
+        if not any(isinstance(x, dict) and x.get("id") == demande["anomalie"] for x in r.get("anomalies_logiciel") or []):
+            return "Anomalie inconnue."
+        return None if demande["etat"] in ETATS_ANOMALIE else "État inconnu (vue ou reglee)."
     if genre == "fable_tache":       # « Autoriser Fable » ou « Refuser : Opus », pour cette tâche seulement
         if _decision(r.get("decisions_projet", []), demande["decision"], "fable_tache") is None:
             return "Décision inconnue."

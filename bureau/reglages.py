@@ -14,7 +14,10 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # lui-même « Yes, I trust this folder » à Claude Code (jamais sans cet accord).
            "cloud_dossier_approuve": False,
            # Vrai quand le Directeur laisse le moteur valider lui-même les leçons proposées, au niveau qu'elles proposent.
-           "lecons_auto": False}
+           "lecons_auto": False,
+           # Vrai (par défaut) : le Chef analyse chaque blocage d'une tâche avant le Directeur (« Analyse intelligente
+           # des blocages ») ; faux, le moteur fait comme avant, sans aucun appel de ce jugement.
+           "analyse_blocages": True}
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
 
@@ -51,6 +54,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « cloud_dossier_approuve » doit valoir true ou false.")
     if type(r.get("lecons_auto")) is not bool:
         raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
+    if type(r.get("analyse_blocages")) is not bool:
+        raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
 
 
 MAX_PROJETS = 12
@@ -151,6 +156,13 @@ def fixer_lecons_auto(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« lecons_auto » doit valoir true ou false.")
     return _ecrire_cle(chemin, "lecons_auto", valeur)
+
+
+def fixer_analyse_blocages(chemin, valeur):
+    """Note si le Chef analyse les blocages avant le Directeur (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« analyse_blocages » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "analyse_blocages", valeur)
 
 
 def _ecrire_cle(chemin, cle, valeur):

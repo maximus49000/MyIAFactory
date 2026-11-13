@@ -115,6 +115,7 @@ class Projet:
         self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
+        self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -1749,9 +1750,10 @@ def _validation_bloquee(t):
         ETAPES_DE_VALIDATION)
 
 
-def _refaire_avant_la_validation(projet, demande, etat, t):
+def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     """Un retour sur une validation bloquée (rien à vérifier, consigne manquante…) : comme un renvoi, l'étape d'avant
-    est refaite avec le texte du Directeur, et la validation sera reposée ensuite. Tout se règle depuis le bureau."""
+    est refaite avec le texte du Directeur (ou du Chef, `qui`), et la validation sera reposée ensuite. Tout se règle
+    depuis le bureau."""
     fid, eid = t["fonctionnalite"], t["element"]
     reprendre_la_serie(projet, etat, fid)
     v = _m(etat, "elements").get(f"{fid}/{eid}")
@@ -1766,9 +1768,10 @@ def _refaire_avant_la_validation(projet, demande, etat, t):
                              "journal": [f"Renvoyé : {texte}"]})
     v.pop("rien_a_verifier", None)
     v.update(phase="flux", pas=avant)
-    _tache_de_flux(projet, etat, v, journal=[f"Remarque du Directeur : {texte}"])
-    _dire(projet, fid, f"« {v['element']['nom']} » : l'étape « {production[avant]['nom']} » est refaite avec votre "
-                       "retour, puis la validation sera reposée.")
+    _tache_de_flux(projet, etat, v, journal=[f"Remarque du {qui} : {texte}"])
+    _dire(projet, fid, f"« {v['element']['nom']} » : l'étape « {production[avant]['nom']} » est refaite avec "
+                       + ("votre retour" if qui == "Directeur" else f"le retour du {qui}")
+                       + ", puis la validation sera reposée.")
     _terminer(projet, {"demande": demande["id"]}, "L'étape précédente est refaite avec votre retour ; la validation "
                                                   "sera reposée ensuite.")
     return _demarrer_en_attente(projet, etat, fid)
@@ -3367,7 +3370,8 @@ def traiter_retour(projet, execution, etat):
     if r["statut"] == "echec":
         _bloquer_taches(projet, taches, "L'agent n'a pas pu finir : " + reponse[:300])
         _terminer(projet, {"demande": liee}, "L'agent n'a pas pu finir : " + reponse[:300])
-        return _apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
+        return (_apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
+                + _analyser_le_blocage(projet, etat, taches[0], "echec", {"rapport": r}))
     t0 = _tache(projet, taches[0])
     message_refuse = None
     if isinstance(r.get("cahier"), dict) and r["cahier"].get("partenaires"):
@@ -3451,7 +3455,8 @@ def _message_refuse(projet, etat, execution, depart, r, raison):
     if t.get("fonctionnalite"):
         _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
-    return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
+    return (_apres_echec_d_installation(projet, etat, depart["taches"], raison)
+            + _analyser_le_blocage(projet, etat, tid, "message_refuse", {"rapport": r, "erreur": raison}))
 
 
 ATTENTES_PANNE_S = (120, 300, 600, 900)     # 2, 5, 10 puis 15 min entre deux essais tant que la panne dure
@@ -3501,9 +3506,12 @@ def _agent_en_echec(projet, etat, execution, depart):
         _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
     if str(execution.erreur or "").startswith(ERREUR_CLOUD):
+        # une session cloud qui ne démarre pas : la démarche est au Directeur (pas un échec de l'agent à analyser)
         _session_a_creer(projet, depart["agent"], str(execution.erreur)[len(ERREUR_CLOUD):].strip(" :"), tid,
                          session=_m(etat, "sessions_cloud").get(depart["agent"]))
-    return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
+        return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
+    return (_apres_echec_d_installation(projet, etat, depart["taches"], raison)
+            + _analyser_le_blocage(projet, etat, tid, "sans_rapport", {"erreur": raison}))
 
 
 ERREUR_CLOUD = "session cloud"       # le début de l'erreur d'un départ cloud (`boucle._partir_cloud`)
@@ -3898,10 +3906,10 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
     else:
         consigne = (f"{qui} est arrêté : il lui faut l'outil « {outil} », que sa fiche ne lui ouvre pas. Ouvrez-le "
                     "vous-même à la ligne « Outils : » de sa fiche, puis relancez l'agent.")
-    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_OUTIL, "agent": cle, "tache": tid,
-                                "outil": quoi[:100], **({"programme": programme} if programme else {}),
-                                **({"commande": montree} if montree else {}),
-                                "texte": consigne + f" Tâche : « {t['titre']} »."})
+    posee = lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_OUTIL, "agent": cle,
+                                        "tache": tid, "outil": quoi[:100], **({"programme": programme} if programme else {}),
+                                        **({"commande": montree} if montree else {}),
+                                        "texte": consigne + f" Tâche : « {t['titre']} »."})
     if fid:
         for commande, entree in rapport.commandes(r, fonctionnalite=fid, tache=tid, agent=cle, etape=""):
             try:
@@ -3909,7 +3917,9 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
             except Refus as e:
                 lancer(projet, "tache", {"id": tid, "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
         _dire(projet, fid, f"{qui} est arrêté faute d'un outil : la décision est au bureau de direction.")
-    return []
+    return _analyser_le_blocage(projet, etat, tid, "outil", {
+        "rapport": r, "decision": posee["id"],
+        "outil_refuse": {"outil": quoi[:100], "programme": programme, "commande": montree}})
 
 
 PAR_SON_NOM = "Le moteur demande d'appeler par son nom : "
@@ -3941,6 +3951,9 @@ def _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes):
 def _reprendre_la_tache(projet, etat, tid, fid, supplement, journal):
     """La même tâche repart avec le même agent : débloquée, sortie de son lot, remise dans les départs à faire."""
     lancer(projet, "tache", {"id": tid, "bloquee": None, "lot": None, "journal": [journal]})
+    for d in _etat(projet)["decisions"]:
+        if d.get("genre") == GENRE_BLOCAGE and d.get("tache") == tid:
+            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     if tid not in _m(etat, "a_lancer", list):
         etat["a_lancer"].append(tid)
     _m(etat, "supplements")[tid] = supplement
@@ -4289,6 +4302,7 @@ def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
     v["taches"].append(tid)
     _bloquer_taches(projet, [tid], raison)
     _dire(projet, v["fid"], f"« {element['nom']} » est arrêté avant « {s['nom']} » : {raison}")
+    _m(etat, "analyses_a_faire", list).append((tid, "validation", {"erreur": raison}))
     return tid
 
 
@@ -4611,10 +4625,11 @@ def avancer(projet, etat):
     etat.pop("attente_charge", None)
     etat.pop("attente_validation", None)
     etat.pop("charge_rouge", None)
+    analyses = analyses_en_attente(projet, etat)      # un jugement n'est pas un départ d'agent : même en pause
     if court["pause"]:
         _noter_les_attentes_sans_risque(projet, etat)
-        return []
-    actions = []
+        return analyses
+    actions = analyses
     for f in court["fonctionnalites"]:
         if f["etape"] in ("cadrage", "cahier") and f["attend_reponse"]:
             actions += _repondre_cadrage(projet, etat, f["id"])
@@ -4927,12 +4942,360 @@ _SUR["fin_vue"] = _sur_fin_vue
 
 # --- Les jugements : leur décision revient ici.
 
+# --- L'analyse d'un blocage par le Chef (jugement `analyser_blocage`).
+#
+# Une tâche qui se bloque par un échec de son agent (rapport « echec », deux essais sans rapport, réponse refusée deux
+# fois, outil refusé, conflit de fusion d'une branche cloud, validation sans consigne répétée) est d'abord traitée comme
+# avant (bloquée, ou décision au Directeur) ; puis le Chef l'analyse : retour à l'agent, correction par un autre métier,
+# question au Directeur (avec sa recommandation) ou anomalie du logiciel ; et, s'il y a une cause réutilisable, une
+# leçon. Un seul essai automatique par tâche et par motif ; un jugement raté laisse la tâche comme avant, journal à
+# l'appui. Le Chef n'ouvre jamais un outil, n'installe rien, ne dépense rien, ne choisit jamais Fable : une consigne de
+# retour ne change pas la fiche de l'agent. Réglage `analyse_blocages` (vrai par défaut) : faux, rien de tout cela.
+# Pas d'analyse : panne du service (attente et reprise), pause, tâche bloquée par le Directeur, blocage d'amont,
+# installation (la décision du poste suit déjà), commande figée (le moteur l'arrête et l'agent continue : sa ligne de
+# journal est dans le dossier si la tâche finit par se bloquer).
+
+GENRE_BLOCAGE = "blocage_analyse"     # la décision de projet « Blocages analysés par le Chef » (bureau de direction)
+MOTIFS_BLOCAGE = {"echec": "l'agent n'a pas pu finir", "sans_rapport": "deux essais sans rapport utilisable",
+                  "message_refuse": "réponse refusée deux fois par l'outil", "outil": "outil refusé",
+                  "fusion": "conflit de fusion d'une branche cloud", "validation": "validation sans consigne répétée"}
+ANALYSE_DU_CHEF = "Analyse du Chef"
+RETOUR_DU_CHEF = "Retour du Chef : "
+CORRECTION_DU_CHEF = "Correction confiée par le Chef"
+JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyées au Chef
+SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
+
+
+def _analyse_active(projet):
+    """Le réglage « Analyse intelligente des blocages » (`analyse_blocages`, vrai si absent), relu à chaque blocage."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["analyse_blocages"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "analyse_blocages", False) is True
+
+
+def _journal(projet, tid, texte):
+    try:
+        lancer(projet, "tache", {"id": tid, "journal": [texte[:500]]})
+    except Refus:
+        pass
+
+
+def _essais_du_chef(projet, t, motif):
+    """Les essais automatiques du Chef déjà faits pour ce motif : un retour ou une correction qui suit une analyse de ce
+    motif, dans le journal de la tâche (et, pour une validation, de celles du même élément à la même étape)."""
+    taches = [t]
+    if motif == "validation" and t.get("fonctionnalite") and t.get("element"):
+        try:
+            soeurs = lancer(projet, "detail", {"fonctionnalite": t["fonctionnalite"], "taches": True})["taches"]
+        except Refus:
+            soeurs = []
+        taches += [_tache(projet, x["id"]) for x in soeurs if x["id"] != t["id"] and x.get("element") == t["element"]
+                   and x.get("etape") == t.get("etape")]
+    libelle, essais = f"{ANALYSE_DU_CHEF} ({MOTIFS_BLOCAGE[motif]})", 0
+    for x in taches:
+        dernier = None
+        for j in x.get("journal") or []:
+            texte = str(j.get("texte") or "")
+            if texte.startswith(f"{ANALYSE_DU_CHEF} ("):
+                dernier = texte.startswith(libelle)
+            elif dernier and (texte.startswith(RETOUR_DU_CHEF) or texte.startswith(CORRECTION_DU_CHEF)):
+                essais += 1
+                dernier = None
+    return essais
+
+
+def _captures(r, t):
+    rendu = []
+    for x in list(((r or {}).get("message") or {}).get("images") or []) + list(t.get("captures") or []):
+        if isinstance(x, str):
+            rendu.append({"chemin": x, "legende": None})
+        elif isinstance(x, dict) and isinstance(x.get("chemin"), str):
+            rendu.append({"chemin": x["chemin"], "legende": x.get("legende")})
+    return rendu[:8]
+
+
+def _lecons_connues(projet, t):
+    """Les leçons validées du métier de la tâche (sinon de la fiche de son agent), 20 au plus."""
+    m = _metier(projet, t.get("role"))
+    lecons = (m or {}).get("lecons") or []
+    if not lecons and t.get("agent"):
+        lecons = (_fiche_de(projet, t["agent"]) or {}).get("lecons") or []
+    return [x["texte"] for x in lecons if isinstance(x, dict) and x.get("etat") == "validée"
+            and isinstance(x.get("texte"), str)][:20]
+
+
+def _metiers_du_blocage(projet, fac, t):
+    court = _etat(projet)
+    roles = set(_metiers_du_projet(fac)) | {a["role"] for a in court["agents"] if a.get("role") and a["role"] != "chef"}
+    if t.get("role"):
+        roles.add(t["role"])
+    return sorted(roles)
+
+
+def _analyser_le_blocage(projet, etat, tid, motif, matiere=None):
+    """Le point d'entrée unique : le Chef analyse le blocage de la tâche `tid` (`motif` : une clé de `MOTIFS_BLOCAGE` ;
+    `matiere` : `rapport`, `erreur`, `decision`, `branche`, `adresse`). Rend l'action `juger`, ou rien (réglage décoché,
+    installation, essai automatique déjà fait : la tâche reste au Directeur, comme avant)."""
+    matiere = matiere or {}
+    if not _analyse_active(projet):
+        return []
+    try:
+        t = _tache(projet, tid)
+    except Refus:
+        return []
+    if str(t.get("etape") or "") == ETAPE_INSTALLATION:
+        return []
+    libelle = MOTIFS_BLOCAGE[motif]
+    if _essais_du_chef(projet, t, motif):
+        _journal(projet, tid, f"Le Chef a déjà fait un essai automatique sur ce blocage ({libelle}) : la décision "
+                              "revient au Directeur.")
+        return []
+    fac = _factory(projet)
+    r = matiere.get("rapport") if isinstance(matiere.get("rapport"), dict) else None
+    dossier = {
+        "tache": {"id": tid, "titre": t.get("titre"), "etape": t.get("etape"), "metier": t.get("role"),
+                  "element": t.get("element")},
+        "motif": {"code": motif, "texte": libelle},
+        "journal": [str(j.get("texte") or "")[:300] for j in (t.get("journal") or [])[-JOURNAL_DE_L_ANALYSE:]],
+        "rapport": None if r is None else {
+            "statut": r.get("statut"), "message": str((r.get("message") or {}).get("texte") or "")[:2000],
+            "outil": r.get("outil"), "captures": _captures(r, t)},
+        "erreur": str(matiere["erreur"])[:600] if matiere.get("erreur") else None,
+        "decision": matiere.get("outil_refuse"),
+        "lecons_du_metier": _lecons_connues(projet, t),
+        "essais_automatiques": 0,
+        "metiers": _metiers_du_blocage(projet, fac, t),
+        # une validation se refait par l'étape d'avant (pas de correction à part) ; une branche fusionnée est faite
+        "voies": [v for v in ("retour", "correction", "directeur", "logiciel")
+                  if not (motif == "validation" and v == "correction") and not (motif == "fusion" and v == "retour")],
+        "mots_interdits": list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""],
+    }
+    dossier["mots_interdits"] = [m for m in dossier["mots_interdits"] if m]
+    suite = {"tache": tid, "motif": motif, "modele": str(fac.get("modele_orchestrateur") or "Sonnet").lower(),
+             "fonctionnalite": t.get("fonctionnalite")}
+    for cle in ("decision", "branche", "adresse"):
+        if matiere.get(cle):
+            suite[cle] = matiere[cle]
+    return [a_juger("analyser_blocage", dossier, suite)]
+
+
+def analyses_en_attente(projet, etat):
+    """Les blocages notés là où aucune action ne peut être rendue (une validation sans consigne répétée) : analysés au
+    passage suivant."""
+    actions = []
+    for tid, motif, matiere in etat.pop("analyses_a_faire", []):
+        try:
+            actions += _analyser_le_blocage(projet, etat, tid, motif, matiere)
+        except (Refus, ErreurMoteur):
+            pass
+    return actions
+
+
+def _analyse_ratee(projet, ctx, question):
+    """Le jugement n'a pas abouti : la tâche reste comme avant (bloquée, ou la décision au Directeur), le journal le dit."""
+    libelle = MOTIFS_BLOCAGE.get(ctx.get("motif"), "blocage")
+    _journal(projet, ctx["tache"], f"{ANALYSE_DU_CHEF} impossible ({libelle}) : {question[:300]} La tâche reste au "
+                                   "Directeur, comme avant.")
+    return []
+
+
+def _toujours_a_debloquer(projet, t, ctx):
+    """Rien n'a changé pendant l'analyse : la décision d'outil est encore posée, ou la tâche encore bloquée."""
+    if ctx["motif"] == "fusion":
+        return True
+    if ctx["motif"] == "outil":
+        return any(d["id"] == ctx.get("decision") for d in _etat(projet)["decisions"])
+    return t["colonne"] != "fait" and bool(t.get("bloquee"))
+
+
+def _lever_la_decision(projet, i):
+    if i:
+        try:
+            lancer(projet, "decision", {"action": "lever", "id": i})
+        except Refus:
+            pass
+
+
+def _lecon_du_chef(projet, t, lecon):
+    """La leçon tirée du blocage, par le circuit des leçons proposées : notée « à valider » au métier de la tâche (ou à
+    la fiche de son agent), au projet (`metier`) ou au genre (`genre`) ; validée tout de suite si `lecons_auto`."""
+    court = _etat(projet)
+    cles = {a["cle"] for a in court["agents"]}
+    agent = t.get("agent") if t.get("agent") in cles else None
+    if agent is None and t.get("role"):     # une validation : la leçon va au métier, par un agent polyvalent
+        agent = next((a["cle"] for a in court["agents"] if _polyvalent(a)), None)
+    etage = "genre" if lecon["portee"] == "genre" else "projet"
+    texte = " ".join(lecon["texte"].split())
+    e = {"action": "noter", "agent": agent or CHEF, "texte": texte, "tache": t["id"], "etage_propose": etage,
+         "roles": [t["role"]] if t.get("role") else ["tous"]}
+    if etage == "genre":
+        e["texte_general"] = texte
+    try:
+        i = lancer(projet, "lecon", e)["id"]
+    except Refus as ex:
+        _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
+        return
+    if getattr(projet, "lecons_auto", False):
+        try:
+            r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
+            x = (r.get("resultats") or [{}])[0]
+            if x.get("ok"):
+                _journal(projet, t["id"], f"Leçon validée : {texte}")
+                return
+            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique refusée : {x.get('refus')})")
+            return
+        except (Refus, ErreurMoteur) as ex:
+            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique impossible : {ex})")
+            return
+    _journal(projet, t["id"], f"Leçon proposée : {texte}")
+
+
+def _apres_analyser_blocage(projet, o, ctx, etat):
+    tid, motif = ctx["tache"], ctx["motif"]
+    t = _tache(projet, tid)
+    fid = t.get("fonctionnalite")
+    _journal(projet, tid, f"{ANALYSE_DU_CHEF} ({MOTIFS_BLOCAGE[motif]}) : {o['analyse']}")
+    if o.get("lecon"):
+        _lecon_du_chef(projet, t, o["lecon"])
+    if not _toujours_a_debloquer(projet, t, ctx):
+        _journal(projet, tid, "La tâche a changé pendant l'analyse du Chef : il n'y touche pas.")
+        return []
+    voie = o["voie"]
+    if voie == "logiciel":
+        a = o["anomalie"]
+        try:
+            lancer(projet, "anomalies", {"action": "ajouter", "tache": tid, "titre_tache": t.get("titre") or "",
+                                         "titre": a["titre"], "description": a["description"]})
+            _journal(projet, tid, f"Anomalie du logiciel notée : {a['titre']}")
+        except Refus as ex:
+            _journal(projet, tid, f"Anomalie du logiciel non notée : {ex}")
+    if voie in ("directeur", "logiciel"):
+        return _blocage_au_directeur(projet, t, ctx, o)
+    consigne = " ".join(o["consigne"].split())
+    if voie == "correction":
+        return _correction_du_chef(projet, etat, t, ctx, consigne, o["metier"])
+    if motif == "outil":
+        _lever_la_decision(projet, ctx.get("decision"))
+    if motif == "validation" and fid and t.get("element"):
+        _journal(projet, tid, RETOUR_DU_CHEF + consigne)
+        try:
+            return _refaire_avant_la_validation(projet, {"texte": consigne, "id": None}, etat, t, qui="Chef")
+        except Refus as ex:
+            _journal(projet, tid, f"Le retour du Chef n'a pas pu être appliqué : {ex}")
+            return []
+    # La même mécanique qu'un retour du Directeur ; la fiche de l'agent n'est pas touchée : ses outils restent les siens.
+    return _reprendre_la_tache(projet, etat, tid, fid,
+                               "Consigne du Chef pour la reprise de cette tâche (tes outils restent ceux de ta fiche) : "
+                               + consigne, RETOUR_DU_CHEF + consigne)
+
+
+def _correction_du_chef(projet, etat, t, ctx, consigne, metier):
+    """Une tâche de correction (le métier choisi par le Chef) ; la tâche bloquée en dépend et repart quand elle est faite.
+    Pour une branche cloud qui ne fusionne pas, la correction règle le conflit (la tâche, déjà faite, n'attend rien)."""
+    tid, fid = t["id"], t.get("fonctionnalite")
+    if ctx["motif"] == "fusion":
+        consigne = f"La branche « {ctx.get('branche')} » ne fusionne pas dans la branche principale : {consigne}"
+    corr = _creer_tache(projet, f"Correction : {t['titre']}"[:120], fid, metier, "correction",
+                        journal=[f"Consigne du Chef : {consigne}"[:500]])
+    ligne = f"{CORRECTION_DU_CHEF} au métier {metier} (tâche {corr}) : {consigne}"
+    if ctx["motif"] == "fusion":
+        _journal(projet, tid, ligne)
+        return _demarrer_en_attente(projet, etat, fid)
+    if ctx["motif"] == "outil":
+        _lever_la_decision(projet, ctx.get("decision"))
+    lancer(projet, "tache", {"id": tid, "depend_de": list(t.get("depend_de") or []) + [corr], "bloquee": None,
+                             "lot": None, "journal": [ligne[:500]]})
+    if tid not in _m(etat, "a_lancer", list):
+        etat["a_lancer"].append(tid)
+    _m(etat, "supplements")[tid] = (f"Avant ta reprise, une correction a été faite (tâche {corr}, métier {metier}) : "
+                                    f"{consigne} Reprends ta tâche ; tes outils restent ceux de ta fiche.")
+    return _demarrer_en_attente(projet, etat, fid)
+
+
+def _blocage_au_directeur(projet, t, ctx, o):
+    """La question au Directeur, avec l'analyse et la recommandation du Chef : sur la décision d'outil déjà posée ; dans
+    la discussion pour une branche qui ne fusionne pas ; sinon une décision « Blocages analysés par le Chef »."""
+    tid, motif, fid = t["id"], ctx["motif"], t.get("fonctionnalite")
+    question, recommandation = o["question"], o["recommandation"]
+    if motif == "outil" and ctx.get("decision"):
+        e = {"action": "annoter", "id": ctx["decision"], "analyse": o["analyse"], "question": question,
+             "recommandation": recommandation}
+        if o.get("verdict"):
+            e["verdict_recommande"] = o["verdict"]
+        lancer(projet, "decision", e)
+    elif motif == "fusion":
+        if fid:
+            _dire(projet, fid, f"Analyse du Chef : {o['analyse']} {question} Recommandation : {recommandation}")
+    else:
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_BLOCAGE, "tache": tid,
+                                    "texte": f"La tâche « {t['titre']} » est bloquée ({MOTIFS_BLOCAGE[motif]}). {question}",
+                                    "analyse": o["analyse"], "question": question, "recommandation": recommandation,
+                                    "motif": motif})
+    _journal(projet, tid, f"Question au Directeur : {question} Recommandation du Chef : {recommandation}")
+    return []
+
+
+def _sur_blocage_analyse(projet, demande, etat):
+    """La réponse du Directeur à un blocage analysé : suivre la recommandation du Chef ou répondre autrement (la tâche
+    repart avec ce texte, comme un retour du Directeur), ou la laisser bloquée."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande["decision"] and x["genre"] == GENRE_BLOCAGE),
+             None)
+    if d is None:
+        raise Refus("ce blocage n'attend plus de réponse")
+    verdict = demande.get("verdict")
+    if verdict == LAISSER:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _terminer(projet, {"demande": demande["id"]}, "La tâche reste bloquée.")
+        return []
+    if verdict == SUIVRE:
+        texte = d["recommandation"]
+    elif verdict == PRECISER and isinstance(demande.get("texte"), str) and demande["texte"].strip():
+        texte = demande["texte"]
+    else:
+        raise Refus(f"réponse inconnue : {verdict}" if verdict != PRECISER else "« texte » est obligatoire")
+    actions = _sur_retour(projet, {"id": demande["id"], "tache": d["tache"], "texte": texte}, etat)
+    _lever_la_decision(projet, d["id"])
+    return actions
+
+
+_SUR[GENRE_BLOCAGE] = _sur_blocage_analyse
+
+
+def _sur_anomalie(projet, demande, etat):
+    """« Vu » ou « Réglée » sur une anomalie du logiciel (section « Anomalies du logiciel » de la direction)."""
+    lancer(projet, "anomalies", {"action": "marquer", "id": demande["anomalie"], "etat": demande["etat"]})
+    _terminer(projet, {"demande": demande["id"]}, "C'est noté." if demande["etat"] == "vue" else "Anomalie réglée.")
+    return []
+
+
+_SUR["anomalie"] = _sur_anomalie
+
+
+def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):
+    """La branche cloud d'une tâche faite ne fusionne pas : la question au Directeur (comme avant), puis l'analyse du
+    Chef."""
+    t = _tache(projet, tid)
+    lancer(projet, "tache", {"id": tid, "journal": [f"Fusion de la branche {branche} impossible : {raison}"]})
+    if t.get("fonctionnalite"):
+        _question(projet, t["fonctionnalite"],
+                  f"La branche « {branche} » de l'agent {agent} n'a pas pu être fusionnée ({raison})"
+                  + (f". Sa session : {adresse}." if adresse else ".")
+                  + " Réglez le conflit dans le dépôt, puis dites-moi de continuer.",
+                  ["C'est réglé, continuez", "Laissez cette branche de côté"])
+    return _analyser_le_blocage(projet, etat, tid, "fusion", {"erreur": raison, "branche": branche, "adresse": adresse})
+
+
 def appliquer_jugement(projet, type_, decision, contexte, etat=None):
     """La suite d'un jugement (`contexte` : la suite donnée avec l'action `juger`). Une décision sans objet (deux essais
     ratés) devient une question au Directeur."""
     etat = nouvel_etat() if etat is None else etat
     if decision.question is not None:
         fid = contexte.get("fonctionnalite")
+        if type_ == "analyser_blocage":     # la tâche reste comme avant, le journal le dit
+            return _analyse_ratee(projet, contexte, decision.question)
         if type_ == "classer_genre" and fid:
             return _classer_rate(projet, etat, fid, contexte)
         if type_ == "classer_genre":       # le genre d'un projet sans demande : il sera proposé à la première demande
@@ -5063,4 +5426,4 @@ def _apres_conseil(projet, o, ctx, etat):
 _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour,
           "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
           "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation,
-          "decouper_lieux": _apres_decouper_lieux}
+          "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage}

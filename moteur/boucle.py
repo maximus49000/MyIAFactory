@@ -84,6 +84,7 @@ def ouvrir_projet(fichier_reglages, environ=None):
         projet.cloud_max = lus["agents_cloud_max"]
         projet.cloud_dossier_approuve = lus["cloud_dossier_approuve"]
         projet.lecons_auto = lus["lecons_auto"]
+        projet.analyse_blocages = lus["analyse_blocages"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet
@@ -512,7 +513,8 @@ class Moteur:
 
     def _juger(self, projet, action):
         _, type_, dossier, suite = action
-        decision = jugement.juger(type_, dossier, couche=projet.couche, appeler=self.appeler)
+        # le modèle donné par la suite (l'analyse d'un blocage : celui de l'orchestrateur du projet), sinon celui du type
+        decision = jugement.juger(type_, dossier, couche=projet.couche, appeler=self.appeler, modele=suite.get("modele"))
         self._noter_usages(projet, decision.usages, AGENT_ORCHESTRATEUR, ETAPE_ORCHESTRATION, tache=suite.get("tache"))
         return regles.appliquer_jugement(projet, type_, decision, suite, self._etat(projet))
 
@@ -837,14 +839,7 @@ class Moteur:
         if raison is None:
             return
         self._noter(projet, f"fusion de {e.branche} : {raison}")
-        t = regles.lancer(projet, "detail", {"tache": e.tache})
-        regles.lancer(projet, "tache", {"id": e.tache, "journal": [f"Fusion de la branche {e.branche} impossible : {raison}"]})
-        if t.get("fonctionnalite"):
-            regles._question(projet, t["fonctionnalite"],
-                             f"La branche « {e.branche} » de l'agent {e.agent} n'a pas pu être fusionnée ({raison})"
-                             + (f". Sa session : {e.adresse}." if e.adresse else ".")
-                             + " Réglez le conflit dans le dépôt, puis dites-moi de continuer.",
-                             ["C'est réglé, continuez", "Laissez cette branche de côté"])
+        self._executer(projet, regles.fusion_impossible(projet, etat, e.tache, e.agent, e.branche, e.adresse, raison))
 
     def _retours_des_agents(self, projet, etat):
         garde = []

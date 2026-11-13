@@ -72,6 +72,12 @@ VALIDES["decouper_lieux"] = {
              {"id": "tests", "nom": "Tests sur émulateur", "role": "qa", "service": "jeu", "lieu": "local"}],
     "message": "Le code du prototype peut s'écrire dans le cloud ; sa mise en place et les tests restent sur le poste."}
 
+# Une analyse de blocage : la tâche repart avec une consigne, et une leçon pour le métier.
+VALIDES["analyser_blocage"] = {
+    "analyse": "Le test rend « ok » à tort : les captures montrent une invite du système, puis un écran noir.",
+    "voie": "retour", "consigne": "Ferme l'invite, relance le jeu et ne conclus « ok » que si la capture montre le jeu.",
+    "lecon": {"portee": "metier", "texte": "Une capture qui montre une invite système ou un écran noir n'est pas un succès."}}
+
 QUESTIONS = {"type": "questions", "message": "Quelques questions avant de proposer le workflow.",
              "questions": [{"id": "q1", "texte": "Le jeu doit-il fonctionner hors ligne ?", "choix": ["Oui", "Non"]},
                            {"id": "q2", "texte": "Quelles étapes voulez-vous valider vous-même ?", "choix": []}]}
@@ -98,6 +104,12 @@ DOSSIERS = {
                          "correction": None},
     "decouper_lieux": {"flux": FLUX_LIEUX, "environnement": [{"outil": "Godot", "pour": "dev", "objectif": "Compiler."}],
                        "suggerees": ["dev"], "metiers": [{"role": "dev", "lieu": "indifférent"}]},
+    "analyser_blocage": {"tache": {"id": "t3", "titre": "Tests automatisés et émulateur : Repos", "etape": "flux:tests",
+                                   "metier": "qa", "element": "repos"},
+                         "motif": {"code": "echec", "texte": "L'agent n'a pas pu finir."}, "journal": [],
+                         "rapport": None, "erreur": None, "decision": None, "lecons_du_metier": [],
+                         "essais_automatiques": 0, "metiers": ["dev", "qa"],
+                         "voies": ["retour", "correction", "directeur", "logiciel"], "mots_interdits": ["Zorglub"]},
 }
 
 
@@ -137,7 +149,7 @@ class Juger(unittest.TestCase):
         self.assertEqual(jugement.TYPES, {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet",
                                           "apres_refus": "haiku", "conseil": "haiku", "classer_genre": "haiku",
                                           "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
-                                          "decouper_lieux": "sonnet"})
+                                          "decouper_lieux": "sonnet", "analyser_blocage": "sonnet"})
         self.assertEqual(jugement.LIBELLES["definir_workflow"], "définir le workflow du projet")
         self.assertEqual((jugement.TOURS_MAX_DEFINITION, jugement.QUESTIONS_PAR_TOUR_MAX,
                           jugement.CHOIX_PAR_QUESTION_MAX), (4, 5, 6))
@@ -712,6 +724,68 @@ class Consignes(unittest.TestCase):
             self.assertIn(modele, texte)
         for cle in QUESTIONS["questions"][0]:
             self.assertIn(f'"{cle}"', texte)
+
+
+
+class AnalyserBlocage(unittest.TestCase):
+    """La réponse de l'analyse d'un blocage : une voie, ses champs, et une leçon publique sans rien du projet."""
+
+    def v(self, dossier=None, **changements):
+        objet = json.loads(json.dumps(VALIDES["analyser_blocage"]))
+        objet.update(changements)
+        return jugement.valider("analyser_blocage", objet, dossier or DOSSIERS["analyser_blocage"])
+
+    def test_retour_valide_et_champs_obligatoires(self):
+        self.assertIsNone(self.v())
+        self.assertIsNotNone(self.v(analyse=""))
+        self.assertIsNotNone(self.v(analyse="x" * 601))
+        self.assertIsNotNone(self.v(voie="abandon"))
+        self.assertIsNotNone(self.v(consigne=None))
+        self.assertIsNotNone(self.v(consigne="x" * 901))
+        self.assertIsNotNone(self.v(consigne="Passe sur Fable pour ce test."))     # un modèle se demande au Directeur
+
+    def test_correction_vers_un_metier_du_projet(self):
+        self.assertIsNone(self.v(voie="correction", metier="dev"))
+        self.assertIsNotNone(self.v(voie="correction", metier="graphiste"))
+        self.assertIsNotNone(self.v(voie="correction"))
+
+    def test_directeur_question_recommandation_et_verdict_pour_un_outil(self):
+        d = dict(DOSSIERS["analyser_blocage"], motif={"code": "outil", "texte": "Outil refusé."})
+        base = {"voie": "directeur", "consigne": None, "question": "Autoriser l'émulateur pour cet agent ?",
+                "recommandation": "Autoriser : il en a besoin pour les tests."}
+        self.assertIsNone(self.v(**base))                       # hors outil : pas de verdict
+        self.assertIsNotNone(self.v(d, **base))
+        self.assertIsNone(self.v(d, verdict="autoriser", **base))
+        self.assertIsNotNone(self.v(d, verdict="ouvrir", **base))
+        self.assertIsNotNone(self.v(**{**base, "recommandation": None}))
+        self.assertIsNotNone(self.v(**{**base, "question": "deux\nlignes"}))
+
+    def test_logiciel_demande_l_anomalie_et_la_question(self):
+        base = {"voie": "logiciel", "question": "Que faire ?", "recommandation": "Signaler l'anomalie."}
+        self.assertIsNone(self.v(anomalie={"titre": "Le relevé perd les captures", "description": "…"}, **base))
+        self.assertIsNotNone(self.v(**base))
+        self.assertIsNotNone(self.v(anomalie={"titre": "x"}, **base))
+        self.assertIsNotNone(self.v(anomalie={"titre": "T", "description": "d"}, voie="logiciel"))
+
+    def test_voies_permises_par_le_dossier(self):
+        d = dict(DOSSIERS["analyser_blocage"], voies=["retour", "directeur", "logiciel"])
+        self.assertIsNotNone(self.v(d, voie="correction", metier="dev"))
+
+    def test_lecon_de_genre_sans_chemin_ni_nom_du_projet(self):
+        ok = "Une capture qui montre une invite système ou un écran noir n'est pas un succès."
+        self.assertIsNone(self.v(lecon={"portee": "genre", "texte": ok}))
+        self.assertIsNone(self.v(lecon=None))
+        for texte in ("Lancer C:\\outils\\emu avant.", "Relire src/jeu avant.", "Vérifier main.gd avant.",
+                      "Le jeu Zorglub plante."):
+            self.assertIsNotNone(self.v(lecon={"portee": "genre", "texte": texte}), texte)
+        self.assertIsNone(self.v(lecon={"portee": "metier", "texte": "Relire src/jeu avant."}))   # celle du projet
+        self.assertIsNotNone(self.v(lecon={"portee": "projet", "texte": ok}))
+        self.assertIsNotNone(self.v(lecon={"portee": "metier", "texte": "x" * 301}))
+
+    def test_le_moteur_ne_choisit_jamais_fable(self):
+        with self.assertRaises(appel.ErreurAppel):
+            jugement.juger("analyser_blocage", DOSSIERS["analyser_blocage"], couche="claude", appeler=Appels(),
+                           modele="fable")
 
 
 if __name__ == "__main__":

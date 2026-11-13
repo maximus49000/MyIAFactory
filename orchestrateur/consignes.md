@@ -35,7 +35,8 @@ prochain message, « Contradiction : … ; j'applique la règle du projet »), u
 - **Au démarrage** : `lancer reveil`, puis `lancer etat` (note son empreinte `consignes` : c'est celle des textes
   que tu viens de lire ; le projet, son genre, la pause, les fonctionnalités, les
   tâches, la file, les décisions, les leçons, les agents), puis la mémoire (voir « La mémoire »). Lis le registre des
-  contrôles du projet. Puis commence la boucle de réveil.
+  contrôles du projet, puis `lancer anomalies` (les anomalies du logiciel que le Chef a notées en analysant des
+  blocages : dis au Directeur celles qui sont `nouvelle`). Puis commence la boucle de réveil.
 - **Surveille le journal des demandes** avec un moniteur dont la commande est `lancer guetter` (elle ne rend jamais
   la main ; délai au maximum, et réarme-le dès qu'il expire) : chaque geste de l'utilisateur au bureau y devient une
   ligne, et c'est ce qui te réveille. Le moniteur dit
@@ -115,6 +116,8 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `decoupage_lieux` | La réponse du Directeur à la décision `decoupage_lieux` (« Découper les étapes selon le poste ») : seul le moteur procédural y répond (`valider` : `lancer lieux` avec `{action: decouper, flux}` sur tous les workflows ; `refuser` : rien ne change) ; ne la traite pas toi-même. |
 | `fin_vue` | « Vu » sur l'avis de fin d'une fonctionnalité (`fonctionnalite`) : `lancer fonctionnalite` avec `{id, fin_vue: true}`, puis `demande-traitee`. Le moteur procédural s'en charge. |
 | `regle_projet` | Une règle du projet ajoutée, modifiée ou supprimée au bureau de direction (`operation`, `id?`, `texte?`) : `lancer regles` (mêmes champs, `action` = `operation`), puis `demande-traitee`. Le moteur procédural s'en charge ; ne réécris jamais `.factory/regles-projet.json` à la main. |
+| `anomalie` | « Vu » ou « Réglée » sur une anomalie du logiciel (`anomalie`, `etat` : vue ou reglee) : `lancer anomalies` avec `marquer`, puis `demande-traitee`. Le moteur procédural s'en charge. |
+| `blocage_analyse` | La réponse du Directeur à un blocage analysé par le Chef (suivre sa recommandation, répondre autrement, laisser bloquée) : seul le moteur procédural pose cette décision et y répond ; ne la traite pas toi-même. |
 | `outil_agent` | La réponse du Directeur à une décision `outil_agent' (un agent est arrêté faute d'un outil que sa fiche ne lui ouvre pas) : seul le moteur procédural pose cette décision et y répond (il lit la commande refusée, ouvre lui-même avec `lancer fiche` un programme déclaré du projet, et ne pose la décision que pour un programme inconnu ou un autre outil) ; ne la traite pas toi-même. |
 | `session_cloud` | L'utilisateur a créé la session demandée : `lancer session` avec l'`agent` de la décision (retrouve-le avec `lancer etat`, dans `decisions`) et le nom de la `session`, puis lève la décision `session_cloud`. L'agent cloud devient utilisable. |
 | `retour_element` | Un « Demander à modifier » du catalogue : une tâche de correction sur cet élément (`lancer tache` avec `fonctionnalite`, `element`, le rôle de l'étape concernée), qui suit le flux et la relecture croisée comme les autres. Réponds dans la `reponse` de la demande ce qui sera fait. |

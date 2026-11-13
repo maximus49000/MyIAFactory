@@ -163,6 +163,15 @@ class TestServeur(AvecServeur):
             self.assertEqual(r.status, 400, corps)
         self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["lecons_auto"], True)
 
+    def test_reglage_analyse_blocages_cochee_par_defaut_ecrit_et_visible(self):
+        self.assertIs(self.json("/api/etat")["analyse_blocages"], True)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"analyse_blocages": False}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["analyse_blocages"], False)
+        self.assertIs(self.json("/api/etat")["analyse_blocages"], False)
+        r, _ = self.req("POST", "/api/reglages", '{"analyse_blocages": "non"}', self.ENT)
+        self.assertEqual(r.status, 400)
+
     def test_reglage_sans_entete(self):
         avant = self.regl.read_text(encoding="utf-8")
         corps = json.dumps({"charge_max": 60})

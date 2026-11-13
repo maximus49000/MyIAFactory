@@ -35,6 +35,7 @@ from orchestrateur import metiers  # noqa: E402
 from orchestrateur import modele_necessaire as mn  # noqa: E402
 from orchestrateur import recrutement as rc  # noqa: E402
 from orchestrateur import regles_projet as rp  # noqa: E402
+from orchestrateur import anomalies as anomalies_logiciel  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 from orchestrateur import workflows as wf  # noqa: E402
 from partenaires import catalogue as pcat  # noqa: E402
@@ -55,7 +56,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
-                 "lieu_etape", "regroupement_etape")
+                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -907,8 +908,10 @@ def cmd_decision(ctx, e):
             return _noter_verification(s, e)
         if action == "completer":
             return _completer_validation(s, e)
+        if action == "annoter":
+            return _annoter_decision(s, e)
         if action != "poser":
-            raise Refus("« action » doit valoir poser, lever, verifier ou completer.")
+            raise Refus("« action » doit valoir poser, lever, verifier, completer ou annoter.")
         portee, genre, contenu = texte(e, "portee"), texte(e, "genre"), texte(e, "texte", vide_ok=True)
         if portee == "projet":
             if genre not in rel.DECISIONS_PROJET:
@@ -941,6 +944,8 @@ def cmd_decision(ctx, e):
                 d["environnement"] = _outils_qui_manquent(e)
             elif genre == "outil_agent":
                 d.update(_outil_a_ouvrir(ctx, s, e))
+            elif genre == "blocage_analyse":    # une tâche bloquée, analysée par le Chef : sa question au Directeur
+                d.update(_blocage_analyse(s, e))
             elif genre == "accord_agent":
                 d.update(_accord_a_donner(ctx, s, e))
             elif genre == "faire_chez_partenaire":      # l'utilisateur fait la génération chez le partenaire où il est inscrit
@@ -1036,6 +1041,43 @@ def _noter_verification(s, e):
             d["environnement"], d["verifie_le"] = neuf, su.maintenant()
             return {"ok": True}
     raise Refus(f"Décision inconnue : {i}")
+
+
+VERDICTS_RECOMMANDES = ("autoriser", "refuser")
+
+
+def _analyse_du_chef(e):
+    """Les champs de l'analyse d'un blocage par le Chef : `analyse` (600 caractères au plus), `question` et
+    `recommandation` (300 au plus chacune)."""
+    return {"analyse": _phrase_courte(e, "analyse", 600), "question": _phrase_courte(e, "question", 300),
+            "recommandation": _phrase_courte(e, "recommandation", 300)}
+
+
+def _blocage_analyse(s, e):
+    """Les champs de la décision `blocage_analyse` : la `tache` bloquée, le `motif`, l'analyse du Chef."""
+    tache = texte(e, "tache")
+    if su.tache(s, tache) is None:
+        raise Refus(f"« blocage_analyse » : tâche inconnue « {tache} ».")
+    return {"tache": tache, "motif": _phrase_courte(e, "motif", 40), **_analyse_du_chef(e)}
+
+
+def _annoter_decision(s, e):
+    """`{"action": "annoter", "id", "analyse", "question", "recommandation", "verdict_recommande"?}` : l'analyse du Chef
+    jointe à une décision `outil_agent` encore posée (`verdict_recommande` : autoriser ou refuser)."""
+    i = texte(e, "id")
+    d = next((x for x in s["decisions_projet"] if x["id"] == i), None)
+    if d is None:
+        raise Refus(f"Décision inconnue : {i}")
+    if d.get("genre") != "outil_agent":
+        raise Refus(f"La décision {i} n'est pas une décision « outil_agent ».")
+    champs = _analyse_du_chef(e)
+    v = e.get("verdict_recommande")
+    if v is not None:
+        if v not in VERDICTS_RECOMMANDES:
+            raise Refus("« verdict_recommande » vaut autoriser ou refuser.")
+        champs["verdict_recommande"] = v
+    d.update(champs)
+    return {"ok": True}
 
 
 def _outil_a_ouvrir(ctx, s, e):
@@ -2292,6 +2334,7 @@ def construire_releve(ctx):
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
+         "anomalies_logiciel": anomalies_logiciel.lire(ctx.f)[-ANOMALIES_AU_RELEVE:],
          "recrutement": releve_recrutement(ctx, s, fiches),
          "etapes_lieux": etapes_lieux_du_releve(ctx)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
@@ -3532,6 +3575,28 @@ def cmd_lieux(ctx, e):
     return {"change": change, "flux": lx.flux_de_reference(ctx.f)}
 
 
+ANOMALIES_AU_RELEVE = 50
+
+
+def cmd_anomalies(ctx, e):
+    """Les anomalies du logiciel (`.factory/anomalies-logiciel.jsonl`, voir `orchestrateur/anomalies.py`) : sans entrée
+    ou `lister`, la liste ; `ajouter` (titre, description, tache?, titre_tache?) ; `marquer` (id, etat : vue | reglee).
+    Seul écrivain du fichier."""
+    action = e.get("action", "lister")
+    try:
+        if action == "lister":
+            return {"anomalies": anomalies_logiciel.lire(ctx.f)}
+        if action == "ajouter":
+            if e.get("tache") is not None and su.tache(ctx.suivi.lire(), e["tache"]) is None:
+                raise ValueError(f"Tâche inconnue : {e['tache']}")
+            return {"anomalie": anomalies_logiciel.ajouter(ctx.f, e)}
+        if action == "marquer":
+            return {"anomalie": anomalies_logiciel.marquer(ctx.f, e.get("id"), e.get("etat"))}
+    except ValueError as ex:
+        raise Refus(str(ex))
+    raise Refus("« action » doit valoir lister, ajouter ou marquer.")
+
+
 def cmd_regles(ctx, e):
     """Les règles du projet (`.factory/regles-projet.json`) : `lister`, `ajouter` (texte, origine?), `modifier` (id, texte),
     `supprimer` (id). Seul écrivain du fichier."""
@@ -3672,7 +3737,7 @@ COMMANDES = {
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
-    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"),
     "lieux": (cmd_lieux, "obligatoire"),
 }
 

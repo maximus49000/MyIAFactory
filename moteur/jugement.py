@@ -27,6 +27,11 @@ Dossiers attendus (préparés par la table de règles) :
 - `decouper_lieux` (un projet en cours, sur le clic du Directeur) : `flux` (le flux de référence, `lieux.flux_de_reference`),
   `environnement` ([{outil, pour, objectif}]), `suggerees` (ids d'étapes qu'un outil cite), `metiers` ([{role, lieu}]).
   La réponse `{flux, message}` est vérifiée strictement par `lieux.verifier_proposition`.
+- `analyser_blocage` (une tâche bloquée par un échec d'agent, voir `regles._analyser_le_blocage`) : `tache` (id, titre,
+  etape, metier, element), `motif` {code, texte}, `journal` (les dernières lignes, coupées), `rapport` (statut, message,
+  outil, captures [{chemin, legende}]) ou null, `erreur`, `decision` (l'outil refusé : programme, commande) ou null,
+  `lecons_du_metier`, `essais_automatiques`, `metiers` (ceux du projet), `voies` (celles permises), `mots_interdits`.
+  Le moteur l'appelle avec le modèle de l'orchestrateur du projet (`modele_orchestrateur`), jamais Fable.
 
 Une étape de flux peut être une validation du Directeur, `{etape, nom, validation: true, raison?}` : ni rôle ni
 service, ni première, ni dernière, ni deux de suite.
@@ -49,13 +54,14 @@ from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
          "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
-         "decouper_lieux": "sonnet"}
+         "decouper_lieux": "sonnet", "analyser_blocage": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
             "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
             "proposer_organisation": "proposer le workflow de cette fonctionnalité",
             "definir_workflow": "définir le workflow du projet",
-            "decouper_lieux": "découper les étapes selon le poste"}
+            "decouper_lieux": "découper les étapes selon le poste",
+            "analyser_blocage": "analyser le blocage de cette tâche"}
 # L'échange de la création d'un projet (`definir_workflow`) : au plus 4 tours de questions, puis une proposition.
 TOURS_MAX_DEFINITION = 4
 QUESTIONS_PAR_TOUR_MAX = 5
@@ -83,6 +89,15 @@ MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depo
 MOTIF_EXECUTABLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")   # un nom à chercher dans le PATH, rien d'autre
 MOTIF_REGLE_OUTIL = re.compile(r"^(Bash|PowerShell)\([A-Za-z0-9][A-Za-z0-9._-]*(:\*| [^()\r\n*]+)\)\Z")
 CLE_ERREUR = "erreur_de_ta_reponse_precedente"
+# L'analyse d'un blocage : la cause, une voie (le Chef ne s'accorde jamais un outil, une dépense, une installation, Fable
+# ni un choix de conception : ce qui le demande va au Directeur) et, s'il y a une cause réutilisable, une leçon.
+VOIES_BLOCAGE = ("retour", "correction", "directeur", "logiciel")
+VERDICTS_OUTIL = ("autoriser", "refuser")
+PORTEES_LECON = ("metier", "genre")
+ANALYSE_MAX, CONSIGNE_BLOCAGE_MAX, QUESTION_MAX, TITRE_ANOMALIE_MAX, LECON_MAX = 600, 900, 300, 120, 300
+MOTIF_FABLE = re.compile(r"\bfable\b", re.IGNORECASE)
+# Une leçon de genre est publique : ni chemin (« C:/… », « src/x »), ni nom de fichier (« main.gd »).
+MOTIF_CHEMIN = re.compile(r"[\\/]|\w\.[a-z]{2,5}\b")
 
 
 class Decision:
@@ -676,10 +691,60 @@ def _valider_decouper_lieux(o, d):
     return None
 
 
+def _valider_analyser_blocage(o, d):
+    """La réponse de l'analyse d'un blocage, lue avec son dossier (motif, métiers du projet, voies permises, mots
+    interdits)."""
+    if not (_texte(o.get("analyse")) and len(o["analyse"]) <= ANALYSE_MAX):
+        return f"« analyse » (la cause probable, 1 à 3 phrases, {ANALYSE_MAX} caractères au plus) est obligatoire."
+    voie = o.get("voie")
+    permises = [v for v in d.get("voies") or VOIES_BLOCAGE if v in VOIES_BLOCAGE] or list(VOIES_BLOCAGE)
+    if voie not in permises:
+        return f"« voie » doit être l'une de : {', '.join(permises)}."
+    if voie in ("retour", "correction"):
+        c = o.get("consigne")
+        if not (_texte(c) and len(c) <= CONSIGNE_BLOCAGE_MAX):
+            return f"« consigne » (pour l'agent, {CONSIGNE_BLOCAGE_MAX} caractères au plus) est obligatoire avec la voie {voie}."
+        if MOTIF_FABLE.search(c):
+            return ("« consigne » ne peut pas demander un autre modèle : un modèle plus fort se demande au Directeur "
+                    "(voie directeur).")
+        if voie == "correction":
+            metiers = [m for m in d.get("metiers") or [] if isinstance(m, str)]
+            if o.get("metier") not in metiers:
+                return f"« metier » doit être un métier du projet ({', '.join(metiers) or 'aucun'})."
+    if voie in ("directeur", "logiciel"):
+        for champ in ("question", "recommandation"):
+            if not (_ligne(o.get(champ)) and len(o[champ]) <= QUESTION_MAX):
+                return f"« {champ} » (une phrase, {QUESTION_MAX} caractères au plus) est obligatoire avec la voie {voie}."
+        motif = d.get("motif") if isinstance(d.get("motif"), dict) else {}
+        if motif.get("code") == "outil" and o.get("verdict") not in VERDICTS_OUTIL:
+            return f"« verdict » (la réponse recommandée sur l'outil) doit valoir {' ou '.join(VERDICTS_OUTIL)}."
+    if voie == "logiciel":
+        a = o.get("anomalie")
+        if not (isinstance(a, dict) and _ligne(a.get("titre")) and len(a["titre"]) <= TITRE_ANOMALIE_MAX
+                and _texte(a.get("description")) and len(a["description"]) <= CONSIGNE_BLOCAGE_MAX):
+            return (f"« anomalie » est {{titre (une ligne, {TITRE_ANOMALIE_MAX} caractères au plus), description "
+                    f"({CONSIGNE_BLOCAGE_MAX} au plus)}} avec la voie logiciel.")
+    lecon = o.get("lecon")
+    if lecon is not None:
+        if not (isinstance(lecon, dict) and lecon.get("portee") in PORTEES_LECON and _ligne(lecon.get("texte"))
+                and len(lecon["texte"]) <= LECON_MAX):
+            return (f"« lecon » est null ou {{portee ({' ou '.join(PORTEES_LECON)}), texte (une phrase, {LECON_MAX} "
+                    "caractères au plus)}}.")
+        if lecon["portee"] == "genre":
+            if MOTIF_CHEMIN.search(lecon["texte"]):
+                return "Une leçon de genre est publique : ni chemin ni nom de fichier ; écris-la en termes généraux."
+            interdits = mots_trouves(lecon["texte"], d.get("mots_interdits") or [])
+            if interdits:
+                return (f"Une leçon de genre est publique : elle contient un mot propre au projet ({', '.join(interdits)}) ; "
+                        "écris-la en termes généraux.")
+    return None
+
+
 _VALIDEURS ={"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
               "ecrire_methode": _valider_ecrire_methode, "apres_refus": _valider_apres_refus,
               "conseil": _valider_conseil}
 _VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
                            "proposer_organisation": _valider_proposer_organisation,
                            "definir_workflow": _valider_definir_workflow,
-                           "decouper_lieux": _valider_decouper_lieux}
+                           "decouper_lieux": _valider_decouper_lieux,
+                           "analyser_blocage": _valider_analyser_blocage}

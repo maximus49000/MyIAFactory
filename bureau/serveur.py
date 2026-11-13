@@ -51,7 +51,7 @@ ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/a
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
 REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre", "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire",
-                     "fable_tache", "decoupage_lieux")
+                     "fable_tache", "decoupage_lieux", "blocage_analyse")
 GARDE_REPONSE_S = 600
 TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
 LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé
@@ -209,6 +209,7 @@ class Projet:
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
+            e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
             # Ce que le moteur dit retenir ce projet (la charge) : sur la carte de chaque tâche retenue et dans la barre.
@@ -1682,9 +1683,11 @@ class Handler(BaseHTTPRequestHandler):
             corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
             if isinstance(corps, dict) and "lecons_auto" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_lecons_auto(projet.chemin_reglages, corps["lecons_auto"])
+            elif isinstance(corps, dict) and "analyse_blocages" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_analyse_blocages(projet.chemin_reglages, corps["analyse_blocages"])
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
-                    raise ValueError("Le corps doit contenir « charge_max » ou « lecons_auto ».")
+                    raise ValueError("Le corps doit contenir « charge_max », « lecons_auto » ou « analyse_blocages ».")
                 nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})

@@ -26,7 +26,7 @@ DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revo
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
                     "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire", "fable_tache",
-                    "decoupage_lieux")
+                    "decoupage_lieux", "blocage_analyse")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -656,9 +656,15 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
         elif d.get("genre") == "outil_agent":
             if not _dans(d.get("agent"), cles_agents) or not _texte_plein(d.get("tache")) or not _texte_plein(d.get("outil")):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » (connu), « tache » et « outil » sont obligatoires.")
-            for c in ("programme", "commande"):
+            for c in ("programme", "commande", "analyse", "question", "recommandation"):
                 if d.get(c) is not None and not _texte_plein(d.get(c)):
                     erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
+            if d.get("verdict_recommande") not in (None, "autoriser", "refuser"):
+                erreurs.append(f"{nom} : la décision « {i} » : « verdict_recommande » vaut autoriser ou refuser.")
+        elif d.get("genre") == "blocage_analyse":
+            if not all(_texte_plein(d.get(c)) for c in ("tache", "analyse", "question", "recommandation")):
+                erreurs.append(f"{nom} : la décision « {i} » : « tache », « analyse », « question » et "
+                               "« recommandation » sont obligatoires.")
         elif d.get("genre") == "accord_agent":
             if not _dans(d.get("agent"), cles_agents) or not _texte_plein(d.get("tache")) or not _texte_plein(d.get("quoi")):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » (connu), « tache » et « quoi » sont obligatoires.")
@@ -916,6 +922,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         _verifier_partenaires(r["partenaires"], erreurs)
     if r.get("regles_projet") is not None:
         _verifier_regles_projet(r["regles_projet"], erreurs)
+    if r.get("anomalies_logiciel") is not None:
+        _verifier_anomalies(r["anomalies_logiciel"], erreurs)
     if r.get("etapes_lieux") is not None:
         _verifier_etapes_lieux(r["etapes_lieux"], "« etapes_lieux »", erreurs)
 
@@ -972,6 +980,25 @@ def _verifier_metiers(r, erreurs):
 
 
 MAX_REGLE_PROJET = 500
+ETATS_ANOMALIE = ("nouvelle", "vue", "reglee")
+
+
+def _verifier_anomalies(anomalies, erreurs):
+    """`anomalies_logiciel` (version 4, facultatif) : `[{id, titre, description, etat (nouvelle | vue | reglee), t?,
+    projet?, tache?, titre_tache?}]`, les anomalies du logiciel notées par le Chef en analysant un blocage."""
+    nom = "« anomalies_logiciel »"
+    if not isinstance(anomalies, list):
+        erreurs.append(f"{nom} doit être une liste d'anomalies.")
+        return
+    for k, x in enumerate(anomalies, 1):
+        if (not _est_dict(x) or not _texte_plein(x.get("id")) or not _texte_plein(x.get("titre"))
+                or not isinstance(x.get("description"), str) or x.get("etat") not in ETATS_ANOMALIE):
+            erreurs.append(f"{nom} : l'anomalie {k} a « id », « titre », « description » et « etat » (nouvelle, vue "
+                           "ou reglee).")
+            continue
+        for c in ("t", "projet", "tache", "titre_tache"):
+            if not _texte_ou_nul(x.get(c)):
+                erreurs.append(f"{nom} : l'anomalie {k} : « {c} » est un texte.")
 
 
 def _verifier_regles_projet(regles, erreurs):
@@ -1209,6 +1236,8 @@ def _normaliser_v4(n):
         n.pop("partenaires", None)
     if not v4 or not isinstance(n.get("regles_projet"), list):
         n.pop("regles_projet", None)      # absent : l'adaptateur ne les dit pas (le bureau n'en montre pas)
+    if not v4 or not isinstance(n.get("anomalies_logiciel"), list):
+        n.pop("anomalies_logiciel", None)     # absent : un ancien adaptateur ne les publie pas
     if not v4 or not isinstance(n.get("metiers"), list):
         n.pop("metiers", None)            # absent : projet à l'ancienne, les leçons sont dans les fiches
     if not v4 or not isinstance(n.get("etapes_lieux"), list):

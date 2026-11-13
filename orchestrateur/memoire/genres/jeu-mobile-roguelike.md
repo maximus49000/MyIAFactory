@@ -554,3 +554,9 @@ Rôles : designer, dev
 Date : 2026-11-13
 
 Dans un roguelike, un robot de simulation fixe la progression du joueur (déblocages) au lieu de lire la sauvegarde, pour que ses mesures soient reproductibles.
+
+## G93 — Dans un roguelike, un nœud que le jeu ne gère pas encore se
+Rôles : designer
+Date : 2026-11-13
+
+Dans un roguelike, un nœud que le jeu ne gère pas encore se simule comme le jeu le traite et se compte, sans inventer son effet, et la mesure le signale comme non mesuré.

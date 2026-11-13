@@ -489,3 +489,9 @@ Rôles : graphiste, equilibreur
 Date : 2026-11-13
 
 Quand les commandes composées exigent une approbation impossible, écrire un petit lanceur dans le langage du projet et l'appeler seul.
+
+## S82 — Un script d'orchestration qui lit la sortie de sous-processu
+Rôles : graphiste
+Date : 2026-11-13
+
+Un script d'orchestration qui lit la sortie de sous-processus en UTF-8 plante dès qu'un contrôle écrit en cp1252 : décoder avec errors=replace et ne pas déclarer le contrôle global passé s'il n'a pas tourné.

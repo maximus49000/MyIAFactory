@@ -89,7 +89,7 @@ class Verifier(unittest.TestCase):
                      for e in decoupee()])
 
     def test_lieu_inconnu_refuse(self):
-        self.refuse([dict(e, lieu="cloud") if e["id"] == "tests" else e for e in decoupee()])
+        self.refuse([dict(e, lieu="ailleurs") if e["id"] == "tests" else e for e in decoupee()])
 
     def test_lieu_sur_une_validation_refuse(self):
         self.refuse([dict(e, lieu="local") if e["id"] == "valid-design" else e for e in decoupee()])
@@ -217,6 +217,14 @@ class Suggestions(unittest.TestCase):
         self.assertEqual(lieux.etapes_locales_suggerees(FLUX, []), set())
         self.assertEqual(lieux.etapes_locales_suggerees(FLUX, None), set())
 
+    def test_exige_le_poste_passe_a_la_partie_locale_d_une_etape_decoupee(self):
+        env = [{"outil": "Godot 4", "pour": "prototype"}, {"outil": "JDK", "pour": "livraison", "cloud": True}]
+        self.assertEqual(lieux.etapes_qui_exigent_le_poste(FLUX, env), {"prototype"})
+        decoupe = [dict(e) for e in FLUX]
+        k = next(i for i, e in enumerate(decoupe) if e["id"] == "prototype")
+        decoupe.insert(k + 1, dict(decoupe[k], id="prototype-local", nom="Prototype : mise en place et tests"))
+        self.assertEqual(lieux.etapes_qui_exigent_le_poste(decoupe, env), {"prototype-local"})
+
     def test_jamais_une_validation(self):
         env = [{"outil": "x", "pour": "valid-design", "objectif": "Validation du design"}]
         self.assertEqual(lieux.etapes_locales_suggerees(FLUX, env), set())
@@ -286,11 +294,27 @@ class Commande(AvecProjet):
         self.assertEqual(self.suivi(), avant)
 
     def test_regler_refuse_une_validation_ou_un_lieu_inconnu(self):
-        for entree in ({"etape": "valid-design", "lieu": "local"}, {"etape": "tests", "lieu": "cloud"},
+        for entree in ({"etape": "valid-design", "lieu": "local"}, {"etape": "tests", "lieu": "ailleurs"},
                        {"etape": "inconnue", "lieu": "local"}):
             with self.subTest(entree=entree):
                 code, _ = self.outil("lieux", entree={"action": "regler", **entree})
                 self.assertNotEqual(code, 0)
+
+    def test_regler_cloud_possible_sauf_si_l_etape_exige_le_poste(self):
+        """Choix du Directeur : local, cloud ou indifférent ; une étape qui exige les logiciels du poste reste locale."""
+        self.ok("lieux", entree={"action": "regler", "etape": "tests", "lieu": "cloud"})
+        self.assertEqual(next(e for e in self.lu()["workflows"][0]["flux"] if e["id"] == "tests")["lieu"], "cloud")
+        f = self.lu()
+        f["environnement"] = [{"outil": "Godot 4", "pour": "prototype"}]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        for lieu in ("cloud", "indifférent"):
+            code, _ = self.outil("lieux", entree={"action": "regler", "etape": "prototype", "lieu": lieu})
+            self.assertNotEqual(code, 0)
+        self.ok("lieux", entree={"action": "regler", "etape": "prototype", "lieu": "local"})
+        f = self.lu()
+        f["environnement"] = [{"outil": "Godot 4", "pour": "prototype", "cloud": True}]   # le cloud sait l'installer
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        self.ok("lieux", entree={"action": "regler", "etape": "prototype", "lieu": "cloud"})
 
     def test_action_inconnue_refusee(self):
         code, _ = self.outil("lieux", entree={"action": "tout"})

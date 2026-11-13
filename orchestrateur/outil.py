@@ -2324,8 +2324,10 @@ def etapes_lieux_du_releve(ctx):
     l'environnement la cite. Le bureau règle le lieu d'une étape par la demande `lieu_etape` (`etape` = cet `id`)."""
     reference = lx.flux_de_reference(ctx.f)
     suggerees = lx.etapes_locales_suggerees(reference, ctx.f.get("environnement"))
+    exigent = lx.etapes_qui_exigent_le_poste(reference, ctx.f.get("environnement"))
     return [{"id": e["id"], "nom": e["nom"], "role": e.get("role"), "validation": wf.est_validation(e),
-             "lieu": wf.lieu(e), "suggeree": e["id"] in suggerees} for e in reference]
+             "lieu": wf.lieu(e), "suggeree": e["id"] in suggerees,
+             **({"exige_poste": True} if e["id"] in exigent else {})} for e in reference]
 
 
 def _briefs_du_releve(ctx):
@@ -3512,8 +3514,11 @@ def cmd_lieux(ctx, e):
             change = lx.decouper_au_projet(ctx.f["chemin"], e["flux"])
         elif action == "regler":
             if "lieu" not in e:
-                raise Refus("« lieu » vaut local, indifférent ou null.")
-            change = lx.regler_au_projet(ctx.f["chemin"], texte(e, "etape"), e["lieu"])
+                raise Refus("« lieu » vaut local, cloud, indifférent ou null.")
+            etape = texte(e, "etape")
+            if e["lieu"] != "local" and etape in lx.etapes_qui_exigent_le_poste(reference, ctx.f.get("environnement")):
+                raise Refus(f"« {etape} » exige les logiciels du poste : seul « local » est possible.")
+            change = lx.regler_au_projet(ctx.f["chemin"], etape, e["lieu"])
         else:
             raise Refus("« action » doit valoir reference, decouper ou regler.")
     except (ValueError, fa.FactoryInvalide) as ex:

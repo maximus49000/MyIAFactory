@@ -40,6 +40,8 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
     reserve = mn.lieu_impose(lieu_etape, lieu_reserve)
     if lieu_etape == "local" and lieu and lieu != "local":
         return None, "l'étape exige le poste : la tâche attend le poste local"
+    if lieu_etape == "cloud" and lieu and lieu != "cloud":
+        return None, "l'étape se fait dans le cloud : la tâche attend un agent cloud"
     if reserve and lieu and lieu != reserve:
         return None, (f"le métier {role} se fait en local : la tâche attend une place locale" if reserve == "local"
                       else f"le métier {role} se fait dans le cloud : la tâche attend une place cloud")

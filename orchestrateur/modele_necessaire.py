@@ -83,6 +83,8 @@ def lieu_impose(lieu_etape, lieu_metier):
     même si le métier est réservé), sinon celui du métier (`local`, `cloud` ou `None`)."""
     if lieu_etape == wf.LIEU_LOCAL:
         return "local"
+    if lieu_etape == wf.LIEU_CLOUD:
+        return "cloud"
     if lieu_etape == wf.LIEU_INDIFFERENT:
         return None
     return lieu_metier if lieu_metier in ("local", "cloud") else None

@@ -203,7 +203,7 @@ class Bureau(Base):
         par_id = {t["id"]: t for t in r["taches"]}
         self.assertEqual(par_id[locale]["lieu"], "local")
         self.assertNotIn("lieu", par_id[ailleurs])
-        self.assertIn("lieu", releve.valider({**r, "taches": [{**par_id[locale], "lieu": "cloud"}]})[0])
+        self.assertIn("lieu", releve.valider({**r, "taches": [{**par_id[locale], "lieu": "ailleurs"}]})[0])
 
     def test_releve_valide_avec_la_decision(self):
         self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "decoupage_lieux",
@@ -233,7 +233,8 @@ class Bureau(Base):
         self.assertIsNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": "local"}))
         self.assertIsNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": "indifférent"}))
         self.assertIsNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": None}))
-        self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": "cloud"}))
+        self.assertIsNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": "cloud"}))
+        self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "qa", "lieu": "ailleurs"}))
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "val", "lieu": "local"}))
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "inconnue", "lieu": "local"}))
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "qa"}))

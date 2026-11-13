@@ -21,8 +21,9 @@ MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
 # Le lieu d'une étape d'agent (facultatif) : `local`, elle exige les logiciels du poste (un agent local la fait) ;
 # `indifférent`, n'importe quel agent, cloud compris (écrit, il l'emporte sur le `Lieu :` du métier). Absent : le
 # `Lieu :` du métier de l'étape, comme avant. Jamais sur une validation du Directeur.
-LIEU_LOCAL, LIEU_INDIFFERENT = "local", "indifférent"
-LIEUX_D_ETAPE = (LIEU_LOCAL, LIEU_INDIFFERENT)
+# `cloud` : seul un agent cloud la fait (demandé par le Directeur ; jamais pour une étape qui exige le poste).
+LIEU_LOCAL, LIEU_INDIFFERENT, LIEU_CLOUD = "local", "indifférent", "cloud"
+LIEUX_D_ETAPE = (LIEU_LOCAL, LIEU_INDIFFERENT, LIEU_CLOUD)
 
 
 def lieu(etape):

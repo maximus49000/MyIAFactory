@@ -21,7 +21,7 @@ MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet pa
 # Directeur, demandé avant son départ (décision `fable_tache`) ; sans accord, Opus.
 MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
 # Le lieu d'une étape d'agent : `local` (exige le poste) ou `indifférent` (cloud possible) ; absent : celui du métier.
-LIEUX_D_ETAPE = ("local", "indifférent")
+LIEUX_D_ETAPE = ("local", "indifférent", "cloud")
 
 
 class FactoryInvalide(Exception):

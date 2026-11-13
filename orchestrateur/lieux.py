@@ -206,6 +206,19 @@ def etapes_locales_suggerees(flux, environnement):
     return sortie
 
 
+def etapes_qui_exigent_le_poste(flux, environnement):
+    """Les étapes d'agent du `flux` qui exigent les logiciels du poste : celles qu'un outil de l'environnement cite
+    (voir `etapes_locales_suggerees`), sauf un outil que le cloud sait installer (`cloud: true`) ; une étape découpée
+    passe l'exigence à sa partie `<id>-local`, et toute partie `-local` l'exige. Leur lieu est figé sur `local`."""
+    outils = [o for o in environnement or [] if isinstance(o, dict) and o.get("cloud") is not True]
+    ids = {e["id"] for e in wf.etapes_d_agent(flux)}
+    sortie = set()
+    for i in etapes_locales_suggerees(flux, outils):
+        sortie.add(f"{i}{SUFFIXE_LOCAL}" if f"{i}{SUFFIXE_LOCAL}" in ids else i)
+    sortie |= {i for i in ids if i.endswith(SUFFIXE_LOCAL)}
+    return sortie
+
+
 # --- L'écriture au projet : tous les workflows du fichier de factory, d'un coup, contrôlée avant de remplacer.
 
 def _ecrire(chemin, transformer):
@@ -246,7 +259,7 @@ def regler_au_projet(chemin, etape, lieu):
     qui l'ont (`etape`, ou `<fid>-<etape>` dans le workflow de la fonctionnalité `fid`). Rend vrai si le fichier a
     changé. `ValueError` si l'étape n'existe pas ou est une validation."""
     if lieu is not None and lieu not in LIEUX:
-        raise ValueError("« lieu » vaut local, indifférent ou null.")
+        raise ValueError("« lieu » vaut local, cloud, indifférent ou null.")
     trouvees = []
 
     def transformer(flux, prefixe):

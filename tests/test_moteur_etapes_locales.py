@@ -45,6 +45,20 @@ class LieuDeLEtape(AvecDeuxPlaces):
         t = self.tache("flux:qa")
         self.assertEqual(self.parties(self.demarrer()), {t: "cloud-1"})
 
+    def test_etape_cloud_ne_part_que_chez_un_agent_cloud(self):
+        """Choix du Directeur « Cloud » : seul un agent cloud la prend ; aucun de libre, elle attend."""
+        self.ok("tache", entree={"id": self.occupee, "agent": None, "active": False})     # le poste local est libre
+        self.lieu("qa", "cloud")
+        t = self.tache("flux:qa")
+        self.assertEqual(self.parties(self.demarrer()).get(t), "cloud-1")    # le poste local libre ne la prend pas
+
+    def test_lieu_impose_cloud(self):
+        self.assertEqual(mn.lieu_impose("cloud", "local"), "cloud")
+        cle, raison = depart.agent_libre([{"cle": "a-local", "lieu": "local", "role": None}], [], "qa", lieu="local",
+                                         lieu_etape="cloud")
+        self.assertIsNone(cle)
+        self.assertIn("agent cloud", raison)
+
     def test_sans_lieu_repli_sur_le_metier(self):
         self.brief("qa", "Lieu : local\n\nBrief des testeurs, avec l'émulateur du poste.\n")
         t = self.tache("flux:qa")
@@ -127,7 +141,7 @@ class Ecriture(unittest.TestCase):
 
     def test_lieu_inconnu_refuse(self):
         with self.assertRaises(factory.FactoryInvalide):
-            self.lire([{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev", "lieu": "cloud"}])
+            self.lire([{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev", "lieu": "ailleurs"}])
 
     def test_validation_refuse_un_lieu(self):
         with self.assertRaises(factory.FactoryInvalide):

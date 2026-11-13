@@ -191,7 +191,8 @@ Ta réponse n'est lue par personne : le moteur relève ton travail dans le dép�
 t'arrêter, par exemple pour un accord de l'utilisateur), **écris le bloc JSON demandé ci-dessus dans le fichier
 `.factory/rapports/{tache_id}.json`** (le JSON seul, sans texte autour), **commite-le sur ta branche `claude/…` avec
 ton travail et pousse**. Ajoute-y `"usage_estime"` : ton estimation, en nombre entier, des tokens employés. Sans ce
-fichier poussé, ton travail n'existe pas pour la factory.""")
+fichier poussé, ton travail n'existe pas pour la factory. Si `.factory/rapports/commandes-figees.jsonl` existe, une
+commande figée (processeur immobile) a été arrêtée pendant ta session : dis lesquelles dans `message.texte`.""")
 
 
 def _bloc_tache(tache):

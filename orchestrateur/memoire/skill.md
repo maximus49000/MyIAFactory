@@ -501,3 +501,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un lanceur de tests qui affiche des caractères accentués doit forcer la sortie en UTF-8 pour que le compte rendu soit lisible sur toutes les consoles.
+
+## S84 — Quand une tâche d'équilibrage porte sur un élément sans vale
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand une tâche d'équilibrage porte sur un élément sans valeur de jeu, ne changer aucune valeur : lancer son contrôle, le déclarer passé, et dire que rien n'a été mesuré.

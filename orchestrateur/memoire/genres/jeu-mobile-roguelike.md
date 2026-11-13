@@ -452,3 +452,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Une capture d'écran d'un moteur de jeu doit se faire dans une fenêtre sans bordure, à la résolution cible, réimposée après les premières images ; le plein écran du système peut réduire la hauteur.
+
+## G76 — Pour un habillage 2D généré par code, utiliser des fonctions
+Rôles : graphiste
+Date : 2026-11-13
+
+Pour un habillage 2D généré par code, utiliser des fonctions de contour communes (polygone, ovale, membre) et un jeu de sourcils et de paupières par personnage : l'expression fait le caractère à moindre coût. Après chaque changement, relire les captures aux endroits où un personnage touche une bulle ou le bord de l'écran.

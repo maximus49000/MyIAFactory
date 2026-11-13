@@ -429,3 +429,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand la suite de tests dépasse la limite d'une commande au premier plan, lancer les modules séparément et les mesures longues en arrière-plan, puis les attendre par de courtes pauses.
+
+## S72 — Un lanceur de tests qui ne rend sa sortie qu'à la fin masque
+Rôles : dev
+Date : 2026-11-13
+
+Un lanceur de tests qui ne rend sa sortie qu'à la fin masque une suite bloquée ou très longue. Afficher la progression au fil de l'eau et annoncer la durée attendue.

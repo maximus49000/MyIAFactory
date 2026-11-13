@@ -399,9 +399,10 @@ class Moteur:
 
     def _dire_l_attente_de_charge(self, projet, etat):
         """Une tâche prête que la charge retient, des places libres qui attendent une validation du Directeur : le bureau
-        le dit (carte de la tâche et barre), à chaque passage."""
+        le dit (carte de la tâche et barre), à chaque passage ; et pourquoi chaque tâche prête ne part pas."""
         for fichier, a in ((attente.chemin_charge(projet.factory.parent), etat.get("attente_charge")),
-                           (attente.chemin_places(projet.factory.parent), etat.get("attente_validation"))):
+                           (attente.chemin_places(projet.factory.parent), etat.get("attente_validation")),
+                           (attente.chemin_taches(projet.factory.parent), etat.get("attente_taches"))):
             if a:
                 self._ecrire(fichier, a)
             else:

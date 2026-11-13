@@ -1,4 +1,4 @@
-"""Ce que le moteur dit au bureau de ce qui retient son travail : deux petits fichiers, écrits par le moteur à chaque
+"""Ce que le moteur dit au bureau de ce qui retient son travail : de petits fichiers, écrits par le moteur à chaque
 passage et relus par le serveur du bureau (deux processus).
 
 - `installation-prioritaire.json`, à côté du fichier du bureau (valable pour tous les projets) : la pause globale d'une
@@ -7,6 +7,9 @@ passage et relus par le serveur du bureau (deux processus).
   `{"t", "texte", "taches": [ids], "charge", "plafond"}`. Absent quand rien n'attend la charge.
 - `attente-places.json`, dans le dossier `.factory` d'un projet : des places d'agents libres que rien ne peut prendre
   tant que le Directeur n'a pas validé, `{"t", "texte", "places", "validation"}`. Absent sinon.
+- `attente-taches.json`, dans le dossier `.factory` d'un projet : pourquoi chaque tâche prête ne part pas (prérequis,
+  agent, décision, pause), `{"t", "texte", "total", "familles", "taches": {id: {genre, motif, texte, detail, ensuite,
+  quand}}}`. Absent quand rien n'attend.
 
 Un fichier que le moteur n'a pas réécrit depuis `FRAICHEUR_S` secondes est ignoré (le moteur s'est arrêté : le bureau ne
 doit pas afficher une pause qui n'existe plus). Aucune donnée de clé ni de chemin n'y est."""
@@ -33,6 +36,42 @@ def attente_places(dossier_factory, maintenant=None):
     places = o.get("places")
     return {"texte": o["texte"], "places": places if isinstance(places, int) and not isinstance(places, bool) else None,
             "validation": o.get("validation") if isinstance(o.get("validation"), str) else None}
+
+
+FICHIER_TACHES = "attente-taches.json"
+GENRES = ("prerequis", "agent", "decision", "pause")
+
+
+def chemin_taches(dossier_factory):
+    return Path(dossier_factory) / FICHIER_TACHES
+
+
+def _texte(v):
+    return v if isinstance(v, str) and v.strip() else None
+
+
+def attente_taches(dossier_factory, maintenant=None):
+    """Pourquoi chaque tâche prête ne part pas (`{texte, total, familles: [{genre, motif, n, texte}], taches: {id:
+    {genre, motif, texte, detail, ensuite, quand}}}`), ou `None`. Une raison ou une famille mal formée est écartée."""
+    o = lire(chemin_taches(dossier_factory), maintenant)
+    if o is None:
+        return None
+    taches = {}
+    for tid, r in (o.get("taches") or {}).items() if isinstance(o.get("taches"), dict) else ():
+        if not isinstance(r, dict) or r.get("genre") not in GENRES or not _texte(r.get("texte")):
+            continue
+        lignes = lambda v: [x for x in v if _texte(x)] if isinstance(v, list) else []  # noqa: E731
+        taches[str(tid)] = {"genre": r["genre"], "motif": _texte(r.get("motif")) or r["texte"], "texte": r["texte"],
+                            "detail": lignes(r.get("detail")), "ensuite": lignes(r.get("ensuite")),
+                            "quand": _texte(r.get("quand"))}
+    familles = [{"genre": f["genre"], "motif": f.get("motif") if isinstance(f.get("motif"), str) else "",
+                 "n": f["n"], "texte": f["texte"]}
+                for f in o.get("familles") or [] if isinstance(f, dict) and f.get("genre") in GENRES
+                and isinstance(f.get("n"), int) and not isinstance(f.get("n"), bool) and _texte(f.get("texte"))] \
+        if isinstance(o.get("familles"), list) else []
+    total = o.get("total")
+    return {"texte": o["texte"], "total": total if isinstance(total, int) and not isinstance(total, bool) else len(taches),
+            "familles": familles, "taches": taches}
 
 
 def chemin_pause(fichier_bureau):

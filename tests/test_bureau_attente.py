@@ -40,6 +40,29 @@ class Fichiers(unittest.TestCase):
         self.assertIsNone(attente.pause_installation(self.bureau))
         self.assertIsNone(attente.pause_installation(None))
 
+    def test_raisons_des_taches_lues_et_nettoyees(self):
+        chemin = attente.chemin_taches(self.dossier)
+        self.assertEqual(chemin.name, "attente-taches.json")
+        self.assertIsNone(attente.attente_taches(self.dossier))
+        attente.ecrire(chemin, {"texte": "2 tâches en attente", "total": 2,
+                                "familles": [{"genre": "prerequis", "motif": "prérequis", "n": 1, "texte": "1 prérequis"},
+                                             {"genre": "inconnu", "motif": "x", "n": 1, "texte": "1 x"},
+                                             "pas un objet"],
+                                "taches": {"t1": {"genre": "prerequis", "motif": "prérequis",
+                                                  "texte": "prérequis — Essai", "detail": ["une ligne", 3],
+                                                  "ensuite": ["elle exige le poste local", None],
+                                                  "quand": "quand vous aurez validé « Essai »", "en_trop": 1},
+                                           "t2": {"genre": "bizarre", "texte": "x"},
+                                           "t3": "pas un objet"}})
+        lu = attente.attente_taches(self.dossier)
+        self.assertEqual(lu["texte"], "2 tâches en attente")
+        self.assertEqual(lu["familles"], [{"genre": "prerequis", "motif": "prérequis", "n": 1, "texte": "1 prérequis"}])
+        self.assertEqual(lu["taches"], {"t1": {"genre": "prerequis", "motif": "prérequis", "texte": "prérequis — Essai",
+                                               "detail": ["une ligne"], "ensuite": ["elle exige le poste local"],
+                                               "quand": "quand vous aurez validé « Essai »"}})
+        attente.ecrire(chemin, {"texte": "1 tâche en attente", "taches": {}}, maintenant=0)      # le moteur s'est arrêté
+        self.assertIsNone(attente.attente_taches(self.dossier))
+
     def test_etat_du_bureau_porte_la_pause_pour_tous_les_projets(self):
         class Projet:
             def etat(self):
@@ -86,6 +109,23 @@ class TestEtatServi(AvecServeur):
                                                              "validation": "Validation de la direction artistique"})
         attente.ecrire(attente.chemin_places(dossier), {"texte": texte}, maintenant=0)     # le moteur s'est arrêté
         self.assertIsNone(self.etat()["attente_validation"])
+
+    def test_chaque_tache_en_attente_porte_sa_raison(self):
+        dossier = self.tmp / "demo"
+        sans = self.etat()
+        self.assertIsNone(sans["attentes"])
+        self.assertTrue(all("attente_raison" not in t for t in sans["taches"]))
+        tid = sans["taches"][0]["id"]
+        raison = {"genre": "agent", "motif": "poste local occupé", "texte": "poste local occupé",
+                  "detail": ["elle exige le poste local ; 1 place locale, occupée par Léa"], "ensuite": [],
+                  "quand": "quand le poste local se libérera"}
+        familles = [{"genre": "agent", "motif": "poste local occupé", "n": 1, "texte": "1 poste local occupé"}]
+        attente.ecrire(attente.chemin_taches(dossier), {"texte": "1 tâche en attente", "total": 1, "familles": familles,
+                                                        "taches": {tid: raison, "t-inconnue": raison}})
+        e = self.etat()
+        self.assertEqual(e["attentes"], {"texte": "1 tâche en attente", "total": 1, "familles": familles})
+        self.assertEqual(next(t for t in e["taches"] if t["id"] == tid)["attente_raison"], raison)
+        self.assertEqual(sum(1 for t in e["taches"] if "attente_raison" in t), 1)
 
     def test_l_agent_au_travail_dit_depuis_quand_et_sa_derniere_action(self):
         import os

@@ -219,6 +219,14 @@ class Projet:
                         t["attente"] = retenu["texte"]
             # Des places d'agents libres que rien ne peut prendre avant une validation du Directeur : dit dans la barre.
             e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
+            # Pourquoi chaque tâche prête ne part pas : sa raison sur sa carte et sa fiche, le résumé dans la barre.
+            raisons = attente.attente_taches(self.chemin_reglages.parent)
+            e["attentes"] = None
+            if raisons:
+                e["attentes"] = {k: raisons[k] for k in ("texte", "total", "familles")}
+                for t in e["taches"]:
+                    if t["id"] in raisons["taches"]:
+                        t["attente_raison"] = raisons["taches"][t["id"]]
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])

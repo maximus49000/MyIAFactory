@@ -246,6 +246,23 @@ class AttenteDeCharge(Bureau):
         self.assertEqual((lu["taches"], lu["charge"], lu["plafond"]), ([t], 90, 70))
         self.assertIsNone(attente.attente_charge(self.racine / "b" / ".factory"))
 
+    def test_raison_de_chaque_tache_en_attente_dite_au_bureau(self):
+        """`attente-taches.json` : la raison de chaque tâche prête qui ne part pas (ici la charge), puis effacé."""
+        mesure = {"feu_vert": False, "charge": 90, "plafond": 70}
+        self.projets["a"] = regles.Projet(self.projets["a"].factory, mesure=lambda: dict(mesure))
+        t = self.correction("a")
+        m = self.moteur()
+        m.tour()
+        lu = attente.attente_taches(self.racine / "a" / ".factory")
+        self.assertEqual(lu["texte"], "1 tâche en attente")
+        self.assertEqual(lu["familles"], [{"genre": "pause", "motif": "charge du PC", "n": 1,
+                                           "texte": "1 retenue par la charge du PC"}])
+        self.assertEqual(lu["taches"][t]["texte"], "charge du PC 90 % (plafond 70 %)")
+        self.assertIsNone(attente.attente_taches(self.racine / "b" / ".factory"))
+        mesure.update(feu_vert=True, charge=50)
+        m.tour()
+        self.assertIsNone(attente.attente_taches(self.racine / "a" / ".factory"))
+
     def test_mise_a_jour_a_chaque_passage_puis_effacee_au_depart(self):
         mesure = {"feu_vert": False, "charge": 90, "plafond": 70}
         self.projets["a"] = regles.Projet(self.projets["a"].factory, mesure=lambda: dict(mesure))

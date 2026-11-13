@@ -29,6 +29,28 @@ def _normal(nom):
     return nom
 
 
+normal = _normal
+_PREMIER_MOT = re.compile(r"""^\s*(?:"([^"]+)"|'([^']+)'|(\S+))""")
+
+
+def nom_appele_par_chemin(commande):
+    """Le nom du programme quand la commande l'appelle par son chemin, entre guillemets ou non, barres `/` ou `\\`
+    (`godot` pour `"C:\\…\\godot.EXE" --headless`) ; `None` si le premier programme est appelé par son nom ou si le
+    dernier morceau du chemin n'est pas un nom de programme."""
+    for morceau in SEPARATEURS.split(commande or ""):
+        m = _PREMIER_MOT.match(morceau)
+        if not m:
+            continue
+        mot = next(g for g in m.groups() if g)
+        if mot in TRANSPARENTS:
+            continue
+        if "/" not in mot and "\\" not in mot:
+            return None
+        nom = _normal(re.split(r"[\\/]", mot.strip())[-1])
+        return nom if MOTIF_EXECUTABLE.match(nom) else None
+    return None
+
+
 def programmes(commande):
     """Les programmes d'une commande du shell, dans l'ordre et sans doublon (`cd` mis à part). `None` si l'un des
     premiers mots n'est pas un nom de programme simple : chemin, option, variable, guillemet, substitution."""

@@ -239,12 +239,31 @@ class Arret(Cadre):
         self.traiter(type="outil_agent", decision=d["id"], verdict="autoriser")
         self.assertIn(f"Bash({emu}:*)", self.outils_de_hugo())
 
+    def test_programme_connu_appele_par_son_chemin_repart_appele_par_son_nom(self):
+        """Cas réel : `"C:\\…\\godot.EXE" --headless …` refusé alors que godot est déclaré : le moteur ouvre
+        Bash(godot:*) et relance en demandant l'appel par le nom, une seule fois."""
+        c = '"C:\\Users\\x\\WinGet\\Links\\godot.EXE" --headless --path "C:\\p" --export-debug "Android" "C:\\p\\a.apk"'
+        suite = self.arret(c)
+        self.assertEqual(self.decisions(), [])
+        self.assertEqual([(a[0], a[1], a[2]) for a in suite], [("agent", "metier-1", [self.tid])])
+        self.assertIn("Appelle « godot » par son nom", suite[0][3])
+        self.assertIn("Bash(godot:*)", self.outils_de_hugo())
+        self.arret(c)                    # le même refus encore : au Directeur
+        self.assertEqual(len(self.decisions()), 1)
+
+    def test_le_nom_appele_par_chemin(self):
+        self.assertEqual(accord_outil.nom_appele_par_chemin('"C:\\a b\\godot.EXE" -v'), "godot")
+        self.assertEqual(accord_outil.nom_appele_par_chemin("cd x && /usr/bin/adb devices"), "adb")
+        self.assertIsNone(accord_outil.nom_appele_par_chemin("godot -v"))
+        self.assertIsNone(accord_outil.nom_appele_par_chemin('"C:\\a\\$(x)" -v'))
+        self.assertIsNone(accord_outil.nom_appele_par_chemin(""))
+
     def test_commande_illisible_pose_la_decision_sans_programme(self):
-        self.arret("C:\\outils\\godot.exe --headless")
+        self.arret("C:\\outils\\inconnu.exe --headless")
         d, = self.decisions()
         self.assertNotIn("programme", d)
-        self.assertEqual(d["commande"], "C:\\outils\\godot.exe --headless")
-        self.assertNotIn("Bash(godot", " ".join(self.outils_de_hugo()))
+        self.assertEqual(d["commande"], "C:\\outils\\inconnu.exe --headless")
+        self.assertNotIn("Bash(inconnu", " ".join(self.outils_de_hugo()))
 
     def test_jamais_bash_sans_motif_si_aucune_commande_n_est_connue(self):
         self.arret(None, refus=[])

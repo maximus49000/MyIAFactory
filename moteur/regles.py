@@ -3880,6 +3880,10 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
         texte += f" Commande refusée : « {montree} »."
     lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
     _liberer_le_lot(projet, depart)
+    if programme is None and lieu == "local" and fiche is not None and outil == "Bash":
+        suite = _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes)
+        if suite is not None:
+            return suite
     origine = accord_outil.origine(programme, _factory(projet).get("environnement")) if programme else None
     if origine and lieu == "local" and not _outil_deja_ouvert(projet, tid, regle):
         lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
@@ -3906,6 +3910,32 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
                 lancer(projet, "tache", {"id": tid, "journal": [f"{JOURNAL_REFUS} ({commande}) : {e}"]})
         _dire(projet, fid, f"{qui} est arrêté faute d'un outil : la décision est au bureau de direction.")
     return []
+
+
+PAR_SON_NOM = "Le moteur demande d'appeler par son nom : "
+
+
+def _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes):
+    """L'agent appelle par son chemin (`"C:\\…\\godot.EXE" --headless …`) un programme connu du projet ou déjà ouvert
+    dans sa fiche : la règle `Bash(<nom>:*)` ne couvre que l'appel par le nom. Le moteur l'ouvre au besoin et relance
+    la tâche en demandant l'appel par le nom, une fois par tâche et par programme. `None` si ce n'est pas le cas."""
+    nom = next((n for n in map(accord_outil.nom_appele_par_chemin, commandes) if n), None)
+    if nom is None:
+        return None
+    ouverts = {accord_outil.normal(p) for p in fi.programmes_ouverts({"outils": ", ".join(fi.outils(fiche))})[0]}
+    origine = accord_outil.origine(nom, _factory(projet).get("environnement"))
+    deja = any(j["texte"].startswith(PAR_SON_NOM) and f"« {nom} »" in j["texte"]
+               for j in _tache(projet, tid).get("journal") or [])
+    if deja or (nom not in ouverts and not origine):
+        return None
+    regle = fi.regle_bash(nom)
+    if nom not in ouverts:
+        lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
+    return _reprendre_la_tache(
+        projet, etat, tid, fid,
+        f"Appelle « {nom} » par son nom (il est dans le PATH), jamais par son chemin ni entre guillemets : ta fiche "
+        f"ouvre {regle}, qui ne couvre que l'appel par le nom. Relance ta commande ainsi.",
+        f"{PAR_SON_NOM}« {nom} » ({prenom} l'appelait par son chemin ; {regle} ouvert)")
 
 
 def _reprendre_la_tache(projet, etat, tid, fid, supplement, journal):

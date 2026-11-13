@@ -453,3 +453,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Lancer la suite de tests avec une limite de temps et un journal écrit en continu ; un script de test qui ne compile pas peut laisser le lanceur bloqué sans sortie.
+
+## S76 — Quand l'environnement ne contient pas le moteur nécessaire p
+Rôles : dev
+Date : 2026-11-13
+
+Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.

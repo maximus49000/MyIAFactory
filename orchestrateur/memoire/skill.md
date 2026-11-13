@@ -387,3 +387,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Regarder les captures réelles de l'interface avant de rendre : les textes coupés ou superposés échappent aux tests automatiques.
+
+## S65 — Au début d'une reprise de travail, comparer l'état du dépôt
+Rôles : dev
+Date : 2026-11-13
+
+Au début d'une reprise de travail, comparer l'état du dépôt à la liste des tâches avant d'écrire du code : une partie peut déjà exister.

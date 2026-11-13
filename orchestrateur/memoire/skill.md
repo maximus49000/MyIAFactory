@@ -573,3 +573,9 @@ Rôles : designer, dev, qa
 Date : 2026-11-13
 
 Un contrôle d'écran se prouve en injectant un faux élément par défaut visé et en exigeant que chaque erreur attendue apparaisse, en plus de celles de l'écran juste.
+
+## S96 — Dans un shell POSIX sous Windows, écrire les chemins avec de
+Rôles : release
+Date : 2026-11-13
+
+Dans un shell POSIX sous Windows, écrire les chemins avec des barres obliques, car les barres inverses sont altérées.

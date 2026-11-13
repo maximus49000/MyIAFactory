@@ -27,7 +27,7 @@ from pathlib import Path
 
 from bureau import attente
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, detache, jugement, regles
+from moteur import agents, appel, cloud, detache, figes, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
@@ -123,8 +123,11 @@ class Moteur:
 
     def __init__(self, projets, *, appeler=appel.appeler, horloge=time.time, bureau=None, environ=None,
                  executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None,
-                 registre=None):
+                 registre=None, surveillance=None):
         self.appeler, self.horloge, self.bureau, self.environ = appeler, horloge, bureau, environ
+        # les commandes figées des agents locaux (`moteur.figes`) : une liste des processus par tour au plus
+        self.surveillance = surveillance if surveillance is not None else figes.Surveillance()
+        self._processus_du_tour, self._surveille = None, {}
         self.executer_agent, self.commit, self.synchrone = executer_agent, commit, synchrone
         self.cloud = session_cloud or cloud      # le module (ou un faux) qui parle aux sessions cloud
         self.registre_de = registre or detache.Registre    # dossier de la factory -> les agents détachés du projet
@@ -169,6 +172,7 @@ class Moteur:
     def tour(self):
         debut = time.monotonic()
         self._mesure_tour = None        # la charge du poste est mesurée au plus une fois par tour (si un projet la demande)
+        self._processus_du_tour = None
         self._prendre_les_projets_ajoutes()
         self._installations()
         self._traiter_les_reveils()
@@ -262,6 +266,7 @@ class Moteur:
         self._relever_le_cloud(projet, etat)
         self._traiter_les_reveils()
         self._retours_des_agents(projet, etat)
+        self._surveiller_les_commandes(projet)
         self._traiter_les_reveils()
         self._executer(projet, regles.avancer(projet, etat))
         self._dire_l_attente_de_charge(projet, etat)
@@ -280,6 +285,8 @@ class Moteur:
             regles.lancer(projet, "partenaires", {"action": "detecter"})
         except (regles.Refus, regles.ErreurMoteur) as e:
             self._noter(projet, f"partenaires : {e}")
+        # avant que les agents morts soient oubliés : leurs programmes laissés seront reconnus (`figes`)
+        self._surveiller_les_commandes(projet)
         try:
             self._rattacher_les_agents(projet, etat)
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
@@ -553,6 +560,36 @@ class Moteur:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{fiche['cle']}", daemon=True).start()
+
+    def _surveiller_les_commandes(self, projet):
+        """Toutes les `figes.SURVEILLER_TOUS_LES_S` : un programme lancé par un agent local du projet (ou laissé par
+        lui) dont le temps processeur ne bouge plus depuis `figes.FIGE_MIN` minutes est arrêté ; la tâche le dit à son
+        journal. Rien à faire sans agent noté ; une mesure impossible ne fait rien."""
+        d = detache.dossier(projet.factory.parent)
+        try:
+            if not any(d.glob("*.json")) and not (d / figes.FICHIER_FAMILLES).exists():
+                return
+        except OSError:
+            return
+        cle, maintenant = str(projet.factory), time.monotonic()
+        if maintenant - self._surveille.get(cle, float("-inf")) < figes.SURVEILLER_TOUS_LES_S:
+            return
+        self._surveille[cle] = maintenant
+        if self._processus_du_tour is None:
+            try:
+                self._processus_du_tour = self.surveillance.lister() or {}
+            except Exception:
+                self._processus_du_tour = {}
+        if not self._processus_du_tour:
+            return
+        for a in self.surveillance.passer(d, self._processus_du_tour):
+            texte = figes.texte_journal(a)
+            self._noter(projet, f"{a.get('tache')} : {texte}")
+            if a.get("tache"):
+                try:
+                    regles.lancer(projet, "tache", {"id": a["tache"], "journal": [texte]})
+                except (regles.Refus, regles.ErreurMoteur) as e:
+                    self._noter(projet, f"commande figée ({a['tache']}) : {e}")
 
     def _rattacher_les_agents(self, projet, etat):
         """Au démarrage : les agents détachés laissés par le moteur d'avant. Vivant, il est attendu ; mort avec son

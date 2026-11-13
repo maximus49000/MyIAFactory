@@ -13,13 +13,13 @@ from orchestrateur import fiches
 OUTILS_PAR_DEFAUT = fiches.OUTILS_PAR_DEFAUT
 DELAI_AGENT_S = 2400     # un agent détaché sans aucune action réelle depuis 40 min est bloqué : arrêté (detache.attendre) ; une commande au premier plan dure 30 min au plus (appel.ENV_COMMANDES_LONGUES)
 ESSAIS = 2
-CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de départ dit qui tu es, quoi faire "
-                  "et comment rendre compte. Travaille dans le dossier du projet avec tes seuls "
-                  "outils ouverts. Personne ne peut approuver une commande pendant que tu travailles : écris chaque fichier "
+CONSIGNE_AGENT = ("Tu es agent de production d'un projet. Ton message de départ dit qui tu es, quoi faire, "
+                  "comment rendre compte. Travaille dans le dossier du projet avec tes seuls "
+                  "outils ouverts. Personne n'approuve tes commandes : écris chaque fichier "
                   "(scripts compris) avec l'outil Write, jamais par le shell (`cat >`, `<<EOF`, `echo >`), puis "
                   "lance tes scripts par `python <chemin>.py` ; une commande refusée, reformule-la ainsi. Un outil "
-                  "qui reste refusé ne se contourne pas : statut outil_refuse. Chaque image rendue porte sa légende (une phrase : à "
-                  "quoi elle correspond). Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
+                  "qui reste refusé ne se contourne pas : statut outil_refuse. Chaque image rendue a sa légende (une phrase). "
+                  "Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
                   "`attend: true`, jamais en simple phrase. Avant une action qui ouvre une fenêtre sur le poste "
                   "(pare-feu, UAC, pilote), dis dans `message.texte` laquelle, pourquoi et quoi "
                   "choisir, avec `attend: true`, et n'agis qu'après la réponse ; ne réponds jamais à ces fenêtres "
@@ -27,7 +27,8 @@ CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de dép
                   "sur le téléphone de l'utilisateur (`adb`, débogage USB) : tests automatiques sur émulateur, "
                   "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Un partenaire inscrit ne s'appelle pas : statut a_faire_chez_partenaire. "
                   "Sans interlocuteur, tu t'arrêtes dès que tu cesses d'agir : chaque commande au premier plan "
-                  "(`timeout` jusqu'à 1800000), jamais en arrière-plan. Termine par le bloc ```json demandé.")
+                  "(`timeout` jusqu'à 1800000), jamais en arrière-plan ; un test se borne par un délai et "
+                  "écrit sa sortie au fil de l'eau. Termine par le bloc ```json demandé.")
 RELANCE_SANS_RAPPORT = (
     "Ta réponse n'avait pas le bloc ```json du rapport. Tu travailles sans interlocuteur : aucune notification ne te "
     "parviendra. Si une commande tournait en arrière-plan (des tests, par exemple), relance-la maintenant au premier "

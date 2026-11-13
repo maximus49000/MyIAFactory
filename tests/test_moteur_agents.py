@@ -96,6 +96,12 @@ class ExecuterAgent(unittest.TestCase):
         self.assertIn("premier plan", a.recus[1]["dossier"])
         self.assertIn("premier plan", agents.CONSIGNE_AGENT)
 
+    def test_une_commande_de_test_se_borne_et_ecrit_au_fil_de_l_eau(self):
+        """Essai réel : des tests Godot figés (erreur de syntaxe), sans délai ni sortie, ont tenu l'agent 25 minutes."""
+        self.assertIn("se borne par un délai", agents.CONSIGNE_AGENT)
+        self.assertIn("au fil de l'eau", agents.CONSIGNE_AGENT)
+        self.assertLess(len(agents.CONSIGNE_AGENT), 1500)
+
     def test_commandes_longues_au_premier_plan(self):
         self.assertEqual(appel.ENV_COMMANDES_LONGUES["BASH_DEFAULT_TIMEOUT_MS"], "1800000")
 

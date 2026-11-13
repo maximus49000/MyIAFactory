@@ -31,6 +31,7 @@ from moteur import verrou
 
 DOSSIER = "agents-en-cours"
 PAS_S = 2                       # l'attente relit l'agent toutes les 2 s
+PLAFOND_AGENT_S = 3 * 3600      # un agent qui écrit encore au bout de 3 h (boucle sans fin) est arrêté
 GRACE_APRES_RESULTAT_S = 10     # un agent qui a rendu sa ligne `result` mais ne se ferme pas : attendu 10 s, pas plus
 QUEUE_OCTETS = 65536            # la dernière action se lit dans la fin du flux seulement
 MAX_ACTION = 80
@@ -289,8 +290,10 @@ class Registre:
     `claude`) ; `noter_abonnement` : l'instantané d'abonnement lu dans le flux est gardé (jamais pendant les essais)."""
 
     def __init__(self, dossier_factory, *, lancer=lancer_processus, vivant=processus_vivant, tuer=tuer_processus,
-                 dormir=time.sleep, horloge=time.time, noter_abonnement=True, pas_s=PAS_S):
+                 dormir=time.sleep, horloge=time.time, noter_abonnement=True, pas_s=PAS_S,
+                 plafond_s=PLAFOND_AGENT_S):
         self.dossier = dossier(dossier_factory)
+        self.plafond_s = plafond_s
         self.lancer, self.vivant, self.tuer = lancer, vivant, tuer
         self.dormir, self.horloge, self.pas_s = dormir, horloge, pas_s
         self.noter_abonnement = noter_abonnement
@@ -378,6 +381,11 @@ class Registre:
         etat = self.lire_etat(cle) or {}
         debut = etat.get("debut") if isinstance(etat.get("debut"), (int, float)) else self.horloge()
         flux, vu_resultat = self.chemin(cle, ".jsonl"), None
+        # `delai_s` compte depuis la dernière ligne écrite par l'agent, pas depuis son début : un agent qui travaille
+        # (ou dont une longue commande tourne : `claude` écrit un signe de vie toutes les 30 s) n'est jamais arrêté.
+        # Essai réel : une tâche avec deux suites de tests de 10 min était tuée à 30 min et relancée de zéro, sans fin.
+        # `plafond_s` borne tout de même un agent pris dans une boucle sans fin.
+        taille, actif = -1, self.horloge()
         while True:
             fini = processus.poll() is not None if processus is not None else not self.vivant(etat)
             if fini:
@@ -386,7 +394,13 @@ class Registre:
                 vu_resultat = vu_resultat if vu_resultat is not None else self.horloge()
                 if self.horloge() - vu_resultat >= GRACE_APRES_RESULTAT_S:
                     break
-            if self.horloge() - debut > delai_s:
+            try:
+                t = flux.stat().st_size
+            except OSError:
+                t = taille
+            if t != taille:
+                taille, actif = t, self.horloge()
+            if self.horloge() - actif > delai_s or self.horloge() - debut > max(self.plafond_s, delai_s):
                 self.tuer(etat.get("pid") if processus is None else processus.pid)
                 if processus is not None:
                     try:

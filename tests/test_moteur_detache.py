@@ -148,6 +148,45 @@ class Registre(Base):
             r.executeur("t1", {})(["claude"], b"x", None, str(self.dossier), 0.5)
         self.assertTrue(self.attendre(lambda: r.issue("t1") != "vivant", 10))
 
+    def test_un_agent_qui_ecrit_encore_n_est_pas_arrete(self):
+        """Essai réel : une tâche avec de longues suites de tests était tuée à 30 min et relancée de zéro, sans fin.
+        Le délai compte depuis la dernière ligne écrite (les signes de vie de `claude` pendant une commande)."""
+        import threading
+        r = self.registre()
+        flux = self.factory_dir / "agents-en-cours" / "t1.jsonl"
+
+        def battre():      # un signe de vie toutes les 0,1 s pendant 1,2 s, puis l'agent rend son résultat
+            fin = time.time() + 1.2
+            while time.time() < fin:
+                if flux.exists():
+                    with open(flux, "a", encoding="utf-8") as f:
+                        f.write('{"type": "tool_progress", "heartbeat": true}\n')
+                time.sleep(0.1)
+            self.finir()
+        fil = threading.Thread(target=battre, daemon=True)
+        fil.start()
+        code, _ = r.executeur("t1", {})(["claude"], b"x", None, str(self.dossier), 0.5)
+        fil.join(5)
+        self.assertEqual(code, 0)
+
+    def test_le_plafond_arrete_un_agent_qui_ecrit_sans_fin(self):
+        import threading
+        r = self.registre(plafond_s=0.6)
+        flux = self.factory_dir / "agents-en-cours" / "t1.jsonl"
+        arret = threading.Event()
+
+        def battre():
+            while not arret.is_set():
+                if flux.exists():
+                    with open(flux, "a", encoding="utf-8") as f:
+                        f.write('{"type": "tool_progress", "heartbeat": true}\n')
+                time.sleep(0.1)
+        fil = threading.Thread(target=battre, daemon=True)
+        fil.start()
+        self.addCleanup(arret.set)
+        with self.assertRaises(TimeoutError):
+            r.executeur("t1", {})(["claude"], b"x", None, str(self.dossier), 0.5)
+
     def test_la_consigne_est_copiee_dans_le_dossier_de_l_agent(self):
         self.finir()
         consigne = self.dossier / "tmp-consigne.md"

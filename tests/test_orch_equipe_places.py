@@ -192,5 +192,5 @@ class TestEquipePlaces(Base):
         r = self.ok("releve")
         self.assertEqual(releve.valider(r), [], releve.valider(r))
         agents = {t["cle"]: t for t in r["titulaires"] if t["cle"] != "chef"}
-        self.assertTrue(all(t["polyvalent"] and "service" not in t and "modele" not in t for t in agents.values()))
+        self.assertTrue(all(t["polyvalent"] and t["service"] is None and "modele" not in t for t in agents.values()))
         self.assertEqual([k for k, t in agents.items() if t.get("retrait_prevu")], [a2])

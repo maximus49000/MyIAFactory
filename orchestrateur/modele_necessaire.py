@@ -68,6 +68,11 @@ def _etape(f, t, fonctionnalites):
     return None
 
 
+def etape_de_la_tache(f, t, fonctionnalites=()):
+    """L'étape du workflow que la tâche `t` fait (sa `service` en est le service), ou `None`."""
+    return _etape(f, t, fonctionnalites)
+
+
 def de_la_tache(f, t, fiches, fonctionnalites=()):
     """`{modele, raison, source, ramene}` : le modèle nécessaire de la tâche `t` (montée comprise), ou `None` quand
     c'est le modèle de la fiche de l'agent qui vaut (cadrage, prototype, installation, tâche sans étape connue). Si aucun

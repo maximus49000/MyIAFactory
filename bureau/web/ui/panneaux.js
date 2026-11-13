@@ -7,6 +7,7 @@ import {el, ligne} from "./dom.js";
 import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
+import {lignesModele} from "./polyvalent.js";
 import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
 import {contenuCatalogue} from "./catalogue.js";
@@ -41,9 +42,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   const signature = (type, id, e) => {
     if (type === "service") {
       return JSON.stringify((e.agents || []).filter((a) => a.service === id)
-        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur]).concat([e.dossier, e.agir,
-        e.challenges, (e.savoir || []).filter((s) => s.service === id),
-        (e.taches || []).map((t) => [t.id, t.titre, t.agent, t.etape, t.active, t.colonne, cleTravail(t)])]));
+        .map((a) => [a.id, a.prenom, a.modele, a.statut, a.lieu, a.couleur, a.polyvalent, a.taches]).concat([e.dossier, e.agir,
+        e.challenges, (e.savoir || []).filter((s) => s.service === id), (e.metiers || []).filter((m) => m.service === id),
+        (e.taches || []).map((t) => [t.id, t.titre, t.agent, t.etape, t.active, t.colonne, t.service, t.modele_depart, cleTravail(t)])]));
     }
     if (type === "partenaires") return JSON.stringify([e.partenaires, e.agir]);
     if (type === "tache") {
@@ -74,7 +75,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       // Le Chef : son point de l'atelier et ses échanges suivent l'état (réponse arrivée, minute qui passe…).
       const chef = a?.chef ? [e.agents, (e.taches || []).map((t) => [t.id, t.bloquee, t.attente, t.retours, cleTravail(t)]),
         e.decisions_projet, (e.fonctionnalites || []).map((f) => f.decisions), e.attente_charge] : null;
-      return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent]), e.services, e.agir,
+      return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.service, t.modele_depart]), e.services, e.agir,
         retourListe, chef]);
     }
     return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
@@ -104,7 +105,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     const service = a.chef ? "Chef d'atelier" : ((e.services || []).find((s) => s.id === a.service)?.nom || "—");
     c.append(ligne("Service", service));
     if (a.specialite) c.append(ligne("Spécialité", a.specialite));
-    c.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
+    for (const [libelle, valeur] of lignesModele(e, a)) c.append(ligne(libelle, tronquer(valeur, MAX_TITRE)));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
     c.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
     c.append(ligne("Statut", STATUTS[a.statut] || a.statut || "—"));
     if (resumeLecons(a)) c.append(ligne("Leçons", resumeLecons(a)));

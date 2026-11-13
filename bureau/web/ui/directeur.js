@@ -10,6 +10,7 @@ import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
+import {lignesModele} from "./polyvalent.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -232,7 +233,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   const service = a.chef ? "Chef d'atelier" : ((e.services || []).find((s) => s.id === a.service)?.nom || "—");
   contenu.append(ligne("Service", service));
   if (a.specialite) contenu.append(ligne("Spécialité", a.specialite));
-  contenu.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
+  for (const [libelle, valeur] of lignesModele(e, a)) contenu.append(ligne(libelle, valeur));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
   contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
   contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
   if (a.chef) {
@@ -282,7 +283,9 @@ export function contenuAgent(ctx, contenu, a, statuts) {
 
   contenu.append(el("div", "carte-sous-titre", "Leçons"));
   const lecons = el("ul", "liste-partie");
-  if (!(a.lecons || []).length) lecons.append(el("li", "vide", "Aucune leçon"));
+  if (!(a.lecons || []).length) {
+    lecons.append(el("li", "vide", a.polyvalent ? "Les leçons sont celles des métiers (dossier du service)" : "Aucune leçon"));
+  }
   for (const l of a.lecons || []) {
     const li = el("li", "lecon");
     li.append(el("div", "lecon-texte", l.texte), el("div", "lecon-etat", ETATS_LECON[l.etat] || l.etat));

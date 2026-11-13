@@ -179,3 +179,24 @@ test("un agent qui change de service prend une place libre de son nouveau servic
   assert.ok(pres(qa1, plan.poste("qa", 0)));
   assert.ok(pres(dev1, plan.poste("qa", 1)), "dev1 doit être au poste qa 1, pas sur qa1 ni dans le bureau dev");
 });
+
+test("agent polyvalent change de pièce avec sa tâche, libre il va au café", () => {
+  const r = new Regie(plan);
+  const base = copie(E1);
+  const dev1 = base.agents.find((a) => a.id === "dev1");
+  Object.assign(dev1, {polyvalent: true, modele: "?", service: null, taches: ["t1"]});
+  base.taches.find((t) => t.id === "t1").service = "dev";     // le service ne vient que de la tâche (relevé sans service d'agent)
+  r.appliquer(base, []);
+  assert.ok(pres(r.acteurs.get("dev1"), plan.poste("dev", 0)), "assis dans la pièce du service de sa tâche");
+  // sa tâche suivante est du service qa
+  const e2 = copie(base);
+  e2.taches.find((t) => t.id === "t1").service = "qa";
+  r.appliquer(e2, changements(base, e2));
+  avancerJusqua(r, () => pres(r.acteurs.get("dev1"), r._destination(r.acteurs.get("dev1"))) && r.acteurs.get("dev1").action !== "marche", 30);
+  assert.ok(pres(r.acteurs.get("dev1"), plan.poste("qa", 0)), "dans la pièce qa avec sa nouvelle tâche");
+  // plus de tâche : au café
+  const e3 = statut(copie(e2), "dev1", "libre");
+  e3.agents.find((a) => a.id === "dev1").taches = [];
+  r.appliquer(e3, changements(e2, e3));
+  avancerJusqua(r, () => r.acteurs.get("dev1").action === "cafe", 30);
+});

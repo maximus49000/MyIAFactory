@@ -10,6 +10,7 @@ import {contenuKpi, rappelAlertes} from "./kpi.js";
 import {contenuChallenge} from "./challenge.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
+import {modeleAffiche} from "./polyvalent.js";
 
 const MAX_TITRE = 90;
 const STATUTS = {travail: "au travail", sans_nouvelles: "sans nouvelles", libre: "libre"};
@@ -91,7 +92,8 @@ function contenuTaches(ctx, conteneur, service) {
 
 // Les tâches d'un service de production : celles de ses agents (ou marquées de ce service), en cours puis faites. Pur.
 export function tachesDuService(etat, service) {
-  const ids = new Set((etat?.agents || []).filter((a) => a.service === service && !a.chef).map((a) => a.id));
+  // Un agent polyvalent change de service avec sa tâche : ses tâches se reconnaissent à leur propre service.
+  const ids = new Set((etat?.agents || []).filter((a) => a.service === service && !a.chef && !a.polyvalent).map((a) => a.id));
   const siennes = (etat?.taches || []).filter((t) => t.id !== "orchestration" && (t.service === service || ids.has(t.agent)));
   const recent = (x, y) => String(y.maj || "").localeCompare(String(x.maj || ""));
   return {enCours: siennes.filter((t) => t.colonne !== "fait" && (t.active || t.travail)).sort(recent),
@@ -161,7 +163,7 @@ export function contenuDossier(ctx, conteneur, service, onglet) {
     const puce = el("span", "puce");
     puce.style.background = a.couleur || "#999";
     li.append(puce, el("span", "nom", a.prenom + (a.lieu === "cloud" ? " ☁" : "")),
-              el("span", "detail", `${a.modele || "?"} · ${STATUTS[a.statut] || a.statut || "—"}`));
+              el("span", "detail", `${modeleAffiche(e, a)} · ${STATUTS[a.statut] || a.statut || "—"}`));
     liste.append(li);
   }
   conteneur.append(liste);

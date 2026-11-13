@@ -115,8 +115,9 @@ def valider(r):
             erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local » ou « cloud ».")
         if t.get("chef") is True:
             chefs += 1
-        elif t.get("polyvalent") is True:      # un agent polyvalent : le service est celui de sa tâche
-            pass
+        elif t.get("polyvalent") is True:      # un agent polyvalent : le service est celui de sa tâche (ou nul)
+            if t.get("service") is not None and not _dans(t.get("service"), ids_services):
+                erreurs.append(f"Titulaire « {cle} » : service inconnu « {t.get('service')} ».")
         elif not _dans(t.get("service"), ids_services):
             erreurs.append(f"Titulaire « {cle} » : service inconnu « {t.get('service')} ».")
     if chefs > 1:
@@ -877,6 +878,9 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         for champ in ("element", "modele_depart"):
             if not _texte_ou_nul(t.get(champ)):
                 erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
+        if t.get("service") is not None and not _dans(t["service"], {s.get("id") for s in r.get("services") or []
+                                                                       if _est_dict(s)}):
+            erreurs.append(f"Tâche « {i} » : « service » inconnu « {t['service']} ».")
         for champ in ("debut", "fin"):       # heures ISO du départ et de la fin de la tâche
             if not _texte_ou_nul(t.get(champ)) or len(t.get(champ) or "") > 40:
                 erreurs.append(f"Tâche « {i} » : « {champ} » est une heure ISO ou nul.")
@@ -898,10 +902,36 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
             erreurs.append(f"Tâche « {i} » : « lignes » doit être un entier positif ou nul (lignes produites).")
     _verifier_lecons_v4(r, titulaires, erreurs)
+    if r.get("metiers") is not None:
+        _verifier_metiers(r, erreurs)
     if r.get("partenaires") is not None:
         _verifier_partenaires(r["partenaires"], erreurs)
     if r.get("regles_projet") is not None:
         _verifier_regles_projet(r["regles_projet"], erreurs)
+
+
+def _verifier_metiers(r, erreurs):
+    """`metiers` (projet d'agents polyvalents) : `[{role, service, modele, specialite, lecons: [{id, texte, etat}]}]`,
+    les leçons de chaque métier (elles ne sont plus dans la fiche d'un agent)."""
+    ms = r["metiers"]
+    if not isinstance(ms, list) or not all(_est_dict(m) for m in ms):
+        erreurs.append("« metiers » doit être une liste de {role, service, lecons}.")
+        return
+    ids = {s.get("id") for s in r.get("services") or [] if _est_dict(s)}
+    for m in ms:
+        q = f"Métier « {m.get('role')} »"
+        if not _texte_plein(m.get("role")):
+            erreurs.append("« metiers » : chaque métier a un « role » (texte non vide).")
+        if m.get("service") is not None and not _dans(m["service"], ids):
+            erreurs.append(f"{q} : service inconnu « {m['service']} ».")
+        for champ in ("modele", "specialite"):
+            if not _texte_ou_nul(m.get(champ)):
+                erreurs.append(f"{q} : « {champ} » doit être un texte.")
+        lecons = m.get("lecons")
+        if not isinstance(lecons, list) or not all(
+                _est_dict(le) and _texte_plein(le.get("id")) and isinstance(le.get("texte"), str)
+                and le.get("etat") in ("à valider", "validée") for le in lecons):
+            erreurs.append(f"{q} : « lecons » est une liste de {{id, texte, etat}} (« à valider » ou « validée »).")
 
 
 MAX_REGLE_PROJET = 500
@@ -1116,7 +1146,7 @@ def _verifier_recrutement(x, erreurs):
         if champ in x and not isinstance(x[champ], bool):
             erreurs.append(f"{q} : « {champ} » doit être vrai ou faux.")
 CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume", "debut",
-                   "fin")
+                   "fin", "service")
 
 
 def _normaliser_v4(n):
@@ -1142,6 +1172,8 @@ def _normaliser_v4(n):
         n.pop("partenaires", None)
     if not v4 or not isinstance(n.get("regles_projet"), list):
         n.pop("regles_projet", None)      # absent : l'adaptateur ne les dit pas (le bureau n'en montre pas)
+    if not v4 or not isinstance(n.get("metiers"), list):
+        n.pop("metiers", None)            # absent : projet à l'ancienne, les leçons sont dans les fiches
     for f in n.get("fonctionnalites") or []:
         for c in ("discussion", "decisions", "documents", "cahiers_precedents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []

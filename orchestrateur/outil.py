@@ -2110,6 +2110,19 @@ def construire_releve(ctx):
         titulaires.append({"cle": "chef", "chef": True, "lieu": "local", "modele": ctx.f["modele_orchestrateur"],
                            "permanent": True})
     sessions = ctx.sessions()
+    poly = rc.a_des_polyvalents(fiches)
+    services_du_projet = {sv["id"] for sv in ctx.f["services"]}
+    briefs = _briefs_du_releve(ctx) if poly else {}
+
+    def service_de(t):      # un agent polyvalent n'a pas de service : celui de l'étape de sa tâche, sinon de son métier
+        e = mn.etape_de_la_tache(ctx.f, t, s["fonctionnalites"])
+        sv = (e or {}).get("service") or (briefs.get(t.get("role")) or {}).get("service")
+        return sv if sv in services_du_projet else None
+
+    en_cours = {}
+    for t in s["taches"]:
+        if poly and t["active"] and t["agent"] and t["colonne"] != "fait":
+            en_cours.setdefault(t["agent"], service_de(t))
     for x in fiches:
         t = {"cle": x["cle"], "lieu": x["lieu"], "permanent": True, "prenom": x["prenom"],
              "specialite": x["specialite"],
@@ -2123,6 +2136,7 @@ def construire_releve(ctx):
             t["chef"] = True
         elif fi.est_polyvalente(x):      # ni service ni modèle : ceux de la tâche qu'il tient
             t["polyvalent"] = True
+            t["service"] = en_cours.get(x["cle"])
             if x.get("retrait_prevu"):
                 t["retrait_prevu"] = True
         else:
@@ -2162,6 +2176,8 @@ def construire_releve(ctx):
              "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None,
              "modele_necessaire": mn.de_la_tache(ctx.f, t, fiches, s["fonctionnalites"]),
              "debut": t.get("debut"), "fin": t.get("fin")}      # le temps de la tâche (vue d'un agent, d'un service)
+        if poly:      # le service de la tâche (étape, sinon métier) : la pièce où son agent s'assoit
+            v["service"] = service_de(t)
         resume = resume_de_tache(t, s["fonctionnalites"])
         if resume:
             v["resume"] = resume
@@ -2271,7 +2287,26 @@ def construire_releve(ctx):
     partenaires = _releve_partenaires(ctx)
     if partenaires is not None:
         r["partenaires"] = partenaires
+    if poly:      # les leçons se lisent par métier (elles ne sont plus dans la fiche d'un agent)
+        r["metiers"] = [{"role": m["role"], "service": m["service"] if m["service"] in services_du_projet else None,
+                         "modele": m["modele"], "specialite": m["specialite"],
+                         "lecons": [dict(le) for le in m["lecons"]]}
+                        for m in briefs.values() if m["service"] or m["lecons"]]
     return r
+
+
+def _briefs_du_releve(ctx):
+    """{role: métier} des briefs lisibles du projet ; un brief illisible n'arrête pas le relevé."""
+    dossier = Path(ctx.f["fiches"]) / "briefs"
+    sortie = {}
+    for c in sorted(dossier.glob("*.md")) if dossier.is_dir() else []:
+        try:
+            m = metiers.lire_metier(dossier, c.stem)
+        except (metiers.MetierInvalide, OSError, ValueError):
+            continue
+        if m:
+            sortie[c.stem] = m
+    return sortie
 
 
 def _decision_au_releve(d, s):

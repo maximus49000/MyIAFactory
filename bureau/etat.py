@@ -18,7 +18,8 @@ def dossier(r):
         "kpi": any(isinstance(x.get("kpi"), list) for x in r["services"]),
         "connaissances": (isinstance(r.get("challenges"), list)
                           or any(isinstance(t.get("connaissances"), list) or _lecons_validees(t)
-                                 for t in r["titulaires"])),
+                                 for t in r["titulaires"])
+                          or any(_lecons_validees(m) for m in r.get("metiers") or [] if isinstance(m, dict))),
     }
 
 
@@ -109,10 +110,13 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         presents.add(cle)
         st = statuts.statut(siennes, maintenant, _fraicheur(ti, fraicheur_min), en_pause)
         fiche = eq.agent(cle, chef=bool(ti.get("chef")), prenom=ti.get("prenom") or None)
+        service = None if ti.get("chef") else ti.get("service")
+        if ti.get("polyvalent") is True and not service:     # le service de la tâche qu'il tient
+            service = next((x.get("service") for x in siennes if x.get("active") and x.get("service")), None)
         agents.append({
             "id": cle,
             "prenom": fiche["prenom"],
-            "service": None if ti.get("chef") else ti.get("service"),
+            "service": service,
             "lieu": ti["lieu"],
             "modele": fiche.get("modele") or ti.get("modele") or "?",
             "couleur": fiche["couleur"],
@@ -123,6 +127,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
             "specialite": ti.get("specialite") or None,
             "lecons": list(ti.get("lecons") or []),
         })
+        if ti.get("polyvalent") is True:      # ni plafond ni service à lui : ceux de sa tâche (la page les lit dessus)
+            agents[-1]["polyvalent"] = True
 
     fiches = {a["id"]: a for a in agents}
     services = {ti["cle"]: (None if ti.get("chef") else ti.get("service")) for ti in r["titulaires"]}
@@ -182,7 +188,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         directeur["total"] += directeur["fonctionnalites"] + directeur["projet"] + directeur["reponses"]
         for t, brut in zip(taches, r["taches"]):
             for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume",
-                      "debut", "fin"):
+                      "debut", "fin", "service"):
                 t[c] = brut.get(c)
 
     e = {
@@ -218,6 +224,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         e["orchestrateur_actif"] = any(a["chef"] and a["statut"] == "travail" for a in agents)
         if isinstance(r.get("orchestrateur_present"), bool):   # absent : l'adaptateur ne le dit pas, rien n'est bloqué
             e["orchestrateur_present"] = r["orchestrateur_present"]
+        if isinstance(r.get("metiers"), list):      # agents polyvalents : les leçons se lisent par métier
+            e["metiers"] = copy.deepcopy(r["metiers"])
         if isinstance(r.get("regles_projet"), list):    # les règles du projet : rendues telles quelles
             e["regles_projet"] = copy.deepcopy(r["regles_projet"])
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)

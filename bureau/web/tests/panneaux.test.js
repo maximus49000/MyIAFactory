@@ -11,3 +11,8 @@ test("le même panneau redessiné garde son défilement", () => {
   assert.match(source.slice(i, i + 120), /if \(memeVue\) panneau\.scrollTop = defilement;/);
   assert.match(source, /const defilement = memeVue \? panneau\.scrollTop : 0;/);
 });
+
+test("la carte d'un agent passe par lignesModele : un polyvalent n'a pas de « Plafond » à lui", () => {
+  assert.match(source, /lignesModele\(e, a\)/);
+  assert.doesNotMatch(source, /ligne\("Plafond"/);
+});

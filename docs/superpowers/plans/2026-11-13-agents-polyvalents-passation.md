@@ -15,7 +15,7 @@ Tenir ce tableau à jour à la fin de chaque phase (dernière action avant le de
 | A | Sonnet 5.5 | 1, 2, 3 : métier (brief enrichi), fiche polyvalente, leçons par métier | non | Formats et lecture au contrat écrit, tests nommés | **faite 2026-11-13** |
 | B | Opus 5.5 | 4, 5, 6 : choix de l'agent et liens amont, modèle par tâche et Fable sur accord, départ par métier | non | Cœur du moteur : chemins de départ multiples, garde Fable, risque de régression | **faite 2026-11-13** |
 | C | Sonnet 5.5 | 7, 8, 9 : équipe = places, création au nouveau format, reprise des projets | non (banc gratuit seulement) | Commandes et installation au contrat écrit | **faite 2026-11-13** |
-| D | Sonnet 5.5 | 10 : bureau vivant (pièce de la tâche, panneaux, leçons par métier) | non | Page et relevé au contrat écrit | à faire |
+| D | Sonnet 5.5 | 10 : bureau vivant (pièce de la tâche, panneaux, leçons par métier) | non | Page et relevé au contrat écrit | **faite 2026-11-13** |
 | E | Opus 5.5 | 11 : essai réel sur ZooRunner, avec l'utilisateur | **oui** (quelques tâches réelles, sur accord) | Jugement de ce qui accroche en vrai | à faire |
 
 Les modèles sont une proposition ; l'utilisateur a le dernier mot. **Fable n'est utilisé dans aucune phase.** Ordre imposé : A avant B (B lit métiers et fiches polyvalentes) ; B avant C (la tâche 7 s'appuie sur le choix polyvalent, la 9 sur les leçons par métier) ; D après A (peut se faire avant ou après C) ; E en dernier.
@@ -153,3 +153,29 @@ Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test
 - **Non vérifié.** Aucune reprise lancée sur ZooRunner ni sur un vrai projet ; le moteur en marche pendant une reprise (une fiche
   réécrite sous un agent au travail) est raisonné, pas essayé : lancer la reprise de préférence quand aucun agent ne travaille.
   La page (`node --test` seulement), jamais ouverte dans un navigateur.
+
+**Phase D (2026-11-13, Sonnet 5.5)** — tâche 10 faite, sans appel réel ni navigateur (tests Python et `node --test` seulement).
+
+- **Relevé (`outil.construire_releve`).** Dans un projet qui a des polyvalents seulement : chaque tâche porte `service` (service
+  de son étape de flux, `mn.etape_de_la_tache`, sinon `Service :` du brief de son métier, sinon `null` ; un service inconnu du
+  projet vaut `null`) ; le titulaire polyvalent porte `service` = celui de sa première tâche active non faite (`null` libre) ;
+  nouveau champ racine `metiers: [{role, service, modele, specialite, lecons: [{id, texte, etat}]}]` (briefs lisibles qui ont un
+  service ou des leçons). Un projet à l'ancienne : relevé inchangé (ni `service` de tâche, ni `metiers`). Validateur/normaliseur
+  (`bureau/releve.py`) : `service` de tâche ajouté à `CHAMPS_V4_TACHE` (nul par défaut), `_verifier_metiers`, `metiers`
+  retiré s'il n'est pas une liste. Écart au plan : le service d'un titulaire polyvalent n'est plus absent mais `null` quand il
+  est libre (test `test_releve_valide_avec_agents_polyvalents` adapté).
+- **État (`bureau/etat.py`).** `agents[].service` d'un polyvalent = celui du relevé, sinon celui de sa première tâche active ;
+  `agents[].polyvalent: true` (clé absente pour les autres) ; `taches[].service` copié ; `metiers` copié ; l'onglet
+  Connaissances s'ouvre si un métier a une leçon validée.
+- **Page.** Nouveau module pur `ui/polyvalent.js` (`tacheEnCours`, `modeleDeLaTache` = `modele_depart` sinon
+  `modele_necessaire.modele`, `lignesModele`, `modeleAffiche`, `leconsParMetier`). Carte au survol et fiche d'un agent :
+  « Tâche » et « Modèle de la tâche » au lieu de « Plafond » pour un polyvalent (le Chef et les agents à l'ancienne gardent
+  « Plafond ») ; liste des agents d'un service : modèle de la tâche ; `regie.js` : `_service(a)` (la pièce suit le service de la
+  tâche si l'agent n'en porte pas) ; `dossier.tachesDuService` reconnaît les tâches d'un polyvalent à leur propre `service` ;
+  `connaissances.js` : bloc « Leçons par métier » (`contenuLecons`) avant les connaissances ; les signatures de panneau
+  suivent `service`, `modele_depart` et `metiers`.
+- **Pour la phase E.** Lancer la reprise puis ouvrir la page : les agents s'assoient dans la pièce du service de leur tâche ;
+  un polyvalent libre va au café ; une tâche sans étape de flux ni brief avec `Service :` reste sans service (son agent va au café
+  même au travail : si cela se voit, poser `Service :` dans le brief du métier). Les leçons « à valider » d'un métier se
+  voient dans le dossier du service (onglet Connaissances) mais le Directeur les juge toujours dans la liste des leçons du
+  relevé. Non vérifié dans un navigateur.

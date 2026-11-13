@@ -6,6 +6,7 @@ import {el} from "./dom.js";
 import {dateFr, libellePeriode, tronquer} from "./texte.js";
 import {challengeDe} from "./actions.js";
 import {enAttenteCible} from "./challenge.js";
+import {leconsParMetier} from "./polyvalent.js";
 
 const JOUR_MS = 24 * 3600 * 1000;
 const DUREES = {"7j": 7 * JOUR_MS, "30j": 30 * JOUR_MS};
@@ -72,12 +73,32 @@ function carteConnaissance(ctx, c, service, noms, prenom) {
   return li;
 }
 
+// Les leçons d'un service, par métier (agents polyvalents : elles ne sont plus dans la fiche d'un agent) :
+// [{role, lignes: [{texte, etat}]}]. Vide pour un projet à l'ancienne. Pur.
+export function contenuLecons(etat, service) {
+  return leconsParMetier(etat, service).map((m) => ({role: m.role, lignes: m.lecons.map((l) => ({texte: l.texte, etat: l.etat}))}));
+}
+
 // contenuConnaissances(contexte, conteneur, service, periode) — `ctx.challenger(cible, constat, taches)` ouvre le volet.
 export function contenuConnaissances(ctx, conteneur, service, periode) {
   const e = ctx.etat;
   const noms = Object.fromEntries((e.services || []).map((s) => [s.id, s.nom]));
   const siens = (e.savoir || []).filter((s) => s.service === service);
   const total = siens.reduce((n, s) => n + (s.connaissances || []).length, 0);
+  const metiers = contenuLecons(e, service);
+  if (metiers.length) {
+    conteneur.append(el("div", "carte-sous-titre", `Leçons par métier (${metiers.reduce((n, m) => n + m.lignes.length, 0)})`));
+    for (const m of metiers) {
+      conteneur.append(el("h4", "agent-savoir", m.role));
+      const ul = el("ul", "liste-partie");
+      for (const l of m.lignes) {
+        const li = el("li", "lecon");
+        li.append(el("div", "lecon-texte", l.texte), el("div", "lecon-etat", l.etat));
+        ul.append(li);
+      }
+      conteneur.append(ul);
+    }
+  }
   conteneur.append(el("div", "carte-sous-titre", `Connaissances du service (${total})`));
   if (!total) conteneur.append(el("p", "vide", "Aucune connaissance pour ce service."));
   for (const s of siens) {

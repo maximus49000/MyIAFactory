@@ -194,24 +194,36 @@ export class Regie {
     }
     if (a.chef) return {...this.plan.chef, action: "debout"};
     if (this._postes.has(a.id)) {
-      const p = this.plan.poste(a.service, this._postes.get(a.id).i);
+      const p = this.plan.poste(this._service(a), this._postes.get(a.id).i);
       return {...p, action: p.assis ? "assis" : "debout"};
     }
     return {...this.plan.cafe(this._cafe.get(a.id) ?? 0), action: "cafe"};
   }
 
+  // La pièce d'un agent : son service ; pour un agent polyvalent, celui de la tâche qu'il tient (le service de la
+  // première de ses tâches qui en dit un, si le relevé n'a pas déjà posé le sien sur l'agent).
+  _service(a) {
+    if (a.service || !a.polyvalent) return a.service;
+    for (const id of a.taches || []) {
+      const t = (this.etat?.taches || []).find((x) => x.id === id);
+      if (t?.service) return t.service;
+    }
+    return a.service;
+  }
+
   _placer(a) {
-    const travaille = !a.chef && (a.statut === "travail" || a.statut === "sans_nouvelles") && this.plan.aService(a.service);
+    const service = this._service(a);
+    const travaille = !a.chef && (a.statut === "travail" || a.statut === "sans_nouvelles") && this.plan.aService(service);
     if (travaille) {
       this._cafe.delete(a.id);
       // Changement de service : la place gardée était celle de l'ancien service.
-      if (this._postes.get(a.id)?.service !== a.service) this._postes.delete(a.id);
+      if (this._postes.get(a.id)?.service !== service) this._postes.delete(a.id);
       if (!this._postes.has(a.id)) {
         const pris = new Set();
-        for (const p of this._postes.values()) if (p.service === a.service) pris.add(p.i);
+        for (const p of this._postes.values()) if (p.service === service) pris.add(p.i);
         let i = 0;
         while (pris.has(i)) i++;
-        this._postes.set(a.id, {service: a.service, i});
+        this._postes.set(a.id, {service, i});
       }
     } else {
       this._postes.delete(a.id);

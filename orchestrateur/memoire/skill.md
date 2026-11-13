@@ -441,3 +441,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.
+
+## S74 — Quand l'environnement ne contient pas le moteur nécessaire p
+Rôles : dev
+Date : 2026-11-13
+
+Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.

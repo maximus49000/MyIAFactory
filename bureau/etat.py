@@ -181,7 +181,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         directeur["reponses"] = sum(1 for f in presentes if attend_utilisateur(f))
         directeur["total"] += directeur["fonctionnalites"] + directeur["projet"] + directeur["reponses"]
         for t, brut in zip(taches, r["taches"]):
-            for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume"):
+            for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume",
+                      "debut", "fin"):
                 t[c] = brut.get(c)
 
     e = {

@@ -2160,7 +2160,8 @@ def construire_releve(ctx):
              "journal": list(t["journal"]), "fonctionnalite": t["fonctionnalite"], "element": t["element"],
              "modele_depart": t["modele_depart"], "montee": t["montee"], "bloquee": t["bloquee"],
              "lot": dict(t["lot"]) if isinstance(t.get("lot"), dict) else None,
-             "modele_necessaire": mn.de_la_tache(ctx.f, t, fiches, s["fonctionnalites"])}
+             "modele_necessaire": mn.de_la_tache(ctx.f, t, fiches, s["fonctionnalites"]),
+             "debut": t.get("debut"), "fin": t.get("fin")}      # le temps de la tâche (vue d'un agent, d'un service)
         resume = resume_de_tache(t, s["fonctionnalites"])
         if resume:
             v["resume"] = resume

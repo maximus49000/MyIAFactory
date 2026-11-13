@@ -877,6 +877,9 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         for champ in ("element", "modele_depart"):
             if not _texte_ou_nul(t.get(champ)):
                 erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
+        for champ in ("debut", "fin"):       # heures ISO du départ et de la fin de la tâche
+            if not _texte_ou_nul(t.get(champ)) or len(t.get(champ) or "") > 40:
+                erreurs.append(f"Tâche « {i} » : « {champ} » est une heure ISO ou nul.")
         if not _texte_ou_nul(t.get("resume")) or len(t.get("resume") or "") > MAX_RESUME_TACHE:
             erreurs.append(f"Tâche « {i} » : « resume » est un texte de {MAX_RESUME_TACHE} caractères au plus.")
         m = t.get("montee")
@@ -1112,7 +1115,8 @@ def _verifier_recrutement(x, erreurs):
     for champ in ("polyvalent", "reprise_possible"):
         if champ in x and not isinstance(x[champ], bool):
             erreurs.append(f"{q} : « {champ} » doit être vrai ou faux.")
-CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume")
+CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume", "debut",
+                   "fin")
 
 
 def _normaliser_v4(n):

@@ -93,7 +93,9 @@ function contenuTaches(ctx, conteneur, service) {
 // Les tâches d'un service de production : celles de ses agents (ou marquées de ce service), en cours puis faites. Pur.
 export function tachesDuService(etat, service) {
   // Un agent polyvalent change de service avec sa tâche : ses tâches se reconnaissent à leur propre service.
-  const ids = new Set((etat?.agents || []).filter((a) => a.service === service && !a.chef && !a.polyvalent).map((a) => a.id));
+  // Un agent retiré de l'équipe garde ses tâches : par leur service, ou par celui de son ancienne fiche.
+  const ids = new Set((etat?.agents || []).filter((a) => a.service === service && !a.chef && !a.polyvalent).map((a) => a.id)
+    .concat((etat?.anciens_agents || []).filter((a) => a.service === service).map((a) => a.id)));
   const siennes = (etat?.taches || []).filter((t) => t.id !== "orchestration" && (t.service === service || ids.has(t.agent)));
   const recent = (x, y) => String(y.maj || "").localeCompare(String(x.maj || ""));
   return {enCours: siennes.filter((t) => t.colonne !== "fait" && (t.active || t.travail)).sort(recent),

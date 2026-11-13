@@ -133,6 +133,7 @@ class TestEquipe(Base):
         e = etat.construire(releve.normaliser(json.loads(json.dumps(r))), _Equipe(), datetime.now(timezone.utc), 30)
         self.assertNotIn(a2, [a["id"] for a in e["agents"]])
         self.assertEqual([a["id"] for a in e["anciens_agents"]], [a2])
+        self.assertEqual(len([t for t in e["taches"] if t["agent"] == a2]), 1)      # sa tâche garde son agent
         self.assertEqual(set(e["anciens_agents"][0]), {"id", "prenom", "couleur", "lieu"})
 
 

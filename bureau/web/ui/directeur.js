@@ -125,6 +125,32 @@ function partie(titre, vide, elements) {
   return s;
 }
 
+// Les agents retirés de l'équipe (gardés pour l'historique de leurs tâches ; la scène ne les dessine pas). Pur.
+export function anciensAgents(etat) {
+  return Array.isArray(etat?.anciens_agents) ? etat.anciens_agents : [];
+}
+
+// La fiche d'un ancien agent, de la forme d'un agent pour `contenuAgent` ; null s'il n'est pas retiré. Pur.
+export function ficheAncienAgent(etat, id) {
+  const a = anciensAgents(etat).find((x) => x.id === id);
+  return a ? {...a, retire: true, taches: [], lecons: [], polyvalent: true, statut: null} : null;
+}
+
+// La section « Anciens agents » de l'espace de direction : chacun ouvre sa fiche.
+function sectionAnciensAgents(ctx) {
+  const liste = anciensAgents(ctx.etat);
+  if (!liste.length) return null;
+  const items = liste.map((a) => {
+    const li = el("li", "");
+    const b = el("button", "lien-tache", a.prenom || a.id);
+    b.type = "button";
+    b.addEventListener("click", () => ctx.ouvrirAgent?.(a.id));
+    li.append(b, el("span", "lecon-meta", ` · ${a.lieu === "cloud" ? "cloud ☁" : "local"} · retiré de l'équipe`));
+    return li;
+  });
+  return partie("Anciens agents", "", items);
+}
+
 export function contenuDirecteur(ctx, contenu) {
   const e = ctx.etat;
   contenu.append(el("h2", "", "Direction"));
@@ -215,6 +241,8 @@ export function contenuDirecteur(ctx, contenu) {
     blocBloquees.querySelector("h3").after(tout);
   }
   contenu.append(blocBloquees);
+  const anciens = sectionAnciensAgents(ctx);
+  if (anciens) contenu.append(anciens);
 }
 
 const ETATS_LECON = {"à valider": "à valider", "validée": "validée"};
@@ -231,11 +259,12 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   const e = ctx.etat;
   contenu.append(el("h2", "", a.prenom || "?"));
   const service = a.chef ? "Chef d'atelier" : ((e.services || []).find((s) => s.id === a.service)?.nom || "—");
-  contenu.append(ligne("Service", service));
+  if (a.retire) contenu.append(el("p", "retire-de-l-equipe", "Retiré de l'équipe"));
+  if (!a.retire) contenu.append(ligne("Service", service));
   if (a.specialite) contenu.append(ligne("Spécialité", a.specialite));
-  for (const [libelle, valeur] of lignesModele(e, a)) contenu.append(ligne(libelle, valeur));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
+  if (!a.retire) for (const [libelle, valeur] of lignesModele(e, a)) contenu.append(ligne(libelle, valeur));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
   contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
-  contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
+  if (!a.retire) contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
   if (a.chef) {
     contenu.append(blocPoint(e, ctx.ouvrirTache));      // « où en est-on ? » : la réponse immédiate
     if (e.agir) contenu.append(blocRetour(ctx, TACHE_DU_CHEF, {titre: "Demander au Chef",
@@ -243,7 +272,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     contenu.append(el("div", "carte-sous-titre", "Échanges avec le Chef"), listeEchanges(e, dateFr));
   }
 
-  contenu.append(el("div", "carte-sous-titre", "Tâches en cours"));
+  if (!a.retire) contenu.append(el("div", "carte-sous-titre", "Tâches en cours"));
   const taches = el("ul", "liste-partie");
   const siennes = (a.taches || []).map((id) => (e.taches || []).find((t) => t.id === id)).filter(Boolean);
   if (!siennes.length) taches.append(el("li", "vide", "Aucune tâche en cours"));
@@ -252,7 +281,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     li.append(lienTache(ctx, t.id, tronquer(t.titre, MAX_TITRE)));
     taches.append(li);
   }
-  contenu.append(taches);
+  if (!a.retire) contenu.append(taches);
 
   if (!a.chef) {
     // L'historique : toutes les tâches qu'il a faites (service – tâche), chacune avec son coût, chacune ouvrable.
@@ -281,6 +310,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
     }
   }
 
+  if (a.retire) return;      // ses leçons sont celles des métiers
   contenu.append(el("div", "carte-sous-titre", "Leçons"));
   const lecons = el("ul", "liste-partie");
   if (!(a.lecons || []).length) {

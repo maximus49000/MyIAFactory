@@ -166,9 +166,10 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
             en_cours = {}
         _marquer_problemes_revenus(savoir, r, en_cours)
 
+    anciens = {x["id"] for x in anciens_agents}      # leurs tâches gardent leur agent (l'historique)
     taches = [{
         "id": t["id"], "titre": t["titre"], "colonne": t["colonne"],
-        "agent": t.get("titulaire") if t.get("titulaire") in presents else None,
+        "agent": t.get("titulaire") if t.get("titulaire") in presents or t.get("titulaire") in anciens else None,
         "etape": t.get("etape") or "", "maj": t.get("maj"), "postit": t.get("postit", True),
         "active": bool(t.get("active")), "type": t.get("type"),
         "journal": sorted(t.get("journal") or [], key=lambda j: j["t"], reverse=True),

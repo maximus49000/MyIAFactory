@@ -8,7 +8,7 @@ import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
 import {lignesModele} from "./polyvalent.js";
-import {contenuDirecteur, contenuAgent, resumeLecons} from "./directeur.js";
+import {contenuDirecteur, contenuAgent, resumeLecons, ficheAncienAgent} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
@@ -71,7 +71,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
         e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
     }
     if (type === "agent") {
-      const a = (e.agents || []).find((x) => x.id === id);
+      const a = (e.agents || []).find((x) => x.id === id) || ficheAncienAgent(e, id);
       // Le Chef : son point de l'atelier et ses échanges suivent l'état (réponse arrivée, minute qui passe…).
       const chef = a?.chef ? [e.agents, (e.taches || []).map((t) => [t.id, t.bloquee, t.attente, t.retours, cleTravail(t)]),
         e.decisions_projet, (e.fonctionnalites || []).map((f) => f.decisions), e.attente_charge] : null;
@@ -80,7 +80,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     }
     return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
       e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,
-      (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours]), e.echanges_vus]);
+      (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours]), e.echanges_vus, e.anciens_agents]);
   };
 
   // Les tâches qui passent le filtre tant que la vue liste est ouverte (sinon null : rien n'est estompé).
@@ -164,6 +164,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     ouvrirListe: () => ouvrirPanneau("liste", null),
     ouvrirAttente: () => ouvrirPanneau("attente", null),
     ouvrirTache: (id) => { retourListe = false; ouvrirPanneau("tache", id); },
+    ouvrirAgent: (id) => ouvrirPanneau("agent", id),
     ouvrirTacheDepuisListe: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
     changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
   });
@@ -227,7 +228,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       if (!e.partenaires) { fermerPanneau(); return; }
       contenuPartenaires(contexte(), contenu, envoyerDemande);
     } else if (type === "agent") {
-      const a = (e.agents || []).find((x) => x.id === id);
+      const a = (e.agents || []).find((x) => x.id === id) || ficheAncienAgent(e, id);
       if (!a) { fermerPanneau(); return; }
       contenuAgent(contexte(), contenu, a, STATUTS);
     } else {

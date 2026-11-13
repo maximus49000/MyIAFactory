@@ -17,13 +17,15 @@ function nomColonne(e, id) {
 }
 
 export function prenomAgent(e, id) {
-  return (e.agents || []).find((a) => a.id === id)?.prenom || "personne";
+  // Un agent retiré de l'équipe garde son prénom : ses tâches réalisées le nomment toujours.
+  return (e.agents || []).find((a) => a.id === id)?.prenom || (e.anciens_agents || []).find((a) => a.id === id)?.prenom || "personne";
 }
 
 // Le prénom de l'agent, sinon sa clé (un agent pas encore venu au bureau, par exemple une fiche cloud qui attend sa
 // session) ; « personne » s'il n'y a pas d'agent.
 export function nomAgent(e, id) {
-  return (e?.agents || []).find((a) => a.id === id)?.prenom || (typeof id === "string" && id ? id : "personne");
+  return (e?.agents || []).find((a) => a.id === id)?.prenom || (e?.anciens_agents || []).find((a) => a.id === id)?.prenom
+    || (typeof id === "string" && id ? id : "personne");
 }
 
 // Le menu « Déplacer vers… » : une demande `deplacer`, jamais un changement direct.

@@ -380,3 +380,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Quand un prompt de génération peut produire plusieurs assets, le plan de génération compte séparément les générations (le coût) et les assets obtenus, et dit pour chaque génération quels fichiers elle donne.
+
+## G64 — Un robot de test qui ne fait que combattre sous-estime la vi
+Rôles : dev
+Date : 2026-11-13
+
+Un robot de test qui ne fait que combattre sous-estime la victoire d'une run complète, parce qu'il ne profite pas des soins, achats et événements : le dire dans le rapport d'équilibrage et lui donner ces actions avant de conclure.

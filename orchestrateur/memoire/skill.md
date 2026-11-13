@@ -549,3 +549,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Un contrôle de relecture ne doit pas modifier les fichiers du projet ; s'il le fait, il faut un mode lecture seule.
+
+## S92 — Dans une consigne, indiquer les chemins avec des barres obli
+Rôles : qa, dev
+Date : 2026-11-13
+
+Dans une consigne, indiquer les chemins avec des barres obliques ou passer par un lanceur Python, car le shell peut déformer les antislashs.

@@ -537,3 +537,9 @@ Rôles : graphiste
 Date : 2026-11-13
 
 Avant de refaire un habillage graphique demandé, chercher dans l'historique si un commit l'a déjà livré ; si oui, relire la capture, signaler les défauts mineurs, ne rien régénérer.
+
+## S90 — Quand l'élément à équilibrer n'est pas mesuré par le robot d
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand l'élément à équilibrer n'est pas mesuré par le robot de test et n'a pas de cible chiffrée, ne change aucune valeur : vérifie que le journal est à jour, lance le contrôle propre à l'élément et déclare ce qui reste seulement calculé.

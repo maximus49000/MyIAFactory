@@ -2,7 +2,7 @@
 // `colonnesKanban` est pure et testée avec node. Tout texte venu du relevé passe par textContent.
 
 import {el} from "./dom.js";
-import {auTravail, ilYA, tronquer} from "./texte.js";
+import {auTravail, ilYA, ligneAttente, tronquer} from "./texte.js";
 
 // Ce que la colonne dit de son genre (sous son nom) : le genre du workflow dont elle est une étape, ou rien.
 export function etiquetteColonne(col) {
@@ -21,7 +21,7 @@ export function colonnesKanban(etat) {
     if (!c || t.postit === false) continue;   // sans post-it (le chef qui orchestre) : pas sur le Kanban, comme dans la scène
     c.taches.push({id: t.id, titre: t.titre, prenom: t.agent ? prenoms.get(t.agent) || t.agent : null,
                    etape: t.etape || "", maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null,
-                   attente: t.attente || null, travail: t.travail || null, resume: t.resume || null});
+                   attente: ligneAttente(t), travail: t.travail || null, resume: t.resume || null});
   }
   for (const c of colonnes) c.taches.sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
   colonnes.file = {elements: [...(etat?.file?.visibles || []), ...(etat?.file?.suite || [])]

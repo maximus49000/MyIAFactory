@@ -43,7 +43,16 @@ export function creerBarre(entete, bandeau) {
   function majRetenue(etat) {
     const lignes = retenues(etat);
     retenue.hidden = lignes.length === 0;
-    retenue.replaceChildren(...lignes.map((l) => { const s = el("span", "retenue", l.texte); s.dataset.ton = l.ton; return s; }));
+    retenue.replaceChildren(...lignes.map((l) => {
+      const s = el("span", "retenue", l.texte);
+      s.dataset.ton = l.ton;
+      for (const p of l.pastilles || []) {      // « 10 prérequis », « 1 poste local occupé »… : une par famille
+        const pastille = el("span", "pastille-attente", p.texte);
+        pastille.dataset.genre = p.genre;
+        s.append(" ", pastille);
+      }
+      return s;
+    }));
   }
 
   const charge = el("div", "charge");

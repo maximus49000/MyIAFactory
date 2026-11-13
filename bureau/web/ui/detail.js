@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, auTravail, dateFr,filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
+import {tronquer, ilYA, auTravail, dateFr, pourquoiElleAttend, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
@@ -118,6 +118,27 @@ function blocImages(t) {
   return vignettes;
 }
 
+// L'encadré « Pourquoi elle attend » : la raison, ce qui la retient, ce qu'il lui faudra ensuite, quand elle partira.
+function blocPourquoi(p) {
+  const bloc = el("section", "pourquoi-attente");
+  bloc.setAttribute("aria-label", p.titre);
+  bloc.append(el("div", "carte-sous-titre", p.titre));
+  const raison = el("p", "pourquoi-raison");
+  raison.append(el("strong", "", p.famille + " : "), document.createTextNode(p.raison));
+  bloc.append(raison);
+  const liste = (titre, lignes) => {
+    if (!lignes.length) return;
+    bloc.append(el("p", "pourquoi-titre", titre));
+    const ul = el("ul", "pourquoi-lignes");
+    for (const l of lignes) ul.append(el("li", "", l));
+    bloc.append(ul);
+  };
+  liste("Ce qui la retient", p.retient);
+  liste("Ce qu'il lui faudra ensuite", p.ensuite);
+  if (p.quand) bloc.append(el("p", "pourquoi-quand", p.quand));
+  return bloc;
+}
+
 export function contenuTache(ctx, contenu, t) {
   const e = ctx.etat;
   if (ctx.retourListe) {
@@ -159,7 +180,9 @@ export function contenuTache(ctx, contenu, t) {
   }
   const travail = auTravail(t.travail);      // l'agent local au travail (dit par le bureau, relu à chaque état)
   if (travail) contenu.append(ligne("Au travail", "depuis " + travail.depuis + (travail.action ? " · " + travail.action : "")));
-  if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge du poste (dit par le moteur)
+  const pourquoi = pourquoiElleAttend(t);     // pourquoi elle ne part pas (dit par le moteur)
+  if (pourquoi) contenu.append(blocPourquoi(pourquoi));
+  else if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge (moteur d'avant)
   if (t.bloquee) {
     const b = el("p", "bloquee");
     b.append(el("strong", "", "Bloquée : "), document.createTextNode(t.bloquee));

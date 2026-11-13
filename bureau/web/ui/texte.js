@@ -79,15 +79,61 @@ export function voyant(factory, erreur, maintenant = new Date()) {
   return {libelle: "Relevé indisponible", ton: "alerte"};
 }
 
+// --- Pourquoi une tâche prête ne part pas (dit par le moteur dans `t.attente_raison`) : quatre familles.
+export const GENRES_ATTENTE = ["prerequis", "agent", "decision", "pause"];
+const FAMILLES_ATTENTE = {prerequis: "Prérequis", agent: "Agent", decision: "Décision", pause: "Pause"};
+
+function texteNonVide(v) {
+  return typeof v === "string" && v.trim() !== "";
+}
+
+function lignesNonVides(v) {
+  return Array.isArray(v) ? v.filter(texteNonVide) : [];
+}
+
+// La raison d'attente d'une tâche, nettoyée ({genre, motif, texte, detail, ensuite, quand}), ou null : rien de faux.
+export function raisonAttente(t) {
+  const r = t?.attente_raison;
+  if (!r || typeof r !== "object" || !GENRES_ATTENTE.includes(r.genre) || !texteNonVide(r.texte)) return null;
+  return {genre: r.genre, motif: texteNonVide(r.motif) ? r.motif : r.texte, texte: r.texte, detail: lignesNonVides(r.detail),
+          ensuite: lignesNonVides(r.ensuite), quand: texteNonVide(r.quand) ? r.quand : null};
+}
+
+// La ligne courte de la carte : « En attente : prérequis — Validation du prototype » ; sinon l'attente de charge
+// d'avant (`t.attente`) ; sinon null.
+export function ligneAttente(t) {
+  const r = raisonAttente(t);
+  if (r) return "En attente : " + r.texte;
+  return texteNonVide(t?.attente) ? t.attente : null;
+}
+
+// L'encadré « Pourquoi elle attend » de la fiche : {titre, famille, raison, retient, ensuite, quand}, ou null.
+export function pourquoiElleAttend(t) {
+  const r = raisonAttente(t);
+  if (!r) return null;
+  return {titre: "Pourquoi elle attend", famille: FAMILLES_ATTENTE[r.genre], raison: r.texte[0].toUpperCase() + r.texte.slice(1),
+          retient: r.detail, ensuite: r.ensuite, quand: r.quand ? "Elle partira " + r.quand : null};
+}
+
 // Ce qui retient le travail, dit par le moteur : la pause d'une installation d'outil (pour tous les projets du bureau),
 // puis les tâches prêtes que la charge retient, puis les places libres qui attendent une validation du Directeur.
-// Rend une liste de {ton, texte} (vide si rien ne retient rien).
+// Rend une liste de {ton, texte} (vide si rien ne retient rien). Quand le moteur dit pourquoi chaque tâche attend
+// (`etat.attentes`), une ligne {ton: "attentes", texte: « 12 tâches en attente », pastilles: [{genre, texte}]} remplace
+// celle de la charge (la charge y est une famille).
 export function retenues(etat) {
   const lignes = [];
   const pause = etat?.pause_installation;
   if (pause && typeof pause.texte === "string" && pause.texte.trim()) lignes.push({ton: "pause", texte: pause.texte});
+  const attentes = etat?.attentes;
   const attente = etat?.attente_charge;
-  if (attente && typeof attente.texte === "string" && attente.texte.trim()) lignes.push({ton: "attente", texte: attente.texte});
+  if (attentes && texteNonVide(attentes.texte)) {
+    const pastilles = (Array.isArray(attentes.familles) ? attentes.familles : [])
+      .filter((f) => f && GENRES_ATTENTE.includes(f.genre) && texteNonVide(f.texte))
+      .map((f) => ({genre: f.genre, texte: f.texte}));
+    lignes.push({ton: "attentes", texte: attentes.texte, pastilles});
+  } else if (attente && typeof attente.texte === "string" && attente.texte.trim()) {
+    lignes.push({ton: "attente", texte: attente.texte});
+  }
   // des places d'agents libres que rien ne peut prendre avant une validation du Directeur
   const places = etat?.attente_validation;
   if (places && typeof places.texte === "string" && places.texte.trim()) lignes.push({ton: "attente", texte: places.texte});

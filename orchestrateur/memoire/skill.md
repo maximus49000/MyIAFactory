@@ -567,3 +567,9 @@ Rôles : designer, dev
 Date : 2026-11-13
 
 Mesurer le contraste de chaque texte contre le fond réellement rendu derrière lui, et compter le contour du texte quand il est assez épais.
+
+## S95 — Un contrôle d'écran se prouve en injectant un faux élément p
+Rôles : designer, dev, qa
+Date : 2026-11-13
+
+Un contrôle d'écran se prouve en injectant un faux élément par défaut visé et en exigeant que chaque erreur attendue apparaisse, en plus de celles de l'écran juste.

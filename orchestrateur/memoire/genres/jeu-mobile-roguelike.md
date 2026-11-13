@@ -398,3 +398,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un nœud d'interface créé par le code puis ajouté à la scène doit avoir une position et une taille explicites, ainsi que ses enfants plein écran ; il faut relire la capture réelle de l'écran avant de rendre.
+
+## G67 — Dans un jeu à carte de nœuds, un test d'issue aléatoire d'un
+Rôles : dev
+Date : 2026-11-13
+
+Dans un jeu à carte de nœuds, un test d'issue aléatoire d'un type de nœud doit partir d'un nœud réellement de ce type, sinon la branche testée n'est jamais atteinte.

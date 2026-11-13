@@ -386,3 +386,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un robot de test qui ne fait que combattre sous-estime la victoire d'une run complète, parce qu'il ne profite pas des soins, achats et événements : le dire dans le rapport d'équilibrage et lui donner ces actions avant de conclure.
+
+## G65 — Quand un jeu permet de voir à l'avance ce qui attend sur cha
+Rôles : dev
+Date : 2026-11-13
+
+Quand un jeu permet de voir à l'avance ce qui attend sur chaque nœud, attribuer les contenus au niveau entier (ordre mélangé selon la graine, sans répétition tant que la liste suffit) et faire lire cette même attribution par l'aperçu et par le jeu.

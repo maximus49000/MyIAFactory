@@ -100,7 +100,7 @@ Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test
   mixte (anciennes fiches + polyvalents) fonctionne (spécialistes d'abord) mais n'est pas un cas visé. Non vérifié en vrai
   (aucun agent lancé) : la sortie réelle de `claude` avec une fiche « accord par tâche ».
 
-**Phase C (2026-11-13, Sonnet 5.5)** — tâches 7, 8, 9 faites, sans appel réel (banc gratuit vert). Commits `740f2ed` (7), `5eb33b1` (8) et celui de la tâche 9.
+**Phase C (2026-11-13, Sonnet 5.5)** — tâches 7, 8, 9 faites, sans appel réel (banc gratuit vert). Commits `740f2ed` (7), `5eb33b1` (8), `5695982` (9, avec la passation).
 
 - **Tâche 7, équipe = places.** `parallelisme` rend en plus `crees`, `retires`, `retraits_prevus` (clés ; vides pour un projet à
   l'ancienne ou mixte). La fiche d'un agent au travail à retirer porte la ligne d'en-tête `Retrait : prévu` (`retrait_prevu` dans

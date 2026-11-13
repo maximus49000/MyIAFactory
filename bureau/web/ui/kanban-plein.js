@@ -56,7 +56,8 @@ export function ouvrirKanban(etat, ouvrirTache) {
     c.append(el("h3", "", `${col.nom} (${col.taches.length})`));
     if (etiquetteColonne(col)) c.append(el("p", "kanban-plein-genre", etiquetteColonne(col)));
     for (const t of col.taches.slice(0, 200)) {
-      const carte = el("button", "kanban-carte" + (t.bloquee ? " bloquee" : "") + (t.active ? "" : " inactive"));
+      const carte = el("button", "kanban-carte" + (t.bloquee ? " bloquee" : "") + (t.active ? "" : " inactive")
+        + (!t.bloquee && (t.travail || (t.active && t.prenom)) ? " au-travail" : ""));
       carte.type = "button";
       carte.append(el("strong", "", tronquer(t.titre, 120)));
       if (t.resume) carte.append(el("span", "kanban-carte-resume", tronquer(t.resume, 90)));   // l'objectif, sur une ligne (pas de surcharge)

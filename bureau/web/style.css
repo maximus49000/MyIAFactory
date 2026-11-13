@@ -879,6 +879,8 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .kanban-carte:hover { border-color: #3d3a4b; }
 .kanban-carte.inactive { background: #f4efe6; }
 .kanban-carte.bloquee { border-color: #c0392b; }
+/* une tâche au travail : fond vert, pour la repérer d'un coup d'œil */
+.kanban-carte.au-travail { background: #e3f6e6; border-color: #4caf6a; }
 .kanban-carte.pale { background: #f4efe6; cursor: default; }
 .kanban-carte-meta { color: #6d6980; font-size: 12px; }
 .kanban-carte-bloquee { color: #c0392b; font-size: 12px; }

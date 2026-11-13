@@ -304,3 +304,10 @@ export const PERIODE_DEFAUT = "7j";
 export function libellePeriode(p) {
   return {aujourdhui: "Aujourd'hui", "7j": "7 jours", "30j": "30 jours"}[p] || "7 jours";
 }
+
+// Une tâche au travail (un agent la tient, ou son agent local tourne) : sa carte et son post-it prennent une couleur à
+// part. Pur.
+export const COULEUR_AU_TRAVAIL = "#6fcf7f";
+export function tacheAuTravail(t) {
+  return Boolean(t && t.colonne !== "fait" && (t.travail || (t.active && t.agent)));
+}

@@ -3,10 +3,10 @@
 
 import * as THREE from "three";
 import {PAS_TABLEAU, JEU_TABLEAU} from "../logique/plan.js";
-import {fileDepliable, resteApresVisibles} from "../ui/texte.js";
+import {fileDepliable, resteApresVisibles, tacheAuTravail as auTravail, COULEUR_AU_TRAVAIL} from "../ui/texte.js";
 import {vignettesVoulues, Vignettes} from "../logique/vignettes.js";
 
-const COULEURS = ["#ffe27a", "#ffb3b0", "#c8f0b4", "#a8e4f0", "#ffd3a1", "#cbbcff"];
+const COULEURS = ["#ffe27a", "#ffb3b0", "#f4c6ec", "#a8e4f0", "#ffd3a1", "#cbbcff"];   // pas de vert : il dit « au travail »
 const PALE = "#f2ede2";
 const HAUT = 2.04;                 // hauteur du bord supérieur de la surface utile (modèle Tripo : tableau 2,2 m de haut)
 const DEVANT = 0.05;               // la surface se pose juste devant la face blanche du modèle
@@ -174,11 +174,14 @@ export class Kanban {
     const parColonne = colonnes.map(() => []);
     const index = new Map(colonnes.map((c, i) => [c.id, i]));
     const ordre = new Map(taches.map((t, i) => [t.id, i]));
+    const parId = new Map(taches.map((t) => [t.id, t]));
     const liste = [...postits.entries()].sort((a, b) => (ordre.get(a[0]) ?? 0) - (ordre.get(b[0]) ?? 0));
     for (const [id, p] of liste) {
       const i = index.get(p.colonne);
       if (i === undefined) continue;
-      parColonne[i].push({cle: "t:" + id, type: "postit", id, couleur: COULEURS[hachage(id) % COULEURS.length]});
+      // une tâche au travail (un agent dessus) : une couleur à part, pour la repérer d'un coup d'œil
+      const couleur = auTravail(parId.get(id)) ? COULEUR_AU_TRAVAIL : COULEURS[hachage(id) % COULEURS.length];
+      parColonne[i].push({cle: "t:" + id, type: "postit", id, couleur});
     }
     let reste = 0;
     if (parColonne.length && file) {

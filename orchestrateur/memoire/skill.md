@@ -519,3 +519,9 @@ Rôles : graphiste
 Date : 2026-11-13
 
 Dans un moteur à scène, un nœud de fond ajouté en enfant recouvre ce que le parent dessine ; dessiner le fond dans le parent.
+
+## S87 — Quand le robot de test ne joue pas une décision (achat, soin
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand le robot de test ne joue pas une décision (achat, soin), ne règle pas les prix ni les coûts qui en dépendent : calcule le rythme de la ressource depuis les fichiers de valeurs, rapporte-le comme calculé et laisse les valeurs inchangées.

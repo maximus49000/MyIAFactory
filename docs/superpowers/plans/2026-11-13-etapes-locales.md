@@ -69,3 +69,12 @@ pour une tâche dont l'étape l'exige), `bureau/etat.py` (étapes et lieux servi
 - [ ] Sur accord : « Proposer le découpage » sur ZooRunner ; relire la proposition ; le Directeur valide au bureau.
 - [ ] Vérifier : prototype, contenu, build… locaux ou découpés ; une partie code part dans le cloud, sa partie locale
   attend le poste ; coûts notés.
+
+### Task 6 : équiper les sessions cloud et choisir à l'initialisation (ajout du Directeur)
+
+- Décision « Équiper les sessions cloud » : le moteur propose d'ajouter au projet `.claude/settings.json` (hook
+  `SessionStart`) et `.claude/cloud/installation.sh` généré depuis l'environnement (commandes Linux des outils) ; sur
+  « Valider », il les écrit, commite et pousse ; un essai cloud vérifie chaque outil et marque `cloud: true`.
+- `definir_workflow` rend, par étape, si elle est exécutable dans le cloud ; la création (`bureau/web/ui/echange.js`,
+  `installation/creation.py`) propose l'écran « Où s'exécutent les étapes » quand le projet a des agents cloud.
+- Tests : décision posée et appliquée, script généré sans clé ni donnée de projet, écran de création (`node --test`).

@@ -78,6 +78,32 @@ faire dans le cloud, alors qu'il n'y a qu'une place locale.
   suite, sans décision ni coût.
 - La fiche d'une tâche dit « Sur le poste local » quand son étape l'exige.
 
+## Ajouts du Directeur (2026-11-13, après validation)
+
+### Trois choix par étape, et ce qui est figé
+
+- Le lieu d'une étape vaut **Local** (seul un agent local la prend ; il attend sinon), **Cloud** (seul un agent cloud ;
+  il attend sinon) ou **Indifférent** (le premier agent libre). Le réglage se fait dans l'espace de direction.
+- Une étape qui **exige le poste** (un logiciel que le cloud ne sait pas installer) est figée sur Local. Une étape faisable
+  aux deux endroits laisse les trois choix. Un outil de l'environnement porte `cloud: true` quand le cloud sait
+  l'installer (vérifié par un essai réel : voir « Équiper les sessions cloud »).
+
+### Équiper les sessions cloud
+
+- Une session cloud clone le dépôt du projet et lance ses hooks `SessionStart` (`.claude/settings.json`) : un script
+  `.claude/cloud/installation.sh` du projet y installe les outils déclarés (ne fait rien hors du cloud ; les agents
+  locaux du moteur sont lancés sans les réglages du projet). Ajouter ce hook à un projet passe par une décision du
+  Directeur au bureau de direction (jamais en silence).
+- Un outil installé ainsi et vérifié par un essai réel est marqué `cloud: true` : ses étapes ne sont plus figées.
+
+### À l'initialisation d'un projet
+
+- Quand le Chef définit le workflow (`definir_workflow`), il évalue pour chaque étape si elle est exécutable dans le
+  cloud (ses outils s'y installent-ils ?) et le dit avec l'étape (`exige_poste`, et pour chaque outil `cloud`).
+- Si le Directeur a choisi de travailler avec des agents cloud, la création propose ensuite, après la définition du
+  workflow, l'écran « Où s'exécutent les étapes » (les trois choix, figés pour ce qui exige le poste) : il choisit quels
+  agents font quoi avant que le projet démarre.
+
 ## Hors champ
 
 - Pas de nouveau métier ; pas de changement des validations.

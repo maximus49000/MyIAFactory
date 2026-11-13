@@ -42,6 +42,23 @@ function menuDeplacer(ctx, tacheId, colonneActuelle) {
   return menu;
 }
 
+// « Relancer » une tâche bloquée : un retour sans consigne nouvelle. Le moteur reprend la tâche (même agent, même
+// élément) ; pour une validation bloquée, il refait l'étape d'avant puis repose la validation.
+export const TEXTE_RELANCE = "Relance demandée par le Directeur (même consigne).";
+const relancees = new Set();     // demandées depuis cette page : le bouton reste « Relance demandée » jusqu'au déblocage
+export function boutonRelancer(ctx, t) {
+  if (!t.bloquee) relancees.delete(t.id);
+  const b = el("button", "bouton secondaire", relancees.has(t.id) ? "Relance demandée" : "Relancer");
+  b.type = "button";
+  b.disabled = relancees.has(t.id) || !ctx.etat?.agir;
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    const r = await ctx.barre.demander({type: "retour", tache: t.id, texte: TEXTE_RELANCE});
+    if (r?.ok) { relancees.add(t.id); b.textContent = "Relance demandée"; } else b.disabled = false;
+  });
+  return b;
+}
+
 // La zone « Faire un retour » ; le brouillon survit aux rafraîchissements du panneau.
 // `textes` : {titre, invite} pour un autre usage (la question au Chef).
 export function blocRetour(ctx, tacheId, textes = {}) {
@@ -130,6 +147,7 @@ export function contenuTache(ctx, contenu, t) {
     const b = el("p", "bloquee");
     b.append(el("strong", "", "Bloquée : "), document.createTextNode(t.bloquee));
     contenu.append(b);
+    if (e.agir) contenu.append(boutonRelancer(ctx, t));
   }
 
   contenu.append(el("div", "carte-sous-titre", "Journal"));

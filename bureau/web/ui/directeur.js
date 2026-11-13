@@ -7,7 +7,7 @@ import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
-import {blocRetour} from "./detail.js";
+import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -195,9 +195,23 @@ export function contenuDirecteur(ctx, contenu) {
     if (!t.bloquee || !t.bloquee.trim()) continue;
     const li = el("li", "");
     li.append(lienTache(ctx, t.id, tronquer(t.titre, MAX_TITRE)), el("div", "bloquee-raison", t.bloquee));
+    if (e.agir) li.append(boutonRelancer(ctx, t));
     bloquees.push(li);
   }
-  contenu.append(partie("Tâches bloquées", "Aucune tâche bloquée", bloquees));
+  const blocBloquees = partie("Tâches bloquées", "Aucune tâche bloquée", bloquees);
+  if (e.agir && bloquees.length > 1) {      // une panne passagère bloque souvent tout d'un coup
+    const tout = el("button", "bouton", `Tout relancer (${bloquees.length})`);
+    tout.type = "button";
+    tout.addEventListener("click", async () => {
+      tout.disabled = true;
+      for (const t of (e.taches || []).filter((x) => x.bloquee && x.bloquee.trim())) {
+        await ctx.barre.demander({type: "retour", tache: t.id, texte: TEXTE_RELANCE});
+      }
+      tout.textContent = "Relances demandées";
+    });
+    blocBloquees.querySelector("h3").after(tout);
+  }
+  contenu.append(blocBloquees);
 }
 
 const ETATS_LECON = {"à valider": "à valider", "validée": "validée"};

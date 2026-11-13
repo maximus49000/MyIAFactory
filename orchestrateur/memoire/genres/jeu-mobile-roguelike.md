@@ -506,3 +506,9 @@ Rôles : release
 Date : 2026-11-13
 
 Après chaque export d'un paquet, vérifier que les fichiers de données embarqués sont identiques à ceux du dépôt, et refaire l'export si ce n'est pas le cas.
+
+## G85 — Un paquet destiné à la publication doit être signé avec une
+Rôles : release
+Date : 2026-11-13
+
+Un paquet destiné à la publication doit être signé avec une clé fournie par son propriétaire ; sans elle, le dire et signaler le paquet comme version de débogage.

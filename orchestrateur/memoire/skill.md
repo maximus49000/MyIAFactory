@@ -579,3 +579,9 @@ Rôles : release
 Date : 2026-11-13
 
 Dans un shell POSIX sous Windows, écrire les chemins avec des barres obliques, car les barres inverses sont altérées.
+
+## S97 — Pour contrôler un paquet, comparer le contenu des fichiers d
+Rôles : release
+Date : 2026-11-13
+
+Pour contrôler un paquet, comparer le contenu des fichiers de données octet par octet avec le dépôt ; la seule présence des fichiers ne suffit pas.

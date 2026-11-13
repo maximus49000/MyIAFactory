@@ -26,7 +26,8 @@ def monter(modele, fable=False):
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 
-def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None):
+def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None,
+                lieu_etape=None):
     """(clé, raison) du premier spécialiste du rôle sans tâche active, au lieu demandé, dont le plafond (le modèle de sa
     fiche) suffit au `modele` nécessaire de la tâche : le plus petit plafond suffisant d'abord (il fera tourner la tâche
     sur ce modèle, jamais au-dessus de son plafond). Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.
@@ -34,8 +35,11 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
     (les agents cloud ne comptent pas dans la limite et ne la subissent pas).
     Après les spécialistes du rôle viennent les agents polyvalents (fiche sans rôle) : n'importe lequel, libre, au lieu
     demandé, sans plafond. `lieu_reserve` : le lieu que le métier de la tâche impose (`Lieu : local` de son brief) ; la
-    tâche attend alors une place de ce lieu."""
-    reserve = lieu_reserve if lieu_reserve in ("local", "cloud") else None
+    tâche attend alors une place de ce lieu. `lieu_etape` : le `lieu` écrit de l'étape de la tâche, qui l'emporte sur
+    le métier (`local` : la tâche attend le poste local ; `indifférent` : aucun lieu imposé)."""
+    reserve = mn.lieu_impose(lieu_etape, lieu_reserve)
+    if lieu_etape == "local" and lieu and lieu != "local":
+        return None, "l'étape exige le poste : la tâche attend le poste local"
     if reserve and lieu and lieu != reserve:
         return None, (f"le métier {role} se fait en local : la tâche attend une place locale" if reserve == "local"
                       else f"le métier {role} se fait dans le cloud : la tâche attend une place cloud")
@@ -57,6 +61,8 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
     if retenu_par_la_limite:
         return None, f"limite de {agents_locaux_max} agents locaux atteinte"
     sur = f" sur {modele}" if modele else ""
+    if lieu_etape == "local":
+        return None, f"aucun agent local libre{sur} : la tâche attend le poste local"
     if lieu == "cloud":
         attend = sans_session(fiches, role, modele)
         if attend:   # une fiche existe mais n'a pas de session : c'est elle que la décision nommera

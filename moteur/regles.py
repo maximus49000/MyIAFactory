@@ -1090,7 +1090,7 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
                 {"validation": True, **({"raison": x["raison"]} if isinstance(x.get("raison"), str) and x["raison"].strip()
                                         else {})} if wf.est_validation(x)
                 else {"role": x["role"], "service": x["service"],
-                      **{c: x[c] for c in ("modele", "justification") if c in x}})}
+                      **{c: x[c] for c in ("modele", "justification", "lieu") if c in x}})}
             for x in o["flux"]]
     # Les nouveaux agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (conception
     # 2026-11-12-modele-par-tache-design.md).
@@ -2374,13 +2374,23 @@ def _metier(projet, role):
         return None
 
 
-def _lieu_reserve(projet, court, role):
-    """`local` ou `cloud` quand le métier du rôle impose son lieu (`Lieu :` de son brief), dans un projet qui a des agents
-    polyvalents ; `None` sinon (un projet à l'ancienne choisit comme avant)."""
-    if not any(_polyvalent(a) for a in court["agents"]):
-        return None
-    m = _metier(projet, role)
+def _lieu_de_l_etape(projet, court, tache):
+    """Le `lieu` écrit de l'étape de la tâche (`local`, `indifférent`), ou `None`."""
+    return mn.lieu_de_la_tache(_factory(projet), tache, court.get("fonctionnalites") or [])
+
+
+def _lieu_reserve(projet, court, tache):
+    """Le lieu que la tâche impose : celui de son étape quand il est écrit (`local` ; `indifférent` : aucun) ; sinon
+    `local` ou `cloud` quand le métier de son rôle impose son lieu (`Lieu :` de son brief), dans un projet qui a des
+    agents polyvalents ; `None` sinon (un projet sans `lieu` d'étape ni polyvalent choisit comme avant)."""
+    lieu_etape = _lieu_de_l_etape(projet, court, tache)
+    if lieu_etape is not None or not any(_polyvalent(a) for a in court["agents"]):
+        return mn.lieu_impose(lieu_etape, None)
+    m = _metier(projet, tache.get("role"))
     return m["lieu"] if m and m["lieu"] in ("local", "cloud") else None
+
+
+TEXTE_ATTEND_LE_POSTE = "En attente : attend le poste local"
 
 
 def _validation_en_attente(projet, court):
@@ -2479,12 +2489,13 @@ def _demarrer_en_attente(projet, etat, fid):
     polyvalents = any(_polyvalent(a) for a in court["agents"])
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
+    parties = set()
     for lot in lots:
         if not places["locaux"] and not places["cloud"]:
             break
         premiere = par_id[lot["ids"][0]]
-        # le lieu que les métiers du lot imposent (projet polyvalent seulement : `Lieu : local` d'un brief)
-        reserves = {_lieu_reserve(projet, court, par_id[i].get("role")) for i in lot["ids"]}
+        # le lieu que les étapes du lot imposent (`lieu` écrit), sinon leurs métiers (projet polyvalent : `Lieu :` d'un brief)
+        reserves = {_lieu_reserve(projet, court, par_id[i]) for i in lot["ids"]}
         local_ok = places["locaux"] > 0 and "cloud" not in reserves
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
@@ -2513,8 +2524,18 @@ def _demarrer_en_attente(projet, etat, fid):
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
         places["cloud" if lieu == "cloud" else "locaux"] -= 1
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id, modele_voulu=lot["modele"]))
+        parties.update(lot["ids"])
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
+    _noter_l_attente_du_poste(projet, etat, court, [par_id[i] for lot in lots for i in lot["ids"] if i not in parties])
     return actions
+
+
+def _noter_l_attente_du_poste(projet, etat, court, restees):
+    """Les tâches restées qui exigent le poste local (lieu de leur étape, ou métier réservé) : dites au bureau dans
+    `etat["attente_charge"]` (« attend le poste local »), sauf si la charge y est déjà notée."""
+    locales = [t["id"] for t in restees if _lieu_reserve(projet, court, t) == "local"]
+    if locales and "attente_charge" not in etat:
+        etat["attente_charge"] = {"texte": TEXTE_ATTEND_LE_POSTE, "taches": locales, "charge": None, "plafond": None}
 
 
 def texte_d_attente_de_charge(mesure):
@@ -2573,8 +2594,10 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     le cloud est impossible, l'agent local équivalent (un autre du même rôle, la tâche ramenée à son plafond), en le
     disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
     role = tache.get("role")
+    de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
     if local_ok:
-        local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {})})
+        local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {}),
+                                               **de_la_tache})
         if local["agent"]:
             return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
@@ -2582,7 +2605,7 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     # moindre, et la fait tourner sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus.
     # Le plus petit plafond suffisant d'abord.
     candidats = [a for a in mn.possibles(court["agents"], role, modele) if a["lieu"] == "cloud" and a["libre"]]
-    if not clouds or not candidats or _lieu_reserve(projet, court, role) == "local":
+    if not clouds or not candidats or _lieu_reserve(projet, court, tache) == "local":
         return None
     raison = projet.cloud_raison()
     if raison is None:
@@ -2591,7 +2614,7 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
         return candidats[0]["cle"] if cloud_ok else None
     if not local_ok:
         return None
-    equivalent = lancer(projet, "agent-libre", {"role": role, "lieu": "local"})["agent"]
+    equivalent = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **de_la_tache})["agent"]
     dits = _m(etat, "cloud_dit", set)
     if equivalent and (tache.get("fonctionnalite"), role) not in dits and tache.get("fonctionnalite"):
         dits.add((tache["fonctionnalite"], role))

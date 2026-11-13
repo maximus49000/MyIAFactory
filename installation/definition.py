@@ -134,7 +134,7 @@ def proposition_calculee(o, infos, *, verifier_environnement=environnement.verif
         {"id": nouveau["id"], "nouveau": True, "description": nouveau["description"]}
     flux = [{"id": x["etape"], "nom": x["nom"], "validation": True} if x.get("validation") is True else
             {"id": x["etape"], "nom": x["nom"], "role": x["role"], "service": x["service"],
-             **{c: x[c] for c in ("modele", "justification") if c in x}} for x in o["flux"]]
+             **{c: x[c] for c in ("modele", "justification", "lieu") if c in x}} for x in o["flux"]]
     raisons = {x["etape"]: x["raison"] for x in o["flux"] if x.get("raison")}
     services = ([dict(mep.SERVICE_FACTURATION)] if infos.get("facturation") else []) + \
         [{"id": s["id"], "nom": s["nom"]} for s in o["services"]]

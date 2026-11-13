@@ -23,7 +23,7 @@ environnement, et sans elle le moteur reste sur `claude -p`. `ecart_estime` : l'
 """
 from pathlib import Path
 
-from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
+from orchestrateur.factory import LIEUX_D_ETAPE, MOTIF_GENRE, MOTIF_ID, RESERVES
 from orchestrateur.fiches import ACCORD_FABLE
 
 MODELES = ("Haiku", "Sonnet", "Opus")
@@ -169,6 +169,8 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
         vus.add(i)
         if not _ligne(x.get("nom")):
             e.append(f"Étape « {i} » : un « nom » est attendu.")
+        if "lieu" in x and (x.get("validation") is True or x["lieu"] not in LIEUX_D_ETAPE):
+            e.append(f"Étape « {i} » : « lieu » vaut local ou indifférent, jamais sur une validation du Directeur.")
         if x.get("validation") is True:   # une validation du Directeur : ni rôle, ni service, ni agent
             if "role" in x or "service" in x:
                 e.append(f"Étape « {i} » : une validation du Directeur n'a ni rôle ni service.")

@@ -69,6 +69,7 @@ LONGUEUR_INTITULE = 60           # le nom court d'une fonctionnalité, rendu par
 MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
 MODELES_ETAPE = MODELES_AGENT + ("Fable",)    # une étape peut proposer Fable : la tâche attend l'accord du Directeur
 LONGUEUR_JUSTIFICATION = 160      # la justification du modèle nécessaire d'une étape : une ligne courte
+LIEUX_ETAPE = ("local", "indifférent")   # le lieu d'une étape d'agent (facultatif) : exige le poste, ou cloud possible
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
                      "mise en ligne")
@@ -479,6 +480,9 @@ def _valider_proposer_organisation(o, d):
             return f"Étape « {e} » : la « raison » tient sur une ligne."
         if "validation" in x and x["validation"] is not True:
             return f"Étape « {e} » : « validation » vaut true (une validation du Directeur), sinon ne la mets pas."
+        if "lieu" in x and (x.get("validation") is True or x["lieu"] not in LIEUX_ETAPE):
+            return (f"Étape « {e} » : « lieu » vaut local (elle exige les logiciels du poste) ou indifférent (cloud "
+                    "possible) ; une validation du Directeur n'en a pas.")
         if x.get("validation") is True:
             if x.get("role") is not None or x.get("service") is not None or "modele" in x:
                 return f"Étape « {e} » : une validation du Directeur n'a ni « role », ni « service », ni « modele »."

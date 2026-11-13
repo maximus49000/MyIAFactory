@@ -73,6 +73,21 @@ def etape_de_la_tache(f, t, fonctionnalites=()):
     return _etape(f, t, fonctionnalites)
 
 
+def lieu_de_la_tache(f, t, fonctionnalites=()):
+    """Le `lieu` écrit de l'étape que la tâche fait (`local` ou `indifférent`), ou `None` (pas d'étape, pas de lieu)."""
+    return wf.lieu(_etape(f, t, fonctionnalites))
+
+
+def lieu_impose(lieu_etape, lieu_metier):
+    """Le lieu que la tâche impose à son agent : celui de son étape quand il est écrit (`local` ; `indifférent` : aucun,
+    même si le métier est réservé), sinon celui du métier (`local`, `cloud` ou `None`)."""
+    if lieu_etape == wf.LIEU_LOCAL:
+        return "local"
+    if lieu_etape == wf.LIEU_INDIFFERENT:
+        return None
+    return lieu_metier if lieu_metier in ("local", "cloud") else None
+
+
 def de_la_tache(f, t, fiches, fonctionnalites=()):
     """`{modele, raison, source, ramene}` : le modèle nécessaire de la tâche `t` (montée comprise), ou `None` quand
     c'est le modèle de la fiche de l'agent qui vaut (cadrage, prototype, installation, tâche sans étape connue). Si aucun

@@ -3351,11 +3351,28 @@ def modele_du_metier(ctx, role):
     return (m or {}).get("modele") or MODELE_SANS_METIER
 
 
+def lieu_de_l_etape(ctx, s, t):
+    """Le `lieu` écrit de l'étape de la tâche `t` (`local`, `indifférent`), ou `None` : le métier décide alors."""
+    return mn.lieu_de_la_tache(ctx.f, t, s.get("fonctionnalites") or []) if t else None
+
+
+def lieu_de_la_tache(ctx, s, t, fiches_):
+    """Le lieu que la tâche impose à son agent : celui de son étape s'il est écrit, sinon celui de son métier."""
+    return mn.lieu_impose(lieu_de_l_etape(ctx, s, t), lieu_reserve(ctx, t.get("role"), fiches_))
+
+
 def cmd_agent_libre(ctx, e):
+    """`{role, modele?, lieu?, tache?}` : l'agent libre ; `tache` (son id) fait lire le `lieu` de son étape."""
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
+    tid = texte(e, "tache", obligatoire=False)
     fiches_ = _fiches_avec_sessions(ctx)
-    cle, raison = depart.agent_libre(fiches_, ctx.suivi.lire()["taches"], role, modele, lieu,
-                                     ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_))
+    s = ctx.suivi.lire()
+    t = su.tache(s, tid) if tid else None
+    if tid and t is None:
+        raise Refus(f"Tâche inconnue : {tid}")
+    cle, raison = depart.agent_libre(fiches_, s["taches"], role, modele, lieu,
+                                     ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_),
+                                     lieu_etape=lieu_de_l_etape(ctx, s, t))
     sortie = {"agent": cle, "raison": raison}
     if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
@@ -3473,7 +3490,7 @@ def _modele_et_lieu(ctx, s, fiches_, t):
     rôle) et le lieu de l'agent qui la prendrait (le plus petit plafond suffisant). Sinon (cadrage, prototype…) : ceux
     de son agent, sinon de l'agent libre de son rôle (à défaut, d'une fiche du rôle)."""
     m = mn.de_la_tache(ctx.f, t, fiches_, s.get("fonctionnalites") or [])
-    reserve = lieu_reserve(ctx, t.get("role"), fiches_)
+    reserve = lieu_de_la_tache(ctx, s, t, fiches_)
     f = fi.trouver(fiches_, t["agent"]) if t.get("agent") else None
     if m is not None:
         if f and not fi.est_polyvalente(f):

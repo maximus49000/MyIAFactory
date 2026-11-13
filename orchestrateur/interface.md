@@ -380,7 +380,9 @@ texte`). Rend `{"numero": n}`.
 
 ### `agent-libre`
 
-Entrée : `{"role", "modele"?, "lieu"?}`. Cherche le spécialiste du rôle (fiches) sans tâche active, au lieu demandé,
+Entrée : `{"role", "modele"?, "lieu"?, "tache"?}`. Avec `tache` (son id), le `lieu` écrit de son étape compte
+(`local` : seul un agent local la prend, raison « … la tâche attend le poste local » ; `indifférent` : aucun lieu
+imposé, même par le métier). Cherche le spécialiste du rôle (fiches) sans tâche active, au lieu demandé,
 dont le **plafond** (le modèle de sa fiche) suffit au `modele` nécessaire de la tâche, le plus petit plafond suffisant
 d'abord (à égalité, l'ordre des fiches) : il fera tourner la tâche sur ce modèle, jamais au-dessus de son plafond. Rend `{"agent": "<clé>"|null, "raison": "…"}` (code 0 même s'il n'y en a pas). Raisons
 sans agent : « aucun dev libre » ; pour le cloud (un agent cloud n'est utilisable qu'avec une session attitrée) :

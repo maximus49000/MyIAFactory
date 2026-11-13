@@ -20,6 +20,8 @@ MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet pa
 # Le modèle nécessaire d'une étape. Fable n'y est qu'une proposition : la tâche ne part sur Fable qu'avec l'accord du
 # Directeur, demandé avant son départ (décision `fable_tache`) ; sans accord, Opus.
 MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
+# Le lieu d'une étape d'agent : `local` (exige le poste) ou `indifférent` (cloud possible) ; absent : celui du métier.
+LIEUX_D_ETAPE = ("local", "indifférent")
 
 
 class FactoryInvalide(Exception):
@@ -46,6 +48,9 @@ def _controler_flux(flux, nom, ids_services, vus):
         elif not isinstance(e, dict) or not all(_texte(e.get(c)) for c in ("id", "nom", "role", "service")):
             raise FactoryInvalide(f"Factory : « {nom} » : chaque étape a un « id », un « nom », un « role » "
                                   "et un « service » (textes non vides).")
+        if "lieu" in e and (e.get("validation") is True or e["lieu"] not in LIEUX_D_ETAPE):
+            raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » : « lieu » vaut "
+                                  f"{' ou '.join(LIEUX_D_ETAPE)}, jamais sur une étape de validation.")
         if not MOTIF_ID.match(e["id"]) or e["id"] in RESERVES:
             raise FactoryInvalide(f"Factory : « {nom} » : identifiant d'étape refusé « {e['id']} » "
                                   f"(minuscules, chiffres et tirets ; ni « cadrage » ni « fait »).")

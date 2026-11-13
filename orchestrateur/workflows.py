@@ -18,11 +18,23 @@ def est_validation(etape):
 
 # le modèle nécessaire d'une étape ; Fable n'y est qu'une proposition (la tâche attend l'accord du Directeur)
 MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
+# Le lieu d'une étape d'agent (facultatif) : `local`, elle exige les logiciels du poste (un agent local la fait) ;
+# `indifférent`, n'importe quel agent, cloud compris (écrit, il l'emporte sur le `Lieu :` du métier). Absent : le
+# `Lieu :` du métier de l'étape, comme avant. Jamais sur une validation du Directeur.
+LIEU_LOCAL, LIEU_INDIFFERENT = "local", "indifférent"
+LIEUX_D_ETAPE = (LIEU_LOCAL, LIEU_INDIFFERENT)
+
+
+def lieu(etape):
+    """Le `lieu` écrit d'une étape d'agent (`local` ou `indifférent`), ou `None` (absent, inconnu, validation)."""
+    if not isinstance(etape, dict) or est_validation(etape):
+        return None
+    return etape.get("lieu") if etape.get("lieu") in LIEUX_D_ETAPE else None
 
 
 def etape_ecrite(e):
     """L'étape telle que la factory la garde : `{id, nom, validation}` ou `{id, nom, role, service}`, avec le modèle
-    nécessaire de l'étape (`modele`) et sa `justification` quand le workflow les a posés."""
+    nécessaire de l'étape (`modele`) et sa `justification` quand le workflow les a posés, et son `lieu` s'il est écrit."""
     if est_validation(e):
         return {"id": e["id"], "nom": e["nom"], CLE_VALIDATION: True}
     sortie = {c: e[c] for c in ("id", "nom", "role", "service")}
@@ -30,6 +42,8 @@ def etape_ecrite(e):
         sortie["modele"] = e["modele"]
         if isinstance(e.get("justification"), str) and e["justification"].strip():
             sortie["justification"] = e["justification"].strip()
+    if lieu(e):
+        sortie["lieu"] = e["lieu"]
     return sortie
 
 

@@ -51,7 +51,7 @@ ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/a
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
 REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre", "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire",
-                     "fable_tache")
+                     "fable_tache", "decoupage_lieux")
 GARDE_REPONSE_S = 600
 TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
 LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé

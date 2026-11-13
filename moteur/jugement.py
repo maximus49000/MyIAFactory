@@ -23,7 +23,10 @@ Dossiers attendus (préparés par la table de règles) :
 - `definir_workflow` (appelé par le bureau, avant que le projet n'existe) : `projet` (nom, description, facturation,
   github), `genres_connus`, `mots_interdits` (le nom du projet en fait partie), `services` ([{id, nom}], la facturation
   si elle est demandée), `echange` ([{auteur: chef, message, questions} | {auteur: utilisateur, reponses: [{question,
-  texte}]}]), `tours_de_questions`, `tours_max`, `proposer_maintenant`, `proposition_precedente`, `correction`.
+  texte}]}]), `tours_de_questions`, `tours_max`, `proposer_maintenant`, `proposition_precedente`, `correction` ;
+- `decouper_lieux` (un projet en cours, sur le clic du Directeur) : `flux` (le flux de référence, `lieux.flux_de_reference`),
+  `environnement` ([{outil, pour, objectif}]), `suggerees` (ids d'étapes qu'un outil cite), `metiers` ([{role, lieu}]).
+  La réponse `{flux, message}` est vérifiée strictement par `lieux.verifier_proposition`.
 
 Une étape de flux peut être une validation du Directeur, `{etape, nom, validation: true, raison?}` : ni rôle ni
 service, ni première, ni dernière, ni deux de suite.
@@ -38,18 +41,21 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from moteur import appel
+from orchestrateur import lieux
 from orchestrateur.factory import MOTIF_GENRE, MOTIF_ID, RESERVES
 from orchestrateur.memoire import mots_trouves, normaliser_mot
 from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
-         "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet"}
+         "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
+         "decouper_lieux": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
             "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
             "proposer_organisation": "proposer le workflow de cette fonctionnalité",
-            "definir_workflow": "définir le workflow du projet"}
+            "definir_workflow": "définir le workflow du projet",
+            "decouper_lieux": "découper les étapes selon le poste"}
 # L'échange de la création d'un projet (`definir_workflow`) : au plus 4 tours de questions, puis une proposition.
 TOURS_MAX_DEFINITION = 4
 QUESTIONS_PAR_TOUR_MAX = 5
@@ -656,9 +662,20 @@ def _valider_definir_workflow(o, d):
                                               "fonctionnalite": FONCTIONNALITE_TYPE})
 
 
+def _valider_decouper_lieux(o, d):
+    """La proposition de découpage, vérifiée strictement sur le flux du dossier (`lieux.verifier_proposition`)."""
+    erreur = lieux.verifier_proposition(d.get("flux") if isinstance(d.get("flux"), list) else [], o.get("flux"))
+    if erreur:
+        return erreur
+    if not _texte(o.get("message")):
+        return "« message » (ce qui change, dit au Directeur) est obligatoire."
+    return None
+
+
 _VALIDEURS ={"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
               "ecrire_methode": _valider_ecrire_methode, "apres_refus": _valider_apres_refus,
               "conseil": _valider_conseil}
 _VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
                            "proposer_organisation": _valider_proposer_organisation,
-                           "definir_workflow": _valider_definir_workflow}
+                           "definir_workflow": _valider_definir_workflow,
+                           "decouper_lieux": _valider_decouper_lieux}

@@ -30,7 +30,9 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "recruter": ("mode", "agents"), "depot_git": ("confirme",), "passer_polyvalent": ("confirme",),
           "regle_projet": ("operation",),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",),
-          "fable_tache": ("decision", "verdict")}
+          "fable_tache": ("decision", "verdict"),
+          # le lieu des étapes (conception 2026-11-13-etapes-locales-design.md)
+          "proposer_decoupage": (), "decoupage_lieux": ("decision", "verdict"), "lieu_etape": ("etape", "lieu")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
@@ -41,8 +43,11 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
-               "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache")
+               "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
+               "lieu_etape")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
+VERDICTS_DECOUPAGE = ("valider", "refuser")    # « refuser » : rien ne change
+LIEUX_D_ETAPE = ("local", "indifférent")       # ou null : le lieu du métier décide
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
 VERDICTS_CHEZ_PARTENAIRE = ("fait", "impossible")
@@ -153,6 +158,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_depot(demande, r)
     if genre == "passer_polyvalent":
         return _verifier_passer_polyvalent(demande, r)
+    if genre in ("lieu_etape", "proposer_decoupage"):
+        return _verifier_lieux(demande, r)
     if genre == "regle_projet":
         return _verifier_regle_projet(demande, r)
     for champ in CHAMPS[genre]:
@@ -396,8 +403,34 @@ def _verifier_passer_polyvalent(demande, r):
     return None
 
 
+def _verifier_lieux(demande, r):
+    """`lieu_etape` : une étape d'agent du relevé (`etapes_lieux`) et son lieu (`local`, `indifférent`, ou null : le
+    métier décide). `proposer_decoupage` : le projet a des étapes, et aucune proposition n'attend déjà le Directeur."""
+    etapes = r.get("etapes_lieux")
+    if not isinstance(etapes, list):
+        return "Le relevé de ce projet ne publie pas le lieu des étapes (mettez à jour l'orchestrateur)."
+    if demande["type"] == "proposer_decoupage":
+        if not any(isinstance(e, dict) and not e.get("validation") for e in etapes):
+            return "Le projet n'a pas encore d'étape à découper."
+        if any(d.get("genre") == "decoupage_lieux" for d in r.get("decisions_projet", [])):
+            return "Une proposition de découpage attend déjà votre décision."
+        return None
+    e = next((x for x in etapes if isinstance(x, dict) and x.get("id") == demande.get("etape")), None)
+    if e is None:
+        return "Étape inconnue."
+    if e.get("validation"):
+        return "Une validation du Directeur n'a pas de lieu."
+    if "lieu" not in demande or (demande["lieu"] is not None and demande["lieu"] not in LIEUX_D_ETAPE):
+        return "« lieu » vaut local, indifférent ou null."
+    return None
+
+
 def _verifier_v4(demande, r, elements):
     genre = demande["type"]
+    if genre == "decoupage_lieux":     # « Valider » ou « Refuser » le découpage des étapes selon le poste
+        if _decision(r.get("decisions_projet", []), demande["decision"], "decoupage_lieux") is None:
+            return "Décision inconnue."
+        return None if demande["verdict"] in VERDICTS_DECOUPAGE else "Réponse inconnue (valider ou refuser)."
     if genre in ("fonctionnalite", "message") and "images" in demande:
         message = verifier_images(demande["images"])
         if message:

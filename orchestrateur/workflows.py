@@ -119,6 +119,8 @@ def colonnes(f, fonctionnalites):
             c = {"id": e["id"], "nom": e["nom"], "genre": w.get("genre"), "workflow": w["id"]}
             if est_validation(e):
                 c[CLE_VALIDATION] = True
+            if lieu(e):        # écrit seulement quand l'étape le porte : un projet sans lieu garde ses colonnes
+                c["lieu"] = e["lieu"]
             sortie.append(c)
     sortie.append({"id": "fait", "nom": "Fait", "terminee": True})
     return sortie

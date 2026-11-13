@@ -25,7 +25,9 @@ Proposition (`"type": "proposition"`), comme une organisation de fonctionnalité
   réglables ensuite dans Facturation) : autant que de tâches à faire en parallèle, sans excès. Ids en minuscules et tirets.
 - Sur chaque étape d'agent, le `modele` que demande son travail et sa `justification` (une ligne, 160 caractères au
   plus) : Haiku pour le mécanique, Sonnet pour la création et le code, Opus pour une conception difficile ;
-  jamais Fable. Aucun agent n'a de plafond : chaque tâche tourne sur le modèle de son étape.
+  jamais Fable. Aucun agent n'a de plafond : chaque tâche tourne sur le modèle de son étape. Son `lieu` : `local` si
+  elle exige un outil du poste (`environnement`), sinon `indifférent` ; une étape mixte se découpe en `<id>`
+  (« … : code », `indifférent`) puis `<id>-local` (« … : mise en place et tests », même rôle et service, `local`).
 - `environnement` : outils du poste (`pour` : l'`etape`), `executables` (noms), `installation` Windows en une ligne,
   `objectif` : à quoi l'outil servira dans CE projet et à quelle étape (une phrase concrète, pas générique),
   `version_min` (« 17 ») ou null ; `telechargement` : URL https **officielle** de l'éditeur, jamais un miroir ni

@@ -26,8 +26,9 @@ métiers (voir plus bas) ; sinon, propose des agents par rôle comme avant. Ce q
 - Sur **chaque étape d'agent**, le `modele` que demande son travail et sa `justification` (une ligne, 160 caractères au
   plus) : Haiku pour le mécanique ou la vérification, Sonnet pour la création et le code courant, Opus pour une
   conception difficile ou un travail où l'erreur coûte cher ; jamais Fable. Un nouvel agent par rôle, sans modèle, a le
-  plafond Opus (au besoin `"fable_suggere": true`) : il fait tourner chaque tâche sur le modèle de son étape. Un agent
-  polyvalent n'a pas de plafond : chaque tâche tourne sur le modèle de son étape.
+  plafond Opus (au besoin `"fable_suggere": true`), un polyvalent aucun : chaque tâche tourne sur le modèle de son étape.
+- Son `lieu` : `local` si elle exige un outil du poste, sinon `indifférent` ; une étape mixte se découpe en `<id>`
+  (« … : code », `indifférent`) puis `<id>-local` (« … : mise en place et tests », même rôle et service, `local`).
 - L'`environnement` : chaque outil du poste dont une étape a besoin (`pour` : l'`etape`), les `executables` à chercher
   (noms de programmes : `java`, `gradle`), l'`installation` sur Windows en une ligne (source officielle, taille), une
   fois chacun ; `objectif` : une phrase concrète sur ce que l'outil fera dans CE projet et à quelle étape (pas une

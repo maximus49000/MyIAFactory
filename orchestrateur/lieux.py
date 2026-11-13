@@ -24,6 +24,23 @@ LIEUX = wf.LIEUX_D_ETAPE
 _HORS_COMPARAISON = ("nom", "lieu")      # ce qu'une proposition peut changer à une étape découpée
 
 
+# Ce que la partie locale d'une étape découpée dit à son agent (au journal de sa tâche, en tête) : le code est déjà écrit.
+CONSIGNE_PARTIE_LOCALE = (
+    "Partie locale d'une étape découpée : le code est déjà écrit par l'étape précédente et fusionné dans le dépôt. "
+    "Tu ne le réécris pas : tu récupères le dépôt à jour, tu compiles, tu testes (au premier plan, sur le poste), tu "
+    "captures ce qu'il faut montrer et tu rends ce que la validation suivante attend (captures, apk, mode opératoire). "
+    "Ne corrige que ce qui empêche de compiler ou de tester, et dis-le.")
+
+
+def est_partie_locale(flux, etape):
+    """Vrai pour la partie locale d'une étape découpée : `<id>-local`, juste après `<id>` dans le flux."""
+    if not isinstance(etape, dict) or not str(etape.get("id") or "").endswith(SUFFIXE_LOCAL):
+        return False
+    ids = [e.get("id") for e in flux]
+    k = ids.index(etape["id"]) if etape["id"] in ids else -1
+    return k > 0 and ids[k - 1] == etape["id"][:-len(SUFFIXE_LOCAL)]
+
+
 def _ligne(v):
     return isinstance(v, str) and v.strip() != "" and "\n" not in v and "\r" not in v
 

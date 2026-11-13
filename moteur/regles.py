@@ -37,6 +37,7 @@ from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
+from orchestrateur import lieux
 from orchestrateur import metiers
 from orchestrateur import modele_necessaire as mn
 from orchestrateur import outil
@@ -2374,16 +2375,17 @@ def _metier(projet, role):
         return None
 
 
-def _lieu_de_l_etape(projet, court, tache):
+def _lieu_de_l_etape(projet, court, tache, fac=None):
     """Le `lieu` écrit de l'étape de la tâche (`local`, `indifférent`), ou `None`."""
-    return mn.lieu_de_la_tache(_factory(projet), tache, court.get("fonctionnalites") or [])
+    return mn.lieu_de_la_tache(fac or _factory(projet), tache, court.get("fonctionnalites") or [])
 
 
-def _lieu_reserve(projet, court, tache):
+def _lieu_reserve(projet, court, tache, fac=None):
     """Le lieu que la tâche impose : celui de son étape quand il est écrit (`local` ; `indifférent` : aucun) ; sinon
     `local` ou `cloud` quand le métier de son rôle impose son lieu (`Lieu :` de son brief), dans un projet qui a des
-    agents polyvalents ; `None` sinon (un projet sans `lieu` d'étape ni polyvalent choisit comme avant)."""
-    lieu_etape = _lieu_de_l_etape(projet, court, tache)
+    agents polyvalents ; `None` sinon (un projet sans `lieu` d'étape ni polyvalent choisit comme avant). `fac` : la
+    factory déjà lue, s'il y en a une."""
+    lieu_etape = _lieu_de_l_etape(projet, court, tache, fac)
     if lieu_etape is not None or not any(_polyvalent(a) for a in court["agents"]):
         return mn.lieu_impose(lieu_etape, None)
     m = _metier(projet, tache.get("role"))
@@ -2495,7 +2497,7 @@ def _demarrer_en_attente(projet, etat, fid):
             break
         premiere = par_id[lot["ids"][0]]
         # le lieu que les étapes du lot imposent (`lieu` écrit), sinon leurs métiers (projet polyvalent : `Lieu :` d'un brief)
-        reserves = {_lieu_reserve(projet, court, par_id[i]) for i in lot["ids"]}
+        reserves = {_lieu_reserve(projet, court, par_id[i], fac) for i in lot["ids"]}
         local_ok = places["locaux"] > 0 and "cloud" not in reserves
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
@@ -2526,14 +2528,17 @@ def _demarrer_en_attente(projet, etat, fid):
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id, modele_voulu=lot["modele"]))
         parties.update(lot["ids"])
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
-    _noter_l_attente_du_poste(projet, etat, court, [par_id[i] for lot in lots for i in lot["ids"] if i not in parties])
+    _noter_l_attente_du_poste(projet, etat, court, [par_id[i] for lot in lots for i in lot["ids"] if i not in parties],
+                              fac)
     return actions
 
 
-def _noter_l_attente_du_poste(projet, etat, court, restees):
+def _noter_l_attente_du_poste(projet, etat, court, restees, fac=None):
     """Les tâches restées qui exigent le poste local (lieu de leur étape, ou métier réservé) : dites au bureau dans
     `etat["attente_charge"]` (« attend le poste local »), sauf si la charge y est déjà notée."""
-    locales = [t["id"] for t in restees if _lieu_reserve(projet, court, t) == "local"]
+    if "attente_charge" in etat:
+        return
+    locales = [t["id"] for t in restees if _lieu_reserve(projet, court, t, fac) == "local"]
     if locales and "attente_charge" not in etat:
         etat["attente_charge"] = {"texte": TEXTE_ATTEND_LE_POSTE, "taches": locales, "charge": None, "plafond": None}
 
@@ -2681,6 +2686,115 @@ def _sur_fable_tache(projet, demande, etat):
 
 
 _SUR[GENRE_FABLE] = _sur_fable_tache
+
+
+# --- Le lieu des étapes et leur découpage (conception 2026-11-13-etapes-locales-design.md).
+
+GENRE_DECOUPAGE = "decoupage_lieux"     # la décision de projet « Découper les étapes selon le poste »
+VALIDER_DECOUPAGE, REFUSER_DECOUPAGE = "valider", "refuser"
+
+
+def _sur_proposer_decoupage(projet, demande, etat):
+    """« Proposer le découpage » (onglet Facturation) : un jugement `decouper_lieux` (Sonnet, un appel) sur le flux de
+    référence du projet et son environnement ; sa proposition deviendra une décision de projet. Rien si une proposition
+    attend déjà le Directeur, ou si le projet n'a aucune étape d'agent."""
+    if any(d.get("genre") == GENRE_DECOUPAGE for d in _etat(projet).get("decisions") or []):
+        _terminer(projet, {"demande": demande["id"]}, "Une proposition de découpage attend déjà votre décision.")
+        return []
+    ref = lancer(projet, "lieux", {"action": "reference"})
+    if not wf.etapes_d_agent(ref["flux"]):
+        _terminer(projet, {"demande": demande["id"]}, "Le projet n'a pas encore d'étape à découper.")
+        return []
+    fac = _factory(projet)
+    dossier = {"flux": ref["flux"], "suggerees": ref["suggerees"],
+               "environnement": [{c: o.get(c) for c in ("outil", "pour", "objectif")}
+                                 for o in fac.get("environnement") or [] if isinstance(o, dict)],
+               "metiers": [{"role": r, "lieu": m["lieu"]} for r, m in _metiers_du_projet(fac).items()]}
+    return [a_juger("decouper_lieux", dossier, {"demande": demande["id"]})]
+
+
+def _apres_decouper_lieux(projet, o, ctx, etat):
+    """La proposition du jugement (déjà vérifiée sur le flux du dossier) : posée en décision de projet avec
+    l'avant/après ; rien n'est appliqué avant la réponse du Directeur. L'outil la revérifie sur le flux du moment."""
+    ref = lancer(projet, "lieux", {"action": "reference"})["flux"]
+    if [wf.etape_ecrite(e) for e in o["flux"]] == ref:
+        _terminer(projet, ctx, "Le découpage proposé ne change rien : les étapes restent telles quelles.")
+        return []
+    try:
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_DECOUPAGE,
+                                    "texte": "Découper les étapes selon le poste : ce qui exige les logiciels du poste "
+                                             "se fait en local, le reste peut partir dans le cloud.",
+                                    "apres": o["flux"], "message": o["message"]})
+    except Refus as e:       # le workflow a changé depuis le dossier : la proposition ne vaut plus
+        _terminer(projet, ctx, f"La proposition de découpage n'est plus valable ({e}) : rien n'a changé.")
+        return []
+    _terminer(projet, ctx, "La proposition de découpage attend votre décision au bureau de direction.")
+    return []
+
+
+def _pas_par_etape(projet, etat):
+    """{clé d'élément: id de l'étape où il en est} : de quoi le retrouver si des étapes s'insèrent avant lui."""
+    sortie = {}
+    for cle, v in _m(etat, "elements").items():
+        production = _production(projet, v.get("fid"))
+        if isinstance(v.get("pas"), int) and 0 <= v["pas"] < len(production):
+            sortie[cle] = production[v["pas"]]["id"]
+    return sortie
+
+
+def _sur_decoupage_lieux(projet, demande, etat):
+    """La réponse du Directeur à « Découper les étapes selon le poste » : `valider` applique la proposition à tous les
+    workflows du projet (`lancer lieux decouper`), chaque élément en cours garde son étape (il continue sa tâche, puis
+    enchaîne sur la partie locale) ; `refuser` ne change rien. La décision est levée dans les deux cas."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande.get("decision")
+              and x["genre"] == GENRE_DECOUPAGE), None)
+    if d is None:
+        raise Refus("cette proposition n'existe plus")
+    verdict = demande.get("verdict")
+    if verdict not in (VALIDER_DECOUPAGE, REFUSER_DECOUPAGE):
+        raise Refus(f"réponse inconnue : {verdict}")
+    if verdict == REFUSER_DECOUPAGE:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _terminer(projet, {"demande": demande["id"]}, "C'est noté : les étapes restent telles quelles.")
+        return []
+    ou = _pas_par_etape(projet, etat)
+    try:
+        r = lancer(projet, "lieux", {"action": "decouper", "flux": d["apres"]})
+    except Refus as e:
+        lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+        _terminer(projet, {"demande": demande["id"]}, f"Le découpage n'a pas pu s'appliquer ({e}) : rien n'a changé. "
+                                                      "Vous pouvez demander une nouvelle proposition.")
+        return []
+    for cle, sid in ou.items():
+        v = etat["elements"][cle]
+        rangs = {s["id"]: k for k, s in enumerate(_production(projet, v.get("fid")))}
+        if sid in rangs:
+            v["pas"] = rangs[sid]
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    locales = sum(1 for e in d["apres"] if e.get("lieu") == wf.LIEU_LOCAL)
+    ajoutees = len(d["apres"]) - len(d.get("avant") or [])
+    _terminer(projet, {"demande": demande["id"]},
+              (f"Les étapes sont découpées : {locales} sur le poste local" + (f", dont {ajoutees} ajoutées" if ajoutees
+                                                                              else "") + ", le reste peut partir dans le cloud.")
+              if r.get("change") else "Les étapes étaient déjà découpées ainsi : rien n'a changé.")
+    return _demarrer_en_attente(projet, etat, None)
+
+
+def _sur_lieu_etape(projet, demande, etat):
+    """Le lieu d'une étape réglé depuis le bureau (« Étapes et lieux ») : appliqué tout de suite, dans tous les workflows
+    qui l'ont, sans décision ni coût (`lancer lieux regler`)."""
+    lieu = demande.get("lieu")
+    lancer(projet, "lieux", {"action": "regler", "etape": demande.get("etape"), "lieu": lieu})
+    _terminer(projet, {"demande": demande["id"]},
+              {wf.LIEU_LOCAL: "C'est noté : cette étape se fait sur le poste local.",
+               wf.LIEU_INDIFFERENT: "C'est noté : cette étape peut partir dans le cloud."}.get(
+                  lieu, "C'est noté : le lieu de cette étape suit son métier."))
+    return _demarrer_en_attente(projet, etat, None)
+
+
+_SUR["proposer_decoupage"] = _sur_proposer_decoupage
+_SUR[GENRE_DECOUPAGE] = _sur_decoupage_lieux
+_SUR["lieu_etape"] = _sur_lieu_etape
 
 
 def _modele_de_depart(projet, court, agent, t, modele_voulu=None):
@@ -3616,6 +3730,8 @@ def _tache_de_flux(projet, etat, v, journal=None):
     if wf.est_validation(s):
         return _attendre_le_directeur(projet, etat, v, s)
     journal = list(journal or []) + v.pop("journal_suivant", [])     # la note du Directeur jointe à sa validation
+    if lieux.est_partie_locale(pas, s):      # la partie locale d'une étape découpée : le code est déjà écrit
+        journal = [lieux.CONSIGNE_PARTIE_LOCALE] + journal
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
                        element=v["element"]["id"], colonne=s["id"], journal=journal or None)
     v["taches"].append(tid)
@@ -4432,6 +4548,10 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
             return []
         if type_ == "proposer_organisation" and fid:
             return _proposition_ratee(projet, etat, contexte, decision.question)
+        if type_ == "decouper_lieux":      # aucune décision posée : le bureau le dit, rien ne change
+            _terminer(projet, contexte, "Je n'ai pas réussi à proposer un découpage valable (deux essais) : rien n'a "
+                                        "changé. Vous pouvez relancer la proposition.")
+            return []
         _question(projet, fid, decision.question, ["Je précise", "Plus tard"], contexte)
         return []
     o = decision.objet
@@ -4551,4 +4671,5 @@ def _apres_conseil(projet, o, ctx, etat):
 
 _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour,
           "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
-          "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation}
+          "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation,
+          "decouper_lieux": _apres_decouper_lieux}

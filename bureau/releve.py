@@ -25,7 +25,8 @@ ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "te
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
-                    "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire", "fable_tache")
+                    "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire", "fable_tache",
+                    "decoupage_lieux")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -682,6 +683,11 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
         elif d.get("genre") == "fable_tache":
             if not _texte_plein(d.get("tache")) or not _texte_plein(d.get("raison")):
                 erreurs.append(f"{nom} : la décision « {i} » : « tache » et « raison » sont obligatoires.")
+        elif d.get("genre") == "decoupage_lieux":       # « Découper les étapes selon le poste » : l'avant/après
+            for cote in ("avant", "apres"):
+                _verifier_etapes_lieux(d.get(cote), f"{nom} : la décision « {i} » : « {cote} »", erreurs)
+            if not _texte_ou_nul(d.get("message")):
+                erreurs.append(f"{nom} : la décision « {i} » : « message » est un texte.")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":
@@ -881,6 +887,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         if t.get("service") is not None and not _dans(t["service"], {s.get("id") for s in r.get("services") or []
                                                                        if _est_dict(s)}):
             erreurs.append(f"Tâche « {i} » : « service » inconnu « {t['service']} ».")
+        if t.get("lieu") is not None and t["lieu"] != "local":    # « Sur le poste local » ; absent sinon
+            erreurs.append(f"Tâche « {i} » : « lieu » vaut local (son étape exige le poste) ou est absent.")
         for champ in ("debut", "fin"):       # heures ISO du départ et de la fin de la tâche
             if not _texte_ou_nul(t.get(champ)) or len(t.get(champ) or "") > 40:
                 erreurs.append(f"Tâche « {i} » : « {champ} » est une heure ISO ou nul.")
@@ -908,6 +916,30 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         _verifier_partenaires(r["partenaires"], erreurs)
     if r.get("regles_projet") is not None:
         _verifier_regles_projet(r["regles_projet"], erreurs)
+    if r.get("etapes_lieux") is not None:
+        _verifier_etapes_lieux(r["etapes_lieux"], "« etapes_lieux »", erreurs)
+
+
+LIEUX_D_ETAPE = ("local", "indifférent")    # le lieu d'une étape d'agent ; nul : le `Lieu :` du métier décide
+
+
+def _verifier_etapes_lieux(etapes, nom, erreurs):
+    """Les étapes et leur lieu (`etapes_lieux` du relevé, l'avant/après d'une décision `decoupage_lieux`) : `[{id, nom,
+    role?, validation?, lieu?, suggeree?}]` ; une validation n'a pas de lieu."""
+    if not isinstance(etapes, list) or not all(_est_dict(e) for e in etapes):
+        erreurs.append(f"{nom} doit être une liste d'étapes {{id, nom, lieu}}.")
+        return
+    for e in etapes:
+        q = f"{nom} : l'étape « {e.get('id')} »"
+        if not _texte_plein(e.get("id")) or not isinstance(e.get("nom"), str):
+            erreurs.append(f"{nom} : chaque étape a un « id » et un « nom » (textes).")
+        if e.get("lieu") is not None and (e["lieu"] not in LIEUX_D_ETAPE or e.get("validation") is True):
+            erreurs.append(f"{q} : « lieu » vaut local, indifférent ou nul (jamais sur une validation).")
+        for champ in ("validation", "suggeree"):
+            if e.get(champ) is not None and not isinstance(e[champ], bool):
+                erreurs.append(f"{q} : « {champ} » est vrai ou faux.")
+        if not _texte_ou_nul(e.get("role")):
+            erreurs.append(f"{q} : « role » doit être un texte.")
 
 
 def _verifier_metiers(r, erreurs):
@@ -1174,6 +1206,8 @@ def _normaliser_v4(n):
         n.pop("regles_projet", None)      # absent : l'adaptateur ne les dit pas (le bureau n'en montre pas)
     if not v4 or not isinstance(n.get("metiers"), list):
         n.pop("metiers", None)            # absent : projet à l'ancienne, les leçons sont dans les fiches
+    if not v4 or not isinstance(n.get("etapes_lieux"), list):
+        n.pop("etapes_lieux", None)       # absent : un ancien adaptateur ne publie pas le lieu des étapes
     for f in n.get("fonctionnalites") or []:
         for c in ("discussion", "decisions", "documents", "cahiers_precedents"):
             f[c] = f[c] if isinstance(f.get(c), list) else []
@@ -1362,6 +1396,8 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
             erreurs.append(f"Colonne « {el.get('id')} » : « workflow » doit être un texte.")
         if el.get("validation") is not None and not isinstance(el["validation"], bool):
             erreurs.append(f"Colonne « {el.get('id')} » : « validation » doit être vrai ou faux.")
+        if el.get("lieu") is not None and el["lieu"] not in LIEUX_D_ETAPE:
+            erreurs.append(f"Colonne « {el.get('id')} » : « lieu » vaut local ou indifférent.")
     for t in titulaires:
         cle = t.get("cle")
         if "modele" in t and not isinstance(t["modele"], str):

@@ -60,6 +60,18 @@ VALIDES["definir_workflow"] = {
                        "installation": "winget install Microsoft.OpenJDK.17 (source officielle)."}],
     "outils_installation": ["Bash(winget:*)"]}
 
+# Une proposition de `decouper_lieux` : le prototype découpé (code dans le cloud, puis mise en place et tests sur le poste).
+FLUX_LIEUX = [{"id": "dev", "nom": "Prototype jouable", "role": "dev", "service": "jeu"},
+              {"id": "val", "nom": "Essai", "validation": True},
+              {"id": "tests", "nom": "Tests sur émulateur", "role": "qa", "service": "jeu"}]
+VALIDES["decouper_lieux"] = {
+    "flux": [{"id": "dev", "nom": "Prototype jouable : code", "role": "dev", "service": "jeu", "lieu": "indifférent"},
+             {"id": "dev-local", "nom": "Prototype jouable : mise en place et tests", "role": "dev", "service": "jeu",
+              "lieu": "local"},
+             {"id": "val", "nom": "Essai", "validation": True},
+             {"id": "tests", "nom": "Tests sur émulateur", "role": "qa", "service": "jeu", "lieu": "local"}],
+    "message": "Le code du prototype peut s'écrire dans le cloud ; sa mise en place et les tests restent sur le poste."}
+
 QUESTIONS = {"type": "questions", "message": "Quelques questions avant de proposer le workflow.",
              "questions": [{"id": "q1", "texte": "Le jeu doit-il fonctionner hors ligne ?", "choix": ["Oui", "Non"]},
                            {"id": "q2", "texte": "Quelles étapes voulez-vous valider vous-même ?", "choix": []}]}
@@ -84,6 +96,8 @@ DOSSIERS = {
                          "mots_interdits": ["Zorglub"], "services": [], "echange": [], "tours_de_questions": 0,
                          "tours_max": 4, "proposer_maintenant": False, "proposition_precedente": None,
                          "correction": None},
+    "decouper_lieux": {"flux": FLUX_LIEUX, "environnement": [{"outil": "Godot", "pour": "dev", "objectif": "Compiler."}],
+                       "suggerees": ["dev"], "metiers": [{"role": "dev", "lieu": "indifférent"}]},
 }
 
 
@@ -122,7 +136,8 @@ class Juger(unittest.TestCase):
     def test_modeles_par_type(self):
         self.assertEqual(jugement.TYPES, {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet",
                                           "apres_refus": "haiku", "conseil": "haiku", "classer_genre": "haiku",
-                                          "proposer_organisation": "sonnet", "definir_workflow": "sonnet"})
+                                          "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
+                                          "decouper_lieux": "sonnet"})
         self.assertEqual(jugement.LIBELLES["definir_workflow"], "définir le workflow du projet")
         self.assertEqual((jugement.TOURS_MAX_DEFINITION, jugement.QUESTIONS_PAR_TOUR_MAX,
                           jugement.CHOIX_PAR_QUESTION_MAX), (4, 5, 6))
@@ -646,6 +661,19 @@ class Consignes(unittest.TestCase):
             self.assertIn('"modele": "Haiku", "justification"', texte, type_)    # sur l'étape, dans l'exemple
             self.assertIn("plafond", texte, type_)       # l'ancien format a un plafond Opus, les agents polyvalents aucun
             self.assertLess(len(texte), 5600, type_)                             # une consigne reste courte
+
+    def test_lieu_par_etape_dans_les_deux_consignes(self):
+        for type_ in ("proposer_organisation", "definir_workflow"):
+            texte = jugement.consigne(type_)
+            for attendu in ("`lieu`", "`local`", "`indifférent`", "<id>-local", ": code"):
+                self.assertIn(attendu, texte, f"{type_} : {attendu}")
+
+    def test_decouper_lieux_dit_la_partie_locale(self):
+        texte = jugement.consigne("decouper_lieux")
+        for attendu in ("`local`", "`indifférent`", "<id>-local", "ne réécrit pas le code", "compile", "teste",
+                        "capture", "validation", "refusée"):
+            self.assertIn(attendu, texte)
+        self.assertLess(len(texte), 4000)
 
     def test_definir_workflow_porte_les_decisions_de_l_utilisateur(self):
         texte = jugement.consigne("definir_workflow")

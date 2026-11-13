@@ -54,7 +54,8 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
-                 "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent")
+                 "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
+                 "lieu_etape")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -951,6 +952,12 @@ def cmd_decision(ctx, e):
                 if su.tache(s, e.get("tache")) is None:
                     raise Refus(f"« fable_tache » : tâche inconnue « {e.get('tache')} ».")
                 d.update(tache=e["tache"], raison=texte(e, "raison")[:300])
+            elif genre == "decoupage_lieux":    # « Découper les étapes selon le poste » : l'avant/après, vérifié
+                avant = lx.flux_de_reference(ctx.f)
+                erreur = lx.verifier_proposition(avant, e.get("apres"))
+                if erreur:
+                    raise Refus(f"« decoupage_lieux » : {erreur}")
+                d.update(avant=avant, apres=[wf.etape_ecrite(x) for x in e["apres"]], message=(texte(e, "message", obligatoire=False) or "")[:1000])
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -2122,6 +2129,14 @@ def construire_releve(ctx):
         sv = (e or {}).get("service") or (briefs.get(t.get("role")) or {}).get("service")
         return sv if sv in services_du_projet else None
 
+    lieux_des_metiers = {}
+
+    def lieu_impose(t):     # le lieu de l'étape de la tâche, sinon celui de son métier (un brief lu une fois par rôle)
+        role = t.get("role")
+        if role not in lieux_des_metiers:
+            lieux_des_metiers[role] = lieu_reserve(ctx, role, fiches)
+        return mn.lieu_impose(lieu_de_l_etape(ctx, s, t), lieux_des_metiers[role])
+
     en_cours = {}
     for t in s["taches"]:
         if poly and t["active"] and t["agent"] and t["colonne"] != "fait":
@@ -2183,6 +2198,8 @@ def construire_releve(ctx):
              "debut": t.get("debut"), "fin": t.get("fin")}      # le temps de la tâche (vue d'un agent, d'un service)
         if poly:      # le service de la tâche (étape, sinon métier) : la pièce où son agent s'assoit
             v["service"] = service_de(t)
+        if t["colonne"] != "fait" and lieu_impose(t) == "local":
+            v["lieu"] = "local"      # « Sur le poste local » : son étape (ou son métier) exige le poste
         resume = resume_de_tache(t, s["fonctionnalites"])
         if resume:
             v["resume"] = resume
@@ -2275,7 +2292,8 @@ def construire_releve(ctx):
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
-         "recrutement": releve_recrutement(ctx, s, fiches)}
+         "recrutement": releve_recrutement(ctx, s, fiches),
+         "etapes_lieux": etapes_lieux_du_releve(ctx)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
     ids_taches, cles_titulaires = {t["id"] for t in taches}, {t["cle"] for t in titulaires}
     r["usage"] = [_usage_au_releve(u, ids_taches, cles_titulaires) if u.get("genre") == "partenaire" else
@@ -2298,6 +2316,16 @@ def construire_releve(ctx):
                          "lecons": [dict(le) for le in m["lecons"]]}
                         for m in briefs.values() if m["service"] or m["lecons"]]
     return r
+
+
+def etapes_lieux_du_releve(ctx):
+    """« Étapes et lieux » : les étapes de tous les workflows (flux de référence, sans le préfixe `<fid>-` des copies),
+    `{id, nom, role, validation, lieu, suggeree}` ; `lieu` nul : le `Lieu :` du métier décide ; `suggeree` : un outil de
+    l'environnement la cite. Le bureau règle le lieu d'une étape par la demande `lieu_etape` (`etape` = cet `id`)."""
+    reference = lx.flux_de_reference(ctx.f)
+    suggerees = lx.etapes_locales_suggerees(reference, ctx.f.get("environnement"))
+    return [{"id": e["id"], "nom": e["nom"], "role": e.get("role"), "validation": wf.est_validation(e),
+             "lieu": wf.lieu(e), "suggeree": e["id"] in suggerees} for e in reference]
 
 
 def _briefs_du_releve(ctx):

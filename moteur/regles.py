@@ -3922,30 +3922,40 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
         "outil_refuse": {"outil": quoi[:100], "programme": programme, "commande": montree}})
 
 
-PAR_SON_NOM = "Le moteur demande d'appeler par son nom : "
+PAR_SON_NOM = "Le moteur demande de corriger la forme de la commande : "
 
 
 def _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes):
     """L'agent appelle par son chemin (`"C:\\…\\godot.EXE" --headless …`) un programme connu du projet ou déjà ouvert
     dans sa fiche : la règle `Bash(<nom>:*)` ne couvre que l'appel par le nom. Le moteur l'ouvre au besoin et relance
     la tâche en demandant l'appel par le nom, une fois par tâche et par programme. `None` si ce n'est pas le cas."""
-    nom = next((n for n in map(accord_outil.nom_appele_par_chemin, commandes) if n), None)
-    if nom is None:
-        return None
+    if any(j["texte"].startswith(PAR_SON_NOM) for j in _tache(projet, tid).get("journal") or []):
+        return None       # déjà demandé une fois pour cette tâche : la suite revient au Directeur
     ouverts = {accord_outil.normal(p) for p in fi.programmes_ouverts({"outils": ", ".join(fi.outils(fiche))})[0]}
-    origine = accord_outil.origine(nom, _factory(projet).get("environnement"))
-    deja = any(j["texte"].startswith(PAR_SON_NOM) and f"« {nom} »" in j["texte"]
-               for j in _tache(projet, tid).get("journal") or [])
-    if deja or (nom not in ouverts and not origine):
+    env, a_ouvrir = _factory(projet).get("environnement"), []
+
+    def ouvert(nom):
+        if nom in ouverts:
+            return True
+        if accord_outil.origine(nom, env):
+            a_ouvrir.append(nom)
+            return True
+        return False
+
+    corrections = []
+    for c in commandes:
+        corrections += [x for x in accord_outil.formes_a_corriger(c, ouvert) if x not in corrections]
+    if not corrections:
         return None
-    regle = fi.regle_bash(nom)
-    if nom not in ouverts:
-        lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
+    for nom in dict.fromkeys(a_ouvrir):
+        if fi.est_programme(nom) and nom not in ouverts:
+            lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": fi.regle_bash(nom)})
+    texte = " ; ".join(corrections)
     return _reprendre_la_tache(
         projet, etat, tid, fid,
-        f"Appelle « {nom} » par son nom (il est dans le PATH), jamais par son chemin ni entre guillemets : ta fiche "
-        f"ouvre {regle}, qui ne couvre que l'appel par le nom. Relance ta commande ainsi.",
-        f"{PAR_SON_NOM}« {nom} » ({prenom} l'appelait par son chemin ; {regle} ouvert)")
+        f"Ta commande a été refusée à cause de sa forme, pas faute d'outil : {texte}. Ta fiche n'ouvre que des "
+        "programmes appelés par leur nom ou leur chemin exact, au début de la commande, sans guillemets. Relance-la ainsi.",
+        f"{PAR_SON_NOM}{texte} ({prenom})")
 
 
 def _reprendre_la_tache(projet, etat, tid, fid, supplement, journal):

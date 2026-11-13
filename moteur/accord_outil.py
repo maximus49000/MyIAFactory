@@ -31,31 +31,50 @@ def _normal(nom):
 
 normal = _normal
 _PREMIER_MOT = re.compile(r"""^\s*(?:"([^"]+)"|'([^']+)'|(\S+))""")
+# Les redirections (`2>&1`, `> x.log`, `< x`) ne sont pas des programmes : `&` de `2>&1` n'est pas un séparateur.
+_REDIRECTIONS = re.compile(r"""\d*>&\d+|&>\s*(?:"[^"]*"|'[^']*'|\S+)|\d*>>?\s*(?:"[^"]*"|'[^']*'|\S+)|<\s*(?:"[^"]*"|\S+)""")
+# Les programmes dont un outil de l'agent tient lieu : on lui dit d'employer l'outil plutôt que d'ouvrir le programme.
+REMPLACANTS = {"ls": "Glob", "dir": "Glob", "find": "Glob", "cat": "Read", "type": "Read", "head": "Read",
+               "tail": "Read", "grep": "Grep", "rg": "Grep", "findstr": "Grep"}
 
 
-def nom_appele_par_chemin(commande):
-    """Le nom du programme quand la commande l'appelle par son chemin, entre guillemets ou non, barres `/` ou `\\`
-    (`godot` pour `"C:\\…\\godot.EXE" --headless`) ; `None` si le premier programme est appelé par son nom ou si le
-    dernier morceau du chemin n'est pas un nom de programme."""
-    for morceau in SEPARATEURS.split(commande or ""):
+def _morceaux(commande):
+    return SEPARATEURS.split(_REDIRECTIONS.sub(" ", commande or ""))
+
+
+def formes_a_corriger(commande, ouvert):
+    """Ce que l'agent doit écrire autrement pour que sa fiche couvre sa commande (une phrase par correction) :
+    un programme ouvert (`ouvert(nom)` vrai, nom normalisé ou chemin) appelé entre guillemets ou par son chemin au lieu
+    de son nom, ou un programme dont un outil tient lieu (`ls` → Glob). Liste vide : rien à corriger dans la forme."""
+    corrections = []
+    for morceau in _morceaux(commande):
         m = _PREMIER_MOT.match(morceau)
         if not m:
             continue
-        mot = next(g for g in m.groups() if g)
+        cite = m.group(1) or m.group(2)
+        mot = (cite or m.group(3)).strip()
         if mot in TRANSPARENTS:
             continue
-        if "/" not in mot and "\\" not in mot:
-            return None
-        nom = _normal(re.split(r"[\\/]", mot.strip())[-1])
-        return nom if MOTIF_EXECUTABLE.match(nom) else None
-    return None
+        if mot in REMPLACANTS and not ouvert(mot):
+            corrections.append(f"au lieu de « {mot} », emploie ton outil {REMPLACANTS[mot]}")
+            continue
+        if cite and (MOTIF_EXECUTABLE.match(mot) or fi.est_chemin(mot)) and ouvert(_normal(mot)):
+            corrections.append(f"appelle « {mot} » sans guillemets, au début de la commande")
+            continue
+        if "/" in mot or "\\" in mot:
+            if fi.est_chemin(mot) and not cite and ouvert(_normal(mot)):
+                continue      # le chemin lui-même est ouvert : la forme est bonne
+            nom = _normal(re.split(r"[\\/]", mot)[-1])
+            if MOTIF_EXECUTABLE.match(nom) and ouvert(nom):
+                corrections.append(f"appelle « {nom} » par son nom (il est dans le PATH), jamais par son chemin")
+    return corrections
 
 
 def programmes(commande):
     """Les programmes d'une commande du shell, dans l'ordre et sans doublon (`cd` mis à part). `None` si l'un des
     premiers mots n'est pas un nom de programme simple : chemin, option, variable, guillemet, substitution."""
     vus = []
-    for morceau in SEPARATEURS.split(commande or ""):
+    for morceau in _morceaux(commande):
         mots = morceau.split()
         if not mots:
             continue

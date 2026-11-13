@@ -246,17 +246,40 @@ class Arret(Cadre):
         suite = self.arret(c)
         self.assertEqual(self.decisions(), [])
         self.assertEqual([(a[0], a[1], a[2]) for a in suite], [("agent", "metier-1", [self.tid])])
-        self.assertIn("Appelle « godot » par son nom", suite[0][3])
+        self.assertIn("appelle « godot » par son nom", suite[0][3])
         self.assertIn("Bash(godot:*)", self.outils_de_hugo())
         self.arret(c)                    # le même refus encore : au Directeur
         self.assertEqual(len(self.decisions()), 1)
 
-    def test_le_nom_appele_par_chemin(self):
-        self.assertEqual(accord_outil.nom_appele_par_chemin('"C:\\a b\\godot.EXE" -v'), "godot")
-        self.assertEqual(accord_outil.nom_appele_par_chemin("cd x && /usr/bin/adb devices"), "adb")
-        self.assertIsNone(accord_outil.nom_appele_par_chemin("godot -v"))
-        self.assertIsNone(accord_outil.nom_appele_par_chemin('"C:\\a\\$(x)" -v'))
-        self.assertIsNone(accord_outil.nom_appele_par_chemin(""))
+    def test_chemin_ouvert_entre_guillemets_et_ls_avec_redirections(self):
+        """Cas réel : `ls "C:/…/emulator" 2>&1; "C:/…/emulator.exe" -list-avds 2>&1`, le chemin de l'émulateur étant
+        ouvert dans la fiche : relance avec « Glob » et « sans guillemets », pas de décision « ouvrez Bash »."""
+        emu = "C:/Sdk/emulator/emulator.exe"
+        fiche = self.dossier / "fiches" / "hugo.md"
+        fiche.write_text(fiche.read_text(encoding="utf-8").replace(
+            "Lieu : local", f"Lieu : local\nOutils : Read, Glob, Bash(py:*), Bash({emu}:*)"), encoding="utf-8")
+        c = f'ls "C:/Sdk/emulator" 2>&1; "{emu}" -list-avds 2>&1'
+        suite = self.arret(c)
+        self.assertEqual(self.decisions(), [])
+        self.assertEqual([a[0] for a in suite], ["agent"])
+        self.assertIn("emploie ton outil Glob", suite[0][3])
+        self.assertIn(f"appelle « {emu} » sans guillemets", suite[0][3])
+        self.assertNotIn("Bash(ls:*)", self.outils_de_hugo())
+
+    def test_formes_a_corriger(self):
+        ouverts = {"godot", "c:/sdk/emu"}
+        f = lambda c: accord_outil.formes_a_corriger(c, lambda n: n in ouverts)
+        self.assertEqual(f('"C:\\a b\\godot.EXE" -v'), ["appelle « godot » par son nom (il est dans le PATH), jamais par son chemin"])
+        self.assertEqual(f("godot -v 2>&1"), [])
+        self.assertEqual(f("C:/sdk/emu.exe -x > log.txt"), [])
+        self.assertEqual(f('"C:/sdk/emu.exe" -x'), ["appelle « C:/sdk/emu.exe » sans guillemets, au début de la commande"])
+        self.assertEqual(f("cat a.txt"), ["au lieu de « cat », emploie ton outil Read"])
+        self.assertEqual(f("curl x"), [])
+        self.assertEqual(f(""), [])
+
+    def test_une_redirection_n_est_pas_un_programme(self):
+        self.assertEqual(accord_outil.programmes("godot -v 2>&1 | tee x.log"), ["godot", "tee"])
+        self.assertEqual(accord_outil.programmes("godot -v > out.txt 2>> err.txt"), ["godot"])
 
     def test_commande_illisible_pose_la_decision_sans_programme(self):
         self.arret("C:\\outils\\inconnu.exe --headless")

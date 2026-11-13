@@ -884,6 +884,34 @@ class Arrets(Base):
         self.assertEqual(d["regles_touchees"][0]["texte"], self.REGLE_APPAREIL)
         self.assertNotIn("regle_proposee", d)                            # la règle existe déjà : pas reproposée
 
+    EMULATEUR = {**ACCORD, "accord": {"quoi": "Lancer l'émulateur zoo_test sans fenêtre, y installer build/x.apk et y "
+                                               "lancer le test automatique. Une fenêtre du pare-feu Windows va s'ouvrir "
+                                               "pour adb.exe ou l'émulateur : choisir Réseaux privés.",
+                                       "partenaire": "aucun", "cout": "aucun"}}
+    REGLE_EMULATEUR = ("Autorisé : lancer le test automatique de l'apk sur un émulateur Android sans fenêtre. Une fenêtre "
+                       "du pare-feu Windows peut s'ouvrir pour adb.exe ou l'émulateur : choisir Réseaux privés.")
+
+    def test_une_regle_qui_autorise_l_action_vaut_accord(self):
+        """Cas réel : une demande d'accord déjà couverte par « Autorisé : … » remontait comme « contredit la règle »."""
+        self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_EMULATEUR})
+        actions = self.piloter(self.depart_cadrage(), rapports=[self.EMULATEUR])
+        self.assertEqual(self.decisions_accord(), [])
+        journal = " ".join(j["texte"] for j in self.taches(etape="cadrage")[0]["journal"])
+        self.assertIn("Accord donné par la règle du projet r1", journal)
+
+    def test_pas_d_accord_d_office_si_cout_ou_regle_qui_interdit(self):
+        self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_EMULATEUR})
+        payant = {**self.EMULATEUR, "accord": {**self.EMULATEUR["accord"], "cout": "3 € de crédits"}}
+        self.piloter(self.depart_cadrage(), rapports=[payant])
+        d, = self.decisions_accord()
+        self.assertEqual(d["regles_touchees"][0]["sens"], "autorise")
+
+    def test_regle_qui_interdit_garde_son_sens(self):
+        self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_APPAREIL})
+        self.piloter(self.depart_cadrage(), rapports=[self.APPAREIL])
+        d, = self.decisions_accord()
+        self.assertEqual(d["regles_touchees"][0]["sens"], "interdit")
+
     def test_accord_sans_rapport_avec_les_regles(self):
         self.ok("regles", entree={"action": "ajouter", "texte": self.REGLE_APPAREIL})
         self.piloter(self.depart_cadrage(), rapports=[self.ACCORD])

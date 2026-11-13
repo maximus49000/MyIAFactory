@@ -292,15 +292,23 @@ test("accord sans proposition du moteur : case décochée, texte « Pas de : …
 });
 
 test("accord : la règle du projet touchée est rappelée, rien n'est refusé d'office", () => {
-  const touchee = {...ACCORD, regles_touchees: [{id: "r1", texte: APPAREIL}]};
+  const touchee = {...ACCORD, regles_touchees: [{id: "r1", texte: APPAREIL, sens: "interdit"}]};
   const {contenu} = rendre({...AVEC_REGLES, regles_projet: [{id: "r1", texte: APPAREIL}], decisions_projet: [touchee]});
   assert.match(contenu.textContent, /Cette demande contredit la règle du projet : Pas d'installation ni de test sur un appareil physique/);
   assert.ok(bouton(contenu, "J'accepte"));
   assert.ok(bouton(contenu, "Je refuse"));
 });
 
+test("accord : une règle qui autorise n'est jamais dite contredite", () => {
+  const regles = [{id: "r1", texte: "Autorisé : lancer l'émulateur sans fenêtre.", sens: "autorise"}, {id: "r2", texte: "Les images viennent de Tripo."}];
+  const {contenu} = rendre({...AVEC_REGLES, decisions_projet: [{...ACCORD, regles_touchees: regles}]});
+  assert.doesNotMatch(contenu.textContent, /contredit/);
+  assert.match(contenu.textContent, /Règle du projet qui l'autorise déjà : Autorisé : lancer l'émulateur/);
+  assert.match(contenu.textContent, /Règle du projet à ce sujet : Les images/);
+});
+
 test("accord avec des choix de l'agent : ses boutons remplacent J'accepte / Je refuse, avec consigne et règle", async () => {
-  const accord = {...ACCORD, choix: ["Oui, je branche le téléphone", "Non, livrer sans ce test"], regles_touchees: [{id: "r1", texte: APPAREIL}]};
+  const accord = {...ACCORD, choix: ["Oui, je branche le téléphone", "Non, livrer sans ce test"], regles_touchees: [{id: "r1", texte: APPAREIL, sens: "interdit"}]};
   const {contenu, demandes} = rendre({...AVEC_REGLES, decisions_projet: [accord]});
   assert.equal(bouton(contenu, "J'accepte"), undefined);
   assert.equal(bouton(contenu, "Je refuse"), undefined);
@@ -539,7 +547,9 @@ test("la règle retenue suit la réponse (essai réel : « Oui » notait « Pas 
   const propose = "Pas de : Lancer le test sur émulateur";
   assert.equal(regleSelonLaReponse(d, propose, "accepter"), "Autorisé : Lancer le test sur émulateur");
   assert.equal(regleSelonLaReponse(d, propose, "refuser"), "Pas de : Lancer le test sur émulateur");
-  assert.equal(regleSelonLaReponse(d, propose, "choisir", "Oui, lancer le test"), "Lancer le test sur émulateur : Oui, lancer le test");
+  assert.equal(regleSelonLaReponse(d, propose, "choisir", "Oui, lancer le test"), "Autorisé : Lancer le test sur émulateur");
+  assert.equal(regleSelonLaReponse(d, propose, "choisir", "Non, livrer sans"), "Pas de : Lancer le test sur émulateur");
+  assert.equal(regleSelonLaReponse(d, propose, "choisir", "Plus tard"), "Lancer le test sur émulateur : Plus tard");
   assert.equal(regleSelonLaReponse(d, "Mon texte à moi", "accepter"), "Mon texte à moi");     // réécrit : gardé
 });
 

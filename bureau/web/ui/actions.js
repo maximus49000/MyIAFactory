@@ -325,8 +325,10 @@ export function regleSelonLaReponse(decision, texte, verdict, choix) {
   if (!quoi || plein(decision?.regle_proposee) || String(texte ?? "").trim() !== regleProposee(decision)) {
     return String(texte ?? "").trim();      // une règle proposée par le moteur, ou un texte réécrit : gardé tel quel
   }
-  const t = verdict === "accepter" ? `Autorisé : ${quoi}` : verdict === "choisir" && plein(choix) ? `${quoi} : ${choix.trim()}`
-    : `Pas de : ${quoi}`;
+  const c = verdict === "choisir" && plein(choix) ? choix.trim() : "";
+  // Un choix « Oui, … » retenu autorise ; « Non, … » interdit ; un autre choix est noté tel quel.
+  const t = verdict === "accepter" || /^oui\b/i.test(c) ? `Autorisé : ${quoi}`
+    : verdict === "refuser" || /^non\b/i.test(c) ? `Pas de : ${quoi}` : `${quoi} : ${c}`;
   return t.slice(0, MAX_REGLE_PROJET);
 }
 

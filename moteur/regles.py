@@ -3646,6 +3646,14 @@ def _choix_de_l_agent(r):
     return []
 
 
+SANS_COUT = ("", "aucun", "aucune", "rien", "0", "0 €", "gratuit", "néant", "sans coût", "sans cout")
+
+
+def _sans_cout(accord):
+    """Ni coût ni partenaire : `cout` et `partenaire` disent « aucun » (ou équivalent)."""
+    return all(str(accord.get(k) or "").strip().rstrip(".").casefold() in SANS_COUT for k in ("cout", "partenaire"))
+
+
 def _accord_demande(projet, etat, execution, depart, r, fid, t):
     """Une demande d'accord d'un agent : une décision au bureau de direction (agent, tâche, quoi, pourquoi, ce que ça
     implique, rappel de la règle d'un appareil physique), pas seulement une question dans la discussion."""
@@ -3676,8 +3684,21 @@ def _accord_demande(projet, etat, execution, depart, r, fid, t):
         if not any(x["texte"].casefold() == REGLE_PROJET_APPAREIL.casefold() for x in regles):
             champs["regle_proposee"] = REGLE_PROJET_APPAREIL      # la case « Retenir comme règle du projet », cochée
     touchees = rp.touchees(regles, a["quoi"], pourquoi, implique, message)
-    if touchees:      # un rappel : le Directeur statue toujours, rien n'est refusé d'office
-        champs["regles_touchees"] = [{"id": x["id"], "texte": x["texte"]} for x in touchees]
+    # Une règle du projet qui autorise exactement cette action vaut l'accord du Directeur : sans coût, sans partenaire,
+    # jamais pour un appareil physique, et aucune règle touchée ne l'interdit. Rien n'est jamais refusé d'office.
+    autorisante = None
+    if not appareil and _sans_cout(a) and not any(rp.sens(x["texte"]) == "interdit" for x in touchees):
+        autorisante = next((x for x in regles if rp.sens(x["texte"]) == "autorise" and rp.couvre(x, a["quoi"])), None)
+    if autorisante:
+        lancer(projet, "tache", {"id": tid, "journal": [
+            f"Accord donné par la règle du projet {autorisante['id']} : « {autorisante['texte'][:200]} »"]})
+        fid = fid or t.get("fonctionnalite")
+        if fid:
+            _dire(projet, fid, f"{prenom} demandait un accord déjà donné par la règle du projet {autorisante['id']} : il continue.")
+        return _reprise_apres_accord(projet, etat, tid, fid, a["quoi"], True)
+    if touchees:      # un rappel : le Directeur statue
+        champs["regles_touchees"] = [{"id": x["id"], "texte": x["texte"], **({"sens": s} if (s := rp.sens(x["texte"])) else {})}
+                                     for x in touchees]
     lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_ACCORD, "texte": texte, **champs})
     fid = fid or t.get("fonctionnalite")
     if fid:

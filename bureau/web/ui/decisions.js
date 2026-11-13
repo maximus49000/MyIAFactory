@@ -446,7 +446,10 @@ function decisionAccordAgent(ctx, d) {
   if (plein(d.implique)) li.append(el("div", "lecon-meta", "Ce que cela implique : " + d.implique));
   if (plein(d.regle)) li.append(el("div", "decision-regle", d.regle));
   for (const r of Array.isArray(d.regles_touchees) ? d.regles_touchees : []) {     // un rappel : le Directeur statue
-    if (plein(r?.texte)) li.append(el("div", "decision-regle", "Cette demande contredit la règle du projet : " + r.texte));
+    if (!plein(r?.texte)) continue;
+    const debut = r.sens === "autorise" ? "Règle du projet qui l'autorise déjà : "
+      : r.sens === "interdit" ? "Cette demande contredit la règle du projet : " : "Règle du projet à ce sujet : ";
+    li.append(el("div", "decision-regle", debut + r.texte));
   }
   if (!ctx.etat.agir) return li;
   const consigne = document.createElement("input");

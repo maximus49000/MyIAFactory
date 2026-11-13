@@ -156,3 +156,32 @@ def touchees(regles, *textes):
         if cles and len(cles & demande) >= min(2, len(cles)):
             sortie.append(r)
     return sortie[:MAX_TOUCHEES]
+
+
+# Le sens d'une règle : « Autorisé : … » (ou une réponse « … : Oui, … » retenue) autorise ; « Pas de … », « Interdit »,
+# « Jamais », « Ne pas » interdisent. Une règle sans sens clair n'est qu'un rappel.
+_AUTORISE = re.compile(r"^\s*autoris[ée]+s?\s*:")
+_OUI_FINAL = re.compile(r":\s*(oui|j'accepte|d'accord|accepte)\b[^:]*$")
+_INTERDIT = re.compile(r"^\s*(pas de|pas d'|interdit|jamais|ne pas|ne jamais|refus)")
+
+
+def sens(texte):
+    """`"autorise"`, `"interdit"` ou `None` (un simple rappel)."""
+    t = (texte or "").casefold()
+    if _INTERDIT.search(t):
+        return "interdit"
+    if _AUTORISE.search(t) or _OUI_FINAL.search(t):
+        return "autorise"
+    return None
+
+
+def couvre(regle, *textes):
+    """La règle couvre la demande, plus fortement que `touchees` : au moins 3 de ses racines, et 60 % d'entre elles, sont
+    dans la demande. Sert à donner un accord d'office ; un simple rappel se contente de `touchees`."""
+    demande = set()
+    for t in textes:
+        if isinstance(t, str):
+            demande |= racines(t)
+    cles = racines(re.sub(r"^\s*autoris[ée]+s?\s*:", "", regle["texte"], flags=re.I))
+    commun = len(cles & demande)
+    return bool(cles) and commun >= 3 and commun * 10 >= 6 * len(cles)

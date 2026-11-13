@@ -1124,7 +1124,9 @@ def _accord_a_donner(ctx, s, e):
                 or not all(isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("texte"), str)
                            and x["texte"].strip() and len(x["texte"]) <= rp.MAX_TEXTE for x in touchees)):
             raise Refus(f"« regles_touchees » est une liste de {rp.MAX_TOUCHEES} règles {{id, texte}} au plus.")
-        d["regles_touchees"] = [{"id": x["id"], "texte": x["texte"]} for x in touchees]
+        d["regles_touchees"] = [{"id": x["id"], "texte": x["texte"],
+                                 **({"sens": x["sens"]} if x.get("sens") in ("autorise", "interdit") else {})}
+                                for x in touchees]
     if e.get("appareil") is not None:
         if not isinstance(e["appareil"], bool):
             raise Refus("« appareil » est vrai ou faux.")

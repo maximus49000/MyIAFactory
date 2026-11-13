@@ -597,3 +597,9 @@ Rôles : release
 Date : 2026-11-13
 
 Pour vérifier qu'un paquet embarque les fichiers du dépôt, décompresse chaque entrée avant de comparer les octets.
+
+## S100 — Avant de modifier un outil de mesure, enregistrer un petit r
+Rôles : designer, dev
+Date : 2026-11-13
+
+Avant de modifier un outil de mesure, enregistrer un petit résultat de référence sur un jeu d'entrées fixe, garder l'ancien comportement en option et vérifier qu'il reproduit cette référence chiffre pour chiffre.

@@ -471,3 +471,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Un taux de victoire mesuré avec un robot qui ignore une partie des décisions du jeu (soin, achats) ne représente pas un joueur : régler les combats isolés et signaler que le niveau de run reste non mesuré.
+
+## S79 — Avant une action qui fait apparaître une fenêtre système, po
+Rôles : dev
+Date : 2026-11-13
+
+Avant une action qui fait apparaître une fenêtre système, poser la question avec son choix recommandé et attendre la réponse, même si l'accord de principe est déjà donné.

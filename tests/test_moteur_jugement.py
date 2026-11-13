@@ -524,6 +524,19 @@ class Valider(unittest.TestCase):
         self.assertIsNone(self._def(dict(o, nouveau={"id": "jeu-mobile", "description": "Jeux pour téléphone."}),
                                     mots_interdits=[]))
 
+    def test_regroupement_d_une_etape_du_workflow_propose(self):
+        o = VALIDES["definir_workflow"]
+        etapes = [k for k, x in enumerate(o["flux"]) if x.get("validation") is not True]
+        for k in range(len(o["flux"])):
+            flux = json.loads(json.dumps(o["flux"]))
+            for valeur, ok in (("regroupe", k in etapes), ("parallele", k in etapes), ("tous", False)):
+                flux[k]["regroupement"] = valeur
+                with self.subTest(etape=k, regroupement=valeur):
+                    erreur = self._def(dict(o, flux=flux))
+                    self.assertEqual(erreur is None, ok, erreur)
+                    if erreur:
+                        self.assertIn("regroupement", erreur)
+
     def test_etape_sans_raison_refusee(self):
         o = VALIDES["definir_workflow"]
         for k in range(len(o["flux"])):
@@ -667,6 +680,20 @@ class Consignes(unittest.TestCase):
             texte = jugement.consigne(type_)
             for attendu in ("`lieu`", "`local`", "`indifférent`", "<id>-local", ": code"):
                 self.assertIn(attendu, texte, f"{type_} : {attendu}")
+
+    def test_regroupement_dit_dans_les_trois_consignes(self):
+        for type_ in ("proposer_organisation", "definir_workflow", "decouper_lieux"):
+            texte = jugement.consigne(type_)
+            for attendu in ("regroupement", "regroupe", "mêmes fichiers"):
+                self.assertIn(attendu, texte, f"{type_} : {attendu}")
+
+    def test_decouper_lieux_accepte_un_regroupement(self):
+        o = json.loads(json.dumps(VALIDES["decouper_lieux"]))
+        d = DOSSIERS["decouper_lieux"]
+        o["flux"][-1]["regroupement"] = "regroupe"
+        self.assertIsNone(jugement.valider("decouper_lieux", o, d))
+        o["flux"][-1]["regroupement"] = "tous"
+        self.assertIsNotNone(jugement.valider("decouper_lieux", o, d))
 
     def test_decouper_lieux_dit_la_partie_locale(self):
         texte = jugement.consigne("decouper_lieux")

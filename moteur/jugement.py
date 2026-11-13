@@ -76,6 +76,7 @@ MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que sugg
 MODELES_ETAPE = MODELES_AGENT + ("Fable",)    # une étape peut proposer Fable : la tâche attend l'accord du Directeur
 LONGUEUR_JUSTIFICATION = 160      # la justification du modèle nécessaire d'une étape : une ligne courte
 LIEUX_ETAPE = ("local", "indifférent")   # le lieu d'une étape d'agent (facultatif) : exige le poste, ou cloud possible
+REGROUPEMENTS_ETAPE = ("parallele", "regroupe")   # le regroupement d'une étape d'agent (facultatif) : un seul agent, ou non
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
                      "mise en ligne")
@@ -489,6 +490,9 @@ def _valider_proposer_organisation(o, d):
         if "lieu" in x and (x.get("validation") is True or x["lieu"] not in LIEUX_ETAPE):
             return (f"Étape « {e} » : « lieu » vaut local (elle exige les logiciels du poste) ou indifférent (cloud "
                     "possible) ; une validation du Directeur n'en a pas.")
+        if "regroupement" in x and (x.get("validation") is True or x["regroupement"] not in REGROUPEMENTS_ETAPE):
+            return (f"Étape « {e} » : « regroupement » vaut parallele ou regroupe (un seul agent enchaîne les tâches de "
+                    "l'étape) ; une validation du Directeur n'en a pas.")
         if x.get("validation") is True:
             if x.get("role") is not None or x.get("service") is not None or "modele" in x:
                 return f"Étape « {e} » : une validation du Directeur n'a ni « role », ni « service », ni « modele »."

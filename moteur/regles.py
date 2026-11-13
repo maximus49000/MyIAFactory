@@ -1093,7 +1093,7 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
                 {"validation": True, **({"raison": x["raison"]} if isinstance(x.get("raison"), str) and x["raison"].strip()
                                         else {})} if wf.est_validation(x)
                 else {"role": x["role"], "service": x["service"],
-                      **{c: x[c] for c in ("modele", "justification", "lieu") if c in x}})}
+                      **{c: x[c] for c in ("modele", "justification", "lieu", "regroupement") if c in x}})}
             for x in o["flux"]]
     # Les nouveaux agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (conception
     # 2026-11-12-modele-par-tache-design.md).

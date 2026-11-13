@@ -157,6 +157,25 @@ class Ecriture(unittest.TestCase):
         self.assertEqual(wf.etape_ecrite({**e, "lieu": "ailleurs"}), e)
 
 
+    def test_factory_lit_le_regroupement_et_le_refuse_hors_valeurs(self):
+        f = self.lire([{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev", "regroupement": "regroupe"},
+                       {"id": "qa", "nom": "Recette", "role": "dev", "service": "dev"}])
+        self.assertEqual([wf.regroupement(e) for e in f["flux"]], ["regroupe", "parallele"])
+        with self.assertRaises(factory.FactoryInvalide):
+            self.lire([{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev", "regroupement": "tous"}])
+        with self.assertRaises(factory.FactoryInvalide):
+            self.lire([{"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"},
+                       {"id": "val", "nom": "Essai", "validation": True, "regroupement": "regroupe"},
+                       {"id": "fin", "nom": "Fin", "role": "dev", "service": "dev"}])
+
+    def test_etape_ecrite_garde_le_regroupement_regroupe_seulement(self):
+        e = {"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}
+        self.assertEqual(wf.etape_ecrite({**e, "regroupement": "regroupe"}), {**e, "regroupement": "regroupe"})
+        self.assertEqual(wf.etape_ecrite({**e, "regroupement": "parallele"}), e)
+        self.assertNotIn("regroupement", wf.etape_ecrite({"id": "val", "nom": "Essai", "validation": True,
+                                                          "regroupement": "regroupe"}))
+
+
 class Jugement(unittest.TestCase):
     def varie(self, type_, etape, **champs):
         o = json.loads(json.dumps(VALIDES[type_]))

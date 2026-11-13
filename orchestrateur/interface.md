@@ -539,7 +539,7 @@ demande par `regle_projet` ; le moteur procédural y répond, la conversation or
 
 ### `lieux`
 
-Entrée : `{"action": "reference" | "decouper" | "regler", …}`. Le `lieu` des étapes d'agent (`local` : elle exige le
+Entrée : `{"action": "reference" | "decouper" | "regler" | "regrouper", …}`. Le `lieu` des étapes d'agent (`local` : elle exige le
 poste ; `indifférent` : cloud possible ; absent : le `Lieu :` du métier). `reference` rend `{flux, suggerees}` : les
 étapes de tous les workflows, sans le préfixe `<fid>-` des copies, et celles qu'un outil de l'environnement cite.
 `decouper` : `flux`, la proposition sur ce flux de référence, vérifiée strictement (chaque étape garde id, ordre, nom,
@@ -547,7 +547,18 @@ rôle, service, modèle et nature ; seuls changent `lieu` et, pour une étape d�
 `lieu: indifférent` et l'insertion juste après de `<id>-local`, même rôle et service, `lieu: local`), puis appliquée à
 tous les workflows du projet par identifiant ; jamais une étape qui a déjà sa partie locale. `regler` : `etape`, `lieu`
 (`local`, `indifférent` ou null) dans tous les workflows qui l'ont ; refusé sur une validation. Rend `{change, flux}` ;
-rejouable sans effet ; aucune tâche touchée. Le moteur procédural y répond (demandes `decoupage_lieux`, `lieu_etape`).
+rejouable sans effet ; aucune tâche touchée. Le moteur procédural y répond (demandes `decoupage_lieux`, `lieu_etape`,
+`regroupement_etape`).
+
+Le `regroupement` d'une étape d'agent (facultatif ; jamais sur une validation) : `parallele` (par défaut, absent du
+fichier : les tâches prêtes de l'étape se répartissent d'abord sur les places libres, une par agent) ou `regroupe` (elles
+restent en un lot confié à un seul agent qui les enchaîne : pour une étape dont les tâches modifient les mêmes fichiers,
+un équilibrage par exemple, que des branches cloud fusionneraient mal). `regrouper` : `etape`, `regroupement`
+(`parallele` ou `regroupe`) dans tous les workflows qui l'ont, comme `regler` ; par exemple
+`lancer lieux '{"action": "regrouper", "etape": "equilibrage", "regroupement": "regroupe"}'`. `reference` et le relevé
+(`etapes_lieux[].regroupement`) le disent pour chaque étape. Une proposition de `decouper` peut le poser (`"regroupe"`) ou
+le retirer (`"parallele"`) ; muette, elle garde le choix déjà fait. Un lot « regroupé » n'est jamais coupé et ne mêle
+aucune tâche d'une autre étape (voir `lots`).
 
 ### `partenaires`
 
@@ -596,7 +607,9 @@ confondues**. Regroupe ces tâches en lots d'un même modèle et d'un même lieu
 [{tache, raison}]}`. Une tâche déjà active, faite ou déjà prise n'est jamais remise en lot (refus si elle est nommée).
 Chaque lot a au plus la taille conseillée de son modèle (5 sans mesure ; sinon d'après le coût moyen d'une tâche au rang
 k d'un lot comparé à une tâche seule), une relecture est toujours seule, et un lot ne passe devant une tâche qui
-dépend d'une autre non encore formée. Les lots sont numérotés après les lots déjà notés sur les tâches. Refus (code 1)
+dépend d'une autre non encore formée. Les tâches d'une étape dont le `regroupement` est `regroupe` (voir `lieux`) font
+exception : toutes celles qui sont prêtes se retrouvent dans un même lot `{…, "regroupe": true}`, sans limite de taille,
+et aucune tâche d'une autre étape ne s'y mêle (ni elles à un lot ordinaire). Les lots sont numérotés après les lots déjà notés sur les tâches. Refus (code 1)
 sur un cycle de `depend_de` ou une dépendance inconnue. La commande ne note rien : `lancer tache` (`lot`) le fait.
 Le modèle d'une tâche d'étape de workflow (`etape` `flux:<id>`, et relecture, correction, retour, demande : l'étape de
 son rôle) est son **modèle nécessaire** : `modele` de l'étape (posé avec le workflow), sinon déduit de sa nature

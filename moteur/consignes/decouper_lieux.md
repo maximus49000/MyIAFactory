@@ -14,9 +14,14 @@ Une étape mixte (du code à écrire, puis à compiler et tester sur le poste) s
   validation suivante attend (captures, apk, mode opératoire).
 Une étape entièrement locale (tests sur émulateur, export de l'apk) n'est pas découpée : seulement `"lieu": "local"`.
 
+Pour chaque étape d'agent, choisis aussi son `regroupement` (facultatif) : `"regroupe"` quand ses tâches (une par élément)
+modifient toutes les mêmes fichiers communs (un équilibrage dont les valeurs vivent dans les mêmes fichiers de données :
+en parallèle, les branches se fusionneraient mal), alors un seul agent les enchaîne. Sinon n'écris rien (`parallele`, par
+défaut : les tâches se répartissent entre les agents libres). Garde celui qu'une étape a déjà. Jamais sur une validation.
+
 Règles strictes, sinon la proposition est refusée : chaque étape existante reste, dans le même ordre, avec son `id`, son
 `nom` (sauf la partie code d'une étape découpée), son `role`, son `service`, son `modele` et sa `justification`. Les
-validations du Directeur (`"validation": true`) restent telles quelles, sans `lieu`. N'ajoute aucune autre étape. Une
+validations du Directeur (`"validation": true`) restent telles quelles, sans `lieu` ni `regroupement`. N'ajoute aucune autre étape. Une
 étape qui a déjà sa partie `<id>-local`, ou qui en est une, ne se découpe pas.
 
 Dans `message`, dis en deux ou trois phrases, en français, sans jargon, ce qui change et pourquoi : il s'affiche au

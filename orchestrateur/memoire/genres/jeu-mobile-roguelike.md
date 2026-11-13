@@ -572,3 +572,9 @@ Rôles : release
 Date : 2026-11-13
 
 Des captures uniformes sur émulateur ne prouvent aucun succès : avant de tester, vérifier que le rendu du projet est compatible mobile (mode compatibilité) et que l'orientation déclarée correspond à celle du jeu.
+
+## G96 — Avant d'exporter et de tester un apk sur émulateur, lancer l
+Rôles : release
+Date : 2026-11-13
+
+Avant d'exporter et de tester un apk sur émulateur, lancer le projet et vérifier que le journal du moteur ne contient aucune erreur de shader (limite d'uniforms de fragment) ; un écran noir vient souvent de là.

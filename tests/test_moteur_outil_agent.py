@@ -51,8 +51,17 @@ class Programme(unittest.TestCase):
         self.assertEqual(accord_outil.programmes("cd x"), [])
 
     def test_un_premier_mot_qui_n_est_pas_un_nom_simple_est_illisible(self):
-        for c in ("C:\\outils\\godot.exe -v", "./godot", "$(godot) x", "FOO=1 godot", '"godot" -v', "-rf /", "`ls`"):
+        for c in ("C:\\outils\\godot.exe -v", "./godot", "$(godot) x", "FOO=1 godot", '"godot" -v', "-rf /", "`ls`",
+                  "C:/a/../b.exe -v", "/a/./b", "C:/a$b/c.exe"):
             self.assertIsNone(accord_outil.programmes(c), c)
+
+    def test_un_chemin_absolu_est_un_programme_que_seul_le_directeur_ouvre(self):
+        emu = "C:/Users/x/AppData/Local/Android/Sdk/emulator/emulator.exe"
+        self.assertEqual(accord_outil.programmes(f"{emu} -list-avds"), [emu])
+        self.assertEqual(accord_outil.programme_refuse([f"{emu} -list-avds"], ["Read"]), (emu, f"{emu} -list-avds"))
+        self.assertIsNone(accord_outil.origine(emu, [{"outil": "SDK", "executables": ["emulator.exe"]}]))
+        self.assertEqual(fi.regle_bash(emu), f"Bash({emu}:*)")
+        self.assertEqual(fi.regle_bash("/usr/bin/adb"), "Bash(/usr/bin/adb:*)")
 
     def test_le_programme_refuse_est_celui_que_la_fiche_n_ouvre_pas(self):
         outils = ["Read", "Bash(py:*)", "Bash(git:*)"]
@@ -218,6 +227,17 @@ class Arret(Cadre):
         demande, suite = self.traiter(type="outil_agent", decision=d["id"], verdict="relancer")
         self.assertEqual([a[0] for a in suite], ["agent"])
         self.assertIn("WebSearch", suite[0][3])
+
+    def test_commande_nommee_par_l_agent_et_chemin_absolu_autorisables_au_bureau(self):
+        """Cas réel : l'agent rend `"outil": "Bash : C:/…/emulator.exe -list-avds"` sans refus lu ; la décision
+        nomme le programme (bouton « Autoriser ») et l'accord l'ouvre à l'agent."""
+        emu = "C:/Sdk/emulator/emulator.exe"
+        suite = self.arret(None, rapport=dict(REFUS_BASH, outil=f"Bash : {emu} -list-avds"), refus=[])
+        self.assertEqual(suite, [])
+        d, = self.decisions()
+        self.assertEqual((d["programme"], d["outil"], d["commande"]), (emu, f"Bash({emu}:*)", f"{emu} -list-avds"))
+        self.traiter(type="outil_agent", decision=d["id"], verdict="autoriser")
+        self.assertIn(f"Bash({emu}:*)", self.outils_de_hugo())
 
     def test_commande_illisible_pose_la_decision_sans_programme(self):
         self.arret("C:\\outils\\godot.exe --headless")

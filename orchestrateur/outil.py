@@ -1048,8 +1048,8 @@ def _outil_a_ouvrir(ctx, s, e):
         raise Refus(f"« outil_agent » : tâche inconnue « {tache} ».")
     d = {"agent": e["agent"], "tache": tache, "outil": _phrase_courte(e, "outil", 100)}
     if e.get("programme") is not None:
-        if not isinstance(e["programme"], str) or not fi.MOTIF_PROGRAMME.match(e["programme"]):
-            raise Refus("« programme » est un nom de programme (lettres, chiffres, point, tiret).")
+        if not fi.est_programme(e["programme"]):
+            raise Refus("« programme » est un nom de programme (lettres, chiffres, point, tiret) ou son chemin absolu.")
         d["programme"] = e["programme"]
     if e.get("commande") is not None:
         d["commande"] = _phrase_courte(e, "commande", 300)

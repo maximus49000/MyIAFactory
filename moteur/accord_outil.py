@@ -5,8 +5,9 @@ Le moteur lit la commande refusée (`permission_denials` de la sortie de `claude
 - le programme est connu du projet (un exécutable déclaré dans son environnement, ou un outil de base déjà ouvert aux
   agents) : le moteur ouvre `Bash(<programme>:*)` à cet agent et relance la tâche ;
 - sinon (programme inconnu, outil autre que le shell, commande illisible) : une décision au bureau de direction.
-Jamais `Bash` seul, jamais un programme qui n'est pas un nom simple (chemin, option, variable, substitution), jamais
-un programme que le projet n'a pas déclaré sans l'accord du Directeur.
+Jamais `Bash` seul, jamais un premier mot qui n'est ni un nom simple ni un chemin absolu (chemin relatif, option,
+variable, substitution), jamais un programme que le projet n'a pas déclaré, ni un programme désigné par son chemin,
+sans l'accord du Directeur.
 """
 import re
 
@@ -37,7 +38,7 @@ def programmes(commande):
         if not mots:
             continue
         mot = mots[0]
-        if not MOTIF_EXECUTABLE.match(mot):
+        if not MOTIF_EXECUTABLE.match(mot) and not fi.est_chemin(mot):
             return None
         if mot not in TRANSPARENTS and mot not in vus:
             vus.append(mot)
@@ -69,7 +70,10 @@ def declares(environnement):
 
 
 def origine(programme, environnement):
-    """Pourquoi le programme est « connu du projet » : `"déclaré du projet"`, `"de base des agents"` ou `None`."""
+    """Pourquoi le programme est « connu du projet » : `"déclaré du projet"`, `"de base des agents"` ou `None`. Un
+    programme désigné par son chemin n'est jamais connu : il revient au Directeur."""
+    if fi.est_chemin(programme):
+        return None
     p = _normal(programme)
     if p in declares(environnement):
         return "déclaré du projet"

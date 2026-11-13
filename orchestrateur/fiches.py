@@ -199,12 +199,25 @@ def outils(fiche):
 
 
 MOTIF_PROGRAMME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")   # un nom de programme, rien d'autre
-_REGLE_BASH = re.compile(r"^Bash\(([A-Za-z0-9][A-Za-z0-9._+-]{0,63}):\*\)\Z")
+# Un programme désigné par son chemin absolu, barres obliques (`C:/…/emulator.exe`, `/usr/bin/x`) : jamais ouvert par le
+# moteur seul, seulement sur l'accord du Directeur. Ni espace, ni variable, ni guillemet, ni `.`/`..` comme dossier.
+MOTIF_CHEMIN = re.compile(r"^(?:[A-Za-z]:)?(?:/(?!\.{1,2}(?:/|\Z))[A-Za-z0-9._+-]{1,64}){1,24}\Z")
+_REGLE_BASH = re.compile(r"^Bash\(([A-Za-z0-9][A-Za-z0-9._+-]{0,63}|(?:[A-Za-z]:)?/[^()\s:*]+):\*\)\Z")
+
+
+def est_programme(programme):
+    """Un nom de programme simple, ou le chemin absolu d'un programme (`MOTIF_CHEMIN`)."""
+    return isinstance(programme, str) and (bool(MOTIF_PROGRAMME.match(programme)) or est_chemin(programme))
+
+
+def est_chemin(programme):
+    return isinstance(programme, str) and len(programme) <= 400 and bool(MOTIF_CHEMIN.match(programme))
 
 
 def regle_bash(programme):
-    """La règle qui ouvre un programme du shell : `Bash(<programme>:*)`. `ValueError` si ce n'est pas un nom de programme."""
-    if not isinstance(programme, str) or not MOTIF_PROGRAMME.match(programme):
+    """La règle qui ouvre un programme du shell : `Bash(<programme>:*)`. `ValueError` si ce n'est ni un nom de programme
+    ni le chemin absolu d'un programme."""
+    if not est_programme(programme):
         raise ValueError(f"« {programme} » n'est pas un nom de programme.")
     return f"Bash({programme}:*)"
 
@@ -224,7 +237,8 @@ def ouvrir_outil(fiche, outil):
     """Ajoute `outil` à la ligne `Outils :` de la fiche (les outils par défaut s'il n'y en avait pas), sans l'écrire.
     Seule une règle `Bash(<programme>:*)` s'ouvre ainsi : jamais `Bash` seul. Vrai si la fiche a changé ; `ValueError`
     si la règle n'est pas de cette forme."""
-    if not isinstance(outil, str) or not _REGLE_BASH.match(outil):
+    m = _REGLE_BASH.match(outil) if isinstance(outil, str) else None
+    if m is None or not est_programme(m.group(1)):
         raise ValueError("Seule une règle Bash(<programme>:*) peut être ouverte à un agent.")
     actuelles = outils(fiche)
     if outil in actuelles:

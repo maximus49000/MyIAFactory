@@ -3839,6 +3839,7 @@ AUTORISER, REFUSER_OUTIL, RELANCER_OUTIL = "autoriser", "refuser", "relancer"
 ARRET_OUTIL = re.compile(r"a besoin de l'outil (.+?), que sa fiche ne lui ouvre pas")   # la ligne de journal de l'arrêt
 OUVERT_A = "Outil ouvert à "          # la ligne de journal d'un outil ouvert (par le moteur ou sur accord du Directeur)
 REPRISE_OUTIL = "Le moteur a repris : l'outil"
+OUTIL_BASH_DIT = re.compile(r"^Bash\s*(?::\s*(.+)|\((?!.*:\*\)\Z)(.+)\))\Z", re.S)
 
 
 def _fiche_de(projet, cle):
@@ -3863,8 +3864,13 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
     prenom = (fiche or {}).get("prenom") or cle
     lieu = (fiche or {}).get("lieu", "local")
     programme = commande = None
+    dite = OUTIL_BASH_DIT.match(outil)        # « Bash : <commande> » ou « Bash(<commande>) » : l'agent nomme sa commande
+    if dite:
+        outil = "Bash"
     if outil.split("(")[0].strip() == "Bash" and fiche is not None:
         commandes = [x["commande"] for x in execution.refus if x.get("outil") == "Bash" and x.get("commande")]
+        if dite and not commandes:
+            commandes = [(dite.group(1) or dite.group(2)).strip()]
         programme, commande = accord_outil.programme_refuse(commandes, fi.outils(fiche))
     regle = fi.regle_bash(programme) if programme else None
     quoi = regle or outil

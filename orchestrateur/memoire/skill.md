@@ -381,3 +381,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une consigne interdit une catégorie de contenu, ajouter un test automatique sur les noms et descriptions avec une liste de mots interdits, plutôt que de renommer à la main.
+
+## S64 — Regarder les captures réelles de l'interface avant de rendre
+Rôles : dev
+Date : 2026-11-13
+
+Regarder les captures réelles de l'interface avant de rendre : les textes coupés ou superposés échappent aux tests automatiques.

@@ -393,3 +393,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Au début d'une reprise de travail, comparer l'état du dépôt à la liste des tâches avant d'écrire du code : une partie peut déjà exister.
+
+## S66 — Quand aucune approbation n'est possible, écrire un lanceur d
+Rôles : dev
+Date : 2026-11-13
+
+Quand aucune approbation n'est possible, écrire un lanceur dans un script qui exécute l'outil et filtre sa sortie, plutôt que d'enchaîner des commandes avec des tubes ou des documents en ligne.

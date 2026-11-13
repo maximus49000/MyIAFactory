@@ -298,6 +298,12 @@ class TestAdresseIntrouvable(AvecBureauOuvert):
         self.assertEqual([d["genre"] for d in self.srv.distants], ["reseau_local"])
         self.assertTrue(any("Tailscale" in a for a in self.srv.annonces), self.srv.annonces)
 
+    def test_l_acces_s_ouvre_quand_l_adresse_revient(self):
+        """Essai réel : Tailscale indisponible un instant au redémarrage, le téléphone ne joignait plus le bureau."""
+        tours = iter([{"tailscale": None}, {"tailscale": "127.0.0.1"}])
+        self.srv._reessayer_les_adresses(["tailscale"], lambda: next(tours), port_distant=0, attendre=lambda: None)
+        self.assertIn("tailscale", [d["genre"] for d in self.srv.distants])
+
 
 class TestUnProjet(unittest.TestCase):
     def test_reglages_un_projet_jamais_distant(self):

@@ -1030,32 +1030,58 @@ class Bureau(ThreadingHTTPServer):
             message += " Son dépôt GitHub privé est créé."
         return message
 
+    REESSAI_ADRESSE_S = 30
+
     def ouvrir_distants(self, ouverts, adresses, cles, port_distant=None):
         """Un écouteur par accès ouvert dont l'adresse est trouvée (même port que 127.0.0.1, sauf `port_distant`).
-        Une adresse introuvable est dite et ignorée."""
+        Une adresse introuvable est dite, puis recherchée de nouveau en arrière-plan toutes les 30 s : l'accès s'ouvre
+        dès qu'elle revient (essai réel : Tailscale indisponible un instant au redémarrage, le téléphone ne joignait
+        plus le bureau)."""
         self.cles = cles
         cles.cle()   # créée maintenant plutôt qu'à la première requête
         trouvees = adresses()
+        manquants = []
         for genre in reglages.ACCES:
             if not ouverts.get(genre):
                 continue
             ip = trouvees.get(genre)
-            nom = NOMS_ACCES[genre]
             if not ip:
-                self.annonces.append(f"{nom} : adresse introuvable, cet accès est ignoré.")
+                self.annonces.append(f"{NOMS_ACCES[genre]} : adresse introuvable pour l'instant ; nouvel essai toutes "
+                                     f"les {self.REESSAI_ADRESSE_S} s.")
+                manquants.append(genre)
                 continue
-            port = self.server_address[1] if port_distant is None else port_distant
+            self._ouvrir_un_acces(genre, ip, port_distant)
+        if manquants:
+            threading.Thread(target=self._reessayer_les_adresses, args=(manquants, adresses, port_distant),
+                             daemon=True).start()
+
+    def _ouvrir_un_acces(self, genre, ip, port_distant=None):
+        nom = NOMS_ACCES[genre]
+        port = self.server_address[1] if port_distant is None else port_distant
+        try:
+            e = Ecouteur((ip, port), self, genre)
+        except OSError as err:
+            self.annonces.append(f"{nom} : impossible d'écouter sur {ip}:{port} ({err}) ; accès ignoré.")
+            return False
+        threading.Thread(target=e.serve_forever, daemon=True).start()
+        url = f"http://{e.hote}"
+        self.ecouteurs.append(e)
+        self.distants.append({"genre": genre, "url": url})
+        self.annonces.append(f"{nom} : {url} (code d'accès exigé ; associez le téléphone depuis la page de "
+                             "l'ordinateur)")
+        return True
+
+    def _reessayer_les_adresses(self, manquants, adresses, port_distant=None, attendre=None):
+        attendre = attendre or (lambda: time.sleep(self.REESSAI_ADRESSE_S))
+        while manquants and not getattr(self, "_arrete", False):
+            attendre()
             try:
-                e = Ecouteur((ip, port), self, genre)
-            except OSError as err:
-                self.annonces.append(f"{nom} : impossible d'écouter sur {ip}:{port} ({err}) ; accès ignoré.")
+                trouvees = adresses()
+            except Exception:       # une recherche ratée : on réessaiera
                 continue
-            threading.Thread(target=e.serve_forever, daemon=True).start()
-            url = f"http://{e.hote}"
-            self.ecouteurs.append(e)
-            self.distants.append({"genre": genre, "url": url})
-            self.annonces.append(f"{nom} : {url} (code d'accès exigé ; associez le téléphone depuis la page de "
-                                 "l'ordinateur)")
+            for genre in list(manquants):
+                if trouvees.get(genre) and self._ouvrir_un_acces(genre, trouvees[genre], port_distant):
+                    manquants.remove(genre)
 
     def infos_acces(self):
         """Pour la page de l'ordinateur : les adresses ouvertes et un code d'association neuf."""
@@ -1066,6 +1092,7 @@ class Bureau(ThreadingHTTPServer):
         return {"adresses": [dict(d) for d in self.distants], "code": code, "expire": expire}
 
     def shutdown(self):
+        self._arrete = True
         for e in self.ecouteurs:
             e.shutdown()
         super().shutdown()

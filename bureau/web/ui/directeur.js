@@ -175,7 +175,7 @@ export function contenuDirecteur(ctx, contenu) {
 
   // Les réponses du Chef aux questions qu'on lui a posées (panneau du Chef) : lisibles ici aussi.
   const echanges = el("section", "partie");
-  echanges.append(el("h3", "", "Échanges avec le Chef"), listeEchanges(e, dateFr));
+  echanges.append(el("h3", "", "Échanges avec le Chef"), listeEchanges(e, dateFr, 10, {direction: true, apresVu: ctx.rouvrir}));
   contenu.append(echanges);
 
   const retours = [];

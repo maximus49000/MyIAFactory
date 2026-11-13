@@ -4,6 +4,7 @@
 
 import {el} from "./dom.js";
 import {auTravail, tronquer} from "./texte.js";
+import {urlProjet} from "./projets.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const MAX_TITRE = 90;
@@ -68,16 +69,40 @@ export function echangesChef(etat, max = 10) {
     .reverse().slice(0, max);
 }
 
-// La liste des échanges (panneau du Chef, espace de direction).
-export function listeEchanges(etat, dateFr, max = 10) {
+// Les échanges que l'espace de direction montre encore : pas ceux marqués « Vu » (le panneau du Chef les garde). Pur.
+export function echangesNonVus(etat, max = 10) {
+  const vus = new Set(liste(etat?.echanges_vus));
+  return echangesChef(etat, 50).filter((x) => !x.t || !vus.has(x.t)).slice(0, max);
+}
+
+// « Vu » : l'échange quitte l'espace de direction, sur tous les appareils (gardé par le bureau).
+export async function marquerVu(t, fetchFn = fetch) {
+  try {
+    const r = await fetchFn(urlProjet("/api/echanges/vu"), {method: "POST",
+      headers: {"X-Bureau": "1", "Content-Type": "application/json"}, body: JSON.stringify({t})});
+    return r.ok;
+  } catch { return false; }
+}
+
+// La liste des échanges. `direction` : sans ceux déjà vus, chacun avec son bouton « Vu » (réponse arrivée).
+export function listeEchanges(etat, dateFr, max = 10, {direction = false, apresVu = null} = {}) {
   const ul = el("ul", "liste-partie echanges-chef");
-  const echanges = echangesChef(etat, max);
-  if (!echanges.length) ul.append(el("li", "vide", "Aucune question posée au Chef"));
+  const echanges = direction ? echangesNonVus(etat, max) : echangesChef(etat, max);
+  if (!echanges.length) ul.append(el("li", "vide", direction ? "Aucun échange à lire" : "Aucune question posée au Chef"));
   for (const x of echanges) {
     const li = el("li", "");
     li.append(el("div", "retour-texte", x.question),
               x.reponse ? el("div", "retour-reponse", x.reponse) : el("div", "retour-attente", "le Chef réfléchit…"),
               el("div", "retour-date", x.t ? dateFr(x.t) : ""));
+    if (direction && x.reponse && x.t) {
+      const vu = el("button", "bouton secondaire", "Vu");
+      vu.type = "button";
+      vu.addEventListener("click", async () => {
+        vu.disabled = true;
+        if (await marquerVu(x.t)) { li.remove(); if (apresVu) apresVu(); } else vu.disabled = false;
+      });
+      li.append(vu);
+    }
     ul.append(li);
   }
   return ul;

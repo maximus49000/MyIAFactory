@@ -158,6 +158,7 @@ class Projet:
         self._cache_etat = (0.0, None)
         self.dernier_releve = None  # dernier relevé normalisé valide (sert à vérifier les demandes)
         self._verrou_demandes = threading.Lock()
+        self._verrou_vus = threading.Lock()
         self._derniere_creation = None  # (empreinte, heure monotone) de la dernière fonctionnalité ou du dernier message
         self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
         self._reponses_envoyees = {}   # (type, décision) répondue -> heure d'envoi (monotone) : une seule réponse
@@ -221,6 +222,7 @@ class Projet:
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
             e["images_ok"] = images_declarees(regl)
+            e["echanges_vus"] = self.echanges_vus()      # les échanges avec le Chef masqués de la direction (« Vu »)
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)
             return e
@@ -426,6 +428,32 @@ class Projet:
                 refusees.append({"id": x["id"], "erreur": message})
             self._cache_etat = (0.0, self._cache_etat[1])   # les verdicts paraissent au prochain relevé
         return 200, {"ok": True, "envoyees": envoyees, "refusees": refusees}
+
+    # -- échanges avec le Chef marqués « Vu » (masqués de l'espace de direction, gardés dans le panneau du Chef) ----
+    FICHIER_VUS = "echanges-vus.json"
+    MAX_VUS = 500
+
+    def echanges_vus(self):
+        try:
+            vus = json.loads((self.chemin_reglages.parent / self.FICHIER_VUS).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [x for x in vus if isinstance(x, str)] if isinstance(vus, list) else []
+
+    def marquer_echange_vu(self, t):
+        """`t` : la date de la question (son identifiant dans le relevé). Rend `(code, objet)`."""
+        if not isinstance(t, str) or not t.strip() or len(t) > 64:
+            return 400, {"erreur": "« t » : la date de l'échange est obligatoire."}
+        with self._verrou_vus:
+            vus = self.echanges_vus()
+            if t not in vus:
+                vus = (vus + [t])[-self.MAX_VUS:]
+                chemin = self.chemin_reglages.parent / self.FICHIER_VUS
+                provisoire = chemin.with_suffix(".tmp")
+                provisoire.write_text(json.dumps(vus, ensure_ascii=False), encoding="utf-8")
+                os.replace(provisoire, chemin)
+        self._cache_etat = (0.0, self._cache_etat[1])     # relire au prochain état
+        return 200, {"ok": True}
 
     def lancer_orchestrateur(self):
         """(code HTTP, objet JSON). Refusé s'il tourne déjà ; un second clic pendant le démarrage ne relance rien."""
@@ -1501,6 +1529,25 @@ class Handler(BaseHTTPRequestHandler):
             if projet is None:
                 return self._json(404, {"erreur": "Projet inconnu."})
             return self._json(*projet.lancer_orchestrateur())
+        if chemin == "/api/echanges/vu":
+            if (self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            projet = self._projet(morceaux.query)
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if projet is None or not 0 < longueur <= 1024:
+                self._vider_corps()
+                return self._json(404 if projet is None else 400,
+                                  {"erreur": "Projet inconnu." if projet is None else "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*projet.marquer_echange_vu(corps.get("t") if isinstance(corps, dict) else None))
         if chemin == "/api/projets/creer":
             if (self.headers.get("X-Bureau") != "1"
                     or not self.headers.get("Content-Type", "").lower().startswith("application/json")):

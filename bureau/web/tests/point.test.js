@@ -42,3 +42,12 @@ test("les échanges avec le Chef : ses questions et ses réponses, les plus réc
     {t: "2026-11-13T10:00:00+01:00", question: "Où en est Hugo ?", reponse: "Il lance les tests."}]);
   assert.deepEqual(echangesChef({}), []);
 });
+
+import {echangesNonVus} from "../ui/point.js";
+
+test("l'espace de direction ne montre plus les échanges marqués « Vu »", () => {
+  const etat = {echanges_vus: ["2026-11-13T10:00:00+01:00"], taches: [{id: "orchestration", retours: [
+    {t: "2026-11-13T10:00:00+01:00", texte: "Où en est Hugo ?", reponse: "Il lance les tests."},
+    {t: "2026-11-13T10:05:00+01:00", texte: "Et la boutique ?", reponse: "Elle avance."}]}]};
+  assert.deepEqual(echangesNonVus(etat).map((x) => x.question), ["Et la boutique ?"]);
+});

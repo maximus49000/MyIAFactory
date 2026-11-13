@@ -78,7 +78,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     }
     return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
       e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,
-      (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours])]);
+      (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours]), e.echanges_vus]);
   };
 
   // Les tâches qui passent le filtre tant que la vue liste est ouverte (sinon null : rien n'est estompé).

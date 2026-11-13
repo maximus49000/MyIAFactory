@@ -507,3 +507,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand une tâche d'équilibrage porte sur un élément sans valeur de jeu, ne changer aucune valeur : lancer son contrôle, le déclarer passé, et dire que rien n'a été mesuré.
+
+## S85 — Quand le journal de mesures correspond aux données et qu'auc
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand le journal de mesures correspond aux données et qu'aucune cible chiffrée n'existe pour la catégorie à régler, ne pas modifier de valeurs : rendre les mesures et demander la cible.

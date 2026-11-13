@@ -10,6 +10,8 @@
     Spécialité : écrans et mise en page
     Outils : Read, Write, Edit, Bash(py:*)   (facultatif : les outils d'un agent lancé par le moteur)
     Fable : accordé par le Directeur le 2026-11-12   (facultatif : la seule façon d'avoir `Modèle : Fable`)
+    Retrait : prévu   (facultatif, agent polyvalent : l'équipe a perdu une place pendant qu'il travaillait ; il finit
+                       sa tâche, ne reprend rien, puis sa fiche est retirée)
 
     Texte libre…
 
@@ -22,7 +24,7 @@ import re
 import tempfile
 from pathlib import Path
 
-ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils", "Fable")
+ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils", "Fable", "Retrait")
 # Les outils d'un agent lancé sans fenêtre quand sa fiche n'en déclare pas : lire, écrire et modifier dans le dossier
 # du projet, lancer Python (`py`, mais aussi `python`, que les agents emploient d'eux-mêmes : refusé, il bloquait toute
 # production à l'essai de la phase D), créer un dossier, `git`. Jamais le mode qui contourne les autorisations.
@@ -32,8 +34,9 @@ MODELES = ("Haiku", "Sonnet", "Opus")
 # Fable n'est jamais choisi par le moteur ni par un outil : une fiche l'a seulement si le Directeur l'a accordé, pour
 # cet agent seulement, et la fiche le dit (ligne `Fable :`).
 ACCORD_FABLE = re.compile(r"^accordé par le Directeur le \d{4}-\d{2}-\d{2}\Z")
+RETRAIT_PREVU = "prévu"
 ETATS = ("à valider", "validée")
-_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils|Fable)\s*:\s*(.*?)\s*$")
+_ENTETE = re.compile(r"^(Clé|Prénom|Rôle|Service|Modèle|Lieu|Session|Spécialité|Outils|Fable|Retrait)\s*:\s*(.*?)\s*$")
 _LECON = re.compile(r"^-\s*\[(à valider|validée)\]\s*(\S+)\s*:\s*(.*)$")
 
 
@@ -93,10 +96,13 @@ def lire_fiche(chemin):
                             "avec l'accord du Directeur, ligne « Fable : »).")
     if champs["Lieu"] not in ("local", "cloud"):
         raise FicheInvalide(f"Fiche {chemin.name} : « Lieu » doit valoir local ou cloud.")
+    retrait = champs.get("Retrait") or None
+    if retrait is not None and retrait != RETRAIT_PREVU:
+        raise FicheInvalide(f"Fiche {chemin.name} : « Retrait » doit dire « {RETRAIT_PREVU} ».")
     return {"cle": champs["Clé"], "prenom": champs.get("Prénom") or None, "role": champs.get("Rôle") or None,
             "service": champs.get("Service") or None, "modele": champs.get("Modèle") or None, "lieu": champs["Lieu"],
             "session": champs.get("Session") or None, "specialite": champs.get("Spécialité") or None,
-            "outils": champs.get("Outils") or None, "fable": accord,
+            "outils": champs.get("Outils") or None, "fable": accord, "retrait_prevu": retrait is not None,
             "texte": "\n".join(corps).strip(), "lecons": lecons, "chemin": chemin}
 
 
@@ -108,7 +114,8 @@ def est_polyvalente(fiche):
 def nouvelle_fiche(cle, prenom, lieu, session=None):
     """Une fiche d'agent polyvalent (à compléter de `chemin` avant `ecrire_fiche`)."""
     return {"cle": cle, "prenom": prenom, "role": None, "service": None, "modele": None, "lieu": lieu,
-            "session": session, "specialite": None, "outils": None, "fable": None, "texte": "", "lecons": []}
+            "session": session, "specialite": None, "outils": None, "fable": None, "retrait_prevu": False, "texte": "",
+            "lecons": []}
 
 
 def lire_toutes(dossier):
@@ -134,6 +141,8 @@ def ecrire_fiche(f):
                      ("Fable", "fable")):
         if f.get(cle):
             lignes.append(f"{nom} : {f[cle]}")
+    if f.get("retrait_prevu"):
+        lignes.append(f"Retrait : {RETRAIT_PREVU}")
     lignes += ["", f["texte"], "", "## Leçons"] if f["texte"] else ["", "## Leçons"]
     lignes += [f"- [{le['etat']}] {le['id']} : {le['texte']}" for le in f["lecons"]]
     chemin = Path(f["chemin"])

@@ -226,3 +226,29 @@ class NonRepris(AvecProjet):
         court = regles._etat(self.projet)
         self.assertEqual(regles._modele_de_depart(self.projet, court, "dev-s",
                                                   next(t for t in court["taches"] if t["id"] == dev)), "Sonnet")
+
+
+class RetraitPrevu(Base):
+    def test_moteur_retire_l_agent_marque_a_la_fin_de_sa_tache(self):
+        self.agent("agent-1")
+        (self.dossier / "fiches" / "agent-2.md").write_text(
+            "Clé : agent-2\nPrénom : Léa\nLieu : local\nRetrait : prévu\n", encoding="utf-8")
+        t = self.tache("flux:dev")
+        self.ok("tache", entree={"id": t, "agent": "agent-2", "active": True})
+        self.demarrer()
+        # au travail : l'agent marqué reste, il n'est ni retiré ni choisi
+        self.assertTrue((self.dossier / "fiches" / "agent-2.md").is_file())
+        self.ok("tache", entree={"id": t, "colonne": "fait", "active": False})
+        self.demarrer()
+        self.assertFalse((self.dossier / "fiches" / "agent-2.md").exists())
+        self.assertTrue((self.dossier / "fiches" / "agent-1.md").is_file())
+
+    def test_agent_marque_ne_prend_pas_la_tache(self):
+        (self.dossier / "fiches" / "agent-2.md").write_text(
+            "Clé : agent-2\nPrénom : Léa\nLieu : local\nRetrait : prévu\n", encoding="utf-8")
+        self.agent("agent-1")
+        t = self.tache("flux:dev")
+        self.ok("tache", entree={"id": t, "agent": "agent-2", "active": True})
+        t2 = self.tache("flux:dev", element="e2", titre="Autre")
+        etat = self.demarrer()
+        self.assertEqual(self.parties(etat).get(t2), "agent-1")

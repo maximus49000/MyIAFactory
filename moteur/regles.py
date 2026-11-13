@@ -1903,9 +1903,18 @@ def _sur_parallelisme(projet, demande, etat):
     r = lancer(projet, "parallelisme", {"agents_locaux_max": demande.get("agents_locaux_max"),
                                         "agents_cloud_max": demande.get("agents_cloud_max")})
     locaux, nuage = r["agents_locaux_max"], r["agents_cloud_max"]
+    equipe = []
+    if r.get("crees"):
+        equipe.append(f"{len(r['crees'])} {'agents ajoutés' if len(r['crees']) > 1 else 'agent ajouté'}")
+    if r.get("retires"):
+        equipe.append(f"{len(r['retires'])} {'agents retirés' if len(r['retires']) > 1 else 'agent retiré'}")
+    if r.get("retraits_prevus"):
+        equipe.append(f"{len(r['retraits_prevus'])} {'agents partiront' if len(r['retraits_prevus']) > 1 else 'agent partira'}"
+                      f" à la fin de {'leur tâche' if len(r['retraits_prevus']) > 1 else 'sa tâche'}")
     _terminer(projet, {"demande": demande["id"]},
               f"C'est noté : au plus {locaux} {'agents locaux' if locaux > 1 else 'agent local'} et {nuage} "
-              f"{'agents cloud' if nuage > 1 else 'agent cloud'} travaillent en même temps sur ce projet.")
+              f"{'agents cloud' if nuage > 1 else 'agent cloud'} travaillent en même temps sur ce projet."
+              + (f" Équipe : {', '.join(equipe)}." if equipe else ""))
     return _demarrer_en_attente(projet, etat, None)
 
 
@@ -2364,6 +2373,10 @@ def _demarrer_en_attente(projet, etat, fid):
     libre (locale sous la charge, ou cloud), un agent libre ; les tâches qui mènent à une validation d'abord. Rend les
     actions agent."""
     court = _etat(projet)
+    if any(a.get("retrait_prevu") for a in court["agents"]):
+        # des places baissées pendant qu'un agent travaillait : il est retiré dès que sa tâche est finie
+        if lancer(projet, "equipe")["retires"]:
+            court = _etat(projet)
     if court["pause"] or projet.pause_globale:      # la pause d'une installation prioritaire : aucun agent neuf ne part
         return []
     attente = _attente(court, fid, etat)

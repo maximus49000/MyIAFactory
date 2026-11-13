@@ -454,3 +454,64 @@ def fiches_a_recruter(f, fiches, mode, agents, places_cloud, depot_, jour, lieu=
                        "fable": f"accordé par le Directeur le {jour}" if a["modele"] == "Fable" else None,
                        "texte": texte, "lecons": [], "chemin": Path(f["fiches"]) / f"{cle}.md"})
     return sortie
+
+
+# --- L'équipe d'un projet polyvalent = les places (conception 2026-11-13-agents-polyvalents-design.md).
+
+MESSAGE_EQUIPE_PAR_LES_PLACES = "L'équipe suit les places de l'onglet Facturation."
+
+
+def a_des_polyvalents(fiches):
+    """Vrai si le projet a au moins un agent polyvalent (fiche sans rôle) : il ne se recrute plus par rôle."""
+    return any(not x.get("role") for x in fiches)
+
+
+def equipe_pure(fiches):
+    """Les agents polyvalents si le projet n'en a que (hors chef) ; `None` pour un projet à l'ancienne, ou mixte (une
+    reprise interrompue) : l'équipe n'y suit pas les places, rien n'y est créé ni retiré."""
+    agents = _sans_chef(fiches)
+    if not agents or any(x.get("role") for x in agents):
+        return None
+    return agents
+
+
+def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True):
+    """Ce qu'il faut faire pour que l'équipe soit égale aux places : `{creer: [lieu…], retirer: [clé…], marquer: [clé…],
+    demarquer: [clé…]}`. Un agent au travail (`occupes`) n'est jamais retiré : il est marqué (`retrait_prevu`), plus
+    choisi, et retiré une fois sa tâche finie. Les agents libres partent d'abord (sans session cloud d'abord, les
+    derniers de la liste d'abord) ; une place remontée annule d'abord les retraits prévus avant de créer un agent.
+    `creer` faux : rien n'est créé ni démarqué (le moteur ne fait que retirer). Rejouable sans effet."""
+    plan = {"creer": [], "retirer": [], "marquer": [], "demarquer": []}
+    agents = equipe_pure(fiches)
+    if agents is None:
+        return plan
+    for lieu, voulu in (("local", locaux), ("cloud", cloud)):
+        siens = [x for x in agents if x["lieu"] == lieu]
+        plan["retirer"] += [x["cle"] for x in siens if x.get("retrait_prevu") and x["cle"] not in occupes]
+        restants = [x for x in siens if x["cle"] not in plan["retirer"]]
+        gardes = [x for x in restants if not x.get("retrait_prevu")]
+        marques = [x for x in restants if x.get("retrait_prevu")]
+        if len(gardes) > voulu:
+            en_trop = len(gardes) - voulu
+            libres = sorted((x for x in reversed(gardes) if x["cle"] not in occupes), key=lambda x: bool(x.get("session")))
+            for x in libres[:en_trop]:
+                plan["retirer"].append(x["cle"])
+            en_trop -= min(en_trop, len(libres))
+            plan["marquer"] += [x["cle"] for x in list(reversed(gardes)) if x["cle"] in occupes][:en_trop]
+        elif creer and len(gardes) < voulu:
+            manque = voulu - len(gardes)
+            plan["demarquer"] += [x["cle"] for x in marques[:manque]]
+            plan["creer"] += [lieu] * (manque - min(manque, len(marques)))
+    return plan
+
+
+def cle_d_agent_libre(prises, dossier):
+    """`agent-<n>` : la première clé d'agent polyvalent qui n'est ni prise ni déjà un fichier du dossier des fiches."""
+    n = 1
+    while f"agent-{n}" in prises or (Path(dossier) / f"agent-{n}.md").exists():
+        n += 1
+    return f"agent-{n}"
+
+
+def prenom_libre(fiches):
+    return _prenom_libre({x.get("prenom") for x in fiches if x.get("prenom")})

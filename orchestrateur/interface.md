@@ -439,7 +439,11 @@ ceux de la décision. Validé : le texte libre est noté sur la tâche de valida
 Entrée : `{"agents_locaux_max": 1 à 16, "agents_cloud_max": 0 à 16}` (entiers). Les **places** du projet, réglées par
 le Directeur dans l'onglet Facturation (demande `parallelisme`) : écrites dans le fichier de factory, le reste du
 fichier gardé. Rend les deux valeurs. Refus (code 1) hors bornes. Une place locale est soumise à la charge du poste,
-une place cloud non ; chaque place est tenue par un agent recruté (une fiche, une tâche à la fois). Clé
+une place cloud non ; chaque place est tenue par un agent recruté (une fiche, une tâche à la fois). Dans un projet
+d'agents polyvalents (fiches sans rôle), l'équipe **est** les places : l'outil crée une fiche polyvalente (clé
+`agent-<n>`, prénom libre) par place ajoutée et retire un agent libre par place retirée ; un agent au travail n'est jamais
+retiré, il porte « Retrait : prévu » (plus choisi) jusqu'à la fin de sa tâche (voir `equipe`). La sortie ajoute `crees`,
+`retires` et `retraits_prevus` (listes de clés, vides pour un projet à l'ancienne). Clé
 `agents_cloud_max` absente : 0 pour un projet sans agent cloud, l'ancienne limite des réglages (`agents_cloud_max`,
 3 par défaut) pour un projet qui en a ; le relevé publie la valeur effective en `agents_cloud_max`.
 
@@ -448,6 +452,13 @@ tâches qui mènent à une validation du Directeur passent d'abord, et aucune t�
 pas encore franchie (un élément qu'elle concerne est encore avant elle ou en attente) ne démarre. Une installation
 prioritaire et la pause restent au-dessus de tout. Des places libres sans tâche permise pendant qu'une validation
 attend : `attente-places.json` dans `.factory` (« 2 places libres : en attente de votre validation « … » »).
+
+### `equipe`
+
+Pas d'entrée. Dans un projet d'agents polyvalents, retire les agents dont le retrait était prévu (`parallelisme` a baissé
+les places pendant qu'ils travaillaient) et dont la tâche est finie ; ne crée jamais d'agent (seul `parallelisme` en crée).
+Rend `{"crees": [], "retires": [clés], "retraits_prevus": []}`. Sans effet, et rejouable, pour un projet à l'ancienne ou
+dont l'équipe est mixte (une reprise interrompue). Le moteur la lance avant chaque départ tant qu'un retrait est prévu.
 
 ### `fiche`
 
@@ -462,7 +473,8 @@ agents ; tout autre cas est une décision.
 
 ### `recruter`
 
-Entrée : `{"mode": "manuel" | "auto", "agents": [{"role", "modele", "lieu", "fable"?}]}` (un agent en manuel, 1 à 16
+Refusé (code 1, « L'équipe suit les places de l'onglet Facturation. ») dès que le projet a un agent polyvalent : l'équipe
+n'y suit que les places (`parallelisme`). Pour un projet à l'ancienne, entrée : `{"mode": "manuel" | "auto", "agents": [{"role", "modele", "lieu", "fable"?}]}` (un agent en manuel, 1 à 16
 en auto ; demande `recruter` du bureau). Écrit une fiche par recrue, tout ou rien : clé `<rôle>-<n>` libre, le prénom
 libre suivant de l'équipe, le service, le texte, la spécialité et les outils d'une fiche du même rôle (sinon le service
 de l'étape), le même brief (`briefs/<rôle>.md`, exigé). Refus (code 1) : rôle hors des étapes d'agent des workflows,

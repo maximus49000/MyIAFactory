@@ -620,9 +620,10 @@ def _agents(ctx, s, fiches):
     sessions, occupes = ctx.sessions(), {t["agent"] for t in s["taches"] if t.get("active") and t.get("agent")}
     sortie = []
     for x in fiches:
+        retrait = bool(x.get("retrait_prevu"))     # l'équipe a perdu sa place : il finit sa tâche, rien d'autre
         sortie.append({"cle": x["cle"], "role": x["role"], "service": x["service"], "modele": x["modele"],
                        "lieu": x["lieu"], "session": sessions.get(x["cle"]) or x["session"],
-                       "libre": x["cle"] not in occupes})
+                       "libre": x["cle"] not in occupes and not retrait, **({"retrait_prevu": True} if retrait else {})})
     return sortie
 
 
@@ -3029,15 +3030,63 @@ def places_cloud_du_projet(ctx):
                                any(x["lieu"] == "cloud" for x in ctx.fiches()))
 
 
+def synchroniser_equipe(ctx, creer=True):
+    """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
+    (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
+    Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet."""
+    vide = {"crees": [], "retires": [], "retraits_prevus": []}
+    with ctx.suivi.transaction() as suivi:     # un seul écrivain à la fois (l'outil, le moteur et le bureau)
+        fiches_ = ctx.fiches()
+        if rc.equipe_pure(fiches_) is None:
+            return vide
+        occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
+        plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer)
+        par_cle = {x["cle"]: x for x in fiches_}
+        for cle in plan["retirer"]:
+            Path(par_cle[cle]["chemin"]).unlink(missing_ok=True)
+        for cle in plan["marquer"]:
+            if not par_cle[cle].get("retrait_prevu"):
+                par_cle[cle]["retrait_prevu"] = True
+                fi.ecrire_fiche(par_cle[cle])
+        for cle in plan["demarquer"]:
+            par_cle[cle]["retrait_prevu"] = False
+            fi.ecrire_fiche(par_cle[cle])
+        crees, prises, existantes = [], {x["cle"] for x in fiches_}, list(fiches_)
+        try:
+            for lieu in plan["creer"]:
+                cle = rc.cle_d_agent_libre(prises, ctx.f["fiches"])
+                nouvelle = fi.nouvelle_fiche(cle, rc.prenom_libre(existantes), lieu)
+                nouvelle["chemin"] = Path(ctx.f["fiches"]) / f"{cle}.md"
+                fi.ecrire_fiche(nouvelle)
+                prises.add(cle)
+                existantes.append(nouvelle)
+                crees.append(cle)
+        except BaseException:
+            for cle in crees:
+                (Path(ctx.f["fiches"]) / f"{cle}.md").unlink(missing_ok=True)
+            raise
+        fi.lire_toutes(ctx.f["fiches"])
+    return {"crees": crees, "retires": list(plan["retirer"]), "retraits_prevus": list(plan["marquer"])}
+
+
+def cmd_equipe(ctx, e):
+    """Le moteur retire les agents dont le retrait était prévu et dont la tâche est finie (jamais d'agent neuf : seul un
+    réglage des places en crée). Rend `{crees, retires, retraits_prevus}`."""
+    return synchroniser_equipe(ctx, creer=False)
+
+
 def cmd_parallelisme(ctx, e):
     """`{agents_locaux_max: 1 à 16, agents_cloud_max: 0 à 16}` : les places du projet, écrites dans la factory (le
-    reste du fichier est gardé). Rend les valeurs écrites."""
+    reste du fichier est gardé). Dans un projet d'agents polyvalents, l'équipe suit : un agent de plus par place
+    ajoutée, un agent libre de moins par place retirée (un agent au travail finit sa tâche, voir `synchroniser_equipe`).
+    Rend les valeurs écrites et `{crees, retires, retraits_prevus}`."""
     locaux, cloud = e.get("agents_locaux_max"), e.get("agents_cloud_max")
     try:
         fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud)
     except fa.FactoryInvalide as ex:
         raise Refus(str(ex))
-    return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
+    ctx.f = fa.lire(ctx.f["chemin"])     # les places qui viennent d'être écrites
+    return {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **synchroniser_equipe(ctx)}
 
 
 # --- Le recrutement depuis le bureau (conception 2026-11-12-recrutement-design.md).
@@ -3084,6 +3133,13 @@ def releve_recrutement(ctx, s, fiches):
     d = rc.depot(_projet(ctx))
     raison = rc.raison_sans_cloud(d)
     places_c = places_cloud_du_projet(ctx)
+    if rc.a_des_polyvalents(fiches):     # l'équipe suit les places : rien à recruter, ni rôle ni répartition
+        return {"polyvalent": True, "roles": [], "places": {"cloud": 0, "locaux": 0}, "propositions": [], "notes": [],
+                "propositions_par_lieu": {"mieux": [], "cloud": [], "local": []},
+                "notes_par_lieu": {"mieux": [], "cloud": [], "local": []},
+                "depot": {"git": d["git"], "github": d["github"], "url": d["url"],
+                          "creable": not d["github"] and not d["origine"]},
+                "cloud_impossible": raison}
     p = rc.proposer(ctx.f, s, fiches, places_c, d["github"])
     par_lieu = {k: rc.proposer(ctx.f, s, fiches, places_c, d["github"], lieu=k) for k in ("cloud", "local")}
     try:
@@ -3109,6 +3165,8 @@ def cmd_recruter(ctx, e):
     chaque recrue a le prénom libre suivant de l'équipe, le service, le texte et les outils d'une fiche du même rôle,
     et suit le brief du rôle. Cloud : projet sur GitHub et place cloud libre ; auto : jamais au-delà des places."""
     fiches_ = ctx.fiches()
+    if rc.a_des_polyvalents(fiches_):
+        raise Refus(rc.MESSAGE_EQUIPE_PAR_LES_PLACES)
     try:
         nouvelles = rc.fiches_a_recruter(ctx.f, fiches_, e.get("mode"), e.get("agents"), places_cloud_du_projet(ctx),
                                          rc.depot(_projet(ctx)), su.maintenant()[:10], e.get("lieu"))
@@ -3397,7 +3455,7 @@ COMMANDES = {
     "agent-libre": (cmd_agent_libre, "obligatoire"), "depart": (cmd_depart, "obligatoire"),
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
-    "recruter": (cmd_recruter, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
+    "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
 }
 
 

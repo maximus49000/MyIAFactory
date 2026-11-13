@@ -271,15 +271,25 @@ export function resumeParallelisme(etat) {
   const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud").length, cloud: agents.filter((a) => a.lieu === "cloud").length};
   const locaux = Number.isInteger(etat?.agents_locaux_max) ? etat.agents_locaux_max : 2;
   const cloud = Number.isInteger(etat?.agents_cloud_max) ? etat.agents_cloud_max : 0;
+  // Un projet d'agents polyvalents : l'équipe est exactement les places, rien ne se recrute par rôle.
+  const polyvalent = etat?.recrutement?.polyvalent === true;
   const notes = [];
-  if (cloud > 0 && !recrutes.cloud) notes.push("Aucun agent cloud recruté : les places cloud resteront vides " +
-                                                "(recrutez-en ci-dessous).");
-  notes.push("Chaque place est tenue par un agent recruté : pour plusieurs tâches d'un même rôle en même temps, " +
-             "il faut plusieurs agents de ce rôle. Une place locale attend que la charge de l'ordinateur le permette ; " +
-             "une place cloud non. Les tâches qui mènent à une validation passent d'abord ; rien ne démarre après une " +
-             "validation qui vous attend.");
+  if (polyvalent) {
+    notes.push("Chaque place est un agent polyvalent. Il prend n'importe quelle tâche prête, en spécialiste de son " +
+               "métier. Monter une place ajoute un agent ; en baisser une retire un agent libre (un agent au travail " +
+               "finit d'abord sa tâche). Une place locale attend que la charge de l'ordinateur le permette ; une place " +
+               "cloud non. Les tâches qui mènent à une validation passent d'abord ; rien ne démarre après une " +
+               "validation qui vous attend.");
+  } else {
+    if (cloud > 0 && !recrutes.cloud) notes.push("Aucun agent cloud recruté : les places cloud resteront vides " +
+                                                  "(recrutez-en ci-dessous).");
+    notes.push("Chaque place est tenue par un agent recruté : pour plusieurs tâches d'un même rôle en même temps, " +
+               "il faut plusieurs agents de ce rôle. Une place locale attend que la charge de l'ordinateur le permette ; " +
+               "une place cloud non. Les tâches qui mènent à une validation passent d'abord ; rien ne démarre après une " +
+               "validation qui vous attend.");
+  }
   const attente = etat?.attente_validation?.texte;
-  return {locaux, cloud, recrutes, notes, attente: typeof attente === "string" && attente.trim() ? attente : null};
+  return {locaux, cloud, recrutes, notes, polyvalent, attente: typeof attente === "string" && attente.trim() ? attente : null};
 }
 
 // La partie « Parallélisme du projet », en bas de l'onglet : deux nombres et « Enregistrer » (si l'on peut agir).
@@ -287,7 +297,7 @@ export function partieParallelisme(ctx) {
   const r = resumeParallelisme(ctx.etat);
   const bloc = el("div", "parallelisme");
   bloc.append(el("div", "carte-sous-titre", "Parallélisme du projet"));
-  bloc.append(el("p", "note", `Agents recrutés : ${r.recrutes.locaux} locaux, ${r.recrutes.cloud} cloud.`));
+  bloc.append(el("p", "note", `${r.polyvalent ? "Agents" : "Agents recrutés"} : ${r.recrutes.locaux} locaux, ${r.recrutes.cloud} cloud.`));
   const champ = (libelle, valeur, [bas, haut]) => {
     const label = el("label", "parallelisme-champ");
     const input = document.createElement("input");
@@ -352,7 +362,7 @@ export function resumeRecrutement(etat) {
   let raisonCloud = null;
   if (!github) raisonCloud = rec.cloud_impossible || "Le projet n'est pas sur GitHub.";
   else if (!places.cloud) raisonCloud = "Aucune place cloud sans agent : augmentez « Agents cloud en même temps ».";
-  return {roles: Array.isArray(rec.roles) ? rec.roles : [], places, github, raisonCloud,
+  return {polyvalent: rec.polyvalent === true, roles: Array.isArray(rec.roles) ? rec.roles : [], places, github, raisonCloud,
           cloudPossible: raisonCloud === null, propositions: Array.isArray(rec.propositions) ? rec.propositions : [],
           parLieu: LIEUX_AUTO.reduce((o, k) => ({...o, [k]: Array.isArray(rec.propositions_par_lieu?.[k]) ? rec.propositions_par_lieu[k]
                                                                   : (k === "mieux" && Array.isArray(rec.propositions) ? rec.propositions : [])}), {}),
@@ -446,7 +456,7 @@ function boutonDemande(ctx, libelle, fabrique, erreur) {
 // dépôt Git (sans GitHub, pas d'agent cloud : « Créer le dépôt Git »).
 export function partieRecrutement(ctx) {
   const r = resumeRecrutement(ctx.etat);
-  if (!r) return null;
+  if (!r || r.polyvalent) return null;      // un projet polyvalent : l'équipe suit les places, rien à recruter
   const agir = !!(ctx.etat?.agir && ctx.barre?.demander);
   const bloc = el("div", "recrutement");
   bloc.append(el("div", "carte-sous-titre", "Recruter des agents"));

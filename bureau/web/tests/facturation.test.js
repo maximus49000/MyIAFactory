@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
         limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot, PLAFOND_PAR_DEFAUT, REGLE_PLAFOND,
-        ligneApercu} from "../ui/facturation.js";
+        ligneApercu, partieRecrutement} from "../ui/facturation.js";
 
 const REC = (extra = {}) => ({recrutement: {
   roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
@@ -196,4 +196,22 @@ test("lieu de la répartition : Cloud et Local limités à leurs places, avec ce
   // Un relevé d'avant (sans propositions_par_lieu) : « au mieux » garde les propositions, cloud/local rien.
   assert.equal(apercuAuto(resumeRecrutement(REC()), 2).length, 2);
   assert.deepEqual(apercuAuto(resumeRecrutement(REC()), 2, "cloud"), []);
+});
+
+test("bloc recruter caché si polyvalent : l'équipe suit les places, la note le dit", () => {
+  const poly = {agents_locaux_max: 2, agents_cloud_max: 1, recrutement: {polyvalent: true, roles: [], places: {cloud: 0, locaux: 0},
+    propositions: [], notes: [], depot: {git: true, github: true, url: null, creable: false}, cloud_impossible: null},
+    agents: [{id: "a1", lieu: "local"}, {id: "a2", lieu: "local"}, {id: "a3", lieu: "cloud"}]};
+  assert.equal(resumeRecrutement(poly).polyvalent, true);
+  assert.equal(partieRecrutement({etat: poly}), null);
+  const r = resumeParallelisme(poly);
+  assert.equal(r.polyvalent, true);
+  assert.deepEqual(r.recrutes, {locaux: 2, cloud: 1});
+  assert.ok(r.notes.some((n) => n.includes("Chaque place est un agent polyvalent.")));
+  assert.ok(!r.notes.some((n) => /Aucun agent cloud recruté|plusieurs agents de ce rôle/.test(n)));
+  // un projet à l'ancienne : le bloc et les notes d'avant
+  const ancien = resumeParallelisme({agents_locaux_max: 2, agents_cloud_max: 1, ...REC(), agents: []});
+  assert.equal(ancien.polyvalent, false);
+  assert.equal(resumeRecrutement(REC()).polyvalent, false);
+  assert.match(ancien.notes.join(" "), /plusieurs agents de ce rôle/);
 });

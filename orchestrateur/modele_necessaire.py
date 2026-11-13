@@ -129,7 +129,7 @@ def possibles(fiches, role, modele):
     dans leur ordre : ils prennent n'importe quel métier et n'ont pas de plafond. Un projet sans agent polyvalent : rien
     ne change."""
     du_role = [x for x in fiches if x.get("role") and x["role"] == role]
-    polyvalents = [x for x in fiches if not x.get("role")]
+    polyvalents = [x for x in fiches if not x.get("role") and not x.get("retrait_prevu")]   # un retrait prévu n'est plus choisi
     if not modele:
         return du_role + polyvalents
     return sorted((x for x in du_role if rang(x.get("modele")) >= rang(modele)),

@@ -47,7 +47,7 @@ def de_l_etape(e, fiches=()):
     n = rc._nature(f"{e.get('nom') or ''} {e.get('id') or ''}") or rc._nature(str(e.get("role") or ""))
     if n:
         return {"modele": n[0], "source": "deduit", "raison": f"déduit de l'étape : {n[1]}"}
-    modele, raison = rc.modele_du_role([x for x in fiches if x.get("role") == e.get("role")])
+    modele, raison = rc.modele_du_role([x for x in fiches if x.get("role") and x["role"] == e.get("role")])
     return {"modele": modele, "source": "role", "raison": f"nature de l'étape inconnue : {raison}"}
 
 
@@ -78,7 +78,7 @@ def de_la_tache(f, t, fiches, fonctionnalites=()):
     if isinstance(montee, dict) and isinstance(montee.get("a"), str) and montee["a"].strip():
         m.update(modele=nom(montee["a"]) if rang(montee["a"]) < len(MODELES) else montee["a"], source="montee",
                  raison=f"monté depuis {montee.get('de') or '?'} : {montee.get('raison') or 'montée de modèle'}")
-    du_role = [x for x in fiches if x.get("role") == t.get("role")]
+    du_role = [x for x in fiches if x.get("role") and x["role"] == t.get("role")]   # un polyvalent n'a pas de plafond
     if du_role:
         haut = max((x["modele"] for x in du_role), key=rang)
         if rang(haut) < rang(m["modele"]):
@@ -120,8 +120,12 @@ def estime(e, agents):
 
 def possibles(fiches, role, modele):
     """Les fiches du rôle dont le plafond suffit au modèle nécessaire, le plus petit plafond d'abord (à égalité, l'ordre
-    des fiches) ; sans modèle, toutes les fiches du rôle dans leur ordre."""
-    du_role = [x for x in fiches if x.get("role") == role]
+    des fiches) ; sans modèle, toutes les fiches du rôle dans leur ordre. Puis les agents polyvalents (fiche sans rôle),
+    dans leur ordre : ils prennent n'importe quel métier et n'ont pas de plafond. Un projet sans agent polyvalent : rien
+    ne change."""
+    du_role = [x for x in fiches if x.get("role") and x["role"] == role]
+    polyvalents = [x for x in fiches if not x.get("role")]
     if not modele:
-        return du_role
-    return sorted((x for x in du_role if rang(x.get("modele")) >= rang(modele)), key=lambda x: rang(x.get("modele")))
+        return du_role + polyvalents
+    return sorted((x for x in du_role if rang(x.get("modele")) >= rang(modele)),
+                  key=lambda x: rang(x.get("modele"))) + polyvalents

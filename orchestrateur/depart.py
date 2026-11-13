@@ -22,12 +22,20 @@ def monter(modele):
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 
-def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None):
+def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None):
     """(clé, raison) du premier spécialiste du rôle sans tâche active, au lieu demandé, dont le plafond (le modèle de sa
     fiche) suffit au `modele` nécessaire de la tâche : le plus petit plafond suffisant d'abord (il fera tourner la tâche
     sur ce modèle, jamais au-dessus de son plafond). Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.
     Quand `agents_locaux_max` tâches actives sont déjà tenues par des agents locaux, aucun agent local n'est rendu
-    (les agents cloud ne comptent pas dans la limite et ne la subissent pas)."""
+    (les agents cloud ne comptent pas dans la limite et ne la subissent pas).
+    Après les spécialistes du rôle viennent les agents polyvalents (fiche sans rôle) : n'importe lequel, libre, au lieu
+    demandé, sans plafond. `lieu_reserve` : le lieu que le métier de la tâche impose (`Lieu : local` de son brief) ; la
+    tâche attend alors une place de ce lieu."""
+    reserve = lieu_reserve if lieu_reserve in ("local", "cloud") else None
+    if reserve and lieu and lieu != reserve:
+        return None, (f"le métier {role} se fait en local : la tâche attend une place locale" if reserve == "local"
+                      else f"le métier {role} se fait dans le cloud : la tâche attend une place cloud")
+    lieu = lieu or reserve
     occupes = {t.get("agent") for t in taches if t.get("active") and t.get("agent")}
     locales = {f["cle"] for f in fiches if f["lieu"] == "local"}
     limite = (agents_locaux_max is not None

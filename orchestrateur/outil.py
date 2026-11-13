@@ -3096,11 +3096,36 @@ def cmd_depot(ctx, e):
     return r
 
 
+def lieu_reserve(ctx, role, fiches_):
+    """Le lieu que le métier `role` impose (`Lieu : local` ou `cloud` de son brief), seulement dans un projet qui a des
+    agents polyvalents (un projet à l'ancienne choisit comme avant) ; `None` sinon, ou si le brief est illisible."""
+    if not any(fi.est_polyvalente(x) for x in fiches_) or not isinstance(role, str) or not depart._ROLE_SUR.match(role):
+        return None
+    try:
+        m = metiers.lire_metier(Path(ctx.f["fiches"]) / "briefs", role)
+    except (metiers.MetierInvalide, OSError):
+        return None
+    return m["lieu"] if m and m["lieu"] in ("local", "cloud") else None
+
+
+MODELE_SANS_METIER = "Sonnet"   # un agent polyvalent, une tâche sans modèle d'étape ni modèle de métier
+
+
+def modele_du_metier(ctx, role):
+    """Le modèle par défaut du métier (`Modèle : …` de son brief), sinon Sonnet."""
+    try:
+        m = metiers.lire_metier(Path(ctx.f["fiches"]) / "briefs", role) \
+            if isinstance(role, str) and depart._ROLE_SUR.match(role) else None
+    except (metiers.MetierInvalide, OSError):
+        m = None
+    return (m or {}).get("modele") or MODELE_SANS_METIER
+
+
 def cmd_agent_libre(ctx, e):
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
     fiches_ = _fiches_avec_sessions(ctx)
     cle, raison = depart.agent_libre(fiches_, ctx.suivi.lire()["taches"], role, modele, lieu,
-                                     ctx.f["agents_locaux_max"])
+                                     ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_))
     sortie = {"agent": cle, "raison": raison}
     if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
@@ -3218,20 +3243,29 @@ def _modele_et_lieu(ctx, s, fiches_, t):
     rôle) et le lieu de l'agent qui la prendrait (le plus petit plafond suffisant). Sinon (cadrage, prototype…) : ceux
     de son agent, sinon de l'agent libre de son rôle (à défaut, d'une fiche du rôle)."""
     m = mn.de_la_tache(ctx.f, t, fiches_, s.get("fonctionnalites") or [])
+    reserve = lieu_reserve(ctx, t.get("role"), fiches_)
+    f = fi.trouver(fiches_, t["agent"]) if t.get("agent") else None
     if m is not None:
-        f = fi.trouver(fiches_, t["agent"]) if t.get("agent") else None
-        if f:
+        if f and not fi.est_polyvalente(f):
             return mn.plafonne(m["modele"], f["modele"]), f["lieu"]
         possibles = mn.possibles(fiches_, t.get("role"), m["modele"])
-        return (m["modele"], possibles[0]["lieu"]) if possibles else None
-    if t.get("agent"):
-        f = fi.trouver(fiches_, t["agent"])
-        if f:
-            return f["modele"], f["lieu"]
-    candidates = [f for f in fiches_ if f["role"] == t.get("role")]
-    voulues = [f for f in candidates if f["modele"] == t.get("modele_depart")]
+        if f:     # un agent polyvalent : le modèle de la tâche, sans plafond
+            return m["modele"], reserve or f["lieu"]
+        return (m["modele"], possibles[0]["lieu"] if possibles[0]["role"] else reserve or possibles[0]["lieu"]) \
+            if possibles else None
+    if f and not fi.est_polyvalente(f):
+        return f["modele"], f["lieu"]
+    if f:     # un agent polyvalent sans modèle d'étape (cadrage, prototype…) : le modèle du métier, sinon Sonnet
+        return modele_du_metier(ctx, t.get("role")), reserve or f["lieu"]
+    candidates = [x for x in fiches_ if x["role"] and x["role"] == t.get("role")]
+    voulues = [x for x in candidates if x["modele"] == t.get("modele_depart")]
     candidates = voulues or candidates
-    return (candidates[0]["modele"], candidates[0]["lieu"]) if candidates else None
+    if candidates:
+        return candidates[0]["modele"], candidates[0]["lieu"]
+    polyvalents = [x for x in fiches_ if fi.est_polyvalente(x)]
+    if not polyvalents:
+        return None
+    return modele_du_metier(ctx, t.get("role")), reserve or polyvalents[0]["lieu"]
 
 
 def cmd_lots(ctx, e):

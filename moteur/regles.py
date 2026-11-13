@@ -37,6 +37,7 @@ from orchestrateur.memoire import normaliser_mot
 from orchestrateur import depart as dep
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
+from orchestrateur import metiers
 from orchestrateur import modele_necessaire as mn
 from orchestrateur import outil
 from orchestrateur import regles_projet as rp
@@ -241,7 +242,7 @@ def _role_cadrage(projet, fid=None):
     première étape de production du workflow de la fonctionnalité (un projet sans agent dédié : le spécialiste cadre
     lui-même)."""
     agents = _etat(projet)["agents"]
-    if any(a["role"] == ROLE_CADRAGE for a in agents):
+    if any(a["role"] == ROLE_CADRAGE for a in agents) or _metier_tenu(projet, agents, ROLE_CADRAGE):
         return ROLE_CADRAGE
     metier = next((a["role"] for a in agents if a.get("service") == "metier"), None)
     return metier or _role_production(projet, fid, agents)
@@ -252,7 +253,13 @@ def _role_production(projet, fid=None, agents=None):
     production = wf.etapes_d_agent(_production(projet, fid))
     if production:
         return production[0]["role"]
-    return next((a["role"] for a in agents if a["role"] != ROLE_RELECTURE), ROLE_CADRAGE) if agents else ROLE_CADRAGE
+    return next((a["role"] for a in agents if a["role"] and a["role"] != ROLE_RELECTURE), ROLE_CADRAGE) \
+        if agents else ROLE_CADRAGE
+
+
+def _metier_tenu(projet, agents, role):
+    """Vrai si un agent polyvalent peut tenir le métier : le projet a des agents polyvalents et le métier a son brief."""
+    return any(_polyvalent(a) for a in agents) and _metier(projet, role) is not None
 
 
 def _colonne_du_role(projet, role, fid=None):
@@ -1587,6 +1594,15 @@ def _sur_session_cloud(projet, demande, etat):
     if lue:
         _m(etat, "sessions_cloud")[agent] = lue["session"]    # les tâches suivantes de l'agent y seront envoyées
         suivie = next((t for t in court["taches"] if t["id"] == d.get("tache") and t["colonne"] != "fait"), None)
+    attend_amont = suivie is not None and not _amont_pret(projet, etat, suivie, court)
+    if attend_amont:
+        # l'amont attend une validation du Directeur : la tâche n'est pas relevée maintenant ; elle repart par le départ
+        # ordinaire (vers la session inscrite de l'agent) une fois l'amont prêt
+        lancer(projet, "tache", {"id": suivie["id"], "bloquee": None, "lot": None, "journal": [
+            "Session cloud inscrite par le Directeur ; la tâche attend une validation en amont avant de partir."]})
+        if suivie["id"] not in _m(etat, "a_lancer", list):
+            etat["a_lancer"].append(suivie["id"])
+        suivie = None
     if suivie is not None:
         # La session créée à la main porte le départ de cette tâche : le moteur la relève, sans en lancer d'autre.
         tid = suivie["id"]
@@ -1605,7 +1621,8 @@ def _sur_session_cloud(projet, demande, etat):
     # Les autres tâches de cet agent bloquées faute de session cloud repartent : le moteur relance lui-même la session
     # (ou, s'il ne le peut pas, les envoie à la session inscrite).
     reprises = [t for t in court["taches"] if t.get("agent") == agent and t["colonne"] != "fait"
-                and ERREUR_CLOUD in str(t.get("bloquee") or "") and t is not suivie]
+                and ERREUR_CLOUD in str(t.get("bloquee") or "") and t is not suivie
+                and not (attend_amont and t["id"] == d.get("tache"))]
     for t in reprises:
         # sortie de son lot (une tâche en lot ne repart jamais seule) et remise dans les départs à faire
         lancer(projet, "tache", {"id": t["id"], "bloquee": None, "lot": None,
@@ -1616,8 +1633,9 @@ def _sur_session_cloud(projet, demande, etat):
     projet._cloud_raison = (None, 0.0)
     _terminer(projet, {"demande": demande["id"]}, "La session est inscrite."
               + (f" La tâche « {suivie['titre']} » y est relevée." if suivie is not None else "")
-              + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else ""))
-    return _demarrer_en_attente(projet, etat, None) if reprises else []
+              + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else "")
+              + (" La tâche attend une validation en amont." if attend_amont else ""))
+    return _demarrer_en_attente(projet, etat, None) if reprises or attend_amont else []
 
 
 def _tache_a_reprendre(t):
@@ -1949,7 +1967,8 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     montee = None
     if tache is None:
         tid = lancer(projet, "tache", {"titre": f"Cadrage : {f['nom']}", "fonctionnalite": fid,
-                                       "role": fiche.get("role") or ROLE_CADRAGE,
+                                       "role": fiche.get("role") or (_role_cadrage(projet, fid) if fiche
+                                                                     else ROLE_CADRAGE),
                                        "colonne": "cadrage", "agent": agent, "etape": "cadrage", "active": False,
                                        "montee": montee})["id"]
     else:
@@ -2238,6 +2257,66 @@ def _avant_une_validation(t, barrieres):
     return r is not None and r < b["premiere"]
 
 
+def _amont_pret(projet, etat, tache, court=None, barrieres=None, cache=None):
+    """Vrai seulement si rien n'attend en amont de la tâche : ses dépendances (`depend_de`) sont faites ; pour une étape
+    du flux d'un élément, les étapes d'avant de cet élément sont faites (une tâche bloquée ne retient rien, comme dans
+    `_barrieres`), aucune validation du Directeur (tâche `validation:*` ou décision `valider_etape`) n'est ouverte en
+    amont, et les barrières de la fonctionnalité sont levées. Appelé par tous les chemins de départ (lot, `a_lancer`,
+    retour, reprise après redémarrage, session cloud) : une place libre ne suffit pas. `barrieres` : ce que rend
+    `_barrieres` (relu sinon) ; `cache` : un dict gardé d'un appel à l'autre (les rangs du workflow par fonctionnalité)."""
+    court = court if court is not None else _etat(projet)
+    sortie, retenues = barrieres if barrieres is not None else _barrieres(projet, court)
+    if tache["id"] in retenues:
+        return False
+    ouvertes = {t["id"] for t in court["taches"]}      # l'état court ne porte que les tâches pas encore faites
+    if any(d in ouvertes and d != tache["id"] for d in tache.get("depend_de") or []):
+        return False
+    fid, eid = tache.get("fonctionnalite"), tache.get("element")
+    if not (str(tache.get("etape") or "").startswith(ETAPES_DE_FLUX) and fid and eid):
+        return True
+    cache = cache if cache is not None else {}
+    if fid not in cache:
+        cache[fid] = (sortie.get(fid) or {}).get("rangs") or {s["id"]: k for k, s in enumerate(_production(projet, fid))}
+    rangs = cache[fid]
+    rang = _rang_de_tache(tache, rangs)
+    for t in court["taches"]:
+        if (t["id"] == tache["id"] or t.get("fonctionnalite") != fid or t.get("element") != eid
+                or t["colonne"] == "fait" or t.get("bloquee")):
+            continue
+        r = _rang_de_tache(t, rangs)
+        if r is not None and r < rang:
+            return False      # une étape d'avant de l'élément, ou sa validation, n'est pas faite
+    for d in court.get("decisions") or []:
+        if (d.get("genre") == GENRE_VALIDATION and d.get("fonctionnalite") == fid
+                and (d.get("element") or {}).get("id") == eid and rangs.get(d.get("etape"), len(rangs)) < rang):
+            return False      # le Directeur n'a pas encore validé une étape d'avant
+    return True
+
+
+def _polyvalent(agent):
+    """Vrai pour un agent polyvalent (sa fiche n'a pas de rôle) : il prend n'importe quelle tâche."""
+    return isinstance(agent, dict) and not agent.get("role")
+
+
+def _metier(projet, role):
+    """Le métier (`briefs/<role>.md`, voir `orchestrateur.metiers`), ou `None` (pas de brief, brief illisible)."""
+    if not isinstance(role, str) or not dep._ROLE_SUR.match(role):
+        return None
+    try:
+        return metiers.lire_metier(Path(_factory(projet)["fiches"]) / "briefs", role)
+    except (metiers.MetierInvalide, OSError):
+        return None
+
+
+def _lieu_reserve(projet, court, role):
+    """`local` ou `cloud` quand le métier du rôle impose son lieu (`Lieu :` de son brief), dans un projet qui a des agents
+    polyvalents ; `None` sinon (un projet à l'ancienne choisit comme avant)."""
+    if not any(_polyvalent(a) for a in court["agents"]):
+        return None
+    m = _metier(projet, role)
+    return m["lieu"] if m and m["lieu"] in ("local", "cloud") else None
+
+
 def _validation_en_attente(projet, court):
     """Le nom de la première validation qui attend le Directeur (étape de validation d'un élément, cahier, méthode),
     ou `None`."""
@@ -2268,8 +2347,9 @@ def _noter_les_places_libres(projet, etat):
     if validation is None:
         return
     fac = _factory(projet)
-    _, retenues = _barrieres(projet, court, fac)
-    pretes = [t for t in _attente(court, None, etat) if t["id"] not in retenues and t.get("etape") != ETAPE_INSTALLATION]
+    barrieres, cache = _barrieres(projet, court, fac), {}
+    pretes = [t for t in _attente(court, None, etat) if t.get("etape") != ETAPE_INSTALLATION
+              and _amont_pret(projet, etat, t, court, barrieres, cache)]
     if pretes:
         return
     places = _places(projet, court, fac)
@@ -2293,7 +2373,8 @@ def _demarrer_en_attente(projet, etat, fid):
         return []
     fac = _factory(projet)
     barrieres, retenues = _barrieres(projet, court, fac)
-    attente = [t for t in attente if t["id"] not in retenues]
+    cache = {}
+    attente = [t for t in attente if _amont_pret(projet, etat, t, court, (barrieres, retenues), cache)]
     if not attente:
         return []
     places = _places(projet, court, fac)
@@ -2322,15 +2403,24 @@ def _demarrer_en_attente(projet, etat, fid):
         if not places["locaux"] and not places["cloud"]:
             break
         premiere = par_id[lot["ids"][0]]
-        agent = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
+        # le lieu que les métiers du lot imposent (projet polyvalent seulement : `Lieu : local` d'un brief)
+        reserves = {_lieu_reserve(projet, court, par_id[i].get("role")) for i in lot["ids"]}
+        local_ok = places["locaux"] > 0 and "cloud" not in reserves
+        cloud_ok = places["cloud"] > 0 and "local" not in reserves
+        voulu = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
             else None
-        if agent is not None:
-            libre = next((a for a in court["agents"] if a["cle"] == agent), {})
-            if not libre.get("libre", False) or not places["cloud" if libre.get("lieu") == "cloud" else "locaux"]:
-                continue
-        else:
-            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"],
-                                   local_ok=places["locaux"] > 0, cloud_ok=places["cloud"] > 0)
+        ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
+        if voulu is None and ancien is not None and _polyvalent(ancien) and premiere.get("debut"):
+            voulu = ancien["cle"]      # une tâche reprise revient de préférence au même agent polyvalent
+        agent = None
+        if voulu is not None:
+            libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
+            if libre.get("libre", False) and (cloud_ok if libre.get("lieu") == "cloud" else local_ok):
+                agent = voulu
+            elif not (libre and _polyvalent(libre) and premiere.get("etape") != "cadrage"):
+                continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
+        if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
+            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok)
             if agent is None:
                 continue
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
@@ -2355,7 +2445,7 @@ def installations_pretes(projet, etat):
     l'a voulu : son installation attend la reprise, et ne retient pas les autres projets) ou s'il n'a aucun agent
     d'installation (rien ne pourrait partir : la pause ne durerait pas moins que toujours)."""
     court = _etat(projet)
-    if court["pause"] or not any(a["role"] == ROLE_ENVIRONNEMENT for a in court["agents"]):
+    if court["pause"] or not any(a["role"] == ROLE_ENVIRONNEMENT or _polyvalent(a) for a in court["agents"]):
         return []
     return [t for t in _attente(court, None, etat) if t.get("etape") == ETAPE_INSTALLATION]
 
@@ -2376,7 +2466,7 @@ def demarrer_installation(projet, etat, tid):
     agent ([] si elle n'est plus prête ou si l'agent d'installation n'est pas libre)."""
     court = _etat(projet)
     t = next((x for x in installations_pretes(projet, etat) if x["id"] == tid), None)
-    if t is None:
+    if t is None or not _amont_pret(projet, etat, t, court):
         return []
     if tid in _m(etat, "a_lancer", list):
         agent = t.get("agent")
@@ -2405,7 +2495,7 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     # moindre, et la fait tourner sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus.
     # Le plus petit plafond suffisant d'abord.
     candidats = [a for a in mn.possibles(court["agents"], role, modele) if a["lieu"] == "cloud" and a["libre"]]
-    if not clouds or not candidats:
+    if not clouds or not candidats or _lieu_reserve(projet, court, role) == "local":
         return None
     raison = projet.cloud_raison()
     if raison is None:
@@ -2439,6 +2529,9 @@ def _modele_de_depart(projet, court, agent, t, modele_voulu=None):
     son modèle nécessaire, sinon celui de la fiche ; jamais au-dessus du modèle de la fiche, qui est le plafond de
     l'agent, local comme cloud."""
     fiche = next(a for a in court["agents"] if a["cle"] == agent)
+    if _polyvalent(fiche):      # un agent polyvalent n'a pas de plafond : le modèle de la tâche
+        return mn.nom((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
+                      or "Sonnet")
     voulu = ((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
              or fiche["modele"])
     return mn.plafonne(voulu, fiche["modele"])
@@ -2457,6 +2550,8 @@ def _partir(projet, etat, court, agent, ids, lot, par_id, modele_voulu=None):
         matiere += "\n\n" + supp
     if ids[0] in etat["a_lancer"]:
         etat["a_lancer"].remove(ids[0])
+    if (_m(etat, "cloud").get(ids[0]) or {}).get("agent") not in (None, agent):
+        etat["cloud"].pop(ids[0])      # reprise par un autre agent : la session de l'ancien n'est pas la sienne
     etat["departs"][ids[0]] = {"agent": agent, "taches": list(ids), "matiere": matiere, "modele": modele, "lot": lot,
                                "suite": supp}
     etat["en_cours"].add(ids[0])
@@ -3632,7 +3727,8 @@ def _passages_de(texte, mots):
 
 def _sans_relecteur(projet):
     """Aucun agent relecteur : une étape du flux (un contrôle, des tests, le plus souvent) tient lieu de relecture."""
-    return not any(a["role"] == ROLE_RELECTURE for a in _etat(projet)["agents"])
+    agents = _etat(projet)["agents"]
+    return not (any(a["role"] == ROLE_RELECTURE for a in agents) or _metier_tenu(projet, agents, ROLE_RELECTURE))
 
 
 def _est_de_qualite(etape, services):
@@ -3775,6 +3871,7 @@ def orphelines(projet, etat):
     if court["pause"]:
         return []
     actions, relancees = [], _m(etat, "relancees", set)
+    barrieres, cache = None, {}
     for t in court["taches"]:
         etape = str(t.get("etape") or "")
         if (not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
@@ -3787,6 +3884,14 @@ def orphelines(projet, etat):
             refus = _refus_sans_suite(projet, t)      # un message refusé par l'outil, perdu, la tâche muette
             if not refus:
                 continue
+        barrieres = barrieres or _barrieres(projet, court)
+        if not _amont_pret(projet, etat, t, court, barrieres, cache):
+            # l'amont attend le Directeur : la tâche ne repart pas ; rendue inactive, elle repartira par le départ
+            # ordinaire une fois l'amont prêt (et son agent n'est plus tenu)
+            if t["active"]:
+                lancer(projet, "tache", {"id": t["id"], "active": False, "journal": [
+                    "Le moteur a repris : l'agent avait disparu ; la tâche attend une validation en amont."]})
+            continue
         relancees.add(t["id"])
         ids = [t["id"]]
         if isinstance(t.get("lot"), dict):

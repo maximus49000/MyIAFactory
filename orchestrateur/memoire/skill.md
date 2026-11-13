@@ -477,3 +477,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Avant une action qui fait apparaître une fenêtre système, poser la question avec son choix recommandé et attendre la réponse, même si l'accord de principe est déjà donné.
+
+## S80 — Quand une commande shell vers un outil externe est refusée s
+Rôles : dev
+Date : 2026-11-13
+
+Quand une commande shell vers un outil externe est refusée sans approbation possible, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.

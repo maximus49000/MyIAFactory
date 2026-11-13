@@ -179,3 +179,21 @@ Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test
   même au travail : si cela se voit, poser `Service :` dans le brief du métier). Les leçons « à valider » d'un métier se
   voient dans le dossier du service (onglet Connaissances) mais le Directeur les juge toujours dans la liste des leçons du
   relevé. Non vérifié dans un navigateur.
+
+**Après la phase D : agents retirés gardés (2026-11-13, Sonnet 5.5)** — demande du Directeur, sans appel réel ni navigateur.
+
+- **Règle.** Un agent retiré de l'équipe (places baissées, reprise) n'est plus supprimé s'il a au moins une tâche au suivi
+  (faite ou non) : sa fiche polyvalente porte `Retrait : fait` (`retire` à la lecture ; clé, prénom, lieu, session gardés). Sans
+  aucune tâche, la fiche est supprimée comme avant. Un retrait prévu devient fait à la fin de la tâche. Un retiré n'est jamais
+  choisi, jamais compté (`equipe_pure`, `ajuster_equipe`, `modele_necessaire.possibles`, `_agents`), jamais réactivé : monter
+  une place crée un NOUVEL agent (clé et prénom des retirés restent pris).
+- **Ordre du retrait.** `ajuster_equipe(..., avec_taches)` retire d'abord les agents libres sans tâche (supprimés), puis ceux qui
+  ont un historique (gardés) ; sans session cloud d'abord et derniers d'abord ne départagent qu'à l'intérieur de chaque groupe.
+  La reprise garde de même d'abord les agents au travail, puis ceux qui ont des tâches. Code : `outil.retirer_l_agent`.
+- **Reprise rejouée.** `reprise_polyvalents.restaurer_les_retires` : pour un projet déjà repris, recrée depuis
+  `<fiches>/avant-polyvalents/<clé>.md` la fiche retirée de chaque agent à tâches dont la fiche manque (rien pour ceux sans tâche) ;
+  compte rendu au journal ; rejouable sans effet, aucune tâche touchée.
+- **Relevé / état / page.** Titulaire `retire: true` ; `etat.anciens_agents: [{id, prenom, couleur, lieu}]` (hors `agents`, les
+  tâches gardent leur `agent`) ; page : `prenomAgent`/`nomAgent`, section « Anciens agents » de la direction, fiche « Retiré de
+  l'équipe » avec tâches réalisées ; `tachesDuService` garde leurs tâches (par `t.service`, ou `service` de l'ancien agent).
+- **Non vérifié.** Page jamais ouverte dans un navigateur ; reprise jamais lancée sur un vrai projet.

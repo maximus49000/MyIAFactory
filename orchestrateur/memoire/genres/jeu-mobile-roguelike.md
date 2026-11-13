@@ -434,3 +434,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Une capture plein écran peut sortir plus petite que la résolution cible à cause de la barre du système : vérifier la taille de chaque image avant de la rendre.
+
+## G73 — Un panneau ouvert par-dessus un écran peut recouvrir des tex
+Rôles : dev
+Date : 2026-11-13
+
+Un panneau ouvert par-dessus un écran peut recouvrir des textes et des cartes sans qu'aucun test ne le voie : relire chaque capture avant de rendre.

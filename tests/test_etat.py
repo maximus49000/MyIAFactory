@@ -403,7 +403,8 @@ class TestEtatV4(unittest.TestCase):
         # un modèle sans donnée (ou un coût illisible) : pas de valeur ; l'étape « Son » demande Sonnet (déduit de sa
         # nature), une étape de nature inconnue prend le modèle de l'agent du rôle
         organisation["flux"][2] = {"id": "poesie", "nom": "Poésie", "role": "barde", "service": "dev"}
-        organisation["agents"][1].update(role="barde", modele="Fable")
+        # (Fable est compté Opus dans une estimation : un nom inventé tient lieu de modèle sans donnée)
+        organisation["agents"][1].update(role="barde", modele="Mythos")
         e = self.etat(modif=avec)
         self.assertNotIn("co2", e["decisions_projet"][0]["organisation"]["cout"])
 

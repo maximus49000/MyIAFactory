@@ -6,7 +6,7 @@ import {tronquer, dateFr, euros} from "./texte.js";
 import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
-  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue} from "./actions.js";
+  demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
 import {rendreOrganisation} from "./organisation.js";
@@ -384,6 +384,20 @@ function decisionOutilAgent(ctx, d) {
   return li;
 }
 
+// « Tâches qui demandent Fable » : la tâche et la raison (la justification de l'étape, ou la montée depuis Opus), puis
+// « Autoriser Fable » (pour cette tâche seulement) ou « Refuser : Opus ». Rien ne part sur Fable sans ce clic.
+function decisionFableTache(ctx, d) {
+  const li = el("li", "decision-fable");
+  li.append(el("div", "decision-texte", d.texte));
+  if (plein(d.raison)) li.append(el("div", "lecon-meta", "Raison : " + d.raison));
+  if (!ctx.etat.agir) return li;
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(boutonDemande(ctx, "Autoriser Fable", "bouton", () => demandeFableTache(d, "autoriser")),
+    boutonDemande(ctx, "Refuser : Opus", "bouton secondaire", () => demandeFableTache(d, "refuser")));
+  li.append(rangee);
+  return li;
+}
+
 // « Demandes d'accord des agents » : l'agent, ce qu'il veut faire et pourquoi, ce que ça implique (fenêtres, branchement,
 // coût), le rappel de la règle quand il vise un appareil physique ; « J'accepte », « Je refuse » et une consigne facultative.
 function decisionAccordAgent(ctx, d) {
@@ -628,6 +642,9 @@ export function contenuDecisionsV4(ctx, contenu) {
       boutonDemande(ctx, libelle, classe, fabrique, avant)))));
   contenu.append(partie("Environnement du poste à compléter", "Aucun outil ne manque",
     d.environnements.map((x) => decisionEnvironnement(ctx, x))));
+  if (d.fables.length) {     // seulement quand il y en a : une tâche attend l'accord pour Fable
+    contenu.append(partie("Tâches qui demandent Fable", "", d.fables.map((x) => decisionFableTache(ctx, x))));
+  }
   contenu.append(partie("Demandes d'accord des agents", "Aucun agent n'attend votre accord",
     d.accords.map((x) => decisionAccordAgent(ctx, x))));
   contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",

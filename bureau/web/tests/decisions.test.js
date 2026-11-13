@@ -220,6 +220,20 @@ test("outil à ouvrir : sans programme à nommer, pas d'autorisation, mais « re
   assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [OUTIL]}).contenu).length, 0);
 });
 
+const FABLE = {id: "d7", genre: "fable_tache", tache: "t12", raison: "Une preuve que seul Fable mène à bien.",
+  texte: "La tâche « Preuve » demande Fable : l'autoriser ? Sans votre accord, elle part sur Opus."};
+
+test("tâche qui demande Fable : la raison, puis « Autoriser Fable » ou « Refuser : Opus »", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [FABLE]});
+  assert.match(contenu.textContent, /Tâches qui demandent Fable/);
+  assert.match(contenu.textContent, /seul Fable mène à bien/);
+  await bouton(contenu, "Autoriser Fable").auteurs.click[0]();
+  await bouton(contenu, "Refuser : Opus").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "fable_tache", decision: "d7", verdict: "autoriser"},
+    {type: "fable_tache", decision: "d7", verdict: "refuser"}]);
+  assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [FABLE]}).contenu).length, 0);
+});
+
 const ACCORD = {id: "a1", genre: "accord_agent", texte: "Atlas (livreur) demande votre accord, tâche « Livrer » : adb install de l'apk.",
   agent: "livreur", tache: "t9", quoi: "adb install de l'apk", partenaire: "aucun", cout: "0", pourquoi: "Tester sur le téléphone.",
   implique: "Brancher le téléphone, débogage USB.", appareil: true,

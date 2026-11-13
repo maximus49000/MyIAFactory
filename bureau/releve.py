@@ -25,7 +25,7 @@ ETAPES = ("cadrage", "cahier", "decoupage", "prototype", "methode", "serie", "te
 DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revoir", "reprendre_methode",
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
-                    "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire")
+                    "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire", "fable_tache")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -333,6 +333,7 @@ def points_de_decision(d):
 
 # Les trois choses que dit chaque demande de validation : ce qui doit marcher, ce qui n'est pas encore attendu, la
 # conclusion (conception de la fenêtre de validation, note « Ce que dit une validation »).
+MAX_RESUME_TACHE = 600       # le résumé d'une tâche : son objectif, son étape, la dernière consigne
 MAX_DOIT_MARCHER = 480      # une à trois phrases
 MAX_PAS_ENCORE = 480        # peut être vide : tout est attendu à ce stade
 MAX_CONCLUSION = 200        # une phrase
@@ -675,6 +676,9 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
                 erreurs.append(f"{nom} : la décision « {i} » : « regles_touchees » est une liste de règles {{id, texte}}.")
         elif d.get("genre") == "faire_chez_partenaire":
             _verifier_chez_partenaire(d, f"{nom} : la décision « {i} »", cles_agents, erreurs)
+        elif d.get("genre") == "fable_tache":
+            if not _texte_plein(d.get("tache")) or not _texte_plein(d.get("raison")):
+                erreurs.append(f"{nom} : la décision « {i} » : « tache » et « raison » sont obligatoires.")
         elif d.get("genre") == "organisation":
             _verifier_organisation(d, nom, erreurs)
         elif d.get("genre") == "valider_etape":
@@ -861,6 +865,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         for champ in ("element", "modele_depart"):
             if not _texte_ou_nul(t.get(champ)):
                 erreurs.append(f"Tâche « {i} » : « {champ} » doit être un texte.")
+        if not _texte_ou_nul(t.get("resume")) or len(t.get("resume") or "") > MAX_RESUME_TACHE:
+            erreurs.append(f"Tâche « {i} » : « resume » est un texte de {MAX_RESUME_TACHE} caractères au plus.")
         m = t.get("montee")
         if m is not None and (not _est_dict(m) or not all(_texte_plein(m.get(c)) for c in ("de", "a", "raison"))):
             erreurs.append(f"Tâche « {i} » : « montee » doit avoir « de », « a » et « raison » (textes non vides).")
@@ -1091,7 +1097,7 @@ def _verifier_recrutement(x, erreurs):
         erreurs.append(f"{q} : « depot.essai » demande « fait » (vrai ou faux) et « texte ».")
     if not _texte_ou_nul(x.get("cloud_impossible")):
         erreurs.append(f"{q} : « cloud_impossible » est un texte ou nul.")
-CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire")
+CHAMPS_V4_TACHE = ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume")
 
 
 def _normaliser_v4(n):

@@ -16,7 +16,8 @@ def est_validation(etape):
     return isinstance(etape, dict) and etape.get(CLE_VALIDATION) is True
 
 
-MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus")   # le modèle nécessaire d'une étape : jamais Fable
+# le modèle nécessaire d'une étape ; Fable n'y est qu'une proposition (la tâche attend l'accord du Directeur)
+MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
 
 
 def etape_ecrite(e):

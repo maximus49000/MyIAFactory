@@ -38,9 +38,11 @@ class Etape(unittest.TestCase):
         m = mn.de_l_etape(FLUX[4])
         self.assertEqual((m["modele"], m["source"]), ("Sonnet", "role"))
 
-    def test_modele_invalide_ignore_et_jamais_fable(self):
-        for mauvais in ("Fable", "GPT", "", None, 3):
+    def test_modele_invalide_ignore_et_fable_propose(self):
+        for mauvais in ("fable", "GPT", "", None, 3):
             self.assertNotEqual(mn.de_l_etape(dict(FLUX[0], modele=mauvais))["source"], "workflow")
+        # Fable : une proposition de l'étape (la tâche attendra l'accord du Directeur ; sans lui, Opus)
+        self.assertEqual(mn.de_l_etape(dict(FLUX[0], modele="Fable"))["modele"], "Fable")
         self.assertIsNone(mn.de_l_etape(FLUX[2]))        # une validation du Directeur n'a pas de modèle
 
     def test_rang_plafonne_et_nom(self):

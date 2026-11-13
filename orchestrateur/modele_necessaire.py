@@ -9,7 +9,11 @@ au plus son plafond (le modèle de sa fiche) et la fait tourner exactement sur c
 from orchestrateur import recrutement as rc
 from orchestrateur import workflows as wf
 
-MODELES = rc.MODELES                       # les modèles qu'une étape peut demander (jamais Fable)
+MODELES = rc.MODELES                       # les modèles qu'un outil choisit (jamais Fable)
+FABLE = "Fable"
+# Une étape (ou une montée depuis Opus) peut demander Fable : une proposition, jamais un départ sans l'accord du
+# Directeur pour cette tâche (décision `fable_tache`) ; sans accord, la tâche part sur Opus.
+MODELES_D_ETAPE = MODELES + (FABLE,)
 ORDRE = ("haiku", "sonnet", "opus", "fable")
 PLAFOND_PAR_DEFAUT = rc.PLAFOND_PAR_DEFAUT  # un nouvel agent : Opus (Fable seulement avec l'accord du Directeur)
 ETAPES_DE_FLUX = "flux:"
@@ -40,7 +44,7 @@ def de_l_etape(e, fiches=()):
     d'après `fiches`, Sonnet sans fiche)."""
     if not isinstance(e, dict) or wf.est_validation(e):
         return None
-    if isinstance(e.get("modele"), str) and e["modele"] in MODELES:
+    if isinstance(e.get("modele"), str) and e["modele"] in MODELES_D_ETAPE:
         j = e.get("justification")
         return {"modele": e["modele"], "source": "workflow",
                 "raison": j.strip() if isinstance(j, str) and j.strip() else "fixé avec le workflow"}
@@ -76,7 +80,7 @@ def de_la_tache(f, t, fiches, fonctionnalites=()):
     m = dict(m, ramene=False)
     montee = t.get("montee")
     if isinstance(montee, dict) and isinstance(montee.get("a"), str) and montee["a"].strip():
-        m.update(modele=nom(montee["a"]) if rang(montee["a"]) < len(MODELES) else montee["a"], source="montee",
+        m.update(modele=nom(montee["a"]), source="montee",
                  raison=f"monté depuis {montee.get('de') or '?'} : {montee.get('raison') or 'montée de modèle'}")
     du_role = [x for x in fiches if x.get("role") and x["role"] == t.get("role")]   # un polyvalent n'a pas de plafond
     if du_role:
@@ -108,14 +112,15 @@ def modeles_sur_les_etapes(flux, nouveaux):
 
 def estime(e, agents):
     """Le modèle d'une étape pour l'estimation d'un workflow pas encore en place : son modèle nécessaire (posé, sinon
-    déduit ; nature inconnue : celui du premier agent du rôle), ramené au plus haut plafond des `agents` du rôle. `None`
-    pour une validation, ou sans agent du rôle."""
+    déduit ; nature inconnue : celui du premier agent du rôle), ramené au plus haut plafond des `agents` du rôle ; Fable
+    est compté Opus (l'accord du Directeur n'est pas donné). `None` pour une validation, ou sans agent du rôle."""
     du_role = [a for a in agents if isinstance(a, dict) and a.get("role") == (e or {}).get("role")]
     m = de_l_etape(e)
     if m is None or not du_role:
         return None
     modele = m["modele"] if m["source"] != "role" else du_role[0].get("modele")
-    return plafonne(modele, max((a.get("modele") for a in du_role), key=rang))
+    modele = plafonne(modele, max((a.get("modele") for a in du_role), key=rang))
+    return "Opus" if rang(modele) >= rang(FABLE) else modele   # Fable compté Opus tant que l'accord n'est pas donné
 
 
 def possibles(fiches, role, modele):

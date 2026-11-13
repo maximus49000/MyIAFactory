@@ -2397,6 +2397,11 @@ def _demarrer_en_attente(projet, etat, fid):
     par_id = {t["id"]: t for t in attente}
     for t in solos:      # une correction, un retour… : le modèle de l'étape de son rôle ; un cadrage : celui de la fiche
         lots.append({"ids": [t["id"]], "modele": _modele_necessaire(projet, court, t), "lot": None})
+    # une tâche qui demande Fable part seule : l'accord du Directeur se donne tâche par tâche
+    lots = [x for lot in lots for x in ([{"ids": [i], "modele": lot["modele"], "lot": None} for i in lot["ids"]]
+                                        if len(lot["ids"]) > 1 and mn.rang(lot["modele"]) >= mn.rang(mn.FABLE)
+                                        else [lot])]
+    polyvalents = any(_polyvalent(a) for a in court["agents"])
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     for lot in lots:
@@ -2407,6 +2412,13 @@ def _demarrer_en_attente(projet, etat, fid):
         reserves = {_lieu_reserve(projet, court, par_id[i].get("role")) for i in lot["ids"]}
         local_ok = places["locaux"] > 0 and "cloud" not in reserves
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
+        if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
+            accord = premiere.get("fable_accordee")
+            if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
+                _demander_fable(projet, court, premiere)
+                continue
+            if accord is True:       # le cloud ne fait jamais tourner Fable : une place locale
+                cloud_ok = False
         voulu = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
             else None
         ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
@@ -2524,14 +2536,65 @@ def _modele_necessaire(projet, court, t):
     return m["modele"] if m else None
 
 
+def _modele_voulu(projet, court, t, modele_voulu=None):
+    """Le modèle que demande la tâche pour un agent polyvalent, sans plafond : sa montée, sinon le modèle voulu (celui du
+    lot), sinon son modèle nécessaire (étape, nature), sinon le modèle par défaut de son métier, sinon Sonnet. Peut valoir
+    Fable : une demande, que `_modele_de_depart` ne laisse partir qu'avec l'accord du Directeur."""
+    voulu = ((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
+             or (_metier(projet, t.get("role")) or {}).get("modele") or "Sonnet")
+    return mn.nom(voulu)
+
+
+GENRE_FABLE = "fable_tache"           # la décision de projet : « cette tâche demande Fable : l'autoriser ? »
+AUTORISER_FABLE, REFUSER_FABLE = "autoriser", "refuser"
+
+
+def _demander_fable(projet, court, t):
+    """Pose (une fois par tâche) la décision `fable_tache` au bureau de direction, avec la raison (la justification de
+    l'étape ou la montée). La tâche attend la réponse ; les autres continuent."""
+    if any(d.get("genre") == GENRE_FABLE and d.get("tache") == t["id"] for d in court.get("decisions") or []):
+        return
+    m = mn.de_la_tache(_factory(projet), t, court["agents"], court.get("fonctionnalites") or [])
+    raison = (m or {}).get("raison") or "le modèle demandé pour cette tâche"
+    lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": GENRE_FABLE, "tache": t["id"],
+                                "raison": raison[:300],
+                                "texte": f"La tâche « {t['titre']} » demande Fable : l'autoriser ? Sans votre accord, "
+                                         "elle part sur Opus."})
+
+
+def _sur_fable_tache(projet, demande, etat):
+    """La réponse du Directeur à « cette tâche demande Fable » : `autoriser` (la tâche part sur Fable, accord noté pour
+    elle seule) ou `refuser` (elle part sur Opus)."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == demande.get("decision") and x["genre"] == GENRE_FABLE),
+             None)
+    if d is None:
+        raise Refus("cette question n'existe plus")
+    verdict = demande.get("verdict")
+    if verdict not in (AUTORISER_FABLE, REFUSER_FABLE):
+        raise Refus(f"réponse inconnue : {verdict}")
+    accord = verdict == AUTORISER_FABLE
+    t = _tache(projet, d["tache"])
+    lancer(projet, "tache", {"id": t["id"], "fable_accordee": accord, "journal": [
+        "Fable accordé par le Directeur pour cette tâche." if accord else "Fable refusé par le Directeur : Opus."]})
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    _terminer(projet, {"demande": demande.get("id")}, f"« {t['titre']} » part sur Fable." if accord
+              else f"« {t['titre']} » part sur Opus.")
+    return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
+
+
+_SUR[GENRE_FABLE] = _sur_fable_tache
+
+
 def _modele_de_depart(projet, court, agent, t, modele_voulu=None):
     """Le modèle sur lequel l'agent fait tourner la tâche `t` : sa montée, sinon le modèle voulu (celui du lot), sinon
     son modèle nécessaire, sinon celui de la fiche ; jamais au-dessus du modèle de la fiche, qui est le plafond de
     l'agent, local comme cloud."""
     fiche = next(a for a in court["agents"] if a["cle"] == agent)
     if _polyvalent(fiche):      # un agent polyvalent n'a pas de plafond : le modèle de la tâche
-        return mn.nom((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
-                      or "Sonnet")
+        voulu = _modele_voulu(projet, court, t, modele_voulu)
+        if mn.rang(voulu) >= mn.rang(mn.FABLE) and t.get("fable_accordee") is not True:
+            return "Opus"       # jamais Fable sans l'accord du Directeur pour cette tâche
+        return voulu
     voulu = ((t.get("montee") or {}).get("a") or modele_voulu or _modele_necessaire(projet, court, t)
              or fiche["modele"])
     return mn.plafonne(voulu, fiche["modele"])
@@ -2554,6 +2617,8 @@ def _partir(projet, etat, court, agent, ids, lot, par_id, modele_voulu=None):
         etat["cloud"].pop(ids[0])      # reprise par un autre agent : la session de l'ancien n'est pas la sienne
     etat["departs"][ids[0]] = {"agent": agent, "taches": list(ids), "matiere": matiere, "modele": modele, "lot": lot,
                                "suite": supp}
+    if mn.rang(modele) >= mn.rang(mn.FABLE) and par_id[ids[0]].get("fable_accordee") is True:
+        etat["departs"][ids[0]]["fable_accorde"] = True     # l'accord du Directeur pour cette tâche (voir `boucle`)
     etat["en_cours"].add(ids[0])
     return a_agent(agent, ids, matiere)
 

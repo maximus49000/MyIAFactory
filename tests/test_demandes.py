@@ -723,6 +723,21 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.ok({**base, "verdict": "relancer", "decision": "o2"})
         self.assertEqual(demandes.nettoyer({**base, "verdict": "refuser", "autre": 1}), {**base, "verdict": "refuser"})
 
+    def test_fable_tache(self):
+        r = copy.deepcopy(R5)
+        r["decisions_projet"].append({"id": "d90", "genre": "fable_tache", "texte": "Fable ?", "tache": "t1",
+                                      "raison": "Une preuve difficile."})
+        de_la_decision = lambda r: [x for x in releve.valider(r) if "d90" in x]   # noqa: E731
+        self.assertEqual(de_la_decision(r), [])
+        base = {"type": "fable_tache", "decision": "d90"}
+        for verdict in ("autoriser", "refuser"):
+            self.assertIsNone(demandes.verifier({**base, "verdict": verdict}, r, frozenset(), None))
+        for mauvais in ({**base, "verdict": "accepter"}, {**base, "verdict": "autoriser", "decision": "o1"}):
+            self.assertIsNotNone(demandes.verifier(mauvais, r, frozenset(), None), mauvais)
+        sans_raison = copy.deepcopy(r)
+        del sans_raison["decisions_projet"][-1]["raison"]
+        self.assertNotEqual(de_la_decision(sans_raison), [])
+
     def test_serie_arretee_et_fin_vue(self):
         r = copy.deepcopy(R5)
         r["decisions_projet"].append({"id": "s1", "genre": "serie_arretee", "texte": "La série ne progresse plus",

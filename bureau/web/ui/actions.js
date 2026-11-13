@@ -116,7 +116,7 @@ export function resumeEnvoi(resultats) {
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
                   genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [],
-                  series: [], terminees: [], chezPartenaires: []};
+                  series: [], terminees: [], chezPartenaires: [], fables: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -142,6 +142,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
     else if (d?.genre === "outil_agent") sortie.outils.push({...d});
     else if (d?.genre === "accord_agent") sortie.accords.push({...d});
+    else if (d?.genre === "fable_tache") sortie.fables.push({...d});   // une tâche demande Fable : l'autoriser ?
     else if (d?.genre === "faire_chez_partenaire") sortie.chezPartenaires.push({...d});   // « À faire chez <partenaire> »
     else if (d?.genre === "valider_etape") sortie.validations.push({...d});
     else if (d?.genre === "serie_arretee") {   // une série qui ne progresse plus : avec le nom de sa fonctionnalité
@@ -264,6 +265,11 @@ export function demandeSerieArretee(decision) {
 // « Vu » sur l'avis de fin d'une fonctionnalité : l'avis se ferme.
 export function demandeFinVue(fonctionnalite) {
   return {type: "fin_vue", fonctionnalite};
+}
+
+// Une tâche demande Fable : « autoriser » (elle part sur Fable, accord pour elle seule) ou « refuser » (elle part sur Opus).
+export function demandeFableTache(decision, verdict) {
+  return {type: "fable_tache", decision: decision.id, verdict};
 }
 
 export function demandeOutilAgent(decision, verdict) {

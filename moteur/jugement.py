@@ -66,6 +66,7 @@ VERDICTS_GENRE = ("meme", "proche", "autre", "incertain")
 LONGUEUR_ELARGISSEMENT = 300      # la description d'un genre élargie à une demande, rendue par le classement
 LONGUEUR_INTITULE = 60           # le nom court d'une fonctionnalité, rendu par le classement de la demande
 MODELES_AGENT = ("Haiku", "Sonnet", "Opus")   # jamais Fable : il n'est que suggéré (`fable_suggere`)
+MODELES_ETAPE = MODELES_AGENT + ("Fable",)    # une étape peut proposer Fable : la tâche attend l'accord du Directeur
 LONGUEUR_JUSTIFICATION = 160      # la justification du modèle nécessaire d'une étape : une ligne courte
 # Ce que dit le nom d'une étape qui remet le livrable (comparé sans accents ni casse).
 MOTS_DE_LIVRAISON = ("livr", "remis", "remet", "remise", "publi", "depos", "depot", "export", "envoi", "deploi",
@@ -393,10 +394,9 @@ def _valider_proposer_organisation(o, d):
         if x.get("service") not in tous_services:
             return f"Étape « {e} » : service « {x.get('service')} » ni au projet ni proposé dans « services »."
         if "modele" in x:      # le modèle que demande le travail de l'étape (facultatif : sinon déduit de sa nature)
-            if isinstance(x["modele"], str) and "fable" in x["modele"].lower():
-                return f"Étape « {e} » : jamais Fable comme modèle d'étape ; au plus Opus."
-            if x["modele"] not in MODELES_AGENT:
-                return f"Étape « {e} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
+            # Fable n'est qu'une proposition : chaque tâche de l'étape attendra l'accord du Directeur (sinon Opus)
+            if x["modele"] not in MODELES_ETAPE:
+                return f"Étape « {e} » : « modele » doit valoir {', '.join(MODELES_ETAPE)}."
             if not (_ligne(x.get("justification")) and len(x["justification"]) <= LONGUEUR_JUSTIFICATION):
                 return (f"Étape « {e} » : « justification » du modèle, une ligne de {LONGUEUR_JUSTIFICATION} "
                         "caractères au plus.")

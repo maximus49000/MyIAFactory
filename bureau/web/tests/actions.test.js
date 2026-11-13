@@ -119,7 +119,7 @@ test("decisionsDirecteur : chaque entrée garde sa fonctionnalité", () => {
   assert.equal(d.genres[0].propose, "vitrine");
   assert.deepEqual(d.sessions.map((x) => [x.id, x.agent]), [["p2", "dev:1"]]);
   assert.deepEqual(decisionsDirecteur({}), {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
-    genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [], series: [], terminees: [], chezPartenaires: []});
+    genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [], series: [], terminees: [], chezPartenaires: [], fables: []});
 });
 
 test("decisionsDirecteur : fonctionnalités terminées pas encore vues et séries arrêtées", () => {

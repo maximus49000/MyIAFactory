@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from installation import estimation
 
@@ -71,12 +72,14 @@ class TestEstimation(unittest.TestCase):
         self.assertNotEqual(mesure["min"], defauts["min"])
 
     def test_pas_d_empreinte_pour_un_modele_sans_donnees(self):
-        agents = [{"cle": "dev-1", "role": "dev", "modele": "Sonnet"}, {"cle": "rel-1", "role": "relecteur", "modele": "Fable"}]
-        estimation.DEFAUTS_TOKENS.setdefault("Fable", (80_000, 300_000))
+        # un modèle que l'empreinte ne connaît pas (Fable est désormais compté Opus : un nom inventé en tient lieu)
+        estimation.DEFAUTS_TOKENS.setdefault("Mythos", (80_000, 300_000))
         try:
-            self.assertNotIn("co2", estimation.estimer(FLUX, agents, [], lambda m: None))
+            with mock.patch.object(estimation.mn, "estime",
+                                   lambda e, agents: "Mythos" if e["role"] == "relecteur" else "Sonnet"):
+                self.assertNotIn("co2", estimation.estimer(FLUX, AGENTS, [], lambda m: None))
         finally:
-            estimation.DEFAUTS_TOKENS.pop("Fable", None)
+            estimation.DEFAUTS_TOKENS.pop("Mythos", None)
 
     def test_fourchette_ordonnee(self):
         for us in ([], [usage("Sonnet", t, i) for i, t in enumerate((9, 1, 5, 3, 7))]):

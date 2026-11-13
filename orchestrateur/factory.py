@@ -17,7 +17,9 @@ CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consi
 AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
 AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
-MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus")         # le modèle nécessaire d'une étape : jamais Fable
+# Le modèle nécessaire d'une étape. Fable n'y est qu'une proposition : la tâche ne part sur Fable qu'avec l'accord du
+# Directeur, demandé avant son départ (décision `fable_tache`) ; sans accord, Opus.
+MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
 
 
 class FactoryInvalide(Exception):
@@ -53,11 +55,12 @@ def _controler_flux(flux, nom, ids_services, vus):
         if e.get("validation") is not True and e["service"] not in ids_services:
             raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » nomme un service inconnu "
                                   f"« {e['service']} ».")
-        # le modèle nécessaire de l'étape (facultatif : sinon déduit de sa nature) ; jamais Fable
+        # le modèle nécessaire de l'étape (facultatif : sinon déduit de sa nature) ; Fable : une proposition seulement
         if "modele" in e and e["modele"] not in MODELES_D_ETAPE or (
                 "justification" in e and "modele" in e and not isinstance(e["justification"], str)):
             raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » : « modele » vaut "
-                                  f"{', '.join(MODELES_D_ETAPE)} (jamais Fable), avec sa « justification » en texte.")
+                                  f"{', '.join(MODELES_D_ETAPE)} (Fable sur l'accord du Directeur), avec sa "
+                                  "« justification » en texte.")
     est_val = [isinstance(e, dict) and e.get("validation") is True for e in flux]
     if est_val and est_val[0]:
         raise FactoryInvalide(f"Factory : « {nom} » : une étape de validation ne peut pas être la première.")

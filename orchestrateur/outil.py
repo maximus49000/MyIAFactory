@@ -53,7 +53,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
-                 "serie_arretee", "fin_vue")
+                 "serie_arretee", "fin_vue", "fable_tache")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -64,12 +64,15 @@ def _interdit(modele):
 
 
 def _fable_accorde_pour(ctx, t):
-    """Fable est permis comme modèle de départ d'une tâche seulement si son agent (à défaut, un agent de son rôle) a une
-    fiche qui porte l'accord du Directeur ; une montée ne va jamais à Fable."""
+    """Fable est permis comme modèle de départ d'une tâche seulement si le Directeur l'a accordé pour cette tâche
+    (`fable_accordee`, projet aux agents polyvalents), ou si son agent (à défaut, un agent de son rôle) a une fiche qui
+    porte l'accord du Directeur."""
+    if t.get("fable_accordee") is True:
+        return True
     fiches_ = ctx.fiches()
     if t.get("agent"):
         return fi.fable_accorde(fi.trouver(fiches_, t["agent"]))
-    return any(fi.fable_accorde(x) for x in fiches_ if x["role"] == t.get("role"))
+    return any(fi.fable_accorde(x) for x in fiches_ if x["role"] and x["role"] == t.get("role"))
 
 
 class Refus(Exception):
@@ -940,6 +943,10 @@ def cmd_decision(ctx, e):
             elif genre == "serie_arretee":      # une série qui ne progresse plus : dite au Directeur
                 _fonc(s, e.get("fonctionnalite"))
                 d["fonctionnalite"] = e["fonctionnalite"]
+            elif genre == "fable_tache":        # « cette tâche demande Fable : l'autoriser ? » (sans accord : Opus)
+                if su.tache(s, e.get("tache")) is None:
+                    raise Refus(f"« fable_tache » : tâche inconnue « {e.get('tache')} ».")
+                d.update(tache=e["tache"], raison=texte(e, "raison")[:300])
             else:
                 if e.get("agent") not in ctx.cles_agents():
                     raise Refus(f"« session_cloud » : agent inconnu « {e.get('agent')} ».")
@@ -1610,6 +1617,10 @@ def cmd_tache(ctx, e):
             if e["agent"] is not None and e["agent"] not in cles:
                 raise Refus(f"Agent inconnu : {e['agent']}")
             t["agent"] = e["agent"]
+        if "fable_accordee" in e:   # la réponse du Directeur à « cette tâche demande Fable » : vrai, faux (Opus) ou rien
+            if e["fable_accordee"] not in (True, False, None):
+                raise Refus("« fable_accordee » vaut vrai, faux ou rien.")
+            t["fable_accordee"] = e["fable_accordee"]
         if _interdit(t["modele_depart"]) and not _fable_accorde_pour(ctx, t):
             raise Refus("Fable n'est jamais choisi par un outil (seulement sur une fiche qui porte l'accord du "
                         "Directeur).")
@@ -1623,9 +1634,12 @@ def cmd_tache(ctx, e):
                 if not isinstance(m, dict) or not all(isinstance(m.get(c), str) and m[c].strip()
                                                       for c in ("de", "a", "raison")):
                     raise Refus("« montee » doit avoir « de », « a » et « raison » (textes non vides).")
-                if _interdit(m["a"]) or _interdit(m["de"]):
+                # un projet aux agents polyvalents peut monter d'Opus à Fable : une demande au Directeur, avant le départ
+                vers_fable = (m["de"] == "Opus" and m["a"] == mn.FABLE
+                              and any(fi.est_polyvalente(x) for x in ctx.fiches()))
+                if (_interdit(m["a"]) and not vers_fable) or _interdit(m["de"]):
                     raise Refus("Fable n'est jamais choisi par un outil (seulement sur demande expresse).")
-                if m["de"] in depart.ECHELLE and m["a"] != depart.monter(m["de"]):
+                if m["de"] in depart.ECHELLE and m["a"] != depart.monter(m["de"], fable=vers_fable):
                     raise Refus(f"Une montée va d'un cran au plus : de {m['de']}, c'est {depart.monter(m['de'])}.")
                 m = {c: m[c] for c in ("de", "a", "raison")}
             t["montee"] = m

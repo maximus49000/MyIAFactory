@@ -28,7 +28,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
           "recruter": ("mode", "agents"), "depot_git": ("confirme",), "regle_projet": ("operation",),
-          "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",)}
+          "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",),
+          "fable_tache": ("decision", "verdict")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
@@ -39,7 +40,8 @@ FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet", "serie_arretee",
-               "fin_vue", "faire_chez_partenaire")
+               "fin_vue", "faire_chez_partenaire", "fable_tache")
+VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
 VERDICTS_CHEZ_PARTENAIRE = ("fait", "impossible")
@@ -429,6 +431,10 @@ def _verifier_v4(demande, r, elements):
         if demande["verdict"] == "autoriser" and not d.get("programme"):
             return "Cette décision ne nomme pas de programme à autoriser."
         return None
+    if genre == "fable_tache":       # « Autoriser Fable » ou « Refuser : Opus », pour cette tâche seulement
+        if _decision(r.get("decisions_projet", []), demande["decision"], "fable_tache") is None:
+            return "Décision inconnue."
+        return None if demande["verdict"] in VERDICTS_FABLE else "Réponse inconnue (autoriser ou refuser)."
     if genre == "serie_arretee":     # « Relancer la série »
         if _decision(r.get("decisions_projet", []), demande["decision"], "serie_arretee") is None:
             return "Décision inconnue."

@@ -34,11 +34,13 @@ class TestDonneesValidation(unittest.TestCase):
         self.assertFalse(wf.est_validation(etape("dev")))
         self.assertEqual(wf.etape_ecrite({**self.VAL, "raison": "x"}), self.VAL)
         self.assertEqual(wf.etape_ecrite({**etape("dev"), "justification": "x"}), etape("dev"))
-        # le modèle nécessaire de l'étape et sa justification sont gardés (jamais Fable, jamais un modèle inconnu)
+        # le modèle nécessaire de l'étape et sa justification sont gardés (Fable : une proposition ; jamais un modèle
+        # inconnu)
         avec = {**etape("dev"), "modele": "Haiku", "justification": "Mécanique."}
         self.assertEqual(wf.etape_ecrite({**avec, "raison": "x"}), avec)
         self.assertEqual(wf.etape_ecrite({**etape("dev"), "modele": "Haiku"}), {**etape("dev"), "modele": "Haiku"})
-        for mauvais in ("Fable", "GPT", 3):
+        self.assertEqual(wf.etape_ecrite({**avec, "modele": "Fable"}), {**avec, "modele": "Fable"})
+        for mauvais in ("fable", "GPT", 3):
             self.assertEqual(wf.etape_ecrite({**avec, "modele": mauvais}), etape("dev"))
         self.assertEqual([e["id"] for e in wf.etapes_d_agent(self.FLUX)], ["dev", "livre"])
 

@@ -484,10 +484,12 @@ class Moteur:
         fiche = fi.trouver(fi.lire_toutes(fa.lire(projet.factory)["fiches"]), cle)
         if fiche is None:
             raise regles.Refus(f"agent inconnu : {cle}")
-        modele = (d.get("modele") or fiche["modele"]).lower()
+        modele = (d.get("modele") or fiche["modele"] or "Sonnet").lower()
+        fiche = self._fiche_avec_accord(fiche, modele, d.get("fable_accorde"))
         if fiche["lieu"] != "cloud":
             infos = {"genre": "tache", "tache": taches[0], "taches": list(taches), "agent": cle, "modele": modele,
-                     "lot": d.get("lot"), "matiere": matiere}
+                     "lot": d.get("lot"), "matiere": matiere,
+                     **({"fable_accorde": True} if d.get("fable_accorde") else {})}
             self._lancer_local(projet, fiche, modele, taches[0], infos, depart, matiere, tache=taches[0],
                                lot=d.get("lot"))
             return
@@ -501,6 +503,15 @@ class Moteur:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{cle}", daemon=True).start()
+
+    @staticmethod
+    def _fiche_avec_accord(fiche, modele, accord):
+        """La fiche avec laquelle l'agent est lancé : un agent polyvalent sur Fable porte, pour ce départ seulement,
+        l'accord que le Directeur a donné à la tâche (`fable_accorde` du départ) ; sans lui, `agents.executer_agent`
+        refuse Fable."""
+        if modele == "fable" and accord is True and not fi.fable_accorde(fiche):
+            return {**fiche, "modele": "Fable", "fable": f"accordé par le Directeur le {time.strftime('%Y-%m-%d')}"}
+        return fiche
 
     # --- Les agents locaux : détachés du moteur (`moteur.detache`), retrouvés quand il redémarre.
 
@@ -540,7 +551,8 @@ class Moteur:
                 registre.effacer(cle)
                 continue
             tid = info.get("tache") or cle
-            modele = (info.get("modele") or fiche["modele"]).lower()
+            modele = (info.get("modele") or fiche["modele"] or "Sonnet").lower()
+            fiche = self._fiche_avec_accord(fiche, modele, info.get("fable_accorde"))
             if info.get("genre") == "reponse":     # une réponse aux questions : attendue, ou redemandée
                 questions = [q for q in info.get("questions") or [] if isinstance(q, str)]
                 if issue not in ("vivant", "resultat"):
@@ -595,7 +607,9 @@ class Moteur:
         if fiche is None or fiche["lieu"] == "cloud" or not fid:
             self._noter(projet, f"questions pour {agent} sans réponse possible : {' / '.join(questions)}")
             return
-        modele = (modele or fiche["modele"]).lower()
+        modele = (modele or fiche["modele"] or "Sonnet").lower()
+        if modele == "fable" and not fi.fable_accorde(fiche):
+            modele = "opus"      # une réponse aux questions ne tourne jamais sur Fable sans l'accord de la fiche
         cle = f"{tid}.reponse"
         infos = {"genre": "reponse", "tache": tid, "agent": fiche["cle"], "modele": modele, "fonctionnalite": fid,
                  "questions": questions, "session": session}

@@ -335,7 +335,8 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._orga(flux=avec(1, modele="Opus", justification="x" * (jugement.LONGUEUR_JUSTIFICATION + 1))))
         self.assertIsNotNone(self._orga(flux=avec(1, modele="Haiku")))                    # sans justification
         self.assertIsNotNone(self._orga(flux=avec(1, modele="Haiku", justification="a\nb")))
-        self.assertIn("Fable", self._orga(flux=avec(1, modele="Fable", justification=j)))
+        self.assertIsNone(self._orga(flux=avec(1, modele="Fable", justification=j)))     # une proposition (accord)
+        self.assertIsNotNone(self._orga(flux=avec(1, modele="fable", justification=j)))
         self.assertIsNotNone(self._orga(flux=avec(1, modele="GPT", justification=j)))
         sans = [{k: v for k, v in a.items() if k not in ("modele", "justification")}
                 for a in VALIDES["proposer_organisation"]["agents"]]
@@ -347,6 +348,8 @@ class Valider(unittest.TestCase):
         o["flux"][1].update(modele="Haiku", justification=j)
         self.assertIsNone(self._def(o))
         o["flux"][1]["modele"] = "Fable"
+        self.assertIsNone(self._def(o))
+        o["flux"][1]["modele"] = "GPT"
         self.assertIsNotNone(self._def(o))
 
     def test_proposer_organisation_role_sans_agent_refuse(self):

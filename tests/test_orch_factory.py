@@ -86,7 +86,10 @@ class TestFactory(unittest.TestCase):
         dev = {"id": "dev", "nom": "Dev", "role": "dev", "service": "dev"}
         f = factory.lire(self.ecrire(flux=[{**dev, "modele": "Haiku", "justification": "Mécanique."}]))
         self.assertEqual((f["flux"][0]["modele"], f["flux"][0]["justification"]), ("Haiku", "Mécanique."))
-        for mauvais in ({"modele": "Fable"}, {"modele": "GPT"}, {"modele": 3}, {"modele": "Opus", "justification": 3}):
+        # Fable : une proposition, gardée (la tâche attendra l'accord du Directeur)
+        f = factory.lire(self.ecrire(flux=[{**dev, "modele": "Fable", "justification": "Preuve."}]))
+        self.assertEqual(f["flux"][0]["modele"], "Fable")
+        for mauvais in ({"modele": "fable"}, {"modele": "GPT"}, {"modele": 3}, {"modele": "Opus", "justification": 3}):
             with self.assertRaises(factory.FactoryInvalide, msg=str(mauvais)) as c:
                 factory.lire(self.ecrire(flux=[{**dev, **mauvais}]))
             self.assertIn("modele", str(c.exception))

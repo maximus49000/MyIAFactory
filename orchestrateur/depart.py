@@ -15,10 +15,14 @@ ECHELLE = ("Haiku", "Sonnet", "Opus")   # on monte d'un cran au plus ; Fable n'e
 _ROLE_SUR = re.compile(r"^[A-Za-z0-9_-]+\Z")
 
 
-def monter(modele):
-    """Le modèle du cran au-dessus (Haiku → Sonnet → Opus → Opus). Un autre nom reste tel quel ; jamais Fable."""
+def monter(modele, fable=False):
+    """Le modèle du cran au-dessus (Haiku → Sonnet → Opus → Opus). Un autre nom reste tel quel ; jamais Fable, sauf
+    `fable` (un projet aux agents polyvalents) : Opus → Fable, une demande que le Directeur accorde ou non avant le
+    départ de la tâche (sans accord, elle part sur Opus)."""
     if modele not in ECHELLE:
         return modele
+    if fable and modele == ECHELLE[-1]:
+        return mn.FABLE
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 

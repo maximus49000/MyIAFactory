@@ -458,3 +458,9 @@ Rôles : graphiste
 Date : 2026-11-13
 
 Pour un habillage 2D généré par code, utiliser des fonctions de contour communes (polygone, ovale, membre) et un jeu de sourcils et de paupières par personnage : l'expression fait le caractère à moindre coût. Après chaque changement, relire les captures aux endroits où un personnage touche une bulle ou le bord de l'écran.
+
+## G77 — Un réglage de test qui montre tout masque le déblocage : une
+Rôles : dev
+Date : 2026-11-13
+
+Un réglage de test qui montre tout masque le déblocage : une capture ou un test faits avec ce réglage ne prouvent pas ce que voit une installation neuve.

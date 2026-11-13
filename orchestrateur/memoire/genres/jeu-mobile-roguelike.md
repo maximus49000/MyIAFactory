@@ -548,3 +548,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Une tâche de test sur émulateur exige le shell : l'ouvrir au métier concerné avant de lancer la tâche, sinon l'agent se bloque sans pouvoir vérifier ses corrections.
+
+## G92 — Dans un roguelike, un robot de simulation fixe la progressio
+Rôles : designer, dev
+Date : 2026-11-13
+
+Dans un roguelike, un robot de simulation fixe la progression du joueur (déblocages) au lieu de lire la sauvegarde, pour que ses mesures soient reproductibles.

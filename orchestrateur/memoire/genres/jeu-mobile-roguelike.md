@@ -464,3 +464,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un réglage de test qui montre tout masque le déblocage : une capture ou un test faits avec ce réglage ne prouvent pas ce que voit une installation neuve.
+
+## G78 — Quand des contrôles imposent un ordre de PV entre catégories
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand des contrôles imposent un ordre de PV entre catégories et entre niveaux, baisser un adversaire du haut de la chaîne oblige à baisser tous ceux qui le dépassent ; lire ces bornes avant l'essai, et déclarer comme calculées les valeurs ajustées par ricochet si le robot ne les mesure pas.

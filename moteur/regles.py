@@ -2782,6 +2782,8 @@ def _demarrer_en_attente(projet, etat, fid):
                                         if len(lot["ids"]) > 1 and mn.rang(lot["modele"]) >= mn.rang(mn.FABLE)
                                         else [lot])]
     polyvalents = any(_polyvalent(a) for a in court["agents"])
+    if polyvalents:      # n'importe quel agent libre peut prendre une tâche : on occupe d'abord toutes les places
+        lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"])
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     parties = set()
@@ -2824,6 +2826,22 @@ def _demarrer_en_attente(projet, etat, fid):
     _noter_l_attente_du_poste(projet, etat, court, [par_id[i] for lot in lots for i in lot["ids"] if i not in parties],
                               fac)
     return actions
+
+
+def _repartir_sur_les_places(lots, libres):
+    """Un lot confie plusieurs tâches au même agent, l'une après l'autre ; tant que des places sont libres, les tâches
+    se répartissent d'abord, une par agent (essai réel : cinq tâches regroupées pour un seul agent local pendant que trois
+    agents cloud restaient sans travail). Le plus gros lot est coupé jusqu'à occuper les places libres. Pur."""
+    lots = [dict(x, ids=list(x["ids"])) for x in lots]
+    while len(lots) < libres:
+        gros = max(lots, key=lambda x: len(x["ids"]), default=None)
+        if gros is None or len(gros["ids"]) < 2:
+            break
+        derniere = gros["ids"].pop()
+        if len(gros["ids"]) == 1:
+            gros["lot"] = None
+        lots.append({"ids": [derniere], "modele": gros["modele"], "lot": None})
+    return lots
 
 
 def _noter_l_attente_du_poste(projet, etat, court, restees, fac=None):
@@ -4554,11 +4572,38 @@ def avancer(projet, etat):
             actions += _rejouer_le_retour(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
+    _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
     _noter_les_attentes_sans_risque(projet, etat)
     return actions
+
+
+TEXTE_LOT_ORPHELIN = ("Sortie de son lot (lot interrompu : aucune tâche du lot en cours) : elle part avec le premier "
+                      "agent libre.")
+
+
+def _liberer_les_lots_orphelins(projet, etat, court):
+    """Une tâche en lot ne part jamais seule ; un lot dont aucune tâche n'est en cours ni en partance (essai réel : le
+    moteur relancé avait perdu la suite du lot, cinq tâches attendaient avec trois agents libres) est défait : ses
+    tâches restantes sortent du lot et partent comme les autres. Rend les tâches libérées."""
+    en_route = set(_m(etat, "en_cours", set)) | set(_m(etat, "a_lancer", list))
+    for d in _m(etat, "departs").values():
+        en_route |= set(d.get("taches") or [])
+    par_lot = {}
+    for t in court["taches"]:
+        lot = t.get("lot")
+        if isinstance(lot, dict) and lot.get("id") and t["colonne"] != "fait":
+            par_lot.setdefault(lot["id"], []).append(t)
+    liberees = []
+    for taches in par_lot.values():
+        if any(t.get("active") or t["id"] in en_route for t in taches):
+            continue
+        for t in taches:
+            lancer(projet, "tache", {"id": t["id"], "lot": None, "journal": [TEXTE_LOT_ORPHELIN]})
+            liberees.append(t["id"])
+    return liberees
 
 
 def _avancer_serie(projet, etat, fid):

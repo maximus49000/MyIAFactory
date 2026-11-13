@@ -370,6 +370,45 @@ class Demandes(Base):
         self.assertEqual([a[0] for a in suite], ["juger", "agent"])
         self.assertEqual(self.statut(d["id"])["reponse"], "Fait.")   # la réponse de l'agent clôt la demande
 
+    def test_les_taches_se_repartissent_sur_les_places_libres_avant_les_lots(self):
+        """Essai réel : cinq tâches regroupées pour un seul agent local pendant que trois agents cloud restaient libres."""
+        lots = [{"ids": ["t1", "t2", "t3", "t4", "t5"], "modele": "Sonnet", "lot": "L1"}]
+        r = regles._repartir_sur_les_places(lots, 4)
+        self.assertEqual(len(r), 4)
+        self.assertEqual(sorted(i for x in r for i in x["ids"]), ["t1", "t2", "t3", "t4", "t5"])
+        self.assertEqual(regles._repartir_sur_les_places(lots, 1), lots)            # une seule place : le lot reste
+        self.assertEqual(len(regles._repartir_sur_les_places(lots, 9)), 5)           # jamais plus de lots que de tâches
+        seule = regles._repartir_sur_les_places([{"ids": ["a", "b"], "modele": "Haiku", "lot": "L2"}], 2)
+        self.assertTrue(all(x["lot"] is None for x in seule))                       # une tâche seule n'est pas un lot
+
+    def test_un_lot_que_plus_personne_ne_porte_est_defait(self):
+        """Essai réel : le moteur relancé avait perdu la suite d'un lot ; ses tâches (rangs 2 à 5) ne partaient jamais
+        seules et attendaient avec trois agents libres. Un lot sans tâche active ni en partance est défait."""
+        self.cahier_a_valider()
+        ids = [self.ok("tache", entree={"titre": f"Équilibrage {k}", "role": "dev", "colonne": "dev", "active": False})["id"]
+               for k in range(3)]
+        for rang, i in enumerate(ids, 1):
+            self.ok("tache", entree={"id": i, "lot": {"id": "L9", "rang": rang}})
+        self.ok("tache", entree={"id": ids[0], "colonne": "fait"})
+        self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)),
+                         ids[1:])
+        for i in ids[1:]:
+            t = self.taches(id=i)[0]
+            self.assertIsNone(t.get("lot"))
+            self.assertIn("Sortie de son lot", t["journal"][-1]["texte"])
+
+    def test_un_lot_en_cours_n_est_jamais_defait(self):
+        self.cahier_a_valider()
+        ids = [self.ok("tache", entree={"titre": f"Écran {k}", "role": "dev", "colonne": "dev", "active": False})["id"]
+               for k in range(2)]
+        for rang, i in enumerate(ids, 1):
+            self.ok("tache", entree={"id": i, "lot": {"id": "L8", "rang": rang}})
+        self.ok("tache", entree={"id": ids[0], "active": True})       # l'agent fait le lot d'une traite
+        self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)), [])
+        self.ok("tache", entree={"id": ids[0], "active": False})
+        self.etat.setdefault("departs", {})[ids[0]] = {"taches": ids}  # en partance (le moteur le lance)
+        self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)), [])
+
     def test_une_question_au_chef_recoit_sa_reponse(self):
         """Un retour sur la tâche « Orchestration » est une question au Chef : il répond d'après l'état de tout le
         projet, et la réponse reste sur la demande (le bureau la montre sous la question)."""

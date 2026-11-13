@@ -404,3 +404,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Dans un jeu à carte de nœuds, un test d'issue aléatoire d'un type de nœud doit partir d'un nœud réellement de ce type, sinon la branche testée n'est jamais atteinte.
+
+## G68 — Quand un retour dit qu'une version améliorée d'une carte n'a
+Rôles : dev
+Date : 2026-11-13
+
+Quand un retour dit qu'une version améliorée d'une carte n'a pas d'effet, comparer pour chaque carte le texte de l'amélioration à ce que le moteur applique à ce niveau, et tester la version de base et l'améliorée avec les mêmes données.

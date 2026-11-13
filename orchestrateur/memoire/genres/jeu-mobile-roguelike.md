@@ -536,3 +536,9 @@ Rôles : release
 Date : 2026-11-13
 
 Pour contrôler un paquet d'application, comparer chaque fichier de données du dépôt au contenu décompressé de chaque entrée du paquet, octet par octet, et ne pas se fier à la seule présence des fichiers.
+
+## G90 — Avant de demander l'accord pour un test sur émulateur, vérif
+Rôles : release, qa
+Date : 2026-11-13
+
+Avant de demander l'accord pour un test sur émulateur, vérifier quel appareil virtuel existe sans le lancer, et le nommer dans la demande.

@@ -399,7 +399,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
             && !(e.fonctionnalites || []).some((f) => f.id === id)) fermerPanneau();
         else if (type === "service" && !(e.services || []).some((s) => s.id === id)) fermerPanneau();
         else if (type === "partenaires" && !e.partenaires) fermerPanneau();
-        else if (type === "agent" && !(e.agents || []).some((a) => a.id === id)) fermerPanneau();
+        else if (type === "agent" && !(e.agents || []).some((a) => a.id === id) && !ficheAncienAgent(e, id)) fermerPanneau();
         else if (type === "tache" && !(e.taches || []).some((t) => t.id === id)) fermerPanneau();
         else if (type === "file" && !(e.taches || []).some((t) => t.id === id)
                  && !(e.file?.visibles || []).some((q) => q.id === id)) fermerPanneau();

@@ -5,7 +5,8 @@ import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
-import {contenuDecisionsV4} from "./decisions.js";
+import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
+import {sectionLieux} from "./lieux.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
@@ -164,6 +165,8 @@ export function contenuDirecteur(ctx, contenu) {
       : `${n} décisions attendent le Directeur (comptées par le projet).`));
   }
   if ((e.version ?? 1) >= 4) contenuDecisionsV4(ctx, contenu);
+  const lieux = (e.version ?? 1) >= 4 ? sectionLieux(ctx, boutonDemande) : null;   // absent : le relevé ne le publie pas
+  if (lieux) contenu.append(lieux);
   const menus = new Map();   // id de leçon -> son menu d'étage
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);

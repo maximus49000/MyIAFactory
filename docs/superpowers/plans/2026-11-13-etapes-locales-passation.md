@@ -10,7 +10,7 @@ changement de branche ; pousser à la fin de la phase. Aucune donnée de projet 
 | Phase | Modèle | Tâches du plan | Dépense réelle | État |
 |---|---|---|---|---|
 | A | Opus 5.5 | 1, 2, 3 : lieu d'une étape et choix de l'agent, découper un workflow, jugement et décision | non (banc gratuit) | **faite 2026-11-13** |
-| B | Sonnet 5.5 | 4 : le bureau (carte de décision, « Étapes et lieux », « Sur le poste local ») | non | à faire |
+| B | Sonnet 5.5 | 4 : le bureau (carte de décision, « Où s'exécutent les étapes », fiche de tâche) | non | **faite 2026-11-13** |
 | C | Opus 5.5 | 5 : essai réel sur ZooRunner, avec le Directeur | **oui** (un appel `decouper_lieux` Sonnet, puis la production), sur accord | à faire |
 
 ## Notes laissées par les phases
@@ -106,3 +106,18 @@ changement de branche ; pousser à la fin de la phase. Aucune donnée de projet 
   relit la factory à chaque usage ; les éléments en mémoire sont recalés par identifiant. Raisonné, pas essayé en vrai.
 - Une session cloud qui fait la partie code puis un agent local qui récupère le dépôt : dépend des sessions cloud
   existantes (fusion avant le départ de l'étape suivante), non essayé.
+
+**Phase B (2026-11-13, Sonnet 5.5)** — tâche 4 faite, sans appel réel ni navigateur.
+
+- **Où.** `bureau/web/ui/lieux.js` (nouveau) : section « Où s'exécutent les étapes » dans l'espace de direction
+  (`directeur.js`, après les décisions v4), un sélecteur Local / Cloud / Indifférent par étape de flux (« Selon le métier »
+  seulement quand `lieu` est nul), `lieu_etape` immédiat (un refus remet le choix d'avant), pas de sélecteur sur une
+  validation, étape avec `exige_poste: true` figée sur Local (désactivée, « exige les logiciels du poste »), bouton
+  « Proposer le découpage » (phrase sur l'appel Sonnet ; grisé si une décision `decoupage_lieux` attend). Carte
+  « Découper les étapes selon le poste » dans `decisions.js` (avant/après, « poste local » / « cloud possible » / « cloud »,
+  « nouvelle partie locale », Valider / Refuser). Fiche de tâche (`detail.js`) : ligne « Lieu » = « Sur le poste local »
+  ou « Dans le cloud » selon `taches[].lieu`.
+- **Python.** `bureau/etat.py` sert `etapes_lieux` (copie) et `taches[].lieu` (`local` ou `cloud`). `bureau/releve.py` et
+  `bureau/demandes.py` acceptent désormais `cloud` comme lieu d'étape, `taches[].lieu` = `local`|`cloud`, et le booleen
+  `etapes_lieux[].exige_poste`. À aligner côté moteur : `workflows.LIEUX_D_ETAPE` ne contient pas encore `cloud`.
+- Tests : `tests/test_etat.py` (TestEtatEtapesLieux), `bureau/web/tests/lieux.test.js` (10).

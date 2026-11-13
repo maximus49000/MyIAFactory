@@ -8,6 +8,7 @@ import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGen
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
   demandeRegleProjet, regleProposee, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache} from "./actions.js";
 import {blocOutil} from "./outils.js";
+import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
 import {rendreOrganisation} from "./organisation.js";
 import {demandeMethode} from "./fonctionnalite.js";
@@ -640,6 +641,11 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Organisation à valider", "Aucune organisation à valider",
     d.organisations.map((x) => rendreOrganisation(ctx, x, (libelle, classe, fabrique, avant) =>
       boutonDemande(ctx, libelle, classe, fabrique, avant)))));
+  const decoupages = decoupageEnAttente(ctx.etat);
+  if (decoupages.length) {     // seulement quand une proposition attend
+    contenu.append(partie("Découper les étapes selon le poste", "",
+      decoupages.map((x) => carteDecoupage(ctx, x, boutonDemande))));
+  }
   contenu.append(partie("Environnement du poste à compléter", "Aucun outil ne manque",
     d.environnements.map((x) => decisionEnvironnement(ctx, x))));
   if (d.fables.length) {     // seulement quand il y en a : une tâche attend l'accord pour Fable

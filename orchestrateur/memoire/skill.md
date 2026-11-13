@@ -543,3 +543,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand l'élément à équilibrer n'est pas mesuré par le robot de test et n'a pas de cible chiffrée, ne change aucune valeur : vérifie que le journal est à jour, lance le contrôle propre à l'élément et déclare ce qui reste seulement calculé.
+
+## S91 — Un contrôle de relecture ne doit pas modifier les fichiers d
+Rôles : qa
+Date : 2026-11-13
+
+Un contrôle de relecture ne doit pas modifier les fichiers du projet ; s'il le fait, il faut un mode lecture seule.

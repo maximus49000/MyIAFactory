@@ -28,6 +28,7 @@ from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import transcriptions  # noqa: E402
+from orchestrateur import lieux as lx  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
 from orchestrateur import metiers  # noqa: E402
@@ -3463,6 +3464,36 @@ def cmd_depart(ctx, e):
                                       metiers_=metiers_)}
 
 
+def cmd_lieux(ctx, e):
+    """Le lieu des étapes du projet (conception 2026-11-13-etapes-locales-design.md). `{action: "reference"}` : le flux
+    que le découpage lit (`flux`) et les étapes locales que l'environnement suggère (`suggerees`). `{action:
+    "decouper", flux}` : la proposition, vérifiée strictement sur le flux de référence, appliquée à tous les workflows
+    du projet (principal et copies `w-<fid>`), rejouable. `{action: "regler", etape, lieu}` : le lieu d'une étape
+    (`local`, `indifférent`, ou null : le métier décide) dans tous les workflows qui l'ont. Aucune tâche touchée.
+    Rend `{change}` (et `flux` après un découpage)."""
+    action = e.get("action")
+    reference = lx.flux_de_reference(ctx.f)
+    if action == "reference":
+        return {"flux": reference,
+                "suggerees": sorted(lx.etapes_locales_suggerees(reference, ctx.f.get("environnement")))}
+    try:
+        if action == "decouper":
+            erreur = lx.verifier_proposition(reference, e.get("flux"))
+            if erreur:
+                raise Refus(erreur)
+            change = lx.decouper_au_projet(ctx.f["chemin"], e["flux"])
+        elif action == "regler":
+            if "lieu" not in e:
+                raise Refus("« lieu » vaut local, indifférent ou null.")
+            change = lx.regler_au_projet(ctx.f["chemin"], texte(e, "etape"), e["lieu"])
+        else:
+            raise Refus("« action » doit valoir reference, decouper ou regler.")
+    except (ValueError, fa.FactoryInvalide) as ex:
+        raise Refus(str(ex))
+    ctx.f = fa.lire(ctx.f["chemin"])
+    return {"change": change, "flux": lx.flux_de_reference(ctx.f)}
+
+
 def cmd_regles(ctx, e):
     """Les règles du projet (`.factory/regles-projet.json`) : `lister`, `ajouter` (texte, origine?), `modifier` (id, texte),
     `supprimer` (id). Seul écrivain du fichier."""
@@ -3601,6 +3632,7 @@ COMMANDES = {
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
     "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"),
+    "lieux": (cmd_lieux, "obligatoire"),
 }
 
 

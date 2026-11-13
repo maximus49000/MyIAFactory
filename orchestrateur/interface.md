@@ -537,6 +537,18 @@ une `action` inconnue est refusé. Les règles sont aussi au relevé (`regles_pr
 `depart` (« Règles du projet, à respecter : ») et dans le dossier du jugement `proposer_organisation`. Le bureau les
 demande par `regle_projet` ; le moteur procédural y répond, la conversation orchestratrice ne les touche pas.
 
+### `lieux`
+
+Entrée : `{"action": "reference" | "decouper" | "regler", …}`. Le `lieu` des étapes d'agent (`local` : elle exige le
+poste ; `indifférent` : cloud possible ; absent : le `Lieu :` du métier). `reference` rend `{flux, suggerees}` : les
+étapes de tous les workflows, sans le préfixe `<fid>-` des copies, et celles qu'un outil de l'environnement cite.
+`decouper` : `flux`, la proposition sur ce flux de référence, vérifiée strictement (chaque étape garde id, ordre, nom,
+rôle, service, modèle et nature ; seuls changent `lieu` et, pour une étape découpée, son nom « … : code » avec
+`lieu: indifférent` et l'insertion juste après de `<id>-local`, même rôle et service, `lieu: local`), puis appliquée à
+tous les workflows du projet par identifiant ; jamais une étape qui a déjà sa partie locale. `regler` : `etape`, `lieu`
+(`local`, `indifférent` ou null) dans tous les workflows qui l'ont ; refusé sur une validation. Rend `{change, flux}` ;
+rejouable sans effet ; aucune tâche touchée. Le moteur procédural y répond (demandes `decoupage_lieux`, `lieu_etape`).
+
 ### `partenaires`
 
 Entrée : `{"action", …}`. Les partenaires (voix, images, 3D, traduction…) sont **facultatifs** : rien ne bloque sans

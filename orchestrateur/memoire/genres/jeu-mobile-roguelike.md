@@ -482,3 +482,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Un jeu testé seulement par ses tests unitaires peut passer sans que ses écrans, ses textes ou son orientation soient vérifiés ; ces points demandent un parcours complet sur appareil ou émulateur.
+
+## G81 — Une suite de tests unitaires verte ne prouve ni le parcours
+Rôles : qa
+Date : 2026-11-13
+
+Une suite de tests unitaires verte ne prouve ni le parcours du joueur ni le rendu : le parcours complet sur appareil ou émulateur reste une étape distincte.

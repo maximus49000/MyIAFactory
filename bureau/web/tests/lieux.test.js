@@ -14,7 +14,7 @@ class Noeud {
 globalThis.document = {createElement: (t) => new Noeud(t), createTextNode: (t) => { const n = new Noeud("#texte"); n._texte = t; return n; }};
 globalThis.Option = class extends Noeud { constructor(texte, valeur) { super("option"); this._texte = texte; this.value = valeur; } };
 
-const {sectionLieux, carteDecoupage, demandeLieuEtape, demandeProposerDecoupage, demandeDecoupage, libelleLieu} = await import("../ui/lieux.js");
+const {sectionLieux, carteDecoupage, demandeLieuEtape, demandeProposerDecoupage, demandeDecoupage, demandeRegroupementEtape, libelleLieu} = await import("../ui/lieux.js");
 const {boutonDemande, contenuDecisionsV4} = await import("../ui/decisions.js");
 const {contenuTache} = await import("../ui/detail.js");
 
@@ -74,6 +74,41 @@ test("changer le lieu envoie lieu_etape tout de suite ; un refus remet le choix 
   assert.equal(m2.value, "indifférent");
 });
 
+const ETAPES_RG = [
+  {id: "equilibrage", nom: "Équilibrage", role: "dev", validation: false, lieu: null, regroupement: "regroupe"},
+  {id: "tests", nom: "Tests", role: "qa", validation: false, lieu: "indifférent", regroupement: "parallele"},
+  {id: "essai", nom: "Essai", validation: true, lieu: null, regroupement: "parallele"}];
+
+test("un second choix par étape de flux : en parallèle ou regroupées, avec sa ligne d'aide", () => {
+  const s = sectionLieux(ctxDe({etapes_lieux: ETAPES_RG}), boutonDemande);
+  assert.equal(menus(s).length, 4);          // lieu + regroupement pour deux étapes ; rien pour la validation
+  const rg = menus(s).filter((m) => m.className.includes("regroupement-choix"));
+  assert.deepEqual(rg[0].enfants.map((o) => o.textContent), ["En parallèle", "Regroupées"]);
+  assert.deepEqual(rg.map((m) => m.value), ["regroupe", "parallele"]);
+  assert.match(s.textContent, /Regroupées : un seul agent enchaîne les tâches de l'étape \(à choisir quand elles modifient les mêmes fichiers, un équilibrage par exemple\)\./);
+});
+
+test("sans regroupement au relevé, aucun second choix ni aide", () => {
+  const s = sectionLieux(ctxDe({etapes_lieux: ETAPES}), boutonDemande);
+  assert.equal(menus(s).filter((m) => m.className.includes("regroupement-choix")).length, 0);
+  assert.doesNotMatch(s.textContent, /Regroupées/);
+});
+
+test("changer le regroupement envoie regroupement_etape ; un refus remet le choix d'avant ; grisé sans droit d'agir", async () => {
+  const c = ctxDe({etapes_lieux: ETAPES_RG});
+  const m = menus(sectionLieux(c, boutonDemande)).filter((x) => x.className.includes("regroupement-choix"))[1];
+  m.value = "regroupe";
+  await m.auteurs.change[0]();
+  assert.deepEqual(c.demandes, [{type: "regroupement_etape", etape: "tests", regroupement: "regroupe"}]);
+  const refus = ctxDe({etapes_lieux: ETAPES_RG}, {ok: false});
+  const m2 = menus(sectionLieux(refus, boutonDemande)).filter((x) => x.className.includes("regroupement-choix"))[0];
+  m2.value = "parallele";
+  await m2.auteurs.change[0]();
+  assert.equal(m2.value, "regroupe");
+  const lecture = menus(sectionLieux(ctxDe({etapes_lieux: ETAPES_RG, agir: false}), boutonDemande));
+  assert.ok(lecture.every((x) => x.disabled === true));
+});
+
 test("Proposer le découpage : demande et phrase sur l'appel Sonnet ; grisé si une proposition attend", async () => {
   const c = ctxDe({etapes_lieux: ETAPES});
   const s = sectionLieux(c, boutonDemande);
@@ -111,6 +146,7 @@ test("aucune carte sans proposition", () => {
 
 test("fabriques et libellés", () => {
   assert.deepEqual(demandeLieuEtape("e", null), {type: "lieu_etape", etape: "e", lieu: null});
+  assert.deepEqual(demandeRegroupementEtape("e", "regroupe"), {type: "regroupement_etape", etape: "e", regroupement: "regroupe"});
   assert.deepEqual(demandeProposerDecoupage(), {type: "proposer_decoupage"});
   assert.deepEqual(demandeDecoupage({id: "x"}, "refuser"), {type: "decoupage_lieux", decision: "x", verdict: "refuser"});
   assert.deepEqual([libelleLieu("local"), libelleLieu("cloud"), libelleLieu("indifférent"), libelleLieu(undefined)],

@@ -544,8 +544,10 @@ class TestEtatPartenaires(unittest.TestCase):
 
 class TestEtatEtapesLieux(unittest.TestCase):
     """Le lieu des étapes et des tâches est servi à la page ; sans ces champs, rien ne change."""
-    ETAPES = [{"id": "proto", "nom": "Prototype", "role": "dev", "validation": False, "lieu": None, "suggeree": True},
-              {"id": "val", "nom": "Essai", "role": None, "validation": True, "lieu": None, "suggeree": False}]
+    ETAPES = [{"id": "proto", "nom": "Prototype", "role": "dev", "validation": False, "lieu": None,
+               "regroupement": "regroupe", "suggeree": True},
+              {"id": "val", "nom": "Essai", "role": None, "validation": True, "lieu": None,
+               "regroupement": "parallele", "suggeree": False}]
 
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

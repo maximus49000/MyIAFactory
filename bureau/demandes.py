@@ -32,7 +32,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",),
           "fable_tache": ("decision", "verdict"),
           # le lieu des étapes (conception 2026-11-13-etapes-locales-design.md)
-          "proposer_decoupage": (), "decoupage_lieux": ("decision", "verdict"), "lieu_etape": ("etape", "lieu")}
+          "proposer_decoupage": (), "decoupage_lieux": ("decision", "verdict"), "lieu_etape": ("etape", "lieu"),
+          "regroupement_etape": ("etape", "regroupement")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
@@ -44,10 +45,11 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
-               "lieu_etape")
+               "lieu_etape", "regroupement_etape")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_DECOUPAGE = ("valider", "refuser")    # « refuser » : rien ne change
 LIEUX_D_ETAPE = ("local", "cloud", "indifférent")       # ou null : le lieu du métier décide
+REGROUPEMENTS_D_ETAPE = ("parallele", "regroupe")
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
 VERDICTS_CHEZ_PARTENAIRE = ("fait", "impossible")
@@ -158,7 +160,7 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_depot(demande, r)
     if genre == "passer_polyvalent":
         return _verifier_passer_polyvalent(demande, r)
-    if genre in ("lieu_etape", "proposer_decoupage"):
+    if genre in ("lieu_etape", "regroupement_etape", "proposer_decoupage"):
         return _verifier_lieux(demande, r)
     if genre == "regle_projet":
         return _verifier_regle_projet(demande, r)
@@ -405,7 +407,7 @@ def _verifier_passer_polyvalent(demande, r):
 
 def _verifier_lieux(demande, r):
     """`lieu_etape` : une étape d'agent du relevé (`etapes_lieux`) et son lieu (`local`, `indifférent`, ou null : le
-    métier décide). `proposer_decoupage` : le projet a des étapes, et aucune proposition n'attend déjà le Directeur."""
+    métier décide) ; `regroupement_etape` : cette étape et son regroupement (`parallele` ou `regroupe`). `proposer_decoupage` : le projet a des étapes, et aucune proposition n'attend déjà le Directeur."""
     etapes = r.get("etapes_lieux")
     if not isinstance(etapes, list):
         return "Le relevé de ce projet ne publie pas le lieu des étapes (mettez à jour l'orchestrateur)."
@@ -420,6 +422,10 @@ def _verifier_lieux(demande, r):
         return "Étape inconnue."
     if e.get("validation"):
         return "Une validation du Directeur n'a pas de lieu."
+    if demande["type"] == "regroupement_etape":
+        if demande.get("regroupement") not in REGROUPEMENTS_D_ETAPE:
+            return "« regroupement » vaut parallele ou regroupe."
+        return None
     if "lieu" not in demande or (demande["lieu"] is not None and demande["lieu"] not in LIEUX_D_ETAPE):
         return "« lieu » vaut local, cloud, indifférent ou null."
     return None

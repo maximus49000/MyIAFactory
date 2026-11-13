@@ -167,6 +167,23 @@ class Decoupage(Base):
         regles.traiter_demande(self.projet, d, regles.nouvel_etat())
         self.assertNotIn("lieu", next(e for e in self.flux() if e["id"] == "qa"))
 
+    def test_regroupement_etape_immediat(self):
+        d = self.demande("regroupement_etape", etape="qa", regroupement="regroupe")
+        regles.traiter_demande(self.projet, d, regles.nouvel_etat())
+        self.assertEqual(next(e for e in self.flux() if e["id"] == "qa")["regroupement"], "regroupe")
+        self.assertEqual(self.decisions(), [])
+        self.assertIn("seul agent", self.reponse_de(d))
+        d = self.demande("regroupement_etape", etape="qa", regroupement="parallele")
+        regles.traiter_demande(self.projet, d, regles.nouvel_etat())
+        self.assertNotIn("regroupement", next(e for e in self.flux() if e["id"] == "qa"))
+
+    def test_regroupement_etape_refuse_sur_une_validation(self):
+        avant = self.factory.read_bytes()
+        d = self.demande("regroupement_etape", etape="val", regroupement="regroupe")
+        regles.traiter_demande(self.projet, d, regles.nouvel_etat())
+        self.assertEqual(self.factory.read_bytes(), avant)
+        self.assertIn("pas pu", self.reponse_de(d))
+
     def test_lieu_etape_refuse_sur_une_validation(self):
         avant = self.factory.read_bytes()
         d = self.demande("lieu_etape", etape="val", lieu="local")
@@ -194,6 +211,17 @@ class Bureau(Base):
         self.assertIsNone(etapes["dev"]["lieu"])
         self.assertTrue(etapes["val"]["validation"])
         self.assertEqual(next(c for c in r["colonnes"] if c["id"] == "qa")["lieu"], "local")
+
+    def test_releve_publie_le_regroupement_des_etapes(self):
+        self.ok("lieux", entree={"action": "regrouper", "etape": "qa", "regroupement": "regroupe"})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [])
+        etapes = {e["id"]: e for e in r["etapes_lieux"]}
+        self.assertEqual((etapes["qa"]["regroupement"], etapes["dev"]["regroupement"]), ("regroupe", "parallele"))
+        mauvais = [dict(e, regroupement="tous") if e["id"] == "qa" else e for e in r["etapes_lieux"]]
+        self.assertTrue(releve.valider({**r, "etapes_lieux": mauvais}))
+        sur_validation = [dict(e, regroupement="regroupe") if e["id"] == "val" else e for e in r["etapes_lieux"]]
+        self.assertTrue(releve.valider({**r, "etapes_lieux": sur_validation}))
 
     def test_tache_sur_le_poste_local_au_releve(self):
         self.ok("lieux", entree={"action": "regler", "etape": "qa", "lieu": "local"})
@@ -238,6 +266,14 @@ class Bureau(Base):
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "val", "lieu": "local"}))
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "inconnue", "lieu": "local"}))
         self.assertIsNotNone(verifier({"type": "lieu_etape", "etape": "qa"}))
+        regrouper = lambda **c: verifier({"type": "regroupement_etape", **c})   # noqa: E731
+        self.assertIsNone(regrouper(etape="qa", regroupement="regroupe"))
+        self.assertIsNone(regrouper(etape="qa", regroupement="parallele"))
+        self.assertIsNotNone(regrouper(etape="qa", regroupement="tous"))
+        self.assertIsNotNone(regrouper(etape="qa", regroupement=None))
+        self.assertIsNotNone(regrouper(etape="qa"))
+        self.assertIsNotNone(regrouper(etape="val", regroupement="regroupe"))
+        self.assertIsNotNone(regrouper(etape="inconnue", regroupement="regroupe"))
         # une proposition attend déjà : pas de seconde demande
         self.assertIsNotNone(verifier({"type": "proposer_decoupage"}))
 

@@ -1,4 +1,5 @@
-// Où s'exécutent les étapes : le lieu de chaque étape d'agent (local, cloud, indifférent), la proposition de découpage
+// Où s'exécutent les étapes : le lieu de chaque étape d'agent (local, cloud, indifférent) et le regroupement de ses
+// tâches (en parallèle ou regroupées sous un seul agent), la proposition de découpage
 // d'un workflow selon le poste, et la carte de décision qui la montre avant/après. Chaque action envoie une demande au
 // projet, jamais un changement direct. Un projet dont le relevé ne publie pas `etapes_lieux` ne montre rien.
 
@@ -67,6 +68,34 @@ function selecteur(ctx, e) {
   return menu;
 }
 
+export const REGROUPEMENTS = [{valeur: "parallele", libelle: "En parallèle"}, {valeur: "regroupe", libelle: "Regroupées"}];
+export const AIDE_REGROUPEMENT = "Regroupées : un seul agent enchaîne les tâches de l'étape (à choisir quand elles " +
+  "modifient les mêmes fichiers, un équilibrage par exemple).";
+
+// `regroupement` : « parallele » (les tâches de l'étape se répartissent entre les agents libres) ou « regroupe ».
+export function demandeRegroupementEtape(etape, regroupement) {
+  return {type: "regroupement_etape", etape, regroupement};
+}
+
+// Le second choix d'une étape de flux : en parallèle (par défaut) ou regroupées. Absent du relevé : pas de choix.
+function selecteurRegroupement(ctx, e) {
+  const menu = el("select", "lieu-choix regroupement-choix");
+  menu.setAttribute("aria-label", `Regroupement des tâches de l'étape ${e.nom || e.id}`);
+  for (const r of REGROUPEMENTS) menu.append(new Option(r.libelle, r.valeur));
+  menu.value = e.regroupement === "regroupe" ? "regroupe" : "parallele";
+  menu.disabled = ctx.etat.agir !== true;
+  let courant = menu.value;
+  menu.addEventListener("change", async () => {
+    const voulu = menu.value;
+    menu.disabled = true;
+    const r = await ctx.barre.demander(demandeRegroupementEtape(e.id, voulu));
+    menu.disabled = false;
+    if (r?.ok) courant = voulu;
+    else menu.value = courant;      // refusé : le choix d'avant reste affiché
+  });
+  return menu;
+}
+
 // La section de l'espace de direction ; `null` quand le relevé ne publie pas le lieu des étapes.
 export function sectionLieux(ctx, boutonDemande) {
   const etapes = etapesAvecLieu(ctx.etat);
@@ -82,11 +111,15 @@ export function sectionLieux(ctx, boutonDemande) {
       li.append(el("span", "lecon-meta", " · validation du Directeur"));
     } else {
       li.append(selecteur(ctx, e));
+      if (typeof e.regroupement === "string") li.append(selecteurRegroupement(ctx, e));   // absent : un ancien relevé
       if (e.exige_poste === true) li.append(el("span", "lecon-meta", " exige les logiciels du poste"));
     }
     ul.append(li);
   }
   s.append(ul);
+  if (etapes.some((e) => e.validation !== true && typeof e.regroupement === "string")) {
+    s.append(el("p", "lecon-meta", AIDE_REGROUPEMENT));
+  }
   if (ctx.etat.agir === true && etapes.some((e) => e.validation !== true)) {
     const attend = decoupageEnAttente(ctx.etat).length > 0;
     const b = boutonDemande(ctx, "Proposer le découpage", "bouton secondaire", () => demandeProposerDecoupage());

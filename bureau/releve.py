@@ -921,11 +921,13 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
 
 
 LIEUX_D_ETAPE = ("local", "cloud", "indifférent")    # le lieu d'une étape d'agent ; nul : le `Lieu :` du métier décide
+REGROUPEMENTS_D_ETAPE = ("parallele", "regroupe")    # le regroupement d'une étape d'agent ; absent : parallele
 
 
 def _verifier_etapes_lieux(etapes, nom, erreurs):
     """Les étapes et leur lieu (`etapes_lieux` du relevé, l'avant/après d'une décision `decoupage_lieux`) : `[{id, nom,
-    role?, validation?, lieu?, suggeree?}]` ; une validation n'a pas de lieu."""
+    role?, validation?, lieu?, regroupement?, suggeree?}]` ; une validation n'a pas de lieu. `regroupement` : `parallele`
+    (absent : pareil) ou `regroupe` (un seul agent enchaîne les tâches de l'étape)."""
     if not isinstance(etapes, list) or not all(_est_dict(e) for e in etapes):
         erreurs.append(f"{nom} doit être une liste d'étapes {{id, nom, lieu}}.")
         return
@@ -935,6 +937,9 @@ def _verifier_etapes_lieux(etapes, nom, erreurs):
             erreurs.append(f"{nom} : chaque étape a un « id » et un « nom » (textes).")
         if e.get("lieu") is not None and (e["lieu"] not in LIEUX_D_ETAPE or e.get("validation") is True):
             erreurs.append(f"{q} : « lieu » vaut local, cloud, indifférent ou nul (jamais sur une validation).")
+        if e.get("regroupement") is not None and (e["regroupement"] not in REGROUPEMENTS_D_ETAPE
+                                                  or (e.get("validation") is True and e["regroupement"] != "parallele")):
+            erreurs.append(f"{q} : « regroupement » vaut parallele ou regroupe (jamais regroupe sur une validation).")
         for champ in ("validation", "suggeree", "exige_poste"):
             if e.get(champ) is not None and not isinstance(e[champ], bool):
                 erreurs.append(f"{q} : « {champ} » est vrai ou faux.")

@@ -3105,9 +3105,21 @@ def _sur_lieu_etape(projet, demande, etat):
     return _demarrer_en_attente(projet, etat, None)
 
 
+def _sur_regroupement_etape(projet, demande, etat):
+    """Le regroupement d'une étape réglé depuis le bureau (« Où s'exécutent les étapes ») : appliqué tout de suite, dans
+    tous les workflows qui l'ont, sans décision ni coût (`lancer lieux regrouper`). Les lots déjà partis ne changent pas."""
+    regroupement = demande.get("regroupement")
+    lancer(projet, "lieux", {"action": "regrouper", "etape": demande.get("etape"), "regroupement": regroupement})
+    _terminer(projet, {"demande": demande["id"]},
+              "C'est noté : un seul agent enchaîne les tâches de cette étape." if regroupement == wf.REGROUPEMENT_REGROUPE
+              else "C'est noté : les tâches de cette étape se répartissent entre les agents libres.")
+    return _demarrer_en_attente(projet, etat, None)
+
+
 _SUR["proposer_decoupage"] = _sur_proposer_decoupage
 _SUR[GENRE_DECOUPAGE] = _sur_decoupage_lieux
 _SUR["lieu_etape"] = _sur_lieu_etape
+_SUR["regroupement_etape"] = _sur_regroupement_etape
 
 
 def _modele_de_depart(projet, court, agent, t, modele_voulu=None):

@@ -1291,7 +1291,7 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 .etiquette.ancien { opacity: 0.7; border-style: dashed; }
 
 /* Où s'exécutent les étapes (espace de direction) et la carte du découpage selon le poste */
-.partie-lieux .etape-lieu { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.partie-lieux .etape-lieu { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; flex-wrap: wrap; }
 .partie-lieux .etape-nom { flex: 1; font-size: 13px; }
 .partie-lieux .lieu-choix { font-size: 13px; padding: 2px 4px; border-radius: 6px; }
 .badge-lieu { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;

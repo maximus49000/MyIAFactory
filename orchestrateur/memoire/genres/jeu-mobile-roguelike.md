@@ -578,3 +578,9 @@ Rôles : release
 Date : 2026-11-13
 
 Avant d'exporter et de tester un apk sur émulateur, lancer le projet et vérifier que le journal du moteur ne contient aucune erreur de shader (limite d'uniforms de fragment) ; un écran noir vient souvent de là.
+
+## G97 — Avant de juger un rendu sur émulateur, vérifier que le GPU v
+Rôles : qa
+Date : 2026-11-13
+
+Avant de juger un rendu sur émulateur, vérifier que le GPU virtuel expose les limites de shader du moteur ; sinon le test ne prouve rien.

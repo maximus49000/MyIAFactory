@@ -1275,3 +1275,14 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 .historique-agent .cout-montant { display: block; font-size: 12px; font-weight: 600; color: #5b5868; margin-top: 2px; }
 .total-taches { font-size: 12px; font-weight: 700; color: #3d3a4b; margin: 2px 0 4px; }
 .etiquette.ancien { opacity: 0.7; border-style: dashed; }
+
+/* Où s'exécutent les étapes (espace de direction) et la carte du découpage selon le poste */
+.partie-lieux .etape-lieu { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.partie-lieux .etape-nom { flex: 1; font-size: 13px; }
+.partie-lieux .lieu-choix { font-size: 13px; padding: 2px 4px; border-radius: 6px; }
+.badge-lieu { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+              background: #e6edf7; color: #2f4a86; margin-left: 4px; }
+.decoupage { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0; }
+.decoupage-colonne { font-size: 12px; }
+@media (max-width: 520px) { .decoupage { grid-template-columns: 1fr; } }
+

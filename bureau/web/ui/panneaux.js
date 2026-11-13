@@ -70,8 +70,11 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
         e.colonnes, e.types, (e.agents || []).map((a) => [a.id, a.prenom]), filtreListe]);
     }
     if (type === "agent") {
-      return JSON.stringify([(e.agents || []).find((a) => a.id === id),
-        (e.taches || []).map((t) => [t.id, t.titre]), e.services, e.agir, retourListe]);
+      const a = (e.agents || []).find((x) => x.id === id);
+      // Le Chef : son point de l'atelier et ses échanges suivent l'état (réponse arrivée, minute qui passe…).
+      const chef = a?.chef ? [e.agents, (e.taches || []).map((t) => [t.id, t.bloquee, t.attente, t.retours, cleTravail(t)]),
+        e.decisions_projet, (e.fonctionnalites || []).map((f) => f.decisions), e.attente_charge] : null;
+      return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre]), e.services, e.agir, retourListe, chef]);
     }
     return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
       e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,

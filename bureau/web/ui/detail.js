@@ -43,13 +43,14 @@ function menuDeplacer(ctx, tacheId, colonneActuelle) {
 }
 
 // La zone « Faire un retour » ; le brouillon survit aux rafraîchissements du panneau.
-function blocRetour(ctx, tacheId) {
+// `textes` : {titre, invite} pour un autre usage (la question au Chef).
+export function blocRetour(ctx, tacheId, textes = {}) {
   const bloc = el("section", "retour-saisie");
-  bloc.append(el("h3", "", "Faire un retour"));
+  bloc.append(el("h3", "", textes.titre || "Faire un retour"));
   const zone = document.createElement("textarea");
   zone.rows = 4;
   zone.maxLength = MAX_RETOUR;
-  zone.placeholder = "Écrire un retour pour l'orchestrateur…";
+  zone.placeholder = textes.invite || "Écrire un retour pour l'orchestrateur…";
   zone.value = ctx.brouillons.get(tacheId) || "";
   const compteur = el("span", "retour-compteur", "");
   const envoyer = el("button", "bouton", "Envoyer");

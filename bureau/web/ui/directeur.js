@@ -6,7 +6,8 @@ import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js"
 import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon} from "./actions.js";
 import {contenuDecisionsV4} from "./decisions.js";
-import {blocPoint} from "./point.js";
+import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
+import {blocRetour} from "./detail.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -172,8 +173,14 @@ export function contenuDirecteur(ctx, contenu) {
   });
   if (enEcriture.length) contenu.append(partie("Leçons validées, écriture en attente", "", enEcriture));
 
+  // Les réponses du Chef aux questions qu'on lui a posées (panneau du Chef) : lisibles ici aussi.
+  const echanges = el("section", "partie");
+  echanges.append(el("h3", "", "Échanges avec le Chef"), listeEchanges(e, dateFr));
+  contenu.append(echanges);
+
   const retours = [];
   for (const t of e.taches || []) {
+    if (t.id === TACHE_DU_CHEF) continue;       // montrés ci-dessus
     for (const r of t.retours || []) {
       if (r.reponse && r.reponse.trim()) continue;
       const li = el("li", "");
@@ -212,7 +219,12 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   contenu.append(ligne("Plafond", a.modele || "?"));   // le modèle de la fiche : jamais dépassé
   contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
   contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
-  if (a.chef) contenu.append(blocPoint(e, ctx.ouvrirTache));      // « où en est-on ? » : la réponse immédiate
+  if (a.chef) {
+    contenu.append(blocPoint(e, ctx.ouvrirTache));      // « où en est-on ? » : la réponse immédiate
+    if (e.agir) contenu.append(blocRetour(ctx, TACHE_DU_CHEF, {titre: "Demander au Chef",
+                                                                 invite: "Une question au Chef (il répond d'après l'état du projet)…"}));
+    contenu.append(el("div", "carte-sous-titre", "Échanges avec le Chef"), listeEchanges(e, dateFr));
+  }
 
   contenu.append(el("div", "carte-sous-titre", "Tâches en cours"));
   const taches = el("ul", "liste-partie");

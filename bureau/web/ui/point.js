@@ -56,3 +56,29 @@ export function blocPoint(etat, ouvrirTache, maintenant = new Date()) {
   if (p.retenue) bloc.append(el("p", "carte-attente", p.retenue));
   return bloc;
 }
+
+// Les échanges avec le Chef : les questions envoyées sur sa tâche « Orchestration » et ses réponses, les plus récents
+// d'abord. Pur.
+export const TACHE_DU_CHEF = "orchestration";
+export function echangesChef(etat, max = 10) {
+  const t = liste(etat?.taches).find((x) => x?.id === TACHE_DU_CHEF);
+  return liste(t?.retours).filter((r) => typeof r?.texte === "string" && r.texte.trim())
+    .map((r) => ({t: r.t || null, question: r.texte.trim(),
+                  reponse: typeof r.reponse === "string" && r.reponse.trim() ? r.reponse.trim() : null}))
+    .reverse().slice(0, max);
+}
+
+// La liste des échanges (panneau du Chef, espace de direction).
+export function listeEchanges(etat, dateFr, max = 10) {
+  const ul = el("ul", "liste-partie echanges-chef");
+  const echanges = echangesChef(etat, max);
+  if (!echanges.length) ul.append(el("li", "vide", "Aucune question posée au Chef"));
+  for (const x of echanges) {
+    const li = el("li", "");
+    li.append(el("div", "retour-texte", x.question),
+              x.reponse ? el("div", "retour-reponse", x.reponse) : el("div", "retour-attente", "le Chef réfléchit…"),
+              el("div", "retour-date", x.t ? dateFr(x.t) : ""));
+    ul.append(li);
+  }
+  return ul;
+}

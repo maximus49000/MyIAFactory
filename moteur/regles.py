@@ -1628,7 +1628,32 @@ def _tache_a_reprendre(t):
     return bool(t.get("bloquee")) or (not t["active"] and bool(t.get("debut")))
 
 
+TACHE_DU_CHEF = "orchestration"     # la tâche que le relevé montre au Chef (pas une vraie tâche du suivi)
+
+
+def _question_au_chef(projet, demande, etat):
+    """Un message au Chef (un retour sur sa tâche « Orchestration ») : il répond d'après l'état de tout le projet ; la
+    réponse s'affiche au bureau, sous la question (panneau du Chef et espace de direction)."""
+    court = _etat(projet)
+    prenoms = {a["cle"]: prenom_de(projet, a["cle"]) for a in court["agents"]}
+    taches = [{"id": t["id"], "titre": t["titre"], "colonne": t["colonne"], "agent": prenoms.get(t.get("agent")),
+               "active": t.get("active"), "bloquee": t.get("bloquee"), "debut": t.get("debut"),
+               "dernier_journal": str(t.get("dernier_journal") or "")[:200]}
+              for t in court["taches"] if t["colonne"] != "fait"][:40]
+    dossier = {"evenement": {"type": "question_chef", "texte": demande.get("texte")},
+               "etat": {"projet": court["projet"], "pause": court["pause"],
+                        "fonctionnalites": [{k: f.get(k) for k in ("id", "nom", "etape")} for f in court["fonctionnalites"]],
+                        "decisions": [{k: d.get(k) for k in ("id", "genre", "texte")} for d in court["decisions"]][:20],
+                        "taches": taches,
+                        "en_cours": sorted(_m(etat, "en_cours", set))},
+               "consignes_propres": _consignes_propres(projet),
+               "commandes": sorted(c for c in outil.COMMANDES if c not in COMMANDES_INTERDITES_AU_CONSEIL)}
+    return [a_juger("conseil", dossier, {"demande": demande.get("id"), "fonctionnalite": None})]
+
+
 def _sur_retour(projet, demande, etat):
+    if demande.get("tache") == TACHE_DU_CHEF:
+        return _question_au_chef(projet, demande, etat)
     t = _tache(projet, demande["tache"])
     fid = t.get("fonctionnalite")
     travail = agent_au_travail(projet, etat, fid) if fid else None

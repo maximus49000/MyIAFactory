@@ -370,6 +370,21 @@ class Demandes(Base):
         self.assertEqual([a[0] for a in suite], ["juger", "agent"])
         self.assertEqual(self.statut(d["id"])["reponse"], "Fait.")   # la réponse de l'agent clôt la demande
 
+    def test_une_question_au_chef_recoit_sa_reponse(self):
+        """Un retour sur la tâche « Orchestration » est une question au Chef : il répond d'après l'état de tout le
+        projet, et la réponse reste sur la demande (le bureau la montre sous la question)."""
+        self.cahier_a_valider()
+        self.ok("tache", entree={"titre": "Écran", "role": "dev", "colonne": "dev", "active": True})
+        d, actions = self.traiter(type="retour", tache="orchestration", texte="Où en est l'atelier ?")
+        ((quoi, genre, dossier, _),) = actions
+        self.assertEqual((quoi, genre), ("juger", "conseil"))
+        self.assertEqual(dossier["evenement"]["type"], "question_chef")
+        self.assertIn("Écran", [t["titre"] for t in dossier["etat"]["taches"]])
+        self.piloter(actions, juges={"conseil": {"action": "repondre", "parametres": {},
+                                                 "reponse": "Un agent fait l'écran, rien n'est bloqué."}})
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(self.statut(d["id"])["reponse"], "Un agent fait l'écran, rien n'est bloqué.")
+
     def test_aucune_demande_sans_reponse(self):
         """Pour chaque type de demande, la demande finit traitée (tout de suite, ou à la fin de son jugement)."""
         self.cahier_a_valider()

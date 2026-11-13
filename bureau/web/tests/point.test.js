@@ -29,3 +29,16 @@ test("le point dit qui fait quoi, depuis quand, et ce qui attend", () => {
 test("un état vide ne casse rien", () => {
   assert.deepEqual(pointAtelier({}, maintenant), {agents: [], decisions: 0, bloquees: [], retenue: null});
 });
+
+import {echangesChef} from "../ui/point.js";
+
+test("les échanges avec le Chef : ses questions et ses réponses, les plus récentes d'abord", () => {
+  const etat = {taches: [{id: "orchestration", retours: [
+    {t: "2026-11-13T10:00:00+01:00", texte: "Où en est Hugo ?", reponse: "Il lance les tests."},
+    {t: "2026-11-13T10:05:00+01:00", texte: "Et la boutique ?"}]},
+    {id: "t1", retours: [{texte: "autre"}]}]};
+  assert.deepEqual(echangesChef(etat), [
+    {t: "2026-11-13T10:05:00+01:00", question: "Et la boutique ?", reponse: null},
+    {t: "2026-11-13T10:00:00+01:00", question: "Où en est Hugo ?", reponse: "Il lance les tests."}]);
+  assert.deepEqual(echangesChef({}), []);
+});

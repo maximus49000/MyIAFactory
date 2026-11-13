@@ -148,30 +148,31 @@ class Registre(Base):
             r.executeur("t1", {})(["claude"], b"x", None, str(self.dossier), 0.5)
         self.assertTrue(self.attendre(lambda: r.issue("t1") != "vivant", 10))
 
-    def test_un_agent_qui_ecrit_encore_n_est_pas_arrete(self):
+    def test_un_agent_actif_n_est_pas_arrete(self):
         """Essai réel : une tâche avec de longues suites de tests était tuée à 30 min et relancée de zéro, sans fin.
-        Le délai compte depuis la dernière ligne écrite (les signes de vie de `claude` pendant une commande)."""
+        L'agent n'est arrêté que s'il est bloqué : tant qu'il agit, le délai repart."""
         import threading
         r = self.registre()
         flux = self.factory_dir / "agents-en-cours" / "t1.jsonl"
 
-        def battre():      # un signe de vie toutes les 0,1 s pendant 1,2 s, puis l'agent rend son résultat
+        def agir():      # une action toutes les 0,1 s pendant 1,2 s (bien plus que le délai), puis le résultat
             fin = time.time() + 1.2
             while time.time() < fin:
                 if flux.exists():
                     with open(flux, "a", encoding="utf-8") as f:
-                        f.write('{"type": "tool_progress", "heartbeat": true}\n')
+                        f.write('{"type": "user", "message": {"content": [{"type": "tool_result"}]}}\n')
                 time.sleep(0.1)
             self.finir()
-        fil = threading.Thread(target=battre, daemon=True)
+        fil = threading.Thread(target=agir, daemon=True)
         fil.start()
         code, _ = r.executeur("t1", {})(["claude"], b"x", None, str(self.dossier), 0.5)
         fil.join(5)
         self.assertEqual(code, 0)
 
-    def test_le_plafond_arrete_un_agent_qui_ecrit_sans_fin(self):
+    def test_une_commande_figee_est_un_blocage(self):
+        """Une commande qui ne finit jamais : `claude` n'écrit plus que des signes de vie, qui ne comptent pas."""
         import threading
-        r = self.registre(plafond_s=0.6)
+        r = self.registre()
         flux = self.factory_dir / "agents-en-cours" / "t1.jsonl"
         arret = threading.Event()
 

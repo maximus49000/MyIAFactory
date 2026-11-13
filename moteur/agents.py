@@ -11,7 +11,7 @@ from moteur import appel, rapport
 from orchestrateur import fiches
 
 OUTILS_PAR_DEFAUT = fiches.OUTILS_PAR_DEFAUT
-DELAI_AGENT_S = 1800     # un agent détaché muet (aucune ligne écrite) depuis 30 min est arrêté (voir detache.attendre)
+DELAI_AGENT_S = 1800     # un agent détaché sans aucune action réelle depuis 30 min est bloqué : arrêté (detache.attendre)
 ESSAIS = 2
 CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de départ dit qui tu es, ce que tu dois faire "
                   "et comment rendre compte. Travaille dans le dossier du projet avec les seuls outils qui te sont "

@@ -31,7 +31,6 @@ from moteur import verrou
 
 DOSSIER = "agents-en-cours"
 PAS_S = 2                       # l'attente relit l'agent toutes les 2 s
-PLAFOND_AGENT_S = 3 * 3600      # un agent qui écrit encore au bout de 3 h (boucle sans fin) est arrêté
 GRACE_APRES_RESULTAT_S = 10     # un agent qui a rendu sa ligne `result` mais ne se ferme pas : attendu 10 s, pas plus
 QUEUE_OCTETS = 65536            # la dernière action se lit dans la fin du flux seulement
 MAX_ACTION = 80
@@ -285,15 +284,29 @@ def _ecrire(chemin, objet):
 
 # --- Le registre d'un projet.
 
+def _nouvelles_actions(flux, lu):
+    """`(nouvelle position, vrai si une ligne complète écrite depuis `lu` est une vraie action)` : tout sauf les signes
+    de vie (`tool_progress`). Lit seulement la suite du fichier."""
+    try:
+        with open(flux, "rb") as f:
+            f.seek(lu)
+            bloc = f.read()
+    except OSError:
+        return lu, False
+    fin = bloc.rfind(b"\n")
+    if fin < 0:
+        return lu, False
+    lignes = [x for x in bloc[:fin].split(b"\n") if x.strip()]
+    return lu + fin + 1, any(b'"tool_progress"' not in x for x in lignes)
+
+
 class Registre:
     """Les agents détachés d'un projet. `lancer`, `vivant`, `tuer`, `dormir`, `horloge` sont là pour les essais (un faux
     `claude`) ; `noter_abonnement` : l'instantané d'abonnement lu dans le flux est gardé (jamais pendant les essais)."""
 
     def __init__(self, dossier_factory, *, lancer=lancer_processus, vivant=processus_vivant, tuer=tuer_processus,
-                 dormir=time.sleep, horloge=time.time, noter_abonnement=True, pas_s=PAS_S,
-                 plafond_s=PLAFOND_AGENT_S):
+                 dormir=time.sleep, horloge=time.time, noter_abonnement=True, pas_s=PAS_S):
         self.dossier = dossier(dossier_factory)
-        self.plafond_s = plafond_s
         self.lancer, self.vivant, self.tuer = lancer, vivant, tuer
         self.dormir, self.horloge, self.pas_s = dormir, horloge, pas_s
         self.noter_abonnement = noter_abonnement
@@ -375,17 +388,16 @@ class Registre:
         return p
 
     def attendre(self, cle, delai_s, processus=None):
-        """Attend la fin de l'agent (ou sa ligne `result`) ; au-delà de `delai_s` depuis son début, l'arrête et lève
-        `TimeoutError`. Rend `(code, sortie)` : le code n'est connu que d'un agent lancé par ce moteur ; sinon 0 si la
+        """Attend la fin de l'agent (ou sa ligne `result`) ; bloqué (aucune action réelle depuis `delai_s`), l'arrête
+        et lève `TimeoutError`. Rend `(code, sortie)` : le code n'est connu que d'un agent lancé par ce moteur ; sinon 0 si la
         ligne `result` est là, 1 sinon."""
         etat = self.lire_etat(cle) or {}
-        debut = etat.get("debut") if isinstance(etat.get("debut"), (int, float)) else self.horloge()
         flux, vu_resultat = self.chemin(cle, ".jsonl"), None
-        # `delai_s` compte depuis la dernière ligne écrite par l'agent, pas depuis son début : un agent qui travaille
-        # (ou dont une longue commande tourne : `claude` écrit un signe de vie toutes les 30 s) n'est jamais arrêté.
-        # Essai réel : une tâche avec deux suites de tests de 10 min était tuée à 30 min et relancée de zéro, sans fin.
-        # `plafond_s` borne tout de même un agent pris dans une boucle sans fin.
-        taille, actif = -1, self.horloge()
+        # L'agent n'est arrêté que s'il est bloqué : aucune action réelle (commande lancée, résultat reçu, texte…)
+        # depuis `delai_s`. Les signes de vie que `claude` écrit pendant une commande (`tool_progress`) ne comptent pas :
+        # une suite de tests de 10 min n'est pas un blocage, une commande figée au-delà de `delai_s` en est un. Essai
+        # réel : une tâche avec deux suites de tests de 10 min était tuée à 30 min depuis son début et relancée de zéro.
+        lu, actif = 0, self.horloge()
         while True:
             fini = processus.poll() is not None if processus is not None else not self.vivant(etat)
             if fini:
@@ -394,20 +406,17 @@ class Registre:
                 vu_resultat = vu_resultat if vu_resultat is not None else self.horloge()
                 if self.horloge() - vu_resultat >= GRACE_APRES_RESULTAT_S:
                     break
-            try:
-                t = flux.stat().st_size
-            except OSError:
-                t = taille
-            if t != taille:
-                taille, actif = t, self.horloge()
-            if self.horloge() - actif > delai_s or self.horloge() - debut > max(self.plafond_s, delai_s):
+            lu, agi = _nouvelles_actions(flux, lu)
+            if agi:
+                actif = self.horloge()
+            if self.horloge() - actif > delai_s:
                 self.tuer(etat.get("pid") if processus is None else processus.pid)
                 if processus is not None:
                     try:
                         processus.wait(timeout=10)
                     except (subprocess.TimeoutExpired, OSError):
                         pass
-                raise TimeoutError(f"délai dépassé ({delai_s} s)")
+                raise TimeoutError(f"agent bloqué : aucune action depuis {delai_s} s")
             self.dormir(self.pas_s)
         try:
             sortie = flux.read_bytes()

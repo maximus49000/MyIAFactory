@@ -182,3 +182,16 @@ class TestEquipePlaces(Base):
         r = self.ok("releve")
         self.assertIs(r["recrutement"]["polyvalent"], True)
         self.assertEqual(r["recrutement"]["roles"], [])
+
+    def test_releve_valide_avec_agents_polyvalents(self):
+        from bureau import releve
+        self.places(3, 0)
+        a1, a2, a3 = self.compte("local")
+        self.tache_active(a1)
+        self.tache_active(a2)
+        self.places(1, 0)          # a3 libre part, a2 au travail est marqué
+        r = self.ok("releve")
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        agents = {t["cle"]: t for t in r["titulaires"] if t["cle"] != "chef"}
+        self.assertTrue(all(t["polyvalent"] and "service" not in t and "modele" not in t for t in agents.values()))
+        self.assertEqual([k for k, t in agents.items() if t.get("retrait_prevu")], [a2])

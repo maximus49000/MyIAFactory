@@ -259,9 +259,14 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
          "charge_max": repris.get("charge_max") or calibrer(bureau_json),
          "moteur": repris.get("moteur") or {"couche": "claude"}}
     if organisation is not None:
-        p.update(services=[dict(s) for s in organisation["services"]], agents=[dict(a) for a in organisation["agents"]],
-                 briefs=dict(organisation["briefs"]), workflow=dict(organisation["workflow"]),
+        p.update(services=[dict(s) for s in organisation["services"]], workflow=dict(organisation["workflow"]),
                  environnement=[dict(x) for x in organisation.get("environnement") or []])
+        if "metiers" in organisation:      # agents polyvalents : des métiers, et le nombre d'agents = les places
+            p.update(metiers=[dict(m) for m in organisation["metiers"]], agents=dict(organisation["agents"]))
+            p["agents_locaux_max"] = p["agents"]["locaux"]
+            p.pop("briefs")
+        else:
+            p.update(agents=[dict(a) for a in organisation["agents"]], briefs=dict(organisation["briefs"]))
     bureau_avant = mep._lire_octets(bureau_json)
     try:
         projet.mkdir()

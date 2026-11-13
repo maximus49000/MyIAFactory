@@ -224,6 +224,13 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     return e
 
 
+def modele_necessaire_agents(o):
+    """Les « agents » que l'estimation attend pour les métiers d'une organisation polyvalente : le modèle par défaut du
+    métier (Sonnet sinon), sans plafond."""
+    return [{"role": m.get("role"), "modele": m.get("modele") or "Sonnet", "sans_plafond": True}
+            for m in o.get("metiers") or [] if isinstance(m, dict)]
+
+
 def _avec_empreinte(d):
     """La décision, copiée ; une organisation proposée y gagne l'empreinte estimée de son coût : ses tokens [bas, haut]
     répartis à parts égales entre les étapes (le modèle de l'agent de chaque rôle), un cinquième en sortie. Rien si un
@@ -232,7 +239,10 @@ def _avec_empreinte(d):
     o = d.get("organisation")
     if d.get("genre") != "organisation" or not isinstance(o, dict) or not isinstance(o.get("cout"), dict):
         return d
-    agents = [a for a in o.get("agents") or [] if isinstance(a, dict)]
+    if "metiers" in o:      # agents polyvalents : le modèle par défaut du métier, sans plafond
+        agents = modele_necessaire_agents(o)
+    else:
+        agents = [a for a in o.get("agents") or [] if isinstance(a, dict)]
     # le modèle nécessaire de chaque étape, ramené au plafond des agents du rôle (comme l'estimation du coût)
     modeles = [modele_necessaire.estime(e, agents) for e in o.get("flux") or []
                if isinstance(e, dict) and e.get("validation") is not True]

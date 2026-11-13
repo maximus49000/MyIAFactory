@@ -119,7 +119,8 @@ def estime(e, agents):
     if m is None or not du_role:
         return None
     modele = m["modele"] if m["source"] != "role" else du_role[0].get("modele")
-    modele = plafonne(modele, max((a.get("modele") for a in du_role), key=rang))
+    if not all(a.get("sans_plafond") for a in du_role):    # un agent polyvalent (métier) n'a pas de plafond
+        modele = plafonne(modele, max((a.get("modele") for a in du_role), key=rang))
     return "Opus" if rang(modele) >= rang(FABLE) else modele   # Fable compté Opus tant que l'accord n'est pas donné
 
 

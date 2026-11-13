@@ -115,6 +115,8 @@ def valider(r):
             erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local » ou « cloud ».")
         if t.get("chef") is True:
             chefs += 1
+        elif t.get("polyvalent") is True:      # un agent polyvalent : le service est celui de sa tâche
+            pass
         elif not _dans(t.get("service"), ids_services):
             erreurs.append(f"Titulaire « {cle} » : service inconnu « {t.get('service')} ».")
     if chefs > 1:
@@ -801,10 +803,20 @@ def _verifier_organisation(d, nom, erreurs):
     if not isinstance(o, dict):
         erreurs.append(f"{nom} est obligatoire (objet).")
         return
-    for champ in ("services", "flux", "agents"):
+    polyvalente = "metiers" in o      # le nouveau format : des métiers et le nombre d'agents (agents polyvalents)
+    for champ in ("services", "flux") + (("metiers",) if polyvalente else ("agents",)):
         if not isinstance(o.get(champ), list) or not all(isinstance(x, dict) for x in o[champ]):
             erreurs.append(f"{nom} : « {champ} » doit être une liste d'objets.")
-    if not isinstance(o.get("briefs"), dict):
+    if polyvalente:
+        a = o.get("agents")
+        if a is not None and not (_est_dict(a) and _entier_nn(a.get("locaux")) and _entier_nn(a.get("cloud"))):
+            erreurs.append(f"{nom} : « agents » doit valoir {{locaux, cloud}} (entiers positifs ou nuls).")
+        for m in o["metiers"] if isinstance(o.get("metiers"), list) else []:
+            if not _texte_plein(m.get("role")) or (m.get("modele") is not None
+                                                   and m["modele"] not in MODELES_ORGANISATION):
+                erreurs.append(f"{nom} : le métier « {m.get('role')} » demande un rôle et un modèle Haiku, Sonnet ou "
+                               "Opus (ou aucun).")
+    elif not isinstance(o.get("briefs"), dict):
         erreurs.append(f"{nom} : « briefs » doit être un objet.")
     cout = o.get("cout")
     if (not isinstance(cout, dict) or not _bornes(cout.get("tokens"))
@@ -1315,7 +1327,7 @@ def _verifier_facultatifs(r, services, colonnes, titulaires, erreurs):
         cle = t.get("cle")
         if "modele" in t and not isinstance(t["modele"], str):
             erreurs.append(f"Titulaire « {cle} » : « modele » doit être un texte.")
-        for champ in ("permanent", "chef"):
+        for champ in ("permanent", "chef", "polyvalent", "retrait_prevu"):
             if champ in t and not isinstance(t[champ], bool):
                 erreurs.append(f"Titulaire « {cle} » : « {champ} » doit être vrai ou faux.")
         f = t.get("fraicheur_min")

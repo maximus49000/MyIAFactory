@@ -803,3 +803,49 @@ class WorkflowDeCreation(AvecParcours):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PROPOSITION_POLYVALENTE = {
+    "flux": PROPOSITION["flux"], "services": PROPOSITION["services"],
+    "metiers": [{"role": "livreur", "service": "livraison", "modele": "Haiku", "specialite": "remise des fichiers",
+                 "brief": "Livre les fichiers dans les livrables."}],
+    "livrable": "Les badges en PNG", "environnement": [], "outils_installation": []}
+
+
+class ParcoursPolyvalent(AvecParcours):
+    """Un projet d'agents polyvalents : le chef propose des métiers (le dossier le dit), pas d'agent de plus."""
+
+    def setUp(self):
+        super().setUp()
+        for fiche in (self.dossier / "fiches").glob("*.md"):
+            fiche.unlink()
+        self.ecrire(self.dossier / "fiches" / "agent-1.md", "Clé : agent-1\nPrénom : Zoé\nLieu : local\n")
+
+    def test_dossier_du_chef_porte_les_metiers_et_la_proposition_aussi(self):
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION_POLYVALENTE})
+        dossier = vus[1][2]
+        self.assertEqual([m["role"] for m in dossier["metiers"]], ["dev"])
+        self.assertEqual(dossier["agents"][0]["role"], None)
+        (decision,) = self.decisions("organisation")
+        o = decision["organisation"]
+        self.assertEqual([m["role"] for m in o["metiers"]], ["livreur"])
+        self.assertNotIn("agents", o)          # l'équipe est en place : pas de nombre à choisir
+        self.assertNotIn("briefs", o)
+        self.assertIn("Métiers à créer : livreur.", decision["texte"])
+        self.assertNotIn("Agents à recruter", decision["texte"])
+        self.assertEqual(len(o["cout"]["tokens"]), 2)
+
+    def test_accepter_ecrit_le_metier_sans_recruter(self):
+        _, decision = self.vers_l_organisation(PROPOSITION_POLYVALENTE)
+        self.accepter(decision)
+        self.assertEqual(sorted(c.name for c in (self.dossier / "fiches").glob("*.md")), ["agent-1.md"])
+        brief = (self.dossier / "fiches" / "briefs" / "livreur.md").read_text(encoding="utf-8")
+        self.assertIn("Modèle : Haiku", brief)
+        self.assertIn("Livre les fichiers dans les livrables.", brief)
+
+    def test_projet_a_l_ancienne_garde_le_dossier_d_avant(self):
+        (self.dossier / "fiches" / "agent-1.md").unlink()
+        self.ecrire(self.dossier / "fiches" / "dev-1.md", "Clé : dev-1\nPrénom : Léa\nRôle : dev\nService : dev\n"
+                    "Modèle : Sonnet\nLieu : local\n\nCode.\n\n## Leçons\n")
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
+        self.assertNotIn("metiers", vus[1][2])

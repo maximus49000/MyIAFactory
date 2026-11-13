@@ -1343,10 +1343,28 @@ def _controle_organisation(ctx, o):
         occupes = sorted({x["service"] for x in existantes if x.get("service") and x["service"] not in gardes})
         if occupes:
             return [f"Un service qui a encore des agents n'est jamais retiré : {', '.join(occupes)}."]
-    return proposition.verifier_organisation(
+    equipe = [x for x in existantes if x["role"] != "chef"]
+    if proposition.est_polyvalente(o.get("agents"), o.get("metiers")):      # le nouveau format : des métiers
+        erreurs = proposition.verifier_organisation(
+            o.get("services"), o.get("flux"), o.get("agents"), None, cloud=True, briefs_existants=briefs_existants,
+            metiers=o.get("metiers"), equipe_en_place=bool(equipe))
+        if any(x["role"] for x in equipe):
+            erreurs.append("Ce projet a encore des agents par rôle : proposez des agents et des briefs à l'ancienne "
+                           "(ou passez d'abord aux agents polyvalents).")
+        return erreurs
+    erreurs = proposition.verifier_organisation(
         o.get("services"), o.get("flux"), o.get("agents"), o.get("briefs"), cloud=True,
         roles_deja_pourvus={x["role"] for x in existantes}, cles_prises={x["cle"] for x in existantes},
         briefs_existants=briefs_existants)
+    if o.get("agents") and any(fi.est_polyvalente(x) for x in equipe):
+        erreurs.append("Ce projet a des agents polyvalents : proposez des métiers, pas des agents par rôle.")
+    return erreurs
+
+
+def proposition_polyvalente(o):
+    """Vrai pour une organisation du nouveau format (des `metiers`, et le nombre d'agents)."""
+    from installation import proposition
+    return proposition.est_polyvalente(o.get("agents"), o.get("metiers"))
 
 
 def _organisation_decidee(ctx, o):
@@ -1361,9 +1379,14 @@ def _organisation_decidee(ctx, o):
     if erreurs:
         raise Refus("Organisation refusée : " + " ; ".join(erreurs))
     decidee = {"services": [dict(x) for x in o["services"]], "flux": [dict(x) for x in o["flux"]],
-               "agents": [dict(x) for x in o["agents"]], "briefs": dict(o["briefs"]),
                "cout": {"tokens": list(cout["tokens"]), "euros": None if cout.get("euros") is None
                         else list(cout["euros"])}}
+    if proposition_polyvalente(o):
+        decidee["metiers"] = [dict(x) for x in o["metiers"]]
+        if o.get("agents") is not None:
+            decidee["agents"] = dict(o["agents"])
+    else:
+        decidee.update(agents=[dict(x) for x in o["agents"]], briefs=dict(o["briefs"]))
     if "workflow" in o or "fonctionnalite" in o:
         decidee.update(_workflow_decide(ctx, o))
     return decidee
@@ -1399,7 +1422,7 @@ def _workflow_decide(ctx, o):
         raise Refus("Organisation refusée : « environnement » est une liste d'outils.")
     if not isinstance(regles, list) or not all(isinstance(x, str) and x.strip() for x in regles):
         raise Refus("Organisation refusée : « outils_installation » est une liste de règles d'outils.")
-    for a in o["agents"]:
+    for a in o["agents"] if isinstance(o.get("agents"), list) else []:
         if "fable_suggere" in a and not isinstance(a["fable_suggere"], bool):
             raise Refus(f"Organisation refusée : « fable_suggere » de l'agent « {a.get('cle')} » vaut vrai ou faux.")
     livrable = o.get("livrable")
@@ -1413,7 +1436,15 @@ def _ouvrir_les_outils_d_installation(ctx, regles):
     """Les règles d'outils proposées avec le workflow (et validées avec lui) s'ajoutent à la ligne « Outils : » de la
     fiche de l'agent d'environnement, celui qui installe ce qui manque ; rien ne s'ouvre à un autre agent."""
     agent = next((a for a in ctx.fiches() if a["role"] == "environnement"), None)
-    if agent is None:
+    if agent is None:      # un projet d'agents polyvalents : les règles vont au métier « environnement »
+        try:
+            metier = metiers.lire_metier(ctx.f["fiches"] / "briefs", "environnement")
+        except (metiers.MetierInvalide, OSError):
+            return
+        if metier is not None:
+            actuelles = fi.outils({"outils": metier["outils"]})
+            metier["outils"] = ", ".join(actuelles + [r for r in dict.fromkeys(regles) if r not in actuelles])
+            metiers.ecrire_metier(metier)
         return
     actuelles = fi.outils(agent)
     agent["outils"] = ", ".join(actuelles + [r for r in dict.fromkeys(regles) if r not in actuelles])
@@ -1451,6 +1482,14 @@ def _recruter_l_installateur(ctx, e):
         raise Refus("Fable n'est jamais choisi par un outil.")
     if any(x["role"] == "environnement" for x in ctx.fiches()):
         return {"ok": True, "deja": True}
+    if any(fi.est_polyvalente(x) for x in ctx.fiches()):      # agents polyvalents : un métier, pas un agent de plus
+        chemin = ctx.f["fiches"] / "briefs" / "environnement.md"
+        if chemin.exists():
+            return {"ok": True, "deja": True}
+        metiers.ecrire_metier({"role": "environnement", "service": a["service"], "modele": a["modele"],
+                               "lieu": "indifférent", "specialite": a.get("specialite"), "outils": a.get("outils"),
+                               "texte": brief.strip(), "lecons": [], "chemin": chemin})
+        return {"ok": True, "deja": False, "metier": "environnement"}
     try:
         mise_en_place.ajouter_agent(ctx.f["chemin"], a, brief)
     except Echec as ex:
@@ -1508,16 +1547,22 @@ def cmd_organisation(ctx, e):
         if d is None:
             raise Refus(f"Décision d'organisation inconnue : {i}")
         o = d["organisation"]
-        try:
-            agents = fi.accorder_fable(o["agents"], fable, su.maintenant()[:10])
-        except ValueError as ex:
-            raise Refus(str(ex))
+        if proposition_polyvalente(o):
+            if fable:
+                raise Refus("Fable ne se coche plus par agent : il se demande tâche par tâche, avec l'accord du Directeur.")
+            agents, briefs, metiers_ = o.get("agents"), {}, o.get("metiers")
+        else:
+            try:
+                agents = fi.accorder_fable(o["agents"], fable, su.maintenant()[:10])
+            except ValueError as ex:
+                raise Refus(str(ex))
+            briefs, metiers_ = o["briefs"], None
         w = o.get("workflow")
         try:
             mise_en_place.ecrire_organisation(
-                ctx.f["chemin"], o["services"], o["flux"], agents, o["briefs"],
+                ctx.f["chemin"], o["services"], o["flux"], agents, briefs,
                 workflow={**w, "fonctionnalite": o.get("fonctionnalite")} if w else None,
-                environnement=o.get("environnement") if w and o.get("environnement") else None)
+                environnement=o.get("environnement") if w and o.get("environnement") else None, metiers=metiers_)
         except Echec as ex:
             raise Refus(str(ex))
         if w and o.get("outils_installation") and any(x.get("etat") != "en_place" for x in o.get("environnement") or []):
@@ -2066,14 +2111,20 @@ def construire_releve(ctx):
                            "permanent": True})
     sessions = ctx.sessions()
     for x in fiches:
-        t = {"cle": x["cle"], "lieu": x["lieu"], "modele": x["modele"], "permanent": True, "prenom": x["prenom"],
+        t = {"cle": x["cle"], "lieu": x["lieu"], "permanent": True, "prenom": x["prenom"],
              "specialite": x["specialite"],
              "lecons": [{"id": le["id"], "texte": le["texte"], "etat": le["etat"],
                          **({k: meta[le["id"]][k] for k in ("etage_propose", "texte_general", "roles")
                              if meta.get(le["id"], {}).get(k) is not None} if le["etat"] == "à valider" else {})}
                         for le in x["lecons"]]}
+        if x["modele"] is not None:      # un agent polyvalent n'a pas de modèle : celui de sa tâche
+            t["modele"] = x["modele"]
         if x["role"] == "chef":
             t["chef"] = True
+        elif fi.est_polyvalente(x):      # ni service ni modèle : ceux de la tâche qu'il tient
+            t["polyvalent"] = True
+            if x.get("retrait_prevu"):
+                t["retrait_prevu"] = True
         else:
             t["service"] = x["service"]
         if sessions.get(x["cle"]) or x["session"]:

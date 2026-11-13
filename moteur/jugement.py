@@ -17,7 +17,8 @@ Dossiers attendus (préparés par la table de règles) :
   description), `genres_du_projet` ([{id, domaine, livrable, outils}], ceux de ses workflows), `genres_connus`
   (`memoire.genres` de la skill), `mots_interdits` du projet ;
 - `proposer_organisation` : `demande`, `genre`, `projet` (nom, description), `services` ([{id, nom}]), `agents`
-  ([{cle, role, modele, specialite}]), `regles_projet` (les textes des règles du projet, absent sans règle), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
+  ([{cle, role, modele, specialite}] ; un agent polyvalent n'a pas de rôle), `metiers` ([{role, service, modele, lieu,
+  specialite}] : les briefs du projet, absent d'un projet à l'ancienne), `regles_projet` (les textes des règles du projet, absent sans règle), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`
   (son id : le moteur préfixe chaque `etape` par `<id>-`), `refus` (texte du Directeur ou null) ;
 - `definir_workflow` (appelé par le bureau, avant que le projet n'existe) : `projet` (nom, description, facturation,
   github), `genres_connus`, `mots_interdits` (le nom du projet en fait partie), `services` ([{id, nom}], la facturation
@@ -337,6 +338,110 @@ def _dit_le_livrable(nom, livrable):
     return any(m in mots for m in re.findall(r"[a-z0-9]+", n))
 
 
+def _valider_agents_a_l_ancienne(o, d, agents_projet, tous_services, roles_du_flux):
+    """Les agents par rôle et leurs briefs (l'ancien format d'une proposition)."""
+    agents = o.get("agents")
+    if not isinstance(agents, list) or not all(isinstance(a, dict) for a in agents):
+        return "« agents » est la liste des nouveaux agents (vide s'il n'en faut pas)."
+    cles = [a.get("cle") for a in agents_projet]
+    roles = {a.get("role") for a in agents_projet}
+    roles_nouveaux = []
+    for a in agents:
+        c = a.get("cle")
+        if not (isinstance(c, str) and MOTIF_ID.match(c)):
+            return f"Agent {c!r} : une « cle » (minuscules, chiffres, tirets, 40 caractères au plus)."
+        if c in cles:
+            return f"Agent « {c} » : clé déjà prise."
+        cles.append(c)
+        # Un agent proposé est recruté avec le plafond Opus (les modèles justifiés vont sur les étapes) : son
+        # « modele » est facultatif, mais jamais Fable ni un nom inconnu.
+        if isinstance(a.get("modele"), str) and "fable" in a["modele"].lower():
+            return (f"Agent « {c} » : jamais Fable comme modèle ; mets Opus et « fable_suggere »: true si Fable "
+                    "serait vraiment utile (le Directeur décidera).")
+        if "modele" in a and a["modele"] not in MODELES_AGENT:
+            return f"Agent « {c} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
+        if not (isinstance(a.get("role"), str) and MOTIF_ID.match(a["role"])):
+            return f"Agent « {c} » : un « role » (minuscules, chiffres, tirets) est attendu."
+        roles.add(a["role"])
+        if a["role"] not in roles_nouveaux:
+            roles_nouveaux.append(a["role"])
+        if a.get("service") not in tous_services:
+            return f"Agent « {c} » : service « {a.get('service')} » ni au projet ni proposé."
+        if "justification" in a and not _ligne(a["justification"]):
+            return f"Agent « {c} » : « justification » en une ligne."
+        if not _texte(a.get("texte")):
+            return f"Agent « {c} » : le « texte » de sa fiche est vide."
+        if a.get("prenom") is not None and not _ligne(a["prenom"]):
+            return f"Agent « {c} » : « prenom » tient sur une ligne."
+        if "fable_suggere" in a and not isinstance(a["fable_suggere"], bool):
+            return f"Agent « {c} » : « fable_suggere » vaut true ou false."
+    for r in roles_du_flux:
+        if r not in roles:
+            return f"Aucun agent pour le rôle « {r} » : propose-en un, ou confie l'étape à un rôle du projet."
+    briefs = o.get("briefs")
+    if not isinstance(briefs, dict) or not all(isinstance(k, str) and _texte(v) for k, v in briefs.items()):
+        return "« briefs » associe à chaque nouveau rôle un texte."
+    for r in roles_nouveaux:
+        if r not in briefs:
+            return f"Aucun brief pour le nouveau rôle « {r} »."
+    return None
+
+
+LIEUX_METIER = ("local", "cloud", "indifférent")
+
+
+def _valider_metiers(o, d, agents_projet, tous_services, roles_du_flux):
+    """Le nouveau format d'une proposition (agents polyvalents) : `metiers` (les métiers neufs, un brief chacun) et
+    `agents` `{locaux, cloud}` (le nombre d'agents, qui sont les places du projet ; facultatif quand le projet a déjà
+    son équipe). Un projet qui a encore des agents par rôle reste à l'ancien format."""
+    if "briefs" in o:
+        return "« briefs » n'existe plus avec « metiers » : le brief de chaque rôle est le « brief » de son métier."
+    if any(a.get("role") and a["role"] != "chef" for a in agents_projet):
+        return ("Ce projet a encore des agents par rôle : propose « agents » (la liste des nouveaux) et « briefs », "
+                "pas « metiers ».")
+    existants = [(m.get("role") if isinstance(m, dict) else m) for m in d.get("metiers") or []]
+    existants = [r for r in existants if isinstance(r, str)]
+    metiers = o.get("metiers")
+    if not isinstance(metiers, list) or not all(isinstance(m, dict) for m in metiers):
+        return "« metiers » est la liste des nouveaux métiers (vide si ceux du projet suffisent)."
+    nouveaux = []
+    for m in metiers:
+        r = m.get("role")
+        if not (isinstance(r, str) and MOTIF_ID.match(r)):
+            return f"Métier {r!r} : un « role » (minuscules, chiffres, tirets, 40 caractères au plus)."
+        if r in existants or r in nouveaux:
+            return f"Métier « {r} » : déjà au projet ou en double ; ne propose que les nouveaux."
+        nouveaux.append(r)
+        if m.get("service") not in tous_services:
+            return f"Métier « {r} » : service « {m.get('service')} » ni au projet ni proposé."
+        if isinstance(m.get("modele"), str) and "fable" in m["modele"].lower():
+            return (f"Métier « {r} » : jamais Fable comme modèle par défaut ; Fable ne se demande que tâche par tâche, "
+                    "sur une étape (« modele »), avec l'accord du Directeur.")
+        if m.get("modele") is not None and m["modele"] not in MODELES_AGENT:
+            return f"Métier « {r} » : « modele » doit valoir {', '.join(MODELES_AGENT)} (ou être absent)."
+        if m.get("lieu", "indifférent") not in LIEUX_METIER:
+            return f"Métier « {r} » : « lieu » vaut {', '.join(LIEUX_METIER)}."
+        for champ in ("specialite", "outils"):
+            if m.get(champ) is not None and not _ligne(m[champ]):
+                return f"Métier « {r} » : « {champ} » tient sur une ligne."
+        if not _texte(m.get("brief")):
+            return f"Métier « {r} » : le « brief » (la consigne du spécialiste) est vide."
+    for r in roles_du_flux:
+        if r not in nouveaux and r not in existants:
+            return f"Aucun métier pour le rôle « {r} » : propose-en un, ou confie l'étape à un métier du projet."
+    agents = o.get("agents")
+    equipe = any(a.get("role") != "chef" for a in agents_projet)
+    if agents is None and equipe:
+        return None
+    if not (isinstance(agents, dict) and set(agents) == {"locaux", "cloud"}):
+        return "« agents » est le nombre d'agents : {\"locaux\": n, \"cloud\": m}."
+    for champ, bas, haut in (("locaux", 1, 16), ("cloud", 0, 16)):
+        v = agents[champ]
+        if isinstance(v, bool) or not isinstance(v, int) or not bas <= v <= haut:
+            return f"« agents.{champ} » est un entier de {bas} à {haut}."
+    return None
+
+
 def _valider_proposer_organisation(o, d):
     services_projet = [s.get("id") for s in d.get("services") or [] if isinstance(s, dict)]
     agents_projet = [a for a in d.get("agents") or [] if isinstance(a, dict)]
@@ -405,50 +510,12 @@ def _valider_proposer_organisation(o, d):
     if not _dit_le_livrable(flux[-1]["nom"], o["livrable"]):
         return (f"La dernière étape (« {flux[-1]['nom']} ») doit produire ou remettre le livrable, et son nom doit le "
                 "dire (par exemple « Livraison de … ») : le workflow va de la demande au livrable remis.")
-    agents = o.get("agents")
-    if not isinstance(agents, list) or not all(isinstance(a, dict) for a in agents):
-        return "« agents » est la liste des nouveaux agents (vide s'il n'en faut pas)."
-    cles = [a.get("cle") for a in agents_projet]
-    roles = {a.get("role") for a in agents_projet}
-    roles_nouveaux = []
-    for a in agents:
-        c = a.get("cle")
-        if not (isinstance(c, str) and MOTIF_ID.match(c)):
-            return f"Agent {c!r} : une « cle » (minuscules, chiffres, tirets, 40 caractères au plus)."
-        if c in cles:
-            return f"Agent « {c} » : clé déjà prise."
-        cles.append(c)
-        # Un agent proposé est recruté avec le plafond Opus (les modèles justifiés vont sur les étapes) : son
-        # « modele » est facultatif, mais jamais Fable ni un nom inconnu.
-        if isinstance(a.get("modele"), str) and "fable" in a["modele"].lower():
-            return (f"Agent « {c} » : jamais Fable comme modèle ; mets Opus et « fable_suggere »: true si Fable "
-                    "serait vraiment utile (le Directeur décidera).")
-        if "modele" in a and a["modele"] not in MODELES_AGENT:
-            return f"Agent « {c} » : « modele » doit valoir {', '.join(MODELES_AGENT)}."
-        if not (isinstance(a.get("role"), str) and MOTIF_ID.match(a["role"])):
-            return f"Agent « {c} » : un « role » (minuscules, chiffres, tirets) est attendu."
-        roles.add(a["role"])
-        if a["role"] not in roles_nouveaux:
-            roles_nouveaux.append(a["role"])
-        if a.get("service") not in tous_services:
-            return f"Agent « {c} » : service « {a.get('service')} » ni au projet ni proposé."
-        if "justification" in a and not _ligne(a["justification"]):
-            return f"Agent « {c} » : « justification » en une ligne."
-        if not _texte(a.get("texte")):
-            return f"Agent « {c} » : le « texte » de sa fiche est vide."
-        if a.get("prenom") is not None and not _ligne(a["prenom"]):
-            return f"Agent « {c} » : « prenom » tient sur une ligne."
-        if "fable_suggere" in a and not isinstance(a["fable_suggere"], bool):
-            return f"Agent « {c} » : « fable_suggere » vaut true ou false."
-    for r in roles_du_flux:
-        if r not in roles:
-            return f"Aucun agent pour le rôle « {r} » : propose-en un, ou confie l'étape à un rôle du projet."
-    briefs = o.get("briefs")
-    if not isinstance(briefs, dict) or not all(isinstance(k, str) and _texte(v) for k, v in briefs.items()):
-        return "« briefs » associe à chaque nouveau rôle un texte."
-    for r in roles_nouveaux:
-        if r not in briefs:
-            return f"Aucun brief pour le nouveau rôle « {r} »."
+    if "metiers" in o:       # le nouveau format : des métiers et le nombre d'agents (agents polyvalents)
+        erreur = _valider_metiers(o, d, agents_projet, tous_services, roles_du_flux)
+    else:
+        erreur = _valider_agents_a_l_ancienne(o, d, agents_projet, tous_services, roles_du_flux)
+    if erreur:
+        return erreur
     env = o.get("environnement")
     if not isinstance(env, list) or not all(isinstance(x, dict) for x in env):
         return "« environnement » est la liste des outils du poste {outil, pour, executables, installation} (vide si rien)."

@@ -517,7 +517,8 @@ def _verifier_v4(demande, r, elements):
             if message:
                 return message
         if "fable" in demande:
-            proposes = {a.get("cle") for a in (d.get("organisation") or {}).get("agents") or []
+            agents_proposes = (d.get("organisation") or {}).get("agents")
+            proposes = {a.get("cle") for a in (agents_proposes if isinstance(agents_proposes, list) else [])
                         if a.get("fable_suggere") is True}
             fable = demande["fable"]
             if not isinstance(fable, list) or not all(isinstance(c, str) for c in fable):

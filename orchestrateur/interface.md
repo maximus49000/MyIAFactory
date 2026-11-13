@@ -204,6 +204,13 @@ notés (`environnement`), et un genre nouveau est créé dans la mémoire de la 
 `genre_raison`, il ne bloque rien). `fable` : les agents que le Directeur a cochés ; ils doivent avoir été suggérés
 (`fable_suggere`), et leur fiche porte alors `Fable : accordé par le Directeur le <date>`. Rend `{"ok": true,
 "services": [...], "flux": [...]}` (et, pour un workflow, `workflow`, `fonctionnalite`, `genre`, `genre_raison`?).
+**Agents polyvalents** (nouveau format) : l'organisation d'une décision porte `metiers` `[{role, service, modele?, lieu?,
+specialite?, outils?, brief}]` (un par rôle neuf du flux) et, seulement si le projet n'a encore aucun agent,
+`agents` `{"locaux": n, "cloud": m}` ; pas de `briefs`, pas de fiche d'agent par rôle, pas de `fable`. `appliquer` écrit un
+brief enrichi par métier (un brief existant est gardé) ; un projet sans équipe reçoit `n + m` fiches polyvalentes et ses places
+(`agents_locaux_max`, `agents_cloud_max`) sont réglées à `n` et `m` ; un projet qui a déjà son équipe la garde. Le contrôle
+refuse des agents par rôle dans un projet polyvalent, et des métiers dans un projet qui a encore des agents par rôle (l'ancien
+format reste accepté pour les projets non repris).
 Refus (code 1) si la décision est inconnue ou n'est
 pas de ce genre, ou si son contenu ne passe plus le contrôle (le projet a changé) : rien n'est écrit, la décision reste.
 Entrée `{"action": "environnement", "outils": [{outil, etat: en_place | a_installer, chemin?, version?, …}]}` : note l'état
@@ -222,7 +229,7 @@ levée ; sinon elle reste, chaque outil marqué trouvé ou non trouvé), `contin
 trouvé ; sans lui, tous) : le Directeur affirme que c'est installé, l'outil est noté déclaré (non vérifié) et la décision levée
 s'il ne reste rien à trouver. Seul le moteur la traite.
 Entrée `{"action": "installateur", "agent": {cle, role: environnement, service, modele, lieu, texte, outils?}, "brief"}` :
-recrute l'agent qui installe les outils du poste (rien si un agent de ce rôle existe ; jamais Fable) ; c'est ce que fait
+recrute l'agent qui installe les outils du poste (rien si un agent de ce rôle existe ; jamais Fable) ; dans un projet d'agents polyvalents, il écrit à la place le métier `environnement` (brief et outils), sans agent de plus ; c'est ce que fait
 le moteur au clic « Installer en autonomie » quand le projet n'en a pas encore.
 Le clic « Installer en autonomie » arrive au projet comme une demande `installer_outil` (`decision`, `outil`, `fonctionnalite`?) : jamais d'installation sans ce clic, un outil à la fois ; seul le moteur la traite.
 Entrée `{"action": "reprendre", "fonctionnalite": fid, "workflow": id}` : la fonctionnalité suit un workflow de genre du

@@ -240,3 +240,22 @@ test("depuis une decision le formulaire actuel reste", () => {
   assert.equal(utiliseLeFormulaireActuel({projets: [], parents: []}), false);
   assert.equal(utiliseLeFormulaireActuel(undefined), false);
 });
+
+test("lignesProposition montre les métiers et le nombre d'agents", () => {
+  const {agents, ...sansAgents} = PROPOSITION;
+  const poly = {...sansAgents, metiers: [
+    {role: "dev", service: "dev", modele: "Sonnet", specialite: "écrans du jeu", brief: "Écris."},
+    {role: "livreur", service: "dev", brief: "Remets."}], agents: {locaux: 2, cloud: 1}};
+  const texte = lignesProposition(poly).join("\n");
+  assert.match(texte, /Métiers/);
+  assert.match(texte, /- dev, service .*écrans du jeu/);
+  assert.match(texte, /- livreur, service/);
+  assert.match(texte, /Équipe : 2 agents locaux, 1 agent cloud/);
+  assert.doesNotMatch(texte, /Équipe à recruter|plafond/);
+  assert.match(lignesProposition({...poly, agents: {locaux: 1, cloud: 0}}).join("\n"), /Équipe : 1 agent local, 0 agent cloud/);
+  // sans nombre (le projet a déjà son équipe) : les métiers seuls ; Fable ne se coche plus par agent
+  assert.doesNotMatch(lignesProposition({...poly, agents: undefined}).join("\n"), /Équipe/);
+  assert.deepEqual(agentsFable(poly), []);
+  // l'ancien format est inchangé
+  assert.match(lignesProposition(PROPOSITION).join("\n"), /Équipe à recruter/);
+});

@@ -17,10 +17,15 @@ Proposition (`"type": "proposition"`), comme une organisation de fonctionnalité
   remet le livrable et son nom le dit (« Livraison de l'apk signé »). Pas d'étape de cadrage. Chaque étape a sa
   `raison` (une ligne). Une validation du Directeur, là où l'utilisateur veut valider : `{"etape", "nom",
   "validation": true, "raison"}`, sans rôle ni service ; ni première, ni dernière, ni deux de suite.
-- Tout est nouveau : `services`, `agents` (un par rôle), `briefs` (un par rôle). Ids en minuscules et tirets.
+- Tout est nouveau : `services` et `metiers`, un par rôle du flux : `{role, service, modele?, lieu?, specialite?, outils?,
+  brief}` ; le `brief` est la consigne complète du spécialiste, `modele` son modèle par défaut (Haiku, Sonnet ou Opus), `lieu`
+  `local` seulement si le métier ne peut se faire que sur le poste (émulateur, programme installé), sinon `indifférent`.
+  Les agents sont **polyvalents** : chacun devient le spécialiste du métier de sa tâche. `agents` est donc le **nombre
+  d'agents** `{"locaux": n, "cloud": m}` (locaux de 1 à 16, cloud de 0 à 16, 0 sans GitHub ; ce sont les places du projet,
+  réglables ensuite dans Facturation) : autant que de tâches à faire en parallèle, sans excès. Ids en minuscules et tirets.
 - Sur chaque étape d'agent, le `modele` que demande son travail et sa `justification` (une ligne, 160 caractères au
   plus) : Haiku pour le mécanique, Sonnet pour la création et le code, Opus pour une conception difficile ;
-  jamais Fable. Les agents, sans modèle, ont le plafond Opus ; au besoin `"fable_suggere": true`.
+  jamais Fable. Aucun agent n'a de plafond : chaque tâche tourne sur le modèle de son étape.
 - `environnement` : outils du poste (`pour` : l'`etape`), `executables` (noms), `installation` Windows en une ligne,
   `objectif` : à quoi l'outil servira dans CE projet et à quelle étape (une phrase concrète, pas générique),
   `version_min` (« 17 ») ou null ; `telechargement` : URL https **officielle** de l'éditeur, jamais un miroir ni
@@ -32,8 +37,8 @@ Textes en français, **courts**. L'une des deux formes :
 {"type": "questions", "message": "…", "questions": [{"id": "q1", "texte": "…", "choix": ["…"], "multiple": false}]}
 {"type": "proposition", "message": "…", "genre": null, "nouveau": {"id": "…", "description": "…"},
  "flux": [{"etape": "dev", "nom": "…", "role": "dev", "service": "…", "raison": "…", "modele": "Haiku", "justification": "…"}],
- "services": [{"id": "…", "nom": "…"}], "agents": [{"cle": "…", "prenom": "…", "role": "…", "service": "…",
- "fable_suggere": false, "texte": "sa fiche"}], "briefs": {"dev": "…"},
+ "services": [{"id": "…", "nom": "…"}], "metiers": [{"role": "dev", "service": "…", "modele": "Sonnet",
+ "lieu": "indifférent", "specialite": "…", "outils": "Read, Edit, Bash(py:*)", "brief": "…"}], "agents": {"locaux": 2, "cloud": 0},
  "livrable": "…", "environnement": [{"outil": "…", "version_min": null, "pour": "dev", "executables": ["…"],
  "installation": "…", "objectif": "…", "telechargement": null, "etapes": ["…", "…"], "autonome": false}], "outils_installation": []}
 ```

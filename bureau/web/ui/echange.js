@@ -145,7 +145,15 @@ export function lignesProposition(p) {
     lignes.push(`${k + 1}. ${e.nom} (${qui})` + (raison ? ` : ${raison}` : ""));
   });
   if (p.livrable) lignes.push(`Livrable : ${String(p.livrable).replace(/\.$/, "")}.`);
-  if ((p.agents || []).length) {
+  if (Array.isArray(p.metiers)) {      // agents polyvalents : des métiers et le nombre d'agents
+    lignes.push("Métiers (chaque agent est spécialiste du métier de sa tâche et la fait tourner sur le modèle de son étape) :");
+    for (const m of p.metiers) {
+      lignes.push(`- ${m.role}, service ${services.find((s) => s.id === m.service)?.nom || m.service}`
+        + (m.specialite ? `, ${m.specialite}` : ""));
+    }
+    const equipe = libelleEquipe(p.agents);
+    if (equipe) lignes.push(`Équipe : ${equipe} (ce sont les places de l'onglet Facturation).`);
+  } else if (Array.isArray(p.agents) && p.agents.length) {
     lignes.push("Équipe à recruter (chaque tâche tourne sur le modèle de son étape, jamais au-dessus du plafond) :");
     for (const a of p.agents) lignes.push(`- ${a.prenom || a.cle}, ${a.role}, plafond ${a.modele}`);
   }
@@ -172,7 +180,14 @@ export function lignesProposition(p) {
 
 // Les agents pour lesquels on peut cocher Fable : seulement ceux dont le chef l'a suggéré.
 export function agentsFable(p) {
-  return (p?.agents || []).filter((a) => a.fable_suggere === true);
+  return Array.isArray(p?.agents) ? p.agents.filter((a) => a.fable_suggere === true) : [];
+}
+
+// « 2 agents locaux, 1 agent cloud » ; "" sans nombre d'agents (un projet qui a déjà son équipe).
+export function libelleEquipe(agents) {
+  if (!agents || Array.isArray(agents) || !Number.isInteger(agents.locaux) || !Number.isInteger(agents.cloud)) return "";
+  const n = (v, un, plusieurs) => `${v} ${v > 1 ? plusieurs : un}`;
+  return `${n(agents.locaux, "agent local", "agents locaux")}, ${n(agents.cloud, "agent cloud", "agents cloud")}`;
 }
 
 // Les outils qui manquent et qu'un agent peut installer seul (les seuls que la case « installer » lui confie).

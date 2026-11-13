@@ -27,7 +27,7 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-from installation import estimation
+from installation import estimation, proposition
 from moteur import accord_outil, agents, cloud, detache, environnement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
@@ -1049,10 +1049,22 @@ def _proposer(projet, etat, fid, suite, refus=None):
                "agents": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"], "specialite": a.get("specialite")}
                           for a in fiches_],
                "workflows_du_genre": anterieurs, "fonctionnalite": fid, "refus": refus}
+    if not any(x["role"] and x["role"] != "chef" for x in fiches_):
+        # un projet sans agent par rôle (neuf, ou passé aux agents polyvalents) : la proposition porte des métiers
+        dossier["metiers"] = [{"role": r, "service": m["service"], "modele": m["modele"], "lieu": m["lieu"],
+                               "specialite": m["specialite"]} for r, m in _metiers_du_projet(fac).items()]
     regles = [x["texte"] for x in rp.lire(fac)]
     if regles:      # ce que le Directeur a retenu pour ce projet : le workflow proposé les respecte
         dossier["regles_projet"] = regles
     return [a_juger("proposer_organisation", dossier, {k: v for k, v in suite.items() if k != "sans_genre"})]
+
+
+def _metiers_du_projet(fac):
+    """{rôle: métier} des briefs du projet ; un brief illisible est ignoré."""
+    try:
+        return {r: m for r, m in metiers.lire_tous(Path(fac["fiches"]) / "briefs").items() if m}
+    except (metiers.MetierInvalide, OSError):
+        return {}
 
 
 def _cout(projet, flux, agents, genre):
@@ -1082,28 +1094,50 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
             for x in o["flux"]]
     # Les nouveaux agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (conception
     # 2026-11-12-modele-par-tache-design.md).
-    flux, nouveaux = mn.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
+    polyvalente = "metiers" in o      # le nouveau format : des métiers et le nombre d'agents
+    if polyvalente:
+        nouveaux = []
+        nouveaux_metiers = [dict(m) for m in o["metiers"]]
+        flux, _ = mn.modeles_sur_les_etapes(flux, [])
+        existants = proposition.agents_pour_estimer(
+            [{"role": r, "modele": m["modele"]} for r, m in _metiers_du_projet(fac).items()]
+            + [{"role": m["role"], "modele": m.get("modele")} for m in nouveaux_metiers])
+    else:
+        flux, nouveaux = mn.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
+        existants = [{"role": a["role"], "modele": a["modele"]} for a in _etat(projet)["agents"]]
     services = [{"id": s["id"], "nom": s["nom"]} for s in fac["services"]] + [dict(s) for s in o["services"]]
-    existants = [{"role": a["role"], "modele": a["modele"]} for a in _etat(projet)["agents"]]
     try:
         cout = _cout(projet, flux, nouveaux + existants, genre)
         w = {"id": f"w-{fid}", "genre": genre, "flux": [dict(x) for x in flux]}
         if ctx.get("genre_nouveau"):
             w["genre_nouveau"] = ctx["genre_nouveau"]
         poste = _verifier_poste(projet, o["environnement"])
-        briefs = dict(o["briefs"])
+        briefs = {} if polyvalente else dict(o["briefs"])
         if environnement.autonomes_a_installer(poste):       # un agent pour installer ce qu'il peut installer seul
             installateur, brief = _agent_d_installation(projet, nouveaux, flux)
-            if installateur:
+            if installateur and polyvalente:       # un métier de plus : n'importe quel agent installe
+                if installateur["role"] not in {m["role"] for m in nouveaux_metiers} | set(_metiers_du_projet(fac)):
+                    nouveaux_metiers.append({"role": installateur["role"], "service": installateur["service"],
+                                             "modele": installateur["modele"], "outils": installateur.get("outils"),
+                                             "brief": brief})
+            elif installateur:
                 nouveaux.append(installateur)
                 briefs[ROLE_ENVIRONNEMENT] = brief
         organisation = {"services": services, "flux": flux, "agents": nouveaux, "briefs": briefs,
                         "cout": cout, "fonctionnalite": fid, "workflow": w, "livrable": o["livrable"],
                         "environnement": poste, "outils_installation": list(o["outils_installation"])}
+        if polyvalente:
+            organisation.pop("briefs")
+            organisation["metiers"] = nouveaux_metiers
+            if o.get("agents") is not None:
+                organisation["agents"] = dict(o["agents"])
+            else:
+                organisation.pop("agents")
         etapes = " puis ".join(x["nom"] for x in flux)
         livrable = o["livrable"].strip().rstrip(".")
         texte = (f"Voici le workflow que je propose pour « {f['nom']} » : {etapes}. Livrable : {livrable}. "
-                 + (f"Agents à recruter : {', '.join(a.get('prenom') or a['cle'] for a in nouveaux)}. " if nouveaux
+                 + (_texte_des_metiers(nouveaux_metiers, o.get("agents")) if polyvalente
+                    else f"Agents à recruter : {', '.join(a.get('prenom') or a['cle'] for a in nouveaux)}. " if nouveaux
                     else "Aucun agent à recruter : ceux du projet suffisent. ")
                  + (f"Services à créer : {', '.join(s['nom'] for s in o['services'])}. " if o["services"] else "")
                  + _texte_du_poste(poste))
@@ -1115,6 +1149,21 @@ def _apres_proposer_organisation(projet, o, ctx, etat):
     _dire(projet, fid, texte.strip() + " Dites si vous l'acceptez.")
     _terminer(projet, ctx, "Je vous propose un workflow pour cette demande : à vous de le valider.")
     return []
+
+
+def _texte_des_metiers(metiers_, agents):
+    """Ce que la proposition dit de l'équipe : les métiers neufs et le nombre d'agents (qui sont les places)."""
+    texte = ""
+    if metiers_:
+        texte += f"Métiers à créer : {', '.join(m['role'] for m in metiers_)}. "
+    else:
+        texte += "Aucun métier à créer : ceux du projet suffisent. "
+    if agents:
+        def n(v, un, plusieurs):
+            return f"{v} {un if v <= 1 else plusieurs}"
+        texte += (f"Équipe : {n(agents['locaux'], 'agent local', 'agents locaux')}, "
+                  f"{n(agents['cloud'], 'agent cloud', 'agents cloud')}. ")
+    return texte
 
 
 def _proposition_ratee(projet, etat, ctx, texte):

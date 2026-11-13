@@ -49,13 +49,12 @@ VALIDES["definir_workflow"] = {
              {"etape": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "jeu",
               "raison": "L'apk signé est déposé dans les livrables."}],
     "services": [{"id": "jeu", "nom": "Jeu"}, {"id": "qualite", "nom": "Qualité"}],
-    "agents": [{"cle": "dev", "role": "dev", "service": "jeu", "modele": "Sonnet",
-                "justification": "Code courant.", "texte": "Tu écris le jeu."},
-               {"cle": "testeur", "role": "testeur", "service": "qualite", "modele": "Haiku",
-                "justification": "Vérification mécanique.", "texte": "Tu testes le jeu."},
-               {"cle": "livreur", "role": "livreur", "service": "jeu", "modele": "Sonnet",
-                "justification": "Construction et signature.", "texte": "Tu construis l'apk."}],
-    "briefs": {"dev": "Écris le jeu.", "testeur": "Teste le jeu.", "livreur": "Construis et signe l'apk."},
+    # agents polyvalents : des métiers (un brief chacun) et le nombre d'agents, qui sont les places du projet
+    "metiers": [{"role": "dev", "service": "jeu", "modele": "Sonnet", "specialite": "Kotlin", "brief": "Écris le jeu."},
+                {"role": "testeur", "service": "qualite", "modele": "Haiku", "brief": "Teste le jeu."},
+                {"role": "livreur", "service": "jeu", "modele": "Sonnet", "lieu": "local",
+                 "brief": "Construis et signe l'apk."}],
+    "agents": {"locaux": 2, "cloud": 0},
     "livrable": "Le jeu en fichier .apk signé.",
     "environnement": [{"outil": "JDK", "version_min": "17", "pour": "livraison", "executables": ["java"],
                        "installation": "winget install Microsoft.OpenJDK.17 (source officielle)."}],
@@ -492,7 +491,9 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._def(dict(o, nouveau={"id": "jeu-android", "description": "x"})))  # déjà connu
         self.assertIsNotNone(self._def(dict(o, nouveau={"id": "Jeu Mobile", "description": "x"})))
         self.assertIsNotNone(self._def(dict(o, message="")))
-        self.assertIsNotNone(self._def(dict(o, agents=o["agents"][1:])))                   # dev sans agent
+        self.assertIsNotNone(self._def(dict(o, metiers=o["metiers"][1:])))                 # dev sans métier
+        self.assertIsNotNone(self._def(dict(o, agents={"locaux": 0, "cloud": 0})))        # au moins un agent local
+        self.assertIsNotNone(self._def({k: v for k, v in o.items() if k != "agents"}))     # le nombre d'agents manque
         self.assertIsNotNone(self._def(dict(o, flux=o["flux"][:3])))                       # finit par une validation
         self.assertIsNotNone(self._def(dict(o, type="organisation")))
         etape_longue = dict(o["flux"][0], etape="x" * 37)                                  # trop longue une fois préfixée
@@ -593,7 +594,7 @@ class Consignes(unittest.TestCase):
     def test_cinq_consignes_courtes(self):
         for type_ in jugement.TYPES:
             texte = jugement.consigne(type_)
-            self.assertLessEqual(len(texte.splitlines()), 40, type_)
+            self.assertLessEqual(len(texte.splitlines()), 56, type_)    # proposer_organisation porte les deux formats
             self.assertIn("Réponds seulement par ce JSON.", texte, type_)
 
     def test_chaque_consigne_donne_ses_champs(self):
@@ -643,13 +644,13 @@ class Consignes(unittest.TestCase):
         for type_ in ("proposer_organisation", "definir_workflow"):
             texte = jugement.consigne(type_)
             self.assertIn('"modele": "Haiku", "justification"', texte, type_)    # sur l'étape, dans l'exemple
-            self.assertIn("plafond Opus", texte, type_)
-            self.assertLess(len(texte), 4600, type_)                             # une consigne reste courte
+            self.assertIn("plafond", texte, type_)       # l'ancien format a un plafond Opus, les agents polyvalents aucun
+            self.assertLess(len(texte), 5600, type_)                             # une consigne reste courte
 
     def test_definir_workflow_porte_les_decisions_de_l_utilisateur(self):
         texte = jugement.consigne("definir_workflow")
         for attendu in ("ne repose jamais", "livrables", "valider", "tests", "assez", "choix",
-                        "de la demande au livrable remis", '"validation": true', "jamais Fable", "fable_suggere",
+                        "de la demande au livrable remis", '"validation": true', "jamais Fable", "polyvalents", "metiers",
                         "raison", "4", "proposer_maintenant", "correction", "courts"):
             self.assertIn(attendu, texte)
         for modele in ("Haiku", "Sonnet", "Opus"):

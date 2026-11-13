@@ -16,7 +16,7 @@ from pathlib import Path
 
 from bureau import empreinte
 from bureau.empreinte import Cumul
-from installation import brouillons, creation, estimation, mise_en_place as mep
+from installation import brouillons, creation, estimation, mise_en_place as mep, proposition
 from installation.dossier import Echec
 from moteur import appel, environnement, jugement
 from orchestrateur import fiches, modele_necessaire, outil
@@ -138,26 +138,42 @@ def proposition_calculee(o, infos, *, verifier_environnement=environnement.verif
     raisons = {x["etape"]: x["raison"] for x in o["flux"] if x.get("raison")}
     services = ([dict(mep.SERVICE_FACTURATION)] if infos.get("facturation") else []) + \
         [{"id": s["id"], "nom": s["nom"]} for s in o["services"]]
-    # Les agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (2026-11-12-modele-par-tache-design).
-    flux, agents = modele_necessaire.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
-    briefs = dict(o["briefs"])
+    polyvalente = "metiers" in o      # le nouveau format : des métiers et le nombre d'agents (agents polyvalents)
+    if polyvalente:
+        flux, _ = modele_necessaire.modeles_sur_les_etapes(flux, [])
+        metiers_ = [dict(m) for m in o["metiers"]]
+        agents, briefs = dict(o["agents"]), {}
+    else:
+        # Les agents ont le plafond Opus ; les modèles justifiés vont sur les étapes (2026-11-12-modele-par-tache-design).
+        flux, agents = modele_necessaire.modeles_sur_les_etapes(flux, [dict(a, lieu="local") for a in o["agents"]])
+        briefs = dict(o["briefs"])
     poste = verifier_environnement(list(o.get("environnement") or [])) if o.get("environnement") else []
     regles = list(o.get("outils_installation") or [])
     installateur = None
     if environnement.autonomes_a_installer(poste):       # l'agent n'existe que pour ce qu'il peut installer seul
-        agent, brief = environnement.agent_d_installation([], agents, flux, services, regles)
-        if agent:
+        agent, brief = environnement.agent_d_installation([], [] if polyvalente else agents, flux, services, regles)
+        if agent and polyvalente:       # un métier de plus (n'importe quel agent installe), pas un agent de plus
+            if agent["role"] not in {m["role"] for m in metiers_}:
+                metiers_.append({"role": agent["role"], "service": agent["service"], "modele": agent["modele"],
+                                 "outils": agent.get("outils"), "brief": brief})
+                installateur = agent["role"]
+        elif agent:
             agents.append(agent)
             briefs[agent["role"]] = brief
             installateur = agent["cle"]
-    estime = estimation.estimer(
-        flux, [dict(a, modele="Opus" if a["modele"] == "Fable" else a["modele"]) for a in agents],
-        list(usages_du_genre), prix_de)
+    if polyvalente:
+        pour_estimer = proposition.agents_pour_estimer(metiers_)
+    else:
+        pour_estimer = [dict(a, modele="Opus" if a["modele"] == "Fable" else a["modele"]) for a in agents]
+    estime = estimation.estimer(flux, pour_estimer, list(usages_du_genre), prix_de)
     cout = {"tokens": estime["tokens"], "euros": estime["euros"], **({"co2": estime["co2"]} if estime.get("co2") else {})}
     p = {"message": o["message"].strip(), "genre": genre, "workflow": {"id": f"w-{genre['id']}", "genre": genre["id"],
                                                                          "flux": flux},
          "raisons": raisons, "services": services, "agents": agents, "briefs": briefs, "livrable": o["livrable"].strip(),
          "environnement": poste, "outils_installation": regles, "installateur": installateur, "cout": cout}
+    if polyvalente:
+        del p["briefs"]
+        p["metiers"] = metiers_
     p["texte"] = texte_de_la_proposition(p)
     return p
 
@@ -177,7 +193,16 @@ def texte_de_la_proposition(p):
         raison = p["raisons"].get(e["id"])
         lignes.append(f"{k}. {e['nom']} ({qui})" + (f" : {raison}" if raison else ""))
     lignes.append(f"Livrable : {p['livrable'].rstrip('.')}.")
-    if p["agents"]:
+    if "metiers" in p:
+        lignes.append("Métiers (chaque agent est spécialiste du métier de sa tâche et la fait tourner sur le modèle de "
+                      "son étape) :")
+        for m in p["metiers"]:
+            lignes.append(f"- {m['role']}, service {_nom_du_service(p, m['service'])}"
+                          + (f", {m['specialite']}" if m.get("specialite") else ""))
+        a = p["agents"]
+        lignes.append(f"Équipe : {_agents(a['locaux'], 'local', 'locaux')}, {_agents(a['cloud'], 'cloud', 'cloud')} (ce "
+                      "sont les places de l'onglet Facturation : vous les changerez quand vous voulez).")
+    elif p["agents"]:
         lignes.append("Équipe à recruter (chaque agent fait tourner une tâche sur le modèle de son étape, jamais "
                       "au-dessus de son plafond) :")
         for a in p["agents"]:
@@ -197,6 +222,10 @@ def texte_de_la_proposition(p):
         lignes.append(f"Empreinte carbone estimée : {empreinte.texte(c['co2'])} (estimation EcoLogits : tailles de "
                       "modèles estimées, tokens de sortie seulement, électricité des États-Unis).")
     return "\n".join(lignes)
+
+
+def _agents(n, singulier, pluriel):
+    return f"{n} agent{'s' if n > 1 else ''} {pluriel if n > 1 else singulier}"
 
 
 def _nom_du_service(p, id_):
@@ -353,6 +382,16 @@ def _organisation(p, infos, installer, fable, jour):
     """L'organisation à écrire avec le projet : sans `installer`, ni agent d'installation ni son brief ; Fable accordé
     par agent. La facturation est ajoutée par la configuration elle-même."""
     cle = p.get("installateur")
+    services = [s for s in p["services"]
+                if not (infos.get("facturation") and s["id"] == mep.SERVICE_FACTURATION["id"])]
+    if "metiers" in p:      # agents polyvalents : le métier d'installation ne s'écrit que si l'on installe
+        if fable:
+            raise Echec("Fable ne se coche plus par agent : il se demande tâche par tâche, avec l'accord du Directeur.")
+        metiers_ = [dict(m) for m in p["metiers"] if installer or cle is None or m["role"] != cle]
+        return {"services": services, "agents": dict(p["agents"]), "metiers": metiers_,
+                "workflow": {"id": p["workflow"]["id"], "genre": p["workflow"]["genre"],
+                             "flux": copy.deepcopy(p["workflow"]["flux"])},
+                "environnement": copy.deepcopy(p["environnement"])}
     agents = [a for a in p["agents"] if installer or a["cle"] != cle]
     briefs = {r: t for r, t in p["briefs"].items()
               if installer or cle is None or r != environnement.ROLE_INSTALLATION}
@@ -360,8 +399,6 @@ def _organisation(p, infos, installer, fable, jour):
         agents = fiches.accorder_fable(agents, fable, jour)
     except ValueError as e:
         raise Echec(str(e)) from None
-    services = [s for s in p["services"]
-                if not (infos.get("facturation") and s["id"] == mep.SERVICE_FACTURATION["id"])]
     return {"services": services, "agents": agents, "briefs": briefs,
             "workflow": {"id": p["workflow"]["id"], "genre": p["workflow"]["genre"],
                          "flux": copy.deepcopy(p["workflow"]["flux"])},

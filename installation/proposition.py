@@ -10,6 +10,10 @@
      "moteur"?: {"couche": "claude" | "api", "ecart_estime": texte},
      "partenaires_conseilles"?: {besoin: [{"id" (actif du catalogue), "raison" (une phrase)}]}}
 
+Nouveau format (agents polyvalents) : `metiers` `[{role, service, modele?, lieu?, specialite?, outils?, brief}]` (un par
+rôle du flux) et `agents` `{"locaux": n, "cloud": m}` (le nombre d'agents, qui sont les places du projet) remplacent
+`agents` (liste de fiches) et `briefs`. L'ancien format reste accepté.
+
 `partenaires_conseilles` est facultatif (rien n'est obligatoire) ; la mise en place l'écrit dans `.factory/partenaires.json`.
 
 `moteur` est facultatif (défaut : `claude`). `couche` dit par où passent les décisions de l'orchestrateur : `claude`
@@ -72,10 +76,75 @@ def _modele(v, ou, accord=None):
     return []
 
 
+LIEUX_METIER = ("local", "cloud", "indifférent")
+
+
+def est_polyvalente(agents, metiers=None):
+    """Vrai pour une organisation du nouveau format : `agents` est `{locaux, cloud}` (ou absent, avec des `metiers`)."""
+    return isinstance(agents, dict) or (agents is None and metiers is not None)
+
+
+def agents_pour_estimer(metiers):
+    """Les agents que l'estimation d'un coût attend (`{role, modele}`) pour des métiers : le modèle par défaut du
+    métier (Sonnet sinon), sans plafond (un agent polyvalent n'en a pas)."""
+    return [{"role": m["role"], "modele": m.get("modele") or "Sonnet", "sans_plafond": True}
+            for m in metiers if isinstance(m, dict) and isinstance(m.get("role"), str)]
+
+
+def verifier_metiers(metiers, ids_services, roles_du_flux, briefs_existants=(), cloud=True):
+    """Les erreurs des `metiers` d'une organisation polyvalente : un métier par rôle du flux (ou un brief déjà là)."""
+    if not isinstance(metiers, list) or not all(isinstance(m, dict) for m in metiers):
+        return ["« metiers » doit être une liste de {role, service, modele?, lieu?, specialite?, outils?, brief}."]
+    e, roles = [], []
+    for m in metiers:
+        r = m.get("role")
+        if not (isinstance(r, str) and MOTIF_ID.match(r)):
+            e.append(f"Métier refusé {r!r} : un « role » (minuscules, chiffres, tirets, 40 caractères au plus).")
+            continue
+        if r in roles:
+            e.append(f"Métier « {r} » en double.")
+        roles.append(r)
+        if m.get("service") not in ids_services:
+            e.append(f"Métier « {r} » : service inconnu « {m.get('service')} ».")
+        if m.get("modele") is not None and m["modele"] not in MODELES:
+            e.append(f"Métier « {r} » : le modèle par défaut doit valoir Haiku, Sonnet ou Opus (Fable ne se demande "
+                     "que tâche par tâche, avec l'accord du Directeur).")
+        lieu = m.get("lieu", "indifférent")
+        if lieu not in LIEUX_METIER:
+            e.append(f"Métier « {r} » : le lieu doit valoir local, cloud ou indifférent.")
+        elif lieu == "cloud" and not cloud:
+            e.append(f"Métier « {r} » : cloud refusé, la proposition est en local seulement.")
+        for champ in ("specialite", "outils"):
+            if m.get(champ) is not None and not _ligne(m[champ]):
+                e.append(f"Métier « {r} » : « {champ} » doit tenir sur une ligne.")
+        if not _texte(m.get("brief")):
+            e.append(f"Métier « {r} » : le « brief » (la consigne du spécialiste) est vide.")
+    for r in roles_du_flux:
+        if r not in roles and r not in briefs_existants:
+            e.append(f"Aucun métier pour le rôle « {r} ».")
+    return e
+
+
+def verifier_equipe(agents, cloud=True):
+    """Les erreurs du nombre d'agents `{locaux: 1 à 16, cloud: 0 à 16}` d'une organisation polyvalente."""
+    if not (isinstance(agents, dict) and set(agents) == {"locaux", "cloud"}):
+        return ["« agents » doit valoir {\"locaux\": n, \"cloud\": m} (le nombre d'agents)."]
+    e = []
+    if not _entier(agents["locaux"], 1, 16):
+        e.append("« agents.locaux » doit être un entier de 1 à 16.")
+    if not _entier(agents["cloud"], 0, 16):
+        e.append("« agents.cloud » doit être un entier de 0 à 16.")
+    elif agents["cloud"] and not cloud:
+        e.append("« agents.cloud » : cloud refusé, la proposition est en local seulement.")
+    return e
+
+
 def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja_pourvus=(), cles_prises=(),
-                          briefs_existants=()):
+                          briefs_existants=(), metiers=None, equipe_en_place=False):
     """Les erreurs de la partie organisation (services, flux, agents, briefs). Les trois derniers paramètres servent
-    quand l'organisation s'ajoute à un projet déjà installé : rôles déjà tenus, clés de fiches et briefs existants."""
+    quand l'organisation s'ajoute à un projet déjà installé : rôles déjà tenus, clés de fiches et briefs existants.
+    Nouveau format (agents polyvalents) : `agents` vaut `{locaux, cloud}` et `metiers` porte un métier par rôle du
+    flux (`briefs` n'existe plus) ; `equipe_en_place` : le projet a déjà son équipe, `agents` peut alors manquer."""
     e = []
     if not isinstance(services, list) or not all(isinstance(s, dict) for s in services):
         return ["« services » doit être une liste de {id, nom}."]
@@ -120,6 +189,11 @@ def verifier_organisation(services, flux, agents, briefs, cloud=True, roles_deja
             e.append(f"Étape « {i} » : service inconnu « {x.get('service')} ».")
         if "justification" in x and not _texte(x.get("justification")):
             e.append(f"Étape « {i} » : la justification est vide.")
+    if est_polyvalente(agents, metiers):
+        e += verifier_metiers(metiers, ids_services, roles_du_flux, briefs_existants, cloud)
+        if agents is not None or not equipe_en_place:
+            e += verifier_equipe(agents, cloud)
+        return e
     if not isinstance(agents, list) or not all(isinstance(a, dict) for a in agents):
         return e + ["« agents » doit être une liste de fiches."]
     cles, roles = set(cles_prises), set(roles_deja_pourvus)
@@ -224,7 +298,10 @@ def verifier(p):
     if isinstance(services, list) and any(isinstance(s, dict) and s.get("id") == SERVICE_FACTURATION for s in services):
         e.append("Le service « facturation » n'est pas déclaré à la main : la mise en place l'ajoute quand la "
                  "facturation est un objectif.")
-    e += verifier_organisation(services, flux, p.get("agents"), p.get("briefs"), cloud=p.get("cloud") is True)
+    e += verifier_organisation(services, flux, p.get("agents"), p.get("briefs"), cloud=p.get("cloud") is True,
+                               metiers=p.get("metiers"))
+    if est_polyvalente(p.get("agents"), p.get("metiers")) and isinstance(p.get("agents"), dict)             and _entier(p["agents"].get("locaux"), 1, 16) and _entier(p.get("agents_locaux_max"), 1, 16)             and p["agents"]["locaux"] != p["agents_locaux_max"]:
+        e.append("« agents_locaux_max » est le nombre d'agents locaux de « agents » : les deux valent la même chose.")
     controles = p.get("controles")
     if not isinstance(controles, list) or not all(_ligne(c) for c in controles):
         e.append("« controles » doit être une liste de textes d'une ligne.")

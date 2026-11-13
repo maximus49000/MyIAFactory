@@ -233,3 +233,18 @@ test("demandeOrganisation : installer seulement avec accepter", () => {
   assert.deepEqual(demandeOrganisation("d1", "refuser", {installer: ["JDK"]}), {type: "organisation", decision: "d1", verdict: "refuser"});
   assert.deepEqual(demandeOrganisation("d1", "accepter", {installer: []}), {type: "organisation", decision: "d1", verdict: "accepter"});
 });
+
+test("resumeOrganisation : des métiers et le nombre d'agents (agents polyvalents)", () => {
+  const d = {id: "d9", genre: "organisation", texte: "Voici.", organisation: {
+    services: [], flux: [], cout: {tokens: [1000, 2000], euros: null},
+    metiers: [{role: "son", service: "son", modele: "Haiku", lieu: "local", specialite: "musique", brief: "Compose."},
+              {role: "dev", service: "dev", brief: "Code."}], agents: {locaux: 2, cloud: 1}}};
+  const r = resumeOrganisation(d, ETAT);
+  assert.deepEqual(r.agents, []);
+  assert.deepEqual(r.metiers.map((m) => m.role), ["son", "dev"]);
+  assert.match(r.metiers[0].ligne, /son · Haiku · local · musique/);
+  assert.equal(r.equipe, "2 agents locaux, 1 agent cloud");
+  assert.deepEqual(agentsOrganisation(d), []);
+  // sans nombre (équipe déjà en place) : pas de ligne d'équipe
+  assert.equal(resumeOrganisation({...d, organisation: {...d.organisation, agents: undefined}}, ETAT).equipe, null);
+});

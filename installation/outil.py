@@ -55,7 +55,9 @@ def _prix_de(modele):
     return estimation.prix_de_modele(dossier.bureau(), modele)
 
 
-def _estimer(flux, agents, genre):
+def _estimer(flux, agents, genre, metiers=None):
+    if proposition.est_polyvalente(agents, metiers):      # agents polyvalents : le coût suit les métiers, sans plafond
+        agents = proposition.agents_pour_estimer(metiers or [])
     usages = estimation.usages_du_genre(dossier.bureau(), genre)
     try:
         return estimation.estimer(flux, agents, usages, _prix_de)
@@ -103,7 +105,7 @@ def cmd_estimer(a):
     e = _entree()
     if not isinstance(e, dict):
         raise AppelInvalide("L'entrée doit être un objet {flux, agents, genre}.")
-    return _estimer(e.get("flux"), e.get("agents"), e.get("genre"))
+    return _estimer(e.get("flux"), e.get("agents"), e.get("genre"), e.get("metiers"))
 
 
 def cmd_proposer(a):
@@ -112,7 +114,7 @@ def cmd_proposer(a):
     if erreurs:
         raise Echec("Proposition refusée.", erreurs)
     # L'estimation enregistrée est celle de l'outil, pas celle recopiée par la discussion.
-    p["estimation"] = _estimer(p["flux"], p["agents"], p["genre"])
+    p["estimation"] = _estimer(p["flux"], p["agents"], p["genre"], p.get("metiers"))
     chemin = dossier.propositions() / f"{_id_dossier(p['projet'])}.json"
     chemin.parent.mkdir(parents=True, exist_ok=True)
     mise_en_place._ecrire_json(chemin, p)

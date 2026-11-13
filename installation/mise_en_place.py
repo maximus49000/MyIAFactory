@@ -16,7 +16,8 @@ from installation import acces as acces_inst
 from installation import dossier, proposition
 from installation.dossier import PREFIXE_SKILL, Echec
 from orchestrateur import factory as fa
-from orchestrateur import fiches, memoire
+from bureau.equipe import PRENOMS
+from orchestrateur import fiches, memoire, metiers as modmetiers
 from orchestrateur import workflows as wf
 from orchestrateur import verifier_interface as vi
 
@@ -241,11 +242,33 @@ def ajouter_agent(factory_json, agent, brief):
         _ecrire(chemin_brief, brief.strip() + "\n")
 
 
-def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=None, environnement=None):
+def _metier_ecrit(m, chemin):
+    """Le métier d'une organisation polyvalente, prêt pour `metiers.ecrire_metier` (sans leçon : il vient de naître)."""
+    return {"role": m["role"], "service": m.get("service"), "modele": m.get("modele"),
+            "lieu": m.get("lieu") or "indifférent", "specialite": m.get("specialite"), "outils": m.get("outils"),
+            "texte": m["brief"].strip(), "lecons": [], "chemin": chemin}
+
+
+def _fiches_polyvalentes(agents, dossier_fiches):
+    """Les `agents["locaux"]` puis `agents["cloud"]` fiches d'agents polyvalents d'une équipe neuve : clés `agent-<n>`,
+    prénoms tirés dans l'ordre (comme le bureau), session cloud à créer ensuite."""
+    sortie = []
+    for k, lieu in enumerate(["local"] * agents["locaux"] + ["cloud"] * agents["cloud"], 1):
+        cle = f"agent-{k}"
+        fiche = fiches.nouvelle_fiche(cle, PRENOMS[k - 1] if k <= len(PRENOMS) else f"Agent {k}", lieu)
+        fiche["chemin"] = dossier_fiches / f"{cle}.md"
+        sortie.append(fiche)
+    return sortie
+
+
+def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=None, environnement=None, metiers=None):
     """Réécrit `services` et `flux` du fichier de factory (le reste est gardé) et écrit les fiches et les briefs
     nouveaux (un brief existant est gardé). Contrôlé comme une proposition ; un refus n'écrit rien.
     Avec `workflow` (`{id, genre, flux, fonctionnalite}`), le flux n'est pas réécrit : le workflow s'ajoute à
-    `workflows` (ses étapes ne doivent pas déjà exister dans le projet). `environnement` : les outils du poste à noter."""
+    `workflows` (ses étapes ne doivent pas déjà exister dans le projet). `environnement` : les outils du poste à noter.
+    Nouveau format (agents polyvalents) : `metiers` (un par rôle du flux) et `agents` `{locaux, cloud}` : les briefs
+    enrichis sont écrits ; un projet sans équipe reçoit autant de fiches polyvalentes et ses places sont réglées à ces
+    nombres ; un projet qui a déjà son équipe la garde (`agents` peut alors être `None`)."""
     factory_json = Path(factory_json)
     try:
         f = fa.lire(factory_json)
@@ -255,18 +278,37 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=N
         raise Echec(f"Organisation refusée : {e}")
     dossier_briefs = f["fiches"] / "briefs"
     briefs_existants = {c.stem for c in dossier_briefs.glob("*.md")} if dossier_briefs.is_dir() else set()
-    erreurs = proposition.verifier_organisation(
-        services, flux, agents, briefs, cloud=True, roles_deja_pourvus={x["role"] for x in existantes},
-        cles_prises={x["cle"] for x in existantes}, briefs_existants=briefs_existants)
+    polyvalente = proposition.est_polyvalente(agents, metiers)
+    equipe = [x for x in existantes if x["role"] != "chef"]
+    if polyvalente:
+        erreurs = proposition.verifier_organisation(
+            services, flux, agents, None, cloud=True, briefs_existants=briefs_existants, metiers=metiers,
+            equipe_en_place=bool(equipe))
+        if any(x["role"] for x in equipe):
+            erreurs.append("Ce projet a encore des agents par rôle : la reprise aux agents polyvalents vient d'abord.")
+    else:
+        erreurs = proposition.verifier_organisation(
+            services, flux, agents, briefs, cloud=True, roles_deja_pourvus={x["role"] for x in existantes},
+            cles_prises={x["cle"] for x in existantes}, briefs_existants=briefs_existants)
+        if agents and any(fiches.est_polyvalente(x) for x in equipe):
+            erreurs.append("Ce projet a des agents polyvalents : une organisation propose des métiers, pas des agents "
+                           "par rôle.")
     if workflow is not None:
         pris = set(wf.ids_etapes(f))
         erreurs += [f"Étape « {x['id']} » : déjà prise dans le projet." for x in flux if isinstance(x, dict)
                     and x.get("id") in pris]
         if workflow.get("id") in {w["id"] for w in wf.tous(f)}:
             erreurs.append(f"Workflow « {workflow.get('id')} » : déjà dans le projet.")
+    if polyvalente:       # une équipe neuve seulement : un projet qui a déjà ses agents les garde
+        nouvelles = _fiches_polyvalentes(agents, f["fiches"]) if isinstance(agents, dict) and not equipe else []
+    else:
+        nouvelles = [{**fiches.nouvelle_fiche(a["cle"], a.get("prenom"), a["lieu"]), "role": a["role"],
+                      "service": a["service"], "modele": a["modele"], "specialite": a.get("specialite"),
+                      "outils": a.get("outils"), "fable": a.get("fable"), "texte": a["texte"].strip(),
+                      "chemin": f["fiches"] / f"{a['cle']}.md"} for a in agents if isinstance(a, dict)]
     if not erreurs:
-        erreurs += [f"Agent « {a['cle']} » : le fichier de sa fiche existe déjà." for a in agents
-                    if (f["fiches"] / f"{a['cle']}.md").exists()]
+        erreurs += [f"Agent « {x['cle']} » : le fichier de sa fiche existe déjà." for x in nouvelles
+                    if x["chemin"].exists()]
     if erreurs:
         raise Echec("Organisation refusée : " + " ; ".join(erreurs))
     d = json.loads(brut)
@@ -280,19 +322,28 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=N
              "flux": etapes}]
     if environnement is not None:
         d["environnement"] = fusionner_environnement(d.get("environnement"), environnement)
+    if polyvalente and nouvelles:      # l'équipe est les places : les nombres choisis règlent Facturation
+        d["agents_locaux_max"], d["agents_cloud_max"] = agents["locaux"], agents["cloud"]
     crees, factory_ecrite = [], False
     try:
         dossier_briefs.mkdir(parents=True, exist_ok=True)
-        for a in agents:
-            chemin = f["fiches"] / f"{a['cle']}.md"
-            crees.append(chemin)
-            fiches.ecrire_fiche(_fiche(a, chemin))
-        for role, texte in briefs.items():
-            chemin = dossier_briefs / f"{role}.md"
-            if role in briefs_existants:
-                continue
-            crees.append(chemin)
-            _ecrire(chemin, texte.strip() + "\n")
+        for fiche in nouvelles:
+            crees.append(fiche["chemin"])
+            fiches.ecrire_fiche(fiche)
+        if polyvalente:
+            for m in metiers:
+                chemin = dossier_briefs / f"{m['role']}.md"
+                if m["role"] in briefs_existants:
+                    continue
+                crees.append(chemin)
+                modmetiers.ecrire_metier(_metier_ecrit(m, chemin))
+        else:
+            for role, texte in briefs.items():
+                chemin = dossier_briefs / f"{role}.md"
+                if role in briefs_existants:
+                    continue
+                crees.append(chemin)
+                _ecrire(chemin, texte.strip() + "\n")
         factory_ecrite = True
         _ecrire_json(factory_json, d)
         fa.lire(factory_json)
@@ -332,10 +383,12 @@ def _ecrire_configuration(base, p, genre, maintenant):
         factory["description"] = p["description"].strip()
     _ecrire_json(base / "factory.json", factory)
     if p.get("workflow"):   # un projet créé avec l'organisation validée au bureau : son workflow de genre, son équipe
-        ecrire_organisation(base / "factory.json", services, p["workflow"]["flux"], p["agents"], p["briefs"],
-                            workflow={**p["workflow"], "fonctionnalite": None}, environnement=p.get("environnement"))
+        ecrire_organisation(base / "factory.json", services, p["workflow"]["flux"], p["agents"], p.get("briefs") or {},
+                            workflow={**p["workflow"], "fonctionnalite": None}, environnement=p.get("environnement"),
+                            metiers=p.get("metiers"))
     elif p.get("flux") or p.get("agents"):
-        ecrire_organisation(base / "factory.json", services, p["flux"], p["agents"], p["briefs"])
+        ecrire_organisation(base / "factory.json", services, p["flux"], p["agents"], p.get("briefs") or {},
+                            metiers=p.get("metiers"))
     else:
         (base / "fiches" / "briefs").mkdir(parents=True)
     modele = _modele_reglages()
@@ -454,7 +507,7 @@ def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adres
             "acces": adresses_ouvertes(bureau_json, adresses),
             "agents_cloud": [{"cle": a["cle"], "role": a["role"], "modele": a["modele"],
                               "environnement": list(a.get("environnement") or [])}
-                             for a in p["agents"] if a["lieu"] == "cloud"],
+                             for a in (p["agents"] if isinstance(p["agents"], list) else []) if a["lieu"] == "cloud"],
             "message_orchestrateur": message_orchestrateur(factory_json), "genre_raison": genre_raison,
             "verification": lignes, "pret": pret}
 

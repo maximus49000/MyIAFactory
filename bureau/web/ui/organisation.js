@@ -8,6 +8,7 @@ import {euros, tokens} from "./texte.js";
 import {blocOutil} from "./outils.js";
 import {etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
 import {etiquetteCO2} from "./empreinte.js";
+import {libelleEquipe} from "./echange.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const plein = (t) => typeof t === "string" && t.trim() !== "";
@@ -45,6 +46,10 @@ export function resumeOrganisation(decision, etat) {
     services: liste(o.services).filter((s) => !servicesActuels.has(s?.id)).map((s) => ({id: s.id, nom: s.nom})),
     colonnes: [...nouvelles, ...changees, ...retirees],
     agents: liste(o.agents).map((a) => ({cle: a.cle, prenom: a.prenom || null, role: a.role, modele: a.modele, lieu: a.lieu})),
+    // agents polyvalents : les métiers neufs (un brief chacun) et le nombre d'agents (ce sont les places)
+    metiers: liste(o.metiers).map((m) => ({role: m.role, service: m.service || null,
+      ligne: [m.role, m.modele, m.lieu && m.lieu !== "indifférent" ? m.lieu : null, m.specialite].filter(plein).join(" · ")})),
+    equipe: libelleEquipe(o.agents) || null,
     cout: libelleCout(o.cout),
   };
 }
@@ -183,6 +188,8 @@ export function rendreOrganisation(ctx, d, bouton) {
   if (agents.length) {
     li.append(liste_(w ? "Agents recrutés" : "Agents", agents.map((a) => [a.ligne, a.justification])));
   }
+  if (r.metiers.length) li.append(liste_("Métiers à créer", r.metiers.map((m) => m.ligne)));
+  if (r.equipe) li.append(el("div", "lecon-meta", `Équipe : ${r.equipe} (les places de l'onglet Facturation)`));
   const environnement = blocEnvironnement(ctx, d);
   if (environnement.bloc) li.append(environnement.bloc);
   li.append(marquerPart(el("div", "lecon-meta", "Coût estimé : " + r.cout)));

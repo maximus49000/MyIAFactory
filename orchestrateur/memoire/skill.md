@@ -411,3 +411,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand une consigne de l'utilisateur est coupée, implémenter ce qui est clair, ne rien inventer pour la suite et la signaler explicitement dans le rapport.
+
+## S69 — Quand une nouvelle consigne annule une consigne précédente s
+Rôles : dev
+Date : 2026-11-13
+
+Quand une nouvelle consigne annule une consigne précédente sur le même point, remplacer l'ancien comportement, son texte affiché et sa documentation, puis noter l'interprétation retenue pour la faire confirmer.

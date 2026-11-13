@@ -185,8 +185,10 @@ Suite complète verte (2042 tests ; un échec d'accès de fichier Windows, `test
 - **Règle.** Un agent retiré de l'équipe (places baissées, reprise) n'est plus supprimé s'il a au moins une tâche au suivi
   (faite ou non) : sa fiche polyvalente porte `Retrait : fait` (`retire` à la lecture ; clé, prénom, lieu, session gardés). Sans
   aucune tâche, la fiche est supprimée comme avant. Un retrait prévu devient fait à la fin de la tâche. Un retiré n'est jamais
-  choisi, jamais compté (`equipe_pure`, `ajuster_equipe`, `modele_necessaire.possibles`, `_agents`), jamais réactivé : monter
-  une place crée un NOUVEL agent (clé et prénom des retirés restent pris).
+  choisi, jamais compté (`equipe_pure`, `ajuster_equipe`, `modele_necessaire.possibles`, `_agents`). Monter une place
+  RÉACTIVE d'abord un agent retiré du même lieu (ligne `Retrait` enlevée, historique, clé et prénom gardés ; le DERNIER de la
+  liste des fiches d'abord, faute de date de retrait) ; un agent neuf n'est créé que s'il n'en reste aucun de ce lieu ; un retrait
+  prévu se démarque avant tout. `parallelisme`/`equipe` rendent aussi `reactives`. La reprise ne réactive pas de cloud.
 - **Ordre du retrait.** `ajuster_equipe(..., avec_taches)` retire d'abord les agents libres sans tâche (supprimés), puis ceux qui
   ont un historique (gardés) ; sans session cloud d'abord et derniers d'abord ne départagent qu'à l'intérieur de chaque groupe.
   La reprise garde de même d'abord les agents au travail, puis ceux qui ont des tâches. Code : `outil.retirer_l_agent`.

@@ -74,20 +74,42 @@ class TestEquipe(Base):
         self.tache_active(a1)
         self.assertIsNone(self.ok("agent-libre", entree={"role": "dev"})["agent"])    # jamais le retiré
 
-    def test_monter_cree_un_nouvel_agent(self):
+    def test_monter_reactive_l_agent_inactif_du_meme_lieu(self):
+        self.places(2, 1)
+        a1, a2 = self.actifs()
+        (c1,) = self.actifs("cloud")
+        for c in (a1, a2, c1):
+            self.fait(self.tache_active(c))
+        self.places(1, 0)
+        self.assertEqual(sorted(self.retires()), [a2, c1])
+        prenom = fiches.trouver(self.equipe(), a2)["prenom"]
+        n = len(self.equipe())
+        r = self.places(2, 0)         # le local revient, pas le cloud ; rien n'est créé
+        self.assertEqual((r["reactives"], r["crees"]), ([a2], []))
+        self.assertEqual(len(self.equipe()), n)
+        f = fiches.trouver(self.equipe(), a2)
+        self.assertFalse(f["retire"])
+        self.assertEqual(f["prenom"], prenom)
+        self.assertNotIn("Retrait", (self.fiches / f"{a2}.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.retires(), [c1])
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev", "lieu": "local"})["agent"], a1)
+        self.assertEqual(self.places(2, 0)["reactives"], [])        # rejoué sans effet
+        r = self.places(2, 1)         # une place cloud : le cloud retiré revient
+        self.assertEqual((r["reactives"], r["crees"]), ([c1], []))
+
+    def test_monter_cree_un_agent_sans_retire_du_lieu(self):
         self.places(2, 0)
         a1, a2 = self.actifs()
         self.fait(self.tache_active(a2))
         self.fait(self.tache_active(a1))
         self.places(1, 0)
         prenom = fiches.trouver(self.equipe(), a2)["prenom"]
-        r = self.places(2, 0)
+        r = self.places(1, 1)       # une place cloud, aucun retiré cloud : un agent neuf (ni la clé ni le prénom d'un retiré)
         self.assertEqual(len(r["crees"]), 1)
         neuf = r["crees"][0]
         self.assertNotIn(neuf, (a1, a2))
         self.assertNotEqual(fiches.trouver(self.equipe(), neuf)["prenom"], prenom)
-        self.assertEqual(self.retires(), [a2])                 # a2 reste retiré
-        self.assertEqual(self.actifs(), sorted([a1, neuf]))
+        self.assertEqual(self.retires(), [a2])                 # a2 reste retiré (local)
 
     def test_on_retire_d_abord_ceux_sans_tache(self):
         self.places(3, 0)

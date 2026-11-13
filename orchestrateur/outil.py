@@ -3136,7 +3136,7 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
     Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet.
     `cloud_aussi` faux : aucun agent cloud n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
-    vide = {"crees": [], "retires": [], "retraits_prevus": []}
+    vide = {"crees": [], "retires": [], "retraits_prevus": [], "reactives": []}
     with ctx.suivi.transaction() as suivi:     # un seul écrivain à la fois (l'outil, le moteur et le bureau)
         fiches_ = ctx.fiches()
         if rc.equipe_pure(fiches_) is None:
@@ -3147,6 +3147,10 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
                                  avec_taches)
         plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
         par_cle = {x["cle"]: x for x in fiches_}
+        plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] != "cloud"]
+        for cle in plan["reactiver"]:      # un agent retiré revient (historique, clé et prénom gardés) avant tout agent neuf
+            par_cle[cle]["retire"] = False
+            fi.ecrire_fiche(par_cle[cle])
         for cle in plan["retirer"]:
             retirer_l_agent(par_cle[cle], cle in avec_taches)
         for cle in plan["marquer"]:
@@ -3171,7 +3175,8 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
                 (Path(ctx.f["fiches"]) / f"{cle}.md").unlink(missing_ok=True)
             raise
         fi.lire_toutes(ctx.f["fiches"])
-    return {"crees": crees, "retires": list(plan["retirer"]), "retraits_prevus": list(plan["marquer"])}
+    return {"crees": crees, "retires": list(plan["retirer"]), "retraits_prevus": list(plan["marquer"]),
+            "reactives": list(plan["reactiver"])}
 
 
 def cmd_equipe(ctx, e):

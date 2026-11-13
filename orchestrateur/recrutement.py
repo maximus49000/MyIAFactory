@@ -477,13 +477,13 @@ def equipe_pure(fiches):
 
 def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True, avec_taches=frozenset()):
     """Ce qu'il faut faire pour que l'équipe soit égale aux places : `{creer: [lieu…], retirer: [clé…], marquer: [clé…],
-    demarquer: [clé…]}`. Un agent au travail (`occupes`) n'est jamais retiré : il est marqué (`retrait_prevu`), plus
+    demarquer: [clé…], reactiver: [clé…]}`. Un agent au travail (`occupes`) n'est jamais retiré : il est marqué (`retrait_prevu`), plus
     choisi, et retiré une fois sa tâche finie. Les agents libres partent d'abord (sans session cloud d'abord, les
     derniers de la liste d'abord) ; une place remontée annule d'abord les retraits prévus avant de créer un agent.
     `creer` faux : rien n'est créé ni démarqué (le moteur ne fait que retirer). Rejouable sans effet. Les agents déjà
-    retirés (`Retrait : fait`) ne comptent pas. `avec_taches` : les clés qui ont au moins une tâche au suivi ; on retire
+    retirés (`Retrait : fait`) ne comptent pas, mais une place qui manque en réactive un du même lieu avant d'en créer un. `avec_taches` : les clés qui ont au moins une tâche au suivi ; on retire
     d'abord ceux qui n'en ont aucune (leur fiche part), puis les autres (gardés, retirés)."""
-    plan = {"creer": [], "retirer": [], "marquer": [], "demarquer": []}
+    plan = {"creer": [], "retirer": [], "marquer": [], "demarquer": [], "reactiver": []}
     agents = equipe_pure(fiches)
     if agents is None:
         return plan
@@ -505,7 +505,12 @@ def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True, avec_taches=froze
         elif creer and len(gardes) < voulu:
             manque = voulu - len(gardes)
             plan["demarquer"] += [x["cle"] for x in marques[:manque]]
-            plan["creer"] += [lieu] * (manque - min(manque, len(marques)))
+            manque -= min(manque, len(marques))
+            # une place de plus réactive d'abord un agent retiré du même lieu (le dernier de la liste d'abord : les
+            # fiches n'ont pas de date de retrait), puis seulement crée un agent
+            retires = [x["cle"] for x in reversed(_sans_chef(fiches)) if x.get("retire") and x["lieu"] == lieu]
+            plan["reactiver"] += retires[:manque]
+            plan["creer"] += [lieu] * (manque - min(manque, len(retires)))
     return plan
 
 

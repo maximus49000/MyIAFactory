@@ -555,3 +555,9 @@ Rôles : qa, dev
 Date : 2026-11-13
 
 Dans une consigne, indiquer les chemins avec des barres obliques ou passer par un lanceur Python, car le shell peut déformer les antislashs.
+
+## S93 — Dans un moteur où une étiquette s'agrandit toute seule à son
+Rôles : dev, designer
+Date : 2026-11-13
+
+Dans un moteur où une étiquette s'agrandit toute seule à son texte, un contrôle de débordement compare le texte au cadre visible qui le contient, jamais à la taille de l'étiquette.

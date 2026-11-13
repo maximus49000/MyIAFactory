@@ -399,3 +399,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand aucune approbation n'est possible, écrire un lanceur dans un script qui exécute l'outil et filtre sa sortie, plutôt que d'enchaîner des commandes avec des tubes ou des documents en ligne.
+
+## S67 — Quand une tâche redemande un élément déjà livré et sans nouv
+Rôles : dev
+Date : 2026-11-13
+
+Quand une tâche redemande un élément déjà livré et sans nouveau retour, relancer la suite de tests et rendre l'existant au lieu de le refaire.

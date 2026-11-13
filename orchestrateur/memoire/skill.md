@@ -495,3 +495,9 @@ Rôles : graphiste
 Date : 2026-11-13
 
 Un script d'orchestration qui lit la sortie de sous-processus en UTF-8 plante dès qu'un contrôle écrit en cp1252 : décoder avec errors=replace et ne pas déclarer le contrôle global passé s'il n'a pas tourné.
+
+## S83 — Un lanceur de tests qui affiche des caractères accentués doi
+Rôles : dev
+Date : 2026-11-13
+
+Un lanceur de tests qui affiche des caractères accentués doit forcer la sortie en UTF-8 pour que le compte rendu soit lisible sur toutes les consoles.

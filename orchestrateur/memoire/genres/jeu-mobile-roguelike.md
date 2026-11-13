@@ -560,3 +560,9 @@ Rôles : designer
 Date : 2026-11-13
 
 Dans un roguelike, un nœud que le jeu ne gère pas encore se simule comme le jeu le traite et se compte, sans inventer son effet, et la mesure le signale comme non mesuré.
+
+## G94 — Appeler l'émulateur par son nom (« emulator ») et non par so
+Rôles : qa
+Date : 2026-11-13
+
+Appeler l'émulateur par son nom (« emulator ») et non par son chemin complet : l'outil ouvert ne couvre que le nom, et le chemin Windows est refusé.

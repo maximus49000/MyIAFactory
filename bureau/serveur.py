@@ -230,6 +230,7 @@ class Projet:
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
+            statuts.activite_des_agents(e.get("factory"), e.get("taches") or [], maintenant)
             if not err:
                 self._cout_en_cours(e.get("taches") or [], regl)
             e["images_ok"] = images_declarees(regl)

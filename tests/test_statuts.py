@@ -61,6 +61,19 @@ class TestStatuts(unittest.TestCase):
         self.assertEqual(agents[1]["statut"], "sans_nouvelles")     # aucun processus : rien ne change
         self.assertEqual(agents[2]["statut"], "libre")
 
+    def test_un_agent_qui_travaille_est_une_activite(self):
+        """Essai réel : « sans activité depuis 48 min » alors que Léa lançait ses tests."""
+        maintenant = datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc)
+        f = {"etat": "en marche", "derniere_activite": "2026-11-13T14:12:00+00:00", "inactive": True}
+        taches = [{"id": "t92", "travail": {"depuis": "2026-11-13T13:02:00+00:00", "action_t": "2026-11-13T14:50:00+00:00",
+                                            "vie_t": "2026-11-13T14:59:30+00:00"}}]
+        statuts.activite_des_agents(f, taches, maintenant)
+        self.assertFalse(f["inactive"])
+        self.assertTrue(f["derniere_activite"].startswith("2026-11-13T14:59:30"))
+        g = {"etat": "en marche", "derniere_activite": "2026-11-13T14:12:00+00:00", "inactive": True}
+        statuts.activite_des_agents(g, [{"id": "t1"}], maintenant)        # aucun agent au travail : rien ne change
+        self.assertTrue(g["inactive"])
+
     def test_present(self):
         self.assertTrue(statuts.present({"cle": "a"}, [t(23 * 60, active=False)], M))
         self.assertFalse(statuts.present({"cle": "a"}, [t(25 * 60, active=False)], M))

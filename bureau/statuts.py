@@ -55,6 +55,29 @@ def statut(taches, maintenant, fraicheur_min, en_pause):
     return {"statut": "sans_nouvelles", "bulle": "sans nouvelles depuis " + duree_en_clair(age)}
 
 
+VIE_RECENTE_MIN = 5    # un agent local qui a donné signe de vie depuis moins de 5 min : l'atelier est actif
+
+
+def activite_des_agents(etat_factory, taches, maintenant):
+    """Un agent local qui travaille (`travail` : sa dernière action, ses signes de vie) est une activité de l'atelier,
+    même si le suivi n'a pas bougé (essai réel : « sans activité depuis 48 min » pendant que Léa lançait ses tests).
+    Met à jour `derniere_activite` et `inactive` du voyant, en place."""
+    if not isinstance(etat_factory, dict):
+        return etat_factory
+    vies = [lire_date((t.get("travail") or {}).get(c)) for t in taches if isinstance(t, dict)
+            for c in ("vie_t", "action_t", "depuis")]
+    vies = [d for d in vies if d != TRES_ANCIEN]
+    if not vies:
+        return etat_factory
+    recente = max(vies)
+    avant = lire_date(etat_factory.get("derniere_activite"))
+    if avant == TRES_ANCIEN or recente > avant:
+        etat_factory["derniere_activite"] = recente.isoformat()
+    if (maintenant - recente).total_seconds() / 60 <= VIE_RECENTE_MIN:
+        etat_factory["inactive"] = False
+    return etat_factory
+
+
 def agents_au_travail(agents, taches):
     """Un agent dont le processus local tourne sur une de ses tâches (`travail`, ajouté par le bureau) est au travail,
     même si le suivi n'a pas bougé depuis longtemps (essai réel : Hugo lançait les tests, sa bulle disait « sans

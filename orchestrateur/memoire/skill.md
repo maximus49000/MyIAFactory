@@ -513,3 +513,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand le journal de mesures correspond aux données et qu'aucune cible chiffrée n'existe pour la catégorie à régler, ne pas modifier de valeurs : rendre les mesures et demander la cible.
+
+## S86 — Dans un moteur à scène, un nœud de fond ajouté en enfant rec
+Rôles : graphiste
+Date : 2026-11-13
+
+Dans un moteur à scène, un nœud de fond ajouté en enfant recouvre ce que le parent dessine ; dessiner le fond dans le parent.

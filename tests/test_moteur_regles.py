@@ -944,6 +944,32 @@ class Arrets(Base):
         t = self.taches(id=tid)[0]
         self.assertIn("deux essais", t["bloquee"])
 
+    def test_panne_du_service_ne_bloque_pas_et_attend_avant_de_reessayer(self):
+        """Essai réel : une panne d'authentification (403 Cloudflare) a bloqué douze tâches d'un coup. La tâche reste
+        prête, rien ne part avant le prochain essai (dit au bureau), puis elle repart seule."""
+        actions = self.depart_cadrage()
+        tid = actions[0][2][0]
+        e = agents.Execution(tid, "metier-1", usages=[usage()],
+                             erreur="l'appel a échoué : Failed to authenticate. API Error: 403 | Cloudflare")
+        e.panne = True
+        self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
+        t = self.taches(id=tid)[0]
+        self.assertFalse(t["bloquee"])
+        self.assertIn("Service Claude indisponible", t["journal"][-1]["texte"])
+        self.assertIn(tid, self.etat["a_lancer"])
+        self.assertEqual(regles._demarrer_en_attente(self.projet, self.etat, None), [])      # pendant la panne
+        self.assertIn("nouvel essai à", self.etat["attente_charge"]["texte"])
+        self.etat["panne"]["jusqu_a"] = 0                                                   # l'heure est passée
+        repart = regles._demarrer_en_attente(self.projet, self.etat, None)
+        self.assertEqual([(a[0], a[2]) for a in repart], [("agent", [tid])])
+        # une deuxième panne attend plus longtemps
+        e2 = agents.Execution(tid, "metier-1", usages=[usage()], erreur="l'appel a échoué : API Error: 529 Overloaded")
+        e2.panne = True
+        regles.traiter_retour(self.projet, e2, self.etat)
+        import time as _t
+        self.assertGreater(self.etat["panne"]["jusqu_a"] - _t.time(), 200)
+        self.assertNotIn(tid, self.etat.get("relancees", set()))                          # aucun essai compté
+
     # Le cas réel : l'agent de cadrage rend des questions mal formées, l'outil refuse son message.
     MAL_FORME = {"statut": "fait", "message": {"texte": "Quatre questions.", "attend": True,
                                                  "questions": [{"enonce": "Quel style ?", "choix": ["a", "b"]}]}}

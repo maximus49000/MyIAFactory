@@ -42,6 +42,7 @@ class Execution:
         self.session = session    # la session `claude -p` (local) : une question de l'utilisateur la reprend
         self.refus = refus or []  # les gestes que la permission lui a refusés : [{outil, commande?}] (voir `appel`)
         self.reponse = None       # une réponse aux questions de l'utilisateur : `{fonctionnalite, questions}`
+        self.panne = False        # le service Claude était indisponible : la tâche n'a pas échoué (voir `regles`)
         self.usages = usages or []
         self.usage = self.usages[0] if self.usages else dict(USAGE_VIDE)
 
@@ -87,6 +88,10 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
         except appel.ErreurAppel as e:
             usages += e.usages
             erreur = f"l'appel a échoué : {e.raison}"
+            if appel.est_une_panne(e.raison):     # le service est en panne : inutile de réessayer tout de suite
+                ex = Execution(tache, cle, lot, usages=cumuler(usages), erreur=erreur)
+                ex.panne = True
+                return ex
             continue
         usages += r.usages
         try:

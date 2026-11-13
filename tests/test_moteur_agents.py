@@ -105,6 +105,21 @@ class ExecuterAgent(unittest.TestCase):
         self.assertIn("l'appel a échoué", e.erreur)
         self.assertEqual((e.usage["entree"], e.usage["sortie"]), (42, 1))
 
+    def test_panne_du_service_un_seul_essai(self):
+        """Essai réel : « Failed to authenticate. API Error: 403 … Cloudflare » ; inutile de réessayer tout de suite."""
+        a = Appels(appel.ErreurAppel("claude signale une erreur (success) : Failed to authenticate. API Error: 403 "
+                                     "Attention Required! | Cloudflare"), sortie_ok())
+        e = lancer(a)
+        self.assertTrue(e.panne)
+        self.assertIsNone(e.rapport)
+        self.assertEqual(len(a.recus), 1)
+
+    def test_une_vraie_erreur_n_est_pas_une_panne(self):
+        self.assertFalse(appel.est_une_panne("délai dépassé (1800 s)"))
+        self.assertFalse(appel.est_une_panne("rapport illisible : pas de bloc json"))
+        self.assertTrue(appel.est_une_panne("API Error: 529 Overloaded"))
+        self.assertTrue(appel.est_une_panne("API Error: 503 Service Unavailable"))
+
     def test_usages_par_modele_cumules(self):
         r = appel.Reponse('x\n```json\n{"statut": "fait"}\n```', [usage(10, 5), usage(3, 1, "claude-haiku-5-5")])
         e = lancer(Appels(r))

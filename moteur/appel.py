@@ -15,6 +15,7 @@ l'appel seulement, jamais écrite, affichée, journalisée ni passée en argumen
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -33,6 +34,18 @@ VARIABLE_CLE = "ANTHROPIC_API_KEY"
 LIGNE_SANS_CLE = ("Les réglages demandent la clé API Anthropic pour les décisions de l'orchestrateur, mais "
                   "ANTHROPIC_API_KEY n'est pas dans l'environnement : les décisions passent par claude -p "
                   "(votre abonnement).")
+
+
+# Une panne du service Claude (connexion refusée, serveurs surchargés…), pas un échec du travail demandé. Essai réel :
+# « Failed to authenticate. API Error: 403 Attention Required! | Cloudflare » a bloqué douze tâches d'un coup.
+MOTIF_PANNE = re.compile(r"Failed to authenticate|API Error: (403|429|5\d\d)|Cloudflare|[Oo]verloaded|ECONNRESET|"
+                         r"ETIMEDOUT|ECONNREFUSED|ENOTFOUND|getaddrinfo|socket hang up|Connection error|"
+                         r"Service Unavailable|Bad Gateway|Gateway Timeout")
+
+
+def est_une_panne(raison):
+    """Vrai si l'erreur dit que le service Claude est indisponible (le travail n'y est pour rien)."""
+    return bool(MOTIF_PANNE.search(str(raison or "")))
 
 
 class ErreurAppel(Exception):

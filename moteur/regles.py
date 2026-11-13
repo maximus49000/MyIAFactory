@@ -2371,6 +2371,11 @@ def _demarrer_en_attente(projet, etat, fid):
         attente = [t for t in attente if t.get("etape") != ETAPE_INSTALLATION]
     if not attente:
         return []
+    panne = _panne_en_cours(etat)
+    if panne:      # le service Claude est indisponible : rien ne part avant le prochain essai (dit au bureau)
+        etat["attente_charge"] = {"texte": panne["texte"], "taches": [t["id"] for t in attente], "charge": None,
+                                  "plafond": None}
+        return []
     fac = _factory(projet)
     barrieres, retenues = _barrieres(projet, court, fac)
     cache = {}
@@ -2811,6 +2816,7 @@ def traiter_retour(projet, execution, etat):
     r = execution.rapport
     if r is None:
         return _agent_en_echec(projet, etat, execution, depart)
+    etat.pop("panne", None)      # un agent a rendu son rapport : le service répond de nouveau
     fid, du_lot = None, {}
     for tid in taches:
         t = _tache(projet, tid)
@@ -2916,8 +2922,38 @@ def _message_refuse(projet, etat, execution, depart, r, raison):
     return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
 
 
+ATTENTES_PANNE_S = (120, 300, 600, 900)     # 2, 5, 10 puis 15 min entre deux essais tant que la panne dure
+
+
+def _panne_en_cours(etat, maintenant=None):
+    """La panne du service Claude qui retient les départs (`{jusqu_a, texte, n}`), ou `None` si l'essai suivant est dû."""
+    p = etat.get("panne")
+    return p if p and (time.time() if maintenant is None else maintenant) < p["jusqu_a"] else None
+
+
+def _service_en_panne(projet, etat, execution, depart, maintenant=None):
+    """Le service Claude était indisponible : la tâche n'a pas échoué. Elle reste prête au travail (aucun essai compté,
+    jamais bloquée) et plus rien ne part avant le prochain essai, de plus en plus espacé tant que la panne dure."""
+    maintenant = time.time() if maintenant is None else maintenant
+    n = (etat.get("panne") or {}).get("n", 0)
+    jusqu_a = maintenant + ATTENTES_PANNE_S[min(n, len(ATTENTES_PANNE_S) - 1)]
+    raison = str(execution.erreur or "").replace("l'appel a échoué : ", "")[:160]
+    texte = (f"Service Claude indisponible ({raison}) : nouvel essai à "
+             f"{datetime.fromtimestamp(jusqu_a).strftime('%H h %M')}.")
+    etat["panne"] = {"jusqu_a": jusqu_a, "texte": texte, "n": n + 1}
+    for tid in depart["taches"]:
+        lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
+        if tid not in _m(etat, "a_lancer", list):
+            etat["a_lancer"].append(tid)
+    return []
+
+
 def _agent_en_echec(projet, etat, execution, depart):
-    """Un agent sans rapport : relancé une fois, puis tâche bloquée avec la raison au journal."""
+    """Un agent sans rapport : relancé une fois, puis tâche bloquée avec la raison au journal. Une panne du service
+    Claude n'est pas un échec : voir `_service_en_panne`."""
+    if getattr(execution, "panne", False):
+        return _service_en_panne(projet, etat, execution, depart)
+    etat.pop("panne", None)
     tid = depart["taches"][0]
     relancees = _m(etat, "relancees", set)
     if tid not in relancees:

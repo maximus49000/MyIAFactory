@@ -428,3 +428,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Une capture d'écran de moteur de jeu se fait dans une fenêtre réelle ; le mode sans interface ne rend pas l'image.
+
+## G72 — Une capture plein écran peut sortir plus petite que la résol
+Rôles : dev
+Date : 2026-11-13
+
+Une capture plein écran peut sortir plus petite que la résolution cible à cause de la barre du système : vérifier la taille de chaque image avant de la rendre.

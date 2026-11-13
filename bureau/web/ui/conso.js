@@ -8,7 +8,7 @@
 
 import {tonReste, agePhrase, lignePart, definirConsoCourante} from "./mesure.js";
 import {heureRemise} from "./abonnement.js";
-import {dessiner, ligneRythme} from "./semaine.js";
+import {dessiner, ligneRythme, tonEcart, ecartRythme} from "./semaine.js";
 import {ouvrirSemaines, lireSemaines, lireSerie} from "./semaine-vue.js";
 
 export {tonReste};
@@ -130,7 +130,8 @@ export function creerConso(url = "/api/conso") {
     panneau.append(zone);
     const rythme = courbe ? ligneRythme(courbe.semaine, courbe.points, Date.now() / 1000) : "";
     if (rythme) {
-      const p = el("p", "conso-rythme", rythme);
+      const t = Math.min(Date.now() / 1000, courbe.semaine.remise);
+      const p = el("p", "conso-rythme " + tonEcart(ecartRythme(courbe.semaine, courbe.points, t)), rythme);
       p.title = "Rythme idéal : 0 % utilisé au début de la semaine, 100 % à l'instant exact de la remise à zéro";
       panneau.append(p);
     }

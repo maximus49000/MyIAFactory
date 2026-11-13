@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {SEP, plafond, paliers, valeurA, finDeCourbe, graduationsJours, chemin, niveaux, apresChoix, marquesDe,
-        marquesSelection, totalSelection, lignesListe, bandes, dessiner, trouver, rythmeA, ecartRythme, phraseEcart, ligneRythme, RYTHME_COULEUR} from "../ui/semaine.js";
+        marquesSelection, totalSelection, lignesListe, bandes, dessiner, trouver, rythmeA, ecartRythme, phraseEcart, ligneRythme, RYTHME_COULEUR, tonEcart} from "../ui/semaine.js";
 import {ouvrirSemaines, ligneTotal, LEGENDE, LEGENDE_RYTHME} from "../ui/semaine-vue.js";
 import {definirAbonnement} from "../ui/abonnement.js";
 
@@ -190,8 +190,13 @@ test("l'écart au rythme et ses phrases", () => {
   assert.equal(phraseEcart(-1), "En dessous de 1 point");
   assert.equal(phraseEcart(0.02), "Sur le rythme idéal");
   assert.equal(phraseEcart(null), "");
-  assert.equal(ligneRythme(SEMAINE, pts, T0 + 3.5 * 86400), "Rythme : en avance de 10 points");
-  assert.equal(ligneRythme(SEMAINE, [{t: T0 + 100, pourcent: 30}], T0 + 3.5 * 86400), "Rythme : en retard de 20 points");
+  assert.equal(ligneRythme(SEMAINE, pts, T0 + 3.5 * 86400), "Rythme : au-dessus de 10 points, attention");
+  assert.equal(ligneRythme(SEMAINE, [{t: T0 + 100, pourcent: 30}], T0 + 3.5 * 86400), "Rythme : en dessous de 20 points, tout va bien");
+  // en dessous du rythme : vert ; au-dessus : rouge
+  assert.equal(tonEcart(-20), "ok");
+  assert.equal(tonEcart(0.01), "ok");
+  assert.equal(tonEcart(10), "alerte");
+  assert.equal(tonEcart(null), "");
   assert.equal(ligneRythme(SEMAINE, [{t: T0 + 100, pourcent: 50}], T0 + 3.5 * 86400), "Rythme : sur le rythme idéal");
   assert.equal(ligneRythme(SEMAINE, [], T0 + 3.5 * 86400), "");
   assert.equal(ligneRythme({...SEMAINE, courante: false}, pts, T0 + 3.5 * 86400), "");

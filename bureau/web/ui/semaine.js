@@ -83,7 +83,13 @@ export function ligneRythme(semaine, pts, maintenant) {
   const e = ecartRythme(semaine, pts, t);
   if (e === null) return "";
   if (nul(e)) return "Rythme : sur le rythme idéal";
-  return `Rythme : en ${e > 0 ? "avance" : "retard"} de ${libPoints(Math.abs(e))}`;
+  return e > 0 ? `Rythme : au-dessus de ${libPoints(e)}, attention` : `Rythme : en dessous de ${libPoints(-e)}, tout va bien`;
+}
+
+// La couleur d'un écart au rythme : en dessous ou dessus, c'est bon (vert) ; au-dessus, c'est dangereux (rouge).
+export function tonEcart(ecart) {
+  if (!nombre(ecart)) return "";
+  return ecart > 0 && !nul(ecart) ? "alerte" : "ok";
 }
 
 // Jusqu'où la courbe est tracée : maintenant pour la semaine en cours, la dernière lecture sinon (au plus la remise).

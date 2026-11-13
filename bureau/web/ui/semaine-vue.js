@@ -7,7 +7,7 @@
 // téléphone. Tout texte venu du serveur passe par textContent.
 
 import {NIVEAUX, apresChoix, lignesListe, marquesSelection, marquesDe, trouver, totalSelection, niveaux, dessiner,
-        instantA, valeurA, heureLocale, SEP, ecartRythme, phraseEcart, finDeCourbe} from "./semaine.js";
+        instantA, valeurA, heureLocale, SEP, ecartRythme, phraseEcart, finDeCourbe, tonEcart} from "./semaine.js";
 import {euros} from "./texte.js";
 import {etiquettePart} from "./abonnement.js";
 import {etiquetteCO2, infobulleCO2} from "./empreinte.js";
@@ -159,8 +159,9 @@ export function ouvrirSemaines({declencheur = null} = {}) {
         .filter((m) => Math.abs(m.t - t) <= ((g.t1 - g.t0) / g.w) * 4 + (m.duree || 0));
       bulle.replaceChildren(el("strong", "", heureLocale(t)),
         el("span", "", v === null ? "pas de mesure" : String(v).replace(".", ",") + " % utilisé"));
-      const ecart = t <= finDeCourbe(etat.serie, etat.maintenant) ? phraseEcart(ecartRythme(etat.serie, etat.serie.points, t)) : "";
-      if (ecart) bulle.append(el("span", "sem-ecart", ecart));
+      const brut = t <= finDeCourbe(etat.serie, etat.maintenant) ? ecartRythme(etat.serie, etat.serie.points, t) : null;
+      const ecart = phraseEcart(brut);
+      if (ecart) bulle.append(el("span", "sem-ecart " + tonEcart(brut), ecart));
       if (proches.length) bulle.append(el("span", "", `${proches.length} appel${proches.length > 1 ? "s" : ""} de la sélection`));
       bulle.hidden = false;
       const gauche = (x / g.largeur) * r.width;

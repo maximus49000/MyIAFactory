@@ -199,7 +199,24 @@ def outils_du_poste(factory):
     return ("## Outils du poste\nDéjà installés ; sers-t'en directement, sans les réinstaller :\n" + "\n".join(lignes)) if lignes else ""
 
 
-def _entete(factory, fiche, lecons_memoire, regles_projet=()):
+def _section_metier(metiers_):
+    """« Ton métier » d'un agent polyvalent : pour chaque métier de la tâche (ou du lot), sa spécialité, ses outils et ses
+    leçons validées (celles « à valider » ne sont pas encore la règle). Le texte du brief est donné à part."""
+    blocs = []
+    for m in metiers_:
+        lignes = [f"### Métier : {m['role']}"] if len(metiers_) > 1 else []
+        for nom, cle in (("Service", "service"), ("Spécialité", "specialite"), ("Outils", "outils")):
+            if m.get(cle):
+                lignes.append(f"{nom} : {m[cle]}")
+        validees = [x for x in m.get("lecons") or [] if x["etat"] == "validée"]
+        lignes.append("Leçons de ce métier :")
+        lignes += [f"- {x['texte']}" for x in validees] if validees else ["(aucune)"]
+        blocs.append("\n".join(lignes))
+    titre = metiers_[0]["role"] if len(metiers_) == 1 else "les métiers de ce lot"
+    return f"## Ton métier : {titre}\nPour cette tâche, tu es le spécialiste de ce métier.\n" + "\n\n".join(blocs)
+
+
+def _entete(factory, fiche, lecons_memoire, regles_projet=(), metiers_=None):
     parties = []
     if fiche["lieu"] == "cloud":
         parties.append("Tu repars de zéro. Rien de ce qui s'est dit dans cette session avant ce message ne compte : "
@@ -212,7 +229,10 @@ def _entete(factory, fiche, lecons_memoire, regles_projet=()):
     poste = outils_du_poste(factory)
     if poste:
         parties.append(poste)
-    parties.append("## Ta fiche\n" + _texte_fiche(fiche))
+    if metiers_:   # un agent polyvalent : l'identité est dans l'en-tête, le reste est celui du métier de la tâche
+        parties.append(_section_metier(metiers_))
+    else:
+        parties.append("## Ta fiche\n" + _texte_fiche(fiche))
     parties.append(_lecons("Leçons de la skill qui touchent ton rôle", lecons_memoire.get("skill") or []))
     parties.append(_lecons("Leçons du genre du projet qui touchent ton rôle", lecons_memoire.get("genre") or []))
     return parties
@@ -270,10 +290,10 @@ def _partenaires_inscrits(inscrits, ecartes):
 
 
 def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=(), inscrits=(),
-            ecartes=()):
+            ecartes=(), metiers_=None):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
-    parties = _entete(factory, fiche, lecons_memoire, regles_projet)
+    parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
     parties.append("## Le brief de ton rôle\n" + (brief_du_role or "(pas de brief propre à ce rôle)"))
     parties.append("\n".join(["## Ta tâche"] + _bloc_tache(tache)))
     if glossaire:
@@ -307,11 +327,11 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
-                regles_projet=(), inscrits=(), ecartes=()):
+                regles_projet=(), inscrits=(), ecartes=(), metiers_=None):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
-    parties = _entete(factory, fiche, lecons_memoire, regles_projet)
+    parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
     if len(briefs) == 1:
         parties.append("## Le brief de ton rôle\n" + (briefs[0][1] or "(pas de brief propre à ce rôle)"))
     else:

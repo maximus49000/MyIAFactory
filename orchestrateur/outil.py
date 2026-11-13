@@ -30,6 +30,7 @@ from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import transcriptions  # noqa: E402
 from orchestrateur import lots  # noqa: E402
 from orchestrateur import memoire  # noqa: E402
+from orchestrateur import metiers  # noqa: E402
 from orchestrateur import modele_necessaire as mn  # noqa: E402
 from orchestrateur import recrutement as rc  # noqa: E402
 from orchestrateur import regles_projet as rp  # noqa: E402
@@ -2729,18 +2730,99 @@ def _noter_lecon(ctx, e):
         raise Refus("« roles » doit être une liste de textes non vide (ou « tous »).")
     tache = texte(e, "tache", obligatoire=False)
     fiche_agent = fi.trouver(ctx.fiches(), agent)
+    polyvalent = fiche_agent is not None and fi.est_polyvalente(fiche_agent)
+    metier_role = None
+    if polyvalent:   # la leçon appartient au métier de la tâche, pas à l'agent
+        t = su.tache(ctx.suivi.lire(), tache) if tache else None
+        metier_role = (t or {}).get("role")
+        if not metier_role or not depart._ROLE_SUR.match(metier_role):
+            raise Refus("Un agent polyvalent note sa leçon avec « tache » : l'identifiant d'une tâche qui a un métier "
+                        "(rôle), car la leçon est celle de ce métier.")
+    prefixe = metier_role or agent
     with ctx.suivi.transaction() as s:
         pris = {x["id"] for x in s["lecons"]} | {x["id"] for x in (fiche_agent["lecons"] if fiche_agent else [])}
+        if metier_role:
+            m = _lire_metier(ctx, metier_role)
+            pris |= {x["id"] for x in (m["lecons"] if m else [])}
         while True:
-            i = f"{agent}:L{su.suivant(s, 'l')}"
+            i = f"{prefixe}:L{su.suivant(s, 'l')}"
             if i not in pris:
                 break
-        s["lecons"].append({"id": i, "agent": agent, "tache": tache, "date": su.maintenant()[:10], "texte": contenu,
-                            "etat": "à valider", "etage_propose": etage, "texte_general": general, "roles": roles})
-        if fiche_agent:
+        nouvelle = {"id": i, "agent": agent, "tache": tache, "date": su.maintenant()[:10], "texte": contenu,
+                    "etat": "à valider", "etage_propose": etage, "texte_general": general, "roles": roles}
+        if metier_role:
+            nouvelle["metier"] = metier_role
+        s["lecons"].append(nouvelle)
+        if metier_role:
+            _noter_dans_le_metier(ctx, metier_role, i, contenu)
+        elif fiche_agent:
             fiche_agent["lecons"].append({"etat": "à valider", "id": i, "texte": _ligne_fiche(contenu)})
             fi.ecrire_fiche(fiche_agent)
     return {"id": i}
+
+
+def _lire_metier(ctx, role):
+    try:
+        return metiers.lire_metier(Path(ctx.f["fiches"]) / "briefs", role)
+    except metiers.MetierInvalide as ex:
+        raise Refus(str(ex))
+
+
+def _metier_de(ctx, role):
+    """Le métier du rôle d'une tâche ; un métier vide (sans brief ni leçons) si le rôle n'a pas de brief ou est absent."""
+    m = _lire_metier(ctx, role) if isinstance(role, str) and depart._ROLE_SUR.match(role) else None
+    return m or {"role": role or "(sans métier)", "service": None, "modele": None, "lieu": "indifférent",
+                 "specialite": None, "outils": None, "texte": "", "lecons": [], "chemin": None}
+
+
+def _noter_dans_le_metier(ctx, role, ident, contenu):
+    """Une leçon « à valider » dans le brief du métier (rien si le brief n'existe pas encore : la validation le crée)."""
+    m = _lire_metier(ctx, role)
+    if m is not None and metiers.ajouter_lecon(m, {"id": ident, "etat": "à valider", "texte": _ligne_fiche(contenu)}):
+        metiers.ecrire_metier(m)
+
+
+def _verdict_dans_le_metier(ctx, role, lecon, verdict):
+    """Le verdict du Directeur sur une leçon, répercuté dans le brief du métier : validée (le brief est créé si besoin) ou
+    retirée."""
+    m = _lire_metier(ctx, role)
+    ligne = _ligne_fiche(lecon["texte"])
+    if verdict == "valider":
+        if m is None:
+            dossier = Path(ctx.f["fiches"]) / "briefs"
+            m = {"role": role, "service": None, "modele": None, "lieu": "indifférent", "specialite": None,
+                 "outils": None, "texte": "", "lecons": [], "chemin": dossier / f"{role}.md"}
+        propre = next((y for y in m["lecons"] if y["id"] == lecon["id"]), None)
+        if propre is not None:
+            propre["etat"] = "validée"
+        else:
+            ancienne = next((y for y in m["lecons"] if y["texte"].strip() == ligne), None)
+            if ancienne is not None:
+                ancienne["etat"] = "validée"   # le même texte, déjà là : il devient la règle
+            else:
+                metiers.ajouter_lecon(m, {"id": lecon["id"], "etat": "validée", "texte": ligne})
+    elif m is not None:
+        m["lecons"] = [y for y in m["lecons"] if y["id"] != lecon["id"]]
+    else:
+        return
+    metiers.ecrire_metier(m)
+
+
+def _metier_de_la_lecon(ctx, s, lecon, fiche_agent):
+    """Le métier où va une leçon validée, ou `None` (la fiche de l'agent, à l'ancienne, la garde). Une leçon d'agent
+    polyvalent porte son métier. Une leçon à l'ancien id (`<agent>:L<n>`) dont la fiche a été reprise (ou n'existe plus) va
+    au métier noté sur la leçon, sinon au rôle que dit le préfixe de l'id s'il a un brief, sinon au rôle de sa tâche."""
+    if lecon.get("metier"):
+        return lecon["metier"]
+    if fiche_agent is not None and not fi.est_polyvalente(fiche_agent):
+        return None
+    dossier = Path(ctx.f["fiches"]) / "briefs"
+    for role in (lecon.get("role"), lecon["id"].split(":", 1)[0]):
+        if isinstance(role, str) and depart._ROLE_SUR.match(role) and (dossier / f"{role}.md").is_file():
+            return role
+    t = su.tache(s, lecon["tache"]) if lecon.get("tache") else None
+    role = (t or {}).get("role")
+    return role if isinstance(role, str) and depart._ROLE_SUR.match(role) else None
 
 
 def genre_de_tache(ctx, s, t):
@@ -2837,6 +2919,7 @@ def _appliquer_verdicts(ctx, items):
                 r.update(ok=False, refus=m.message)
                 continue
             fiche_agent = fi.trouver(fiches, lecon["agent"])
+            metier_role = _metier_de_la_lecon(ctx, s2, lecon, fiche_agent)
             courante.pop("refus", None)
             if verdict == "valider":
                 courante["etat"], courante["etage_applique"] = "validée", r["etage"]
@@ -2847,7 +2930,9 @@ def _appliquer_verdicts(ctx, items):
                     r.update(en_attente=True, raison=m.message)
             else:
                 s2["lecons"].remove(courante)
-            if fiche_agent:
+            if metier_role:
+                _verdict_dans_le_metier(ctx, metier_role, lecon, verdict)
+            elif fiche_agent:
                 if verdict == "valider":
                     for y in fiche_agent["lecons"]:
                         if y["id"] == i:
@@ -3048,6 +3133,7 @@ def _depart_d_un_lot(ctx, e):
         if t is None:
             raise Refus(f"Tâche inconnue : {i}")
         taches.append(t)
+    polyvalent = fi.est_polyvalente(fiche_agent)
     roles = list(dict.fromkeys(t.get("role") or fiche_agent["role"] for t in taches))
     genres = list(dict.fromkeys(genre_de_tache(ctx, s, t) for t in taches))   # une tâche, le genre de sa fonctionnalité
     lecons_lot = {"skill": [], "genre": []}
@@ -3060,12 +3146,17 @@ def _depart_d_un_lot(ctx, e):
     for t in taches:
         fonc = su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite") else None
         glossaire = _sans_doublon(glossaire + list((fonc or {}).get("glossaire") or []))
-    briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
+    if polyvalent:   # un brief et des leçons par métier du lot
+        metiers_ = [_metier_de(ctx, role) for role in roles]
+        briefs = [(m["role"], m["texte"] or None) for m in metiers_]
+    else:
+        metiers_ = None
+        briefs = [(role, depart.brief(ctx.f, role)) for role in roles]
     regles, inscrits, ecartes = partenaires_du_depart(ctx, s, taches)
     factory = {**ctx.f, "genre": ", ".join(g for g in genres if g) or None}
     return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire, regles,
                                           par_le_moteur=e.get("moteur", False), regles_projet=rp.lire(ctx.f),
-                                          inscrits=inscrits, ecartes=ecartes)}
+                                          inscrits=inscrits, ecartes=ecartes, metiers_=metiers_)}
 
 
 def cmd_depart(ctx, e):
@@ -3083,12 +3174,21 @@ def cmd_depart(ctx, e):
     s = ctx.suivi.lire()
     fonc = su.fonctionnalite(s, tache_suivie.get("fonctionnalite")) if tache_suivie.get("fonctionnalite") else None
     genre = wf.genre_de(ctx.f, fonc)   # les leçons du genre de la fonctionnalité de la tâche
-    lecons = memoire.lire(ctx.f["memoire"], genre, fiche_agent["role"])
+    metiers_ = None
+    if fi.est_polyvalente(fiche_agent):   # spécialiste du métier de la tâche : son brief, ses leçons
+        role = tache_suivie.get("role")
+        metier = _metier_de(ctx, role)
+        brief_du_role = metier["texte"] or None
+        metiers_ = [metier]
+    else:
+        role = fiche_agent["role"]
+        brief_du_role = depart.brief(ctx.f, role)
+    lecons = memoire.lire(ctx.f["memoire"], genre, role)
     partenaires = partenaires_du_depart(ctx, s, [tache_suivie])
-    return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie,
-                                      depart.brief(ctx.f, fiche_agent["role"]), lecons,
+    return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie, brief_du_role, lecons,
                                       (fonc or {}).get("glossaire") or [], partenaires[0],
-                                      regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2])}
+                                      regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2],
+                                      metiers_=metiers_)}
 
 
 def cmd_regles(ctx, e):

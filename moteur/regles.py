@@ -2284,25 +2284,25 @@ def _barrieres(projet, court, fac=None):
             if t.get("element") and r is not None:
                 attend = str(t.get("etape")).startswith(ETAPES_DE_VALIDATION) and t["colonne"] != "fait"
                 position[t["element"]] = (r, attend, bool(t.get("bloquee")) and t["colonne"] != "fait")
-        ouvertes = {}
+        ouvertes, retiennent = {}, {}      # retiennent : rang -> [(élément, nom)] pas encore passés (dit au bureau)
         for k in validations:
             sid = production[k]["id"]
-            for eid in set(connus) | set(dans_la_file):
+            for eid in sorted(set(connus) | set(dans_la_file)):
                 element = dans_la_file.get(eid) or connus.get(eid)
                 if not _concerne(element, sid):
                     continue
-                if eid in dans_la_file:
-                    ouvertes[k] = production[k]["nom"]
-                    break
                 p = position.get(eid)
-                if p is None or p[2]:        # le prototype (sans tâche de flux), ou bloqué : ne retient rien
-                    continue
-                r, attend, _ = p
-                if r < k or (r == k and attend):
-                    ouvertes[k] = production[k]["nom"]
-                    break
+                if eid not in dans_la_file:
+                    if p is None or p[2]:        # le prototype (sans tâche de flux), ou bloqué : ne retient rien
+                        continue
+                    r, attend, _ = p
+                    if not (r < k or (r == k and attend)):
+                        continue
+                ouvertes[k] = production[k]["nom"]
+                retiennent.setdefault(k, []).append((eid, (element or {}).get("nom") or eid))
         premiere = min(ouvertes) if ouvertes else None
-        sortie[fc["id"]] = {"production": production, "ouvertes": ouvertes, "premiere": premiere, "rangs": rangs}
+        sortie[fc["id"]] = {"production": production, "ouvertes": ouvertes, "premiere": premiere, "rangs": rangs,
+                            "retiennent": retiennent}
         if premiere is not None:
             for t in taches:
                 r = _rang_de_tache(t, rangs)
@@ -2437,6 +2437,296 @@ def _noter_les_places_libres(projet, etat):
                                       "validation": validation}
 
 
+# --- Pourquoi une tâche prête ne part pas : dit au bureau à chaque passage (`etat["attente_taches"]`, écrit par la
+# boucle dans `attente-taches.json`). Quatre familles : prérequis (une étape d'avant, une dépendance, une barrière de
+# validation), agent (aucun agent libre au bon lieu), décision (le Directeur doit répondre), pause (le projet, une
+# installation, une panne du service Claude, la charge du poste). Une tâche bloquée reste à part.
+
+GENRES_D_ATTENTE = ("prerequis", "agent", "decision", "pause")
+_PASTILLES = {      # motif -> (une tâche, plusieurs) : les pastilles de la barre du bureau
+    "prérequis": ("1 prérequis", "{n} prérequis"),
+    "poste local occupé": ("1 poste local occupé", "{n} attendent le poste local"),
+    "aucun agent cloud libre": ("1 attend un agent cloud", "{n} attendent un agent cloud"),
+    "aucun agent libre": ("1 attend un agent libre", "{n} attendent un agent libre"),
+    "décision à prendre": ("1 décision à prendre", "{n} décisions à prendre"),
+    "charge du PC": ("1 retenue par la charge du PC", "{n} retenues par la charge du PC"),
+    "service Claude indisponible": ("1 retenue par la panne du service Claude",
+                                    "{n} retenues par la panne du service Claude"),
+    "projet en pause": ("1 en pause", "{n} en pause"),
+    "installation en cours": ("1 en pause : installation", "{n} en pause : installation"),
+}
+_DECISIONS_D_UNE_TACHE = {"fable_tache": "autoriser Fable",
+                          "outil_agent": "outil à autoriser", "session_cloud": "session cloud à créer",
+                          "accord_agent": "accord demandé", "faire_chez_partenaire": "à faire chez un partenaire"}
+
+
+def texte_de_pastille(motif, n):
+    """« 1 poste local occupé », « 10 prérequis », « 2 décisions à prendre »."""
+    un, plusieurs = _PASTILLES.get(motif, ("1 " + motif, "{n} " + motif))
+    return (un if n == 1 else plusieurs).format(n=n)
+
+
+def _depuis(debut, maintenant):
+    """« 1 h 27 », « 12 min » : le temps écoulé depuis `debut` (date ISO), ou `None`."""
+    try:
+        d = datetime.fromisoformat(str(debut))
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        d = d.astimezone()
+    m = max(0, int((maintenant - d).total_seconds() // 60))
+    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d}"
+
+
+def _noter_les_attentes_sans_risque(projet, etat):
+    """`noter_les_attentes`, sans jamais arrêter un passage du moteur : ce n'est qu'une aide pour le bureau."""
+    try:
+        noter_les_attentes(projet, etat)
+    except Exception:
+        etat.pop("attente_taches", None)
+
+
+class _Contexte:
+    """Ce que les raisons relisent d'une tâche à l'autre (un seul relevé par passage)."""
+
+    def __init__(self, projet, etat):
+        self.projet, self.etat = projet, etat
+        self.court = _etat(projet)
+        self.fac = _factory(projet)
+        self.maintenant = datetime.now().astimezone()
+        try:
+            fiches = fi.lire_toutes(self.fac["fiches"])
+        except (OSError, fi.FicheInvalide):
+            fiches = []
+        self.prenoms = {f["cle"]: f.get("prenom") or f["cle"] for f in fiches}
+        self.lieux = {a["cle"]: a["lieu"] for a in self.court["agents"]}
+        self.barrieres = _barrieres(projet, self.court, self.fac)
+        self.places = _places(projet, self.court, self.fac)
+        self.cloud_max = self.places["total"] - self.fac["agents_locaux_max"]
+        self.ouvertes = {t["id"]: t for t in self.court["taches"]}
+        self._prods = {}
+
+    def production(self, fid):
+        if fid not in self._prods:
+            b = self.barrieres[0].get(fid)
+            self._prods[fid] = b["production"] if b else (_production(self.projet, fid) if fid else [])
+        return self._prods[fid]
+
+    def nom_etape(self, t):
+        etape = str(t.get("etape") or "")
+        for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION):
+            if etape.startswith(prefixe):
+                sid = etape[len(prefixe):]
+                return next((s["nom"] for s in self.production(t.get("fonctionnalite")) if s["id"] == sid), sid)
+        return etape or "étape"
+
+    def qui(self, t):
+        """« Léa (en cours depuis 1 h 27) », « confiée à Léa », ou rien."""
+        if not t.get("agent"):
+            return ""
+        prenom = self.prenoms.get(t["agent"], t["agent"])
+        if not t.get("active"):
+            return prenom
+        depuis = _depuis(t.get("debut"), self.maintenant)
+        return f"{prenom} (en cours depuis {depuis})" if depuis else f"{prenom} (en cours)"
+
+    def occupants(self, lieu=None):
+        """Les tâches actives tenues par un agent du lieu (tous lieux si `None`)."""
+        return [t for t in self.court["taches"] if t["active"] and t.get("agent") in self.lieux
+                and (lieu is None or self.lieux[t["agent"]] == lieu)]
+
+
+def _ligne_d_element(ctx, fid, eid, nom):
+    """« « Profil », Développement par Léa (en cours depuis 1 h 27) » : où en est un élément qui retient une barrière."""
+    siennes = [t for t in ctx.court["taches"] if t.get("fonctionnalite") == fid and t.get("element") == eid
+               and t["colonne"] != "fait" and not t.get("bloquee")]
+    active = next((t for t in siennes if t["active"]), None)
+    if active is not None:
+        verbe = "refait par" if active.get("etape") in ("correction", "retour") else f"{ctx.nom_etape(active)} par"
+        return f"« {nom} », {verbe} {ctx.qui(active)}"
+    if any(str(t.get("etape")).startswith(ETAPES_DE_VALIDATION) for t in siennes):
+        return f"« {nom} », attend votre validation"
+    if siennes:
+        return f"« {nom} », {ctx.nom_etape(siennes[0])} pas encore partie"
+    return f"« {nom} », pas encore commencé"
+
+
+def _raison_prerequis(ctx, t):
+    """(texte, détail, quand) de ce qui retient la tâche en amont (voir `_amont_pret`), ou `None`."""
+    sortie, retenues = ctx.barrieres
+    fid, eid = t.get("fonctionnalite"), t.get("element")
+    if t["id"] in retenues:
+        b = sortie[fid]
+        nom = b["ouvertes"][b["premiere"]]
+        elements = b.get("retiennent", {}).get(b["premiere"]) or []
+        s = "s" if len(elements) > 1 else ""
+        lignes = [_ligne_d_element(ctx, fid, e, n) for e, n in elements[:3]]
+        if len(elements) > 3:
+            lignes.append(f"et {len(elements) - 3} autre(s)")
+        return (f"prérequis — {nom}", [f"{len(elements)} élément{s} pas encore validé{s} — " + " ; ".join(lignes)],
+                f"quand vous aurez validé « {nom} » pour {'ces éléments' if s else 'cet élément'}")
+    for d in t.get("depend_de") or []:
+        u = ctx.ouvertes.get(d)
+        if u is not None and d != t["id"]:
+            qui = ctx.qui(u)
+            return (f"prérequis — « {u['titre']} »", [f"dépend de « {u['titre']} », pas encore faite"
+                                                     + (f" — {qui}" if qui else "")],
+                    f"quand « {u['titre']} » sera faite")
+    if not (str(t.get("etape") or "").startswith(ETAPES_DE_FLUX) and fid and eid):
+        return None
+    rangs = (sortie.get(fid) or {}).get("rangs") or {s["id"]: k for k, s in enumerate(ctx.production(fid))}
+    rang = _rang_de_tache(t, rangs)
+    avant = [u for u in ctx.court["taches"] if u["id"] != t["id"] and u.get("fonctionnalite") == fid
+             and u.get("element") == eid and u["colonne"] != "fait" and not u.get("bloquee")
+             and (_rang_de_tache(u, rangs) is not None and _rang_de_tache(u, rangs) < rang)]
+    if avant:
+        u = next((x for x in avant if x["active"]), None) or min(avant, key=lambda x: _rang_de_tache(x, rangs))
+        nom = ctx.nom_etape(u)
+        if str(u.get("etape")).startswith(ETAPES_DE_VALIDATION):
+            return f"prérequis — {nom}", [f"« {nom} » attend votre validation"], f"quand vous aurez validé « {nom} »"
+        qui = ctx.qui(u)
+        return (f"prérequis — {nom}", [f"« {nom} » de cet élément pas encore faite" + (f" — {qui}" if qui else "")],
+                f"quand « {nom} » sera faite")
+    for d in ctx.court.get("decisions") or []:
+        if (d.get("genre") == GENRE_VALIDATION and d.get("fonctionnalite") == fid
+                and (d.get("element") or {}).get("id") == eid and rangs.get(d.get("etape"), len(rangs)) < rang):
+            nom = next((s["nom"] for s in ctx.production(fid) if s["id"] == d.get("etape")), "Validation du Directeur")
+            return f"prérequis — {nom}", [f"« {nom} » attend votre validation"], f"quand vous aurez validé « {nom} »"
+    return None
+
+
+def _ligne_du_lieu(ctx, lieu, ensuite=False):
+    """« elle exige le poste local ; 1 place locale, occupée par Léa » et le détail de chaque occupant."""
+    if lieu not in ("local", "cloud"):
+        return []
+    occupants = ctx.occupants(lieu)
+    if lieu == "local":
+        n, quoi, mot = ctx.fac["agents_locaux_max"], "elle exige le poste local", "locale"
+    else:
+        n, quoi, mot = ctx.cloud_max, "elle se fait dans le cloud", "cloud"
+    s = "s" if n > 1 else ""
+    noms = ", ".join(dict.fromkeys(ctx.prenoms.get(o["agent"], o["agent"]) for o in occupants))
+    if occupants and len(occupants) >= n:
+        ligne = f"{quoi} ; {n} place{s} {mot}{s if mot != 'cloud' else ''}, occupée{s} par {noms}"
+    elif n == 0:
+        ligne = f"{quoi} ; aucune place {mot} dans ce projet"
+    else:
+        ligne = f"{quoi} ; aucun agent {mot if mot != 'locale' else 'local'} libre" + (f" ({noms} au travail)"
+                                                                                       if noms else "")
+    lignes = [ligne]
+    if not ensuite:
+        lignes += [f"{ctx.qui(o)} : « {o['titre']} »" for o in occupants[:3]]
+    return lignes
+
+
+def _raison_agent(ctx, t, lieu):
+    """(motif, texte, détail, quand) d'une tâche prête qu'aucun agent libre ne prend."""
+    if lieu == "local":
+        return "poste local occupé", "poste local occupé", _ligne_du_lieu(ctx, "local"), \
+            "quand le poste local se libérera"
+    if lieu == "cloud":
+        detail = _ligne_du_lieu(ctx, "cloud")
+        raison = ctx.projet.cloud_raison()
+        if raison:
+            detail.append(f"le cloud n'est pas disponible : {raison}")
+        if not any(a["lieu"] == "cloud" and a.get("session") for a in ctx.court["agents"]):
+            detail.append("aucun agent cloud n'a de session")
+        return "aucun agent cloud libre", "aucun agent cloud libre", detail, "quand un agent cloud se libérera"
+    occupants = ctx.occupants()
+    s = "s" if ctx.places["total"] > 1 else ""
+    if occupants and ctx.places["locaux"] == 0 and ctx.places["cloud"] == 0:
+        detail = [f"{ctx.places['total']} place{s} au total, toutes prises"]
+    else:
+        detail = [f"aucun agent libre ne peut la prendre ({t.get('role') or 'sans rôle'})"]
+    detail += [f"{ctx.qui(o)} : « {o['titre']} »" for o in occupants[:4]]
+    return "aucun agent libre", "aucun agent libre", detail, "quand un agent se libérera"
+
+
+def _raison_decision(ctx, t):
+    """(texte, détail, quand) d'une décision du Directeur qui concerne la tâche, ou `None`."""
+    for d in ctx.court.get("decisions") or []:
+        if d.get("tache") == t["id"]:
+            quoi = _DECISIONS_D_UNE_TACHE.get(d.get("genre"), "votre réponse")
+            return (f"décision — {quoi}", [str(d.get("texte") or quoi)[:300]],
+                    "quand vous aurez répondu (bureau de direction)")
+    for a in _m(ctx.etat, "accords").values():
+        if isinstance(a, dict) and a.get("tache") == t["id"]:
+            return ("décision — accord demandé", [str(a.get("quoi") or "un accord demandé par l'agent")[:300]],
+                    "quand vous aurez répondu (bureau de direction)")
+    return None
+
+
+def _raison(ctx, t, panne, charge):
+    """`{genre, motif, texte, detail, ensuite, quand}` : pourquoi la tâche prête ne part pas ; `detail` dit ce qui la
+    retient précisément, `ensuite` ce qu'il lui faudra une fois la raison levée (le lieu qu'elle exige, qui l'occupe)."""
+    lieu = _lieu_reserve(ctx.projet, ctx.court, t, ctx.fac)
+
+    def r(genre, motif, texte, detail, quand):
+        ensuite = _ligne_du_lieu(ctx, lieu, ensuite=True) if genre != "agent" else []
+        return {"genre": genre, "motif": motif, "texte": texte, "detail": list(detail), "ensuite": ensuite,
+                "quand": quand}
+
+    if ctx.court["pause"]:
+        return r("pause", "projet en pause", "projet en pause", ["le projet est en pause : aucun agent neuf ne part"],
+                 "quand vous reprendrez le projet")
+    if ctx.projet.pause_globale:
+        return r("pause", "installation en cours", "installation en cours", [ctx.projet.pause_globale],
+                 "à la fin de l'installation")
+    if panne:
+        heure = datetime.fromtimestamp(panne["jusqu_a"]).strftime("%H h %M")
+        return r("pause", "service Claude indisponible", "service Claude indisponible", [panne["texte"]],
+                 f"au prochain essai, à {heure}")
+    d = _raison_decision(ctx, t)
+    if d:
+        return r("decision", "décision à prendre", *d)
+    p = _raison_prerequis(ctx, t)
+    if p:
+        return r("prerequis", "prérequis", *p)
+    if charge and lieu != "cloud":
+        c, plafond = charge.get("charge"), charge.get("plafond")
+        texte = f"charge du PC {c} % (plafond {plafond} %)" if c is not None and plafond is not None \
+            else "charge du PC au-dessus du plafond"
+        quand = f"quand la charge repassera sous {plafond} %" if plafond is not None else "quand la charge baissera"
+        return r("pause", "charge du PC", texte, ["l'ordinateur est trop chargé : aucun agent local neuf ne part"],
+                 quand)
+    return r("agent", *_raison_agent(ctx, t, lieu))
+
+
+def noter_les_attentes(projet, etat):
+    """Pour chaque tâche prête qui n'est pas partie à ce passage : sa raison, dans `etat["attente_taches"]` =
+    `{texte, total, familles: [{genre, motif, n, texte}], taches: {id: {genre, motif, texte, detail, ensuite, quand}}}` ;
+    absent
+    quand rien n'attend. À appeler après les départs du passage."""
+    etat.pop("attente_taches", None)
+    ctx = _Contexte(projet, etat)
+    court = ctx.court
+    attendues = {d.get("tache") for d in court.get("decisions") or [] if d.get("tache")} \
+        | {a.get("tache") for a in _m(etat, "accords").values() if isinstance(a, dict)}
+    en_cours = _m(etat, "en_cours")
+    candidates = {t["id"]: t for t in _attente(court, None, etat)}
+    for t in court["taches"]:      # une tâche commencée qui attend une décision n'est pas dans `_attente`
+        if (t["id"] in attendues and not t["active"] and t["colonne"] != "fait" and not t.get("bloquee")
+                and not isinstance(t.get("lot"), dict) and t["id"] not in en_cours):
+            candidates.setdefault(t["id"], t)
+    if projet.installations_a_part:      # le moteur les lance lui-même, à part
+        candidates = {i: t for i, t in candidates.items() if t.get("etape") != ETAPE_INSTALLATION}
+    if not candidates:
+        return
+    panne, charge = _panne_en_cours(etat), etat.get("charge_rouge")
+    taches = {i: _raison(ctx, t, panne, charge) for i, t in sorted(candidates.items(), key=lambda x: _numero(x[0]))}
+    familles = {}
+    for r in taches.values():
+        familles.setdefault((r["genre"], r["motif"]), 0)
+        familles[(r["genre"], r["motif"])] += 1
+    ordre = sorted(familles, key=lambda gm: GENRES_D_ATTENTE.index(gm[0]))
+    n = len(taches)
+    etat["attente_taches"] = {
+        "texte": f"{n} tâche{'s' if n > 1 else ''} en attente", "total": n,
+        "familles": [{"genre": g, "motif": m, "n": familles[(g, m)], "texte": texte_de_pastille(m, familles[(g, m)])}
+                     for g, m in ordre],
+        "taches": taches}
+
+
 def _demarrer_en_attente(projet, etat, fid):
     """Lance ce qui peut l'être : aucune étape en pause, aucune tâche après une validation pas encore faite, une place
     libre (locale sous la charge, ou cloud), un agent libre ; les tâches qui mènent à une validation d'abord. Rend les
@@ -2467,6 +2757,7 @@ def _demarrer_en_attente(projet, etat, fid):
     places = _places(projet, court, fac)
     mesure = projet.charge()
     if not mesure["feu_vert"]:
+        etat["charge_rouge"] = mesure       # la raison des tâches retenues (voir `noter_les_attentes`)
         etat["attente_charge"] = {"texte": texte_d_attente_de_charge(mesure), "charge": mesure["charge"],
                                   "plafond": mesure["plafond"], "taches": [t["id"] for t in attente]}
         places["locaux"] = 0        # un agent cloud ne compte pas dans la charge du poste
@@ -4249,7 +4540,9 @@ def avancer(projet, etat):
     court = _etat(projet)
     etat.pop("attente_charge", None)
     etat.pop("attente_validation", None)
+    etat.pop("charge_rouge", None)
     if court["pause"]:
+        _noter_les_attentes_sans_risque(projet, etat)
         return []
     actions = []
     for f in court["fonctionnalites"]:
@@ -4262,6 +4555,7 @@ def avancer(projet, etat):
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
+    _noter_les_attentes_sans_risque(projet, etat)
     return actions
 
 

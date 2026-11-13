@@ -145,6 +145,7 @@ export class Personnages {
     f.nuage.hidden = agent.lieu !== "cloud";
     f.etiquette.classList.toggle("chef", Boolean(agent.chef));
     f.etiquette.classList.toggle("directeur", Boolean(agent.fixe));
+    f.etiquette.classList.toggle("ancien", Boolean(agent.retire));    // retiré de l'équipe : au café, pour son historique
     const texte = agent.bulle || "";
     if (f.bulle.textContent !== texte) f.bulle.textContent = texte;
     f.bulle.classList.toggle("grise", agent.statut === "sans_nouvelles");

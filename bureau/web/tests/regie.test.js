@@ -200,3 +200,14 @@ test("agent polyvalent change de pièce avec sa tâche, libre il va au café", (
   r.appliquer(e3, changements(e2, e3));
   avancerJusqua(r, () => r.acteurs.get("dev1").action === "cafe", 30);
 });
+
+test("un ancien agent (retiré de l'équipe) reste au café, jamais au travail", () => {
+  const r = new Regie(plan);
+  const e = copie(E1);
+  e.anciens_agents = [{id: "ancien-1", prenom: "Hugo", couleur: "#2fa05a", lieu: "local", service: "dev"}];
+  r.appliquer(e, []);
+  const a = r.acteurs.get("ancien-1");
+  assert.ok(a, "l'ancien agent est dessiné");
+  assert.equal(a.agent.retire, true);
+  avancerJusqua(r, () => a.action === "cafe", 60);
+});

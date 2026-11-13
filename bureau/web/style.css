@@ -1271,3 +1271,4 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 /* L'historique d'un agent : le coût de chaque tâche, sous son titre */
 .historique-agent .cout-montant { display: block; font-size: 12px; font-weight: 600; color: #5b5868; margin-top: 2px; }
 .total-taches { font-size: 12px; font-weight: 700; color: #3d3a4b; margin: 2px 0 4px; }
+.etiquette.ancien { opacity: 0.7; border-style: dashed; }

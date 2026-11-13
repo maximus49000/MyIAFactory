@@ -42,7 +42,11 @@ export class Regie {
   appliquer(etat, changements) {
     const premier = this.etat === null;
     this.etat = etat;
-    const agents = new Map((etat.agents || []).map((a) => [a.id, a]));
+    // Les anciens agents (retirés de l'équipe, gardés pour leur historique) restent au café : un clic sur eux ouvre
+    // leur fiche et leurs tâches réalisées. Ils ne travaillent jamais.
+    const anciens = (etat.anciens_agents || []).filter((a) => a?.id && !(etat.agents || []).some((x) => x.id === a.id))
+      .map((a) => ({...a, statut: "libre", bulle: "", taches: [], retire: true, polyvalent: true, service: null}));
+    const agents = new Map([...(etat.agents || []), ...anciens].map((a) => [a.id, a]));
     const chef = (etat.agents || []).find((a) => a.chef);
     this._idChef = chef ? chef.id : null;
 

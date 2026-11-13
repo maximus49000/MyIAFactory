@@ -2987,6 +2987,10 @@ def _session_a_creer(projet, cle, raison, tache=None, session=None):
                                          if x["cle"] == cle), None))
     except (OSError, fi.FicheInvalide):
         url = None
+    if _polyvalent(fiche):      # un agent polyvalent : le modèle de la tâche (sinon Sonnet), un seul compte de session
+        t = next((x for x in court["taches"] if x["id"] == tache), None) if tache else None
+        fiche = dict(fiche, role="agent polyvalent",
+                     modele=_modele_de_depart(projet, court, cle, t) if t is not None else "Sonnet")
     plus = {}
     if tache:
         try:

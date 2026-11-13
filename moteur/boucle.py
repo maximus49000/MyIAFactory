@@ -485,7 +485,7 @@ class Moteur:
         if fiche is None:
             raise regles.Refus(f"agent inconnu : {cle}")
         modele = (d.get("modele") or fiche["modele"] or "Sonnet").lower()
-        fiche = self._fiche_avec_accord(fiche, modele, d.get("fable_accorde"))
+        fiche = self._fiche_avec_accord(self._fiche_du_metier(projet, fiche, taches), modele, d.get("fable_accorde"))
         if fiche["lieu"] != "cloud":
             infos = {"genre": "tache", "tache": taches[0], "taches": list(taches), "agent": cle, "modele": modele,
                      "lot": d.get("lot"), "matiere": matiere,
@@ -503,6 +503,24 @@ class Moteur:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{cle}", daemon=True).start()
+
+    @staticmethod
+    def _fiche_du_metier(projet, fiche, taches):
+        """Un agent polyvalent est lancé avec ses outils plus ceux du métier de chaque tâche (`Outils :` du brief) :
+        pour cette tâche, il est le spécialiste de ce métier. Une fiche à l'ancienne reste telle quelle."""
+        if not regles._polyvalent(fiche):
+            return fiche
+        siens = fi.outils(fiche)
+        outils = list(siens)
+        for tid in taches:
+            try:
+                role = regles._tache(projet, tid).get("role")
+            except (regles.Refus, regles.ErreurMoteur):
+                continue
+            m = regles._metier(projet, role)
+            if m and m.get("outils"):
+                outils += [o for o in fi.outils({"outils": m["outils"]}) if o not in outils]
+        return {**fiche, "outils": ", ".join(outils)} if outils != siens else fiche
 
     @staticmethod
     def _fiche_avec_accord(fiche, modele, accord):

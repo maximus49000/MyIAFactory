@@ -422,3 +422,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un titre de calque modal ne doit pas recouvrir la barre d'en-tête de l'écran ; à vérifier sur capture réelle.
+
+## G71 — Une capture d'écran de moteur de jeu se fait dans une fenêtr
+Rôles : dev
+Date : 2026-11-13
+
+Une capture d'écran de moteur de jeu se fait dans une fenêtre réelle ; le mode sans interface ne rend pas l'image.

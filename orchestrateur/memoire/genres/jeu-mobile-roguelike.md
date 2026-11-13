@@ -440,3 +440,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Un panneau ouvert par-dessus un écran peut recouvrir des textes et des cartes sans qu'aucun test ne le voie : relire chaque capture avant de rendre.
+
+## G74 — Quand un contrôle impose un ordre entre catégories d'adversa
+Rôles : equilibreur
+Date : 2026-11-13
+
+Quand un contrôle impose un ordre entre catégories d'adversaires (normal < élite < champion < boss), lire cet ordre avant de régler un adversaire : une baisse du dernier de la chaîne oblige à baisser les précédents.

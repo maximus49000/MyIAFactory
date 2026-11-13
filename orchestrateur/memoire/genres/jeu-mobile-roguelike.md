@@ -470,3 +470,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand des contrôles imposent un ordre de PV entre catégories et entre niveaux, baisser un adversaire du haut de la chaîne oblige à baisser tous ceux qui le dépassent ; lire ces bornes avant l'essai, et déclarer comme calculées les valeurs ajustées par ricochet si le robot ne les mesure pas.
+
+## G79 — Pour un habillage 2D généré par code, regrouper les icônes d
+Rôles : graphiste
+Date : 2026-11-13
+
+Pour un habillage 2D généré par code, regrouper les icônes dans une classe de dessin à repère normalisé associée à une table id→forme ; pour des captures sans écran, lancer le moteur sous un écran virtuel avec rendu OpenGL logiciel.

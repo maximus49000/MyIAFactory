@@ -494,3 +494,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Une suite de tests unitaires verte ne prouve pas le parcours du joueur ; le parcours complet sur appareil ou émulateur est une étape distincte.
+
+## G83 — Pour un jeu mobile, la lisibilité et la mise en page se véri
+Rôles : designer, dev, qa
+Date : 2026-11-13
+
+Pour un jeu mobile, la lisibilité et la mise en page se vérifient d'abord par des captures du moteur à la résolution de référence et un contrôle automatique de chaque texte ; l'émulateur ne sert plus qu'à confirmer le rendu dans le paquet.

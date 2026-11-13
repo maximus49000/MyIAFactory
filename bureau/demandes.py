@@ -47,7 +47,7 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "lieu_etape")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_DECOUPAGE = ("valider", "refuser")    # « refuser » : rien ne change
-LIEUX_D_ETAPE = ("local", "indifférent")       # ou null : le lieu du métier décide
+LIEUX_D_ETAPE = ("local", "cloud", "indifférent")       # ou null : le lieu du métier décide
 VERDICTS_OUTIL = ("autoriser", "refuser", "relancer")     # « relancer » : la fiche a été complétée à la main
 DEMANDES_PARTENAIRES = ("partenaire_regle", "partenaire_inscrit", "partenaires_actualiser", "partenaires_maj")
 VERDICTS_CHEZ_PARTENAIRE = ("fait", "impossible")
@@ -421,7 +421,7 @@ def _verifier_lieux(demande, r):
     if e.get("validation"):
         return "Une validation du Directeur n'a pas de lieu."
     if "lieu" not in demande or (demande["lieu"] is not None and demande["lieu"] not in LIEUX_D_ETAPE):
-        return "« lieu » vaut local, indifférent ou null."
+        return "« lieu » vaut local, cloud, indifférent ou null."
     return None
 
 

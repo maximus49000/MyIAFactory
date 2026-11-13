@@ -887,8 +887,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         if t.get("service") is not None and not _dans(t["service"], {s.get("id") for s in r.get("services") or []
                                                                        if _est_dict(s)}):
             erreurs.append(f"Tâche « {i} » : « service » inconnu « {t['service']} ».")
-        if t.get("lieu") is not None and t["lieu"] != "local":    # « Sur le poste local » ; absent sinon
-            erreurs.append(f"Tâche « {i} » : « lieu » vaut local (son étape exige le poste) ou est absent.")
+        if t.get("lieu") is not None and t["lieu"] not in ("local", "cloud"):    # « Sur le poste local » / « Dans le cloud » ; absent sinon
+            erreurs.append(f"Tâche « {i} » : « lieu » vaut local ou cloud (son étape l'exige) ou est absent.")
         for champ in ("debut", "fin"):       # heures ISO du départ et de la fin de la tâche
             if not _texte_ou_nul(t.get(champ)) or len(t.get(champ) or "") > 40:
                 erreurs.append(f"Tâche « {i} » : « {champ} » est une heure ISO ou nul.")
@@ -920,7 +920,7 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         _verifier_etapes_lieux(r["etapes_lieux"], "« etapes_lieux »", erreurs)
 
 
-LIEUX_D_ETAPE = ("local", "indifférent")    # le lieu d'une étape d'agent ; nul : le `Lieu :` du métier décide
+LIEUX_D_ETAPE = ("local", "cloud", "indifférent")    # le lieu d'une étape d'agent ; nul : le `Lieu :` du métier décide
 
 
 def _verifier_etapes_lieux(etapes, nom, erreurs):
@@ -934,8 +934,8 @@ def _verifier_etapes_lieux(etapes, nom, erreurs):
         if not _texte_plein(e.get("id")) or not isinstance(e.get("nom"), str):
             erreurs.append(f"{nom} : chaque étape a un « id » et un « nom » (textes).")
         if e.get("lieu") is not None and (e["lieu"] not in LIEUX_D_ETAPE or e.get("validation") is True):
-            erreurs.append(f"{q} : « lieu » vaut local, indifférent ou nul (jamais sur une validation).")
-        for champ in ("validation", "suggeree"):
+            erreurs.append(f"{q} : « lieu » vaut local, cloud, indifférent ou nul (jamais sur une validation).")
+        for champ in ("validation", "suggeree", "exige_poste"):
             if e.get(champ) is not None and not isinstance(e[champ], bool):
                 erreurs.append(f"{q} : « {champ} » est vrai ou faux.")
         if not _texte_ou_nul(e.get("role")):

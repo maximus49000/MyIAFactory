@@ -542,5 +542,40 @@ class TestEtatPartenaires(unittest.TestCase):
         self.assertNotIn("partenaires", self.etat(version=3))
 
 
+class TestEtatEtapesLieux(unittest.TestCase):
+    """Le lieu des étapes et des tâches est servi à la page ; sans ces champs, rien ne change."""
+    ETAPES = [{"id": "proto", "nom": "Prototype", "role": "dev", "validation": False, "lieu": None, "suggeree": True},
+              {"id": "val", "nom": "Essai", "role": None, "validation": True, "lieu": None, "suggeree": False}]
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.eq = equipe.Equipe(Path(self._t.name) / "equipe.json")
+
+    def etat(self, version=4, modif=None):
+        r = {**copy.deepcopy(BASE), "version": version}
+        if modif:
+            modif(r)
+        return etat.construire(releve.normaliser(r), self.eq, M, 30)
+
+    def test_etapes_et_lieu_des_taches_servis(self):
+        def avec(r):
+            r["etapes_lieux"] = copy.deepcopy(self.ETAPES)
+            r["etapes_lieux"][0]["exige_poste"] = True
+            r["taches"][0]["lieu"] = "local"
+            r["taches"][1]["lieu"] = "cloud"
+        e = self.etat(modif=avec)
+        self.assertEqual(e["etapes_lieux"][0], {**self.ETAPES[0], "exige_poste": True})
+        self.assertEqual(e["taches"][0]["lieu"], "local")
+        self.assertEqual(e["taches"][1]["lieu"], "cloud")
+
+    def test_sans_les_champs_rien_ne_change(self):
+        e = self.etat()
+        self.assertNotIn("etapes_lieux", e)
+        for t in e["taches"]:
+            self.assertNotIn("lieu", t)
+        self.assertNotIn("etapes_lieux", self.etat(version=3))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -196,6 +196,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
             for c in ("fonctionnalite", "element", "modele_depart", "montee", "lot", "modele_necessaire", "resume",
                       "debut", "fin", "service"):
                 t[c] = brut.get(c)
+            if brut.get("lieu") in ("local", "cloud"):      # « Sur le poste local » / « Dans le cloud » ; absent sinon
+                t["lieu"] = brut["lieu"]
 
     e = {
         "version": r["version"],
@@ -235,6 +237,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
             e["metiers"] = copy.deepcopy(r["metiers"])
         if isinstance(r.get("regles_projet"), list):    # les règles du projet : rendues telles quelles
             e["regles_projet"] = copy.deepcopy(r["regles_projet"])
+        if isinstance(r.get("etapes_lieux"), list):    # les étapes d'agent et leur lieu (le sélecteur de la page)
+            e["etapes_lieux"] = copy.deepcopy(r["etapes_lieux"])
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)
             e["partenaires"] = copy.deepcopy(r["partenaires"])
     return e

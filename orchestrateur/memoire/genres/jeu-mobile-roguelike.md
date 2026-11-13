@@ -500,3 +500,9 @@ Rôles : designer, dev, qa
 Date : 2026-11-13
 
 Pour un jeu mobile, la lisibilité et la mise en page se vérifient d'abord par des captures du moteur à la résolution de référence et un contrôle automatique de chaque texte ; l'émulateur ne sert plus qu'à confirmer le rendu dans le paquet.
+
+## G84 — Après chaque export d'un paquet, vérifier que les fichiers d
+Rôles : release
+Date : 2026-11-13
+
+Après chaque export d'un paquet, vérifier que les fichiers de données embarqués sont identiques à ceux du dépôt, et refaire l'export si ce n'est pas le cas.

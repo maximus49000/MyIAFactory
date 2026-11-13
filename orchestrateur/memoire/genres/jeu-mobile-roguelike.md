@@ -518,3 +518,9 @@ Rôles : release
 Date : 2026-11-13
 
 Un paquet signé avec une clé de débogage n'est pas une version de publication : la clé de publication est fournie par le propriétaire du projet, hors du dépôt.
+
+## G87 — Un paquet signé avec la clé de débogage du poste n'est pas u
+Rôles : release
+Date : 2026-11-13
+
+Un paquet signé avec la clé de débogage du poste n'est pas une version de publication : la clé vient du propriétaire du projet, hors du dépôt, et l'agent ne la crée jamais.

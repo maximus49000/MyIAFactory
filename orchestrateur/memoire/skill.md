@@ -423,3 +423,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand un seul test de données de mesure périmées échoue dans une suite, le signaler comme dette de l'étape d'équilibrage plutôt que de modifier l'élément en cours ; relancer la mesure suffit à le résoudre.
+
+## S71 — Quand la suite de tests dépasse la limite d'une commande au
+Rôles : dev
+Date : 2026-11-13
+
+Quand la suite de tests dépasse la limite d'une commande au premier plan, lancer les modules séparément et les mesures longues en arrière-plan, puis les attendre par de courtes pauses.

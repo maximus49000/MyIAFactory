@@ -185,10 +185,12 @@ def derniere_action(lignes, dossier_projet):
                     chemin = entree.get("file_path") or entree.get("notebook_path") or entree.get("path")
                     return f"{VERBES_FICHIER[nom]} {_fichier_court(chemin, dossier_projet)}"[:MAX_ACTION]
                 if nom in ("Bash", "PowerShell"):
-                    # le programme lancé, pas le « cd dossier && » qui le précède (essai réel : « lance cd »)
-                    morceaux = [m.split() for m in re.split(r"&&|\|\||;|\|", str(entree.get("command") or ""))]
-                    utiles = [m for m in morceaux if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
-                    mot = utiles[0][0] if utiles else ""
+                    # le programme qui tourne : le dernier d'une chaîne « a && b && c », avant tout « | tail » de mise
+                    # en forme, jamais le « cd dossier && » du début (essais réels : « lance cd », « lance ls » pour
+                    # « cd … && ls … && grep … && python tests »)
+                    etapes = [e.split("|", 1)[0].split() for e in re.split(r"&&|\|\||;", str(entree.get("command") or ""))]
+                    utiles = [m for m in etapes if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
+                    mot = utiles[-1][0] if utiles else ""
                     mot = re.sub(r"[^\w.-]", "", Path(mot.strip("\"'").replace("\\", "/")).name)[:20]
                     return f"lance {mot}" if mot else "lance une commande"
                 if nom in VERBES:
@@ -206,9 +208,23 @@ def _iso(t):
         return None
 
 
+def moment_de_la_derniere_action(lignes):
+    """L'heure ISO locale de la dernière ligne qui n'est pas un signe de vie (`tool_progress`), d'après son
+    `timestamp` ; `None` si aucune n'en porte."""
+    for d in reversed(lignes):
+        if d.get("type") == "tool_progress" or not isinstance(d.get("timestamp"), str):
+            continue
+        try:
+            return datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).astimezone().isoformat(
+                timespec="seconds")
+        except ValueError:
+            continue
+    return None
+
+
 def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
-    """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t}`
-    (heures ISO). Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
+    """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t,
+    vie_t}` (heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris). Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
     try:
         d = dossier(dossier_factory)
         if not d.is_dir():
@@ -227,14 +243,18 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
             if not isinstance(debut, (int, float)) or isinstance(debut, bool):
                 continue
             flux = f.with_suffix(".jsonl")
-            action = derniere_action(_lignes(flux, QUEUE_OCTETS), etat.get("dossier"))
+            lignes = _lignes(flux, QUEUE_OCTETS)
+            action = derniere_action(lignes, etat.get("dossier"))
             try:
-                action_t = _iso(flux.stat().st_mtime) if action else None
+                vie_t = _iso(flux.stat().st_mtime)      # la dernière ligne écrite, signes de vie compris
             except OSError:
-                action_t = None
+                vie_t = None
+            # l'heure de la dernière vraie action (pas d'un signe de vie) ; à défaut, la dernière ligne écrite
+            action_t = (moment_de_la_derniere_action(lignes) or vie_t) if action else None
             if _iso(debut) is None:
                 continue
-            info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t}
+            info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
+                    "vie_t": vie_t}
             for tid in etat.get("taches") or [etat.get("tache")]:
                 if isinstance(tid, str):
                     travail[tid] = info

@@ -33,6 +33,10 @@ test("auTravail : depuis quand l'agent travaille, et sa dernière action", () =>
                    {depuis: "1 h 05", action: "dernière action à l'instant : modifie scenes/combat.gd"});
   assert.deepEqual(auTravail({depuis: ilYa(0.5), action: null}, MAINTENANT), {depuis: "moins d'une minute", action: null});
   assert.equal(auTravail({...t, action_t: null}, MAINTENANT).action, "dernière action : modifie scenes/combat.gd");
+  // Une commande en cours : l'action date, les signes de vie sont récents.
+  assert.equal(auTravail({...t, action: "lance python", action_t: ilYa(4), vie_t: ilYa(0.2)}, MAINTENANT).action,
+               "dernière action il y a 4 min : lance python · commande en cours, signe de vie à l'instant");
+  assert.equal(auTravail({...t, vie_t: ilYa(2)}, MAINTENANT).action, "dernière action il y a 2 min : modifie scenes/combat.gd");
   assert.equal(auTravail(null, MAINTENANT), null);
   assert.equal(auTravail({depuis: "n'importe quoi"}, MAINTENANT), null);
   // Ce qui redessine un panneau : la minute qui passe ou une nouvelle action.

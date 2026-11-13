@@ -258,8 +258,27 @@ class AuTravail(Base):
         self.assertAlmostEqual(datetime.fromisoformat(t["depuis"]).timestamp(), debut, delta=1)
         self.assertAlmostEqual(datetime.fromisoformat(t["action_t"]).timestamp(), debut + 21 * 60, delta=1)
         self.assertNotIn("mot de passe", json.dumps(t))
+        self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), debut + 21 * 60, delta=1)
         self.assertEqual(taches[1]["travail"]["agent"], "dev-1")     # le reste du lot aussi
         self.assertNotIn("travail", taches[2])
+
+    def test_une_commande_en_cours_donne_l_heure_de_l_action_et_le_signe_de_vie(self):
+        """Essai réel : « dernière action il y a 4 min » pendant une suite de tests ; l'action garde son heure, les
+        signes de vie de la commande en cours sont donnés à part (`vie_t`)."""
+        from datetime import datetime, timezone
+        debut = time.time() - 10 * 60
+        action = datetime.fromtimestamp(debut + 60, timezone.utc).isoformat().replace("+00:00", "Z")
+        flux = self.ecrire("t1", {"tache": "t1", "agent": "dev", "pid": os.getpid(), "debut": debut,
+                                  "dossier": str(self.dossier)},
+                           [{**self.outil("Bash", {"command": "python tools/lancer_tests.py"}), "timestamp": action},
+                            {"type": "tool_progress", "heartbeat": True}])
+        os.utime(flux, (debut + 9 * 60, debut + 9 * 60))
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        t = taches[0]["travail"]
+        self.assertEqual(t["action"], "lance python")
+        self.assertAlmostEqual(datetime.fromisoformat(t["action_t"]).timestamp(), debut + 60, delta=1)
+        self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), debut + 9 * 60, delta=1)
 
     def test_rien_pour_un_agent_qui_ne_tourne_plus(self):
         self.ecrire("t1", {"tache": "t1", "agent": "dev-1", "pid": 999999999, "debut": time.time()}, [])
@@ -272,6 +291,8 @@ class AuTravail(Base):
         self.assertEqual(detache.derniere_action(lignes, None), "lance python")
         cd = [self.outil("Bash", {"command": "cd C:/projet && python tools/lancer_tests.py 2>&1 | tail -40"})]
         self.assertEqual(detache.derniere_action(cd, None), "lance python")       # pas « lance cd »
+        chaine = [self.outil("Bash", {"command": "cd C:/p && ls tests && grep -n x a.json && py -3.12 tools/t.py | tail"})]
+        self.assertEqual(detache.derniere_action(chaine, None), "lance py")       # le dernier, pas « lance ls »
         self.assertEqual(detache.derniere_action([self.outil("Write", {"file_path": "/ailleurs/x.txt"})], "/projet"),
                          "écrit x.txt")
         self.assertEqual(detache.derniere_action([self.outil("Grep", {"pattern": "secret"})], None),

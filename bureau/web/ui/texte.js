@@ -31,7 +31,7 @@ export function ilYA(date, maintenant = new Date()) {
   return "il y a " + dureeEnClair(m);
 }
 
-// Un agent local au travail (`travail` servi par le bureau : {depuis, agent, action, action_t}, heures ISO) :
+// Un agent local au travail (`travail` servi par le bureau : {depuis, agent, action, action_t, vie_t}, heures ISO) :
 // {depuis: « 23 min » | « 1 h 05 », action: « dernière action il y a 2 min : modifie scenes/combat.gd » | null}, ou
 // null si on ne sait pas depuis quand. Calculé à chaque dessin : la durée suit chaque relecture de l'état.
 export function auTravail(travail, maintenant = new Date()) {
@@ -44,6 +44,11 @@ export function auTravail(travail, maintenant = new Date()) {
     const a = minutesDepuis(travail.action_t, maintenant);
     const quand = a === null ? "" : a < 1 ? " à l'instant" : " il y a " + dureeEnClair(a);
     action = `dernière action${quand} : ${tronquer(travail.action.trim(), 80)}`;
+    // Une commande en cours (tests, compilation…) : l'agent n'agit pas, mais il donne signe de vie (`vie_t`).
+    const v = minutesDepuis(travail.vie_t, maintenant);
+    if (v !== null && (a === null || a - v >= 1)) {
+      action += ` · commande en cours, signe de vie ${v < 1 ? "à l'instant" : "il y a " + dureeEnClair(v)}`;
+    }
   }
   return {depuis, action};
 }
@@ -54,7 +59,8 @@ export function cleTravail(tache, maintenant = new Date()) {
   const t = tache?.travail;
   const m = minutesDepuis(t?.depuis, maintenant);
   if (m === null) return null;
-  return [Math.floor(m), t.action || null, t.action_t || null];
+  const v = minutesDepuis(t.vie_t, maintenant);
+  return [Math.floor(m), t.action || null, t.action_t || null, v === null ? null : Math.floor(v)];
 }
 
 // Le voyant de la factory : {libelle, ton} avec ton parmi ok | pause | alerte.

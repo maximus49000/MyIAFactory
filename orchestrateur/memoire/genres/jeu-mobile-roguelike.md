@@ -392,3 +392,9 @@ Rôles : dev
 Date : 2026-11-13
 
 Quand un jeu permet de voir à l'avance ce qui attend sur chaque nœud, attribuer les contenus au niveau entier (ordre mélangé selon la graine, sans répétition tant que la liste suffit) et faire lire cette même attribution par l'aperçu et par le jeu.
+
+## G66 — Un nœud d'interface créé par le code puis ajouté à la scène
+Rôles : dev
+Date : 2026-11-13
+
+Un nœud d'interface créé par le code puis ajouté à la scène doit avoir une position et une taille explicites, ainsi que ses enfants plein écran ; il faut relire la capture réelle de l'écran avant de rendre.

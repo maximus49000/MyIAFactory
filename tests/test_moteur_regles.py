@@ -1246,7 +1246,9 @@ class Validation(Base):
         (d,) = self.decisions()
         self.assertEqual({c: d[c] for c in DIT}, DIT)
 
-    def test_validation_sans_doit_marcher_relance_une_fois_puis_bloque(self):
+    def test_validation_sans_doit_marcher_relance_une_fois_puis_pose_avec_l_objectif(self):
+        """Essai réel : trois validations bloquées, l'agent jugeant qu'il n'y avait rien à modifier. Au second essai
+        muet, s'il y a de quoi vérifier, la validation est posée avec l'objectif de l'étape comme consigne."""
         self.projet_avec_validation()
         self.fichier("pieces/f1/essai.png")
         sans = {**verdict("e1"), "message": {"texte": "Testé."},
@@ -1254,13 +1256,38 @@ class Validation(Base):
                 "doit_marcher": "x" * 481}                      # trop long : écarté comme absent
         self.piloter(regles.avancer(self.projet, self.etat),
                      rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, sans, sans])
-        self.assertEqual(self.decisions(), [])
         essais = self.taches(etape="flux:essai")
         self.assertEqual(len(essais), 2)
         self.assertTrue(any(j["texte"].startswith("Validation sans consigne") for j in essais[-1]["journal"]))
+        (d,) = self.decisions()
+        self.assertTrue(d["doit_marcher"].startswith("L'agent ne l'a pas précisé"))
+        self.assertLessEqual(len(d["doit_marcher"]), 480)
         (val,) = self.taches(etape="validation:valider")
-        self.assertIn("doit_marcher", val["bloquee"])
-        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "bloque")
+        self.assertFalse(val.get("bloquee"))
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "validation")
+
+    def test_retour_sur_une_validation_bloquee_refait_l_etape_d_avant(self):
+        """Tout se règle depuis le bureau : un retour sur la validation bloquée refait l'étape précédente avec le texte
+        du Directeur, puis la validation est reposée."""
+        self.projet_avec_validation()
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Testé."}}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, rien, rien])
+        (val,) = self.taches(etape="validation:valider")
+        self.assertIn("Écrivez un retour sur cette tâche", val["bloquee"])
+        d, actions = self.traiter(type="retour", tache=val["id"], texte="Joins une capture de l'écran.")
+        self.assertIn("refaite", self.statut(d["id"])["reponse"])
+        (val,) = self.taches(etape="validation:valider")
+        self.assertEqual((val["colonne"], val.get("bloquee")), ("fait", None))
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 3)
+        self.assertTrue(any("Joins une capture" in j["texte"] for j in essais[-1]["journal"]))
+        self.assertEqual([t for t in self.taches() if t["titre"].startswith("Retour :")], [])
+        self.fichier("pieces/f1/essai.png")
+        self.piloter(actions, rapports=[{**rien, "fichiers": [
+            {"chemin": "pieces/f1/essai.png", "titre": "Capture", "element": "e1"}]}])
+        (nouvelle,) = self.decisions()
+        self.assertEqual(nouvelle["doit_marcher"], DIT["doit_marcher"])
 
     def test_doit_marcher_rendu_a_la_relance_pose_la_decision(self):
         self.projet_avec_validation()

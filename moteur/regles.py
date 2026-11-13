@@ -1634,6 +1634,8 @@ def _sur_retour(projet, demande, etat):
     travail = agent_au_travail(projet, etat, fid) if fid else None
     if travail is not None and travail[0] == t["id"]:      # l'agent est en plein travail sur cette tâche
         return _transmettre_a_l_agent(projet, demande, fid, *travail)
+    if _validation_bloquee(t) and fid and t.get("element"):
+        return _refaire_avant_la_validation(projet, demande, etat, t)
     if _tache_a_reprendre(t) and t["id"] not in _m(etat, "en_cours"):
         # le retour reprend CETTE tâche (même agent, même élément) : débloquée aussitôt, pas de tâche « Retour » à part
         texte = " ".join(str(demande["texte"]).split())
@@ -1645,6 +1647,36 @@ def _sur_retour(projet, demande, etat):
                        "retour", element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
     _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")
     return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
+
+
+def _validation_bloquee(t):
+    return t["colonne"] != "fait" and bool(t.get("bloquee")) and str(t.get("etape") or "").startswith(
+        ETAPES_DE_VALIDATION)
+
+
+def _refaire_avant_la_validation(projet, demande, etat, t):
+    """Un retour sur une validation bloquée (rien à vérifier, consigne manquante…) : comme un renvoi, l'étape d'avant
+    est refaite avec le texte du Directeur, et la validation sera reposée ensuite. Tout se règle depuis le bureau."""
+    fid, eid = t["fonctionnalite"], t["element"]
+    reprendre_la_serie(projet, etat, fid)
+    v = _m(etat, "elements").get(f"{fid}/{eid}")
+    production = _production(projet, fid)
+    rang = next((k for k, s in enumerate(production) if ETAPES_DE_VALIDATION + s["id"] == t["etape"]), None)
+    avant = None if rang is None else next((k for k in range(rang - 1, -1, -1)
+                                            if not wf.est_validation(production[k])), None)
+    if v is None or avant is None:
+        raise Refus("l'étape à refaire avant cette validation n'est plus dans le workflow")
+    texte = " ".join(str(demande["texte"]).split())
+    lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
+                             "journal": [f"Renvoyé : {texte}"]})
+    v.pop("rien_a_verifier", None)
+    v.update(phase="flux", pas=avant)
+    _tache_de_flux(projet, etat, v, journal=[f"Remarque du Directeur : {texte}"])
+    _dire(projet, fid, f"« {v['element']['nom']} » : l'étape « {production[avant]['nom']} » est refaite avec votre "
+                       "retour, puis la validation sera reposée.")
+    _terminer(projet, {"demande": demande["id"]}, "L'étape précédente est refaite avec votre retour ; la validation "
+                                                  "sera reposée ensuite.")
+    return _demarrer_en_attente(projet, etat, fid)
 
 
 def _sur_retour_element(projet, demande, etat):
@@ -3288,6 +3320,11 @@ def _attendre_le_directeur(projet, etat, v, s):
         renvoi = _remarque_du_renvoi(projet, v)
         if renvoi:
             precedent = {**precedent, "doit_marcher": renvoi}
+        elif v.get("rien_a_verifier") and _de_quoi_verifier(projet, precedent):
+            # Second essai toujours muet, mais il y a de quoi vérifier : la validation est posée avec l'objectif de
+            # l'étape comme consigne, plutôt que bloquée (essai réel : trois validations arrêtées, l'agent jugeant
+            # qu'il n'y avait « rien à modifier »). Le Directeur juge, et renvoie s'il le faut.
+            precedent = {**precedent, "doit_marcher": _doit_marcher_derive(_objectif_de(projet, v, s))}
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
@@ -3343,6 +3380,14 @@ def _remarque_du_renvoi(projet, v):
                     phrase = "Les points renvoyés sont corrigés : " + points
                     return phrase if len(phrase) <= rel.MAX_DOIT_MARCHER else phrase[:rel.MAX_DOIT_MARCHER - 1] + "…"
     return None
+
+
+def _doit_marcher_derive(objectif):
+    """Ce qui doit marcher quand l'agent ne l'a pas dit, tiré de l'objectif de l'étape (sans appel d'IA)."""
+    debut = "L'agent ne l'a pas précisé : le résultat doit correspondre à l'objectif de l'étape. "
+    objectif = " ".join(str(objectif or "").split()) or "ce que l'étape devait produire."
+    phrase = debut + objectif
+    return phrase if len(phrase) <= rel.MAX_DOIT_MARCHER else phrase[:rel.MAX_DOIT_MARCHER - 1] + "…"
 
 
 OBJECTIF_MAX = 600
@@ -3433,14 +3478,15 @@ def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
     raisons = []
     if "rien" in manques:
         raisons.append("Rien à valider : l'étape précédente n'a rendu ni image, ni livrable téléchargeable, ni lien "
-                       "d'accès (deux fois). Demandez-les par un retour sur cette tâche.")
+                       "d'accès (deux fois).")
     if "doit_marcher" in manques:
         raisons.append("Validation sans consigne : l'étape précédente n'a pas dit ce qui doit marcher "
-                       "(`doit_marcher`, deux fois). Demandez-le par un retour sur cette tâche.")
+                       "(`doit_marcher`, deux fois).")
     for m in manques:
         if m in CONSIGNES_DE_NATURE:
-            raisons.append(f"Validation incomplète : l'étape précédente est restée {QUOI_MANQUE[m]} "
-                           f"(deux fois). Demandez-le par un retour sur cette tâche.")
+            raisons.append(f"Validation incomplète : l'étape précédente est restée {QUOI_MANQUE[m]} (deux fois).")
+    raisons.append("Écrivez un retour sur cette tâche (ce qu'il faut rendre) : l'étape précédente sera refaite avec, "
+                   "puis la validation reposée.")
     raison = " ".join(raisons)
     tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
                                    "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],

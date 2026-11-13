@@ -119,7 +119,9 @@ class TestReprise(Base):
         self.assertEqual((designer["service"], designer["modele"], designer["texte"]), ("art", "Opus", "Tu es designer."))
         self.assertEqual(self.metier("graphiste")["lieu"], "local")     # toutes locales, des outils déclarés
         self.assertEqual(self.metier("graphiste")["modele"], "Haiku")
-        self.assertEqual(self.metier("equilibreur")["lieu"], "indifférent")   # locale mais sans outils déclarés
+        # toutes ses fiches étaient locales : réservé au local, même sans outils déclarés (essai réel : un prototype Godot
+        # parti dans une session cloud, sans Godot ni SDK Android, n'a rendu ni test ni capture)
+        self.assertEqual(self.metier("equilibreur")["lieu"], "local")
         self.assertEqual(self.metier("qa")["lieu"], "indifférent")            # cloud
         # les leçons : toutes présentes une fois, le doublon exact fusionné, les ids gardés
         textes = self.textes_des_lecons()
@@ -290,6 +292,17 @@ class TestReprise(Base):
         r = self.reprendre()
         self.assertEqual(self.instantane(), avant)
         self.assertIn("déjà", r["compte_rendu"])
+
+    def test_rejouee_reserve_au_local_un_metier_dont_les_fiches_d_origine_etaient_locales(self):
+        self.reprendre()
+        m = self.metier("equilibreur")
+        m["lieu"] = "indifférent"                          # un projet repris avec l'ancienne règle
+        metiers.ecrire_metier(m)
+        r = self.reprendre()
+        self.assertEqual(self.metier("equilibreur")["lieu"], "local")
+        self.assertIn("poste local", r["compte_rendu"])
+        self.assertEqual(self.metier("qa")["lieu"], "indifférent")          # ses fiches étaient cloud
+        self.assertTrue(self.reprendre()["deja"])                          # puis plus rien à faire
 
     def test_chef_et_brief_illisible_gardes(self):
         (self.fiches / "chef.md").write_text(fiche("chef", "chef", "local", service="metier", modele="Opus"),

@@ -5,7 +5,7 @@ passe au nouveau standard, sans perte :
 
 1. un **métier** par rôle des fiches (`briefs/<rôle>.md`) : le brief existant est gardé, sinon créé depuis le texte d'une
    fiche du rôle ; sa spécialité, ses outils, son service et son modèle viennent d'une fiche du rôle ; il est réservé au
-   local quand toutes ses fiches étaient locales et déclarent des outils installés ;
+   local quand toutes ses fiches étaient locales ;
 2. les **leçons** des fiches (validées et « à valider ») vont dans le métier de leur rôle, ids gardés, doublons exacts
    fusionnés ; une leçon « à valider » du suivi porte son métier (`metier`) pour qu'elle se valide au bon endroit ;
 3. l'**équipe** est ramenée aux places (Facturation) : on garde d'abord les agents au travail, puis ceux d'une fonctionnalité
@@ -69,11 +69,11 @@ def mettre_de_cote(ctx):
 def _depuis_les_fiches(role, siennes):
     """Les champs du métier d'un rôle, d'après ses fiches : service, modèle, spécialité et outils viennent d'une fiche du
     rôle (la première qui déclare une spécialité ou des outils, sinon la première) ; réservé au local quand toutes
-    étaient locales et déclarent des outils installés."""
+    étaient locales (essai réel : un prototype Godot parti dans une session cloud, sans Godot ni SDK Android, n'a pu
+    rendre ni test ni capture)."""
     source = next((x for x in siennes if x["specialite"] or x["outils"]), siennes[0])
     modele = source["modele"] if source["modele"] in metiers.MODELES else "Opus"     # Fable : jamais dans un brief
-    lieu = "local" if all(x["lieu"] == "local" for x in siennes) and any(x["outils"] for x in siennes) \
-        else "indifférent"
+    lieu = "local" if all(x["lieu"] == "local" for x in siennes) else "indifférent"
     return {"service": source["service"] or next((x["service"] for x in siennes if x["service"]), None),
             "modele": modele, "specialite": source["specialite"], "outils": source["outils"], "lieu": lieu}
 
@@ -102,6 +102,28 @@ def fixer_les_metiers(ctx):
             change = True
         sortie.append({"role": role, "cree": cree})
     return sortie, change
+
+
+def reserver_au_local_depuis_l_avant(ctx):
+    """Un projet déjà repris : un métier dont toutes les fiches d'origine (`avant-polyvalents/`) étaient locales et dont
+    le brief ne dit pas son lieu est réservé au local. Rend les rôles changés. Rejouable sans effet."""
+    dossier = Path(ctx.f["fiches"]) / DOSSIER_AVANT
+    if not dossier.is_dir():
+        return []
+    try:
+        anciennes = _a_reprendre(fi.lire_toutes(dossier))
+    except fi.FicheInvalide:
+        return []
+    changes = []
+    for role, siennes in _par_role(anciennes).items():
+        if not all(x["lieu"] == "local" for x in siennes):
+            continue
+        m = _lire_metier(ctx, role)
+        if m is not None and m.get("lieu") == "indifférent":
+            m["lieu"] = "local"
+            metiers.ecrire_metier(m)
+            changes.append(role)
+    return changes
 
 
 def regrouper_les_lecons(ctx):
@@ -249,18 +271,22 @@ def reprendre(ctx):
         _lire_metier(ctx, role)
     if not anciennes:
         restaures = restaurer_les_retires(ctx)
+        locaux_ = reserver_au_local_depuis_l_avant(ctx)
         gardes = [x["cle"] for x in ctx.fiches() if x["role"] != "chef" and not x.get("retire")]
         compte_rendu = _texte_du_compte_rendu([], 0, 0, gardes, [], [], [], True)
         if restaures:
             compte_rendu += (f" {len(restaures)} agent{'s' if len(restaures) > 1 else ''} retiré"
                              f"{'s' if len(restaures) > 1 else ''} de l'équipe remis en historique ({', '.join(restaures)}).")
+        if locaux_:
+            compte_rendu += f" Réservé{'s' if len(locaux_) > 1 else ''} au poste local : {', '.join(locaux_)}."
+        if restaures or locaux_:
             journal = Path(ctx.f["suivi"]).with_name(JOURNAL)
             ancien = journal.read_text(encoding="utf-8") if journal.is_file() else "# Passage aux agents polyvalents\n"
             journal.write_text(ancien.rstrip("\n") + f"\n\n## {su.maintenant()}\n\n{compte_rendu}\n", encoding="utf-8",
                                newline="\n")
         return {"metiers": [], "lecons_regroupees": 0, "doublons": 0, "agents_gardes": gardes, "agents_retires": restaures,
                 "retraits_prevus": [x["cle"] for x in ctx.fiches() if x.get("retrait_prevu")], "agents_crees": [],
-                "deja": not restaures, "compte_rendu": compte_rendu}
+                "deja": not restaures and not locaux_, "compte_rendu": compte_rendu}
     locaux, cloud = ctx.f["agents_locaux_max"], outil.places_cloud_du_projet(ctx)
     mettre_de_cote(ctx)
     metiers_, _ = fixer_les_metiers(ctx)

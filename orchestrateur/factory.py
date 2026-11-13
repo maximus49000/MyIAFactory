@@ -22,6 +22,8 @@ MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet pa
 MODELES_D_ETAPE = ("Haiku", "Sonnet", "Opus", "Fable")
 # Le lieu d'une étape d'agent : `local` (exige le poste) ou `indifférent` (cloud possible) ; absent : celui du métier.
 LIEUX_D_ETAPE = ("local", "indifférent", "cloud")
+# Le regroupement d'une étape d'agent : `parallele` (par défaut) ou `regroupe` (un seul agent enchaîne ses tâches).
+REGROUPEMENTS_D_ETAPE = ("parallele", "regroupe")
 
 
 class FactoryInvalide(Exception):
@@ -51,6 +53,9 @@ def _controler_flux(flux, nom, ids_services, vus):
         if "lieu" in e and (e.get("validation") is True or e["lieu"] not in LIEUX_D_ETAPE):
             raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » : « lieu » vaut "
                                   f"{' ou '.join(LIEUX_D_ETAPE)}, jamais sur une étape de validation.")
+        if "regroupement" in e and (e.get("validation") is True or e["regroupement"] not in REGROUPEMENTS_D_ETAPE):
+            raise FactoryInvalide(f"Factory : « {nom} » : l'étape « {e['id']} » : « regroupement » vaut "
+                                  f"{' ou '.join(REGROUPEMENTS_D_ETAPE)}, jamais sur une étape de validation.")
         if not MOTIF_ID.match(e["id"]) or e["id"] in RESERVES:
             raise FactoryInvalide(f"Factory : « {nom} » : identifiant d'étape refusé « {e['id']} » "
                                   f"(minuscules, chiffres et tirets ; ni « cadrage » ni « fait »).")

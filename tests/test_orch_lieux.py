@@ -94,6 +94,21 @@ class Verifier(unittest.TestCase):
     def test_lieu_sur_une_validation_refuse(self):
         self.refuse([dict(e, lieu="local") if e["id"] == "valid-design" else e for e in decoupee()])
 
+    def test_regroupement_propose_accepte(self):
+        """Le Chef peut rendre « regroupe » pour une étape qui modifie des fichiers communs : seul le regroupement change."""
+        p = [dict(e, regroupement="regroupe") if e["id"] == "tests" else e for e in decoupee()]
+        self.assertIsNone(lieux.verifier_proposition(FLUX, p))
+        p = [dict(e, regroupement="regroupe") if e["id"] == "prototype" else e for e in decoupee()]
+        self.assertIsNone(lieux.verifier_proposition(FLUX, p))             # une étape découpée aussi
+
+    def test_regroupement_inconnu_ou_sur_une_validation_refuse(self):
+        self.refuse([dict(e, regroupement="tous") if e["id"] == "tests" else e for e in decoupee()])
+        self.refuse([dict(e, regroupement="regroupe") if e["id"] == "valid-design" else e for e in decoupee()])
+
+    def test_une_proposition_qui_oublie_le_regroupement_n_est_pas_refusee(self):
+        flux = [dict(e, regroupement="regroupe") if e["id"] == "tests" else e for e in FLUX]
+        self.assertIsNone(lieux.verifier_proposition(flux, decoupee()))
+
     def test_etape_inventee_refusee(self):
         p = decoupee()
         p.insert(1, {"id": "maquette", "nom": "Maquette", "role": "designer", "service": "dev", "lieu": "local"})
@@ -197,6 +212,16 @@ class Appliquer(unittest.TestCase):
     def test_etape_inconnue_de_la_proposition_gardee(self):
         flux = FLUX + [{"id": "bonus", "nom": "Bonus", "role": "dev", "service": "dev"}]
         self.assertEqual(lieux.appliquer(flux, decoupee())[-1], flux[-1])
+
+    def test_regroupement_pose_garde_ou_retire(self):
+        propose = [dict(e, regroupement="regroupe") if e["id"] == "tests" else e for e in decoupee()]
+        une = lieux.appliquer(FLUX, propose)
+        self.assertEqual(next(e for e in une if e["id"] == "tests")["regroupement"], "regroupe")
+        self.assertEqual(lieux.appliquer(une, propose), une)                      # rejouable sans effet
+        self.assertEqual(next(e for e in lieux.appliquer(une, decoupee()) if e["id"] == "tests")["regroupement"],
+                         "regroupe")                                              # une proposition muette le garde
+        parallele = [dict(e, regroupement="parallele") if e["id"] == "tests" else e for e in decoupee()]
+        self.assertNotIn("regroupement", next(e for e in lieux.appliquer(une, parallele) if e["id"] == "tests"))
 
     def test_lieu_retire_si_la_proposition_n_en_a_plus(self):
         une = lieux.appliquer(FLUX, decoupee())
@@ -315,6 +340,54 @@ class Commande(AvecProjet):
         f["environnement"] = [{"outil": "Godot 4", "pour": "prototype", "cloud": True}]   # le cloud sait l'installer
         self.factory.write_text(json.dumps(f), encoding="utf-8")
         self.ok("lieux", entree={"action": "regler", "etape": "prototype", "lieu": "cloud"})
+
+    def test_regrouper_une_etape_dans_tous_les_workflows(self):
+        avant = self.suivi()
+        r = self.ok("lieux", entree={"action": "regrouper", "etape": "tests", "regroupement": "regroupe"})
+        self.assertTrue(r["change"])
+        d = self.lu()
+        self.assertEqual([e.get("regroupement") for w in d["workflows"] for e in w["flux"] if e["id"].endswith("tests")],
+                         ["regroupe"] * 3)
+        self.assertEqual([e.get("regroupement") for e in d["workflows"][0]["flux"] if not e["id"].endswith("tests")],
+                         [None] * 4)
+        self.assertFalse(self.ok("lieux", entree={"action": "regrouper", "etape": "tests",
+                                                  "regroupement": "regroupe"})["change"])
+        self.ok("lieux", entree={"action": "regrouper", "etape": "tests", "regroupement": "parallele"})
+        self.assertNotIn("regroupement", next(e for e in self.lu()["workflows"][1]["flux"] if e["id"] == "f1-tests"))
+        self.assertEqual(self.suivi(), avant)
+
+    def test_regrouper_refuse_une_validation_une_valeur_ou_une_etape_inconnue(self):
+        for entree in ({"etape": "valid-design", "regroupement": "regroupe"}, {"etape": "tests", "regroupement": "tous"},
+                       {"etape": "tests", "regroupement": None}, {"etape": "inconnue", "regroupement": "regroupe"}):
+            with self.subTest(entree=entree):
+                avant = self.factory.read_bytes()
+                code, _ = self.outil("lieux", entree={"action": "regrouper", **entree})
+                self.assertNotEqual(code, 0)
+                self.assertEqual(self.factory.read_bytes(), avant)
+
+    def test_regrouper_ne_touche_pas_au_lieu_et_inversement(self):
+        self.ok("lieux", entree={"action": "regler", "etape": "tests", "lieu": "local"})
+        self.ok("lieux", entree={"action": "regrouper", "etape": "tests", "regroupement": "regroupe"})
+        self.ok("lieux", entree={"action": "regler", "etape": "tests", "lieu": None})
+        e = next(e for e in self.lu()["workflows"][0]["flux"] if e["id"] == "tests")
+        self.assertEqual(e.get("regroupement"), "regroupe")
+        self.assertNotIn("lieu", e)
+
+    def test_le_releve_dit_le_regroupement_de_chaque_etape(self):
+        self.ok("lieux", entree={"action": "regrouper", "etape": "tests", "regroupement": "regroupe"})
+        etapes = {e["id"]: e for e in self.ok("releve")["etapes_lieux"]}
+        self.assertEqual(etapes["tests"]["regroupement"], "regroupe")
+        self.assertEqual(etapes["conception"]["regroupement"], "parallele")
+        self.assertEqual(etapes["valid-design"]["regroupement"], "parallele")
+
+    def test_factory_refuse_un_regroupement_invalide(self):
+        for e in ({"id": "tests", "nom": "T", "role": "qa", "service": "dev", "regroupement": "tous"},
+                  {"id": "tests", "nom": "T", "validation": True, "regroupement": "regroupe"}):
+            f = self.lu()
+            f["workflows"][0]["flux"] = [e]
+            self.factory.write_text(json.dumps(f), encoding="utf-8")
+            with self.assertRaises(lieux.fa.FactoryInvalide):
+                lieux.fa.lire(self.factory)
 
     def test_action_inconnue_refusee(self):
         code, _ = self.outil("lieux", entree={"action": "tout"})

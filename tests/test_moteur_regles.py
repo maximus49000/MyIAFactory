@@ -381,6 +381,17 @@ class Demandes(Base):
         seule = regles._repartir_sur_les_places([{"ids": ["a", "b"], "modele": "Haiku", "lot": "L2"}], 2)
         self.assertTrue(all(x["lot"] is None for x in seule))                       # une tâche seule n'est pas un lot
 
+    def test_un_lot_regroupe_n_est_jamais_coupe(self):
+        """Une étape « regroupée » : un seul agent enchaîne ses tâches, même avec des places libres ; les autres lots se
+        répartissent comme avant."""
+        regroupe = {"ids": ["g1", "g2", "g3"], "modele": "Sonnet", "lot": "L1", "regroupe": True}
+        r = regles._repartir_sur_les_places([regroupe], 4)
+        self.assertEqual(r, [regroupe])
+        ordinaire = {"ids": ["a", "b", "c"], "modele": "Sonnet", "lot": "L2"}
+        r = regles._repartir_sur_les_places([regroupe, ordinaire], 4)
+        self.assertEqual(sorted(len(x["ids"]) for x in r), [1, 1, 1, 3])
+        self.assertIn(regroupe, r)
+
     def test_un_lot_que_plus_personne_ne_porte_est_defait(self):
         """Essai réel : le moteur relancé avait perdu la suite d'un lot ; ses tâches (rangs 2 à 5) ne partaient jamais
         seules et attendaient avec trois agents libres. Un lot sans tâche active ni en partance est défait."""

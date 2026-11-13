@@ -66,6 +66,23 @@ class TestFormer(unittest.TestCase):
         self.assertEqual(ids(r), [["s0", "s1"], ["s2", "s3"], ["h0", "h1", "h2"], ["h3"]])
         self.assertEqual(len(lots.former([tache(f"t{i}") for i in range(8)], {"Sonnet": 99})[0]["taches"]), 5)
 
+    def test_etape_regroupee_garde_toutes_ses_taches_ensemble_sans_limite(self):
+        base = [dict(tache(f"g{i}"), groupe="equilibrage") for i in range(8)]
+        r = lots.former(base)
+        self.assertEqual(ids(r), [[f"g{i}" for i in range(8)]])     # au-delà des cinq d'un lot ordinaire
+        self.assertTrue(r[0]["regroupe"])
+        self.assertNotIn("regroupe", lots.former([tache("a")])[0])  # un lot ordinaire n'est pas marqué
+
+    def test_etape_regroupee_ne_se_melange_a_aucune_autre_tache(self):
+        base = [tache("a"), dict(tache("g1"), groupe="eq"), tache("b"), dict(tache("g2"), groupe="eq"),
+                dict(tache("h1"), groupe="autre"), tache("c")]
+        self.assertEqual(ids(lots.former(base)), [["a", "b", "c"], ["g1", "g2"], ["h1"]])
+
+    def test_etape_regroupee_garde_le_modele_et_le_lieu(self):
+        base = [dict(tache("g1"), groupe="eq"), dict(tache("g2", lieu="cloud"), groupe="eq"),
+                dict(tache("g3", "Opus"), groupe="eq")]
+        self.assertEqual(ids(lots.former(base)), [["g1"], ["g2"], ["g3"]])
+
     def test_cycle_refuse(self):
         base = [tache("a", depend_de=["b"]), tache("b", depend_de=["a"]), tache("c")]
         with self.assertRaises(ValueError) as e:

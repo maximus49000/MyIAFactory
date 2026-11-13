@@ -228,6 +228,53 @@ class NonRepris(AvecProjet):
                                                   next(t for t in court["taches"] if t["id"] == dev)), "Sonnet")
 
 
+class Regroupement(Base):
+    """Le regroupement d'une étape (conception du Directeur) : `parallele` (le défaut) répartit ses tâches sur les places
+    libres, une par agent ; `regroupe` les garde en un seul lot pour un seul agent, sans les mêler à une autre étape."""
+    locaux = 3
+
+    def setUp(self):
+        super().setUp()
+        for k in range(1, 4):
+            self.agent(f"agent-{k}", prenom=f"P{k}")
+
+    def regrouper(self, etape):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        for e in f["flux"]:
+            if e["id"] == etape:
+                e["regroupement"] = "regroupe"
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def departs(self, etat):
+        return sorted(sorted(d["taches"]) for d in etat["departs"].values())
+
+    def test_en_parallele_par_defaut_les_taches_se_repartissent(self):
+        ids = [self.tache("flux:dev", element=f"e{k}", titre=f"Équilibrage {k}") for k in range(1, 4)]
+        etat = self.demarrer()
+        self.assertEqual(self.departs(etat), sorted([i] for i in ids))
+        self.assertEqual(len(set(self.parties(etat).values())), 3)
+
+    def test_regroupees_un_seul_agent_enchaine_toutes_les_taches(self):
+        self.regrouper("dev")
+        ids = [self.tache("flux:dev", element=f"e{k}", titre=f"Équilibrage {k}") for k in range(1, 4)]
+        etat = self.demarrer()
+        self.assertEqual(self.departs(etat), [sorted(ids)])       # un seul départ malgré trois places libres
+        self.assertEqual(len(set(self.parties(etat).values())), 1)
+
+    def test_regroupees_ne_se_melent_pas_a_une_autre_etape(self):
+        self.regrouper("dev")
+        dev = [self.tache("flux:dev", element=f"e{k}", titre=f"Équilibrage {k}") for k in range(1, 3)]
+        livraison = self.tache("flux:livraison", element="e3", titre="Livrer")
+        etat = self.demarrer()
+        self.assertEqual(self.departs(etat), sorted([sorted(dev), [livraison]]))
+
+    def test_une_etape_regroupee_ne_regroupe_pas_les_autres(self):
+        self.regrouper("livraison")
+        dev = [self.tache("flux:dev", element=f"e{k}", titre=f"Écran {k}") for k in range(1, 3)]
+        etat = self.demarrer()
+        self.assertEqual(self.departs(etat), sorted([i] for i in dev))      # l'étape « dev » reste en parallèle
+
+
 class RetraitPrevu(Base):
     def test_moteur_retire_l_agent_marque_a_la_fin_de_sa_tache(self):
         self.agent("agent-1")

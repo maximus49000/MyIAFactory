@@ -2320,13 +2320,15 @@ def construire_releve(ctx):
 
 def etapes_lieux_du_releve(ctx):
     """« Étapes et lieux » : les étapes de tous les workflows (flux de référence, sans le préfixe `<fid>-` des copies),
-    `{id, nom, role, validation, lieu, suggeree}` ; `lieu` nul : le `Lieu :` du métier décide ; `suggeree` : un outil de
-    l'environnement la cite. Le bureau règle le lieu d'une étape par la demande `lieu_etape` (`etape` = cet `id`)."""
+    `{id, nom, role, validation, lieu, regroupement, suggeree}` ; `lieu` nul : le `Lieu :` du métier décide ;
+    `regroupement` : `parallele` ou `regroupe` (une validation n'en a pas : `parallele`) ; `suggeree` : un outil de
+    l'environnement la cite. Le bureau règle le lieu d'une étape par la demande `lieu_etape` et son regroupement par
+    `regroupement_etape` (`etape` = cet `id`)."""
     reference = lx.flux_de_reference(ctx.f)
     suggerees = lx.etapes_locales_suggerees(reference, ctx.f.get("environnement"))
     exigent = lx.etapes_qui_exigent_le_poste(reference, ctx.f.get("environnement"))
     return [{"id": e["id"], "nom": e["nom"], "role": e.get("role"), "validation": wf.est_validation(e),
-             "lieu": wf.lieu(e), "suggeree": e["id"] in suggerees,
+             "lieu": wf.lieu(e), "regroupement": wf.regroupement(e), "suggeree": e["id"] in suggerees,
              **({"exige_poste": True} if e["id"] in exigent else {})} for e in reference]
 
 
@@ -3499,8 +3501,9 @@ def cmd_lieux(ctx, e):
     que le découpage lit (`flux`) et les étapes locales que l'environnement suggère (`suggerees`). `{action:
     "decouper", flux}` : la proposition, vérifiée strictement sur le flux de référence, appliquée à tous les workflows
     du projet (principal et copies `w-<fid>`), rejouable. `{action: "regler", etape, lieu}` : le lieu d'une étape
-    (`local`, `indifférent`, ou null : le métier décide) dans tous les workflows qui l'ont. Aucune tâche touchée.
-    Rend `{change}` (et `flux` après un découpage)."""
+    (`local`, `indifférent`, ou null : le métier décide) dans tous les workflows qui l'ont. `{action: "regrouper", etape,
+    regroupement}` : `parallele` (par défaut : les tâches de l'étape se répartissent sur les places libres) ou `regroupe`
+    (un seul agent les enchaîne), de même. Aucune tâche touchée. Rend `{change}` (et `flux` après un découpage)."""
     action = e.get("action")
     reference = lx.flux_de_reference(ctx.f)
     if action == "reference":
@@ -3519,8 +3522,10 @@ def cmd_lieux(ctx, e):
             if e["lieu"] != "local" and etape in lx.etapes_qui_exigent_le_poste(reference, ctx.f.get("environnement")):
                 raise Refus(f"« {etape} » exige les logiciels du poste : seul « local » est possible.")
             change = lx.regler_au_projet(ctx.f["chemin"], etape, e["lieu"])
+        elif action == "regrouper":
+            change = lx.regrouper_au_projet(ctx.f["chemin"], texte(e, "etape"), e.get("regroupement"))
         else:
-            raise Refus("« action » doit valoir reference, decouper ou regler.")
+            raise Refus("« action » doit valoir reference, decouper, regler ou regrouper.")
     except (ValueError, fa.FactoryInvalide) as ex:
         raise Refus(str(ex))
     ctx.f = fa.lire(ctx.f["chemin"])
@@ -3603,8 +3608,11 @@ def cmd_lots(ctx, e):
             ecartees.append({"tache": t["id"], "raison": "aucun agent pour le rôle de la tâche" if t.get("role")
                              else "la tâche n'a pas de rôle"})
             continue
+        etape = mn.etape_de_la_tache(ctx.f, t, s.get("fonctionnalites") or []) \
+            if str(t.get("etape")).startswith(mn.ETAPES_DE_FLUX) else None     # une correction n'est jamais regroupée
         entrees.append({"id": t["id"], "modele": ml[0], "lieu": ml[1], "role": t.get("role"),
-                        "depend_de": list(t.get("depend_de") or [])})
+                        "depend_de": list(t.get("depend_de") or []),
+                        **({"groupe": etape["id"]} if wf.regroupement(etape) == wf.REGROUPEMENT_REGROUPE else {})})
     choisis = {t["id"] for t in choisies}
     par_id = {t["id"]: t for t in s["taches"]}
     for x in entrees:   # une dépendance faite est tenue ; une dépendance partie mais pas finie fait attendre la tâche

@@ -2773,7 +2773,8 @@ def _demarrer_en_attente(projet, etat, fid):
     lots = []
     if en_flux:
         r = lancer(projet, "lots", {"taches": [t["id"] for t in en_flux]})
-        lots = [{"ids": x["taches"], "modele": x["modele"], "lot": x["lot"]} for x in r["lots"]]
+        lots = [{"ids": x["taches"], "modele": x["modele"], "lot": x["lot"],
+                 **({"regroupe": True} if x.get("regroupe") else {})} for x in r["lots"]]
     par_id = {t["id"]: t for t in attente}
     for t in solos:      # une correction, un retour… : le modèle de l'étape de son rôle ; un cadrage : celui de la fiche
         lots.append({"ids": [t["id"]], "modele": _modele_necessaire(projet, court, t), "lot": None})
@@ -2831,10 +2832,11 @@ def _demarrer_en_attente(projet, etat, fid):
 def _repartir_sur_les_places(lots, libres):
     """Un lot confie plusieurs tâches au même agent, l'une après l'autre ; tant que des places sont libres, les tâches
     se répartissent d'abord, une par agent (essai réel : cinq tâches regroupées pour un seul agent local pendant que trois
-    agents cloud restaient sans travail). Le plus gros lot est coupé jusqu'à occuper les places libres. Pur."""
+    agents cloud restaient sans travail). Le plus gros lot est coupé jusqu'à occuper les places libres. Un lot
+    « regroupé » (`regroupe` : une étape que le Directeur veut faire enchaîner par un seul agent) n'est jamais coupé. Pur."""
     lots = [dict(x, ids=list(x["ids"])) for x in lots]
     while len(lots) < libres:
-        gros = max(lots, key=lambda x: len(x["ids"]), default=None)
+        gros = max((x for x in lots if not x.get("regroupe")), key=lambda x: len(x["ids"]), default=None)
         if gros is None or len(gros["ids"]) < 2:
             break
         derniere = gros["ids"].pop()

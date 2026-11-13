@@ -21,7 +21,7 @@ from orchestrateur.memoire import normaliser_mot
 
 SUFFIXE_LOCAL = "-local"
 LIEUX = wf.LIEUX_D_ETAPE
-_HORS_COMPARAISON = ("nom", "lieu")      # ce qu'une proposition peut changer à une étape découpée
+_HORS_COMPARAISON = ("nom", "lieu", "regroupement")      # ce qu'une proposition peut changer à une étape découpée
 
 
 # Ce que la partie locale d'une étape découpée dit à son agent (au journal de sa tâche, en tête) : le code est déjà écrit.
@@ -55,6 +55,9 @@ def _forme(e):
         return "chaque étape est un objet {id, nom, …} dont l'« id » est court (minuscules, chiffres, tirets)."
     if "lieu" in e and (wf.est_validation(e) or e["lieu"] not in LIEUX):
         return (f"l'étape « {e['id']} » : « lieu » vaut local ou indifférent, jamais sur une validation du "
+                "Directeur.")
+    if "regroupement" in e and (wf.est_validation(e) or e["regroupement"] not in wf.REGROUPEMENTS_D_ETAPE):
+        return (f"l'étape « {e['id']} » : « regroupement » vaut parallele ou regroupe, jamais sur une validation du "
                 "Directeur.")
     if not _ligne(e.get("nom")):
         return f"l'étape « {e['id']} » : un « nom » sur une ligne est attendu."
@@ -117,7 +120,7 @@ def verifier_proposition(flux, propose):
         orig = existants[e["id"]]
         if wf.est_validation(orig) != wf.est_validation(e):
             return f"Proposition refusée : l'étape « {e['id']} » change de nature (validation ou non)."
-        hors = _HORS_COMPARAISON if e["id"] in decoupees else ("lieu",)
+        hors = _HORS_COMPARAISON if e["id"] in decoupees else ("lieu", "regroupement")
         if _sans(orig, hors) != _sans(e, hors):
             quoi = "son rôle, son service ou son modèle" if e["id"] in decoupees else \
                 "son nom, son rôle, son service ou son modèle"
@@ -156,6 +159,11 @@ def appliquer(flux, propose, prefixe=""):
             e["lieu"] = code["lieu"]
         else:
             e.pop("lieu", None)
+        if "regroupement" in code:      # une proposition muette garde le choix déjà fait (le Directeur l'a peut-être réglé)
+            if wf.regroupement(code) == wf.REGROUPEMENT_REGROUPE:
+                e["regroupement"] = wf.REGROUPEMENT_REGROUPE
+            else:
+                e.pop("regroupement", None)
         sortie.append(e)
         soeur = f"{e['id']}{SUFFIXE_LOCAL}"
         if local is None or soeur in ids:
@@ -260,6 +268,20 @@ def regler_au_projet(chemin, etape, lieu):
     changé. `ValueError` si l'étape n'existe pas ou est une validation."""
     if lieu is not None and lieu not in LIEUX:
         raise ValueError("« lieu » vaut local, cloud, indifférent ou null.")
+    return _regler(chemin, etape, "lieu", lieu)
+
+
+def regrouper_au_projet(chemin, etape, regroupement):
+    """Le `regroupement` (`parallele` : le défaut, retiré du fichier ; `regroupe`) de l'étape `etape` dans tous les
+    workflows qui l'ont, comme le lieu (`regler_au_projet`). Rend vrai si le fichier a changé. `ValueError` si
+    l'étape n'existe pas ou est une validation."""
+    if regroupement not in wf.REGROUPEMENTS_D_ETAPE:
+        raise ValueError("« regroupement » vaut parallele ou regroupe.")
+    return _regler(chemin, etape, "regroupement", None if regroupement == wf.REGROUPEMENT_PARALLELE else regroupement)
+
+
+def _regler(chemin, etape, cle, valeur):
+    """Pose `cle` = `valeur` (retirée si `None`) sur l'étape `etape` de tous les workflows qui l'ont."""
     trouvees = []
 
     def transformer(flux, prefixe):
@@ -269,10 +291,10 @@ def regler_au_projet(chemin, etape, lieu):
                 trouvees.append(e)
                 if not wf.est_validation(e):
                     e = dict(e)
-                    if lieu is None:
-                        e.pop("lieu", None)
+                    if valeur is None:
+                        e.pop(cle, None)
                     else:
-                        e["lieu"] = lieu
+                        e[cle] = valeur
             sortie.append(e)
         return sortie
 
@@ -283,6 +305,6 @@ def regler_au_projet(chemin, etape, lieu):
     if not trouvees:
         raise ValueError(f"Étape inconnue : {etape}")
     if any(wf.est_validation(e) for e in trouvees):
-        raise ValueError(f"« {etape} » est une validation du Directeur : elle n'a pas de lieu.")
+        raise ValueError(f"« {etape} » est une validation du Directeur : elle n'a pas de {cle}.")
     trouvees.clear()
     return _ecrire(chemin, transformer)

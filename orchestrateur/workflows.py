@@ -33,9 +33,25 @@ def lieu(etape):
     return etape.get("lieu") if etape.get("lieu") in LIEUX_D_ETAPE else None
 
 
+# Le regroupement d'une étape d'agent (facultatif) : `parallele` (par défaut, ses tâches se répartissent d'abord sur les
+# places libres, une par agent) ou `regroupe` (ses tâches restent en lot, confiées à un seul agent qui les enchaîne :
+# pour une étape dont les tâches modifient les mêmes fichiers). Jamais sur une validation du Directeur.
+REGROUPEMENT_PARALLELE, REGROUPEMENT_REGROUPE = "parallele", "regroupe"
+REGROUPEMENTS_D_ETAPE = (REGROUPEMENT_PARALLELE, REGROUPEMENT_REGROUPE)
+
+
+def regroupement(etape):
+    """Le regroupement d'une étape d'agent : `regroupe` quand il est écrit, `parallele` sinon (absent, inconnu,
+    validation)."""
+    if not isinstance(etape, dict) or est_validation(etape):
+        return REGROUPEMENT_PARALLELE
+    return REGROUPEMENT_REGROUPE if etape.get("regroupement") == REGROUPEMENT_REGROUPE else REGROUPEMENT_PARALLELE
+
+
 def etape_ecrite(e):
     """L'étape telle que la factory la garde : `{id, nom, validation}` ou `{id, nom, role, service}`, avec le modèle
-    nécessaire de l'étape (`modele`) et sa `justification` quand le workflow les a posés, et son `lieu` s'il est écrit."""
+    nécessaire de l'étape (`modele`) et sa `justification` quand le workflow les a posés, son `lieu` et son
+    `regroupement` (seulement `regroupe`, le défaut ne s'écrit pas) s'ils sont écrits."""
     if est_validation(e):
         return {"id": e["id"], "nom": e["nom"], CLE_VALIDATION: True}
     sortie = {c: e[c] for c in ("id", "nom", "role", "service")}
@@ -45,6 +61,8 @@ def etape_ecrite(e):
             sortie["justification"] = e["justification"].strip()
     if lieu(e):
         sortie["lieu"] = e["lieu"]
+    if regroupement(e) == REGROUPEMENT_REGROUPE:
+        sortie["regroupement"] = REGROUPEMENT_REGROUPE
     return sortie
 
 

@@ -57,7 +57,9 @@ def former(taches, tailles=None, premier=1):
     précédent ou placées plus tôt dans le lot courant (un lot s'exécute dans l'ordre, d'une traite : une chaîne d'un
     même modèle reste une seule conversation) ; on continue le lot courant avec la première tâche prête de même modèle et même lieu (dans l'ordre
     d'origine), sinon on ouvre un lot sur la première tâche prête. Une relecture forme toujours un lot à elle seule ;
-    un lot s'arrête à `tailles[modele]` (au plus `MAX_TACHES_LOT`). Lève `ValueError` sur un cycle ou une
+    un lot s'arrête à `tailles[modele]` (au plus `MAX_TACHES_LOT`). Une tâche d'une étape « regroupée » porte `groupe`
+    (l'id de l'étape) : son lot (`regroupe: True`) réunit toutes les tâches prêtes de cette étape, sans limite de taille,
+    et jamais une tâche d'une autre étape. Lève `ValueError` sur un cycle ou une
     dépendance inconnue."""
     tailles = tailles or {}
     ids = [t["id"] for t in taches]
@@ -79,15 +81,20 @@ def former(taches, tailles=None, premier=1):
                     raise ValueError(f"Cycle de dépendances entre les tâches : {noms}.")
                 t = pretes[0]
                 courant = {"lot": f"L{premier + len(lots)}", "modele": t["modele"], "lieu": t["lieu"], "taches": [t["id"]]}
+                groupe = t.get("groupe")
+                if groupe:      # une étape « regroupée » : un lot qui ne se coupe pas (voir `moteur.regles`)
+                    courant["regroupe"] = True
                 restantes.remove(t)
                 if t.get("role") == ROLE_RELECTEUR:
                     break
                 continue
+            # un lot « regroupé » garde toutes les tâches prêtes de son étape (sans limite de taille) et n'en reçoit
+            # aucune d'une autre étape ; un lot ordinaire n'en reçoit aucune d'une étape regroupée
             taille = max(1, min(tailles.get(courant["modele"], MAX_TACHES_LOT), MAX_TACHES_LOT))
-            if len(courant["taches"]) >= taille:
+            if len(courant["taches"]) >= taille and not groupe:
                 break
             suite = next((t for t in pretes if t["modele"] == courant["modele"] and t["lieu"] == courant["lieu"]
-                          and t.get("role") != ROLE_RELECTEUR), None)
+                          and t.get("groupe") == groupe and t.get("role") != ROLE_RELECTEUR), None)
             if suite is None:
                 break
             courant["taches"].append(suite["id"])

@@ -525,3 +525,9 @@ Rôles : equilibreur
 Date : 2026-11-13
 
 Quand le robot de test ne joue pas une décision (achat, soin), ne règle pas les prix ni les coûts qui en dépendent : calcule le rythme de la ressource depuis les fichiers de valeurs, rapporte-le comme calculé et laisse les valeurs inchangées.
+
+## S88 — Un journal de mesures périmé sans changement de valeurs se r
+Rôles : equilibreur
+Date : 2026-11-13
+
+Un journal de mesures périmé sans changement de valeurs se régénère avant de conclure ; sans cible chiffrée, on ne change aucune valeur.

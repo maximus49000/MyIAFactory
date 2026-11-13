@@ -609,3 +609,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Un test de capture d'écran doit mesurer le contenu de l'image (écart de luminance) et échouer si elle est uniforme ou identique à une autre.
+
+## S102 — Pour vérifier qu'une application est au premier plan, lire l
+Rôles : qa
+Date : 2026-11-13
+
+Pour vérifier qu'une application est au premier plan, lire l'activité du dessus, pas la liste des fenêtres.

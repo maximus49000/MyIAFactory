@@ -83,6 +83,22 @@ class ExecuterAgent(unittest.TestCase):
             self.assertNotIn(mot, texte)
         self.assertIn("--permission-prompts", argv)
 
+    def test_sans_rapport_le_second_essai_reprend_la_session(self):
+        """Essai réel : l'agent finissait en « attendant » des tests en arrière-plan ; le second essai reprend sa session
+        avec la consigne de rendre le rapport, au lieu de tout refaire."""
+        a = Appels(appel.Reponse("Les tests tournent en arrière-plan. J'attends leur fin.", [usage()], session="s-1"),
+                   appel.Reponse('Fait.\n```json\n{"statut": "fait", "message": {"texte": "Tests verts."}}\n```',
+                                 [usage()], session="s-1"))
+        e = lancer(a)
+        self.assertIsNotNone(e.rapport)
+        self.assertNotIn("reprendre", a.recus[0])
+        self.assertEqual(a.recus[1]["reprendre"], "s-1")
+        self.assertIn("premier plan", a.recus[1]["dossier"])
+        self.assertIn("premier plan", agents.CONSIGNE_AGENT)
+
+    def test_commandes_longues_au_premier_plan(self):
+        self.assertEqual(appel.ENV_COMMANDES_LONGUES["BASH_DEFAULT_TIMEOUT_MS"], "1800000")
+
     def test_agent_sans_bloc_relance_puis_bloque(self):
         a = Appels(appel.Reponse("Je n'ai pas de bloc.", [usage(10, 5)]), appel.Reponse("Toujours pas.", [usage(20, 7)]))
         e = lancer(a)

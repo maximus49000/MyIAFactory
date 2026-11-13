@@ -43,6 +43,12 @@ MOTIF_PANNE = re.compile(r"Failed to authenticate|API Error: (403|429|5\d\d)|Clo
                          r"Service Unavailable|Bad Gateway|Gateway Timeout")
 
 
+# Une commande longue (une suite de tests de 10 min) reste au premier plan jusqu'à 30 min : passée en arrière-plan,
+# l'agent lancé par `claude -p` finissait son tour en « attendant » une fin qui ne lui parvient jamais, sans rapport
+# (essai réel, deux fois de suite).
+ENV_COMMANDES_LONGUES = {"BASH_DEFAULT_TIMEOUT_MS": "1800000", "BASH_MAX_TIMEOUT_MS": "1800000"}
+
+
 def est_une_panne(raison):
     """Vrai si l'erreur dit que le service Claude est indisponible (le travail n'y est pour rien)."""
     return bool(MOTIF_PANNE.search(str(raison or "")))
@@ -165,6 +171,7 @@ def _executer_claude(argv, entree, env, cwd, delai_s):
 def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail, reprendre, delai_s):
     claude = trouver_claude() or "claude"
     env = {k: v for k, v in os.environ.items() if k != VARIABLE_CLE}
+    env.update(ENV_COMMANDES_LONGUES)
     with tempfile.TemporaryDirectory(prefix="moteur-") as tmp:
         fichier = os.path.join(tmp, "consigne.md")
         with open(fichier, "w", encoding="utf-8") as f:

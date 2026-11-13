@@ -11,22 +11,28 @@ from moteur import appel, rapport
 from orchestrateur import fiches
 
 OUTILS_PAR_DEFAUT = fiches.OUTILS_PAR_DEFAUT
-DELAI_AGENT_S = 1800     # un agent détaché sans aucune action réelle depuis 30 min est bloqué : arrêté (detache.attendre)
+DELAI_AGENT_S = 2400     # un agent détaché sans aucune action réelle depuis 40 min est bloqué : arrêté (detache.attendre) ; une commande au premier plan dure 30 min au plus (appel.ENV_COMMANDES_LONGUES)
 ESSAIS = 2
-CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de départ dit qui tu es, ce que tu dois faire "
-                  "et comment rendre compte. Travaille dans le dossier du projet avec les seuls outils qui te sont "
-                  "ouverts. Personne ne peut approuver une commande pendant que tu travailles : écris chaque fichier "
+CONSIGNE_AGENT = ("Tu es un agent de production d'un projet. Ton message de départ dit qui tu es, quoi faire "
+                  "et comment rendre compte. Travaille dans le dossier du projet avec tes seuls "
+                  "outils ouverts. Personne ne peut approuver une commande pendant que tu travailles : écris chaque fichier "
                   "(scripts compris) avec l'outil Write, jamais par le shell (`cat >`, `<<EOF`, `echo >`), puis "
                   "lance tes scripts par `python <chemin>.py` ; une commande refusée, reformule-la ainsi. Un outil "
-                  "qui reste refusé n'est pas une raison de chercher à le contourner : dis-le dans ton rapport "
-                  "(statut outil_refuse). Chaque image que tu rends porte sa légende, une phrase qui dit à quoi elle "
-                  "correspond. Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
+                  "qui reste refusé ne se contourne pas : statut outil_refuse. Chaque image rendue porte sa légende (une phrase : à "
+                  "quoi elle correspond). Un avis ou un accord de l'utilisateur se demande en `message.questions` à choix avec "
                   "`attend: true`, jamais en simple phrase. Avant une action qui ouvre une fenêtre sur le poste "
                   "(pare-feu, UAC, pilote), dis dans `message.texte` laquelle, pourquoi et quoi "
                   "choisir, avec `attend: true`, et n'agis qu'après la réponse ; ne réponds jamais à ces fenêtres "
                   "à sa place ; une commande bloquée par une fenêtre se dit dans ton rapport. Jamais d'installation ni de test "
                   "sur le téléphone de l'utilisateur (`adb`, débogage USB) : tests automatiques sur émulateur, "
-                  "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Un partenaire inscrit ne s'appelle pas : statut a_faire_chez_partenaire. Termine par le bloc ```json demandé.")
+                  "version validée par lui dans la fenêtre de validation ; un refus du Directeur se respecte. Un partenaire inscrit ne s'appelle pas : statut a_faire_chez_partenaire. "
+                  "Sans interlocuteur, tu t'arrêtes dès que tu cesses d'agir : chaque commande au premier plan "
+                  "(`timeout` jusqu'à 1800000), jamais en arrière-plan. Termine par le bloc ```json demandé.")
+RELANCE_SANS_RAPPORT = (
+    "Ta réponse n'avait pas le bloc ```json du rapport. Tu travailles sans interlocuteur : aucune notification ne te "
+    "parviendra. Si une commande tournait en arrière-plan (des tests, par exemple), relance-la maintenant au premier "
+    "plan et attends sa fin (`timeout` jusqu'à 1800000), puis termine par le bloc ```json demandé dans ton message de "
+    "départ. Ne refais pas le travail déjà fait.")
 USAGE_VIDE = {"modele": "", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
 
 
@@ -98,6 +104,10 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
             lu = rapport.lire(r.texte)
         except rapport.RapportIllisible as e:
             erreur = f"rapport illisible : {e}"
+            if getattr(r, "session", None):
+                # le second essai reprend la même session (son travail est fait), avec la consigne de rendre le rapport
+                # (essai réel : l'agent finissait en « attendant » des tests lancés en arrière-plan)
+                reprendre, message = r.session, RELANCE_SANS_RAPPORT
             continue
         return Execution(tache, cle, lot, rapport=lu, usages=cumuler(usages), session=getattr(r, "session", None),
                          refus=getattr(r, "refus", None))

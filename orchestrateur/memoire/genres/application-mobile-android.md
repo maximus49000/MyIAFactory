@@ -104,3 +104,9 @@ Rôles : release
 Date : 2026-11-14
 
 Quand une clé de signature de livraison précédente existe hors du dépôt, la réutiliser et vérifier son empreinte ; n'en générer une nouvelle que si elle est absente, en le signalant.
+
+## G18 — Passer les mots de passe de signature aux outils de signatur
+Rôles : release
+Date : 2026-11-14
+
+Passer les mots de passe de signature aux outils de signature par variables d'environnement, lues depuis un fichier hors dépôt, sans jamais les afficher.

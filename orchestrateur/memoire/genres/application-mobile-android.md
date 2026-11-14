@@ -32,3 +32,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand un script lance un wrapper de build, il l'appelle par chemin absolu plutôt que par nom relatif.
+
+## G6 — Pour livrer une application Android sans modifier le fichier
+Rôles : release
+Date : 2026-11-14
+
+Pour livrer une application Android sans modifier le fichier de build, signer l'apk non signé en externe (alignement, signature, vérification) avec une clé stockée hors du dépôt et des mots de passe générés, jamais affichés.

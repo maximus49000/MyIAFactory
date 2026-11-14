@@ -230,3 +230,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Une tâche périodique lit ses réglages à chaque exécution plutôt qu'à la planification ; changer un réglage n'impose alors aucune replanification.
+
+## G39 — Une notification n'est enregistrée comme envoyée qu'après so
+Rôles : dev
+Date : 2026-11-14
+
+Une notification n'est enregistrée comme envoyée qu'après son affichage ; si elle est bloquée, elle sera retentée. La logique de décision reste dans une classe pure testable.

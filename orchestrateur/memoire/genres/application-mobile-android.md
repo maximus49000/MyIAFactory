@@ -602,3 +602,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un NoSuchMethodError sur une méthode existante après un changement de type signale un cache de compilation périmé : recompiler à froid avant d'ouvrir un défaut.
+
+## G101 — Quand la destination d'une action n'existe pas encore et que
+Rôles : designer
+Date : 2026-11-15
+
+Quand la destination d'une action n'existe pas encore et que la navigation est hors périmètre, exposer un rappel à valeur par défaut, ne rien inventer et signaler que l'action reste sans effet jusqu'au câblage.

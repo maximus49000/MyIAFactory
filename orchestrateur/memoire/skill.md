@@ -639,3 +639,9 @@ Rôles : cadrage
 Date : 2026-11-14
 
 Quand un livrable comporte plus de 4 images, ne joindre que 4 images au message et référencer les autres dans la structure du livrable.
+
+## S107 — Pour une correction de style, centraliser palette et composa
+Rôles : cadrage
+Date : 2026-11-14
+
+Pour une correction de style, centraliser palette et composants dans un script unique de maquettes et le relancer, afin que tous les écrans restent cohérents.

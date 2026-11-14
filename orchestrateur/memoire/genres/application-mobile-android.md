@@ -410,3 +410,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Les messages d'erreur destinés à l'utilisateur ne montrent pas de codes techniques ; les garder pour le journal interne.
+
+## G69 — Une maquette d'attente qui montre un pourcentage est transcr
+Rôles : designer
+Date : 2026-11-14
+
+Une maquette d'attente qui montre un pourcentage est transcrite en progression indéterminée quand la durée est inconnue. La fiche précise que la rotation d'écran n'annule ni ne relance l'opération.

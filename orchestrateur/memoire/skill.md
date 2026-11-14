@@ -735,3 +735,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand l'environnement d'exécution ne contient pas la chaîne de compilation nécessaire, écrire le code, le déclarer non compilé et non testé dans le rapport, et indiquer la commande à lancer ailleurs.
+
+## S123 — Relire chaque édition juste après l'avoir faite : une erreur
+Rôles : dev
+Date : 2026-11-14
+
+Relire chaque édition juste après l'avoir faite : une erreur d'inattention compile parfois sans que personne ne la voie.

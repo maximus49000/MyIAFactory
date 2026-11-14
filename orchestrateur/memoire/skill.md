@@ -711,3 +711,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Un contrôle de débordement compare chaque élément au cadre visible qui le contient, pas seulement à l'écran entier ; la relecture visuelle reste nécessaire.
+
+## S119 — Pour compter les tests par suite, interroger les fichiers XM
+Rôles : testeur
+Date : 2026-11-14
+
+Pour compter les tests par suite, interroger les fichiers XML de résultats, pas le journal de build.

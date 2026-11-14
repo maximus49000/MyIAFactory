@@ -440,3 +440,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Un build tout vert et UP-TO-DATE ne prouve pas la règle « textes dans les ressources de chaînes » : en revue, chercher chaque phrase affichée dans le fichier de ressources, car des constantes de code passent tous les tests.
+
+## G74 — Quand des textes d'interface passent de constantes du code à
+Rôles : designer
+Date : 2026-11-14
+
+Quand des textes d'interface passent de constantes du code à des ressources, les tests unitaires qui les comparaient doivent lire le fichier de ressources, car les ressources ne sont pas accessibles en test sans émulateur.

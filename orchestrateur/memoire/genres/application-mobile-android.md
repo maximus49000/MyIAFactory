@@ -170,3 +170,9 @@ Rôles : dev, testeur
 Date : 2026-11-14
 
 Un téléchargement borné en taille signale le dépassement au lieu de tronquer en silence ; l'écriture du fichier téléchargé rattrape ses exceptions d'E/S en relançant CancellationException, pour ne jamais planter l'application ni enregistrer une image corrompue.
+
+## G29 — Pour un écran de saisie d'une quantité bornée, dessiner les
+Rôles : designer
+Date : 2026-11-14
+
+Pour un écran de saisie d'une quantité bornée, dessiner les états : valeur au-dessus du maximum, vide ou nulle, valeur maximale, succès avec annulation, échec d'enregistrement avec repli.

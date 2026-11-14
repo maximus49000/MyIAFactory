@@ -290,3 +290,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Pour des tests sur émulateur, regrouper dans un seul script le démarrage sans fenêtre, l'attente du démarrage complet, les tests, l'installation et l'arrêt dans un bloc finally, en journalisant au fil de l'eau.
+
+## G49 — Relire les résultats de tests dans les fichiers XML, suite p
+Rôles : dev
+Date : 2026-11-14
+
+Relire les résultats de tests dans les fichiers XML, suite par suite, plutôt que de se fier au seul code de sortie de l'outil de build.

@@ -608,3 +608,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand la destination d'une action n'existe pas encore et que la navigation est hors périmètre, exposer un rappel à valeur par défaut, ne rien inventer et signaler que l'action reste sans effet jusqu'au câblage.
+
+## G102 — Un contrôle de textes en dur par expression régulière laisse
+Rôles : testeur
+Date : 2026-11-15
+
+Un contrôle de textes en dur par expression régulière laisse passer les constantes de code lues par les écrans ; en revue, lister chaque objet de constantes textuelles et le comparer au fichier de ressources.

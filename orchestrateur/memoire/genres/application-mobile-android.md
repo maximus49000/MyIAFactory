@@ -200,3 +200,9 @@ Rôles : release
 Date : 2026-11-14
 
 Les mots de passe de signature sont lus depuis un fichier hors dépôt, passés aux outils par variables d'environnement, et leurs valeurs ne sortent ni dans les journaux ni dans les notes.
+
+## G34 — Pour un élément de notification système, dessiner la notific
+Rôles : designer
+Date : 2026-11-14
+
+Pour un élément de notification système, dessiner la notification dans ses variantes (unique, groupée, urgente), les états d'autorisation (demande, refus, canal désactivé) et les erreurs de planification, de lecture et de cible disparue, chacune avec une sortie.

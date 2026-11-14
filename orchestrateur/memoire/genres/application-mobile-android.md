@@ -182,3 +182,9 @@ Rôles : release
 Date : 2026-11-14
 
 Réutilisez la clé de signature de livraison existante hors dépôt et vérifiez son empreinte contre la livraison précédente avant de compiler.
+
+## G31 — Pour un écran de liste avec statistiques, dessiner les états
+Rôles : designer
+Date : 2026-11-14
+
+Pour un écran de liste avec statistiques, dessiner les états vide, chargement, erreur de lecture, filtre sans résultat, période sans donnée (pas de division par zéro) et ligne dont l'objet source a disparu.

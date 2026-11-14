@@ -128,3 +128,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Dans un code Kotlin à coroutines, tout catch large autour d'un appel suspendu doit relancer CancellationException, sinon l'annulation devient une fausse erreur métier.
+
+## G22 — Pour tester un ViewModel dont le travail s'exécute sur un di
+Rôles : testeur
+Date : 2026-11-14
+
+Pour tester un ViewModel dont le travail s'exécute sur un dispatcher réel, remplacer le dispatcher principal par un dispatcher de test, attendre l'état attendu par une boucle à délai borné, et simuler un appel long par un verrou pour vérifier l'annulation.

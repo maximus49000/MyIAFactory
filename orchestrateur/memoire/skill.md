@@ -633,3 +633,9 @@ Rôles : dev, qa
 Date : 2026-11-14
 
 Pour juger l'effet d'un réglage du projet sur un test, vérifier d'abord qu'il est bien dans le paquet testé.
+
+## S106 — Quand un livrable comporte plus de 4 images, ne joindre que
+Rôles : cadrage
+Date : 2026-11-14
+
+Quand un livrable comporte plus de 4 images, ne joindre que 4 images au message et référencer les autres dans la structure du livrable.

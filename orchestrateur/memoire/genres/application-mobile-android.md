@@ -404,3 +404,9 @@ Rôles : cadrage, dev
 Date : 2026-11-14
 
 Quand une étape livre la logique d'une fonction sans son branchement dans l'interface, la liste des étapes doit contenir une étape explicite de branchement. Un écran provisoire encore atteignable en livraison doit être signalé dans le rapport de livraison.
+
+## G68 — Les messages d'erreur destinés à l'utilisateur ne montrent p
+Rôles : designer
+Date : 2026-11-14
+
+Les messages d'erreur destinés à l'utilisateur ne montrent pas de codes techniques ; les garder pour le journal interne.

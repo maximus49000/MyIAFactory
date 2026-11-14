@@ -1017,3 +1017,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Avant d'appliquer une consigne qui s'appuie sur un état supposé du code (« comme le fait déjà tel écran »), vérifier cet état par recherche ; s'il est faux, appliquer le minimum cohérent et signaler l'écart.
+
+## S170 — Un rappel d'interface avec valeur par défaut vide ne fait ja
+Rôles : testeur
+Date : 2026-11-15
+
+Un rappel d'interface avec valeur par défaut vide ne fait jamais échouer la compilation. En revue, relire chaque appel de l'écran dans la navigation et vérifier que chaque rappel est passé.

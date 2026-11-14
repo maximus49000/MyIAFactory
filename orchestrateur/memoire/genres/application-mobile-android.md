@@ -518,3 +518,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Dans une application Android avec Room, écrire les opérations composées (enregistrer, supprimer avec report) comme méthodes avec corps au-dessus de requêtes de base abstraites, puis tester ces méthodes avec un faux qui n'implémente que les requêtes de base.
+
+## G87 — Quand un élément ajouté n'apparaît pas dans une liste, vérif
+Rôles : dev
+Date : 2026-11-14
+
+Quand un élément ajouté n'apparaît pas dans une liste, vérifier d'abord que l'écran de la liste lit bien la source de données, avant de chercher une erreur dans l'écriture.

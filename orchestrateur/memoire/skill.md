@@ -825,3 +825,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Pour étendre une interface déjà implémentée par des faux de test, ajouter une méthode avec corps par défaut qui délègue à l'ancienne, au lieu de modifier la signature existante.
+
+## S138 — Pour lire une version dans une sortie d'outil, chercher le n
+Rôles : release
+Date : 2026-11-14
+
+Pour lire une version dans une sortie d'outil, chercher le nom exact du champ affiché et ne pas supposer un préfixe.

@@ -909,3 +909,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Sans approbation possible, enchaîner les lectures par des appels d'outils séparés ou par un script écrit avec l'outil de fichier, jamais par une commande composée.
+
+## S152 — Quand des codes de statut d'un service sont regroupés sous u
+Rôles : dev, designer
+Date : 2026-11-14
+
+Quand des codes de statut d'un service sont regroupés sous un message, chaque code voisin doit avoir un cas explicite et un test, sinon il tombe dans le message générique d'erreur.

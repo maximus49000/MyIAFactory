@@ -350,3 +350,9 @@ Rôles : release
 Date : 2026-11-14
 
 Les mots de passe de signature ne sortent jamais dans les journaux : ils sont passés aux outils par variables d'environnement, et seuls les noms des clés de configuration sont affichés.
+
+## G59 — Chaque livraison signée est comparée à la précédente sur ses
+Rôles : release
+Date : 2026-11-14
+
+Chaque livraison signée est comparée à la précédente sur ses schémas de signature ; tout écart est signalé à l'utilisateur.

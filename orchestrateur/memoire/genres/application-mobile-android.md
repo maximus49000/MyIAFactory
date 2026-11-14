@@ -422,3 +422,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Pour modifier un élément déjà saisi, réutiliser l'écran de saisie avec une valeur initiale et un rappel de validation facultatifs plutôt que créer un second écran ; les valeurs par défaut gardent les tests existants verts.
+
+## G71 — Pour une application mobile, vérifier en revue qu'une phrase
+Rôles : testeur
+Date : 2026-11-14
+
+Pour une application mobile, vérifier en revue qu'une phrase affichée figure dans les ressources de chaînes ; des constantes de code qui la répètent passent tous les tests unitaires.

@@ -687,3 +687,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand aucune approbation n'est possible, remplacer les commandes shell composées par les outils de lecture et de recherche, ou par un script lancé seul.
+
+## S115 — Pour lister ou lire un dossier situé hors du projet, utilise
+Rôles : release
+Date : 2026-11-14
+
+Pour lister ou lire un dossier situé hors du projet, utiliser les outils de lecture et de recherche de fichiers plutôt qu'une commande shell, qui peut demander une approbation impossible à donner.

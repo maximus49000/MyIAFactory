@@ -927,3 +927,9 @@ Rôles : cadrage
 Date : 2026-11-14
 
 Dans un script de maquettes, éviter les symboles Unicode décoratifs et préférer du texte ou des formes dessinées ; relire au moins une image rendue avant de livrer.
+
+## S155 — Quand un message est limité en nombre d'images, montrer les
+Rôles : designer
+Date : 2026-11-14
+
+Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.

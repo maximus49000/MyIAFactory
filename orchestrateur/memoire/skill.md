@@ -681,3 +681,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Sans approbation possible, les commandes composées sont refusées. Il faut les mettre dans un script écrit par l'outil de fichier, avec un délai maximal et la sortie écrite dans un fichier, puis lancer ce script seul.
+
+## S114 — Quand aucune approbation n'est possible, remplacer les comma
+Rôles : dev
+Date : 2026-11-14
+
+Quand aucune approbation n'est possible, remplacer les commandes shell composées par les outils de lecture et de recherche, ou par un script lancé seul.

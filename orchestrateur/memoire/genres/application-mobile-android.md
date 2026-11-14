@@ -308,3 +308,9 @@ Rôles : designer, dev
 Date : 2026-11-14
 
 Un message d'erreur d'un écran qui ouvre une feuille ou une boîte modale doit être affiché dans la feuille elle-même, sinon il reste caché derrière jusqu'à sa fermeture.
+
+## G52 — Pour un écran de capture d'image déjà maquetté, ne dessiner
+Rôles : designer
+Date : 2026-11-14
+
+Pour un écran de capture d'image déjà maquetté, ne dessiner que l'aperçu après capture, les états d'autorisation (demande, refus, matériel indisponible) et les erreurs d'image (illisible, trop lourde, non enregistrée, introuvable), chacun avec une sortie de repli.

@@ -831,3 +831,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour lire une version dans une sortie d'outil, chercher le nom exact du champ affiché et ne pas supposer un préfixe.
+
+## S139 — Quand une étape de conception porte sur un élément de test o
+Rôles : designer
+Date : 2026-11-14
+
+Quand une étape de conception porte sur un élément de test ou de validation sans interface propre, la déclarer non applicable en une ligne, sans produire de livrable vide.

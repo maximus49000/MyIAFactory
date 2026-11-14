@@ -14,3 +14,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Pour un projet Android sans Gradle installé, lancer la distribution en cache via un petit script qui fixe JAVA_HOME, écrit le journal en continu, et passe le compilateur Kotlin en mode in-process si le démon échoue.
+
+## G3 — Avec un build incrémental, une tâche de test à jour n'est pa
+Rôles : dev
+Date : 2026-11-14
+
+Avec un build incrémental, une tâche de test à jour n'est pas relancée. Lire les rapports de résultats pour donner les comptes réels, et forcer l'exécution si une preuve fraîche est demandée.

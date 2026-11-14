@@ -723,3 +723,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un écran déjà maquetté, ne dessiner que les états absents (vide, attente, succès, erreurs) ; dessiner les icônes plutôt que d'utiliser des glyphes Unicode, puis relire les images.
+
+## S121 — Quand une correction est relancée après une interruption du
+Rôles : designer
+Date : 2026-11-14
+
+Quand une correction est relancée après une interruption du moteur, vérifier d'abord ce qui est déjà appliqué dans les fichiers et ne reprendre que ce qui manque.

@@ -975,3 +975,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Écrire un lanceur de build qui n'affiche que les erreurs de compilation, les échecs et le résultat final, et qui garde le journal complet dans un fichier, évite de relire des centaines de lignes.
+
+## S163 — Quand une fiche est corrigée après une remarque, vérifier da
+Rôles : testeur
+Date : 2026-11-14
+
+Quand une fiche est corrigée après une remarque, vérifier dans le code que chaque nouvel état et chaque nouveau réglage décrit existe, par une recherche de ses libellés et de son état ; les tests écrits avant la correction restent verts.

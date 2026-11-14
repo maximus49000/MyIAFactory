@@ -626,3 +626,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand un registre annonce qu'un réglage est appliqué partout ou qu'un test existe, chercher les usages du réglage dans les sources et le nom du test avant de le croire.
+
+## G105 — Pour étendre un composant partagé avec un réglage utilisateu
+Rôles : designer, dev
+Date : 2026-11-15
+
+Pour étendre un composant partagé avec un réglage utilisateur, passer le réglage en paramètre facultatif (nul = comportement actuel) et le charger en arrière-plan, l'écran restant neutre tant que la lecture n'est pas finie.

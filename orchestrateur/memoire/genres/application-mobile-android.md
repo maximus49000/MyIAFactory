@@ -44,3 +44,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Dans un projet Android, org.json ne lit rien dans les tests unitaires JVM. Pour tester l'analyse d'une réponse JSON, utiliser un lecteur en Kotlin pur ou une bibliothèque JVM, et isoler le transport HTTP derrière une interface pour simuler les réponses.
+
+## G8 — En Gradle Kotlin DSL, importer les classes Java en tête de f
+Rôles : release, dev
+Date : 2026-11-14
+
+En Gradle Kotlin DSL, importer les classes Java en tête de fichier plutôt que les écrire en nom complet.

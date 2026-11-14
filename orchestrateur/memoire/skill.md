@@ -837,3 +837,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une étape de conception porte sur un élément de test ou de validation sans interface propre, la déclarer non applicable en une ligne, sans produire de livrable vide.
+
+## S140 — Ne jamais afficher, même partiellement, un fichier contenant
+Rôles : release
+Date : 2026-11-14
+
+Ne jamais afficher, même partiellement, un fichier contenant des secrets ; le lire par un script qui ne sort que les noms des clés.

@@ -813,3 +813,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour contrôler la présence d'une classe dans un paquet, décompresser l'entrée dex avec le module zip avant de chercher le nom de la classe.
+
+## S136 — Annuler ou attendre le travail asynchrone d'un test avant re
+Rôles : testeur
+Date : 2026-11-14
+
+Annuler ou attendre le travail asynchrone d'un test avant resetMain, et relancer une fois pour distinguer un test instable d'une régression.

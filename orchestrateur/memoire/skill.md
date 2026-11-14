@@ -693,3 +693,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour lister ou lire un dossier situé hors du projet, utiliser les outils de lecture et de recherche de fichiers plutôt qu'une commande shell, qui peut demander une approbation impossible à donner.
+
+## S116 — Pour un élément de service sans écran propre, lister les maq
+Rôles : designer
+Date : 2026-11-14
+
+Pour un élément de service sans écran propre, lister les maquettes existantes qu'il utilise et ne dessiner que les états absents (attente, données incomplètes, erreurs), avec un contrôle de débordement dans le script.

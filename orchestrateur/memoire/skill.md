@@ -861,3 +861,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Un outil de comptage qui lit les fichiers de résultats peut montrer d'anciens résultats après un échec de compilation ; vérifier que le build a réussi avant de s'y fier.
+
+## S144 — Quand une tâche de build échoue sur un dossier intermédiaire
+Rôles : release
+Date : 2026-11-14
+
+Quand une tâche de build échoue sur un dossier intermédiaire absent et que le code n'y est pour rien, relancer le build une fois avant de supprimer des sorties générées.

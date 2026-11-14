@@ -620,3 +620,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand des libellés passent de constantes texte à des identifiants de ressources, les listes et propriétés qui les transportent changent de type : chercher tous leurs usages, tests compris, avant la modification.
+
+## G104 — Quand un registre annonce qu'un réglage est appliqué partout
+Rôles : testeur
+Date : 2026-11-15
+
+Quand un registre annonce qu'un réglage est appliqué partout ou qu'un test existe, chercher les usages du réglage dans les sources et le nom du test avant de le croire.

@@ -218,3 +218,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Avant de coder un écran de statistiques, vérifier que chaque distinction affichée est bien enregistrée en base ; sinon ajouter la colonne avec une migration qui donne une valeur par défaut aux lignes existantes.
+
+## G37 — Avant de lancer la livraison release, vérifier que la compil
+Rôles : release
+Date : 2026-11-14
+
+Avant de lancer la livraison release, vérifier que la compilation release passe et que toutes les bibliothèques utilisées par le code sont déclarées dans le fichier de build, sinon la livraison bloque après la vérification de la clé.

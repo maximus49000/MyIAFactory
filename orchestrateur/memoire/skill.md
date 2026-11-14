@@ -753,3 +753,9 @@ Rôles : release
 Date : 2026-11-14
 
 Sous Windows, lancer un script de build par son chemin complet, jamais par son seul nom, car le shell ne cherche pas dans le dossier courant.
+
+## S126 — Après avoir écrit un fichier de code, chercher les caractère
+Rôles : testeur
+Date : 2026-11-14
+
+Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.

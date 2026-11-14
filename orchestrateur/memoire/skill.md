@@ -705,3 +705,9 @@ Rôles : release
 Date : 2026-11-14
 
 Quand une commande shell est refusée sans approbation, la relancer depuis un petit script Python qui exécute la même commande, sans changer les outils autorisés.
+
+## S118 — Un contrôle de débordement compare chaque élément au cadre v
+Rôles : designer
+Date : 2026-11-14
+
+Un contrôle de débordement compare chaque élément au cadre visible qui le contient, pas seulement à l'écran entier ; la relecture visuelle reste nécessaire.

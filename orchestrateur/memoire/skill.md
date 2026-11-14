@@ -765,3 +765,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.
+
+## S128 — Quand une correction de code est confiée à un rôle de concep
+Rôles : designer
+Date : 2026-11-14
+
+Quand une correction de code est confiée à un rôle de conception, appliquer exactement la consigne, ne pas toucher aux maquettes, et déclarer ce qui n'a pas pu être compilé ou exécuté.

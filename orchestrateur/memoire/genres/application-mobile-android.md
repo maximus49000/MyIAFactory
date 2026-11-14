@@ -146,3 +146,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Ne jamais lire un stockage chiffré ou bloquant dans l'initialisation d'un modèle de vue : démarrer à un état neutre, charger en arrière-plan, mémoriser la valeur lue pour les actions suivantes.
+
+## G25 — Quand la chaîne de compilation de la plateforme cible manque
+Rôles : dev
+Date : 2026-11-14
+
+Quand la chaîne de compilation de la plateforme cible manque, mettre la validation, les conversions d'unités et les bornes dans un objet pur testable et garder les écrans minces ; déclarer le code non compilé.

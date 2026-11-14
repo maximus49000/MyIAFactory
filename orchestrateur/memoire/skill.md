@@ -951,3 +951,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand un élément est couvert par une maquette déjà validée, relancer l'étape de maquettes ne produit rien : vérifier que le fichier existe et fournir au valideur de quoi juger.
+
+## S159 — Quand la tâche annoncée est introuvable dans les fichiers de
+Rôles : designer
+Date : 2026-11-14
+
+Quand la tâche annoncée est introuvable dans les fichiers de suivi, récupérer d'abord la dernière version de la branche principale et la fusionner avant de déclarer l'information absente ; en cas de conflit hors périmètre, garder la version de la branche principale.

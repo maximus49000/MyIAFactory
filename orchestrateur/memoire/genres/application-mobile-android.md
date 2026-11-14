@@ -74,3 +74,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Pour un client de service externe, distinguer par un test les erreurs d'authentification, de limitation de débit, de surcharge et de réseau, et vérifier que chacune a un message ou un écran prévu.
+
+## G13 — Pour un élément de persistance sans écran propre, lister les
+Rôles : designer
+Date : 2026-11-14
+
+Pour un élément de persistance sans écran propre, lister les maquettes qui affichent ses données et ne dessiner que les erreurs d'enregistrement et de lecture, chacune avec une sortie de repli.

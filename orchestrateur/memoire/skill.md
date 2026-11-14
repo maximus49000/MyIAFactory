@@ -867,3 +867,9 @@ Rôles : release
 Date : 2026-11-14
 
 Quand une tâche de build échoue sur un dossier intermédiaire absent et que le code n'y est pour rien, relancer le build une fois avant de supprimer des sorties générées.
+
+## S145 — Journaliser la sortie complète d'un build dans un fichier av
+Rôles : release
+Date : 2026-11-14
+
+Journaliser la sortie complète d'un build dans un fichier avant de la filtrer : un filtre par mots-clés peut masquer la cause réelle de l'échec.

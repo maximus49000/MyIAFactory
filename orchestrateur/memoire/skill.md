@@ -1023,3 +1023,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un rappel d'interface avec valeur par défaut vide ne fait jamais échouer la compilation. En revue, relire chaque appel de l'écran dans la navigation et vérifier que chaque rappel est passé.
+
+## S171 — Sous Windows, dans un shell POSIX, écrire les chemins avec d
+Rôles : release
+Date : 2026-11-15
+
+Sous Windows, dans un shell POSIX, écrire les chemins avec des barres obliques, les barres inverses étant perdues.

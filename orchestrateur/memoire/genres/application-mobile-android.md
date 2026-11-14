@@ -302,3 +302,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour clore une étape de tests sur appareil, rapprocher chaque contrôle ouvert d'un test nommé, puis vérifier que les comptes lus dans les XML (toutes les suites du fichier, pas la première) correspondent au nombre de tests écrits.
+
+## G51 — Un message d'erreur d'un écran qui ouvre une feuille ou une
+Rôles : designer, dev
+Date : 2026-11-14
+
+Un message d'erreur d'un écran qui ouvre une feuille ou une boîte modale doit être affiché dans la feuille elle-même, sinon il reste caché derrière jusqu'à sa fermeture.

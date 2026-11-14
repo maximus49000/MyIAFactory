@@ -320,3 +320,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand la chaîne de compilation mobile manque, mettre la validation d'image, le plafond de taille et la décision de permission dans des classes pures testables avec des flux simulés, garder l'écran mince, et déclarer le code non compilé.
+
+## G54 — Si la compilation des tests échoue sur des références non ré
+Rôles : testeur
+Date : 2026-11-14
+
+Si la compilation des tests échoue sur des références non résolues vers des symboles qui existent, relancer une fois avant de les traiter comme un défaut : le cache incrémental peut être périmé.

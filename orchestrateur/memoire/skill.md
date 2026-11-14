@@ -897,3 +897,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une validation est refusée faute de consigne, reprendre le livrable existant, vérifier qu'il est intact et ne rendre que les champs de consigne manquants, sans refaire le travail.
+
+## S150 — Injecter le dispatcher dans tout composant qui lance du trav
+Rôles : dev
+Date : 2026-11-14
+
+Injecter le dispatcher dans tout composant qui lance du travail asynchrone : dispatcher synchrone pour les tests déterministes, vrai dispatcher avec verrou pour tester l'annulation pendant l'appel.

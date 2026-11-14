@@ -915,3 +915,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Quand des codes de statut d'un service sont regroupés sous un message, chaque code voisin doit avoir un cas explicite et un test, sinon il tombe dans le message générique d'erreur.
+
+## S153 — Une erreur de compilation sur une ressource existante peut v
+Rôles : release
+Date : 2026-11-14
+
+Une erreur de compilation sur une ressource existante peut venir d'un état périmé : relancer une fois avant de corriger le code.

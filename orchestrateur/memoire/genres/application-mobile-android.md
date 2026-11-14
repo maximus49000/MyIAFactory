@@ -224,3 +224,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant de lancer la livraison release, vérifier que la compilation release passe et que toutes les bibliothèques utilisées par le code sont déclarées dans le fichier de build, sinon la livraison bloque après la vérification de la clé.
+
+## G38 — Une tâche périodique lit ses réglages à chaque exécution plu
+Rôles : dev
+Date : 2026-11-14
+
+Une tâche périodique lit ses réglages à chaque exécution plutôt qu'à la planification ; changer un réglage n'impose alors aucune replanification.

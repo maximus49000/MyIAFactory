@@ -92,3 +92,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Dans une application mobile qui affiche des images distantes sans bibliothèque de chargement, télécharger l'image choisie dans le stockage privé de l'application ; ne jamais stocker une adresse web comme chemin de fichier.
+
+## G16 — Quand l'environnement n'a pas le SDK de la plateforme cible,
+Rôles : dev
+Date : 2026-11-14
+
+Quand l'environnement n'a pas le SDK de la plateforme cible, écrire la logique en classes pures testables, annoncer explicitement que rien n'a été compilé et indiquer la commande à lancer sur le poste équipé.

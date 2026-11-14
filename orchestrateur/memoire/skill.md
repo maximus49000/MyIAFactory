@@ -657,3 +657,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une étape de maquettes porte sur un élément d'infrastructure, écrire seulement ce qu'il doit fournir aux écrans (thème, composants communs, navigation) et renvoyer aux maquettes existantes.
+
+## S110 — Dans une image générée par script, les symboles Unicode peuv
+Rôles : designer
+Date : 2026-11-14
+
+Dans une image générée par script, les symboles Unicode peuvent s'afficher en carrés vides selon la police ; dessiner les icônes ou utiliser du texte, et relire l'image ouverte.

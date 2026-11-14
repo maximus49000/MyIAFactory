@@ -783,3 +783,9 @@ Rôles : dev
 Date : 2026-11-14
 
 En Kotlin, une lambda finale est affectée au dernier paramètre, même si un paramètre précédent attend une interface à méthode unique : passer l'argument ou le constructeur SAM explicitement.
+
+## S131 — Le script qui lance les tests doit afficher les comptes par
+Rôles : testeur
+Date : 2026-11-14
+
+Le script qui lance les tests doit afficher les comptes par suite depuis les XML de résultats, pour repérer une suite manquante.

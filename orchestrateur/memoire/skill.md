@@ -849,3 +849,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour contrôler l'empreinte d'un certificat sans exposer son mot de passe, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.
+
+## S142 — Quand le build répond UP-TO-DATE, lire les XML de résultats
+Rôles : testeur
+Date : 2026-11-14
+
+Quand le build répond UP-TO-DATE, lire les XML de résultats existants et vérifier leur nombre par suite avant de conclure.

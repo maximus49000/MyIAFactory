@@ -332,3 +332,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Tout téléchargement borné en taille passe par un transport injectable, pour tester le dépassement et l'échec d'écriture sans réseau.
+
+## G56 — Pour vérifier la présence d'une classe dans un paquet, lire
+Rôles : release
+Date : 2026-11-14
+
+Pour vérifier la présence d'une classe dans un paquet, lire les noms réels dans les déclarations du code et tenir compte des classes générées par les outils.

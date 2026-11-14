@@ -344,3 +344,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Relire le câblage de navigation entre deux écrans : un rappel qui reçoit une donnée mais navigue sans la transmettre passe tous les tests unitaires de la logique.
+
+## G58 — Les mots de passe de signature ne sortent jamais dans les jo
+Rôles : release
+Date : 2026-11-14
+
+Les mots de passe de signature ne sortent jamais dans les journaux : ils sont passés aux outils par variables d'environnement, et seuls les noms des clés de configuration sont affichés.

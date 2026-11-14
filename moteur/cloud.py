@@ -17,7 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from moteur import appel, rapport
+from moteur import appel, git_sur, rapport
 
 DOSSIER_RAPPORTS = ".factory/rapports"
 PREFIXE_BRANCHES = "claude/"
@@ -92,7 +92,9 @@ def _texte(octets):
 
 
 def _git(executer, dossier, *args, delai_s=DELAI_GIT_S):
-    return _lancer(executer, ["git", *args], dossier, delai_s)
+    """Une commande git dans le dépôt du projet : une à la fois par dépôt, réessayée si un autre git tient l'index
+    (voir `git_sur`)."""
+    return git_sur.executer(lambda argv: _lancer(executer, argv, dossier, delai_s), dossier, ["git", *args])
 
 
 PUSH_ESSAIS = 4
@@ -164,8 +166,9 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     claude = trouver()
     if not claude:
         raise ErreurCloud("la commande claude n'est pas installée")
-    etat_hors_du_depot(dossier_projet, executer)
-    code, sortie = _pousser(executer, dossier_projet)
+    with git_sur.verrou(dossier_projet):
+        etat_hors_du_depot(dossier_projet, executer)
+        code, sortie = _pousser(executer, dossier_projet)
     if code != 0:
         raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
     argv = [claude, "--cloud", depart, "--model", m]
@@ -411,6 +414,11 @@ def etat_hors_du_depot(dossier, executer=None):
 
 
 def fusionner(dossier_projet, branche, *, executer=None):
+    with git_sur.verrou(dossier_projet):      # la fusion et son envoi d'un seul tenant, sans autre git du moteur
+        return _fusionner(dossier_projet, branche, executer)
+
+
+def _fusionner(dossier_projet, branche, executer):
     """Fusionne la branche de la session dans la branche du projet, puis pousse. `None` si c'est fait, sinon la raison
     (un conflit : la fusion est annulée, rien n'est cassé)."""
     # L'état du moteur s'écrit sans cesse (attente-*.json, anomalies…) : enregistré juste avant la fusion, sinon git

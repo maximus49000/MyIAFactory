@@ -27,7 +27,7 @@ from pathlib import Path
 
 from bureau import attente
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, detache, figes, jugement, regles
+from moteur import agents, appel, cloud, detache, figes, git_sur, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
@@ -103,19 +103,29 @@ def commit_et_push(dossier, message):
         return False
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
 
-    def git(*args):
-        return subprocess.run(["git", *args], cwd=str(dossier), capture_output=True, env=env, timeout=DELAI_GIT_S,
-                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    class _Fait:
+        def __init__(self, code):
+            self.returncode = code
+
+    def lancer(argv):
+        p = subprocess.run(argv, cwd=str(dossier), capture_output=True, env=env, timeout=DELAI_GIT_S,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return p.returncode, (p.stdout or b"") + (p.stderr or b"")
+
+    def git(*args):     # une à la fois par dépôt, réessayée si un autre git tient l'index (`git_sur`)
+        return _Fait(git_sur.executer(lancer, dossier, ["git", *args])[0])
 
     try:
-        git("add", "-A")
-        if git("diff", "--cached", "--quiet").returncode == 0:
-            return False
-        if git("commit", "-m", message).returncode != 0:
-            return False
-        git("push")
-        return True
-    except (OSError, subprocess.SubprocessError):
+        with git_sur.verrou(dossier):
+            cloud.etat_hors_du_depot(dossier)
+            git("add", "-A")
+            if git("diff", "--cached", "--quiet").returncode == 0:
+                return False
+            if git("commit", "-m", message).returncode != 0:
+                return False
+            cloud._pousser(None, dossier)
+            return True
+    except (OSError, subprocess.SubprocessError, cloud.ErreurCloud):
         return False
 
 

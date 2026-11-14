@@ -140,3 +140,9 @@ Rôles : dev, testeur
 Date : 2026-11-14
 
 Une écriture dans un stockage matériel ou système (coffre de clés) peut lever une exception ; l'appelant la rattrape, en relançant l'annulation, pour ne pas planter l'application.
+
+## G24 — Ne jamais lire un stockage chiffré ou bloquant dans l'initia
+Rôles : dev, designer
+Date : 2026-11-14
+
+Ne jamais lire un stockage chiffré ou bloquant dans l'initialisation d'un modèle de vue : démarrer à un état neutre, charger en arrière-plan, mémoriser la valeur lue pour les actions suivantes.

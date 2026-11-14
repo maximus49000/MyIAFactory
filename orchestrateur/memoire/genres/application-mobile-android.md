@@ -8,3 +8,9 @@ Rôles : cadrage
 Date : 2026-11-14
 
 Sur un écran mobile à liste, un bouton d'action flottant doit être compact (rond) ou la liste doit prévoir une marge basse, sinon il masque du contenu.
+
+## G2 — Pour un projet Android sans Gradle installé, lancer la distr
+Rôles : dev
+Date : 2026-11-14
+
+Pour un projet Android sans Gradle installé, lancer la distribution en cache via un petit script qui fixe JAVA_HOME, écrit le journal en continu, et passe le compilateur Kotlin en mode in-process si le démon échoue.

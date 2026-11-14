@@ -759,3 +759,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.
+
+## S127 — Après avoir écrit un fichier de code, chercher les caractère
+Rôles : testeur
+Date : 2026-11-14
+
+Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.

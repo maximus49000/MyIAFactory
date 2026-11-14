@@ -627,3 +627,9 @@ Rôles : designer, dev
 Date : 2026-11-14
 
 Avant de corriger un shader attribué à un élément, vérifier que le projet en contient un ; une erreur de liaison peut venir des shaders du moteur, qui ne se corrigent pas dans l'élément.
+
+## S105 — Pour juger l'effet d'un réglage du projet sur un test, vérif
+Rôles : dev, qa
+Date : 2026-11-14
+
+Pour juger l'effet d'un réglage du projet sur un test, vérifier d'abord qu'il est bien dans le paquet testé.

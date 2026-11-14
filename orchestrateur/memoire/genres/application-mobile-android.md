@@ -242,3 +242,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Tester les calculs par période aux bornes exactes (première et dernière seconde) et dans deux fuseaux horaires ; tester un observateur de flux avec un flux partagé qui émet plusieurs valeurs, puis annuler : l'annulation ne doit pas devenir un état d'erreur.
+
+## G41 — Quand une valeur de réglage est normalisée pour un filtre, u
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Quand une valeur de réglage est normalisée pour un filtre, utiliser la même valeur normalisée pour la requête qui l'alimente ; tester qu'une notification refusée ou qui lève une exception n'enregistre pas l'événement comme envoyé.

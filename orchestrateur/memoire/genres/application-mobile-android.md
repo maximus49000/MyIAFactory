@@ -134,3 +134,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour tester un ViewModel dont le travail s'exécute sur un dispatcher réel, remplacer le dispatcher principal par un dispatcher de test, attendre l'état attendu par une boucle à délai borné, et simuler un appel long par un verrou pour vérifier l'annulation.
+
+## G23 — Une écriture dans un stockage matériel ou système (coffre de
+Rôles : dev, testeur
+Date : 2026-11-14
+
+Une écriture dans un stockage matériel ou système (coffre de clés) peut lever une exception ; l'appelant la rattrape, en relançant l'annulation, pour ne pas planter l'application.

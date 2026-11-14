@@ -176,3 +176,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un écran de saisie d'une quantité bornée, dessiner les états : valeur au-dessus du maximum, vide ou nulle, valeur maximale, succès avec annulation, échec d'enregistrement avec repli.
+
+## G30 — Réutilisez la clé de signature de livraison existante hors d
+Rôles : release
+Date : 2026-11-14
+
+Réutilisez la clé de signature de livraison existante hors dépôt et vérifiez son empreinte contre la livraison précédente avant de compiler.

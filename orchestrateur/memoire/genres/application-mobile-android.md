@@ -572,3 +572,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand un effet d'écran relance un chargement à chaque changement de configuration, ajouter une méthode gardée (sans effet si déjà chargé) et la faire appeler par l'écran, en laissant la méthode de chargement complète intacte pour les rechargements explicites et les tests.
+
+## G96 — Le brief de livraison doit donner le chemin du dossier de cl
+Rôles : release
+Date : 2026-11-14
+
+Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à le chercher dans les scripts précédents.

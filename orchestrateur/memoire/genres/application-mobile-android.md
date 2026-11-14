@@ -356,3 +356,9 @@ Rôles : release
 Date : 2026-11-14
 
 Chaque livraison signée est comparée à la précédente sur ses schémas de signature ; tout écart est signalé à l'utilisateur.
+
+## G60 — Quand une route de navigation reçoit un argument, la route c
+Rôles : dev, designer
+Date : 2026-11-14
+
+Quand une route de navigation reçoit un argument, la route courante exposée est le motif complet ; les listes de routes (barre masquée, etc.) doivent utiliser ce motif.

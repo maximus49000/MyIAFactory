@@ -740,10 +740,16 @@ class Projet:
             self._fil_prix.join(5)  # qu'il n'écrive plus dans le dossier une fois le serveur fermé
 
 
+FILE_CONNEXIONS = 256          # connexions en attente acceptées par le système
+
+
 class Bureau(ThreadingHTTPServer):
     """Le serveur : un ou plusieurs projets, une seule sonde de charge (la charge est celle de la machine).
     Il écoute sur 127.0.0.1 ; les écouteurs distants (`ouvrir_distants`) servent le même bureau, avec code d'accès."""
     daemon_threads = True
+    # La page charge près de 300 fichiers d'un coup : avec la file par défaut (5), Windows refuse des connexions
+    # (ERR_CONNECTION_REFUSED) et la page reste vide.
+    request_queue_size = FILE_CONNEXIONS
     distant = False
 
     def __init__(self, adresse, projets, ouvrir=None, multi=True, lancement=None, demarrer=None, fichier_bureau=None):
@@ -1112,6 +1118,7 @@ class Bureau(ThreadingHTTPServer):
 class Ecouteur(ThreadingHTTPServer):
     """Un écouteur distant (adresse Tailscale ou du réseau local) : il sert le même bureau, avec code d'accès."""
     daemon_threads = True
+    request_queue_size = FILE_CONNEXIONS
     distant = True
 
     def __init__(self, adresse, bureau, genre):

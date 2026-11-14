@@ -903,3 +903,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Injecter le dispatcher dans tout composant qui lance du travail asynchrone : dispatcher synchrone pour les tests déterministes, vrai dispatcher avec verrou pour tester l'annulation pendant l'appel.
+
+## S151 — Sans approbation possible, enchaîner les lectures par des ap
+Rôles : testeur
+Date : 2026-11-14
+
+Sans approbation possible, enchaîner les lectures par des appels d'outils séparés ou par un script écrit avec l'outil de fichier, jamais par une commande composée.

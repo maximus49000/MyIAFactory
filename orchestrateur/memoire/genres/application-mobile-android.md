@@ -530,3 +530,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Avant d'installer une version de test sur un émulateur persistant, désinstaller le paquet existant sur l'émulateur seulement (jamais sur un appareil physique) pour éviter un conflit de signature.
+
+## G89 — Un contrôle automatique des littéraux affichés doit viser to
+Rôles : testeur
+Date : 2026-11-14
+
+Un contrôle automatique des littéraux affichés doit viser tous les fichiers qui produisent du texte visible, pas seulement les écrans de l'élément en cours, sinon les messages construits dans la navigation ou dans les modèles de vue y échappent.

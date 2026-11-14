@@ -789,3 +789,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Le script qui lance les tests doit afficher les comptes par suite depuis les XML de résultats, pour repérer une suite manquante.
+
+## S132 — Quand une maquette déjà validée contient un glyphe manquant,
+Rôles : designer
+Date : 2026-11-14
+
+Quand une maquette déjà validée contient un glyphe manquant, le signaler comme écart sans la régénérer si aucune donnée n'a changé, et dessiner l'icône dans les nouvelles images.

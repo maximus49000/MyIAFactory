@@ -807,3 +807,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Dans une maquette, vérifier que les chiffres d'exemple restent cohérents avec le filtre ou l'état affiché à côté.
+
+## S135 — Pour contrôler la présence d'une classe dans un paquet, déco
+Rôles : release
+Date : 2026-11-14
+
+Pour contrôler la présence d'une classe dans un paquet, décompresser l'entrée dex avec le module zip avant de chercher le nom de la classe.

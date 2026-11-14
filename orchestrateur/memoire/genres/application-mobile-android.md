@@ -254,3 +254,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant une livraison, réutiliser la clé de signature précédente hors dépôt et contrôler son empreinte contre celle de la livraison précédente, avant toute compilation.
+
+## G43 — Si le build signe déjà la release, ne pas re-signer en exter
+Rôles : release
+Date : 2026-11-14
+
+Si le build signe déjà la release, ne pas re-signer en externe : vérifier la signature produite.

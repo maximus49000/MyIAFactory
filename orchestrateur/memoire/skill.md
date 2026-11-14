@@ -645,3 +645,9 @@ Rôles : cadrage
 Date : 2026-11-14
 
 Pour une correction de style, centraliser palette et composants dans un script unique de maquettes et le relancer, afin que tous les écrans restent cohérents.
+
+## S108 — Prototyper un écran dans un script qui reproduit les règles
+Rôles : cadrage, dev
+Date : 2026-11-14
+
+Prototyper un écran dans un script qui reproduit les règles métier (filtre, regroupement, état visuel), avec assertions et rendu image, permet de valider avant d'écrire le code de l'application.

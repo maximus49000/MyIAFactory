@@ -596,3 +596,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand un test lit par réflexion les champs entiers d'une classe pour en tirer des identifiants, écarter les champs synthétiques (nom commençant par $) ajoutés par le compilateur.
+
+## G100 — Un NoSuchMethodError sur une méthode existante après un chan
+Rôles : testeur
+Date : 2026-11-15
+
+Un NoSuchMethodError sur une méthode existante après un changement de type signale un cache de compilation périmé : recompiler à froid avant d'ouvrir un défaut.

@@ -458,3 +458,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Quand un écran affiche un texte de repli par `?:` sur une valeur nulle, ce repli s'applique à toute future valeur nulle. Préférer une correspondance explicite sur le cas visé.
+
+## G77 — Quand une consigne demande de déplacer les textes d'un écran
+Rôles : designer
+Date : 2026-11-14
+
+Quand une consigne demande de déplacer les textes d'un écran en ressources, chercher tous les objets de constantes et propriétés d'énumération que l'écran lit, pas seulement celui nommé ; signaler ceux laissés hors périmètre.

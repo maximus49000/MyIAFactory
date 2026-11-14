@@ -578,3 +578,9 @@ Rôles : release
 Date : 2026-11-14
 
 Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à le chercher dans les scripts précédents.
+
+## G97 — Avant de compiler une livraison, relever le code de version
+Rôles : release
+Date : 2026-11-14
+
+Avant de compiler une livraison, relever le code de version de la livraison précédente et le comparer à celui du projet : ne monter le code que s'il n'est pas déjà supérieur.

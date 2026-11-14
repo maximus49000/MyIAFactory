@@ -26,3 +26,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Sur un SDK Android, cibler directement le sous-dossier voulu, car un parcours complet est trop lent.
+
+## G5 — Quand un script lance un wrapper de build, il l'appelle par
+Rôles : testeur
+Date : 2026-11-14
+
+Quand un script lance un wrapper de build, il l'appelle par chemin absolu plutôt que par nom relatif.

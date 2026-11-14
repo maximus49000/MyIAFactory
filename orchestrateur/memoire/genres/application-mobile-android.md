@@ -542,3 +542,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Dans une application mobile, ajouter un test unitaire qui lit les fichiers d'écran et le fichier de ressources. Il vérifie que les identifiants de texte utilisés existent, qu'aucune chaîne n'est écrite en dur et que les apostrophes sont échappées.
+
+## G91 — Un effet de lancement qui appelle le chargement d'un modèle
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Un effet de lancement qui appelle le chargement d'un modèle de vue se relance à chaque recréation de l'écran. La garde « déjà chargé » appartient au modèle de vue, et un test appelle charger deux fois.

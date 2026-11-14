@@ -524,3 +524,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand un élément ajouté n'apparaît pas dans une liste, vérifier d'abord que l'écran de la liste lit bien la source de données, avant de chercher une erreur dans l'écriture.
+
+## G88 — Avant d'installer une version de test sur un émulateur persi
+Rôles : dev
+Date : 2026-11-14
+
+Avant d'installer une version de test sur un émulateur persistant, désinstaller le paquet existant sur l'émulateur seulement (jamais sur un appareil physique) pour éviter un conflit de signature.

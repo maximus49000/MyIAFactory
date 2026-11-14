@@ -368,3 +368,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Supprimer un fichier temporaire à la sortie d'un écran exige un drapeau « transmis » et d'ignorer la rotation, sinon on détruit la donnée utile.
+
+## G62 — Avant de créer une classe de test, chercher son nom dans tou
+Rôles : testeur
+Date : 2026-11-14
+
+Avant de créer une classe de test, chercher son nom dans tout le paquet de test, car une déclaration en double fait échouer la compilation de toute la suite.

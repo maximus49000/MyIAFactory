@@ -470,3 +470,9 @@ Rôles : designer, dev
 Date : 2026-11-14
 
 Dans une interface, le repli d'un libellé manquant doit être un texte neutre, jamais le texte d'une autre erreur précise ; un test doit interdire ce repli.
+
+## G79 — Avant une livraison, relever le versionCode de la livraison
+Rôles : release
+Date : 2026-11-14
+
+Avant une livraison, relever le versionCode de la livraison précédente, le monter avant compilation, et donner au brief le chemin du fichier de propriétés de signature.

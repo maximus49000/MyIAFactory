@@ -774,3 +774,24 @@ class PushConcurrent(__import__("unittest").TestCase):
             return 1, b"fatal: Authentication failed"
         self.assertEqual(cloud._pousser(executer, ".")[0], 1)
         self.assertEqual(len(appels), 1)
+
+
+class FusionPushConcurrent(__import__("unittest").TestCase):
+    def test_la_fusion_faite_n_est_pas_un_echec_quand_le_push_est_seulement_concurrent(self):
+        from moteur import cloud
+        def executer(argv, cwd, delai):
+            if argv[1] == "push":
+                return 1, b" ! [remote rejected] master -> master (cannot lock ref 'refs/heads/master')"
+            return 0, b""
+        ancien = cloud.PUSH_PAUSE_S
+        cloud.PUSH_PAUSE_S = 0
+        try:
+            self.assertIsNone(cloud.fusionner(".", "claude/x", executer=executer))
+        finally:
+            cloud.PUSH_PAUSE_S = ancien
+
+    def test_un_autre_refus_reste_un_echec(self):
+        from moteur import cloud
+        def executer(argv, cwd, delai):
+            return (1, b"fatal: Authentication failed") if argv[1] == "push" else (0, b"")
+        self.assertIn("n'a pas pu être poussée", cloud.fusionner(".", "claude/x", executer=executer))

@@ -376,8 +376,10 @@ def fusionner(dossier_projet, branche, *, executer=None):
     if code != 0:
         _git(executer, dossier_projet, "merge", "--abort")
         return "conflit de fusion : " + _texte(sortie)[:200]
-    code, sortie = _git(executer, dossier_projet, "push")
-    if code != 0:
+    code, sortie = _pousser(executer, dossier_projet)
+    if code != 0 and not any(m in _texte(sortie) for m in _PUSH_CONCURRENT):
         return "la fusion est faite mais n'a pas pu être poussée : " + _texte(sortie)[:200]
+    # Encore refusé par un autre push en cours après les essais : la fusion est faite dans le dépôt local et part avec le
+    # push suivant (cas réel : deux fusions bloquées puis retrouvées dans le dépôt distant, la tâche restait arrêtée).
     return None
 

@@ -476,3 +476,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant une livraison, relever le versionCode de la livraison précédente, le monter avant compilation, et donner au brief le chemin du fichier de propriétés de signature.
+
+## G80 — Après toute écriture d'une ressource de chaînes Android, vér
+Rôles : testeur
+Date : 2026-11-14
+
+Après toute écriture d'une ressource de chaînes Android, vérifier l'échappement des apostrophes et l'absence de marques de gabarit ; une correction commitée sans compilation ne prouve rien tant que le build n'a pas réussi.

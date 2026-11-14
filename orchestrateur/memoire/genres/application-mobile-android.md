@@ -554,3 +554,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Mesurer le contraste des couleurs d'alerte du thème avant de les employer en texte : sous 4,5:1 sur le fond, utiliser une variante plus foncée pour le texte et réserver la teinte vive aux bordures et pastilles.
+
+## G93 — Un modèle de vue sans contexte expose ses messages d'erreur
+Rôles : dev, designer
+Date : 2026-11-14
+
+Un modèle de vue sans contexte expose ses messages d'erreur sous forme d'identifiants de ressources ; l'écran les résout. Les tests vérifient la présence de l'identifiant, et le texte se lit dans le fichier de ressources.

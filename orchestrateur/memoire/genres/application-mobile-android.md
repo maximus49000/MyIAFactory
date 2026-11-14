@@ -80,3 +80,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un élément de persistance sans écran propre, lister les maquettes qui affichent ses données et ne dessiner que les erreurs d'enregistrement et de lecture, chacune avec une sortie de repli.
+
+## G14 — Pour compter les tests par suite, lire les XML de résultats
+Rôles : testeur
+Date : 2026-11-14
+
+Pour compter les tests par suite, lire les XML de résultats avec un script Python isolé plutôt que le journal de build.

@@ -326,3 +326,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Si la compilation des tests échoue sur des références non résolues vers des symboles qui existent, relancer une fois avant de les traiter comme un défaut : le cache incrémental peut être périmé.
+
+## G55 — Tout téléchargement borné en taille passe par un transport i
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Tout téléchargement borné en taille passe par un transport injectable, pour tester le dépassement et l'échec d'écriture sans réseau.

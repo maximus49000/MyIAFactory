@@ -30,6 +30,16 @@ _CODE_VU = {"t": 0.0, "empreinte": None}
 CODE_RELU_S = 5
 
 
+def sans_lecons_au_compteur(e):
+    """Leçons validées automatiquement : elles ne réclament rien au Directeur, son compteur ne les compte pas (le
+    moteur les valide au tour suivant ; sans cela, le chiffre montait puis redescendait)."""
+    d = e.get("directeur")
+    if e.get("lecons_auto") is True and isinstance(d, dict) and isinstance(d.get("lecons"), int):
+        d["total"] = max(0, (d.get("total") or 0) - d["lecons"])
+        d["lecons"] = 0
+    return e
+
+
 def empreinte_du_code(web=WEB, maintenant=None):
     """L'empreinte des fichiers de la page (chemin, taille, date) : elle change dès qu'une mise à jour touche le code du
     bureau. Une page ouverte la compare à celle de son chargement et se recharge : aucune correction ne reste invisible
@@ -232,6 +242,7 @@ class Projet:
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
+            sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
             # « Dossier approuvé pour les sessions cloud »
             e["cloud_dossier_approuve"] = regl.get("cloud_dossier_approuve") is True

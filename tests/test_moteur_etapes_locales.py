@@ -121,6 +121,24 @@ class Choix(unittest.TestCase):
         self.assertIsNone(mn.lieu_de_la_tache(f, {"etape": "flux:qa", "role": "qa"}))
         self.assertIsNone(mn.lieu_de_la_tache(f, {"etape": "cadrage", "role": "dev"}))
 
+    def test_partie_locale_sans_lieu_ecrit_exige_le_poste(self):
+        f = {"flux": [dict(FLUX[0]), dict(FLUX[0], id="dev-local"), *FLUX[1:]], "workflows": []}
+        self.assertEqual(mn.lieu_de_la_tache(f, {"etape": "flux:dev-local", "role": "dev"}), "local")
+        self.assertIsNone(mn.lieu_de_la_tache(f, {"etape": "flux:dev", "role": "dev"}))
+
+    def test_une_correction_se_fait_la_ou_la_tache_bloquee_reprendra(self):
+        """MyFridgeCleaner t52 : la correction d'une livraison (agent local) partait dans un conteneur cloud."""
+        f = {"flux": list(FLUX), "workflows": []}
+        corr = {"id": "t2", "etape": "correction", "role": "dev"}
+        bloquee = {"id": "t1", "etape": "flux:qa", "role": "qa", "agent": "a-local", "depend_de": ["t2"],
+                   "colonne": "qa"}
+        lieux = {"a-local": "local", "a-cloud": "cloud"}.get
+        self.assertEqual(mn.lieu_de_la_tache(f, corr, (), [bloquee, corr], lieux), "local")
+        self.assertIsNone(mn.lieu_de_la_tache(f, corr, (), [dict(bloquee, agent="a-cloud"), corr], lieux))
+        self.assertIsNone(mn.lieu_de_la_tache(f, corr, (), [dict(bloquee, colonne="fait"), corr], lieux))
+        f_local = {"flux": [*FLUX[:2], dict(FLUX[2], lieu="local"), *FLUX[3:]], "workflows": []}
+        self.assertEqual(mn.lieu_de_la_tache(f_local, corr, (), [dict(bloquee, agent=None), corr]), "local")
+
 
 class Ecriture(unittest.TestCase):
     def setUp(self):

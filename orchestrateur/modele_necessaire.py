@@ -73,9 +73,39 @@ def etape_de_la_tache(f, t, fonctionnalites=()):
     return _etape(f, t, fonctionnalites)
 
 
-def lieu_de_la_tache(f, t, fonctionnalites=()):
-    """Le `lieu` écrit de l'étape que la tâche fait (`local` ou `indifférent`), ou `None` (pas d'étape, pas de lieu)."""
-    return wf.lieu(_etape(f, t, fonctionnalites))
+def _lieu_de_l_etape(f, t, fonctionnalites):
+    """Le lieu de l'étape de `t` : écrit (`local`, `indifférent`), sinon `local` quand l'étape exige les logiciels du poste
+    (une partie `-local`, une étape qu'un outil du poste cite : `lieux.etapes_qui_exigent_le_poste`), sinon `None`."""
+    e = _etape(f, t, fonctionnalites)
+    ecrit = wf.lieu(e)
+    if ecrit is not None or e is None:
+        return ecrit
+    from orchestrateur import lieux as lx      # ici : lieux importe workflows, pas ce module
+    for w in wf.tous(f):
+        if any(x.get("id") == e.get("id") for x in w["flux"]):
+            if e.get("id") in lx.etapes_qui_exigent_le_poste(w["flux"], f.get("environnement")):
+                return wf.LIEU_LOCAL
+            break
+    return None
+
+
+def lieu_de_la_tache(f, t, fonctionnalites=(), taches=None, lieu_agent=None):
+    """Le lieu de l'étape que la tâche fait (`local` ou `indifférent`), ou `None`.
+
+    Règle générale : une tâche sans lieu propre dont une tâche ouverte dépend (une correction, un préalable) se fait
+    là où cette tâche reprendra : `local` si celle-ci exige le poste, ou si son agent est sur le poste (`lieu_agent(cle)`
+    rend `local`). Sinon une correction de livraison part dans un conteneur cloud sans SDK ni clé, et la tâche bloquée
+    n'est jamais débloquée (MyFridgeCleaner, t52)."""
+    propre = _lieu_de_l_etape(f, t, fonctionnalites)
+    if propre is not None or not taches or not t.get("id"):
+        return propre
+    for u in taches:
+        if u.get("colonne") == "fait" or t["id"] not in (u.get("depend_de") or []):
+            continue
+        if _lieu_de_l_etape(f, u, fonctionnalites) == wf.LIEU_LOCAL or (
+                lieu_agent is not None and u.get("agent") and lieu_agent(u["agent"]) == "local"):
+            return wf.LIEU_LOCAL
+    return None
 
 
 def lieu_impose(lieu_etape, lieu_metier):

@@ -2403,7 +2403,9 @@ def _metier(projet, role):
 
 def _lieu_de_l_etape(projet, court, tache, fac=None):
     """Le `lieu` écrit de l'étape de la tâche (`local`, `indifférent`), ou `None`."""
-    return mn.lieu_de_la_tache(fac or _factory(projet), tache, court.get("fonctionnalites") or [])
+    lieux = {a.get("cle"): a.get("lieu") for a in court.get("agents") or []}
+    return mn.lieu_de_la_tache(fac or _factory(projet), tache, court.get("fonctionnalites") or [],
+                               court.get("taches") or [], lieux.get)
 
 
 def _lieu_reserve(projet, court, tache, fac=None):

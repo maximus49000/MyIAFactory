@@ -3435,7 +3435,10 @@ def modele_du_metier(ctx, role):
 
 def lieu_de_l_etape(ctx, s, t):
     """Le `lieu` écrit de l'étape de la tâche `t` (`local`, `indifférent`), ou `None` : le métier décide alors."""
-    return mn.lieu_de_la_tache(ctx.f, t, s.get("fonctionnalites") or []) if t else None
+    if not t:
+        return None
+    lieux = {x["cle"]: x.get("lieu") for x in ctx.fiches()}
+    return mn.lieu_de_la_tache(ctx.f, t, s.get("fonctionnalites") or [], s.get("taches") or [], lieux.get)
 
 
 def lieu_de_la_tache(ctx, s, t, fiches_):

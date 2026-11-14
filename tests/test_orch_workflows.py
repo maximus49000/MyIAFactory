@@ -352,3 +352,16 @@ class TestFonctionnaliteDeplacee(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepliSurLeGenre(__import__("unittest").TestCase):
+    """Cas réel : un projet créé avec son seul workflow de genre (pas de principal) ; la série n'avait aucune étape,
+    chaque élément pris dans la file était perdu sans tâche."""
+
+    def test_sans_principal_le_workflow_du_genre(self):
+        from orchestrateur import workflows as wf
+        genre = {"id": "w-appli", "fonctionnalite": None, "genre": "appli", "flux": [{"id": "dev", "nom": "Dev", "role": "dev"}]}
+        f = {"genre": "appli", "workflows": [genre]}
+        self.assertEqual(wf.de_la_fonctionnalite(f, {"genre": "appli", "workflow": None})["id"], "w-appli")
+        self.assertEqual(wf.de_la_fonctionnalite(f, None)["id"], "w-appli")
+        self.assertIsNone(wf.de_la_fonctionnalite({"workflows": []}, None))

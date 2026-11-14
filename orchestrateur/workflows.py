@@ -81,14 +81,19 @@ def tous(f):
 
 
 def de_la_fonctionnalite(f, fonc):
-    """Le workflow de `fonc["workflow"]`, sinon le principal (None si le projet n'en a pas)."""
+    """Le workflow de `fonc["workflow"]`, sinon le principal, sinon celui du genre de la fonctionnalité ou du projet
+    (cas réel : un projet créé avec son seul workflow de genre ; sans ce repli, la série n'avait aucune étape et ne
+    partait jamais). None si le projet n'en a aucun."""
     voulu = (fonc or {}).get("workflow")
     ws = tous(f)
     if voulu:
         w = next((x for x in ws if x["id"] == voulu), None)
         if w is not None:
             return w
-    return next((x for x in ws if x["id"] == PRINCIPAL), None)
+    principal = next((x for x in ws if x["id"] == PRINCIPAL), None)
+    if principal is not None:
+        return principal
+    return de_creation(f, (fonc or {}).get("genre")) or de_creation(f)
 
 
 def de_creation(f, genre=None):

@@ -4742,6 +4742,12 @@ def _avancer_serie(projet, etat, fid):
         plafond = max(ELEMENTS_EN_COURS_MAX, _places(projet, court, fac)["total"])
         fait = {v["element"]["id"] for v in mine if v["phase"] == "fait"}
         deps = _m(etat, "depend_de").get(fid, {})
+        if not _production(projet, fid):
+            # Aucune étape à enchaîner : ne rien prendre dans la file (cas réel : chaque élément pris était perdu, sans
+            # tâche). La série muette le dit au bureau de direction.
+            _m(etat, "serie_perdue").setdefault(fid, {})["sans_workflow"] = (
+                "la fonctionnalité n'a aucun workflow à enchaîner (ni le sien, ni le principal, ni celui du genre)")
+            plafond = vivants
         while vivants < plafond:
             file = _fonc(projet, fid)["file"]
             ids = {q["id"] for q in file}

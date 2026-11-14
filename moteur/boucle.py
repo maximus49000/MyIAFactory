@@ -850,8 +850,7 @@ class Moteur:
             if not (t["active"] and t.get("agent") and regles.fiche_cloud(court, t["agent"])) or t["id"] in etat["cloud"]:
                 continue
             journal = regles.lancer(projet, "detail", {"tache": t["id"]}).get("journal") or []
-            vu = next((m.group(1, 2) for j in reversed(journal)
-                       if (m := re.match(r"Session cloud (\S+) \((\w+)\)", j["texte"]))), None)
+            vu = regles.session_cloud_du_journal(journal)      # la session du dernier essai, pas d'un essai ancien
             if vu:
                 etat["cloud"][t["id"]] = {"session": vu[0], "adresse": None, "depuis": self.horloge(),
                                           "taches": [t["id"]], "agent": t["agent"], "modele": vu[1], "lot": None,

@@ -4623,6 +4623,22 @@ def fiche_cloud(court, cle):
     return any(a["cle"] == cle and a["lieu"] == "cloud" for a in court["agents"])
 
 
+_SESSION_DU_JOURNAL = re.compile(r"Session cloud (\S+) \((\w+)\)")
+
+
+def session_cloud_du_journal(journal):
+    """`(session, modèle)` de la session cloud du dernier essai d'une tâche, lue dans son journal ; `None` si ce dernier
+    essai n'en a pas (un « nouvel essai » noté après la dernière session, ou aucune session : lancement perdu)."""
+    for j in reversed(journal or []):
+        texte = (j or {}).get("texte") or ""
+        m = _SESSION_DU_JOURNAL.match(texte)
+        if m:
+            return m.group(1, 2)
+        if "nouvel essai" in texte:
+            return None
+    return None
+
+
 def orphelines(projet, etat):
     """À la reprise du moteur : une tâche active dont l'agent a disparu est relancée une fois (avec le reste de son lot).
     Une tâche relancée une fois n'est plus reprise."""
@@ -4636,8 +4652,11 @@ def orphelines(projet, etat):
         if (not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
                 or not (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
             continue
-        if fiche_cloud(court, t["agent"]):
+        if fiche_cloud(court, t["agent"]) and (
+                not t["active"] or session_cloud_du_journal(_tache(projet, t["id"]).get("journal"))):
             continue      # sa session cloud vit encore : la boucle la retrouve et la relève
+        # active sans session au dernier essai (moteur arrêté entre deux essais, lancement perdu) : elle repart ici,
+        # sinon personne ne la suivrait (« sans nouvelles » indéfiniment)
         refus = None
         if not t["active"]:
             refus = _refus_sans_suite(projet, t)      # un message refusé par l'outil, perdu, la tâche muette

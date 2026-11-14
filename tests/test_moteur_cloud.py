@@ -732,6 +732,27 @@ class Agents(Base):
         self.assertEqual(len(self.cloud.lancees), 1)                          # pas de seconde session
         self.assertEqual(nouveau.etats[str(self.projet.factory)]["cloud"][t]["session"], "session_1")
 
+    def test_essai_perdu_au_redemarrage_relance(self):
+        """Le moteur s'arrête entre deux essais (« nouvel essai » noté, session pas encore lancée) : relancé, il relance
+        la tâche au lieu de la laisser active sans personne pour la suivre."""
+        t = self.tache()
+        self.avancer()
+        self.ok("tache", entree={"id": t, "journal": ["L'agent n'a pas rendu de rapport (session cloud : rien) : "
+                                                      "nouvel essai."]})
+        nouveau = boucle.Moteur([self.projet], horloge=lambda: self.temps, synchrone=True, session_cloud=self.cloud,
+                                commit=lambda d, m: None, executer_agent=lambda *a, **k: self.fail("agent local"))
+        nouveau.tour()
+        self.assertEqual(len(self.cloud.lancees), 2)                          # l'essai perdu repart
+        self.assertEqual(nouveau.etats[str(self.projet.factory)]["cloud"][t]["session"], "session_2")
+
+    def test_session_du_dernier_essai(self):
+        j = lambda *x: [{"texte": y} for y in x]
+        self.assertEqual(regles.session_cloud_du_journal(j("Session cloud s1 (sonnet)")), ("s1", "sonnet"))
+        self.assertIsNone(regles.session_cloud_du_journal(j("Session cloud s1 (sonnet)", "… : nouvel essai.")))
+        self.assertIsNone(regles.session_cloud_du_journal(j("Corriger l'élément e8")))
+        self.assertEqual(regles.session_cloud_du_journal(j("x : nouvel essai.", "Session cloud s2 (opus) : https://a")),
+                         ("s2", "opus"))
+
 
 class Reglages(unittest.TestCase):
     def test_agents_cloud_max_lu_dans_les_reglages(self):

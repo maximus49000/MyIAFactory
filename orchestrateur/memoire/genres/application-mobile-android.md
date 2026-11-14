@@ -638,3 +638,9 @@ Rôles : release
 Date : 2026-11-15
 
 Le brief de livraison doit donner le chemin du fichier de propriétés de signature et du dossier de clés hors dépôt, sans que l'agent ait à les chercher dans les scripts précédents.
+
+## G107 — Une livraison ne déclare vérifié que ce qui a été exécuté ;
+Rôles : release
+Date : 2026-11-15
+
+Une livraison ne déclare vérifié que ce qui a été exécuté ; un test non lancé est écrit « non vérifié » dans la note d'installation.

@@ -843,3 +843,9 @@ Rôles : release
 Date : 2026-11-14
 
 Ne jamais afficher, même partiellement, un fichier contenant des secrets ; le lire par un script qui ne sort que les noms des clés.
+
+## S141 — Pour contrôler l'empreinte d'un certificat sans exposer son
+Rôles : release
+Date : 2026-11-14
+
+Pour contrôler l'empreinte d'un certificat sans exposer son mot de passe, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.

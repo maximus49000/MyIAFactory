@@ -957,3 +957,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand la tâche annoncée est introuvable dans les fichiers de suivi, récupérer d'abord la dernière version de la branche principale et la fusionner avant de déclarer l'information absente ; en cas de conflit hors périmètre, garder la version de la branche principale.
+
+## S160 — Quand une étape de maquettes porte sur un branchement de par
+Rôles : designer
+Date : 2026-11-14
+
+Quand une étape de maquettes porte sur un branchement de parcours ou un contrôle de navigation sans écran nouveau, vérifier que les maquettes des écrans reliés existent, déclarer l'étape non applicable en une ligne et renvoyer aux contrôles du registre.

@@ -656,3 +656,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un paramètre optionnel qui vaut null par défaut masque les appels qui oublient de le passer. Pour un réglage annoncé comme appliqué partout, lister les appels du composant partagé et vérifier que chacun transmet la valeur.
+
+## G110 — Une apk de même taille que la livraison précédente n'est pas
+Rôles : release
+Date : 2026-11-15
+
+Une apk de même taille que la livraison précédente n'est pas forcément la même : comparer le hachage du fichier et le versionCode réel.

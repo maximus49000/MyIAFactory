@@ -819,3 +819,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Annuler ou attendre le travail asynchrone d'un test avant resetMain, et relancer une fois pour distinguer un test instable d'une régression.
+
+## S137 — Pour étendre une interface déjà implémentée par des faux de
+Rôles : dev
+Date : 2026-11-14
+
+Pour étendre une interface déjà implémentée par des faux de test, ajouter une méthode avec corps par défaut qui délègue à l'ancienne, au lieu de modifier la signature existante.

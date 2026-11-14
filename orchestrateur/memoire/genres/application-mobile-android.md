@@ -584,3 +584,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant de compiler une livraison, relever le code de version de la livraison précédente et le comparer à celui du projet : ne monter le code que s'il n'est pas déjà supérieur.
+
+## G98 — Avant de monter le versionCode d'une livraison, relever le c
+Rôles : release
+Date : 2026-11-15
+
+Avant de monter le versionCode d'une livraison, relever le code le plus élevé de toutes les livraisons précédentes, pas seulement de la dernière de la série.

@@ -614,3 +614,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un contrôle de textes en dur par expression régulière laisse passer les constantes de code lues par les écrans ; en revue, lister chaque objet de constantes textuelles et le comparer au fichier de ressources.
+
+## G103 — Quand des libellés passent de constantes texte à des identif
+Rôles : designer
+Date : 2026-11-15
+
+Quand des libellés passent de constantes texte à des identifiants de ressources, les listes et propriétés qui les transportent changent de type : chercher tous leurs usages, tests compris, avant la modification.

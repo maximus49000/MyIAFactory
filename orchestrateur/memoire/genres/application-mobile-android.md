@@ -632,3 +632,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Pour étendre un composant partagé avec un réglage utilisateur, passer le réglage en paramètre facultatif (nul = comportement actuel) et le charger en arrière-plan, l'écran restant neutre tant que la lecture n'est pas finie.
+
+## G106 — Le brief de livraison doit donner le chemin du fichier de pr
+Rôles : release
+Date : 2026-11-15
+
+Le brief de livraison doit donner le chemin du fichier de propriétés de signature et du dossier de clés hors dépôt, sans que l'agent ait à les chercher dans les scripts précédents.

@@ -717,3 +717,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour compter les tests par suite, interroger les fichiers XML de résultats, pas le journal de build.
+
+## S120 — Pour un écran déjà maquetté, ne dessiner que les états absen
+Rôles : designer
+Date : 2026-11-14
+
+Pour un écran déjà maquetté, ne dessiner que les états absents (vide, attente, succès, erreurs) ; dessiner les icônes plutôt que d'utiliser des glyphes Unicode, puis relire les images.

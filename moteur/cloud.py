@@ -95,6 +95,22 @@ def _git(executer, dossier, *args, delai_s=DELAI_GIT_S):
     return _lancer(executer, ["git", *args], dossier, delai_s)
 
 
+PUSH_ESSAIS = 4
+PUSH_PAUSE_S = 3
+_PUSH_CONCURRENT = ("cannot lock ref", "failed to lock", "unable to lock", "incorrect old value")
+
+
+def _pousser(executer, dossier):
+    """`git push`, réessayé quand un autre push du même dépôt est en cours (cas réel : trois sessions cloud lancées
+    ensemble, GitHub en refusait deux avec « cannot lock ref »)."""
+    for essai in range(PUSH_ESSAIS):
+        code, sortie = _git(executer, dossier, "push")
+        if code == 0 or not any(m in _texte(sortie) for m in _PUSH_CONCURRENT) or essai == PUSH_ESSAIS - 1:
+            return code, sortie
+        time.sleep(PUSH_PAUSE_S * (essai + 1))
+    return code, sortie
+
+
 def prerequis(dossier_projet, *, executer=None, trouver=appel.trouver_claude):
     """`None` si le cloud est possible (le projet est sur GitHub, `claude` est là), sinon la raison, en français."""
     if not trouver():
@@ -148,7 +164,7 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     claude = trouver()
     if not claude:
         raise ErreurCloud("la commande claude n'est pas installée")
-    code, sortie = _git(executer, dossier_projet, "push")
+    code, sortie = _pousser(executer, dossier_projet)
     if code != 0:
         raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
     argv = [claude, "--cloud", depart, "--model", m]

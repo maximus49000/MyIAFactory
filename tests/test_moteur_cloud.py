@@ -745,3 +745,32 @@ class Reglages(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PushConcurrent(__import__("unittest").TestCase):
+    def test_un_push_refuse_par_un_autre_push_est_reessaye(self):
+        from moteur import cloud
+        appels = []
+
+        def executer(argv, cwd, delai):
+            appels.append(argv)
+            if len(appels) == 1:
+                return 1, b" ! [remote rejected] master -> master (cannot lock ref 'refs/heads/master')"
+            return 0, b"ok"
+        ancien = cloud.PUSH_PAUSE_S
+        cloud.PUSH_PAUSE_S = 0
+        try:
+            self.assertEqual(cloud._pousser(executer, ".")[0], 0)
+        finally:
+            cloud.PUSH_PAUSE_S = ancien
+        self.assertEqual(len(appels), 2)
+
+    def test_un_autre_refus_n_est_pas_reessaye(self):
+        from moteur import cloud
+        appels = []
+
+        def executer(argv, cwd, delai):
+            appels.append(argv)
+            return 1, b"fatal: Authentication failed"
+        self.assertEqual(cloud._pousser(executer, ".")[0], 1)
+        self.assertEqual(len(appels), 1)

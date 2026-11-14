@@ -590,3 +590,9 @@ Rôles : release
 Date : 2026-11-15
 
 Avant de monter le versionCode d'une livraison, relever le code le plus élevé de toutes les livraisons précédentes, pas seulement de la dernière de la série.
+
+## G99 — Quand un test lit par réflexion les champs entiers d'une cla
+Rôles : testeur
+Date : 2026-11-15
+
+Quand un test lit par réflexion les champs entiers d'une classe pour en tirer des identifiants, écarter les champs synthétiques (nom commençant par $) ajoutés par le compilateur.

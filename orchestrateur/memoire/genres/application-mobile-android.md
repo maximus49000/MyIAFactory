@@ -392,3 +392,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant de conclure qu'une classe est absente d'un paquet, lire ses déclarations dans le code : une fonction de niveau fichier, un objet ou une classe n'ont pas le même nom compilé.
+
+## G66 — Avant de livrer une application, vérifier que les bibliothèq
+Rôles : release
+Date : 2026-11-14
+
+Avant de livrer une application, vérifier que les bibliothèques importées par le code sont déclarées dans le fichier de build.

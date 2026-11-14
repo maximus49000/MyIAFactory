@@ -266,3 +266,9 @@ Rôles : release
 Date : 2026-11-14
 
 Comparer le schéma de signature de chaque livraison à la précédente et signaler toute différence.
+
+## G45 — Pour les tests instrumentés d'une application mobile sans po
+Rôles : dev
+Date : 2026-11-14
+
+Pour les tests instrumentés d'une application mobile sans possibilité d'approbation, encapsuler dans un seul script la création de l'émulateur s'il manque, son démarrage sans fenêtre, l'attente de fin de boot, l'exécution des tests et l'arrêt de l'émulateur dans un bloc finally, avec journal écrit au fil de l'eau.

@@ -62,3 +62,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Sans approbation possible, lire les rapports de tests avec l'outil de recherche et des chemins absolus plutôt qu'avec des commandes shell.
+
+## G11 — Dans un shell POSIX sous Windows, passer à l'interpréteur de
+Rôles : designer
+Date : 2026-11-14
+
+Dans un shell POSIX sous Windows, passer à l'interpréteur des chemins avec des barres obliques, car les antislashs sont consommés.

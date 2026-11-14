@@ -110,3 +110,9 @@ Rôles : release
 Date : 2026-11-14
 
 Passer les mots de passe de signature aux outils de signature par variables d'environnement, lues depuis un fichier hors dépôt, sans jamais les afficher.
+
+## G19 — Utiliser la version la plus récente des outils de build inst
+Rôles : release
+Date : 2026-11-14
+
+Utiliser la version la plus récente des outils de build installés pour aligner, signer et vérifier un paquet.

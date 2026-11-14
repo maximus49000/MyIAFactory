@@ -675,3 +675,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand plusieurs agents partagent un dépôt, relire l'état du dépôt avant d'ajouter des fichiers, car un commit automatique peut embarquer le travail d'un autre ; lancer les compilations sans démon partagé.
+
+## S113 — Sans approbation possible, les commandes composées sont refu
+Rôles : testeur
+Date : 2026-11-14
+
+Sans approbation possible, les commandes composées sont refusées. Il faut les mettre dans un script écrit par l'outil de fichier, avec un délai maximal et la sortie écrite dans un fichier, puis lancer ce script seul.

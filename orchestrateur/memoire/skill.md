@@ -651,3 +651,9 @@ Rôles : cadrage, dev
 Date : 2026-11-14
 
 Prototyper un écran dans un script qui reproduit les règles métier (filtre, regroupement, état visuel), avec assertions et rendu image, permet de valider avant d'écrire le code de l'application.
+
+## S109 — Quand une étape de maquettes porte sur un élément d'infrastr
+Rôles : designer
+Date : 2026-11-14
+
+Quand une étape de maquettes porte sur un élément d'infrastructure, écrire seulement ce qu'il doit fournir aux écrans (thème, composants communs, navigation) et renvoyer aux maquettes existantes.

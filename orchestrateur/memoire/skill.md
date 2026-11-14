@@ -1005,3 +1005,9 @@ Rôles : release
 Date : 2026-11-15
 
 Quand un contrôle exige un shell composé (opérateurs enchaînés), passer par les outils de recherche ou par un script Python qui exécute la même commande.
+
+## S168 — Un test de reprise après panne qui s'appuie sur un faux non
+Rôles : testeur
+Date : 2026-11-15
+
+Un test de reprise après panne qui s'appuie sur un faux non transactionnel doit modéliser le retour arrière, sinon il compte des écritures que la vraie base annulerait.

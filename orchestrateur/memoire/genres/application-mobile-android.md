@@ -512,3 +512,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand deux niveaux d'alerte partagent une même famille de couleur, les séparer par la teinte, ajouter un badge texte, rendre les couleurs réglables et refuser deux choix identiques.
+
+## G86 — Dans une application Android avec Room, écrire les opération
+Rôles : dev
+Date : 2026-11-14
+
+Dans une application Android avec Room, écrire les opérations composées (enregistrer, supprimer avec report) comme méthodes avec corps au-dessus de requêtes de base abstraites, puis tester ces méthodes avec un faux qui n'implémente que les requêtes de base.

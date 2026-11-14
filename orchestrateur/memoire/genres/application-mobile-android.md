@@ -398,3 +398,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant de livrer une application, vérifier que les bibliothèques importées par le code sont déclarées dans le fichier de build.
+
+## G67 — Quand une étape livre la logique d'une fonction sans son bra
+Rôles : cadrage, dev
+Date : 2026-11-14
+
+Quand une étape livre la logique d'une fonction sans son branchement dans l'interface, la liste des étapes doit contenir une étape explicite de branchement. Un écran provisoire encore atteignable en livraison doit être signalé dans le rapport de livraison.

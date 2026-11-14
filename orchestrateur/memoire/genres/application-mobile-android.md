@@ -362,3 +362,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Quand une route de navigation reçoit un argument, la route courante exposée est le motif complet ; les listes de routes (barre masquée, etc.) doivent utiliser ce motif.
+
+## G61 — Supprimer un fichier temporaire à la sortie d'un écran exige
+Rôles : dev
+Date : 2026-11-14
+
+Supprimer un fichier temporaire à la sortie d'un écran exige un drapeau « transmis » et d'ignorer la rotation, sinon on détruit la donnée utile.

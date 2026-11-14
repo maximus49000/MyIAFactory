@@ -284,3 +284,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Une tâche qui doit compiler et signer un apk échoue dans un conteneur sans SDK ni clé : la rendre seulement quand l'exécution sur le poste équipé est assurée, sinon livrer le code commité en disant que rien n'a été compilé.
+
+## G48 — Pour des tests sur émulateur, regrouper dans un seul script
+Rôles : dev
+Date : 2026-11-14
+
+Pour des tests sur émulateur, regrouper dans un seul script le démarrage sans fenêtre, l'attente du démarrage complet, les tests, l'installation et l'arrêt dans un bloc finally, en journalisant au fil de l'eau.

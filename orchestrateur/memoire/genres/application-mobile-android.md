@@ -248,3 +248,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Quand une valeur de réglage est normalisée pour un filtre, utiliser la même valeur normalisée pour la requête qui l'alimente ; tester qu'une notification refusée ou qui lève une exception n'enregistre pas l'événement comme envoyé.
+
+## G42 — Avant une livraison, réutiliser la clé de signature précéden
+Rôles : release
+Date : 2026-11-14
+
+Avant une livraison, réutiliser la clé de signature précédente hors dépôt et contrôler son empreinte contre celle de la livraison précédente, avant toute compilation.

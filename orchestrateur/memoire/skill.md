@@ -993,3 +993,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Un contrôle de textes en dur ne signale que les littéraux contenant des lettres (ni icônes, ni simples formats numériques), couvre aussi snackbar, étiquettes d'action, descriptions et replis, et se prouve par injection de faux littéraux.
+
+## S166 — Pour une preuve de build, relancer les tâches sans cache et
+Rôles : release
+Date : 2026-11-14
+
+Pour une preuve de build, relancer les tâches sans cache et journaliser toute la sortie dans un fichier avant de la filtrer.

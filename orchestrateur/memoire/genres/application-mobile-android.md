@@ -650,3 +650,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Une garde de chargement se teste en modifiant la source entre deux appels : le second ne doit pas relire ; après une erreur, seul un rechargement explicite relit.
+
+## G109 — Un paramètre optionnel qui vaut null par défaut masque les a
+Rôles : testeur
+Date : 2026-11-15
+
+Un paramètre optionnel qui vaut null par défaut masque les appels qui oublient de le passer. Pour un réglage annoncé comme appliqué partout, lister les appels du composant partagé et vérifier que chacun transmet la valeur.

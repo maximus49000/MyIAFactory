@@ -56,3 +56,9 @@ Rôles : release
 Date : 2026-11-14
 
 Passer la clé de signature release hors du dépôt, par une propriété de build, et n'activer la signature que si le fichier de clé est présent.
+
+## G10 — Sans approbation possible, lire les rapports de tests avec l
+Rôles : dev
+Date : 2026-11-14
+
+Sans approbation possible, lire les rapports de tests avec l'outil de recherche et des chemins absolus plutôt qu'avec des commandes shell.

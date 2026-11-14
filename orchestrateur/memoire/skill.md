@@ -1011,3 +1011,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un test de reprise après panne qui s'appuie sur un faux non transactionnel doit modéliser le retour arrière, sinon il compte des écritures que la vraie base annulerait.
+
+## S169 — Avant d'appliquer une consigne qui s'appuie sur un état supp
+Rôles : designer, dev
+Date : 2026-11-15
+
+Avant d'appliquer une consigne qui s'appuie sur un état supposé du code (« comme le fait déjà tel écran »), vérifier cet état par recherche ; s'il est faux, appliquer le minimum cohérent et signaler l'écart.

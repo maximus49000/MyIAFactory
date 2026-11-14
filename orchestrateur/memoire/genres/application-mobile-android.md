@@ -188,3 +188,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un écran de liste avec statistiques, dessiner les états vide, chargement, erreur de lecture, filtre sans résultat, période sans donnée (pas de division par zéro) et ligne dont l'objet source a disparu.
+
+## G32 — Avant de signer une livraison, retrouver la clé de la livrai
+Rôles : release
+Date : 2026-11-14
+
+Avant de signer une livraison, retrouver la clé de la livraison précédente hors du dépôt, la réutiliser et contrôler son empreinte contre celle de la livraison précédente.

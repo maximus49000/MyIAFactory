@@ -89,21 +89,6 @@ def _lieu_de_l_etape(f, t, fonctionnalites):
     return None
 
 
-def _element_exige_le_poste(f, t, fonctionnalites):
-    """Une étape du workflow de la fonctionnalité de `t` (hors validation) exige le poste : les éléments s'y font
-    (compilation `-local`, tests sur émulateur…). Lu sur le workflow, pas sur les tâches : celles déjà faites ne sont
-    pas dans l'état court du moteur."""
-    fonc = next((x for x in fonctionnalites if x.get("id") == t.get("fonctionnalite")), None)
-    w = wf.de_la_fonctionnalite(f, fonc)
-    for e in (w or {}).get("flux") or []:
-        if wf.est_validation(e) or not e.get("id"):
-            continue
-        if _lieu_de_l_etape(f, {"etape": ETAPES_DE_FLUX + e["id"], "role": e.get("role")},
-                            fonctionnalites) == wf.LIEU_LOCAL:
-            return True
-    return False
-
-
 def lieu_de_la_tache(f, t, fonctionnalites=(), taches=None, lieu_agent=None):
     """Le lieu de l'étape que la tâche fait (`local` ou `indifférent`), ou `None`.
 
@@ -112,12 +97,11 @@ def lieu_de_la_tache(f, t, fonctionnalites=(), taches=None, lieu_agent=None):
     rend `local`). Sinon une correction de livraison part dans un conteneur cloud sans SDK ni clé, et la tâche bloquée
     n'est jamais débloquée (MyFridgeCleaner, t52).
 
-    De même, la correction d'un élément (après un refus à la validation) se fait là où l'élément s'est fait : `local` si
-    une étape du workflow de sa fonctionnalité exige le poste (compilation, tests sur émulateur…). Sinon elle part dans un
-    conteneur cloud qui ne peut ni compiler ni lancer l'émulateur, et l'agent reste sans nouvelles (MyFridgeCleaner,
-    t151)."""
-    if t.get("etape") == "correction" and t.get("element") and _element_exige_le_poste(f, t, fonctionnalites):
-        return wf.LIEU_LOCAL       # avant le lieu de l'étape du rôle (des maquettes « cloud ») : l'élément se vérifie au poste
+    Une tâche marquée `sur_le_poste` (un agent cloud a demandé d'agir sur le poste, l'utilisateur a accepté : lancer
+    l'émulateur…) se fait au poste, quel que soit le lieu de son étape (MyFridgeCleaner t151). Les autres corrections
+    restent où leur étape les met : retoucher du code se fait très bien dans le cloud."""
+    if t.get("sur_le_poste") is True:
+        return wf.LIEU_LOCAL
     propre = _lieu_de_l_etape(f, t, fonctionnalites)
     if propre is not None or not t.get("id"):
         return propre

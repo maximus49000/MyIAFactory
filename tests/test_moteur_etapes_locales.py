@@ -147,21 +147,26 @@ class Choix(unittest.TestCase):
         self.assertEqual(mn.lieu_de_la_tache(f_local, corr, (), [dict(bloquee, agent=None), corr]), "local")
 
 
-    def test_la_correction_d_un_element_se_fait_la_ou_l_element_s_est_fait(self):
-        """MyFridgeCleaner t151 : la correction d'un élément testé sur émulateur partait dans un conteneur cloud. Les
-        tâches faites de l'élément ne sont pas dans l'état court du moteur : la règle se lit sur le workflow."""
+    def test_une_correction_de_code_reste_dans_le_cloud(self):
+        """Retoucher le code d'un élément se fait très bien dans le cloud, même si la fonctionnalité compile au poste."""
         corr = {"id": "t9", "etape": "correction", "role": "dev", "fonctionnalite": "f3", "element": "e10"}
-        avec_poste = {"flux": [dict(FLUX[0]), dict(FLUX[0], id="dev-local"), *FLUX[1:]], "workflows": []}
-        sans_poste = {"flux": list(FLUX), "workflows": []}
-        self.assertEqual(mn.lieu_de_la_tache(avec_poste, corr, (), []), "local")
-        self.assertEqual(mn.lieu_de_la_tache(avec_poste, corr), "local")
-        self.assertIsNone(mn.lieu_de_la_tache(sans_poste, corr, (), []))
-        self.assertIsNone(mn.lieu_de_la_tache(avec_poste, dict(corr, element=None), (), []))
-        self.assertIsNone(mn.lieu_de_la_tache(avec_poste, dict(corr, etape="flux:dev"), (), []))
-        # l'étape du rôle est écrite « cloud » (des maquettes) : l'élément se vérifie quand même au poste
-        maquettes_cloud = {"flux": [dict(FLUX[0], lieu="cloud"), dict(FLUX[0], id="dev-local"), *FLUX[1:]],
-                           "workflows": []}
-        self.assertEqual(mn.lieu_de_la_tache(maquettes_cloud, corr, (), []), "local")
+        f = {"flux": [dict(FLUX[0], lieu="cloud"), dict(FLUX[0], id="dev-local"), *FLUX[1:]], "workflows": []}
+        self.assertNotEqual(mn.lieu_de_la_tache(f, corr, (), []), "local")
+
+    def test_une_tache_marquee_sur_le_poste_se_fait_au_poste(self):
+        """MyFridgeCleaner t151 : l'agent cloud demandait de lancer l'émulateur ; accord donné, la tâche va au poste."""
+        corr = {"id": "t9", "etape": "correction", "role": "dev", "fonctionnalite": "f3", "element": "e10",
+                "sur_le_poste": True}
+        f = {"flux": [dict(FLUX[0], lieu="cloud"), *FLUX[1:]], "workflows": []}
+        self.assertEqual(mn.lieu_de_la_tache(f, corr, (), []), "local")
+
+    def test_action_sur_le_poste(self):
+        from moteur import regles
+        for oui in ("Lancer l'émulateur Android sans fenêtre (emulator -no-window) et adb",
+                    "Oui, lancer l'exécution sur mon poste", "installer le SDK"):
+            self.assertTrue(regles.action_sur_le_poste(oui), oui)
+        for non in ("Utiliser la police Inter", "Supprimer l'ancien écran", "adbusters"):
+            self.assertFalse(regles.action_sur_le_poste(non), non)
 
 class Ecriture(unittest.TestCase):
     def setUp(self):

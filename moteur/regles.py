@@ -2859,6 +2859,17 @@ def _demarrer_en_attente(projet, etat, fid):
     return actions
 
 
+SUR_LE_POSTE = ("Accord pour une action sur le poste, demandée par un agent cloud : la tâche se fera sur le poste, "
+                "par un agent du poste.")
+_ACTION_SUR_LE_POSTE = re.compile(r"émulateur|emulator|\badb\b|sur (?:mon|votre|ton|le) (?:poste|ordinateur|PC)\b|"
+                                  r"\bSDK\b|gradlew|\bavd\b", re.IGNORECASE)
+
+
+def action_sur_le_poste(texte):
+    """Le texte d'un accord parle d'agir sur le poste de l'utilisateur (émulateur, adb, SDK, « sur mon poste »)."""
+    return bool(_ACTION_SUR_LE_POSTE.search(str(texte or "")))
+
+
 RAMENEE_SUR_LE_POSTE = "Cette tâche exige le poste : la session cloud qui la tenait est laissée, un agent du poste la reprend."
 
 
@@ -2883,7 +2894,8 @@ def ramener_sur_le_poste(projet, etat):
             u = par_id.get(i)
             if u is None or not u.get("active"):
                 continue
-            lancer(projet, "tache", {"id": i, "active": False, "lot": None, "journal": [RAMENEE_SUR_LE_POSTE]})
+            lancer(projet, "tache", {"id": i, "active": False, "lot": None, "sur_le_poste": True,
+                                     "journal": [RAMENEE_SUR_LE_POSTE]})
             if i not in _m(etat, "a_lancer", list):
                 etat["a_lancer"].append(i)
             rendu.append(i)
@@ -3839,6 +3851,10 @@ def _sur_accord_agent(projet, demande, etat):
         consigne = CONSIGNE_APPAREIL
     prenom = prenom_de(projet, d["agent"])
     _retenir_la_regle(projet, d, demande, verdict, consigne)
+    if verdict != "refuser" and fiche_cloud(_etat(projet), d["agent"]) and action_sur_le_poste(
+            f"{d.get('quoi') or ''} {choix or ''}"):
+        # un agent cloud ne peut pas agir sur le poste (émulateur, adb…) : la tâche passe à un agent du poste
+        lancer(projet, "tache", {"id": tid, "sur_le_poste": True, "journal": [SUR_LE_POSTE]})
     if verdict == "choisir":     # la réponse transmise à l'agent est le choix retenu (et la consigne)
         supplement = f"Sur ta demande ({d['quoi']}), l'utilisateur a choisi : « {choix} »." + (f" Sa consigne : {consigne}" if consigne else "")
         actions = _reprendre_la_tache(projet, etat, tid, t.get("fonctionnalite"), supplement,

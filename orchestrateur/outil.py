@@ -1725,6 +1725,10 @@ def cmd_tache(ctx, e):
             if e["fable_accordee"] not in (True, False, None):
                 raise Refus("« fable_accordee » vaut vrai, faux ou rien.")
             t["fable_accordee"] = e["fable_accordee"]
+        if "sur_le_poste" in e:     # la tâche se fait au poste (un agent cloud a demandé d'y agir, accord donné)
+            if e["sur_le_poste"] not in (True, False, None):
+                raise Refus("« sur_le_poste » vaut vrai, faux ou rien.")
+            t["sur_le_poste"] = e["sur_le_poste"]
         if _interdit(t["modele_depart"]) and not _fable_accorde_pour(ctx, t):
             raise Refus("Fable n'est jamais choisi par un outil (seulement sur une fiche qui porte l'accord du "
                         "Directeur).")

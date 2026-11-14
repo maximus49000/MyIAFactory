@@ -68,3 +68,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Dans un shell POSIX sous Windows, passer à l'interpréteur des chemins avec des barres obliques, car les antislashs sont consommés.
+
+## G12 — Pour un client de service externe, distinguer par un test le
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Pour un client de service externe, distinguer par un test les erreurs d'authentification, de limitation de débit, de surcharge et de réseau, et vérifier que chacune a un message ou un écran prévu.

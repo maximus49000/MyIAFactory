@@ -795,3 +795,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une maquette déjà validée contient un glyphe manquant, le signaler comme écart sans la régénérer si aucune donnée n'a changé, et dessiner l'icône dans les nouvelles images.
+
+## S133 — Si l'affichage d'un certificat échoue dans l'outil de clés,
+Rôles : release
+Date : 2026-11-14
+
+Si l'affichage d'un certificat échoue dans l'outil de clés, exportez le certificat au format DER et calculez son empreinte avec un calcul de hachage.

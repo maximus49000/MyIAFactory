@@ -446,3 +446,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand des textes d'interface passent de constantes du code à des ressources, les tests unitaires qui les comparaient doivent lire le fichier de ressources, car les ressources ne sont pas accessibles en test sans émulateur.
+
+## G75 — Quand une règle impose que les textes affichés soient dans l
+Rôles : testeur
+Date : 2026-11-14
+
+Quand une règle impose que les textes affichés soient dans les ressources de chaînes, chercher chaque libellé dans le fichier de ressources et compter les appels de lecture de ressources ; une application dont tous les textes sont des constantes de code passe tous les tests unitaires.

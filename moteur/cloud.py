@@ -217,7 +217,9 @@ DEMANDES_A_L_UTILISATEUR = (("trust this folder", "Claude Code demande d'approuv
                             ("Enter to confirm", "Claude Code attend un choix"),
                             ("/login", "Claude Code demande de se connecter"))
 GRACE_APRES_ADRESSE_S = 3
-PASSES_STABLES = 8             # l'écran n'a pas changé pendant ce nombre de passages (0,1 s chacun) : il est complet
+PASSES_STABLES = 25            # l'écran n'a pas changé pendant ce nombre de passages (0,1 s chacun) : il est complet.
+# Essai réel : une flèche envoyée moins d'une seconde après le menu « trust this folder » revenait sur « No, exit » ;
+# après 2 s, elle tient.
 MARQUE_DOSSIER = "trust this folder"
 OUI_DOSSIER = "Yes, I trust this folder"
 BAS = "\x1b[B"                  # la flèche vers le bas : « No, exit » est proposé d'abord

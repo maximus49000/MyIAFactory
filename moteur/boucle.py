@@ -867,6 +867,13 @@ class Moteur:
         if maintenant - etat.get("cloud_releve", 0) < CLOUD_TOUS_LES_S:
             return
         etat["cloud_releve"] = maintenant
+        try:
+            for tid in regles.ramener_sur_le_poste(projet, etat):
+                self._noter(projet, f"{tid} : {regles.RAMENEE_SUR_LE_POSTE}")
+        except (regles.Refus, regles.ErreurMoteur) as e:
+            self._noter(projet, f"tâche à ramener sur le poste : {e}")
+        if not sessions:
+            return
         for info in list(sessions.values()):
             if info.get("depuis") is None:
                 info["depuis"] = maintenant

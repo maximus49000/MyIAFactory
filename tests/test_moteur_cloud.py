@@ -745,6 +745,29 @@ class Agents(Base):
         self.assertEqual(len(self.cloud.lancees), 2)                          # l'essai perdu repart
         self.assertEqual(nouveau.etats[str(self.projet.factory)]["cloud"][t]["session"], "session_2")
 
+    def test_une_tache_qui_exige_le_poste_est_reprise_au_cloud(self):
+        """MyFridgeCleaner t151 : partie dans le cloud avant que son lieu soit corrigé, l'agent cloud redemandait sans
+        fin l'accord de lancer l'émulateur. La session est laissée, la tâche attend un agent du poste."""
+        from unittest import mock
+        t = self.tache()
+        self.avancer()
+        etat = self.moteur.etats[str(self.projet.factory)]
+        self.assertIn(t, etat["cloud"])
+        with mock.patch.object(regles, "_lieu_reserve", lambda *a, **k: "local"):
+            self.avancer(boucle.CLOUD_TOUS_LES_S + 1)
+        self.assertNotIn(t, etat["cloud"])
+        tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+        self.assertFalse(tache["active"])
+        self.assertIn(regles.RAMENEE_SUR_LE_POSTE, [j["texte"] for j in tache["journal"]])
+        self.assertIn(t, etat["a_lancer"])
+        self.assertEqual(len(self.cloud.lancees), 1)          # pas relancée dans le cloud
+
+    def test_une_tache_cloud_sans_lieu_impose_reste_suivie(self):
+        t = self.tache()
+        self.avancer()
+        self.avancer(boucle.CLOUD_TOUS_LES_S + 1)
+        self.assertIn(t, self.moteur.etats[str(self.projet.factory)]["cloud"])
+
     def test_session_du_dernier_essai(self):
         j = lambda *x: [{"texte": y} for y in x]
         self.assertEqual(regles.session_cloud_du_journal(j("Session cloud s1 (sonnet)")), ("s1", "sonnet"))

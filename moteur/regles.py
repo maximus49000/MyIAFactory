@@ -2856,6 +2856,37 @@ def _demarrer_en_attente(projet, etat, fid):
     return actions
 
 
+RAMENEE_SUR_LE_POSTE = "Cette tâche exige le poste : la session cloud qui la tenait est laissée, un agent du poste la reprend."
+
+
+def ramener_sur_le_poste(projet, etat):
+    """Une tâche suivie dans une session cloud alors qu'elle exige le poste (son lieu a été corrigé après son départ,
+    ou la règle a changé) : la session n'est plus relevée, la tâche est rendue inactive et remise dans les départs, où
+    un agent du poste la prend (`_hors_du_lieu`). Sinon l'agent cloud redemande sans fin un accord qu'il ne peut pas
+    exécuter (MyFridgeCleaner t151 : émulateur à lancer depuis un conteneur). Rend les tâches ramenées."""
+    sessions = etat.get("cloud") or {}
+    if not sessions:
+        return []
+    court = _etat(projet)
+    fac = _factory(projet)
+    par_id = {t["id"]: t for t in court["taches"]}
+    rendu = []
+    for tid, info in list(sessions.items()):
+        t = par_id.get(tid)
+        if t is None or not t.get("active") or _lieu_reserve(projet, court, t, fac) != "local":
+            continue
+        del sessions[tid]
+        for i in [tid, *[x for x in info.get("taches") or [] if x != tid]]:
+            u = par_id.get(i)
+            if u is None or not u.get("active"):
+                continue
+            lancer(projet, "tache", {"id": i, "active": False, "lot": None, "journal": [RAMENEE_SUR_LE_POSTE]})
+            if i not in _m(etat, "a_lancer", list):
+                etat["a_lancer"].append(i)
+            rendu.append(i)
+    return rendu
+
+
 def _hors_du_lieu(agent, reserves):
     """Vrai si l'agent est là où la tâche ne peut pas tourner (cloud quand elle exige le poste, ou l'inverse) : la
     tâche ne l'attend pas, un autre agent du bon lieu la prend (une correction de livraison reprise par l'agent cloud

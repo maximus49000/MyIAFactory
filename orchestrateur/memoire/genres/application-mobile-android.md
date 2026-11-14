@@ -428,3 +428,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour une application mobile, vérifier en revue qu'une phrase affichée figure dans les ressources de chaînes ; des constantes de code qui la répètent passent tous les tests unitaires.
+
+## G72 — Quand une fiche ne dit pas quels champs absents bloquent un
+Rôles : testeur
+Date : 2026-11-14
+
+Quand une fiche ne dit pas quels champs absents bloquent un ajout, tester la règle effective de validation du formulaire et signaler l'écart pour validation, au lieu de le passer sous silence.

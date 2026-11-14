@@ -663,3 +663,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Dans une image générée par script, les symboles Unicode peuvent s'afficher en carrés vides selon la police ; dessiner les icônes ou utiliser du texte, et relire l'image ouverte.
+
+## S111 — Avant de compiler, comparer l'état du dépôt à ce qu'on a écr
+Rôles : dev
+Date : 2026-11-14
+
+Avant de compiler, comparer l'état du dépôt à ce qu'on a écrit. Si un autre intervenant a modifié ou dupliqué des fichiers, aligner son code sur le sien et supprimer ses doublons plutôt que de le réécrire.

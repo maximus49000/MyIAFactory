@@ -981,3 +981,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand une fiche est corrigée après une remarque, vérifier dans le code que chaque nouvel état et chaque nouveau réglage décrit existe, par une recherche de ses libellés et de son état ; les tests écrits avant la correction restent verts.
+
+## S164 — Quand l'environnement n'a pas l'émulateur ou le SDK demandé
+Rôles : designer
+Date : 2026-11-14
+
+Quand l'environnement n'a pas l'émulateur ou le SDK demandé pour vérifier un écran, le dire, remplacer la vérification par une relecture du code contre la maquette et déclarer non exécutés les tests ajoutés.

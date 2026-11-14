@@ -29,3 +29,10 @@ export function changements(avant, apres) {
   }
   return liste;
 }
+
+// Le code du bureau a changé depuis le chargement de la page (empreinte `code_bureau` du serveur) : la page doit se
+// recharger pour montrer les corrections. Faux si l'une des deux empreintes manque (serveur ancien, état en erreur). Pur.
+export function codeChange(initial, e) {
+  const a = initial?.code_bureau, b = e?.code_bureau;
+  return typeof a === "string" && typeof b === "string" && a !== b;
+}

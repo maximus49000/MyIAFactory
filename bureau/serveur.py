@@ -26,6 +26,28 @@ from . import processus as modprocessus
 from moteur import detache, verrou
 
 WEB = Path(__file__).resolve().parent / "web"
+_CODE_VU = {"t": 0.0, "empreinte": None}
+CODE_RELU_S = 5
+
+
+def empreinte_du_code(web=WEB, maintenant=None):
+    """L'empreinte des fichiers de la page (chemin, taille, date) : elle change dès qu'une mise à jour touche le code du
+    bureau. Une page ouverte la compare à celle de son chargement et se recharge : aucune correction ne reste invisible
+    parce que la page (téléphone, onglet) date d'avant. Relue au plus toutes les `CODE_RELU_S` secondes."""
+    maintenant = time.monotonic() if maintenant is None else maintenant
+    if web == WEB and _CODE_VU["empreinte"] and maintenant - _CODE_VU["t"] < CODE_RELU_S:
+        return _CODE_VU["empreinte"]
+    h = hashlib.sha1()
+    for f in sorted(Path(web).rglob("*")):
+        rel = f.relative_to(web).as_posix()
+        if rel.startswith("tests/") or not f.is_file():
+            continue
+        st = f.stat()
+        h.update(f"{rel}|{st.st_size}|{st.st_mtime_ns};".encode())
+    empreinte = h.hexdigest()[:12]
+    if web == WEB:
+        _CODE_VU.update(t=maintenant, empreinte=empreinte)
+    return empreinte
 DELAI_ETAT_S = 2.0
 PAS_SONDE_S = 5
 PAS_HISTORIQUE_S = 60
@@ -1342,7 +1364,10 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/telecharger":
             return self._telecharger(projet, morceaux.query)
         if chemin == "/api/etat":
-            return self._json(200, self.server.etat_du_projet(projet))
+            e = self.server.etat_du_projet(projet)
+            if isinstance(e, dict):
+                e = {**e, "code_bureau": empreinte_du_code()}
+            return self._json(200, e)
         if chemin == "/api/charge":
             return self._json(200, self.server.charge(projet))
         if chemin == "/api/conseil":

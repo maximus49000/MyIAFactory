@@ -1,6 +1,6 @@
 // La page : lit l'état toutes les 3 s, en déduit les changements, fait jouer la régie, dessine.
 
-import {changements, etatUtilisable} from "./logique/diff.js";
+import {changements, etatUtilisable, codeChange} from "./logique/diff.js";
 import {creerPlan} from "./logique/plan.js";
 import {estMobile} from "./logique/mobile.js";
 import {doitProposer} from "./logique/lancement.js";
@@ -125,6 +125,7 @@ async function demarrer() {
       const l = await lireProjets();
       if (l.multi) { liste = l; barre.majProjets(true, l.projets, projetCourant(), l.parents); }
     }
+    if (codeChange(etat, e)) { location.reload(); return; }   // le code du bureau a été mis à jour : la page le reprend
     if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
     if (document.hidden) { dernier = e; aRemettre = true; return; }
     regie.appliquer(e, changements(dernier, e));

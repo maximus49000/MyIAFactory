@@ -296,3 +296,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Relire les résultats de tests dans les fichiers XML, suite par suite, plutôt que de se fier au seul code de sortie de l'outil de build.
+
+## G50 — Pour clore une étape de tests sur appareil, rapprocher chaqu
+Rôles : testeur
+Date : 2026-11-14
+
+Pour clore une étape de tests sur appareil, rapprocher chaque contrôle ouvert d'un test nommé, puis vérifier que les comptes lus dans les XML (toutes les suites du fichier, pas la première) correspondent au nombre de tests écrits.

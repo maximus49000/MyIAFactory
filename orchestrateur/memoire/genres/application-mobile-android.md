@@ -152,3 +152,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand la chaîne de compilation de la plateforme cible manque, mettre la validation, les conversions d'unités et les bornes dans un objet pur testable et garder les écrans minces ; déclarer le code non compilé.
+
+## G26 — Sous Windows, une erreur « fichier utilisé par un autre proc
+Rôles : dev
+Date : 2026-11-14
+
+Sous Windows, une erreur « fichier utilisé par un autre processus » pendant un build Gradle signale généralement un build concurrent sur le même dossier. Lister les processus par un script, attendre la fin du concurrent, puis relancer.

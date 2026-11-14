@@ -560,3 +560,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Un modèle de vue sans contexte expose ses messages d'erreur sous forme d'identifiants de ressources ; l'écran les résout. Les tests vérifient la présence de l'identifiant, et le texte se lit dans le fichier de ressources.
+
+## G94 — Les règles de pluriel d'une langue peuvent classer zéro comm
+Rôles : dev, designer
+Date : 2026-11-14
+
+Les règles de pluriel d'une langue peuvent classer zéro comme singulier ; quand un titre doit rester au pluriel pour zéro, utiliser deux chaînes distinctes plutôt qu'un pluriel de ressources.

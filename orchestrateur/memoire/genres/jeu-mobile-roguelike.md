@@ -584,3 +584,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Avant de juger un rendu sur émulateur, vérifier que le GPU virtuel expose les limites de shader du moteur ; sinon le test ne prouve rien.
+
+## G98 — Un contrôle de capture d'écran doit aussi rejeter une image
+Rôles : qa
+Date : 2026-11-14
+
+Un contrôle de capture d'écran doit aussi rejeter une image unie d'une autre couleur que le noir, par exemple si plus de 95 % des pixels ont la même valeur.

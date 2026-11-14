@@ -278,3 +278,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Avant de clore une étape de tests instrumentés, rapprocher la liste des contrôles encore ouverts qui réclament un test sur émulateur de la liste des suites réellement exécutées ; tout écart est un défaut à signaler.
+
+## G47 — Une tâche qui doit compiler et signer un apk échoue dans un
+Rôles : dev
+Date : 2026-11-14
+
+Une tâche qui doit compiler et signer un apk échoue dans un conteneur sans SDK ni clé : la rendre seulement quand l'exécution sur le poste équipé est assurée, sinon livrer le code commité en disant que rien n'a été compilé.

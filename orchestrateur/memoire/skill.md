@@ -963,3 +963,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une étape de maquettes porte sur un branchement de parcours ou un contrôle de navigation sans écran nouveau, vérifier que les maquettes des écrans reliés existent, déclarer l'étape non applicable en une ligne et renvoyer aux contrôles du registre.
+
+## S161 — Quand une étape est relancée uniquement faute de consigne de
+Rôles : designer
+Date : 2026-11-14
+
+Quand une étape est relancée uniquement faute de consigne de validation, relire le livrable existant et ne rendre que les champs de consigne manquants, sans refaire le travail.

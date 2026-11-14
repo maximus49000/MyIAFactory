@@ -987,3 +987,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand l'environnement n'a pas l'émulateur ou le SDK demandé pour vérifier un écran, le dire, remplacer la vérification par une relecture du code contre la maquette et déclarer non exécutés les tests ajoutés.
+
+## S165 — Un contrôle de textes en dur ne signale que les littéraux co
+Rôles : dev, designer
+Date : 2026-11-14
+
+Un contrôle de textes en dur ne signale que les littéraux contenant des lettres (ni icônes, ni simples formats numériques), couvre aussi snackbar, étiquettes d'action, descriptions et replis, et se prouve par injection de faux littéraux.

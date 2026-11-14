@@ -38,3 +38,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour livrer une application Android sans modifier le fichier de build, signer l'apk non signé en externe (alignement, signature, vérification) avec une clé stockée hors du dépôt et des mots de passe générés, jamais affichés.
+
+## G7 — Dans un projet Android, org
+Rôles : dev
+Date : 2026-11-14
+
+Dans un projet Android, org.json ne lit rien dans les tests unitaires JVM. Pour tester l'analyse d'une réponse JSON, utiliser un lecteur en Kotlin pur ou une bibliothèque JVM, et isoler le transport HTTP derrière une interface pour simuler les réponses.

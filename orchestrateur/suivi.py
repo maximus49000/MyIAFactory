@@ -34,13 +34,26 @@ class Suivi:
         self.chemin = Path(chemin)
         self.verrou = self.chemin.with_name(self.chemin.name + ".verrou")
 
+    @property
+    def precedent(self):
+        """La version d'avant la dernière écriture : de quoi repartir si le suivi est abîmé (coupure du poste)."""
+        return self.chemin.with_name(self.chemin.name + ".precedent")
+
     def lire(self):
-        """Le suivi tel qu'il est écrit (jamais à moitié : l'écriture remplace le fichier d'un coup)."""
+        """Le suivi tel qu'il est écrit (jamais à moitié : l'écriture remplace le fichier d'un coup). Cas réel : une
+        coupure du poste a laissé un suivi plein de zéros ; il est alors relu depuis sa version précédente."""
         donnees = vide()
+        lu = None
         if self.chemin.exists():
-            lu = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
-            if isinstance(lu, dict):
-                donnees.update(lu)
+            try:
+                lu = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
+            except (ValueError, UnicodeDecodeError):
+                if not self.precedent.exists():
+                    raise
+        if lu is None and self.precedent.exists():
+            lu = json.loads(self.precedent.read_text(encoding="utf-8-sig"))
+        if isinstance(lu, dict):
+            donnees.update(lu)
         return donnees
 
     def _prendre(self):
@@ -84,6 +97,13 @@ class Suivi:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(donnees, f, ensure_ascii=False, indent=2)
                 f.write("\n")
+                f.flush()
+                os.fsync(f.fileno())      # sur le disque avant de remplacer : une coupure ne laisse pas un fichier de zéros
+            if self.chemin.exists():
+                try:
+                    os.replace(self.chemin, self.precedent)
+                except OSError:
+                    pass                  # sans copie précédente cette fois : le suivi s'écrit quand même
             os.replace(tmp, self.chemin)
         except BaseException:
             if os.path.exists(tmp):

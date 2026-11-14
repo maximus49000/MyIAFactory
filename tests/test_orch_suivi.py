@@ -986,3 +986,44 @@ class TestSuivi(AvecProjet):
         self.assertEqual(p.returncode, 2)
         p = subprocess.run([sys.executable, str(RACINE / "orchestrateur" / "outil.py"), "etat"], capture_output=True)
         self.assertEqual(p.returncode, 2)
+
+
+class SuiviAbime(__import__("unittest").TestCase):
+    """Cas réel : une coupure du poste pendant une écriture a laissé un suivi plein de zéros ; le relevé était illisible."""
+
+    def setUp(self):
+        import tempfile
+        self.dossier = Path(tempfile.mkdtemp())
+        self.s = suivi.Suivi(self.dossier / "suivi.json")
+
+    def test_chaque_ecriture_garde_la_version_precedente(self):
+        with self.s.transaction() as d:
+            d["livrable"] = "un"
+        with self.s.transaction() as d:
+            d["livrable"] = "deux"
+        self.assertEqual(json.loads(self.s.precedent.read_text(encoding="utf-8"))["livrable"], "un")
+        self.assertEqual(self.s.lire()["livrable"], "deux")
+
+    def test_un_suivi_plein_de_zeros_se_relit_depuis_sa_version_precedente(self):
+        with self.s.transaction() as d:
+            d["livrable"] = "un"
+        with self.s.transaction() as d:
+            d["livrable"] = "deux"
+        self.s.chemin.write_bytes(b"\0" * 5000)
+        self.assertEqual(self.s.lire()["livrable"], "un")
+        with self.s.transaction() as d:          # et la transaction suivante le répare
+            d["livrable"] = "trois"
+        self.assertEqual(json.loads(self.s.chemin.read_text(encoding="utf-8"))["livrable"], "trois")
+
+    def test_suivi_absent_entre_deux_remplacements(self):
+        with self.s.transaction() as d:
+            d["livrable"] = "un"
+        with self.s.transaction() as d:
+            d["livrable"] = "deux"
+        self.s.chemin.unlink()
+        self.assertEqual(self.s.lire()["livrable"], "un")
+
+    def test_sans_version_precedente_l_erreur_reste_visible(self):
+        self.s.chemin.write_bytes(b"\0" * 10)
+        with self.assertRaises(ValueError):
+            self.s.lire()

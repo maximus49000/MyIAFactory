@@ -50,3 +50,9 @@ Rôles : release, dev
 Date : 2026-11-14
 
 En Gradle Kotlin DSL, importer les classes Java en tête de fichier plutôt que les écrire en nom complet.
+
+## G9 — Passer la clé de signature release hors du dépôt, par une pr
+Rôles : release
+Date : 2026-11-14
+
+Passer la clé de signature release hors du dépôt, par une propriété de build, et n'activer la signature que si le fichier de clé est présent.

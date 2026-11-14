@@ -86,3 +86,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour compter les tests par suite, lire les XML de résultats avec un script Python isolé plutôt que le journal de build.
+
+## G15 — Dans une application mobile qui affiche des images distantes
+Rôles : dev
+Date : 2026-11-14
+
+Dans une application mobile qui affiche des images distantes sans bibliothèque de chargement, télécharger l'image choisie dans le stockage privé de l'application ; ne jamais stocker une adresse web comme chemin de fichier.

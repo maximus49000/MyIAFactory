@@ -7,6 +7,8 @@ couperait. Tout est dans `<dossier de la factory>/agents-en-cours/`, par tâche 
   `genre` « tache » ou « reponse », `dossier`) ;
 - `<tache>.jsonl` : le flux de l'agent ; `<tache>.err` : sa sortie d'erreur ; `<tache>.entree` : son message ;
   `<tache>.consigne.md` : sa consigne ;
+- `<tache>.arrete` : posé par le bureau (« Optimiser la charge ») avant d'arrêter l'agent : sa fin n'est pas une panne
+  à réessayer, c'est une tâche arrêtée par l'utilisateur (`ArretDemande`) ;
 - `<tache>.questions.json` : les questions de l'utilisateur à transmettre à la fin de la tâche (gardées à part : elles
   survivent à l'effacement de l'agent et à une relance).
 
@@ -35,6 +37,32 @@ GRACE_APRES_RESULTAT_S = 10     # un agent qui a rendu sa ligne `result` mais ne
 QUEUE_OCTETS = 65536            # la dernière action se lit dans la fin du flux seulement
 MAX_ACTION = 80
 OPTIONS_CONSIGNE = ("--append-system-prompt-file", "--system-prompt-file")
+ARRET = "agent arrêté par l'utilisateur depuis le bureau"
+
+
+class ArretDemande(TimeoutError):
+    """L'utilisateur a arrêté l'agent depuis le bureau : la tâche ne repart pas d'elle-même (voir `agents`)."""
+
+    def __init__(self):
+        super().__init__(ARRET)
+
+
+def demander_arret(dossier_factory, cle):
+    """Pour le bureau, juste avant d'arrêter l'agent `cle` : sa fin sera lue comme un arrêt voulu. Ne lève jamais."""
+    try:
+        d = dossier(dossier_factory)
+        _preparer(d)
+        (d / f"{_nom(cle)}.arrete").write_text("arrêté depuis le bureau\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def annuler_arret(dossier_factory, cle):
+    """L'arrêt n'a pas eu lieu (l'arrêt a échoué) : la marque est retirée. Ne lève jamais."""
+    try:
+        (dossier(dossier_factory) / f"{_nom(cle)}.arrete").unlink()
+    except OSError:
+        pass
 
 
 def dossier(dossier_factory):
@@ -409,7 +437,7 @@ class Registre:
 
     def effacer(self, cle):
         """Oublie l'agent (ses questions restent)."""
-        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md"):
+        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete"):
             try:
                 self.chemin(cle, suffixe).unlink()
             except OSError:
@@ -425,12 +453,26 @@ class Registre:
         def executer(argv, entree, env, cwd, delai_s):
             rattache, premier[0] = premier[0], False
             issue = self.issue(cle)
+            if issue == "mort" and self._prendre_arret(cle):    # arrêté depuis le bureau avant que le moteur le voie
+                raise ArretDemande()
             if issue == "vivant" or (rattache and issue == "resultat"):
                 return self.attendre(cle, delai_s)
             return self.attendre(cle, delai_s, self._lancer(cle, infos, argv, entree, env, cwd))
 
         executer.noter_abonnement = self.noter_abonnement
         return executer
+
+    def arret_demande(self, cle):
+        """Vrai si le bureau a demandé l'arrêt de cet agent (la marque reste)."""
+        return self.chemin(cle, ".arrete").is_file()
+
+    def _prendre_arret(self, cle):
+        """Vrai (une seule fois) si le bureau a demandé l'arrêt de cet agent."""
+        try:
+            self.chemin(cle, ".arrete").unlink()
+            return True
+        except OSError:
+            return False
 
     def _lancer(self, cle, infos, argv, entree, env, cwd):
         self.effacer(cle)        # les restes d'un essai précédent
@@ -481,6 +523,8 @@ class Registre:
                         pass
                 raise TimeoutError(f"agent bloqué : aucune action depuis {delai_s} s")
             self.dormir(self.pas_s)
+        if not a_un_resultat(flux) and self._prendre_arret(cle):
+            raise ArretDemande()
         try:
             sortie = flux.read_bytes()
         except OSError:

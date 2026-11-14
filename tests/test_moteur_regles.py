@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from moteur import agents, appel, jugement, regles
+from moteur import agents, appel, detache, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import workflows as wf
 from tests.orch_aide import AvecProjet
@@ -1021,6 +1021,16 @@ class Arrets(Base):
         self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
         t = self.taches(id=tid)[0]
         self.assertIn("deux essais", t["bloquee"])
+
+    def test_agent_arrete_depuis_le_bureau_bloque_sans_nouvel_essai(self):
+        actions = self.depart_cadrage()
+        tid = actions[0][2][0]
+        e = agents.Execution(tid, "metier-1", usages=[usage()], erreur="l'appel a échoué : " + detache.ARRET)
+        e.arrete = True
+        self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
+        t = self.taches(id=tid)[0]
+        self.assertEqual(t["bloquee"], regles.ARRET_DEPUIS_LE_BUREAU)
+        self.assertFalse(t["active"])
 
     def test_panne_du_service_ne_bloque_pas_et_attend_avant_de_reessayer(self):
         """Essai réel : une panne d'authentification (403 Cloudflare) a bloqué douze tâches d'un coup. La tâche reste

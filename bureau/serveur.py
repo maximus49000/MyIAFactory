@@ -22,7 +22,8 @@ from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
-from moteur import detache
+from . import processus as modprocessus
+from moteur import detache, verrou
 
 WEB = Path(__file__).resolve().parent / "web"
 DELAI_ETAT_S = 2.0
@@ -773,6 +774,12 @@ class Bureau(ThreadingHTTPServer):
         self.annonces = []    # ce que le terminal dit au lancement
         self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer) for id_, chemin in projets}
         self.sonde = charge.Sonde()
+        # « Optimiser la charge » : remplacés dans les essais (jamais un vrai relevé ni un vrai arrêt)
+        self.releve_processus = modprocessus.releve
+        self.instantane_processus = modprocessus.instantane
+        self.tuer_processus = modprocessus.arreter
+        self.agent_vivant = detache.processus_vivant
+        self.pid_moteur = lambda: verrou.actif(verrou.chemin_par_defaut())
         # la consommation du forfait Claude Code (le rond du bandeau, source unique des jauges), avec repli sur le dernier
         # appel du moteur, versement à l'historique d'abonnement et part estimée des coûts
         self.conso = conso.Conso(memoire=True, part=self._part_abonnement, renouveler=conso.renouveler_connexion)
@@ -896,6 +903,62 @@ class Bureau(ThreadingHTTPServer):
 
     def charge(self, projet):
         return projet.charge(self.mesure, self.lisseur.moyenne())
+
+    # -- « Optimiser la charge » : les programmes qui chargent l'ordinateur (`processus.py`) ----------------------
+    def _agents_locaux(self):
+        """Les agents locaux vivants de tous les projets : `[{pid, prenom, tache, cle, factory}]`."""
+        rendu = []
+        for p in list(self.projets.values()):
+            factory = p.chemin_reglages.parent
+            d = detache.dossier(factory)
+            if not d.is_dir():
+                continue
+            e = p._cache_etat[1] or {}
+            prenoms = {a.get("id"): a.get("prenom") for a in e.get("agents") or [] if isinstance(a, dict)}
+            for f in sorted(d.glob("*.json")):
+                if f.name.endswith(".questions.json"):
+                    continue
+                try:
+                    etat_agent = json.loads(f.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if not isinstance(etat_agent, dict) or not self.agent_vivant(etat_agent):
+                    continue
+                cle = etat_agent.get("agent")
+                rendu.append({"pid": etat_agent.get("pid"), "prenom": prenoms.get(cle) or cle,
+                              "tache": etat_agent.get("tache"), "cle": f.name[:-len(".json")], "factory": factory})
+        return rendu
+
+    def _pids_myiafactory(self):
+        return {"agents": self._agents_locaux(), "moteur": self.pid_moteur(), "bureau": os.getpid()}
+
+    def processus(self):
+        """`GET /api/processus` : les programmes qui chargent l'ordinateur (environ 1 s de mesure)."""
+        try:
+            avant, apres, duree = self.releve_processus()
+        except OSError as e:
+            return 503, {"erreur": f"La liste des programmes est indisponible : {e}"[:300]}
+        lignes = modprocessus.classer(avant, apres, duree, os.cpu_count() or 1, **self._pids_myiafactory())
+        return 200, {"processus": lignes, "duree_s": round(duree, 2)}
+
+    def arreter_processus(self, pid):
+        """`POST /api/processus/arreter` : arrête un programme, jamais un programme protégé. Un agent local est arrêté
+        avec ce qu'il a lancé, et le moteur le voit comme une tâche arrêtée (`detache.demander_arret`)."""
+        try:
+            liste = self.instantane_processus()
+        except OSError as e:
+            return 503, {"erreur": f"La liste des programmes est indisponible : {e}"[:300]}
+        refus, agent, p = modprocessus.peut_arreter(pid, liste, **self._pids_myiafactory())
+        if refus:
+            return (404 if "ne tourne plus" in refus else 403), {"erreur": refus}
+        if agent is not None:
+            detache.demander_arret(agent["factory"], agent["cle"])
+        echec = self.tuer_processus(pid, arbre=agent is not None)
+        if echec:
+            if agent is not None:    # l'agent tourne encore : sa fin future ne sera pas un arrêt voulu
+                detache.annuler_arret(agent["factory"], agent["cle"])
+            return 500, {"erreur": f"{p['nom']} (pid {pid}) n'a pas pu être arrêté : {echec}"[:300]}
+        return 200, {"ok": True, "message": f"{p['nom']} (pid {pid}) arrêté."}
 
     def liste(self):
         """Tous les projets, lus en parallèle : un projet lent ne fait pas attendre les autres."""
@@ -1255,6 +1318,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*creations.liste(self.server, ids[0] if ids else None))
         if chemin == "/api/conso":
             return self._json(200, self.server.conso.lire())
+        if chemin == "/api/processus":   # les programmes qui chargent l'ordinateur (environ 1 s de mesure)
+            return self._json(*self.server.processus())
         if chemin in ("/api/semaines", "/api/semaine", "/api/sujets"):   # tous les projets du bureau : pas de `?projet=`
             q = parse_qs(morceaux.query, keep_blank_values=True)
             cle = "semaine" if chemin == "/api/sujets" else "id"
@@ -1660,6 +1725,23 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(corps, dict):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*getattr(creations, ROUTES_CREATIONS[chemin])(self.server, corps))
+        if chemin == "/api/processus/arreter":   # arrêter un programme : seulement sur le clic de l'utilisateur
+            if (self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= 1024:
+                self._vider_corps()
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*self.server.arreter_processus(corps.get("pid") if isinstance(corps, dict) else None))
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)

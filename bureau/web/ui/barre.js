@@ -11,6 +11,7 @@ import {creerConso} from "./conso.js";
 import {creerJauges, definirAbonnement} from "./abonnement.js";
 import {surConso} from "./mesure.js";
 import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
+import {brancherOptimiser} from "./optimiser.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -63,7 +64,10 @@ export function creerBarre(entete, bandeau) {
   trait.title = "Charge maximum pour lancer une nouvelle étape";
   piste.append(remplissage, trait);
   const valeur = el("span", "charge-valeur", "—");
-  charge.append(etiquette, piste, valeur);
+  // « Optimiser la charge » : ce qui charge l'ordinateur, et l'arrêt d'un programme sur le clic de l'utilisateur.
+  const boutonOptimiser = el("button", "bouton-barre bouton-optimiser", "Optimiser la charge");
+  boutonOptimiser.type = "button";
+  charge.append(etiquette, piste, valeur, boutonOptimiser);
 
   const zoneActions = el("div", "barre-actions");
   const boutonListe = el("button", "bouton-barre bouton-liste", "Toutes les tâches");
@@ -273,6 +277,7 @@ export function creerBarre(entete, bandeau) {
   }
 
   brancherAssociation(boutonTelephone, dire);
+  brancherOptimiser(boutonOptimiser, dire);
   rafraichirCharge();
   setInterval(() => { if (!document.hidden) rafraichirCharge(); }, INTERVALLE_CHARGE);
   // Le voyant dit « sans activité depuis… » : on le remet à jour même sans nouvel état.

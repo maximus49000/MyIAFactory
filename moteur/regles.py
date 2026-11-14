@@ -3485,6 +3485,17 @@ def _service_en_panne(projet, etat, execution, depart, maintenant=None):
     return []
 
 
+ARRET_DEPUIS_LE_BUREAU = "Tâche arrêtée : l'agent a été arrêté depuis le bureau (Optimiser la charge)."
+
+
+def arret_depuis_le_bureau(projet, etat, taches):
+    """L'utilisateur a arrêté l'agent depuis le bureau (« Optimiser la charge », `detache.ArretDemande`) : la tâche
+    s'arrête là, sans nouvel essai ni analyse de blocage ; elle se relance depuis le bureau comme toute tâche bloquée."""
+    _bloquer_taches(projet, taches, ARRET_DEPUIS_LE_BUREAU)
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, ARRET_DEPUIS_LE_BUREAU)
+    return []
+
+
 def _agent_en_echec(projet, etat, execution, depart):
     """Un agent sans rapport : relancé une fois, puis tâche bloquée avec la raison au journal. Une panne du service
     Claude n'est pas un échec : voir `_service_en_panne`."""
@@ -3492,6 +3503,8 @@ def _agent_en_echec(projet, etat, execution, depart):
         return _service_en_panne(projet, etat, execution, depart)
     etat.pop("panne", None)
     tid = depart["taches"][0]
+    if getattr(execution, "arrete", False):
+        return arret_depuis_le_bureau(projet, etat, depart["taches"])
     relancees = _m(etat, "relancees", set)
     if tid not in relancees:
         relancees.add(tid)

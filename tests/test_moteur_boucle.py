@@ -322,6 +322,14 @@ class Detaches(Base):
         self.assertFalse(lance["executeur"].rattacher)
         self.assertTrue(any("avait disparu" in j for j in self.journal()))
 
+    def test_un_agent_arrete_depuis_le_bureau_moteur_coupe_ne_repart_pas(self):
+        self.agent_en_cours()
+        detache.demander_arret(self.dossier, self.tache)
+        self.moteur.tour()
+        self.assertEqual(self.agents.lances, [])
+        self.assertEqual(self.tache_suivie()["bloquee"], regles.ARRET_DEPUIS_LE_BUREAU)
+        self.assertFalse((self.registre / f"{self.tache}.arrete").exists())
+
     def test_le_depart_passe_par_le_registre_du_projet(self):
         self.moteur.tour()
         (lance,) = self.agents.lances          # la tâche orpheline (aucun agent connu) repart

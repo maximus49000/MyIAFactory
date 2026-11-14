@@ -928,6 +928,39 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .associer-mention { color: #b6401c; font-size: 13px; font-weight: 700; }
 .associer-revoquer, .associer-fermer { align-self: flex-start; }
 
+/* « Optimiser la charge » : ce qui charge l'ordinateur. */
+.bouton-optimiser { font-size: 12px; padding: 3px 8px; }
+.optimiser {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(61, 58, 75, 0.45);
+}
+.optimiser[hidden] { display: none; }
+.optimiser-boite {
+  width: min(760px, 94vw); max-height: 92vh; overflow-y: auto;
+  padding: 18px 20px; border-radius: 14px;
+  background: var(--papier); box-shadow: 0 10px 30px rgba(61, 58, 75, 0.35);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.optimiser-contenu { display: flex; flex-direction: column; gap: 10px; }
+.optimiser-titre { margin: 0; font-size: 20px; }
+.optimiser-haut { display: flex; align-items: flex-start; gap: 12px; }
+.optimiser-texte { margin: 0; font-size: 14px; flex: 1; }
+.optimiser-erreur { margin: 0; font-size: 14px; color: #b6401c; font-weight: 700; }
+.optimiser-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.optimiser-table th { text-align: left; font-weight: 800; padding: 4px 6px; border-bottom: 1px solid rgba(61, 58, 75, 0.2); }
+.optimiser-table td { padding: 5px 6px; border-bottom: 1px solid rgba(61, 58, 75, 0.1); vertical-align: middle; }
+.optimiser-nom { overflow-wrap: anywhere; }
+.optimiser-pid { color: #6e6880; font-size: 12px; }
+.optimiser-etiquette {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 9px;
+  background: #e8e1f5; font-size: 12px; font-weight: 700;
+}
+.optimiser-nombre { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.optimiser-geste { text-align: right; white-space: nowrap; }
+.optimiser-protege { color: #6e6880; font-style: italic; }
+.optimiser-fermer { align-self: flex-start; }
+
 /* --- Téléphone et tablette (classe « mobile » posée par main.js : moins de 768 px, ou pointeur grossier) --- */
 #scene { touch-action: none; }   /* glisser et pincer sont gérés par la page (ui/gestes.js) */
 

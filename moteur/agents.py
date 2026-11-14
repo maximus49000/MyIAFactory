@@ -7,7 +7,7 @@ chaque appel a coûté est gardé, réussi ou non : la boucle note chaque usage.
 autorisations. Fable : seulement pour un agent dont la fiche porte l'accord du Directeur (`fiches.fable_accorde`), pour
 cet agent seulement ; jamais choisi par le moteur (montée de modèle, jugements).
 """
-from moteur import appel, rapport
+from moteur import appel, detache, rapport
 from orchestrateur import fiches
 
 OUTILS_PAR_DEFAUT = fiches.OUTILS_PAR_DEFAUT
@@ -95,6 +95,10 @@ def executer_agent(depart, matiere, *, agent, modele, dossier_projet, appeler=ap
         except appel.ErreurAppel as e:
             usages += e.usages
             erreur = f"l'appel a échoué : {e.raison}"
+            if str(e.raison).startswith(detache.ARRET):     # arrêté par l'utilisateur : ni nouvel essai ni relance
+                ex = Execution(tache, cle, lot, usages=cumuler(usages), erreur=erreur)
+                ex.arrete = True
+                return ex
             if appel.est_une_panne(e.raison):     # le service est en panne : inutile de réessayer tout de suite
                 ex = Execution(tache, cle, lot, usages=cumuler(usages), erreur=erreur)
                 ex.panne = True

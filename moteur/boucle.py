@@ -638,6 +638,15 @@ class Moteur:
             cle = info["cle"]
             issue = registre.issue(cle)
             fiche = fi.trouver(fiches, info.get("agent")) if info.get("agent") else None
+            if issue == "mort" and info.get("genre") != "reponse" and registre.arret_demande(cle):
+                # arrêté depuis le bureau pendant que le moteur était coupé : la tâche ne repart pas d'elle-même
+                taches = [x for x in info.get("taches") or [info.get("tache") or cle] if isinstance(x, str)]
+                try:
+                    regles.arret_depuis_le_bureau(projet, etat, taches)
+                except (regles.Refus, regles.ErreurMoteur) as e:
+                    self._noter(projet, f"agent arrêté ({cle}) : {e}")
+                registre.effacer(cle)
+                continue
             if fiche is None or (issue not in ("vivant", "resultat") and info.get("genre") != "reponse"):
                 registre.effacer(cle)
                 continue

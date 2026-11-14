@@ -662,3 +662,9 @@ Rôles : release
 Date : 2026-11-15
 
 Une apk de même taille que la livraison précédente n'est pas forcément la même : comparer le hachage du fichier et le versionCode réel.
+
+## G111 — Quand une correction câble ce qu'un test source gardait expl
+Rôles : designer
+Date : 2026-11-15
+
+Quand une correction câble ce qu'un test source gardait explicitement comme non câblé, mettre à jour ce test dans la même modification, en gardant l'interdiction de navigation vers une route absente.

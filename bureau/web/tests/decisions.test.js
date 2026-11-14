@@ -435,6 +435,41 @@ test("session cloud : une adresse qui n'est pas https n'est pas un lien ; la for
   assert.equal(avant.contenu.tous((n) => n.tagName === "textarea").length, 0);
 });
 
+test("dossier à approuver : « Approuver le dossier et relancer » en premier, coche le réglage puis relance", async () => {
+  const appels = [];
+  const fetch = async (url, options) => { appels.push([url, JSON.parse(options.body)]); return {ok: true}; };
+  const etat = {...ETAT, fonctionnalites: [], decisions_projet: [{...SESSION, dossier_a_approuver: true}]};
+  const {contenu, demandes} = rendre(etat, null, {fetch});
+  const libelles = boutons(contenu).map((b) => b.textContent);
+  assert.equal(libelles[0], "Approuver le dossier et relancer");
+  assert.ok(libelles.includes("C'est fait"));                     // la démarche manuelle reste en dessous
+  assert.ok(contenu.textContent.indexOf("Approuver le dossier") < contenu.textContent.indexOf(SESSION.texte));
+  await bouton(contenu, "Approuver le dossier et relancer").auteurs.click[0]();
+  assert.equal(appels.length, 1);
+  assert.match(appels[0][0], /\/api\/reglages/);
+  assert.deepEqual(appels[0][1], {cloud_dossier_approuve: true});
+  assert.deepEqual(demandes, [{type: "session_cloud", decision: "s1", verdict: "relancer"}]);
+  assert.equal(etat.cloud_dossier_approuve, true);
+});
+
+test("dossier à approuver : un réglage refusé n'envoie pas la relance et dit pourquoi", async () => {
+  const fetch = async () => ({ok: false, status: 400, json: async () => ({erreur: "non"})});
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [{...SESSION, dossier_a_approuver: true}]},
+    null, {fetch});
+  const b = bouton(contenu, "Approuver le dossier et relancer");
+  await b.auteurs.click[0]();
+  assert.deepEqual(demandes, []);
+  assert.match(contenu.textContent, /Refusé : non/);
+  assert.equal(b.disabled, false);
+});
+
+test("sans dossier_a_approuver, ou sans droit d'agir : pas de bouton d'approbation", () => {
+  const sans = rendre({...ETAT, fonctionnalites: [], decisions_projet: [SESSION]});
+  assert.equal(bouton(sans.contenu, "Approuver le dossier et relancer"), undefined);
+  const lecture = rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [{...SESSION, dossier_a_approuver: true}]});
+  assert.equal(bouton(lecture.contenu, "Approuver le dossier et relancer"), undefined);
+});
+
 const VALIDATION = {id: "v1", genre: "valider_etape", texte: "L'élément « Accueil » attend votre validation : « Validation du Directeur ».",
   fonctionnalite: "f1", element: {id: "e1", nom: "Accueil"}, etape: "f1-valider", tache: "t4",
   compte_rendu: "Tout est vert, apk d'essai prêt.",

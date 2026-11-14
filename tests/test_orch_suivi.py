@@ -64,13 +64,19 @@ class TestSuivi(AvecProjet):
                     "agent": "dev-1", "tache": t0, "depart": "Tu repars de zéro.", "lien": "https://claude.ai/code",
                     "depot": "https://github.com/moi/p", "modele": "Sonnet"}
         self.ok("decision", entree=manuelle)
-        for champ, valeur in (("tache", "t999"), ("lien", "http://claude.ai"), ("depart", " "), ("depot", 3)):
+        for champ, valeur in (("tache", "t999"), ("lien", "http://claude.ai"), ("depart", " "), ("depot", 3),
+                              ("dossier_a_approuver", "oui"), ("dossier_a_approuver", False)):
             code, _ = self.outil("decision", entree={**manuelle, champ: valeur})
             self.assertNotEqual(code, 0, champ)
         r = self.releve()
         self.assertEqual(releve.valider(r), [], releve.valider(r))
         d = next(x for x in r["decisions_projet"] if x["genre"] == "session_cloud")
         self.assertEqual((d["tache"], d["lien"], d["depart"]), (t0, "https://claude.ai/code", "Tu repars de zéro."))
+        self.assertNotIn("dossier_a_approuver", d)
+        self.ok("decision", entree={**manuelle, "agent": "metier-1", "dossier_a_approuver": True})
+        r = self.releve()
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        self.assertIs(next(x for x in r["decisions_projet"] if x.get("agent") == "metier-1")["dossier_a_approuver"], True)
 
     def test_releve_est_un_releve_v4_valide(self):
         f = self.nouvelle("Une page d'accueil", images=[{"nom": "ref.png", "type": "image/png", "donnees": PNG}])

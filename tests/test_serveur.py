@@ -172,6 +172,17 @@ class TestServeur(AvecServeur):
         r, _ = self.req("POST", "/api/reglages", '{"analyse_blocages": "non"}', self.ENT)
         self.assertEqual(r.status, 400)
 
+    def test_reglage_cloud_dossier_approuve_decoche_par_defaut_ecrit_et_visible(self):
+        self.assertIs(self.json("/api/etat")["cloud_dossier_approuve"], False)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"cloud_dossier_approuve": True}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(data.decode("utf-8"))["cloud_dossier_approuve"], True)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["cloud_dossier_approuve"], True)
+        self.assertIs(self.json("/api/etat")["cloud_dossier_approuve"], True)
+        r, _ = self.req("POST", "/api/reglages", '{"cloud_dossier_approuve": "oui"}', self.ENT)
+        self.assertEqual(r.status, 400)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["cloud_dossier_approuve"], True)
+
     def test_reglage_sans_entete(self):
         avant = self.regl.read_text(encoding="utf-8")
         corps = json.dumps({"charge_max": 60})

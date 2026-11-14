@@ -856,8 +856,9 @@ class TestVersion4(unittest.TestCase):
                 "modele": "Sonnet"}
         self.assertEqual(releve.valider(v4(decisions_projet=[base])), [])
         for champ, valeur in (("depart", ""), ("depart", 3), ("lien", "javascript:x"), ("depot", "http://x"),
-                              ("tache", 4), ("modele", "")):
+                              ("tache", 4), ("modele", ""), ("dossier_a_approuver", "oui")):
             self.refus(v4(decisions_projet=[{**base, champ: valeur}]), champ)
+        self.assertEqual(releve.valider(v4(decisions_projet=[{**base, "dossier_a_approuver": True}])), [])
 
     def test_decision_outil_agent(self):
         base = {"id": "o", "genre": "outil_agent", "texte": "T", "agent": "d1", "tache": "t3", "outil": "Bash(curl:*)"}

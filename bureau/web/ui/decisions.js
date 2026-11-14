@@ -7,7 +7,7 @@ import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
   demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache,
-  demandeBlocageAnalyse} from "./actions.js";
+  demandeBlocageAnalyse, demandeRelancerSession, enregistrerCloudDossierApprouve} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
@@ -320,6 +320,9 @@ function decisionSession(ctx, d) {
   const li = el("li", "decision-session");
   const agent = (e.agents || []).find((a) => a.id === d.agent);
   const service = agent?.service ? (e.services || []).find((s) => s.id === agent.service)?.nom : null;
+  // le dossier à approuver : le bouton d'abord, la démarche manuelle reste en dessous
+  if (d.dossier_a_approuver === true && e.agir) li.append(blocApprouverDossier(ctx, d), el("div", "lecon-meta",
+    "Ou faites-le à la main :"));
   li.append(el("div", "decision-texte", d.texte));
   li.append(el("div", "lecon-meta", [nomAgent(e, d.agent), agent?.modele, service].filter(Boolean).join(" · ")));
   const manuelle = plein(d.depart);
@@ -365,6 +368,33 @@ function decisionSession(ctx, d) {
   };
   li.append(nom, erreur, boutonDemande(ctx, "C'est fait", "bouton", () => demandeSession(d.id, nom.value.trim()), valide));
   return li;
+}
+
+// Claude Code demandait d'approuver le dossier du projet (`dossier_a_approuver`) : « Approuver le dossier et
+// relancer » coche le réglage `cloud_dossier_approuve` (le moteur répondra lui-même « Yes, I trust this folder »),
+// puis demande au projet de lever la décision et de relancer les tâches bloquées. `ctx.fetch` : pour les essais.
+function blocApprouverDossier(ctx, d) {
+  const bloc = el("div", "session-approuver");
+  const b = el("button", "bouton", "Approuver le dossier et relancer");
+  b.type = "button";
+  const message = el("p", "saisie-erreur", "");
+  message.setAttribute("aria-live", "polite");
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    message.textContent = "";
+    const r = await enregistrerCloudDossierApprouve(true, ctx.fetch || globalThis.fetch);
+    if (!r.ok) {
+      message.textContent = r.message;
+      b.disabled = false;
+      return;
+    }
+    ctx.etat.cloud_dossier_approuve = true;
+    const envoi = await ctx.barre.demander(demandeRelancerSession(d.id), b);
+    if (!envoi.ok) b.disabled = false;     // le réglage reste coché : un nouveau clic renvoie la demande
+  });
+  bloc.append(el("div", "lecon-meta", "Claude Code demande d'approuver le dossier de ce projet pour les sessions cloud."),
+    b, message);
+  return bloc;
 }
 
 // « Outils à ouvrir à un agent » : l'agent arrêté, la commande refusée (une ligne, déjà coupée par le moteur), puis

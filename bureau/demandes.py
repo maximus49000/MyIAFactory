@@ -18,7 +18,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "verdict_solution": ("challenge", "solution", "verdict"),
           "fonctionnalite": ("texte",), "message": ("fonctionnalite", "texte"),
           "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
-          "genre": ("decision", "genre"), "session_cloud": ("decision", "session"),
+          # `session_cloud` : `session` (« C'est fait ») ou `verdict: relancer` (« Approuver le dossier et relancer »)
+          "genre": ("decision", "genre"), "session_cloud": ("decision",),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
@@ -38,7 +39,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "blocage_analyse": ("decision", "verdict"), "anomalie": ("anomalie", "etat")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
-FACULTATIFS = {"partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
+FACULTATIFS = {"session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
                "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
@@ -463,6 +464,12 @@ def _verifier_v4(demande, r, elements):
         d = _decision(r.get("decisions_projet", []), demande["decision"], "session_cloud")
         if d is None:
             return "Décision inconnue."
+        if "verdict" in demande:     # « Approuver le dossier et relancer » : le réglage est coché juste avant
+            if demande["verdict"] != "relancer" or "session" in demande:
+                return "Réponse inconnue (relancer, sans session)."
+            return None
+        if not isinstance(demande.get("session"), str):
+            return "« session » est obligatoire (texte)."
         if not demande["session"].strip():
             return "Le nom de la session est vide."
         if len(demande["session"]) > MAX_SESSION:

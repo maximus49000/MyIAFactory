@@ -197,6 +197,7 @@ class EssaiFauxTerminal(unittest.TestCase):
 
 
 CONFIANCE_OUI = "  No, exit\n❯ Yes, I trust this folder\n"
+CONFIANCE_NON = "❯ No, exit\n  Yes, I trust this folder\n"
 CREEE = ("Created cloud session: Analyse du projet\nView: " + ADRESSE + "?from=cli&m=0\n"
          "Resume with: claude --teleport session_01AbCdEf\n")
 
@@ -221,8 +222,28 @@ class ApprobationDuDossier(unittest.TestCase):
     def test_jamais_entree_si_la_selection_n_est_pas_oui(self):
         faux = FauxTerminal([THEME, SECURITE, CONFIANCE, CONFIANCE])      # la flèche n'a rien changé
         r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
-        self.assertEqual(faux.tape, ["\r", "\r", "\x1b[B"])
+        self.assertEqual(faux.tape, ["\r", "\r", "\x1b[B", "\x1b[B"])    # une nouvelle flèche, jamais Entrée
         self.assertEqual(r["issue"], "delai")
+
+    def test_rebond_sur_no_une_seconde_fleche_puis_entree(self):
+        """Essai réel : une flèche trop tôt redessine « ❯ Yes » puis revient sur « ❯ No, exit » (les redessins
+        n'ajoutent que les deux lignes d'options) : une seconde flèche, puis Entrée sur « Yes »."""
+        faux = FauxTerminal([CONFIANCE, CONFIANCE_OUI + CONFIANCE_NON, CONFIANCE_OUI, CREEE])
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
+        self.assertEqual(faux.tape, ["\x1b[B", "\x1b[B", "\r"])
+        self.assertEqual(r["issue"], "session")
+
+    def test_toujours_sur_no_quatre_fleches_au_plus_jamais_entree(self):
+        faux = FauxTerminal([CONFIANCE] + [CONFIANCE_NON] * 6)
+        r = cloud.essai_pseudo_terminal(["claude", "--cloud", "x"], "/p", lancer=faux, approuver_dossier=True)
+        self.assertEqual(faux.tape, ["\x1b[B"] * cloud.BAS_MAX)
+        self.assertEqual(r["issue"], "delai")
+
+    def test_oui_choisi_lu_apres_le_dernier_titre(self):
+        self.assertTrue(cloud._oui_est_choisi(CONFIANCE + CONFIANCE_OUI))     # redessin sans « Enter to confirm »
+        self.assertFalse(cloud._oui_est_choisi(CONFIANCE + CONFIANCE_OUI + CONFIANCE_NON))
+        self.assertFalse(cloud._oui_est_choisi(CONFIANCE_OUI + CONFIANCE))    # un nouvel écran : « No » choisi
+        self.assertTrue(cloud._oui_est_choisi(CONFIANCE_OUI))                 # sans titre : tout le texte
 
     def test_dossier_non_accorde_rien_n_est_tape(self):
         faux = FauxTerminal([THEME, SECURITE, CONFIANCE])
@@ -634,6 +655,41 @@ class Agents(Base):
         tache2 = next(x for x in self.suivi()["taches"] if x["id"] == t2)
         self.assertTrue(any("Session cloud session_01Manuel (sonnet)" in j["texte"] for j in tache2["journal"]))
         self.assertEqual(self.moteur.etats[str(self.projet.factory)]["cloud"][t2]["session"], "session_01Manuel")
+
+    def test_dossier_a_approuver_marque_la_decision_puis_approuver_et_relancer(self):
+        """Claude Code demande d'approuver le dossier : la décision le dit (`dossier_a_approuver`) ; la case cochée au
+        bureau est relue au lancement (sans redémarrer), et « relancer » lève la décision et relance la tâche."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            fichier = Path(d) / "reglages.json"
+            fichier.write_text("{}", encoding="utf-8")
+            self.projet.fichier_reglages = fichier
+            t = self.tache()
+            self.cloud.panne = cloud.RAISON_DOSSIER_A_APPROUVER
+            self.avancer()
+            self.avancer(5)
+            dec = self.decision_session()
+            self.assertIs(dec["dossier_a_approuver"], True)
+            self.assertIn("Yes, I trust this folder", dec["texte"])          # la démarche manuelle reste
+            self.assertIn("deux essais", next(x for x in self.suivi()["taches"] if x["id"] == t)["bloquee"])
+            # le bureau coche le réglage, puis envoie « relancer »
+            fichier.write_text(json.dumps({"cloud_dossier_approuve": True}), encoding="utf-8")
+            self.cloud.panne = None
+            self.ok("actions", entree={"type": "session_cloud", "decision": dec["id"], "verdict": "relancer"})
+            self.avancer(5)
+            self.assertNotIn(dec["id"], [x["id"] for x in self.suivi()["decisions_projet"]])
+            self.assertEqual([l["approuver_dossier"] for l in self.cloud.lancees], [True])
+            tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+            self.assertIsNone(tache["bloquee"])
+            self.assertTrue(tache["active"])
+
+    def test_une_autre_panne_ne_marque_pas_le_dossier(self):
+        self.tache()
+        self.cloud.panne = cloud.SANS_TERMINAL
+        self.avancer()
+        self.avancer(5)
+        self.assertNotIn("dossier_a_approuver", self.decision_session())
 
     def test_secours_la_session_inscrite_refuse_aussi(self):
         etat = self.moteur.etats[str(self.projet.factory)]

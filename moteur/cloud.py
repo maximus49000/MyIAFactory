@@ -41,6 +41,13 @@ class ErreurDossierAApprouver(ErreurCloud):
     l'utilisateur ne l'a pas accordé : seul lui peut le faire (le moteur ne répond jamais de lui-même)."""
 
 
+# La raison de `ErreurDossierAApprouver` ; la reconnaître dans l'erreur d'un départ marque la décision `session_cloud`
+# (`dossier_a_approuver`) : le bureau propose alors « Approuver le dossier et relancer ».
+RAISON_DOSSIER_A_APPROUVER = ("Claude Code demande d'approuver le dossier du projet pour les sessions cloud : à "
+                              "approuver une fois (lancer claude dans le dossier et répondre « Yes, I trust this "
+                              "folder »)")
+
+
 ADRESSE_CODE = "https://claude.ai/code"
 _SESSION_SEULE = re.compile(r"(session_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 _ADRESSE_COLLEE = re.compile(r"https://claude\.ai/code/([A-Za-z0-9_-]+)/?(?:[?#].*)?")
@@ -170,9 +177,7 @@ def _lancer_dans_le_faux_terminal(argv, dossier_projet, terminal, approuver_doss
     if r["issue"] == "session":
         return {"session": r["session"], "adresse": r["adresse"]}
     if r.get("dossier_a_approuver"):
-        raise ErreurDossierAApprouver(
-            "Claude Code demande d'approuver le dossier du projet pour les sessions cloud : à approuver une fois "
-            "(lancer claude dans le dossier et répondre « Yes, I trust this folder »)")
+        raise ErreurDossierAApprouver(RAISON_DOSSIER_A_APPROUVER)
     raise ErreurCloud((r["raison"] or "pas de session créée") + " (faux terminal)")
 
 
@@ -218,9 +223,16 @@ OUI_DOSSIER = "Yes, I trust this folder"
 BAS = "\x1b[B"                  # la flèche vers le bas : « No, exit » est proposé d'abord
 
 
+TITRE_DOSSIER = "Quick safety check"
+BAS_MAX = 4                     # flèches vers le bas au plus : jamais Entrée tant que « Yes » n'est pas choisi
+
+
 def _oui_est_choisi(texte):
-    """Sur l'écran d'approbation, la ligne marquée par ❯ (après la dernière ligne « Enter to confirm ») est-elle « Yes » ?"""
-    apres = texte[texte.rfind("Enter to confirm"):]
+    """Sur l'écran d'approbation, la dernière ligne marquée par ❯ (après le dernier « Quick safety check », sinon dans
+    tout le texte) est-elle « Yes » ? Essai réel : les redessins du menu n'ajoutent que les deux lignes d'options, sans
+    nouveau « Enter to confirm » ; c'est la dernière ligne marquée qui dit le choix."""
+    i = texte.rfind(TITRE_DOSSIER)
+    apres = texte[i:] if i >= 0 else texte
     marquees = [x.strip() for x in apres.split("\n") if x.strip().startswith("❯")]
     return bool(marquees) and OUI_DOSSIER in marquees[-1]
 
@@ -232,12 +244,13 @@ def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None, appr
     "dossier_a_approuver"}` (`ecran` : la fin de la sortie nettoyée). Lève `ErreurCloud` si la pseudo-console manque.
 
     `approuver_dossier` (vrai seulement si l'utilisateur a accordé CE dossier) : à l'écran d'approbation du dossier,
-    une flèche vers le bas puis Entrée, et Entrée seulement si « Yes, I trust this folder » est bien la ligne choisie.
+    une flèche vers le bas (réessayée sur chaque écran stable, `BAS_MAX` fois au plus) puis Entrée, et Entrée seulement
+    si « Yes, I trust this folder » est bien la ligne choisie.
     Sinon cet écran est une demande à l'utilisateur et rien n'est tapé."""
     from moteur import pseudo_terminal as pt
     lancer = lancer or pt.lancer
     faits, vu = set(), {"adresse": None, "demande": None}
-    suivi = {"texte": None, "stables": 0, "bas": False}
+    suivi = {"texte": None, "stables": 0, "bas": 0}
     debut = time.monotonic()
 
     def apres_les_reponses(texte):
@@ -255,13 +268,16 @@ def essai_pseudo_terminal(argv, cwd, *, env=None, delai_s=180, lancer=None, appr
                 return touches
         if (approuver_dossier and OUI_DOSSIER not in faits and MARQUE_DOSSIER in apres_les_reponses(texte)
                 and suivi["stables"] >= PASSES_STABLES):
-            if not suivi["bas"]:
-                suivi["bas"] = True
-                suivi["stables"] = 0
-                return BAS
+            # Essai réel : une flèche envoyée trop tôt est perdue (le menu redessine « ❯ Yes » puis revient sur
+            # « ❯ No, exit ») : sur chaque écran redevenu stable, Entrée si « Yes » est choisi, sinon une nouvelle
+            # flèche, BAS_MAX fois au plus. Jamais Entrée sur « No ».
             if _oui_est_choisi(texte):
                 faits.add(OUI_DOSSIER)
                 return "\r"
+            if suivi["bas"] < BAS_MAX:
+                suivi["bas"] += 1
+                suivi["stables"] = 0
+                return BAS
         return None
 
     def arret(texte):

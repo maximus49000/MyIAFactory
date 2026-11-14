@@ -165,6 +165,13 @@ def fixer_analyse_blocages(chemin, valeur):
     return _ecrire_cle(chemin, "analyse_blocages", valeur)
 
 
+def fixer_cloud_dossier_approuve(chemin, valeur):
+    """Note si le Directeur accorde le dossier du projet pour les sessions cloud (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« cloud_dossier_approuve » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "cloud_dossier_approuve", valeur)
+
+
 def _ecrire_cle(chemin, cle, valeur):
     chemin = Path(chemin)
     donnees = {}

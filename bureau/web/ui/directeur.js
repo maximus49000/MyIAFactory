@@ -4,8 +4,8 @@
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
 import {prenomAgent} from "./detail.js";
-import {urlProjet} from "./projets.js";
-import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie} from "./actions.js";
+import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie, enregistrerReglage,
+  enregistrerCloudDossierApprouve} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
 import {sectionLieux} from "./lieux.js";
 import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
@@ -38,22 +38,8 @@ export const AIDE_ANALYSE_BLOCAGES = "Cochée, le Chef analyse chaque tâche blo
   "avec une consigne, confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. " +
   "Il n'ouvre jamais un outil et ne dépense rien sans vous.";
 
-// Une case des réglages du projet (une écriture par le serveur du bureau). Rend {ok, message} ; ne lève jamais.
-async function enregistrerReglage(cle, valeur, messages, fetchFn) {
-  try {
-    const r = await fetchFn(urlProjet("/api/reglages"), {
-      method: "POST",
-      headers: {"X-Bureau": "1", "Content-Type": "application/json"},
-      body: JSON.stringify({[cle]: valeur === true}),
-    });
-    if (r.ok) return {ok: true, message: valeur === true ? messages[0] : messages[1]};
-    let erreur = "";
-    try { erreur = (await r.json())?.erreur || ""; } catch { /* corps illisible */ }
-    return {ok: false, message: `Refusé : ${erreur || "le serveur a répondu " + r.status}`};
-  } catch {
-    return {ok: false, message: "Serveur du bureau injoignable."};
-  }
-}
+export const AIDE_CLOUD_DOSSIER = "Le moteur répond lui-même « Yes, I trust this folder » quand Claude Code le " +
+  "demande pour lancer une session cloud dans ce projet.";
 
 // Le réglage « Valider les leçons automatiquement ».
 export function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
@@ -102,6 +88,14 @@ function caseAnalyseBlocages(ctx) {
   return caseReglage(ctx, {classe: "lecons-auto analyse-blocages", libelle: "Analyse intelligente des blocages",
     aide: AIDE_ANALYSE_BLOCAGES, coche: e.analyse_blocages !== false, enregistrer: (v) => enregistrerAnalyseBlocages(v),
     noter: (v) => { e.analyse_blocages = v; }});
+}
+
+// À côté des deux autres : le réglage `cloud_dossier_approuve` (décochée si absente de l'état).
+function caseCloudDossier(ctx) {
+  const e = ctx.etat;
+  return caseReglage(ctx, {classe: "lecons-auto cloud-dossier", libelle: "Dossier approuvé pour les sessions cloud",
+    aide: AIDE_CLOUD_DOSSIER, coche: e.cloud_dossier_approuve === true,
+    enregistrer: (v) => enregistrerCloudDossierApprouve(v), noter: (v) => { e.cloud_dossier_approuve = v; }});
 }
 
 const ETATS_ANOMALIE = {nouvelle: "nouvelle", vue: "vue", reglee: "réglée"};
@@ -277,7 +271,7 @@ export function contenuDirecteur(ctx, contenu) {
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
   if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
-    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx));
+    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseCloudDossier(ctx));
   }
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
   if (e.agir && e.lecons_auto !== true && enAttente.length >= 2) {

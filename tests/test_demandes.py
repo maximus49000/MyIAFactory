@@ -348,6 +348,18 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "session_cloud", "decision": "s1", "session": "x" * 200})
         self.refus({"type": "session_cloud", "decision": "g1", "session": "S"})
         self.refus({"type": "session_cloud", "decision": "zz", "session": "S"})
+        self.refus({"type": "session_cloud", "decision": "s1"})                       # ni session ni verdict
+        self.refus({"type": "session_cloud", "decision": "s1", "session": 3})
+
+    def test_session_cloud_approuver_le_dossier_et_relancer(self):
+        self.ok({"type": "session_cloud", "decision": "s1", "verdict": "relancer"})
+        self.refus({"type": "session_cloud", "decision": "s1", "verdict": "autre"})
+        self.refus({"type": "session_cloud", "decision": "s1", "verdict": "relancer", "session": "S"})
+        self.refus({"type": "session_cloud", "decision": "zz", "verdict": "relancer"})
+        self.assertEqual(demandes.nettoyer({"type": "session_cloud", "decision": "s1", "verdict": "relancer", "x": 1}),
+                         {"type": "session_cloud", "decision": "s1", "verdict": "relancer"})
+        self.assertEqual(demandes.nettoyer({"type": "session_cloud", "decision": "s1", "session": "S"}),
+                         {"type": "session_cloud", "decision": "s1", "session": "S"})
 
     def test_session_cloud_creee_a_la_main(self):
         # La démarche simplifiée : l'adresse claude.ai/code ou l'identifiant de la session, rien d'autre.

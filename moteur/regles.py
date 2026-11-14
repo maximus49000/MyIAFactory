@@ -1639,6 +1639,8 @@ def _sur_session_cloud(projet, demande, etat):
     d = next((x for x in court["decisions"] if x["id"] == demande["decision"]), None)
     if d is None or not d.get("agent"):
         raise Refus("la décision de cette session n'existe plus")
+    if demande.get("verdict") == "relancer":
+        return _relancer_apres_approbation(projet, demande, etat, court, d)
     from moteur import cloud
     agent, lue = d["agent"], cloud.lire_session(demande["session"])
     lancer(projet, "session", {"agent": agent, "session": lue["adresse"] if lue else demande["session"]})
@@ -1673,22 +1675,41 @@ def _sur_session_cloud(projet, demande, etat):
                                   "muette_dite": False, "vu": None}
     # Les autres tâches de cet agent bloquées faute de session cloud repartent : le moteur relance lui-même la session
     # (ou, s'il ne le peut pas, les envoie à la session inscrite).
-    reprises = [t for t in court["taches"] if t.get("agent") == agent and t["colonne"] != "fait"
-                and ERREUR_CLOUD in str(t.get("bloquee") or "") and t is not suivie
-                and not (attend_amont and t["id"] == d.get("tache"))]
-    for t in reprises:
-        # sortie de son lot (une tâche en lot ne repart jamais seule) et remise dans les départs à faire
-        lancer(projet, "tache", {"id": t["id"], "bloquee": None, "lot": None,
-                                 "journal": ["Session cloud créée par le Directeur : nouvel essai."]})
-        _m(etat, "relancees", set).discard(t["id"])
-        if t["id"] not in _m(etat, "a_lancer", list):
-            etat["a_lancer"].append(t["id"])
+    reprises = _reprendre_faute_de_session(
+        projet, etat, court, agent, "Session cloud créée par le Directeur : nouvel essai.",
+        sauf={suivie["id"] if suivie is not None else None, d.get("tache") if attend_amont else None})
     projet._cloud_raison = (None, 0.0)
     _terminer(projet, {"demande": demande["id"]}, "La session est inscrite."
               + (f" La tâche « {suivie['titre']} » y est relevée." if suivie is not None else "")
               + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else "")
               + (" La tâche attend une validation en amont." if attend_amont else ""))
     return _demarrer_en_attente(projet, etat, None) if reprises or attend_amont else []
+
+
+def _reprendre_faute_de_session(projet, etat, court, agent, journal, sauf=()):
+    """Les tâches de l'agent bloquées faute de session cloud repartent (sorties de leur lot : une tâche en lot ne
+    repart jamais seule), avec deux essais neufs ; rend la liste reprise."""
+    reprises = [t for t in court["taches"] if t.get("agent") == agent and t["colonne"] != "fait"
+                and ERREUR_CLOUD in str(t.get("bloquee") or "") and t["id"] not in sauf]
+    for t in reprises:
+        lancer(projet, "tache", {"id": t["id"], "bloquee": None, "lot": None, "journal": [journal]})
+        _m(etat, "relancees", set).discard(t["id"])
+        if t["id"] not in _m(etat, "a_lancer", list):
+            etat["a_lancer"].append(t["id"])
+    return reprises
+
+
+def _relancer_apres_approbation(projet, demande, etat, court, d):
+    """« Approuver le dossier et relancer » (`session_cloud`, verdict `relancer`) : le bureau a coché le réglage
+    `cloud_dossier_approuve` juste avant ; la décision est levée et les tâches de l'agent bloquées faute de session
+    repartent (le moteur relit le réglage au lancement et répond lui-même « Yes, I trust this folder »)."""
+    lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    reprises = _reprendre_faute_de_session(projet, etat, court, d["agent"],
+                                           "Dossier approuvé pour les sessions cloud : nouvel essai.")
+    projet._cloud_raison = (None, 0.0)
+    _terminer(projet, {"demande": demande["id"]}, "Le dossier est approuvé pour les sessions cloud."
+              + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else ""))
+    return _demarrer_en_attente(projet, etat, None) if reprises else []
 
 
 def _tache_a_reprendre(t):
@@ -3520,8 +3541,10 @@ def _agent_en_echec(projet, etat, execution, depart):
     _terminer(projet, {"demande": _m(etat, "liees").pop(tid, None)}, raison)
     if str(execution.erreur or "").startswith(ERREUR_CLOUD):
         # une session cloud qui ne démarre pas : la démarche est au Directeur (pas un échec de l'agent à analyser)
+        from moteur import cloud
         _session_a_creer(projet, depart["agent"], str(execution.erreur)[len(ERREUR_CLOUD):].strip(" :"), tid,
-                         session=_m(etat, "sessions_cloud").get(depart["agent"]))
+                         session=_m(etat, "sessions_cloud").get(depart["agent"]),
+                         dossier_a_approuver=cloud.RAISON_DOSSIER_A_APPROUVER in str(execution.erreur))
         return _apres_echec_d_installation(projet, etat, depart["taches"], raison)
     return (_apres_echec_d_installation(projet, etat, depart["taches"], raison)
             + _analyser_le_blocage(projet, etat, tid, "sans_rapport", {"erreur": raison}))
@@ -3559,10 +3582,11 @@ def texte_session_a_creer(fiche, raison, url, *, avec_depart=False, session_ouve
             "relance lui-même ses sessions.")
 
 
-def _session_a_creer(projet, cle, raison, tache=None, session=None):
+def _session_a_creer(projet, cle, raison, tache=None, session=None, dossier_a_approuver=False):
     """Pose (une fois par agent) la décision `session_cloud` avec la démarche ; avec `tache`, la démarche simplifiée :
     le lien claude.ai/code (celui de la session déjà inscrite pour l'agent, s'il y en a une), le dépôt et le message de
-    départ complet de cette tâche, à coller dans la session."""
+    départ complet de cette tâche, à coller dans la session. `dossier_a_approuver` : Claude Code demandait d'approuver
+    le dossier (réglage `cloud_dossier_approuve` absent) ; le bureau propose « Approuver le dossier et relancer »."""
     court = _etat(projet)
     if any(d.get("genre") == "session_cloud" and d.get("agent") == cle for d in court.get("decisions") or []):
         return
@@ -3593,6 +3617,8 @@ def _session_a_creer(projet, cle, raison, tache=None, session=None):
                     "modele": fiche["modele"]}
             if url and url.startswith("https://"):
                 plus["depot"] = url
+    if dossier_a_approuver:
+        plus["dossier_a_approuver"] = True
     lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": "session_cloud", "agent": cle,
                                 "texte": texte_session_a_creer(fiche, raison or "raison inconnue", url,
                                                                avec_depart=bool(plus),

@@ -243,6 +243,35 @@ export function demandeSession(decision, session) {
   return {type: "session_cloud", decision, session};
 }
 
+// « Approuver le dossier et relancer » : la décision est levée et les tâches de l'agent bloquées faute de session
+// repartent (le réglage `cloud_dossier_approuve` est coché juste avant, par `enregistrerCloudDossierApprouve`).
+export function demandeRelancerSession(decision) {
+  return {type: "session_cloud", decision, verdict: "relancer"};
+}
+
+// Une case des réglages du projet (une écriture par le serveur du bureau). Rend {ok, message} ; ne lève jamais.
+export async function enregistrerReglage(cle, valeur, messages, fetchFn = fetch) {
+  try {
+    const r = await fetchFn(urlProjet("/api/reglages"), {
+      method: "POST",
+      headers: {"X-Bureau": "1", "Content-Type": "application/json"},
+      body: JSON.stringify({[cle]: valeur === true}),
+    });
+    if (r.ok) return {ok: true, message: valeur === true ? messages[0] : messages[1]};
+    let erreur = "";
+    try { erreur = (await r.json())?.erreur || ""; } catch { /* corps illisible */ }
+    return {ok: false, message: `Refusé : ${erreur || "le serveur a répondu " + r.status}`};
+  } catch {
+    return {ok: false, message: "Serveur du bureau injoignable."};
+  }
+}
+
+// Le réglage « Dossier approuvé pour les sessions cloud ».
+export function enregistrerCloudDossierApprouve(valeur, fetchFn = fetch) {
+  return enregistrerReglage("cloud_dossier_approuve", valeur, ["Le moteur approuvera lui-même le dossier du projet " +
+    "pour les sessions cloud.", "Le dossier du projet n'est plus approuvé pour les sessions cloud."], fetchFn);
+}
+
 // La session collée par le Directeur : l'adresse https://claude.ai/code/<id> ou l'identifiant (session_… ou un UUID).
 // {session, adresse}, ou null. Même règle que le moteur (moteur/cloud.py, lire_session).
 const SESSION_SEULE = /^(session_[A-Za-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;

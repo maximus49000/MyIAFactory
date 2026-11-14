@@ -49,6 +49,16 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
                 reglages.charger(self.tmp / "r.json")
 
+    def test_fixer_cloud_dossier_approuve(self):
+        self.assertIs(reglages.charger(self.tmp / "absent.json")["cloud_dossier_approuve"], False)
+        (self.tmp / "r.json").write_text('{"port": 9000}', encoding="utf-8")
+        self.assertIs(reglages.fixer_cloud_dossier_approuve(self.tmp / "r.json", True)["cloud_dossier_approuve"], True)
+        self.assertEqual(json.loads((self.tmp / "r.json").read_text(encoding="utf-8")),
+                         {"port": 9000, "cloud_dossier_approuve": True})
+        for v in ("oui", 1, None):
+            with self.assertRaises(ValueError):
+                reglages.fixer_cloud_dossier_approuve(self.tmp / "r.json", v)
+
     def test_fixer_lecons_auto_ecrit_et_conserve_le_reste(self):
         (self.tmp / "r.json").write_text('{"port": 9000}', encoding="utf-8")
         self.assertIs(reglages.fixer_lecons_auto(self.tmp / "r.json", True)["lecons_auto"], True)

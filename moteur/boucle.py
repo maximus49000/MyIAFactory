@@ -763,7 +763,13 @@ class Moteur:
 
     def _lancer_ou_envoyer(self, projet, etat, depart, fiche, modele):
         """Une nouvelle session ; si le moteur ne peut pas la créer et que le Directeur a inscrit une session pour cet
-        agent (la démarche manuelle), le départ est envoyé à cette session. Lève `ErreurCloud` si rien ne marche."""
+        agent (la démarche manuelle), le départ est envoyé à cette session. Lève `ErreurCloud` si rien ne marche. Le
+        réglage `cloud_dossier_approuve` est relu ici : la case cochée au bureau vaut sans redémarrer le moteur."""
+        if getattr(projet, "fichier_reglages", None) is not None:
+            try:
+                projet.cloud_dossier_approuve = reglages_bureau.charger(projet.fichier_reglages)["cloud_dossier_approuve"]
+            except reglages_bureau.ReglagesInvalides:
+                pass        # des réglages illisibles ne changent pas le dernier état connu
         try:
             return self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele,
                                              approuver_dossier=getattr(projet, "cloud_dossier_approuve", False))

@@ -211,6 +211,8 @@ class Projet:
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
+            # « Dossier approuvé pour les sessions cloud »
+            e["cloud_dossier_approuve"] = regl.get("cloud_dossier_approuve") is True
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
             # Ce que le moteur dit retenir ce projet (la charge) : sur la carte de chaque tâche retenue et dans la barre.
@@ -1774,9 +1776,12 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = reglages.fixer_lecons_auto(projet.chemin_reglages, corps["lecons_auto"])
             elif isinstance(corps, dict) and "analyse_blocages" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_analyse_blocages(projet.chemin_reglages, corps["analyse_blocages"])
+            elif isinstance(corps, dict) and "cloud_dossier_approuve" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_cloud_dossier_approuve(projet.chemin_reglages, corps["cloud_dossier_approuve"])
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
-                    raise ValueError("Le corps doit contenir « charge_max », « lecons_auto » ou « analyse_blocages ».")
+                    raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages » "
+                                     "ou « cloud_dossier_approuve ».")
                 nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})

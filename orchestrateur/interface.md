@@ -521,7 +521,10 @@ Après le recrutement d'un agent cloud, tout est automatique tant que le projet 
 installé et connecté : quand une tâche de son rôle part, le moteur pousse, lance `claude --cloud`, relève le rapport
 par le dépôt et fusionne. Si le lancement échoue deux fois, la tâche est bloquée et le moteur pose la décision
 `session_cloud` (« Sessions cloud à créer ») avec la démarche ; « C'est fait » inscrit la session et remet en route
-les tâches de cet agent bloquées faute de session.
+les tâches de cet agent bloquées faute de session. Quand Claude Code demandait d'approuver le dossier du projet
+(réglage `cloud_dossier_approuve` absent), la décision porte `dossier_a_approuver: true` : « Approuver le dossier et
+relancer » coche le réglage puis envoie `session_cloud` avec `verdict: relancer` (la décision est levée, les tâches
+repartent ; le moteur relit le réglage à chaque lancement).
 
 ### `depot`
 

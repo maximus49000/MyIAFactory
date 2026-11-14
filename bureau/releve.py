@@ -653,6 +653,8 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             for c in ("lien", "depot"):
                 if c in d and not (isinstance(d.get(c), str) and d[c].startswith("https://")):
                     erreurs.append(f"{nom} : la décision « {i} » : « {c} » est une adresse https.")
+            if "dossier_a_approuver" in d and type(d["dossier_a_approuver"]) is not bool:
+                erreurs.append(f"{nom} : la décision « {i} » : « dossier_a_approuver » vaut vrai ou faux.")
         elif d.get("genre") == "outil_agent":
             if not _dans(d.get("agent"), cles_agents) or not _texte_plein(d.get("tache")) or not _texte_plein(d.get("outil")):
                 erreurs.append(f"{nom} : la décision « {i} » : « agent » (connu), « tache » et « outil » sont obligatoires.")

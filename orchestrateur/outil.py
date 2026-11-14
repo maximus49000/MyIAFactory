@@ -1006,6 +1006,10 @@ def _session_a_creer(s, e):
             if not isinstance(e[champ], str) or not e[champ].startswith("https://") or len(e[champ]) > 500:
                 raise Refus(f"« session_cloud » : « {champ} » est une adresse https.")
             d[champ] = e[champ]
+    if e.get("dossier_a_approuver") is not None:     # Claude Code demandait d'approuver le dossier du projet
+        if e["dossier_a_approuver"] is not True:
+            raise Refus("« session_cloud » : « dossier_a_approuver » vaut true ou est absent.")
+        d["dossier_a_approuver"] = True
     return d
 
 

@@ -380,3 +380,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour tester la libération d'un ViewModel en JVM, appeler onCleared par réflexion, car il reste protégé même redéclaré par override sans modificateur.
+
+## G64 — Quand la génération de code par processeur d'annotations éch
+Rôles : dev
+Date : 2026-11-14
+
+Quand la génération de code par processeur d'annotations échoue sur un fichier de cache introuvable, supprimer le dossier de cache de la variante concernée puis relancer : le code n'est pas en cause.

@@ -1029,3 +1029,9 @@ Rôles : release
 Date : 2026-11-15
 
 Sous Windows, dans un shell POSIX, écrire les chemins avec des barres obliques, les barres inverses étant perdues.
+
+## S172 — Pour exécuter des tests sur émulateur sans approbation inter
+Rôles : designer
+Date : 2026-11-15
+
+Pour exécuter des tests sur émulateur sans approbation interactive, regrouper dans un script le démarrage, l'attente du démarrage complet, les tests filtrés par classe et l'arrêt dans un finally.

@@ -500,3 +500,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand un écran n'est connu que par sa carte d'entrée, le concevoir dans le thème existant, le signaler comme écart, et dessiner ses états (nominal, vide, attente, erreur, action modale, échec, succès avec annulation, objet disparu).
+
+## G84 — Un script de maquettes qui charge des polices système doit p
+Rôles : designer
+Date : 2026-11-14
+
+Un script de maquettes qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation pour Arial) pour tourner hors du poste d'origine ; le noter en écart.

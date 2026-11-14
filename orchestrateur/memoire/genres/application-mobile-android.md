@@ -314,3 +314,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un écran de capture d'image déjà maquetté, ne dessiner que l'aperçu après capture, les états d'autorisation (demande, refus, matériel indisponible) et les erreurs d'image (illisible, trop lourde, non enregistrée, introuvable), chacun avec une sortie de repli.
+
+## G53 — Quand la chaîne de compilation mobile manque, mettre la vali
+Rôles : dev
+Date : 2026-11-14
+
+Quand la chaîne de compilation mobile manque, mettre la validation d'image, le plafond de taille et la décision de permission dans des classes pures testables avec des flux simulés, garder l'écran mince, et déclarer le code non compilé.

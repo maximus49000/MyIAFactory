@@ -921,3 +921,9 @@ Rôles : release
 Date : 2026-11-14
 
 Une erreur de compilation sur une ressource existante peut venir d'un état périmé : relancer une fois avant de corriger le code.
+
+## S154 — Dans un script de maquettes, éviter les symboles Unicode déc
+Rôles : cadrage
+Date : 2026-11-14
+
+Dans un script de maquettes, éviter les symboles Unicode décoratifs et préférer du texte ou des formes dessinées ; relire au moins une image rendue avant de livrer.

@@ -416,3 +416,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Une maquette d'attente qui montre un pourcentage est transcrite en progression indéterminée quand la durée est inconnue. La fiche précise que la rotation d'écran n'annule ni ne relance l'opération.
+
+## G70 — Pour modifier un élément déjà saisi, réutiliser l'écran de s
+Rôles : dev
+Date : 2026-11-14
+
+Pour modifier un élément déjà saisi, réutiliser l'écran de saisie avec une valeur initiale et un rappel de validation facultatifs plutôt que créer un second écran ; les valeurs par défaut gardent les tests existants verts.

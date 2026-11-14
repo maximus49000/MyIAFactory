@@ -939,3 +939,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour ajouter une variante à un jeu d'images produit par script, paramétrer la fonction de dessin existante et vérifier que les images déjà validées sont regénérées à l'identique.
+
+## S157 — Quand une étape de maquettes porte sur un correctif de compo
+Rôles : designer
+Date : 2026-11-14
+
+Quand une étape de maquettes porte sur un correctif de comportement sans interface nouvelle, vérifier que la maquette de l'écran concerné existe, déclarer l'étape non applicable et renvoyer aux contrôles du registre.

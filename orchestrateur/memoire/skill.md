@@ -729,3 +729,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une correction est relancée après une interruption du moteur, vérifier d'abord ce qui est déjà appliqué dans les fichiers et ne reprendre que ce qui manque.
+
+## S122 — Quand l'environnement d'exécution ne contient pas la chaîne
+Rôles : dev
+Date : 2026-11-14
+
+Quand l'environnement d'exécution ne contient pas la chaîne de compilation nécessaire, écrire le code, le déclarer non compilé et non testé dans le rapport, et indiquer la commande à lancer ailleurs.

@@ -158,3 +158,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Sous Windows, une erreur « fichier utilisé par un autre processus » pendant un build Gradle signale généralement un build concurrent sur le même dossier. Lister les processus par un script, attendre la fin du concurrent, puis relancer.
+
+## G27 — Pour tester un ViewModel en test unitaire JVM, la bibliothèq
+Rôles : testeur
+Date : 2026-11-14
+
+Pour tester un ViewModel en test unitaire JVM, la bibliothèque de test des coroutines doit être déclarée dans la configuration des tests unitaires, pas seulement dans celle des tests instrumentés.

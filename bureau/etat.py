@@ -98,6 +98,10 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     en_pause = r["factory"].get("etat") == "en pause"
     taches_de = {}
     for t in r["taches"]:
+        if t.get("id") == "orchestration" and r.get("orchestrateur_present") is True:
+            # le Chef, c'est le moteur : présent, il a des nouvelles (son « réveil » n'est plus noté depuis le moteur,
+            # et le Chef restait « sans nouvelles » en permanence)
+            t = dict(t, maj=maintenant.isoformat())
         taches_de.setdefault(t.get("titulaire"), []).append(t)
 
     agents = []

@@ -62,6 +62,17 @@ class TestEtat(unittest.TestCase):
         chef = next(x for x in self.etat()["agents"] if x["chef"])
         self.assertIsNone(chef["service"])
 
+    def test_le_chef_a_des_nouvelles_tant_que_le_moteur_est_la(self):
+        """Le Chef, c'est le moteur : son réveil n'est plus noté, il restait « sans nouvelles » en permanence."""
+        def avec(r, present):
+            r["titulaires"].append({"cle": "chef", "chef": True, "lieu": "local"})
+            r["taches"].append({"id": "orchestration", "titre": "Orchestration", "colonne": "a", "active": True,
+                                "titulaire": "chef", "maj": None})
+            r["orchestrateur_present"] = present
+        chef = lambda e: next(x for x in e["agents"] if x["id"] == "chef")
+        self.assertEqual(chef(self.etat(modif=lambda r: avec(r, True)))["statut"], "travail")
+        self.assertEqual(chef(self.etat(modif=lambda r: avec(r, False)))["statut"], "sans_nouvelles")
+
     def test_agent_parti(self):
         e = self.etat(active=False, minutes=30 * 60)
         self.assertNotIn("d1", [x["id"] for x in e["agents"]])

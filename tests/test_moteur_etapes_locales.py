@@ -158,6 +158,10 @@ class Choix(unittest.TestCase):
         self.assertIsNone(mn.lieu_de_la_tache(sans_poste, corr, (), []))
         self.assertIsNone(mn.lieu_de_la_tache(avec_poste, dict(corr, element=None), (), []))
         self.assertIsNone(mn.lieu_de_la_tache(avec_poste, dict(corr, etape="flux:dev"), (), []))
+        # l'étape du rôle est écrite « cloud » (des maquettes) : l'élément se vérifie quand même au poste
+        maquettes_cloud = {"flux": [dict(FLUX[0], lieu="cloud"), dict(FLUX[0], id="dev-local"), *FLUX[1:]],
+                           "workflows": []}
+        self.assertEqual(mn.lieu_de_la_tache(maquettes_cloud, corr, (), []), "local")
 
 class Ecriture(unittest.TestCase):
     def setUp(self):

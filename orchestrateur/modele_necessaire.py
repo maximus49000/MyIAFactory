@@ -116,11 +116,11 @@ def lieu_de_la_tache(f, t, fonctionnalites=(), taches=None, lieu_agent=None):
     une étape du workflow de sa fonctionnalité exige le poste (compilation, tests sur émulateur…). Sinon elle part dans un
     conteneur cloud qui ne peut ni compiler ni lancer l'émulateur, et l'agent reste sans nouvelles (MyFridgeCleaner,
     t151)."""
+    if t.get("etape") == "correction" and t.get("element") and _element_exige_le_poste(f, t, fonctionnalites):
+        return wf.LIEU_LOCAL       # avant le lieu de l'étape du rôle (des maquettes « cloud ») : l'élément se vérifie au poste
     propre = _lieu_de_l_etape(f, t, fonctionnalites)
     if propre is not None or not t.get("id"):
         return propre
-    if t.get("etape") == "correction" and t.get("element") and _element_exige_le_poste(f, t, fonctionnalites):
-        return wf.LIEU_LOCAL
     if not taches:
         return None
     for u in taches:

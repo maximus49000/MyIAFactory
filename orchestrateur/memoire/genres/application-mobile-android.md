@@ -506,3 +506,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Un script de maquettes qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation pour Arial) pour tourner hors du poste d'origine ; le noter en écart.
+
+## G85 — Quand deux niveaux d'alerte partagent une même famille de co
+Rôles : designer
+Date : 2026-11-14
+
+Quand deux niveaux d'alerte partagent une même famille de couleur, les séparer par la teinte, ajouter un badge texte, rendre les couleurs réglables et refuser deux choix identiques.

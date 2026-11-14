@@ -164,3 +164,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Pour tester un ViewModel en test unitaire JVM, la bibliothèque de test des coroutines doit être déclarée dans la configuration des tests unitaires, pas seulement dans celle des tests instrumentés.
+
+## G28 — Un téléchargement borné en taille signale le dépassement au
+Rôles : dev, testeur
+Date : 2026-11-14
+
+Un téléchargement borné en taille signale le dépassement au lieu de tronquer en silence ; l'écriture du fichier téléchargé rattrape ses exceptions d'E/S en relançant CancellationException, pour ne jamais planter l'application ni enregistrer une image corrompue.

@@ -621,3 +621,9 @@ Rôles : designer, qa, dev
 Date : 2026-11-14
 
 Une capture d'application qui n'est pas uniforme peut n'être que l'écran de démarrage du moteur : un test d'affichage doit aussi la comparer à cet écran.
+
+## S104 — Avant de corriger un shader attribué à un élément, vérifier
+Rôles : designer, dev
+Date : 2026-11-14
+
+Avant de corriger un shader attribué à un élément, vérifier que le projet en contient un ; une erreur de liaison peut venir des shaders du moteur, qui ne se corrigent pas dans l'élément.

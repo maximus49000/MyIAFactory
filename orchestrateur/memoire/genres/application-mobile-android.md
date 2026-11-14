@@ -20,3 +20,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Avec un build incrémental, une tâche de test à jour n'est pas relancée. Lire les rapports de résultats pour donner les comptes réels, et forcer l'exécution si une preuve fraîche est demandée.
+
+## G4 — Sur un SDK Android, cibler directement le sous-dossier voulu
+Rôles : dev
+Date : 2026-11-14
+
+Sur un SDK Android, cibler directement le sous-dossier voulu, car un parcours complet est trop lent.

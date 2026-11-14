@@ -590,3 +590,9 @@ Rôles : qa
 Date : 2026-11-14
 
 Un contrôle de capture d'écran doit aussi rejeter une image unie d'une autre couleur que le noir, par exemple si plus de 95 % des pixels ont la même valeur.
+
+## G99 — Quand le GPU virtuel ne peut pas afficher le moteur, le test
+Rôles : qa
+Date : 2026-11-14
+
+Quand le GPU virtuel ne peut pas afficher le moteur, le test d'écran doit rendre non vérifié plutôt que réussi.

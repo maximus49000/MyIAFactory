@@ -186,6 +186,20 @@ class Passage(Base):
             self.assertEqual([x["agent"] for x in self.agents.lances], ["metier-9"])    # seul B a démarré
             self.assertEqual([t for t in self.suivi()["taches"] if t.get("active")], [])
 
+    def test_une_reprise_promise_survit_au_redemarrage(self):
+        """La reprise demandée (`a_lancer`) est gardée dans `attente-reprises.json` : le moteur redémarré la relance."""
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        self.ok("demande-traitee", entree={"id": "r1"})
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        t = self.ok("tache", entree={"titre": "Correction : Accueil", "fonctionnalite": "f1", "role": "dev",
+                                     "colonne": "dev", "etape": "correction", "agent": "dev-1"})["id"]
+        fichier = boucle.Moteur._fichier_reprises(self.moteur.projets[0])
+        fichier.write_text(json.dumps({"a_lancer": [t], "supplements": {t: "Reprends sur le poste."}}),
+                           encoding="utf-8")
+        self.moteur.tour()
+        self.assertEqual([(x["agent"], x["tache"]) for x in self.agents.lances], [("dev-1", t)])
+        self.assertFalse(fichier.exists())             # partie : plus rien à garder
+
     def test_reprise_relance_tache_orpheline(self):
         self.demande(type="fonctionnalite", texte="Des écrans")
         self.ok("demande-traitee", entree={"id": "r1"})

@@ -33,6 +33,7 @@ from orchestrateur import fiches as fi
 from orchestrateur import guetteur
 
 PAS_S = 2
+FICHIER_REPRISES = "attente-reprises.json"   # les relances promises (`a_lancer`), gardées hors du dépôt (`attente-*.json`)
 REVEIL_VERIFIE_S = 0.2           # pendant l'attente, le fichier de réveil de chaque projet est regardé cinq fois par seconde
 QUOTA_TOUS_LES_S = 60
 CLOUD_TOUS_LES_S = 60            # le dépôt est relevé toutes les minutes
@@ -286,6 +287,54 @@ class Moteur:
         self._dire_l_attente_de_charge(projet, etat)
         self._traiter_les_reveils()
         self._quota(projet)
+        self._garder_les_reprises(projet, etat)
+
+    # --- Les reprises promises survivent à un redémarrage du moteur.
+
+    @staticmethod
+    def _fichier_reprises(projet):
+        return fa.lire(projet.factory)["suivi"].with_name(FICHIER_REPRISES)
+
+    def _garder_les_reprises(self, projet, etat):
+        """Les tâches à relancer (`a_lancer` : une reprise sur retour, une correction faite…) et leur consigne de reprise
+        sont écrites dans un fichier d'état local : redémarré, le moteur les relance au lieu de les oublier (t52 de
+        MyFridgeCleaner, reprise demandée puis perdue au redémarrage, la tâche restée inactive sans raison)."""
+        ids = [t for t in etat.get("a_lancer") or [] if isinstance(t, str)]
+        supp = etat.get("supplements") or {}
+        objet = {"a_lancer": ids, "supplements": {t: supp[t] for t in ids if isinstance(supp.get(t), str)}}
+        contenu = json.dumps(objet, sort_keys=True, ensure_ascii=False)
+        if etat.get("_reprises_ecrites") == contenu:
+            return
+        fichier = self._fichier_reprises(projet)
+        try:
+            if ids:
+                tmp = fichier.with_name(fichier.name + ".tmp")
+                tmp.write_text(contenu, encoding="utf-8")
+                os.replace(tmp, fichier)
+            elif fichier.exists():
+                fichier.unlink()
+            etat["_reprises_ecrites"] = contenu
+        except OSError as e:
+            self._noter(projet, f"reprises non gardées : {e}")
+
+    def _reprendre_les_reprises(self, projet, etat):
+        """Au démarrage : les tâches qui attendaient leur relance la retrouvent (si elles ne sont ni faites, ni actives,
+        ni bloquées depuis)."""
+        try:
+            objet = json.loads(self._fichier_reprises(projet).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(objet, dict):
+            return
+        taches = {t["id"]: t for t in regles.lancer(projet, "etat")["taches"]}
+        supp = objet.get("supplements") if isinstance(objet.get("supplements"), dict) else {}
+        for tid in objet.get("a_lancer") or []:
+            t = taches.get(tid)
+            if not t or t["colonne"] == "fait" or t["active"] or t.get("bloquee") or tid in etat["a_lancer"]:
+                continue
+            etat["a_lancer"].append(tid)
+            if isinstance(supp.get(tid), str):
+                etat.setdefault("supplements", {})[tid] = supp[tid]
 
     def _presence(self, projet):
         suivi = fa.lire(projet.factory)["suivi"]
@@ -305,6 +354,10 @@ class Moteur:
             self._rattacher_les_agents(projet, etat)
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
             self._noter(projet, f"agents en cours : {e}")
+        try:
+            self._reprendre_les_reprises(projet, etat)
+        except (regles.Refus, regles.ErreurMoteur, OSError) as e:
+            self._noter(projet, f"reprises : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
         try:    # arrêtée faute d'outil, dont la fiche l'ouvre maintenant : la tâche repart, une fois
             self._executer(projet, regles.reprendre_les_taches_sans_outil(projet, etat))

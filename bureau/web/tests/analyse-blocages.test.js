@@ -75,9 +75,10 @@ test("les demandes : répondre autrement porte le texte, l'anomalie son état", 
   assert.deepEqual(demandeAnomalie({id: "a1"}, "reglee"), {type: "anomalie", anomalie: "a1", etat: "reglee"});
 });
 
-test("les anomalies : les plus récentes d'abord, les réglées à la fin", () => {
+test("les anomalies : les plus récentes d'abord, les réglées n'apparaissent plus", () => {
   const etat = {anomalies_logiciel: [{id: "a1", etat: "reglee"}, {id: "a2", etat: "nouvelle"}, {id: "a3", etat: "vue"}]};
-  assert.deepEqual(anomaliesAMontrer(etat).map((a) => a.id), ["a3", "a2", "a1"]);
+  assert.deepEqual(anomaliesAMontrer(etat).map((a) => a.id), ["a3", "a2"]);   // une anomalie réglée disparaît de la liste
+
   assert.deepEqual(anomaliesAMontrer({}), []);
 });
 

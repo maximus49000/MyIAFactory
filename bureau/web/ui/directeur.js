@@ -103,7 +103,8 @@ const ETATS_ANOMALIE = {nouvelle: "nouvelle", vue: "vue", reglee: "réglée"};
 // Les anomalies du logiciel à montrer : les plus récentes d'abord, les réglées à la fin. Pur.
 export function anomaliesAMontrer(etat) {
   const liste = Array.isArray(etat?.anomalies_logiciel) ? etat.anomalies_logiciel.filter((x) => x && x.id) : [];
-  return [...liste].reverse().sort((a, b) => (a.etat === "reglee") - (b.etat === "reglee"));
+  // Une anomalie réglée disparaît de la liste (demande du Directeur) ; elle reste dans le fichier du projet.
+  return [...liste].reverse().filter((a) => a.etat !== "reglee");
 }
 
 // « Anomalies du logiciel » : ce que le Chef attribue au logiciel lui-même (pas au projet) en analysant un blocage.

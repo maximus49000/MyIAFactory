@@ -548,3 +548,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Un effet de lancement qui appelle le chargement d'un modèle de vue se relance à chaque recréation de l'écran. La garde « déjà chargé » appartient au modèle de vue, et un test appelle charger deux fois.
+
+## G92 — Mesurer le contraste des couleurs d'alerte du thème avant de
+Rôles : designer
+Date : 2026-11-14
+
+Mesurer le contraste des couleurs d'alerte du thème avant de les employer en texte : sous 4,5:1 sur le fond, utiliser une variante plus foncée pour le texte et réserver la teinte vive aux bordures et pastilles.

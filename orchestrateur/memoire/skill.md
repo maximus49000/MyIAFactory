@@ -933,3 +933,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.
+
+## S156 — Pour ajouter une variante à un jeu d'images produit par scri
+Rôles : designer
+Date : 2026-11-14
+
+Pour ajouter une variante à un jeu d'images produit par script, paramétrer la fonction de dessin existante et vérifier que les images déjà validées sont regénérées à l'identique.

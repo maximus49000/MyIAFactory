@@ -999,3 +999,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour une preuve de build, relancer les tâches sans cache et journaliser toute la sortie dans un fichier avant de la filtrer.
+
+## S167 — Quand un contrôle exige un shell composé (opérateurs enchaîn
+Rôles : release
+Date : 2026-11-15
+
+Quand un contrôle exige un shell composé (opérateurs enchaînés), passer par les outils de recherche ou par un script Python qui exécute la même commande.

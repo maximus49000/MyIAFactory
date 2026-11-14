@@ -212,3 +212,9 @@ Rôles : testeur, dev
 Date : 2026-11-14
 
 Tester les raccourcis de saisie sur des valeurs décimales aux bornes (reste non rond) : un texte formaté pour l'affichage n'est pas un texte à relire par le contrôle de saisie.
+
+## G36 — Avant de coder un écran de statistiques, vérifier que chaque
+Rôles : dev
+Date : 2026-11-14
+
+Avant de coder un écran de statistiques, vérifier que chaque distinction affichée est bien enregistrée en base ; sinon ajouter la colonne avec une migration qui donne une valeur par défaut aux lignes existantes.

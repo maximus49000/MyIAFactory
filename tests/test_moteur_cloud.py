@@ -72,6 +72,31 @@ class Session(unittest.TestCase):
             self.assertLess(len(depart), 400)
             self.assertIn(".factory/departs/depart-", depart)
 
+    def test_un_message_deja_commite_n_est_pas_une_erreur(self):
+        """Cas réel : le même départ long une seconde fois ; le commit rendait 1 (« Changes not staged… ») et la
+        session n'était pas lancée."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            ex = Executeur({"claude --cloud": (0, ADRESSE.encode()),
+                            "git commit": (1, b"On branch master Changes not staged for commit:")})
+            cloud.lancer_session("x" * 30000, dossier_projet=d, modele="sonnet", executer=ex, trouver=CLAUDE)
+            self.assertFalse([a for a in ex.appels if "Départ d'une session cloud (message long)" in a])
+
+    def test_une_suite_trop_longue_passe_par_un_fichier_pousse(self):
+        """Cas réel : « [WinError 206] Nom de fichier ou extension trop long » en envoyant un départ à une session."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            ex = Executeur({"git rev-parse": (0, b"master"), "git diff": (1, b"")})
+            cloud.envoyer_suite("session_1", "Consigne. " * 4000, executer=ex, dossier_projet=d, trouver=CLAUDE)
+            commandes = [" ".join(a[:2]) for a in ex.appels]
+            self.assertLess(commandes.index("git commit"), commandes.index("git push"))
+            envoi = ex.appels[-1]
+            self.assertEqual(envoi[:2], ["claude", "-p"])
+            self.assertLess(len(envoi[2]), 500)
+            self.assertIn("git fetch origin master", envoi[2])
+            self.assertEqual(len(list((Path(d) / ".factory" / "departs").glob("depart-*.md"))), 1)
+
     def test_la_cle_api_n_est_pas_transmise(self):
         import os
         from unittest import mock
@@ -691,6 +716,22 @@ class Agents(Base):
         self.avancer()
         self.avancer(5)
         self.assertNotIn("dossier_a_approuver", self.decision_session())
+
+    def test_reessayer_le_lancement_depuis_le_bureau(self):
+        """La cause réglée (un correctif du moteur) : « Réessayer le lancement » relance sans session faite à la main."""
+        t = self.tache()
+        self.cloud.panne = "message trop long"
+        self.avancer()
+        self.avancer(5)
+        dec = self.decision_session()
+        self.cloud.panne = None
+        self.ok("actions", entree={"type": "session_cloud", "decision": dec["id"], "verdict": "relancer"})
+        self.avancer(5)
+        self.assertNotIn(dec["id"], [x["id"] for x in self.suivi()["decisions_projet"]])
+        tache = next(x for x in self.suivi()["taches"] if x["id"] == t)
+        self.assertIsNone(tache["bloquee"])
+        self.assertTrue(tache["active"])
+        self.assertIn("Lancement de la session cloud réessayé depuis le bureau.", [j["texte"] for j in tache["journal"]])
 
     def test_secours_la_session_inscrite_refuse_aussi(self):
         etat = self.moteur.etats[str(self.projet.factory)]

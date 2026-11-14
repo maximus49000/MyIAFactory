@@ -452,6 +452,15 @@ test("dossier à approuver : « Approuver le dossier et relancer » en premier, 
   assert.equal(etat.cloud_dossier_approuve, true);
 });
 
+test("session à créer : « Réessayer le lancement » demande au moteur de relancer lui-même", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [SESSION]});
+  const libelles = boutons(contenu).map((b) => b.textContent);
+  assert.ok(libelles.includes("Réessayer le lancement"));
+  assert.ok(libelles.includes("C'est fait"));
+  await bouton(contenu, "Réessayer le lancement").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "session_cloud", decision: "s1", verdict: "relancer"}]);
+});
+
 test("dossier à approuver : un réglage refusé n'envoie pas la relance et dit pourquoi", async () => {
   const fetch = async () => ({ok: false, status: 400, json: async () => ({erreur: "non"})});
   const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [{...SESSION, dossier_a_approuver: true}]},

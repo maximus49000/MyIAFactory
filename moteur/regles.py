@@ -1704,10 +1704,13 @@ def _relancer_apres_approbation(projet, demande, etat, court, d):
     `cloud_dossier_approuve` juste avant ; la décision est levée et les tâches de l'agent bloquées faute de session
     repartent (le moteur relit le réglage au lancement et répond lui-même « Yes, I trust this folder »)."""
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    dossier = d.get("dossier_a_approuver") is True      # sinon « Réessayer le lancement » : la cause est réglée
     reprises = _reprendre_faute_de_session(projet, etat, court, d["agent"],
-                                           "Dossier approuvé pour les sessions cloud : nouvel essai.")
+                                           "Dossier approuvé pour les sessions cloud : nouvel essai." if dossier
+                                           else "Lancement de la session cloud réessayé depuis le bureau.")
     projet._cloud_raison = (None, 0.0)
-    _terminer(projet, {"demande": demande["id"]}, "Le dossier est approuvé pour les sessions cloud."
+    _terminer(projet, {"demande": demande["id"]},
+              ("Le dossier est approuvé pour les sessions cloud." if dossier else "Le moteur réessaie le lancement.")
               + (f" {len(reprises)} tâche(s) bloquée(s) repartent." if reprises else ""))
     return _demarrer_en_attente(projet, etat, None) if reprises else []
 

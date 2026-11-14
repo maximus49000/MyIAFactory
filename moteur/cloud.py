@@ -140,8 +140,12 @@ def _depart_en_fichier(executer, dossier_projet, depart):
     chemin.write_text(depart, encoding="utf-8", newline="\n")
     code, sortie = _git(executer, dossier_projet, "add", "--", relatif)
     if code == 0:
-        code, sortie = _git(executer, dossier_projet, "commit", "-q", "-m", "Départ d'une session cloud (message long)",
-                            "--", relatif)
+        # le même message déjà commité (même empreinte, même contenu) : rien à valider, ce n'est pas une erreur (cas
+        # réel : un second départ identique, git rendait 1 avec « Changes not staged for commit » d'autres fichiers)
+        deja, _ = _git(executer, dossier_projet, "diff", "--cached", "--quiet", "--", relatif)
+        if deja != 0:
+            code, sortie = _git(executer, dossier_projet, "commit", "-q", "-m",
+                                "Départ d'une session cloud (message long)", "--", relatif)
     if code != 0 and "nothing to commit" not in _texte(sortie) and "rien à valider" not in _texte(sortie):
         raise ErreurCloud("le message de départ, trop long, n'a pas pu être mis dans le dépôt : " + _texte(sortie)[:200])
     return (f"Ton message de départ complet est dans le fichier `{relatif}` de ce dépôt : lis-le entièrement maintenant, "
@@ -201,11 +205,32 @@ def _lancer_dans_le_faux_terminal(argv, dossier_projet, terminal, approuver_doss
     raise ErreurCloud((r["raison"] or "pas de session créée") + " (faux terminal)")
 
 
+def _suite_en_fichier(executer, dossier_projet, texte):
+    """Le texte long d'une suite : dans `.factory/departs/`, commité et poussé ; rend la consigne courte qui dit à la
+    session (déjà sur sa branche) de le lire sur la branche principale du dépôt."""
+    consigne = _depart_en_fichier(executer, dossier_projet, texte)
+    relatif = consigne.split("`")[1]
+    code, sortie = _git(executer, dossier_projet, "rev-parse", "--abbrev-ref", "HEAD", delai_s=30)
+    branche = _texte(sortie) if code == 0 and _texte(sortie) and _texte(sortie) != "HEAD" else "master"
+    with git_sur.verrou(dossier_projet):
+        etat_hors_du_depot(dossier_projet, executer)
+        code, sortie = _pousser(executer, dossier_projet)
+    if code != 0:
+        raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
+    return (f"La suite de ta tâche est dans le fichier `{relatif}` de la branche `{branche}` du dépôt : récupère-le "
+            f"(`git fetch origin {branche}` puis `git show FETCH_HEAD:{relatif}`), lis-le entièrement, puis fais "
+            "exactement ce qu'il demande.")
+
+
 def envoyer_suite(session, texte, *, executer=None, dossier_projet=".", trouver=appel.trouver_claude):
     """Envoie une suite (l'accord de l'utilisateur) à la même session : `claude -p "<texte>" --cloud <session>`."""
     claude = trouver()
     if not claude:
         raise ErreurCloud("la commande claude n'est pas installée")
+    if len(texte) > LONGUEUR_MAX_DEPART:
+        # trop long pour la ligne de commande (cas réel : « [WinError 206] Nom de fichier ou extension trop long ») : le
+        # texte va dans un fichier du dépôt, poussé ; la session le récupère sur la branche principale
+        texte = _suite_en_fichier(executer, dossier_projet, texte)
     code, sortie = _lancer(executer, [claude, "-p", texte, "--cloud", session], dossier_projet, DELAI_CLAUDE_S)
     if code != 0:
         raise ErreurCloud(_sans_terminal(_texte(sortie)) or f"la suite n'a pas pu être envoyée : {_texte(sortie)[:200]}")

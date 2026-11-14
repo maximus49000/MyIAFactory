@@ -347,6 +347,12 @@ function decisionSession(ctx, d) {
     li.append(el("div", "lecon-meta", "Message de départ à coller dans la session :"), message, copier);
   }
   if (!e.agir) return li;
+  // la cause réglée (un correctif du moteur, claude reconnecté…) : le moteur relance lui-même, sans session à la main
+  if (d.dossier_a_approuver !== true) {
+    li.append(el("div", "lecon-meta", "La cause est réglée ? Le moteur peut réessayer lui-même :"),
+      boutonDemande(ctx, "Réessayer le lancement", "bouton", () => demandeRelancerSession(d.id)),
+      el("div", "lecon-meta", "Ou créez la session à la main :"));
+  }
   const nom = document.createElement("input");
   nom.type = manuelle ? "url" : "text";
   nom.maxLength = 200;

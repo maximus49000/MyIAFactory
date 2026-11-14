@@ -338,3 +338,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour vérifier la présence d'une classe dans un paquet, lire les noms réels dans les déclarations du code et tenir compte des classes générées par les outils.
+
+## G57 — Relire le câblage de navigation entre deux écrans : un rappe
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Relire le câblage de navigation entre deux écrans : un rappel qui reçoit une donnée mais navigue sans la transmettre passe tous les tests unitaires de la logique.

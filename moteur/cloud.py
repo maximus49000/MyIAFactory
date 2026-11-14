@@ -164,6 +164,7 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
     claude = trouver()
     if not claude:
         raise ErreurCloud("la commande claude n'est pas installée")
+    etat_hors_du_depot(dossier_projet, executer)
     code, sortie = _pousser(executer, dossier_projet)
     if code != 0:
         raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
@@ -368,12 +369,60 @@ def chercher_rapports(dossier_projet, taches, *, executer=None):
     return trouves
 
 
+# Les fichiers d'état que le moteur réécrit lui-même : en conflit, la version locale (celle du moteur) l'emporte.
+ETAT_DU_MOTEUR = re.compile(r"^\.factory/(attente-[^/]+\.json|anomalies-logiciel\.jsonl|presence\.json|moteur-reveil"
+                            r"|suivi\.json(\.precedent)?|demandes\.jsonl|sessions\.json|[^/]+-historique\.jsonl)$")
+
+
+def _regler_les_conflits_d_etat(executer, dossier):
+    """Vrai si tous les conflits de la fusion en cours portent sur des fichiers d'état du moteur : la version locale
+    est gardée et la fusion est conclue. Faux sinon (rien n'est touché)."""
+    code, sortie = _git(executer, dossier, "diff", "--name-only", "--diff-filter=U", delai_s=30)
+    fichiers = [x.strip() for x in _texte(sortie).splitlines() if x.strip()]
+    if code != 0 or not fichiers or not all(ETAT_DU_MOTEUR.match(f) for f in fichiers):
+        return False
+    _git(executer, dossier, "checkout", "--ours", "--", *fichiers)
+    _git(executer, dossier, "add", "--", *fichiers)
+    code, _ = _git(executer, dossier, "commit", "--no-edit", "-q")
+    return code == 0
+
+
+def etat_hors_du_depot(dossier, executer=None):
+    """La règle de fond : les fichiers que le moteur réécrit lui-même (présence, attentes, historiques, copies
+    précédentes, agents en cours…) ne sont pas suivis par git. Le .gitignore du projet reçoit le bloc de MyIAFactory
+    et ceux déjà suivis sont retirés du suivi (gardés sur le disque). Cas réels : fusions de branches cloud refusées
+    (« Your local changes … would be overwritten ») et conflits sur ces fichiers. Sans dossier .factory : rien."""
+    dossier = Path(dossier)
+    if not (dossier / ".factory").is_dir():
+        return False
+    from installation import mise_en_place as mep
+    try:
+        change = mep.regler_gitignore(dossier)
+    except OSError:
+        return False
+    code, sortie = _git(executer, dossier, "ls-files", "-ci", "--exclude-standard", "--", ".factory", delai_s=30)
+    suivis = [x.strip() for x in _texte(sortie).splitlines() if x.strip()] if code == 0 else []
+    if suivis:
+        _git(executer, dossier, "rm", "-q", "--cached", "--", *suivis)
+    if change or suivis:
+        _git(executer, dossier, "add", "--", ".gitignore")
+        _git(executer, dossier, "commit", "-q", "-m", "Factory : fichiers d'état du moteur hors du dépôt")
+    return bool(change or suivis)
+
+
 def fusionner(dossier_projet, branche, *, executer=None):
     """Fusionne la branche de la session dans la branche du projet, puis pousse. `None` si c'est fait, sinon la raison
     (un conflit : la fusion est annulée, rien n'est cassé)."""
+    # L'état du moteur s'écrit sans cesse (attente-*.json, anomalies…) : enregistré juste avant la fusion, sinon git
+    # refuse (« Your local changes … would be overwritten by merge », cas réel).
+    etat_hors_du_depot(dossier_projet, executer)
+    code, sortie = _git(executer, dossier_projet, "status", "--porcelain", delai_s=30)
+    if code == 0 and _texte(sortie).strip():
+        _git(executer, dossier_projet, "add", "-A")
+        _git(executer, dossier_projet, "commit", "-q", "-m", f"Factory : état local avant la fusion de {branche}")
     code, sortie = _git(executer, dossier_projet, "merge", "--no-ff", "-m", f"Factory : fusion de {branche}",
                         f"origin/{branche}")
-    if code != 0:
+    if code != 0 and not _regler_les_conflits_d_etat(executer, dossier_projet):
         _git(executer, dossier_projet, "merge", "--abort")
         return "conflit de fusion : " + _texte(sortie)[:200]
     code, sortie = _pousser(executer, dossier_projet)

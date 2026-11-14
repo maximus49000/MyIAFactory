@@ -26,7 +26,8 @@ OUTIL = PREFIXE_SKILL + "/orchestrateur/outil.py"
 DOSSIERS = ("pieces", "captures", "livrables", "methodes", "documents")
 # `.env` : les clés des partenaires y vivent (lues au moment de l'appel) et ne partent jamais dans le dépôt.
 BLOC_GITIGNORE = ("# MyIAFactory : fichiers propres à la machine", ".factory/equipe.json", ".factory/*-historique.jsonl",
-                  ".env", ".factory/presence.json", ".factory/*.precedent")
+                  ".env", ".factory/presence.json", ".factory/*.precedent", ".factory/attente-*.json",
+                  ".factory/moteur-reveil", ".factory/agents-en-cours/", ".factory/anomalies-logiciel.jsonl")
 PORT = 8770
 SERVICE_FACTURATION = {"id": "facturation", "nom": "Facturation"}
 

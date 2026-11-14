@@ -320,8 +320,9 @@ class Releve(unittest.TestCase):
     def test_fusion_reussie_pousse(self):
         ex = Executeur()
         self.assertIsNone(cloud.fusionner("/p", "claude/bbb", executer=ex))
-        self.assertEqual(ex.appels[0][:4], ["git", "merge", "--no-ff", "-m"])
-        self.assertEqual(ex.appels[0][-1], "origin/claude/bbb")
+        fusion = next(a for a in ex.appels if a[1] == "merge")
+        self.assertEqual(fusion[:4], ["git", "merge", "--no-ff", "-m"])
+        self.assertEqual(fusion[-1], "origin/claude/bbb")
         self.assertEqual(ex.appels[-1], ["git", "push"])
 
 
@@ -795,3 +796,64 @@ class FusionPushConcurrent(__import__("unittest").TestCase):
         def executer(argv, cwd, delai):
             return (1, b"fatal: Authentication failed") if argv[1] == "push" else (0, b"")
         self.assertIn("n'a pas pu être poussée", cloud.fusionner(".", "claude/x", executer=executer))
+
+
+class FusionEtatLocal(__import__("unittest").TestCase):
+    def test_l_etat_local_est_enregistre_avant_la_fusion(self):
+        from moteur import cloud
+        appels = []
+        def executer(argv, cwd, delai):
+            appels.append(argv[1:3])
+            if argv[1] == "status":
+                return 0, b" M .factory/attente-taches.json\n"
+            return 0, b""
+        self.assertIsNone(cloud.fusionner(".", "claude/x", executer=executer))
+        ordre = [a[0] for a in appels]
+        self.assertLess(ordre.index("commit"), ordre.index("merge"))
+
+    def test_conflit_sur_l_etat_du_moteur_regle_seul(self):
+        from moteur import cloud
+        def executer(argv, cwd, delai):
+            if argv[1] == "merge" and "--abort" not in argv:
+                return 1, b"CONFLICT"
+            if argv[1] == "diff":
+                return 0, b".factory/attente-charge.json\n.factory/anomalies-logiciel.jsonl\n"
+            return 0, b""
+        self.assertIsNone(cloud.fusionner(".", "claude/x", executer=executer))
+
+    def test_conflit_sur_du_code_reste_au_directeur(self):
+        from moteur import cloud
+        def executer(argv, cwd, delai):
+            if argv[1] == "merge" and "--abort" not in argv:
+                return 1, b"CONFLICT (content): app/Main.kt"
+            if argv[1] == "diff":
+                return 0, b"app/Main.kt\n.factory/attente-charge.json\n"
+            return 0, b""
+        self.assertIn("conflit de fusion", cloud.fusionner(".", "claude/x", executer=executer))
+
+
+class EtatHorsDuDepot(__import__("unittest").TestCase):
+    """La règle de fond : les fichiers d'état du moteur ne sont pas suivis par git (vrai dépôt temporaire)."""
+
+    def test_les_fichiers_d_etat_suivis_sont_retires_et_ignores(self):
+        import subprocess, tempfile
+        from pathlib import Path
+        from moteur import cloud
+        d = Path(tempfile.mkdtemp())
+        (d / ".factory").mkdir()
+        git = lambda *a: subprocess.run(["git", *a], cwd=d, capture_output=True)
+        git("init", "-q")
+        git("config", "user.email", "x@x")
+        git("config", "user.name", "x")
+        for nom in ("attente-taches.json", "presence.json", "suivi.json", "moteur-reveil"):
+            (d / ".factory" / nom).write_text("{}", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        self.assertTrue(cloud.etat_hors_du_depot(d))
+        suivis = git("ls-files").stdout.decode().split()
+        self.assertIn(".factory/suivi.json", suivis)                 # le suivi reste dans le dépôt
+        for nom in ("attente-taches.json", "presence.json", "moteur-reveil"):
+            self.assertNotIn(f".factory/{nom}", suivis)
+            self.assertTrue((d / ".factory" / nom).exists())         # gardé sur le disque
+        self.assertFalse(cloud.etat_hors_du_depot(d))                # rien à refaire
+        self.assertEqual(git("status", "--porcelain").stdout.decode().strip(), "")

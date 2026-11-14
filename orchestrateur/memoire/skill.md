@@ -747,3 +747,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand une tâche redemande un élément déjà livré et que l'environnement n'a pas les outils de build, vérifier l'historique du dépôt, rendre l'existant et signaler clairement que rien n'a été recompilé ni retesté.
+
+## S125 — Sous Windows, lancer un script de build par son chemin compl
+Rôles : release
+Date : 2026-11-14
+
+Sous Windows, lancer un script de build par son chemin complet, jamais par son seul nom, car le shell ne cherche pas dans le dossier courant.

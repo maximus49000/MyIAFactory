@@ -879,3 +879,9 @@ Rôles : release
 Date : 2026-11-14
 
 Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.
+
+## S147 — Quand les états d'un écran sont déjà maquettés et validés, l
+Rôles : designer
+Date : 2026-11-14
+
+Quand les états d'un écran sont déjà maquettés et validés, livrer un tableau état → texte → actions et les règles de comportement, sans regénérer d'images.

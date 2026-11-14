@@ -536,3 +536,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Un contrôle automatique des littéraux affichés doit viser tous les fichiers qui produisent du texte visible, pas seulement les écrans de l'élément en cours, sinon les messages construits dans la navigation ou dans les modèles de vue y échappent.
+
+## G90 — Dans une application mobile, ajouter un test unitaire qui li
+Rôles : testeur
+Date : 2026-11-14
+
+Dans une application mobile, ajouter un test unitaire qui lit les fichiers d'écran et le fichier de ressources. Il vérifie que les identifiants de texte utilisés existent, qu'aucune chaîne n'est écrite en dur et que les apostrophes sont échappées.

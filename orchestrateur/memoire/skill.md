@@ -741,3 +741,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Relire chaque édition juste après l'avoir faite : une erreur d'inattention compile parfois sans que personne ne la voie.
+
+## S124 — Quand une tâche redemande un élément déjà livré et que l'env
+Rôles : dev
+Date : 2026-11-14
+
+Quand une tâche redemande un élément déjà livré et que l'environnement n'a pas les outils de build, vérifier l'historique du dépôt, rendre l'existant et signaler clairement que rien n'a été recompilé ni retesté.

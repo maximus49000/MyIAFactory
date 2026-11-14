@@ -206,3 +206,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Pour un élément de notification système, dessiner la notification dans ses variantes (unique, groupée, urgente), les états d'autorisation (demande, refus, canal désactivé) et les erreurs de planification, de lecture et de cible disparue, chacune avec une sortie.
+
+## G35 — Tester les raccourcis de saisie sur des valeurs décimales au
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Tester les raccourcis de saisie sur des valeurs décimales aux bornes (reste non rond) : un texte formaté pour l'affichage n'est pas un texte à relire par le contrôle de saisie.

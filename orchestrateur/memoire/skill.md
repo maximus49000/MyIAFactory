@@ -873,3 +873,9 @@ Rôles : release
 Date : 2026-11-14
 
 Journaliser la sortie complète d'un build dans un fichier avant de la filtrer : un filtre par mots-clés peut masquer la cause réelle de l'échec.
+
+## S146 — Pour contrôler un certificat de signature, passer le mot de
+Rôles : release
+Date : 2026-11-14
+
+Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.

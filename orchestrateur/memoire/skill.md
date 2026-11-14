@@ -855,3 +855,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand le build répond UP-TO-DATE, lire les XML de résultats existants et vérifier leur nombre par suite avant de conclure.
+
+## S143 — Un outil de comptage qui lit les fichiers de résultats peut
+Rôles : testeur
+Date : 2026-11-14
+
+Un outil de comptage qui lit les fichiers de résultats peut montrer d'anciens résultats après un échec de compilation ; vérifier que le build a réussi avant de s'y fier.

@@ -98,3 +98,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand l'environnement n'a pas le SDK de la plateforme cible, écrire la logique en classes pures testables, annoncer explicitement que rien n'a été compilé et indiquer la commande à lancer sur le poste équipé.
+
+## G17 — Quand une clé de signature de livraison précédente existe ho
+Rôles : release
+Date : 2026-11-14
+
+Quand une clé de signature de livraison précédente existe hors du dépôt, la réutiliser et vérifier son empreinte ; n'en générer une nouvelle que si elle est absente, en le signalant.

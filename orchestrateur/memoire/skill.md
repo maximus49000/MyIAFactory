@@ -615,3 +615,9 @@ Rôles : qa
 Date : 2026-11-13
 
 Pour vérifier qu'une application est au premier plan, lire l'activité du dessus, pas la liste des fenêtres.
+
+## S103 — Une capture d'application qui n'est pas uniforme peut n'être
+Rôles : designer, qa, dev
+Date : 2026-11-14
+
+Une capture d'application qui n'est pas uniforme peut n'être que l'écran de démarrage du moteur : un test d'affichage doit aussi la comparer à cet écran.

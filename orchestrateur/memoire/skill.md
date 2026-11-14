@@ -801,3 +801,9 @@ Rôles : release
 Date : 2026-11-14
 
 Si l'affichage d'un certificat échoue dans l'outil de clés, exportez le certificat au format DER et calculez son empreinte avec un calcul de hachage.
+
+## S134 — Dans une maquette, vérifier que les chiffres d'exemple reste
+Rôles : designer
+Date : 2026-11-14
+
+Dans une maquette, vérifier que les chiffres d'exemple restent cohérents avec le filtre ou l'état affiché à côté.

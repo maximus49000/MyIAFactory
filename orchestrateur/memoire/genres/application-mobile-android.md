@@ -482,3 +482,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Après toute écriture d'une ressource de chaînes Android, vérifier l'échappement des apostrophes et l'absence de marques de gabarit ; une correction commitée sans compilation ne prouve rien tant que le build n'a pas réussi.
+
+## G81 — Quand une correction de revue ajoute un état ou un écran abs
+Rôles : testeur
+Date : 2026-11-14
+
+Quand une correction de revue ajoute un état ou un écran absent de la fiche, la revue le signale comme écart à faire valider, même si les tests passent : les tests prouvent le comportement, pas l'accord sur la conception.

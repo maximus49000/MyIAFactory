@@ -885,3 +885,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand les états d'un écran sont déjà maquettés et validés, livrer un tableau état → texte → actions et les règles de comportement, sans regénérer d'images.
+
+## S148 — Quand un élément est couvert par une maquette déjà validée e
+Rôles : designer
+Date : 2026-11-14
+
+Quand un élément est couvert par une maquette déjà validée et une fiche écrite, relancer l'étape de maquettes ne produit rien : vérifier la présence des fichiers, déclarer l'étape non applicable et fournir au valideur de quoi juger.

@@ -179,7 +179,9 @@ fenêtre, dis-le dans ton compte rendu.
 **Jamais d'installation ni de test sur un appareil physique de l'utilisateur** : pas d'`adb devices` ni d'`adb install`
 vers un téléphone branché, pas de demande de brancher un téléphone ni d'activer le débogage USB. Les tests automatiques
 d'une application mobile se font sur un émulateur (AVD sans fenêtre : `emulator -no-window`) ; s'il manque, déclare-le
-comme outil du poste à installer. La version, c'est l'utilisateur qui la valide dans la fenêtre de validation
+comme outil du poste à installer. **Avant ton compte rendu, ferme ce que tu as lancé** (émulateur : `adb emu kill` ;
+serveur local ; démon Gradle : `gradlew --stop`) : le poste de l'utilisateur doit retrouver sa mémoire (le moteur arrête
+de toute façon ce qui reste à la fin de la tâche). La version, c'est l'utilisateur qui la valide dans la fenêtre de validation
 (`nature: en_jeu`, apk à télécharger et mode opératoire). Si tu juges quand même nécessaire un test sur appareil, rends
 `accord_requis` : c'est le Directeur qui statue, et s'il refuse, continue sans ce test (installation non faite)."""
 

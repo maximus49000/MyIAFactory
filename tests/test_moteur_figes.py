@@ -173,13 +173,38 @@ class Orphelins(Base):
             del self.procs[pid]
         (self.agents / "t1.json").unlink()        # le moteur a oublié l'agent
         self.ajouter(proc(4, 0, "System", None, self.T0 - 9999))     # une liste vide serait une mesure ratée
-        self.assertEqual(self.passer(s, 100), [])
-        arrets = self.passer(s, 201)
+        arrets = self.passer(s, 30)           # sans attendre qu'il soit figé : la tâche est finie
         self.assertEqual([(a["tache"], a["nom"], a["orphelin"]) for a in arrets], [("t1", "godot", True)])
-        self.assertEqual(figes.texte_journal(arrets[0]),
-                         "Commande figée arrêtée : godot (aucune activité du processeur depuis 5 min).")
+        self.assertEqual(figes.texte_journal(arrets[0]), "Programme laissé à la fin de la tâche arrêté : godot "
+                                                         "(mémoire et processeur rendus au poste).")
         self.assertEqual(self.passer(s, 30), [])
         self.assertFalse((self.agents / figes.FICHIER_FAMILLES).exists())     # plus rien à surveiller pour lui
+
+    def test_l_emulateur_qui_calcule_est_arrete_a_la_fin_de_la_tache(self):
+        """Cas réel : un émulateur Android sans fenêtre (4 Go) lancé par un agent est resté deux heures après lui."""
+        self.agent(lignes=[ligne_commande(self.T0 - 60)])
+        self.ajouter(proc(100, 1, "claude", 50.0, self.T0 - 600), proc(200, 100, "bash", 0.1, self.T0 - 59),
+                     proc(250, 200, "emulator", 1.0, self.T0 - 58),
+                     proc(400, 250, "qemu-system-x86_64-headless", 5.0, self.T0 - 57),
+                     proc(700, 1, "qemu-system-x86_64-headless", 5.0, self.T0 - 50))    # celui d'un autre : intouché
+        s = self.surveillance()
+        self.passer(s)
+        for pid in (100, 200, 250):
+            del self.procs[pid]
+        self.procs[400]["cpu"] += 3          # il calcule encore
+        arrets = self.passer(s, 30)
+        self.assertEqual([(a["nom"], a.get("fin")) for a in arrets], [("qemu-system-x86_64-headless", True)])
+        self.assertEqual(self.tues, [(400, [])])
+        self.assertIn(700, self.procs)
+
+    def test_un_shell_laisse_et_son_enfant_partent_ensemble(self):
+        self.arbre_godot()
+        s = self.surveillance()
+        self.passer(s)
+        del self.procs[100], self.procs[150]
+        self.assertEqual(self.tues, [])
+        self.passer(s, 30)
+        self.assertEqual(self.tues, [(200, [300, 400])])
 
     def test_l_orphelin_d_un_agent_jamais_vu_vivant_est_reconnu_a_son_parent(self):
         """Le moteur redémarre : l'agent est mort, son enfant (parent = l'agent, né après lui) est encore là."""
@@ -187,8 +212,7 @@ class Orphelins(Base):
         self.ajouter(proc(400, 100, "godot", 1.0, self.T0 - 50),
                      proc(500, 100, "godot", 1.0, self.T0 - 700))     # né avant l'agent : pas le sien
         s = self.surveillance()
-        self.passer(s)
-        arrets = self.passer(s, 301)
+        arrets = self.passer(s)
         self.assertEqual([a["pid"] for a in arrets], [400])
         self.assertEqual(self.tues, [(400, [])])
 
@@ -202,12 +226,13 @@ class Orphelins(Base):
         arrets = self.passer(s, 301)
         self.assertEqual([(a["nom"], a["orphelin"]) for a in arrets], [("godot", True)])
 
-    def test_un_orphelin_qui_calcule_reste(self):
+    def test_l_orphelin_qui_calcule_d_un_agent_vivant_reste(self):
+        """L'agent travaille encore : un programme qu'il a lancé à part (son shell coupé) peut lui servir."""
         self.arbre_godot()
         s = self.surveillance()
         self.passer(s)
-        for pid in (100, 150, 200, 300):
-            del self.procs[pid]
+        del self.procs[200], self.procs[300]
+        self.agent(lignes=[ligne_commande(self.T0 - 60), ligne_resultat()])
         for _ in range(10):
             self.procs[400]["cpu"] += 1
             self.assertEqual(self.passer(s, 120), [])

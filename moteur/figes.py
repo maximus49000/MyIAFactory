@@ -311,7 +311,27 @@ def commandes_en_attente(lignes, en_attente=None):
     return en_attente
 
 
+def a_la_fin(procs, enfants, racines, laisses, interdits=()):
+    """Ce qu'un agent fini a laissé, à arrêter sans attendre : `[(processus, descendants)]`, shells compris (l'agent
+    n'est plus là pour s'en servir) ; jamais un processus `interdits` ni un hors de `laisses`."""
+    rendu, file, vus = [], list(racines), set()
+    while file:
+        pid = file.pop(0)
+        if pid in vus or pid not in procs or pid not in laisses or pid in interdits:
+            continue
+        vus.add(pid)
+        dessous = [x for x in sous_arbre(enfants, pid) if x in laisses and x not in interdits]
+        if any(x in interdits for x in sous_arbre(enfants, pid)):
+            file += enfants.get(pid, [])
+            continue
+        rendu.append((procs[pid], dessous))
+        vus.update(dessous)
+    return rendu
+
+
 def texte_journal(arret):
+    if arret.get("fin"):
+        return f"Programme laissé à la fin de la tâche arrêté : {arret['nom']} (mémoire et processeur rendus au poste)."
     minutes = max(1, int(arret["immobile_s"] // 60))
     return f"Commande figée arrêtée : {arret['nom']} (aucune activité du processeur depuis {minutes} min)."
 
@@ -425,11 +445,20 @@ class Surveillance:
             # les programmes laissés : ni sous un agent vivant, mais d'un ancêtre de la famille
             laisses = self._laisses(fam, procs, tous_sous_agents | interdits, vivants.get(ident))
             racines = [pid for pid in laisses if procs[pid].get("parent") not in laisses]
-            for r in racines:
-                for q, immobile, dessous in cibles(procs, enfants, [r], self.suivi, maintenant, self.fige_s,
-                                                   interdits=interdits | tous_sous_agents):
+            if ident not in vivants:
+                # l'agent est fini : tout ce qu'il a laissé (émulateur, serveur, démon de compilation…) est arrêté tout
+                # de suite, qu'il calcule ou non — la mémoire et le processeur du poste sont rendus à la fin de la tâche
+                for q, dessous in a_la_fin(procs, enfants, racines, laisses, interdits | tous_sous_agents):
                     if self.tuer(q, dessous):
-                        arrets.append(self._arret(fam, q, immobile, True))
+                        arrets.append(self._arret(fam, q, self.suivi.immobile_depuis(q, maintenant) or 0, True,
+                                                  fin=True))
+                        laisses = laisses - {q["pid"], *dessous}
+            else:
+                for r in racines:
+                    for q, immobile, dessous in cibles(procs, enfants, [r], self.suivi, maintenant, self.fige_s,
+                                                       interdits=interdits | tous_sous_agents):
+                        if self.tuer(q, dessous):
+                            arrets.append(self._arret(fam, q, immobile, True))
             if ident not in vivants and not laisses:
                 del familles[ident]          # l'agent est fini et n'a rien laissé : plus rien à surveiller
             elif len(connus) > MAX_CONNUS:
@@ -471,9 +500,12 @@ class Surveillance:
         return laisses
 
     @staticmethod
-    def _arret(fam, q, immobile, orphelin):
-        return {"tache": fam.get("tache"), "agent": fam.get("agent"), "nom": nom_court(q["nom"]), "pid": q["pid"],
-                "immobile_s": immobile, "orphelin": orphelin}
+    def _arret(fam, q, immobile, orphelin, fin=False):
+        rendu = {"tache": fam.get("tache"), "agent": fam.get("agent"), "nom": nom_court(q["nom"]), "pid": q["pid"],
+                 "immobile_s": immobile, "orphelin": orphelin}
+        if fin:
+            rendu["fin"] = True
+        return rendu
 
     @staticmethod
     def _lire_familles(dossier):

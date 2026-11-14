@@ -365,3 +365,12 @@ class RepliSurLeGenre(__import__("unittest").TestCase):
         self.assertEqual(wf.de_la_fonctionnalite(f, {"genre": "appli", "workflow": None})["id"], "w-appli")
         self.assertEqual(wf.de_la_fonctionnalite(f, None)["id"], "w-appli")
         self.assertIsNone(wf.de_la_fonctionnalite({"workflows": []}, None))
+
+    def test_ses_colonnes_au_tableau(self):
+        from orchestrateur import workflows as wf
+        genre = {"id": "w-appli", "fonctionnalite": None, "genre": "appli", "flux": [{"id": "dev", "nom": "Dev", "role": "dev"}]}
+        f = {"genre": "appli", "workflows": [genre]}
+        ids = [c["id"] for c in wf.colonnes(f, [{"id": "f1", "etape": "serie", "workflow": None, "genre": "appli"}])]
+        self.assertEqual(ids, ["cadrage", "dev", "fait"])
+        ids = [c["id"] for c in wf.colonnes(f, [{"id": "f1", "etape": "terminee", "workflow": None}])]
+        self.assertEqual(ids, ["cadrage", "fait"])

@@ -133,11 +133,24 @@ def colonnes(f, fonctionnalites):
     toujours), puis fait."""
     par_id = {x["id"]: x for x in fonctionnalites}
     sortie = [{"id": "cadrage", "nom": "Cadrage"}]
-    for w in tous(f):
+    ws = tous(f)
+    # Sans principal, une fonctionnalité en cours sans workflow à elle suit celui du genre (`de_la_fonctionnalite`) :
+    # ses colonnes sont alors celles de ce workflow de genre (cas réel : tâches à l'étape « maquettes » montrées en
+    # « Fait », faute de colonne).
+    suivis = set()
+    if not any(w["id"] == PRINCIPAL for w in ws):
+        copies = {w["fonctionnalite"] for w in ws if w["fonctionnalite"]}
+        for x in fonctionnalites:
+            if (not x.get("workflow") and x.get("id") not in copies
+                    and x.get("etape") not in ETAPES_CACHANT_LES_COLONNES):
+                w = de_la_fonctionnalite(f, x)
+                if w is not None:
+                    suivis.add(w["id"])
+    for w in ws:
         fonc = par_id.get(w["fonctionnalite"]) if w["fonctionnalite"] else None
         if fonc is not None and fonc.get("etape") in ETAPES_CACHANT_LES_COLONNES:
             continue
-        if w["fonctionnalite"] is None and w["id"] != PRINCIPAL:
+        if w["fonctionnalite"] is None and w["id"] != PRINCIPAL and w["id"] not in suivis:
             continue   # un workflow de genre n'a pas de colonnes : ses copies par fonctionnalité en ont
         for e in w["flux"]:
             c = {"id": e["id"], "nom": e["nom"], "genre": w.get("genre"), "workflow": w["id"]}

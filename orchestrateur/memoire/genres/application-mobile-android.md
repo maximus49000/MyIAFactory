@@ -434,3 +434,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand une fiche ne dit pas quels champs absents bloquent un ajout, tester la règle effective de validation du formulaire et signaler l'écart pour validation, au lieu de le passer sous silence.
+
+## G73 — Un build tout vert et UP-TO-DATE ne prouve pas la règle « te
+Rôles : testeur
+Date : 2026-11-14
+
+Un build tout vert et UP-TO-DATE ne prouve pas la règle « textes dans les ressources de chaînes » : en revue, chercher chaque phrase affichée dans le fichier de ressources, car des constantes de code passent tous les tests.

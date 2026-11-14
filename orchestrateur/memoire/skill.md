@@ -969,3 +969,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une étape est relancée uniquement faute de consigne de validation, relire le livrable existant et ne rendre que les champs de consigne manquants, sans refaire le travail.
+
+## S162 — Écrire un lanceur de build qui n'affiche que les erreurs de
+Rôles : dev
+Date : 2026-11-14
+
+Écrire un lanceur de build qui n'affiche que les erreurs de compilation, les échecs et le résultat final, et qui garde le journal complet dans un fichier, évite de relire des centaines de lignes.

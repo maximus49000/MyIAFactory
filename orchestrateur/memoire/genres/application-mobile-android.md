@@ -374,3 +374,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Avant de créer une classe de test, chercher son nom dans tout le paquet de test, car une déclaration en double fait échouer la compilation de toute la suite.
+
+## G63 — Pour tester la libération d'un ViewModel en JVM, appeler onC
+Rôles : testeur
+Date : 2026-11-14
+
+Pour tester la libération d'un ViewModel en JVM, appeler onCleared par réflexion, car il reste protégé même redéclaré par override sans modificateur.

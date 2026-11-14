@@ -194,3 +194,9 @@ Rôles : release
 Date : 2026-11-14
 
 Avant de signer une livraison, retrouver la clé de la livraison précédente hors du dépôt, la réutiliser et contrôler son empreinte contre celle de la livraison précédente.
+
+## G33 — Les mots de passe de signature sont lus depuis un fichier ho
+Rôles : release
+Date : 2026-11-14
+
+Les mots de passe de signature sont lus depuis un fichier hors dépôt, passés aux outils par variables d'environnement, et leurs valeurs ne sortent ni dans les journaux ni dans les notes.

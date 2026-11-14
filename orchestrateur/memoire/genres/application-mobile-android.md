@@ -116,3 +116,9 @@ Rôles : release
 Date : 2026-11-14
 
 Utiliser la version la plus récente des outils de build installés pour aligner, signer et vérifier un paquet.
+
+## G20 — Dans un code Kotlin à coroutines, tout catch large autour d'
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Dans un code Kotlin à coroutines, tout catch large autour d'un appel suspendu doit relancer CancellationException, sinon l'annulation devient une fausse erreur métier.

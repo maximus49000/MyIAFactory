@@ -644,3 +644,9 @@ Rôles : release
 Date : 2026-11-15
 
 Une livraison ne déclare vérifié que ce qui a été exécuté ; un test non lancé est écrit « non vérifié » dans la note d'installation.
+
+## G108 — Une garde de chargement se teste en modifiant la source entr
+Rôles : testeur
+Date : 2026-11-15
+
+Une garde de chargement se teste en modifiant la source entre deux appels : le second ne doit pas relire ; après une erreur, seul un rechargement explicite relit.

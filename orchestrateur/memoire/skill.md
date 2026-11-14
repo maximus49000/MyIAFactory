@@ -669,3 +669,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Avant de compiler, comparer l'état du dépôt à ce qu'on a écrit. Si un autre intervenant a modifié ou dupliqué des fichiers, aligner son code sur le sien et supprimer ses doublons plutôt que de le réécrire.
+
+## S112 — Quand plusieurs agents partagent un dépôt, relire l'état du
+Rôles : dev
+Date : 2026-11-14
+
+Quand plusieurs agents partagent un dépôt, relire l'état du dépôt avant d'ajouter des fichiers, car un commit automatique peut embarquer le travail d'un autre ; lancer les compilations sans démon partagé.

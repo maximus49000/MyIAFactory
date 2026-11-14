@@ -272,3 +272,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Pour les tests instrumentés d'une application mobile sans possibilité d'approbation, encapsuler dans un seul script la création de l'émulateur s'il manque, son démarrage sans fenêtre, l'attente de fin de boot, l'exécution des tests et l'arrêt de l'émulateur dans un bloc finally, avec journal écrit au fil de l'eau.
+
+## G46 — Avant de clore une étape de tests instrumentés, rapprocher l
+Rôles : testeur
+Date : 2026-11-14
+
+Avant de clore une étape de tests instrumentés, rapprocher la liste des contrôles encore ouverts qui réclament un test sur émulateur de la liste des suites réellement exécutées ; tout écart est un défaut à signaler.

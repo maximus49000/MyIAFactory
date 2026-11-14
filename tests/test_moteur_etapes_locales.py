@@ -147,6 +147,19 @@ class Choix(unittest.TestCase):
         self.assertEqual(mn.lieu_de_la_tache(f_local, corr, (), [dict(bloquee, agent=None), corr]), "local")
 
 
+    def test_la_correction_d_un_element_se_fait_la_ou_l_element_s_est_fait(self):
+        """MyFridgeCleaner t151 : la correction d'un élément testé sur émulateur partait dans un conteneur cloud."""
+        f = {"flux": [dict(FLUX[0]), dict(FLUX[0], id="dev-local"), *FLUX[1:]], "workflows": []}
+        corr = {"id": "t9", "etape": "correction", "role": "dev", "fonctionnalite": "f3", "element": "e10"}
+        compil = {"id": "t5", "etape": "flux:dev-local", "role": "dev", "fonctionnalite": "f3", "element": "e10",
+                  "colonne": "fait"}
+        code = {"id": "t4", "etape": "flux:dev", "role": "dev", "fonctionnalite": "f3", "element": "e10",
+                "colonne": "fait"}
+        self.assertEqual(mn.lieu_de_la_tache(f, corr, (), [code, compil, corr]), "local")
+        self.assertIsNone(mn.lieu_de_la_tache(f, corr, (), [code, corr]))
+        self.assertIsNone(mn.lieu_de_la_tache(f, corr, (), [code, dict(compil, element="e8"), corr]))
+        self.assertIsNone(mn.lieu_de_la_tache(f, dict(corr, etape="flux:dev"), (), [code, compil]))
+
 class Ecriture(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()

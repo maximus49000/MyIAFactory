@@ -95,10 +95,21 @@ def lieu_de_la_tache(f, t, fonctionnalites=(), taches=None, lieu_agent=None):
     Règle générale : une tâche sans lieu propre dont une tâche ouverte dépend (une correction, un préalable) se fait
     là où cette tâche reprendra : `local` si celle-ci exige le poste, ou si son agent est sur le poste (`lieu_agent(cle)`
     rend `local`). Sinon une correction de livraison part dans un conteneur cloud sans SDK ni clé, et la tâche bloquée
-    n'est jamais débloquée (MyFridgeCleaner, t52)."""
+    n'est jamais débloquée (MyFridgeCleaner, t52).
+
+    De même, la correction d'un élément (après un refus à la validation) se fait là où l'élément s'est fait : `local` si
+    une autre tâche du même élément exige le poste (compilation, tests sur émulateur…). Sinon elle part dans un
+    conteneur cloud qui ne peut ni compiler ni lancer l'émulateur, et l'agent reste sans nouvelles (MyFridgeCleaner,
+    t151)."""
     propre = _lieu_de_l_etape(f, t, fonctionnalites)
     if propre is not None or not taches or not t.get("id"):
         return propre
+    if t.get("etape") == "correction" and t.get("element"):
+        for u in taches:
+            if (u.get("id") != t["id"] and u.get("element") == t["element"]
+                    and u.get("fonctionnalite") == t.get("fonctionnalite")
+                    and _lieu_de_l_etape(f, u, fonctionnalites) == wf.LIEU_LOCAL):
+                return wf.LIEU_LOCAL
     for u in taches:
         if u.get("colonne") == "fait" or t["id"] not in (u.get("depend_de") or []):
             continue

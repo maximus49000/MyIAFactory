@@ -260,3 +260,9 @@ Rôles : release
 Date : 2026-11-14
 
 Si le build signe déjà la release, ne pas re-signer en externe : vérifier la signature produite.
+
+## G44 — Comparer le schéma de signature de chaque livraison à la pré
+Rôles : release
+Date : 2026-11-14
+
+Comparer le schéma de signature de chaque livraison à la précédente et signaler toute différence.

@@ -386,3 +386,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Quand la génération de code par processeur d'annotations échoue sur un fichier de cache introuvable, supprimer le dossier de cache de la variante concernée puis relancer : le code n'est pas en cause.
+
+## G65 — Avant de conclure qu'une classe est absente d'un paquet, lir
+Rôles : release
+Date : 2026-11-14
+
+Avant de conclure qu'une classe est absente d'un paquet, lire ses déclarations dans le code : une fonction de niveau fichier, un objet ou une classe n'ont pas le même nom compilé.

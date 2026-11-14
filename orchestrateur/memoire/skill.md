@@ -771,3 +771,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une correction de code est confiée à un rôle de conception, appliquer exactement la consigne, ne pas toucher aux maquettes, et déclarer ce qui n'a pas pu être compilé ou exécuté.
+
+## S129 — Dans une coroutine, entourer chaque écriture persistante d'u
+Rôles : dev
+Date : 2026-11-14
+
+Dans une coroutine, entourer chaque écriture persistante d'un try/catch : relancer l'annulation, convertir le reste en état d'erreur visible avec une sortie de repli.

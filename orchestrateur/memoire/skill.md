@@ -777,3 +777,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Dans une coroutine, entourer chaque écriture persistante d'un try/catch : relancer l'annulation, convertir le reste en état d'erreur visible avec une sortie de repli.
+
+## S130 — En Kotlin, une lambda finale est affectée au dernier paramèt
+Rôles : dev
+Date : 2026-11-14
+
+En Kotlin, une lambda finale est affectée au dernier paramètre, même si un paramètre précédent attend une interface à méthode unique : passer l'argument ou le constructeur SAM explicitement.

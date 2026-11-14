@@ -494,3 +494,9 @@ Rôles : designer, dev
 Date : 2026-11-14
 
 Avant de déplacer les textes d'un écran en ressources, lister par recherche tous les objets de constantes et énumérations qu'il lit, et ajouter un contrôle automatique qui signale tout texte affiché en dur, prouvé par injection d'un faux littéral.
+
+## G83 — Quand un écran n'est connu que par sa carte d'entrée, le con
+Rôles : designer
+Date : 2026-11-14
+
+Quand un écran n'est connu que par sa carte d'entrée, le concevoir dans le thème existant, le signaler comme écart, et dessiner ses états (nominal, vide, attente, erreur, action modale, échec, succès avec annulation, objet disparu).

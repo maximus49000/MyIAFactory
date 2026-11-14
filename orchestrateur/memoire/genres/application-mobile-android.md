@@ -464,3 +464,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand une consigne demande de déplacer les textes d'un écran en ressources, chercher tous les objets de constantes et propriétés d'énumération que l'écran lit, pas seulement celui nommé ; signaler ceux laissés hors périmètre.
+
+## G78 — Dans une interface, le repli d'un libellé manquant doit être
+Rôles : designer, dev
+Date : 2026-11-14
+
+Dans une interface, le repli d'un libellé manquant doit être un texte neutre, jamais le texte d'une autre erreur précise ; un test doit interdire ce repli.

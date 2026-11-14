@@ -488,3 +488,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand une correction de revue ajoute un état ou un écran absent de la fiche, la revue le signale comme écart à faire valider, même si les tests passent : les tests prouvent le comportement, pas l'accord sur la conception.
+
+## G82 — Avant de déplacer les textes d'un écran en ressources, liste
+Rôles : designer, dev
+Date : 2026-11-14
+
+Avant de déplacer les textes d'un écran en ressources, lister par recherche tous les objets de constantes et énumérations qu'il lit, et ajouter un contrôle automatique qui signale tout texte affiché en dur, prouvé par injection d'un faux littéral.

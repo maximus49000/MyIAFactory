@@ -2839,7 +2839,8 @@ def _demarrer_en_attente(projet, etat, fid):
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
             if libre.get("libre", False) and (cloud_ok if libre.get("lieu") == "cloud" else local_ok):
                 agent = voulu
-            elif not (libre and _polyvalent(libre) and premiere.get("etape") != "cadrage"):
+            elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))
+                      and premiere.get("etape") != "cadrage"):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
             agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok)
@@ -2853,6 +2854,14 @@ def _demarrer_en_attente(projet, etat, fid):
     _noter_l_attente_du_poste(projet, etat, court, [par_id[i] for lot in lots for i in lot["ids"] if i not in parties],
                               fac)
     return actions
+
+
+def _hors_du_lieu(agent, reserves):
+    """Vrai si l'agent est là où la tâche ne peut pas tourner (cloud quand elle exige le poste, ou l'inverse) : la
+    tâche ne l'attend pas, un autre agent du bon lieu la prend (une correction de livraison reprise par l'agent cloud
+    qui l'avait ratée faute de SDK, MyFridgeCleaner t52)."""
+    lieu = "cloud" if agent.get("lieu") == "cloud" else "local"
+    return ("local" in reserves and lieu == "cloud") or ("cloud" in reserves and lieu == "local")
 
 
 def _repartir_sur_les_places(lots, libres):

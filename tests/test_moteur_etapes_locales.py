@@ -121,6 +121,13 @@ class Choix(unittest.TestCase):
         self.assertIsNone(mn.lieu_de_la_tache(f, {"etape": "flux:qa", "role": "qa"}))
         self.assertIsNone(mn.lieu_de_la_tache(f, {"etape": "cadrage", "role": "dev"}))
 
+    def test_l_ancien_agent_hors_du_lieu_n_est_pas_attendu(self):
+        from moteur import regles
+        self.assertTrue(regles._hors_du_lieu({"lieu": "cloud"}, {"local"}))
+        self.assertTrue(regles._hors_du_lieu({"lieu": "local"}, {"cloud", None}))
+        self.assertFalse(regles._hors_du_lieu({"lieu": "local"}, {"local"}))
+        self.assertFalse(regles._hors_du_lieu({"lieu": "cloud"}, {None}))
+
     def test_partie_locale_sans_lieu_ecrit_exige_le_poste(self):
         f = {"flux": [dict(FLUX[0]), dict(FLUX[0], id="dev-local"), *FLUX[1:]], "workflows": []}
         self.assertEqual(mn.lieu_de_la_tache(f, {"etape": "flux:dev-local", "role": "dev"}), "local")

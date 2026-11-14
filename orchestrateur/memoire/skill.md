@@ -891,3 +891,9 @@ Rôles : designer
 Date : 2026-11-14
 
 Quand un élément est couvert par une maquette déjà validée et une fiche écrite, relancer l'étape de maquettes ne produit rien : vérifier la présence des fichiers, déclarer l'étape non applicable et fournir au valideur de quoi juger.
+
+## S149 — Quand une validation est refusée faute de consigne, reprendr
+Rôles : designer
+Date : 2026-11-14
+
+Quand une validation est refusée faute de consigne, reprendre le livrable existant, vérifier qu'il est intact et ne rendre que les champs de consigne manquants, sans refaire le travail.

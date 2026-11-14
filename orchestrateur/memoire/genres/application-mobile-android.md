@@ -566,3 +566,9 @@ Rôles : dev, designer
 Date : 2026-11-14
 
 Les règles de pluriel d'une langue peuvent classer zéro comme singulier ; quand un titre doit rester au pluriel pour zéro, utiliser deux chaînes distinctes plutôt qu'un pluriel de ressources.
+
+## G95 — Quand un effet d'écran relance un chargement à chaque change
+Rôles : designer
+Date : 2026-11-14
+
+Quand un effet d'écran relance un chargement à chaque changement de configuration, ajouter une méthode gardée (sans effet si déjà chargé) et la faire appeler par l'écran, en laissant la méthode de chargement complète intacte pour les rechargements explicites et les tests.

@@ -596,3 +596,9 @@ Rôles : qa
 Date : 2026-11-14
 
 Quand le GPU virtuel ne peut pas afficher le moteur, le test d'écran doit rendre non vérifié plutôt que réussi.
+
+## G100 — Sur l'émulateur en rendu logiciel (SwiftShader), les shaders
+Rôles : designer
+Date : 2026-11-14
+
+Sur l'émulateur en rendu logiciel (SwiftShader), les shaders canvas de Godot 4 peuvent ne pas se lier et donner des captures noires : ce n'est pas un défaut du projet, ne pas modifier le jeu pour cela.

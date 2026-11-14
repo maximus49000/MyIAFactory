@@ -452,3 +452,9 @@ Rôles : testeur
 Date : 2026-11-14
 
 Quand une règle impose que les textes affichés soient dans les ressources de chaînes, chercher chaque libellé dans le fichier de ressources et compter les appels de lecture de ressources ; une application dont tous les textes sont des constantes de code passe tous les tests unitaires.
+
+## G76 — Quand un écran affiche un texte de repli par `?:` sur une va
+Rôles : testeur, dev
+Date : 2026-11-14
+
+Quand un écran affiche un texte de repli par `?:` sur une valeur nulle, ce repli s'applique à toute future valeur nulle. Préférer une correspondance explicite sur le cas visé.

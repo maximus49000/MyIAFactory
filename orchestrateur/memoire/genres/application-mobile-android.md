@@ -236,3 +236,9 @@ Rôles : dev
 Date : 2026-11-14
 
 Une notification n'est enregistrée comme envoyée qu'après son affichage ; si elle est bloquée, elle sera retentée. La logique de décision reste dans une classe pure testable.
+
+## G40 — Tester les calculs par période aux bornes exactes (première
+Rôles : testeur
+Date : 2026-11-14
+
+Tester les calculs par période aux bornes exactes (première et dernière seconde) et dans deux fuseaux horaires ; tester un observateur de flux avec un flux partagé qui émet plusieurs valeurs, puis annuler : l'annulation ne doit pas devenir un état d'erreur.

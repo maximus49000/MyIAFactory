@@ -1209,3 +1209,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un message de commit annonçant la correction d'un document ne prouve pas que le contenu a changé : relire le fichier et rapprocher chaque point de la consigne avant de conclure.
+
+## S202 — Après le remplacement d'un livrable, relire chaque mention «
+Rôles : testeur
+Date : 2026-11-15
+
+Après le remplacement d'un livrable, relire chaque mention « reste à faire » ou « à corriger par un autre élément » dans les documents liés et la comparer à l'état réel : elles deviennent périmées sans casser aucun test.

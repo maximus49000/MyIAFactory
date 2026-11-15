@@ -292,6 +292,18 @@ export function demandeSerieArretee(decision) {
   return {type: "serie_arretee", decision: decision.id, verdict: "relancer"};
 }
 
+// « Livrer maintenant » : la livraison groupée (un seul livrable) part sans attendre que le travail soit au calme.
+export function demandeLivrerMaintenant() {
+  return {type: "livrer_maintenant", confirme: true};
+}
+
+// Les éléments qui attendent la livraison groupée (`{texte, elements}`), ou null.
+export function attenteLivraison(etat) {
+  const a = etat?.attente_livraison;
+  if (!a || typeof a.texte !== "string" || !a.texte.trim()) return null;
+  return {texte: a.texte, elements: Array.isArray(a.elements) ? a.elements.filter((x) => typeof x === "string") : []};
+}
+
 // « Vu » sur l'avis de fin d'une fonctionnalité : l'avis se ferme.
 export function demandeFinVue(fonctionnalite) {
   return {type: "fin_vue", fonctionnalite};

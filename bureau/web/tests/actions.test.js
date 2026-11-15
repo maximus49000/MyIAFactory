@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleModeleNecessaire, libelleLot} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLivrerMaintenant, attenteLivraison, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleModeleNecessaire, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -249,4 +249,12 @@ test("Tout valider : une seule demande groupée, avec l'étage choisi de chaque 
   assert.deepEqual(demandeToutes(lecons, "valider", new Map([["a", "projet"]])),
                    {type: "lecons", verdict: "valider", lecons: [{id: "a", etage: "projet"}, {id: "c"}]});
   assert.equal(demandeToutes([{id: "b", verdict_demande: "valider"}], "valider"), null);
+});
+
+test("livrer maintenant : la demande et l'attente de la livraison groupée", () => {
+  assert.deepEqual(demandeLivrerMaintenant(), {type: "livrer_maintenant", confirme: true});
+  assert.equal(attenteLivraison({}), null);
+  assert.equal(attenteLivraison({attente_livraison: {texte: "  "}}), null);
+  assert.deepEqual(attenteLivraison({attente_livraison: {texte: "2 prêts", elements: ["A", 3, "B"]}}),
+                   {texte: "2 prêts", elements: ["A", "B"]});
 });

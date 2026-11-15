@@ -3,7 +3,7 @@
 // Tout texte venu du serveur passe par textContent.
 
 import {voyant, libelleCharge, listeDisponible, dateFr, retenues} from "./texte.js";
-import {boutons, envoyer} from "./actions.js";
+import {boutons, envoyer, demandeLivrerMaintenant, attenteLivraison} from "./actions.js";
 import {urlProjet, livrables, projetCourant, memoriser, optionsProjets, ENTREE_NOUVEAU} from "./projets.js";
 import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
@@ -163,11 +163,20 @@ export function creerBarre(entete, bandeau) {
     dernierEtat = etat;
     const liste = livrables(etat, projetCourant());
     const cats = ouvrirCatalogue ? (etat.fonctionnalites || []).filter((f) => f?.catalogue === true) : [];
-    const signature = JSON.stringify([liste, cats.map((f) => [f.id, f.nom])]);
+    const aLivrer = attenteLivraison(etat);
+    const signature = JSON.stringify([liste, cats.map((f) => [f.id, f.nom]), aLivrer, !!etat?.agir]);
     if (signature === signatureLivrables) return;
     signatureLivrables = signature;
     zoneLivrable.replaceChildren();
-    zoneLivrable.hidden = liste.length + cats.length === 0;
+    zoneLivrable.hidden = liste.length + cats.length === 0 && !aLivrer;
+    if (aLivrer) {       // des éléments conformes attendent la livraison groupée : la lancer sans attendre le calme
+      const b = el("button", "bouton-barre bouton-livrer", `Livrer maintenant (${aLivrer.elements.length || "?"})`);
+      b.type = "button";
+      b.title = aLivrer.texte;
+      b.disabled = !etat?.agir;
+      b.addEventListener("click", () => demander(demandeLivrerMaintenant(), b));
+      zoneLivrable.append(b);
+    }
     const lien = (l, classe, texte) => {
       const a = el("a", classe, texte);
       a.href = l.url;

@@ -327,6 +327,8 @@ class Demande(Base):
         r = self.ok("releve")
         verifier = lambda d, rel=r: demandes.verifier(demandes.nettoyer(d), rel)      # noqa: E731
         self.assertIsNone(verifier({"type": "passer_polyvalent", "confirme": True}))
+        self.assertIsNone(verifier({"type": "livrer_maintenant", "confirme": True}))
+        self.assertIn("clic", verifier({"type": "livrer_maintenant"}))
         self.assertIn("clic", verifier({"type": "passer_polyvalent", "confirme": "oui"}))
         self.assertIn("clic", verifier({"type": "passer_polyvalent"}))
         self.assertIn("version 4", verifier({"type": "passer_polyvalent", "confirme": True}, {"version": 3}))

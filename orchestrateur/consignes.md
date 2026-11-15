@@ -227,6 +227,11 @@ Un refus fait seulement de points « Oubli : » (des défauts déjà là, que la
 pas pour le seuil, jusqu'à deux fois le seuil. La première revue d'un élément est complète (tous les défauts d'un
 coup) ; les suivantes ne vérifient que les points corrigés. Une correction traite la cause partout dans le projet,
 pas seulement aux lignes citées.
+
+**Un seul livrable.** Sans relecteur, l'étape après la qualité (la livraison) fabrique tout le produit : un élément
+conforme attend (« prêt à livrer »), et une seule livraison part quand plus aucun élément n'est au travail, menée par
+l'un d'eux pour tous (son journal porte le lot). La demande `livrer_maintenant` (« Livrer maintenant » au bureau) la
+fait partir sans attendre.
 - Sur `methode` `revoir` : la fonctionnalité repasse au `prototype` sur cet élément, puis à `methode` (nouvelle
   version de la méthode). Les éléments faits avec une version plus ancienne restent faits ; le catalogue les marque
   « à réévaluer » si la nouvelle version les concerne.

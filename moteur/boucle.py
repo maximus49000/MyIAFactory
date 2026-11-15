@@ -506,6 +506,7 @@ class Moteur:
         le dit (carte de la tâche et barre), à chaque passage ; et pourquoi chaque tâche prête ne part pas."""
         for fichier, a in ((attente.chemin_charge(projet.factory.parent), etat.get("attente_charge")),
                            (attente.chemin_places(projet.factory.parent), etat.get("attente_validation")),
+                           (attente.chemin_livraison(projet.factory.parent), etat.get("attente_livraison")),
                            (attente.chemin_taches(projet.factory.parent), etat.get("attente_taches"))):
             if a:
                 self._ecrire(fichier, a)

@@ -28,7 +28,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "faire_chez_partenaire": ("decision", "verdict"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
           "parallelisme": ("agents_locaux_max", "agents_cloud_max"),
-          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "passer_polyvalent": ("confirme",),
+          "recruter": ("mode", "agents"), "depot_git": ("confirme",), "livrer_maintenant": ("confirme",), "passer_polyvalent": ("confirme",),
           "regle_projet": ("operation",),
           "serie_arretee": ("decision", "verdict"), "fin_vue": ("fonctionnalite",),
           "fable_tache": ("decision", "verdict"),
@@ -48,7 +48,7 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
-               "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie")
+               "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant")
 VERDICTS_BLOCAGE = ("suivre", "preciser", "laisser")   # suivre la recommandation du Chef, répondre autrement, laisser
 ETATS_ANOMALIE = ("vue", "reglee")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
@@ -165,6 +165,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_depot(demande, r)
     if genre == "passer_polyvalent":
         return _verifier_passer_polyvalent(demande, r)
+    if genre == "livrer_maintenant":     # « Livrer maintenant » : le moteur dit lui-même si rien n'attend
+        return None if demande.get("confirme") is True else "« confirme » doit être vrai : la livraison part sur votre clic."
     if genre in ("lieu_etape", "regroupement_etape", "proposer_decoupage"):
         return _verifier_lieux(demande, r)
     if genre == "regle_projet":

@@ -700,6 +700,41 @@ class Serie(Base):
         self.assertIn("ne vérifie que ces points", second)         # la revue d'après ne rouvre pas tout
         self.assertIn("La balle traverse la raquette", second)
 
+    def livrer_deux(self):
+        self.casse_briques()
+        self.serie(2)
+        self.piloter(regles.avancer(self.projet, self.etat), limite=200)
+
+    def test_un_seul_livrable_pour_les_elements_prets(self):
+        self.livrer_deux()
+        livraisons = self.taches(etape="flux:livraison")
+        self.assertEqual(len(livraisons), 1)
+        journal = " ".join(j["texte"] for j in regles._tache(self.projet, livraisons[0]["id"])["journal"])
+        self.assertIn(regles.MARQUE_LOT, journal)
+        self.assertIn("f1/e1", journal)
+        self.assertIn("f1/e2", journal)
+        self.assertEqual({v["phase"] for v in self.etat["elements"].values()}, {"fait"})
+
+    def test_la_livraison_attend_le_calme_sauf_livrer_maintenant(self):
+        self.livrer_deux()
+        e1, e2 = self.etat["elements"]["f1/e1"], self.etat["elements"]["f1/e2"]
+        e1["phase"], e2["phase"] = regles.A_LIVRER, "correction"
+        e1["taches"] = []                                   # pas encore livré par un lot
+        self.assertFalse(regles.livrer_si_calme(self.projet, self.etat))
+        self.assertIn("1 élément prêt à livrer", self.etat["attente_livraison"]["texte"])
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat, force=True))
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 2)
+        self.assertNotIn("attente_livraison", self.etat)
+
+    def test_le_moteur_relance_ne_relivre_pas_un_element_deja_dans_un_lot(self):
+        self.livrer_deux()
+        self.etat["elements"].clear()                       # le moteur relancé : la mémoire est perdue
+        regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()},
+                         {"f1/e1": "fait", "f1/e2": "fait"})
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+
     def test_sans_relecteur_ni_etape_de_qualite_la_derniere_etape_juge(self):
         self.casse_briques(flux=[{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
                                  {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur",

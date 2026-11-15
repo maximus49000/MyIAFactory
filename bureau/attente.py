@@ -7,6 +7,8 @@ passage et relus par le serveur du bureau (deux processus).
   `{"t", "texte", "taches": [ids], "charge", "plafond"}`. Absent quand rien n'attend la charge.
 - `attente-places.json`, dans le dossier `.factory` d'un projet : des places d'agents libres que rien ne peut prendre
   tant que le Directeur n'a pas validé, `{"t", "texte", "places", "validation"}`. Absent sinon.
+- `attente-livraison.json`, dans le dossier `.factory` d'un projet : les éléments conformes qui attendent la livraison
+  groupée (un seul livrable, quand le travail est au calme), `{"t", "texte", "elements"}`. Absent sinon.
 - `attente-taches.json`, dans le dossier `.factory` d'un projet : pourquoi chaque tâche prête ne part pas (prérequis,
   agent, décision, pause), `{"t", "texte", "total", "familles", "taches": {id: {genre, motif, texte, detail, ensuite,
   quand}}}`. Absent quand rien n'attend.
@@ -22,6 +24,20 @@ FRAICHEUR_S = 120
 FICHIER_PAUSE = "installation-prioritaire.json"
 FICHIER_CHARGE = "attente-charge.json"
 FICHIER_PLACES = "attente-places.json"
+FICHIER_LIVRAISON = "attente-livraison.json"
+
+
+def chemin_livraison(dossier_factory):
+    return Path(dossier_factory) / FICHIER_LIVRAISON
+
+
+def attente_livraison(dossier_factory, maintenant=None):
+    """Les éléments conformes qui attendent la livraison groupée (`{texte, elements}`), ou `None`."""
+    o = lire(chemin_livraison(dossier_factory), maintenant)
+    if o is None or not isinstance(o.get("texte"), str):
+        return None
+    elements = [x for x in o.get("elements") or [] if isinstance(x, str)]
+    return {"texte": o["texte"], "elements": elements}
 
 
 def chemin_places(dossier_factory):

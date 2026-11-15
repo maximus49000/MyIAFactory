@@ -257,6 +257,8 @@ class Projet:
                         t["attente"] = retenu["texte"]
             # Des places d'agents libres que rien ne peut prendre avant une validation du Directeur : dit dans la barre.
             e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
+            # Les éléments conformes qui attendent la livraison groupée : dit dans la barre, avec « Livrer maintenant ».
+            e["attente_livraison"] = attente.attente_livraison(self.chemin_reglages.parent)
             # Pourquoi chaque tâche prête ne part pas : sa raison sur sa carte et sa fiche, le résumé dans la barre.
             raisons = attente.attente_taches(self.chemin_reglages.parent)
             e["attentes"] = None

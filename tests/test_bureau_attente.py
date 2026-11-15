@@ -110,6 +110,15 @@ class TestEtatServi(AvecServeur):
         attente.ecrire(attente.chemin_places(dossier), {"texte": texte}, maintenant=0)     # le moteur s'est arrêté
         self.assertIsNone(self.etat()["attente_validation"])
 
+    def test_les_elements_qui_attendent_la_livraison_groupee(self):
+        dossier = self.tmp / "demo"
+        self.assertIsNone(self.etat()["attente_livraison"])
+        texte = "2 éléments prêts à livrer (A, B) : un seul livrable partira quand plus rien ne sera en cours."
+        attente.ecrire(attente.chemin_livraison(dossier), {"texte": texte, "elements": ["A", "B", 3]})
+        self.assertEqual(self.etat()["attente_livraison"], {"texte": texte, "elements": ["A", "B"]})
+        attente.ecrire(attente.chemin_livraison(dossier), {"texte": texte}, maintenant=0)  # le moteur s'est arrêté
+        self.assertIsNone(self.etat()["attente_livraison"])
+
     def test_chaque_tache_en_attente_porte_sa_raison(self):
         dossier = self.tmp / "demo"
         sans = self.etat()

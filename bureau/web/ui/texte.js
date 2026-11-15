@@ -137,6 +137,11 @@ export function retenues(etat) {
   // des places d'agents libres que rien ne peut prendre avant une validation du Directeur
   const places = etat?.attente_validation;
   if (places && typeof places.texte === "string" && places.texte.trim()) lignes.push({ton: "attente", texte: places.texte});
+  // des éléments conformes qui attendent la livraison groupée (un seul livrable, quand le travail est au calme)
+  const livraison = etat?.attente_livraison;
+  if (livraison && typeof livraison.texte === "string" && livraison.texte.trim()) {
+    lignes.push({ton: "attente", texte: livraison.texte});
+  }
   return lignes;
 }
 

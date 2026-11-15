@@ -52,6 +52,10 @@ MOTS_DE_QUALITE = ("qualit", "test", "controle", "verif", "recette")   # le déb
 CHEF = "chef"                       # l'auteur des messages du moteur dans la discussion
 ELEMENTS_EN_COURS_MAX = 2           # « deux éléments au plus en cours » en série
 RELECTEURS_PREMIER_TOUR = 2
+A_LIVRER = "a_livrer"                # conforme, il attend la livraison groupée (un seul livrable pour le produit)
+DANS_UN_LOT = "dans_un_lot"         # livré par la livraison groupée d'un autre élément (le meneur du lot)
+MARQUE_LOT = "Livraison groupée, lot : "
+OCCUPE = ("flux", "relecture", "correction")    # un élément au travail : le produit n'est pas au calme
 OUBLI = "Oubli : "                  # le défaut déjà là avant la correction, qu'une revue précédente n'avait pas relevé
 TOURS_MAX_FACTEUR = 2               # au-delà de seuil × 2 tours, même faits d'oublis, la méthode est à revoir
 REVUE_COMPLETE = ("Revue complète : vérifie l'élément entier contre sa fiche, point par point, et rends tous les "
@@ -4637,7 +4641,14 @@ def _conclure_relecture(projet, etat, v):
     v["tour"] += 1
     if not points:
         if _sans_relecteur(projet) and v["pas"] < len(_production(projet, v["fid"])):
-            v["phase"] = "flux"        # verdict favorable : les étapes suivantes (la livraison) viennent maintenant
+            if not wf.est_validation(_production(projet, v["fid"])[v["pas"]]):
+                # la livraison fabrique tout le produit : elle est groupée, quand le travail est au calme
+                if _deja_livre(projet, v):
+                    return _element_fait(projet, etat, v)
+                v["phase"] = A_LIVRER
+                livrer_si_calme(projet, etat)        # tout de suite si plus rien n'est au travail
+                return []
+            v["phase"] = "flux"        # verdict favorable : les étapes suivantes viennent maintenant
             _tache_de_flux(projet, etat, v)
             return []
         return _element_fait(projet, etat, v)
@@ -4670,8 +4681,69 @@ def _est_oubli(point):
     return str(point).lstrip().lower().startswith(OUBLI.strip().lower())
 
 
+def _deja_livre(projet, v):
+    """Vrai si une livraison groupée faite après le dernier pas de l'élément l'a emporté (le moteur relancé : sa mémoire
+    du lot est perdue, le journal de la livraison la garde)."""
+    cle = f"{v['fid']}/{v['element']['id']}"
+    dernier = _tache(projet, v["taches"][-1]) if v.get("taches") else {}
+    depuis = str(dernier.get("fin") or dernier.get("maj") or "")
+    if not depuis:
+        return False
+    for fc in _etat(projet)["fonctionnalites"]:
+        for t in lancer(projet, "detail", {"fonctionnalite": fc["id"], "taches": True}).get("taches") or []:
+            if (not str(t.get("etape") or "").startswith(ETAPES_DE_FLUX) or t["colonne"] != "fait"
+                    or str(t.get("fin") or t.get("maj") or "") < depuis):
+                continue
+            journal = _tache(projet, t["id"]).get("journal") or []
+            if any(MARQUE_LOT in j["texte"] and cle in j["texte"].split(MARQUE_LOT, 1)[1].split() for j in journal):
+                return True
+    return False
+
+
+def livrer_si_calme(projet, etat, force=False):
+    """Un seul livrable pour le produit : les éléments conformes attendent ensemble (`A_LIVRER`) ; une livraison part
+    quand aucun élément n'est plus au travail (ou tout de suite sur « Livrer maintenant »), menée par l'un d'eux pour
+    tous. Ce qui attend est noté dans `etat["attente_livraison"]` (dit au bureau). Rend vrai si une livraison est partie."""
+    elements = _m(etat, "elements")
+    prets = [v for v in elements.values() if v["phase"] == A_LIVRER]
+    etat.pop("attente_livraison", None)
+    if not prets:
+        return False
+    noms = [v["element"]["nom"] for v in prets]
+    en_cours = [v for v in elements.values() if v["phase"] in OCCUPE]
+    if en_cours and not force:
+        etat["attente_livraison"] = {
+            "texte": (f"{len(prets)} élément{'s' if len(prets) > 1 else ''} prêt{'s' if len(prets) > 1 else ''} à "
+                      f"livrer ({', '.join(noms)}) : un seul livrable partira quand plus rien ne sera en cours "
+                      f"({len(en_cours)} élément{'s' if len(en_cours) > 1 else ''} au travail)."),
+            "elements": noms}
+        return False
+    if any(v.get("lot_livraison") is not None and v["phase"] in OCCUPE for v in elements.values()):
+        return False          # une livraison groupée est déjà en route
+    for v in prets:           # le moteur relancé : un lot déjà livré les avait emportés
+        if _deja_livre(projet, v):
+            _element_fait(projet, etat, v)
+    prets = [v for v in prets if v["phase"] == A_LIVRER]
+    if not prets:
+        return False
+    noms = [v["element"]["nom"] for v in prets]
+    meneur, autres = prets[-1], prets[:-1]
+    cles = [f"{v['fid']}/{v['element']['id']}" for v in prets]
+    for v in autres:
+        v["phase"] = DANS_UN_LOT
+    meneur["phase"], meneur["lot_livraison"] = "flux", cles
+    texte = (f"Un seul livrable pour tout le produit, avec les éléments : {', '.join(noms)}. Fabrique-le depuis le "
+             f"dépôt à jour. {MARQUE_LOT}{' '.join(cles)}")
+    _tache_de_flux(projet, etat, meneur, journal=[texte])
+    return True
+
+
 def _element_fait(projet, etat, v):
     v["phase"] = "fait"
+    for cle in v.pop("lot_livraison", None) or []:       # les éléments livrés avec lui
+        autre = _m(etat, "elements").get(cle)
+        if autre is not None and autre is not v and autre["phase"] in (DANS_UN_LOT, A_LIVRER):
+            _element_fait(projet, etat, autre)
     f = _fonc(projet, v["fid"])
     if not f.get("catalogue"):
         lancer(projet, "fonctionnalite", {"id": v["fid"], "catalogue": True})
@@ -4808,6 +4880,7 @@ def avancer(projet, etat):
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
+    livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
@@ -5114,6 +5187,19 @@ def _sur_fin_vue(projet, demande, etat):
 
 _SUR[SERIE_ARRETEE] = _sur_serie_arretee
 _SUR["fin_vue"] = _sur_fin_vue
+
+
+def _sur_livrer_maintenant(projet, demande, etat):
+    """« Livrer maintenant » : la livraison groupée part au prochain passage, sans attendre que le travail soit calme."""
+    if not any(v["phase"] == A_LIVRER for v in _m(etat, "elements").values()):
+        _terminer(projet, {"demande": demande["id"]}, "Aucun élément n'attend la livraison.")
+        return []
+    etat["livrer_maintenant"] = True
+    _terminer(projet, {"demande": demande["id"]}, "La livraison part maintenant, avec tous les éléments prêts.")
+    return []
+
+
+_SUR["livrer_maintenant"] = _sur_livrer_maintenant
 
 
 # --- Les jugements : leur décision revient ici.

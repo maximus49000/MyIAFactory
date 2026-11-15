@@ -812,3 +812,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand l'élément est un document d'inventaire de statuts, la suite de tests verte ne le valide pas : la revue rapproche chaque ligne du code actuel par recherche ciblée et signale les lignes devenues fausses après des livraisons ultérieures, ainsi que les périmètres annoncés non relus.
+
+## G136 — Dans un inventaire de statuts, relire chaque statut contre l
+Rôles : designer
+Date : 2026-11-15
+
+Dans un inventaire de statuts, relire chaque statut contre le code (routes, écrans, usages) à chaque reprise ; un statut hérité d'une version antérieure du document peut être faux, et tous les statuts reposant sur la même hypothèse doivent être recalculés ensemble.

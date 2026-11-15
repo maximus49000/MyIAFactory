@@ -1125,3 +1125,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un élément prépare les corrections de plusieurs manques, associer chaque manque à sa maquette existante, déclarer non applicable ce qui est couvert, et soumettre à l'utilisateur par question à choix les manques sans maquette.
+
+## S188 — Quand une étape de maquettes est relancée parce que le rappo
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de maquettes est relancée parce que le rapport ne contenait ni image ni consigne de validation, relire le livrable existant, joindre les images déjà produites avec légende et rendre les champs de consigne, sans regénérer.

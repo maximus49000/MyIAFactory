@@ -818,3 +818,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Dans un inventaire de statuts, relire chaque statut contre le code (routes, écrans, usages) à chaque reprise ; un statut hérité d'une version antérieure du document peut être faux, et tous les statuts reposant sur la même hypothèse doivent être recalculés ensemble.
+
+## G137 — Avant de reporter un manque dans un inventaire, chercher les
+Rôles : testeur
+Date : 2026-11-15
+
+Avant de reporter un manque dans un inventaire, chercher les usages de l'identifiant cité ; un identifiant « non confirmé » est souvent utilisé dans un état de l'écran que l'auteur n'a pas lu.

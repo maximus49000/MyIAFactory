@@ -1227,3 +1227,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Après la correction d'un document de statuts, chercher par Grep chaque ancienne valeur et chaque formule périmée : elles ne doivent subsister que dans le journal des changements. Relire ensuite le total de tests dans les résultats.
+
+## S205 — Quand une consigne de revue cite des numéros de ligne à corr
+Rôles : testeur
+Date : 2026-11-15
+
+Quand une consigne de revue cite des numéros de ligne à corriger, vérifier d'abord par recherche ciblée l'état courant du document : la correction peut déjà être livrée, et la revue consiste alors à confirmer sans rien recopier de l'ancien statut.

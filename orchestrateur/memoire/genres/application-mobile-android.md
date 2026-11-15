@@ -698,3 +698,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand la consigne demande explicitement de créer une destination de navigation absente, la créer en version minimale conforme à la fiche et lister ce qui manque, au lieu de laisser le rappel vide.
+
+## G117 — Dans un paquet Android multidex, la recherche d'une classe d
+Rôles : release
+Date : 2026-11-15
+
+Dans un paquet Android multidex, la recherche d'une classe doit couvrir chaque fichier dex de l'archive, et non le seul premier.

@@ -1251,3 +1251,9 @@ Rôles : cadrage
 Date : 2026-11-15
 
 Dans un script de maquettes, dimensionner les cartes d'après leur contenu et relire l'image rendue pour repérer les chevauchements de texte.
+
+## S209 — Pour une quantité répartie sur plusieurs lignes, définir des
+Rôles : designer
+Date : 2026-11-15
+
+Pour une quantité répartie sur plusieurs lignes, définir des invariants dans une logique pure testée, puis faire lire ces règles par le script de rendu.

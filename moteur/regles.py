@@ -5184,6 +5184,12 @@ def _reprendre_l_element(projet, etat, f, element, taches):
     texte = str(dernier.get("dernier_journal") or "")
     if etape.startswith(ETAPES_DE_FLUX):
         v["phase"] = "flux"
+        if not ouverte and any(d.get("genre") == "methode_a_revoir" and (m := _ELEMENT.search(d.get("texte") or ""))
+                               and m.group(1) == element["id"] for d in f.get("decisions") or []):
+            # essai réel : relancé, le moteur prenait le contrôle qui venait de refuser l'élément pour un contrôle
+            # réussi et lançait sa livraison ; l'élément attend la réponse du Directeur
+            v["phase"] = "attente_methode"
+            return None
         if not ouverte:      # faite, sa suite jamais créée : elle l'est maintenant (le rapport, relu dans le suivi)
             _rapport_du_suivi(projet, etat, v, dernier, f)
             _apres_flux(projet, etat, v)

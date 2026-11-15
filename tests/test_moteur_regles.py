@@ -892,6 +892,21 @@ class Serie(Base):
         self.assertEqual([x["genre"] for x in self.fonc()["decisions"]], ["methode_a_revoir"])
         self.assertEqual(self.etat["elements"]["f1/e2"]["phase"], "attente_methode")
 
+    def test_relance_pendant_methode_a_revoir_l_element_attend(self):
+        """Essai réel : relancé pendant la question « méthode à revoir ? », le moteur prenait le contrôle qui venait de
+        refuser l'élément pour un contrôle réussi et lançait sa livraison."""
+        self.sans_relecteurs()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Fait."}}, verdict("e1", ["Sept tests cassés"])],
+            juges={"apres_refus": {"suite": "methode_a_revoir", "consigne": None, "raison": "trop de tours"}})
+        self.assertEqual([x["genre"] for x in self.fonc()["decisions"]], ["methode_a_revoir"])
+        avant = len(self.taches())
+        self.etat["elements"].clear()                               # le moteur relancé
+        regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "attente_methode")
+        self.assertEqual(len(self.taches()), avant)                # aucune étape lancée
+
     def test_seuil_methode_sans_ia(self):
         self.vers_la_relecture(1)
         v = self.etat["elements"]["f1/e1"]

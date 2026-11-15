@@ -758,3 +758,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Compter les tests réellement présents dans les XML de résultats, pas le nombre annoncé dans le rapport d'un commit.
+
+## G127 — Une suite instrumentée entièrement verte ne prouve que ce qu
+Rôles : testeur
+Date : 2026-11-15
+
+Une suite instrumentée entièrement verte ne prouve que ce qu'elle contient : avant de clore l'étape, rapprocher chaque parcours exigé par la méthode d'un test nommé dans les résultats, et signaler comme non vérifié tout parcours sans test.

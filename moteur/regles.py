@@ -52,6 +52,16 @@ MOTS_DE_QUALITE = ("qualit", "test", "controle", "verif", "recette")   # le déb
 CHEF = "chef"                       # l'auteur des messages du moteur dans la discussion
 ELEMENTS_EN_COURS_MAX = 2           # « deux éléments au plus en cours » en série
 RELECTEURS_PREMIER_TOUR = 2
+OUBLI = "Oubli : "                  # le défaut déjà là avant la correction, qu'une revue précédente n'avait pas relevé
+TOURS_MAX_FACTEUR = 2               # au-delà de seuil × 2 tours, même faits d'oublis, la méthode est à revoir
+REVUE_COMPLETE = ("Revue complète : vérifie l'élément entier contre sa fiche, point par point, et rends tous les "
+                  "défauts d'un coup. Si ton journal liste les points d'un tour de correction, vérifie ces points et "
+                  "ce que la correction a pu casser ; un autre défaut, déjà là avant, se rend dans `points` précédé de "
+                  f"« {OUBLI.strip()} » (il sera corrigé sans compter comme un tour de plus).")
+CORRECTION_COMPLETE = ("Corrige la cause, pas seulement les endroits cités : cherche dans tout le projet les autres "
+                       "occurrences du même défaut (le même réglage à appliquer, le même composant, le même genre de "
+                       "texte écrit en dur…) et corrige-les dans ce tour. Dans ton message, liste chaque endroit "
+                       "trouvé et corrigé.")
 ETAPES_DE_FLUX = "flux:"
 ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
 GENRE_VALIDATION = "valider_etape"     # la décision de projet posée quand un élément attend le Directeur
@@ -3346,11 +3356,12 @@ def _matiere(projet, etat, t):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
+            parties.append(REVUE_COMPLETE)
     elif etape == "relecture":
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
-                    "Un défaut devient un contrôle : sois précis."]
+                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
                     "(son chemin et sa version). Dans ton message, dis pour chaque outil : en place (chemin, version) ou "
@@ -3358,6 +3369,8 @@ def _matiere(projet, etat, t):
                     "pas : rends `statut: fait` avec ce constat."]
     elif etape in ("correction", "retour", "demande", "challenge"):
         parties.append(f"Élément : {t.get('element') or '(aucun)'}")
+        if etape == "correction":
+            parties.append(CORRECTION_COMPLETE)
     if consignes:
         parties += ["Consignes :", consignes]
     return "\n".join(parties)
@@ -4590,17 +4603,17 @@ def _apres_flux(projet, etat, v, r=None):
 
 def _lancer_relecture(projet, etat, v):
     """Le premier tour : deux relecteurs à contexte neuf, qui ne se voient pas ; les tours suivants : un seul, qui ne
-    vérifie que les points corrigés. Sans relecteur, l'étape de qualité du flux est refaite."""
+    vérifie que les points corrigés. Sans relecteur, l'étape de qualité du flux est refaite, avec les mêmes points."""
+    journal = ([f"Tour {v['corrections'] + 1} : ne vérifie que ces points, et que la correction n'a rien cassé :"
+                + "".join(f"\n- {p}" for p in v.get("points") or [])] if v["corrections"] and v.get("points") else None)
     if _sans_relecteur(projet):
         v["phase"], v["pas"] = "flux", _etape_de_relecture(projet, v["fid"])
-        _tache_de_flux(projet, etat, v)
+        _tache_de_flux(projet, etat, v, journal)
         return []
     v["phase"], v["rapports"] = "relecture", []
     v["attendus"] = RELECTEURS_PREMIER_TOUR if v["tour"] == 0 and v["corrections"] == 0 else 1
     colonne = _colonne_du_role(projet, ROLE_RELECTURE, v["fid"])
     for k in range(1, v["attendus"] + 1):
-        journal = ([f"Tour {v['corrections'] + 1} : ne vérifie que ces points, et que la correction n'a rien cassé :"
-                    + "".join(f"\n- {p}" for p in v.get("points") or [])] if v["corrections"] else None)
         v["taches"].append(_creer_tache(
             projet, f"Relecture{f' {k}' if v['attendus'] > 1 else ''} : {v['element']['nom']}", v["fid"],
             ROLE_RELECTURE, "relecture", element=v["element"]["id"], journal=journal, colonne=colonne))
@@ -4640,7 +4653,8 @@ def _conclure_relecture(projet, etat, v):
         elements.add(v["element"]["id"])
         if len(elements) > 1:
             autre = p
-    if v["corrections"] >= seuil:
+    persistants = [p for p in points if not _est_oubli(p)]
+    if v["corrections"] >= seuil and (persistants or v["corrections"] >= seuil * TOURS_MAX_FACTEUR):
         return _methode_a_revoir(projet, etat, v, f"cet élément a déjà eu {v['corrections']} tours de corrections")
     if autre is not None:
         return _methode_a_revoir(projet, etat, v, f"le même contrôle échoue sur deux éléments : « {autre} »")
@@ -4648,6 +4662,12 @@ def _conclure_relecture(projet, etat, v):
                "tours": v["corrections"] + 1, "seuil_methode": seuil,
                "methode": (_fonc(projet, v["fid"]).get("methode") or {}).get("version")}
     return [a_juger("apres_refus", dossier, {"fonctionnalite": v["fid"], "element": v["element"]["id"]})]
+
+
+def _est_oubli(point):
+    """Un défaut déjà là avant la correction, que la revue précédente avait manqué : il se corrige sans compter pour
+    « méthode à revoir » (la faute est à la revue, pas à la méthode)."""
+    return str(point).lstrip().lower().startswith(OUBLI.strip().lower())
 
 
 def _element_fait(projet, etat, v):

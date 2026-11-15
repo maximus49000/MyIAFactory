@@ -694,6 +694,11 @@ class Serie(Base):
                  if str(t["etape"]).startswith(("flux:", "correction"))]
         self.assertEqual(ordre, ["flux:dev", "flux:essai", "correction", "flux:essai", "flux:livraison"])
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        essais = sorted(self.taches(etape="flux:essai"), key=lambda t: int(t["id"][1:]))
+        self.assertIn(regles.REVUE_COMPLETE, regles._matiere(self.projet, self.etat, essais[0]))
+        second = " ".join(j["texte"] for j in essais[1].get("journal") or [])
+        self.assertIn("ne vérifie que ces points", second)         # la revue d'après ne rouvre pas tout
+        self.assertIn("La balle traverse la raquette", second)
 
     def test_sans_relecteur_ni_etape_de_qualite_la_derniere_etape_juge(self):
         self.casse_briques(flux=[{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
@@ -737,6 +742,30 @@ class Serie(Base):
         self.assertEqual([a for a in actions if a[0] == "juger"], [])
         self.assertEqual([x["genre"] for x in self.fonc()["decisions"]], ["methode_a_revoir"])
         self.assertIn("(élément e1)", self.fonc()["decisions"][0]["texte"])
+
+    def test_un_oubli_de_la_revue_ne_compte_pas_pour_le_seuil(self):
+        self.vers_la_relecture(1)
+        self.etat["elements"]["f1/e1"]["corrections"] = 3
+        actions = self.rendre_relectures(self.taches(etape="relecture"),
+                                         [verdict("e1", ["Oubli : la fiche produit ignore le réglage"]), verdict("e1")])
+        self.assertEqual([a[1] for a in actions if a[0] == "juger"], ["apres_refus"])     # corrigé, pas de méthode
+        self.assertEqual(self.fonc()["decisions"], [])
+
+    def test_les_oublis_ont_un_plafond(self):
+        self.vers_la_relecture(1)
+        self.etat["elements"]["f1/e1"]["corrections"] = 6           # seuil × 2
+        self.rendre_relectures(self.taches(etape="relecture"),
+                               [verdict("e1", ["Oubli : encore un écran"]), verdict("e1")])
+        self.assertEqual([x["genre"] for x in self.fonc()["decisions"]], ["methode_a_revoir"])
+
+    def test_revue_complete_et_correction_complete_dans_les_consignes(self):
+        self.vers_la_relecture(1)
+        rel = self.taches(etape="relecture")[0]
+        self.assertIn(regles.REVUE_COMPLETE, regles._matiere(self.projet, self.etat, rel))
+        actions = self.rendre_relectures(self.taches(etape="relecture"), [verdict("e1", ["Défaut"]), verdict("e1")])
+        self.piloter(actions, juges={"apres_refus": {"suite": "corriger", "consigne": "Corriger.", "raison": "d"}})
+        corr = self.taches(etape="correction")[0]
+        self.assertIn(regles.CORRECTION_COMPLETE, regles._matiere(self.projet, self.etat, corr))
 
     def test_apres_refus_methode_a_revoir_puis_garder_bloque(self):
         self.vers_la_relecture(1)

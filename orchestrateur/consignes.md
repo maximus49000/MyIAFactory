@@ -223,6 +223,10 @@ le bandeau du bureau montre.
 **Méthode à revoir.** Quand un élément dépasse `seuil_methode` tours de corrections (dans `etat` ; 3 par défaut),
 ou quand **le même contrôle échoue sur deux éléments différents**, pose la décision `methode_a_revoir` (`portee` =
 la fonctionnalité, avec l'élément et la raison dans le `texte`), et n'avance pas cet élément en attendant.
+Un refus fait seulement de points « Oubli : » (des défauts déjà là, que la revue précédente avait manqués) ne compte
+pas pour le seuil, jusqu'à deux fois le seuil. La première revue d'un élément est complète (tous les défauts d'un
+coup) ; les suivantes ne vérifient que les points corrigés. Une correction traite la cause partout dans le projet,
+pas seulement aux lignes citées.
 - Sur `methode` `revoir` : la fonctionnalité repasse au `prototype` sur cet élément, puis à `methode` (nouvelle
   version de la méthode). Les éléments faits avec une version plus ancienne restent faits ; le catalogue les marque
   « à réévaluer » si la nouvelle version les concerne.

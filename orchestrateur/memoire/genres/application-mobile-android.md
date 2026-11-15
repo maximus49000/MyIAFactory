@@ -938,3 +938,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand on agrandit des zones tactiles à 48 dp dans un prototype, vérifier aussi qu'elles restent dans le cadre de leur carte : le contrôle de débordement doit porter sur les formes dessinées, pas seulement sur les textes.
+
+## G157 — Quand un lot mêle logique, écrans et livraison signée et que
+Rôles : dev
+Date : 2026-11-15
+
+Quand un lot mêle logique, écrans et livraison signée et que l'environnement n'a pas la chaîne de compilation, livrer la logique pure avec ses tests, déclarer le reste non fait et ne pas écrire d'écrans non compilables.

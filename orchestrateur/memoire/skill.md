@@ -1089,3 +1089,9 @@ Rôles : cadrage
 Date : 2026-11-15
 
 Pour un inventaire de manques, interroger le registre des contrôles par recherches ciblées (TODO, provisoire, à venir, non réalisé) plutôt que de le lire en entier.
+
+## S182 — Pour ajouter un état à un jeu d'images validé, écrire un scr
+Rôles : designer
+Date : 2026-11-15
+
+Pour ajouter un état à un jeu d'images validé, écrire un script qui importe le script existant sans le modifier, puis vérifier par le suivi git que les images validées n'ont pas changé.

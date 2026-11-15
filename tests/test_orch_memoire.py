@@ -424,6 +424,21 @@ class TestMemoireLot(AvecArbreModifie):
         self.assertFalse(r.ok)
         self.assertFalse(r.transitoire)   # pas de réessai tout seul : il faut une main
 
+    def test_une_ecriture_interrompue_avant_son_commit_est_reprise(self):
+        """Essai réel : le moteur relancé entre l'écriture de la leçon et son commit ; chaque nouvelle validation était
+        refusée pour « modifications d'une autre origine ». Des leçons ajoutées en fin de fichier sont reprises."""
+        chemin, nouveau, _, _ = memoire._plan_ajout(self.ma, "skill", None, self.lecon())
+        autre = memoire._plan_ajout(self.ma, "skill", None, self.lecon("Une autre", "Autre texte."))[1]
+        chemin.write_text(autre(nouveau(SKILL)), encoding="utf-8", newline="\n")    # deux écritures interrompues
+        n = self.nb_commits(self.a)
+        ok, message = memoire.ajouter(self.ma, "skill", None, self.lecon(), [])
+        self.assertTrue(ok, message)
+        self.assertEqual(self.nb_commits(self.a), n + 1)
+        texte = chemin.read_text(encoding="utf-8")
+        self.assertEqual(texte.count("Un texte général."), 1)                     # jamais en double
+        self.assertIn("Autre texte.", texte)
+        self.assertEqual(git("status", "--porcelain", "--", "memoire/skill.md", cwd=self.a), "")
+
     def test_fichier_de_memoire_indexe_refuse(self):
         (self.ma / "skill.md").write_text(SKILL + "\nIndexé.\n", encoding="utf-8")
         git("add", "memoire/skill.md", cwd=self.a)

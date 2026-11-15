@@ -215,6 +215,26 @@ def republier(dossier, git=executer_git):
     return r
 
 
+def _reste_d_une_ecriture(dossier, chemin, git):
+    """Vrai si les modifications non commitées du fichier ne sont que des leçons ajoutées à sa fin : une écriture de
+    l'outil interrompue avant son commit (essai réel : le moteur relancé entre l'écriture et le commit ; chaque nouvelle
+    validation de la leçon était refusée pour « modifications d'une autre origine »). Elles sont reprises et commitées
+    avec la leçon ; toute autre modification reste refusée."""
+    try:
+        relatif = Path(chemin).resolve().relative_to(Path(dossier).resolve()).as_posix()
+    except ValueError:
+        return False
+    code, tete = git(["show", f"HEAD:./{relatif}"], dossier)
+    if code != 0:
+        return False
+    tete = tete.replace("\r\n", "\n").rstrip("\n")
+    actuel = _lire(chemin).replace("\r\n", "\n")
+    if not tete or not actuel.startswith(tete):
+        return False
+    reste = actuel[len(tete):].strip("\n")
+    return bool(reste) and all(re.match(r"## [SG]\d+ — ", bloc) for bloc in re.split(r"\n+(?=## )", reste))
+
+
 def _ecrire(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, message_commit, git, synchro):
     """Écrit le contenu et ne commite QUE ce fichier (`git commit -- <chemin>`) ; ne pousse pas (voir `_publier`). Tout
     échec remet le fichier tel quel et ne touche à rien d'autre."""
@@ -226,7 +246,7 @@ def _ecrire(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, mess
     code, sortie = git(["status", "--porcelain", "--", str(chemin)], dossier)
     if code != 0:
         return Resultat(False, f"Arrêt : « git status » a échoué (le dossier n'est pas un dépôt git ?). {sortie}"[:400])
-    if sortie.strip():
+    if sortie.strip() and not _reste_d_une_ecriture(dossier, chemin, git):
         return Resultat(False, f"Arrêt : le fichier de mémoire « {chemin.name} » a des modifications non commitées "
                                "d'une autre origine : la leçon n'est pas écrite. Commitez ou annulez ces modifications, "
                                "puis validez de nouveau.")
@@ -311,6 +331,9 @@ def _plan_ajout(dossier, etage, genre, lecon):
         return Resultat(False, f"Genre inconnu : « {genre} » (aucun fichier de mémoire).")
 
     def nouveau(actuel):
+        if any(m.group(1).strip() == titre and texte in m.group(2)
+               for m in re.finditer(r"^## [SG]\d+ — (.*)\n((?:(?!## ).*\n?)*)", actuel, re.M)):
+            return actuel        # déjà là (une écriture interrompue, reprise) : jamais en double
         i = lecon.get("id") or _prochain_id(actuel, "S" if etage == "skill" else "G")
         base = actuel if actuel.strip() else "# Mémoire de la skill\n"
         section = (f"## {i} — {titre}\nRôles : {'tous' if 'tous' in roles else ', '.join(roles)}\n"

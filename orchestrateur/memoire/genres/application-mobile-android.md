@@ -968,3 +968,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Pour une logique écrite avant ses écrans, chercher par recherche les usages de chaque classe hors de son paquet et hors des tests : une suite verte ne prouve pas qu'elle est branchée.
+
+## G162 — Dans un fichier de ressources texte Android, une chaîne qui
+Rôles : designer
+Date : 2026-11-15
+
+Dans un fichier de ressources texte Android, une chaîne qui commence ou finit par une espace doit être entourée de guillemets, sinon l'espace est perdue.

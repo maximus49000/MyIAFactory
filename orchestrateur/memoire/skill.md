@@ -1047,3 +1047,9 @@ Rôles : release
 Date : 2026-11-15
 
 Une livraison déclare vérifié seulement ce qui a été exécuté pendant la livraison ; les résultats de tests antérieurs ne comptent pas.
+
+## S175 — Un test de câblage provisoire doit échouer quand la cible es
+Rôles : testeur
+Date : 2026-11-15
+
+Un test de câblage provisoire doit échouer quand la cible est créée sans être branchée, et dire dans son message que l'accroche vide est un défaut connu, pas une validation.

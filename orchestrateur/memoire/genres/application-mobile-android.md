@@ -686,3 +686,9 @@ Rôles : release, testeur
 Date : 2026-11-15
 
 Avant de lancer un émulateur ou un outil qui ouvre une fenêtre sur le poste de l'utilisateur, demander son accord en question à choix, même si le brief du projet autorise le lancement.
+
+## G115 — Le contrôle des textes affichés parcourt toutes les sources
+Rôles : testeur
+Date : 2026-11-15
+
+Le contrôle des textes affichés parcourt toutes les sources du module et prouve son efficacité en injectant un faux littéral.

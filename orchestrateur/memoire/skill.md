@@ -1083,3 +1083,9 @@ Rôles : release, testeur
 Date : 2026-11-15
 
 Avant de reporter un point ouvert d'un registre de contrôles, vérifier son état réel dans le code par une recherche ciblée, et signaler la différence plutôt que de recopier l'ancien statut.
+
+## S181 — Pour un inventaire de manques, interroger le registre des co
+Rôles : cadrage
+Date : 2026-11-15
+
+Pour un inventaire de manques, interroger le registre des contrôles par recherches ciblées (TODO, provisoire, à venir, non réalisé) plutôt que de le lire en entier.

@@ -416,5 +416,31 @@ class VraisProcessus(unittest.TestCase):
         self.assertIsNone(agent.poll())
 
 
+class EmulateursOublies(unittest.TestCase):
+    """Essai réel : un émulateur lancé la veille par un agent fini gardait la mémoire du poste (69 Mo libres)."""
+
+    def procs(self):
+        return {1: {"pid": 1, "nom": "qemu-system-x86_64-headless", "cree": 1000.0, "debut": 1},
+                2: {"pid": 2, "nom": "claude", "cree": 5000.0, "debut": 2},
+                3: {"pid": 3, "nom": "qemu-system-x86_64", "cree": 6000.0, "debut": 3},
+                4: {"pid": 4, "nom": "java", "cree": 100.0, "debut": 4}}
+
+    def test_l_emulateur_ne_avant_tous_les_agents_vivants_est_vise(self):
+        vises = figes.emulateurs_oublies(self.procs(), [5000.0], maintenant=7000.0)
+        self.assertEqual([p["pid"] for p in vises], [1])      # celui de l'agent vivant (né après lui) reste
+
+    def test_sans_agent_vivant_tout_emulateur_ancien_est_vise(self):
+        vises = figes.emulateurs_oublies(self.procs(), [], maintenant=7000.0)
+        self.assertEqual(sorted(p["pid"] for p in vises), [1, 3])
+        self.assertEqual(figes.emulateurs_oublies(self.procs(), [], maintenant=6030.0)[0]["pid"], 1)  # 3 trop jeune
+
+    def test_les_agents_vivants_sont_lus_dans_les_dossiers(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "t1.json").write_text(json.dumps({"pid": 2, "debut_processus": 2}), encoding="utf-8")
+            (Path(d) / "t2.json").write_text(json.dumps({"pid": 9, "debut_processus": 9}), encoding="utf-8")   # mort
+            (Path(d) / "t3.json").write_text(json.dumps({"pid": 3, "debut_processus": 77}), encoding="utf-8")  # repris
+            self.assertEqual(figes.agents_vivants([d], self.procs()), [5000.0])
+
+
 if __name__ == "__main__":
     unittest.main()

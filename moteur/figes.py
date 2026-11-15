@@ -197,6 +197,47 @@ def arreter(p, descendants):
         return False
 
 
+# --- Les émulateurs oubliés (essai réel : un émulateur Android lancé à 23 h 39 par un agent fini tournait encore le
+#  lendemain ; avec lui le poste de 7,5 Go n'avait plus que 69 Mo de mémoire libre et la charge restait au plafond).
+
+EMULATEURS_TOUS_LES_S = 300     # le balayage des émulateurs oubliés : toutes les 5 min
+EMULATEURS = re.compile(r"^(qemu-system-.*|emulator\d*)$")
+
+
+def agents_vivants(dossiers, procs):
+    """Les heures de création (epoch) des agents locaux encore en vie, de tous les projets : `dossiers` sont les
+    dossiers des agents détachés (un `*.json` par agent, avec `pid` et `debut_processus`)."""
+    debuts = []
+    for d in dossiers:
+        try:
+            fichiers = sorted(Path(d).glob("*.json"))
+        except OSError:
+            continue
+        for f in fichiers:
+            if f.name.endswith(".questions.json"):
+                continue
+            try:
+                etat = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            pid = etat.get("pid") if isinstance(etat, dict) else None
+            p = procs.get(pid) if isinstance(pid, int) and not isinstance(pid, bool) else None
+            if p is None or (etat.get("debut_processus") is not None and p.get("debut") not in (None, etat["debut_processus"])):
+                continue
+            if p.get("cree") is not None:
+                debuts.append(p["cree"])
+    return debuts
+
+
+def emulateurs_oublies(procs, debuts_agents, maintenant, marge=60):
+    """Les émulateurs qu'aucun agent vivant n'a pu lancer : nés avant chacun des agents locaux en vie (ou sans agent en
+    vie), depuis plus de `marge` secondes. Un émulateur lancé par un agent qui travaille encore n'est jamais visé ; un
+    agent qui voulait réutiliser un ancien émulateur en relance un."""
+    return [p for p in procs.values()
+            if EMULATEURS.match(str(p.get("nom") or "").lower()) and isinstance(p.get("cree"), (int, float))
+            and maintenant - p["cree"] > marge and all(p["cree"] < d - MARGE_S for d in debuts_agents)]
+
+
 # --- La logique pure (listes injectables).
 
 def enfants_de(procs):

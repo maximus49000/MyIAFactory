@@ -190,6 +190,7 @@ class Moteur:
         self._prendre_les_projets_ajoutes()
         self._installations()
         self._traiter_les_reveils()
+        self._arreter_les_emulateurs_oublies()
         for projet in list(self.projets):
             self._traiter_les_reveils()
             try:
@@ -659,6 +660,26 @@ class Moteur:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{fiche['cle']}", daemon=True).start()
+
+    def _arreter_les_emulateurs_oublies(self):
+        """Toutes les `figes.EMULATEURS_TOUS_LES_S` (pas au premier tour) : un émulateur né avant tous les agents locaux
+        en vie (de tous les projets) ne sert plus à personne ; il est arrêté (la mémoire du poste est rendue)."""
+        maintenant = time.monotonic()
+        if maintenant - self._surveille.setdefault("<emulateurs>", maintenant) < figes.EMULATEURS_TOUS_LES_S:
+            return
+        self._surveille["<emulateurs>"] = maintenant
+        try:
+            procs = self._processus_du_tour or self.surveillance.lister() or {}
+            self._processus_du_tour = procs or self._processus_du_tour
+            if not procs:
+                return
+            debuts = figes.agents_vivants([detache.dossier(p.factory.parent) for p in self.projets], procs)
+            for q in figes.emulateurs_oublies(procs, debuts, time.time()):
+                if self.surveillance.tuer(q, []) and self.projets:
+                    self._noter(self.projets[0], f"émulateur oublié arrêté : {q['nom']} ({q['pid']})")
+        except Exception as e:      # une mesure qui échoue ne fait jamais rien
+            if self.projets:
+                self._noter(self.projets[0], f"émulateurs oubliés : {e}")
 
     def _surveiller_les_commandes(self, projet):
         """Toutes les `figes.SURVEILLER_TOUS_LES_S` : un programme lancé par un agent local du projet (ou laissé par

@@ -3491,8 +3491,13 @@ def traiter_retour(projet, execution, etat):
     refus.discard(taches[0])
     for retour in r.get("retours_factory") or []:
         lancer(projet, "controle", {"texte": retour, "origine": f"retour de {execution.agent}"})
+    non_faites = [tid for tid in taches if tid in set(r.get("non_faites") or [])] if len(taches) > 1 else []
+    for tid in non_faites:
+        _rendre_non_faite(projet, tid, r)
     for tid in taches:
         t = _tache(projet, tid)
+        if tid in non_faites:
+            continue
         if str(t.get("etape")) == "cadrage" and not r.get("cahier"):
             lancer(projet, "tache", {"id": tid, "active": False, "journal": [reponse[:300]]})   # il répondra encore
         elif t["colonne"] != "fait":
@@ -3507,8 +3512,29 @@ def traiter_retour(projet, execution, etat):
     _terminer(projet, {"demande": liee}, reponse[:500])
     actions = []
     for tid in taches:
-        actions += _suite_de_tache(projet, etat, _tache(projet, tid), execution, r)
+        if tid not in non_faites:
+            actions += _suite_de_tache(projet, etat, _tache(projet, tid), execution, r)
     return actions + _demarrer_en_attente(projet, etat, fid)
+
+
+MARQUE_NON_FAITE = "Non faite par l'agent du lot : "
+
+
+def _rendre_non_faite(projet, tid, r):
+    """Une tâche d'un lot que l'agent dit ne pas avoir faite (`non_faites`, essai réel : onze tâches de code crues
+    faites, une seule écrite) : jamais marquée faite. Elle sort du lot et repart à part avec la raison ; une seconde
+    fois non faite, elle est bloquée (le Chef analyse le blocage)."""
+    t = _tache(projet, tid)
+    if t["colonne"] == "fait":
+        return
+    compte = next((c.get("texte") for c in r.get("comptes_rendus") or []
+                   if c.get("element") and c.get("element") == t.get("element") and c.get("texte")), None)
+    raison = MARQUE_NON_FAITE + str(compte or ((r.get("message") or {}).get("texte")) or "sans raison donnée")
+    deja = any(str(j.get("texte", "")).startswith(MARQUE_NON_FAITE) for j in t.get("journal") or [])
+    if deja:
+        _bloquer_taches(projet, [tid], "Deux fois non faite par un agent : " + raison[len(MARQUE_NON_FAITE):])
+        return
+    lancer(projet, "tache", {"id": tid, "active": False, "lot": None, "agent": None, "journal": [raison[:500]]})
 
 
 JOURNAL_REFUS = "Refusé par l'outil"
@@ -4897,8 +4923,11 @@ def _liberer_les_lots_orphelins(projet, etat, court):
     moteur relancé avait perdu la suite du lot, cinq tâches attendaient avec trois agents libres) est défait : ses
     tâches restantes sortent du lot et partent comme les autres. Rend les tâches libérées."""
     en_route = set(_m(etat, "en_cours", set)) | set(_m(etat, "a_lancer", list))
-    for d in _m(etat, "departs").values():
-        en_route |= set(d.get("taches") or [])
+    for tete, d in _m(etat, "departs").items():
+        # `departs` garde aussi les départs finis (essai réel : un rapport appliqué à moitié laissait neuf tâches d'un
+        # lot attendre l'agent rentré depuis) : seul un départ dont la tête est en cours porte encore son lot
+        if tete in en_route:
+            en_route |= set(d.get("taches") or [])
     par_lot = {}
     for t in court["taches"]:
         lot = t.get("lot")

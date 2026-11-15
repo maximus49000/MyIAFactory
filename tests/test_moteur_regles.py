@@ -418,7 +418,23 @@ class Demandes(Base):
         self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)), [])
         self.ok("tache", entree={"id": ids[0], "active": False})
         self.etat.setdefault("departs", {})[ids[0]] = {"taches": ids}  # en partance (le moteur le lance)
+        self.etat["en_cours"].add(ids[0])
         self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)), [])
+
+    def test_un_depart_fini_ne_retient_plus_son_lot(self):
+        """Essai réel : l'agent d'un lot de onze compilations était rentré, son rapport appliqué à moitié (deux tâches
+        faites) ; son départ, resté en mémoire, retenait les neuf autres sans fin. Un départ dont la tête n'est plus en
+        cours ne retient plus rien."""
+        self.cahier_a_valider()
+        ids = [self.ok("tache", entree={"titre": f"Écran {k}", "role": "dev", "colonne": "dev", "active": False})["id"]
+               for k in range(3)]
+        for rang, i in enumerate(ids, 1):
+            self.ok("tache", entree={"id": i, "lot": {"id": "L7", "rang": rang}})
+        self.ok("tache", entree={"id": ids[0], "colonne": "fait"})
+        self.etat.setdefault("departs", {})[ids[0]] = {"taches": ids}  # l'agent est rentré : plus en cours
+        self.etat["en_cours"].discard(ids[0])
+        self.assertEqual(regles._liberer_les_lots_orphelins(self.projet, self.etat, regles._etat(self.projet)),
+                         ids[1:])
 
     def test_une_question_au_chef_recoit_sa_reponse(self):
         """Un retour sur la tâche « Orchestration » est une question au Chef : il répond d'après l'état de tout le
@@ -569,6 +585,24 @@ class Serie(Base):
         self.assertEqual(len(actions), 1)
         self.assertEqual(len(actions[0][2]), 2)                     # un seul agent pour les deux tâches
         self.assertEqual({t["lot"]["id"] for t in self.taches() if t.get("lot")}, {"L1"})
+
+    def test_une_tache_non_faite_du_lot_n_est_jamais_marquee_faite(self):
+        """Essai réel : un agent cloud rend un lot de onze tâches de code en disant « NON FAIT : … » pour neuf ; le
+        moteur les marquait toutes faites. Une tâche de `non_faites` sort du lot et repart à part ; une seconde fois non
+        faite, elle est bloquée."""
+        self.serie(2)
+        (action,) = regles.avancer(self.projet, self.etat)
+        tete, autre = action[2]
+        r = _lu({"statut": "fait", "message": {"texte": "Seul e1 est écrit."}, "non_faites": [autre],
+                 "comptes_rendus": [{"element": "e2", "texte": "Non fait : l'écran parent manque."}]})
+        regles.traiter_retour(self.projet, agents.Execution(tete, action[1], rapport=r, usages=[usage()]), self.etat)
+        t = self.taches(id=autre)[0]
+        self.assertNotEqual(t["colonne"], "fait")
+        self.assertIsNone(t.get("lot"))                              # sortie du lot (elle repart seule)
+        self.assertTrue(any("l'écran parent manque" in j["texte"] for j in t["journal"]))
+        self.assertEqual(self.taches(id=tete)[0]["colonne"], "fait")
+        regles._rendre_non_faite(self.projet, autre, r)            # une seconde fois : bloquée
+        self.assertTrue(self.taches(id=autre)[0].get("bloquee"))
 
     def test_prototype_jamais_parallele(self):
         self.fonctionnalite("prototype")

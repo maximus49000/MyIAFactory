@@ -10,7 +10,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "chez_partenaire": {"partenaire", "quoi", "prompt", "reglages"?, "mode_operatoire", "a_rapporter", "elements"?}?,
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?}?,
-     "methode_prete": bool?,
+     "methode_prete": bool?, "non_faites": [id de tâche]?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,
      "nature": "en_jeu" | "visuel" | "son" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
@@ -18,6 +18,8 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
 une forme fautive est écartée, jamais une raison de refuser le rapport.
 `comptes_rendus` : dans un lot, le compte rendu de chaque élément à part (ce que le Directeur voit à sa validation) ;
 une entrée mal formée est écartée, jamais une raison de refuser le rapport.
+`non_faites` : dans un lot, les tâches que l'agent n'a pas faites (ou en partie) ; le moteur ne les marque pas faites,
+elles repartent à part. Une forme fautive est écartée.
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
 moteur le note comme une estimation).
 Les trois derniers champs sont demandés par la matière des seuls agents qui en ont l'usage (cadrage : `nom`, `cahier` ;
@@ -115,6 +117,8 @@ def lire(texte):
     if comptes is not None:      # facultatif : un compte rendu par élément d'un lot (une forme fautive est ignorée)
         r["comptes_rendus"] = [_de_quoi_valider(x) for x in comptes if isinstance(x, dict) and _texte(x.get("element"))
                                and isinstance(x.get("texte", ""), str)] if isinstance(comptes, list) else []
+    nf = r.get("non_faites")
+    r["non_faites"] = [x.strip() for x in nf if _texte(x)] if isinstance(nf, list) else []
     r = _de_quoi_valider(r)
     if "lignes" in r and (not isinstance(r["lignes"], int) or isinstance(r["lignes"], bool) or r["lignes"] < 0):
         raise RapportIllisible("« lignes » doit être un entier positif")

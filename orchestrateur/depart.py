@@ -346,7 +346,10 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
                        "rapport**, à la fin du lot : dans `message`, le résultat de chaque tâche (par son identifiant) ; "
                        "l'`element` de chaque fichier et de chaque verdict ; et, pour chaque élément, son compte rendu "
                        'à part dans `comptes_rendus` : `[{"element": <id>, "texte": "…", "images": [{"chemin", '
-                       '"legende"}]}]` (le Directeur ne voit que celui de l\'élément qu\'il valide).')
+                       '"legende"}]}]` (le Directeur ne voit que celui de l\'élément qu\'il valide). Une tâche du lot '
+                       "que tu n'as pas faite (ou seulement en partie) va dans `non_faites` : `[\"<id>\", …]`, avec la "
+                       "raison dans le compte rendu de son élément ; le moteur la refait à part, il ne la croit jamais "
+                       "faite.")
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,

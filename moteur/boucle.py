@@ -951,6 +951,11 @@ class Moteur:
                 actions = regles.traiter_retour(projet, e, etat)
             except (regles.Refus, regles.ErreurMoteur) as ex:
                 self._noter(projet, f"retour de {e.agent} : {ex}")
+                try:      # dit au bureau (la suite du lot est libérée par `_liberer_les_lots_orphelins`)
+                    regles.lancer(projet, "tache", {"id": e.tache, "journal": [
+                        f"Le moteur n'a pas pu appliquer tout le rapport de {e.agent} : {ex}"[:500]]})
+                except (regles.Refus, regles.ErreurMoteur):
+                    pass
                 continue
             finally:
                 if e.estime is None:      # un agent local : son résultat est appliqué, ses fichiers sont oubliés

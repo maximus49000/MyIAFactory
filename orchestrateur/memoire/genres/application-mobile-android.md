@@ -926,3 +926,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un élément ne contient que de la logique pure et que les maquettes des écrans qui l'utilisent existent déjà, déclarer l'étape de maquettes non applicable en une ligne, joindre au plus quatre images existantes avec légende et renvoyer le reste à la fiche, sans rien regénérer.
+
+## G155 — Quand un élément de création en quantité est couvert par une
+Rôles : designer
+Date : 2026-11-15
+
+Quand un élément de création en quantité est couvert par une maquette de confirmation et des états déjà validés, vérifier la présence des fichiers et déclarer l'étape non applicable, sans rien regénérer.

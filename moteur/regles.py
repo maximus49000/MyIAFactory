@@ -4912,6 +4912,11 @@ def avancer(projet, etat):
             actions += _rejouer_le_retour(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
+    en_serie = {f["id"] for f in court["fonctionnalites"] if f["etape"] == "serie"}
+    for d in court["decisions"]:
+        # essai réel : l'alerte posée juste avant la fin de la série restait affichée sur une fonctionnalité terminée
+        if d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") and d["fonctionnalite"] not in en_serie:
+            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
     actions += _demarrer_en_attente(projet, etat, None)
@@ -5065,8 +5070,32 @@ def reprendre_la_serie(projet, etat, fid):
     finally:
         if not deja:
             etat.pop("reprise_en_cours", None)
+    _retrouver_les_lots_de_livraison(projet, etat, fid)
     if not deja:
         livrer_si_calme(projet, etat)
+
+
+def _retrouver_les_lots_de_livraison(projet, etat, fid):
+    """Le moteur relancé pendant une livraison groupée : le lot (gardé en mémoire seulement) est relu dans le journal de
+    la tâche en cours de l'élément qui le mène ; les autres éléments du lot attendent avec lui (`DANS_UN_LOT`) et passent
+    à « fait » quand elle finit (essai réel : dix éléments déjà livrés restaient « prêts à livrer »)."""
+    elements = _m(etat, "elements")
+    for v in [x for x in elements.values() if x["fid"] == fid and x["phase"] == "flux" and x.get("taches")]:
+        if v.get("lot_livraison"):
+            continue
+        t = _tache(projet, v["taches"][-1])
+        if t["colonne"] == "fait":
+            continue
+        texte = next((str(j.get("texte", "")) for j in reversed(t.get("journal") or [])
+                      if MARQUE_LOT in str(j.get("texte", ""))), None)
+        if texte is None:
+            continue
+        cles = texte.split(MARQUE_LOT, 1)[1].split()
+        v["lot_livraison"] = cles
+        for cle in cles:
+            autre = elements.get(cle)
+            if autre is not None and autre is not v and autre["phase"] == A_LIVRER:
+                autre["phase"] = DANS_UN_LOT
 
 
 def _reprendre_l_element(projet, etat, f, element, taches):
@@ -5152,9 +5181,9 @@ def _signaler_une_serie_muette(projet, etat, fid):
     """Le garde-fou : une fonctionnalité en série sans aucune tâche ouverte, ni décision, ni agent au travail ne progresse
     plus ; elle est dite au bureau de direction (décision `serie_arretee`), jamais laissée muette."""
     f = _fonc(projet, fid)
-    if f.get("etape") != "serie":
-        return
     court = _etat(projet)
+    if f.get("etape") != "serie":
+        return        # une alerte d'une série finie est levée par `avancer`
     if any(d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") == fid for d in court["decisions"]):
         return        # déjà dite
     raisons = list(_m(etat, "serie_perdue").get(fid, {}).values())
@@ -5167,7 +5196,9 @@ def _signaler_une_serie_muette(projet, etat, fid):
         return
     occupes = {t.get("element") for t in siennes if t["colonne"] != "fait"}
     for v in _m(etat, "elements").values():
-        if v["fid"] == fid and v["phase"] not in ("fait", "bloque") and v["element"]["id"] not in occupes:
+        # prêt à livrer ou dans un lot : la livraison groupée les prend (`livrer_si_calme`), rien n'est bloqué
+        if (v["fid"] == fid and v["phase"] not in ("fait", "bloque", A_LIVRER, DANS_UN_LOT)
+                and v["element"]["id"] not in occupes):
             raisons.append(f"« {v['element']['nom']} » attend sans aucune tâche ({v['phase']})")
     if f.get("file") and not occupes:
         raisons.append(f"{len(f['file'])} élément(s) restent dans la file sans pouvoir partir (dépendances)")

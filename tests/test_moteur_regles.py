@@ -790,6 +790,39 @@ class Serie(Base):
         self.assertIn("1 élément prêt à livrer", self.etat["attente_livraison"]["texte"])
         self.assertNotIn("reprise_en_cours", self.etat)
 
+    def test_le_moteur_relance_pendant_une_livraison_groupee_retrouve_son_lot(self):
+        """Essai réel : le moteur relancé pendant la livraison d'un lot de onze éléments ; seul le meneur passait à
+        « fait », les dix autres restaient « prêts à livrer » et le garde-fou disait la série arrêtée."""
+        self.livrer_deux()
+        e1, e2 = self.etat["elements"]["f1/e1"], self.etat["elements"]["f1/e2"]
+        e1["phase"] = e2["phase"] = regles.A_LIVRER
+        e1["taches"], e2["taches"] = [], []
+        e1["pas"] = e2["pas"] = len(regles._production(self.projet, "f1")) - 1     # la livraison, dernière étape
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat))     # une seconde livraison groupée part
+        self.etat["elements"].clear()                                        # le moteur relancé
+        regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        phases = [v["phase"] for v in self.etat["elements"].values()]
+        self.assertNotIn(regles.A_LIVRER, phases)                            # aucun ne se croit encore à livrer
+        self.assertEqual(phases.count("flux"), 1)
+        meneur = next(v for v in self.etat["elements"].values() if v["phase"] == "flux")
+        self.assertEqual(sorted(meneur["lot_livraison"]), ["f1/e1", "f1/e2"])
+
+    def test_le_garde_fou_ne_dit_pas_bloque_un_element_pret_a_livrer(self):
+        self.livrer_deux()
+        self.etat["elements"]["f1/e1"]["phase"] = regles.A_LIVRER
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        regles._signaler_une_serie_muette(self.projet, self.etat, "f1")
+        texte = " ".join(d["texte"] for d in regles._etat(self.projet)["decisions"] if d["genre"] == regles.SERIE_ARRETEE)
+        self.assertNotIn("a_livrer", texte)
+
+    def test_l_alerte_d_une_serie_finie_est_levee(self):
+        self.livrer_deux()
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "terminee"})     # la série est finie
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": regles.SERIE_ARRETEE,
+                                    "fonctionnalite": "f1", "texte": "La série ne progresse plus."})
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual([d for d in regles._etat(self.projet)["decisions"] if d["genre"] == regles.SERIE_ARRETEE], [])
+
     def test_sans_relecteur_ni_etape_de_qualite_la_derniere_etape_juge(self):
         self.casse_briques(flux=[{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},
                                  {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur",

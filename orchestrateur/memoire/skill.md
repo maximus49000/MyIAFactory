@@ -1191,3 +1191,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Avant de valider un document qui cite une version ou un schéma de signature, relire la configuration de build courante et lancer l'outil de vérification de signature sur chaque fichier livré : une livraison ultérieure rend les notes fausses sans casser de test.
+
+## S199 — Quand un document corrigé liste en tête ce qui a changé, cet
+Rôles : designer
+Date : 2026-11-15
+
+Quand un document corrigé liste en tête ce qui a changé, cette liste cite les anciennes valeurs ; le contrôle de recherche après correction doit les distinguer des occurrences oubliées.

@@ -2,6 +2,7 @@
 l'amont attend une validation du Directeur ne part, par aucun chemin (conception 2026-11-13-agents-polyvalents-design.md).
 Aucun appel réel."""
 import json
+from unittest import mock
 
 from moteur import regles
 from tests.orch_aide import AvecProjet
@@ -300,3 +301,36 @@ class RetraitPrevu(Base):
         t2 = self.tache("flux:dev", element="e2", titre="Autre")
         etat = self.demarrer()
         self.assertEqual(self.parties(etat).get(t2), "agent-1")
+
+
+class CorrectionSurLePoste(Base):
+    """Essai réel : quatre allers-retours ; chaque correction se faisait dans le cloud, sans SDK ni émulateur, rendue
+    « non compilée », et le contrôle suivant, sur le poste, trouvait le défaut d'après. Une correction refusée par un
+    contrôle du poste se fait sur le poste."""
+
+    def lieu(self, etape, lieu):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["flux"] = [dict(e, lieu=lieu) if e["id"] == etape else e for e in f["flux"]]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def corriger_apres(self, etape):
+        t = self.tache(etape)
+        self.ok("tache", entree={"id": t, "colonne": "fait"})
+        etat = regles.nouvel_etat()
+        etat["elements"]["f1/e1"] = {"fid": "f1", "element": {"id": "e1", "nom": "Écran"}, "phase": "relecture",
+                                     "pas": 2, "tour": 0, "corrections": 0, "taches": [t], "attendus": 1, "rapports": []}
+        with mock.patch.object(regles, "reprendre_la_serie"):
+            regles._apres_apres_refus(self.projet, {"suite": "corriger", "consigne": "Corriger le test."},
+                                      {"fonctionnalite": "f1", "element": "e1"}, etat)
+        return next(x for x in regles._etat(self.projet)["taches"] if x.get("etape") == "correction")
+
+    def test_refus_d_un_controle_du_poste_correction_sur_le_poste(self):
+        self.lieu("qa", "local")
+        c = self.corriger_apres("flux:qa")
+        self.assertIs(c.get("sur_le_poste"), True)
+        journal = regles._tache(self.projet, c["id"])["journal"]
+        self.assertIn("ne le rends pas « non compilé »", " ".join(j["texte"] for j in journal))
+
+    def test_refus_d_un_controle_ailleurs_correction_comme_avant(self):
+        c = self.corriger_apres("flux:qa")
+        self.assertFalse(c.get("sur_le_poste"))

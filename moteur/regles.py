@@ -5752,8 +5752,10 @@ def _apres_apres_refus(projet, o, ctx, etat):
     v = _m(etat, "elements").get(f"{fid}/{eid}")
     if o["suite"] == "corriger":
         role = _role_production(projet, fid)
+        local = _refus_venu_du_poste(projet, v)
         tid = _creer_tache(projet, f"Correction : {v['element']['nom'] if v else eid}", fid, role, "correction",
-                           element=eid, journal=[o["consigne"]])
+                           element=eid, journal=[o["consigne"]] + ([CORRECTION_SUR_LE_POSTE] if local else []),
+                           **({"sur_le_poste": True} if local else {}))
         if v:
             v["phase"] = "correction"
             v["taches"].append(tid)
@@ -5765,6 +5767,29 @@ def _apres_apres_refus(projet, o, ctx, etat):
     _bloquer_element(projet, etat, fid, eid, o["raison"])
     _dire(projet, fid, f"L'élément « {eid} » est bloqué : {o['raison']}")
     return []
+
+
+CORRECTION_SUR_LE_POSTE = ("Le refus vient d'un contrôle fait sur le poste (compilation, tests, émulateur) : la correction "
+                           "se fait aussi sur le poste. Compile et relance les tests concernés avant de rendre ton "
+                           "travail ; ne le rends pas « non compilé ».")
+
+
+def _refus_venu_du_poste(projet, v):
+    """Vrai si l'étape qui vient de refuser l'élément se fait sur le poste local (essai réel : quatre allers-retours ;
+    chaque correction faite dans le cloud, sans SDK ni émulateur, rendue « non compilée », et le contrôle suivant, sur le
+    poste, trouvait le défaut d'après)."""
+    if not v or not v.get("taches"):
+        return False
+    court = _etat(projet)
+    for tid in reversed(v["taches"]):
+        try:
+            t = _tache(projet, tid)       # la vue courte du moteur ne garde pas les tâches faites
+        except Refus:
+            continue
+        if t.get("etape") == "correction" or t["colonne"] != "fait":
+            continue
+        return t.get("sur_le_poste") is True or _lieu_reserve(projet, court, t) == "local"
+    return False
 
 
 def _apres_conseil(projet, o, ctx, etat):

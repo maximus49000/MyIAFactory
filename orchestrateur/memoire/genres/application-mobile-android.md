@@ -914,3 +914,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une décision de hiérarchie (sous-élément rattaché à un parent) est tranchée, la traduire en invariants testés dans la logique pure (pas de parent homonyme, parent hérité, effacement au changement de parent), pas seulement en libellé.
+
+## G153 — Quand on doit pouvoir différer un choix d'emplacement, réuti
+Rôles : designer
+Date : 2026-11-15
+
+Quand on doit pouvoir différer un choix d'emplacement, réutiliser la liste d'attente existante : la modéliser comme une ligne spéciale unique sans emplacement, hors du plan, avec un raccourci qui y envoie le reste à placer, et la tester dans la logique pure.

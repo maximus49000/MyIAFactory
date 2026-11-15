@@ -740,3 +740,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Un script d'images qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation Sans pour Arial) et l'image produite doit être relue pour détecter les glyphes manquants.
+
+## G124 — Avant de dessiner les variantes d'un composant déjà validé,
+Rôles : designer
+Date : 2026-11-15
+
+Avant de dessiner les variantes d'un composant déjà validé, vérifier sa taille tactile ; si elle est sous 48 dp, la signaler comme écart au lieu de la copier.

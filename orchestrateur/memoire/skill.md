@@ -1059,3 +1059,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un élément a été repris plusieurs fois pour des défauts qui se retrouveront ailleurs, revoir la méthode : inventaire global, contrôle automatique couvrant tout le code, test réellement exécuté, critère de sortie explicite et plafond de reprises.
+
+## S177 — Un test qui accepte un point d'accroche vide tant que la cib
+Rôles : testeur
+Date : 2026-11-15
+
+Un test qui accepte un point d'accroche vide tant que la cible n'existe pas ne valide rien ; le rapport le dit à chaque tour jusqu'à la création de la cible.

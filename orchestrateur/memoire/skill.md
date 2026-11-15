@@ -1215,3 +1215,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Après le remplacement d'un livrable, relire chaque mention « reste à faire » ou « à corriger par un autre élément » dans les documents liés et la comparer à l'état réel : elles deviennent périmées sans casser aucun test.
+
+## S203 — Avant d'appliquer une consigne de correction d'un document,
+Rôles : designer
+Date : 2026-11-15
+
+Avant d'appliquer une consigne de correction d'un document, vérifier par recherche des variantes périmées si elle est déjà appliquée ; si oui, ne rien modifier et le dire.

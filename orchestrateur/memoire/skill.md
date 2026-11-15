@@ -1107,3 +1107,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape est relancée parce que le rapport n'a ni image ni consigne de validation, relire le livrable existant, vérifier qu'il est intact et rendre seulement les images légendées et les champs de consigne.
+
+## S185 — Quand une étape de conception est relancée uniquement parce
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de conception est relancée uniquement parce que le rapport ne disait pas au valideur ce qu'il doit juger, relire le livrable existant, vérifier qu'il est intact et rendre seulement les champs de consigne (ce qui doit marcher, ce qui n'est pas attendu, conclusion), sans rien régénérer.

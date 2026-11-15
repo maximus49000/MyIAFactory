@@ -4641,6 +4641,18 @@ def _apres_flux(projet, etat, v, r=None):
         _tache_de_flux(projet, etat, v)
         return []
     if sans:       # la livraison, venue après un verdict favorable
+        refus = [x for x in (r or {}).get("verdicts") or [] if x["element"] == v["element"]["id"] and not x["conforme"]]
+        if refus:
+            # essai réel : la livraison rendait « non conforme » (un test du parcours en échec) et l'élément, avec tout
+            # son lot, passait quand même à « fait ». Le refus passe par la correction comme celui de la qualité ; les
+            # éléments du lot attendent de nouveau la livraison groupée
+            for cle in v.pop("lot_livraison", None) or []:
+                autre = _m(etat, "elements").get(cle)
+                if autre is not None and autre is not v and autre["phase"] == DANS_UN_LOT:
+                    autre["phase"] = A_LIVRER
+            v["pas"] = _etape_de_relecture(projet, v["fid"]) + 1
+            v["phase"], v["attendus"], v["rapports"] = "relecture", 1, [refus]
+            return _conclure_relecture(projet, etat, v)
         return _element_fait(projet, etat, v)
     v["phase"] = "relecture"
     return _lancer_relecture(projet, etat, v)

@@ -987,12 +987,16 @@ class Moteur:
                 self._noter_estimation(projet, e)
             try:
                 actions = regles.traiter_retour(projet, e, etat)
-            except (regles.Refus, regles.ErreurMoteur) as ex:
+            except Exception as ex:      # essai réel : un rapport perdu, la tâche « active » sans agent pour toujours
                 self._noter(projet, f"retour de {e.agent} : {ex}")
                 try:      # dit au bureau (la suite du lot est libérée par `_liberer_les_lots_orphelins`)
-                    regles.lancer(projet, "tache", {"id": e.tache, "journal": [
-                        f"Le moteur n'a pas pu appliquer tout le rapport de {e.agent} : {ex}"[:500]]})
-                except (regles.Refus, regles.ErreurMoteur):
+                    texte = f"Le moteur n'a pas pu appliquer tout le rapport de {e.agent} : {ex}"[:300]
+                    if regles._tache(projet, e.tache)["colonne"] == "fait":
+                        regles.lancer(projet, "tache", {"id": e.tache, "journal": [texte]})
+                    else:      # bloquée : visible, et le Chef analyse le blocage (jamais relancée en boucle)
+                        regles.lancer(projet, "tache", {"id": e.tache, "active": False, "bloquee": texte,
+                                                        "journal": [texte]})
+                except Exception:
                     pass
                 continue
             finally:

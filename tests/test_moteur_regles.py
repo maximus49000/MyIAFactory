@@ -821,6 +821,28 @@ class Serie(Base):
         meneur = next(v for v in self.etat["elements"].values() if v["phase"] == "flux")
         self.assertEqual(sorted(meneur["lot_livraison"]), ["f1/e1", "f1/e2"])
 
+    def test_une_livraison_non_conforme_part_en_correction(self):
+        """Essai réel : la livraison rendait « non conforme » (un test du parcours en échec) et les cinq éléments du lot
+        passaient quand même à « fait ». Le refus passe par la correction ; les autres éléments du lot attendent de
+        nouveau la livraison groupée."""
+        self.livrer_deux()
+        e1, e2 = self.etat["elements"]["f1/e1"], self.etat["elements"]["f1/e2"]
+        e1["phase"] = e2["phase"] = regles.A_LIVRER
+        e1["taches"], e2["taches"] = [], []
+        e1["pas"] = e2["pas"] = len(regles._production(self.projet, "f1")) - 1
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat))
+        meneur = next(v for v in self.etat["elements"].values() if v["phase"] == "flux")
+        autre = next(v for v in self.etat["elements"].values() if v is not meneur)
+        tid = meneur["taches"][-1]
+        self.ok("tache", entree={"id": tid, "agent": "dev-1", "active": True})
+        r = _lu({"statut": "fait", "message": {"texte": "Livré, mais un test échoue."}, "verdicts": [
+            {"element": meneur["element"]["id"], "conforme": False, "points": ["Le test du parcours échoue"]}]})
+        actions = regles.traiter_retour(self.projet, agents.Execution(tid, "dev-1", rapport=r, usages=[usage()]),
+                                        self.etat)
+        self.assertEqual([(a[0], a[1]) for a in actions if a[0] == "juger"], [("juger", "apres_refus")])
+        self.assertNotEqual(meneur["phase"], "fait")
+        self.assertEqual(autre["phase"], regles.A_LIVRER)                   # il repartira avec le prochain lot
+
     def test_le_garde_fou_ne_dit_pas_bloque_un_element_pret_a_livrer(self):
         self.livrer_deux()
         self.etat["elements"]["f1/e1"]["phase"] = regles.A_LIVRER

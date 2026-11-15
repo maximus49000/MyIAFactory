@@ -167,6 +167,16 @@ class Passage(Base):
         self.assertIn("Discussion", self.agents.lances[0]["matiere"])
         self.assertEqual(self.agents.lances[0]["dossier"], str(self.projet.dossier))
 
+    def test_un_rapport_qui_fait_echouer_le_moteur_n_est_jamais_perdu_en_silence(self):
+        """Essai réel : le rapport d'une livraison n'a jamais été appliqué ; la tâche restait « active » sans agent et
+        le bureau semblait bloqué. Toute erreur : la tâche est bloquée et dit pourquoi."""
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        with mock.patch.object(regles, "traiter_retour", side_effect=KeyError("element")):
+            self.moteur.tour()                      # en essai, le rapport de l'agent est lu dans le même passage
+        t = self.suivi()["taches"][0]
+        self.assertFalse(t["active"])
+        self.assertIn("n'a pas pu appliquer tout le rapport", t["bloquee"])
+
     def test_agent_en_echec_usage_note_quand_meme(self):
         self.agents.rapport = None
         self.demande(type="fonctionnalite", texte="Des écrans")

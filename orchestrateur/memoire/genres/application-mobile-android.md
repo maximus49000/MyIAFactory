@@ -878,3 +878,9 @@ Rôles : release
 Date : 2026-11-15
 
 Avant de monter le numéro de version d'une livraison, relever le code de la livraison précédente dans son paquet et le comparer à celui du projet.
+
+## G147 — Sous Windows, lancer le wrapper de build par cmd /c et son c
+Rôles : release
+Date : 2026-11-15
+
+Sous Windows, lancer le wrapper de build par cmd /c et son chemin complet.

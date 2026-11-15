@@ -920,3 +920,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand on doit pouvoir différer un choix d'emplacement, réutiliser la liste d'attente existante : la modéliser comme une ligne spéciale unique sans emplacement, hors du plan, avec un raccourci qui y envoie le reste à placer, et la tester dans la logique pure.
+
+## G154 — Quand un élément ne contient que de la logique pure et que l
+Rôles : designer
+Date : 2026-11-15
+
+Quand un élément ne contient que de la logique pure et que les maquettes des écrans qui l'utilisent existent déjà, déclarer l'étape de maquettes non applicable en une ligne, joindre au plus quatre images existantes avec légende et renvoyer le reste à la fiche, sans rien regénérer.

@@ -1825,6 +1825,20 @@ def _lire_texte(regl, source):
     return sortie.decode("utf-8-sig")
 
 
+def _cause_probable():
+    """Essai réel : « relevé indisponible » sans raison, pendant qu'un émulateur et une compilation saturaient la
+    mémoire du poste. La mémoire pleine est dite ; le relevé revient seul quand elle se libère."""
+    try:
+        from bureau import charge
+        occupee = charge.memoire_occupee()
+    except Exception:
+        return ""
+    if occupee is None or occupee < 90:
+        return ""
+    return (f" La mémoire de l'ordinateur est pleine ({occupee} %), sans doute un émulateur ou une compilation en "
+            "cours : le relevé reviendra quand elle se libérera.")
+
+
 def obtenir(regl):
     """(relevé normalisé, None) ou (None, message). Ne lève jamais."""
     try:
@@ -1834,7 +1848,7 @@ def obtenir(regl):
         try:
             texte = _lire_texte(regl, source)
         except subprocess.TimeoutExpired:
-            return None, f"La commande du relevé a dépassé {DELAI_COMMANDE_S} s."
+            return None, f"La commande du relevé a dépassé {DELAI_COMMANDE_S} s." + _cause_probable()
         except FileNotFoundError as e:
             return None, f"Relevé introuvable : {e.filename or e}"
         except (OSError, ValueError) as e:

@@ -597,6 +597,20 @@ class TestObtenir(unittest.TestCase):
         self.assertIn("dépassé", err)
         self.assertLess(time.monotonic() - debut, 6)
 
+    def test_relevé_trop_long_dit_la_memoire_pleine(self):
+        """Essai réel : « relevé indisponible » sans raison, pendant qu'un émulateur et une compilation saturaient la
+        mémoire du poste."""
+        from unittest import mock
+        from bureau import charge
+        self._avec_delai_court()
+        cmd = [sys.executable, "-c", "import time; time.sleep(30)"]
+        with mock.patch.object(charge, "memoire_occupee", return_value=99):
+            _, err = releve.obtenir(self.regl({"commande": cmd}))
+        self.assertIn("mémoire de l'ordinateur est pleine (99 %)", err)
+        with mock.patch.object(charge, "memoire_occupee", return_value=50):
+            _, err = releve.obtenir(self.regl({"commande": cmd}))
+        self.assertNotIn("mémoire", err)
+
     def test_obtenir_commande_dont_un_descendant_garde_la_sortie(self):
         # La commande lance un sous-processus qui hérite de sa sortie et dort : le délai doit tenir.
         self._avec_delai_court()

@@ -48,6 +48,16 @@ def machine():
     return {"coeurs": coeurs, "memoire_totale_go": total, "disponible": True}
 
 
+def memoire_occupee():
+    """La mémoire du poste occupée, en %, ou `None` si on ne sait pas la lire."""
+    if not WINDOWS:
+        return None
+    try:
+        return int(_memoire().dwMemoryLoad)
+    except OSError:
+        return None
+
+
 class Sonde:
     """Lecture instantanée : CPU par différence entre deux appels, mémoire."""
 

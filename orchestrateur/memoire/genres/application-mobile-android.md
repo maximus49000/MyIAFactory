@@ -992,3 +992,9 @@ Rôles : release, testeur
 Date : 2026-11-15
 
 Pour arrêter un émulateur de test, utiliser la commande d'arrêt de l'appareil via adb ciblée par son numéro de série, et non la commande console qui peut exiger un jeton.
+
+## G166 — Avant de compiler une livraison, lire le code de version dan
+Rôles : release
+Date : 2026-11-15
+
+Avant de compiler une livraison, lire le code de version dans le paquet précédent, pas dans sa note, et le monter si le projet n'est pas strictement supérieur.

@@ -902,3 +902,9 @@ Rôles : cadrage
 Date : 2026-11-15
 
 Dans un cahier de stockage ou de rangement, le sélecteur d'emplacement doit couvrir tous les niveaux de la hiérarchie existante, pas seulement le premier.
+
+## G151 — Mesurer le contraste des gris secondaires et convertir les t
+Rôles : designer
+Date : 2026-11-15
+
+Mesurer le contraste des gris secondaires et convertir les tailles en dp avant de copier les composants d'une maquette validée ; assombrir et agrandir dans les prototypes.

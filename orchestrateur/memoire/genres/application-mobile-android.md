@@ -842,3 +842,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un contrôle exige une version de schéma de signature précise, l'activer explicitement dans la configuration de signature (après avoir cherché toutes les configs), et déclarer l'APK non reconstruit si l'outil de build manque.
+
+## G141 — Quand le minSdk est inférieur à 28, déclarer explicitement l
+Rôles : release
+Date : 2026-11-15
+
+Quand le minSdk est inférieur à 28, déclarer explicitement les schémas de signature v2 et v3 dans la configuration release, puis vérifier leur présence dans l'apk.

@@ -1287,3 +1287,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand on écrit du code d'interface sans pouvoir compiler, relire les signatures utilisées et les portées des modificateurs (weight, align) avant de rendre, et déclarer le code non compilé.
+
+## S215 — Quand on ajoute un paramètre après un paramètre de type fonc
+Rôles : testeur
+Date : 2026-11-15
+
+Quand on ajoute un paramètre après un paramètre de type fonction, le lambda de fin se lie au nouveau dernier paramètre : compiler les tests après tout changement de signature et passer le lambda entre parenthèses.

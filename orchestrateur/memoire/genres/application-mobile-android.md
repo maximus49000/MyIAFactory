@@ -692,3 +692,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Le contrôle des textes affichés parcourt toutes les sources du module et prouve son efficacité en injectant un faux littéral.
+
+## G116 — Quand la consigne demande explicitement de créer une destina
+Rôles : designer
+Date : 2026-11-15
+
+Quand la consigne demande explicitement de créer une destination de navigation absente, la créer en version minimale conforme à la fiche et lister ce qui manque, au lieu de laisser le rappel vide.

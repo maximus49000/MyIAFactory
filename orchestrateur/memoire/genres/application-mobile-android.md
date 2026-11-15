@@ -980,3 +980,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Dans une application Compose, certaines icônes Material (Remove, par exemple) appartiennent à la bibliothèque étendue, absente de la bibliothèque de base : vérifier la dépendance ou compiler avant de livrer un écran.
+
+## G164 — Dans une application Compose, certaines icônes courantes (mo
+Rôles : designer, dev
+Date : 2026-11-15
+
+Dans une application Compose, certaines icônes courantes (moins, etc.) n'existent que dans le paquet d'icônes étendu ; avant de les utiliser, vérifier le paquet ou dessiner un vecteur local.

@@ -776,3 +776,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Pour un parcours d'écrans dépendant d'un service externe ou du matériel, injecter la dépendance sous forme de fonction (avec un verrou pour tenir l'état d'attente) et fabriquer l'entrée avec un fichier minimal valide.
+
+## G130 — Un test unitaire qui échoue par une course sur le dispatcher
+Rôles : dev, designer
+Date : 2026-11-15
+
+Un test unitaire qui échoue par une course sur le dispatcher principal d'un autre test se relance seul puis en suite complète ; il se signale comme instable sans masquer les résultats des tests ajoutés.

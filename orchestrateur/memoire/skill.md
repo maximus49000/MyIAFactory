@@ -1179,3 +1179,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Après avoir reporté une décision validée dans un document, chercher par recherche dans tout le projet les autres documents qui la présentent encore comme ouverte ; ceux hors périmètre se signalent sans être modifiés.
+
+## S197 — Dédoublonner les fichiers de résultats avant de totaliser le
+Rôles : testeur
+Date : 2026-11-15
+
+Dédoublonner les fichiers de résultats avant de totaliser les comptes d'un lot de tests.

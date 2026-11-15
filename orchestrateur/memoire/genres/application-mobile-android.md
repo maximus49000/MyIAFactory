@@ -974,3 +974,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Dans un fichier de ressources texte Android, une chaîne qui commence ou finit par une espace doit être entourée de guillemets, sinon l'espace est perdue.
+
+## G163 — Dans une application Compose, certaines icônes Material (Rem
+Rôles : testeur
+Date : 2026-11-15
+
+Dans une application Compose, certaines icônes Material (Remove, par exemple) appartiennent à la bibliothèque étendue, absente de la bibliothèque de base : vérifier la dépendance ou compiler avant de livrer un écran.

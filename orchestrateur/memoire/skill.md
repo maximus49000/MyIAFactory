@@ -1257,3 +1257,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Pour une quantité répartie sur plusieurs lignes, définir des invariants dans une logique pure testée, puis faire lire ces règles par le script de rendu.
+
+## S210 — Ne pas importer un script d'images qui s'exécute à l'import
+Rôles : designer
+Date : 2026-11-15
+
+Ne pas importer un script d'images qui s'exécute à l'import et dépend d'une police absente du poste ; écrire un script autonome qui n'écrit que dans son propre dossier.

@@ -704,3 +704,9 @@ Rôles : release
 Date : 2026-11-15
 
 Dans un paquet Android multidex, la recherche d'une classe doit couvrir chaque fichier dex de l'archive, et non le seul premier.
+
+## G118 — Un contrôle automatique des textes affichés doit aussi couvr
+Rôles : testeur
+Date : 2026-11-15
+
+Un contrôle automatique des textes affichés doit aussi couvrir les objets de constantes de texte lus par les écrans, pas seulement les littéraux passés aux composants.

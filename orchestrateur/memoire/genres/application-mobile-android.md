@@ -824,3 +824,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Avant de reporter un manque dans un inventaire, chercher les usages de l'identifiant cité ; un identifiant « non confirmé » est souvent utilisé dans un état de l'écran que l'auteur n'a pas lu.
+
+## G138 — Quand une action d'une notification est retirée, supprimer e
+Rôles : dev
+Date : 2026-11-15
+
+Quand une action d'une notification est retirée, supprimer ensemble sa cible, son texte, son identifiant, les tests qui comptent les actions par indice, la maquette et son script ; garder le repli sur une cible inconnue pour les notifications déjà affichées.

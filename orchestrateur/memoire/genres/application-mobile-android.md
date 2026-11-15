@@ -788,3 +788,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Ajouter une route ou un argument de route impose de mettre à jour les listes de routes, les tests de câblage qui lisent la source et les contrôles par réflexion.
+
+## G132 — Prévoir une relecture silencieuse qui garde l'état affiché s
+Rôles : dev
+Date : 2026-11-15
+
+Prévoir une relecture silencieuse qui garde l'état affiché si la lecture échoue, plutôt que de repasser par l'état de chargement.

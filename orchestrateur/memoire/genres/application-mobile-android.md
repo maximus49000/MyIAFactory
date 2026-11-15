@@ -764,3 +764,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Une suite instrumentée entièrement verte ne prouve que ce qu'elle contient : avant de clore l'étape, rapprocher chaque parcours exigé par la méthode d'un test nommé dans les résultats, et signaler comme non vérifié tout parcours sans test.
+
+## G128 — Avant d'écrire un test d'écran demandé, vérifier par recherc
+Rôles : designer, dev
+Date : 2026-11-15
+
+Avant d'écrire un test d'écran demandé, vérifier par recherche que le composable existe ; s'il n'y a que de la logique, tester le plus proche écran réel et déclarer l'écart au lieu d'inventer l'écran.

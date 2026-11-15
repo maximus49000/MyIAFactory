@@ -950,3 +950,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand une tâche demande de brancher une logique pure à l'interface et que la chaîne de compilation manque, vérifier par recherche l'état du branchement, ne pas écrire d'écrans non compilables, et déclarer les éléments non faits pour qu'ils soient refaits sur le poste équipé.
+
+## G159 — Une valeur sentinelle de logique pure se nomme par un identi
+Rôles : dev
+Date : 2026-11-15
+
+Une valeur sentinelle de logique pure se nomme par un identifiant technique, jamais par le libellé affiché ; le libellé vient des ressources.

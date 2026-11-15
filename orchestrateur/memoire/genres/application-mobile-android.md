@@ -710,3 +710,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un contrôle automatique des textes affichés doit aussi couvrir les objets de constantes de texte lus par les écrans, pas seulement les littéraux passés aux composants.
+
+## G119 — Pour déplacer les textes d'interface en ressources, partir d
+Rôles : designer, dev
+Date : 2026-11-15
+
+Pour déplacer les textes d'interface en ressources, partir d'un inventaire par recherche de tous les objets de constantes, énumérations et formateurs ; le contrôle automatique couvre tous les fichiers sources, impose que la liste des exceptions reste exacte et se prouve par injection de faux littéraux.

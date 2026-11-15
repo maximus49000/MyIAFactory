@@ -2613,7 +2613,17 @@ def _raison_prerequis(ctx, t):
         lignes = [_ligne_d_element(ctx, fid, e, n) for e, n in elements[:3]]
         if len(elements) > 3:
             lignes.append(f"et {len(elements) - 3} autre(s)")
-        return (f"prérequis — {nom}", [f"{len(elements)} élément{s} pas encore validé{s} — " + " ; ".join(lignes)],
+        detail = [f"{len(elements)} élément{s} pas encore validé{s} — " + " ; ".join(lignes)]
+        a_valider = any(str(x.get("etape")).startswith(ETAPES_DE_VALIDATION) and x["colonne"] != "fait"
+                        and not x.get("bloquee") for x in ctx.court["taches"]
+                        if x.get("fonctionnalite") == fid and x.get("element") in {e for e, _ in elements})
+        if not a_valider:
+            # essai réel : « quand vous aurez validé » alors que l'élément était encore en maquettes ; le Directeur
+            # cherchait en vain quoi valider
+            return (f"prérequis — {nom} (rien à valider pour l'instant)", detail,
+                    f"quand {'ces éléments auront' if s else 'cet élément aura'} fini leur étape en cours, puis après "
+                    f"votre validation « {nom} »")
+        return (f"prérequis — {nom}", detail,
                 f"quand vous aurez validé « {nom} » pour {'ces éléments' if s else 'cet élément'}")
     for d in t.get("depend_de") or []:
         u = ctx.ouvertes.get(d)

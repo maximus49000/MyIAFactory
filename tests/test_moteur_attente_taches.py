@@ -100,13 +100,20 @@ class Prerequis(Attentes):
         t = self.tache("flux:qa", element="e1")                         # e1 est passé : sa recette attend la barrière
         r = self.raison(self.raisons(), t)
         self.assertEqual(r["genre"], "prerequis")
-        self.assertEqual(r["texte"], "prérequis — Essai")
+        # essai réel : « quand vous aurez validé » alors que l'élément était encore en maquettes
+        self.assertEqual(r["texte"], "prérequis — Essai (rien à valider pour l'instant)")
         tout = " ".join(r["detail"])
         self.assertIn("1 élément pas encore validé", tout)
         self.assertIn("« Profil »", tout)
         self.assertIn("Léa", tout)
         self.assertIn("en cours depuis", tout)
+        self.assertIn("cet élément aura fini", r["quand"])
         self.assertIn("Essai", r["quand"])
+        # l'élément arrivé à la validation : c'est bien au Directeur de valider
+        self.tache("validation:val", element="e2", titre="Validation : Profil")
+        r = self.raison(self.raisons(), t)
+        self.assertEqual(r["texte"], "prérequis — Essai")
+        self.assertIn("quand vous aurez validé", r["quand"])
 
     def test_ce_qu_il_lui_faudra_ensuite(self):
         """Retenue par un prérequis, elle dit aussi le lieu qu'elle exigera, et qui l'occupe."""

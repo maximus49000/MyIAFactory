@@ -1,6 +1,7 @@
 """La table de règles du moteur : une ligne de la conception, un test. Appels d'IA et agents simulés."""
 import json
 import unittest
+from unittest import mock
 
 from moteur import agents, appel, detache, jugement, regles
 from orchestrateur import factory as fa
@@ -768,6 +769,26 @@ class Serie(Base):
         self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()},
                          {"f1/e1": "fait", "f1/e2": "fait"})
         self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+
+    def test_le_moteur_relance_ne_livre_qu_apres_avoir_repris_tous_les_elements(self):
+        """Essai réel : au redémarrage, le premier élément repris, prêt, partait seul en livraison alors que trois
+        autres, pas encore repris, étaient en correction."""
+        self.livrer_deux()
+        avant = len(self.taches(etape="flux:livraison"))
+        self.etat["elements"].clear()
+        ordre = iter([regles.A_LIVRER, "correction"])
+
+        def reprendre(projet, etat, f, element, taches):
+            v = regles._etat_element(etat, f["id"], element)
+            v.update(taches=[], pas=0, phase=next(ordre))
+            regles.livrer_si_calme(projet, etat)      # ce que fait la conclusion d'un élément prêt
+            return None
+
+        with mock.patch.object(regles, "_reprendre_l_element", side_effect=reprendre):
+            regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        self.assertEqual(len(self.taches(etape="flux:livraison")), avant)
+        self.assertIn("1 élément prêt à livrer", self.etat["attente_livraison"]["texte"])
+        self.assertNotIn("reprise_en_cours", self.etat)
 
     def test_sans_relecteur_ni_etape_de_qualite_la_derniere_etape_juge(self):
         self.casse_briques(flux=[{"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"},

@@ -4731,6 +4731,8 @@ def livrer_si_calme(projet, etat, force=False):
     quand aucun élément n'est plus au travail (ou tout de suite sur « Livrer maintenant »), menée par l'un d'eux pour
     tous. Ce qui attend est noté dans `etat["attente_livraison"]` (dit au bureau). Rend vrai si une livraison est partie."""
     elements = _m(etat, "elements")
+    if etat.get("reprise_en_cours"):
+        return False          # le moteur relancé recharge ses éléments : on ne sait pas encore lesquels sont au travail
     prets = [v for v in elements.values() if v["phase"] == A_LIVRER]
     etat.pop("attente_livraison", None)
     if not prets:
@@ -5038,17 +5040,28 @@ def reprendre_la_serie(projet, etat, fid):
     for t in f.get("taches") or []:
         if t.get("element"):
             par_element.setdefault(t["element"], []).append(t)
-    for eid in a_reprendre:
-        if eid not in par_element:
-            continue      # jamais commencé (un ancien découpage) : rien à reprendre
-        connu = f["elements"][eid]
-        element = {"id": eid, **(connu if isinstance(connu, dict) else {})}
-        element.setdefault("nom", eid)
-        raison = _reprendre_l_element(projet, etat, f, element, sorted(par_element[eid], key=lambda t: _numero(t["id"])))
-        if raison:
-            perdus[eid] = f"« {element['nom']} » : {raison}"
-        else:
-            perdus.pop(eid, None)
+    # essai réel : le premier élément rechargé, prêt, partait seul en livraison avant que les éléments encore au travail
+    # soient rechargés ; la livraison groupée est décidée une fois tous les éléments repris
+    deja = etat.get("reprise_en_cours")
+    etat["reprise_en_cours"] = True
+    try:
+        for eid in a_reprendre:
+            if eid not in par_element:
+                continue      # jamais commencé (un ancien découpage) : rien à reprendre
+            connu = f["elements"][eid]
+            element = {"id": eid, **(connu if isinstance(connu, dict) else {})}
+            element.setdefault("nom", eid)
+            raison = _reprendre_l_element(projet, etat, f, element,
+                                          sorted(par_element[eid], key=lambda t: _numero(t["id"])))
+            if raison:
+                perdus[eid] = f"« {element['nom']} » : {raison}"
+            else:
+                perdus.pop(eid, None)
+    finally:
+        if not deja:
+            etat.pop("reprise_en_cours", None)
+    if not deja:
+        livrer_si_calme(projet, etat)
 
 
 def _reprendre_l_element(projet, etat, f, element, taches):

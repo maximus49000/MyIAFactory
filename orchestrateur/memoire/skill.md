@@ -1173,3 +1173,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une correction remplace une valeur ou un choix périmé dans un document, rechercher toutes ses variantes avant et après la modification, et reporter les statuts qui en découlent directement, sans toucher aux autres.
+
+## S196 — Après avoir reporté une décision validée dans un document, c
+Rôles : designer
+Date : 2026-11-15
+
+Après avoir reporté une décision validée dans un document, chercher par recherche dans tout le projet les autres documents qui la présentent encore comme ouverte ; ceux hors périmètre se signalent sans être modifiés.

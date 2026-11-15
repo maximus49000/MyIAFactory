@@ -111,6 +111,20 @@ class Passage(Base):
         self.assertIn("Je n'ai pas pu aller au bout", f["discussion"][-1]["texte"])
         self.assertNotEqual(f["discussion"][-1]["auteur"], "utilisateur")
 
+    def test_un_jugement_en_echec_n_est_jamais_laisse_en_attente(self):
+        """Essai réel : l'écriture d'une méthode validée a échoué (appel au modèle) ; la demande restait « en attente »
+        sans fin et le bureau semblait bloqué. L'échec est dit sur la demande et dans la discussion."""
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        self.ok("demande-traitee", entree={"id": "r1"})
+        i = self.demande(type="message", fonctionnalite="f1", texte="Bonjour")
+        with mock.patch.object(self.moteur, "_juger", side_effect=RuntimeError("délai dépassé")):
+            self.moteur._executer(self.projet, [("juger", "ecrire_methode", {}, {"demande": i, "fonctionnalite": "f1"})])
+        d = self.statut(i)
+        self.assertEqual(d["statut"], "traitée")
+        self.assertIn("délai dépassé", d["reponse"])
+        f = next(x for x in self.suivi()["fonctionnalites"] if x["id"] == "f1")
+        self.assertIn("renvoyer votre réponse", f["discussion"][-1]["texte"])
+
     def test_usage_de_chaque_jugement_note(self):
         i = self.demande(type="bouton", id="exporter")
         self.moteur.tour()

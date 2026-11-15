@@ -569,6 +569,10 @@ class Moteur:
                     self._partir(projet, action)
             except (regles.Refus, regles.ErreurMoteur) as e:
                 self._signaler(projet, action, e)
+            except Exception as e:     # un appel au modèle en échec, une réponse illisible… (essai réel : la validation
+                if action[0] != "juger":   # d'une méthode restait « en attente » sans fin, rien n'était dit)
+                    raise
+                self._signaler(projet, action, f"{e} — vous pouvez renvoyer votre réponse.")
 
     def _signaler(self, projet, action, erreur):
         """Une action refusée par l'outil : visible au bureau quand on sait où (la demande qu'elle servait)."""

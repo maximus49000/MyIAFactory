@@ -728,3 +728,9 @@ Rôles : release
 Date : 2026-11-15
 
 Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à les chercher dans les scripts précédents.
+
+## G122 — Dans une maquette, comparer chaque texte à la zone réellemen
+Rôles : designer
+Date : 2026-11-15
+
+Dans une maquette, comparer chaque texte à la zone réellement visible, c'est-à-dire sans la barre de navigation fixe, et pas seulement à la taille de l'écran.

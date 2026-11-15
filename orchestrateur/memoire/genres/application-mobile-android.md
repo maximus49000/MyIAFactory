@@ -932,3 +932,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un élément de création en quantité est couvert par une maquette de confirmation et des états déjà validés, vérifier la présence des fichiers et déclarer l'étape non applicable, sans rien regénérer.
+
+## G156 — Quand on agrandit des zones tactiles à 48 dp dans un prototy
+Rôles : designer
+Date : 2026-11-15
+
+Quand on agrandit des zones tactiles à 48 dp dans un prototype, vérifier aussi qu'elles restent dans le cadre de leur carte : le contrôle de débordement doit porter sur les formes dessinées, pas seulement sur les textes.

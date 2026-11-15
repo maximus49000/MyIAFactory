@@ -872,3 +872,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Avant de déclarer un artefact à reconstruire, comparer les empreintes des livrables des dossiers concernés : une empreinte identique prouve qu'il a déjà été remplacé.
+
+## G146 — Avant de monter le numéro de version d'une livraison, releve
+Rôles : release
+Date : 2026-11-15
+
+Avant de monter le numéro de version d'une livraison, relever le code de la livraison précédente dans son paquet et le comparer à celui du projet.

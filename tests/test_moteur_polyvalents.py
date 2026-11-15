@@ -334,3 +334,27 @@ class CorrectionSurLePoste(Base):
     def test_refus_d_un_controle_ailleurs_correction_comme_avant(self):
         c = self.corriger_apres("flux:qa")
         self.assertFalse(c.get("sur_le_poste"))
+
+    def test_methode_a_revoir_corriger_encore_sur_le_poste(self):
+        """« Méthode à revoir ? » → « Non, corriger encore » : une correction de plus, sur le poste, avec le constat du
+        dernier contrôle ; la décision est levée."""
+        self.lieu("qa", "local")
+        t = self.tache("flux:qa")
+        self.ok("tache", entree={"id": t, "colonne": "fait", "journal": ["Non conforme : 7 tests instrumentés rouges."]})
+        self.ok("decision", entree={"action": "poser", "portee": "f1", "genre": "methode_a_revoir",
+                                    "texte": "La méthode est peut-être à revoir ? (élément e1)"})
+        etat = regles.nouvel_etat()
+        etat["elements"]["f1/e1"] = {"fid": "f1", "element": {"id": "e1", "nom": "Écran"}, "phase": "attente_methode",
+                                     "pas": 2, "tour": 1, "corrections": 3, "taches": [t], "attendus": 1,
+                                     "rapports": []}
+        self.ok("actions", entree={"type": "methode", "fonctionnalite": "f1", "verdict": "corriger"})
+        suivi = lambda: json.loads((self.dossier / "suivi.json").read_text(encoding="utf-8"))
+        demande = next(x for x in suivi()["demandes"] if x.get("verdict") == "corriger")
+        with mock.patch.object(regles, "reprendre_la_serie"):
+            regles.traiter_demande(self.projet, demande, etat)
+        c = next(x for x in regles._etat(self.projet)["taches"] if x.get("etape") == "correction")
+        self.assertIs(c.get("sur_le_poste"), True)
+        journal = " ".join(j["texte"] for j in regles._tache(self.projet, c["id"])["journal"])
+        self.assertIn("7 tests instrumentés rouges", journal)
+        self.assertEqual(etat["elements"]["f1/e1"]["corrections"], 0)
+        self.assertEqual(suivi()["fonctionnalites"][0]["decisions"], [])

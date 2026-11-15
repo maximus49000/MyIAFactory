@@ -645,7 +645,7 @@ def _verifier_v4(demande, r, elements):
         return "Verdict inconnu (valider ou corriger)."
     if verdict == "valider":  # méthode
         return None if _a_decision(f, "valider_methode") else "Aucune méthode à valider."
-    if verdict == "garder":
+    if verdict in ("garder", "corriger"):
         return None if _a_decision(f, "methode_a_revoir") else "Aucune question « méthode à revoir ? » en attente."
     if verdict == "revoir":
         # essai réel : « Demander une correction » sur une méthode proposée (fin du prototype, à valider) était refusé
@@ -659,7 +659,7 @@ def _verifier_v4(demande, r, elements):
         if verdict == "adapter":
             return _texte_libre(texte, "texte") if texte is not None else "« texte » est obligatoire pour adapter."
         return None
-    return "Verdict inconnu (valider, revoir, garder, reprendre ou adapter)."
+    return "Verdict inconnu (valider, revoir, garder, corriger, reprendre ou adapter)."
 
 
 def _verifier_genre(demande, r):

@@ -712,6 +712,8 @@ export function contenuDecisionsV4(ctx, contenu) {
     d.elargissements.map((x) => decisionElargirGenre(ctx, x))));
   contenu.append(partie("Méthode à revoir ?", "Aucune méthode à revoir", d.revoir.map((x) => decisionFonctionnalite(ctx, x, [
     boutonDemande(ctx, "Oui, revoir", "bouton", () => demandeMethode(x.fonctionnalite, "revoir")),
+    // la méthode n'est pas en cause : une correction de plus, sur le poste quand le refus vient d'un contrôle du poste
+    boutonDemande(ctx, "Non, corriger encore", "bouton secondaire", () => demandeMethode(x.fonctionnalite, "corriger")),
     boutonDemande(ctx, "Non, garder", "bouton secondaire", () => demandeMethode(x.fonctionnalite, "garder"))]))));
   contenu.append(partie("Organisation à valider", "Aucune organisation à valider",
     d.organisations.map((x) => rendreOrganisation(ctx, x, (libelle, classe, fabrique, avant) =>

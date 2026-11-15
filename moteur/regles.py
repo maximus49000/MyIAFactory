@@ -572,6 +572,8 @@ def _sur_methode(projet, demande, etat):
                 return []
         _dire(projet, fid, "Nous reprenons la mise au point : dites-moi ce qu'il faut changer.", attend=True)
         return []
+    if verdict == "corriger":
+        return _corriger_encore(projet, etat, f, suite)
     if verdict == "garder":
         texte = next((d["texte"] for d in f["decisions"] if d["genre"] == "methode_a_revoir"), "")
         element = _ELEMENT.search(texte)
@@ -581,6 +583,42 @@ def _sur_methode(projet, demande, etat):
         _terminer(projet, suite, "C'est noté : l'élément reste bloqué, la méthode ne change pas.")
         return []
     raise Refus(f"verdict de méthode inconnu : {verdict}")
+
+
+def _corriger_encore(projet, etat, f, suite):
+    """« Méthode à revoir ? » → « Non, corriger encore » : la méthode n'est pas en cause (essai réel : trois tours de
+    corrections faites dans le cloud sans compiler ; le dernier contrôle, sur le poste, relevait sept tests cassés). Une
+    correction de plus sur les défauts du dernier contrôle, sur le poste quand il s'y faisait ; le compte des tours
+    repart de zéro."""
+    fid = f["id"]
+    texte = next((d["texte"] for d in f["decisions"] if d["genre"] == "methode_a_revoir"), "")
+    element = _ELEMENT.search(texte)
+    if not element:
+        raise Refus("l'élément à corriger n'est plus lisible dans la décision")
+    eid = element.group(1)
+    _lever(projet, f, "methode_a_revoir")
+    reprendre_la_serie(projet, etat, fid)
+    v = _m(etat, "elements").get(f"{fid}/{eid}")
+    dernier = None
+    for tid in reversed((v or {}).get("taches") or []):
+        t = _tache(projet, tid)
+        if t["colonne"] == "fait" and t.get("etape") != "correction":
+            dernier = t
+            break
+    constat = (dernier["journal"][-1]["texte"] if dernier and dernier.get("journal") else "") or "voir le journal"
+    local = _refus_venu_du_poste(projet, v)
+    consigne = ("Le Directeur garde la méthode et demande une correction de plus. Corrige chaque défaut relevé par le "
+                f"dernier contrôle, en traitant sa cause partout dans le projet : {constat[:1500]}")
+    tid = _creer_tache(projet, f"Correction : {v['element']['nom'] if v else eid}", fid, _role_production(projet, fid),
+                       "correction", element=eid,
+                       journal=[consigne] + ([CORRECTION_SUR_LE_POSTE] if local else []),
+                       **({"sur_le_poste": True} if local else {}))
+    if v:
+        v.update(phase="correction", corrections=0, tour=0)
+        v["taches"].append(tid)
+    _terminer(projet, suite, "C'est noté : la méthode est gardée, l'élément est corrigé encore une fois"
+                             + (" sur le poste." if local else "."))
+    return _demarrer_en_attente(projet, etat, fid)
 
 
 def _reprise_proposee(f):

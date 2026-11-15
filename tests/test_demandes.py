@@ -315,6 +315,8 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "methode", "fonctionnalite": "f2", "verdict": "valider"})
         self.refus({"type": "methode", "fonctionnalite": "f1", "verdict": "valider"})
         self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "garder"})
+        self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "corriger"})      # « Non, corriger encore »
+        self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "corriger"})
         self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "garder"})
         self.ok({"type": "methode", "fonctionnalite": "f2", "verdict": "revoir"})  # étape « methode »
         self.ok({"type": "methode", "fonctionnalite": "f4", "verdict": "revoir", "texte": "Mieux"})  # « serie »

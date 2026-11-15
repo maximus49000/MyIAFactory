@@ -1263,3 +1263,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Ne pas importer un script d'images qui s'exécute à l'import et dépend d'une police absente du poste ; écrire un script autonome qui n'écrit que dans son propre dossier.
+
+## S211 — Quand une étape de maquettes est relancée uniquement faute d
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de maquettes est relancée uniquement faute de consigne de validation et que la maquette existe, vérifier sa présence, joindre les images existantes et ne rendre que les champs de consigne.

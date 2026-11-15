@@ -830,3 +830,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand une action d'une notification est retirée, supprimer ensemble sa cible, son texte, son identifiant, les tests qui comptent les actions par indice, la maquette et son script ; garder le repli sur une cible inconnue pour les notifications déjà affichées.
+
+## G139 — Pour une livraison signée, vérifier chaque schéma de signatu
+Rôles : testeur
+Date : 2026-11-15
+
+Pour une livraison signée, vérifier chaque schéma de signature exigé directement sur le fichier livré, pas d'après la configuration de build.

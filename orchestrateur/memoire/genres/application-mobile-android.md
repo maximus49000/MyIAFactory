@@ -770,3 +770,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Avant d'écrire un test d'écran demandé, vérifier par recherche que le composable existe ; s'il n'y a que de la logique, tester le plus proche écran réel et déclarer l'écart au lieu d'inventer l'écran.
+
+## G129 — Pour un parcours d'écrans dépendant d'un service externe ou
+Rôles : designer, dev
+Date : 2026-11-15
+
+Pour un parcours d'écrans dépendant d'un service externe ou du matériel, injecter la dépendance sous forme de fonction (avec un verrou pour tenir l'état d'attente) et fabriquer l'entrée avec un fichier minimal valide.

@@ -1101,3 +1101,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de maquettes porte sur des tests automatiques d'un écran déjà maquetté, vérifier que les maquettes existent et déclarer l'étape non applicable en une ligne, sans livrable vide.
+
+## S184 — Quand une étape est relancée parce que le rapport n'a ni ima
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape est relancée parce que le rapport n'a ni image ni consigne de validation, relire le livrable existant, vérifier qu'il est intact et rendre seulement les images légendées et les champs de consigne.

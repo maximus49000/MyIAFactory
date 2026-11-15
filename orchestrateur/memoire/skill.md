@@ -1119,3 +1119,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de maquettes porte sur un élément d'inventaire ou d'audit dont le seul livrable est un document de statuts, la déclarer non applicable en une ligne ; les maquettes des manques constatés se font dans l'élément qui prépare leur correction.
+
+## S187 — Quand un élément prépare les corrections de plusieurs manque
+Rôles : designer
+Date : 2026-11-15
+
+Quand un élément prépare les corrections de plusieurs manques, associer chaque manque à sa maquette existante, déclarer non applicable ce qui est couvert, et soumettre à l'utilisateur par question à choix les manques sans maquette.

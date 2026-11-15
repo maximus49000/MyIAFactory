@@ -1203,3 +1203,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une correction remplace une valeur périmée dans un document qui s'appuie sur un autre document, relire la source réelle (code) plutôt que le document intermédiaire, qui peut être lui aussi en retard ; signaler l'écart sans le corriger hors périmètre.
+
+## S201 — Un message de commit annonçant la correction d'un document n
+Rôles : testeur
+Date : 2026-11-15
+
+Un message de commit annonçant la correction d'un document ne prouve pas que le contenu a changé : relire le fichier et rapprocher chaque point de la consigne avant de conclure.

@@ -1155,3 +1155,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Dans un inventaire de statuts, distinguer l'état où une sortie existe de celui où elle manque : lire la ligne de code concernée avant d'écrire « absent », et nommer précisément ce qui manque.
+
+## S193 — Quand une livraison inclut une étape qui ouvre une fenêtre s
+Rôles : dev
+Date : 2026-11-15
+
+Quand une livraison inclut une étape qui ouvre une fenêtre système sans réponse possible, exécuter et livrer la partie sûre (compilation, signature, vérifications) et déclarer explicitement l'étape non faite.

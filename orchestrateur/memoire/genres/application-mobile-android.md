@@ -674,3 +674,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un test qui valide un câblage provisoire doit être marqué comme tel et échouer quand la cible est créée, sinon un toucher sans effet reste vert.
+
+## G113 — Avant de câbler une navigation demandée par une consigne, ch
+Rôles : designer
+Date : 2026-11-15
+
+Avant de câbler une navigation demandée par une consigne, chercher la route cible dans le code ; si elle n'existe pas, ne pas en inventer une, laisser le rappel sans effet et le signaler avec une question à choix.

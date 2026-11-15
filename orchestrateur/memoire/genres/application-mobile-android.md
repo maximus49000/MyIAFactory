@@ -794,3 +794,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Prévoir une relecture silencieuse qui garde l'état affiché si la lecture échoue, plutôt que de repasser par l'état de chargement.
+
+## G133 — Dans les tests d'interface Compose, onNode, assertExists et
+Rôles : testeur
+Date : 2026-11-15
+
+Dans les tests d'interface Compose, onNode, assertExists et assertDoesNotExist sont des membres de la règle de test ou de l'interaction, pas des fonctions à importer ; compiler les tests instrumentés dès leur écriture, avant de démarrer l'émulateur.

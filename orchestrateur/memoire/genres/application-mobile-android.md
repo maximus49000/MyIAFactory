@@ -800,3 +800,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Dans les tests d'interface Compose, onNode, assertExists et assertDoesNotExist sont des membres de la règle de test ou de l'interaction, pas des fonctions à importer ; compiler les tests instrumentés dès leur écriture, avant de démarrer l'émulateur.
+
+## G134 — Dans un test d'interface, cibler un élément par une balise d
+Rôles : dev
+Date : 2026-11-15
+
+Dans un test d'interface, cibler un élément par une balise de test plutôt que par son texte affiché, car ce texte peut apparaître plusieurs fois à l'écran.

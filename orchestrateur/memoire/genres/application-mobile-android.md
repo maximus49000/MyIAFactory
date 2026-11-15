@@ -866,3 +866,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Sans outil de signature, lire le bloc de signature de l'APK avec un petit script : les identifiants 0x7109871a (v2) et 0xf05368c0 (v3) prouvent la présence des schémas. Le certificat reste à vérifier avec l'outil officiel.
+
+## G145 — Avant de déclarer un artefact à reconstruire, comparer les e
+Rôles : designer
+Date : 2026-11-15
+
+Avant de déclarer un artefact à reconstruire, comparer les empreintes des livrables des dossiers concernés : une empreinte identique prouve qu'il a déjà été remplacé.

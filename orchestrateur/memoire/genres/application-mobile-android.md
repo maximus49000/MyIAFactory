@@ -1046,3 +1046,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un échec d'injection de toucher sur un test d'interface sans fenêtre est souvent lié à l'état de l'émulateur ; relancer une fois avant de conclure.
+
+## G175 — En test d'interface, cibler par balise de test un libellé qu
+Rôles : testeur
+Date : 2026-11-15
+
+En test d'interface, cibler par balise de test un libellé qui apparaît à plusieurs endroits de l'écran.

@@ -746,3 +746,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Avant de dessiner les variantes d'un composant déjà validé, vérifier sa taille tactile ; si elle est sous 48 dp, la signaler comme écart au lieu de la copier.
+
+## G125 — Quand un lot contient des éléments qui dépendent d'un élémen
+Rôles : dev
+Date : 2026-11-15
+
+Quand un lot contient des éléments qui dépendent d'un élément absent du lot et que la chaîne de compilation manque, livrer seulement la logique pure testable et signaler les dépendances manquantes.

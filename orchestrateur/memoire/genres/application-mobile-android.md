@@ -1016,3 +1016,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Dans un test d'interface qui enchaîne plusieurs écrans, n'appeler setContent qu'une fois par test et changer d'écran par un état observable ; chercher ce motif dans tous les tests du projet.
+
+## G170 — Sans outil de signature, extraire le certificat du bloc de s
+Rôles : designer
+Date : 2026-11-15
+
+Sans outil de signature, extraire le certificat du bloc de signature v2 de deux APK et comparer son empreinte prouve que la mise à jour garde la même clé.

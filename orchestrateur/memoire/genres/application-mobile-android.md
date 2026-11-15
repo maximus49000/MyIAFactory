@@ -854,3 +854,9 @@ Rôles : release
 Date : 2026-11-15
 
 Quand le minSdk est inférieur à 28, déclarer explicitement les schémas de signature v2 et v3 dans la configuration release, puis vérifier leur présence dans l'apk.
+
+## G143 — Quand aucun outil de signature n'est disponible, lire le man
+Rôles : designer, release
+Date : 2026-11-15
+
+Quand aucun outil de signature n'est disponible, lire le manifeste binaire de l'APK et son bloc de signature par un petit script pour vérifier versionCode, versionName et schémas v2/v3, comparer les empreintes SHA-256, et déclarer que la vérification officielle n'a pas été lancée.

@@ -1149,3 +1149,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Quand l'environnement n'a pas de quoi compiler ou exécuter des tests, livrer les tests en les déclarant non compilés et non exécutés, avec la liste exacte des classes à lancer et du résultat à relire.
+
+## S192 — Dans un inventaire de statuts, distinguer l'état où une sort
+Rôles : designer
+Date : 2026-11-15
+
+Dans un inventaire de statuts, distinguer l'état où une sortie existe de celui où elle manque : lire la ligne de code concernée avant d'écrire « absent », et nommer précisément ce qui manque.

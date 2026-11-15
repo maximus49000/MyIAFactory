@@ -1025,6 +1025,15 @@ class Arrets(Base):
         self.assertEqual(relance[0][2], [t["id"]])
         self.assertEqual(self.decisions_accord(), [])
 
+    def test_le_journal_d_un_accord_sans_partenaire_ni_cout_ne_dit_pas_chez_aucun(self):
+        """Essai réel : « Lancer l'émulateur … (chez aucun, 0) »."""
+        actions = self.depart_cadrage()
+        self.piloter(actions, rapports=[dict(self.ACCORD, accord={"quoi": "Lancer l'émulateur", "partenaire": "aucun",
+                                                                   "cout": "0"})])
+        journal = " ".join(j["texte"] for j in self.taches(etape="cadrage")[0]["journal"])
+        self.assertIn("demande votre accord : Lancer l'émulateur.", journal)
+        self.assertNotIn("chez aucun", journal)
+
     def test_accord_refuse_avec_consigne_l_agent_reprend_sans_l_action(self):
         self.piloter(self.depart_cadrage(), rapports=[self.ACCORD])
         d, = self.decisions_accord()

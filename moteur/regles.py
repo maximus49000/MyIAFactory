@@ -3814,7 +3814,12 @@ def _accord_demande(projet, etat, execution, depart, r, fid, t):
     tid, cle = depart["taches"][0], execution.agent
     a = r["accord"]
     prenom = prenom_de(projet, cle)
-    quoi = f"{a['quoi']} (chez {a['partenaire']}, {a['cout']})"
+    # « (chez aucun, 0) » ne disait rien (essai réel) : le partenaire et le coût seulement quand il y en a
+    sans = {"", "aucun", "aucune", "0", "0 €", "gratuit", "none", "null"}
+    chez = [x for x in (f"chez {a['partenaire']}" if str(a.get("partenaire") or "").strip().lower() not in sans else "",
+                        str(a.get("cout") or "").strip() if str(a.get("cout") or "").strip().lower() not in sans
+                        else "") if x]
+    quoi = a["quoi"] + (f" ({', '.join(chez)})" if chez else "")
     message = (r.get("message") or {}).get("texte") or ""
     pourquoi = a.get("pourquoi") if isinstance(a.get("pourquoi"), str) and a["pourquoi"].strip() else message
     implique = a.get("implique") if isinstance(a.get("implique"), str) and a["implique"].strip() else ""

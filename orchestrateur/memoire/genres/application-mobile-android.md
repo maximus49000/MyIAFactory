@@ -734,3 +734,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Dans une maquette, comparer chaque texte à la zone réellement visible, c'est-à-dire sans la barre de navigation fixe, et pas seulement à la taille de l'écran.
+
+## G123 — Un script d'images qui charge des polices système doit prévo
+Rôles : designer
+Date : 2026-11-15
+
+Un script d'images qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation Sans pour Arial) et l'image produite doit être relue pour détecter les glyphes manquants.

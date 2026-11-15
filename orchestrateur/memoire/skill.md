@@ -1245,3 +1245,9 @@ Rôles : release
 Date : 2026-11-15
 
 Pour relever une version dans une sortie d'outil, filtrer sans sensibilité à la casse sur le mot-clé, et non sur le préfixe exact du champ.
+
+## S208 — Dans un script de maquettes, dimensionner les cartes d'après
+Rôles : cadrage
+Date : 2026-11-15
+
+Dans un script de maquettes, dimensionner les cartes d'après leur contenu et relire l'image rendue pour repérer les chevauchements de texte.

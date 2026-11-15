@@ -1065,3 +1065,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un test qui accepte un point d'accroche vide tant que la cible n'existe pas ne valide rien ; le rapport le dit à chaque tour jusqu'à la création de la cible.
+
+## S178 — Un contrôle automatique de littéraux dans les écrans ne voit
+Rôles : designer
+Date : 2026-11-15
+
+Un contrôle automatique de littéraux dans les écrans ne voit pas les textes portés par des objets de constantes ou des énumérations ; les inventorier séparément et déclarer la limite du contrôle.

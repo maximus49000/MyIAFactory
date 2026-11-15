@@ -1143,3 +1143,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Sans interlocuteur, quand l'accord de l'action figure déjà dans la tâche et dans une règle du projet, l'exécuter au premier plan et signaler dans le rapport toute fenêtre éventuelle, au lieu de s'arrêter sur une question qui restera sans réponse.
+
+## S191 — Quand l'environnement n'a pas de quoi compiler ou exécuter d
+Rôles : designer, dev
+Date : 2026-11-15
+
+Quand l'environnement n'a pas de quoi compiler ou exécuter des tests, livrer les tests en les déclarant non compilés et non exécutés, avec la liste exacte des classes à lancer et du résultat à relire.

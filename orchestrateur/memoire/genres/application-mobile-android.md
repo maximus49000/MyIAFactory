@@ -998,3 +998,9 @@ Rôles : release
 Date : 2026-11-15
 
 Avant de compiler une livraison, lire le code de version dans le paquet précédent, pas dans sa note, et le monter si le projet n'est pas strictement supérieur.
+
+## G167 — Avant de remplacer un livrable déjà produit, le conserver da
+Rôles : release
+Date : 2026-11-15
+
+Avant de remplacer un livrable déjà produit, le conserver dans un dossier à part avec sa note, pour pouvoir le comparer ou le restaurer.

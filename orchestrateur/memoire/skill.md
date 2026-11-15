@@ -1113,3 +1113,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de conception est relancée uniquement parce que le rapport ne disait pas au valideur ce qu'il doit juger, relire le livrable existant, vérifier qu'il est intact et rendre seulement les champs de consigne (ce qui doit marcher, ce qui n'est pas attendu, conclusion), sans rien régénérer.
+
+## S186 — Quand une étape de maquettes porte sur un élément d'inventai
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de maquettes porte sur un élément d'inventaire ou d'audit dont le seul livrable est un document de statuts, la déclarer non applicable en une ligne ; les maquettes des manques constatés se font dans l'élément qui prépare leur correction.

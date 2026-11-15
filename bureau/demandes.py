@@ -648,7 +648,9 @@ def _verifier_v4(demande, r, elements):
     if verdict == "garder":
         return None if _a_decision(f, "methode_a_revoir") else "Aucune question « méthode à revoir ? » en attente."
     if verdict == "revoir":
-        if f["etape"] in ("methode", "serie") or _a_decision(f, "methode_a_revoir") or _a_decision(f, "reprendre_methode"):
+        # essai réel : « Demander une correction » sur une méthode proposée (fin du prototype, à valider) était refusé
+        if f["etape"] in ("methode", "serie") or any(_a_decision(f, g) for g in (
+                "methode_a_revoir", "reprendre_methode", "valider_methode")):
             return None
         return "Cette fonctionnalité n'a pas encore de méthode à revoir."
     if verdict in ("reprendre", "adapter"):   # une méthode déjà validée ailleurs, proposée d'emblée

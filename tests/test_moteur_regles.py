@@ -337,6 +337,20 @@ class Demandes(Base):
         self.assertIn("Le titre fait 24 px.", (self.dossier / "controles.md").read_text(encoding="utf-8"))
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
+    def test_methode_proposee_corrigee_avant_validation(self):
+        """Essai réel : « Demander une correction » sur la méthode proposée à la fin du prototype ; la correction part
+        à l'agent du prototype et la validation en attente est levée."""
+        self.fonctionnalite("prototype")
+        self.etat["prototype"]["f1"] = {"id": "e1", "nom": "Accueil"}
+        self.ok("decision", entree={"action": "poser", "portee": "f1", "genre": "valider_methode", "texte": "ok ?"})
+        d, actions = self.traiter(type="methode", fonctionnalite="f1", verdict="revoir",
+                                  texte="Les unités non rangées vont dans la liste à ranger")
+        f = self.fonc()
+        self.assertEqual((f["etape"], f["decisions"]), ("prototype", []))
+        agent = next(a for a in actions if a[0] == "agent")
+        self.assertIn("Les unités non rangées vont dans la liste à ranger", agent[3])
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
     def test_lecon_appliquee_sans_ia(self):
         self.ok("lecon", entree={"action": "noter", "agent": "dev-1", "texte": "Relancer les tests.",
                                  "etage_propose": "projet", "roles": ["dev"]})

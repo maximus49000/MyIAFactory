@@ -260,7 +260,9 @@ R4 = releve.normaliser({
         {"id": "f4", "nom": "Série", "etape": "serie", "catalogue": True},
         {"id": "f5", "nom": "Simple", "etape": "cadrage"},
         {"id": "f6", "nom": "Comme une autre", "etape": "decoupage",
-         "decisions": [{"id": "dp", "genre": "reprendre_methode", "texte": "Reprendre la méthode de « Badges » ?"}]}],
+         "decisions": [{"id": "dp", "genre": "reprendre_methode", "texte": "Reprendre la méthode de « Badges » ?"}]},
+        {"id": "f7", "nom": "Méthode proposée", "etape": "prototype",
+         "decisions": [{"id": "dv", "genre": "valider_methode", "texte": "Valider ?"}]}],
     "decisions_projet": [
         {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
          "genres_connus": ["ville"]},
@@ -319,6 +321,9 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "methode", "fonctionnalite": "f3", "verdict": "revoir"})  # décision « à revoir »
         self.refus({"type": "methode", "fonctionnalite": "f5", "verdict": "revoir"})
         self.refus({"type": "methode", "fonctionnalite": "f2", "verdict": "autre"})
+        # essai réel : « Demander une correction » sur la méthode proposée à la fin du prototype était refusé
+        self.ok({"type": "methode", "fonctionnalite": "f7", "verdict": "revoir", "texte": "Les unités non rangées "
+                 "vont dans la liste à ranger"})
 
     def test_reprendre_une_methode(self):
         # Essai réel : une fonctionnalité qui ressemble à une méthode déjà validée peut partir en série sans

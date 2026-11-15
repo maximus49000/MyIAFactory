@@ -1275,3 +1275,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape est relancée uniquement faute de consigne de validation, vérifier que le livrable est intact, joindre au plus quatre images existantes et ne rédiger que les champs de consigne, sans rien regénérer.
+
+## S213 — Quand un lot de code a été écrit sans chaîne de compilation,
+Rôles : dev
+Date : 2026-11-15
+
+Quand un lot de code a été écrit sans chaîne de compilation, lire le détail de chaque échec pour savoir si le test ou le code est faux avant de modifier l'un des deux.

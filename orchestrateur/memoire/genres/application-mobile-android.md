@@ -722,3 +722,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand une correction est livrée sans compilation, la revue lance d'abord le build ; une annotation de ressource sur une propriété sans champ de stockage se pose sur le getter (@get:).
+
+## G121 — Le brief de livraison doit donner le chemin du dossier de cl
+Rôles : release
+Date : 2026-11-15
+
+Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à les chercher dans les scripts précédents.

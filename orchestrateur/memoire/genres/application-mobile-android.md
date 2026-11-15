@@ -908,3 +908,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Mesurer le contraste des gris secondaires et convertir les tailles en dp avant de copier les composants d'une maquette validée ; assombrir et agrandir dans les prototypes.
+
+## G152 — Quand une décision de hiérarchie (sous-élément rattaché à un
+Rôles : designer
+Date : 2026-11-15
+
+Quand une décision de hiérarchie (sous-élément rattaché à un parent) est tranchée, la traduire en invariants testés dans la logique pure (pas de parent homonyme, parent hérité, effacement au changement de parent), pas seulement en libellé.

@@ -1161,3 +1161,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand une livraison inclut une étape qui ouvre une fenêtre système sans réponse possible, exécuter et livrer la partie sûre (compilation, signature, vérifications) et déclarer explicitement l'étape non faite.
+
+## S194 — Avant de rendre un document de statuts, relire chaque ligne
+Rôles : testeur
+Date : 2026-11-15
+
+Avant de rendre un document de statuts, relire chaque ligne contre l'état courant du code, car une décision livrée entre deux tours rend les lignes fausses sans casser un test.

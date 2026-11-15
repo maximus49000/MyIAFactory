@@ -986,3 +986,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Dans une application Compose, certaines icônes courantes (moins, etc.) n'existent que dans le paquet d'icônes étendu ; avant de les utiliser, vérifier le paquet ou dessiner un vecteur local.
+
+## G165 — Pour arrêter un émulateur de test, utiliser la commande d'ar
+Rôles : release, testeur
+Date : 2026-11-15
+
+Pour arrêter un émulateur de test, utiliser la commande d'arrêt de l'appareil via adb ciblée par son numéro de série, et non la commande console qui peut exiger un jeton.

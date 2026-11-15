@@ -782,3 +782,9 @@ Rôles : dev, designer
 Date : 2026-11-15
 
 Un test unitaire qui échoue par une course sur le dispatcher principal d'un autre test se relance seul puis en suite complète ; il se signale comme instable sans masquer les résultats des tests ajoutés.
+
+## G131 — Ajouter une route ou un argument de route impose de mettre à
+Rôles : dev
+Date : 2026-11-15
+
+Ajouter une route ou un argument de route impose de mettre à jour les listes de routes, les tests de câblage qui lisent la source et les contrôles par réflexion.

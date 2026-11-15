@@ -1269,3 +1269,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de maquettes est relancée uniquement faute de consigne de validation et que la maquette existe, vérifier sa présence, joindre les images existantes et ne rendre que les champs de consigne.
+
+## S212 — Quand une étape est relancée uniquement faute de consigne de
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape est relancée uniquement faute de consigne de validation, vérifier que le livrable est intact, joindre au plus quatre images existantes et ne rédiger que les champs de consigne, sans rien regénérer.

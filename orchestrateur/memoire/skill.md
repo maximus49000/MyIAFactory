@@ -1185,3 +1185,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Dédoublonner les fichiers de résultats avant de totaliser les comptes d'un lot de tests.
+
+## S198 — Avant de valider un document qui cite une version ou un sché
+Rôles : testeur
+Date : 2026-11-15
+
+Avant de valider un document qui cite une version ou un schéma de signature, relire la configuration de build courante et lancer l'outil de vérification de signature sur chaque fichier livré : une livraison ultérieure rend les notes fausses sans casser de test.

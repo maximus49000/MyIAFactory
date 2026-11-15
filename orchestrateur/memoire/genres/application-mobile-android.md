@@ -668,3 +668,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une correction câble ce qu'un test source gardait explicitement comme non câblé, mettre à jour ce test dans la même modification, en gardant l'interdiction de navigation vers une route absente.
+
+## G112 — Un test qui valide un câblage provisoire doit être marqué co
+Rôles : testeur
+Date : 2026-11-15
+
+Un test qui valide un câblage provisoire doit être marqué comme tel et échouer quand la cible est créée, sinon un toucher sans effet reste vert.

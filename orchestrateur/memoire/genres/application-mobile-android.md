@@ -944,3 +944,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand un lot mêle logique, écrans et livraison signée et que l'environnement n'a pas la chaîne de compilation, livrer la logique pure avec ses tests, déclarer le reste non fait et ne pas écrire d'écrans non compilables.
+
+## G158 — Quand une tâche demande de brancher une logique pure à l'int
+Rôles : dev
+Date : 2026-11-15
+
+Quand une tâche demande de brancher une logique pure à l'interface et que la chaîne de compilation manque, vérifier par recherche l'état du branchement, ne pas écrire d'écrans non compilables, et déclarer les éléments non faits pour qu'ils soient refaits sur le poste équipé.

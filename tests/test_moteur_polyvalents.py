@@ -329,7 +329,7 @@ class CorrectionSurLePoste(Base):
         c = self.corriger_apres("flux:qa")
         self.assertIs(c.get("sur_le_poste"), True)
         journal = regles._tache(self.projet, c["id"])["journal"]
-        self.assertIn("ne le rends pas « non compilé »", " ".join(j["texte"] for j in journal))
+        self.assertIn("ni « non compilé » ni avec un test rouge", " ".join(j["texte"] for j in journal))
 
     def test_refus_d_un_controle_ailleurs_correction_comme_avant(self):
         c = self.corriger_apres("flux:qa")

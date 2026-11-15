@@ -5814,8 +5814,10 @@ def _apres_apres_refus(projet, o, ctx, etat):
 
 
 CORRECTION_SUR_LE_POSTE = ("Le refus vient d'un contrôle fait sur le poste (compilation, tests, émulateur) : la correction "
-                           "se fait aussi sur le poste. Compile et relance les tests concernés avant de rendre ton "
-                           "travail ; ne le rends pas « non compilé ».")
+                           "se fait aussi sur le poste. Compile, puis relance toute la suite de tests du projet "
+                           "(unitaires et, s'il y en a, ceux sur émulateur), pas seulement ceux de l'élément : une "
+                           "correction casse souvent un autre écran. Ne rends ton travail ni « non compilé » ni avec un "
+                           "test rouge ; un test déjà rouge avant toi se signale, il ne bloque pas.")
 
 
 def _refus_venu_du_poste(projet, v):

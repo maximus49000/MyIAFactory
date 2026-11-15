@@ -962,3 +962,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Avant de rendre un élément de livraison, vérifier par recherche qu'au moins un écran utilise la logique ; sinon, rendre les comptes de tests et déclarer le branchement non fait.
+
+## G161 — Pour une logique écrite avant ses écrans, chercher par reche
+Rôles : testeur
+Date : 2026-11-15
+
+Pour une logique écrite avant ses écrans, chercher par recherche les usages de chaque classe hors de son paquet et hors des tests : une suite verte ne prouve pas qu'elle est branchée.

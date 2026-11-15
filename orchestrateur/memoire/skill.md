@@ -1053,3 +1053,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un test de câblage provisoire doit échouer quand la cible est créée sans être branchée, et dire dans son message que l'accroche vide est un défaut connu, pas une validation.
+
+## S176 — Quand un élément a été repris plusieurs fois pour des défaut
+Rôles : designer
+Date : 2026-11-15
+
+Quand un élément a été repris plusieurs fois pour des défauts qui se retrouveront ailleurs, revoir la méthode : inventaire global, contrôle automatique couvrant tout le code, test réellement exécuté, critère de sortie explicite et plafond de reprises.

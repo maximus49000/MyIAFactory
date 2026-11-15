@@ -97,6 +97,23 @@ class TestHistoriqueUsage(unittest.TestCase):
         self.assertIsNone(lignes["u2"]["service"])
         self.assertIsNone(lignes["u1"]["tache"])
 
+    def test_l_usage_d_un_agent_polyvalent_va_au_service_de_sa_tache(self):
+        """Essai réel : un agent polyvalent n'a de service que le temps d'une tâche ; son travail, noté une fois libre,
+        tombait dans « direction / hors service » (9,86 € sur 33,94 €). Le service de la tâche est pris, et une ligne
+        déjà écrite sans service est réparée."""
+        def libre(*usages):                                  # polyvalent et libre : sans service
+            r = releve_avec(*usages)
+            r["titulaires"][0]["service"] = None
+            return r
+        self.h.integrer(libre(usage()))
+        self.assertIsNone(self.h.lire()[0]["service"])       # la tâche ne dit pas son service : rien à deviner
+        r = libre(usage(id="u2"))
+        r["taches"][0]["service"] = "qa"
+        self.h.integrer(r)
+        lignes = {x["id"]: x for x in self.h.lire()}
+        self.assertEqual(lignes["u2"]["service"], "qa")
+        self.assertEqual(lignes["u1"]["service"], "qa")        # l'ancienne ligne sans service est réparée
+
     def test_ligne_illisible_ignoree(self):
         self.h.integrer(releve_avec(usage()))
         with open(self.chemin, "a", encoding="utf-8") as f:

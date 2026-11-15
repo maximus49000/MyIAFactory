@@ -55,8 +55,14 @@ def _ligne_valide(d):
             and (d.get("abonnement") is None or modabonnement.valider(d["abonnement"]) is not None))
 
 
-def _service_de(r, agent):
-    """Service de l'agent dans ce relevé ; None pour le chef, un agent inconnu ou absent."""
+def _service_de(r, agent, tache=None):
+    """Le service de la tâche de l'usage s'il est connu (un agent polyvalent n'a de service que le temps d'une tâche ;
+    essai réel : son travail, noté une fois l'agent libre, tombait dans « direction / hors service ») ; sinon celui de
+    l'agent dans ce relevé ; None pour le chef, un agent inconnu ou absent."""
+    if tache:
+        for t in r.get("taches") or []:
+            if t.get("id") == tache and isinstance(t.get("service"), str) and t["service"]:
+                return t["service"]
     for t in r.get("titulaires") or []:
         if t.get("cle") == agent:
             return None if t.get("chef") else t.get("service")
@@ -98,6 +104,12 @@ class HistoriqueUsage:
         with self._verrou:
             lignes = self._lignes()
             change = False
+            for cle, l in lignes.items():     # un usage resté sans service : celui de sa tâche, s'il est connu
+                if l.get("genre") != "partenaire" and not l.get("service") and l.get("tache"):
+                    service = _service_de(r, None, l["tache"])
+                    if service:
+                        lignes[cle] = {**l, "service": service}
+                        change = True
             for u in usages:
                 if not isinstance(u, dict) or not isinstance(u.get("id"), str):
                     continue
@@ -113,7 +125,8 @@ class HistoriqueUsage:
                     continue
                 nouvelle = {
                     "id": u["id"], "tache": u.get("tache"), "agent": u.get("agent"),
-                    "service": ancienne["service"] if ancienne else _service_de(r, u.get("agent")),
+                    "service": (ancienne["service"] if ancienne and ancienne.get("service")
+                                else _service_de(r, u.get("agent"), u.get("tache"))),
                     "modele": u.get("modele"), "etape": u.get("etape"), "t": u.get("t"),
                     "t_prix": ancienne["t_prix"] if ancienne else u.get("t"),
                 }

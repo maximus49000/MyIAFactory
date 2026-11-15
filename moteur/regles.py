@@ -385,6 +385,11 @@ def traiter_demande(projet, demande, etat):
         return fonction(projet, demande, etat)
     except Refus as e:
         _terminer(projet, {"demande": demande["id"]}, f"Je n'ai pas pu le faire : {e}")
+        if demande.get("type") in ("fonctionnalite", "message") and demande.get("fonctionnalite"):
+            try:      # dit dans la discussion : sans cela le bureau montrait « en train d'écrire… » sans fin
+                _dire(projet, demande["fonctionnalite"], f"Je n'ai pas pu aller au bout : {e}"[:1500])
+            except Refus:
+                pass
         return []
 
 

@@ -288,8 +288,13 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=N
         if any(x["role"] for x in equipe):
             erreurs.append("Ce projet a encore des agents par rôle : la reprise aux agents polyvalents vient d'abord.")
     else:
+        pourvus = {x["role"] for x in existantes if x["role"]}
+        if not agents and any(fiches.est_polyvalente(x) for x in equipe):
+            # essai réel : une fonctionnalité qui reprend le workflow du projet, tenu par des agents polyvalents, était
+            # refusée faute d'« agent pour le rôle » ; un agent polyvalent tient tout métier qui a son brief
+            pourvus |= briefs_existants
         erreurs = proposition.verifier_organisation(
-            services, flux, agents, briefs, cloud=True, roles_deja_pourvus={x["role"] for x in existantes},
+            services, flux, agents, briefs, cloud=True, roles_deja_pourvus=pourvus,
             cles_prises={x["cle"] for x in existantes}, briefs_existants=briefs_existants)
         if agents and any(fiches.est_polyvalente(x) for x in equipe):
             erreurs.append("Ce projet a des agents polyvalents : une organisation propose des métiers, pas des agents "

@@ -100,6 +100,17 @@ class Passage(Base):
             self.moteur.tour()
         self.assertEqual(vus, [c, a, b])
 
+    def test_un_jugement_refuse_est_dit_dans_la_discussion(self):
+        """Essai réel : la création d'une fonctionnalité refusée après son classement ; le bureau montrait l'agent de
+        cadrage « en train d'écrire » sans fin. Le refus est dit dans la discussion de la fonctionnalité."""
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        self.ok("demande-traitee", entree={"id": "r1"})
+        self.moteur._signaler(self.projet, ("juger", "classer_genre", {}, {"demande": "r1", "fonctionnalite": "f1"}),
+                              regles.Refus("organisation : Organisation refusée : Aucun agent pour le rôle « dev »."))
+        f = next(x for x in self.suivi()["fonctionnalites"] if x["id"] == "f1")
+        self.assertIn("Je n'ai pas pu aller au bout", f["discussion"][-1]["texte"])
+        self.assertNotEqual(f["discussion"][-1]["auteur"], "utilisateur")
+
     def test_usage_de_chaque_jugement_note(self):
         i = self.demande(type="bouton", id="exporter")
         self.moteur.tour()

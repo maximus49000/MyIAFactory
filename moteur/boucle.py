@@ -575,6 +575,12 @@ class Moteur:
         self._noter(projet, f"{action[0]} : {erreur}")
         if action[0] == "juger":
             regles._terminer(projet, action[3], f"Je n'ai pas pu aller au bout : {erreur}")
+            fid = (action[3] or {}).get("fonctionnalite") if isinstance(action[3], dict) else None
+            if fid:      # dit aussi dans la discussion : sans cela le bureau montrait « en train d'écrire… » sans fin
+                try:
+                    regles._dire(projet, fid, f"Je n'ai pas pu aller au bout : {erreur}"[:1500])
+                except (regles.Refus, regles.ErreurMoteur):
+                    pass
 
     def _juger(self, projet, action):
         _, type_, dossier, suite = action

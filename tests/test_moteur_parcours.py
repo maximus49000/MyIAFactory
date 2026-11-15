@@ -801,6 +801,32 @@ class WorkflowDeCreation(AvecParcours):
         self.assertIn("déjà un workflow", refus)
 
 
+class WorkflowDeCreationPolyvalent(AvecParcours):
+    """Essai réel : dans un projet d'agents polyvalents (sans rôle fixe), une nouvelle fonctionnalité du genre du projet
+    était refusée (« Aucun agent pour le rôle … ») et le bureau montrait l'agent de cadrage « en train d'écrire » sans
+    fin. Un agent polyvalent tient tout métier qui a son brief."""
+
+    def setUp(self):
+        super().setUp()
+        self.reecrire(workflows=[CREATION])
+        for fiche in (self.dossier / "fiches").glob("*.md"):
+            fiche.unlink()
+        self.ecrire(self.dossier / "fiches" / "agent-1.md", "Clé : agent-1\nPrénom : Zoé\nLieu : local\n")
+        (self.dossier / "fiches" / "briefs").mkdir(exist_ok=True)
+        self.ecrire(self.dossier / "fiches" / "briefs" / "dev.md", "Modèle : Sonnet\n\nFabrique les badges.\n")
+
+    def test_la_reprise_du_workflow_passe_avec_des_agents_polyvalents(self):
+        self.demander({"classer_genre": CLASSER_MEME})
+        f = self.fonc()
+        self.assertEqual((f["workflow"], f["genre"]), ("w-f1", "badges"))
+
+    def test_un_metier_sans_brief_reste_refuse(self):
+        (self.dossier / "fiches" / "briefs" / "dev.md").unlink()
+        with self.assertRaises(regles.Refus) as ctx:
+            self.demander({"classer_genre": CLASSER_MEME})
+        self.assertIn("Aucun brief pour le rôle « dev »", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -956,3 +956,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Une valeur sentinelle de logique pure se nomme par un identifiant technique, jamais par le libellé affiché ; le libellé vient des ressources.
+
+## G160 — Avant de rendre un élément de livraison, vérifier par recher
+Rôles : dev
+Date : 2026-11-15
+
+Avant de rendre un élément de livraison, vérifier par recherche qu'au moins un écran utilise la logique ; sinon, rendre les comptes de tests et déclarer le branchement non fait.

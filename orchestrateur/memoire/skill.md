@@ -1071,3 +1071,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Un contrôle automatique de littéraux dans les écrans ne voit pas les textes portés par des objets de constantes ou des énumérations ; les inventorier séparément et déclarer la limite du contrôle.
+
+## S179 — Deux fichiers de même taille peuvent différer : comparer le
+Rôles : release
+Date : 2026-11-15
+
+Deux fichiers de même taille peuvent différer : comparer le hachage avant de conclure qu'un livrable est identique à un précédent.

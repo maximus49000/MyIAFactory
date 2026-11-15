@@ -1022,3 +1022,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Sans outil de signature, extraire le certificat du bloc de signature v2 de deux APK et comparer son empreinte prouve que la mise à jour garde la même clé.
+
+## G171 — Un paramètre optionnel dont la valeur par défaut change le s
+Rôles : testeur
+Date : 2026-11-15
+
+Un paramètre optionnel dont la valeur par défaut change le sens métier masque les appelants qui l'omettent ; tester chaque appelant avec une valeur non triviale, par exemple une unité de masse ou de volume.

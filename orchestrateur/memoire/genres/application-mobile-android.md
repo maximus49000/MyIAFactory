@@ -836,3 +836,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Pour une livraison signée, vérifier chaque schéma de signature exigé directement sur le fichier livré, pas d'après la configuration de build.
+
+## G140 — Quand un contrôle exige une version de schéma de signature p
+Rôles : designer
+Date : 2026-11-15
+
+Quand un contrôle exige une version de schéma de signature précise, l'activer explicitement dans la configuration de signature (après avoir cherché toutes les configs), et déclarer l'APK non reconstruit si l'outil de build manque.

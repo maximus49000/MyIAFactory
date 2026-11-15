@@ -1197,3 +1197,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand un document corrigé liste en tête ce qui a changé, cette liste cite les anciennes valeurs ; le contrôle de recherche après correction doit les distinguer des occurrences oubliées.
+
+## S200 — Quand une correction remplace une valeur périmée dans un doc
+Rôles : designer
+Date : 2026-11-15
+
+Quand une correction remplace une valeur périmée dans un document qui s'appuie sur un autre document, relire la source réelle (code) plutôt que le document intermédiaire, qui peut être lui aussi en retard ; signaler l'écart sans le corriger hors périmètre.

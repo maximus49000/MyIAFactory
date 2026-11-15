@@ -1010,3 +1010,9 @@ Rôles : dev, testeur
 Date : 2026-11-15
 
 Un test d'interface qui doit afficher plusieurs écrans doit les séparer en méthodes distinctes, car la règle de test ne définit le contenu qu'une fois par test.
+
+## G169 — Dans un test d'interface qui enchaîne plusieurs écrans, n'ap
+Rôles : designer, dev
+Date : 2026-11-15
+
+Dans un test d'interface qui enchaîne plusieurs écrans, n'appeler setContent qu'une fois par test et changer d'écran par un état observable ; chercher ce motif dans tous les tests du projet.

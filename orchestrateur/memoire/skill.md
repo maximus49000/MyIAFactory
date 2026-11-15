@@ -1233,3 +1233,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand une consigne de revue cite des numéros de ligne à corriger, vérifier d'abord par recherche ciblée l'état courant du document : la correction peut déjà être livrée, et la revue consiste alors à confirmer sans rien recopier de l'ancien statut.
+
+## S206 — Pour contrôler un certificat de signature, passer le mot de
+Rôles : release
+Date : 2026-11-15
+
+Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et comparer le SHA-256 du certificat à celui de la livraison précédente.

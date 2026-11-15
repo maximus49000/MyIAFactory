@@ -1040,3 +1040,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Quand la commande d'arrêt de la console d'émulateur est refusée, lancer l'émulateur avec un port explicite et l'éteindre par adb -s <série> shell reboot -p.
+
+## G174 — Un échec d'injection de toucher sur un test d'interface sans
+Rôles : testeur
+Date : 2026-11-15
+
+Un échec d'injection de toucher sur un test d'interface sans fenêtre est souvent lié à l'état de l'émulateur ; relancer une fois avant de conclure.

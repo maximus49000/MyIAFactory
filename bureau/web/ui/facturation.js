@@ -12,6 +12,17 @@ const MAX_TITRE = 90;
 const MAX_DISCUSSIONS = 200;  // au-delà, la liste dit combien elle n'en montre pas
 
 // Le service dans la facturation ; null si absent (le relevé ne l'a pas compté).
+// L'identifiant de la pièce « Facturation » (la vue centrale des coûts du projet).
+export const SERVICE_CENTRAL = "facturation";
+
+// Le chiffre en tête de la facturation d'une pièce : celui du service, ou celui de tout le projet pour la pièce
+// « Facturation » quand aucun usage n'y est rangé. Pur.
+export function teteFacturation(f, service) {
+  const s = serviceFacture(f, service);
+  const central = service === SERVICE_CENTRAL && !s;
+  return {central, tete: central ? {total: f?.total ?? 0, sans_prix: f?.sans_prix, co2: f?.co2} : s};
+}
+
 export function serviceFacture(f, id) {
   return f && f.services && f.services[id] ? f.services[id] : null;
 }
@@ -138,12 +149,16 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
     return;
   }
   const s = serviceFacture(donnees, service);
-  const total = el("div", "cout-total", coutEnClair(s || {total: 0}));
+  // La pièce « Facturation » est la vue centrale des coûts : aucun agent n'y travaille, son propre coût vaut toujours 0 ;
+  // son chiffre est celui de tout le projet (essai réel : « ≈ 0,00 € » en tête de la vue des coûts).
+  const {central, tete} = teteFacturation(donnees, service);
+  const total = el("div", "cout-total", coutEnClair(tete || {total: 0}));
   if (donnees.prix_du) total.title = `Prix du ${dateFr(donnees.prix_du) || donnees.prix_du}`;
-  conteneur.append(el("div", "carte-sous-titre", `Coût estimé · ${libellePeriode(periode)}`), total);
-  const part = etiquettePart(s?.total);   // la part de l'abonnement ; « en cours d'étalonnage » tant que le ratio manque
+  conteneur.append(el("div", "carte-sous-titre",
+                      `Coût estimé${central ? " · tout le projet" : ""} · ${libellePeriode(periode)}`), total);
+  const part = etiquettePart(tete?.total);   // la part de l'abonnement ; « en cours d'étalonnage » tant que le ratio manque
   if (part) conteneur.append(marquerPart(el("div", "cout-part", part)));
-  const empreinte = etiquetteCO2(s?.co2);   // l'empreinte carbone estimée du service (EcoLogits), avec le lien vers la méthode
+  const empreinte = etiquetteCO2(tete?.co2);   // l'empreinte carbone estimée (EcoLogits), avec le lien vers la méthode
   if (empreinte) conteneur.append(marquerPart(el("div", "cout-part cout-empreinte", empreinte)));
   conteneur.append(el("p", "note", "Estimation d'après les tokens et les prix des modèles, jamais une facture."));
   if (donnees.message) conteneur.append(el("p", "avertissement", donnees.message));
@@ -159,7 +174,7 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
       "Des discussions sont antérieures au premier prix enregistré : elles sont comptées au prix du jour de l'installation."));
   }
   if (!s) {
-    conteneur.append(el("p", "vide", "Aucun usage pour ce service sur la période."));
+    if (!central) conteneur.append(el("p", "vide", "Aucun usage pour ce service sur la période."));
   } else {
     conteneur.append(el("div", "carte-sous-titre", "Par tâche et par étape"));
     const taches = lignesTaches(s, etat?.taches);

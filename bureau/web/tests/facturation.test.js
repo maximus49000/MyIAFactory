@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
+import {teteFacturation, lignesTaches, lignesModeles, serviceFacture, coutEnClair, coutDeTache, MARQUE_LOT, lignesDiscussions, totalProjet,
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
         limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot, PLAFOND_PAR_DEFAUT, REGLE_PLAFOND,
         ligneApercu, partieRecrutement, partieReprise, reprisePossible, demandePasserPolyvalent,
@@ -227,4 +227,12 @@ test("passer aux agents polyvalents : le bouton se montre tant que des fiches pa
   assert.equal(partieReprise({etat: {}}), null);
   assert.match(CONFIRMATION_REPRISE, /Aucune tâche n'est touchée/);
   assert.match(CONFIRMATION_REPRISE, /fiches d'origine/);
+});
+
+// Essai réel : la pièce « Facturation » (la vue centrale) affichait « ≈ 0,00 € » en tête : aucun agent n'y travaille.
+test("la pièce Facturation montre en tête le coût de tout le projet", () => {
+  const f = {total: 34.5, sans_prix: [], services: {developpement: {total: 11.5}}};
+  assert.deepEqual(teteFacturation(f, "facturation"), {central: true, tete: {total: 34.5, sans_prix: [], co2: undefined}});
+  assert.deepEqual(teteFacturation(f, "developpement"), {central: false, tete: {total: 11.5}});
+  assert.deepEqual(teteFacturation(f, "qualite"), {central: false, tete: null});
 });

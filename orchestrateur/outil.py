@@ -2269,7 +2269,7 @@ def construire_releve(ctx):
         v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"],
              "agent_cadrage": f["agent_cadrage"] if f["agent_cadrage"] in cles else None,    # un agent retiré : plus d'agent
              "attend_reponse": f["attend_reponse"], "discussion": [],
-             "decisions": [_decision_au_releve(d, s) for d in f["decisions"]],
+             "decisions": [_decision_au_releve(d, s, f["id"]) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
              "cahier": f["cahier"], "methode": f["methode"], "livrable": f["livrable"]}
         for cle in ("genre", "workflow", "deplacee_vers"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
@@ -2399,10 +2399,31 @@ def _briefs_du_releve(ctx):
     return sortie
 
 
-def _decision_au_releve(d, s):
+# Les décisions qu'une demande « cahier » ou « methode » (sans identifiant de décision) vient trancher.
+DECISIONS_PAR_DEMANDE = {"cahier": ("valider_cahier",),
+                         "methode": ("valider_methode", "methode_a_revoir", "reprendre_methode")}
+
+
+def _repondue(d, s, fid=None):
+    """Vrai si une demande en attente du moteur répond déjà à la décision (essai réel : « 1 action à faire » au bureau
+    pour une méthode que le Directeur venait de valider, le temps que le moteur l'écrive)."""
+    for x in s["demandes"]:
+        if x["statut"] != "en attente":
+            continue
+        if x.get("decision") == d.get("id"):
+            return True
+        if fid and x.get("fonctionnalite") == fid and d.get("genre") in DECISIONS_PAR_DEMANDE.get(x["type"], ()):
+            return True
+    return False
+
+
+def _decision_au_releve(d, s, fid=None):
     """Une décision telle que le bureau la lit : celle de l'environnement marque `en_cours` chaque outil qu'une tâche
-    d'installation pas encore finie couvre (le bouton « Installer en autonomie » n'est plus offert)."""
+    d'installation pas encore finie couvre (le bouton « Installer en autonomie » n'est plus offert) ; `repondue` quand
+    une demande en attente du moteur y répond déjà (elle ne compte plus dans ce qui attend le Directeur)."""
     d = dict(d)
+    if _repondue(d, s, fid):
+        d["repondue"] = True
     if d.get("genre") == "environnement" and isinstance(d.get("environnement"), list):
         en_cours = [t for t in s["taches"] if t.get("etape") == "environnement" and t["colonne"] != "fait"
                     and not t.get("bloquee")]

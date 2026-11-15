@@ -192,8 +192,9 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     if v4:
         # Une fonctionnalité partie dans un autre projet ne réclame plus rien ici.
         presentes = [f for f in r["fonctionnalites"] if f.get("etape") != "deplacee"]
-        directeur["fonctionnalites"] = sum(len(f["decisions"]) for f in presentes)
-        directeur["projet"] = len(r["decisions_projet"])
+        # une décision à laquelle une demande en attente du moteur répond déjà ne compte plus (`repondue`)
+        directeur["fonctionnalites"] = sum(1 for f in presentes for d in f["decisions"] if not d.get("repondue"))
+        directeur["projet"] = sum(1 for d in r["decisions_projet"] if not d.get("repondue"))
         directeur["reponses"] = sum(1 for f in presentes if attend_utilisateur(f))
         directeur["total"] += directeur["fonctionnalites"] + directeur["projet"] + directeur["reponses"]
         for t, brut in zip(taches, r["taches"]):

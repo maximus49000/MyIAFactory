@@ -259,6 +259,22 @@ class TestRelevePourChaqueFonctionnalite(AvecWorkflows):
         self.ok("fonctionnalite", entree={"id": i, "etape": "deplacee", "deplacee_vers": "Autre projet"})
         self.assertEqual(a_traiter(), 0)
 
+    def test_une_decision_deja_repondue_ne_reclame_plus_le_directeur(self):
+        """Essai réel : « 1 action à faire » au bureau pour une méthode que le Directeur venait de valider, le temps que
+        le moteur l'écrive. Une décision à laquelle une demande en attente répond ne compte plus."""
+        from datetime import datetime, timezone
+        from bureau import equipe, etat
+        i = self.nouvelle()
+        self.ok("decision", entree={"action": "poser", "portee": i, "genre": "valider_methode", "texte": "Méthode ?"})
+        eq = equipe.Equipe(self.dossier / "equipe.json")
+        maintenant = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
+
+        def a_traiter():
+            return etat.construire(releve.normaliser(self.ok("releve")), eq, maintenant, 30)["directeur"]["fonctionnalites"]
+        self.assertEqual(a_traiter(), 1)
+        self.ok("actions", entree={"type": "methode", "fonctionnalite": i, "verdict": "valider"})
+        self.assertEqual(a_traiter(), 0)
+
 
 class TestParFonctionnaliteMemoire(AvecDepots, AvecWorkflows):
     """Le départ, les leçons et l'usage suivent le genre de la fonctionnalité de la tâche."""

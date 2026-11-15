@@ -1167,3 +1167,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Avant de rendre un document de statuts, relire chaque ligne contre l'état courant du code, car une décision livrée entre deux tours rend les lignes fausses sans casser un test.
+
+## S195 — Quand une correction remplace une valeur ou un choix périmé
+Rôles : designer
+Date : 2026-11-15
+
+Quand une correction remplace une valeur ou un choix périmé dans un document, rechercher toutes ses variantes avant et après la modification, et reporter les statuts qui en découlent directement, sans toucher aux autres.

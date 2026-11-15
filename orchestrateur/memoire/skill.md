@@ -1077,3 +1077,9 @@ Rôles : release
 Date : 2026-11-15
 
 Deux fichiers de même taille peuvent différer : comparer le hachage avant de conclure qu'un livrable est identique à un précédent.
+
+## S180 — Avant de reporter un point ouvert d'un registre de contrôles
+Rôles : release, testeur
+Date : 2026-11-15
+
+Avant de reporter un point ouvert d'un registre de contrôles, vérifier son état réel dans le code par une recherche ciblée, et signaler la différence plutôt que de recopier l'ancien statut.

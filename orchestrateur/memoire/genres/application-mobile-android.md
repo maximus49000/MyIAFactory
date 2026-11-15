@@ -1034,3 +1034,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Quand une quantité saisie est répartie en N articles, la quantité d'un article dépend de l'unité : total/N pour une mesure continue (masse, volume), 1 pour une unité comptable ; chercher tous les appelants de la valeur par défaut avant de la changer.
+
+## G173 — Quand la commande d'arrêt de la console d'émulateur est refu
+Rôles : designer, dev
+Date : 2026-11-15
+
+Quand la commande d'arrêt de la console d'émulateur est refusée, lancer l'émulateur avec un port explicite et l'éteindre par adb -s <série> shell reboot -p.

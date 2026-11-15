@@ -1095,3 +1095,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Pour ajouter un état à un jeu d'images validé, écrire un script qui importe le script existant sans le modifier, puis vérifier par le suivi git que les images validées n'ont pas changé.
+
+## S183 — Quand une étape de maquettes porte sur des tests automatique
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de maquettes porte sur des tests automatiques d'un écran déjà maquetté, vérifier que les maquettes existent et déclarer l'étape non applicable en une ligne, sans livrable vide.

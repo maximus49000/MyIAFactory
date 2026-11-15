@@ -1041,3 +1041,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un contrôle automatique des textes affichés doit parcourir toutes les sources du module, pas seulement le fichier de ressources.
+
+## S174 — Une livraison déclare vérifié seulement ce qui a été exécuté
+Rôles : release
+Date : 2026-11-15
+
+Une livraison déclare vérifié seulement ce qui a été exécuté pendant la livraison ; les résultats de tests antérieurs ne comptent pas.

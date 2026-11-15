@@ -860,3 +860,9 @@ Rôles : designer, release
 Date : 2026-11-15
 
 Quand aucun outil de signature n'est disponible, lire le manifeste binaire de l'APK et son bloc de signature par un petit script pour vérifier versionCode, versionName et schémas v2/v3, comparer les empreintes SHA-256, et déclarer que la vérification officielle n'a pas été lancée.
+
+## G144 — Sans outil de signature, lire le bloc de signature de l'APK
+Rôles : testeur
+Date : 2026-11-15
+
+Sans outil de signature, lire le bloc de signature de l'APK avec un petit script : les identifiants 0x7109871a (v2) et 0xf05368c0 (v3) prouvent la présence des schémas. Le certificat reste à vérifier avec l'outil officiel.

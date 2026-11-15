@@ -1035,3 +1035,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Pour exécuter des tests sur émulateur sans approbation interactive, regrouper dans un script le démarrage, l'attente du démarrage complet, les tests filtrés par classe et l'arrêt dans un finally.
+
+## S173 — Un contrôle automatique des textes affichés doit parcourir t
+Rôles : testeur
+Date : 2026-11-15
+
+Un contrôle automatique des textes affichés doit parcourir toutes les sources du module, pas seulement le fichier de ressources.

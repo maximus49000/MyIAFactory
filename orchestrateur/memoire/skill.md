@@ -1281,3 +1281,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand un lot de code a été écrit sans chaîne de compilation, lire le détail de chaque échec pour savoir si le test ou le code est faux avant de modifier l'un des deux.
+
+## S214 — Quand on écrit du code d'interface sans pouvoir compiler, re
+Rôles : designer
+Date : 2026-11-15
+
+Quand on écrit du code d'interface sans pouvoir compiler, relire les signatures utilisées et les portées des modificateurs (weight, align) avant de rendre, et déclarer le code non compilé.

@@ -259,6 +259,7 @@ class Projet:
             e["attente_validation"] = attente.attente_places(self.chemin_reglages.parent)
             # Les éléments conformes qui attendent la livraison groupée : dit dans la barre, avec « Livrer maintenant ».
             e["attente_livraison"] = attente.attente_livraison(self.chemin_reglages.parent)
+            e["chef_au_travail"] = attente.chef_au_travail(self.chemin_reglages.parent)
             # Pourquoi chaque tâche prête ne part pas : sa raison sur sa carte et sa fiche, le résumé dans la barre.
             raisons = attente.attente_taches(self.chemin_reglages.parent)
             e["attentes"] = None

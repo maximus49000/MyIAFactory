@@ -154,5 +154,23 @@ class TestEtatServi(AvecServeur):
         self.assertIn("depuis", t["travail"])
 
 
+class ChefAuTravail(unittest.TestCase):
+    """Essai réel : pendant que le moteur écrivait une méthode (une minute), rien ne bougeait au bureau."""
+
+    def test_le_moteur_dit_ce_que_fait_le_chef_le_temps_d_un_jugement(self):
+        with tempfile.TemporaryDirectory() as d:
+            ch = attente.chemin_chef(d)
+            attente.ecrire(ch, {"texte": attente.phrase_chef("écrire la méthode"), "fonctionnalite": "f5",
+                                "depuis": 1000.0}, maintenant=1000.0)
+            self.assertEqual(attente.chef_au_travail(d, maintenant=1300.0),     # un jugement long reste dit
+                             {"texte": "Le Chef est en train d'écrire la méthode", "fonctionnalite": "f5",
+                              "depuis": 1000.0})
+            self.assertIsNone(attente.chef_au_travail(d, maintenant=1000.0 + attente.FRAICHEUR_CHEF_S + 1))
+            attente.effacer(ch)
+            self.assertIsNone(attente.chef_au_travail(d, maintenant=1001.0))
+        self.assertEqual(attente.phrase_chef("classer le genre de cette demande"),
+                         "Le Chef est en train de classer le genre de cette demande")
+
+
 if __name__ == "__main__":
     unittest.main()

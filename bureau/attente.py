@@ -12,6 +12,9 @@ passage et relus par le serveur du bureau (deux processus).
 - `attente-taches.json`, dans le dossier `.factory` d'un projet : pourquoi chaque tâche prête ne part pas (prérequis,
   agent, décision, pause), `{"t", "texte", "total", "familles", "taches": {id: {genre, motif, texte, detail, ensuite,
   quand}}}`. Absent quand rien n'attend.
+- `chef-au-travail.json`, dans le dossier `.factory` d'un projet : ce que le Chef (le moteur) est en train de faire
+  pendant un jugement (une minute environ), `{"t", "texte", "fonctionnalite", "depuis"}`. Absent sinon ; gardé au plus
+  `FRAICHEUR_CHEF_S` (un jugement peut durer plus de deux minutes).
 
 Un fichier que le moteur n'a pas réécrit depuis `FRAICHEUR_S` secondes est ignoré (le moteur s'est arrêté : le bureau ne
 doit pas afficher une pause qui n'existe plus). Aucune donnée de clé ni de chemin n'y est."""
@@ -38,6 +41,33 @@ def attente_livraison(dossier_factory, maintenant=None):
         return None
     elements = [x for x in o.get("elements") or [] if isinstance(x, str)]
     return {"texte": o["texte"], "elements": elements}
+
+
+FICHIER_CHEF = "chef-au-travail.json"
+FRAICHEUR_CHEF_S = 900
+
+
+def chemin_chef(dossier_factory):
+    return Path(dossier_factory) / FICHIER_CHEF
+
+
+def phrase_chef(libelle):
+    """« Le Chef est en train d'écrire la méthode » à partir du libellé d'un jugement (« écrire la méthode »)."""
+    libelle = str(libelle or "travailler").strip()
+    de = "d'" if libelle[:1].lower() in "aâàeéèêiîoôuûh" else "de "
+    return f"Le Chef est en train {de}{libelle}"
+
+
+def chef_au_travail(dossier_factory, maintenant=None):
+    """Ce que le Chef fait en ce moment (`{texte, fonctionnalite, depuis}`), ou `None` (essai réel : pendant qu'il
+    écrivait une méthode, rien ne bougeait au bureau et le processus semblait bloqué)."""
+    maintenant = time.time() if maintenant is None else maintenant
+    o = lire(chemin_chef(dossier_factory), maintenant - (FRAICHEUR_CHEF_S - FRAICHEUR_S))   # gardé FRAICHEUR_CHEF_S
+    if o is None:
+        return None
+    depuis = o.get("depuis")
+    return {"texte": o["texte"], "fonctionnalite": o.get("fonctionnalite") if isinstance(o.get("fonctionnalite"), str)
+            else None, "depuis": depuis if isinstance(depuis, (int, float)) and not isinstance(depuis, bool) else None}
 
 
 def chemin_places(dossier_factory):

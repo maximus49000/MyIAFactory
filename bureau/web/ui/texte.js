@@ -120,8 +120,26 @@ export function pourquoiElleAttend(t) {
 // Rend une liste de {ton, texte} (vide si rien ne retient rien). Quand le moteur dit pourquoi chaque tâche attend
 // (`etat.attentes`), une ligne {ton: "attentes", texte: « 12 tâches en attente », pastilles: [{genre, texte}]} remplace
 // celle de la charge (la charge y est une famille).
+// Ce que le Chef (le moteur) fait en ce moment, pendant un jugement : « Le Chef est en train d'écrire la méthode de
+// « Quantités multiples » · depuis 2 min » (essai réel : pendant ce temps rien ne bougeait et le processus semblait
+// bloqué). `fid` : seulement pour cette fonctionnalité. Rend le texte, ou null. Pur.
+export function texteChef(etat, fid = null, maintenant = Date.now()) {
+  const c = etat?.chef_au_travail;
+  if (!c || !texteNonVide(c.texte)) return null;
+  if (fid !== null && c.fonctionnalite !== fid) return null;
+  const f = (etat?.fonctionnalites || []).find((x) => x.id === c.fonctionnalite);
+  let texte = c.texte + (f && fid === null ? ` de « ${f.nom} »` : "");
+  if (typeof c.depuis === "number") {
+    const min = Math.floor((maintenant / 1000 - c.depuis) / 60);
+    texte += min >= 1 ? ` · depuis ${min} min` : " · à l'instant";
+  }
+  return texte + "…";
+}
+
 export function retenues(etat) {
   const lignes = [];
+  const chef = texteChef(etat);
+  if (chef) lignes.push({ton: "attente", texte: chef});
   const pause = etat?.pause_installation;
   if (pause && typeof pause.texte === "string" && pause.texte.trim()) lignes.push({ton: "pause", texte: pause.texte});
   const attentes = etat?.attentes;

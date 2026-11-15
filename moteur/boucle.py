@@ -589,7 +589,14 @@ class Moteur:
     def _juger(self, projet, action):
         _, type_, dossier, suite = action
         # le modèle donné par la suite (l'analyse d'un blocage : celui de l'orchestrateur du projet), sinon celui du type
-        decision = jugement.juger(type_, dossier, couche=projet.couche, appeler=self.appeler, modele=suite.get("modele"))
+        chef = attente.chemin_chef(projet.factory.parent)      # dit au bureau pendant le jugement (une minute environ)
+        attente.ecrire(chef, {"texte": attente.phrase_chef(jugement.LIBELLES.get(type_)),
+                              "fonctionnalite": suite.get("fonctionnalite"), "depuis": time.time()})
+        try:
+            decision = jugement.juger(type_, dossier, couche=projet.couche, appeler=self.appeler,
+                                      modele=suite.get("modele"))
+        finally:
+            attente.effacer(chef)
         self._noter_usages(projet, decision.usages, AGENT_ORCHESTRATEUR, ETAPE_ORCHESTRATION, tache=suite.get("tache"))
         return regles.appliquer_jugement(projet, type_, decision, suite, self._etat(projet))
 

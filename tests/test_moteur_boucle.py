@@ -125,6 +125,18 @@ class Passage(Base):
         f = next(x for x in self.suivi()["fonctionnalites"] if x["id"] == "f1")
         self.assertIn("renvoyer votre réponse", f["discussion"][-1]["texte"])
 
+    def test_le_chef_au_travail_est_dit_pendant_un_jugement(self):
+        from bureau import attente
+        vu = []
+
+        def juger(type_, dossier, **kw):
+            vu.append(attente.chef_au_travail(self.dossier))
+            raise RuntimeError("fin de l'essai")
+        with mock.patch.object(boucle.jugement, "juger", side_effect=juger):
+            self.moteur._executer(self.projet, [("juger", "ecrire_methode", {}, {"fonctionnalite": "f1"})])
+        self.assertEqual((vu[0]["texte"], vu[0]["fonctionnalite"]), ("Le Chef est en train d'écrire la méthode", "f1"))
+        self.assertIsNone(attente.chef_au_travail(self.dossier))        # effacé après, même en échec
+
     def test_usage_de_chaque_jugement_note(self):
         i = self.demande(type="bouton", id="exporter")
         self.moteur.tour()

@@ -3,7 +3,7 @@
 // tout texte venu du relevé passe par textContent.
 
 import {el} from "./dom.js";
-import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage, auTravail} from "./texte.js";
+import {dateFr, tronquer, euros, imageLegendee, imagesLegendees, altImage, auTravail, texteChef} from "./texte.js";
 import {lienSur} from "./actions.js";
 import {creerAccuses} from "./accuse.js";
 import {etiquettePart, avecPart, marquerPart} from "./abonnement.js";
@@ -182,6 +182,8 @@ export async function preparerFichier(fichier, moyens) {
 // a 2 min : modifie scenes/combat.gd », même sans message en attente de réponse.
 export function ecritDetail(fonc, etat, nonPrise = false, maintenant = new Date()) {
   if (!fonc) return null;
+  const chef = texteChef(etat, fonc.id, maintenant.getTime());   // le Chef travaille pour elle en ce moment
+  if (chef) return {texte: chef, actif: true};
   const taches = (etat?.taches || []).filter((t) => t.fonctionnalite === fonc.id)
     .sort((a, b) => String(b.maj || "").localeCompare(String(a.maj || "")));
   const prenomDe = (qui) => (etat?.agents || []).find((a) => a.id === qui)?.prenom;

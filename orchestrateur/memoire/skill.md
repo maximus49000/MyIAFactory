@@ -1221,3 +1221,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Avant d'appliquer une consigne de correction d'un document, vérifier par recherche des variantes périmées si elle est déjà appliquée ; si oui, ne rien modifier et le dire.
+
+## S204 — Après la correction d'un document de statuts, chercher par G
+Rôles : testeur
+Date : 2026-11-15
+
+Après la correction d'un document de statuts, chercher par Grep chaque ancienne valeur et chaque formule périmée : elles ne doivent subsister que dans le journal des changements. Relire ensuite le total de tests dans les résultats.

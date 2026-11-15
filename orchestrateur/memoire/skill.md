@@ -1239,3 +1239,9 @@ Rôles : release
 Date : 2026-11-15
 
 Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et comparer le SHA-256 du certificat à celui de la livraison précédente.
+
+## S207 — Pour relever une version dans une sortie d'outil, filtrer sa
+Rôles : release
+Date : 2026-11-15
+
+Pour relever une version dans une sortie d'outil, filtrer sans sensibilité à la casse sur le mot-clé, et non sur le préfixe exact du champ.

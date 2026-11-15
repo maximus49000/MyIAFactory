@@ -752,3 +752,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Quand un lot contient des éléments qui dépendent d'un élément absent du lot et que la chaîne de compilation manque, livrer seulement la logique pure testable et signaler les dépendances manquantes.
+
+## G126 — Compter les tests réellement présents dans les XML de résult
+Rôles : testeur
+Date : 2026-11-15
+
+Compter les tests réellement présents dans les XML de résultats, pas le nombre annoncé dans le rapport d'un commit.

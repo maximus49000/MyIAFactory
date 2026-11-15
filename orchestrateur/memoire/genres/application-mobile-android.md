@@ -806,3 +806,9 @@ Rôles : dev
 Date : 2026-11-15
 
 Dans un test d'interface, cibler un élément par une balise de test plutôt que par son texte affiché, car ce texte peut apparaître plusieurs fois à l'écran.
+
+## G135 — Quand l'élément est un document d'inventaire de statuts, la
+Rôles : testeur
+Date : 2026-11-15
+
+Quand l'élément est un document d'inventaire de statuts, la suite de tests verte ne le valide pas : la revue rapproche chaque ligne du code actuel par recherche ciblée et signale les lignes devenues fausses après des livraisons ultérieures, ainsi que les périmètres annoncés non relus.

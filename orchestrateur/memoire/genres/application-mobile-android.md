@@ -716,3 +716,9 @@ Rôles : designer, dev
 Date : 2026-11-15
 
 Pour déplacer les textes d'interface en ressources, partir d'un inventaire par recherche de tous les objets de constantes, énumérations et formateurs ; le contrôle automatique couvre tous les fichiers sources, impose que la liste des exceptions reste exacte et se prouve par injection de faux littéraux.
+
+## G120 — Quand une correction est livrée sans compilation, la revue l
+Rôles : testeur
+Date : 2026-11-15
+
+Quand une correction est livrée sans compilation, la revue lance d'abord le build ; une annotation de ressource sur une propriété sans champ de stockage se pose sur le getter (@get:).

@@ -1137,3 +1137,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de conception est refusée parce que le rapport ne contient aucune image, relire le livrable, joindre au rapport les images existantes pertinentes (dans la limite du nombre autorisé) avec légende, et renvoyer les autres à la fiche, sans rien regénérer.
+
+## S190 — Sans interlocuteur, quand l'accord de l'action figure déjà d
+Rôles : dev
+Date : 2026-11-15
+
+Sans interlocuteur, quand l'accord de l'action figure déjà dans la tâche et dans une règle du projet, l'exécuter au premier plan et signaler dans le rapport toute fenêtre éventuelle, au lieu de s'arrêter sur une question qui restera sans réponse.

@@ -890,3 +890,9 @@ Rôles : release
 Date : 2026-11-15
 
 Une note d'une livraison précédente n'est pas une preuve ; ne reprendre que ce que la livraison en cours a exécuté.
+
+## G149 — Comparer le hachage, jamais la taille, pour dire qu'un livra
+Rôles : release
+Date : 2026-11-15
+
+Comparer le hachage, jamais la taille, pour dire qu'un livrable est identique à un précédent.

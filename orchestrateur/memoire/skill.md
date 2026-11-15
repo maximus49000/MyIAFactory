@@ -1131,3 +1131,9 @@ Rôles : designer
 Date : 2026-11-15
 
 Quand une étape de maquettes est relancée parce que le rapport ne contenait ni image ni consigne de validation, relire le livrable existant, joindre les images déjà produites avec légende et rendre les champs de consigne, sans regénérer.
+
+## S189 — Quand une étape de conception est refusée parce que le rappo
+Rôles : designer
+Date : 2026-11-15
+
+Quand une étape de conception est refusée parce que le rapport ne contient aucune image, relire le livrable, joindre au rapport les images existantes pertinentes (dans la limite du nombre autorisé) avec légende, et renvoyer les autres à la fiche, sans rien regénérer.

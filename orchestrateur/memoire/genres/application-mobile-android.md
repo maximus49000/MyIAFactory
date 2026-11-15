@@ -1028,3 +1028,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Un paramètre optionnel dont la valeur par défaut change le sens métier masque les appelants qui l'omettent ; tester chaque appelant avec une valeur non triviale, par exemple une unité de masse ou de volume.
+
+## G172 — Quand une quantité saisie est répartie en N articles, la qua
+Rôles : designer, dev
+Date : 2026-11-15
+
+Quand une quantité saisie est répartie en N articles, la quantité d'un article dépend de l'unité : total/N pour une mesure continue (masse, volume), 1 pour une unité comptable ; chercher tous les appelants de la valeur par défaut avant de la changer.

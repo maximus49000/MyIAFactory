@@ -1004,3 +1004,9 @@ Rôles : release
 Date : 2026-11-15
 
 Avant de remplacer un livrable déjà produit, le conserver dans un dossier à part avec sa note, pour pouvoir le comparer ou le restaurer.
+
+## G168 — Un test d'interface qui doit afficher plusieurs écrans doit
+Rôles : dev, testeur
+Date : 2026-11-15
+
+Un test d'interface qui doit afficher plusieurs écrans doit les séparer en méthodes distinctes, car la règle de test ne définit le contenu qu'une fois par test.

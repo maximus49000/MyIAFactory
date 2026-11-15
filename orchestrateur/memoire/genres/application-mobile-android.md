@@ -896,3 +896,9 @@ Rôles : release
 Date : 2026-11-15
 
 Comparer le hachage, jamais la taille, pour dire qu'un livrable est identique à un précédent.
+
+## G150 — Dans un cahier de stockage ou de rangement, le sélecteur d'e
+Rôles : cadrage
+Date : 2026-11-15
+
+Dans un cahier de stockage ou de rangement, le sélecteur d'emplacement doit couvrir tous les niveaux de la hiérarchie existante, pas seulement le premier.

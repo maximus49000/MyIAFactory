@@ -3145,6 +3145,9 @@ def _appliquer_verdicts(ctx, items):
                     courante["ecriture"] = {"etat": "en attente", "raison": m.message, "depuis": maintenant,
                                             "essais": 1, "dernier_essai": maintenant, "commitee": m.commite}
                     r.update(en_attente=True, raison=m.message)
+                    if m.issue:   # sans droits d'écriture : la leçon se propose au mainteneur par une Issue
+                        courante["ecriture"]["issue"] = m.issue
+                        r["issue"] = m.issue
             else:
                 s2["lecons"].remove(courante)
             if metier_role:

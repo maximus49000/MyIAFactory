@@ -1,0 +1,36 @@
+name: Proposer une connaissance
+description: Une leçon (skill ou genre) ou un genre, à relire par le mainteneur avant d'entrer dans la mémoire.
+title: "Mémoire : "
+labels: ["connaissance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Seul le mainteneur modifie ce dépôt. Une connaissance proposée ici est relue, puis ajoutée à la mémoire
+        (`orchestrateur/memoire/`) si elle est retenue. Le code n'est jamais modifié par une proposition.
+
+        **Aucun nom propre ni aucune donnée personnelle** : pas de nom de projet, de personne, de lieu, d'entreprise
+        ou de fichier propre à un projet. Écrivez en termes généraux.
+  - type: input
+    id: fichier
+    attributes:
+      label: Fichier de mémoire visé
+      description: "orchestrateur/memoire/skill.md, ou orchestrateur/memoire/genres/<genre>.md"
+      placeholder: orchestrateur/memoire/genres/mon-genre.md
+    validations:
+      required: true
+  - type: textarea
+    id: contenu
+    attributes:
+      label: Contenu proposé
+      description: La leçon (titre, rôles, texte) ou le fichier du genre, tel que la skill l'a préparé.
+      render: markdown
+    validations:
+      required: true
+  - type: checkboxes
+    id: confidentialite
+    attributes:
+      label: Confidentialité
+      options:
+        - label: Le contenu ne contient aucun nom propre ni aucune donnée personnelle.
+          required: true

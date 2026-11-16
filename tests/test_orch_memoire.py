@@ -217,6 +217,47 @@ class TestMemoire(AvecDepots):
         self.assertEqual(self.nb_commits(self.a), n + 1)   # le commit local reste
         self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
 
+    def test_push_sans_droits_propose_une_issue(self):
+        def git_sans_droits(args, cwd):
+            if args[0] == "push":
+                return 128, "remote: Permission to maximus49000/MyIAFactory.git denied to quelqu-un.\nfatal: 403"
+            return memoire.executer_git(args, cwd)
+
+        r = memoire.ecrire_lecons(self.ma, [("skill", None, self.lecon())], [], git=git_sans_droits)[0]
+        self.assertTrue(r.ok and r.commite and not r.publie)
+        self.assertIn("droits d'écriture", r.message)
+        self.assertLessEqual(len(r.message), 400)
+        self.assertTrue(r.issue.startswith(memoire.DEPOT_WEB + "/issues/new?template=connaissance.yml"))
+        from urllib.parse import parse_qs, urlsplit
+        champs = parse_qs(urlsplit(r.issue).query)
+        self.assertEqual(champs["fichier"], ["memoire/skill.md"])
+        self.assertTrue(champs["contenu"][0].startswith("## S"))   # l'ajout seul, pas tout le fichier
+        self.assertIn(self.lecon()["texte"], champs["contenu"][0])
+
+    def test_panne_reseau_sans_issue(self):
+        def git_hors_ligne(args, cwd):
+            if args[0] == "push":
+                return 128, "fatal: unable to access: Could not resolve host: github.com"
+            return memoire.executer_git(args, cwd)
+
+        r = memoire.ecrire_lecons(self.ma, [("skill", None, self.lecon())], [], git=git_hors_ligne)[0]
+        self.assertFalse(r.publie)
+        self.assertIsNone(r.issue)   # une panne passe toute seule : pas d'Issue, nouvel essai plus tard
+
+    def test_genre_sans_droits_message_avec_issue(self):
+        def git_sans_droits(args, cwd):
+            return (128, "The requested URL returned error: 403") if args[0] == "push" else memoire.executer_git(args, cwd)
+
+        ok, message = memoire.creer_genre(self.ma, "genre-essai", "Un domaine général.", [], git=git_sans_droits)
+        self.assertTrue(ok, message)
+        self.assertIn("Issue : " + memoire.DEPOT_WEB + "/issues/new?", message)
+        self.assertIn("genre-essai", message)
+
+    def test_lien_issue_coupe_un_contenu_trop_long(self):
+        lien = memoire.lien_issue({"titre": "t", "fichier": "f", "contenu": "x" * 20000})
+        self.assertLess(len(lien), 20000)
+        self.assertIn("coup", lien)
+
     def test_echec_du_commit_defait_tout(self):
         avant = (self.ma / "skill.md").read_text(encoding="utf-8")
         tete = git("rev-parse", "HEAD", cwd=self.a)

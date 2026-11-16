@@ -8,6 +8,8 @@ from orchestrateur.memoire import executer_git
 
 DEPOT = "https://github.com/maximus49000/MyIAFactory.git"
 PREFIXE_SKILL = "~/MyIAFactory/skill"
+# « .invalid » est réservé : l'adresse ne mène à personne et aucun compte GitHub ne peut s'en voir attribuer les commits.
+IDENTITE_MEMOIRE = ("MyIAFactory", "memoire@myiafactory.invalid")
 
 
 class Echec(Exception):
@@ -47,6 +49,17 @@ def _est_depot(chemin):
     return (chemin / ".git").exists()
 
 
+def identite_neutre(s, git=executer_git):
+    """Les commits de mémoire de la copie téléchargée ne portent ni le nom ni l'adresse de la personne : sans identité
+    propre à ce dépôt, on y règle l'identité neutre `IDENTITE_MEMOIRE`. Une identité déjà réglée dans le dépôt est
+    gardée ; un clone lié (`--lier`, le dépôt de développement) n'est jamais touché."""
+    code, _ = git(["config", "--local", "--get", "user.email"], s)
+    if code != 0:
+        nom, adresse = IDENTITE_MEMOIRE
+        git(["config", "--local", "user.name", nom], s)
+        git(["config", "--local", "user.email", adresse], s)
+
+
 def preparer(lier=None, git=executer_git, lien=creer_lien):
     """Crée ou met à jour le dossier stable. Rend {"skill", "action", "message"}."""
     s = skill()
@@ -67,6 +80,7 @@ def preparer(lier=None, git=executer_git, lien=creer_lien):
         else:
             git(["rebase", "--abort"], s)
             msg = "La skill n'a pas pu être mise à jour (la version présente est gardée) : " + sortie[:300]
+        identite_neutre(s, git)
         return {"skill": str(s), "action": "mise_a_jour", "message": msg}
     if lier is not None:
         lien(lier, s)
@@ -75,4 +89,5 @@ def preparer(lier=None, git=executer_git, lien=creer_lien):
     code, sortie = git(["clone", DEPOT, str(s)], racine())
     if code != 0:
         raise Echec("La skill n'a pas pu être téléchargée (réseau ou droits) : " + sortie[:300])
+    identite_neutre(s, git)
     return {"skill": str(s), "action": "clone", "message": f"La skill a été téléchargée dans {s}."}

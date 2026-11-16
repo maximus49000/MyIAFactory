@@ -58,6 +58,14 @@ Pour essayer la démo sans rien brancher : `py -3.12 lancer.py serveur --bureau 
 
 ![Le catalogue d'une fonctionnalité : la fiche d'un élément et sa comparaison « Produit » / « Réel »](docs/img/catalogue.jpg)
 
+## Contribuer des connaissances
+
+Seul le mainteneur modifie ce dépôt (code comme mémoire). Quand une leçon ou un genre est validé sur un poste sans
+droits d'écriture, la skill le garde dans sa copie locale et donne le lien d'une **Issue préremplie** (formulaire
+« Proposer une connaissance ») : le mainteneur la relit et l'ajoute à `orchestrateur/memoire/` s'il la retient. Une
+proposition ne touche jamais au code et ne contient ni nom propre ni donnée personnelle (contrôle des mots interdits).
+Les commits de mémoire de la copie téléchargée portent une identité neutre (`MyIAFactory`), jamais celle de la personne.
+
 ## Objectifs
 
 - Voir et piloter une équipe d'agents comme un bureau : qui fait quoi, où en est chaque élément, ce qui attend l'utilisateur.

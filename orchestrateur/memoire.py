@@ -136,6 +136,35 @@ class Resultat:
     commite: bool = False
     publie: bool = False
     transitoire: bool = False
+    proposition: dict = None   # {titre, fichier, contenu} : ce qui est proposé au mainteneur faute de droits
+    issue: str = None          # le lien de l'Issue préremplie, quand le push est refusé faute de droits
+
+
+# Le dépôt public de la skill : seul son propriétaire y pousse ; les autres proposent par une Issue (formulaire
+# `.github/ISSUE_TEMPLATE/connaissance.yml`), relue avant d'entrer dans la mémoire.
+DEPOT_WEB = "https://github.com/maximus49000/MyIAFactory"
+FORMULAIRE = "connaissance.yml"
+_SANS_DROITS = re.compile(r"\b403\b|permission to .* denied|permission denied|authentication failed|"
+                          r"could not read username|not allowed|write access .* not granted|protected branch",
+                          re.IGNORECASE)
+_LONGUEUR_LIEN = 6000   # sous la limite d'une adresse acceptée par GitHub
+
+
+def sans_droits(sortie):
+    """Vrai si la sortie d'un `git push` dit un refus de droits (et non une panne de réseau)."""
+    return bool(_SANS_DROITS.search(sortie or ""))
+
+
+def lien_issue(proposition):
+    """L'adresse d'une Issue préremplie (formulaire de connaissance) pour proposer une leçon ou un genre. Le contenu a
+    déjà passé le contrôle des mots interdits ; il est coupé pour que l'adresse reste acceptée."""
+    from urllib.parse import urlencode
+    contenu = proposition.get("contenu") or ""
+    if len(contenu) > _LONGUEUR_LIEN:
+        contenu = contenu[:_LONGUEUR_LIEN] + "\n…(coupé : à compléter)"
+    champs = {"template": FORMULAIRE, "title": proposition.get("titre") or "Connaissance proposée",
+              "fichier": proposition.get("fichier") or "", "contenu": contenu}
+    return f"{DEPOT_WEB}/issues/new?{urlencode(champs)}"
 
 
 def _compter(git, dossier, plage):
@@ -153,6 +182,7 @@ class Synchro:
     def __init__(self, dossier, git=executer_git):
         self.dossier, self.git = Path(dossier), git
         self.distant_en_avance = False
+        self.sans_droits = False
         self._fait, self._echec = False, None
 
     def preparer(self):
@@ -184,6 +214,10 @@ class Synchro:
             return False, ("le dépôt distant a du nouveau et l'arbre a d'autres fichiers modifiés (pas de « git pull "
                            "--rebase » : ils ne sont pas touchés) : elle n'est pas publiée, nouvel essai plus tard.")
         code, sortie = self.git(["push", "-q"], self.dossier)
+        if code != 0 and sans_droits(sortie):
+            self.sans_droits = True
+            return False, ("vous n'avez pas les droits d'écriture sur le dépôt de la skill (seul son propriétaire y "
+                           "pousse) : elle n'est pas publiée. Proposez-la au mainteneur par l'Issue préremplie.")
         if code != 0:
             return False, f"« git push » a échoué (droits ou réseau) : elle n'est pas publiée. {sortie}"
         return True, ""
@@ -199,6 +233,8 @@ def _publier(synchro, resultats):
         r.publie = publie
         r.message = ("Leçon ajoutée, commitée et poussée." if publie
                      else f"Leçon ajoutée et commitée dans la copie locale ; {raison}"[:400])
+        if synchro.sans_droits and r.proposition:
+            r.issue = lien_issue(r.proposition)   # rendu à part : le message reste court
 
 
 def republier(dossier, git=executer_git):
@@ -264,7 +300,8 @@ def _ecrire(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, mess
 
     try:
         chemin.parent.mkdir(parents=True, exist_ok=True)
-        chemin.write_text(nouveau_texte(avant or ""), encoding="utf-8", newline="\n")
+        texte = nouveau_texte(avant or "")
+        chemin.write_text(texte, encoding="utf-8", newline="\n")
         for etape, args in (("git add", ["add", "--", str(chemin)]),
                             ("git commit", ["commit", "-q", "-m", message_commit, "--", str(chemin)])):
             code, sortie = git(args, dossier)
@@ -274,7 +311,17 @@ def _ecrire(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, mess
     except OSError as e:
         defaire()
         return Resultat(False, f"Arrêt : écriture impossible ({e}).")
-    return Resultat(True, "", commite=True)
+    # Ce qui part dans l'Issue si le push est refusé : l'ajout seul quand le fichier ne fait que grandir, sinon tout.
+    precedent = (avant or "").rstrip("\n")
+    ajout = texte[len(precedent):].strip("\n") if precedent and texte.startswith(precedent) else texte.strip("\n")
+    racine = next((d for d in [Path(dossier).resolve(), *Path(dossier).resolve().parents] if (d / ".git").exists()),
+                  Path(dossier).resolve().parent)
+    try:
+        fichier = chemin.resolve().relative_to(racine).as_posix()   # chemin dans le dépôt, sans le dossier local
+    except ValueError:
+        fichier = chemin.name
+    return Resultat(True, "", commite=True,
+                    proposition={"titre": message_commit, "fichier": fichier, "contenu": ajout})
 
 
 def _ecrire_et_pousser(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, message_commit, git):
@@ -284,7 +331,7 @@ def _ecrire_et_pousser(dossier, chemin, nouveau_texte, mots_interdits, texte_con
     synchro = Synchro(dossier, git)
     r = _ecrire(dossier, chemin, nouveau_texte, mots_interdits, texte_controle, message_commit, git, synchro)
     _publier(synchro, [r])
-    return r.ok, r.message
+    return r.ok, (f"{r.message} Issue : {r.issue}" if r.issue else r.message)
 
 
 def _prochain_id(texte, prefixe):

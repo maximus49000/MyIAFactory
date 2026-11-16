@@ -67,7 +67,28 @@ class TestDossier(AvecMaison):
         r = dossier.preparer(git=self.git(1, "droits refusés"))
         self.assertEqual(r["action"], "mise_a_jour")
         self.assertIn("droits refusés", r["message"])
-        self.assertEqual(self.appels[-1][0], ["rebase", "--abort"])   # jamais laissée au milieu d'un rebase
+        self.assertEqual(self.appels[1][0], ["rebase", "--abort"])   # jamais laissée au milieu d'un rebase
+
+    def test_identite_neutre_reglee_sans_identite_locale(self):
+        self.faire_depot(dossier.skill())
+
+        def git(args, cwd):
+            self.appels.append(list(args))
+            return (1, "") if args[:2] == ["config", "--local"] and "--get" in args else (0, "")
+        dossier.preparer(git=git)
+        nom, adresse = dossier.IDENTITE_MEMOIRE
+        self.assertIn(["config", "--local", "user.name", nom], self.appels)
+        self.assertIn(["config", "--local", "user.email", adresse], self.appels)
+        self.assertTrue(adresse.endswith(".invalid"))
+
+    def test_identite_locale_existante_gardee(self):
+        self.faire_depot(dossier.skill())
+        dossier.preparer(git=self.git())   # « config --get » répond 0 : une identité est déjà réglée
+        self.assertFalse([a for a, _ in self.appels if a[:2] == ["config", "--local"] and "--get" not in a])
+
+    def test_identite_reglee_apres_clone(self):
+        dossier.preparer(git=self.git())
+        self.assertEqual(self.appels[1][0], ["config", "--local", "--get", "user.email"])
 
     def test_lier_un_clone_existant(self):
         clone = Path(self._tmp.name) / "dev"

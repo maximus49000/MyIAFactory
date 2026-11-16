@@ -1305,3 +1305,9 @@ Rôles : dev, testeur, orchestrateur
 Date : 2026-11-16
 
 Tout test doit être à la fois qualitatif et rapide à exécuter, et on cherche toujours à l'optimiser : pas d'attente réelle, de réseau, de gros fichiers ni de scénario complet quand un double ou une donnée minimale prouve la même chose, en gardant des assertions précises. Quand une suite devient lente, repérer les tests les plus lents (par exemple pytest --durations=15) et les accélérer sans perdre ce qu'ils vérifient.
+
+## S218 — Avant de poser une question de cadrage sur une correction va
+Rôles : dev
+Date : 2026-11-16
+
+Avant de poser une question de cadrage sur une correction vague, vérifier dans les registres de suivi du projet et dans le code si la fonctionnalité ou l'anomalie citée existe réellement, afin de ne poser que la question strictement nécessaire.

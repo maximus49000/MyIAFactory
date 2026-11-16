@@ -46,6 +46,8 @@ def lignes_projet(pid, nom, usages, releve, prix_de, debut, fin):
         tache = u.get("tache")
         if u.get("etape") == cout.ETAPE_ORCHESTRATION:
             chemin.append(("orchestration", "Orchestration", "groupe"))
+        elif u.get("etape") == cout.ETAPE_QUESTIONS:
+            chemin.append(("questions", "Questions", "groupe"))
         elif tache:
             fid = (taches.get(tache) or {}).get("fonctionnalite")
             if fid:

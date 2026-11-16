@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, cloud, detache, environnement, rapport
+from moteur import accord_outil, agents, cloud, detache, environnement, jugement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
 from bureau import releve as rel
@@ -5925,6 +5925,59 @@ def _question_ratee(projet, ctx):
 
 
 _SUR["question"] = _sur_question
+
+
+# --- L'agent lecteur : il lit le code (Read, Grep, Glob) pour répondre à une question ; lancé par la boucle dans un fil.
+
+OUTILS_LECTEUR = ("Read", "Grep", "Glob")
+MODELE_LECTEUR = "sonnet"
+CONSIGNE_LECTEUR = Path(__file__).resolve().parent / "consignes" / "lire_pour_repondre.md"
+LECTURE_RATEE = "Je n'ai pas pu lire le code jusqu'au bout."
+
+
+def _sur_question_approfondir(projet, demande, etat):
+    """« Chercher dans le code » sur un fil déjà répondu : le lecteur part, sans nouveau jugement."""
+    lancer(projet, "questions", {"action": "marquer", "id": demande["fil"], "etat": "en_lecture"})
+    _terminer(projet, {"demande": demande["id"]}, "Je cherche dans le code.")
+    return [a_lire(demande["fil"], {"demande": None, "fonctionnalite": None, "fil": demande["fil"]})]
+
+
+_SUR["question_approfondir"] = _sur_question_approfondir
+
+
+def dossier_de_lecture(projet, fil_id):
+    """Le dossier de la première réponse, la question étant la dernière de l'utilisateur (le fil se termine par la
+    réponse de la factory), plus cette première réponse."""
+    fil = _fil(projet, fil_id)
+    messages = fil["messages"]
+    k = max((i for i, m in enumerate(messages) if m["auteur"] == "utilisateur"), default=len(messages) - 1)
+    return {**_dossier_question(projet, {**fil, "messages": messages[:k + 1]}),
+            "premiere_reponse": next((m["texte"] for m in reversed(messages[k + 1:]) if m["auteur"] == "factory"),
+                                     None)}
+
+
+def appliquer_lecture(projet, etat, suite, objet, usages):
+    """La réponse du lecteur dans le fil (`niveau: "code"`) ; une réponse vide ou invalide y écrit `LECTURE_RATEE`.
+    Le fil finit toujours `repondue`."""
+    if not isinstance(objet, dict):
+        objet = None
+    erreur = jugement.valider("repondre_question", objet, dossier_de_lecture(projet, suite["fil"])) if objet else "vide"
+    fichiers = objet.get("fichiers_lus") if objet and isinstance(objet.get("fichiers_lus"), list) else None
+    if erreur:
+        objet, fichiers = {"reponse": LECTURE_RATEE, "sur": False, "suggestion": None}, None
+    fichiers = [x for x in fichiers or [] if isinstance(x, str) and x.strip()][:40] or None
+    return _repondre_au_fil(projet, etat, suite, objet, "code", fichiers)
+
+
+def lecture_interrompue(projet):
+    """Au démarrage du moteur : un fil resté `en_lecture` (le lecteur est mort avec l'ancien moteur) le dit et
+    repasse `repondue`."""
+    for q in lancer(projet, "questions", {"action": "lister"})["questions"]:
+        if q["etat"] == "en_lecture":
+            lancer(projet, "questions", {"action": "ajouter", "id": q["id"], "auteur": "factory",
+                                         "texte": "Lecture interrompue (le moteur a redémarré). « Chercher dans le "
+                                                  "code » la relance.", "niveau": "documents", "sur": False})
+            lancer(projet, "questions", {"action": "marquer", "id": q["id"], "etat": "repondue"})
 
 
 def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):

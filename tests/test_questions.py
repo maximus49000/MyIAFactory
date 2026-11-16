@@ -141,3 +141,54 @@ class TestRepondreQuestion(Base):
     def test_terminer_sans_demande_ne_plante_pas(self):
         regles._terminer(self.projet, {"demande": None, "fil": "q1"}, "ok")
         regles._terminer(self.projet, None, "ok")
+
+
+class TestLecteur(Base):
+    def fils(self):
+        return self.ok("lancer", "questions", entree={"action": "lister"})["questions"]
+
+    def test_approfondir_rend_une_lecture(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        self.ok("lancer", "questions", entree={"action": "ajouter", "id": "q1", "auteur": "factory", "texte": "R",
+                                              "niveau": "documents", "sur": True})
+        d, actions = self.traiter(type="question_approfondir", fil="q1")
+        self.assertEqual([a[0] for a in actions], ["lire"])
+        self.assertEqual(self.fils()[0]["etat"], "en_lecture")
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_dossier_de_lecture_garde_la_question_et_la_premiere_reponse(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        self.ok("lancer", "questions", entree={"action": "ajouter", "id": "q1", "auteur": "factory", "texte": "R",
+                                              "niveau": "documents", "sur": False})
+        d = regles.dossier_de_lecture(self.projet, "q1")
+        self.assertEqual((d["question"]["texte"], d["premiere_reponse"]), ("Q ?", "R"))
+
+    def test_appliquer_lecture(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        suite = {"demande": None, "fonctionnalite": None, "fil": "q1"}
+        actions = regles.appliquer_lecture(self.projet, self.etat, suite,
+                                           {**REPONSE_SURE, "fichiers_lus": ["jeu/score.py:12"]}, [])
+        self.assertEqual(actions, [])
+        (fil,) = self.fils()
+        dernier = fil["messages"][-1]
+        self.assertEqual((fil["etat"], dernier["niveau"], dernier["fichiers_lus"]),
+                         ("repondue", "code", ["jeu/score.py:12"]))
+
+    def test_lecture_invalide_ou_vide_repond_quand_meme(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        suite = {"demande": None, "fonctionnalite": None, "fil": "q1"}
+        for objet in (None, {"reponse": "", "sur": True, "suggestion": None}, "pas un objet"):
+            self.ok("lancer", "questions", entree={"action": "marquer", "id": "q1", "etat": "en_lecture"})
+            self.assertEqual(regles.appliquer_lecture(self.projet, self.etat, suite, objet, []), [])
+            (fil,) = self.fils()
+            self.assertEqual((fil["etat"], fil["messages"][-1]["texte"], fil["messages"][-1]["niveau"]),
+                             ("repondue", "Je n'ai pas pu lire le code jusqu'au bout.", "code"))
+
+    def test_lecture_interrompue(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Autre ?"})
+        self.ok("lancer", "questions", entree={"action": "marquer", "id": "q1", "etat": "en_lecture"})
+        regles.lecture_interrompue(self.projet)
+        q1, q2 = self.fils()
+        self.assertEqual((q1["etat"], q2["etat"]), ("repondue", "en_cours"))
+        self.assertIn("Lecture interrompue", q1["messages"][-1]["texte"])

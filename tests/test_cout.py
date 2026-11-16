@@ -148,6 +148,14 @@ class TestCalcul(unittest.TestCase):
         self.assertAlmostEqual(f["total"], 8)                            # tout compte dans le total
         self.assertEqual(facturer([])["orchestration"]["total"], 0)
 
+    def test_facturation_isole_les_questions(self):
+        f = facturer([usage("u1"), usage("u2", service=None, agent="orchestrateur", tache=None, etape="questions",
+                                          modele="haiku")])
+        self.assertAlmostEqual(f["questions"]["total"], 1)
+        self.assertEqual((f["direction"]["total"], f["orchestration"]["total"]), (0, 0))
+        self.assertAlmostEqual(f["total"], 4)
+        self.assertEqual(facturer([])["questions"]["total"], 0)
+
     def test_service_nomme_direction_ne_se_melange_pas(self):
         f = facturer([usage("u1", service="direction"), usage("u2", service=None)])
         self.assertAlmostEqual(f["services"]["direction"]["total"], 3)

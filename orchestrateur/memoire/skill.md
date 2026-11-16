@@ -1377,3 +1377,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand on cherche une anomalie sans piste donnée, lancer la suite de tests existante et examiner les warnings qu'elle émet (pas seulement les échecs) est un moyen rapide et peu coûteux de trouver un vrai défaut plutôt que d'explorer le code au hasard.
+
+## S230 — Quand du code applique une suppression explicite d'enregistr
+Rôles : dev
+Date : 2026-11-16
+
+Quand du code applique une suppression explicite d'enregistrements enfants en filet de sécurité contre une cascade de clé étrangère potentiellement inactive sur certaines connexions, forcer un flush de ces suppressions avant de supprimer le parent : sans relation déclarée entre les deux objets au niveau de l'ORM, l'ordre des instructions de suppression n'est pas garanti et peut entrer en course avec la cascade côté base de données, produisant des suppressions redondantes ou des avertissements silencieux.

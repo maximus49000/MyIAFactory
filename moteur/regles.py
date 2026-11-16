@@ -5862,6 +5862,71 @@ def _sur_anomalie(projet, demande, etat):
 _SUR["anomalie"] = _sur_anomalie
 
 
+def a_lire(fil, suite):
+    """L'action asynchrone de l'agent lecteur (exécutée par la boucle dans un fil)."""
+    return ("lire", fil, suite)
+
+
+def _dossier_question(projet, fil):
+    fac = _factory(projet)
+    court = _etat(projet)
+    question = fil["messages"][-1]
+    dossier = {"projet": {"nom": fac["nom"], "description": fac["description"]}, "genre": _genre_du_projet(fac),
+               "fonctionnalites": [{"id": f["id"], "nom": f["nom"], "nature": f.get("nature") or "fonctionnalite",
+                                    "etape": f["etape"], "cahier": (_fonc(projet, f["id"]).get("cahier") or {}).get("etapes")}
+                                   for f in court["fonctionnalites"]][:40],
+               "fonctionnalite": None,
+               "regles_projet": [x["texte"] for x in lancer(projet, "regles", {"action": "lister"}).get("regles", [])],
+               "fil": [{"auteur": m["auteur"], "texte": m["texte"][:1500]} for m in fil["messages"][:-1]][-10:],
+               "question": {"texte": question["texte"], "images": question.get("images") or []},
+               "mots_interdits": fac["mots_interdits"]}
+    if fil.get("fonctionnalite"):
+        f = _fonc(projet, fil["fonctionnalite"])
+        dossier["fonctionnalite"] = {"id": f["id"], "nom": f["nom"], "cahier": f.get("cahier"),
+                                     "elements": [x["nom"] for x in f.get("file") or []]}
+    return dossier
+
+
+def _fil(projet, ident):
+    return next(q for q in lancer(projet, "questions", {"action": "lister"})["questions"] if q["id"] == ident)
+
+
+def _sur_question(projet, demande, etat):
+    fil = _fil(projet, demande["fil"])
+    return [a_juger("repondre_question", _dossier_question(projet, fil),
+                    {"demande": demande["id"], "fonctionnalite": None, "fil": fil["id"]})]
+
+
+def _repondre_au_fil(projet, etat, ctx, o, niveau, fichiers_lus=None):
+    lancer(projet, "questions", {"action": "ajouter", "id": ctx["fil"], "auteur": "factory", "texte": o["reponse"],
+                                 "niveau": niveau, "sur": o["sur"], "suggestion": o.get("suggestion"),
+                                 **({"fichiers_lus": fichiers_lus} if fichiers_lus else {})})
+    if niveau == "documents" and not o["sur"]:
+        lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "en_lecture"})
+        _terminer(projet, ctx, "Première réponse d'après les documents ; je vérifie dans le code.")
+        return [a_lire(ctx["fil"], ctx)]
+    lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "repondue"})
+    _terminer(projet, ctx, "Réponse écrite dans le panneau Questions.")
+    return []
+
+
+def _apres_repondre_question(projet, o, ctx, etat):
+    return _repondre_au_fil(projet, etat, ctx, o, "documents")
+
+
+def _question_ratee(projet, ctx):
+    """Deux réponses invalides : le fil le dit, aucune décision n'est posée au Directeur."""
+    lancer(projet, "questions", {"action": "ajouter", "id": ctx["fil"], "auteur": "factory",
+                                 "texte": "Je n'ai pas pu répondre d'après les documents.", "niveau": "documents",
+                                 "sur": False, "suggestion": None})
+    lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "repondue"})
+    _terminer(projet, ctx, "Je n'ai pas pu répondre d'après les documents.")
+    return []
+
+
+_SUR["question"] = _sur_question
+
+
 def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):
     """La branche cloud d'une tâche faite ne fusionne pas : la question au Directeur (comme avant), puis l'analyse du
     Chef."""
@@ -5882,6 +5947,8 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
     etat = nouvel_etat() if etat is None else etat
     if decision.question is not None:
         fid = contexte.get("fonctionnalite")
+        if type_ == "repondre_question":
+            return _question_ratee(projet, contexte)
         if type_ == "analyser_blocage":     # la tâche reste comme avant, le journal le dit
             return _analyse_ratee(projet, contexte, decision.question)
         if type_ == "classer_genre" and fid:
@@ -6041,4 +6108,5 @@ def _apres_conseil(projet, o, ctx, etat):
 _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour,
           "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
           "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation,
-          "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage}
+          "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage,
+          "repondre_question": _apres_repondre_question}

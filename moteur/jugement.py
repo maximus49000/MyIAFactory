@@ -33,6 +33,10 @@ Dossiers attendus (préparés par la table de règles) :
   `lecons_du_metier`, `essais_automatiques`, `metiers` (ceux du projet), `voies` (celles permises), `mots_interdits`.
   Le moteur l'appelle avec le modèle de l'orchestrateur du projet (`modele_orchestrateur`), jamais Fable.
 
+- `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
+  `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
+  `question` (texte, images), `mots_interdits`.
+
 Une étape de flux peut être une validation du Directeur, `{etape, nom, validation: true, raison?}` : ni rôle ni
 service, ni première, ni dernière, ni deux de suite.
 
@@ -54,14 +58,17 @@ from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
          "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
-         "decouper_lieux": "sonnet", "analyser_blocage": "sonnet"}
+         "decouper_lieux": "sonnet", "analyser_blocage": "sonnet", "repondre_question": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
             "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
             "proposer_organisation": "proposer le workflow de cette fonctionnalité",
             "definir_workflow": "définir le workflow du projet",
             "decouper_lieux": "découper les étapes selon le poste",
-            "analyser_blocage": "analyser le blocage de cette tâche"}
+            "analyser_blocage": "analyser le blocage de cette tâche",
+            "repondre_question": "répondre à votre question"}
+NATURES_SUGGESTION = ("fonctionnalite", "correction")
+LONGUEUR_REPONSE = 3500
 # L'échange de la création d'un projet (`definir_workflow`) : au plus 4 tours de questions, puis une proposition.
 TOURS_MAX_DEFINITION = 4
 QUESTIONS_PAR_TOUR_MAX = 5
@@ -740,6 +747,24 @@ def _valider_analyser_blocage(o, d):
     return None
 
 
+def _valider_repondre_question(o, d):
+    if not _texte(o.get("reponse")) or len(o["reponse"]) > LONGUEUR_REPONSE:
+        return f"« reponse » : un texte non vide de {LONGUEUR_REPONSE} caractères au plus."
+    if not isinstance(o.get("sur"), bool):
+        return "« sur » doit être true ou false."
+    s = o.get("suggestion")
+    if s is None:
+        return None
+    if not isinstance(s, dict) or s.get("nature") not in NATURES_SUGGESTION or not _texte(s.get("texte")):
+        return "« suggestion » : null, ou {nature (fonctionnalite | correction), texte, concerne?}."
+    if len(s["texte"]) > LONGUEUR_REPONSE:
+        return f"« suggestion.texte » tient en {LONGUEUR_REPONSE} caractères au plus."
+    connues = {f.get("id") for f in d.get("fonctionnalites") or []}
+    if s.get("concerne") is not None and s["concerne"] not in connues:
+        return f"« suggestion.concerne » doit être une fonctionnalité du dossier ({', '.join(sorted(connues)) or 'aucune'})."
+    return None
+
+
 _VALIDEURS ={"decouper": _valider_decouper, "traduire_retour": _valider_traduire_retour,
               "ecrire_methode": _valider_ecrire_methode, "apres_refus": _valider_apres_refus,
               "conseil": _valider_conseil}
@@ -747,4 +772,5 @@ _VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
                            "proposer_organisation": _valider_proposer_organisation,
                            "definir_workflow": _valider_definir_workflow,
                            "decouper_lieux": _valider_decouper_lieux,
-                           "analyser_blocage": _valider_analyser_blocage}
+                           "analyser_blocage": _valider_analyser_blocage,
+                           "repondre_question": _valider_repondre_question}

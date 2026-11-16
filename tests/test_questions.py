@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from moteur import jugement, regles
 from orchestrateur import questions
 from tests.test_moteur_regles import Base
 
@@ -83,3 +84,60 @@ class TestCommandeQuestions(Base):
         self.assertEqual(code, 1, rep)
         code, rep = self.outil("actions", entree={"type": "fonctionnalite", "texte": "x", "concerne": "f99"})
         self.assertEqual(code, 1, rep)
+
+
+REPONSE_SURE = {"reponse": "Le score repart de zéro à chaque niveau.", "sur": True, "suggestion": None}
+
+
+class TestRepondreQuestion(Base):
+    def fils(self):
+        return self.ok("lancer", "questions", entree={"action": "lister"})["questions"]
+
+    def test_valider(self):
+        d = {"fonctionnalites": [{"id": "f1"}]}
+        self.assertIsNone(jugement.valider("repondre_question", REPONSE_SURE, d))
+        self.assertIsNone(jugement.valider("repondre_question", {**REPONSE_SURE, "suggestion": {
+            "nature": "correction", "texte": "Le score…", "concerne": "f1"}}, d))
+        for mauvais in ({"reponse": "", "sur": True, "suggestion": None},
+                        {"reponse": "x", "sur": "oui", "suggestion": None},
+                        {"reponse": "x", "sur": True, "suggestion": {"nature": "idee", "texte": "x"}},
+                        {"reponse": "x", "sur": True, "suggestion": {"nature": "correction", "texte": "x",
+                                                                    "concerne": "f9"}}):
+            self.assertIsNotNone(jugement.valider("repondre_question", mauvais, d), mauvais)
+
+    def test_question_jugee_puis_repondue(self):
+        d, actions = self.traiter(type="question", texte="Comment est calculé le score ?")
+        ((_, type_, dossier, suite),) = actions
+        self.assertEqual(type_, "repondre_question")
+        self.assertEqual(dossier["question"]["texte"], "Comment est calculé le score ?")
+        self.assertIn("projet", dossier)
+        suite_actions = regles.appliquer_jugement(self.projet, type_, jugement.Decision(objet=REPONSE_SURE), suite,
+                                                  self.etat)
+        self.assertEqual(suite_actions, [])
+        (fil,) = self.fils()
+        self.assertEqual((fil["etat"], fil["messages"][-1]["niveau"]), ("repondue", "documents"))
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+
+    def test_reponse_pas_sure_escalade_vers_la_lecture(self):
+        d, ((_, type_, _, suite),) = self.traiter(type="question", texte="Que fait la fonction de sauvegarde ?")
+        actions = regles.appliquer_jugement(self.projet, type_, jugement.Decision(objet={**REPONSE_SURE, "sur": False}),
+                                            suite, self.etat)
+        self.assertEqual([a[0] for a in actions], ["lire"])
+        (fil,) = self.fils()
+        self.assertEqual(fil["etat"], "en_lecture")
+
+    def test_jugement_rate_ecrit_dans_le_fil_sans_decision(self):
+        d, ((_, type_, _, suite),) = self.traiter(type="question", texte="Pourquoi ?")
+        avant = len(self.ok("etat")["decisions"])
+        actions = regles.appliquer_jugement(self.projet, type_, jugement.Decision(question="Raté."), suite, self.etat)
+        self.assertEqual(actions, [])
+        (fil,) = self.fils()
+        dernier = fil["messages"][-1]
+        self.assertEqual((fil["etat"], dernier["texte"], dernier["niveau"], dernier["sur"]),
+                         ("repondue", "Je n'ai pas pu répondre d'après les documents.", "documents", False))
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(len(self.ok("etat")["decisions"]), avant)
+
+    def test_terminer_sans_demande_ne_plante_pas(self):
+        regles._terminer(self.projet, {"demande": None, "fil": "q1"}, "ok")
+        regles._terminer(self.projet, None, "ok")

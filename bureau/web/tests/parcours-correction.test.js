@@ -11,6 +11,7 @@ test("étape d'une correction : cadrage → diagnostic, colonnes et étapes de f
   assert.equal(etapeCorrection("f2", "cadrage"), "diagnostic");
   assert.equal(etapeCorrection("f2", "flux:f2-correctif"), "correctif");
   assert.equal(etapeCorrection("f2", "f2-livraison"), "livraison");
+  assert.equal(etapeCorrection("f2", "validation:f2-validation"), "validation");
   assert.equal(etapeCorrection("f2", "f3-correctif"), null);
   assert.equal(etapeCorrection("f2", "relecture"), null);
 });

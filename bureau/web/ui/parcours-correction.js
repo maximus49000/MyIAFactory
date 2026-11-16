@@ -12,10 +12,11 @@ export const ETAPES_CORRECTION = [
 
 export const estCorrection = (f) => f?.nature === "correction";
 
-// L'étape d'une tâche de correction, sans préfixe : `cadrage` → diagnostic ; `flux:f2-correctif` ou une colonne
+// L'étape d'une tâche de correction, sans préfixe : `cadrage` → diagnostic ; `flux:f2-correctif`, `validation:f2-validation`
+// ou une colonne
 // `f2-correctif` → correctif. `null` si ce n'est pas une étape du parcours d'une correction.
 export function etapeCorrection(fid, valeur) {
-  const v = String(valeur || "").replace(/^flux:/, "");
+  const v = String(valeur || "").replace(/^(flux|validation):/, "");
   if (v === "cadrage") return "diagnostic";
   const prefixe = fid + "-";
   if (!v.startsWith(prefixe)) return null;

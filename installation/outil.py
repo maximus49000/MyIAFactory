@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bureau import charge, reglages  # noqa: E402
-from installation import acces, calibrage, creation, dossier, estimation, examen, lanceur, mise_en_place, proposition  # noqa: E402
+from installation import acces, calibrage, creation, dossier, estimation, examen, lanceur, mise_a_jour, mise_en_place, proposition  # noqa: E402
 from installation.dossier import Echec  # noqa: E402
 
 
@@ -206,8 +206,16 @@ def cmd_partenaires(a):
     return sortie
 
 
-def cmd_bureau(a):
-    return lanceur.lancer(relancer=a.relancer)
+def cmd_bureau(a, verifier=None):
+    """Prend d'abord la dernière version de la skill (sauf travail local), puis lance le bureau ; un bureau déjà
+    lancé est relancé s'il vient d'y avoir une mise à jour, pour qu'il tourne sur le nouveau code."""
+    verifier = verifier or mise_a_jour.verifier_et_noter
+    try:
+        maj = verifier()
+    except Exception as e:      # la mise à jour ne doit jamais empêcher d'ouvrir le bureau
+        maj = {"etat": "erreur", "message": f"Mise à jour de la skill non vérifiée ({e})."}
+    r = lanceur.lancer(relancer=a.relancer or maj.get("etat") == "mise_a_jour")
+    return {**r, "mise_a_jour": maj.get("message")}
 
 
 def cmd_orchestrateur(a):

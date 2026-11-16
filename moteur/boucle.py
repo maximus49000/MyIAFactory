@@ -43,6 +43,7 @@ AGENT_ORCHESTRATEUR = "orchestrateur"
 ETAPE_ORCHESTRATION = "orchestration"
 ETAPE_QUESTIONS = "questions"    # les réponses aux questions (jugement et agent lecteur) : leur ligne à la facturation
 DELAI_GIT_S = 60
+INTERVALLE_MAJ_S = 15 * 60       # la skill regarde GitHub toutes les 15 minutes (conception 2026-11-16-mise-a-jour-automatique)
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
 ECRITURE_LECONS_TOUS_LES_S = 300  # une leçon validée mais pas encore écrite dans la mémoire de la skill est réessayée ainsi
 REECRIRE_TOUS_LES_S = 20        # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
@@ -138,8 +139,13 @@ class Moteur:
 
     def __init__(self, projets, *, appeler=appel.appeler, horloge=time.time, bureau=None, environ=None,
                  executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None,
-                 registre=None, surveillance=None):
+                 registre=None, surveillance=None, mise_a_jour=None, relancer_bureau=None):
         self.appeler, self.horloge, self.bureau, self.environ = appeler, horloge, bureau, environ
+        # La mise à jour de la skill (`installation.mise_a_jour`) : branchée par `python -m moteur`, jamais par défaut
+        # (les essais du moteur ne touchent pas au vrai dépôt). `relance_demandee` : le moteur doit être relancé.
+        self.mise_a_jour, self.relancer_bureau = mise_a_jour, relancer_bureau
+        self._prochaine_maj, self._maj_en_vol, self._maj_resultat = None, None, None
+        self._maj_faite, self._maj_dernier_message, self.relance_demandee = False, None, False
         # les commandes figées des agents locaux (`moteur.figes`) : une liste des processus par tour au plus
         self.surveillance = surveillance if surveillance is not None else figes.Surveillance()
         self._processus_du_tour, self._surveille = None, {}
@@ -199,7 +205,50 @@ class Moteur:
                 self._tour_projet(projet)
             except Exception as e:      # une erreur d'un projet n'arrête ni la boucle ni les autres projets
                 self._noter(projet, f"erreur au passage : {e}")
+        self._mise_a_jour_de_la_skill()
         self.duree_dernier_tour_s = time.monotonic() - debut
+
+    # --- La mise à jour de la skill : vérifiée à intervalle, appliquée au premier passage où rien ne travaille.
+
+    def _libre(self):
+        """Vrai quand aucun agent ne travaille : aucune tâche en cours, aucune installation, aucun retour non lu."""
+        return (not any(e.get("en_cours") for e in self.etats.values()) and not self.file_installations
+                and self.pause_installation is None and self.retours.empty())
+
+    def _verifier_la_skill(self):
+        try:
+            self._maj_resultat = self.mise_a_jour()
+        except Exception as e:          # une vérification ratée n'arrête jamais le moteur
+            self._maj_resultat = {"etat": "erreur", "message": f"Mise à jour de la skill : erreur ({e})."}
+
+    def _mise_a_jour_de_la_skill(self):
+        if self.mise_a_jour is None or self.relance_demandee:
+            return
+        if self._maj_en_vol is not None and not self._maj_en_vol.is_alive():
+            self._maj_en_vol = None
+        if self._maj_resultat is not None:
+            r, self._maj_resultat = self._maj_resultat, None
+            if r.get("message") and r["message"] != self._maj_dernier_message:   # un même état n'est dit qu'une fois
+                self.journal.append(r["message"])
+                self._maj_dernier_message = r["message"]
+            self._maj_faite = self._maj_faite or r.get("etat") == "mise_a_jour"
+        maintenant = self.horloge()
+        if (not self._maj_faite and self._maj_en_vol is None
+                and (self._prochaine_maj is None or maintenant >= self._prochaine_maj)):
+            self._prochaine_maj = maintenant + INTERVALLE_MAJ_S
+            if self.synchrone:
+                self._verifier_la_skill()
+                return self._mise_a_jour_de_la_skill()
+            self._maj_en_vol = threading.Thread(target=self._verifier_la_skill, daemon=True)
+            self._maj_en_vol.start()
+        if self._maj_faite and self._libre():
+            if self.relancer_bureau is not None:
+                try:
+                    self.journal.append(f"Bureau : {self.relancer_bureau()}")
+                except Exception as e:
+                    self.journal.append(f"Bureau non relancé après la mise à jour : {e}")
+            self.journal.append("Le moteur se relance sur la nouvelle version de la skill.")
+            self.relance_demandee = True
 
     def tourner(self, arret):
         while not arret.is_set():

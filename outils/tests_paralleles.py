@@ -4,12 +4,16 @@
     py -3.12 outils/tests_paralleles.py -j 4            # 4 morceaux à la fois
     py -3.12 outils/tests_paralleles.py orch_memoire    # les modules dont le nom contient ce texte
     py -3.12 outils/tests_paralleles.py --lents 15      # les 15 morceaux les plus longs, à la fin
+    py -3.12 outils/tests_paralleles.py --touches       # seulement les tests touchés par ce qui diffère d'origin/main
 
-Rien à installer : la bibliothèque standard seule. Un morceau est un module de test, ou une classe de test pour les
-modules longs (plus de `SEUIL_DECOUPE_S` lors du dernier passage) : un gros module ne tient plus toute la suite à lui
-seul. Chaque morceau tourne dans son propre processus, comme `py -3.12 -m unittest tests.<module>[.<Classe>]` : les
-variables d'environnement qu'un test modifie ne débordent pas sur un autre. Les morceaux les plus longs connus
-(fichier `.durees-tests.json`, hors dépôt) partent en premier.
+Rien à installer : la bibliothèque standard seule. Un morceau est un module de test ; les modules de `DECOUPAGE`, les
+plus longs, sont découpés (par classe ou par test) pour ne pas tenir toute la suite à eux seuls. Chaque morceau tourne
+dans son propre processus, comme `py -3.12 -m unittest tests.<module>[.<Classe>[.<test>]]` : les variables
+d'environnement qu'un test modifie ne débordent pas sur un autre. Les morceaux les plus longs connus (fichier
+`.durees-tests.json`, hors dépôt) partent en premier.
+
+`--touches [référence]` (`outils/impact_tests.py`) ne garde que les modules de test qui atteignent un fichier modifié
+(imports et mentions de nom de fichier) : le quotidien ; la suite complète reste de mise avant de pousser.
 
 Le dossier temporaire passé aux tests est écrit en chemin long : sous Windows, un TEMP en nom court (`NOM~1.EXT`)
 fait échouer les tests qui comparent des chemins. Un morceau en échec est relancé seul une fois, à la fin : s'il passe,
@@ -28,9 +32,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(RACINE))   # `tests` est le paquet de la skill, pas un homonyme installé ailleurs
 DUREES = RACINE / ".durees-tests.json"
 DELAI_S = 1800
 SEUIL_DECOUPE_S = 40
+# Les modules qui tenaient seuls la durée de la suite (mesure du 2026-11-16 : 217 s et 176 s pour 326 s au total).
+# Découpés ceux-là seulement : tout découper avait doublé la durée. Découper aussi test_moteur_regles n'a rien gagné
+# (276 s contre 253 s) : la durée suit désormais le travail cumulé divisé par les cœurs, plus aucun module seul.
+DECOUPAGE = {"test_orch_memoire": "classe", "test_orch_interface": "test"}
 
 
 def modules(filtres):
@@ -44,8 +53,6 @@ def classes(module):
     il reste entier et son erreur sera dite par son propre passage."""
     import importlib
     import unittest
-    if str(RACINE) not in sys.path:
-        sys.path.insert(0, str(RACINE))
     try:
         mod = importlib.import_module(f"tests.{module}")
     except Exception:
@@ -56,16 +63,23 @@ def classes(module):
             and chargeur.getTestCaseNames(c)]
 
 
+def tests_de(module):
+    """`Classe.test` pour chaque test du module (même règle que `classes`)."""
+    import importlib
+    import unittest
+    mod = importlib.import_module(f"tests.{module}")
+    chargeur = unittest.TestLoader()
+    return [f"{c}.{t}" for c in classes(module) for t in chargeur.getTestCaseNames(getattr(mod, c))]
+
+
 def morceaux(liste, connues, decouper=False):
-    """Avec `decouper`, les modules longs au dernier passage sont découpés par classe ; sinon tout reste entier.
-    Mesure (8 cœurs, Windows) : découper a doublé la durée (1 016 s contre 453 s), trop de classes gourmandes en
-    accès disque tournant ensemble ; c'est donc un choix, pas le défaut."""
-    if not decouper:
-        return list(liste)
+    """Les modules de `DECOUPAGE` sont découpés comme indiqué ; avec `decouper`, tout module long au dernier passage
+    l'est aussi par classe. Mesure (8 cœurs, Windows) : tout découper a doublé la durée (1 016 s contre 453 s), trop
+    de classes gourmandes en accès disque tournant ensemble ; c'est donc un choix, pas le défaut."""
     sortie = []
     for m in liste:
-        long = connues.get(m, 0) > SEUIL_DECOUPE_S
-        noms = classes(m) if long else []
+        maniere = DECOUPAGE.get(m) or ("classe" if decouper and connues.get(m, 0) > SEUIL_DECOUPE_S else None)
+        noms = (tests_de(m) if maniere == "test" else classes(m)) if maniere else []
         sortie += [f"{m}.{c}" for c in noms] if noms else [m]
     return sortie
 
@@ -102,12 +116,36 @@ def main(argv=None):
     a.add_argument("filtres", nargs="*", help="textes contenus dans le nom des modules à lancer")
     a.add_argument("-j", type=int, default=os.cpu_count() or 4, help="morceaux lancés à la fois (défaut : les cœurs)")
     a.add_argument("--lents", type=int, default=10, help="nombre de morceaux les plus longs à afficher")
-    a.add_argument("--decouper", action="store_true", help="découper les modules longs par classe de test")
+    a.add_argument("--decouper", action="store_true", help="découper aussi les autres modules longs par classe")
+    a.add_argument("--touches", nargs="?", const="origin/main", metavar="REFERENCE",
+                   help="seulement les tests touchés par ce qui diffère de la référence (défaut : origin/main)")
+    a.add_argument("--sans-attendre", action="store_true",
+                   help="refuser (code 3) au lieu d'attendre quand une autre campagne tourne sur le poste")
     o = a.parse_args(argv)
     liste = modules(o.filtres)
+    if o.touches:
+        import impact_tests
+        modifies = impact_tests.fichiers_modifies(RACINE, o.touches)
+        touches, raison = impact_tests.Graphe(RACINE).touches(modifies)
+        if touches is not None:
+            liste = [m for m in liste if m in touches]
+        print(f"Tests touchés : {len(liste)} module(s) ({raison}).", flush=True)
+        if not liste:
+            print("Rien à tester.")
+            return 0
     if not liste:
         print("Aucun module de test ne correspond.")
         return 1
+    import campagne   # une seule campagne à la fois sur le poste (outils/campagne.py)
+    if not campagne.attendre_son_tour(RACINE, attendre=not o.sans_attendre):
+        return 3
+    try:
+        return _campagne(o, liste)
+    finally:
+        campagne.liberer()
+
+
+def _campagne(o, liste):
     connues, env = _lire_durees(), _environnement()
     parts = morceaux(liste, connues, o.decouper)
     parts.sort(key=lambda n: -connues.get(n, 1e9))   # inconnus d'abord (prudence), puis les plus longs

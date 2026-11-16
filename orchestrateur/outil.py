@@ -20,30 +20,57 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bureau import fichiers_joints as fj  # noqa: E402
-from bureau import releve as rel  # noqa: E402
+
+def _a_la_demande(nom):
+    """Le module `nom`, chargé seulement au premier usage d'un de ses attributs (`importlib.util.LazyLoader`).
+
+    Chaque commande de l'outil est un nouveau processus : charger d'office tous les modules coûtait ~0,8 s par appel
+    (mesure : 0,9 s pour `--help`, dont 0,1 s pour Python), alors que la plupart des commandes n'en utilisent que
+    quelques-uns. Un module déjà chargé est rendu tel quel.
+
+    Seulement quand l'outil est lancé en ligne de commande (un processus neuf, un seul fil) : importé par le moteur ou
+    le bureau, qui ont plusieurs fils, il charge tout d'office (le chargement différé n'y est pas sûr avant 3.13)."""
+    import importlib
+    import importlib.util
+    if nom in sys.modules or __name__ != "__main__":
+        return importlib.import_module(nom)
+    spec = importlib.util.find_spec(nom)
+    chargeur = importlib.util.LazyLoader(spec.loader)
+    spec.loader = chargeur
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[nom] = module
+    chargeur.exec_module(module)
+    parent, _, court = nom.rpartition(".")
+    if parent:
+        setattr(sys.modules[parent], court, module)
+    return module
+
+
 from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
-from orchestrateur import depart  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import guetteur  # noqa: E402
-from orchestrateur import transcriptions  # noqa: E402
-from orchestrateur import lieux as lx  # noqa: E402
-from orchestrateur import lots  # noqa: E402
-from orchestrateur import memoire  # noqa: E402
-from orchestrateur import metiers  # noqa: E402
-from orchestrateur import modele_necessaire as mn  # noqa: E402
-from orchestrateur import recrutement as rc  # noqa: E402
-from orchestrateur import regles_projet as rp  # noqa: E402
-from orchestrateur import anomalies as anomalies_logiciel  # noqa: E402
-from orchestrateur import questions as questions_projet  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
-from orchestrateur import workflows as wf  # noqa: E402
-from partenaires import catalogue as pcat  # noqa: E402
-from partenaires import choix as pchoix  # noqa: E402
-from partenaires import detection as pdet  # noqa: E402
-from partenaires import etat as petat  # noqa: E402
-from partenaires import quota as pquota  # noqa: E402
+
+fj = _a_la_demande("bureau.fichiers_joints")
+rel = _a_la_demande("bureau.releve")
+depart = _a_la_demande("orchestrateur.depart")
+transcriptions = _a_la_demande("orchestrateur.transcriptions")
+lx = _a_la_demande("orchestrateur.lieux")
+lots = _a_la_demande("orchestrateur.lots")
+memoire = _a_la_demande("orchestrateur.memoire")
+metiers = _a_la_demande("orchestrateur.metiers")
+mn = _a_la_demande("orchestrateur.modele_necessaire")
+rc = _a_la_demande("orchestrateur.recrutement")
+rp = _a_la_demande("orchestrateur.regles_projet")
+anomalies_logiciel = _a_la_demande("orchestrateur.anomalies")
+questions_projet = _a_la_demande("orchestrateur.questions")
+wf = _a_la_demande("orchestrateur.workflows")
+pcat = _a_la_demande("partenaires.catalogue")
+pchoix = _a_la_demande("partenaires.choix")
+pdet = _a_la_demande("partenaires.detection")
+petat = _a_la_demande("partenaires.etat")
+pquota = _a_la_demande("partenaires.quota")
 
 MAX_IMAGES = 4
 MAX_OCTETS_IMAGE = 5 * 1024 * 1024

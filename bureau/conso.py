@@ -24,6 +24,7 @@ from . import abonnement
 URL = "https://api.anthropic.com/api/oauth/usage"
 IDENTIFIANTS = Path.home() / ".claude" / ".credentials.json"
 DUREE_CACHE = 60.0
+DUREE_CACHE_SANS_CONNEXION = 10.0   # sans jeton, la lecture n'est que celle d'un fichier local
 MARGE_JETON = 300.0               # un jeton qui expire dans moins de 5 min est déjà à renouveler
 INTERVALLE_RENOUVELLEMENT = 300.0  # au plus un renouvellement toutes les 5 min
 DELAI_RENOUVELLEMENT = 30
@@ -49,6 +50,32 @@ def renouveler_connexion():
         return True
     except Exception:   # absente, délai dépassé, refus du système : on se rabat, sans lever
         return False
+
+
+def raison_de_connexion(resultat):
+    """Vrai quand la lecture du compte a manqué faute de connexion Claude Code (jeton absent ou à renouveler)."""
+    return not resultat.get("disponible") and str(resultat.get("raison") or "").startswith("Connexion")
+
+
+def lancer_connexion(trouver=None, lancer=subprocess.Popen):
+    """(code HTTP, objet JSON) : ouvre `claude auth login` dans une console à part (Windows) pour que l'utilisateur se
+    reconnecte ; la commande ouvre elle-même la page de connexion du navigateur. Le bureau ne voit ni ne lit rien de
+    ce qui s'y tape ; il relira le jeton à la prochaine lecture. Seulement sur le clic de l'utilisateur."""
+    if trouver is None:
+        from moteur import appel
+        trouver = appel.trouver_claude
+    try:
+        claude = trouver()
+    except Exception:
+        claude = None
+    if not claude:
+        return 200, {"ok": False, "message": "Claude Code est introuvable sur cet ordinateur.",
+                     "a_copier": "claude auth login"}
+    try:
+        lancer([claude, "auth", "login"], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+    except Exception:
+        return 200, {"ok": False, "message": "La connexion n'a pas pu être lancée.", "a_copier": "claude auth login"}
+    return 200, {"ok": True, "message": "Connexion lancée : terminez-la dans la fenêtre et le navigateur ouverts."}
 
 
 def _jeton(chemin, marge=0):
@@ -152,7 +179,7 @@ class Conso:
         self.identifiants, self._telecharger, self._horloge = identifiants, telecharger, horloge
         self.memoire, self._part, self._maintenant = memoire, part, maintenant
         self._renouveler, self._dernier_renouvellement = renouveler, None
-        self._verrou, self._cache, self._a = threading.Lock(), None, 0.0
+        self._verrou, self._cache, self._a, self._duree = threading.Lock(), None, 0.0, DUREE_CACHE
 
     def _jeton_renouvele(self):
         """Le jeton à utiliser : s'il expire dans moins de `MARGE_JETON`, on demande à Claude Code de le renouveler (au
@@ -181,11 +208,18 @@ class Conso:
         except (OSError, ValueError):
             return {"disponible": False, "raison": "Consommation indisponible (réseau)."}
 
+    def oublier(self):
+        """Vide le cache : la prochaine lecture interroge à nouveau le compte (après une reconnexion)."""
+        with self._verrou:
+            self._cache = None
+
     def lire(self):
         with self._verrou:
-            if self._cache is not None and self._horloge() - self._a < DUREE_CACHE:
+            if self._cache is not None and self._horloge() - self._a < self._duree:
                 return self._cache
             resultat, maintenant = self._lecture(), self._maintenant()
+            # Sans jeton, rien ne part sur le réseau : on relit le fichier plus souvent pour voir vite une reconnexion.
+            self._duree = DUREE_CACHE_SANS_CONNEXION if raison_de_connexion(resultat) else DUREE_CACHE
             if self.memoire:
                 if resultat["disponible"]:
                     resultat["source"], resultat["mesure"] = "compte", int(maintenant)

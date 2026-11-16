@@ -1699,6 +1699,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"erreur": "Le bureau n'est ouvert à aucun téléphone."})
             self.server.cles.revoquer()
             return self._json(200, {"ok": True})
+        if chemin == "/api/conso/connexion":   # reconnecter Claude Code : depuis l'ordinateur seulement, sur un clic
+            self._vider_corps()
+            if self.server.distant:
+                return self._json(404, {"erreur": "Introuvable."})
+            if self.headers.get("X-Bureau") != "1":
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            self.server.conso.oublier()
+            return self._json(*conso.lancer_connexion())
         if chemin == "/api/lancement":   # le premier lancement a été proposé : il ne le sera plus
             self._vider_corps()
             if self.headers.get("X-Bureau") != "1":

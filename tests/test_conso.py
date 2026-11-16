@@ -267,3 +267,40 @@ class Memoire(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Connexion(unittest.TestCase):
+    """Le bouton « Se connecter » : `claude auth login` dans une console à part ; sans connexion, relecture rapide."""
+
+    def test_lance_claude_auth_login(self):
+        vus = []
+        code, r = conso.lancer_connexion(trouver=lambda: "claude.exe", lancer=lambda args, **k: vus.append((args, k)))
+        self.assertEqual((code, r["ok"]), (200, True))
+        self.assertEqual(vus[0][0], ["claude.exe", "auth", "login"])
+        self.assertEqual(vus[0][1]["creationflags"], getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+
+    def test_claude_absent_ou_lancement_refuse(self):
+        _, r = conso.lancer_connexion(trouver=lambda: None, lancer=lambda *a, **k: self.fail("rien à lancer"))
+        self.assertEqual((r["ok"], r["a_copier"]), (False, "claude auth login"))
+        def refus(*a, **k):
+            raise OSError("refus")
+        _, r = conso.lancer_connexion(trouver=lambda: "claude.exe", lancer=refus)
+        self.assertFalse(r["ok"])
+
+    def test_sans_connexion_relecture_toutes_les_10_s_et_oublier(self):
+        with tempfile.TemporaryDirectory() as t:
+            chemin = identifiants(t, jeton="")
+            heure, vus = [0.0], []
+            c = conso.Conso(chemin, lambda j: vus.append(j) or BRUT, horloge=lambda: heure[0])
+            self.assertTrue(conso.raison_de_connexion(c.lire()))
+            identifiants(t)                      # l'utilisateur s'est reconnecté
+            heure[0] = 5.0
+            self.assertFalse(c.lire()["disponible"])   # encore en cache
+            heure[0] = 11.0
+            self.assertTrue(c.lire()["disponible"])
+            heure[0] = 30.0
+            c.lire()
+            self.assertEqual(len(vus), 1)        # connecté : de nouveau 60 s de cache
+            c.oublier()
+            c.lire()
+            self.assertEqual(len(vus), 2)

@@ -1038,6 +1038,21 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestConnexionClaude(AvecServeur):
+    """« Se connecter » : un POST du bureau lance `claude auth login` (simulé ici) ; refusé sans l'en-tête."""
+
+    def test_post_lance_la_connexion(self):
+        from unittest import mock
+        from bureau import conso as conso_
+        with mock.patch.object(conso_, "lancer_connexion", return_value=(200, {"ok": True, "message": "m"})) as l:
+            r, _ = self.req("POST", "/api/conso/connexion", "", {"Content-Type": "application/json"})
+            self.assertEqual(r.status, 403)
+            l.assert_not_called()
+            r, data = self.req("POST", "/api/conso/connexion", "", self.ENT)
+            self.assertEqual((r.status, json.loads(data)["ok"]), (200, True))
+            l.assert_called_once()
+
+
 class FileDeConnexions(__import__("unittest").TestCase):
     def test_la_file_accepte_le_chargement_de_la_page(self):
         """Cas réel : la page charge près de 300 fichiers ; avec la file par défaut (5), page vide."""

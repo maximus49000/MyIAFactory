@@ -187,7 +187,12 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 /* --- Les jauges de l'abonnement Claude (5 h, semaine) : orange à 80 %, rouge à 95 %. --- */
 .jauges { flex: none; display: flex; align-items: center; gap: 12px; font-size: 12px; cursor: default; }
 .jauges[hidden], .jauges-vide[hidden], .jauge[hidden] { display: none; }
-.jauges-vide { font-weight: 700; color: #6d6980; white-space: nowrap; }
+.jauges-vide { font-weight: 700; color: #6d6980; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.connexion-claude { display: inline-flex; align-items: center; gap: 8px; }
+.connexion-claude[hidden], .connexion-claude-retour[hidden] { display: none; }
+.connexion-claude-retour { font-weight: 400; white-space: normal; max-width: 260px; }
+.connexion-claude-retour[data-ok="false"] { color: #b6401c; }
+.conso-panneau .connexion-claude { margin-top: 8px; flex-wrap: wrap; }
 .jauge { --ton: #3f9d5a; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .jauge[data-ton="attention"] { --ton: #d9962b; }
 .jauge[data-ton="alerte"] { --ton: #d65a31; }

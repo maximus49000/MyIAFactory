@@ -7,7 +7,7 @@
 // Tout texte venu du serveur passe par textContent.
 
 import {tonReste, agePhrase, lignePart, definirConsoCourante} from "./mesure.js";
-import {heureRemise} from "./abonnement.js";
+import {heureRemise, connexionAProposer, creerBoutonConnexion, EVENEMENT_RELIRE} from "./abonnement.js";
 import {dessiner, ligneRythme, tonEcart, ecartRythme} from "./semaine.js";
 import {ouvrirSemaines, lireSemaines, lireSerie} from "./semaine-vue.js";
 
@@ -104,6 +104,7 @@ export function creerConso(url = "/api/conso") {
     panneau.append(el("div", "conso-titre", dispo ? `Il reste ${Math.round(c.reste)} %` : "Consommation Claude Code"));
     if (!dispo) {
       panneau.append(el("p", "conso-vide", c?.raison || "Consommation indisponible."));
+      if (connexionAProposer(c)) panneau.append(creerBoutonConnexion());
       return;
     }
     if (c.source === "moteur") {
@@ -187,5 +188,6 @@ export function creerConso(url = "/api/conso") {
   afficher();
   rafraichir();
   setInterval(() => { if (!document.hidden) rafraichir(); }, INTERVALLE);
+  window.addEventListener(EVENEMENT_RELIRE, () => rafraichir());   // après « Se connecter » : voir vite la reconnexion
   return racine;
 }

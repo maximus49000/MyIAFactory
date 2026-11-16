@@ -100,11 +100,69 @@ function el(tag, classe, texte) {
   return e;
 }
 
+// --- Sans mesure : la raison, et un bouton pour reconnecter Claude Code quand c'est la connexion qui manque.
+
+// Vrai quand la lecture a manqué faute de connexion Claude Code (jeton absent ou à renouveler).
+export function connexionAProposer(c) {
+  return !!c && c.disponible !== true && /^Connexion/.test(String(c.raison || ""));
+}
+
+// « abonnement : connexion Claude Code introuvable » ; « abonnement : pas de mesure » sans raison connue.
+export function texteSansMesure(c) {
+  const raison = String(c?.raison || "").trim().replace(/[.\s]+$/, "");
+  return "abonnement : " + (raison ? raison.charAt(0).toLowerCase() + raison.slice(1) : "pas de mesure");
+}
+
+// Demande au bureau d'ouvrir `claude auth login`. Rend {ok, message}.
+export async function lancerConnexion(fetchFn = fetch) {
+  try {
+    const r = await fetchFn("/api/conso/connexion", {method: "POST", headers: {"X-Bureau": "1"}});
+    let d = {};
+    try { d = await r.json(); } catch { /* corps illisible */ }
+    if (!r.ok) return {ok: false, message: d?.erreur || `Le serveur a répondu ${r.status}.`};
+    const copier = typeof d.a_copier === "string" ? ` Tapez « ${d.a_copier} » dans un terminal.` : "";
+    return {ok: d.ok === true, message: String(d.message || "") + (d.ok === true ? "" : copier)};
+  } catch {
+    return {ok: false, message: "Connexion impossible à lancer : serveur injoignable."};
+  }
+}
+
+export const EVENEMENT_RELIRE = "conso:relire";
+const RELECTURES_MS = [15000, 30000, 60000, 120000];   // le temps de terminer la connexion dans le navigateur
+
+// Le bouton « Se connecter » et son message de retour ; après le lancement, le rond relit la consommation.
+export function creerBoutonConnexion(fetchFn = fetch) {
+  const bloc = el("span", "connexion-claude");
+  const bouton = el("button", "bouton-barre connexion-claude-bouton", "Se connecter");
+  bouton.type = "button";
+  bouton.title = "Ouvre « claude auth login » : terminez la connexion dans le navigateur";
+  const retour = el("span", "connexion-claude-retour");
+  retour.hidden = true;
+  bouton.addEventListener("click", async (e) => {
+    e.stopPropagation?.();
+    bouton.disabled = true;
+    const r = await lancerConnexion(fetchFn);
+    retour.textContent = r.message;
+    retour.hidden = !r.message;
+    retour.dataset.ok = String(r.ok);
+    bouton.disabled = false;
+    if (r.ok && typeof window !== "undefined") {
+      for (const ms of RELECTURES_MS) setTimeout(() => window.dispatchEvent(new Event(EVENEMENT_RELIRE)), ms);
+    }
+  });
+  bloc.append(bouton, retour);
+  return bloc;
+}
+
 export function creerJauges() {
   const racine = el("div", "jauges");
   racine.setAttribute("aria-label", "Abonnement Claude");
   racine.hidden = true;
-  const vide = el("span", "jauges-vide", "abonnement : pas de mesure");
+  const vide = el("span", "jauges-vide");
+  const texteVide = el("span", "jauges-vide-texte", "abonnement : pas de mesure");
+  const connexion = creerBoutonConnexion();
+  connexion.hidden = true;
+  vide.append(texteVide, connexion);
   const lignes = FENETRES.map(([cle, nom]) => {
     const jauge = el("div", "jauge");
     const tete = el("span", "jauge-tete");
@@ -126,6 +184,8 @@ export function creerJauges() {
     if (racine.hidden) return;
     const mesure = lignes.some((l) => vueJauge(l.cle, c, maintenant));
     vide.hidden = !!mesure;
+    texteVide.textContent = texteSansMesure(c);
+    connexion.hidden = !!mesure || !connexionAProposer(c);
     racine.title = mesure ? "Part de l'abonnement Claude utilisée (tout le compte, vos autres sessions comprises)"
       : "Aucune mesure de l'abonnement pour l'instant";
     for (const l of lignes) {

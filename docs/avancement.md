@@ -115,6 +115,20 @@ Le workflow défini dès la création d'un projet, et les outils à installer ([
 - [x] F. Le banc gratuit et l'essai réel de la création au bureau
 - [x] Outils à installer : objectif, lien officiel, mode opératoire, bouton « Installer en autonomie » (jamais sans clic)
 
+« Nouvelle correction » et « Une question » ([conception](superpowers/specs/2026-11-16-correction-et-question-design.md), [plan](superpowers/plans/2026-11-16-correction-et-question.md), [passation](superpowers/plans/2026-11-16-correction-et-question-passation.md)) — 2026-11-16 :
+
+- [x] 1. Le stockage des questions (`.factory/questions.jsonl`, commande `lancer questions`)
+- [x] 2. Les demandes du bureau (`nature`, `concerne`, `question`, `question_approfondir`)
+- [x] 3. Le workflow de correction construit par le code
+- [x] 4. Le parcours d'une correction dans le moteur (fiche, consigne de l'étape)
+- [x] 5. Le jugement `repondre_question`
+- [x] 6. L'agent lecteur (Read, Grep, Glob), forcé sur `claude -p`
+- [x] 7. Les boutons « + Nouvelle correction » et « ? Une question », le mode correction du formulaire, le badge
+- [x] 8. Le panneau « Questions » ; le serveur du bureau publie `questions`
+- [x] 9. La documentation ; la démo répond aux questions par des réponses fixes
+- [ ] Reste : la revue finale de la branche, la suite complète comparée aux 10 échecs préexistants, la fusion dans `main`
+  et un essai réel au bureau d'un projet installé (le moteur répond, l'agent lecteur lit le code)
+
 ## État
 
 le bureau vivant est terminé, le bureau agit (il transmet à un projet les gestes de l'utilisateur et montre le détail des tâches), et chaque service a son dossier : tâches, connaissances partagées entre agents, KPI, coût estimé en euros d'après les tokens, et le geste « Challenger » qui mène d'un problème à une connaissance validée (voir « Les dossiers des services » dans [docs/installation.md](installation.md)). Le projet 3, le parcours d'une tâche, est réalisé dans ce dépôt : un bureau qui suit plusieurs projets, « + Nouvelle fonctionnalité » et la discussion de cadrage, le Directeur enrichi, le catalogue de chaque fonctionnalité, et un **orchestrateur générique** ([consignes](../orchestrateur/consignes.md), [interface des commandes](../orchestrateur/interface.md), [guide de passage](orchestrateur.md)) avec sa mémoire à trois étages. Le vrai passage de bout en bout est fait (phase G). **Projet 3 terminé, vérifié sur le projet pilote** (voir la [passation](superpowers/plans/2026-11-10-parcours-d-une-tache-passation.md)). Depuis, un **moteur procédural** (`py -3.12 -m moteur`, banc d'essai dans `banc/`) applique ces consignes sans conversation orchestratrice ; **chaque fonctionnalité a son genre et son workflow** (classement de la demande, cohérence avec la description du projet, workflow repris ou dédié) ; un projet se **crée au bureau en définissant son workflow avec le chef**, avec des étapes de validation du Directeur ; et les **outils manquant sur le poste** se vérifient, s'expliquent (objectif, lien officiel, mode opératoire) et ne s'installent en autonomie que sur clic (voir « Créer un projet depuis le bureau » et les sections suivantes de [docs/installation.md](installation.md)).

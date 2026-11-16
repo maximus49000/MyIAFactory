@@ -1293,3 +1293,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 Quand on ajoute un paramètre après un paramètre de type fonction, le lambda de fin se lie au nouveau dernier paramètre : compiler les tests après tout changement de signature et passer le lambda entre parenthèses.
+
+## S216 — Corriger à la source ce qui a été rattrapé depuis l'interface
+Rôles : orchestrateur
+Date : 2026-11-16
+
+Quand un traitement a dû être fait ou rattrapé à la main depuis l'interface Claude Code parce que le bureau n'a pas su le faire seul, corriger la cause à la source, dans le code de la skill, pour que le bureau redevienne autonome ; le contournement à la main ne suffit pas. Si le compte GitHub connecté (gh api user) est le propriétaire du dépôt de la skill (git remote get-url origin), commiter la correction avec ses tests et la pousser directement. Sinon, ne rien pousser : ouvrir une issue sur le dépôt de la skill qui décrit le problème, sa cause et la correction proposée ; elle sera analysée avant d'être fusionnée.

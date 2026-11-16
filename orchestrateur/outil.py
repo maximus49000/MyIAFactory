@@ -64,6 +64,7 @@ mn = _a_la_demande("orchestrateur.modele_necessaire")
 rc = _a_la_demande("orchestrateur.recrutement")
 rp = _a_la_demande("orchestrateur.regles_projet")
 anomalies_logiciel = _a_la_demande("orchestrateur.anomalies")
+questions_projet = _a_la_demande("orchestrateur.questions")
 wf = _a_la_demande("orchestrateur.workflows")
 pcat = _a_la_demande("partenaires.catalogue")
 pchoix = _a_la_demande("partenaires.choix")
@@ -83,7 +84,8 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
-                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant")
+                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant",
+                 "question", "question_approfondir")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -551,7 +553,12 @@ def cmd_actions(ctx, e):
         demande["id"] = f"r{su.suivant(s, 'r')}"
         demande["statut"], demande["reponse"] = "en attente", None
         if genre == "fonctionnalite":
-            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40])
+            nature = e.get("nature") or "fonctionnalite"
+            if nature not in ("fonctionnalite", "correction"):
+                raise Refus("« nature » vaut fonctionnalite ou correction.")
+            if e.get("concerne") is not None:
+                _fonc(s, e["concerne"])
+            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"))
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
             su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
@@ -560,6 +567,22 @@ def cmd_actions(ctx, e):
                 demande["images"] = images
             if fichiers:
                 demande["fichiers"] = fichiers
+        elif genre == "question":
+            images = _pieces_jointes(ctx, e, "questions")[0]
+            try:
+                if e.get("fil"):
+                    q = questions_projet.ajouter(ctx.f, e["fil"], {"auteur": "utilisateur", "texte": texte(e, "texte"),
+                                                                   "images": images})
+                else:
+                    if e.get("fonctionnalite") is not None:
+                        _fonc(s, e["fonctionnalite"])
+                    q = questions_projet.ouvrir(ctx.f, {"texte": texte(e, "texte"), "images": images,
+                                                        "fonctionnalite": e.get("fonctionnalite")})
+            except ValueError as ex:
+                raise Refus(str(ex))
+            demande["fil"] = q["id"]
+            if images:
+                demande["images"] = images
         elif genre == "message":
             f = _fonc(s, e.get("fonctionnalite"))
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
@@ -667,6 +690,7 @@ def _fonc_compacte(f):
     return {
         "id": f["id"], "nom": f["nom"], "etape": f["etape"], "genre": f.get("genre"), "workflow": f.get("workflow"),
         "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"],
+        "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
         "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
         "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
                    "valide_le": cahier.get("valide_le")} if cahier else None,
@@ -1608,6 +1632,35 @@ def _reprendre_le_workflow_de_creation(ctx, e):
     return {"ok": True, "workflow": copie["id"]}
 
 
+def _workflow_de_correction(ctx, e):
+    """`{"action": "correction", "fonctionnalite", "role_production", "role_qa"?}` : le workflow d'une correction
+    (`workflows.de_correction`), écrit sans service, agent ni brief nouveau, sans décision. Les rôles viennent du moteur
+    (`_role_production`, `_role_qa`) ; un rôle dont aucune étape du projet ne dit le service est refusé."""
+    from installation.dossier import Echec
+    from installation import mise_en_place
+    fid, production = texte(e, "fonctionnalite"), texte(e, "role_production")
+    qa = e.get("role_qa") or None
+    if qa is not None and not isinstance(qa, str):
+        raise Refus("« role_qa » est un rôle (texte) ou nul.")
+    with ctx.suivi.transaction() as s:
+        fonc = su.fonctionnalite(s, fid)
+        if fonc is None or fonc.get("nature") != "correction":
+            raise Refus(f"{fid} n'est pas une correction.")
+        if fonc.get("workflow"):
+            raise Refus(f"La fonctionnalité {fid} a déjà un workflow ({fonc['workflow']}).")
+        try:
+            w = wf.de_correction(ctx.f, fid, production, qa)
+        except ValueError as ex:
+            raise Refus(str(ex))
+        try:
+            mise_en_place.ecrire_organisation(ctx.f["chemin"], [dict(x) for x in ctx.f["services"]], w["flux"], [], {},
+                                              workflow=w)
+        except Echec as ex:
+            raise Refus(str(ex))
+        fonc["genre"], fonc["workflow"], fonc["maj"] = w["genre"], w["id"], su.maintenant()
+    return {"ok": True, "workflow": w["id"]}
+
+
 def cmd_organisation(ctx, e):
     """Applique une décision `organisation` acceptée : services, flux (ou workflow d'une fonctionnalité), fiches et
     briefs, puis lève la décision. `fable` : les clés des agents que le Directeur a cochés pour Fable (parmi ceux dont la
@@ -1620,8 +1673,10 @@ def cmd_organisation(ctx, e):
         return _reprendre_le_workflow_de_creation(ctx, e)
     if e.get("action") == "installateur":
         return _recruter_l_installateur(ctx, e)
+    if e.get("action") == "correction":
+        return _workflow_de_correction(ctx, e)
     if e.get("action") != "appliquer":
-        raise Refus("« action » doit valoir appliquer (ou environnement, reprendre ou installateur).")
+        raise Refus("« action » doit valoir appliquer (ou environnement, reprendre, installateur ou correction).")
     i = texte(e, "decision")
     fable = e.get("fable", [])
     if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):
@@ -2295,6 +2350,7 @@ def construire_releve(ctx):
     for f in s["fonctionnalites"]:
         v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"],
              "agent_cadrage": f["agent_cadrage"] if f["agent_cadrage"] in cles else None,    # un agent retiré : plus d'agent
+             "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
              "attend_reponse": f["attend_reponse"], "discussion": [],
              "decisions": [_decision_au_releve(d, s, f["id"]) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
@@ -2372,6 +2428,7 @@ def construire_releve(ctx):
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
          "anomalies_logiciel": anomalies_logiciel.lire(ctx.f)[-ANOMALIES_AU_RELEVE:],
+        "questions": questions_projet.lire(ctx.f)[-QUESTIONS_AU_RELEVE:],
          "recrutement": releve_recrutement(ctx, s, fiches),
          "etapes_lieux": etapes_lieux_du_releve(ctx)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
@@ -3661,6 +3718,30 @@ def cmd_anomalies(ctx, e):
     raise Refus("« action » doit valoir lister, ajouter ou marquer.")
 
 
+QUESTIONS_AU_RELEVE = 50
+
+
+def cmd_questions(ctx, e):
+    """Les questions sur le projet (`.factory/questions.jsonl`, voir `orchestrateur/questions.py`) : `lister` (défaut),
+    `ouvrir` (texte, images?, fonctionnalite?), `ajouter` (id, auteur, texte, niveau?, sur?, suggestion?,
+    fichiers_lus?), `marquer` (id, etat). Seul écrivain du fichier."""
+    action = e.get("action", "lister")
+    try:
+        if action == "lister":
+            return {"questions": questions_projet.lire(ctx.f)}
+        if action == "ouvrir":
+            if e.get("fonctionnalite") is not None:
+                _fonc(ctx.suivi.lire(), e["fonctionnalite"])      # Refus si inconnue
+            return {"question": questions_projet.ouvrir(ctx.f, e)}
+        if action == "ajouter":
+            return {"question": questions_projet.ajouter(ctx.f, e.get("id"), e)}
+        if action == "marquer":
+            return {"question": questions_projet.marquer(ctx.f, e.get("id"), e.get("etat"))}
+    except ValueError as ex:
+        raise Refus(str(ex))
+    raise Refus("« action » doit valoir lister, ouvrir, ajouter ou marquer.")
+
+
 def cmd_regles(ctx, e):
     """Les règles du projet (`.factory/regles-projet.json`) : `lister`, `ajouter` (texte, origine?), `modifier` (id, texte),
     `supprimer` (id). Seul écrivain du fichier."""
@@ -3801,7 +3882,7 @@ COMMANDES = {
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
-    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
     "lieux": (cmd_lieux, "obligatoire"),
 }
 

@@ -41,6 +41,7 @@ CLOUD_MUETTE_S = 2 * 3600        # une session sans rapport au bout de deux heur
 BUREAU_PAR_DEFAUT = "~/MyIAFactory/bureau.json"
 AGENT_ORCHESTRATEUR = "orchestrateur"
 ETAPE_ORCHESTRATION = "orchestration"
+ETAPE_QUESTIONS = "questions"    # les réponses aux questions (jugement et agent lecteur) : leur ligne à la facturation
 DELAI_GIT_S = 60
 INTERVALLE_MAJ_S = 15 * 60       # la skill regarde GitHub toutes les 15 minutes (conception 2026-11-16-mise-a-jour-automatique)
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
@@ -153,6 +154,7 @@ class Moteur:
         self.registre_de = registre or detache.Registre    # dossier de la factory -> les agents détachés du projet
         self._registres = {}
         self.projets, self.etats, self.retours, self.journal = [], {}, queue.Queue(), []
+        self.lectures = queue.Queue()      # (projet, suite, objet, usages) rendus par les agents lecteurs (`_lire`)
         self.dernier_quota = {}
         self.file_installations = []       # (clé du projet, tâche) des installations prêtes, dans l'ordre d'arrivée
         self.pause_installation = None     # {texte, projet, outils} quand une installation retient tout le bureau
@@ -331,6 +333,7 @@ class Moteur:
         self._relever_le_cloud(projet, etat)
         self._traiter_les_reveils()
         self._retours_des_agents(projet, etat)
+        self._retours_des_lectures(projet)
         self._surveiller_les_commandes(projet)
         self._traiter_les_reveils()
         self._executer(projet, regles.avancer(projet, etat))
@@ -409,6 +412,10 @@ class Moteur:
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
             self._noter(projet, f"reprises : {e}")
         self._executer(projet, regles.orphelines(projet, etat))
+        try:    # un lecteur mort avec l'ancien moteur : son fil ne reste pas « en lecture »
+            regles.lecture_interrompue(projet)
+        except (regles.Refus, regles.ErreurMoteur, OSError) as e:
+            self._noter(projet, f"lectures interrompues : {e}")
         try:    # arrêtée faute d'outil, dont la fiche l'ouvre maintenant : la tâche repart, une fois
             self._executer(projet, regles.reprendre_les_taches_sans_outil(projet, etat))
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
@@ -616,6 +623,8 @@ class Moteur:
                     file += self._juger(projet, action)
                 elif action[0] == "agent":
                     self._partir(projet, action)
+                elif action[0] == "lire":
+                    self._lire(projet, action)
             except (regles.Refus, regles.ErreurMoteur) as e:
                 self._signaler(projet, action, e)
             except Exception as e:     # un appel au modèle en échec, une réponse illisible… (essai réel : la validation
@@ -646,8 +655,63 @@ class Moteur:
                                       modele=suite.get("modele"))
         finally:
             attente.effacer(chef)
-        self._noter_usages(projet, decision.usages, AGENT_ORCHESTRATEUR, ETAPE_ORCHESTRATION, tache=suite.get("tache"))
+        etape = ETAPE_QUESTIONS if type_ == "repondre_question" else ETAPE_ORCHESTRATION
+        self._noter_usages(projet, decision.usages, AGENT_ORCHESTRATEUR, etape, tache=suite.get("tache"))
         return regles.appliquer_jugement(projet, type_, decision, suite, self._etat(projet))
+
+    def _lire(self, projet, action):
+        """L'agent lecteur d'une question (Read, Grep, Glob, sur Sonnet, dans le dossier du projet), dans un fil ; son
+        résultat revient par la file `lectures`. Jamais d'exception : tout échec revient comme une lecture vide, que
+        `regles.appliquer_lecture` dit dans le fil (le fil ne reste jamais « en lecture »)."""
+        _, fil, suite = action
+
+        def travail():
+            objet, usages = None, []
+            try:
+                dossier = regles.dossier_de_lecture(projet, fil)
+                consigne = regles.CONSIGNE_LECTEUR.read_text(encoding="utf-8")
+                r = self.appeler(consigne, json.dumps(dossier, ensure_ascii=False), regles.MODELE_LECTEUR,
+                                 # toujours claude -p (comme un agent de production) : la couche « api » ignore
+                                 # les outils et le dossier, le lecteur répondrait sans lire le code
+                                 couche="claude", outils=list(regles.OUTILS_LECTEUR),
+                                 dossier_travail=str(projet.dossier))
+                objet, usages = jugement.extraire_json(r.texte), r.usages
+            except Exception as ex:          # noqa: BLE001 — une erreur n'arrête jamais la boucle
+                usages = getattr(ex, "usages", None) or []      # `appel.ErreurAppel` porte l'usage d'un appel raté
+                self._noter(projet, f"lecture du code ratée ({fil}) : {ex}")
+            finally:
+                self.lectures.put((projet, suite, objet, usages))
+
+        if self.synchrone:
+            travail()
+        else:
+            threading.Thread(target=travail, name=f"lecteur-{fil}", daemon=True).start()
+
+    def _retours_des_lectures(self, projet):
+        """Les lectures rendues pour ce projet : l'usage noté (ligne « Questions »), la réponse écrite dans le fil.
+        Si l'écriture échoue, le fil est quand même rendu (`repondue`) pour ne pas rester « en lecture »."""
+        garde = []
+        while True:
+            try:
+                p, suite, objet, usages = self.lectures.get_nowait()
+            except queue.Empty:
+                break
+            if p is not projet:
+                garde.append((p, suite, objet, usages))
+                continue
+            self._noter_usages(projet, usages, AGENT_ORCHESTRATEUR, ETAPE_QUESTIONS)
+            try:
+                actions = regles.appliquer_lecture(projet, self._etat(projet), suite, objet, usages)
+            except Exception as ex:          # noqa: BLE001
+                self._noter(projet, f"lecture du code ({suite.get('fil')}) : {ex}")
+                try:
+                    actions = regles.appliquer_lecture(projet, self._etat(projet), suite, None, [])
+                except Exception as ex2:     # noqa: BLE001 — le fil a disparu, ou l'outil refuse : dit au journal
+                    self._noter(projet, f"lecture du code ({suite.get('fil')}) : {ex2}")
+                    actions = []
+            self._executer(projet, actions)
+        for x in garde:
+            self.lectures.put(x)
 
     def _partir(self, projet, action):
         _, cle, taches, matiere = action

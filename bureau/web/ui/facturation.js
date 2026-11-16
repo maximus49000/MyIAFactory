@@ -82,9 +82,10 @@ export function lignesDiscussions(s, etat) {
 // Le total général du projet et la part « direction / hors service » (qui n'a pas de dossier).
 export function totalProjet(f) {
   return {total: f?.total ?? 0, direction: f?.direction?.total ?? 0, orchestration: f?.orchestration?.total ?? 0,
-          sansPrix: (f?.sans_prix || []).length > 0,
+          questions: f?.questions?.total ?? 0, sansPrix: (f?.sans_prix || []).length > 0,
           ...avec(f?.co2), ...(f?.direction?.co2 ? {co2Direction: f.direction.co2} : {}),
-          ...(f?.orchestration?.co2 ? {co2Orchestration: f.orchestration.co2} : {})};
+          ...(f?.orchestration?.co2 ? {co2Orchestration: f.orchestration.co2} : {}),
+          ...(f?.questions?.co2 ? {co2Questions: f.questions.co2} : {})};
 }
 
 // Les partenaires dans la facturation : une ligne par partenaire (coût en euros ; le coût d'origine est en info-bulle).
@@ -260,6 +261,9 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   conteneur.append(rangee("↳ dont orchestration (les décisions du moteur)",
                           avecCO2(coutEnClair(donnees.orchestration || {total: 0}), projet.co2Orchestration), "etape",
                           projet.co2Orchestration));
+  conteneur.append(rangee("↳ dont questions (les réponses sur le projet)",
+                          avecCO2(coutEnClair(donnees.questions || {total: 0}), projet.co2Questions), "etape",
+                          projet.co2Questions));
   const noteEmpreinte = projet.co2 ? marquerPart(el("p", "note", `Empreinte carbone estimée : ${etiquetteCO2(projet.co2)}`)) : null;
   if (noteEmpreinte) conteneur.append(noteEmpreinte);
   const equivalences = ligneEquivalences(projet.co2);   // « Équivaut à ≈ … » pour tout le projet

@@ -74,8 +74,10 @@ export function creerBarre(entete, bandeau) {
   boutonListe.type = "button";
   boutonListe.hidden = true;  // montré seulement pour un relevé qui a la vue liste (version 2)
   const boutonNouvelle = el("button", "bouton-barre", "+ Nouvelle fonctionnalité");
+  const boutonCorrection = el("button", "bouton-barre", "+ Nouvelle correction");
+  const boutonQuestion = el("button", "bouton-barre", "? Une question");
   const boutonFonctions = el("button", "bouton-barre", "Fonctionnalités");
-  for (const b of [boutonNouvelle, boutonFonctions]) { b.type = "button"; b.hidden = true; }   // relevé v4 et `agir`
+  for (const b of [boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions]) { b.type = "button"; b.hidden = true; }   // relevé v4 et `agir`
   const zoneLivrable = el("span", "barre-livrable");
   zoneLivrable.hidden = true;
   const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
@@ -87,7 +89,7 @@ export function creerBarre(entete, bandeau) {
   const blocAbonnement = el("div", "bloc-abonnement");
   blocAbonnement.append(creerConso(), jauges);
   surConso(() => jauges.maj());
-  entete.append(blocAbonnement, titre, leVoyant, retenue, zoneActions, boutonNouvelle, boutonFonctions, zoneLivrable, boutonListe,
+  entete.append(blocAbonnement, titre, leVoyant, retenue, zoneActions, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, zoneLivrable, boutonListe,
                 boutonTelephone, charge);
   // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
   new ResizeObserver(() => {
@@ -313,7 +315,7 @@ export function creerBarre(entete, bandeau) {
       boutonListe.hidden = !listeDisponible(etat);
       majActions(etat);
       const v4 = (etat.version ?? 1) >= 4 && etat.agir === true;
-      boutonNouvelle.hidden = boutonFonctions.hidden = !v4;
+      boutonNouvelle.hidden = boutonCorrection.hidden = boutonQuestion.hidden = boutonFonctions.hidden = !v4;
       majLivrables(etat);
     },
     // Le relevé est indisponible : voyant en alerte et bandeau avec le message du serveur.
@@ -325,6 +327,8 @@ export function creerBarre(entete, bandeau) {
     },
     boutonListe,
     boutonNouvelle,
+    boutonCorrection,
+    boutonQuestion,
     boutonFonctions,
     // Le panneau donne de quoi ouvrir un catalogue ; la barre l'offre alors avec les livrables.
     surCatalogue(fn) { ouvrirCatalogue = fn; signatureLivrables = ""; if (dernierEtat) majLivrables(dernierEtat); },

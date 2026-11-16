@@ -446,6 +446,10 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
         ac = f.get("agent_cadrage")
         if ac is not None and not _dans(ac, cles_agents):
             erreurs.append(f"{nom} : « agent_cadrage » inconnu « {ac} ».")
+        if f.get("nature") is not None and f["nature"] not in ("fonctionnalite", "correction"):
+            erreurs.append(f"{nom} : « nature » vaut fonctionnalite ou correction.")
+        if not _texte_ou_nul(f.get("concerne")):
+            erreurs.append(f"{nom} : « concerne » doit être un texte ou nul.")
         for champ in ("attend_reponse", "catalogue"):
             if f.get(champ) is not None and not isinstance(f[champ], bool):
                 erreurs.append(f"{nom} : « {champ} » doit être vrai ou faux.")
@@ -926,6 +930,8 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
         _verifier_regles_projet(r["regles_projet"], erreurs)
     if r.get("anomalies_logiciel") is not None:
         _verifier_anomalies(r["anomalies_logiciel"], erreurs)
+    if r.get("questions") is not None:
+        _verifier_questions(r["questions"], erreurs)
     if r.get("etapes_lieux") is not None:
         _verifier_etapes_lieux(r["etapes_lieux"], "« etapes_lieux »", erreurs)
 
@@ -983,6 +989,24 @@ def _verifier_metiers(r, erreurs):
 
 MAX_REGLE_PROJET = 500
 ETATS_ANOMALIE = ("nouvelle", "vue", "reglee")
+
+
+ETATS_QUESTION = ("en_cours", "repondue", "en_lecture")
+
+
+def _verifier_questions(questions, erreurs):
+    """`questions` (version 4, facultatif) : `[{id, etat, fonctionnalite?, ouverte?, messages: [{auteur, texte, t?,
+    niveau?, sur?, suggestion?, images?, fichiers_lus?}]}]`, les questions posées sur le projet."""
+    nom = "« questions »"
+    if not isinstance(questions, list):
+        erreurs.append(f"{nom} doit être une liste de questions.")
+        return
+    for k, x in enumerate(questions, 1):
+        if (not _est_dict(x) or not _texte_plein(x.get("id")) or x.get("etat") not in ETATS_QUESTION
+                or not isinstance(x.get("messages"), list) or not x["messages"]
+                or not all(_est_dict(m) and m.get("auteur") in ("utilisateur", "factory")
+                           and isinstance(m.get("texte"), str) for m in x["messages"])):
+            erreurs.append(f"{nom} : la question {k} a « id », « etat » et des « messages » {{auteur, texte}}.")
 
 
 def _verifier_anomalies(anomalies, erreurs):
@@ -1240,6 +1264,8 @@ def _normaliser_v4(n):
         n.pop("regles_projet", None)      # absent : l'adaptateur ne les dit pas (le bureau n'en montre pas)
     if not v4 or not isinstance(n.get("anomalies_logiciel"), list):
         n.pop("anomalies_logiciel", None)     # absent : un ancien adaptateur ne les publie pas
+    if not v4 or not isinstance(n.get("questions"), list):
+        n.pop("questions", None)
     if not v4 or not isinstance(n.get("metiers"), list):
         n.pop("metiers", None)            # absent : projet à l'ancienne, les leçons sont dans les fiches
     if not v4 or not isinstance(n.get("etapes_lieux"), list):
@@ -1249,6 +1275,8 @@ def _normaliser_v4(n):
             f[c] = f[c] if isinstance(f.get(c), list) else []
         f["attend_reponse"] = f.get("attend_reponse") is True
         f["catalogue"] = f.get("catalogue") is True
+        f["nature"] = f["nature"] if f.get("nature") in ("fonctionnalite", "correction") else "fonctionnalite"
+        f["concerne"] = f["concerne"] if isinstance(f.get("concerne"), str) else None
         for c in ("cahier", "methode", "livrable", "agent_cadrage"):
             f.setdefault(c, None)
     for t in n["taches"]:

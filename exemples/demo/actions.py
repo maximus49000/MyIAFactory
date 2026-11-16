@@ -268,9 +268,41 @@ def fonctionnalite(r, d):
     f = {"id": _libre({x["id"] for x in fonctionnalites}, "f"), "nom": d["texte"].strip()[:40] or "Sans nom",
          "etape": "cadrage", "agent_cadrage": _agent_cadrage(r), "attend_reponse": False, "catalogue": False,
          "discussion": [], "decisions": []}
+    if d.get("nature") == "correction":      # une correction : le même parcours de démo, avec son badge
+        f["nature"] = "correction"
+        if d.get("concerne"):
+            f["concerne"] = d["concerne"]
     _dire(f, "utilisateur", d["texte"], _ranger_images(f["id"], d.get("images")))
     _dire(f, f["agent_cadrage"], "Merci ! Pour bien cibler : qui s'en servira, et à quel moment ? (réponse de démo)")
     fonctionnalites.append(f)
+
+
+def question(r, d):
+    """Une question : un fil neuf (ou le suivi d'un fil), avec une réponse fixe d'après les documents."""
+    fils = r.setdefault("questions", [])
+    q = next((x for x in fils if x["id"] == d.get("fil")), None) if d.get("fil") else None
+    if d.get("fil") and q is None:
+        refuser("Question inconnue : " + str(d["fil"]))
+    if q is None:
+        q = {"id": _libre({x["id"] for x in fils}, "q"), "ouverte": maintenant(), "messages": []}
+        if d.get("fonctionnalite"):
+            q["fonctionnalite"] = d["fonctionnalite"]
+        fils.append(q)
+    q["messages"].append({"auteur": "utilisateur", "texte": d["texte"], "date": maintenant()})
+    q["messages"].append({"auteur": "factory", "niveau": "documents", "sur": False, "date": maintenant(),
+                          "texte": "Réponse de démo, d'après les documents du projet. Le code n'a pas été lu.",
+                          "suggestion": {"nature": "correction", "texte": "Le comportement décrit dans ma question "
+                                         "semble anormal : le vérifier et le corriger."}})
+    q["etat"] = "repondue"
+
+
+def question_approfondir(r, d):
+    q = next((x for x in r.get("questions", []) if x["id"] == d.get("fil")), None)
+    if q is None:
+        refuser("Question inconnue : " + str(d.get("fil")))
+    q["messages"].append({"auteur": "factory", "niveau": "code", "sur": True, "date": maintenant(),
+                          "texte": "Réponse de démo, d'après le code (lecture simulée).", "fichiers_lus": ["demo/code.py:12"]})
+    q["etat"] = "repondue"
 
 
 def message(r, d):
@@ -375,7 +407,8 @@ def retour_element(r, d):
 
 GESTES = {"bouton": bouton, "deplacer": deplacer, "retour": retour, "lecon": lecon,
           "challenge": challenge, "solution": solution, "verdict_solution": verdict_solution,
-          "fonctionnalite": fonctionnalite, "message": message, "cahier": cahier, "methode": methode,
+          "fonctionnalite": fonctionnalite, "question": question,
+          "question_approfondir": question_approfondir, "message": message, "cahier": cahier, "methode": methode,
           "genre": genre, "session_cloud": session_cloud, "retour_element": retour_element}
 
 

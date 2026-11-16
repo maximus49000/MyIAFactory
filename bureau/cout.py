@@ -15,6 +15,7 @@ DUREES = {"7j": timedelta(days=7), "30j": timedelta(days=30)}
 COMPTEURS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
 SANS = ""  # clé de « hors tâche » et de « sans étape » : aucun identifiant réel n'est vide
 ETAPE_ORCHESTRATION = "orchestration"  # l'étape des usages du moteur (ses appels de jugement) : la facturation les isole
+ETAPE_QUESTIONS = "questions"   # les réponses aux questions (jugement et agent lecteur) : leur propre ligne
 FACTEUR_TACHE_CHERE = 3
 MIN_RETOURS = 2
 
@@ -157,7 +158,7 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
     `taux_de(date_iso) -> (euros pour un dollar | None, date)` convertit les coûts des partenaires en dollars."""
     if periode not in PERIODES:
         raise ValueError(f"période inconnue « {periode} »")
-    services, direction, orchestration = {}, _vide(), _vide()
+    services, direction, orchestration, questions = {}, _vide(), _vide(), _vide()
     sans_prix, dates, anciens = {}, [], 0
     lignes = []  # (service, usage, cout, prix)
     partenaires, noms = {}, _noms_partenaires(r)
@@ -180,6 +181,8 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
             anciens += 1 if ancien else 0
         if u.get("etape") == ETAPE_ORCHESTRATION:   # les appels de jugement du moteur : à part de la production
             groupe = orchestration
+        elif u.get("etape") == ETAPE_QUESTIONS:   # les réponses aux questions : ni production ni direction
+            groupe = questions
         else:
             groupe = services.setdefault(u["service"], _vide()) if u.get("service") else direction
         _ajouter(groupe, u, cout)
@@ -195,15 +198,17 @@ def facturation(usages, prix_de, r, periode, maintenant, taux_de=None):
             "prix_du": date_prix if cout is not None else None, "ancien": bool(ancien and cout is not None)})
         if u.get("service"):
             lignes.append((u["service"], u, cout, p))
-    for g in list(services.values()) + [direction, orchestration]:
+    for g in list(services.values()) + [direction, orchestration, questions]:
         _arrondir(g)
     gestion = 0.0  # le bureau ne consomme aucun token ; ses requêtes de prix ne coûtent que du temps
-    total = sum(g["total"] for g in services.values()) + direction["total"] + orchestration["total"] + gestion
+    total = (sum(g["total"] for g in services.values()) + direction["total"] + orchestration["total"] + questions["total"]
+             + gestion)
     return {
         **({"co2": avec_equivalences(total_co2.vue())} if total_co2.vue() else {}),
         "total": round(total, 6), "gestion": gestion,
         "sans_prix": sorted(sans_prix.values(), key=lambda x: x["modele"]),
         "services": services, "direction": direction, "orchestration": orchestration,
+        "questions": questions,
         "sources": _sources(services, lignes, r),
         "prix_du": max(dates) if dates else None,
         "avertissement": _avertissement(sans_prix, anciens),

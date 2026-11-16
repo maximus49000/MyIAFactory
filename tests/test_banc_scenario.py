@@ -283,6 +283,10 @@ class Passage(unittest.TestCase):
         self.assertEqual(jouer.vers_l_essai(fac, fonc, "prototype", "illustrateur"), ("prototype", "graphiste"))
         self.assertEqual(jouer.vers_l_essai(fac, {"id": "f2"}, "flux:creation", "graphiste"), ("flux:creation", "graphiste"))
 
+    def test_les_questions_comptent_comme_l_orchestration(self):
+        """Les jugements et réponses aux questions ne sont pas de la production (comme `bureau.cout`)."""
+        self.assertEqual(set(jouer.ETAPES_HORS_PRODUCTION), {"orchestration", "questions"})
+
     def test_le_poste_du_banc_est_pret(self):
         """Le banc rejoue un essai fait : les outils du poste sont tenus pour en place, aucun agent d'installation."""
         outil = {"outil": "Outil absent", "pour": "dev", "executables": ["outil-introuvable-du-banc"],

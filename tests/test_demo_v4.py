@@ -132,6 +132,21 @@ class TestDemo(AvecCopie):
         self.assertEqual(retours[-1]["texte"], "La vitrine est trop sombre.")
         self.assertTrue(retours[-1]["reponse"])
 
+    def test_demo_correction_et_question(self):
+        d = self.copie("demo")
+        r = self.demander(d, {"type": "fonctionnalite", "texte": "Le panier se vide tout seul.", "nature": "correction",
+                              "concerne": "magasin"})
+        f = r["fonctionnalites"][-1]
+        self.assertEqual((f["nature"], f["concerne"]), ("correction", "magasin"))
+        r = self.demander(d, {"type": "question", "texte": "Comment est calculé le total ?"})
+        (q,) = r["questions"]
+        self.assertEqual((q["etat"], q["messages"][-1]["niveau"]), ("repondue", "documents"))
+        r = self.demander(d, {"type": "question", "texte": "Et la remise ?", "fil": q["id"]})
+        self.assertEqual(len(r["questions"][0]["messages"]), 4)
+        r = self.demander(d, {"type": "question_approfondir", "fil": q["id"]})
+        dernier = r["questions"][0]["messages"][-1]
+        self.assertEqual((dernier["niveau"], r["questions"][0]["etat"]), ("code", "repondue"))
+
 
 class TestProjetNeuf(AvecCopie):
     def test_projet_neuf_economique(self):

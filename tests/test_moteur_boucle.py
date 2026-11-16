@@ -605,5 +605,57 @@ class Lecons(Base):
         self.assertTrue(boucle.ouvrir_projet(reglages).lecons_auto)
 
 
+class Lecteur(Base):
+    """L'agent lecteur d'une question : Read, Grep, Glob seulement, sur Sonnet, dans le dossier du projet."""
+    PREMIERE = {"reponse": "D'après les documents, la sauvegarde est automatique.", "sur": False, "suggestion": None}
+    LUE = {"reponse": "Elle écrit `sauvegarde.json` à chaque niveau.", "sur": True, "suggestion": None,
+           "fichiers_lus": ["jeu/sauvegarde.py:12"]}
+
+    def fils(self):
+        return self.ok("lancer", "questions", entree={"action": "lister"})["questions"]
+
+    def test_lecture_avec_les_seuls_outils_de_lecture(self):
+        vus = []
+
+        def appeler(consigne, dossier, modele, **kw):
+            vus.append((modele, kw.get("outils"), kw.get("dossier_travail"), kw.get("couche")))
+            return appel.Reponse(json.dumps(self.LUE if kw.get("outils") else self.PREMIERE), [dict(USAGE)])
+        self.moteur.appeler = appeler
+        self.projet.couche = "api"     # les jugements passent par l'API ; le lecteur, lui, a besoin de claude -p
+        self.demande(type="question", texte="Que fait la sauvegarde ?")
+        self.moteur.tour()          # synchrone : jugée, escaladée, lue et la lecture appliquée dans le même passage
+        self.assertEqual(len(vus), 2)
+        self.assertEqual(vus[-1], ("sonnet", ["Read", "Grep", "Glob"], str(self.projet.dossier), "claude"))
+        (fil,) = self.fils()
+        dernier = fil["messages"][-1]
+        self.assertEqual((fil["etat"], dernier["niveau"], dernier["fichiers_lus"]),
+                         ("repondue", "code", ["jeu/sauvegarde.py:12"]))
+        etapes = [u.get("etape") for u in self.suivi()["usage"] if u.get("agent") == "orchestrateur"]
+        self.assertEqual(etapes, ["questions", "questions"])      # le jugement et la lecture : ligne « Questions »
+        self.assertEqual(self.moteur.journal, [])
+
+    def test_un_appel_en_echec_ne_laisse_jamais_le_fil_en_lecture(self):
+        def appeler(consigne, dossier, modele, **kw):
+            if kw.get("outils"):
+                raise appel.ErreurAppel("délai dépassé")
+            return appel.Reponse(json.dumps(self.PREMIERE), [dict(USAGE)])
+        self.moteur.appeler = appeler
+        self.demande(type="question", texte="Que fait la sauvegarde ?")
+        self.moteur.tour()
+        (fil,) = self.fils()
+        self.assertEqual((fil["etat"], fil["messages"][-1]["texte"]),
+                         ("repondue", "Je n'ai pas pu lire le code jusqu'au bout."))
+        self.assertEqual(fil["messages"][-1]["niveau"], "documents")    # « Chercher dans le code » reste possible
+        self.assertTrue(any("délai dépassé" in j for j in self.moteur.journal))
+
+    def test_au_demarrage_une_lecture_laissee_est_dite_interrompue(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        self.ok("lancer", "questions", entree={"action": "marquer", "id": "q1", "etat": "en_lecture"})
+        self.moteur.tour()
+        (fil,) = self.fils()
+        self.assertEqual(fil["etat"], "repondue")
+        self.assertIn("Lecture interrompue", fil["messages"][-1]["texte"])
+
+
 if __name__ == "__main__":
     unittest.main()

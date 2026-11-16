@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, cloud, detache, environnement, rapport
+from moteur import accord_outil, agents, cloud, detache, environnement, jugement, rapport
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
 from bureau import releve as rel
@@ -468,6 +468,8 @@ def _sur_message(projet, demande, etat):
         return _transmettre_a_l_agent(projet, demande, fid, *travail)
     if f["etape"] == "cadrage" and fid in _m(etat, "proposition_ratee"):
         return _reponse_proposition_ratee(projet, etat, demande, fid)
+    if f["etape"] == "cadrage" and _correction_sans_workflow(f):
+        return _reponse_metier_de_correction(projet, etat, demande, fid)
     if f["etape"] == "cadrage" and _en_parcours(projet, etat, fid):
         _terminer(projet, {"demande": demande["id"]}, "C'est noté. Répondez d'abord à la question posée dans les "
                                                       "décisions : le cadrage commencera ensuite.")
@@ -700,6 +702,8 @@ def _en_parcours(projet, etat, fid):
         return False
     if any(d["genre"] in DECISIONS_DU_PARCOURS for d in f["decisions"]):
         return True
+    if _correction_sans_workflow(f):      # le Directeur doit d'abord dire quel métier corrige
+        return True
     if any(d["portee"] == "projet" and d["genre"] in ("organisation", "confirmer_genre") and d.get("fonctionnalite") == fid
            for d in court["decisions"]):
         return True
@@ -837,6 +841,8 @@ def _nommer(projet, fid, intitule=None):
 
 
 def _sur_fonctionnalite(projet, demande, etat):
+    if _fonc(projet, demande["fonctionnalite"]).get("nature") == "correction":
+        return _sur_correction(projet, demande, etat)
     fid = demande["fonctionnalite"]
     suite = {"demande": demande["id"], "fonctionnalite": fid}
     _nommer(projet, fid)
@@ -850,6 +856,93 @@ def _sur_fonctionnalite(projet, demande, etat):
             return _suivre_le_workflow_de_creation(projet, etat, fid, suite, creation)
         return _proposer(projet, etat, fid, suite)
     return _classer(projet, etat, fid, suite)
+
+
+# --- Une correction : ni classement de genre, ni workflow proposé, ni cahier des charges.
+
+ROLES_QA = ("qa", "test", "recette")      # un mot de l'identifiant du rôle de vérification (`testeur` compris)
+
+
+def _roles_avec_service(fac):
+    """Les rôles des étapes d'agent des workflows du projet dont le service est connu (ceux qu'une correction peut
+    prendre : `workflows.service_du_role`), dans l'ordre, sans doublon ; la relecture croisée n'en est pas un."""
+    roles = []
+    for w in wf.tous(fac):
+        for e in w["flux"]:
+            if (not wf.est_validation(e) and e.get("role") and e.get("service") and e["role"] != ROLE_RELECTURE
+                    and e["role"] not in roles):
+                roles.append(e["role"])
+    return roles
+
+
+def _role_qa(projet):
+    """Le rôle de vérification du projet : un métier dont l'identifiant contient un mot de `ROLES_QA` et dont une étape
+    du projet dit le service ; sinon None (la correction n'a pas d'étape de vérification)."""
+    fac = _factory(projet)
+    possibles = _roles_avec_service(fac)
+    return next((r for r in _metiers_du_projet(fac) if any(mot in r.lower() for mot in ROLES_QA) and r in possibles),
+                None)
+
+
+def _correction_sans_workflow(f):
+    """Vrai pour une correction dont le workflow n'a pas pu être construit (le métier qui corrige est à choisir)."""
+    return (f or {}).get("nature") == "correction" and not f.get("workflow")
+
+
+def _sur_correction(projet, demande, etat):
+    """Une correction : ni classement de genre, ni workflow proposé ; son workflow est construit par le code, puis le
+    cadrage court démarre."""
+    fid = demande["fonctionnalite"]
+    _nommer(projet, fid)
+    return _lancer_la_correction(projet, etat, fid, {"demande": demande["id"], "fonctionnalite": fid},
+                                 _role_production(projet))
+
+
+def _lancer_la_correction(projet, etat, fid, suite, production):
+    """Le workflow de correction (`organisation`, action `correction`) avec ce rôle de production, puis le cadrage
+    court. Un rôle de vérification refusé (sans agent pour le tenir) : la correction se fait sans vérification. Un
+    rôle de production refusé : la question « quel métier corrige ? » au Directeur."""
+    qa, note = _role_qa(projet), ""
+    entree = {"action": "correction", "fonctionnalite": fid, "role_production": production, "role_qa": qa}
+    try:
+        try:
+            lancer(projet, "organisation", entree)
+        except Refus:
+            if qa is None:
+                raise
+            lancer(projet, "organisation", {**entree, "role_qa": None})
+            note = f" Le métier « {qa} » ne peut pas la vérifier ici : elle se fera sans vérification."
+    except Refus as ex:
+        return _demander_le_metier(projet, fid, suite, str(ex))
+    _dire(projet, fid, "C'est une correction : je cherche à reproduire l'anomalie avant de la corriger." + note)
+    _terminer(projet, suite, "Correction reçue : le cadrage court commence.")
+    return _repondre_cadrage(projet, etat, fid)
+
+
+def _demander_le_metier(projet, fid, suite, raison):
+    """Le moteur ne sait pas quel métier corrige : une question à choix au Directeur (les rôles dont le projet connaît
+    le service) ; rien ne démarre avant sa réponse (`_en_parcours`)."""
+    choix = _roles_avec_service(_factory(projet))[:12] or [JE_PRECISE]
+    if len(choix) < 2:
+        choix.append("Plus tard")
+    texte = (f"Je ne sais pas quel métier doit corriger cette anomalie ({raison.split(' : ', 1)[-1].rstrip('.')}). "
+             "Choisissez le métier qui la corrige.")
+    _question(projet, fid, texte, choix, suite)
+    return []
+
+
+def _reponse_metier_de_correction(projet, etat, demande, fid):
+    """La réponse à « quel métier corrige ? » : un des rôles proposés lance la correction ; sinon la question reste."""
+    texte = " ".join((demande.get("texte") or "").split())
+    roles = _roles_avec_service(_factory(projet))
+    role = next((r for r in roles if r == texte), None) or next(
+        (r for r in roles if re.search(rf"(?<![\w-]){re.escape(r)}(?![\w-])", texte)), None)
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if role is None:
+        _terminer(projet, suite, "Je n'ai pas reconnu le métier : choisissez-en un parmi "
+                                 + (", ".join(roles) or "ceux du projet (il n'en a encore aucun)") + ".")
+        return []
+    return _lancer_la_correction(projet, etat, fid, suite, role)
 
 
 def _apres_classer_genre(projet, o, ctx, etat):
@@ -3360,6 +3453,35 @@ def _partenaires_au_cadrage(projet):
     return "\n".join(lignes)
 
 
+SECTIONS_CORRECTION = {"correctif": "Correctif", "verification": "Vérification", "livraison": "Livraison"}
+
+
+def _consigne_de_correction(pas):
+    """La section de `consignes-correction.md` de l'étape (`correctif`, `verification`, `livraison`), titre compris ;
+    vide pour une autre étape ou un fichier illisible."""
+    titre = SECTIONS_CORRECTION.get(pas)
+    try:
+        texte = wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8") if titre else ""
+    except OSError:
+        return ""
+    m = re.search(rf"^## {re.escape(titre)}[ \t]*\n.*?(?=^## |\Z)", texte, re.M | re.S) if titre else None
+    return m.group(0).strip() if m else ""
+
+
+def _contexte_concerne(projet, f):
+    """Ce que l'agent d'une correction sait de la fonctionnalité concernée (nom, cahier, éléments) ; rien si elle n'est
+    pas dite ou n'existe plus."""
+    if not (f or {}).get("concerne"):
+        return []
+    try:
+        c = _fonc(projet, f["concerne"])
+    except Refus:
+        return []
+    return [f"Fonctionnalité concernée : {c['nom']} ({c['id']})", "Son cahier : " + str(c.get("cahier")),
+            "Ses éléments : " + (", ".join(str((x or {}).get("nom") or k)
+                                           for k, x in (c.get("elements") or {}).items()) or "(aucun)")]
+
+
 def _matiere(projet, etat, t):
     """Ce que l'agent doit savoir de la tâche, en plus de son message de départ (la discussion, les retours, l'élément)."""
     etape, fid = str(t.get("etape") or ""), t.get("fonctionnalite")
@@ -3374,22 +3496,30 @@ def _matiere(projet, etat, t):
             if est_intention_de_demarrage(_demande_de(f)["texte"]):
                 parties.append("La demande ne décrit pas de fonctionnalité, elle demande de démarrer le projet : le "
                                "cadrage porte sur la description du projet.")
-        parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
-                    "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
-                    "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
-                    '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
-                    "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
-                    "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
-                    "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
-                    "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
-                    f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
-                    'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
-                    "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
-                    "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
-                    "l'utilisateur : refais la maquette et rends le cahier corrigé."]
-        partenaires = _partenaires_au_cadrage(projet)
-        if partenaires:
-            parties.append(partenaires)
+        if (f or {}).get("nature") == "correction":
+            parties += ["C'est une **correction**, pas une nouvelle fonctionnalité.",
+                        wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8"),
+                        "Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
+                        "Rends `fiche_correction` dès que tu peux reproduire et comprendre l'attendu ; sinon des "
+                        "questions courtes à choix (`message.questions`, `attend: true`)."]
+            parties += _contexte_concerne(projet, f)
+        else:
+            parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
+                        "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
+                        "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
+                        '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
+                        "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
+                        "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
+                        "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
+                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
+                        f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
+                        'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
+                        "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
+                        "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
+                        "l'utilisateur : refais la maquette et rends le cahier corrigé."]
+            partenaires = _partenaires_au_cadrage(projet)
+            if partenaires:
+                parties.append(partenaires)
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
                     "Discussion récente :", _texte_discussion(f, 8, projet),
@@ -3399,10 +3529,19 @@ def _matiere(projet, etat, t):
                     'convient-il ? » → « Oui, on continue » / « À corriger (précisez) »). Quand la méthode te semble prête, résume-la dans ton message et rends '
                     '`"methode_prete": true`.']
     elif etape.startswith(ETAPES_DE_FLUX):
-        methode = (f or {}).get("methode") or {}
-        parties += [f"Élément : {t.get('element')}", f"Étape du flux : {etape[len(ETAPES_DE_FLUX):]}",
-                    "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
-                    "Registre des contrôles : relis-le avant de rendre l'élément."]
+        pas = etape[len(ETAPES_DE_FLUX):]
+        if (f or {}).get("nature") == "correction":
+            consigne = _consigne_de_correction(pas.removeprefix(f"{fid}-"))
+            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
+                        "C'est une **correction**, pas une nouvelle fonctionnalité. Fiche de correction :",
+                        "\n".join(f"- {x}" for x in (f.get("cahier") or {}).get("etapes") or []) or "(vide)"]
+            parties += ([consigne] if consigne else []) + _contexte_concerne(projet, f)
+            parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
+        else:
+            methode = (f or {}).get("methode") or {}
+            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
+                        "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
+                        "Registre des contrôles : relis-le avant de rendre l'élément."]
         production = _production(projet, fid)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
@@ -3551,7 +3690,7 @@ def traiter_retour(projet, execution, etat):
         t = _tache(projet, tid)
         if tid in non_faites:
             continue
-        if str(t.get("etape")) == "cadrage" and not r.get("cahier"):
+        if str(t.get("etape")) == "cadrage" and not (r.get("cahier") or _fiche_correction(projet, t, r)):
             lancer(projet, "tache", {"id": tid, "active": False, "journal": [reponse[:300]]})   # il répondra encore
         elif t["colonne"] != "fait":
             e = {"id": tid, "colonne": "fait", "active": False, "journal": ["Terminé."]}
@@ -4300,12 +4439,45 @@ def _suite_cadrage(projet, etat, t, r):
     if r.get("nom"):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
         lancer(projet, "tache", {"id": t["id"], "titre": f"Cadrage : {r['nom'][:80]}"})
+    fiche = _fiche_correction(projet, t, r)
+    if fiche:
+        return _suite_fiche_correction(projet, fid, fiche)
     if r.get("cahier"):
         cahier = {"maquette": r["cahier"]["maquette"], "etapes": r["cahier"]["etapes"]}
         if "partenaires" in r["cahier"]:      # les partenaires décidés au cadrage (la réponse de l'utilisateur)
             cahier["partenaires"] = r["cahier"]["partenaires"]
         lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "cahier"})
         _poser(projet, fid, "valider_cahier", "Le cahier des charges est prêt : le valider, ou le faire corriger ?")
+    return []
+
+
+def _fiche_correction(projet, t, r):
+    """La `fiche_correction` du rapport de cadrage d'une correction (un objet avec `symptome` et `attendu` non vides),
+    sinon None : la tâche de cadrage reste ouverte, comme sans cahier."""
+    fiche = r.get("fiche_correction")
+    if (not isinstance(fiche, dict) or not t.get("fonctionnalite")
+            or not all(isinstance(fiche.get(k), str) and fiche[k].strip() for k in ("symptome", "attendu"))):
+        return None
+    return fiche if _fonc(projet, t["fonctionnalite"]).get("nature") == "correction" else None
+
+
+def _suite_fiche_correction(projet, fid, fiche):
+    """La fiche est rangée comme un cahier validé (maquette vide, étapes = la fiche), pour l'affichage existant ; la
+    correction passe en série avec un seul élément, sans découpage, prototype ni méthode."""
+    def ligne(x):
+        return " ".join(str(x or "").split())
+    etapes = ["Symptôme : " + ligne(fiche.get("symptome")),
+              "Reproduction : " + " ; ".join(ligne(x) for x in fiche.get("reproduction") or [] if ligne(x)),
+              "Attendu : " + ligne(fiche.get("attendu"))]
+    if ligne(fiche.get("piste")):
+        etapes.append("Piste : " + ligne(fiche["piste"]))
+    lancer(projet, "fonctionnalite", {"id": fid, "cahier": {"maquette": [], "etapes": etapes,
+                                                             "valide_le": su.maintenant()}})
+    f = _fonc(projet, fid)
+    lancer(projet, "file", {"fonctionnalite": fid, "elements": [
+        {"id": "correction", "nom": f["nom"], "objectif": ligne(fiche.get("attendu"))[:300] or None}]})
+    lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
+    _dire(projet, fid, "Fiche de correction écrite : le correctif commence.")
     return []
 
 
@@ -4849,8 +5021,13 @@ def _element_fait(projet, etat, v):
 
 
 def _methode_a_revoir(projet, etat, v, raison):
-    v["phase"] = "attente_methode"
     f = _fonc(projet, v["fid"])
+    if f.get("nature") == "correction":       # pas de méthode : la correction est laissée de côté, le Directeur le sait
+        _bloquer_element(projet, etat, v["fid"], v["element"]["id"], f"correction qui n'aboutit pas : {raison}")
+        _dire(projet, v["fid"], f"La correction n'aboutit pas : {raison}. Je la laisse de côté ; pour réessayer, "
+                                "envoyez un retour sur l'élément ou une nouvelle correction plus précise.")
+        return []
+    v["phase"] = "attente_methode"
     if not _a_decision(f, "methode_a_revoir"):
         _poser(projet, v["fid"], "methode_a_revoir",
                f"La méthode est peut-être à revoir : {raison}. La revoir, ou la garder et laisser l'élément "
@@ -5685,6 +5862,134 @@ def _sur_anomalie(projet, demande, etat):
 _SUR["anomalie"] = _sur_anomalie
 
 
+def a_lire(fil, suite):
+    """L'action asynchrone de l'agent lecteur (exécutée par la boucle dans un fil)."""
+    return ("lire", fil, suite)
+
+
+def _dossier_question(projet, fil):
+    fac = _factory(projet)
+    court = _etat(projet)
+    question = fil["messages"][-1]
+    dossier = {"projet": {"nom": fac["nom"], "description": fac["description"]}, "genre": _genre_du_projet(fac),
+               "fonctionnalites": [{"id": f["id"], "nom": f["nom"], "nature": f.get("nature") or "fonctionnalite",
+                                    "etape": f["etape"], "cahier": (_fonc(projet, f["id"]).get("cahier") or {}).get("etapes")}
+                                   for f in court["fonctionnalites"]][:40],
+               "fonctionnalite": None,
+               "regles_projet": [x["texte"] for x in lancer(projet, "regles", {"action": "lister"}).get("regles", [])],
+               "fil": [{"auteur": m["auteur"], "texte": m["texte"][:1500]} for m in fil["messages"][:-1]][-10:],
+               "question": {"texte": question["texte"], "images": question.get("images") or []},
+               "mots_interdits": fac["mots_interdits"]}
+    if fil.get("fonctionnalite"):
+        f = _fonc(projet, fil["fonctionnalite"])
+        dossier["fonctionnalite"] = {"id": f["id"], "nom": f["nom"], "cahier": f.get("cahier"),
+                                     "elements": [x["nom"] for x in f.get("file") or []]}
+    return dossier
+
+
+def _fil(projet, ident):
+    return next(q for q in lancer(projet, "questions", {"action": "lister"})["questions"] if q["id"] == ident)
+
+
+def _sur_question(projet, demande, etat):
+    fil = _fil(projet, demande["fil"])
+    return [a_juger("repondre_question", _dossier_question(projet, fil),
+                    {"demande": demande["id"], "fonctionnalite": None, "fil": fil["id"]})]
+
+
+def _repondre_au_fil(projet, etat, ctx, o, niveau, fichiers_lus=None):
+    lancer(projet, "questions", {"action": "ajouter", "id": ctx["fil"], "auteur": "factory", "texte": o["reponse"],
+                                 "niveau": niveau, "sur": o["sur"], "suggestion": o.get("suggestion"),
+                                 **({"fichiers_lus": fichiers_lus} if fichiers_lus else {})})
+    if niveau == "documents" and not o["sur"]:
+        lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "en_lecture"})
+        _terminer(projet, ctx, "Première réponse d'après les documents ; je vérifie dans le code.")
+        return [a_lire(ctx["fil"], ctx)]
+    lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "repondue"})
+    _terminer(projet, ctx, "Réponse écrite dans le panneau Questions.")
+    return []
+
+
+def _apres_repondre_question(projet, o, ctx, etat):
+    return _repondre_au_fil(projet, etat, ctx, o, "documents")
+
+
+def _question_ratee(projet, ctx):
+    """Deux réponses invalides : le fil le dit, aucune décision n'est posée au Directeur."""
+    lancer(projet, "questions", {"action": "ajouter", "id": ctx["fil"], "auteur": "factory",
+                                 "texte": "Je n'ai pas pu répondre d'après les documents.", "niveau": "documents",
+                                 "sur": False, "suggestion": None})
+    lancer(projet, "questions", {"action": "marquer", "id": ctx["fil"], "etat": "repondue"})
+    _terminer(projet, ctx, "Je n'ai pas pu répondre d'après les documents.")
+    return []
+
+
+_SUR["question"] = _sur_question
+
+
+# --- L'agent lecteur : il lit le code (Read, Grep, Glob) pour répondre à une question ; lancé par la boucle dans un fil.
+
+OUTILS_LECTEUR = ("Read", "Grep", "Glob")
+MODELE_LECTEUR = "sonnet"
+CONSIGNE_LECTEUR = Path(__file__).resolve().parent / "consignes" / "lire_pour_repondre.md"
+LECTURE_RATEE = "Je n'ai pas pu lire le code jusqu'au bout."
+
+
+def _sur_question_approfondir(projet, demande, etat):
+    """« Chercher dans le code » sur un fil déjà répondu : le lecteur part, sans nouveau jugement. Un lecteur déjà
+    parti sur ce fil (double clic) : rien de plus."""
+    if _fil(projet, demande["fil"])["etat"] == "en_lecture":
+        _terminer(projet, {"demande": demande["id"]}, "Je cherche déjà dans le code.")
+        return []
+    lancer(projet, "questions", {"action": "marquer", "id": demande["fil"], "etat": "en_lecture"})
+    _terminer(projet, {"demande": demande["id"]}, "Je cherche dans le code.")
+    return [a_lire(demande["fil"], {"demande": None, "fonctionnalite": None, "fil": demande["fil"]})]
+
+
+_SUR["question_approfondir"] = _sur_question_approfondir
+
+
+def dossier_de_lecture(projet, fil_id):
+    """Le dossier de la première réponse, la question étant la dernière de l'utilisateur (le fil se termine par la
+    réponse de la factory), plus la première réponse d'après les documents qui la suit (pas « Lecture interrompue »
+    ni une lecture ratée, écrites après elle)."""
+    fil = _fil(projet, fil_id)
+    messages = fil["messages"]
+    k = max((i for i, m in enumerate(messages) if m["auteur"] == "utilisateur"), default=len(messages) - 1)
+    return {**_dossier_question(projet, {**fil, "messages": messages[:k + 1]}),
+            "premiere_reponse": next((m["texte"] for m in messages[k + 1:]
+                                      if m["auteur"] == "factory" and m.get("niveau") == "documents"), None)}
+
+
+def appliquer_lecture(projet, etat, suite, objet, usages):
+    """La réponse du lecteur dans le fil (`niveau: "code"`) ; une réponse vide ou invalide y écrit `LECTURE_RATEE` au
+    niveau « documents » (le bureau garde ainsi « Chercher dans le code » pour réessayer). Le fil finit toujours
+    `repondue`."""
+    if not isinstance(objet, dict):
+        objet = None
+    erreur = jugement.valider("repondre_question", objet, dossier_de_lecture(projet, suite["fil"])) if objet else "vide"
+    fichiers = objet.get("fichiers_lus") if objet and isinstance(objet.get("fichiers_lus"), list) else None
+    if erreur:      # écrit ici, pas par `_repondre_au_fil` : « documents » et pas sûr y relancerait une lecture
+        lancer(projet, "questions", {"action": "ajouter", "id": suite["fil"], "auteur": "factory",
+                                     "texte": LECTURE_RATEE, "niveau": "documents", "sur": False, "suggestion": None})
+        lancer(projet, "questions", {"action": "marquer", "id": suite["fil"], "etat": "repondue"})
+        _terminer(projet, suite, LECTURE_RATEE)
+        return []
+    fichiers = [x for x in fichiers or [] if isinstance(x, str) and x.strip()][:40] or None
+    return _repondre_au_fil(projet, etat, suite, objet, "code", fichiers)
+
+
+def lecture_interrompue(projet):
+    """Au démarrage du moteur : un fil resté `en_lecture` (le lecteur est mort avec l'ancien moteur) le dit et
+    repasse `repondue`."""
+    for q in lancer(projet, "questions", {"action": "lister"})["questions"]:
+        if q["etat"] == "en_lecture":
+            lancer(projet, "questions", {"action": "ajouter", "id": q["id"], "auteur": "factory",
+                                         "texte": "Lecture interrompue (le moteur a redémarré). « Chercher dans le "
+                                                  "code » la relance.", "niveau": "documents", "sur": False})
+            lancer(projet, "questions", {"action": "marquer", "id": q["id"], "etat": "repondue"})
+
+
 def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):
     """La branche cloud d'une tâche faite ne fusionne pas : la question au Directeur (comme avant), puis l'analyse du
     Chef."""
@@ -5705,6 +6010,8 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
     etat = nouvel_etat() if etat is None else etat
     if decision.question is not None:
         fid = contexte.get("fonctionnalite")
+        if type_ == "repondre_question":
+            return _question_ratee(projet, contexte)
         if type_ == "analyser_blocage":     # la tâche reste comme avant, le journal le dit
             return _analyse_ratee(projet, contexte, decision.question)
         if type_ == "classer_genre" and fid:
@@ -5864,4 +6171,5 @@ def _apres_conseil(projet, o, ctx, etat):
 _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour,
           "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
           "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation,
-          "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage}
+          "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage,
+          "repondre_question": _apres_repondre_question}

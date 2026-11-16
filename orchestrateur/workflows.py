@@ -168,13 +168,25 @@ CONSIGNES_CORRECTION = Path(__file__).resolve().parent / "consignes-correction.m
 ETAPES_CORRECTION = ("correctif", "verification", "validation")
 
 
+def service_du_role(f, role):
+    """Le `service` du rôle, lu sur la première étape d'agent de ce rôle dans les workflows du projet. ValueError si
+    aucune étape ne le dit."""
+    for w in tous(f):
+        for e in w["flux"]:
+            if not est_validation(e) and e.get("role") == role and e.get("service"):
+                return e["service"]
+    raise ValueError(f"Aucune étape du projet ne dit le service du rôle « {role} ».")
+
+
 def de_correction(f, fid, role_production, role_qa=None):
     """Le workflow d'une correction, construit sans appel d'IA : correctif (rôle de production, un seul agent),
-    vérification (rôle QA, s'il existe), validation du Directeur. Étapes préfixées par `<fid>-`."""
+    vérification (rôle QA, s'il existe), validation du Directeur. Étapes préfixées par `<fid>-`. Chaque étape d'agent
+    prend le `service` de son rôle (`service_du_role`)."""
     flux = [{"id": f"{fid}-correctif", "nom": "Correctif", "role": role_production,
-             "regroupement": REGROUPEMENT_REGROUPE}]
+             "service": service_du_role(f, role_production), "regroupement": REGROUPEMENT_REGROUPE}]
     if role_qa:
-        flux.append({"id": f"{fid}-verification", "nom": "Vérification", "role": role_qa})
+        flux.append({"id": f"{fid}-verification", "nom": "Vérification", "role": role_qa,
+                     "service": service_du_role(f, role_qa)})
     flux.append({"id": f"{fid}-validation", "nom": "Validation de la correction", CLE_VALIDATION: True,
                  "raison": "Vérifier la cause, le correctif et la preuve que l'anomalie ne revient pas."})
     return {"id": f"w-{fid}", "fonctionnalite": fid, "genre": f.get("genre"), "nature": "correction", "flux": flux}

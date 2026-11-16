@@ -367,18 +367,33 @@ class TestFonctionnaliteDeplacee(unittest.TestCase):
 
 
 class TestDeCorrection(unittest.TestCase):
-    FAC = {"genre": "jeu", "workflows": [], "flux": []}
+    FAC = {"genre": "jeu", "flux": [], "workflows": [
+        {"id": "w-jeu", "fonctionnalite": None, "genre": "jeu", "flux": [
+            {"id": "dev", "nom": "Développement", "role": "dev", "service": "dev"},
+            {"id": "qa", "nom": "Test", "role": "qa", "service": "qa"}]}]}
 
     def test_avec_qa(self):
         w = wf.de_correction(self.FAC, "f4", "dev", "qa")
         self.assertEqual(w["id"], "w-f4")
         self.assertEqual([e["id"] for e in w["flux"]], ["f4-correctif", "f4-verification", "f4-validation"])
         self.assertEqual([e.get("role") for e in w["flux"]], ["dev", "qa", None])
+        self.assertEqual([e.get("service") for e in w["flux"]], ["dev", "qa", None])
         self.assertTrue(wf.est_validation(w["flux"][-1]))
 
     def test_sans_qa_pas_de_verification(self):
         w = wf.de_correction(self.FAC, "f4", "dev")
         self.assertEqual([e["id"] for e in w["flux"]], ["f4-correctif", "f4-validation"])
+
+    def test_etapes_ecrivables(self):
+        for w in (wf.de_correction(self.FAC, "f4", "dev", "qa"), wf.de_correction(self.FAC, "f4", "dev")):
+            for e in w["flux"]:
+                wf.etape_ecrite(e)   # lève KeyError si une étape d'agent n'a pas son service
+
+    def test_role_sans_service_refuse(self):
+        with self.assertRaises(ValueError):
+            wf.de_correction(self.FAC, "f4", "inconnu")
+        with self.assertRaises(ValueError):
+            wf.de_correction(self.FAC, "f4", "dev", "inconnu")
 
     def test_consignes_presentes(self):
         texte = wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8")

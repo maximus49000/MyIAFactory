@@ -10,6 +10,7 @@ import {contenuDossier} from "./dossier.js";
 import {lignesModele} from "./polyvalent.js";
 import {contenuDirecteur, contenuAgent, resumeLecons, ficheAncienAgent} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue, cleNouvelle} from "./fonctionnalite.js";
+import {contenuQuestions} from "./questions.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
@@ -34,6 +35,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   // La discussion neuve : `envoi` {avant, texte, images} une fois le premier message parti ; `nature` « fonctionnalite » ou
   // « correction » ; `concerne` la fonctionnalité visée par une correction (choisie, ou venue d'une suggestion).
   const nouvelle = {envoi: null, nature: "fonctionnalite", concerne: ""};
+  const questions = {apropos: ""};   // le panneau « Questions » : la fonctionnalité choisie pour la prochaine question
   const corrections = new Set();   // fonctionnalités dont l'utilisateur écrit une correction du cahier des charges
   const catalogues = new Map();      // fonctionnalité -> {statut, cat, avertissements, erreur, lu} (lu à l'ouverture)
   const vuesCatalogue = new Map();   // fonctionnalité -> filtres, page, fiche ouverte, zoom de la vue de haut
@@ -65,6 +67,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
           cleTravail(t)])]);     // l'agent au travail : « depuis X min » suit la minute qui passe
     }
     if (type === "fonctionnalites") return JSON.stringify([e.fonctionnalites, e.agir]);
+    // Les fils (id, état, nombre de messages) : le panneau se redessine à chaque réponse, pas à la frappe.
+    if (type === "questions") return JSON.stringify([(e.questions || []).map((q) => [q.id, q.etat, (q.messages || []).length]),
+      e.agir, (e.fonctionnalites || []).map((f) => [f.id, f.nom])]);
     if (type === "catalogue") {
       const f = (e.fonctionnalites || []).find((x) => x.id === id);
       return JSON.stringify([f?.nom, f?.catalogue, e.agir, e.images_ok]);
@@ -154,7 +159,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   }
 
   const contexte = () => ({
-    etat: etat(), barre, brouillons, vuePartenaires, filtreListe, retourListe, envois, envoyes, nouvelle, corrections,
+    etat: etat(), barre, brouillons, vuePartenaires, filtreListe, retourListe, envois, envoyes, nouvelle, questions, corrections,
     rouvrir: () => { if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
     ouvrirFonctionnalite: (id) => ouvrirPanneau("fonctionnalite", id),
     ouvrirCatalogue: (id) => ouvrirCatalogue(id),
@@ -196,7 +201,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     if (type === "file" && (e.taches || []).some((t) => t.id === id)) type = "tache";  // la file est devenue une tâche
     if (type !== "tache") retourListe = false;
     // La saisie d'une discussion garde le curseur quand le panneau se redessine.
-    const surSaisie = (panneauOuvert?.type === "fonctionnalite") && document.activeElement?.dataset?.saisie === "1"
+    const surSaisie = (panneauOuvert?.type === "fonctionnalite" || panneauOuvert?.type === "questions") && document.activeElement?.dataset?.saisie === "1"
       && panneau.contains(document.activeElement);
     const debut = surSaisie ? document.activeElement.selectionStart : 0;
     // Le même panneau redessiné (relevé rafraîchi) garde son défilement : la lecture ne remonte pas en haut.
@@ -232,6 +237,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       const f = id === null ? null : (e.fonctionnalites || []).find((x) => x.id === id);
       if (id !== null && !f) { fermerPanneau(); return; }
       contenuFonctionnalite(contexte(), contenu, f);
+    } else if (type === "questions") {
+      contenuQuestions(contexte(), contenu);
     } else if (type === "fonctionnalites") {
       contenuFonctionnalites(contexte(), contenu);
     } else if (type === "catalogue") {
@@ -342,6 +349,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   // --- Boutons de la barre : « + Nouvelle fonctionnalité » et « Fonctionnalités ».
   barre.boutonNouvelle.addEventListener("click", () => ouvrirNouvelle("fonctionnalite"));
   barre.boutonCorrection.addEventListener("click", () => ouvrirNouvelle("correction"));
+  barre.boutonQuestion.addEventListener("click", () => ouvrirPanneau("questions", null));
   barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
   barre.surCatalogue((id) => ouvrirCatalogue(id));
 

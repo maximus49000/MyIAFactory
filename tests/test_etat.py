@@ -590,5 +590,30 @@ class TestEtatEtapesLieux(unittest.TestCase):
         self.assertNotIn("etapes_lieux", self.etat(version=3))
 
 
+class Questions(unittest.TestCase):
+    """Les fils de questions du relevé sont servis au bureau (panneau « Questions »), en version 4 seulement."""
+    FILS = [{"id": "q1", "etat": "repondue", "messages": [
+        {"auteur": "utilisateur", "texte": "Comment ?"},
+        {"auteur": "factory", "texte": "Ainsi.", "niveau": "documents", "sur": True}]}]
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.eq = equipe.Equipe(Path(self._t.name) / "equipe.json")
+
+    def etat(self, version=4, questions=None):
+        r = {**copy.deepcopy(BASE), "version": version}
+        if questions is not None:
+            r["questions"] = copy.deepcopy(questions)
+        return etat.construire(releve.normaliser(r), self.eq, M, 30)
+
+    def test_les_fils_sont_servis(self):
+        self.assertEqual(self.etat(questions=self.FILS)["questions"], self.FILS)
+
+    def test_sans_fils_ou_avant_la_version_4_rien_n_est_servi(self):
+        self.assertNotIn("questions", self.etat())
+        self.assertNotIn("questions", self.etat(version=3, questions=self.FILS))
+
+
 if __name__ == "__main__":
     unittest.main()

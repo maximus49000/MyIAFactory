@@ -29,6 +29,15 @@ export function accuseDe(demande, etat) {
     return {cle: "message:" + demande.fonctionnalite, libelle: "Votre message",
             traite: (e) => { const f = fonctionnalite(e); return !f || liste(f.discussion).length > avant; }};
   }
+  if (demande.type === "question") {      // le fil (ou, pour une question neuve, l'ensemble) a une réponse de plus
+    const fils = (e) => liste(e?.questions);
+    const messages = (q) => liste(q?.messages).length;
+    const fil = (e) => fils(e).find((q) => q?.id === demande.fil);
+    const avant = demande.fil ? messages(fil(etat)) : fils(etat).reduce((n, q) => n + messages(q), 0);
+    return {cle: "question:" + (demande.fil || "nouvelle"), libelle: "Votre question",
+            traite: (e) => (demande.fil ? (fil(e) ? fil(e).etat !== "en_cours" && messages(fil(e)) > avant : false)
+                                        : !fils(e).some((q) => q?.etat === "en_cours") && fils(e).reduce((n, q) => n + messages(q), 0) > avant)};
+  }
   if ((demande.type === "cahier" || demande.type === "methode") && plein(demande.fonctionnalite)) {
     const genre = demande.type === "cahier" ? "valider_cahier" : "valider_methode";
     const ids = new Set(liste(fonctionnalite(etat)?.decisions).filter((d) => d?.genre === genre).map((d) => d.id));

@@ -244,6 +244,8 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
             e["regles_projet"] = copy.deepcopy(r["regles_projet"])
         if isinstance(r.get("anomalies_logiciel"), list):    # les anomalies du logiciel notées par le Chef
             e["anomalies_logiciel"] = copy.deepcopy(r["anomalies_logiciel"])
+        if isinstance(r.get("questions"), list):    # les fils de questions sur le projet (panneau « Questions »)
+            e["questions"] = copy.deepcopy(r["questions"])
         if isinstance(r.get("etapes_lieux"), list):    # les étapes d'agent et leur lieu (le sélecteur de la page)
             e["etapes_lieux"] = copy.deepcopy(r["etapes_lieux"])
         if r.get("partenaires") is not None:   # l'espace partenaire : rendu tel quel (aucune valeur de clé n'y est)

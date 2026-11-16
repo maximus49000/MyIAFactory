@@ -9,7 +9,7 @@ import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.
 import {contenuDossier} from "./dossier.js";
 import {lignesModele} from "./polyvalent.js";
 import {contenuDirecteur, contenuAgent, resumeLecons, ficheAncienAgent} from "./directeur.js";
-import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue} from "./fonctionnalite.js";
+import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue, cleNouvelle} from "./fonctionnalite.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
@@ -31,7 +31,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   const brouillons = new Map();  // tâche -> retour en cours d'écriture ; "f:<id>" -> saisie de discussion (survit aux rafraîchissements)
   const envois = new Set();      // saisies dont l'envoi est en cours (un double clic ne crée qu'une demande)
   const envoyes = new Map();     // fonctionnalité -> messages envoyés que le relevé n'a pas encore repris
-  const nouvelle = {envoi: null};  // la discussion neuve : {avant, texte, images} une fois le premier message parti
+  // La discussion neuve : `envoi` {avant, texte, images} une fois le premier message parti ; `nature` « fonctionnalite » ou
+  // « correction » ; `concerne` la fonctionnalité visée par une correction (choisie, ou venue d'une suggestion).
+  const nouvelle = {envoi: null, nature: "fonctionnalite", concerne: ""};
   const corrections = new Set();   // fonctionnalités dont l'utilisateur écrit une correction du cahier des charges
   const catalogues = new Map();      // fonctionnalité -> {statut, cat, avertissements, erreur, lu} (lu à l'ouverture)
   const vuesCatalogue = new Map();   // fonctionnalité -> filtres, page, fiche ouverte, zoom de la vue de haut
@@ -57,6 +59,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     if (type === "fonctionnalite") {
       return JSON.stringify([(e.fonctionnalites || []).find((f) => f.id === id), e.agir, e.images_ok,
         e.orchestrateur_actif, (e.agents || []).map((a) => [a.id, a.prenom]), nouvelle.envoi?.texte, e.pause_installation?.texte,
+        id === null ? [nouvelle.nature, nouvelle.concerne, (e.fonctionnalites || []).map((x) => [x.id, x.nom, x.nature, x.etape])] : null,
         // Une tâche de la fonctionnalité qui bouge (un agent a fini) : le panneau se redessine et relit le coût.
         (e.taches || []).filter((t) => t.fonctionnalite === id).map((t) => [t.id, t.maj, t.colonne, t.active, t.agent, t.attente,
           cleTravail(t)])]);     // l'agent au travail : « depuis X min » suit la minute qui passe
@@ -160,7 +163,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     catalogues, vuesCatalogue, retoursEnvoyes,
     grand: () => grand,
     basculerGrand: () => { grand = !grand; if (panneauOuvert) ouvrirPanneau(panneauOuvert.type, panneauOuvert.id); },
-    ouvrirNouvelle: () => ouvrirPanneau("fonctionnalite", null),
+    // Le formulaire d'une nouvelle fonctionnalité ou correction, avec un brouillon (suggestion d'une réponse) si on en donne.
+    ouvrirNouvelle,
     ouvrirListe: () => ouvrirPanneau("liste", null),
     ouvrirAttente: () => ouvrirPanneau("attente", null),
     ouvrirTache: (id) => { retourListe = false; ouvrirPanneau("tache", id); },
@@ -168,6 +172,16 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     ouvrirTacheDepuisListe: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
     changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
   });
+
+  // `nature` : « fonctionnalite » (défaut) ou « correction » ; `texte` et `concerne` préremplissent le formulaire sans rien
+  // envoyer : l'utilisateur relit, puis envoie.
+  function ouvrirNouvelle(nature = "fonctionnalite", texte = null, concerne = null) {
+    nouvelle.envoi = null;
+    nouvelle.nature = nature === "correction" ? "correction" : "fonctionnalite";
+    nouvelle.concerne = nature === "correction" && concerne ? concerne : "";
+    if (texte) brouillons.set(cleNouvelle(nouvelle.nature), {texte, fichiers: []});
+    ouvrirPanneau("fonctionnalite", null);
+  }
 
   // Venir d'ailleurs (fonctionnalité, barre) ouvre la page du catalogue, pas la dernière fiche vue.
   function ouvrirCatalogue(id) {
@@ -182,7 +196,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     if (type === "file" && (e.taches || []).some((t) => t.id === id)) type = "tache";  // la file est devenue une tâche
     if (type !== "tache") retourListe = false;
     // La saisie d'une discussion garde le curseur quand le panneau se redessine.
-    const surSaisie = panneauOuvert?.type === "fonctionnalite" && document.activeElement?.dataset?.saisie === "1"
+    const surSaisie = (panneauOuvert?.type === "fonctionnalite") && document.activeElement?.dataset?.saisie === "1"
       && panneau.contains(document.activeElement);
     const debut = surSaisie ? document.activeElement.selectionStart : 0;
     // Le même panneau redessiné (relevé rafraîchi) garde son défilement : la lecture ne remonte pas en haut.
@@ -326,7 +340,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   }
 
   // --- Boutons de la barre : « + Nouvelle fonctionnalité » et « Fonctionnalités ».
-  barre.boutonNouvelle.addEventListener("click", () => { nouvelle.envoi = null; ouvrirPanneau("fonctionnalite", null); });
+  barre.boutonNouvelle.addEventListener("click", () => ouvrirNouvelle("fonctionnalite"));
+  barre.boutonCorrection.addEventListener("click", () => ouvrirNouvelle("correction"));
   barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
   barre.surCatalogue((id) => ouvrirCatalogue(id));
 

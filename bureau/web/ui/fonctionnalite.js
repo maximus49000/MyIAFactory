@@ -62,10 +62,26 @@ export function bandeau(etape) {
 const plein = (t) => typeof t === "string" && t.trim() !== "";
 
 // `fichiers` : les fichiers joints `{nom, type, donnees}` (images, gif, vidéos, sons, documents, zip : voir `pieces.js`).
-export function demandeNouvelle(texte, fichiers) {
+// `nature` « correction » (une anomalie à réparer) et `concerne` (la fonctionnalité visée) sont facultatifs.
+export function demandeNouvelle(texte, fichiers, {nature = "fonctionnalite", concerne = null} = {}) {
   const d = {type: "fonctionnalite", texte};
   if (fichiers && fichiers.length) d.fichiers = fichiers;
+  if (nature === "correction") {
+    d.nature = "correction";
+    if (concerne) d.concerne = concerne;
+  }
   return d;
+}
+
+export const estCorrection = (f) => f?.nature === "correction";
+
+// La clé du brouillon de la discussion neuve : une pour chaque nature (on ne perd pas l'une en ouvrant l'autre).
+export const cleNouvelle = (nature) => "f:nouvelle" + (nature === "correction" ? "-correction" : "");
+
+// Les fonctionnalités qu'une correction peut viser : toutes, sauf les corrections déjà terminées.
+export function fonctionnalitesConcernables(etat) {
+  return (Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : [])
+    .filter((f) => f && !(estCorrection(f) && f.etape === "terminee"));
 }
 
 export function demandeMessage(fonc, texte, fichiers) {
@@ -1069,7 +1085,7 @@ function lienExterne(url, texte) {
 
 // La zone de saisie : texte, fichiers joints (aperçus avant envoi), envoi. Le brouillon survit aux rafraîchissements.
 // `envoyerDemande(texte, fichiers, bouton)` rend {ok}. Un envoi en cours (`ctx.envois`) grise « Envoyer », même après un redessin.
-function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoindre = true, invite = "Écrire un message…",
+export function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoindre = true, invite = "Écrire un message…",
                                          questions = null, rapides = null} = {}) {
   const brouillon = ctx.brouillons.get(cle) || {texte: "", fichiers: []};
   ctx.brouillons.set(cle, brouillon);
@@ -1187,6 +1203,7 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoi
   }
   bloc.append(zone, conseil, miniatures, erreur, rangee, fichier);
   if (cle.startsWith("f:")) bloc.append(creerAccuses("message:" + cle.slice(2)).racine);   // « Reçu, en cours de traitement… »
+  else if (cle.startsWith("q:")) bloc.append(creerAccuses("question:" + cle.slice(2)).racine);   // une question du panneau « Questions »
   maj();
   return {bloc, texte: () => zone.value};
 }
@@ -1194,8 +1211,11 @@ function saisie(ctx, cle, envoyerDemande, {libelle = "Envoyer", joindre: peutJoi
 // f : la fonctionnalité du relevé, ou null pour une discussion neuve.
 export function contenuFonctionnalite(ctx, contenu, f) {
   const e = ctx.etat;
-  const cle = "f:" + (f ? f.id : "nouvelle");
-  contenu.append(el("h2", "", f ? f.nom : "Nouvelle fonctionnalité"));
+  const correction = f ? estCorrection(f) : ctx.nouvelle.nature === "correction";
+  const cle = f ? "f:" + f.id : cleNouvelle(correction ? "correction" : "fonctionnalite");
+  const titre = el("h2", "", f ? f.nom : (correction ? "Nouvelle correction" : "Nouvelle fonctionnalité"));
+  if (f && correction) titre.append(" ", el("span", "badge-correction", "Correction"));
+  contenu.append(titre);
   if (f) {
     if (genreEtWorkflow(f)) contenu.append(el("p", "fonctionnalite-genre", genreEtWorkflow(f)));
     if (f.etape === "deplacee") contenu.append(el("p", "note", libelleEtape(f)));
@@ -1206,8 +1226,23 @@ export function contenuFonctionnalite(ctx, contenu, f) {
       ol.append(li);
     }
     contenu.append(ol);
+  } else if (correction) {
+    contenu.append(el("p", "note", "Décrivez l'anomalie : ce qui se passe, comment la reproduire, ce que vous attendiez. " +
+      "Joignez une capture si possible."));
   } else {
     contenu.append(el("p", "note", "Décrivez ce que vous voulez : l'agent de cadrage vous répondra ici."));
+  }
+  // Une correction peut viser une fonctionnalité (facultatif) : le diagnostic reçoit alors son cahier des charges.
+  let concerne = null;
+  if (!f && correction && e.agir === true) {
+    concerne = el("select", "correction-concerne");
+    concerne.setAttribute("aria-label", "Fonctionnalité concernée (facultatif)");
+    concerne.append(new Option("Fonctionnalité concernée (facultatif)", ""));
+    for (const x of fonctionnalitesConcernables(e)) concerne.append(new Option(x.nom, x.id));
+    concerne.value = ctx.nouvelle.concerne || "";
+    if (concerne.value !== (ctx.nouvelle.concerne || "")) ctx.nouvelle.concerne = concerne.value;   // la visée a disparu du relevé
+    concerne.addEventListener("change", () => { ctx.nouvelle.concerne = concerne.value; });
+    contenu.append(concerne);
   }
 
   const vue = presentation(f, e.agir, f ? ctx.corrections.has(f.id) : false);
@@ -1247,11 +1282,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
       : saisie(ctx, cle, async (texte, fichiers, bouton) => {
           const joints = fichiers.map(({nom, type, donnees}) => ({nom, type, donnees}));
           if (!f) ctx.nouvelle.envoi = {avant: e, texte, fichiers};
-          const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints) : demandeNouvelle(texte, joints), bouton);
+          const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints)
+            : demandeNouvelle(texte, joints, {nature: correction ? "correction" : "fonctionnalite", concerne: concerne?.value}), bouton);
           if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, fichiers}]);
           if (!r.ok && !f) ctx.nouvelle.envoi = null;
           return r;
         }, {questions: f ? questionsEnAttente(f) : null,
+            invite: !f && correction ? "Ce qui se passe, comment le reproduire, ce que vous attendiez…" : undefined,
             rapides: f && !questionsEnAttente(f) && !locaux.length ? reponsesRapides(f) : null});
     blocDiscussion.append(s.bloc);
   }
@@ -1365,6 +1402,7 @@ export function contenuFonctionnalites(ctx, contenu) {
     const b = el("button", "lien-tache", f.nom);
     b.type = "button";
     b.addEventListener("click", () => ctx.ouvrirFonctionnalite(f.id));
+    if (estCorrection(f)) b.append(" ", el("span", "badge-correction", "Correction"));
     const etape = libelleEtape(f);
     const n = (f.decisions || []).length;
     li.append(b, el("div", "note", [etape, f.genre].filter(Boolean).join(" · ") + (n ? ` · ${n} décision${n > 1 ? "s" : ""}` : "")));

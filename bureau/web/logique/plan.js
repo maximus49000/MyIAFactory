@@ -165,14 +165,16 @@ export function creerPlan(services, colonnes, options = {}) {
   const largeur = panneaux * PAS_TABLEAU - JEU_TABLEAU;
   const kx = 0, kz = openspace.z - 0.6;
   const LIGNES = 4;
-  const largeurColonne = (largeur - 0.3) / nc;
-  // (u, v) : position du centre d'un post-it sur la surface, depuis le coin haut gauche, en mètres.
+  // (u, v) : position du centre d'un post-it sur la surface, depuis le coin haut gauche, en mètres. Le nombre de
+  // colonnes se lit sur `kanban` : une colonne qui apparaît (une correction et son workflow) les resserre sur le même
+  // tableau, sans recharger la page (`adapterColonnes`).
   const postit = (colonneIndex, rang) => ({
-    u: 0.15 + largeurColonne * (Math.max(0, Math.min(nc - 1, colonneIndex)) + 0.5),
+    u: 0.15 + kanban.largeurColonne * (Math.max(0, Math.min(kanban.colonnes - 1, colonneIndex)) + 0.5),
     v: 0.38 + 0.235 * Math.max(0, Math.min(LIGNES - 1, rang)),
   });
   const kanban = {
-    x: kx, z: kz, cap: 0, largeur, panneaux, hauteur: 1.25, entete: 0.26, lignes: LIGNES, colonnes: nc, largeurColonne,
+    x: kx, z: kz, cap: 0, largeur, panneaux, hauteur: 1.25, entete: 0.26, lignes: LIGNES, colonnes: nc,
+    largeurColonne: (largeur - 0.3) / nc,
     devant: {x: kx, z: kz + 1.0, cap: Math.PI},
     devantColonne: (i) => ({x: kx - largeur / 2 + postit(i, 0).u, z: kz + 1.0, cap: Math.PI}),
     attente: (i) => {
@@ -260,5 +262,10 @@ export function creerPlan(services, colonnes, options = {}) {
     batiment: {largeur: W, profondeur: H},
     poste, cafe, chemin, pieceDe, postit,
     aService: (id) => parService.has(id),
+    // Le nombre de colonnes a changé : elles se partagent la largeur du tableau tel qu'il est construit.
+    adapterColonnes(n) {
+      kanban.colonnes = Math.max(1, n);
+      kanban.largeurColonne = (kanban.largeur - 0.3) / kanban.colonnes;
+    },
   };
 }

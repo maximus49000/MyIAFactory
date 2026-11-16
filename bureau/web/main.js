@@ -62,7 +62,9 @@ async function lireEtat() {
   }
 }
 
-const structure = (e) => JSON.stringify([e.services, (e.colonnes || []).map((c) => c.id), Boolean(e.partenaires)]);
+// Ce qui oblige à reconstruire la scène : les services (les pièces) et l'espace partenaires. Les colonnes, elles, se
+// redessinent sur place (`plan.adapterColonnes`).
+const structure = (e) => JSON.stringify([e.services, Boolean(e.partenaires)]);
 
 // Le Directeur (l'utilisateur) : un personnage fixe à son bureau. Ce n'est pas un agent du relevé.
 function acteurDirecteur(plan) {
@@ -126,7 +128,10 @@ async function demarrer() {
       if (l.multi) { liste = l; barre.majProjets(true, l.projets, projetCourant(), l.parents); }
     }
     if (codeChange(etat, e)) { location.reload(); return; }   // le code du bureau a été mis à jour : la page le reprend
-    if (structure(e) !== sigStructure) { location.reload(); return; }   // services ou colonnes changés : on redessine tout
+    if (structure(e) !== sigStructure) { location.reload(); return; }   // services changés : on redessine tout
+    // Des colonnes apparaissent ou partent (une correction et son workflow) : le tableau se redessine sur place, sans
+    // recharger la page (le Kanban redessine ses colonnes quand leur signature change).
+    if ((e.colonnes || []).length !== plan.kanban.colonnes) plan.adapterColonnes((e.colonnes || []).length);
     if (document.hidden) { dernier = e; aRemettre = true; return; }
     regie.appliquer(e, changements(dernier, e));
     dernier = e;

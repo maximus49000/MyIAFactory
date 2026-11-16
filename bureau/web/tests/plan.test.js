@@ -128,3 +128,17 @@ test("le tableau est fait de panneaux entiers et tient dans l'open space", () =>
     }
   }
 });
+
+test("colonnes ajoutées (une correction et son workflow) : le tableau se resserre sur place, sans recharger", () => {
+  const cols = (n) => Array.from({length: n}, (_, i) => ({id: "c" + i, nom: "C" + i}));
+  const p = creerPlan([{id: "dev", nom: "Développement"}], cols(4));
+  const largeur = p.kanban.largeur;
+  const dernierAvant = p.postit(3, 0).u;
+  p.adapterColonnes(7);
+  assert.equal(p.kanban.colonnes, 7);
+  assert.equal(p.kanban.largeur, largeur);                       // le même tableau physique
+  assert.ok(Math.abs(p.kanban.largeurColonne - (largeur - 0.3) / 7) < 1e-9);
+  assert.ok(p.postit(6, 0).u < largeur);                         // la 7e colonne tient sur le tableau
+  assert.ok(p.postit(3, 0).u < dernierAvant);                    // les colonnes se sont resserrées
+  assert.ok(Math.abs(p.kanban.devantColonne(6).x - (p.kanban.x - largeur / 2 + p.postit(6, 0).u)) < 1e-9);
+});

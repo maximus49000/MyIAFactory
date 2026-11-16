@@ -1371,3 +1371,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant d'investiguer une anomalie signalée, chercher si un test automatisé couvre déjà précisément ce scénario et l'exécuter ; son statut (passant/échouant) tranche immédiatement sans lecture de code supplémentaire.
+
+## S229 — Quand on cherche une anomalie sans piste donnée, lancer la s
+Rôles : dev
+Date : 2026-11-16
+
+Quand on cherche une anomalie sans piste donnée, lancer la suite de tests existante et examiner les warnings qu'elle émet (pas seulement les échecs) est un moyen rapide et peu coûteux de trouver un vrai défaut plutôt que d'explorer le code au hasard.

@@ -37,7 +37,8 @@ class TestCorrection(Base):
         f = self.fonc()
         self.assertEqual((f["nature"], f["workflow"], f["etape"]), ("correction", "w-f1", "cadrage"))
         self.assertEqual(self.decisions("organisation"), [])
-        self.assertEqual(len(self.taches(etape="cadrage")), 1)
+        (t,) = self.taches(etape="cadrage")
+        self.assertTrue(t["titre"].startswith("Diagnostic : "), t["titre"])     # pas « Cadrage » pour une anomalie
         self.assertEqual(self.flux_de(), ["f1-correctif", "f1-validation", "f1-livraison"])     # sans rôle QA : pas de vérification
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 

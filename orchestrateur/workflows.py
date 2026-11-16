@@ -129,11 +129,22 @@ def premiere_etape(f, fonc):
     return w["flux"][0]["id"] if w and w["flux"] else None
 
 
+# La première colonne du tableau, commune aux fonctionnalités (cadrage) et aux corrections (diagnostic).
+NOM_COLONNE_CADRAGE = "Cadrage / Diagnostic"
+
+
+def titre_du_cadrage(fonc, nom=None):
+    """Le titre de la première tâche d'une fonctionnalité : « Cadrage : … », ou « Diagnostic : … » pour une correction
+    (lire le signalement, reproduire, trouver une piste)."""
+    mot = "Diagnostic" if (fonc or {}).get("nature") == "correction" else "Cadrage"
+    return f"{mot} : {nom if nom is not None else (fonc or {}).get('nom', '')}"
+
+
 def colonnes(f, fonctionnalites):
     """Les colonnes du tableau : cadrage, les étapes des workflows dont la fonctionnalité est en cours (le principal
     toujours), puis fait."""
     par_id = {x["id"]: x for x in fonctionnalites}
-    sortie = [{"id": "cadrage", "nom": "Cadrage"}]
+    sortie = [{"id": "cadrage", "nom": NOM_COLONNE_CADRAGE}]
     ws = tous(f)
     # Sans principal, une fonctionnalité en cours sans workflow à elle suit celui du genre (`de_la_fonctionnalite`) :
     # ses colonnes sont alors celles de ce workflow de genre (cas réel : tâches à l'étape « maquettes » montrées en

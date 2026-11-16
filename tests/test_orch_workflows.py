@@ -106,7 +106,7 @@ class TestWorkflows(AvecWorkflows):
         self.assertEqual(ws, [{"id": "principal", "fonctionnalite": None, "genre": "badges", "flux": PRINCIPAL}])
         self.assertEqual(wf.ids_etapes(f), ["dev", "relecture"])
         self.assertEqual(wf.colonnes(f, []), [
-            {"id": "cadrage", "nom": "Cadrage"},
+            {"id": "cadrage", "nom": "Cadrage / Diagnostic"},
             {"id": "dev", "nom": "Développement", "genre": "badges", "workflow": "principal"},
             {"id": "relecture", "nom": "Relecture", "genre": "badges", "workflow": "principal"},
             {"id": "fait", "nom": "Fait", "terminee": True}])
@@ -146,7 +146,7 @@ class TestWorkflows(AvecWorkflows):
         self.assertEqual(f["flux"], [])
         self.assertEqual(f["description"], "Des badges pour une chaîne")
         self.assertEqual(wf.tous(f), [])
-        self.assertEqual(wf.colonnes(f, []), [{"id": "cadrage", "nom": "Cadrage"},
+        self.assertEqual(wf.colonnes(f, []), [{"id": "cadrage", "nom": "Cadrage / Diagnostic"},
                                               {"id": "fait", "nom": "Fait", "terminee": True}])
         self.assertIsNone(wf.de_la_fonctionnalite(f, None))
         self.assertEqual(self.ok("releve")["colonnes"], wf.colonnes(f, []))
@@ -193,7 +193,7 @@ class TestRelevePourChaqueFonctionnalite(AvecWorkflows):
 
     def test_releve_inchange_sans_workflows(self):
         r = self.ok("releve")
-        self.assertEqual(r["colonnes"], [{"id": "cadrage", "nom": "Cadrage"}, {"id": "dev", "nom": "Développement"},
+        self.assertEqual(r["colonnes"], [{"id": "cadrage", "nom": "Cadrage / Diagnostic"}, {"id": "dev", "nom": "Développement"},
                                          {"id": "relecture", "nom": "Relecture"},
                                          {"id": "fait", "nom": "Fait", "terminee": True}])
         t = self.ok("tache", entree={"titre": "Une tâche"})
@@ -427,3 +427,12 @@ class RepliSurLeGenre(__import__("unittest").TestCase):
         self.assertEqual(ids, ["cadrage", "dev", "fait"])
         ids = [c["id"] for c in wf.colonnes(f, [{"id": "f1", "etape": "terminee", "workflow": None}])]
         self.assertEqual(ids, ["cadrage", "fait"])
+
+
+class TestTitreDuCadrage(unittest.TestCase):
+    def test_cadrage_pour_une_fonctionnalite_diagnostic_pour_une_correction(self):
+        self.assertEqual(wf.titre_du_cadrage({"nom": "Écran titre"}), "Cadrage : Écran titre")
+        self.assertEqual(wf.titre_du_cadrage({"nom": "Score", "nature": "fonctionnalite"}), "Cadrage : Score")
+        self.assertEqual(wf.titre_du_cadrage({"nom": "Score bloqué", "nature": "correction"}), "Diagnostic : Score bloqué")
+        self.assertEqual(wf.titre_du_cadrage({"nom": "x", "nature": "correction"}, "Corriger le score"),
+                         "Diagnostic : Corriger le score")

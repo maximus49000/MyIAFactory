@@ -2316,7 +2316,7 @@ def construire_releve(ctx):
     avec_tache = {t["fonctionnalite"] for t in s["taches"] if t.get("active") and t["colonne"] == "cadrage"}
     for f in s["fonctionnalites"]:
         if f["etape"] == "cadrage" and f["agent_cadrage"] in cles and f["id"] not in avec_tache:
-            taches.append({"id": f"cadrage:{f['id']}", "titre": f"Cadrage : {f['nom']}", "colonne": "cadrage",
+            taches.append({"id": f"cadrage:{f['id']}", "titre": wf.titre_du_cadrage(f), "colonne": "cadrage",
                            "active": True, "titulaire": f["agent_cadrage"], "etape": "", "maj": f["maj"]})
     colonnes = _colonnes_du_releve(ctx, s["fonctionnalites"])
     visibles = {c["id"] for c in colonnes}

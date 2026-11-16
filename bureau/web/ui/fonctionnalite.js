@@ -19,6 +19,8 @@ import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEn
         tailleLisible, badge, affichage, fichiersAMontrer} from "./pieces.js";
 export {verifierChoix};
 
+import {estCorrection, bandeauCorrection, libelleEtapeCorrection} from "./parcours-correction.js";
+
 export const MAX_TEXTE = 3500;
 const MAX_OCTETS = MAX_OCTETS_IMAGE;   // une image fixe, une fois réduite
 
@@ -42,13 +44,15 @@ export function genreEtWorkflow(f) {
 // Ce que le moteur note quand le Directeur abandonne la demande plutôt que d'en valider le workflow.
 export const DEMANDE_ABANDONNEE = "(demande abandonnée)";
 
-// L'étape d'une fonctionnalité en clair (la liste et la page).
-export function libelleEtape(f) {
+// L'étape d'une fonctionnalité en clair (la liste et la page). `e` (le relevé) : l'étape d'une correction se lit sur
+// ses tâches (diagnostic, correctif…).
+export function libelleEtape(f, e) {
   if (f?.etape === "terminee") return "Terminée";
   if (f?.etape === "deplacee") {
     if (f.deplacee_vers === DEMANDE_ABANDONNEE) return "Demande abandonnée";   // le moteur n'a pas déplacé : le Directeur a renoncé
     return f.deplacee_vers ? "Partie dans le projet " + f.deplacee_vers : "Partie dans un autre projet";
   }
+  if (estCorrection(f)) return libelleEtapeCorrection(f, e);
   return ETAPES_PARCOURS.find((x) => x.id === f?.etape)?.libelle || f?.etape || "";
 }
 
@@ -73,7 +77,7 @@ export function demandeNouvelle(texte, fichiers, {nature = "fonctionnalite", con
   return d;
 }
 
-export const estCorrection = (f) => f?.nature === "correction";
+export {estCorrection};
 
 // La clé du brouillon de la discussion neuve : une pour chaque nature (on ne perd pas l'une en ouvrant l'autre).
 export const cleNouvelle = (nature) => "f:nouvelle" + (nature === "correction" ? "-correction" : "");
@@ -1220,7 +1224,7 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     if (genreEtWorkflow(f)) contenu.append(el("p", "fonctionnalite-genre", genreEtWorkflow(f)));
     if (f.etape === "deplacee") contenu.append(el("p", "note", libelleEtape(f)));
     const ol = el("ol", "parcours");
-    for (const b of bandeau(f.etape)) {
+    for (const b of (correction ? bandeauCorrection(f, e) : bandeau(f.etape))) {
       const li = el("li", "etape" + (b.courante ? " courante" : "") + (b.faite ? " faite" : ""), b.libelle);
       if (b.courante) li.setAttribute("aria-current", "step");
       ol.append(li);
@@ -1403,7 +1407,7 @@ export function contenuFonctionnalites(ctx, contenu) {
     b.type = "button";
     b.addEventListener("click", () => ctx.ouvrirFonctionnalite(f.id));
     if (estCorrection(f)) b.append(" ", el("span", "badge-correction", "Correction"));
-    const etape = libelleEtape(f);
+    const etape = libelleEtape(f, ctx.etat);
     const n = (f.decisions || []).length;
     li.append(b, el("div", "note", [etape, f.genre].filter(Boolean).join(" · ") + (n ? ` · ${n} décision${n > 1 ? "s" : ""}` : "")));
     ul.append(li);

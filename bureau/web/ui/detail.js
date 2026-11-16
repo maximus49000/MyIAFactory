@@ -8,6 +8,8 @@ import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
 import {coutsDesTaches, libelleCout} from "./couts.js";
 import {livraisonGroupee, titreAffiche} from "./repetitions.js";
+import {libelleEtapeTache} from "./parcours-correction.js";
+import {questionsEnAttente} from "./fonctionnalite.js";
 
 export const MAX_RETOUR = 3500;
 const MAX_TITRE = 90;
@@ -139,6 +141,12 @@ function blocPourquoi(p) {
   return bloc;
 }
 
+// Les questions à choix qui attendent l'utilisateur dans la discussion de la fonctionnalité de cette tâche, ou null.
+export function questionsAAttendre(e, t) {
+  if (!t?.fonctionnalite || t.colonne === "fait") return null;
+  return questionsEnAttente((e?.fonctionnalites || []).find((f) => f.id === t.fonctionnalite));
+}
+
 export function contenuTache(ctx, contenu, t) {
   const e = ctx.etat;
   if (ctx.retourListe) {
@@ -159,9 +167,19 @@ export function contenuTache(ctx, contenu, t) {
     r.append(el("strong", "", "Objectif : "), document.createTextNode(t.resume));
     contenu.append(r);
   }
+  // L'agent attend des réponses à ses questions à choix : elles se répondent dans la discussion de la fonctionnalité.
+  const attente = questionsAAttendre(e, t);
+  if (attente && ctx.ouvrirFonctionnalite) {
+    const n = attente.questions.length;
+    const b = el("button", "bouton", n > 1 ? `Répondre aux ${n} questions de l'agent` : "Répondre à la question de l'agent");
+    b.type = "button";
+    b.addEventListener("click", () => ctx.ouvrirFonctionnalite(t.fonctionnalite));
+    contenu.append(b);
+  }
   contenu.append(ligne("Colonne", tronquer(nomColonne(e, t.colonne), 30)));
   contenu.append(ligne("Agent", prenomAgent(e, t.agent)));
-  contenu.append(ligne("Étape", t.etape ? tronquer(t.etape, MAX_TITRE) : "—"));
+  const etape = libelleEtapeTache(e, t);       // « diagnostic », « correctif »… pour une correction
+  contenu.append(ligne("Étape", etape ? tronquer(etape, MAX_TITRE) : "—"));
   const necessaire = libelleModeleNecessaire(t);   // la montée y est comprise ; sans lui, la montée seule
   const montee = libelleMontee(t);
   if (necessaire) contenu.append(ligne("Modèle nécessaire", necessaire));

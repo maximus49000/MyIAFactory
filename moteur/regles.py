@@ -2212,7 +2212,7 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     # d'une fiche Haiku : le modèle de la fiche est un plafond, jamais dépassé (conception 2026-11-12-modele-par-tache).
     montee = None
     if tache is None:
-        tid = lancer(projet, "tache", {"titre": f"Cadrage : {f['nom']}", "fonctionnalite": fid,
+        tid = lancer(projet, "tache", {"titre": wf.titre_du_cadrage(f), "fonctionnalite": fid,
                                        "role": fiche.get("role") or (_role_cadrage(projet, fid) if fiche
                                                                      else ROLE_CADRAGE),
                                        "colonne": "cadrage", "agent": agent, "etape": "cadrage", "active": False,
@@ -2223,7 +2223,7 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
             return []     # il répond déjà
         if tid in _m(etat, "a_lancer", list):
             return _demarrer_en_attente(projet, etat, fid)    # déjà prêt à partir : on attend un agent libre
-        lancer(projet, "tache", {"id": tid, "agent": agent, "montee": montee, "titre": f"Cadrage : {f['nom']}"})
+        lancer(projet, "tache", {"id": tid, "agent": agent, "montee": montee, "titre": wf.titre_du_cadrage(f)})
     if consigne:
         lancer(projet, "tache", {"id": tid, "journal": [consigne]})
     if tid not in _m(etat, "a_lancer", list):
@@ -4438,7 +4438,7 @@ def _suite_cadrage(projet, etat, t, r):
     fid = t["fonctionnalite"]
     if r.get("nom"):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
-        lancer(projet, "tache", {"id": t["id"], "titre": f"Cadrage : {r['nom'][:80]}"})
+        lancer(projet, "tache", {"id": t["id"], "titre": wf.titre_du_cadrage(_fonc(projet, fid), r["nom"][:80])})
     fiche = _fiche_correction(projet, t, r)
     if fiche:
         return _suite_fiche_correction(projet, fid, fiche)

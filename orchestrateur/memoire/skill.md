@@ -1299,3 +1299,9 @@ Rôles : orchestrateur
 Date : 2026-11-16
 
 Quand un traitement a dû être fait ou rattrapé à la main depuis l'interface Claude Code parce que le bureau n'a pas su le faire seul, corriger la cause à la source, dans le code de la skill, pour que le bureau redevienne autonome ; le contournement à la main ne suffit pas. Si le compte GitHub connecté (gh api user) est le propriétaire du dépôt de la skill (git remote get-url origin), commiter la correction avec ses tests et la pousser directement. Sinon, ne rien pousser : ouvrir une issue sur le dépôt de la skill qui décrit le problème, sa cause et la correction proposée ; elle sera analysée avant d'être fusionnée.
+
+## S217 — Un test est qualitatif et rapide
+Rôles : dev, testeur, orchestrateur
+Date : 2026-11-16
+
+Tout test doit être à la fois qualitatif et rapide à exécuter, et on cherche toujours à l'optimiser : pas d'attente réelle, de réseau, de gros fichiers ni de scénario complet quand un double ou une donnée minimale prouve la même chose, en gardant des assertions précises. Quand une suite devient lente, repérer les tests les plus lents (par exemple pytest --durations=15) et les accélérer sans perdre ce qu'ils vérifient.

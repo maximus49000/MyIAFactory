@@ -270,7 +270,7 @@ class TestPrixEffectif(AvecTable):
         self.assertIsNotNone(prix.prix_effectif(self.table, {"prix": 3}, "claude-x", "2026-11-02")[0])
 
 
-class TestOuvrirUrl(unittest.TestCase):
+class TestOuvrirUrl(AvecTable):
     def test_adresses_constantes(self):
         self.assertTrue(prix.URL_PRIX.startswith("https://raw.githubusercontent.com/"))
         self.assertTrue(prix.URL_TAUX.startswith("https://www.ecb.europa.eu/"))
@@ -307,6 +307,27 @@ class TestOuvrirUrl(unittest.TestCase):
                 prix.ouvrir_url(prix.URL_TAUX)
         self.assertIn("www.ecb.europa.eu", str(ctx.exception))
         self.assertIn("certificat", str(ctx.exception))
+
+    def test_message_du_certificat_jamais_coupe(self):
+        """Le conseil de la BCE va jusqu'au bout dans le message du bureau (il était coupé à « son . »)."""
+        import ssl
+        import urllib.error
+        erreur = urllib.error.URLError(ssl.SSLCertVerificationError("unable to get local issuer certificate"))
+        with mock.patch("urllib.request.OpenerDirector.open", side_effect=erreur):
+            try:
+                prix.ouvrir_url(prix.URL_TAUX)
+            except ValueError as e:
+                conseil = e
+        res = prix.actualiser(self.table, Source(taux=conseil), "2026-11-16")
+        self.assertFalse(res["ok"])
+        self.assertIn(str(conseil), res["message"])
+        self.assertTrue(res["message"].endswith("son autorité)."), res["message"])
+
+    def test_erreur_trop_longue_coupee_sur_un_mot(self):
+        texte = prix._court(ValueError("mot " * 200))
+        self.assertTrue(texte.endswith("…"), texte)
+        self.assertLessEqual(len(texte), prix.MAX_ERREUR + 1)
+        self.assertFalse(texte[:-1].endswith(" "))
 
     def test_redirection_vers_http_refusee(self):
         gestionnaire = prix._RedirectionHttps()

@@ -26,6 +26,7 @@ MAX_OCTETS = 5 * 1024 * 1024
 FACTEUR_ABSURDE = 10
 MAX_NOM = 200
 MAX_NOTE = 600
+MAX_ERREUR = 400  # le conseil « certificat non reconnu » de la BCE fait plus de 200 caractères
 CHAMPS = ("entree", "sortie", "cache_lecture", "cache_ecriture")
 CHAMPS_SOURCE = {"entree": "input_cost_per_token", "sortie": "output_cost_per_token",
                  "cache_lecture": "cache_read_input_token_cost",
@@ -279,7 +280,11 @@ def _absurde(ancien, nouveau):
 
 
 def _court(e):
-    return str(e).strip()[:200] or e.__class__.__name__
+    """Le texte d'une erreur, borné à MAX_ERREUR caractères : coupé sur un mot et marqué « … »."""
+    texte = str(e).strip()
+    if len(texte) > MAX_ERREUR:
+        texte = texte[:MAX_ERREUR].rsplit(" ", 1)[0].rstrip(" ,;:(") + "…"
+    return texte or e.__class__.__name__
 
 
 def actualiser(table, ouvrir, aujourdhui_iso):

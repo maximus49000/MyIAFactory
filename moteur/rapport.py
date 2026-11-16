@@ -10,6 +10,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "chez_partenaire": {"partenaire", "quoi", "prompt", "reglages"?, "mode_operatoire", "a_rapporter", "elements"?}?,
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?}?,
+     "fiche_correction": {"symptome", "reproduction": [texte], "attendu", "piste"?}?,   (cadrage d'une correction)
      "methode_prete": bool?, "non_faites": [id de tâche]?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,

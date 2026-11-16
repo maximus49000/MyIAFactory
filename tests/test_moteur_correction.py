@@ -75,6 +75,8 @@ class TestCorrection(Base):
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
         self.assertEqual(regles.avancer(self.projet, self.etat), [])     # rien ne démarre avant la réponse
         self.assertEqual(self.taches(etape="cadrage"), [])
+        self.traiter(type="message", fonctionnalite="f1", texte="devops")     # pas un des métiers : « dev » ≠ « devops »
+        self.assertIsNone(self.fonc().get("workflow"))
         # la réponse du Directeur : le métier choisi corrige, le cadrage court démarre
         self.traiter(type="message", fonctionnalite="f1", texte="dev")
         self.assertEqual(self.fonc()["workflow"], "w-f1")
@@ -100,6 +102,58 @@ class TestCorrection(Base):
         (t,) = self.taches(etape="cadrage")
         self.assertEqual(t["colonne"], "fait")
         self.assertEqual(self.fonc()["etape"], "serie")
+
+    def en_serie(self):
+        """Une correction cadrée, en série : rend la tâche du correctif."""
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        regles._suite_cadrage(self.projet, self.etat, t, {"nom": "Corriger : score", "fiche_correction": FICHE})
+        regles.avancer(self.projet, self.etat)
+        (flux,) = self.taches(etape="flux:f1-correctif")
+        return flux
+
+    def test_la_matiere_du_correctif_et_de_la_livraison(self):
+        matiere = regles._matiere(self.projet, self.etat, self.en_serie())
+        self.assertIn("Symptôme : reste à 12", matiere)
+        self.assertIn("## Correctif", matiere)
+        self.assertNotIn("## Livraison", matiere)
+        self.assertNotIn("Méthode validée", matiere)
+        tid = regles._creer_tache(self.projet, "Livraison", "f1", "dev", "flux:f1-livraison", element="correction")
+        matiere = regles._matiere(self.projet, self.etat, regles._tache(self.projet, tid))
+        self.assertIn("Symptôme : reste à 12", matiere)
+        self.assertIn("## Livraison", matiere)
+        self.assertNotIn("## Correctif", matiere)
+
+    def test_la_matiere_d_une_fonctionnalite_ordinaire_ne_change_pas(self):
+        self.serie(n=1)
+        regles.avancer(self.projet, self.etat)
+        (t,) = self.taches(etape="flux:dev")
+        matiere = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("Méthode validée : pieces/f1/methode-v1.md", matiere)
+        self.assertNotIn("correction**", matiere)
+        self.assertNotIn("Symptôme", matiere)
+
+    def test_trop_de_tours_laisse_la_correction_de_cote_sans_parler_de_methode(self):
+        self.en_serie()
+        v = self.etat["elements"]["f1/correction"]
+        regles._methode_a_revoir(self.projet, self.etat, v, "cet élément a déjà eu 3 tours de corrections")
+        self.assertEqual(self.decisions("methode_a_revoir"), [])
+        (t,) = self.taches(etape="flux:f1-correctif")
+        self.assertIn("correction qui n'aboutit pas", t["bloquee"])
+        dernier = self.fonc()["discussion"][-1]["texte"]
+        self.assertIn("La correction n'aboutit pas", dernier)
+        self.assertNotIn("méthode", dernier)
+
+    def test_une_fiche_sans_attendu_laisse_le_cadrage_ouvert(self):
+        _, actions = self.corriger()
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Je cherche."},
+                                         "fiche_correction": {**FICHE, "attendu": " "}}], limite=1)
+        (t,) = self.taches(etape="cadrage")
+        self.assertNotEqual(t["colonne"], "fait")
+        self.assertEqual(self.fonc()["etape"], "cadrage")
+
+    def test_une_fonctionnalite_concernee_disparue_est_ignoree(self):
+        self.assertEqual(regles._contexte_concerne(self.projet, {"concerne": "f9"}), [])
 
     def test_la_fonctionnalite_concernee_est_dans_la_matiere(self):
         self.fonctionnalite(etape="serie")       # f1 : une fonctionnalité existante

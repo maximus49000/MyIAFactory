@@ -935,7 +935,8 @@ def _reponse_metier_de_correction(projet, etat, demande, fid):
     """La réponse à « quel métier corrige ? » : un des rôles proposés lance la correction ; sinon la question reste."""
     texte = " ".join((demande.get("texte") or "").split())
     roles = _roles_avec_service(_factory(projet))
-    role = next((r for r in roles if r == texte), None) or next((r for r in roles if r in texte), None)
+    role = next((r for r in roles if r == texte), None) or next(
+        (r for r in roles if re.search(rf"(?<![\w-]){re.escape(r)}(?![\w-])", texte)), None)
     suite = {"demande": demande["id"], "fonctionnalite": fid}
     if role is None:
         _terminer(projet, suite, "Je n'ai pas reconnu le métier : choisissez-en un parmi "
@@ -3452,6 +3453,35 @@ def _partenaires_au_cadrage(projet):
     return "\n".join(lignes)
 
 
+SECTIONS_CORRECTION = {"correctif": "Correctif", "verification": "Vérification", "livraison": "Livraison"}
+
+
+def _consigne_de_correction(pas):
+    """La section de `consignes-correction.md` de l'étape (`correctif`, `verification`, `livraison`), titre compris ;
+    vide pour une autre étape ou un fichier illisible."""
+    titre = SECTIONS_CORRECTION.get(pas)
+    try:
+        texte = wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8") if titre else ""
+    except OSError:
+        return ""
+    m = re.search(rf"^## {re.escape(titre)}[ \t]*\n.*?(?=^## |\Z)", texte, re.M | re.S) if titre else None
+    return m.group(0).strip() if m else ""
+
+
+def _contexte_concerne(projet, f):
+    """Ce que l'agent d'une correction sait de la fonctionnalité concernée (nom, cahier, éléments) ; rien si elle n'est
+    pas dite ou n'existe plus."""
+    if not (f or {}).get("concerne"):
+        return []
+    try:
+        c = _fonc(projet, f["concerne"])
+    except Refus:
+        return []
+    return [f"Fonctionnalité concernée : {c['nom']} ({c['id']})", "Son cahier : " + str(c.get("cahier")),
+            "Ses éléments : " + (", ".join(str((x or {}).get("nom") or k)
+                                           for k, x in (c.get("elements") or {}).items()) or "(aucun)")]
+
+
 def _matiere(projet, etat, t):
     """Ce que l'agent doit savoir de la tâche, en plus de son message de départ (la discussion, les retours, l'élément)."""
     etape, fid = str(t.get("etape") or ""), t.get("fonctionnalite")
@@ -3472,11 +3502,7 @@ def _matiere(projet, etat, t):
                         "Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
                         "Rends `fiche_correction` dès que tu peux reproduire et comprendre l'attendu ; sinon des "
                         "questions courtes à choix (`message.questions`, `attend: true`)."]
-            if f.get("concerne"):
-                c = _fonc(projet, f["concerne"])
-                parties += [f"Fonctionnalité concernée : {c['nom']} ({c['id']})", "Son cahier : " + str(c.get("cahier")),
-                            "Ses éléments : " + (", ".join(str((x or {}).get("nom") or k)
-                                                           for k, x in (c.get("elements") or {}).items()) or "(aucun)")]
+            parties += _contexte_concerne(projet, f)
         else:
             parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
                         "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
@@ -3503,10 +3529,19 @@ def _matiere(projet, etat, t):
                     'convient-il ? » → « Oui, on continue » / « À corriger (précisez) »). Quand la méthode te semble prête, résume-la dans ton message et rends '
                     '`"methode_prete": true`.']
     elif etape.startswith(ETAPES_DE_FLUX):
-        methode = (f or {}).get("methode") or {}
-        parties += [f"Élément : {t.get('element')}", f"Étape du flux : {etape[len(ETAPES_DE_FLUX):]}",
-                    "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
-                    "Registre des contrôles : relis-le avant de rendre l'élément."]
+        pas = etape[len(ETAPES_DE_FLUX):]
+        if (f or {}).get("nature") == "correction":
+            consigne = _consigne_de_correction(pas.removeprefix(f"{fid}-"))
+            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
+                        "C'est une **correction**, pas une nouvelle fonctionnalité. Fiche de correction :",
+                        "\n".join(f"- {x}" for x in (f.get("cahier") or {}).get("etapes") or []) or "(vide)"]
+            parties += ([consigne] if consigne else []) + _contexte_concerne(projet, f)
+            parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
+        else:
+            methode = (f or {}).get("methode") or {}
+            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
+                        "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
+                        "Registre des contrôles : relis-le avant de rendre l'élément."]
         production = _production(projet, fid)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
@@ -4417,9 +4452,11 @@ def _suite_cadrage(projet, etat, t, r):
 
 
 def _fiche_correction(projet, t, r):
-    """La `fiche_correction` du rapport de cadrage d'une correction (un objet), sinon None."""
+    """La `fiche_correction` du rapport de cadrage d'une correction (un objet avec `symptome` et `attendu` non vides),
+    sinon None : la tâche de cadrage reste ouverte, comme sans cahier."""
     fiche = r.get("fiche_correction")
-    if not isinstance(fiche, dict) or not t.get("fonctionnalite"):
+    if (not isinstance(fiche, dict) or not t.get("fonctionnalite")
+            or not all(isinstance(fiche.get(k), str) and fiche[k].strip() for k in ("symptome", "attendu"))):
         return None
     return fiche if _fonc(projet, t["fonctionnalite"]).get("nature") == "correction" else None
 
@@ -4984,8 +5021,13 @@ def _element_fait(projet, etat, v):
 
 
 def _methode_a_revoir(projet, etat, v, raison):
-    v["phase"] = "attente_methode"
     f = _fonc(projet, v["fid"])
+    if f.get("nature") == "correction":       # pas de méthode : la correction est laissée de côté, le Directeur le sait
+        _bloquer_element(projet, etat, v["fid"], v["element"]["id"], f"correction qui n'aboutit pas : {raison}")
+        _dire(projet, v["fid"], f"La correction n'aboutit pas : {raison}. Je la laisse de côté ; pour réessayer, "
+                                "envoyez un retour sur l'élément ou une nouvelle correction plus précise.")
+        return []
+    v["phase"] = "attente_methode"
     if not _a_decision(f, "methode_a_revoir"):
         _poser(projet, v["fid"], "methode_a_revoir",
                f"La méthode est peut-être à revoir : {raison}. La revoir, ou la garder et laisser l'élément "

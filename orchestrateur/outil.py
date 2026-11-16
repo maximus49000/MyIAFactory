@@ -1605,7 +1605,6 @@ def _reprendre_le_workflow_de_creation(ctx, e):
     return {"ok": True, "workflow": copie["id"]}
 
 
-
 def _workflow_de_correction(ctx, e):
     """`{"action": "correction", "fonctionnalite", "role_production", "role_qa"?}` : le workflow d'une correction
     (`workflows.de_correction`), écrit sans service, agent ni brief nouveau, sans décision. Les rôles viennent du moteur

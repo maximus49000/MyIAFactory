@@ -8,7 +8,7 @@ import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
 import {lignesModele} from "./polyvalent.js";
-import {contenuDirecteur, contenuAgent, resumeLecons, ficheAncienAgent} from "./directeur.js";
+import {contenuDirecteur, contenuAgent, resumeLecons, ficheAncienAgent, signatureDirecteur} from "./directeur.js";
 import {contenuFonctionnalite, contenuFonctionnalites, nouvelleApparue, cleNouvelle} from "./fonctionnalite.js";
 import {contenuQuestions} from "./questions.js";
 import {contenuCatalogue} from "./catalogue.js";
@@ -86,9 +86,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       return JSON.stringify([a, (e.taches || []).map((t) => [t.id, t.titre, t.colonne, t.agent, t.service, t.modele_depart]), e.services, e.agir,
         retourListe, chef]);
     }
-    return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
-      e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length]), e.decisions_projet,
-      (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours]), e.echanges_vus, e.anciens_agents]);
+    return signatureDirecteur(e);
   };
 
   // Les tâches qui passent le filtre tant que la vue liste est ouverte (sinon null : rien n'est estompé).

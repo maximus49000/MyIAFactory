@@ -445,3 +445,11 @@ export function serviceDeTache(etat, t, agent) {
   return (etat?.services || []).find((s) => s.id === id)?.nom || "—";
 }
 
+// Ce que montre le panneau Direction : il se redessine quand cela change. L'avis de fin (`fin`, fermé par « Vu ») et
+// les anomalies du logiciel en font partie, sinon « Vu » ne fermait rien tant que la page n'était pas rechargée.
+export function signatureDirecteur(e) {
+  return JSON.stringify([e.decisions, e.lecons, e.lecons_en_attente, e.agir, (e.agents || []).map((a) => [a.id, a.modele, a.service, a.prenom]),
+    e.version, (e.fonctionnalites || []).map((f) => [f.id, f.nom, f.decisions, f.etape, (f.discussion || []).length, f.fin, f.catalogue]),
+    e.decisions_projet, (e.taches || []).map((t) => [t.id, t.titre, t.bloquee, t.retours]), e.echanges_vus, e.anciens_agents,
+    e.anomalies_logiciel]);
+}

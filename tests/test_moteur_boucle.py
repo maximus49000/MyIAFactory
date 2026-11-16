@@ -618,13 +618,14 @@ class Lecteur(Base):
         vus = []
 
         def appeler(consigne, dossier, modele, **kw):
-            vus.append((modele, kw.get("outils"), kw.get("dossier_travail")))
+            vus.append((modele, kw.get("outils"), kw.get("dossier_travail"), kw.get("couche")))
             return appel.Reponse(json.dumps(self.LUE if kw.get("outils") else self.PREMIERE), [dict(USAGE)])
         self.moteur.appeler = appeler
+        self.projet.couche = "api"     # les jugements passent par l'API ; le lecteur, lui, a besoin de claude -p
         self.demande(type="question", texte="Que fait la sauvegarde ?")
         self.moteur.tour()          # synchrone : jugée, escaladée, lue et la lecture appliquée dans le même passage
         self.assertEqual(len(vus), 2)
-        self.assertEqual(vus[-1], ("sonnet", ["Read", "Grep", "Glob"], str(self.projet.dossier)))
+        self.assertEqual(vus[-1], ("sonnet", ["Read", "Grep", "Glob"], str(self.projet.dossier), "claude"))
         (fil,) = self.fils()
         dernier = fil["messages"][-1]
         self.assertEqual((fil["etat"], dernier["niveau"], dernier["fichiers_lus"]),
@@ -644,6 +645,7 @@ class Lecteur(Base):
         (fil,) = self.fils()
         self.assertEqual((fil["etat"], fil["messages"][-1]["texte"]),
                          ("repondue", "Je n'ai pas pu lire le code jusqu'au bout."))
+        self.assertEqual(fil["messages"][-1]["niveau"], "documents")    # « Chercher dans le code » reste possible
         self.assertTrue(any("délai dépassé" in j for j in self.moteur.journal))
 
     def test_au_demarrage_une_lecture_laissee_est_dite_interrompue(self):

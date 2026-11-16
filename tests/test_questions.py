@@ -182,7 +182,26 @@ class TestLecteur(Base):
             self.assertEqual(regles.appliquer_lecture(self.projet, self.etat, suite, objet, []), [])
             (fil,) = self.fils()
             self.assertEqual((fil["etat"], fil["messages"][-1]["texte"], fil["messages"][-1]["niveau"]),
-                             ("repondue", "Je n'ai pas pu lire le code jusqu'au bout.", "code"))
+                             ("repondue", "Je n'ai pas pu lire le code jusqu'au bout.", "documents"))
+        d, actions = self.traiter(type="question_approfondir", fil="q1")     # « Chercher dans le code » reste possible
+        self.assertEqual([a[0] for a in actions], ["lire"])
+
+    def test_approfondir_pendant_une_lecture_ne_relance_pas(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        self.ok("lancer", "questions", entree={"action": "ajouter", "id": "q1", "auteur": "factory", "texte": "R",
+                                              "niveau": "documents", "sur": False})
+        self.ok("lancer", "questions", entree={"action": "marquer", "id": "q1", "etat": "en_lecture"})
+        d, actions = self.traiter(type="question_approfondir", fil="q1")
+        self.assertEqual(actions, [])
+        self.assertEqual(self.statut(d["id"])["reponse"], "Je cherche déjà dans le code.")
+        self.assertEqual(len(self.fils()[0]["messages"]), 2)
+
+    def test_premiere_reponse_est_celle_des_documents(self):
+        self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})
+        for texte in ("R", "Lecture interrompue (le moteur a redémarré)."):
+            self.ok("lancer", "questions", entree={"action": "ajouter", "id": "q1", "auteur": "factory",
+                                                  "texte": texte, "niveau": "documents", "sur": False})
+        self.assertEqual(regles.dossier_de_lecture(self.projet, "q1")["premiere_reponse"], "R")
 
     def test_lecture_interrompue(self):
         self.ok("lancer", "questions", entree={"action": "ouvrir", "texte": "Q ?"})

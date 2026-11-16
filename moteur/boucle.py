@@ -622,7 +622,9 @@ class Moteur:
                 dossier = regles.dossier_de_lecture(projet, fil)
                 consigne = regles.CONSIGNE_LECTEUR.read_text(encoding="utf-8")
                 r = self.appeler(consigne, json.dumps(dossier, ensure_ascii=False), regles.MODELE_LECTEUR,
-                                 couche=projet.couche, outils=list(regles.OUTILS_LECTEUR),
+                                 # toujours claude -p (comme un agent de production) : la couche « api » ignore
+                                 # les outils et le dossier, le lecteur répondrait sans lire le code
+                                 couche="claude", outils=list(regles.OUTILS_LECTEUR),
                                  dossier_travail=str(projet.dossier))
                 objet, usages = jugement.extraire_json(r.texte), r.usages
             except Exception as ex:          # noqa: BLE001 — une erreur n'arrête jamais la boucle

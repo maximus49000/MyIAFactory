@@ -13,6 +13,8 @@ MAX_TOURS = 600
 # Une leçon validée de genre ou de skill s'écrit dans la skill (ce dépôt) : le banc n'en valide jamais. Les leçons
 # notées par les agents restent comptées dans le suivi.
 GESTES_IGNORES = ("lecon",)
+# les usages du moteur hors production (comme `bureau.cout`) : ses jugements et les réponses aux questions
+ETAPES_HORS_PRODUCTION = (boucle.ETAPE_ORCHESTRATION, boucle.ETAPE_QUESTIONS)
 
 
 def poste_pret(outils):
@@ -149,8 +151,8 @@ def jouer_moteur(scenario, dossier, appeler, *, couche="claude", max_tours=MAX_T
     suivi = json.loads((dossier / "suivi.json").read_text(encoding="utf-8"))
     usages = suivi.get("usage") or []
     return {"tours": tours, "appels": [{"modele": a["modele"]} for a in compteur.appels],
-            "usages_jugement": [u for u in usages if u.get("etape") == "orchestration"],
-            "usages_production": [u for u in usages if u.get("etape") != "orchestration"],
+            "usages_jugement": [u for u in usages if u.get("etape") in ETAPES_HORS_PRODUCTION],
+            "usages_production": [u for u in usages if u.get("etape") not in ETAPES_HORS_PRODUCTION],
             "ecarts": list(rejoueur.ecarts), "etat": regles.lancer(projet, "etat"), "suivi": suivi,
             "gestes_restants": scenario.restants, "journal": list(moteur.journal),
             "demandes_en_attente": [d for d in suivi["demandes"] if d["statut"] == "en attente"]}

@@ -5936,7 +5936,11 @@ LECTURE_RATEE = "Je n'ai pas pu lire le code jusqu'au bout."
 
 
 def _sur_question_approfondir(projet, demande, etat):
-    """« Chercher dans le code » sur un fil déjà répondu : le lecteur part, sans nouveau jugement."""
+    """« Chercher dans le code » sur un fil déjà répondu : le lecteur part, sans nouveau jugement. Un lecteur déjà
+    parti sur ce fil (double clic) : rien de plus."""
+    if _fil(projet, demande["fil"])["etat"] == "en_lecture":
+        _terminer(projet, {"demande": demande["id"]}, "Je cherche déjà dans le code.")
+        return []
     lancer(projet, "questions", {"action": "marquer", "id": demande["fil"], "etat": "en_lecture"})
     _terminer(projet, {"demande": demande["id"]}, "Je cherche dans le code.")
     return [a_lire(demande["fil"], {"demande": None, "fonctionnalite": None, "fil": demande["fil"]})]
@@ -5947,24 +5951,30 @@ _SUR["question_approfondir"] = _sur_question_approfondir
 
 def dossier_de_lecture(projet, fil_id):
     """Le dossier de la première réponse, la question étant la dernière de l'utilisateur (le fil se termine par la
-    réponse de la factory), plus cette première réponse."""
+    réponse de la factory), plus la première réponse d'après les documents qui la suit (pas « Lecture interrompue »
+    ni une lecture ratée, écrites après elle)."""
     fil = _fil(projet, fil_id)
     messages = fil["messages"]
     k = max((i for i, m in enumerate(messages) if m["auteur"] == "utilisateur"), default=len(messages) - 1)
     return {**_dossier_question(projet, {**fil, "messages": messages[:k + 1]}),
-            "premiere_reponse": next((m["texte"] for m in reversed(messages[k + 1:]) if m["auteur"] == "factory"),
-                                     None)}
+            "premiere_reponse": next((m["texte"] for m in messages[k + 1:]
+                                      if m["auteur"] == "factory" and m.get("niveau") == "documents"), None)}
 
 
 def appliquer_lecture(projet, etat, suite, objet, usages):
-    """La réponse du lecteur dans le fil (`niveau: "code"`) ; une réponse vide ou invalide y écrit `LECTURE_RATEE`.
-    Le fil finit toujours `repondue`."""
+    """La réponse du lecteur dans le fil (`niveau: "code"`) ; une réponse vide ou invalide y écrit `LECTURE_RATEE` au
+    niveau « documents » (le bureau garde ainsi « Chercher dans le code » pour réessayer). Le fil finit toujours
+    `repondue`."""
     if not isinstance(objet, dict):
         objet = None
     erreur = jugement.valider("repondre_question", objet, dossier_de_lecture(projet, suite["fil"])) if objet else "vide"
     fichiers = objet.get("fichiers_lus") if objet and isinstance(objet.get("fichiers_lus"), list) else None
-    if erreur:
-        objet, fichiers = {"reponse": LECTURE_RATEE, "sur": False, "suggestion": None}, None
+    if erreur:      # écrit ici, pas par `_repondre_au_fil` : « documents » et pas sûr y relancerait une lecture
+        lancer(projet, "questions", {"action": "ajouter", "id": suite["fil"], "auteur": "factory",
+                                     "texte": LECTURE_RATEE, "niveau": "documents", "sur": False, "suggestion": None})
+        lancer(projet, "questions", {"action": "marquer", "id": suite["fil"], "etat": "repondue"})
+        _terminer(projet, suite, LECTURE_RATEE)
+        return []
     fichiers = [x for x in fichiers or [] if isinstance(x, str) and x.strip()][:40] or None
     return _repondre_au_fil(projet, etat, suite, objet, "code", fichiers)
 

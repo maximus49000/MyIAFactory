@@ -462,6 +462,8 @@ def _verifier_v4(demande, r, elements):
         if demande.get("fil") is not None and demande["fil"] not in fils:
             return f"Question inconnue : {demande['fil']}"
         if genre == "question_approfondir":
+            if fils[demande["fil"]].get("etat") == "en_lecture":     # un lecteur est déjà parti : pas de second
+                return "Je cherche déjà dans le code."
             dernier = fils[demande["fil"]]["messages"][-1]
             if dernier.get("auteur") != "factory" or dernier.get("niveau") != "documents":
                 return "Cette question n'a pas de réponse d'après les documents à approfondir."

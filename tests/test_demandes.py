@@ -315,6 +315,11 @@ class TestVerifierV4(unittest.TestCase):
         self.ok({"type": "question_approfondir", "fil": "q1"})
         self.refus({"type": "question_approfondir", "fil": "q9"})
 
+    def test_approfondir_refuse_pendant_une_lecture(self):
+        r = {**R4, "questions": [{**R4["questions"][0], "etat": "en_lecture"}]}
+        self.assertEqual(demandes.verifier({"type": "question_approfondir", "fil": "q1"}, r, frozenset(), None),
+                         "Je cherche déjà dans le code.")
+
     def test_message(self):
         self.ok({"type": "message", "fonctionnalite": "f5", "texte": "Bonjour"})
         self.ok({"type": "message", "fonctionnalite": "f5", "texte": "Bonjour", "images": [image(), image("b.jpg", JPEG, "image/jpeg")]})

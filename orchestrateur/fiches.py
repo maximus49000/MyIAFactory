@@ -25,6 +25,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from orchestrateur import lecture
+
 ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", "Spécialité", "Outils", "Fable", "Retrait")
 # Les outils d'un agent lancé sans fenêtre quand sa fiche n'en déclare pas : lire, écrire et modifier dans le dossier
 # du projet, lancer Python (`py`, mais aussi `python`, que les agents emploient d'eux-mêmes : refusé, il bloquait toute
@@ -49,7 +51,7 @@ class FicheInvalide(Exception):
 def lire_fiche(chemin):
     """Une fiche : {cle, prenom, role, service, modele, lieu, session, specialite, texte, lecons, chemin}."""
     chemin = Path(chemin)
-    lignes = chemin.read_text(encoding="utf-8-sig").splitlines()
+    lignes = lecture.texte(chemin).splitlines()
     champs, i = {}, 0
     while i < len(lignes):
         m = _ENTETE.match(lignes[i])

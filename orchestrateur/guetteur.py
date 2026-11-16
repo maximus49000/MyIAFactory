@@ -16,10 +16,33 @@ def _maintenant():
     return datetime.now().astimezone()
 
 
+RENOUVELLEMENT_S = 5   # une présence plus récente n'est pas réécrite : bien en deçà de FRAICHEUR_S
+
+
 def ecrire_presence(presence, quand):
+    """Note la présence. L'outil l'appelle à chaque commande : une présence du même processus notée il y a moins de
+    `RENOUVELLEMENT_S` est gardée telle quelle (mesure : 5 024 réécritures pour 54 tests, chaque `os.replace` coûtant
+    plusieurs millisecondes sous Windows)."""
+    cle = (os.path.abspath(presence), os.getpid())
+    precedente = _ECRITES.get(cle)
+    try:
+        if precedente is not None and 0 <= (quand - precedente).total_seconds() < RENOUVELLEMENT_S \
+                and presence.stat().st_mtime_ns == _MARQUES.get(cle):   # toujours la nôtre : personne ne l'a réécrite
+            return
+    except (OSError, TypeError):
+        pass
     tmp = presence.with_name(presence.name + ".tmp")
     tmp.write_text(json.dumps({"maj": quand.isoformat(timespec="seconds"), "pid": os.getpid()}), encoding="utf-8")
     os.replace(tmp, presence)
+    _ECRITES[cle] = quand
+    try:
+        _MARQUES[cle] = presence.stat().st_mtime_ns
+    except OSError:
+        _MARQUES.pop(cle, None)
+
+
+_ECRITES = {}   # (présence, processus) -> la dernière présence notée par ce processus
+_MARQUES = {}   # (présence, processus) -> la date du fichier juste après cette écriture
 
 
 def _annoncer(journal, pos, sortie):

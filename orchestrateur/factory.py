@@ -2,6 +2,7 @@
 
 Un fichier JSON versionné dans le dépôt du projet. Tous les chemins qu'il contient sont relatifs à lui.
 """
+import copy
 import json
 import os
 import re
@@ -80,8 +81,33 @@ def _controler_flux(flux, nom, ids_services, vus):
         raise FactoryInvalide(f"Factory : « {nom} » : deux étapes de validation de suite sont refusées.")
 
 
+_CACHE = {}
+_CACHE_MAX = 64
+
+
 def lire(chemin):
-    """Le fichier de factory, contrôlé : un dict dont les chemins sont des `Path` absolus."""
+    """Le fichier de factory, contrôlé : un dict dont les chemins sont des `Path` absolus.
+
+    Le résultat est gardé tant que le fichier ne change pas (date de modification et taille) : le moteur, le bureau et
+    l'outil le relisent des centaines de fois par tour, et chaque lecture résolvait sept chemins sur le disque (mesure :
+    13 428 lectures pour 54 tests, un tiers de leur durée). La clé porte aussi le dossier de l'utilisateur, dont
+    dépendent les chemins en « ~/ ». Chaque appel reçoit sa propre copie."""
+    try:
+        st = os.stat(chemin)
+        cle = (os.path.abspath(chemin), st.st_mtime_ns, st.st_size, os.path.expanduser("~"))
+    except OSError:
+        cle = None   # illisible : `_lire` le dit
+    if cle is not None and cle in _CACHE:
+        return copy.deepcopy(_CACHE[cle])
+    r = _lire(chemin)
+    if cle is not None:
+        if len(_CACHE) >= _CACHE_MAX:
+            _CACHE.clear()
+        _CACHE[cle] = copy.deepcopy(r)
+    return r
+
+
+def _lire(chemin):
     chemin = Path(chemin)
     try:
         d = json.loads(chemin.read_text(encoding="utf-8-sig"))

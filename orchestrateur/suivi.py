@@ -11,6 +11,8 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from orchestrateur import lecture
+
 DELAI_VERROU_S = 5
 VERROU_PERIME_S = 30      # un verrou plus vieux est celui d'un processus mort
 
@@ -46,7 +48,7 @@ class Suivi:
         lu = None
         if self.chemin.exists():
             try:
-                lu = json.loads(self.chemin.read_text(encoding="utf-8-sig"))
+                lu = json.loads(lecture.texte(self.chemin))
             except (ValueError, UnicodeDecodeError):
                 if not self.precedent.exists():
                     raise

@@ -28,3 +28,5 @@ exemples/projet-neuf/sessions.json
 exemples/projet-neuf/pieces/
 exemples/projet-neuf/equipe.json
 exemples/projet-neuf/*-historique.jsonl
+
+.durees-tests.json

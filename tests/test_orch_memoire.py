@@ -1,6 +1,7 @@
 """La mémoire à trois étages. Seuls des dépôts git temporaires et locaux sont utilisés (jamais un distant réel)."""
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -65,26 +66,41 @@ def git(*args, cwd, entree=None):
 class AvecDepots(unittest.TestCase):
     """Un dépôt nu local et deux clones, comme deux orchestrateurs qui écrivent dans la mémoire."""
 
+    @classmethod
+    def setUpClass(cls):
+        """Les trois dépôts sont construits une fois par classe (une douzaine de commandes git) ; chaque test en
+        reçoit une copie fraîche (voir `setUp`)."""
+        super().setUpClass()
+        cls._modele = tempfile.TemporaryDirectory()
+        m = Path(cls._modele.name)
+        distant, a, b = m / "distant.git", m / "a", m / "b"
+        git("init", "-q", "--bare", "-b", "main", str(distant), cwd=m)
+        git("init", "-q", "-b", "main", str(a), cwd=m)
+        cls.configurer(a)
+        (a / "memoire" / "genres").mkdir(parents=True)
+        (a / "memoire" / "skill.md").write_text(SKILL, encoding="utf-8")
+        (a / "memoire" / "genres" / "vitrine.md").write_text(GENRE_A, encoding="utf-8")
+        (a / "memoire" / "genres" / "jeu-web.md").write_text(GENRE_B, encoding="utf-8")
+        git("add", "-A", cwd=a)
+        git("commit", "-q", "-m", "départ", cwd=a)
+        git("remote", "add", "origin", str(distant), cwd=a)
+        git("push", "-q", "-u", "origin", "main", cwd=a)
+        git("clone", "-q", str(distant), str(b), cwd=m)
+        cls.configurer(b)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._modele.cleanup()
+        super().tearDownClass()
+
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
         self.addCleanup(self._t.cleanup)
         self.tmp = Path(self._t.name)
-        self.distant = self.tmp / "distant.git"
-        git("init", "-q", "--bare", "-b", "main", str(self.distant), cwd=self.tmp)
-        self.a = self.tmp / "a"
-        git("init", "-q", "-b", "main", str(self.a), cwd=self.tmp)
-        self.configurer(self.a)
-        (self.a / "memoire" / "genres").mkdir(parents=True)
-        (self.a / "memoire" / "skill.md").write_text(SKILL, encoding="utf-8")
-        (self.a / "memoire" / "genres" / "vitrine.md").write_text(GENRE_A, encoding="utf-8")
-        (self.a / "memoire" / "genres" / "jeu-web.md").write_text(GENRE_B, encoding="utf-8")
-        git("add", "-A", cwd=self.a)
-        git("commit", "-q", "-m", "départ", cwd=self.a)
-        git("remote", "add", "origin", str(self.distant), cwd=self.a)
-        git("push", "-q", "-u", "origin", "main", cwd=self.a)
-        self.b = self.tmp / "b"
-        git("clone", "-q", str(self.distant), str(self.b), cwd=self.tmp)
-        self.configurer(self.b)
+        shutil.copytree(self._modele.name, self.tmp, dirs_exist_ok=True)
+        self.distant, self.a, self.b = self.tmp / "distant.git", self.tmp / "a", self.tmp / "b"
+        for clone in (self.a, self.b):   # les copies pointent sur le distant de leur propre dossier
+            git("remote", "set-url", "origin", str(self.distant), cwd=clone)
         self.ma, self.mb = self.a / "memoire", self.b / "memoire"
 
     @staticmethod

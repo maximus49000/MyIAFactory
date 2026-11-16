@@ -42,6 +42,22 @@ export function genreEtWorkflow(f) {
   return parties.join(" · ");
 }
 
+// L'objectif de la tâche en clair, lu en tête du panneau avant le détail : la lecture « En clair » de la fiche d'une
+// correction, sinon ce qui est attendu, sinon la demande d'origine (premier message de l'utilisateur). null : rien.
+export const MAX_EN_CLAIR = 400;
+export function objectifEnClair(f) {
+  const ligne = (x) => String(x || "").split(/\s+/).filter(Boolean).join(" ");
+  const etapes = (Array.isArray(f?.cahier?.etapes) ? f.cahier.etapes : []).filter((x) => typeof x === "string");
+  const champ = (prefixe) => ligne((etapes.find((x) => x.startsWith(prefixe)) || "").slice(prefixe.length));
+  const enClair = champ("En clair : ");
+  if (enClair) return {titre: "En clair", texte: tronquer(enClair, MAX_EN_CLAIR - 1)};
+  const attendu = estCorrection(f) ? champ("Attendu : ") : "";
+  if (attendu) return {titre: "Objectif", texte: tronquer(attendu, MAX_EN_CLAIR - 1)};
+  const m = (Array.isArray(f?.discussion) ? f.discussion : []).find((x) => x?.auteur === "utilisateur");
+  const demande = ligne(m?.texte);
+  return demande ? {titre: "Demande", texte: tronquer(demande, MAX_EN_CLAIR - 1)} : null;
+}
+
 // Ce que le moteur note quand le Directeur abandonne la demande plutôt que d'en valider le workflow.
 export const DEMANDE_ABANDONNEE = "(demande abandonnée)";
 
@@ -1265,6 +1281,12 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (f && correction) titre.append(" ", el("span", "badge-correction", "Correction"));
   contenu.append(titre);
   if (f) {
+    const objectif = objectifEnClair(f);
+    if (objectif) {
+      const bloc = el("div", "fonctionnalite-en-clair");
+      bloc.append(el("strong", "", objectif.titre), el("p", "", objectif.texte));
+      contenu.append(bloc);
+    }
     if (genreEtWorkflow(f)) contenu.append(el("p", "fonctionnalite-genre", genreEtWorkflow(f)));
     if (f.etape === "deplacee") contenu.append(el("p", "note", libelleEtape(f)));
     const ol = el("ol", "parcours");

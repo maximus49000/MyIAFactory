@@ -1323,3 +1323,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand une fonction bascule entre deux colonnes/dates de référence selon un paramètre de mode, vérifier que TOUS les champs dérivés de cette date (pas seulement le filtre ou le tri principal) basculent aussi — sinon un champ dérivé reste calé sur l'ancien mode par défaut, bug difficile à repérer car les tests du mode par défaut restent verts.
+
+## S221 — Pour une tâche de correction de bug, commencer par chercher
+Rôles : dev
+Date : 2026-11-16
+
+Pour une tâche de correction de bug, commencer par chercher dans l'historique git si le fichier/la fonction visée a déjà été modifiée récemment dans un sens qui corrige le symptôme décrit, avant de réécrire le correctif.

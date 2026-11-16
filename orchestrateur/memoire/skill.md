@@ -1311,3 +1311,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant de poser une question de cadrage sur une correction vague, vérifier dans les registres de suivi du projet et dans le code si la fonctionnalité ou l'anomalie citée existe réellement, afin de ne poser que la question strictement nécessaire.
+
+## S219 — Quand un signalement de correction évoque un suivi, une tâch
+Rôles : dev
+Date : 2026-11-16
+
+Quand un signalement de correction évoque un suivi, une tâche ou un écran qui n'existe pas dans le code du projet, vérifier s'il décrit en réalité le comportement de l'outil d'orchestration (moteur/Factory) plutôt qu'un défaut de l'application développée, avant de chercher à reproduire dans le code applicatif.

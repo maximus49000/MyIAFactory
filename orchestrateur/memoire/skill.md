@@ -1335,3 +1335,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant d'investiguer un signalement, chercher dans l'historique de versions si une tâche identique a déjà été conclue récemment ; si oui, citer cette conclusion au lieu de relancer l'exploration.
+
+## S223 — Quand la consigne d'une étape de correction demande explicit
+Rôles : dev
+Date : 2026-11-16
+
+Quand la consigne d'une étape de correction demande explicitement un retour/texte de cadrage plutôt qu'un correctif de code, le livrable attendu pour cette étape est ce texte réutilisable comme future consigne, et non une modification de fichiers.

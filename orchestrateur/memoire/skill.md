@@ -1389,3 +1389,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant d'instruire une demande de correction, chercher un test automatisé reproduisant exactement le scénario décrit dans la fiche ; son exécution tranche immédiatement entre 'déjà corrigé' et 'encore buggé', sans lecture de code approfondie ni nouvelle exploration.
+
+## S232 — Avant de corriger un test qui échoue sur un symptôme de conf
+Rôles : dev
+Date : 2026-11-16
+
+Avant de corriger un test qui échoue sur un symptôme de configuration (403/503/auth manquante), vérifier aussi que les paramètres qu'il envoie à l'endpoint testé sont bien consommés par celui-ci ; un paramètre non déclaré dans la signature de la route est ignoré sans erreur, ce qui masque un second défaut une fois le premier corrigé.

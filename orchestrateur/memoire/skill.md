@@ -1347,3 +1347,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Un ticket de correction resoumis plusieurs fois avec un diagnostic identique de hors-périmètre doit être fermé par l'orchestrateur plutôt que renvoyé à un nouvel agent de résolution.
+
+## S225 — Avant de démarrer un service réseau local pour produire une
+Rôles : dev
+Date : 2026-11-16
+
+Avant de démarrer un service réseau local pour produire une preuve de validation, vérifier d'abord par une requête s'il n'est pas déjà actif, afin d'éviter un conflit de port et de réutiliser le service existant.

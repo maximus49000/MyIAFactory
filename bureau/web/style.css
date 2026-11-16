@@ -1194,6 +1194,9 @@ body.val-ouverte, body.visionneuse-ouverte { overflow: hidden; }
 .val-fermer { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #efe8da; font-size: 20px;
   cursor: pointer; }
 .val-partie h3 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: #6b6573; }
+/* « En clair » : la lecture pour n'importe qui, en tête de la fenêtre de validation. */
+.val-en-clair { background: #f3f1fc; border-left: 4px solid #7f77dd; border-radius: 0; padding: 10px 12px; }
+.val-en-clair p { margin: 0; font-size: 15px; line-height: 1.5; }
 .val-entete { margin: 4px 0; overflow-wrap: anywhere; }
 .val-consigne { margin: 8px 0; padding: 8px 12px; border-left: 4px solid #2f6f4f; background: #f3f7f4; border-radius: 6px; }
 .val-consigne h4 { margin: 0 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #2f6f4f; }

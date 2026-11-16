@@ -335,3 +335,11 @@ test("un .md joint se lit dans la fenêtre (bloc repliable) et reste télécharg
   assert.doesNotMatch(boite.textContent, /Rien à télécharger/);
   delete globalThis.fetch;
 });
+
+test("« En clair » d'abord : la lecture pour n'importe qui, avant ce qu'on valide et le compte rendu technique", () => {
+  const enClair = "Deux tests censés prouver le surlignage échouaient : ils oubliaient de brancher Zendesk. C'est réparé.";
+  const texte = rendre({...D, en_clair: enClair}).boite.textContent;
+  const i = texte.indexOf("En clair"), j = texte.indexOf(enClair), k = texte.indexOf("Objectif : Le jeu complet");
+  assert.ok(i >= 0 && j > i && k > j, JSON.stringify([i, j, k]));
+  assert.equal(rendre(D).boite.textContent.indexOf("En clair"), -1);      // absente : rien d'inventé
+});

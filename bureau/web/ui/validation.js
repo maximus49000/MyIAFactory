@@ -296,6 +296,13 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   tete.append(titre, bFermer);
   boite.append(tete);
 
+  // 0. En clair : la lecture pour n'importe qui (le problème, ce qui a été fait), avant le détail technique.
+  if (plein(d.en_clair)) {
+    const s0 = el("section", "val-partie val-en-clair");
+    s0.append(el("h3", "", "En clair"), el("p", "", d.en_clair.trim()));
+    boite.append(s0);
+  }
+
   // 1. Ce qu'il y a à valider.
   const s1 = section("Ce que vous validez");
   for (const x of enteteValidation(d)) {

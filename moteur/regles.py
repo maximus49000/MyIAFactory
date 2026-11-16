@@ -4572,11 +4572,27 @@ def _attendre_le_directeur(projet, etat, v, s):
         entree["nature"] = nature
         if nature == "en_jeu":
             entree["mode_operatoire"] = list(precedent["mode_operatoire"])
-    for c in ("doit_marcher", "pas_encore", "conclusion"):
+    for c in ("doit_marcher", "pas_encore", "conclusion", "en_clair"):
         if isinstance(precedent.get(c), str) and (precedent[c].strip() or c == "pas_encore"):
             entree[c] = precedent[c]
+    if "en_clair" not in entree:      # une correction : la lecture pour n'importe qui de sa fiche de diagnostic
+        en_clair = _en_clair_de_la_fiche(projet, v["fid"])
+        if en_clair:
+            entree["en_clair"] = en_clair
     lancer(projet, "decision", entree)
     return tid
+
+
+def _en_clair_de_la_fiche(projet, fid):
+    """La lecture « En clair » de la fiche d'une correction (première ligne de sa fiche, rangée comme un cahier), ou
+    None : le Directeur lit d'abord, sans jargon, ce qui ne va pas et ce qu'on fait."""
+    f = _fonc(projet, fid)
+    if f.get("nature") != "correction":
+        return None
+    for x in (f.get("cahier") or {}).get("etapes") or []:
+        if isinstance(x, str) and x.startswith("En clair : "):
+            return x[len("En clair : "):].strip()[:rel.MAX_EN_CLAIR] or None
+    return None
 
 
 def _remarque_du_renvoi(projet, v):
@@ -4793,7 +4809,7 @@ def _retenir_le_rapport(v, r):
     nat = propre if (propre or {}).get("nature") else r
     v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX],
                             "points": list(points)[:rel.MAX_POINTS], "acces": acces,
-                            **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion") if c in dit},
+                            **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion", "en_clair") if c in dit},
                             **{c: nat[c] for c in ("nature", "mode_operatoire") if c in nat}}
 
 

@@ -37,6 +37,8 @@ fonction (ce qui ne va pas, ce que ça change pour l'utilisateur de l'applicatio
     phrases, sans jargon).
   - Ton compte rendu suit les deux lectures : **En clair** (ce qui était faux, ce qui est réparé, pour n'importe
     qui), puis **Détail technique** (cause, fichiers touchés, test et sa sortie).
+  - Rends aussi la lecture en clair dans le champ `en_clair` (2 à 4 phrases sans jargon : le problème, ce qui a été
+    fait, ce que ça change) : elle s'affiche en tête de la fenêtre de validation du Directeur.
   - `pas_encore` vide (tout est attendu) et `conclusion` : « Validez si … ».
   - `points_a_verifier` : 3 points tirés de la fiche, chacun vérifiable en regardant l'illustration ou le document.
 

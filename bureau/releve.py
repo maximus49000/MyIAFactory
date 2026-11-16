@@ -341,8 +341,9 @@ MAX_RESUME_TACHE = 600       # le résumé d'une tâche : son objectif, son éta
 MAX_DOIT_MARCHER = 480      # une à trois phrases
 MAX_PAS_ENCORE = 480        # peut être vide : tout est attendu à ce stade
 MAX_CONCLUSION = 200        # une phrase
+MAX_EN_CLAIR = 800          # la lecture pour n'importe qui : 2 à 4 phrases sans jargon
 CHAMPS_DIT = (("doit_marcher", MAX_DOIT_MARCHER, False), ("pas_encore", MAX_PAS_ENCORE, True),
-              ("conclusion", MAX_CONCLUSION, False))
+              ("conclusion", MAX_CONCLUSION, False), ("en_clair", MAX_EN_CLAIR, False))
 DOIT_MARCHER_PAR_DEFAUT = "L'élément correspond à son objectif"      # une décision d'avant, sans ces champs
 
 # La nature de ce que le Directeur valide, et donc les preuves à joindre (règle de l'utilisateur : l'apk seulement pour

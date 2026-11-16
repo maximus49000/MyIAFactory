@@ -109,6 +109,26 @@ class TestCorrection(Base):
         self.assertIn(en_clair, f["discussion"][-1]["texte"])
         # une fiche sans « en clair » reste acceptée (rien ne bloque) : elle commence au symptôme
 
+    def test_la_validation_reprend_l_en_clair_de_la_fiche(self):
+        # Le Directeur lit d'abord, sans jargon, le problème et ce qu'on fait : en tête de sa fenêtre de validation.
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        en_clair = "Le score ne repart pas de zéro quand on recommence une partie."
+        regles._suite_cadrage(self.projet, self.etat, t, {"nom": "Corriger : score",
+                                                           "fiche_correction": {**FICHE, "en_clair": en_clair}})
+        self.assertEqual(regles._en_clair_de_la_fiche(self.projet, "f1"), en_clair)
+        self.fonctionnalite()                       # une fonctionnalité ordinaire : pas de lecture de fiche
+        self.assertIsNone(regles._en_clair_de_la_fiche(self.projet, "f2"))
+
+    def test_en_clair_est_un_champ_de_la_validation(self):
+        from bureau import releve as rel
+        from moteur import rapport
+        self.assertIn("en_clair", [c for c, _, _ in rel.CHAMPS_DIT])
+        import json
+        brut = {"statut": "fait", "en_clair": "  Le test  oubliait Zendesk. ", "doit_marcher": "x"}
+        r = rapport.lire("```json\n" + json.dumps(brut, ensure_ascii=False) + "\n```")
+        self.assertEqual(r.get("en_clair"), "Le test oubliait Zendesk.")
+
     def test_le_rapport_de_cadrage_avec_fiche_ferme_la_tache(self):
         _, actions = self.corriger()
         self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Je reproduis."},

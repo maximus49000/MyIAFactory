@@ -1365,3 +1365,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand une commande shell impliquant le réseau (curl, netstat) ou un changement de répertoire avant une commande git est refusée automatiquement faute d'approbateur, la reformuler : écrire un script dans le langage du projet (ex. Python) avec l'outil d'écriture de fichier puis l'exécuter directement, et utiliser l'option de l'outil qui évite le changement de répertoire (ex. `-C`) plutôt que `cd &&`.
+
+## S228 — Avant d'investiguer une anomalie signalée, chercher si un te
+Rôles : dev
+Date : 2026-11-16
+
+Avant d'investiguer une anomalie signalée, chercher si un test automatisé couvre déjà précisément ce scénario et l'exécuter ; son statut (passant/échouant) tranche immédiatement sans lecture de code supplémentaire.

@@ -1298,7 +1298,7 @@ Quand on ajoute un paramètre après un paramètre de type fonction, le lambda d
 Rôles : orchestrateur
 Date : 2026-11-16
 
-Quand un traitement a dû être fait ou rattrapé à la main depuis l'interface Claude Code parce que le bureau n'a pas su le faire seul, corriger la cause à la source, dans le code de la skill, pour que le bureau redevienne autonome ; le contournement à la main ne suffit pas. Si le compte GitHub connecté (gh api user) est le propriétaire du dépôt de la skill (git remote get-url origin), commiter la correction avec ses tests et la pousser directement. Sinon, ne rien pousser : ouvrir une issue sur le dépôt de la skill qui décrit le problème, sa cause et la correction proposée ; elle sera analysée avant d'être fusionnée.
+Quand un traitement a dû être fait ou rattrapé à la main depuis l'interface Claude Code parce que le bureau n'a pas su le faire seul, corriger la cause à la source, dans le code de la skill, pour que le bureau redevienne autonome ; le contournement à la main ne suffit pas. Si l'utilisateur est le propriétaire du dépôt de la skill (le compte de git remote get-url origin ; le vérifier par gh api user quand gh est installé, sinon le lui demander une fois), commiter la correction avec ses tests et la pousser directement. Sinon, ne rien pousser : ouvrir une issue sur le dépôt de la skill qui décrit le problème, sa cause et la correction proposée ; elle sera analysée avant d'être fusionnée.
 
 ## S217 — Un test est qualitatif et rapide
 Rôles : dev, testeur, orchestrateur

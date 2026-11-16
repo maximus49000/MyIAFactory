@@ -22,6 +22,15 @@ Une correction répare un comportement existant du projet. Elle ne change rien d
   de test.
 - Joins une illustration **avant / après** du même scénario (captures, ou le schéma du diagnostic refait avec les
   valeurs corrigées), légendée, dans les images de ton compte rendu : le Directeur les voit à la validation.
+- **Donne toujours au Directeur de quoi valider**, même si le correctif était déjà en place ou s'il n'y avait rien à
+  changer : c'est alors la preuve que l'anomalie ne se reproduit plus qu'il valide.
+  - `nature: "visuel"` avec les images avant / après (`message.images`) ; si aucune image n'est possible,
+    `nature: "mecanique"` avec un court document md dans `fichiers` (cause, fichiers touchés, test qui reproduisait
+    l'anomalie, sa sortie avant et après).
+  - `doit_marcher` : le scénario de la fiche donne maintenant le résultat attendu (dis lequel, en une ou deux
+    phrases, sans jargon).
+  - `pas_encore` vide (tout est attendu) et `conclusion` : « Validez si … ».
+  - `points_a_verifier` : 3 points tirés de la fiche, chacun vérifiable en regardant l'illustration ou le document.
 
 ## Vérification
 - Rejoue le scénario de la fiche et les tests ; joins la capture (ou le schéma) « après », légendée, en reprenant

@@ -404,6 +404,9 @@ class TestDeCorrection(unittest.TestCase):
         # l'anomalie est illustrée au diagnostic, puis avant / après au correctif (demande du Directeur)
         self.assertIn("Illustre l'anomalie", texte)
         self.assertIn("avant / après", texte)
+        # la validation n'est jamais vide, même quand le correctif était déjà en place (cas réel : bloquée deux fois)
+        for champ in ("doit_marcher", "conclusion", "points_a_verifier", "nature"):
+            self.assertIn(champ, texte)
 
 
 if __name__ == "__main__":

@@ -1329,3 +1329,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Pour une tâche de correction de bug, commencer par chercher dans l'historique git si le fichier/la fonction visée a déjà été modifiée récemment dans un sens qui corrige le symptôme décrit, avant de réécrire le correctif.
+
+## S222 — Avant d'investiguer un signalement, chercher dans l'historiq
+Rôles : dev
+Date : 2026-11-16
+
+Avant d'investiguer un signalement, chercher dans l'historique de versions si une tâche identique a déjà été conclue récemment ; si oui, citer cette conclusion au lieu de relancer l'exploration.

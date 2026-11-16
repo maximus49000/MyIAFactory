@@ -22,7 +22,7 @@ def commandes_de_l_outil():
 class TestPlugin(unittest.TestCase):
     def test_json_du_plugin(self):
         p = lire_json(RACINE / ".claude-plugin" / "plugin.json")
-        self.assertEqual((p["name"], p["version"]), ("myiafactory", "0.4.0"))
+        self.assertEqual((p["name"], p["version"]), ("myiafactory", "0.5.0"))
         self.assertTrue(p["description"].strip())
         m = lire_json(RACINE / ".claude-plugin" / "marketplace.json")
         self.assertEqual(m["name"], "myiafactory")

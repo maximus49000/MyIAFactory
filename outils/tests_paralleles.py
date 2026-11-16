@@ -36,8 +36,9 @@ sys.path.insert(0, str(RACINE))   # `tests` est le paquet de la skill, pas un ho
 DUREES = RACINE / ".durees-tests.json"
 DELAI_S = 1800
 SEUIL_DECOUPE_S = 40
-# Les modules qui tenaient seuls la durée de la suite (mesure du 2026-11-16 : 217 s et 176 s, pour 326 s au total).
-# Découpés ceux-là seulement : tout découper avait doublé la durée (trop d'accès disque à la fois).
+# Les modules qui tenaient seuls la durée de la suite (mesure du 2026-11-16 : 217 s et 176 s pour 326 s au total).
+# Découpés ceux-là seulement : tout découper avait doublé la durée. Découper aussi test_moteur_regles n'a rien gagné
+# (276 s contre 253 s) : la durée suit désormais le travail cumulé divisé par les cœurs, plus aucun module seul.
 DECOUPAGE = {"test_orch_memoire": "classe", "test_orch_interface": "test"}
 
 
@@ -118,6 +119,8 @@ def main(argv=None):
     a.add_argument("--decouper", action="store_true", help="découper aussi les autres modules longs par classe")
     a.add_argument("--touches", nargs="?", const="origin/main", metavar="REFERENCE",
                    help="seulement les tests touchés par ce qui diffère de la référence (défaut : origin/main)")
+    a.add_argument("--sans-attendre", action="store_true",
+                   help="refuser (code 3) au lieu d'attendre quand une autre campagne tourne sur le poste")
     o = a.parse_args(argv)
     liste = modules(o.filtres)
     if o.touches:
@@ -133,6 +136,16 @@ def main(argv=None):
     if not liste:
         print("Aucun module de test ne correspond.")
         return 1
+    import campagne   # une seule campagne à la fois sur le poste (outils/campagne.py)
+    if not campagne.attendre_son_tour(RACINE, attendre=not o.sans_attendre):
+        return 3
+    try:
+        return _campagne(o, liste)
+    finally:
+        campagne.liberer()
+
+
+def _campagne(o, liste):
     connues, env = _lire_durees(), _environnement()
     parts = morceaux(liste, connues, o.decouper)
     parts.sort(key=lambda n: -connues.get(n, 1e9))   # inconnus d'abord (prudence), puis les plus longs

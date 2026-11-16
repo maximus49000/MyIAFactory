@@ -165,7 +165,7 @@ def colonnes(f, fonctionnalites):
 
 
 CONSIGNES_CORRECTION = Path(__file__).resolve().parent / "consignes-correction.md"
-ETAPES_CORRECTION = ("correctif", "verification", "validation")
+ETAPES_CORRECTION = ("correctif", "verification", "validation", "livraison")
 
 
 def service_du_role(f, role):
@@ -180,13 +180,17 @@ def service_du_role(f, role):
 
 def de_correction(f, fid, role_production, role_qa=None):
     """Le workflow d'une correction, construit sans appel d'IA : correctif (rôle de production, un seul agent),
-    vérification (rôle QA, s'il existe), validation du Directeur. Étapes préfixées par `<fid>-`. Chaque étape d'agent
-    prend le `service` de son rôle (`service_du_role`)."""
-    flux = [{"id": f"{fid}-correctif", "nom": "Correctif", "role": role_production,
-             "service": service_du_role(f, role_production), "regroupement": REGROUPEMENT_REGROUPE}]
+    vérification (rôle QA, s'il existe), validation du Directeur, livraison (rôle de production : une validation n'est
+    jamais la dernière étape, la dernière remet le livrable). Étapes préfixées par `<fid>-`. Chaque étape d'agent prend
+    le `service` de son rôle (`service_du_role`)."""
+    service = service_du_role(f, role_production)
+    flux = [{"id": f"{fid}-correctif", "nom": "Correctif", "role": role_production, "service": service,
+             "regroupement": REGROUPEMENT_REGROUPE}]
     if role_qa:
         flux.append({"id": f"{fid}-verification", "nom": "Vérification", "role": role_qa,
                      "service": service_du_role(f, role_qa)})
     flux.append({"id": f"{fid}-validation", "nom": "Validation de la correction", CLE_VALIDATION: True,
                  "raison": "Vérifier la cause, le correctif et la preuve que l'anomalie ne revient pas."})
+    flux.append({"id": f"{fid}-livraison", "nom": "Livraison de la correction", "role": role_production,
+                 "service": service})
     return {"id": f"w-{fid}", "fonctionnalite": fid, "genre": f.get("genre"), "nature": "correction", "flux": flux}

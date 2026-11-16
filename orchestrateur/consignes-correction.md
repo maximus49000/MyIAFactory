@@ -18,3 +18,6 @@ Une correction répare un comportement existant du projet. Elle ne change rien d
 ## Vérification
 - Rejoue le scénario de la fiche et les tests ; joins une capture si le projet a un écran.
 - Si l'anomalie revient ou si autre chose casse, dis-le : la tâche repart au correctif.
+
+## Livraison
+- Intègre le correctif validé par le Directeur comme toute livraison du projet (commit, poussée, paquet si le projet en produit un) ; ne change plus rien au code.

@@ -366,6 +366,26 @@ class TestFonctionnaliteDeplacee(unittest.TestCase):
         self.assertEqual([x["id"] for x in cout.couts_fonctionnalite(us, prix, r, "f1")["taches"]], ["t1"])
 
 
+class TestDeCorrection(unittest.TestCase):
+    FAC = {"genre": "jeu", "workflows": [], "flux": []}
+
+    def test_avec_qa(self):
+        w = wf.de_correction(self.FAC, "f4", "dev", "qa")
+        self.assertEqual(w["id"], "w-f4")
+        self.assertEqual([e["id"] for e in w["flux"]], ["f4-correctif", "f4-verification", "f4-validation"])
+        self.assertEqual([e.get("role") for e in w["flux"]], ["dev", "qa", None])
+        self.assertTrue(wf.est_validation(w["flux"][-1]))
+
+    def test_sans_qa_pas_de_verification(self):
+        w = wf.de_correction(self.FAC, "f4", "dev")
+        self.assertEqual([e["id"] for e in w["flux"]], ["f4-correctif", "f4-validation"])
+
+    def test_consignes_presentes(self):
+        texte = wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8")
+        for titre in ("## Cadrage", "## Correctif", "## Vérification"):
+            self.assertIn(titre, texte)
+
+
 if __name__ == "__main__":
     unittest.main()
 

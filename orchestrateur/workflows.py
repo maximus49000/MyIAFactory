@@ -5,6 +5,7 @@ a une clé `workflows` y ajoute ceux de ses fonctionnalités (`{id, fonctionnali
 création. Les identifiants d'étape sont uniques dans tout le projet : ce sont les identifiants des colonnes du tableau.
 Fonctions pures sur le dict rendu par `factory.lire`.
 """
+from pathlib import Path
 
 PRINCIPAL = "principal"
 CLE_VALIDATION = "validation"   # `{"id", "nom", "validation": true}` : une étape où le Directeur valide, sans agent
@@ -161,3 +162,19 @@ def colonnes(f, fonctionnalites):
             sortie.append(c)
     sortie.append({"id": "fait", "nom": "Fait", "terminee": True})
     return sortie
+
+
+CONSIGNES_CORRECTION = Path(__file__).resolve().parent / "consignes-correction.md"
+ETAPES_CORRECTION = ("correctif", "verification", "validation")
+
+
+def de_correction(f, fid, role_production, role_qa=None):
+    """Le workflow d'une correction, construit sans appel d'IA : correctif (rôle de production, un seul agent),
+    vérification (rôle QA, s'il existe), validation du Directeur. Étapes préfixées par `<fid>-`."""
+    flux = [{"id": f"{fid}-correctif", "nom": "Correctif", "role": role_production,
+             "regroupement": REGROUPEMENT_REGROUPE}]
+    if role_qa:
+        flux.append({"id": f"{fid}-verification", "nom": "Vérification", "role": role_qa})
+    flux.append({"id": f"{fid}-validation", "nom": "Validation de la correction", CLE_VALIDATION: True,
+                 "raison": "Vérifier la cause, le correctif et la preuve que l'anomalie ne revient pas."})
+    return {"id": f"w-{fid}", "fonctionnalite": fid, "genre": f.get("genre"), "nature": "correction", "flux": flux}

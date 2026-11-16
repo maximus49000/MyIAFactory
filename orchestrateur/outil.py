@@ -36,6 +36,7 @@ from orchestrateur import modele_necessaire as mn  # noqa: E402
 from orchestrateur import recrutement as rc  # noqa: E402
 from orchestrateur import regles_projet as rp  # noqa: E402
 from orchestrateur import anomalies as anomalies_logiciel  # noqa: E402
+from orchestrateur import questions as questions_projet  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
 from orchestrateur import workflows as wf  # noqa: E402
 from partenaires import catalogue as pcat  # noqa: E402
@@ -2345,6 +2346,7 @@ def construire_releve(ctx):
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
          "anomalies_logiciel": anomalies_logiciel.lire(ctx.f)[-ANOMALIES_AU_RELEVE:],
+        "questions": questions_projet.lire(ctx.f)[-QUESTIONS_AU_RELEVE:],
          "recrutement": releve_recrutement(ctx, s, fiches),
          "etapes_lieux": etapes_lieux_du_releve(ctx)}
     # La facturation : les usages récents, au format du bureau (une tâche ou un agent disparu devient « hors tâche »).
@@ -3634,6 +3636,30 @@ def cmd_anomalies(ctx, e):
     raise Refus("« action » doit valoir lister, ajouter ou marquer.")
 
 
+QUESTIONS_AU_RELEVE = 50
+
+
+def cmd_questions(ctx, e):
+    """Les questions sur le projet (`.factory/questions.jsonl`, voir `orchestrateur/questions.py`) : `lister` (défaut),
+    `ouvrir` (texte, images?, fonctionnalite?), `ajouter` (id, auteur, texte, niveau?, sur?, suggestion?,
+    fichiers_lus?), `marquer` (id, etat). Seul écrivain du fichier."""
+    action = e.get("action", "lister")
+    try:
+        if action == "lister":
+            return {"questions": questions_projet.lire(ctx.f)}
+        if action == "ouvrir":
+            if e.get("fonctionnalite") is not None:
+                _fonc(ctx.suivi.lire(), e["fonctionnalite"])      # Refus si inconnue
+            return {"question": questions_projet.ouvrir(ctx.f, e)}
+        if action == "ajouter":
+            return {"question": questions_projet.ajouter(ctx.f, e.get("id"), e)}
+        if action == "marquer":
+            return {"question": questions_projet.marquer(ctx.f, e.get("id"), e.get("etat"))}
+    except ValueError as ex:
+        raise Refus(str(ex))
+    raise Refus("« action » doit valoir lister, ouvrir, ajouter ou marquer.")
+
+
 def cmd_regles(ctx, e):
     """Les règles du projet (`.factory/regles-projet.json`) : `lister`, `ajouter` (texte, origine?), `modifier` (id, texte),
     `supprimer` (id). Seul écrivain du fichier."""
@@ -3774,7 +3800,7 @@ COMMANDES = {
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
-    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
     "lieux": (cmd_lieux, "obligatoire"),
 }
 

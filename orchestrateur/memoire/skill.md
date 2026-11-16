@@ -1317,3 +1317,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand un signalement de correction évoque un suivi, une tâche ou un écran qui n'existe pas dans le code du projet, vérifier s'il décrit en réalité le comportement de l'outil d'orchestration (moteur/Factory) plutôt qu'un défaut de l'application développée, avant de chercher à reproduire dans le code applicatif.
+
+## S220 — Quand une fonction bascule entre deux colonnes/dates de réfé
+Rôles : dev
+Date : 2026-11-16
+
+Quand une fonction bascule entre deux colonnes/dates de référence selon un paramètre de mode, vérifier que TOUS les champs dérivés de cette date (pas seulement le filtre ou le tri principal) basculent aussi — sinon un champ dérivé reste calé sur l'ancien mode par défaut, bug difficile à repérer car les tests du mode par défaut restent verts.

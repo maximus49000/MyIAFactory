@@ -821,6 +821,20 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .liste-couts .note { grid-column: 1 / -1; }
 .cout-tache { min-width: 0; overflow-wrap: anywhere; }
 .cout-montant { font-variant-numeric: tabular-nums; }
+/* Le même coût regroupé par étape du parcours : une ligne et une barre par étape, les passages dépliables. */
+.couts-etapes { margin-top: 6px; }
+.cout-etape { border-top: 1px solid #e7e1d4; padding: 8px 0 6px; }
+.cout-etape > summary { cursor: pointer; list-style-position: inside; }
+.cout-etape-ligne { display: inline-grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; width: calc(100% - 18px);
+                    vertical-align: top; }
+div.cout-etape > .cout-etape-ligne { width: 100%; }
+.cout-etape-nom { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.cout-etape-nom .note, .cout-montant .note { font-weight: 400; }
+.cout-etape-barre { height: 6px; border-radius: 3px; background: #ece7dc; margin-top: 5px; overflow: hidden; }
+.cout-etape-barre span { display: block; height: 100%; background: #7f77dd; }
+.cout-etape-passages { list-style: none; margin: 6px 0 0 10px; padding: 0 0 0 10px; border-left: 1px solid #e7e1d4;
+                       display: grid; gap: 2px; font-size: 12px; color: #5b5868; }
+.cout-etape-passages li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 
 /* Les questions à choix d'un agent : un bouton par choix, « Passer » à part. */
 .questions { display: grid; gap: 8px; margin-bottom: 6px; }

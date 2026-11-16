@@ -327,7 +327,10 @@ def couts_fonctionnalite(usages, prix_de, r, fonctionnalite):
         t = taches[u["tache"]]
         ligne = lignes.setdefault(u["tache"], {"id": u["tache"], "titre": t.get("titre") or u["tache"],
                                               "total": 0.0, "sans_prix": 0, "modeles": {}, "tokens": 0,
-                                              "lignes": t.get("lignes") if isinstance(t.get("lignes"), int) else None})
+                                              "lignes": t.get("lignes") if isinstance(t.get("lignes"), int) else None,
+                                              # pour regrouper par étape du parcours (et la durée de chaque passage)
+                                              **{c: t.get(c) for c in ("etape", "colonne", "debut", "fin")
+                                                 if isinstance(t.get(c), str) and t.get(c)}})
         ligne["tokens"] += sum(u.get(c) or 0 for c in COMPTEURS)   # l'échelle, même sans prix connu
         ligne.setdefault("_co2", Cumul()).ajouter(u["modele"], u.get("sortie") or 0)
         total_co2.ajouter(u["modele"], u.get("sortie") or 0)

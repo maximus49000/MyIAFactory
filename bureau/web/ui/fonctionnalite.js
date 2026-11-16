@@ -20,6 +20,7 @@ import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEn
 export {verifierChoix};
 
 import {estCorrection, bandeauCorrection, libelleEtapeCorrection} from "./parcours-correction.js";
+import {regrouperParEtape, raisonDuPassage, libelleMinutes} from "./couts-etapes.js";
 
 export const MAX_TEXTE = 3500;
 const MAX_OCTETS = MAX_OCTETS_IMAGE;   // une image fixe, une fois réduite
@@ -821,7 +822,57 @@ export function echelle({tokens = 0, lignes = null} = {}) {
 }
 
 // La partie « Coût » : le coût de chaque tâche de la fonctionnalité (depuis toujours), lu à l'ouverture du panneau.
-function partieCouts(f) {
+// Le coût regroupé par étape du parcours : une ligne par étape (passages, durée, sous-total, part, barre), et le détail
+// de chaque passage pour une étape faite plusieurs fois.
+function coutsParEtape(c, f, e) {
+  const groupes = regrouperParEtape(c.taches, f, e);
+  const passages = groupes.reduce((s, g) => s + g.passages, 0);
+  const minutes = groupes.reduce((s, g) => s + g.minutes, 0);
+  const inconnues = groupes.reduce((s, g) => s + g.inconnues, 0);
+  const duree = libelleMinutes(minutes, inconnues, passages);
+  const bloc = el("div", "couts-etapes");
+  bloc.append(el("p", "note", ["Par étape du parcours", `${passages} passage${passages > 1 ? "s" : ""}`, duree]
+    .filter(Boolean).join(" · ")));
+  const parId = new Map((e?.taches || []).map((t) => [t.id, t]));
+  for (const g of groupes) {
+    const ligne = el("div", "cout-etape-ligne");
+    const nom = el("span", "cout-etape-nom", g.libelle);
+    const d = libelleMinutes(g.minutes, g.inconnues, g.passages);
+    nom.append(el("span", "note", [` · ${g.passages} passage${g.passages > 1 ? "s" : ""}`, d].filter(Boolean).join(" · ")));
+    const montant = el("strong", "cout-montant", euros(g.total) + (g.sans_prix ? " + prix inconnu" : ""));
+    montant.append(el("span", "note", ` ${Math.round(g.part * 100)} %`));
+    ligne.append(nom, montant);
+    const barre = el("div", "cout-etape-barre");
+    const plein = el("span", "");
+    plein.style.width = `${Math.max(g.total > 0 ? 1 : 0, Math.round(g.part * 100))}%`;
+    barre.append(plein);
+    const detail = el("ol", "cout-etape-passages");
+    g.taches.forEach((t, i) => {
+      const li = el("li", "");
+      const raison = raisonDuPassage(parId.get(t.id));
+      const modeles = Object.keys(t.modeles || {}).join(", ");
+      const quoi = [`${i + 1}. ${g.libelle}${raison ? ` (${raison})` : ""}`, modeles, echelle(t), etiquetteCO2(t.co2)]
+        .filter(Boolean).join(" · ");
+      li.append(marquerTitreCO2(el("span", "", quoi), t.co2), el("span", "", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
+      detail.append(li);
+    });
+    if (g.passages > 1) {          // plusieurs passages : le détail se déplie sous l'étape
+      const plie = el("details", "cout-etape");
+      const resume = el("summary", "");
+      resume.append(ligne);
+      plie.append(resume, barre, detail);
+      bloc.append(plie);
+    } else {
+      const seul = el("div", "cout-etape");
+      ligne.title = detail.textContent;
+      seul.append(ligne, barre);
+      bloc.append(seul);
+    }
+  }
+  return bloc;
+}
+
+function partieCouts(f, e) {
   const bloc = el("details", "couts");
   const titre = el("summary", "", "Coût : …");
   bloc.append(titre);
@@ -841,16 +892,9 @@ function partieCouts(f) {
     const equivalences = ligneEquivalences(c.co2);   // « Équivaut à ≈ … » : de quoi se rendre compte
     if (equivalences) corps.append(equivalences);
     if (!c.taches.length) { corps.append(el("p", "note", "Aucune consommation notée pour l'instant.")); return; }
-    const ul = el("ul", "liste-couts");
-    for (const t of c.taches) {
-      const li = el("li", "");
-      const modeles = Object.entries(t.modeles).map(([m, v]) => `${m} ${euros(v)}`).join(" · ");
-      li.append(el("span", "cout-tache", t.titre), el("strong", "cout-montant", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
-      const detail = [echelle(t), modeles, etiquetteCO2(t.co2)].filter(Boolean).join(" · ");
-      if (detail) li.append(marquerTitreCO2(el("div", "note", detail), t.co2));
-      ul.append(li);
-    }
-    corps.append(ul, el("p", "note", "Estimation d'après les tokens notés par l'orchestrateur (au plus bas quand seul un total est connu)."));
+    corps.append(coutsParEtape(c, f, e));
+    corps.append(el("p", "note", "Estimation d'après les tokens notés par l'orchestrateur (au plus bas quand seul un total "
+      + "est connu). Les décisions du moteur (classement, blocages) sont comptées dans « Orchestration »."));
   })();
   return bloc;
 }
@@ -1385,13 +1429,13 @@ export function contenuFonctionnalite(ctx, contenu, f) {
   if (vue.discussionOuverte) {
     contenu.append(blocDiscussion, blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f, ctx.etat), partieDocuments(ctx, f));
   } else {
     const repliee = el("details", "discussion-repliee");
     repliee.append(el("summary", "", `Discussion (${messages.length} message${messages.length > 1 ? "s" : ""})`), blocDiscussion);
     contenu.append(blocCahier, blocMethode);
     if (gestes.childElementCount) contenu.append(gestes);
-    contenu.append(repliee, partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f), partieDocuments(ctx, f));
+    contenu.append(repliee, partieTaches(ctx, f), partieLivrables(ctx, f), partieCouts(f, ctx.etat), partieDocuments(ctx, f));
   }
 }
 

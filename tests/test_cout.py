@@ -268,6 +268,18 @@ class TestCoutsFonctionnalite(unittest.TestCase):
         self.assertEqual((t2["tokens"], t2["lignes"]), (15, None))      # les tokens comptent même sans prix
         self.assertEqual((c["tokens"], c["lignes"]), (1565, 85))
 
+    def test_etape_et_duree_de_chaque_tache_pour_regrouper(self):
+        r = {"version": 4, "taches": [
+            {"id": "t1", "titre": "Diagnostic : x", "fonctionnalite": "f1", "etape": "cadrage", "colonne": "fait",
+             "debut": "2026-11-16T14:00:00+01:00", "fin": "2026-11-16T14:12:00+01:00"},
+            {"id": "t2", "titre": "Correctif : x", "fonctionnalite": "f1", "etape": "flux:f1-correctif", "colonne": "fait"}]}
+        c = cout.couts_fonctionnalite([usage("u1", tache="t1"), usage("u2", tache="t2")], prix_de, r, "f1")
+        t1, t2 = c["taches"]
+        self.assertEqual((t1["etape"], t1["debut"], t1["fin"]), ("cadrage", "2026-11-16T14:00:00+01:00",
+                                                                 "2026-11-16T14:12:00+01:00"))
+        self.assertEqual((t2["etape"], t2["colonne"]), ("flux:f1-correctif", "fait"))
+        self.assertNotIn("debut", t2)                      # inconnu : absent, jamais inventé
+
 
 class TestEmpreinte(unittest.TestCase):
     """L'empreinte estimée à côté des euros : calculée sur les tokens de sortie, jamais inventée."""

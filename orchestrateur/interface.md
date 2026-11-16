@@ -559,6 +559,19 @@ sont `nouvelle`. `{"action": "ajouter", "titre" (une ligne, 120 caractères au p
 `{anomalie}`. Une tâche ou une anomalie inconnue, un texte vide ou trop long est refusé. Le relevé publie les 50
 dernières (`anomalies_logiciel`).
 
+### `questions`
+
+Entrée facultative. Les questions sur le projet posées au bouton « ? Une question » (`.factory/questions.jsonl`, à côté
+du fichier de factory, un fil par ligne : `{id, ouverte, fonctionnalite?, etat (en_cours | repondue | en_lecture),
+messages: [{auteur (utilisateur | factory), texte, t, images?, niveau? (documents | code), sur?, suggestion?,
+fichiers_lus?}]}`). Seul écrivain du fichier ; 200 fils au plus, les plus anciens partent d'abord, une ligne illisible
+est ignorée. Sans entrée, ou `{"action": "lister"}` : rend `{questions}`. `{"action": "ouvrir", "texte",
+"fonctionnalite"?, "images"?}` rend `{question}` (un texte vide ou une fonctionnalité inconnue est refusé).
+`{"action": "ajouter", "id", "auteur", "texte", …}` ajoute un message au fil (une question de suivi le rouvre) et rend
+`{question}` ; `{"action": "marquer", "id", "etat"}` change son état. Le moteur procédural répond (jugement
+`repondre_question`, puis l'agent lecteur limité à Read, Grep, Glob) ; la conversation orchestratrice ne répond jamais
+d'elle-même. Le relevé publie les 50 derniers fils (`questions`).
+
 ### `lieux`
 
 Entrée : `{"action": "reference" | "decouper" | "regler" | "regrouper", …}`. Le `lieu` des étapes d'agent (`local` : elle exige le

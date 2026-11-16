@@ -57,7 +57,8 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
-                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant")
+                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant",
+                 "question", "question_approfondir")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -525,7 +526,12 @@ def cmd_actions(ctx, e):
         demande["id"] = f"r{su.suivant(s, 'r')}"
         demande["statut"], demande["reponse"] = "en attente", None
         if genre == "fonctionnalite":
-            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40])
+            nature = e.get("nature") or "fonctionnalite"
+            if nature not in ("fonctionnalite", "correction"):
+                raise Refus("« nature » vaut fonctionnalite ou correction.")
+            if e.get("concerne") is not None:
+                _fonc(s, e["concerne"])
+            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"))
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
             su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
@@ -534,6 +540,22 @@ def cmd_actions(ctx, e):
                 demande["images"] = images
             if fichiers:
                 demande["fichiers"] = fichiers
+        elif genre == "question":
+            images = _pieces_jointes(ctx, e, "questions")[0]
+            try:
+                if e.get("fil"):
+                    q = questions_projet.ajouter(ctx.f, e["fil"], {"auteur": "utilisateur", "texte": texte(e, "texte"),
+                                                                   "images": images})
+                else:
+                    if e.get("fonctionnalite") is not None:
+                        _fonc(s, e["fonctionnalite"])
+                    q = questions_projet.ouvrir(ctx.f, {"texte": texte(e, "texte"), "images": images,
+                                                        "fonctionnalite": e.get("fonctionnalite")})
+            except ValueError as ex:
+                raise Refus(str(ex))
+            demande["fil"] = q["id"]
+            if images:
+                demande["images"] = images
         elif genre == "message":
             f = _fonc(s, e.get("fonctionnalite"))
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
@@ -641,6 +663,7 @@ def _fonc_compacte(f):
     return {
         "id": f["id"], "nom": f["nom"], "etape": f["etape"], "genre": f.get("genre"), "workflow": f.get("workflow"),
         "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"],
+        "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
         "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
         "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
                    "valide_le": cahier.get("valide_le")} if cahier else None,
@@ -2269,6 +2292,7 @@ def construire_releve(ctx):
     for f in s["fonctionnalites"]:
         v = {"id": f["id"], "nom": f["nom"], "etape": f["etape"],
              "agent_cadrage": f["agent_cadrage"] if f["agent_cadrage"] in cles else None,    # un agent retiré : plus d'agent
+             "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
              "attend_reponse": f["attend_reponse"], "discussion": [],
              "decisions": [_decision_au_releve(d, s, f["id"]) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),

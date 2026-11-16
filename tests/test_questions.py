@@ -62,3 +62,24 @@ class TestCommandeQuestions(Base):
         code, rep = self.outil("lancer", "questions", entree={"action": "ouvrir", "texte": "x", "fonctionnalite": "f99"})
         self.assertEqual(code, 1, rep)
         self.assertIn("Fonctionnalité inconnue", rep["erreur"])
+
+    def test_demande_question_ouvre_puis_suit_le_fil(self):
+        i = self.ok("actions", entree={"type": "question", "texte": "Comment marche la sauvegarde ?"})["id"]
+        d = next(x for x in self.ok("demandes")["demandes"] if x["id"] == i)
+        self.assertEqual(d["fil"], "q1")
+        self.ok("actions", entree={"type": "question", "texte": "Et en cloud ?", "fil": "q1"})
+        (fil,) = self.ok("questions")["questions"]
+        self.assertEqual(len(fil["messages"]), 2)
+
+    def test_demande_correction_cree_une_fonctionnalite_de_nature_correction(self):
+        self.ok("actions", entree={"type": "fonctionnalite", "texte": "Le score reste à 12", "nature": "correction"})
+        f = self.fonc("f1")
+        self.assertEqual((f["nature"], f["concerne"]), ("correction", None))
+        r = next(x for x in self.ok("releve")["fonctionnalites"] if x["id"] == "f1")
+        self.assertEqual((r["nature"], r["concerne"]), ("correction", None))
+        self.ok("actions", entree={"type": "fonctionnalite", "texte": "Encore", "nature": "correction", "concerne": "f1"})
+        self.assertEqual(self.fonc("f2")["concerne"], "f1")
+        code, rep = self.outil("actions", entree={"type": "fonctionnalite", "texte": "x", "nature": "anomalie"})
+        self.assertEqual(code, 1, rep)
+        code, rep = self.outil("actions", entree={"type": "fonctionnalite", "texte": "x", "concerne": "f99"})
+        self.assertEqual(code, 1, rep)

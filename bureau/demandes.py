@@ -16,7 +16,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour": ("tache", "texte"), "lecon": ("id", "verdict"),
           "challenge": ("cible",), "solution": ("challenge", "texte"),
           "verdict_solution": ("challenge", "solution", "verdict"),
-          "fonctionnalite": ("texte",), "message": ("fonctionnalite", "texte"),
+          "fonctionnalite": ("texte",), "question": ("texte",), "question_approfondir": ("fil",),
+          "message": ("fonctionnalite", "texte"),
           "cahier": ("fonctionnalite", "verdict"), "methode": ("fonctionnalite", "verdict"),
           # `session_cloud` : `session` (« C'est fait ») ou `verdict: relancer` (« Approuver le dossier et relancer »)
           "genre": ("decision", "genre"), "session_cloud": ("decision",),
@@ -40,7 +41,8 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 FACULTATIFS = {"session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
-               "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers"), "message": ("images", "fichiers"),
+               "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne"),
+               "question": ("images", "fichiers", "fil", "fonctionnalite"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "blocage_analyse": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
@@ -48,7 +50,9 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
-               "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant")
+               "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant",
+               "question", "question_approfondir")
+NATURES = ("fonctionnalite", "correction")
 VERDICTS_BLOCAGE = ("suivre", "preciser", "laisser")   # suivre la recommandation du Chef, répondre autrement, laisser
 ETATS_ANOMALIE = ("vue", "reglee")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
@@ -444,6 +448,28 @@ def _verifier_v4(demande, r, elements):
         if _decision(r.get("decisions_projet", []), demande["decision"], "decoupage_lieux") is None:
             return "Décision inconnue."
         return None if demande["verdict"] in VERDICTS_DECOUPAGE else "Réponse inconnue (valider ou refuser)."
+    if genre == "fonctionnalite":
+        nature = demande.get("nature", "fonctionnalite")
+        if nature not in NATURES:
+            return "« nature » vaut fonctionnalite ou correction."
+        if demande.get("concerne") is not None:
+            if nature != "correction":
+                return "« concerne » ne sert qu'à une correction."
+            if _fonctionnalite(r, demande["concerne"]) is None:
+                return f"Fonctionnalité inconnue : {demande['concerne']}"
+    if genre in ("question", "question_approfondir"):
+        fils = {q["id"]: q for q in r.get("questions") or []}
+        if demande.get("fil") is not None and demande["fil"] not in fils:
+            return f"Question inconnue : {demande['fil']}"
+        if genre == "question_approfondir":
+            dernier = fils[demande["fil"]]["messages"][-1]
+            if dernier.get("auteur") != "factory" or dernier.get("niveau") != "documents":
+                return "Cette question n'a pas de réponse d'après les documents à approfondir."
+            return None
+        if demande.get("fonctionnalite") is not None and _fonctionnalite(r, demande["fonctionnalite"]) is None:
+            return f"Fonctionnalité inconnue : {demande['fonctionnalite']}"
+        return _texte_libre(demande.get("texte"), "texte") or (
+            verifier_images(demande["images"]) if "images" in demande else None)
     if genre in ("fonctionnalite", "message") and "images" in demande:
         message = verifier_images(demande["images"])
         if message:

@@ -263,6 +263,9 @@ R4 = releve.normaliser({
          "decisions": [{"id": "dp", "genre": "reprendre_methode", "texte": "Reprendre la méthode de « Badges » ?"}]},
         {"id": "f7", "nom": "Méthode proposée", "etape": "prototype",
          "decisions": [{"id": "dv", "genre": "valider_methode", "texte": "Valider ?"}]}],
+    "questions": [{"id": "q1", "etat": "repondue", "messages": [
+        {"auteur": "utilisateur", "texte": "?"},
+        {"auteur": "factory", "texte": "!", "niveau": "documents", "sur": True}]}],
     "decisions_projet": [
         {"id": "g1", "genre": "confirmer_genre", "texte": "Genre ?", "propose": "ville",
          "genres_connus": ["ville"]},
@@ -293,6 +296,24 @@ class TestVerifierV4(unittest.TestCase):
                   {"type": "fonctionnalite", "texte": 3}, {"type": "fonctionnalite", "texte": "x" * 3501}):
             self.refus(d)
         self.ok({"type": "fonctionnalite", "texte": "x" * 3500})
+
+    def test_correction(self):
+        self.ok({"type": "fonctionnalite", "texte": "Le score ne se remet pas à zéro", "nature": "correction"})
+        self.ok({"type": "fonctionnalite", "texte": "Bug", "nature": "correction", "concerne": "f5"})
+        self.refus({"type": "fonctionnalite", "texte": "Bug", "nature": "anomalie"})
+        self.refus({"type": "fonctionnalite", "texte": "Bug", "nature": "correction", "concerne": "f999"})
+        self.refus({"type": "fonctionnalite", "texte": "Écran", "concerne": "f5"})     # concerne : correction seulement
+
+    def test_question(self):
+        self.ok({"type": "question", "texte": "Comment est calculé le score ?"})
+        self.ok({"type": "question", "texte": "Et les bonus ?", "fil": "q1"})
+        self.ok({"type": "question", "texte": "x", "images": [image()]})
+        self.ok({"type": "question", "texte": "x", "fonctionnalite": "f5"})
+        self.refus({"type": "question", "texte": "  "})
+        self.refus({"type": "question", "texte": "x", "fil": "q9"})
+        self.refus({"type": "question", "texte": "x", "fonctionnalite": "f999"})
+        self.ok({"type": "question_approfondir", "fil": "q1"})
+        self.refus({"type": "question_approfondir", "fil": "q9"})
 
     def test_message(self):
         self.ok({"type": "message", "fonctionnalite": "f5", "texte": "Bonjour"})

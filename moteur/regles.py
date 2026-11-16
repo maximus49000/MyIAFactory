@@ -468,6 +468,8 @@ def _sur_message(projet, demande, etat):
         return _transmettre_a_l_agent(projet, demande, fid, *travail)
     if f["etape"] == "cadrage" and fid in _m(etat, "proposition_ratee"):
         return _reponse_proposition_ratee(projet, etat, demande, fid)
+    if f["etape"] == "cadrage" and _correction_sans_workflow(f):
+        return _reponse_metier_de_correction(projet, etat, demande, fid)
     if f["etape"] == "cadrage" and _en_parcours(projet, etat, fid):
         _terminer(projet, {"demande": demande["id"]}, "C'est noté. Répondez d'abord à la question posée dans les "
                                                       "décisions : le cadrage commencera ensuite.")
@@ -700,6 +702,8 @@ def _en_parcours(projet, etat, fid):
         return False
     if any(d["genre"] in DECISIONS_DU_PARCOURS for d in f["decisions"]):
         return True
+    if _correction_sans_workflow(f):      # le Directeur doit d'abord dire quel métier corrige
+        return True
     if any(d["portee"] == "projet" and d["genre"] in ("organisation", "confirmer_genre") and d.get("fonctionnalite") == fid
            for d in court["decisions"]):
         return True
@@ -837,6 +841,8 @@ def _nommer(projet, fid, intitule=None):
 
 
 def _sur_fonctionnalite(projet, demande, etat):
+    if _fonc(projet, demande["fonctionnalite"]).get("nature") == "correction":
+        return _sur_correction(projet, demande, etat)
     fid = demande["fonctionnalite"]
     suite = {"demande": demande["id"], "fonctionnalite": fid}
     _nommer(projet, fid)
@@ -850,6 +856,92 @@ def _sur_fonctionnalite(projet, demande, etat):
             return _suivre_le_workflow_de_creation(projet, etat, fid, suite, creation)
         return _proposer(projet, etat, fid, suite)
     return _classer(projet, etat, fid, suite)
+
+
+# --- Une correction : ni classement de genre, ni workflow proposé, ni cahier des charges.
+
+ROLES_QA = ("qa", "test", "recette")      # un mot de l'identifiant du rôle de vérification (`testeur` compris)
+
+
+def _roles_avec_service(fac):
+    """Les rôles des étapes d'agent des workflows du projet dont le service est connu (ceux qu'une correction peut
+    prendre : `workflows.service_du_role`), dans l'ordre, sans doublon ; la relecture croisée n'en est pas un."""
+    roles = []
+    for w in wf.tous(fac):
+        for e in w["flux"]:
+            if (not wf.est_validation(e) and e.get("role") and e.get("service") and e["role"] != ROLE_RELECTURE
+                    and e["role"] not in roles):
+                roles.append(e["role"])
+    return roles
+
+
+def _role_qa(projet):
+    """Le rôle de vérification du projet : un métier dont l'identifiant contient un mot de `ROLES_QA` et dont une étape
+    du projet dit le service ; sinon None (la correction n'a pas d'étape de vérification)."""
+    fac = _factory(projet)
+    possibles = _roles_avec_service(fac)
+    return next((r for r in _metiers_du_projet(fac) if any(mot in r.lower() for mot in ROLES_QA) and r in possibles),
+                None)
+
+
+def _correction_sans_workflow(f):
+    """Vrai pour une correction dont le workflow n'a pas pu être construit (le métier qui corrige est à choisir)."""
+    return (f or {}).get("nature") == "correction" and not f.get("workflow")
+
+
+def _sur_correction(projet, demande, etat):
+    """Une correction : ni classement de genre, ni workflow proposé ; son workflow est construit par le code, puis le
+    cadrage court démarre."""
+    fid = demande["fonctionnalite"]
+    _nommer(projet, fid)
+    return _lancer_la_correction(projet, etat, fid, {"demande": demande["id"], "fonctionnalite": fid},
+                                 _role_production(projet))
+
+
+def _lancer_la_correction(projet, etat, fid, suite, production):
+    """Le workflow de correction (`organisation`, action `correction`) avec ce rôle de production, puis le cadrage
+    court. Un rôle de vérification refusé (sans agent pour le tenir) : la correction se fait sans vérification. Un
+    rôle de production refusé : la question « quel métier corrige ? » au Directeur."""
+    qa, note = _role_qa(projet), ""
+    entree = {"action": "correction", "fonctionnalite": fid, "role_production": production, "role_qa": qa}
+    try:
+        try:
+            lancer(projet, "organisation", entree)
+        except Refus:
+            if qa is None:
+                raise
+            lancer(projet, "organisation", {**entree, "role_qa": None})
+            note = f" Le métier « {qa} » ne peut pas la vérifier ici : elle se fera sans vérification."
+    except Refus as ex:
+        return _demander_le_metier(projet, fid, suite, str(ex))
+    _dire(projet, fid, "C'est une correction : je cherche à reproduire l'anomalie avant de la corriger." + note)
+    _terminer(projet, suite, "Correction reçue : le cadrage court commence.")
+    return _repondre_cadrage(projet, etat, fid)
+
+
+def _demander_le_metier(projet, fid, suite, raison):
+    """Le moteur ne sait pas quel métier corrige : une question à choix au Directeur (les rôles dont le projet connaît
+    le service) ; rien ne démarre avant sa réponse (`_en_parcours`)."""
+    choix = _roles_avec_service(_factory(projet))[:12] or [JE_PRECISE]
+    if len(choix) < 2:
+        choix.append("Plus tard")
+    texte = (f"Je ne sais pas quel métier doit corriger cette anomalie ({raison.split(' : ', 1)[-1].rstrip('.')}). "
+             "Choisissez le métier qui la corrige.")
+    _question(projet, fid, texte, choix, suite)
+    return []
+
+
+def _reponse_metier_de_correction(projet, etat, demande, fid):
+    """La réponse à « quel métier corrige ? » : un des rôles proposés lance la correction ; sinon la question reste."""
+    texte = " ".join((demande.get("texte") or "").split())
+    roles = _roles_avec_service(_factory(projet))
+    role = next((r for r in roles if r == texte), None) or next((r for r in roles if r in texte), None)
+    suite = {"demande": demande["id"], "fonctionnalite": fid}
+    if role is None:
+        _terminer(projet, suite, "Je n'ai pas reconnu le métier : choisissez-en un parmi "
+                                 + (", ".join(roles) or "ceux du projet (il n'en a encore aucun)") + ".")
+        return []
+    return _lancer_la_correction(projet, etat, fid, suite, role)
 
 
 def _apres_classer_genre(projet, o, ctx, etat):
@@ -3374,22 +3466,34 @@ def _matiere(projet, etat, t):
             if est_intention_de_demarrage(_demande_de(f)["texte"]):
                 parties.append("La demande ne décrit pas de fonctionnalité, elle demande de démarrer le projet : le "
                                "cadrage porte sur la description du projet.")
-        parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
-                    "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
-                    "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
-                    '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
-                    "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
-                    "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
-                    "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
-                    "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
-                    f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
-                    'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
-                    "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
-                    "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
-                    "l'utilisateur : refais la maquette et rends le cahier corrigé."]
-        partenaires = _partenaires_au_cadrage(projet)
-        if partenaires:
-            parties.append(partenaires)
+        if (f or {}).get("nature") == "correction":
+            parties += ["C'est une **correction**, pas une nouvelle fonctionnalité.",
+                        wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8"),
+                        "Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
+                        "Rends `fiche_correction` dès que tu peux reproduire et comprendre l'attendu ; sinon des "
+                        "questions courtes à choix (`message.questions`, `attend: true`)."]
+            if f.get("concerne"):
+                c = _fonc(projet, f["concerne"])
+                parties += [f"Fonctionnalité concernée : {c['nom']} ({c['id']})", "Son cahier : " + str(c.get("cahier")),
+                            "Ses éléments : " + (", ".join(str((x or {}).get("nom") or k)
+                                                           for k, x in (c.get("elements") or {}).items()) or "(aucun)")]
+        else:
+            parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
+                        "Réponds-lui par ton rapport : des questions courtes, avec des choix quand c'est possible "
+                        "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
+                        '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
+                        "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
+                        "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
+                        "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
+                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
+                        f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
+                        'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
+                        "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
+                        "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
+                        "l'utilisateur : refais la maquette et rends le cahier corrigé."]
+            partenaires = _partenaires_au_cadrage(projet)
+            if partenaires:
+                parties.append(partenaires)
     elif etape == "prototype":
         parties += [f"Élément du prototype : {t.get('element')}", "Cahier : " + str((f or {}).get("cahier")),
                     "Discussion récente :", _texte_discussion(f, 8, projet),
@@ -3551,7 +3655,7 @@ def traiter_retour(projet, execution, etat):
         t = _tache(projet, tid)
         if tid in non_faites:
             continue
-        if str(t.get("etape")) == "cadrage" and not r.get("cahier"):
+        if str(t.get("etape")) == "cadrage" and not (r.get("cahier") or _fiche_correction(projet, t, r)):
             lancer(projet, "tache", {"id": tid, "active": False, "journal": [reponse[:300]]})   # il répondra encore
         elif t["colonne"] != "fait":
             e = {"id": tid, "colonne": "fait", "active": False, "journal": ["Terminé."]}
@@ -4300,12 +4404,43 @@ def _suite_cadrage(projet, etat, t, r):
     if r.get("nom"):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
         lancer(projet, "tache", {"id": t["id"], "titre": f"Cadrage : {r['nom'][:80]}"})
+    fiche = _fiche_correction(projet, t, r)
+    if fiche:
+        return _suite_fiche_correction(projet, fid, fiche)
     if r.get("cahier"):
         cahier = {"maquette": r["cahier"]["maquette"], "etapes": r["cahier"]["etapes"]}
         if "partenaires" in r["cahier"]:      # les partenaires décidés au cadrage (la réponse de l'utilisateur)
             cahier["partenaires"] = r["cahier"]["partenaires"]
         lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "cahier"})
         _poser(projet, fid, "valider_cahier", "Le cahier des charges est prêt : le valider, ou le faire corriger ?")
+    return []
+
+
+def _fiche_correction(projet, t, r):
+    """La `fiche_correction` du rapport de cadrage d'une correction (un objet), sinon None."""
+    fiche = r.get("fiche_correction")
+    if not isinstance(fiche, dict) or not t.get("fonctionnalite"):
+        return None
+    return fiche if _fonc(projet, t["fonctionnalite"]).get("nature") == "correction" else None
+
+
+def _suite_fiche_correction(projet, fid, fiche):
+    """La fiche est rangée comme un cahier validé (maquette vide, étapes = la fiche), pour l'affichage existant ; la
+    correction passe en série avec un seul élément, sans découpage, prototype ni méthode."""
+    def ligne(x):
+        return " ".join(str(x or "").split())
+    etapes = ["Symptôme : " + ligne(fiche.get("symptome")),
+              "Reproduction : " + " ; ".join(ligne(x) for x in fiche.get("reproduction") or [] if ligne(x)),
+              "Attendu : " + ligne(fiche.get("attendu"))]
+    if ligne(fiche.get("piste")):
+        etapes.append("Piste : " + ligne(fiche["piste"]))
+    lancer(projet, "fonctionnalite", {"id": fid, "cahier": {"maquette": [], "etapes": etapes,
+                                                             "valide_le": su.maintenant()}})
+    f = _fonc(projet, fid)
+    lancer(projet, "file", {"fonctionnalite": fid, "elements": [
+        {"id": "correction", "nom": f["nom"], "objectif": ligne(fiche.get("attendu"))[:300] or None}]})
+    lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
+    _dire(projet, fid, "Fiche de correction écrite : le correctif commence.")
     return []
 
 

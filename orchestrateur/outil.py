@@ -1605,6 +1605,36 @@ def _reprendre_le_workflow_de_creation(ctx, e):
     return {"ok": True, "workflow": copie["id"]}
 
 
+
+def _workflow_de_correction(ctx, e):
+    """`{"action": "correction", "fonctionnalite", "role_production", "role_qa"?}` : le workflow d'une correction
+    (`workflows.de_correction`), écrit sans service, agent ni brief nouveau, sans décision. Les rôles viennent du moteur
+    (`_role_production`, `_role_qa`) ; un rôle dont aucune étape du projet ne dit le service est refusé."""
+    from installation.dossier import Echec
+    from installation import mise_en_place
+    fid, production = texte(e, "fonctionnalite"), texte(e, "role_production")
+    qa = e.get("role_qa") or None
+    if qa is not None and not isinstance(qa, str):
+        raise Refus("« role_qa » est un rôle (texte) ou nul.")
+    with ctx.suivi.transaction() as s:
+        fonc = su.fonctionnalite(s, fid)
+        if fonc is None or fonc.get("nature") != "correction":
+            raise Refus(f"{fid} n'est pas une correction.")
+        if fonc.get("workflow"):
+            raise Refus(f"La fonctionnalité {fid} a déjà un workflow ({fonc['workflow']}).")
+        try:
+            w = wf.de_correction(ctx.f, fid, production, qa)
+        except ValueError as ex:
+            raise Refus(str(ex))
+        try:
+            mise_en_place.ecrire_organisation(ctx.f["chemin"], [dict(x) for x in ctx.f["services"]], w["flux"], [], {},
+                                              workflow=w)
+        except Echec as ex:
+            raise Refus(str(ex))
+        fonc["genre"], fonc["workflow"], fonc["maj"] = w["genre"], w["id"], su.maintenant()
+    return {"ok": True, "workflow": w["id"]}
+
+
 def cmd_organisation(ctx, e):
     """Applique une décision `organisation` acceptée : services, flux (ou workflow d'une fonctionnalité), fiches et
     briefs, puis lève la décision. `fable` : les clés des agents que le Directeur a cochés pour Fable (parmi ceux dont la
@@ -1617,8 +1647,10 @@ def cmd_organisation(ctx, e):
         return _reprendre_le_workflow_de_creation(ctx, e)
     if e.get("action") == "installateur":
         return _recruter_l_installateur(ctx, e)
+    if e.get("action") == "correction":
+        return _workflow_de_correction(ctx, e)
     if e.get("action") != "appliquer":
-        raise Refus("« action » doit valoir appliquer (ou environnement, reprendre ou installateur).")
+        raise Refus("« action » doit valoir appliquer (ou environnement, reprendre, installateur ou correction).")
     i = texte(e, "decision")
     fable = e.get("fable", [])
     if not isinstance(fable, list) or not all(isinstance(x, str) and x for x in fable):

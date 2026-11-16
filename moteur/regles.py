@@ -4466,7 +4466,10 @@ def _suite_fiche_correction(projet, fid, fiche):
     correction passe en série avec un seul élément, sans découpage, prototype ni méthode."""
     def ligne(x):
         return " ".join(str(x or "").split())
-    etapes = ["Symptôme : " + ligne(fiche.get("symptome")),
+    # Deux lectures : « En clair » pour n'importe qui (sans jargon), puis la description technique complète.
+    en_clair = ligne(fiche.get("en_clair"))[:600]
+    etapes = (["En clair : " + en_clair] if en_clair else []) + [
+             "Symptôme : " + ligne(fiche.get("symptome")),
               "Reproduction : " + " ; ".join(ligne(x) for x in fiche.get("reproduction") or [] if ligne(x)),
               "Attendu : " + ligne(fiche.get("attendu"))]
     if ligne(fiche.get("piste")):
@@ -4477,7 +4480,8 @@ def _suite_fiche_correction(projet, fid, fiche):
     lancer(projet, "file", {"fonctionnalite": fid, "elements": [
         {"id": "correction", "nom": f["nom"], "objectif": ligne(fiche.get("attendu"))[:300] or None}]})
     lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
-    _dire(projet, fid, "Fiche de correction écrite : le correctif commence.")
+    _dire(projet, fid, ("En clair : " + en_clair + "\n\n" if en_clair else "")
+          + "Fiche de correction écrite : le correctif commence.")
     return []
 
 

@@ -407,6 +407,9 @@ class TestDeCorrection(unittest.TestCase):
         # la validation n'est jamais vide, même quand le correctif était déjà en place (cas réel : bloquée deux fois)
         for champ in ("doit_marcher", "conclusion", "points_a_verifier", "nature"):
             self.assertIn(champ, texte)
+        # deux lectures : en clair pour n'importe qui, puis le détail technique (demande du Directeur)
+        for mot in ("En clair", "Détail technique", '"en_clair"'):
+            self.assertIn(mot, texte)
 
 
 if __name__ == "__main__":

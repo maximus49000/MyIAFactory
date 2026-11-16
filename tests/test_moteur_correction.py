@@ -96,6 +96,19 @@ class TestCorrection(Base):
         (flux,) = self.taches(etape="flux:f1-correctif")
         self.assertEqual(flux["element"], "correction")
 
+    def test_la_fiche_se_lit_en_clair_puis_en_detail(self):
+        # Double lecture demandée par le Directeur : une vulgarisation pour n'importe qui, puis la description complète.
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        en_clair = "Le score ne repart pas de zéro quand on recommence une partie."
+        regles._suite_cadrage(self.projet, self.etat, t, {"nom": "Corriger : score",
+                                                           "fiche_correction": {**FICHE, "en_clair": en_clair}})
+        f = self.fonc()
+        self.assertEqual(f["cahier"]["etapes"][0], "En clair : " + en_clair)
+        self.assertTrue(f["cahier"]["etapes"][1].startswith("Symptôme : "))
+        self.assertIn(en_clair, f["discussion"][-1]["texte"])
+        # une fiche sans « en clair » reste acceptée (rien ne bloque) : elle commence au symptôme
+
     def test_le_rapport_de_cadrage_avec_fiche_ferme_la_tache(self):
         _, actions = self.corriger()
         self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Je reproduis."},

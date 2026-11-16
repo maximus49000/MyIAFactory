@@ -1353,3 +1353,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant de démarrer un service réseau local pour produire une preuve de validation, vérifier d'abord par une requête s'il n'est pas déjà actif, afin d'éviter un conflit de port et de réutiliser le service existant.
+
+## S226 — Quand un même signalement de correction a déjà été confirmé
+Rôles : dev
+Date : 2026-11-16
+
+Quand un même signalement de correction a déjà été confirmé hors périmètre ou déjà corrigé à 5-6 reprises consécutives avec le même diagnostic, il doit être clos directement par l'orchestrateur sans nouvelle instruction à un agent, pour éviter de gaspiller des cycles d'exploration identiques.

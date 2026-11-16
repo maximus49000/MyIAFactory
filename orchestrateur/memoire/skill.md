@@ -1341,3 +1341,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand la consigne d'une étape de correction demande explicitement un retour/texte de cadrage plutôt qu'un correctif de code, le livrable attendu pour cette étape est ce texte réutilisable comme future consigne, et non une modification de fichiers.
+
+## S224 — Un ticket de correction resoumis plusieurs fois avec un diag
+Rôles : dev
+Date : 2026-11-16
+
+Un ticket de correction resoumis plusieurs fois avec un diagnostic identique de hors-périmètre doit être fermé par l'orchestrateur plutôt que renvoyé à un nouvel agent de résolution.

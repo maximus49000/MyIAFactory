@@ -1383,3 +1383,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Quand du code applique une suppression explicite d'enregistrements enfants en filet de sécurité contre une cascade de clé étrangère potentiellement inactive sur certaines connexions, forcer un flush de ces suppressions avant de supprimer le parent : sans relation déclarée entre les deux objets au niveau de l'ORM, l'ordre des instructions de suppression n'est pas garanti et peut entrer en course avec la cascade côté base de données, produisant des suppressions redondantes ou des avertissements silencieux.
+
+## S231 — Avant d'instruire une demande de correction, chercher un tes
+Rôles : dev
+Date : 2026-11-16
+
+Avant d'instruire une demande de correction, chercher un test automatisé reproduisant exactement le scénario décrit dans la fiche ; son exécution tranche immédiatement entre 'déjà corrigé' et 'encore buggé', sans lecture de code approfondie ni nouvelle exploration.

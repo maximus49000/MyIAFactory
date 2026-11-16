@@ -399,8 +399,11 @@ class TestDeCorrection(unittest.TestCase):
 
     def test_consignes_presentes(self):
         texte = wf.CONSIGNES_CORRECTION.read_text(encoding="utf-8")
-        for titre in ("## Cadrage", "## Correctif", "## Vérification", "## Livraison"):
+        for titre in ("## Diagnostic", "## Correctif", "## Vérification", "## Livraison"):
             self.assertIn(titre, texte)
+        # l'anomalie est illustrée au diagnostic, puis avant / après au correctif (demande du Directeur)
+        self.assertIn("Illustre l'anomalie", texte)
+        self.assertIn("avant / après", texte)
 
 
 if __name__ == "__main__":

@@ -117,6 +117,15 @@ BAC_A_SABLE = (".html", ".txt")
 DOCUMENTS = {**LIVRABLES, ".md": ("text/plain; charset=utf-8", False), ".json": ("text/plain; charset=utf-8", False),
              ".csv": ("text/plain; charset=utf-8", False), ".svg": ("image/svg+xml", False)}
 BAC_A_SABLE_DOCUMENTS = BAC_A_SABLE + (".md", ".json", ".csv", ".svg")
+# Les fichiers de code qu'un agent déclare comme documents d'une fonctionnalité (les fichiers qu'une correction touche) :
+# lus en texte brut, en bac à sable, s'ils sont dans le dossier du projet, hors des dossiers cachés (`.git`, `.venv`…)
+# et jamais un fichier de secrets.
+CODE_SOURCE = (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte", ".css", ".scss", ".sql", ".toml",
+               ".yaml", ".yml", ".ini", ".cfg", ".xml", ".sh", ".ps1", ".bat", ".java", ".kt", ".cs", ".go", ".rs",
+               ".php", ".rb", ".c", ".h", ".cpp", ".hpp", ".gd", ".tscn", ".gradle")
+DOCUMENTS_ET_CODE = {**DOCUMENTS, **{x: ("text/plain; charset=utf-8", False) for x in CODE_SOURCE}}
+BAC_A_SABLE_DOCUMENTS_ET_CODE = BAC_A_SABLE_DOCUMENTS + CODE_SOURCE
+SECRETS = re.compile(r"(^\.env|secret|credential|password|passwd|token|\.pem$|\.key$|^id_rsa)", re.IGNORECASE)
 METHODES = {".md": ("text/plain; charset=utf-8", False), ".txt": ("text/plain; charset=utf-8", False)}
 # Le bureau ouvert au téléphone : le cookie posé par l'association, la page servie sans lui.
 COOKIE_ACCES = "myiafactory_acces"
@@ -657,8 +666,11 @@ class Projet:
         f = next((f for f in r["fonctionnalites"] if f["id"] == fonctionnalite), None)
         if f is None or not any(isinstance(d, dict) and d.get("chemin") == brut for d in f.get("documents") or []):
             return None
-        if (not brut or "\x00" in brut or Path(brut).is_absolute() or brut[0] in "/\\"
-                or Path(brut).suffix.lower() not in DOCUMENTS):
+        if not brut or "\x00" in brut or Path(brut).is_absolute() or brut[0] in "/\\":
+            return None
+        if Path(brut).suffix.lower() in CODE_SOURCE:     # un fichier que la correction touche : lu dans le projet
+            return self._code_du_projet(brut)
+        if Path(brut).suffix.lower() not in DOCUMENTS:
             return None
         regl, _ = self.reglages()
         conf = regl.get("documents")
@@ -680,6 +692,25 @@ class Projet:
         except (OSError, ValueError):
             pass
         return None
+
+    def _code_du_projet(self, brut):
+        """Un fichier de code déclaré document d'une fonctionnalité : dans le dossier du projet (le parent de `.factory`),
+        lien résolu, jamais sous un dossier caché (`.git`, `.venv`…) ni un fichier de secrets ; sinon `None`."""
+        regl, _ = self.reglages()
+        p = Path(brut.replace("\\", "/"))
+        if p.drive or p.anchor or ".." in p.parts:
+            return None
+        try:
+            base = Path(regl["dossier"]).resolve()
+            projet = base.parent if base.name == ".factory" else base
+            cible = (projet / p).resolve()
+            if not cible.is_file() or not _sous(cible, projet) or cible.suffix.lower() not in CODE_SOURCE:
+                return None
+            if any(x.startswith(".") for x in cible.relative_to(projet).parts) or SECRETS.search(cible.name):
+                return None
+            return cible
+        except (OSError, ValueError, KeyError):
+            return None
 
     def telechargeable(self, fonctionnalite, brut):
         """Le fichier à télécharger (fenêtre de validation, partie « Livrables »), sinon `None`. Il doit avoir une
@@ -1403,7 +1434,7 @@ class Handler(BaseHTTPRequestHandler):
             fonc, doc = q.get("fonctionnalite", []), q.get("chemin", [])
             if len(fonc) != 1 or len(doc) != 1:
                 return self._json(404, {"erreur": "Introuvable."})
-            return self._livrable(projet.document(fonc[0], doc[0]), DOCUMENTS, BAC_A_SABLE_DOCUMENTS)
+            return self._livrable(projet.document(fonc[0], doc[0]), DOCUMENTS_ET_CODE, BAC_A_SABLE_DOCUMENTS_ET_CODE)
         if chemin in ("/api/catalogue", "/api/livrable"):
             valeurs = parse_qs(morceaux.query, keep_blank_values=True).get("fonctionnalite")
             if valeurs is not None and len(valeurs) != 1:

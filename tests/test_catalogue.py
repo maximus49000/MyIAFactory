@@ -391,6 +391,34 @@ class TestCatalogueServi(AvecServeur):
         r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=pieces/f1/m.png")
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/png"))
 
+    def test_code_d_une_correction_lu_en_texte(self):
+        # Les fichiers qu'une correction touche (`backend/app/x.py`) : déclarés documents, lus dans le projet en texte
+        # brut et en bac à sable, même hors des racines `documents` (cas réel : « Introuvable » sur tickets.py).
+        self.document("backend/app/tickets.py", b"def f():\n    return '<script>'\n", racines=("pieces",))
+        r, data = self.req("GET", "/api/document?fonctionnalite=f1&chemin=backend/app/tickets.py")
+        self.assertEqual((r.status, data), (200, b"def f():\n    return '<script>'\n"))
+        self.assertEqual(r.getheader("Content-Type"), "text/plain; charset=utf-8")
+        self.assertEqual(r.getheader("Content-Security-Policy"), "sandbox")
+
+    def test_code_refuse(self):
+        (self.dossier / "backend").mkdir()
+        (self.dossier / "backend" / "pas_liste.py").write_bytes(b"x")
+        for chemin in (".git/hooks/pre-commit.py",         # dossier caché
+                       ".venv/lib/site.py",
+                       "config/secrets.py",                # fichier de secrets
+                       "backend/token_api.py",
+                       "../hors_projet.py"):               # hors du projet
+            with self.subTest(chemin):
+                if ".." not in chemin:
+                    self.document(chemin, b"x")
+                else:
+                    self.document("backend/a.py", b"x", liste=[chemin])
+                r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=" + chemin)
+                self.assertEqual(r.status, 404)
+        self.document("backend/a.py", b"x")           # liste : backend/a.py seulement
+        r, _ = self.req("GET", "/api/document?fonctionnalite=f1&chemin=backend/pas_liste.py")
+        self.assertEqual(r.status, 404)              # pas déclaré pour cette fonctionnalité
+
     def test_couts_d_une_fonctionnalite(self):
         r = json.loads(json.dumps(RELEVE))
         r["taches"][0]["fonctionnalite"] = "f1"

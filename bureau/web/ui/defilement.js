@@ -28,11 +28,21 @@ export function garderDefilement(panneau, y, {observer, geste, minuteur = setTim
 // Les branchements du navigateur : la hauteur du contenu observée, les gestes de l'utilisateur sur le panneau.
 export function garderDefilementDOM(panneau, contenu, y) {
   return garderDefilement(panneau, y, {
+    // La taille (images qui arrivent) et les ajouts de contenu (la facturation chargée) : les ajouts suffisent même
+    // quand la page n'est pas affichée (pas de rendu, donc pas de ResizeObserver).
     observer: (rappel) => {
-      if (typeof ResizeObserver === "undefined") return () => {};
-      const o = new ResizeObserver(rappel);
-      o.observe(contenu);
-      return () => o.disconnect();
+      const arrets = [];
+      if (typeof ResizeObserver !== "undefined") {
+        const o = new ResizeObserver(() => rappel());
+        o.observe(contenu);
+        arrets.push(() => o.disconnect());
+      }
+      if (typeof MutationObserver !== "undefined") {
+        const m = new MutationObserver(() => rappel());
+        m.observe(contenu, {childList: true, subtree: true, characterData: true});
+        arrets.push(() => m.disconnect());
+      }
+      return () => { for (const a of arrets) a(); };
     },
     geste: (rappel) => {
       const types = ["wheel", "touchstart", "keydown", "pointerdown"];

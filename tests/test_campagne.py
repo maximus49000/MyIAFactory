@@ -53,5 +53,53 @@ class TestCampagne(unittest.TestCase):
         self.assertEqual([p for p, _ in campagne.suites_sans_verrou(lister, moi={2})], [])
 
 
+    # --- Les tests d'un projet, lancés par un agent (`lancer.py tests -- <commande>`).
+    def test_les_suites_node_d_un_agent_comptent_comme_suites_directes(self):
+        """Essai réel (2026-11-17) : deux agents lançaient chacun `vitest run` en même temps, chacun beaucoup plus lent."""
+        lister = lambda: [(5, "node C:/p/frontend/node_modules/vitest/vitest.mjs run"),  # noqa: E731
+                          (6, "node node_modules/jest/bin/jest.js"), (7, "npx playwright test"),
+                          (8, "node C:/p/frontend/node_modules/vite/bin/vite.js"),
+                          (9, "node C:/npm/node_modules/@playwright/mcp/cli.js")]
+        self.assertEqual([p for p, _ in campagne.suites_sans_verrou(lister, moi=set())], [5, 6, 7])
+
+    def test_executer_prend_le_verrou_lance_la_commande_et_le_libere(self):
+        vu = {}
+
+        def lancer(commande, dossier):
+            vu["verrou"] = json.loads(self.verrou.read_text(encoding="utf-8"))["pid"]
+            vu["commande"], vu["dossier"] = commande, dossier
+            return 7
+        code = campagne.executer(["npx", "vitest", "run", "src/a.test.tsx"], dossier="C:/p/frontend", verrou=self.verrou,
+                                 lister=lambda: [], dormir=self.sommes.append, dire=lambda t, **k: self.dits.append(t),
+                                 lancer=lancer)
+        self.assertEqual(code, 7)                                  # le code de la commande
+        self.assertEqual(vu, {"verrou": os.getpid(), "commande": ["npx", "vitest", "run", "src/a.test.tsx"],
+                              "dossier": "C:/p/frontend"})
+        self.assertFalse(self.verrou.exists())                    # libéré après
+
+    def test_executer_attend_la_campagne_d_un_autre_agent(self):
+        listes = [[(5, "node node_modules/vitest/vitest.mjs run")], []]
+        lancees = []
+        code = campagne.executer(["npm", "test"], verrou=self.verrou, lister=lambda: listes.pop(0),
+                                 dormir=self.sommes.append, dire=lambda t, **k: self.dits.append(t),
+                                 lancer=lambda c, d: lancees.append(c) or 0)
+        self.assertEqual((code, lancees, len(self.sommes)), (0, [["npm", "test"]], 1))
+        self.assertIn("Une seule campagne", self.dits[0])
+
+    def test_executer_libere_meme_si_la_commande_echoue(self):
+        def lancer(c, d):
+            raise OSError("introuvable")
+        with self.assertRaises(OSError):
+            campagne.executer(["x"], verrou=self.verrou, lister=lambda: [], dormir=self.sommes.append,
+                              dire=lambda t, **k: None, lancer=lancer)
+        self.assertFalse(self.verrou.exists())
+
+    def test_la_ligne_de_commande_exige_une_commande_apres_les_tirets(self):
+        self.assertEqual(campagne.main([], executer=lambda *a, **k: 0), 2)
+        vu = []
+        self.assertEqual(campagne.main(["--dossier", "front", "--", "npx", "vitest", "run"],
+                                       executer=lambda c, dossier=None, attendre=True: vu.append((c, dossier)) or 4), 4)
+        self.assertEqual(vu, [(["npx", "vitest", "run"], "front")])
+
 if __name__ == "__main__":
     unittest.main()

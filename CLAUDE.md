@@ -7,6 +7,9 @@
 - **Toujours passer par le lanceur**, jamais `python -m unittest discover` ni `pytest` directement : il prend le verrou
   du poste (`~/MyIAFactory/tests-en-cours.json`) et attend la fin d'une autre campagne, la sienne ou une suite lancée
   à la main.
+- **Les agents des projets passent par le même verrou** : `python lancer.py tests --dossier <d> -- <commande>` (consigne
+  de départ de tout agent local, `orchestrateur/depart.py`). Les suites `vitest`, `jest`, `playwright test`, `mocha`
+  lancées sans lui sont repérées et attendues, comme `unittest` et `pytest`.
 
 ```
 py -3.12 outils/tests_paralleles.py --touches     # au quotidien : seulement les tests touchés par vos changements

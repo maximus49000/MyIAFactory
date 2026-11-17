@@ -2,8 +2,13 @@
 et le processeur, et chacune devient jusqu'à dix fois plus lente (mesure du 2026-11-16 : 1 861 s au lieu de 253 s).
 
 Le verrou est `~/MyIAFactory/tests-en-cours.json` ({pid, debut, racine}) ; celui d'un processus mort est repris. Une
-suite lancée sans le lanceur (`python -m unittest …`) ne prend pas le verrou : elle est repérée parmi les processus
-du poste, et la campagne attend aussi qu'elle finisse.
+suite lancée sans le lanceur (`python -m unittest …`, `vitest run`, `jest`, `playwright test`) ne prend pas le verrou :
+elle est repérée parmi les processus du poste, et la campagne attend aussi qu'elle finisse.
+
+Les agents des projets passent par le même verrou (essai réel du 2026-11-17 : deux agents lançaient chacun la suite
+vitest du projet en même temps, et chacun attendait plus de six minutes) :
+    python <skill>/lancer.py tests [--dossier <dossier>] [--sans-attendre] -- <commande de test>
+attend son tour, lance la commande (sa sortie s'affiche telle quelle), rend son code et libère le verrou.
 """
 import json
 import os
@@ -40,12 +45,16 @@ def pid_vivant(pid):
     return True
 
 
+# Les suites de tests JavaScript lancées sans le verrou (le serveur `vite` seul n'en est pas une).
+SUITES_NODE = ("vitest", "jest", "playwright test", "mocha")
+
+
 def processus():
-    """[(pid, ligne de commande)] des processus Python du poste ; liste vide si on ne sait pas les lire."""
+    """[(pid, ligne de commande)] des processus Python et Node du poste ; liste vide si on ne sait pas les lire."""
     try:
         if sys.platform == "win32":
             p = subprocess.run(["powershell", "-NoProfile", "-Command",
-                                "Get-CimInstance Win32_Process -Filter \"Name like 'python%' or Name='py.exe'\" | "
+                                "Get-CimInstance Win32_Process -Filter \"Name like 'python%' or Name='py.exe' or Name='node.exe'\" | "
                                 "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"],
                                capture_output=True, timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         else:
@@ -60,11 +69,18 @@ def processus():
     return sortie
 
 
+def _suite_directe(commande):
+    c = commande.lower()
+    if "tests_paralleles" in c or "lancer.py" in c:
+        return False      # un lanceur : couvert par le verrou
+    return "unittest" in c or "pytest" in c or any(n in c for n in SUITES_NODE)
+
+
 def suites_sans_verrou(lister=processus, moi=None):
-    """Les suites lancées directement (`unittest`, `pytest`), hors celles du lanceur (couvertes par le verrou)."""
+    """Les suites lancées directement (`unittest`, `pytest`, `vitest`…), hors celles des lanceurs (couvertes par le
+    verrou)."""
     moi = {os.getpid(), os.getppid()} if moi is None else moi
-    return [(pid, c) for pid, c in lister() if pid not in moi and "tests_paralleles" not in c
-            and ("unittest" in c or "pytest" in c)]
+    return [(pid, c) for pid, c in lister() if pid not in moi and _suite_directe(c)]
 
 
 def _lire(verrou):
@@ -126,3 +142,44 @@ def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, do
             dire(f"En attente : {motif}. Une seule campagne de tests à la fois sur le poste.", flush=True)
             deja_dit = motif
         dormir(PAS_S)
+
+
+def _lancer(commande, dossier):
+    """Lance la commande de test (sous Windows par l'interpréteur de commandes : `npx`, `npm` sont des `.cmd`)."""
+    if sys.platform == "win32":
+        return subprocess.run(subprocess.list2cmdline(commande), cwd=dossier, shell=True).returncode
+    return subprocess.run(commande, cwd=dossier).returncode
+
+
+def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
+             lancer=_lancer):
+    """Les tests d'un projet, une campagne à la fois sur le poste : attend son tour, lance `commande` dans `dossier`,
+    rend son code (3 si refusé sans attendre) et libère toujours le verrou."""
+    racine = str(Path(dossier or os.getcwd()).resolve())
+    if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire):
+        return 3
+    try:
+        return lancer(list(commande), dossier)
+    finally:
+        liberer(verrou)
+
+
+def main(argv=None, executer=executer):
+    """`lancer.py tests [--dossier D] [--sans-attendre] -- <commande>`."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--" not in argv or argv.index("--") == len(argv) - 1:
+        print("Usage : lancer.py tests [--dossier <dossier>] [--sans-attendre] -- <commande de test>", file=sys.stderr)
+        return 2
+    i = argv.index("--")
+    options, commande = argv[:i], argv[i + 1:]
+    dossier, attendre = None, True
+    while options:
+        o = options.pop(0)
+        if o == "--dossier" and options:
+            dossier = options.pop(0)
+        elif o == "--sans-attendre":
+            attendre = False
+        else:
+            print(f"Option inconnue : {o}", file=sys.stderr)
+            return 2
+    return executer(commande, dossier=dossier, attendre=attendre)

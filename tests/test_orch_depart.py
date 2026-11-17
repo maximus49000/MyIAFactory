@@ -139,6 +139,15 @@ class TestDepart(unittest.TestCase):
         self.assertIn("Texte de dev-1.", m)
         self.assertIn("T", m)
 
+    def test_un_agent_local_passe_ses_tests_par_le_verrou_du_poste(self):
+        """Une seule campagne de tests à la fois sur le poste, pour les agents des projets aussi (2026-11-17)."""
+        m = self.message()
+        self.assertIn("lancer.py\" tests --", m)
+        self.assertIn("une seule campagne de tests à la fois", m.lower())
+        self.assertIn("seulement les tests touchés", m)
+        self.assertNotIn("lancer.py\" tests --", self.message("cloud"))      # un agent cloud a sa propre machine
+
+
     def test_message_cloud_repart_de_zero(self):
         self.assertTrue(self.message("cloud").startswith("Tu repars de zéro."))
 

@@ -134,6 +134,22 @@ pas un essai qui a réussi, et préfère un outil du projet qui fait le travail 
 manque, dis-le dans ton résultat plutôt que de la chercher partout."""
 
 
+LANCEUR_DE_TESTS = Path(__file__).resolve().parent.parent / "lancer.py"
+
+
+def tests_un_a_la_fois():
+    """La consigne des tests d'un agent local : une seule campagne de tests à la fois sur le poste (essai réel du
+    2026-11-17 : deux agents lançaient chacun la suite vitest du projet en même temps, plus de six minutes chacun)."""
+    return f"""## Tes tests : une seule campagne de tests à la fois sur le poste
+D'autres agents travaillent sur ce poste : deux suites de tests lancées ensemble se disputent la machine et chacune
+devient bien plus lente. **Lance toujours tes tests par le lanceur du poste**, qui attend son tour, lance ta commande et
+rend son code :
+`python "{LANCEUR_DE_TESTS}" tests --dossier <dossier où lancer> -- <ta commande de test>`
+(par exemple `-- npx vitest run src/screens/Ecran.test.tsx`). Jamais une suite lancée directement, ni par un script à
+toi. Lance **seulement les tests touchés** par ta tâche (les fichiers de test concernés) ; la suite complète, une fois
+au plus, à la fin, et seulement si ta tâche le demande."""
+
+
 def _lecons(titre, lecons):
     lignes = [f"- {x['titre']} — {x['texte']}" if x.get("titre") else f"- {x.get('texte', '')}" for x in lecons]
     corps = "\n".join(lignes) if lignes else "(aucune)"
@@ -326,6 +342,8 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
     if inscrits or ecartes:
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
+    if fiche["lieu"] != "cloud":
+        parties.append(tests_un_a_la_fois())
     parties.append(FIN_D_ETAPE)
     if fiche["lieu"] == "cloud":
         parties.append(fin_cloud(tache.get("id", "?")))
@@ -376,6 +394,8 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
     if inscrits or ecartes:
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
+    if fiche["lieu"] != "cloud":
+        parties.append(tests_un_a_la_fois())
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
                    .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))
     if fiche["lieu"] == "cloud":

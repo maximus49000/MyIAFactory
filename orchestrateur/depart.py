@@ -188,18 +188,17 @@ Partenaire **inscrit** (compte, pas de liaison directe) : ne l'appelle pas ; ren
 `"chez_partenaire": {"partenaire" (id), "quoi", "prompt" (prêt à copier, selon ses règles), "reglages" (chacun), "mode_operatoire" (où
 cliquer), "a_rapporter": {"description", "nom"}, "elements" (groupés en une génération)}`. L'utilisateur le fait et te rapporte le résultat.
 Avant une action qui fait apparaître une fenêtre sur l'ordinateur de l'utilisateur (pare-feu Windows pour adb.exe, un
-émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote), arrête-toi : mets en tête de ton `message.texte` quelle fenêtre va s'ouvrir,
-pourquoi et quoi choisir (« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez Réseaux privés. »), avec `attend: true`, et
-n'agis qu'après sa réponse. Ne réponds jamais à ces fenêtres à sa place. Si une commande attend, bloquée par une
-fenêtre, dis-le dans ton compte rendu.
+émulateur ou un serveur local ; droits d'administrateur (UAC) ; pilote), arrête-toi : mets en tête de ton `message.texte`
+quelle fenêtre va s'ouvrir, pourquoi et quoi choisir (« Une fenêtre du pare-feu Windows va s'ouvrir pour adb.exe : choisissez
+Réseaux privés. »), avec `attend: true`, et n'agis qu'après sa réponse. Ne réponds jamais à ces fenêtres à sa place. Si une
+commande reste bloquée par une fenêtre, dis-le dans ton compte rendu.
 **Jamais d'installation ni de test sur un appareil physique de l'utilisateur** : pas d'`adb devices` ni d'`adb install`
-vers un téléphone branché, pas de demande de brancher un téléphone ni d'activer le débogage USB. Les tests automatiques
-d'une application mobile se font sur un émulateur (AVD sans fenêtre : `emulator -no-window`) ; s'il manque, déclare-le
-comme outil du poste à installer. **Avant ton compte rendu, ferme ce que tu as lancé** (émulateur : `adb emu kill` ;
-serveur local ; démon Gradle : `gradlew --stop`) : le poste de l'utilisateur doit retrouver sa mémoire (le moteur arrête
-de toute façon ce qui reste à la fin de la tâche). La version, c'est l'utilisateur qui la valide dans la fenêtre de validation
-(`nature: en_jeu`, apk à télécharger et mode opératoire). Si tu juges quand même nécessaire un test sur appareil, rends
-`accord_requis` : c'est le Directeur qui statue, et s'il refuse, continue sans ce test (installation non faite)."""
+vers un téléphone branché, pas de demande de brancher un téléphone ni d'activer le débogage USB. Les tests d'une
+application mobile se font sur un émulateur (AVD sans fenêtre : `emulator -no-window`) ; s'il manque, déclare-le comme
+outil du poste à installer. **Avant ton compte rendu, ferme ce que tu as lancé** (émulateur : `adb emu kill` ; serveur
+local ; démon Gradle : `gradlew --stop`) : le poste doit retrouver sa mémoire. La version, c'est l'utilisateur qui la
+valide dans la fenêtre de validation (`nature: en_jeu`, apk à télécharger et mode opératoire). Si un test sur appareil te
+semble nécessaire, rends `accord_requis` : le Directeur statue, et s'il refuse, continue sans (installation non faite)."""
 
 
 def fin_cloud(tache_id):

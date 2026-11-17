@@ -12,6 +12,7 @@ EXCEPTIONS = {
     ("installation", "dossier.py"),            # mklink, pendant l'installation, depuis Claude Code
     ("installation", "lanceur.py"),            # drapeaux calculés par `_drapeaux_windows`
     ("orchestrateur", "verifier_interface.py:38"),   # vérification lancée à la main depuis une console
+    ("bureau", "processus.py:146"),            # `ps`, branche hors Windows : pas de console à masquer
 }
 
 
@@ -31,7 +32,7 @@ class SansFenetre(unittest.TestCase):
             if (d, f.name) in EXCEPTIONS or (d, f"{f.name}:{n}") in EXCEPTIONS:
                 continue
             if "CREATE_NO_WINDOW" not in appel and "creationflags=drapeaux" not in appel \
-                    and "**options" not in appel:
+                    and "**options" not in appel and "creationflags=_sans_fenetre()" not in appel:
                 manquants.append(f"{f.relative_to(RACINE)}:{n}")
         self.assertEqual(manquants, [], "commandes lancées sans CREATE_NO_WINDOW (fenêtre noire sous Windows)")
 

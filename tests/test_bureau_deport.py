@@ -152,4 +152,4 @@ class TestDeportDepotRoutes(AvecServeur):
         e = self.json("/api/deport/apercu")["empreinte"]
         r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": e}), self.ENT)
         self.assertEqual(r.status, 409)
-        self.assertIn("push", json.loads(data.decode("utf-8"))["erreur"].lower())
+        self.assertIn("origin", json.loads(data.decode("utf-8"))["erreur"])

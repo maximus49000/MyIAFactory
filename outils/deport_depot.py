@@ -25,6 +25,7 @@ from bureau.deport import ACTIONS  # noqa: E402
 from moteur import git_sur  # noqa: E402
 
 BRANCHE = "deport/workflow"
+MARQUEUR = "[MyIAFactory-deport] "   # début du message de TOUS nos commits : la branche distante est alors la nôtre
 DELAI_GIT_S = 120
 DELAI_PUSH_S = 300
 _NOM_DEFAUT = "myiafactory"
@@ -129,7 +130,8 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             return 127, "git n'a pas pu être lancé : %s" % e
 
     def lu(sortie):
-        return (sortie.decode("utf-8", "replace") if isinstance(sortie, bytes) else str(sortie or "")).strip()[:300]
+        brut = sortie.decode("utf-8", "replace") if isinstance(sortie, bytes) else str(sortie or "")
+        return re.sub(r"://[^/@\s]+@", "://***@", brut).strip()[:300]
 
     with git_sur.verrou(racine):
         code, sortie = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -137,6 +139,7 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             return _refus("Le dossier du projet n'est pas un dépôt git utilisable : %s" % lu(sortie))
         if lu(sortie) == BRANCHE:
             return _refus("La branche « %s » est déjà la branche courante : revenez sur la branche principale." % BRANCHE)
+        git("worktree", "prune")
         temporaire = tempfile.mkdtemp(prefix="deport-")
         travail = os.path.join(temporaire, "copie")
         cree = False
@@ -147,6 +150,16 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             cree = True
             chemin = _chemin(travail, fichier)
             etat = workflow_github.etat_du_fichier(chemin, texte)
+            # la même règle que l'aperçu : la copie de l'arbre de travail compte aussi (modification non commitée)
+            copie = _chemin(racine, fichier)
+            etat_copie = workflow_github.etat_du_fichier(copie, texte)
+            if etat_copie == "modifie_a_la_main":
+                etat = etat_copie
+            elif etat_copie not in ("absent", "a_jour"):
+                dans_head = chemin.read_bytes() if chemin.exists() else None
+                if dans_head != copie.read_bytes():
+                    return _refus("Le fichier %s a une modification non commitée dans le dossier du projet : "
+                                  "commitez-la ou annulez-la, puis relancez." % copie.relative_to(racine).as_posix())
             if etat == "modifie_a_la_main":
                 return _refus("Le fichier %s a été modifié à la main : MyIAFactory ne l'écrase pas. Reprenez-le ou "
                               "supprimez-le, puis relancez." % chemin.relative_to(travail).as_posix())
@@ -155,15 +168,29 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             chemin.parent.mkdir(parents=True, exist_ok=True)
             chemin.write_bytes(texte.encode("utf-8"))
             relatif = chemin.relative_to(travail).as_posix()
-            for args, quoi in ((("checkout", "-q", "-B", BRANCHE), "branche de travail"),
-                               (("add", "--", relatif), "préparation"),
-                               (("commit", "-q", "-m", "Déport : workflow GitHub Actions des actions déportées",
+            for args, quoi in ((("add", "--", relatif), "préparation"),
+                               (("commit", "-q", "-m", MARQUEUR + "Déport : workflow GitHub Actions des actions déportées",
                                  "--", relatif), "commit")):
                 code, sortie = git(*args, cwd=travail)
                 if code != 0:
                     return _refus("Échec (%s) : %s" % (quoi, lu(sortie)))
-            code, sortie = git("push", "--force", "origin", "%s:refs/heads/%s" % (BRANCHE, BRANCHE), cwd=travail,
-                               delai=DELAI_PUSH_S)
+            ref = "refs/heads/" + BRANCHE
+            code, sortie = git("ls-remote", "origin", ref, cwd=travail)
+            if code != 0:
+                return _refus("Impossible de lire la branche « %s » sur origin : %s" % (BRANCHE, lu(sortie)))
+            vu = lu(sortie).split()
+            pousser = ["push"]
+            if vu:
+                sha = vu[0]
+                code, sortie = git("fetch", "-q", "origin", ref, cwd=travail, delai=DELAI_PUSH_S)
+                if code != 0:
+                    return _refus("Impossible de lire la branche « %s » sur origin : %s" % (BRANCHE, lu(sortie)))
+                code, sortie = git("log", "-1", "--format=%s", "FETCH_HEAD", cwd=travail)
+                if code != 0 or not lu(sortie).startswith(MARQUEUR):
+                    return _refus("La branche « %s » existe déjà et n'a pas été créée par MyIAFactory : renommez-la "
+                                  "ou supprimez-la." % BRANCHE)
+                pousser.append("--force-with-lease=%s:%s" % (ref, sha))
+            code, sortie = git(*(pousser + ["origin", "HEAD:" + ref]), cwd=travail, delai=DELAI_PUSH_S)
             if code != 0:
                 return _refus("Échec du push de la branche « %s » : %s" % (BRANCHE, lu(sortie)))
             return {"ok": True, "etat": etat, "branche": BRANCHE,

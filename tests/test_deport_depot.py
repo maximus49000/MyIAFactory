@@ -80,9 +80,10 @@ class TestAppliquer(AvecDepot):
         self.assertEqual(git(self.depot, "rev-parse", "HEAD"), tete)
         self.assertEqual(git(self.depot, "status", "--porcelain"), "")
         self.assertFalse(self.chemin().exists())
-        contenu = git(self.depot, "show", "deport/workflow:.github/workflows/mon-projet.yml")
+        contenu = git(self.origine, "show", "deport/workflow:.github/workflows/mon-projet.yml")
         self.assertIn("jobs:", contenu)
-        self.assertEqual(git(self.origine, "rev-parse", "deport/workflow"), git(self.depot, "rev-parse", "deport/workflow"))
+        self.assertEqual(git(self.depot, "branch", "--list", "deport/workflow"), "")   # aucune branche locale
+        self.assertTrue(git(self.origine, "log", "-1", "--format=%s", "deport/workflow").startswith(dd.MARQUEUR))
         self.assertEqual(git(self.origine, "rev-parse", "main"), tete)   # la principale n'est jamais poussée
         self.assertEqual(git(self.depot, "worktree", "list").count("\n"), 0)   # aucun dossier temporaire laissé
 
@@ -113,7 +114,8 @@ class TestAppliquer(AvecDepot):
 
     def test_deja_a_jour_ne_pousse_rien(self):
         self.assertTrue(self.appliquer()["ok"])
-        git(self.depot, "merge", "-q", "deport/workflow")
+        git(self.depot, "fetch", "-q", "origin", "deport/workflow")
+        git(self.depot, "merge", "-q", "FETCH_HEAD")
         tete = git(self.depot, "rev-parse", "HEAD")
         r = self.appliquer()
         self.assertTrue(r["ok"])
@@ -124,8 +126,63 @@ class TestAppliquer(AvecDepot):
         git(self.depot, "remote", "set-url", "origin", str(self.origine) + "-absent")
         r = self.appliquer()
         self.assertFalse(r["ok"])
-        self.assertIn("push", r["message"].lower())
+        self.assertIn("origin", r["message"])
         self.assertEqual(git(self.depot, "worktree", "list").count("\n"), 0)
+
+    def test_modification_non_commitee_refusee_meme_en_post_direct(self):
+        a = dd.apercu(str(self.depot), REGLAGES)
+        self.chemin().parent.mkdir(parents=True)
+        self.chemin().write_text("name: à moi\n", encoding="utf-8")
+        r = dd.appliquer(str(self.depot), a["empreinte"], REGLAGES)
+        self.assertFalse(r["ok"])
+        self.assertIn("main", r["message"])
+        self.assertNotIn("deport/workflow", git(self.origine, "branch", "--list"))
+
+    def test_copie_regeneree_non_commitee_refusee(self):
+        self.chemin().parent.mkdir(parents=True)
+        self.chemin().write_text(wf.generer("Mon Projet", ["apk", "tests"], {"apk": "autre", "tests": "x"}), encoding="utf-8")
+        r = self.appliquer()
+        self.assertFalse(r["ok"])
+        self.assertIn("non commitée", r["message"])
+
+    def pousser_etrangere(self):
+        git(self.depot, "checkout", "-q", "-b", "ailleurs")
+        (self.depot / "autre.txt").write_text("a", encoding="utf-8")
+        git(self.depot, "add", ".")
+        git(self.depot, "commit", "-q", "-m", "travail de quelqu'un d'autre")
+        git(self.depot, "push", "-q", "origin", "ailleurs:deport/workflow")
+        git(self.depot, "checkout", "-q", "main")
+        return git(self.origine, "rev-parse", "deport/workflow")
+
+    def test_branche_distante_etrangere_refusee(self):
+        avant = self.pousser_etrangere()
+        r = self.appliquer()
+        self.assertFalse(r["ok"])
+        self.assertIn("pas été créée par MyIAFactory", r["message"])
+        self.assertEqual(git(self.origine, "rev-parse", "deport/workflow"), avant)
+
+    def test_branche_distante_a_nous_poussee_avec_lease(self):
+        self.assertTrue(self.appliquer()["ok"])
+        premier = git(self.origine, "rev-parse", "deport/workflow")
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(list(argv))
+            return dd._executer(argv, cwd, delai)
+        regl = {"deport": {**REGLAGES["deport"], "commandes": {"apk": "./autre", "tests": "x"}}}
+        e = dd.apercu(str(self.depot), regl)["empreinte"]
+        self.assertTrue(dd.appliquer(str(self.depot), e, regl, executer=executer)["ok"])
+        pousse = [v for v in vus if v[:2] == ["git", "push"]][0]
+        self.assertIn("--force-with-lease=refs/heads/deport/workflow:" + premier, pousse)
+        self.assertNotIn("--force", pousse)
+        self.assertNotEqual(git(self.origine, "rev-parse", "deport/workflow"), premier)
+        self.assertEqual(git(self.depot, "branch", "--list", "deport/workflow"), "")
+
+    def test_identifiants_retires_des_messages(self):
+        git(self.depot, "remote", "set-url", "origin", "https://user:secret@127.0.0.1:1/x.git")
+        r = self.appliquer()
+        self.assertFalse(r["ok"])
+        self.assertNotIn("secret", r["message"])
 
     def test_aucun_push_de_la_branche_principale(self):
         vus = []

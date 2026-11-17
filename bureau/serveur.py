@@ -18,12 +18,14 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
+from . import avancement as modavancement
 from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
 from . import processus as modprocessus
 from moteur import detache, verrou
+from moteur.agents import DELAI_AGENT_S
 
 WEB = Path(__file__).resolve().parent / "web"
 _CODE_VU = {"t": 0.0, "empreinte": None}
@@ -185,6 +187,7 @@ class Projet:
         self.demarrer = demarrer or demarrage.demarrer   # « Lancer l'orchestrateur » ; remplacé dans les tests
         self._lance_a = None   # heure (monotone) du dernier lancement de l'orchestrateur
         self.envoyer = demandes.envoyer   # la commande d'actions du projet ; remplacée dans les tests
+        self.pid_moteur = lambda: verrou.actif(verrou.chemin_par_defaut())   # le moteur tourne-t-il ? remplacé dans les tests
         self.chemin_reglages = Path(chemin_reglages)
         dossier = self.chemin_reglages.parent
         self.equipe = equipe.Equipe(dossier / "equipe.json")
@@ -279,6 +282,7 @@ class Projet:
                         t["attente_raison"] = raisons["taches"][t["id"]]
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
             detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
+            self._avancement_des_taches(e.get("taches") or [], maintenant)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
             statuts.activite_des_agents(e.get("factory"), e.get("taches") or [], maintenant)
             if not err:
@@ -290,6 +294,23 @@ class Projet:
             return e
         finally:
             self._verrou.release()
+
+    def _avancement_des_taches(self, taches, maintenant):
+        """Où en est chaque tâche dont un agent travaille (ou vient de finir) : voir `bureau/avancement.py`. Ne fait jamais
+        tomber l'état."""
+        try:
+            moteur = bool(self.pid_moteur())
+        except Exception:
+            moteur = None
+        for t in taches:
+            if not isinstance(t, dict) or not (t.get("travail") or t.get("agent_termine")):
+                continue
+            try:
+                a = modavancement.pour_la_tache(t, taches, moteur, maintenant, DELAI_AGENT_S)
+            except Exception:
+                a = None
+            if a:
+                t["avancement"] = a
 
     def _abonnement(self, regl):
         """Les jauges d'abonnement et le taux de la part estimée (voir bureau/abonnement.py) ; rien si la couche est l'API."""

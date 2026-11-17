@@ -109,6 +109,39 @@ class TestServeur(AvecServeur):
         self.assertEqual(e["projet"], "Démo")
         self.assertIsNone(e["erreur"])
 
+    def agent_au_travail(self, tache="t1"):
+        from moteur import detache
+        d = detache.dossier(self.regl.parent)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{tache}.json").write_text(json.dumps({"tache": tache, "agent": "dev", "pid": os.getpid(),
+                                                       "debut": time.time() - 120}), encoding="utf-8")
+        (d / f"{tache}.jsonl").write_text(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "a.py"}}]}}) + chr(10), encoding="utf-8")
+
+    def test_etat_porte_l_avancement_d_une_tache_au_travail(self):
+        self.agent_au_travail()
+        self.p.pid_moteur = lambda: 4242
+        t = {x["id"]: x for x in self.json("/api/etat")["taches"]}["t1"]
+        self.assertEqual(t["avancement"]["etat"], "avance")
+        self.assertEqual(t["avancement"]["phase"], "lecture")
+
+    def test_etat_dit_moteur_arrete(self):
+        self.agent_au_travail()
+        self.p.pid_moteur = lambda: None
+        t = {x["id"]: x for x in self.json("/api/etat")["taches"]}["t1"]
+        self.assertEqual(t["avancement"]["etat"], "moteur_arrete")
+
+    def test_avancement_en_erreur_ne_fait_pas_tomber_l_etat(self):
+        from bureau import avancement
+        self.agent_au_travail()
+        self.p.pid_moteur = lambda: 4242
+        original = avancement.pour_la_tache
+        avancement.pour_la_tache = lambda *a, **k: 1 / 0
+        self.addCleanup(setattr, avancement, "pour_la_tache", original)
+        e = self.json("/api/etat")
+        self.assertIsNone(e["erreur"])
+        self.assertNotIn("avancement", {x["id"]: x for x in e["taches"]}["t1"])
+
     def test_etat_releve_casse(self):
         self.json("/api/etat")
         (self.tmp / "demo" / "releve.json").write_text("{", encoding="utf-8")

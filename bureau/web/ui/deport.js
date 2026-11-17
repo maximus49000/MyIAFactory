@@ -154,6 +154,8 @@ function blocApercu(fetchFn) {
     if (!rep.ok) { message.textContent = rep.message; return; }
     const a = rep.apercu;
     zone.append(el("p", "note", ETATS_APERCU[a.etat] || a.etat), el("p", "note", a.chemin || ""));
+    // la base distante : les commits locaux non poussés ne partent pas, une branche non poussée est refusée
+    if (a.note) zone.append(el("p", "note", a.note));
     if (a.diff) zone.append(el("pre", "deport-diff", a.diff));
     const pousser = el("button", "", "Valider et pousser");
     pousser.type = "button";

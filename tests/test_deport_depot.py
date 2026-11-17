@@ -202,6 +202,64 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestBaseDistante(AvecDepot):
+    """Relecture finale (C1) : la branche de travail part du sommet DISTANT de la branche courante, jamais du HEAD
+    local : un commit local non poussé (travail d'un agent, peut-être un secret) ne part jamais sur GitHub."""
+
+    def commit_local(self):
+        (self.depot / "secret.txt").write_text("cle-privee\n", encoding="utf-8")
+        git(self.depot, "add", ".")
+        git(self.depot, "commit", "-q", "-m", "travail local non poussé")
+        return git(self.depot, "rev-parse", "HEAD")
+
+    def test_un_commit_local_non_pousse_n_est_jamais_envoye(self):
+        distant = git(self.origine, "rev-parse", "main")
+        local = self.commit_local()
+        a = dd.apercu(str(self.depot), REGLAGES)
+        r = dd.appliquer(str(self.depot), a["empreinte"], REGLAGES)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(git(self.origine, "rev-parse", "deport/workflow^"), distant)
+        envoyes = git(self.origine, "rev-list", "deport/workflow")
+        self.assertNotIn(local, envoyes)
+        fichiers = git(self.origine, "ls-tree", "-r", "--name-only", "deport/workflow")
+        self.assertNotIn("secret.txt", fichiers)
+        self.assertEqual(git(self.origine, "rev-parse", "main"), distant)
+        self.assertEqual(git(self.depot, "rev-parse", "HEAD"), local)
+
+    def test_l_apercu_annonce_les_commits_locaux_exclus(self):
+        self.commit_local()
+        a = dd.apercu(str(self.depot), REGLAGES)
+        self.assertEqual(a["non_pousses"], 1)
+        self.assertIn("1 commit local non poussé", a["note"])
+        self.assertIn("PAS inclus", a["note"])
+        sans = dd.apercu(str(self.depot), REGLAGES)
+        git(self.depot, "push", "-q", "origin", "main")
+        sans = dd.apercu(str(self.depot), REGLAGES)
+        self.assertEqual(sans["non_pousses"], 0)
+        self.assertEqual(sans["note"], "")
+
+    def test_sans_amont_refus_clair_et_rien_n_est_pousse(self):
+        git(self.depot, "checkout", "-q", "-b", "feat")
+        a = dd.apercu(str(self.depot), REGLAGES)
+        self.assertIn("pousse ta branche d'abord", a["note"])
+        r = dd.appliquer(str(self.depot), a["empreinte"], REGLAGES)
+        self.assertFalse(r["ok"])
+        self.assertIn("pousse ta branche d'abord", r["message"])
+        self.assertNotIn("deport/workflow", git(self.origine, "branch", "--list"))
+
+    def test_l_amont_suivi_est_prefere(self):
+        git(self.depot, "checkout", "-q", "-b", "feat")
+        (self.depot / "f.txt").write_text("f\n", encoding="utf-8")
+        git(self.depot, "add", ".")
+        git(self.depot, "commit", "-q", "-m", "feat")
+        git(self.depot, "push", "-q", "-u", "origin", "feat")
+        pousse = git(self.depot, "rev-parse", "HEAD")
+        self.commit_local()
+        a = dd.apercu(str(self.depot), REGLAGES)
+        self.assertTrue(dd.appliquer(str(self.depot), a["empreinte"], REGLAGES)["ok"])
+        self.assertEqual(git(self.origine, "rev-parse", "deport/workflow^"), pousse)
+
+
 class TestApercuParType(AvecDepot):
     def test_projet_android_utilise_les_commandes_et_l_artefact_du_catalogue(self):
         import json

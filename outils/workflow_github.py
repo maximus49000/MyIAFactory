@@ -130,9 +130,15 @@ def _separer(contenu):
 def etat_du_fichier(chemin, contenu_voulu):
     """"absent", "a_jour", "a_valider" (généré par MyIAFactory mais différent du voulu) ou "modifie_a_la_main"."""
     chemin = Path(chemin)
-    if not chemin.exists():
+    return etat_du_contenu(chemin.read_bytes() if chemin.exists() else None, contenu_voulu)
+
+
+def etat_du_contenu(actuel, contenu_voulu):
+    """Comme `etat_du_fichier`, pour un contenu déjà lu (octets ou texte ; `None` : absent)."""
+    if actuel is None:
         return "absent"
-    actuel = chemin.read_bytes().decode("utf-8", errors="replace")
+    if isinstance(actuel, bytes):
+        actuel = actuel.decode("utf-8", errors="replace")
     if actuel.startswith("﻿"):
         actuel = actuel[1:]
     empreinte, corps = _separer(actuel)

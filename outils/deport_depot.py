@@ -59,6 +59,65 @@ def _nom_du_projet(dossier):
     return dossier.parent.name if dossier.name == ".factory" else dossier.name
 
 
+def _texte(sortie):
+    return sortie.decode("utf-8", "replace") if isinstance(sortie, bytes) else str(sortie or "")
+
+
+def _amont(git, courante):
+    """`(nom, sha)` du sommet distant de la branche courante : son amont suivi (`@{u}`), sinon `origin/<courante>` ;
+    `(None, None)` si la branche n'existe pas sur le dépôt distant. `git(*args) -> (code, sortie)`."""
+    if not courante or courante == "HEAD":
+        return None, None
+    code, sortie = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    nom = _texte(sortie).strip() if code == 0 else ""
+    for candidat in ([nom] if "/" in nom else []) + ["origin/" + courante]:
+        code, sortie = git("rev-parse", "--verify", "-q", "refs/remotes/%s^{commit}" % candidat)
+        sha = _texte(sortie).strip() if code == 0 else ""
+        if sha:
+            return candidat, sha
+    return None, None
+
+
+def _msg_sans_amont(courante):
+    return ("La branche « %s » n'est pas sur le dépôt distant : pousse ta branche d'abord (git push -u origin %s), "
+            "puis relance. Le workflow part du sommet distant de ta branche, jamais de tes commits locaux."
+            % (courante, courante))
+
+
+def _note_non_pousses(nombre, amont):
+    if not nombre:
+        return ""
+    return ("%d commit%s local%s non poussé%s ne %s PAS inclus : la branche « %s » part de %s."
+            % (nombre, "s" if nombre > 1 else "", "aux" if nombre > 1 else "", "s" if nombre > 1 else "",
+               "sont" if nombre > 1 else "est", BRANCHE, amont))
+
+
+def _base_distante(dossier, executer=None):
+    """`{"amont", "non_pousses", "note"}` pour l'aperçu : la base distante de la branche de travail et les commits
+    locaux qu'elle n'inclura pas. Lecture seule ; ne lève jamais."""
+    executer = executer or _executer
+    racine = _racine_du_depot(dossier)
+
+    def git(*args):
+        try:
+            return executer(["git", *args], str(racine), DELAI_GIT_S)
+        except (OSError, subprocess.TimeoutExpired):
+            return 127, ""
+    code, sortie = git("rev-parse", "--abbrev-ref", "HEAD")
+    courante = _texte(sortie).strip() if code == 0 else ""
+    if not courante:
+        return {"amont": None, "non_pousses": 0, "note": ""}
+    amont, sha = _amont(git, courante)
+    if amont is None:
+        return {"amont": None, "non_pousses": 0, "note": _msg_sans_amont(courante)}
+    code, sortie = git("rev-list", "--count", sha + "..HEAD")
+    try:
+        nombre = int(_texte(sortie).strip()) if code == 0 else 0
+    except ValueError:
+        nombre = 0
+    return {"amont": amont, "non_pousses": nombre, "note": _note_non_pousses(nombre, amont)}
+
+
 def _voulu(dossier, reglages):
     """(actions sur GitHub, nom du projet, nom du fichier, texte voulu ou None sans action) ; ValueError si une
     commande manque."""
@@ -83,21 +142,25 @@ def _chemin(racine, fichier):
     return Path(racine) / ".github" / "workflows" / (fichier + ".yml")
 
 
-def apercu(dossier, reglages):
-    """Ce que le déport écrirait : `{"etat", "diff", "chemin", "empreinte"}`, sans rien écrire.
+def apercu(dossier, reglages, executer=None):
+    """Ce que le déport écrirait : `{"etat", "diff", "chemin", "empreinte", "amont", "non_pousses", "note"}`, sans
+    rien écrire.
 
     `etat` : absent, a_jour, a_valider, modifie_a_la_main, ou aucune_action (rien n'est déporté sur GitHub).
+    `amont` : la branche distante dont partira `deport/workflow` (None : la branche n'est pas poussée, l'envoi sera
+    refusé) ; `non_pousses` : les commits locaux qui ne seront PAS envoyés ; `note` : la phrase à afficher.
     Lève ValueError (message en français) si une commande manque.
     """
     racine = _racine_du_depot(dossier)
     _, _, fichier, texte = _voulu(dossier, reglages)
     chemin = _chemin(racine, fichier)
     if texte is None:
-        return {"etat": "aucune_action", "diff": "", "chemin": str(chemin), "empreinte": ""}
+        return {"etat": "aucune_action", "diff": "", "chemin": str(chemin), "empreinte": "", "amont": None,
+                "non_pousses": 0, "note": ""}
     etat = workflow_github.etat_du_fichier(chemin, texte)
     ancien = chemin.read_bytes().decode("utf-8", errors="replace") if chemin.exists() else ""
-    return {"etat": etat, "diff": workflow_github.diff(ancien, texte), "chemin": str(chemin),
-            "empreinte": _empreinte_de(texte)}
+    return dict({"etat": etat, "diff": workflow_github.diff(ancien, texte), "chemin": str(chemin),
+                 "empreinte": _empreinte_de(texte)}, **_base_distante(dossier, executer))
 
 
 def _refus(message, **autres):
@@ -139,14 +202,33 @@ def appliquer(dossier, empreinte, reglages, executer=None):
         code, sortie = git("rev-parse", "--abbrev-ref", "HEAD")
         if code != 0:
             return _refus("Le dossier du projet n'est pas un dépôt git utilisable : %s" % lu(sortie))
-        if lu(sortie) == BRANCHE:
+        courante = lu(sortie)
+        if courante == BRANCHE:
             return _refus("La branche « %s » est déjà la branche courante : revenez sur la branche principale." % BRANCHE)
+        if courante == "HEAD":
+            return _refus("Tête détachée : placez-vous sur votre branche de travail, poussée, puis relancez.")
+        # la base est le sommet DISTANT de la branche courante : un commit local non poussé (travail d'un agent,
+        # peut-être un secret) ne part jamais sur GitHub ; le Directeur n'a validé que le diff du workflow
+        amont, base = _amont(git, courante)
+        if amont is None:
+            return _refus(_msg_sans_amont(courante))
+        relatif = ".github/workflows/%s.yml" % fichier
+        code, sortie = git("show", "HEAD:" + relatif)
+        if code == 0:      # le workflow tel qu'il est dans la branche LOCALE (fusionné mais peut-être pas poussé)
+            etat_local = workflow_github.etat_du_contenu(
+                sortie if isinstance(sortie, bytes) else str(sortie).encode("utf-8"), texte)
+            if etat_local == "a_jour":
+                return {"ok": True, "etat": "a_jour", "message": "Le workflow est déjà à jour dans votre branche : "
+                        "rien à envoyer (poussez-la si ce n'est pas encore fait)."}
+            if etat_local == "modifie_a_la_main":
+                return _refus("Le fichier %s a été modifié à la main : MyIAFactory ne l'écrase pas. Reprenez-le ou "
+                              "supprimez-le, puis relancez." % relatif)
         git("worktree", "prune")
         temporaire = tempfile.mkdtemp(prefix="deport-")
         travail = os.path.join(temporaire, "copie")
         cree = False
         try:
-            code, sortie = git("worktree", "add", "-q", "--detach", travail, "HEAD")
+            code, sortie = git("worktree", "add", "-q", "--detach", travail, base)
             if code != 0:
                 return _refus("Impossible de préparer la branche de travail : %s" % lu(sortie))
             cree = True
@@ -195,8 +277,9 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             code, sortie = git(*(pousser + ["origin", "HEAD:" + ref]), cwd=travail, delai=DELAI_PUSH_S)
             if code != 0:
                 return _refus("Échec du push de la branche « %s » : %s" % (BRANCHE, lu(sortie)))
-            return {"ok": True, "etat": etat, "branche": BRANCHE,
-                    "message": "Workflow envoyé sur la branche « %s » : ouvrez-la sur GitHub pour la fusionner." % BRANCHE}
+            return {"ok": True, "etat": etat, "branche": BRANCHE, "base": amont,
+                    "message": "Workflow envoyé sur la branche « %s » (partie de %s) : ouvrez-la sur GitHub pour la "
+                               "fusionner." % (BRANCHE, amont)}
         finally:
             if cree:
                 git("worktree", "remove", "--force", travail)

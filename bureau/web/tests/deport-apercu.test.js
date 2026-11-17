@@ -91,3 +91,10 @@ test("un refus du serveur est affiché, le bouton reste utilisable après un nou
   await cliquer(bouton(bloc, /Valider et pousser/));
   assert.match(bloc.textContent, /Refusé : n'est plus à jour/);
 });
+
+test("l'aperçu annonce les commits locaux non poussés qui ne partent pas", async () => {
+  const note = "1 commit local non poussé n'est PAS inclus : la branche « deport/workflow » part de origin/main.";
+  const bloc = rendre(async () => reponse(200, {...APERCU, non_pousses: 1, note}));
+  await cliquer(bouton(bloc, /Aperçu du workflow/));
+  assert.match(bloc.textContent, /PAS inclus/);
+});

@@ -1380,3 +1380,12 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 .question-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .question-suite { margin-top: 6px; }
 html.mobile .question-actions .bouton { min-height: 44px; }
+
+.avancement { margin: 8px 0; }
+.avancement-etat { margin: 6px 0; padding: 6px 10px; border-radius: 8px; overflow-wrap: anywhere; }
+.avancement-ok { background: #e3f3e6; color: #24602f; }
+.avancement-pause { background: #fdf0d5; color: #7a5710; }
+.avancement-alerte { background: #fbe3d6; color: #8a3b1e; }
+.avancement-points { margin: 4px 0 8px; padding-left: 4px; list-style: none; }
+.avancement-points li { margin: 2px 0; color: #6b6b6b; overflow-wrap: anywhere; }
+.avancement-points li.fait { color: #24602f; }

@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, auTravail, dateFr, pourquoiElleAttend, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
+import {tronquer, ilYA, auTravail, avancementEnClair, dateFr, pourquoiElleAttend, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
@@ -149,6 +149,33 @@ export function questionsAAttendre(e, t) {
 
 // La ligne « Story » : le nom de la fonctionnalité de la tâche, un lien qui ouvre sa carte. Null sans fonctionnalité
 // connue ; texte simple si la page ne sait pas ouvrir une fonctionnalité.
+const PHASES = {lecture: "il lit le code", modification: "il modifie des fichiers", compilation: "il compile",
+                tests: "il lance des tests", autre: "il travaille"};
+
+// Où en est la tâche (liste de l'agent, sinon sa phase), le temps passé et restant, et si ça avance (voir avancementEnClair).
+function blocAvancement(av, travail) {
+  const bloc = el("div", "avancement");
+  const etat = el("p", "avancement-etat avancement-" + av.ton);
+  etat.append(el("strong", "", "État : "), document.createTextNode(av.etatTexte));
+  bloc.append(etat);
+  if (av.sansListe) {
+    const phase = av.phase ? PHASES[av.phase] || PHASES.autre : null;
+    bloc.append(ligne("Où il en est", (phase || "pas encore d'action") + " · liste de l'agent absente"));
+  } else {
+    const liste = el("ul", "avancement-points");
+    for (const p of av.points) liste.append(el("li", p.fait ? "fait" : "", (p.fait ? "✔ " : "○ ") + p.texte));
+    bloc.append(ligne("Où il en est", ""), liste);
+    if (av.enCours) bloc.append(ligne("En cours", av.enCours));
+  }
+  const temps = [];
+  if (av.passe) temps.push("passé " + av.passe);
+  if (av.cumul && av.cumul !== av.passe) temps.push("depuis le début de la tâche " + av.cumul);
+  temps.push("reste " + av.reste);
+  bloc.append(ligne("Temps", temps.join(" · ")));
+  if (travail?.action) bloc.append(ligne("Au travail", travail.action));
+  return bloc;
+}
+
 export function ligneStory(ctx, e, t) {
   if (!t?.fonctionnalite) return null;
   const f = (e?.fonctionnalites || []).find((x) => x?.id === t.fonctionnalite);
@@ -223,7 +250,9 @@ export function contenuTache(ctx, contenu, t) {
     coutsDesTaches().then((c) => { const v = cout.lastChild; if (v) v.textContent = libelleCout(t, c); });
   }
   const travail = auTravail(t.travail);      // l'agent local au travail (dit par le bureau, relu à chaque état)
-  if (travail) contenu.append(ligne("Au travail", "depuis " + travail.depuis + (travail.action ? " · " + travail.action : "")));
+  const av = avancementEnClair(t.avancement);
+  if (av) contenu.append(blocAvancement(av, travail));
+  else if (travail) contenu.append(ligne("Au travail", "depuis " + travail.depuis + (travail.action ? " · " + travail.action : "")));
   const pourquoi = pourquoiElleAttend(t);     // pourquoi elle ne part pas (dit par le moteur)
   if (pourquoi) contenu.append(blocPourquoi(pourquoi));
   else if (t.attente) contenu.append(el("p", "carte-attente", t.attente));     // retenue par la charge (moteur d'avant)

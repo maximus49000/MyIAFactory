@@ -57,11 +57,37 @@ export function auTravail(travail, maintenant = new Date()) {
 // panneaux s'en sert pour se redessiner. null sans agent au travail.
 export function cleTravail(tache, maintenant = new Date()) {
   const t = tache?.travail;
+  const a = tache?.avancement;
+  const cleAvancement = a ? [a.etat, a.etat_texte, a.reste_texte, (a.points || []).map((p) => (p.fait ? 1 : 0)).join(""),
+                             a.en_cours || null, a.phase || null] : null;
   const m = minutesDepuis(t?.depuis, maintenant);
-  if (m === null) return null;
+  if (m === null) return cleAvancement;      // un agent terminé dont le résultat attend : pas de « travail », mais un état
   const v = minutesDepuis(t.vie_t, maintenant);
   return [Math.floor(m), t.action || null, t.action_t || null, v === null ? null : Math.floor(v),
-          typeof t.cout?.total === "number" ? Math.round(t.cout.total * 100) : null];
+          typeof t.cout?.total === "number" ? Math.round(t.cout.total * 100) : null, cleAvancement];
+}
+
+function dureeCourte(secondes) {
+  if (typeof secondes !== "number" || !Number.isFinite(secondes) || secondes < 0) return null;
+  const m = Math.floor(secondes / 60);
+  if (m < 1) return "moins d'une minute";
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
+
+const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause"};
+
+// Ce que dit la fiche d'une tâche (`avancement` servi par le bureau, voir bureau/avancement.py) : où elle en est (la
+// liste de l'agent, sinon la phase déduite de son flux), le temps passé et restant, et si ça avance. null sans avancement.
+export function avancementEnClair(av) {
+  if (!av || typeof av !== "object") return null;
+  const points = (Array.isArray(av.points) ? av.points : [])
+    .filter((p) => p && typeof p.texte === "string").map((p) => ({texte: p.texte, fait: p.fait === true}));
+  return {
+    etat: av.etat, etatTexte: av.etat_texte || "", ton: TON_AVANCEMENT[av.etat] || "alerte",
+    points, enCours: typeof av.en_cours === "string" && av.en_cours.trim() ? av.en_cours.trim() : null,
+    phase: typeof av.phase === "string" ? av.phase : null, sansListe: points.length === 0,
+    passe: dureeCourte(av.passe_s), cumul: dureeCourte(av.cumul_s), reste: av.reste_texte || "inconnu",
+  };
 }
 
 // Le voyant de la factory : {libelle, ton} avec ton parmi ok | pause | alerte.

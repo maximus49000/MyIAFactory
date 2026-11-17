@@ -69,6 +69,11 @@ CORRECTION_COMPLETE = ("Corrige la cause, pas seulement les endroits cités : ch
 # Les tests selon l'étape (essai réel du 2026-11-17 : 15 minutes sur 21 à attendre des suites complètes, relancées à
 # chaque élément et à chaque étape). Les tests ciblés partout ; la suite complète une fois, au dernier pas du dernier
 # élément de la fonctionnalité.
+# Essai réel du 2026-11-17 : une revue a rendu « non conforme » parce que l'APK livré datait d'avant le correctif, et
+# aucun test n'avait tourné sur le code courant. Un test qui exécute l'application se lance sur une application à jour.
+APK_A_JOUR_AVANT_LES_TESTS = ("Avant tout test qui exécute l'application (émulateur, test instrumenté, vérification de "
+                              "l'APK livré) : si le code a changé depuis la construction de l'APK, reconstruis-le "
+                              "d'abord, puis teste cette version. Ne teste ni ne juge jamais un APK périmé.")
 TESTS_CIBLES = ("Tests : lance seulement les tests touchés par ton élément (ses fichiers de test), par le lanceur du "
                 "poste. Pas la suite complète : elle passe une fois, à la dernière étape du dernier élément de la "
                 "fonctionnalité.")
@@ -3579,8 +3584,8 @@ def _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
 
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
     if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
-        return [SUITE_COMPLETE_UNE_FOIS]
-    return [TESTS_DU_DERNIER_REGARD] if dernier_regard else [TESTS_CIBLES]
+        return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS]
+    return [TESTS_DU_DERNIER_REGARD if dernier_regard else TESTS_CIBLES, APK_A_JOUR_AVANT_LES_TESTS]
 
 
 def _matiere(projet, etat, t):
@@ -3678,7 +3683,8 @@ def _matiere(projet, etat, t):
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
-                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD]
+                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD,
+                    APK_A_JOUR_AVANT_LES_TESTS]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
                     "(son chemin et sa version). Dans ton message, dis pour chaque outil : en place (chemin, version) ou "

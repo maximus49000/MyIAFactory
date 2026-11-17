@@ -68,6 +68,7 @@ function rangee(ctx, action, nom, lieuxActuels, groupe, message, fetchFn) {
     label.append(r, el("span", "", " " + libelle + (grise ? " (" + grise + ")" : "")));
     r.addEventListener("change", async () => {
       const avant = lieuxActuels[action];
+      message.textContent = "";
       groupe.forEach((x) => { x.disabled = true; });
       const rep = await enregistrerDeport({[action]: lieu}, fetchFn);
       groupe.forEach((x) => { x.disabled = x.grise; });

@@ -1,6 +1,8 @@
 // Les cases du déport : un lieu (poste / GitHub / serveur) par action, les avertissements de l'état sous les choix.
 import test from "node:test";
 import assert from "node:assert/strict";
+import {execFileSync} from "node:child_process";
+import {fileURLToPath} from "node:url";
 
 class Noeud {
   constructor(tag) { this.tagName = tag; this.enfants = []; this.className = ""; this._texte = ""; this.auteurs = {};
@@ -14,7 +16,7 @@ class Noeud {
 }
 globalThis.document = {createElement: (t) => new Noeud(t), createTextNode: (t) => { const n = new Noeud("#texte"); n._texte = t; return n; }};
 
-const {blocDeport, enregistrerDeport, AIDE_DEPORT} = await import("../ui/deport.js");
+const {blocDeport, enregistrerDeport, AIDE_DEPORT, avertissementsGroupes} = await import("../ui/deport.js");
 
 const POSTE = {apk: "poste", tests: "poste", charge: "poste", emulateur: "poste"};
 const radios = (b) => b.tous((n) => n.tagName === "input" && n.type === "radio");
@@ -111,4 +113,19 @@ test("un état sans déport donne les lieux par défaut (poste)", () => {
   const ctx = {etat: {}};
   const bloc = blocDeport(ctx, async () => ({ok: true}));
   assert.equal(radio(bloc, "apk", "poste").checked, true);
+});
+
+// Lien avec le moteur : la vraie sortie de bureau.deport.avertissements() doit passer par le regroupement.
+// Si l'un des deux textes change, ce test casse (le texte copié à la main ci-dessus ne suffirait pas).
+test("la vraie sortie de bureau/deport.py est reconnue et regroupée", () => {
+  const racine = fileURLToPath(new URL("../../..", import.meta.url));
+  const sortie = execFileSync("py", ["-3.12", "-c", "import json; from bureau import deport; " +
+    "print(json.dumps(deport.avertissements({'apk': 'github', 'tests': 'poste', 'emulateur': 'poste', 'charge': 'poste'})))"],
+  {cwd: racine, encoding: "utf8"});
+  const reels = JSON.parse(sortie);
+  assert.equal(reels.length, 3);
+  const groupes = avertissementsGroupes(reels);
+  assert.equal(groupes.length, 1);
+  assert.match(groupes[0], /tests, charge, emulateur|tests, emulateur, charge/);
+  assert.doesNotMatch(groupes[0], /tourne au lieu/);   // reconnu par la regex, pas affiché tel quel
 });

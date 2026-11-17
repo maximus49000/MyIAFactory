@@ -247,12 +247,7 @@ def verifier_preconditions(dossier, gh, git):
         raise Refus(CODE_GH, message)
     racine = deport_depot._racine_du_depot(dossier)
     fichier = deport_depot.nom_fichier(deport_depot._nom_du_projet(dossier))
-    try:
-        commit, branche = deporter._etat_du_depot(racine, fichier, git)
-    except deporter._Refus as r:
-        if r.code == 7:
-            raise Refus(CODE_WORKFLOW, MSG_WORKFLOW)
-        raise Refus(CODE_NON_POUSSE, r.message)
+    # l'arbre modifié (12) se juge avant l'état du dépôt, qui le refuserait sous le code 11
     code, sortie = git(["status", "--porcelain", "--untracked-files=no"], racine)
     if code != 0:
         raise Refus(CODE_MODIFS, "git status a échoué : %s" % sortie.strip())
@@ -262,6 +257,12 @@ def verifier_preconditions(dossier, gh, git):
         raise Refus(CODE_MODIFS, "des fichiers suivis sont modifiés (hors .factory/) : le run mesurerait un autre état "
                                  "que le commit. Fichiers : %s. Validez-les ou annulez-les, puis recommencez."
                     % ", ".join(ligne[3:].strip() for ligne in modifs[:8]))
+    try:
+        commit, branche = deporter._etat_du_depot(racine, fichier, git)
+    except deporter._Refus as r:
+        if r.code == 7:
+            raise Refus(CODE_WORKFLOW, MSG_WORKFLOW)
+        raise Refus(CODE_NON_POUSSE, r.message)
     return racine, commit, branche, fichier + ".yml"
 
 

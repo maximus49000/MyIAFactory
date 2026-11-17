@@ -1425,3 +1425,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Quand un format de rapport impose une limite de longueur sur un champ texte (légende d'image), mesurer la longueur réelle de la chaîne avant de l'envoyer plutôt que de l'estimer à l'œil.
+
+## S238 — Dans un test d'interface, ne jamais agir sur un élément alim
+Rôles : dev, testeur
+Date : 2026-11-17
+
+Dans un test d'interface, ne jamais agir sur un élément alimenté par un chargement asynchrone sans avoir attendu qu'il soit présent ; chercher ce motif dans toute la suite.

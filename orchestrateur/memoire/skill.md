@@ -1407,3 +1407,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Dans un rapport de fin d'étape de cadrage, le champ listant maquettes et étapes à réaliser est une condition de passage à la validation, pas une simple information : son absence bloque la fonctionnalité même si les livrables existent déjà sur disque. Toujours le renseigner dès que des maquettes et une liste d'étapes sont produites.
+
+## S235 — Dans une session sans approbateur pour l'outil shell, un app
+Rôles : dev
+Date : 2026-11-17
+
+Dans une session sans approbateur pour l'outil shell, un appel direct à un outil de build/test dans un autre langage peut être refusé alors qu'un script dans le langage dont l'exécution est autorisée (ex. Python), qui lance ce même outil en sous-processus, est accepté.

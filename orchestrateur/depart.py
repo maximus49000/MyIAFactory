@@ -163,12 +163,19 @@ def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossie
     deportees = [a for a in catalogue if lieux.get(a, "poste") == "github"]
     if not deportees:
         return ""
+    # au poste mais consommant une production de GitHub (catalogue générique : les tests consomment l'APK)
+    attendent = [a for a in catalogue if a not in deportees
+                 and any(lieux.get(d, "poste") == "github" for d in catalogue[a]["consomme"])]
     lancer = f'python "{LANCEUR_DE_TESTS}" deporter'
     options = f' --dossier "{dossier}"' + (f' --reglages "{reglages}"' if reglages else "")
     lignes = []
     for a in deportees:
         commande = commandes.get(a) or catalogue[a].get("commande") or "<ta commande>"
         lignes.append(f"- {catalogue[a]['libelle']} : `{lancer} {a}{options} -- {commande}`")
+    if attendent:
+        lignes.append("- Au poste mais consommant une production de GitHub, lance aussi par `deporter` (il attend et "
+                      "télécharge l'artefact) : " + ", ".join(f"`{lancer} {a}{options} -- <ta commande>`"
+                                                             for a in attendent))
     return "\n".join([
         "## Actions déportées sur GitHub",
         "Ces actions ne tournent pas sur ce poste : lance-les **uniquement** par le lanceur, jamais directement.",
@@ -179,8 +186,9 @@ def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossie
         "Ne lance jamais une action déportée directement sur la machine, et ne bascule jamais sur le poste de toi-même : "
         "demande au Directeur, `--poste` seulement après son accord.",
         "Codes : 0 réussi, 1 échoué, 2 lieu invalide, 3 refusé (`--sans-attendre`), 4 GitHub injoignable, 5 amont "
-        "échoué, 6 travail non poussé (pousse, puis relance), 7 workflow absent de ta branche (demande au Directeur de "
-        "fusionner `deport/workflow`)."])
+        "échoué, 6 travail non poussé ou non commité (commite, pousse, relance), 7 workflow absent de ta branche "
+        "(demande au Directeur de fusionner `deport/workflow`), 8 quota GitHub épuisé (ne corrige pas le code : "
+        "demande au Directeur, `--poste` après son accord)."])
 
 
 def _lecons(titre, lecons):

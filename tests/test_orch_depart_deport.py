@@ -24,7 +24,7 @@ class TestDeportConsigne(unittest.TestCase):
         t = depart.deport_consigne({**_tous("poste"), "apk": "github"})
         self.assertIn("deporter apk", t)
         self.assertIn(str(depart.LANCEUR_DE_TESTS), t)
-        self.assertNotIn("deporter tests", t)
+        self.assertNotIn("- Tests : ", t)      # pas déportés ; ils attendent l'APK (voir la ligne « Au poste… »)
         for mot in ("Pousse d'abord", "ATTEND", "dépendances", "directement", "--poste", "Directeur", "deport/workflow"):
             self.assertIn(mot, t)
 
@@ -37,6 +37,17 @@ class TestDeportConsigne(unittest.TestCase):
     def test_commande_du_projet(self):
         t = depart.deport_consigne({"tests": "github"}, GENERIQUE, {"tests": "npx vitest run"}, dossier="D:/p")
         self.assertIn('deporter tests --dossier "D:/p" -- npx vitest run', t)
+
+    def test_action_au_poste_qui_attend_github_passe_aussi_par_deporter(self):
+        t = depart.deport_consigne({**_tous("poste"), "apk": "github"}, GENERIQUE, dossier="D:/p")
+        self.assertIn('deporter tests --dossier "D:/p" -- <ta commande>', t)
+        self.assertIn("8 quota", t)
+        android = depart.deport_consigne({**{a: "poste" for a in ANDROID}, "apk": "github"}, ANDROID)
+        self.assertNotIn("deporter tests", android)     # les tests Android ne consomment pas l'APK
+
+    def test_generique_tout_sur_github_dans_le_budget(self):
+        t = depart.deport_consigne({**_tous("github"), "emulateur": "poste"}, GENERIQUE, dossier="D:/un/long/chemin")
+        self.assertLess(len(t), 2200)
 
     def test_dans_le_budget(self):
         t = depart.deport_consigne({a: "github" for a in ANDROID}, ANDROID)

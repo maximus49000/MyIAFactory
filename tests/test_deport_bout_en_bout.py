@@ -315,7 +315,8 @@ class TestCatalogueGenerique(Base):
         consigne = depart.deport_consigne({"apk": "github", "tests": "poste"}, catalogue_du_projet(str(d))[1],
                                           {"apk": "echo construire"}, str(d))
         self.assertIn("deporter apk", consigne)
-        self.assertNotIn("deporter tests", consigne)
+        self.assertNotIn("- Tests : ", consigne)                    # les tests ne sont pas déportés…
+        self.assertIn("deporter tests", consigne)                  # …mais attendent l'APK : par `deporter` aussi
 
     def test_un_deuxieme_appel_apres_succes_reutilise_le_run_sans_attendre(self):
         d = self.projet({"apk": "github", "tests": "poste"}, commandes={"apk": "echo construire"})

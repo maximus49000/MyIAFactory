@@ -271,3 +271,18 @@ class TestCoquille(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNiveauEnCache(unittest.TestCase):
+    """Pour `deporter` (code 8) : le niveau lu dans le cache, sans gh."""
+
+    def test_niveau(self):
+        with tempfile.TemporaryDirectory() as t:
+            self.assertIsNone(dc.niveau_en_cache(["/p"], cache=t))
+            (Path(t) / dc.NOM_CACHE).write_text(json.dumps({"depots": {"/p/.factory": {
+                "lu_a": 1, "public": False, "quota": {"utilisees": 2500, "incluses": 2000}, "executions": []}}}),
+                encoding="utf-8")
+            self.assertEqual(dc.niveau_en_cache(["/p", "/p/.factory"], cache=t), "depasse")
+            self.assertIsNone(dc.niveau_en_cache(["/autre"], cache=t))
+            (Path(t) / dc.NOM_CACHE).write_text("{abîmé", encoding="utf-8")
+            self.assertIsNone(dc.niveau_en_cache(["/p"], cache=t))

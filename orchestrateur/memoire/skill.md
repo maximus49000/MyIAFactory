@@ -1413,3 +1413,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Dans une session sans approbateur pour l'outil shell, un appel direct à un outil de build/test dans un autre langage peut être refusé alors qu'un script dans le langage dont l'exécution est autorisée (ex. Python), qui lance ce même outil en sous-processus, est accepté.
+
+## S236 — Un test qui échoue seulement dans la suite complète mais pas
+Rôles : dev
+Date : 2026-11-17
+
+Un test qui échoue seulement dans la suite complète mais passe isolément est un indice de flakiness (charge, concurrence, ordre d'exécution), pas forcément une régression du changement en cours ; vérifier par exécution isolée avant de l'imputer à sa propre tâche.

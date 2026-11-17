@@ -1,0 +1,94 @@
+"""Essai réel : le bureau lit, écrit et expose les lieux d'exécution déportée (réglage `deport`)."""
+import http.client
+import json
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+from bureau import serveur
+from tests import copie_demo
+from tests.test_serveur import AvecServeur, SourceSimulee
+
+
+class TestDeportReglage(AvecServeur):
+    def poster(self, corps):
+        return self.req("POST", "/api/reglages", json.dumps(corps), self.ENT)
+
+    def test_etat_par_defaut_tout_au_poste(self):
+        d = self.json("/api/etat")["deport"]
+        self.assertEqual(set(d["lieux"].values()), {"poste"})
+        self.assertEqual(d["avertissements"], [])
+        self.assertIs(d["serveur_disponible"], False)
+
+    def test_post_lieux_partiels_ecrit_et_expose(self):
+        r, _ = self.poster({"deport": {"lieux": {"apk": "github"}}})
+        self.assertEqual(r.status, 200)
+        ecrit = json.loads(self.regl.read_text(encoding="utf-8"))["deport"]
+        self.assertEqual(ecrit["lieux"]["apk"], "github")
+        self.assertEqual(ecrit["charge_heure"], "03:00")   # les autres clés sont gardées
+        etat = self.json("/api/etat")["deport"]
+        self.assertEqual(etat["lieux"]["apk"], "github")
+        self.assertEqual(etat["lieux"]["tests"], "poste")
+
+    def test_post_fusionne_sur_l_existant(self):
+        self.poster({"deport": {"lieux": {"apk": "github"}}})
+        r, _ = self.poster({"deport": {"lieux": {"tests": "github"}}})
+        self.assertEqual(r.status, 200)
+        lieux = self.json("/api/etat")["deport"]["lieux"]
+        self.assertEqual((lieux["apk"], lieux["tests"]), ("github", "github"))
+
+    def test_emulateur_sur_github_refuse(self):
+        r, data = self.poster({"deport": {"lieux": {"emulateur": "github"}}})
+        self.assertEqual(r.status, 400)
+        self.assertIn("peu fiable", json.loads(data.decode("utf-8"))["erreur"])
+        self.assertEqual(self.json("/api/etat")["deport"]["lieux"]["emulateur"], "poste")
+
+    def test_deport_invalide_refuse(self):
+        r, _ = self.poster({"deport": "github"})
+        self.assertEqual(r.status, 400)
+
+    def test_chaine_coupee_produit_un_avertissement(self):
+        self.poster({"deport": {"lieux": {"apk": "github", "tests": "poste"}}})
+        d = self.json("/api/etat")["deport"]
+        self.assertTrue(any(a.startswith("« tests »") for a in d["avertissements"]))
+
+    def test_message_d_erreur_mentionne_deport(self):
+        r, data = self.req("POST", "/api/reglages", json.dumps({"x": 1}), self.ENT)
+        self.assertEqual(r.status, 400)
+        self.assertIn("deport", json.loads(data.decode("utf-8"))["erreur"])
+
+
+class TestDeportGlobalDuBureau(unittest.TestCase):
+    def test_le_defaut_du_bureau_s_applique_et_le_projet_l_emporte(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+            tmp = Path(t)
+            copie_demo(tmp / "a")
+            fichier = tmp / "bureau.json"
+            fichier.write_text(json.dumps({"projets": ["a/reglages.json"],
+                                           "deport": {"lieux": {"apk": "github", "tests": "github"}}}),
+                               encoding="utf-8")
+            srv = serveur.creer(bureau=fichier, port=0, ouvrir=SourceSimulee())
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                def lire():
+                    c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
+                    c.request("GET", "/api/etat")
+                    r = json.loads(c.getresponse().read())
+                    c.close()
+                    return r["deport"]["lieux"]
+                self.assertEqual(lire()["apk"], "github")
+                self.assertEqual(lire()["emulateur"], "poste")
+                regl = tmp / "a" / "reglages.json"
+                donnees = json.loads(regl.read_text(encoding="utf-8"))
+                donnees["deport"] = {"lieux": {"apk": "poste"}}
+                regl.write_text(json.dumps(donnees), encoding="utf-8")
+                srv.projet()._cache_etat = (0.0, srv.projet()._cache_etat[1])
+                self.assertEqual(lire()["apk"], "poste")
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
+
+if __name__ == "__main__":
+    unittest.main()

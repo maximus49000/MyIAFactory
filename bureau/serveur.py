@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from . import avancement as modavancement
+from . import deport as moddeport
 from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
 from . import sujets as modsujets
@@ -182,8 +183,9 @@ def _location_relayee(valeur, hote, port, prefixe):
 class Projet:
     """Tout ce que le bureau tient pour un fichier de réglages : équipe, historiques, prix, état, demandes."""
 
-    def __init__(self, id_, chemin_reglages, ouvrir=None, demarrer=None):
+    def __init__(self, id_, chemin_reglages, ouvrir=None, demarrer=None, fichier_bureau=None):
         self.id = id_
+        self.fichier_bureau = Path(fichier_bureau) if fichier_bureau else None   # sa clé `deport` est le défaut global
         self.demarrer = demarrer or demarrage.demarrer   # « Lancer l'orchestrateur » ; remplacé dans les tests
         self._lance_a = None   # heure (monotone) du dernier lancement de l'orchestrateur
         self.envoyer = demandes.envoyer   # la commande d'actions du projet ; remplacée dans les tests
@@ -226,6 +228,35 @@ class Projet:
             d["dossier"] = str(self.chemin_reglages.parent)
             return d, str(e)
 
+    # -- exécution déportée ----------------------------------------------
+    def lieux_globaux(self):
+        """Les lieux par défaut du bureau (fichier du bureau) ; sans fichier ou illisible : tout au poste."""
+        if self.fichier_bureau is not None:
+            try:
+                return dict(reglages.lire_bureau(self.fichier_bureau)["deport"]["lieux"])
+            except reglages.ReglagesInvalides:
+                pass
+        return dict(moddeport.LIEUX_PAR_DEFAUT)
+
+    def lieux_du_projet(self):
+        """Les lieux écrits dans les réglages du projet (surcharges), tels quels, sans les défauts."""
+        try:
+            donnees = json.loads(self.chemin_reglages.read_text(encoding="utf-8-sig"))
+        except (ValueError, OSError):
+            return {}
+        d = donnees.get("deport") if isinstance(donnees, dict) else None
+        lieux = d.get("lieux") if isinstance(d, dict) else None
+        return dict(lieux) if isinstance(lieux, dict) else {}
+
+    def lieux_effectifs(self):
+        globaux, projet = self.lieux_globaux(), self.lieux_du_projet()
+        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in moddeport.ACTIONS}
+
+    def etat_deport(self):
+        lieux = self.lieux_effectifs()
+        # le serveur n'existe pas encore (étape 1) : jamais disponible
+        return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux), "serveur_disponible": False}
+
     # -- état -------------------------------------------------------------
     def etat(self, bloquant=False):
         t, e = self._cache_etat
@@ -254,6 +285,7 @@ class Projet:
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
+            e["deport"] = self.etat_deport()
             sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
             # « Dossier approuvé pour les sessions cloud »
@@ -876,7 +908,7 @@ class Bureau(ThreadingHTTPServer):
         self.ecouteurs = []
         self.distants = []    # [{"genre", "url"}]
         self.annonces = []    # ce que le terminal dit au lancement
-        self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer) for id_, chemin in projets}
+        self.projets = {id_: Projet(id_, chemin, ouvrir=ouvrir, demarrer=demarrer, fichier_bureau=self.fichier_bureau) for id_, chemin in projets}
         self.sonde = charge.Sonde()
         # « Optimiser la charge » : remplacés dans les essais (jamais un vrai relevé ni un vrai arrêt)
         self.releve_processus = modprocessus.releve
@@ -916,7 +948,8 @@ class Bureau(ThreadingHTTPServer):
                 return
             for p in conf["projets"]:
                 if p["id"] not in self.projets:
-                    self.projets[p["id"]] = Projet(p["id"], p["chemin"], ouvrir=self._ouvrir, demarrer=self._demarrer)
+                    self.projets[p["id"]] = Projet(p["id"], p["chemin"], ouvrir=self._ouvrir, demarrer=self._demarrer,
+                                                       fichier_bureau=self.fichier_bureau)
 
     def etat_du_projet(self, projet):
         """L'état servi à la page : celui du projet, plus la pause globale du bureau (une installation d'outil, dans
@@ -1943,10 +1976,22 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = reglages.fixer_analyse_blocages(projet.chemin_reglages, corps["analyse_blocages"])
             elif isinstance(corps, dict) and "cloud_dossier_approuve" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_cloud_dossier_approuve(projet.chemin_reglages, corps["cloud_dossier_approuve"])
+            elif isinstance(corps, dict) and "deport" in corps and "charge_max" not in corps:
+                demande = corps["deport"]
+                if not isinstance(demande, dict):
+                    raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
+                actuel = reglages.charger(projet.chemin_reglages)["deport"]
+                # une demande partielle se fusionne sur l'existant ; les lieux hérités du bureau sont figés au projet
+                lieux = projet.lieux_effectifs()
+                if isinstance(demande.get("lieux"), dict):
+                    lieux.update(demande["lieux"])
+                elif "lieux" in demande:
+                    lieux = demande["lieux"]
+                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux})
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
-                    raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages » "
-                                     "ou « cloud_dossier_approuve ».")
+                    raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "
+                                     "« deport » ou « cloud_dossier_approuve ».")
                 nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})

@@ -1431,3 +1431,9 @@ Rôles : dev, testeur
 Date : 2026-11-17
 
 Dans un test d'interface, ne jamais agir sur un élément alimenté par un chargement asynchrone sans avoir attendu qu'il soit présent ; chercher ce motif dans toute la suite.
+
+## S239 — Avant de valider une livraison, rapprocher la date de constr
+Rôles : testeur
+Date : 2026-11-17
+
+Avant de valider une livraison, rapprocher la date de construction du fichier livré de celle du dernier changement de code ; une correction commitée après le fichier n'y figure pas, même si les tests sont verts.

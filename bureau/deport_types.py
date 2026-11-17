@@ -65,7 +65,7 @@ def catalogue_du_projet(dossier):
         try:
             with open(chemin, encoding="utf-8-sig") as f:
                 donnees = json.load(f)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):      # illisible ou trop profond : le générique
             continue
         genre = donnees.get("genre") if isinstance(donnees, dict) else None
         if isinstance(genre, str) and genre in CATALOGUES:

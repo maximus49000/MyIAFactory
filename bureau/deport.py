@@ -51,14 +51,19 @@ def a_attendre(lieux, action, catalogue=GENERIQUE):
     return [dep for dep in catalogue[action]["consomme"] if lieux.get(dep, "poste") != lieu]
 
 
+def _nom_lieu(lieu):
+    """Le nom affiché d'un lieu ; une valeur inconnue (réglage abîmé) est dite telle quelle, sans lever."""
+    return _NOMS_LIEUX.get(lieu, str(lieu)) if isinstance(lieu, str) else str(lieu)
+
+
 def avertissements(lieux, catalogue=GENERIQUE):
     """Un texte par action qui devra attendre une production venue d'un autre lieu."""
     textes = []
     for action in catalogue:
         for dep in a_attendre(lieux, action, catalogue):
             produit = (catalogue[dep]["produit"] or dep).upper()
-            ici = _NOMS_LIEUX[lieux.get(action, "poste")]
-            ailleurs = _NOMS_LIEUX[lieux.get(dep, "poste")]
+            ici = _nom_lieu(lieux.get(action, "poste"))
+            ailleurs = _nom_lieu(lieux.get(dep, "poste"))
             textes.append("« %s » tourne au lieu « %s » mais attendra l'%s produit par %s : "
                           "mettez la chaîne entière au même lieu pour éviter cette attente."
                           % (action, ici, produit, ailleurs))

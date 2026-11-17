@@ -230,3 +230,44 @@ class TestDeportConsoEtat(AvecServeur):
                                   "par_action", "derniers"})
         self.assertTrue(appels)
         self.assertEqual(c["derniers"][0]["conclusion"], "success")
+
+
+class TestDeportReglagesAbimes(AvecServeur):
+    """Relecture finale (I1) : des réglages de déport abîmés ne coupent jamais `/api/etat`."""
+
+    def ecrire_lieux(self, lieux):
+        donnees = json.loads(self.regl.read_text(encoding="utf-8"))
+        donnees["deport"] = {"lieux": lieux}
+        self.regl.write_text(json.dumps(donnees), encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+
+    def test_lieu_inconnu_ou_liste_ramene_au_poste(self):
+        for lieux in ({"apk": "nuage"}, {"apk": ["github"]}, {"apk": {"x": 1}}, {"apk": 3}):
+            self.ecrire_lieux(lieux)
+            d = self.json("/api/etat")["deport"]
+            self.assertEqual(d["lieux"]["apk"], "poste", lieux)
+            self.assertIsInstance(d["avertissements"], list)
+
+    def test_une_panne_du_bloc_deport_ne_coupe_pas_l_etat(self):
+        from unittest import mock
+        with mock.patch.object(serveur.Projet, "etat_deport", side_effect=RuntimeError("boum")):
+            self.p._cache_etat = (0.0, self.p._cache_etat[1])
+            e = self.json("/api/etat")
+        self.assertNotIn("deport", e)
+        self.assertIn("boum", e["deport_erreur"])
+
+    def test_factory_json_tres_profond_donne_le_catalogue_generique(self):
+        (self.tmp / "demo" / "factory.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        d = self.json("/api/etat")["deport"]
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
+
+    def test_un_lieu_perime_apres_changement_de_genre_ne_bloque_pas_les_reglages(self):
+        self.ecrire_lieux({"charge": "github", "apk": "poste"})
+        (self.tmp / "demo" / "factory.json").write_text(json.dumps({"genre": "application-mobile-android"}),
+                                                        encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        r, data = self.req("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"apk": "github"}}}), self.ENT)
+        self.assertEqual(r.status, 200, data)
+        ecrit = json.loads(self.regl.read_text(encoding="utf-8"))["deport"]["lieux"]
+        self.assertEqual(ecrit, {"apk": "github"})

@@ -241,14 +241,17 @@ class Projet:
         return dict(moddeport.LIEUX_PAR_DEFAUT)
 
     def lieux_du_projet(self):
-        """Les lieux écrits dans les réglages du projet (surcharges), tels quels, sans les défauts."""
+        """Les lieux écrits dans les réglages du projet (surcharges), sans les défauts. Une valeur qui n'est pas un lieu
+        connu (texte inconnu, liste, objet : fichier abîmé ou écrit à la main) est lue `poste` : l'état ne casse pas."""
         try:
             donnees = json.loads(self.chemin_reglages.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError):
+        except (ValueError, OSError, RecursionError):
             return {}
         d = donnees.get("deport") if isinstance(donnees, dict) else None
         lieux = d.get("lieux") if isinstance(d, dict) else None
-        return dict(lieux) if isinstance(lieux, dict) else {}
+        if not isinstance(lieux, dict):
+            return {}
+        return {a: (v if isinstance(v, str) and v in moddeport.LIEUX else "poste") for a, v in lieux.items()}
 
     def catalogue_deport(self):
         """Le catalogue d'actions du type du projet (générique si le genre est absent ou inconnu)."""
@@ -325,7 +328,10 @@ class Projet:
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
-            e["deport"] = self.etat_deport()
+            try:      # le bloc du déport ne coupe jamais l'état du projet (réglages abîmés, catalogue illisible…)
+                e["deport"] = self.etat_deport()
+            except Exception as x:
+                e["deport_erreur"] = "Bloc « Où tournent les actions » indisponible : %s" % x
             sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
             # « Dossier approuvé pour les sessions cloud »
@@ -2037,13 +2043,16 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
                 actuel = reglages.charger(projet.chemin_reglages)["deport"]
                 # une demande partielle se fusionne sur les lieux écrits dans le projet ; ceux du bureau restent hérités
-                lieux = projet.lieux_du_projet()
+                # un lieu écrit pour une action que le type du projet n'a plus (genre changé) est oublié : il ne doit
+                # pas faire refuser toutes les demandes suivantes
+                catalogue = projet.catalogue_deport()
+                lieux = {a: v for a, v in projet.lieux_du_projet().items() if a in catalogue}
                 if isinstance(demande.get("lieux"), dict):
                     lieux.update(demande["lieux"])
                 elif "lieux" in demande:
                     lieux = demande["lieux"]
                 nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},
-                                                projet.catalogue_deport())
+                                                catalogue)
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
                     raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "

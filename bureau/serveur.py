@@ -82,7 +82,7 @@ IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
 LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancement, hors de tout dépôt
 ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
-                 "/api/catalogue", "/api/livrable", "/api/telecharger")
+                 "/api/catalogue", "/api/livrable", "/api/telecharger", "/api/deport/apercu")
 # La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
@@ -256,6 +256,33 @@ class Projet:
         lieux = self.lieux_effectifs()
         # le serveur n'existe pas encore (étape 1) : jamais disponible
         return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux), "serveur_disponible": False}
+
+    def reglages_deport(self):
+        """Les réglages de déport tels que le dépôt les lit : lieux effectifs (projet puis bureau), commandes, heure."""
+        regl, err = self.reglages()
+        if err:
+            raise ValueError(err)
+        d = regl["deport"]
+        return {"deport": {"lieux": self.lieux_effectifs(), "commandes": d["commandes"], "charge_heure": d["charge_heure"]}}
+
+    def apercu_deport(self):
+        """(code, objet) : ce que le déport écrirait dans le dépôt du projet ; ne modifie rien."""
+        from outils import deport_depot
+        try:
+            return 200, deport_depot.apercu(str(self.chemin_reglages.parent), self.reglages_deport())
+        except ValueError as e:
+            return 400, {"erreur": str(e)}
+
+    def appliquer_deport(self, empreinte):
+        """(code, objet) : écrit le workflow sur la branche de travail et la pousse, si l'empreinte validée est à jour."""
+        from outils import deport_depot
+        try:
+            r = deport_depot.appliquer(str(self.chemin_reglages.parent), empreinte, self.reglages_deport())
+        except ValueError as e:
+            return 400, {"erreur": str(e)}
+        if r.get("ok"):
+            return 200, r
+        return 409, {"erreur": r.get("message", "Refusé."), **{k: v for k, v in r.items() if k != "message"}}
 
     # -- état -------------------------------------------------------------
     def etat(self, bloquant=False):
@@ -1511,6 +1538,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._image(projet, morceaux.query)
         if chemin == "/api/telecharger":
             return self._telecharger(projet, morceaux.query)
+        if chemin == "/api/deport/apercu":
+            return self._json(*projet.apercu_deport())
         if chemin == "/api/etat":
             e = self.server.etat_du_projet(projet)
             if isinstance(e, dict):
@@ -1942,7 +1971,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*self.server.connaissances(corps))
-        if chemin not in ("/api/reglages", "/api/demande"):
+        if chemin not in ("/api/reglages", "/api/demande", "/api/deport/appliquer"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
         if projet is None:
@@ -1958,6 +1987,19 @@ class Handler(BaseHTTPRequestHandler):
             longueur = -1
         if not 0 < longueur <= (MAX_CORPS_DEMANDE if chemin == "/api/demande" else MAX_CORPS_REGLAGES):
             return self._json(400, {"erreur": "Corps de requête invalide."})
+        if chemin == "/api/deport/appliquer":   # le seul chemin qui pousse : la validation explicite du Directeur
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            empreinte = corps.get("empreinte") if isinstance(corps, dict) else None
+            if not isinstance(empreinte, str) or not empreinte:
+                return self._json(400, {"erreur": "L'empreinte validée est requise."})
+            try:
+                code, objet = projet.appliquer_deport(empreinte)
+            except Exception as e:  # jamais une connexion coupée sans réponse lisible
+                code, objet = 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
+            return self._json(code, objet)
         if chemin == "/api/demande":
             try:
                 demande = json.loads(self.rfile.read(longueur).decode("utf-8"))

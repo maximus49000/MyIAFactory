@@ -84,6 +84,81 @@ function rangee(ctx, action, nom, lieuxActuels, groupe, message, fetchFn) {
   return fieldset;
 }
 
+async function erreurDe(r) {
+  try { return (await r.json())?.erreur || ""; } catch { return ""; }
+}
+
+// L'aperçu du workflow que le déport écrirait (une lecture, rien n'est écrit). {ok, apercu} ou {ok: false, message}.
+export async function lireApercu(fetchFn = fetch) {
+  try {
+    const r = await fetchFn(urlProjet("/api/deport/apercu"), {headers: {"X-Bureau": "1"}});
+    if (r.ok) return {ok: true, apercu: await r.json()};
+    return {ok: false, message: `Refusé : ${(await erreurDe(r)) || "le serveur a répondu " + r.status}`};
+  } catch {
+    return {ok: false, message: "Serveur du bureau injoignable."};
+  }
+}
+
+// La validation du Directeur : envoie l'empreinte vue ; le serveur refuse si le contenu voulu a changé depuis.
+export async function validerEtPousser(empreinte, fetchFn = fetch) {
+  try {
+    const r = await fetchFn(urlProjet("/api/deport/appliquer"), {
+      method: "POST",
+      headers: {"X-Bureau": "1", "Content-Type": "application/json"},
+      body: JSON.stringify({empreinte}),
+    });
+    if (r.ok) {
+      let message = "";
+      try { message = (await r.json())?.message || ""; } catch { /* corps illisible */ }
+      return {ok: true, message: message || "Workflow envoyé."};
+    }
+    return {ok: false, message: `Refusé : ${(await erreurDe(r)) || "le serveur a répondu " + r.status}`};
+  } catch {
+    return {ok: false, message: "Serveur du bureau injoignable."};
+  }
+}
+
+const ETATS_APERCU = {
+  absent: "Aucun workflow n'existe encore : il sera créé.",
+  a_valider: "Un workflow MyIAFactory existe : voici ce qui change.",
+  a_jour: "Le workflow est déjà à jour : rien à envoyer.",
+  modifie_a_la_main: "Le fichier a été modifié à la main : MyIAFactory ne l'écrase pas.",
+  aucune_action: "Aucune action n'est déportée sur GitHub.",
+};
+
+// L'aperçu et la validation : le diff s'affiche, « Valider et pousser » envoie l'empreinte affichée (branche de travail).
+function blocApercu(fetchFn) {
+  const bloc = el("div", "deport-apercu");
+  const zone = el("div", "deport-apercu-zone");
+  const message = el("p", "note", "");
+  message.setAttribute("aria-live", "polite");
+  const voir = el("button", "", "Aperçu du workflow");
+  voir.type = "button";
+  async function ouvrir() {
+    zone.textContent = "";
+    message.textContent = "";
+    const rep = await lireApercu(fetchFn);
+    if (!rep.ok) { message.textContent = rep.message; return; }
+    const a = rep.apercu;
+    zone.append(el("p", "note", ETATS_APERCU[a.etat] || a.etat), el("p", "note", a.chemin || ""));
+    if (a.diff) zone.append(el("pre", "deport-diff", a.diff));
+    const pousser = el("button", "", "Valider et pousser");
+    pousser.type = "button";
+    pousser.disabled = !(a.etat === "absent" || a.etat === "a_valider") || !a.empreinte;
+    pousser.addEventListener("click", async () => {
+      pousser.disabled = true;
+      message.textContent = "";
+      const r = await validerEtPousser(a.empreinte, fetchFn);
+      message.textContent = r.message;
+      pousser.disabled = r.ok;   // envoyé : plus rien à valider ; refusé : on peut réessayer (après un nouvel aperçu)
+    });
+    zone.append(pousser);
+  }
+  voir.addEventListener("click", ouvrir);
+  bloc.append(voir, zone, message);
+  return bloc;
+}
+
 // Le bloc « Où tournent les actions » ; `fetchFn` seulement pour les tests.
 export function blocDeport(ctx, fetchFn = fetch) {
   const bloc = el("div", "lecons-auto deport");
@@ -97,5 +172,6 @@ export function blocDeport(ctx, fetchFn = fetch) {
   for (const action of ACTIONS) bloc.append(rangee(ctx, action, action, lieux, groupe, message, fetchFn));
   for (const phrase of avertissementsGroupes(d.avertissements)) bloc.append(el("p", "note deport-avertissement", phrase));
   bloc.append(message);
+  if (ACTIONS.some((a) => lieux[a] === "github")) bloc.append(blocApercu(fetchFn));
   return bloc;
 }

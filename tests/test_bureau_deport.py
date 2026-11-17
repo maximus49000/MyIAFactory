@@ -121,3 +121,35 @@ class TestDeportGlobalDuBureau(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDeportDepotRoutes(AvecServeur):
+    def setUp(self):
+        super().setUp()
+        import subprocess
+        self.depot = self.tmp / "demo"
+        for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@example.org"],
+                     ["config", "user.name", "T"], ["add", "."], ["commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *args], cwd=str(self.depot), check=True, capture_output=True)
+        r, _ = self.req("POST", "/api/reglages", json.dumps(
+            {"deport": {"lieux": {"apk": "github"}, "commandes": {"apk": "./gradlew assembleDebug"}}}), self.ENT)
+        self.assertEqual(r.status, 200)
+
+    def test_apercu_expose_etat_diff_et_empreinte(self):
+        a = self.json("/api/deport/apercu")
+        self.assertEqual(a["etat"], "absent")
+        self.assertIn("+jobs:", a["diff"])
+        self.assertEqual(len(a["empreinte"]), 64)
+
+    def test_appliquer_demande_l_en_tete_et_une_empreinte_a_jour(self):
+        r, _ = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": "0" * 64}), {"Content-Type": "application/json"})
+        self.assertEqual(r.status, 403)
+        r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": "0" * 64}), self.ENT)
+        self.assertEqual(r.status, 409)
+        self.assertIn("plus à jour", json.loads(data.decode("utf-8"))["erreur"])
+
+    def test_appliquer_sans_origine_dit_l_echec_du_push(self):
+        e = self.json("/api/deport/apercu")["empreinte"]
+        r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": e}), self.ENT)
+        self.assertEqual(r.status, 409)
+        self.assertIn("push", json.loads(data.decode("utf-8"))["erreur"].lower())

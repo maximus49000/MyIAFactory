@@ -2,24 +2,30 @@
 
 Lance l'action `<type>` (tests, apk, charge…) là où le Directeur l'a réglée :
 - au poste (ou avec `--poste`) : la commande locale part par `campagne.executer`, comme `lancer.py tests` ;
-- sur GitHub : l'exécution du commit courant (une seule par commit : un deuxième appelant la réutilise) est suivie
-  jusqu'au bout ; 0 si elle réussit, 1 sinon. Ce commit doit déjà être poussé (jamais poussé ici : le travail de
-  l'agent n'est pas à nous) et le workflow doit être dans sa branche.
+- sur GitHub : l'exécution du commit courant (une seule par commit : un deuxième appelant la réutilise si elle est en
+  cours ou réussie ; une exécution terminée en échec est refaite) est suivie jusqu'au bout ; 0 si le job de l'action
+  réussit, 1 sinon. Ce commit doit déjà être poussé (jamais poussé ici : le travail de l'agent n'est pas à nous) et le
+  workflow doit être dans sa branche.
 - une action au poste qui consomme la production d'une action sur GitHub (les tests d'un projet générique consomment
-  l'APK) attend d'abord cette exécution, télécharge l'artefact, puis lance la commande locale ; amont échoué : code 5.
+  l'APK) attend d'abord cette exécution, télécharge l'artefact, puis lance la commande locale ; job amont échoué :
+  code 5.
 
-Codes : 0 réussi, 1 action échouée, 2 usage, 3 `--sans-attendre` refusé, 4 `gh` indisponible ou réseau absent,
-5 amont échoué, 6 travail non poussé, 7 workflow absent de la branche. Jamais de bascule silencieuse vers le poste.
+Codes : 0 réussi, 1 action échouée, 2 usage ou lieu refusé, 3 `--sans-attendre` refusé, 4 `gh` indisponible ou réseau
+absent, 5 amont échoué, 6 travail non poussé (origin/<branche> n'est pas au commit courant), 7 workflow absent de la
+branche. Jamais de bascule silencieuse vers le poste.
 
 Pendant l'attente, `~/MyIAFactory/deport-en-cours/<id>.json` = {action, attend, lieu, dossier, depuis, battement}
 (`battement` rafraîchi chaque minute) dit au bureau quel agent attend quoi ; retiré à la fin, même sur exception.
+Un verrou `<commit>-<workflow>.lock` (création exclusive) évite que deux agents déclenchent deux exécutions.
 
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
+import contextlib
 import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -38,9 +44,11 @@ EN_COURS = Path("~/MyIAFactory/deport-en-cours").expanduser()
 USAGE = ("Usage : lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] "
          "[-- <commande locale>]")
 PROPOSITION = "relance avec --poste après accord du Directeur"
-MSG_NON_POUSSE = "pousse d'abord ton travail : le commit courant n'est dans aucune branche distante."
+MSG_NON_POUSSE = "pousse d'abord ton travail : le commit courant n'est pas sur le dépôt distant."
 MSG_SANS_WORKFLOW = ("le workflow n'est pas dans ta branche : fusionne deport/workflow (validé par le Directeur) "
                      "dans ta branche, puis réessaie")
+VERROU_PERIME_S = 300
+PAS_VERROU_S = 2
 ESSAIS_APPARITION = 12
 PAUSE_APPARITION_S = 5
 DELAI_GIT_S = 60
@@ -110,6 +118,27 @@ def _lieux(dossier, reglages, bureau):
     return {a: lieu_effectif(globaux, projet, a) for a in catalogue}, catalogue
 
 
+def lieux_refuses(lieux, action, catalogue):
+    """Les lieux que `deporter` ne sait pas servir (ni `poste` ni `github`, ex. `serveur` écrit à la main) pour
+    l'action et les actions dont elle dépend : jamais de repli silencieux sur le poste."""
+    refus = []
+    for a in [action] + [d for d in catalogue[action]["consomme"] if d in lieux]:
+        if lieux[a] not in ("poste", "github"):
+            refus.append("Le lieu « %s » de l'action « %s » n'est pas disponible : seuls « poste » et « github » le "
+                         "sont. Corrigez les réglages du projet, ou relancez avec --poste après accord du "
+                         "Directeur." % (lieux[a], a))
+    return refus
+
+
+def doit_passer_par_deporter(action, lieux, catalogue):
+    """Vrai si l'action tourne sur GitHub, ou si elle dépend de la production d'une action d'un autre lieu (il y a
+    alors une attente à faire) ; un lieu que `deporter` ne sert pas passe aussi par lui, qui le refuse."""
+    if action not in catalogue:
+        return False
+    return (lieux[action] == "github" or bool(a_attendre(lieux, action, catalogue))
+            or bool(lieux_refuses(lieux, action, catalogue)))
+
+
 def _analyser(argv):
     """`(options, commande)` ou `None` si l'usage est faux ; `options` : type, dossier, reglages, attendre, poste."""
     argv = list(argv)
@@ -134,20 +163,31 @@ def _analyser(argv):
     return opt, commande
 
 
-def lieu_de(action, argv, bureau=BUREAU):
-    """Le lieu effectif de `action` pour les options (`--dossier`, `--reglages`) de `argv` ; le poste si on ne sait pas."""
-    analyse = _analyser(_avant_double_tiret(argv))
-    if analyse is None:
-        return "poste"
-    opt = analyse[0]
-    dossier = str(Path(opt["dossier"] or os.getcwd()).resolve())
-    lieux, _ = _lieux(dossier, opt["reglages"], bureau)
-    return lieux.get(action, "poste")
-
-
 def _avant_double_tiret(argv):
     argv = list(argv)
     return argv[:argv.index("--")] if "--" in argv else argv
+
+
+def _lieux_des_options(argv, bureau):
+    analyse = _analyser(_avant_double_tiret(argv))
+    if analyse is None:
+        return None
+    opt = analyse[0]
+    dossier = str(Path(opt["dossier"] or os.getcwd()).resolve())
+    return _lieux(dossier, opt["reglages"], bureau)
+
+
+def faut_deporter(action, argv, bureau=BUREAU):
+    """Pour `lancer.py tests` : cette action, avec les options (`--dossier`, `--reglages`) de `argv`, passe-t-elle par
+    `deporter` ? Faux (le poste, comme toujours) si on ne sait pas lire les options."""
+    lus = _lieux_des_options(argv, bureau)
+    return bool(lus) and doit_passer_par_deporter(action, lus[0], lus[1])
+
+
+def lieu_de(action, argv, bureau=BUREAU):
+    """Le lieu effectif de `action` pour les options (`--dossier`, `--reglages`) de `argv` ; le poste si on ne sait pas."""
+    lus = _lieux_des_options(argv, bureau)
+    return lus[0].get(action, "poste") if lus else "poste"
 
 
 # --- git ---------------------------------------------------------------------------------------------------------
@@ -171,23 +211,76 @@ class _Refus(Exception):
 
 
 def _etat_du_depot(racine, fichier, git):
-    """`(commit, branche)` du HEAD, après avoir vérifié qu'il est poussé et que le workflow est dans la branche."""
+    """`(commit, branche)` du HEAD, après avoir vérifié que la branche distante est exactement à ce commit (« poussé »)
+    et que le workflow est dans la branche. `branche` est le nom de la branche distante visée."""
     code, sortie = git(["rev-parse", "HEAD"], racine)
     if code != 0 or not sortie.strip():
         raise _Refus(6, "Ce dossier n'est pas un dépôt git avec un commit : %s" % MSG_NON_POUSSE)
     commit = sortie.strip()
-    code, sortie = git(["branch", "-r", "--contains", "HEAD"], racine)
-    distantes = [l.strip() for l in sortie.splitlines() if l.strip() and "->" not in l] if code == 0 else []
-    if not distantes:
-        raise _Refus(6, MSG_NON_POUSSE)
     code, sortie = git(["rev-parse", "--abbrev-ref", "HEAD"], racine)
-    branche = sortie.strip() if code == 0 else ""
-    if not branche or branche == "HEAD":      # tête détachée : la première branche distante qui contient le commit
-        branche = distantes[0].partition("/")[2] or distantes[0]
+    courante = sortie.strip() if code == 0 else ""
+    if not courante or courante == "HEAD":
+        raise _Refus(6, "Tête détachée : place-toi sur une branche, pousse-la, puis réessaie.")
+    code, sortie = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], racine)
+    suivi = sortie.strip() if code == 0 and "/" in sortie else "origin/" + courante
+    code, sortie = git(["rev-parse", "--verify", "-q", "refs/remotes/" + suivi], racine)
+    if code != 0 or not sortie.strip():
+        raise _Refus(6, "pousse ta branche : %s n'existe pas sur le dépôt distant." % suivi)
+    if sortie.strip() != commit:
+        raise _Refus(6, "pousse ta branche : %s n'est pas à ton commit (%s)." % (suivi, commit[:8]))
     code, _ = git(["cat-file", "-e", "HEAD:.github/workflows/%s.yml" % fichier], racine)
     if code != 0:
         raise _Refus(7, MSG_SANS_WORKFLOW)
-    return commit, branche
+    return commit, suivi.partition("/")[2]
+
+
+# --- verrou de la course -----------------------------------------------------------------------------------------
+
+def _verrou_perime(chemin, maintenant):
+    try:
+        donnees = json.loads(chemin.read_text(encoding="utf-8"))
+        pid, debut = donnees.get("pid"), float(donnees.get("t", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        pid, debut = None, 0.0
+    return (not campagne.pid_vivant(pid)) or maintenant - debut > VERROU_PERIME_S
+
+
+@contextlib.contextmanager
+def _verrou_du_run(chemin, attendre, dormir, dire):
+    """Tenu autour de « chercher un run, sinon le déclencher, attendre son apparition » : deux agents qui demandent le
+    même commit ne déclenchent qu'une exécution (le second attend le verrou, puis voit le run). Création exclusive ;
+    le verrou d'un processus mort, ou vieux de plus de 5 minutes, est repris."""
+    chemin = Path(chemin)
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    deja_dit = False
+    while True:
+        try:
+            fd = os.open(str(chemin), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if _verrou_perime(chemin, time.time()):
+                try:
+                    chemin.unlink()
+                except OSError:
+                    pass
+                continue
+            if not attendre:
+                raise _Refus(3, "Refusé : un autre appelant déclenche l'exécution de ce commit et --sans-attendre "
+                                "est donné.")
+            if not deja_dit:
+                dire("Un autre appelant déclenche l'exécution de ce commit : on attend.")
+                deja_dit = True
+            dormir(PAS_VERROU_S)
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"pid": os.getpid(), "t": time.time()}, f)
+        break
+    try:
+        yield
+    finally:
+        try:
+            chemin.unlink()
+        except OSError:
+            pass
 
 
 # --- exécution ---------------------------------------------------------------------------------------------------
@@ -212,6 +305,10 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         return 2
     if opt["poste"]:
         lieux[action] = "poste"
+    refus = lieux_refuses(lieux, action, catalogue)
+    if refus:
+        print("\n".join(refus), file=sys.stderr)
+        return 2
     amont = [d for d in a_attendre(lieux, action, catalogue) if lieux.get(d) == "github"]
     if lieux[action] != "github" and not commande:
         print(USAGE, file=sys.stderr)
@@ -223,18 +320,60 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
     if lieux[action] != "github" and not amont:
         return lancer_au_poste()
 
-    id_ = "%s-%s" % (os.getpid(), action)
+    id_ = "%s-%s-%s" % (os.getpid(), threading.get_ident(), action)
     try:
         return _sur_github(action, lieux, catalogue, amont, opt, dossier, gh, git, dormir, dire, id_,
                            repertoire_attente, lancer_au_poste)
     except _Refus as r:
-        dire(r.message)
+        if r.message:
+            dire(r.message)
         return r.code
     except gh.Gh_indisponible as e:
         dire("%s\nPas de bascule silencieuse vers le poste : %s." % (e, PROPOSITION))
         return 4
     finally:
         retirer_attente(id_, repertoire_attente)
+
+
+def _reutilisable(run):
+    """Un run du commit se réutilise s'il est en cours ou réussi ; terminé en échec ou annulé, il est refait."""
+    return run is not None and (run.get("statut") != "completed" or run.get("conclusion") == "success")
+
+
+def _obtenir_run(gh, racine, workflow, commit, branche, opt, dormir, dire):
+    """Le run de ce commit : celui d'un autre appelant s'il est en cours ou réussi, sinon un seul déclenchement."""
+    run = gh.execution_du_commit(str(racine), workflow, commit)
+    if _reutilisable(run):
+        if run.get("statut") != "completed":
+            dire("Une exécution de ce commit tourne déjà (%s) : on la suit." % run.get("url", ""))
+        return run
+    if not opt["attendre"]:
+        raise _Refus(3, "Refusé : aucune exécution utilisable de ce commit sur GitHub et --sans-attendre est donné.")
+    if run is not None:
+        dire("exécution précédente échouée : nouvelle exécution lancée")
+    ancien = run.get("id") if run is not None else None
+    dire("Déclenchement de l'exécution sur GitHub (branche %s, commit %s)." % (branche, commit[:8]))
+    gh.declencher(str(racine), workflow, branche, {})
+    for _ in range(ESSAIS_APPARITION):
+        run = gh.execution_du_commit(str(racine), workflow, commit)
+        if run is not None and run.get("id") != ancien:
+            return run
+        dormir(PAUSE_APPARITION_S)
+    raise _Refus(4, "L'exécution déclenchée n'apparaît pas sur GitHub. %s." % PROPOSITION)
+
+
+def _job_reussi(gh, racine, run, action):
+    """L'action a-t-elle réussi ? On juge son job (son nom est l'id de l'action) ; sans jobs, le run entier."""
+    jobs = run.get("jobs")
+    if jobs is None and hasattr(gh, "jobs_du_run"):
+        try:
+            jobs = gh.jobs_du_run(str(racine), run["id"])
+        except gh.Gh_indisponible:
+            jobs = None
+    for j in jobs or []:
+        if j.get("name") == action:
+            return j.get("conclusion") == "success"
+    return run.get("conclusion") == "success"
 
 
 def _sur_github(action, lieux, catalogue, amont, opt, dossier, gh, git, dormir, dire, id_, repertoire_attente,
@@ -247,43 +386,29 @@ def _sur_github(action, lieux, catalogue, amont, opt, dossier, gh, git, dormir, 
     fichier = deport_depot.nom_fichier(deport_depot._nom_du_projet(dossier))
     commit, branche = _etat_du_depot(racine, fichier, git)
     workflow = fichier + ".yml"
-    attend = amont[0] if amont else action
+    if opt["attendre"]:
+        ecrire_attente(id_, action, amont[0] if amont else action, "github", dossier, repertoire_attente)
 
-    # Une seule exécution par commit : on réutilise celle d'un autre appelant, sinon on la déclenche.
-    run = gh.execution_du_commit(str(racine), workflow, commit)
-    if run is None:
-        if not opt["attendre"]:
-            dire("Refusé : aucune exécution de ce commit sur GitHub et --sans-attendre est donné.")
-            return 3
-        dire("Déclenchement de l'exécution sur GitHub (branche %s, commit %s)." % (branche, commit[:8]))
-        gh.declencher(str(racine), workflow, branche, {})
-        for _ in range(ESSAIS_APPARITION):
-            run = gh.execution_du_commit(str(racine), workflow, commit)
-            if run is not None:
-                break
-            dormir(PAUSE_APPARITION_S)
-        if run is None:
-            dire("L'exécution déclenchée n'apparaît pas sur GitHub. %s." % PROPOSITION)
-            return 4
-    elif run.get("statut") != "completed":
-        dire("Une exécution de ce commit tourne déjà (%s) : on la suit." % run.get("url", ""))
+    def dormir_battant(s):
+        dormir(s)
+        battre(id_, repertoire_attente)
+
+    verrou = Path(repertoire_attente) / ("%s-%s.lock" % (commit, fichier))
+    with _verrou_du_run(verrou, opt["attendre"], dormir_battant, dire):
+        run = _obtenir_run(gh, racine, workflow, commit, branche, opt, dormir_battant, dire)
     if run.get("statut") != "completed":
         if not opt["attendre"]:
-            dire("Refusé : l'exécution de ce commit n'est pas finie et --sans-attendre est donné.")
-            return 3
-        ecrire_attente(id_, action, attend, "github", dossier, repertoire_attente)
-
-        def dormir_battant(s):
-            dormir(s)
-            battre(id_, repertoire_attente)
+            raise _Refus(3, "Refusé : l'exécution de ce commit n'est pas finie et --sans-attendre est donné.")
         run = gh.suivre(str(racine), run["id"], dormir=dormir_battant, dire=dire)
-    reussi = run.get("conclusion") == "success"
-    dire("Exécution %s : %s (%s)." % (run.get("id"), "réussie" if reussi else "échouée (%s)" % run.get("conclusion"),
-                                       run.get("url", "")))
     if lieux[action] == "github":
+        reussi = _job_reussi(gh, racine, run, action)
+        dire("Exécution %s : %s (%s)." % (run.get("id"), "réussie" if reussi else "échouée (%s)" % run.get("conclusion"),
+                                           run.get("url", "")))
         return 0 if reussi else 1
-    if not reussi:
-        dire("L'amont (%s) a échoué : « %s » n'est pas lancé." % (", ".join(amont), action))
+    echecs = [d for d in amont if not _job_reussi(gh, racine, run, d)]
+    dire("Exécution %s : %s (%s)." % (run.get("id"), run.get("conclusion"), run.get("url", "")))
+    if echecs:
+        dire("L'amont (%s) a échoué : « %s » n'est pas lancé." % (", ".join(echecs), action))
         return 5
     for dep in amont:
         produit = catalogue[dep]["produit"]

@@ -77,9 +77,17 @@ def _duree(v) -> int:
         return 0
 
 
+def _jobs(v) -> List[Dict]:
+    return [{"name": j.get("name"), "conclusion": j.get("conclusion") or None}
+            for j in (v.get("jobs") or []) if isinstance(j, dict)]
+
+
 def _resume(v, run_id=None) -> Dict:
-    return {"id": run_id if run_id is not None else v.get("databaseId"), "statut": v.get("status"),
-            "conclusion": v.get("conclusion") or None, "duree_s": _duree(v), "url": v.get("url", "")}
+    r = {"id": run_id if run_id is not None else v.get("databaseId"), "statut": v.get("status"),
+         "conclusion": v.get("conclusion") or None, "duree_s": _duree(v), "url": v.get("url", "")}
+    if "jobs" in v:      # présents seulement quand `gh run view` les a rendus : `[{name, conclusion}]`
+        r["jobs"] = _jobs(v)
+    return r
 
 
 def execution_du_commit(depot_dossier: str, workflow: str, commit: str,
@@ -96,7 +104,7 @@ def suivre(depot_dossier: str, run_id: int, dormir: Callable = time.sleep, dire:
     resume = {"id": run_id, "statut": None, "conclusion": None, "duree_s": 0, "url": ""}
     while True:
         try:
-            v = _json(["gh", "run", "view", str(run_id), "--json", "status,conclusion,createdAt,updatedAt,url"],
+            v = _json(["gh", "run", "view", str(run_id), "--json", "status,conclusion,createdAt,updatedAt,url,jobs"],
                       lancer, depot_dossier)
         except Gh_indisponible:
             echecs += 1
@@ -118,6 +126,11 @@ def suivre(depot_dossier: str, run_id: int, dormir: Callable = time.sleep, dire:
         attente = min(PAS_S, delai_s - ecoule)
         dormir(attente)
         ecoule += attente
+
+
+def jobs_du_run(depot_dossier: str, run_id: int, lancer: Callable = subprocess.run) -> List[Dict]:
+    """Les jobs d'une exécution : `[{name, conclusion}]` (le nom du job est l'id de l'action qui l'a produit)."""
+    return _jobs(_json(["gh", "run", "view", str(run_id), "--json", "jobs"], lancer, depot_dossier))
 
 
 def telecharger(depot_dossier: str, run_id: int, nom: str, dossier: str, lancer: Callable = subprocess.run) -> str:

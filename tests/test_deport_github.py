@@ -117,6 +117,23 @@ class TestSuivre(unittest.TestCase):
         self.assertEqual(sum(pauses), 180)
 
 
+class TestJobs(unittest.TestCase):
+    def test_suivre_rend_les_jobs_quand_gh_les_donne(self):
+        v = ok({"status": "completed", "conclusion": "failure", "createdAt": "2026-11-17T10:00:00Z",
+                "updatedAt": "2026-11-17T10:05:30Z", "url": "u",
+                "jobs": [{"name": "apk", "conclusion": "success", "x": 1}, {"name": "lint", "conclusion": "failure"}]})
+        faux = Faux(v)
+        r = ga.suivre("d", 7, dormir=lambda s: None, dire=lambda _: None, lancer=faux)
+        self.assertEqual(r["jobs"], [{"name": "apk", "conclusion": "success"}, {"name": "lint", "conclusion": "failure"}])
+        self.assertIn("jobs", faux.appels[0][0][-1])
+
+    def test_jobs_du_run(self):
+        faux = Faux(ok({"jobs": [{"name": "apk", "conclusion": "success"}, {"name": "t", "conclusion": ""}]}))
+        self.assertEqual(ga.jobs_du_run("d", 7, lancer=faux),
+                         [{"name": "apk", "conclusion": "success"}, {"name": "t", "conclusion": None}])
+        self.assertEqual(faux.appels[0][0], ["gh", "run", "view", "7", "--json", "jobs"])
+
+
 class TestPannes(unittest.TestCase):
     def test_delai_depasse_leve(self):
         faux = Faux(subprocess.TimeoutExpired("gh", 120))

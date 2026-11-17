@@ -1395,3 +1395,9 @@ Rôles : dev
 Date : 2026-11-16
 
 Avant de corriger un test qui échoue sur un symptôme de configuration (403/503/auth manquante), vérifier aussi que les paramètres qu'il envoie à l'endpoint testé sont bien consommés par celui-ci ; un paramètre non déclaré dans la signature de la route est ignoré sans erreur, ce qui masque un second défaut une fois le premier corrigé.
+
+## S233 — Quand aucune bibliothèque graphique (image/police) n'est dis
+Rôles : dev
+Date : 2026-11-17
+
+Quand aucune bibliothèque graphique (image/police) n'est disponible dans l'environnement, une maquette basse-fidélité peut être produite par un script d'encodage d'image minimal utilisant uniquement la bibliothèque standard, en simulant le texte par des barres plutôt que des lettres.

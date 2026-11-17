@@ -1437,3 +1437,9 @@ Rôles : testeur
 Date : 2026-11-17
 
 Avant de valider une livraison, rapprocher la date de construction du fichier livré de celle du dernier changement de code ; une correction commitée après le fichier n'y figure pas, même si les tests sont verts.
+
+## S240 — Relire chaque statut d'une note de livraison contre les dern
+Rôles : testeur
+Date : 2026-11-17
+
+Relire chaque statut d'une note de livraison contre les derniers résultats de tests avant de la valider ; elle reste fausse après une correction ultérieure.

@@ -20,3 +20,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Dans une application de gestion, un terme utilisateur comme « menu de sélection » ou « bandeau déroulant » peut désigner la navigation principale (sidebar) et non un composant de formulaire ; chercher aussi du côté des fichiers de configuration de routes/navigation avant de restreindre la recherche aux composants de type select.
+
+## G4 — Quand une fonctionnalité doit remplacer plusieurs écrans exi
+Rôles : dev
+Date : 2026-11-17
+
+Quand une fonctionnalité doit remplacer plusieurs écrans existants par un seul composant composite, construire et tester ce composant isolément sur le premier cas représentatif avant de modifier le routage/menu global évite de casser la navigation en cours de validation.

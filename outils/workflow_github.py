@@ -95,7 +95,9 @@ def _tache(action, commande, deportees, catalogue, sauf_la_nuit=False):
         lignes += ["      - uses: actions/setup-java@v4",
                    "        with:",
                    "          distribution: temurin",
-                   "          java-version: '17'"]
+                   "          java-version: '17'",
+                   # le cache de ~/.gradle (distribution, dépendances) : chaque job démarre sur une VM neuve
+                   "      - uses: gradle/actions/setup-gradle@v4"]
     for dep in attend:
         produit = catalogue[dep]["produit"]
         if produit:

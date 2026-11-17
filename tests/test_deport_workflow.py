@@ -264,13 +264,13 @@ class TestGradle(unittest.TestCase):
                 noms.append("commande")
         return noms
 
-    def test_ordre_checkout_java_chmod_commande(self):
+    def test_ordre_checkout_java_cache_gradle_chmod_commande(self):
         from bureau.deport_types import CATALOGUES
         texte = wf.generer("p", ["apk", "tests"], {}, catalogue=CATALOGUES["application-mobile-android"])
         for job, bloc in TestDeclencheurs.jobs(texte).items():
             e = self.etapes(bloc)
-            self.assertEqual(e[:4], ["actions/checkout@v4", "actions/setup-java@v4", "chmod +x gradlew", "commande"],
-                             job)
+            self.assertEqual(e[:5], ["actions/checkout@v4", "actions/setup-java@v4", "gradle/actions/setup-gradle@v4",
+                                       "chmod +x gradlew", "commande"], job)
             self.assertIn("distribution: temurin", bloc)
             self.assertIn("java-version: '17'", bloc)
 
@@ -278,6 +278,8 @@ class TestGradle(unittest.TestCase):
         texte = wf.generer("p", ["apk", "tests"], COMMANDES)
         blocs = TestDeclencheurs.jobs(texte)
         self.assertNotIn("setup-java", blocs["tests"])
+        self.assertNotIn("setup-gradle", blocs["tests"])
         self.assertNotIn("chmod", blocs["tests"])
         self.assertIn("setup-java", blocs["apk"])          # ./gradlew assembleDebug
+        self.assertIn("gradle/actions/setup-gradle@v4", blocs["apk"])
         self.assertIn("chmod +x gradlew", blocs["apk"])

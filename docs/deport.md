@@ -66,7 +66,8 @@ même commit). Seulement le bouton manuel (`workflow_dispatch`, utilisé par `la
 déportée, une planification (03:00 UTC par défaut, réglable) : la nuit, seuls `charge` et les jobs dont elle dépend
 tournent (les autres portent `if: github.event_name != 'schedule'`). Un déclenchement manuel lance tous les jobs.
 Les jobs `./gradlew …` reçoivent un JDK 17 (`actions/setup-java@v4`, temurin) et `chmod +x gradlew` (un dépôt créé
-sous Windows enregistre `gradlew` sans le bit exécutable). Le SDK Android est celui préinstallé sur `ubuntu-latest`.
+sous Windows enregistre `gradlew` sans le bit exécutable) ; `gradle/actions/setup-gradle@v4` met `~/.gradle` en
+cache (le cache est propre au dépôt et n'est en lecture-écriture que sur la branche par défaut). Le SDK Android est celui préinstallé sur `ubuntu-latest`.
 
 ## `lancer.py deporter`
 

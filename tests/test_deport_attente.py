@@ -185,3 +185,65 @@ class Travail(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ParAgent(Base):
+    """Relecture finale (I6) : deux agents dans le même dossier ; seule l'attente de celui qui attend le protège."""
+
+    def test_lecture_par_cle_d_agent(self):
+        self.ecrire(agent="t1")
+        self.assertIsNotNone(detache.attente_deportee(self.attentes, maintenant(), cwd=self.projet, agent="t1"))
+        self.assertIsNone(detache.attente_deportee(self.attentes, maintenant(), cwd=self.projet, agent="t2"))
+        self.assertIsNone(detache.attente_deportee(self.attentes, maintenant(), cwd=self.projet))
+
+    def test_sans_cle_dans_le_fichier_le_dossier_suffit(self):
+        self.ecrire()      # usage à la main : pas de clé d'agent
+        self.assertIsNotNone(detache.attente_deportee(self.attentes, maintenant(), cwd=self.projet, agent="t2"))
+
+    def test_le_garde_fou_du_frere_s_applique(self):
+        self.debut = self.t = time.time()
+        self.tues, self.rafraichir = [], (lambda m: self.ecrire(battement=m, agent="autre"))
+        r = detache.Registre(self.racine / ".factory", vivant=lambda e: True, tuer=self.tues.append,
+                             dormir=lambda s: Garde.dormir(self, s), horloge=lambda: self.t, noter_abonnement=False,
+                             pas_s=2, dossier_attente=self.attentes)
+        detache._preparer(r.dossier)
+        etat = {"genre": "tache", "cle": "t1", "pid": 4242, "debut": self.t, "dossier": self.projet}
+        (r.dossier / "t1.json").write_text(json.dumps(etat), encoding="utf-8")
+        (r.dossier / "t1.jsonl").write_text("", encoding="utf-8")
+        with self.assertRaises(TimeoutError):
+            r.attendre("t1", 2400)
+        self.assertLess(self.t - self.debut, 2400 + 10)
+        self.assertEqual(self.tues, [4242])
+
+    def test_la_fiche_du_seul_agent_qui_attend(self):
+        factory = self.racine / ".factory"
+        d = detache.dossier(factory)
+        detache._preparer(d)
+        for cle in ("t1", "t2"):
+            (d / (cle + ".json")).write_text(json.dumps({"genre": "tache", "cle": cle, "pid": os.getpid(),
+                                                         "debut": time.time(), "dossier": self.projet,
+                                                         "taches": [cle]}), encoding="utf-8")
+            (d / (cle + ".jsonl")).write_text("", encoding="utf-8")
+        self.ecrire(agent="t2")
+        taches = [{"id": "t1"}, {"id": "t2"}]
+        detache.ajouter_au_travail(taches, factory, dossier_attente=self.attentes)
+        self.assertIsNone(taches[0]["travail"]["attente_deportee"])
+        self.assertEqual(taches[1]["travail"]["attente_deportee"]["attend"], "apk")
+
+    def test_le_moteur_passe_la_cle_a_l_agent(self):
+        vus = []
+
+        class P:
+            pid = 1
+
+        def lancer(argv, entree, sortie, erreurs, env, cwd):
+            vus.append(env)
+            return P()
+        r = detache.Registre(self.racine / ".factory", vivant=lambda e: True, noter_abonnement=False,
+                             dossier_attente=self.attentes)
+        r.lancer = lancer
+        r._lancer("cle-7", {}, ["x"], b"", {"PATH": "p"}, self.projet)
+        r._lancer("cle-8", {}, ["x"], b"", None, self.projet)
+        self.assertEqual(vus[0]["MYIAFACTORY_AGENT"], "cle-7")
+        self.assertEqual(vus[0]["PATH"], "p")
+        self.assertEqual(vus[1]["MYIAFACTORY_AGENT"], "cle-8")

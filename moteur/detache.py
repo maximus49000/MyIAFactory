@@ -38,7 +38,8 @@ QUEUE_OCTETS = 65536            # la dernière action se lit dans la fin du flux
 MAX_ACTION = 80
 ATTENTE = Path("~/MyIAFactory/deport-en-cours").expanduser()    # les attentes d'exécution distante (écrites par deporter)
 PLAFOND_ATTENTE_S = 6 * 3600    # une attente distante ne protège jamais l'agent plus de 6 h d'affilée
-DELAI_BATTEMENT_S = 180         # une attente dont le battement a plus de 3 min n'est plus vivante
+VARIABLE_AGENT = "MYIAFACTORY_AGENT"   # la clé de l'agent, exportée à son lancement (lue par `deporter`)
+DELAI_BATTEMENT_S = 180        # une attente dont le battement a plus de 3 min n'est plus vivante
 OPTIONS_CONSIGNE = ("--append-system-prompt-file", "--system-prompt-file")
 ARRET = "agent arrêté par l'utilisateur depuis le bureau"
 VARIABLE_TACHE = "MYIAFACTORY_TACHE"    # la clé de l'agent dans l'environnement de ses commandes (voir `outils/campagne`)
@@ -337,19 +338,28 @@ def _meme_arbre(a, b):
     return a == b or a.startswith(b.rstrip(os.sep) + os.sep) or b.startswith(a.rstrip(os.sep) + os.sep)
 
 
-def attente_deportee(dossier_etat, maintenant, delai_s=DELAI_BATTEMENT_S, cwd=None):
-    """L'attente d'une exécution distante que `outils/deporter.py` déclare pour l'agent qui travaille dans `cwd` :
-    `{action, attend, lieu, depuis}` si un fichier du dossier `dossier_etat` vise ce dossier (le même, ou dedans, ou
-    au-dessus) et que son `battement` a moins de `delai_s` ; `None` sinon. Lecture seule (`deporter` est le seul
+def _attente_de(d, cwd, agent):
+    """Le fichier d'attente `d` est-il celui de cet agent ? Par sa clé (`agent`, exportée par le moteur dans
+    `MYIAFACTORY_AGENT`) d'abord : les agents d'un projet partagent le même dossier. Par le dossier (le même, dedans ou
+    au-dessus) seulement si le fichier n'a pas de clé (`deporter` lancé à la main)."""
+    cle = d.get("agent")
+    if isinstance(cle, str) and cle:
+        return bool(agent) and cle == agent
+    return bool(cwd) and isinstance(d.get("dossier"), str) and bool(d["dossier"]) and _meme_arbre(d["dossier"], cwd)
+
+
+def attente_deportee(dossier_etat, maintenant, delai_s=DELAI_BATTEMENT_S, cwd=None, agent=None):
+    """L'attente d'une exécution distante que `outils/deporter.py` déclare pour l'agent `agent` (sa clé) qui
+    travaille dans `cwd` : `{action, attend, lieu, depuis}` si un fichier du dossier `dossier_etat` est le sien (voir
+    `_attente_de`) et que son `battement` a moins de `delai_s` ; `None` sinon. Lecture seule (`deporter` est le seul
     rédacteur), les fichiers périmés ou illisibles sont ignorés, ne lève jamais."""
     try:
-        if not cwd:
+        if not cwd and not agent:
             return None
         for f in sorted(Path(dossier_etat).glob("*.json")):
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
-                if not isinstance(d, dict) or not isinstance(d.get("dossier"), str) or not d["dossier"] \
-                        or not _meme_arbre(d["dossier"], cwd):
+                if not isinstance(d, dict) or not _attente_de(d, cwd, agent):
                     continue
                 battement = datetime.fromisoformat(d["battement"])
                 if battement.tzinfo is None:
@@ -502,7 +512,7 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attente
             info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
                     "vie_t": vie_t, "conso": conso_en_cours(flux), "phase": phase_du_flux(lignes),
                     "attente_deportee": attente_deportee(dossier_attente or ATTENTE, datetime.now().astimezone(),
-                                                         cwd=etat.get("dossier")),
+                                                         cwd=etat.get("dossier"), agent=etat.get("cle")),
                     "avancement": lire_avancement(f.with_suffix(".avancement.json"))}
             if (attentes_tests or {}).get(f.stem):     # l'agent attend le verrou de tests du poste
                 info["attente_tests"] = dict(attentes_tests[f.stem])
@@ -719,8 +729,10 @@ class Registre:
                 shutil.copyfile(argv[i + 1], copie)
                 argv[i + 1] = str(copie)
         self.chemin(cle, ".entree").write_bytes(entree or b"")
-        # la clé de l'agent, héritée par ses commandes : une campagne de tests qui attend son tour dit pour qui (le bureau)
+        # la clé de l'agent, héritée par ses commandes : une campagne de tests qui attend son tour dit pour qui (le bureau),
+        # et `lancer.py deporter` : son fichier d'attente est le sien, pas celui des agents du même dossier
         env = {**(os.environ if env is None else env), VARIABLE_TACHE: cle}
+        env[VARIABLE_AGENT] = str(cle)
         p = self.lancer(argv, str(self.chemin(cle, ".entree")), str(self.chemin(cle, ".jsonl")),
                         str(self.chemin(cle, ".err")), env, cwd)
         etat = {"genre": "tache", **infos, "cle": cle, "pid": p.pid, "debut_processus": debut_processus(p.pid),
@@ -754,7 +766,8 @@ class Registre:
             if agi:
                 actif, debut_attente = self.horloge(), None
             elif (debut_attente is None or self.horloge() - debut_attente < PLAFOND_ATTENTE_S) and attente_deportee(
-                    self.dossier_attente, datetime.fromtimestamp(self.horloge()).astimezone(), cwd=etat.get("dossier")):
+                    self.dossier_attente, datetime.fromtimestamp(self.horloge()).astimezone(), cwd=etat.get("dossier"),
+                    agent=etat.get("cle") or cle):
                 # l'attente vivante d'une exécution distante n'est pas un blocage : le délai repart ; l'attente finie, le
                 # compte reprend depuis là. Bornée : au-delà de PLAFOND_ATTENTE_S d'attente continue, le garde-fou s'applique.
                 debut_attente = debut_attente if debut_attente is not None else self.horloge()

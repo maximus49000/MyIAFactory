@@ -11,6 +11,7 @@ import {Personnages} from "./scene/personnages.js";
 import {Kanban} from "./scene/kanban.js";
 import {creerBarre} from "./ui/barre.js";
 import {creerPanneaux} from "./ui/panneaux.js";
+import {nombreAVoir} from "./ui/actions.js";
 import {brancherGestes} from "./ui/gestes.js";
 import {lireProjets, projetInitial, definirProjet, memorise, memoriser, urlProjet, projetCourant} from "./ui/projets.js";
 
@@ -97,6 +98,7 @@ async function demarrer() {
   const personnages = new Personnages(sc, modeles);
   const kanban = new Kanban(sc, plan, modeles);
   const directeur = acteurDirecteur(plan);
+  directeur.agent.compteur = nombreAVoir(etat);     // le « 1 » : ce qui attend le Directeur dans son panneau
   const sigStructure = structure(etat);
   let dernier = etat;
   let aRemettre = false;
@@ -134,6 +136,7 @@ async function demarrer() {
     if ((e.colonnes || []).length !== plan.kanban.colonnes) plan.adapterColonnes((e.colonnes || []).length);
     if (document.hidden) { dernier = e; aRemettre = true; return; }
     regie.appliquer(e, changements(dernier, e));
+    directeur.agent.compteur = nombreAVoir(e);
     dernier = e;
     panneaux.maj(e);
     sc.assombrir(e.factory?.etat === "en pause");

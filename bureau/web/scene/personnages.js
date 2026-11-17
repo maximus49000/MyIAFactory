@@ -76,7 +76,10 @@ export class Personnages {
     nuage.className = "nuage";
     nuage.textContent = "☁";
     nuage.title = "Agent cloud";
-    etiquette.append(nuage, nom);
+    const compteur = document.createElement("span");      // le « 1 » du Directeur : ce qui l'attend
+    compteur.className = "compteur-a-voir";
+    compteur.hidden = true;
+    etiquette.append(nuage, nom, compteur);
     const oEtiquette = new CSS2DObject(etiquette);
     oEtiquette.position.set(0, hauteurTexte, 0);
     oEtiquette.center.set(0.5, 1);
@@ -94,7 +97,7 @@ export class Personnages {
 
     this.sc.scene.add(g);
     this.sc.choisissables.push(g);
-    const f = {id, g, art, sq, etiquette, nom, nuage, bulle, oBulle, acteur: a, couleur: null,
+    const f = {id, g, art, sq, etiquette, nom, nuage, compteur, bulle, oBulle, acteur: a, couleur: null,
                phase: Math.random() * 10, decalage: Math.random() * 10, x: a.x, z: a.z, assise: 0};
     this.figures.set(id, f);
     return f;
@@ -145,6 +148,11 @@ export class Personnages {
     f.nuage.hidden = agent.lieu !== "cloud";
     f.etiquette.classList.toggle("chef", Boolean(agent.chef));
     f.etiquette.classList.toggle("directeur", Boolean(agent.fixe));
+    const n = Number.isInteger(agent.compteur) && agent.compteur > 0 ? agent.compteur : 0;
+    const texteN = n > 9 ? "9+" : String(n);
+    f.compteur.hidden = !n;
+    if (n && f.compteur.textContent !== texteN) f.compteur.textContent = texteN;
+    f.compteur.title = n ? `${n} chose${n > 1 ? "s" : ""} à voir au bureau de direction` : "";
     f.etiquette.classList.toggle("ancien", Boolean(agent.retire));    // retiré de l'équipe : au café, pour son historique
     const texte = agent.bulle || "";
     if (f.bulle.textContent !== texte) f.bulle.textContent = texte;

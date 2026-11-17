@@ -886,7 +886,8 @@ MAX_LIVRABLES_FIN = 10
 
 def _fin_verifiee(fin):
     """La fin d'une fonctionnalité : `livrables` [{chemin, titre}] (10 au plus), `acces` {url http(s), description?}
-    facultatif, `laisses` (les noms des éléments laissés de côté) facultatif."""
+    facultatif, `captures` [{chemin, legende?}] (le résultat final) facultatif, `laisses` (les noms des éléments laissés
+    de côté) facultatif."""
     if not isinstance(fin, dict):
         raise Refus("« fin » est un objet {livrables, acces?, laisses?}.")
     livrables = fin.get("livrables", [])
@@ -900,6 +901,14 @@ def _fin_verifiee(fin):
         if not rel.acces_ok(fin["acces"]):
             raise Refus("« fin.acces » est {url (http ou https), description? (200 caractères au plus)}.")
         sortie["acces"] = {k: v for k, v in fin["acces"].items() if k in ("url", "description") and v is not None}
+    if fin.get("captures") is not None:      # la capture du résultat final, montrée dans l'avis de fin
+        captures = fin["captures"]
+        if (not isinstance(captures, list) or len(captures) > 6
+                or not all(isinstance(x, dict) and isinstance(x.get("chemin"), str) and x["chemin"].strip()
+                           and "\x00" not in x["chemin"] and isinstance(x.get("legende", ""), str) for x in captures)):
+            raise Refus("« fin.captures » : au plus 6 images {chemin, legende?}.")
+        sortie["captures"] = [{"chemin": x["chemin"].strip(), **({"legende": x["legende"][:200]} if x.get("legende") else {})}
+                              for x in captures]
     if fin.get("laisses") is not None:
         if not isinstance(fin["laisses"], list) or not all(isinstance(x, str) for x in fin["laisses"]):
             raise Refus("« fin.laisses » est une liste de noms d'éléments.")

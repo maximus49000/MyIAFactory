@@ -625,7 +625,11 @@ export function avisDeFin(x, {hotePage = globalThis.location?.hostname || "127.0
     url: urlTelechargement(x.fonctionnalite, l.chemin, projet, origine)}));
   const acces = x?.acces ? lienAcces({id: "fin-" + x.fonctionnalite, acces: x.acces}, {hotePage, projet, origine}) : null;
   const laisses = (Array.isArray(x?.laisses) ? x.laisses : []).filter(plein);
-  return {livrables, acces, laisses};
+  // La capture du résultat final (lue dans la page, pas téléchargée), avec sa légende : où regarder.
+  const captures = (Array.isArray(x?.captures) ? x.captures : []).filter((c) => plein(c?.chemin)).map((c) => ({
+    legende: plein(c.legende) ? c.legende : "Le résultat livré",
+    url: urlTelechargement(x.fonctionnalite, c.chemin, projet, origine, true)}));
+  return {livrables, acces, laisses, captures};
 }
 
 // La ligne de coût de l'avis de fin : « Coût : ≈ 1,20 € · ≈ 3 % semaine · CO₂ … » (ce que dit déjà le panneau).
@@ -651,6 +655,16 @@ function decisionFin(ctx, x) {
         if (cout.textContent) marquerPart(cout);
       } catch { cout.textContent = ""; }
     })();
+  }
+  for (const c of a.captures) {        // la capture du résultat final : ce qui a été livré, avant les liens
+    const fig = el("figure", "vignette fin-capture");
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.src = c.url;
+    img.alt = c.legende;
+    fig.addEventListener("click", () => fig.classList.toggle("agrandie"));
+    fig.append(img, el("figcaption", "", c.legende));
+    li.append(fig);
   }
   const liens = el("div", "fin-liens");
   for (const l of a.livrables) {

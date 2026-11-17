@@ -76,6 +76,13 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 }
 .etiquette.chef::before { content: "★"; color: #d39b17; }
 .etiquette.directeur { border-style: double; border-width: 3px; }
+/* Le « 1 » du Directeur : ce qui l'attend au bureau de direction (une fonctionnalité livrée, une décision…) */
+.compteur-a-voir { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #d64545; color: #fff;
+  font-size: 12px; font-weight: 800; line-height: 18px; text-align: center; box-sizing: border-box; }
+.compteur-a-voir[hidden] { display: none; }
+.fin-capture { margin: 8px 0; max-width: 100%; cursor: zoom-in; }
+.fin-capture img { max-width: 100%; border: 1px solid #ddd; border-radius: 6px; }
+.fin-capture.agrandie { cursor: zoom-out; }
 .nuage { color: #5d8fc7; font-size: 12px; line-height: 1; }
 .nuage[hidden] { display: none; }
 

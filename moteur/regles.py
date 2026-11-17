@@ -76,7 +76,10 @@ TESTS_DU_DERNIER_REGARD = ("Pour vérifier, relis le diff de l'élément et appu
                            "l'étape d'avant : relance seulement les tests de l'élément, jamais la suite complète.")
 SUITE_COMPLETE_UNE_FOIS = ("Tests : c'est la dernière étape du dernier élément de la fonctionnalité. Lance une fois "
                            "la suite complète du projet (par le lanceur du poste) avant de rendre, et dis son résultat "
-                           "dans ton message.")
+                           "dans ton message. Pour l'avis de livraison au Directeur, rends aussi une **capture du "
+                           "résultat final** tel que l'utilisateur le verra (`message.images`, avec sa légende : où "
+                           "regarder) et, si le résultat s'ouvre dans un navigateur, `acces` : `{\"url\": \"…\", "
+                           "\"description\": \"…\"}` (l'adresse exacte de la page livrée).")
 OCCUPANTS_DE_FICHIERS = ("flux", "relecture", "correction")    # un élément qui écrit encore dans ses fichiers
 ETAPES_DE_FLUX = "flux:"
 ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
@@ -4902,8 +4905,11 @@ def _retenir_le_rapport(v, r):
     dit = propre if (propre or {}).get("doit_marcher") else r
     # La nature et le mode opératoire vont ensemble : ceux du compte rendu de l'élément s'il déclare sa nature.
     nat = propre if (propre or {}).get("nature") else r
+    captures = [{"chemin": c, **({"legende": str(x["legende"])[:200]} if isinstance(x, dict) and x.get("legende") else {})}
+                for x in images for c in [x.get("chemin") if isinstance(x, dict) else x]
+                if isinstance(c, str) and c.strip()][:CAPTURES_A_LA_FIN]
     v["dernier_rapport"] = {"compte_rendu": texte[:COMPTE_RENDU_MAX], "fichiers": fichiers[:FICHIERS_MAX],
-                            "points": list(points)[:rel.MAX_POINTS], "acces": acces,
+                            "points": list(points)[:rel.MAX_POINTS], "acces": acces, "captures": captures,
                             **{c: dit[c] for c in ("doit_marcher", "pas_encore", "conclusion", "en_clair") if c in dit},
                             **{c: nat[c] for c in ("nature", "mode_operatoire") if c in nat}}
 
@@ -5602,6 +5608,9 @@ def _sur_serie_arretee(projet, demande, etat):
 LIVRABLES_A_LA_FIN = 10
 
 
+CAPTURES_A_LA_FIN = 4     # les captures du résultat final montrées dans l'avis de fin
+
+
 def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
     """L'étape passe à « terminee » et la fin est notée pour le bureau de direction (`fin`, non bloquante, fermée par
     « Vu ») : les livrables déclarés de la fonctionnalité (téléchargeables), le dernier lien d'accès d'un site rendu par
@@ -5611,14 +5620,19 @@ def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
     for d in reversed(f.get("documents") or []):
         if d.get("livrable") is True and all(x["chemin"] != d["chemin"] for x in livrables):
             livrables.append({"chemin": d["chemin"], "titre": d.get("titre") or d["chemin"].rsplit("/", 1)[-1]})
-    acces = None
+    acces, captures = None, []
     for v in _m(etat, "elements").values():
         a = (v.get("dernier_rapport") or {}).get("acces") if v["fid"] == fid else None
         if a and rel.acces_ok(a):
             acces = a
+        c = (v.get("dernier_rapport") or {}).get("captures") if v["fid"] == fid else None
+        if c:      # la capture du résultat final : celle du dernier élément qui en a rendu une
+            captures = c
     fin = {"livrables": list(reversed(livrables[:LIVRABLES_A_LA_FIN]))}
     if acces:
         fin["acces"] = {k: acces[k] for k in ("url", "description") if acces.get(k)}
+    if captures:
+        fin["captures"] = captures[:CAPTURES_A_LA_FIN]
     if bloques:
         fin["laisses"] = list(bloques)
     lancer(projet, "fonctionnalite", {"id": fid, "etape": "terminee", "fin": fin})

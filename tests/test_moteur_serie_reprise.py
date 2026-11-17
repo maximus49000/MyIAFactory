@@ -212,6 +212,23 @@ class FinDeFonctionnalite(AvecValidation):
         self.assertTrue(self.fonc()["fin"]["vu"])
         self.assertEqual(self.fonc()["etape"], "terminee")
 
+    def test_l_avis_de_fin_montre_la_capture_du_resultat_final(self):
+        """Essai réel (2026-11-17) : la fonctionnalité livrée, le Directeur ne savait ni où regarder ni à quoi
+        s'attendre. L'avis de fin garde la capture rendue à la dernière étape, avec sa légende, et le lien d'accès."""
+        self.projet_avec_validation(flux=[FLUX[0], FLUX[3], FLUX[4]], elements=0)
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": ELEMENTS[:1]})
+        self.fichier("pieces/f1/final.png")
+        livraison = {"statut": "fait", "acces": ACCES,
+                     "message": {"texte": "Livré.", "images": [{"chemin": "pieces/f1/final.png",
+                                                                "legende": "La page livrée, menu ouvert"}]}}
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}},
+            {**verdict("e1"), "message": {"texte": "Testé."}, **DIT}, livraison])
+        regles.avancer(self.projet, self.etat)
+        fin = self.fonc()["fin"]
+        self.assertEqual(fin["captures"], [{"chemin": "pieces/f1/final.png", "legende": "La page livrée, menu ouvert"}])
+        self.assertEqual(fin["acces"], ACCES)
+
     def test_fin_refusee_mal_formee(self):
         self.fonctionnalite("serie")
         for fin in ({"livrables": "x"}, {"acces": {"url": "ftp://x"}}, {"livrables": [{"chemin": ""}]}, "oui"):

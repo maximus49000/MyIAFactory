@@ -1464,6 +1464,12 @@ class VitesseDeLivraison(Base):
         self.assertIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
         self.assertNotIn(regles.TESTS_CIBLES, m)
 
+    def test_la_derniere_etape_demande_une_capture_et_le_lien_d_acces(self):
+        self.livrer_un_element()
+        m = self.matiere("livraison")
+        self.assertIn("capture du résultat final", m)
+        self.assertIn("`acces`", m)
+
     def test_pas_de_suite_complete_tant_qu_un_autre_element_travaille(self):
         self.livrer_un_element()
         self.etat["elements"]["f1/e9"] = {"fid": "f1", "element": {"id": "e9", "nom": "Autre"}, "phase": "flux",

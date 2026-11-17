@@ -550,7 +550,14 @@ test("avisDeFin : livrables téléchargeables, site direct sur l'ordinateur et r
   assert.deepEqual(a.laisses, ["Sons"]);
   const t = avisDeFin(x, {hotePage: "100.64.0.2", projet: "p1"});
   assert.equal(t.acces.url, "/apercu/p1/fin-f1/");
-  assert.deepEqual(avisDeFin({fonctionnalite: "f2"}), {livrables: [], acces: null, laisses: []});
+  assert.deepEqual(avisDeFin({fonctionnalite: "f2"}), {livrables: [], acces: null, laisses: [], captures: []});
+});
+
+test("avisDeFin : la capture du résultat final, lisible dans la page, avec sa légende", () => {
+  const x = {fonctionnalite: "f5", ...FIN, captures: [{chemin: "pieces/f5/final.png", legende: "Le menu livré"}, {chemin: ""}]};
+  const a = avisDeFin(x, {hotePage: "127.0.0.1", projet: "p1"});
+  assert.deepEqual(a.captures, [{legende: "Le menu livré",
+    url: "/api/telecharger?fonctionnalite=f5&chemin=pieces%2Ff5%2Ffinal.png&lecture=1&projet=p1"}]);
 });
 
 test("texteCoutDeFin : le coût total, rien quand il n'est pas disponible", () => {

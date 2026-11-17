@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, demandeSerieArretee, demandeFinVue, demandeLivrerMaintenant, attenteLivraison, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleModeleNecessaire, libelleLot} from "../ui/actions.js";
+import {boutons, lienSur, envoyer, challengesDuService, decisionsDirecteur, nombreAVoir, demandeSerieArretee, demandeFinVue, demandeLivrerMaintenant, attenteLivraison, demandeLecon, demandeGenre, demandeSession, lireSession, libelleMontee, libelleModeleNecessaire, libelleLot} from "../ui/actions.js";
 
 const ACTIONS = [
   {id: "pause", libelle: "Pause", confirmer: "Mettre en pause ?"},
@@ -257,4 +257,13 @@ test("livrer maintenant : la demande et l'attente de la livraison groupée", () 
   assert.equal(attenteLivraison({attente_livraison: {texte: "  "}}), null);
   assert.deepEqual(attenteLivraison({attente_livraison: {texte: "2 prêts", elements: ["A", 3, "B"]}}),
                    {texte: "2 prêts", elements: ["A", "B"]});
+});
+
+test("nombreAVoir : le « 1 » du Directeur compte tout ce qui l'attend, dont une fonctionnalité livrée non vue", () => {
+  const livree = {id: "f5", nom: "Menu", etape: "terminee", fin: {vu: false, livrables: []}, decisions: [], discussion: []};
+  assert.equal(nombreAVoir({fonctionnalites: [livree]}), 1);
+  assert.equal(nombreAVoir({fonctionnalites: [{...livree, fin: {vu: true}}]}), 0);
+  const cahier = {id: "f6", nom: "Autre", etape: "cahier", decisions: [{id: "d1", genre: "valider_cahier"}], discussion: []};
+  assert.equal(nombreAVoir({fonctionnalites: [livree, cahier], decisions_projet: []}), 2);
+  assert.equal(nombreAVoir(null), 0);
 });

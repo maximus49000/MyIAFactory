@@ -155,6 +155,13 @@ export function decisionsDirecteur(etat) {
   return sortie;
 }
 
+// Le « 1 » du Directeur sur la carte : tout ce qui l'attend dans son panneau (décisions, validations, fonctionnalités
+// livrées pas encore vues). Essai réel (2026-11-17) : une fonctionnalité livrée, rien ne le signalait sur la carte.
+export function nombreAVoir(etat) {
+  if (!etat || typeof etat !== "object") return 0;
+  return Object.values(decisionsDirecteur(etat)).reduce((n, liste) => n + (Array.isArray(liste) ? liste.length : 0), 0);
+}
+
 // Le verdict d'une leçon ; l'étage n'est joint que s'il diffère de l'étage proposé (« projet » par défaut).
 export function demandeLecon(lecon, verdict, etage) {
   const d = {type: "lecon", id: lecon.id, verdict};

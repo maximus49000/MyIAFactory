@@ -38,3 +38,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Pour intégrer un écran existant comme onglet d'un composant conteneur, le réutiliser sans modification et mocker ses appels API dans le test du conteneur, à l'identique de ce que fait le test de l'écran d'origine.
+
+## G7 — Pour prouver un correctif de mise en forme (CSS) sans enviro
+Rôles : dev
+Date : 2026-11-17
+
+Pour prouver un correctif de mise en forme (CSS) sans environnement de rendu réel disponible, un test qui vérifie la présence de la classe CSS attendue sur l'élément concerné suffit comme preuve automatisée (échoue avant, passe après) ; une illustration avant/après peut être produite par un schéma généré en code pur, sans dépendance graphique externe.

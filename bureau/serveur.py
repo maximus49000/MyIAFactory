@@ -302,11 +302,12 @@ class Projet:
             moteur = bool(self.pid_moteur())
         except Exception:
             moteur = None
+        executions = detache.lire_durees(self.chemin_reglages.parent)
         for t in taches:
             if not isinstance(t, dict) or not (t.get("travail") or t.get("agent_termine")):
                 continue
             try:
-                a = modavancement.pour_la_tache(t, taches, moteur, maintenant, DELAI_AGENT_S)
+                a = modavancement.pour_la_tache(t, taches, executions, moteur, maintenant, DELAI_AGENT_S)
             except Exception:
                 a = None
             if a:

@@ -251,8 +251,47 @@ def lire_avancement(chemin):
             "maj": _iso(maj)}
 
 
+DUREES = "durees-agents.jsonl"      # dans le dossier de la factory : la durée réelle de chaque agent, notée à sa fin
+MAX_DUREES_LUES = 500
 MAX_AVANCEMENT_OCTETS = 65536
 MAX_POINTS = 30
+def noter_duree(dossier_factory, etat, t_fin=None):
+    """Note la durée réelle d'un agent fini (de son démarrage à maintenant) pour chaque tâche qu'il portait : la source du
+    « temps restant » de la fiche (les dates `debut`/`fin` du suivi ne mesurent pas le travail). Ne lève jamais."""
+    try:
+        debut = etat.get("debut")
+        if not isinstance(debut, (int, float)) or isinstance(debut, bool):
+            return
+        duree = int((time.time() if t_fin is None else t_fin) - debut)
+        if duree < 0:
+            return
+        lignes = "".join(json.dumps({"tache": tid, "duree_s": duree, "t": _iso(time.time() if t_fin is None else t_fin)})
+                         + "\n" for tid in etat.get("taches") or [etat.get("tache")] if isinstance(tid, str))
+        if lignes:
+            with open(Path(dossier_factory) / DUREES, "a", encoding="utf-8") as f:
+                f.write(lignes)
+    except Exception:
+        pass
+
+
+def lire_durees(dossier_factory):
+    """Les dernières durées notées : `[{"tache", "duree_s", "t"}]`, vide si le fichier manque ; les lignes abîmées sont
+    ignorées."""
+    try:
+        brut = (Path(dossier_factory) / DUREES).read_text(encoding="utf-8").splitlines()[-MAX_DUREES_LUES:]
+    except OSError:
+        return []
+    rendu = []
+    for ligne in brut:
+        try:
+            d = json.loads(ligne)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and isinstance(d.get("tache"), str) and isinstance(d.get("duree_s"), (int, float)):
+            rendu.append(d)
+    return rendu
+
+
 _COMPILATION = ("gradle", "assemble", "compile", "build")
 _TESTS = re.compile(r"\btests?\b|pytest|unittest|connectedandroidtest|\badb\b|\bemulator\b")
 
@@ -608,6 +647,8 @@ class Registre:
             sortie = flux.read_bytes()
         except OSError:
             sortie = b""
+        if a_un_resultat(flux):
+            noter_duree(self.dossier.parent, etat)
         code = getattr(processus, "returncode", None) if processus is not None else None
         if code is None or (code != 0 and a_un_resultat(flux)):
             code = 0 if a_un_resultat(flux) else 1

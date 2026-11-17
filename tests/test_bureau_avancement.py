@@ -22,12 +22,15 @@ def tache(**plus):
 
 
 def historique(*durees):
-    return [{"id": f"h{i}", "etape": "correction", "debut": il_y_a(10000 + d), "fin": il_y_a(10000), "colonne": "fait"}
-            for i, d in enumerate(durees)]
+    """Les exécutions réelles d'agents (durées notées par le moteur) de tâches de l'étape « correction »."""
+    return [{"tache": f"h{i}", "duree_s": d} for i, d in enumerate(durees)]
+
+
+TACHES_PASSEES = [{"id": f"h{i}", "etape": "correction"} for i in range(8)]
 
 
 def calculer(t, histo=(), moteur_vivant=True, delai=DELAI):
-    return avancement.pour_la_tache(t, list(histo), moteur_vivant, MAINTENANT, delai)
+    return avancement.pour_la_tache(t, TACHES_PASSEES, list(histo), moteur_vivant, MAINTENANT, delai)
 
 
 class Etats(unittest.TestCase):
@@ -99,19 +102,11 @@ class Fourchette(unittest.TestCase):
         self.assertIsNone(r["reste"])
         self.assertEqual(r["reste_texte"], "inconnu")
 
-    def test_ecarte_les_durees_aberrantes(self):
-        h = historique(0, 600, 600, 900, 1200, 1200) + [
-            {"id": "x", "etape": "correction", "debut": il_y_a(3 * 86400 + 10), "fin": il_y_a(10)},
-            {"id": "autre", "etape": "flux:f1", "debut": il_y_a(900), "fin": il_y_a(10)}]
-        self.assertEqual(sorted(avancement.durees_de_l_etape(h, "correction")), [600, 600, 900, 1200, 1200])
-
-    def test_l_historique_ne_compte_que_les_taches_menees_a_leur_fin(self):
-        h = historique(600, 600, 900)
-        h.append({"id": "bloquee", "etape": "correction", "debut": il_y_a(10040), "fin": il_y_a(10000),
-                  "colonne": "fait", "bloquee": "agent bloqué"})
-        h.append({"id": "attente", "etape": "correction", "debut": il_y_a(10060), "fin": il_y_a(10000),
-                  "colonne": "f5-tests"})
-        self.assertEqual(sorted(avancement.durees_de_l_etape(h, "correction")), [600, 600, 900])
+    def test_ecarte_les_durees_aberrantes_et_les_autres_etapes(self):
+        taches = TACHES_PASSEES + [{"id": "x", "etape": "flux:f1"}]
+        execs = historique(0, 600, 600, 900, 1200, 1200, 3 * 86400) + [{"tache": "x", "duree_s": 700}]
+        self.assertEqual(sorted(avancement.durees_de_l_etape(taches, execs, "correction")),
+                         [600, 600, 900, 1200, 1200])
 
     def test_reste_deduit_le_temps_passe(self):
         r = calculer(tache(travail=travail(depuis_s=240)), historique(600, 600, 900, 1200, 1200))

@@ -400,6 +400,21 @@ class AuTravail(Base):
         self.assertIsNone(detache.derniere_action([{"type": "system"}], None))
 
 
+class Durees(Base):
+    def test_noter_et_lire_les_durees(self):
+        detache.noter_duree(self.factory_dir, {"taches": ["t1", "t2"], "debut": 1000.0}, 1000.0 + 754)
+        detache.noter_duree(self.factory_dir, {"tache": "t3", "debut": 1000.0}, 1000.0 + 61)
+        detache.noter_duree(self.factory_dir, {"tache": "t4"}, 5.0)                     # sans début : rien
+        self.assertEqual([(x["tache"], x["duree_s"]) for x in detache.lire_durees(self.factory_dir)],
+                         [("t1", 754), ("t2", 754), ("t3", 61)])
+
+    def test_lire_les_durees_sans_fichier_ou_abime(self):
+        self.assertEqual(detache.lire_durees(self.factory_dir), [])
+        (self.factory_dir / "durees-agents.jsonl").write_text('pas du json\n{"tache": "t1", "duree_s": 5}\n',
+                                                              encoding="utf-8")
+        self.assertEqual([x["tache"] for x in detache.lire_durees(self.factory_dir)], ["t1"])
+
+
 class AvecExecuterAgent(Base):
     def test_executer_agent_passe_par_le_registre_et_rend_la_session(self):
         self.finir()
@@ -413,6 +428,9 @@ class AvecExecuterAgent(Base):
         self.assertEqual(e.usage["entree"], 10)
         self.assertEqual(len(self.lances), 1)
         self.assertEqual(self.lances[0][1:3], ["-p", "--output-format"])
+        notees = detache.lire_durees(self.factory_dir)
+        self.assertEqual([x["tache"] for x in notees], ["t1"])        # la durée réelle de l'agent, notée à sa fin
+        self.assertGreaterEqual(notees[0]["duree_s"], 0)
 
 
 if __name__ == "__main__":

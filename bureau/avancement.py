@@ -1,7 +1,7 @@
 """L'avancement d'une tâche, pour sa fiche : où elle en est, le temps passé, le temps restant (une fourchette) et si
 l'agent avance ou est bloqué. Module pur : tout entre en paramètre (aucune lecture de fichier).
 
-Les durées passées viennent de l'historique du suivi (les tâches terminées de la même étape) ; moins de 3 durées : le
+Les durées passées viennent des exécutions réelles d'agents notées par le moteur (`durees-agents.jsonl`) ; moins de 3 durées : le
 temps restant est « inconnu » plutôt qu'un chiffre inventé."""
 import math
 import statistics
@@ -24,20 +24,13 @@ def _minutes(secondes):
     return max(0, int(secondes // 60))
 
 
-def durees_de_l_etape(taches, etape):
-    """Les durées (secondes) des tâches menées à leur fin (colonne « fait », non bloquées) de cette étape, sans les
-    aberrantes. Une tâche bloquée, arrêtée ou en attente n'est pas une durée de travail."""
-    rendu = []
-    for t in taches:
-        if not isinstance(t, dict) or t.get("etape") != etape:
-            continue
-        debut, fin = lire_date(t.get("debut")), lire_date(t.get("fin"))
-        if debut == TRES_ANCIEN or fin == TRES_ANCIEN:
-            continue
-        d = (fin - debut).total_seconds()
-        if t.get("colonne") == "fait" and not t.get("bloquee") and DUREE_MIN_S <= d <= DUREE_MAX_S:
-            rendu.append(d)
-    return rendu
+def durees_de_l_etape(taches, executions, etape):
+    """Les durées (secondes) des exécutions réelles d'agents sur des tâches de cette étape, sans les aberrantes.
+    `executions` : `[{"tache", "duree_s"}]` notées par le moteur à la fin de chaque agent (les dates `debut`/`fin` du suivi
+    ne mesurent pas le travail : elles repartent à chaque reprise)."""
+    etapes = {t.get("id"): t.get("etape") for t in taches if isinstance(t, dict)}
+    return [e["duree_s"] for e in executions if isinstance(e, dict) and etapes.get(e.get("tache")) == etape
+            and isinstance(e.get("duree_s"), (int, float)) and DUREE_MIN_S <= e["duree_s"] <= DUREE_MAX_S]
 
 
 def fourchette(durees):
@@ -66,7 +59,7 @@ def _reste(passe_s, durees, points):
     return {"min_s": int(mini), "max_s": int(maxi)}, texte
 
 
-def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
+def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_arret_s):
     """Ce que dit la fiche d'une tâche : `{etat, etat_texte, points, en_cours, phase, passe_s, cumul_s, reste,
     reste_texte}` ; `moteur_vivant` : vrai, faux, ou `None` si on ne sait pas. `None` quand aucun agent n'est dessus (ni au travail, ni terminé depuis plus de 2 min)."""
     travail = tache.get("travail") if isinstance(tache.get("travail"), dict) else None
@@ -79,7 +72,8 @@ def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
     reste, reste_texte = (None, "inconnu")
     if passe is not None:
         reste, reste_texte = _reste(passe, durees_de_l_etape(
-            [x for x in historique if x.get("id") != tache.get("id")], tache.get("etape")), points)
+            [x for x in taches if x.get("id") != tache.get("id")],
+            [x for x in executions if x.get("tache") != tache.get("id")], tache.get("etape")), points)
     # À la minute : la fiche ne se redessine pas à chaque relevé (toutes les 2 s) pour des secondes qui passent.
     if reste:
         reste = {"min_s": reste["min_s"] // 60 * 60, "max_s": reste["max_s"] // 60 * 60}

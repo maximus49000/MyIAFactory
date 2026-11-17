@@ -181,7 +181,7 @@ orange « commande longue en cours depuis 5 min », rouge « sans action depuis 
 terminé, résultat en attente de lecture depuis 3 min » ou « moteur arrêté »), **où il en est** (la liste de points que
 l'agent écrit lui-même dans `.factory/agents-en-cours/<tâche>.avancement.json` et coche au fil de l'eau ; sans liste, la phase
 déduite de son flux : il lit, modifie, compile ou lance des tests), et le **temps** : passé, depuis le début de la tâche, et
-une fourchette du temps restant tirée des durées des mêmes étapes déjà terminées dans le projet (« inconnu » sous 3 durées,
+une fourchette du temps restant tirée des durées réelles des agents sur les mêmes étapes, que le moteur note à la fin de chaque agent dans `.factory/durees-agents.jsonl` (« inconnu » sous 3 durées,
 « plus long que d'habitude » au-delà). Le calcul est dans `bureau/avancement.py`.
 
 **Une question à un agent en plein travail lui est transmise.** Un message dans la discussion d'une fonctionnalité dont

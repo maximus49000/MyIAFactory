@@ -186,5 +186,23 @@ class TestTelecharger(unittest.TestCase):
                 ga.telecharger("d", 7, "apk", t, lancer=Faux((1, "", "no artifact")))
 
 
+class TestConsommation(unittest.TestCase):
+    def test_executions_recentes_demande_la_liste_json(self):
+        f = Faux(ok([{"databaseId": 1}]))
+        self.assertEqual(ga.executions_recentes("d", 50, lancer=f), [{"databaseId": 1}])
+        argv = f.appels[0][0]
+        self.assertEqual(argv[:5], ["gh", "run", "list", "-L", "50"])
+        self.assertIn("databaseId,name,status,conclusion,createdAt,updatedAt,startedAt,headSha,url", argv)
+
+    def test_quota_inconnu_sans_la_portee_user(self):
+        f = Faux((0, "moi\n", ""), (1, "", "Not Found: needs the user scope"))
+        self.assertIsNone(ga.quota_actions(lancer=f))
+
+    def test_quota_officiel(self):
+        f = Faux((0, "moi\n", ""), ok({"total_minutes_used": 640, "included_minutes": 2000}))
+        self.assertEqual(ga.quota_actions(lancer=f), (640.0, 2000))
+        self.assertEqual(f.appels[1][0], ["gh", "api", "users/moi/settings/billing/actions"])
+
+
 if __name__ == "__main__":
     unittest.main()

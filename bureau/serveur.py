@@ -20,6 +20,7 @@ from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from . import avancement as modavancement
 from . import deport as moddeport
+from . import deport_conso
 from . import deport_types
 from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
@@ -261,8 +262,13 @@ class Projet:
         catalogue = self.catalogue_deport()
         lieux = self.lieux_effectifs()
         # le serveur n'existe pas encore (étape 1) : jamais disponible
-        return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
-                "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": False}
+        d = {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
+             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": False}
+        # résultats et minutes GitHub : seulement si une action tourne sur GitHub (sinon aucun appel à gh)
+        conso = deport_conso.conso(str(self.chemin_reglages.parent), {a: e["libelle"] for a, e in catalogue.items()}, lieux)
+        if conso is not None:
+            d["conso"] = conso
+        return d
 
     def reglages_deport(self):
         """Les réglages de déport tels que le dépôt les lit : lieux effectifs (projet puis bureau), commandes, heure."""

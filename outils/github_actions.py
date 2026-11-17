@@ -138,3 +138,27 @@ def telecharger(depot_dossier: str, run_id: int, nom: str, dossier: str, lancer:
     _lancer(["gh", "run", "download", str(run_id), "-n", nom, "-D", dossier], lancer, depot_dossier)
     fichiers = sorted(p for p in Path(dossier).rglob("*") if p.is_file())
     return str(fichiers[0]) if fichiers else dossier
+
+
+def executions_recentes(depot_dossier: str, limite: int = 100, lancer: Callable = subprocess.run) -> List[Dict]:
+    """Les `limite` dernières exécutions du dépôt, telles que `gh run list --json` les rend (clés de gh conservées)."""
+    liste = _json(["gh", "run", "list", "-L", str(limite), "--json",
+                   "databaseId,name,status,conclusion,createdAt,updatedAt,startedAt,headSha,url"],
+                  lancer, depot_dossier)
+    return [v for v in liste if isinstance(v, dict)] if isinstance(liste, list) else []
+
+
+def quota_actions(lancer: Callable = subprocess.run) -> Optional[Tuple[float, int]]:
+    """`(minutes_utilisées, minutes_incluses)` officielles du compte, ou `None` si GitHub ne les donne pas (la portée
+    `user` du jeton manque : l'API de facturation répond 404). Lecture seule ; ne change jamais le jeton."""
+    try:
+        login = _lancer(["gh", "api", "user", "--jq", ".login"], lancer).strip()
+        if not login:
+            return None
+        v = _json(["gh", "api", "users/%s/settings/billing/actions" % login], lancer)
+        utilisees, incluses = v.get("total_minutes_used"), v.get("included_minutes")
+        if isinstance(utilisees, (int, float)) and isinstance(incluses, (int, float)) and incluses > 0:
+            return float(utilisees), int(incluses)
+    except (Gh_indisponible, AttributeError):
+        pass
+    return None

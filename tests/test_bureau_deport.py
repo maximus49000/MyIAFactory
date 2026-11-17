@@ -6,7 +6,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from bureau import serveur
+from bureau import deport_conso, serveur
 from tests import copie_demo
 from tests.test_serveur import AvecServeur, SourceSimulee
 
@@ -187,3 +187,40 @@ class TestDeportParTypeDeProjet(AvecServeur):
         r, _ = self.poster({"deport": {"lieux": {"apk": "github", "tests": "poste"}}})
         self.assertEqual(r.status, 200)
         self.assertEqual(self.json("/api/etat")["deport"]["avertissements"], [])
+
+
+class TestDeportConsoEtat(AvecServeur):
+    """`deport.conso` : présent seulement si une action tourne sur GitHub ; jamais de vrai gh (faux lanceur)."""
+
+    def faux_gh(self):
+        appels = []
+
+        def lancer(argv, **kw):
+            import subprocess
+            appels.append(list(argv))
+            sortie = {("run", "list"): json.dumps([{"databaseId": 1, "name": "MyIAFactory", "status": "completed",
+                                                    "conclusion": "success", "createdAt": "2026-11-10T10:00:00Z",
+                                                    "startedAt": "2026-11-10T10:00:00Z",
+                                                    "updatedAt": "2026-11-10T10:04:10Z", "url": "https://x/1"}]),
+                      ("run", "view"): json.dumps({"jobs": [{"name": "apk", "conclusion": "success"}]}),
+                      ("repo", "view"): json.dumps({"visibility": "PRIVATE"})}.get(tuple(argv[1:3]), "")
+            code = 1 if argv[1] == "api" else 0
+            return subprocess.CompletedProcess(argv, code, sortie, "")
+        return lancer, appels
+
+    def test_sans_action_github_pas_de_conso_et_pas_d_appel_gh(self):
+        lancer, appels = self.faux_gh()
+        deport_conso.LANCER = lancer
+        self.assertNotIn("conso", self.json("/api/etat")["deport"])
+        self.assertEqual(appels, [])
+
+    def test_avec_action_github_conso_exposee(self):
+        lancer, appels = self.faux_gh()
+        deport_conso.LANCER = lancer
+        r, _ = self.req("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"apk": "github"}}}), self.ENT)
+        self.assertEqual(r.status, 200)
+        c = self.json("/api/etat")["deport"]["conso"]
+        self.assertEqual(set(c), {"niveau", "texte", "mois", "minutes_total", "quota", "restantes", "public",
+                                  "par_action", "derniers"})
+        self.assertTrue(appels)
+        self.assertEqual(c["derniers"][0]["conclusion"], "success")

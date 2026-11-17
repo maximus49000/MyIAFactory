@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from bureau import abonnement, prix, serveur
+from bureau import abonnement, deport_conso, prix, serveur
 from tests import copie_demo
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -48,7 +48,14 @@ class AvecServeur(unittest.TestCase):
         self.regl = self.tmp / "demo" / "reglages.json"
         abonnement.DOSSIER = self.tmp / "commun"   # jamais le vrai dossier commun
         self.addCleanup(setattr, abonnement, "DOSSIER", None)
+        deport_conso.DOSSIER, deport_conso.LANCER = self.tmp / "commun", self.gh_absent   # jamais le vrai gh ni le vrai cache
+        self.addCleanup(setattr, deport_conso, "DOSSIER", None)
+        self.addCleanup(setattr, deport_conso, "LANCER", None)
         self.demarrer()
+
+    @staticmethod
+    def gh_absent(argv, **kw):
+        raise FileNotFoundError("gh")
 
     def demarrer(self, source=None):
         self.source = source or SourceSimulee()

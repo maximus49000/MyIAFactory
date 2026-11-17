@@ -172,6 +172,52 @@ function blocApercu(fetchFn) {
   return bloc;
 }
 
+const espaces = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+// « 640 / 2 000 min » (quota connu), « 640 min (illimité) » (dépôt public), « 640 min » (quota inconnu : estimation).
+export function libelleMinutes(c) {
+  const m = espaces(c?.minutes_total || 0);
+  if (c?.public) return `${m} min (illimité)`;
+  return typeof c?.quota === "number" ? `${m} / ${espaces(c.quota)} min` : `${m} min`;
+}
+
+const CONCLUSIONS = {success: "réussi", failure: "échoué", cancelled: "annulé", timed_out: "délai dépassé",
+  skipped: "ignoré", startup_failure: "n'a pas démarré"};
+
+function dureeCourte(s) {
+  const n = Math.max(0, Math.round(Number(s) || 0));
+  return n < 60 ? `${n} s` : `${Math.floor(n / 60)} min ${n % 60} s`;
+}
+
+// Les minutes GitHub du mois, le niveau (ok / alerte / dépassé), le détail par action et les derniers résultats
+// (réussi ou échoué, durée, lien vers l'exécution). Pur : `c` est `deport.conso` de l'état.
+export function blocConso(c) {
+  const niveau = ["alerte", "depasse"].includes(c?.niveau) ? c.niveau : "ok";
+  const bloc = el("div", `deport-conso deport-conso-${niveau}`);
+  bloc.setAttribute("role", niveau === "ok" ? "status" : "alert");
+  bloc.append(el("h5", "", `Consommation GitHub ${c?.mois || ""} : ${libelleMinutes(c)}`.replace("  ", " ")));
+  if (c?.texte) bloc.append(el("p", "note", c.texte));
+  for (const a of Array.isArray(c?.par_action) ? c.par_action : []) {
+    bloc.append(el("p", "note", `${a.libelle || a.action} : ${espaces(a.minutes)} min (${a.executions} exécution${a.executions > 1 ? "s" : ""})`));
+  }
+  const derniers = Array.isArray(c?.derniers) ? c.derniers : [];
+  if (derniers.length) {
+    bloc.append(el("h5", "", "Derniers résultats"));
+    for (const d of derniers) {
+      const ligne = el("p", "note deport-resultat", `${d.libelle || d.action} : ${CONCLUSIONS[d.conclusion] || d.conclusion || "en cours"} (${dureeCourte(d.duree_s)}) `);
+      if (typeof d.url === "string" && d.url.startsWith("https://")) {
+        const a = el("a", "", "voir l'exécution");
+        a.href = d.url;
+        a.rel = "noopener";
+        a.target = "_blank";
+        ligne.append(a);
+      }
+      bloc.append(ligne);
+    }
+  }
+  return bloc;
+}
+
 // Le bloc « Où tournent les actions » ; `fetchFn` seulement pour les tests.
 export function blocDeport(ctx, fetchFn = fetch) {
   const bloc = el("div", "lecons-auto deport");
@@ -187,5 +233,6 @@ export function blocDeport(ctx, fetchFn = fetch) {
   for (const phrase of avertissementsGroupes(d.avertissements)) bloc.append(el("p", "note deport-avertissement", phrase));
   bloc.append(message);
   if (actions.some((a) => lieux[a.id] === "github")) bloc.append(blocApercu(fetchFn));
+  if (d.conso) bloc.append(blocConso(d.conso));
   return bloc;
 }

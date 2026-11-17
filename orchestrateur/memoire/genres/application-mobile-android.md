@@ -1058,3 +1058,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Quand un test provoque une panne de stockage, la provoquer le plus tard possible, après que l'interface s'est stabilisée.
+
+## G177 — Sans outil officiel de signature, lire les identifiants du b
+Rôles : testeur
+Date : 2026-11-17
+
+Sans outil officiel de signature, lire les identifiants du bloc de signature du fichier livré prouve les schémas présents ; le certificat se vérifie à part.

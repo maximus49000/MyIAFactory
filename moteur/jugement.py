@@ -485,6 +485,12 @@ def _valider_proposer_organisation(o, d):
             return f"Service {s.get('id')!r} : un « id » (minuscules, chiffres, tirets) et un « nom »."
         if s["id"] in services_projet:
             return f"Le service « {s['id']} » existe déjà au projet : ne propose que les nouveaux."
+        meme = next((x for x in d.get("services") or [] if isinstance(x, dict)
+                     and normaliser_mot(s["nom"]) in (normaliser_mot(x.get("nom") or ""), normaliser_mot(x.get("id") or ""))),
+                    None)
+        if meme:      # un doublon sous un autre id : ses coûts seraient comptés à part, l'historique se casserait
+            return (f"Le service « {s['nom']} » existe déjà au projet sous l'id « {meme['id']} » : rattache ses étapes "
+                    f"à « {meme['id']} » au lieu d'en créer un autre.")
         if s["id"] in nouveaux_services:
             return f"Service « {s['id']} » en double."
         nouveaux_services.append(s["id"])

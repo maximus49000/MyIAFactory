@@ -400,6 +400,15 @@ class Valider(unittest.TestCase):
         self.assertIsNotNone(self._orga(agents=self._agents(texte="")))
         self.assertIsNotNone(self._orga(agents=self._agents(service="inconnu")))
 
+    def test_proposer_organisation_rattache_aux_services_existants(self):
+        """Un « nouveau » service du même nom qu'un service du projet (accents, casse, tirets près) est refusé : ses
+        coûts seraient comptés à part et l'historique par service se casserait."""
+        autres = VALIDES["proposer_organisation"]["services"]
+        for doublon in ({"id": "jeux", "nom": "JEU"}, {"id": "jeu-2", "nom": "Jeu"}):
+            with self.subTest(doublon=doublon):
+                message = self._orga(services=[doublon] + autres)
+                self.assertIn("« jeu »", message)
+
     def test_validation_premiere_ou_double_refusee(self):
         """Les deux jugements : une validation du Directeur ni en première, ni en dernière, ni deux de suite, sans rôle."""
         val = {"etape": "essai", "nom": "Essai par le Directeur", "validation": True, "raison": "Vous essayez."}

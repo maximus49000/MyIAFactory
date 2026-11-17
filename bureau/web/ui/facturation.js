@@ -88,6 +88,19 @@ export function totalProjet(f) {
           ...(f?.questions?.co2 ? {co2Questions: f.questions.co2} : {})};
 }
 
+// La part de chaque service dans « Tout le projet » : les services du bureau dans leur ordre (même sans dépense, 0 €),
+// puis ceux qui n'existent plus mais ont des dépenses dans la période (l'historique reste lisible, sous leur id).
+// [{id, nom, total, sans_prix, co2?}]. Pur.
+export function lignesServicesProjet(f, services) {
+  const connus = (Array.isArray(services) ? services : []).filter((s) => s && typeof s.id === "string");
+  const ids = [...connus.map((s) => s.id), ...Object.keys(f?.services || {}).filter((id) => !connus.some((s) => s.id === id))];
+  return ids.map((id) => {
+    const g = f?.services?.[id] || {};
+    const nom = connus.find((s) => s.id === id)?.nom || id;
+    return {id, nom, total: g.total ?? 0, sans_prix: (g.sans_prix || []).length, ...(g.co2 ? {co2: g.co2} : {})};
+  });
+}
+
 // Les partenaires dans la facturation : une ligne par partenaire (coût en euros ; le coût d'origine est en info-bulle).
 // Un coût absent compte « non chiffré », jamais zéro ; un coût estimé le dit.
 export function lignesPartenaires(f) {
@@ -256,6 +269,10 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
   conteneur.append(el("div", "carte-sous-titre", "Tout le projet"));
   conteneur.append(rangee("Total, tous services",
                           avecCO2(coutEnClair({total: projet.total, sans_prix: projet.sansPrix ? 1 : 0}), projet.co2), "gras", projet.co2));
+  for (const s of lignesServicesProjet(donnees, etat?.services)) {
+    conteneur.append(rangee("↳ dont " + s.nom, avecCO2(coutEnClair({total: s.total, sans_prix: s.sans_prix}), s.co2),
+                            "etape", s.co2));
+  }
   conteneur.append(rangee("↳ dont direction / hors service",
                           avecCO2(coutEnClair(donnees.direction || {total: 0}), projet.co2Direction), "etape", projet.co2Direction));
   conteneur.append(rangee("↳ dont orchestration (les décisions du moteur)",

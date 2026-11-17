@@ -18,6 +18,7 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -309,11 +310,16 @@ def _un_run(numero, racine, workflow, commit, branche, gh, fabrique, dormir, hor
         run = _attendre_apparition(gh, racine, workflow, commit, ancien, dormir)
         apparition = horloge() - t0
 
+        def dire_reel(texte):
+            # `suivre` compte PAS_S secondes par tour alors qu'on dort moins : on affiche le temps réellement écoulé
+            minutes = int((horloge() - t0) // 60)
+            dire(re.sub(r"\(\d+ min\)$", "(%d min)" % minutes, str(texte)))
+
         def dormir_fin(s):
             dormir(min(s, PAS_SONDE_S))
         # `suivre` compte PAS_S secondes par tour ; on dort moins pour mesurer finement : le délai est mis à l'échelle
         facteur = max(1, int(github_actions.PAS_S // PAS_SONDE_S))
-        final = gh.suivre(str(racine), run["id"], dormir=dormir_fin, dire=dire, delai_s=3600 * facteur)
+        final = gh.suivre(str(racine), run["id"], dormir=dormir_fin, dire=dire_reel, delai_s=3600 * facteur)
         total = horloge() - t0
     jobs = gh.jobs_du_run(str(racine), final["id"])
     par_nom = {}

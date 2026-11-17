@@ -345,6 +345,23 @@ class TestMesureGithub(unittest.TestCase):
         r = self.mesurer(FauxGh(conclusion="failure"), runs=1)[0]
         self.assertEqual(r["conclusion"], "failure")
 
+    def test_la_ligne_de_progression_affiche_le_temps_reel(self):
+        """`suivre` compte 60 s par tour alors que l'outil dort moins : la minute affichée est celle de l'horloge."""
+        class GhBavard(FauxGh):
+            def suivre(self, dossier, run_id, dormir=None, dire=None, delai_s=0, lancer=None):
+                dire("exécution %d : in_progress (31 min)" % run_id)
+                dire("exécution %d : gh ne répond pas, nouvel essai (32 min)" % run_id)
+                dire("autre ligne sans minutes")
+                return super().suivre(dossier, run_id, dormir, dire, delai_s, lancer)
+        lignes = []
+        ed.mesurer_github(self.dossier, 1, GhBavard(), FauxGit(), fabrique((10.0, 30.0)),
+                          dormir=lambda s: None, horloge=Horloge(150.0), maintenant=lambda: MAINTENANT,
+                          dire=lignes.append)
+        progression = [x for x in lignes if x.startswith("exécution")]
+        self.assertEqual(progression, ["exécution 100 : in_progress (5 min)",
+                                       "exécution 100 : gh ne répond pas, nouvel essai (7 min)"])
+        self.assertIn("autre ligne sans minutes", lignes)
+
     def test_le_fil_de_mesure_est_arrete(self):
         fabriques = []
 

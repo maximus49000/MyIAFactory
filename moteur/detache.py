@@ -223,7 +223,8 @@ def derniere_action(lignes, dossier_projet):
                     return f"lance {mot}" if mot else "lance une commande"
                 if nom in VERBES:
                     return VERBES[nom]
-                return f"utilise {re.sub(r'[^\w.-]', '', nom)[:30] or 'un outil'}"
+                outil = re.sub(r"[^\w.-]", "", nom)[:30]
+                return f"utilise {outil or 'un outil'}"
             if bloc.get("type") == "text":
                 return "rédige"
     return None

@@ -230,6 +230,56 @@ def derniere_action(lignes, dossier_projet):
     return None
 
 
+def lire_avancement(chemin):
+    """La liste d'avancement que l'agent écrit lui-même (`<tâche>.avancement.json`) : `{"points": [{"texte", "fait"}],
+    "en_cours": texte | None, "maj": heure ISO du fichier}`. `None` si elle manque, est illisible ou mal formée : la
+    fiche se rabat alors sur la phase déduite du flux."""
+    try:
+        brut = json.loads(Path(chemin).read_text(encoding="utf-8"))
+        maj = Path(chemin).stat().st_mtime
+    except (OSError, ValueError):
+        return None
+    points = brut.get("points") if isinstance(brut, dict) else None
+    if not isinstance(points, list):
+        return None
+    rendu = [{"texte": str(p["texte"])[:120], "fait": p.get("fait") is True}
+             for p in points if isinstance(p, dict) and isinstance(p.get("texte"), str)]
+    en_cours = brut.get("en_cours")
+    return {"points": rendu, "en_cours": en_cours[:120] if isinstance(en_cours, str) and en_cours.strip() else None,
+            "maj": _iso(maj)}
+
+
+_COMPILATION = ("gradle", "assemble", "compile", "build")
+_TESTS = ("test", "lancer.py", "adb", "emulator", "pytest", "unittest")
+
+
+def phase_du_flux(lignes):
+    """Ce que l'agent est en train de faire, d'après sa dernière action : « lecture », « modification », « compilation »,
+    « tests » ou « autre » ; `None` sans action. Jamais le contenu d'une commande."""
+    for d in reversed(lignes):
+        if d.get("type") != "assistant":
+            continue
+        contenu = (d.get("message") or {}).get("content")
+        if not isinstance(contenu, list):
+            continue
+        for bloc in reversed(contenu):
+            if not isinstance(bloc, dict) or bloc.get("type") != "tool_use":
+                continue
+            nom = bloc.get("name")
+            if nom in ("Read", "Grep", "Glob"):
+                return "lecture"
+            if nom in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+                return "modification"
+            if nom == "Bash":
+                commande = str((bloc.get("input") or {}).get("command") or "").lower()
+                if any(m in commande for m in _TESTS):
+                    return "tests"
+                if any(m in commande for m in _COMPILATION):
+                    return "compilation"
+            return "autre"
+    return None
+
+
 def _iso(t):
     try:
         return datetime.fromtimestamp(t).astimezone().isoformat(timespec="seconds")
@@ -296,20 +346,33 @@ def conso_en_cours(flux):
 def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
     """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t,
     vie_t, conso}` (heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris ;
-    `conso` : voir `conso_en_cours`). Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
+    `conso` : voir `conso_en_cours` ; `phase`, `avancement` : voir `phase_du_flux`, `lire_avancement`). Un agent
+    mort dont le résultat n'est pas encore lu donne `agent_termine` = `{t}` à la place. Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
     try:
         d = dossier(dossier_factory)
         if not d.is_dir():
             return taches
-        travail = {}
+        travail, termines = {}, {}
         for f in sorted(d.glob("*.json")):
-            if f.name.endswith(".questions.json"):
+            if f.name.endswith((".questions.json", ".avancement.json")):
                 continue
             try:
                 etat = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if not isinstance(etat, dict) or etat.get("genre") == "reponse" or not vivant(etat):
+            if not isinstance(etat, dict) or etat.get("genre") == "reponse":
+                continue
+            if not vivant(etat):
+                flux = f.with_suffix(".jsonl")
+                if a_un_resultat(flux):
+                    # l'agent a fini et rendu son résultat que le moteur n'a pas encore lu : dit à part
+                    try:
+                        fini = _iso(flux.stat().st_mtime)
+                    except OSError:
+                        fini = None
+                    for tid in etat.get("taches") or [etat.get("tache")]:
+                        if isinstance(tid, str) and fini:
+                            termines[tid] = {"t": fini}
                 continue
             debut = etat.get("debut")
             if not isinstance(debut, (int, float)) or isinstance(debut, bool):
@@ -326,13 +389,16 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
             if _iso(debut) is None:
                 continue
             info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
-                    "vie_t": vie_t, "conso": conso_en_cours(flux)}
+                    "vie_t": vie_t, "conso": conso_en_cours(flux), "phase": phase_du_flux(lignes),
+                    "avancement": lire_avancement(f.with_suffix(".avancement.json"))}
             for tid in etat.get("taches") or [etat.get("tache")]:
                 if isinstance(tid, str):
                     travail[tid] = info
         for t in taches:
             if isinstance(t, dict) and t.get("id") in travail:
                 t["travail"] = dict(travail[t["id"]])
+            elif isinstance(t, dict) and t.get("id") in termines:
+                t["agent_termine"] = dict(termines[t["id"]])
     except Exception:     # le bureau ne tombe jamais pour une aide
         pass
     return taches
@@ -419,7 +485,7 @@ class Registre:
             return []
         rendu = []
         for f in sorted(self.dossier.glob("*.json")):
-            if f.name.endswith(".questions.json"):
+            if f.name.endswith((".questions.json", ".avancement.json")):
                 continue
             cle = f.name[:-len(".json")]
             etat = self.lire_etat(cle)
@@ -438,7 +504,7 @@ class Registre:
 
     def effacer(self, cle):
         """Oublie l'agent (ses questions restent)."""
-        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete"):
+        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete", ".avancement.json"):
             try:
                 self.chemin(cle, suffixe).unlink()
             except OSError:

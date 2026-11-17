@@ -286,6 +286,74 @@ class AuTravail(Base):
         detache.ajouter_au_travail(taches, self.factory_dir)
         self.assertNotIn("travail", taches[0])
 
+    def avancement(self, cle, contenu):
+        (self.dossier_agents() / (cle + ".avancement.json")).write_text(
+            contenu if isinstance(contenu, str) else json.dumps(contenu), encoding="utf-8")
+
+    def dossier_agents(self):
+        d = detache.dossier(self.factory_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def test_lire_avancement_valide(self):
+        self.avancement("t1", {"points": [{"texte": "APK reconstruit", "fait": True}, {"texte": "Note", "fait": False}],
+                               "en_cours": "réécrit la note"})
+        a = detache.lire_avancement(self.dossier_agents() / "t1.avancement.json")
+        self.assertEqual(a["points"], [{"texte": "APK reconstruit", "fait": True}, {"texte": "Note", "fait": False}])
+        self.assertEqual(a["en_cours"], "réécrit la note")
+        self.assertTrue(a["maj"])
+
+    def test_lire_avancement_illisible_rend_none(self):
+        self.avancement("t1", '{"points": [{"texte": "a", ')              # à moitié écrit
+        self.assertIsNone(detache.lire_avancement(self.dossier_agents() / "t1.avancement.json"))
+        self.avancement("t2", {"points": "pas une liste"})
+        self.assertIsNone(detache.lire_avancement(self.dossier_agents() / "t2.avancement.json"))
+        self.assertIsNone(detache.lire_avancement(self.dossier_agents() / "absent.avancement.json"))
+
+    def test_phase_du_flux(self):
+        phase = lambda nom, entree: detache.phase_du_flux([self.outil(nom, entree)])
+        self.assertEqual(phase("Read", {"file_path": "a.kt"}), "lecture")
+        self.assertEqual(phase("Edit", {"file_path": "a.kt"}), "modification")
+        self.assertEqual(phase("Bash", {"command": "gradlew assembleRelease"}), "compilation")
+        self.assertEqual(phase("Bash", {"command": "py lancer.py tests"}), "tests")
+        self.assertEqual(phase("Bash", {"command": "ls"}), "autre")
+        self.assertIsNone(detache.phase_du_flux([{"type": "system"}]))
+
+    def test_ajouter_au_travail_porte_avancement_et_phase(self):
+        debut = time.time() - 60
+        self.ecrire("t1", {"tache": "t1", "agent": "dev", "pid": os.getpid(), "debut": debut,
+                           "dossier": str(self.dossier)}, [self.outil("Read", {"file_path": "a.kt"})])
+        self.avancement("t1", {"points": [{"texte": "a", "fait": True}], "en_cours": "x"})
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        t = taches[0]["travail"]
+        self.assertEqual(t["phase"], "lecture")
+        self.assertEqual(t["avancement"]["points"], [{"texte": "a", "fait": True}])
+
+    def test_l_avancement_n_est_pas_pris_pour_un_agent(self):
+        self.avancement("t9", {"points": [], "en_cours": None})
+        taches = [{"id": "t9"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+        self.assertEqual(detache.Registre(self.factory_dir).entrees(), [])
+
+    def test_agent_mort_avec_resultat_est_dit_termine(self):
+        debut = time.time() - 300
+        flux = self.ecrire("t1", {"tache": "t1", "agent": "dev", "pid": 999999999, "debut": debut},
+                           [{"type": "result", "result": "ok"}])
+        os.utime(flux, (debut + 120, debut + 120))
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+        from datetime import datetime
+        self.assertAlmostEqual(datetime.fromisoformat(taches[0]["agent_termine"]["t"]).timestamp(), debut + 120, delta=1)
+
+    def test_effacer_oublie_avancement(self):
+        self.ecrire("t1", {"tache": "t1", "pid": 1, "debut": 1}, [])
+        self.avancement("t1", {"points": []})
+        detache.Registre(self.factory_dir).effacer("t1")
+        self.assertFalse((self.dossier_agents() / "t1.avancement.json").exists())
+
     def test_une_commande_est_dite_sans_son_contenu(self):
         lignes = [self.outil("Bash", {"command": "python outils/build.py --token=abc123"})]
         self.assertEqual(detache.derniere_action(lignes, None), "lance python")

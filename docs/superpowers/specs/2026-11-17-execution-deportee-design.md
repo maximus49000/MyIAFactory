@@ -59,6 +59,18 @@ lieu, l'agent doit **attendre** la première, puis récupérer son produit.
    le point d'entrée les pousse (sur une branche de travail, avec accord) ou refuse, jamais de compilation d'un code
    différent de celui que l'agent teste.
 
+## Type de projet (ajout demandé par le Directeur)
+Ce que Git peut faire dépend du type de projet : l'APK n'existe que pour un projet qui génère une application Android.
+1. **Catalogue par genre** : le genre du projet (`genre` dans `.factory/factory.json`, par exemple `application-mobile-android`)
+   donne la liste des actions proposées, leurs libellés, leurs commandes par défaut, leurs artefacts et leurs dépendances.
+   Genre absent ou inconnu : catalogue générique (apk, tests, charge, émulateur), commandes à fournir par le Directeur.
+2. **Android (Gradle natif, MyFridgeCleaner)** : APK (`assembleDebug`), tests unitaires (`testDebugUnitTest`, sans besoin
+   de l'APK : ils se compilent depuis les sources), lint, tests sur émulateur (poste seulement), APK signé release (poste
+   seulement tant que les clés ne sont pas dans les secrets GitHub, saisis par le Directeur). Pas d'action « charge » : une
+   application sans serveur n'a pas de test de charge.
+3. **Dépendances** : celles du catalogue du type. Le mécanisme d'attente reste, mais pour un projet Android Gradle les
+   tests n'attendent pas l'APK ; il sert quand une action consomme vraiment le produit d'une autre.
+
 ## Contraintes
 - Le dépôt MyFridgeCleaner est **privé** : quota gratuit limité (environ 2 000 min/mois sur Free, à vérifier).
 - Les secrets (clé de signature de l'APK, jetons) restent saisis par le Directeur dans GitHub.

@@ -95,3 +95,11 @@ Ce que Git peut faire dépend du type de projet : l'APK n'existe que pour un pro
 ## Laissé au réalisateur
 Nom et emplacement du réglage global ; mise en page des cases ; forme exacte du workflow par type de projet ; cache des
 résultats ; tests.
+
+## Évolution prévue : bibliothèque globale d'actions (demande du Directeur, non commencée)
+Un catalogue global d'actions candidates, livré avec la skill, où chaque action est étiquetée par type de livrable
+(APK, application web, bureau, images…) et par technique (Gradle, Godot, Node…). À la création d'un nouveau genre de
+projet, les actions utiles lui sont associées d'après ce que fait le projet et son type de livrable, et le Directeur
+valide. Les catalogues `GENERIQUE` et `application-mobile-android` deviennent les premières instances de cette
+bibliothèque. À concevoir après la tâche 13 : lire d'abord le mécanisme de création d'un genre
+(`orchestrateur/memoire/genres`, décisions `confirmer_genre` / `elargir_genre`).

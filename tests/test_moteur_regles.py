@@ -1358,6 +1358,19 @@ class Arrets(Base):
         self.assertEqual([d["genre"] for d in f["decisions"]], ["valider_cahier"])
         self.assertEqual(self.taches(etape="cadrage")[0]["colonne"], "fait")
 
+    def test_cadrage_rend_l_objectif_en_clair(self):
+        # Le Directeur comprend le but de la tâche d'un coup d'œil : l'agent de cadrage l'écrit sans jargon dès sa
+        # première réponse, et peut le préciser ensuite.
+        actions = self.depart_cadrage()
+        r = {"statut": "fait", "nom": "Écrans", "en_clair": "Ajouter les écrans de l'appli.",
+             "message": {"texte": "Quel style ?", "attend": True}}
+        self.piloter(actions, rapports=[r])
+        self.assertEqual(self.fonc()["en_clair"], "Ajouter les écrans de l'appli.")
+        r = self.ok("releve")
+        self.assertEqual(r["fonctionnalites"][-1]["en_clair"], "Ajouter les écrans de l'appli.")
+        from bureau import releve
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+
     def test_agent_libre_manquant_attend(self):
         (self.dossier / "fiches" / "hugo.md").unlink()     # le cadrage revient à dev-1, qui est occupé
         occupe = self.ok("tache", entree={"titre": "Autre chose", "role": "dev", "colonne": "dev", "agent": "dev-1",

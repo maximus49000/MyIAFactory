@@ -117,14 +117,15 @@ leur texte). Ce que `etat` compte, `detail` le donne, quand il sert. Code 1 si l
 
 ### `fonctionnalite`
 
-Entrée : `{"id", "nom"?, "etape"?, "genre"?, "workflow"?, "deplacee_vers"?, "agent_cadrage"?, "cahier"?, "methode"?,
+Entrée : `{"id", "nom"?, "en_clair"?, "etape"?, "genre"?, "workflow"?, "deplacee_vers"?, "agent_cadrage"?, "cahier"?, "methode"?,
 "livrable"?, "catalogue"?, "fin"?, "fin_vue"?}`. `fin` : la fin de la fonctionnalité, annoncée au bureau de direction (partie « Fonctionnalités terminées ») :
 `{livrables: [{chemin, titre}] (10 au plus), acces?: {url http(s), description?}, laisses?: [noms]}` ; l'outil y ajoute
 `date` et `vu: false`. `fin_vue: true` (le « Vu » du Directeur) ferme l'avis (refusé sans `fin`). Met à
 jour la fonctionnalité (`etape` : `cadrage`, `cahier`, `decoupage`, `prototype`, `methode`, `serie`, `terminee`,
 `deplacee` (la fonctionnalité est partie dans un autre projet, dont `deplacee_vers` donne le nom : ni livrée ni
 comptée) ; `genre` : l'identifiant du genre de la fonctionnalité (ou `null`) ; `workflow` : l'identifiant du
-workflow du projet qu'elle suit (ou `null` : le workflow principal) ;
+workflow du projet qu'elle suit (ou `null` : le workflow principal) ; `en_clair` : l'objectif de la tâche pour
+n'importe qui (texte non vide, espaces resserrés, 800 caractères au plus), affiché en tête de son panneau ;
 `cahier` : `{maquette: [images], etapes: [textes], valide_le?, partenaires?}` (une image : un chemin, ou `{"chemin", "legende"}` ;
 la légende est une phrase de 160 caractères au plus qui dit à quoi l'image correspond, affichée sous elle ; ajouter ou
 changer des légendes seules ne crée pas de version du cahier ; `partenaires` : les partenaires décidés au cadrage,

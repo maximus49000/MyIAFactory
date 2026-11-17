@@ -190,6 +190,7 @@ cadrage, et ce qui attend l'utilisateur. Tout est **facultatif** ; en version 1,
   joints par l'utilisateur (voir « Les fichiers joints ») : `[{chemin, nom, type, taille}]`, `chemin` relatif au dossier des
   réglages comme les images, `nom` le nom d'origine, `type` le type servi, `taille` en octets (les images PNG et JPEG
   jointes figurent dans `images` **et** dans `fichiers`) ; `attend_reponse` (vrai ou faux) ;
+- `en_clair` (facultatif) : l'objectif de la tâche pour n'importe qui, écrit par l'agent de cadrage (ou repris de la fiche d'une correction), affiché en tête de son panneau ;
 - `cahier` : `{maquette: [images], etapes: [textes], valide_le?, partenaires?}`, chaque image de la maquette étant un chemin ou `{chemin, legende?}` ; `partenaires` (facultatif) : les partenaires décidés au cadrage, `[{id, mode}]` avec `mode` = `direct` (connecté), `inscrit` (l'utilisateur fait la génération chez le partenaire) ou `aucun` (pas de partenaire pour ce besoin), un partenaire au plus une fois, 20 au plus ;
 - `cahiers_precedents` (facultatif) : les cahiers remplacés par une correction, du plus ancien au plus récent, chacun avec `remplace_le` ; une fonctionnalité revenue en `cadrage` alors qu'elle a un `cahier` est en correction (le bureau ne montre plus ce cahier comme valable) ;
 - `methode` : `{version, lien | chemin, validee_le?}` ;

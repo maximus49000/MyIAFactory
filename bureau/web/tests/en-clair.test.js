@@ -10,6 +10,12 @@ test("objectif en clair d'une correction : la lecture « En clair » de sa fiche
   assert.deepEqual(objectifEnClair(f), {titre: "En clair", texte: "Le surlignage est faux."});
 });
 
+test("objectif en clair : celui écrit par l'agent de cadrage passe avant tout", () => {
+  const f = {en_clair: "Exporter les roadmaps en PDF.", discussion: [demande("pdf stp")],
+             cahier: {etapes: ["Faire le bouton"]}};
+  assert.deepEqual(objectifEnClair(f), {titre: "En clair", texte: "Exporter les roadmaps en PDF."});
+});
+
 test("objectif en clair d'une correction sans « En clair » : ce qui est attendu", () => {
   const f = {nature: "correction", cahier: {etapes: ["Symptôme : x", "Attendu : Le champ suit la résolution."]}};
   assert.deepEqual(objectifEnClair(f), {titre: "Objectif", texte: "Le champ suit la résolution."});

@@ -107,6 +107,7 @@ class TestCorrection(Base):
         self.assertEqual(f["cahier"]["etapes"][0], "En clair : " + en_clair)
         self.assertTrue(f["cahier"]["etapes"][1].startswith("Symptôme : "))
         self.assertIn(en_clair, f["discussion"][-1]["texte"])
+        self.assertEqual(f["en_clair"], en_clair)          # en tête du panneau de la tâche
         # une fiche sans « en clair » reste acceptée (rien ne bloque) : elle commence au symptôme
 
     def test_la_validation_reprend_l_en_clair_de_la_fiche(self):

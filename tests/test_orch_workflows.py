@@ -183,6 +183,17 @@ class TestWorkflows(AvecWorkflows):
             self.assertEqual(self.outil("fonctionnalite", entree={"id": i, **refus})[0], 1, refus)
 
 
+    def test_en_clair(self):
+        i = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": i, "en_clair": "  Un export PDF   des roadmaps. "})
+        self.assertEqual(self.ok("etat")["fonctionnalites"][-1]["en_clair"], "Un export PDF des roadmaps.")
+        r = self.ok("releve")
+        self.assertEqual(releve.valider(r), [], releve.valider(r))
+        self.assertEqual(r["fonctionnalites"][-1]["en_clair"], "Un export PDF des roadmaps.")
+        for refus in ({"en_clair": ""}, {"en_clair": 3}):
+            self.assertEqual(self.outil("fonctionnalite", entree={"id": i, **refus})[0], 1, refus)
+
+
 class TestRelevePourChaqueFonctionnalite(AvecWorkflows):
     def deux_fonctionnalites(self):
         self.deux_workflows()

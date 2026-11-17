@@ -3509,7 +3509,9 @@ def _matiere(projet, etat, t):
                         "(`message.questions`, `attend: true`). Une question a exactement cette forme : "
                         '`{"texte": "…", "choix": ["…", "…"], "multiple": false}` (`texte` et non `question` ; 2 choix au '
                         "moins ; `multiple: true` quand plusieurs choix vont ensemble). Dès ta première réponse, donne un `nom` court à la "
-                        "fonctionnalité. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
+                        "fonctionnalité, et rends aussi `en_clair` : l'objectif de la demande pour n'importe qui (1 à 3 phrases "
+                        "sans jargon : ce qu'on veut obtenir et pourquoi), affiché en tête de la tâche ; précise-le "
+                        "ensuite si les réponses le changent. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                         "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
                         "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
                         f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
@@ -4438,6 +4440,8 @@ def _suite_cadrage(projet, etat, t, r):
     fid = t["fonctionnalite"]
     if r.get("nom"):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
+    if isinstance(r.get("en_clair"), str) and r["en_clair"].strip():    # l'objectif pour n'importe qui (panneau)
+        lancer(projet, "fonctionnalite", {"id": fid, "en_clair": r["en_clair"]})
         lancer(projet, "tache", {"id": t["id"], "titre": wf.titre_du_cadrage(_fonc(projet, fid), r["nom"][:80])})
     fiche = _fiche_correction(projet, t, r)
     if fiche:
@@ -4476,6 +4480,8 @@ def _suite_fiche_correction(projet, fid, fiche):
         etapes.append("Piste : " + ligne(fiche["piste"]))
     lancer(projet, "fonctionnalite", {"id": fid, "cahier": {"maquette": [], "etapes": etapes,
                                                              "valide_le": su.maintenant()}})
+    if en_clair:
+        lancer(projet, "fonctionnalite", {"id": fid, "en_clair": en_clair})
     f = _fonc(projet, fid)
     lancer(projet, "file", {"fonctionnalite": fid, "elements": [
         {"id": "correction", "nom": f["nom"], "objectif": ligne(fiche.get("attendu"))[:300] or None}]})

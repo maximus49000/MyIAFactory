@@ -457,7 +457,7 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
         if f.get("genre") is not None and not _genre_valide(f["genre"]):
             erreurs.append(f"{nom} : « genre » doit être un identifiant de genre "
                            "(minuscules, chiffres et tirets, 40 au plus).")
-        for champ in ("workflow", "deplacee_vers"):
+        for champ in ("workflow", "deplacee_vers", "en_clair"):
             if not _texte_ou_nul(f.get(champ)):
                 erreurs.append(f"{nom} : « {champ} » doit être un texte.")
         for k, x in enumerate(f.get("workflow_etapes") or [], 1) if isinstance(f.get("workflow_etapes"), list) else ():

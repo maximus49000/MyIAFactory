@@ -689,7 +689,7 @@ def _fonc_compacte(f):
     cahier, methode = f.get("cahier"), f.get("methode")
     return {
         "id": f["id"], "nom": f["nom"], "etape": f["etape"], "genre": f.get("genre"), "workflow": f.get("workflow"),
-        "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"],
+        "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"], "en_clair": f.get("en_clair"),
         "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
         "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
         "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
@@ -840,6 +840,8 @@ def cmd_fonctionnalite(ctx, e):
             if e["workflow"] is not None and e["workflow"] not in connus:
                 raise Refus(f"Workflow inconnu « {e['workflow']} » ({', '.join(connus) or 'aucun'}).")
             f["workflow"] = e["workflow"]
+        if "en_clair" in e:        # l'objectif de la tâche pour n'importe qui, en tête de son panneau
+            f["en_clair"] = " ".join(texte(e, "en_clair").split())[:rel.MAX_EN_CLAIR]
         if "deplacee_vers" in e:   # le nom du projet où la fonctionnalité est partie (étape « deplacee »)
             f["deplacee_vers"] = texte(e, "deplacee_vers", obligatoire=False)
         if "agent_cadrage" in e:
@@ -2355,7 +2357,7 @@ def construire_releve(ctx):
              "decisions": [_decision_au_releve(d, s, f["id"]) for d in f["decisions"]],
              "catalogue": bool(f["catalogue"] or f["id"] in ctx.f["catalogues"]),
              "cahier": f["cahier"], "methode": f["methode"], "livrable": f["livrable"]}
-        for cle in ("genre", "workflow", "deplacee_vers"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
+        for cle in ("genre", "workflow", "deplacee_vers", "en_clair"):   # facultatifs : absents d'un projet qui n'en a pas l'usage
             if f.get(cle):
                 v[cle] = f[cle]
         w = wf.de_la_fonctionnalite(ctx.f, f) if f.get("workflow") else None

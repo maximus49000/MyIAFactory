@@ -116,9 +116,36 @@ class TestSuivre(unittest.TestCase):
         self.assertEqual(r["conclusion"], "timeout")
         self.assertEqual(sum(pauses), 180)
 
-    def test_echec_gh_leve(self):
+
+class TestPannes(unittest.TestCase):
+    def test_delai_depasse_leve(self):
+        faux = Faux(subprocess.TimeoutExpired("gh", 120))
+        with self.assertRaises(ga.Gh_indisponible):
+            ga.declencher("d", "ci.yml", "main", {}, lancer=faux)
+        self.assertEqual(faux.appels[0][1]["timeout"], ga.DELAI_COMMANDE_S)
+
+    def test_trois_echecs_puis_succes(self):
+        faux = Faux((1, "", "x"), (1, "", "x"), (1, "", "x"), vue("completed", "success"))
+        lignes = []
+        r = ga.suivre("d", 7, dormir=lambda s: None, dire=lignes.append, lancer=faux)
+        self.assertEqual(r["conclusion"], "success")
+        self.assertEqual(len(lignes), 3)
+        self.assertTrue(all("gh ne répond pas, nouvel essai" in l for l in lignes))
+
+    def test_compteur_remis_a_zero(self):
+        faux = Faux((1, "", "x"), (1, "", "x"), vue("in_progress"), (1, "", "x"), (1, "", "x"), (1, "", "x"),
+                    vue("completed", "success"))
+        r = ga.suivre("d", 7, dormir=lambda s: None, dire=lambda _: None, lancer=faux)
+        self.assertEqual(r["conclusion"], "success")
+
+    def test_quatre_echecs_leve(self):
         with self.assertRaises(ga.Gh_indisponible):
             ga.suivre("d", 7, dormir=lambda s: None, dire=lambda _: None, lancer=Faux((1, "", "x")))
+
+    def test_booleens_en_minuscules(self):
+        faux = Faux(ok())
+        ga.declencher("d", "ci.yml", "main", {"a": True, "b": False}, lancer=faux)
+        self.assertEqual(faux.appels[0][0][-4:], ["-f", "a=true", "-f", "b=false"])
 
 
 class TestTelecharger(unittest.TestCase):

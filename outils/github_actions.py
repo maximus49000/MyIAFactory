@@ -14,6 +14,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 MSG_CONNEXION = "gh n'est pas installé ou pas connecté : lancez `gh auth login` (portées repo et workflow)."
 PAS_S = 60
+DELAI_COMMANDE_S = 120
+ECHECS_TOLERES = 3
 
 
 class Gh_indisponible(Exception):
@@ -22,7 +24,10 @@ class Gh_indisponible(Exception):
 
 def _lancer(argv: List[str], lancer, dossier: Optional[str] = None):
     try:
-        r = lancer(argv, cwd=dossier, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        r = lancer(argv, cwd=dossier, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                   timeout=DELAI_COMMANDE_S)
+    except subprocess.TimeoutExpired as e:
+        raise Gh_indisponible("gh ne répond pas (plus de %d s)." % DELAI_COMMANDE_S) from e
     except (FileNotFoundError, PermissionError, OSError) as e:
         raise Gh_indisponible(MSG_CONNEXION) from e
     if r.returncode != 0:
@@ -55,6 +60,8 @@ def visibilite(depot_dossier: str, lancer: Callable = subprocess.run) -> str:
 def declencher(depot_dossier: str, workflow: str, ref: str, entrees: Dict, lancer: Callable = subprocess.run) -> None:
     argv = ["gh", "workflow", "run", workflow, "--ref", ref]
     for cle, valeur in (entrees or {}).items():
+        if isinstance(valeur, bool):
+            valeur = "true" if valeur else "false"
         argv += ["-f", "%s=%s" % (cle, valeur)]
     _lancer(argv, lancer, depot_dossier)
 
@@ -85,22 +92,36 @@ def execution_du_commit(depot_dossier: str, workflow: str, commit: str,
 def suivre(depot_dossier: str, run_id: int, dormir: Callable = time.sleep, dire: Callable = print,
            delai_s: int = 3600, lancer: Callable = subprocess.run) -> Dict:
     ecoule = 0
+    echecs = 0
+    resume = {"id": run_id, "statut": None, "conclusion": None, "duree_s": 0, "url": ""}
     while True:
-        v = _json(["gh", "run", "view", str(run_id), "--json", "status,conclusion,createdAt,updatedAt,url"],
-                  lancer, depot_dossier)
-        resume = _resume(v, run_id)
-        if resume["statut"] == "completed":
-            return resume
+        try:
+            v = _json(["gh", "run", "view", str(run_id), "--json", "status,conclusion,createdAt,updatedAt,url"],
+                      lancer, depot_dossier)
+        except Gh_indisponible:
+            echecs += 1
+            if echecs > ECHECS_TOLERES:
+                raise
+            v = None
+        if v is not None:
+            echecs = 0
+            resume = _resume(v, run_id)
+            if resume["statut"] == "completed":
+                return resume
         if ecoule >= delai_s:
             resume["conclusion"] = "timeout"
             return resume
-        dire("exécution %s : %s (%d min)" % (run_id, resume["statut"], ecoule // 60))
+        if v is None:
+            dire("exécution %s : gh ne répond pas, nouvel essai (%d min)" % (run_id, ecoule // 60))
+        else:
+            dire("exécution %s : %s (%d min)" % (run_id, resume["statut"], ecoule // 60))
         attente = min(PAS_S, delai_s - ecoule)
         dormir(attente)
         ecoule += attente
 
 
 def telecharger(depot_dossier: str, run_id: int, nom: str, dossier: str, lancer: Callable = subprocess.run) -> str:
+    """Télécharge l'artefact `nom` dans `dossier` et rend le premier fichier trié trouvé, ou le dossier s'il est vide."""
     _lancer(["gh", "run", "download", str(run_id), "-n", nom, "-D", dossier], lancer, depot_dossier)
     fichiers = sorted(p for p in Path(dossier).rglob("*") if p.is_file())
     return str(fichiers[0]) if fichiers else dossier

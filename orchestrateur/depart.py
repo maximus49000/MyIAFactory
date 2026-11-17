@@ -153,19 +153,22 @@ toi. Lance **seulement les tests touchés** par ta tâche (les fichiers de test 
 au plus, à la fin, et seulement si ta tâche le demande."""
 
 
-def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossier où lancer>"):
+def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossier où lancer>",
+                    reglages=None):
     """La consigne des actions déportées sur GitHub, ou "" quand toutes sont au poste (le message de départ des projets
     sans déport ne change pas d'un caractère). `lieux` : `{action: lieu effectif}` ; `commandes` : les commandes du
-    projet (`deport.commandes`), sinon celle du catalogue. Pure : l'appelant lit les réglages."""
+    projet (`deport.commandes`), sinon celle du catalogue ; `reglages` : le fichier de réglages du projet quand il n'est pas
+    à l'emplacement par défaut (le lanceur doit résoudre le même lieu). Pure : l'appelant lit les réglages."""
     lieux, commandes = lieux or {}, commandes or {}
     deportees = [a for a in catalogue if lieux.get(a, "poste") == "github"]
     if not deportees:
         return ""
     lancer = f'python "{LANCEUR_DE_TESTS}" deporter'
+    options = f' --dossier "{dossier}"' + (f' --reglages "{reglages}"' if reglages else "")
     lignes = []
     for a in deportees:
         commande = commandes.get(a) or catalogue[a].get("commande") or "<ta commande>"
-        lignes.append(f"- {catalogue[a]['libelle']} : `{lancer} {a} --dossier {dossier} -- {commande}`")
+        lignes.append(f"- {catalogue[a]['libelle']} : `{lancer} {a}{options} -- {commande}`")
     return "\n".join([
         "## Actions déportées sur GitHub",
         "Ces actions ne tournent pas sur ce poste : lance-les **uniquement** par le lanceur, jamais directement.",

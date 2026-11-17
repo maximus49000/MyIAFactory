@@ -3699,29 +3699,39 @@ def _depart_d_un_lot(ctx, e):
                                           deport=_deport_du_depart(ctx))}
 
 
-def _deport_du_depart(ctx):
-    """La consigne des actions déportées pour l'agent de ce projet ("" si tout est au poste, y compris quand les
-    réglages sont absents ou illisibles) : lieux effectifs = surcharge du projet, sinon défaut du bureau, sinon poste."""
-    from bureau.deport import lieu_effectif
-    from bureau.deport_types import catalogue_du_projet
+BUREAU_DEPORT = "~/MyIAFactory/bureau.json"   # remplacé par les tests
 
-    def deport(chemin):
-        try:
-            d = json.loads(Path(chemin).read_text(encoding="utf-8-sig")).get("deport")
-        except (OSError, ValueError, AttributeError):
-            return {}
-        return d if isinstance(d, dict) else {}
 
-    projet = _projet(ctx)
-    catalogue = catalogue_du_projet(projet)[1]
-    reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else projet / ".factory" / "reglages.json"
-    du_projet = deport(reglages)
-    globaux = deport(Path("~/MyIAFactory/bureau.json").expanduser())
-    lieux = {a: lieu_effectif(globaux.get("lieux") if isinstance(globaux.get("lieux"), dict) else {},
-                              du_projet.get("lieux") if isinstance(du_projet.get("lieux"), dict) else {}, a)
-             for a in catalogue}
-    commandes = du_projet.get("commandes") if isinstance(du_projet.get("commandes"), dict) else {}
-    return depart.deport_consigne(lieux, catalogue, commandes, str(projet))
+def _deport_du_depart(ctx, bureau=None):
+    """La consigne des actions déportées pour l'agent de ce projet. "" si tout est au poste, et aussi au moindre
+    souci (réglages absents ou illisibles, contexte invalide) : une consigne manquante vaut mieux qu'un départ
+    cassé. Lieux effectifs : surcharge du projet, sinon défaut du bureau, sinon poste."""
+    try:
+        from bureau.deport import lieu_effectif
+        from bureau.deport_types import catalogue_du_projet
+
+        def deport(chemin):
+            try:
+                d = json.loads(Path(chemin).read_text(encoding="utf-8-sig")).get("deport")
+            except (OSError, ValueError, AttributeError):
+                return {}
+            return d if isinstance(d, dict) else {}
+
+        def objet(d, cle):
+            v = d.get(cle)
+            return v if isinstance(v, dict) else {}
+
+        projet = _projet(ctx)
+        catalogue = catalogue_du_projet(projet)[1]
+        par_defaut = projet / ".factory" / "reglages.json"
+        reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else par_defaut
+        du_projet = deport(reglages)
+        globaux = deport(Path(bureau or BUREAU_DEPORT).expanduser())
+        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a) for a in catalogue}
+        ailleurs = str(reglages) if reglages != par_defaut else None
+        return depart.deport_consigne(lieux, catalogue, objet(du_projet, "commandes"), str(projet), ailleurs)
+    except Exception:
+        return ""
 
 
 def cmd_depart(ctx, e):

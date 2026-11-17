@@ -1,8 +1,13 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 
 from bureau.deport_types import ANDROID, GENERIQUE
-from orchestrateur import depart
+from orchestrateur import depart, outil
 from tests.test_orch_depart import fiche
+from tests import test_orch_lots_outil as lots
 
 
 def _tous(lieu):
@@ -31,7 +36,7 @@ class TestDeportConsigne(unittest.TestCase):
 
     def test_commande_du_projet(self):
         t = depart.deport_consigne({"tests": "github"}, GENERIQUE, {"tests": "npx vitest run"}, dossier="D:/p")
-        self.assertIn("deporter tests --dossier D:/p -- npx vitest run", t)
+        self.assertIn('deporter tests --dossier "D:/p" -- npx vitest run', t)
 
     def test_dans_le_budget(self):
         t = depart.deport_consigne({a: "github" for a in ANDROID}, ANDROID)
@@ -57,22 +62,75 @@ class TestAssemblage(unittest.TestCase):
 
 
 class TestLectureDesReglages(unittest.TestCase):
+    def setUp(self):
+        t = tempfile.TemporaryDirectory()
+        self.addCleanup(t.cleanup)
+        self.projet = Path(t.name) / "mon projet"
+        (self.projet / ".factory").mkdir(parents=True)
+        self.bureau = Path(t.name) / "bureau.json"
+        self.ctx = SimpleNamespace(f={"base": self.projet / ".factory", "reglages": None})
+
+    def ecrire(self, chemin, deport):
+        Path(chemin).write_text(json.dumps({"deport": deport}), encoding="utf-8")
+
+    def consigne(self, ctx=None):
+        return outil._deport_du_depart(ctx or self.ctx, bureau=self.bureau)
+
+    def test_rien_ne_change_sans_deport(self):
+        self.assertEqual(self.consigne(), "")   # ni bureau.json ni réglages
+
     def test_depuis_les_reglages_du_projet(self):
-        import json
-        import tempfile
-        from pathlib import Path
-        from types import SimpleNamespace
-        from orchestrateur import outil
-        with tempfile.TemporaryDirectory() as t:
-            projet = Path(t)
-            (projet / ".factory").mkdir()
-            ctx = SimpleNamespace(f={"base": projet / ".factory", "reglages": None})
-            self.assertEqual(outil._deport_du_depart(ctx), "") if not Path("~/MyIAFactory/bureau.json").expanduser().exists() else None
-            (projet / ".factory" / "reglages.json").write_text(json.dumps(
-                {"deport": {"lieux": {"apk": "github"}, "commandes": {"apk": "make apk"}}}), encoding="utf-8")
-            texte = outil._deport_du_depart(ctx)
+        self.ecrire(self.projet / ".factory" / "reglages.json",
+                    {"lieux": {"apk": "github"}, "commandes": {"apk": "make apk"}})
+        texte = self.consigne()
         self.assertIn("deporter apk", texte)
         self.assertIn("-- make apk", texte)
+        self.assertIn('--dossier "%s"' % self.projet, texte)
+        self.assertNotIn("--reglages", texte)   # emplacement par défaut
+
+    def test_defaut_global_github_surcharge_projet_poste(self):
+        self.ecrire(self.bureau, {"lieux": {a: "github" for a in GENERIQUE}})
+        self.assertIn("deporter apk", self.consigne())
+        self.ecrire(self.projet / ".factory" / "reglages.json", {"lieux": {a: "poste" for a in GENERIQUE}})
+        self.assertEqual(self.consigne(), "")
+
+    def test_reglages_ailleurs_ajoutent_l_option(self):
+        autre = self.projet / "reglages.json"
+        self.ecrire(autre, {"lieux": {"apk": "github"}})
+        ctx = SimpleNamespace(f={"base": self.projet / ".factory", "reglages": autre})
+        self.assertIn('--reglages "%s"' % autre, self.consigne(ctx))
+
+    def test_reglages_invalides_donnent_vide(self):
+        chemin = self.projet / ".factory" / "reglages.json"
+        chemin.write_text("{ cassé", encoding="utf-8")
+        self.assertEqual(self.consigne(), "")
+        for deport in ("texte", ["x"], {"lieux": "github"}, {"lieux": ["apk"]}, {"lieux": {"apk": "github"}, "commandes": 3}):
+            self.ecrire(chemin, deport)
+            texte = self.consigne()
+            if isinstance(deport, dict) and isinstance(deport.get("lieux"), dict):
+                self.assertIn("deporter apk", texte)
+            else:
+                self.assertEqual(texte, "")
+
+    def test_contexte_invalide_donne_vide(self):
+        self.assertEqual(outil._deport_du_depart(SimpleNamespace(f={})), "")
+        self.assertEqual(outil._deport_du_depart(None), "")
+
+
+class TestDepartDeBoutEnBout(lots.AvecTaches):
+    def setUp(self):
+        super().setUp()
+        (self.dossier / "reglages.json").write_text(json.dumps(
+            {"images": {"racines": ["pieces"]}, "deport": {"lieux": {"apk": "github"}}}), encoding="utf-8")
+
+    def test_tache_seule_et_lot(self):
+        a, b = self.nt("Écrire le menu"), self.nt("Autre tâche")
+        seul = self.ok("lancer", "depart", entree={"agent": "dev-1", "tache": a})["message"]
+        lot = self.ok("lancer", "depart", entree={"agent": "dev-1", "taches": [a, b]})["message"]
+        for m in (seul, lot):
+            self.assertIn("## Actions déportées sur GitHub", m)
+            self.assertIn("deporter apk", m)
+            self.assertIn("--reglages", m)   # les réglages du projet ne sont pas dans .factory/
 
 
 if __name__ == "__main__":

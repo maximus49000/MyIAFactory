@@ -78,10 +78,14 @@ class Base(unittest.TestCase):
         self.bureau = self.tmp / "bureau.json"
         self.attente = self.tmp / "deport-en-cours"
         self.poste = []
+        self.envs = []
         self.dits = []
+        self.artefacts = self.tmp / "artefacts"          # jamais le vrai ~/MyIAFactory
+        self.conso = self.tmp / "conso"
 
-    def executer_poste(self, commande, dossier=None, attendre=True):
+    def executer_poste(self, commande, dossier=None, attendre=True, env=None):
         self.poste.append((list(commande), dossier, attendre))
+        self.envs.append(env)
         return 0
 
     def projet(self, lieux=None, genre=None, pousse=True, workflow=True):
@@ -111,7 +115,8 @@ class Base(unittest.TestCase):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             code = deporter.main(argv, executer_poste=self.executer_poste, gh=gh or FauxGh(),
-                                 dormir=lambda s: None, bureau=self.bureau, repertoire_attente=self.attente, **k)
+                                 dormir=lambda s: None, bureau=self.bureau, repertoire_attente=self.attente,
+                                 artefacts=self.artefacts, cache_conso=self.conso, **k)
         self.sortie = sortie.getvalue()
         return code
 
@@ -434,7 +439,8 @@ class TestCorrectifs(Base):
         def appel():
             codes.append(deporter.main(["tests", "--dossier", str(d)], executer_poste=self.executer_poste, gh=gh,
                                        dormir=lambda s: time.sleep(0.02), dire=lambda *a, **k: None,
-                                       bureau=self.bureau, repertoire_attente=self.attente))
+                                       bureau=self.bureau, repertoire_attente=self.attente,
+                                       artefacts=self.artefacts, cache_conso=self.conso))
         fils = [threading.Thread(target=appel) for _ in range(2)]
         for f in fils:
             f.start()
@@ -517,6 +523,198 @@ class TestCorrectifs(Base):
         d = self.projet({"tests": "serveur"}, genre=self.ANDROID)
         self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--poste", "--", "x"]), 0)
         self.assertEqual(len(self.poste), 1)
+
+
+class GhQuiTelecharge(FauxGh):
+    def telecharger(self, depot, run_id, nom, dossier):
+        self.appels.append(("telecharger", run_id, nom, dossier))
+        Path(dossier).mkdir(parents=True, exist_ok=True)
+        (Path(dossier) / "app-debug.apk").write_bytes(b"APK")
+        return str(Path(dossier) / "app-debug.apk")
+
+
+class TestRelectureFinale(Base):
+    """Relecture finale de la branche : I2, I4, I5, I6, I7, I8 et le délai de suivi."""
+    ANDROID = "application-mobile-android"
+
+    def declenchements(self, gh):
+        return [a for a in gh.appels if isinstance(a, tuple) and a[0] == "declencher"]
+
+    def fini(self, conclusion, id_=5):
+        return {"id": id_, "statut": "completed", "conclusion": conclusion, "duree_s": 1, "url": "http://run/%d" % id_}
+
+    # -- I2 : réutilisation jugée sur les jobs nécessaires, une seule relance par (commit, job) --
+    def test_un_job_sans_rapport_en_echec_ne_redeclenche_pas(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        gh = FauxGh(run=self.fini("failure"), jobs=[{"name": "tests", "conclusion": "success"},
+                                                    {"name": "lint", "conclusion": "failure"}])
+        for _ in range(3):
+            self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 0)
+        self.assertEqual(self.declenchements(gh), [])
+
+    def test_amont_reussi_un_autre_job_en_echec_reutilise(self):
+        d = self.projet({"apk": "github", "charge": "github"})
+        gh = GhQuiTelecharge(run=self.fini("failure"), jobs=[{"name": "apk", "conclusion": "success"},
+                                                             {"name": "charge", "conclusion": "failure"}])
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"], gh=gh), 0)
+        self.assertEqual(self.declenchements(gh), [])
+
+    def test_job_necessaire_en_echec_relance_une_fois_puis_plus(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        gh = FauxGh(run=self.fini("failure"), conclusion="failure", jobs=[{"name": "tests", "conclusion": "failure"}])
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 1)
+        self.assertEqual(len(self.declenchements(gh)), 1)
+        for _ in range(2):
+            self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 1)
+            self.assertIn("déjà relancé une fois pour ce commit : corrige le code", self.sortie)
+        self.assertEqual(len(self.declenchements(gh)), 1)
+
+    def test_amont_en_echec_relance_une_fois_puis_code_5(self):
+        d = self.projet({"apk": "github"})
+        gh = FauxGh(run=self.fini("failure"), conclusion="failure", jobs=[{"name": "apk", "conclusion": "failure"}])
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"], gh=gh), 5)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"], gh=gh), 5)
+        self.assertIn("déjà relancé une fois", self.sortie)
+        self.assertEqual(len(self.declenchements(gh)), 1)
+        self.assertEqual(self.poste, [])
+
+    # -- I4 : modifications suivies non commitées --
+    def test_modification_suivie_non_commitee_code_6_avec_la_liste(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        (d / ".github" / "workflows" / "monprojet.yml").write_text("name: y\n", encoding="utf-8")
+        gh = FauxGh()
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 6)
+        self.assertIn(".github/workflows/monprojet.yml", self.sortie)
+        self.assertIn("GitHub teste le commit poussé", self.sortie)
+        self.assertEqual(self.declenchements(gh), [])
+
+    def test_la_liste_est_plafonnee(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        for i in range(15):
+            (d / ("f%02d.txt" % i)).write_text("a", encoding="utf-8")
+        git(d, "add", "-A")
+        git(d, "commit", "-m", "fichiers")
+        git(d, "push", "origin", "main")
+        for i in range(15):
+            (d / ("f%02d.txt" % i)).write_text("b", encoding="utf-8")
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)]), 6)
+        self.assertIn("(et 5 autres)", self.sortie)
+
+    def test_l_etat_de_la_factory_n_empeche_pas_le_deport(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        (d / ".factory" / "suivi.json").write_text("{}", encoding="utf-8")
+        git(d, "add", "-A")
+        git(d, "commit", "-m", "suivi")
+        git(d, "push", "origin", "main")
+        (d / ".factory" / "suivi.json").write_text('{"t": 1}', encoding="utf-8")      # le moteur l'écrit sans cesse
+        (d / "nonsuivi.txt").write_text("x", encoding="utf-8")                          # non suivi : ignoré
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)]), 0)
+
+    # -- I5 : un sous-dossier du projet --
+    def test_un_sous_dossier_donne_le_projet(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        (d / "app").mkdir()
+        gh = FauxGh()
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d / "app")], gh=gh), 0)
+        self.assertIn(("declencher", "monprojet.yml", "main"), gh.appels)
+        self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d / "app")], bureau=self.bureau), "github")
+        self.assertTrue(deporter.faut_deporter("tests", ["--dossier", str(d / "app")], bureau=self.bureau))
+        self.assertEqual(self.lancer(["lint", "--dossier", str(d / "app"), "--", "x"]), 0)   # catalogue Android
+
+    # -- I6 : la clé de l'agent dans le fichier d'attente --
+    def test_la_cle_de_l_agent_est_ecrite(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"MYIAFACTORY_AGENT": "cle-9"}):
+            deporter.ecrire_attente("a-2", "tests", "apk", "github", dossier="/x", repertoire=self.attente)
+        self.assertEqual(json.loads((self.attente / "a-2.json").read_text(encoding="utf-8"))["agent"], "cle-9")
+        with mock.patch.dict(os.environ, {"MYIAFACTORY_AGENT": ""}):
+            deporter.ecrire_attente("a-3", "tests", "apk", "github", dossier="/x", repertoire=self.attente)
+        self.assertNotIn("agent", json.loads((self.attente / "a-3.json").read_text(encoding="utf-8")))
+
+    # -- I7 : quota --
+    def ecrire_conso(self, d, utilisees):
+        self.conso.mkdir(parents=True, exist_ok=True)
+        (self.conso / "deport-conso.json").write_text(json.dumps({"depots": {str(d): {
+            "lu_a": time.time(), "public": False, "quota": {"utilisees": utilisees, "incluses": 2000},
+            "executions": []}}}), encoding="utf-8")
+
+    def test_quota_depasse_code_8_sans_declencher(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        self.ecrire_conso(d, 2000)
+        gh = FauxGh()
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 8)
+        self.assertIn("--poste", self.sortie)
+        self.assertIn("Directeur", self.sortie)
+        self.assertEqual(self.declenchements(gh), [])
+        self.ecrire_conso(d, 100)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 0)
+
+    def test_quota_depasse_un_run_reussi_reste_reutilisable(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        self.ecrire_conso(d, 5000)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=FauxGh(run=self.fini("success"))), 0)
+
+    def test_startup_failure_code_8(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=FauxGh(conclusion="startup_failure")), 8)
+        self.assertIn("quota probablement épuisé", self.sortie)
+        gh = FauxGh(run=self.fini("startup_failure"))
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 8)
+        self.assertEqual(self.declenchements(gh), [])
+
+    # -- I8 : artefacts hors du projet, chemin exporté, réutilisés --
+    def test_artefact_hors_du_projet_chemin_exporte_et_reutilise(self):
+        d = self.projet({"apk": "github"})
+        commit = git(d, "rev-parse", "HEAD")
+        gh = GhQuiTelecharge()
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"], gh=gh), 0)
+        apk = self.artefacts / commit / "apk" / "app-debug.apk"
+        self.assertTrue(apk.is_file())
+        self.assertFalse((d / "artefacts").exists())
+        self.assertEqual(self.envs[-1], {"MYIAFACTORY_ARTEFACT_APK": str(apk)})
+        self.assertIn(str(apk), self.sortie)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"], gh=gh), 0)
+        self.assertEqual(len([a for a in gh.appels if isinstance(a, tuple) and a[0] == "telecharger"]), 1)
+        self.assertEqual(self.envs[-1], {"MYIAFACTORY_ARTEFACT_APK": str(apk)})
+        self.assertEqual(list(apk.parent.parent.iterdir()), [apk.parent])     # pas de reste « .partiel »
+
+    def test_nom_de_variable(self):
+        self.assertEqual(deporter._nom_variable("apk-release"), "MYIAFACTORY_ARTEFACT_APK_RELEASE")
+
+    # -- (e) délai dépassé : distinct d'un échec --
+    def test_delai_depasse_dit_que_l_execution_tourne_peut_etre_encore(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=FauxGh(conclusion="timeout")), 1)
+        self.assertIn("délai dépassé, l'exécution tourne peut-être encore", self.sortie)
+        self.assertNotIn("échouée", self.sortie)
+
+    def test_code_7_parle_de_la_branche_par_defaut(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID, workflow=False)
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)]), 7)
+        self.assertIn("branche par défaut", self.sortie)
+
+    def test_workflow_introuvable_au_declenchement_code_7(self):
+        d = self.projet({"tests": "github"}, genre=self.ANDROID)
+        gh = FauxGh()
+
+        def declencher(*a):
+            raise github_actions.Gh_indisponible("gh workflow run a échoué (1) : HTTP 404: Not Found")
+        gh.declencher = declencher
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d)], gh=gh), 7)
+        self.assertIn("branche par défaut", self.sortie)
+
+
+class TestCampagneEnv(unittest.TestCase):
+    def test_executer_reste_compatible_et_passe_env(self):
+        import campagne
+        vus = []
+        dossier = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(dossier, ignore_errors=True))
+        kw = dict(verrou=Path(dossier) / "v.json", lister=lambda: [], dormir=lambda s: None, dire=lambda *a, **k: None)
+        self.assertEqual(campagne.executer(["x"], dossier=dossier, lancer=lambda c, d: vus.append((c, d)) or 0, **kw), 0)
+        self.assertEqual(campagne.executer(["x"], dossier=dossier, env={"A": "1"},
+                                           lancer=lambda c, d, env=None: vus.append((c, d, env)) or 0, **kw), 0)
+        self.assertEqual(vus[1][2], {"A": "1"})
 
 
 if __name__ == "__main__":

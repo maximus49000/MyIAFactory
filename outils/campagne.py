@@ -224,22 +224,27 @@ def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, do
             _oublier_l_attente(attentes)
 
 
-def _lancer(commande, dossier):
-    """Lance la commande de test (sous Windows par l'interpréteur de commandes : `npx`, `npm` sont des `.cmd`)."""
+def _lancer(commande, dossier, env=None):
+    """Lance la commande de test (sous Windows par l'interpréteur de commandes : `npx`, `npm` sont des `.cmd`).
+    `env` : des variables ajoutées à l'environnement hérité (ex. le chemin d'un artefact téléchargé)."""
+    complet = dict(os.environ, **env) if env else None
     if sys.platform == "win32":
-        return subprocess.run(subprocess.list2cmdline(commande), cwd=dossier, shell=True).returncode
-    return subprocess.run(commande, cwd=dossier).returncode
+        return subprocess.run(subprocess.list2cmdline(commande), cwd=dossier, shell=True, env=complet).returncode
+    return subprocess.run(commande, cwd=dossier, env=complet).returncode
 
 
 def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
-             lancer=_lancer, attentes=ATTENTES):
+             lancer=_lancer, attentes=ATTENTES, env=None):
     """Les tests d'un projet, une campagne à la fois sur le poste : attend son tour, lance `commande` dans `dossier`,
-    rend son code (3 si refusé sans attendre) et libère toujours le verrou."""
+    rend son code (3 si refusé sans attendre) et libère toujours le verrou. `env` : variables ajoutées à
+    l'environnement de la commande (sans `env`, `lancer` est appelé comme avant, à deux arguments)."""
     racine = str(Path(dossier or os.getcwd()).resolve())
     if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire,
                              attentes=attentes):
         return 3
     try:
+        if env:
+            return lancer(list(commande), dossier, env=env)
         return lancer(list(commande), dossier)
     finally:
         liberer(verrou)

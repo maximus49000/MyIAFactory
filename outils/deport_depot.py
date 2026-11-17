@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import workflow_github  # noqa: E402
-from bureau.deport_types import catalogue_du_projet  # noqa: E402
+from bureau.deport_types import catalogue_du_projet, racine_du_projet  # noqa: E402
 from moteur import git_sur  # noqa: E402
 
 BRANCHE = "deport/workflow"
@@ -55,8 +55,9 @@ def _racine_du_depot(dossier):
 
 
 def _nom_du_projet(dossier):
-    dossier = Path(dossier).resolve()
-    return dossier.parent.name if dossier.name == ".factory" else dossier.name
+    """Le nom du projet : celui du plus proche dossier qui contient `.factory/` (un agent peut donner un
+    sous-dossier, ex. `app/`), sinon du dossier donné."""
+    return Path(racine_du_projet(Path(dossier).resolve())).name
 
 
 def _texte(sortie):
@@ -123,7 +124,7 @@ def _voulu(dossier, reglages):
     commande manque."""
     deport = (reglages or {}).get("deport") or {}
     lieux = deport.get("lieux") or {}
-    catalogue = catalogue_du_projet(dossier)[1]
+    catalogue = catalogue_du_projet(racine_du_projet(dossier))[1]
     actions = [a for a in catalogue if lieux.get(a) == "github"]
     nom = _nom_du_projet(dossier)
     fichier = nom_fichier(nom)

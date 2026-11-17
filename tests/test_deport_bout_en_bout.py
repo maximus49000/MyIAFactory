@@ -158,6 +158,8 @@ class Base(unittest.TestCase):
         self.attente = self.maison / "deport-en-cours"
         self.cache = self.maison
         self.poste = []
+        self.envs = []
+        self.artefacts = self.maison / "artefacts"
         self.dormis = 0
         self.vu_pendant_attente = []
 
@@ -183,8 +185,9 @@ class Base(unittest.TestCase):
         self.origin = origin
         return d
 
-    def executer_poste(self, commande, dossier=None, attendre=True):
+    def executer_poste(self, commande, dossier=None, attendre=True, env=None):
         self.poste.append((list(commande), dossier, attendre))
+        self.envs.append(env)
         return 0
 
     def dormir(self, secondes):
@@ -199,7 +202,8 @@ class Base(unittest.TestCase):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             code = deporter.main(argv, executer_poste=self.executer_poste, gh=gh, dormir=self.dormir,
-                                 bureau=self.bureau, repertoire_attente=self.attente)
+                                 bureau=self.bureau, repertoire_attente=self.attente, artefacts=self.artefacts,
+                                 cache_conso=self.cache)
         self.sortie = sortie.getvalue()
         return code
 
@@ -269,9 +273,14 @@ class TestCatalogueGenerique(Base):
         code = self.deporter(["tests", "--dossier", str(d), "--", "echo", "tests"], branche)
         self.assertEqual(code, 0, self.sortie)
         self.assertEqual(gh.declenchements, 1)                      # même commit : le run est réutilisé
-        self.assertIn(["gh", "run", "download", "77", "-n", "apk", "-D", str(d / "artefacts" / "apk")], gh.appels)
-        self.assertTrue((d / "artefacts" / "apk" / "app-debug.apk").is_file())
+        # ruling 15 : l'artefact va hors du projet, dans <artefacts>/<commit>/apk, et son chemin est passé à la commande
+        telecharge = [a for a in gh.appels if a[1:3] == ["run", "download"]]
+        self.assertEqual(len(telecharge), 1)
+        apk = self.artefacts / tete / "apk" / "app-debug.apk"
+        self.assertTrue(apk.is_file())
+        self.assertFalse((d / "artefacts").exists())
         self.assertEqual(self.poste, [(["echo", "tests"], str(d), True)])
+        self.assertEqual(self.envs[-1], {"MYIAFACTORY_ARTEFACT_APK": str(apk)})
         self.assertTrue(self.vu_pendant_attente)
         attente = self.vu_pendant_attente[0]
         self.assertEqual((attente["action"], attente["attend"], attente["lieu"], attente["dossier"]),
@@ -290,6 +299,7 @@ class TestCatalogueGenerique(Base):
         instant = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc).timestamp()
         lieux = {"apk": "github", "tests": "poste", "charge": "poste", "emulateur": "poste"}
         libelles = {a: e["libelle"] for a, e in catalogue_du_projet(str(d))[1].items()}
+        self.addCleanup(deport_conso.arreter)
         deport_conso.conso(str(d), libelles, lieux, maintenant=lambda: instant, lancer=gh, cache=self.cache)
         deport_conso.attendre(10)
         vue = deport_conso.conso(str(d), libelles, lieux, maintenant=lambda: instant, lancer=gh, cache=self.cache)
@@ -376,10 +386,28 @@ class TestToutAuPoste(Base):
         self.assertFalse((self.cache / "deport-conso.json").exists())
 
     def test_lancer_tests_passe_par_deporter_seulement_si_necessaire(self):
-        """`lancer.py tests` n'appelle `deporter` que si `faut_deporter` le dit (lu dans le source du lanceur)."""
-        source = (RACINE / "lancer.py").read_text(encoding="utf-8")
-        self.assertIn('if deporter.faut_deporter("tests", sys.argv[2:])', source)
-        self.assertIn("sys.exit(campagne.main(sys.argv[2:]))", source)
+        """`lancer.py tests` route par `deporter.lancer_tests` : `deporter` seulement si `faut_deporter` le dit,
+        sinon la campagne du poste (vérifié en exécutant le vrai `lancer.py`, routage remplacé par un témoin)."""
+        import runpy
+        poste = self.projet({})
+        vus = []
+        vrai = deporter.lancer_tests
+
+        def lancer_tests(argv, **k):      # le vrai routage, mais vers des témoins et le faux bureau
+            return vrai(argv, bureau=self.bureau,
+                                         deporter_main=lambda a: vus.append(("deporter", a)) or 0,
+                                         campagne_main=lambda a: vus.append(("campagne", a)) or 0)
+        with mock.patch.object(deporter, "lancer_tests", lancer_tests),                 mock.patch.object(sys, "argv", ["lancer.py", "tests", "--dossier", str(poste), "--", "x"]):
+            with self.assertRaises(SystemExit) as fin:
+                runpy.run_path(str(RACINE / "lancer.py"), run_name="__main__")
+        self.assertEqual(fin.exception.code, 0)
+        self.assertEqual(vus, [("campagne", ["--dossier", str(poste), "--", "x"])])
+        reg = json.loads(self.reglages.read_text(encoding="utf-8"))
+        reg["deport"]["lieux"] = {"tests": "github"}
+        self.reglages.write_text(json.dumps(reg), encoding="utf-8")
+        vus.clear()
+        self.assertEqual(lancer_tests(["--dossier", str(poste), "--", "x"]), 0)
+        self.assertEqual(vus, [("deporter", ["tests", "--dossier", str(poste), "--", "x"])])
 
 
 if __name__ == "__main__":

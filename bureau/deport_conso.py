@@ -278,6 +278,25 @@ def arreter(delai_s=10):
         ARRET.clear()
 
 
+def niveau_en_cache(dossiers, cache=None, maintenant=None):
+    """Le niveau du quota (`ok`, `alerte`, `depasse`) d'après la dernière lecture en cache du premier de `dossiers`
+    (les clés possibles du projet : son dossier, son `.factory`) qui y figure ; `None` si aucun n'y est. Lecture seule,
+    sans `gh` ; ne lève jamais (pour `lancer.py deporter`, avant de déclencher une exécution)."""
+    try:
+        maintenant_s = float((maintenant or time.time)())
+        mois = datetime.fromtimestamp(maintenant_s, timezone.utc).strftime("%Y-%m")
+        depots = _lire_cache(_chemin(cache)).get("depots")
+        if not isinstance(depots, dict):
+            return None
+        for cle in dossiers:
+            entree = depots.get(str(cle))
+            if isinstance(entree, dict) and ("lu_a" in entree or entree.get("executions")):
+                return _vue(entree, {}, str(cle), mois)["niveau"]
+    except Exception:
+        pass
+    return None
+
+
 def conso(dossier, libelles, lieux, maintenant=None, lancer=None, cache=None):
     """L'objet `conso` du projet, ou `None` si aucune de ses actions n'est au lieu `github` (aucun appel à `gh`).
     `libelles` : `{action: libellé}` ; `lieux` : `{action: lieu}`. Répond toujours tout de suite : la dernière valeur du

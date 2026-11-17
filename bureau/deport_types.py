@@ -73,6 +73,30 @@ def catalogue_du_projet(dossier):
     return "generique", GENERIQUE
 
 
+def racine_du_projet(dossier):
+    """Le dossier du projet pour `dossier` (souvent un sous-dossier où travaille un agent, ex. `app/`) : le plus
+    proche (lui-même, puis ses parents) qui contient `.factory/`, sans dépasser la racine du dépôt git ni monter au
+    dossier personnel ; à défaut, `dossier` lui-même (résolu)."""
+    try:
+        depart = os.path.abspath(str(dossier))
+        if os.path.basename(depart) == ".factory":
+            return os.path.dirname(depart)
+        maison = os.path.normcase(os.path.abspath(os.path.expanduser("~")))
+        d = depart
+        while True:
+            if os.path.isdir(os.path.join(d, ".factory")):
+                return d
+            if os.path.exists(os.path.join(d, ".git")):
+                break                      # la racine du dépôt : le projet n'est pas au-dessus
+            parent = os.path.dirname(d)
+            if parent == d or os.path.normcase(parent) == maison:
+                break
+            d = parent
+        return depart
+    except (OSError, ValueError):
+        return str(dossier)
+
+
 def actions_exposees(catalogue):
     """La liste `[{id, libelle, lieux, bientot}]` que le bureau affiche pour ce catalogue."""
     return [{"id": nom, "libelle": e["libelle"], "lieux": list(e["lieux"]), "bientot": e["bientot"]}

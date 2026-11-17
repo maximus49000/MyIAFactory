@@ -28,8 +28,6 @@ if __name__ == "__main__":
                 pass
         if sys.argv[1] == "deporter":
             sys.exit(deporter.main(sys.argv[2:]))
-        if deporter.faut_deporter("tests", sys.argv[2:]):    # sur GitHub, ou en attente d'une production d'ailleurs ;
-            # sinon : les tests au poste, comme toujours
-            sys.exit(deporter.main(["tests"] + sys.argv[2:]))
-        sys.exit(campagne.main(sys.argv[2:]))
+        # sur GitHub, ou en attente d'une production d'ailleurs : par `deporter` ; sinon les tests au poste (campagne)
+        sys.exit(deporter.lancer_tests(sys.argv[2:]))
     sys.exit(serveur.main(sys.argv[1:]))

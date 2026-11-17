@@ -32,3 +32,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Quand on retire une URL en faveur d'une URL paramètrée, préférer une redirection 301/302 avec paramètre préséléctionné plutôt qu'une simple suppression, pour préserver les bookmarks et liens externes.
+
+## G6 — Pour intégrer un écran existant comme onglet d'un composant
+Rôles : dev
+Date : 2026-11-17
+
+Pour intégrer un écran existant comme onglet d'un composant conteneur, le réutiliser sans modification et mocker ses appels API dans le test du conteneur, à l'identique de ce que fait le test de l'écran d'origine.

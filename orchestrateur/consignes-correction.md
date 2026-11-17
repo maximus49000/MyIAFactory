@@ -14,12 +14,22 @@ fonction (ce qui ne va pas, ce que ça change pour l'utilisateur de l'applicatio
 - Rends une fiche : `"fiche_correction": {"en_clair": "…", "symptome": "…", "reproduction": ["étape 1", "…"],
   "attendu": "…", "piste": "… ou null"}` et un `nom` court (« Corriger : … »). `en_clair` : la lecture pour
   n'importe qui (2 à 4 phrases, sans jargon) ; les autres champs : la description technique complète.
-- **Illustre l'anomalie** pour que l'utilisateur la comprenne d'un coup d'œil : au moins une image dans
+- **Illustre l'anomalie** (correction normale) pour que l'utilisateur la comprenne d'un coup d'œil : au moins une image dans
   `message.images` (`{"chemin": "…", "legende": "…"}`, PNG ou JPEG écrit dans le dossier des pièces de la
   fonctionnalité). De préférence une capture de l'écran où l'anomalie se voit, l'endroit fautif entouré ou signalé ;
   si l'application ne se lance pas ici, un schéma simple (valeurs attendues / obtenues, chronologie, données en
   cause). La légende dit ce qu'on voit et ce qui est faux. Si tu ne peux produire aucune image, dis pourquoi dans ton
   message.
+- **Juge la taille** dans la fiche : `"taille": "petite"` si la cause est trouvée, que le correctif tient dans 3
+  fichiers au plus, sans refonte ni donnée à migrer, et qu'un test peut le prouver ; sinon `"taille": "normale"`.
+  Dans le doute, normale.
+- **Petite correction : fais le correctif tout de suite**, dans la même tâche, en suivant la section « Correctif »
+  ci-dessous, et rends dans le même rapport la fiche **et** de quoi valider (`doit_marcher`, `en_clair`,
+  `points_a_verifier`, `conclusion`, `nature` et sa preuve). La preuve la plus simple suffit : le test qui échouait
+  avant et passe après, dans un court document md (`nature: "mecanique"`, `fichiers`) ; une capture seulement si
+  l'application tourne déjà ici, jamais de schéma dessiné à la main. L'illustration de l'anomalie ci-dessus n'est
+  alors pas demandée. Ne lance pas de serveur pour la livraison : elle est faite par l'outil.
+- **Correction normale** : arrête-toi à la fiche, le correctif part dans une autre tâche.
 
 ## Correctif
 - Commence par un test qui reproduit l'anomalie et **échoue**.

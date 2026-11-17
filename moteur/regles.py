@@ -108,6 +108,12 @@ GARDE_FOU_PARCOURS_COURT = ("Parcours court (pas de méthode) : le cahier ci-des
                             "arrête-toi et rends `statut: accord_requis` avec `accord.quoi` = « Passer au parcours "
                             "complet (prototype et méthode) » et la raison : le Directeur décide.")
 ETAPES_DE_FLUX = "flux:"
+# Le parcours d'une petite correction, jugée au diagnostic (essai réel du 2026-11-17 : diagnostic, correctif et livraison,
+# trois agents et 0,94 € pour deux lignes de CSS ; une session directe : 0,10 à 0,40 €).
+TAILLE_PETITE_CORRECTION, PARCOURS_CORRECTION_COURTE = "petite", "correction_courte"
+JOURNAL_CORRECTIF_AU_DIAGNOSTIC = "Petite correction : correctif fait avec le diagnostic."
+JOURNAL_LIVREE_PAR_L_OUTIL = ("Petite correction : livrée par l'outil (le correctif est déjà commité et poussé), sans "
+                              "agent.")
 ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
 GENRE_VALIDATION = "valider_etape"     # la décision de projet posée quand un élément attend le Directeur
 VALIDER = "valider"
@@ -3919,9 +3925,12 @@ JOURNAL_REFUS = "Refusé par l'outil"
 FORME_DES_QUESTIONS = '{"texte": "…", "choix": ["…", "…"], "multiple": false}'
 
 
-def _supplement_de_refus(raison, message=None):
+def _supplement_de_refus(raison, message=None, rapport=None):
     s = f"Ta réponse a été refusée : {raison} Rends-la au bon format, sans refaire le travail."
-    if message:
+    if rapport:      # essai réel (2026-11-17) : seul le message était redonné, l'agent perdait sa fiche de correction
+        s += ("\n\nTon rapport refusé, à rendre **en entier** (tous ses champs) une fois corrigé :\n```json\n"
+              + json.dumps(rapport, ensure_ascii=False)[:8000] + "\n```")
+    elif message:
         s += ("\n\nTon message refusé, à reprendre tel quel une fois corrigé :\n```json\n"
               + json.dumps(message, ensure_ascii=False)[:4000] + "\n```")
     if "questions" in raison:
@@ -3929,12 +3938,12 @@ def _supplement_de_refus(raison, message=None):
     return s
 
 
-def _relancer_apres_refus(projet, etat, depart, raison, message=None):
+def _relancer_apres_refus(projet, etat, depart, raison, message=None, rapport=None):
     """Le même agent, sur la même tâche, avec la raison du refus. Sa session n'est pas reprise (le départ la rejoue en
     entier) : son message refusé est redonné dans la matière, il n'a rien à refaire."""
     tid = depart["taches"][0]
     _m(etat, "refus_relances", set).add(tid)
-    matiere = (depart.get("matiere") or "").rstrip() + "\n\n" + _supplement_de_refus(raison, message)
+    matiere = (depart.get("matiere") or "").rstrip() + "\n\n" + _supplement_de_refus(raison, message, rapport)
     lancer(projet, "tache", {"id": tid, "active": True,
                              "journal": ["Réponse refusée par l'outil : l'agent la rend de nouveau."]})
     etat["departs"][tid] = {**depart, "matiere": matiere}
@@ -3946,7 +3955,8 @@ def _message_refuse(projet, etat, execution, depart, r, raison):
     """Le message d'un agent refusé par l'outil : l'agent le rend de nouveau une fois, puis la tâche est bloquée."""
     tid = depart["taches"][0]
     if tid not in _m(etat, "refus_relances", set):
-        return _relancer_apres_refus(projet, etat, depart, raison, r.get("message"))
+        rapport = {k: x for k, x in r.items() if not str(k).startswith("_")}
+        return _relancer_apres_refus(projet, etat, depart, raison, r.get("message"), rapport)
     _m(etat, "refus_relances", set).discard(tid)
     raison = f"La réponse de l'agent a été refusée par l'outil deux fois : {raison}"
     _bloquer_taches(projet, depart["taches"], raison)
@@ -4629,7 +4639,7 @@ def _suite_cadrage(projet, etat, t, r):
         lancer(projet, "tache", {"id": t["id"], "titre": wf.titre_du_cadrage(_fonc(projet, fid), r["nom"][:80])})
     fiche = _fiche_correction(projet, t, r)
     if fiche:
-        return _suite_fiche_correction(projet, fid, fiche)
+        return _suite_fiche_correction(projet, fid, fiche, etat=etat, r=r)
     if r.get("cahier"):
         cahier = {"maquette": r["cahier"]["maquette"], "etapes": r["cahier"]["etapes"]}
         if "partenaires" in r["cahier"]:      # les partenaires décidés au cadrage (la réponse de l'utilisateur)
@@ -4652,9 +4662,26 @@ def _fiche_correction(projet, t, r):
     return fiche if _fonc(projet, t["fonctionnalite"]).get("nature") == "correction" else None
 
 
-def _suite_fiche_correction(projet, fid, fiche):
+def petite_correction(fiche):
+    """Vrai si le diagnostic juge la correction petite (`fiche_correction.taille`)."""
+    return isinstance(fiche, dict) and fiche.get("taille") == TAILLE_PETITE_CORRECTION
+
+
+def _correctif_au_diagnostic(fiche, r):
+    """Vrai si le rapport du diagnostic d'une petite correction porte aussi le correctif (de quoi valider : ce qui doit
+    marcher, avec une illustration ou un document)."""
+    if not petite_correction(fiche) or not isinstance(r, dict):
+        return False
+    m = r.get("message") if isinstance(r.get("message"), dict) else {}
+    preuve = m.get("images") or r.get("fichiers") or any(c.get("images") for c in r.get("comptes_rendus") or [])
+    return bool(isinstance(r.get("doit_marcher"), str) and r["doit_marcher"].strip() and preuve)
+
+
+def _suite_fiche_correction(projet, fid, fiche, etat=None, r=None):
     """La fiche est rangée comme un cahier validé (maquette vide, étapes = la fiche), pour l'affichage existant ; la
-    correction passe en série avec un seul élément, sans découpage, prototype ni méthode."""
+    correction passe en série avec un seul élément, sans découpage, prototype ni méthode. Une petite correction
+    (`fiche.taille`, essai réel du 2026-11-17 : 0,94 € pour deux lignes de CSS) suit le parcours court : si le diagnostic
+    a déjà fait le correctif, l'élément va droit à la validation du Directeur ; sa livraison est faite par l'outil."""
     def ligne(x):
         return " ".join(str(x or "").split())
     # Deux lectures : « En clair » pour n'importe qui (sans jargon), puis la description technique complète.
@@ -4665,17 +4692,54 @@ def _suite_fiche_correction(projet, fid, fiche):
               "Attendu : " + ligne(fiche.get("attendu"))]
     if ligne(fiche.get("piste")):
         etapes.append("Piste : " + ligne(fiche["piste"]))
-    lancer(projet, "fonctionnalite", {"id": fid, "cahier": {"maquette": [], "etapes": etapes,
-                                                             "valide_le": su.maintenant()}})
+    cahier = {"maquette": [], "etapes": etapes, "valide_le": su.maintenant()}
+    if petite_correction(fiche):
+        cahier["parcours"] = PARCOURS_CORRECTION_COURTE
+    lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier})
     if en_clair:
         lancer(projet, "fonctionnalite", {"id": fid, "en_clair": en_clair})
     f = _fonc(projet, fid)
     lancer(projet, "file", {"fonctionnalite": fid, "elements": [
         {"id": "correction", "nom": f["nom"], "objectif": ligne(fiche.get("attendu"))[:300] or None}]})
     lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
+    if etat is not None and _correctif_au_diagnostic(fiche, r):
+        _dire(projet, fid, ("En clair : " + en_clair + "\n\n" if en_clair else "")
+              + "Petite correction : le correctif est fait avec le diagnostic, il attend votre validation.")
+        return _correctif_deja_fait(projet, etat, fid, r)
     _dire(projet, fid, ("En clair : " + en_clair + "\n\n" if en_clair else "")
           + "Fiche de correction écrite : le correctif commence.")
     return []
+
+
+def _correctif_deja_fait(projet, etat, fid, r):
+    """Le parcours court : l'élément est pris dans la file, sa tâche de correctif est fermée (faite au diagnostic) et
+    il passe à l'étape suivante avec le rapport du diagnostic (la validation du Directeur le montre)."""
+    element = lancer(projet, "file-prendre", {"fonctionnalite": fid, "element": "correction"})["element"]
+    v = _etat_element(etat, fid, element)
+    s = _production(projet, fid)[0]
+    tid = _creer_tache(projet, f"{s['nom']} : {element['nom']}", fid, s["role"], ETAPES_DE_FLUX + s["id"],
+                       element=element["id"], colonne=s["id"], journal=[JOURNAL_CORRECTIF_AU_DIAGNOSTIC])
+    lancer(projet, "tache", {"id": tid, "colonne": "fait", "active": False})
+    v["taches"].append(tid)
+    return _apres_flux(projet, etat, v, r)
+
+
+def _livree_par_l_outil(projet, v, s):
+    """Vrai pour la livraison d'une petite correction : le moteur a déjà commité et poussé le correctif, aucun agent
+    n'est lancé pour la refaire (essai réel du 2026-11-17 : 0,19 $ pour relancer les tests)."""
+    f = _fonc(projet, v["fid"])
+    return (f.get("nature") == "correction" and (f.get("cahier") or {}).get("parcours") == PARCOURS_CORRECTION_COURTE
+            and not wf.est_validation(s) and str(s.get("id") or "").endswith("-livraison"))
+
+
+def _livrer_par_l_outil(projet, etat, v, s):
+    tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
+                       element=v["element"]["id"], colonne=s["id"], journal=[JOURNAL_LIVREE_PAR_L_OUTIL])
+    lancer(projet, "tache", {"id": tid, "colonne": "fait", "active": False})
+    v["taches"].append(tid)
+    # le Directeur a déjà validé le correctif : ni relecture ni étape de qualité après la livraison
+    v["pas"] = len(_production(projet, v["fid"]))
+    return _element_fait(projet, etat, v)
 
 
 def _suite_prototype(projet, etat, t, r):
@@ -5069,6 +5133,9 @@ def _apres_flux(projet, etat, v, r=None):
         v["rapports"] = [[x for x in (r or {}).get("verdicts") or [] if x["element"] == v["element"]["id"]]]
         return _conclure_relecture(projet, etat, v)
     if v["pas"] < len(_production(projet, v["fid"])):
+        suivante = _production(projet, v["fid"])[v["pas"]]
+        if _livree_par_l_outil(projet, v, suivante):
+            return _livrer_par_l_outil(projet, etat, v, suivante)
         _tache_de_flux(projet, etat, v)
         return []
     if sans:       # la livraison, venue après un verdict favorable

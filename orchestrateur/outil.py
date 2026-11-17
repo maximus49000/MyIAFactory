@@ -189,6 +189,17 @@ def liste_de_textes(e, cle):
 IMAGES_MONTREES = (".png", ".jpg", ".jpeg")   # ce que le bureau sert ; le reste n'apparaîtrait pas
 
 
+def _legende_raccourcie(x):
+    """Une légende trop longue est raccourcie (au dernier mot entier, avec « … ») au lieu d'être refusée : essai réel
+    (2026-11-17), un refus pour quelques caractères relançait tout un diagnostic."""
+    leg = x.get("legende") if isinstance(x, dict) else None
+    if not isinstance(leg, str) or len(leg.strip()) <= rel.MAX_LEGENDE:
+        return x
+    coupe = leg.strip()[:rel.MAX_LEGENDE - 1]
+    coupe = (coupe.rsplit(" ", 1)[0] if " " in coupe else coupe).rstrip(" ,;:.") + "…"
+    return {**x, "legende": coupe}
+
+
 def liste_d_images(valeur, cle):
     """Les images rendues par un agent : chacune est un chemin (ancienne forme) ou `{chemin, legende?}`, la légende
     étant une phrase de 160 caractères au plus. Rend la liste normalisée : un chemin seul reste un texte, une image
@@ -197,6 +208,7 @@ def liste_d_images(valeur, cle):
         raise Refus(f"« {cle} » doit être une liste d'images.")
     sortie = []
     for x in valeur:
+        x = _legende_raccourcie(x)
         if not rel.image_legendee_ok(x):
             raise Refus(f"« {cle} » : chaque image est un chemin (texte non vide) ou {{\"chemin\": \"…\", \"legende\": "
                         f"\"…\"}} ; la « legende » est une phrase de {rel.MAX_LEGENDE} caractères au plus.")

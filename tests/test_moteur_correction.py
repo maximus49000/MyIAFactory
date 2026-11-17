@@ -207,5 +207,81 @@ class TestCorrection(Base):
         self.assertIn("n'est pas une correction", objet["erreur"])
 
 
+class TestPetiteCorrection(TestCorrection):
+    """Essai réel (2026-11-17) : deux lignes de CSS ont payé diagnostic, correctif et livraison, trois agents et 0,94 €.
+    Une petite correction, jugée au diagnostic, fait le correctif dans la même tâche ; la livraison est faite par
+    l'outil."""
+    PETITE = {**FICHE, "taille": "petite"}
+    CORRECTIF = {"doit_marcher": "Le score revient à 0.", "en_clair": "Le score repart de zéro.",
+                 "conclusion": "Validez si le test passe.", "points_a_verifier": ["a", "b", "c"]}
+
+    def diagnostic(self, fiche, **plus):
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        r = {"nom": "Corriger : score", "fiche_correction": fiche,
+             "message": {"texte": "Fait.", "images": [{"chemin": "pieces/f1/apres.png", "legende": "Après"}]}, **plus}
+        return regles._suite_cadrage(self.projet, self.etat, t, r)
+
+    def test_le_diagnostic_demande_la_taille(self):
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        matiere = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("**Juge la taille**", matiere)
+        self.assertIn("Petite correction : fais le correctif tout de suite", matiere)
+
+    def test_le_correctif_fait_au_diagnostic_va_droit_a_la_validation(self):
+        preuve = self.dossier / "pieces" / "f1" / "preuve.md"     # la preuve la plus simple : le test avant / après
+        preuve.parent.mkdir(parents=True, exist_ok=True)
+        preuve.write_text("# Preuve\n\nLe test échouait avant, passe après.\n", encoding="utf-8")
+        actions = self.diagnostic(self.PETITE, nature="mecanique",
+                                  fichiers=[{"chemin": "pieces/f1/preuve.md", "titre": "Preuve"}], **self.CORRECTIF)
+        self.assertFalse(any(a[0] == "agent" for a in actions))
+        (c,) = self.taches(etape="flux:f1-correctif")
+        self.assertEqual(c["colonne"], "fait")
+        self.assertIn(regles.JOURNAL_CORRECTIF_AU_DIAGNOSTIC, [j["texte"] for j in c["journal"]])
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_CORRECTION_COURTE)
+        (d,) = self.decisions("valider_etape")
+        # le Directeur valide : la livraison est faite par l'outil, sans agent, et l'élément est fini
+        _, actions = self.traiter(type="valider_etape", decision=d["id"], verdict="valider")
+        self.assertFalse(any(a[0] == "agent" for a in actions))
+        (liv,) = self.taches(etape="flux:f1-livraison")
+        self.assertEqual(liv["colonne"], "fait")
+        self.assertIn(regles.JOURNAL_LIVREE_PAR_L_OUTIL, [j["texte"] for j in liv["journal"]])
+        self.assertEqual(self.etat["elements"]["f1/correction"]["phase"], "fait")
+        regles.avancer(self.projet, self.etat)
+        ouvertes = [t["etape"] for t in self.taches(fonctionnalite="f1") if t["colonne"] != "fait"]
+        self.assertEqual(ouvertes, ["cadrage"])     # ni relecture ni agent après la validation (le cadrage : appel direct)
+
+    def test_une_petite_correction_sans_preuve_passe_par_le_correctif(self):
+        self.diagnostic(self.PETITE)       # ni `doit_marcher` : le correctif n'est pas fait, un agent le fera
+        regles.avancer(self.projet, self.etat)
+        (c,) = self.taches(etape="flux:f1-correctif")
+        self.assertNotEqual(c["colonne"], "fait")
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_CORRECTION_COURTE)
+
+    def test_une_correction_normale_garde_le_parcours_complet(self):
+        self.diagnostic({**FICHE, "taille": "normale"}, **self.CORRECTIF)
+        regles.avancer(self.projet, self.etat)
+        (c,) = self.taches(etape="flux:f1-correctif")
+        self.assertNotEqual(c["colonne"], "fait")
+        self.assertNotIn("parcours", self.fonc()["cahier"])
+        v = self.etat["elements"]["f1/correction"]
+        s = regles._production(self.projet, "f1")[2]
+        self.assertFalse(regles._livree_par_l_outil(self.projet, v, s))
+
+    def test_une_legende_trop_longue_est_raccourcie_pas_refusee(self):
+        from bureau import releve as rel
+        from orchestrateur import outil
+        (x,) = outil.liste_d_images([{"chemin": "a.png", "legende": "mot " * 80}], "images")
+        self.assertLessEqual(len(x["legende"]), rel.MAX_LEGENDE)
+        self.assertTrue(x["legende"].endswith("…"))
+
+    def test_un_refus_redonne_le_rapport_entier(self):
+        s = regles._supplement_de_refus("légende trop longue.", {"texte": "m"},
+                                        {"fiche_correction": FICHE, "message": {"texte": "m"}})
+        self.assertIn("en entier", s)
+        self.assertIn("fiche_correction", s)
+
+
 if __name__ == "__main__":
     unittest.main()

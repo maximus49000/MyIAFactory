@@ -562,7 +562,7 @@ class TestSuivi(AvecProjet):
 
     def test_legende_refusee(self):
         f = self.nouvelle()
-        for legende in ("", "x" * 161, 3):
+        for legende in ("", 3):
             image = {"chemin": "pieces/a.png", "legende": legende}
             code, sortie = self.outil("fonctionnalite", entree={"id": f, "cahier": {"maquette": [image], "etapes": []}})
             self.assertEqual(code, 1, legende)
@@ -574,6 +574,12 @@ class TestSuivi(AvecProjet):
         self.assertEqual(code, 1)
         self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": [{"chemin": "pieces/a.png", "legende": "x" * 160}],
                                                               "etapes": []}})
+        # trop longue : raccourcie, pas refusée (un refus relançait tout un diagnostic, essai réel du 2026-11-17)
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": [{"chemin": "pieces/a.png", "legende": "mot " * 60}],
+                                                              "etapes": []}})
+        (image,) = self.ok("detail", entree={"fonctionnalite": f})["cahier"]["maquette"]
+        self.assertLessEqual(len(image["legende"]), 160)
+        self.assertTrue(image["legende"].endswith("…"))
 
     def test_documents_de_la_fonctionnalite(self):
         # Tout ce qui est produit pour une fonctionnalité est rangé dans ses documents, avec son origine :

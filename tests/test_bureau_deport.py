@@ -153,3 +153,37 @@ class TestDeportDepotRoutes(AvecServeur):
         r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": e}), self.ENT)
         self.assertEqual(r.status, 409)
         self.assertIn("origin", json.loads(data.decode("utf-8"))["erreur"])
+
+
+class TestDeportParTypeDeProjet(AvecServeur):
+    def poster(self, corps):
+        return self.req("POST", "/api/reglages", json.dumps(corps), self.ENT)
+
+    def en_android(self):
+        (self.tmp / "demo" / "factory.json").write_text(json.dumps({"genre": "application-mobile-android"}),
+                                                        encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+
+    def test_projet_generique_expose_les_quatre_actions(self):
+        d = self.json("/api/etat")["deport"]
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
+        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge"})
+
+    def test_projet_android_expose_ses_actions_avec_libelle_lieux_et_bientot(self):
+        self.en_android()
+        d = self.json("/api/etat")["deport"]
+        actions = {a["id"]: a for a in d["actions"]}
+        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release"])
+        self.assertEqual(actions["tests"]["libelle"], "Tests unitaires")
+        self.assertEqual(actions["emulateur"]["lieux"], ["poste"])
+        self.assertIn("clés de signature", actions["release"]["bientot"])
+        self.assertEqual(set(d["lieux"]), set(actions))
+
+    def test_projet_android_refuse_la_charge_et_ne_signale_pas_d_attente_pour_les_tests(self):
+        self.en_android()
+        r, data = self.poster({"deport": {"lieux": {"charge": "poste"}}})
+        self.assertEqual(r.status, 400)
+        self.assertIn("n'existe pas pour ce type de projet", json.loads(data.decode("utf-8"))["erreur"])
+        r, _ = self.poster({"deport": {"lieux": {"apk": "github", "tests": "poste"}}})
+        self.assertEqual(r.status, 200)
+        self.assertEqual(self.json("/api/etat")["deport"]["avertissements"], [])

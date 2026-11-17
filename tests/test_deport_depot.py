@@ -200,3 +200,16 @@ class TestAppliquer(AvecDepot):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestApercuParType(AvecDepot):
+    def test_projet_android_utilise_les_commandes_et_l_artefact_du_catalogue(self):
+        import json
+        (self.depot / "factory.json").write_text(json.dumps({"genre": "application-mobile-android"}),
+                                                 encoding="utf-8")
+        reglages = {"deport": {"lieux": {"apk": "github", "tests": "github", "charge": "github"}, "commandes": {}}}
+        r = dd.apercu(str(self.depot), reglages)
+        self.assertEqual(r["etat"], "absent")
+        self.assertIn("./gradlew testDebugUnitTest", r["diff"])
+        self.assertIn("app/build/outputs/apk/debug/*.apk", r["diff"])
+        self.assertNotIn("cron", r["diff"])

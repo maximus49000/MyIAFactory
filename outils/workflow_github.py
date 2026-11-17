@@ -16,13 +16,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bureau.deport import ACTIONS  # noqa: E402
+from bureau.deport_types import GENERIQUE  # noqa: E402
 
 MARQUEUR = "# généré par MyIAFactory empreinte="
 _MOTIF_ENTETE = re.compile(r"^# généré par MyIAFactory empreinte=([0-9a-f]{64})$")
 _MOTIF_HEURE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
-_ARTEFACT = "apk"
-_CHEMIN_APK = "**/build/outputs/apk/**/*.apk"
 
 
 def _normaliser(texte):
@@ -59,41 +57,52 @@ def _cron(charge_heure):
     return "%d %d * * *" % (int(trouve.group(2)), int(trouve.group(1)))
 
 
-def _tache(action, commande, deportees):
-    attend = [dep for dep in ACTIONS[action]["consomme"] if dep in deportees]
+def _commande_de(action, commandes, catalogue):
+    """La commande donnée par le Directeur pour l'action, sinon celle du catalogue (vide si on ne la connaît pas)."""
+    donnee = str(commandes.get(action) or "")
+    return donnee if donnee.strip() else str(catalogue[action].get("commande") or "")
+
+
+def _tache(action, commande, deportees, catalogue):
+    attend = [dep for dep in catalogue[action]["consomme"] if dep in deportees]
     lignes = ["  %s:" % action, "    runs-on: ubuntu-latest"]
     if attend:
         lignes.append("    needs: [%s]" % ", ".join(attend))
     lignes += ["    steps:", "      - uses: actions/checkout@v4"]
-    if _ARTEFACT in attend:
-        lignes += ["      - uses: actions/download-artifact@v4",
-                   "        with:",
-                   "          name: %s" % _ARTEFACT,
-                   "          path: artefacts/%s" % _ARTEFACT]
+    for dep in attend:
+        produit = catalogue[dep]["produit"]
+        if produit:
+            lignes += ["      - uses: actions/download-artifact@v4",
+                       "        with:",
+                       "          name: %s" % produit,
+                       "          path: artefacts/%s" % produit]
     lignes += ["      - name: %s" % action, "        run: |", _bloc_commande(commande)]
-    if ACTIONS[action]["produit"] == _ARTEFACT:
+    produit, chemin = catalogue[action]["produit"], catalogue[action]["artefact"]
+    if produit and chemin:
         lignes += ["      - uses: actions/upload-artifact@v4",
                    "        with:",
-                   "          name: %s" % _ARTEFACT,
-                   "          path: '%s'" % _CHEMIN_APK]
+                   "          name: %s" % produit,
+                   "          path: '%s'" % chemin]
     return "\n".join(lignes)
 
 
-def generer(nom, actions_github, commandes, charge_heure="03:00"):
+def generer(nom, actions_github, commandes, charge_heure="03:00", catalogue=GENERIQUE):
     """Texte du workflow pour les actions déportées sur GitHub ; lève ValueError si une commande manque.
 
-    Une tâche par action (sur ubuntu-latest) ; une action qui consomme l'APK d'une action aussi déportée ici
-    l'attend (`needs`) et le télécharge. `schedule` n'existe que si `charge` est déportée ; son heure est en UTC.
+    Les actions, leurs commandes par défaut, leurs artefacts et leurs dépendances viennent du `catalogue` du type
+    de projet ; une commande donnée dans `commandes` l'emporte sur celle du catalogue. Une tâche par action (sur
+    ubuntu-latest) ; une action qui consomme l'artefact d'une action aussi déportée ici l'attend (`needs`) et le
+    télécharge. `schedule` n'existe que si `charge` est déportée ; son heure est en UTC.
     """
     actions = []
     for action in actions_github:
-        if action not in ACTIONS:
-            raise ValueError("Action inconnue : « %s » (attendu : %s)." % (action, ", ".join(ACTIONS)))
+        if action not in catalogue:
+            raise ValueError("Action inconnue : « %s » (attendu : %s)." % (action, ", ".join(catalogue)))
         if action not in actions:
             actions.append(action)
     commandes = commandes or {}
     for action in actions:
-        if not str(commandes.get(action) or "").strip():
+        if not _commande_de(action, commandes, catalogue).strip():
             raise ValueError("Aucune commande pour l'action « %s » : renseignez la commande à lancer." % action)
     corps = ["name: \"%s\"" % (_une_ligne(nom) or "MyIAFactory"),
              "",
@@ -105,7 +114,7 @@ def generer(nom, actions_github, commandes, charge_heure="03:00"):
                   "    # GitHub lit l'heure en UTC (et non en heure locale).",
                   "    - cron: '%s'" % _cron(charge_heure)]
     corps += ["", "jobs:"]
-    corps.append("\n\n".join(_tache(a, commandes[a], actions) for a in actions))
+    corps.append("\n\n".join(_tache(a, _commande_de(a, commandes, catalogue), actions, catalogue) for a in actions))
     texte = _normaliser("\n".join(corps)).rstrip("\n") + "\n"
     return "%s%s\n%s" % (MARQUEUR, _empreinte(texte), texte)
 

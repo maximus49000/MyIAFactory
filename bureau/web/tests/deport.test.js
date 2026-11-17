@@ -129,3 +129,35 @@ test("la vraie sortie de bureau/deport.py est reconnue et regroupée", () => {
   assert.match(groupes[0], /tests, charge, emulateur|tests, emulateur, charge/);
   assert.doesNotMatch(groupes[0], /tourne au lieu/);   // reconnu par la regex, pas affiché tel quel
 });
+
+
+const ACTIONS_ANDROID = [
+  {id: "apk", libelle: "Générer l'APK", lieux: ["poste", "github"], bientot: null},
+  {id: "tests", libelle: "Tests unitaires", lieux: ["poste", "github"], bientot: null},
+  {id: "emulateur", libelle: "Tests sur émulateur", lieux: ["poste"], bientot: "peu fiable sur GitHub, utilisez le poste ou le serveur"},
+  {id: "release", libelle: "APK signé (release)", lieux: ["poste"], bientot: "demande vos clés de signature dans les secrets GitHub, que vous devez saisir vous-même"},
+];
+
+test("n'affiche que les actions de l'état, avec leur libellé (pas de charge pour Android)", () => {
+  const {bloc} = rendre({lieux: {apk: "poste", tests: "github", emulateur: "poste", release: "poste"}, avertissements: [], actions: ACTIONS_ANDROID});
+  assert.deepEqual([...new Set(radios(bloc).map((r) => r.name))], ["deport-apk", "deport-tests", "deport-emulateur", "deport-release"]);
+  assert.match(bloc.textContent, /Générer l'APK/);
+  assert.match(bloc.textContent, /Tests unitaires/);
+  assert.match(bloc.textContent, /APK signé \(release\)/);
+  assert.equal(radios(bloc).some((r) => r.name === "deport-charge"), false);
+  assert.equal(radio(bloc, "tests", "github").checked, true);
+});
+
+test("un lieu que l'action n'offre pas est grisé avec le texte de l'état", () => {
+  const {bloc} = rendre({lieux: {apk: "poste"}, avertissements: [], actions: ACTIONS_ANDROID});
+  assert.equal(radio(bloc, "release", "github").disabled, true);
+  assert.match(bloc.textContent, /clés de signature/);
+  assert.equal(radio(bloc, "emulateur", "github").disabled, true);
+  assert.equal(radio(bloc, "apk", "github").disabled, false);
+  assert.equal(radio(bloc, "release", "poste").disabled, false);
+});
+
+test("sans `actions` dans l'état, les quatre actions génériques s'affichent", () => {
+  const {bloc} = rendre({lieux: POSTE, avertissements: []});
+  assert.deepEqual([...new Set(radios(bloc).map((r) => r.name))], ["deport-apk", "deport-tests", "deport-charge", "deport-emulateur"]);
+});

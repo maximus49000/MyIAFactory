@@ -1,4 +1,4 @@
-// « Où tournent les actions » : un lieu (poste, GitHub, serveur) pour chacune des quatre actions du projet.
+// « Où tournent les actions » : un lieu (poste, GitHub, serveur) pour chacune des actions que son type de projet permet.
 // Une écriture des réglages par le serveur du bureau ; le serveur valide, la case redit l'état réel en cas de refus.
 
 import {el} from "./dom.js";
@@ -8,11 +8,21 @@ export const AIDE_DEPORT = "Par défaut, tout tourne sur le poste. On déporte u
   "un serveur) pour soulager le poste. Gardez la chaîne entière (APK, tests, charge, émulateur) au même lieu : une " +
   "action qui attend une production venue d'ailleurs patiente.";
 
-// Les noms des actions sont ceux du moteur (ceux que citent aussi les avertissements).
-const ACTIONS = ["apk", "tests", "charge", "emulateur"];
+// Les actions viennent de l'état (`deport.actions` : celles du type du projet, avec libellé, lieux permis, `bientot`).
+// Sans elles (état ancien), les quatre actions génériques du moteur, dont les noms sont aussi ceux des avertissements.
+const MSG_EMULATEUR = "peu fiable sur GitHub, utilisez le poste ou le serveur";
+const ACTIONS_GENERIQUES = [
+  {id: "apk", libelle: "apk", lieux: ["poste", "github", "serveur"], bientot: null},
+  {id: "tests", libelle: "tests", lieux: ["poste", "github", "serveur"], bientot: null},
+  {id: "charge", libelle: "charge", lieux: ["poste", "github", "serveur"], bientot: null},
+  {id: "emulateur", libelle: "emulateur", lieux: ["poste", "serveur"], bientot: MSG_EMULATEUR},
+];
+export function actionsDe(deport) {
+  const liste = deport?.actions;
+  return Array.isArray(liste) && liste.length ? liste : ACTIONS_GENERIQUES;
+}
 const LIEUX = [["poste", "Poste"], ["github", "GitHub"], ["serveur", "Serveur"]];
 const MSG_SERVEUR = "bientôt";
-const MSG_EMULATEUR = "peu fiable sur GitHub, utilisez le poste ou le serveur";
 
 // Écrit les lieux voulus (partiels : le serveur fusionne). {ok, message}, sans jamais lever.
 export async function enregistrerDeport(lieux, fetchFn = fetch) {
@@ -50,7 +60,9 @@ export function avertissementsGroupes(textes) {
   return [...new Set([...phrases, ...autres])];
 }
 
-function rangee(ctx, action, nom, lieuxActuels, groupe, message, fetchFn) {
+function rangee(ctx, def, lieuxActuels, groupe, message, fetchFn) {
+  const action = def.id;
+  const nom = def.libelle || action;
   const fieldset = el("div", "deport-action");
   fieldset.setAttribute("role", "radiogroup");
   fieldset.setAttribute("aria-label", nom);
@@ -63,7 +75,8 @@ function rangee(ctx, action, nom, lieuxActuels, groupe, message, fetchFn) {
     r.name = "deport-" + action;
     r.value = lieu;
     r.checked = lieuxActuels[action] === lieu;
-    const grise = lieu === "serveur" ? MSG_SERVEUR : (action === "emulateur" && lieu === "github" ? MSG_EMULATEUR : "");
+    const permis = Array.isArray(def.lieux) ? def.lieux.includes(lieu) : true;
+    const grise = lieu === "serveur" ? MSG_SERVEUR : (permis ? "" : (def.bientot || "indisponible pour ce type de projet"));
     r.disabled = grise !== "";
     label.append(r, el("span", "", " " + libelle + (grise ? " (" + grise + ")" : "")));
     r.addEventListener("change", async () => {
@@ -163,15 +176,16 @@ function blocApercu(fetchFn) {
 export function blocDeport(ctx, fetchFn = fetch) {
   const bloc = el("div", "lecons-auto deport");
   const d = ctx.etat.deport || {};
-  const lieux = {apk: "poste", tests: "poste", charge: "poste", emulateur: "poste", ...(d.lieux || {})};
+  const actions = actionsDe(d);
+  const lieux = {...Object.fromEntries(actions.map((a) => [a.id, "poste"])), ...(d.lieux || {})};
   if (ctx.etat.deport) ctx.etat.deport.lieux = lieux;
   const message = el("p", "note", "");
   message.setAttribute("aria-live", "polite");
   const groupe = [];
   bloc.append(el("h4", "", "Où tournent les actions"), el("p", "note", AIDE_DEPORT));
-  for (const action of ACTIONS) bloc.append(rangee(ctx, action, action, lieux, groupe, message, fetchFn));
+  for (const def of actions) bloc.append(rangee(ctx, def, lieux, groupe, message, fetchFn));
   for (const phrase of avertissementsGroupes(d.avertissements)) bloc.append(el("p", "note deport-avertissement", phrase));
   bloc.append(message);
-  if (ACTIONS.some((a) => lieux[a] === "github")) bloc.append(blocApercu(fetchFn));
+  if (actions.some((a) => lieux[a.id] === "github")) bloc.append(blocApercu(fetchFn));
   return bloc;
 }

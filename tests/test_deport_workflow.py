@@ -135,3 +135,33 @@ class TestDeportWorkflow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWorkflowParCatalogue(unittest.TestCase):
+    def setUp(self):
+        from bureau.deport_types import CATALOGUES
+        self.android = CATALOGUES["application-mobile-android"]
+
+    def test_android_commandes_par_defaut_sans_needs_et_artefact_du_catalogue(self):
+        texte = wf.generer("Mon projet", ["apk", "tests"], {}, catalogue=self.android)
+        self.assertIn("./gradlew assembleDebug", texte)
+        self.assertIn("./gradlew testDebugUnitTest", texte)
+        self.assertNotIn("needs", texte)
+        self.assertNotIn("download-artifact", texte)
+        self.assertIn("path: 'app/build/outputs/apk/debug/*.apk'", texte)
+        self.assertNotIn("**/build/outputs", texte)
+
+    def test_une_commande_donnee_l_emporte_sur_celle_du_catalogue(self):
+        texte = wf.generer("p", ["apk", "tests"], {"tests": "./gradlew test --info"}, catalogue=self.android)
+        self.assertIn("./gradlew test --info", texte)
+        self.assertNotIn("testDebugUnitTest", texte)
+        self.assertIn("./gradlew assembleDebug", texte)
+
+    def test_action_absente_du_catalogue_refusee(self):
+        with self.assertRaises(ValueError):
+            wf.generer("p", ["charge"], {"charge": "x"}, catalogue=self.android)
+
+    def test_le_generique_n_a_pas_de_commande_par_defaut_et_garde_son_artefact(self):
+        with self.assertRaises(ValueError):
+            wf.generer("p", ["apk"], {})
+        self.assertIn("path: '**/build/outputs/apk/**/*.apk'", wf.generer("p", ["apk"], {"apk": "build"}))

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import workflow_github  # noqa: E402
-from bureau.deport import ACTIONS  # noqa: E402
+from bureau.deport_types import catalogue_du_projet  # noqa: E402
 from moteur import git_sur  # noqa: E402
 
 BRANCHE = "deport/workflow"
@@ -64,12 +64,14 @@ def _voulu(dossier, reglages):
     commande manque."""
     deport = (reglages or {}).get("deport") or {}
     lieux = deport.get("lieux") or {}
-    actions = [a for a in ACTIONS if lieux.get(a) == "github"]
+    catalogue = catalogue_du_projet(dossier)[1]
+    actions = [a for a in catalogue if lieux.get(a) == "github"]
     nom = _nom_du_projet(dossier)
     fichier = nom_fichier(nom)
     if not actions:
         return actions, nom, fichier, None
-    texte = workflow_github.generer(nom, actions, deport.get("commandes") or {}, deport.get("charge_heure", "03:00"))
+    texte = workflow_github.generer(nom, actions, deport.get("commandes") or {}, deport.get("charge_heure", "03:00"),
+                                     catalogue)
     return actions, nom, fichier, texte
 
 

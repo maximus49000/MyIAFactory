@@ -20,6 +20,7 @@ from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from . import avancement as modavancement
 from . import deport as moddeport
+from . import deport_types
 from . import fichiers_joints, releve, statuts
 from . import semaines as modsemaines
 from . import sujets as modsujets
@@ -248,14 +249,20 @@ class Projet:
         lieux = d.get("lieux") if isinstance(d, dict) else None
         return dict(lieux) if isinstance(lieux, dict) else {}
 
+    def catalogue_deport(self):
+        """Le catalogue d'actions du type du projet (générique si le genre est absent ou inconnu)."""
+        return deport_types.catalogue_du_projet(str(self.chemin_reglages.parent))[1]
+
     def lieux_effectifs(self):
         globaux, projet = self.lieux_globaux(), self.lieux_du_projet()
-        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in moddeport.ACTIONS}
+        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in self.catalogue_deport()}
 
     def etat_deport(self):
+        catalogue = self.catalogue_deport()
         lieux = self.lieux_effectifs()
         # le serveur n'existe pas encore (étape 1) : jamais disponible
-        return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux), "serveur_disponible": False}
+        return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
+                "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": False}
 
     def reglages_deport(self):
         """Les réglages de déport tels que le dépôt les lit : lieux effectifs (projet puis bureau), commandes, heure."""
@@ -2029,7 +2036,8 @@ class Handler(BaseHTTPRequestHandler):
                     lieux.update(demande["lieux"])
                 elif "lieux" in demande:
                     lieux = demande["lieux"]
-                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux})
+                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},
+                                                projet.catalogue_deport())
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
                     raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "

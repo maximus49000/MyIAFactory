@@ -92,3 +92,41 @@ class TestDeportReglages(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDeportReglagesParCatalogue(unittest.TestCase):
+    """Les lieux et commandes sont validés contre le catalogue du projet ; le réglage du bureau reste permissif."""
+
+    def test_projet_android_refuse_charge_et_accepte_lint(self):
+        from bureau.deport_types import CATALOGUES
+        android = CATALOGUES["application-mobile-android"]
+        with self.assertRaises(reglages.ReglagesInvalides) as c:
+            reglages.normaliser_deport({"lieux": {"charge": "poste"}}, catalogue=android)
+        self.assertIn("n'existe pas pour ce type de projet", str(c.exception))
+        with self.assertRaises(reglages.ReglagesInvalides) as c:
+            reglages.normaliser_deport({"commandes": {"charge": "x"}}, catalogue=android)
+        self.assertIn("n'existe pas pour ce type de projet", str(c.exception))
+        d = reglages.normaliser_deport({"lieux": {"lint": "github"}, "commandes": {"lint": "./gradlew lint"}},
+                                       catalogue=android)
+        self.assertEqual(d["lieux"]["lint"], "github")
+
+    def test_sans_catalogue_toute_action_connue_est_admise_mais_pas_les_inconnues(self):
+        d = reglages.normaliser_deport({"lieux": {"lint": "github", "charge": "github"},
+                                        "commandes": {"release": "./gradlew assembleRelease"}})
+        self.assertEqual(d["lieux"]["lint"], "github")
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.normaliser_deport({"lieux": {"bidon": "poste"}})
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.normaliser_deport({"commandes": {"bidon": "x"}})
+
+    def test_fixer_deport_valide_contre_le_catalogue(self):
+        from bureau.deport_types import CATALOGUES
+        android = CATALOGUES["application-mobile-android"]
+        with tempfile.TemporaryDirectory() as t:
+            chemin = Path(t) / "r.json"
+            chemin.write_text("{}", encoding="utf-8")
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages.fixer_deport(chemin, {"lieux": {"charge": "poste"}}, android)
+            r = reglages.fixer_deport(chemin, {"lieux": {"lint": "github"}}, android)
+            self.assertEqual(r["deport"]["lieux"]["lint"], "github")
+            self.assertEqual(json.loads(chemin.read_text(encoding="utf-8"))["deport"]["lieux"], {"lint": "github"})

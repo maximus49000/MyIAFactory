@@ -25,7 +25,8 @@ def _minutes(secondes):
 
 
 def durees_de_l_etape(taches, etape):
-    """Les durées (secondes) des tâches terminées de cette étape, sans les aberrantes."""
+    """Les durées (secondes) des tâches menées à leur fin (colonne « fait », non bloquées) de cette étape, sans les
+    aberrantes. Une tâche bloquée, arrêtée ou en attente n'est pas une durée de travail."""
     rendu = []
     for t in taches:
         if not isinstance(t, dict) or t.get("etape") != etape:
@@ -34,7 +35,7 @@ def durees_de_l_etape(taches, etape):
         if debut == TRES_ANCIEN or fin == TRES_ANCIEN:
             continue
         d = (fin - debut).total_seconds()
-        if DUREE_MIN_S <= d <= DUREE_MAX_S:
+        if t.get("colonne") == "fait" and not t.get("bloquee") and DUREE_MIN_S <= d <= DUREE_MAX_S:
             rendu.append(d)
     return rendu
 
@@ -79,8 +80,11 @@ def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
     if passe is not None:
         reste, reste_texte = _reste(passe, durees_de_l_etape(
             [x for x in historique if x.get("id") != tache.get("id")], tache.get("etape")), points)
-    base.update(passe_s=None if passe is None else int(passe), cumul_s=None if cumul is None else int(cumul),
-                reste=reste, reste_texte=reste_texte)
+    # À la minute : la fiche ne se redessine pas à chaque relevé (toutes les 2 s) pour des secondes qui passent.
+    if reste:
+        reste = {"min_s": reste["min_s"] // 60 * 60, "max_s": reste["max_s"] // 60 * 60}
+    base.update(passe_s=None if passe is None else int(passe) // 60 * 60,
+                cumul_s=None if cumul is None else int(cumul) // 60 * 60, reste=reste, reste_texte=reste_texte)
 
     def rendre(etat, texte):
         return {**base, "etat": etat, "etat_texte": texte}
@@ -94,7 +98,10 @@ def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
         if age is None or age < TERMINE_NON_LU_S:
             return None
         return rendre("termine_non_lu", f"agent terminé, résultat en attente de lecture depuis {_minutes(age)} min")
+    arret = f"arrêt automatique à {_minutes(delai_arret_s)} min"
     if not travail.get("action"):
+        if passe is not None and passe > ACTION_RECENTE_S:      # aucune action depuis plus de 2 min : pas un démarrage
+            return rendre("sans_action", f"sans action depuis {_minutes(passe)} min, {arret}")
         return rendre("demarre", "démarre")
     action, vie = _secondes(travail.get("action_t"), maintenant), _secondes(travail.get("vie_t"), maintenant)
     if action is not None and action <= ACTION_RECENTE_S:
@@ -104,6 +111,5 @@ def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
             texte += f" · liste non mise à jour depuis {_minutes(maj)} min"
         return rendre("avance", texte)
     if action is not None and vie is not None and vie <= ACTION_RECENTE_S:
-        return rendre("commande_longue", f"commande longue en cours depuis {_minutes(action)} min")
-    return rendre("sans_action", f"sans action depuis {_minutes(action or vie or 0)} min, "
-                                 f"arrêt automatique à {_minutes(delai_arret_s)} min")
+        return rendre("commande_longue", f"commande longue en cours depuis {_minutes(action)} min ({arret})")
+    return rendre("sans_action", f"sans action depuis {_minutes(action or vie or 0)} min, {arret}")

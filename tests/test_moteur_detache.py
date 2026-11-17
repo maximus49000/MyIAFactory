@@ -330,6 +330,36 @@ class AuTravail(Base):
         self.assertEqual(t["phase"], "lecture")
         self.assertEqual(t["avancement"]["points"], [{"texte": "a", "fait": True}])
 
+    def test_chaque_tache_d_un_lot_a_sa_propre_liste(self):
+        self.ecrire("t1", {"tache": "t1", "taches": ["t1", "t2"], "agent": "dev", "pid": os.getpid(),
+                           "debut": time.time() - 60, "dossier": str(self.dossier)}, [])
+        self.avancement("t1", {"points": [{"texte": "un", "fait": True}]})
+        self.avancement("t2", {"points": [{"texte": "deux", "fait": False}]})
+        taches = [{"id": "t1"}, {"id": "t2"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertEqual(taches[0]["travail"]["avancement"]["points"][0]["texte"], "un")
+        self.assertEqual(taches[1]["travail"]["avancement"]["points"][0]["texte"], "deux")
+
+    def test_effacer_oublie_la_liste_de_chaque_tache_du_lot(self):
+        self.ecrire("t1", {"tache": "t1", "taches": ["t1", "t2"], "pid": 1, "debut": 1}, [])
+        self.avancement("t1", {"points": []})
+        self.avancement("t2", {"points": []})
+        detache.Registre(self.factory_dir).effacer("t1")
+        self.assertFalse((self.dossier_agents() / "t2.avancement.json").exists())
+
+    def test_phase_powershell_et_faux_amis(self):
+        phase = lambda nom, c: detache.phase_du_flux([self.outil(nom, {"command": c})])
+        self.assertEqual(phase("PowerShell", "py lancer.py tests --dossier x"), "tests")
+        self.assertEqual(phase("PowerShell", "./gradlew assembleRelease"), "compilation")
+        self.assertEqual(phase("Bash", "git log latest"), "autre")             # « latest » n'est pas « test »
+        self.assertEqual(phase("Bash", "py lancer.py anomalies"), "autre")
+
+    def test_une_liste_enorme_est_ignoree_ou_plafonnee(self):
+        self.avancement("t1", {"points": [{"texte": str(i), "fait": False} for i in range(200)]})
+        self.assertEqual(len(detache.lire_avancement(self.dossier_agents() / "t1.avancement.json")["points"]), 30)
+        self.avancement("t2", '{"points": [], "en_cours": "' + "x" * 100000 + '"}')
+        self.assertIsNone(detache.lire_avancement(self.dossier_agents() / "t2.avancement.json"))
+
     def test_l_avancement_n_est_pas_pris_pour_un_agent(self):
         self.avancement("t9", {"points": [], "en_cours": None})
         taches = [{"id": "t9"}]

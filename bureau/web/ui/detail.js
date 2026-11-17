@@ -158,6 +158,7 @@ function blocAvancement(av, travail) {
   const etat = el("p", "avancement-etat avancement-" + av.ton);
   etat.append(el("strong", "", "État : "), document.createTextNode(av.etatTexte));
   bloc.append(etat);
+  if (!travail && av.sansListe) return bloc;      // l'agent a fini (ou le moteur est arrêté) : pas de « il n'a rien fait »
   if (av.sansListe) {
     const phase = av.phase ? PHASES[av.phase] || PHASES.autre : null;
     bloc.append(ligne("Où il en est", (phase || "pas encore d'action") + " · liste de l'agent absente"));

@@ -22,7 +22,7 @@ def tache(**plus):
 
 
 def historique(*durees):
-    return [{"id": f"h{i}", "etape": "correction", "debut": il_y_a(10000 + d), "fin": il_y_a(10000)}
+    return [{"id": f"h{i}", "etape": "correction", "debut": il_y_a(10000 + d), "fin": il_y_a(10000), "colonne": "fait"}
             for i, d in enumerate(durees)]
 
 
@@ -61,11 +61,28 @@ class Etats(unittest.TestCase):
         self.assertEqual(calculer(tache(travail=travail()), moteur_vivant=None)["etat"], "avance")
 
     def test_demarre_sans_flux(self):
-        r = calculer(tache(travail=travail(action=None)))
+        r = calculer(tache(travail=travail(action=None, depuis_s=30)))
         self.assertEqual(r["etat"], "demarre")
 
     def test_rien_sans_agent(self):
         self.assertIsNone(calculer(tache()))
+
+    def test_demarre_trop_longtemps_est_dit_sans_action(self):
+        r = calculer(tache(travail=travail(action=None, depuis_s=39 * 60)))
+        self.assertEqual(r["etat"], "sans_action")
+        self.assertIn("sans action depuis 39 min", r["etat_texte"])
+
+    def test_commande_longue_rappelle_l_arret_automatique(self):
+        r = calculer(tache(travail=travail(action_s=38 * 60, vie_s=10)))
+        self.assertEqual(r["etat"], "commande_longue")
+        self.assertIn("arrêt automatique à 40 min", r["etat_texte"])
+
+    def test_les_temps_sont_a_la_minute_pour_ne_pas_redessiner_toutes_les_2_s(self):
+        r = calculer(tache(travail=travail(depuis_s=601)), historique(600, 600, 900, 1200, 1200))
+        self.assertEqual(r["passe_s"] % 60, 0)
+        self.assertEqual(r["cumul_s"] % 60, 0)
+        self.assertEqual(r["reste"]["min_s"] % 60, 0)
+        self.assertEqual(r["reste"]["max_s"] % 60, 0)
 
     def test_liste_non_mise_a_jour(self):
         av = {"points": [{"texte": "a", "fait": False}], "en_cours": "a", "maj": il_y_a(600)}
@@ -87,6 +104,14 @@ class Fourchette(unittest.TestCase):
             {"id": "x", "etape": "correction", "debut": il_y_a(3 * 86400 + 10), "fin": il_y_a(10)},
             {"id": "autre", "etape": "flux:f1", "debut": il_y_a(900), "fin": il_y_a(10)}]
         self.assertEqual(sorted(avancement.durees_de_l_etape(h, "correction")), [600, 600, 900, 1200, 1200])
+
+    def test_l_historique_ne_compte_que_les_taches_menees_a_leur_fin(self):
+        h = historique(600, 600, 900)
+        h.append({"id": "bloquee", "etape": "correction", "debut": il_y_a(10040), "fin": il_y_a(10000),
+                  "colonne": "fait", "bloquee": "agent bloqué"})
+        h.append({"id": "attente", "etape": "correction", "debut": il_y_a(10060), "fin": il_y_a(10000),
+                  "colonne": "f5-tests"})
+        self.assertEqual(sorted(avancement.durees_de_l_etape(h, "correction")), [600, 600, 900])
 
     def test_reste_deduit_le_temps_passe(self):
         r = calculer(tache(travail=travail(depuis_s=240)), historique(600, 600, 900, 1200, 1200))

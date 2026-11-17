@@ -235,6 +235,8 @@ def lire_avancement(chemin):
     "en_cours": texte | None, "maj": heure ISO du fichier}`. `None` si elle manque, est illisible ou mal formée : la
     fiche se rabat alors sur la phase déduite du flux."""
     try:
+        if Path(chemin).stat().st_size > MAX_AVANCEMENT_OCTETS:     # une liste de quelques lignes : jamais un gros fichier
+            return None
         brut = json.loads(Path(chemin).read_text(encoding="utf-8"))
         maj = Path(chemin).stat().st_mtime
     except (OSError, ValueError):
@@ -243,14 +245,16 @@ def lire_avancement(chemin):
     if not isinstance(points, list):
         return None
     rendu = [{"texte": str(p["texte"])[:120], "fait": p.get("fait") is True}
-             for p in points if isinstance(p, dict) and isinstance(p.get("texte"), str)]
+             for p in points[:MAX_POINTS] if isinstance(p, dict) and isinstance(p.get("texte"), str)]
     en_cours = brut.get("en_cours")
     return {"points": rendu, "en_cours": en_cours[:120] if isinstance(en_cours, str) and en_cours.strip() else None,
             "maj": _iso(maj)}
 
 
+MAX_AVANCEMENT_OCTETS = 65536
+MAX_POINTS = 30
 _COMPILATION = ("gradle", "assemble", "compile", "build")
-_TESTS = ("test", "lancer.py", "adb", "emulator", "pytest", "unittest")
+_TESTS = re.compile(r"\btests?\b|pytest|unittest|connectedandroidtest|\badb\b|\bemulator\b")
 
 
 def phase_du_flux(lignes):
@@ -270,9 +274,9 @@ def phase_du_flux(lignes):
                 return "lecture"
             if nom in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
                 return "modification"
-            if nom == "Bash":
+            if nom in ("Bash", "PowerShell"):
                 commande = str((bloc.get("input") or {}).get("command") or "").lower()
-                if any(m in commande for m in _TESTS):
+                if _TESTS.search(commande):
                     return "tests"
                 if any(m in commande for m in _COMPILATION):
                     return "compilation"
@@ -392,8 +396,9 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
                     "vie_t": vie_t, "conso": conso_en_cours(flux), "phase": phase_du_flux(lignes),
                     "avancement": lire_avancement(f.with_suffix(".avancement.json"))}
             for tid in etat.get("taches") or [etat.get("tache")]:
-                if isinstance(tid, str):
-                    travail[tid] = info
+                if isinstance(tid, str):     # chaque tâche d'un lot a sa liste ; à défaut, celle de l'agent
+                    travail[tid] = {**info, "avancement": lire_avancement(f.parent / f"{tid}.avancement.json")
+                                    or info["avancement"]}
         for t in taches:
             if isinstance(t, dict) and t.get("id") in travail:
                 t["travail"] = dict(travail[t["id"]])
@@ -503,7 +508,14 @@ class Registre:
         return "resultat" if a_un_resultat(self.chemin(cle, ".jsonl")) else "mort"
 
     def effacer(self, cle):
-        """Oublie l'agent (ses questions restent)."""
+        """Oublie l'agent (ses questions restent) et la liste d'avancement de chaque tâche qu'il portait."""
+        etat = self.lire_etat(cle) or {}
+        for tid in etat.get("taches") or []:
+            if isinstance(tid, str):
+                try:
+                    self.chemin(tid, ".avancement.json").unlink()
+                except OSError:
+                    pass
         for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete", ".avancement.json"):
             try:
                 self.chemin(cle, suffixe).unlink()

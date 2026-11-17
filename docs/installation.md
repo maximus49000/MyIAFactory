@@ -176,6 +176,14 @@ scenes/combat.gd », relu à chaque rafraîchissement. La dernière action se li
 le nom de l'outil et du fichier (« lit », « modifie », « écrit », « lance python », « cherche dans les fichiers »,
 « rédige »), jamais le contenu d'une commande ou d'un fichier.
 
+**Où en est la tâche.** Le panneau d'une tâche dont un agent travaille dit, en haut : l'**état** (pastille verte « avance »,
+orange « commande longue en cours depuis 5 min », rouge « sans action depuis 12 min, arrêt automatique à 40 min », « agent
+terminé, résultat en attente de lecture depuis 3 min » ou « moteur arrêté »), **où il en est** (la liste de points que
+l'agent écrit lui-même dans `.factory/agents-en-cours/<tâche>.avancement.json` et coche au fil de l'eau ; sans liste, la phase
+déduite de son flux : il lit, modifie, compile ou lance des tests), et le **temps** : passé, depuis le début de la tâche, et
+une fourchette du temps restant tirée des durées des mêmes étapes déjà terminées dans le projet (« inconnu » sous 3 durées,
+« plus long que d'habitude » au-delà). Le calcul est dans `bureau/avancement.py`.
+
 **Une question à un agent en plein travail lui est transmise.** Un message dans la discussion d'une fonctionnalité dont
 un agent local travaille sur une tâche active n'ouvre plus de tâche « Retour » : la discussion répond « Question
 transmise à Orion : il répondra à la fin de sa tâche en cours. » (la question attend dans

@@ -74,6 +74,12 @@ CORRECTION_COMPLETE = ("Corrige la cause, pas seulement les endroits cités : ch
 APK_A_JOUR_AVANT_LES_TESTS = ("Avant tout test qui exécute l'application (émulateur, test instrumenté, vérification de "
                               "l'APK livré) : si le code a changé depuis la construction de l'APK, reconstruis-le "
                               "d'abord, puis teste cette version. Ne teste ni ne juge jamais un APK périmé.")
+# L'avancement d'une tâche, lu par la fiche du bureau (bureau/avancement.py) : la liste des points de l'agent, cochée au fil
+# de l'eau. Sans elle, la fiche ne sait dire que la phase du flux.
+CONSIGNE_AVANCEMENT = ("Avancement : dès le début, écris dans `{chemin}` la liste de tes points, au format "
+                       '`{{"points": [{{"texte": "…", "fait": false}}], "en_cours": "ce que tu fais"}}` (pour une correction : '
+                       "un point par défaut du refus). Quand un point est fini, mets `fait` à `true` et mets `en_cours` à "
+                       "jour. Une ligne par point, sans commentaire.")
 TESTS_CIBLES = ("Tests : lance seulement les tests touchés par ton élément (ses fichiers de test), par le lanceur du "
                 "poste. Pas la suite complète : elle passe une fois, à la dernière étape du dernier élément de la "
                 "fonctionnalité.")
@@ -3582,6 +3588,15 @@ def _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
                    for v in _m(etat, "elements").values())
 
 
+def _chemin_avancement(projet, tid):
+    """Le fichier d'avancement de la tâche, compté depuis le dossier du projet (là où travaille l'agent)."""
+    chemin = detache.dossier(projet.factory.resolve().parent) / f"{tid}.avancement.json"
+    try:
+        return chemin.resolve().relative_to(projet.dossier.resolve()).as_posix()
+    except ValueError:
+        return chemin.as_posix()
+
+
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
     if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
         return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS]
@@ -3694,6 +3709,8 @@ def _matiere(projet, etat, t):
         parties.append(f"Élément : {t.get('element') or '(aucun)'}")
         if etape == "correction":
             parties.append(CORRECTION_COMPLETE)
+    if etape != "cadrage":
+        parties.append(CONSIGNE_AVANCEMENT.format(chemin=_chemin_avancement(projet, t["id"])))
     if consignes:
         parties += ["Consignes :", consignes]
     return "\n".join(parties)

@@ -678,6 +678,25 @@ class Serie(Base):
                      {"id": "controle", "nom": "Contrôle", "role": "controleur", "service": "dev"}]
         self.factory.write_text(json.dumps(f), encoding="utf-8")
 
+    def test_la_consigne_demande_la_liste_d_avancement(self):
+        self.sans_relecteurs()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[{"statut": "fait", "message": {"texte": "Fait."}}])
+        t = self.taches(etape="flux:dev")[0]
+        m = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("Avancement : dès le début", m)
+        self.assertNotIn("factory.json/", m)      # le dossier de la factory, pas son fichier
+        self.assertIn(f"agents-en-cours/{t['id']}.avancement.json", m)
+
+    def test_la_consigne_d_avancement_est_dans_chaque_etape(self):
+        self.sans_relecteurs()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écran fait."}}, verdict("e1")])
+        for etape in ("flux:dev", "flux:controle"):
+            t = self.taches(etape=etape)[0]
+            self.assertIn("avancement.json", regles._matiere(self.projet, self.etat, t), etape)
+
     def test_sans_relecteur_le_controle_du_flux_conclut(self):
         self.sans_relecteurs()
         self.serie(1)

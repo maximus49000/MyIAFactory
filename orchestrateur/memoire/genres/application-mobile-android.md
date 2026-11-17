@@ -1052,3 +1052,9 @@ Rôles : testeur
 Date : 2026-11-15
 
 En test d'interface, cibler par balise de test un libellé qui apparaît à plusieurs endroits de l'écran.
+
+## G176 — Quand un test provoque une panne de stockage, la provoquer l
+Rôles : dev
+Date : 2026-11-17
+
+Quand un test provoque une panne de stockage, la provoquer le plus tard possible, après que l'interface s'est stabilisée.

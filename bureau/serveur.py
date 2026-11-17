@@ -1981,8 +1981,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(demande, dict):
                     raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
                 actuel = reglages.charger(projet.chemin_reglages)["deport"]
-                # une demande partielle se fusionne sur l'existant ; les lieux hérités du bureau sont figés au projet
-                lieux = projet.lieux_effectifs()
+                # une demande partielle se fusionne sur les lieux écrits dans le projet ; ceux du bureau restent hérités
+                lieux = projet.lieux_du_projet()
                 if isinstance(demande.get("lieux"), dict):
                     lieux.update(demande["lieux"])
                 elif "lieux" in demande:

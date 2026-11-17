@@ -188,8 +188,11 @@ def fixer_lecons_auto(chemin, valeur):
 
 def fixer_deport(chemin, deport):
     """Note le déport du projet (lieux, commandes, heure de charge) : validé avant d'écrire, ReglagesInvalides sinon.
-    Rend les réglages rechargés."""
-    return _ecrire_cle(chemin, "deport", normaliser_deport(deport, "Réglages"))
+    Seuls les lieux explicitement donnés sont écrits (jamais ceux complétés par défaut : le projet hérite du bureau
+    pour les autres). Rend les réglages rechargés."""
+    complet = normaliser_deport(deport, "Réglages")
+    explicites = {a: complet["lieux"][a] for a in deport.get("lieux", {})}
+    return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
 
 
 def fixer_analyse_blocages(chemin, valeur):

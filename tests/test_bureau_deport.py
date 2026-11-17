@@ -90,5 +90,34 @@ class TestDeportGlobalDuBureau(unittest.TestCase):
                 srv.server_close()
 
 
+    def test_le_projet_ne_fige_que_ses_propres_lieux(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+            tmp = Path(t)
+            copie_demo(tmp / "a")
+            fichier = tmp / "bureau.json"
+            ecrire = lambda lieux: fichier.write_text(json.dumps(
+                {"projets": ["a/reglages.json"], "deport": {"lieux": lieux}}), encoding="utf-8")
+            ecrire({"apk": "github"})
+            srv = serveur.creer(bureau=fichier, port=0, ouvrir=SourceSimulee())
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
+                c.request("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"tests": "poste"}}}),
+                          {"X-Bureau": "1", "Content-Type": "application/json"})
+                r = c.getresponse()
+                r.read()
+                c.close()
+                self.assertEqual(r.status, 200)
+                brut = json.loads((tmp / "a" / "reglages.json").read_text(encoding="utf-8"))
+                self.assertEqual(brut["deport"]["lieux"], {"tests": "poste"})
+                p = srv.projet()
+                self.assertEqual(p.lieux_effectifs()["apk"], "github")
+                ecrire({"apk": "poste"})
+                self.assertEqual(p.lieux_effectifs()["apk"], "poste")
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
+
 if __name__ == "__main__":
     unittest.main()

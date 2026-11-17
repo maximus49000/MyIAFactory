@@ -8,6 +8,7 @@ temporaire : la branche courante et le dossier du projet restent intacts. Toute 
 
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
+import json
 import os
 import re
 import shutil
@@ -29,6 +30,7 @@ MARQUEUR = "[MyIAFactory-deport] "   # début du message de TOUS nos commits : l
 DELAI_GIT_S = 120
 DELAI_PUSH_S = 300
 _NOM_DEFAUT = "myiafactory"
+_IDENTITE_REPLI = (("user.name", "MyIAFactory"), ("user.email", "myiafactory@users.noreply.github.com"))
 
 
 def nom_fichier(texte):
@@ -55,9 +57,17 @@ def _racine_du_depot(dossier):
 
 
 def _nom_du_projet(dossier):
-    """Le nom du projet : celui du plus proche dossier qui contient `.factory/` (un agent peut donner un
-    sous-dossier, ex. `app/`), sinon du dossier donné."""
-    return Path(racine_du_projet(Path(dossier).resolve())).name
+    """Le nom du projet : le champ `nom` de `.factory/factory.json` du plus proche dossier qui contient `.factory/`
+    (un agent peut donner un sous-dossier, ex. `app/`) ; à défaut le nom de ce dossier (un clone peut s'appeler
+    `clone`). Un fichier absent, illisible ou sans `nom` texte non vide ne gêne jamais."""
+    racine = Path(racine_du_projet(Path(dossier).resolve()))
+    try:
+        declare = json.loads((racine / ".factory" / "factory.json").read_text(encoding="utf-8")).get("nom")
+        if isinstance(declare, str) and declare.strip():
+            return declare.strip()
+    except (OSError, ValueError, AttributeError, RecursionError):
+        pass
+    return racine.name
 
 
 def _texte(sortie):
@@ -253,8 +263,15 @@ def appliquer(dossier, empreinte, reglages, executer=None):
             chemin.parent.mkdir(parents=True, exist_ok=True)
             chemin.write_bytes(texte.encode("utf-8"))
             relatif = chemin.relative_to(travail).as_posix()
+            # un dépôt sans identité git (clone neuf) refuse de commiter : on complète ce qui manque, au seul commit,
+            # sans jamais écraser une identité existante ni écrire de configuration
+            repli = []
+            for cle, valeur in _IDENTITE_REPLI:
+                code, sortie = git("config", cle, cwd=travail)
+                if code != 0 or not lu(sortie):
+                    repli += ["-c", "%s=%s" % (cle, valeur)]
             for args, quoi in ((("add", "--", relatif), "préparation"),
-                               (("commit", "-q", "-m", MARQUEUR + "Déport : workflow GitHub Actions des actions déportées",
+                               ((*repli, "commit", "-q", "-m", MARQUEUR + "Déport : workflow GitHub Actions des actions déportées",
                                  "--", relatif), "commit")):
                 code, sortie = git(*args, cwd=travail)
                 if code != 0:

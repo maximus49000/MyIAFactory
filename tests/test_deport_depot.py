@@ -1,8 +1,11 @@
+import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
@@ -40,6 +43,34 @@ class AvecDepot(unittest.TestCase):
 
     def chemin(self):
         return self.depot / ".github" / "workflows" / "mon-projet.yml"
+
+
+class TestNomDuProjet(AvecDepot):
+    """Le nom du fichier vient du `nom` de `.factory/factory.json` (un clone peut s'appeler `clone`)."""
+
+    def ecrire(self, contenu):
+        (self.depot / ".factory").mkdir(exist_ok=True)
+        (self.depot / ".factory" / "factory.json").write_text(contenu, encoding="utf-8")
+
+    def test_prefere_le_nom_declare_au_nom_du_dossier(self):
+        self.ecrire(json.dumps({"nom": "MyFridgeCleaner"}))
+        self.assertEqual(dd._nom_du_projet(str(self.depot)), "MyFridgeCleaner")
+        a = dd.apercu(str(self.depot), REGLAGES)
+        self.assertTrue(a["chemin"].replace("\\", "/").endswith(".github/workflows/myfridgecleaner.yml"), a["chemin"])
+
+    def test_retombe_sur_le_dossier_si_le_nom_est_absent_ou_invalide(self):
+        for contenu in ("{}", "pas du json", json.dumps({"nom": 12}), json.dumps({"nom": "  "}),
+                        json.dumps(["nom"]), json.dumps({"nom": None})):
+            self.ecrire(contenu)
+            self.assertEqual(dd._nom_du_projet(str(self.depot)), "Mon Projet", contenu)
+
+    def test_sans_fichier_factory_json(self):
+        (self.depot / ".factory").mkdir()
+        self.assertEqual(dd._nom_du_projet(str(self.depot)), "Mon Projet")
+
+    def test_tolere_une_recursion_trop_profonde(self):
+        self.ecrire("[" * 100000)
+        self.assertEqual(dd._nom_du_projet(str(self.depot)), "Mon Projet")
 
 
 class TestApercu(AvecDepot):
@@ -200,6 +231,51 @@ class TestAppliquer(AvecDepot):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIdentiteGit(AvecDepot):
+    """Le commit du workflow réussit sans identité git (clone neuf) et ne touche jamais une identité existante."""
+
+    def setUp(self):
+        super().setUp()
+        self.vide = Path(tempfile.mkdtemp()) / "gitconfig-vide"
+        self.vide.write_text("", encoding="utf-8")
+        self.addCleanup(lambda: shutil.rmtree(str(self.vide.parent), ignore_errors=True))
+
+    def sans_identite_globale(self):
+        env = mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(self.vide), "GIT_CONFIG_NOSYSTEM": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        for var in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"):
+            os.environ.pop(var, None)
+
+    def deporter(self):
+        e = dd.apercu(str(self.depot), REGLAGES)["empreinte"]
+        return dd.appliquer(str(self.depot), e, REGLAGES)
+
+    def test_sans_identite_le_commit_porte_l_identite_de_repli(self):
+        self.sans_identite_globale()
+        git(self.depot, "config", "--unset", "user.name")
+        git(self.depot, "config", "--unset", "user.email")
+        r = self.deporter()
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(git(self.origine, "log", "-1", "--format=%an <%ae>", "deport/workflow"),
+                         "MyIAFactory <myiafactory@users.noreply.github.com>")
+        r = subprocess.run(["git", "config", "--local", "--get", "user.name"], cwd=str(self.depot))
+        self.assertNotEqual(r.returncode, 0)      # aucune configuration git n'est écrite
+
+    def test_une_identite_partielle_est_completee_sans_ecraser_l_existante(self):
+        self.sans_identite_globale()
+        git(self.depot, "config", "--unset", "user.email")
+        self.assertTrue(self.deporter()["ok"])
+        self.assertEqual(git(self.origine, "log", "-1", "--format=%ae", "deport/workflow"),
+                         "myiafactory@users.noreply.github.com")
+
+    def test_une_identite_configuree_est_conservee(self):
+        self.sans_identite_globale()
+        self.assertTrue(self.deporter()["ok"])
+        self.assertEqual(git(self.origine, "log", "-1", "--format=%an <%ae>", "deport/workflow"),
+                         "Test <t@example.org>")
 
 
 class TestBaseDistante(AvecDepot):

@@ -1401,3 +1401,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Quand aucune bibliothèque graphique (image/police) n'est disponible dans l'environnement, une maquette basse-fidélité peut être produite par un script d'encodage d'image minimal utilisant uniquement la bibliothèque standard, en simulant le texte par des barres plutôt que des lettres.
+
+## S234 — Dans un rapport de fin d'étape de cadrage, le champ listant
+Rôles : dev
+Date : 2026-11-17
+
+Dans un rapport de fin d'étape de cadrage, le champ listant maquettes et étapes à réaliser est une condition de passage à la validation, pas une simple information : son absence bloque la fonctionnalité même si les livrables existent déjà sur disque. Toujours le renseigner dès que des maquettes et une liste d'étapes sont produites.

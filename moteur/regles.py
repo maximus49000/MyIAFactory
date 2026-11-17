@@ -81,6 +81,21 @@ SUITE_COMPLETE_UNE_FOIS = ("Tests : c'est la dernière étape du dernier éléme
                            "regarder) et, si le résultat s'ouvre dans un navigateur, `acces` : `{\"url\": \"…\", "
                            "\"description\": \"…\"}` (l'adresse exacte de la page livrée).")
 OCCUPANTS_DE_FICHIERS = ("flux", "relecture", "correction")    # un élément qui écrit encore dans ses fichiers
+# Le parcours selon la taille de l'évolution (essai réel du 2026-11-17 : une petite évolution payait cadrage, prototype et
+# méthode, environ 1,3 €, pour le travail d'une session). Le cadrage juge la taille ; le Directeur peut toujours
+# demander le parcours complet.
+CONSIGNE_TAILLE = ("Avec le cahier, juge la **taille** de l'évolution et rends `\"taille\": {\"valeur\": \"petite\" | "
+                   "\"moyenne\" | \"grande\", \"pourquoi\": \"…\", \"fichiers\": [chemins]}` dans `cahier`. "
+                   "**petite** : 5 fichiers au plus, aucun écran nouveau à concevoir, aucune partie qui se répète, peu de "
+                   "risque (elle partira en un seul élément, sans prototype ni méthode : `fichiers` = ceux qu'elle "
+                   "touchera) ; **moyenne** : plusieurs parties différentes, sans modèle répété à mettre au point (découpée, "
+                   "sans prototype ni méthode) ; **grande** : un modèle qui se répète sur beaucoup d'éléments, ou un rendu à "
+                   "mettre au point avec l'utilisateur (parcours complet). Dans le doute, la taille au-dessus.")
+PARCOURS_UN_ELEMENT, PARCOURS_SANS_PROTOTYPE, PARCOURS_COMPLET = "un_element", "sans_prototype", "complet"
+GARDE_FOU_PARCOURS_COURT = ("Parcours court (pas de méthode) : le cahier ci-dessus tient lieu de méthode. Si l'évolution "
+                            "se révèle nettement plus grosse que prévu (bien plus de fichiers, un modèle qui se répète), "
+                            "arrête-toi et rends `statut: accord_requis` avec `accord.quoi` = « Passer au parcours "
+                            "complet (prototype et méthode) » et la raison : le Directeur décide.")
 ETAPES_DE_FLUX = "flux:"
 ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
 GENRE_VALIDATION = "valider_etape"     # la décision de projet posée quand un élément attend le Directeur
@@ -502,14 +517,56 @@ def _sur_message(projet, demande, etat):
     return [_conseil(projet, etat, demande, fid)]
 
 
+def _texte_du_parcours(taille):
+    """Ce que la taille jugée au cadrage dit au Directeur, ajouté à la question de validation du cahier."""
+    valeur = (taille or {}).get("valeur")
+    if valeur == "petite":
+        return (f" Évolution jugée petite ({taille['pourquoi']}) : elle partira en un seul élément, sans prototype ni "
+                "méthode. Vous pouvez demander le parcours complet.")
+    if valeur == "moyenne":
+        return (f" Évolution jugée moyenne ({taille['pourquoi']}) : elle sera découpée, sans prototype ni méthode. "
+                "Vous pouvez demander le parcours complet.")
+    return ""
+
+
+def _parcours(cahier, verdict):
+    valeur = ((cahier or {}).get("taille") or {}).get("valeur")
+    if verdict != "valider" or valeur not in ("petite", "moyenne"):
+        return PARCOURS_COMPLET
+    return PARCOURS_UN_ELEMENT if valeur == "petite" else PARCOURS_SANS_PROTOTYPE
+
+
+def _parcours_un_element(projet, demande, f, cahier):
+    """Une petite évolution : comme une fiche de correction, le cahier validé part en un seul élément, sans découpage,
+    prototype ni méthode (ses fichiers déclarés au cadrage)."""
+    fid = f["id"]
+    objectif = " ".join(" ".join(cahier.get("etapes") or []).split())
+    element = {"id": "evolution", "nom": f["nom"],
+               "objectif": (objectif[:297] + "…") if len(objectif) > 300 else objectif}
+    if (cahier.get("taille") or {}).get("fichiers"):
+        element["fichiers"] = cahier["taille"]["fichiers"]
+    lancer(projet, "file", {"fonctionnalite": fid, "elements": [{k: v for k, v in element.items() if v}]})
+    lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
+    _dire(projet, fid, "Cahier validé : l'évolution est petite, elle part en un seul élément, sans prototype ni méthode.")
+    _terminer(projet, {"demande": demande["id"]}, "Le cahier est validé : le développement commence.")
+    return []
+
+
 def _sur_cahier(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
-    if demande.get("verdict") == "valider":
+    if demande.get("verdict") in ("valider", "valider_complet"):
         cahier = {k: (f.get("cahier") or {}).get(k) for k in ("maquette", "etapes")}
         if (f.get("cahier") or {}).get("partenaires") is not None:     # décidés au cadrage : le cahier validé les garde
             cahier["partenaires"] = f["cahier"]["partenaires"]
+        if (f.get("cahier") or {}).get("taille") is not None:
+            cahier["taille"] = f["cahier"]["taille"]
         cahier["valide_le"] = su.maintenant()
+        cahier["parcours"] = parcours = _parcours(f.get("cahier"), demande["verdict"])
+        if parcours == PARCOURS_UN_ELEMENT:
+            lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier})
+            _lever(projet, f, "valider_cahier")
+            return _parcours_un_element(projet, demande, f, cahier)
         lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "decoupage"})
         _lever(projet, f, "valider_cahier")
         dossier = {"fonctionnalite": {"nom": f["nom"], "cahier": {"maquette": cahier.get("maquette"),
@@ -519,7 +576,8 @@ def _sur_cahier(projet, demande, etat):
                             for s in _production(projet, fid)],
                    "methodes_validees": _methodes_validees(projet, fid),
                    "consignes_propres": _consignes_propres(projet)}
-        return [a_juger("decouper", dossier, {"demande": demande["id"], "fonctionnalite": fid})]
+        return [a_juger("decouper", dossier, {"demande": demande["id"], "fonctionnalite": fid,
+                                              **({"sans_prototype": True} if parcours == PARCOURS_SANS_PROTOTYPE else {})})]
     # corriger : la discussion se rouvre, le cahier sera réécrit d'après le texte
     _lever(projet, f, "valider_cahier")
     lancer(projet, "fonctionnalite", {"id": fid, "etape": "cadrage"})
@@ -3561,7 +3619,7 @@ def _matiere(projet, etat, t):
                         'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
                         "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
                         "élément, moment du jeu…), affichée sous l'image. Une correction demandée par "
-                        "l'utilisateur : refais la maquette et rends le cahier corrigé."]
+                        "l'utilisateur : refais la maquette et rends le cahier corrigé.", CONSIGNE_TAILLE]
             partenaires = _partenaires_au_cadrage(projet)
             if partenaires:
                 parties.append(partenaires)
@@ -3584,9 +3642,20 @@ def _matiere(projet, etat, t):
             parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
         else:
             methode = (f or {}).get("methode") or {}
-            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
-                        "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
-                        "Registre des contrôles : relis-le avant de rendre l'élément."]
+            cahier = (f or {}).get("cahier") or {}
+            parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}"]
+            if not methode and cahier.get("parcours") in (PARCOURS_UN_ELEMENT, PARCOURS_SANS_PROTOTYPE):
+                objectif = (((f or {}).get("elements") or {}).get(t.get("element")) or {}).get("objectif")
+                parties += (([f"Objectif de l'élément : {objectif}"] if objectif else [])
+                            + ["Cahier des charges validé (étapes à réaliser) :"]
+                            + [f"- {x}" for x in cahier.get("etapes") or []]
+                            + ["Maquette : " + ", ".join(str(m.get("chemin") if isinstance(m, dict) else m)
+                                                        for m in cahier.get("maquette") or [])]
+                            + [GARDE_FOU_PARCOURS_COURT])
+            else:
+                parties.append("Méthode validée : " + str(methode.get("chemin") or methode.get("lien")
+                                                           or "(voir ton brief)"))
+            parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
         fichiers = ((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
         if fichiers:
             parties.append("Fichiers de ton élément : " + ", ".join(fichiers) + " (si tu dois en toucher un autre, "
@@ -4542,8 +4611,11 @@ def _suite_cadrage(projet, etat, t, r):
         cahier = {"maquette": r["cahier"]["maquette"], "etapes": r["cahier"]["etapes"]}
         if "partenaires" in r["cahier"]:      # les partenaires décidés au cadrage (la réponse de l'utilisateur)
             cahier["partenaires"] = r["cahier"]["partenaires"]
+        if "taille" in r["cahier"]:           # la taille jugée au cadrage : elle choisit le parcours
+            cahier["taille"] = r["cahier"]["taille"]
         lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier, "etape": "cahier"})
-        _poser(projet, fid, "valider_cahier", "Le cahier des charges est prêt : le valider, ou le faire corriger ?")
+        _poser(projet, fid, "valider_cahier", "Le cahier des charges est prêt : le valider, ou le faire corriger ?"
+               + _texte_du_parcours(cahier.get("taille")))
     return []
 
 
@@ -6176,6 +6248,11 @@ def _apres_decouper(projet, o, ctx, etat):
     lancer(projet, "file", {"fonctionnalite": fid, "elements": elements})
     _m(etat, "depend_de")[fid] = o["depend_de"]
     _dire(projet, fid, o["message"])
+    if ctx.get("sans_prototype"):      # une évolution moyenne : la série commence, sans prototype ni méthode
+        lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
+        _terminer(projet, ctx, f"Le cahier est découpé en {len(o['elements'])} éléments ; la série commence, sans "
+                               "prototype ni méthode.")
+        return []
     reprise = o.get("reprendre_methode")
     if reprise:
         r = reprise

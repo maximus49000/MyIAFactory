@@ -773,6 +773,8 @@ def _verifier_cahier(c):
     if "partenaires" in c and not rel.partenaires_cahier_ok(c["partenaires"]):
         raise Refus("« cahier.partenaires » est une liste de {id, mode} (mode : direct, inscrit ou aucun), un partenaire au "
                     "plus une fois.")
+    if "taille" in c and not rel.taille_ok(c["taille"]):
+        raise Refus("« cahier.taille » est {valeur (petite, moyenne ou grande), pourquoi (texte), fichiers? (chemins)}.")
     c["maquette"] = liste_d_images(c["maquette"], "cahier.maquette")
     images_montrables(chemins_d_images(c["maquette"]), "cahier.maquette")
     if c.get("valide_le") is not None and not isinstance(c["valide_le"], str):

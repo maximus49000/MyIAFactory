@@ -9,7 +9,8 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "verdicts": [{"element", "conforme", "points": [str]}],
      "accord": {"quoi", "partenaire", "cout"}?, "outil": str?, "lignes": int?,
      "chez_partenaire": {"partenaire", "quoi", "prompt", "reglages"?, "mode_operatoire", "a_rapporter", "elements"?}?,
-     "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?}?,
+     "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?,
+                             "taille": {valeur: petite | moyenne | grande, pourquoi, fichiers?}?}?,
      "fiche_correction": {"en_clair"?, "symptome", "reproduction": [texte], "attendu", "piste"?}?,   (cadrage d'une correction)
      "methode_prete": bool?, "non_faites": [id de tâche]?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
@@ -105,6 +106,8 @@ def lire(texte):
                 or not c["etapes"] or not all(_texte(x) for x in c["etapes"])):
             raise RapportIllisible("« cahier » demande « maquette » (chemins, ou {chemin, legende}) et « etapes » "
                                    "(listes non vides)")
+    if isinstance(r.get("cahier"), dict) and "taille" in r["cahier"] and not rel.taille_ok(r["cahier"]["taille"]):
+        r["cahier"] = {k: v for k, v in r["cahier"].items() if k != "taille"}   # mal formée : écartée (parcours complet)
     if isinstance(r.get("cahier"), dict) and "partenaires" in r["cahier"]:
         if not rel.partenaires_cahier_ok(r["cahier"]["partenaires"]):
             raise RapportIllisible("« cahier.partenaires » est une liste de {id, mode} (mode : direct, inscrit ou aucun), un "

@@ -86,9 +86,28 @@ function piecesCahier(etat, c, parent) {
   }
 }
 
+// La taille jugée au cadrage et le parcours qu'elle choisit ; null pour une grande évolution ou sans taille (parcours
+// complet, rien à dire).
+export function parcoursDuCahier(cahier) {
+  const t = cahier?.taille;
+  if (!t || !plein(t.pourquoi)) return null;
+  if (t.valeur === "petite") return {taille: "petite", texte: `Évolution jugée petite : ${t.pourquoi}`,
+    parcours: "Elle partira en un seul élément, sans prototype ni méthode."};
+  if (t.valeur === "moyenne") return {taille: "moyenne", texte: `Évolution jugée moyenne : ${t.pourquoi}`,
+    parcours: "Elle sera découpée, sans prototype ni méthode."};
+  return null;
+}
+
 function contenuDuCahier(etat, f, boite) {
   const vue = vueCahier(f);
   const s = section("Cahier des charges");
+  const parcours = parcoursDuCahier(vue.courant);
+  if (parcours) {
+    const p = el("p", "val-parcours");
+    p.append(el("strong", "", parcours.texte), el("span", "", " " + parcours.parcours
+      + " Si elle vous semble plus grosse, choisissez « Valider avec le parcours complet »."));
+    s.append(p);
+  }
   if (vue.courant) {
     piecesCahier(etat, vue.courant, s);
     const partenaires = partenairesDuCahier(etat, vue.courant);
@@ -251,7 +270,18 @@ export function contenuCahierMethode(ctx, d, {fermer = () => {}} = {}) {
     return envoyer(methode ? demandeMethode(d.fonctionnalite, "revoir", texte) : demandeCahier(d.fonctionnalite, "corriger", texte), corriger);
   });
   const pied = el("div", "val-pied");
-  pied.append(erreur, corriger, valider);
+  pied.append(erreur, corriger);
+  // Petite ou moyenne évolution : le Directeur peut préférer le parcours complet (prototype et méthode).
+  if (!methode && parcoursDuCahier(vueCahier(f).courant)) {
+    const complet = el("button", "bouton secondaire val-envoyer", "Valider avec le parcours complet");
+    complet.type = "button";
+    complet.addEventListener("click", () => {
+      erreur.textContent = "";
+      return envoyer(demandeCahier(d.fonctionnalite, "valider_complet"), complet);
+    });
+    pied.append(complet);
+  }
+  pied.append(valider);
   boite.append(pied);
   return {boite, fermer: bFermer};
 }

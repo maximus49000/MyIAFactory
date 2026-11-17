@@ -1514,6 +1514,84 @@ class VitesseDeLivraison(Base):
             self.assertNotEqual(code, 0, mauvais)
 
 
+
+class ParcoursSelonLaTaille(Base):
+    """Essai réel (2026-11-17) : une petite évolution (5 entrées de menu regroupées en onglets) a payé cadrage, prototype
+    et méthode, environ 1,3 €, pour un changement d'une session. Le cadrage juge la taille ; une petite évolution part en
+    un seul élément, une moyenne sans prototype ni méthode, une grande suit le parcours complet."""
+    PETITE = {"valeur": "petite", "pourquoi": "Quatre fichiers, aucun écran nouveau.",
+              "fichiers": ["src/menu.tsx", "src/menu.test.tsx"]}
+
+    def cahier_de_taille(self, taille):
+        self.fonctionnalite("cahier", cahier={"maquette": [PNG], "etapes": ["Regrouper les entrées", "Rediriger"],
+                                              **({"taille": taille} if taille else {})})
+        self.ok("decision", entree={"action": "poser", "portee": "f1", "genre": "valider_cahier", "texte": "ok ?"})
+
+    def test_la_taille_du_cadrage_est_gardee_dans_le_cahier_et_dite_au_directeur(self):
+        d, actions = self.cadrer(texte="Des écrans pour l'appli")
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Cahier prêt."},
+                                         "cahier": {"maquette": [PNG], "etapes": ["Faire"], "taille": self.PETITE}}])
+        f = self.fonc()
+        self.assertEqual(f["cahier"]["taille"], self.PETITE)
+        (dec,) = [x for x in f["decisions"] if x["genre"] == "valider_cahier"]
+        self.assertIn("petite", dec["texte"])
+        self.assertIn("sans prototype ni méthode", dec["texte"])
+
+    def test_le_cadrage_demande_la_taille(self):
+        d, actions = self.cadrer(texte="Des écrans pour l'appli")
+        self.assertIn("juge la **taille**", actions[0][3])
+
+    def test_une_petite_evolution_part_en_un_seul_element(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertEqual([a for a in actions if a[0] == "juger"], [])       # ni découpage ni méthode
+        f = self.fonc()
+        self.assertEqual(f["etape"], "serie")
+        self.assertTrue(f["cahier"]["valide_le"])
+        self.assertEqual(f["decisions"], [])
+        (e,) = f["file"]
+        self.assertEqual(e["fichiers"], self.PETITE["fichiers"])
+        regles.avancer(self.projet, self.etat)
+        (t,) = [t for t in self.taches() if str(t["etape"]).startswith("flux:")]
+        m = regles._matiere(self.projet, self.etat, t)
+        self.assertIn("Regrouper les entrées", m)                          # le cahier tient lieu de méthode
+        self.assertIn(regles.GARDE_FOU_PARCOURS_COURT, m)
+        self.assertEqual(self.taches(etape="prototype"), [])
+
+    def test_une_evolution_moyenne_est_decoupee_sans_prototype(self):
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "decouper")])
+        self.piloter(actions, juges={"decouper": DECOUPAGE})
+        f = self.fonc()
+        self.assertEqual(f["etape"], "serie")
+        self.assertEqual([q["id"] for q in f["file"]], ["e1", "e2", "e3"])   # aucun élément pris pour un prototype
+        self.assertEqual(self.taches(etape="prototype"), [])
+
+    def test_le_directeur_peut_demander_le_parcours_complet(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "decouper")])
+        self.piloter(actions, juges={"decouper": DECOUPAGE})
+        self.assertEqual(self.fonc()["etape"], "prototype")
+
+    def test_une_grande_evolution_ou_sans_taille_suit_le_parcours_complet(self):
+        for taille in ({"valeur": "grande", "pourquoi": "Vingt écrans sur le même modèle."}, None):
+            self.setUp()
+            self.cahier_de_taille(taille)
+            d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+            self.piloter(actions, juges={"decouper": DECOUPAGE})
+            self.assertEqual(self.fonc()["etape"], "prototype", taille)
+
+    def test_l_outil_verifie_la_taille_du_cahier(self):
+        self.fonctionnalite("cahier")
+        for mauvaise in ({"valeur": "minuscule", "pourquoi": "x"}, {"valeur": "petite"}, "petite",
+                         {"valeur": "petite", "pourquoi": "x", "fichiers": "a.tsx"}):
+            code, _ = self.outil("fonctionnalite", entree={"id": "f1", "cahier": {"maquette": [PNG], "etapes": ["x"],
+                                                                                 "taille": mauvaise}})
+            self.assertNotEqual(code, 0, mauvaise)
+
+
 class Validation(Base):
     """Une étape de validation du Directeur dans le flux : l'élément s'arrête, le Directeur valide ou renvoie."""
 

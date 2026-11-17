@@ -580,6 +580,18 @@ MODES_PARTENAIRE = ("direct", "inscrit", "aucun")     # décidés au cadrage : a
 MAX_PARTENAIRES_CAHIER = 20
 
 
+TAILLES = ("petite", "moyenne", "grande")     # la taille d'une évolution, jugée au cadrage
+
+
+def taille_ok(t):
+    """La taille d'une évolution jugée au cadrage : `{valeur (petite, moyenne, grande), pourquoi (texte), fichiers?
+    (les chemins qu'elle touchera)}`."""
+    return (isinstance(t, dict) and t.get("valeur") in TAILLES and isinstance(t.get("pourquoi"), str)
+            and bool(t["pourquoi"].strip()) and len(t["pourquoi"]) <= 400 and set(t) <= {"valeur", "pourquoi", "fichiers"}
+            and (t.get("fichiers") is None or (isinstance(t["fichiers"], list) and len(t["fichiers"]) <= 30
+                                               and all(isinstance(x, str) and x.strip() for x in t["fichiers"]))))
+
+
 def partenaires_cahier_ok(v):
     """Les partenaires décidés au cadrage : `[{id, mode}]` (rien d'autre dans chaque entrée), `mode` valant direct (liaison
     directe), inscrit (l'utilisateur fait la génération sur le site du partenaire) ou aucun (pas de partenaire pour ce besoin) ;

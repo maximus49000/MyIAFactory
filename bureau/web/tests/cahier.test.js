@@ -342,3 +342,26 @@ test("le panneau de la fonctionnalité : « Ouvrir … » à la place des bouton
   await lien(contenu, "Ouvrir la méthode").click();
   assert.deepEqual(ouvertes.map((d) => [d.id, d.genre, d.fonctionnalite]), [["dc1", "valider_cahier", "f1"], ["dm1", "valider_methode", "f1"]]);
 });
+
+test("une petite évolution : la taille est dite, et le Directeur peut demander le parcours complet", async () => {
+  globalThis.fetch = async () => ({ok: true, text: async () => "x"});
+  const demandes = [];
+  const etat = etatDe([{...DECISION_CAHIER, id: "dc-t"}]);
+  etat.fonctionnalites[0].cahier = {...CAHIER, taille: {valeur: "petite", pourquoi: "Quatre fichiers."}};
+  const ctx = {etat, barre: {demander: async (d) => { demandes.push(d); return {ok: true}; }}};
+  const {boite} = contenuCahierMethode(ctx, {...etat.fonctionnalites[0].decisions[0], fonctionnalite: "f1"});
+  assert.match(boite.textContent, /Évolution jugée petite : Quatre fichiers\./);
+  assert.match(boite.textContent, /un seul élément, sans prototype ni méthode/);
+  await lien(boite, "Valider avec le parcours complet").click();
+  assert.deepEqual(demandes, [{type: "cahier", fonctionnalite: "f1", verdict: "valider_complet"}]);
+  V.oublierEnvoyee("dc-t");
+});
+
+test("une grande évolution ou sans taille : pas de bouton de parcours complet", () => {
+  for (const taille of [{valeur: "grande", pourquoi: "Vingt écrans."}, undefined]) {
+    const etat = etatDe([DECISION_CAHIER]);
+    etat.fonctionnalites[0].cahier = {...CAHIER, ...(taille ? {taille} : {})};
+    const {boite} = contenuCahierMethode({etat, barre: {}}, {...DECISION_CAHIER, fonctionnalite: "f1"});
+    assert.equal(lien(boite, "Valider avec le parcours complet"), undefined);
+  }
+});

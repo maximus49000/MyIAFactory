@@ -26,3 +26,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Quand une fonctionnalité doit remplacer plusieurs écrans existants par un seul composant composite, construire et tester ce composant isolément sur le premier cas représentatif avant de modifier le routage/menu global évite de casser la navigation en cours de validation.
+
+## G5 — Quand on retire une URL en faveur d'une URL paramètrée, préf
+Rôles : dev
+Date : 2026-11-17
+
+Quand on retire une URL en faveur d'une URL paramètrée, préférer une redirection 301/302 avec paramètre préséléctionné plutôt qu'une simple suppression, pour préserver les bookmarks et liens externes.

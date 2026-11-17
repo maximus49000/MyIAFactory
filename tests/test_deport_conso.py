@@ -1,9 +1,11 @@
-"""Consommation GitHub du déport : cumul des minutes, état du quota, cache de 5 minutes. Jamais de vrai `gh` ni du vrai
-dossier `~/MyIAFactory` : un faux `lancer`, un dossier temporaire et une horloge injectée."""
+"""Consommation GitHub du déport : cumul des minutes par job, état du quota, cache de 5 minutes, rafraîchissement en
+arrière-plan. Jamais de vrai `gh` ni du vrai dossier `~/MyIAFactory` : un faux `lancer`, un dossier temporaire et une
+horloge injectée."""
 import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -12,6 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
 from bureau import deport_conso as dc  # noqa: E402
 
 MOIS = "2026-11"
+
+
+def job(nom, debut, fin):
+    return {"name": nom, "conclusion": "success", "debut": debut, "fin": fin}
 
 
 def run(debut, fin, statut="completed", conclusion="success", nom="MyIAFactory", jobs=None, id_=1, projet="p"):
@@ -65,32 +71,59 @@ class TestCumuler(unittest.TestCase):
         ex = [run("2026-11-10T10:00:00Z", "2026-11-10T10:03:00Z", statut="in_progress", conclusion=None)]
         self.assertEqual(dc.cumuler(ex, MOIS), {})
 
-    def test_l_action_vient_des_jobs(self):
-        ex = [run("2026-11-10T10:00:00Z", "2026-11-10T10:04:00Z", jobs=["apk", "tests"])]
+    def test_trois_jobs_paralleles_de_1_min_10_font_6_minutes(self):
+        t = ("2026-11-10T10:00:00Z", "2026-11-10T10:01:10Z")
+        ex = [run(t[0], t[1], jobs=[job("apk", *t), job("tests", *t), job("lint", *t)])]
         c = dc.cumuler(ex, MOIS)["p"]
-        self.assertEqual(c, {"apk": {"minutes": 2.0, "executions": 1}, "tests": {"minutes": 2.0, "executions": 1}})
+        self.assertEqual(c, {a: {"minutes": 2.0, "executions": 1} for a in ("apk", "tests", "lint")})
+        self.assertEqual(sum(x["minutes"] for x in c.values()), 6.0)
 
-    def test_sans_jobs_l_action_est_le_nom_du_run(self):
+    def test_le_ceil_est_par_job_et_l_action_est_le_nom_du_job(self):
+        ex = [run("2026-11-10T10:00:00Z", "2026-11-10T10:05:00Z",
+                  jobs=[job("apk", "2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z"),
+                        job("tests", "2026-11-10T10:00:00Z", "2026-11-10T10:00:20Z")])]
+        self.assertEqual(dc.cumuler(ex, MOIS)["p"], {"apk": {"minutes": 5.0, "executions": 1},
+                                                      "tests": {"minutes": 1.0, "executions": 1}})
+
+    def test_un_job_ignore_sans_dates_ne_compte_pas(self):
+        ex = [run("2026-11-10T10:00:00Z", "2026-11-10T10:05:00Z",
+                  jobs=[job("apk", "2026-11-10T10:00:00Z", "2026-11-10T10:02:00Z"),
+                        {"name": "lint", "conclusion": "skipped"}])]
+        self.assertEqual(dc.cumuler(ex, MOIS)["p"], {"apk": {"minutes": 2.0, "executions": 1}})
+
+    def test_sans_jobs_repli_sur_la_duree_du_run_nommee_par_le_run(self):
         ex = [run("2026-11-10T10:00:00Z", "2026-11-10T10:01:00Z", nom="tests")]
-        self.assertIn("tests", dc.cumuler(ex, MOIS)["p"])
+        self.assertEqual(dc.cumuler(ex, MOIS)["p"], {"tests": {"minutes": 1.0, "executions": 1}})
 
 
 class Faux:
-    """Faux `gh` : route selon la commande ; enregistre les appels."""
+    """Faux `gh` : route selon la commande ; enregistre les appels ; peut bloquer (événement) ou tomber en panne."""
 
-    def __init__(self, runs=None, visibilite="PRIVATE", panne=False, facturation=None):
+    def __init__(self, runs=None, visibilite="PRIVATE", panne=False, facturation=None, bloque=None, jobs="un"):
         self.runs, self.vis, self.panne, self.facturation = runs or [], visibilite, panne, facturation
+        self.bloque, self.jobs = bloque, jobs
         self.appels = []
 
     def __call__(self, argv, **kw):
         self.appels.append(list(argv))
+        if self.bloque is not None:
+            self.bloque.wait(10)
         if self.panne:
             raise FileNotFoundError("gh")
         sortie, code = "", 0
+        t = ("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")
         if argv[1:3] == ["run", "list"]:
             sortie = json.dumps(self.runs)
         elif argv[1:3] == ["run", "view"]:
-            sortie = json.dumps({"jobs": [{"name": "apk", "conclusion": "success"}]})
+            if self.jobs == "aucun":
+                liste = []
+            elif self.jobs == "deux":
+                u = ("2026-11-10T10:00:00Z", "2026-11-10T10:01:00Z")
+                liste = [{"name": "apk", "conclusion": "success", "startedAt": u[0], "completedAt": u[1]},
+                         {"name": "tests", "conclusion": "failure", "startedAt": u[0], "completedAt": u[1]}]
+            else:
+                liste = [{"name": "apk", "conclusion": "success", "startedAt": t[0], "completedAt": t[1]}]
+            sortie = json.dumps({"jobs": liste})
         elif argv[1:3] == ["repo", "view"]:
             sortie = json.dumps({"visibility": self.vis})
         elif argv[1] == "api" and argv[2] == "user":
@@ -112,29 +145,39 @@ def brut(debut, fin, id_=1):
             "url": "https://github.com/o/d/actions/runs/%d" % id_}
 
 
+BRUT = brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")
+
+
 class TestCoquille(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self._t.cleanup)
+        self.addCleanup(dc.arreter)   # aucun fil de rafraîchissement ne survit au test
         self.cache = Path(self._t.name)
         self.t = [1794823200.0]   # 2026-11-17 10:00 UTC
 
     def horloge(self):
         return self.t[0]
 
-    def lire(self, faux, lieux=None):
+    def appeler(self, faux, lieux=None):
         return dc.conso("depot", {"apk": "Générer l'APK"}, lieux or {"apk": "github", "tests": "poste"},
                         maintenant=self.horloge, lancer=faux, cache=self.cache)
 
+    def lire(self, faux, lieux=None):
+        """Un appel, on attend le rafraîchissement en arrière-plan qu'il a lancé, puis la valeur à jour."""
+        self.appeler(faux, lieux)
+        dc.attendre()
+        return self.appeler(faux, lieux)
+
     def test_sans_action_github_ni_conso_ni_appel(self):
         faux = Faux()
-        self.assertIsNone(self.lire(faux, {"apk": "poste"}))
+        self.assertIsNone(self.appeler(faux, {"apk": "poste"}))
+        dc.attendre()
         self.assertEqual(faux.appels, [])
         self.assertFalse((self.cache / "deport-conso.json").exists())
 
     def test_conso_complete(self):
-        faux = Faux([brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")], facturation={
-            "total_minutes_used": 640, "included_minutes": 2000})
+        faux = Faux([BRUT], facturation={"total_minutes_used": 640, "included_minutes": 2000})
         c = self.lire(faux)
         self.assertEqual((c["niveau"], c["mois"], c["quota"], c["minutes_total"]), ("ok", "2026-11", 2000, 640))
         self.assertEqual(c["par_action"], [{"action": "apk", "libelle": "Générer l'APK", "minutes": 5.0,
@@ -143,19 +186,50 @@ class TestCoquille(unittest.TestCase):
         self.assertEqual((c["derniers"][0]["conclusion"], c["derniers"][0]["duree_s"]), ("success", 250))
         self.assertTrue(c["derniers"][0]["url"].startswith("https://"))
 
+    def test_derniers_une_ligne_par_job(self):
+        c = self.lire(Faux([BRUT], jobs="deux"))
+        self.assertEqual([(d["action"], d["conclusion"], d["duree_s"]) for d in c["derniers"]],
+                         [("apk", "success", 60), ("tests", "failure", 60)])
+
     def test_quota_inconnu_estimation_par_les_durees(self):
-        c = self.lire(Faux([brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")]))
+        c = self.lire(Faux([BRUT]))
         self.assertIsNone(c["quota"])
         self.assertEqual(c["minutes_total"], 5.0)
         self.assertIn("gh auth refresh -h github.com -s user", c["texte"])
+
+    def test_sans_detail_des_jobs_estimation_basse(self):
+        c = self.lire(Faux([BRUT], jobs="aucun"))
+        self.assertEqual(c["par_action"][0]["action"], "MyIAFactory")
+        self.assertIn("estimation basse", c["texte"])
 
     def test_depot_public(self):
         c = self.lire(Faux([], visibilite="PUBLIC"))
         self.assertIs(c["public"], True)
         self.assertIn("illimit", c["texte"])
 
+    def test_gh_bloque_conso_repond_tout_de_suite(self):
+        porte = threading.Event()
+        self.addCleanup(porte.set)
+        faux = Faux([BRUT], bloque=porte)
+        c = self.appeler(faux)
+        self.assertIn("lecture", c["texte"])
+        self.assertEqual(c["par_action"], [])
+        porte.set()
+        dc.attendre()
+        self.assertEqual(self.appeler(faux)["par_action"][0]["action"], "apk")
+
+    def test_deux_appels_rapproches_un_seul_rafraichissement(self):
+        porte = threading.Event()
+        self.addCleanup(porte.set)
+        faux = Faux([BRUT], bloque=porte)
+        self.appeler(faux)
+        self.appeler(faux)
+        porte.set()
+        dc.attendre()
+        self.assertEqual(len(faux.lectures_de_runs()), 1)
+
     def test_cache_reutilise_moins_de_5_minutes_puis_rafraichi(self):
-        faux = Faux([brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")])
+        faux = Faux([BRUT])
         self.lire(faux)
         self.t[0] += 299
         self.lire(faux)
@@ -165,20 +239,32 @@ class TestCoquille(unittest.TestCase):
         self.assertEqual(len(faux.lectures_de_runs()), 2)
 
     def test_panne_de_gh_rend_la_derniere_valeur(self):
-        faux = Faux([brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")])
+        faux = Faux([BRUT])
         avant = self.lire(faux)
         faux.panne = True
         self.t[0] += 400
         apres = self.lire(faux)
         self.assertEqual(apres["par_action"], avant["par_action"])
+        self.assertIn("conservée", apres["texte"])
 
     def test_panne_sans_cache_indisponible_sans_exception(self):
         c = self.lire(Faux(panne=True))
         self.assertIn("indisponible", c["texte"])
         self.assertEqual(c["par_action"], [])
 
+    def test_un_echec_n_est_pas_relance_avant_5_minutes(self):
+        faux = Faux(panne=True)
+        self.lire(faux)
+        n = len(faux.appels)
+        self.t[0] += 299
+        self.lire(faux)
+        self.assertEqual(len(faux.appels), n)
+        self.t[0] += 2
+        self.lire(faux)
+        self.assertGreater(len(faux.appels), n)
+
     def test_cache_ecrit_dans_le_dossier_injecte(self):
-        self.lire(Faux([brut("2026-11-10T10:00:00Z", "2026-11-10T10:04:10Z")]))
+        self.lire(Faux([BRUT]))
         donnees = json.loads((self.cache / "deport-conso.json").read_text(encoding="utf-8"))
         self.assertIn("depot", donnees["depots"])
 

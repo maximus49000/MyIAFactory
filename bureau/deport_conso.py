@@ -2,6 +2,10 @@
 
 Cœur pur (`cumuler`, `etat_quota`) et coquille d'entrée-sortie (`conso`). Compatible Python 3.9 : pas de `X | Y`, pas
 de `match`. Le cache `~/MyIAFactory/deport-conso.json` n'est lu et écrit que par ce module (écriture atomique).
+
+`conso` ne lit jamais `gh` dans le fil de l'appelant : elle rend tout de suite la dernière valeur du cache (ou « lecture
+en cours » à vide) et lance, si la dernière tentative (réussie ou non) date de plus de 5 minutes, un rafraîchissement
+dans un fil daemon, un seul à la fois par dépôt. Aucun verrou n'est tenu pendant les appels à `gh`.
 """
 import json
 import math
@@ -18,15 +22,22 @@ _OUTILS = str(Path(__file__).resolve().parent.parent / "outils")
 
 DOSSIER = None     # remplacé par les tests : dossier du cache (jamais le vrai `~/MyIAFactory`)
 LANCER = None      # remplacé par les tests : compatible `subprocess.run` (jamais le vrai `gh`)
-DELAI_S = 300      # `gh` n'est lu qu'une fois toutes les 5 minutes
+DELAI_S = 300      # `gh` n'est relancé qu'une fois toutes les 5 minutes, après un succès comme après un échec
 NB_EXECUTIONS = 100
 MAX_JOBS_PAR_LECTURE = 10   # lectures de jobs (une par exécution terminée encore inconnue) par rafraîchissement
-NB_DERNIERS = 5
+NB_DERNIERS = 8             # lignes de « derniers résultats » (une par job d'action)
 SEUIL_ALERTE = 0.8
 NOM_CACHE = "deport-conso.json"
-_VERROU = threading.Lock()
+_VERROU = threading.Lock()      # protège le cache et `_EN_COURS` ; jamais tenu pendant un appel à gh
+_EN_COURS = {}                  # dépôt -> fil de rafraîchissement en cours
+ARRET = threading.Event()       # levé par `arreter` : les rafraîchissements s'interrompent entre deux appels à gh
 
 MSG_ESTIMATION = "estimation par les durées ; `gh auth refresh -h github.com -s user` pour le quota officiel"
+MSG_BASSE = " (estimation basse : le détail des jobs manque pour certaines exécutions, durée de l'exécution comptée)"
+
+
+class _Arret(Exception):
+    pass
 
 
 def _github_actions():
@@ -44,37 +55,42 @@ def _instant(texte):
     return datetime.fromisoformat(str(texte).replace("Z", "+00:00"))
 
 
-def _actions_du_run(ex):
-    """Les actions d'une exécution : les noms de ses jobs (le workflow nomme chaque job d'après son action) quand on les
-    a lus, sinon le `name` de l'exécution."""
-    jobs = [j for j in (ex.get("jobs") or []) if isinstance(j, str) and j]
-    if jobs:
-        return jobs
-    return [str(ex.get("name") or "inconnue")]
+def _secondes(debut, fin):
+    return (_instant(fin) - _instant(debut)).total_seconds()
 
 
-def _debut(ex):
-    return ex.get("startedAt") or ex["createdAt"]
+def _minutes(secondes):
+    """Minute entamée = minute facturée : arrondi à la minute supérieure."""
+    return max(0, math.ceil(secondes / 60.0 - 1e-9))
 
 
-def _duree_s(ex):
-    return (_instant(ex["updatedAt"]) - _instant(_debut(ex))).total_seconds()
-
-
-def _minutes_facturees(ex):
-    """Minutes facturées d'une exécution terminée : sa durée arrondie À LA MINUTE SUPÉRIEURE (GitHub facture chaque job
-    à la minute entamée), ou None si elle n'est pas terminée ou sans dates lisibles."""
+def _lignes(ex):
+    """Les lignes facturables d'une exécution terminée : `[(action, minutes, duree_s, conclusion, estimation)]`.
+    Une ligne par job de dates lisibles (action = nom du job, `ceil` par job) ; sans aucun job daté, une ligne pour
+    toute l'exécution (action = son `name`, `ceil` sur sa durée, `estimation` vrai : durée murale, estimation basse)."""
     if ex.get("status") != "completed":
-        return None
+        return []
+    lignes = []
+    for j in ex.get("jobs") or []:
+        if not isinstance(j, dict) or not j.get("name"):
+            continue
+        try:
+            d = _secondes(j["debut"], j["fin"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        lignes.append((str(j["name"]), _minutes(d), max(0, int(d)), j.get("conclusion") or None, False))
+    if lignes:
+        return lignes
     try:
-        return max(0, math.ceil(_duree_s(ex) / 60.0 - 1e-9))
+        d = _secondes(ex.get("startedAt") or ex["createdAt"], ex["updatedAt"])
     except (KeyError, TypeError, ValueError):
-        return None
+        return []
+    return [(str(ex.get("name") or "inconnue"), _minutes(d), max(0, int(d)), ex.get("conclusion") or None, True)]
 
 
 def _mois_de(ex):
     try:
-        return _instant(_debut(ex)).astimezone(timezone.utc).strftime("%Y-%m")
+        return _instant(ex.get("startedAt") or ex["createdAt"]).astimezone(timezone.utc).strftime("%Y-%m")
     except (KeyError, TypeError, ValueError):
         return None
 
@@ -82,22 +98,19 @@ def _mois_de(ex):
 def cumuler(executions, mois):
     """`{projet: {action: {"minutes": float, "executions": int}}}` pour le mois `AAAA-MM`.
 
-    Chaque exécution porte son `projet`. Minutes = durée arrondie à la minute supérieure, par exécution (la durée vaut
-    les minutes : seuls des exécuteurs `ubuntu` sont utilisés, ratio Linux 1). Une exécution non terminée, sans dates
-    lisibles ou d'un autre mois est ignorée. Action : les noms des jobs quand on les a (les minutes de l'exécution se
-    répartissent à parts égales entre eux), sinon le `name` de l'exécution."""
+    Chaque exécution porte son `projet`. GitHub facture chaque JOB à la minute entamée : une action = un job (son nom),
+    ses minutes = sa durée arrondie à la minute supérieure (ratio Linux 1 : seuls des exécuteurs `ubuntu` sont utilisés,
+    donc durée du job = minutes), et les jobs parallèles s'additionnent. Les jobs sans dates (ignorés, ex. sautés) ne
+    comptent pas. Sans aucun job daté, repli sur la durée de l'exécution, arrondie, nommée par le `name` de l'exécution
+    (estimation basse). Une exécution non terminée ou d'un autre mois est ignorée."""
     total = {}
     for ex in executions or []:
         if not isinstance(ex, dict) or _mois_de(ex) != mois:
             continue
-        minutes = _minutes_facturees(ex)
-        if minutes is None:
-            continue
-        actions = _actions_du_run(ex)
-        projet = total.setdefault(str(ex.get("projet", "")), {})
-        for action in actions:
-            cellule = projet.setdefault(action, {"minutes": 0.0, "executions": 0})
-            cellule["minutes"] += minutes / float(len(actions))
+        for action, minutes, _d, _c, _e in _lignes(ex):
+            cellule = total.setdefault(str(ex.get("projet", "")), {}).setdefault(
+                action, {"minutes": 0.0, "executions": 0})
+            cellule["minutes"] += float(minutes)
             cellule["executions"] += 1
     return total
 
@@ -168,12 +181,16 @@ def _rafraichir(dossier, ancien, lancer, maintenant):
     lectures = 0
     executions = []
     for v in brutes:
+        if ARRET.is_set():
+            raise _Arret()
         ex = dict(v)
         jobs = connus.get(v.get("databaseId"))
+        if not isinstance(jobs, list):
+            jobs = None
         if jobs is None and v.get("status") == "completed" and lectures < MAX_JOBS_PAR_LECTURE:
             lectures += 1
             try:
-                jobs = [j["name"] for j in ga.jobs_du_run(dossier, v.get("databaseId"), lancer) if j.get("name")]
+                jobs = ga.jobs_du_run(dossier, v.get("databaseId"), lancer)
             except ga.Gh_indisponible:
                 jobs = None
         if jobs is not None:
@@ -202,26 +219,70 @@ def _vue(entree, libelles, projet, mois):
     public = entree.get("public") is True
     utilisees = quota["utilisees"] if quota else estimees
     q = etat_quota(utilisees, quota["incluses"] if quota else None, public)
+    texte = q["texte"]
+    if any(ligne[4] for e in executions if _mois_de(e) == mois for ligne in _lignes(e)):
+        texte += MSG_BASSE
     termines = [e for e in executions if e.get("status") == "completed"]
     termines.sort(key=lambda e: str(e.get("startedAt") or e.get("createdAt") or ""), reverse=True)
     derniers = []
-    for e in termines[:NB_DERNIERS]:
-        action = _actions_du_run(e)[0]
-        try:
-            duree = int(_duree_s(e))
-        except (KeyError, TypeError, ValueError):
-            duree = 0
-        derniers.append({"action": action, "libelle": libelles.get(action, action),
-                         "conclusion": e.get("conclusion") or None, "duree_s": max(0, duree), "url": e.get("url", "")})
-    return {"niveau": q["niveau"], "texte": q["texte"], "mois": mois, "minutes_total": round(utilisees, 1),
+    for e in termines:
+        for action, _m, duree, conclusion, _est in _lignes(e):
+            derniers.append({"action": action, "libelle": libelles.get(action, action), "conclusion": conclusion,
+                             "duree_s": duree, "url": e.get("url", "")})
+    return {"niveau": q["niveau"], "texte": texte, "mois": mois, "minutes_total": round(utilisees, 1),
             "quota": quota["incluses"] if quota else None, "restantes": q["restantes"], "public": public,
-            "par_action": par_action, "derniers": derniers}
+            "par_action": par_action, "derniers": derniers[:NB_DERNIERS]}
+
+
+def _vide(texte, mois):
+    return {"niveau": "ok", "texte": texte, "mois": mois, "minutes_total": 0, "quota": None, "restantes": None,
+            "public": False, "par_action": [], "derniers": []}
+
+
+def _travail(cle, chemin, ancien, lancer, maintenant):
+    """Le rafraîchissement, dans son fil : gh sans aucun verrou, puis une écriture courte du cache."""
+    try:
+        try:
+            entree = _rafraichir(cle, ancien, lancer, maintenant)
+        except _Arret:
+            return
+        except Exception:   # panne de gh ou donnée inattendue : on garde l'ancienne valeur et on note l'échec
+            entree = None
+        with _VERROU:
+            donnees = _lire_cache(chemin)
+            depots = donnees.get("depots") if isinstance(donnees.get("depots"), dict) else {}
+            if entree is not None:
+                depots[cle] = entree
+            else:
+                depots[cle] = dict(depots.get(cle) or {}, echec_a=maintenant)
+            _ecrire_cache(chemin, {"depots": depots})
+    finally:
+        with _VERROU:
+            _EN_COURS.pop(cle, None)
+
+
+def attendre(delai_s=10):
+    """Attend la fin des rafraîchissements en cours (tests, arrêt propre)."""
+    with _VERROU:
+        fils = list(_EN_COURS.values())
+    for f in fils:
+        f.join(delai_s)
+
+
+def arreter(delai_s=10):
+    """Interrompt les rafraîchissements en cours et attend leur fin."""
+    ARRET.set()
+    try:
+        attendre(delai_s)
+    finally:
+        ARRET.clear()
 
 
 def conso(dossier, libelles, lieux, maintenant=None, lancer=None, cache=None):
     """L'objet `conso` du projet, ou `None` si aucune de ses actions n'est au lieu `github` (aucun appel à `gh`).
-    `libelles` : `{action: libellé}` ; `lieux` : `{action: lieu}`. Lit `gh` au plus toutes les 5 minutes ; une panne rend
-    la dernière valeur du cache, ou « indisponible » sans cache. Ne lève jamais."""
+    `libelles` : `{action: libellé}` ; `lieux` : `{action: lieu}`. Répond toujours tout de suite : la dernière valeur du
+    cache, ou « lecture en cours » / « indisponible » à vide ; le rafraîchissement (au plus toutes les 5 minutes, échec
+    compris) se fait dans un fil daemon. Ne lève jamais."""
     if not any(lieu == "github" for lieu in (lieux or {}).values()):
         return None
     try:
@@ -229,25 +290,22 @@ def conso(dossier, libelles, lieux, maintenant=None, lancer=None, cache=None):
         mois = datetime.fromtimestamp(maintenant_s, timezone.utc).strftime("%Y-%m")
         chemin = _chemin(cache)
         cle = str(dossier)
-        indisponible = False
         with _VERROU:
             donnees = _lire_cache(chemin)
             depots = donnees.get("depots") if isinstance(donnees.get("depots"), dict) else {}
             entree = depots.get(cle) if isinstance(depots.get(cle), dict) else {}
-            lu_a = float(entree.get("lu_a", 0)) if entree else 0.0
-            if not entree or not 0 <= maintenant_s - lu_a < DELAI_S:
-                try:
-                    entree = _rafraichir(cle, entree, lancer or LANCER or subprocess.run, maintenant_s)
-                    depots[cle] = entree
-                    _ecrire_cache(chemin, {"depots": depots})
-                except Exception:   # panne de gh ou donnée inattendue : la dernière valeur connue
-                    indisponible = True
-        if not entree:
-            return {"niveau": "ok", "texte": "Consommation indisponible (gh ne répond pas).", "mois": mois,
-                    "minutes_total": 0, "quota": None, "restantes": None, "public": False, "par_action": [],
-                    "derniers": []}
+            derniere = max(float(entree.get("lu_a", 0) or 0), float(entree.get("echec_a", 0) or 0))
+            if cle not in _EN_COURS and not ARRET.is_set() and not 0 <= maintenant_s - derniere < DELAI_S:
+                fil = threading.Thread(target=_travail, daemon=True,
+                                       args=(cle, chemin, entree, lancer or LANCER or subprocess.run, maintenant_s))
+                _EN_COURS[cle] = fil
+                fil.start()
+        echec = float(entree.get("echec_a", 0) or 0) > float(entree.get("lu_a", 0) or 0)
+        if not entree.get("executions") and "lu_a" not in entree:
+            return _vide("Consommation indisponible (gh ne répond pas)." if echec
+                         else "Consommation GitHub : lecture en cours…", mois)
         vue = _vue(entree, libelles or {}, cle, mois)
-        if indisponible:
+        if echec:
             vue["texte"] += " (dernière lecture conservée : gh ne répond pas)"
         return vue
     except Exception:

@@ -202,7 +202,9 @@ class TestDeportConsoEtat(AvecServeur):
                                                     "conclusion": "success", "createdAt": "2026-11-10T10:00:00Z",
                                                     "startedAt": "2026-11-10T10:00:00Z",
                                                     "updatedAt": "2026-11-10T10:04:10Z", "url": "https://x/1"}]),
-                      ("run", "view"): json.dumps({"jobs": [{"name": "apk", "conclusion": "success"}]}),
+                      ("run", "view"): json.dumps({"jobs": [{"name": "apk", "conclusion": "success",
+                                                     "startedAt": "2026-11-10T10:00:00Z",
+                                                     "completedAt": "2026-11-10T10:04:10Z"}]}),
                       ("repo", "view"): json.dumps({"visibility": "PRIVATE"})}.get(tuple(argv[1:3]), "")
             code = 1 if argv[1] == "api" else 0
             return subprocess.CompletedProcess(argv, code, sortie, "")
@@ -217,9 +219,13 @@ class TestDeportConsoEtat(AvecServeur):
     def test_avec_action_github_conso_exposee(self):
         lancer, appels = self.faux_gh()
         deport_conso.LANCER = lancer
+        self.addCleanup(deport_conso.arreter)
         r, _ = self.req("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"apk": "github"}}}), self.ENT)
         self.assertEqual(r.status, 200)
-        c = self.json("/api/etat")["deport"]["conso"]
+        premier = self.json("/api/etat")["deport"]["conso"]   # rendu tout de suite : gh se lit en arrière-plan
+        self.assertIn("lecture", premier["texte"])
+        deport_conso.attendre()
+        c = self.p.etat_deport()["conso"]
         self.assertEqual(set(c), {"niveau", "texte", "mois", "minutes_total", "quota", "restantes", "public",
                                   "par_action", "derniers"})
         self.assertTrue(appels)

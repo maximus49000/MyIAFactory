@@ -133,6 +133,13 @@ class TestJobs(unittest.TestCase):
                          [{"name": "apk", "conclusion": "success"}, {"name": "t", "conclusion": None}])
         self.assertEqual(faux.appels[0][0], ["gh", "run", "view", "7", "--json", "jobs"])
 
+    def test_jobs_du_run_rend_les_dates_du_job(self):
+        faux = Faux(ok({"jobs": [{"name": "apk", "conclusion": "success", "startedAt": "2026-11-17T10:00:00Z",
+                                  "completedAt": "2026-11-17T10:01:10Z"}, {"name": "t", "conclusion": "skipped"}]}))
+        self.assertEqual(ga.jobs_du_run("d", 7, lancer=faux),
+                         [{"name": "apk", "conclusion": "success", "debut": "2026-11-17T10:00:00Z",
+                           "fin": "2026-11-17T10:01:10Z"}, {"name": "t", "conclusion": "skipped"}])
+
 
 class TestPannes(unittest.TestCase):
     def test_delai_depasse_leve(self):

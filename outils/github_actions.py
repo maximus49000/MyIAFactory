@@ -77,9 +77,15 @@ def _duree(v) -> int:
         return 0
 
 
+def _un_job(j: Dict) -> Dict:
+    r = {"name": j.get("name"), "conclusion": j.get("conclusion") or None}
+    if j.get("startedAt") and j.get("completedAt"):    # de quoi compter les minutes facturées de ce job
+        r["debut"], r["fin"] = j["startedAt"], j["completedAt"]
+    return r
+
+
 def _jobs(v) -> List[Dict]:
-    return [{"name": j.get("name"), "conclusion": j.get("conclusion") or None}
-            for j in (v.get("jobs") or []) if isinstance(j, dict)]
+    return [_un_job(j) for j in (v.get("jobs") or []) if isinstance(j, dict)]
 
 
 def _resume(v, run_id=None) -> Dict:
@@ -129,7 +135,8 @@ def suivre(depot_dossier: str, run_id: int, dormir: Callable = time.sleep, dire:
 
 
 def jobs_du_run(depot_dossier: str, run_id: int, lancer: Callable = subprocess.run) -> List[Dict]:
-    """Les jobs d'une exécution : `[{name, conclusion}]` (le nom du job est l'id de l'action qui l'a produit)."""
+    """Les jobs d'une exécution : `[{name, conclusion[, debut, fin]}]` (le nom du job est l'id de l'action qui l'a produit ;
+    `debut` et `fin` quand GitHub les donne : le job est facturé à la minute entamée)."""
     return _jobs(_json(["gh", "run", "view", str(run_id), "--json", "jobs"], lancer, depot_dossier))
 
 

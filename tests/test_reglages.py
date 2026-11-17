@@ -69,6 +69,17 @@ class TestReglages(unittest.TestCase):
                 reglages.fixer_lecons_auto(self.tmp / "r.json", v)
         self.assertIs(json.loads((self.tmp / "r.json").read_text(encoding="utf-8"))["lecons_auto"], True)
 
+    def test_deport_defauts_et_surcharge_partielle(self):
+        r = reglages.charger(self.tmp / "absent.json")
+        self.assertEqual(r["deport"]["lieux"]["apk"], "poste")
+        self.assertEqual(r["deport"]["charge_heure"], "03:00")
+        (self.tmp / "r.json").write_text('{"deport": {"lieux": {"apk": "github"}}}', encoding="utf-8")
+        r = reglages.charger(self.tmp / "r.json")
+        self.assertEqual((r["deport"]["lieux"]["apk"], r["deport"]["lieux"]["tests"]), ("github", "poste"))
+        (self.tmp / "r.json").write_text('{"deport": {"lieux": {"emulateur": "github"}}}', encoding="utf-8")
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.charger(self.tmp / "r.json")
+
     def test_fichier_avec_bom(self):
         # PowerShell 5.1 écrit un BOM avec -Encoding utf8.
         (self.tmp / "r.json").write_bytes(bytes([0xEF, 0xBB, 0xBF]) + b'{"charge_max": 60}')

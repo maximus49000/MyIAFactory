@@ -6,6 +6,7 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
+from .deport import ACTIONS, LIEUX_PAR_DEFAUT, valider_lieux
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 
 DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True,
@@ -17,7 +18,11 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            "lecons_auto": False,
            # Vrai (par défaut) : le Chef analyse chaque blocage d'une tâche avant le Directeur (« Analyse intelligente
            # des blocages ») ; faux, le moteur fait comme avant, sans aucun appel de ce jugement.
-           "analyse_blocages": True}
+           "analyse_blocages": True,
+           # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
+           # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
+           "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
+_HEURE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
 
@@ -56,6 +61,28 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
     if type(r.get("analyse_blocages")) is not bool:
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
+    r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
+
+
+def normaliser_deport(v, contexte="Réglages"):
+    """Valide la clé `deport` et la rend complète : lieux manquants au défaut (poste), commandes vides, charge 03:00.
+    Lève ReglagesInvalides (message en français) si une valeur est mauvaise."""
+    if not isinstance(v, dict):
+        raise ReglagesInvalides(f"{contexte} : « deport » doit être un objet {{lieux, commandes, charge_heure}}.")
+    lieux = v.get("lieux", {})
+    try:
+        lieux = valider_lieux(lieux)
+    except ValueError as e:
+        raise ReglagesInvalides(f"{contexte} : « deport.lieux » : {e}")
+    commandes = v.get("commandes", {})
+    if (not isinstance(commandes, dict)
+            or not all(k in ACTIONS and isinstance(c, str) for k, c in commandes.items())):
+        raise ReglagesInvalides(f"{contexte} : « deport.commandes » doit associer une action connue à une "
+                                "commande (texte).")
+    heure = v.get("charge_heure", DEFAUTS["deport"]["charge_heure"])
+    if not isinstance(heure, str) or not _HEURE.match(heure):
+        raise ReglagesInvalides(f"{contexte} : « deport.charge_heure » doit être une heure HH:MM (00:00 à 23:59).")
+    return {"lieux": {**LIEUX_PAR_DEFAUT, **lieux}, "commandes": dict(commandes), "charge_heure": heure}
 
 
 MAX_PROJETS = 12
@@ -123,7 +150,8 @@ def lire_bureau(chemin):
             pris.add(id_)
         sortie.append({"id": id_, "chemin": c})
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
-            "moteur": lire_moteur_du_bureau(donnees.get("moteur", {}))}
+            "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
+            "deport": normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")}
 
 
 def lire_moteur_du_bureau(v):
@@ -156,6 +184,12 @@ def fixer_lecons_auto(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« lecons_auto » doit valoir true ou false.")
     return _ecrire_cle(chemin, "lecons_auto", valeur)
+
+
+def fixer_deport(chemin, deport):
+    """Note le déport du projet (lieux, commandes, heure de charge) : validé avant d'écrire, ReglagesInvalides sinon.
+    Rend les réglages rechargés."""
+    return _ecrire_cle(chemin, "deport", normaliser_deport(deport, "Réglages"))
 
 
 def fixer_analyse_blocages(chemin, valeur):

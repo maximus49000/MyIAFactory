@@ -4,6 +4,7 @@
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
 import {tronquer, filtrer, filtreDeListe, cleTravail} from "./texte.js";
 import {el, ligne} from "./dom.js";
+import {garderDefilementDOM} from "./defilement.js";
 import {urlProjet} from "./projets.js";
 import {contenuTache, contenuFile, contenuAttente, contenuListe} from "./detail.js";
 import {contenuDossier} from "./dossier.js";
@@ -26,6 +27,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   // Partout l'état affiché est l'état servi SANS les validations déjà envoyées (liste, compteur, signature).
   const etat = () => appliquerEnvoyees(etatBrut());
   let panneauOuvert = null;    // {type, id}
+  let garde = null;            // la position de lecture à retrouver quand le contenu arrive après coup (defilement.js)
   let signaturePanneau = "";   // ce que le panneau ouvert montre, pour savoir quand le redessiner
   let retourListe = false;     // le panneau d'une tâche a été ouvert depuis la vue liste
   const filtreListe = {etat: null, type: null};   // etat null : pas de choix, le défaut de la vue s'applique
@@ -204,7 +206,9 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     const debut = surSaisie ? document.activeElement.selectionStart : 0;
     // Le même panneau redessiné (relevé rafraîchi) garde son défilement : la lecture ne remonte pas en haut.
     const memeVue = !panneau.hidden && panneauOuvert?.type === type && panneauOuvert?.id === id;
-    const defilement = memeVue ? panneau.scrollTop : 0;
+    // Pendant qu'une position attend encore son contenu (la facturation se charge après coup), on repart d'elle.
+    const defilement = memeVue ? (garde?.actif() ? garde.y : panneau.scrollTop) : 0;
+    garde?.();
     panneauOuvert = {type, id};
     signaturePanneau = signature(type, id, e);
     const contenu = el("div", "panneau-contenu");
@@ -257,7 +261,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     if (avecReglage) contenu.append(blocReglage());
 
     panneau.replaceChildren(fermer, contenu);
-    if (memeVue) panneau.scrollTop = defilement;
+    garde = memeVue ? garderDefilementDOM(panneau, contenu, defilement) : null;
     panneau.hidden = false;
     if (type !== "catalogue") grand = false;
     document.body.classList.add("panneau-ouvert");

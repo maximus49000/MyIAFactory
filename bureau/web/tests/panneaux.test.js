@@ -8,8 +8,9 @@ const source = readFileSync(new URL("../ui/panneaux.js", import.meta.url), "utf8
 test("le même panneau redessiné garde son défilement", () => {
   const i = source.indexOf("panneau.replaceChildren(fermer, contenu);");
   assert.ok(i > 0);
-  assert.match(source.slice(i, i + 120), /if \(memeVue\) panneau\.scrollTop = defilement;/);
-  assert.match(source, /const defilement = memeVue \? panneau\.scrollTop : 0;/);
+  // la position est tenue jusqu'à l'arrivée du contenu chargé après coup (la facturation) : ui/defilement.js
+  assert.match(source.slice(i, i + 200), /garde = memeVue \? garderDefilementDOM\(panneau, contenu, defilement\) : null;/);
+  assert.match(source, /const defilement = memeVue \? \(garde\?\.actif\(\) \? garde\.y : panneau\.scrollTop\) : 0;/);
 });
 
 test("la carte d'un agent passe par lignesModele : un polyvalent n'a pas de « Plafond » à lui", () => {

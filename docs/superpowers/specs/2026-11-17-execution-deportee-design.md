@@ -25,8 +25,13 @@ B. Serveur personnel seul (type Hetzner) : tout est possible, mais administratio
 3. **Portée du réglage** : valeur globale (configuration de la skill) avec **surcharge par projet**, dans les réglages
    du projet (`bureau/reglages.py`, comme `lecons_auto`), validée à la lecture. Les cases du bureau écrivent là.
 4. **Étape 1, `github`** : à partir des cases, le bureau génère `.github/workflows/<projet>.yml` (Linux uniquement),
-   l'**affiche pour validation** avant le premier push, puis le pousse. Déclencheurs : push, bouton manuel, planification
-   (tests de charge de nuit). L'APK compilé est publié en artefact.
+   l'**affiche pour validation** avant le premier push, puis le pousse. Déclencheurs : bouton manuel
+   (`workflow_dispatch`, utilisé par `lancer.py deporter`) et planification (tests de charge de nuit, seulement si
+   `charge` est déportée ; la nuit, seuls `charge` et les jobs dont elle dépend tournent). L'APK compilé est publié en
+   artefact.
+   *Note (relecture finale, ruling 9)* : le déclencheur `push` a été retiré : un push suivi du déclenchement par
+   l'agent donnait deux exécutions pour un même commit, et le quota de minutes est limité. Les jobs Gradle reçoivent
+   un JDK 17 (`actions/setup-java@v4`, temurin) et `chmod +x gradlew` (dépôt créé sous Windows).
 5. **Étape 2, `serveur`** : le lanceur de tests exécute la commande sur le serveur par SSH, avec le même verrou de
    campagne que sur le poste (voir CLAUDE.md). Ajouté après l'étape 1, sans refaire l'écran.
 6. **Retour des résultats** : la fiche du projet montre, par action déportée, réussi/échoué, durée et lien. Les agents

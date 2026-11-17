@@ -29,7 +29,8 @@ class TestDeportWorkflow(unittest.TestCase):
         texte = wf.generer("Mon projet", ["apk", "tests"], COMMANDES)
         self.assertNotIn("schedule", texte)
         self.assertIn("workflow_dispatch", texte)
-        self.assertIn("push:", texte)
+        self.assertNotIn("push", texte)          # relecture finale (I3) : un push + un dispatch = deux runs par commit
+        self.assertNotIn("if:", texte)           # sans planification, aucun job n'a de condition
 
     def test_charge_donne_le_cron(self):
         texte = wf.generer("Mon projet", ["apk", "charge"], COMMANDES, charge_heure="03:00")
@@ -165,3 +166,118 @@ class TestWorkflowParCatalogue(unittest.TestCase):
         with self.assertRaises(ValueError):
             wf.generer("p", ["apk"], {})
         self.assertIn("path: '**/build/outputs/apk/**/*.apk'", wf.generer("p", ["apk"], {"apk": "build"}))
+
+
+class TestDeclencheurs(unittest.TestCase):
+    """Relecture finale (I3) : jamais `push` ; `schedule` seulement si `charge` est déportée, et alors seuls `charge`
+    et les jobs dont elle dépend tournent la nuit."""
+
+    @staticmethod
+    def jobs(texte):
+        """{id du job: texte de son bloc}."""
+        blocs, courant = {}, None
+        for ligne in texte.split("\njobs:\n", 1)[1].splitlines():
+            if ligne.startswith("  ") and not ligne.startswith("   ") and ligne.endswith(":"):
+                courant = ligne.strip()[:-1]
+                blocs[courant] = ""
+            elif courant:
+                blocs[courant] += ligne + "\n"
+        return blocs
+
+    def test_jamais_de_push(self):
+        for actions in (["apk"], ["apk", "tests", "charge"], ["charge"]):
+            texte = wf.generer("p", actions, COMMANDES)
+            self.assertNotIn("push", texte.split("jobs:")[0])
+            self.assertIn("  workflow_dispatch:\n", texte)
+
+    def test_la_nuit_seule_la_charge_et_ce_dont_elle_depend(self):
+        texte = wf.generer("p", ["apk", "tests", "charge"], COMMANDES)
+        jobs = self.jobs(texte)
+        self.assertIn("schedule", texte)
+        self.assertIn("if: github.event_name != 'schedule'", jobs["tests"])
+        self.assertNotIn("if:", jobs["charge"])          # planification ou bouton manuel
+        self.assertNotIn("if:", jobs["apk"])             # la charge consomme l'APK : il doit tourner la nuit aussi
+
+    def test_charge_sans_apk_deporte(self):
+        jobs = self.jobs(wf.generer("p", ["tests", "charge"], COMMANDES))
+        self.assertIn("if: github.event_name != 'schedule'", jobs["tests"])
+        self.assertNotIn("if:", jobs["charge"])
+
+
+class TestFormeYaml(unittest.TestCase):
+    """Relecture finale : la forme du YAML généré, vérifiée sans analyseur (et avec PyYAML s'il est là)."""
+
+    def textes(self):
+        from bureau.deport_types import CATALOGUES, GENERIQUE
+        android = CATALOGUES["application-mobile-android"]
+        return [(wf.generer("p", ["apk", "tests", "charge"], COMMANDES), GENERIQUE),
+                (wf.generer("p", ["apk", "tests"], {"apk": "a\n  b", "tests": "t"}), GENERIQUE),
+                (wf.generer("p", ["apk", "tests", "lint"], {}, catalogue=android), android)]
+
+    def test_forme(self):
+        import re
+        for texte, catalogue in self.textes():
+            self.assertNotIn("\t", texte)
+            lignes = texte.splitlines()
+            for i, ligne in enumerate(lignes):
+                retrait = len(ligne) - len(ligne.lstrip(" "))
+                self.assertEqual(retrait % 2, 0, ligne)          # indentation par 2 espaces
+                if ligne.rstrip().endswith("run: |"):
+                    corps = lignes[i + 1]
+                    self.assertGreater(len(corps) - len(corps.lstrip(" ")), retrait, corps)
+            blocs = TestDeclencheurs.jobs(texte)
+            for job in blocs:
+                self.assertRegex(job, r"^[A-Za-z_][A-Za-z0-9_-]*$")
+            for besoin in re.findall(r"needs: \[([^\]]*)\]", texte):
+                for nom in besoin.split(","):
+                    self.assertIn(nom.strip(), blocs)
+            # le nom publié est celui que `deporter` télécharge : le `produit` du catalogue
+            for job, bloc in blocs.items():
+                if "upload-artifact" in bloc:
+                    nom = re.search(r"upload-artifact@v4\n\s+with:\n\s+name: (\S+)", bloc).group(1)
+                    self.assertEqual(nom, catalogue[job]["produit"])
+
+    def test_aller_retour_pyyaml(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML absent")
+        for texte, _ in self.textes():
+            v = yaml.safe_load(texte)
+            self.assertIn("jobs", v)
+            self.assertNotIn("push", v.get(True, v.get("on")) or {})
+
+
+class TestGradle(unittest.TestCase):
+    """Contrôleur (essai réel) : `gradlew` sans bit exécutable dans un dépôt créé sous Windows, JDK 17 exigé."""
+
+    def etapes(self, bloc):
+        """Les étapes d'un job, dans l'ordre : `uses` ou `run` de chacune."""
+        noms = []
+        for ligne in bloc.splitlines():
+            s = ligne.strip()
+            if s.startswith("- uses: "):
+                noms.append(s[len("- uses: "):])
+            elif s.startswith("- run: "):
+                noms.append(s[len("- run: "):])
+            elif s.startswith("- name: "):
+                noms.append("commande")
+        return noms
+
+    def test_ordre_checkout_java_chmod_commande(self):
+        from bureau.deport_types import CATALOGUES
+        texte = wf.generer("p", ["apk", "tests"], {}, catalogue=CATALOGUES["application-mobile-android"])
+        for job, bloc in TestDeclencheurs.jobs(texte).items():
+            e = self.etapes(bloc)
+            self.assertEqual(e[:4], ["actions/checkout@v4", "actions/setup-java@v4", "chmod +x gradlew", "commande"],
+                             job)
+            self.assertIn("distribution: temurin", bloc)
+            self.assertIn("java-version: '17'", bloc)
+
+    def test_sans_gradlew_ni_java_ni_chmod(self):
+        texte = wf.generer("p", ["apk", "tests"], COMMANDES)
+        blocs = TestDeclencheurs.jobs(texte)
+        self.assertNotIn("setup-java", blocs["tests"])
+        self.assertNotIn("chmod", blocs["tests"])
+        self.assertIn("setup-java", blocs["apk"])          # ./gradlew assembleDebug
+        self.assertIn("chmod +x gradlew", blocs["apk"])

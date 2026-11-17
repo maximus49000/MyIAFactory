@@ -63,12 +63,39 @@ def _commande_de(action, commandes, catalogue):
     return donnee if donnee.strip() else str(catalogue[action].get("commande") or "")
 
 
-def _tache(action, commande, deportees, catalogue):
+def _de_nuit(actions, catalogue):
+    """Les jobs qui tournent sur la planification : `charge` et, de proche en proche, les jobs dont elle dépend."""
+    if "charge" not in actions:
+        return set()
+    vus, a_voir = set(), ["charge"]
+    while a_voir:
+        a = a_voir.pop()
+        if a in vus or a not in actions:
+            continue
+        vus.add(a)
+        a_voir.extend(catalogue[a]["consomme"])
+    return vus
+
+
+def _gradle(commande):
+    """Vrai si la commande lance le wrapper Gradle du dépôt (`./gradlew …`)."""
+    return textwrap.dedent(_normaliser(commande)).strip().startswith("./gradlew")
+
+
+def _tache(action, commande, deportees, catalogue, sauf_la_nuit=False):
     attend = [dep for dep in catalogue[action]["consomme"] if dep in deportees]
     lignes = ["  %s:" % action, "    runs-on: ubuntu-latest"]
+    if sauf_la_nuit:      # la planification ne lance que la charge (et ce dont elle dépend)
+        lignes.append("    if: github.event_name != 'schedule'")
     if attend:
         lignes.append("    needs: [%s]" % ", ".join(attend))
     lignes += ["    steps:", "      - uses: actions/checkout@v4"]
+    gradle = _gradle(commande)
+    if gradle:      # projet Gradle : un JDK 17 (minimum d'AGP récent) ; le SDK Android est préinstallé sur ubuntu-latest
+        lignes += ["      - uses: actions/setup-java@v4",
+                   "        with:",
+                   "          distribution: temurin",
+                   "          java-version: '17'"]
     for dep in attend:
         produit = catalogue[dep]["produit"]
         if produit:
@@ -76,6 +103,8 @@ def _tache(action, commande, deportees, catalogue):
                        "        with:",
                        "          name: %s" % produit,
                        "          path: artefacts/%s" % produit]
+    if gradle:      # un dépôt créé sous Windows enregistre gradlew sans le bit exécutable : « Permission denied »
+        lignes += ["      - run: chmod +x gradlew"]
     lignes += ["      - name: %s" % action, "        run: |", _bloc_commande(commande)]
     produit, chemin = catalogue[action]["produit"], catalogue[action]["artefact"]
     if produit and chemin:
@@ -92,7 +121,9 @@ def generer(nom, actions_github, commandes, charge_heure="03:00", catalogue=GENE
     Les actions, leurs commandes par défaut, leurs artefacts et leurs dépendances viennent du `catalogue` du type
     de projet ; une commande donnée dans `commandes` l'emporte sur celle du catalogue. Une tâche par action (sur
     ubuntu-latest) ; une action qui consomme l'artefact d'une action aussi déportée ici l'attend (`needs`) et le
-    télécharge. `schedule` n'existe que si `charge` est déportée ; son heure est en UTC.
+    télécharge. Déclencheurs : `workflow_dispatch` toujours (jamais `push`) ; `schedule` seulement si `charge` est
+    déportée (heure UTC), et alors les autres jobs portent `if: github.event_name != 'schedule'`, sauf ceux dont la
+    charge dépend.
     """
     actions = []
     for action in actions_github:
@@ -104,17 +135,20 @@ def generer(nom, actions_github, commandes, charge_heure="03:00", catalogue=GENE
     for action in actions:
         if not _commande_de(action, commandes, catalogue).strip():
             raise ValueError("Aucune commande pour l'action « %s » : renseignez la commande à lancer." % action)
+    # Pas de `push` : un push suivi du déclenchement par l'agent donnerait deux exécutions pour un commit (le quota
+    # est limité). Seuls le bouton manuel (`deporter`) et, si la charge est déportée, la planification de nuit.
     corps = ["name: \"%s\"" % (_une_ligne(nom) or "MyIAFactory"),
              "",
              "on:",
-             "  push:",
              "  workflow_dispatch:"]
-    if "charge" in actions:
+    de_nuit = _de_nuit(actions, catalogue)
+    if de_nuit:
         corps += ["  schedule:",
                   "    # GitHub lit l'heure en UTC (et non en heure locale).",
                   "    - cron: '%s'" % _cron(charge_heure)]
     corps += ["", "jobs:"]
-    corps.append("\n\n".join(_tache(a, _commande_de(a, commandes, catalogue), actions, catalogue) for a in actions))
+    corps.append("\n\n".join(_tache(a, _commande_de(a, commandes, catalogue), actions, catalogue,
+                                    sauf_la_nuit=bool(de_nuit) and a not in de_nuit) for a in actions))
     texte = _normaliser("\n".join(corps)).rstrip("\n") + "\n"
     return "%s%s\n%s" % (MARQUEUR, _empreinte(texte), texte)
 

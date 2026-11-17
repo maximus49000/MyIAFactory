@@ -1443,3 +1443,9 @@ Rôles : testeur
 Date : 2026-11-17
 
 Relire chaque statut d'une note de livraison contre les derniers résultats de tests avant de la valider ; elle reste fausse après une correction ultérieure.
+
+## S241 — Avant de rapporter des résultats de tests, relire l'horodata
+Rôles : designer
+Date : 2026-11-17
+
+Avant de rapporter des résultats de tests, relire l'horodatage et les comptes de chaque XML de résultats ; si une relance rapide n'a rien réécrit, le dire plutôt que d'affirmer une revérification complète.

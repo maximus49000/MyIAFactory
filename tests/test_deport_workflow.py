@@ -80,6 +80,24 @@ class TestDeportWorkflow(unittest.TestCase):
         texte = wf.generer("p", ["apk"], {"apk": "echo \"a\" && echo 'b'\nls"})
         self.assertIn("        run: |\n          echo \"a\" && echo 'b'\n          ls\n", texte)
 
+    def test_premiere_ligne_indentee_reste_un_yaml_valide(self):
+        texte = wf.generer("p", ["apk"], {"apk": "  ./gradlew assembleDebug\nls\n  sous-ligne"})
+        self.assertIn("        run: |\n          ./gradlew assembleDebug\n          ls\n            sous-ligne\n", texte)
+        texte = wf.generer("p", ["apk"], {"apk": "\n\n    a\n      b\n\n"})
+        self.assertIn("        run: |\n          a\n            b\n", texte)
+        with self.assertRaises(ValueError) as c:
+            wf.generer("p", ["apk"], {"apk": "\n  \n"})
+        self.assertIn("commande", str(c.exception))
+
+    def test_nom_avec_caracteres_speciaux_reste_entre_guillemets(self):
+        texte = wf.generer("a: b # c $d", ["apk"], COMMANDES)
+        self.assertIn('name: "a: b # c $d"\n', texte)
+
+    def test_heure_invalide_refusee(self):
+        for h in ("25:00", "3h", "12:60", ""):
+            with self.assertRaises(ValueError):
+                wf.generer("p", ["apk", "charge"], COMMANDES, charge_heure=h)
+
     def test_nom_injecte_neutralise(self):
         texte = wf.generer("p\nevil: 1", ["apk"], COMMANDES)
         self.assertNotIn("\nevil: 1", texte)

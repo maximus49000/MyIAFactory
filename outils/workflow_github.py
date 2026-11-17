@@ -11,6 +11,7 @@ import difflib
 import hashlib
 import re
 import sys
+import textwrap
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -39,8 +40,16 @@ def _une_ligne(valeur):
 
 
 def _bloc_commande(commande):
-    lignes = _normaliser(commande).strip("\n").split("\n")
-    return "\n".join(("          " + ligne) if ligne.strip() else "" for ligne in lignes)
+    """La commande indentée pour un bloc `run: |` : le YAML déduit l'indentation du bloc de sa première ligne,
+    qui ne doit donc pas commencer par une espace (commande collée avec une première ligne indentée)."""
+    lignes = textwrap.dedent(_normaliser(commande)).split("\n")
+    while lignes and not lignes[0].strip():
+        lignes.pop(0)
+    while lignes and not lignes[-1].strip():
+        lignes.pop()
+    if lignes:
+        lignes[0] = lignes[0].lstrip()
+    return "\n".join(("          " + ligne.rstrip()) if ligne.strip() else "" for ligne in lignes)
 
 
 def _cron(charge_heure):

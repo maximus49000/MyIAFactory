@@ -1419,3 +1419,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Un test qui échoue seulement dans la suite complète mais passe isolément est un indice de flakiness (charge, concurrence, ordre d'exécution), pas forcément une régression du changement en cours ; vérifier par exécution isolée avant de l'imputer à sa propre tâche.
+
+## S237 — Quand un format de rapport impose une limite de longueur sur
+Rôles : dev
+Date : 2026-11-17
+
+Quand un format de rapport impose une limite de longueur sur un champ texte (légende d'image), mesurer la longueur réelle de la chaîne avant de l'envoyer plutôt que de l'estimer à l'œil.

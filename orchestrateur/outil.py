@@ -3695,7 +3695,33 @@ def _depart_d_un_lot(ctx, e):
                                           inscrits=inscrits, ecartes=ecartes, metiers_=metiers_,
                                           contexte=" ".join(depart.contexte_de_tache(
                                               t, su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite")
-                                              else None) for t in taches))}
+                                              else None) for t in taches),
+                                          deport=_deport_du_depart(ctx))}
+
+
+def _deport_du_depart(ctx):
+    """La consigne des actions déportées pour l'agent de ce projet ("" si tout est au poste, y compris quand les
+    réglages sont absents ou illisibles) : lieux effectifs = surcharge du projet, sinon défaut du bureau, sinon poste."""
+    from bureau.deport import lieu_effectif
+    from bureau.deport_types import catalogue_du_projet
+
+    def deport(chemin):
+        try:
+            d = json.loads(Path(chemin).read_text(encoding="utf-8-sig")).get("deport")
+        except (OSError, ValueError, AttributeError):
+            return {}
+        return d if isinstance(d, dict) else {}
+
+    projet = _projet(ctx)
+    catalogue = catalogue_du_projet(projet)[1]
+    reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else projet / ".factory" / "reglages.json"
+    du_projet = deport(reglages)
+    globaux = deport(Path("~/MyIAFactory/bureau.json").expanduser())
+    lieux = {a: lieu_effectif(globaux.get("lieux") if isinstance(globaux.get("lieux"), dict) else {},
+                              du_projet.get("lieux") if isinstance(du_projet.get("lieux"), dict) else {}, a)
+             for a in catalogue}
+    commandes = du_projet.get("commandes") if isinstance(du_projet.get("commandes"), dict) else {}
+    return depart.deport_consigne(lieux, catalogue, commandes, str(projet))
 
 
 def cmd_depart(ctx, e):
@@ -3727,7 +3753,8 @@ def cmd_depart(ctx, e):
     return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie, brief_du_role, lecons,
                                       (fonc or {}).get("glossaire") or [], partenaires[0],
                                       regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2],
-                                      metiers_=metiers_, contexte=depart.contexte_de_tache(tache_suivie, fonc))}
+                                      metiers_=metiers_, contexte=depart.contexte_de_tache(tache_suivie, fonc),
+                                      deport=_deport_du_depart(ctx))}
 
 
 def cmd_lieux(ctx, e):

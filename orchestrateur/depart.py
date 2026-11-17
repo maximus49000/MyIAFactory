@@ -12,6 +12,7 @@ from pathlib import Path
 
 from orchestrateur import modele_necessaire as mn
 from orchestrateur import regles_projet as rp
+from bureau.deport_types import GENERIQUE
 
 ECHELLE = ("Haiku", "Sonnet", "Opus")   # on monte d'un cran au plus ; Fable n'en fait jamais partie
 _ROLE_SUR = re.compile(r"^[A-Za-z0-9_-]+\Z")
@@ -150,6 +151,33 @@ rend son code :
 (par exemple `-- npx vitest run src/screens/Ecran.test.tsx`). Jamais une suite lancée directement, ni par un script à
 toi. Lance **seulement les tests touchés** par ta tâche (les fichiers de test concernés) ; la suite complète, une fois
 au plus, à la fin, et seulement si ta tâche le demande."""
+
+
+def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossier où lancer>"):
+    """La consigne des actions déportées sur GitHub, ou "" quand toutes sont au poste (le message de départ des projets
+    sans déport ne change pas d'un caractère). `lieux` : `{action: lieu effectif}` ; `commandes` : les commandes du
+    projet (`deport.commandes`), sinon celle du catalogue. Pure : l'appelant lit les réglages."""
+    lieux, commandes = lieux or {}, commandes or {}
+    deportees = [a for a in catalogue if lieux.get(a, "poste") == "github"]
+    if not deportees:
+        return ""
+    lancer = f'python "{LANCEUR_DE_TESTS}" deporter'
+    lignes = []
+    for a in deportees:
+        commande = commandes.get(a) or catalogue[a].get("commande") or "<ta commande>"
+        lignes.append(f"- {catalogue[a]['libelle']} : `{lancer} {a} --dossier {dossier} -- {commande}`")
+    return "\n".join([
+        "## Actions déportées sur GitHub",
+        "Ces actions ne tournent pas sur ce poste : lance-les **uniquement** par le lanceur, jamais directement.",
+        *lignes,
+        "**Pousse d'abord ton travail** : origin/<ta branche> doit être à ton commit. Le lanceur ATTEND GitHub et les "
+        "dépendances (une action qui consomme la production d'une autre, les tests l'APK, attend d'abord celle-ci) ; "
+        "cette attente est normale, plusieurs minutes : ne l'interromps pas et ne relance pas l'action directement.",
+        "Ne lance jamais une action déportée directement sur la machine, et ne bascule jamais sur le poste de toi-même : "
+        "demande au Directeur, `--poste` seulement après son accord.",
+        "Codes : 0 réussi, 1 échoué, 2 lieu invalide, 3 refusé (`--sans-attendre`), 4 GitHub injoignable, 5 amont "
+        "échoué, 6 travail non poussé (pousse, puis relance), 7 workflow absent de ta branche (demande au Directeur de "
+        "fusionner `deport/workflow`)."])
 
 
 def _lecons(titre, lecons):
@@ -386,7 +414,7 @@ def _partenaires_inscrits(inscrits, ecartes):
 
 
 def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=(), inscrits=(),
-            ecartes=(), metiers_=None, contexte=""):
+            ecartes=(), metiers_=None, contexte="", deport=""):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
@@ -401,6 +429,8 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
     parties.append(SOBRIETE)
     if fiche["lieu"] != "cloud":
         parties.append(tests_un_a_la_fois())
+        if deport:
+            parties.append(deport)
     parties.append(FIN_D_ETAPE)
     if fiche["lieu"] == "cloud":
         parties.append(fin_cloud(tache.get("id", "?")))
@@ -428,7 +458,7 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
-                regles_projet=(), inscrits=(), ecartes=(), metiers_=None, contexte=""):
+                regles_projet=(), inscrits=(), ecartes=(), metiers_=None, contexte="", deport=""):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
@@ -453,6 +483,8 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
     parties.append(SOBRIETE)
     if fiche["lieu"] != "cloud":
         parties.append(tests_un_a_la_fois())
+        if deport:
+            parties.append(deport)
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")
                    .replace("1. **Le résultat** de la tâche :", "1. **Le résultat** de chaque tâche :", 1))
     if fiche["lieu"] == "cloud":

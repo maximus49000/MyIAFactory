@@ -1455,3 +1455,9 @@ Rôles : designer
 Date : 2026-11-17
 
 Une mesure de performance faite uniquement sur émulateur ne doit pas être présentée comme validée sur appareil réel ; le périmètre se déclare dans la note de livraison et dans la fenêtre de validation.
+
+## S243 — Pour juger si un fichier livré est périmé, comparer la date
+Rôles : testeur
+Date : 2026-11-17
+
+Pour juger si un fichier livré est périmé, comparer la date de la sortie de build d'origine avec le dernier changement de code, car la copie dans le dossier de livraison porte la date de la copie.

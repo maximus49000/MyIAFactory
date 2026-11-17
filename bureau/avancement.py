@@ -10,7 +10,6 @@ from .statuts import TRES_ANCIEN, lire_date
 
 ACTION_RECENTE_S = 120      # une action réelle depuis moins de 2 min : l'agent avance
 TERMINE_NON_LU_S = 120      # un agent terminé dont le moteur n'a pas lu le résultat depuis plus de 2 min : dit
-MOTEUR_MUET_S = 180         # aucun battement du moteur depuis 3 min
 LISTE_PERIMEE_S = 600       # la liste de l'agent n'a pas bougé depuis 10 min alors qu'il agit
 MIN_DUREES = 3
 DUREE_MIN_S, DUREE_MAX_S = 30, 6 * 3600     # en dehors : une durée aberrante, écartée
@@ -66,9 +65,9 @@ def _reste(passe_s, durees, points):
     return {"min_s": int(mini), "max_s": int(maxi)}, texte
 
 
-def pour_la_tache(tache, historique, battement_moteur_t, maintenant, delai_arret_s):
+def pour_la_tache(tache, historique, moteur_vivant, maintenant, delai_arret_s):
     """Ce que dit la fiche d'une tâche : `{etat, etat_texte, points, en_cours, phase, passe_s, cumul_s, reste,
-    reste_texte}` ; `None` quand aucun agent n'est dessus (ni au travail, ni terminé depuis plus de 2 min)."""
+    reste_texte}` ; `moteur_vivant` : vrai, faux, ou `None` si on ne sait pas. `None` quand aucun agent n'est dessus (ni au travail, ni terminé depuis plus de 2 min)."""
     travail = tache.get("travail") if isinstance(tache.get("travail"), dict) else None
     termine = tache.get("agent_termine") if isinstance(tache.get("agent_termine"), dict) else None
     liste = (travail or {}).get("avancement") if isinstance((travail or {}).get("avancement"), dict) else {}
@@ -88,9 +87,8 @@ def pour_la_tache(tache, historique, battement_moteur_t, maintenant, delai_arret
 
     if travail is None and termine is None:
         return None
-    muet = None if battement_moteur_t is None else maintenant.timestamp() - battement_moteur_t
-    if muet is not None and muet > MOTEUR_MUET_S:
-        return rendre("moteur_muet", f"moteur muet depuis {_minutes(muet)} min")
+    if moteur_vivant is False:      # le verrou du moteur n'a plus de processus vivant : rien ne fera avancer la tâche
+        return rendre("moteur_arrete", "moteur arrêté : rien n'avance tant qu'il n'est pas relancé")
     if travail is None:
         age = _secondes(termine.get("t"), maintenant)
         if age is None or age < TERMINE_NON_LU_S:

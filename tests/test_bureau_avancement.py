@@ -26,9 +26,8 @@ def historique(*durees):
             for i, d in enumerate(durees)]
 
 
-def calculer(t, histo=(), battement=None, delai=DELAI):
-    return avancement.pour_la_tache(t, list(histo), battement if battement is not None else MAINTENANT.timestamp() - 10,
-                                    MAINTENANT, delai)
+def calculer(t, histo=(), moteur_vivant=True, delai=DELAI):
+    return avancement.pour_la_tache(t, list(histo), moteur_vivant, MAINTENANT, delai)
 
 
 class Etats(unittest.TestCase):
@@ -55,10 +54,11 @@ class Etats(unittest.TestCase):
         self.assertIn("résultat en attente de lecture depuis 3 min", r["etat_texte"])
         self.assertIsNone(calculer(tache(agent_termine={"t": il_y_a(60)})))      # trop tôt pour le dire
 
-    def test_moteur_muet(self):
-        r = calculer(tache(travail=travail()), battement=MAINTENANT.timestamp() - 240)
-        self.assertEqual(r["etat"], "moteur_muet")
-        self.assertIn("moteur muet depuis 4 min", r["etat_texte"])
+    def test_moteur_arrete(self):
+        r = calculer(tache(travail=travail()), moteur_vivant=False)
+        self.assertEqual(r["etat"], "moteur_arrete")
+        self.assertIn("moteur arrêté", r["etat_texte"])
+        self.assertEqual(calculer(tache(travail=travail()), moteur_vivant=None)["etat"], "avance")
 
     def test_demarre_sans_flux(self):
         r = calculer(tache(travail=travail(action=None)))

@@ -17,6 +17,19 @@ from installation import mise_a_jour
 from moteur import boucle, verrou
 
 
+def sortie_sure(flux):
+    """Un journal redirigé vers un fichier sous Windows s'écrit en cp1252 : un « → » y faisait planter le moteur
+    (UnicodeEncodeError, 2026-11-16 et 2026-11-17), et toute la factory s'arrêtait. Hors console, la sortie passe en
+    UTF-8 ; un caractère qu'elle ne sait pas écrire est remplacé, jamais une raison de s'arrêter."""
+    try:
+        if not flux.isatty():
+            flux.reconfigure(encoding="utf-8", errors="replace")
+        else:
+            flux.reconfigure(errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
 def main(argv=None, lancer=demarrage.lancer_moteur):
     p = argparse.ArgumentParser(prog="moteur", description="Le moteur procédural de la factory.")
     cible = p.add_mutually_exclusive_group()
@@ -73,4 +86,6 @@ def main(argv=None, lancer=demarrage.lancer_moteur):
 
 
 if __name__ == "__main__":
+    for _flux in (sys.stdout, sys.stderr):
+        sortie_sure(_flux)
     raise SystemExit(main())

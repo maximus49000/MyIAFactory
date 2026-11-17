@@ -1381,6 +1381,52 @@ class Arrets(Base):
         self.assertEqual([t["id"] for t in self.taches()], [occupe])
 
 
+
+class CadrageSansCahier(Base):
+    """Essai réel (2026-11-17) : l'agent de cadrage a écrit le cahier en pièce jointe et rendu un compte rendu
+    (`attend: false`) sans le champ `cahier` : aucune validation posée, la fonctionnalité restait en cadrage pour
+    toujours, sans rien dire."""
+    SANS_CAHIER = {"statut": "fait", "message": {"texte": "Cahier des charges rédigé avec 2 maquettes.", "attend": False}}
+    AVEC_CAHIER = {"statut": "fait", "message": {"texte": "Le cahier est prêt."},
+                   "cahier": {"maquette": [PNG], "etapes": ["Faire les écrans"]}}
+
+    def depart(self):
+        d, actions = self.cadrer(texte="Des écrans pour l'appli")
+        return actions
+
+    def test_un_compte_rendu_sans_cahier_relance_l_agent_une_fois(self):
+        vus = self.piloter(self.depart(), rapports=[self.SANS_CAHIER, self.AVEC_CAHIER])
+        agents_ = [a for a in vus if a[0] == "agent"]
+        self.assertEqual(len(agents_), 2)
+        self.assertEqual(agents_[1][2], agents_[0][2])                 # la même tâche
+        self.assertIn("`cahier`", agents_[1][3])                        # la consigne dit ce qui manquait
+        self.assertIn("Ne refais pas le travail", agents_[1][3])
+        self.assertEqual(self.fonc()["etape"], "cahier")
+        self.assertTrue(any(d["genre"] == "valider_cahier" for d in self.fonc()["decisions"]))
+        self.assertFalse(self.taches(etape="cadrage")[0].get("bloquee"))
+
+    def test_deux_fois_sans_cahier_la_tache_est_bloquee_et_le_dit(self):
+        self.piloter(self.depart(), rapports=[self.SANS_CAHIER, self.SANS_CAHIER])
+        t = self.taches(etape="cadrage")[0]
+        self.assertIn("cahier", t["bloquee"])
+        self.assertFalse(t["active"])
+        self.assertIn("bloquée", self.fonc()["discussion"][-1]["texte"])
+
+    def test_des_questions_attendent_la_reponse_sans_relance(self):
+        q = {"statut": "fait", "message": {"texte": "Deux choix :", "attend": True,
+                                           "questions": [{"texte": "Couleur ?", "choix": ["Bleu", "Rouge"]}]}}
+        vus = self.piloter(self.depart(), rapports=[q])
+        self.assertEqual(len([a for a in vus if a[0] == "agent"]), 1)
+        t = self.taches(etape="cadrage")[0]
+        self.assertFalse(t.get("bloquee"))
+        self.assertEqual(self.fonc()["etape"], "cadrage")
+
+    def test_un_message_qui_attend_une_reponse_n_est_pas_relance(self):
+        vus = self.piloter(self.depart(), rapports=[{"statut": "fait", "message": {"texte": "Quel public ?", "attend": True}}])
+        self.assertEqual(len([a for a in vus if a[0] == "agent"]), 1)
+        self.assertFalse(self.taches(etape="cadrage")[0].get("bloquee"))
+
+
 class Validation(Base):
     """Une étape de validation du Directeur dans le flux : l'élément s'arrête, le Directeur valide ou renvoie."""
 

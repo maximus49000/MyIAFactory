@@ -147,6 +147,24 @@ export function questionsAAttendre(e, t) {
   return questionsEnAttente((e?.fonctionnalites || []).find((f) => f.id === t.fonctionnalite));
 }
 
+// La ligne « Story » : le nom de la fonctionnalité de la tâche, un lien qui ouvre sa carte. Null sans fonctionnalité
+// connue ; texte simple si la page ne sait pas ouvrir une fonctionnalité.
+export function ligneStory(ctx, e, t) {
+  if (!t?.fonctionnalite) return null;
+  const f = (e?.fonctionnalites || []).find((x) => x?.id === t.fonctionnalite);
+  if (!f) return null;
+  const nom = tronquer(f.nom || f.id, MAX_TITRE);
+  const l = ligne("Story", ctx.ouvrirFonctionnalite ? "" : nom);
+  if (ctx.ouvrirFonctionnalite) {
+    const b = el("button", "lien-retour lien-story", nom + " →");
+    b.type = "button";
+    b.title = "Ouvrir la carte de la story";
+    b.addEventListener("click", () => ctx.ouvrirFonctionnalite(f.id));
+    l.lastChild.append(b);
+  }
+  return l;
+}
+
 export function contenuTache(ctx, contenu, t) {
   const e = ctx.etat;
   if (ctx.retourListe) {
@@ -176,6 +194,8 @@ export function contenuTache(ctx, contenu, t) {
     b.addEventListener("click", () => ctx.ouvrirFonctionnalite(t.fonctionnalite));
     contenu.append(b);
   }
+  const story = ligneStory(ctx, e, t);         // la fonctionnalité (ou correction) dont la tâche fait partie
+  if (story) contenu.append(story);
   contenu.append(ligne("Colonne", tronquer(nomColonne(e, t.colonne), 30)));
   contenu.append(ligne("Agent", prenomAgent(e, t.agent)));
   const etape = libelleEtapeTache(e, t);       // « diagnostic », « correctif »… pour une correction

@@ -3708,7 +3708,49 @@ def traiter_retour(projet, execution, etat):
     for tid in taches:
         if tid not in non_faites:
             actions += _suite_de_tache(projet, etat, _tache(projet, tid), execution, r)
+    if _cadrage_sans_suite(projet, _tache(projet, taches[0]), r):
+        actions += _cadrage_sans_cahier(projet, etat, depart, fid)
     return actions + _demarrer_en_attente(projet, etat, fid)
+
+
+CADRAGE_SANS_CAHIER = "Cadrage rendu sans cahier ni question"
+
+
+def _cadrage_sans_suite(projet, t, r):
+    """Un rapport de cadrage dont rien ne peut suivre : ni `cahier`, ni fiche de correction, ni question à
+    l'utilisateur (`message.questions`), ni message qui attend sa réponse (`message.attend: true`). Essai réel
+    (2026-11-17) : le cahier écrit en pièce jointe seulement, la fonctionnalité restait en cadrage sans rien dire."""
+    if str(t.get("etape")) != "cadrage" or t["colonne"] == "fait" or t.get("bloquee"):
+        return False
+    if r.get("cahier") or _fiche_correction(projet, t, r):
+        return False
+    m = r.get("message") if isinstance(r.get("message"), dict) else {}
+    return not m.get("questions") and m.get("attend") is not True
+
+
+def _cadrage_sans_cahier(projet, etat, depart, fid):
+    """L'agent rend son rapport de nouveau une fois, avec ce qui manquait (sans refaire le travail) ; la seconde fois,
+    la tâche est bloquée et la discussion le dit : le Directeur peut la relancer ou faire un retour. La première
+    relance est notée au journal (elle survit à un redémarrage du moteur)."""
+    tid = depart["taches"][0]
+    t = _tache(projet, tid)
+    if any(str(j.get("texte", "")).startswith(CADRAGE_SANS_CAHIER) for j in t.get("journal") or []):
+        raison = ("L'agent a rendu deux fois son cadrage sans le cahier des charges (champ « cahier » du rapport) ni "
+                  "question : rien ne peut suivre. Relancez la tâche ou faites-lui un retour.")
+        _bloquer_taches(projet, [tid], raison)
+        if fid:
+            _dire(projet, fid, f"La tâche « {t['titre']} » est bloquée : {raison}")
+        return []
+    supplement = ("Ton rapport de cadrage n'avait ni `cahier` ni question : le bureau ne peut rien proposer à "
+                  "l'utilisateur et la fonctionnalité resterait bloquée. Ne refais pas le travail. Si le cahier est "
+                  "écrit, rends le rapport avec `cahier: {maquette: [images], etapes: [textes]}` ; si tu attends une "
+                  "réponse de l'utilisateur, pose tes questions (`message.questions`) ou mets `message.attend: true`.")
+    matiere = (depart.get("matiere") or "").rstrip() + "\n\n" + supplement
+    lancer(projet, "tache", {"id": tid, "active": True,
+                             "journal": [CADRAGE_SANS_CAHIER + " : l'agent le rend de nouveau."]})
+    _m(etat, "departs")[tid] = {**depart, "matiere": matiere}
+    etat["en_cours"].add(tid)
+    return [a_agent(depart["agent"], depart["taches"], matiere)]
 
 
 MARQUE_NON_FAITE = "Non faite par l'agent du lot : "

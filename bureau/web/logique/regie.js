@@ -1,5 +1,6 @@
 // La régie : qui est où, qui va où, la file au tableau, le temps qui passe.
 // Classe pure : ni DOM, ni three.js. Le rendu lit `acteurs` et `postits`.
+import {bulleChef} from "../ui/texte.js";
 
 const VITESSE = 1.5;        // m/s
 const DUREE_POSE = 1.2;     // s devant le tableau pour poser un post-it
@@ -46,7 +47,9 @@ export class Regie {
     // leur fiche et leurs tâches réalisées. Ils ne travaillent jamais.
     const anciens = (etat.anciens_agents || []).filter((a) => a?.id && !(etat.agents || []).some((x) => x.id === a.id))
       .map((a) => ({...a, statut: "libre", bulle: "", taches: [], retire: true, polyvalent: true, service: null}));
-    const agents = new Map([...(etat.agents || []), ...anciens].map((a) => [a.id, a]));
+    // Le Chef : ce qu'il fait (un jugement du moteur) dans sa bulle, au-dessus de lui, comme les agents au travail.
+    const agents = new Map([...(etat.agents || []), ...anciens]
+      .map((a) => [a.id, a.chef ? {...a, bulle: bulleChef(etat)} : a]));
     const chef = (etat.agents || []).find((a) => a.chef);
     this._idChef = chef ? chef.id : null;
 

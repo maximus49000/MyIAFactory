@@ -167,7 +167,8 @@ export class Personnages {
     const assis = a.action === "assis" || (a.action === "cafe" && a.assis);
     const travaille = ag.statut === "travail";
     const enPoste = (a.action === "assis" || a.action === "debout") && !ag.chef && !ag.fixe;
-    f.oBulle.visible = Boolean(ag.bulle) && enPoste && (ag.statut === "travail" || ag.statut === "sans_nouvelles");
+    f.oBulle.visible = Boolean(ag.bulle) && ((enPoste && (ag.statut === "travail" || ag.statut === "sans_nouvelles"))
+                                             || (ag.chef && a.action !== "marche"));   // le Chef qui juge, à sa place
     // Bulles de voisins de bureau à deux hauteurs, pour qu'elles ne se recouvrent pas.
     if (f.oBulle.visible) f.oBulle.element.classList.toggle("haute", (Math.round(a.x / 1.4) & 1) === 1);
     if (art && art.tasse) art.tasse.visible = a.action === "cafe";

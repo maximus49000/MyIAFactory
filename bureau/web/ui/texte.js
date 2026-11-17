@@ -136,10 +136,15 @@ export function texteChef(etat, fid = null, maintenant = Date.now()) {
   return texte + "…";
 }
 
+// La bulle du Chef au-dessus de lui (comme celle d'un agent au travail) : « En train d'écrire la méthode de « … » ·
+// à l'instant… », ou "" quand il ne juge rien. Pur.
+export function bulleChef(etat, maintenant = Date.now()) {
+  const t = texteChef(etat, null, maintenant);
+  return t ? t.replace(/^Le Chef est e/, "E") : "";
+}
+
 export function retenues(etat) {
-  const lignes = [];
-  const chef = texteChef(etat);
-  if (chef) lignes.push({ton: "attente", texte: chef});
+  const lignes = [];      // ce que fait le Chef : dans sa bulle (bulleChef), pas ici
   const pause = etat?.pause_installation;
   if (pause && typeof pause.texte === "string" && pause.texte.trim()) lignes.push({ton: "pause", texte: pause.texte});
   const attentes = etat?.attentes;

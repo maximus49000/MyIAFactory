@@ -37,6 +37,15 @@ test("l'état se colore : vert, orange, rouge", () => {
   }
 });
 
+test("l'attente d'une exécution distante se dit en clair : pause, puis alerte si elle est trop longue", () => {
+  const a = avancementEnClair({...base, etat: "attente_deportee",
+                               etat_texte: "en attente de l'APK (GitHub, depuis 12 min), durée habituelle inconnue"});
+  assert.equal(a.ton, "pause");
+  assert.match(a.etatTexte, /en attente de l'APK \(GitHub, depuis 12 min\)/);
+  assert.equal(avancementEnClair({...base, etat: "attente_longue", etat_texte: "attente anormalement longue (35 min)"}).ton,
+               "alerte");
+});
+
 test("sans avancement, rien n'est rendu", () => {
   assert.equal(avancementEnClair(undefined), null);
   assert.equal(avancementEnClair(null), null);

@@ -95,6 +95,43 @@ class Etats(unittest.TestCase):
         self.assertEqual(r["en_cours"], "a")
 
 
+class AttenteDeportee(unittest.TestCase):
+    """L'agent attend une exécution distante (fichier de `deporter`) : une attente, pas un blocage."""
+
+    def attente(self, depuis_min=12, **plus):
+        return {"action": "apk", "attend": "apk", "lieu": "github", "depuis": il_y_a(depuis_min * 60), **plus}
+
+    def test_la_fiche_dit_ce_qui_est_attendu_et_d_ou(self):
+        # aucune action depuis 45 min : sans l'attente, ce serait « sans action »
+        r = calculer(tache(travail=travail(action_s=2700, vie_s=2700, attente_deportee=self.attente(12))))
+        self.assertEqual(r["etat"], "attente_deportee")
+        self.assertIn("en attente de l'APK (GitHub, depuis 12 min)", r["etat_texte"])
+        self.assertIn("durée habituelle inconnue", r["etat_texte"])
+
+    def test_noms_inconnus_dits_tels_quels(self):
+        r = calculer(tache(travail=travail(attente_deportee=self.attente(3, attend="ipa", lieu="gitlab"))))
+        self.assertIn("en attente de ipa (gitlab, depuis 3 min)", r["etat_texte"])
+
+    def test_apres_le_seuil_c_est_une_alerte(self):
+        r = calculer(tache(travail=travail(attente_deportee=self.attente(35))))
+        self.assertEqual(r["etat"], "attente_longue")
+        self.assertIn("attente anormalement longue (35 min)", r["etat_texte"])
+
+    def test_le_seuil_se_regle(self):
+        t = tache(travail=travail(attente_deportee=self.attente(12)))
+        r = avancement.pour_la_tache(t, TACHES_PASSEES, [], True, MAINTENANT, DELAI, attente_longue_s=600)
+        self.assertEqual(r["etat"], "attente_longue")
+
+    def test_sans_attente_les_autres_etats_ne_changent_pas(self):
+        for plus, etat in (({}, "avance"), ({"action_s": 3000, "vie_s": 3000}, "sans_action"),
+                           ({"action_s": 600, "vie_s": 10}, "commande_longue")):
+            self.assertEqual(calculer(tache(travail=travail(attente_deportee=None, **plus)))["etat"], etat)
+
+    def test_moteur_arrete_prime(self):
+        r = calculer(tache(travail=travail(attente_deportee=self.attente())), moteur_vivant=False)
+        self.assertEqual(r["etat"], "moteur_arrete")
+
+
 class Fourchette(unittest.TestCase):
     def test_inconnue_sous_trois_durees(self):
         self.assertIsNone(avancement.fourchette([600, 900]))

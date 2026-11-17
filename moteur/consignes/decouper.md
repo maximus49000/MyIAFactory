@@ -11,6 +11,12 @@ Ce qu'il faut décider :
 - Choisis l'élément du **prototype** : la méthode est mise au point en itération, avec l'utilisateur, sur ce premier
   élément. Prends le plus représentatif des autres, pas le plus simple ni le plus particulier.
 - Note ce dont chaque élément dépend (`depend_de`), seulement quand un élément a vraiment besoin d'un autre fini.
+- **Le moins d'éléments possible.** Chaque élément coûte un démarrage d'agent, une vérification et une validation : des
+  parties presque identiques (des onglets, des écrans ou des fiches qui suivent le même modèle) forment **un seul
+  élément**, pas un par partie. Une petite fonctionnalité tient en un ou deux éléments.
+- Donne à chaque élément ses `fichiers` : les chemins (relatifs au projet) qu'il va créer ou modifier, d'après le
+  cahier. Deux éléments qui partagent un fichier ne travaillent jamais en même temps (le moteur les enchaîne) :
+  découpe de préférence selon les fichiers, pour que les éléments puissent avancer en parallèle.
 - Donne à chaque élément son `objectif` : une phrase (300 caractères au plus) qui dit ce qu'il doit produire ; elle est
   rappelée à l'utilisateur quand il valide l'élément.
 - Si le flux a des étapes de validation du Directeur (`"validation": true`), dis pour chaque élément lesquelles le
@@ -25,7 +31,7 @@ Ne découpe que ce que demande le cahier : aucun élément en plus, aucun oubli�
 Forme de la réponse :
 
 ```json
-{"elements": [{"id": "e1", "nom": "…", "groupe": "…", "objectif": "…", "validations": ["…"]}],
+{"elements": [{"id": "e1", "nom": "…", "groupe": "…", "objectif": "…", "validations": ["…"], "fichiers": ["…"]}],
  "prototype": "e1",
  "depend_de": {"e2": ["e1"]},
  "reprendre_methode": null,

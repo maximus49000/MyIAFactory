@@ -214,6 +214,8 @@ def _valider_decouper(o):
         if "validations" in e and not (isinstance(e["validations"], list) and all(_texte(x) for x in e["validations"])):
             return (f"« validations » de « {e['id']} » : la liste des « id » des étapes de validation qui le concernent "
                     "(vide si aucune).")
+        if "fichiers" in e and not (isinstance(e["fichiers"], list) and all(_texte(x) for x in e["fichiers"])):
+            return (f"« fichiers » de « {e['id']} » : la liste des chemins (relatifs au projet) qu'il crée ou modifie.")
         if "objectif" in e and not (_texte(e["objectif"]) and len(e["objectif"]) <= OBJECTIF_MAX):
             return f"« objectif » de « {e['id']} » : une phrase de {OBJECTIF_MAX} caractères au plus."
         ids.append(e["id"])

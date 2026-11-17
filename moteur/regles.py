@@ -66,6 +66,18 @@ CORRECTION_COMPLETE = ("Corrige la cause, pas seulement les endroits cités : ch
                        "occurrences du même défaut (le même réglage à appliquer, le même composant, le même genre de "
                        "texte écrit en dur…) et corrige-les dans ce tour. Dans ton message, liste chaque endroit "
                        "trouvé et corrigé.")
+# Les tests selon l'étape (essai réel du 2026-11-17 : 15 minutes sur 21 à attendre des suites complètes, relancées à
+# chaque élément et à chaque étape). Les tests ciblés partout ; la suite complète une fois, au dernier pas du dernier
+# élément de la fonctionnalité.
+TESTS_CIBLES = ("Tests : lance seulement les tests touchés par ton élément (ses fichiers de test), par le lanceur du "
+                "poste. Pas la suite complète : elle passe une fois, à la dernière étape du dernier élément de la "
+                "fonctionnalité.")
+TESTS_DU_DERNIER_REGARD = ("Pour vérifier, relis le diff de l'élément et appuie-toi sur les tests ciblés de "
+                           "l'étape d'avant : relance seulement les tests de l'élément, jamais la suite complète.")
+SUITE_COMPLETE_UNE_FOIS = ("Tests : c'est la dernière étape du dernier élément de la fonctionnalité. Lance une fois "
+                           "la suite complète du projet (par le lanceur du poste) avant de rendre, et dis son résultat "
+                           "dans ton message.")
+OCCUPANTS_DE_FICHIERS = ("flux", "relecture", "correction")    # un élément qui écrit encore dans ses fichiers
 ETAPES_DE_FLUX = "flux:"
 ETAPES_DE_VALIDATION = "validation:"   # l'étape d'une tâche « Validation du Directeur » (jamais lancée par le moteur)
 GENRE_VALIDATION = "valider_etape"     # la décision de projet posée quand un élément attend le Directeur
@@ -3482,6 +3494,34 @@ def _contexte_concerne(projet, f):
                                            for k, x in (c.get("elements") or {}).items()) or "(aucun)")]
 
 
+def _chemin_normal(x):
+    return str(x).strip().replace("\\", "/").removeprefix("./").lower()
+
+
+def _fichiers_de(element):
+    """Les fichiers d'un élément (du découpage), normalisés pour comparer ; vide s'il n'en dit rien."""
+    return {_chemin_normal(x) for x in (element or {}).get("fichiers") or [] if isinstance(x, str) and x.strip()}
+
+
+def _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
+    """Vrai si la tâche est la dernière étape d'agent de son élément et qu'aucun autre élément de la fonctionnalité
+    n'attend ni ne travaille : la suite complète des tests passe alors, une fois."""
+    agents_ = wf.etapes_d_agent(_production(projet, fid))
+    if not agents_ or str(t.get("etape")) != ETAPES_DE_FLUX + agents_[-1]["id"]:
+        return False
+    if (f or {}).get("file"):
+        return False
+    en_cours = ("flux", "relecture", "correction", "validation", "attente_methode")
+    return not any(v["fid"] == fid and v["element"].get("id") != t.get("element") and v["phase"] in en_cours
+                   for v in _m(etat, "elements").values())
+
+
+def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
+    if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
+        return [SUITE_COMPLETE_UNE_FOIS]
+    return [TESTS_DU_DERNIER_REGARD] if dernier_regard else [TESTS_CIBLES]
+
+
 def _matiere(projet, etat, t):
     """Ce que l'agent doit savoir de la tâche, en plus de son message de départ (la discussion, les retours, l'élément)."""
     etape, fid = str(t.get("etape") or ""), t.get("fonctionnalite")
@@ -3544,6 +3584,10 @@ def _matiere(projet, etat, t):
             parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
                         "Méthode validée : " + str(methode.get("chemin") or methode.get("lien") or "(voir ton brief)"),
                         "Registre des contrôles : relis-le avant de rendre l'élément."]
+        fichiers = ((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
+        if fichiers:
+            parties.append("Fichiers de ton élément : " + ", ".join(fichiers) + " (si tu dois en toucher un autre, "
+                           "dis-le dans ton message).")
         production = _production(projet, fid)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
@@ -3555,11 +3599,14 @@ def _matiere(projet, etat, t):
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
             parties.append(REVUE_COMPLETE)
+            parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=True)
+        else:
+            parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=False)
     elif etape == "relecture":
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
-                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE]
+                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
                     "(son chemin et sa version). Dans ton message, dis pour chaque outil : en place (chemin, version) ou "
@@ -5298,12 +5345,17 @@ def _avancer_serie(projet, etat, fid):
             _m(etat, "serie_perdue").setdefault(fid, {})["sans_workflow"] = (
                 "la fonctionnalité n'a aucun workflow à enchaîner (ni le sien, ni le principal, ni celui du genre)")
             plafond = vivants
+        # Les fichiers des éléments qui écrivent encore : un élément qui en partage un attend leur fin (essai réel :
+        # deux agents modifiaient les mêmes fichiers en même temps, chacun relisait et retestait le travail de l'autre).
+        occupes = set().union(*(_fichiers_de(v["element"]) for v in mine if v["phase"] in OCCUPANTS_DE_FICHIERS))
         while vivants < plafond:
             file = _fonc(projet, fid)["file"]
             ids = {q["id"] for q in file}
-            choisi = next((q for q in file if all(d in fait or d not in ids for d in deps.get(q["id"], []))), None)
+            choisi = next((q for q in file if all(d in fait or d not in ids for d in deps.get(q["id"], []))
+                           and not (_fichiers_de(q) & occupes)), None)
             if choisi is None:
                 break
+            occupes |= _fichiers_de(choisi)
             element = lancer(projet, "file-prendre", {"fonctionnalite": fid, "element": choisi["id"]})["element"]
             _tache_de_flux(projet, etat, _etat_element(etat, fid, element))
             vivants += 1

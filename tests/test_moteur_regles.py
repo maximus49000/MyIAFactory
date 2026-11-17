@@ -1427,6 +1427,87 @@ class CadrageSansCahier(Base):
         self.assertFalse(self.taches(etape="cadrage")[0].get("bloquee"))
 
 
+
+class VitesseDeLivraison(Base):
+    """Essai réel (2026-11-17, « menu simplifié ») : sur 21 minutes d'un agent, 15 à attendre des suites de tests
+    complètes, relancées à chaque élément et à chaque étape, et deux agents qui touchaient les mêmes fichiers en même
+    temps. Les tests ciblés à chaque étape, la suite complète une fois ; deux éléments qui partagent un fichier
+    s'enchaînent."""
+    casse_briques = Serie.casse_briques
+
+    def livrer_un_element(self):
+        self.casse_briques()
+        self.serie(1)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Programmé."}}, verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Livré."}}])
+
+    def matiere(self, etape):
+        return regles._matiere(self.projet, self.etat, self.taches(etape=f"flux:{etape}")[0])
+
+    # --- Levier 1 : les tests.
+    def test_le_developpeur_lance_seulement_les_tests_touches(self):
+        self.livrer_un_element()
+        m = self.matiere("dev")
+        self.assertIn(regles.TESTS_CIBLES, m)
+        self.assertNotIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
+
+    def test_le_dernier_regard_relit_le_diff_sans_relancer_la_suite(self):
+        self.livrer_un_element()
+        m = self.matiere("essai")
+        self.assertIn(regles.TESTS_DU_DERNIER_REGARD, m)
+        self.assertNotIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
+
+    def test_la_livraison_du_dernier_element_lance_la_suite_complete_une_fois(self):
+        self.livrer_un_element()
+        m = self.matiere("livraison")
+        self.assertIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
+        self.assertNotIn(regles.TESTS_CIBLES, m)
+
+    def test_pas_de_suite_complete_tant_qu_un_autre_element_travaille(self):
+        self.livrer_un_element()
+        self.etat["elements"]["f1/e9"] = {"fid": "f1", "element": {"id": "e9", "nom": "Autre"}, "phase": "flux",
+                                          "pas": 0, "tour": 0, "corrections": 0, "taches": []}
+        m = self.matiere("livraison")
+        self.assertNotIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
+        self.assertIn(regles.TESTS_CIBLES, m)
+
+    # --- Levier 2 : le découpage par fichiers.
+    def serie_avec_fichiers(self, f1, f2):
+        self.fonctionnalite("serie", methode={"version": 1, "chemin": "pieces/f1/methode-v1.md"})
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": [
+            {"id": "e1", "nom": "Accueil", "groupe": "écrans", "fichiers": f1},
+            {"id": "e2", "nom": "Profil", "groupe": "écrans", "fichiers": f2}]})
+
+    def elements_partis(self):
+        return sorted(t["element"] for t in self.taches() if str(t["etape"]).startswith("flux:"))
+
+    def test_deux_elements_qui_partagent_un_fichier_s_enchainent(self):
+        self.serie_avec_fichiers(["src/navConfig.tsx", "src/Accueil.tsx"], ["src\\navConfig.tsx", "src/Profil.tsx"])
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.elements_partis(), ["e1"])
+        self.assertEqual([q["id"] for q in self.fonc()["file"]], ["e2"])     # il attend la fin de e1
+
+    def test_deux_elements_sans_fichier_commun_partent_ensemble(self):
+        self.serie_avec_fichiers(["src/Accueil.tsx"], ["src/Profil.tsx"])
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.elements_partis(), ["e1", "e2"])
+
+    def test_le_developpeur_connait_les_fichiers_de_son_element(self):
+        self.serie_avec_fichiers(["src/Accueil.tsx"], ["src/Profil.tsx"])
+        regles.avancer(self.projet, self.etat)
+        t = next(t for t in self.taches() if t.get("element") == "e1")
+        self.assertIn("Fichiers de ton élément : src/Accueil.tsx", regles._matiere(self.projet, self.etat, t))
+
+    def test_la_file_garde_les_fichiers_et_refuse_une_mauvaise_forme(self):
+        self.serie_avec_fichiers(["src/a.tsx"], ["src/b.tsx"])
+        self.assertEqual(self.fonc()["elements"]["e1"]["fichiers"], ["src/a.tsx"])
+        for mauvais in ("src/a.tsx", [""], [3]):
+            code, _ = self.outil("file", entree={"fonctionnalite": "f1", "elements": [
+                {"id": "e1", "nom": "A", "fichiers": mauvais}]})
+            self.assertNotEqual(code, 0, mauvais)
+
+
 class Validation(Base):
     """Une étape de validation du Directeur dans le flux : l'élément s'arrête, le Directeur valide ou renvoie."""
 

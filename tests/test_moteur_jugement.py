@@ -588,9 +588,17 @@ class Valider(unittest.TestCase):
         self.assertIsNone(self._varie("decouper", elements=un(validations=[]), prototype="e1", depend_de={}))
         for mauvais in ({"validations": "f1-da"}, {"validations": [""]}, {"objectif": ""}, {"objectif": "x" * 301}):
             self.assertIsNotNone(self._varie("decouper", elements=un(**mauvais), prototype="e1", depend_de={}), mauvais)
+        self.assertIsNone(self._varie("decouper", elements=un(fichiers=["src/a.tsx"]), prototype="e1", depend_de={}))
+        for mauvais in ({"fichiers": "src/a.tsx"}, {"fichiers": [""]}, {"fichiers": [1]}):
+            self.assertIsNotNone(self._varie("decouper", elements=un(**mauvais), prototype="e1", depend_de={}), mauvais)
         self.assertIsNotNone(self._varie("decouper", reprendre_methode={"fonctionnalite": "f1"}))
         self.assertIsNone(self._varie("decouper", reprendre_methode={"fonctionnalite": "f1", "version": 2,
                                                                      "pourquoi": "même élément, même flux"}))
+
+    def test_la_consigne_du_decoupage_parle_des_fichiers_et_du_regroupement(self):
+        texte = (Path(__file__).resolve().parent.parent / "moteur" / "consignes" / "decouper.md").read_text(encoding="utf-8")
+        self.assertIn("`fichiers`", texte)
+        self.assertIn("presque identiques", texte)
 
     def test_traduire_retour(self):
         self.assertIsNotNone(self._varie("traduire_retour", consigne=None))

@@ -1954,8 +1954,9 @@ def cmd_ecrire(ctx, e):
 
 
 # Un élément de la file : `objectif` (ce qu'il doit produire, rappelé à sa validation) et `validations` (les étapes de
-# validation du Directeur qui le concernent ; absent : toutes) viennent du découpage.
-CHAMPS_ELEMENT = ("id", "nom", "groupe", "objectif", "validations")
+# validation du Directeur qui le concernent ; absent : toutes) et `fichiers` (ceux qu'il crée ou modifie : deux éléments
+# qui en partagent un ne travaillent pas en même temps) viennent du découpage.
+CHAMPS_ELEMENT = ("id", "nom", "groupe", "objectif", "validations", "fichiers")
 
 
 def cmd_file(ctx, e):
@@ -1974,6 +1975,9 @@ def cmd_file(ctx, e):
         if q.get("validations") is not None and not (isinstance(q["validations"], list)
                                                      and all(isinstance(v, str) and v for v in q["validations"])):
             raise Refus(f"File : « validations » de « {q['id']} » : une liste d'identifiants d'étapes.")
+        if q.get("fichiers") is not None and not (isinstance(q["fichiers"], list)
+                                                  and all(isinstance(x, str) and x.strip() for x in q["fichiers"])):
+            raise Refus(f"File : « fichiers » de « {q['id']} » : la liste des chemins qu'il crée ou modifie.")
         vus.add(q["id"])
         propres.append({k: q[k] for k in CHAMPS_ELEMENT if q.get(k) is not None})
     with ctx.suivi.transaction() as s:

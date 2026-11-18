@@ -74,3 +74,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand un refus signale qu'un téléchargement censé être un fichier binaire arrive comme du texte/JSON, produire la preuve en appelant la route réelle via un client de test HTTP in-process, sauvegarder les octets reçus sur disque et vérifier leur signature binaire, plutôt que de relire seulement le code source.
+
+## G13 — Dans une application web qui exporte des fichiers Office pro
+Rôles : dev
+Date : 2026-11-18
+
+Dans une application web qui exporte des fichiers Office protégés par cellule (feuille verrouillée, cellules spécifiques déverrouillées), un utilisateur signalant 'le fichier est en lecture seule' décrit souvent la Vue protégée d'Office déclenchée par le marquage 'provenance Internet' que le système d'exploitation ajoute à tout fichier téléchargé par navigateur — pas un défaut de verrouillage de cellules. Vérifier d'abord le code de protection et son test avant de chercher un bug.

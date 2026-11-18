@@ -110,3 +110,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans une tâche de correction/développement, si les chemins de fichiers cités dans la matière n'existent pas, chercher par nom de fonction/mot-clé dans tout le dépôt avant de conclure à un fichier manquant : l'arborescence réelle peut diverger du cahier.
+
+## G19 — Dans un dossier de travail partagé par plusieurs agents, une
+Rôles : dev
+Date : 2026-11-18
+
+Dans un dossier de travail partagé par plusieurs agents, une édition non committée peut être intégrée au commit d'une autre session qui committe entre-temps ; vérifier que le contenu voulu y figure plutôt que de corriger l'historique a posteriori.

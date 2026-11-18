@@ -84,6 +84,16 @@ def agents_au_travail(agents, taches):
     nouvelles depuis 31 min »). Modifie `agents` en place."""
     par_id = {t.get("id"): t for t in taches if isinstance(t, dict)}
     for a in agents:
+        # un lot : la session de l'agent est passée à une autre de ses tâches (essai réel du 2026-11-18 : la bulle de
+        # Hugo nommait t68, finie, pendant qu'il faisait t69) ; la bulle nomme celle qu'il fait
+        du_lot = [t for t in par_id.values() if (t.get("travail") or {}).get("lot") and t.get("agent") == a.get("id")
+                  and t.get("travail", {}).get("agent") == a.get("id")]
+        if du_lot:
+            a["taches"] = list(a.get("taches") or []) + [t["id"] for t in du_lot if t["id"] not in (a.get("taches") or [])]
+            if a.get("statut") in ("sans_nouvelles", "travail"):
+                a["statut"] = "travail"
+                a["bulle"] = _tronquer(du_lot[0].get("titre"))
+            continue
         if a.get("statut") != "sans_nouvelles":
             continue
         vivantes = [par_id[i] for i in a.get("taches") or [] if i in par_id and par_id[i].get("travail")]

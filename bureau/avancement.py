@@ -64,6 +64,9 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
     reste_texte}` ; `moteur_vivant` : vrai, faux, ou `None` si on ne sait pas. `None` quand aucun agent n'est dessus (ni au travail, ni terminé depuis plus de 2 min)."""
     travail = tache.get("travail") if isinstance(tache.get("travail"), dict) else None
     termine = tache.get("agent_termine") if isinstance(tache.get("agent_termine"), dict) else None
+    lot = tache.get("dans_le_lot") if isinstance(tache.get("dans_le_lot"), dict) and not travail else None
+    if lot:
+        return _dans_le_lot(lot, taches, moteur_vivant)
     liste = (travail or {}).get("avancement") if isinstance((travail or {}).get("avancement"), dict) else {}
     points = liste.get("points") or []
     base = {"points": points, "en_cours": liste.get("en_cours"), "phase": (travail or {}).get("phase")}
@@ -93,6 +96,11 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
             return None
         return rendre("termine_non_lu", f"agent terminé, résultat en attente de lecture depuis {_minutes(age)} min")
     arret = f"arrêt automatique à {_minutes(delai_arret_s)} min"
+    attente = travail.get("attente_tests") if isinstance(travail.get("attente_tests"), dict) else None
+    if attente:      # l'agent a lancé ses tests, une autre campagne occupe le poste : il attend, il n'est pas bloqué
+        depuis = _secondes(attente.get("depuis"), maintenant)
+        return rendre("attente_tests", "attend son tour pour les tests (une autre campagne tourne sur le poste)"
+                      + (f" depuis {_minutes(depuis)} min" if depuis is not None else ""))
     if not travail.get("action"):
         if passe is not None and passe > ACTION_RECENTE_S:      # aucune action depuis plus de 2 min : pas un démarrage
             return rendre("sans_action", f"sans action depuis {_minutes(passe)} min, {arret}")
@@ -107,3 +115,25 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
     if action is not None and vie is not None and vie <= ACTION_RECENTE_S:
         return rendre("commande_longue", f"commande longue en cours depuis {_minutes(action)} min ({arret})")
     return rendre("sans_action", f"sans action depuis {_minutes(action or vie or 0)} min, {arret}")
+
+
+def _titre(taches, tid):
+    t = next((x for x in taches if isinstance(x, dict) and x.get("id") == tid), None)
+    titre = (t or {}).get("titre")
+    return f"{tid} ({titre})" if isinstance(titre, str) and titre.strip() else str(tid)
+
+
+def _dans_le_lot(lot, taches, moteur_vivant):
+    """Une tâche d'un lot que la session de l'agent ne fait pas en ce moment (`dans_le_lot`, voir
+    `detache.ajouter_au_travail`) : finie, l'agent poursuit le lot ; à venir, elle attend son tour dans la même session.
+    Ni temps passé ni temps restant : ils sont sur la tâche en cours."""
+    liste = lot.get("avancement") if isinstance(lot.get("avancement"), dict) else {}
+    base = {"points": liste.get("points") or [], "en_cours": liste.get("en_cours"), "phase": None, "passe_s": None,
+            "cumul_s": None, "reste": None, "reste_texte": "inconnu", "lot": {k: lot.get(k) for k in ("rang", "total")}}
+    courante = _titre(taches, lot.get("courante"))
+    if moteur_vivant is False:
+        return {**base, "etat": "moteur_arrete", "etat_texte": "moteur arrêté : rien n'avance tant qu'il n'est pas relancé"}
+    if lot.get("etat") == "faite":
+        return {**base, "etat": "lot_faite", "etat_texte": f"faite ; l'agent poursuit le lot dans la même session, "
+                                                           f"sur {courante}"}
+    return {**base, "etat": "lot_a_venir", "etat_texte": f"attend son tour dans le lot : l'agent fait d'abord {courante}"}

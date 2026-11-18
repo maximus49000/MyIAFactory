@@ -50,3 +50,13 @@ test("un changement d'état ou de liste redessine la fiche", () => {
   assert.notEqual(avant, apres);
   assert.ok(cleTravail({avancement: {...base, etat: "termine_non_lu"}}));      // même sans agent au travail
 });
+
+test("lot et attente du verrou de tests : à son tour, pas une alerte", () => {
+  // essai réel du 2026-11-18 (lot L5) : t68 finie, la même session faisait t69 ; Hugo attendait le verrou de tests
+  const faite = avancementEnClair({...base, etat: "lot_faite", etat_texte: "faite ; l'agent poursuit le lot"});
+  assert.equal(faite.ton, "ok");
+  assert.equal(faite.dansLeLot, true);
+  assert.equal(avancementEnClair({...base, etat: "lot_a_venir"}).ton, "pause");
+  assert.equal(avancementEnClair({...base, etat: "attente_tests"}).ton, "pause");
+  assert.equal(avancementEnClair(base).dansLeLot, false);
+});

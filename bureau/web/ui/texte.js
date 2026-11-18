@@ -74,7 +74,10 @@ function dureeCourte(secondes) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 }
 
-const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause"};
+// lot_faite / lot_a_venir : une tâche d'un lot que la même session a finie ou fera ensuite ; attente_tests : l'agent
+// attend le verrou de tests du poste (voir bureau/avancement.py).
+const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause", lot_faite: "ok", lot_a_venir: "pause",
+                        attente_tests: "pause"};
 
 // Ce que dit la fiche d'une tâche (`avancement` servi par le bureau, voir bureau/avancement.py) : où elle en est (la
 // liste de l'agent, sinon la phase déduite de son flux), le temps passé et restant, et si ça avance. null sans avancement.
@@ -87,6 +90,7 @@ export function avancementEnClair(av) {
     points, enCours: typeof av.en_cours === "string" && av.en_cours.trim() ? av.en_cours.trim() : null,
     phase: typeof av.phase === "string" ? av.phase : null, sansListe: points.length === 0,
     passe: dureeCourte(av.passe_s), cumul: dureeCourte(av.cumul_s), reste: av.reste_texte || "inconnu",
+    dansLeLot: av.etat === "lot_faite" || av.etat === "lot_a_venir",
   };
 }
 

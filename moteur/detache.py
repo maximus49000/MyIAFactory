@@ -38,6 +38,7 @@ QUEUE_OCTETS = 65536            # la dernière action se lit dans la fin du flux
 MAX_ACTION = 80
 OPTIONS_CONSIGNE = ("--append-system-prompt-file", "--system-prompt-file")
 ARRET = "agent arrêté par l'utilisateur depuis le bureau"
+VARIABLE_TACHE = "MYIAFACTORY_TACHE"    # la clé de l'agent dans l'environnement de ses commandes (voir `outils/campagne`)
 
 
 class ArretDemande(TimeoutError):
@@ -386,16 +387,41 @@ def conso_en_cours(flux):
     return list(par_modele.values())
 
 
-def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
+FINS_DE_LISTE = ("termine", "terminé", "terminee", "terminée", "fini", "finie", "fait", "faite", "done")
+
+
+def liste_finie(liste):
+    """Vrai quand la liste d'avancement d'une tâche dit qu'elle est finie : `en_cours` vaut « termine » (ou proche), ou
+    tous ses points sont cochés sans rien d'autre en cours."""
+    if not isinstance(liste, dict):
+        return False
+    en_cours = liste.get("en_cours")
+    if isinstance(en_cours, str) and en_cours.strip().lower().rstrip(".!") in FINS_DE_LISTE:
+        return True
+    points = liste.get("points") or []
+    return bool(points) and not en_cours and all(p.get("fait") for p in points)
+
+
+def tache_du_lot_en_cours(ids, listes):
+    """La tâche d'un lot que sa session fait maintenant : la première, dans l'ordre du lot, dont la liste ne dit pas
+    qu'elle est finie ; toutes finies : la dernière (l'agent rédige son compte rendu)."""
+    return next((tid for tid in ids if not liste_finie(listes.get(tid))), ids[-1])
+
+
+def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attentes_tests=None):
     """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t,
     vie_t, conso}` (heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris ;
     `conso` : voir `conso_en_cours` ; `phase`, `avancement` : voir `phase_du_flux`, `lire_avancement`). Un agent
-    mort dont le résultat n'est pas encore lu donne `agent_termine` = `{t}` à la place. Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais."""
+    mort dont le résultat n'est pas encore lu donne `agent_termine` = `{t}` à la place. Lecture seule ; un agent qui ne tourne plus n'est pas montré. Ne lève jamais.
+    Dans un lot, seule la tâche que la session fait (`tache_du_lot_en_cours`) reçoit `travail` (avec `lot` : `{rang,
+    total}`), est dite active et porte l'agent ; les autres reçoivent `dans_le_lot` = `{etat: "faite" | "a_venir",
+    agent, courante, rang, total, avancement}`. `attentes_tests` : `{clé de l'agent: {depuis, motif}}`, les agents qui
+    attendent le verrou de tests du poste (`outils/campagne.en_attente`) ; leur tâche en cours reçoit `attente_tests`."""
     try:
         d = dossier(dossier_factory)
         if not d.is_dir():
             return taches
-        travail, termines = {}, {}
+        travail, termines, dans_le_lot = {}, {}, {}
         for f in sorted(d.glob("*.json")):
             if f.name.endswith((".questions.json", ".avancement.json")):
                 continue
@@ -434,14 +460,41 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant):
             info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
                     "vie_t": vie_t, "conso": conso_en_cours(flux), "phase": phase_du_flux(lignes),
                     "avancement": lire_avancement(f.with_suffix(".avancement.json"))}
-            for tid in etat.get("taches") or [etat.get("tache")]:
-                if isinstance(tid, str):     # chaque tâche d'un lot a sa liste ; à défaut, celle de l'agent
-                    travail[tid] = {**info, "avancement": lire_avancement(f.parent / f"{tid}.avancement.json")
-                                    or info["avancement"]}
+            if (attentes_tests or {}).get(f.stem):     # l'agent attend le verrou de tests du poste
+                info["attente_tests"] = dict(attentes_tests[f.stem])
+            ids = [tid for tid in etat.get("taches") or [etat.get("tache")] if isinstance(tid, str)]
+            listes = {tid: lire_avancement(f.parent / f"{tid}.avancement.json") for tid in ids}
+            if len(ids) < 2:
+                for tid in ids:
+                    travail[tid] = {**info, "avancement": listes[tid] or info["avancement"]}
+                continue
+            # Un lot : une seule session fait ses tâches l'une après l'autre. Seule celle qu'elle fait reçoit `travail`
+            # (essai réel du 2026-11-18 : t68 finie disait « En cours : termine » et t69, que Hugo faisait, restait
+            # sans agent ni activité : l'utilisateur croyait l'agent arrêté).
+            courante = tache_du_lot_en_cours(ids, listes)
+            for rang, tid in enumerate(ids, 1):
+                if tid == courante:
+                    travail[tid] = {**info, "avancement": listes[tid], "lot": {"rang": rang, "total": len(ids)}}
+                else:
+                    faite = ids.index(tid) < ids.index(courante)
+                    a = listes[tid]
+                    dans_le_lot[tid] = {"etat": "faite" if faite else "a_venir", "agent": etat.get("agent"),
+                                        "courante": courante, "rang": rang, "total": len(ids),
+                                        "avancement": dict(a, en_cours=None) if a and faite else a}
         for t in taches:
-            if isinstance(t, dict) and t.get("id") in travail:
+            if not isinstance(t, dict):
+                continue
+            if t.get("id") in travail:
                 t["travail"] = dict(travail[t["id"]])
-            elif isinstance(t, dict) and t.get("id") in termines:
+                if t["travail"].get("lot"):     # la tâche que la session du lot fait : active, avec son agent
+                    t["active"] = True
+                    t["agent"] = t.get("agent") or t["travail"].get("agent")
+            elif t.get("id") in dans_le_lot:
+                t["dans_le_lot"] = dict(dans_le_lot[t["id"]])
+                t["agent"] = t.get("agent") or t["dans_le_lot"].get("agent")
+                if t["dans_le_lot"]["etat"] == "faite":
+                    t["active"] = False      # finie : la session est passée à la suivante du lot
+            elif t.get("id") in termines:
                 t["agent_termine"] = dict(termines[t["id"]])
     except Exception:     # le bureau ne tombe jamais pour une aide
         pass
@@ -621,6 +674,8 @@ class Registre:
                 shutil.copyfile(argv[i + 1], copie)
                 argv[i + 1] = str(copie)
         self.chemin(cle, ".entree").write_bytes(entree or b"")
+        # la clé de l'agent, héritée par ses commandes : une campagne de tests qui attend son tour dit pour qui (le bureau)
+        env = {**(os.environ if env is None else env), VARIABLE_TACHE: cle}
         p = self.lancer(argv, str(self.chemin(cle, ".entree")), str(self.chemin(cle, ".jsonl")),
                         str(self.chemin(cle, ".err")), env, cwd)
         etat = {"genre": "tache", **infos, "cle": cle, "pid": p.pid, "debut_processus": debut_processus(p.pid),

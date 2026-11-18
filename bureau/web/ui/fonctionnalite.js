@@ -620,7 +620,9 @@ export function tachesDeFonctionnalite(etat, f) {
     const c = colonnes.get(t.colonne);
     const ligne = {id: t.id, titre: t.titre, colonne: c?.nom || t.colonne, prenom: t.agent ? prenoms.get(t.agent) || t.agent : null,
                    maj: t.maj || null, active: t.active === true, bloquee: t.bloquee || null};
-    (c?.terminee || t.active === false ? realisees : aVenir).push(ligne);   // inactive : finie, même hors de « Fait »
+    // inactive : finie, même hors de « Fait » ; sauf une tâche d'un lot qui attend son tour dans la session de l'agent
+    const aSonTour = t.dans_le_lot?.etat === "a_venir";
+    (c?.terminee || (t.active === false && !aSonTour) ? realisees : aVenir).push(ligne);
   }
   const recent = (a, b) => String(b.maj || "").localeCompare(String(a.maj || ""));
   realisees.sort(recent);

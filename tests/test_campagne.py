@@ -16,12 +16,38 @@ class TestCampagne(unittest.TestCase):
         self._t = tempfile.TemporaryDirectory()
         self.addCleanup(self._t.cleanup)
         self.verrou = Path(self._t.name) / "tests-en-cours.json"
+        self.attentes = Path(self._t.name) / "tests-en-attente"
         self.dits, self.sommes = [], []
 
     def tour(self, lister=lambda: [], attendre=True, dormir=None):
         return campagne.attendre_son_tour("skill", attendre=attendre, verrou=self.verrou, lister=lister,
                                           dormir=dormir or self.sommes.append,
-                                          dire=lambda texte, **k: self.dits.append(texte))
+                                          dire=lambda texte, **k: self.dits.append(texte), attentes=self.attentes)
+
+    def test_une_campagne_qui_attend_est_notee_pour_le_bureau_puis_oubliee(self):
+        """Essai réel (2026-11-18) : Hugo attendait le verrou de tests, sa fiche n'en disait rien. Pendant l'attente,
+        la campagne est notée avec la clé de l'agent (`MYIAFACTORY_TACHE`) ; une fois son tour venu, elle est oubliée."""
+        vu = []
+        listes = [[(4242, "node node_modules/vitest/vitest.mjs run")], []]
+
+        def dormir(_):
+            vu.append(campagne.en_attente(self.attentes))
+        os.environ[campagne.VARIABLE_TACHE] = "t68"
+        self.addCleanup(os.environ.pop, campagne.VARIABLE_TACHE, None)
+        self.assertTrue(self.tour(lister=lambda: listes.pop(0), dormir=dormir))
+        self.assertEqual(list(vu[0]), ["t68"])
+        self.assertIn("sans le lanceur", vu[0]["t68"]["motif"])
+        self.assertTrue(vu[0]["t68"]["depuis"])
+        self.assertEqual(campagne.en_attente(self.attentes), {})        # son tour venu : plus en attente
+        self.assertEqual(list(self.attentes.glob("*.json")), [])
+
+    def test_en_attente_ignore_un_processus_mort_ou_sans_agent(self):
+        self.attentes.mkdir()
+        (self.attentes / "1.json").write_text(json.dumps({"pid": 999999999, "tache": "t1"}), encoding="utf-8")
+        (self.attentes / "2.json").write_text(json.dumps({"pid": os.getpid(), "tache": None}), encoding="utf-8")
+        (self.attentes / "3.json").write_text("{pas du json", encoding="utf-8")
+        self.assertEqual(campagne.en_attente(self.attentes), {})
+        self.assertEqual(campagne.en_attente(self.attentes / "absent"), {})
 
     def test_poste_libre_le_verrou_est_pris_puis_libere(self):
         self.assertTrue(self.tour())
@@ -71,7 +97,7 @@ class TestCampagne(unittest.TestCase):
             return 7
         code = campagne.executer(["npx", "vitest", "run", "src/a.test.tsx"], dossier="C:/p/frontend", verrou=self.verrou,
                                  lister=lambda: [], dormir=self.sommes.append, dire=lambda t, **k: self.dits.append(t),
-                                 lancer=lancer)
+                                 lancer=lancer, attentes=self.attentes)
         self.assertEqual(code, 7)                                  # le code de la commande
         self.assertEqual(vu, {"verrou": os.getpid(), "commande": ["npx", "vitest", "run", "src/a.test.tsx"],
                               "dossier": "C:/p/frontend"})
@@ -82,7 +108,7 @@ class TestCampagne(unittest.TestCase):
         lancees = []
         code = campagne.executer(["npm", "test"], verrou=self.verrou, lister=lambda: listes.pop(0),
                                  dormir=self.sommes.append, dire=lambda t, **k: self.dits.append(t),
-                                 lancer=lambda c, d: lancees.append(c) or 0)
+                                 lancer=lambda c, d: lancees.append(c) or 0, attentes=self.attentes)
         self.assertEqual((code, lancees, len(self.sommes)), (0, [["npm", "test"]], 1))
         self.assertIn("Une seule campagne", self.dits[0])
 

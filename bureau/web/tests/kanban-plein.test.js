@@ -62,3 +62,13 @@ test("colonne de validation nommee : « Validation du Directeur » sous son nom"
   assert.equal(etiquetteColonne(c[2]), "jeu-android");
   assert.deepEqual(c[1].taches.map((t) => t.id), ["t1"]);
 });
+
+test("colonnesKanban : la carte d'un agent qui attend le verrou de tests dit sa position dans la file", () => {
+  const travail = {depuis: "2026-11-18T10:00:00+01:00", agent: "dev-1", attente_tests: {rang: 2, total: 3}};
+  const etat = {colonnes: [{id: "b", nom: "En cours"}],
+                taches: [{id: "t1", titre: "Un", colonne: "b", active: true, travail},
+                         {id: "t2", titre: "Deux", colonne: "b", active: true, travail: {depuis: travail.depuis}}]};
+  const [c] = colonnesKanban(etat);
+  assert.deepEqual(c.taches.map((t) => [t.id, t.attenteTests]),
+                   [["t1", "En attente pour lancer les tests · position 2 sur 3"], ["t2", null]]);
+});

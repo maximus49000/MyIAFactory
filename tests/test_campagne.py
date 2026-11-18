@@ -49,6 +49,33 @@ class TestCampagne(unittest.TestCase):
         self.assertEqual(campagne.en_attente(self.attentes), {})
         self.assertEqual(campagne.en_attente(self.attentes / "absent"), {})
 
+    def test_la_file_donne_le_rang_de_chaque_agent_dans_l_ordre_d_arrivee(self):
+        self.attentes.mkdir()
+        vivant = lambda pid: pid in (11, 12, 13)      # noqa: E731
+        for pid, arrivee, tache in ((12, 200.0, "t2"), (11, 100.0, "t1"), (13, 300.0, None), (14, 50.0, "mort")):
+            (self.attentes / f"{pid}.json").write_text(json.dumps(
+                {"pid": pid, "arrivee": arrivee, "depuis": "10:00", "motif": "m", "tache": tache}), encoding="utf-8")
+        f = campagne.en_attente(self.attentes, vivant=vivant)
+        self.assertEqual({k: (v["rang"], v["total"]) for k, v in f.items()}, {"t1": (1, 3), "t2": (2, 3)})
+
+    def test_premier_arrive_premier_servi_meme_poste_libre(self):
+        """Le bureau affiche la position dans la file : une campagne arrivée après une autre qui attend ne lui passe
+        pas devant, même si le verrou est libre à cet instant."""
+        self.attentes.mkdir()
+        avant = self.attentes / "autre.json"
+        avant.write_text(json.dumps({"pid": os.getppid(), "arrivee": 1.0, "tache": "t1"}), encoding="utf-8")
+        vu = []
+
+        def dormir(_):
+            vu.append(campagne.en_attente(self.attentes))
+            avant.unlink()        # l'autre a eu son tour : elle quitte la file
+        os.environ[campagne.VARIABLE_TACHE] = "t2"
+        self.addCleanup(os.environ.pop, campagne.VARIABLE_TACHE, None)
+        self.assertTrue(self.tour(dormir=dormir))
+        self.assertIn("1 campagne attend avant elle", self.dits[0])
+        self.assertEqual({k: (v["rang"], v["total"]) for k, v in vu[0].items()}, {"t1": (1, 2), "t2": (2, 2)})
+        self.assertEqual(json.loads(self.verrou.read_text(encoding="utf-8"))["pid"], os.getpid())
+
     def test_poste_libre_le_verrou_est_pris_puis_libere(self):
         self.assertTrue(self.tour())
         self.assertEqual(json.loads(self.verrou.read_text(encoding="utf-8"))["pid"], os.getpid())

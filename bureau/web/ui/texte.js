@@ -74,6 +74,15 @@ function dureeCourte(secondes) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 }
 
+// La ligne courte d'un agent qui attend le verrou de tests du poste (`travail.attente_tests`, voir
+// outils/campagne.en_attente) : « En attente pour lancer les tests · position 2 sur 3 ». null s'il n'attend pas.
+export function attenteTestsEnClair(attente) {
+  if (!attente || typeof attente !== "object") return null;
+  const {rang, total} = attente;
+  const position = Number.isInteger(rang) && Number.isInteger(total) && rang >= 1 && rang <= total;
+  return "En attente pour lancer les tests" + (position ? ` · position ${rang} sur ${total}` : "");
+}
+
 // lot_faite / lot_a_venir : une tâche d'un lot que la même session a finie ou fera ensuite ; attente_tests : l'agent
 // attend le verrou de tests du poste (voir bureau/avancement.py).
 const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause", lot_faite: "ok", lot_a_venir: "pause",

@@ -68,3 +68,11 @@ test("« termine » dans la ligne en cours ne fait pas croire la tâche finie : 
   assert.equal(avancementEnClair({...base, en_cours: "terminer les tests"}).enCours, "terminer les tests");
   assert.equal(avancementEnClair({...base, en_cours: "  "}).enCours, null);
 });
+
+test("attenteTestsEnClair : la position dans la file des tests, sans position si elle est incohérente", async () => {
+  const {attenteTestsEnClair} = await import("../ui/texte.js");
+  assert.equal(attenteTestsEnClair({rang: 1, total: 2}), "En attente pour lancer les tests · position 1 sur 2");
+  assert.equal(attenteTestsEnClair({rang: 3, total: 2}), "En attente pour lancer les tests");
+  assert.equal(attenteTestsEnClair({}), "En attente pour lancer les tests");
+  assert.equal(attenteTestsEnClair(null), null);
+});

@@ -99,8 +99,17 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
     attente = travail.get("attente_tests") if isinstance(travail.get("attente_tests"), dict) else None
     if attente:      # l'agent a lancé ses tests, une autre campagne occupe le poste : il attend, il n'est pas bloqué
         depuis = _secondes(attente.get("depuis"), maintenant)
-        return rendre("attente_tests", "attend son tour pour les tests (une autre campagne tourne sur le poste)"
-                      + (f" depuis {_minutes(depuis)} min" if depuis is not None else ""))
+        rang, total = attente.get("rang"), attente.get("total")
+        position = isinstance(rang, int) and isinstance(total, int) and 1 <= rang <= total
+        texte = "en attente pour lancer les tests"
+        if position:
+            texte += f" · position {rang} sur {total} dans la file"
+            texte += " (passe dès que le poste se libère)" if rang == 1 else ""
+        else:
+            texte += " (une autre campagne tourne sur le poste)"
+        r = rendre("attente_tests", texte + (f" · depuis {_minutes(depuis)} min" if depuis is not None else ""))
+        r["file_tests"] = {"rang": rang, "total": total} if position else None
+        return r
     if not travail.get("action"):
         if passe is not None and passe > ACTION_RECENTE_S:      # aucune action depuis plus de 2 min : pas un démarrage
             return rendre("sans_action", f"sans action depuis {_minutes(passe)} min, {arret}")

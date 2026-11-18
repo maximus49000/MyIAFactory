@@ -154,6 +154,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .pourquoi-lignes { margin: 0; padding-left: 18px; font-size: 13px; }
 .carte-attente { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #e8eefb; color: #2f4a86; overflow-wrap: anywhere; }
 .kanban-carte-attente { color: #2f4a86; font-size: 12px; }
+.kanban-carte-tests { justify-self: start; background: #fdf0d5; color: #7a5710; border-radius: 4px; padding: 1px 6px; font-size: 12px; font-weight: 600; }
 .kanban-carte-resume { color: #5b5868; font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .resume-tache { color: #4a4757; font-size: 13px; margin: 2px 0 6px; }
 .kanban-carte-travail { color: #2f6b3f; font-size: 12px; overflow-wrap: anywhere; }

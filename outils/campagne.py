@@ -127,12 +127,12 @@ def liberer(verrou=VERROU):
             pass
 
 
-def _noter_l_attente(attentes, racine, motif, depuis):
+def _noter_l_attente(attentes, racine, motif, depuis, arrivee):
     try:
         Path(attentes).mkdir(parents=True, exist_ok=True)
         (Path(attentes) / f"{os.getpid()}.json").write_text(json.dumps(
-            {"pid": os.getpid(), "depuis": depuis, "racine": str(racine), "tache": os.environ.get(VARIABLE_TACHE) or None,
-             "motif": motif}), encoding="utf-8")
+            {"pid": os.getpid(), "depuis": depuis, "arrivee": arrivee, "racine": str(racine),
+             "tache": os.environ.get(VARIABLE_TACHE) or None, "motif": motif}), encoding="utf-8")
     except OSError:
         pass      # une aide pour le bureau : l'attente continue sans elle
 
@@ -144,44 +144,79 @@ def _oublier_l_attente(attentes):
         pass
 
 
-def en_attente(attentes=ATTENTES, vivant=pid_vivant):
-    """Les campagnes qui attendent leur tour, par clé d'agent : `{tache: {depuis, motif}}` (celles d'un processus mort
-    ou sans agent sont ignorées). Lecture seule, ne lève jamais."""
-    sortie = {}
+def _file(attentes, vivant=pid_vivant):
+    """Les campagnes vivantes qui attendent, dans leur ordre d'arrivée : `[(arrivee, pid, note)]`. Une note sans
+    `arrivee` (ancienne version) prend la date du fichier. Lecture seule, ne lève jamais."""
     try:
-        fichiers = sorted(Path(attentes).glob("*.json"))
+        fichiers = list(Path(attentes).glob("*.json"))
     except OSError:
-        return sortie
+        return []
+    file = []
     for f in fichiers:
         x = _lire(f)
-        if (isinstance(x, dict) and isinstance(x.get("tache"), str) and x["tache"] and vivant(x.get("pid"))
-                and x["tache"] not in sortie):
-            sortie[x["tache"]] = {"depuis": x.get("depuis"), "motif": x.get("motif")}
+        if not isinstance(x, dict) or not isinstance(x.get("pid"), int) or not vivant(x["pid"]):
+            continue
+        arrivee = x.get("arrivee")
+        if not isinstance(arrivee, (int, float)) or isinstance(arrivee, bool):
+            try:
+                arrivee = f.stat().st_mtime
+            except OSError:
+                continue
+        file.append((float(arrivee), x["pid"], x))
+    file.sort(key=lambda e: (e[0], e[1]))
+    return file
+
+
+def _devant(attentes, arrivee, vivant=pid_vivant):
+    """Les campagnes qui attendent avant nous (toutes, tant que nous ne sommes pas encore dans la file)."""
+    moi = os.getpid()
+    return [e for e in _file(attentes, vivant)
+            if e[1] != moi and (arrivee is None or (e[0], e[1]) < (arrivee, moi))]
+
+
+def en_attente(attentes=ATTENTES, vivant=pid_vivant):
+    """Les campagnes qui attendent leur tour, par clé d'agent : `{tache: {depuis, motif, rang, total}}` ; `rang` est la
+    position dans la file (1 : la prochaine à passer), `total` le nombre de campagnes qui attendent (celles sans agent
+    comptent dans la file ; celles d'un processus mort sont ignorées). Lecture seule, ne lève jamais."""
+    sortie = {}
+    file = _file(attentes, vivant)
+    for rang, (_, _, x) in enumerate(file, 1):
+        if isinstance(x.get("tache"), str) and x["tache"] and x["tache"] not in sortie:
+            sortie[x["tache"]] = {"depuis": x.get("depuis"), "motif": x.get("motif"), "rang": rang, "total": len(file)}
     return sortie
 
 
 def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
                       attentes=ATTENTES):
-    """Prend le verrou dès que le poste est libre. Rend vrai quand c'est fait, faux si `attendre` est faux et qu'une
-    autre campagne tourne. Pendant qu'elle attend, la campagne est notée dans `attentes` (voir `en_attente`)."""
-    deja_dit, depuis = None, None
+    """Prend le verrou dès que le poste est libre et que personne n'attend avant nous (premier arrivé, premier servi :
+    le bureau affiche la position dans la file, elle doit dire vrai). Rend vrai quand c'est fait, faux si `attendre`
+    est faux et que le poste est pris. Pendant qu'elle attend, la campagne est notée dans `attentes` (voir
+    `en_attente`)."""
+    deja_dit, depuis, arrivee = None, None, None
     try:
         while True:
-            autre = prendre(verrou, racine)
-            directes = [] if autre else suites_sans_verrou(lister)
-            if not autre and not directes:
+            devant = _devant(attentes, arrivee)
+            autre = None if devant else prendre(verrou, racine)
+            directes = [] if (autre or devant) else suites_sans_verrou(lister)
+            if not autre and not directes and not devant:
                 return True
-            if not autre:
+            if not autre and not devant:
                 liberer(verrou)      # une suite lancée sans le lanceur tourne : on lui laisse le poste
-            motif = (f"une campagne tourne déjà (processus {autre.get('pid')}, depuis {autre.get('debut')})" if autre
-                     else f"une suite lancée sans le lanceur tourne (processus {', '.join(str(p) for p, _ in directes[:3])})")
+            if autre:
+                motif = f"une campagne tourne déjà (processus {autre.get('pid')}, depuis {autre.get('debut')})"
+            elif devant:
+                motif = (f"{len(devant)} campagne{'s' if len(devant) > 1 else ''} attend"
+                         f"{'ent' if len(devant) > 1 else ''} avant elle")
+            else:
+                motif = f"une suite lancée sans le lanceur tourne (processus {', '.join(str(p) for p, _ in directes[:3])})"
             if not attendre:
                 dire(f"Refusé : {motif}. Une seule campagne de tests à la fois sur le poste.")
                 return False
             if motif != deja_dit:
                 dire(f"En attente : {motif}. Une seule campagne de tests à la fois sur le poste.", flush=True)
                 depuis = depuis or datetime.now().astimezone().isoformat(timespec="seconds")
-                _noter_l_attente(attentes, racine, motif, depuis)
+                arrivee = arrivee or time.time()
+                _noter_l_attente(attentes, racine, motif, depuis, arrivee)
                 deja_dit = motif
             dormir(PAS_S)
     finally:

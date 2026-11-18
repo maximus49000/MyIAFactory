@@ -153,8 +153,18 @@ class Lot(unittest.TestCase):
         r = calculer(tache(travail=travail(action_s=900, vie_s=900, attente_tests={
             "depuis": il_y_a(300), "motif": "une campagne tourne déjà"})))
         self.assertEqual(r["etat"], "attente_tests")
-        self.assertEqual(r["etat_texte"], "attend son tour pour les tests (une autre campagne tourne sur le poste) "
-                                          "depuis 5 min")
+        self.assertEqual(r["etat_texte"], "en attente pour lancer les tests (une autre campagne tourne sur le poste) "
+                                          "· depuis 5 min")
+        self.assertIsNone(r["file_tests"])
+
+    def test_attente_du_verrou_de_tests_avec_sa_position_dans_la_file(self):
+        r = calculer(tache(travail=travail(action_s=900, vie_s=900, attente_tests={
+            "depuis": il_y_a(300), "motif": "1 campagne attend avant elle", "rang": 2, "total": 3})))
+        self.assertEqual(r["etat"], "attente_tests")
+        self.assertEqual(r["etat_texte"], "en attente pour lancer les tests · position 2 sur 3 dans la file · depuis 5 min")
+        self.assertEqual(r["file_tests"], {"rang": 2, "total": 3})
+        r = calculer(tache(travail=travail(action_s=900, vie_s=900, attente_tests={"rang": 1, "total": 1})))
+        self.assertIn("position 1 sur 1 dans la file (passe dès que le poste se libère)", r["etat_texte"])
 
 
 if __name__ == "__main__":

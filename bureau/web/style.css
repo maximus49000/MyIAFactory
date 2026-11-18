@@ -1397,3 +1397,8 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .avancement-points { margin: 4px 0 8px; padding-left: 4px; list-style: none; }
 .avancement-points li { margin: 2px 0; color: #6b6b6b; overflow-wrap: anywhere; }
 .avancement-points li.fait { color: #24602f; }
+
+/* « Partager les connaissances » (panneau Direction) : une ligne par réglage, le texte à relire sur toute la largeur. */
+.connaissances-partage .lecons-auto-label, .connaissances-partage .connaissances-niveau { display: block; margin: 6px 0; }
+.connaissances-partage .connaissances-niveau select { display: block; width: 100%; margin-top: 4px; }
+.connaissances-partage .connaissances-texte { display: block; width: 100%; box-sizing: border-box; font: inherit; }

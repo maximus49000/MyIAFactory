@@ -1503,3 +1503,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Avant de conclure qu'une route API n'existe pas, inspecter la liste complète des chemins exposés (openapi/swagger) plutôt que de tester un chemin deviné : un préfixe de routeur peut changer le chemin réel.
+
+## S251 — Une remarque de correction peut porter sur un état du code d
+Rôles : dev
+Date : 2026-11-18
+
+Une remarque de correction peut porter sur un état du code déjà corrigé entretemps par une autre session partageant le même dossier ; vérifier le code actuel et git log avant de rejouer le correctif.

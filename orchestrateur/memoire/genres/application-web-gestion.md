@@ -3,116 +3,78 @@ Domaine : Application web de gestion interne (backend Python, frontend React/Typ
 Livrable : à préciser
 Outils : à préciser
 
-## G1 — Quand une demande de correction exige une preuve vérifiable
-Rôles : dev
-Date : 2026-11-16
+## G1 — chiffrée
 
-Quand une demande de correction exige une preuve vérifiable et que le correctif est déjà en place, produire une preuve au niveau le plus proche de l'usage réel possible sans ouvrir une fenêtre sur le poste (ex. appel de la vraie route HTTP via un client de test en mémoire) plutôt que de se contenter de rappeler un test unitaire déjà existant.
+Chiffré : v1.CdGriKiavIkxENVmQwd7ZkQ6pv8whTiLyPW7WvyKpSrC2oOxr5abqyUCzBfXBPQ8s4ViwQIPFrJsz4j9mJh6dwFC1fXK6-EGOcY9dyjVboJ7O-FRzwvxWnrL2ojT1g4fro3sE92AqLPuGAJRl1AoMmr04_oyM42hoM2X8l7jTazS8k8bsz6dpRx3z997p-j5TG5lI3D-3-GU4YneN7jMCJZd1UDhiQZI3AqsXTDVlvCQtW3rVfUd1UI0DEUKBdD87gLa4Y-aR3mE-cMrlwKVdm6f1d2foSahZ43OQhc8u3adzmu25YTak-NKG5eBNdrtM4sOb3Hj2mEFe3VDCQtSak5gxjI48bRZaY-onfe3MFmsL2TeEW7aN0adhWy8WUHY7O5T4zFUFW8DMlIX2zGALEncxPuQ6kLZCdD3v5Z3oydEOAjy6SFipygfG0f9sHU27JbFe4Xr_KAkH1JTgsOr-8o6VxYPyy9mO-B7v07ajEHiZUmd_wR8o_U296Qvca85fRAV-u0H33Ie3hmcO4KjE8yko5c3jsaN4HvAg8kellBcrAWSzaZGl_8eW3B9NBszbX8g1-VNA8_Ytxm55WoZTqO-VPle5xM2n40MdVn2l-ezXvgyszFaxSAWD7Rmb9rHYn5vKnppIcHzis5vYX1ODVdoxVy6k1wb7uZNo6mJ0RVwLnhiS03T-LUq4V_wJhI
 
-## G2 — Dans un dossier de travail partagé par plusieurs agents conc
-Rôles : dev
-Date : 2026-11-16
+## G2 — chiffrée
 
-Dans un dossier de travail partagé par plusieurs agents concurrents, un fichier modifié mais non committé par l'un peut se retrouver absorbé dans le commit d'un autre agent exécutant une opération de commit large (type « tout »). Ne pas corriger cet historique a posteriori ; vérifier que le contenu voulu y figure et poursuivre.
+Chiffré : v1.Oj-qDIyHkiNxW--P0yIDvlRjSwepMUdg83v2u2N6NKa0BWpx3uD7TR7en7vEyGGYz1fVaqasSZ8Pvf5pr2mdv9kh69_xeGjOiu74ECZwP0V8ZJEPzXdi0DQYu93inx9AjrpjMDxH0GWK69P4uaOTntFoPGL7Z1rdFzfCktuRaKK4mb1YZ4F_M8UE7uOLDpslQIB-QFhp3J6jGmTGWnk0Prh3_KiX-oPus8WUE98x6l6TyGvqeFIaMmX4p5Nq_gSJEZlh4TTwAjAEIERX39Fv-BV2EWYZ36YTzGsg2Sx8bK9oGfN2vs4X3aN0RUngI2oyONPJwKGegByo4WVpLMJDEXbjrjMRS9IavbE3690_yeaVDdilZigpl3sWfAyJ3I65cuXHIVXufPVoQZ4WEr4xcfw86_HVVcS2hIfV4dPjHMMiBGxNUg7U293k-zU2I7ftY1gigorJrdExcCpihRIvw7BjoJWul_wxa0NC-H9VRB25twqnNGM5-uW6Zk7fhz3UIg-LH09a_mCdPq1aUHic7YKbTRAxcDMtYqjDhbv-H6hzKBD-Y50tDz--2JWj2-thk_u9Ey4foJAzWuGOnzTzTy9T9pM4wLVcRmxwdt-b9WMvBJp10WY0sH_0LSN-AkEjE94QGoIU3-eWwHPL1kJ5H4vAcEX3u79yknLMb3n4PcSN
 
-## G3 — Dans une application de gestion, un terme utilisateur comme
-Rôles : dev
-Date : 2026-11-17
+## G3 — chiffrée
 
-Dans une application de gestion, un terme utilisateur comme « menu de sélection » ou « bandeau déroulant » peut désigner la navigation principale (sidebar) et non un composant de formulaire ; chercher aussi du côté des fichiers de configuration de routes/navigation avant de restreindre la recherche aux composants de type select.
+Chiffré : v1.Xv7I3ek2Jo0p5WpyJvtJIaKIHtIME-O7wP9RFtFWAjyyT3g9Xq9u9KCx0otsNl6KU89i8JBRCY-Fm6zg7lCe_IqEwCC0Y7Oh6OQTb-wjc8gArYEfzq3Hfah72hWkEm2H0q3Pq-Uv5avst1HCHy7IY_z08ln4ZJDA-y2dbQxgcrBTP_jk6on-Ye08Xrc-2NQbKIYFQCOyiMr0b5GNYdu-jSSE7nSqzDVba9nZc0V_aie3zdyvKMy7VtQ8QPtN5QwyFedaxTS2l0H8YGypYWPWmt93PH2WE09Pr_sO83F6x1INcwbHCFmYaXnO5TX8k9dCvrPRWpI2V4UHhw4NdN078jFVbP3RcmBGJwVMmx-6pF6U5bGw5Sb7ADQOzDMMWnDJYee2fkCL_WVSOKxvRUvnmGRYAqk_TKI_YsBEhpvr8lDoWT22hZ2u_tPGBF_v-lnqt_SraYjIG88Avbh-q8vpS8Q-5AnReFSoJVRKfLQkdH4yg8S0hTBao0A-mF5zbY5noB0iyG72MdUtGRuabuF3y0JWxm6yxFXA7k7Q27O7rN2F4w3zMFu9Gs_YHUsM0qz2Fs1xgsIZ76H38XAbQxKqYLPD02qFUcCaKvloQhGPfAUCqh0EUgQaRp9maeREKd5brcjKnAGv-euQsHI6GQuino9jNJW7XcHO28CJ4U79i-4
 
-## G4 — Quand une fonctionnalité doit remplacer plusieurs écrans exi
-Rôles : dev
-Date : 2026-11-17
+## G4 — chiffrée
 
-Quand une fonctionnalité doit remplacer plusieurs écrans existants par un seul composant composite, construire et tester ce composant isolément sur le premier cas représentatif avant de modifier le routage/menu global évite de casser la navigation en cours de validation.
+Chiffré : v1.AcBpp6ZcAlwdFQ1S-7FFx5TX6swfDyezegi2TMP-bnxBvZp0jRmH0nCyYauOZi4GFAtifcO3m5ZAufEn4cZaiGi5OOFv9nPnCOFxUL0JRFItQT3id0ypb0T3K1fXoRQsJImfzgNwaEedoCnHpbOvf6evNmod4iFfG-xGpHRclUEfG705ZWP5xgWeGUQ_6gZB7crUsfZgpA-JFgvIL326oGPblw6N5Q23ZK66cNTUjgMGHGT12M6OxqxpxaVyCYHL5Wm7AXkGhn3YBv8fNDNb6mVeDef9JDZxNTqNgU2mlDUGBbdSXvfAjfNuYCoQYJxV3jdbOzS5oe-siHwXO2qkJKEvyZ7Ta7qxCPh0zwkdI3jBWeCIR3zQQRU74rpOiadVvqyZXt6ZzmY37XqUmmFJVJ9YSGEMKEP-s4Ei38F8QJZ71U7PaOpnfI2ZLzmgM_9JnlujGEFD7WUIIMbmrJE-FfYCDVTA4qsiUEO2_nSL4NZ06o6FbvjCwYI7Ka5s9sF4EDqaXMxnpqY-ZQFk7FgBS_-E56DxDh3Jnq__qDVq_CY3EHxEknWHwTYSwTvrRNZxNK2g4-YweQXyalghKG7Qgkn4pow
 
-## G5 — Quand on retire une URL en faveur d'une URL paramètrée, préf
-Rôles : dev
-Date : 2026-11-17
+## G5 — chiffrée
 
-Quand on retire une URL en faveur d'une URL paramètrée, préférer une redirection 301/302 avec paramètre préséléctionné plutôt qu'une simple suppression, pour préserver les bookmarks et liens externes.
+Chiffré : v1.22NGJ_B5_yvlg6kpmwequ7B-05HblkcBHvRcFwwIA6RqncoBfC8m7yNikAC4ls1uxPPeMl9Rk-BimM4MjoFJ2kGGg3jnQZlmZAZXLEnRuvA0ShvbdH4lT6UCP6azXTdfQMDzaQXgrVT6RjIHPvSTZJ4kmZWDMOVZnahU4mHInKPNgB1vgRAk9OmuIk2sM9kokFh_oAoXudECsJFbXkZmqWqJBzxSTaZ7dBgiuH3CP92hrqh6EMWJ1Vq8VQ1Crimp1f4XG1LDTVBtjNU1OS595Gf1P6KlCcjUQdBg3Gat4Nya3FUMDoh7O0KrcAzSicZlOKzR1r9nDvFirz-lCf6D6wCCpl8ERSmpmKOgTTB6rc4abkHIYoDv6L5rpdeIlcD03KbUeFjmjGK9ROZoOETBBELfujvjbZWgTEtKqEvaPcjIy6c0ANnttfsTEejM0k_I-s7ZWau_NOMFxSUmb3FCqM8jqV3QqZEA8K6eYRheO935hkaMMLz0NOZiKJuvCoHPXF5Eow
 
-## G6 — Pour intégrer un écran existant comme onglet d'un composant
-Rôles : dev
-Date : 2026-11-17
+## G6 — chiffrée
 
-Pour intégrer un écran existant comme onglet d'un composant conteneur, le réutiliser sans modification et mocker ses appels API dans le test du conteneur, à l'identique de ce que fait le test de l'écran d'origine.
+Chiffré : v1.HmTCR7A7deYLkoekTi8emjrvfmXaKiGLObkwIXHXp9DWrGJ6rCI1Sphy7HodFx9LkNKw0Go1B9V-dMaoKii64WkZnm4QGlg3euw_u2V3LBK958eAOFILxEejlOv6zHlNm3gph20B1fG2dYWaSUHMRaCYHrbwcwl9BfYL9Cbb5E6fi6nHEvtsDOPqGQ6JddSRB3nITPrtLrhAZf2u5HaHItUi024AIGgTk1oeBwJrcNgptBUnLHcxGGZaFreYyhzbXo9_AsVPMwhmk4mczxIU_c8sXnM5F2NLTBK44EQkx3gAdQYqLkQ5NTpNomBlfR8WbIN1JfX7TEfbxslSN1pJz8LtbUFxnO-juT_NaLgZtQrLAWDt05-YrhluY7c1VXv001Pbtka91R8CIODXwejxWY6PVI5yxUbczHoVdnfab8dsXDemlC-HJEudjYnt40P7mWuw9XWd7Ww6QXaHLjyZ5Lqo4750qwexON3eBgQXl1KzvG1VgPf_E-AF4BSnVt9r7LX9bKSJsqnr
 
-## G7 — Pour prouver un correctif de mise en forme (CSS) sans enviro
-Rôles : dev
-Date : 2026-11-17
+## G7 — chiffrée
 
-Pour prouver un correctif de mise en forme (CSS) sans environnement de rendu réel disponible, un test qui vérifie la présence de la classe CSS attendue sur l'élément concerné suffit comme preuve automatisée (échoue avant, passe après) ; une illustration avant/après peut être produite par un schéma généré en code pur, sans dépendance graphique externe.
+Chiffré : v1.6dG5WXUryDy5xwhKe2QoNMokkC5s1YANKbgSoY5wuvl1y5wzLvhUz6k8uK7P9OPRz_xKQAU71M34byeh9dYiqfAXlfk4WUBEfQuwZSdkIXQFLSU9_1RVaEGYBdJFl1idWSfBrSsm0_qNULxPMWScvCRJJz_feV8b3Xw0Qsy8Kn1FgISsDKYIRXu32sGdr-DX_ImOrdJteEP2bueHuG-AbsmO5ba4UJIh3ZwJiHvp9skeN0VX2y2ir3L9OzhUrYFFITwQrjEItWFzX0h6kcfVmnVN5AwXqR5lkrG8XEFW9U8sTheGtMJNIhlGZ-ArAcbEfK0xOsZWGwlvxb3HQysPPpqqKDi8W9RZ4nnJDRgpU8-MUfJt_M9_TynG-_oG5clIehxE6zitv-lvB-D_LTMF_QbiH8aOJ0qSedJ6vi7wfEKxeyy5XRIkvvzNtGjO97O8u3dTsLyMR9u3lSTDDF6rjOVbL2N23Rti8H0q78VdaWASJM64Y5Vx6XN0Xj-H6OqM3Ilt7_wmbcQLU5oDTyUTKdO7VMm1e8Ej7PvykLo9c5_FA11ZKqjSefkwrQhzUAjIHTguf9ouL1wD6TbhMVN94pKchl_vcMDsidkKXL3xB2VNlpVc7FPttq5zC2McAgSEIylGhbGRx5oios-FG6B0d2Cx_Kwk8ai6G9EKbpSorFNkdIETFEGOWy2B0PHUWEdOnRVTrJbFiSfHgSxMbqjB
 
-## G8 — Dans une application de gestion avec tableaux à statuts déri
-Rôles : dev
-Date : 2026-11-18
+## G8 — chiffrée
 
-Dans une application de gestion avec tableaux à statuts dérivés, la petite fonction qui calcule le libellé affiché est le point d'entrée le plus rapide pour retrouver la règle métier exacte distinguant les catégories, avant de creuser les modèles de données.
+Chiffré : v1.ZGvQYCQEXaxBpVaxFcYE1SMs2HC8PUxwoXQ1HcVV5HZPpdcQH4bbzfNYd31DnRPU2xydSJi-TNHrG10h-pxcp7DllJmFFvv4ViBva4lX0dMFWqw0cTh_6xZAQtjYwwVPHFIw2twYyeDOl_YTBKeIfdU_rbDFjD5YmlfomUeEJRc4-_SRlkTk1VMKf7odeuXSgxyL9IQMNdrLwZzqDCHh1Qo5Bnam8dLvyyP0QUI4DLj5HXY0hzU1RYL0nN21zasDQyKnmPnYMZY0LEnFdqWulH9l8R0gAXIVhWS-LWVq4Okenv275PJoJc_A_NBRBcrpDfFiOTkZrYLoEezAtht5rLPHG_quwlJBa1iMNszoCmvEh_SDd7dNCTzq5JA_Icr7s35HtLz-LduZ7svj4u4fNM5PEsptkTnE48i3omyBxG_R7m93rITFQ4sgKyUlhCp0vO5NnX87K5_KRhL-7hesgviEqvXNOAYpD4G_wXGxMYBZ77R5DCK2l0DYF89heSsoQM0K2DQJXOil2CFbLCToiLxcAiv1GfRrzcJEDxjkl9I-B3plS0EuRmWaBwXD6YSGIci30xntBIo1wNv_wg
 
-## G9 — Dans un workflow de cadrage à une seule série de questions,
-Rôles : dev
-Date : 2026-11-18
+## G9 — chiffrée
 
-Dans un workflow de cadrage à une seule série de questions, une correction du périmètre après coup se traite en réécrivant le cahier avec les choix qui en découlent, sans rouvrir une nouvelle série de questions à l'utilisateur.
+Chiffré : v1.h8w47pg3zNK1LkbZo9ehSl30_iT_hYQOlty45mxELwcxNBLH4AlYymkqXKTMtxEMvPupEI0zqak3LT_4vqFZrJok-ixwKfA2R2kMrKecFG0K2WIFB8PsAeUU56B9wzvPTxXVGL8yVjSVrQ2HzT61ScoUtfQefz1pBp6TOZZr_cmakYIDqtxBjMu7di--pKeikkFERxpAjTHXj5a1UtNesNxEhyPNKhLWBYHI5O1WvmkspYUIcqVjcUVvHR58V7_pJpHnw7OkznSiUGi0ToutX8T4kNr832yb5s6OlkQIdYeOm_loGh3ejtf52q9wl_RipW8Fsz0dKgxMZngNyGsFhzfjvNff3YJd-FF9-N2IBlaMU3v7ivZGLrBr5zhsc4jZkSKw_llQoqs9HP3CO3YO7nLRFKh5mE5HpNAX3UMlSEVrZxTocLQU5M_NFRQVTOHaQoT7xWU0c6BrCBzaarLODd1o_C3pLVHojEwQ9lxGeCQGlxDTFR7f7urpTuhBZZ6RwlWBKOOTQXfTWPpjU2eLFW2aIylfjc1VHEvZrA
 
-## G10 — Quand un enregistrement a un champ de statut de verrouillage
-Rôles : dev
-Date : 2026-11-18
+## G10 — chiffrée
 
-Quand un enregistrement a un champ de statut de verrouillage et un champ de contenu saisi indépendant, une action d'annulation doit croiser les deux pour choisir entre suppression (rien à perdre) et déverrouillage avec conservation du contenu (quelque chose à préserver), plutôt que se baser sur le seul statut.
+Chiffré : v1.fSXPKpH_3SmcHtX9uJnk7qdFZUgsl7mGxHfjCLCgaRS-ru9E1geICFi9gm_91cUBqqk18cE7f0dYBmm1DCugxC8sxcJ1lUOBsW4TVrJ2e7YS4IhUcAQpbNQulEJDGd6UMJ_TTMVFLAfxuCBnr7mlVJ0uTlfHyTN_7Ddba7N4duIVBIkhF9wXwsa_UjENDyO-4zT5YNVSu28KR823MrRJdXkQbijzhfiy_l-XyK-pzCZle9jxPQVfiDIWkfgyHBdTsV0tfE3GujJ3prZs-8tyzrjLToK_4ddPZ8AXo9WCLzfufTQkIqCdplBZSe7pwltlMW3HI7-KNIollWZcH88Sy1BcdatTQ6UT5AZFO-D3FPZhV6W_f_Yb5JL6YktsFPUwxaLIfk3foIvBueAlAI2QCtIww1B2rmmLTYsV6zxq7Kc5Yz0eYjoyqpcuotEbhAxaYXnL8WgTVBzweTIbYUe2e7yPDoV3Wj13RSGu-rnRkM0QIbs4eUmexaGjwX0Ii5qE-9jgeTkUPSplo9Qa6e6chP1qyS-yT6FjLN1x56VtTVTIJ3-hnJxMfxgLmUdD2FSvKSeeCREx-S4qa_uAfaW5yFXxDIR49AniAa2FyeGjgVVCgFSb1KVOYRo5bn3-33a--7BgsbxndBR162o
 
-## G11 — Dans un environnement de développement partagé par plusieurs
-Rôles : dev
-Date : 2026-11-18
+## G11 — chiffrée
 
-Dans un environnement de développement partagé par plusieurs agents, un serveur déjà en écoute sur le port conventionnel peut appartenir à une autre session et exécuter une version de code antérieure au dernier commit ; avant de l'utiliser comme preuve de fonctionnement, comparer son schéma d'API exposé au code actuel, et ne jamais l'arrêter soi-même pour ne pas perturber le travail d'autrui.
+Chiffré : v1.VhxWFjqfcYji4T-qNP-wRYxyecyG0qnTnQK45BcI5yHcHKUrX0IcuNBIZve26zP4VMJc3adzzZKESeFpREh5i2ycJXXsJ4WvnQvPx86vcHopwS0-9TI7CnuxjROkhwVc6wqITW5uH27de5Mequq2OXsia1TySMgd3zbVNcTtLUevtQ34xu_Njqxo4w29teTRnIl1cppQEF8qS0xnLBS82w_V91H-lIFPZDgGPv8c7nWgTgU5putvNC3MIxBOLhZAkhBJXrFgGlrRPLGuB8IaqFCoVdWPJcYnzEV62EiVowcJ3VlE7_kNYmED5juDwhPICUADNF-aq_t5Q4mbCgyr28FrMXgcZXC9-_fOXzpcy_a_qXlEqu3DR3yXBYdZAAMygcq1GMNNMdhiVpq4btYAvJrDORU56Kq9kyX1MGsNQBBhh0YSFK1rRn_Y6xmvwCx4Ob1lyFwlDLNr_pcv_LFU7li-kIaCogoysTFwbgnFMDuN8ibKeV2Xp5SU4ZOqmQS8kkIkdFv763OoUvuBjA2MN_bdWG8hw48jU5Tc_JZ5Mr-vfIlf6eJPKAXhV2gww6IVHrDLK9LYDjBEgghKSzTAv-zYNnUgcemeEnQ9CZqILp6Yy5QL3dB6PFnWHBmtsEqS4ANpYrbQl7nmr5k3DZLz1OUTwg5ccJwAsgdZ_hDWYLdzbJLj02dr2b4ZX99CiDsNjDrnzyWaR3iuxSrJJSPIf_73I1LN84xnzr52ymluFAOunbMugvYppJBpTiR6Jht_i6PIFU1euw
 
-## G12 — Quand un refus signale qu'un téléchargement censé être un fi
-Rôles : dev
-Date : 2026-11-18
+## G12 — chiffrée
 
-Quand un refus signale qu'un téléchargement censé être un fichier binaire arrive comme du texte/JSON, produire la preuve en appelant la route réelle via un client de test HTTP in-process, sauvegarder les octets reçus sur disque et vérifier leur signature binaire, plutôt que de relire seulement le code source.
+Chiffré : v1.OgtRDD_R8wMoNedaGtQn0v54wSkT2377dM3ZZoCF_DB4Vlrli0CWWGhXA34hWWhhPoMhhcD2rh2b1CBNaRG5dXqfkRgzyq2B0d50Nx-KYZNtwRHccZj73P0pm4pIxf75IZs7rThJKjWkz6I068VrowB9ApCAXeRpmI5QF69V2bm6Xelfa3o2WGEtPeyPlIp_LQBmZ88-Igzajjuk6XiMqKlXqQswIs51X8JsOT7Yv0bF0aKqgIfit6Z0thpWwuw7BV4nVhdfV7G46I5-buDqS2eSPuGFqG57BcNkss57FeBeDWz-Tvja5GKLYCimTb6tJncemlDAUVh2PWiSsLrINdAmoJFFI-p5_ksYdh2JJ8WaxbwUNd1L7h1aK8TD6_rBSDqH170f_9WxLMzB3dBWRdmhq0vFwngl6L4AhHusAETR_O00rfqTR9DVJjSl9HbUyHyWW8O8O2wUW0W_ww9Mw5wyhzKjTCuF38cq4xCQiBl6cS6JB9YIaIjLeULJCCh9EtZrnK6Veh1royLbumdDcmJb-9ScOVi4inAEx7Di3oUASpi-swflTfgqRqjPcacw3qcj9TKbYvZFNwqSCBIJWP5jHdbwYXZTH4duhDjs3QFy87EijwD0OjeVdNwdwty9Nf4x0WBir5hfY7nn-1P78g
 
-## G13 — Dans une application web qui exporte des fichiers Office pro
-Rôles : dev
-Date : 2026-11-18
+## G13 — chiffrée
 
-Dans une application web qui exporte des fichiers Office protégés par cellule (feuille verrouillée, cellules spécifiques déverrouillées), un utilisateur signalant 'le fichier est en lecture seule' décrit souvent la Vue protégée d'Office déclenchée par le marquage 'provenance Internet' que le système d'exploitation ajoute à tout fichier téléchargé par navigateur — pas un défaut de verrouillage de cellules. Vérifier d'abord le code de protection et son test avant de chercher un bug.
+Chiffré : v1.s2DsIExxf9J5nqbKfFoRIODVI5cVze9Tm3u3-RYOKMbIjEq0S7bjVmf5yhrYlc7gAqO8O9r-hItu4h90CBeFaF5OEUsz5jZF6mFg8ny2WGuScez_FvUSbPtKQOI5tojgznO8b1WK-F9X3prFOemq5GtTCwDz1Fn1hV16WMubZ5Kxcc4Fea3i0uycMHgWiLlidWE18EokqCkgbKP0EqeLlskk4uuuAe8Y1noOG1LpNioGUYU584uJ0FRQbAxRFnvI-g_tvs4nhdAMLO1iW6Xul9tTeBQW9VKzZ6H5JkgvJm4oxGBeWcPHOUJ2fb582P8kgW6RlU_YGRFLS8zR-XYJ1VT6bgK3yFfBbzzlTWHlgEuf_McaJGMQiMM2ORFA6vn5nzmep7g7Al47wG5CXN0idBnKRHOH5hiZcv6F4OXgMhLw--8LVNfp_KWns4a3XwtD0cmIjP2qZ62rlcopyrlnBxeA4s9T9l4aigKR_zSWIZly7yBSwV6eGOScHMnOgxsJI6eWU4f5odPNm0XlyFIFe-l3_xo2TAcQ63UvS_uIOKes0ov0joAm8GeF0xE9kb6owaCcZjU5_WYnQ548JE5AWxg5ojx2xcmBO_4DfaMu06PKFEC2ppU_aHbvDjXRTxaPNJrOn_xV8D_EmSdnDuE6y1RAVMkI_wUMsV0jzENRVFHxDT0cNiXxHGfnOlpD_Kc3NiTattBF_B-5w4eoxrD-foTj7ofomxrqpWOMaj9nZWQR7NVFD3507v42pG29l5t9mHjoROL7v1M1eq2kWFUqrfvZhAoIkOM9xJJGSuVhbeKjyeS39IU99SNKZaAyBuL9BCXf2WXlh5Ce4bjgaKEZIWT9jXo35UtaP0elxGshYIa7gXIxCULlBGbdFndQknRDPdao6YGFCw
 
-## G14 — Pour un export Excel protégé perçu comme intégralement en le
-Rôles : dev
-Date : 2026-11-18
+## G14 — chiffrée
 
-Pour un export Excel protégé perçu comme intégralement en lecture seule, plusieurs bandeaux distincts existent côté client avec des boutons différents ; l'absence d'un bouton précis ne prouve pas que la protection du fichier est cassée, seulement qu'un autre bandeau s'affiche — à vérifier en inspectant l'artefact produit, pas seulement le client.
+Chiffré : v1.iYA-bTM1bhe_sCyDTmpJrmHnkT0Vbgb9cDFIrbFNDQ8PSMOePY9xZkojqgRpfwj096eIIKHmaVpghTX_CPnp2F4MbscuZ-mYvUbiwVApcXDh2RUDyVHkx5IfS0a1cGS-EUgTa2Ffbi1qVKm4WEQJl-KE0Y2wzJP82W7g4FwLyEeLkvxLZC49_YOWsNUMmI1TWvf4mQL6cn9a7J4aQFi_dkyeRtCaWryzyY0jF7y6pUhITKpBsDe5MOpCE5EyMFqsFr_Xd_WCsiRl-Acru9KUzIYg77fSaDSY3hOiKGEWW5vqZjyPu3cpe3kRhczNGneMws4O_d7bQvpwAtopmTPfS7hPGnGx0oA5vvf7WfrMQbS8O2BtBGfT_3YGGowNLlQa5xfvaaS11L1JrpZVgIhopiSYKbKhyqayHdrcUGXAm3P3g_QxQm92EynZ1ut2JPjg-pRfyPKWmmrBx29sRByuPISQWHT6y8Osl846wMLVdzQufnj1Fs8lkG3IVxhrWBFXfWXZtA-W9BVo_Y1PnvW7pvenSEwkVNyCqvOb2w9gQWIodVskOV3AX0qDAq5pSweb6mXdZB-RfXOZZOgRpTGBJT6GS-B4pmqqEQjLn-vN71eSS0xKLYs640GYn5WQmEkz2R8YMCsUATF1D_FuuLi1aJ_26WsYY1Q4KB_rNncD_i4qzhefqyD7py3oAJXqnVtdy-2x3ei6DJoYVaU
 
-## G15 — Quand un chef de projet résout un point de méthode ou de pro
-Rôles : dev
-Date : 2026-11-18
+## G15 — chiffrée
 
-Quand un chef de projet résout un point de méthode ou de process de cadrage, cela ne remplace pas les questions fonctionnelles propres à la fonctionnalité elle-même ; les poser avant d'écrire le cahier des charges.
+Chiffré : v1.axhaUqLwKdKphMM6ueLrgRa5_O1xZ4ajRUzvgSZCCnmtP6A6UJx1PoiHCOuT0P5HpNqz7wm1ERXShahbqKB_SHzdM8abBw6LN-8AipxZHM-VizJDlzTAqtezQ1TXssoxhXAr06yhxK8gYWHwwZyIoMTKKSX-MsUOByVMVpwwCSQsMQ-G2agDuPWzT4uxIHkpxeTJ3OVrotWl1S-2HuTVChXohLuDyYab1iWX43cXPJ36qGCc02TLRD0ey3gwFP_cvzLSZ-rOo5EE50bD_FhisvMtAtWQ6fCDLkVVuZJMvfOgr9YEBmzF7jpqWVJHIYL0LwvBxHq-T3hnbKd5hv7nLQftRP_i9b7B4_09FsEFtznw7KaoIQoz9EKwb4sdrbEg0IK4PIQ83LuiBWfEtzX-V15-oM19-3AMwfqDLcmq7az4-8CX1A1IM78n8fdpvqvZTF3z1hUmUniecNyTaJBSLei_xZcfGDfOVS2jxf11yRGLH3OW2vG_U7b5m9DZs0rtg2uuEL1FQfbCKGDW
 
-## G16 — Dans un modèle de validation en deux temps (brouillon modifi
-Rôles : dev
-Date : 2026-11-18
+## G16 — chiffrée
 
-Dans un modèle de validation en deux temps (brouillon modifiable → version figée immuable), une donnée annexe qui n'a pas besoin d'être comparée à une version antérieure n'a pas besoin d'être copiée dans la structure figée : la garder uniquement sur l'entité vivante, avec le même verrou de modification que les autres champs du brouillon, suffit et simplifie le cycle validation/annulation.
+Chiffré : v1.MviFAer_mad5nHv30a4QonrH9qSLv3XvVt5lTGtE_C1qAe9pN4sfHXHrJDBC-oRbFNOJiKpNRwEkPnY_ZA2C_SJebCWAWRsqM_UxZYY4izYrlsaUIeE7ZGb1_6oeA9t9CreXxc_JWujah-9IyFR8Ie5moljzk-WWLuomqmBC2W6B5LT5cZr-9o94i1g42LDkskUMnCWHBBlsCgcAma3eJu4OYPAcWtxnI7VppstyG_DyhC6USRdB7SB6eAK0OH6Xsh2u8yWRHVxWG_SjMZGvgt33iDnjPyrbtI0_ONRYc5LObPrDQVEcnuJp2AsxYOh2k2Lspxj52W0_uBbKYIQXYqjA-Mdm04KCOigj7xOkt1_9RjHBi2lMJDRf1p9e2lydRnNlxJ1gGua3O9-PkoWmugd--VoNgv9d1_SWLLEm4dfXprRAPE91349SHrC7MmzuZ-U6INRvRKkG5xJTnkcMzoFLtAML1eVXA6qQZttPRCnkM658zpT972K5ViWm8h4B2vpeUUStRybTPjQOX0MCPYdy3doZLk71pOHHyoEwkJoDrTqa3-JaI8lBVfalWHIOl0aecz79K9RwqBgcYB19qpjbGA_GBfU8s-qrwuvzSVnm9Mxqfn8l936geNSjI4_pa7g5owpeBDC0IKxfqrSAoJbSg8KyHGy0cPKiwqKYOaqeSPoeqIYKFozdKQI8SB3lJ9Q2XkxcifqdBhcYXLyhZCHhTvaP8a_01anWPljV61ShpEoqxFOA2Qv0YTwZ2k8DXXdftA
 
-## G17 — Avant de reprendre un element de developpement signale comme
-Rôles : dev
-Date : 2026-11-18
+## G17 — chiffrée
 
-Avant de reprendre un element de developpement signale comme interrompu/repris d'une session precedente, verifier d'abord l'etat reel du code et lancer les tests deja ecrits plutot que de relire ou reecrire le perimetre : cela tranche en quelques secondes entre deja fait et reste a faire.
+Chiffré : v1.XieSMvb-9DiQVtBVvgUjQ9Nb34TP0SFgkViP87oxQpCgdF1nzwafqcJRi4YyW2yuYbcO85W90RUfJ9aPH-GU7IphqTuEAoMCPsAv7tK2Zs4EaVSCMkomexJdprkxWhA2ptV9NBwNSqVsVTR8S-Rp6DRKxtyldyZYchOjh4xDtPCWGFzmv9z6lKLQTVDhE2hwHwJA5nux8C99Bh1sBTLTZm66PHUbKsfhOuIsteiDY1egMwc0oVfgtAivcIPM1t_340JkYeQhQoP8RXdiEAdTuwlXPxd_pHq__0xFXip4WvYSaSuTm1E6U_DmmFZi1DUjZLBTwer8_ErRGkVIAeLrZr0eepfNcj1G0tun7CQ1cZ4WAr7YkyOOpHSS6uDlnuneQsNeXs7r39oLcy5Z3k79wR5zvAQP8ih3DuLvkC7Mcq1CQoDhoeYdza8sKDXKi_khVP5KM4_wOZjO7pAVwhWIwgX3dGRX7oJ0GnAB6c2CRfP1rqq88GA_imX4OeADhzoUf96U_OUdKbGryD_W0TxraCDjExtt9eSw9yjvB8qJ3pYThWH23sdIb8msBWcKM8ti5Xv_C067oIq-1qAomtLfst7UY0iRBy09-oxqVAswNQ
 
-## G18 — Dans une tâche de correction/développement, si les chemins d
-Rôles : dev
-Date : 2026-11-18
+## G18 — chiffrée
 
-Dans une tâche de correction/développement, si les chemins de fichiers cités dans la matière n'existent pas, chercher par nom de fonction/mot-clé dans tout le dépôt avant de conclure à un fichier manquant : l'arborescence réelle peut diverger du cahier.
+Chiffré : v1.oYefVxuh8UM9_1Pdmqjo-F9Oz_FbCdm8-AnSmuBVllcd27-aAEH3W9NAyjx3W_2KwMw-B4_FXEcYwXAa_jDehhFICNzCUm6LxuchSHGd7t6qmwIVHw7PsPVtJ-C4zHpiID2j_6KfuI6tY3e4cjCBoBLxxv4HL_19hhU8DdslZ0jMApubXKiuTvDHxEgNckrkciRXLzvwz65AXJhxoHk5TeoFy0HKjbbFM-_8aLF5QjhhjEq-3OD_kZgIFKjJwmIIGVJCxfO6vASRMbZHaBYUnS2iRrYx2gt4mIseNBW07A1BHpUwyexZQmRuVjcp5B6V-UcDlWhtBqxR4wiDkqjfxYiXvo7yZGhYoz8DsXpGPYfcoeVS5Hr8_ZkMWV_mx0V35juyqyl41X7JNJ9JrLVzZsPBzaiXlD5WFhwyxJNXtJXoflV53rr6CgbGS8M0h8CGGPa8CV6dUhZ5g2P1MErafeytvMAoy5RkEk0lonL3Q8jkh2-TzS5fQm5s26jozuVH6oHSOFqCNeGilkmiKu4xLaFnfuvy-opNKBOkqz7xFOosz_tBCBZSrfhE4wiKjiuQkG9Fu4Jx
 
-## G19 — Dans un dossier de travail partagé par plusieurs agents, une
-Rôles : dev
-Date : 2026-11-18
+## G19 — chiffrée
 
-Dans un dossier de travail partagé par plusieurs agents, une édition non committée peut être intégrée au commit d'une autre session qui committe entre-temps ; vérifier que le contenu voulu y figure plutôt que de corriger l'historique a posteriori.
+Chiffré : v1.VO5LB0vpqQHjFCxVTzmJc18OKBFdPztfs8iG2ux51TuBFiFPrMA391-sqDw7x_gRluMxEtBkNAjKz-xP5i58Fq6gAs3BiM_WcYPB_cl_w_FuFIaA8VTCJlUs4wuph7bcNU154ZrHwBXnQiMTVFmI3NniEcjxV6odEsZ3gy_aiJY1Ux5TKmJ9A0J9I5rQbH1wVPJQcvjBFOTGdmkkIXssW1nH08_UuPCTH-E4Qvq7DRybL2FFQx870NUID6uRjeFaS5NIHWE_QV1TT9kk6L4U8-fXTmPfMSCgXzhs8L_rLNxeuQ7gEPnPnE4wXZ5zmWW4j50LeZWBH5SLDJ2K3UB_NzJlKiVzYErrNbmri_5oGWlT5LbO6AEwKXdtSNjdcbTY2g4AnMVWo_lMtXEbzJN-K3SQGzWda3WhuSw8Rnp6FG5YnsnYgsUHqY6_y-9JNO1mVmv2yZ6l3HgL6Cw9uE1p018DRTGQx8FcdBLY40onm_fsp--i2k-CfJWxJrNWbdthgHG5l-8twRASFq_9LAG5NU8_atcW1c2y4tUs03KuqhtunCDej6ycKfvZ1W5cBQ

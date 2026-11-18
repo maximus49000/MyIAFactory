@@ -3,1064 +3,710 @@ Domaine : Application Android native, livrée sous forme d'apk signé installabl
 Livrable : à préciser
 Outils : à préciser
 
-## G1 — Sur un écran mobile à liste, un bouton d'action flottant doi
-Rôles : cadrage
-Date : 2026-11-14
+## G1 — chiffrée
 
-Sur un écran mobile à liste, un bouton d'action flottant doit être compact (rond) ou la liste doit prévoir une marge basse, sinon il masque du contenu.
+Chiffré : v1.KGfi4QId95IvoWFOWSMTZfLsNao-EmT1URE2hm23P5eQAdTUrR7rgb3yLvXntaG4Cn0NGC6reD7B0-iDdLm_CVDtv8NKr447CrgYeNyMq-TJjuegPV2WTPwOh23ktKpJOKkSqVIBdct85z6VXmG5vYcJnhxgWWe4f9t0ogNkkHnHf3JGQg9T5O6CzZFxR6h_3B7Xe28NlH6sAuqmrGpD0lUh0f1fyIj3AitZfJ265hM8uIynAaSUYIxDrwWTJqD599ShSW8eOiusOkqcuiOowsSu3dD5028iPd8EHLmQFEstgzSoqSTWmMWQ_XscBDwbyid1scr3e6aNzbim6RR5mU6ke0z-fXfPn6jhPiZr_MX3Apxqu0Z3OzQUyjW3a3p-9djpj_-1sgUGLHYuW9ih8MQDVZl3UrMhq-vuN0FtcW3VTvJz1bQ4NQlEZMu7fHU
 
-## G2 — Pour un projet Android sans Gradle installé, lancer la distr
-Rôles : dev
-Date : 2026-11-14
+## G2 — chiffrée
 
-Pour un projet Android sans Gradle installé, lancer la distribution en cache via un petit script qui fixe JAVA_HOME, écrit le journal en continu, et passe le compilateur Kotlin en mode in-process si le démon échoue.
+Chiffré : v1.fGrP4emKubjkh4KQajuoL27Dg9Jfg0ixfhF3YaObIRYHY_6TsvDvnysBW1Qkqn_c4rzR8N-Xl2bhqh2Q7bIvTsKMcqila163VxY6JGTShoNsj2wxxHd0s2k0OEs8dD7OGz2p5YdggexcwbeBCb6tjB7gSJWCMCwuC8ew5XQEZhMOUFKdA3elqrbauPEfzMiIskYG6y5hI3_9hwiESf6EgoQQ5usowzqRwDmRBUCEve-tFob1_Wj5Of6m7ZW80le2tE8skmjeEElJ55tntMztpmiaIAfE16nGYfYeWaVSqzWv5XUqFv3G1barng4UgQTQBqn7lsOzYjEbYCtCoAVT15509lJGwR2WOJVd1FHPf-PVkYdsu2F6Hd9euSGLtVrSe_EPBs53p3ffWCXCpeKaLZcaqcqaFuqQHAvtSh7w0l9H8k5lyp9jrciPKDysqA8-svEka0DsOnsztDGt4yoUkOxfUMMFJIvj32W9b0XFydwve8uGjhjyEEvqH3qklX9Fg-4Uip4UUAj0IA
 
-## G3 — Avec un build incrémental, une tâche de test à jour n'est pa
-Rôles : dev
-Date : 2026-11-14
+## G3 — chiffrée
 
-Avec un build incrémental, une tâche de test à jour n'est pas relancée. Lire les rapports de résultats pour donner les comptes réels, et forcer l'exécution si une preuve fraîche est demandée.
+Chiffré : v1.IQhwxZG2guhOU7kEhAuhkRgM2cGdFJvZ-XOq6DQpU5GkMv_9Uwom6ZqOwbhoszO5dGwQlWLbmchw-HkC8NNZqHZzItjrpGnTzvAwVMM7A-HIcbXNj9f5F6IWXEbbzpIcG7VjwaEyvlpwHGzr8pxoUN-yWo6VxgX9nndjvbdH64e-6-Ck4ulFeUCvb8ANo8-c7pyoF4iNlfEmx_tmpuHZbTSz7Mk9_KQQ39rxUAENL7sQ4AVRZQXR05TM5GP1MYaCsMBVzra6NdfrPsQzbDSqRM2whhfky9HP6MeDZByAHZOYE86jzA3fCpXMV189FILUh2e-_FhuB5QYAHQW20QTAIO6m2haR45820HbIe4Hy7zF-OHJVrz72fnsPFafFTqTW4d6GzuCh3r7g4Tpf8yDRpva8h3OCj575i8JzGSBChur-gRGjEozdy-JCc9cehv_zMXRtElUw2byDuQutbfNxytLy2Cuq67-e_KDboKrnYcV18nrGiZpzwg
 
-## G4 — Sur un SDK Android, cibler directement le sous-dossier voulu
-Rôles : dev
-Date : 2026-11-14
+## G4 — chiffrée
 
-Sur un SDK Android, cibler directement le sous-dossier voulu, car un parcours complet est trop lent.
+Chiffré : v1.0V_7fr5s3-tlZONoZXjVPtmA7i-FtIsEJNX2K4Q4IGqgiDvaU5jNNJkCBxM-55cu5DsGVIUKHk3Zd2htoh_is_dfq2WXfQtDrhka7JVD9JI5GcCrlF4dhPQ7HJLjKF1gl7eKderG5u6W7nhMnKOnL8GcQK1YowPqC0-gDKpXs4eArvxOBQWOl5b47j928gLwLgZMX3gb-DGnsc3pICOdYPcTb16Ube5qoEQNEj1JG7ux7QLMb1SXD2ZJF3ebriwFPTxE4Z4tVsw-Vl0Dck6IgN2DfIG02lhxmqmH0HeoIB3wnR2653hDIBa5d9QmRFcYVMQF_k46TTBDipWww9D5vzMzfcyC1PghXWYstLESLvd1KQ
 
-## G5 — Quand un script lance un wrapper de build, il l'appelle par
-Rôles : testeur
-Date : 2026-11-14
+## G5 — chiffrée
 
-Quand un script lance un wrapper de build, il l'appelle par chemin absolu plutôt que par nom relatif.
+Chiffré : v1.BmmyHlQ_w0MlyFBFa5cGNQl154ii1LLdrQJpztBD7XMZPDUvrYuReMyQUxP8ISjfgGG3WRaejpYZ26dxu0s_p3EnClEEAxl343d3jRKm6AAlD9NApxrMlQ0OkvdjmebzXXBUDMaUn3HxXphRADpPBW95hw_6j5gj572hHtYEujI3stMlqfi64k-bPXXuyzNsaUlOHTZwLGtFtmMbC-zIlMhPtn_BKDd0YllfOaaderyFRS5IkaHfqzlgTzemxJ_81nKpx1VyU9zCzvU4t9psC5CPS-LrzzOdtWOL0zoRIjh2EUBNcyjRAAe38ITWRwJKnGDRn37QnSZqb6IyzCe-Kd00Kx_xWe_A9P7gxM7FO3FxeEvIOM9O
 
-## G6 — Pour livrer une application Android sans modifier le fichier
-Rôles : release
-Date : 2026-11-14
+## G6 — chiffrée
 
-Pour livrer une application Android sans modifier le fichier de build, signer l'apk non signé en externe (alignement, signature, vérification) avec une clé stockée hors du dépôt et des mots de passe générés, jamais affichés.
+Chiffré : v1.ruzZIy8On-CKvXaMyQP4qwMpqIHF_oHb8uD7tbJi7ve4Q9QIymtTWhOdV5btz5KihmNxL4tURZ6IiHoXUAamZ2auRHeEpMcg4ed_A-hvyfS8g1fr2UsSRLdsWzBzyqGhJPqXT6Fuih67_FmftSgz3HcCbkX0uQXNWvL-me2UpSSxDy5VwUH3L_CtnpYhe6l6cHAtIaCZUf4B-em6239mcnZHww1sKX--U4IwAlCAkOK9Cm283-zbwOTdagaCwogKNkZHgPIY9fvpKjWZNKTp9iJ2J2MEooFSo-u3V3uBpl-c_NgmVp4kpVRGkgmEj3dobxI21lTMta37b6fkKns-JwEt0OI-9tVnBkc1LYk83LA6rIDWYTSSHnwtcRyx8jeQCHVb4rsF-uDuhGWhwWeCupk_u8aYdIktQHHcewKtSxj5Uz2Z2ebjBSC9pDjkj0Xs4kZ-0NX0eD3YJq56DF66ZpTmRQ-X8SUdELdCRp3yy5peIf3IcpXPvDpztJ5FUXByKYsYmKHjGyc1m_oLfrP0EW87wrr_upYc5YG8kQ
 
-## G7 — Dans un projet Android, org
-Rôles : dev
-Date : 2026-11-14
+## G7 — chiffrée
 
-Dans un projet Android, org.json ne lit rien dans les tests unitaires JVM. Pour tester l'analyse d'une réponse JSON, utiliser un lecteur en Kotlin pur ou une bibliothèque JVM, et isoler le transport HTTP derrière une interface pour simuler les réponses.
+Chiffré : v1.aPA_mFOtlXq6yJhYW2wdv8nVZqLYqn9cQt24f5iifuEBzb-PgJvIAZQAlVY9Nc8ACicf_z08IWz1EQmwsZYMKh5hxNfEMFlvJCkwUXzeNZUV6We7f_dIYhPeK5TVGkvkXcKDzOH1LuLMZCX-KdSq3JhXvISN1TeD0ahTqIre1-3qMwsYOjuBBri4m3QU80uV-mJDrrpJg2Jsb25MSGnJ_vykwDrZbLlQbYhz2jdcBSFPy3mcsoNc4ILJ_9Fgo2kT660t2tH2tEQAKYbWMujf_P6DfXwXhbTp6KFqS0DgbflmVhRJj4tB-5CFyZxvbJm9H_EFBKPZqAoOTrG_EDaBNfwskV9Jn-4SSIjfFACBiZ5OYYeXqWyZ0-S3C5cqeMbo2ipZ70NDi8evYDNZELdBirHUZpjA05j0Ymp3OULJQqOkTIpr1KLl-SUKiUwDLKjuUpgOaZtPUwGc754OGltJDysMjx-pGGpnNEohOw3sAaPrYNroAw3v138LJR3Q3YmmM3Cfyr9juDt6ytFCxAk
 
-## G8 — En Gradle Kotlin DSL, importer les classes Java en tête de f
-Rôles : release, dev
-Date : 2026-11-14
+## G8 — chiffrée
 
-En Gradle Kotlin DSL, importer les classes Java en tête de fichier plutôt que les écrire en nom complet.
+Chiffré : v1.4vwh58I4m5wBH4djGm6kNYGwVZ7fqtEGEOpVhAH4YFKl_J0Jvh1zgBYkXoVCQHADoG398cI_n2zdZj9qbVAu-6HzVBlZ3e2zB2C2rof-9xAzr39I8E1BkC3quJbfNDj5F-aVXOYDsnD2bWiZiMtu9xp_uRc5oh9yWZ9Y3AvL4YJKczR-x0qPOraZvJo4dsGy8Fy2KD9HMy84HNpaxQbEZBTriIaknlJp_k0HtwddArqDWzh319IrKSzP55TB6zeYAZttNPNvc1r8E9GHIe0aYguJONiXy2SsSRJapv6_Q4A6VVGxBD3Z5JhKUOC5hEnYAGLUEE9HYWzrEYus114MfiYJKyedgkMEzhvkrfzAghy-ofE6Qc4YDtnJx-J_D7GMe3q-4JY
 
-## G9 — Passer la clé de signature release hors du dépôt, par une pr
-Rôles : release
-Date : 2026-11-14
+## G9 — chiffrée
 
-Passer la clé de signature release hors du dépôt, par une propriété de build, et n'activer la signature que si le fichier de clé est présent.
+Chiffré : v1.urqy_N_3jrM5f3Yh6ZXgtRWz-1vvpz6SXe8leDl6_EkBcXr9KL2ul_WCnh9JM5JnbD43E5-fCATRIyI7c1F_Wo4PNPeLLfIFEZwBSYsI9gl5uLFdaNMaobYYhkOexwaw15_6A6LaRgjGblc9_1c7yvHlIR-z2b2COCuHHIzTHiZDbfuOtRZ5-rfgvC53YzF8wPwh9KFdYQGOerv4C_Xqn1kJlTYzOO9npLTzDr-8x4hPurmi0wSp_rbhNLabXODDvVGsjrA1STT9AxQqxRILwCmh91cXqUwj0kD8ihlj_m3L4rZJli41wQBiMMOaC6u3FJJF5NItv76nGhvtD1XOm9x2_gcLTDFwWYEYPqyq6StLH4KBPruykQTd0j_8PwYIe9AUwi8rWMytJep6vLo5ILiQG08Hc3qSgSfNaPzghaHLANWSXaAATOk
 
-## G10 — Sans approbation possible, lire les rapports de tests avec l
-Rôles : dev
-Date : 2026-11-14
+## G10 — chiffrée
 
-Sans approbation possible, lire les rapports de tests avec l'outil de recherche et des chemins absolus plutôt qu'avec des commandes shell.
+Chiffré : v1.wfa5LGBzcQTUWFisqHST6f4f3G5QsUTsBfKpiDeNZlnlROhuKCCxYhlLMPosqNt0ww8WgYt45KgPjGv18ueGdcq8olCuRPKbmBceyiWuzHvtkDrjr5me7UMMcyl-gc9KPIOyhLS2HTM6wiYQz3Q1fwNepiiOAH9hJWC0-sEFbHY-oh61SO1PkTtYrHbJlBfYdfjUrWVzS8e2Lkx2b2GTuy509NWQThoM60CqRHMmCLr2De2gjRysLLj0nrU5apWhsbeFjFcVDuUpmkGlaWst2JIHFWP9kli_jTzKaEDqSjgMxMzvfaEZsuwBblP3FZadxRe_KDBIV3u61OguJD9YjDbyAJikduo4jr47w94iLa5GhBOSUbUnOV5QYBuKt7aMYxg9u3eI6TgJieMkgEsb7occfntuE6xEJA
 
-## G11 — Dans un shell POSIX sous Windows, passer à l'interpréteur de
-Rôles : designer
-Date : 2026-11-14
+## G11 — chiffrée
 
-Dans un shell POSIX sous Windows, passer à l'interpréteur des chemins avec des barres obliques, car les antislashs sont consommés.
+Chiffré : v1.x5EoeZTW4iMgfQc1EvBWcUSVlscZ4-4Z9Ibb2S2sYqtru65aKUtsxCgq4ROSNIi0dKVYDg3JxvniCjYyP_30l8H9QVKNzPKyfxO2pfeAGND1bVIkaJICuZERyx0KDuLxb3qxDkvgqrQOTy3QbAyc2pHN81vaQGIfkLCOq3Rt6dJP7em4jdFUwda4UKIBdSZuhFd4yhkSyfwbqoWw_P1A0O1eR0oaFT_bgoAXj2NlRYka1jKZakxOVGdAEQ1XMGl1yPBp5UnmR6IYXDEyIAEYrAm9tacS75GnWnEf4aYXxObwmFzTYqbLK0mCeLdIk_mA3f2CbSgSCt83XdE8i-67KY9mL9Tn53uf_QIi95QVjmGcYTv29qUy3tvywHMxQCvY099X24R0_NsnJ69bJ0L2FUehhBH1xXd_C-Q
 
-## G12 — Pour un client de service externe, distinguer par un test le
-Rôles : testeur, dev
-Date : 2026-11-14
+## G12 — chiffrée
 
-Pour un client de service externe, distinguer par un test les erreurs d'authentification, de limitation de débit, de surcharge et de réseau, et vérifier que chacune a un message ou un écran prévu.
+Chiffré : v1.o-sQP-geWdls5I7vldlBjNgNlCkYR5HeS2c5xoGPaygY9EepxmT1QqoNeVV9cYRhX1fbfX6QEM5rdIXjscULEDbsafQojBawXWMPYjBw_h2MTRn5U13CFNXflRVWmm_UCgU-UoD6M-5cL1O0RnG3LQa84LBzNPnSwKrjMb7LgFlh3D5H3OUtsHggl4teL6FTeadw8vfA5Iy7LcPoL5oojZEokcmGpKHiPsxUYTsMeqq_SD1z2BE0ZfiBTuaqo0ydMDmvAkUpPSTAbkPQeQAcYFvX-yxcdSr13EZ4HAK69y0aywkE_DTEoyfWN3FPQtU9DIMlB6plGJ0hxv2bpa2RsfLGt9xa3MoEbyaTIu0PwTeiRO7njswN_kM3Y_iMjCh7Z8zOeBHllGMvWsXmQ3iun8fgEOoERS0212zG3Yn3pDIZsITa29akGVrZeCQbI8UaqjOj5AlgLxwD_2YC6sOp3nR_tMeKyXZBqJOpwiAO5ioel6-4lH2z2OyDDx1M0LzrH8U
 
-## G13 — Pour un élément de persistance sans écran propre, lister les
-Rôles : designer
-Date : 2026-11-14
+## G13 — chiffrée
 
-Pour un élément de persistance sans écran propre, lister les maquettes qui affichent ses données et ne dessiner que les erreurs d'enregistrement et de lecture, chacune avec une sortie de repli.
+Chiffré : v1.rDIQLvw280JFjbdp5r4hXVT_lLxNdChPVgXJMjSFO1YyP-HUketiSREpER2URQnVKqTuV088occr4kBJ2VgdxFhMXl9wL5TdT1qio3pZmRAdHmbLjGHUh4qujLxBQyGqE0SiUpXX0VMTrXV4BvzerNMG3suuuROp4IYZLqeFx_KV22kgMLa6NJd5b22HmIHjVoTaXKxi1liUWayXcesICLnNbfP7TqaTHW-YIr9NlWhsQwmv3UbJF82D_Gl8UYR9Gjc_FnLaXoQYe_b3vU5uOfTFbDtof0M3e1EHiMcJ4rLTIBtz56miIVHpn9_MEVqrAmm0WzrmEFuGn72exnvC2wUMkf_0FOkSXvGgOOfcXTpIJv-uRXw8fJWEhz_MyHoq2UwnGyFwRENUGPL5_rtPC_4lAHy72FG7yqRWzB5t_rH_1wseqZzZ25zArnyStrstBohS-MbWAbh5_3qqwx-Ft744NmnI3JgZ8wlMgd_Uwa9xNwRc8Jpw7Wvqww
 
-## G14 — Pour compter les tests par suite, lire les XML de résultats
-Rôles : testeur
-Date : 2026-11-14
+## G14 — chiffrée
 
-Pour compter les tests par suite, lire les XML de résultats avec un script Python isolé plutôt que le journal de build.
+Chiffré : v1.CiEf-2nN1khj2R87vkz0xODUbywcEGq4I9YQnoJEKVBC5G0pivVfnpsJ7oxDfyjzlDEdLWunedMa57GqgSeAvVBA2Vp6EuEhnwuAc1BaWTq3EnHP6DDHfpFEaKuILa7rIC_gNqNJz6c9ECwRd6kpfJ0KUJT2bEmuqLtRG6cpGsk1JxFzDxzQwekG8KjzM95-1EVe9XBoV5jdDMI1EazhlrABvF1_cd3ewglZcyc0QgGkebbKTU26ExjJzc7TZWigtf0VDj9Qx-mSdggUeCDtWt_wzC0lzj3EAw2QFlTDaaGMI9_055_7FsYV9SoY68hO_XGaQTILeiGxaV02jhcLwMhfb22hK0vC1ZzkdhgTG95fSIaV-_B0EAM-bIxWsaRWoLWsZw7_XNYd9DRi
 
-## G15 — Dans une application mobile qui affiche des images distantes
-Rôles : dev
-Date : 2026-11-14
+## G15 — chiffrée
 
-Dans une application mobile qui affiche des images distantes sans bibliothèque de chargement, télécharger l'image choisie dans le stockage privé de l'application ; ne jamais stocker une adresse web comme chemin de fichier.
+Chiffré : v1.VGCdtROpW7J_-hIw9Uu7thXpox0EcQWCtEEHmfA442oubJwx3SNKl8_DJe9OO3VbLLCoWq3Ey2xUqn616ilZwmPEAV3Nvh9ryxrlXW5x9f4Xbpa7saivMzB23BfyCra_OOlbJhoFOwnpbZBF9C0k2XVF4Bd9afc0sDR9A-5MU_aC2K31NCJ1IlkVzAn7N2SotiDDCzARPEALUq-TIDQxJtLytsaNZZq9xTWSwFW2acohh_ikBef4V46FX05r-4eC9D-VPm_VWb9fiOSRDbXEPibjW8A32zxhyQpSutADoN5SkTZWLrsUktz2hmAn7mcL3X7Y_v7Z50jXYFdNuAWJrURXaq8tdUnfwbDD5-vsvtmtbP4H9Gar3moiJ0RKfAI0OPBY1BzTHNOtnn-0P_0_0Z0fJBRXwPcGQykPcvMIh_hyNgr51UE2qO9IuZr43ayEgxwQhLENHl24WPh7mOwy3xcqDTIrynrnsrS9CXIaH7Pt-CrokC6_0rMPFym5ZWFZ8woy4u3dhkDDUjgEFKvsrQ
 
-## G16 — Quand l'environnement n'a pas le SDK de la plateforme cible,
-Rôles : dev
-Date : 2026-11-14
+## G16 — chiffrée
 
-Quand l'environnement n'a pas le SDK de la plateforme cible, écrire la logique en classes pures testables, annoncer explicitement que rien n'a été compilé et indiquer la commande à lancer sur le poste équipé.
+Chiffré : v1.zat5yoKKjU3g4rIOZpolJKxShrV8VptaHJTLoTRuYRIX5P4c4O38JyPvMj7dR1jZWZ13eoiR-gh2lp5V6i5NuBnmQlgh_0LsBLG75zaUiPmdFwU_umWkx2Jt9hiMlZT0bLBC2uxs2hHHSQhEYIp2updC8yo-jvLaWDsFoDJITlb1dXvBkpFHe1WVas8DXfk7K9gCWNzGOwHBruF62hwxvnI9Zx9ZHzXyqqR3wByNTFz-p89z15C4OaXroyxJ6UiKOPnM1IXkXYo1g3tPMS9OJbV3fUIb0zspKWXigeP8ypKVZbqi_i1u66JqPGWnfKP4NvofCanW-5fCBVg3QOOmxUyhKj2z5ecNVza99nt2cOTTAodJzd6bScwd4LikxvgrlWV2QvRR1TroT39LdW9sht5FL0YSnEUXwVOEJLveDUyqjqADZ6_TSmz2ly0lnQUzbXarGMNVujjlPxcwZUx7YFnERrUhxZnSuTPYxgAHon3haYZSE8oIDSu6kWOl23D0af09wyA
 
-## G17 — Quand une clé de signature de livraison précédente existe ho
-Rôles : release
-Date : 2026-11-14
+## G17 — chiffrée
 
-Quand une clé de signature de livraison précédente existe hors du dépôt, la réutiliser et vérifier son empreinte ; n'en générer une nouvelle que si elle est absente, en le signalant.
+Chiffré : v1.HDVKWI8E-c3zYztwA3c6j7CbwnMHyLOp3Q9Enrzv9aypgGFrL4KEyqJyTcUtKQ7fUgeL_cAh0nnGUw1rPAWBkuzcV5sXdJJRpoLHn6wq_DypgbcL2xXCOVn3mfI12Mo8lyDNe5CAa5pgjfH4sskzHq708LvfjiiGTz0rDx5vpbCzOY9KQ4JsZqec2u0h-u4hISDXI2UUlpUiVEVF70GThtN5Qy8T0PGWlokk9rIH9VI3727ZB5PXaYJPTBTsQ-qCbK3Eu93YNtUVBW9kxY0bTqkb7hSSaEGgqcNGxetrgcvpqLVISPLLxmCcY23MwGBx6eIwWdS5tBC7scJXk1Y2dVU4kijwewP4IQh2MtY0JSZAhpweqbqy6yqx-zdPk26YMS-rYkxVBJns_S26wkRmrd0xkaHxSOQvQIL1hpC5F47pQA34SuvjomtNivYjOOxpfn5G-A9as16tzJb8ekzbDzP2cNci4VPRcJO-N9m1_BVxq_jC
 
-## G18 — Passer les mots de passe de signature aux outils de signatur
-Rôles : release
-Date : 2026-11-14
+## G18 — chiffrée
 
-Passer les mots de passe de signature aux outils de signature par variables d'environnement, lues depuis un fichier hors dépôt, sans jamais les afficher.
+Chiffré : v1.LYHEFV9Gp7GOHoYfYmvqYfYhgTQDVrQZYJ1R1dE-SejVvemXc6khfBIv_HNawAf9vyuJ6wlEozTU8nhBm8RIkiuBkvCAwS5_TXkz1fuiNvz4jbYtQjTy2ip9HtigjRk1jxs_wcSsbryz-Td7JMhlm3e0hLwpDPXcReAF3zybcxJNLWMTGSpnjcRRx9H1gkEBaP98u3CFhTwJ8Z0Tg_Mr8qXNybwrSLkLgQxrQUIhi8pDv9X-JvaZvfRtiuMHS3inEfcFkUiZZ7teIyUjQ17tvzZTmhQOEf3lN5mGsH-xn0lCUPbupxZvB0X0SMI2_ukSZH560XC9WoTxaStUNFq3jUDhFEILjrvBxZAcFtvc_QCmomMiqs8kAaVZH6mJavA1BAaX7FkCFBF0gMkvd4fyEzZxavLy_IfGoiV6M8nKar19m8Zfu7KeJdEnRkxE
 
-## G19 — Utiliser la version la plus récente des outils de build inst
-Rôles : release
-Date : 2026-11-14
+## G19 — chiffrée
 
-Utiliser la version la plus récente des outils de build installés pour aligner, signer et vérifier un paquet.
+Chiffré : v1.kNRCCRAWMAF_pfZAf5r4cJk8WN3zSR8jrqTuaUMsVSV77KNil9KOkZyBZn42NVOMy1vzrPVfsbKHfBbOFARrAo_W1fZthy6EhS05k-0FN7V_ta1vmP5dzF5Zf0880-4t6SiQDbDTmlv3lhYq1umWVX66wW2Y2J912nO_lrL-pmB87Vcz3divirAPrR-hIFAV-5j9JQ-yQINBSYQ2cTmye7bstIPyIDxPtLR8ZBiwjoeOhyMlYOFWdTQYUGM_YprfNNEJjwv3QrwsVgA4sYF0fYRlYwWIp5dUH1tBxgHOJAeoSlBGLk-SCQyBwCn_fCLhk-cfqk0mCl8Yvg-7P5VbI7vS3KrfEiM3moQESeXiB89I5QMmKrkC9v9pCC-FmLtzFJUB
 
-## G20 — Dans un code Kotlin à coroutines, tout catch large autour d'
-Rôles : testeur, dev
-Date : 2026-11-14
+## G20 — chiffrée
 
-Dans un code Kotlin à coroutines, tout catch large autour d'un appel suspendu doit relancer CancellationException, sinon l'annulation devient une fausse erreur métier.
+Chiffré : v1.pnvBs_4SJ89EaUvQsyX4lYhzvo75z3LUpV4jPIgmydPTy5SzrT_zRs3OWdD1-47AauQy1nrSxfHsPhgbucRIV8bO1ZmYka3JoJqbdmik9oivhzZnZyRn6pDVmWUm2b_n_kjfpnPVhsEVy0bkJ6aapb00F2XPLjs-zStm-M9mSKxGml4z0_PpZ_H02t5diSH6aFdHNONdx2Sh3WuTTTmelZV2A_AkpJULT0V6QotYMRIKf9a3q_aKs68Lic3KW-JTW8Z8K_85EkTQN10Mjvmixhyg1yP-_ViYZt6YgCGG5Jo5GUqpKwOpho1_63Rw4UK9DxXfVCAqY97M0r7byozxy8_BXo4MGXSSzn_fDueLjyKaZ_n4rt_4VcDzbd8TsIU-oCb8eQssbS3GmMS1dD-fQMeBlD3arjMPaHp67XhTw9NsN0AhaXIENsWhtnz07UZESHxA6DygrCLKivCWwyoYK0484w
 
-## G21 — Dans un code Kotlin à coroutines, tout catch large autour d'
-Rôles : testeur, dev
-Date : 2026-11-14
+## G21 — chiffrée
 
-Dans un code Kotlin à coroutines, tout catch large autour d'un appel suspendu doit relancer CancellationException, sinon l'annulation devient une fausse erreur métier.
+Chiffré : v1.DDnZ2fWqzqwwbFStc_QxdLaw7DsnBUtZjUfus1YHkr4yO4P6hxxJkb0nTu2okCSpBu3_PTX7sgYAcKR6StuBp1vtCGSa3YN9lZl5TgH-sQu3Sipgha1Nxi5aD_R_YgOkFWz_P83p92ptA1UsBMvF967ACNECBIzDtx9iKd2mEZqIbDvSaSR-XM4_5a2x_InxWrH6ixo9m2uYNcudkXA6GclFkzkQ2hXPiI74_MN0l7EAJGTNoG41fBo1n2TxldSlBF5dV-eqyyNOxNLmSo98TB1GW-8qfhpm1MNIWoZ-KpzHgXXVtuDEpq6FbCvqscsG2U1S7EVlh-Ld9jxnNDmaR5qZcouXsEeRAGdACqu7Q1vfNYSGY3EmqLieiJyGQ8gx9dmIIWOQ1kKi8vyrO0dm_JQ5nPj5gMVrlzh_edS8GJYPGj7IaS1_QmpRgwFHyCToV7boHYaEi25d2PtZCUSNIsql1Q
 
-## G22 — Pour tester un ViewModel dont le travail s'exécute sur un di
-Rôles : testeur
-Date : 2026-11-14
+## G22 — chiffrée
 
-Pour tester un ViewModel dont le travail s'exécute sur un dispatcher réel, remplacer le dispatcher principal par un dispatcher de test, attendre l'état attendu par une boucle à délai borné, et simuler un appel long par un verrou pour vérifier l'annulation.
+Chiffré : v1.scbnBYUY66NFGK1rXY-zxjr12yOnfUPguIFXHTDO8SZq94kzYOBU2j2uiksGl5JGjyzNHIxRRaAhPtv1ma3GmjiGIKhCc0QlBGXOkI9iPzv14zux6h36Z_l5-DCVtxmdVpBqEgvj4RF-cWAJeaSlnGKjU7l-i4Uc76AJCZFI-vmNZlEGsoavo65iNOly5SWfHE7ANeYFx94NtNziWyKQfwZdWFhAmIqXucFCVEoVrKk58RMcky8QrcPysLPQqH1Be7cTl0p84Zo9XYoes1Iqqf9OZE4zi26aM9xKVAxLpONL4_1Wl7k3AOtPNPbSW2PC00ByU4pZYY7K-TpmVFZm5YdlQqK5UPIw9Ja2T2K2wFdaoX8tguOT2GX2EMLyVgTefxQwcBBY-J5_wQvR7Q_t7WoAdAW6mD0I_KG3NL-3CscOx6AyevhtvCJkvj-FT7v6B-3LMIr0LWYQg2nVBjS5F0HR1FpyxzE471l7gnb6ukp3cfcqnvWvKLtT3oSEr_qmnSToqd2Lk_CnQtxzKglsZv_BP7vXcVKVhT_5avCo-CDBvn6Bxln5SPWCa0csGMlVP8iEoXEnVC9rKg
 
-## G23 — Une écriture dans un stockage matériel ou système (coffre de
-Rôles : dev, testeur
-Date : 2026-11-14
+## G23 — chiffrée
 
-Une écriture dans un stockage matériel ou système (coffre de clés) peut lever une exception ; l'appelant la rattrape, en relançant l'annulation, pour ne pas planter l'application.
+Chiffré : v1.PYgHHklgJw0-DIGIOll9peGYq2HMppLt8RusSZCY76a5uVt8FoxczoE7ub--fOgTvvPfr-Pi3gnDWm3rCsC6y1DYP_WfDYgqoR52XV1nX-4j3OfKnnfiI2DI1UyCzyCOBkiWPovrfBf_HkmqMCYkcXFd_48POm7pA0CDkxfd77QyQ-gnx3ytqdZngkfiQ2qnIRj_W8eyye7wh3a4BrnVurKuudQRggYFcTDI7bDyiJ1LfLPLZvF0aYP4Vb_TQmdRdVNDXJBNyvq0otrgpKO2GUXF-wjJjsnGlD3YAv6ugxa5O1X-mKCg4IHS-OOw4hRmBHeDVZ5p8ue75wovLCge20Qy5iTCBucfdQbx_wn7Ue_cgzmsPB8w6L2kAwg_NU7zH0GzLoBLsmRsA0hEpzUUtcys5tht61QlE9LQ9_bEH9cjacebm_23-sA2lx5YtzS9ZBAdGYeXfgTDMl-p9WQE9y8_rus6M-ptNX4oVo321bB-zsQx
 
-## G24 — Ne jamais lire un stockage chiffré ou bloquant dans l'initia
-Rôles : dev, designer
-Date : 2026-11-14
+## G24 — chiffrée
 
-Ne jamais lire un stockage chiffré ou bloquant dans l'initialisation d'un modèle de vue : démarrer à un état neutre, charger en arrière-plan, mémoriser la valeur lue pour les actions suivantes.
+Chiffré : v1.QZ3QcGPgEejMlsaAtfyi4yTBWPk8umHhtCTDvTkJbA3HWDG4Sw_paZsqNR7tdknkSYp5w_fkcdYG4IZDtcn3FIPUwOBUcX2goRQix9oloROkPl36w0REtN-J-XPxpaC8dGfYFpBAu-4YG4RorBzSWYhOwCGA_WjNunbzntTLXIThcBuq4Xq__bDX6dxkidVVGa9gtTtWWngigSzFdeDFTVmP8XCMUWdrumgQe-7JbJPXef17p3ky8PRF5INaYBCblFxoWD0079UN__2RqIuZVKdEC-1Xe0ilN3TW6qdmHEudOuFFhCPZZ3LKLB1-Zyvs_L6YjkbXZqbVu-jFLjiuClF25058XnDon75NjuMY-uhINsvp_PUROsqJJddb62j-jWhvBPGeDqyCh7oz9mdSA7Nl6ZeREkcaN14xaWw-KIVqit9kONFY5Ys3Vw1xgIl1pnGILUc8Gt7fEqycYezKu2afHLYkkM6lSydBcggq5A8sHFdEYyES6_TDlRyiqmIq2pUY
 
-## G25 — Quand la chaîne de compilation de la plateforme cible manque
-Rôles : dev
-Date : 2026-11-14
+## G25 — chiffrée
 
-Quand la chaîne de compilation de la plateforme cible manque, mettre la validation, les conversions d'unités et les bornes dans un objet pur testable et garder les écrans minces ; déclarer le code non compilé.
+Chiffré : v1.YbrDcDFGOLdeQoI2h04FTK7OZXdqtqQeTVuCCPnHdQalYznysRbxABwKpffWMtItlyDEcGBawNDmiwgM8RWOm0Kw2SE1TJkDjSObNhdL802sj7BHUQFxyWPuQfqHQSqi78mTMq9LUpqwfeZOjOlPQ0Obie9I9r2gnyr6AWkxN7SR-2grde_GoMU__fER07BSNDqMCO8oajrZd8m-yNMgaKQPpQtRKJEL5n7LUA4fbejuo9bHpXvc_OiQMKJoOH7BJM3tGXidE_mNu9EobmnFT5XBFSsTW_z6efrwipb85XuK2lIuFR16Q1KMJY02beBkFi6KzeR4LGc_5pLjtW2XJOwgnQm-rxFAvH5FVvcieQXZkiN6f4_00CyE0Z78P-ru5eYbzjaJ6jZrfKE8_UtXC1VG3fQBPYDzQYYhQaFQac9KonsaqGGJerA_fMmsZhmwR0DgqiYaBuTdiS_ONeFB87mnX4fDshLzlcVKnnXd187hJyp49aZ5v_ccwZsevqTIplS_s1c
 
-## G26 — Sous Windows, une erreur « fichier utilisé par un autre proc
-Rôles : dev
-Date : 2026-11-14
+## G26 — chiffrée
 
-Sous Windows, une erreur « fichier utilisé par un autre processus » pendant un build Gradle signale généralement un build concurrent sur le même dossier. Lister les processus par un script, attendre la fin du concurrent, puis relancer.
+Chiffré : v1.iSZ6WjuA8eRDUiFboPAda-Al9opfT7R89RKnXLQn05SGWVURE_QZ1pO__FSw19xhZE2YdgI5Urg2K5xhHh2VQTaeBG787hfVPIEaASIpAJGhoczrcbOItaQNK72rUDDeeg0kKUxDYxRslgGk0HrOYEjExciPSjTQmHASqL63V95GMkdCvREQIJXlGDMETguEsT8Cuh-sLoYA_eeiK4s9fJyQAVyLFXZ-fkdji3h_EcEQZIk7FySr5lSHM-qMnQUnmXj25x6aU0wt-jMNzd-da0wOiWA-Mu6WeIv_vsjVCJwu71BGF6e0zJ9Bizy_45hPyxiVv4zCqbpXmjS1Ols4KRtFs4-kc-TjhnKDiUtN3A9hYa1w-nXK_jySvIFy1wCl6hhA_x4JkU3ugtaQf3Sm8T9lvX36xysR9a68SQ1tZswvCg4hvqSgfgn9RT3W-Q_nyevXTCPgtOT9wVAy4gd1s0jp79br3T_BqApd5pXrOr77RjN_FREWsfgNXRRoDNP1VdPLusJrszz-chfhY8MQ1K1mJEB09gGq3pnvT0fZAaOx
 
-## G27 — Pour tester un ViewModel en test unitaire JVM, la bibliothèq
-Rôles : testeur
-Date : 2026-11-14
+## G27 — chiffrée
 
-Pour tester un ViewModel en test unitaire JVM, la bibliothèque de test des coroutines doit être déclarée dans la configuration des tests unitaires, pas seulement dans celle des tests instrumentés.
+Chiffré : v1.hjWTvHBP5VorWBsCqeYsOvBqY1MVe_223nO9Ed-BxAAnDdGehjsacWDMw__MFlPpe3uUONoPvH-OSvmL29oqXC7gG2QkKYuzZkvr7r2nQiUS91f_MyxPhGPtX0YdEUxo_sGqzYjTLyGkE-e4oMqMyaVXhqU-qx7G3jaEBW8AWam3QnLIWQxANMOoXUyTttUmTQ6ychTL9gwZvbZ5FXKpa7xkbQP_gJMDLJ40IkCovTqIwUnGpBkhFiZPiWgttbBz_itfU6M4tS3KisX4dk6lU1m-gLRfB1J1Ex3tpoxbQ3_gz_ZQDhISDRjft8Lfq34kUJTZFVkRCOIBkieeBWt9lObQSOMGV3mnK3xuIvO4YTFEU_2t83UepNX3_k6zfrspEfCct4z2irfttdh_044s4kGY3cGjycZsUAuOheyKvkxZCr9nkyZzdeNoFA-u593Ta0r7PWepZOBn8GvU2_1k8_L1CJeoYIMUZVrygGiqEi8aZxPthngOgQma7uE
 
-## G28 — Un téléchargement borné en taille signale le dépassement au
-Rôles : dev, testeur
-Date : 2026-11-14
+## G28 — chiffrée
 
-Un téléchargement borné en taille signale le dépassement au lieu de tronquer en silence ; l'écriture du fichier téléchargé rattrape ses exceptions d'E/S en relançant CancellationException, pour ne jamais planter l'application ni enregistrer une image corrompue.
+Chiffré : v1.5mGcgXVRyLf86_vdUliRogYXcL7s8Uo1ZwFsYygon6HjF9sci7JS9mXvkNPyAcc9w4ZwsRTRfQvcfguXffrNG9dveZiCIxrFz4k-VwznpsaNTMIeTeb5aUcz9Y1X4tm-ItwGlSiEwD5SgnNSClfL_-LQzFeVfiR5f8Kyf0m_89fok1GHejG_Iy78Ed_Wwl1j6HM4Bx3n7bj2xYRZj4hEK_Dydk0G7xuC-LFmHR6JSieuS9mvx2durcAlAX8bAFAkpsaRp1DfV5qytZtcxlSI5we_BpNJw3Jlgv_qXhiyB0pfZFTgg-h3qytvkBAecASvesBQcf8-cLk8UutchWCoJhVj90ddGUE1cJqIih0O8xfFDEhh83T4GbaHUwjaGsOfLUiiedDZfuQXxr_XF7Bs3E_47GARo-8T8LwW7STrjfpnwNqNImqErEouNC4IDR3OOhWwOW6k5A421uTr7AJnRQwNUnFx86syBbm-BlgHMEVOqbI2VqUrp6iZ2NVOUOdxcSSET8lH-qRjOs3DG9aSCcvTjfvHOsxw7ykt7Ysq3EnqZ9a9KyTQ_XI_84aWSppmY8qRAPMCClaMVBH-8qHtteZJ7grSBPNb0hA
 
-## G29 — Pour un écran de saisie d'une quantité bornée, dessiner les
-Rôles : designer
-Date : 2026-11-14
+## G29 — chiffrée
 
-Pour un écran de saisie d'une quantité bornée, dessiner les états : valeur au-dessus du maximum, vide ou nulle, valeur maximale, succès avec annulation, échec d'enregistrement avec repli.
+Chiffré : v1.x7s8gQCPyLKI7h_zFWT2xcoTl1tXisWBf0hgH41zXoSaFGGotN-ripRhGDS6AWewaCkvayJ_UC9KRU4dpBfT5uSLpAwd8E9N44Ed1kHMzgYlksTYt8kSdsiU-GIEqb4cqiu76-2JLCFYqKGY_lo6Xtev7Q3Mv5XHpsAU4Ievg_oG2MwDqg8-aLnHJSwlfXAdvRHmEouDWzWTqxxP6mUea7ew_JaiA-nS4OpXIid2iIYgkkUWZtXtPY84VsSewb2vLaM_Oybmq5vdA0JNZ2w2iiXWbz98EUu8BQfDwwC9TlOjWFYjmUwtzj9bDNHvfqX7xfVqiEHaOOb2GwLvsVlkC0-9YzWZMW90xaTfKr9apScYm0xQNT5CEpF3MytJWsfrY5ESaALYGOLQ1b96O2wDqJwgKVXKL__4NP0tZqyrUHh-Xutkly-twcDqy0DUuIpv2F7qCsIUIf8MHsa2uupNIUP28eE0Kg7PHtCiytreqrMtmkg3bXs
 
-## G30 — Réutilisez la clé de signature de livraison existante hors d
-Rôles : release
-Date : 2026-11-14
+## G30 — chiffrée
 
-Réutilisez la clé de signature de livraison existante hors dépôt et vérifiez son empreinte contre la livraison précédente avant de compiler.
+Chiffré : v1.P8uwd_WjrKbVMMoRDeyUhqi_sWm0TAvOPDzwF30MteLWFCUk3LbPTscTP0LJ4F8yz46pNtVBNabWX1X3c0ogWKRdQAdCJHUW3S5_T-CAZBb_qsnf5RLRi49Us9UL3j_mNla84FvFsTPq2kX0idjvf-EYeE2RUd016pEhlQz-a1rC30dRklWmt3SrXKU3qOHAgI_l0ZstUlYBZlr7UPM3pwV4eLne1itSJpoIWlvB7b3hX2S5S0MNOJG38tuNe7ju8_S7PO1XiiXidrbF75DX0hgvOMNG-nh-iICn3GobrayD6oDvup_--MeDb_V_VU_h809HARtj71EvgofbtkOF4Kf-HWCONI-u9ucLk19lwRMCErziMhsbNGnluZ0A91pcT_SQky5yE8PcDkQkUnfCEqtQJriAVma4XSmnmS5EuRwF6sMduXEA
 
-## G31 — Pour un écran de liste avec statistiques, dessiner les états
-Rôles : designer
-Date : 2026-11-14
+## G31 — chiffrée
 
-Pour un écran de liste avec statistiques, dessiner les états vide, chargement, erreur de lecture, filtre sans résultat, période sans donnée (pas de division par zéro) et ligne dont l'objet source a disparu.
+Chiffré : v1.G7BEaYPWcDYbc2mQ8KvfSWcJElliS-tJT49gZe7lsfPseHQ8a9npminY5LvJindDcHtI-s2U_vl4EswGBZOycENkRQSwn-3g3wbgiQXyuhCC-1teORz6Rge6Ju2RCDlc3o4ktjOujkFqsSjB9cgr3a5gw3Vgi4TL07UKFEDNSRuu-UPXMCEyhUJLTSA0KT2H93xm8ZdTzS6X8FXc8rijPUGohipPZJ4m0Ig1SO116-XPfPoTzpju-dOyknYCd2a-NpHTYRNbjfC8nJA_vpupEKRmYPu968ZH3_nhhpgATOgl92r6pBzdqtq2XSa20zAXs7Apy0oQS2onrHVkpDIBqAHv2qqF4AUZCefQKQ_xF6ZuPqoIlryNhDBDOdzlNOOQBRD5GWui3RhKq8vzoPXsRY9wa7cktryt9xXN8If89t0YZNWszYdWhNh2oeAU2ARiT_0EM1pptgbfp1f8EqWiUIgydEQnIEtr9tB8enacaW4_9hDAu0aSQlOGWl-VTlBDyM3EoNU_bupD
 
-## G32 — Avant de signer une livraison, retrouver la clé de la livrai
-Rôles : release
-Date : 2026-11-14
+## G32 — chiffrée
 
-Avant de signer une livraison, retrouver la clé de la livraison précédente hors du dépôt, la réutiliser et contrôler son empreinte contre celle de la livraison précédente.
+Chiffré : v1.FqowUVCsdyPLfZplmTp5Qc4GYjkTRQmn3r6yNWQJ08EFZ9YdnTM2cNOxL-4shW1sgKdN6gJ94VwiGcvQQpUBXWZtiJpKU_RLbQqc84Q_8GAB8ZGaSX8PRSmR9FrTX6aj8AagQR4KbSRPoImz0CLU1OWO2ern-Rn54m7dSwqiaCZde5U3c0VrvG468zcWUOIhTX-I4MoUD8s-hqgM7YY3D3XemqL9UkDs7aRBxNDPYCuvG3JXdkaSRufDNECdntMgPSTgspSGej5997DfTLvnPwAxyC5N_IOXJ6775qkKut2d9fOOJJDVLozePOcL9fz5rtrJjoYJi_e7exmIPOQnnc9qPD78uyzlCwQ_hmIg-TTckv02vEAZbL0e54zdLg256ff__sPfjH23AjP-pTabWfLWPJcVR_Zm9r191LOCq7EKiXL-tl5Xh4J-0ehtcERQgHyq0m6YO3HbnEigk5DsruKbFCjr17k
 
-## G33 — Les mots de passe de signature sont lus depuis un fichier ho
-Rôles : release
-Date : 2026-11-14
+## G33 — chiffrée
 
-Les mots de passe de signature sont lus depuis un fichier hors dépôt, passés aux outils par variables d'environnement, et leurs valeurs ne sortent ni dans les journaux ni dans les notes.
+Chiffré : v1.86W14jt8631Dyl1leASJCAljdkmF0mVVOkgz-WLugkKc20Mg1DDZbwULF4hrlqKPbwTTUM1D_l1LUDsJykpaEhP5DONt2Ir1xUsFnf8asrmEa26cwSi_QGXEnYL3I3Kex7o6v0Xjx8ehBCnTbAKj79iz6LCaN-oH2ZsVOG2Q3p1NF2UIDq_7JsWTu36T---bO18HXsHmt2AIcY2DFm1MFoxEjTcZ8Y8e3U3aE44jfd6IcQmoUW9N3NC5gdV2055LdCAvhacTXwraKYtE6KDBfrDmXUvSajN8Amo_du6a_ycmt8w7n5zWjIkdrNdUMGVFeECTlSpSTfyfnDHNsw-P8EZJhJHvwEPkypWC-LgDIFFTt8Bb9iWtFSq8hw8s2kCAXkODOI1H7c6j7-t--v7CTSBNRDqpU9Arso0G42CkZVumhRf0tgcqt-4RNaCRnyj2aPN1Iohk4N_XEqPkfmXXB6j0jYrcaJwlashWP4kFpw
 
-## G34 — Pour un élément de notification système, dessiner la notific
-Rôles : designer
-Date : 2026-11-14
+## G34 — chiffrée
 
-Pour un élément de notification système, dessiner la notification dans ses variantes (unique, groupée, urgente), les états d'autorisation (demande, refus, canal désactivé) et les erreurs de planification, de lecture et de cible disparue, chacune avec une sortie.
+Chiffré : v1.jXZzI5pyc-UBttO1vPMvJgwyO6987tmk5Uq0UFtvwLfuKU21E62R1lXrXWBEcQigsMvHuD8k4_J_D0jdtDIPe6hZu6Yp5k8ox4XcRQKjqiMzmvVpf9fFxXI-QSCBDtHDNc2v8HubxtYrEMKFwQwO13BxsOpmXyra0lTpv8-RnEnPt09ZexjF9eCdMSRC3j4tqyWmrP4_WKtB1GITKUhyfI9P3Eor1-T6owGTAhbalk2ENihMjz6-VvuvhRH_S5o4Q9zueIkqdFF3yCBqIjwqoUCtLc4EmglIdxG0V0xzca50Eu9zL2qiafXDhLiLfY6e9yX4zeJw3al-9GwxBZD8A2MiKnDaQ8peTPtxCPhI00mf_AE99nt5wWIG9M0eq34M0gjQQUzumLpNw-CXfdcF3VBDWwRdWrv_7UzqDbOOT2DT-Tc4DDi2DS33yawT8Shj8aHs4W2gn_kV9-a3esvxMKUekYau4Y11Zn2rtbiwB0QRnWNTzgTynPVfz7qcLXFRfca9kgu5NpOn7eMsDdJk52Arq_hQxvW9tiI-xTlHEaWUDGO4DDa8NcygHaFXsANHugFbJ7YcC1R48Q8O4u2dpvvy_w
 
-## G35 — Tester les raccourcis de saisie sur des valeurs décimales au
-Rôles : testeur, dev
-Date : 2026-11-14
+## G35 — chiffrée
 
-Tester les raccourcis de saisie sur des valeurs décimales aux bornes (reste non rond) : un texte formaté pour l'affichage n'est pas un texte à relire par le contrôle de saisie.
+Chiffré : v1.WTgu1sGYvsPzl5YV0mn2EeuMRBusF8pu-voQTbkoV5acJC75bT1BfdxbwLgXtfkXmIGTduwvaZRBEIKLqrOf4hdTUuDehM0S7qM46IQ42tOLTBf5UXHcIhx_fbXQ_nvqgmgshs_lbFDf3_QsiF707HEZ4C6-BJyAQVSxu-XuopvDU1e-tGqgnkFAxOqp4s_rnWUQ8g6d_Z0o7cEbSU7quhSzCsOg0koqYUCiBqtJA4q9DeOTwhaVPdH4fp-dzqIFlYGNOFhsmIE_wCiaXYFnzX68HQfRT7pC6-hY3h-YHMxV1k8AmK4nWSdvYwKWOoVHDBMnVFm92yUBwSo_KxuoaQQYu-m8EaHbyAVAnJGz5R8AfLoms-YAdHzRv8qQrCOcb8dqChBLMpuKb8eF3HIt2xp7iTvNRVuF_9bCjtuVChM5jnQKypOxA26nXzkTc5ZqvzzjPxbzSTw37gJgs1rdnBIkJifqdTavsLLAs8ko
 
-## G36 — Avant de coder un écran de statistiques, vérifier que chaque
-Rôles : dev
-Date : 2026-11-14
+## G36 — chiffrée
 
-Avant de coder un écran de statistiques, vérifier que chaque distinction affichée est bien enregistrée en base ; sinon ajouter la colonne avec une migration qui donne une valeur par défaut aux lignes existantes.
+Chiffré : v1.8c2nPqCbumVzx9c5LFiwIb8FmFtjM_WV4Q0PHDO6nSiEw7xEzJMaUvFEC_xuz8clLs3AS2iykQ6a6sXZy_85-2CqgaDceBy4Ljk3zF9pcBQJI4Vp9NajVe0bxctQVnV5cLiOw0PbvBYGNYRE9Y9Ph0Cc5J5SxWw_ilhRnPUQeWEa_gf1IIp6ZMALMtkgyikMMN9FUK3r6_8-9BWn6KLCLbpfsGlhT5hmTo7Elx5ochcCk8iE_A3KdJjANn71u_9Tk-SGlG4CXLSLJ7JmJiGFqWx2fAYh_Uqd_QR5_iPE1vRyQidrCT0Hiit2o9WJgd1_Qn62YIkkPhEzVIYkkou07HA5kJQkvBEi8g1nQt3b_w-YJb72Rk80MpvI3BZKGuwWqi9uX0U8MfaOdUubOa7xtda9AQjzE-HljttN_Mzy040heecHNwQgTN-Y9x7HhFk0auX5tp_la1btAXp_om6ntbHFwqw8ICnOFkt-fDWdyK5rJc5plmwurGGFkc_b0Ix-WG0lbXcZK1o
 
-## G37 — Avant de lancer la livraison release, vérifier que la compil
-Rôles : release
-Date : 2026-11-14
+## G37 — chiffrée
 
-Avant de lancer la livraison release, vérifier que la compilation release passe et que toutes les bibliothèques utilisées par le code sont déclarées dans le fichier de build, sinon la livraison bloque après la vérification de la clé.
+Chiffré : v1.YTnAYCpN93MZcIFtkD3P7fDog9cTPbJ8IARQLPDDFyTg6-zElpx3oDc_eC_ZlWKuEa5o-hbrdJJ9WG9eHceS2fF85B4Hd9foG-hj-gSd2sww0xFAQ02fBfjoM7Y2eCyyeeMDHT2U_qordOznuMqsldFVMqDyoUdd1BLk7bFiW3h5qBfNmpyMNHUA5_pg0nsHrDQMvmLi9hmQTTAxraNM_unBqna1rPY32ekgYd9EWYbtBsLkmJF0Wtdw4-pkM3Dhbh1r1dOKfV1n8CaFRXtTsthX-67wjtEFSuoZDdlIhH6-XyGxNpVae4gM35lVSRc1hq-LNU31kJ7LDuN2Tk5QiBQgPpL6ii-Pi5iY07mLif0ku-IWq7icDnC3dkCh2dHSbfxTU-4uN0yayr7AO2kZce61Bna4YJa74Rm5uwXms_uGPo6MPZCFPmVa31YC7I63cUmQwCZBlSlmEE-QWRmNCgx1Fe0hE64kqrX0tAAxETRtaXgfDj7DFaoK7J4VZK7WvxTgq_W9r7umMtNoH-oqzRyX02so17WPh8YJtBzuR0RLpBru
 
-## G38 — Une tâche périodique lit ses réglages à chaque exécution plu
-Rôles : dev
-Date : 2026-11-14
+## G38 — chiffrée
 
-Une tâche périodique lit ses réglages à chaque exécution plutôt qu'à la planification ; changer un réglage n'impose alors aucune replanification.
+Chiffré : v1.QQFk2vRMcyUjFV-QTx5PkLVBf2UT0gON7C2rlbDRmTc6pD5VeVVVKxfRG8NMhFY6tarvNfScrO1putZkqIGHpiWfBLJ8OneEv1o38TFnBCYzVo43urMr49N3FafJJivx0yMQR9JB97VaqtE4smJt3HsRUkIHYrCCvKizlTPb4sT_I3gyE5ZLve0T2lcY-dkSKC8vAN8Tu7DG8VmQpubFasUAiJeJbCrxhk6_qHWW5Ieu2xKUHKUmkM4Tlf4XCv3JHRd9MZiQQ1j2TNJISqz7uohej3EYz-umw1NfpjPhRyYANXLq61wevOHmoHpclxpW2nvDOdko8CzU1g-1AvWF6mPg-ChNuKVE1CITi_rEk90xRMAmMNsQKVNpYbXCAcPU6K58Wnqq1GV0eaQLSBlLBQBwY7-aXHQXj1_SuwnG00j6wyCes1k0s2J4sik
 
-## G39 — Une notification n'est enregistrée comme envoyée qu'après so
-Rôles : dev
-Date : 2026-11-14
+## G39 — chiffrée
 
-Une notification n'est enregistrée comme envoyée qu'après son affichage ; si elle est bloquée, elle sera retentée. La logique de décision reste dans une classe pure testable.
+Chiffré : v1.qLDiewZhiFG8lOepqLyM2rnMCnvedkizBJk12pH_y1H-tlL_3P8ix3cjZ2u05AH08-yIJ_bksaZiBZzxlsi2Qp1_XRDWdwFGsvZw9kxcZklRGD8ykdQHDYpN7gdGSERPAum_Tjac4ibI9P4k5BmxcFZHiX2rnqjdE0gURVDVgBYZGMqzl_FT25j-VzN2i5GT7qeN3aWvb6JChNA_taxU2xafonPCmseTnTLhN_D8VlEcVC44Wv-eKbwusVawIeVuP7ZZ6UM2Wc05nJhZUkzew5DNkanmYOmUVxk9n6-bo20uO_0n9bbZZPZ3Gxvl_OJZdaY0b6zEOJ3xnf9UPiD4ruDgeDPWQOSqP3PdN5LSUAcnc49UwivAZ0-HqEyGsKwcfYVzCxy9lcGkC6O2PYKM4a51RO6T59O21iZRiheyCvLUYwIimFRTPQ5JVxzpRe0ih-ExJpzeqxOAPWJ-iVXo3QIzP6Qw
 
-## G40 — Tester les calculs par période aux bornes exactes (première
-Rôles : testeur
-Date : 2026-11-14
+## G40 — chiffrée
 
-Tester les calculs par période aux bornes exactes (première et dernière seconde) et dans deux fuseaux horaires ; tester un observateur de flux avec un flux partagé qui émet plusieurs valeurs, puis annuler : l'annulation ne doit pas devenir un état d'erreur.
+Chiffré : v1.ya6KfP17Anl3kEGva3NEATXFlCw6-bprFUjWHAvpbBe-FODSlQ_uETy2dzhQlKsb_eK2u3agYhHyPiGV0PnJCRVoABI7E7gAUrbJBo18dwlv0z9qZlZ9pdn5EaYsmbq3XSMBW9V7LqW5jgJZ1EAG50ZRUM-LE5vdJXh354Ln3elhX1uUgdU8IDlkc2S3qzZVhJCApmDxJCO8UHraPiAY-scrOoWsPo4XL7CtO85Yzy1xWU-h3WJo2PJQovDaH7WPXuzPfySJ8_X-RzsNT5E62EzVbiKDyJZ-UFFahqtp_sdgkWK9fQ4b45UUoZEP9BEyndABXQqqoXjX-c4onX3_gwcH9EPv6MWGwhr2AuLTrm2T3P4xosDi2DqAK7jwSMciCVNfX-_0Wk1zm3ENqPb75hXhQ29QvexG-HkwctNt2gCibe7qoHcu7gFQVcJWr2ARbSl77cRLVStgO-Sfxu74Glbq2ZnIXQf38c0GRy0xuDSRdk0rDJdCEvj3vnUwZbYRzog-TuFsT-1Wf0jEcXkYhXfac5oCZLKEUaPhF2xOPVjK5zlRnY0NfHLWglrPFU-dW7Z7YIJy9zDpsw
 
-## G41 — Quand une valeur de réglage est normalisée pour un filtre, u
-Rôles : testeur, dev
-Date : 2026-11-14
+## G41 — chiffrée
 
-Quand une valeur de réglage est normalisée pour un filtre, utiliser la même valeur normalisée pour la requête qui l'alimente ; tester qu'une notification refusée ou qui lève une exception n'enregistre pas l'événement comme envoyé.
+Chiffré : v1.cQk6bwC-W-8FRwLTwEAD_h-BgXqwAh0NduPWZQwC5jNuLOAzfPCUdbbHSGNB0EfWtOmu9egWA0Fwag8I7ZAYiCvBjaAOjKmGfGcEARFcWqV5pCQlUztjPOKY52H6Jn79j6rv-_PF6oP1qO2Ka0uR5LQGwAdpfZcJWpk3Bs8ckmc6FL6UUb_l7Crrf-KGoNVz0J8BjmR80YMrMWUrZ2kAjl-J1kIFy5JEY8PFKs9LmqytsB6ktRMINDTg5El57NLJRBdKQjkqW7IAVbIc2JqhbUBfGo8ms1VE4sDMzy0sicGRSzYNti9mu44WG6v22_cycL9b669n9mQNaqc99IS1S4ypEL_lcJ_9QdKsoSlHIhcRgCly90sDMQFMqqb5OoNkp1NnNFd_GY0wIpxML_hk8XpNazZmIu5PavI_l9p3i_Hx2moWZd7lloZ_mMYpshq_r5Gvbwo7_gCGC8hoDU8fxsOGcl8EQjPht-QZcdTkF7jayupn8ZchQptmaycYgOkZZJZJRTZacedpBxwS7KGbiubnUcz9HhksTeoELalRG64mAQGonoaZFHkCIw
 
-## G42 — Avant une livraison, réutiliser la clé de signature précéden
-Rôles : release
-Date : 2026-11-14
+## G42 — chiffrée
 
-Avant une livraison, réutiliser la clé de signature précédente hors dépôt et contrôler son empreinte contre celle de la livraison précédente, avant toute compilation.
+Chiffré : v1.QPlAGiRUg-odQWjL0_y0cD4opgEpFkhZqUgZgmjmeYp2VIY3DWnc3ks78KMFg--CydFfNmj5FFgee1jEnla32DgWkWDsJ9RVYDbNB3BLJokrvgmOHi7vNbTpExhGLpJNlkY5X-LF7XodanoqLzDnTrc_88Lc14fu4hUnQRrpS7-EjaKdpv5yIv5RahVmZQ6wjsfGA-8JlffBJPluuNJzQmeos3Z30yw8n9KD1mrC_8HArDsEMv-YpMX_xw_hYokKtCRfOBqvYYdQ5DVP83sYlMEkvDYXDEdLXhE9qbP_V9asheTqMLsQsX0NnOSztfEj0svrEpJbD7sLpRmyDld6eGjm7tWu4uAYYQ0ZQvmGg4Ahbpk6aozaA9Gu1w39dz42Y8emSYGXm4w8wtgyCfqhPjHBemDOkFBRyDQ2JTmdB-AoTVtbSpWzFb0Jz-IuLSUkcz8sQURiPJwEdKU2CtvS29QkG2Qj
 
-## G43 — Si le build signe déjà la release, ne pas re-signer en exter
-Rôles : release
-Date : 2026-11-14
+## G43 — chiffrée
 
-Si le build signe déjà la release, ne pas re-signer en externe : vérifier la signature produite.
+Chiffré : v1.aTvUGTq_xJNVK8gSg5y9Oy9nol4bF746i7_cMbAu3kvAxf8cf3RlRFo8HkeKtsK62sgQiJJLTIlqQ9fQVz3BBQM_zhsSA6AtdgjJ2_g0e9UXI3Oz_dQJMSVJR_RBZFddBI6jJwHIC_rcLIovJJVKWPObmgMbi82gbDqK5qtJqin7rFNFhxjh63uolNi6g4Fqh-3u4Dh56n-xJ9mv1SqJUeJzC0TG6rkzuWQfwmPP2BB-V0733-aCCsQJqoU06jgnoxuWyde6x3gvlTRTNWSuSHsRx0RlmOAKOCROc7qW1_3MR9fDxjhgIo2jJYqvbZg6hiB-vHeK84ZOYKVNd1Sd_p6Y_yTVLJB7NOkqQctKghfRM7vrNyS3
 
-## G44 — Comparer le schéma de signature de chaque livraison à la pré
-Rôles : release
-Date : 2026-11-14
+## G44 — chiffrée
 
-Comparer le schéma de signature de chaque livraison à la précédente et signaler toute différence.
+Chiffré : v1.q8W85-Y2DcD-PmVdx8Epqllv4ODZrVApsebJ_Hi9ePRAJ8-_LCuaOc2EGxKRHnem6KrHVd9uMyafiiHyrUF33MoGtUvcDp8iwSPJ3kvQCB-e8QFX8-etpr4ZAXdGVCmcPiu9kGvuz1s6_TIeVleyaZiBz6A7CSEiIodybL90ZBppyldFBelSuCmpa9oI6glAvf8lFu8FsRBT_ga2cuvGUNxp8VP_3MgqBOoDeoBSjmBUx-sv7XoQdblqG1yb5zitjLx9ybeuIqu26w1iRJCghdQ6b0QVckwzQ0q1enbxD9rX-EgXfkyWetkiu0wDo-6Se0pLTruP2Wl7YXpAzuc0v6awHV3X_8t8IacAcRyilI748DrQnkOfZxhEXQ
 
-## G45 — Pour les tests instrumentés d'une application mobile sans po
-Rôles : dev
-Date : 2026-11-14
+## G45 — chiffrée
 
-Pour les tests instrumentés d'une application mobile sans possibilité d'approbation, encapsuler dans un seul script la création de l'émulateur s'il manque, son démarrage sans fenêtre, l'attente de fin de boot, l'exécution des tests et l'arrêt de l'émulateur dans un bloc finally, avec journal écrit au fil de l'eau.
+Chiffré : v1._DfGFmn8Zs2Le5N0h1e1BhLOYGj_Mu80Xagi-UN93rZsI-TMNhgCEnu8W1f4SPL0XVlkMdJhvfAAvSDZSs2zWSjaPm99fn7bz10zheYi2IkNeUtmNEjNC5yGv8wB44Xpjxwo99h9W7dAg99ShbYxvAprheJfS2A1F-rL9lvGOGnx1oKSigUnPh_vtLsnz90ZeF09DjLdzz-i-8Zmuluev5mMn9DfvF4M3fV90vYY15NSVk6nRloBVqOcwc8iNvPDd3vaPwAzkExv69aBMI8TdqroRP9s5cyXerSiLnMnaURbIXZPZKuPEUgbQf0HAtZqV10q43KMdv6ucxLr_nTDWE5zoW90JQnEkCStcoh6aUONHYf--evIvConr2otU7EI25ILajA9oZa5THEBBmHBp0umeWUX_uGKCkk18bv-7dVdgAtUk0G2mYF-VnwfJzCg78ADbOkHA6IYDTMIiyn8ZQJI_ibIjROE64TjxQkSpovWPH0_kjGIt625xdLRrZ4oLeEueNv7h5BDFXh5ZyyqV3Hng9_s--AgQSbCp-E7IaVYYZLZaMxWU4fxCp_tG9Q07uZaBocRq_OKYWef0XqYmJEBjWySHhSQYPRv7srE9gN4X967Sg27QYYVjuYKcfTsqGtEtwu3RN9CBrUCeF2zDVVw_IU
 
-## G46 — Avant de clore une étape de tests instrumentés, rapprocher l
-Rôles : testeur
-Date : 2026-11-14
+## G46 — chiffrée
 
-Avant de clore une étape de tests instrumentés, rapprocher la liste des contrôles encore ouverts qui réclament un test sur émulateur de la liste des suites réellement exécutées ; tout écart est un défaut à signaler.
+Chiffré : v1.DNHKoDd95l0PjScbfz8Se1HqdBXHmfVtfF1IUV3GiuqEJaMvZnHvNzNzA5_YeZauc363pz5uBJlh9OUzuiPmw_hDfi0bjyGbc2Izo9MmLqzlDOwHqTUKKWYLCPRdkESh4KQLxlmiOZ1VXkfOlUMLk8N5TUUDiGpxjuVPCZmV40Dn7gYAQ17UIYD6OXB3Y0vyadcPb2N5-kq5xFRrTe0U3vTqPclpgb8lNbfDX0iGU0-gnjcoMqEu0CegpdaeCpGiFCnWDr5M7-CTxrajL6S3wuIyX2w4LJVSd3JRp4G0qz807muq8gF0zwzR1j5hBVAbx2ArGjy6FntHPWeIJeq1sk3-dKd2K7frp14RwKjcmDGoCHv-e-vystnFME71IGzej13bPE7achyDxGAQpQyFNb3vnekYDJpQAwC9PJK4WUZDJIGtp50_kyll_HXd0NT0eVoBGwpMd5tIH4wiZQ6lrMjyBFDQ_GKZ4v-IIbKm3mTvIy0-BsFKjmiUrkVeOAE4WC2fxaLzbbwcIwyDzK-IicC8AaOXdg
 
-## G47 — Une tâche qui doit compiler et signer un apk échoue dans un
-Rôles : dev
-Date : 2026-11-14
+## G47 — chiffrée
 
-Une tâche qui doit compiler et signer un apk échoue dans un conteneur sans SDK ni clé : la rendre seulement quand l'exécution sur le poste équipé est assurée, sinon livrer le code commité en disant que rien n'a été compilé.
+Chiffré : v1.imhFsz9JNRFcV9x1gNb5-1nib3ZLqQMCDfxQMkoacbLqlI-kEAsh_KHinMeryKkHLx9MVMeJkMnXB30PaeFQIAWXSfOLf4q4BcpFYJMJrpIelenZLR86y9FyihLgxBjChsgmT2NiHOHdiXAEzeTcN2Bzx3z7uC6Eau5ywzl-DrqEFuO863iI7wtnV68yih7jYMSlL3e4ZqUAy_wXCaT-pz7g4quh7o6YUTa_bBBCc2laC88N8PUji9Yfo2QROPp1aN4G0Xt6JXRtpeVFy5VlCn_cof1A9VlBq37ppRSn8ErCabXyDt5avI_pnJTlvr3219I4fI5MNqoMY7-X6NnDpGX5KbOvSOAvdTDBeW13qikNpgs346BjzKFvArHGKvwr8FyImJQN29NfEqxhg6vURNrt09FO5vszdED9koOGUsWL8wz0u8iy61MPQ7PqeX4uNi4MgF7_QPHHaHXlWI4cgTEkAN7qyVn6mF1ZykQiidnjgIbFCJePZXBei_nfAC9fUxbaRSiihVwh74uc0f-UJKoJRLjwVW9nxg
 
-## G48 — Pour des tests sur émulateur, regrouper dans un seul script
-Rôles : dev
-Date : 2026-11-14
+## G48 — chiffrée
 
-Pour des tests sur émulateur, regrouper dans un seul script le démarrage sans fenêtre, l'attente du démarrage complet, les tests, l'installation et l'arrêt dans un bloc finally, en journalisant au fil de l'eau.
+Chiffré : v1.H0-olVCjWmOynQXuhHt5Hx_SoQrha6s0lUyVhi3n1dYdLUos4BXmJFKGeibSIc4u4uyl7Xm5yOMRFvNjCmEgnKAcQBF_40YgVMQdSUdKByQARuH3vnr8RMmvXAiP5se_bGfkMSzPw0pxuPQOjqq8soUXKc6on9JLSoQabVeE_JvQXsO0da9OF0B_ZNBK3x2HFmtsWLYx1fzuw3PWDIdUZr7bOgdgCJoTIWg2hpX6qpAJ2EFQfqpPeVfJ99k5-3yiyqbgBt2ZpbeqxvGOBtn3SRqFY13M6PXWCpRY1hAl3mQbVaxMyzfNz6GAyZZ7wdPCzsBqga1CRnYY-roNG4posfppdjOZDL8KeTGHTuDLvQdcHvftVXUJuQSz6UJJIPQcyrYwNbdo6fvNbKAdF0mkf8PEiL_4nibjeQ2-nrFQxS7rNoR3UseA6bb7EUzHY5-FocIiqn-aZd0fWCR-cX0TnWaGbXLhly-OZLfUleTjtCJRyzEy7PQFw1yRZ96HYbBnV6qscUo
 
-## G49 — Relire les résultats de tests dans les fichiers XML, suite p
-Rôles : dev
-Date : 2026-11-14
+## G49 — chiffrée
 
-Relire les résultats de tests dans les fichiers XML, suite par suite, plutôt que de se fier au seul code de sortie de l'outil de build.
+Chiffré : v1.qYrh9tTAx2gEXxVxUg9M2BHXO0ajXCsI8KTqgX0ayT-ZdhacnrN_Lt7JQ9IoSJQf9Z0aJDbZ2P57TCPVLrlPCpgUYubpcgIE5iglUKw0EKEIf-cmuoaojT-VDbSKtp1acika0MOGZbdgfJe3DEkftZWrnlFrUNIfIzL_HHLtR3pzPAPghbUWBtoOnZoFw2itYbwAZjRoDAliVOCYPXEB3RxzQ-Md_TC6vQZ9tt67t4iYlF72yoMfnNE-ovi3pGWCvOsqfmOHvQja4XbijikGFoJEQxJNVSa8ZSILaRKFztSlyeGOT6olU8xi-l8ne6FsfCO2tSclxcSXV-29lS_VHtPhMabm5FWT-uAGLYCFmX4vgwa9ZVxykQLdFha0qeCLFRo2gsZ5jo0_Us9Sjm20cqNrEQRmFmia
 
-## G50 — Pour clore une étape de tests sur appareil, rapprocher chaqu
-Rôles : testeur
-Date : 2026-11-14
+## G50 — chiffrée
 
-Pour clore une étape de tests sur appareil, rapprocher chaque contrôle ouvert d'un test nommé, puis vérifier que les comptes lus dans les XML (toutes les suites du fichier, pas la première) correspondent au nombre de tests écrits.
+Chiffré : v1.47tRpBPkZzT5WDD2y6npIvPRq4G1g0lglAdA7mGq0hVJqNuS9XQXsLQftU9_WX5KxRpivad_T2_aIuwV3ypNrPILevQkoq626fV4H9qh0lnc_lXuqU74qPO3_Z-uRlcBjaHLW3aG7jnmr59jXJyINCcYfNd7ulCwE3AaBrj4f7AdjqMyxxI9moHYU47fhNPvdLCt1TztYeCRr_msMRPrPKmFnJOTpz_FFgX1aDsv34GxiWn3Z9b7TVbijlDSgGvuJ5hk7-YCi1-PdL5uGupcKkU4dr86WxpF-JXcS_eqBnJqf-2J95A7IErDvfSiAE6aNOigbrkyBqIjev8Un4LbRBEjTpNfZ7iY3z-JTUrhJWVDGx2LrbXKKu8cZRgwbIo9KFYLP0rWBns7r-UhBOVkroK3Ou-kXEIHP2yUpD5DOlARxQjpGC-K9Jxci-3FKGzxaiDWfysgEDKXo881hWhzeG7mVG5NxSnFf_XiGN2k81T-CdTZFxgLfKtf07jjIoXttb_hocD_TuKtYQq_zt6O89mNL4ffBJXcRe0AH0YSpQ
 
-## G51 — Un message d'erreur d'un écran qui ouvre une feuille ou une
-Rôles : designer, dev
-Date : 2026-11-14
+## G51 — chiffrée
 
-Un message d'erreur d'un écran qui ouvre une feuille ou une boîte modale doit être affiché dans la feuille elle-même, sinon il reste caché derrière jusqu'à sa fermeture.
+Chiffré : v1.lqF8Cz8DVLdsLMQuoA_C8ITL4FaCSCCNFBGD_iEELmwaqlxp80x5YMqYiDj0nl4iVw6ENmL4g-Q7AnbnW-amheIyQwpBbdFKAl4UahGL-SfG1N5R3ZNUYNJnn100Q_ZXs-W8iENGqPpIaTexS9wINs-Bfp8o44G3wReiyqFRayNVJJmCj2xmsQPgeQsGYuTETwXr_bGSGVVma9sb4Zzxc-KvoejAwWq5qrP712il7elpUdzotZr3dqO_wQusD8LL9PsUzPkxNH35xCC4OSzoSUCvKeZfg7lxEQ6UUZJDELxteEW7Tgi87AaAbQzXOr80nGbJIQ_fgREmr-nPbA25LOKa8Xnr7wTlGYYBFlDwxMKG6EJG4r12zlvIS0uD6HZDWqcM6agKugbJyPBEBeGzVEdukdqAhXEvF-vQYnurMWyKs-o57WYMtDuPUbFDmIexQ_xJ58pbbmfPkY6dNtCugjIjOSY7od7YVz4v
 
-## G52 — Pour un écran de capture d'image déjà maquetté, ne dessiner
-Rôles : designer
-Date : 2026-11-14
+## G52 — chiffrée
 
-Pour un écran de capture d'image déjà maquetté, ne dessiner que l'aperçu après capture, les états d'autorisation (demande, refus, matériel indisponible) et les erreurs d'image (illisible, trop lourde, non enregistrée, introuvable), chacun avec une sortie de repli.
+Chiffré : v1.NZyrdkNxmANmthL85fVeq1QDA5mYq1leOQB0rjtPRrC2NVBl7zuvZ9cBTcRfO_HNEvT0SUGhUhI5_uWk5eOVhEgNkckCtY5oX5wXI-p2aAB_uIgZYqdvyWpVw9dX8SM7mfEWcWFWClwvPnmvWmyiHi4hmqDQnMcnrrwYz6DnMUqqTGaOIVdRqWGuyhhUAnhfICL1ROrLAqfr5flFpw3liOEDelTZNohii5udwQneU_gqFSiL66j6gqXcT9Uxz38OBdIlqHypnVD5Q7FHm2-8GlXVJqUdCc4T0VMKTxTJAMvmBpv8wJlRJWODyjzDP00VYBS0g70U10GTtJFYmhHu-TVPLdqJEoWrmJ4g-9G_xIn0NsVltTLfhxQgPS9pNDWEf94xoNcTS3tgZW1Ns-qp3Dv8ITs5DvHO8pKlGbzykLnwyc3AShhiCdKommmJtcnEO4RjiDdIkcTbIOmJ0be6ZDkPDemXfSbR_EV1Zs3Bx92awiaztPLBGeGEFVvyRCp8dKKuXEI-cTbCekAQ7CuLmDujW782aaHD5h6V5NWKqzv4CTUAhoI9nG105J8z5ErlorR1jhDYNDWNyS_Z8onnBXkhpuGc_UU
 
-## G53 — Quand la chaîne de compilation mobile manque, mettre la vali
-Rôles : dev
-Date : 2026-11-14
+## G53 — chiffrée
 
-Quand la chaîne de compilation mobile manque, mettre la validation d'image, le plafond de taille et la décision de permission dans des classes pures testables avec des flux simulés, garder l'écran mince, et déclarer le code non compilé.
+Chiffré : v1.AQyrIcmTnSzqO8MUJm0dXXxMa8Njwc9-WIAJ-XhFac6o8mY3Z-Px0G5PKwx9UikZA5S9tAlafLS99jroINDdKYRSX4m95kfN94D0fEUPKD6gyJecPGZokEPjPw2lsuDuvqgpcKl7cgwbLyVDi_qHbuiS4VCd4EauTTcwminDPbh-M1nMh6Nn5VW8FliDl9ND4zoqHPXQDir0DhTMRKIdsn0EbMbXz059lvGjtKPX2TqLHM7KTE75StmxtAxNZi4hC8j5Gn_bWxpuAAD6YlvjzUs5G8ZWKZC-YwgFDhbUWJdrYK3AIxoxo_IARtH1oM5YGRWHZHftxcDhlhghGxQpAtg9g3Ao39oELO-I5aRI8P99FToGrSjUK6U1BCe_-F1ZC34fOsKd7PQXWYv0Sv1TG5_IEZDpVYpTtXYoAYXybOtqY-Sfv08CaSt-cFHnTSIcnwhrLcB71Q_YhISN0EHoVrQbT_kt__l7-tuY6abKG8MbmeE6rhmBoG56ipllm0XMAIrix8CtjY9ZJgoDvTO704urWlNWohkFFCqNI5gk7HUI
 
-## G54 — Si la compilation des tests échoue sur des références non ré
-Rôles : testeur
-Date : 2026-11-14
+## G54 — chiffrée
 
-Si la compilation des tests échoue sur des références non résolues vers des symboles qui existent, relancer une fois avant de les traiter comme un défaut : le cache incrémental peut être périmé.
+Chiffré : v1.EykX-qf8P3o8hjMno9BupuDJGN12LgRHfLf_PJlHdtU7UEqfIpQ6RVUeckPdQX93tJ4eyvnlzMyZSkPLOwhrurAm2bdefEiyjH_-jMbNNt0CKZG2SC3CR99Qh2HEkQhv3Ab4aIh5ROa1lq6yI-Bs654CCgNHCprSVUCjv2cAoocLYGqvkxtCh-yYEIxLA1d0oCyaMZ1smNcBHBHHWj57ykczIqVQWrZ73KXtffWXfxkUB0Rq4-CD_TNyBHLrCJcQ1KreFsjnI7oEFO061GNgDK0baQclbIC8toHcUjqFPtstlsBu3_6OcNcRnFIvDE4S6DIv3_ZEKirjNjf5chFL5Nk_v9EtP770i-Xdh_jeOn0MUeYV2xU-p2da-ww5a2cYqk4BsKMXkEeoGOHEGB2GF0QoHf-iZbzpUkM_L3i3NsYaRrlbzY_g7NEvqmu56hCLQpP4X29HPXxXkGBlT5OKHK2BWdIQCu-nULxNC80jqdWhD0j2lSo7xDF0xVsQ3lDYtg
 
-## G55 — Tout téléchargement borné en taille passe par un transport i
-Rôles : testeur, dev
-Date : 2026-11-14
+## G55 — chiffrée
 
-Tout téléchargement borné en taille passe par un transport injectable, pour tester le dépassement et l'échec d'écriture sans réseau.
+Chiffré : v1.t89X_1MQkSwqRglb2zYtjZ-Xi9Rd9j345r2G_AKj8nFqrarceHwQX9kRXF5nSqta8gnk7m7a7FdrP_dNF_55b7qc375vXUH3sTXakTrdiVSgkjkkBzBPHPQ6PsENZQ8DR4yd9LfWws176yqNcgvRR01MxKUzoWjhmWZz_AgGFqG5yjRVcX7PkDvSJAorYENaMy_DuDLrcTOEFz7u_TyhOjYfsRHzYbVhNk3TYrjDX16WhrGUE92azlP_KBerNJSvHj1_wLBHJWjf3KRGUlOSuAf5mZhIRieHjUpjlAvTdUAIXFoEE1_bkgkU5ZTjGaQm67gr1ToaWeAh42bNI2EtHZwNBXfIUuMXZ_cDhOQHM8bBMHP3vgnPJCxN8fcxiC714kdq5EaeNRNNxh-0WY9MrlUl6G2_cfEeddFt0JYlw-TM8L44ypb2
 
-## G56 — Pour vérifier la présence d'une classe dans un paquet, lire
-Rôles : release
-Date : 2026-11-14
+## G56 — chiffrée
 
-Pour vérifier la présence d'une classe dans un paquet, lire les noms réels dans les déclarations du code et tenir compte des classes générées par les outils.
+Chiffré : v1.zBFNvig44Ealq9wkD--AsR_dxfGpfRa5KroK2fnuycwEeDMTKAl7g4iGcM_DOLnxuTqcg7PxPFRo_BHdrx2aItvs9-ThtqNPtNHFaedW0fkokSZzSjGmLbdMcFuX2elnRfuHO96s4hg5a-gMMQ3rV05bHfZlEJ6vTs_WbdYGNWGQEkAYym7QQBbRlQhzhwRPan2oOOhDu68CDfR_qRXqMJ0Z7-VZdRqEnsTXCA_9m0IV5szj3vwenVi7jwsqIoQgdmDIo55-fmqJ3oxuI8DjoKf3G44lKqORD4zBDqfkRayg4p5GGXrpxTylcD7x_jjJq8Y_ZQnDQUxcX0Dhwv8JaZF5Eb9dLkoTep7QBDQBInvQQkOyW1KaVAeRJF0NPSal-eHYJH6QAqh029XrwPMHAe0hTQz0gWGxrV-s3EPh5ENWMr0o0lGcRooUAoYj5Ch7IJ7RnunMhQ
 
-## G57 — Relire le câblage de navigation entre deux écrans : un rappe
-Rôles : testeur, dev
-Date : 2026-11-14
+## G57 — chiffrée
 
-Relire le câblage de navigation entre deux écrans : un rappel qui reçoit une donnée mais navigue sans la transmettre passe tous les tests unitaires de la logique.
+Chiffré : v1.t8G85kJbUujAgFMIWj7mDCkGmG55FlJcSZU-YrNL_ycm9fNaJ74QoiHR9xQKWHo5xofQibseW3mNPYSKwrdl-Hr00icZfdxCj9qO4qIEGuWxBe4j_SedYKZt-Y5_zPbpgA43hQPn9LrrgUjiWG1xNTfShQIJMQUiEaHznQdYw6WRmZPiAKcSJRHT7qoFSP-arFHvKCKmoOZILem-QaI8bI131wvhd2aTik9rKxxjJcwMAn7FerOvaqPWYjJ9eP4LHdzxmphAcPNwkEVhrgv-kiRG79JnaqBhcS5Ll9uOo6BULS4CvnihBb1HI17c9Xedyxj6yAaUOwjfh-vd66HxPhFoPm9D-aeEsXePMLzRfDFhKRzpQWwOpoEDdPvB84706gtY1XNLB70q_8DAyTpu2B4r7ziYhRW2UyEPMiKi3X9r_B9Vh8z1USnfx8de4gtPAKxut4mOfvyL2XNdtQyQBQg
 
-## G58 — Les mots de passe de signature ne sortent jamais dans les jo
-Rôles : release
-Date : 2026-11-14
+## G58 — chiffrée
 
-Les mots de passe de signature ne sortent jamais dans les journaux : ils sont passés aux outils par variables d'environnement, et seuls les noms des clés de configuration sont affichés.
+Chiffré : v1.IJGSR20BUcW920WDlDag8bOZuN5Wm1ywZZLnVkDQHCzqgZL3iK-tPXV5Ewb40OS_eGarXgKN_mRLFcyPQGuMk51vwHtoIqHY6YDxImsgmhr1AH21LyZjusUp96PCDBT5Rs8M84rPpVsfAhEqTOOUByriMNfX-hXgkUgdEdvMbi95YqEccpNOjPLj7AIwyFNvopPDlRRncyujgcvxTmXDdGGtU5NJlnLATMnhCJXxxTvfpJb-K4oFm6kGfwHvEqU7TcXLHTjVVgKi8FIJlx45z_vu8grm8FSsD1mGdO_FofH5fEaHmpyTH4Vd_twtd5KjEnGnlTnxoskYnS2Pxn5b1LmoCHZp7kPY86y-uGkMgnnreHgeVkku59zM9AmxMkHvHb_srlp45WYP9V_NgqWuFgJYkzJ1h2oj5GWvhn5Awi3qDTnk6YPs637l2LZs4RNCocEpjSolJu3D-X3c1Vc25HhpR5jx91FWZ9oWsnyQ
 
-## G59 — Chaque livraison signée est comparée à la précédente sur ses
-Rôles : release
-Date : 2026-11-14
+## G59 — chiffrée
 
-Chaque livraison signée est comparée à la précédente sur ses schémas de signature ; tout écart est signalé à l'utilisateur.
+Chiffré : v1.DtSWYpyAwaFQ1sFhDi7n9WipqD-5FkUEvqwem-1APtRMf5kJLQfByeSuxzFNVxZp8Tulj7ztaHNr7_bij8if7m4L2OMzSG4L5l05ZMnnfXZrlIFtaL4XHg3sQ0lDaFGGZj8yKWkkj_NrSaftc4VS9ZBzHEb2VY_U2lnIxu7yU3LUvHQSWU5LB_pQJLwUSXQG3xNfRPpJEdlezVhGquwS-A7WKdgT_oiUZf0dg_3ZNrUzFgGI5UOTDD1hoQ1LIA1O01ORvezgY1OrfhbQ0KIFRCDadwiwQuioUm5R6TU1-15ilZMDiXsDE7MVspc67cL0ZjVI16KfXbLZfGO4BOcDeA4iH-Ippk8F4JqrrF0PZqEb00rUVERdGYGh6P-rRJAsr1e22h5SW2jMXqhpZc8huIEiooJxoEDEdsa3
 
-## G60 — Quand une route de navigation reçoit un argument, la route c
-Rôles : dev, designer
-Date : 2026-11-14
+## G60 — chiffrée
 
-Quand une route de navigation reçoit un argument, la route courante exposée est le motif complet ; les listes de routes (barre masquée, etc.) doivent utiliser ce motif.
+Chiffré : v1.2GQQU_ue6J_Zit8IbympLi9YQTTAXJSnTfGwboXfvoHtfQmQfB5Xz1jNCfzQ6pzTpIC9Q4eMGKU55QZCukjL0JsRPwCz--iuUfGY_v_JOkikVgtFp51I7jYlWfGgM5b537-iRGrw-KLDVX3wotIRpk8H49FbHV0ejVJrTa1vQ27RFuCfk4-bbE9hfxCPoopx3Irb11qYaIH_6zx7lvY6LPM70APD88WGOldKtWE8mKBxMOBV7bY3-cCdK7S2-Ji227mnQ-gpeVVcicgsspKGXlT6-yzczQSwb5xkbU6hsXnFKajzdYGmZbmvUsIvNyUplNLJq5WYRtSpFKUHy1HD6qos8v79vn_BV1CASzynXES0MrawMEpgIsnyoqm8Rf1yGBa1tu_bRJDqFVgw7_VXmjN0DPjsJ7KMYUS_hlHogD5L90iSra8xE7OYRjxdbZfMjHsDWBAsixiHKHGx5LalPADvinMuxg
 
-## G61 — Supprimer un fichier temporaire à la sortie d'un écran exige
-Rôles : dev
-Date : 2026-11-14
+## G61 — chiffrée
 
-Supprimer un fichier temporaire à la sortie d'un écran exige un drapeau « transmis » et d'ignorer la rotation, sinon on détruit la donnée utile.
+Chiffré : v1.HzT0NnFwmgTAapgb1El5qZm1KksgHoU5NpYeDzqqvDeGTMl6LFiWBgxv8hXCbhheT6vUpsgrDxorcfSedGm7FWy7wsdGkdxRchbXCZNWZD7tJkALgnunMdt1lbxKUcQAkz12TGM8bHX-1_ppZEssZik30JPGTQNWhhE6uAKHTleDzy-MFrzwdA949v1c0vrd-PmLEUZD1WQoRxD5oPpv2IiQ5UNJoI8AfG3XqE8sq7mKPIchEPCgP8Bz7rELtdo6mIfyGG3X-dCX5DIQiK-9AIR7dcwIYVGuR62FChZNSoDsJWrTS-0xyQKsbi269leu9UoY1sox1PhvbWBAqMQaVBQJEGbmDWmI0zgdnHi54W0pyeSGI_gNq8U7hFof9CrkWpCV94qKnbD29LlcQuVsvlIhGlCdusfcas_QLUrc_2zLLUfdpaE
 
-## G62 — Avant de créer une classe de test, chercher son nom dans tou
-Rôles : testeur
-Date : 2026-11-14
+## G62 — chiffrée
 
-Avant de créer une classe de test, chercher son nom dans tout le paquet de test, car une déclaration en double fait échouer la compilation de toute la suite.
+Chiffré : v1.Ps28XUOCMEIfIgtmsCz1UeRH_20H6PHk4UXI2zKU1B-tMCMHiECbN32SRKoWNg1ZbC2zFw8DtFdCSDiOf2HKWKzkhFizp3edSdtkBiGfIoC7z8DQ5lCQ2OziF2UApqrGuwWCfYyQwG8VAdJo1TIxo08hVEx_M8oDIERcs5cmfK2JoQEpVRZO3Y5YB1oVTdkiqYvjHDxaMWhsWfiWD94VXaz_GR_R7KMU3nXTQfPGCXlHuAkYwUCp7rxOX8YpisqQAP0-JLkMawC2zNNZ6yCQwK6ha-M4cecZfkm6UBdndDymNd5VggAVFJNacqzj_A88Fqbxp-P8TqWfvyxt8yIl2UTdE0u36Nuau9J6WH7fEzrePtEfmfPXDOowSSGWhN8ETIRpBDxtaFKLSvue4XBCV1Pu0hngdbIb7vLfFAZ5Yh1K2KNUJnwhV1Xq22H2L_YKJpgl
 
-## G63 — Pour tester la libération d'un ViewModel en JVM, appeler onC
-Rôles : testeur
-Date : 2026-11-14
+## G63 — chiffrée
 
-Pour tester la libération d'un ViewModel en JVM, appeler onCleared par réflexion, car il reste protégé même redéclaré par override sans modificateur.
+Chiffré : v1.BM0pNETxthRTsFPwDCX0RGMXc32rTGFyYMY70jHNHXd5TS9j-Dli_mDWSJmGqRXnPxXPLK9A3D2005C-SYSC_dlj_DzMRA0hA9dsTFv9JF4KXvwLOOpK2WwZbRCGb2nf6Cz__71U3dPsNJBCLPoy6G2Jx2_HTCQEE2J23GEnU_sQXBj6U_f1ILAOWnyzrKj4IycEUKjqJzGuLX_Vz6y6KOjDrXdDGuyOOtd83bXB89ILLwLajxQAy6w80pL1FoQ6nXLQriACSbtonmRgT7fKjYTSxKBh-tzj4MeSVpj4ZW6t96yJZl_4mW1jadp6rnETsKcjbaCcqw7edPF9uyt0E8evYaiSYKQFQGu-ALxzBDbggt_EoqzEbRHqr8hoVIvSrA10dpMqHJ2_0NW0s4gzuh8IHej8B6OeBbzuUIU9hioIPIpb2F21ZwEM9_3DqaM
 
-## G64 — Quand la génération de code par processeur d'annotations éch
-Rôles : dev
-Date : 2026-11-14
+## G64 — chiffrée
 
-Quand la génération de code par processeur d'annotations échoue sur un fichier de cache introuvable, supprimer le dossier de cache de la variante concernée puis relancer : le code n'est pas en cause.
+Chiffré : v1.qTGXPU43bQurwW2fP6YBzjiNlRDN380n18SYhEEkj_vhR5DiW4r5O6EtnxAECRyc6PEPVZUcE6SGFnA70lPTDjfoBRw3AsVYZIBzP5TKB9fpzbqu1ax5EkgVm2YbXACjmo7rawjoC89FJsPq4qWs1zfw5VXi2zVZcK-UlWDk7TNlAK4hRjgwD3HcY1997SW1WjTLAx0FCU9zZ3qhNySoZJmLRiUGVI206Pj7PCsi2YsnPdwHY8z-Qkf3sXFsyeuxOEDJjPgh1fQMQkVN-02NDFpDLg31vadn57_8YnnIhGB7I1ULkeuaojUUcaLLY2Qcn38a1CKF7aawZnpvN_p21tx7Rt687EZAuVESXn1PrwD1yOSG1Wq1pFu802GBAnNlOdguMFMFCbnt1FD8FexTr7-gZ044PAtWZ_ZBz8wyTVluUtOSbaiG2RgyU1cf_lmAZbJ3x2LB9fIhVbNdGN3idq8GHlyGSXQjftPJNskXmDvGpVRXufVGIEFONig
 
-## G65 — Avant de conclure qu'une classe est absente d'un paquet, lir
-Rôles : release
-Date : 2026-11-14
+## G65 — chiffrée
 
-Avant de conclure qu'une classe est absente d'un paquet, lire ses déclarations dans le code : une fonction de niveau fichier, un objet ou une classe n'ont pas le même nom compilé.
+Chiffré : v1.AZbe732LD8Z9GzRqq4trIy-TVr32yfqHbneaiivIfVH69umypj1vYpFtCtcJbwj7NezCXvAihvBM9Lcolsi0GN_WptkSyLSUtkFInC52fc23XqSg7JqFfsXFBUSVkfIznVwDYaNDSyy8aZluu8f1j3UQzuU17vp-v26ufzizNCY2BXHU7TfP30CMdk-nfjg7MjvkpAvAJVGjBxq0fZKTGXb85CnTTt27UggGF_BaRzNabGb7I0YgFQUZxlCmiHk3WTC70cjw3eNE3ZWUN9Q1R6DF0GsY3zxcnfCG-ktakyT7QZU_qZxyeMuNMmQQSvjDa9Ve_vUHst1VNUY4zriBU6omcz0kW5vGrHt-LTcUSncxhYegZXQ8fpJC5icogm-Zcx4bNpZI_C9x2tITzkegWeUBZ_77p4gXvBa7oajAKPAJdNKSIlxYqsHCjhevQFvxUY9awKOnkn6h9-Ii4jIx7BjHO3TD-mGe
 
-## G66 — Avant de livrer une application, vérifier que les bibliothèq
-Rôles : release
-Date : 2026-11-14
+## G66 — chiffrée
 
-Avant de livrer une application, vérifier que les bibliothèques importées par le code sont déclarées dans le fichier de build.
+Chiffré : v1.cJZC7jYnJ8WGTTM2uJZfjhLVtTvs5p8x6wwlP4Ab4RrQz6LbLz9j8iDdZjNXMHR03mzwWTX-6KiTsiT6u0BxgeNzRwqUU0JYxtl8eMeW-6sySGVH3KKUuBIWBRdfMMbl9fYgrFaR6BciWOcA0fnNFnwY1ZMegDVv_D-ETwQef_8aOldh3tJNm8c5gXBs2ucf9EvRdVpgWH9scyUH8cR9iUndNARwv8gXGmGpeV1MVq-dpIVHKuAYq6DlHsK-aYdxPM0m0d8F6VuusasI8Hk2SS30vgtNh7oj2ybH0sTOMR7OddLTQUaQvENjntGMt2Q878FoEVNWcGsLuuHBUKRt4MpcOpZLhe705PLZ_sN3iHrH2Ygc5tRvpa9VTeXmHMt1-qVgfbKKL00K1qvZ48tFJ6mYHtFvVw4
 
-## G67 — Quand une étape livre la logique d'une fonction sans son bra
-Rôles : cadrage, dev
-Date : 2026-11-14
+## G67 — chiffrée
 
-Quand une étape livre la logique d'une fonction sans son branchement dans l'interface, la liste des étapes doit contenir une étape explicite de branchement. Un écran provisoire encore atteignable en livraison doit être signalé dans le rapport de livraison.
+Chiffré : v1.YCG1VhCWnedH3n2hCijhtzd1iMIsqGIvnarwXMLuW3pD4SMOKqEtSszdQ3kgzCBAJQgXYRSXNjHH-TdFNfLIlSuRqoUccIZ-MAUJNtjBU55A1Jo_Iblqgs1xI7JA_Ew_AS1ilYOdOSSPJlEHxPrVkz5fFMnBdSrts2vwA416sqaI78ogwyRZlLIOwB247v1t_knWeRtLfj6bf5Tb0YXqE6jxB5IfLuWW8Weif1gVp1GllI9zXKQXc9149eDOLOSAA-3gQ2N5Z07Ht2mupKcBCqmR6zDC-ZRFpEzwdk67UnWdmWCEKd2ADIHER7webe3Vqb4PC8o24gY1I1ylNXUuMgbm5GtAVdNn8hry106tyu1De8n31H4Dgowvp-GLEohxwu4iiMi5ebUkMyT_BO4n4WxTOHKikbfVjYNEg8sdmt42VR7Yoi-OEHflDmDbPZiS1GrmXiMqNAEF2UVcAAXKR0pRr8rNWtHsgGx3qNRUy4-8-P7Fpz1ZoX2s_ONTKjqup4Z_m11KU5fkDK69VueDy9fz942bIAqcFot-W3RgBT83iJqmPYhRpXZkZoPR0V4Myp8Vq3dxEaRd-usT-2TGhg
 
-## G68 — Les messages d'erreur destinés à l'utilisateur ne montrent p
-Rôles : designer
-Date : 2026-11-14
+## G68 — chiffrée
 
-Les messages d'erreur destinés à l'utilisateur ne montrent pas de codes techniques ; les garder pour le journal interne.
+Chiffré : v1.74BL01aSLLkTR7fRTfih8OHhkdN2PZBwYJ1wMIE7Te8Mf5cBHx6vzyEtp6zEhtl_pgQK2u70ft2Ps68qzyJqiNszqSOeRq0v5zFONOiR-gn_rRdUN8je72GLZiQwHiYjikzScJMU-Js70rkQPBiY0skWvmLKZR7jdkroGg7AFw5DF9Cm7CHW94e9_wlSTQOdou6bWuuvLteTwCfUcrIX9PJN6kMjVYTlEgnkvmlRHsYgjvhwsjT-BhfMljJqZ2CQDKsivch32Onpnf9bYWlyVe4F8WViCURAxn4Xi567FlRZApk6nO421h6y6lPbRer5Sc8dQ2lJKu2auM2JMqktpm2Eftq6q7GBfyeuszQb1UzORW7fV-zlnFOvlntatqdTdizPOSYtifMfOJMhabSu
 
-## G69 — Une maquette d'attente qui montre un pourcentage est transcr
-Rôles : designer
-Date : 2026-11-14
+## G69 — chiffrée
 
-Une maquette d'attente qui montre un pourcentage est transcrite en progression indéterminée quand la durée est inconnue. La fiche précise que la rotation d'écran n'annule ni ne relance l'opération.
+Chiffré : v1.EFGg0r4eCfPeqkVh8sgcXEa1k-NWGrM05iaczlzKUWnz8nQrX-_13Iw4Cuvn-RDxPwNM0vRHp0KkvKBjONHjEacxRh9GHVzaLV1v3SiAT-WbL4GjnxPE1ZI1wrMuu9ZkRtu1NqaHWX9WycVwVeAqdYaCBAAXqi1JsKQ7_-YeX9gIWkWTBUgDl1JIfLtR3Q-Qn-uGzhkJ2PbMUm8pOpCW6mpSfLiZS0IMvLm7fBR2lqrmpwedc3Y4U4l8_07lXG2D0iPK9kayhiQreNRwOGApEcr_Af39lu9LDt0xyl9-iJGS73wTYpwIN1PmzfE_hWAZV5yzR1BJk9h67-Jiclm6QBgyoDV2Kyj5Z2Me4q6SwQKgXy7yUeFnQ8Rztj7w95K55uGY-QBSnpAmMwtD3YlBRwrY8pFdk2_njZoU4d7DSBqtSthTPj8CeCm_kGBlM9UMR2rBw1XmHQLdhl-jXagR-7y0Tbh856uf4xg9b6tj923XUcYAodb9qs6PqwoebA
 
-## G70 — Pour modifier un élément déjà saisi, réutiliser l'écran de s
-Rôles : dev
-Date : 2026-11-14
+## G70 — chiffrée
 
-Pour modifier un élément déjà saisi, réutiliser l'écran de saisie avec une valeur initiale et un rappel de validation facultatifs plutôt que créer un second écran ; les valeurs par défaut gardent les tests existants verts.
+Chiffré : v1.bv5xgXz1Mz9QpBRday-E8_96FDPxiMSFaF36jW5yYFYf6Wz-fihEnki0tpnJHIwJwQDFs9zB3i1F-tq2jksJ5Pbd90fTZpnEDU3Qj9fvNQdtsTXhjXmowj7b7XsOuN0gsEViLnuQQzIVFP9tmHIqrZBTU0EQalkiHORqNL2VIhU7EaD8s1LScJPQe9b-gBkpq4U7UVUltEc5sBTQBsrw19llPag_meFZI5BDBwJG9W9iFXr_hqpEBIvYIk-VEwLbNp_VTprrmL_lD01LdJSw_YORsJFJ7PLooaoVaFO5O_EzUMb5Zm4gc-TpwRBFjs0koT_xGdect-llqnZdSt-euRjHGq-HAw530tqZxug_0sLHsZuMaBpLilJv959NNd_rHhVlkP9IEMOOZ8DBDWfF0tCtoMrVMAzEMXUXO2qbS2zxVdJXJwqQ0UkAlzWVg8a9Y9wSXKo1MkITUKDF0JEYp3Dc1A1JeT0-h18VCyFKPK7tEuHWHLi3j5lwbSq1J0WiL_kMQ7O4U-AMpnBFyfYut3ZWsjjuU3vkjrm_2Q
 
-## G71 — Pour une application mobile, vérifier en revue qu'une phrase
-Rôles : testeur
-Date : 2026-11-14
+## G71 — chiffrée
 
-Pour une application mobile, vérifier en revue qu'une phrase affichée figure dans les ressources de chaînes ; des constantes de code qui la répètent passent tous les tests unitaires.
+Chiffré : v1.cKBYljOzjs4qml7t7I4qMnY70faqDY8cLv54I6uvdHk2wh6-XikSLA0ZO2G2tjb4bqHZV9fuA1VyKt7SW98cnofjfyX8xSIwUpmysP14dxL-zME-3dMTHrMYed_N1iAXBGDVS2hExZwtqlc7KK1adQRanOlKMKfgug-YIWkJ7pEuYG6OEbVzhGcl8qmdFvNJc1EBshmAACn4Xedmcb-S1RPESW8BZ_fa6FCC6cammjYuNJTStpWGI4fthO0KYL_poGBafnm0darC5o956OWc2KtYLtqmR4h2A62OWMswd-y3mDg3oEHuo9gf-4LPNV3G_97dYnp_kATbqDBo5MZmSs6RL7LpFCgVnyEqIiKxYHaanQGZL93kAbq6h6PV3N3hwcxWNWT-zrWLIOihZCcZr3cQm0fNBS2NPTJV9Hu5-2eZi8R9JQ8FFec3crgKQfrTI4OvAbdGynR_bBIt5lXPHfY3vWDz14eIT8N0wrkF
 
-## G72 — Quand une fiche ne dit pas quels champs absents bloquent un
-Rôles : testeur
-Date : 2026-11-14
+## G72 — chiffrée
 
-Quand une fiche ne dit pas quels champs absents bloquent un ajout, tester la règle effective de validation du formulaire et signaler l'écart pour validation, au lieu de le passer sous silence.
+Chiffré : v1.FZ_tGTdRT_7BI2PJeC5SKidECcwvV7XalBituJxQM6_Y3tMce7O2kXxMAKyWCkRxamSi6b16q2J9-mSpeIvA6l6suyhyf7wE38a44bNSbIpnN4QB3cZLK2fXvS6ITXYY6Z6ynYPQLTm2QUlAZgWEqv5EnT8YFtIapOHO2QvLiPcnM-n4AcYMJZkm1FQbByGpksxf7zyDJYyR2zhbTlmzVMMCosC30H-Y6qHz2GTQTy8Q7pcihMhX4zgp9Skst3BDi2AP89awAw9oDncMe8PXwEj-NT_yGhRAcWllVyHHnW3Yl_56y32hAOSpP_M7vkCp-uZB5gIaqF8Wx9PF4MYPAnjXSINTShUpa4YFyPPz94vpoJyEXr0wUMnJCf0uLqKKyrQRew82ErtGb_bAQ7SrBekVSy2uCFLyKpLLsDSX4RvMLWexeXW79sT0FHEzGq8wxsTaOuBxE4sK3E1SmLKjpW9PIGpnQjWbpC-Jm6qMaJfDcXk
 
-## G73 — Un build tout vert et UP-TO-DATE ne prouve pas la règle « te
-Rôles : testeur
-Date : 2026-11-14
+## G73 — chiffrée
 
-Un build tout vert et UP-TO-DATE ne prouve pas la règle « textes dans les ressources de chaînes » : en revue, chercher chaque phrase affichée dans le fichier de ressources, car des constantes de code passent tous les tests.
+Chiffré : v1.-Br_n4LsOkKf2h-fIxiSHT736u6hwOZeBC0uAjlU5SKtS-C3Z86JHh54btDzu55um5P_OEmvf7HYGA14j6YbmStJ-V0zNr3vpgrRLU4VSy-2PKPDH7fbJSvLPEABxBcunWvA6ar482H6rG7foRH_YVJUuFD-7-mT83wc-kJ6drHypAyWJWqe6dKzlw6cCwiDrZDJcuFlDNF9ASQqr45pUdtN9RDV8WYXDaOObGZ3iY94y7WmylxvSsCJioQNyDKTYI8yV0jOXuceBwOQNIXxjn9CGU7AesNT5tuj7JklR0Iq0gyv_jp9BRXljxnkF00EKG2yA9tZTJwkLd3zlmT2jsCnIRQrAV-gb7QlN7mOY6xheT6MtX18hGOCcfwoQ2iWJaZgjVefjcIYdeOsvQMYDTODMtnnyamAcmwKIXOd3BzdPMkLji-nYeqoBURAwo8RUaCQ_q6DbqUQ0wqF6BQ3ENSW7xL-txy-t8-wz4A6lkdoxz_kelhdZidU6V0tvmGfc01_LI1p2wGckOP3UaAaIWvOjATn9SdM
 
-## G74 — Quand des textes d'interface passent de constantes du code à
-Rôles : designer
-Date : 2026-11-14
+## G74 — chiffrée
 
-Quand des textes d'interface passent de constantes du code à des ressources, les tests unitaires qui les comparaient doivent lire le fichier de ressources, car les ressources ne sont pas accessibles en test sans émulateur.
+Chiffré : v1.EvBthzyWqd3ZibHdxKM77gWoD9nCyoqjv7SyVlyB6P0BTGVC3-QpSOUQJD75oTpWzd5rgQZ1WqPkh2D7RRciDzHv1LsqOQjIJBiMya6ax0_BFFOThbyBTm1MdnYjg80ibOzxsEMJXZjVFN3a151gznSX_k-dr278WP7-WtV3VtfDkCt1LSieU_Q2fLEzzgqz4_6eAqPbeeULtgKNdi4kQf13yTPulaAVgfgDItzYlI0tZ_cZtJWoNKvs14lWnOQSVPTfP0LUbkPKxnLqCrSMFs0PV6DbGCCrp7e6YWTO5JrWt8c8YzGd1HibFOAPrQ54UO1EgmRSQoyQ7XiLo29eo6ilzlaJZYL4iGedF_qqetwjkH3Jz-1q8zJsAQ0JskkFHvoIqFbW6PDTzZzuSMva3yxcQ090kZeOWYBkgWvPGjaifsYrPsPobWbJbn5HNsI97Xe2E4EoQZAEaQn0RXCtMT9uQN5lKy8rgUNZ6V9o7ctK0M_0m1YgLXf9_8th1cUVAeoQTrv8pu06ETF60ITng8vGlBg
 
-## G75 — Quand une règle impose que les textes affichés soient dans l
-Rôles : testeur
-Date : 2026-11-14
+## G75 — chiffrée
 
-Quand une règle impose que les textes affichés soient dans les ressources de chaînes, chercher chaque libellé dans le fichier de ressources et compter les appels de lecture de ressources ; une application dont tous les textes sont des constantes de code passe tous les tests unitaires.
+Chiffré : v1.BjjPxVruhHsBr7RBcMqXPx7375efMy30zdeTVzL2agwPDE32zRTo4GSx_sxJrJtP0AVU9cC_h2lHvLuiRGCP6Uh6EpXuXvnNqsxGdHfLADLvvWrUD40hjYilNgYDFO_0ME9nWyY9lbgeerSz51sYhNvV5McX4Yohf1MSlo1XOMtxuPqApxtoN1gnqo7IF4RFk2kdZvhIzINX3HGP4K_C0fJNrLm4UmYw_tJ5O2nspwZyMMciZ6SYpksTYYJ5xwzndx51EZwxsqJDuEXWsvz5wf97h6drZ9nvZGQOUjga7Bzx6MWiOFwY4R3zhY9CriWyPCw1tWYPSMRat73WzGMk-iWKozCJioxQeGVRIgl6x4uArcUqWmyd7bboJIiFY5LMfF8PIyoZEfzT7o42TL0-xyxtdLh6Fgf5Nq40FvzTbjCu1ggGS8X1CGp83K9oVnzFnIGE-o8BJJUtss8yJvLp5SihAk7WD6v7fztJf_foCV8cyv25qXSKHM1uPhTK1TTvznXQkC07A9foc4SVYs81fgC-Vi5_LqJyG4wc3NdwBcwRnUBk0DTysVP7wYz9F7ITHGU7bT4T3_K6Ldk5pAWyL-bHRw6SjKQuortf-FFR8IlRFW7MJw
 
-## G76 — Quand un écran affiche un texte de repli par `?:` sur une va
-Rôles : testeur, dev
-Date : 2026-11-14
+## G76 — chiffrée
 
-Quand un écran affiche un texte de repli par `?:` sur une valeur nulle, ce repli s'applique à toute future valeur nulle. Préférer une correspondance explicite sur le cas visé.
+Chiffré : v1.8T5XzXeXm5KLGnEeavqETXRKLouLkp-eZVF0NnOMDtTgwZJa9z4KSnGwrj3qSUaDVqtUSJi1Kyf4HWcinoNWnN7bMjauKHMpDh3KlUGoJQ1_SQEBd3LwsxgjRptxg3L6aq9lf2VWo0xmGFEZlR7CvVetjyTtPHXZcyfgENBShedyQWCTRKhLOVu9Q4ncNy_4hvQpyDRePwueIkJPmleiP_xmNQ7vPI_KFcgQoxXV6rjk9LgFDSXnLcnBs5W472wwAGITv1LSC3b7ggCsiRYKDiiML5Gq_wFlPkKvSB3sEtFcDsuhNVslk54OwbuckujOVipbCuv0ZZnBAKm14x1osA0JT6fO_M5H5GthRVw6sjetPv_golyZ5AGDBTTd7Ce4eKsat0GY4eWonVQKaigDXA70w-rLfyd-d_ncm8_l8Aq43UBFcRk8e0V_1NaoDINikOb9exmjkpOS3FQ3Vwh3nI8fnsFkPl8JKP5Z1eA0
 
-## G77 — Quand une consigne demande de déplacer les textes d'un écran
-Rôles : designer
-Date : 2026-11-14
+## G77 — chiffrée
 
-Quand une consigne demande de déplacer les textes d'un écran en ressources, chercher tous les objets de constantes et propriétés d'énumération que l'écran lit, pas seulement celui nommé ; signaler ceux laissés hors périmètre.
+Chiffré : v1.cHE5HCna3HcSiLa2WNc1LMsE2cQYztbCoGnEepMamooHLAawz8v5LEXZLbYo5j_OwhQNudZmyrwV8azuqnqX96ptwLZCns_UxnOwqXhATqshAzpJ924emiEWtFK4l69nwyfiP5f6jvbtk48dW8FvA_c-N1NYK7yOeL3iI40oaP9pKsYwLF7av49Ilw1qR-32v_eMQSyl2UbJQbcoLECv2UMh1xcxJ5cwewlOE7fSxd07Zw_NPQuWDezCoMctAJV4XJTxOI-1hWp8nVwssI2IURSE4WPwROODJbFlnidcAqpehAHFD6eU_ez7kKEanby7zvvdz6Gvs1eBzYvMV5puOKV7ri7BB1VphSF6HE6ezYWJPQaqTfDdAQRo07yfzyXb85I_O53i1unHuyklEQqwJjLRyGp3SHZ-z-FJpP7EcC4_WNnfOTZ5-8dyItZRw7BVLx_Gy0ONrtWkiAFc8U-Pw6SsNwLfWT8rQYB8K90lqxki0qwl8JPRqeYlJMQ04afr7LlNXLDlEIJhWLcUSZiM-9Tmv8Ojl5r3evFzN3MQz0Cr
 
-## G78 — Dans une interface, le repli d'un libellé manquant doit être
-Rôles : designer, dev
-Date : 2026-11-14
+## G78 — chiffrée
 
-Dans une interface, le repli d'un libellé manquant doit être un texte neutre, jamais le texte d'une autre erreur précise ; un test doit interdire ce repli.
+Chiffré : v1.7DLHqw6_AFofY4NmOTQJ_byBTNl8J3rA0WdVaVsNtPQXAUylF1Bj-qd1agFiyC22AQ7KzG5G1LdowbQ-SsZ-ghTg9047SLXBaUC9wFp_8XB_fomwlrPH2ma3sK8rSCzfBHA6ZCbskel-Tw-DfFPHiulHUAcmApZb0JzlRbRvmp1dueoH7lo-m6hWMToc-uc6xBNDc5ZqmCUpcwPdEYI8uuKGu_7y3MPNkMinKyPasZZO4uUFCd-VLKd-6DdmLIK2W6isj2tRvbefV7x_fPMGtScA44GQ9kDPRaFziMmo03HPAkmRkTjGGsCx9IWnM4H2l4I55oWWb0wsgD5tXdKtW8CevQSyxX0vaH77Tf-4LhFuTCGxRvHEMudxRfH434kR-kmTR9VwDeX9wBhQ4ieY2408cFVMEF9k4uzCWkddrErPxt91INPO7iOLO6kK1HB_C3Svh4P0rZZspQ
 
-## G79 — Avant une livraison, relever le versionCode de la livraison
-Rôles : release
-Date : 2026-11-14
+## G79 — chiffrée
 
-Avant une livraison, relever le versionCode de la livraison précédente, le monter avant compilation, et donner au brief le chemin du fichier de propriétés de signature.
+Chiffré : v1.Td-Wk1vxg3ncXvW-Xjg9rmvhpLztkdXRmFyog57BrKJIImX-EyS0MmTouEVHtR0gvsfaPsj52SPtMlbuUPiyOUwgiU6pezEoU6cO_bLopo2UOCtgBY9TbRKfACZGesB2C8pAC7m-gWEXS9qgV71RYxrvilT-fOiclgK_28K_5a-phiAB8bH-6J9u-GA0pV7C0UTS9hqfM3-83GnUzyzQ_5Ttziyzr-4muNLCsFJ76C7Z96uAEBAiAamSIRC8dly9kKeMgRVfjv7jr6JVIzUJ4XAk5TbHLyHywVc0PW5diIMIGoq8gWR0-Dxi-nerg92HCtrfmDIHRbdHEX_J-X-lL6Rvfi23sJW26q4K7dA6VfkwbsMyagK7VcH_E9DeYUzNGKQ_rA1J4pGoBCcBxBeb_WxyJIZn3HW7YV28HFLkkzp_idEYmMpBU3p9V4SeGopFcoGGbu_kEcGrLBKmNg
 
-## G80 — Après toute écriture d'une ressource de chaînes Android, vér
-Rôles : testeur
-Date : 2026-11-14
+## G80 — chiffrée
 
-Après toute écriture d'une ressource de chaînes Android, vérifier l'échappement des apostrophes et l'absence de marques de gabarit ; une correction commitée sans compilation ne prouve rien tant que le build n'a pas réussi.
+Chiffré : v1.yCtBWxs4T7fHk0f3jGYofFMaPpB_67-G8-vG3-qhkk_qHO_RNVYr9bnrvoxRRSHAODtxwLwW_mlzKVVW3QySf8AWVGbzJzwaVuMdwZMzvAb6DWmhrZtdS3nfJKDVPO_fNUrz6QvB8p4h_7eaDYrJWracrFY51lm2I2Thigci-P-BrctyEJXsJte4Xscj8opMtpkEYtabSOXHl7aIN0iFBzgXG4Z2yXHKD931Od2sCm_knpsiQwIPYbf-6gC6pE09xsBoT1guRhOHx9Egk6BXt1EpFqRXiFVeQb5luN7wMiie4s-jLrJB_AshZ8h831B2BySftWm64jVln3NOPxzPf7ydcPH7EdPEtcUlNl4L5sV8p26Djt8umwrX4jGxp_w_Z4QclKWIVbgp5yyRkyWkK_r-V1mKzFIwYyEIwyXnqqQUCUpfvR8JVTR2srtyaFsc4IiqywBwEfTou64NGTOwQ3sV1oCPzFP4gWqn-QUTded0DruwKUpWTCPPss32vW2WIWdTs87kR6PsU0ISF8OblNrShkoIX_reX-l9
 
-## G81 — Quand une correction de revue ajoute un état ou un écran abs
-Rôles : testeur
-Date : 2026-11-14
+## G81 — chiffrée
 
-Quand une correction de revue ajoute un état ou un écran absent de la fiche, la revue le signale comme écart à faire valider, même si les tests passent : les tests prouvent le comportement, pas l'accord sur la conception.
+Chiffré : v1.iVVNrD2X1g_n2vNzhN9wvJgY2v1yApBP1R1SgB3jXffIUukkRRTw2ceg1pVHdmqWp0tW_z-PtD5UDnikz3QtM-Mk_l-364v5nOGnrB3ComwzDMvEKJe2wZCJx1ls8rDWUiKsnEWb2_pPYojvbWqiJ3TEKxubfUDpsqTODXnsD_yzW_6s1p3tTyFqi3IGCtkeDeGZSzymuZaaUpmdecpHJVaV_Up86qqiR-VkEAQLEsNKU4UsUR6Yq-j_PokVTbCECILstlVkkZcx0nHhpZ_YjlLg5UbMrMSKtj_BVIQMk9CGssx1xMgSzqKYZrW7Uu8TqTNvDsayG5Az3gEiRG1sldIBHZ51ijgtVCyULD0y0xbSjANGb7DYA26cmSBdwdjWj8CDEPk57CF3gLX15cvCv6Y9gwQ5OsyV9l59bPB2rS8_SQ4pD2t40xOlB0_fC3BknhFq4c0gtxkGG0IEKxoF1FZKJpxUQsJBQltQ6ZzM2PmNQ4vZqueekwChKe4T6mfulZA_CH2c93lpW-ofB4LH--lDUo8wBw
 
-## G82 — Avant de déplacer les textes d'un écran en ressources, liste
-Rôles : designer, dev
-Date : 2026-11-14
+## G82 — chiffrée
 
-Avant de déplacer les textes d'un écran en ressources, lister par recherche tous les objets de constantes et énumérations qu'il lit, et ajouter un contrôle automatique qui signale tout texte affiché en dur, prouvé par injection d'un faux littéral.
+Chiffré : v1.SMJREssPL5Zm_oswrETotsbYCEBCLd8slEZaNC1wV_0lq7UoJ_o-0UD9SnyUOKQgLXFq_8DNPvm1Fayugx6drdMeGLGUxf8ow4HbJ9hWiHaNw5GD4CYnOlnjT6blWeGc3gyvFVqf2Cfb2oEjyqieDP7zj7dJ_5kMdjHOvhxZxCQISO90sF9ofsbl55VwhpJOCITXI9EqU0SUCqiJiMzMinKHY6MVmKkbAez28lk9tOqDTGapfhUUzNFDQhdWHwJstC_DkNsEPUjUgE-wu5ft1oZv2cc7Ld4-fPilx22Irud6Vpj2TyXDChEvpv-HrZAombWL-BZKz_TNaLQfNk2QoWCeiR-Hu3o2zZnhJ3Dc8GdRIdOp-YMMrmmG1e3rbPbgaap43zqTuG-G6vknHNzKnpd2cpdlHS6h4NzjXFqpOIWUY9MX38KH3zU8PkaBlP6uEK_iMefTQKqm0VLAlsPj3h419MvWOGhPNrbyUrydI5tj5SMUKQYY0NbMj7gHlV0kmq_DqDmIwYXnpn5eFYSrop_F21AKyeExR4vHdyY9IPFwIGXCbNjI318ecC844y9JhSXP6z6duH5MLvo
 
-## G83 — Quand un écran n'est connu que par sa carte d'entrée, le con
-Rôles : designer
-Date : 2026-11-14
+## G83 — chiffrée
 
-Quand un écran n'est connu que par sa carte d'entrée, le concevoir dans le thème existant, le signaler comme écart, et dessiner ses états (nominal, vide, attente, erreur, action modale, échec, succès avec annulation, objet disparu).
+Chiffré : v1.A59m9AQJlrx65RTE7ROUuJ1-31UUjpZ6gUAsmjHXEWVFFiPZNDH3IHhd1hsaQYSVB0ufI9w2wdA2FI47ET5K9IGQppOW1BUQPt-d5NEH5BgSv5KOQwIYjU4oKD170vLDZR34sszMhiNrAP2pjJzWh3QkH7rzRKOAULR2bpHaQZPbhi3qmRw0kyryY0K0jSqUZNYuW0m40-A9-932yzLcTMmCDAQwSg7hVjA-omDeVYK0slrUW3ejHbk1jv5FxF20fhG9TEvxOa3Uyr4AC-tmYpshlRQvG3FfemOEqPhNyfwDC-dv3HxVui6IGwVJ76XZi6lcIFmto8xavdZFmW2fDvan7zLF95T3Zv1wbU6UunmdPz4sXukRhMhxFaO9uK1FdGj2zKMgHhMwRY2adRLL3KzeECjS-E04pvTLtZhSaif3dAvxGaT4uBK1dMtCKjyXae3Oqnah2IyXhSQlLJY2UhaiquU0fIH4Y9N3GUApkgtfxi2t-m-CYluLyrAzCbkf7nyM58OULaq-Y7IgcLMdyvluav_MkIaO_s5ulVIWvHbfvk0x
 
-## G84 — Un script de maquettes qui charge des polices système doit p
-Rôles : designer
-Date : 2026-11-14
+## G84 — chiffrée
 
-Un script de maquettes qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation pour Arial) pour tourner hors du poste d'origine ; le noter en écart.
+Chiffré : v1.jRBuWvc37FCTQHPwvQeAuvQWggegOUGAsqHPXMgJ4BpAlHjO_XBwCVt2R7KXeSc5RRbc4VFHpM8--FkTOqkYYbGnxyylIwINz4GC23eks6LMJwn16_P7Y8Q5NxJuP7T6igEqltjDJTTOzQCLg4Cfm0SKe5ZWeYga7J51RgnG3SsXVQAW0qhplHHGHgpP8u8q0q0Arev4XbOdSpwZE6XjF2Zr6V0p7E1LAZCLHhW3kXHtU66D1DDFDb70amMIfrvfdkzYsgQMl4qyv_T7iFNCeznWc6aC2lNic64j6EL3QOR-Chfjn57UBkFx-dWOkEuDGG1khwVNGbm1q0MvU0RCVg2MhC01ewBpTil4hqORrk0ezKQYsnTPi1nRtmAEwPig0WRtA-3bmEW2SWfLdQXC-07wO_-peSDs_2CxtYr2sUz5X2y7ukCTTAyutZwhu7YAKg0m0A1plqgGvHDQ_kF0AnCl3ix1dsrJngJ85Ra6
 
-## G85 — Quand deux niveaux d'alerte partagent une même famille de co
-Rôles : designer
-Date : 2026-11-14
+## G85 — chiffrée
 
-Quand deux niveaux d'alerte partagent une même famille de couleur, les séparer par la teinte, ajouter un badge texte, rendre les couleurs réglables et refuser deux choix identiques.
+Chiffré : v1.itOJJxX_TaziQg5oqMHEAhhTDysMXiVwA4c8lbd3qxYwmQwfSeslpcSZU_tpZSf4mp5YkVuU6UOYeQnC4bx8BvC-IQ9qoRMZ46LhC5rgJtsJ-Wrn-kvN72rd_cRY3UffpnF0Ne-BQdhnGZGjWGCLi97w27OPdQC_Zd-ZLu8OAdvCQvaaIoWw6C6XKYNEOzgxuXxnUlKDJ-VLAIwUyKMS1WMvHiLUgqJM_8sTQRrhyX96MI9R25FNK8xTQ0BsIDpXLBEjeWnt0QbQN3CCMCkc7hCzHE-FcfZTnvZ1c6gREw8poeUu0TEwQ7ERvEcemwYjoGBFljsSEuK9r1xkap5ihkmF6NyrLS7ftnhSHmytbEGERUAQpKRrj6VhuEKGNLon5xUottWUXJMrUtz3zft4oWQXxESy6b_HuwBoRImShDI_c1_r7p-EZCLugyM5Vpq-aWwxD2VlsSlePWnjto7T7otKp-dk7Lypo9FXfA
 
-## G86 — Dans une application Android avec Room, écrire les opération
-Rôles : dev
-Date : 2026-11-14
+## G86 — chiffrée
 
-Dans une application Android avec Room, écrire les opérations composées (enregistrer, supprimer avec report) comme méthodes avec corps au-dessus de requêtes de base abstraites, puis tester ces méthodes avec un faux qui n'implémente que les requêtes de base.
+Chiffré : v1.1BXPyc27QC2WI9rmAVmllHGQdcmXHnF3ONbZ-PS2NyMoVmIfxxMxWchDlcTJO4hyVJCB7KOoCx1VfNSzI-dIhTKqS9P9dvwEiDuoKQcHVdwVqZwvanpT0sUEQPzD-D4oT2JkLC8-5PAN3GFIahSfPkHvPF02CbCsjUSCKfr1wrJsCN3gtqW-YpNMY514obWY9QLtxCh9Tl6QOOiCEQFq66OXfkzfCw81_FoVvtfrrZcDAU24U_4F2L6eZdCBMugQGrWQQjpRcIOEtjGNzqhoNGs5oS94Wppm8zs3Gs9Vm3OJnqOWkGQhr8ipM8OoqE8keSSYnd-ibRRbwtxT6f5OvmXBZ75UWQSbW5F8UKFzqmIUEuAeeTv5rTR--vvN3qRSlraFxWfohi6Jg-kMagXUYko7QPo0xCeqPBF_E__VeLnt03aDmQIBwzz5MOfMOjulzPoKkOwNhl6WTMrPdtV5GTTFtMJqF5WegRh8n4QQkUulrPuFFZx-vU3bnYvNtREBuHGnZhBAPWDMbRGsJXaa5SvWnZpkGOwKnzt5e_jc4oG8YhNabNykjTM76VVU3MvDJGTBpgysTbMU
 
-## G87 — Quand un élément ajouté n'apparaît pas dans une liste, vérif
-Rôles : dev
-Date : 2026-11-14
+## G87 — chiffrée
 
-Quand un élément ajouté n'apparaît pas dans une liste, vérifier d'abord que l'écran de la liste lit bien la source de données, avant de chercher une erreur dans l'écriture.
+Chiffré : v1.CoqewbjX5u_94BdVbcYeY4nonsQWAhvHodrWFZH7Xeu--5acutbE8AlVbMQ8cbinkv1NNE0Zuxy_sG479VdGwNXWIgdmwEFMczcAyAKXQhgyWunbFKRZZxIpzSzAt7-Pa0n5m9FCiYGQNv-93Idm98QRtOUYUYCEwQNDvbJrfjq_7hRLcg56PAdtoG3hFd17M0C_l__okBQngSc8GKLBj_dmOz5Sq-zmiDDaZjhk6XZ-rggh0g7MKBq4qv2t8zl094raF9Slhai7CNr0lIuWVXqoSxw7fg-WJEewMQG8aJSsl9tM-6pt2ZBypi06kfjFxMCpewtOHgZ527tfQHRmbZ0H9utLOnEBsjyWk-tPkxIErdGDvPT8X2rfRbuTfzAm_OE1kx_Rv8iVBf7tspEyS6bRLdGeFyH0DstHWttP5r0xQzmfTh3W_olP7kOyzm3ipOmXSzJBSrxz3ed5LQepr5QYXkM5KMs
 
-## G88 — Avant d'installer une version de test sur un émulateur persi
-Rôles : dev
-Date : 2026-11-14
+## G88 — chiffrée
 
-Avant d'installer une version de test sur un émulateur persistant, désinstaller le paquet existant sur l'émulateur seulement (jamais sur un appareil physique) pour éviter un conflit de signature.
+Chiffré : v1.PmM5EUYzZIyxS8nWeJks4pf-1KRCnUylf0g0ygH_2i837qIMqnlpWsAJ2Sal_E2zidvlxCM3zzckvjnmy1xkOmG-Rpa_MgGw_ZAhmRtgWyGGkEu0HPa1ki9pfW2t_9k5t1twLKGLHVaLOPVJipKTxH8fF72rLMafnMUKAt-uSC4n6phuZx1TBU0DlIf-0BQDRIt8DcA0z4kgQi2iRBWZfb0TstifLgT7GGUNKBoI4hMRAWBQ9tN_mLjtnoXSICiFAYDl5mlIOdx4-eYC3w6VT15RzAujROxEdXGhW9S3be-I5zYcILgixbFi8pzetsFWygw60cHcp2H-onvBlA2GesMwlFYR33yo-y6BzDdnWG2HRjh_0mAXpYni0k9WEHS9d6hG2Tj60mfuOfyaClia3pzrtjfqqLIGzMkw0vwZG-FZC42kTOUDyHmA7oVMUDaq0NxX_QlrETkXEOnAal-Zd3qOIkeZGWxsfvphGY_x7CmvJ7QBkTE
 
-## G89 — Un contrôle automatique des littéraux affichés doit viser to
-Rôles : testeur
-Date : 2026-11-14
+## G89 — chiffrée
 
-Un contrôle automatique des littéraux affichés doit viser tous les fichiers qui produisent du texte visible, pas seulement les écrans de l'élément en cours, sinon les messages construits dans la navigation ou dans les modèles de vue y échappent.
+Chiffré : v1.IGMfs7KgvO29D0XmXbEge31uAeAP5bWxLvoK-dP6I5WIpJ0MFDAZDG2XFcSdzFGbzlh_-yuW5RY8xqWTwqyJq0OZbaK2Ou1hAY4SHbHHEZulXQbRzGDoxSX_29q1XLfC54LjmPFuExuoewZLK-akgHukneGfnKamIwiZbPAFXNY1wrO5PihEgzK61_No-MGzjTKEHEaSiq9mCMEc1tyUVwzM40lBx9uR1y0wk62mA-vqpViH0KI8QVjxJqix6-jBCgWJOZT70jLn5ND3JKbTZ-IP_FI-b29JHqcB7gVLMDG-w8cZ3di6vjbzSEY5KgBoPWGo4nyQzy-L88vF4SvLASdt_jN1PLMIflu-_AQgKSLgz5QOptIi8FAK6uXZeIGskDFcuC9G6x0-CkkUK1g47aTZVSV_RB28We1Um8QEI_8XD64U1buyKcbEv4m0FRPi4bOlWODEzP0K2bYaQsvbNVKKqS8GdDp14dP0eldEzgDKYKpK9y-xHdHHIU_qmHwv9exTnliqmxzXalUuhNA1ebH3Lg5b3Kt-xOBYCO7NSHlt5rwwB3mcE5ybbuL69MSiKl4
 
-## G90 — Dans une application mobile, ajouter un test unitaire qui li
-Rôles : testeur
-Date : 2026-11-14
+## G90 — chiffrée
 
-Dans une application mobile, ajouter un test unitaire qui lit les fichiers d'écran et le fichier de ressources. Il vérifie que les identifiants de texte utilisés existent, qu'aucune chaîne n'est écrite en dur et que les apostrophes sont échappées.
+Chiffré : v1.gdBVIdnpKxKDPpfBInAN8wf97MoMIR_WCaoHZqajrv-Rsi0CwYEGla1ZvkYMxNqGtv1Ji6xhS5G0tFHh25uI-hsh4TlYn2JjpfwKLBy9H6Oim3FrOMahjkCWf3YJZ5eVBpEnxPLqN-kstE15GnXN1bFbP0M-QeduOvW7BIsyPKz2kSv_bW7OaBWnyEAtZfRcB4211spEK60zrqFBkX5Qirc0zLkIYdwt53J5E35_1YRr8xAbrRqF7wujn-72fb8DE73HqWHTDw-5oL_pMOgGM03NORvaI8hBVfobTpaH4FsmSCw2epJGRWrKlU-PEjfkpsk42bIZLG2HgYeIgXrM3UwNvewRG_B6v_l7C_HZkud0JJqBjn6mdi2NdxAuQZN7j0MH-01k5UM-P60dDv3CEQdPz5MtbL2ujxuzx9C66oSVEmWbQfI0VtcLIuy-7Y9cEP1aBNQJGrQr3DQKV5S_Ug3X10P3QN1n-PfeNg5bgyvbqNBhpV70aZu0qwdXJH-Ozb0NFKxtJY19mo8rglj_YVfWIbF-NywMccHFLPZt5IRTOGnI39I9AwVXcI8NHDQj
 
-## G91 — Un effet de lancement qui appelle le chargement d'un modèle
-Rôles : testeur, dev
-Date : 2026-11-14
+## G91 — chiffrée
 
-Un effet de lancement qui appelle le chargement d'un modèle de vue se relance à chaque recréation de l'écran. La garde « déjà chargé » appartient au modèle de vue, et un test appelle charger deux fois.
+Chiffré : v1.Cfjq6_a8HEw4iUlYh2gXNwdJEyQR78F5_Mn7p0e6tBod-2hb0xYLAusuXbWh4osUmQzibK6Rlwtu2gY-UhkQ96rFoVTF2Xq6Jtpz3s1hTKVdjLZZJ83YrYRb-5QvsywFS2oDg_elUw_khfHWdiZs8J57axzeDHLtzd3rgtcaCwbLDfjlcIKfqycP1ENxVqDZ36NdO0EpeGNfTIPmtnpAVM4srNLX8ldoXdb8XWQm-09E0qDJAgho6m-i286xGGQnXcmM8m5rwx-lxS1aV6pF1rnsHKyyNlbnlPrb_NJVFM-xdExLMlnXdIZERpQHPToS-sHvxiGw5t7feL9D1c--wzmChYOip9Ao9_TW4EjGNY2wPMQU04vHiRn-9vTiDUT7QamphhP0AMc8sY7ej01x98rw9Sd9k3GZ9f7hCCepGpSX3Bk47Zm3lzukdKGLYmdqsq4rT7uP_6s8sMzz7gd0jPkQUWL867JEIeXbD31ATu6Rgc3P6_jEBghHlQebgXyuNVzfQ1lyhlJr0EF6
 
-## G92 — Mesurer le contraste des couleurs d'alerte du thème avant de
-Rôles : designer
-Date : 2026-11-14
+## G92 — chiffrée
 
-Mesurer le contraste des couleurs d'alerte du thème avant de les employer en texte : sous 4,5:1 sur le fond, utiliser une variante plus foncée pour le texte et réserver la teinte vive aux bordures et pastilles.
+Chiffré : v1.Zih86xBEGJtecdrGG81K_2aPYszXAnn7xAjpdR3jfoZZ77aRPyRPtA7u_YdlOSfZ81Vx0cVe-IMLN8E3d77QQ3E8zsTBRAzPHcjYW5rtUA9-bMP97lCi2FeZJ5mLEiXqgKdkVxOYpQYTgOAjVtUXVr1xCPGAv2WuCXJNwKF95G6EANU4SNoK7tfEnV4grLRRj_AdpGckT0NkOtCt0jOp38lwqdD6MTSkJjeYux6iDaZhU91rleCAv7zqofE1JfhvDgO0pCkDYpLhWAWi-qPnKm_zyIqErwlPpJqC0w0lA0V8lFLr5C9AxOUvd4bfgKWFbBLt0c7Z0ikoimZmyw5CA6-C9krZfq6Jkp7eDwh3uh4LnWhotRjwVCQwnovmxJ4CfpLgPCrQ8BhA5bSyLXSqaaw2gt9HVIYwpXz10Exqi-2bdwCjoV5syAr24OfK8Ic8YFF2UTYDH7Z3pV2v8JovisQeCUjaopXNU_GvjIS7phuU3_eIBZWXZgX1nWrIZanS0liCb3QmyeVa
 
-## G93 — Un modèle de vue sans contexte expose ses messages d'erreur
-Rôles : dev, designer
-Date : 2026-11-14
+## G93 — chiffrée
 
-Un modèle de vue sans contexte expose ses messages d'erreur sous forme d'identifiants de ressources ; l'écran les résout. Les tests vérifient la présence de l'identifiant, et le texte se lit dans le fichier de ressources.
+Chiffré : v1.C6JUEwqhCsjYTAVwcQz_eQ16EZm3nyg3YCdHyy-6xJYeTH5Iv3RWLCWUiEZ6gEaBSCQ9HtNk5kL-raVA8AXux-FxSYTKo2uSavX2CDDEmvybyKl25QX3rxerzHU61jjd04dGDqGgffsLJ28_JOCKJCta8ttzH6ByLncokkgXLmwPUNz4pmFiyRVbu4-VI4ICl0B2IY0OrjmD1gXPYhcR3kRcbmEUnp_mkbdztev6Z1cb1cC4NdOuKCZTlxffnJC-_okjzgwJKa2058ROYw60ZKGeiCjJxpRTpWULpBGJy0h5Wy3XSjTC5qWXoUHuQkUBBerFZYx2WBHGdjNPJTVwh_CvjmItW_FgXwc4qaOyBJz707KwJABn18wr9gwTFRZ2aWB_tquCe2cqnzVtgmmMCawBe_oKAmXC4Zn2I3bcBIyjBIkDau6VVwprYZWM7GaDlELqBbRndh4xQfnXRLXZkd0pIhzHcVhDPb1sUbnfK6L57qTlgM9_110ux55fKX8biEH1cisRTBDn6i0HIQ3SHRLqdthUqVq8nqEDdQ
 
-## G94 — Les règles de pluriel d'une langue peuvent classer zéro comm
-Rôles : dev, designer
-Date : 2026-11-14
+## G94 — chiffrée
 
-Les règles de pluriel d'une langue peuvent classer zéro comme singulier ; quand un titre doit rester au pluriel pour zéro, utiliser deux chaînes distinctes plutôt qu'un pluriel de ressources.
+Chiffré : v1.vkmt5sZIOUkS_NJYBdMpOVzPhGNeAE-j8bWPmYG27Ug6WiG8eKcJuMLybdcFj77XY58X48ALTsgJdKJ_wD24MXcUTEhkMUTHMA1xsM0ye8RJx91JyTs6IuYF4XBIDDmzbV8JxpZm0I0hzdZSdcSRMgENXY7eH-WGW3I6rKhFTIuEaS-cw9EtJfVvDHZLlXviJNnlcyrK23dLC8NRmzyxx30G3J742wZnWNncY3cb3XqYvYxOu69Xwgi9k-8pXS3Xt1SAFTFJozk62Au2HUHcmJxi-sRX0I6E_-4M96io7TxfZn_PhtibpqDLnxZk-EOEmQcRBF0L1HwolZ6bUG9DYr7vKSfJo3r9qSXitaY7aNlIePEYhfbmmGWAlrB7qQN3wHLyqA_-rNYdnmnqbf-hcwdpsQWXFmCJH4OhjoVo3bry-8GB1Fo1j7ocMBlI1Fq4eeO2YiA6rnV9y3WZqt5eR0fUSlslcZFlGejr9IiATetRA7wUAM8PmWWUEropBfnC
 
-## G95 — Quand un effet d'écran relance un chargement à chaque change
-Rôles : designer
-Date : 2026-11-14
+## G95 — chiffrée
 
-Quand un effet d'écran relance un chargement à chaque changement de configuration, ajouter une méthode gardée (sans effet si déjà chargé) et la faire appeler par l'écran, en laissant la méthode de chargement complète intacte pour les rechargements explicites et les tests.
+Chiffré : v1.c6fqvYtyDeuY8z8WJbaKS53LTW4Pf-dTQpv464r9fVa8d7MlblwbLvzeLh92WHQ_f22gJv_JWrX43B_-2n-Dk7vaAbs-kQoWD_rMih_S1I0FXZT3SrSt2BxZPVh_EB2NjAH-bEopTw3uatRxx55o4tqDoIDUUZo6rWP33RS3AMNPUHa3RcSJqJE-ne2xCkzrmE-pNNfuC2-0KKefoF3sbAoW3FNaIJUoJjPexLRxemv5Ad4r_TegDxkAsbzUj8iL5FIZt7ZvS6y-ChaC7SHW6xDpCwFFnYPNebc4hmA_TOivTfo5x6n0c8Acwmno-0L_Aaar7Xzbb-MbwCp-sqVGNI4dDHQAnivDEh0Ar0AvevmsZVswNONcVOrk4aHeDrJKauGgqfa4mHYKTel4UJWWCy_rf8EVHNh0M-1UOwBddkqxaB8-oKpf7dCMB_gH6qEjKPzByREtxIkIEws6ErJfaIhehnIWg4o1euAmyfselcN3Rt3-jvcYccqA03PZaPij9Stw2rwvGlwfSjJdDaALCicKdnHXQVODW0Cf-EbIbn_A0BKz3orwI7cXYn9r4DzkcylwbQU3f8Viyksrlzef16OTLNdJAsyXTH6sOU-_ng
 
-## G96 — Le brief de livraison doit donner le chemin du dossier de cl
-Rôles : release
-Date : 2026-11-14
+## G96 — chiffrée
 
-Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à le chercher dans les scripts précédents.
+Chiffré : v1.j-SRObFw5Wej8O5H2UBMCaT1C5UeM86F2WW010mfEy77D7-6FeVLHMNdo3Mb7jF36jbi_LErih_R1DrovyAfk1LnUMTsCkxDiezz5TEAU-mLoeljssQdWqLGaVJ_PvRsSQtEgD8RjYs2UTPGkOLJ517eLu_ai9SQ0JqB-RmK1FLG9a7r5mSeuenpwXrvNl_5flmttmPNoChPMFUCMfzS_3ysHnoPS0lI5SJ0ROD5DEtd4QJnylsdFlc7U8jCgvs6LrSpDL--KkBj0ncMKROdPAH3y_IQUygOGJJ5haJw6cqAFhcUCwq_mAHitr4VqaSP6BbvOZRYkAtC4gywU_km1xPn0Wv_oBoYsqvWIlu8b4hxr_EvZKZGjwIJerlAOtEIIvTeGBftkZlFAtM7qCu79Hai_Yke8KXd-Tqk1UgunPlXCyJC0CGnL7dU16enUVql6GT5VouKY02zeHZm4OeP-kQ0o298573_JDSH4hk
 
-## G97 — Avant de compiler une livraison, relever le code de version
-Rôles : release
-Date : 2026-11-14
+## G97 — chiffrée
 
-Avant de compiler une livraison, relever le code de version de la livraison précédente et le comparer à celui du projet : ne monter le code que s'il n'est pas déjà supérieur.
+Chiffré : v1.E3Zi09plEesj7xIfySgL03IFQnzxPnH_QNAysFGC-sSKTKF8BnC0V_x3UPlhgiBAN2AmMh_SLDpnJL7yRSQfU_KBn8qj8_DfaQJ1MWBK76vaZIG_V5walLbKV7mR2qTu6cdb3-9EXMrWWa4LvniTGG9PN0xuGmUJoHqmRzpteJPTJ-D8j258n4GcfIbF1fEZpNhz0OiyMeB_IkmA5RfvUJ7dhrvTX3LGTywduOK4QfLPML3FfUmyafWpPIibJWIRetalQrH3x7ApkN_6Huae_vFf7b6gNILgkkd_hoGT_AjKRkN0R1SM0LEuu0JkHLTZ3KSQzj-Aft_7BjaJO5IEWPBpzkULuznehiOA4jdLWUnbpxzRwOh0jyNW7OHWsT_Ho5xAw3dfkOlXTKnsAe4hPmkW_9bLCP6l3aUSGSmMY_1lIwny8JYbxZXVUUkzMuMA4pGKgCV3VKkfw-U622u7qfPq52oV
 
-## G98 — Avant de monter le versionCode d'une livraison, relever le c
-Rôles : release
-Date : 2026-11-15
+## G98 — chiffrée
 
-Avant de monter le versionCode d'une livraison, relever le code le plus élevé de toutes les livraisons précédentes, pas seulement de la dernière de la série.
+Chiffré : v1.kv2jGKsIn25hksdAyI4fUN56XhsOkCkyb_idkUkAexLK_2mu_2gttMmf62KMdFfrZlzdA8CESA5suzgF9kYDwxe2SlFwjMfeBL8h3pe_APZ9ZxSjNTE2BZMPN5d_9xLU0lWyPCAUyCjVaTw0ifnTSR8JyLmavfUBlbAWspm4CmqRb39PDpQSQ9K6pO30z1bMcsWfQ2P8_Oi5cKpXRW42wmN6Dx5ZcET4xreSIYbox1VLl7msXcwR_qu0uRoLhZLhSqUx4-iN4uUKT3Ovh7mi0-tjg4WCn5yDG4ZMPdGFsKrE6WYEyRzpyAMY0N8nIJmW5rSfLhhzU4-zXWtPaYUfhKJMrJ4f6fbFW-ZX6G6Upds7hZiV9pWD5WjBv7Crf-eef53X2TwJdxJSV2uydAhTluik7a76DN0Hsqjy2aSGOFRrLUMaRVCUjfb-pnSd_43OjoqhecQ
 
-## G99 — Quand un test lit par réflexion les champs entiers d'une cla
-Rôles : testeur
-Date : 2026-11-15
+## G99 — chiffrée
 
-Quand un test lit par réflexion les champs entiers d'une classe pour en tirer des identifiants, écarter les champs synthétiques (nom commençant par $) ajoutés par le compilateur.
+Chiffré : v1.AhuN0lv68CuIuIdMBymWolB5zWZXXC_sBVnOriTko9p0oQmPRyF_aVqB719dr3n_DmIg2HrAPa5LqZFiPDeFoWnDNbvXm52vT__Fg0lJWvpdwIi3uKTAmrKbQlhYfjj8pjjzC12dIBE6EERsabupEuK54usGqifpA6y0KGrccBN4Olr3aDV8zgMSaYzFQ_2LtSaKaP7LWO6yZB1X4hg5Y9SyVogm2-7iNwBMZicfENvyMVEvvQ2fjzMNzq4RwkqO82dDFTSuwDBR4iMvpqse3-T8dseothRhuS22DtfxzjtkIkIvxWbUck5Oo0DQpX8rLnDmH1mpl4VuxwCHf_7YojRzqrULK5R3ZASqFbkNFDlZc5LPmiO9YXdvnnaztd8LOuee7-DcTOmxMC9-P-CJCsx5rVECGmayUARvFyqi50bWYB6s0-U1yocMYG8fLP7bULfHiTgceWo-wz6q43KYWXmkWIuxFOZtT-0
 
-## G100 — Un NoSuchMethodError sur une méthode existante après un chan
-Rôles : testeur
-Date : 2026-11-15
+## G100 — chiffrée
 
-Un NoSuchMethodError sur une méthode existante après un changement de type signale un cache de compilation périmé : recompiler à froid avant d'ouvrir un défaut.
+Chiffré : v1.IGLU2kQ4PHWi8HsyUbvS2zLF5UmJf759pjYBD7S6vIrvlJebqeBaEhkfZOMXX6zgKP-LmJyCsqMH-JZJSSqk8gumYxI2iCC8-em2-nhmYLGn-9im7cJjEmT2HOizslr6K3bWCRMjkQmC1cE0DkolGrFWDZdMzALhP2RiQPavptAXwIb4yjSub3-ap51UXds3stL4IW-batAinm5-WOEwyxQNpY9cBHXXDor69pqzkH68LKOF7OmSEugf6qhkGFWfuJ4sK3SstSDpmMmAueIjfXnImysGPaAIfX8yH-3m7imKnX-YbmU3mWq-k4AbcCBUCdQrFQj3QzBrLbKeaqk8bs28Z55DMHxFBuE2T4mrSoXPGXlbMNNoebpjUMhkIyGUFlBH1IB2GIiVHOmRcT8RKuWTX4FdbHj8siUfHPc2kvUFQqgQFrZTVpetY6WRbGFq2NxNYLcZ48j0YQ
 
-## G101 — Quand la destination d'une action n'existe pas encore et que
-Rôles : designer
-Date : 2026-11-15
+## G101 — chiffrée
 
-Quand la destination d'une action n'existe pas encore et que la navigation est hors périmètre, exposer un rappel à valeur par défaut, ne rien inventer et signaler que l'action reste sans effet jusqu'au câblage.
+Chiffré : v1.ZXpWo_MGZmg7-BByz-0EHkqghgfJo0c91npMnL73yznnCGiI-e05ffZ3vV7j90ejy9HMPCWkFvzJu2btJjzaNEwFgxXuANAmUi60qkq1rkXbA7sZLxHeLK3TQcUt5EB05z5FhSl9vo47vqJVoUTkrmjk_gC7i733Yud4eqwRslYA6k7XuTiVsd17wdPNUepurLHBmxfzccGqRTlC5SxpNUq8XAGNDlSNfv7EzMnWhDvXQARP9bfb3ss72JVTYEJAGVLa0oTJaSjTO6uako2sTAPTd1JO9kyqVn2DBYftX0s98Tdd54cZ0SzVxavwlpbcvcy5zRETjywGg584SokDnSlGMZEhGLV50_3qaI1uJXuAQ7oP48BGog_omUpHIaIUCbZg2AIvXdOVUeXiKbL8pApdIQ7E84qI-bbLCJB3YU65b2x1ny4d1A64IOnL87NYbj071a1A-X5KHE7adLFj5qLdJ89-Ht1CsWPh4gONm-u27RDGeT_gmxUJkHAOC64vxasIGsgDyECrFQ
 
-## G102 — Un contrôle de textes en dur par expression régulière laisse
-Rôles : testeur
-Date : 2026-11-15
+## G102 — chiffrée
 
-Un contrôle de textes en dur par expression régulière laisse passer les constantes de code lues par les écrans ; en revue, lister chaque objet de constantes textuelles et le comparer au fichier de ressources.
+Chiffré : v1.8gpn-OTz6QVrdy7lzdPDWbT0250tlwStpE6aSnAUh6rPL5MPEiDWdrKQfx6u0P6A5E8Lzn9YiFIO0YGRasTAdqkW61oyZRG6BOP5q9yg-Pxz7NkRlIdYrQat5gmI3ROukqgvfYbYxYOgiZBYsWng0SHGEYEyJRbTXX9bHROB8MKC_5Bo-vhxwTyqb9GVo9IzBt1hBUIlu1HuzUw-m4uq0A__e5A5sXERLyw5eC-EQk0Sb1oqbn5bzdjoKj2sMvRWxKm3wMR153pyeUmg8RWRzDAzpkS--BKQeytamk2iTfmKi5nAYtdhKtZP8pTHu4-tUOU3JXo7RJkrEE_mMQq5oNNF2wKV-Kn3s40WIlLLOBKwwbasFOpqqdIDEsg9uxdUUUhaKQOWe0V2TwHDdyFrGjjk8wS4jQ8MZAPEd2y2cfG8_IMjk4o4l9nIZP0qK22NU8rXojVGdQUcdXkJq4Gi7LnvYrMSSV45BeoKcyfXuw1f_zeQjqzNTrBylTHrmnDog5nKCh6wNR13
 
-## G103 — Quand des libellés passent de constantes texte à des identif
-Rôles : designer
-Date : 2026-11-15
+## G103 — chiffrée
 
-Quand des libellés passent de constantes texte à des identifiants de ressources, les listes et propriétés qui les transportent changent de type : chercher tous leurs usages, tests compris, avant la modification.
+Chiffré : v1.CERNE0i0v66CQkOJAf25HV97UJgqPeKVfzqe3_PVdo3bCrD4A7q4lDuqqE8LuRqdSI40qDfRrfOCYh9t41M5RwpredHY6s7vve5x1SouimQtpHZuoPtpV7U8hO4aKA-0mTsI1NuGRqgrxxF3LEFdZ60KyLhiYxntAVujxfDT3b8Z2xsiyVl4Csmu06gFzQNMR62x1AfOyhJFfoWJmGAEAQQTQDVIAZNOo1P73m-eagMFFPb-MxJFMCr5tk47tkx6hKrMgkg09Qa1SKqW49vEJs8JQrEGYYuchMHir0BZ9F82NwgJP_Vdl56LKqVPRX-ml7Vlgjn-nT44wrxBFKadFJjw3bAEb6F-kD7FkMBvCse8pj0Lk7legbhTV2XtJ6aWyVPvVVYK-3JdHJruqvSFwjwb_VADDzGUMzhkk42zBVe4chFC2JLR0UukVloZygUseqmCowVZizTgd5WwgW3KhTr9XRk9liNY5sUuveH7YAVL-UzDzv1ATsWfw6-6_Ck_6UNmHjva9Occ2ZJT
 
-## G104 — Quand un registre annonce qu'un réglage est appliqué partout
-Rôles : testeur
-Date : 2026-11-15
+## G104 — chiffrée
 
-Quand un registre annonce qu'un réglage est appliqué partout ou qu'un test existe, chercher les usages du réglage dans les sources et le nom du test avant de le croire.
+Chiffré : v1.y1OiWS8WnN4opFm2R7zWf4aSakEQ3p8XfpD0Vh_yl7QCOCSmcXLTAWNFuFmeMoSlTZBtQliQfGUK_WE_aY3ZTRUG4csss2Y0CEjFHBRECmASm4twe8tSZJ4WlX1pKOAiOoyx0EQBi40zifgj3sgaSmZEbYhwOqDFCpS4qfjp8qL0AhPghFHEE8IHeXP06X_zeEZn8-5SpYtfmhzhfw_Zythh0RFXo6gBmIEaqKPDrpTzuX63TslWJECNRCXjI5jdH5lru-hn_Io8krBGfaBHFys00C91BUvpcDMB2mPZ48rY80Gw29g7k2vPGeqJhtECxr_GAO2YiHs7ex3qsWDsMIf21zDDvE9Ud08Y6vIHcgqwbTtBV_KJDZA8Laecs6T8Gptfwj1ZDN2n6xcNJtlYeaUtAJ5ojaCEk0VB33WWkZHlhAoOmdjX66NC84gr3qPKWqLR-mFhkt35FXSzOpBS
 
-## G105 — Pour étendre un composant partagé avec un réglage utilisateu
-Rôles : designer, dev
-Date : 2026-11-15
+## G105 — chiffrée
 
-Pour étendre un composant partagé avec un réglage utilisateur, passer le réglage en paramètre facultatif (nul = comportement actuel) et le charger en arrière-plan, l'écran restant neutre tant que la lecture n'est pas finie.
+Chiffré : v1.2d_2KrS5VDQk275qSPPJHnCblG0O-UQvvL0hnlfoHdqhY87wNqV6db0jcF5PZqbeAd5LzLZycl1ooDwGXF3ehggfJPK3xNXw3FwQl4lBzR6ObtjlWUFIqeiaAcrWqVcv8gZnK5mv1MDMc_vifgBmtp5JO_-W9qQKm2KG__kLUPTU_R3MJPLpssLf6oZUnoRwil6m8fsUjA2cCPGALxHikgSEmZb6sE2nKSm4_ShLtVYF52akIXz8I7yB7Jc3_2rrEu_ss1B5xiwUvkiNB_yMDesx30HSK3L8YS-IdSVJc7GgISEVDicdr4I6-sZIQbBUSTgAleU0LatWuQsTm-gcvD_P_7mWigdr-USL8xSi8HmNnHl1MY8_VaJDaXTMLfZyWmFCzUuyhFG6bX2242zd4CpGJjSAe3bWY1kD2vuEihoMBh-7-GJ-vWuL-xv6t-5to4yNM-rI2fqRkaphk5icnVUMo5oM_-Ws2Pp1QgqE78rORhdnOaNZs1QDTugjSCmb-NberEANM8wZkiwrfDG-Ho4hUrOnNnX3BYbIRSSka88fk3k
 
-## G106 — Le brief de livraison doit donner le chemin du fichier de pr
-Rôles : release
-Date : 2026-11-15
+## G106 — chiffrée
 
-Le brief de livraison doit donner le chemin du fichier de propriétés de signature et du dossier de clés hors dépôt, sans que l'agent ait à les chercher dans les scripts précédents.
+Chiffré : v1.MFI3lw-r3VuRFtkJtgYW5Kht-0VU4JTvOOrkz7TrqpCj2C-5ZRKcLVxbFjZrXrPQsLitQTmkxsdNKamvk_U2H1CcErtRn7Kv1KMGoIqnbLUAGh4typZ7MKNQEY1TUsMCuqLpjSfeRgHy3bTxr67WwXOUYOMw718CFizxjG7GWeF9gF7Z1ijZ8vzqmXXBslOTxHuNDes9m2TDahCi9FZ-0c4D4AHMyK6vmfBUJlS-s1EQozEXUvbCs9sWDZhFQM1iJr-ZHSMnAun_am65tlbzc8RFBpMhOOqACc5-pioRZx6bkbpV41mMtNSC3AqnDeKtuaL6ZxtW9sqRFl1I05KdEFd88DAftdD7UjfZcS0Mj6HwAOR9p7fOjM0-Rn8GLNt_XGFn7l7JG53CDsPD7-ml8OL9LF1fb9vUZePSAJ3T2yk0agkzufoYccpR9fSeJ2FaKpZ0plDArE7dN6jd3JvDDeEuypOMYOEZXQE2hBkS
 
-## G107 — Une livraison ne déclare vérifié que ce qui a été exécuté ;
-Rôles : release
-Date : 2026-11-15
+## G107 — chiffrée
 
-Une livraison ne déclare vérifié que ce qui a été exécuté ; un test non lancé est écrit « non vérifié » dans la note d'installation.
+Chiffré : v1.ewqZGdIryxdw1zMYBd8kkngtlxPy6NrMH93ve7_sCbJznazuH2PYX0jRMFSrBdo5-nSX2lfHOO4iukX1Z-Qm9qWgBKzUDTgdWR3jLRzkKZ3zJ1gNJ1O3YymxTp0ZyrP5Ifb9LFs-IVaR9DAttG6L8pd-f5hU7-erfYxfvmeXL-PY0wkhA_bjsiMpTSdXAjxCQT4XG88rFJzMIgjmsEoDbaQ3p2W1OI3KfQssCrMJjxUSjMH4xNM3b-8eaIXChKS4Q8oFfP4Ld-16jTfi3RlyRyRaz8Fqn0c9WcSi7E2sOMBxbLynt4kLV9KWhN1LuTfEkRUBzCFMgC72N1Z6ugu4TMeZ7Q0bazP_twWyMPkX4ZIwTtZYjgG_pgc670fs3SvWuHm0epL5i6uVsIVz5Tybcq-GBlqReg-c-6p-Jdn5AuT6NqD2ALfL1go
 
-## G108 — Une garde de chargement se teste en modifiant la source entr
-Rôles : testeur
-Date : 2026-11-15
+## G108 — chiffrée
 
-Une garde de chargement se teste en modifiant la source entre deux appels : le second ne doit pas relire ; après une erreur, seul un rechargement explicite relit.
+Chiffré : v1.zzwZ_aqT43cIq5jqot5o74muhdoIOdp8cmhNdSHAqk90SsWQjbvdT-Kq7IPbmWGePUgmo6U3V-DrR1nNkW7U1yjXAOkgT6TeWx7urOID44NAS0K3YiWK8JrdWMJVRAv4g0-UDBUYx0zISnNpeJo5y5PceiUmvEiLksYyBp4jfsUVRqHuHhd8gEMGXmvfJVQ9qn_9LERSQ853XkGRK1EM5X9ivzu2Ie5Wzru395UnnUMDoLUeomkjKdcggfpBTaQRupd8C8suzLQbwFiDPVQO5A_Oa9tBdNAY7wDVqhCm6AWywe_9NQ0iZGRZR9nH1cl-rG-xk53_lFmCPPjxdqNlXpWwHRGZOu3ZrH_jqQo25gK0FzaV_uXH_YZGY28h-dqssRvZVSyCtNOymMDlgjP4ukE8o3A28j-nnosqyqGKAI9Y-hlWFaNBCPRq2KhfMFEVBBvBM7o
 
-## G109 — Un paramètre optionnel qui vaut null par défaut masque les a
-Rôles : testeur
-Date : 2026-11-15
+## G109 — chiffrée
 
-Un paramètre optionnel qui vaut null par défaut masque les appels qui oublient de le passer. Pour un réglage annoncé comme appliqué partout, lister les appels du composant partagé et vérifier que chacun transmet la valeur.
+Chiffré : v1.9XYGjXNOYJv7IxQtsMFQRSRUuhIVwQpxC9QwKXA-kBSx1vU9StETvr5IHVQzKAYErlyvjEXWJY1pX3GW2pbfGGm7RfK86SE1HEkplakXINxc70-SBM3MsxeYSxy4mUWhIF97Zl5nT6bqpzwg3LgZFTQ_3CI7kqa1DBTRKQ5JBRqvqcpJN3PcMMoLVPNcZFbbtujS_SD6B5-KKoXYl2kRqzX6ndymAIOxemGlQYmZoe1nHdX3XFOVpaFaEa7mpjE1dym9wFJ56O9EFCgFyGcPCr3bnS9WztLrJwBXVXacIjhCDzMBad1yYgOPjhKhU4HTOV_wNhlrEG3PKQLBRwGqcxtYsu-5Zw-Wiq_oSaJ5Cp5H7r-tLkf2SAu0ePWi3c8Ddf0SRYymZQpW36hBoBwcjsqFX9Haty8v-io0VHvCo986HBhjla97Ox2chbsX07V0n0FtEqO-Dul28kJbELkZpzntOh3q6llIydH84-EgvTIMe5e7EsX8GsxistyEYYYES6Iz4XV0L2NGy3wVqApRSQBoOUACwXBDQg
 
-## G110 — Une apk de même taille que la livraison précédente n'est pas
-Rôles : release
-Date : 2026-11-15
+## G110 — chiffrée
 
-Une apk de même taille que la livraison précédente n'est pas forcément la même : comparer le hachage du fichier et le versionCode réel.
+Chiffré : v1.cQBospzhz9oTNdAlhif96-BIhkpNnxR-NPUcpSJOs20_wHwdbL5QKLFknrpJSNlfsFkd73koY3MRY8ixAvMlepaI_nUVyOjDm1mp477yCalUJAOSKICa7tmrfHlgEilrnx76dK7MsaVwrjnvHyq1jLwSp4JTx6hYEg19N1b8I6hD-AwWXON_b8IY7NV7RbJyhCobJ0IUz5H39eH8QtSjChcH-ZX_jy5ZzmaAX5X1314BpUNmfamw2qzyCH1sbEYMK-FczhmyK_7mOl5jWWwD94Q1U5xbuwE-rEHO26gyJSjThaHnCGbsGWFTRaPETPT7C-mGxOXKK_oYzmQ0fb5SNUdNe_5QOWdx9XBlHQDBaD5G0JeKOvaU9zuPqce9m2cm51so4f8HfQVZU7TgfJenR3t-7eSl3VSOeEzBl5EEWwyqbw
 
-## G111 — Quand une correction câble ce qu'un test source gardait expl
-Rôles : designer
-Date : 2026-11-15
+## G111 — chiffrée
 
-Quand une correction câble ce qu'un test source gardait explicitement comme non câblé, mettre à jour ce test dans la même modification, en gardant l'interdiction de navigation vers une route absente.
+Chiffré : v1.MOJlEKTu_XCBuTkD-FPSl4HRxACIQyjk_4Il2PHWsxq7XYOCxI9en0ky1uAv9bUP4qUxwlPB-568Tbg1kbafV-YCKgASq-pwDIoSTXxlG1e2XI1378i-XUyh_iSUvYDq-wBNAwF9qsfyGbWpjC5gz7Da0x74I50Hfy7fzQgm4Lq6bKbhWbhT9M9GAYOswTSkYrVlYhChOyMXaNHyTiTpVeLi1UaUiiMoQ6ZUwQzBIetZpCayNBIuI5XodqTYN7uoMriYMEplQuN8pMJ3Z4w0l0LvcmDUkKgnqohBH2iAy9v8C4hZG9cfQJuuSxiIO_UfozEIFRctXPuXlYlPtTSszZFWxUAn1JLFsRkfwxlPOy7bnWffjLIAbTuvhayXdxH-4NXhXO0fGiEgxCJ61nTrw7-fgoySbU3iu0xYrJ8mH6VZ3w1aSViO9-WAI88O1j4U9IKBk4jCkyU6jkAGzJGr8C7FAj6MAFTzLAWjvrfTjjGqVnFiYxLWfvTUG4rglY16
 
-## G112 — Un test qui valide un câblage provisoire doit être marqué co
-Rôles : testeur
-Date : 2026-11-15
+## G112 — chiffrée
 
-Un test qui valide un câblage provisoire doit être marqué comme tel et échouer quand la cible est créée, sinon un toucher sans effet reste vert.
+Chiffré : v1.V2Ew8N93aerlEQzGE7UMSTI5FmuaDHilfH00UKtebWQ9HRjvr5Prxxaj9542iHePIs-SZrBs1JLLJlUxzJmJVPEoR923j4d-AJF9GSPAsngfhhDwsCO3BIWGWiKkcKkWmhvmfqRIktsDw_3qZssXtqD4Kq8i_FIXNjTRwPpaLGuLJmA78o1fXc7SP43O9DW1ryIJUwxYThjLK4M6kMaqfPVuh7_8OxKaM6VC7OKNZg-aqMneN2qGaAD-dUabB96Y5GwVoNdpNkgwzM8OlhLobc2JuxoOJvsce1g7vhzZ4RNRtRmjW77VzUd8GfYGjTb19DvwyUy8k7FGDmcr1DxWaAkZ4bQYX7vySNUv-XOtrVnfCnEuZTHU0ks9uhUP-E00DF-yrQn6bC1wmNfQQg6InUIFLaEByPPz14dwWr7t0xQa_WtjZVWEyS_BTA
 
-## G113 — Avant de câbler une navigation demandée par une consigne, ch
-Rôles : designer
-Date : 2026-11-15
+## G113 — chiffrée
 
-Avant de câbler une navigation demandée par une consigne, chercher la route cible dans le code ; si elle n'existe pas, ne pas en inventer une, laisser le rappel sans effet et le signaler avec une question à choix.
+Chiffré : v1.RVxSygw7SVUWB2BaatrQ99J2zhyLkfIyd9heoYbYvFqZB7OwyP57jJX2_6XXt7w6eJrHgt3cbsXJRhgSmRh3Jr9rZvS8Z1t_svQteDnzFXferMDqGAVZ6xy2dhIfOoZBcYQlpvpwVyLUEJGcuHb96gEt5267Otcv9g3pK5NuhsCQIGN3uUqwk_Vy-cUx9d8eidV28dbr1Ubr_6qXQmLd6d5TnKEKO83Sn-Cj62wnHdTZR8d-rvm2qSarcyY2IOdjCuEGknlpG8MnSLYqeibE3riFjZaSD3cLxV39sh_61Kmx3Pgeo8wtCooOsPz0AarOO6xsyoTbDPQvpb2Ce1lzvleVP_Ba-Mia_OEdJLAszYb1pY-p4oDpKK7rRUdcpYeLReYJG2NkcYxiZHEE9Rpfx2Rdb2Co4IRTeUf_0Kj5pfFcaueICXb27cURq3hlm77OULdyB6PwDcowIuPCXqwmn9U_MMrXYURlRnMgdUOtU4vl3qmzL8eeEB7Xpsc3A2dirSsNUsYiTOwE4eT0dA
 
-## G114 — Avant de lancer un émulateur ou un outil qui ouvre une fenêt
-Rôles : release, testeur
-Date : 2026-11-15
+## G114 — chiffrée
 
-Avant de lancer un émulateur ou un outil qui ouvre une fenêtre sur le poste de l'utilisateur, demander son accord en question à choix, même si le brief du projet autorise le lancement.
+Chiffré : v1.O0PTKv1QRIfY0BijIMK-MhJ4Tc3VKOf5vdFcFYayUWcoF6bhwBhJJrpDVGoO7-nIpCMoAucXgiqOg309Oa7tTatYC6NOk7VuO6BXHm2UBYLi-UndWVQGDBIAFWYb81Cl8gCzFNO0FoyoWnABKzhbOfI4E7CKo-5oHP7bMuxEakY3ce2Ci8wlhN4As1jGYn7zeNgp24rVS35HM0SU9-TtRerrOivCTPPq_kH7LwsSoClShlgZa0awg88q7eqUjjrSkNgnVnAYl5nXYwbLUdy2pdlpbU0HrE_BHpMgOaLvhlfr_SXrWNwiNjCGewP569qDvlSoxxRg3NwX5Rbleap6GUzSEskWr-_orTojnwmJFdU0cZyH32RAJnCI5J7KnyuzngvirA4LCL40V1op3lxiDIJsCmfeHmShKypaI_7E_BXj2H7d0MjmLHIwJ5FD-nx0arhYWm0wJsTUjXdkVMuFXEU16PD2bbe7fKkPkCzOJGL32m3pEnhAO-5prA
 
-## G115 — Le contrôle des textes affichés parcourt toutes les sources
-Rôles : testeur
-Date : 2026-11-15
+## G115 — chiffrée
 
-Le contrôle des textes affichés parcourt toutes les sources du module et prouve son efficacité en injectant un faux littéral.
+Chiffré : v1.Znxf6Ru0OL0KcJPoV44fALn0sLF_c5f1d77tRaqIMwFi5Ez4YVCl07Zy32MFhH_amFDehYBDe1g-xvVzCk4I6uenQNcAtxpy18SsAYhCVJStKCqeXaLuih9nwR2ddVVhurSnvjmzx_nOFfMW69pvqXFIbtgshhIxUXyIgqYUkiqxS9MVFUUWHmkrPorO9fZO2s1mQEBEal4tLGcP8NSV3XGQ0laCb7LCCMqbNnP8leM6SZ20pOdX80WyjnkSYAu1z8f4zdKIACHlTsznIqcl5OQVdJ1yz4ptHWKvg-RXN_HEZwn9_8EfFShuWurglEPxwq_ru-OctKsJyw0KprMpuLV9as2Ckz4eKCScnvNnJBmNgqyBe11YbKU7PkEB2PZo8YkunQ6zdviO-W_Yt9v9A4ktOqo
 
-## G116 — Quand la consigne demande explicitement de créer une destina
-Rôles : designer
-Date : 2026-11-15
+## G116 — chiffrée
 
-Quand la consigne demande explicitement de créer une destination de navigation absente, la créer en version minimale conforme à la fiche et lister ce qui manque, au lieu de laisser le rappel vide.
+Chiffré : v1.eF4pFdsUZZu4jmNJYH4_D_Z_YHlBCXLwzaWQeiOaIvn3mQA2A2cXUegu55s06KfObIQHTo4wzjohYHjsthB4Psm9dp1LdfvUd1fbQXwBsyFt5PdLErQG2v0qkM79P8nT6-igkjXOifvao-iOLokBN5o3UB02HbmTY57NpkAFwYfe1E4Jqy3olOpmV1FwKGb8dieAjIxfTWaqllJ4y7Rka0cdN-UZ-OKRt-VvI0VL8mRPF9xQ0FcaaA_a-7K6A1RTiIhtEP3gA1PwnJO9x2_kX4ATmJZpxmoImfeGyIF4YLqdtlFUQxIlVWqxMsW9uPjdHOESWOQg2LeX7pt6AE4pZROGBLwYsGgsmoHV1-uwozrcv5Wp4ImfRkmO6oQC3gSKnLxd9Kb-sEc8iulLnonQujQJ6TFysOUmeFCKt3RXLHFTRxwEfvrZ790KKjNaHsUcsRcH3t_jqj8oct_00FGNEqJ_hyNxRsCYytE8pfs81IJL4TcKQf-6khF9xg
 
-## G117 — Dans un paquet Android multidex, la recherche d'une classe d
-Rôles : release
-Date : 2026-11-15
+## G117 — chiffrée
 
-Dans un paquet Android multidex, la recherche d'une classe doit couvrir chaque fichier dex de l'archive, et non le seul premier.
+Chiffré : v1.5JnQaMYGE5YsGWufrwBt77houh6RmnncYpxhEk67wYphJEOB1spTZrHx54J7hNrR-wMqi0REfCqtOk1RJs-WcDIr10U2IHouyoepUw55nymxt9LilygsLBzElZFdGIPY97vmypoyQbrVYbB0sVWZfcbVqkQP-Pp5NNaORkgE9_3pYmF58Q2Oai5KCXKyX02tzroWKXVtgbmjfU2HISO9IQW-QiUoqpKCZ_eLKpgzlOUsrl9LNyw15FS3mSi-d9ji4tglZzqx8w1_X9tVcUdXEj2W8KF0JahSLaeu7j4DPMkbIitLo5dopF-1l8eE5pQTxJIyn8XcdRW_jLAGEz8BhKoHE8w95Pu8bP_agLWK6gl_t-W4li3uX6JYKA9zXCBYi_og9kZbJ1KY8PIeOEGolYjz
 
-## G118 — Un contrôle automatique des textes affichés doit aussi couvr
-Rôles : testeur
-Date : 2026-11-15
+## G118 — chiffrée
 
-Un contrôle automatique des textes affichés doit aussi couvrir les objets de constantes de texte lus par les écrans, pas seulement les littéraux passés aux composants.
+Chiffré : v1.uDmVw5Bf_Y566Jo1x9CT0nBLdfIiv7UcIs5uF7Djx7SyAxQjUlWC9n0lmH_A4RfhRHR0ni73MhoFq3QsM4ZRBJrVTfKr886xFHn3GfXkMDl9dF90bTUcBzuqssQoVba-jFNlVP1M1ykx_qlLgFCTgusIOZUIBBACINz9QBDpjJxXE6lgGyrttat9sE84I8yaybZbO_6-BVB_fyVx8F-HJNhz-MS7lms1Ki_-tHzv-MeTIKyenlMbG-C8sesfBIado8AVW1Ayy4Ym9XfKZizmSOs12rFXeR4NDg7qKe8MvTjCD9qnK6BG8T8Y-pENTUTmZ93ycNtKxs1dZ8XZewe95VPomay2eyxCZk0RbLvXp-hc3flR7gMvIOs8IplcHb4fkMDNgs68q_wdnBTjPt4m3GHKcyKeI8zMy8dTNyISWdhHcG7thK481ZcabuFK9OfFdGTolrCEolOgzL84h7n1sQ
 
-## G119 — Pour déplacer les textes d'interface en ressources, partir d
-Rôles : designer, dev
-Date : 2026-11-15
+## G119 — chiffrée
 
-Pour déplacer les textes d'interface en ressources, partir d'un inventaire par recherche de tous les objets de constantes, énumérations et formateurs ; le contrôle automatique couvre tous les fichiers sources, impose que la liste des exceptions reste exacte et se prouve par injection de faux littéraux.
+Chiffré : v1._RmBD9mqQDjo7k7VHjVc2tvCR2qrNOOoMRBI0Y8KO3g_CNPMb0mqZhXkJG0qV98eUDxUZ55Ubr85fqjqhOmc4POFHTc9c6EunIJSWTfvDi4AhJuYkfZOIfiWkzi8s8DuOw8i_yaZ38i1V-V551ralkk3lbQjPkrXf34Ro6EQ9thT0bolNfRfLm_zndTlGyfoBGxF42iU9xtcpgd1dbdOrpKLX_cF5A2vi6StZFnhwB1GB_9SoV-uyL2co76kG0i8Gu_aYj4we8JuprZo2yVVwNE4Ik5kojqzuA8lhkcQLivyoVQZJexGWcTlhOlUppLl-UQ3YR_fqL-Upu6ujKPxOf7J1dAmHxIvuD1rDafZ8_r4JUphQhYZX5en7IsphIlCR1_lZxwYMRtmVgkBvkWoM7tU2OpP_EDpZABeeuoENEENIqmC33XO-5mkbFY7L8w9eWV7D3MAuxgYXkMvnLN99jHZ38ugXFZkGhqUpBkwSZX-O2Xo5uMXKvwwAFhVQYkmYdG7HyysFSvvfAR4KdJTJaSeWdyjwaJHlfalD6L7gVuQVeSPiY1c7DTshDUQ-9C6C1VRxUN4WR-tagfPmFCdSI99lPYtfM2P8JrzXNkf84d7Vw8NHeM64luwymZ8cc0MaoP1uEK_UH2UBphv4TZO
 
-## G120 — Quand une correction est livrée sans compilation, la revue l
-Rôles : testeur
-Date : 2026-11-15
+## G120 — chiffrée
 
-Quand une correction est livrée sans compilation, la revue lance d'abord le build ; une annotation de ressource sur une propriété sans champ de stockage se pose sur le getter (@get:).
+Chiffré : v1.oPEF8DP2Sbkz5antghI8eLBtQ9KBWAhQ2GlRy3cnMBA4bw2NmN6lRaLpj_r7b6N6MF7EcCJJTI5Rz19posiLNL50NjlP-ZEsi4752Y_pMDwNB4BjsI0wxHnO3jfTVccVXV47Nxzz7zjxAyBzj-1qxoMXOkOp-PG60iToB4tmpobtdlS1Dh_oREe1mOq92ar9tRUksOcNVh3_PPRKDvSLqPbOYSn__rcWV3hEXERwQ8zNJqm0hTylN3XHinjl6kwyVWAh5Zyfa8My-bZI824MOvoZxCPX26EleTJ43rs68LlSCCojN19oTgKrIJv6it9LXvivBLibLtKEaTBNMZbxKDOCZ8JDoZ2nsqqhOMQVmyhhRbrUIAKbCn91inC92TWq2Gs4CoYHnOqR2_HDJj0JP3dTvx89EswfgR72-HEBaCCu1zoa-KJv3Ag3JKys57dAsOcQS578BLF9i_YxjxLycHrinRcFQ8dugF4yIPw
 
-## G121 — Le brief de livraison doit donner le chemin du dossier de cl
-Rôles : release
-Date : 2026-11-15
+## G121 — chiffrée
 
-Le brief de livraison doit donner le chemin du dossier de clés de signature hors dépôt et du fichier de propriétés, sans que l'agent ait à les chercher dans les scripts précédents.
+Chiffré : v1.8QcYCC6xP57BSAmnF0k9lEC5GddjpWF2_m0FYgBdfg5ZAfqeXKgOsYLRMddMpIoZqko9v16o8puKzxDPf9Nme-hRM5zJ6jtGDX35f1MVkeEzX4bRxAXtpnMXx_tVel1XtrDHDt-guDRWkVYQUOyq4s4fQPuFDiz12V4pGicAwBQom5WJ3o3I1dZxWZVtTzguYq45Jy9YMZjoiI0ZykIfIQqJqR4IVW5VoJzfBaI12qeO9KKwpV6TkRbfioj2RDUHnH_J34HbWOrsF9fZIIgU4RoBmfIJr-wh6fAQdcLpD31pi0mNnrtuF1x3JFPUtwXETlUjaPM6OMMB-6pbLXTEPlcMKX3k_kT0m7n8zg66NCkslY_VA4kJ_7WcrrpSsjN6l8XmvA9sDHE0v49Dsjt3iPKQ-euAhSdHPxtGIp0faleoOAPczymAP2ZoTU75K3HUPBO0Ud89Ek1HQSuTYUveNinLVs--kpiMZuF0JQ-h
 
-## G122 — Dans une maquette, comparer chaque texte à la zone réellemen
-Rôles : designer
-Date : 2026-11-15
+## G122 — chiffrée
 
-Dans une maquette, comparer chaque texte à la zone réellement visible, c'est-à-dire sans la barre de navigation fixe, et pas seulement à la taille de l'écran.
+Chiffré : v1.OV026SKbw990oPzmLle8vdlTJFLsZ2Zp2K8-Udc_kCZ_cvIar0q8n4IHITF6rD5F6SnyDJoXWqelxnsZAj1ckCQxfbfPgbADnFSDghvTlWdu7wcJGxjM1JMdJ-4fanpGIoI88dtoS6s8y8SniOkQhJmM1KkMPx7jT-TESNbewmSjbaZxZh4QU-Vi2bj60CcOWv8pNKCyNbK0owyZKCWVHZ5F2pPkJG2fKGohC9AAfymN-d2ibIGLH3POEha80p9H63VSeJaqaEJhQkgDKWON9BpgJZQHHL2O-xAWr_hXmPKPt5BZJX8ESPO2_Ek2mBG5Hvt1FYIO2JRh_Zxbqwk-6ABFU-FNHiZu2zenmPNZmNPAwbAlW5WolFr0UApF715VDKw-P-HuTqTGQpc4FTrwVrPxUq5aiJu_YZeMerWU_yJbqgILKwB8oLRiLePSJM1qXVXSfreFAP0
 
-## G123 — Un script d'images qui charge des polices système doit prévo
-Rôles : designer
-Date : 2026-11-15
+## G123 — chiffrée
 
-Un script d'images qui charge des polices système doit prévoir un repli métriquement équivalent (Liberation Sans pour Arial) et l'image produite doit être relue pour détecter les glyphes manquants.
+Chiffré : v1.i6aJodxBRGI4p8ubqpTEsKA4zCTOW8a-_qJLAr-tasdrEhmceRzfpc6Kpbr-YBye6jtgbOIKCfzHpWzoKvMArbUfAs3fhFh3HQcArRU3x1aOOsffIxpJUBHLeHiThb6K__rzK0NHsu89ZjCX6an3NQ2M_CrVonqAJm6loIVp872K5nrwnWBS6cJL5OZ8gmBb8MIdXyXeRq_gESjbcXF4VN_FXXCYSpdSGT1IJh_oMS4o-4-8GA_LNMV45dVuICp4GHHvPtWkkNuBGZR1Gt5Pw3pOUFidIFn0e9b2wuv70iUjQYmvs8qdV7LmZZ3BPT_BKN-CPgA6LY0yOgQYEQL36X_CNEPZH7XqYKk7_eTBYx9-AMcNB03aOYAcgpuIVC7gVS0IAnU07MD00G5uH2Q_8fkl08BrEkSHMl7EXFftCWwBszWKsNiFCk6woODdKxsYcpCk8GeQdr48nxkBk27uYj-ZsZ5lfVnZg63LlDYtKuj-rraU-9P5nEe55S17b2z-
 
-## G124 — Avant de dessiner les variantes d'un composant déjà validé,
-Rôles : designer
-Date : 2026-11-15
+## G124 — chiffrée
 
-Avant de dessiner les variantes d'un composant déjà validé, vérifier sa taille tactile ; si elle est sous 48 dp, la signaler comme écart au lieu de la copier.
+Chiffré : v1.KpwC6xqhY1lnVEGb3mbCoVEpx4FKhoPa0etfGYBwPQq9cZDiEuhYmKNxo6LEFp6FGp-rMWIXTvheJdmktyoqGKQ598-rzmFDHe3hYGZOHyVpEtbCgg18bOmiAd8ZPAUwLgGg7aJc_HBt2aLRQuaMSvzPCWHIQUSTaAy1aJYIUpBUfvHCW3CtumqBKZDPmyQYI7kXzlEYBmpEB19dC0z3vKTKf8XJVDwyqdtr3arBs2ZORe1pgFGUXk5odDD49tIh7I9D9uGx6RjQpPCXVlkk4KyZyUn6N1iy7-dEO724_3ql4fCyoYcGG5RiSOx39kKh7cXja4HmXxAzPdy6I4Txh7r4CriguZVB5fAMJlWo0LPXsfEvaH8rki3fAPsdnbOju_IH0DANkSafF16H5n9-Iw-6d4n-kzbIIBVXiuzR-B83_ck96EUZJjfs5quC-xKkgB8jvlm4ntU
 
-## G125 — Quand un lot contient des éléments qui dépendent d'un élémen
-Rôles : dev
-Date : 2026-11-15
+## G125 — chiffrée
 
-Quand un lot contient des éléments qui dépendent d'un élément absent du lot et que la chaîne de compilation manque, livrer seulement la logique pure testable et signaler les dépendances manquantes.
+Chiffré : v1.zEF6VT-J8ivotY1D2G_NevQRfbD2nSaQG98jNMg7WJvDQXsp2C0slHGtcd9fEPKwmJS6GO7LEd28wKX3N_34PrwguibRUwW8Edz-RuXc95wc_sTje9aELy7GjrXmPHp6Vj2P47U503813oGAzgg3HJEhjT3jODjCLe4QlvcPCCXXTubFCi1S2N468ycfwuV820InGrJWwyS9FypN-8nANlFAEgNhL3y9xn3PZxkjBM9MAIlsZ-nfxNLj1av2iXd5x_kHeiK7fYBhve53U4DagUzHPakZn1egrGBzqkup0q5qdFhQ2-Xk8pOkhXS59j0xCr9pJkJy2lqpiTCn9Blnl6SzEVtUOZPL2lbVwbMb2uDBQwm5OD8qdVOn3CbNJdsV2sfKCbKvLVee3GLiIfCifkaMX_KQrdT_ShTVp3GtV0A2OStDW0LLbbuj_aCdadOQHD2FTRE4MROxdVQum1eCYEIu5zINdv2i0rCvfvZ8CjvJBgqG5B44PLuamYHWAV4
 
-## G126 — Compter les tests réellement présents dans les XML de résult
-Rôles : testeur
-Date : 2026-11-15
+## G126 — chiffrée
 
-Compter les tests réellement présents dans les XML de résultats, pas le nombre annoncé dans le rapport d'un commit.
+Chiffré : v1.DOmCnUs-Ua5x_8yZxPMl5wE4VzeqJ5tk6UzfTOv11CbWhufDV9fG91pq2mysGlIp0LRkueST-TRriZSLvlbw4ZhxCVKES0yntnNnZ9Tm_kV2s0HU4dEm-PZ6OIjIfmC4olBBYrbkVFD-6y1C3ZIvHZh8LKeLiyBXx_14TgYa2oMa2IVb5n9vIx9FCUsZQYDUh3hLO5uSjaWi5_LIGReSq1p03dc2KB5yDiMOSXiNd_R5zMOBaaxbTKU5R6Sf1t_x4rb7jQfXsFT_UreMCXFNUlblgYw8X7uiozhh8oewADNKwPyt-MIJi5T-5HX0ye7FgtLAdnUb1qI1MC38tz4j-O2gcQ-8WNvQCJS5dVYxMdRl6D8jVDNqL8ZfDDy920r2GoiHzetjqsLEcrSm
 
-## G127 — Une suite instrumentée entièrement verte ne prouve que ce qu
-Rôles : testeur
-Date : 2026-11-15
+## G127 — chiffrée
 
-Une suite instrumentée entièrement verte ne prouve que ce qu'elle contient : avant de clore l'étape, rapprocher chaque parcours exigé par la méthode d'un test nommé dans les résultats, et signaler comme non vérifié tout parcours sans test.
+Chiffré : v1.sInDgoM5DlLU6VWdMLcsp7aaIRS1Uk1N9e9eGtQgo7f_bXcjkiPd2i10M6tFAb2fIJlgglT2IbqQTiprlcwbWKPqTj7BrBzYTHzASHL1YxVu5rZeBL_GM7U_G8mCWbsGhSqwA4fsFH7U0X4wgkHLqcdv92AWp9kkkJSx9gEIZlizrN9Uq4fQQyYfAMVzfZpF7OgxJqdRSZ9fRXkAqS0_CiguZqWFfopi3mTOHH4mIf1LLD3y1I29Gqwg9npNBggEfd-W3bo504OWBvQ7B9IIku8AjwiHj3GSq361e3--2k8UKDor6yQ0WmThUHh6RY6G2rrv0RYu3j61jCitkYFDWyOl6FZ_wJgnzKNWDoE5Be0XFIo5WfletlDf0ZUEPIVZQ4hOIJ3VdEopGt4fmxJZa8ZRlyvJ4OJR1xeTzNBy7lOG7vDa0V22XsajPXKxi-isCTQbOm13YkyDSsc3L7zjRiAADwbTnx6KqmCGh3KOopfStHK1U7O_z7XAHkMfUzVYzfvvLVbixvi_ZxsdOlSwIs5cehowNmTHORGhq976L-8suEUXewjkmnlk_Rg
 
-## G128 — Avant d'écrire un test d'écran demandé, vérifier par recherc
-Rôles : designer, dev
-Date : 2026-11-15
+## G128 — chiffrée
 
-Avant d'écrire un test d'écran demandé, vérifier par recherche que le composable existe ; s'il n'y a que de la logique, tester le plus proche écran réel et déclarer l'écart au lieu d'inventer l'écran.
+Chiffré : v1.Fb4hU3cLuatXnmzY63DXIg-pwXYsMD8sg2QnlonVtuNJN_gerYLGAnewk_dzqHocLdw2ZaBAvpfkjF81uSdacWXD1GJ4bcxJRSaptsp9lmptcQHprBnZRysKTAPXLWI4ZjD1V_I3drY3Ldd1GqNPUoJNYoPAbQIs2a-UY491p0GjIUNKqZDzZiQInD5wG9Ppl_M8c86u0S8W4Sc9W0N7U5XXQICNR7H7QLS0cM9YPnY2y-mQojRRO07pajdvnscRKy5jAaGiJqwV0qJ7nzJIohw9X3xcUrFpp9BFf6barxaue9AuqWVfIpiNMo2Wzc2zr_NkX_CoiITU0RwadpRSaoKzR4dm3x3uWxe1U-PE1FO5doE9KlLfgKq3pW3HLbZDFb8tGDS4kxo59piaxTazc16AjUAhQrqGYC0O4pwzupuUB3Bwqw5rBQgnFtA1DVmVEyqcGDoq_7Y1siz9iMxEl4lPIz1d5uPEDRB5BYzOZ2B5pEBKw-qHZ_Sm2vT3wRbgWoi9iP9QFciWi4jWNuZM
 
-## G129 — Pour un parcours d'écrans dépendant d'un service externe ou
-Rôles : designer, dev
-Date : 2026-11-15
+## G129 — chiffrée
 
-Pour un parcours d'écrans dépendant d'un service externe ou du matériel, injecter la dépendance sous forme de fonction (avec un verrou pour tenir l'état d'attente) et fabriquer l'entrée avec un fichier minimal valide.
+Chiffré : v1.OlxZpKTn9Nx7ZyEuNO9F2gctBOSd4bWK48TH0-6tZA3TUagCzmMqdimbOmbzvonirmhodu7szQi73RkEtpgaaZ0OHLovau1NyClvsaNj5FG5MTYV4E1vrLdK-a5QcZpwnE6zro5ZRhij_jYwPUmZlWwP1WtwvzVdWNBkeZfYf5o28O05AuSZ7WXp3sX3MpJ1BCrdQKHq_4SOuamFZaDi7p_wUjODa1OupS_Aezacud-23upn0vrbFh4t4vuQ9pc-shwRgo34vOuHfGkVtUH4wWdMUHEZ_YoOmGQ2onl65-oGkl0Vu1jzQb3ION9QkJRFLvvpcFLg_7TEXF3yuVHh9CdWH-Ye6cnEoT3GTEvtNcUG7lsmBlIovGXUY19d5zf6CJj_8d1ge_BZGCE6pT3QKY2DltrdFC2Ni5aqtUG65DtVRevhlzwJuyIqRV4lhWn3DTyRZWWFcs3ULUxxunLF681dMNKhECnz9vGcLMOV799i0mthf48-BS4bpUMk93RSdIieGXcqUYy0x30B14fFL0tPMQmj8Z0YZDQ
 
-## G130 — Un test unitaire qui échoue par une course sur le dispatcher
-Rôles : dev, designer
-Date : 2026-11-15
+## G130 — chiffrée
 
-Un test unitaire qui échoue par une course sur le dispatcher principal d'un autre test se relance seul puis en suite complète ; il se signale comme instable sans masquer les résultats des tests ajoutés.
+Chiffré : v1.Q2H0FzqO2NmHe5tAilEz9vFBlxVynthCklZ_uYlAjuDLsib6nXxYeWpJtaTxbIb4lC45IGz81tPcd1Kl4rtH4pl4PQLSirYB08Rm1QLNqjR26EIuo8wGH_raVQhs2LreBpWi-QV_ghYtcRVcw5mtbyTfs2af6vqpT1XoDLrEyRX-zObTGa6j_QaatQd1W9ulJntg0tGSF7xgcZytbfKe_5gaX_ZJyFN3rOSFNCvHNTw3UfgbXcbESSHIUxQSvS741Vvo96efjvDT0Upr6CajYfE7ebLVJwj5fa6C0SybPJvasKVv8ctCS1SIMjpge_pX0yZV2BvKm-yvnWDbSprocjc7ZbpaUU_grEfnwiWOxKnVRBZqZ47WSnM4zCOYPAyLg5pnoRB3Mtq5e5aof0wzw68zbScbH9lit_fitHryoKY64K-lVpDsEusqABaoJBkr3YDOB8wMskcrxNGGEmYxuOH_DHspra0ZZmiOFZOep8eZYheNxSIEhUNiXAyI8zUQv5DtlUZuzr8R
 
-## G131 — Ajouter une route ou un argument de route impose de mettre à
-Rôles : dev
-Date : 2026-11-15
+## G131 — chiffrée
 
-Ajouter une route ou un argument de route impose de mettre à jour les listes de routes, les tests de câblage qui lisent la source et les contrôles par réflexion.
+Chiffré : v1.lFYWuz31Nwm_IsmqLX4bjglYU_MNM0c8RISEENOIeg_HeFDBR4NUSUIuNTC2ma5_BlNUVP8GKTFpQO04onLtHaGGOvO6XJJIwV-O8oAuRWpdouwmAMWi2Vz62-09Q1uxFmfxI-qDOpR6TpHXJt2PDCImewwpMZ51hbewVg8PVlTMUMqBJp4WlYqIgZMuE0q6Tu9I5gV6uIoSk731HQsmk2ZlHBz_nxHkclm4VtB7yn7jFbt9o6Np0jr7wc7q2nMGxzvjWkl-uE5RxZdFpRryk_1_B8tO5yNhlQt3PC7ovMevNmze4N_o-G0fyrE70nO6avSB2oBx3lFv_Cgi8fxXyQEOIHWkQC-LvubiJ8N-Z4KCTQEQ1okReSJN0b3oDQYAi32zPv68vDY_-5-B4HW7FXIddcmBxDrO80nN8TmC1vQJ6wdaNt5j_HcQ9Pb4NaGh2zWInQ
 
-## G132 — Prévoir une relecture silencieuse qui garde l'état affiché s
-Rôles : dev
-Date : 2026-11-15
+## G132 — chiffrée
 
-Prévoir une relecture silencieuse qui garde l'état affiché si la lecture échoue, plutôt que de repasser par l'état de chargement.
+Chiffré : v1.52FUwCZt-iZ5_wrOwrVGU4EgvVvPsuUyarAqNY4iSeMYnhzLe17ea7c-e0fDbXDFJS41kkW98u8xDrmDq38veBscUKHgFKwQl3x2UchONlkucYzPvOJFoMLz8fc7XrIjow7aAtL-_o4U-hcHZqduYwB4Bx9nV7tKLU4o_-uh5Ta6vzhg9shY7HmzSO77LvoVrHKtRbu2iEyU64bqotluM5iyK8VrpAaxv6w5INp6Tm6sOqRcAd4fNSiM42fD6fBSU0GNAUxxOVbd_jcBGN5JUVW0GVUBypezZfqsEgWeGCqG-0n0ydnmiOWeV4KJ6P8bOsHE1tCJ4ep313MgLLokGsPTeUcq3M5a-sdyhXSgdv46vSApmgkmKRYtfov-hejNO4e-Qf0BBvu-GJbjx3f1cSoL0Zo4g8Dd
 
-## G133 — Dans les tests d'interface Compose, onNode, assertExists et
-Rôles : testeur
-Date : 2026-11-15
+## G133 — chiffrée
 
-Dans les tests d'interface Compose, onNode, assertExists et assertDoesNotExist sont des membres de la règle de test ou de l'interaction, pas des fonctions à importer ; compiler les tests instrumentés dès leur écriture, avant de démarrer l'émulateur.
+Chiffré : v1.hUwxq77IjXvajExEhdTD0bI0keApS5iWOgW4dS91WoP5xYJrSiBOVJsHOi0sOQx-fcN6hk8KoWhlFsWiWQ1kei3NQTyIpQGkti3uZUX_57SAxPpm38rzik7gWbj1q-KqEa3uarKuHlUYVXRh7iAwymVJWAog-GrAZcwgBGfDPS5VVg_9jnXe_8VcOEi7KWGDzdEem9c4akRiexsdaXUDOwL6JMR9la2g5xx14jHWYfTiVMjVx5dqXtJnq4mcWv1yrKj5QQYXKc6pIdC5wvjtgpMY8XIDvHkuhlw05lcNa4o3BbX8inxH1r6s0Yub4R9eqgyjtUDR0bV5v_Xd536UxzvfdhBA7ZUAnsr2DY9oCqSor8pNqpOyw6EwFEYsW6PpcabNCQXj2i6R1T3592XHnWfql28_tfTVxa9KljhZDQ6DagcjdP8IHqRE8lmn1WxDTKUqlIonwow6lT9Vm5AQswd_1w5sM2L3SuWz_cmBTC4eRgC5Pcrjnti4z7_TnMykS5wWaIUbLaU0DZ6Q5EKfG2nhYR2x6xgdWPMyPuQYOiooH1O5_xHVZjZHaajlHraL0Q
 
-## G134 — Dans un test d'interface, cibler un élément par une balise d
-Rôles : dev
-Date : 2026-11-15
+## G134 — chiffrée
 
-Dans un test d'interface, cibler un élément par une balise de test plutôt que par son texte affiché, car ce texte peut apparaître plusieurs fois à l'écran.
+Chiffré : v1.copeR57ygNm4L3he-plksxHQ4cc0J5J2nHi0tGUXoLeVMWcHDYV0PhnV6aVBm-Q-uvZ-VoQAXCxVRg0_XX71-LVIR6Y86NOEFi2jJi5gVO16t-KAQHggmkPznehpGZxP53uabDfTRcYF9SocLvoIDQuJAeMH-OdqJsyTKzGksTulHQKCu-OV5i45pPnAY0JKcNG_l2Vd71VOKZxo40-5eBHhoaDSsxheUcwDzdxj7YH5eelcs_5UcXQpPlJZjq6pMSOb9Qa9CtfBdnIKDmnhcCwvTX1YL12pbnEi9AyBK6jw5gJlJv1p1luQxx4FFZMJ7I9N2vR7_TvHlZmf9wk_ScNVwBB27Yu84lhw4mkC6lrHbKZszOpzU8rw2xIraHokUf3_dKl9X2Tmp1uPMj9zXNlyXEApYeV6SBsjFRW_LKvE_y2HiAYAJBYYwz8BYVEVeCM
 
-## G135 — Quand l'élément est un document d'inventaire de statuts, la
-Rôles : testeur
-Date : 2026-11-15
+## G135 — chiffrée
 
-Quand l'élément est un document d'inventaire de statuts, la suite de tests verte ne le valide pas : la revue rapproche chaque ligne du code actuel par recherche ciblée et signale les lignes devenues fausses après des livraisons ultérieures, ainsi que les périmètres annoncés non relus.
+Chiffré : v1.u7oj6PgSvLlln1Bjf9YxkhU8m5NHdh3nyYc0HgCci8JwArSGrb2I38fWlHzeKi9pSEWT_9Hi2EU_fNYgCVyNk888ApQ-7uIe0XQe99ufmppdpB6qAeL_BgQlVZEGyU-_UU-bs96i-gOlg6hDSZc3-dlaAJ-TQ5V7wuwkoxReKDxeEIvglCKIHgRVkSdQi230oR8HSUitlWzJGu4Kh_VZYYwOgTJdAb6mjuHAGpwdjhImTkfhC3KKiAMt5bKZUe4U6HVIU4vPB2SskDzSXFBSD9rtdJ6vxBvHT9lKwnR8SoceDEnakqqfg_8p0hwodnHjIISJvZFC88YoOlMNRSwE0Y7hN-hZckFlU2lgZrAcLiBEehnTauwnXpE5q_MaRFrICWChDhH-RtQh8JK-mP0Q-96Dheq1FtiUM7nNF3aNMXoAXsOSkCYC0ST2xEKMItANWPUF6yO_MZ0Z6WbnYW5-pgmIJKDVNyyXKUdQ3K0drY4oKkpMtp7dnqO5Qr6cBZga8eX7HMcgeITl3GvrCpzEuJs-hgBU5C4pvf-17i41E_tRUZF2LnVJhk3y8nKQ_0927p8yzVhTwbd8wtA8XONmXfNAnhGK8tLt864P_mssANwMH2TUCiOVgA
 
-## G136 — Dans un inventaire de statuts, relire chaque statut contre l
-Rôles : designer
-Date : 2026-11-15
+## G136 — chiffrée
 
-Dans un inventaire de statuts, relire chaque statut contre le code (routes, écrans, usages) à chaque reprise ; un statut hérité d'une version antérieure du document peut être faux, et tous les statuts reposant sur la même hypothèse doivent être recalculés ensemble.
+Chiffré : v1.OzeJdLorjGziXKKW22ymTLtjmGI9Q9hJnpXUpRWY2YQJ-gV7BleUHC4HEi_WzkyzdDt8moVgZdEdBdtRcFAjqtpfZtH3VonMC0PCU0shhlgY5Mq4NPXyTkPjKH6h59SQNXgoI79omDBRrmLhrMWAGq9xURG7I5rU_J1paoeZNNC8fJMJ0t-0jfOT_6PmYw74r7dQPz9oetB5rm1UDQS2KNrEqvzFRWxVPgVXAr_S25_uwOmrXMA1U7sI-Afm7IDMPwfrZS6XLUFZLtalOPJtIZipr6MZpaU9VxrhSOJQvGDUePn3hAheR7ATthhHAga1zmsZEaYH7AwQPomD37dATcrZbHy1WWr10lsOESxwnoKyKnGb8GFxSD1TqeINT-bc0yA4li4D4uaLCUvVY6dFPbEaex5iIqeaolSbB_RMKHKWcQ8gs1Sfi3eR-kOvoYN1yS5nPP1GRd1dtBoxWzz-U4hRXCIZDXrsl-TlZ4jg4vkZiHkYLg4kADAt7VpQgwRsSjNiRSaCdzhUMKRmUUiZ4bUVW5XxxNRCb7EbudG883NfK1-Yt-dJq_PaUlk_D14xHfTlrqywuM9IHrXVE828OSdy7lv3eA
 
-## G137 — Avant de reporter un manque dans un inventaire, chercher les
-Rôles : testeur
-Date : 2026-11-15
+## G137 — chiffrée
 
-Avant de reporter un manque dans un inventaire, chercher les usages de l'identifiant cité ; un identifiant « non confirmé » est souvent utilisé dans un état de l'écran que l'auteur n'a pas lu.
+Chiffré : v1.UG-ZdjHG2zmqOhv_rqix-YtjI7v-fEKS2qilCkDeboX5p3BYxfFoaeEe0MKk6PdklMZHoLtMUCsXyOnCDXGz-coOmNpQNbKhmz6eDAZmXfcd4NkbT-awBEWl39TmI9Ft7QlPRLXpltbDLz_9bpms0dhb5jTWyG18tWug2gCTBPxJmO9ZYroHjP01-3O4b64zkZuB4-plpP6EWCdTlxWz-GFwTa6Gdf-1fQElpUSyr-VSnmByxIEuSnlCM0AU8cTXsTW7u0jV_3Vg0BbDD6VidZogqSXuhdEv-Lga4x5qT_Xy75kjhBHOvlXVntuVWYCHF_uWhXMLsG_1ot3VD2GN1_bz18aRmcc3Z198pBTb1wQzqXphMwGpR6qANgPtk26N1GHgtsyXr1GFuij8bJuA3YbAnYQiSkYKBtSHZrdFOoi8NNiJl69qqp-2WP_e1d1DOz7Jg9zBq92X4V1mcjHMeR7POiTVQTwS74kXeMnJmLRvMd8RmEIXoVE
 
-## G138 — Quand une action d'une notification est retirée, supprimer e
-Rôles : dev
-Date : 2026-11-15
+## G138 — chiffrée
 
-Quand une action d'une notification est retirée, supprimer ensemble sa cible, son texte, son identifiant, les tests qui comptent les actions par indice, la maquette et son script ; garder le repli sur une cible inconnue pour les notifications déjà affichées.
+Chiffré : v1.iAZUDFWG8H4euiEtonGiSlDj9bxlVzu1pyq9mh3tPaJTVd-XZKEjtVGOzoqGbMU2i1oS8M9HIUM0dCZ1s673PCj_1iJNfuZjKsyGcQtTgojaU3FJvNFe9WkI3ReqUmbMBmhWs1K5YjnXlAsko0bpxfEdjvop0bnyLzmlFlCILJUwU5S1TqBQiM-uG6PAVyuZu_812dPuIBe03sQ1DdVOxMvjOjmAsa2gfz01w52c3PWyQMQSKi_fgJfd6VIFrpJ09gZGvA0JW16nls3_zXDrocG5ugZhWaTuoVWitQX3dxe9vVh6NVAfaYkap02GJ_qfk3dKu8vOV-xmkJSdGSmwFC2JK6nsa60Xo8tQM-4vDqCb1a0AD8S2vCp29ffWnWF40SMe9ewFqGZrPmow3B8JbCXKrPyFmfg5SvgvVVpgrIzNcZEnpW0TZBiCCtt-noqREoGz5VAOghTRlDBlQRaMJKOtCfGT4hpjZoP8dn46i-WyVFwyqHy-2XTfEf4R42jC0fwPgOJP4eLVREqkVaPb1SogXs5FtnpDonmn7mIXKIBvXMuP2U9xoz58SydeUKYc35hu8Uo
 
-## G139 — Pour une livraison signée, vérifier chaque schéma de signatu
-Rôles : testeur
-Date : 2026-11-15
+## G139 — chiffrée
 
-Pour une livraison signée, vérifier chaque schéma de signature exigé directement sur le fichier livré, pas d'après la configuration de build.
+Chiffré : v1.znqXxsfJKSTBZ8SbHh24Z8nQEOr1ZvIYYLfaFDD3WDa3rLG5_TRdfOns3nUyI2i0gLT63PjMzq5AYTpVhOlavco0fV-NpSji3LswhhlB4V9pbL8T3_YeMJ87ZHIbps9qsJtOkAnc2elANiaFNBrVGXbDMogdMeQpw7gS_ZIXJNgfIiYN1SdoXlvP6Tolkj00kzX1s8d3fWeD_cWmzQ7TFQm2gql9jwHi0e15NuwfYsEGNbtTE5DLJO1ISUSP4wDt35RW6sAyFd2imrUR-lH7Jb0zV75_6sGhRTs1L6dhbFRP3phcOPLQrFVRUCDu1k1OmRk4zInxhhaa-ZISxiMHEtTRtmbMniOuNM2WtTT7RHEeSLsCGoThjlE4N7f61Pc_FsrcDM4b4BJL6B1a8oJvAAZvDM-rhGw4cl0aOBAsuh2OE1Y4SIh4Rg
 
-## G140 — Quand un contrôle exige une version de schéma de signature p
-Rôles : designer
-Date : 2026-11-15
+## G140 — chiffrée
 
-Quand un contrôle exige une version de schéma de signature précise, l'activer explicitement dans la configuration de signature (après avoir cherché toutes les configs), et déclarer l'APK non reconstruit si l'outil de build manque.
+Chiffré : v1.LSR2RkFINNhQ-oabLI_mYtAxaRqYRnZnhWcEnmNRfEdYtFPtbw5c1RzLEHOcja6tynXHw9EGHWjolgjolFhQHEj6o97fezU80kcyziqVwnDP8NlQjTZSjf3vaMs8WzK1kTCc7iDHRMldijUveN5qc6RpEv0ts7kYKlPqWP0vYxnw86zauCH4LrlHR6rPQbOENP9-wQ3L-D4q_HxXPCrRTcNgx50AnHk72-CrTgYWbF3JGRU-Tacki53Ok0HuVcFS--Eo9rIbt_s6XAPisbuoM4c-qmMNPXk0birUIUNj_dcZX4HJcvvkZ3RCu5voaaIJQMkI3QXcOkrEullG8vhdrE6eYyDfmhhYF8ZzjASm3ev-dBgYY1tT0t-PCh_dupI4oScmzkWCgbdlBFjJUeqZelg8KK1UvUiSpfCw8GtyUOiThh_K_g1AJL8iLtX-WKSxeQ-6Dc_Z72dDqFNqLOP_f0g0dCAhHeZZ2gN9couvCgCEaPqb49asA4IuLkb8Ut8MHyTLvlqfavGvXHnvHgW667bcBknfxbwI_HKPHrdDVvWT
 
-## G141 — Quand le minSdk est inférieur à 28, déclarer explicitement l
-Rôles : release
-Date : 2026-11-15
+## G141 — chiffrée
 
-Quand le minSdk est inférieur à 28, déclarer explicitement les schémas de signature v2 et v3 dans la configuration release, puis vérifier leur présence dans l'apk.
+Chiffré : v1.Aa-XrYmfprj0MFirynn27lzATUFy4dyuWZYGOXs6uUjm7q597sGv4rH0ib55ChuZgWhEvJ8i8lHyqmd0h8NUvVnYv-QgI4pFSTwg4_eEgC-dP3IBQfTYcQNdZg1ppwfwULaFFDWGz0NA4ffchcTtZLE8CyCd0ZkiVStGasadqhnIV14DbTHk1Cvg5lUpcIuCjIkTcKVxJXx1g-iL1tAwmeow4PUvbcKLkKeCSMSHsMjgo5On5oN6Dalqinmrws_Hs8lwHnW33HNIKRPh_PvLv45iUkBuxs6-dVE9rF3_S0ARKhJYX_woQVxEffkg3GzR7ic0heoYl28RCmgu3q6wzsFogw16itVQ8ZInklHQ-WtCRZUAGUOf8AfyEfPfPaAh2UTxHso471uTasx_ovC05i2okPlUmuBOmcnwsEyM3upw8KJb7_XxugzOwwOD6Jwi1Iom-84C94CjEvAWlE4
 
-## G142 — Quand le minSdk est inférieur à 28, déclarer explicitement l
-Rôles : release
-Date : 2026-11-15
+## G142 — chiffrée
 
-Quand le minSdk est inférieur à 28, déclarer explicitement les schémas de signature v2 et v3 dans la configuration release, puis vérifier leur présence dans l'apk.
+Chiffré : v1.JgezrCnu7WmdEXDyo-TEHLoNsIn4TUe3CS65nhnreoZzf2D0q1ERqcqAcFOewPc7FSHOnC2UY0_RDGCsulDrPxcVUuVfSZtUlvj5822Vf9V-0aRZBXNsT3VbzF_GyXgN5G__X9EDFedOUTydaQz6C_uSSbRS7voTvUtKVI64fSSOY69bBHSAVt961JwKtG8Fsndh7B80aXglMC8sVk98-AaKi7qaxV71lWIktzwfh-_NCy5bmCgvbgobrpwRHjXsSH0C8d4QEmOfpSPiyHjd2l9JxArajmu1hUZMBAISIWrD_DXu0mzRknF8MMnXRkaBclTXiyMWAoQvsNWTv0M2l63eA3Q5HS2kpgeQPpI2pjcaxByI95D7QXoKPJ-BAkLWmNe2nw4YRYf40HzteXLkOqAol1Tvf9q88ZgpvEQd9sygU2GkRDPZjI_aZlxv2HZuF4Zck8KVgTumY0Sasdk
 
-## G143 — Quand aucun outil de signature n'est disponible, lire le man
-Rôles : designer, release
-Date : 2026-11-15
+## G143 — chiffrée
 
-Quand aucun outil de signature n'est disponible, lire le manifeste binaire de l'APK et son bloc de signature par un petit script pour vérifier versionCode, versionName et schémas v2/v3, comparer les empreintes SHA-256, et déclarer que la vérification officielle n'a pas été lancée.
+Chiffré : v1.2Z-PROWeNOe41TnEPfgQONLzSPCmPjCmFlLE-HxYD9lrmEszxBNJYsBANF9HLzB4rgsJrGvESjw0lCakCGYWY8gUROQMSd2Z7t25I6C4qhEmAQPXgQnJE7Fm-F5p5iaAd536w2mF8vNw_9Bgn0n2stbaGJHbEiwUjGAKPvlAwTKFQ_Oj3G_ojEAjVYbt2FKDslHqsdbJO7FZPvH02fpTvaiZZdTOmOwE8IPwhF2vb65Uql0OyYK2dYHosS0vbkNxRwfG9GmxOHw1MTPu7izvlPFivg0wexFijPa4EZnPi2Da2WRFyWk7xA9yhONbzw6yHnFOQpp4L3MHkB4qgZHQPW-rcruq9TZuJDalY6A95TXYkAPbgTMRpC-ueFy3s-UDgTEPOxXXQRphnpxnvIfWfZNsnz7H70TcHjEN5PvFPj8Gd9S7P2Ts1XHmzG3AjuOCXSEUjd0VZLwtV5mUcrrJC2S5Uht3aEcWslsrvOgcQFqIb_nrFm2B0N2v-IMpI6H-RJrcRaWQ3eZKAxdwZ8Mf7hqxLvnJ82iu7zcJXMHThbuQeAd7Hd3iljcs9lP7Cr-JAZFendu5q2nAUNyMYJfBt7sjhKDRMkAKrP4TzMMzMSC_cJsBZIop0zbeVMAJbA
 
-## G144 — Sans outil de signature, lire le bloc de signature de l'APK
-Rôles : testeur
-Date : 2026-11-15
+## G144 — chiffrée
 
-Sans outil de signature, lire le bloc de signature de l'APK avec un petit script : les identifiants 0x7109871a (v2) et 0xf05368c0 (v3) prouvent la présence des schémas. Le certificat reste à vérifier avec l'outil officiel.
+Chiffré : v1.xhIbVrDZNsTam-R_uAeqNKx8smJhDxMLncJVgBMEGEe4nWGAGnjnr7h3Otj7Msj8y4qxwGVDjQXNop55iYeDP9O7WG9oR8e_J7rBcvaD2CBpcGHJ8TUj0oew55anqDMP3DGRIcA5IvSRQwZkYAlY7GjFcmG7UZQql7tqum7Y6AdrYml0UXPCje6fi6XockLMGxMg5jFHZ6ea6XJ_PJKvVfKkL9e0_Fbtc3Xgzyph6iwK1i83VTI79v0Uilr9tUm0br65lxD3hd_RhHAXVQUISM3p5DuoCNaIrd9TNi0IbZsZ9spo4x4Lx1pCOJOHZjUgAum_2MhrU2FKJpdzYLleaSe09hjYg5-FshKwhSEKC0FxDCrklGB_sqZv66ttiMc3m04C2kfvCNLOv80Yrw-7QPiLNyOUm4OUr2HKQWF1jQs8hnom7IRhg9T1zHeHUXyBjgRzWFHQF8xsU7OJEr0h1pXcEX4XoZ6GJi9mOEVb6Axf3O5MmJ-iIc4eUKyJ59qYu4uLPxmt2LNOE3NjTyBQ-d_7Gw
 
-## G145 — Avant de déclarer un artefact à reconstruire, comparer les e
-Rôles : designer
-Date : 2026-11-15
+## G145 — chiffrée
 
-Avant de déclarer un artefact à reconstruire, comparer les empreintes des livrables des dossiers concernés : une empreinte identique prouve qu'il a déjà été remplacé.
+Chiffré : v1.5YoD6iFysqAYHZDiGS66Lbrr3TDdhPNKGBtw62Za7fd4R_JPHf9j0k4PUd1eB8d4gGnh3XzMO6y3Qo1nydzWfaUTTnTQ-hXWEUihIYEP9h7Y78RuJX0wHe5izGZGwAnbqXnyhVKb7uu75vPxBySlWPonKqCLPEFogaeoGlfc9eg7pcw5YniI16ZkZlwQJx8r9uI1jGgySqYYOSbTounAS2m1exAKbzJBskPcPQoOWYYEz-nX51ibPQYdKJWxfK3VHc8zeyWyt9yty-vNAx7mILsfGaoaDhq5LsKnulMWYcY7d3p2UoD3qS0bNU0qnu6l6TuO_6EvvhtYV5RcwP3qrD0QGcZqP3EKgY_z4sC7reSm2tSVxBoioR5GblkCfc9ncfSzUvwCaX34iR751WeiD5SVdLoNzpauRVMAaxLoKP0KRYif2pdSDKGgKqXBtqsd2CPD8CODDJ7l-dlt8Y7FlZ6Hxg
 
-## G146 — Avant de monter le numéro de version d'une livraison, releve
-Rôles : release
-Date : 2026-11-15
+## G146 — chiffrée
 
-Avant de monter le numéro de version d'une livraison, relever le code de la livraison précédente dans son paquet et le comparer à celui du projet.
+Chiffré : v1.71xyHXdue_sLeV1pf2eq5ONRqPct9zIDo_jW3o_JsvaIUzex2Qmu5Xf7JxUeGkp3orajReZ5X8OLJPGedl-GRzunqCi30no8y8taSIudfpHRFXDXSmwfO8fEmqs70XHl5eVfQVLo9hcBjpiugCbn2R7W8I69FaatMD_KoEG6Xiy1qii0ZPY2BPy9szI0IyY1x3X65UT9D9gVNKHQ1MR3okpB2k0YadS33aNtWAiFm6KmS9kcuYxzll39AoGvQhxaPq2txh7_l7cT0-GOoaJd7wryG3oLG--r2QbXvFc6lKl6dAcoq8GkP_7_OLSzqiqYAUaGObPdGGvie_JzVHQ1_jI_bfqq0UZ3eeCdbq4AjjGAnmSR7hOSmxPp5YnSEMwVsch14l0_qPlc6D0a3zW8eVbEUpsU7HdIeNaUv3tSkY0sio83hjqFHws
 
-## G147 — Sous Windows, lancer le wrapper de build par cmd /c et son c
-Rôles : release
-Date : 2026-11-15
+## G147 — chiffrée
 
-Sous Windows, lancer le wrapper de build par cmd /c et son chemin complet.
+Chiffré : v1.Z78RNiai5656kUPMZGaDBBfXAgwl4sVCiD3EOBeEXZA8O2R5G02Hg-KGJQAyexVWb12InHnmGPEJyNXcgCum1HtlG7XsmNA1OELCozAYy99zF1KjxdD1rPdwmUF1u4AwzKvteIfI1GDiHx7WsKXDF9snUBfw5xVhllPZAlnqirqmvplbAUZ3rxhsVSejJA7BY1AmeiWrymaXMxMDpG6YrbsHLgsDPzcA50EzMAaBs-xfW_Qfux7r7nxKCi4FPXxOyS7J0oBh5yAyElOPCTyMrW04sjcwp7thwg2afa8z-pLzxbzUBVtaRFx-3RH4-KOXcfZKnMp4xVAkQGX0
 
-## G148 — Une note d'une livraison précédente n'est pas une preuve ; n
-Rôles : release
-Date : 2026-11-15
+## G148 — chiffrée
 
-Une note d'une livraison précédente n'est pas une preuve ; ne reprendre que ce que la livraison en cours a exécuté.
+Chiffré : v1.4tU3nZWsZ9rnkw5Igim2Po3wu_4cj9KIcXG2dV2mwo7XNlSp7xal4KOdC9iw1JbUFzhOJOfJXnVBl3jfqPv1VOhvcEf2y5DAuf6jdJT2-HuXsNr17aJ6LeXR5T_mqfMEdWrW8ryPGprCTDrEKosTvCSmRDBvUbontl_yFv9QiGGHA4YbnbDBtGbbloVEQVXRBkT4ioKiXbU0mksHUP9nhSbnx29Qx4bTxCBYIzjPoZXV1fKA7d7w3j_6qRZCDupeQErFLA9vCBeMD4BUilXePMkOvEUsNjt8yHrjEsOdAlMLrkSjWgEDg-fIxUNr2FnGAShvnussJ5J77jngX9rjWsrQcUBtOgnm5SoLZ-6vE8VgmeRNCOGm2Fnr6ktNrDQ73vsna87Jj-yLYcE
 
-## G149 — Comparer le hachage, jamais la taille, pour dire qu'un livra
-Rôles : release
-Date : 2026-11-15
+## G149 — chiffrée
 
-Comparer le hachage, jamais la taille, pour dire qu'un livrable est identique à un précédent.
+Chiffré : v1.YqAO6SubTGH0zbLjOTaR1JhIWM6OY-gtbS_EfNngJm-gEYBDwmh2mmiQ-MTxMuSdyzJK2_K8duMY0TvOT1I1lMU6IAiOuUjkQTe6UqweQVsfsEqOy09-hGp6_JCLnwwYfSrIumW6_SxfUKdwIEkWKJmWATTYAIgGFlWSjWVePuX2J-VDgeS6NlANXNUSofEv5CO0C55-iNS3_RRyjAZnzdt6njFlYlnagYORzl4Wt1FuG_GV2VqFawBrBERMFum-7KznjqbSbcoDTM1V32IQz7mrtGHEjav-HLIkr7JyLiW55pEtHPeHHIhlhsJqxMzYzz5YWAV53KrVK7V97afdgL9bdCqBTo3KzAtY-0-18lSduw
 
-## G150 — Dans un cahier de stockage ou de rangement, le sélecteur d'e
-Rôles : cadrage
-Date : 2026-11-15
+## G150 — chiffrée
 
-Dans un cahier de stockage ou de rangement, le sélecteur d'emplacement doit couvrir tous les niveaux de la hiérarchie existante, pas seulement le premier.
+Chiffré : v1.OCjHckKszxtDUHnrEMwsSMWeyS3mJTHo4gb35qqsGJ0TdRNAqQ--6X8o50pSVd5g9TdS6LxL-jpsybl379O2-VR_l8WGLUkqS4dzqtVB-GQt39M_Rg6LniaZwESKjEKhOvoYpFH3jZqD8EmVG-u9qRIzLpG0_kXwL43t2QhdzN6FNZ2AA_HNYKgXXj7HyZy6zcW3x9fkLWSGKKAP7zvn9g2q_RPkLxMwaNa89vmeMckCVKBA_2A1_3-UDCzOrEpB4snrE4_SYujcVzuV8seY3QbSRiT9Lj_u2-rOXzLSSF0x7os9yihBeq53nMDWPmV2gKfICBtO8RmNDn_cTn2g1JiecmgCJwaE2cksOg2cIXRjKGCzR_vrGAgLwij_tLbwhbDQKJ2qfXBgKdDnVR9uVZL26wz1jibXG3keO3evJygFdgTzyFAESf821jqYVRw
 
-## G151 — Mesurer le contraste des gris secondaires et convertir les t
-Rôles : designer
-Date : 2026-11-15
+## G151 — chiffrée
 
-Mesurer le contraste des gris secondaires et convertir les tailles en dp avant de copier les composants d'une maquette validée ; assombrir et agrandir dans les prototypes.
+Chiffré : v1.1xLGl7tbpvMgdO36-9hXhNN16lA3QWNw-B4Zx-MBZVV-flBealOEzf6EPX0okyZxkbKczLvV4caVq9GBaGMRj4FpUzChxwy2F8H0ACe5urybeZST5CjRHiNz8guzbHDxX_nT5l0CtgyuH6MC0shyCifW8iee_Ge0DKbKram54gok7amxERPVOB9iYxUhknEqAw3gthqaM9uotp5PAJ8f7wKn_hGNoEMVirM0ItTyEr_uk2wYtTPo-4FI1LemXRrZGHHWyE36VJZ0QC76i-Mbmqo9qazyITvaR62BypdMzXPD13gRkCsUJ0JK6jHsPGU0QJOSHEfgAiETXv7WP748kvQ3hCBPOaQ4ChpqzBakRnctk7cohf8eb3OSnszezKKuQiGq2oirH3XxD9jnc0NK1UHuwqBFE-W2FWw60WFXDFfC2FGbotsqaj9aRac7M7P4yIeUORPWALujZ0zg0MTv
 
-## G152 — Quand une décision de hiérarchie (sous-élément rattaché à un
-Rôles : designer
-Date : 2026-11-15
+## G152 — chiffrée
 
-Quand une décision de hiérarchie (sous-élément rattaché à un parent) est tranchée, la traduire en invariants testés dans la logique pure (pas de parent homonyme, parent hérité, effacement au changement de parent), pas seulement en libellé.
+Chiffré : v1.zgNHOXMmEYpI_Do996Wk9dIYypcY3pqczNv89L1E3fzCdw2wDfozq-Ko-bhYM99nEscB3yap1eU9N0mcptVLiKRx33ZsRCEVkHFQedrXOGMgBLpfEDex_xpoJrO6knSZ49BaCqjabMxkAsM5u0EHpJZZiOJPH8lYqYjIKzcCNzCJwHZInpj39EY0HdrDHigx7LIYNglS1Ll8QOnAu5Rs0wJsT_V3btqaf15I5l66TwwI-vExcpRZzc-QoisZYYt3h6OMqR9XXpLAnOyxzUkLyWZ54-PXTzfYzNyh_hit9EnV8TADPIVh5uKiT6ljKyZRWkx8aFBZKl6msXisnoPi_nkAEgFBFawJTK04JdAxobabO34iP1Wd6_nmDrQVdbOSmbzWmRsE3_CDeXerCngvxX3SIsco42uuzDX7e1GHmUGcwgrFvyRm1Cy8K3k8w_lp6V9ETfm65zVmJZDkiJZYr5H8c6OeyO84F18NDJjq-MggbIwgqojEgZkd8PknBvva_zuoElGn_ScK88B9Fjfk0T7iwAxhA6GVeE_IWjN9oM2nLeOe_u83tZ1li4lAuBr6s8bZ
 
-## G153 — Quand on doit pouvoir différer un choix d'emplacement, réuti
-Rôles : designer
-Date : 2026-11-15
+## G153 — chiffrée
 
-Quand on doit pouvoir différer un choix d'emplacement, réutiliser la liste d'attente existante : la modéliser comme une ligne spéciale unique sans emplacement, hors du plan, avec un raccourci qui y envoie le reste à placer, et la tester dans la logique pure.
+Chiffré : v1.Q97VZoPB8WysCr1_zUXt8JdjHw9OqtUkwcvvLpralYuLfcCP2Aa4Rb29pcGatNmsVfkcywQ9ebAzaoiuOyxxnj0N_ncZqNal2j3O32-MWvsSb6qURBsp0I1UVpDTLFQtoYVSt3buT2twNekYyL0xJpEk-tICj1xOgra-7-2LrTZs1Hvg-0yWCK6Z6ZKW_PsgnYCt_Zl4i4nAZseKDZW7lzEd374zAc_nV_bOHzrV0Wq-bu2iMzX3nE_eN8wTQBNYy2dynTlB6vSVSGwsiICct1GcD7Jm4BAqWYG7yy-9YGnEUaVbkbgPcisMGSwv87qk0MRhAJi9O5dgIrcL6AsyExXV7HE4Fy3vxmutLuNkOA0iYE-xgPnFxToo5Hh8TpcORjRoqsBe5_OwTAsBbzxdMEkcAxKW18piGYqkChmyJOP99rPf0lAmygrehh_NlWmgF3AyKKz8y0kqClAiwHw0rgjQqVh467fND_bpAjBEAM9I-vo9lhbwXDbY0Fv52wO_fu233WhEKm7a6NRPfDq0NtMJoESM2I0cksTydX0veRy4AAzB7Z5DJ1sFbBAI2v2BlGLg9a8P8bbP1VCb
 
-## G154 — Quand un élément ne contient que de la logique pure et que l
-Rôles : designer
-Date : 2026-11-15
+## G154 — chiffrée
 
-Quand un élément ne contient que de la logique pure et que les maquettes des écrans qui l'utilisent existent déjà, déclarer l'étape de maquettes non applicable en une ligne, joindre au plus quatre images existantes avec légende et renvoyer le reste à la fiche, sans rien regénérer.
+Chiffré : v1.zBT38Cb3k921zY0vzQL1odaEUjR3jFYNP4YTLE0DjKrLh1JCwHXP9YyNo7t3Na1HWsjhIrmG8rbR1D0zjoK7bLsnrZVclO47buVKEvSSNRJcTBf4NrN2ZE570Ina6LiTH2kxkU8a8CNS3lUI36nTJPlA5hFMngltaxB3qG5ztuSQR04x_mMcgnxt8rKB-skEpKNvUo6KS3QfscQMzuucRIMaibpkOp76xfjK6pNA6DGB6FVxbcoKu8aIVz3GusbIoGJQehqANWPGP7ccOPkovO1v1k30cYBPA1QuWWpjJwRtpVzBfai1h6LWMBlA2a1rOxMHkejT4_zjhu8uznFQHKntZlts0GjtXuSgHX6E6xRZSaoIglKDIF2jzUSpk7uXkCMgLdmKrgqPLkx5yMdYc14DhtmyQ14jLq-B3VpsnB9I_2oE6qW51gEex3WDQ-U4J2TPX0cA0IS9-SYoumASusDZXohjFukuDM8pLVylinLiYLS4Y-DYMTd9JIap2627MuEGdgMg---ah9vBjjHQgLsHLYoWkP9duuK7wZqXk4dFKwKtx31Ey4oE8C6JOkCIdZED9fC7EbBFiSXED6UQ0AdqJEHe508cj02bfR20LuqnfyegHiQpShE
 
-## G155 — Quand un élément de création en quantité est couvert par une
-Rôles : designer
-Date : 2026-11-15
+## G155 — chiffrée
 
-Quand un élément de création en quantité est couvert par une maquette de confirmation et des états déjà validés, vérifier la présence des fichiers et déclarer l'étape non applicable, sans rien regénérer.
+Chiffré : v1.2VSqpt7V03rl0y5Viyv9feF_3MU5L4zrLx6UH2ctQ-SDQs89gNq5ekfqrO6by0X07XvYwaj5rbHC9-ciWfRF6tux7UbuBT_9fsv4uvbdDAi_SqECdX-N_SuTOQG2gGePKlF9oS4vgnRbrtjSTcr66EFVATbv00fVqmUjZDKL4Kzj7dHY7Jc5OclX3B6hZ4fZk1qgrAI4OUXqu4FxTqREfcJsD8jW3rQDOi3Kut5fx2TnRlNa9fGIxUBAIWqAFkzF5L7itZQlTQIgUJgGnUCmlpLCYGlW7tKwvrODgXDX6lFaWdOD_BfFijLfmuRLLlaMvOHJVEYKHZizMchLkk7LlbapbGgszGvl_8irB9-6wMmJkoJi4Dn_QnHrQYQ99F5ZcV-WkGCFyz54MCWE7fFwKyl7DGVPv5fKqxiDPVKoOU0wuuj24rNs7svi4JW9THwNKNHSTft1clcQYKhoStFt7KmsqCejjpmB6XSI0_tS5_9gcBCedQOsbTDQ88hNS-DDuVBTzHFOYsYYJ-smQIjh4A
 
-## G156 — Quand on agrandit des zones tactiles à 48 dp dans un prototy
-Rôles : designer
-Date : 2026-11-15
+## G156 — chiffrée
 
-Quand on agrandit des zones tactiles à 48 dp dans un prototype, vérifier aussi qu'elles restent dans le cadre de leur carte : le contrôle de débordement doit porter sur les formes dessinées, pas seulement sur les textes.
+Chiffré : v1.wtWJeUKQQaTEdiKr51237M4P71a0wtusescrA1YYcKzTonJ3oCOyb1sH-JH-x5t5Vy6jwmpIgXdmT9VHGgUzHheMQ-EwswBl6gT3XhtYzrOUgGELCC7VCbt4zz6hHEGomXEXplz2VeD5t5mVXSfQwatkGSx6lOVAVTPx5XK-2biFLC3yL9b5XFAPsb2KarpsWw6dsGIfvxFxSzdCcUPET2pWfpY6AvdciryJAx-Fhm2c1d3hUTDYgzUksLx8TbonireEtiT2rUItHptMOIVsYpSqodIc9uF8UllERlSWcEFqKVQonYJP4PaBvTzmUcQutNmerINFKSPA8_wTYG4_Noo4Wi0uw7CHDqzx0Yuo3LThXjYTCORdHk5c7GNYP2W5DPHncZNy63knbuJZXphHpERZ-q6SvaX4nKaWq970H2F4gxti1JaBU63XMPq-usOJtIEkDisDx9_cJyWrWhNHvvQKgGFGzxUwgonZaz8U3bVk6VRGrUfUrVFuZEcKIRTzvh5MBLQRb0Gr3Zx5YlfJlr9ubRUR
 
-## G157 — Quand un lot mêle logique, écrans et livraison signée et que
-Rôles : dev
-Date : 2026-11-15
+## G157 — chiffrée
 
-Quand un lot mêle logique, écrans et livraison signée et que l'environnement n'a pas la chaîne de compilation, livrer la logique pure avec ses tests, déclarer le reste non fait et ne pas écrire d'écrans non compilables.
+Chiffré : v1.dgSJAboN1ngQ315dx2gCp50mLfKH353qvjbfLdMBqo8qjgi4VutcSF2-oWauBhPx4XWbJO58nbBn00y5gtIQIF7u6Ds68lCJsvRY8GdgFtLWBmDiRA3mxnp1bzZ6BsQQh-dOQ04ut2mKDB7BR_bZR8E_YAL8CFhH4HhEYgkXDhlan6RSOHZqdkQ0wTg_umUsGskGS89E2fT0rhRCsX2BKlyRLDdYmGIxlHzENan-KVrzFc4iGCvDkbpmiD_ysG3BmcUkjK9ehRFUhQS9sOrQGJn3-VLs6CCL3QymSsSnsmi9veHu7O5cvJnbkr3HCqxw8IAeYMEKIqX1VKqetrbWDh4a0sf3sacEdP3dWCqD8J96Zf-J9z9WTZLTc03rhxKE42rfoq-9B2MMGUuHI6bxc-YVoZrnRN08wc2CS2wvOvjhCd4LMYNipzdCcshbjJqrj8F-FSiql8D6NOk6Co6yi7MncZKl0tc991hW9005ic2M84sjjoJBKa9FDe5JJvl324ZTLCKbg9L83MjEOazsYPVkzA
 
-## G158 — Quand une tâche demande de brancher une logique pure à l'int
-Rôles : dev
-Date : 2026-11-15
+## G158 — chiffrée
 
-Quand une tâche demande de brancher une logique pure à l'interface et que la chaîne de compilation manque, vérifier par recherche l'état du branchement, ne pas écrire d'écrans non compilables, et déclarer les éléments non faits pour qu'ils soient refaits sur le poste équipé.
+Chiffré : v1.Cen-LZcSCO0iS2waooDmT362GAuFyleue791qJgRxX-HHFi6-K-81-HWEVBSvzmE6DOjO5ivVAheoC-XYEt4TETazeHMna7K1_T4RWhyqVLDkrBWLr8lT11E5ej0MuMrFl3cOgd26TZIMSYiImDSRp-LIG3TxF7ohM_bF3FBVFAxADsd3rFY2qFjJMb08qIlvzOTu57aO6pjJXwDRyy1ZsgqHkcjmweptKv7eqNLLhbfg9HQTjlymuFk8SsEVZX5aS8J0K9-eAFroxLy_qF3TYqqq2KYxytCFDBzpoeFAgWqfQKWX-a68Emkm4Y9cJaffh--McnPHKE_2mQ-jLYmqyC8otJHoVREam1yeH2WpDLhxTBS4wU6dJJ-sab9XNn8Om36Xf9dbzALmhLSaD3-Be8PYp5girCGnpFQvQDxnyEuKSJj9_Hgt9MxbTBSRuJ0Fz8w99zJ5N9i2-mp9s8qkXV-v1js6MjQW0DH5c8pyI8FSMaPvDUJm_IpMM-MH30HhJn6iOvinylvRw9ORXKVgB37gZUkyAvOFD1lYq5_-3BVd6xN_e-mP-1OCu9clpJwgmfeuL0jcJEE_2TY8ECVGLm4YnztmEW84XZOHYBtZA
 
-## G159 — Une valeur sentinelle de logique pure se nomme par un identi
-Rôles : dev
-Date : 2026-11-15
+## G159 — chiffrée
 
-Une valeur sentinelle de logique pure se nomme par un identifiant technique, jamais par le libellé affiché ; le libellé vient des ressources.
+Chiffré : v1.e1L_XaS0RGxE2CjSRqasB83mamkDmSBfro8aqcXIioJ1oHfaWDuVdZZxgjbSwO0cF1WmegkkDSSyv8wDtSzQvddl3Lkmix-4CNHK21MHuu92LBRdp7Rrt_Ej8QH52m5MWabbrZ4c1lmowAsIDnVuU_xCvxRBLnO6bao7KPwpN_n093w9vrZiYLyNsT2DWqxpOhTyTvIu-nHVzi3zzkvwZbOeSveJ-ylILVNZAELE6_XS_DXLL8vz6FpXZdp_j8g-dPU_ruu-61jRWq806oocSRctfHCJ1T9kiP_DzeKX5bMUOc2E9d5U9NZRkiEUCVj7M3q-FJBCT0qSatY_stJ1h88ZnQhQ8mmaKNs5jiPNR5eotxc1Io8sbrzUuGbaPnY7mfpQbRtgvzUwfaCqQknj8Vo-Lg8bfftnk6OaYY3A
 
-## G160 — Avant de rendre un élément de livraison, vérifier par recher
-Rôles : dev
-Date : 2026-11-15
+## G160 — chiffrée
 
-Avant de rendre un élément de livraison, vérifier par recherche qu'au moins un écran utilise la logique ; sinon, rendre les comptes de tests et déclarer le branchement non fait.
+Chiffré : v1.G1FTQPTV48VR1pX7SMDQ_fpYeJaSAeEwVDqKuPIhSgs0qe2-4VcdHCC1L_X3UtmgVd3bkOw8kmGKQn3PAKg4n1enUe2TD2BeoikZSnc5lAabw9ltJ-fp2_Nyy1oorjA2k7qe67RknNx8qAjPBq1sJ8bdliNkt1t9OZfF5dgHs5_eQvAZTvAXE4Mpkh6ZTynt4_vxJgB0nxMZITGxf8lOH8uh1bOsqXU4YH2mtDgrtSWN0DF_lonWn70OwGyuYoQgviCpgHHtURgE0N5l8HR2MDk1X9vYeFrWZ8aJnSemVug5VY7gx8Xq7juycJHHNKMm2o_PCFonB-irAUGhwlV57aQIVQacMStQKk_7bQGQGl96NBfdIHFe32me6Oye6KMlxv_wBprQQ4WYtLIPaR06q7ApXnR_Rh1G_aWNK5OBN1SJy0k-LCUqQ2NtceHSy9Ac8H8Sa1RWXo_PzyrXra6n3b6S62yEgQ0
 
-## G161 — Pour une logique écrite avant ses écrans, chercher par reche
-Rôles : testeur
-Date : 2026-11-15
+## G161 — chiffrée
 
-Pour une logique écrite avant ses écrans, chercher par recherche les usages de chaque classe hors de son paquet et hors des tests : une suite verte ne prouve pas qu'elle est branchée.
+Chiffré : v1.rCxNMaiRhqmSoGC_apJZjcL9VLkO7sUjsjKlWL8uC42kGjjDByBW7NsC_UZBj-R2-rRBA7UBO0pnMsFpReFkI2P7umffyJfzLlFnqsUVbYY-j3MPIVZePzuQsMC0tys4y5zYcTOq4FpnkK4sXrero5AycMt4uoBrr4iHRx-CoAt_hIGJsW-VepQ73uGP71LuTeMiZNh8zFDzA3aIlq_KL2N00bKce2gZx8BmStyFjR-YUb232WNDR965vNBkPndM8gufHmDadyBFVIlOoTE4or1FReeNAkI6s4fcep_tBRAoKggBNvCZjYWn1JlHUOlOLKvPWx4q4qtP_e16KZOUfkm7vG6-WUZwHzM03oTjqXwHqKo1wNk0W3r3ML2TPQaoxovMZgihBdBJL8QXOkySZVLX2YY44avMCOqMsWqzT__8P5_G_nlXE1cV0TvJK3CbXt4QP45NSvoppKg8TlBKj7-pjELYKN5BeG5I9A-x
 
-## G162 — Dans un fichier de ressources texte Android, une chaîne qui
-Rôles : designer
-Date : 2026-11-15
+## G162 — chiffrée
 
-Dans un fichier de ressources texte Android, une chaîne qui commence ou finit par une espace doit être entourée de guillemets, sinon l'espace est perdue.
+Chiffré : v1.WeoC_DAs4czRB7O1S0oRJqzwwyRokQaU-xe8gsfhYy8zDdroFbEn9F_E0KlGdmi5WUS1LYfQDXse-M45iRCprmPUWFj6r3Ft-hHRnMmHN1JdAfX3u6QXDhb_NuGUZvPFLdgFNk72cADXEj8cVqMQS3vDuBMMrAYgdyMGnl6rjDlcH3M0iAB5lKTDpLMGWF92u1ehG65QcCXedTTyQSec80GejALb0vP8XxH-l8owc-UPLzTzLQSAgArDwmkOCQS12sPZmlUsaBwPhUhqvK99tNUE3Spszo5vRyATYAbwkryCB-SpDBTzjrDqlS4g3WN2tvp51-eL0jgl0Kzcg5eiKRKq2k0o7U1m4PJl63VLMjeuzf7e1-6lyqK4qUDvG5_Wf9lr35e62sdh_F9ct0zdwoMcTeZqmR81BQhF19DQT3LdHVxmvdZ6N-WcPOq4h2g
 
-## G163 — Dans une application Compose, certaines icônes Material (Rem
-Rôles : testeur
-Date : 2026-11-15
+## G163 — chiffrée
 
-Dans une application Compose, certaines icônes Material (Remove, par exemple) appartiennent à la bibliothèque étendue, absente de la bibliothèque de base : vérifier la dépendance ou compiler avant de livrer un écran.
+Chiffré : v1.in5slfqse7P4NEoSQR0_wXCnXHoYIGYJryLTC8tYVBgTrahqfbBO-HxWvb8p5zrCK1a1F5grdfLCVJ9OPPkfnMgU9uSm4z3UivbBLeg63uOeXR1M6wBAVjXTrJFcm2nZhpjSBOZ37bhnbnknuN3QsVOEAmdKzDb1RqN3jPGZVyaE2nPVGzFGBtUbcU64RielDUY64OsNOHpAuG2ENgfvNU5HPPUSBFNJWFSHy469o5WgOC16pnECmcPNHs7XSaj55e__L3LdeipEPD1kuJPxpwA3LmeC_YRvO_ky7HrKTBBHYRsm-w4Lzd6RJjuZDhp31PpgnMx1sWRYnNLo7NjQ3ZM2lwRE5-Ml9eQBThTs7pEWXdzGhkznOlXCX_Fwjo5VTB2vvLa8DgoqzaS9c-3and8c1ZE5LznyCj95va2arRF-_U81pnOIrFLoGpbW6M2SQwVu_OOlYZrIWVLBuuJ33GsI30js0mi-Mcz_gH_jmMkR1ciTBGODPZMaWoPbFM-CFYXx90fpyr9l7U9DN1Q65RsmAA
 
-## G164 — Dans une application Compose, certaines icônes courantes (mo
-Rôles : designer, dev
-Date : 2026-11-15
+## G164 — chiffrée
 
-Dans une application Compose, certaines icônes courantes (moins, etc.) n'existent que dans le paquet d'icônes étendu ; avant de les utiliser, vérifier le paquet ou dessiner un vecteur local.
+Chiffré : v1.6vvy009t2i54wzm6Iw1OK1jjkLzZEkEGJJRlMfPCsb9SIHkigbKr5j_ozA6OwyDK5acVFmYme38w4KvDIB77mgEvwSoD7Wix1qXblHirPbNpxOTaKFI9BF-m-CcTt14-z138c-Bt_wOuQSpZyVraBNXh4Z5A2E89PNnhcZWb8H1zGZtfZSzEVpdHAqta0P0Q1B88R3z4LNYz6cq2F4kgGoAuLt7_CpA94tHsJKmrqtLTnVEHwuY3-AD4bdRzGktOqmCTcNroKssMlUXacJRxslXJLLnCWf7YcLP1HyDL1188WHsn2D1zllLxBbkdHdlGPY0oMz31rtdvHcx6UL1q3tOsmTRqdUQGLiovtPa9VuC8DO1ee5PKp2MAZZO4-EgwSMlYe9evf8VKtGBF3fxr72Qr5L6ovaV5b4cSwKmZrcmfZRDDAVPmy_4siiilUhhUWzjSnIyRb9UT9WP_98b8BLrJzmmolnFBUZcdKXOfMoO4wBPJODCP_lHCHBSx
 
-## G165 — Pour arrêter un émulateur de test, utiliser la commande d'ar
-Rôles : release, testeur
-Date : 2026-11-15
+## G165 — chiffrée
 
-Pour arrêter un émulateur de test, utiliser la commande d'arrêt de l'appareil via adb ciblée par son numéro de série, et non la commande console qui peut exiger un jeton.
+Chiffré : v1.aYgGUGIVmvmmdxpwHFgckzEclTkUOmrQ1m0CflmOuTYYSA3tFQAnuwgIoBpP-eWecrZ3N8zHisNyKwt9uaU-8HO9351N78mZSPw5Ar-wLj8_rm09kIit_txi6piXLkEWu6fv2qYeMeopgPecBZGquad0wW0ewr5RpElUDNl4KPE1WzNzrt-GvtYQleju_F9FUQoMk6AHf1nlgdIyuWYE-IIol0FPbUj6VzZDTPOzAGw1HeCqwWlSbJl6mxPyTJgBg0evKlPCOgP28V6L7AV9ScR1YQDoSmHdxrmbwfaf7iQ4VuSNXXlzY-ltjs67xPpJvhtgR_FqBtDol0uJColm4_NfyMdmpYIvuPq0lUisWQI9AmrYpkVWBhJ_2DCU3Ad8W8-lL1TgVJUnhdSe2X8saEDF1aAutztAyEtqfljNWGQBA8OP_VtJholvM2uBtHRiGPE270Xjxn4VQEXqNzqM4kNxzQQsaChAMEUL23Aa1A
 
-## G166 — Avant de compiler une livraison, lire le code de version dan
-Rôles : release
-Date : 2026-11-15
+## G166 — chiffrée
 
-Avant de compiler une livraison, lire le code de version dans le paquet précédent, pas dans sa note, et le monter si le projet n'est pas strictement supérieur.
+Chiffré : v1.POnKpTrCnOnM9Jv8DXMV0uX1yims7TzUg8Urp5aKenQnw9FNRPxer8FklS_eoQdUHFwz0bbkWLAR5RIiAL1DxSYQ2D0ryvT6jywJSjSiFkaDqmP8uFlgqpTeyEWYaevWCiVhf0c7LVwWq1_MGk1P75LMEB-nr2KCFFNoxNHeCkWblenWSalVjYF7gCZYN7x4Td8B-iuDtCnVX__vLUDWmPgsq9G8yg4FFPsTOEV078xqetJlXjE8Lqo2p886Asl2LpOaMEh67lVBFR2jkbyW_Y3M1adTYuICSQwaILyaE8Ns_OjGJqFMidDnvUrsuVPXC-yahpmk4faaCc16bOAQCGkS_3raxg1i_JV0JLuw3txzlNPcrs6LQnTSC-DMsx3MtTL3x_oT4nxnj4nV3uBtSuLCAY1Q9VRaDSyrjKx4wwjdWreehQoLv3eVTzHez4DFkgmfjQ
 
-## G167 — Avant de remplacer un livrable déjà produit, le conserver da
-Rôles : release
-Date : 2026-11-15
+## G167 — chiffrée
 
-Avant de remplacer un livrable déjà produit, le conserver dans un dossier à part avec sa note, pour pouvoir le comparer ou le restaurer.
+Chiffré : v1.Q2EQkIhWg2fWzjcsiB4oJDI3p_JPNj1OGeUVYN6MVqztC6Fe3Tnd2K6VupVFS_PS4I98mYSvXOqk323aNpSFCGurCUDxgwMvcyOKG27Hav3AvC8X-q6LKqqVcWOstDda48I8k2REr5L-5E57vydOZIUahSE9YaWKWirMG6SlrVKiHtvCAH1aT56EHB9mdzo_XDprpTSINymaz_JuH-lz-a2iSv_hRShgfHVNDw1MiB1Opl_wP_ZsJZfNmmPYaMtqNKjEe9tuXVJsI-8Jdj3ukkC8mNk2KV0g0OiqYFKJDUJUt2BL-KUOreS1FbgX9LnDD1SK_bSPaLnOvmMeku_6Q9dhVH6icEul88wct34qPNvZha3Lh-lL0KJ8Gw3pbQrfvWZHQ4OGXKpUVT5ycGRrWX09Rfx2gAqDOn_UnVIrrA
 
-## G168 — Un test d'interface qui doit afficher plusieurs écrans doit
-Rôles : dev, testeur
-Date : 2026-11-15
+## G168 — chiffrée
 
-Un test d'interface qui doit afficher plusieurs écrans doit les séparer en méthodes distinctes, car la règle de test ne définit le contenu qu'une fois par test.
+Chiffré : v1.5oyYWqTxn9IvV7Ba8uOFXpQUE6hZ7bMyRnbT2FWUUhxC77xkE-4kBnQkFzY_sRrZfT5C7sTDlIL7vVO0GoOTLWPdBZS-pyYmWUjOfmxZwK9IL4U93fWO4wJHur4erxg2ehzo2Td0XLvNaoJcoud9A7ap8AH5zO7-1HYPkBJEwNvBFL2UeQ5A7EiaZu6ILbHNxvUIgnghZrQPB1_Vi_ZqPpATh95qo5PV8m0jC-UPsozKtkXRimNSVg05aACVAIrd91KRhJ7A6K0-_0D2_euZg5uT2-qEq5ozjZTFz-O8EckjtXwxQ5X0E7IFzmVjY0pkt_D-NPpFoaZnXIxlCplAwlUXREfXFg7frF6YSK8lh-Weh0ehFRSCXd3KaH7FxKBOGg7uSGMAirl3p9vvQPhfmUWHuH4-THzBTrKtReX64_qkNQ_RPLALlOVV3fXGj-F4DiL3QP172iXMtCmmStM
 
-## G169 — Dans un test d'interface qui enchaîne plusieurs écrans, n'ap
-Rôles : designer, dev
-Date : 2026-11-15
+## G169 — chiffrée
 
-Dans un test d'interface qui enchaîne plusieurs écrans, n'appeler setContent qu'une fois par test et changer d'écran par un état observable ; chercher ce motif dans tous les tests du projet.
+Chiffré : v1.qpaQhx6eUWByinQdpsHFMTAUZxZIeJZzdWyqbZv_mzSUUHjE262AsR_8fuGd8UCCZ_z8LTi3Pq09YYiilLE_6yMvBgGu_Tp9uRQu7bqovupcBuXHgcV8inpA0UglLNPuNEVBgjj-WyuxOjiqoCHAzIhkcBlSd4xzZTaA7jS-pxc7cvop0IMiwdVNup2wDfYFYK-CFLqRAa5ymrxQEysyCyDDthjObmQbi7W1NRdMlxSKi1b7ITBQs4P5CH6WIE-2iLQEWLJRnIYv_6fzkyP59yv3en6rnLvJRylHS8eXTND7eTAdbPPJq3V7KEAWWv0C-tAGVZ3QUmqZ26KNTSG5JzULycULVBcKQQ5BUROENbOQqBZhgdBBeWcZ0tY060TPCFTzCrCYftW5IAb5QKl4pkU9dGLHg6HObjuX6loRSCS-8eg2i6hqGrzvhSfl3sIY53UzvUQsr0VM5yKzdLXzZScP_csmA6z8-1dHKvzvpvenImmMe9tttC9NSUbttw
 
-## G170 — Sans outil de signature, extraire le certificat du bloc de s
-Rôles : designer
-Date : 2026-11-15
+## G170 — chiffrée
 
-Sans outil de signature, extraire le certificat du bloc de signature v2 de deux APK et comparer son empreinte prouve que la mise à jour garde la même clé.
+Chiffré : v1.Ya7ayc8DNTxuAf0_qLDBDbkF8bbgYVFM9Jjgj3pXYY_UTwNEoGI883jJAS-xUz4TFEVb8bmNjB869Vwn88ft-DDRkmuAFgBXpFy1jeA0Wyz2z2ZJ4LOHqnYW14e1TTPjfA1nqq-9sR3y5f12C_eWatMlVDNofc6B-fU2rtuEjxRMWWNKxOxYeQFYdbrWDVKRpX0BkJLa4ndP4ywdGy0JuUqQe4Xd8u0RGkCRjIa8Sk29szCzormSq1WBrzr05h03vQv8aCzdBHD5IclhMIlOxV09rzW1BgNxbSd8Ww-ySkC9OoqdRkw_pw4dmQHPsxmsV7H6w7WKSWiPT4PuoLjCjHfDZMgx3n4iN-6hPEKxW5gt7aDEoKyBptbRI5WYRpnnIpVJ1DUFA-KdGzU3XU_aPhMwHO9ZEbwV-gooSN8jDNg1k_EwtGw9fATHx0Cs4A0d
 
-## G171 — Un paramètre optionnel dont la valeur par défaut change le s
-Rôles : testeur
-Date : 2026-11-15
+## G171 — chiffrée
 
-Un paramètre optionnel dont la valeur par défaut change le sens métier masque les appelants qui l'omettent ; tester chaque appelant avec une valeur non triviale, par exemple une unité de masse ou de volume.
+Chiffré : v1.Rs7rmICecFLJH5yFLIXiGBnu8XrZYAPLl53ZdCIhqtbn2RO0l_X3plLdUnpt3Fg7S0y3ezE0kKzH01Tm5dg6euh7C32Ai7d24WIZFrGmVwcTdwKdLj7-9Gaa6Rc5GfdyRYdPFunBxXTx60wit7alm8Gu0NTmkq7As-3wTLcq29bXPMGMFWI-8GrTQ6SoC5NTH248YMBF3OULqr0UbaMRMpY1dEGDLlAW4Cv0CinAMsSE8VD_TH8wzsRZPUv6FbYwd3tInDLTVZNfMN5tZtOdXBGqI7OcwAmwqTxXTP4pal57NU59Pzq-Wo98mgHre0d0FPfOqyRmaUHHjpqn-qOvB-d3_ucSunKVxAL-g0jBfwl7YHrGf9lhw8dJXsGmV2dTdx-Cz4c9_H4XhkvYnZ8Ih8s7UlDpZiX1xUhOfr4N3qFEWiZ8A337w7ZsvyNK8E3mGySW2YTwfw0ysXD450DmFeH3F4cowDlTNG89E1_Dw8l0W4ctMyQIDI8yOAHAnWxxsrctaJ_O
 
-## G172 — Quand une quantité saisie est répartie en N articles, la qua
-Rôles : designer, dev
-Date : 2026-11-15
+## G172 — chiffrée
 
-Quand une quantité saisie est répartie en N articles, la quantité d'un article dépend de l'unité : total/N pour une mesure continue (masse, volume), 1 pour une unité comptable ; chercher tous les appelants de la valeur par défaut avant de la changer.
+Chiffré : v1.P-eQdJ6Mnic5ZWVEJ-OQpDarFn_vDSITlGhIXf9DEoHRkWxNjFXe8VOwXsxNkETh7p4729RND44c3UAaLHZSE_2o2zs7dNScKTLrTr7R4g92--1O3vi-LL4NR7OHzVxXvoHTsuSsAE6w2noinN17BvUxISXDTKZ8kfL0VTUpKZ3L_n-vLHMxbDM-sG2GKfDNo9mcMYp8vct5LWnNq9Bx1Fmc87pcfb1uwGKpfGOVBH2Mwqm4TgjQn5pInflM8cASGaVioJPHy83eaWthVAApZPfG3F-Yo4gnm1k7n2gF6O_ovu7CkrZDPFvgE8062nPhNz3TmtUZfEHfNCCOs63sc4QG3hXO7qR5lBrP4NQpbq834cM8isL821C7K_gRvnOyix_jLtEYqBNH8W24Jl1xvF4a_ScLeRS-GgrVW0Or5IxxX-4Wjoqp423IKkEJ1h_saf2W57gPEDQzFTb0nHAQm6N74e3O8eQbVNd5DmpHFC4nQ9qsP9QZ2sR8S5ktGfR_PRV4fI_BvzyEMShW7e6scbpAUOqcfQei0ZhDSN_j-H6B0aiEd9PGIuu1dF_MVQBzGWjHqM3liDuYEdj2IA
 
-## G173 — Quand la commande d'arrêt de la console d'émulateur est refu
-Rôles : designer, dev
-Date : 2026-11-15
+## G173 — chiffrée
 
-Quand la commande d'arrêt de la console d'émulateur est refusée, lancer l'émulateur avec un port explicite et l'éteindre par adb -s <série> shell reboot -p.
+Chiffré : v1.T7-FAVzysRPRYZ1ashcwaFaepcCv_QtZvaB1v2UhRw3QEvosFOr5d4azoBFcm9VcIrAyutOiMP5gRoHcfdnDH-Cr-24rPgOHNpIvNPJri7rbIJXH8ntqMYzv2yoZzkDNkY_jyx_ojarYUDfex5SSWEwGCHCYd2FeeuaJJj-JiIKW54Oc2xWQcsXA1iHKtDKMIWtZI2V0GGt5N2dtY0jbzlhRLJFVMAYa5izSND3ZnEI13ufezYsTy385hyzmN4GuE42fk6Gvj9BHJ34-afQlQpKEKIsm-kBtmqqC7LGSR1huLKR0xDAvPIlISZPwzgW8DTBroc1nn81-Lb75Ds-01qw6D3FaifhzwZrjxLuL_Zm_ymcFBljMJWHqJV0UouTtHxEEePzy64mzAqtHCfeB4pDjnrssDDye_EHYJ6WKBlOE8jsRctnVM46naCVUvZx9nOAzoisXVJbfUELi1rg
 
-## G174 — Un échec d'injection de toucher sur un test d'interface sans
-Rôles : testeur
-Date : 2026-11-15
+## G174 — chiffrée
 
-Un échec d'injection de toucher sur un test d'interface sans fenêtre est souvent lié à l'état de l'émulateur ; relancer une fois avant de conclure.
+Chiffré : v1.ayE-gpNeYIcMzUkGAwAbpdFhlzrBbk0c84ltQA4LxjUydq1yqsXhJd9ycaWSvKtZbqC0NqU3c6Ueyg3FVXK-IdatdnbKIcLeSBPlV06tWglPPdCeblr_59-zmSt2azLFNdGi7yfn9c2ZszJ3sNF7qiF55ONH-VCYRKz6nE0XzLql4s9uNbr9MIRBrJqUwwf-OcyVqUK3jDBFNHsUw0sOGoIz0lrghhJgLuQ_NvzwKCLLg4jmPAzlZAjYtjZZloTE27GnO0KtoGecDbb6mN3BXOyGJ_2VyGYTcY_QODqLfqvPuEqo1bAfZxswiXG8USP5HBMry1qflKcv_51ec27C0hPHr1gszP9ndIQJFUzw6FakqNirtmYGZuo2t3074aH0QWiYhgkRR2TQSavpbyvHCQoJ2p6Igkb7039FM1TJNcMZyZc7GhkgW_iXOkM
 
-## G175 — En test d'interface, cibler par balise de test un libellé qu
-Rôles : testeur
-Date : 2026-11-15
+## G175 — chiffrée
 
-En test d'interface, cibler par balise de test un libellé qui apparaît à plusieurs endroits de l'écran.
+Chiffré : v1.TL3y7vRX2rHVDraQkgd_66ZfS4gNmzKt5uFOgbjf51H1atYFmGJ5xSg6NnU5C835bHlyIXNoVDVZaM3kVWupQOVunCmMewQSq3uCQtfquScEFVxv5VBI3msYfi7v0I6WiGrR_kx39igkorjgP9tImudkIF0Ppde1ILkI6KEVCxCDYFWhusCSdniku4QUKWsnz04NmxiyCisfaiX9IUDPilic89uQtR9XJTKmaZHfbJ4F_Uzrr2mNMu5gpB4l3EJWJB-O-SniJ_tBK2MEgWkj-X8yM_cYIrG5tVWVfyU2SYKRE9RQuUjhhNwV1jwJykD0Zo-NmS25YAKCLIeBJGokwnQjzfp_FxTRFJ2wq2dymqh55Rm2KwLczeJ7zFGGZw
 
-## G176 — Quand un test provoque une panne de stockage, la provoquer l
-Rôles : dev
-Date : 2026-11-17
+## G176 — chiffrée
 
-Quand un test provoque une panne de stockage, la provoquer le plus tard possible, après que l'interface s'est stabilisée.
+Chiffré : v1.oZ3FY5fKbIoWlQ5aRZZLGfuPFCCJ5WVu-7QojR4gjWwYo0OWB5JHHsPNlHPYTqTjJt7vpT7gqU2Dxn9X2OvXlETOerTPnSO5J46GXmw3dsZqDfrjAfUA9_tO3Glu4TJOMvL0Ixz5zsXNEgTHGd5tQHU96GXykAkOcDeEB1nB9KOSkzoLVXE1uCqO85H7uGYWZ44URZtoHZ8NpZWrBsomc7oqbF--bTiEi3UNfmuAT5T788oEc4P9ms5LXlSCbfUyOKKwnhXHTLSvYnY-KEL9HZFKvmMVFUo8zn7b_QCIbWgK7vZgvQprCm3t9fUMLQhHggdBNaQTBrPnF7-6fXIPyF0Y2feGDdgBwEZPsIP6bfC85KVciU_aHD6eH5WfEgJuYrE-atUAA-by
 
-## G177 — Sans outil officiel de signature, lire les identifiants du b
-Rôles : testeur
-Date : 2026-11-17
+## G177 — chiffrée
 
-Sans outil officiel de signature, lire les identifiants du bloc de signature du fichier livré prouve les schémas présents ; le certificat se vérifie à part.
+Chiffré : v1.1BIrmJAmf_KjZrd9kNFNNr_ZlfKbn92doJf3x5UY-rLjtk617aL1OVZxMezXXYCOosyoynxTgWPZfdbwcDU5JPktZhTmGq3ADm8W2_xtew0lE0ynsZHesRjLjurW_39kGNSruTvsg6qAQDvUjJ8cJG8yPa57YaAd_RuetOYUI6ZYOqeV4dx8xSS5tt1_FQE24POp3k7pMr71YhJtDCj_zhijcRHvtS4A1dp1VF3g1GqjMbmBr9Vy8uj7kT4bfCaxeKIwQg76XAEWH0c9ZyoQmHZwiOqferqNbOfYcIOES2meSRyO5n9ARfvjS4RffnsYWUUgJQ8q2-D2R7evBwRmsYtjzmR7r-QrDReGa0uNg-bH6OJybO26_QB5Q1Kgz7UxiC61SvhsBNvPiZP15eRg6r7nyUXAw1kUD_161UX2NOk-hjWRfzuaO7vlRuJ-NQ9Qd0EJ

@@ -3,20 +3,14 @@ Domaine : Production d'assets graphiques de petite taille aux dimensions imposé
 Livrable : à préciser
 Outils : à préciser
 
-## G1 — Choisis la grille maître de façon que chaque taille finale s
-Rôles : graphiste
-Date : 2026-11-11
+## G1 — chiffrée
 
-Choisis la grille maître de façon que chaque taille finale soit un multiple entier : un badge 72/36/18 se dessine en 18x18 (x4, x2, x1), jamais en 20x20 puis mis à l échelle. Une grille qui ne divise pas la taille finale donne des pixels inégaux et casse la symétrie.
+Chiffré : v1.WOrt7rnqPDWOmOf-GT4cuqgJegps2XTRAWYxWmRuMD4b2b5aRbFDuMnKx92lQ6Q2q5KQDoI-VU-2p2QwLCwEHJfLpcRiwGgIjTo77ImueBAesKXsTHCA6PQA9222sMN0zX9lI7Wny7rr-87epcpOK3P98Du_08L5QHvKKTemgv5QHieX5EB7Pbj_iHn9BcKxc4JNUEPTcQjY5MhR-M0D_gVT6XcgqPKkfWVe1UmtkFMg0lBBEaPH7MdgI0TypGhyDI_6wOz-NmfSrLFNNVUlhfbMSw04H06xT34kqvKvj4qjKIgPSB1q2f1w33v7iC5xWIrbvO0GiH5g_EYD2WBkyD6XGqbnaRfY-RFxLr61VpaYlSkND1emBMHDp-jsJJSZzOos-edphtJT5HOB_e7h8DaPMWVSPz-Ie8pOpysPL8cPV5E1rPZU0zByN452tLfQxQWQnc2mLlkHhcMZzVVA2riE6opmKKJUCnYuEOpUiPr8J9CTe7xYMkan9ofI16wf0Jy7bG7Fzs7N8q-CQUaPTE-LSRwrC2fOur6enznMimcNH_nrhl-1m_11BOEBsaX-E1SRf0X2_ZZqRgT80iD7Il66TxYoOFs
 
-## G2 — Dessine le pictogramme en demi-matrice puis mets-le en miroi
-Rôles : graphiste
-Date : 2026-11-11
+## G2 — chiffrée
 
-Dessine le pictogramme en demi-matrice puis mets-le en miroir : la symétrie est exacte sans vérification manuelle. Un motif asymétrique en hauteur doit être décalé verticalement pour que son centroïde, et pas seulement sa boîte englobante, soit à moins d une cellule du centre ; mesure les deux avant de rendre.
+Chiffré : v1.wBXl-xyvg2hMIjWYKHPxZPa7fm8ky0udWPpbC-6pw4D7kl8XPJMaJEff_7wT2999i8tUzFC-kU5sasPsELxTPJpXJdVOaILkDoL10DmWMohQEM7A7elgUwu3r6_vMEWtXrxbviJsEKMSmnavS4MSksrhkWWi97Vr4cOYThW-W22BXty2-kRpO6T7KlReDPDGHPqlCeMzcE0xasWqt9bLuFDUabnNo_jvov-adPRkuiyDnDreudfQeCStgs9lQTRNlB1vwGGy4vfpBaZ0xKG2oYlMUIHPI6y4uY0VMFm0PUbkrl7ilTHbKHSK012kDnn18jibIkUNJjiPbhLy9g0dXysxS3PcCQSHeS4fvpT60jjbH0mSseF2dJt3zVdwWbJrolnIFjLC8zvF1kafbYbIcDUsV3ukC-COSjrM6XINWJ_EttBEWiLEFIj8wD0exSboBeLCAG6Vbje4oNtVub0JcNIWpDHCVlPuCe26y1iS72gqiruvoEoOA0JFn94nqkrzd2CfKnhitVddDu_u0OdRhv1FjdRs_DADJrcuYneVfYr7fytITxwQz9jK32rGUTRXvdqwdQaENedPInUIoecIe4KPjClaZPLxIHdQJBM-SchM_TvGOuLPC9UrEpxeIHGmpcpCMlV9HNjUxZEdNmYyLK7d85I
 
-## G3 — Exprime les seuils de centrage en cellules de la grille maît
-Rôles : graphiste
-Date : 2026-11-11
+## G3 — chiffrée
 
-Exprime les seuils de centrage en cellules de la grille maître, jamais en pixels de rendu. Dans une grille de côté pair, une forme de hauteur impaire se centre à 0,5 cellule près et une forme de hauteur paire exactement ; pour une forme déséquilibrée verticalement, calcule boîte et centroïde pour chaque décalage possible avant de choisir hauteur et position.
+Chiffré : v1.kDi5G_sPzZV4N-p9nblAIGN9aGTBQFyipB7X-2hWSMK_apavMCmITQk4WRqib2CF5Ij0TWHvEzkuiT9x0MUcSdHXsXQVkcMQKd6eB27mcRG4KPIzwZVQ7s2D6PDIHrWpx6b9b-JTC_zEfhrLV0j2MWvJbegAKPWYAyg1bjFQ9SybFmDR3yTzB54nQROhtmnKWq4luouhuta7MrSMIuxL0pTWXrhxEPAG_ANDgis9K2ayzPRuMAIYiYxpcGbYIQVgnHjnGfOAA96Ttd1ypM5Xisx8AHJNrwCH42dLqsRicr9G50pReW5o-zM7WX4T9eQtdyPRdgD9donbIMkiU_ucac6xKcjFoBzsvEdS4OE_qXbHi8L_gA3pIZkzn0OHJmBonZOGq6RbtiZlfDFhCXLfWeYOGdkYqWLTG17kKtHKtWZ6DNacx3ttmiInvJ5DsmMnDt2Sg4HdEEwK02soE57LURZ5PkGkRj1nQQgglhNDPBkAIn8Av8yxhMq9gZ6xXlkPA5enxmyNxnd_VW1LnBVy7-ybhh4jRjggRyo4eNXSI5MbEh_67HZSFC1zy4zTyY2y6MPkzxfjqKZFW5E7ooJA7V7IxkMiAA7kIqeFmXSsAt8ennEZowIDKE0rDYumx3LFYPMPbw3i_qPl2XmdJPdy4pRLoLzNH5k2Xu38OQ5OWwjhFO5MSHWGY6_YWC1mtyS5rAj0MPOI-V-HnSqBX1YPqjWEwpk4hkbJ

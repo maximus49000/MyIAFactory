@@ -4,1550 +4,1034 @@ Ce fichier garde les leçons du **processus pur** de la skill, celles qui peuven
 n'importe quel projet. Il ne contient aucun nom, lieu, chemin, fichier ou personne d'un projet. Il commence sans
 leçon : une leçon n'y entre que validée par l'utilisateur, par `outil.py lecon appliquer`.
 
-## S1 — Quand aucun humain ne peut approuver les commandes, éviter l
-Rôles : environnement
-Date : 2026-11-12
+## S1 — chiffrée
 
-Quand aucun humain ne peut approuver les commandes, éviter les variables shell : passer par un script avec des chemins absolus en slashs avant.
+Chiffré : v1.0abZIepooXKBIay-YKsmiQ2fjt5ZzAs7mg6o8t7EFOMSFOPRz4xnfJJn7-bqlF3w0hdU6gIzW3jm6uLNQg8jEj4QVN72ESzDXgMHKo99W10ct8E1_kwSYHtjg9kortCzQQeJBrPowcKn-8oVAsaH1DxJ1wp-dpHgTgHG5loenHAxUkExUBeyMZzyYqgca19luArz1MD-5Dj9FJISCunhMXVuuFb2k6PBlpi3bHhIkaXHwVAQL_QSXOLH8AC3Bj9fzwM64ieWZ16cDLpLQXFbkEWTdmFQl-S-j4nAjMBERNr4MqNbLXsedmlbjpvXPAUMgsnhe97QEzwBqxKykP2S6hRuR-4iSb2ZzcRdhQBv0X3epqliW2rlzkXrjgB5DmHDnqMztdXM8-1Vnf6Z7tNvkDq6ZItPwgKP5GGvdeQ_YzAHaQiEiziAh2Q
 
-## S2 — Sous Git Bash, mettre les chemins Windows entre guillemets a
-Rôles : environnement
-Date : 2026-11-12
+## S2 — chiffrée
 
-Sous Git Bash, mettre les chemins Windows entre guillemets avec des slashs avant.
+Chiffré : v1.gakDUAHiuMhWP_3OkX-O8adTOmm4gdD8ng1LpBczC4UYKPeVGdR5x3lk7CQOo_52KfsVMpKr3NzcmRqvnCAOjKG3wfMOFoIcKu8t7M1ijdyNUAQZP-G3t5XKmVD-7SZZIYEHXRYBkd1ZWRA96CE4j8O0aj1SBDjQeS-Hl22MkiLs42frwmU3K8TCIqWxeUV6mFHPlTObXmVjemjgJ49BMD9ynBXiXk2Z2PDrBwGmuYi96gRN4zCWwfic-KvLKKExSiaXTirnbvitb-KAiWlIjb8pg--Ve2yhodY1vUJ4tacFsOmOxqkcu3FSuOmwkwdcNNEzRRHyByGYLrG2GnL-213DplnM0iffvw
 
-## S3 — Quand aucune bibliothèque d'images n'est garantie, générer l
-Rôles : artiste
-Date : 2026-11-12
+## S3 — chiffrée
 
-Quand aucune bibliothèque d'images n'est garantie, générer les maquettes PNG avec le module standard zlib et struct, depuis un script écrit par l'outil Write puis lancé avec python.
+Chiffré : v1.dVXe-6JowXb7364zZ2nst94GECkbOMpcg07l9cWcZymPjNOd7kdzXHjDfyyBEh1WIP0UrgJUUwLRavcxNpLd5S-Pv_CBegEz4eekVZYa7SjhTR7I9s8hYs-69HxdNdv0t80TY_71Q-mgaprwzVWjhAWSZsjUe7ohlhPCoTP-zN3DetzOm_WJ1F_76BycLDBbDpMfC_IIRW9p0jQRTQZwfkRUxoT9hsfNKVFbwE56fdqyHNu2n08ESW-1TOEzhNOWrypIx7ebrm87j07f3tUk2v0FaS3wexPpEqBGwF3cF0DkE8zmtrRqV3AVn03et9aAYYjiMnJDu7Ae4TCqnXrbwV2t_vqsh4f8f4ffEMf40ka3sftFy89KJsjrZw_eMjJO0Zcq_ffJqFzpcMc7hx6zr3ZVwzcduMo_6I7a0rwuKhKq5lgadrSJRBn2flh12RJcy1ZVUYcAhd8VFlxByIjGYr2seRhUiApjHitarSCoXQ
 
-## S4 — Produire les visuels pixel art par un script versionné évite
-Rôles : artiste
-Date : 2026-11-12
+## S4 — chiffrée
 
-Produire les visuels pixel art par un script versionné évite les licences externes et permet de régénérer tout le lot quand la palette change.
+Chiffré : v1.uRbvusylvh-29QQ5qX1JA2kH9enOWdMly7Y8YdUG8pNojokA_HQxmJ6RG-ubN5acgyBU5BtHsGkqeJ2SLhymSAPOYcZy928ERhCCqdK1sq-Gq30TAzrShk94KVOvnr8nlTiRPE-mo-T-uNfKq2F88l8KthGGPlv6W29IT1dRrQlSlXD-bc19TmXZL2lfpnMelnUCxRxRNxN1pzpc6jwsJATHLeQuKc-0CX1FMRffLh44nIRq5dbqJamjZ6M-C2Ad30mj4cMujmb-ZrdMbzYmspTKyzYB-4sx_-G5cVQLGOtFU6JaGSYwKBfSKB4xyX01axeeXPAms25zPJ0kG_WPiwWdWq853nF_HuzlOEHNuJaoV8lGMBztEMg5jCr9LkVpfwqEIvAk5wp4_ZKzsUvGiOgmW1uJa26TnHD5v_nR935XUY8p6-oO
 
-## S5 — Quand aucune approbation n'est possible, mets les enchaîneme
-Rôles : artiste, dev
-Date : 2026-11-12
+## S5 — chiffrée
 
-Quand aucune approbation n'est possible, mets les enchaînements de commandes dans un script lancé par une seule commande.
+Chiffré : v1.kJOL8eHNDKkWWysoAbi7XqTgpgznA2aKxLJLJl3k_37F9tBcSvJHMNcd98FCS8jLlNEquVlKGIhiI2Rn_XX_L5prqf3zp1JCTGdP_WbUhZXWnC4Kb1jhO1mJDWs38c3zNjzZsvlBPCyGh6oMaJyVaI66lC8nwIDOJak_uu7OE8i3UHXPw2BBvxfm5t3L4qO7jYWwkGdwXPuf-VLcALDX-DTegZc6BX5ccYey0bc1vttRZYobY998jppuCScaairsnoO9dT9NPS27R5fTn4rkn40ODiZZ8iDSxv5Vw24eDqsYiyFpXRbr7dG8E9oe30gM1cVGX1rxbAvHS8kdhUSsGcvQZloPbpY_gwCx46PmA43n0juwWIHoL0Lfi1hmKusl5O15U4KIFDQlW2Pc2lJEjc3ins-u
 
-## S6 — Dans un environnement sans approbation possible, éviter les
-Rôles : dev
-Date : 2026-11-12
+## S6 — chiffrée
 
-Dans un environnement sans approbation possible, éviter les variables d'environnement dans les commandes shell. Mettre la logique dans un script lancé par l'interpréteur, avec des chemins explicites.
+Chiffré : v1.Ipih6WLM4Dj3CMqI14poLmQou64F09yIwLF-Wmi5pWTWHojJKZXYqaLr4mbN_q1nYwaKpzX6WPXp-UB36rTK_fVnq7ifdTmnYUbr3AnDxcwu0aK_RC09OIA3atZOjJiroleh0Hi_MlzXYUZMA1PfpMq40yiX3wSp9yJmmkcxcafbsWqBz7K5DYJ4VfI5b-fc7JtV2EA21IFYtEzglrrSLZT7dKN7TANhyx5VKEShZcBc4pNNcwhSQ77S8hRkvahvE6qGm0-y4wupEHivQIvih2m1iebw0t12EyH-urhDyHF2fxxKjnX6H-mh2yss5vmSZ21uvvUs4Pdy9HrYXjIcp6dThWyWOEQWsWv_nJMrDbQ_nGdFMw8y8ELFnV5odycwXYLU2bslgf07FPGZw5eMzFLDBZjTySNung9dxo9g3dTylXL3PuBmCjiCVQVYEFXd8ONqqC0YOexOREM8pj1yyn_kykRD_LZJsuKzPaTmUuEQzqsa1lSG6g
 
-## S7 — Avant une étape d'équilibrage, vérifier qu'il existe du code
-Rôles : designer
-Date : 2026-11-12
+## S7 — chiffrée
 
-Avant une étape d'équilibrage, vérifier qu'il existe du code de gameplay et un fichier de valeurs ; sinon, déclarer l'étape non applicable en une ligne au lieu de produire un livrable vide.
+Chiffré : v1.LNvBhHtm69HnRZ9k8Bz6MvEU8XROkIMkWTo0e-R8qJkCtg9D2LXxG7tKbQAyIzS8PnjGqd95TeXeepAG4jwcc56s4I2nM_OEyYihQ8eTbOgTRyGyxlho1NyUcMhdKqWJlXDTNgM2NZLdMCQSvnLeI5r4xyZTZ7-jsLsBNqDFE5okZ8VR-JV9iqcIhKAEJWYKR8q1DbMrOmhNbb8-ONWOP2jCoWIdcQD9nres7STk-19ltrAzQRhr1byCm01EJEjEiC-CeEraiKI8M3WxZ9PbYzN9NnFemti50DEzOkGnUJfIvvCefLe8s8geSdyGtw32fmN4JUnC2vFMCWB2EQcwT222vqXZ0cg0ytP0LlsYu-dDxc6nAtw_mnvu3kdJBJv01r90obRdFABxQeuOskbjhQ2QnTbOVW5weWjYey1CQLq9oWTZDTHGRB7k8_i4dlXhsrBFm5_HpnL2Kx0R6oRBzfADkX5CblwGzJc7OZXgKDT448OO4kxD6w
 
-## S8 — Quand un outil externe est refusé au shell sans possibilité
-Rôles : dev
-Date : 2026-11-12
+## S8 — chiffrée
 
-Quand un outil externe est refusé au shell sans possibilité d'approbation, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.
+Chiffré : v1.GM57RnnXl0uL22su55Ao3I2wJ44DpWKywhihBQanTYvhgBfNiyCQtTbGRohnLneKV7vZmllbQNFTKJ8mO3I67fn1R0fkGgIYS5rNqRpuSmPRNW9Plkeq67JdVCvgD03zQZFzknVwPqEl_Ci-A3aKLb7UJP8jNQQ1NPPzLBWNyD8Jv37NK7Zk9J8shvr6xQZQrqkqWhRdMVu0zHXqtSlrZMwrKm8bXRLMlvH1tiHYbn2y6mzx4-euNWc5tA0xisza4KCV4Sna-MZFi28kXnFz5-3F8BmneiZviIflPVt6FsajXfF42y08M98BtjwToAtv6wcVblWZLtWQXacdRMwBlvZOx0GH3TpwxyTW0sBYu-0VnUuc7mbSIqIXuf60e5dJsHFzrqP5P6dy_9QipTHoETSDyuZtCsCsdhDuA97bNsGBaDkmfmrE86Nz1w
 
-## S9 — Quand une étape est relancée sur un élément déjà traité, rep
-Rôles : designer
-Date : 2026-11-12
+## S9 — chiffrée
 
-Quand une étape est relancée sur un élément déjà traité, repartir du livrable existant et noter seulement ce qui a changé, sans tout refaire.
+Chiffré : v1.nC7IpCzMRMrFsh2XM7uUMVymkVYIwUKUKOmPb-XlWuXv66d0K92FcIzzl6vPF7rGvxTTZKRDrDXUv7h_K5av2IXWQjIahvEpB7dvP2xig7vSuSNLNq3f_joph5clYDNV8rQjgJ3cWNzE-e1iiy_PSXhJEVwPnOJiGFBwWI6HlVFtA_RGoj8CBsQGYmLBmcX3n3eNYrZ4NUX99mk5pX1RUbdyTp1uKnG_UJVgvHBV-JdiZ2DNfyrxDk8PrY5HaK9lpWwROwOM77CPN5_mxHxQq2IZbxKITeQ1nVc9S7oPLUppKzdSK1FOhyUNmsxH4nYYLCl2zMd3WLl6xxxH2zLSK6id5FnNxraE2IHp-PdVPCLHklM3Bq47uyxvtzMjVnHTU0sevUGx3n6X5YwXEVvvKxH55JcPQg6t4Y6YAIQf5dQnkON9WOfoX-c_jVdo6OA
 
-## S10 — Quand aucune approbation n'est possible, utiliser les outils
-Rôles : artiste
-Date : 2026-11-12
+## S10 — chiffrée
 
-Quand aucune approbation n'est possible, utiliser les outils de lecture dédiés, un par fichier, plutôt qu'un enchaînement de commandes shell.
+Chiffré : v1.6wX-21TZKiAi40S6pGbH_WjxM6HBZ7OUYIE7bvqeTIZobEEfPWYMynw3kqdM9UASbbuqFBLMaMwo3PIRUGARjgDsdyV60yUTObeHCll26VQco9rjCcpsZv2ePh0ShKNUb1RGJRZNzVpF-9OG7X-PGo5--ZVShiiHRIT8ABet_yWN5WvfRPY3L66gReuVtB-VZpitNqZAWq6zEa_3QRzwFBXinUgx-_g4ESpoQJdz8a6UybnuGTx-EwsgGQYR9ugOLAgXT4Z4lQ6qSjTLIf7lgGYTNioLGfIhyWT2n3yhcE5sBZOHxNrxUx-rEcHOpafjyUFmFeUjOhgLGhQkUV5b-2S5pcUzzeAwJk7eYNyAzo5owg41K_hsGzsMw2Fki44y-Jo9QbNoxCymQ31JQOoDQBgsaZuSVvS6ZChuW3f5RuGUY0s
 
-## S11 — Quand une commande shell est refusée parce qu'elle contient
-Rôles : artiste
-Date : 2026-11-12
+## S11 — chiffrée
 
-Quand une commande shell est refusée parce qu'elle contient une variable ou un enchaînement, l'envelopper dans un script lancé par python permet de la faire passer.
+Chiffré : v1.fsQBScmNT_fjfMPPtCpwAqT5oRnr2-jzekDOJ91T0UHYfzZUCA3LNjMki6LJry94jBtQ_66jL1Qv1a_5rWWmgPh0ivdXHQByJGAat9FgLjQUdB4Mwmn9-e2yrU40k7fV3LBi5-4oZZr7r28MuBoRqxDGYv_CKhxudqFAwfG2NdT_PXfGk2ExAxzaL5Welm-yxa4w6Q4mqwq7Ft-6F8cE4XKTZGFYqjiD21oNr7SlMYuWHBUUVotug57D6ARgH873Rq4FpTjw2ua2XpWXT7fSnJ7sX68qaG1DpYz_hFLaK4TJNAO6FZ30ptl7L5BQfCci0oqS6z1jzA4j1x_HvWJfeZhuDfRm9hvxpFfpPKCZYzrzkQtPEi_8Qydo8gqdr9j4De3aHhR2JrFeroI_hyYmTm7UY2dP88SO7Dy2GzJBM6WglGaOLs1pLfQRN5cf4tH2sIEXY7KSDvAN
 
-## S12 — Lorsqu'aucune approbation n'est possible, évite les variable
-Rôles : testeur, dev, livreur
-Date : 2026-11-12
+## S12 — chiffrée
 
-Lorsqu'aucune approbation n'est possible, évite les variables shell dans les commandes. Écris un script avec l'outil de fichier, puis lance-le avec des chemins guillemetés en slashs.
+Chiffré : v1.l7ymRTc8ThQzAPw2EJvsQ-fswTYrM10xk11cNt_43pcdGyWAChky7yJHSp1BAh2brjg0D8IizapeX1FxQRboDCD-xi5VT5IhCugTkMbtMMOoqNybbRoMcS_A1KVAGCAJrfslZZR2ZOSxHU6AOmzhxPBRWVH6KLSf-dfUrPdBEvM2V4lsG5nSxzSr4_xoTe9l4WS4LrQklpHD_PPG9-B1sfxsF-0XrW3ztPMnDy0ZVzzSPQn75PDqAhNYcbzLqhlbrE7m2icJogjJfm28ipiz5yhE6-UXOMLgZ9HFKOiWaRCAtxICY7HJvgH4OTt2EAubA6lYJPko0GHa-lrjN98EU2L0brWVWix48vYqd7zNIHmXRTdrXLdsh3B3oe0M0ej6VKSOes9XBOo0rVNxCyxIPpYaFA3E_a5Nfua7uNmGFL6YQ6xg_2VzTJ0YpLFHqhhIAAvOYsok8MdD49ZZYCjgG_l65jsYsQrmhxY_qsTxHB8g6bXNu40Z44Zk55C3sg
 
-## S13 — Quand une étape de design porte sur un élément d'assets, vér
-Rôles : designer
-Date : 2026-11-12
+## S13 — chiffrée
 
-Quand une étape de design porte sur un élément d'assets, vérifier seulement que chaque entité prévue a son asset nommé, puis déclarer l'étape non applicable.
+Chiffré : v1.TTxkYGGR34MtfsTDtGaS58-IJpeBkO7SUCCs89eK-w9-I_ADGIo3WKBBHoFbbcK18r3crdkKwXMSIE_9shxUPGU7KVGCjEX-fipzpeJLS-xD7VC16FIIGc_RNXAoGAka618WVQAdSEP295PvpSNBRpGzbJuguUKRRUFg6_TbJFV4pLNOvTnjNejkCnThLtakXKfQnbjDqowONb-upSHvvojIufrX0Oe_i2QarKuzP-jccXE_7C-AemQ4C332gA12mmn3cT_TDJ2hCJN3-c93hZlTyRVEmr5O4aERfemDipDhz0Q8n70AJiYym6v_0defsu0O1C2KenNEen6i4KHdvbCa0u5sTkMKxA8nTZXN8aJqiBMdfP13oV1OuVX8EbiJdrBAbuvPBpU9Oho2dodoNUaTsSkg8OahGnyXnnEWFKDyjD9Rs-Dc-KPf8_3p3bu7EIwCulHUKsFTZniGsg
 
-## S14 — Si le shell est refusé, reformuler la commande dans un scrip
-Rôles : livreur
-Date : 2026-11-12
+## S14 — chiffrée
 
-Si le shell est refusé, reformuler la commande dans un script Python écrit avec l'outil Write puis lancé par python.
+Chiffré : v1.Bzuuz6IaHCGFoIeF7D-PsSqa-KwVB2ORHJ1UVtmzyt3GhQOJ7eUd2XB_OlyrR6B7kwL5ediTNtP66gzKBeycDQxcyXMIFAIBhczApQXh5yuh8e8iWiaoF0cOR4hsjbjn7VOEPDFe9M51frukJqgKb7NYn5sa0BDv0TC5pO3d34XCB8a0jEeSOHzX8pOHBrr_jbPo8I9lzIArMczs6SamgWhlFqcaEvLv6flwdfVOBVLrdSa0rNE6RCcthHcyYYlXFI2-Gh88W2912H9ES2HCqUV_5D2uB01w1-7NQZXjqX4clTRZRYS-y-DCVF7TpDR33IV8Hb5T7mzcubBc6VcFVlUwl31cnOHG1xw_uyV2YRzOvv3jjlxe13I0mst8Oy7dODc44OFvLuA4CA
 
-## S15 — Pour valider des assets graphiques, lancer un script qui com
-Rôles : testeur
-Date : 2026-11-12
+## S15 — chiffrée
 
-Pour valider des assets graphiques, lancer un script qui compare chaque couleur opaque à la palette autorisée, puis une capture produite par le moteur qui prouve résolution et affichage.
+Chiffré : v1.k8dFMlKLmiQu-mlmw-q7XGpYzk7tZvCamjkF_lotNqaBJF8xRCO_JURwrvia7PxUeEwX0sWPkvN1bpQ2hM45f4Esb2nsCBqiTXVSbFQnt_4Vt9AukKoI0n1tDi9Ptv6bdBfoCqvF3h1oqs3LaZt9kKg_v0mPx7Efo8i2Xa8B3OteZwH_q3xNazH0IgQQTuigMM4Iv6TahNuCum51FZa9YA9x0cYF05YzaBXiTE_l__e-FcAO_usGei_fvE-S8EKc4XfXdLzpE4HEYnD06r7WXkAWO7WGzVpT5IHBfqkq-Z-8-8wf3bpx8cx2BnwP0Rf0rI3ksbhSri0JtnZYJ7-rPvzpQ0MVr7Odxi9yOnoeWJ5GWYheT-l2u_MW2RHJ1Ubx9cJTE661VHuOUgP5ShxNIXBk87fh3QLPFPT2NyMxjp1loYoVzyXfWCRe89rGroO09Det33qPDydmgbMZntlFvn5r27_lutuligWr3oJMAg
 
-## S16 — Quand un outil système affiche des libellés traduits, ne pas
-Rôles : livreur
-Date : 2026-11-12
+## S16 — chiffrée
 
-Quand un outil système affiche des libellés traduits, ne pas parser le texte d'un libellé fixe : utiliser un motif tolérant à la langue ou une sortie structurée.
+Chiffré : v1.zqk5XrGIs8UkD9AmkFB8BJ5hIAbDVfBrqzUPS9R5WbbnRLFVM6dR2yeWCfcjUiJAet55JywiXvvY8IMHxLx3c757RoCf-_7PmRnQmQoHXeokMYEXSxZiTridjEdelZ19b-OBZ3geXeJ8H_wBxy9Kg2-JKrp6zRl11vxuK-0V6jtkWzG1kG9-ybCueA7F_GNbho7wNCyvRwb3QedZA07I4RHQX-A2mCZIIcYhMGh3SY551LXjK_IGVINNQxnDzcWB21dWLciwucvX2muA4r36JUHMftJYhP22QbaEVjGf8ZPciFW72TG9I8kOGUisvZiKgJcdzePonqbELuUCsRO0MrqVD78OiT5Vx1n_yjW-7nDeAfRDgaD6uN7PA03N8MpPuyGYn-DyiQzl_Qrkl3AUnbe5la6ccyp0lfAIoQDpLaTJRCtc4sp-06GrLIzHozsXh1UA1T3N64zdH8c
 
-## S17 — Un contrôle de continuité de boucle audio fondé sur l'écart
-Rôles : artiste
-Date : 2026-11-12
+## S17 — chiffrée
 
-Un contrôle de continuité de boucle audio fondé sur l'écart entre premier et dernier échantillon donne de faux positifs avec des ondes carrées ; fixer un seuil large qui ne détecte que les vrais clics.
+Chiffré : v1.VwYpgWipLFLIRlhLkRENnWB0hgdNmhVYz4ykafeF7ozhQkssxA0eoEtfxy9V00Z6btDZP7gOIyrsQF7AlaDkOlHLBMgBYI234XDnJxsW4fIevzkDXraMYXwiI1aJxX4oqg8O2ANd09R2fVWn7aDFtPkea1hIVs4hkIZcd9xnsa_eyfbyOaUsif4P5K_sv2Vl2DHKmdqpX3eSRrbgyVi34gIlh3OGsUMOt3W095N9SYDA-UCdjH8B_tEI4t3YTTlJI93EoGo6ZAPhXJLlP3Bm2-q7C5DMSiZzcTdTtSxhUU0Q08rA5kzp1FsV_gjEbVcCXJqJwYCYh6TLJalPnSIh_MSAEiXVRC-V6rBFLgrdqcrK9zXe-i5slE1rTzdTdwkCVoZiQCiMbAY4o17BGnAPpuaphW-xy4NHvqtowLhKHGqjcv7GJvmyjGjbGcEAV1t0Z4BE8-9nrDpAlz5d8YB2IJ5F-wU88HflvLcMuN9C0leQFvaLvZNQNMYy0D0xIrJhdzL5x9g
 
-## S18 — Quand une police bitmap générée par script ne couvre pas tou
-Rôles : artiste
-Date : 2026-11-12
+## S18 — chiffrée
 
-Quand une police bitmap générée par script ne couvre pas tous les caractères, documenter son jeu de caractères et rédiger les textes d'aperçu avec ses seuls glyphes, sinon un symbole manquant disparaît sans erreur.
+Chiffré : v1.Q4XSKJwIrWw_xh_nxzqVFiN1BTxG1JwF_gLGSSGe6re23sMpp-ahvCzNvMcd2IxUE58sx4jt1t42KDvO8-NVCQVZxnNw9j012kx2eENTYqaX23MHV9_ho8-v0On87Y66TrFOGZdT0jO6mVMQRPw8IYZVpWDz_IkB4J9r0JwoVAfh0KbbWrHRNh4qauFdL9RVhLqQ_cESwdQdRa9e1nJLYWk1c4k6GZQqua9ImT-UYvM-UFaRg2l8OmozzCrRIr6XOS7lPHxyuK-OLH2Yfmy6LD-N3WzhXJ57lBHLtcbcL3r7tpvI1bu8U2zycm7AZKMUMDPgbK0taYWvpZqhE3MuCdvbsPlORiDKBhEuT0fEY0-wkzywveeCYXDk7EfclWZ-0NDNPdPR2508_a6b9yIj8twlXVmHbvWAvyR3NCTdr8vBK0rqfZoEUBba7uwhhP2h1RVQTYDNBC2j1qH01LAfuPaKr0W_qEUVoaXhsqoMPyjAixH0hfTKUq4wxp8aLsp98twYXWibQEzNI2-uwCka1hWv9Q
 
-## S19 — Quand un générateur audio utilise des graines fixes, on peut
-Rôles : artiste
-Date : 2026-11-12
+## S19 — chiffrée
 
-Quand un générateur audio utilise des graines fixes, on peut ajouter des sons au script et le relancer sans altérer l'existant.
+Chiffré : v1.d96v2czRP4dKKnOP3A0usofEsjgOVZDtvBBoaGghofykK_Yta1YTCiIN4bOuk_Z4qPj5KMIIrbrjPDFQgKIwCqHy9D19BLLsJL-bnih91rLqt7pIeF5E7NA4peZo1Mibhre3iG85BFZIrn6PKyipxA9ZIxi42iNOMgUF4RZAKQFpHqpEn7CzHAiv0GSgVfuU1kW_kZLX8zkSbhHPgbp17dfpQSYxda0LCJFrzqZGmaui5v8cjFlSShmQmW0yQiI2DLSJy0JThqSctb5uHjSfDEe8qbIbDCFAHcOn383zPPXG00hBt7IiEh3MmurQs9FNTIOULTIuKXUkT-rXoLA0J2nnEPaB-nvPQDzQRfMnMSorKaGotaY63qLeguICJyttrCDePMaEKliFD4u9P4oNLlA_Ygcclg
 
-## S20 — Appliquer systématiquement un filtre passe-bas (environ 2 à
-Rôles : artiste
-Date : 2026-11-12
+## S20 — chiffrée
 
-Appliquer systématiquement un filtre passe-bas (environ 2 à 3 kHz) au mixage final des musiques synthétisées, et le dire dans la vérification.
+Chiffré : v1.ydzy2Ut6wse1L9Cx9-FuH-p0k9c5PmSXKQs2hUdS2BFviVmwWbD0P-LWrSK1cFHGMMYTLtnqBfTEpuHAPbizQ7Ryt-MqQVHQSgTITZDVxmuPhre3yNps3IoqPUbBkkFkCzCiW60VVOgAoRIQHxu_Wqx2qIf8_UONy2cWOnNOQsq9lBQcoHoI-aM2xv5wlpz32MzzfzJAiqBv0YnNxEWqBiV4bIAUoZONhBnVRl6J_G6bs0fi4gTJv3ADoEUeY-3QZtBPW6VacJOwZl2ojH16kwvJEt6pTms1lWSdAl-qtZh0d1tKWJYb0rtXkVj82OAElgELBvyJGD_BjqYQCV4O2YQpUfhjaw6rjhB3a0t8lgup7DExds30IX3i2P-ivVeYQX804KpxjGmwTwSMVCDBsSbFARSrKtU9q2fP-5MyAitp7TxNdSg
 
-## S21 — Pour valider des assets graphiques, lancer un script qui com
-Rôles : testeur
-Date : 2026-11-12
+## S21 — chiffrée
 
-Pour valider des assets graphiques, lancer un script qui compare chaque couleur opaque à la palette autorisée, puis une capture produite par le moteur qui prouve résolution et affichage.
+Chiffré : v1.UjYisSlxZWLmUsxWELcXHb52Tgw2Hk81sSb_6gTAtAIG_NYTDHsR54oIZvJm9pVsJ1xiybVQvbwHerynwd1XvEBW-azstnD00Z4AjSWGVDl0oGdlaeAcveLe-jmhMlEb5DUaIwiIpw2omTgjQSS6P8ts-lFARxTptQFxSBm45PgqO-CE_3TrfydcTlCRjyOitvfVcAlA-aLoGMugaIlKZNSuVxpniO2TP8An-4UVvwG_6uVkxIC-zlVQ9TiyTwdsim-vL7CH3EOKRB6k34se0W93PV8CxlQ_nry2a48Z_3JIKcUvqdgdp8jNOp87g9QGSGccJl7NbRew-L4pY25CArLOrpaOVlRSMszSRlXnUFrFYHeBbabLhsvuPlEEfJl9qYlNL_bVINydfDUd3P24SDbKqMCWhSiGcQ1soJkSG-b_aViPA8S7ZqO--9Vh_I-1bbigSJtYrpnqZGVPb76yebAXrSyoZ2mqFAVpG1punA
 
-## S22 — Quand un outil système affiche des libellés traduits, ne pas
-Rôles : livreur
-Date : 2026-11-12
+## S22 — chiffrée
 
-Quand un outil système affiche des libellés traduits, ne pas parser le texte d'un libellé fixe : utiliser un motif tolérant à la langue ou une sortie structurée.
+Chiffré : v1.3YGB9pjQj2ZBebReeRSVSjMZEXnl2CoD0YrA_AK4E3cdJIFRJxQ9PLmyh2jz1nkiMCl_TlnesDZK0Kx0BFLGrssafb7M7vhLQEVrT7GhI8aq3xQsiB35d7zlLj9nvoFZsSdy44dtBacuug9UwqKNxrPLAsgFRdhLPkUQq5vetEzjKdtIA_CVF0w8QP4VlziQzVoywhytCJt3v0iVKXQ0NoiRPADI4E5ELM_4J-068ZHfwEuvvf3EkjvJ2fcvh1S_alOV4-hBc585oxF6YpaS2ezV6lWbmrJ9tZwbGTlPw5snRcoAREzKpDYTPlVUzQSkIaH4k4ThEvnzCz4zF4z3eGN_3-QbKFTBqoorXyx86oJU4efzLsqlnYh2aXOOncYlUxvoxgJwi45wLe5-fAqAJD9iYr8JiKZYmzWczbysNY4wqOpR7iwhLMUdLdv9NmBvdb4__wTb6OwAMzY
 
-## S23 — Un contrôle de continuité de boucle audio fondé sur l'écart
-Rôles : artiste
-Date : 2026-11-12
+## S23 — chiffrée
 
-Un contrôle de continuité de boucle audio fondé sur l'écart entre premier et dernier échantillon donne de faux positifs avec des ondes carrées ; fixer un seuil large qui ne détecte que les vrais clics.
+Chiffré : v1.wqsL14sbffiLTSCRu0l8WHoJ-CU--qArsGb0n6fD-Trtd0vdf8EefKahTWZACmitDjdIHfGdrkOI5VCu76sZGopSAN0y-4g1iGGckd-YMTLd4U1dGYf-2Dt_0_3oJanmpmda8vKvtptqa1O5CL160HpNFszlvNDZhdWmhNfvxNIcDDYElflGijsTnK7ZOBa4NdsMQOuIMqbd0NO--T0lTuNznA_8jwSUeVF53zQwY7qXl_9_QqXrup1ETTuRQBqmb6G7OTnsLXyMMLEQ8DbogR7nYx_rpjLoEOqDhmXm7ozuuRi5eXhZ2-rerj5HMW4jBkVEcl_8broEg8han24AouSr_60hpteRDM_esOw6zXiIJl6qRjWp-Wj4uFT6G6oY-FQpBO89xJnM4aYx2JbfcI9sq9NQoLvIjfGYq9QZS4orlOK914i_YgghKc1qsk5yEWN4uQV-56dQWizqTNXAaW-xz5Kk1hwONERJNwjQof8DK5fK5n5CE0WmjfzrVzTBpeqvC9c
 
-## S24 — Quand une police bitmap générée par script ne couvre pas tou
-Rôles : artiste
-Date : 2026-11-12
+## S24 — chiffrée
 
-Quand une police bitmap générée par script ne couvre pas tous les caractères, documenter son jeu de caractères et rédiger les textes d'aperçu avec ses seuls glyphes, sinon un symbole manquant disparaît sans erreur.
+Chiffré : v1.7bK3nA5WaodYj0dB3l28T1vC8ptFLgHQvZZH8YBItTb5X_0KEPBkbg812NrVnp2QYZh_dM0QkmeuAX59Fr8APQMFCx1syYBtPULHzLnVSN9Wh9g-ipIdvU_8272SbbHjOLY9H3S3TJ_75TqMtHGSII84kJe8hhk-oiyfza_3CPm8GXAahfW170mz_yjGIJWjrg7OYTFYxUq6kJIya5Q-aooSHhoyR8jVdll31dINDxchx9wa3BPlOIDnFHvPrxSphJfOgXSrpUh57j16exCFkfs-4P80kn9VU5pc1OLFI2OBRmUpVxImYvXqc7qhzyKNWcDNLC3DoQxz9gXMdYjSHZS7mv6sTUyc5rdV2TauxoAAUxgGkAC7v6TPTQlZTr3hHK4pB-gagSwvrTWo3P8YIeFlK_RJNfL_S77S_WtM59dL4_52wLTu9pcP6DXOKkHVMF5kIy2C1xqrfWi3fRxp1oQimB6mDNIIn4Dwe-HNht4av49AOtZ_vTQRGvghyq6v52yqFljxZ62uHRfDBKp6X0YvjQ
 
-## S25 — Quand un générateur audio utilise des graines fixes, on peut
-Rôles : artiste
-Date : 2026-11-12
+## S25 — chiffrée
 
-Quand un générateur audio utilise des graines fixes, on peut ajouter des sons au script et le relancer sans altérer l'existant.
+Chiffré : v1.RpRJqYOeuany1arRv0k7Rt0g0YD6Y1QgZRHEKhY9-rUKSYv6StJWi9aSGVuVTWhMrpACbPgIizAezUSoyiWc3vEroaqy8Spryyg6rPu2_X4NMddj9c8ENpzVUxpi-gFc53TRx2cTGa9ODUs0pVZKMYqI-3oiHeOLs6_Xp2MO5GK7KfVOYG578Bl04BMltbUDb4jhm7ZOj7d_0vrmJQBjw2-Pn4jLfqi_pkhthEN-hpOZMNAqReVyqFEuXP69deJeBuTHoVLK43MnDSVNCpD0xYI1BzpsTW-UDzbDEZSazc1kU3xiee05uVONiotZC-udhBWtYOPmKRqdOTBhC3s5Qr79FcmYwNd9qk4Hq3CbzqTq52-XbDlQw-WjaiiUGl8bH2pq4FFaTVyrXf00x42R-cOFifXt0w
 
-## S26 — Quand un outil de signature affiche les détails du certifica
-Rôles : livreur
-Date : 2026-11-12
+## S26 — chiffrée
 
-Quand un outil de signature affiche les détails du certificat, n'en recopier que le statut de vérification ; le détail peut contenir des données personnelles.
+Chiffré : v1.tK_MU3cUu_cJ9hOva-hKTQJnSAyzlImqybl-g-lwVvg5VMP0oODGJkVVmAQs8NRzSOrBpARuYcgQLdWFCoInYHeRFLANnFD3s41quCI91RPqJRtpZ1help7SIbXCB93yr9XlRJ_JZKyOCf99pYwPrpBECqV0KnnM-9qxm0P4hPMWOS6rnEt56cm29ZvicFhr91bH7GjRsj_-2zMHD17y9jFVnghNVTj0a7FActRn0ruDo6p26Na1I5d3KJ3f6gmR9Kik6iUhsV_1BeWIi1gnKaBjbV4loh5NHcS0KqbFMtKMqfT7JY2Uprl3sD8N4EiZlPTk3K0rv9x-cwmosnI7ciSSjRkKGr6genYSH6nUOSueFoajALDxd41hZl1QPYCiaYbaM30RbfZA1WjUHqqYraRderpAua42hVH_XKG9K8p81Oiui7Rzj_8MNR5FofCxGqDI5Ag
 
-## S27 — Pour créer un keystore de signature, générer un mot de passe
-Rôles : artiste, livreur
-Date : 2026-11-12
+## S27 — chiffrée
 
-Pour créer un keystore de signature, générer un mot de passe aléatoire, le passer à l'outil par variable d'environnement, le stocker hors du dépôt et masquer sa valeur dans toute sortie ; rendre le script idempotent : il ne recrée rien si le keystore existe.
+Chiffré : v1.rAftLuHVs-50ApBJp72EVJ2ZE9fHGHIUKBppSXD3JwlIj5f3kXC6p_CD0VavFoiNUoJjgU0aG4ppZm5wvP_MuegrfaNQ85u7mzDoDMkiTb7sCxkOXIRFr1xgHxjbbgP1bPoDg8tFmtzwtdScbq0hJ6WHCQISsCe7KF-LWv5CSA59UxF1vu6C2ZfrNGZRBPy56RVZqE2JqpPt2AKa1K2CcoVmtGi3C46dhVNumrNokS7HMp6v70Lp7bvD_uC7LoE0UUMXK2Q4z8S0KeVNp27Q8FxeBWmecaiSwfHwX6sWkw4zeD3z4rd2RRtvHawBN6ycmrA-Lk1aEqJ_kGLU-COuApWWt2f3c-IwS-SCHHaGvR-cbHMiZ0CexH1ls9zssjBPhuHUnSxHIHfX6j1BOlSrm73u_mbssivIv2lt-Qm4Li5cQMRniCZBF7iWAnbAf3Hq6h0lUYNw0kJ9AuMUuXkxkBjqb_oa5wA0h1vFxwcfWJkRGR0st2fPq-QQ18Cr1VpES7toZwc2l52toq_ATcRxR1-X0PdcOxggSBUv8mgCr8Ixo-8R8OlVIywtF77pGSMHaPM2mW_LX-kbEb9zsl3yAwSWaSXvQHJMdRg
 
-## S28 — Quand les tests automatiques ne peuvent pas échouer, équilib
-Rôles : designer
-Date : 2026-11-12
+## S28 — chiffrée
 
-Quand les tests automatiques ne peuvent pas échouer, équilibrer seulement ce qui se calcule (ressources, fréquences) et ne pas changer les valeurs de difficulté sans mesure.
+Chiffré : v1.O747g7zDnDbcOG2Z0b-I70amb6eR2gIyrHiQV_Tyn0EZMGA8iatTsg-S1VUcfJuD3v16HrNDLdTzybfxA9jWQNxzNSRl98pjxYhwZGyPE4tU6n5pCGAi2IFHE5brfa5cz8-ZcIatsizeS_1yAwrWPmiwltNXVarJu8pUYYDtBzaGQZYzM6qhtt5uoIuDZYgvBPOhBGBmIHGv1KhRPJJ3JJVFacGGwAbgC5ltA6xuACuKWnhkV4uVQs0F-p2pU8Vnomc6Cnv2tBB8niM644KZHmEp-2o3membrBzhpy3ynU7LFbrQuvqCCiIOMGPcNaufpFbFm-n4b-7630DOst65V3-TVUJPumYFDrLuFMXrDfsg5Fm9s8FxaF8AUHTOgnJt2ehdu4QRMafcAXI0-h2sFuCnELl9KJIhQ-9RsqMzdn-8J1k65jL0lD6unJskUSV02gfGiknZL01PsXEtKtwzfkwkZIp_6g
 
-## S29 — Après avoir changé une valeur d'équilibrage, chercher les te
-Rôles : designer, dev
-Date : 2026-11-12
+## S29 — chiffrée
 
-Après avoir changé une valeur d'équilibrage, chercher les textes affichés qui la répètent en dur et les mettre à jour.
+Chiffré : v1.cUt7uAifK9uHULcXjCi9JX5QBJeDKJu5SYaOMeq0nENdK2moaxDBtMf0_7TOFAEbJ_5cLCG73Ggfl6tl2ZSyOTJNcTaShu4qOsqgA8j1NCNeEfTciwePTaZFaeWaLgZuzrG-YRTSeH64_5AmYgNO8sVW5hfSsHnXnGZ6uX-AN7qqOpgnaGOidxZjL_6WEqbyQkbuMxoMfBrJoM3HFOF6l1rxvEnyHIf8eJ0h6wTKmVGv53BDvwa4l_qScoCRo6JSQ7yWzLbWfy5M-yF5IIE4eF-fcbbi7VBt6YgakLCkeiA1xRLhpqeO7ka7j8ng6yswbmgprSDNZXg7blUaxVSj4txtfcysUap0bZ-7DquYRERmYzKWT3OGBDanphNzoQ0pBYyl680KcHCSmAf10S7rw2FJnUIYU-4PYd8
 
-## S30 — Les textes affichés et les tests lisent les valeurs d'équili
-Rôles : designer, dev
-Date : 2026-11-12
+## S30 — chiffrée
 
-Les textes affichés et les tests lisent les valeurs d'équilibrage au lieu de recopier leurs chiffres, pour qu'un réglage ne les casse pas.
+Chiffré : v1.n2ctveOvwx08V45PgN6dK2fyD0rirklvyQ1c0pMb1_-8U9h1lAlLft6ezJmCl_DLbx6UBq_2IDJu05pPikYolmnsOUgmoLBO478FUjo1rbvvGq1U1NvQrj0S2LD1jgvBSaF2C2zmscKQ7Rb-C-xr3YGbTheZSs3OAXLxsWsQjbGa0tmXCBG3h7O-I0GTJ1YU5UNrfF8sNo3jew-IuW8xKm7yZ8U6CSXNlSpsjitEo8JOw2FPwQmykxKhS2m419xRM31naMDPbqVAEkZ7a5dwxTrm6iu5vSONjt777u-jDIGPowrdsLtLQzTRihT9_WT6mhhC-ObfSeywhhEPpiKyApDE0LbGIvZWIZV-2YrD_k5tiWd_YK3FOZmUAbH_WXcw0P0eP_8dt853cmVt33fzvTUxsj0FcD7f7Q2eTS_ZvA068wzwpIK7QSE
 
-## S31 — Chaque journal de mesure note les valeurs avec lesquelles il
-Rôles : designer
-Date : 2026-11-12
+## S31 — chiffrée
 
-Chaque journal de mesure note les valeurs avec lesquelles il a été pris, et les outils qui le relisent ignorent ceux pris avec d'autres valeurs.
+Chiffré : v1.hUINx980OKYbQZgmOKdls-MkI_F7O_6tTr7soSHSWq-H0lvBWibeDbojCgr7a2vhIitNirrfg6THUBLu3AN1ZK_qYqepslZlEqh_S_oe_ryjPRTXvd_30jKCvHwrJYvYcJJ7WYewSD8uUNEsXvPjCu-s21grzIkY741g0tCW4nqc0aFYfsIAM3WJ5QhLweVhnTk_jv9Rvv62rOmMcYKLZZ0z7I-rnPfbssKqOiJhHx4LtsUaZHrHrbQ8b-xr05u8ShKagutklQO-I3l4iGBp8t3bZdr-nkoy1myG0-rQjADvoOFK__wmA9-Wo363Ks0VAuKV_snEdi2075r5F6a3CIWWC2Af6qJnzOB8B9JIoEwO3hlF_kO15NNGzoisL3gdNJq0BgSIdT2-Iy9m4WEAIeTGS-ifESvRanmAimvT7Dq7uGrxRg
 
-## S32 — Quand un message est limité en nombre d'images, montrer les
-Rôles : designer
-Date : 2026-11-12
+## S32 — chiffrée
 
-Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.
+Chiffré : v1.P47lf0x4V7WPEX47dP3oDdHNC1-KJeAhqxR0f3_XAaVa4SD5GX-p0vUbPMLC0TXTlAmZfPQI5K8GnfwnlHaLl53FNQ-JeD1tEiSctnVBdl5BNEPuiDpSTNQfKC4U4hi3eLBP5TMiPu74rJmmBIspEcFMSzqlraSTa4eSF7KlKI76zvDQ9ce3xB_UsqDm6-KWD_FDqOy9YQ12u8BHZZF8o_osjWUshUJt-fTN8rqy2I6ETX0CR-vU0RFri9p3akr8DsLY_krs_0gwXiILsJXWlzBBtkZwkKckPkCnc2sF5fNoo2uSSVu399T1HtpqZhGjRgajs6gpimNTgELibReePX_tJ8le5lA2pmbO5mKyteWxgU01jJ9ckHrp2NyOCUDywb9uXD4d-n_SqeEroeYK1M7B71Exr7926tMV6jlPqooMDMBVjHwMZwEpIQ
 
-## S33 — Mettre dans le document de cadrage la liste ordonnée des éta
-Rôles : designer
-Date : 2026-11-12
+## S33 — chiffrée
 
-Mettre dans le document de cadrage la liste ordonnée des étapes, pour que le rapport la reprenne sans la refaire.
+Chiffré : v1.87sUy0jDoJ6TvhNFbBT7wsGu6LYq50aiAmDg8q35AN4hrN8o2p1NrMDm2hZBH1kUoqePicNa864drOpWKberELvyPTn2BaAXam8T1l3ClNBxAk1UvVQiizT62qCqgNTEsM2-VAFcRi_frKv3B_nFtyq_X1C7T-WXw4ChYvUKYlx1qcD_M_Aex7eava1NZG3wYdFvu5zqzUvd6XEVFJYSj7cv4O1Yhm6c_mtHUPDQiKUY-v9KmLlEVL5lrCEs932DwNBjs2RCNYaKczQ0w6scOiijsyuRPcAfQ0EILCUSiQFf9Y3IFa-WGs_pQ0HpWzehXyVS-gqg_6P7lb3-M0ixjnTiG_GsVJdQAvHOyVxTlPIe1D-YtiuHv70-rrvC5QjKpEAiu6V4Wic
 
-## S34 — Pour vérifier l'environnement d'un build, lancer en une seul
-Rôles : livreur
-Date : 2026-11-12
+## S34 — chiffrée
 
-Pour vérifier l'environnement d'un build, lancer en une seule fois un script qui contrôle la version de l'outil, les modèles d'export, les outils de signature et la présence des variables secrètes, sans afficher leur valeur.
+Chiffré : v1.sby6uU7cymw3VuhDsTIc--EjgaWYrTKfLkuMKoRYEAzJ7Qbkk476Srv-FLtDfzt6KLbCS004c7Lt2flKpfLEExNJOS-B5sckQGTXdHHeKe-zF3TTodMeXseWsp9pwmyF-zJr-C-3nwbutFnEMhRoc4eSFXS10Tf53E6pJRASLxQD3iIZMH8vYs8HGcpFRd8r9Tn2acu7cELiBjf6VtV7S_BQPVoamj9stTOuId_X35rzxxN7g4FBc096-vlegijT0hxyx-IPcrhZdTxBPAD6WjiJMX2BAXNc8waeaztTZzqeHGCVBjolXtMOWp7_j2R8wFKV0rXaH4Qq2VFck6yOID7jUprHHGn4sPr1aR3hZtRCZnw0D24_okvgqXzg6uGuebS_86e_UnlTlPbZyWPxftj0P_36N-josVnXeo18s-KDmQD15glb3p9WhmA3aXc8mnXY49N6frZwM8jc2fQgiP6ARUlI0fAy528j0EOVIKq2DtMIcxm_CTz-oCjHHBduxkykWC_7fXSE9cW0tjrU12GrFgWnu6is
 
-## S35 — Pour un test long, le lancer en tâche de fond avec un délai
-Rôles : testeur
-Date : 2026-11-12
+## S35 — chiffrée
 
-Pour un test long, le lancer en tâche de fond avec un délai généreux et ne lire la sortie qu'à la fin.
+Chiffré : v1.SuU6FSiSb-O37LyIPNDBjZ2HhAw95O0j_DfZyQ1xbYrzID7N8kB0z6qd8XPimVz9luJ995KXe740CHMsd0v-TqEabi-4TIKvNY_tHO29x_K-E1ruOpY_VbCgrgW56y46f_I_6lmy3dgPlXbSKnlLOk8ruSkoAsaMb7aD5-vLMoI15J4x6dLEylgiCUeqtnEVYr1wBaKooajsDhIosfPtC1NHRrw7s0NRZpuvbEs_T856mLygdGkllaul9RoytOOt1rp7Ot8Uy3j4fC3j3yZQvWszqJkCIrte99z3mi7eMV-vDz5ieLScLGt13jOSQQAZ3oNyJT1rwsR_r-7xJrbuOr4G0k4B5B0FFtQEwfuhf4vY_XMFajRCNx8aQo6eFQ
 
-## S36 — Quand une édition multi-lignes échoue sur l'indentation, la
-Rôles : dev, artiste
-Date : 2026-11-12
+## S36 — chiffrée
 
-Quand une édition multi-lignes échoue sur l'indentation, la découper en remplacements d'une seule ligne, puis relire le bloc pour vérifier les tabulations.
+Chiffré : v1.6FudlACQuijDM0Simvbfq5k-N0xzkz7GcE2eQ14boU91TYEdl57dwrsQpc8iDlHYTx-YXzVwVtNdgPtJ86y3UjELR45V_zav9dlXmTsrvrl11ASdXaGsY0jlKbGAmr8cunEyCCrWw_XHkDRV6Z7xjzqyg5rIrn_Ewy4mlSgrJnIy0aV_vK9L1LP7lvZ33MdEfVBqZ0gAV40r8kcV5cS1H_rrXAtBuPQl4LHZT-DE2R0NZV7MbvY4bkMkjS1YZUNxZRnDyYOLLSbC04RBR7svVIOUvo2L9wkm7hUDM38OrEt1flMNZuowRw7axfTWQC4m1Wax5gLffvNyWD4iQFsidFJ0Fyq2OXsoKnEngiZzTwPfy2BwKh5K06F7YDESGVM14NbJAK7qdfWnxLAf8ja9WofEXy4z6ofAc6cFMRV9NoPN3mEjfGWXkKDwjqQWWdBbRQnZM7iNwsFr
 
-## S37 — Avant une correction guidée par des numéros de ligne, relire
-Rôles : dev, artiste
-Date : 2026-11-12
+## S37 — chiffrée
 
-Avant une correction guidée par des numéros de ligne, relire les lignes ciblées ; si le défaut n'y est plus, le signaler plutôt que de modifier le fichier.
+Chiffré : v1.Cn_ONPJK9sEt3tLfCVgYMJrQqedtY6xFngrQGsoe5LqRpwTOwmpZrIeyyOkXMX82FqAIBFinFk9zEf3j996RRC6k9St7AXRCFUzA_rFB-TqXo5wL01zZvdE2P8pUxhJowPCf2lUcg7EGSMJHUgPS-pNj_4kdxy3c0SzVvDhxuR8iOgqR92nXsoxwd_j_MKKgtsjfu-k-eTi_Dox6z4BVYL3n_cEQkIQkuXPtIHRkPlgAUK5wxRuqlgHy2M4A24mNdgZN7KmYSvgeqmP4UXjwuQViV41adIelPeZTn5APqWpRbl2Z7aRMM_rgRFsMF-u087OVfkgtSHDFWciUIkjKIcgNBWSGR6nrtxN0Kqv13X05XwLG6pY_2n1rkS_U9QsnqbSxXdAMw20mdICjA9pVpKD5pg2NRwWzrwG-3KhvF3-ImByurwH3XLAPKoayFO2_Jc_lzUzNFmWVMdE
 
-## S38 — Un script de test lancé par le moteur doit toujours être app
-Rôles : testeur
-Date : 2026-11-12
+## S38 — chiffrée
 
-Un script de test lancé par le moteur doit toujours être appelé avec un délai maximal. En cas d'erreur de script, le moteur peut rester actif sans jamais quitter. Le lanceur doit alors afficher la sortie partielle plutôt que d'attendre.
+Chiffré : v1.Z7cDYDYLkAA-G5YkifwdHRrsZx0XelCtkE1OEUaRSWj7Mb2pEy06SfBHFFFV9i4fHdohZhJX0VgO7qObWNEOpR3AR-ARD697SPM2SWShe2ma4ciKkh_Ok61sa7WOxrR8McqCqKkfyDPQEGqVAQNV1vr1tjB9hsXjTO-4KFmb6X0n2dQKDGoN_wr9LKjFsH32IaGyMP-v6hyUYOCKBdpS1AULA0C0bEcmNCCoH-aBdIqOt6PQXeALxwKcVqIxExCzl4xogTmRt-ttUMuEcy5-mZcB_nKBZ4UxVJzoUhhyugPIpyqP4tIgdgCyWBYDX_SM4Idqs8bK6KeGX8Gqeo3oDPGa87LF0Dy8O-ObRkshkkyfOM6g7FF5whXmP72KkS82Wx-f_gSvDw5XVqW5XvI-0GaX5eXQR0uZKd_fPZzTNkg83fBGoWEO-xi1nh3UTEIb6TeNFn1SF3_YNHfOqnvUEyN_0NUHYwrUIvXCrtJa6tqQgfs-zSh7Z8jXfnjJzNsC5xVL7WVjhbYtVIjM8Ye0wHdwWrRS7dIYfYVMeVwb2i0jgtusxA
 
-## S39 — Dans un script de test Godot sans interface, les warnings «
-Rôles : dev, artiste
-Date : 2026-11-12
+## S39 — chiffrée
 
-Dans un script de test Godot sans interface, les warnings « ObjectDB instances were leaked » et « resources still in use » viennent souvent de lectures audio encore actives à quit(). Arrêter les lecteurs, vider leurs flux, attendre un court délai en temps réel pour que le serveur audio libère les lectures, puis quitter, en s'assurant qu'aucune scène en cours de chargement ne relance un son après l'arrêt.
+Chiffré : v1.6B-xSlNfE9hTnWUwAZcOKZpzJuUGbLdQJcygWFxftzgJ5cu2Agdq5jDqQfPR5NeVIrN-HTbkoaFmqwu9ZSo-w2eJ3joVWFa5egpbJkUEZU9nP4h_0WIfRNDO90yR_TYAzCiobUPdMFsqV4F1LkxCTSRkdGcYrYOllv0KlO6OdW4x5kHta8fOSvCJALQs-rw_7cbglDhuLdhkqmtfwUb4U_S3sv2tJRUWbhN7CMyATr4nNYk_dlWDmh3MiGvRJvkSvuY_WLUGoW5DF1_UNwocjmE6xHzmzs78f2Dw7sOQjmaCj4LiRMvioSmg6B1rUlUfhzn-26qQ_cXF-OtrlU8lJOmwoV7aeVEwbic-T9wSLVg7GVdP6ZEmxz2saJBvtBKONLP5SowFFA5SUx25PduWuc53K-aivx9IYIcngVFgdjsAjEN1h8vdq_s4UlyFTVibq9oJdpK9I95LW20lcrLFztqQTILMt0D_eknlYe0_yw1QZpBXAlzfdjHdSGZPm33n4Mm4JkXPC2Qjsk13sV3Ai8UHCpjHq0i9dw6FL_CgbEHpLvRjbTXQ7OXhAWwqc6Fc4VKloakARtD2jgWFjGvuez-Qtg4BnT9Ma7DIpvV35cWtVmqRebXxQAEFhgI29uKxvtj7c2AVQrWndksAkk9CTkMQCRW7m6FRo0PgOQSaj_r_KA477Be8S9ER2W8LhvR4aHu-k3QnI6LPrmM6EhY1ehVEPUNr-df6avQ84k4zvpJo-LWcwEKoovNOwjKMdDU5CBujYUpGDCPrNeucyvcQixGgWo-Ymhk8TWWodg
 
-## S40 — Dans une constante GDScript, utiliser l'operateur de formata
-Rôles : dev, artiste
-Date : 2026-11-12
+## S40 — chiffrée
 
-Dans une constante GDScript, utiliser l'operateur de formatage % plutot que str(), qui empeche la compilation.
+Chiffré : v1.m5x3SlCPCwV3hwZmOn6sfJzvup7R1ufymMoVWDD-Kx3-mZc3whIirug6QGVvgZFgjYWg4IJhYreEoCB5SO6Bi9jHrjUtThS51Hv0z8giKlfo9XA7LZHesQOro3rQRxi6JNVjRV2G8c8p5nL0y3KuN1pqC4qBc4e9iaKJIcznxKman3dzfRNldhvud8NKdRz94_Lg8TMzSWg4DBfaN_NaHE7j7ko8bwSqUbaLrkGeZfe7iq2PmkYaGVjdzLvVi0qfhFvZk6jq-GRwGZ2eTLljOY1A1gmGK5KZbwF7Jdcf5e9Q7Ax8I1tTmU4qK4lqEnzSTC1cPE8pnDldUfCkqC7NQqIX13M6qbrVNCewu9Cv1egyGAdE5UpHLm4ee9fUv8wxdYLhnsNS6Q
 
-## S41 — Pour attribuer un avertissement de fuite a la fermeture, le
-Rôles : dev
-Date : 2026-11-12
+## S41 — chiffrée
 
-Pour attribuer un avertissement de fuite a la fermeture, le relancer avec --verbose avant de modifier du code.
+Chiffré : v1.f6PGaslIVBHK9BxWyS9jNJxSQv6KEF6WxbIzeK0tI5_EcO6UXDREYHqDHVjjUbOJss_RTYK9E_qu5uv72UTF8rc1xEs-p40-C6ftOxxze0Bfjbgt0OGtABekGUakuRG_jY6QYcucx-KK-h9uOYGlgw53RPk1Q7xbvrr3oXP25rUdaz8lW71A3_sFcabxtsSNqrKQiL7eeuhvzPesuxpDDwzwQjEtyC2tM833OHLYzBue2ZA6xd4t8OyDPnqDtpjaEN0CdoE4GhACApB0mHXPC8DigTmBxTOvRoIbCF6JNnl8tNF7QlFA_WmIkf4hnfcRTOtbCv3ES6eq-A7yxkuQOYWWeBlpGSkrB5VmyQ4VmU0U9hidaX2GmKqdYg
 
-## S42 — Quand un document de conception est corrigé, ajouter en tête
-Rôles : designer
-Date : 2026-11-12
+## S42 — chiffrée
 
-Quand un document de conception est corrigé, ajouter en tête la liste de ce qui a changé et reporter chaque correction dans tous les tableaux, règles, prompts et maquettes qu'elle touche.
+Chiffré : v1.O3LrgWyN3U1FJhjjlUwI5xW6BJWG_EWoadIl36fVWHZhqkEA_b9CBJ20raxO4A2EAMKFuvE6JQ5PICFfsuAbtR6kdYcWs_03adKQRq_ZtHX2dBF0tcPNV_DVhyi18Rlr8pg1XbC5JdDE3wqayXHbiXdvQYpngT4BEKOc0BKjJVLnwh9-A8hWZrfAZ44jnyVHhDNiOPeJtJaiNHA-GKpCzUN-gq3wcy583K9ZZnRg9hzeAXKFFDUUq55lB_Yatu0NkHWtIs-76zhDta91aarcFuc5X2T_aHpg31uidbU9QS9_XBRD9JzQRf0B8av_zyIy7_py5a4ZGA5WUG_9H-eMDehnH9KTDmm1OvyULGYX3mDlkI0EBHc5OaoPuNqwDzhtQ-6mPTByXhG0JYVMMzWWBo8nAdkBgWsrHi_cklBV__ln4O9f9ixITbKq2i832Zn85gP_thJEFtAl2jbb1nbAQ_7tqmU2weLdaCCbyHqzVii5qf2J
 
-## S43 — Pour vérifier une signature Android, considérer valide un AP
-Rôles : livreur
-Date : 2026-11-12
+## S43 — chiffrée
 
-Pour vérifier une signature Android, considérer valide un APK dont les schémas v2 ou v3 sont à true, même si v1 est à false.
+Chiffré : v1.mM1cVSlm_qc58ZcjLSJjyxpAIPTZTT9iiWmql0puFBKcpFPFcCUOjZhdXHFNxgjffv7WiieXOvanl9rkY-sx-1bvzqbrd8i9z0R6FiN9hocXLA0ym2Oi857GC_7oPz9VxKaE8G9VpxN_kXpmDkPCkiLIYmSGv6qJGIKqVKY1Y0yYOtMWM4emWPVNw-WwjWmcgMS7vb8DhIVLk27iws8fp3roMrU4BQoyFMe4Nvqpud9NcXB2QzxEDXMvJc8UX1TUOQWd_IamF3YcfOQzEy4yxNTqyEWWXy6iNTmuEHuh3IrDodqW58JWOlgHwomaTCtlPaOZBPJSPBS9qfQIUqa44d3Mfb-clzjTnTboSzjU4fJDOGo5rMpYxAi1vxWSfbDwH-KsvaqGjwa7stKjS2R59ENDCgurqA
 
-## S44 — Pour contrôler les fuites à la fermeture d'un jeu Godot avec
-Rôles : dev, artiste
-Date : 2026-11-12
+## S44 — chiffrée
 
-Pour contrôler les fuites à la fermeture d'un jeu Godot avec audio, ne pas se fier à l'option de sortie automatique, qui court-circuite la demande de fermeture. Simuler la notification de fermeture de fenêtre et intercepter celle-ci dans l'autoload audio : couper les lecteurs, attendre environ 0,5 s, puis quitter.
+Chiffré : v1.i3ov1G3UGClWy525df-rcOwoph4JNPlE-QkFZ-oU1_Uzztj1vQt7MZIzKUqzMW3aLYiEFjND8M1n6R2cx3kLa9ou_7Ltq3QT2xkUsmiSLRgScuKo3Qr2-w91ygZ0eceHHQf9vZbI0fLgUlW577sHZSTom9sMs4pzCuDeNuqJHX7ullhGJpnHhSLFpRZu46wqfnsww-a005w45Ofd4OHF1nU1VYR1HvlvN5Me6PCNF6zETpuypXDTJ9gumiz0todHV8v8dD9VxBd0kNgtxWzotV4YA6cwKIDw5qyo5ZihlaQFGNPaV05ukUun6OKR5ilhaA-q6Ogohs5NdnKr4YfHDbS1tALYS-iFXlQJQ5ylqm6NKi3xLUjsLlWY2X2yTGjTqr4PDJ3BepOJ7IWvdG1EIRSvsrPfMb10HTtuzWsDxW56hKRDIpF2_mGPL9pXtbJP__h8qpUbwWlfCtXU7MS8EySum8Z7DNR8l-peMgNVTrwVKyDbHWddrPToLp5QhyP2Xl7bAxZthKTVg0EvaO95zrKFp06bU1xnm0qiGC4AeAsZh0DX1X1A_Vxg5fA8FBxi5ZdobwPWoTa_KOdHUA3xMZsz8HehTruj-3UzjrTxHysWV70hKdmQdufNpGUNQMEVmiMcDup-UEYYhqorVG3p8Vbfsfd2Bbx4bXM
 
-## S45 — Produire les tableaux et les images de design par un script
-Rôles : designer
-Date : 2026-11-12
+## S45 — chiffrée
 
-Produire les tableaux et les images de design par un script qui lit le fichier de valeurs, et garder dans la fiche écrite les règles et l'intention sans recopier les chiffres.
+Chiffré : v1.dnNvAvpGHmkF5b1cx-QFsdf_q7vEynXaBPGaXw5wwg6NeBCtNorJWk6ddhmnRETSXG8u1tj1KcQ5_J3ZUfrQ7k0PjvD94fr-U9Oz3LvjpJ5K4c7iINU4jZfYd94Vc1_IktI1swIgdQyUnbrkJ1UM42arZsVx7xXc2BtCIws7KSiEyZ0zKaifmBpfslIo-LvlrCGffU-E7GRj-5QaYgQ2avIhCNJ-uz0S8H5PmQNoSXpy9N_1YN9Eg38d2ElvB7aEymYQK-SsRfgZ7IaQ6IBjp7LQL5Sna-vfgeC7aWXWCLngSqhhJGUFYZYB_J4q1AebamBAu-fOSayzYPPFUpC64_z8Pa-Df7cwMtP0avFIRmG276ah7mw5FGxZg2fCH_IdWAXmp4bRrJnGQurXOf4_l1uDAg2CGQVA61CNcR3UBWBRo_M7ix-jv_EwOODnvZeJrk4J5iuwjLoTIDTaLrUCaPON9A
 
-## S46 — Contrôler la console de chaque outil de test séparément : un
-Rôles : testeur
-Date : 2026-11-12
+## S46 — chiffrée
 
-Contrôler la console de chaque outil de test séparément : une fuite ou une erreur peut n'apparaître que dans la run complète.
+Chiffré : v1.hPngfzbNhGLzfIM0DfOKxoR4tIhuTzFtTGOua76QYQK4gQBFj50EsApb8Gd4_N4PB7JIRXMII1wTV_MAydX27aJqGlo1H9T9pgi1FcRyBGnee2gAUnQK2bBDlhsP6rT8-13lrbMkH9oamFETGWhe8PSx1kbuarqALObf6cMSTLVOjq1eSgxn_hqXwPPeDsmop8AWwI7E8japin4iJEKvjJKKJQwa1teBTLiMX7S12lm-o4pND331OU5rug_Jxmgvv_i_-fgPo87XSEuMHxVJxLF3ImuPeGwbzXmarbvdxcnZf7i5zUTMtiIRYZM18BXsLHxnJ9SYoylZL7_4MJbMT4BNkhmWEQwNNwSd_4Iv91kSLu3exdz2u7kPoU-nNtXSCaa6W7sLQc8gmFLtigihHtSDA0w8Cl8
 
-## S47 — Quand un avertissement de fuite à la sortie apparaît dans to
-Rôles : testeur, dev
-Date : 2026-11-12
+## S47 — chiffrée
 
-Quand un avertissement de fuite à la sortie apparaît dans tous les tests, chercher l'objet commun (autoload, singleton) au lieu de le répéter élément par élément.
+Chiffré : v1.nCJ1lVoXA01GDya0-EpyeTlDjSdm8O6ezSKFE_TmuGI75qlDVvQgtkZ2Lye4SObKGC29kh6km1CFDs2uZQco0mW2U91LutKLuisf8oZNsBxnDpQ3yJkk5RNnlgGf3jCJEGVhHG5GRXOH-WPB9zlM4kNBwzyfKNto36lTc0-Qm-8dFGdwEREpg01m5oNCMINPBJGa9UdfcCmJUcPRAl22Zx-vnR13LMXx4KWJnxPes2XLGPxX2h-wPjVOorhJoXBPEzRaLXyqVIEDX6ajGyooK06o2xbtWfY0tjfby7OvwcfHQNb3gBvfTVbb16kuLzbXqFKWEwrG-fZ6_toCRhXzmM8SgSH0wpzqIGd3-36QfEhQApjGO2t2ZRUs-70ATma_btZ6kVBY6IBac7JugTac6NXENzwlditzPZrYn_gV6VLC3oj8uR07eBEhQZKBEvcl0ZF0J_GGL-amZlJ3o99K6umRWqon
 
-## S48 — Dans un test automatique avec écran de fin qui revient au me
-Rôles : dev, artiste
-Date : 2026-11-12
+## S48 — chiffrée
 
-Dans un test automatique avec écran de fin qui revient au menu, désactiver le pilote automatique dès la fin de run, laisser la scène s'installer quelques images, puis seulement arrêter l'audio et quitter.
+Chiffré : v1.0WKV5oUkT-Pwa74O0CsGAfjznr7PyqLRmPrHitmQ_yNLjTg55LWrrN__eHCbgzngRTwyNpSZKDq6GNVVEbNLeI0hfQqq5VrJ0xnlcT4yMDFS8i-fw4dLqE5TuWii1GmQJVwPQ-Wu39lLaasXO2Ut8KUz_HeZ-LZ4wr1-bPLAomCVbQpg2_r2zxe1RhwUiXBj_AXJGN7lNff1CKnl-pccB002rkDDvVhTg0CQ-pss-9KZYV_zulBXNQsS2NT7tOln9tXB4XJos0-FwXsBWF7_hIilX0TNeMikHM1No_rLqcuf9oMsWy1LHqDYrCtxbeW3uUbfqKBVuWorxuMPmmypH1mJGB2L3if0x_O5PCJUj6U4B9bEhDuE-m2ynFly6kUDT77jCb0agfoqaCR8cD6yyxJ1h-ovEEUdoBtH53p-7Xtc-6X7HbbpOGowDIR_0ZsnSFw1s75W95rN2JP3MdEWBOJjRU_7ZGjEyj3qHZ9Ahe7UyM8YxAujnql2yigzZghC31O32pavzWT6-60
 
-## S49 — Après tout await dans une scène pouvant être remplacée en co
-Rôles : dev
-Date : 2026-11-12
+## S49 — chiffrée
 
-Après tout await dans une scène pouvant être remplacée en cours de route, tester que le nœud est toujours dans l'arbre avant d'utiliser get_tree() ou de poursuivre.
+Chiffré : v1.6ApQMw6iAUhtTOowQotwOwqkl1xTCPEYjtpFEE55UzIkGfDsmLiTOFdA16cwxBA9oGcBhHhFBS1jKdRrSXJtODOFdb21q4vIs7fxz6EEafEDlxVblElUCgOFzAI-2d0LyrqZAlJBU-FRX8ftkRXeMV-q7Y-tPz2WkatUJLwdh5E_zUbEQoUFeSTpwjYcLAVLkG41pHecRhx5ZVNsQuV3SN5tRpc_kdvK_sPoDydw-MP9sfvbKf9NieL7WrnlleX-M_su2dzZQqJGg7DrYPft4eFSZ20trABrtZlIUNo0uF6-cttRpayw8G1xRnlieigQDAMqnNwzHW2pPSxQwFqjJOW4vq7YqQjYVI0bujOW487qdp51jnFVfoiTsFQJh4lP-TBIryJjPSIsFdeUpjr0j6AGl322ISUtnmaATErucKTMMFXMqkO5qsVd5XPri57pieIukExUo6we39A
 
-## S50 — Quand un script référence les constantes d'une classe global
-Rôles : dev
-Date : 2026-11-12
+## S50 — chiffrée
 
-Quand un script référence les constantes d'une classe globale et que le cache de classes peut être périmé, préférer une constante locale initialisée par preload du script.
+Chiffré : v1.sH_9fbVe603NDrVyna6l7cF0-ObydGryJpvI-EsCOy1Xx7xbct9M_I3736h4JwtcSJ3FuIZJ6ie0t3dDpjAS5oIZU94VITCbT06Ow1eJ1QjQwjN63xrY-6VKWXvC57DwQ58YqucV_Gt-Nl0zPQDTw0GYdVOrshIuZLOc3ZF_UAoM9RW15qA4U6mV-kHZX9BXccKEjayYfS2R7yMV2PU25eTM7SGER6CnMro3PrFAwLLOOxc_gKJO80S_H5-SKwpJ82ity5V-cT89f0Zr3cFxxdu1PAk1XnvSDB6euOeHJ3JE-SquAQ7P9zBfOIcmo3NmCbYMpsQbAIc44tTbphyzG0e_tsV8RH5rWjIPalEwZ4M8yOyDa4L2aXa9xCuE0CRyX4k3sw9vWGwelLjnHG3aKsmWTUohlkK4EMe24qffs79i8fU3j-b6EdhLHX2IA1F-ZcCkZXy4vuBBCveg2GCFwDrwGQ
 
-## S51 — Un contrôle d'environnement de signature liste les clés par
-Rôles : livreur
-Date : 2026-11-12
+## S51 — chiffrée
 
-Un contrôle d'environnement de signature liste les clés par chemin et taille, vérifie la présence des variables secrètes sans afficher leurs valeurs, et ne les ouvre pas.
+Chiffré : v1.m10gIFRIPV8QeFUfWjp8upbaD7ahT6p4oL0tNEqZYILETgsoJqLtZ6cz9Ic5hNPFczBTHGra52anDPlhWzdMDLd1TfhFAopw5o6uWw81jqwiTKNKULPYcQeUwaEFRHlmiJzsvNk29FW7d42HiBEIEUlvZJ4w8qfSoVBiYgM3l7-8KbPnFoProqwAxooRCsyBezaoeL7vf_0OZoKsv39VhN2-WLs9CQNQBJBBdrqkjuNulX7i4N3CP1-mbHerrEgKaytcdPzrWj7eLeOK_YskrHeR1ffIHcIRtB1wwbr28dTqYpuX4WuhkD7t3mVkG1fEsJNt-m9cR2FmxnF6W1NMJDykB3ggPC0JnJwFmqIDereouxp4vteJGkY5iUpCsQAhYYMGfus-HF6rbgHxRFBRb7vCymqoyEEe3kgZ7yVnCG5bpeM2OIOQbT7Tzg77giAYJQAXFEHz982KI18zKsMIKFFw
 
-## S52 — Faire tourner dès le premier élément un contrôle qui parcour
-Rôles : designer, dev
-Date : 2026-11-12
+## S52 — chiffrée
 
-Faire tourner dès le premier élément un contrôle qui parcourt tous les fichiers de valeurs et signale tout chiffre écrit en dur dans un texte à trous ; il trouve aussi les oublis des éléments déjà validés.
+Chiffré : v1.Jq7T0TrTXpRMwM7qaiVXEdA2yRjQAJ7ur746Ut-XTk-q2802iKxFFl4AnFrPbMdKQzm5BjlobwejKBJjQoPajftJ8v9ygrdWNxLRbhDLfh7awlBj4eAeW3iwwTr1DecpkpdEk5viFngX_9Jx6ScR8y0LIBIJm38BLLqdyu5_ujIqI41uWyJib8h7oMg9qSbEI6NBFiMyF4uLRI3S2z8Vu0rfsdNSkdY_iith8-W2DBxH2b2GbQnwkamJ1byGBEL4sk04Qe5VlYtD4HBBXm8-eBwWShRJN0H0CxoXCLQSQkYLSIdqG_9pvFAuC4AOuZP0TqK3Og0anDR0qvugDonMmDRE6TNYa-UEf1uDZ2ScVRxtLL9dJlE5Yor7TLgbX_wp53Yd0G9UHMeFajyn4GEAmv9SIUXX-3tZnW3PsFf6KngRZDWRtQaTa64S8dR1U8RTJj2nuak4Hr7k-6IvKIbCmFftQQMZ6v5c_alhHoczlWiRgFFxcrDdw77EU6G-tfPxMAIR7r8FMK6GJwz428SDDlydprdOgA
 
-## S53 — Un test qui donne une donnée fausse à un contrôle ne compte
-Rôles : designer, dev, qa
-Date : 2026-11-12
+## S53 — chiffrée
 
-Un test qui donne une donnée fausse à un contrôle ne compte que si une erreur nouvelle apparaît par rapport aux données justes.
+Chiffré : v1.NXTr24txzCgFKIqNc_9VjHn0noDgxRMlUgu4M7pueTQk3uuG8cuKkxnP-hTWb9YaDflaF0WcjGLoBlFHcCehTIyjvsph1smAEiTnmh-k0a2n_JVjak4fWLpINjHU00guwoKaGpk4kfV2MLgvSvvZge8DfnoK-nYp5WDUCKY31TrYd0SQhh9vl5GUPt2gg3xqy79ulI19iONMhp8G4fYzUBPkSXjcjDC5zdIXhB2tLVJGcPzRtWpEKYIgANmI5Igcl0ralOnEQfI_hcEQZ_TnUz0wdlS-YSnm3m3ncoWGKVLRbxsOxrx-0Kki56yL1wR-ZaE3SYeFwBsNvwXMLq09CUZMnaLwFDZffqjui22CiJxT5BEOHWnoioIkFgowE5pQPFZN9zekDCTB4IIZP0vNlYrzNUPrwox-HUw8vvGxOWDsqDNmkW8
 
-## S54 — Un contrôle qui cherche des secrets par mots-clés doit viser
-Rôles : designer, dev, qa
-Date : 2026-11-13
+## S54 — chiffrée
 
-Un contrôle qui cherche des secrets par mots-clés doit viser un motif de valeur (mot suivi d'un séparateur et d'une valeur), pas le mot seul, pour ne pas bloquer des noms de contenu légitimes.
+Chiffré : v1.vhMpA6Gj0Nd-w25D446aJn97zTg1wqSEv4a7Ck8fMjhlehlwwIOahNh6OFu433ksYIUjCjnVzB30oXnrGSLkGxPA3JIAzC1b1dWETgzMDb7ByOGz5c7Q3ZKUDpATSXftKJa1_1R_EtCcKru9n5iIcK2mHd1iqlezI5V95EUxQDjGQMgF9y_HdyuITUfAxC2VxTSc-eCnJJwY1DHmtUncAtnRxBRg-klZCyazaIx1kjHKG0FXS7ay0uprKfs0UIeH2fZK0VvGuGts__MS6RoBDzzhmhFAp4mCRzZUHh69cP1rgqVkArgTnnsGxhdefm2Czci_O6Pj8HtMxwru7ATOkE49GDEAmRs-cW0xeCkEmXDkKDUjLBnz-RmGcr90kUhDwJYXPVc5Ky3kZn9UzgImG5IRZvQFxJGT1Mbx8tocxRUOthxwYVLeqRFaAQa5ZQgL7JjtaEKMkvoM4qQB62U42K5-FmygTcHzsI2P1bxTCxD6PmsXIYCiOy-uqpF_1usy_ZxZ9IQF
 
-## S55 — Quand un élément d'équilibrage est conçu avant que le jeu ex
-Rôles : designer, equilibreur
-Date : 2026-11-13
+## S55 — chiffrée
 
-Quand un élément d'équilibrage est conçu avant que le jeu existe, livrer le plan de mesure et des indicateurs calculés depuis les fichiers de valeurs, sans changer aucune valeur.
+Chiffré : v1.E-lXnMe6nDstqA-ZBxsSRQM_jTl4wfsmOAhT7aydF1ll9KfDZV7flHrmMRvrzu6y6PuchO3AGO2aeHg1JbJE3mUvOm1M1f9PG3Fu6a4Gw0xU-Bi7jJWGBEz84VfqOrPfGU-nNL-6nu5bShClNaKvKuy2a_9IHGTbY4TmS_rfzB49_l5-mceUxvi671UTIXbaXkZVNrzRXVPs_f9bJqD2eM-W3Gb7ZSusG_tIyUkn7Wz2Vuf8NnGqCZ8j53w6GXy6Ab3yvNCVUwl10Vwz-JzOZZRwzf7wBErM0U4QQnT2j4Fm2N0GomUQfwqgTnBKrD6_jwZ_gZrBQhy7zJANSCklQYvkQuvNEVgypgm3wxeMK4k_1wKbKEE3WtHAlC1Fu9_NnGNhXrHmWyAvjpuoYZ-MQ6kriQSBp2YkLgtPtLOmz_U-cZvXnPTPuFTP-PrbbWzOVcWG4pLiKk25GQ3etObJP9chW05iqePG2VX80cVNXMBjAuYfMa_-jRrxcVUl
 
-## S56 — Un script qui produit des images et vérifie la présence des
-Rôles : designer, dev
-Date : 2026-11-13
+## S56 — chiffrée
 
-Un script qui produit des images et vérifie la présence des images référencées doit exclure de la vérification celles qu'il produit lui-même.
+Chiffré : v1.e6m2kq9wqwJLEz-DXN-YpnZyLYODXVnciHBO4hTEUJAs4oJHqrrDpkYPRXkGkdhsHXYwsYLR2ViOWPn_HEojPEgMN_yeLbPdDiTOkZsV7aVgjliHJIKhf-0APYROioaYUVeZDYpTBYE5KIMhQcPJ-sNUqGpceZMLlphWtAXW-LqCXJZJV6UfHlc4qV4myVD8lZ-3neJRoyM8qy-pxtmN80AcgwK83stb9KY72wM8D23aFHPSZ6V3789FJuwrjzymckjIXdlNuiq5ldNZjuWx1B0ECtD0T9wuWHB-ejAsmynmIJer49_OCyxkNq4bVng9pCxAU1NutlHAdo_FkFxfEQ3B_Jm2AF_t8rRC33TYtBZWXz1j4JNShgeOdmfuZSHtPUlPUhOgg021zG-3gexxghUj0isg9m7dDA-N6rP6q1z4zoCcRUaq4ARBojMAscg
 
-## S57 — Quand une remarque reformule une règle déjà appliquée, rendr
-Rôles : designer
-Date : 2026-11-13
+## S57 — chiffrée
 
-Quand une remarque reformule une règle déjà appliquée, rendre la règle visible à l'écran et la contrôler automatiquement plutôt que de la modifier.
+Chiffré : v1.-yDuxHEt7PM5kh1VxneWlAS3_KZWId-cbPYnrj5IfH84Hx7sSY4URhTUHAzjFT_keDs66zRhN0zVoIDdk_nwJWBiqZimg182_cyZRBeiwTnGCH5al9y3vE-dxHMGBPT8Eho8ju3r9kle3ix6cEtdh8kpHRoqIhqZyMYWVns_oekaLvRkTTLoCGFVTozz5R2_zTJgy9SAWomcf2WesPy_oYRkKd2sTzsZ1wZrIvq4DlmRBgKYVXOlwnPxGT520x1oVCysGC36T1frJQJZKoC9yFhHGai8dVM8_ZNGvSBdaOphuzln_6Pfx8aYPLE2jbfbE6TFwx-k6tI0RrSJoi4NS2XhMx42lePFsVfxp7ejavD5BVCR74IUjjZVhyytuZpAZw-Zq0kLnqxKyIVjR7W16bvD1Qwr7Az2MUxdxBxkkWVTVPwPMeUaZICuiS5Ges4nX7Xu
 
-## S58 — Quand une étape de conception porte sur des tests d'applicat
-Rôles : designer
-Date : 2026-11-13
+## S58 — chiffrée
 
-Quand une étape de conception porte sur des tests d'application (émulateur, paquet installable), vérifier d'abord qu'un projet compilable existe ; sinon, déclarer l'étape non applicable en une ligne, sans produire de livrable vide.
+Chiffré : v1.XxSqssNbSzL1BnvcpesD88hdkBKGNd2AopwSPy7Ublv7In1iP4nomPEvdi7QcFpZbRvTVlAAYRpJCz9xISBR2mOj9shYlH4NNi7DCVuw7Xg8FRwmSRuiq7_1ZanTC8eybGc-uv_lKLQSzXfIS9IBb12uBA0J9aM8MdFaKCt9Rq3ITqZ-fO9MhcDc3VOpoglVi1Wo7K0YpQ3OT5XGpAM1cQtegQAOoZOAm_4PU_UW2Q7bgC9A-l_DGawqhkcKKRFfMHgBCYCKI5kyrymzcXdpz6s9gpxr_EnSdWO_98UueYmmKxNZWXj5xv2TcedoGYkwa5AyZ5Pi8cjenNA2E5vu6qKlJq8lbqfrMGgLoM4Tw6tDge9bHER0tNBPPQVoWza5tDnGt788r7m4_WATv0u8xOEEcXJ1GKpeYebvprVWgQzZ_4Lu-VfXntcpRfs1ObjsseOkMmXf_LZR0Dps9YNh4SsrPXNYZWnJDLt9aCHwQ63e7QlBsNOlJmAg2tW-QdTFmTg767Z7w3szgoiSEy-t-VBCa7jU-tYsy7cp7suCeRs
 
-## S59 — Quand une regénération d'images ne vient d'aucun changement
-Rôles : designer
-Date : 2026-11-13
+## S59 — chiffrée
 
-Quand une regénération d'images ne vient d'aucun changement de données, annuler ces modifications binaires plutôt que de les commiter, pour garder un historique lisible.
+Chiffré : v1.XOBvK7FfSeIVvznlG75MOqAULZ91w4NxjAYN_0ZnRikzGaevlTADqFIym2CZZKn49QEuto5dkjFyxZdiCakCIG-p_N4-TPlCi5TetaLmq60w1csA9GW8BsCJ2DEBAji7rOdoluzCqWsBm6-9q-8dnQFZe34z4kLgZ9Uzszu_pvzEoOS7yb5iAZuDUCSBD4hPJY_B1xmKCzWyNZ6PIYCXI1e3_Z3k8My7FzfPAwNl-ErZrtM9iKcPKkwHGl-13F212vRV0hkIjz4UG-aPvOkrm_kpzu7wtMNvzvxccYRgehYNl9QeFK4picIJu_t0xY70JsPFI_1haBFrEkrLZWc8EQwiJNWcrzRa-8_P118yMq23_adgvqq_WAHlAPJ7YLLKRrsmRP0p5zdsTyRN-zQs_Yo8vGJSli6RaIh-kZhi7b6swlcqu2C79bwA9rX4hcd7PZLOo1PZlCBzdt7lZPmQ-so
 
-## S60 — Quand seul le rapport d'une étape a été refusé pour sa forme
-Rôles : designer
-Date : 2026-11-13
+## S60 — chiffrée
 
-Quand seul le rapport d'une étape a été refusé pour sa forme, reprendre le livrable déjà produit, relancer ses contrôles et rendre un rapport complet au lieu de refaire le travail.
+Chiffré : v1._01iw7f-cTRj-jIQGKN0kENCNFW2SyGqLMdzzf-uwPTHd6g_RRBRjMwdsbHBGIYB97UMa-dEKgfPJO3EjP0v3aKTxtEXgfG9hWL2flYLiReBk8EaZr54Dulf2PnL4yvoJBm-DP8AFW6f-kZZJwO-Z1Hd3-kUfJOHXbJ37WUKuBWCDts9XtX_k5j2Jx8ZepvPqbOB2Drtc7mAj77edfiq6oHxpNwVPaG81bPs0LzksH8I55Gvq-KrXzH7s3Zfg8wD2rPyxODAjNt2adwQv0oWyL0MaMZGLckMT8zMyjjEJgwVXgQQA3Tif6z3ucXHHNrISUKl4Z3AnPVpDYiJQeOxlDcC7YfeCd-CvcHOvxoI32DTMRx20w4RUTyvPQHbnkWcKx52bGRj2tW9V2_LZ7oLs4ZhlQUpjhAThd2SbLqGEIrSmxrSPoEmzkR72Ss5whSlY-K9bSt99fdclKKTKMLa29TuJCyEjzq5-dXIxYXieVh-GQ
 
-## S61 — Quand des prompts de génération d'assets sont regroupés pour
-Rôles : designer
-Date : 2026-11-13
+## S61 — chiffrée
 
-Quand des prompts de génération d'assets sont regroupés pour réduire le nombre de générations, limiter chaque groupe à quelques sujets de même gabarit et du même lot, les numéroter dans un ordre fixe lié à leurs identifiants, faire vérifier la numérotation par un contrôle et prévoir de régénérer seul un sujet raté.
+Chiffré : v1.KPffvD9JjZdqWfvAwKDTCldEutWWkdKSsihbc-YEJMRCf_Hwe4uyr3lb05AJssRax36JYijRpavROA7IujpSeaYpi8gyldp8lanFMb1_7rtXvjCvNipPTE69jYO7VXshOtkx30v7Y9lkvmMqAzHMdIDWSjELkIXXHV1GKzebljqoKpytbE5j4-njNFV3UXbDSJAWcbbdqnU7xKj_tdBGxDkEX7evXAlKJ-2VG9iQ8OrlAdtxH0noCqn_AS-AsoaS8SmJokdEkeKDSVf-IVCrWJGbtUAC-xxBBnTYeRV1rwqZ19b1K0GeCJkUGx5f48S8jL7Z8wwOibx7jcd34NpGTTCeQD2wbGJcWbVUyXelVn5lfRvkUiOAvgK9t-fGS8hp5OivGgF3rJZ46PMd2xZZQ2UjENqgsMiZ4naGmyRJ8R6l7dwK5O6cRjJwWb3UjkOIMeiehhdMdYxmi_43548MHfUucBUNH4vI1zII0fkCKelzLXSg8QGvEfDzsYHvvd3_LHbW9y4WgjOGN0-2Bcv0s3v-S101y0VajvJPL1h23rCkThKnKjfO3eaqmmNPcvZLrRed5k0zYJlp18nBpfzsSYu5oNv49vcBeCK89zCj972y04N6aN90dGTKruP6ijfUzr4zYWD_NGJ7sjXR2z9-f4HsTCjPWqbt0aPr1lqs4ZxTc4gbJYQ
 
-## S62 — Un test qui donne une donnée fausse à un contrôle doit vérif
-Rôles : designer, dev
-Date : 2026-11-13
+## S62 — chiffrée
 
-Un test qui donne une donnée fausse à un contrôle doit vérifier que l'erreur visée apparaît (par un motif), pas seulement qu'une erreur nouvelle quelconque apparaît.
+Chiffré : v1.T1Qlt0NrVMWBAu6jKqC9G7PQcv1mJ6-YKEQEiKD2oj7mp7tYsZOiC0gnpujkHcYyua1AxHvYd31eY3L-lYXaBH2HOuRXBtZXzz8Hsa1gao0-o-OwlipHxYb4R5sajlTbhoHD0ox6FsxAw6DrlSz89M8RIhAOQkIYB-GB9FgY6cA9YFX1hTP0sGUxXiJtPXr6rtiBv_7gCrWkCYJJd6m-bD6eymiayyIOMuZA_CuBsFoYfJNXqELIJ87p86a5Q2OLaaGZAVJEfNfwNdqPJ8vO_nMgLIXeGt16ciQxHT7tOhQuETsBGn5jpDwgfmUXu-6QNGfVQ41O5TthWb7Wbt73EJ3kmDPHNkNydvZrJSXOn-yFcwgxVWGX71_feL1PQC2N-6blf6kkUFGhhu-tikRbQfGXUGGd_va34NIN2-bswJRGP_I9Xr0W3F_14ueUpSgRXxaguOcyJ6UnEbl0SW6vASz9qQlxNkzC6Vk
 
-## S63 — Quand une consigne interdit une catégorie de contenu, ajoute
-Rôles : dev
-Date : 2026-11-13
+## S63 — chiffrée
 
-Quand une consigne interdit une catégorie de contenu, ajouter un test automatique sur les noms et descriptions avec une liste de mots interdits, plutôt que de renommer à la main.
+Chiffré : v1.U4Ya3KVk0CpGyK8z8Smw8Dv2XQYjb8T7FAumygXRPkoSSU9F6dQjFaVXALvsv5mgjiFLYaAmKmtmlz-fqzumYbG6CmM9a_qaaqlCW9OISfhTl806VA0lY3h9K2h3zO-Se8wRmk35QOkVEbg3_J97vFVF7hcLbGI4Dx3uBtlLcH2WVUge4IsdJO3f5DhXHoSP172rc0rI2rCEg7LK0y97VlTsBF2zTW_wxPpiFby6EDg2XUP-4nT5M4A_sodfypGCO7oNDiiJ8HqW9KuNNk-ac85aWdskpAVWcJA2b38CKi8y_SC4I7UTySZE2VwjAINj7webzu15bCPyxQvAZeUYIhAoPNYtm3WpsFxOLHuZ6rwlMKBF2b-BTwqjK28uZsLMlTvl8M4Zyn1yyNY4nRs21mbZuRYsTXpOFBzlqdIumzomKLQ1nckG0Gxq9-8bYh5wKyTMVXaTFrcEmtYemJfcIkCH7pM
 
-## S64 — Regarder les captures réelles de l'interface avant de rendre
-Rôles : dev
-Date : 2026-11-13
+## S64 — chiffrée
 
-Regarder les captures réelles de l'interface avant de rendre : les textes coupés ou superposés échappent aux tests automatiques.
+Chiffré : v1.nvd9E9Zt6qnP36abKePsUQBEVsbyzgO1Dr2hDJe9Sie5CLjJZaPXaPUa7uz_bxKlKfKf6v3ZzJ_s1-vU2TXSFg7dKrbOqtWCv7aRmifwm9vMldoBbeV4qqmK6L96ljDGXvvg7PxGFtO95Lvgaf13h4isYiqdCqaasMhJkCG-D1qHRhJEixlmBzQMOnMpWADs_wbjQNJa9AZJnTYg4lXi-rRrrPVNnqcVkQXFRajqma3vGyiq3uqLRT8EgysAx-FN8dsTklhjKsbBtwqeEzvma8VM4hJ2xE8PqDmtSupiduTHWkiu-CoJdd43INzozYqjPrRmQKgBGjD4p0P1okbZB861NAAk78vs181GGs7AJaymPKUgm6GzEuXTqnt0IpC9pxRiLKf8_KEE1QqZTLTfCa_nyw
 
-## S65 — Au début d'une reprise de travail, comparer l'état du dépôt
-Rôles : dev
-Date : 2026-11-13
+## S65 — chiffrée
 
-Au début d'une reprise de travail, comparer l'état du dépôt à la liste des tâches avant d'écrire du code : une partie peut déjà exister.
+Chiffré : v1.4xiLFnIK3ZfZv5Vgj5RDXNVphTgMgDZTA-VVy9VxvbXmxyqqeUU_SXPAfVWIV1s6QC2PSXtHMSYaQFrH7hxaX1wMeFXs-AABDlbfVk5XiFDTJ0FB08bWleyp2tLdEUUUsgLORdabUQb1ykErQkC5_7aZxNB-2Jcg6kyjYnELilU7JB3TnZMFZhL3XcbzZ3uIER81fkU628liDq5H6qtXF0-mi-oWXS8szeE101Dw8pS4mt68i_H6atmSiuTNoGFMvWTChyVrzVO39FvmDae3hCxg5m73r8s7LAzXFNxG_qX-CslX5gKYlEK0UXAaYJOEmprnHMzRahGeTViP4w7czP6Hf6KvsLjKw-2TshAx_hOoOohlSxFu3U1w7MReLP4L2Qr90GCOZo4fARJdKGg6HO0t_fa9r6YHIP4MF8j004469g
 
-## S66 — Quand aucune approbation n'est possible, écrire un lanceur d
-Rôles : dev
-Date : 2026-11-13
+## S66 — chiffrée
 
-Quand aucune approbation n'est possible, écrire un lanceur dans un script qui exécute l'outil et filtre sa sortie, plutôt que d'enchaîner des commandes avec des tubes ou des documents en ligne.
+Chiffré : v1.4CH3yFVKi8FP6d2-DLQFIj5GLNkel1j2XsEGBBBK8gybFLqOHNwjb_FUqUmnZQMoaY8UQMBiYZHTTCgdb4kK4nH0lG-muCYRbipmOjxU1anGdbSzXte-3KZRiJPxIHzQySte05YKOz4ND8SxsvGghpMFxL3CE9cCOZU3s4j8NB9B-vRKDA0Clw4mReaeR1c5kDLnJ6A9pjoudCy2WbLmc5hp_lkBE4ERVlxx8oV_keGBaD_EH38DGeZPXTZPSi9Cui0f2oCcS1f_oB9CQjN-LGUxWwh_GYoaKF2Ef4mL69vQBNFd0owyjdItpeNmzidCth47BKZqIqS8BIrdLBzRKshFA15Y4OCdhcGccV89Q5CdFivYhwnEYO-uv6YyTS8ySyUL1ZrOSFY6bRobkuaZJT35OqapWzVdS27bkltz9-xhsFia8591GTmG2djffb6AiUwO-tWtCal6LQV7gd4KhBH1R-p3qX7KFOLO379o1n8CmUIi
 
-## S67 — Quand une tâche redemande un élément déjà livré et sans nouv
-Rôles : dev
-Date : 2026-11-13
+## S67 — chiffrée
 
-Quand une tâche redemande un élément déjà livré et sans nouveau retour, relancer la suite de tests et rendre l'existant au lieu de le refaire.
+Chiffré : v1.sifAxP_mhpe4bnsYw2MyAavhT2Dg3_6k5Dk2TKTN2_d42kJ9ky0bqQcuA1RhyBqITniGrngFWdhe1e4NCP7j5dFVicVvdrEGxwMAIYy1rRXLXXGB7IVgZUeOJpRxmUnOyuv4T0pU2fAOE2i2CvXhdTj_Hrh4q6GzS5wiiC62FsWZ84J39n8cL5KxSX2o8qnxFmOmdwmd1qgA6WXuOpBRSGKNt3NpKi6SY2OlYVxrjv91kIfuyGIT0bjpyKoK-fY_hARfcoM4LFNU7DAki-UDn4mxkB1kJUE2QdJuCY2kQcQoVpwLKNpvgHFIasmiLA1_8ZQnxQncCDW8q8KPp62YlqJK4bV2GCGtfswYiz4AjAIkjh5N4NW7JHBM2Wo7dqZqDupSf0lVVedIEqSIwGL_fBlly9-5udvb3-AxrMgIyc2ar4ix4ZGe9Q
 
-## S68 — Quand une consigne de l'utilisateur est coupée, implémenter
-Rôles : dev
-Date : 2026-11-13
+## S68 — chiffrée
 
-Quand une consigne de l'utilisateur est coupée, implémenter ce qui est clair, ne rien inventer pour la suite et la signaler explicitement dans le rapport.
+Chiffré : v1.GswYxWc3fitNaRaKUSja4Nqz_CcEiSysBaCyp4kgQBpVGgOgYmQIYUuIX6udfcXjOxGkPXHVKASYoGgctpt2WsbBLyPYBbIGyGXXyyuplWzBLLjaBE5Zj4Fe7q5FwS5CuChAGCRJ9gLgwIGl71Rc7SKwg1S4yi_DvfWcY8onJFuI3Fe7bMmE8mdLCCW-fVSTyRKfBDQuKrGo7BvHokXHNqzasSl07V7OzdxTa15WPod2NTeZVnnadpHwwNK5YjaquTw_qXTQDL7LTXIadZvjKba_VVnxm_W-lZTt6iTek7ugNXeeVTdygcml4xkwurMQytavfkSidmzeFZG-K6dvlHDeb4Eqb9eoSONKFH4CrAqBe5XwSl2DA7XW8DwnyUa0QMo8p-CTwNF3EinRyltS92QDNzVblaAbcyXKIgxddcqSgNtynizaamTJTA
 
-## S69 — Quand une nouvelle consigne annule une consigne précédente s
-Rôles : dev
-Date : 2026-11-13
+## S69 — chiffrée
 
-Quand une nouvelle consigne annule une consigne précédente sur le même point, remplacer l'ancien comportement, son texte affiché et sa documentation, puis noter l'interprétation retenue pour la faire confirmer.
+Chiffré : v1.QPlYUrmrUJ-T6N-EiJIbU4BaUVk7lbTjziqx72J8SzE-gPSPnXVpuHBdC7hmR5HeMQYm_QM-Uo9NhmcjsjVCYxeI2ZDxAj9VVU22GRB0-WLMVmKglMwSAEFZ5cZ-C-FRIxXxXUiSvBBjoM9SRJJpqKDK774Qy0vExnpkHLKQHOT1T7twILKVlLaqLdaUxuU3AWY3Jwg2yuF1bZ5xLE8GravyHEdxEEjPFpyjgZHyO_Tt91KeTcqssteXh4DlJyw8itCVU4LCk_G-aQzb_4P6N5fhXuYjzt5gR6usZSIaFgBdQu0bRqsoy7IfpMy0y1kfVGQPr7juXlu5KjasY7_J4s-OJV6lb4npoZP5TIiBr-h9gXpO91AHrsKvGQ4CPGj_uHUaOuZrtSXqfC_lNreru1lO13wRb2W0Hi4GLEpYY0BX25_Lmj9x_Sh38Tv5jK2rdEZv7p0gJA7x1TtVu7YEKSt9Cp2xSQx4IyVa9TpAFF9ys4s781pyZ8ZDAjR3HO_T2UTymMqsGg
 
-## S70 — Quand un seul test de données de mesure périmées échoue dans
-Rôles : dev
-Date : 2026-11-13
+## S70 — chiffrée
 
-Quand un seul test de données de mesure périmées échoue dans une suite, le signaler comme dette de l'étape d'équilibrage plutôt que de modifier l'élément en cours ; relancer la mesure suffit à le résoudre.
+Chiffré : v1.2Jun1kOGH4gTEji_bNoBkP8eNd1OpWQi120WxcRuRDI8Phh79l6nor-g0-Nz6RwNjCmFEzkaa5k0Q0ZB3yBiPJNNWpUfKed0o-fFy5fM0_cEdMRKmnCirL9Zqr3sJzuW8yxl7Z5QGweTm2_9fK78l8ArZcBUL0BUdijecQDbYTmnbxXQS2OncrUeH9RQNL1qtJMQFMTmihtwDQ3Y9MQ2TO9LdbDTFKqTVbtHoyz89EvWSd1t2WsZffq15EQU88dubtSWFR2bvGPj3YNXt-xtbo4jiSlrR7v7ScCFR3QhpdlaXAUihO6tzrpv5y639L_AqHD6ijOeUXkUufV7TyNYfsm_s3KKhWQ9VPqLjrPGqd82opmbXC0ziSbYIsOw4n1gY3mAeNfYYtN-Rz7bi-JUJLA9_7-487a6OrnBqiNP1C6mDwWgzdiWz0vRa176O22H7V-0Ci0A0yIACJL4hQe_gKaTwWEZVOuC4Oq2IoD1IRE9SUK1sVkxfJOvdfufXc_zxrPpQ9YCBoMwKg
 
-## S71 — Quand la suite de tests dépasse la limite d'une commande au
-Rôles : dev
-Date : 2026-11-13
+## S71 — chiffrée
 
-Quand la suite de tests dépasse la limite d'une commande au premier plan, lancer les modules séparément et les mesures longues en arrière-plan, puis les attendre par de courtes pauses.
+Chiffré : v1.Vxr8gAOn3ulnGCQKlUmbMAbbg6Mkxxk7SbyjrD88U6ekGzpMGMO8pR-4Couzx9Rz5vDksFoTGU4B4ZP6m_s4w-qcuuFmbEyecdoTMglkbetRzoNTznMoMd3Z6hx7513qeaceUWj92DGY4S0vpmAgCsdQc7-4Qaa-0YKADbcEH-F-5hRG1MTbFfaE_BSN_pDcEMOOxyVbT0HiVjGPmFI2qJeH0iAfEuIyF8aETvg3ZN9SdAPiq5FG_a_PmyeQDzzLEvdtZcTfYXWMP1NR-6WWBPSB5wd5_1Nh9dyEfMSRS81TGL6U3Gi1ddvACdFTlnn1khm49niNQ_4SoW3XdO2Z985P3hEFjREMJNIbkcNTIiwBZ41H1R6PZ_4vQQ9ZO5bRhiGd6fbVQi0e8oPwCyC9XRyGi0aZH7SySioyusN8kwEmW-Ps_KOhj2q0xxJv0pf7gPH74UP9wof8TkLbI2rf_I5Zxg-u9HIagJo
 
-## S72 — Un lanceur de tests qui ne rend sa sortie qu'à la fin masque
-Rôles : dev
-Date : 2026-11-13
+## S72 — chiffrée
 
-Un lanceur de tests qui ne rend sa sortie qu'à la fin masque une suite bloquée ou très longue. Afficher la progression au fil de l'eau et annoncer la durée attendue.
+Chiffré : v1.Rh-7sOjislanFapKoImhWx6Vm-5jI4vcavVZue6DyOxl82Sj-mTcDufzWSC4ppoMtyNLL5Fnk04h31su0wDIjNB7fEgxq1pdTk6_mEkAd3R3H08w6gUXei1FFPA_m_z8710eLv5lb_OJB_XxUXqhnHpzGNb7KZ9kIAjj0yMLxEXAHbDYdahFNuMejESAi-Ad5QpHsO5W4Zk4sZIgCA_STrZDxCFSZNAE19oY23iswqt0ZOKfe9zu-37QgjO7uHkCrX4a9yrwFpDEPNDWZdaS-zoTmP1xqEN4M64fEXzQ0FFgL8RbMNR4hGCbK-WJrN03XAKFfr0-PMU-7Os6REBu59P-8ZWiV4lpQrOmOwoYV9tCU_Fw6_Syu5iTBlux0PNgVm7YWG5fP7b-7PxdcGNWPG3Z2DtPD9JtbV3mKO7WJtxIAuOUbXy2d7py5ioFsp5aiGx0mli5GXk
 
-## S73 — Quand l'environnement ne contient pas le moteur nécessaire p
-Rôles : dev
-Date : 2026-11-13
+## S73 — chiffrée
 
-Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.
+Chiffré : v1.TIpJaiNCNi4-QB0Nhy2hbAxbrkrkqpjYRpyCfQfBAT28ZyS4GTGtCmST8KRfodPC_gSDouvp505lY5mdxUCnQZ-tkGaSJy1-4Op8n7STGVrvOpqsw-NoOEhwph2TjmLdyAwWwWh8nbJ2dpTT2gYHwWWZsBCXL0ucKmZaXMAPeW3ANY3k_thnpfkqEJzPErW5DOKFEk_303mrxEv8VnaQXpu-wrZ3veFyf41TxjLbV9W2_J2806tKxjlQffkD1skPEuZzC9020a3e9_8SpE6PP6kUQcr7KcssxyLq8_MfQijO7JFCZ32HEYgC8tlKSgrENvkXw-TVSH9tH5QKA7pWFqNS0d82YQv1tK6soLeOVcYWzFwoh8vwxhJG5J4GS2p2kM4vA3DKdBuB30ILar_fwX-3mtp12554D_qWP1J3Wi2VQsr7yLJGwyaHJRevGe_UDUWiZm-wXz-IQVJcWMEH2PVU8xSFjoAbAf4P8np2L-OIYGYJAgn_YkVVjMU4CMAKBVw-bMgdd1-hrMjk0Z909ZOOoo_Dm5Bxzc3xK1Qs8Nol_tGPAF4ward1YuZuaCSbkowfknt-Qajd
 
-## S74 — Quand l'environnement ne contient pas le moteur nécessaire p
-Rôles : dev
-Date : 2026-11-13
+## S74 — chiffrée
 
-Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.
+Chiffré : v1.OhvOaUdLskyH_kLrSwAm06KJH6-2VTCyRC3od5HuEo5U7ruoFFQn8r_-KDHU95KgKNad3h55zj5AqbI_Zj_-_Ri-3L_Sas5E50P9ksoLPsGehu2OuHJa_gvDc7Ig8Zt05Tq3CsJmZeyPkzoh-kekqOf6lOgQOE7XmAPtr06I-PNCBYaQmgNYpT5isTFxqxiI1N48WIOHc6FOBafrQewOyeW1p5wcC2oQkDXWIe57CtzaW3yb0kQFa5MgiDD_wo72L3alxkKaDZdNGLzanzlUinCbQx0nIJbnFti5tcKTgxtau2Oi45mseUAMCxUaJabQMBnR96rWxnkS6B6XjkYH-_omKNclORLmS7yA3ypRYqJV37EQNz6p3o38IvhqxIGgds1R91ORqsNlsxoYY-x0y0oFY0Hkn9t5dKbmBb06i0of6AFZ7VV9bms4Cit7HrsXP76jbfH1yPlnVibupN_xMyFLlTBwQiaVDeH5QTu_T-XBtwE-Ze0qJHQIHLBA7pCrHMnXEsOdKMK4X76Y9esW1ytgxiSrNVuUPRjz5tJ_OW8nTEzyvtinzUTuxCeVQSBRTcmp2GBjQ-_j
 
-## S75 — Lancer la suite de tests avec une limite de temps et un jour
-Rôles : dev
-Date : 2026-11-13
+## S75 — chiffrée
 
-Lancer la suite de tests avec une limite de temps et un journal écrit en continu ; un script de test qui ne compile pas peut laisser le lanceur bloqué sans sortie.
+Chiffré : v1.1FmSFhrFA_ZaCRn186EuXpGYvWsCEgDisyxSnySK-75c7kZHFsuufketWNwAyP1uvuh5vRLfRdb-zz39vjuZlqUDLjmLJDP8lS7gsBO_yv6A-tjtuXVF44Tc0bp1e9gPGcbSojmJrz-ZIOYFSOxJDl3aQVYSh07qJdWwHSExxRUGcxQuYCTvMSIdbz6-NKnax6l34oPPy1ArtF84jAmGPRaOCxYQK3Fb_KZZY_6SxHBYYrbBQc50EoYnCFqsFIff8p-X7puYWv54MOvjF33u5Y6BiGHw_erqzN5WSWa1owfqypAbrnNrVzyVt_QmdyLfbv9A8_YdEXUzjrtNE8p2Jm4WZHdC_Td-bcFjvCGpTV3GwFX5xCoALncUdSQCFKm-A0VjD15Vo4QVIBR6q_5y0W6ec_jt3GhqLpkPrE93I64dY1zvgdGoZ7CEsCEzVTj1FcqG
 
-## S76 — Quand l'environnement ne contient pas le moteur nécessaire p
-Rôles : dev
-Date : 2026-11-13
+## S76 — chiffrée
 
-Quand l'environnement ne contient pas le moteur nécessaire pour relancer les tests et qu'une tâche redemande un élément déjà livré sans nouveau retour, vérifier l'état du dépôt, rendre l'existant et dire clairement que les tests n'ont pas été relancés.
+Chiffré : v1.dvCZ5Xz-VNGodZ2rVxpmrctwcSTEbd0PsLHy2S1ZUhe14Rio66_27UQM8Pl9a1Gu3ZSSP2qH9Q6kkdiD9Rgi-FiWONPX5Mo9LrTIKAL9dZ1LVStqUfXNS2LuIONsLrc0FlwXx6tvcrrnPmx_GDE5vRuk3NUrLpXa_nQkWmyPuhlOwsChvgAKCsyFI-LwOrZmSStyrrRM3yK79xSvxzM9vkCHQmAhQfOqMx3s_tofM7XUO-fegR-kawJavTULLf9VmDnVh6j6Y2Z48TemgSrtOV0aOllBaEzatvPGO3_DZ2-x9V1YiiVFEqPtInraDBZD2Jf4UuIe8fOkx3PC1msmqi1GIPZskP29AAFrL14pjU9mhjXEE9bJMWXw6-eKj2QVdABfWnsV0-k5Awr7qK64KHcti1pWi8lp4OqhyUXPEn4dd_WfV2HqVUdn-MYph-BOS2PB5aLlCz6lr6eHowyKInT9xCMkTkeVlOWnVV_8BfZfO9aysLVKOyGqwIOUu9p5gzF_s7KD8bhXfwmeRYSz8cKfKAn_Y8fW_SUF2fT84ScFwgIuG1RaZe7JtQBDtS4fvapkWK5wngEM
 
-## S77 — Quand une commande shell simple est refusée faute d'approbat
-Rôles : dev
-Date : 2026-11-13
+## S77 — chiffrée
 
-Quand une commande shell simple est refusée faute d'approbation, passer par un lanceur Python du projet qui trouve l'outil à sa place.
+Chiffré : v1.jcIRX0dVyTqzsKv717QY109QdDQAYb1LXRcv743AuYZtF-IWHix92YdBB9T9XqXWQyCQh3wp1u_7rTXf6-X_M7Z_6F8ivv-BjmZoDx16Pge8hudf3h1GZSvdiinDGLdSBsfojbem8c7dpVXM7KOP39r6L3pVyXcKmsy3l2kEIfz6qLVsN-g1_jUegBfFs-tYEFD4TheVSzB0esQYUxpej9KLHnvtUBc8is7BvQwc5zc3lkqtxgc7sLjlwGP3q6y1Eq_0CFwjXWC4-Qhu15vglvMHN7j9EdSHhOZ50WHt86G17E4zkNyUWhk1KWuyyWxw9XhTjw--JIju08Yacvzf1BxWeO74No0JezXXobiMX212HFqtbES-BFK2ORmdO_Y1OoUy8qa51zg5FU_ST7fEh4DCP_9Sqz4
 
-## S78 — Un taux de victoire mesuré avec un robot qui ignore une part
-Rôles : equilibreur
-Date : 2026-11-13
+## S78 — chiffrée
 
-Un taux de victoire mesuré avec un robot qui ignore une partie des décisions du jeu (soin, achats) ne représente pas un joueur : régler les combats isolés et signaler que le niveau de run reste non mesuré.
+Chiffré : v1.GoV38fyNtwKJm1p5i5GaarsMAvlNGUywP6MZMRmLaiF-REe4WpnqLcNf0l_aM5uk9dOL5kcvfLPPAAsPTCtxecpbP7buw_F1FhPLpF1tAmW4TxhALgoSkPM2HJaoMVJibPHL0Nmxiwh9CHJTBAEDT0lEiYSXu29nc7gnwv05O0rC8St3JJWFP5LfMZ1exgmfKMi9qy62HeGY0pVpHT7P3QolMVwU1Fmz4wvlPupGoqIj_-2CxduzG6SUtNb_sa9S3wwgNzpZXd6onPznfoVWYGDKpV9RWF2B0oQ1Td4QZ6D4yZF_TdLYR0fxZkx8AKwpqyV9RN5XTYk1xXp8yDAvOxRLajKj_qaXJV88MSQtTYX5LX81Luc3sCOTj6nMHlQ69uxhJOspReGb4HemVLhEU1ILyx7QKIe7tJPcV1bHvXuTvhNpxCyO4QHdZKjGYll-oykTLS9NhMpqdYEyrskklzly_GMKi4hFihEzg-wP7L8JyFYrE_mg4Ym1qVwLVY-FANVzA_KFgxokZw
 
-## S79 — Avant une action qui fait apparaître une fenêtre système, po
-Rôles : dev
-Date : 2026-11-13
+## S79 — chiffrée
 
-Avant une action qui fait apparaître une fenêtre système, poser la question avec son choix recommandé et attendre la réponse, même si l'accord de principe est déjà donné.
+Chiffré : v1.ZAQnZiFhXGEGXLbnniN7JEllpFgi9r0Xe4f781yhskMjaQJWh4jFlhM6aI3tB1GKKXDFyRVbJWpm1XAFMU_JTnDmW2cztsUT5Ga5IiocYIRDG1R2fR1ibphjqbdi9s7NcAl9Gqa56bidB8oi97UOs7N_eu9sVoG96ZTmWMpsnFiBruTeq3OIWOe8wA_m8GKsiRYsDYl8Lw4_CH8HmX0g1S3s7D5arv2GBYt6IvYkQYtp51Z6-4IY4lOoIWDMzqn7OmyvMIgC9I1NfgsFicR-Dge43PucEMTQYlpINK8qdQ2LMQFNCwsg08pRoG1g_3BFWE-AfBbVQcwjNWfrGv4iMweZryCVXKZhdKdt7mXplTiK2doPBUtwGOcSavwObzJgQUEj9kEjm2Vkc-lhNCBTXuLpcCsJ2YWlQlACLXjFw_AhENE9RolnCEjjETLaF8BbCuNuv6kLdBDuCkP8srJG6I-kDWw
 
-## S80 — Quand une commande shell vers un outil externe est refusée s
-Rôles : dev
-Date : 2026-11-13
+## S80 — chiffrée
 
-Quand une commande shell vers un outil externe est refusée sans approbation possible, l'encapsuler dans un script écrit au préalable et lancé par l'interpréteur.
+Chiffré : v1.vReuZ1-iyUdjzQhyAV_IfjJWKtgZ4dP9EUetQSq01HwVhslxpXAs6ai5Jv4wsfxmKfzBZoVKXY0SA2CtYWuf8PV729Fya6BEg85B7AWp7BXN6Vku0e3O7o2refZv2_crzxNWy6GCy6cYm1XcuvO9vqcuNUbtRni3nUgz4AUo3aZ4Fr1xbPJuSLgvOl2R3AgcK-Z7ZgO4uhTmVwUG-HvC9yIjNIjsU1XnUoVl7ntqbm96QOjFUO8miBrxqkOtQLGbd930zKTYo5fxxmRG0HjusOkbBBqIB8e9IDMF_D4646U4uS8CrIv-icg2mQy77mK2-8HHbr4Ftgi2N7B8OczKkOSx6sLCGF5bwXTvT4-ZaFl95nou8y5OmETh_9nJgACq8GS9pHE1OZ2efGI2e9Wp_arVR-FTMrOBbA40Bd0bLwCW5_rvRGiusCV707bEUFj6SZHPMa0
 
-## S81 — Quand les commandes composées exigent une approbation imposs
-Rôles : graphiste, equilibreur
-Date : 2026-11-13
+## S81 — chiffrée
 
-Quand les commandes composées exigent une approbation impossible, écrire un petit lanceur dans le langage du projet et l'appeler seul.
+Chiffré : v1.rRb9kJxI7cXY0W2pG6qN1Af3K0Deob9oZCeYXC4-cbkPSKda52Lb9PaRCcRDaJUdmA-AEkNPONK5CGHegzDxh-HrBXyOcUq1rQqKG-hryRD1aUHnE0nAJ0NKByhXKvvuqPcwe1ir-wQZugh-jvfT56Dcd_6aB1lSZnAeXaHyYOBO-JPKQNPbasNKwt2SvH7KhmQ2qwQmf-bwk29t0dccJ6DfE_C7Xaducpt0YVYtnu_YFZY5yuMqHMvpbiSHthWDHEP5Av241Lh5bG4Q86F0dNix9DAFD3oriGLiNifUL_YQCefvUvzTB68ug40W19TcapF6wR5XTaAg6kZvkq2xo8SxNvin6B9xVQARbt4LzLS8Cz5urjJP4Lp2XXBchU7FI-2fert4vNZ0ffPR7NUGw7abtyBStq610FzcjCUnImgw2KHtbaQnpzd9CqE
 
-## S82 — Un script d'orchestration qui lit la sortie de sous-processu
-Rôles : graphiste
-Date : 2026-11-13
+## S82 — chiffrée
 
-Un script d'orchestration qui lit la sortie de sous-processus en UTF-8 plante dès qu'un contrôle écrit en cp1252 : décoder avec errors=replace et ne pas déclarer le contrôle global passé s'il n'a pas tourné.
+Chiffré : v1.I9_1owFaCyLH9dhfwKYD8WNaF7HSh6VlfhdmCKHkTLHPsqd0otoP1PTH33AM6CBCoE8tXGYHLCLQD3bDliZ-AosJQAus8ziJfpaUM9AzLZpqYi-sHOGcvF3p3esVOO00LkvaEHIkNOcXhexkY_fOl4tcv1WtDM_ng7u_MhnHqET5pjzEIuPn02LpT4Eo5lrjbCkNi_f0a9feRXAIBD_IarLJfRotVHTi-OWRi0Bb36-HgAwXZPbBR0TL5FRgvk7W-PZX00B_j5vqUbfNG1cyh0M5DJ-AlabuMZYSWBv_T3e978Ho-eAAO1q4trn0zxN53PXs4WFeEXUoRXNfNlXR47jl_JjywcVGd84wA2hNf7vcQE6yeZTEwC9sO2tFxeEaG4yqNZ8Wiyx_CTEx68nnK9U0IAoZMzIWmYhFRBcJx68GiD1Si1SMrMwwz7N0iJKTNX34q27RcsE6si0Fx4KDfg68uHjTxUsempPiHoBnZrJPPsCid9h-7iSU2YY4GlyEGZw2K5NkepPuVww
 
-## S83 — Un lanceur de tests qui affiche des caractères accentués doi
-Rôles : dev
-Date : 2026-11-13
+## S83 — chiffrée
 
-Un lanceur de tests qui affiche des caractères accentués doit forcer la sortie en UTF-8 pour que le compte rendu soit lisible sur toutes les consoles.
+Chiffré : v1.Uuma3bnDVI4m1Wh21ltxZszSWO3FtXj8-xIrii2o6wXrPANDmneSRN5_MqPrd1XWXtZ5Xuv5VSHAO2fzBPgfdxxm5kuxcdOzpk4n1VpP2FdKH4o72SdWTdGpZTgyL9igqE2mv7n-FEybr9XvFj9envNJ6E17TUmbJ3JMMX8JaSglKx6-sqkMALB3OllSmnEcQfFwxDafxqHoWBYr1NI7dIzNOl8pMPi5iI5Fkbp1EfunRFGEBVMl47DWi4fldqzq6CQKUOlGZO7CBswThr5wfJdrSpBt0MTvk8plTTO_gpuL03HEkFWlKViogUcxSv6UhHrroEH8kMzyNenLAVFNXHeDec0nCxOpS2qmDqg5mt2w6rOGmWszXq4oP2vZeEeLzeUJV44aEq8fyldaldOChjsm-gZLjEpoj1uGi9BwS-iopayooeFzag
 
-## S84 — Quand une tâche d'équilibrage porte sur un élément sans vale
-Rôles : equilibreur
-Date : 2026-11-13
+## S84 — chiffrée
 
-Quand une tâche d'équilibrage porte sur un élément sans valeur de jeu, ne changer aucune valeur : lancer son contrôle, le déclarer passé, et dire que rien n'a été mesuré.
+Chiffré : v1.9tfQjd78IFeRN6iPZ1gBRgPSfDECZtLytjt_uWgodsS7oedLNAXYlamQYl0KFOV06fSIaXAPL27v4zUKa3L9sSVB_EU2cfURH3vK9BV41qYiwLYwc2b2-MwM2Jkf01JTWhvs4Osub_pgC_-cOqpxJ9jGXbJtOtLTzT2DinYvVsxUnR3ZCFKOCqMsjuG6wJxuceyPSK7xEbCVWuZk3FtdNs6iUzAZnJjyuqtpwJdXBI9jeUpJfQj9iHN1nKFGKkcBxg2IMPYc8oKwSxFzi3-ZwPrlvUjvg5VlqrSZY9ajlfyy2YcCReNwD0e65Bw6AC4_5XX7wGPNU4rXc_R9VAWMFYhXEuSp75I2EkFejAAq5GWmtelLqv0KKfTAk7SGAVONY8w2RDA-LebIK9hwgVog0l_WhaJonGMnrKyD8WlobdOV5O8E1y_-xd1giNDU4xNyWvd2oKaUfUmP_eH_ZZkOFnSZq9cvv--DGptB0lOx
 
-## S85 — Quand le journal de mesures correspond aux données et qu'auc
-Rôles : equilibreur
-Date : 2026-11-13
+## S85 — chiffrée
 
-Quand le journal de mesures correspond aux données et qu'aucune cible chiffrée n'existe pour la catégorie à régler, ne pas modifier de valeurs : rendre les mesures et demander la cible.
+Chiffré : v1.nhPszkbWNYZANW18_3tITrQhfJK3hp4vZDTmmlG-ufssMWhUPB80OXrr7XBMnCq-lhfnxJ2RX0WyD6TisMVq54IanvnvLiqQSXM3mYQ9VP0wEZOpP8hF5VPhNRToqZ7glwxDdoDBuJfQ33sLXEw6dI2sP4KCt3mYfKP5uuqQvuT3-eIklisYyF70J5Zify7MTSBJeJQSscmXFO1nyaj1UlYrJ0by7uKEAiN-wHduH23RQKlNphDVBU-TDi-P3VgeowQ-skZqUc6DDbrHbeTlSv_fvm54A_lAVLDCLFnFp7lyka-2_xOzBEhbxcmW1-d05PrttzLPytZYVej3twxxHGPd_rK-iSDW6-q-ROKqhvi9EkTidyzWWV_WCR0OepcAbIWcR26kb1eSJj94A53eJgBeaPb7bfJb0kzO17Q1KFNnJwp_dmZvLGvW-W_diiMUGr9s1F2IAbvobIChtWIloxtMTpCXNu-QUNY9DHwFRbSJBrgkJQ
 
-## S86 — Dans un moteur à scène, un nœud de fond ajouté en enfant rec
-Rôles : graphiste
-Date : 2026-11-13
+## S86 — chiffrée
 
-Dans un moteur à scène, un nœud de fond ajouté en enfant recouvre ce que le parent dessine ; dessiner le fond dans le parent.
+Chiffré : v1.gL-QK1F5zxM1EH-2smkMQdEA8L_Z0g5ICvYBL6GO8X7Mbzd7eg-mAeIcsHX9nH3PgDnnEKcnoKw6dUV8Xx_5GZTkIR71fmdITh0oy5OQrfkm1QkSbKKWZlHl5Gp9muzcwWugnRhI9Aby26ZvkkfXNKHeN0RaOzPtW2g6Lau9xBYswLEQQ7v3Mjbmh2Ix4Ew2_eHCQFD7GJ-KJiOcLKHLOtj926CpxtYF_avn4vAL-R4tSjGFxZfFYtJXIBLELUCAIEksJdaCFn_GVJBDJzBh_N2PAA4Bkr24UWsvICzOj2QqMtTd2QeQbXuhe4fHd_phkb-LMDCNA9tBktsMdHVfdEtJVgeYO91EMOY8ygI8htUUFtAqPQLOrO43BzSJXV8vWlP_Vpq0UMH2SYhF5l5W__EoDbXVa3YJOw
 
-## S87 — Quand le robot de test ne joue pas une décision (achat, soin
-Rôles : equilibreur
-Date : 2026-11-13
+## S87 — chiffrée
 
-Quand le robot de test ne joue pas une décision (achat, soin), ne règle pas les prix ni les coûts qui en dépendent : calcule le rythme de la ressource depuis les fichiers de valeurs, rapporte-le comme calculé et laisse les valeurs inchangées.
+Chiffré : v1.B-aRrpL9B2RowEjNnMXDEXRP-iWRoU9w_RkTFUmk0RgCZ0v6gMvTnCHv6oWxjZHnz43Rw79vSCHQ1NZ2ePmEPjuls9MObPOXuvBHGnoOg6zrtHYYjg66bDVhP_VlZADxj19iHLuw26IXTysfqGOGuq0qmNBCLft9urm-dhEfdZWX6ENeABpzDjsaMxzCnP4sJ-zcGh0P04-OLIasW145yLGOmxbXsvVd-_lCxIVir9M0O6tScPHPjWgf3dhqdoqxq1_axtzh5sZ0JGaOtCcgwhENPMlv2x0I3avt0aJVoq86i_nCpJacS3mDHX-pfR6kdkBJY2v3ygBJeYG5lH0T5SL4i28z5gRaBeEfUOL9cJeI76QxJcz7rmn6Rmc41pFZ4ABOg2cShgr0V9OAy37a-v7MyW3wuYOR7epWflN-U6LK37-Iw9atVb02iO3GcxlYdZmvv9tFfm7GSCPWp58cRj2Bmwzh-I-KOFE_744lB3AhkUVm5SxDQvYDGoN1wUc4845-qHrwbeZrxzW5uJsl00Bfbpl-PJE_v-kfKplSJPNs7V96LHBqVjKfiXXjoKo
 
-## S88 — Un journal de mesures périmé sans changement de valeurs se r
-Rôles : equilibreur
-Date : 2026-11-13
+## S88 — chiffrée
 
-Un journal de mesures périmé sans changement de valeurs se régénère avant de conclure ; sans cible chiffrée, on ne change aucune valeur.
+Chiffré : v1.1nt5n5QdEd4Pc2y4p_Y4HPMyqp9TLhiAHZi-9WLAhfAa9LZXzf7W5vk8Utwm5BspEdImS87TAaKvAXte8n0ub9Dd0Je1qZ4Piu0kQTi1L-N3CI-bmpVOGGwH269FIzWlULgyURtG5_qCOUrsoz34uVO8DhVXgjYmpULuYefhLybGA14Plg5yl2LgTE5TWVIc1vORJeITspE_mbYVmA7Dk6qgplLFi6rxqRAFz0OY1LrO55jDSh04Tbpy0pYuf3DrEXH-6BYQb3f9WWDqoEg4TRDUhO9lAMa_kd_NsqXe_6UuhTgPANRiQVUOXUgu552k81SA3JdCW8nlhZxE1EWQBw4F0zE-8CiW2xaaf-iPCpTGQrddIhjR0x_FFkQFyhVkIERHpR0ploK8qHLKczT_n7TaVdyrcY6ea-VzqqznM3cQD7CF_7Q
 
-## S89 — Avant de refaire un habillage graphique demandé, chercher da
-Rôles : graphiste
-Date : 2026-11-13
+## S89 — chiffrée
 
-Avant de refaire un habillage graphique demandé, chercher dans l'historique si un commit l'a déjà livré ; si oui, relire la capture, signaler les défauts mineurs, ne rien régénérer.
+Chiffré : v1.mVfSA4RigEXJzakjGRgeiPe718MIKkTPDN4Mjd9qfK0uPmFI4igPejMPkjeQjORLKTZtyxLrFkQcPxKgVeoVL58VTaSUjHzZoR-QSDN1OOOTd713jGDRS4tvYlQg7oR0-PmdVKvkKQvsajERCEvHp6tXm5Kxs9zOEE4O6sT8XkGm1-XUc1aRzuazbsp2sNKUSf1bmH-5bcHQZMrYOG_06sApf72HvTpFsA_Vp93S8ElGa1S8PPrnhSR_LEinw_nwPvnQ9XLiTTajvtMLDaGsCBLNF8FSBY2WBib44CLNGK9AF3qV4ix-AM5MR0cieUV7aV9Xln3qGwpnrfO2D6vJeR1UUfXovMicnrMIV-BFwbWgJAj5wpKGN_LlehcooKamFNKFaUABogfMvfmveDjQR3jjD1k1VmpQAWtZ10VfYypPcLweFacNsYhUemvkIiQDlo_kE-wTCjOqXHqiCQV8663Ppb3fF6zJk-GwLSIUMrfMYg
 
-## S90 — Quand l'élément à équilibrer n'est pas mesuré par le robot d
-Rôles : equilibreur
-Date : 2026-11-13
+## S90 — chiffrée
 
-Quand l'élément à équilibrer n'est pas mesuré par le robot de test et n'a pas de cible chiffrée, ne change aucune valeur : vérifie que le journal est à jour, lance le contrôle propre à l'élément et déclare ce qui reste seulement calculé.
+Chiffré : v1.6DlJSNdidWkp8vpmoQlh-bJhgvH1usMK27cw1AokLKlLYJVMF6H0IasCc0v718Bz0or8H93ghQGhAqXLrKNdofqlHvhrQ44dhb_EJIYhy8_1Iw6kGnZipaxodrXfWhZmlUHFCpiEHZHJNRDl0gsBPr3-pyqK658wJasohip66tnkzI11m6OltrHAvvFi3SkQAL0vpKavUmamnG6xi_sDY7_YBSFQZsqPPJ7f7XTvMilJJkGsvfTGB7O0o8149kneIW6CaRf014QRpBLlqNxPj7b8KpD7DDWGvRjHPjTo2e_kk0aA-c-2PX7BhOkvK6g5HiQHAEAV1A2Ty6z3cm78_BLtkPE0vTL_D1zDC7of65SDpyujq1pHJNrzSN-DdlOtu-KSuLQ-an8Qz0djXsS_awm6wv_H73pTaA0tDa8ecqa3hpdOoMqREo7a7G9KWSuyQmU39AneaTJ4X_Lm0K7E_DTgcZ39cBOtOYK8IlE1ZgnzO5mElwMeTU2pVoT3hcuLemgac6AkYA1d87xEy2UsDpZCgTUAq50jI1KfgwrMdtwMkRa7p5DGoxWXru-yOPtAQT31p3ri
 
-## S91 — Un contrôle de relecture ne doit pas modifier les fichiers d
-Rôles : qa
-Date : 2026-11-13
+## S91 — chiffrée
 
-Un contrôle de relecture ne doit pas modifier les fichiers du projet ; s'il le fait, il faut un mode lecture seule.
+Chiffré : v1.VKEGwrrV0Xb-IOiB1h4JXOSF5yVDbZVF4-bVJAAhyoIlkiabPAbyLlm-gX3NdX2U4zi9HeoArGxqJE5123RVY6PgCRT_HmHego7l0XOXC-sl95bD2JOsBdybTCuOaEdIruj5w_P0BPlg0VrwPYVYPXYqFXxvVE262_HtSL0cZPbNt_i_kxmdHSWvVhjJ5hTRGL36aDXpDTakdeydcoAdu4iGSTvmjD1Su20AHPiLRuFYSIZGu2ixxI9mV5I4JfeX1empawT7XkKaX3iBR8y7MXMvv6wf3dA3clnweTi225YxU_JOU0vccaFwjWLvbdpX3ueRbspnC_wIABdaMi_HWt3xSaRrd65HEv3FX8DZmx2EsLizTKQ2N-VJKnMXyo2hg8g
 
-## S92 — Dans une consigne, indiquer les chemins avec des barres obli
-Rôles : qa, dev
-Date : 2026-11-13
+## S92 — chiffrée
 
-Dans une consigne, indiquer les chemins avec des barres obliques ou passer par un lanceur Python, car le shell peut déformer les antislashs.
+Chiffré : v1.Yh4iVT0HHtFSD-OBzecYfebyEjDXMlCbHmA7dGEunp8LzJ6HVTiZkzEApjZrm7Ln2tnV90h3OjAccqDS9R_8XYWLAziG77Yg9t0sS986WVfbWdJ23mZkBJKyNlaxnSU7F-OvqXdSUoVeC0AGNfdiF1Xxej5bvPkTJz3zfFdU6om5cE-pXm4XyvkqnmOLbhzPV8_8mera7mL0PoSLF2W9JUQxPve7SbSHLjYa7JMbqoVSyRpC7a-w7Qdr_JkZ239DgvZPrccp2K0G6PLwg2sqJMut2eWCUA0YPL9V5kyUeoqbinI1jGLCHUZrLhHqDM-AsiDU5pgLbuUC-svS3RA_VZoy8AJbC5rv4CzR_p-g1WF--Id8im_NPrUGGY08_4bcwZUk8hkn2Zsqf8Mj58u4LokKbAK2_5CnFIBGdQANXt6c
 
-## S93 — Dans un moteur où une étiquette s'agrandit toute seule à son
-Rôles : dev, designer
-Date : 2026-11-13
+## S93 — chiffrée
 
-Dans un moteur où une étiquette s'agrandit toute seule à son texte, un contrôle de débordement compare le texte au cadre visible qui le contient, jamais à la taille de l'étiquette.
+Chiffré : v1.zYVmvHQ1SJ4tJbc5MjFilg2VnIZ50YDSc3ynuFGsw6R-I3L9Uw3J7EJGx_ej2WxExEKX9Ay3aq_QCv1R7UWUFIyScjESpri3KvvBZngPs5lTxKkIipzLFQUhP87jGCRw-FtexzXu1IntAK8cMrFkmOwzShy-g4pIpWIZjJPOmRQjl19E76brmAzkrjKlrclmO0oBDKwZn6mInekrdG74masxzZcaqi8HKdYv2yXXVDeudk-70G8j5wUkGavqcqz6ueM-K_BI7cwZT25cZ9EqgqHTmANwkLWlHtG8rtYM2dYBgkYy9qGPQZB-dM0I8m1huIsGzGldp5kOVFzJTO39pkyNiKFpIjh6BovZ7ryJrgXy-Mmdid0eQ8TufhhYXCrkQbWUKOS_kSMUdx28MbjCC1FEwbjUFW_Uh03OpO48u5hlWrN09EG5GVNQaeochynm79D1ym0_e3D1s5MWYZb7PyDqjcXZl-T1KoFadtuz-82eJfRtAyCg6w
 
-## S94 — Mesurer le contraste de chaque texte contre le fond réelleme
-Rôles : designer, dev
-Date : 2026-11-13
+## S94 — chiffrée
 
-Mesurer le contraste de chaque texte contre le fond réellement rendu derrière lui, et compter le contour du texte quand il est assez épais.
+Chiffré : v1.n9lu-kae2XyEJ2gKzTSvjOLouRFPZ71whw7pC2q6Q6GUMOYjrdPZapFwp6spvo-K2ukuRGKYygKxnCk8KwWaH2FMfbmz6bF3UzZlt2T-jptZTXNeS-yZyyZAZjwWezO40mdAr5r5uLOp1QKUkkJhPkx-ifXMKUmVpaYbbMm-4dmo07nhcHnq0uC0oGufploDZlJmHKTKaucebeb60olZZPGAfq11sHif-9Yk8m4iHsbb8WzC8d4Y-QyC4euzBAV8AK6_CcgHIi5nLLV57PQ2Eaj8FeluTJCTUuDwaT6Rs_ez9MPtZFdJiCeB34R2H2g8beamikCnefdFVL1larDzwkUc8Cl6blgJHq38HdxV_mIc3-Fcw2aQEkRAHxFdSEGslRqoBUDSuVLp9W4VvUutuTHvUE8i2zDVdljvDxseR-DBJuKAe5OUTWw
 
-## S95 — Un contrôle d'écran se prouve en injectant un faux élément p
-Rôles : designer, dev, qa
-Date : 2026-11-13
+## S95 — chiffrée
 
-Un contrôle d'écran se prouve en injectant un faux élément par défaut visé et en exigeant que chaque erreur attendue apparaisse, en plus de celles de l'écran juste.
+Chiffré : v1._4X04KCsCNtiWzveBlU3VMnS95n_J0JMzBgbQlhMQYWYuHycUbStGiSOWxbuxndiCt4g99CVxJWO16ix8NylbLZ0Glgv6Wu6-GFW46cU2Vi8AZ-W-Odgr_6avXDNPDqNK9dKbsTQy6HxXsKu6fq2Vc_T8XxOeLsuaiZrJ_cZ6zINcfPCflBEqO4IFKL-lQy99Z1YmOkBynEnkSNhQowr9LxS3jirjRhkUd8xLGmSo0XtjU0ERZMXIGBNtlmaswZTTokU3cZiDDp7Wb7WSXuQZHIIma-9J2vAUcG2KmQis8oMOhciH1ds2n9UwNEJ59RLp5W-pZhPBgL8eX9wb_ZHxEYaguzXo271GTd2vkZAZvJYOS_Iwe7hduWKKN8hKP7NAK2KTNTKy0_WQjzLQ4K7LaHuzdF7G40pLW3ASQGySCq43hH2OCyDM8aNn49hbpHBmYZzEVFalMxFoUjA8Oj40AUO-Ww3Snba_8GGFZMkkw
 
-## S96 — Dans un shell POSIX sous Windows, écrire les chemins avec de
-Rôles : release
-Date : 2026-11-13
+## S96 — chiffrée
 
-Dans un shell POSIX sous Windows, écrire les chemins avec des barres obliques, car les barres inverses sont altérées.
+Chiffré : v1.aR4wj5iQgzFV6RjrPfT2-KYslvA4wb9xy1fn3qyKCOB7mpXPYzgC3OMl65NVUg9AAikhIkSsqD7u27x7GdbY0C7lP1JfN8rwQFSZfKexNh-7U8p_BV5PAWJ5MoDD6HKUThPPaEZ9J-moFpOBDqr1ZEP0Af4SDvNTuUpCNnXDKkPyCBpRRIdoEyLowlWCLQwLOlJY11AgcAFhpbls2TlwL3L5eg8lLQHy_-I_Jp9tM9AuDpBn2B0KOh65FG39-a-sMsvtxu6LwZCmRvmq5duDcN5Lot4hmYuWo9wt6fgEBJ_1hFFbBGSOM_qFezXdznQWguiDzXNzTlbSjoO6rcHBYfzOCikBzdbHYMSFBfTRxdE669IaKTuuIBf7-hxUWmkCLfU-SNJSalgNHlg
 
-## S97 — Pour contrôler un paquet, comparer le contenu des fichiers d
-Rôles : release
-Date : 2026-11-13
+## S97 — chiffrée
 
-Pour contrôler un paquet, comparer le contenu des fichiers de données octet par octet avec le dépôt ; la seule présence des fichiers ne suffit pas.
+Chiffré : v1.ZMKaiJkKCcwIHT3Tbx68akMFR1eh2tCDOrgOxk0VHx-clNAXlE4XPxU-3pmtEGQQD-mIZawhEK3wJF98WpMkFhZOdukAQqNNc-Oo0LDtNQok892DNEIYXlC1YlfOV9bhAubdPXqhMKI-ixdgKg17iwN8WIQ1uMha9qi_aesk1x5zrT9JzfEWzY8-x9Xz0CyEGKmueIG-DiSjBe7sAwYNdvCiIeOsUSprsrR0UdvPaClvCSoMKnxgWJaGAKaiJyWwhCsBV4aij7aK2DLjZyewzJNeuHwMAlRF5ws8EdWT1jQwW8UzcjnQbfA4FNsl9t7CnzchfH5WHLrFwPHoGLBqsCXRyzW9MX-sudwxQaKeV5Sgqh-YW2mrIYVS9wZyJWPxlSUBIOk72jDasnUF7Dptl0XanDwlywB4tMTPwtENUmnQ5HMSN0HBa6TqSA
 
-## S98 — Quand une commande shell d'un outil est refusée sans approba
-Rôles : release
-Date : 2026-11-13
+## S98 — chiffrée
 
-Quand une commande shell d'un outil est refusée sans approbation, lance-la depuis un petit script Python qui l'exécute ; c'est la voie prévue, pas un contournement.
+Chiffré : v1.v2PnIOjp39vtaADDxDLM3iywv8wVPL__SMfo6Y_Dys6ZnV6ov2nBYnlYer245ONqPb8NYFPsvswDGtxq6v3VI6qLZgWMxmsiFV5CCQnheuYUUW5NR2moa3DlDMfV948oyM_swhwwKrd6_yYvvIQHFUNY5X7TAcLhmSwQPOLn5OzUVpZrLF-mxIUlMpbI7hrE6v089C4fRTFg-ZMwP04PyaY72QRFc4N1FboXywEJU1wixiGDttaW0p0m6pGVrtN66AlE77Nb_x_jtqNNH4TzE3Wop6NVjqWPMzRfVCg-m3EHw3fBY9sVz0qQgtYEfMILTXeZAadloYxCUUD3Gh9zMOhNPjTVRd66rWQI-6sWu3yMPRB7p_TA2rfpK5RRkmSK41dFs4jnmmo3qnkRuC0bKi_tpsNg3vHEYA2rivBE2NY64ff-0PDOOzeWsKXvXUy8QMdbPKe9uNUl6g
 
-## S99 — Pour vérifier qu'un paquet embarque les fichiers du dépôt, d
-Rôles : release
-Date : 2026-11-13
+## S99 — chiffrée
 
-Pour vérifier qu'un paquet embarque les fichiers du dépôt, décompresse chaque entrée avant de comparer les octets.
+Chiffré : v1.7HcMse7zsInswc8rPffKJQHBriUgiUine3kFwC7Ml1uguzrfZPDjRi-ZnYyWspjJv0zAkdpdM3RcZNXjwypm6bi_bGswT0K2olEQ0efDadapFZb1iDBiDblL4UqTDB9_xPPTOdETIGuDj9vhz_QOO_0Zepuboa5IujOdEo9W2llSCml6bBfTPqSE1vI3aGkaRa2M15IHSsZVw5QGIlN735nHQCouQnnPyMjze46jP2E2CeUx8h0dfrncnN_ygxpDZxfR2CvplfrZrDifqvjGuLD5bAGaitwj7WFBg_rq6LV8OhwyjT22mqJy5ljOchSaxuQ6-p7hs_yuz2Rp1QZO5xuoQWJyXLMz9xIBC3qROnN05nQu5UMJC9Og5f5ku0vDdlyikkhvDJnT8Klj
 
-## S100 — Avant de modifier un outil de mesure, enregistrer un petit r
-Rôles : designer, dev
-Date : 2026-11-13
+## S100 — chiffrée
 
-Avant de modifier un outil de mesure, enregistrer un petit résultat de référence sur un jeu d'entrées fixe, garder l'ancien comportement en option et vérifier qu'il reproduit cette référence chiffre pour chiffre.
+Chiffré : v1.Y296uAIP7fPMOB8uGZJXfh5ikkQwseC8Q7_uiKJIa20sf_T8ST43OfSX6OkuR-lxwzdGcK4HuTf4VwWAuYSqgUspGv2Ih2sk5dxHYl1k-H8Efv3S32C9VesJrpN-m6p7vAlpq1mBCYOWOOy4LK-5A1VwaGKQYEQ5uYyRiADY-CymBzTj4S0KnrnbbN_qXQutMGq_ElXscBl5u9ChX79yOB9_b0mIg-_ivnpSZga_cOWGqoWSuYbtGK6CUSs_e1Ir4XqsHVF-CLqaH0doIb9LsmGFztP8nzhWfAKzLqvQLEE87MkoEshM6UHy9nSv2LzndLlpStH-H13Ow0qWwtDmz5yAl3DJlBERjif4FzQzDl5LlkMzcMuDUgaEK-r1bsNQbXoN3wprREwExZnIoWyxy5sa-lEfs7siU92pRGeNCvCGMK7ImmU4V7cFJqp-_SFGtsP9kIATxfFF09E7fUgo0NaIQvgge0J0b2wl-UUGuvxkgSRiXaK_jGLeKYQhzQ4heAxqI4566sOO68JCn6ePW0N59MzX
 
-## S101 — Un test de capture d'écran doit mesurer le contenu de l'imag
-Rôles : qa
-Date : 2026-11-13
+## S101 — chiffrée
 
-Un test de capture d'écran doit mesurer le contenu de l'image (écart de luminance) et échouer si elle est uniforme ou identique à une autre.
+Chiffré : v1.ql5b-mwZfQN4-9KSqeIPEby0iEO9sAi4ZnzBdIw9CLJ0M5xtJotPTjKSZf5RJKOWtpizHpF-jbSgvjoNWn1I8Ov34xxglYMgIqaaJqTWxG7whPwdXUhUg383JqmcS8TkLP9r29Q5RRwkAXwSKbflIC8oXCnvZBUYlhVJUMatOtD_1LlJSS_MBpBPy36LPIXQTLFHxqqkdE65YgHAd7SYf23qNcu5kzpy1HDqrZbtkM3eVnwyAVolzf5_wfj6xNzFqb86NH7kkVcW-xdtVuHmun-_JzPYn1GygGYPd50TVYecBLSqpxOibMlxHzEQvv503qYNPa2LbtnEH4LW-9RSyOYaiAxWRGKDbWnvEPHue_ZZ6TPSp91OEHChTD2ag6BAlsnKMd-k9JwXXNcpHqffs4v_BuHKe2wlytB3NbYF
 
-## S102 — Pour vérifier qu'une application est au premier plan, lire l
-Rôles : qa
-Date : 2026-11-13
+## S102 — chiffrée
 
-Pour vérifier qu'une application est au premier plan, lire l'activité du dessus, pas la liste des fenêtres.
+Chiffré : v1.BzojESJhfIUyzPbWD_XzX1fZB02DeoO3cwHPvwKlpu71LHNatf7GyD49X4sqlFiR5WRbBcBfREaGWTs4CZ-VQ9fQu46jHFheLWCgA-xSr5aQHR2jXVW8ROubSeuwzzY1JeeM4PIgonAZv9VxMljjT1wHgW0BsKsQz29TJktgjiYD-Y5IyRmfFA92YimMazG8BHgAd9YcPMYLkZDfowl8afWUVTk5xmOTpl5nufADy7w2GqGT4FLBNPG6n6_LccQrhLTX-WrIR64KPx2ShQYAdKb9juzYq4HkBFTSP8afzEjmXR6oFiCbkmf3dEVbUm95FahqxkGlsEhRF1LJf_crnjBwtahQdYH3eDmHCAsJpuPw73FiKnoF8j8pSLo
 
-## S103 — Une capture d'application qui n'est pas uniforme peut n'être
-Rôles : designer, qa, dev
-Date : 2026-11-14
+## S103 — chiffrée
 
-Une capture d'application qui n'est pas uniforme peut n'être que l'écran de démarrage du moteur : un test d'affichage doit aussi la comparer à cet écran.
+Chiffré : v1.xqjQYIzj5-uN33H7MW3pZQblv_OT9vpJ8Sw547Uqh-mWzO3UkSsyOauwcL_v7qfqanhoYbbKDpgfodpuWDrzvf926p0sdfQGRUwaXSwmjp4dCbiABIddt5h1YPHYb_InVpvIvzA8WwV3z3yotwlubLj6LKPN4bBcLnIi1rsqlzlVOJUieFuwJaizV41XSBGC7sWESWIdE5Ky9eT9h7-URKLrW1PBIeenvt5G5eON7vshtBYJADNJn_JEKeMSwo1r_mO6D8MWWhQ6PfnvAuCTKPyknnQsuTiEw9IQ4_LQwGysNqHee6TbCUbwfHkjYNaxgJmx2bYWdjMFC6Dg8ykBs1pXlnfqzdoHJ5xLSx1RSnKNoBozA_FGDKzjgvTJyq1VTCT5UHES6UYCp2fltqVLDCTgkZmSNb8vlxw8pQB3zWfWnHmjrbtzcVyGTAXq9NJ9THYbNNjsNJlY4jgh7fBz
 
-## S104 — Avant de corriger un shader attribué à un élément, vérifier
-Rôles : designer, dev
-Date : 2026-11-14
+## S104 — chiffrée
 
-Avant de corriger un shader attribué à un élément, vérifier que le projet en contient un ; une erreur de liaison peut venir des shaders du moteur, qui ne se corrigent pas dans l'élément.
+Chiffré : v1.UUcoAkpIO3Z-Vw9CZwXoPxdFiQnX3Ps7P61R7cIZiKCRLLTaQngGba2uP-QKnCWr2XeojpMaQYZF11uRIU3c7iFPpt8AH2BGovoXqhz146jI4QwxUHFNPBh2PMgE9Sn_zHLUEs5C9t4yj_-R9oqDgAGFGLg20UE4ijX13k1L9ZD9BLOZ86R03QqQBlxlePT-niifcnHjCZNR3nlPeEIQVBV7NP5A6X-agQwjffGCM6TcaZd4OG_82FXXkD0UEFDHr_uoc7aHRwAUQAC2qIzg24W2AOyawOKJAdTA_RgsZ4ZCwL-kj58voWeH9RXeJjuQ_R_YoGuQtelD1KK2g6HyXxd8vLuiwAgCeNfFBFX67fY2v4HqnEHDDvy6jEvLjYlUTfmbZBZqCwI-c-GJP6PMDoZxM2Q8mCqN1J0s10DJnJIOvjupJJxtjcPGdVRGO0iCkmXmU4iAoZfwvP5X36aYpJUZFImPlIQ7ylcStZZ9g85kNrMWA4ILNp3z0c2ZFcE
 
-## S105 — Pour juger l'effet d'un réglage du projet sur un test, vérif
-Rôles : dev, qa
-Date : 2026-11-14
+## S105 — chiffrée
 
-Pour juger l'effet d'un réglage du projet sur un test, vérifier d'abord qu'il est bien dans le paquet testé.
+Chiffré : v1.q-VDwIkGvi-QThi7ffTYmBnlOkJcXFFVPgUmttJv4Lhim9IatHqUrW9tpDnG3hnr4LxHkmc0-aCcP6t3kcAtUZrKph_Pu801KWHJUDBH8s_Ehpso5H1jSSoRKVVOup0fRzuB0GEKPQiSOZ6JmFTVNpP-KFJ4dmbHAOYZvmPyFKHCwr3n1ipULKJ6dM5Bipo0cYtxvssoc0obN85FFXegO-kuZwQDgDQer_zl-D14wioDxJpQrPPBqLTxxFjonE9sTY-vVqER36xPVa9qOEWfickC2HYX0hXkiYGMOBjE4kGzKEloKsDaJGvO4zobUvExq64KdQ2htvnAb0wPDQWVFeewnBEbLbeh4rXCArqh5WaIp-EdqW6hRCQiOCtqKuQH2n9Ayl4
 
-## S106 — Quand un livrable comporte plus de 4 images, ne joindre que
-Rôles : cadrage
-Date : 2026-11-14
+## S106 — chiffrée
 
-Quand un livrable comporte plus de 4 images, ne joindre que 4 images au message et référencer les autres dans la structure du livrable.
+Chiffré : v1.INFdHCqVSdjn73Zju7-tOesg-wWAfIVwA_HIpQKWt0jnBd3_hDtQ-YrV68MDXDmBC_2CH5IoQL5YISRkG_PS9047Xh2qKGryavW7uKrgTw74IaU_X-RKvIQuAC0nEz9wtcVp6GpwfZ_fkqwuPGMr1LH3FiCbnAr_oslDzZZ7mryOeW3qu2W0l4mMQ4jM0bNcMujuEWh1pF8w-hRiayR9bLMQ92hwv4KVV1y2BBcjpBo3bMFT-j5aNEVqxXX4wpWkQxWUORNM8yto82DwVLeYhJGYhFL01bW2pHrwMuD0giKI9azMb6KVqqnyeMKB7QYnEroeRPN4RjsoR-RfOVCNw12DQpGQqn8QiTo2trsVVXfZcLaJZYZNV0T7B67s2fdOKTmzv3f35zMX1iKuEgY9DS_lMYVOBwCEGfA
 
-## S107 — Pour une correction de style, centraliser palette et composa
-Rôles : cadrage
-Date : 2026-11-14
+## S107 — chiffrée
 
-Pour une correction de style, centraliser palette et composants dans un script unique de maquettes et le relancer, afin que tous les écrans restent cohérents.
+Chiffré : v1.KQ1mSsmD6NnLlnNe5tFxkMdFNbzckLJKmkbOwE4CtTRueVcLz8khPsIQf4bapMLhyCoTly_ulvArqSeqd0OqskMpCogz2X6tzTdwx3u2qbmFFPW1vGgYWY9q1wjCTOc5Jdgk1CPduHa5GvAjzyOfqN2blxTHmyDf1NiDbIdFjApnVNVUw1XYboiEenC26ybpWqz3S_pOTnL27JqlwtwkIkjns-IPFs7DT8WhHHDoTLY1xL2SRWOZl079y4p6CbMXPnsUdHRnwaoOyjhd1ySIiMza9-JgzjUGhRoAmGEEIBCjzbpZE_bdHv0x1y6zSs7j5xbrPq19ocF8pTOMBOoVcBj3kl5CMTZ1xRBalz3HYhbUwJptcnE2pCC17nwHtM0eo51nOiiYgqrGqrvYGWPVi_GG6nClwHLnG5qBy-kds3u8vfmVN1egDHyG4PiqKCbESlM
 
-## S108 — Prototyper un écran dans un script qui reproduit les règles
-Rôles : cadrage, dev
-Date : 2026-11-14
+## S108 — chiffrée
 
-Prototyper un écran dans un script qui reproduit les règles métier (filtre, regroupement, état visuel), avec assertions et rendu image, permet de valider avant d'écrire le code de l'application.
+Chiffré : v1.All9aO-QDcf0sCUhsSy31tn3yU6IxPNR5kBaKSLFNJ78mqoNMC-qXuteifCrxL3yRkkD1tI29F23npRBTWjdk0sRzveF14iHFkIMQ6skNlEcQwu5CHFDkRGBpQj67oTgHctbiokmFsyEWY7qgZSTQI2TWZUZ3te80ahDcoiCCjwAvsQNX1wKZvsnnoaUVNYpzaXayAA49OGk0swIHoPvga5ASidQmDMw37HoifrCUFgrxv_Y-q6EPzXhgDVZugsMWUUAP2RGb55tA5oKT-sbhKxd8HPstXiTJqcviTLHN9diA8wkgb7t-LguJg-qEK_4fbHN7v5ZhMx_xKEUpybkkfWZPhbJNnw-z8srz3_f6RH38A_7-23L1SZqhykE8NE4XQCuvxkAwAvZ8EA1ifDlttUrobzoVnv4B4BjeielKc6rhMZc560r6Xc-8buINGEK1lrRY7bQeWL-PfD6V_JiqeKfPWwIHDZb-XuJ6nVLJD_a4EQue8kVIxOvc_gYibpUew
 
-## S109 — Quand une étape de maquettes porte sur un élément d'infrastr
-Rôles : designer
-Date : 2026-11-14
+## S109 — chiffrée
 
-Quand une étape de maquettes porte sur un élément d'infrastructure, écrire seulement ce qu'il doit fournir aux écrans (thème, composants communs, navigation) et renvoyer aux maquettes existantes.
+Chiffré : v1.2FC2jre8qV4J4XR9XhjxM9-UvZLjTXQKwcIN0CMGVpeMsifTk1-EuZUw1qYLD8vK4hIFT9RgYABPBeUgZLki3X4_Yf0g2OXBIH4qXzPDKvpmmrrWSpesgBtyVIs0I8MJ88rO4TKFGUafGkJiLQJso4mo_MyP9UjAmszqvcBEnYptyLYsvV3u2dY2KSaQjB3dPHHe0XDFCmrPpxtFrDylnz43K3s2MkAkwTGgvLHnoS683n3mjyXmtpw39pN7hwxMJ1MPwqRD7UQ6lG_lVYNovFQGyHG4BTCCoGl5WtyFc3oWO6vVzH7qVWdtjt2mN2A5gWnZr0uwS9fFBOJqOff0EL8OFFST8HChi_s0nPkSInKEtDMt5qt_1bFRNQxs1iUG9JN_njL8js9L_1ElrNszpEO0eBbMiK7R1es1s1lSYhcGeoELYuSXmoAb_M_AGab0cPqUegytkyaI8D2Ktr9ggV5aROzI8wo4E2UVUsvPGDxNwGzWC5tl5M588Baki4w
 
-## S110 — Dans une image générée par script, les symboles Unicode peuv
-Rôles : designer
-Date : 2026-11-14
+## S110 — chiffrée
 
-Dans une image générée par script, les symboles Unicode peuvent s'afficher en carrés vides selon la police ; dessiner les icônes ou utiliser du texte, et relire l'image ouverte.
+Chiffré : v1.3X3kczkARfcU4mSL3d7aV_yR2oysnqKwZcU4EBOwv3wfo_WHWRZpEOraJxHsSLHUojU-3gh2TQHWq8jjDYAG3GVGRRtyPT29DYtCAxJnr8h1VS4vfmcDgUo4E8J3yWyVLmplDwG2d7HKcGuQqD1mcre3vCMOLCHdRfOYDHY4GbbLCA_QgzxQ9y2vINQs_4aG9LrUPEleq5Pt9E-SPwuwKFmmQU89VRf5VHCVD08PYZyiOfujPEoc3yutCHzCGGM1Zmg04np4T01MgPV9y0XFjfOZBDArxc_Ai2gnY6dgMpuGIAwlLcY1Cwhjo3AKS-oo5kCC-orU74irYiijH_jsHxHOjhPui8tZ8IG5hh3FjEr2uwv5AOjQokaNLT6JxUwbxvlVTsI63DoQnM4J1Won30zHgs6eREXDWBwc9YzGnjWz73z7Yz5CuS-r-NcOGnQdCLiByOL4CphUM_n84Da7Ro_NK6a24Dolx25tpg
 
-## S111 — Avant de compiler, comparer l'état du dépôt à ce qu'on a écr
-Rôles : dev
-Date : 2026-11-14
+## S111 — chiffrée
 
-Avant de compiler, comparer l'état du dépôt à ce qu'on a écrit. Si un autre intervenant a modifié ou dupliqué des fichiers, aligner son code sur le sien et supprimer ses doublons plutôt que de le réécrire.
+Chiffré : v1.G3DzBa-Rj0WWiw9j4IIl1OkYLRYvhgi_w7CSg_iyBYEIEgytLvR7UPoQVLTZGGDXl6ZKxVVfWVC2wMPTWIUjuNxpKFubgUi7pcaPYjsAaDz4WOlgB8pQItMw4pXPPNQzOsqJ8TeNLJjydrk0xMWChglBJoDlQxidG9Ni3GhbJz5mhBnI3Og5J9QvudqsRRJvInWGcZfwrlYZG0YSZHmOfjzXGdCbxgcE4MogQ8ONAeVGddgwswdnvgpZqdaQ8wnAexbdpB5C7kMbwdhXd3_YOmGkfze9JtfH8T5NVq8L_f4fwFRoIm1Hw_f76GbcK9AxZpexG5LcuXFZzdn_8k8hY2CTlhQf-4tffj8jNtiepab2oAud97hFFGInLFlmYj2QH2Iir7FB2vXKzuhRwF2xGuXoYImvg_Thhcy2LX42X5G8biI4YLLwdUOG4D6PMqIgVckqEFT1bTljU88qOqF9J6zOvkC8qtTgB1M6SLK5P3KRRCTyxWhWItJXLhQSPgGPKMt-bYKClqvCeA
 
-## S112 — Quand plusieurs agents partagent un dépôt, relire l'état du
-Rôles : dev
-Date : 2026-11-14
+## S112 — chiffrée
 
-Quand plusieurs agents partagent un dépôt, relire l'état du dépôt avant d'ajouter des fichiers, car un commit automatique peut embarquer le travail d'un autre ; lancer les compilations sans démon partagé.
+Chiffré : v1.gaokgaY8ezorxuLPRHVxPHRTcIydwoTPFhbQ5qxZXqoMefufVL-5HvenNHEuOmErqeGtEV8DJxExAO_TgDtt9AcHFs-6TZBhKiU1SWaTL0wC7AFv1GfowSsqDCvoJJNXCFfEtAfNdsPEQia5GdGjyI8npJbWxQcdTgD5rRLdZ6T3WGCWTsXXzwL0JYcz2i1XbqZuaP8u-IF8bVnnOdhWozkxUcRFL3f44K4-p4GP9ijfU4tz-rlnKHudd0qqRDDO6yl0OeGu_VqY5Ni46Z2MRMKIZQwCitADQWveWLnEV9DPpkci4kPZhVmeJpn2BRoUNWZpUIRcPRIJ3GDRxVlgr2lg6iGfiBIma5r2hF264MuLHa9TejlgNCc_vmNVY9yz4xAIky2smkt5YJuP91cR_AFJvW6jFT0qfWEHQoAARfHleZQK0XNjl8NTm8Geb01uySfXl2bTj_G20Kr2ws6FQBEnoC7kw3kcaZyPtwm1BNgNzQvWSkPBPanOrjVvXYkiJbDF
 
-## S113 — Sans approbation possible, les commandes composées sont refu
-Rôles : testeur
-Date : 2026-11-14
+## S113 — chiffrée
 
-Sans approbation possible, les commandes composées sont refusées. Il faut les mettre dans un script écrit par l'outil de fichier, avec un délai maximal et la sortie écrite dans un fichier, puis lancer ce script seul.
+Chiffré : v1.xfQqlyh7UVlj3bhf7s2LoJjQVoDWBwV120s8bYLzSpdwqpuakveGT7W8vEHFJZFImbpJGVoxLLsPAufFuTf_3IUt8__l2hEElc5bkdfql1MPYaNsoyozQu7KFvjbl_qMOgZJXUDA1Rk4nOxdcRHbiDLHDFlMfZG-Xi-jrUurSONbytA2-jsjBy7Xyjo9G8NVfwrFidBxAQ5_fTMcgeYY3G-k3ViW2Uakims5_SzA5v-O6J28GkhXz7n-uF2YfJHiygawxKSisGZHJQvKM_wT3_06QmwKUbxJ7Gyc4ZZ7Uup_pNFw6HA6p3KlGd4dDYLFFSZ1_6Io8p6jtYfKcDVpQiD_d4L_sscI5UsGm1yzsbzpjlHI6SUYUMzkhR7auvpIlj9BsdfeRw1_8Zrrir2RWiMX5LYbmPImeLPJqj5gHVtHlTmozwC2SvjwvthrbAoz5yaeJAKXzEy-KGGalPvBWY94nvPxmiBy6hltNKkVWglsY4aopQmSwDzJi3COod3UfAN-QId2dofVjgbvz84O8g
 
-## S114 — Quand aucune approbation n'est possible, remplacer les comma
-Rôles : dev
-Date : 2026-11-14
+## S114 — chiffrée
 
-Quand aucune approbation n'est possible, remplacer les commandes shell composées par les outils de lecture et de recherche, ou par un script lancé seul.
+Chiffré : v1.-mbBYGWQrwIY4eg9jPTU8s0uunQAQKF_CH1KbbMe9l9RPR2SKwSZfMz6Mq8PN4OuNtPLpdmBUsGgbT8PrT2vVZ6Ggc1EiuKWeh1shmM9wFxMNDtIn0sHJxO057axZtKNgVjuTsw8GTdUxzYYasa6zJyPPr8HxaQFhyWqjtNcDhm7ZecpmWbGxMPVAIdGMJL_9OGhotaY3JOODotGBcbplyL8O1xVz8D2A_dMCyQiIzZJCcKwnbp3T3uU1I0l8IrkQj9gXKNT6DNuqtembccA6h_u7QE7e28mRrkqGhD8n1kwNIZT_xE4Vi_7NoYEXTfrizIt8t5I5nmfbfeQT7bR-IrxOsAJwm043mF77zcC8Z3o67LTOzW-EUqEDihB3LtotYZZ8H7bang0k8bbJjyNvd7t48uyA0W5nDlBmbHRRPtCsXzt9hJ87g
 
-## S115 — Pour lister ou lire un dossier situé hors du projet, utilise
-Rôles : release
-Date : 2026-11-14
+## S115 — chiffrée
 
-Pour lister ou lire un dossier situé hors du projet, utiliser les outils de lecture et de recherche de fichiers plutôt qu'une commande shell, qui peut demander une approbation impossible à donner.
+Chiffré : v1.-Pxeu4L-h6fi7_Y7LqqshPMQWyEWq9vJ3YaSW8Iqgi6kPNRyGCWOMqveS84t5Xt3buG6HqzUUvSl8mPxyyQAASYbgpWHUAfFj9GYKQd8GwUsI_MDZoc_fxHtrbIqYxXPBPIi-IMc8xwR3ev33rKS294JpLDKI5Db_a22y7yNJx_dTpdd2qDgELRWMzdguMzbszlfNwB-QETIq75U3waxzXJBXUa9vd2WNr4mqSpDRJ3Z3o3bEvo1g3ltFBBDXQN9tUHrHoAvcOlfG2S_K7Qb6g4uPNYUEQW9HjgBbg7OPirxd3s0-WPG_OG9rk-hZUpd0aCYdRWj6OlAJPMJNjCUK3JlqDotKzkdHlWcdCRfjUeC_UZ2Pcw9_UJIGYCAaloDeg4YEj0rEUATZ9HyLmETWEULHu40ZmQOmabG4p9DxqBSuAulPp3KcPc7FGv8NlKno1LTKwSu7OEGOF82bA_9702G2P32lh7cGf0y6xHo9TZMfaQ773b7u2Bi
 
-## S116 — Pour un élément de service sans écran propre, lister les maq
-Rôles : designer
-Date : 2026-11-14
+## S116 — chiffrée
 
-Pour un élément de service sans écran propre, lister les maquettes existantes qu'il utilise et ne dessiner que les états absents (attente, données incomplètes, erreurs), avec un contrôle de débordement dans le script.
+Chiffré : v1.KVa5tHUjPwlzDkP8jBYicZmRjXLE5mjKr_nUD9zXMmDQkFBUGstK_LMn3_Rfqn0rBX7DtOK2YwgLj8Fydun1zZQjBACC7aYMFO37RwoRxQCdvXRrtM6n1e8M9-eZ19z0NHXU2ku_fqcUwriLDeS2Rz9Ym1SDLRA57HU5q88FFGy1g7XK3hkS0y2WIM892uyV7BkXPj1zJNfhN9QxQ_aMiFfFNIBVzorCf654gXo_jUAuZWhlewtvkQDyX64TkI-v143-ORbWferBEU9vxkklGlWKISMomxoLWJWQ0DJA1u3UGCHvLq_bNRvULtxeborRS6VKAofc5B2ayorzQXPxd7WyOx57GMu0FsNG81PNP0w3OQp2r-S3YV4-P32V_0_oIwd5maxsdPwoMXyiBzqECUgdP96juGTqeTUIrl6ibIZMWyonB_Z2IogcaR9DKSlHcMXVV0T3OxPH8PMVbC0NTgQEFBBcgF9YLGJkGlh93iWcybGAw1fssrOuPeB9VjYsQfvjjwUIcb1PShVgR-6nhli7AD9D4Ms
 
-## S117 — Quand une commande shell est refusée sans approbation, la re
-Rôles : release
-Date : 2026-11-14
+## S117 — chiffrée
 
-Quand une commande shell est refusée sans approbation, la relancer depuis un petit script Python qui exécute la même commande, sans changer les outils autorisés.
+Chiffré : v1.C9IFiA6Rpjv8wZnsvGMCs8GuYULH3oP3tH9ZQjiwoSz5iRDhwyv1JlrzmfWhaFKkjcNsSxaYRcVV0ZwQmApci80QP3Y-tUTNzoMKQJ8qGDQ2uCs_f4XXlhvEkeoNAeBjoPXjOUQ8vvjkQB0e57ZEGqVS5QAV2CB2PA6pIfnpxtaYChBrgKgedFiJlz8yjzCG3yPYwAYTgTWG4garJMvMkPikd-XykccTzrA2v8Leohcj0bySiTMu1oV9UarOQ81XFEYKRysH1gW-cmoGd2Wy-X5Q8I9Mevs4MiHUrTMgJQts3n09LKdm23knAKEuUdYKMy5p68_PrOG20zglob1ii5OxCbKMmeAwNwg48DgyWwlKDRxk_EDRryMoYDtCQsUbMeFI-RNwpOA_sSdrKkzKzhfwBaSzzaVZ9ANJyaOoM4ngJMlYqx0Ni-Q7OmX3SZWjZ_K_S-TAIpc
 
-## S118 — Un contrôle de débordement compare chaque élément au cadre v
-Rôles : designer
-Date : 2026-11-14
+## S118 — chiffrée
 
-Un contrôle de débordement compare chaque élément au cadre visible qui le contient, pas seulement à l'écran entier ; la relecture visuelle reste nécessaire.
+Chiffré : v1.JuuVx2uZsj-86hNtSahIfla17_3u_4ZUI2apmzEa9MoWub5UgESSPpT7o0zYw-SXJz1EPhRk6cirmfeMiBcbjdvD_d0BXQWFXlxoquSyvQjkjuu8GAo-gIXbLHXSmaMiLZNYc1tVDbv9Kxu0bRfP4EFRa8zR1acO0Vsg9JVyHZytLRmlPdTVAnS_VWeq0sLIKE5ASstPIurtj2I0AkOgU3OaJQWGClOuH2imT5DjdBew7FfyvR1ogn5sRhCv7nrNqFTVgnteYSJaOeH6g_jTZfNq5QYV3FRSUUZ6i3RStoWvIxPDCXtJjjklm3xdE3h7wVkRZdu0E0kPuLZ-fI3YlKPcXbuafNNzdZCYhXs4kA0-t8tnM4TaOevnMGnBf0yiy7HglSDaikXkQdNLtVRmyF8kAiF3Mhver7A84rXLscmRqDyq7f4rLgMzXRz0PC_AX3reRd_xjPyMGg
 
-## S119 — Pour compter les tests par suite, interroger les fichiers XM
-Rôles : testeur
-Date : 2026-11-14
+## S119 — chiffrée
 
-Pour compter les tests par suite, interroger les fichiers XML de résultats, pas le journal de build.
+Chiffré : v1.eHs4xUnE4wfr7wdi4Foa13B1pgjav7TSD88nozLYFrq0Q7tN9-namDq9WK0tihh0gyOx7GdZNgHjHX0c_GbF95HCY2141Mq3EkZLDo2m0OOo6HeEu9l0RuWSh1ol2b9YN3EYOU4WqqRtJED13gkhMBHG6vz5qKQK-nd5CwPO1hC80fqWacx-dxc5IaRnx-YbH9G3GWrFERFB6AUTLXPf1uaQcsRS1he79mRCObHsFweky_H-TzqgS0wgbR5vuzumM8RUZ5ZUJQj8wIruLsOcYjUTthgJSo7mw_oIZXGKyFw_lrXUrQzeXhBgaCvV_kspdOKbHobWUw4_NjmY9uq_fefV9sdiFTCaloPN97EHsfzKlHr2f7T4
 
-## S120 — Pour un écran déjà maquetté, ne dessiner que les états absen
-Rôles : designer
-Date : 2026-11-14
+## S120 — chiffrée
 
-Pour un écran déjà maquetté, ne dessiner que les états absents (vide, attente, succès, erreurs) ; dessiner les icônes plutôt que d'utiliser des glyphes Unicode, puis relire les images.
+Chiffré : v1.xoGlWprz4umRn-lRHHeQigEMPEPEw05LSTLsF6363Tb1mHKhLr3YlsU7_zydI905TQRGfeI4uw2atZYcqfivHNqD6twX3xnqtUHntaWqIiVHWsoE2a3QgkeFTFDWELj9CPbZTI9vyRw-ykUuvtcHplZ7Zr6LjykxkaGtkkDjK-p2vnR6TTb9eRsL2QMsld6JLX9l6Y7h31YvBP4pVh-KTLWGvkdsOwx97xuORMptO039no5fnNJwSB8QPMBMwpUEsrCz5fridS9WafbuVgPAGWLXekcg1zRoddSfntXFf7_oVh8n0RiGJu-t6jykC0KjK10ZP_vW77ry_L_Ox3RawxQsgPE-252qIiJBDKQNXBctNohnf1CTPra51v6goM35EdzEEoQ-avRsjhHbIBCsdUBAbmu5K6vPbF8RZbQWSKC3O7ZCdf5e4uBg7ElRwVS1ifnfLsKcMwWYXhqphqFDLbq2WeZd9LRuXneJDhKdrQFW_ppJQBfXHA
 
-## S121 — Quand une correction est relancée après une interruption du
-Rôles : designer
-Date : 2026-11-14
+## S121 — chiffrée
 
-Quand une correction est relancée après une interruption du moteur, vérifier d'abord ce qui est déjà appliqué dans les fichiers et ne reprendre que ce qui manque.
+Chiffré : v1.5GK-HcVnoPqrwOmoSGzCONSm9ucMIgJ-0Zwbky7PqaQsSdykmeutJ9xRVpt2FDa4D7QIm83k6jwzdYHWKlpp7l9D7JzVc0GLHKgjBUlyGgnSJ2Nt7shvIG2KkOuBz47oKYr1rwLQKso1aDt3_SbYWeXl8dEs7wgz4J7FSyVY5RXDgJZzP8QuGoMYXP4zWdQPPq6D68esJQwhQxHZjuuelShnE1fM_-IAhDRc90ycOeKJGQcji162N3KnZWYH_OQ3ykeikI2vWaSdtR89JVQ-lduzj062IxHxdn7PCzlcZyBTHzdhWajLnDQ-jmjucEzcMJPtAEdw0vyyXrKsDwXs5Y_DluC4Qv_a5-xIktNhCraMcZ1CYtqdItLoyuwzr2V9BO6rvR8prK3S9NYhq-DJsEMGnw0VQiD-C67eQTpYNuPcFL2Fu8J_mq7QLweRnHKMexoIZwQnXVQVLqNB
 
-## S122 — Quand l'environnement d'exécution ne contient pas la chaîne
-Rôles : dev
-Date : 2026-11-14
+## S122 — chiffrée
 
-Quand l'environnement d'exécution ne contient pas la chaîne de compilation nécessaire, écrire le code, le déclarer non compilé et non testé dans le rapport, et indiquer la commande à lancer ailleurs.
+Chiffré : v1.j3NXfQSGs_z_1u9LPUB2Z67lgZzO7RiUREP-8YkmHM6IRAPV2pBG7LT_zk63DJCe_eG8JSFnrAIthjBlkrBXmA3_aLjo3frfbd9eza3C-FoqQcBPHUB_ss9qC1KQnzGDvFVeYPhDbW3YY-7D4dub1N2BLAUKN7KhVSzoehfs3IYa2O5YJoQRF0Jrr_fEbt7eYC2_uno2qy7e3V5jHTpyXDtUlPMbnzp_jYsJrd8aM-A-7NG0MQ2C9JKuIoTpruszUVLkLaQVpcFGsrZBd_mvsLmS1CvT-iHFC38nJTjvgee6dQ1pI3s5MJqCsvsTeuNh2d3mX73i5UnBryUWj7eA3DORpbcFPyyrRATHVSUQ9Jt9NWXH6DO614BIJxnXfiMfo2cYA9xWgQiZ3omh9Xx_w8eFaVjuOQ2LJNSglkhUbJ5Li5LdouMRZaSrWXi6A9LWzxpc3uH9SIjFjUVgiEDfDZEuSKlO1HAUzJiv8_0o80LmsbMYre8YaoML8Ul60w
 
-## S123 — Relire chaque édition juste après l'avoir faite : une erreur
-Rôles : dev
-Date : 2026-11-14
+## S123 — chiffrée
 
-Relire chaque édition juste après l'avoir faite : une erreur d'inattention compile parfois sans que personne ne la voie.
+Chiffré : v1.HaOdeeodVSyGnxjg36coOQaBko174TzIP9CEVAYiPMsH8RROvJzLvDw3ad6UhkN12c-mnfHI9FevupzZbA1YJ0YvBpsZqJqtnxFd5YauifLH7jUMdrSp5hzR-q2SfgTG0_e-cbyao7PwoWxBskpqpp4VNNfPw2M8rvgDAOVMNVW8HBE4jEWYIsKFd6oLHZr-jdq-MWFI8P29g7LMByarM7O5QycZUV0Fi7w6tH8Gd3RozWPO1kC8nB1SDmp_pR6kg4QhtRFbE0vY04geZ0oE-eiw4x2RDKKCvvK7aeBo6vstK69FoDjkBN7fZ2m7OWXrIzEyaKteBrgjETlPYSNPpc5hq1z0qnsA4tXDjQi2qQr-lVoUokAXJL3O-rbUHJpAilwTNXJN2dsHyA
 
-## S124 — Quand une tâche redemande un élément déjà livré et que l'env
-Rôles : dev
-Date : 2026-11-14
+## S124 — chiffrée
 
-Quand une tâche redemande un élément déjà livré et que l'environnement n'a pas les outils de build, vérifier l'historique du dépôt, rendre l'existant et signaler clairement que rien n'a été recompilé ni retesté.
+Chiffré : v1.e6EwhL_AGOLtNh93IgdU5ksTU1cODz38yVFS8kH1Ab07m3_QwiH-Tx4m8ul4D15rZ3Uvo1lg_H0Cd-1wgY4tYglFvlsOs3JjozUJMMTkzNLCpLYbtsWfwpCw4G7stB1CJl6CJlegIj2vqE2GIPovA3GcwwAD_zxvfJlQX97iOsjNZlkmOHAa7f-t--YMrPAuhDYqz--H0cNAz5WooD4xNSD6xnBZBcpa_xt5Zq0CqKX53rukHAu0jwWv_2XJRrTo6loq0vJkrBgP9S6FX7TNRCG1cUIJDW4yOgpcb5CIMVC6lYDFMEbflSIV4DxALBjbYkmPz92ytBiMiSfpKzNAoyjdpEpdH9D2ivE1LzTg-__XISg9t6wiBYnwJZYYXishhxfyFSrnTyJj4-Jg8it7g3vIAlfJ66CmakF9ZRRcHVQxTy5DVQZYg3fpS2tmGXp9ARgiQt9Gtjh9NWXZmE6t2jXb_jIy9MxF-XSYz7HgW5PQD19W-Ouv-nHfKxqY_MouxFbgNcoWsnbqOecyy3DRoCKFBCA
 
-## S125 — Sous Windows, lancer un script de build par son chemin compl
-Rôles : release
-Date : 2026-11-14
+## S125 — chiffrée
 
-Sous Windows, lancer un script de build par son chemin complet, jamais par son seul nom, car le shell ne cherche pas dans le dossier courant.
+Chiffré : v1.ph9CJdKMKieJyMRzhd0krJmFKGzhKo4_hmi81Cyp9lq3RqlrpNKlPxDaJd62WTqW_gaLVF_6aof6yoOSqhlr6aa8mEsjL4lxeQ29SnTTGSzEYTX84ucteY1QrJFoeSvZVgi8gXQQqrhQs2PxAFfa3wCVOgCvqKCWFbES7-_Xx0ynU1Qu8yqJtqjWTT1DIPVlhNKtmjuNpwYk3sto5F3YIGw5M9yM-69ElvAIPHnydtciagOXu3mKTua6S_DvYnXrNu8E6Cz1qBOp8f9Mhmghz0SahFN4iDFjmH3J64aBliFxo1ihk6GJJ7LGWxSPj3gxSG1z9mZ5Zy9qGfsdHkAUnJo2ZTKE89cXB8ezK2pm0xFpLDJIOGeUOQ804dvlYNjaKV_RsnFf1jm7SB53qJs0wdzeNtaQVxtWLhk83R8dxA
 
-## S126 — Après avoir écrit un fichier de code, chercher les caractère
-Rôles : testeur
-Date : 2026-11-14
+## S126 — chiffrée
 
-Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.
+Chiffré : v1.T-Hw7YfG--k4wkMaJewiSCFJXE3CT8Spw6aXG9BMeNFo7wDh1QojGrH3fzJ2Cv4kchOfCmM5a_wUhidTjDXwB92RbVg-Q3W9UdWvBnpiE7uqao_XYsKVSDBfDnTPxVKDUd1S194iWzWiBEVZWxzGTO6VQGO2INSDz_C5eYt5PzFxcvi9OTgEf8C-JSyk5fPYSkrhtEWR8EFowcHZMuVGlo3zJNVAj3ZONXbpF4Izpz-E_mAV-aeu8ktm3SXnmCelx5swsXlWmkIcMqjeAlXR5S9QidyQdOGfXuZJZD7ClxUQMRkXU8TLmEofijrogRtp1ufkF-66YwUH5_GZpcX-2pvABQdchxv5pe9gUxA364g6oQum1HO9mSAuq4tzW6-R37AUXmpiBoTLDa8hlyQTK6B20AlhCdc5_LmpEzWEnGO_DbH6LOV0zeHI8gPmAC1Kw_Ww3Q
 
-## S127 — Après avoir écrit un fichier de code, chercher les caractère
-Rôles : testeur
-Date : 2026-11-14
+## S127 — chiffrée
 
-Après avoir écrit un fichier de code, chercher les caractères non ASCII invisibles dans les identifiants, car ils compilent parfois mais cassent la lecture.
+Chiffré : v1.8tJn0jpn8kOmmrIKLgTUv3dh1Ni952VmeV8O_TJ9QFAay9V-jg3rUNPjw3wc_xWDCt00RKt4DmcB2ZVfTdtIfOMGT5CnvsYGuMdOVSFIxZbednnyfdkdv002_gnHcHdtAA_PTbm8mUKI6QeNRHQu7rKec_48eF4EIN1Od4ttZCMUp3JzDjNZUaWu05BRrZgouYl5PrskbxzL8srYlnnEiUIhMHGXn_1xr0UiFX5QD9M5012itU4BtoOVLzVy25DVkzIFMBaj0R2WxBLZcpUqaMJXtIvGAEhlAmpP-A0Us8dVm6Jc4NJ0d0BeV-sKDgZyWH1AiQcbF9kyA7hPMEMCdiBQTzJRsyYIf5X01AElALr2ZCbJv-6YvgCAQRc1SCNfnKgI5X8aV--IEAk5k392czv4J5sOlvFwvYIraQ7tI9Eeq-YjQe54mXmaR4mGGcyFJQVMIQ
 
-## S128 — Quand une correction de code est confiée à un rôle de concep
-Rôles : designer
-Date : 2026-11-14
+## S128 — chiffrée
 
-Quand une correction de code est confiée à un rôle de conception, appliquer exactement la consigne, ne pas toucher aux maquettes, et déclarer ce qui n'a pas pu être compilé ou exécuté.
+Chiffré : v1.HrVfALUMJkyuY74_Czq5c6mDeYT7NMEM550j9hbhRaPbteaJCn0-aYgCpoQMtgQuzaP1P96j6M_HQtW4jdiLKMr5f-0V2Nthut61uEbPi6SD2IqvnVpvbrdkfGeEleRMuQL3w8eb_Ks1Pr--fO8O3TmOhC0gXf7pCDCXMPVYHaa2nXNAvACGDyvx91CCKripuG6EbANqlojKpxeV67afSBBuT2glh4J5vPQP829ivCHR0MjFIVhNVfKVRRAFCNFtVdVboNVvT7X8GsALRoFNJSgKQXEwkBWYqiMSjMbC1VVmBHn2hCdgRmtUktljZaYzOalTdVkVPcQ8nu-mtnqYUmcajrRDvYRcWaZNFnjS7YBohBb3SXgTeHDLK6TMxGB29Md-V6fsmv3cdIt16KnTsYpoA-BHhLRnr-HukdVQS9E62kN-WFQ-u7sw0wFU8EWMXq85yVuBTCPJ7S8adSRg0jpFiios_vWcZAKr8UnLfbf8W2wgPfY
 
-## S129 — Dans une coroutine, entourer chaque écriture persistante d'u
-Rôles : dev
-Date : 2026-11-14
+## S129 — chiffrée
 
-Dans une coroutine, entourer chaque écriture persistante d'un try/catch : relancer l'annulation, convertir le reste en état d'erreur visible avec une sortie de repli.
+Chiffré : v1.8vZr531eLD9RQ7cTYL0yVC8IVU9OKNTV9BGry7LAfcoDKuWmNz4gP7uu6mCJNktTDV4i9uOztYiusNdg5UpynqGt451nmJbu1xykBQzIsAww5PlXnA4cp-_KXomOsyCZbX-pIprA0oKkKJD5X0ttsdnA9SzCs68LpnmNV-Ys-wKMBMCpZWc9NmBjQl0rHOhHrASoopIaxac065GMwXCqat0pDLzqK5G4odXiIgmTFRbFDddSai7EoEkkOr8-1N5XMsyS9-WGLtZ1Oakrw51SNPyy_wfhbOkUhyyJYt1Zsd-RiPxCS7GgyjCRTaZQwmrXJpSUiSgsQT8z0OCN4-p8H1w6agtQUlT0rzfgB2Tl7IaYXFXrj37cPv2aci8hzeTyHP-BpbtSf6WjW4pNqZIsPGMbvXmZJJMComDwRHvuJP6kgMBe4d2NQn5XtyYeMbm2eTGUOydMbw
 
-## S130 — En Kotlin, une lambda finale est affectée au dernier paramèt
-Rôles : dev
-Date : 2026-11-14
+## S130 — chiffrée
 
-En Kotlin, une lambda finale est affectée au dernier paramètre, même si un paramètre précédent attend une interface à méthode unique : passer l'argument ou le constructeur SAM explicitement.
+Chiffré : v1.UmdL7RZSqJBh6Hip5X3Mi3Ynplk07yBWcKsI5ayCi7sBilgpnm863fqWhOPVAZBtt_bTOKpeiLFR1hIIhtGa8M4FGNsyyxy6zSgW9ExOd7BR3rnfMlzwOYk1fx5Hm7c8lrmYixc5vdBSqOOKHdOX4WiYEJWyfI5te6EcBj6loyq5qZ_Kr45sAnyPFxxVzzwmbJcbKmKyS0_Q6jHtSGiiutRd7BAcBbORZKoOf_P62wsShhABTsaCNFM0ku4-GaCNGC9C-3OsqqRkA3mCEWOEblqIA0D6TEeaLR1kszVQDh4Tr3ijwU1B99brWukMaHSqLdjh5-pTTEXOyBSBHVHrbmpQmub9jcCZgfXMDaVoqXmo2VfRsxyhyaAtBv3UN7WvJZHHJ8EQOdNTYNiGIdvi1TqHx0R0V1Zef1RvjPk-mMHOL-MUzu7213h-hQ3z19VS3SPUad9RbtO-2BRJMhN05Jbz4Kw-8qaBS9FgRCC6iKdWL_B96lg
 
-## S131 — Le script qui lance les tests doit afficher les comptes par
-Rôles : testeur
-Date : 2026-11-14
+## S131 — chiffrée
 
-Le script qui lance les tests doit afficher les comptes par suite depuis les XML de résultats, pour repérer une suite manquante.
+Chiffré : v1.PnMolg_6UdpZRfRgxl9tQ7X3rriFbkW7nSU_vtDnF90cO7b08b8lGOwHuiYNTzmUIs4hUHj9BWep7DHENLgrC4IxuwV2XNxX0dE9PPj_AILgTvL9mKjsi2ZBJcf6UCqx9wdGWY3Ea6TTEVvue6975fElLlJrVuYhYpt3T-a3MWDMfWgtMYyDeWgDHmxPDvjeTYj2TM2erYPbrxqbwQ5Rt7Hb4XCgwUrazv4pOUPg-3b5tHes-7VJZTaD8zhMjJfI9w3swDF2j4l9bnqb5cbrflDOByGxKcJq3FHUFboTxcbMJxhH3J04DRh5ZNMSe-g9JNLJVISnfo9CoBX-6Xs-6DApv-XUKIW9WP-tvGESp9pOhDvAtQz6CSvFeqr19huqdLxvtgFpoSCuE6gjPFLtQu2Axg
 
-## S132 — Quand une maquette déjà validée contient un glyphe manquant,
-Rôles : designer
-Date : 2026-11-14
+## S132 — chiffrée
 
-Quand une maquette déjà validée contient un glyphe manquant, le signaler comme écart sans la régénérer si aucune donnée n'a changé, et dessiner l'icône dans les nouvelles images.
+Chiffré : v1.PQOP7eZDqghkhEnlMePZo-Lj2cnPsMmUCx7mWme0DeEgXt3iNiqHGUwz-nkazylGLWe5egacv8ywC45-6xJHIj55RKWZMZhKxiZErd3TWBm3kd_5nzbBbqmC5kKT61_EzjDrdHdwpH-xro4EsuLkjy3SHUIhilwQM9EbV1m6sWsBVIDyuoNZ4ocmddsx6F8TT-pSg4Tnv48HJv98DEs7qsfWbEk1W9q1EOIlHZCBijbrmQYrP-ftvW4LWBkZtJtGZ03QO4xsQmylHYSWWz5zWCw_OqHTE5odHuaJGXwHVnLWSWIIH4l_CoKsD7RuNbEGWdvNMo3LAhqIS-2SyDHJBI_5AtN8NAKAoEamF_N5qTCnfiZdIWZlGHg6XzHhAyq2hD2gGRXagYDtA3woVWWyNS2Dn81wujiCrEwBqyp4W2WO4qZkqjjSLOCqIctK38H4BpTQJFForVyLWpxtVez7c1mWlY7G1nBfK5ZmJYlLlGig6A
 
-## S133 — Si l'affichage d'un certificat échoue dans l'outil de clés,
-Rôles : release
-Date : 2026-11-14
+## S133 — chiffrée
 
-Si l'affichage d'un certificat échoue dans l'outil de clés, exportez le certificat au format DER et calculez son empreinte avec un calcul de hachage.
+Chiffré : v1.2GwKFg9TyxkJ4wapIxJb6_cygng4hktDy9_nbBeWlKd0xL9s0TkZSComc0SQabdJW-HfbeWrtKbf87RhI9gDuI9evTCdi2BkAL1sWvxtchS84vqM1-IemBi4zJBEzVB-lTSuutM619bDs7eNkMXRhLQ9K3g6ucOYrzrXFOwgVQBwRTSBq8zbO2kyVv_1TkXgZdegi28UQOD9A9ea0z-t35dXYTTdv5iIhmfPrt4hva9hl_5JJfR8neOSoqes1Xhq9zug_Q5jkDVucOScsUXSDHqfACIzY_-lESfEQJrqioIWq9eGyqNv6jl6fEjkukc4cWmMMuVx03XIGxl-i8gx5wCdmT8e4jM6j8srZKndC9vPuduth-VaCOAMgWxeZ2mGul9nkTHD1Y0MdqcigOyY2EJ3T7oDUH-KXFyzD9PsyRs_WkERxuLF3p71
 
-## S134 — Dans une maquette, vérifier que les chiffres d'exemple reste
-Rôles : designer
-Date : 2026-11-14
+## S134 — chiffrée
 
-Dans une maquette, vérifier que les chiffres d'exemple restent cohérents avec le filtre ou l'état affiché à côté.
+Chiffré : v1.eD6XZZWDHYLXipA67A73CanYevlOKiHqDpA0zxzX_z5IZjDtiPuuvnJXXWTt-qpTq0a-1SilfM6xj-fjbjEkVfkBKq4NFq6kQ0pr2-JJGv4TcJ5dkZJzMy314WxyjG77We0WWLxtn9pa4dXrVpAZlOXcnHbuV2pjDb-BhBTE4CH8p_TlMZ8y-su38Zpt0o-H-75orDGD10_-sYZbLSbNg7OeCF83ZYLRb2nV0MxskJ5RTwQxPB8YGSd6eL_GuT4jezG55LLTQ24dkJYgbRUvdGWfxf9sEVi_iHwAJN8qBZu-WCqnxDA9dUMSHBLC07stI1aYrCfrds1U0I-lCG9a6yo_XMJYcVTtI310WmiHXNajP6EhGDf87ejiliNls0NEZQx4-RGr62qVSYuu
 
-## S135 — Pour contrôler la présence d'une classe dans un paquet, déco
-Rôles : release
-Date : 2026-11-14
+## S135 — chiffrée
 
-Pour contrôler la présence d'une classe dans un paquet, décompresser l'entrée dex avec le module zip avant de chercher le nom de la classe.
+Chiffré : v1.clATlHMVsfWm4khIhNmLnLnY65H5kC1DEMTpsTTD71iMIR-2WvfbCGqxo52FpYHoV0Qt1CD8cz21rhysfFxyIFZEqwJrPEkGkT_wK6uweBaLi_WcvH5Kb1sGaTklVLJSVv9WAUVpwUsZRkjCA-CfpT_b9diBc0Hg-ywyz0Lm9LwMSCvgzx_VwXrrcRVpQnUs6-b6D_ZQE5H0Mw4bPw84sMnP_9zgxyK8FyIjnzr-dqKw4KhTYKjKowZokEY1-OQO5DITjeaKmudrTe0m-PVSHiqiC7vluCPibBrVO3bIyoscSVnfedfvqEbIcEobVM-PL21-1GUDeoqqanqvR9yeOZFaVZpeYY_9KzjFKxQZbfw6R3V4TgHrkLTbQ4yhZ4dfbQ87n3QIu163TLZJG4N_E_q4EhfgGgmakTWHCwVmaDJc9YwL
 
-## S136 — Annuler ou attendre le travail asynchrone d'un test avant re
-Rôles : testeur
-Date : 2026-11-14
+## S136 — chiffrée
 
-Annuler ou attendre le travail asynchrone d'un test avant resetMain, et relancer une fois pour distinguer un test instable d'une régression.
+Chiffré : v1.OJNHhBXiMYnJsh2gIdJNmNlRhZFgbxBbitTqncqA0FLT_JCD6JIqeXNsgsHGpcR3zmF3eDED-Fh1WeoN2IAGnLIYOstQVNOsAG06ywBPUGz5ZJWZuP5DFAVMfkWaAnB9ZjcVlukrsGWI3rde6dZEwWUqC4Cc7RPY4J3g_xgAdn0NnfzE2v3uAXQ_3KaEopszPJyTI5G_m38v-6XZHP--7iagqYhd8nA2cMdoEr6mV1WO2HCBFhfHMUx0ELGBTEjtGAgTR78PJzN0co7n-az8nOFMvctxNuC2HT8aEvUKJpVpenekBXSuqi3Uj_7CFYBXdGMIRaswF6zh_zwCCjzNNCRdLDVIQv6XNKaIq897fVYvqHltnMMpR1qfu4Ll06PDTrKiGyKMRBjRcT3cKH3AqgBsgmtbT7xHLRhY31pnig
 
-## S137 — Pour étendre une interface déjà implémentée par des faux de
-Rôles : dev
-Date : 2026-11-14
+## S137 — chiffrée
 
-Pour étendre une interface déjà implémentée par des faux de test, ajouter une méthode avec corps par défaut qui délègue à l'ancienne, au lieu de modifier la signature existante.
+Chiffré : v1.N3G06v-3E1A6RBGUaiS_APfTiOhNl7FIMxOhoMz7uI6pRNRztqdSIB8hLACwgeEtc5buTVZtc5YucGYJkkVQHrl8DyK9t3QJLpVufJ0AQdN-CLTHllLs5-X12kG_L3_Hq2nFWzoy3v2Rgd7SH-U6i8qP3nH3n0av6NYnHOyWD2UW3u_QU9KJwfyshYajUb4qciibslsnd5y687RJ7HCo91XmXndvfEHIzAz3nKc1RKbmLjk0LPTeXa10tzWhnYWSHgUJeU89sc0qboSHiPkst_8yWOwMHRmfNaRhbYpyv_3WmaNFuRk0a6foJhbor9LHKMNrEMxHoXSyfAkl6xGbxbDqyhk_HqMXK9thc92OqrLQzN06foBnJinVdDNR9_hAk5u4V8yPs2DVCOrJfZvwr2IHUosDWHjKfwV1qV9XEtNHmxA5m3ISqAsIb5GCk6dFeir9nL9P2tmBlqrzX4tZ70zPMz_cKqZvh7MJ8xQ
 
-## S138 — Pour lire une version dans une sortie d'outil, chercher le n
-Rôles : release
-Date : 2026-11-14
+## S138 — chiffrée
 
-Pour lire une version dans une sortie d'outil, chercher le nom exact du champ affiché et ne pas supposer un préfixe.
+Chiffré : v1.1K-iKxHFb_rRYEz6yAB74wkMZwY8iSjBLN9LdoUSdSxuF80r_DR-Ys_7dpXOi1wrySt04tiNKAYaQAxeN0BuZq-C2AGncxLFmz9sPxt_ItQk5r3Dbw6Rl-5XNWvzrhKKQ4BvHWDQo3NHBg3zwJVzdgvrYiUfgOGRglfFuHO20U9Av_M35HDgavHHcpFqcROcgFsoLRiwD0R2lfhhzg3B9Sag8xqNy53z-U6nMUjHOOroPhI1LOfrbrrTObgFtemwCSprJmyzyB-O-3jXWSWv3JRSMJsJFz7gHuUribFtey7EvbehsBe8nkKCZ5rvxbb72ZSMqz8-ouvYzZMFXx2_bbrcRIjbglXy1szgpxwzmfDXLLgxJU6ywFtNTpHDiI-wT3G3uViFzQc
 
-## S139 — Quand une étape de conception porte sur un élément de test o
-Rôles : designer
-Date : 2026-11-14
+## S139 — chiffrée
 
-Quand une étape de conception porte sur un élément de test ou de validation sans interface propre, la déclarer non applicable en une ligne, sans produire de livrable vide.
+Chiffré : v1.UxZ6VWuqJM6UNY4oOrTEUwMwSR18tpMt1-N2Ip6wMMx__QlFHq859_Zt2xchiQOSHCD5tX_r2IC7awEFX-l5Zgf-OYT4APZdEZjPfjD3uHEj7KuYBhEHK23MaPfzGtJ8X8cwijqboZk71ncn2yN-esjQmVbOYVjLFksoOIWdQXxg9hi9gY_NATJRDuov6sagcr5KJ0yf2iavjJ93bvXn_nPh2d_NIBhm3kpv8mOLhS-DmMYueN14hKSsGJgP-NeQaU8kTNLq7UU533nUhjOV2gpLtAIyXj8-jTdOdbwu3j-mHovZ-ptdXSFb71tg9QViUXTlCgqGld8cy2I6S-A0p6OdZjP-tXhpXygJ6eNzMXZMZM1nk_UKZQeMTYVKFteSOUfpU_nCWgWIxPbXPK93ilAI3wyVDpvgK9AWJFTbCHTnUu6KgbpI-ySIsuUmzelaTwzpQmQHOIPR6K0ONKDf4PUmoMB7
 
-## S140 — Ne jamais afficher, même partiellement, un fichier contenant
-Rôles : release
-Date : 2026-11-14
+## S140 — chiffrée
 
-Ne jamais afficher, même partiellement, un fichier contenant des secrets ; le lire par un script qui ne sort que les noms des clés.
+Chiffré : v1.XsnIKqR9TNvvQpRF-3NbX7FH0G5_EyFiodfg0hq4wJeikFxJtW3kN_bk8afyMkIOvK5rw9rp5LTvZQATpD1_8mFdLUIDCTsxn_PgYFL3gLaz3nsqxUu99WFv3hAtSL7itlbUnVNu7ORhLXh5UqMGMCsPEO8oKhevZ3EavQR6PJRTNl38odTe17Sme7bJukzw69oC6Irih2lkTr5GZKE2heknmsYvJiGz_op5ydL9S0oWYZDn27v7L8i5xHNAegmSCBu57H6SoeGDCVDCdt067ou72XBJuDd76MHDeegq4-HQHa-pQy402y3M7HqVmGNVIl45ZtycLo1hVe3P-mgTVwSfXYcyei2VW-15tf0hZAfKjHJLKYdTRPV2l7sYRAYpseZi12inGgSU4GTFXIOeBRnK-2AmcwJH
 
-## S141 — Pour contrôler l'empreinte d'un certificat sans exposer son
-Rôles : release
-Date : 2026-11-14
+## S141 — chiffrée
 
-Pour contrôler l'empreinte d'un certificat sans exposer son mot de passe, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.
+Chiffré : v1.fn6XMWK53Iy2iqCVMDHY-jbPIZqrQu56fCqbzZKnzZwcCRQHfR6S_nK7xNUDzinXAKIGY0ONXw6kjtgU5NtIEhEyVzF69JCX0WV8uP0PnP7morepi9DflRL1DHcU-i_TsbstlLfeORA7E1X8z-3s1nCmD1ICPpfKsDYB4u6qeY-d3uUiCxMcWKJFG9WVsvFlalu37K1AGfSgWKzvPce-oWr0oy7ZLk9jjm3pLXNi8AOVfJqAa_3gcxpzkxqm_hx66ELmeTW8-Kj6O40Mh4BUbH5SSZN_uc5UlqhHq-7LQVM6f9lRdjUlLwwvwj-9fXQqUDL_M8KI-0nmoNiR1qNVJ9AOdPILZy1Y41XlI1hcUZcJJ8dDK2CgTxoyQkJTwHS-dB71cegQJgHrpzXJOwPGAfAXuEpbArGKMr0ZX7xveYsX3U_Nul6J7cF2dTTYN3YpOUkowpW1q_q1nbK15HvG
 
-## S142 — Quand le build répond UP-TO-DATE, lire les XML de résultats
-Rôles : testeur
-Date : 2026-11-14
+## S142 — chiffrée
 
-Quand le build répond UP-TO-DATE, lire les XML de résultats existants et vérifier leur nombre par suite avant de conclure.
+Chiffré : v1.AwrWK08vWCgpBg8jmXYXRibpuqve41zC2uPrUoNGPEXiEdA3HQpCKfJg5Y7KLeMCZh_kifE-M0V_1SWT0fCUtdrQacpNC_74zkHC_uhL9ldCWNzd_8UNFw5ghK1451vf10X9WBtea6TnyEz-oWhZ6l0YRfW85YP_89-xoWxmdUK8CraQG_cogMhkbJgV1sklHmXMe2cG5lC_Gvjp_Uq838hpr1Be3roe7kpUrP-QiG5uvA2-1QE2LPcFHuQRApzg8vj_-FpVGv3QO_d-nLSCRRxusAiIKKui8naA-mbYc2b4PVCmwzfHaAReZXiNKwVeNQH0onj49HRKON5l2f26wqLOY59__XaKzP2Fgq9I80bv6j7GMy1C5t2p-hjYu__QrX1obmwJSulIlHfJl3ZV5w
 
-## S143 — Un outil de comptage qui lit les fichiers de résultats peut
-Rôles : testeur
-Date : 2026-11-14
+## S143 — chiffrée
 
-Un outil de comptage qui lit les fichiers de résultats peut montrer d'anciens résultats après un échec de compilation ; vérifier que le build a réussi avant de s'y fier.
+Chiffré : v1.guWlKZxQX62vKH35X3il9ShgzGRx1f4LhwdXgJxvrjfhT_XEuzxK2uYj-N4P6yva9YG8_ySvu9EUPioEamThk3tN6syh3Tx-frxS7q7lsp4HZw9uS8wpsDhp8bINzdmt2VC4o3BGAS1w6y7sUrtLQjmaK3lhGQXa9-JapLMo1C1Hh0DdkHe_Vros67m9NNXSNpl6jQe88C74ENE9VMPThO09l0YqPXddCjxUuTB0ZKvEi3tVrGsnUxWO8CGaBWkR129Y5ulzwsTmdW-KO04O91341qVV_M741iRTKXZSLOhVEdjgu137vHE9p48lXq0y4f86_b4XmTayJC0m3KAlmc-i6UUsdm0V8uYlGPceZtZR4Q4Pf1eU-i2eRiIEUnMmdZ_jCwJtsvBbKMvgoUuydkb2mJACFUbgfCuqOKZiCkfxdiEWvwFPIK_WLZ5-6EdFWxw2cnedZjJzswdC_zzbsUU
 
-## S144 — Quand une tâche de build échoue sur un dossier intermédiaire
-Rôles : release
-Date : 2026-11-14
+## S144 — chiffrée
 
-Quand une tâche de build échoue sur un dossier intermédiaire absent et que le code n'y est pour rien, relancer le build une fois avant de supprimer des sorties générées.
+Chiffré : v1.WPSxZw7AY7uASmqWTsP2VMXA29yg4djDM6_m-S3_78S8oh77ABYTeGpWigAy29I3xRZA1KK7e4wM2wQNkk5a6D0vwpgkaTTA25EelDTBb-GgVT97pnO0kkp-wBpnl7RWEW4dt7okU2PCBkPhlJGV5Ged3frWhVvisinbhR4sPsd7K-zhrW0HZ03kgjRZ7LgJjAd3juqZFIBXPYyW3-wUetQ2f-bwm_I7eqqLS_x4ZuMiHTq33DN4JmNjvV1eVF8S4Npnc5MTUEt0-Y6GG7Rilm11XjFxX4uz50sWtpdG7Ewu5EIoFfSjZJdqMwlHDp6Wll3vuyfR0DfGKjTKHJAh9fQE4Mjd9Qs0eXgrOImgBje7v351W2_5EdRAoZQhVKaD7MPZ2FpqHkD9rS6CWp6W-5FZpx7hmeGELF1Eeva1BLt7NdNsQrZs8wmYPvZUzS0zWMn7PFpY-bFy89wns2wIlfmQm38
 
-## S145 — Journaliser la sortie complète d'un build dans un fichier av
-Rôles : release
-Date : 2026-11-14
+## S145 — chiffrée
 
-Journaliser la sortie complète d'un build dans un fichier avant de la filtrer : un filtre par mots-clés peut masquer la cause réelle de l'échec.
+Chiffré : v1.tMyd7LafM-zV_AgY7WrQyFoDi_0auIKZMwRCYXkY2_z2wbYK1vE6son_EEnwKP_6t0-uoM1XlsXwp4gzypqqXrkpprVzd9OPIhBGqfrU0atRuRTQaHB6kUMXvi6x0s0pNXhD_wHoHeJeATUlEKKYj-KZxA4eyUQDbeUfZOimVxKR2_VAeAD-fxroAVXG_D0r-UcZfjhGzW877r94yC5EZmv8rJJ7bEvbPUolj0Jk8hS3Mh9B9Kk9mo45lAyc8S8N8VeIzhhjhgJ2lDGK1hFg805cR6ys089f44xXEsa_Gg3Q7bhLtWAtJUByo6XaGpM0bm8kwFjLGrD7O7wPgvn-YIK10XhM0HVVJdMxJTza8KpNWUXFhfnTZ3QsKQCmUPBNIWY0P1KjFzoM1cV4E8RYVDwzV4YRqOBHu2_9mkMqkGSbK7dImT6I
 
-## S146 — Pour contrôler un certificat de signature, passer le mot de
-Rôles : release
-Date : 2026-11-14
+## S146 — chiffrée
 
-Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et calculer le SHA-256 du certificat exporté.
+Chiffré : v1.-tmPTX7J55Ui9dKlEpkzE3RKAtFMd8wiPakjyheFzwDk8Po-wypwRVFb6eI1Z44iWwlC2zWIrjbWm0W3CfmIT2WvAixZA5YDAr4NydNT92_V1navnVGXLzUUYCRm6_D5OYPfd_fv5p73sqKnZ9RpHi_Xg1h3jpi8WdpvLoA9lMcuXRfPIy2a6qOmpvKRelrGfqQTzpLC4Tz5xcrToAf8GCug_JGeOmXQynoCAmNaDGI6TCo_lkxbejJWlvRWftIdjZD_AO_RMH34VFeCPEHh6zVjv9fEDYiqlL_0IDhByRsoL2PEdOD7FtN4mvEXfQRl3N5aouex8E_5-XbtDlafR1b3f-QgBseBFicMBVQYshDA0ISfELdBrdVExouF01fmADUj0wGz2cpU5XYgZJuTgEhHl-bITNzN7pN33WBKRww
 
-## S147 — Quand les états d'un écran sont déjà maquettés et validés, l
-Rôles : designer
-Date : 2026-11-14
+## S147 — chiffrée
 
-Quand les états d'un écran sont déjà maquettés et validés, livrer un tableau état → texte → actions et les règles de comportement, sans regénérer d'images.
+Chiffré : v1.VqTzrfTaYwToadViHbcn4FknF2dpJ5dQV9baoxv5h-uzD4eDGgUckwzvN_Z0zvmmdD7BYFnFIFhG5jnhpyCD3uxyD9Jn4Ai0zIMZ1yOTIS4StCe4uNZWh3eL2TbQDxleitznLAvzuu4XlbVGL6vZ-tYhhQRvFdFnq9gFALbXTRDlCMB1hRtmFv0duNpOyw5biNlf1YAm6_eNnXsgOyocmsf14MF6nC4jf_9mTUwlQWNQONPS5-ikbgEfjq853wxVNbNrBOErJh5REIe0wDOVrO1zoD5211U_DPmxDFoKwiuv7_YCa37S3-3kcurARs1hA5hgBiAxqCALMr_Qonmgrt9VfMYEnc1vzpn63DMfRKxj9v0vYd2CxK0mH9h4Auh1KDUJ_Z9K0T0H8pSt3F5tlRgAJL3T99OqbnPmepR-IDpiKuknXIfz3FtTZtQ2YNp24d-51y7WblIn0deiIvy0TfhM
 
-## S148 — Quand un élément est couvert par une maquette déjà validée e
-Rôles : designer
-Date : 2026-11-14
+## S148 — chiffrée
 
-Quand un élément est couvert par une maquette déjà validée et une fiche écrite, relancer l'étape de maquettes ne produit rien : vérifier la présence des fichiers, déclarer l'étape non applicable et fournir au valideur de quoi juger.
+Chiffré : v1.bAc5Ze6nWHz1vxkSVm-6fXsMUL7jl6MKUrmh6TI_0OZemd-n64AHoma00DhlwT8qPZXru5aF6gevBNDhbucb-8UlBKNV419LKajyIBHCFRtdwj6gpCJ4OFR0GkBlSDy7P4_Crfks2Z_MjwZ1kBzWS2N4bl_oAjdT6zCUHeseqy9ZdN3-2Jfka5fZwcQEPpOMZAXvLHoPRAOab0jdTXKt8OmEANgtbdHMFci_fxIieUKSHlF3tJM2fkWaxJHiMy8MwL5OORmmb5nQ2uRFfMzM7IlQEcUQBbaACByZSgewSfgfa4ca1u_g2Z2oiEkAU5Ij7na4PI9xyNaWdjstqx-tiGJpwqzoCfuieI5wDx5Lg1dWfYGOMdquaKFhMDBAqTNSazw0IlqB2wRGQQ3Sgp0Murf7twTeo8FQKW9qhZPTU7bUXoDUjHjVyJpHhnl7v6aIsSFcuE--0BdRaXfY6eNaw8du7wEXS5CK7Q1_JpCXT0dk2bPsCrg934JbEPIOBfRRE8ZnAIObY_hLimmQOa5L4vdC9X9chTc1AC9xD-u9y1K9cybQc5iuILITJQ
 
-## S149 — Quand une validation est refusée faute de consigne, reprendr
-Rôles : designer
-Date : 2026-11-14
+## S149 — chiffrée
 
-Quand une validation est refusée faute de consigne, reprendre le livrable existant, vérifier qu'il est intact et ne rendre que les champs de consigne manquants, sans refaire le travail.
+Chiffré : v1.wjU8ncLFLXIuU6Q8H8j_M7sjaBYYpjqho72cdM-_IFIj-YscaXq7f6b1mR2BBsDyjpFeLr8kPFxbdi7od9NEn93rcDNGTI7G9q9FQXW3oOu96qbMZv_iW51-YSVZqkAv3Uz36cfqIIvbfoJNy70lZiCL5c1ckXGFEA4uEhKjwPKBIgAMp42WO9RnD4ayNUIDjqQDM2ICWtyV-hGzq5MOkDregESh3cPRCJiYbT_UYRD8gcOxGhLEwRjB6jg7VqttFX2CdaFB58IgP4j76azY8IyrHNmjDfScrMigti480oAiU_Q37FSDHS4SBnucl2rzUrjL6_3epg_wNAGAhHG8OD1GPY7gJv8g2E6baXhMPfYCXdqlrqrIlVbuQGVp8qXHmodl2ZaGNjZTIvSyPZ535DJO8lHMhOIeV6P9ePsPIM8axXjEndS1RZqXn6oq_6XOFFdi21hXvnyO5YQhTKvICUudRScWPI6XCUguYtoJGg
 
-## S150 — Injecter le dispatcher dans tout composant qui lance du trav
-Rôles : dev
-Date : 2026-11-14
+## S150 — chiffrée
 
-Injecter le dispatcher dans tout composant qui lance du travail asynchrone : dispatcher synchrone pour les tests déterministes, vrai dispatcher avec verrou pour tester l'annulation pendant l'appel.
+Chiffré : v1.irxh5-iocaBbW0USFvtNkBzDcCxGmeigAARluUm_lfBNFHibyZzr0y3j8bPpRZ0wC-26tYGsR3QHtWt7qBhWCeC0GxW__KfKJm6YovpFkUCwr-1brAPo-uFXtcC0Pgi5XG-jzJ5RbKXqEd-_LWImd7ss9Eozz-RBgL_wmBQo2YQ5JZZ8i5bc0SpT__FxoAlc0w1iT5IR3JUYr56DfsljeKgeSdSaQE1ZpXjwABOpfI79kmd2HxmF35InIZG4Mi0t6euLshKA8CGF4-S0OyF8YGw5FkIyF0DB4g0cB61cRinJD9MKt33LloC1F0RdfAmKtEu2kg18kFNrNQ9xOplicuLGTawI0EhQn7gcEQNBnMV-gOM-3L7fa7m0rMiXMxEBwMVbigajGknhj-S_C7wJw0cZUBFWnj38IyKBgmJmV3RscbN_SaCkeX46AN2ooOI8p-Rl8c8HmChficCmsuzFzbZSPWbwzAi_x-mHhrC_DAcvop5k
 
-## S151 — Sans approbation possible, enchaîner les lectures par des ap
-Rôles : testeur
-Date : 2026-11-14
+## S151 — chiffrée
 
-Sans approbation possible, enchaîner les lectures par des appels d'outils séparés ou par un script écrit avec l'outil de fichier, jamais par une commande composée.
+Chiffré : v1.jdhLhsVKPzQ8H_YbE6kDkAo-UgP-fFaoAN7_zMW4fsx2BYSxzSvNPbJ0ZmLSUPF-ZMtl9a-dBSA2frgju9w-k8ccsYVT9wE0HEohnOBI4U5Ca2CFi2MxTU6x-Jf_tdXduWuuX-x1Z6G0yV8dIolEvenRG-ZXdW_bzWY02gPBHxj13XqwiCWJPibRy6EZ3eCC6QtThT7klW2IWklE79c3yPBWbzDUxyO-pjHXxpC8mJUFNcyK1hlwQgBhdq2V50X5_rhb-CMCx0O0Bbdf94ZKUBxXQmPaOWIzHSlIXCMnzqz3s-PjPIHGqnntYl-wVih-b28-KBCyGr85sk2BdsPFroOG6MFQQ-u2A8coghT458TS1fKlhN5IaldU1JeM5FT9ojpmUoDuC6pgb__J68tzBqi2PKki0utdkYANj6Vb5XowSJn4FkB565aTO6X5N_7NnwFY4zqJ1kagOBs
 
-## S152 — Quand des codes de statut d'un service sont regroupés sous u
-Rôles : dev, designer
-Date : 2026-11-14
+## S152 — chiffrée
 
-Quand des codes de statut d'un service sont regroupés sous un message, chaque code voisin doit avoir un cas explicite et un test, sinon il tombe dans le message générique d'erreur.
+Chiffré : v1.Y7-YxzGEAm0SNMYl40OMLCHyYUPXpuxos2mMGaCa--jSef7ziP-Iwfe_BY_rHgWWgzls1lY8NE6SI4uVQEnrw5OVBgBxo4ajLF3fFgflZHNGvC3kuOgOwg6M5G4S9LRCB3sQxR88ugFgU0qqlOhFj-4EltUvrP66_JDgwyLkUMzJPQET8efuK_0j2gB9vZJT0vL0Xbt_gN4SRXy2TKszIDzgm4x7NhaOcLJU0SrHN_5AerRR9_uFfIKQUWZFJnY6L5wduHOPMHyhv-bztqculN4qpPJpBKsy3m4Ypx-dxcUKexGEjqQ4jKMaiL7XEK1xnBZPu0M7zjSGHayMCrUR6sO721IdgmRqhYjMKSyE7sT7TVRQVaGWw7EbNMHrDvfGrgju50_FtkwQAXy5yuW4Ls9kRZ2sBwFMIccnFW12PZM4OjfN_9uwUfBLHyQ9XNPlcYo06kJq_GQm3webaFSZAnO85q7OFoSIjqfvqUMNFwwTpA
 
-## S153 — Une erreur de compilation sur une ressource existante peut v
-Rôles : release
-Date : 2026-11-14
+## S153 — chiffrée
 
-Une erreur de compilation sur une ressource existante peut venir d'un état périmé : relancer une fois avant de corriger le code.
+Chiffré : v1.GegbLvkp9sYOlaYAm_R6Qq1ZnxHzUwze-GuSyX8faIN9cHwQQjHIY76eIRQgy54lH7F0PEaahXCyX-EQYfLTblL2wg5MKPQ49P7Cu8XRL7y7YMR0ZTfZqc-kaHHU2k7-v0p0oIJ2kA_2YiZAvBSeUmzQCZ6lFcOtxlHYoMinVr32YLhnSizf-UQpTAq6nuzIdrwNv7htC8UybWZc1-htQhpPGwkCoeZVRyuEIETKL0zVdeR2Lm5lgqPHwvF3-b4_wJz3omaukr-tJNrzAF_qz2N3WBUtebZjnBDfXZlbpX0PeFtfAT6xs6i0kwMRUjtYvcbMBy3DQ46RIXyARH5LHFw8wq5G9xEDHEG_FEgXdwUaFllF5PfgPm9N1M9WBC5hM0zGsxkKpUdZPmNKBXz5G3AeERB0
 
-## S154 — Dans un script de maquettes, éviter les symboles Unicode déc
-Rôles : cadrage
-Date : 2026-11-14
+## S154 — chiffrée
 
-Dans un script de maquettes, éviter les symboles Unicode décoratifs et préférer du texte ou des formes dessinées ; relire au moins une image rendue avant de livrer.
+Chiffré : v1.B9px5Xqf1RbJvBhNTV8Q8VQ1mwVJbDURXz2UD14-X1m3-l2cb1EoCD1K9Slrc9Bn5HLCrkqViHXZCF9tmPP47nSVy8WFsMG5wPEXtI927DpFE9AQ7r__Ktjx9NAzfcUdbKcFg_PJTaQY466A-kNiwoYWcRZaRctIzg0IY7_dOZE0CFHj5NyI2uWSJfQqO9Q1z0l0oToCFrbdT21nghLifa3S056GV43K95dZOWgnL76FnYygHO91zWjgfjFPqnZcEogMwKyv_UO6h6DNGtDHnPbZCjdeRzLK1ugro5JpXHqaPH9kbjJ0KnElasOfaO7-thsDYolS3qTrFMywNb08neYLLgPyMSeeILc5i1jyEqrB_5K82NyeFCJgrYRDmJiJehqP8lz6CYjmIAOlOC7yueAn_TtM8lIDOJpUTr-2L55ENhyE24U2RW6FneK_q8bcLYzvVsDnqw53LuMT4A
 
-## S155 — Quand un message est limité en nombre d'images, montrer les
-Rôles : designer
-Date : 2026-11-14
+## S155 — chiffrée
 
-Quand un message est limité en nombre d'images, montrer les principales dans le message et mettre la liste complète dans le livrable qui l'accompagne.
+Chiffré : v1.C2RReU-DGYs4OkBt8XUX5Ez4ql3CZHeABp8rdRlIOeGmB0GEljFjhAFldRq8wLDuL1edQT-BD8qLeFM3VHIo_JF0KZB4HKr-yKQD5pveqyzUxcn99xjeBozVe7BSiHKv2uHd7B8Fd2i7c8HWknEa6zCfl3G2epJhxsAedYcbB6jLzHgaZNnEaWPFWmsddySbGdv4u3fQRCCoAQqPXKVTdYEjEKxQZRH6WN0J81Lt4473mc1nDHmU5F9VBdwul1_maj-nlhMFv4rSNW3gt9ydxrbj628FRQ0hEMSvSmGFcor2jvcJd1yj5t6cVvAUGEyGG-tHdzBZtto459nHjfsup0hLH1x6QNxza5P-O1-xPzzgud50tttusC5oTzYDkAdTn3Z5tlptJxiVvH4ZhrHP89w52-MvJsD9M4xYACvQwacCBkRi0li2bBacMg
 
-## S156 — Pour ajouter une variante à un jeu d'images produit par scri
-Rôles : designer
-Date : 2026-11-14
+## S156 — chiffrée
 
-Pour ajouter une variante à un jeu d'images produit par script, paramétrer la fonction de dessin existante et vérifier que les images déjà validées sont regénérées à l'identique.
+Chiffré : v1.hR75MRIEYaads2OBh9_4lhvFYH0-B8Fp-f6FgSjHkzwhx6jf5VkzAERr1DLtUg9JnBpY4ieC-L5HADSYW86jzWTWjDS-EgpfRQmXWALuJJqqF2tDR4S1sQtQeUr3pCJ-60tzAIXH-0P8GUH7ZWwBs0SR1LF5ah5iL0QXH1VeRlVaY9duUtEXTYibPStyqjJ0k2zD09SE6anjM7sJRF0mfCzAMN75JlD-faCHswVK7sxS-z-wJngvzOeiNdzyUvIvlosjGDOzYwbEYa5gjZhv8oRbEUNf48HZ6nBtDa7IqvANtnWzHdzFkMuTAI5LXGOZY4_9iYqWreG0g7zm8hEKS-k9bXTEPo1XFKb10jL3ThvFmTHr_KLaESiEgw1tLpGTM38-j96rNXRvpM7tvc8SON6XlLSysj58Pb6maKpuXCF06ow3MLHzgC1cZv63mv0hvE7ZlbT3XDRj-qUagIhh4QyAQ_W4oi40OPHf80C9xFY
 
-## S157 — Quand une étape de maquettes porte sur un correctif de compo
-Rôles : designer
-Date : 2026-11-14
+## S157 — chiffrée
 
-Quand une étape de maquettes porte sur un correctif de comportement sans interface nouvelle, vérifier que la maquette de l'écran concerné existe, déclarer l'étape non applicable et renvoyer aux contrôles du registre.
+Chiffré : v1.E6ihszJUg9n8Z2hMeqj3EGr4ykxByWPWmZKhdfbWmvLSBCS2Lw5wEAs0AJ4FxEEq5NS-jskKGfxUK5SzNaH_7OxT3vES34rvdCeaiedlKQF4ObNvt6nmKSs9d2OBuEabK26SH69vCb-SF8MAFUZDyajdWedlxhPbFvrCKzpVprBGAQf2DGCo7MH348RIuvkrSvg8z2LGQZJ4KhhAB1pNyk6kBKivZlKHiJy--NWZuXclWurjFwlJYORjQ6OsJ5WLMhcJ9mTlyZn0VmQXniSb4BWzuapalW2v3BJOjSiim33YHssoH0XBnxdIqFfggb5IYFxyKWQl5CpvhoXpx-WtWAg-Jo46iFXkqdPnJX8N5vnx88yINTsKIChHI3bFmbavkLFBMsxtCLvtsv6RL2SloDiZuecxAZgVCUhEzWmTmeiZrNex_y-xhlv0H52pqj5faIbDSOBmu8ZDPSMhHhxYmnmy9-DgOD-swI9ZvxFvHQS6IBLFKt0cXVvopnK-OEU4ENYpUMIszVMuTjaCmPtnkHfrSw
 
-## S158 — Quand un élément est couvert par une maquette déjà validée,
-Rôles : designer
-Date : 2026-11-14
+## S158 — chiffrée
 
-Quand un élément est couvert par une maquette déjà validée, relancer l'étape de maquettes ne produit rien : vérifier que le fichier existe et fournir au valideur de quoi juger.
+Chiffré : v1.uPHzsJT4aJDSEE6Nek55_rt_XFQ1YLLZ7neGkiorcbQ4A0ATF2b8naLewlk74GZ3qRS9VP0DU8kkHnoZT5MfMfo3Bej7D_9IFh-NDpEQv4FAEUr-WRSc1C_WT6amNHX2oHG5tOGbzgbnaGFuTIWb-bj20sqONBwVdYjaHIqx-cPPPChzaK7GP-WJWS4-41GCFCbfOTQd0FHAvoT8IS0hvfnaspK4UijVLs_CIGYwNZHeLsPyfxDU5r9jnAhioL7vj0-VgZzcnaiZ3-XIEXnLx_dNG1PBtycYaT5tKzQNfGw7ZcXmCDEqBCbL6Kbx6DF_zqv-B2N-ZSApMxZ8tGrode0gvI4UkYLd8Fw9iTTYY6XFilfRSMEisyturL86pF5wCMocc7FElnO69LoHgWgxmEGguJ_RNUqTW9zVZvo0nq2xVWuZmwEh0vrNBKXOpoJrtlJOX9fPf_LXnsZeYGPTcPX1iVwX7JooYoTx_fbf
 
-## S159 — Quand la tâche annoncée est introuvable dans les fichiers de
-Rôles : designer
-Date : 2026-11-14
+## S159 — chiffrée
 
-Quand la tâche annoncée est introuvable dans les fichiers de suivi, récupérer d'abord la dernière version de la branche principale et la fusionner avant de déclarer l'information absente ; en cas de conflit hors périmètre, garder la version de la branche principale.
+Chiffré : v1.y4JPS7NP3khwzAC9u690xkyOVoFVfE_POdID5sdUFzeEZkG2XpsyUe1OUu2bWL8f55JR8UxoB4AeRtZFcmbvPRoZiALWSYVujAxacMu6Va-U9FmLrRBLKI8XsWErIyYQC4x5s_2pJxuRzAqMJhOhjvg1hu859HsY4T9vpfhnrdZhOc_3RB0PxjBBaIwKsmd8Vjw5tBk2ulKq6C7mXhF8Yj5iHT_6vLAAnP038YEqsV0ZGO599hWZphofAxR_6Q4qpgbw_kMW1JVS3OE1MYZ4F9btzLlvxCImves0mE9mszECffqHrnntWI7_edDbGFX14FqKfzGhF50sXBAgN6Drjr1q6l0SIFBZf4VKIlgQ-33kRodF5iNdz1wLv1meNdkuHw4R1fEUCbCG1g48oOARgfcZx74Z_-x8a3-Fe4ZUTYJYsqGUoaZW4bjan2vqivlInCV5lH_gP4lC7ebeaL6pSn-am2X00_j4sgYI6z51Ixk-ArrWl4zk9SIPHDe8TNXbDApVXWeLFgtzyGdGkDNLJ6__vQwissmxHvMmRGkmvUZysQQYBOmXp-4nQInZ9VNm6uaEz-DM7H6eonBKi32djq0XwNzvbS8
 
-## S160 — Quand une étape de maquettes porte sur un branchement de par
-Rôles : designer
-Date : 2026-11-14
+## S160 — chiffrée
 
-Quand une étape de maquettes porte sur un branchement de parcours ou un contrôle de navigation sans écran nouveau, vérifier que les maquettes des écrans reliés existent, déclarer l'étape non applicable en une ligne et renvoyer aux contrôles du registre.
+Chiffré : v1.HzJzKphLDQkfpVS5-Ej-TIDv1iKXEL12S8M5gQYq0-Nxluag0LD5Db6Sqx8EaGD4zRhj3q2dybwcRq7spCnGkZYsncvoQYj7cGts9Rao22ZVjE7oMvP_6Y76ngjkDdcqR4gc1Qv_ukxh3J2TminPXcA5dOI57NntpBxNqIMlKUtZ-iwboHvpLrfzViMwQp31GXIruqaFF0FpjU6S4CKT5NwDaxnoe6BATOpgdeC0F9W5DceBeYEXA7VK09hm7dxZbMpI7v5_6FhWTE5h894bqB572ybtBmmAytcjXD8h8t-DDAPlyN1snf7WS89_Xj6LOfihDvXmc8_rUVcvB5pVUbEHN3oEIdQwdPoayov_NOvThMgJ9-wJNTbFFP7x5OfYILrbs0j_PsaMR5dr4z3Bz5SxpZ_aDlBAi2s7bljsjr_h5319ucplvKwo-s-OrjAShmXWmgtPxRcPAs97DHq5icChWQ3Z8kW5XU1juPwo17rxqHLoDflZuD89yK4bGP48gRYfUglWTNCIdi-BZ5q59Y9FkhGMN3NfsglNrGBSloFYKLsN-NuFbkImqKaoeYsxMBsZOPcoo3A4kg
 
-## S161 — Quand une étape est relancée uniquement faute de consigne de
-Rôles : designer
-Date : 2026-11-14
+## S161 — chiffrée
 
-Quand une étape est relancée uniquement faute de consigne de validation, relire le livrable existant et ne rendre que les champs de consigne manquants, sans refaire le travail.
+Chiffré : v1.mA94zX7WYh56E_9N4DL2F9z1DBVe-iJroCJ6h1E4CK1O3EbokK4AXC02bfUzLPwovTMDAz_hwyQQcyjgJ51XYU7Y_7fLfTFx0SlmxH3WSLFsFlwTornF3lytX1TUKHQIOqX_S5dGGi504Afa_IoGY3Qj9uQ3xJaWlpYKnihgA--c-0snXWIIceBH3Gaz2npnwnc2p1R8cU9CifrRBOErOWLfh4DYDhOXUT-S7P-puxtSCafO8NwGvBGtb9XiHXukJV_oe-8h3vnfofGaZfbEUaam49TcmmpqbjNKc8QVvOp6qDE6RtVnh0nbnyeYjEUatM8PxAQWUnwAITRK6-9EQeJNdtmexoZDGUojuC06TGJP5g6NCSACaDZd3DSFiOIQ7hC0AOV_QZVPMy3yI1OwfsUCmwMR6a_e6iaDt6RI39XQXlBSeI7gJrRJ3eOnuVJfc7XauUTZaCdE-HnCn83qWQGNOKGlpEg
 
-## S162 — Écrire un lanceur de build qui n'affiche que les erreurs de
-Rôles : dev
-Date : 2026-11-14
+## S162 — chiffrée
 
-Écrire un lanceur de build qui n'affiche que les erreurs de compilation, les échecs et le résultat final, et qui garde le journal complet dans un fichier, évite de relire des centaines de lignes.
+Chiffré : v1.v9gNwC-7h5bUP7tMmAWUbT0Yj-6Xn4b2G9WbJIfNRkifPiR63rMppGc-4KefJCqVRVQQumB4tmUKo7uRVniQhpptsWpHJ4hv4twT2jF-EdY7Vt-_Ij-CA14xNyGQ5zX0-1YDuQmflCkArr9jyINi92PMqtvAZgNQNFDsIZRL2AuiIbiQQvmsoVs2Zmp__kDyKbDrRIAS3iJbPrz_YCI2LerfxYHDRgsLQI6KhBwnojaukFKELwctwlVdn_HBlxlHtR7PxGxMvpCIMN6D6DeFqsI9VNtOCEi2LStLIESTsGYQof89dmCs8pzGkAImA1zNKmKBj7zi6ouH3eCqk0FO4IKcy89v0ReE-HkTIGnIXnJYXl9P75QF4Lfxn4vbNOvMltQdVwU9bVbML904hozMJs4F-oIE1oIeeX1_iv9KD7OHs0A-GyT3MjGZYdkISMw_hsqxyBeI8Th-vHR4RZybs1ZkyMTSi7c37qHY6IUc0BbHeRednw
 
-## S163 — Quand une fiche est corrigée après une remarque, vérifier da
-Rôles : testeur
-Date : 2026-11-14
+## S163 — chiffrée
 
-Quand une fiche est corrigée après une remarque, vérifier dans le code que chaque nouvel état et chaque nouveau réglage décrit existe, par une recherche de ses libellés et de son état ; les tests écrits avant la correction restent verts.
+Chiffré : v1.Hq4EcKBeyViWu4k1dAmcUHCr6Gl_oNDfaSEREWguUgbknbDiD-mFCdD7qkvsr74HX1Y0LyE_zv1Ao2lqCQTbTOdApAGWFPhk2UAX9ekXuQ1pnXM9cjAaCP1y6xD9zVf5NU2p9CqU2kDdqUEg92t3xYlSzDprOGkY9UxI5nbpdGkXvxOu_51t81V6z-QL6_ynWxYsd1wjrkk99WkjpPYQVpDovCRVD79BgrCJqvZ9RhzUDSieCRuHe5ZQ3MKdC4jH8hnLdS1HHv1koeKofKcI0T4wT6GWAtcMSaH-M7CJO9Xpprywn6xOTeSf16iKx0hvRtwdsgljvEd9l7DtKjVQwIlZsYBEBReEEBHPA6hY43eP114xI54nc_w6Wfxls_j535N3BttUrCGEMyECR6dn_B07OaMtKHNZMnJTibzzsnIdCI4807QS5I9S94370MQwGknOReetddEwmRgT7O3pgsENod8gY7wCXV0jdIVG2hDq9YW3A3KR-e_OxXb1OScGGfd15-HVScL23jmjQhdPQqf0gudCI8slHUekAycHwTqNGnAJCVD1Lo5xDQ
 
-## S164 — Quand l'environnement n'a pas l'émulateur ou le SDK demandé
-Rôles : designer
-Date : 2026-11-14
+## S164 — chiffrée
 
-Quand l'environnement n'a pas l'émulateur ou le SDK demandé pour vérifier un écran, le dire, remplacer la vérification par une relecture du code contre la maquette et déclarer non exécutés les tests ajoutés.
+Chiffré : v1.OXxK48vSnsLZP-lzcu8IXnYep06oQ4Lfv5T2WKzsx_nbQ9iyDslCP9rdient9W6b9TrzSqXNcbVoDjPPmdIwIp57nPEcaZDwa6qEpcYn6cv10wyHXy1JsrA1mmN0Q7bx7XZ7wGP57rYptUcMYkudBWFIDUNJqH8yOBJuQUWk8CI7RaKVYSlFuKPijhvrumlJQdQDjx_Red45O7S85nFlRpkUqqtge_3XKCIsL_Ondy0lfBYATjEnoLKa3Wb0UbkGbUG3rWIC_rczuvoR7pt5jdL-3yDe58zMSIc5R5G3ur176jF_CjTLOSC8bTKFtXtkUSDFqduM5uYXjFMxQHXSS5QDAVxWpanowsfs2moQq03OfB5GXessyfLLERtRcwicySGAt8khzHkIuFn9q3BkgPtf3Kt8Ly_KehHtb3ERkgf0fXvKL3F17cs2254CnLcTfIRWe9EhX3Vt_jLwpk0BUjBEu930mXQWULrigdfKNYrMfAl13R8XBnwLgFnuoGthIgtnveIe8eiO7xa0
 
-## S165 — Un contrôle de textes en dur ne signale que les littéraux co
-Rôles : dev, designer
-Date : 2026-11-14
+## S165 — chiffrée
 
-Un contrôle de textes en dur ne signale que les littéraux contenant des lettres (ni icônes, ni simples formats numériques), couvre aussi snackbar, étiquettes d'action, descriptions et replis, et se prouve par injection de faux littéraux.
+Chiffré : v1.MXGVLY8_PeozypJwpodnPuFOM7BjC7ln_cBNc-YuDnNS71E1y-J5N6L2LKdaDWpjiAV_bzP4_7Wxt8evlk2apP3iEX-KZBM3neXe-s2egzlijl6H3IRej-yEXwABnqcdSnqQ8UG9pwQW17KqvXIzV2AdxGbqDAqmguQZSEiAxoPrtHSjDI-tcWIAGqf_XIoZbD_hWi3YAgguvLNCZm1zl1P5FiBUjSh1RQ0QLUkWDwlGtpAwUExiZtQCeWfc32jw_6OX9Pv_tVdDusm7PQXvZwUsiJOpcdzSTfEdNI7TnKULbfRKv6Mlj_cdq_ALPBWMmrBPERespqNDaho6RgwxXnhd47gne7F2NaQ_l9C4W67NLP9rULwsKZ-Jwy8QC3HQ-FiGKxvOuWBxM7pq7VUhEcqx8mQvf0tD-2a0JmuEhn0aoF6VPmqzQ-wp7kUh4i6w8k-z1iF0hmD0GBaT7-0G7--Wk8BnE-rmxzyEJRTLsi03ltNXB59ijFL3wwFzXrLwDqvS2nlGcZxtAMl4kNi2AtxeZKJH9liJz6vJysOLPfP3k6vQ0o-W-pTqZkxZVzM
 
-## S166 — Pour une preuve de build, relancer les tâches sans cache et
-Rôles : release
-Date : 2026-11-14
+## S166 — chiffrée
 
-Pour une preuve de build, relancer les tâches sans cache et journaliser toute la sortie dans un fichier avant de la filtrer.
+Chiffré : v1.rxoGJaHFlQUEJwbKEkg1Dtutz-x1Ecfxal5QfmNOp_mkD8kIT4N1sC8wra84VtS63Kwi9BthPiXFqqruQiN-8fwXdF0OfooG8f0hUdgN7ouKJQJDo079r0zq0FJohYyJBgJIB3G-isR9yCdhXUDa6sAKxOqMGulHIXPPuxUHPZsbb0IGvqo-y9smUiXBwiAnv0gmcDJNQ_h72nDmf3tDEyh6LhViD8olQCBZXFeOf_VzkRCxcl1Xt2I8by_4bKiwkWNvgZTg2kV5cYuBELXHCnr2f6e1p8ZlcUWQHMSM3jUhytJRgXh7NOZVDXwvxDORMVvu4oRvQxWfOC_gi5ODzQLYiTgViR-iNFdUkQSKTZpFCzEIOWQIyoUSlzBEQ-0Xk23IX4ZnlhdL3M0dAWpo
 
-## S167 — Quand un contrôle exige un shell composé (opérateurs enchaîn
-Rôles : release
-Date : 2026-11-15
+## S167 — chiffrée
 
-Quand un contrôle exige un shell composé (opérateurs enchaînés), passer par les outils de recherche ou par un script Python qui exécute la même commande.
+Chiffré : v1.SM9tQAWHCixWWgp0TxsjtuQuJNfJ2o8V9zdWmvsLygAd7zTq_K2kGEAXE94-hYycukoVnmck3nUyaYnn_J-N54VkjvrWAoPk3IT_uWZt22NNrV7cISxrpLvUAaDXhgmIb3WgvSP4hQRTxy970IZM4Hf-FR7xItujAr-EXgFxSVj9PMPMaqo2HsAZoCiAEI3S940pQRpHoPu5BUiSA6lIj_b118joi-jdm__ng2BBwldocbO_SuhyA62WpejMtYyQyb-GWB_SXaOzxq3sZeNe8eM9zcwE01dT5gdgdFjDQ4xMinkRpmKJeuVm0YybjcrC35Al8C1h927EM_Ug2SFqweX0f2EGUP8xv99j3T1qMA-7FSvRUrYvKpxIFuKXyPxwAHiFhNylwksMFpJ3ZypLkcKkFWx0i2JVPNZ1KjBTrKVfiCDU1kMYJXh1PIe7msfyXkER-ey8
 
-## S168 — Un test de reprise après panne qui s'appuie sur un faux non
-Rôles : testeur
-Date : 2026-11-15
+## S168 — chiffrée
 
-Un test de reprise après panne qui s'appuie sur un faux non transactionnel doit modéliser le retour arrière, sinon il compte des écritures que la vraie base annulerait.
+Chiffré : v1.Lk9K9aK0c_MdiLqhe5H4FgpX6Dxcm9VRmr5Nz5LOrypur_sSplSJhL1xd_4kIB8yqhn6RaGFwGt0-GKR7hu4PST4CaTyYU_46RLxTfaRDIfOFmvInJCw2fXZzKBJyd_-zrWIqXIWfkmJ_y1LlkiXGk8EWgeYlGOiaD1zQkEKeJXdMUnDXdpOkZUGF9ENJivywzEDdL6cTQIsJusJ84I2R_jiOdmOYcLPFh4YERdAjyDTe3qfiQeJUBYRz-dVIiNc8VUi1n43QFvwHArjiqMi1sd1hQzUopgkvALIWvSjHAa9b7HtwEQ-ZJSZtUDX3QmDjrbl1TWG_Teqo2q-1SyuUgho0bcEL7LxvGMHp8AOIpQOIZN-ezpyUNfiSY7-AJpKo-Sd2cHzjZ5Agud1XhVy7Iki8WPTCksLMgwV6QUFrMcZDQQwSzS2c9hF3nalj5Qgj5K8o9t47hZqqfZn3Ag
 
-## S169 — Avant d'appliquer une consigne qui s'appuie sur un état supp
-Rôles : designer, dev
-Date : 2026-11-15
+## S169 — chiffrée
 
-Avant d'appliquer une consigne qui s'appuie sur un état supposé du code (« comme le fait déjà tel écran »), vérifier cet état par recherche ; s'il est faux, appliquer le minimum cohérent et signaler l'écart.
+Chiffré : v1.2McWyPfAN_N8QVJGxrs63UgthlFEZr8__UYHlgzmAbgpBpNQJrrJyaZ3m4pqz5AXwBu_ftCe0pH8Z8NvBav2LLLISiTz43s_NX0NvkWc75U-IrE0l6zzXOOjxTfHIo7jWW9rdkFRrG51l5Jdj8wOaN2MZ8avUdLtgvL7vk1PGy5KDapIid4IYggG9oCMY9BatYwZTypOYWVbd3IavchpgjBjzr21s_VAU9Dw8KaopulloA6BZsXxmbUsEcRbrOTttKYgYnZTduruMbXEMyWuhBt1tZ5r-JZkkHofygbLAW929PS8ofLChp77OruPsivMMweU8TqBSgpwkOtF12zT8wQGzo5e5qAi1NllE9jesKQVv8jbq8h5MigJyae54TOdEV6wqqkAyP_jJCfwXS1RN1uitxJL9eaSV0F_wo6VIu3LEmDB2kX0KuZuPCftcvSR8hjxU9-ZsOEMdrCzys4H1qFvEkMwj0hdkgpfwiPpEvZmtPP9L-mdE_Dh_WQ3Kvb2bF5xEuv1_VVHkzkkCxBiEr-CzNOH
 
-## S170 — Un rappel d'interface avec valeur par défaut vide ne fait ja
-Rôles : testeur
-Date : 2026-11-15
+## S170 — chiffrée
 
-Un rappel d'interface avec valeur par défaut vide ne fait jamais échouer la compilation. En revue, relire chaque appel de l'écran dans la navigation et vérifier que chaque rappel est passé.
+Chiffré : v1.X_p_HqGrQYFIsPu5EDVxA9tI3jFfZUw-sztI17Wpi3yyhypyVxHKDLn4uglyWDZbMEL3kZP1R0cmyGjfisx_pP1ScrQVgG25XUByY6MJFeRKDf5LAJFtHBkb8UvzD01LDTaXfOGdI893TF6ghRaZBluWu8z6BrTWKgYq2wFmVVJkB_T53na_gj2t7C2tBl-fI3uj2YpInhakFCwqcunEvkbfmcXRGuSPnwygJoczNScgWF07d1HaBiE09Y-y7pKHH3eFqxg4ejL3R0LefljLc5OBng3ulGW-Kwkw5HA9PhNi7P3XWDZIb-jnFhKCGdNKhnv6-KlGuY-4yVL9lO4XIkTWDgoGPjVletd61cFj06Kv5G0T0njaQS2aozIYvF5G3wSpwIS7VylibDhd0qtE9fAkesp8mPMkLyUOYipOCVWGzaNAyLaww2T2YmIrfO9LgIR3MtB1tL0-ReydvdpBzhh-26EX4HFjAg_ijOf21ursXEIRSA
 
-## S171 — Sous Windows, dans un shell POSIX, écrire les chemins avec d
-Rôles : release
-Date : 2026-11-15
+## S171 — chiffrée
 
-Sous Windows, dans un shell POSIX, écrire les chemins avec des barres obliques, les barres inverses étant perdues.
+Chiffré : v1.RJM4wDzfJ820FPT8kM0oaR9yWen17w3RKXe_MTwX2VLHJ4zF4t0qXsl0c4arAYGt0_NNgAxeXyiOKhY1xl7PSRISH8HaGrKNKRGj6ZinE4Fi1SOfwNa5jYZrHySRysmprhc4NLlTDTKOmV11eFw6dVoZDrLlHC51hh0h-if-rTFCrRYdJVaimbNdCbTIcQYKtUUh3NIFMi1mREkqDe2SzZvvlHErdrZbO77oIW8GKzZIgz0nBlTjBKWwuhNHQ2m2HU4W__STxKco1S_3WERBpOtPNnI0CzrCDqiDitxGEsHvLHbP3aeixY7sNEFK0p3Q5SVsdp92YF8ILGfXKCpWrCHZXWo5F8KIKy-hfeem5I568t0D3tOoc_lz81erxA3_gV5fldPP6w
 
-## S172 — Pour exécuter des tests sur émulateur sans approbation inter
-Rôles : designer
-Date : 2026-11-15
+## S172 — chiffrée
 
-Pour exécuter des tests sur émulateur sans approbation interactive, regrouper dans un script le démarrage, l'attente du démarrage complet, les tests filtrés par classe et l'arrêt dans un finally.
+Chiffré : v1._guZp1zfJFatp4WcUnepLGuthQKXeCDHjsPU55nvyGDY1UwMg0rnsz6aGxXQEign6jYqHW8u3urXM-nKU9JXi8D3PTQJabKmc6XPustPqcHxr9L_JOZU-IpMLfNJtQaiMQuP2pFuVnusf5ddfm2Yv3CpAqby5CQLVVBslKdFXQmhqRsa6FXEoOO6ku6ReYnjQVD2owR7U9hR2ujl_HzzFK0fJsns93fsE8bIkdXJrCwAZlCv8TWsgBzfDXrWkKqv7P-1KgEBXVx33e2k_n67q_j5btWYkocVX1Rg6umjXM8TpwgLN98EiXu0QxDYXENIpRkHkAFjTCzFkqVl9JYOTAhBYOGWTIkdL6QvrmTa3zXX1sWyGD1Dnxy9h3XlMnfQiD2rpcoOWWm4P5yCf--G7suQ_uXnuAoODzugzOpy4Tp4aGSyqOHoOIND0Km33_xMIh45OGRq5mh2ghagtzKyJpAhEovls2DSwP_okoWpCf16e94Y7TyV3-pSE6PVfQ
 
-## S173 — Un contrôle automatique des textes affichés doit parcourir t
-Rôles : testeur
-Date : 2026-11-15
+## S173 — chiffrée
 
-Un contrôle automatique des textes affichés doit parcourir toutes les sources du module, pas seulement le fichier de ressources.
+Chiffré : v1.2TdimSe7Zq2dvbLXifGaZFpQ32JJicHc9sZ1RdHmXNiyy3upQfQoBHRz0O18qswF_NsxiTdIy7KEDsUIDKlXwb_Mah9auhF4GO5KLeW_73snNCpDIJ8yAm_qoypQ0FzjgWRuHU1XbLVLJacOH0b0NlQUHILWCvmDZAj0vnn60G4wwuM5HBuEOp_32UnQ3fiXwJkMws1Vu30cGe6iAcDiGwL0mqo0mkeQOmUjeF4RnJxUNVwb0oHvteSVaZyKVQupDw3ohzBb1tNn7Mnr_6RAMht0C7JDkOvBwelcw4z36iskWkBjrcs12HPZw1T4crvFbQqHxCmLA1acsW9s-kjvpsTfpL6YVJ1vZLyQYE0ZtoYLFRBnl-Skxz2d_paWxe0oYr1rzCzwA5i_nE4IFBso7mO3EBK7CA
 
-## S174 — Une livraison déclare vérifié seulement ce qui a été exécuté
-Rôles : release
-Date : 2026-11-15
+## S174 — chiffrée
 
-Une livraison déclare vérifié seulement ce qui a été exécuté pendant la livraison ; les résultats de tests antérieurs ne comptent pas.
+Chiffré : v1.-1UqwQ6oDJS0kkodQFwoS5svNgQvphmvI33_dmlOJD9tGEjlpxgeQXTUQrU2-gAmzeno8snaNZIGiFwe-LLZ6PN6hohZESkCNDCrwg77Rm4Y5raN2G6aBMLsTPK-sgmKPY6j0s_hAXpVfC3ck2XgedF-LN6FECzy8Uc3XwZzouJE3ZowNtLR0U0iJG5zZYjiPyk2DMvxYRNxeKa_T3OYNlgvZ1IU5MIpWVLXGtYveMR1glmrPDz_zPF_qRE0NwpZlTiFoh76glZDTCde0JXuIU93S-iajb1ddFcMJBceetZb7wtpEBjs3uYApisDXn8-9RkNCEFuQopIepEHlStUEoh6VmNX7qoelCIfOJe-_Lg99Xq4qlw1zen0W8YaX27Xuw6cheWd-FLPxtV12Nn-FjV8nXngSDECL20uICbLKvwTgBXp-FKLcQ
 
-## S175 — Un test de câblage provisoire doit échouer quand la cible es
-Rôles : testeur
-Date : 2026-11-15
+## S175 — chiffrée
 
-Un test de câblage provisoire doit échouer quand la cible est créée sans être branchée, et dire dans son message que l'accroche vide est un défaut connu, pas une validation.
+Chiffré : v1.zuOe9-6sUH852G_02c-LWAWcFp9mQ1QUqrHLBfuBFfEYEDRGKxXNfVGdwNe08Z-yrs3rYqktYdExmnWVANISZpq5nyydSLV4HSqNFSKtuaIwLKZyrN3Eaj-UwA6WrIG8PsjPvrlCjl52PJBH-Y52TGPrdXERI1gjU_7l18ANJmTXgWUgMUpJqOagIX0cX2FqI6Q6zamZz0EjI68HTCnZZv9XxlZterfqyzojABt1rOYiVBCUiwkcjN9lTfVRArc6FQdxuuvgR66KHxkJpzDCXuGebL-cgaJVT5XhXWq9c_LKHBmRThxDBKeofKHIU-R3NWcFYjQK1J5IZT0ZOGZBaVNF_2LKjiWEH2Dctlma8y9dr9uj4Wb9izNgl-UKrX33PWIB6r6fic-D9VHPa72NwvJW50OJj4fkoFLEQBgTniEiyDQJQIDuMfNIUvYT4a2iKGBJznYEFWSUnDzQxUI4zYQuT_U1Mm8W
 
-## S176 — Quand un élément a été repris plusieurs fois pour des défaut
-Rôles : designer
-Date : 2026-11-15
+## S176 — chiffrée
 
-Quand un élément a été repris plusieurs fois pour des défauts qui se retrouveront ailleurs, revoir la méthode : inventaire global, contrôle automatique couvrant tout le code, test réellement exécuté, critère de sortie explicite et plafond de reprises.
+Chiffré : v1.OppzzRhb_TYuOpR1cIdh4TSHMZAlQCGkTJAB7kAmfOgV2zqD7B9iEiVtQ7tWVPZ4NfP15W5c1piavfydC2vArlWa9Hkjips_M-w2qeRi91Qc1Qlkt5hyjULh4wtcF6TZZnYkMosmk8_Z2KKCCzh4-TKRBIgEu8WbnZ3I0qvL0Z8X_Qf3jRWwWAKQ-p0YnNiQFJPbfoHPjseZdclk7-MKrM2GatzPdHw9lXABweTHjGI6_evmx5XhUb_iTGKjPXjQdgaPXk_qDyY8D2MgqJdG3XYRJ57IjLHXa7JinZiGfOvGjh-dwXPuOb8WsZ0Iy9ohvWkenQdS9AfNv9Pk8OLvjTTrSjIGi1bQymNGlub5_QdZU5o2Xlm5l7DTHYHzOVZto0AbHrOuRbu6mONzc8HcFqsYokRE1OO6LDo0DITd1R0XsrALUwfoyKf85brDahxCqJa6ax8Fe8vX6RVD1arYw6xvVUOfi03szT7g3mdCcIE9MGenvIVd3BDq1VrHAbtCNjkNqs85viM4CTCQ3UnIW9NhORbroWvZKtdfD5urDRg6KIpVK349GWDagyQG6GEyiZ-2_F9EcZBsgriiNhw
 
-## S177 — Un test qui accepte un point d'accroche vide tant que la cib
-Rôles : testeur
-Date : 2026-11-15
+## S177 — chiffrée
 
-Un test qui accepte un point d'accroche vide tant que la cible n'existe pas ne valide rien ; le rapport le dit à chaque tour jusqu'à la création de la cible.
+Chiffré : v1.hvFsSqnuy_edlKqbcZriNlsi2drJmmTiJwLKqNzFp6qkQU_S_Y0g8MRWxnSCWs17vXeNlUmtCP4o3HbIQxtDrWoGMWW-XQ2b8DKwIDB4PltC-OGjDzzFCrdrTrC2-ELUExJCTtQ8UpLbitQ7bpT0M1mFBVeMnMeumG6RtPh1UBAXGv9vATpcbZpLbzScQMTNaWR8aZs3LeKPlwf1VCW1hR2F9-SevzHWoYC7u4VQUHXBfBL0bpCx3plwVxYN_AvPi8FyigaMoFCzKrHI_FFvM1NHUzQi1jysavHF8WsJRjZpT_zNan7-8gapeI89F08bQe07MVVWIjtIne_t4mTplZOOLrOv18kiWBmg4pNA0dE4Mn8Y2S0t-VCh-Fcl48G06bEVMkhenCzL_X6v3raEjavpmG8f-9ZlCwbS-mNRnZs_6CmQSVY70hb3NS48cRn_pJ4
 
-## S178 — Un contrôle automatique de littéraux dans les écrans ne voit
-Rôles : designer
-Date : 2026-11-15
+## S178 — chiffrée
 
-Un contrôle automatique de littéraux dans les écrans ne voit pas les textes portés par des objets de constantes ou des énumérations ; les inventorier séparément et déclarer la limite du contrôle.
+Chiffré : v1.nxI1oLFL3Qb5J2kRPB2-f-H_0D9X-bvSssHhdo8UBUxOhaHPzfJozus4ISBCsoOYEdvTC4D6eYfQmEu-O4nPHKEzEaOmdwfqg80mST-V8M50pMdTky9bFyHBM1M__PhpCU7aUXsnM-TNJR-zSSKk9Af8h1FARLPBUEh5BPRP1V5AEDqc4Lr0yDRS37JSFfOAASJUdsUm6xWSr6j4vmtL0QtFb4wpQtayUm-bDLMpNyd3b1b38tZPAokHU0jNHbMP0kOQ_8I3VPdT7_jefp87Gs08lUex4BL3LB9_SSeeg5yLI7gCwA6ksY87ZDCiQ1XZ10R2cdKET8oZUflpbwIveWBozbQ9Td1Gfd8GYLM8cCGMfrAuXrRAbv7MK8HpvI-ntrGmN7y5iWNLYmMzT6TyDEDrbQTziIWL7srlVc_RG5a1kU9NuMz_oBu-RWs1qcvi1WFYpjVa504sdlIO1-AI1kR1zU_aBvBANwUE3-dxMJ7eqjuY57Sgz7-z9eHZSwTPwdYq
 
-## S179 — Deux fichiers de même taille peuvent différer : comparer le
-Rôles : release
-Date : 2026-11-15
+## S179 — chiffrée
 
-Deux fichiers de même taille peuvent différer : comparer le hachage avant de conclure qu'un livrable est identique à un précédent.
+Chiffré : v1.Hlgb2b9AtNBpKpS3k2MDegbh2K7iRrnnD7_zGDWbF-utYfTM3Lx_L5Np5yL-mdYV6nxXolG1R7V_j3V23YrZRMb4FFt6pFYlVh99lfyZOZ0H78w-vR1ecMrkiikXmBNZeKZIJZdYfzowWreZ7z29W9JaqPtMHpruJEDgSKjIYYRja3YA2CQNCdnsFCopmw_Qfkjnr2MtD9FwHIa0ibttJ1oGdt0lGNRsFU8YDRu9EX6lufn-lzaOnezCFSWZbajiDhH17aDHOietQyJzXNACEl9KNcldtofO_pn7JO41734RQq9aa10q56EMVmTP_BoN73-amCJ4_px5JD8jmGdHMgzVP9YY9shGvVIsCi3ansqwaAIQawr4Xk-po64l9UEwYNelkYtgRqShXIPe_y1vfPM9wZAcDyYc6x0
 
-## S180 — Avant de reporter un point ouvert d'un registre de contrôles
-Rôles : release, testeur
-Date : 2026-11-15
+## S180 — chiffrée
 
-Avant de reporter un point ouvert d'un registre de contrôles, vérifier son état réel dans le code par une recherche ciblée, et signaler la différence plutôt que de recopier l'ancien statut.
+Chiffré : v1.bE5BFkmKsAzx5QHCsIXqbXklchyLC5vlkM3nZiRBIMtSJMW-V4JY7h27OYFHFOYYMPVDp0bMFHaOaa1aTJ8ZSIRYRQjG64e5noVsU6iXb2i767N3lTbLvfGs2YxckeAJL89Z3F4b_XW-XXPSYeDnMocT0DCFFqRTrTEL7ysHR2f5lrZTdziVhaWfOl00ecXTWJR-aRB-wBe4XwH-jQ_pQ8fsmrlFTuRtJj_ArIwXCb8iiK0ear6gnDsBgECFMQdiexPITeB7n9ZmyNv8DzVKN87V69eQ5ZC-TMIgQA85OtKDAbxF-mNjebv9cn8wJmE5lhKbyaGZ1GSTbvPberacYFL41GdZ6B31vw60hUw1PgjZBTXKWC1UgjmFJ-MLFhjHPqyPEPpAbaPRlF85H3Oz0j6iBOs5ZsgtArtXctjgFjW2Ni4exvdKUEOBfcLbZT7PkK_szWOAS8Nape5GdirD2O_YWftoG6Hy6i95qarwOIMMiykBizaHmo2eCTOPa4n6Uvk
 
-## S181 — Pour un inventaire de manques, interroger le registre des co
-Rôles : cadrage
-Date : 2026-11-15
+## S181 — chiffrée
 
-Pour un inventaire de manques, interroger le registre des contrôles par recherches ciblées (TODO, provisoire, à venir, non réalisé) plutôt que de le lire en entier.
+Chiffré : v1.Vq5fATvRd9GgMFPT5xGtCT1AUL-vZvTYlZfq1sUUKncew5wE8EFh-LcuHpu3rA77tGPvdXbSB8cNQIlzciJFmasJLcOR95KgqvdHe845jRcCckTq7kXkaNQB_2hqEwtIbXTsTFl4LGSHdGGl0xNukuxwWTAbA1M33bx7HVWGbLGiiSr6iIZujweu1iXbowU-cu75HTC29owVkpGAxw9styuAPpKnJ8PLbajHwm3uFouOP_IofwPWsEPm3GXjNFFEMlgTUUemDeMgbKvJWobdf6tBWWXBn669-TZZQVHIeDo23GRMc2-JHPhrkdreuYQ3jpFvVK5QTaYcENkA465l_LTpYXyJMyYlExC7LjbeNOgjhhTu2HRl6QoZ5o0lr7hwAgJU0RGm91KAmPa6YaRkTmuRSaqJcy-LJH1LsP1TfzRx6UIAbX02tZyNERtskILtY53QZI9Zh6O7iRC6
 
-## S182 — Pour ajouter un état à un jeu d'images validé, écrire un scr
-Rôles : designer
-Date : 2026-11-15
+## S182 — chiffrée
 
-Pour ajouter un état à un jeu d'images validé, écrire un script qui importe le script existant sans le modifier, puis vérifier par le suivi git que les images validées n'ont pas changé.
+Chiffré : v1.gAiTO00xE9zygy7CM0x_vR1wSsDx3ufJXm-hccMTq4tLoOIc5tnulh6fKLMRHa0OI_vLRmtJ5HLnf8Yp9TFR5F-czVxroZv_xF3szvjMpOgc-_2KJDewJvrNHV8PJ6U1Hi6AwrjpN2Rrb8sXfktcJxiJfXo02yHEl-NlFGjIvHMd0bK5wAythbP5oxAZvjX_HG2FCJwSk2nOnpMhnRyvb7-DCImzpyThTmdbjQ7BP3js-6OLLP7pTGajnkhP9UxEChTkAoBwnKhREIXYk-QU0wI_LrFXuh9pNqZ8IQo9NyyKPonM9tUoxX6rxuPKEDOhu5Ll6LhGvgFFK4IBgq7yKXujLgMb0S1zJUT00lb-TD2a8avBlume9Bsalhwqbzq4HJrA9tXMRyrDBTqv5WCLytbDGhqbR5VONYY4Omd8wNj1juuAoMpAkDO0a-RFp09xRpO8QlJ08UAlzqf8vcf5gWEFGxmjOlN_Nklzfm50BA0rScKbDAP8
 
-## S183 — Quand une étape de maquettes porte sur des tests automatique
-Rôles : designer
-Date : 2026-11-15
+## S183 — chiffrée
 
-Quand une étape de maquettes porte sur des tests automatiques d'un écran déjà maquetté, vérifier que les maquettes existent et déclarer l'étape non applicable en une ligne, sans livrable vide.
+Chiffré : v1.YpcB5qkV-N6eJdjLBk1uumDjUj01tfSRHQwhj3amRoYGGVy-5VGzlHk0GWI7auZbdZ041nEX5AXJ3qEtaRvXNb13LK3t70gSjJe3a15fR3_-FrzkzSzMLZJul6D30sROyCHPJ3k9RIa9a8wLu8x3z8_cK7s5REPj_APMoOH3s_JIJzNjWDLdNU5M7zbu47BymQQ8soVQZwJRwh-RUoqfvRJIGOC0lu9yPqeSHWWoHDu94KIIkNpVxQvyzYGleKtCSvw6MTh1sGGJzZjGkMWhygzhVX0jU05OixqOmF2NvL09L5b6mOYXV1jl4ea3FBaiuJ76D1PH0tt2DrQIHDg2XrbnjYn7GLZwxKyr0mpNzKAezkzpNXNEi0HWDptDbZ9S5KeEWiINhpd7bd75xoIfKESOxaN3QjbKiv7yc_zpMa9dKm_cmn61Qg6EiOmKAEgpFxEYDnOim1oc-tQayFnQgVl8zph4k7qfSsF1Lndq1fa44bnXPFViw6WeTF4
 
-## S184 — Quand une étape est relancée parce que le rapport n'a ni ima
-Rôles : designer
-Date : 2026-11-15
+## S184 — chiffrée
 
-Quand une étape est relancée parce que le rapport n'a ni image ni consigne de validation, relire le livrable existant, vérifier qu'il est intact et rendre seulement les images légendées et les champs de consigne.
+Chiffré : v1.69jxBhet3NNwYc6GatBfNIbt2cvmRScw3LKt8N1j4TE2zHG527RyRKdvl-Ch4D-eyBsoyWspZl_MlElLlm66PUe63ytJGxND6hjpLHQgHKcBiFJMHl6-peH247UYih7ZjIwpDjcHJYnkn_1t1zu6MsroPq4vWd2PcZmsol7spEdMdo6Au5E2W9tfOwh7wlU5SI9OzMs71Pdt2iwx3vcdwUbzHg9hYly1LDBBWfnQ_QOLgaxSVYE3N9xYiJYp12uEKhDh0zNiGYCOt0JrkpMlq3JB2-s5pdh5lFyTbUXcZHsYfQmFyNPlc5Nu13V4VAWBuXPmTZij0LTrpTd_hoUrctdaYBC5A30QftI_BzAEcxtQKRHUacZYSt15Qq-jOlZNDjMJ3_WAajh-Qhk_04jfUNxPqVSNjjC79PXL9ZZiDacOihsz8pjw9-e9RGXVzrizQRgy13xnoUuvZjIW00EBUEU40GZu_cAxtzFMjaDJT93sQkbfr5t-FgKeqYvV4YPNyaTq-JArTG3QClkeV0g
 
-## S185 — Quand une étape de conception est relancée uniquement parce
-Rôles : designer
-Date : 2026-11-15
+## S185 — chiffrée
 
-Quand une étape de conception est relancée uniquement parce que le rapport ne disait pas au valideur ce qu'il doit juger, relire le livrable existant, vérifier qu'il est intact et rendre seulement les champs de consigne (ce qui doit marcher, ce qui n'est pas attendu, conclusion), sans rien régénérer.
+Chiffré : v1.PXiqhN_47BcaNahjMCOOtceXPStPW4EWd7o57oE0n-xRa2QpHsZUTTAgZ5jdCUYNszEtBq7Owvu_vyswZEbmj4DdNAWhafXTj-Jw7qAsE4tzcizF1yO302aJfykkLF9Pyacwd2brE3Vnc6niqrf7Zl0bwMgm2D6bMSAdoc3btOeH_It6s2eYQefPlNkYaLgRMOEULK8W0xv3IFGevNICiwuXvM2frAe9mzd3qzV0zd-qMOYgGA5SKRntV5p66vD12sMs59p-DBu10r197JlenNuxjOTLTLgXlK6CdL6DH6wB77_MhvHDShkv6CLbZtFyYh-DCvtkleRt-45syxVB7Rnazk6CXDN6-lnofxnCSwfg6qPQhQxhLgHFhEg5bDNHemX3l_fPFo4Zf7cR5RNRcfl6vPSky71_D0tZ-ui-paI8xWjfN6FVrKe2xT8SlFopnbp4WvTNItDyQ0ZH5XlY6HmrAZXiC7FtS6kgay2Lo2KaBd_-fbYdwwMRGgJUYrY3YfTgDYn-ySfan7CiXQmsOvzAvS0jYHJRpCcaTQwCv4m1uhwIGNzoWjOueN47aJXm4OoHJkZ55onr1HgKYRAFxkMtPOQ2_oDFcg-rshtaRBpOYtigaYU1Kryl6zDm5uSglkmwDLamWw
 
-## S186 — Quand une étape de maquettes porte sur un élément d'inventai
-Rôles : designer
-Date : 2026-11-15
+## S186 — chiffrée
 
-Quand une étape de maquettes porte sur un élément d'inventaire ou d'audit dont le seul livrable est un document de statuts, la déclarer non applicable en une ligne ; les maquettes des manques constatés se font dans l'élément qui prépare leur correction.
+Chiffré : v1.zbLW2et4IK-q13CIo5xV3bh6YqkFw7qmUUo-23kLSikq99M_ePmzVzphRBWcCOxMfSjJpXZ2jH5FuKuUOySksgFA3IOIdWTu_twX0IPcZsZZUZSIdlRY_-9EzU-08NIq48wuCjQdTv0hELQMoaMpW1Hr3DL3nhJkB5VsEBLiaruLShwqXxEZncjhnqZmrgIfLBYYd94ZkZ4cQYrR3rDK0Jt2riKU0HAQ1Q5EAFfp2Hr35AEtiQiXIo-3yY6G4ZtYlDgo767Gp-1NIC3TkQEfxsE-pECVu4F1hQ1LS81C7WFj7wF1gpB0ocOsDflQvb3F_I7m7NoqfNy08xK_aKo8HJTU-yHqstShPbXvB-oXCgCao60gHaAKs7AF52M42zgNuxNzzXxK44Odv5I2aCyQBYgmvf3tlDPUhvdM59Je69pqUIVl2-lUv60qRGo2gwBooAsYhXJrJ4Yv24GtIBRxXpGP5Kt2P0awlenpz_B9c7MVfnU1-oSNPol8XAMNwgJ2PkDnL5QBDejmYqIYfp-j3IiLKMU-C3ni37EqOTGr2XE8O0xQFNpldDhEnPQIWtUodeegVTg2weGLQb8
 
-## S187 — Quand un élément prépare les corrections de plusieurs manque
-Rôles : designer
-Date : 2026-11-15
+## S187 — chiffrée
 
-Quand un élément prépare les corrections de plusieurs manques, associer chaque manque à sa maquette existante, déclarer non applicable ce qui est couvert, et soumettre à l'utilisateur par question à choix les manques sans maquette.
+Chiffré : v1.sefkdCGFbNPS5ZIqLHkaf5oaLq3RKnIbkTysc_BJf1InhLBfx7fkCT35urEiu2lbBZlGwvAnvTG_4qKYGaWLNK0r7dEwgVwVEXMf8bxIeWEznWm9M7A-jriE2t0U1g-z8tRWc4o5xcu3rIBSJ2x-Bt1crgiVxLy4bukgric_4n1u-3XBWr7RliegP-KuQHxPIXA_z4LfnGa7U6ZWPbg67AGuYxEQoVUZy16lmx6nolC1LtBuYriWIgXLFG035gWWbgxv5tSp0vXVEulFyKGYzRBhHgUTkkBZtwuLdi6Nauaime_wiOgpobAa4aB14zrfasKmff5TMvjSsLjTXOSxUQVtPB4mQmWFYoGh1RuClMjINGkSNZM_u40kwJuluyJiQgC_jsXv_pQVXQeYvSGoWLTdrd4xGt7Q5lbah5eOqms7aBQbCbq17MLhkHcWQfAvHFuIHdU0UVf4vTULTty7IrN6uHjTsb0QJ0cETD_tXlxjDU0x2T7zajaBKVQvq1Sy2irlKMSd7L1cMsg4OHweTAA96z6gLUwhI5AQW8QIZKYDqpz7
 
-## S188 — Quand une étape de maquettes est relancée parce que le rappo
-Rôles : designer
-Date : 2026-11-15
+## S188 — chiffrée
 
-Quand une étape de maquettes est relancée parce que le rapport ne contenait ni image ni consigne de validation, relire le livrable existant, joindre les images déjà produites avec légende et rendre les champs de consigne, sans regénérer.
+Chiffré : v1.4Y3oveSzLI3WslaKjOJil7PYfpa_0Wsnb3ZOxes6N9E6Pu7HA4nPBWedWxdBBrFQLlZnR3eUJXMGBaiqS0P20NFHD2DbGpkEvBXCHDkdA0rve2m4upOXroGPCFHiv2ASprPW0rZBvnqeQR6cv5rcPnDhJRDRUCIvkoN39GI6ZGdOKeJKswwret87WrkbqllLBzkMv2uh0hRYnbN5Tz7_KuWDq09c3m2ufGHsDYgC-GEKBUgkNePnLdHY8-g8Ax8-Alclc196m1LpIsCXc9GwvXIu0Y28MyikPeVL3LdvRgjMSQNyYSXy_4UstbgmE2HGPp91xqqb4u17fZ0pUQrtC972Ld6BOyYr0F5HAVeK39Y7602TIIiiEQndI5JCqtlYt9RiJ0g3p7mbQwvt6s9gwlOOsZikz0uZQ-y3fss_mrue9x-2nvmmq5C4RZcgoN_f_2jm-561cTzNGbs6EFcrH3Dbwo-Q_-PA-Q1fmozzLFMiaUWAuijRVZoPIq5pTqug8KuiJWu5crDo_LMm05udd-Mn29KRPAWxzEFHRF33ju95TDj74lGFbMo
 
-## S189 — Quand une étape de conception est refusée parce que le rappo
-Rôles : designer
-Date : 2026-11-15
+## S189 — chiffrée
 
-Quand une étape de conception est refusée parce que le rapport ne contient aucune image, relire le livrable, joindre au rapport les images existantes pertinentes (dans la limite du nombre autorisé) avec légende, et renvoyer les autres à la fiche, sans rien regénérer.
+Chiffré : v1.JSk5LmBJdoUj6BVlvYH_qSjK-jWvkr2J2F7OsOPhQ628AMezMYwHw4TgNmCcdDfWhX5xHpvrBryYOnKhqNhcot3_Z7RgRWAs3yRrAf9-w1q5nBuDnSKnnks5FRl2paewEcB8af_V1JqTx_0gv7cKVVZbLHOrkntN7QATerVKNIB0PHeGVD-wZTzxP13JTdZxa98hdSgmc512YylNzkbYu5SKX1Zo9JOEIgOtHu9gdDtJ31IHZ4nJ5VcexL43NrK5mRjEx_Pr5HZleddNhvc2FLlxVoPDfG1O5Xg1YDrOB9Wg-nISCMaGNTfk9JGDsxV2BZ-b8goIam8HsEdMJnWA0FZg-oNEam9Tb2MsPvUSL1Q3FSCcvY1Q9f7g5HOLc8-rfcub3QQakt2pu2X8i__liovNdvOxt6cUtVGK6auM31hd5Y_zNOgNEpQT6w12TnnJHjuB_lVcFAU8Rdz9ilPmGIcIIXEaKmc-MjP_Kqy-OpKsw4G0v8mWZelWx0kwfDhpTKfHJFvVQ_mQnwq7KTbincWXxH5RfLtELXJN7UswN5qvQle7nNngrM_9mhoUD18Mgo4vg82DERCaPEApxUhWJvqOH_JCRC0
 
-## S190 — Sans interlocuteur, quand l'accord de l'action figure déjà d
-Rôles : dev
-Date : 2026-11-15
+## S190 — chiffrée
 
-Sans interlocuteur, quand l'accord de l'action figure déjà dans la tâche et dans une règle du projet, l'exécuter au premier plan et signaler dans le rapport toute fenêtre éventuelle, au lieu de s'arrêter sur une question qui restera sans réponse.
+Chiffré : v1.tD6exGHR81diwSUBdDhc4BnmLz2PmPLaCoitF44khHKaLCOKU0mz_ftwp57RrrEM0EfTUwR55O0HLfF4s0oZVl8s0JHc0W9hJMdZamy_cXdfQo83M9Ew7xULNeeqajf49hnX2t_aPB-blugXPmdnIzgmKxJ2tsdUwNlU_lEmcjh9Znod8BBLcQHccNFfutS9k-lws_NpEvIIF3bJ7O8IUhLIvFvyomXwvNHZzvUrjY0UeluKA0R-eJbcDuZsVZFo1JkNcXkk1r_MUTcWYcopwyyTBk9e2GZoOPKxRZpP3nY71FuXIaijmU35JgrhtLoHKv3JoPlSjPVgunOdPsJsDexwGObD9z9124GVZrPSd7xtH8utq-NmSTIfltIE9TT_V-uwm0FpHvBmU4pRmpl4blgFyzO_Scy6eAnYHiWQD2QRJ3o38ytsgdZoX-Oqp4q9ja9adW27d1-HfvVeRXcVF6MrkPTAOZTentewpfgv9wb3hKllEfmaC2uWOmsO3Zk8tNEIHp66626OaLHV7Nq9UY_5gY49hFswrIMq_PHfvRDmLdiXTrAf1CYlgjIUaKM
 
-## S191 — Quand l'environnement n'a pas de quoi compiler ou exécuter d
-Rôles : designer, dev
-Date : 2026-11-15
+## S191 — chiffrée
 
-Quand l'environnement n'a pas de quoi compiler ou exécuter des tests, livrer les tests en les déclarant non compilés et non exécutés, avec la liste exacte des classes à lancer et du résultat à relire.
+Chiffré : v1.As2wnvX02Mbxv9go_flqtMVeLe-qo-XCXfAXN4KaZ8vhQCX7XCoEIdYoQauJv6PTF7YpxdnpEQ038X39CFT_tY8bEjj6uzZYeBlQtdjcWlqtuWOLjVwAZv9mFLfaCOepV48f0lQC3e0jHfaw3mKjYdB1fbMQXVRu-mgmX4QhMwneUn7Ap99ANoXvV8ih2XZMtxfutaHlAj3YJ2kLSrI5wgzkkIkCdMy8RiAaDL-qBzNuHM0ZH6__23hmWGBBX8Q2j9RJ8UuG6jh9sm45PGWMnqGRpxrtErLB3LaWUu3BnVcnQu2c-ft6cUv4Cby8YiMfD2B6-Z9sF_ozdbyKbzc3UMv31YZxJXmTYxhuHq1iWcpOP6nqHXEcdjjB7ktwD40klQ_iw0o_T8otfym_YJGJ-cbljP-lJ6AnXqWZICbtfy1GZHV9q4NEHG0H55X7LLLY_SH06oweo6dew0h0TBQAMZTVdrxZz-xAPyflVQdaCwGupQW2S4VCClnIUhPLveVbhkf-Y4kzUUAg2X8
 
-## S192 — Dans un inventaire de statuts, distinguer l'état où une sort
-Rôles : designer
-Date : 2026-11-15
+## S192 — chiffrée
 
-Dans un inventaire de statuts, distinguer l'état où une sortie existe de celui où elle manque : lire la ligne de code concernée avant d'écrire « absent », et nommer précisément ce qui manque.
+Chiffré : v1.7G3utkCIhkp6_fztfGfDrOeE8g71EoTn-ENWTjkMUrt4SS58Isog_F9oCQVZwPHqPaeiiixDcUoLmUKbhEVvS9t0IkRnwthX0n7Z3XTvV0qqHCwNND0cS4EEjPdOrtxDWQv8jyMJ3Vz5_40CqCRp7ECYFli6t31K9ZiCXaRR8NAsZHyG3-PiEzqZ_lpDtpi7DIBUUb5WDDXUhWq1fo-U0UGGoMmumJXU0eobvJAQ2R5dMLv2jfbte5nqciC8FohZFjMiqNCrWDmf0LcbYDDtYHGhPcaHTHolznEVkC_egF9kwXJ-729higSfkuiYVPpinuMsxl8Sh1F2KglUjXoFaxBHtSPmU5pYzmA7xqYQwodTDzQlQH3Sbi2QmdpMnQ27cZy2_bCZdcDnKDsnwv2uJdf9Oe2bDS_iN-jQ0yShUUtydy_WxfFJBNi8F9s5Jd3dKk-ITCqqwq9t5BsM5835FQEz1TjT_QSR_A7ZwsSjPsJxmTmzTDku_8CZB6wQ
 
-## S193 — Quand une livraison inclut une étape qui ouvre une fenêtre s
-Rôles : dev
-Date : 2026-11-15
+## S193 — chiffrée
 
-Quand une livraison inclut une étape qui ouvre une fenêtre système sans réponse possible, exécuter et livrer la partie sûre (compilation, signature, vérifications) et déclarer explicitement l'étape non faite.
+Chiffré : v1.5GEnSCYsQs9mXnbOCk8oLQCbl4FPpHOVUZTE6gYubuVYgA66XZMzl2q9POU7VUZZaJcmfEheI9Ss24nDS9kUe4bGW0-jntb1RBr0o02NE3ravN-ec_0iM5Zwed-WYKAnhK9Xbg4joVATx_ZwzsKgXz4CFnIsgjhLidXCanKlczN1QALWkGdaEO-8_-THdGoUpR214sYewjBCoW3Mpt6ySzH8mMA5EtGjpSy51Zwm3Or_ztpVUkuaj5i19r-Qy8Vf5Mmc5MFObp7WcE9sJzQ-3azbAUJtREUQIMgslA_qC6fsA-N4z0FW-rYAG95x1AIKZSMh2HF9M-0ozbat73C6Dymi7nTdNKOt-Lui6UXGYI1Go5jQ8qNQ-56wW_mTAiGt3U2mZFesQRkd8TVDYk6DkSZv4nGyNS6vbThX9FKbuiTrAFyXYz1fKDn8sCINOl69bpKd9BvgM8Vo8VTwF7he52rNQ9R9azMTmgqpeH1NVp5aJGK99Fjlsb_tzXFdMi_IGs6O9riTs3kb
 
-## S194 — Avant de rendre un document de statuts, relire chaque ligne
-Rôles : testeur
-Date : 2026-11-15
+## S194 — chiffrée
 
-Avant de rendre un document de statuts, relire chaque ligne contre l'état courant du code, car une décision livrée entre deux tours rend les lignes fausses sans casser un test.
+Chiffré : v1.0fi2zdpA6s48cxFSU7pOvKSxDsYXXUYmAkha8lHi5YbSkhTZaOz2hisQfxRu1bs1e6zQVR4HbBMtoRwGJMut7mDH5VvT68Xtv_SZH_uxvFFSPnJlNkvu1LalfPhW0ftUbkFjq84hNAuiJ6RwZ3QW6299j5x_Rln6TbcyJZTndmq6WTR763UNKWfXcaqCOYEXS9jLbOUcxrH7UcsUs8mdK97-_MztEC93nUfSjM69BG-BrEhJSxNyWctMvhjI7DErS_rtmvJyH5yBy38a5y4opUIXafCWIj_cRrO-KYTQ37vlrA1515ypk0J-uhWppHcTkLLR__jyzeDxWjQwnHsAdi7G1YAdkp7TUFk2xPM_qEWq-cD3AoyrL_IGbcIeXg7pJj1qr8n6sry3VDu4qRT264ARJ3vtJIbhdFy_AF011ciXFOrxhZHPIpS0ZsMVTx7czMVR5hwatlre-r2ulg8COFlCrdU
 
-## S195 — Quand une correction remplace une valeur ou un choix périmé
-Rôles : designer
-Date : 2026-11-15
+## S195 — chiffrée
 
-Quand une correction remplace une valeur ou un choix périmé dans un document, rechercher toutes ses variantes avant et après la modification, et reporter les statuts qui en découlent directement, sans toucher aux autres.
+Chiffré : v1.KAEAfuxpCoXgIM5k_KlphpBTZVzIfN4UqZhzO2c6mL1bNGZqQGxd6d1c9qTk9vlBUOQly_1xFHq-i3DY-eReWfvf0SUEh5hSxpU8Vb10cvqjD2xOxzdOhmqQt-A9ztqm0hmuGprN1H7c5NpaJEyxNG9zzE__5AEdI47YuGfRDBcOIHOrtcpPP78SV5q2W8xGt6RbYJ-qOMDI6NvKt2zJB4BTOKUCXBn5kvFT0Vsf3M0wELHweqPM_dc7kNDoQYslF5uzZobQH-52qnCwVN5NliotT635Cb0LPbb-ZjkTnwAtUfOJ8dKwaPpfTwfkiVtcZA7ktgj2_EBiBDZBdFs2b4XjPD7pR0yn15ChUSzNK-Z1TdrGqYLi1s9hpOlL7IEwwyOWb0l_kid0NNiga30cJZzv1Fls1Yl1YBdVJ_ZDs9HR6BZmrs82kKXXDj7jVtbCnxFMfHlvM-9IQaljDyDY77KiX_GddsPt-oslo9DlLxCy1HB9WmUYsFTzgdWMmcAOL5Rp6aMyU3-LGRzwv2mfa-Aicfc
 
-## S196 — Après avoir reporté une décision validée dans un document, c
-Rôles : designer
-Date : 2026-11-15
+## S196 — chiffrée
 
-Après avoir reporté une décision validée dans un document, chercher par recherche dans tout le projet les autres documents qui la présentent encore comme ouverte ; ceux hors périmètre se signalent sans être modifiés.
+Chiffré : v1.vHxg5l0i7unloEype1yEYXvvDczOQn528O9k0tZu3VnLOdaCnXhnRhSQgRLZxF_gL7uBwK6bfc_Fw9tkIA03I7BsTgSr9O6OUSpNmgDCj4MHgndqGh3Z2CWqxoF6xju6XCFlNsaZSxEdwA18GQbm5JtP3XSJ_s-we8BOGAofWgtODgXjd2I9dvRn4_zAq9xasEgr5Ls1kpbxu1kAU8DibD7tsLTXTyhj_rmQ0w2jJk5zwfNP6byn8W_Nzfm12_YhDddFBv5mm9DgeV36LIjvrnXwXEG5PU7ZRAbG288Kw7I_vgfRuYOYykrcQdNYlei1PKmvV0D50LqiibCt5yCeTh2nzHJwo0MbutZv51srvaxd1wwRmXuBZHXaehD7fPnC01AAURRzG-MI7K-8jcAgNuoxWNVE_lHQ_btEZiuei5c390rVbygHw0JP9Sgb_5w9vUWd1jD3Ium9HGsDlH5hP7A3hwd2qTvWjbQYPp3F6vo8awTZ5EhucsggV5o4xYDarZY_QtmtFS-QwTfwNtftDJ2vTZbbbl1q
 
-## S197 — Dédoublonner les fichiers de résultats avant de totaliser le
-Rôles : testeur
-Date : 2026-11-15
+## S197 — chiffrée
 
-Dédoublonner les fichiers de résultats avant de totaliser les comptes d'un lot de tests.
+Chiffré : v1.YiWs_5QVDEuCnCIZMOKRN3CNDtsCUtXWv0gauO5kIOV18ZeGJ0fa_MW-NvSv-h1AeUvefhBrkO-U4wU_ZyKEXRBRrHQlWCI9AM5sJxjaCmDSbgBapSqg5gQwHRmAkcdNauDeioC_S4gQv5D8xan2V_9_LYcEUEcRuyfPfu_t9fZxNCA6qSTSqThJw7GU_lJLt3huepdwszB9bJESeg86-_EOPDDdoNyEt-b_GTsrknSdtayc9alqBWdd0EK5kFYF-vkbJ9Dly7DQzWeohXizuey6ZWGwrrAzLhH7x__my1oS_J8q1JgNlY7qazrqtzr5ml2SE31pdOWV-gZQxjVMZtM65IHpU3U9JD7Msb3D
 
-## S198 — Avant de valider un document qui cite une version ou un sché
-Rôles : testeur
-Date : 2026-11-15
+## S198 — chiffrée
 
-Avant de valider un document qui cite une version ou un schéma de signature, relire la configuration de build courante et lancer l'outil de vérification de signature sur chaque fichier livré : une livraison ultérieure rend les notes fausses sans casser de test.
+Chiffré : v1.X8Pby2YzVu_gPgSd9oMWnezi0kQfJ9F_nopgbVY17Re_KRjZ6yH_yq3jTvBhiwTK5X0fvuYRQ1tjcn20FlW4DQMac80_DXGTTk2JnKLy5bmR9eIfecgXc0oBQ24MPpHKV9r5iP1jQpD1cnip9KHg3zyTxfs8Bh8GwS2ZzKkpUxKYjAz3LFQhB4_5VBZO8fb05UjMmtRxnR_g2Dq1jg9pHIQgq-ryQ9oFzsylRMm2-rnz1ky6m-CkvmCIhgjn_ZOpF1aTTqRt67jcKbnkPs73Rfi1VgNUs8fsSti0tXhGJitRzvUZhvQdKzvCWvunebjiuSs7hc_FrDaQgIIYsBgzvSVbpkU6lDPLfZmxqUDc95raOExZfMSRRR1FnzVavZ2eeJc1gxi7TByA_GnsPLIoZugZJuPm7xkm5KRvy03RC9-YzfyHOjFcP5nuPxhJOZ115ddHDJCO0p6B19Aon2gKsDkFgx_9yec-kfIbdskEkKSnPbIGhZchiqjzOCoqKuUONMKOZdCHoAajL1Rr23apDqknk2orfpAX10ys04eQ0ZH2YMKXNLYPgdENLhValuGVD4bbHY2TJicOIlcl
 
-## S199 — Quand un document corrigé liste en tête ce qui a changé, cet
-Rôles : designer
-Date : 2026-11-15
+## S199 — chiffrée
 
-Quand un document corrigé liste en tête ce qui a changé, cette liste cite les anciennes valeurs ; le contrôle de recherche après correction doit les distinguer des occurrences oubliées.
+Chiffré : v1.hs8eYoxjS4Xew_JWnQSL81KRMlkXgkEgSGdbYwS8-TkfQT82xDoNboucK174ydIFruJxL4uRQlm5N6BSHY_ZmnpVmtyqZ5h0DJIBDEQcvies3J0qtQ04wnY5faKPE1RdZrXgeDENwrf38NFGO0aKHW_d-yd2pPS0VDlWZUrKLj0o7t9wVj-2J8WbzaAImI-ttjxvHBm2F2ZrR6bGRNsZc7xPkhxwLJ8h_JNBIyXw0EaXkSjpaRUGUj-654Q1czTAk-y7p6mVKfaSAkOsYn-rezCgA0z5alv7Xmhkoy6_NJxjHweWPco4byG9uE1CbptEppaRJsb0D46viQXlMTw0yhHDD_KeOZEnkNgkff0yo8aF-3uDLiq3hyLM4UvrrMj97D8DwlDLl47vCpun-qhCG6XMfrUScUtJ5eAig4LSqE8jV3NlH5r4pFFKfk00CjDLtmZuj_SwmbegSurtrCDi4xogxgZoFzm-YGH0nSMqHE8Se2TgxA
 
-## S200 — Quand une correction remplace une valeur périmée dans un doc
-Rôles : designer
-Date : 2026-11-15
+## S200 — chiffrée
 
-Quand une correction remplace une valeur périmée dans un document qui s'appuie sur un autre document, relire la source réelle (code) plutôt que le document intermédiaire, qui peut être lui aussi en retard ; signaler l'écart sans le corriger hors périmètre.
+Chiffré : v1.nCjxCITwO-YMlEbvhT3UCGNJxaQJJhBwn9qWt5RPjl1wQ_AgdKt2qGe_-8N-yJwNPsbxx3Cy1ltMIYoVXyWInDGAVl1HOa5Q4ct5-riLy5DmHRFpNYPcW7BoGvtYRy8zuGtfr-Q4XGUun2HYFM_zFXjfIudx-_X6RVST2k4ymEn6DE1-biz7ZDXtpuSG76TrZtJWNu-eGnJVqjCxgfuTiipzk1sv4OxHj6_PMz9DyNvSDiISWWZYkQmPZFh10svoouOAKCWgajLbMGIIbs7252AhyJTZWfx5t73yA3XPq0QLHivvpEUsQjweQZDcR_LTtg_ScHSvVjiDMZZCGF8S2p_Efe3IKSfgDin3VbRp1VbECC9cbxu9pH4B9i2HMPf1iTot_YheBDuVL5QQDCevTXhwYNAk8UhktXCdjX2Yv5T5JUK9UKJn8pmSEQIsejqxrn-waIzUADcyjnlaVTo8cp0nxpGD2ovHAAT_IeRxMhsjdy5gNIufa1mg7EjadbliN9k17F8dIhMFDcFPfpLhiyOsNUl5zAJivrQ5zLxcL8ZUlqj9U_cMn9gHExJjiIzEl4rZXG8Fk09pJAKgU4k
 
-## S201 — Un message de commit annonçant la correction d'un document n
-Rôles : testeur
-Date : 2026-11-15
+## S201 — chiffrée
 
-Un message de commit annonçant la correction d'un document ne prouve pas que le contenu a changé : relire le fichier et rapprocher chaque point de la consigne avant de conclure.
+Chiffré : v1.0s4NJkvLEKdZ9kswFyMEen1x6QNuOCmo4od2eyOImtBkL9R9p38RHbSg4v9-X1g9s3dLU2_--vOSAGzrj98qLULsvMFBssMbt8vT9uIDKfy_1ZJe9uvhTmIf1p2MoSkT_WcNzjFdY5MFyFLGQrnD8djjXW7k6xJz9PeVBxqum5gedJSgpJ-FBLcYeqv-nQi3ZBl2ZD8SZyL8e8o3ODFsTI1L3XtDkiOBPIayVqipT7Mz98N23Udx11BIiKkOJA798qoyzLzymL6QdSJBFkjXFv-q7FZVzd3DpDkpVW9Srj7iiCDaZQsR9D2XvfOUhJ_jcOe5UElHPdFjxUTRr7grULVGNaMe7aurYZy2fIj0h65Me0VLgsLkXxSS1Hyi1rJu71XRkOLUsPqMSzvwSfGXujo3L5ch3biGvJJW_cK_m4Ej8KyN0ZZlLHQDXy_1mOuFQN4-Nm-5M6BLGwsfY2M7_AEBpXDi2Q
 
-## S202 — Après le remplacement d'un livrable, relire chaque mention «
-Rôles : testeur
-Date : 2026-11-15
+## S202 — chiffrée
 
-Après le remplacement d'un livrable, relire chaque mention « reste à faire » ou « à corriger par un autre élément » dans les documents liés et la comparer à l'état réel : elles deviennent périmées sans casser aucun test.
+Chiffré : v1.CJA44qk5QF6H2vnDOHmfIXTRQe_pRlqTzsMelgH3hy1kh7TEahg-9NPSltfdKSlqeKXCnpVdsHBAQ0mwVMCG-isdbIGe50gKS4FADu93ZP67ki9-y6NBg62NqKOxm8-tvY4u6hK8AMStIouL80xsgT0VCHXX1CoBOj0NYL440byEqwuM4tyXfOIq-EzrPr7gB1gdURgQdFeqxDbTwp2RbDRo_6LnXQhfd7mAXRt6eHWD0zOsdFTs4kHvFIEZ0fO-od0Jyz3lRI8zjqAduQCfNmq0BsbyflSLRWzabEKCYSmlnSS6ARsGoTOxkI5BANyNXAtzDK2nXCfgaax5kjTrJmR0Wpf6vwfIb4rv9MvtqJbYvb4YqaZZllzGAjRg-fCKQy5UikW2igZ_eWJEarKjTdn3S7Pn2ancbPqVtvVzuGAXe17VAQOgMxwhsr_e4fBqNSTT9_w1EYliR8ssKGlfk_l51PBI6yHpbXoCPfIT5GdBwtlor9pK5cY-7nWJeAbMC-TQ9EY5UVwHzlXZp4C59ud_wU1kOuufrwZYh6tjgA
 
-## S203 — Avant d'appliquer une consigne de correction d'un document,
-Rôles : designer
-Date : 2026-11-15
+## S203 — chiffrée
 
-Avant d'appliquer une consigne de correction d'un document, vérifier par recherche des variantes périmées si elle est déjà appliquée ; si oui, ne rien modifier et le dire.
+Chiffré : v1.6s42LhU2hfPKRjLNo8xgSLBEWHfOjvM3V5ueuH6YIOUN97qYqsjminuyIuAiqMSipYBvD52SvPODphDeo5mNOAjFEyokFaVfG6TigxpCLEXLe6Fafc4SwNwUO6DqzzF-REczMEj21_2ijRnOUEFm4M5-jY3vM4OZEnJJqCqLDKYrhWyKq6ZFcQy4cO8slIr5G9gkaCJWZn9gRMixu5sBBA1pTI2BT6NNDw_TWt-iU18DrZhCAqexz-PNXcgQN2W1SdZ2pp0rCIo2ZMZQgcES0X2P4iJmXfSlRXsVZMO51-goilUvbdvg0r_kiXDh-0Q0pnbZfikE_A9J3INU7xJg3yxOoGyfQRQIpPPt7H3AlpoW3V6CksUkLZF4Uh2PtspTw0An_W2K3IsFiAYcQCr7M8mf8in_dD-zMzMkbzN-g1H9XSCtITFbpcL-ZZEQwWFhNg4UFh19__6waD91Y2bj8PO22Q
 
-## S204 — Après la correction d'un document de statuts, chercher par G
-Rôles : testeur
-Date : 2026-11-15
+## S204 — chiffrée
 
-Après la correction d'un document de statuts, chercher par Grep chaque ancienne valeur et chaque formule périmée : elles ne doivent subsister que dans le journal des changements. Relire ensuite le total de tests dans les résultats.
+Chiffré : v1.jzbdPxsWld9vEnXN9YHOVTc784XJbLJ5MBYpwTBgFhbO3Nkwy4jdhdO05BuYSg43nTEwEQR3Gp2B2zQrGmuuCOnZMSlG2FKRoquPqEwpqPx-n-GXCu4WZVD0w9g_AkV1VqkPm0_zfWLRbHp_3LeZexrGb7YFJj2VJ8w0ZKAXpbtVle4JLnif9mX49j6lkev8HqjXIIcQFsS3PP3Pn2QO2MsgQXxQyMG3eLM118n2PVp0oh6zLbpisgLYDA03-jj5zAn-QBwRip9QtqwG8hoxRjOpl8XKQywqooQ9FqRjR2wTrQz0iZoCglYUNIEVY_d6fSmX9Mgp9n1vMEPM9kdUY7L1nADu1U3jFBs9L9-KclXLEiLV36hp0FX5L9S677B-J9AchcV3Yc9sGyEB9gHsE5jdVGviyEIKpXJTznYy7CHJk74Dtl0SDmCD3DpLHQHsbMt8ltiSl7Cr-Z0at5nuACTt6UggiJY5v-rShz-9hm3OTMCYHr7kijZ8ZKFIbWRviGDVKX0LHS5dYJyAewxvcMD1bR9n88dKAiChQAyu
 
-## S205 — Quand une consigne de revue cite des numéros de ligne à corr
-Rôles : testeur
-Date : 2026-11-15
+## S205 — chiffrée
 
-Quand une consigne de revue cite des numéros de ligne à corriger, vérifier d'abord par recherche ciblée l'état courant du document : la correction peut déjà être livrée, et la revue consiste alors à confirmer sans rien recopier de l'ancien statut.
+Chiffré : v1.bpDbWdRxsAw1NxTZSZ3rwM7JmPvcovrNOQPcguJN6Vbvanlk3tychyQs58yw4jvYQAqoqr2BMJ-kcO7TWFUa-6OpTc3gyZurSTFJL5MGBhWS5eBPuEMKvs5A2OIm6aJkhSLBHvt10kLU5S5wxd5G4m9pIb1AGNkmX9QVNy97LVuS4hlE_fUQ8KIkJ-VIOMtoh3TwgdIRuJOFNyF1ffhuItD2vd_85A91_T4qTBe-1gSTvgsCBu-Z0xfvWzQGbq1u6cybwZu67ml7eiZDeOkig7SkdBMINjWp375y4bSSDT6fW2GH5P2SIFsjNRBToulwHd_KDL5ju1lWTQ9ggrB2dmUxAUON-74e81YdcRtbVM9URpZXq2Cyrzw-f1BGahBO3pOIsd1Fe72eLldEr6UFuArZ7qhXq97CVVenQyTnuRkJW5JkHMmaNIXMOoSuwaQHJTdppfz2h07uu89Mp1EQeTHjgGe-03CemxsbyjaXjOSKqIsueJ4UH9T1xVcNNHoDyN5irjqTT1FaYtV10jpHGRUIWRC-moFTUsTwuq9n1YY4gLCPAR1pdUWOWC_2f5-D6rMkT3M
 
-## S206 — Pour contrôler un certificat de signature, passer le mot de
-Rôles : release
-Date : 2026-11-15
+## S206 — chiffrée
 
-Pour contrôler un certificat de signature, passer le mot de passe par variable d'environnement et comparer le SHA-256 du certificat à celui de la livraison précédente.
+Chiffré : v1.nWW57ra-i8rdgsusL29agZ_J40xp_-73Z-yPYzCeVDZXDYtc4W3fkZgA7-xjWdjKqzCbpjsEJ7qRcVxphmttKU5viG175O2fT32AuPUGyOiygb_OeCr58WRAW9xEv8NAjF5R_x-vg6RbTf3t4EUW1ZkA3lA1_bksn8shyWB0OgXQxw4x_I89noN5-A8Mq5bzpPnmzbTBHjHiGPJYxTZ-LNfWEqpTUPCY7O9idXvuU_P40YL1Gmaphm8y4oh9XLg2hjFRjFkhUvxUQ4zkAD01mpQOI88PRfTfs4Pkzgw56F64l1Gr5xwfhNJ6HpDQV0m-slqd9BtPTA-G2S9B4Hbovxb4tU13jqb0oXaW1e_L_psabmwJyyMBWLqfoBzhUaw5e0Y1eD-Gjvxtr_LtJRNx3Fgih62J9VVQqXMsweDhdkxOjD-3INx86Lc8JtxR2dN3e2CWMudjvghQMR5XUA
 
-## S207 — Pour relever une version dans une sortie d'outil, filtrer sa
-Rôles : release
-Date : 2026-11-15
+## S207 — chiffrée
 
-Pour relever une version dans une sortie d'outil, filtrer sans sensibilité à la casse sur le mot-clé, et non sur le préfixe exact du champ.
+Chiffré : v1.E-G0ID_XQiQeVpeYMXTIy1BL9map8imLxehK9X1qKgyeMT7UI91fxidXoBlG7ikxKklaJzC3mF6_t-DzRIfSFVOjR1XuQxLxtbOKaGcnRKafm9Up7Q1VGRSyDA4qGFV427PAIKlhCvstj0bargra2tappO6tMS9E11YSTSjAETCJbBRtgKtHqbxFkGuj8cO6LlqJhrsxWf3RKQ4yXVBtyDZF5AB9xHWdDFA2tWbNzMbKZxkhBzNTvkD5Px68Q-rFnSgaytUYYRxVEOtiATYQWWicQu_oOJq5pT8rMUycviu8JiKbDd-bXUq_3l30wg3hdLOzBfLjuh1xTizy4Do7q2a7V09VZCoQZO_myziGGl_cSgkD7PWJnLv5fyvhbbF6fC6FgZnUKPcJmsN87ghrhzbF4h8j5UO-IhXtfOSwPRyO
 
-## S208 — Dans un script de maquettes, dimensionner les cartes d'après
-Rôles : cadrage
-Date : 2026-11-15
+## S208 — chiffrée
 
-Dans un script de maquettes, dimensionner les cartes d'après leur contenu et relire l'image rendue pour repérer les chevauchements de texte.
+Chiffré : v1.qHcqhZX7rC-lBRdVtaQjYAmhdW65dJctAcnTAzn6sqa0MbcyEYDOAbzRvrTSAGuz79NHjU3zcz6tCOq1GUKCyXcs-8e_ChKMSHVAKSVGupa5UjTHJNofk58-L_gWvaRgZmSmLgGNpOjHk_zuvB4ini_TEIc4X3hqvYZjvBy9RgFLXttrp8iUni28KN1ezuksiNmbdIaixzLbKVlYNY2QB5gihbl7pT1zzIsh6TRGyjbWjcTlsgMqMa6c3rHAUuJ41JXTdEeudBIrZC_Tz_F-MNp8FA5uyy6xgCIWYqtX1KZplEQgCylT1hcfiuN0sj_W0svBvj-SNkFTTGv445KJwRCoEBwZWWNXxW_zOjTaaybce8cJlpDkwrboZej_f-s8VpzZ8uu0bkg4NdhvaBZBvkdFR8bOa-BOU90nFTTAmk7H
 
-## S209 — Pour une quantité répartie sur plusieurs lignes, définir des
-Rôles : designer
-Date : 2026-11-15
+## S209 — chiffrée
 
-Pour une quantité répartie sur plusieurs lignes, définir des invariants dans une logique pure testée, puis faire lire ces règles par le script de rendu.
+Chiffré : v1._36Is2n6UJ-A0ct_B2Z6-Cmcv8ZG13dR6HQRuYkkXzA5p8eBWE8o0M2CottliKfREgIty8Cmfpi7g01ALfD7UMuouRjKfNwKW4Ok_UE3D529JcMGP51xAkLrDDrVsrd9GOXc02wdfQ_ZJHkxSVM3s35cDdNcoH2ilW1Eg074lKf_x9P1JQMtL8f2Kp2I8UzlYWpJowKDsmi_YbjskVz8gKhytordW7-sJWEdskUJj9lQ73vNx3Lzm-gohUncRRtz_4etrjZVwApx-KVjBolM8odcfzEPm0Jos4gdz1QgbaS5FadC0F4gUfsh5lFii1vGyjk-X2tIYlAS5oL_xMnGpOQo0KD6GCXjlli2F8-W5JhheUuHn7tJFw73hD-USn_QcmfNo5Vx4PkvIwE89dk_il26fCZ9aDZ1eww9Uozo7pTf4lYCTrTHbmRq9kxdEkDl34FW
 
-## S210 — Ne pas importer un script d'images qui s'exécute à l'import
-Rôles : designer
-Date : 2026-11-15
+## S210 — chiffrée
 
-Ne pas importer un script d'images qui s'exécute à l'import et dépend d'une police absente du poste ; écrire un script autonome qui n'écrit que dans son propre dossier.
+Chiffré : v1.bk0qoVgrqY3PrzJAGqtfv0qrh1KwmZM9QShbH22V8rnLO7d4rDT7dw4sqkOI-mmZmFy8i-3CYiuNbWxxN034sXMBYtmEzJnCmvvbWn0YNVGkwKc3BSA5iRmyhWWB-Bc-gpZL7px66hm5L7_x7eiRtcCYHry7aeee1wOJt7GpyYmLFcBjLVam6UVD77qs7Qa2IbBqHxSXtt2fgTA0LOF7db9szDB7_x2kT5PpQWwwj1Vp331sQs6t7a8wEc0X3yLwRoN5SktV47cbtJ7UugWasZK5Ab8rzxE9SBYbmbfMstDtwoHtIKDjlnONYlzXufCkfNCJNMDQd_8qHH0buTmhMzw78jDhSb2t2syy01MTsB7thGnj1YS1xKKddlEtGxvBv0BwzykwojKZN5ozscGsrOW-jTlWliLt5opMrx_KZ2hqIle4Wd-g6-ekqnMF_t0ONEfccdkVJVjEYHD44zPiZ-A
 
-## S211 — Quand une étape de maquettes est relancée uniquement faute d
-Rôles : designer
-Date : 2026-11-15
+## S211 — chiffrée
 
-Quand une étape de maquettes est relancée uniquement faute de consigne de validation et que la maquette existe, vérifier sa présence, joindre les images existantes et ne rendre que les champs de consigne.
+Chiffré : v1.z7g-YmdVJKFUOdnHnto9p6cOXPbjE7B4dalrwwO-dironBLKqX2JBnpMNKlE8UW1hERNrksLVOt_HT8HXjdn7gV7lVOjI5hMo-lkC-iERjvui7XV8S6vlZ7qaUwtKfKC-jTohgZr32jM1FxvEPCDR9WcIhGb8dYeWEQxzNHi8mZI3SeDjjMR1YMs7iz56mE4Imtsg9FQXsCvtUO6JjslXdPYqruLTBTudBBGYX7LxFNHiEdJUwqV9v3wab9PiuDy1PyKBklF-HYFz7NzluZqcL7hT8opbv4Xry5aNgODM1TiOUZv-8PJwPlatCwxaCJPdP0EZyS60sg49AZwMbFJSxzDQlGScUQ1GVlwZU9iNT1z7alok676BJkYciAhTsXwNrW2paYQW_P2P1SOI9FbgqdvKRYsng0Z8imxarHPZwqlNudiecq3yDg3w3gfcp8Co0M8IZSJnq_ZBVABIM7g52_WKBc7DXZJ6iK2CWh2c_nCNBoKlqXJZkZIisIJhdDYZbGdxKI
 
-## S212 — Quand une étape est relancée uniquement faute de consigne de
-Rôles : designer
-Date : 2026-11-15
+## S212 — chiffrée
 
-Quand une étape est relancée uniquement faute de consigne de validation, vérifier que le livrable est intact, joindre au plus quatre images existantes et ne rédiger que les champs de consigne, sans rien regénérer.
+Chiffré : v1.Bc2wQq9p3FvpgGeWp6arYLeJKl9gX_wtYmKrJp7ocxHbJ31JeXlEn2pAxIubxVVbc6XsoeVRvx58BCVi4VqwWbjvf2wQZO4EqsFhsyrhOHW2PitOJXsWnaxPrdCw8x0-jMDqJV_RVsq7ptHuJa48kGr5585ph_X3uYkIQNeq9VPPyNBB-teOlMChbB2QQwhbtzc1WJpON_DFP6ZKjDteaA-BpzRrYvcdmnfw5KqaKLTSWtE3Gj4m7SYat6lcUP02QteybDIMq8rOj2v88GmqmX73QUWQlDY8FNCpIaNZu3ql1pY-1ERktGJMrYEF_Q-eV1HD-GNM4ArBzvjY6GQaE40vN7560UViZEq75YHVkhS2nKSQLQY8SYfcVCMQihpJ1rj-PWRKLm2rTZtOUevypwSfRzjxSJGSoKqz8uy9GfQ5ageVvAZ7Ha-VvVB0BnUoPcBkcM_dbjLJf5qBD1-znj8UFzxmHYpPpY6-_V3dcDcl8CVsTpg3vzI2rFaTVRgT7zjZ9W2ELd2iUBgQSAeOtA
 
-## S213 — Quand un lot de code a été écrit sans chaîne de compilation,
-Rôles : dev
-Date : 2026-11-15
+## S213 — chiffrée
 
-Quand un lot de code a été écrit sans chaîne de compilation, lire le détail de chaque échec pour savoir si le test ou le code est faux avant de modifier l'un des deux.
+Chiffré : v1.BmJSSAHqkenstqaYANtEAkiMQKU4d4X0YxGxtWcMC-Lni6jdnJO3dC0UW1zSnyFgPfDInHyWkmERTnh4GqWV84kfx3qFyaSg4PVZraXxBMcrMfo5v9c1iW2AhraOZaWlGdPwi0hhOUnAKd5BNoFaRYDfMnFEW14eytFphQLtS1K1Wv0ZI4Ayp_ZJeyIWpJtvk2dFMxa-u1JYfcspF8K4Lodj1REGnGC5_kHSgZ68BXbXzUOMCD2lWIJ4DjeRz8LTdOvOLhXB-_-wnkVPjRpGz96CuXAPIu85MERwLQKyhUqECG8tgjysXnWVJ97aS20LbwF6k4toahLig9YfNmez5Sb-4OUb7_zsuPY90aDYLUl4seCbbVVpgUyupAl8P0zAa14VOfWlGypTTE51O2DHb1MZQggNFB3M7_HBQMxDoRGM_t9njV50IQl9LSVwEg6lLFJFzZPkuWsnA4d32L8j
 
-## S214 — Quand on écrit du code d'interface sans pouvoir compiler, re
-Rôles : designer
-Date : 2026-11-15
+## S214 — chiffrée
 
-Quand on écrit du code d'interface sans pouvoir compiler, relire les signatures utilisées et les portées des modificateurs (weight, align) avant de rendre, et déclarer le code non compilé.
+Chiffré : v1.BIfV1YQd42-ltpHtEzGwdIUO7KyizXhtobzdaX1jsN1DBvdfZqDWpv_lANo57aO8Z7-sG9gaCXoSqu42o4SizDol_4SMfi4pQYulyRigEICluMdEBcHu5zmNOA_0_N0nV59CSJ-PYzKGKLDT6zXfnmcUagIsZokIMAW1gh7OdlBnoPDHUeH21jlITII5r3hWt-LWQRvnxKQ8vP4lXl7nB6rNSqIldGLQ9L-c4bMxG_dSI_dD5aVIqrBu7eHMAgOK3nHFso6kPWOfBDgLrriuhdI_GK1OXbfMeAP5FvYw5dB43w6oUh3PzAyz2Et9muLWizAPeL8a9xXmwsDYSxUUCyHFgdi_fXnqBn6yzlkglSoNhj8-vwsZ6Myh8qjTb0f_wyAZ3WIroaE4ucNZ2gczaVd6ejMg932Bfvf1jx--tAMJSusoBhKeEjpIL-cYM_tri_l1_s-NvKQuvWQFtGcKVmOTjOsLsxeoiXHr4m9-qXZ9Hdu15A
 
-## S215 — Quand on ajoute un paramètre après un paramètre de type fonc
-Rôles : testeur
-Date : 2026-11-15
+## S215 — chiffrée
 
-Quand on ajoute un paramètre après un paramètre de type fonction, le lambda de fin se lie au nouveau dernier paramètre : compiler les tests après tout changement de signature et passer le lambda entre parenthèses.
+Chiffré : v1.mVH6uilWRX22sb7VAFK-ArQ5TkyY7kOr89lw7d0fk1fDheHvHoKrjaIOxZrTa4ESNVfbONCdlWUy8XOPZkeVLbhE0-DJWtvMwpjMOPV9SlncG1C8ffCmf3aHnLtipy-iStAdaUjMC0BVVZZQh7hPammg7C7-NVEai1J0roNZYtoEdVH-ipHdIUgxBShz-HowTg_S_STkhD6WrGsVGGoR3TyAmzQQVlMx_gikUr6_X_ZRvQBSlo6O8Xpk67xNYARcLJlSETScG3zDZqg8v0DuB9VQMDdhTClvbsWpEHdqndrm-f-S8teZu2A95oyM5AdTfgmuBPip2nq4p4GauOC4VavLsq7VMV-C4SXnMxjfmHn4poELfXY_qod-_en-dsuzd7VJn0-V84xHJiirvME2c8HTDG7feFquwPPNtzg8mn8XPEHxR5X1kDLGJFDiTMU2kD9BXTER4s-klbPKjVL7J5lafOxF0Dnkfj-70aJKyGoleUpnl3NJIGSfmH3Q41B1EfPZsHhswobtJp-lfx7eSA
 
-## S216 — Corriger à la source ce qui a été rattrapé depuis l'interface
-Rôles : orchestrateur
-Date : 2026-11-16
+## S216 — chiffrée
 
-Quand un traitement a dû être fait ou rattrapé à la main depuis l'interface Claude Code parce que le bureau n'a pas su le faire seul, corriger la cause à la source, dans le code de la skill, pour que le bureau redevienne autonome ; le contournement à la main ne suffit pas. Si l'utilisateur est le propriétaire du dépôt de la skill (le compte de git remote get-url origin ; le vérifier par gh api user quand gh est installé, sinon le lui demander une fois), commiter la correction avec ses tests et la pousser directement. Sinon, ne rien pousser : ouvrir une issue sur le dépôt de la skill qui décrit le problème, sa cause et la correction proposée ; elle sera analysée avant d'être fusionnée.
+Chiffré : v1.1AMWMXs_bbGbVxQvA2vFG1h8kOyh8U1lcYNtSelNcMEaN-u5SwGxeXUpII7o31YRfZTz8TlQlq0sSS-zxaPI022NN4j5gDbV4e0IdyzSfeFtVXZtNvvSegzvr95gj6uHuuAQf33sq1ZuQhkoUNAsj-djWVcI1B-9EkLUZOhkSSJ2shYkSCjKkQUCLEvw821qa2dNJhNpVb7bQuMDdJn2EsH9uP2LUIDeisgIm_7d8Gcx1tjPNtL2xT3WkkPbU7XgOWpzjIDTs8PZPXKxYMUSlTUi33MSS0qyhF9H6sXcVaEpi-TpsLCr4uRUyX9NvduXHBIQpUuKOvjhyl8yc2FZqhQ_fRbpoHu163zyHTs8aLlPH3DNyqq-BRHGeQQPtw9y4nlghYyTZ4FJUZKOi3ETk9CGltqFNs1D4TXfdbZ_APDKVAt-uENF9yoQYdtlWkqdJCblezaRHnhyJZd7t2x_wMqjwsQOIoqdLZn2k5v2sr5179rYf8ebK0e9fhP9uFVsEDlvkUu25M-KLUbn38sleQLOuOO-V7ALMd09_irekjdiRZmv0xSopfTcui-od39f191H-z_m4rwcOTZKUNgranXkZ-FhmgZIruFXhmPovHUVKwHKk5UMO8Ajsqf_BXl1bbvJTrz12RCWBdK2CYnsM_ckJUdpjBZ946STCL5azqRcRWktlFtUAGmTdKKJazrqawxQUl7AfyeBJaeKdVrTGg316Epvk0k2RbvYyomNs8FFMQVuqryeHD0VnlgsxonW9ynf67HKIFeOtdM8DzUvf9iEhRB5qIzU8Ak0xup9TndyuTi-hd2c2MBuBwxPMEiuvmQxxaURiNlvIuonAs5aOyGJh0cOJUojGjAQESLhV83kWcx5mT5un7Sf_M4E6Be7deSDcnht0oq6GjQh8RDctgsKr59rgAH4ZNPa5KyvLjb-pROGuYnv51KikqyW8YDwZAgqoxTe8MPNL3Q-tscDv1jo7N4tgjhLUcmhUBnl1aDFZFoaNkeBPq2j6ghdtSw_KzCVwxITuUb3qm3AvdL2wWE0JVwFi2Z-3DN7D7H_FRLRSkqIbkwspuWoFIeVXIJmcyhqtwzuHAJsy64jOlfGGfoZ5J-iTVHksfebLg0_ObX8Tpzdrkj2x-E7EzvS98Sx764p6i8o4eJQ12YmkIThLiYUUL2LOEgc2JURco0j6tuo0v_u3Q
 
-## S217 — Un test est qualitatif et rapide
-Rôles : dev, testeur, orchestrateur
-Date : 2026-11-16
+## S217 — chiffrée
 
-Tout test doit être à la fois qualitatif et rapide à exécuter, et on cherche toujours à l'optimiser : pas d'attente réelle, de réseau, de gros fichiers ni de scénario complet quand un double ou une donnée minimale prouve la même chose, en gardant des assertions précises. Quand une suite devient lente, repérer les tests les plus lents (par exemple pytest --durations=15) et les accélérer sans perdre ce qu'ils vérifient.
+Chiffré : v1.kgUh0H2EYqvlDA0RDf6P6Rh82i7LC6Q9cpzw3QrvsivFOXNppIReiH0AMFGO9jY2HOhf7YQL2mw8KlXRtih52cEjXCCMS7onhArtG-VG-T6T8Bq1GSGPeaoKHObV497-kVJFBf9mcXQPC6GScCB-ZA7OODNCj0N_PnMbVc-mum4LB5W9bPh6qBPX-UaUgKpBzaE1n5hD7MPPuTDDB4_dEHe7gCa4oRDF3NQ8qQihFQ0xB-bKFZvHgzU7sXcPe2si4tWpreKnbXuDELpr6vR9xcrp0nQwbOx3VH9AVdQLb8hX4vAsH-cQhe1kEHf3fC9KJyET6teovnEOpdR0ZzFGZ-2zvAqi1t-65IFPAW9OYfrfl1zK1CfIde1AmS671U9vdkwXNh4Ll2wH4cp-kMrkSCg1KJRL1OktqM9UBOUR3HxdZofSgzUZixKHtdME-T8OZT4CIJDSFLKGvZi3LFEaWk-k5BBgrotclOObt8asZynwoAei3QJElUwkvUXemNy7kIRVNygfJOWW5Uyvj1k2Txn9yF5oMthd_Rz-AKOfwQnamXZWqof2Y9YZo4tYkQcd7l1BpIgC2zry_a2kOY49eYf5dhdPGTsecdowzcRl5hdzOPtUjs-XMUPFN19UM5nrMl0__HD8TTEYHzN6sXC6LS2IamYYdGynaTiLkpVOj0oRDeNAcjRBOaEPEIOy6zniGb7hwpiLupQHxhQkXAjRfJnbjXCEVBbSgUEXPg6CYX0NjMRU9vibhUCaF0Idr0WYGoIGI6T65hZaguk7593D3pncgH2AQ6yeg0AT5SNy4Smy7Q
 
-## S218 — Avant de poser une question de cadrage sur une correction va
-Rôles : dev
-Date : 2026-11-16
+## S218 — chiffrée
 
-Avant de poser une question de cadrage sur une correction vague, vérifier dans les registres de suivi du projet et dans le code si la fonctionnalité ou l'anomalie citée existe réellement, afin de ne poser que la question strictement nécessaire.
+Chiffré : v1.zxKZ5MP-quOCcXMx7VtzTkD-CAEoKE0xOC0gb4NjqeOU7OYfGVn0pw0l4HAvf2u6McPG9Aiet4W05jMPCo_0CGGZxWrnQ97RSpeUj3ibT1PQ9Fr12ZjHkveBtNPKofFtkR_fMImNLhJbXm1_cD2TvuuofbpRMWjrWGLZE5EPqjxrK1fgWINQ_2W7TF8Na-NzWccMLI4LqHtcjziykYDpkmeNl0PegQc3SoK0Q0L6cMWb8CZXVdJUJ3RngDqRsJRZA84PuY3qz8aqZfUd4YT_kgs1i6cWcaVHL4461rwHrqZquHxPB1nc6ONjPLOYBPRxVUaweuwAme9G958yDluZ7DeOzL2u9uxITUWxNhgsaoK6sqBFdffMug9IZsdz4ZzhqGhKbRgg8_6O3K0nIVvsw0fIx6ZdapB1Bt2OdQG5y9NjMIwm9IwBGvlpmf4wkKVNxyohV5QUsQ9QSc_zqw4zxl98HAsDuSs76tc0JFX3LgV7Pk0sk1svxXvgope1f7ZTjZSJy7PYGqRgKn8p7IB2rs6vF2ojXGkd4OiBOT1-CMgq_P78iH_T
 
-## S219 — Quand un signalement de correction évoque un suivi, une tâch
-Rôles : dev
-Date : 2026-11-16
+## S219 — chiffrée
 
-Quand un signalement de correction évoque un suivi, une tâche ou un écran qui n'existe pas dans le code du projet, vérifier s'il décrit en réalité le comportement de l'outil d'orchestration (moteur/Factory) plutôt qu'un défaut de l'application développée, avant de chercher à reproduire dans le code applicatif.
+Chiffré : v1.02bsbzEFoqesTfdusPFhL_iTlBX27RNK3S_ntAd2gynf_cKUr-c887MbZToRfY9p83K2aNJOvWqWj0yJymEn2G_CTQ_Qg3kbOcmtDbEzzsf00Y8cdOQEyHNDKiZ7OU058_PElpmwLGx9466fDDt3wkbA_Nu8ws2-9GKyS0YwjVhTjI4xXypzsTwujEMNvdMZOmVqwVUXSGL-QllF1FDQ-idrLlV8R5wYXU1-BHg8Ec0rYEl4rd-6RqHr1zAyisPoSxLX60pGY5Dbim0DsARHIDk_zOnpfJ9Te6rK5E5mZ1Lc0tkm3a1LD_P2JxG-Ow2Qz5aeH2m_ATbHOOYTfQ7_0Ld_RKl0ZXR4NlK6Y37WHFS_Ub4AjE7AfwyVUcv-y_ptsbMMOF2jl8Cfgf9YUyTUoUD-fBkT66xi1RvY8qgkRpYY8UeWnjqDRWdke8R7NVGUN_MQoX0xiAjtuYvJ2xbSwIXV-fil6TCBVtQTJClj4yEJSlw7v5VDYUc44X_r9YA8vQ53mEVvVrX6lbHRGlOJSYpmHu026xNfaqoJBQPFX4K3BBxI6NIAMRiM4peczAbGCg5Or-i2iujN15BzQLwb_Y-tOuhGtKpyv-yaYveLeQfN3C-rUcjgiWnb1ToNjp-3svVsJkwsofwSRZx5EGkYKSnyCQ
 
-## S220 — Quand une fonction bascule entre deux colonnes/dates de réfé
-Rôles : dev
-Date : 2026-11-16
+## S220 — chiffrée
 
-Quand une fonction bascule entre deux colonnes/dates de référence selon un paramètre de mode, vérifier que TOUS les champs dérivés de cette date (pas seulement le filtre ou le tri principal) basculent aussi — sinon un champ dérivé reste calé sur l'ancien mode par défaut, bug difficile à repérer car les tests du mode par défaut restent verts.
+Chiffré : v1.E9p_poW1fthU1gqYV7Sb45kCXos9-5ivzLjSSV8UCRnk8VhwhkoKy-5W-vUTWm3n8DPmSzri5QQGIa-XQblMXT0QZ0smwqxffWtZjPBDEDoETMPBPnhcpbwRCpSjf63Y1RilNeYyclAd_zWGKbaKXKcNk2m56aXTjOfOjDzmtoTxz-HL2Md91kJ0AQ1MkaC345_H3BO8MvODjtMmffSzpcUbU2goiMKt3S7TataPuKyTyzXyio6Ot22MtLJjJE7-MtDF4Ia5bA9XiqCD3VzRoz5oSIhOL62cBzS_znLksuML9fX7ZEudjdtSa53H7sJk4EPL-YQTDgVFekHRiuO8lCNQxhbckcTY0YUv8BOoHOhbH9FGCzUJqlBM5L3_2f7luOb-zhKyUg64XCPJYU7FT9DTemxyvryMZ-ABAljbUDeT701wWlFHtWIcCyOo-bWgM9ql6JTI-SF6KVGc2Rtv5xRNllsMR7dBczCBSZOtj-SOMsW1QndQD5FDWgoHpiHJ9ABY8cSdjsbZ6oq2nL_jz6Qjjbko-oP1R__9e8m9QzA_GCpGiTEuT6Fuokr1xVlCOCaseDFmK3epFuuoAgh4hmFTNfOLhFRuH4CqCnK-xXBvAJhWen20nAdiypIXKvlbjdjfYLUd63CDb-Dl3W9jjfxq6eHl5nqu9eYrnvrG8uo_CB__OWw-dEDqaUtkInWw4rhDg6ge
 
-## S221 — Pour une tâche de correction de bug, commencer par chercher
-Rôles : dev
-Date : 2026-11-16
+## S221 — chiffrée
 
-Pour une tâche de correction de bug, commencer par chercher dans l'historique git si le fichier/la fonction visée a déjà été modifiée récemment dans un sens qui corrige le symptôme décrit, avant de réécrire le correctif.
+Chiffré : v1.W0q_otLtT9Tao-eF4HYd5umxY_6pwdPt1EBvNN5IQom_q1LqjZ1d_LoKKmaE9lf7qHhy78p5mgjcVFQ4t6j1w9C7TLLfmHz_2yaW1Xm6qqvnF7xNOKkSlfujuzlBBCNDcmWCO1di4B-VFbkAqgDJrxEeSlUECjLx-FvzOTuhuiLgKB-xlY1_3JNjIc2DtBSI-0nIgkNi5SThGhH2vofa8HTrmHay6GIrElh485oPREqsjp0MhQoY_ojxVnXWrE3tlL1p1rdnQV-5lxjQPLu9aFnFFxkyuxq9CCgvHOMq8YdzsIAZYVTbGr_psxQhydh3ypylppxlB7b1KNiJ3_n5zZK_7s2FJqS_p1CT8euO5zAGLoPemCpcvazkWaQqAFT9SubzXvuInWy70vnNZ_yN8OnP2pdF33alUHTED-ma08FKE-tGI6fWjduHF_LY8qe-pH_FEnwJoJyRBtEiWBut3qyZAcrjhkKg_U-DjSDw80Pq366jRCHiMXTkeuAuebARiu6linyDRZhUMdJo9E_c2SjUG_HkIw
 
-## S222 — Avant d'investiguer un signalement, chercher dans l'historiq
-Rôles : dev
-Date : 2026-11-16
+## S222 — chiffrée
 
-Avant d'investiguer un signalement, chercher dans l'historique de versions si une tâche identique a déjà été conclue récemment ; si oui, citer cette conclusion au lieu de relancer l'exploration.
+Chiffré : v1._A9mzdqpBmeBNSORFJ66nQ4uA-SSQDoPriF13RBqPmFd0zPcb2KgHVDHD1FMk20HkkBmoNa-T8YmCkorRTzkwaoLL50g5tCy8bojQ1UaBgXZBO_ma16KM01D223uTgOWfRJnb0OOrmtEKNF-gD0M-wy_BYVK09IlUWfU2_GjoL-CWPV5OJa_91wDv5rp5YAF4AUTWVA6X5QDl-cw_i7P71soCuPpSCKKVBKepixl_s7AJ7SIu3pRR7QNlXvqYu494j6uYl5Yjyyy8S3iY7XRjxPq4Tk4XyWzY7nMSAHPnZIozX5mPe5JYvXFUWzXuUUGJWZP4VWwZ3eM6YuusFjeL51yogkgTdimXxxJXPCEty4I9YlEW6YfL3edT_OMf9-7_E8YWpG7kJnWyzOXztstyLtYRUM83tqoP8ReIb1J8esSjU142WqXed66oUjBRUWOO75W4nvyG0TjNk1zIIvxVOf5cndAdnObXIevQLt3nIuRrrFB_g0
 
-## S223 — Quand la consigne d'une étape de correction demande explicit
-Rôles : dev
-Date : 2026-11-16
+## S223 — chiffrée
 
-Quand la consigne d'une étape de correction demande explicitement un retour/texte de cadrage plutôt qu'un correctif de code, le livrable attendu pour cette étape est ce texte réutilisable comme future consigne, et non une modification de fichiers.
+Chiffré : v1.rydUBwsrlmESPOgpV70rLX6WKZzSzgG846j1sjw7tGAbSOMX-TldARkrHLGN3JU4h3SCMBqpcO2o0WM9QE3bdUE0gzMvxH2Acuv7-0rFFgo_PM4IvWm0f-OqIxARHEoiRinWPtFAGthzJxDTOgF4kpn6Gqsg2qbmYdfUbOyS_pT4N_qm2v9UZ4FJi9j-ES9-L25CY-la8OyHqC0M3pbooNWLLTq8632tG3qy4yo45jZkphTY3BYXinC3RpEsPquhb2NXK6ul3wgMDfvIs9vf8-k-n872MRT6rVeQXjtZzdCjoVr-HkJHaBHtgvWvixu7o3xnj6SHOOD33WoJuAPOcTHmxX7pE4iVr8asZsbsIeJ0kmU-E0hjyV_VMWiOJdsxyNprMTcv-3GtO-uxJj_KYPS9yxqasAEkF7bnN-ofFz0hpnfyIYieozzQr0DpWzZYxXtAQy0Wy2ahoe7b9Y6GDhbCM-d2TpkArOz35_ICLDgIw4JkPV7Qz3kmioWVjt7gckUPFcYTNC78Lbkt85WqZvdYqUHpLzP2ApAEOEunStzp1ChK6FGAjkOR
 
-## S224 — Un ticket de correction resoumis plusieurs fois avec un diag
-Rôles : dev
-Date : 2026-11-16
+## S224 — chiffrée
 
-Un ticket de correction resoumis plusieurs fois avec un diagnostic identique de hors-périmètre doit être fermé par l'orchestrateur plutôt que renvoyé à un nouvel agent de résolution.
+Chiffré : v1.Cl1f6tmyzpEb5sf-T5HPBY6x43-euIGq3yBE4eBc1AipV43XwA8Y9f3r-OjyCtbaziqnAQTKEUW7e3JeaNrz-6O9QYt8lq5vYeVQDUcHcVqPWVeKmVRqlGrZNLUsR5l8EbIxdyGDk6b8lINQ0kouVOF5q59NuLlGydlkxXtIQzR3rCspUSzBEFS4V9vxNI_je-qxFdds24_rUBiY5zEPOnx1fbv8TVE3k4sgSC483dp4feT_7nJDSRCR6Y91469WSAha_MKs6KXbMFWn6tuaLUxRnDgy5RBy5bZCLivO6LavArMPnxt07cMQoL3XfQkHS25bTRyv2_mvtGsql_r1baDmRlLIt0eAPo9J7eGUumsUoqYNayeL1U7cNaLdfJN28KwujLf-TlDhgFgcfcp5gWu21SkVmFVLPd85hi8R14W9PVPgvg3t5gZAFoeiSKcz3N3kPbOgGMt7RXJJzxh9n3VbEcaimb7MQGPA4A
 
-## S225 — Avant de démarrer un service réseau local pour produire une
-Rôles : dev
-Date : 2026-11-16
+## S225 — chiffrée
 
-Avant de démarrer un service réseau local pour produire une preuve de validation, vérifier d'abord par une requête s'il n'est pas déjà actif, afin d'éviter un conflit de port et de réutiliser le service existant.
+Chiffré : v1.v5ZODgyyPqTrNDEwXsQJ2fOpcaQfJCKKPTX-6pGL1aa9BdG1dHoIKDL71x-BvGz15PCUgxP2mo72W01_kqfzReaRd8x_u_qT3JflmIyVtkXSjSCuG3sdABnYJeKJl9k_Am8be2C5t1aUnN1duBX2RghbEi6qn-GCXmGhP234t-DoUZom5bnzXbhHSGnwPGaPq0yUrc2jJ_0tp1kevG976A0kQPIfZc6W5ThuZoPgNGMcRvfCFqTfgzZbKDAflNR7MDuIY_e4I7W9BOVrrHoHF-WwUiUmM6NHuFDSQYvfprzecJxMpIHjntXSyhhuhVnUZpCxqh2wyk3ZSuXEIOTRW3saIbA9h5lU8zqbCS3f58xgUk65lLffCCvEtvZeaSBOZk6Wf-AfnoYaG2yxE_A88srRxCSH8D0HDzRRwMVDMq5Bndt99VX8JjVA4lFcm02I9DVMs6cKAaAksuT0Z_so_h6EJY6VBaImZBVjz9c6UB9whhEN3yaVxBlSMChEWpx5vGjSmckrQdQvlaA
 
-## S226 — Quand un même signalement de correction a déjà été confirmé
-Rôles : dev
-Date : 2026-11-16
+## S226 — chiffrée
 
-Quand un même signalement de correction a déjà été confirmé hors périmètre ou déjà corrigé à 5-6 reprises consécutives avec le même diagnostic, il doit être clos directement par l'orchestrateur sans nouvelle instruction à un agent, pour éviter de gaspiller des cycles d'exploration identiques.
+Chiffré : v1.k9s73SuYz5WdG0voCddfpjxg7xwYpinF4S7Mcz4ZpdcfYH75IhxUOV5JO4s0l7Wpj_pFFtqfPSe39zcUM4zc99qwJFSFvC-8Aee6Qe6oHp5E20yvoMk14XnmS4R9QP49UwUAODKsNHtMFbZa-wnq7PpShihZaZw6LZrLPRQlmw2G8lOab_ynFXARIKEAKsY_nmgiYjA0FyfucwsJXG_2W_JiogJbFGfe5KKjg8GWV2qP7ErCxn2WJzjHTDeY15A82eP-Gbsi8mkSwctdcoNuz9GWK8CiRRXksj_JoGn5mg6oPi7EdV74Q96ZP3gVsg-Fe3arGkhsG494lk-G6Yfg443pK1d4ygJ3e4Hy1o38gno9sBHqPNNYkotweuhF6L2xV74bMVp3HdlAGONdxRc4dnvs9s_danxln8tH7EaSZxbYfCKog-stUt24kRJAAYkaDoX8-yjsXefXpQ_21cpCcC8_QS1c9BAip9V4DAPQwivcLF05fcf7uBhqHQmPyYjs4-69WItx_8Q9oGbgD4SQj0AJGyjwYlAyARkxhy2l3QazrsZgGOzZ4jTlVmR3QcOPvd80hwJfj12rFi9p8TxTKhCdLj-cQ8thGcFoRnDo30j4qtlR4g_l_95ULgVuRLm2LzpmER2G9UIB
 
-## S227 — Quand une commande shell impliquant le réseau (curl, netstat
-Rôles : dev
-Date : 2026-11-16
+## S227 — chiffrée
 
-Quand une commande shell impliquant le réseau (curl, netstat) ou un changement de répertoire avant une commande git est refusée automatiquement faute d'approbateur, la reformuler : écrire un script dans le langage du projet (ex. Python) avec l'outil d'écriture de fichier puis l'exécuter directement, et utiliser l'option de l'outil qui évite le changement de répertoire (ex. `-C`) plutôt que `cd &&`.
+Chiffré : v1.kBNRC4ZXJQPQZrje6RvxfHqvYU7jasMWviTiUZmZ9AdNDJAwyl3dST4ZrmGuOWFYF7H5F7dWnK1IPqB5j5vZvzwZRGvkkfvFMBf9pK-n811NUdU13FXXJseZaD-qAnosTG-BfGgTDmAPjRrAW3E386WBNaWzWpa42a5aS8mDl7X5ylA5CRKkE5qwphEkfpGCIZ7F9TWnJ4pUPhO_l81JToAcLnq3jaTwXwhczbicoHna6r7_qJQQnRdeyEnS_m9smKppFZfSyMr1KqrS29FDO9MOE3O67DD_VHLF79uVJ1ltdUfFM2GMHPgk_2wmmMMYes6oZT991nPWDs3hkdszopDhxR80BiZviaJ6gF-9QnReKPyFYWHPzf48ljLEBEY1QhVswkR5RMbbDyERf0kLtBADgjaHNSfMXgS4al9XkGl65Xs9YqyO9JTS2iwD0SIzmX-JMNRURheqbi2m84jnqGZ_Q40KHP7cqBGQfB_kJ77DuqyGEz3pXT3w-7_y7r-iuzG8BRcxwyHBU840CcrHRwx4PGjGLkIOU1eo1TZo8tVSUq7vETdhyqUAB84hebHLqGUKFhqWZHEFwYFo616hjn8EuG6FmzjKDEzuV_kj1XelR7_nNge0pto_0XtC7tc_T8my8lmSAzmOYb_pUrOfdCjYJjutV-1nr08iMHqoNcfLKpEc1kmbQvif8IsiJMR_Cnbpc53aMw8HKXjTaDEyO_NEI63kBgJHqIvtijPf0vLrK45kdtLnCDwjXqxVRsyTPFb3RkcB6pnP
 
-## S228 — Avant d'investiguer une anomalie signalée, chercher si un te
-Rôles : dev
-Date : 2026-11-16
+## S228 — chiffrée
 
-Avant d'investiguer une anomalie signalée, chercher si un test automatisé couvre déjà précisément ce scénario et l'exécuter ; son statut (passant/échouant) tranche immédiatement sans lecture de code supplémentaire.
+Chiffré : v1.95O--RSaXoUus9TmozZWGOAa3sFqYQT0f8E0dWm-nDZ6wHirDTyJbNbwtGTw5YWF9_OMRb1gwmaRGveiP9RUlP8XV7XQ_eUpAiP6V76MdhrG6eiT4wH_o5XSXaEX8dOhBLokHlzoAA-zYE5RTk_jmiExW_TLLlwyDi9iZ1yGaIc285DOJIROyWI5dXvMa8B31-KCaAvZbLWLK6UtKjK2cnvRLFQVm0jI5s-dIApwhc5PntokceWULbfbk-ZcR9gNPuoOigfAzFYsvfPQ_AS_g-sFjE5Vaj_quO5APTxqhhFg5Y_dyDwxPe-kod3f637jZa1Gliymgkfi2vJYyOFaL1zZMp3cS5WPMz6T98oPFxMm0MfhMH1no6d6e2MzxNqMKeCV5WrFcgaPNNdVfhg1KJq-spsWmkWi0G80KOw3clZsB3QnRC-C5Svlw5RTET9FE1kllgV9wkgyiYmRVxUpyGr9BqjZc2_bfw0_xFvQ-cmI0-MIWC5t5KoCQWhsbyOsRExhxyZktcw-kwq7YBoH9A
 
-## S229 — Quand on cherche une anomalie sans piste donnée, lancer la s
-Rôles : dev
-Date : 2026-11-16
+## S229 — chiffrée
 
-Quand on cherche une anomalie sans piste donnée, lancer la suite de tests existante et examiner les warnings qu'elle émet (pas seulement les échecs) est un moyen rapide et peu coûteux de trouver un vrai défaut plutôt que d'explorer le code au hasard.
+Chiffré : v1.MLdRs-tru7WeMcEw3ryRFbCPkyfmqg8qUxX6ej2zKH1PoIRqSu-d5l-xOUzR5VLOXA1B3CzVmzCkdBSR0FcCr0fCyiJ73krEv0HtVmaQT8LfTH_sS6Y_5a4CXxIvMCTtBwcuClFk__FMN9xEc7RQWahEZOEzBVd_aA-VPT1r1ELANEa_9A_fAZV9KqRYjAapoiYVfaRwgs38qk1ML5MPOfvD8cfeDpDX81BOnO-X6UKif80OAuNNrENMP3oP7vWU0YOqTbQrxb5MV1R6jly8Rm8aHEFLZc8buOMLVV5uIYLic3C1ZWZvPn4kNzYUI2cb9-PBY-Mts59fxJ5lIIgh56MYDHKCwnTUdoDgnvo8o7YQRUH5_HuINyHXLSE9KTGpohEepJV4yL5gyRjM4kmBliXHbjlM1v68UXGhoBvsv0Qggdm269InN7UGAXfd1h28lKHDUTuXyHAIuNNNnZJ8h74Z20CTj-x4Owh6utFXp3N6t77EXSCluEQrs0P0jDdkd1i0Hq09evpHSV8MrziUWp26H_7RDujXBcGG5TaJHbdsXBoNrWVyMZuf0Msq3gc
 
-## S230 — Quand du code applique une suppression explicite d'enregistr
-Rôles : dev
-Date : 2026-11-16
+## S230 — chiffrée
 
-Quand du code applique une suppression explicite d'enregistrements enfants en filet de sécurité contre une cascade de clé étrangère potentiellement inactive sur certaines connexions, forcer un flush de ces suppressions avant de supprimer le parent : sans relation déclarée entre les deux objets au niveau de l'ORM, l'ordre des instructions de suppression n'est pas garanti et peut entrer en course avec la cascade côté base de données, produisant des suppressions redondantes ou des avertissements silencieux.
+Chiffré : v1.vJ8kpZHxxaYNDQsG2Usgea3PMevrvMdE3JxDENRJIZCO7BO09qnQHcceNysIwvSd9SXON61of7YyssByE1uM98Li0BIGvspA_-FmB-LjBeJYNcOVumxQAcMiYLtp2ohNNdebaU1pCpdKZ7fZ1XTT1GNqG3lBW_BYTUdrz-xl1g4BwgAyEFFIb94XAe6JScU0AvjGLTDp0_ZmOxqJf1bm5xuieiLj7bBx2bo4a97tov7dYyN97iLE0BTBCyiIk6NKulWw8vHZbwuERqMDGoBw7KA8gGjshS_89Iz0TMpimM4mRuc3Q3IvyTCg6unW1yKse-L7yKvbLAryhElbZJZXJtexqqQQ_0vD82-CEHn-nfilZg1OxKc4DemosisBsDXfWKuJQmKIzdfnsqxTCaihCPtyQIm8bgEUNbAJB-MUFq8y5qw6e4C-BSXul9_8izu-9fPFXIg0_LgPm8XFbbZXj_-5x7xZ_R_gQOYYESeZwvRyS-Jg7RBT2xLjnAd8nCZfqAP-nR0HsiT562yzvrPq7wMTslGHyd1A8sTdflvPITsOWtCBu6QhvRGArojw28aTuQHGzIpO_JkW6FWYqsADrePJXlZmjAaDHEawi8WkZFIQ7nPev-D3L67xUoeEDfN-ToJJIBN0tjx6bVoDT9gtOfeuW48NpYiIfKc0FntpRO92MbYIVC9r5rCc5QBFpSAgCVPdJRnamcumIMVbqJX-JM4Y0c2Fnk8KtVGveeOAByEGBgg5xX3WNvOZhvSFf6Yol5XnLiLjiZacLHd1g9kaHJtjMviDL2mrwtsmZzpILa20s0AwrbGf0SboLmBsdeaioKLOmWOxFwC1al6R55rxFrcB18t1R5-1kpwLot2kwUqXB-VcOF6ClPdggO4Ubzd51BmuRS_PbNZQrgldDvT4Fn-MqSIf
 
-## S231 — Avant d'instruire une demande de correction, chercher un tes
-Rôles : dev
-Date : 2026-11-16
+## S231 — chiffrée
 
-Avant d'instruire une demande de correction, chercher un test automatisé reproduisant exactement le scénario décrit dans la fiche ; son exécution tranche immédiatement entre 'déjà corrigé' et 'encore buggé', sans lecture de code approfondie ni nouvelle exploration.
+Chiffré : v1.Ko9M-ZNiGgtQiddIld1oSMOqOSGx-Rd3QWv4ZWDEB6-SEBH8JYndDXQtmbi5bfMQOPJIpWluJV1cWr3slZYCExwHp663meTi2-BygMYqhiGQz2c9ugw9sO0ciXzlAd8mvkC6kMFe01A3_xKtVbHHrxIFk78n_iv1VG3aQjdWfsq8IpHfmOrJPTMUS9L7RWMO7V-4FcapsUpMuiDJCHnYUx3NainmWRUHFiqVG5sv3T1xe-GyyDXSq8CRmSlrvUt87gEFBJHYMUZ-ZBzEX5nF8k8G7-7xERsDXdJmb1v8D9ukirgv7ZRupyaJWrcGK6DY_iV_Saq7vhcvpjba0h-qlUGX5mZhiKXVI3apoGKYadxX0GwqUm6_VmbfN1NmJFmJPfv17S6j5u0pMGYSH5pUnpdjtc8FmKMfhp8nk1ojdHVO9xF4gciuv5sN3Jnpt8Krdp5gVLs12KShyJtf1OhX_4vk6pwiwTwSI-YSLy18XiB91v3Wgzny2xKjGSmks5ZgZarKcEp8IAaF4SQjCTJrpAMHBYq74BXauBW32h0p0_0KATdUREJ7NkBMvIc6wXfGwLqdt_pE-Zn0VJJaRotU-g
 
-## S232 — Avant de corriger un test qui échoue sur un symptôme de conf
-Rôles : dev
-Date : 2026-11-16
+## S232 — chiffrée
 
-Avant de corriger un test qui échoue sur un symptôme de configuration (403/503/auth manquante), vérifier aussi que les paramètres qu'il envoie à l'endpoint testé sont bien consommés par celui-ci ; un paramètre non déclaré dans la signature de la route est ignoré sans erreur, ce qui masque un second défaut une fois le premier corrigé.
+Chiffré : v1.awUX0MhE4G_su5RtSrE0YEK62IxoMOq5nIC-sQ1gSF-3o0h1WAEszyLXYWaWYfkPBfd04ejmfG95r5x0B90d6C3GM7AqgXMjemWN3EGuJ0_rbxM5bnuyvHJ_t925aa7dAToxEs2IBSEpJYwCqrmdLnUlBwG-XuZ_q215IK855hSjl8OTVqqVZhfV6IebE-F0ZIWEdEpGpkOR4Vpg6VsEZkW-KCSHyYOQngaMEl-xHkh7BJHH3RO-NpNFTsGoWVlYhXxyk5S5sEykdFuqzOfH4k4UFkXH_6tjnnFuwTWSFa-pgnXo5M6avDyo99him3-qPCSCKkcb9gahh2LLuAj3f5r7AP9Zn93ycug1baJUERfClT55BvJ-bWOZWu2emJYAK8j-6X22uEilRWicKMUCJJgoNDJL24Foe3AMhN_yc7bIK5yxhJ3QghIYRwb9qUJbu4-dzfDbkWYJldATHTTt_a556OHejFVKIoBck6GjHeuTdqxPNswW7KzA9rptar64UarUB4u0TkbcAgI4iJQDz1iFENTlqdKnA1egh-I9KnRtflTfk_1DNrLj9iKxmoWW0GZMI2WTPKZc9X2iYZfh2ndxfXiQ7iko-PTbYSDZxNsndcKTCXdAYFngYk6Ti8gIt1K9iedtFHIgPCjiFaIIH0Q6L-W-NAiBwAVDjjDwr_oOSSAc-lmK1yNJOW4
 
-## S233 — Quand aucune bibliothèque graphique (image/police) n'est dis
-Rôles : dev
-Date : 2026-11-17
+## S233 — chiffrée
 
-Quand aucune bibliothèque graphique (image/police) n'est disponible dans l'environnement, une maquette basse-fidélité peut être produite par un script d'encodage d'image minimal utilisant uniquement la bibliothèque standard, en simulant le texte par des barres plutôt que des lettres.
+Chiffré : v1.05Y0IvYoDdhRTxnDEANPOQBNdKAc4ZtrtW6rTDz9kU_5zBhOOlg2BgxFQZ2okagGVKdmcy62SOxkF5EAwkxyzUiTuhJES-AE_KV6ylx44jXA6Ip-ecn0-xMMqj_84gv74Pf_YMzDY3D6CyD0uOLhjZzsVVsxw2VZ34MXguP4XUeCAgzAC1d0oJ9Z6DN0K-cFptfJ2QfFIZ3VM3aXtH_z39mxb6B_LkfdEX3Tivw_ejhT2IclVPUrJGa1srH2H02tE-MmRuvB9piMuR7AKBHhLclvd2ARtTRze2Sv1iPvWbbHU-ZfI-gDuVFHvFUibHqheoTmCFSQIEdUtIu0CgUOTCrkK6cbJW1aX7V5HB6jntimfOeiBlcnIdSMIr5znGUxh9Mlbvyh9RAc9DDHuw-oTSoA9UWSVIeC0qCWnXz-T6TMSDWdqqrMsrQ93UJ8Ae_T2Wa4wYaoCJcUSDpKonYBrDWeqIUOdQrGlWfX3J7bLc71A5TKB4Qvqh2UCmUxV2vXUS8p0O6rGIATDLjhH8hIqYqrxcfhmV2DqHhXt-1pH03iqte4TrRp_J2ypI3OBQa6r5psO00vcR5Wi2pktfukUHUnhx5_s62EK2oZGjvzZWmq
 
-## S234 — Dans un rapport de fin d'étape de cadrage, le champ listant
-Rôles : dev
-Date : 2026-11-17
+## S234 — chiffrée
 
-Dans un rapport de fin d'étape de cadrage, le champ listant maquettes et étapes à réaliser est une condition de passage à la validation, pas une simple information : son absence bloque la fonctionnalité même si les livrables existent déjà sur disque. Toujours le renseigner dès que des maquettes et une liste d'étapes sont produites.
+Chiffré : v1.ByCg79RyKcK9Wc4_GflALlZ9oJcvY-Uru_Wy_hto3-YV9nxjh0GkIwkmWc35HF9JwlS0jBjSz0S88LTZdHMJqB9BBQvXI5JJJdRguLMLWepzFKD8uaJhykDCzLJybeyiBaZ5Pk60sUkB8pl7hy9jqIZ0NNeDCj6L0FvhpH21sgu5_B2MGrviHaihwzyp9dP4qIt1xvvO3hjNsGhvNl_UHr2dj2O1N3FTkpou3oXz-FQnjJGzN7qzAuzyh2Pz0Jbziv8jY6pYN4A07xeM-zyxbdTflq2Cl7Ow7hP2UmMhBlnU-6dK-yJC7JRY7b-frWMnrPTH3fao1TTDS-0BKHJoubAVvP_ELpTlU2Nwzzx4tQi3LDl8XvSg49ScuhKRN2cdHW17IJ66o0w3FAmtHmQvUJOmllSUDH4-3Q2OopPyqeZSrfXE0NuDbv6dDOzEUFUoflhWy9v0WK4KV0oJf89Ly0ZbLd8mCq0hoi1LlZp3afpoEF4C2Qv9x34h4LOjyvI1WiKL1oxNeAgOpgbvnWBKVG72azNua4a0rg3I4WHuUzTZX98MJzvISgt7rMaw0ZPXBW6YJQBAmYAlO53-hsttopl0_QX_LY-FrLtSIUZ0ELrqQ0gQGAdZRo-cvBeco3OFd8n_N6u310SfEOwBrORoVtQCJ95_SXem9eKTeg3UOdJTyp_nNr8
 
-## S235 — Dans une session sans approbateur pour l'outil shell, un app
-Rôles : dev
-Date : 2026-11-17
+## S235 — chiffrée
 
-Dans une session sans approbateur pour l'outil shell, un appel direct à un outil de build/test dans un autre langage peut être refusé alors qu'un script dans le langage dont l'exécution est autorisée (ex. Python), qui lance ce même outil en sous-processus, est accepté.
+Chiffré : v1.2xn8vkmRi3jjRitfdJK2gQ8NSy5Uf4KJ0HCmVdKcH9YNn1Hdw-SEnSkttccMcCUzFvVu2Y4oZKDAAdi_X-qus1eQEPKNTCZF9IPdU-3OX4UuJybfpS5irHVmeMkJTKT0fPpFZ2f3K8SIVRuRWF8nhOIg80itawy_fydkCL5yCb17UcfnwJZl7IIW3OaXu1B4sCv-mSM5iqWEmWw7aSrDEVrsOVakMOH7lkKAsyXqZn57P9ohD3AxjcLWMtGZOXUfISIfbbvmI76xKFKepFqnjctmnNVMFr8FuhmawfdRFyhDYlwTxdiJz8YZNCfnb1hvQwRLk3ERzWXgv4AnWehe5PWzlCp2pmrAI3TTJOP6RVcLzEH1cGCJTsO95fW8hVJdJmx9VS0hOkI_MTtf5IgjCNS4QBSI2YaEDQCF9iBszn0ySQ20pVcb4Zy4MLd0VIqBMDjAvOTBLZHzdHr9HZJ0QTWHMzTtY2qpqpd7tQWTc2qVMEn4Jx-UrGU3zxiWCVLYDbzJK0_D5JEtFqeaqMbpsCwIkrYzMpEbPEeRKEVdBn-aEN5o6MllAgoua3WPvki4PPtfLiUQodDMygigJL4qJeAA
 
-## S236 — Un test qui échoue seulement dans la suite complète mais pas
-Rôles : dev
-Date : 2026-11-17
+## S236 — chiffrée
 
-Un test qui échoue seulement dans la suite complète mais passe isolément est un indice de flakiness (charge, concurrence, ordre d'exécution), pas forcément une régression du changement en cours ; vérifier par exécution isolée avant de l'imputer à sa propre tâche.
+Chiffré : v1.I_B8sU2T1IWjdUua-e60ujhBq3pS9_1fe6D9a8U2-vkDJ9K--85sgCudKXE3_MInLm5aN4rRMBDNC-pl565-H848JfpUuIQgF3CguYIv4-kylqjvSsjA82r_b0V4qVfdKYrNLqctQaPhhKcRB15VQMAfzQck9GmfBvYHf2dbdg6w3mQRKg9e6lpvyou919C5Dl7HB_Gd70IXpPZJDQa2e01rD5c5Tfv65AUmTZRRe7G3lPRgs-6oHks5t_il-w1s-OmF_5vyPuyt4uSrs95iQeNRnc9UsyAA9qs1rfemIhenj-xyPpNjl-Mt7dkGOFBnYXZmdpvV49uXYre16dZzh-S9P31Q5IOAY9O9N69w47AS-np69HWaiCHba9O96CM2oCd7nO2_6Y9EQCo8F4_qfSeVnkwfNEf5VDrLqYqQWEUlaAh2zclg1xobRhDPmuW40wHTYmB7BXmT7xkTHTChtCScsmBY7PhBw_00tI9SOWPh-U5ZJyDaVEhqwlRAAWvvWhkiGcw0X68c96XW1dkXJrz1rMOvl2ccF_Mk3OTGluxdPI7Y3lO28Xs3PfJma488yYNZv5R54dg6Fb1hjbpDusIw
 
-## S237 — Quand un format de rapport impose une limite de longueur sur
-Rôles : dev
-Date : 2026-11-17
+## S237 — chiffrée
 
-Quand un format de rapport impose une limite de longueur sur un champ texte (légende d'image), mesurer la longueur réelle de la chaîne avant de l'envoyer plutôt que de l'estimer à l'œil.
+Chiffré : v1.sNdw2HfoD458Iep7CEdCw37EomoeaRN__JEMkarPdc959VebBEioS0cR8RZ5sRVzVDY-ErUjtoaNiZz3-7MJSTjgtwGmM8ZX7oBppXaZynYl4-H1CElSVzlpNd6_14r3aKdQGbFKF_LvqO4FOY2cLOvj1ujJIip2oF7WOn-QkIUQ84vVq907BzTiqSFywVTo7DMRTlbMQihxp4FSyTLGpQGJQSkVOQZ8xjIloNMyYbm2zIEn0zCDzxJRklUA50bhRs4Q9IjfxJJtErD93dHLRORBnfqtyCSTkPSRIe61ni-UUH14asDEdqYOBY_ek8aCITcZ-1zzcj_py6IIgh-TqChQO8Hn59Xr-s4cT9zRLFsA2MGv0ODwxekxruPznwNWiEuzdDs-JClaaiTkgBSW9iz7D6cjr5jneQL11bQH7HpyA9OiC5MKK5AUeXgGejxFtKfyh1PJqTKmDSU79N7OhVFeqQO7ajcezbYeR-Mj
 
-## S238 — Dans un test d'interface, ne jamais agir sur un élément alim
-Rôles : dev, testeur
-Date : 2026-11-17
+## S238 — chiffrée
 
-Dans un test d'interface, ne jamais agir sur un élément alimenté par un chargement asynchrone sans avoir attendu qu'il soit présent ; chercher ce motif dans toute la suite.
+Chiffré : v1.PorsZUvMp9lBE5m8zzr6fXEcqkuzMj8V6cuKdjoOxrBSmfa2g5uKzj8jFF-c8udZAdyhp7ucNx6sCLkNtwo9_mB6ofBppziXJzUZaDCXD8RHekeDqNtE4L6kBD4DtPrnZghnNYrIga3BHQd9rQC-FTGNKOBkD5zElOgI3oSiGvrkn6BGO1UUePm53Kfd8aNoP9Vrtkcu4zPFrXVI-sCCNKmLc8h22jXJlOx0vlGOPDHilqcUNaPPERFqPJctC3W0p_d0LP05565f9tPuoLnzUHUDbFvzYRzOOQWD_kXYb7BgZwsxGSXaok5wbESKXCOPjo7aHI26B5Qx6U411TtQ1sXeuP3Do56Uo5KuGBYcahX9QDK6uRrIHfje1TyjminQLfKuXSTX6Yid6KdwruQ-pJ40tm2WYyNF6fUjAB7QzscYztaHxvw4ZDIU2IZHltOE7dsk7hYMcvJ7PuTQGiQHo54bgRd5fqBo1n2E
 
-## S239 — Avant de valider une livraison, rapprocher la date de constr
-Rôles : testeur
-Date : 2026-11-17
+## S239 — chiffrée
 
-Avant de valider une livraison, rapprocher la date de construction du fichier livré de celle du dernier changement de code ; une correction commitée après le fichier n'y figure pas, même si les tests sont verts.
+Chiffré : v1.ESLTyc53lGCIoOTG4l_gHPqB5VfMZRq8N28EmOhunMTPvVaklAjOQQWRF0VuZtVAaq6qgCgl6jZPC-6FkWqLAVN6apXz4ybX7jSemSdGvEtAIztVFheNr7DBJ13SODvfgJ6lby2N9NEHul52wNMgOUqu5eu-TZNFd48jiZfLB_WweZqhDgqaXWD9NRn8lOlLPi8wT1ZOVgai9_6cF3vy0uLJp2jC4fht9IWVq9wRM5iNX5ebNkdlOjhx3bFhmvCxHC-77DIKhPsIddmetRjT0QkBpdNPN9yQyvS0qhMOaqXvqDwC1wRoIjlPqhfVqO_BXxz5EMtyK7JU0raVMcnzO5kiARpR93csacQxieCqngZKxFrcoeO2y_5wbiiEwLM_nGUK9JsDCL356ZyJN11VJsdp2Uc3DF6wefjjH7HvtLvjBV3YbiPg4tqkmlHNVClxfDIx_GErCQPujOvflZG7vg-swFIlanQ5i3nSqYDku1fE4dQXJxnbqGKNfkf4bVc4H41L3WM5Vlbn
 
-## S240 — Relire chaque statut d'une note de livraison contre les dern
-Rôles : testeur
-Date : 2026-11-17
+## S240 — chiffrée
 
-Relire chaque statut d'une note de livraison contre les derniers résultats de tests avant de la valider ; elle reste fausse après une correction ultérieure.
+Chiffré : v1.5fZuMM7OyuOrAnxntIbgkYhv1SScS6L2i3BCB6KzJ0kpb9sNmhJt-YFlQq8M7vqIu1X0vgYHSeU5zfRSqEYhX3JrlxviTJUDkc2_PiDAWArV3j6rfZieDeixwK5hxCJSe9cNqvqNDbbXAYwI8HSdmJsC47ap1BawFuwu01xqAu0IPrGU9_7tjkB822X4EqNzIwFRJAsFXb6nMuFq3oFBmdeEbyJB8wILvqJsvIXPiPAEeawNufCGpfra3mTPQqdKY0dULgCPf0t96h0cKvdWBn4rDplnd0opTxCozwCiJqXPdeOJzj2RoWxNQsGRSx_hFxVq2J3RC2efeuHmVd-261V0JO4PX7Ra31hkfnxYdSR9EvQX8sYVz-nF36kUaeGt3mBjPxR9ARi9rjFBaQhpIVFdRi-ARhAzUYpd7d6SfbdtyDy8_vTEFpNRwi9gVKEd3Q
 
-## S241 — Avant de rapporter des résultats de tests, relire l'horodata
-Rôles : designer
-Date : 2026-11-17
+## S241 — chiffrée
 
-Avant de rapporter des résultats de tests, relire l'horodatage et les comptes de chaque XML de résultats ; si une relance rapide n'a rien réécrit, le dire plutôt que d'affirmer une revérification complète.
+Chiffré : v1.Fo8MrEQPX11Ll3sgamYUQaHMhJxm794KoGzDi3N13LPgoqNUa7VwQpx9mXgqmyWRRFyxZRepvhOQ8QzEe3dREU25BsUIiKPkPKMqYtNU2zG6L8Sc7hh34dKxzyxJaT_lR_QrLGC1_qAIcqD947Uab6lOId08SKSj_HwDkM0stpLwLoMtnuymLxcp5KwFW7_Vxrm0ddIHhg506UZC6u2j9uaXCCGHKrm7yVVbyeKX7c5_S6PAGyuHxMUX41lj8TwHuI_tzFdpT67wNA5zRYIa8wLeUWfTQ_q_f_ulJP_xqZic68wpdDH1Pk_4RfbyyRfPl4sf-2lu96YhXEVaJTyv9sdR6W-FqTddENJiakFT5_mZiO1H9vs8E9LVc7R1-dxyNnXXGQ2yjbPfkWXv1UJy-esb9M6N3gGzz2LQ6mk05hYTgcIZYmNn3WbyZRCu3rJQ-46bGXoZgvzRBIuBCrya4RgqGLD98u_1sM1VhpQ8glrcvlgPUBW9aiRIy-UZMvCyfyOvy-kVbqc
 
-## S242 — Une mesure de performance faite uniquement sur émulateur ne
-Rôles : designer
-Date : 2026-11-17
+## S242 — chiffrée
 
-Une mesure de performance faite uniquement sur émulateur ne doit pas être présentée comme validée sur appareil réel ; le périmètre se déclare dans la note de livraison et dans la fenêtre de validation.
+Chiffré : v1.ax8uwmgzMHSsVhhJgFnZY2jnzyHG0LYKOwaAWxnbTO1oRPkosFIDsfUCxsIfSq0zIs-yLBMaDf1IC-xVhmyp6bvTgpj1DJuKA7FNGy6iliS8QilD6RC7QyuIlH4otgt8EsPRH7up3vUg3yjxmP2CGri3968sET370mGaojM6G2G1uqHscamQce_wpjT-wucovftZ4K286zxCwzg2ySB0XbtKQRS0VcIxT083wgTlcABODEsJJY79FXmyVQyWU7hhfdufkdZMYNKAjFlA8BbeAXe66Mrjjx9pfe9fTCUexl9lhydLpRJtlQgs3Zje7q9y1o1uk74TIpxTSEnnzRAGbI2HxxrwijPltKWo3bPA_UAN9NxpEjV1gEKIUOtmUkCklXdGPh0HMQ0hZZe1frQq3PUHb75BZ-UADZvRfW8srgioQMP9uX4NUxSvF3Vl1HOkZFEtUU4-nvY3dLWhQ3sWBZQ0whJPemh57C55XAA3qW1cdWboGSJCVKSLJjaOBJRYgd_E24mS
 
-## S243 — Pour juger si un fichier livré est périmé, comparer la date
-Rôles : testeur
-Date : 2026-11-17
+## S243 — chiffrée
 
-Pour juger si un fichier livré est périmé, comparer la date de la sortie de build d'origine avec le dernier changement de code, car la copie dans le dossier de livraison porte la date de la copie.
+Chiffré : v1.avcoi4HK4DYsTCFvBY7QwiSIJyGQg54AMq81zQWpYAyUi7y_eIwA9HW4XtE668sDgeUjDgp63llHte14vQqy7OsPhcv_v0T67c3qJ9UWaM_it1oKfqOufPw4tlFWrUbL5qLQi4rsolbhMfNc27DSVr50mUI_mE35QdBtgVeuu7CRmbPc2woWCZDZe3EeJZMkt6DFWINfQKfav5i5uVwXHQHU0OCajtXdz5xJIESKsgGwDxp5VEXsy_zuA2snm7wgURFEqziHr2RT5I6ybaKI9fxhUVUDXUeEEZtMpF460nv59gnopyUPdszNPltOdHs5xk80wdaP95gylGCY2g-E84_giQvhxHHGwycAm8okpD5ESveEAUiV-jcI5kVQGd_X93dVlEw9E5mvFTeqT41WwuOINqrAyDGzejkv2tMEix0RvefIU7G42n5I15Y7CEYSIN5FpRwUeAwjpIbOQHxWRoC-G6Yu6wcM_57vLpiWiT9R0uIEKGpmhD6VEg
 
-## S244 — Dans un cadrage, quand l'utilisateur corrige une règle métie
-Rôles : dev
-Date : 2026-11-18
+## S244 — chiffrée
 
-Dans un cadrage, quand l'utilisateur corrige une règle métier après la rédaction du cahier, il faut réécrire explicitement toutes les parties du cahier affectées (étapes, taille, légendes de maquette) dans le rapport final — le message de confirmation et une nouvelle maquette ne suffisent pas si le champ structuré du cahier n'est pas lui-même renvoyé à jour.
+Chiffré : v1.JvXcIoJUZ2XSTwlhuy1YzJzW1JRdH2ytXhSb5ccIktzOwrmaoisKpV5oMN5y--KgD5jYfC6Gw94RsgXq1sj_svDa6Qn4MRzlT5fskFFy3E6tSgdbf6OlZ9ZahtVMX8a5x-FwrkG9Sj7INCCqOLH44R4Ukv4mO0c_xM1bJ8VHBkYUbTI8I-_RVn95ZJtM1yuspeYiAq4lXAaU8rq6ji5u7qj_GE8LEkof8jysgGQDK0TO1EXMRRpX6LfmY_F-nXXqM1oH6S2P7EARpraTP7FcMwqwfOdYXaCzoclIJqoKgoLfMrpRJ8klH4mavHtGZfrerssil7sjlG97BMYrFQqNgz-OwSfPhKfbRUKr1ZZiVntpYhu87X2N8HuBQv30jKdp8mAL6h81itfqDIlkrttH2ABYow5pM_tRZx8nHVuBsHgNMK3GlCictWj-zyuZInD6xIlPJpJqC36Ag1vAUxpTmL6EiD9P9Ily6i5QWH07ucuOwBTvakWnpg8DOMikMHeGnds1krNG9Ge7jsNb9qTBK1mMa91dVZ74nVtsmcqtc4dPnH26Ha4ExZpBvyuHQWca4bZGk4SkDYONW4BBOUd4QGKGjkuVYVsLM-HOemQ4Hy_9ZJWRkCROmU8WFfNlpHo1J3fS7jtKxCXB-VrFIZHbwE8FRSIYVEyPD579bKPhg1HLQASc3zPkNQUc9HMvCjblg1gpe3Ha3ZkBp3AJDWaeJ_8D7sGIi34
 
-## S245 — Quand une correction de cahier déjà posée par l'utilisateur
-Rôles : dev
-Date : 2026-11-18
+## S245 — chiffrée
 
-Quand une correction de cahier déjà posée par l'utilisateur introduit un besoin distinct de l'objet initial de la fonctionnalité, on l'intègre quand même dans le même cahier corrigé, sans rouvrir de série de questions ; on choisit soi-même la forme des points encore ouverts et on l'explique dans le compte rendu.
+Chiffré : v1._x5cx3dlhHjtUZ4nbJtJ16YXsy86cpekDzL_d7wRPtfoMPtCE82HZFWz5aKIzw3rWvcXFvnMDlV5SFOiVurGAUh5Z55vcZd3QlSZw-YXQS_0iDT9VnTdmhWtn2SXWl_5MvWfQKAHSQ-EbDIgI3kRCyHr1tBuwgyvkkaHPktslOrWy7RGyK7_7pWs20s2-967STgRMF1HlvrOuYp3qxR2zeHcm5YlNIb2K3fxAtJWGTHoKMZsphHzHU1wwUjSGQNOvN_p6XrbWPGma6AXkKrlJtBagr2WLidAAEsRr1mbkGVwDn3bjC4xta_vrWxr2fTi2K2msjruTTZWJM4dE14NRFikKnulZMZyU8o-QA_GcS2h5-kJU3-NYKJPBJaYilb20MtDGAQIyGqZdnlQAwaT03E8CLTG4L8bOCHNSA8ludTSrmg7WVGgcByp7otNpzfNasNqyT62qFNYC7xQ79TZ6G54m2MzURiwf4DBrP3rRLdlNv63ittxzWFJj3MOzLOnESpCYf8Aqq-oYelbM7-Pg5dztFjIYUm62vMyWlcIMSBVb4hxcYUqSJ1-Brcbt3QOWVGqTHaTOJ8LL-IUM7C7U6YQyHbnzKHsssJDq1kI_DzOXN7s9nEFw0HJk5GyGkOiIh8EZ3A6B_WsxR52E3Tn3s4TyA
 
-## S246 — Quand l'analyse d'une correction de cahier des charges est d
-Rôles : dev
-Date : 2026-11-18
+## S246 — chiffrée
 
-Quand l'analyse d'une correction de cahier des charges est déjà complète, rendre le cahier des charges (étapes, taille) dans le même rapport que l'analyse ; un rapport sans ce cahier laisse la fonctionnalité bloquée et provoque un aller-retour inutile.
+Chiffré : v1.l3KrI77n6AkCmFTV6JZyaIXaUZOWa6cjaigxlOKhHz5zv091ZtmU2mAhR9p-cnwUZXymBxGijEZzAS-y8MbuMdUroLFU-jHVhICX5yoDiAzra_-gEFLHKnruxx-mgulhJJkucIMHmXoYBHcAo4lHGrZvhW8scBdOmbEYsG1F-9StlpYW9u4jDm0GehCXs5eYj_fETDhxisxDzmsfPevyLkG4s6YO36kjnBPqCigFPXVNSU-WdbH_O96vaZt7GFtMDn7LSHHAEzzW341zfqcX2tBNwc5cSSGNmsdgn-XPj_mHH9hwc4jRWe8JguBB4RHL8wACjSMc3eCg-lsZbjd3Mysx6amCnoTQE6kNvo7GcViR8giWZQrr3NaPzx05EVmB3-l-F614Qi02fQdQQSChggjP7LzKekktG0emJVTy1p_BGlBHFtRVzO8is7C0hFlDOjYT3H3uLzxdZU1JH-ZltzKNzaIDXK2lvxXhdZt7UBGA753GdgqC_Y_X73BRy---SsGOjLKLFJIOlXP0YSBaRLoXlBXrg_Wi_r2ClFjQwECIxdw1QrY6aS5cKo9U0wwQlA
 
-## S247 — Quand une correction lève explicitement une règle métier déj
-Rôles : dev
-Date : 2026-11-18
+## S247 — chiffrée
 
-Quand une correction lève explicitement une règle métier déjà couverte par un test, rechercher ce test par son nom/assertion et le réécrire pour le nouveau comportement, plutôt que d'ajouter un test en parallèle qui laisserait l'ancien échouer ou mentir.
+Chiffré : v1.2hR7bPboK8cXGSJGMd8HzURtNpJA8Dk_L3Z4oHcyB9pEUMJilTekIUlVcmoPyG9J0yarQJBm4IPL4VrxkjDIvywsz5YFEvpdGhVgaB7n4zkvsG3nkrhmdJyGkbHShuX1bwc0PdviVf41jAPY6Ha7FwgSfbb6BImfBvEp3qblkn3Kw2CpVwJ7rGCt4xpX_sZqdwDH9E9BG3L6Lm1oQJOMv_RQYJEAEKydUPNWhgFtDCwjs6Rm0zoHBk24i01CKB0CIe0s1D1OmbMcPGDut41oTDz2pU0Dyq27BrgOAFn7h54p5L-VYg9O7m4irbJwyz-BhyHtVarjRLUTrsCsYC61THTxiUYpE7-EI6SLVxKbaNe-AM6fnyii2EC6AyzTOCODjFuMLdU1WgVXoLrtqkve-w47xPVcIBDx5quQ5KVkDYq5rYkAuW5KTcB2V3p-vTSj5B_YoVTbIJUqHdTf8vdAoFfRY__I3kETMm80C7tV3iT0bTglG-tbCH2etOWmf5dK5xZIyLwtsgO4RW6NPXyS3lvJVi849mNudjtMELLnWRtrUyBAzaBaAf5epljw_R6Z12sho4AWV8qddw
 
-## S248 — Quand un processus est lancé détaché depuis un script avec d
-Rôles : dev
-Date : 2026-11-18
+## S248 — chiffrée
 
-Quand un processus est lancé détaché depuis un script avec des flags de détachement système, la redirection de sa sortie standard vers un fichier peut rester vide même si le processus a réellement démarré et s'est lié à son port ; vérifier l'état réel par une requête fonctionnelle (ex. HTTP) plutôt que de se fier au contenu du fichier de log.
+Chiffré : v1.1KMJHUgShwn7oUBIuv3EAy_L52ZWss_DsgxuSFM6D997P1SpKTFTz6B26MUdLz1dS9CWBUVTt4lRpwGSqiCXFB4kLYOhdNw4r0U2-eT0pAZ_0n4H1StIImtwjb-g6mT9lKR94_r_MDAD3rDmOF6w6f2o313kNB1cMZc9Hi7ly9AWSvCnmLPZBPxQCktDwuLPZqD0gG17FNfAPhUjfME9UW__dYdheywaPHcsow8YJxT-C6mnTomMCzWciltMJTT_fqOiEGEAxLqIjq-GiS1SL3b8HHbbIomqOl5KsgNMD8pOqawInlcTFTGgG2aQuT6HgJogHAu-d0aQsxFMFPAgIhDKTHr5TYQ2vNzmjPxsOzzPvdqUhFSfcCua-pLm2HN90VFCVOk4HbdDugNibKuWI3-BZI9L2KV-IEBbg3iKvfZJbtGaPxzYrth2xi7C826TTzfkd3pg5tBchjmiQwgMNkRW8ZMxx2d0zYZBponWkHFnpJC4J07QVCXHd2ZNTzw1GybM9nZdiGeVpV7TW2sm2nhRDCo7jW7pSn4cdJTUVNi_mOPI-3UXrs2q_rdlfaDHpbebQU4DPHlzSffpFKVgYZH8jd4eh64Cdq5LYpM_jyt5MsM_arWfsjvnpAcivgLW6NgygPc50QPzS3-3d_ZcTV15AucBJAtkL7XVVY7FyNICtpBCJW_w7RH3FF4LvhWy3mdN5aq_coKG
 
-## S249 — Avant de corriger un symptôme décrit dans un cahier des char
-Rôles : dev
-Date : 2026-11-18
+## S249 — chiffrée
 
-Avant de corriger un symptôme décrit dans un cahier des charges, vérifier directement dans le code si la fonction citée existe déjà avec le comportement attendu ; si oui, se limiter à relancer les tests ciblés et produire la preuve demandée plutôt que de ré-écrire du code.
+Chiffré : v1.MGmWDzTG4TrcAv6bWqoR2sCF4J1SoutmfL8q8PQuBqWraO8Fgqs3SI-6r8u9a0r6u6pXdHeQUiayHcfmzgCPzt9Sh5jH1rdiMaQV7rh15sOn7IP7AepuPkRrUC3SNEP8g45d8qCNDVFwOHLU06S3ViNjbA5kyWihanHVSJFE8aDx43LFKcxletBKgpFCMxh-k7562g_Usn-14z1WOfIevQNz-vyx9bQm1KKl2eRTytjMEyT7UaxgKAsnvIATrOMLiCRXAtRTmOkgo0UxIFkyS_-5rrc_SC601TPUTA_1DIW4GqfKK-6DEPS4Toa0NH9WvFbgDFYtViXAswzLRt-wZyGRo8m8OlVe4ASSNzu49k9mj7uoFz0zmreBEUF8goc38xNBEximQqOSI5JjgRg0kz8Lqxq0C1zQEcTehKWcu_bUmiLWdU3__P6emHSpsgF7oylc27WUjpg-QBZuhlkJoVq5G2uxyyY53ip4gbIVUCiLnCXIMW3r4xX9sP2KWJvhu8arqLyZfEcqIwdD8hn2L_Au7AV7y93lJi9_IiXXotEqgayltsG7G-9rqyRLR9P10GChzopEdbAuVm6kbLEog8MainMxPO-SBhr_fHc
 
-## S250 — Avant de conclure qu'une route API n'existe pas, inspecter l
-Rôles : dev
-Date : 2026-11-18
+## S250 — chiffrée
 
-Avant de conclure qu'une route API n'existe pas, inspecter la liste complète des chemins exposés (openapi/swagger) plutôt que de tester un chemin deviné : un préfixe de routeur peut changer le chemin réel.
+Chiffré : v1.zssRygxVuh8YOj1qBCLWBgP-mFNleht25QtA3AIfb1Gpf-eEhYOA6G6e4vsGqG5er-PkayB66ap1tavIT7dNOkioIGxjckCTZ_oubZySEP0jma6TP0JobxBIYvVGJ6exINwGNvfROblq0Ungi5ruHnjPtgmpfvWBN7HCMZgaZMvL-1LMTDkvVze3lJWDPfFzBZ1JspBvpuQ1umRuIGkM0gCWGWmpZh-Tsp9ped2-XS86AqqoaTpj2IkE1Pykptf8GlTt7CrmVLNjesTu5VCOCzOXyxe7mJefboZHXGz1PIYc5aPOM_psVPDc4_8f7YznSmihK5eFY0mB2WO9FXkhy28fIbcSxr43CnptIsEX8xK0Zzk0THoG9502OeTvurAJJVLgCk4_KIjcPnxS7qW9J-V2GvcYbLBVtu7xvX0RWOZdKr8q2qsGZBx9iz2qgM__TDOJ1XoPICEiShppriI6eAP2qwkW1u1d_fTGBgECnvHMReK7bXWXX7R1zUBC_Fog7A
 
-## S251 — Une remarque de correction peut porter sur un état du code d
-Rôles : dev
-Date : 2026-11-18
+## S251 — chiffrée
 
-Une remarque de correction peut porter sur un état du code déjà corrigé entretemps par une autre session partageant le même dossier ; vérifier le code actuel et git log avant de rejouer le correctif.
+Chiffré : v1.bxxs2EXioK16mhCk0YdQbhJ7sgGnEx-jj4yK6nrSnwyPokKFBYYGRm9WUUWzg43JImP0lnlW8rq83xOXjavmFRkL_0l9quH0o9YcJlncSr4hv-myeuPXvhMz_5W3l-jp3fQSH1oO_lZYAbkzGPziDLS2IdQuj_-x3-KwrHe3Wa7I8b51FrySD7A4mv83-YIKBW4uG1r1e2BfXaTDZb4SKDJ48rY5mdJhirOhMPwBGaIPXzf6wEkIxIIwDQI3-4_8QWHV2NVargEuzN0ag9fl5ifKDZnTPqd9XOckI7E1TzspcttNlQGYrlxy8aSBJOp2DnQtddP2uDxLT390syXa8AMrGPMuH9G_Cm31B7nLpJOxy8ljZ3POxOo3hIzAqdf8-3xw0wJVar4K1i7mdTRhVO_v8BZbAnGTB0DE_qVk-aikih2LX8EE6KscXjSwALAvjRa7U8I_u2EhnQEZmlGPjPZ9nQNzXro4d4sdGn5igrozbCj4GLN_grUgpFU
 
-## S252 — Sur un poste partagé, un port déjà annoncé « in use » par un
-Rôles : dev
-Date : 2026-11-18
+## S252 — chiffrée
 
-Sur un poste partagé, un port déjà annoncé « in use » par un outil de build peut être occupé en IPv6 loopback ([::1]) sans répondre sur 127.0.0.1 ; vérifier les deux avant de conclure à un échec de démarrage ou de tenter de libérer le port.
+Chiffré : v1.NTz8UqM9tszVNzi0CPGoqhRQu8_-Uz9QAOfj3w1xxkYef0RG0axk7B-W30-ueNATNfLi7rqmKb7zpUe9ipU1YS7EECH0B-pdMn3Jxxqk1Ne9_r_fzXH61mvSDXpTlxqwk83ZTrMGXIDcDrNqqbLY0XqjgRzSqAnHlZLA44QaLUdi9UQ3ecEO1B_NH6Lv5C2I3UXCNbA9w7ihawUwNFIrVYqJRyM2cXkM1jqjhPWeItmj3GzCuPEj9jMB9DpO-KRORwlGZlAflfF4fwVrLX1eb5pS1FAbUZh6Z8-hJ95-t1bTcRhtSWx3C-nmrpPHqR8s3ihGA8ce3ymLQBLP5O7bpWmuhR5VQ6gLejCI2vJUgKVfnWd4kctxQ_RQwCmbdRnylOe-BDrjUG6Qx36kcGtJVzszEDNSQt11AJRIyZU5lnTGUH1g5A2aBnWmohpi1jNxQpZHzPv4M_sPWZTeSWnkvc2CTG6J-u1CWvFPuNThYbyu_qbz_5Kzj3LSnXwIsuiOWcBfKemimtPbxQWrQL0LQ1juEQHy_5OgKrzfnlRLuYkIsrOKN_eALnY0t8JUe_odDCk
 
-## S253 — Pour une tâche de vérification, lancer d'abord les tests exi
-Rôles : dev
-Date : 2026-11-18
+## S253 — chiffrée
 
-Pour une tâche de vérification, lancer d'abord les tests existants couvrant exactement le scénario. Cela résout en quelques secondes ce qu'une lecture de code approfondie prendrait des minutes à clarifier.
+Chiffré : v1.6YFrSeL8ri3InFIsUyFYQcfKA-miL7T4wFxZ234C87jCoY6kSY1Vg9EtWbJ4ZsJUx5tFI4nDNg7KZ6K3q3y3Lg6A0FW1XZYLlopUVpgUIo6hQ4B0C86yNzoLkwlB8pyXsvaU93Wx6SrLwAwSPbyzwTG-Hnvix9rDHbiCbXBkEk2Mw0xr65wsIfZPZYeVGb9l52fnC4HePLL7ad--PnVPGqmERIXMRBCY-_up-bHeoTtN3Jk3WSYi1DesgOHvL1h2qRfxkOgJmugMpetJOb7S5WaML5kba69zEHZnZiPPt1cqzd4ZXNoSh3AB--ormxN8DBlZeKinvbWWmx5vqi43rCH3S142W0QTgauk5dq_BoTpiE05Dv8YCmtOUyyVnTEaA5fsDPq1aI9BrmT8rHmkyweFDaQQj4gYcUvDyzwNbNN5gMRL8YyJguz7XjkpTsQ_lwZ0A7vJ3OuQ40gsDj59VSNwnLOM4lLCjzneC1ODyPbSsc_7lE-cl-gpaQjA0S9huMA
 
-## S254 — Avant de produire une nouvelle preuve visuelle, vérifier si
-Rôles : dev
-Date : 2026-11-18
+## S254 — chiffrée
 
-Avant de produire une nouvelle preuve visuelle, vérifier si une preuve équivalente a déjà été produite par une session très récente sur le même sujet, et la réutiliser plutôt que de la régénérer.
+Chiffré : v1.D7bERqfq-d5g8N28hRgUuXJYKxWi2kbZISHa8kcbZvpz5ewcQLGssr-4Z5Oa3m0PocjWgR9B7VcLGErjHXOy6ug0A-a9QcVbeNz01UMo7qjdZF3I8MkqDCKXuIkYFWER7zcmbAmZBaMLT7WUJjF_lrnWFZuF_WqRzKNlUlcsGXCPandvugHcdeOum-XZHea0slAZK67iMT-i4BmQQqKLxOnsSrb4d9t41Z_fLwbHNrPfdnxxquZXXd-xGaju8h7qL6sx6Xi-Gdda0UwuqzPzHi-Ym0lS_jKK43uT3LMzriRZxO3DBlSqflTHtVJDFXbP-o7JwsSYnRm75Db_aaV42QolIq0Uwi5mSp8rSPvpzcjMLM7dDSAMcglpX_US4EPobEKpieoAzrDtk8HG4q4HQJU5iVBXmZt9TbrepQJktveHCkdqXuvBeJ-kWyoSA8I2ctDGU-h2k9kHGDT3vQv4rBX95VHFOw7smV8DN1RaF_VraZSaDGKZpZlFyJ4YOPU
 
-## S255 — Quand un commanditaire conteste un diagnostic « hors périmèt
-Rôles : dev
-Date : 2026-11-18
+## S255 — chiffrée
 
-Quand un commanditaire conteste un diagnostic « hors périmètre » avec un détail précis et contradictoire, avant de répéter la même conclusion, vérifier l'artefact produit au niveau le plus bas possible (octets/fichier réel, pas seulement l'objet en mémoire de la bibliothèque utilisée) : cela donne une preuve plus forte, positive ou négative, que de relire seulement le code.
+Chiffré : v1.4T9Ish6vSRGBEGfrSQ6pko3QHHmPLQAQIOzfnVJ6DiV7LIfvKcq8lcxADclMdV8-btiq7mqny7U-1RFLQ_CqykNfYjQ_nE5FhKo6QGZNRuc0xQtzt4FcJn1VxxD0GDgtWeV7fUpf47bu5WuUKVrBRzEd8p3DjycxkMlSeNOPL4H7hP380ri7nbQWgkXvxj-E3n6gGRWicBLYnIT_5pBwFCwYY8MFmNy46xh-1Jn5q1o6VpjdLfMKZ0Mg3FGGKyLvNtD77FLjp8jlSSrDepxQwCSdxSEAeIeb2hovF969bnmF13_uN11gjEcgdjDn4QvPGT7oe-yRZOZTw8i20NYaBhZvXflIVlpm4q0QaghNAToBv8_ptk2RH7m6yWzRD53yUmVz1TtXg8frXeFJVBWMb6HsuvSl-FpprGbn_g6cdg-bNhcenf1sgthfaAWC3KSnkKi_-y9MFNPwU1FZAN6-yudCTmiKRZY5ZozkUcjvnOpHEI7d5CMKkRyVWdlQybfjxB1Pt7vjiDNFt7xpgGOoRKOicngFqUUsg7QH_2iPiijGBdCI0-ibw4eblk3zajiqplyu4MoaR8KfY_rALTjiy_V4p587tezzx1YOE2rdbrAYyakKXJYPHXMHXfpnFcxkegHxERkRgV3fXfohXTagUWOOIu9szXreXr4CDLF4hI18ue1or4RrEfg7yu7rHd_MMuPuSiP9U1xdWCwsiClATZWlX5rNC7ukDak5txY4dmFiJQxpZrv-WA
 
-## S256 — Avant de concevoir un contrôle d'accès pour une nouvelle règ
-Rôles : dev
-Date : 2026-11-18
+## S256 — chiffrée
 
-Avant de concevoir un contrôle d'accès pour une nouvelle règle (« qui a le droit de remplir/modifier ce champ »), vérifier si l'application dispose déjà d'un système de permissions par utilisateur ; si non, ne pas ajouter de contrôle technique isolé pour cette seule règle — elle reste une convention d'usage, cohérente avec le reste de l'application.
+Chiffré : v1.SfkdyCq8oeSrwCraFdLAsC_AztrBm0AbT73kW404UYf2eBm5XKTPmDWoxXLfQv9rELq6o0q_dex_6CL9WEen1YwdsztrmrSQ6CisEYGv5cWRcY1q-BPMRzizzKtOrgoyrv-Qyey9XUH0CIqaNnZSAa7Y7IGoZjPv7ty-WWdor2ap96A3ScJCh2Eonu7kInELqLAAWtBhF6lyQJi4rDxQVO-k5_19Zek3YkY1MlpDt_-mOS_TKRQIyb65T-RFKWqXY_LXSu3DvFOG7PA-MO5byB2ZjEqY3eg-iImcydXj0pDHN6Yd59gbMaO-0myGKCMuk3YlXCKQLI9LAzMGPjaoG3WGr8gzocy7wmceNTgo02b8k7D2kGnuJXiuUYScBUGplS7DPRUHLpH_KpQCJIIaYPLW2XZiTy02nqFvZL7ZysWZc-61PuigkrMUK1YR_pH8WwnEM8jihGs2uGVPkLlxUxNKKAzBesEiOCCbndQnAmYkRmMQfpz5EMe7z5QUF5WTKoYlH9nnP8m8u5pj_5Eg8NFnP5n_7bO02h5DVHC2uSIJIVZrXDFierj82l_PUaZr8SsbM2zUu-ER5X5nH5DDEVLypWgA0TeB6H276OjCoEu-vfzqLAPTKH--A3Dqp6Nv2HxqOClnsJMisrzXbvg8Qwzg88VZ5kWebTjOQxfh0BmV7eiddmEbJDXIdUHlwkQKKRAwgPGSirOoC04Nlzvp
 
-## S257 — Quand un test d'aller-retour (export puis reimport) echoue,
-Rôles : dev
-Date : 2026-11-18
+## S257 — chiffrée
 
-Quand un test d'aller-retour (export puis reimport) echoue, verifier d'abord la fonction d'aide qui reconstruit le fichier intermediaire : si elle n'ecrase que les valeurs fournies sans effacer les anciennes au-dela de la nouvelle liste, le test accuse a tort le code applicatif.
+Chiffré : v1.4rFjJV5K-w3cvNXfcQsZfYzVnfYTWESbB4nspFWuk7t5lgIIklHrOpynUfmHx_rxaCpJs6zhV5rl2BXS8-vP1I6xL65K0SAS253shfRkPONGoDsLsKSIS5mI55KCgH8Bb1xMQITGIMscuVjw_1wYAHXfJElHBBsk0Y0Z4U0PiHAWx4FmKXQfTmc9wmTxrEhp7SenxrzvaOy3XdKTnPkCmAVo3niFNAnN19lcHD1q_x5lkte1IW4UWV1P-EPJtsaIWPM1tTf5qoBs7O2FJAz54FoEdFFMDTKuTArVnjOwuWh6-iTObyGyAZUc03ONTuC_wGR1nmh3xAvHFLvQfAY7pgDj8cRHG9pBPEazBl6Kiwh6c1GtO2aicmhFk7xG7-IwIha4XtV713uArM7ZcsRctrS4pwusZWNBhRIX5kAJdpQZe-KvfnaJW_YKTTUmsCWZM9qXxrIT31gXVa6qybGgi2xmxpaFfqoA8K93e5LEbQxBfyTLSPeevJclF8kP4jDlHvL-Yso2nwMrSJxmmdb-7FbFsVZtRrbMz5ks377-OTVgv_kAhVkr2e4Hn9q7G9u3IKAExvWZJEZqj5_O4EbR9PBskmw
 
-## S258 — Pour une fonctionnalité qui bascule entre édition et lecture
-Rôles : dev
-Date : 2026-11-18
+## S258 — chiffrée
 
-Pour une fonctionnalité qui bascule entre édition et lecture seule, préférer remplacer le champ de saisie par un élément non-interactif plutôt que de le désactiver, si des tests vérifient l'absence de tout champ de saisie en mode lecture seule.
+Chiffré : v1._IYlzMKuErP58C-_0uRZcWa2mWhNNk4pUSkgx5ukWvo20al6pm1hpYkJZNAmRd-7XXAqesiEWQvp0IA5ARKz6-4coT5tSqS51aP-QN_hFF5ZwE8PCUjvsiDw7tWzUE5MoJYxl9MfM9iSVxdLM3xsoLEYFCvxR4VcgScfW4rEjPeMWBAT32tEovqv5IunoDuK2xCQIdzqZixR4suAwOYQCqPk1qTV5pfUexmMKgKglAyy4jl0FidAg5-2chOJAS8ZLy-IhZvQ-vU2ChIdYiVBdw-H0Ps0a7-Clc2VRA-ZzNe8xb91j7B74IsG7YZV7RBGzaaUdCmCf1P60vRWRDVUvhW9SrUF83Sp7sHz7lYdoYNmYbYWWPoOz1j0f93zCumURAm8e-aluDGSIVyjaNpYeaJqWqaHtyBNXXfgwkDbG1rBvaM8ZE6g_OUj0IQHQ3Z31xr8EIsfbXXB4IBFJEHxQdrwqyWN5INaolOJ2pifAdIjz9VMCf5lx-YPUgS4qPQch2kiUnXEV5fuzqIzh1lNj1Ss_591vJBnk1Wi4729MmooxjAq8vju8juBVhf5

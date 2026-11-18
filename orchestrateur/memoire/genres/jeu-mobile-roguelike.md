@@ -3,602 +3,402 @@ Domaine : rogue-like procédural
 Livrable : à préciser
 Outils : à préciser
 
-## G1 — Pour un moteur dont les templates d'export sont distribués à
-Rôles : environnement
-Date : 2026-11-12
+## G1 — chiffrée
 
-Pour un moteur dont les templates d'export sont distribués à part, les télécharger depuis la source officielle et les placer dans le dossier utilisateur du moteur sous le nom exact de la version.
+Chiffré : v1.VieTfTq1h5DhvpFMefo7tKQbTNzinct7wszK_I1bh6_0QsMTZ8nsFhYwkHZFHqMBO5CCKjvDi2YYPybtWnveRi02CalyNlKoYfMSPaGbxG_rT-8_zbdM-2ob7Ni_YrVaMju6HGRZSH77_hzr4wABdfnaiq3VzndJ1KPXt5spOXMzf0rsyYBUKY4Uzbh3wojUKK6XtORWZwNbL1jNkLIVcaOl0v68ThoPugCczOlBRHi8lU2hPIkzlb3so9HXqhAzPor_CnxgKtzyxPoA6PWLlfvpIVOPLHl8WOvv0DGewG-UHYycR-U-sPvPiat0HXAoQrlnaLM9TsV1joDi_JYA4u3Rx7Ov3hWvipW-9adFJ7-_ZwdLVsql6jq2km4YgEqMrcyxXQserN2axi2JRU5_L_laLAPfr42B7gTjdajUpNPhHszSXtmKmr6omls5reNDdrVVR3YPpsY2QH7oRy0YvehMsSWIAx63U_2tAkR-55cvrKcNjwBU6K-_y40FPH9kfA
 
-## G2 — Pour un jeu en pixel art, une police bitmap générée par scri
-Rôles : artiste
-Date : 2026-11-12
+## G2 — chiffrée
 
-Pour un jeu en pixel art, une police bitmap générée par script, à échelle entière, évite d'inscrire une licence de police.
+Chiffré : v1.NmtPKg2dyL_nicUBuFVEmmA748GEQC3cJQz3dVnYoCJLgAYJ3qaTl0rsaNSoSPcuTibzT67sjVmxh_ZSpdd6_WCoEC2ABVRwiGvRRPztHerzdM4zQpEKXDCZ_p3_Ut80s0QihGbffop7eW_Bc35KoP-zuWEQz7xp7h7VOjLXC_M8tEUUdynCApTs2FRlXZZ8zdwNbxhNccDlQf3CBzo0hMfl_Sm137bwTjwBKbNC7VvlObkuCK76KkNJrmZVCZjRH3k02yI5QC-SebCMeY716a63FHeO6l0PmPLtOk-6WAOi5kfeMbn5cKXxFocNwBb2m-7IcPKV3Glnx1jZjB5QJKWOhiSoQG5flyW7uGaJawJ6xddFwzpW2dyJUrsR7RJKw4Y8hZ70bKZuMfsUsSNu0VwsPt6_ag
 
-## G3 — Pour vérifier un projet de jeu sans écran, importer les ress
-Rôles : dev
-Date : 2026-11-12
+## G3 — chiffrée
 
-Pour vérifier un projet de jeu sans écran, importer les ressources puis lancer quelques images en mode sans interface, et lire le code de retour et la console.
+Chiffré : v1.IC5GQbiW6zQ1AmsR_ZgDFzNP-dThNph-EB8nLsoP6roE4ZDrrVMgQPvRlLzJCku0yyzKCbX_9oAZ9M3TPOsKBkWTVYvmn9QPIss5NmhmtfeilHZreQMkYvtaE2QDVrmL12JWV8Ckej7P-n4Kgh53UpnqGtdpyFuaZsfn2-zdD9-OgdcHsBUFfmaUF1KT8bjJq5gEiQc4V-p0WZPec2NfMYzT9vMkTRWchnR8LzXJRyJwpmr_KMQLGPNP0fzv6Lurt-Iae176PMLnptFFhv4HzRubcbeNEk-C-5EopaobV2owdPxMa44ZLhXoHwQgMzIMruONc6m1WmWNti41xarSxa1Inh0DXdwXh36fgzkWCZDPjimrbdtLGJ0mcYvJtSIFcVubYBffeo-vCgjPk5c4wtiOgq9DXFQXdHjBe_RvpQtpTWTxTt8aromsG7oT26SUeg
 
-## G4 — Pour vérifier un rendu de jeu, un script lancé avec le moteu
-Rôles : dev, testeur
-Date : 2026-11-12
+## G4 — chiffrée
 
-Pour vérifier un rendu de jeu, un script lancé avec le moteur instancie la scène, attend quelques images et enregistre la capture, ce qui prouve la résolution et l'affichage.
+Chiffré : v1.YDGoDuAVuGxvPdZ5hef56GgrNifJVsgTIev1WVMYWYidxpuvy8gitgK9vP7iS5e9NcqOX8d7ElgJC1A6vM2iRm__d_0my1QWz_oGbSmJiI46-6OOhXbNvB7rgIq90hnBCyxLQOpXajoIz7lqE_snB9x45GHEFEZgOHjwmXiTzRVsDYEnicpc14Zts8uAHpzyDk41EGHJH7fv_RxUYvkgwJYYsGegjKu7qPf69u6izeOQiQLfkiPYxqT0Xr9WH6BIAFYcfTG0fjXHSp-0Hoyb5X9D2GJ-PNc0DVIoE0OHM0CQst4vqgNzGPMvuT17g4RP0J6PasSGOn5lG1sQtJPybjsNAdhneDFLAv4oyXStUQsBoOhFDJyVTleEHDcXwZ0UkGF6oik3xaO-LQZYxPOx7Wgr8AfnXRS3nXwv2YN9XkLiTu6svqeakb8orLOWAiecWe7y4JUr6qyF4xz1m1IBofuUufF7Xq3DPSYKGCE
 
-## G5 — Pour des personnages jouables aux particularités différentes
-Rôles : artiste
-Date : 2026-11-12
+## G5 — chiffrée
 
-Pour des personnages jouables aux particularités différentes, garder une silhouette et une zone de collision identiques et varier seulement couleurs et détails, pour ne pas fausser l'équilibrage.
+Chiffré : v1.Jni354lFmav8fIBjPPyHhG3aZknOm_Z4l9ggwfcuiOj6UdDhFEdR8l3aZSaciBRkSWh3LmlY-HNPNuW3rdbJSb5fKQx6e2Oq7gA2litX5f2L_lqkhVFgNjyFZTLHOongk3n-sNBPJLapSfMJU8gwHFXzrxiwBfjQaAEsr5Rbaqa3K8Hiz3GI34_hRYhZQDY5xpkjjWGzTw0G6iaq06OPWyC7VOm-HZLKvCLVlCwq11Do_Hg37m4-aWqF1A8Ih0cmv7cvkcHkVO0W6p_EpU32TpItwGh5EalI6LbpDSHGiGoXOBPPN3zNW0-gkNMKlgGXHHFM8jrsiDKDkIl3iz5yZXiVeNOZM1WBWwIJkVNOVNM26jHRgv37_EAOtQMlbQpBUebd1WPxGO8eDYoFCkN8nZqWtCsxPa1YyLvi7AbJwfMLYaRw61HjsfXa_FZc76qPSJae_ra7WQok5aGDWZNnVACJHe-JnPpVQO_0FPQN6EXsAWyKxtKkRDSFdA
 
-## G6 — Lancer un export de test (headless) dès la mise en place du
-Rôles : dev, testeur
-Date : 2026-11-12
+## G6 — chiffrée
 
-Lancer un export de test (headless) dès la mise en place du projet : les prérequis de compression de textures et de signature ne se voient pas dans les fichiers de configuration, seulement à l'export.
+Chiffré : v1.zUavwDjNpQca8Xp0Zu289tRWMpJr009_u1rDY2QPp5aLsLxp9EUfnLYTlqboCudQAW1IjShVmTzG0hzoQzvSP1YhmL-2NooZKOFBEz_6I4FDlLzO20hvVHNPBoOtM13rEeG_CCvtdL2mLjDkzgMeqBk-0iOH_2XZvlL7K1u6yV4J1pG7Ao-Ot3EXNZ5ZadcFYL_YKzAg9iDYuMoIRc7ZFNuBSa1Cd1X3oElKzrTjUpd6x-knnU3g1I921tLDgWLtbA6eNVRPYHyvP3vDroWifyd_AlfahPEM3Ta43kuGKt9t5GaDMZQ-PH14LkMHabjFyAnjPJ_HKyou5xs3uK8-sSiCKNYZUlgr2Vlf9y7t48uGRNuJgTlA8tMB761_W_S0S4EQ-UE8tRfxRAnLmHZXOmbXH7c9Ps7SiFik97HjTC9Sf8ilBLH-Uq84vlZ3ILe4HWg8qXYfFKuDKpm07LhTw2RsVHBnZl4aOMQNlEsBsUxv3Hj8QVuIuj_LVAsjq6b_xEw_hQ
 
-## G7 — Pour un export mobile de test, désactiver la signature tant
-Rôles : dev
-Date : 2026-11-12
+## G7 — chiffrée
 
-Pour un export mobile de test, désactiver la signature tant qu'aucun keystore n'est fourni.
+Chiffré : v1.pX1JfOvgbvLbIGAw4vpNqpsfsYDHdZmgRYfM85F7ifzq30X_CDHWPGDngFH-vik3FclVRSfRBOgWnJVdrQt5LPFaT0ltok6uV7Na3DjIbJxwq5_kVEFfhLUgh7oyNsMGDujoT_h_qLIaRVyGw5-9tu06kjRQHJlXqG4Iwtaa8scrmlLX2XuOJXuIQjdO8de4RNHGSjKuFuBKAOsfMHEbzyla3ACcWyZzKpiGEgkmwfBrQreyV54GeAEvEdhx1U8vRWNHEkBUvLYfGVJcYeKEcxdhljSwlyTyRDFJJ5VNrmGJyl2f0pbWH2Us0YaF6czR-kqWjWVOTFTDWa62ft-PLihl1yjYfzS2qGI
 
-## G8 — Pour prouver un rendu de jeu, instancie la scène depuis un s
-Rôles : testeur
-Date : 2026-11-12
+## G8 — chiffrée
 
-Pour prouver un rendu de jeu, instancie la scène depuis un script lancé par le moteur. Attends quelques images, enregistre la capture et affiche sa taille.
+Chiffré : v1.3IlIEfodq5B4POSO0AbuqG_lOOu7-Pb7OLN5cHFDw-bogTALlRMOhEAZKKNFh6Z3s5Kg3usBurujx7QJULQbNrgLfy_M506MhkHx1ExEz-rPJELRvZp9LVVcmjMyDlKvj-l9apquIeaENe02NmgI27YPVM65Ap8zHBptUr5FCJkXgTlksJdVV31B6g2Dyb7uiygBjz6lqVHt9ZOTfubIsp8I8Qv5N0S6qi1js0ntrFcgqCPK_iEnSQHquuq0Qq5aFecv9sT8beh_j7cxPSwaA-k9NUFsmg-W8nXVlRw0Hrz1q-DzhGxNGIycbW_XQvUo96FkuabY4zp5IGzhlqKZGUtk044wntp0qosKrXe87PSACOQye_u7GcN8U2Xh_u3uj50uqrVo9U_yXYR06swfr8Lk7vJlFhn9L_f3UZn7xl_-Cn01IYdC4tX0v0IBQmZj
 
-## G9 — Quand les assets arrivent avant les scènes qui les utilisent
-Rôles : dev
-Date : 2026-11-12
+## G9 — chiffrée
 
-Quand les assets arrivent avant les scènes qui les utilisent, centraliser leur accès dans un catalogue nommé et vérifier le branchement avec une scène galerie capturée par le moteur.
+Chiffré : v1.P7ViEbD3GfP-kwRygJwZGpE2NkC74imAmcEPorjVIGvdpZ9mrgxGbVhND38FSwDbscQmqCVaM3NPhy_WkXQhMISH2dDBwFBuMmtIW1JQwYJch1YDEb2g6C2UtcZVXDAZab_4FjGuwxPCH6Z2GajUu1m7R6sVxvwfxdV7eXPKfim9s_v30gdj0J0FmS9XDMWL2ugUtf_z1xG35323ZJTXhffttOYmQmaZqrh3D-foE0xje8mAlLsg4wNra8T6X7B178L-OudyqMwPiSRBbv7oYeapLK-3Swi5RjzbmHhVqTCMsCrmwrRYGnFK0WNSn5n704VZafllBji9NQHSC6t87Z_K2ESuICOHZrc2QUe-BwV1ZhyQIEAHzEAC_L1dt8PMG6BmpZJb-aXAqAamTsCyEV5Cve6-y3Wklxrs9p6YGBTTUp_eMLleAWA-uQEpq8UfEWi__WQPV5g0-KPre-rROYeDtBNRNNEcw2Wd
 
-## G10 — Pour signer une APK Godot, créer le keystore avec keytool en
-Rôles : livreur
-Date : 2026-11-12
+## G10 — chiffrée
 
-Pour signer une APK Godot, créer le keystore avec keytool en -storetype JKS, car apksigner ne lit pas le PKCS12 par défaut du JDK 17.
+Chiffré : v1.TmZnGYVC-zGeoLlhgHRwyDIkFp8I-_QVg19nbKR11D86PgoEieZEQ4NRLulwY0QYX2Clnm7Mpb5PLLuEhFKW3QsB2R3d5gW_tCESwpA4hHc8mwnl0SQM9DpeUqVIb1HkDHshGclLmyk_a8-Hrq11n9GF9K9IJE4vXljSwUA1r-9X-IPT9lbxXAimXBFGvrsuK2AeHXxw-gvjvAXz-lkTvcnvLinc8Rsu4jEOmQpVc6D_f1ulhM7Znp7tYKnlGDKbmAH4IXGAjTkSgRCGic6pMCyP1wviVZ4hesZM0Z3uWRoEW2zFua7v4ihuI_Oye-yDn7AcW2amwSpcI932PtalWUrnK-icMRA_KJ1hgO9GNECjuGM4Qxrar8_-LeE4BvafQLnJyAmUxzEin7jypZd0u32FxUu1XC_YJeU
 
-## G11 — Pour un export Godot signé, passer le chemin, l'alias et le
-Rôles : livreur
-Date : 2026-11-12
+## G11 — chiffrée
 
-Pour un export Godot signé, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset.
+Chiffré : v1.Wi6z-ChfZg8GjEh81U8wnZXmUCsIHYYfYFt8T8DaaWeD-_M6foWyB4jLsyOBOFcVCEPzYqHvu362zr04s-_wC--bSNKw62j7cRSQPnXotIvZT6hsubfTzOmh8Z38FYOaYXotztfsM6zO73Dvn9taluCdYsI8eSSmrdtH0siIZH0uARCcL-uz0e4j3H1muDLL9fuxyH83yZGZ0VHXP7sQJ1cG30lZ6l7BSj3IcFj3036jABv6rABDCETgBbcYL3BRTGBz_FG-c5KoTMl2qNzGQPd5gthZva87ud-Q4np4tBWRvP8zKTu3s3-W5RycRFagfc2QvUlYZokn4y2sf2dL5rWodkmXYwsLcRhDT97sRosm-2QbpafhxZ9iQ51h4tnP5qkiuiS6rs6-lJT6qCwRCH6M9w2og7RiQWx7IY0_44uzMf6JMtQ-hg
 
-## G12 — Comparer par script les pixels de chaque sprite à la palette
-Rôles : testeur
-Date : 2026-11-12
+## G12 — chiffrée
 
-Comparer par script les pixels de chaque sprite à la palette documentée, avec les variantes d'ombre et de reflet calculées, avant de valider un lot d'assets.
+Chiffré : v1.X9qTMzJ6BWwAGDz29x5olyF-3aEfJlhHpxTYbHP4EAeqlloxlVZL-yXBwsnDGRgi6VAmFEYqBOiLPnrwZZN8UsNDFXGuoBqZbNGrTr2puZozoDm8HkU_JU0Z6CmQI92nP3UeG1Rdf_y-Mws9fgllJgbw8qsyxr5Ze2aERfdvHqeOnk4ESl7ZuDkCB4tPdDo2X3lhpM18fy-A_qWwaSYljjbudNaaR0fUmXsQXyfU5rv4ioMm6IP4xfdWOhkEWqsmN0MIXthYGXfUVEIaAjrawUua-yhM-NhwmKke7v0j1BBMTABSs5aHHU1s793AX6sm-61SP1KC6xM7eWB5STJ0T6Mq7wQpsXR0IzLY36v7cdZMIZ8QJTqpztvZQEHHAR65y87a4pYWOMqs5Zs3EpCJMDRb38vUBvsC8ermSa7uy89aLEgMvvjJ89GyxWsfAqCMBtim
 
-## G13 — Dans un script de génération de sprites, imposer par asserti
-Rôles : artiste
-Date : 2026-11-12
+## G13 — chiffrée
 
-Dans un script de génération de sprites, imposer par assertion les seuls facteurs d'ombre et de reflet autorisés et fournir un script de vérification qui compare tous les pixels opaques à la palette évite les couleurs hors palette.
+Chiffré : v1.lKsBrsfOmfQEd_l25YqRaWEJrYr5zdDHEBxRcERG0GPXw8W1e_UVqZ5EHIHCpqv8lQXLSSboXovQldiPVMiAPTUyCE4v9Sg1IJwPU8YlpudbniP6N9dTsenVATx86xK9nP2ZWapRUqN-TsKrQEpkFqxzv19IZNyleaD2zwpEg7PCwHDONoESFWzSe2LOAg3jNb192bekrvGFiijund6vxSl_1FzPC6aBRjFcD79k5siCevA57fv7JYeysKcSER2OoK_0WmJFQzHz8Ym6puU1SV0r-nUSNssap40Ve-7mtZwZABF8x-MQlBSwSTCln5-ydXVUocHa2tfTGYvPH1FUdZvRQ2__UGt4pOoURAdyIT2ky_qOarcY2C8pdYi7sTrU2iwtiQt94mpjm8DaJD7y5HybCDBqCSzjVhs2Xqs7NXfJvJ_MzUx7HcvWLGsExWzffEZuJ9evgydl5XqbycYsXzkMivb9nkMa0co-QcXJE2djZaizxtgx5JRYOmql2jT68MroYgZzGofL8qpIZeE5NT5K_1R3z-3C6P6X1jGtZv-Q
 
-## G14 — Pour un export Android signé d'un moteur de jeu, transmettre
-Rôles : livreur
-Date : 2026-11-12
+## G14 — chiffrée
 
-Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.
+Chiffré : v1.ubp-Xoo1mVsFJcPG6x0BHHbrON3Tk4rDWPj54znEk8oXmjlK9d_1ifoPsZonDerjI0bUGNmM76rl0erQYYdM_iFzRTYv0lEZXrDR8WdCyiwO1gFikbiFS7Be78kPCMsV0ZHywEDdSjcn7c50MfPJ_ShxdnKX8yIwg25vJy-hZNW9JWx8bHbu0m8prb7HgmjhdnNGhwnf5qCiyt_i2CLD1EzvX4rCAp1o54Wk8FuW8zh4vDWY4P9XA91eWi0bvJcPkvkPVtF0uBb2kQsp58sGWikJyxqIdUskPfnXge-QeeW5ShJXKyySJdIY0EyybtBhriZT8t3lglUGHYxU6bJ3c6hevFtGdYVwVOaA0S2M3mhRJcpkMuvAXHHE_4JTuOMCgtNI94_zBVvEBsA7819Jhq0I_mgDwDDoszvCe1F92RYEBNhYdxIexvPVf0eFMMOCkIim6Uc67PYnG32QmlmbWRJdrAC0RTq24MXaLysy0iXp0y0mCFgM9X1mtChCiHaqdmNb4YrBwLArhY80yYU
 
-## G15 — Pour un jeu à musique en boucle, générer sons et musiques pa
-Rôles : artiste
-Date : 2026-11-12
+## G15 — chiffrée
 
-Pour un jeu à musique en boucle, générer sons et musiques par un script en Python pur (module wave, oscillateurs, bruit) évite toute licence externe, et un script de vérification contrôle format, niveau, écrêtage et continuité de boucle.
+Chiffré : v1.H2rYJSAzUWtlhFaRV0QuEFn3_aZVl-ZkLndlpYJzWsItT80-EefSDUL0SyuB2LjYW7ZUVeoEFXSmlESrhHWacATXgZ2ig0SYKl-E8gI4sAXYPwT4dpB2MZUE5BKkaEbRc4otDzjPceblvM-8V6rUs1xgm_F_RVfBIR5hmwQwXV3ABG3YWbXOU9e-DlgZMJ7AqgLmYECHmFkL1B3kfuzDlGK04I2ZsAI3i_opTgkWTlqmJkJox1JK9zBsmJP5qo_E4YfWnHm205SchWML7Vsm3-2GMML9SA_iynbkg6247wq858tVtN0EhnKRWPOsd_SWVUT590o31ASl3UrM4e8Tc49S4quFtoxT96nDUaWFahqDgJZy9lDn7W_i1q3auXJJkIbp-M21uomLmwG_DI2wOb7iYelBvUTURhjYCqVargPCK-oq7s7DzlFoR8ijQcQrDV4UM6I0c5kqQ57sfDFguaNz-XFCPbp7NHaclotFBopweJ8lfHHQFZJV0gpZnFXd7bnpscUunDf5ZoDfbpgE-kPnwi0U91fGudcBUNQhsHj5x2zkgHsM73l4ag
 
-## G16 — Pour des icônes de carte de progression, doubler la couleur
-Rôles : artiste
-Date : 2026-11-12
+## G16 — chiffrée
 
-Pour des icônes de carte de progression, doubler la couleur par une silhouette distincte (pointes, anneau lisse, taille) garde les types de nœuds lisibles à petite taille et pour les daltoniens.
+Chiffré : v1.0KRzB8Oj_jwyFBGyiWdsAHCxHSGfkWvuoy2bju1FLwFJ6ADs1NP4SlIlL28GR3-tAmVsg6fHzyI_V9LMf9Iu0BPMMCJ0E_dwEsNEpqrA-IcK7qrfHxHKJR9zPU98REaYvQv0Nh7YPAzrHhI6pdwO7DSCY0jUNzncgPUxifmAN_1Rg3OIGmiIR_gKdy-Wxyt3zkqUbZmQBn105_opTmS_eOxK1GeTeOt2fSxvXUQj3tyE6tZSB5BnUpHs7zmXOzrazFlJLKgBLQg9jFd1ndvMHKHCcNGKkC1LE0xWlQN_70QZCB1u7y2jJ6WUL4dkaBdqafh2QMVDRC_QetF7ZxTgxJZbqFepPe_BWPjvfdthuU3myj19KzzPrOdYpAwsXokDUfTfXxIlf7L4QZvgsZXO6g7bArv4YZQ7d_b9VoKZOPhMhm15mF_4baqAdyvWc2n4n7vrYyH0KF3szojU0ntckX9klRNlGaOUmvIbRuEDRvf3HjOYUg9Q
 
-## G17 — Pour un jeu à carte de nœuds, fournir un marqueur de sélecti
-Rôles : artiste, dev
-Date : 2026-11-12
+## G17 — chiffrée
 
-Pour un jeu à carte de nœuds, fournir un marqueur de sélection distinct des icônes et trois styles de liens (normal, actif, parcouru) évite au développeur de les redessiner et ne repose pas sur la seule couleur.
+Chiffré : v1.gueMVCawDjaLRbemyBpGCQRFzaa7ncUuvlvXtNqZFKLWNOXBZza6xAzRdVxQiUMEOyqZ3b9ulPdLl7OxxQrVIxvZyMTgrAIl0NGGtD8gkvvDjpZVE-K1aC_OFQOZsiN0J4XDR22t9QykqxawFxo9GSKIucX8yVvf_-KmfBHnPY_kMFOA8gLF0Gipov3jbOlHmIt-RUinruELjtnJ_3er23TuPOEYMujzAlYUrieZEhyXMLs4DrQbAIkpgSmlgp-KqmbC4EDKNOfV5nQXE1QB4dlZ1WjNscLkP0HcDfB37Wht5HRACtKtdZlZoyGdXXmG6ssKDUzukCwnRtZRdzfCngQtxWANlmK5EXMJN-ZqveDEK9Ma3MuON63jfOPOpyDQvySj0Tv3cIpHE2c5hKsrciqA4YrB1J5rG8h3UzxJk4ZUApwdsJ-CP5a11xs84vv8dFsBRaJkYl0I-ZWpuQR339LsqVFErw0B9IV8QRtpHG8aajy3a-T_Ml5trSHZwnvnhO0j1c_axHRALH4xZKO2qNM6Brrk
 
-## G18 — Pour une barre d'état d'objets, utiliser un gabarit d'emplac
-Rôles : artiste
-Date : 2026-11-12
+## G18 — chiffrée
 
-Pour une barre d'état d'objets, utiliser un gabarit d'emplacement unique par taille d'icône, avec la couleur de bordure comme seul signal d'état.
+Chiffré : v1.eDTzvhMoAVHLW2-q_atW1cAD4cRzThEp3nPynSuhL2X8Ml2feI_0bStOK-i37_0AhJ9xN6c58ns6_F2VJhHGsrdFFi7mwsdhQh_H0iHcnu4v7jC7WYSrzVQrmYt7CoDDNdimTNsY9toZ1Il9dBCBglZ7zdSV9Lbzr8uyMwXD9PEAj3DP2zQIg6N5OOjgRAXxdNRF6z9j3MxRk5ahAbEY9hE2cOlCnN-4IpOiD9QTNnsgYsjp-cJWY1sHYooB9GL8gl1NEr876NRDTahtSJpF5h2Iqc1bOK5vWqCPebgUpGThoZY8Pg4xFCSpMz2Ws-Q4NIFOS8zaK1A5WBxJDy_ukzZytj1KQdw6Ecc-ZKD8BaehkTDQ2TTz8ZVCwRQzarh8J4Uw-NHAOREjA3lUhiU4HkQUhj0r0UeRhAZDOZ88HCYZEkOU4rxc
 
-## G19 — Construire les emblèmes pixel art à partir d'un masque de pi
-Rôles : artiste
-Date : 2026-11-12
+## G19 — chiffrée
 
-Construire les emblèmes pixel art à partir d'un masque de pixels, puis calculer contour, reflet et ombre depuis les voisins, garantit des couleurs conformes à la palette sans retouche manuelle.
+Chiffré : v1.ajNHSue-aqjclsouWRoVT2C52UHZTeWo8qZCLGxK0oJmBVlE9-79ndjSqzIQ6sjl0MWKvD9EuRTbiO26zBjiEWkdsuN_C0bxj9VqPomDCuU-9-8l51cdgQlDGw-gMHhDbQm2MIrMFfC8IeF4pwnLxD8MpT01GjGS4hpr9z9IQtfkNnJ39evshPRr9fcXQmaQe4sPz9sUd5QfeGfz7oFiuscwR11DW57cPtoj4HfvMV-xrXPYAo6rdrCqVNWWlGHkbBUIUa_jgqbmDJKshh8FNqVQjysygayExWGMPtf-d-qMxh9Z0xHf686QfIk3RUU94cwvvUmWjHtfNFMzW3Pmtk-RSdl4cmKpl9EuwSHoOg9KFk_tFFQzBjGh3LZPAoPSoX7MkuP38oN2JehgYZgBr5mJIfuYD-ME_1Wjnqq6yJ7nJZhmEQQfU8VTEdz-_9PI08bVPiMm0J-qXJg3WcfOziR0BUn_mj5SMXSqv1WwXiZav77T2nxRBA
 
-## G20 — Un script qui dessine du texte avec une police bitmap partie
-Rôles : artiste
-Date : 2026-11-12
+## G20 — chiffrée
 
-Un script qui dessine du texte avec une police bitmap partielle doit lever une erreur sur tout caractère absent, plutôt que de l'ignorer.
+Chiffré : v1.8uxg3wR_h4mtRUDWktN8CBCLfEqjg4KWh1S0mCtOXo-AFawmBAPFzmMuriVpZfkRG8mAOOXUwu3qjxYeMTvHYDhE5VDGO3WcOuVKgy8gZEyxtigSFqtvHxp12GmwhSp1gK3kcP2nhw33hQ_TZbtYIjKq3Fwph8h_X_cTxZhGOFGoQNILOdza4ZPE-y9gT_2tiwyruorILaCL_ueKSDaD_jtAGX2aqHE-R-ZJubjlmEMkDMWnAshqrHuFOv9smxzQ-PYSixd4GW1lVJJdoYEz_g6e4lJV6t4VJykAJoTO1soT3lp3yynH6JtusbQhOH3XcaMVyh3UFzIhndyD9Uill5e-TO9jKm6k2FCRT1R_y8jmUVK4VuLZLkav-NdQeu-0zzd7RLiC5TZLVAjvI5N6rgoWAFUNNruY_DmbITc
 
-## G21 — Pour une musique en boucle, initialiser le filtre avec la fi
-Rôles : artiste
-Date : 2026-11-12
+## G21 — chiffrée
 
-Pour une musique en boucle, initialiser le filtre avec la fin du tampon et le faire passer deux fois, afin que la jonction reste continue.
+Chiffré : v1.NsLbPzamsYYH5pHUtEnug5v_C5KUHEU3lKJNHZQvfbZ-TfLrbi06GbZcB9VR8_jb1jCGuT215VgHn5ISPrJKK9Z5IO5FkV4fqM9qgDou6g-Ldoo87Rti8fVjuDib4JGFvUUrz4bflFJTUiRN1WBi34ipaOIWslw4vZtSkYTbDzYC4fr3twWfKR_Mrx8Zf_Yf4Cw4gp550_cSz4BQiyMp8Nr_qRTqw7EAdjOkZVrJRkwnd0gK-rBxvBEItQJePcbu__ZnYL7qtR1pWtloiXkdkHvZDlfoQurxhiKTfUmZX8qIzImZtGhVTIXe2HWJrpEWVefua1CN3Bb_IV5pIMd9op7WJMfQpOlwa3zCf4XJMhEX8pZyWZyOMEU16wGo0T2GJt5uti9Z9rh0ROVF8bXkX86QrhukmjoP5NhWyw
 
-## G22 — Pour un export Android signé d'un moteur de jeu, transmettre
-Rôles : livreur
-Date : 2026-11-12
+## G22 — chiffrée
 
-Pour un export Android signé d'un moteur de jeu, transmettre le chemin, l'alias et le mot de passe du keystore par variables d'environnement, jamais dans le fichier de preset, et vérifier la signature de l'APK obtenu.
+Chiffré : v1.bKZwDxpT7X_6HFuogUy0A_HnMaap341WOPrv0zuJInmrweSWSlL1Ad0KB19c2coSdX1vnHGmcPkgrDVq8Pzi9IdOFcFQorS8qqqM1psvf8xlyV9m3OCY3rM64RuVN9fI30-LGCBr9V6WdR1Qwqre_WSf4a_erEWyJ7oB-IfM-J4zJupcL4RcFmmKwAetiJfq8X6WBgxiCmJvawwcoFoWUGROXRRZrIVw-shFJnbquusES2TkoAchb_xQ9VqQAw2jduGyvTsT0F5AXZE4ppgHHgcqun_vcg67yGmujRTm_kqK1ewumPHR0Bcox1mJA9hdaMoLxgAvnONdjmEXlPm0FWa8AjOdHoU6-_AGkUShyNBPXpOK9mMzGEZG6le_vbLL0eBfNy7KWpks3csnulChq-1MVXgqyuIdBBpSYUl7c7Tg5Q-yX6X4RczCTCJzjzjrCKx8TgHWVIdH0wi8LSSjvOpL1hxW_LxjmqlrUuBACgcCyVwWV5scojSunoHrNXDVgrt-_WRJ_6a7xiZjlb0
 
-## G23 — Un avertissement de format de keystore n'est pas un blocage
-Rôles : livreur
-Date : 2026-11-12
+## G23 — chiffrée
 
-Un avertissement de format de keystore n'est pas un blocage : vérifier le format attendu par l'outil de signature avant de migrer.
+Chiffré : v1.haWnMOlOrkt_BkT8DFG1mAbdcc7akG33BkqQiPK5P8Rdfi_2Y1LuM2eMQsqgl-tMsLR_sMZvAchIrLBsI3ccXwD_6oIpnmQIcgmWSHASRYM3u4UFNnw5nLqUEARH0atY30PYrjfQIVWrkrrCMBUO4q3-2K6_LsLG1c5OJwYMFq11KCL1f0Zae-8Qwd1XmBTRzYBw3nsrcZwQ_BHmFUyY0ruPr5gstwj5SJHpwoxGu4OAoR7Nxc8olA5Tk8tQKXpNP1Y6iSlYPQ5pdlXagsYLkEWH0rfz2iBmEm3YrYl7MC7D_ttUSjJDLQzI_VDJnz4nYOLfe5UMXmsjIz6mkYc1LR__v5FCJF9uiAXcIN6iqcYyqXIT4l8k1bqpeui3FksxMoGxi9qYkFrAVEqi0b1l_VESK3Y
 
-## G24 — Pour un jeu à musique en boucle, générer sons et musiques pa
-Rôles : artiste
-Date : 2026-11-12
+## G24 — chiffrée
 
-Pour un jeu à musique en boucle, générer sons et musiques par un script en Python pur (module wave, oscillateurs, bruit) évite toute licence externe, et un script de vérification contrôle format, niveau, écrêtage et continuité de boucle.
+Chiffré : v1.lRN3epjUnF6ify8uLkAyHgDJTAGiFIiaFKb5MB0gxHYxnG1KfgxFzeLE8xpZ28ooutR3q-4ZR01InPp5sRHLUkaLcWLPusrLIFEWL2xLsO5fiC43sbRJfDYDJc92A3EVQDfQrEBYoJacd1vDfgFeQ-vqUJlwyxrdXvhF6_Xf64pHDpmaxP1L76VlgKZiNy3yewtWE0Ans10kK_sfdLgYtdYkkOJYU3cI7W-prXDl8mD8YX76i1Qd1MwsslNiuUTbg25gF56WSxyg6-1EoD61C4y3FKH4j-zvxx-kSx-DFX5IJkDpvRCHaSpAZeHGcrpRkGaKlVNGyZS7Kqb2-NLcfr_IJlBy6FOoo83sn2Ldo3UCsv6ycqWO4yA0yHlcXbnEF3aMdiQlG_IJQuBvXrC4--UT61DW1BDZpUSGBQlZHv7IkuD7uB6sWdnf9CgwG6gMtAKgEr65Vtqfxz3QeawkPvbgtVgETHTADZQBkbGN6oLnEBzhCZ2043h0L9mG0NeI274Ki-kuFhfLWudQJryqkNjQ-GpxK1XWC3kK57ibW9y5SudC_MJNnc0m6Q
 
-## G25 — Pour des icônes de carte de progression, doubler la couleur
-Rôles : artiste
-Date : 2026-11-12
+## G25 — chiffrée
 
-Pour des icônes de carte de progression, doubler la couleur par une silhouette distincte (pointes, anneau lisse, taille) garde les types de nœuds lisibles à petite taille et pour les daltoniens.
+Chiffré : v1.uguQEOvPTyyHcDSPqx0lwsm0fkUFvZ96zbsNAB8RfWidxjMlGjuZP56vsXLIZoHa1BI5ioyeoFgQfp-qH7k0FAPgoWn6ObdIjIyfx2iyK5B-iyPiCW9Mtsmbh9_WVIlaeZrInrh2CNSRFa9yAvwE0VRRarXmUe4tQdnde0vuPhmRevYNgnKFmO57eH90jlDvpInKG9B3QrZDybPgROn9-MymkbdRV7UoBpznKaLIZRov1MRn9BiGXhkwM87V0NVAV5XVbIRPr2-0W6y1YJWTvCwrMAscl-tayIreRITd955681c6ObJfZSm5Te0B9VmgTMQ5Cgd0AnMGJy4lrizwhJwRZ_muFFZ27GD8UR405zG66rTWLpwcVrtlxgrIPFM_X2ub6zG2bu0OK34xlK6QzmK5fjfurkTy0R-NnFvMYlmII-r_aExhCiMonQLv0uiJvue8hUEr2TKjGDZBMwOhQA-eLBU6x_vTPg24It9lGED5CxLhb6ao
 
-## G26 — Pour un jeu à carte de nœuds, fournir un marqueur de sélecti
-Rôles : artiste, dev
-Date : 2026-11-12
+## G26 — chiffrée
 
-Pour un jeu à carte de nœuds, fournir un marqueur de sélection distinct des icônes et trois styles de liens (normal, actif, parcouru) évite au développeur de les redessiner et ne repose pas sur la seule couleur.
+Chiffré : v1.5Oy2hZxAB6K8z4v88GZInDrDHu7lxivDZFpnvpP7S0LtuyBFD2Z3B5-w1B-N4tHgHPDCpfZ9FQJY6GtOewBuEfCmW2TVgGd3WC3ZFSgEK5jXhpyNNOLcW2L7ZJwy13PGXkJ4zXY0Yk77pU-7N0zYayN-ec3O7dpJs8wyuw62Dwvz_FAevDrkNLo4QslYmMW78ti89N3nR1gPoEFzr2gj-hF2nzTLazR0uEV2LxqBwkccv8LJ894hcccS2X72VguJMIDVJTd8KdGlAa5GACO6OdYGj8aZbVgeS5jv5sz5F-g8a2uwIXi1ETeGnVTL55_eZXONCuqzMrBeQfkrpTPvNMXGaYlhpS_lhE_Umy_1_B6fROnztlbl9diLzMNLANai9w5pSw718KVl332vZ3PAVwx4ev0cqnnYtMeQaRk4T2Htbf8NPwXDhzyyPYfWqVREYrFd_5p3q6V4E0t-Zw-aeFurgSz0wk-w5HXJ3i71mCBXFBqSGokGG7z5DdBRTCWaUemZJcX2Sv_O9QCk2k1n2z4q5mTG
 
-## G27 — Pour une barre d'état d'objets, utiliser un gabarit d'emplac
-Rôles : artiste
-Date : 2026-11-12
+## G27 — chiffrée
 
-Pour une barre d'état d'objets, utiliser un gabarit d'emplacement unique par taille d'icône, avec la couleur de bordure comme seul signal d'état.
+Chiffré : v1.HhLYF9HkXbcu0DLisTNi32G4AZ6fs5BtdC05kqjluXhDejFhfupwyOOCr_EqrvD2iFGEBK4LiJ5E298mA46l-UIVg77avY1uBpPiQJicjjidYvBG0Ezf8IlR3izEHPVGP-QjLLnSdbLIHimwSx2WOcVbbLiztV8H_QmIaitkS_k_3R6w9lrjc5thlI7PgOgJ4OFCD5JwiDHHADsH1WZlJbWDFfG0dJ_7Sp36KnZYiuHFe2TrokGsKKAVLX2QXmoRL97dVJ5ykcoF13CujN_f0KfY-E5zT8ggfFQ6JOFPskI-eV5qDILhDMq9HeL_fvwzjBUKlJIzc9NU8TeEkt_xMO301KV2M-S02GBUNf7wyssOyRLxnYaquTnfoVKwOy54XbKUzLWr1xbOFwFK2Hck8RtFed4tjuosZA24YLgtJEqlts5Pbtt7
 
-## G28 — Construire les emblèmes pixel art à partir d'un masque de pi
-Rôles : artiste
-Date : 2026-11-12
+## G28 — chiffrée
 
-Construire les emblèmes pixel art à partir d'un masque de pixels, puis calculer contour, reflet et ombre depuis les voisins, garantit des couleurs conformes à la palette sans retouche manuelle.
+Chiffré : v1.0xNxtSQBc5LUN14IDhqPXF0FX5Gp_p1wHnHv3HEZH1weAyKHTJrO86Kij4XJpF3zw2XilEa6ephW6TQI9YSUchO44sMYdxxnLoB57tp6iNO0J5HJ6MHKuRb7c_P9hIiBkH7MKHlhPoaTdpUxJrr0b1fJh3IuZHzMD-RXZ6lqwDWHR1L-4MqsJ4Q8aGmjPoiemQQIMWkWZcRHv0IuyDxFPFXghIFfcJcfbAd9_NHBkBRcIFtmJGb30fTSmlzcdtos-GpqlaZtpprpi3HlwvKASzO4gp1iukg5yWP-KaBdej1WnYIUMD09CBVtA94mrOhG5VQU8Y00zyoGp549tq7FSUV0JtaZ5VsUG6vBY2R4FI8OT_IavP08yDndSuffjqClSc3S9LGKLuMoxD3LWMGGqJpD5msT_pMKQm4sVFgtNxU3zLPPw7JqOcSvL3mENFgl12pmgajMpBokMH3VpMK27dCD4Ug_NpM1Rat8XvPK-DSlJaBK2Q4dwg
 
-## G29 — Quand un rapport est limité à un nombre d'images par message
-Rôles : dev
-Date : 2026-11-12
+## G29 — chiffrée
 
-Quand un rapport est limité à un nombre d'images par message, n'y mettre que les plus parlantes et répartir les autres dans les comptes rendus par élément.
+Chiffré : v1.ek0opLilDC1ukgOiKuY_cvW8_W_vu3VZTwindBMcS7Aq6n08wKsnqENAinXPkYslm144u2x0fSnG63IGIID4D1sd8kXKXuSIK9J9EtpiyP1j2R5KE1zJabzjA00Gf0akyuisjQbAbh68dacc415UwGrdmVnptm2Lv77V4F3SkikHAmpceCVg14qU8MDejXGJIVcWy5Yk8aE_kr2n-U6Mq-Qcd0BrsCWldrCN73L0Sn5pYHONJymK91BVdI_hTBzgO5lHLjJc56gOQqx0_pZifrDHW9pwGj-sYv9NQdpbs9CyLpBaAbBpQUqXbauKyBM1bEAEXezfafVntzrC7UWH_ThGNy3bbXd4U1GdGVfqv1ioOnw5nH9Yilw1yNuafXva_lUi9u-jpTrTtrQUONm-_U1CNmjcdrmRRnnoA6WO075O41p69TxWoFzckRwv0Qki
 
-## G30 — Un robot de test qui gagne toujours prouve l'enchaînement du
-Rôles : dev
-Date : 2026-11-12
+## G30 — chiffrée
 
-Un robot de test qui gagne toujours prouve l'enchaînement du jeu, pas sa difficulté ; l'équilibrage demande un humain ou un robot imparfait.
+Chiffré : v1.Sx9nY3QeEW79fRNqph-xQZBIlU76VP0ABrMNqUz1DfwaJIhvxvybxAvL3F0ddLodWxTc5eW4-RKJE89niGFNuHGkInxILVBHy6tl3BITz-XchPAFH4d_7PTGfb3UgaE0sNG4dH3ofE5-5nWTnuW5Wdy5o8WyZsTT3OSaRzfyZ9yR4QTUyzZIQdZ5OQltQ7zX_wJMTLHNhedjWARfSoXm9YFBjNSvt2gJSgMejWk6buanegcZLaAgJFvwQmpd91YVcmHnhnDOJEi3r3iRUn_onYL3fgxgstv0sIGVmztFu8fsGO5eHZhXIlXhkNAHYIiGcGDWM5knkG4BVdPH7mtyRHxqfxa9kY5w2mzPAhwlDWAz-dhOIsorMmugZWOho3rMuxajunsscMMVEuSREChzqFBdbT_UuGuv5nBck01Q
 
-## G31 — Pour un export Android signé, localiser l'outil de signature
-Rôles : livreur
-Date : 2026-11-12
+## G31 — chiffrée
 
-Pour un export Android signé, localiser l'outil de signature dans le SDK plutôt que supposer qu'il est sur le PATH, puis vérifier la signature de l'APK (schémas v2/v3).
+Chiffré : v1.R72hsPLLOrzCQEiQpCTzYwn5NiMlZSPmOEQrbZM9_PaMZaUqobJFSLLGTBLuX-ygejXuMyUXdP6b5r6ysGhvui3seQGoO9Pouy1Jb68XnFZ35g9nYavRyt_Ht-d9H6wfDgnV1efpiJrhSmHKmFJk3hsmdUeUCFUF5pdGMlAgmpb092heESY3Dnzq4-h1KR7H981I5dYraqlzNl00F2Vp3fLuJO6ncgkVNBeBRuY1q4Rk9CoxkEJDR8Xtit33YtCKl_WEXuZAoGZdGC3cUBmNWy0qhWHsfG8_4tUyT40PpY5hCh8HXNuPRjaoCbPoYRD16s7P5kZLGBvJGfBzcPzjsxUucoDEP9LKPH3TDKwSEbShkJGC18UdLinZR9Scnfg7noE66gAzm7WC0TQz2WouPWYj8IIXKEwhKCTW3rGh3snC6EPuGEL_nhR7E0cVyu67EeMi838sS7puxAnsATLs
 
-## G32 — Pour contrôler qu'aucun mot de passe n'est écrit dans un fic
-Rôles : livreur
-Date : 2026-11-12
+## G32 — chiffrée
 
-Pour contrôler qu'aucun mot de passe n'est écrit dans un fichier livré, afficher seulement le nom de la clé concernée et jamais sa valeur.
+Chiffré : v1.UZXooV_etLSDrNFcRJ0FyiBWdfdbTrqmhrNOMzQSwCb2alm_J_qlX9sUtIeiLMI8lVxCCSUjZ9HIfyW58b9dU8enuYWje_gvgcX9v8aoOY0K96CnJlSiqQjCj43PsizUTvHiHW26dNwFhpyz2Oh1qtfMZBbbbXaE5ZsFpB1LTwQ03UFPlzAFiukxtptkF3qkArRNLob7lNb5qfPdkzyXZcpJuHEmLGAB0B6xViriQSmqPI7zNIrp9ycOYLcrs80pYyaHwMl-62inWTLIc43NSVKromw63A2UkB7iH4F_igz5MkNiJiIm35u813Z0OYJbeTADS3jt8Vh1L9a85WqivpJHKA6wXQbwzJ0EZVPXJ-sj-eX2yILOHUsGgIkLRPLwZ-hqD0lUslyjJj83VezlYYG92E6z3Su162IJhEAQcPwdPA4
 
-## G33 — Pour un export signé, demander à l'utilisateur le chemin et
-Rôles : livreur
-Date : 2026-11-12
+## G33 — chiffrée
 
-Pour un export signé, demander à l'utilisateur le chemin et l'alias du keystore avant de lancer le build ; ne jamais deviner l'emplacement d'une clé de signature.
+Chiffré : v1.bCcimCEOCfarYNfvbwZV9iBEoyeN8TtDyhSDNDZ6nsbpBt6GEmIZQFAMraBoq3JKgNI2B5YRvKrCh8yZXNVaywbw68ikU_7tq1CYfYQ-R9swSJdAW12zhZGenH1GTOEt04uJOuhMx5ZmulNXcjYRKUXkUiNVFp2UDz5kBKjhF8K00d9lftEHZB9J521zkWXLl69cNRWKvvr41QAz645xwfEkeQ_IHRvMFL8cGgnXZSfHgx5eaJtHzxjfEc3R6Co28lkwCOQT8_aAMGClGvol8kDoi0Z8YaDAZdGMgo0HsEqpn_5tCLHvPVNOdnnXrSZIfNtap8_SPxUe1_t1gty-t0NRo083RGa0nePdqmtcU--dN8NipQTS4KpYveB226uwSptupWPb5G-CDueVwFSvGbqJ-BijeLo6EepC6aeZ6j5w1hG6fZUzWbcL52f7pPTElSHb8ag1VMA
 
-## G34 — Dans un roguelike d'action, équilibrer avec un robot de test
-Rôles : designer, testeur
-Date : 2026-11-12
+## G34 — chiffrée
 
-Dans un roguelike d'action, équilibrer avec un robot de test imparfait (taux d'erreur réglable), mesurer le coût réel d'un combat, puis caler une simulation de runs sur ces mesures pour comparer les réglages.
+Chiffré : v1.p9tcuGQJaEV2_pGq93K26YK3DNGr1-JTf69ARmXIOxZXIv1TMtAjlt5sfUK0zoqx1hTKEuzCZgrXf3UNHzRHcKlE1WYvSthpdjKvAewJcFGNrXglzZ_xHRzaA8skjrxanKsXnDj-gLxchJUse14EN50bIcY93PMGeKpTKhMZkWWn-0mTyiTNScEEr3XBAHkLJc5ExAPd5MclYJPvXUnt2z3mS74Jj__TYM_ikHC3ZRxjGuqkCoB2ugk4mQys1i7_wF4Hn5w-5NAOXydjrT1a7q-y_3SIqN8GnjZFgtOpVIgitL1jo_d3NqeBdRiju8bA6s0rtID4-b4wi_E_LIYS5Zeh87kknI0PoyS9FX7lyWFn7GnT34bxG3cY0kmE9eUabtrlclzRGj3k38BnrAKLAQ4ezKE8xIoPAlUqgvLfWM5aB9D4LFdZdbz1YPnanil4v690UxExnlnpzNFf82l6FFQY3kDeFoSptv3yiATxaybXWfl3z8GJAhu9_3kQG6YoojpeC54xVPz84loLXSOXxy9ssYA
 
-## G35 — Avant un export signé, lister les clés de signature candidat
-Rôles : livreur
-Date : 2026-11-12
+## G35 — chiffrée
 
-Avant un export signé, lister les clés de signature candidates sans lire leurs secrets, puis demander à l'utilisateur quelle clé et quel alias utiliser.
+Chiffré : v1.bX3G_ouH7MomATC0XLgI3T-VTZdSq2K-Lu4kTxFYwfl41fHhg6MQ50QzzJ-S_41Dhz58c-so1pk4CN01xatfZlqNDTciAnSQ3W82WAg3Mjyh953i_3w57JhZYv2prt95tz1WaUmLumS8wRTNnB5cUwXqEGEbNXWSqFYUXBUfJTen2mowsSFym-E3Ek8yanpuD6PMxa_LcN_cRbznknZYD13nvv-vHah4vDDlUeQ6vQh5smpNeF2eqPLwDEDxYmPm0DPVBMWv__sjuVYAf_kL_o7of5ZxbGmCXbRngs5SEHutiKZB-pFtr9Dp4IuA6tCCztESWQwK2mzGvShfl1hFCGh9KlUkZFd-rN3YgWRUybef0ti2SFprMmlcg_qrtcjtS2dOP1Tg_2HoadbwMhwMEGhJPm69kUw9e313ZooFgf5douPPyNQKAe2h_T1HEmir
 
-## G36 — Quand plusieurs clés de signature candidates existent, deman
-Rôles : livreur
-Date : 2026-11-12
+## G36 — chiffrée
 
-Quand plusieurs clés de signature candidates existent, demander à l'utilisateur laquelle utiliser (chemin et alias) avant tout export signé ; ne jamais en supprimer aucune.
+Chiffré : v1.-nBRYhZsXYoR-LxVcCM3F6uoEP498GDGH0uVaFxfUah03jhXgwePxjKPXIGwblN6FY0SIeCN_AGSoNfjDvbk-5USFmI5Z5mIAzpDn4wJr1P--gTCDcMEjZmMDDYJ7_h03_Ia-Nj8NKUL2ZLgQ0O9NdbJbwrvDMntIGuIiDqfdo94Wzf8MorlgdUW_Aa4FmvpsMP-vMJtFdH4L6Ph_Gdo5_gWFipD6fPJQUWz-E7eEpMPMQOM4l1UmpT19q-5nFiktaz88Dk9ZSs_jsR3IuEN0brYtdSuTBBR8EkoGk5sEGb37Y6mtV0ptx5pZNCVG7A3zMy37IFIXAtuW2vV85xDoBPIXPsk9lCwyz2IXNht9A1QGrPGI4W9PiTmAr5oc_07riyeakHNXZzMZtXH9rCms2sHeTMo_BxnJxq3kcAsBinDBL47nuy_9CrbEpsvnMkGRvnJpC9Tj6adK_s5aGFyhE5r
 
-## G37 — Dans un roguelike, un robot de test avec un taux d'erreur fa
-Rôles : testeur
-Date : 2026-11-12
+## G37 — chiffrée
 
-Dans un roguelike, un robot de test avec un taux d'erreur faible produit à la fois victoires et défaites, et vérifie les deux écrans de fin.
+Chiffré : v1.ssoMTwJZXihfIGjNPfbYj4-lZYlLgVy16RKiARio0vuXb85VVd78UVPq6DyKx6c7R9vPNbuYXurXVoqFCG0JqOx_Py7jAvL4iDdnkQ471AwyX7lejAK3ULvXvIIZmbCkyXuqwNR-bw_ZEeYWEWNvqw0q_beGO4VTwoKpa_T_4RyWFf7g5UtwfsaRe2aPZ9zBKKWRz4P09rh7TkmQFGUeqV8dKrlaWXusJmmxnPH_SOdbKJEbdS5153jXoX2OdvNppwqz6Gxx3vWwmTQEG5RyaFqqKVh64r3qO2W5JYj6svf2J6tuIctTNPtkZTdOMHoMG4PQGVDbBzCK2km74AMGfYrZCbm5rcjgi30XJVs5aMSf-ki1UUE5Ybxvtjh12EZiOZWZ3nbgq_s1XJKnRp1pV5qPxmPiM1jDTX4MJZwDK-W_tA
 
-## G38 — Quand on déplace une valeur d'équilibrage vers une constante
-Rôles : dev
-Date : 2026-11-12
+## G38 — chiffrée
 
-Quand on déplace une valeur d'équilibrage vers une constante, brancher à la fois le libellé affiché et l'effet réel sur cette constante.
+Chiffré : v1.Ba7L4yc6QFCkpbuLN89BbGvf3JocJi8OL0zToveQTCtBZbzZxcNwj_z8nsMG9KUR2kbjLtJdV7BmCjZct61ac6rtIimgRStZ_V3ytdjtJ9Vt-ABO_dTauv7i1gcROiU0w-rT5SCFyxch4AbJF2rdX4pR-3m4FULQI0EF6tiVDQqsKePQO19QcQFIzRsbG4xpBXpPuBwqWALATyFpCfxgzAqxL4GjeLah9xy0yRnBSQ_9uUFWz_XpbbbJrTllqi3EuJFWTrEmh6uF_arwrmGM3iIkTvTqcGIJUS5fYDlHioXpr_hbOoYkrCj22NqhHaElkTc2VH2bYFJo8TtTdm9RhnyqmOmayTzkKgqJgtN2Mcd7Q071VBPDc38Wwacwm4FiDljj5PeGv--7KJsVlLINo6gXzCNlPI6Z9L0ROe5n
 
-## G39 — Pour une signature Android, si plusieurs fichiers de clé exi
-Rôles : livreur
-Date : 2026-11-12
+## G39 — chiffrée
 
-Pour une signature Android, si plusieurs fichiers de clé existent, demander à l'utilisateur lequel utiliser et son alias avant de lancer l'export signé.
+Chiffré : v1.ZwtwmYD1TMk--78Int7h9eRICw-Lne5OOeDQRwNw5M3m-_e5-q-HG1QEnkn6Bw5NlM0f4qyZgRUa6dP8Mf2zCGhZ1jV0O2TOoa9mPYHtlui4_6S0R4jbBETdsNwC6vIUzT72k3jnV3v9mks9KQgJFsIn-PynUEQlaC-4CaewWizw1nLl5dnhJefzjzkbn4YbBy_YzvlJCDWDJ1WJNMGp-Xyy0y4MUPFYC24pM9rgvyhn0NWUOrfO0Mt44byCvz7GykhbRfW5VxooK3AhtDqRuULclI40T-OoOv3DysmYeMRRiLOPLW8_TsnslyjnbzYNY6NU-HQqmbBU_xKBZU5YTqY1gWG-Pe-ITeSk99amVBAQwgzH-I9bTTvIBbB7awr-npoOF1VwKCib2v8zRlaBC_vbFex792FYNV0XZaiAENJkpSmbj7CDQhQrHGchog
 
-## G40 — Dans un roguelike, tester chaque événement et chaque boutiqu
-Rôles : testeur
-Date : 2026-11-12
+## G40 — chiffrée
 
-Dans un roguelike, tester chaque événement et chaque boutique en appelant directement la fonction d'effet sur l'état de run. Faire de nombreux tirages pour les effets aléatoires et vérifier que le résultat est un cas exact connu. Vérifier aussi le taux observé contre la valeur d'équilibrage, et les bornes : plafond, solde jamais négatif.
+Chiffré : v1.V5OZC4dYKiePsTxsfBccfVGALX8CSHt6FoMf5O3MoBbtX9f40LpjIYDbtpLPN_4GmBYn2kPfv5xKxxsBAftm0PZ1FCxiCOn9-PkVFhUzf1ZmvQHJlVID3EpfY_0r8UzXtmfLXamcwfcl5XyiL90yZck2bItX1Q334R89FUnDNi_ntvJBxkzIVTK8o4l2MzUSYfSnAVneA2q6lAVWsy5LKSoNetyBCo6D1szjocxJzV_YbOmeMqwn5cfz6I80KqSTa7xPfhYjvB0yZHvZ6-a-RJ6EAzhsHxNdPTRrmwyP8ACI3gvW8plydZMHdeX3Mfvms4ggsLOh1kA1TuDlAFIcP8Z0eg3yaTvODV7qnN4IQqxXHx_OHmetwhJF-Pdvr-g3o9l30VjozXgLEr-B4052hYS2dUUJTiESOK6bIMMzU-0_fCYQ9-QSClp72cnxQ-w9DpNnSQvw9MFmwqgIapNIcDRFGpZ_e-RUpN6jeNgff2f-dXK5ndaBC7BD2tA51dtJdnm5CtA6gweaanhv11ld-dSX0yn5dewzERB23FgEher4NViqTIP4fxLSUyZhpfEqv2Wsov8KIKMcus5PtPcWFU1NulnIkG6LrSG_XgXyILrDcu3toUmb5Rox7v_FMciJx7cLEvm2yNS_xD69Tcz1sc1Ju2SJpzF8QjuSx9-wfZFSVHQWBvnDf8YqRUVxvjRNwg
 
-## G41 — Pour tester des bonus temporaires dans un jeu, un script lan
-Rôles : testeur
-Date : 2026-11-12
+## G41 — chiffrée
 
-Pour tester des bonus temporaires dans un jeu, un script lancé par le moteur manipule l'état de la partie. Il vérifie ajout, cumul, plafond, usure et remise à zéro, puis instancie la scène de jeu pour lire les valeurs réellement appliquées.
+Chiffré : v1.u6Gpd4gxJ5bZasqL6h6knaMJVel6Zr3xw3sYthqtAcvJZ5T44XWM9DCivv40FFVVUaCqACL4CXJM0XWw0Sev18DhKPQcdEI5OKOkQsq7a3MbIyCmfLa76gR3hmVM64kiJqyIGCCXN5P3mALfwWFoX6HJL2fwX0NdYZL8vuH7CnlfNUhQ_sDkNg6HAE9LrZLwDM-m-0T0D6Ge3sj5VuRrnm2xCIX9v9uoEsz_0uppyAuume5X3h7ZqExT93FkP2NV0hwKGp0f3ofvbqrpF-3RNhw_7FXK7c4v0DipNb5d5ESssl7UgeiJBPnL5q1zqu4X6ellai3j7GlBdC1vw84M9ynhdnlujwkYpbGJyaYdGGmRM7fUK46qkr0cOzX3kmVdPeoTsSXYf9zTfNoexOTi62Hbndz81XCho9urC9q6-hKpHt2ASYNMTWLFm9n_-PWMZOXyR7KWA1mab5usKH-gHO4Wuyz3BHty-Vpf448uQJts3LOUeJSOU-QdIK6LDT0tbe4J5VnK8ownl_vmrnEWZJyQIFfElIOk1W5pGIzDT96z30_TZroU9NbL
 
-## G42 — Pour tester une navigation d'écrans sans interface, émettre
-Rôles : dev
-Date : 2026-11-12
+## G42 — chiffrée
 
-Pour tester une navigation d'écrans sans interface, émettre le signal des boutons, attendre quelques images, puis vérifier le chemin de la scène courante et que l'ancienne instance n'est plus valide.
+Chiffré : v1.PzvO_FjuWwe2OYOXIPuMlz55ceiqGxidq4W-TuWQGbTfwDNqc5oG3R8JnZRFPAPoeZ-NmRE8adLFlgFJ4tHJkA5pRLNcsqQUsRhBwpdezu0YyovMdvVY_Mr_3VCug8-ls-fSHDBiUxRPnY3ojxUXhjUqU7SlrnDFSOCpABTMuo6xv2n9dXbjqDo7b5Vemz99MLQEmpVs_KlTWiNC_dt0B3f-xm6OsUR30jS3Yb081bgkCrqMAZqGPWtDpdyu3p5zoBMYmV0WtXOrQ8XHHJsbbchLm_DzCGzIIhN4SpM-UUhPMpW1ycL1RXkwGwO1JTCkxDb-nWjy5vufLC8pajFtuUFyz9MbcIqAwTgBN0SyQ7GWEEGwlFkAfEMqnZivYvtO-1JJGWDbS32bo9I7y3G-_5tvlOw1y5vc9D6dNVb-Eiujy_lYB9SJeuJnjDk73hYMpXIqYivgLe27baktaQIHhfDz8AxElANbIg91iu06-feD5momzcaNJODE
 
-## G43 — Pour des maquettes cartoon pas enfantines : expressions exag
-Rôles : designer
-Date : 2026-11-12
+## G43 — chiffrée
 
-Pour des maquettes cartoon pas enfantines : expressions exagérées (sourcils, dents, yeux mi-clos), silhouettes anguleuses, contours épais et ombres décalées ; éviter les formes rondes et les grands yeux.
+Chiffré : v1.0jCpwhXgfBUCWtKEjuliP1jGY248H3_oE46DcF7-9yJCUcqmw_wSHw43svQkWY-MCSTbZGxS_sgqRdw6bcFASL3bTNuBJ4Qqbd33eDTZ7MratOKqY1sr9xerpSF7MIElLeXIzjmMBS48ZGiORAPegVepFkoWU9fbfFBSnHLOt3LgFfWlsjbQ8dYzdVmQlV3XvvGWQkTCdyk1TRrVokwm34xD0fFtATurFJl-lf7See_UmnfAsJOO8QuBJDwSWw-Q01AClpT2IPc-8hZMJ9M2DL4VdlZ9S-Zz_gk6dkfbgFZhTjB1bAIrK_OflaKb_C7i0Ji-v8VCyWR13l9JiWii8eCcXFtBBIJmS3hYRfOIeCMKfu5b9Jt-U_QZFVGM_bankrr-6wPV5-Kw-730Cw7G4SENkCRjdXBUDJtiTWAZF_Lay3e4VJxGAWqtM1Urw7__Re67xYfcntXI2O3GeVywdOItwR3HCyhyD9X6ZHSYRmtsHRcQ-EgU-_JRBT7Ezbf_743tKQ
 
-## G44 — Pour un export signé d'un moteur de jeu, passer le chemin, l
-Rôles : livreur
-Date : 2026-11-12
+## G44 — chiffrée
 
-Pour un export signé d'un moteur de jeu, passer le chemin, l'alias et le mot de passe du keystore par variables d'environnement, puis contrôler le code retour, la date et la taille du paquet produit.
+Chiffré : v1.rmm0m3YkvzE357GCcrGu4-H_H4-eOGE-o-ov1SXiRbvsFp8Zitu9Yv2EkIx8gpmsJg1Io8pCOKrAf01lpqK9ka-734Bk8C7LSD4hL2VRd4D8zF2UDZ8O8COptyhEXB1XpwG-9eI0SqXH6Q6oaiyLYY0p0duK5DUxQ5uEWrk_-2SHvKThJMHQRtCCcbGOxUtzPnUQ5Ps5z_47qXZ-UmGQM9xJeJmsTDtt0RyHOaGQXuiWu_ChF8XUqZ-tTHrKWzPBCPRSaqtfweO3o5qGVoySVDmrK2r3PIPOfagAGpZQR-D1p8Z7xhTrNTXVcjeB08mWgOludgCgbxeKDBPDhoO1VFtmClVMr81g-Okbauonwk5BydIiLRHtKJLl0zQJPwY5KXoH1ybRJrB3sg8nqA8p_-2uBeoMDYWImuj8eva116vAqWw39qhwXcvnGI3R7QzyEHDqzhd5w0XhgHBiS6_TwRjhVE4EcD4Q4qsCNULynObBFFfNZgKJhPt2cvo
 
-## G45 — Dans un roguelike de cartes, vérifier automatiquement que le
-Rôles : designer, dev
-Date : 2026-11-12
+## G45 — chiffrée
 
-Dans un roguelike de cartes, vérifier automatiquement que le pool de chaque personnage contient, à chaque rareté proposée, de quoi remplir chaque contrainte de tirage des récompenses.
+Chiffré : v1.rL6knd7DvpOEw0R6KOmLKeZjSbmYA99vp4lFz79YqsLMAmVCoStOJ7FlJccn27dO4oViVRl7rErlWJ24bkh700IC8-9No8Wy8MFK2drK1eN4wWgQJPHx6xLUyPDuZayzle3UTLOp9hzOxFVBP3lFiiV2diRHTGwXS9ItGw9_XFMZfvuC43CU_CVxOFUW_pmxCuuXI11QvXwQPQu7X19naA_uzBacUj1IDc5bmnK0Hw8jyfhQcK_TcNdBSPOsMaCJpz1EGvMtLKB4y_ekokxe-dAiOD-yJcK8z9P9qorxweeT5NIrIfr2h8G7uGDC6ulGEMZBnExi8haaa9wGyn1VitXHEPETQWsnNIAbq8OPfANsYHFXjC5q3JQtbuv4QdJ0HhxpicMeV5LOt6y--Y9EMlNqprrYBQAwxW1BrxahU3okk_lr_Z90ZIEWlJEQhDzigYWekr9LzSathL9ku-7ur4FqNiYcojGgRlvq3X4D09-OTuM0w5A_
 
-## G46 — Quand on ajoute un type de récompense pendant le design d'un
-Rôles : designer
-Date : 2026-11-12
+## G46 — chiffrée
 
-Quand on ajoute un type de récompense pendant le design d'un roguelike, le distinguer d'abord des récompenses existantes, réutiliser un nœud existant de la carte plutôt que d'en créer un, et dire dans quelle étape il entre et quelles autres étapes il touche.
+Chiffré : v1.C5yP0J-AZ_ofu6jUfmRkluoFQowSvDO_KIFhNEKVPLSYdWmRWL1K_Vw9sEGNkxjbKQS9XGbzjIQPfh87jiVdCI7a_uhU8MjsYlo2N7pcBNeIPzsLbrY_xv_-Q_BeqZaKW0cxQba5vmD6RwOG_Lkp7opHgJY8Ott-wDR7sRWiVf6bmNHop3wE2oIoG-gmgnw6Arv5QQ3DkE8lVgIM5NPCb1O2iFE1O2wkEC5mhOOpUlB6X7lWrLzh6lIGQ-KfjDD1RH2peytrRz6rJxK_zCeS6-ej-bhUHPu4FsVzL9V_1dHpt4E2OndEfqo6QGbx9SuyAkj1bjChztOIUqlOXxbF1oDsKaNkQR7NWwsPnNlaJYdaSp1SaKJycRjcgj9e9DNWG9yePers0DLn3jO3Y46Yyh3gpNfyYlhM5KokkX9tSpINnHzyup167wBQel7WnRZyTBxFAq0TMsMgRVtDGZMWbb7Mpn6HpBf0C2QnP2i4utmDnOLdnNWctWUTUDM-dT9TJTFsoc2KwZiQVEKu4oUlKAAO2JKNSRODlxEm-r6Twlrbu2LszX8vCuWO_Kv2fk6xZVEss6cYuyae3NMbRAs
 
-## G47 — Dans un tirage sans remise d'effets qui se cumulent sur une
-Rôles : designer
-Date : 2026-11-12
+## G47 — chiffrée
 
-Dans un tirage sans remise d'effets qui se cumulent sur une partie, vérifier automatiquement que le pool remplit chaque offre au pire cas : effets déjà pris plus effets qu'ils excluent, dans chaque famille.
+Chiffré : v1.loGHCXLv4QHxDUsEg2vNKoJ-ztPa-Fo8doaOuxPGYUhYvBajJW5YRAJ0pA57Umi5BQk3qXgfWCRhQkp4hLrQdlUnpSsvA9q6g-SHKlcKrUpVGEtF5RnEdiffulONYaLz668IwcOTxj-VkFgG_FnrVrMIjxaUiH9Hiasv0cAlVp_v5IsWIcML927sdpuZuqNiNMF2Ql4uE_-VW22z4wgEPST3WJ78Cbx5WZIfz8V3BsIpTgMhiYfPZ2uCl3yWpDbCsaTAnbpHA6Ypc6DUUuW8DtCV2KY47plU9XQgHbfgQG4immGFoGKCg87zxMvkPj1DqHtfKp4W5f9ZM9mF-wOdVUQVrFz4FZpFIIl_ooagQ3zCGDLxeQziNtFZeNPgUgVBDlTBCZd6Fd4uz1-H4BTIvi1wv_E8s5Rh0SBzSSUVVLUmNduK1f1NOsWxcZRDZNJ0rQJ-452yOvgUyKR63ybtzti28s265-ogEog9tJMkdsKGebMM58vUaHJ_MPP5t4DVTpy3
 
-## G48 — Dans un roguelike, vérifier qu'un événement qui termine la r
-Rôles : testeur, dev
-Date : 2026-11-12
+## G48 — chiffrée
 
-Dans un roguelike, vérifier qu'un événement qui termine la run (mort par piège) ne lance pas de temporisation ni d'accès à l'arbre de scène après la libération du nœud ; la console doit rester sans erreur.
+Chiffré : v1.JpWNMuusIr7Xud2jSdwI3zA9yjZMWHIGhIsZG4m_KOOxbaLA3xevpzPqtW3sAQdWL3iwRHMK7rtRlQZutjnNcHb-yaEy4zuIgB1noW7eS7scqAI-cpH0nJf5itNYagWIplyW44-MT8OsecRehFLbiLCGofztlac-tZ_kh2kydvFm3vWV1gTWRN4ZB60PNGsdaXPbBQDsZDP9Ga591uw8GNxEZBC7ukp4LNHKH-ToxDYk0ccwng1j0dJEPjeCZbFXJ4L8Q6WTfMjqDI0WvzNf74K2A-SByniLlngk8K5sK7GwYz__x8dkKCQoDHounb9VRv50yMuN5WFqi1Qxyq4bod3Qzqpglayv1BtanSeTH-KjUG0XqUDCnhN7N7-qWcphzAa8i2TKxUA4Mn9ddkOZIGH4jXt3TdibRJb0Zx-S3d6QYzy2Nyrvr9uTNjXB0L6Z2qi2SVux5El3ZV0PQbE_6Z8JpydYWiFpRAnnqegg5KzKdyA57YvzOtaZ45WMUpZ4JSHyD8ZjxKnK9sZlddYerki9oQ
 
-## G49 — Dans un roguelike difficile, un robot de test même peu fauti
-Rôles : testeur
-Date : 2026-11-12
+## G49 — chiffrée
 
-Dans un roguelike difficile, un robot de test même peu fautif peut ne jamais gagner. Prévoir un mode robot parfait pour exercer la victoire en run complète, en plus de la vérification des écrans de fin par un script d'état.
+Chiffré : v1.QUuPhiFvU1DacN4tFSUgaGaftDKGi2wSBf0QtExPFD6MmrfNq9Loi7HvsLsidQCKQ6YiJcziVc6UXsfPAQFdZ8XEjHDMaGhoHq-Urzzi8sC6xj2b6YrhhHIORY8nq2-eh1LVxOIGSQqlLa9aYaNXohvM0RrcshD-f9hujEf6IGb4cH5alezGrq9BPJqwilyNON6EHfqMzYz_xhzRG9OQgZ2XyF6O_dUmk1yyHtv3XZcTq27NmhAb4irUAiXI5UKlJLn40T_WMuFiCZh0sF2jUE6Gde4NjORZfqvIIbsSoR4xy3NPkSHQXwM931d1x7L5-69TKtppIxlD0ABseR_avj-5EmeMNceUPSxGuTgMou7RrCTA2IiT1xkN5BrUY8-WAFmUUIAeTHaBoS9FN8wg2ICSfkVJlhXlCW0VkShpEZM0o_aFSCQ7xwlCrFDOsgY3sQY4QC9zJIp-9KjcF85WMmFW9M9tjmi5_QyJP3l49q4CC9GK3BqQ5a-V36QkCI1mmFyz8C95KD-VfINEdgJWQGUVO98VLSRM
 
-## G50 — Pour tester l'écran de victoire d'un roguelike avec un robot
-Rôles : dev
-Date : 2026-11-12
+## G50 — chiffrée
 
-Pour tester l'écran de victoire d'un roguelike avec un robot imparfait, faire passer le robot en mode sans erreur et sans risque quand il lui reste une seule vie.
+Chiffré : v1.3BL-SvBXZbGTM-4zqN16XfuYL9zEH1Z9rZbOIVNMxvzrO1v-vVZG4LkgY6pn9NNnEIM6QoZ3hdVA5AcO3DUxkJfcdkubsZyGU7i8lsF_bv_89E0CILOsH5Rw4b1NlHv4i6u4AWQ7g50F5JHH5yOCEmNZrLOOv1qaF7fS_d3qc6V0yt9_OEnUfyydGHXeVBiuHd5wnMDp6-gPchYid3cAe9On7GBq4TOi7TOu0XHpjtyO-ErYWxV9s5FjqVpUC74Jr5Rzohk6xfoPyIzN_aTh-NE_A--q74LbCOrlZWJ0CWDi_WIGuoOcGM2fL3DkVMDXlgJKoZARCI6UfHss6hjumYeYhthwCdPh_nB6zh89AQxo2Gv9MKdRrKX1XfckaKb0Xn1zu4IDzFngJcon47ygBieWJwJOt6ShV3cl2RYAwGKY6yQDoeiQM3IaxRiEgfmAlSE
 
-## G51 — Quand plusieurs clés de signature candidates existent, liste
-Rôles : livreur
-Date : 2026-11-12
+## G51 — chiffrée
 
-Quand plusieurs clés de signature candidates existent, lister leurs noms, tailles et dates sans les ouvrir, puis demander à l'utilisateur laquelle utiliser et son alias.
+Chiffré : v1.xGNrxPGwaKkXpbuTClB-HmQQ4xscm8QqE2wfqdHL0a4osv3jhVf5C1Aw8eptXgvGZkTz5aEe68wZxx62McMpHmzlwZLHThw79C9sZV2IWdBRJkexi5CN6s0wxomVJpj6DBqY_st7NrzjNCTqebQTmo2D1TMTMboDf23JhEruuK6NA6gY_WHFfLdBsCMeZzSFYRL0mHO1YngVZ_N3MGA45aS-zYsO6pgvPCmQqsfojEaHVyVedHv66f927fdUkm4Uc2mtJphDFCQJW6Buuah81K4db5YR94wxzr4k7VE-xY-StmKYXQjbJc7ZO8rfCyYfO9m_XWn3UnmXaBUIfoi2sHyzwgj8DNu0A6A8MdDB9m9reQKvIeNkb-7no4CUMqqcB9IPoowMIOnikMTU4u_yiRQYWF0izSzKb8xL-exPg4JRcbwdbsxynZhxE3N4lUFV4MG0pm1QrtEpabCCLiY
 
-## G52 — Pour un export signé destiné à une livraison, ne jamais rete
-Rôles : livreur
-Date : 2026-11-12
+## G52 — chiffrée
 
-Pour un export signé destiné à une livraison, ne jamais retenir le keystore de debug fourni par le moteur ou le SDK : demander à l'utilisateur sa clé de release, son chemin et son alias avant le build.
+Chiffré : v1.Cd3gWR0ilKo3swqGp-b67KT-BnpENxk-1dHgRG3xsa4Rkc_HNlppEVeD-zgCPUJS1NP8PIYZQszXHee5NjC9MuUmMiAbNVcojzgo3CZUSuClXiU6VdmTAOdCfwqJq9lkPkgW-6hCiZmNEV8wrQSdlp38wPrr49bxOgYyKQ_0wXpo3S6a4H4VXn1tqy2WSrS0-xPwX_F-Q7xA6darEPYIp2mzBfqNu5aN-orAK-UtCF0GQbU6dguA2wG9Bp9db0PvgkajLdDN00Tr-8ekpgkY6bDDqs4e7IVjllTAS7SSRgnmDxCkfkW0-e1ejGpa3-BDXFjSmGikL60FL_QHeQeHc3-DJNOXBwj7jknnaJASUw4BxDdXIUyiIYEDyRWeI_VmHPt0bsICbhWVFEL3y4ErwkaGj4Jwh4YGSUwvjKuySJ6cFTh6F0yCUqMkDPe8ioJAAo8TzChUTpfPLNCqsXBETKrM3-jbW8Dc3FwMFVhw7IvylPTnFIwBT8UNLuFXp0TaOfQ0
 
-## G53 — Quand un robot de test accélère le temps, vérifier l'écran d
-Rôles : testeur
-Date : 2026-11-12
+## G53 — chiffrée
 
-Quand un robot de test accélère le temps, vérifier l'écran de fin au moment où le journal signale la fin, car un retour automatique peut le faire disparaître avant le contrôle.
+Chiffré : v1.sdPiZG3gK-YBNJ6UwgUDNblxUrz20_FyOT-JxEI-AcV5cmY3TEh-GpUYemJpRwoDK1T4xt3f0j0GAlm1ZrFtTX8zg56ZVEt4bT-wHtXOyW7IEeYixPzVGQhjPpwz_sprI4rRUljpPWkztYZJnnbgbEne6EH9D9QhVxkg9DEUjKpikO4gt_pkpND4-V6dNDFofj9tVc8rRWaPa2WIDIp8wMPbTvePqhqOc3843_8hXUv06BNPsOMrtaLdkcCGTXtrERvq0ixpoDsF_ye0MhBcnONNfk4mKiXCgllXnDSEijG6jBBIJBo7-VEAiZ6PgxtOzyHUm-fSfiEMxlBfI-eQkGIGivnLdtHzFc04Y_qUdoX99Kv5MrfbJSv4zS4XAYapPDAGkiAYzGySOFDeVoJhP5vXLUWwPuQW60g1jYzFWypz85QAIO98KSivYvxbUMJxpr33LNqsElBWJAJ_4w0ESBRhqBTtSCIC3O-OcT4
 
-## G54 — Avant un export signé d'un moteur de jeu, si seule une clé d
-Rôles : livreur
-Date : 2026-11-12
+## G54 — chiffrée
 
-Avant un export signé d'un moteur de jeu, si seule une clé de debug est trouvée, la présenter comme choix explicite et ne jamais l'utiliser par défaut pour une release.
+Chiffré : v1.X6E6Q5ESwz1zrVLjFxGDKfWeznR20NWYruuP-wyWeEbwmkhcZgNplpOwy1-xG9_3S-G-ciKnkSGk-yjFZbDcZXVpxWAzkKnHCNrYgSUCMiJJ55FedH-BGzMmoiPF6LhQSaKjIgQ23l_CEJyS9ngK8A0dQYVSM3VfBPbupEguNujPapSYPQzP676nnVEG0bR_m5NIXdlL1KE41PDTj1s2MG2zGRRaMHvCxFOkufNN_iUAFvoT4S7wHehBHVEBNO7Ei7QF488fyl8vkVFYnhcdxdIr4y0GN_d51a0ydWtIp_D1S0JJyeXFupp6XRDmbaeY7nYHRkkrQB-xVnrQ-YnC_hqtdUYiBH4yOdSC-vdRmLFTSFg8GVWutyAe_gBbDpwCTtd6xlbY9TIUQfn9-V6ujUa3hHCfurQUCU8QhCFsGCPKJD1cO5X4T8VJod-KfEj1fCE2KGhwsvRSMzMTwl699LA
 
-## G55 — Dans un roguelike, quand un nouveau type d'ennemi donne une
-Rôles : designer
-Date : 2026-11-12
+## G55 — chiffrée
 
-Dans un roguelike, quand un nouveau type d'ennemi donne une récompense qui ressemble à un tirage existant, lui donner un stock à lui plutôt que de piocher dans le stock commun, pour ne pas fausser le contrôle du tirage au pire cas.
+Chiffré : v1.ixa7wGhe-GFO6_e_CLRIat4sIUW_RCcdLSf0A7D7E4BCtg0QyFrgPhMl0a44fV8-Nf9yf6j0e17kWJUGYBc3FvYeIf3VbKbUA-boA9CdBSxqzFFHcYwZeT1IxTBnYYrK3oaQplbXh2TUdhcvTaogUmh76gdt_iEbGOLqk6yZmd6yIen35GZSkEk4OU5YtZwYCljUtP0s7NaAY0LXtuJpOCxoJZv47tiqz_eTDUSPynQ0hDgls-wT_QAHND0clMkI40-L5oi5ySfR1QolRE-E5d-4fSWxjdyuXMP4ZJcaj8PCptPPocknZRhMEswATB6wHELgY1HqoKImqaiZOVhn-e0kvGBJlA9zmffuQbYWyp8tY4pC_Ey8Q7FZ-rpTyOXx9karC3hjDzCIghUcZ9sMy73LY8p-o57RelIk9y6EOH1W_G4AkcCS1R1YdzKcRiaqeefmHdg9gUg_VpPuM-Z1QBnx9qB7KqFeDkwETLmiPNh4ctegqqWCB-ned3siuvgsvkLNlygj92CE-knAejCykkeYdDPbxiVLvpsAzjjH
 
-## G56 — Dans un roguelike à plusieurs personnages, le point faible d
-Rôles : designer
-Date : 2026-11-12
+## G56 — chiffrée
 
-Dans un roguelike à plusieurs personnages, le point faible d'un ennemi commun doit pouvoir être atteint avec des moyens que tous les personnages ont, jamais avec la mécanique propre d'un seul.
+Chiffré : v1.3G13xcKIW5MdbzdvFeddH3troAwcP0HjFdHhVqaGkfRx6Y9AjHADGCLD2kL84iUWPARm48VfTr7_RqWoT7R1LDcLYWW4f2cKSirWnmlu2cKzbohlmQglEnrVNlP4gr-8gw2Gc4MZlJvK97Lyg5duRc7ztMBzPpOzD4ZgOktzWN_Mwiiv3MNDZx43SyhVluCyouMkBHfIrXjfAoE9kLxsPUWai-bHsDHvPse2DUmlubSY3YqPdgFPnZ2SY0MKnt0nP3TKJi899YHE5KcUokFgBOmLFI8FM0Hw-YhXk0hXe-Yw2-aHiGSe5DaLzhYbFvx0Ga_roMnx-p98lygNTYptSMekadmJgfI-d3CV5XNGFcWfAt3T5TrIXAjzQlzaqY2aZ1Icl3BMXofL_6G3QouJTgH1H6ABYOmDtSzDNNavdivOzQTpqf5mFzv0r6NPtwgeEqhcVID7auza1eEXd-AocNUnNoRSN6kxVO51As3FwEDYdhHA_xst
 
-## G57 — Pour une carte générée dont des règles valent sur chaque che
-Rôles : designer, dev, equilibreur
-Date : 2026-11-12
+## G57 — chiffrée
 
-Pour une carte générée dont des règles valent sur chaque chemin, écrire un générateur de référence avec réparation, le vérifier sur des centaines de graines, et dire de combien la réparation éloigne la répartition voulue.
+Chiffré : v1.Z1NuHMriB5icWe5KcCBB24vG27nDhZey1dQn_LH49BPGJ__kkYi_tXi7A0uTEULg7ba31I-Wr_e-GY8XA5j4t4rrhIViDbQ2IyQGJ005ZpbaUHByOdHzi-TyCGiQ-CWezebfyGcjYLm5X7iy_5GiHkYRD9U3dT-BY79ctXVjrvHBdQkuO4N9nuteC0r-IRy6YdKIRFNM7GVNFJScfYOC7wovK58RlWnt083Wq4Vlfb9ERuMa7XGXUuwXYYtsFutY5WcyxREyhwNHjCrxmbsFwhPMCFJqCHiV2SqWuOnLWZvne01GBaVzO0tnJqFrAwQQNrj1LsoBh4c3aFnT9mDuOF76Y1eB2kBSXqHYLY4kV1N-n3yio_JsOVuoV8lspAFEXOJmPc0kOPEja5SXDhNCz5vBi46ClLuL9KVpwGvf57ckJXPU4z7jEyfSZSXnBozlcOfILBocdivs_bFMjl-Xp4USRiNGpC9XKbaEzxDlw7JvzfLST-Q8amMjowa5jfYoHie9OxpaKFzR5TeWvZGx8yoejzCepB8FgkYaAV5KPRLQnpsK2jbgk1fgIAg1y2jtB70JcIl1gUw
 
-## G58 — Quand les intentions d'un ennemi tournent en boucle avec un
-Rôles : designer, dev
-Date : 2026-11-12
+## G58 — chiffrée
 
-Quand les intentions d'un ennemi tournent en boucle avec un départ au hasard, vérifier qu'une intention qui n'a de sens qu'après une autre (fuite après un vol, coup après une préparation) ne peut pas tomber en premier.
+Chiffré : v1.FdVdS3dPDAZ7qtRwHMJ02DWaJJ35ywRs_M0WoHbRlDojCbFg60w57nRD2Mx0C6nc1Ae6TUZxlx2feIJ1KtbNzd_kC95SVK_2V-WTZgfK1iPHCL0peoiobTURanWP0U2d-pZ5g9pa4n-4K9yH1qdWZz_soPaHu1WS24ZHCQ3zjtiEbgFToY461isXJajjWKs0oFSxEj-ZECFAclmhMd8PaWoL4qPeCO_vNTou0CaMsOE_0IUpWFZJcI4FBZ6DmhVr5tSqe1isOKwY6AeWdYcMcWBa4KgxS8S9dgYIaJyiPAuFUWrPp4gPe_KjPDSDXsnMSwWf1HN3xwILal1cnB5PHsBMOhh5eax6R-vpeutDHyBqnSFKsXV6bPsoJJ6MSSx9ekJfRsVXfvQPPC25Sp15-2EGabExj6kUo8nuby5Cv_UTpMgSRhK2bzqP5-Cj0nb-x8fepoRRL-kMmQTW3n4k2JqEevqTjq6oSXaD682BRizLJYVsZmZBaifCeZR4UlUmvOaeghC9Ji-Bl3DWD121_97jpG8T2qY5Cg
 
-## G59 — Dans un roguelike, chaque événement à choix doit garder au m
-Rôles : designer, qa
-Date : 2026-11-13
+## G59 — chiffrée
 
-Dans un roguelike, chaque événement à choix doit garder au moins un choix sans risque qui ne demande aucune ressource, et un contrôle automatique le vérifie.
+Chiffré : v1.CYMC1aQ7jG-TE-9LkXZPI11prbD12R7-Nf_pM88taktgz0DGHwqseUQzc5WCCjEBrA3kx7TH0rgqznkUVCafXooOAJKj6y0A229r7j8MDNyOfNEBJ3DzlfDxalBYRnFJIlqktYM_pT8_oUrml7BVH9gbwMawJCXBiJxobr2ovHMaMpBNWOSNq37qlLEeqaVQD0SDvthnq4zU-Fn9_hVLTUjySSgnmJTzfHiT5lFQCJZGzc8N8UzTHtUlNR50G0qmyUZOZr4VlYtwTYEda2PmkH_Pkyn5ITCTJbg6r6Hvz4Mr5eV08Y4ES8dFtG5rB7fYi1Rh9XrLFDfuchfLfdEF0skIA3_Qvjy9vX2aNLfOkrGtSkjyDeAjssfxEVKOxjHiq4MKeQwapTsJRFkxGipQW_jhCcgkVs6Z5hEgfx2rC3Be0l_pHgYM8cnxtWxiBG7rJMsCMe9BLQhvIotoiv0
 
-## G60 — Quand une ligne du cahier regroupe plusieurs cartes, les com
-Rôles : designer
-Date : 2026-11-13
+## G60 — chiffrée
 
-Quand une ligne du cahier regroupe plusieurs cartes, les compter une à une avant de remplir une réserve de taille fixée, et signaler le choix fait pour rester dans la taille.
+Chiffré : v1.ttDDKtIUn6AJHctMvepQE0IXj7B-I-UdMeZPrcj1uqt-vI--ZSJmGef5IUmcuannm37XadQUDzACLL9qQYH9NpPlswfTPi-wbDB_i49cR5nctijRw3EnHzhTb7Vm93pbLfg8XAOw67i73rQXGXtpDr31j7vWXIQs38qBOWfC9brJyhT_MIAWmIw9Tev0D7d2nynD3NXlZ-2L9_wG2GAVkxZFI-S6ACJYgXJOo8rJcx2UgmeyVRdQymprz6bhTpOg4JE-5FL1ZtMBXZDS9cSzXlcsTjAzhY88bsRBicYbBsVwfIV5_3CxtPF1jbSICru1XY6xLPqGGLoUnmhnnmtWx-Ti9CtCX1CPYthp8XNTAGXcQFY9_MwgKdJuWhpecjXavuGDcoqnoJnJ6Ahp1wxuSjxAtRmiUJU9VkEiqJ0YKpul0KYe60kULzxIk2FZUKTGNFHzv6F9VMgPZaV0YcowTqzSEaI
 
-## G61 — Quand une contrainte de tirage de récompense est retirée, re
-Rôles : designer
-Date : 2026-11-13
+## G61 — chiffrée
 
-Quand une contrainte de tirage de récompense est retirée, recalculer ce que son repli garantissait : un type absent à certaines raretés peut disparaître des offres.
+Chiffré : v1.5l9pAP-SWN_mbulmi0KiFvUruXsckP-RfADl5zo4yK17ko-FKWbJMp5xAfBMvB2aicd22WbfywFTsMjHUfAYsAYbtXoYasxZk_purIamHP42BbIl9a0sEVpkL7BRVH8RHi9kj_DhUQVfOQHjKOEd4wPGCl-8f4i-b2pz0_DZc5Xh-p6ckDMdw4pxqjxxGHdkb5hfjjQoSO5zro6Sb-ZcPOaqCL1XCnBsN2qWqcC1V3d_fOwCiZ5AQtUYEqgZfH-qHvcoEfbmW2245UhFv1r9WmZ5iJcOwawl8KkSy-ujVWv5gtbZyyGaknOxPKtqmOAIQ8jKk4tfyZzOp3dOqjqsp42V8JiwyXoMfjL9To5RQXOwruViZf0luozn1qN5E7M34lcHeVhB6RGbOCdTjo4Q6Lzo3HNRYxWKZxlBBnK2ZRfa9TJOnJuATo4mvc4ZGAbfyVaobt9O_FM3Ymtsqwo
 
-## G62 — Dans un roguelike de cartes, quand l'utilisateur retire une
-Rôles : designer
-Date : 2026-11-13
+## G62 — chiffrée
 
-Dans un roguelike de cartes, quand l'utilisateur retire une contrainte d'un tirage, vérifier chaque autre tirage qui l'appliquait avant de supposer qu'il veut la garder ailleurs.
+Chiffré : v1.sLVdX7RRk1aCVANqVj53NTBgE_UTW5KwWJaa5nC9iilH2UxrKegpYZX1KV4HogOBlp0-D5TkFM_Ee0HfZVUe4CL6pQ0AkHDlkaLlzxZg2WGSlVJh1w1rXxeU1x4ZD_QtfEdSOfzDosVevWwKO13UffeU-twn5t7NBAJV0XhXgZi1Q2h1daLCOnrD5y-TniScVImpJ9A1p8D9Qm1QmrHI6MbhYt_BDlNPXBRP6p-PRxqfTxppfsdnuFSpcNMCCmgVMexe8gbwRfyB3w1kDZkekK-I7KM3ia415ywwEgvaFFlLHADzw-PMOcBY47CnH9A3M2ooDRKSoP1TIi5-22oUtVL0drQgGRixxfduP7vQfmRXFGkO7A5KP-zg9gk6b24gh4ztMZF476A8A0fI6sN8AsphBHmW7X_FiwJJfXvFiDX4Mob_ez8WR1C_sNUQT9M4T26XEed4Ne7iIF3pdh30JeUEkxJM
 
-## G63 — Quand un prompt de génération peut produire plusieurs assets
-Rôles : designer
-Date : 2026-11-13
+## G63 — chiffrée
 
-Quand un prompt de génération peut produire plusieurs assets, le plan de génération compte séparément les générations (le coût) et les assets obtenus, et dit pour chaque génération quels fichiers elle donne.
+Chiffré : v1.fi7UxaFVQm34DdxFWpnZT-k_LRKoo7kj4svG4mqwRMvv-jay4q5LmvbZbs17kXHvO95WoUrrzsTIZGCA4ONCGdlV3Zg5-ylGAalYeQvUuj4oTY4aqh87qLLsHKSTC385fXkBuabPjte11R3npFdCkAbA9AhbL1vF4UrQ1O0ml80m12NF1TXca8S8sgZoEsU265olxcCTzlf8bjWu_eF1QCzKl6OA-T9Lhq164YWFx1ZpULfbwefzPKBnbuz2pFN6D9L3mKxwPNtzQASU9yOcJfEmldKxhtrDuuAG9Y442Vsw2KWSo0QvVa8Pqr2yvUUowItKqLmK5oc2kAQw2NwtIpBsvw6H78yCN6jAEcPPIkLEJFLxqC20iKFcEb_9I9u2BHx5juuETNUz8A3d9-Ar1y7R411ngWuoYqQY7sS7NNFTDdlanTLBwmlp91vXzm6DylRzGxO-ny3hw1eG_cXLm7xu88By50YFk9ZJz4jHyAfv1I_5jx9WwDW1DyMUR9NYy5h7j9xbBhvSFMq9mx0t
 
-## G64 — Un robot de test qui ne fait que combattre sous-estime la vi
-Rôles : dev
-Date : 2026-11-13
+## G64 — chiffrée
 
-Un robot de test qui ne fait que combattre sous-estime la victoire d'une run complète, parce qu'il ne profite pas des soins, achats et événements : le dire dans le rapport d'équilibrage et lui donner ces actions avant de conclure.
+Chiffré : v1.vJvqHYJCRM-rQ7y-Et5hHWL0hZ_iNmYUyXM1DG_pKoipWf2o2sk-kPCcEiZNdEF7QTLrFz1z4C6fUfWtcafxv3GKO4iUGmNgMQcF3WC5rcti3dz5rH6MUotTFb_fZ7LvdYkiXwUSGIIvrlWlkCDyZ4CJ33xZQIsbZImW5ZbNGyu1DquSqMOw4g3wVeGJyiLJN8pg781pfYfgFNFp6PbWXYKA6YVm2-UjOnvwCVo_ht2DTTk4tbBcIVarM7L7tQpJ8ypl3UVNwci8lm2SmYLrB5fqs3y15Bw2baKOmbzQf0lRzPb7-kueTwv5h_hd7bzmg3cuYGXT1jlChIcYDg3Dnt0Wazn1dCK_XBZLjo28QYmbTwXC1zgnoTXOW6MM1LF2qmQoT-UDWI0n7H4n0hzbB4xxCxy68HjBMrMp2ppDFWVQqCou02Vfb2DLuo9ER3BiNyNnyF-x6TsozYkl_eaAya1A0FjCRTKmyifCoq9iFydCl-wWbFah7LCWStonzpAZuLshUqTF8ylNgdKwBEmWpDMLweZScT8v
 
-## G65 — Quand un jeu permet de voir à l'avance ce qui attend sur cha
-Rôles : dev
-Date : 2026-11-13
+## G65 — chiffrée
 
-Quand un jeu permet de voir à l'avance ce qui attend sur chaque nœud, attribuer les contenus au niveau entier (ordre mélangé selon la graine, sans répétition tant que la liste suffit) et faire lire cette même attribution par l'aperçu et par le jeu.
+Chiffré : v1.4nIM78vnsRNP7qiXk1OH9P8WdJHcKThbhCcZsdaVE0fKQD8FGmlnEKQemnBMn_ZXM2hlFJCgGYZ8X3SBjtPss-T9ddRmu-Bs8Iwn2PAGTfx0Rj9OAjjuSLBRAEO1nRuoBiDFKcbOCPez07E5TZF8VBam5xSNuAhPNAzxC5jvq0v-JabEfLtyri7ur1CjaDKplAD7VSlVI76TkJaTKvXB-t10Vg7Yu4treaUxiBgoV75sjemrny9SPbm33i1J8-Huc91AGc3bOJk0C2_Jq-yvhbz1SHJXydwF7QrJedli08mPgTz-H-6jDSV5X_wGbY9wChXd1C2AjZVifKNRBJnPn61KAOqsRSDex46Moiy9ERR-T1dlBU5ian3zGi8RFSSNlC8_ycuO3J33qSxxo9YJtyWXk9cqiYiLhwo-o9EdA7uT-BCjXJpRHRLSPxNDLK4GrZLy-G7WRGjLyZKmKPnZOvkeZkizzwTn0YtOJuPi9-0fhO4LYlILEsgKAetOADracGdvCJu6sG4RRBI5rXSanj84uAPCVPWDvZJQ18pkeCTBoq5DyRGXD4GtCOWEZKI
 
-## G66 — Un nœud d'interface créé par le code puis ajouté à la scène
-Rôles : dev
-Date : 2026-11-13
+## G66 — chiffrée
 
-Un nœud d'interface créé par le code puis ajouté à la scène doit avoir une position et une taille explicites, ainsi que ses enfants plein écran ; il faut relire la capture réelle de l'écran avant de rendre.
+Chiffré : v1.ytiqymrljyOM1R7B8cJvMJtLDTT_u-k-GhbNuv_giLjFNUUBD8hs5YJwoKQUw7UnaILR0c3L5cGwNL9QhzZ05KUoAYdnaB_PlzfjVDrHvL9oEyC_RfGBBJ3JMuS539Cf95KpvoEnIT0SCvUny0diwrxvHwCVlVOokGkb9lAT7IKrg1qWZH7DRLpLsAJIdTwztaU9ml1lXyUCifk-OFEb3MgEL6e2OzFOKAxmMA2bvsmUnZlXo1riLj7rzhfQScoCQMOtYsYK6Cjw0seRaAlpXSfCsPLNy3OlOABhRm2j1FeEbJAHT4-U4v4Bav3OcR5CNMf88QeqCT46hwd7mvSuVYMZgUGKGO0uYnv-DL-vcVLAXR5JCRxVhoagNzHWNRqJ6BZA4SYB-dWnUPeDDLQMGqIa-2B2xHV4sNvb-9C-Wn8YahConvnLlnC13Jo3ndvadNJAODlF5F5N9T46SA23CRfGa8fSnAPDfOk6FJVS2e59VOC7CzvdhnhCu42ERVIn114LGE-1n9Zo8A
 
-## G67 — Dans un jeu à carte de nœuds, un test d'issue aléatoire d'un
-Rôles : dev
-Date : 2026-11-13
+## G67 — chiffrée
 
-Dans un jeu à carte de nœuds, un test d'issue aléatoire d'un type de nœud doit partir d'un nœud réellement de ce type, sinon la branche testée n'est jamais atteinte.
+Chiffré : v1.rFHW0WqsK6jVO1SWt_YrPxgGUsIkY2mUvFdbFkFwAcA9piAVBNRgnG1lxJ8azjsbISeqilRCFHuxZsL7u7B6ibIfB0IM0hL3nA_CUsVJWrTBHRC8RzMKzNXT9FpzcQfVRRHtvNUIPLVQpTKnxN7QfBp1GnipD1J6zOulYvDT_rb-MaKE8UxkaO_dBbfhnUhFCzSF41PPFPMwELnAml0x-9-bni-Y5F0Iv4Dk9rgQtq4cVSSWUYqkD5D7vQ6oeU0k1KzX5BPRPwnrrCtmxutChP-7BafhjiFRBkpD6oSzrY8xYUdjSnJO5n8ApFzHJ4SNhKd7Ic_T2GAMf2nqnIJ59nWfX58P5s7moWC24lNsN68YQBnJa6y3KXIMi9--dx78zq7mxo44HTXJV76SwucQ_EJGuUdIwkj4WGjBvfbucFrcpBDbJHVE27PKbyA-l9ab8ydDPUL5M2yW6m-CZg
 
-## G68 — Quand un retour dit qu'une version améliorée d'une carte n'a
-Rôles : dev
-Date : 2026-11-13
+## G68 — chiffrée
 
-Quand un retour dit qu'une version améliorée d'une carte n'a pas d'effet, comparer pour chaque carte le texte de l'amélioration à ce que le moteur applique à ce niveau, et tester la version de base et l'améliorée avec les mêmes données.
+Chiffré : v1.0aTFov3xhHaGrCfg-PIww-tavzd6xoOgiixoclLS0SEf5_-0x6SWyL37TYDc6Za_fNhs_GpyPvaRcKlOFLrjr_0Kmd1vv8SckuP-OwFv2RRryGOffSyc9DaJ2ZPAdaHOnT3TAmaAiZTOsHGL7RmIZnvSlI1SKLLqec7lbVuHagQra1tjlyl7SAfPtNk-kcYsPjyTV0M_Ei1deLCON_uhysm2vkyfYP4YPSRgHaAAtDm-SEJ51m70mhXtFTyEanrltyzncxycIV5jMAlb4MnmzTR1abRJiPX3LiODHJjTRuv2gtOyLDugC4-fSZMl-6LQuVgAEtzegspsMY-wcWq1GWUznVn8wPamfpVE49s4L4pGhWAwnto60IiM-m3DT3VEkdaSziZoSi2wUYNcHMzgUGN46GFvizgJxF3Kn-s0S4AtHy7LdclicIH7eRg1cZ26MuHkRyU8NVHrHoh_W1B6_b2KteVFDe2gRaUXvpZs8EPQUeR5LjuV64x8DNilROtdFht2sXPqNq08Vsv6PBi7VOeuYPJfoF9DutuPFocpCDsg1bYYEg
 
-## G69 — Quand une version doit être validée par une personne, vérifi
-Rôles : dev
-Date : 2026-11-13
+## G69 — chiffrée
 
-Quand une version doit être validée par une personne, vérifier ce qu'elle voit au premier lancement avec une sauvegarde vide, pas avec le profil de test ; si du contenu est verrouillé par progression, prévoir un réglage d'essai dans les données qui le rend accessible.
+Chiffré : v1.SofrYAvqxxGuTftIdSxDHZjD9okXHZsemf5RCCVZovCPu5rn5OqDld-ALADFWeDGdeEoAKg_jw9xJllhWWtoXGnJrbdefxcGkzyGJUSOWuCvBKxAeKPYGaDFug2bEowJJLQjKTPmbGWQgBkOfBpp7SnzsHP2pIXHkreXpgP5akwuwtukGKz2e7b7lFdZHuk7GQXrjToILtUJMR2UWZDBCKOvpROghDl3EpqvlpAUMuMNk8DDD3jyeIFOfjI38nIiHDBUn-PvvFJc-0NPHAKZRATRjQmxh3M8f2duyNGzjZIE9dCpu0tw5grOsMOJPUaz8iieHjDaJm4YsyHRk0aJ3lgg54a451J_QJNcRG3kT6U8Ww_zZzczHYk-ecDgmPz5iz9lEX66R6MU3MsD7OZVB0K8wmYp2JAnLT4VXSO7yLOwnmMBvdCZof1NIQASGhS-71xxt1oX8TttK9kJ80FNi5zdwh4Uye_yY8RuULcqAFNnlpmlBy54ck6o-1jSG4c_D1SmW-YqKg4eLR12EJOCRs8RBNL4GdvVetis2LpHw1UTd1kCfmEjIQAbPG_Lesa5NIfNsuuO4NuoUIS7e9SDYPYwRt0
 
-## G70 — Un titre de calque modal ne doit pas recouvrir la barre d'en
-Rôles : dev
-Date : 2026-11-13
+## G70 — chiffrée
 
-Un titre de calque modal ne doit pas recouvrir la barre d'en-tête de l'écran ; à vérifier sur capture réelle.
+Chiffré : v1.1HD2UUZCidCyXnoYb3g10D3z0mltZtUGOkwDgWl5ED5oeyXXF4UAwT1QA7Fk54OscQWohuu5Cxa5Ct4wPWq_-oo7jb9hUZVmihuTIy4NLSxMScXuj78qko-j6eKKURQVrWzc8YH1oWOnLbCr0ZG6z7UH43UkjN4xlezvPHiYutnNCyU2of2MtEn13i35rEmCap3xujNY1b8ACqws2_f9rBz8wpgsXj_c0Tw0v0nhmKlxLv5YC-KEJEoU5_h0hbfSoZ6KzPfqWdXpxzwJJx17RgbZbiLQVZdEDJWOz4pe_wArVtsPL3mYZdsc4sPR6QdVZtE3DiG5XerVkeOP54pNQq_4SQzcMOGtSwcAjFhTwRwHuxRIfHY3brXKYSwgPcjL
 
-## G71 — Une capture d'écran de moteur de jeu se fait dans une fenêtr
-Rôles : dev
-Date : 2026-11-13
+## G71 — chiffrée
 
-Une capture d'écran de moteur de jeu se fait dans une fenêtre réelle ; le mode sans interface ne rend pas l'image.
+Chiffré : v1.9Dx6WE94jLd8gQhfDDVEoLPlxZdiwc9h-NoQwmlI-5liyXyyyfm3IZzEOrvateVrC2exRSearxXxCOoQF9pdHkLgrfniVz8Ui8ClplJlCFLr8AUm1cL1c8hFIb7TZKMXkysHQOlRItkC6kUpTf3fQBW-8Z5l7-Jpst5OjlFDheE9Z60491oPeZ7eP59oE-3BE7ABVED0mFJTF4kjxnqJBnqq64a9L3aqNVzPqOlqttNRqXqzdAaRBBOPyh7nhMG5i2zsY1J56TorXBUsRVfvysiMVYenHsEuETDADX7ilhft8ojLiSfTQaLdDKDYiNwIvdQHLpd85LySmhRNJXbDv-dymEVdPx72y1TzhPL3VMj6DDm-srmgUgFDmY4HikXBbbhUq_0
 
-## G72 — Une capture plein écran peut sortir plus petite que la résol
-Rôles : dev
-Date : 2026-11-13
+## G72 — chiffrée
 
-Une capture plein écran peut sortir plus petite que la résolution cible à cause de la barre du système : vérifier la taille de chaque image avant de la rendre.
+Chiffré : v1.WnP5WptFfYjNOXSsFR8WUeXC8hTZgb6qtaUQKdUoh3CVrlSs2Y9UXFi8n2cfuF3-dtbKFpT7KaBrEgLBLhWnDRL2UBTBIPTI5wCEFpZlNHGy6kpULqVn7y5C_ez6-03lejgIAyYTUqFFHHTpVg-bfirrzyHDE7lIbD7Ku5Cjk736PecZWhUlxjPQg9DJlZa4JaR8C7DjF4DbE1PAbwnM31CCtpm_QBp4rUL7sQVHR156qlGoSZ_FrWzuvR9Tr3TVoPdtPrc_L6oOWW139zPzirADwaJ6HgUPronweSml1jmCHZJmfrWFZpVxJJiL9fp4rV92M3Vn7Of-y6eZXZxaTvjg1QKPXKolQ0ZrYx-eBzgF_6bGNQ2VpRaPt3-QSOP51sOWXLXFoO3dS1f_0eEHa2VSURweDUNuQOBIdCRqXeFRB6tPiRj8hmQLmcv3FsxdmHnbLQ
 
-## G73 — Un panneau ouvert par-dessus un écran peut recouvrir des tex
-Rôles : dev
-Date : 2026-11-13
+## G73 — chiffrée
 
-Un panneau ouvert par-dessus un écran peut recouvrir des textes et des cartes sans qu'aucun test ne le voie : relire chaque capture avant de rendre.
+Chiffré : v1.z3d5GiBAUifgbC8lnWfKPjcRQ8vkWV6vA2d8BwqCbIg9wLkQU72BV518Z30sGHGxYyuXc3avKAGd_z5kldYysPYvXp5uB7BiixDFgBnF1zYjKO3l1SmPBm0JsMJg8GUkdsXV3__42A0i5jQ5KIdeW9nkg66SM9ULO1TpN6T89tik0O3IsI4ZMaeg-HJQlir1JlKAObcMDjdX0VN06tkYVU-JLBkkjy4JgqKn786w1qiWAe2CkCfRm78u7T2GH4hD0joo6N9sSmVYwO6aldl3ekOdvgPNU9YJO57IFOgUME2LYZ8sFJHALK4yigsRu1g6HAnFK7CDLdxVEv16ZfynpcoiLxbGtG9tCDRKgT-GbkBBY5M4AsTGmYIN923F_6lzyaVLChr9UtF0dWk7QdRfcErlzE-vEPg2P50jcnWtZobuAb6E
 
-## G74 — Quand un contrôle impose un ordre entre catégories d'adversa
-Rôles : equilibreur
-Date : 2026-11-13
+## G74 — chiffrée
 
-Quand un contrôle impose un ordre entre catégories d'adversaires (normal < élite < champion < boss), lire cet ordre avant de régler un adversaire : une baisse du dernier de la chaîne oblige à baisser les précédents.
+Chiffré : v1.5wIEIW5EJlMrz9JCRCP_jeytEYUXBfoRS3KFAQctKfcBBp3STKNtIs3Qf5be8UdegZ2ccToaF4JZ45Oj0LoSgJPiJGI1hPEZ0MVHBK8K9LxLpXF_k4JekoJMQAux4LuKQPZ-L-UMVhMa2P8V1FFMMfPf5kISYEu4aihBQ8_txD9jReMcDjWItvm7JWEvotH0YYkxecYFZzN-gGWe0tXlqruK9sZwq3qFyazQDVIl-UR8JIOhUNMhy2dBiQklJ6YU13yBltWTKKrolgj5KVny-2n5HvfyJmXchZPlihXD0NlB8gtyclZmj1Pg44tg7FwD2nx1BOoxODS_RXPPB6dYIcSbYqpwYgH0nGrhrzyCQ89-B0XEZCB8hZlmdqUL7i_vpti41sJroCpe9Ny5BTLBXhXJkIcSMs_01t79wKjMJF40twRwVtkfone7Z2Zik53PcGdJwlT81ptv8alQ_YMGowKsMGI-coNmT2UwmiSV3a9qVPe2ErkpiheSccq-_YFyPgLX5bU94guVF9DLsipsdg4WlgtrYsI
 
-## G75 — Une capture d'écran d'un moteur de jeu doit se faire dans un
-Rôles : dev
-Date : 2026-11-13
+## G75 — chiffrée
 
-Une capture d'écran d'un moteur de jeu doit se faire dans une fenêtre sans bordure, à la résolution cible, réimposée après les premières images ; le plein écran du système peut réduire la hauteur.
+Chiffré : v1.CIOuwRQf4XJctBhRmqRL0Y_zpvuLtkEVzcZlH9Exh4wQL14TOWsqlWhSGNF3gZ93v0Avw47fFCJdXy0yQioi2DKTYBI1nY-HgPPi4XoA4GJ5NImKhL082Xv8jhnOaHLdd-8ypGPoV3RUZPO7aY7PyWEvBYWOB81mIXpoDA1catJEdfljvi-YL-OiQR97W21fwO8JenIARUPfYdTHyfxbRFJ7uIIQozn7CK1a5oOtQNEWTpTAoLSgfe2C_hMlznSKSfxyh1gNah0AfMedNgA5SevFLK3WA1IPwYz2kU6TXZkn-3fjGcogKd66xUhjIWP1bui2_zxUYuj4Sqi_XYt9DN7Fkwd6Iob6TnOlwwPt02pwQZn2p2qgdH8ZHimIhXX5WvFq4hhG2-knT56gG8XK8iZckjbuPQmE2L7xoennTMUEx696k3rUZU4yTXOk8hgJNb_vJoC9u9BmzmFXCkQtnin3WRntad9j-jbxFcmAJrvto5KPpoUsehxNveGeIQ
 
-## G76 — Pour un habillage 2D généré par code, utiliser des fonctions
-Rôles : graphiste
-Date : 2026-11-13
+## G76 — chiffrée
 
-Pour un habillage 2D généré par code, utiliser des fonctions de contour communes (polygone, ovale, membre) et un jeu de sourcils et de paupières par personnage : l'expression fait le caractère à moindre coût. Après chaque changement, relire les captures aux endroits où un personnage touche une bulle ou le bord de l'écran.
+Chiffré : v1.cH4YO0cuiFu0KBg2YGigPopHKilCewXCkY4W-EOd_CgtSOQBRcsY5eUyIA54jsnmrFsT9b6bKp1Z6tknamOtI6o3fVX4pB7O3sCNsofhtABfNrIRTqnHMnJa0qsCyStIStQ6YuXt8eFyVl8uW0jAVNDYQsGz61V0Dm46azn9wHAeNg5ypEIGV4MT1pzvdzAvvKBT-M61EmBDAg4I6We0LoCfhMPQkd_GG6MsjhFjpl225jdAKMtToLcvLaWw9podqpdmogEhxBrvkG-hz5vqjkfzM_dSaR00CoBGkEdrc2IyqnJshYXeeUfV3Fu8m6Cs2EgB2dj7Jvt_rllM4CW8IB3s-Ee8t9fb1fclqjN5fj9DGDdaS6z4V3RH4t4sM2oR6TpPhoKbn1g4nOJmftiSJACSUGsv_xI6RrngsRpAEUH4A7Gp56Eu9csuo6XiE4zepTJrUz8O36_G6i76sR-c4EXJz-AAEQYRlhaJ7QFOmVIPI27s-niKS1y1ppHpOpBo-4uLjA-DbFtGVC4sVV4blyYrgGwlxzVS77h97bsFPhPtHcxLrobkbDXdnhtP8rkVk_CVpgZQSFpDn0wXzgJi5mEb61VXnKh9pI632K1LhkOdtvM2iqpJEyEH7l0CsYDo4HEYbXy5m9LPCnJY-AoxWzY7BGyYUmGXKQ9jiirr5AvGza44
 
-## G77 — Un réglage de test qui montre tout masque le déblocage : une
-Rôles : dev
-Date : 2026-11-13
+## G77 — chiffrée
 
-Un réglage de test qui montre tout masque le déblocage : une capture ou un test faits avec ce réglage ne prouvent pas ce que voit une installation neuve.
+Chiffré : v1.ieRJFdfCVadTOA-Frc00MkuIlbGSyQksXuS2ysymBY0p-exaerW2TIETHLXnPXE2cMjsqMLCbR2lipJjPRsBMu0BAp0IPm1gFm7MFSbW1ur3ASNXqpcX-D1fss5_giNu8Sa8ttNF237txfSgBfl-JzWjV6lbhGH7_nWc6jxqY3dWRjiWxtvnNKcPUaevgRdUnV7X6Hibi2uvaGkoE3fKLhEhnBdTVJ9BHL0uBVb9UVVRqqsDSBzEpQi97qW1xP6SzDyULhJjub0ilW1JPsHiVWWndnISjEZQPxJZVcbpYvKPfobcLSUV-_jX7O4xL4bDavjoMgjNpTXBrCYHQJP_gezs0SEWY-7Ejg8qnCl5bas7Z7uGU6XJuD5hbChXty_QRielaIUaTwqHlm-ifK04PLf30tNhzB0qU-l1dniSgoA30h8W47Yd-SsQCVM
 
-## G78 — Quand des contrôles imposent un ordre de PV entre catégories
-Rôles : equilibreur
-Date : 2026-11-13
+## G78 — chiffrée
 
-Quand des contrôles imposent un ordre de PV entre catégories et entre niveaux, baisser un adversaire du haut de la chaîne oblige à baisser tous ceux qui le dépassent ; lire ces bornes avant l'essai, et déclarer comme calculées les valeurs ajustées par ricochet si le robot ne les mesure pas.
+Chiffré : v1.dZ7Tl-oVLsCVUSj1hoO1VhlaE2Q3O0_Q6Kd2vM0R98U1peXhWBoTR5z-C9N_Yw4HKinlpM-osn3ybxTU1M8ny7lIUPfjLhF-S3SnOXFi9FeCLf1YkpojgrzNxjNZ7s6vnB3DY78nKnuWjX-bU9S-wHUhnVMYT5JIFKRS61Yn9DGxAt8-6Ijg_3TFCyYQAtxPqQmgR8zpqCD-xZFeHs4KXP9gOs_QitAbWLy7Fqjib4zI4VUspB2dhI2QimV6FK1ivvbmJ4nCT0VK2_pz47i7jG_lg11T8LyDlXzSN6xi0ifgaVUTcnjOx8kKfCp_aG_D1lt4SZqUrv0Y5i0m27FcbxmMnt7v7rpqlgcpmniwDI1svGpUQrgY1XTGCsKdT7eol9Ud-cf6bYeVzK9n7GG9nNYuLE1yTtwwOYGIpPnVoAH-hMPWMy0KXI9BT8m9uRnlmibGk5WcnNn1NmnEyAsRbdpdZD_galvbNscHXVk-E0fhtES29Eozel-0b2sU8P3-c7vwVHTCyalRm9v64Yci_9gnxwk8pQmBPQnXZ6eyp6JLgni-7PU0-etfL8i0DWRbSK3CSIylI-eDHtCHGhtb3kQzUMHvXDIsOp6KPGIj3MW5QvcbOxG51F6HO25zLrwVjKMb
 
-## G79 — Pour un habillage 2D généré par code, regrouper les icônes d
-Rôles : graphiste
-Date : 2026-11-13
+## G79 — chiffrée
 
-Pour un habillage 2D généré par code, regrouper les icônes dans une classe de dessin à repère normalisé associée à une table id→forme ; pour des captures sans écran, lancer le moteur sous un écran virtuel avec rendu OpenGL logiciel.
+Chiffré : v1.SUZ10jens4IKY1_A-Z4Jfry3LwvcHuaSuxA7TUb_ditTUFzSOw5xw37I17jAjNPyHOgQCfiqZu1obhsbIJbCclCO-0wiKv80HDuT2G_zC4sJTHYzr2R2ts_AbGAWqryfO9GlJv5RgXZR1UmfbCnRZQicWrQYDni7QN1F_o2Q4PWIWpd_gTqNCHEp1ttQWHW7ZLxFR8tc8bi-6SHJm0VZjXHPWn4YAN6Zw51DCX27N59GYspQv4QdUS6ajWEjohjtWepMaLaf2VbclZ7XYkWqyLEvdG2ZUYQr7xxqcaLf4_rqxbTmjZKESQDoNCciatkt1a3DWAHP4b09m-KYyYYbsUngVcph-sHg4_sYTm5IxII8QVs_6P-UXudrSCuNFsPBdOwADvZsr_YPthFeiDtvZJ23GsZoXymuytm3aGL2cD7RVxNuMZt6n4MbxyJnK2fv14FFcntqB5UGLaBnCputlvLn9K0T-9IvZZV6jGJi-K2IbRZEliYiAFhQYBaVc_kUPqJYbzP06Uk4c8wNS4XCzQbwtMdmGosyZf46SyFHRNIrPDg_ZL7EbxXKJUqU
 
-## G80 — Un jeu testé seulement par ses tests unitaires peut passer s
-Rôles : qa
-Date : 2026-11-13
+## G80 — chiffrée
 
-Un jeu testé seulement par ses tests unitaires peut passer sans que ses écrans, ses textes ou son orientation soient vérifiés ; ces points demandent un parcours complet sur appareil ou émulateur.
+Chiffré : v1.ZfW52aB_wUIBLw5lwpbs5_ZGGMkfRLqjQif_gPVsSyQpxL_McWsHF_SM3RbC4d5SAySl_FOQp0qosUoZO92wHAWIS0rTuwoSN9kB4odN63xM2pA4O0A2BcX9Zmo9ikRpo_Euka50q2bDyvg0EMBq0Wj7vDNSyHB0YKZhBeL9UgHO9hzOreCnbgws20wAfpOHZhJSHSjEZJeyuJXji9HoRg2oBgvYYAvlj4wf7QSwPKJ5m9_EC6tQA2C7aF4A-tDSR25vkIsVvlSU-qlK-SnquZy8wCmpqayrMHpqC82JU4NVkLoIo-satUJ9WaVJSBewO9xgAfx0OPjh-vYy1paBAcGUPx4Ap3VWPBc4NqHdev6i-iVCK2ZGjnrQGlLoc68Ut_KMuRzT6dqDkLjcWt0rYwBJqoq9-2bXQlQuQADtcJIB3P8M7vg4yUH-c5NJ0KVH0cM2-GtiIarjHiNA3ntluWOOTNfIyMLSMsV6qsMi8_tGXq3p1eA
 
-## G81 — Une suite de tests unitaires verte ne prouve ni le parcours
-Rôles : qa
-Date : 2026-11-13
+## G81 — chiffrée
 
-Une suite de tests unitaires verte ne prouve ni le parcours du joueur ni le rendu : le parcours complet sur appareil ou émulateur reste une étape distincte.
+Chiffré : v1.-Z5Cz5tdzHIlkBhj60j6egu7UhCrew9AYQKWvIVUl3BKhnUjlbjXvZGjKfqY5Ozn0iipJkbGYVCeWHF1DMgajJ5Ouk_t2t6f-pu_IgsCzGQ924sW-QR5NmvjAlrwB2qNIS5XXfVHErbx_7SMKPJ5zhipxqy34fjLmH2p92Azy0UCv_UoyFYSWasiiRge_s9dbqScu_S-ZZ54zPoxoLSOQU5Ms-C-_fKb358SDb9ByGUhK7moWEfafm9slLwp5Mn1ahclceNvdFVSMmI31z1wljbudORQFduaNXbWZCFpk8Z2Q9SCseC9UNC8Ih1TLxqnHCDmVsGQkpUm4pEvvHnQgO3HeQIOOiF6pV8-GCnxc-fDz3Ieh_r_k7nMgVchoYRniQ5WPbzfU6j7lJqBaz9NrvkWTHHk9ZCzc3ZbpPd6naCAH7AssaR7UdA1
 
-## G82 — Une suite de tests unitaires verte ne prouve pas le parcours
-Rôles : qa
-Date : 2026-11-13
+## G82 — chiffrée
 
-Une suite de tests unitaires verte ne prouve pas le parcours du joueur ; le parcours complet sur appareil ou émulateur est une étape distincte.
+Chiffré : v1.QC4Rap3BmTeEIlVJ5AzIjheU6UYKD6rr4FhEfUIIcOl5cLBD3q_qGt2JwchDgtSschSN6Yx3lJlgD5SgxNnP8AbiJ_ysAG4kWlpwH67j3vR4ZubayKgkrQDiM3jLRFkSlznDV_y7fykOWIw8MeAz7Ycuy5u1tZJw4hxweypU4AMyxOzBGFKJfUzK0K8stPfwNpGoFf3oY7xp8cKiBJaCVHeOtdYkx9HcIvSgv2yAJ7zcNX-vRjWb9DBdehSrPaBY5Nmqq877M2ufjWzka5t_ZevpvoS2cfFmxdR9NIvMrIp17PIxg6l_ImfMk2cdnPxSJhtIS5BoOJpS_IwrrkuunnQYw3xLNjrcXc1git5Rh4l3BXLYHDxO0FxlqMnCr8h3yxF7Pjb5DfsigS8_-jWNF6iRkgvo529D0lwGVJxu
 
-## G83 — Pour un jeu mobile, la lisibilité et la mise en page se véri
-Rôles : designer, dev, qa
-Date : 2026-11-13
+## G83 — chiffrée
 
-Pour un jeu mobile, la lisibilité et la mise en page se vérifient d'abord par des captures du moteur à la résolution de référence et un contrôle automatique de chaque texte ; l'émulateur ne sert plus qu'à confirmer le rendu dans le paquet.
+Chiffré : v1.FYjuj60z0t7mXTqx9iCdudkYQznOWQUWhV4OrtIIEJMCU_R8zjN4IB2Jd2kxPJX2MRun7OZOOPWSSbrE7xVMHrjkUWQO0LGku6aLEDjBL7jlL_LvNlA90hmlyujKvCnXf1V5N5-bmM4DZOji65LKfpzJdale60GLROAtAuiDvGYziCH7to_tPomg27eBMAtuMlJ8Yo5oVvuY2f57ZtR02CDSNEJmFbGjTO9gVuEgbIIZyYD6XteYo4XvNKeYo_zGiRc2JrpDuAD6Ube73-EPYsMij6vEO49QB6vkCrFU-XV4L9mFwgPt9EwhYouzCbDvLQBvNAWTLZLSLyvtg5SkOOV5yU31O-dscJ4G8Q6x2QZjiReJSGP0EcBixYiwOgX73Pihy-WBA-1t3mF64hxmdnumz5i1uE2TZWXEyBH6Vfc8bykuW9T6OVQvaiVUEE8D7SKfpJwfAUoXx__gZjqQw49CBZse4zK-Bzyk-9HC6uLhjMxsk4x-kVHlsA1PHKjPmIPcIcrj5IYvOthxrh66Nc8Btjzfg_bLm1mqGf21VRVXAkxim4QCxC10JCYzAmrP-qOet8C0Q5DTYA
 
-## G84 — Après chaque export d'un paquet, vérifier que les fichiers d
-Rôles : release
-Date : 2026-11-13
+## G84 — chiffrée
 
-Après chaque export d'un paquet, vérifier que les fichiers de données embarqués sont identiques à ceux du dépôt, et refaire l'export si ce n'est pas le cas.
+Chiffré : v1.QVzKVzP8aFEGVjFZTJhwdlEqAn-wujupfWdLNJ4pBi2VI1m1JIU4qzM9q2cZMJB1y-cy4QxnDy9pGWU9jtqbbJW2BcEDQEsmRNJUVMz6X9QEeh6l7azoMwwQQFfbHdFfQmbWkV-xFx9Ay3zEHwSwSw1dLbkNr7YzhpB7W66pUets2732gBZCVTupKWLu9qfNd1HDGjlFD7o1WnkelsaGETHJkSlb24bmTmfZGGMS0dwOXoHlIIsXAs_h9sVTTBlVlmpk8izOxOJXfc1JnMd6Wu8eErAvwY1Rp-eW3bEe9qGqZx2XDCyOcL0He_0eMMDBh9wRj847rdYFPMPrUSQtUr1PwhaqnsOd-BoxyZQOqgOYRsXk6w8ExyIubkoozQoDa0-bvn3h7ElVlaGd8jVmiX4i4iNmHJSn5Y_4TVAfv-Ykwj__tnQWwCqRzHk1IF0a3gsviyVjww
 
-## G85 — Un paquet destiné à la publication doit être signé avec une
-Rôles : release
-Date : 2026-11-13
+## G85 — chiffrée
 
-Un paquet destiné à la publication doit être signé avec une clé fournie par son propriétaire ; sans elle, le dire et signaler le paquet comme version de débogage.
+Chiffré : v1.wunN4BLuJnsf1Q4FDV8xFXO82Iy8HWRaqwXTL0riXF2wNRqhmAW0vZ4qzRXscMOXstn2bg2321jHuaeWJ_C070vJ5zcG_1GfHlZN7472y-SNgnitshvI5-xZWDwHqoZlYrfI_gJO5lKuBJpNOzl872mwJUHAVpcp2K7odOgjm5K7z9jC6AUwOxGMga1y_Ysj4Z_UAlaWijIniW-e1zJIPIcqucMEgsSOyO00GxSieO6Gx2MVUHnat1Khlps_yhRKdG16nt-jhNpWcFFNJkX8u9fZsUg4alJ3Pbcs_iOKR6JNZFr0igyD76pZvN9HTDP52Woph3AnZyqZHY6PG8kv8MLiJhbkFaAWS-R9SZMd9nFGlOkI_BpyVEH5zKucpyqFop_NNRbk15mEVS1lpc_bBpSWg_40lPit87_ptu4GtQlFakRIjGU_eFUN5G2uMUwm7C0oZWVGTcZdSYH31tw
 
-## G86 — Un paquet signé avec une clé de débogage n'est pas une versi
-Rôles : release
-Date : 2026-11-13
+## G86 — chiffrée
 
-Un paquet signé avec une clé de débogage n'est pas une version de publication : la clé de publication est fournie par le propriétaire du projet, hors du dépôt.
+Chiffré : v1.wHeGoqHwFwJw3Qmam3t3zYky21j5a7g_2DFP0WTlMQJ92qJ-glLfBsgIf3BFZ0dqUs4-SNJtHlPCVUxpVhRq_JQ4QMJIORh1rgpeE5XrvSrkiP7qJKFRodz64ly1uHYzgS6L5jKGRe09ETQfLlnLQ1ZJutNELz9t9yPAXUcwT5iK6mws0wZNipvFlqOJJGmqoyV2WS6DeeE7hURmeu5XYuE0Xw42wRDNz0u9DeoYMBaWIUZSqJCLAmkc2hjiXNdqBxRGXhdHQicjssHu7cGkoqqyWxsYav1Z8R_CFwu0sWtEfLxxx0yl74AsruMEATliid0p4Jq7FvlwEWhjpeZXuG7M0aBlWzC89KnxKdF_kki-exu_mXNsVccInyUwp6e-MxYUc4sLNGnTJRp0Cho7mcDCGQNZvmRFnafI2Y9jq024DGcN5EN7T6ZfjuBprZDis3XAXp-2G4U2Fus
 
-## G87 — Un paquet signé avec la clé de débogage du poste n'est pas u
-Rôles : release
-Date : 2026-11-13
+## G87 — chiffrée
 
-Un paquet signé avec la clé de débogage du poste n'est pas une version de publication : la clé vient du propriétaire du projet, hors du dépôt, et l'agent ne la crée jamais.
+Chiffré : v1.ZETOGlEwUsYK0a9TkPg56p0TilURePwYJPvm-kDD336vZAkGMKHD8Kwnww4sbUIH-jbG_j6vAIcHSO3hYTu9TX0cZw9eb4gY8dM5Zby0VI3BkJSBvyx_BcgyL1bPZLDVSHgv7gW0T_xfsiQIwhIXtNjY4E4YcfHgeYBDKqUE9fc0UPg68oyK9a5xz5HbDXk1uhI9jrVdTfWUdrjz60nrTC1BT-CoyRlzrElthRncUHA6SaYycqP3CkggMJ3rS-Xj6WhSmF6AvKF2yMgdiWL0cGUNh7-QgxAjIpkFFtIVPAVMCWfV6f8MK8359dkt7W6Ma-OzEQeW_5htwRwGSdFc-E2EGB1js73ywd_WUm24I8vxqMDlOl72k5m0UDwfeRnpNtMkumtJUAhRH6yU7wnyJGyM5oy17zBX_tGlDg1oH2a7fgO6kx-uR3WzS3bY5uTuBbUMiVlUkXg-FSfo5logbPVmD7tTE-85mg
 
-## G88 — Un test sur émulateur n'est réussi que si ses captures montr
-Rôles : tous
-Date : 2026-11-13
+## G88 — chiffrée
 
-Un test sur émulateur n'est réussi que si ses captures montrent l'application : une capture noire, uniforme ou d'une invite système est un échec, à détecter par le test lui-même. Sur un émulateur sans fenêtre, un rendu Vulkan peut rester noir : préférer un rendu OpenGL de compatibilité et confirmer les invites système par adb avant le lancement.
+Chiffré : v1.Z12b82Rx6xRuvR1YfhoS1CvMwrBglLPeeb3a4GZg9Po-Xild2bJ0Ss1Raps2lg7b3s3mFHVMaQV4w4f69Pbrzd2VugeF73XVhypy0qYMpj8Sxem91lCG9ijrSaUBdpk0JZWKgKQ4jHocI0J-2eK2f-1eyI-Im3cAik2x3w7TQlaEp9htZiq67RchYQ-JdjjSNdFKeKhD3o7_kqd92vLRKnY0x4RWtQ7mbHYOzuvWwsg0Vid0tYWwOv2VaJhloSrC6FGfZKwkHP2PrrSDO4Y6JxccjbepvPqdxixDpUEYTR4E8VTGJWLSlLsA-6Ld2wZ_XP43NOPBWzKGbg0XxqVSuAeztye1LI_zZzETjsXNw3xpOCTUXb8PqIIQHKeIhDvYbDnXE-8CI4721v5GiUUmppJQVJxcK64qG3ATsAMct2Uh_SBjSqA1OKn8dFi44Z9XkOVoJsXcyMBYrxiMGRAveXbdaF9iTLY2WDItlbpLPYaLWF_A-hxoSSEXo_E8WE98a3-sJtzQX_PmmtL5Z9vTSoDcEm69G3JwJU7B0hKJOzF0dfl0BGxcmToVhC2TnQx4BYVWZG83fH1jjrRsgHlKjaqSR5_nCbBjA1ddXmlQ5DS5nQ2M-lDDNSWLeBXb8Lq4423OXxBSLf2YCm88295j7RnKbDSjNjyjEK2gjejM41hxE7pNwyI8oKbrlwfWQ__8wPdo77TDTfoH
 
-## G89 — Pour contrôler un paquet d'application, comparer chaque fich
-Rôles : release
-Date : 2026-11-13
+## G89 — chiffrée
 
-Pour contrôler un paquet d'application, comparer chaque fichier de données du dépôt au contenu décompressé de chaque entrée du paquet, octet par octet, et ne pas se fier à la seule présence des fichiers.
+Chiffré : v1.C_0wncoSuHSSgAtJz0_FWq626d0D0k-pDF67XcRQm2xpsfKFP4CoblYZg9yi1UYNP_gQmsXZEhYj6GDY78k4-i6WEOeIaTJaq2K_jcVn1ghOqpoCh_YoVanHQQ3KHecjJN_gtCmGWL1YMVABDh9ShXLy3qhqBfTCq1nILHnIIi1u4gK-3qgtM274GavRo9X4XXvuyOkDqH9L8SDEOgar1aMqD_z1NQbL_hQEvd2NSIkQTZTSQD4qp98QDZConwE9B9QQQ5x2mdigy69iwDc4zELP14VMyI9GktaDPOhNrcT6r3n1RzRc-NYGClrJVJrUqtn5luefwNf7CnY0TefeOF8JszrU5e8WW52MltyBApG0lSJCccTPQvSS56qWY1ThTeifnkdEU9TClmJubPZ9c0p1oFsi-47c7M7tGATSDWq-Ek7dYQbLh8f21Qs2BkKcePvlutWfBgg_acZrjUXjJ5-RUzjOUmcMrR5tJzgVW1G7y_fqcG4Yb5xh184rh2mrQB5FPpQjRQ
 
-## G90 — Avant de demander l'accord pour un test sur émulateur, vérif
-Rôles : release, qa
-Date : 2026-11-13
+## G90 — chiffrée
 
-Avant de demander l'accord pour un test sur émulateur, vérifier quel appareil virtuel existe sans le lancer, et le nommer dans la demande.
+Chiffré : v1.AH8uOFl2EnnkdVgklhANI6XelCjd8S3Su2jlRzw1t7CLAS5IsO10Cv3AZvbXrcBL-QDxXnLqolhR0KvzfMgO4a6Qt1Gln0rxyIgZkV5uYOM0VjJpm6iYVLsw4525eRTIzH7LYP38wALd5fiSpe3Dlrs51m_YbrKGpY9A946ydPtZqBis5DP9uDC9oVK1Tn-wDaQpSAebbgcUXlUl0bJ2spoEGJ7snt0GLdUF0rZi48WcMUTG9bRRzo4zETtiwZPe-fp5kZWuLykeayzoTSZhF7kpFOFI33zfxLAnyDcnxqPSMkj7SzqysiZoE01MCvrBmu-U2jHWg8HMqZz76PHh4sSxjOzqelh1mbNWzEJSrMvoyQDA-tNsZnz4tSDKtLzBN3DuzIxCJ8cjAbmTrgf2_fobH2tGKTj8LLS88-GvKe9OZ5HQqVo
 
-## G91 — Une tâche de test sur émulateur exige le shell : l'ouvrir au
-Rôles : qa
-Date : 2026-11-13
+## G91 — chiffrée
 
-Une tâche de test sur émulateur exige le shell : l'ouvrir au métier concerné avant de lancer la tâche, sinon l'agent se bloque sans pouvoir vérifier ses corrections.
+Chiffré : v1.z3TbJgmHjI5TWSW14kS4oT7Si3EtXTI6puv-lIlPQVXSqddEnDXre_PCUDSXQqbRvyfjAs16qfeicrT2QMVA7HN36Meo1dtz5DAJFqhiwW2Ldq9bnP0FiQhZz-cRXWGZNbJlXpxT4X-c9_YMBuqUg2xI5t7FxuJVKtFokyrsFa8_PPjHcx38wtNz7HgaQS6OG-lA_ah0A7drO5gxOiZDUGXoEJ4pw-IY4WOivqw6_35oull8OEaP9_TUBuhBA-OOZGTDtl0Yz1-wMXUIx-nb1KWdihGrhntbUW17EPSIh_ex3NwfkfMXn3vpEEj2pWnfrLt_EjLYRjNao3_fhD6uqVGW2HVDgYymcrmATzoNE90hNJ3G21bN1Y3oJUNWYt6qN4rJD8HhiZnaJfO_heMUZxcFaAFJpzRWMHwSA6rXKunacKFiG7OYzGrmLVSEHyRu_QusGZUTXTbp_g
 
-## G92 — Dans un roguelike, un robot de simulation fixe la progressio
-Rôles : designer, dev
-Date : 2026-11-13
+## G92 — chiffrée
 
-Dans un roguelike, un robot de simulation fixe la progression du joueur (déblocages) au lieu de lire la sauvegarde, pour que ses mesures soient reproductibles.
+Chiffré : v1.b_xgsrns2rV50PN-Tx2hnnEillMLy8GOYeEGiAaUdhbETCL5Ng0VdaA2LKefYXaVCN_16Bg1NIuh4HyYB1ZZK8XTHmIBQ9Sb_0-N-SwiFEWWkLD9GLRlIDPb5jHKakgCoBO0pMjou8L0FpqdFjtGoksLFx46arTUPOE-75o_rP7NoqnmjU12xX9XsNEwvqfwabWqs6ywF9TOzeb67gyfwzwxS15htfyoNTH9C7ryvVn7r4-MBmp9-XC-gcdKcyEc8WeasPcYfILvv8WWgaFVQjTjQoCEVLT1USN4Br6gPCsNuWXwTXCLczsibvdrOKolqrgqcX4vZO5zw2N1PVfhT7wn0jHvLJQgvT_5cmYn6Ik2xW9eTXhMBIZhI1O_41FzdNfjDJYuH4eJ8dV1P65texOIvinvFdGXhOMvUwUBad_RhQPt7cLB-eLWKMiCOvH6RAOvMsgWMZtvcQ
 
-## G93 — Dans un roguelike, un nœud que le jeu ne gère pas encore se
-Rôles : designer
-Date : 2026-11-13
+## G93 — chiffrée
 
-Dans un roguelike, un nœud que le jeu ne gère pas encore se simule comme le jeu le traite et se compte, sans inventer son effet, et la mesure le signale comme non mesuré.
+Chiffré : v1.dY2ZNBN5eCBDeuEX5zViNnu_s4UbRXMRqVkrYNVQU95ih4Welo6fqSe5hgMkJSXSBKlPrwwoBZzOgjzP3AseMHIxaN6bFdce5T02GBKhBA0CahPG5j0jRrN0yVm6dj6vIj2dvdpkL7X_LjpdFtd_2OlAjDBREtgL-LSAAHT8aiO48YavC8t-HLiK-iuahBcnGoSbd8VUryAiRURdq_3Q72dl4i49p24A7_3_6MdV3o_ztUYPGuCRxBJ2dKTGR58CToUHdz79w4gPQwPdMkLzCwN3vMq9TzwPHNnNaWt_SFbJbJhMc-Uwjc0gmvIXHlJQAdq5CWPnQBiZGbzQxJnBLNM40zPhOQAM1NfV3vRD3wf8toy31PsGOl_JxNJNm2D2A_qHSKU1S3ahSKMuSX3-6XIcsIEupGZuQnlD4pL76GsErY0jtgep9mgbp7DFxG5J0gIHxmyAnFGUFNUlRIt0NnA
 
-## G94 — Appeler l'émulateur par son nom (« emulator ») et non par so
-Rôles : qa
-Date : 2026-11-13
+## G94 — chiffrée
 
-Appeler l'émulateur par son nom (« emulator ») et non par son chemin complet : l'outil ouvert ne couvre que le nom, et le chemin Windows est refusé.
+Chiffré : v1.hgAV9s9wEJOWIcQFLWlG-uoI9UL72Z3fI6LrslziOoZqyU_X4qNIGulJdbniqRBQWOtmUz_FRhlQzEV0lvtnN3smKiwR09uP3_H79qP2mtsTaxfarq8utEQ44-bNPfdXbMnqRr5vzkZTcB8UM-ScK9uYxV3o0NJKD5u2swn9g7j0htbU_E8UYXVWsLS260MSs5eAmsBohYAX_7ym_Ccz9Lu18ORVxzfJNJfEQ5vSPeD3uug0T5Ni54QsFj6cGXNav9JpXjQURQ0aKveE7JQcdfIQkC-uRiwVut2npebyd1dCMdmJLQ794EDlT29A3tYHOIgkcNYQaJhOn8lcRbSOrB2X-AmIRTd8411TcjV_tLdcpf20KRH6fiUiUOE_qxH9MAKejxjtdmwNXVrh5qHWXcHw7-84cMAmIMrH_lzT-z3YC2xEwA6ZIQ
 
-## G95 — Des captures uniformes sur émulateur ne prouvent aucun succè
-Rôles : release
-Date : 2026-11-13
+## G95 — chiffrée
 
-Des captures uniformes sur émulateur ne prouvent aucun succès : avant de tester, vérifier que le rendu du projet est compatible mobile (mode compatibilité) et que l'orientation déclarée correspond à celle du jeu.
+Chiffré : v1.M7tWbta7iMcEm7jGY95lss3E1lM19XcrPaFQKRYrgs4Gszu2CtT93CiLDekRNWvBMjVBNvQb1MR9BDwEkn6Oe_oVEQ_fj4xWzfCXxUT2hl5igyRxRPDHjYqACQzZNj5bLLYikkQP5H3LYHq07oHSHRRH4KNG1ca0W4YZX--ZAYYgNijvD_3PQLLAEiBMq6gzlCdxSmkQC2wgctMBiEMQfOwM7puAKrpMZ6NIJsbuTiTgsYOHFXQ_XasPDio_q-qtRtZUI_-MAJTeHFbSnWDJlodIVaR7tyWExuztw0QFoS-gxk05kr7tOuMuxcyjwSFC3ep9rRQ1D6OJizGLEwOTbM39Ws5_8NligK7k38WlVYzcBk7pr1icgvu8v8g1CRj5XsWujKBnxo-_qheSc94855X6kdgj9wSgc9TTXmNm7Jv7GFIw4-HVJWhUvobMcnat99CfYv1ls6ktVj390LerR8BpDqNRqB6ydvFS3HrofbiEmoBoZ1qu68QENmKw37ovBkAYWsn5fRA9cigbV5Ds
 
-## G96 — Avant d'exporter et de tester un apk sur émulateur, lancer l
-Rôles : release
-Date : 2026-11-13
+## G96 — chiffrée
 
-Avant d'exporter et de tester un apk sur émulateur, lancer le projet et vérifier que le journal du moteur ne contient aucune erreur de shader (limite d'uniforms de fragment) ; un écran noir vient souvent de là.
+Chiffré : v1.yPc8B-YmdOcxj13Q8Z8NZsEmwWjxbVZGEswNmpjCMLSZvf3YP0Zt4TiBCjdXvbXMvQJh-jUv8BE5enLMgkk2eMw_c5PcMjOpmBMqzZ8ZI4s0fyDiCXleYPM-Ji3AUrsBaf6RBFxi7zt2XLXKNlOQ-DeGu5wirDlzL_qPmg1rrvkqZkvBQ9TUyVimyG8La4kzyPuMayVNCfWciXLUQXUywmebFe7vlPmiqRSoi_437vRCUe4ufA73VfZ_tnv2F1zCqylwzyJttGw73mUVerZ4O33VozKP_8iyEXvMDRDRjPXXSHMVLWRjUe5rqozwXKzoA3h4at6-zyv4cyj5AQ_DI7b8A863h2OJpCWKVtkgZzoruR8xGut4PIOmUI76N6vu6UOkLsuy7puVsH8E__SSvo4MTiLZKV3pQjhXJsZ2ODOHJ8yCG5VSuRWBCds2b21HLXcamliqquUKRwgxHwOHKKstZ9cnghSk2Twk382Ktzw2twyjl1VU137pMmYHrpq1DAuRzaJ9A1_p
 
-## G97 — Avant de juger un rendu sur émulateur, vérifier que le GPU v
-Rôles : qa
-Date : 2026-11-13
+## G97 — chiffrée
 
-Avant de juger un rendu sur émulateur, vérifier que le GPU virtuel expose les limites de shader du moteur ; sinon le test ne prouve rien.
+Chiffré : v1.EH-1qKqF9W3JXKKZwiGdwWp6sGh5FfEVD6AWT-cnjBYDAdyP7meIBizCwkMtNuzwiRI3G4_2FH-7E_IQZt-YV1JhrQPNwTdyY3swp0uZGLBv2bNOr-Hii2OCMPvYUg5Kycgyo1LsYKH5JELX7-1ou06c1zjszXqI51YVlgHXHkPlCObwFjiqBkzAjy9EpYGQR7_E1CQ71sucs9n020hYLsA5ROQIj71fA5_bPhqMxqSaQM2V0RyShdslQbx5-4C-2CvVpstlbE_dv4HjOZv-nklm0TA3lMI9_-omvEfrI4Mug6rzGlT04ftBqE0AMH96YtfdQifWXtsrYXXgXRwzJvnbIiQJp_oYQiB3i1hYwY7zSJ5hgLuiu9mvuN5U9Besa-vtFr0NYJspNVoEes6XUNJvMnMZhkCOnvo
 
-## G98 — Un contrôle de capture d'écran doit aussi rejeter une image
-Rôles : qa
-Date : 2026-11-14
+## G98 — chiffrée
 
-Un contrôle de capture d'écran doit aussi rejeter une image unie d'une autre couleur que le noir, par exemple si plus de 95 % des pixels ont la même valeur.
+Chiffré : v1.PLXLmWY_HkvyIDZm7Btp725THzD_L87ndws-HbwoD2RUvNTFWwdbuk4yp9-Ojev334vOgNdl7w9BXTHgzMvy01qOLKmjeH6herPvnoSkDGhGfRH9NzTd_xgylXWpbN0_qgmjcBeCGc_Mp58xnqKjGwi5avLQHk9Z7IhC7pH9xDGBg1KcDjVWJuw7MXO_TiYq_pZmWQSx60Rg2GjdFbS_i9rDcPwp73A9m5v7gR_nVxrFNw98PrLWhpTw_HxfH_8zgdRx4iEKBgsEzaejx29ndSTiVQk6Y-MF4bcOPJ0wnttdi6EJkhciQvxYXeYLkl2rc4augCUCXnxnsqU-DALFCtLHWrVdYdWA5aJ07RL2FJ_y9suQTzTGVd-wXkxWPQN3ZZT7m6aywgZ7X6Q80V7JOzIHK7brkH7SoT_xsfDoMuIKeiQF8AzQklb29sK1
 
-## G99 — Quand le GPU virtuel ne peut pas afficher le moteur, le test
-Rôles : qa
-Date : 2026-11-14
+## G99 — chiffrée
 
-Quand le GPU virtuel ne peut pas afficher le moteur, le test d'écran doit rendre non vérifié plutôt que réussi.
+Chiffré : v1.rQaNsKlAWjPxazXZ8J2VR0ujr5w2qNC_pBpVvreIkZmjKk8th5YCYfgq0FcYrx5ki5w-6onpVulaPN9uf-3jBjAKYg6THc9jZjas1ZpzLq990sOg8hJv8vKh4Az3qbHCo2MVoudBi9cljq6FoHbhe3C_6NfoGBDolgZqCCOU-r_WFrVoN-EggZOTa6dNnhtAO3i37gSeFfiU8R4PU8Shu63DsCIXyryhMH3PGAG4rMEnAieHxr77gjsw-zUJQ0kWnPOC_MMfFeKohDlfqRM8ASYkb0M6kiz0QBj_FgNv-F82QJJ--9kDM2gferfI-IiX-G34DhLS_Y-2W-FLtir_K6587GJ8Z56IOxA-NaTIwIB9z81rbD25D-by7x72FiTKbA
 
-## G100 — Sur l'émulateur en rendu logiciel (SwiftShader), les shaders
-Rôles : designer
-Date : 2026-11-14
+## G100 — chiffrée
 
-Sur l'émulateur en rendu logiciel (SwiftShader), les shaders canvas de Godot 4 peuvent ne pas se lier et donner des captures noires : ce n'est pas un défaut du projet, ne pas modifier le jeu pour cela.
+Chiffré : v1.RLdsl52YvSp4ad4ZuITfzU6k_Mjr1owyAz8F4Mo1LbNm8YM1KWFDExPgTiO7drh2DPpy72T4wgDQnZhzJ2r4ogd_qz72udRGrcRFscN963tDCVWdBQ17bkDLZNhC0pDS0TXLChB4BK9Niv7jMUkEroUR1kWLC2o3D9TdZlSW1KZDcp9AMEw1uKT-p0mRqAeBX7jjKIuEbJwoTJwPEaQZFXgFdmoQ5ZlF34pYI4E6pdn1-_Xtyh775w52gjIe46RQBVfNSn-bookcArGhMdrgu5IZqC53kI1G76dj1KSXJTqqNYYyyEgZinw61WxjnBN9QRm467UqjjPqM19Tv_X_VfkFRaOUIyXo-AjK-4Q2hNFoZLLafWU7GhStKXnu_ndNVSktvMkTgKfzLjcTRnxmmw9bkWLuKp_aL9ojriYyVMV3RNegW2N5vP_RL5j0_E0Um4LZybmVhOLGz1VklIG1t3gBVsCMBBmc4olnAOcoZ_28tggAS9GfTDPAOJsVANw

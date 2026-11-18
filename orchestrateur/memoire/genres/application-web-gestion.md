@@ -80,3 +80,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans une application web qui exporte des fichiers Office protégés par cellule (feuille verrouillée, cellules spécifiques déverrouillées), un utilisateur signalant 'le fichier est en lecture seule' décrit souvent la Vue protégée d'Office déclenchée par le marquage 'provenance Internet' que le système d'exploitation ajoute à tout fichier téléchargé par navigateur — pas un défaut de verrouillage de cellules. Vérifier d'abord le code de protection et son test avant de chercher un bug.
+
+## G14 — Pour un export Excel protégé perçu comme intégralement en le
+Rôles : dev
+Date : 2026-11-18
+
+Pour un export Excel protégé perçu comme intégralement en lecture seule, plusieurs bandeaux distincts existent côté client avec des boutons différents ; l'absence d'un bouton précis ne prouve pas que la protection du fichier est cassée, seulement qu'un autre bandeau s'affiche — à vérifier en inspectant l'artefact produit, pas seulement le client.

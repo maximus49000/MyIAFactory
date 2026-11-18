@@ -68,3 +68,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans un environnement de développement partagé par plusieurs agents, un serveur déjà en écoute sur le port conventionnel peut appartenir à une autre session et exécuter une version de code antérieure au dernier commit ; avant de l'utiliser comme preuve de fonctionnement, comparer son schéma d'API exposé au code actuel, et ne jamais l'arrêter soi-même pour ne pas perturber le travail d'autrui.
+
+## G12 — Quand un refus signale qu'un téléchargement censé être un fi
+Rôles : dev
+Date : 2026-11-18
+
+Quand un refus signale qu'un téléchargement censé être un fichier binaire arrive comme du texte/JSON, produire la preuve en appelant la route réelle via un client de test HTTP in-process, sauvegarder les octets reçus sur disque et vérifier leur signature binaire, plutôt que de relire seulement le code source.

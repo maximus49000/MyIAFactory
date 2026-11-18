@@ -485,6 +485,19 @@ def texte_question_transmise(prenom):
     return f"Question transmise à {prenom} : il répondra à la fin de sa tâche en cours."
 
 
+def suivre_demande(projet, demande, etat, texte, tache=None):
+    """Note où en est une demande déjà traitée (le retour transmis) ; ne fait jamais échouer le travail."""
+    if not demande:
+        return
+    e = {"id": demande, "etat": etat, "texte": texte}
+    if tache:
+        e["tache"] = tache
+    try:
+        lancer(projet, "demande-suivi", e)
+    except (Refus, ErreurMoteur):
+        pass
+
+
 def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
     """Un message de l'utilisateur pendant qu'un agent travaille : il lui est transmis (pas de tâche « Retour ») ; le
     moteur le lui donne à la fin de sa tâche (`boucle.Moteur._transmettre_les_questions`)."""
@@ -497,10 +510,14 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
     if joints:      # tu peux les lire : chemin, type, taille de chacun
         texte += (" Fichiers joints (à lire si utile) :\n" + "\n".join(fichiers_joints.lignes_pour_agent(joints)) + "\n"
                   + fichiers_joints.CONSIGNE_LECTURE)
-    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)")
-    dit = texte_question_transmise(prenom_de(projet, agent))
+    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)", demande=demande["id"])
+    prenom = prenom_de(projet, agent)
+    dit = texte_question_transmise(prenom)
     _dire(projet, fid, dit)
     _terminer(projet, {"demande": demande["id"]}, dit)
+    suivre_demande(projet, demande["id"], "transmis",
+                   f"En attente : {prenom} travaille encore sur la tâche {tid} ; il lira votre question en la finissant.",
+                   tache=tid)
     return []
 
 
@@ -2003,9 +2020,12 @@ def _sur_retour(projet, demande, etat):
         return _reprendre_la_tache(projet, etat, t["id"], fid,
                                    "Consigne de l'utilisateur pour la reprise de cette tâche : " + demande["texte"],
                                    "Reprise sur votre retour : " + texte)
-    _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"), t.get("role") or _role_production(projet, t.get("fonctionnalite")),
-                       "retour", element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
+    nouvelle = _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"),
+                            t.get("role") or _role_production(projet, t.get("fonctionnalite")), "retour",
+                            element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
     _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")
+    suivre_demande(projet, demande["id"], "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.",
+                   tache=nouvelle)
     return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
 
 

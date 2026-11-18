@@ -92,6 +92,13 @@ Sans entrée. Rend `{"demandes": [...]}` : les demandes « en attente », les pl
 Entrée : `{"id": "r1", "reponse"?: "texte"}`. Marque la demande traitée ; la réponse d'un `retour` apparaît sur la
 tâche au relevé suivant. Rend `{"ok": true}` ; code 1 si la demande est inconnue ou déjà traitée.
 
+### `demande-suivi`
+
+Entrée : `{"id": "r1", "etat": "transmis" | "reponse_en_cours" | "repondu" | "repris" | "confie" | "sans_reponse",
+"texte"?: "…", "tache"?: "t3"}`. Où en est une demande déjà traitée (un `retour` transmis à l'agent au travail, jusqu'à
+sa réponse) : le suivi paraît sous le retour, sur la fiche de la tâche ; un retour « repondu » compte au bureau du
+Directeur jusqu'à « Pris en compte ». Rend `{"ok": true}` ; code 1 si la demande est inconnue ou l'état invalide.
+
 ### `etat`
 
 Sans entrée. L'instantané **court** que l'orchestrateur relit à chaque réveil : `{projet, genre, pause, reveil,

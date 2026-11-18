@@ -454,28 +454,47 @@ def _chemin_questions(dossier_factory, tache):
     return dossier(dossier_factory) / f"{_nom(tache)}.questions.json"
 
 
-def questions(dossier_factory, tache):
+def _questions_et_demandes(dossier_factory, tache):
+    """`[{texte, demande?}]` : une question est un texte (ancien format) ou `{texte, demande}` (la demande du bureau
+    d'où elle vient, pour suivre le retour jusqu'à la réponse de l'agent)."""
     try:
         q = json.loads(_chemin_questions(dossier_factory, tache).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
-    return [x for x in q if isinstance(x, str)] if isinstance(q, list) else []
+    sortie = []
+    for x in q if isinstance(q, list) else []:
+        if isinstance(x, str):
+            sortie.append({"texte": x})
+        elif isinstance(x, dict) and isinstance(x.get("texte"), str):
+            sortie.append({"texte": x["texte"], **({"demande": x["demande"]} if isinstance(x.get("demande"), str)
+                                                   else {})})
+    return sortie
 
 
-def ajouter_question(dossier_factory, tache, texte):
+def questions(dossier_factory, tache):
+    return [x["texte"] for x in _questions_et_demandes(dossier_factory, tache)]
+
+
+def ajouter_question(dossier_factory, tache, texte, demande=None):
     chemin = _chemin_questions(dossier_factory, tache)
     _preparer(chemin.parent)
-    _ecrire(chemin, questions(dossier_factory, tache) + [str(texte)])
+    _ecrire(chemin, _questions_et_demandes(dossier_factory, tache)
+            + [{"texte": str(texte), **({"demande": demande} if demande else {})}])
 
 
-def prendre_questions(dossier_factory, tache):
-    """Les questions en attente pour la tâche, retirées du fichier."""
-    q = questions(dossier_factory, tache)
+def prendre_questions_et_demandes(dossier_factory, tache):
+    """`(questions, demandes)` en attente pour la tâche, retirées du fichier."""
+    q = _questions_et_demandes(dossier_factory, tache)
     try:
         _chemin_questions(dossier_factory, tache).unlink()
     except OSError:
         pass
-    return q
+    return [x["texte"] for x in q], [x["demande"] for x in q if x.get("demande")]
+
+
+def prendre_questions(dossier_factory, tache):
+    """Les questions en attente pour la tâche, retirées du fichier."""
+    return prendre_questions_et_demandes(dossier_factory, tache)[0]
 
 
 def _ecrire(chemin, objet):

@@ -8,6 +8,30 @@ from . import statuts
 from orchestrateur import modele_necessaire
 
 
+SUIVIS_SANS_REPONSE = ("transmis", "reponse_en_cours")
+
+
+def retour_sans_reponse(x):
+    """Un retour sans réponse : rien de répondu, ou seulement transmis à l'agent qui n'a pas encore répondu (`suivi`,
+    voir `orchestrateur.outil.cmd_demande_suivi`)."""
+    suivi = x.get("suivi") if isinstance(x.get("suivi"), dict) else None
+    if suivi and suivi.get("etat"):
+        return suivi["etat"] in SUIVIS_SANS_REPONSE
+    return not (x.get("reponse") or "").strip()
+
+
+PREFIXE_VU_RETOUR = "retour:"
+
+
+def retours_repondus_non_vus(taches, vus):
+    """Les retours auxquels l'agent a répondu (`suivi.etat` « repondu ») et que le Directeur n'a pas encore marqués
+    « pris en compte » (`vus` : les clés `retour:<id>` du fichier des « Vu »). Chacun compte au bureau du Directeur."""
+    vus = set(vus or [])
+    return [(t, x) for t in taches or [] if isinstance(t, dict) for x in t.get("retours") or []
+            if isinstance(x, dict) and isinstance(x.get("suivi"), dict) and x["suivi"].get("etat") == "repondu"
+            and x.get("id") and PREFIXE_VU_RETOUR + x["id"] not in vus]
+
+
 def dossier(r):
     """Ce que le relevé fournit au dossier d'un service (version 3) ; un onglet absent est masqué."""
     if r.get("version", 1) < 3:
@@ -182,8 +206,7 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
     } for t in r["taches"]]
 
     lecons = r.get("lecons") or []
-    retours = sum(1 for t in r["taches"] for x in t.get("retours") or []
-                  if not (x.get("reponse") or "").strip())
+    retours = sum(1 for t in r["taches"] for x in t.get("retours") or [] if retour_sans_reponse(x))
     bloquees = sum(1 for t in r["taches"] if (t.get("bloquee") or "").strip())
     a_juger = sum(1 for le in lecons if not le.get("verdict_demande"))   # un verdict envoyé ne compte plus
     directeur = {"lecons": a_juger, "retours": retours, "bloquees": bloquees,

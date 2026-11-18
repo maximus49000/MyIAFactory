@@ -872,12 +872,17 @@ class Moteur:
                 questions = [q for q in info.get("questions") or [] if isinstance(q, str)]
                 if issue not in ("vivant", "resultat"):
                     registre.effacer(cle)
+                demandes = [d for d in info.get("demandes") or [] if isinstance(d, str)]
+                if issue not in ("vivant", "resultat"):
+                    registre.effacer(cle)
                     if questions:
-                        self._repondre(projet, etat, tid, fiche["cle"], questions, info.get("session"), modele=modele)
+                        self._repondre(projet, etat, tid, fiche["cle"], questions, info.get("session"), modele=modele,
+                                       demandes=demandes)
                     continue
                 self._lancer_local(projet, self._fiche_de_reponse(fiche), modele, cle, info, "", "", tache=tid,
                                    lot=None, rattacher=True, reponse={"fonctionnalite": info.get("fonctionnalite"),
-                                                                      "questions": questions, "cle": cle})
+                                                                      "questions": questions, "cle": cle,
+                                                                      "demandes": demandes})
                 continue
             taches = [x for x in info.get("taches") or [tid] if isinstance(x, str)] or [tid]
             etat["departs"][tid] = {"agent": fiche["cle"], "taches": taches, "matiere": info.get("matiere") or "",
@@ -900,37 +905,50 @@ class Moteur:
     def _transmettre_les_questions(self, projet, etat, e, actions):
         """Les questions posées pendant la tâche : dans la matière de la tâche si elle repart (nouvel essai, réponse
         refusée), sinon l'agent reprend sa session pour y répondre."""
-        questions = detache.prendre_questions(projet.factory.parent, e.tache)
+        questions, demandes = detache.prendre_questions_et_demandes(projet.factory.parent, e.tache)
         if not questions:
             return actions
         bloc = texte_des_questions(questions)
+        prenom = regles.prenom_de(projet, e.agent)
         for i, a in enumerate(actions):
             if a[0] == "agent" and a[2] and a[2][0] == e.tache:
                 matiere = (a[3] or "").rstrip() + "\n\n" + bloc
                 actions[i] = (a[0], a[1], a[2], matiere)
                 if e.tache in etat["departs"]:
                     etat["departs"][e.tache]["matiere"] = matiere
+                for d in demandes:
+                    regles.suivre_demande(projet, d, "repris", f"La tâche {e.tache} repart : {prenom} tient compte de "
+                                          "votre question dans ce nouvel essai et y répondra dans la discussion.",
+                                          tache=e.tache)
                 return actions
         modele = (etat["departs"].get(e.tache) or {}).get("modele")
         self._repondre(projet, etat, e.tache, e.agent, questions, e.session, modele=modele,
-                       rendu=((e.rapport or {}).get("message") or {}).get("texte"))
+                       rendu=((e.rapport or {}).get("message") or {}).get("texte"), demandes=demandes)
         return actions
 
-    def _repondre(self, projet, etat, tid, agent, questions, session, *, modele=None, rendu=None):
+    def _repondre(self, projet, etat, tid, agent, questions, session, *, modele=None, rendu=None, demandes=()):
         fiche = fi.trouver(fi.lire_toutes(fa.lire(projet.factory)["fiches"]), agent)
         fid = regles.lancer(projet, "detail", {"tache": tid}).get("fonctionnalite")
         if fiche is None or fiche["lieu"] == "cloud" or not fid:
             self._noter(projet, f"questions pour {agent} sans réponse possible : {' / '.join(questions)}")
+            for d in demandes:
+                regles.suivre_demande(projet, d, "sans_reponse", f"Pas de réponse possible : l'agent de la tâche {tid} "
+                                      "n'est plus joignable. Posez la question de nouveau si elle tient toujours.",
+                                      tache=tid)
             return
         modele = (modele or fiche["modele"] or "Sonnet").lower()
         if modele == "fable" and not fi.fable_accorde(fiche):
             modele = "opus"      # une réponse aux questions ne tourne jamais sur Fable sans l'accord de la fiche
         cle = f"{tid}.reponse"
         infos = {"genre": "reponse", "tache": tid, "agent": fiche["cle"], "modele": modele, "fonctionnalite": fid,
-                 "questions": questions, "session": session}
+                 "questions": questions, "session": session, "demandes": list(demandes)}
+        for d in demandes:
+            regles.suivre_demande(projet, d, "reponse_en_cours", f"{fiche.get('prenom') or fiche['cle']} a fini la "
+                                  f"tâche {tid} et rédige sa réponse.", tache=tid)
         self._lancer_local(projet, self._fiche_de_reponse(fiche), modele, cle, infos,
                            depart_de_reponse(tid, questions, session, rendu), "", tache=tid, lot=None,
-                           reprendre=session, reponse={"fonctionnalite": fid, "questions": questions, "cle": cle})
+                           reprendre=session, reponse={"fonctionnalite": fid, "questions": questions, "cle": cle,
+                                                       "demandes": list(demandes)})
 
     def _poser_la_reponse(self, projet, e):
         """La réponse de l'agent aux questions de l'utilisateur, dans la discussion (sinon pourquoi elle manque)."""
@@ -938,11 +956,19 @@ class Moteur:
         texte = ((e.rapport or {}).get("message") or {}).get("texte") if e.rapport else None
         if not fid:
             return
+        demandes = [d for d in e.reponse.get("demandes") or [] if isinstance(d, str)]
+        prenom = regles.prenom_de(projet, e.agent)
         if isinstance(texte, str) and texte.strip():
             regles.lancer(projet, "message", {"fonctionnalite": fid, "auteur": e.agent, "texte": texte.strip()})
+            for d in demandes:      # la réponse, aussi sous le retour (fiche de la tâche)
+                regles.suivre_demande(projet, d, "repondu", f"Réponse de {prenom} : {texte.strip()}"[:4000],
+                                      tache=e.tache)
             return
-        regles._dire(projet, fid, f"{regles.prenom_de(projet, e.agent)} n'a pas pu répondre à votre question "
-                                  f"({e.erreur or 'réponse vide'}) : posez-la de nouveau si elle tient toujours.")
+        dit = (f"{prenom} n'a pas pu répondre à votre question ({e.erreur or 'réponse vide'}) : posez-la de nouveau si "
+               "elle tient toujours.")
+        regles._dire(projet, fid, dit)
+        for d in demandes:
+            regles.suivre_demande(projet, d, "sans_reponse", dit, tache=e.tache)
 
     # --- Les agents cloud : une session par départ, relevée par le dépôt.
 

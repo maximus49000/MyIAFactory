@@ -2,13 +2,14 @@
 // Chaque fonction remplit `contenu` ; un verdict est une demande au projet, jamais un changement direct.
 
 import {el, ligne} from "./dom.js";
-import {tronquer, dateFr, listeDisponible, phrasesDirectionV1} from "./texte.js";
+import {tronquer, dateFr, listeDisponible, phrasesDirectionV1, retourSansReponse, suiviDuRetour, retoursRepondusNonVus,
+        PREFIXE_VU_RETOUR} from "./texte.js";
 import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie, enregistrerReglage,
   enregistrerCloudDossierApprouve} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
 import {sectionLieux} from "./lieux.js";
-import {blocPoint, listeEchanges, TACHE_DU_CHEF} from "./point.js";
+import {blocPoint, listeEchanges, marquerVu, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
@@ -314,13 +315,34 @@ export function contenuDirecteur(ctx, contenu) {
   echanges.append(el("h3", "", "Échanges avec le Chef"), listeEchanges(e, dateFr, 10, {direction: true, apresVu: ctx.rouvrir}));
   contenu.append(echanges);
 
+  // Les réponses des agents à vos retours : chacune compte au bureau du Directeur jusqu'à « Pris en compte ».
+  const repondus = retoursRepondusNonVus(e).map(({tache: t, retour: r}) => {
+    const li = el("li", "");
+    li.append(lienTache(ctx, t.id, tronquer(t.titre, MAX_TITRE)), el("div", "retour-texte", tronquer(r.texte, 200)),
+              el("div", "retour-reponse", r.suivi.texte || "Répondu"),
+              el("div", "retour-date", r.suivi.t ? dateFr(r.suivi.t) : ""));
+    if (e.agir) {
+      const b = el("button", "bouton secondaire", "Pris en compte");
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        if (await marquerVu(PREFIXE_VU_RETOUR + r.id)) { li.remove(); if (ctx.rouvrir) ctx.rouvrir(); } else b.disabled = false;
+      });
+      li.append(b);
+    }
+    return li;
+  });
+  if (repondus.length) contenu.append(partie("Réponses à vos retours", "", repondus));
+
   const retours = [];
   for (const t of e.taches || []) {
     if (t.id === TACHE_DU_CHEF) continue;       // montrés ci-dessus
     for (const r of t.retours || []) {
-      if (r.reponse && r.reponse.trim()) continue;
+      if (!retourSansReponse(r)) continue;
       const li = el("li", "");
       li.append(lienTache(ctx, t.id, tronquer(t.titre, MAX_TITRE)), el("div", "retour-texte", tronquer(r.texte, 200)));
+      const suivi = suiviDuRetour(r, t.avancement);
+      if (suivi) li.append(el("div", "retour-attente", suivi.libelle + (suivi.ouAgent ? " · " + suivi.ouAgent : "")));
       retours.push(li);
     }
   }

@@ -435,6 +435,69 @@ class Detaches(Base):
         self.assertEqual((f["discussion"][-1]["auteur"], f["discussion"][-1]["texte"]), ("dev-1", "Voilà."))
         self.assertEqual(self.tache_suivie()["colonne"], "fait")
 
+    def suivi_du_retour(self, i):
+        return next(d for d in self.suivi()["demandes"] if d["id"] == i).get("suivi")
+
+    def test_un_retour_transmis_est_suivi_jusqu_a_la_reponse(self):
+        """Essai réel (2026-11-18) : « Question transmise à Hugo » restait la seule trace du retour sur la tâche."""
+        self.agent_en_cours()
+        self.vivants.add(4242)
+        self.moteur.synchrone = False
+        fini = __import__("threading").Event()
+        vrai = self.agents.__call__
+
+        def lent(*a, **k):
+            fini.wait(10)
+            return vrai(*a, **k)
+        self.moteur.executer_agent = lent
+        self.moteur.tour()
+        i = self.demande(type="retour", tache=self.tache, texte="Le téléchargement échoue")
+        self.moteur.tour()
+        s = self.suivi_du_retour(i)
+        self.assertEqual((s["etat"], s["tache"]), ("transmis", self.tache))
+        self.assertIn("Léa travaille encore", s["texte"])
+        (r,) = next(t for t in self.ok("releve")["taches"] if t["id"] == self.tache)["retours"]
+        self.assertEqual(r["suivi"]["etat"], "transmis")      # le bureau le voit sous le retour
+        self.moteur.synchrone = True
+        self.moteur.executer_agent = self.agents
+        fini.set()
+        for _ in range(100):
+            if not self.moteur.retours.empty():
+                break
+            __import__("time").sleep(0.05)
+        with mock.patch.object(regles, "suivre_demande", wraps=regles.suivre_demande) as suivre:
+            self.moteur.tour()                    # la tâche finie : l'agent rédige sa réponse, puis la rend
+            self.moteur.tour()
+        self.assertEqual([c.args[2] for c in suivre.call_args_list], ["reponse_en_cours", "repondu"])
+        s = self.suivi_du_retour(i)
+        self.assertEqual((s["etat"], s["texte"]), ("repondu", "Réponse de Léa : Voilà."))
+
+    def test_le_bureau_compte_la_reponse_jusqu_a_pris_en_compte(self):
+        from bureau import etat as bureau_etat
+        taches = [{"id": "t1", "retours": [{"id": "r1", "t": "x", "texte": "y", "suivi": {"etat": "repondu"}},
+                                           {"id": "r2", "t": "x", "texte": "y", "suivi": {"etat": "transmis"}}]}]
+        self.assertEqual([x["id"] for _, x in bureau_etat.retours_repondus_non_vus(taches, [])], ["r1"])
+        self.assertEqual(bureau_etat.retours_repondus_non_vus(taches, ["retour:r1"]), [])
+        self.assertEqual([bureau_etat.retour_sans_reponse(x) for x in taches[0]["retours"]], [False, True])
+
+    def test_un_retour_repris_dans_le_nouvel_essai(self):
+        self.agents.rapport = None
+        self.agent_en_cours()
+        self.vivants.add(4242)
+        i = self.demande(type="retour", tache=self.tache, texte="Et le menu ?")
+        self.ok("demande-traitee", entree={"id": i, "reponse": "transmise"})
+        detache.ajouter_question(self.dossier, self.tache, "Et le menu ?", demande=i)
+        self.moteur.tour()
+        self.moteur.tour()
+        self.assertEqual(self.suivi_du_retour(i)["etat"], "repris")
+
+    def test_les_anciennes_questions_sans_demande_se_lisent_encore(self):
+        self.registre.mkdir(exist_ok=True)
+        (self.registre / f"{self.tache}.questions.json").write_text('["Ancienne"]', encoding="utf-8")
+        detache.ajouter_question(self.dossier, self.tache, "Nouvelle", demande="r9")
+        self.assertEqual(detache.prendre_questions_et_demandes(self.dossier, self.tache),
+                         (["Ancienne", "Nouvelle"], ["r9"]))
+
     def test_la_question_suit_la_tache_relancee(self):
         """L'agent rend sans rapport : la tâche repart, la question va dans la matière de ce nouvel essai."""
         self.agents.rapport = None

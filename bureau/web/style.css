@@ -400,6 +400,12 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .retour-date { font-size: 11.5px; color: #8a8698; }
 .retour-reponse { margin-top: 4px; padding-left: 8px; border-left: 3px solid #5aa86a; }
 .retour-attente { margin-top: 4px; font-size: 12.5px; font-style: italic; color: #8a8698; }
+.retour-suivi { margin-top: 6px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; background: #f4f2f8;
+                border-left: 3px solid #8a8698; }
+.retour-suivi-attente { border-left-color: #e0a63a; }
+.retour-suivi-ok { border-left-color: #5aa86a; }
+.retour-suivi-alerte { border-left-color: #d0524a; }
+.retour-suivi-agent, .retour-suivi-texte { margin-top: 3px; overflow-wrap: anywhere; }
 .retour-saisie { margin-top: 14px; }
 .retour-saisie textarea { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid #cfc7b6; border-radius: 8px; font: inherit; resize: vertical; }
 .retour-pied { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }

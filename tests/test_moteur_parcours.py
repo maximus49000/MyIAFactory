@@ -96,6 +96,22 @@ class Parcours(AvecParcours):
         self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION}, texte="Un badge pour le chat.")
         self.assertEqual(self.fonc("f2")["nom"], "Un badge pour le chat")
 
+    def test_le_classement_connait_les_fonctionnalites_deja_au_projet(self):
+        # Essai réel RoadmapReborn f10 et f11 : une demande sur un fichier que le projet génère déjà était jugée d'un
+        # autre genre, faute de savoir ce que le projet fait.
+        self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION}, texte="Un badge pour le chat.")
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION},
+                               texte="Limiter à quatre lignes le fichier Excel de saisie.")
+        dossier = next(a[2] for a in vus if a[1] == "classer_genre")
+        self.assertEqual(dossier["fonctionnalites_du_projet"], [self.fonc("f1")["nom"]])
+
+    def test_le_classement_lit_la_presentation_du_projet(self):
+        self.assertNotIn("presentation_du_projet", self.demander(
+            {"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})[1][0][2])
+        self.ecrire(self.dossier / "README.md", "Application de suivi. Elle génère le fichier Excel de saisie des évaluations.")
+        d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
+        self.assertIn("fichier Excel de saisie", next(a[2] for a in vus if a[1] == "classer_genre")["presentation_du_projet"])
+
     def test_demande_du_meme_genre_propose_son_workflow(self):
         d, vus = self.demander({"classer_genre": CLASSER_MEME, "proposer_organisation": PROPOSITION})
         self.assertEqual([(a[0], a[1]) for a in vus], [("juger", "classer_genre"), ("juger", "proposer_organisation")])
@@ -104,6 +120,7 @@ class Parcours(AvecParcours):
         self.assertEqual([g["id"] for g in dossier["genres_du_projet"]], ["badges"])
         self.assertEqual(sorted(g["id"] for g in dossier["genres_connus"]), ["badges", "stickers"])
         self.assertEqual(dossier["mots_interdits"], ["Secret"])
+        self.assertNotIn("fonctionnalites_du_projet", dossier)      # aucune autre fonctionnalité : rien à ajouter
         self.assertEqual(vus[1][2]["fonctionnalite"], "f1")
         self.assertEqual(self.fonc()["genre"], "badges")
         (decision,) = self.decisions("organisation")

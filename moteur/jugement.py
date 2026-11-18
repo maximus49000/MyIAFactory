@@ -15,7 +15,8 @@ Dossiers attendus (préparés par la table de règles) :
 - `conseil` : `evenement`, `etat` court de la fonctionnalité, `consignes_propres`, `commandes` permises ;
 - `classer_genre` : `demande` (texte, images ; ou la description d'un projet créé sans genre), `projet` (nom,
   description), `genres_du_projet` ([{id, domaine, livrable, outils}], ceux de ses workflows), `genres_connus`
-  (`memoire.genres` de la skill), `mots_interdits` du projet ;
+  (`memoire.genres` de la skill), `mots_interdits` du projet, `fonctionnalites_du_projet` (les noms de ses fonctionnalités
+  déjà là, facultatif), `presentation_du_projet` (début de son README ou de son contexte, facultatif) ;
 - `proposer_organisation` : `demande`, `genre`, `projet` (nom, description), `services` ([{id, nom}]), `agents`
   ([{cle, role, modele, specialite}] ; un agent polyvalent n'a pas de rôle), `metiers` ([{role, service, modele, lieu,
   specialite}] : les briefs du projet, absent d'un projet à l'ancienne), `regles_projet` (les textes des règles du projet, absent sans règle), `workflows_du_genre` ([{id, flux}], le plus récent d'abord), `fonctionnalite`

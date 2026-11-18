@@ -916,16 +916,58 @@ def _classer(projet, etat, fid, suite):
             return []
         suite = {**suite, "sans_genre": True}
         demande = {"texte": fac["description"] or demande["texte"], "images": []}
-    return [a_juger("classer_genre", _dossier_classer(projet, fac, demande), suite)]
+    return [a_juger("classer_genre", _dossier_classer(projet, fac, demande, fid), suite)]
 
 
-def _dossier_classer(projet, fac, demande):
+def _dossier_classer(projet, fac, demande, fid=None):
     connus = lancer(projet, "genre", {"action": "lister"})["genres"]
     par_id = {g["id"]: g for g in connus}
     du_projet = [par_id.get(i) or {"id": i, "domaine": None, "livrable": None, "outils": None}
                  for i in _genres_du_projet(fac)]
-    return {"demande": demande, "projet": {"nom": fac["nom"], "description": fac["description"]},
-            "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
+    dossier = {"demande": demande, "projet": {"nom": fac["nom"], "description": fac["description"]},
+               "genres_du_projet": du_projet, "genres_connus": connus, "mots_interdits": fac["mots_interdits"]}
+    deja = _noms_des_fonctionnalites(projet, fid)
+    if deja:
+        dossier["fonctionnalites_du_projet"] = deja
+    presentation = _presentation_du_projet(projet)
+    if presentation:
+        dossier["presentation_du_projet"] = presentation
+    return dossier
+
+
+PRESENTATION_LONGUEUR = 3000
+PRESENTATIONS = ("CONTEXTE_PROJET.md", "README.md", "LISEZMOI.md", "readme.md")
+
+
+def _presentation_du_projet(projet):
+    """Le début du fichier de présentation du projet (README ou contexte), à la racine : un projet construit avant son
+    installation n'a pas de fonctionnalités au suivi, mais il dit là ce qu'il fait déjà. Absent ou illisible : rien."""
+    dossier = projet.factory.resolve().parent
+    for racine in (dossier.parent, dossier):
+        for nom in PRESENTATIONS:
+            try:
+                with open(racine / nom, encoding="utf-8", errors="replace") as f:
+                    texte = f.read(PRESENTATION_LONGUEUR).strip()
+            except OSError:
+                continue
+            if texte:
+                return texte
+    return None
+
+
+FONCTIONNALITES_VUES = 40      # les plus récentes : de quoi reconnaître ce que le projet fait déjà, sans gonfler le dossier
+
+
+def _noms_des_fonctionnalites(projet, sauf=None):
+    """Les noms des fonctionnalités déjà au projet (essai réel RoadmapReborn f10 et f11, 2026-11-18 : « passer à 4 lignes
+    le fichier Excel de saisie des évaluations » jugé d'un autre genre, car le classement ne savait pas que le projet
+    génère ce fichier). Les demandes déplacées ou abandonnées n'en font pas partie, ni la demande en cours (`sauf`)."""
+    try:
+        noms = [f["nom"].strip() for f in _etat(projet)["fonctionnalites"]
+                if isinstance(f.get("nom"), str) and f["nom"].strip() and f.get("etape") != "deplacee" and f.get("id") != sauf]
+    except (KeyError, TypeError, Refus):
+        return []
+    return noms[-FONCTIONNALITES_VUES:]
 
 
 MOTS_DE_LIAISON = ("de", "du", "des", "la", "le", "les", "un", "une", "d", "l", "et", "ou", "à", "a", "au", "aux", "pour",

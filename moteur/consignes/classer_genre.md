@@ -17,6 +17,13 @@ Le `verdict` :
 - `incertain` : la demande est trop floue pour trancher, ou elle est à cheval. Mets dans `genre` (ou `nouveau`) ta
   meilleure piste, ou null.
 
+Le dossier peut porter `fonctionnalites_du_projet` et `presentation_du_projet` (le début de son README) : ce que le
+projet fait déjà, y compris ce qui a été construit avant son installation. Une demande qui **modifie ou règle**
+quelque chose que le projet produit ou gère déjà (un export, un fichier généré, un écran, une limite, un libellé)
+est du genre du projet : le format du fichier (Excel, PDF, CSV…) ne change pas le genre quand c'est le projet qui le
+génère. Appuie-toi sur eux et sur la description du projet ; mets `coherente` true et `meme` avec le genre du
+projet. N'invente pas un autre livrable à partir du seul format du fichier.
+
 Règle de l'utilisateur : dans le doute, `incertain`. N'élargis jamais un genre pour y faire entrer une demande qui
 n'en partage pas les outils ou le livrable : l'utilisateur tranchera. Une demande qui ne décrit aucune fonctionnalité mais dit de démarrer, commencer ou continuer
 le projet (« démarrer le projet », « on commence », « go ») vise le projet tel que décrit : classe la description du

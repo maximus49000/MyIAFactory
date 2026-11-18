@@ -612,6 +612,15 @@ class Parcours(AvecParcours):
         self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "proposer_organisation")])
         self.assertEqual(actions[0][2]["refus"], "Sans service de livraison")
 
+    def test_proposer_rate_puis_redemarrage_la_reponse_relance_encore(self):
+        """Essai réel (RoadmapReborn, f9) : le moteur relancé avait oublié la proposition ratée (état en mémoire) ; la
+        réponse du Directeur serait partie vers un cadrage sans workflow. La question en attente suffit à la retrouver."""
+        self.proposition_ratee()
+        self.etat = regles.nouvel_etat()          # le moteur a redémarré
+        _, actions = self.traiter(type="message", fonctionnalite="f1", texte="Relance")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "proposer_organisation")])
+        self.assertEqual(self.taches(etape="cadrage"), [])
+
     def test_un_message_pendant_la_question_n_ouvre_pas_le_cadrage(self):
         self.avertie()
         d, actions = self.traiter(type="message", fonctionnalite="f1", texte="Alors ?")

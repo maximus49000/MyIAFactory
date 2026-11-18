@@ -530,6 +530,10 @@ def _sur_message(projet, demande, etat):
     travail = agent_au_travail(projet, etat, fid)
     if travail is not None:
         return _transmettre_a_l_agent(projet, demande, fid, *travail)
+    if f["etape"] == "cadrage" and fid not in _m(etat, "proposition_ratee") and _question_de_proposition_ratee(f):
+        # Le moteur a redémarré depuis la question (son état est en mémoire) : la question en attente la rappelle.
+        # Essai réel (RoadmapReborn, f9) : sans cela, la réponse ouvrait un cadrage sans workflow.
+        etat["proposition_ratee"][fid] = {"fonctionnalite": fid}
     if f["etape"] == "cadrage" and fid in _m(etat, "proposition_ratee"):
         return _reponse_proposition_ratee(projet, etat, demande, fid)
     if f["etape"] == "cadrage" and _correction_sans_workflow(f):
@@ -1433,6 +1437,14 @@ def _proposition_ratee(projet, etat, ctx, texte):
     _m(etat, "proposition_ratee")[fid] = {k: v for k, v in ctx.items() if k != "demande"}
     _question(projet, fid, texte, [CONTINUER, JE_PRECISE], ctx)
     return []
+
+
+def _question_de_proposition_ratee(f):
+    """Vrai si la fonctionnalité, sans workflow, a pour dernière question celle d'une proposition ratée (ses choix)."""
+    if f.get("workflow"):
+        return False
+    dernier = next((m for m in reversed(f.get("discussion") or []) if m.get("auteur") != "utilisateur"), None)
+    return any((q.get("choix") or []) == [CONTINUER, JE_PRECISE] for q in (dernier or {}).get("questions") or [])
 
 
 def _reponse_proposition_ratee(projet, etat, demande, fid):

@@ -104,3 +104,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Avant de reprendre un element de developpement signale comme interrompu/repris d'une session precedente, verifier d'abord l'etat reel du code et lancer les tests deja ecrits plutot que de relire ou reecrire le perimetre : cela tranche en quelques secondes entre deja fait et reste a faire.
+
+## G18 — Dans une tâche de correction/développement, si les chemins d
+Rôles : dev
+Date : 2026-11-18
+
+Dans une tâche de correction/développement, si les chemins de fichiers cités dans la matière n'existent pas, chercher par nom de fonction/mot-clé dans tout le dépôt avant de conclure à un fichier manquant : l'arborescence réelle peut diverger du cahier.

@@ -1545,3 +1545,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand un test d'aller-retour (export puis reimport) echoue, verifier d'abord la fonction d'aide qui reconstruit le fichier intermediaire : si elle n'ecrase que les valeurs fournies sans effacer les anciennes au-dela de la nouvelle liste, le test accuse a tort le code applicatif.
+
+## S258 — Pour une fonctionnalité qui bascule entre édition et lecture
+Rôles : dev
+Date : 2026-11-18
+
+Pour une fonctionnalité qui bascule entre édition et lecture seule, préférer remplacer le champ de saisie par un élément non-interactif plutôt que de le désactiver, si des tests vérifient l'absence de tout champ de saisie en mode lecture seule.

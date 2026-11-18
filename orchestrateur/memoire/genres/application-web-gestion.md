@@ -56,3 +56,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans un workflow de cadrage à une seule série de questions, une correction du périmètre après coup se traite en réécrivant le cahier avec les choix qui en découlent, sans rouvrir une nouvelle série de questions à l'utilisateur.
+
+## G10 — Quand un enregistrement a un champ de statut de verrouillage
+Rôles : dev
+Date : 2026-11-18
+
+Quand un enregistrement a un champ de statut de verrouillage et un champ de contenu saisi indépendant, une action d'annulation doit croiser les deux pour choisir entre suppression (rien à perdre) et déverrouillage avec conservation du contenu (quelque chose à préserver), plutôt que se baser sur le seul statut.

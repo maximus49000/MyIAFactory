@@ -92,3 +92,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand un chef de projet résout un point de méthode ou de process de cadrage, cela ne remplace pas les questions fonctionnelles propres à la fonctionnalité elle-même ; les poser avant d'écrire le cahier des charges.
+
+## G16 — Dans un modèle de validation en deux temps (brouillon modifi
+Rôles : dev
+Date : 2026-11-18
+
+Dans un modèle de validation en deux temps (brouillon modifiable → version figée immuable), une donnée annexe qui n'a pas besoin d'être comparée à une version antérieure n'a pas besoin d'être copiée dans la structure figée : la garder uniquement sur l'entité vivante, avec le même verrou de modification que les autres champs du brouillon, suffit et simplifie le cycle validation/annulation.

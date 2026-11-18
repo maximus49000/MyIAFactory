@@ -69,6 +69,21 @@ export function raisonDuPassage(tache) {
   return null;
 }
 
+// « claude-haiku-4-5-20251001 » → « Haiku 4.5 », « claude-sonnet-5 » → « Sonnet 5 » ; le nom tel quel sinon.
+export function nomCourtModele(nom) {
+  const m = String(nom || "").match(/(haiku|sonnet|opus|fable)-(\d+)(?:-(\d{1,2}))?(?!\d)/i);
+  if (!m) return String(nom || "");
+  return m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() + " " + m[2] + (m[3] ? "." + m[3] : "");
+}
+
+// Les modèles d'un passage (`{modèle: euros}`), le plus cher d'abord : « Sonnet 5 : ≈ 2,10 € · Haiku 4.5 : ≈ 0,15 € ».
+// Un seul modèle : son nom seul, le montant de la ligne suffit. `euros` : le format du montant (celui de texte.js).
+export function libelleModeles(modeles, euros) {
+  const liste = Object.entries(modeles || {}).sort((a, b) => (b[1] || 0) - (a[1] || 0));
+  if (liste.length < 2) return liste.map(([n]) => nomCourtModele(n)).join("");
+  return liste.map(([n, v]) => `${nomCourtModele(n)} : ${euros(v)}`).join(" · ");
+}
+
 // « 12 min », « 1 h 05 » ; null sans durée connue.
 export function libelleMinutes(m, inconnues = 0, passages = 1) {
   if (inconnues >= passages) return null;

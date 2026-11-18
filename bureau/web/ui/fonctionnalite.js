@@ -20,7 +20,7 @@ import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEn
 export {verifierChoix};
 
 import {estCorrection, bandeauCorrection, libelleEtapeCorrection} from "./parcours-correction.js";
-import {regrouperParEtape, raisonDuPassage, libelleMinutes} from "./couts-etapes.js";
+import {regrouperParEtape, raisonDuPassage, libelleMinutes, libelleModeles} from "./couts-etapes.js";
 
 export const MAX_TEXTE = 3500;
 const MAX_OCTETS = MAX_OCTETS_IMAGE;   // une image fixe, une fois réduite
@@ -867,7 +867,7 @@ function coutsParEtape(c, f, e) {
     g.taches.forEach((t, i) => {
       const li = el("li", "");
       const raison = raisonDuPassage(parId.get(t.id));
-      const modeles = Object.keys(t.modeles || {}).join(", ");
+      const modeles = libelleModeles(t.modeles, euros);   // le prix de chacun, chaque modèle n'ayant pas le même
       const quoi = [`${i + 1}. ${g.libelle}${raison ? ` (${raison})` : ""}`, modeles, echelle(t), etiquetteCO2(t.co2)]
         .filter(Boolean).join(" · ");
       li.append(marquerTitreCO2(el("span", "", quoi), t.co2), el("span", "", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));

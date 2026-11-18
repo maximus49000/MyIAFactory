@@ -6246,6 +6246,19 @@ def a_lire(fil, suite):
     return ("lire", fil, suite)
 
 
+def _equipe_pour_question(projet, court):
+    """Les agents par leur prénom (l'utilisateur les nomme ainsi : « où en est Hugo ? ») et leurs tâches pas faites."""
+    equipe = []
+    for a in court["agents"]:
+        taches = [{"id": t["id"], "titre": t["titre"], "colonne": t["colonne"], "fonctionnalite": t.get("fonctionnalite"),
+                   "active": bool(t.get("active")), "bloquee": t.get("bloquee"),
+                   "dernier_journal": str(t.get("dernier_journal") or "")[:200]}
+                  for t in court["taches"] if t.get("agent") == a["cle"] and t["colonne"] != "fait"][:15]
+        equipe.append({"prenom": prenom_de(projet, a["cle"]), "cle": a["cle"], "role": a.get("role"),
+                       "libre": a.get("libre"), "taches": taches})
+    return equipe[:20]
+
+
 def _dossier_question(projet, fil):
     fac = _factory(projet)
     court = _etat(projet)
@@ -6258,6 +6271,7 @@ def _dossier_question(projet, fil):
                "regles_projet": [x["texte"] for x in lancer(projet, "regles", {"action": "lister"}).get("regles", [])],
                "fil": [{"auteur": m["auteur"], "texte": m["texte"][:1500]} for m in fil["messages"][:-1]][-10:],
                "question": {"texte": question["texte"], "images": question.get("images") or []},
+               "equipe": _equipe_pour_question(projet, court),
                "mots_interdits": fac["mots_interdits"]}
     if fil.get("fonctionnalite"):
         f = _fonc(projet, fil["fonctionnalite"])

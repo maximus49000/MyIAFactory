@@ -35,7 +35,7 @@ Dossiers attendus (préparés par la table de règles) :
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
   `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
-  `question` (texte, images), `mots_interdits`.
+  `question` (texte, images), `equipe` ([{prenom, cle, role, libre, taches}]), `mots_interdits`.
 
 Une étape de flux peut être une validation du Directeur, `{etape, nom, validation: true, raison?}` : ni rôle ni
 service, ni première, ni dernière, ni deux de suite.

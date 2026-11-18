@@ -35,7 +35,7 @@ class Session(unittest.TestCase):
         ex = Executeur({"claude --cloud": (0, ("Session ouverte : " + ADRESSE).encode())})
         cloud.lancer_session("Fais l'écran.", dossier_projet="/p", modele="Sonnet", executer=ex, trouver=CLAUDE)
         self.assertEqual(ex.appels[0], ["git", "push"])
-        self.assertEqual(ex.appels[1], ["claude", "--cloud", "Fais l'écran.", "--model", "sonnet"])
+        self.assertEqual(ex.appels[1], ["claude", "--cloud", "Fais l'écran.", "--model", "claude-sonnet-5-5"])
 
     def test_lancer_session_rend_session_et_adresse(self):
         ex = Executeur({"claude --cloud": (0, ("Session ouverte : " + ADRESSE + "\n").encode())})

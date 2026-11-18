@@ -46,6 +46,17 @@ class ClaudeP(unittest.TestCase):
         self.assertEqual(r.usages, [r.usage])
         self.assertEqual(r.session, "s1")
 
+    def test_les_identifiants_viennent_des_reglages_puis_du_defaut(self):
+        """Un nouveau modèle se change dans `alias_modeles` des réglages, sans toucher au code."""
+        self.addCleanup(appel.enregistrer_modeles, None)
+        self.assertEqual(appel.modele_exact("opus"), "claude-opus-5-5")                # le défaut
+        appel.enregistrer_modeles({"Opus": "claude-opus-6", "sonnet": "pas-un-modele", "Inconnu": "claude-x"})
+        self.assertEqual(appel.modele_exact("opus"), "claude-opus-6")                  # les réglages, casse libre
+        self.assertEqual(appel.modele_exact("sonnet"), "claude-sonnet-5-5")            # valeur invalide : le défaut
+        self.assertEqual(appel.modele_exact("fable"), "fable")                         # jamais réécrit
+        argv = appel._argv("claude", "opus", "c.md", [], None)
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-6")
+
     def test_consigne_et_dossier_passent_par_l_entree_pas_par_argv(self):
         vu = Vu()
         appel.appeler("CONSIGNE", "DOSSIER", "haiku", executer=vu)
@@ -60,7 +71,7 @@ class ClaudeP(unittest.TestCase):
         appel.appeler("c", "d", "sonnet", executer=vu)
         argv = vu.appels[0]["argv"]
         self.assertEqual(argv[1:2], ["-p"])
-        self.assertEqual(argv[argv.index("--model") + 1], "sonnet")
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-sonnet-5-5")   # l'identifiant exact, pas l'alias que le CLI résout vers une ancienne version
         self.assertEqual(argv[argv.index("--output-format") + 1], "stream-json")
         self.assertIn("--verbose", argv)
         self.assertEqual(argv[argv.index("--tools") + 1], "")

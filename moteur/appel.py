@@ -27,6 +27,30 @@ from bureau import abonnement
 
 MODELES = ("haiku", "sonnet", "opus")
 MODELES_API = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
+
+
+_MODELES_DES_REGLAGES = {}
+
+
+def enregistrer_modeles(alias):
+    """Les identifiants exacts voulus par les réglages du projet (`alias_modeles` : {"Sonnet": "claude-sonnet-5-5", …}).
+    Un nouveau modèle (Opus 5.5 après Opus 5.0, une nouvelle famille) se change là, sans toucher au code : le fichier est
+    relu à chaque tour du moteur. Seuls les alias connus et des identifiants `claude-…` sont retenus."""
+    _MODELES_DES_REGLAGES.clear()
+    for nom, identifiant in (alias if isinstance(alias, dict) else {}).items():
+        cle = str(nom).strip().lower()
+        if cle in MODELES and isinstance(identifiant, str) and identifiant.strip().startswith("claude-"):
+            _MODELES_DES_REGLAGES[cle] = identifiant.strip()
+
+
+def modele_exact(modele):
+    """L'identifiant exact du modèle pour le CLI : les réglages d'abord, à défaut `MODELES_API`. L'alias (« haiku »,
+    « sonnet ») est résolu par le CLI vers une version plus ancienne (essai réel, RoadmapReborn f9, 2026-11-18 : agents
+    sur claude-haiku-4-5 et claude-sonnet-5 alors que les réglages visent la 5.5, dont la relecture du cache coûte deux
+    fois moins). Fable et les noms inconnus sont gardés tels quels."""
+    return _MODELES_DES_REGLAGES.get(modele) or MODELES_API.get(modele, modele)
+
+
 URL_API = "https://api.anthropic.com/v1/messages"
 VERSION_API = "2023-06-01"
 MAX_TOKENS_API = 16000
@@ -143,7 +167,7 @@ def trouver_claude(which=shutil.which, environ=None):
 
 
 def _argv(claude, modele, fichier_consigne, outils, reprendre):
-    argv = [claude, "-p", "--output-format", "stream-json", "--verbose", "--model", modele]
+    argv = [claude, "-p", "--output-format", "stream-json", "--verbose", "--model", modele_exact(modele)]
     if outils:
         noms = []
         for o in outils:
@@ -281,7 +305,7 @@ def _appeler_api(consigne, dossier, modele, executer, delai_s):
     cle = (os.environ.get(VARIABLE_CLE) or "").strip()
     if not cle:
         raise ErreurAppel("ANTHROPIC_API_KEY n'est pas dans l'environnement.")
-    corps = json.dumps({"model": MODELES_API[modele], "max_tokens": MAX_TOKENS_API, "system": consigne,
+    corps = json.dumps({"model": modele_exact(modele), "max_tokens": MAX_TOKENS_API, "system": consigne,
                         "messages": [{"role": "user", "content": dossier}]}).encode("utf-8")
     entetes = {"x-api-key": cle, "anthropic-version": VERSION_API, "content-type": "application/json"}
     try:
@@ -299,7 +323,7 @@ def _appeler_api(consigne, dossier, modele, executer, delai_s):
         message = ((r.get("error") or {}).get("message") or "") if isinstance(r, dict) else ""
         raise ErreurAppel(_sans_cle(f"l'API a rendu le code {code} : {message[:200]}", cle))
     u = r.get("usage") or {}
-    usages = [_usage(r.get("model") or MODELES_API[modele], u.get("input_tokens"), u.get("output_tokens"),
+    usages = [_usage(r.get("model") or modele_exact(modele), u.get("input_tokens"), u.get("output_tokens"),
                      u.get("cache_read_input_tokens"), u.get("cache_creation_input_tokens"))]
     if r.get("stop_reason") in ("refusal", "max_tokens"):
         raise ErreurAppel(f"l'API s'est arrêtée ({r.get('stop_reason')})", usages)

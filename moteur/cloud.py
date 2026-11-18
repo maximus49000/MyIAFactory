@@ -175,7 +175,7 @@ def lancer_session(depart, *, dossier_projet, modele, executer=None, trouver=app
         code, sortie = _pousser(executer, dossier_projet)
     if code != 0:
         raise ErreurCloud("le dépôt n'a pas pu être poussé : " + _texte(sortie)[:200])
-    argv = [claude, "--cloud", depart, "--model", m]
+    argv = [claude, "--cloud", depart, "--model", appel.modele_exact(m)]
     if terminal is not None or (executer is None and _faux_terminal_possible()):
         return _lancer_dans_le_faux_terminal(argv, dossier_projet, terminal, approuver_dossier)
     code, sortie = _lancer(executer, argv, dossier_projet, DELAI_CLAUDE_S)

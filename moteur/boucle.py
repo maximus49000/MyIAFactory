@@ -80,6 +80,7 @@ def ouvrir_projet(fichier_reglages, environ=None):
         r = json.loads(fichier.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         r = {}
+    appel.enregistrer_modeles((r if isinstance(r, dict) else {}).get("alias_modeles"))
     couche, ligne = appel.choisir_couche(r if isinstance(r, dict) else {}, os.environ if environ is None else environ)
     projet = regles.Projet(fichier.parent / "factory.json", couche)
     projet.ligne_a_dire = ligne

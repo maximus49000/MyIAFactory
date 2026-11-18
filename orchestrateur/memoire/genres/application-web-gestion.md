@@ -50,3 +50,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans une application de gestion avec tableaux à statuts dérivés, la petite fonction qui calcule le libellé affiché est le point d'entrée le plus rapide pour retrouver la règle métier exacte distinguant les catégories, avant de creuser les modèles de données.
+
+## G9 — Dans un workflow de cadrage à une seule série de questions,
+Rôles : dev
+Date : 2026-11-18
+
+Dans un workflow de cadrage à une seule série de questions, une correction du périmètre après coup se traite en réécrivant le cahier avec les choix qui en découlent, sans rouvrir une nouvelle série de questions à l'utilisateur.

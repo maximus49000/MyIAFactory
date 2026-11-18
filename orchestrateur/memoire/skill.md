@@ -1509,3 +1509,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Une remarque de correction peut porter sur un état du code déjà corrigé entretemps par une autre session partageant le même dossier ; vérifier le code actuel et git log avant de rejouer le correctif.
+
+## S252 — Sur un poste partagé, un port déjà annoncé « in use » par un
+Rôles : dev
+Date : 2026-11-18
+
+Sur un poste partagé, un port déjà annoncé « in use » par un outil de build peut être occupé en IPv6 loopback ([::1]) sans répondre sur 127.0.0.1 ; vérifier les deux avant de conclure à un échec de démarrage ou de tenter de libérer le port.

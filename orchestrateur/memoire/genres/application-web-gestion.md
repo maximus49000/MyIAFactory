@@ -44,3 +44,9 @@ Rôles : dev
 Date : 2026-11-17
 
 Pour prouver un correctif de mise en forme (CSS) sans environnement de rendu réel disponible, un test qui vérifie la présence de la classe CSS attendue sur l'élément concerné suffit comme preuve automatisée (échoue avant, passe après) ; une illustration avant/après peut être produite par un schéma généré en code pur, sans dépendance graphique externe.
+
+## G8 — Dans une application de gestion avec tableaux à statuts déri
+Rôles : dev
+Date : 2026-11-18
+
+Dans une application de gestion avec tableaux à statuts dérivés, la petite fonction qui calcule le libellé affiché est le point d'entrée le plus rapide pour retrouver la règle métier exacte distinguant les catégories, avant de creuser les modèles de données.

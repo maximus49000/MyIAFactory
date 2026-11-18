@@ -86,3 +86,27 @@ Rôles : dev
 Date : 2026-11-18
 
 Pour un export Excel protégé perçu comme intégralement en lecture seule, plusieurs bandeaux distincts existent côté client avec des boutons différents ; l'absence d'un bouton précis ne prouve pas que la protection du fichier est cassée, seulement qu'un autre bandeau s'affiche — à vérifier en inspectant l'artefact produit, pas seulement le client.
+
+## G15 — Quand un chef de projet résout un point de méthode ou de pro
+Rôles : dev
+Date : 2026-11-18
+
+Quand un chef de projet résout un point de méthode ou de process de cadrage, cela ne remplace pas les questions fonctionnelles propres à la fonctionnalité elle-même ; les poser avant d'écrire le cahier des charges.
+
+## G16 — Dans un modèle de validation en deux temps (brouillon modifi
+Rôles : dev
+Date : 2026-11-18
+
+Dans un modèle de validation en deux temps (brouillon modifiable → version figée immuable), une donnée annexe qui n'a pas besoin d'être comparée à une version antérieure n'a pas besoin d'être copiée dans la structure figée : la garder uniquement sur l'entité vivante, avec le même verrou de modification que les autres champs du brouillon, suffit et simplifie le cycle validation/annulation.
+
+## G17 — Avant de reprendre un element de developpement signale comme
+Rôles : dev
+Date : 2026-11-18
+
+Avant de reprendre un element de developpement signale comme interrompu/repris d'une session precedente, verifier d'abord l'etat reel du code et lancer les tests deja ecrits plutot que de relire ou reecrire le perimetre : cela tranche en quelques secondes entre deja fait et reste a faire.
+
+## G18 — Dans une tâche de correction/développement, si les chemins d
+Rôles : dev
+Date : 2026-11-18
+
+Dans une tâche de correction/développement, si les chemins de fichiers cités dans la matière n'existent pas, chercher par nom de fonction/mot-clé dans tout le dépôt avant de conclure à un fichier manquant : l'arborescence réelle peut diverger du cahier.

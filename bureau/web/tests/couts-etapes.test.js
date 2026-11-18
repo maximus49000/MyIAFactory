@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {regrouperParEtape, raisonDuPassage, libelleMinutes} from "../ui/couts-etapes.js";
+import {regrouperParEtape, raisonDuPassage, libelleMinutes, libelleModeles, nomCourtModele} from "../ui/couts-etapes.js";
 
 const CORR = {id: "f1", nature: "correction"};
 const ligne = (id, etape, total, extra = {}) => ({id, etape, total, sans_prix: 0, modeles: {sonnet: total}, ...extra});
@@ -36,4 +36,15 @@ test("la raison d'un passage refait se lit dans le journal de la tâche", () => 
   assert.equal(raisonDuPassage({journal: [{texte: "Retour de l'utilisateur : refais la capture"}]}), "retour du Directeur");
   assert.equal(raisonDuPassage({journal: [{texte: "Terminé."}]}), null);
   assert.equal(raisonDuPassage(undefined), null);
+});
+
+test("les modèles d'un passage : le prix de chacun, le plus cher d'abord ; un seul modèle, son nom seul", () => {
+  const e = (v) => v.toFixed(2) + " €";
+  assert.equal(nomCourtModele("claude-haiku-4-5-20251001"), "Haiku 4.5");
+  assert.equal(nomCourtModele("claude-sonnet-5"), "Sonnet 5");
+  assert.equal(nomCourtModele("modele-inconnu"), "modele-inconnu");
+  assert.equal(libelleModeles({"claude-haiku-4-5-20251001": 0.15, "claude-sonnet-5": 2.1}, e),
+               "Sonnet 5 : 2.10 € · Haiku 4.5 : 0.15 €");
+  assert.equal(libelleModeles({"claude-sonnet-5-5": 2.1}, e), "Sonnet 5.5");
+  assert.equal(libelleModeles({}, e), "");
 });

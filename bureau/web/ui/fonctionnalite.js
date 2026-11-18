@@ -20,7 +20,7 @@ import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEn
 export {verifierChoix};
 
 import {estCorrection, bandeauCorrection, libelleEtapeCorrection} from "./parcours-correction.js";
-import {regrouperParEtape, raisonDuPassage, libelleMinutes} from "./couts-etapes.js";
+import {regrouperParEtape, raisonDuPassage, libelleMinutes, libelleModeles} from "./couts-etapes.js";
 
 export const MAX_TEXTE = 3500;
 const MAX_OCTETS = MAX_OCTETS_IMAGE;   // une image fixe, une fois réduite
@@ -846,6 +846,16 @@ function coutsParEtape(c, f, e) {
   const passages = groupes.reduce((s, g) => s + g.passages, 0);
   const minutes = groupes.reduce((s, g) => s + g.minutes, 0);
   const inconnues = groupes.reduce((s, g) => s + g.inconnues, 0);
+  const totalGeneral = groupes.reduce((s, g) => s + g.total, 0);
+  // Une barre de consommation, à l'échelle du total : celle d'une étape, et la sous-barre de chacun de ses passages.
+  const barreDe = (montant, classe) => {
+    const barre = el("div", classe);
+    const plein = el("span", "");
+    const part = totalGeneral > 0 ? montant / totalGeneral : 0;
+    plein.style.width = `${Math.max(montant > 0 ? 1 : 0, Math.round(part * 100))}%`;
+    barre.append(plein);
+    return barre;
+  };
   const duree = libelleMinutes(minutes, inconnues, passages);
   const bloc = el("div", "couts-etapes");
   bloc.append(el("p", "note", ["Par étape du parcours", `${passages} passage${passages > 1 ? "s" : ""}`, duree]
@@ -859,25 +869,23 @@ function coutsParEtape(c, f, e) {
     const montant = el("strong", "cout-montant", euros(g.total) + (g.sans_prix ? " + prix inconnu" : ""));
     montant.append(el("span", "note", ` ${Math.round(g.part * 100)} %`));
     ligne.append(nom, montant);
-    const barre = el("div", "cout-etape-barre");
-    const plein = el("span", "");
-    plein.style.width = `${Math.max(g.total > 0 ? 1 : 0, Math.round(g.part * 100))}%`;
-    barre.append(plein);
+    const barre = barreDe(g.total, "cout-etape-barre");
     const detail = el("ol", "cout-etape-passages");
     g.taches.forEach((t, i) => {
       const li = el("li", "");
       const raison = raisonDuPassage(parId.get(t.id));
-      const modeles = Object.keys(t.modeles || {}).join(", ");
+      const modeles = libelleModeles(t.modeles, euros);   // le prix de chacun, chaque modèle n'ayant pas le même
       const quoi = [`${i + 1}. ${g.libelle}${raison ? ` (${raison})` : ""}`, modeles, echelle(t), etiquetteCO2(t.co2)]
         .filter(Boolean).join(" · ");
-      li.append(marquerTitreCO2(el("span", "", quoi), t.co2), el("span", "", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")));
+      li.append(marquerTitreCO2(el("span", "", quoi), t.co2), el("span", "", euros(t.total) + (t.sans_prix ? " + prix inconnu" : "")),
+                 barreDe(typeof t.total === "number" ? t.total : 0, "cout-passage-barre"));
       detail.append(li);
     });
-    if (g.passages > 1) {          // plusieurs passages : le détail se déplie sous l'étape
+    if (g.passages > 1) {          // plusieurs passages : la barre reste visible, le détail se déplie sous l'étape
       const plie = el("details", "cout-etape");
       const resume = el("summary", "");
-      resume.append(ligne);
-      plie.append(resume, barre, detail);
+      resume.append(ligne, barre);
+      plie.append(resume, detail);
       bloc.append(plie);
     } else {
       const seul = el("div", "cout-etape");

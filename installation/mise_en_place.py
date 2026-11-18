@@ -325,7 +325,7 @@ def ecrire_organisation(factory_json, services, flux, agents, briefs, workflow=N
     else:
         d["workflows"] = list(d.get("workflows") or []) + [
             {"id": workflow["id"], "fonctionnalite": workflow.get("fonctionnalite"), "genre": workflow.get("genre"),
-             "flux": etapes}]
+             "flux": etapes, **({"nature": workflow["nature"]} if workflow.get("nature") else {})}]
     if environnement is not None:
         d["environnement"] = fusionner_environnement(d.get("environnement"), environnement)
     if polyvalente and nouvelles:      # l'équipe est les places : les nombres choisis règlent Facturation

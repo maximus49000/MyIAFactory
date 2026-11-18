@@ -697,6 +697,25 @@ class Lecteur(Base):
         self.assertEqual(etapes, ["questions", "questions"])      # le jugement et la lecture : ligne « Questions »
         self.assertEqual(self.moteur.journal, [])
 
+    def test_le_dossier_nomme_les_agents_par_leur_prenom_avec_leurs_taches(self):
+        """« Où en est Rémi ? » : le dossier de la question porte l'équipe (prénom et tâches pas faites)."""
+        self.demande(type="fonctionnalite", texte="Des écrans")
+        self.ok("demande-traitee", entree={"id": "r1"})
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        t = self.ok("tache", entree={"titre": "Relecture : Accueil", "fonctionnalite": "f1", "role": "relecteur",
+                                     "colonne": "relecture", "etape": "flux:relecture", "agent": "rel-1"})["id"]
+        recus = []
+
+        def appeler(consigne, dossier, modele, **kw):
+            recus.append(json.loads(dossier))
+            return appel.Reponse(json.dumps({**self.PREMIERE, "sur": True}), [dict(USAGE)])
+        self.moteur.appeler = appeler
+        self.demande(type="question", texte="Où en est Rémi ?")
+        self.moteur.tour()
+        equipe = next(d for d in recus if "equipe" in d)["equipe"]
+        (remi,) = [a for a in equipe if a["cle"] == "rel-1"]
+        self.assertEqual((remi["prenom"], [x["id"] for x in remi["taches"]]), ("Rémi", [t]))
+
     def test_un_appel_en_echec_ne_laisse_jamais_le_fil_en_lecture(self):
         def appeler(consigne, dossier, modele, **kw):
             if kw.get("outils"):

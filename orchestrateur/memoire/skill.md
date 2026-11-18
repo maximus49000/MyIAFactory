@@ -1467,3 +1467,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans un cadrage, quand l'utilisateur corrige une règle métier après la rédaction du cahier, il faut réécrire explicitement toutes les parties du cahier affectées (étapes, taille, légendes de maquette) dans le rapport final — le message de confirmation et une nouvelle maquette ne suffisent pas si le champ structuré du cahier n'est pas lui-même renvoyé à jour.
+
+## S245 — Quand une correction de cahier déjà posée par l'utilisateur
+Rôles : dev
+Date : 2026-11-18
+
+Quand une correction de cahier déjà posée par l'utilisateur introduit un besoin distinct de l'objet initial de la fonctionnalité, on l'intègre quand même dans le même cahier corrigé, sans rouvrir de série de questions ; on choisit soi-même la forme des points encore ouverts et on l'explique dans le compte rendu.

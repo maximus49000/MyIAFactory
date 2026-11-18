@@ -4984,6 +4984,23 @@ CONSIGNE_DOIT_MARCHER = (
     "dans le compte rendu de l'élément (`comptes_rendus`).")
 
 
+COMPLEMENT_RAPPEL_MAX = 600
+
+
+def _consigne_de_complement(v):
+    """La consigne qui ouvre une relance pour rapport incomplet : le travail est rendu, on ne le refait pas. Essai réel
+    (RoadmapReborn, f7) : sans elle, l'agent relancé refaisait toute l'étape, constatait « déjà fait », rendait encore
+    sans pièce, et les relances ont coûté la moitié de la fonctionnalité (4,5 $ sur 9 $)."""
+    rendu = " ".join(str((v.get("dernier_rapport") or {}).get("compte_rendu") or "").split())
+    if len(rendu) > COMPLEMENT_RAPPEL_MAX:
+        rendu = rendu[:COMPLEMENT_RAPPEL_MAX - 1] + "…"
+    texte = ("Relance pour compléter le rapport, pas pour refaire le travail : l'étape a déjà été rendue. Tu ne refais "
+             "pas ce travail et tu ne le revérifies pas en entier (pas de relecture de tout le code, pas de suite de tests "
+             "complète) : tu produis seulement ce qui manque ci-dessous, puis tu rends le rapport. Ne corrige que ce qui "
+             "t'empêche de produire ces pièces, et dis-le.")
+    return texte + (f" Compte rendu déjà rendu : « {rendu} »" if rendu else "")
+
+
 def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
     """L'élément arrive à la validation sans rien à montrer (`rien`) ou sans dire ce qui doit marcher (`doit_marcher`) :
     l'étape précédente est relancée une fois avec la consigne (un seul compteur pour les deux) ; au second échec, la
@@ -4997,7 +5014,7 @@ def _rien_a_verifier(projet, etat, v, s, manques=("rien",)):
         _dire(projet, v["fid"], f"« {v['element']['nom']} » arrive à « {s['nom']} » {quoi} : l'étape "
                                 f"« {production[avant]['nom']} » est refaite.")
         consignes = {"rien": CONSIGNE_DE_QUOI_VERIFIER, "doit_marcher": CONSIGNE_DOIT_MARCHER, **CONSIGNES_DE_NATURE}
-        return _tache_de_flux(projet, etat, v, journal=[consignes[m] for m in manques])
+        return _tache_de_flux(projet, etat, v, journal=[_consigne_de_complement(v)] + [consignes[m] for m in manques])
     v.pop("rien_a_verifier", None)
     v["phase"] = "bloque"
     element = v["element"]

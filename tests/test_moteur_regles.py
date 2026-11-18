@@ -1825,6 +1825,23 @@ class Validation(Base):
         self.assertIn("Rien à valider", val["bloquee"])
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "bloque")
 
+    def test_relance_pour_pieces_ne_fait_pas_refaire_le_travail(self):
+        """Essai réel (RoadmapReborn, f7) : relancé pour une pièce manquante, l'agent refaisait toute l'étape, constatait
+        « déjà fait » et rendait encore sans pièce (4,5 $ sur 9 $). La relance dit que le travail est rendu, rappelle son
+        compte rendu, et ne demande que ce qui manque."""
+        self.projet_avec_validation()
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Annulation livrée, 31 tests passent."}}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, rien, rien])
+        essais = self.taches(etape="flux:essai")
+        self.assertEqual(len(essais), 2)
+        textes = [j["texte"] for j in essais[-1]["journal"]]
+        complement = next(t for t in textes if t.startswith("Relance pour compléter le rapport"))
+        self.assertIn("ne refais pas", complement)
+        self.assertIn("Annulation livrée, 31 tests passent.", complement)
+        self.assertLess(textes.index(complement),
+                        next(k for k, t in enumerate(textes) if t.startswith("Rien à valider")))
+
     def test_ce_que_dit_la_validation_est_stocke_sur_la_decision(self):
         self.jusqu_a_la_validation()
         (d,) = self.decisions()

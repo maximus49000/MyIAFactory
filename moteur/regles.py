@@ -108,6 +108,12 @@ GARDE_FOU_PARCOURS_COURT = ("Parcours court (pas de méthode) : le cahier ci-des
                             "arrête-toi et rends `statut: accord_requis` avec `accord.quoi` = « Passer au parcours "
                             "complet (prototype et méthode) » et la raison : le Directeur décide.")
 ETAPES_DE_FLUX = "flux:"
+# Essai réel (RoadmapReborn f9, 2026-11-18) : trois éléments, chacun recevant le cahier entier. Le développeur du
+# backend a aussi codé les autres, puis son vérificateur l'a refusé faute du frontend : une correction en double et une
+# vérification de plus (≈ 1,2 €). Chaque tâche d'un élément doit savoir que d'autres existent.
+PERIMETRE_ELEMENT = ("Ton périmètre est ton élément seul : n'écris pas le code des autres éléments de la "
+                     "fonctionnalité et ne juge jamais ton élément non conforme pour ce qui leur revient (au plus, "
+                     "signale-le dans ton message).")
 # Le parcours d'une petite correction, jugée au diagnostic (essai réel du 2026-11-17 : diagnostic, correctif et livraison,
 # trois agents et 0,94 € pour deux lignes de CSS ; une session directe : 0,10 à 0,40 €).
 TAILLE_PETITE_CORRECTION, PARCOURS_CORRECTION_COURTE = "petite", "correction_courte"
@@ -3652,6 +3658,21 @@ def _chemin_avancement(projet, tid):
         return chemin.as_posix()
 
 
+def _perimetre_de_l_element(f, eid):
+    """Les autres éléments de la fonctionnalité (nom et objectif) et la consigne de s'en tenir au sien ; rien s'il est seul."""
+    # Un élément quitte la file quand il est pris : les autres sont ceux de la file et ceux déjà pris (`elements`).
+    tous = {x["id"]: x for x in (f or {}).get("file") or [] if isinstance(x, dict) and x.get("id")}
+    for k, x in ((f or {}).get("elements") or {}).items():
+        if isinstance(x, dict):
+            tous[k] = {"id": k, **x, **{c: v for c, v in tous.get(k, {}).items() if v}}
+    autres = [x for k, x in tous.items() if k != eid]
+    if not autres:
+        return []
+    lignes = [f"- {x['id']} : {x.get('nom') or x['id']}" + (f" — {x['objectif']}" if x.get("objectif") else "")
+              for x in autres]
+    return ["Les autres éléments de la fonctionnalité, traités par d'autres tâches :", *lignes, PERIMETRE_ELEMENT]
+
+
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
     if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
         return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS]
@@ -3730,8 +3751,9 @@ def _matiere(projet, etat, t):
             else:
                 parties.append("Méthode validée : " + str(methode.get("chemin") or methode.get("lien")
                                                            or "(voir ton brief)"))
+            parties += _perimetre_de_l_element(f, t.get("element"))
             parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
-        fichiers = ((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
+        fichiers =((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
         if fichiers:
             parties.append("Fichiers de ton élément : " + ", ".join(fichiers) + " (si tu dois en toucher un autre, "
                            "dis-le dans ton message).")

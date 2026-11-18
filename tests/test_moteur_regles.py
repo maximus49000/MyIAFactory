@@ -1587,6 +1587,27 @@ class ParcoursSelonLaTaille(Base):
         self.assertEqual([q["id"] for q in f["file"]], ["e1", "e2", "e3"])   # aucun élément pris pour un prototype
         self.assertEqual(self.taches(etape="prototype"), [])
 
+    def test_une_tache_d_un_element_apprend_qu_il_y_en_a_d_autres_et_s_en_tient_au_sien(self):
+        """Essai réel (RoadmapReborn f9, 2026-11-18) : chaque élément recevait le cahier entier ; le développeur du
+        backend codait aussi les autres éléments, puis son vérificateur le refusait faute du frontend (≈ 1,2 € de
+        corrections en double)."""
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.piloter(actions, juges={"decouper": DECOUPAGE})
+        regles.avancer(self.projet, self.etat)
+        t = next(t for t in self.taches() if str(t["etape"]).startswith("flux:"))
+        m = regles._matiere(self.projet, self.etat, t)
+        self.assertIn(regles.PERIMETRE_ELEMENT, m)
+        for autre in ("Profil", "Réglages"):                  # les autres éléments, nommés
+            self.assertIn(autre, m)
+
+    def test_un_element_seul_ne_recoit_pas_de_consigne_de_perimetre(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        regles.avancer(self.projet, self.etat)
+        (t,) = [t for t in self.taches() if str(t["etape"]).startswith("flux:")]
+        self.assertNotIn(regles.PERIMETRE_ELEMENT, regles._matiere(self.projet, self.etat, t))
+
     def test_le_directeur_peut_demander_le_parcours_complet(self):
         self.cahier_de_taille(self.PETITE)
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")

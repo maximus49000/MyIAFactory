@@ -1497,3 +1497,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Avant de corriger un symptôme décrit dans un cahier des charges, vérifier directement dans le code si la fonction citée existe déjà avec le comportement attendu ; si oui, se limiter à relancer les tests ciblés et produire la preuve demandée plutôt que de ré-écrire du code.
+
+## S250 — Avant de conclure qu'une route API n'existe pas, inspecter l
+Rôles : dev
+Date : 2026-11-18
+
+Avant de conclure qu'une route API n'existe pas, inspecter la liste complète des chemins exposés (openapi/swagger) plutôt que de tester un chemin deviné : un préfixe de routeur peut changer le chemin réel.

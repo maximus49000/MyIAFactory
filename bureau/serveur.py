@@ -1170,20 +1170,51 @@ class Bureau(ThreadingHTTPServer):
                 sortie["demande_deposee"] = True
         return 200, sortie
 
+    def connaissances(self, corps):
+        """(code, objet) de `POST /api/connaissances` : `{action: "regler", actif?, niveau?}`, `{action: "valider",
+        ids, textes?}` ou `{action: "ecarter", ids}`. Rend la vue à jour et un message."""
+        from orchestrateur import connaissances
+        from installation import dossier as dossier_inst
+        if not isinstance(corps, dict):
+            return 400, {"erreur": "Demande illisible."}
+        action, ids = corps.get("action"), corps.get("ids")
+        memoire_skill = dossier_inst.skill() / "orchestrateur" / "memoire"
+        try:
+            if action == "regler":
+                actif, niveau = corps.get("actif"), corps.get("niveau")
+                if actif is not None and not isinstance(actif, bool):
+                    return 400, {"erreur": "« actif » vaut true ou false."}
+                ok, message = connaissances.regler(actif=actif, niveau=niveau)
+                if ok and actif is True:
+                    connaissances.traiter(memoire_skill)
+            elif action in ("valider", "ecarter"):
+                if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+                    return 400, {"erreur": "« ids » est une liste non vide d'identifiants."}
+                if action == "valider":
+                    textes = corps.get("textes") if isinstance(corps.get("textes"), dict) else None
+                    ok, message = connaissances.valider(memoire_skill, ids, textes)
+                else:
+                    ok, message = connaissances.ecarter(ids)
+            else:
+                return 400, {"erreur": "« action » vaut regler, valider ou ecarter."}
+        except (OSError, TimeoutError) as e:
+            return 503, {"erreur": f"Partage des connaissances indisponible : {e}"[:200]}
+        return (200 if ok else 409), {**connaissances.vue(), "ok": ok, "message": message}
+
     def _genres_connus(self):
-        from orchestrateur import memoire
+        from orchestrateur import connaissances
         try:
             from installation import dossier as dossier_inst
-            return {g["id"] for g in memoire.genres(dossier_inst.skill() / "orchestrateur" / "memoire")}
+            return {g["id"] for g in connaissances.genres(dossier_inst.skill() / "orchestrateur" / "memoire")}
         except Exception:
             return set()
 
     def _genres_pour_le_chef(self):
         """Les genres de la mémoire de la skill, tels que le chef les lit : [{id, domaine, livrable, outils}]."""
-        from orchestrateur import memoire
+        from orchestrateur import connaissances
         try:
             from installation import dossier as dossier_inst
-            return list(memoire.genres(dossier_inst.skill() / "orchestrateur" / "memoire"))
+            return list(connaissances.genres(dossier_inst.skill() / "orchestrateur" / "memoire"))
         except Exception:
             return []
 
@@ -1411,6 +1442,9 @@ class Handler(BaseHTTPRequestHandler):
             if ids is not None and len(ids) != 1:
                 return self._json(404, {"erreur": "Ce brouillon n'existe pas."})
             return self._json(*creations.liste(self.server, ids[0] if ids else None))
+        if chemin == "/api/connaissances":   # le partage des connaissances : un réglage de tout le bureau
+            from orchestrateur import connaissances
+            return self._json(200, connaissances.vue())
         if chemin == "/api/conso":
             return self._json(200, self.server.conso.lire())
         if chemin == "/api/processus":   # les programmes qui chargent l'ordinateur (environ 1 s de mesure)
@@ -1848,6 +1882,23 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*self.server.arreter_processus(corps.get("pid") if isinstance(corps, dict) else None))
+        if chemin == "/api/connaissances":
+            if (self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= 256 * 1024:
+                self._vider_corps()
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*self.server.connaissances(corps))
         if chemin not in ("/api/reglages", "/api/demande"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)

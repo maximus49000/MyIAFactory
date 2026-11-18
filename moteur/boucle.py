@@ -28,6 +28,7 @@ from pathlib import Path
 from bureau import attente
 from bureau import reglages as reglages_bureau
 from moteur import agents, appel, cloud, detache, figes, git_sur, jugement, regles
+from orchestrateur import anonymat, connaissances
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
@@ -45,6 +46,7 @@ ETAPE_QUESTIONS = "questions"    # les réponses aux questions (jugement et agen
 DELAI_GIT_S = 60
 INTERVALLE_MAJ_S = 15 * 60       # la skill regarde GitHub toutes les 15 minutes (conception 2026-11-16-mise-a-jour-automatique)
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
+CONNAISSANCES_TOUS_LES_S = 60      # la file du partage des connaissances (relecture, envoi)
 ECRITURE_LECONS_TOUS_LES_S = 300  # une leçon validée mais pas encore écrite dans la mémoire de la skill est réessayée ainsi
 REECRIRE_TOUS_LES_S = 20        # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
 OUTILS_DE_REPONSE = "Read, Grep, Glob"   # l'agent qui répond à une question lit, il ne modifie rien
@@ -197,6 +199,7 @@ class Moteur:
         self._processus_du_tour = None
         self._prendre_les_projets_ajoutes()
         self._installations()
+        self._connaissances()
         self._traiter_les_reveils()
         self._arreter_les_emulateurs_oublies()
         for projet in list(self.projets):
@@ -480,6 +483,33 @@ class Moteur:
             return
         if r.get("ecrites"):
             self._noter(projet, f"{r['ecrites']} leçon(s) en attente enfin écrite(s) dans la mémoire de la skill")
+
+    def _connaissances(self):
+        """Le partage des connaissances (réglage du bureau) : les leçons confiées sont relues par Claude (Haiku) pour
+        les anonymiser, puis chiffrées et poussées ; au plus une fois par minute, jamais quand le partage est désactivé.
+        Le coût de chaque relecture est compté (le surcoût affiché au bureau)."""
+        maintenant = self.horloge()
+        if maintenant - getattr(self, "_connaissances_vues", float("-inf")) < CONNAISSANCES_TOUS_LES_S:
+            return
+        self._connaissances_vues = maintenant
+        try:
+            if connaissances.cle() is None or not connaissances.a_faire():
+                return
+            memoire_skill = Path(__file__).resolve().parents[1] / "orchestrateur" / "memoire"
+            bilan = connaissances.traiter(memoire_skill, reecrire=self._relire_connaissance)
+        except (OSError, TimeoutError, ValueError) as e:
+            self.journal.append(f"partage des connaissances : {e}"[:300])
+            return
+        if bilan["envoyees"]:
+            self.journal.append(f"partage des connaissances : {bilan['envoyees']} leçon(s) anonymisée(s), chiffrée(s) "
+                                "et envoyée(s)")
+        for err in bilan["erreurs"]:
+            self.journal.append(f"partage des connaissances : {err}")
+
+    def _relire_connaissance(self, titre, texte):
+        rep = self.appeler(anonymat.CONSIGNE_RELECTURE, anonymat.message_relecture(titre, texte), "haiku",
+                           couche="claude", delai_s=180)
+        return anonymat.lire_relecture(rep.texte), getattr(rep, "cout_usd", None) or 0.0
 
     def _quota(self, projet):
         maintenant = self.horloge()

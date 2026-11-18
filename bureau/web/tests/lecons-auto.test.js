@@ -20,7 +20,7 @@ test("la case « Dossier approuvé pour les sessions cloud » : son aide, et ell
 
 test("l'aide dit ce que fait la case", () => {
   assert.equal(AIDE_LECONS_AUTO, "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre ou skill). " +
-    "Les leçons genre et skill vont dans la skill partagée.");
+    "Les leçons genre et skill vont au partage des connaissances (s'il est activé).");
 });
 
 test("cocher écrit lecons_auto vrai dans les réglages", async () => {

@@ -14,6 +14,7 @@ import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal}
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 import {lignesModele} from "./polyvalent.js";
+import {sectionPartage} from "./partage.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -33,7 +34,7 @@ function lienTache(ctx, id, texte) {
 }
 
 export const AIDE_LECONS_AUTO = "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre " +
-  "ou skill). Les leçons genre et skill vont dans la skill partagée.";
+  "ou skill). Les leçons genre et skill vont au partage des connaissances (s'il est activé).";
 
 export const AIDE_ANALYSE_BLOCAGES = "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance " +
   "avec une consigne, confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. " +
@@ -275,6 +276,7 @@ export function contenuDirecteur(ctx, contenu) {
   if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
     section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseCloudDossier(ctx));
   }
+  if (e.agir && (e.version ?? 1) >= 4) contenu.append(sectionPartage());   // un réglage de tout le bureau
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
   if (e.agir && e.lecons_auto !== true && enAttente.length >= 2) {
     // Tout valider ou tout invalider, chaque leçon avec l'étage montré dans son menu (même s'il a été changé).

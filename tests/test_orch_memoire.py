@@ -10,6 +10,7 @@ from unittest import mock
 
 from bureau import releve
 from orchestrateur import fiches, memoire
+from tests import CLE_TEST, connaissances_jetables
 from tests.orch_aide import AvecProjet, RACINE
 
 SKILL = """# Mémoire de la skill
@@ -102,6 +103,7 @@ class AvecDepots(unittest.TestCase):
         for clone in (self.a, self.b):   # les copies pointent sur le distant de leur propre dossier
             git("remote", "set-url", "origin", str(self.distant), cwd=clone)
         self.ma, self.mb = self.a / "memoire", self.b / "memoire"
+        self.connaissances = connaissances_jetables(self)
 
     @staticmethod
     def configurer(depot):
@@ -119,25 +121,25 @@ class AvecDepots(unittest.TestCase):
 class TestMemoire(AvecDepots):
     def test_lire_par_role(self):
         ids = lambda m: [x["id"] for x in m]  # noqa: E731
-        self.assertEqual(ids(memoire.lire(self.ma, None, "dev")["skill"]), ["S1", "S2"])
-        self.assertEqual(ids(memoire.lire(self.ma, None, "qa")["skill"]), ["S2", "S3"])
-        self.assertEqual(ids(memoire.lire(self.ma, None, "cadrage")["skill"]), ["S2"])
-        s2 = memoire.lire(self.ma, None, "dev")["skill"][1]
+        self.assertEqual(ids(memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]), ["S1", "S2"])
+        self.assertEqual(ids(memoire.lire(self.ma, None, "qa", cle=CLE_TEST)["skill"]), ["S2", "S3"])
+        self.assertEqual(ids(memoire.lire(self.ma, None, "cadrage", cle=CLE_TEST)["skill"]), ["S2"])
+        s2 = memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"][1]
         self.assertEqual((s2["titre"], s2["roles"], s2["date"]), ("Noter les décisions", ["tous"], "2026-11-02"))
         self.assertEqual(s2["texte"], "Noter chaque décision dans le suivi.")
 
     def test_genre_d_un_autre_projet_jamais_lu(self):
-        a = memoire.lire(self.ma, "vitrine", "dev")["genre"]
-        b = memoire.lire(self.ma, "jeu-web", "dev")["genre"]
+        a = memoire.lire(self.ma, "vitrine", "dev", cle=CLE_TEST)["genre"]
+        b = memoire.lire(self.ma, "jeu-web", "dev", cle=CLE_TEST)["genre"]
         self.assertEqual([x["texte"] for x in a], ["Garder les textes d'accueil courts (leçon du genre A)."])
         self.assertEqual([x["texte"] for x in b], ["Séparer la boucle de jeu du dessin (leçon du genre B)."])
-        self.assertEqual(memoire.lire(self.ma, "vitrine", "qa")["genre"][0]["id"], "G1")   # roles: tous
-        self.assertEqual(memoire.lire(self.ma, "jeu-web", "qa")["genre"], [])   # roles: dev seulement
+        self.assertEqual(memoire.lire(self.ma, "vitrine", "qa", cle=CLE_TEST)["genre"][0]["id"], "G1")   # roles: tous
+        self.assertEqual(memoire.lire(self.ma, "jeu-web", "qa", cle=CLE_TEST)["genre"], [])   # roles: dev seulement
 
     def test_genre_nul(self):
         for genre in (None, "inconnu", "../skill", "", "A", 3):
-            self.assertEqual(memoire.lire(self.ma, genre, "dev")["genre"], [], repr(genre))
-        self.assertEqual(memoire.lire(self.tmp / "vide", None, "dev"), {"skill": [], "genre": []})
+            self.assertEqual(memoire.lire(self.ma, genre, "dev", cle=CLE_TEST)["genre"], [], repr(genre))
+        self.assertEqual(memoire.lire(self.tmp / "vide", None, "dev", cle=CLE_TEST), {"skill": [], "genre": []})
 
     def test_genres(self):
         (self.ma / "genres" / "LISEZMOI.md").write_text("# Le format\n", encoding="utf-8")
@@ -169,7 +171,7 @@ class TestMemoire(AvecDepots):
         self.assertEqual(git("log", "-1", "--format=%s", cwd=self.distant), "Mémoire (skill) : Titre court")   # poussé
         ok, _ = memoire.ajouter(self.ma, "genre", "vitrine", self.lecon("Autre", "Autre texte.", ["dev"]), [])
         self.assertTrue(ok)
-        lecons = memoire.lire(self.ma, "vitrine", "dev")["genre"]
+        lecons = memoire.lire(self.ma, "vitrine", "dev", cle=CLE_TEST)["genre"]
         self.assertEqual([x["id"] for x in lecons], ["G1", "G2"])
         self.assertEqual(lecons[1]["roles"], ["dev"])
         self.assertEqual(git("status", "--porcelain", cwd=self.a), "")
@@ -518,7 +520,7 @@ class TestMemoireLot(AvecArbreModifie):
         self.assertLessEqual(verbes.count("pull"), 1)
         self.assertEqual(verbes.count("push"), 1)
         self.assertEqual(self.nb_commits(self.a), n + 4)
-        ids = [x["id"] for x in memoire.lire(self.ma, None, "dev")["skill"]]
+        ids = [x["id"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]]
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
 
@@ -631,14 +633,14 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
                        roles=["dev"])["id"]
         self.ok("lecon", entree={"action": "appliquer", "id": i, "verdict": "valider"})
         self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
-        textes = [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev")["genre"]]
+        textes = [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev", cle=CLE_TEST)["genre"]]
         self.assertIn("Toujours relancer les tests après un changement.", textes)
         self.assertEqual(git("log", "-1", "--format=%s", cwd=self.distant)[:15], "Mémoire (genre)")
 
     def test_etage_change_au_verdict(self):
         i = self.noter(etage_propose="genre", texte_general="Un conseil général.")["id"]
         self.ok("lecon", entree={"action": "appliquer", "id": i, "verdict": "valider", "etage": "skill"})
-        self.assertIn("Un conseil général.", [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]])
+        self.assertIn("Un conseil général.", [x["texte"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]])
         j = self.noter(texte="Locale")["id"]   # étage projet : jamais écrit dans le dépôt de la skill
         n = self.nb_commits(self.a)
         self.ok("lecon", entree={"action": "appliquer", "id": j, "verdict": "valider"})
@@ -647,15 +649,15 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         self.assertEqual(self.outil("lecon", entree={"action": "appliquer", "id": k, "verdict": "valider",
                                                      "etage": "genre"})[0], 1)
 
-    def test_appliquer_genre_echec_laisse_a_valider(self):
+    def test_appliquer_genre_mot_interdit_efface_avant_le_partage(self):
+        # Partage des connaissances : un mot du projet n'arrête plus la leçon, il est effacé avant tout envoi.
         i = self.noter(etage_propose="genre", texte_general="Les rues de la ville lumiere sont étroites.")["id"]
-        n = self.nb_commits(self.a)
-        code, sortie = self.outil("lecon", entree={"action": "appliquer", "id": i, "verdict": "valider"})
-        self.assertEqual(code, 1)
-        self.assertIn("mot interdit", sortie["erreur"])
-        self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "à valider")
-        self.assertEqual([x["id"] for x in self.ok("etat")["lecons"]], [i])
-        self.assertEqual(self.nb_commits(self.a), n)
+        self.ok("lecon", entree={"action": "appliquer", "id": i, "verdict": "valider"})
+        self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
+        textes = [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev", cle=CLE_TEST)["genre"]]
+        self.assertIn("Les rues de la le projet sont étroites.", textes)
+        journal = git("--git-dir", str(self.distant), "log", "-p", "--all", cwd=self.tmp)
+        self.assertNotIn("lumi", journal.lower())
 
     def test_appliquer_genre_sans_genre_au_projet(self):
         d = json.loads(self.factory.read_text(encoding="utf-8"))
@@ -693,7 +695,7 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         code, r = self.verdict(i)
         self.assertEqual(code, 0, r)
         self.assertNotIn("en_attente", r)
-        self.assertIn("Un conseil général.", [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]])
+        self.assertIn("Un conseil général.", [x["texte"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]])
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
         self.assertEqual((self.a / "autre.txt").read_text(encoding="utf-8"), "v2\n")
         self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
@@ -703,64 +705,58 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
 
     def test_distant_en_avance_arbre_modifie_attend_puis_s_ecrit_seule(self):
+        from orchestrateur import connaissances
         self.depot_en_travail()
         memoire.ajouter(self.mb, "skill", None, self.lecon("Leçon de B", "Texte de B."), [])
         i = self.generale("Un conseil du genre.", etage="genre")
         code, r = self.verdict(i)
         self.assertEqual(code, 0, r)
-        self.assertTrue(r["en_attente"])
-        self.assertIn("nouveau", r["raison"])
-        releve_ = self.ok("releve")
-        self.assertEqual(releve_["lecons"], [])   # elle a quitté la liste « à valider »
-        self.assertEqual([(x["id"], x["etage"]) for x in releve_["lecons_en_attente"]], [(i, "genre")])
-        self.assertIn("nouveau", releve_["lecons_en_attente"][0]["raison"])
-        self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
-        self.assertEqual([x["id"] for x in self.ok("etat")["lecons"]], [])
-        self.assertEqual(self.verdict(i)[0], 1)   # elle n'est plus à valider
-        # Tant que l'arbre a d'autres modifications, le réessai ne change rien et garde la raison.
-        r = self.ok("lecon", entree={"action": "reessayer"})
-        self.assertEqual((r["ecrites"], r["en_attente"]), (0, 1))
-        self.assertEqual(len(self.ok("releve")["lecons_en_attente"]), 1)
-        self.commiter_tout()
-        r = self.ok("lecon", entree={"action": "reessayer"})
-        self.assertEqual((r["ecrites"], r["en_attente"]), (1, 0))
+        self.assertNotIn("en_attente", r)   # le projet n'attend plus rien : la file du partage s'en charge
         self.assertEqual(self.ok("releve")["lecons_en_attente"], [])
+        self.assertEqual(connaissances.entrees()[0]["etat"], "envoyee")
+        self.assertTrue(connaissances.entrees()[0].get("a_pousser"))   # commitée, pas encore poussée
+        connaissances.traiter(self.ma)
+        self.assertTrue(connaissances.entrees()[0].get("a_pousser"))   # l'arbre a toujours d'autres modifications
+        self.commiter_tout()
+        connaissances.traiter(self.ma)
+        self.assertFalse(connaissances.entrees()[0].get("a_pousser"))
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
-        self.assertIn("Un conseil du genre.", [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev")["genre"]])
-        self.assertIn("Texte de B.", [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]])
-        self.assertEqual(self.ok("lecon", entree={"action": "reessayer"})["en_attente"], 0)
+        self.assertIn("Un conseil du genre.",
+                      [x["texte"] for x in memoire.lire(self.ma, "vitrine", "dev", cle=CLE_TEST)["genre"]])
+        self.assertIn("Texte de B.", [x["texte"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]])
 
-    def test_push_refuse_met_la_lecon_en_attente_et_elle_s_ecrit_au_reessai(self):
+    def test_push_refuse_la_lecon_est_poussee_au_passage_suivant(self):
+        from orchestrateur import connaissances
         i = self.generale()
         with mock.patch("orchestrateur.outil.GIT", espion([], {"push": "rejeté (droits)"})):
             code, r = self.verdict(i)
         self.assertEqual(code, 0, r)
-        self.assertTrue(r["en_attente"])
-        self.assertIn("rejeté (droits)", r["raison"])
         self.assertEqual(self.fiche_lea()["lecons"][-1]["etat"], "validée")
-        en_attente = self.ok("releve")["lecons_en_attente"]
-        self.assertEqual([x["id"] for x in en_attente], [i])
-        self.assertIn("rejeté (droits)", en_attente[0]["raison"])
+        x = connaissances.entrees()[0]
+        self.assertTrue(x.get("a_pousser"))
+        self.assertIn("rejeté (droits)", x["raison"])
         nb = self.nb_commits(self.a)
-        r = self.ok("lecon", entree={"action": "reessayer"})   # le dépôt a déjà la leçon : il ne reste qu'à pousser
-        self.assertEqual((r["ecrites"], r["en_attente"]), (1, 0))
+        connaissances.traiter(self.ma)   # le dépôt a déjà la leçon : il ne reste qu'à pousser
+        self.assertFalse(connaissances.entrees()[0].get("a_pousser"))
         self.assertEqual(self.nb_commits(self.a), nb)   # pas de second commit de la même leçon
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
 
-    def test_fichier_de_memoire_modifie_la_lecon_reste_a_valider_avec_la_raison(self):
+    def test_fichier_de_memoire_modifie_la_lecon_attend_dans_la_file_du_partage(self):
+        from orchestrateur import connaissances
         (self.ma / "skill.md").write_text(SKILL + "\nUne retouche.\n", encoding="utf-8")
         i = self.generale()
         code, r = self.verdict(i)
-        self.assertEqual(code, 1)
-        self.assertIn("modifications non commitées", r["erreur"])
-        releve_ = self.ok("releve")
-        self.assertEqual([x["id"] for x in releve_["lecons"]], [i])
-        self.assertIn("modifications non commitées", releve_["lecons"][0]["refus"])
-        self.assertEqual(releve_["lecons_en_attente"], [])
-        self.assertEqual(releve.valider(releve_), [], releve.valider(releve_))
-        git("checkout", "--", "memoire/skill.md", cwd=self.a)   # la main extérieure a fini : la leçon passe
-        self.assertEqual(self.verdict(i)[0], 0)
-        self.assertNotIn("refus", json.dumps(self.ok("releve")["lecons"]))
+        self.assertEqual(code, 0, r)   # validée : son envoi est l'affaire de la file du bureau
+        self.assertEqual(self.ok("releve")["lecons"], [])
+        x = connaissances.entrees()[0]
+        self.assertEqual(x["etat"], "a_relire")
+        self.assertIn("modifications non commitées", x["raison"])
+        git("checkout", "--", "memoire/skill.md", cwd=self.a)   # la main extérieure a fini : le Directeur valide
+        ok, message = connaissances.valider(self.ma, [x["id"]])
+        self.assertTrue(ok, message)
+        self.assertEqual(connaissances.entrees()[0]["etat"], "envoyee")
+        self.assertIn("Un conseil général.",
+                      [x["texte"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]])
 
     def test_lot_une_synchronisation_et_un_resultat_par_lecon(self):
         self.depot_en_travail()
@@ -775,17 +771,14 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
             r = self.ok("lecon", entree={"action": "appliquer", "lot": lot})
         par_id = {x["id"]: x for x in r["resultats"]}
         self.assertEqual([x["id"] for x in r["resultats"]], [x["id"] for x in lot])
-        self.assertTrue(all(par_id[x]["ok"] for x in (a, b, d, e)), r)
-        self.assertFalse(par_id[c]["ok"])
-        self.assertIn("mot interdit", par_id[c]["refus"])
+        self.assertTrue(all(par_id[x]["ok"] for x in (a, b, c, d, e)), r)   # le mot interdit est effacé, pas refusé
         self.assertFalse(par_id["inconnue:L9"]["ok"])
         verbes = [x[0] for x in appels]
         self.assertEqual((verbes.count("fetch"), verbes.count("pull"), verbes.count("push")), (1, 0, 1))
-        self.assertEqual([x["id"] for x in self.ok("releve")["lecons"]], [c])   # la refusée reste, avec sa raison
-        self.assertIn("mot interdit", self.ok("releve")["lecons"][0]["refus"])
-        textes = [x["texte"] for x in memoire.lire(self.ma, None, "dev")["skill"]]
-        self.assertIn("Premier conseil.", textes)
-        self.assertIn("Cinquième conseil.", textes)
+        self.assertEqual(self.ok("releve")["lecons"], [])
+        textes = [x["texte"] for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"]]
+        for t in ("Premier conseil.", "Cinquième conseil.", "Les rues de la le projet sont étroites."):
+            self.assertIn(t, textes)
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.a), git("rev-parse", "HEAD", cwd=self.distant))
 
     def test_lot_deux_fois_la_meme_lecon(self):
@@ -793,7 +786,7 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         r = self.ok("lecon", entree={"action": "appliquer", "lot": [{"id": a, "verdict": "valider"},
                                                                      {"id": a, "verdict": "valider"}]})
         self.assertEqual([x["ok"] for x in r["resultats"]], [True, False])
-        self.assertEqual(sum(1 for x in memoire.lire(self.ma, None, "dev")["skill"] if x["texte"] == "Un conseil général."), 1)
+        self.assertEqual(sum(1 for x in memoire.lire(self.ma, None, "dev", cle=CLE_TEST)["skill"] if x["texte"] == "Un conseil général."), 1)
 
     def test_reessayer_sans_attente_ne_touche_pas_au_depot(self):
         appels = []
@@ -821,13 +814,33 @@ class TestMemoireCommandes(AvecProjet, AvecDepots):
         self.assertEqual(git("log", "-1", "--format=%s", cwd=self.distant), "Mémoire (genre) : nouveau genre jeu-3d")
         self.assertEqual(self.outil("genre", entree={"action": "fixer", "genre": "../x", "description": "d"})[0], 1)
 
-    def test_genre_fixer_nouveau_echec_laisse_le_genre(self):
+    def test_genre_fixer_nouveau_description_anonymisee(self):
         d = json.loads(self.factory.read_text(encoding="utf-8"))
         d["mots_interdits"] = ["trois dimensions"]
         self.factory.write_text(json.dumps(d), encoding="utf-8")
-        code, _ = self.outil("genre", entree={"action": "fixer", "genre": "jeu-3d", "description": "Un jeu en 3 dimensions et trois dimensions"})
+        self.ok("genre", entree={"action": "fixer", "genre": "jeu-3d",
+                                 "description": "Un jeu en 3 dimensions et trois dimensions"})
+        self.assertIn("Domaine : Un jeu en 3 dimensions et le projet",
+                      (self.ma / "genres" / "jeu-3d.md").read_text(encoding="utf-8"))
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["mots_interdits"] = ["jeu"]   # l'identifiant même nomme le projet : refusé, le genre reste
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        code, _ = self.outil("genre", entree={"action": "fixer", "genre": "jeu-2d", "description": "Plat"})
         self.assertEqual(code, 1)
-        self.assertEqual(json.loads(self.factory.read_text(encoding="utf-8"))["genre"], "vitrine")
+        self.assertEqual(json.loads(self.factory.read_text(encoding="utf-8"))["genre"], "jeu-3d")
+
+    def test_partage_desactive_rien_ne_part_et_reste_au_poste(self):
+        from orchestrateur import connaissances
+        connaissances_jetables(self, actif=False)
+        n = self.nb_commits(self.a)
+        self.verdict(self.generale())
+        self.ok("genre", entree={"action": "fixer", "genre": "jeu-local", "description": "Un genre local"})
+        self.assertEqual(self.nb_commits(self.a), n)
+        self.assertFalse((self.ma / "genres" / "jeu-local.md").exists())
+        m = self.ok("memoire", entree={"role": "dev"})
+        self.assertIn("Un conseil général.", [x["texte"] for x in m["skill"]])   # la sienne reste servie
+        self.assertNotIn("S1", [x["id"] for x in m["skill"]])   # pas celles du dépôt partagé
+        self.assertEqual(connaissances.entrees()[0]["etat"], "locale")
 
     def test_decision_confirmer_genre_connait_les_genres(self):
         self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "confirmer_genre",

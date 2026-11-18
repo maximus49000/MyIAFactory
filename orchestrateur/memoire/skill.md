@@ -1539,3 +1539,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Avant de concevoir un contrôle d'accès pour une nouvelle règle (« qui a le droit de remplir/modifier ce champ »), vérifier si l'application dispose déjà d'un système de permissions par utilisateur ; si non, ne pas ajouter de contrôle technique isolé pour cette seule règle — elle reste une convention d'usage, cohérente avec le reste de l'application.
+
+## S257 — Quand un test d'aller-retour (export puis reimport) echoue,
+Rôles : dev
+Date : 2026-11-18
+
+Quand un test d'aller-retour (export puis reimport) echoue, verifier d'abord la fonction d'aide qui reconstruit le fichier intermediaire : si elle n'ecrase que les valeurs fournies sans effacer les anciennes au-dela de la nouvelle liste, le test accuse a tort le code applicatif.

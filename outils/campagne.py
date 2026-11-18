@@ -19,6 +19,11 @@ from datetime import datetime
 from pathlib import Path
 
 VERROU = Path("~/MyIAFactory/tests-en-cours.json").expanduser()
+# Les campagnes qui attendent leur tour, une par fichier `<pid>.json` ({pid, depuis, racine, tache, motif}) : le bureau
+# dit sur la fiche de la tâche que son agent attend le poste (essai réel du 2026-11-18 : Hugo attendait le verrou, sa
+# fiche n'en disait rien et l'utilisateur le croyait bloqué). `tache` : la clé de l'agent (`MYIAFACTORY_TACHE`).
+ATTENTES = Path("~/MyIAFactory/tests-en-attente").expanduser()
+VARIABLE_TACHE = "MYIAFACTORY_TACHE"
 PAS_S = 10
 
 
@@ -122,26 +127,66 @@ def liberer(verrou=VERROU):
             pass
 
 
-def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print):
+def _noter_l_attente(attentes, racine, motif, depuis):
+    try:
+        Path(attentes).mkdir(parents=True, exist_ok=True)
+        (Path(attentes) / f"{os.getpid()}.json").write_text(json.dumps(
+            {"pid": os.getpid(), "depuis": depuis, "racine": str(racine), "tache": os.environ.get(VARIABLE_TACHE) or None,
+             "motif": motif}), encoding="utf-8")
+    except OSError:
+        pass      # une aide pour le bureau : l'attente continue sans elle
+
+
+def _oublier_l_attente(attentes):
+    try:
+        (Path(attentes) / f"{os.getpid()}.json").unlink()
+    except OSError:
+        pass
+
+
+def en_attente(attentes=ATTENTES, vivant=pid_vivant):
+    """Les campagnes qui attendent leur tour, par clé d'agent : `{tache: {depuis, motif}}` (celles d'un processus mort
+    ou sans agent sont ignorées). Lecture seule, ne lève jamais."""
+    sortie = {}
+    try:
+        fichiers = sorted(Path(attentes).glob("*.json"))
+    except OSError:
+        return sortie
+    for f in fichiers:
+        x = _lire(f)
+        if (isinstance(x, dict) and isinstance(x.get("tache"), str) and x["tache"] and vivant(x.get("pid"))
+                and x["tache"] not in sortie):
+            sortie[x["tache"]] = {"depuis": x.get("depuis"), "motif": x.get("motif")}
+    return sortie
+
+
+def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
+                      attentes=ATTENTES):
     """Prend le verrou dès que le poste est libre. Rend vrai quand c'est fait, faux si `attendre` est faux et qu'une
-    autre campagne tourne."""
-    deja_dit = None
-    while True:
-        autre = prendre(verrou, racine)
-        directes = [] if autre else suites_sans_verrou(lister)
-        if not autre and not directes:
-            return True
-        if not autre:
-            liberer(verrou)      # une suite lancée sans le lanceur tourne : on lui laisse le poste
-        motif = (f"une campagne tourne déjà (processus {autre.get('pid')}, depuis {autre.get('debut')})" if autre
-                 else f"une suite lancée sans le lanceur tourne (processus {', '.join(str(p) for p, _ in directes[:3])})")
-        if not attendre:
-            dire(f"Refusé : {motif}. Une seule campagne de tests à la fois sur le poste.")
-            return False
-        if motif != deja_dit:
-            dire(f"En attente : {motif}. Une seule campagne de tests à la fois sur le poste.", flush=True)
-            deja_dit = motif
-        dormir(PAS_S)
+    autre campagne tourne. Pendant qu'elle attend, la campagne est notée dans `attentes` (voir `en_attente`)."""
+    deja_dit, depuis = None, None
+    try:
+        while True:
+            autre = prendre(verrou, racine)
+            directes = [] if autre else suites_sans_verrou(lister)
+            if not autre and not directes:
+                return True
+            if not autre:
+                liberer(verrou)      # une suite lancée sans le lanceur tourne : on lui laisse le poste
+            motif = (f"une campagne tourne déjà (processus {autre.get('pid')}, depuis {autre.get('debut')})" if autre
+                     else f"une suite lancée sans le lanceur tourne (processus {', '.join(str(p) for p, _ in directes[:3])})")
+            if not attendre:
+                dire(f"Refusé : {motif}. Une seule campagne de tests à la fois sur le poste.")
+                return False
+            if motif != deja_dit:
+                dire(f"En attente : {motif}. Une seule campagne de tests à la fois sur le poste.", flush=True)
+                depuis = depuis or datetime.now().astimezone().isoformat(timespec="seconds")
+                _noter_l_attente(attentes, racine, motif, depuis)
+                deja_dit = motif
+            dormir(PAS_S)
+    finally:
+        if deja_dit is not None:
+            _oublier_l_attente(attentes)
 
 
 def _lancer(commande, dossier):
@@ -152,11 +197,12 @@ def _lancer(commande, dossier):
 
 
 def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
-             lancer=_lancer):
+             lancer=_lancer, attentes=ATTENTES):
     """Les tests d'un projet, une campagne à la fois sur le poste : attend son tour, lance `commande` dans `dossier`,
     rend son code (3 si refusé sans attendre) et libère toujours le verrou."""
     racine = str(Path(dossier or os.getcwd()).resolve())
-    if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire):
+    if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire,
+                             attentes=attentes):
         return 3
     try:
         return lancer(list(commande), dossier)

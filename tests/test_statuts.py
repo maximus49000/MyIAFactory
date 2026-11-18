@@ -61,6 +61,16 @@ class TestStatuts(unittest.TestCase):
         self.assertEqual(agents[1]["statut"], "sans_nouvelles")     # aucun processus : rien ne change
         self.assertEqual(agents[2]["statut"], "libre")
 
+    def test_lot_la_bulle_nomme_la_tache_que_la_session_fait(self):
+        """Essai réel (2026-11-18, lot L5) : la bulle de Hugo nommait t68, finie, pendant qu'il faisait t69."""
+        agents = [{"id": "agent-1", "statut": "travail", "bulle": "API bilan et objectifs", "taches": ["t68"]}]
+        taches = [{"id": "t68", "titre": "API bilan et objectifs", "agent": "agent-1", "dans_le_lot": {"etat": "faite"}},
+                  {"id": "t69", "titre": "Export et réimport Excel", "agent": "agent-1",
+                   "travail": {"agent": "agent-1", "lot": {"rang": 2, "total": 2}}}]
+        statuts.agents_au_travail(agents, taches)
+        self.assertEqual((agents[0]["statut"], agents[0]["bulle"]), ("travail", "Export et réimport Excel"))
+        self.assertEqual(agents[0]["taches"], ["t68", "t69"])
+
     def test_un_agent_qui_travaille_est_une_activite(self):
         """Essai réel : « sans activité depuis 48 min » alors que Léa lançait ses tests."""
         maintenant = datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc)

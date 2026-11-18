@@ -125,5 +125,37 @@ class Fourchette(unittest.TestCase):
         self.assertLessEqual(r["reste"]["min_s"], r["reste"]["max_s"])
 
 
+
+class Lot(unittest.TestCase):
+    """Essai réel du 2026-11-18 (lot L5) : t68 finie disait « En cours : termine » et t69, que la même session faisait,
+    ne disait rien ; l'utilisateur croyait l'agent arrêté."""
+    TACHES = TACHES_PASSEES + [{"id": "t69", "titre": "Export et réimport Excel"}]
+
+    def calculer(self, t, moteur_vivant=True):
+        return avancement.pour_la_tache(t, self.TACHES, [], moteur_vivant, MAINTENANT, DELAI)
+
+    def test_tache_faite_dit_que_l_agent_poursuit_le_lot(self):
+        lot = {"etat": "faite", "agent": "agent-1", "courante": "t69", "rang": 1, "total": 2,
+               "avancement": {"points": [{"texte": "Modele", "fait": True}], "en_cours": None}}
+        r = self.calculer(tache(id="t68", dans_le_lot=lot))
+        self.assertEqual(r["etat"], "lot_faite")
+        self.assertIn("poursuit le lot dans la même session, sur t69 (Export et réimport Excel)", r["etat_texte"])
+        self.assertEqual((r["points"][0]["fait"], r["en_cours"], r["reste"]), (True, None, None))
+
+    def test_tache_a_venir_attend_son_tour_dans_le_lot(self):
+        r = self.calculer(tache(id="t70", dans_le_lot={"etat": "a_venir", "courante": "t69", "avancement": None}))
+        self.assertEqual(r["etat"], "lot_a_venir")
+        self.assertIn("l'agent fait d'abord t69", r["etat_texte"])
+        self.assertEqual(self.calculer(tache(dans_le_lot={"etat": "faite", "courante": "t69"}),
+                                       moteur_vivant=False)["etat"], "moteur_arrete")
+
+    def test_attente_du_verrou_de_tests(self):
+        r = calculer(tache(travail=travail(action_s=900, vie_s=900, attente_tests={
+            "depuis": il_y_a(300), "motif": "une campagne tourne déjà"})))
+        self.assertEqual(r["etat"], "attente_tests")
+        self.assertEqual(r["etat_texte"], "attend son tour pour les tests (une autre campagne tourne sur le poste) "
+                                          "depuis 5 min")
+
+
 if __name__ == "__main__":
     unittest.main()

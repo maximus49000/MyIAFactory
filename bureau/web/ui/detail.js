@@ -159,6 +159,14 @@ function blocAvancement(av, travail) {
   etat.append(el("strong", "", "État : "), document.createTextNode(av.etatTexte));
   bloc.append(etat);
   if (!travail && av.sansListe) return bloc;      // l'agent a fini (ou le moteur est arrêté) : pas de « il n'a rien fait »
+  if (av.dansLeLot) {      // finie ou à venir dans le lot : sa liste seule, le temps est sur la tâche que fait la session
+    if (!av.sansListe) {
+      const liste = el("ul", "avancement-points");
+      for (const p of av.points) liste.append(el("li", p.fait ? "fait" : "", (p.fait ? "✔ " : "○ ") + p.texte));
+      bloc.append(ligne("Où il en est", ""), liste);
+    }
+    return bloc;
+  }
   if (av.sansListe) {
     const phase = av.phase ? PHASES[av.phase] || PHASES.autre : null;
     bloc.append(ligne("Où il en est", (phase || "pas encore d'action") + " · liste de l'agent absente"));

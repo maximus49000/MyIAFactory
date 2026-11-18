@@ -285,6 +285,10 @@ test("tachesDeFonctionnalite : réalisées et à venir (la file de la fonctionna
   const e2 = {...etat, taches: [...etat.taches, {id: "t5", titre: "Ancienne correction", colonne: "dev", fonctionnalite: "f1",
                                                  active: false, maj: "2026-11-10T21:00:00"}]};
   assert.ok(tachesDeFonctionnalite(e2, {id: "f1"}).realisees.some((t) => t.id === "t5"));
+  // Une tâche d'un lot qui attend son tour dans la session de l'agent (inactive au suivi) est à venir, pas réalisée.
+  const e3 = {...etat, taches: [...etat.taches, {id: "t6", titre: "Export Excel", colonne: "dev", fonctionnalite: "f1",
+                                                 active: false, agent: "dev-1", dans_le_lot: {etat: "a_venir"}}]};
+  assert.ok(tachesDeFonctionnalite(e3, {id: "f1"}).aVenir.some((t) => t.id === "t6"));
 });
 
 test("texteACopier : tout le contenu d'un message", async () => {

@@ -281,7 +281,8 @@ class Projet:
                     if t["id"] in raisons["taches"]:
                         t["attente_raison"] = raisons["taches"][t["id"]]
             # Les agents locaux au travail (détachés du moteur) : depuis quand, et leur dernière action.
-            detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent)
+            detache.ajouter_au_travail(e.get("taches") or [], self.chemin_reglages.parent,
+                                       attentes_tests=self._attentes_tests())
             self._avancement_des_taches(e.get("taches") or [], maintenant)
             statuts.agents_au_travail(e.get("agents") or [], e.get("taches") or [])
             statuts.activite_des_agents(e.get("factory"), e.get("taches") or [], maintenant)
@@ -299,6 +300,14 @@ class Projet:
         finally:
             self._verrou.release()
 
+    def _attentes_tests(self):
+        """Les agents qui attendent le verrou de tests du poste (`outils/campagne.en_attente`) ; rien en cas d'ennui."""
+        try:
+            from outils import campagne
+            return campagne.en_attente()
+        except Exception:
+            return {}
+
     def _avancement_des_taches(self, taches, maintenant):
         """Où en est chaque tâche dont un agent travaille (ou vient de finir) : voir `bureau/avancement.py`. Ne fait jamais
         tomber l'état."""
@@ -308,7 +317,7 @@ class Projet:
             moteur = None
         executions = detache.lire_durees(self.chemin_reglages.parent)
         for t in taches:
-            if not isinstance(t, dict) or not (t.get("travail") or t.get("agent_termine")):
+            if not isinstance(t, dict) or not (t.get("travail") or t.get("agent_termine") or t.get("dans_le_lot")):
                 continue
             try:
                 a = modavancement.pour_la_tache(t, taches, executions, moteur, maintenant, DELAI_AGENT_S)

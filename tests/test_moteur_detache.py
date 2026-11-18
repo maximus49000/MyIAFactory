@@ -259,7 +259,9 @@ class AuTravail(Base):
         self.assertAlmostEqual(datetime.fromisoformat(t["action_t"]).timestamp(), debut + 21 * 60, delta=1)
         self.assertNotIn("mot de passe", json.dumps(t))
         self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), debut + 21 * 60, delta=1)
-        self.assertEqual(taches[1]["travail"]["agent"], "dev-1")     # le reste du lot aussi
+        # le reste du lot attend son tour dans la même session : confié au même agent, sans activité à lui
+        self.assertNotIn("travail", taches[1])
+        self.assertEqual((taches[1]["dans_le_lot"]["etat"], taches[1]["agent"]), ("a_venir", "dev-1"))
         self.assertNotIn("travail", taches[2])
 
     def test_une_commande_en_cours_donne_l_heure_de_l_action_et_le_signe_de_vie(self):
@@ -337,8 +339,79 @@ class AuTravail(Base):
         self.avancement("t2", {"points": [{"texte": "deux", "fait": False}]})
         taches = [{"id": "t1"}, {"id": "t2"}]
         detache.ajouter_au_travail(taches, self.factory_dir)
-        self.assertEqual(taches[0]["travail"]["avancement"]["points"][0]["texte"], "un")
+        self.assertEqual(taches[0]["dans_le_lot"]["avancement"]["points"][0]["texte"], "un")
         self.assertEqual(taches[1]["travail"]["avancement"]["points"][0]["texte"], "deux")
+
+    def lot_l5(self, liste_t68, liste_t69=None, attentes_tests=None):
+        """Essai réel du 2026-11-18 (RoadmapReborn, lot L5) : t68 puis t69 confiées à Hugo (agent-1) dans une seule
+        session, journal `t68.jsonl` ; le suivi ne marque active (avec son agent) que la première."""
+        self.ecrire("t68", {"tache": "t68", "taches": ["t68", "t69"], "agent": "agent-1", "pid": os.getpid(),
+                            "debut": time.time() - 900, "dossier": str(self.dossier), "lot": "L5"},
+                    [self.outil("Edit", {"file_path": str(self.dossier / "backend" / "fiches_saisie.py")})])
+        self.avancement("t68", liste_t68)
+        if liste_t69 is not None:
+            self.avancement("t69", liste_t69)
+        taches = [{"id": "t68", "agent": "agent-1", "active": True, "lot": {"id": "L5", "rang": 1}},
+                  {"id": "t69", "agent": None, "active": False, "lot": {"id": "L5", "rang": 2}}]
+        detache.ajouter_au_travail(taches, self.factory_dir, attentes_tests=attentes_tests)
+        return taches
+
+    def test_lot_la_tache_suivante_est_active_avec_l_agent_une_fois_la_premiere_finie(self):
+        t68, t69 = self.lot_l5({"points": [{"texte": "Modele", "fait": True}], "en_cours": "termine"},
+                               {"points": [{"texte": "Zone texte", "fait": False}], "en_cours": "Ajout de la zone"})
+        # t69, que la session fait : active, avec l'agent du lot, son activité et sa propre liste
+        self.assertEqual((t69["active"], t69["agent"]), (True, "agent-1"))
+        self.assertEqual(t69["travail"]["action"], "modifie backend/fiches_saisie.py")
+        self.assertEqual(t69["travail"]["avancement"]["en_cours"], "Ajout de la zone")
+        self.assertEqual(t69["travail"]["lot"], {"rang": 2, "total": 2})
+        # t68 : finie, la session est passée à t69 ; plus d'activité à son nom ni de « En cours : termine »
+        self.assertNotIn("travail", t68)
+        self.assertFalse(t68["active"])
+        self.assertEqual({k: t68["dans_le_lot"][k] for k in ("etat", "agent", "courante")},
+                         {"etat": "faite", "agent": "agent-1", "courante": "t69"})
+        self.assertIsNone(t68["dans_le_lot"]["avancement"]["en_cours"])
+        self.assertTrue(t68["dans_le_lot"]["avancement"]["points"][0]["fait"])
+
+    def test_lot_la_suivante_sans_liste_encore_est_quand_meme_la_tache_en_cours(self):
+        t68, t69 = self.lot_l5({"points": [{"texte": "a", "fait": True}, {"texte": "b", "fait": True}]})
+        self.assertEqual((t69["active"], t69["agent"]), (True, "agent-1"))
+        self.assertIsNone(t69["travail"]["avancement"])          # pas encore de liste : la fiche dira sa phase
+        self.assertEqual(t68["dans_le_lot"]["etat"], "faite")
+
+    def test_lot_la_premiere_en_cours_garde_l_activite(self):
+        t68, t69 = self.lot_l5({"points": [{"texte": "a", "fait": True}, {"texte": "b", "fait": False}],
+                                "en_cours": "b"})
+        self.assertEqual((t68["active"], t68["travail"]["lot"]["rang"]), (True, 1))
+        self.assertEqual((t69["active"], t69["agent"], t69["dans_le_lot"]["etat"]), (False, "agent-1", "a_venir"))
+        self.assertNotIn("travail", t69)
+
+    def test_lot_tout_fini_la_derniere_reste_en_cours(self):
+        """L'agent rédige son compte rendu : la dernière tâche du lot reste celle de la session."""
+        self.assertEqual(detache.tache_du_lot_en_cours(["t1", "t2"], {"t1": {"en_cours": "Terminé."},
+                                                                       "t2": {"en_cours": "termine"}}), "t2")
+        self.assertFalse(detache.liste_finie({"points": [{"fait": True}], "en_cours": "relit le diff"}))
+        self.assertFalse(detache.liste_finie(None))
+
+    def test_l_attente_du_verrou_de_tests_va_sur_la_tache_en_cours(self):
+        attente = {"depuis": "2026-11-18T14:40:00+01:00", "motif": "une campagne tourne déjà (processus 12)"}
+        t68, t69 = self.lot_l5({"en_cours": "termine", "points": []}, {"points": [], "en_cours": "tests"},
+                               attentes_tests={"t68": attente})      # la clé de l'agent : celle de son journal
+        self.assertEqual(t69["travail"]["attente_tests"], attente)
+        self.assertNotIn("travail", t68)
+
+    def test_les_commandes_de_l_agent_connaissent_sa_cle(self):
+        """`lancer.py tests` lancé par l'agent dit au bureau pour qui il attend le poste (voir `outils/campagne`)."""
+        vu = {}
+
+        class Faux:
+            pid = os.getpid()
+
+        def lancer(argv, entree, sortie, erreurs, env, cwd):
+            vu["env"] = env
+            return Faux()
+        reg = detache.Registre(self.factory_dir, lancer=lancer)
+        reg._lancer("t68", {"taches": ["t68", "t69"]}, ["claude"], b"", {"PATH": "x"}, str(self.dossier))
+        self.assertEqual(vu["env"], {"PATH": "x", detache.VARIABLE_TACHE: "t68"})
 
     def test_effacer_oublie_la_liste_de_chaque_tache_du_lot(self):
         self.ecrire("t1", {"tache": "t1", "taches": ["t1", "t2"], "pid": 1, "debut": 1}, [])

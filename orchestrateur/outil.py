@@ -48,6 +48,7 @@ def _a_la_demande(nom):
 
 from bureau.statuts import TRES_ANCIEN, lire_date  # noqa: E402
 from orchestrateur import factory as fa  # noqa: E402
+from orchestrateur import anonymat, connaissances  # noqa: E402
 from orchestrateur import fiches as fi  # noqa: E402
 from orchestrateur import guetteur  # noqa: E402
 from orchestrateur import suivi as su  # noqa: E402
@@ -1765,17 +1766,30 @@ def cmd_organisation(ctx, e):
     if w:
         sortie.update(workflow=w["id"], fonctionnalite=o["fonctionnalite"], genre=w.get("genre"))
     if genre_a_creer and genre_a_creer[0] not in genres_connus(ctx):   # en dernier : il publie dans la mémoire de la skill
-        ok, message = memoire.creer_genre(ctx.f["memoire"], genre_a_creer[0], genre_a_creer[1],
-                                          ctx.f["mots_interdits"], git=GIT)
+        ok, message = connaissances.creer_genre(ctx.f["memoire"], genre_a_creer[0], genre_a_creer[1],
+                                                _mots_du_projet(ctx), git=GIT)
         sortie["genre_cree"] = ok
         if not ok:
             sortie["genre_raison"] = f"le genre « {genre_a_creer[0]} » n'a pas pu être créé : {message}"
     return sortie
 
 
+def _mots_du_projet(ctx):
+    """Tout ce qui nomme le projet, effacé des connaissances avant leur partage (voir `anonymat`)."""
+    code, depot = GIT(["remote", "get-url", "origin"], ctx.f["base"])
+    return anonymat.mots_du_projet(ctx.f["mots_interdits"], ctx.f.get("nom"), Path(ctx.f["base"]).name,
+                                   depot if code == 0 else None)
+
+
+def _confier(ctx, plans):
+    """Les leçons skill et genre validées vont au partage des connaissances (anonymisées, chiffrées) ou restent sur ce
+    poste si le partage est désactivé ; voir `connaissances`."""
+    return connaissances.confier(ctx.f["memoire"], plans, _mots_du_projet(ctx), git=GIT, projet=ctx.f.get("nom"))
+
+
 def genres_connus(ctx):
     try:
-        return [g["id"] for g in memoire.genres(ctx.f["memoire"])]
+        return [g["id"] for g in connaissances.genres(ctx.f["memoire"])]
     except OSError:
         return []
 
@@ -3023,19 +3037,19 @@ def _releve_partenaires(ctx):
 
 def cmd_memoire(ctx, e):
     role = texte(e, "role")
-    lecons = memoire.lire(ctx.f["memoire"], ctx.f["genre"], role)
+    lecons = connaissances.lire(ctx.f["memoire"], ctx.f["genre"], role)
     return {"genre_id": ctx.f["genre"], "skill": lecons["skill"], "genre": lecons["genre"]}
 
 
 def cmd_genre(ctx, e):
     action = e.get("action")
     if action == "lister":
-        return {"genre": ctx.f["genre"], "genres": memoire.genres(ctx.f["memoire"])}
+        return {"genre": ctx.f["genre"], "genres": connaissances.genres(ctx.f["memoire"])}
     if action == "decrire":    # élargir la description d'un genre existant (après l'accord du Directeur)
         genre = texte(e, "genre")
-        if genre not in {g["id"] for g in memoire.genres(ctx.f["memoire"])}:
+        if genre not in {g["id"] for g in connaissances.genres(ctx.f["memoire"])}:
             raise Refus(f"Genre inconnu : « {genre} ».")
-        ok, message = memoire.decrire_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"], git=GIT)
+        ok, message = connaissances.decrire_genre(ctx.f["memoire"], genre, e.get("description"), _mots_du_projet(ctx), git=GIT)
         if not ok:
             raise Refus(message)
         return {"genre": genre, "message": message}
@@ -3044,9 +3058,9 @@ def cmd_genre(ctx, e):
     genre = texte(e, "genre")
     if not fa.MOTIF_GENRE.match(genre):
         raise Refus("Identifiant de genre refusé (minuscules, chiffres et tirets, 40 caractères au plus).")
-    cree = genre not in {g["id"] for g in memoire.genres(ctx.f["memoire"])}
+    cree = genre not in {g["id"] for g in connaissances.genres(ctx.f["memoire"])}
     if cree:   # un nouveau genre : son fichier de mémoire, avec sa description, avant de le noter au projet
-        ok, message = memoire.creer_genre(ctx.f["memoire"], genre, e.get("description"), ctx.f["mots_interdits"], git=GIT)
+        ok, message = connaissances.creer_genre(ctx.f["memoire"], genre, e.get("description"), _mots_du_projet(ctx), git=GIT)
         if not ok:
             raise Refus(message)
     fa.ecrire_genre(ctx.f["chemin"], genre)
@@ -3253,7 +3267,7 @@ def _appliquer_verdicts(ctx, items):
                 continue
             ecritures.append((r, (etage, _genre_de_la_lecon(ctx, s, lecon), _lecon_pour_la_memoire(lecon))))
     if ecritures:   # une seule mise à jour du dépôt de la skill, un seul push, pour tout le lot
-        ecrites = memoire.ecrire_lecons(ctx.f["memoire"], [p for _, p in ecritures], ctx.f["mots_interdits"], git=GIT)
+        ecrites = _confier(ctx, [p for _, p in ecritures])
         for (r, _), m in zip(ecritures, ecrites):
             r["_memoire"] = m
     fiches = ctx.fiches()
@@ -3314,7 +3328,7 @@ def _reessayer_ecritures(ctx):
     publication = None
     if a_ecrire:
         plans = [(x["etage_applique"], _genre_de_la_lecon(ctx, s, x), _lecon_pour_la_memoire(x)) for x in a_ecrire]
-        for x, m in zip(a_ecrire, memoire.ecrire_lecons(ctx.f["memoire"], plans, ctx.f["mots_interdits"], git=GIT)):
+        for x, m in zip(a_ecrire, _confier(ctx, plans)):
             issue[x["id"]] = m
             if m.ok and m.commite:
                 publication = publication or m
@@ -3661,7 +3675,7 @@ def _depart_d_un_lot(ctx, e):
     lecons_lot = {"skill": [], "genre": []}
     for g in genres:
         for role in roles:
-            lues = memoire.lire(ctx.f["memoire"], g, role)
+            lues = connaissances.lire(ctx.f["memoire"], g, role)
             for etage in lecons_lot:
                 lecons_lot[etage] = _sans_doublon(lecons_lot[etage] + lues[etage])
     glossaire = []
@@ -3705,7 +3719,7 @@ def cmd_depart(ctx, e):
     else:
         role = fiche_agent["role"]
         brief_du_role = depart.brief(ctx.f, role)
-    lecons = memoire.lire(ctx.f["memoire"], genre, role)
+    lecons = connaissances.lire(ctx.f["memoire"], genre, role)
     partenaires = partenaires_du_depart(ctx, s, [tache_suivie])
     return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie, brief_du_role, lecons,
                                       (fonc or {}).get("glossaire") or [], partenaires[0],

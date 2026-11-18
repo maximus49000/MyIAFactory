@@ -8,6 +8,7 @@ from bureau import releve
 from orchestrateur import factory as fa
 from orchestrateur import memoire
 from orchestrateur import workflows as wf
+from tests import CLE_TEST
 from tests.orch_aide import AvecProjet, factory_minimale
 from tests.test_orch_memoire import AvecDepots
 
@@ -330,7 +331,7 @@ class TestParFonctionnaliteMemoire(AvecDepots, AvecWorkflows):
 
     def test_lecon_de_genre_va_au_genre_de_sa_fonctionnalite(self):
         self.ok("lecon", entree={"action": "appliquer", "id": self.noter(self.t_jeu), "verdict": "valider"})
-        textes = lambda genre: [x["texte"] for x in memoire.lire(self.ma, genre, "dev")["genre"]]
+        textes = lambda genre: [x["texte"] for x in memoire.lire(self.ma, genre, "dev", cle=CLE_TEST)["genre"]]
         self.assertIn("Toujours relancer les tests.", textes("jeu-web"))
         self.assertNotIn("Toujours relancer les tests.", textes("vitrine"))
         self.ok("lecon", entree={"action": "appliquer", "id": self.noter(self.t_libre), "verdict": "valider"})

@@ -76,11 +76,46 @@ def _chemin_genre(dossier, genre):
     return Path(dossier) / "genres" / f"{genre}.md"
 
 
-def lire(dossier, genre, role):
+TITRE_CHIFFRE = "chiffrée"
+_JETON = re.compile(r"^Chiffré : (\S+)\s*$")
+
+
+def section_chiffree(i, lecon, cle):
+    """Une leçon partagée : seul son numéro est lisible ; titre, rôles, date et texte sont dans le jeton."""
+    import json
+    from . import chiffre
+    corps = json.dumps({"titre": lecon["titre"], "texte": lecon["texte"], "roles": lecon["roles"],
+                        "date": lecon.get("date")}, ensure_ascii=False)
+    return f"## {i} — {TITRE_CHIFFRE}\n\nChiffré : {chiffre.chiffrer(cle, corps)}\n"
+
+
+def dechiffrer_lecons(lecons, cle):
+    """Les leçons lisibles : en clair telles quelles, chiffrées ouvertes avec `cle` ; sans clé (ou d'une autre clé),
+    une leçon chiffrée est omise."""
+    import json
+    from . import chiffre
+    sortie = []
+    for x in lecons:
+        m = _JETON.match(x["texte"]) if x["titre"] == TITRE_CHIFFRE else None
+        if m is None:
+            sortie.append(x)
+            continue
+        if cle is None:
+            continue
+        try:
+            d = json.loads(chiffre.dechiffrer(cle, m.group(1)))
+        except (chiffre.JetonInvalide, ValueError):
+            continue
+        sortie.append({"id": x["id"], "titre": str(d.get("titre") or ""), "texte": str(d.get("texte") or ""),
+                       "roles": d.get("roles") or ["tous"], "date": d.get("date"), "chiffree": True})
+    return sortie
+
+
+def lire(dossier, genre, role, cle=None):
     """Les leçons de la skill et du genre du projet qui touchent ce rôle (ou « tous »). Un genre nul, inconnu
-    ou mal écrit ne donne rien ; jamais le fichier d'un autre genre."""
+    ou mal écrit ne donne rien ; jamais le fichier d'un autre genre. Une leçon chiffrée n'est lue qu'avec `cle`."""
     def pour(lecons):
-        return [x for x in lecons if "tous" in x["roles"] or role in x["roles"]]
+        return [x for x in dechiffrer_lecons(lecons, cle) if "tous" in x["roles"] or role in x["roles"]]
 
     sortie = {"skill": pour(analyser(_lire(Path(dossier) / "skill.md"))["lecons"]), "genre": []}
     if isinstance(genre, str) and MOTIF_GENRE.match(genre):
@@ -346,13 +381,14 @@ def ajouter(dossier, etage, genre, lecon, mots_interdits, git=executer_git):
     return r.ok, r.message
 
 
-def ecrire_lecons(dossier, lecons, mots_interdits, git=executer_git):
+def ecrire_lecons(dossier, lecons, mots_interdits, git=executer_git, cle=None):
     """Ajoute plusieurs leçons `[(etage, genre, lecon)]` avec une seule synchronisation du dépôt et un seul push. Rend un
-    `Resultat` par leçon, dans l'ordre : l'échec de l'une n'arrête pas les autres."""
+    `Resultat` par leçon, dans l'ordre : l'échec de l'une n'arrête pas les autres. Avec `cle`, chaque leçon est écrite
+    chiffrée (`section_chiffree`) et son titre n'apparaît pas dans le message de commit."""
     synchro = Synchro(dossier, git)
     resultats = []
     for etage, genre, lecon in lecons:
-        plan = _plan_ajout(dossier, etage, genre, lecon)
+        plan = _plan_ajout(dossier, etage, genre, lecon, cle)
         if isinstance(plan, Resultat):
             resultats.append(plan)
         else:
@@ -362,7 +398,7 @@ def ecrire_lecons(dossier, lecons, mots_interdits, git=executer_git):
     return resultats
 
 
-def _plan_ajout(dossier, etage, genre, lecon):
+def _plan_ajout(dossier, etage, genre, lecon, cle=None):
     """Un `Resultat` d'échec, ou ce qu'il faut pour écrire : (chemin, nouveau_texte, texte_controle, message_commit)."""
     if etage not in ("skill", "genre"):
         return Resultat(False, "Seuls les étages « skill » et « genre » vivent dans ce dépôt.")
@@ -381,13 +417,21 @@ def _plan_ajout(dossier, etage, genre, lecon):
         if any(m.group(1).strip() == titre and texte in m.group(2)
                for m in re.finditer(r"^## [SG]\d+ — (.*)\n((?:(?!## ).*\n?)*)", actuel, re.M)):
             return actuel        # déjà là (une écriture interrompue, reprise) : jamais en double
+        if cle is not None and any(x["titre"] == titre and x["texte"] == texte
+                                   for x in dechiffrer_lecons(analyser(actuel)["lecons"], cle)):
+            return actuel
         i = lecon.get("id") or _prochain_id(actuel, "S" if etage == "skill" else "G")
         base = actuel if actuel.strip() else "# Mémoire de la skill\n"
-        section = (f"## {i} — {titre}\nRôles : {'tous' if 'tous' in roles else ', '.join(roles)}\n"
-                   f"Date : {lecon.get('date') or date.today().isoformat()}\n\n{texte}\n")
+        quand = lecon.get("date") or date.today().isoformat()
+        if cle is not None:
+            section = section_chiffree(i, {"titre": titre, "texte": texte, "roles": roles, "date": quand}, cle)
+        else:
+            section = (f"## {i} — {titre}\nRôles : {'tous' if 'tous' in roles else ', '.join(roles)}\n"
+                       f"Date : {quand}\n\n{texte}\n")
         return base.rstrip("\n") + "\n\n" + section
 
-    return chemin, nouveau, "\n".join([titre, texte, " ".join(roles)]), f"Mémoire ({etage}) : {titre}"
+    message = f"Mémoire ({etage}) : leçon chiffrée" if cle is not None else f"Mémoire ({etage}) : {titre}"
+    return chemin, nouveau, "\n".join([titre, texte, " ".join(roles)]), message
 
 
 def decrire_genre(dossier, genre, description, mots_interdits, git=executer_git):

@@ -17,7 +17,7 @@ from installation import dossier, proposition
 from installation.dossier import PREFIXE_SKILL, Echec
 from orchestrateur import factory as fa
 from bureau.equipe import PRENOMS
-from orchestrateur import fiches, memoire, metiers as modmetiers
+from orchestrateur import anonymat, connaissances, fiches, memoire, metiers as modmetiers
 from orchestrateur import workflows as wf
 from orchestrateur import verifier_interface as vi
 
@@ -474,7 +474,7 @@ def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adres
     bureau_avant = _controler_bureau(bureau_json, fd / "reglages.json")
     genre, genre_raison = p["genre"], None
     memoire_skill = dossier.skill() / "orchestrateur" / "memoire"
-    connus = {g["id"] for g in memoire.genres(memoire_skill)}
+    connus = {g["id"] for g in connaissances.genres(memoire_skill)}
     a_creer = genre is not None and genre not in connus and "genre_nouveau" in p
     if genre is not None and genre not in connus and not a_creer:
         raise Echec(f"Genre inconnu « {genre} » : choisir un genre connu ou décrire un nouveau genre.")
@@ -501,8 +501,8 @@ def appliquer(p, maintenant, git=memoire.executer_git, adresses=acces_inst.adres
         raise
     factory_json = fd / "factory.json"
     if a_creer:   # en dernier : il publie dans la mémoire de la skill, hors du projet
-        ok, message = memoire.creer_genre(memoire_skill, genre, p["genre_nouveau"]["description"],
-                                          p["mots_interdits"], git=git)
+        ok, message = connaissances.creer_genre(memoire_skill, genre, p["genre_nouveau"]["description"],
+                                                anonymat.mots_du_projet(p["mots_interdits"], projet.name), git=git)
         if ok:
             fa.ecrire_genre(factory_json, genre)
         else:

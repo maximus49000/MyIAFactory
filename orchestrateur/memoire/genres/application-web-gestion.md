@@ -86,3 +86,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Pour un export Excel protégé perçu comme intégralement en lecture seule, plusieurs bandeaux distincts existent côté client avec des boutons différents ; l'absence d'un bouton précis ne prouve pas que la protection du fichier est cassée, seulement qu'un autre bandeau s'affiche — à vérifier en inspectant l'artefact produit, pas seulement le client.
+
+## G15 — Quand un chef de projet résout un point de méthode ou de pro
+Rôles : dev
+Date : 2026-11-18
+
+Quand un chef de projet résout un point de méthode ou de process de cadrage, cela ne remplace pas les questions fonctionnelles propres à la fonctionnalité elle-même ; les poser avant d'écrire le cahier des charges.

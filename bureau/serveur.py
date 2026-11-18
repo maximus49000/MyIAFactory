@@ -886,7 +886,8 @@ class Bureau(ThreadingHTTPServer):
         self.pid_moteur = lambda: verrou.actif(verrou.chemin_par_defaut())
         # la consommation du forfait Claude Code (le rond du bandeau, source unique des jauges), avec repli sur le dernier
         # appel du moteur, versement à l'historique d'abonnement et part estimée des coûts
-        self.conso = conso.Conso(memoire=True, part=self._part_abonnement, renouveler=conso.renouveler_connexion)
+        self.conso = conso.Conso(memoire=True, part=self._part_abonnement, renouveler=conso.renouveler_connexion,
+                                 compte=conso.compte_different)
         self.lisseur = charge.Lisseur(60)
         self.mesure = None  # dernière lecture brute de la sonde
         self._dernier_historique = 0.0

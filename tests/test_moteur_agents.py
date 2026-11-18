@@ -140,6 +140,10 @@ class ExecuterAgent(unittest.TestCase):
         self.assertFalse(appel.est_une_panne("délai dépassé (1800 s)"))
         self.assertFalse(appel.est_une_panne("rapport illisible : pas de bloc json"))
         self.assertTrue(appel.est_une_panne("API Error: 529 Overloaded"))
+        limite = "claude signale une erreur (success) : You've hit your session limit · resets 7pm (Europe/Paris)"
+        self.assertTrue(appel.est_une_panne(limite))      # la limite du compte n'est pas un échec du travail
+        self.assertTrue(appel.est_une_limite(limite))
+        self.assertFalse(appel.est_une_limite("API Error: 529 Overloaded"))
         self.assertTrue(appel.est_une_panne("API Error: 503 Service Unavailable"))
 
     def test_usages_par_modele_cumules(self):

@@ -7,7 +7,7 @@
 // Tout texte venu du serveur passe par textContent.
 
 import {tonReste, agePhrase, lignePart, definirConsoCourante} from "./mesure.js";
-import {heureRemise, connexionAProposer, creerBoutonConnexion, EVENEMENT_RELIRE} from "./abonnement.js";
+import {heureRemise, connexionAProposer, creerBoutonConnexion, TEXTE_AUTRE_COMPTE, EVENEMENT_RELIRE} from "./abonnement.js";
 import {dessiner, ligneRythme, tonEcart, ecartRythme} from "./semaine.js";
 import {ouvrirSemaines, lireSemaines, lireSerie} from "./semaine-vue.js";
 
@@ -107,6 +107,7 @@ export function creerConso(url = "/api/conso") {
       if (connexionAProposer(c)) panneau.append(creerBoutonConnexion());
       return;
     }
+    if (c.compte_different === true) panneau.append(el("p", "conso-source", TEXTE_AUTRE_COMPTE), creerBoutonConnexion());
     if (c.source === "moteur") {
       panneau.append(el("p", "conso-source", `Lecture directe indisponible (${c.raison || "compte injoignable"}) : ` +
         `${agePhrase(c)}.`));

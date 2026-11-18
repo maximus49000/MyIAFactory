@@ -29,6 +29,7 @@ from pathlib import Path
 
 from installation import estimation, proposition
 from moteur import accord_outil, agents, cloud, detache, environnement, jugement, rapport
+from moteur.appel import est_une_limite as appel_limite
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
 from bureau import releve as rel
@@ -3131,6 +3132,8 @@ def _demarrer_en_attente(projet, etat, fid):
     if panne:      # le service Claude est indisponible : rien ne part avant le prochain essai (dit au bureau)
         etat["attente_charge"] = {"texte": panne["texte"], "taches": [t["id"] for t in attente], "charge": None,
                                   "plafond": None}
+        if panne.get("connexion"):
+            etat["attente_charge"]["connexion"] = True
         return []
     fac = _factory(projet)
     barrieres, retenues = _barrieres(projet, court, fac)
@@ -4187,6 +4190,10 @@ def _service_en_panne(projet, etat, execution, depart, maintenant=None):
     texte = (f"Service Claude indisponible ({raison}) : nouvel essai à "
              f"{datetime.fromtimestamp(jusqu_a).strftime('%H h %M')}.")
     etat["panne"] = {"jusqu_a": jusqu_a, "texte": texte, "n": n + 1}
+    if appel_limite(execution.erreur):
+        # le compte de `claude -p` a atteint sa limite : si l'abonnement du bureau a de la marge, il est connecté à un
+        # autre compte que l'application ; le bureau propose de le reconnecter
+        etat["panne"]["connexion"] = True
     for tid in depart["taches"]:
         lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
         if tid not in _m(etat, "a_lancer", list):

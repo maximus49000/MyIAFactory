@@ -2,6 +2,7 @@
 import json
 import os
 import unittest
+from unittest import mock
 
 from moteur import appel
 
@@ -141,6 +142,16 @@ class ClaudeP(unittest.TestCase):
             else:
                 os.environ["ANTHROPIC_API_KEY"] = ancien
         self.assertNotIn("ANTHROPIC_API_KEY", vu.appels[0]["env"])   # claude -p reste sur l'abonnement
+
+    def test_variables_de_la_session_hote_retirees_de_l_environnement_de_claude(self):
+        vu = Vu()
+        hote = {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": "s", "CLAUDE_CODE_ACCOUNT_UUID": "a",
+                "ANTHROPIC_BASE_URL": "http://x", "PATH": "p"}
+        with mock.patch.dict(os.environ, hote):
+            appel.appeler("c", "d", "haiku", executer=vu)
+        env = vu.appels[0]["env"]
+        self.assertEqual([k for k in env if k.upper().startswith(("CLAUDE", "ANTHROPIC"))], [])
+        self.assertEqual(env["PATH"], "p")
 
     def test_fable_refuse_avant_appel(self):
         for modele in ("fable", "Fable", "claude-fable-5-2"):

@@ -31,3 +31,8 @@ test("lancerConnexion : POST avec l'en-tête du bureau, et la commande à taper 
   const panne = await lancerConnexion(async () => { throw new Error("x"); });
   assert.equal(panne.ok, false);
 });
+
+test("un autre compte que l'application propose la connexion, même avec une mesure", () => {
+  assert.equal(connexionAProposer({disponible: true, compte_different: true}), true);
+  assert.equal(connexionAProposer({disponible: true}), false);
+});

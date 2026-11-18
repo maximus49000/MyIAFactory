@@ -11,6 +11,7 @@ et est versée à l'historique d'abonnement ; sinon, on se rabat sur le dernier 
 « indisponible ». Ici les pourcentages sont en « utilisé » (`utilise`) et en « reste » (`reste`).
 """
 import json
+import os
 import subprocess
 import threading
 import time
@@ -50,6 +51,38 @@ def renouveler_connexion():
         return True
     except Exception:   # absente, délai dépassé, refus du système : on se rabat, sans lever
         return False
+
+
+def compte_different(environ=None, statut=None):
+    """Vrai si le `claude` du poste (celui des agents, `claude -p`) est connecté à un autre compte que la session de
+    l'application qui a lancé le bureau. Compare l'organisation (sinon l'adresse e-mail) de `claude auth status`, commande
+    sans appel au modèle, à celles que l'application met dans l'environnement du bureau (`CLAUDE_CODE_ORGANIZATION_UUID`,
+    `CLAUDE_CODE_USER_EMAIL`). Rend un booléen seulement : aucune de ces valeurs n'est gardée, montrée ni journalisée.
+    Faux dès qu'une des deux lectures manque (bureau lancé hors de l'application, claude introuvable…). Ne lève jamais."""
+    environ = os.environ if environ is None else environ
+    hote = {"org": (environ.get("CLAUDE_CODE_ORGANIZATION_UUID") or "").strip().lower(),
+            "email": (environ.get("CLAUDE_CODE_USER_EMAIL") or "").strip().lower()}
+    if not any(hote.values()):
+        return False
+    try:
+        if statut is None:
+            from moteur import appel, pseudo_terminal
+            claude = appel.trouver_claude()
+            if not claude:
+                return False
+            fini = subprocess.run([claude, "auth", "status"], stdin=subprocess.DEVNULL, capture_output=True,
+                                  timeout=DELAI_RENOUVELLEMENT, env=pseudo_terminal.environnement_sans("ANTHROPIC_API_KEY"),
+                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            statut = json.loads(fini.stdout.decode("utf-8"))
+        if not isinstance(statut, dict) or statut.get("loggedIn") is not True:
+            return False
+        for cle, champ in (("org", "orgId"), ("email", "email")):
+            lu = str(statut.get(champ) or "").strip().lower()
+            if hote[cle] and lu:
+                return lu != hote[cle]
+    except Exception:
+        return False
+    return False
 
 
 def raison_de_connexion(resultat):
@@ -175,10 +208,11 @@ class Conso:
     rend ce que `abonnement.pour_la_page` rend (ou None) pour y lire la part estimée des coûts."""
 
     def __init__(self, identifiants=IDENTIFIANTS, telecharger=_telecharger, horloge=time.monotonic,
-                 memoire=False, part=None, maintenant=time.time, renouveler=None):
+                 memoire=False, part=None, maintenant=time.time, renouveler=None, compte=None):
         self.identifiants, self._telecharger, self._horloge = identifiants, telecharger, horloge
         self.memoire, self._part, self._maintenant = memoire, part, maintenant
         self._renouveler, self._dernier_renouvellement = renouveler, None
+        self._compte, self._autre_compte = compte, None     # `(horloge, bool)` : relu au plus toutes les 5 min
         self._verrou, self._cache, self._a, self._duree = threading.Lock(), None, 0.0, DUREE_CACHE
 
     def _jeton_renouvele(self):
@@ -211,7 +245,7 @@ class Conso:
     def oublier(self):
         """Vide le cache : la prochaine lecture interroge à nouveau le compte (après une reconnexion)."""
         with self._verrou:
-            self._cache = None
+            self._cache, self._autre_compte = None, None
 
     def lire(self):
         with self._verrou:
@@ -229,8 +263,19 @@ class Conso:
                 else:   # le jeton manque, est périmé ou le réseau coupe : le dernier instantané du moteur, dit comme tel
                     resultat = depuis_le_moteur(abonnement.lire(), resultat["raison"], maintenant)
                 resultat["part"] = self._lire_part()
+            if self._compte is not None:
+                resultat["compte_different"] = self._compte_different()
             self._cache, self._a = resultat, self._horloge()
             return resultat
+
+    def _compte_different(self):
+        t = self._horloge()
+        if self._autre_compte is None or t - self._autre_compte[0] >= INTERVALLE_RENOUVELLEMENT:
+            try:
+                self._autre_compte = (t, bool(self._compte()))
+            except Exception:
+                self._autre_compte = (t, False)
+        return self._autre_compte[1]
 
     def _lire_part(self):
         """{"pourcent_par_euro" (semaine, ou None), "mesures", "minimum"} ; None sans état d'abonnement (couche API)."""

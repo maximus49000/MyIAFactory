@@ -304,3 +304,34 @@ class Connexion(unittest.TestCase):
             c.oublier()
             c.lire()
             self.assertEqual(len(vus), 2)
+
+
+class CompteDifferentTests(unittest.TestCase):
+    HOTE = {"CLAUDE_CODE_ORGANIZATION_UUID": "ORG-A", "CLAUDE_CODE_USER_EMAIL": "a@x.fr"}
+
+    def test_autre_organisation(self):
+        self.assertTrue(conso.compte_different(self.HOTE, {"loggedIn": True, "orgId": "org-b", "email": "a@x.fr"}))
+
+    def test_meme_organisation(self):
+        self.assertFalse(conso.compte_different(self.HOTE, {"loggedIn": True, "orgId": "org-a", "email": "b@x.fr"}))
+
+    def test_email_quand_pas_d_organisation(self):
+        env = {"CLAUDE_CODE_USER_EMAIL": "a@x.fr"}
+        self.assertTrue(conso.compte_different(env, {"loggedIn": True, "email": "b@x.fr"}))
+        self.assertFalse(conso.compte_different(env, {"loggedIn": True, "email": "A@x.fr"}))
+
+    def test_faux_sans_information(self):
+        self.assertFalse(conso.compte_different({}, {"loggedIn": True, "orgId": "x"}))     # bureau hors de l'application
+        self.assertFalse(conso.compte_different(self.HOTE, {"loggedIn": False}))
+        self.assertFalse(conso.compte_different(self.HOTE, {}))
+
+    def test_lecture_expose_un_booleen_relu_toutes_les_5_min(self):
+        t, n = [0.0], []
+        c = conso.Conso(identifiants="/nulle-part", horloge=lambda: t[0], compte=lambda: n.append(1) or True)
+        self.assertTrue(c.lire()["compte_different"])
+        t[0] = 100.0
+        c.lire()
+        self.assertEqual(len(n), 1)
+        t[0] = 400.0
+        c.lire()
+        self.assertEqual(len(n), 2)

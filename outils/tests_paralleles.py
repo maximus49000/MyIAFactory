@@ -93,7 +93,10 @@ def _lire_durees():
 
 def _environnement():
     temp = str(Path(tempfile.gettempdir()).resolve())   # le chemin long, même si TEMP est en nom court
-    return {**os.environ, "PYTHONIOENCODING": "utf-8", "TEMP": temp, "TMP": temp, "TMPDIR": temp}
+    # Sans PYTHONDONTWRITEBYTECODE (posé par certains lanceurs) : les morceaux écrivent et relisent les `.pyc` au lieu
+    # de recompiler `regles.py`, `outil.py`… à chaque processus (mesure : 1,45 s contre 1,05 s pour un seul test).
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+    return {**env, "PYTHONIOENCODING": "utf-8", "TEMP": temp, "TMP": temp, "TMPDIR": temp}
 
 
 def lancer(morceau, env):

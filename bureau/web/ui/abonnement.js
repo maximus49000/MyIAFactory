@@ -103,9 +103,14 @@ function el(tag, classe, texte) {
 // --- Sans mesure : la raison, et un bouton pour reconnecter Claude Code quand c'est la connexion qui manque.
 
 // Vrai quand la lecture a manqué faute de connexion Claude Code (jeton absent ou à renouveler).
+// Aussi quand le `claude` du poste (celui des agents) est connecté à un autre compte que l'application : le bouton est
+// alors proposé même avec une mesure ; sans clic, les agents gardent l'ancienne connexion.
 export function connexionAProposer(c) {
-  return !!c && c.disponible !== true && /^Connexion/.test(String(c.raison || ""));
+  return !!c && (c.compte_different === true || (c.disponible !== true && /^Connexion/.test(String(c.raison || ""))));
 }
+
+export const TEXTE_AUTRE_COMPTE = "Claude Code du poste est connecté à un autre compte que l'application. Les agents "
+  + "l'utilisent tel quel ; pour qu'ils utilisent le compte de l'application, reconnectez-le.";
 
 // « abonnement : connexion Claude Code introuvable » ; « abonnement : pas de mesure » sans raison connue.
 export function texteSansMesure(c) {
@@ -183,9 +188,11 @@ export function creerJauges() {
     racine.hidden = !ab || !c;   // rien d'affiché quand la couche est l'API, ni avant la première lecture du rond
     if (racine.hidden) return;
     const mesure = lignes.some((l) => vueJauge(l.cle, c, maintenant));
-    vide.hidden = !!mesure;
-    texteVide.textContent = texteSansMesure(c);
-    connexion.hidden = !!mesure || !connexionAProposer(c);
+    const autre = c?.compte_different === true;
+    vide.hidden = !!mesure && !autre;
+    texteVide.textContent = mesure ? "claude du poste : autre compte que l'application" : texteSansMesure(c);
+    texteVide.title = autre ? TEXTE_AUTRE_COMPTE : "";
+    connexion.hidden = !connexionAProposer(c) || (!!mesure && !autre);
     racine.title = mesure ? "Part de l'abonnement Claude utilisée (tout le compte, vos autres sessions comprises)"
       : "Aucune mesure de l'abonnement pour l'instant";
     for (const l of lignes) {

@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 
 from bureau import abonnement
+from moteur import pseudo_terminal
 
 MODELES = ("haiku", "sonnet", "opus")
 MODELES_API = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
@@ -73,9 +74,21 @@ MOTIF_PANNE = re.compile(r"Failed to authenticate|API Error: (403|429|5\d\d)|Clo
 ENV_COMMANDES_LONGUES = {"BASH_DEFAULT_TIMEOUT_MS": "1800000", "BASH_MAX_TIMEOUT_MS": "1800000"}
 
 
+# La limite d'usage du compte connecté à `claude` (« You've hit your session limit · resets 7pm »). Le travail n'y est
+# pour rien non plus ; et si l'abonnement que l'utilisateur voit a de la marge, c'est que `claude` du poste est connecté
+# à un autre compte que l'application : le bureau propose alors de le reconnecter.
+MOTIF_LIMITE = re.compile(r"hit your .{0,30}limit|(session|usage|weekly|opus) limit|rate_limit|usage limit reached",
+                          re.IGNORECASE)
+
+
+def est_une_limite(raison):
+    """Vrai si l'erreur dit que le compte connecté à `claude` a atteint sa limite d'usage."""
+    return bool(MOTIF_LIMITE.search(str(raison or "")))
+
+
 def est_une_panne(raison):
     """Vrai si l'erreur dit que le service Claude est indisponible (le travail n'y est pour rien)."""
-    return bool(MOTIF_PANNE.search(str(raison or "")))
+    return bool(MOTIF_PANNE.search(str(raison or ""))) or est_une_limite(raison)
 
 
 class ErreurAppel(Exception):
@@ -194,7 +207,11 @@ def _executer_claude(argv, entree, env, cwd, delai_s):
 
 def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail, reprendre, delai_s):
     claude = trouver_claude() or "claude"
-    env = {k: v for k, v in os.environ.items() if k != VARIABLE_CLE}
+    # sans la clé API (l'abonnement) et, si le moteur a été lancé depuis une session de Claude Code ou de l'application,
+    # sans les variables de cette session hôte (`CLAUDE_CODE_*`, `ANTHROPIC_*`) : `claude -p` lit alors le compte
+    # connecté du poste, pas l'identité figée de la session qui a lancé le moteur (essai réel : « session limit »
+    # annoncée alors que l'abonnement du poste avait de la marge)
+    env = pseudo_terminal.environnement_sans(VARIABLE_CLE)
     env.update(ENV_COMMANDES_LONGUES)
     with tempfile.TemporaryDirectory(prefix="moteur-") as tmp:
         fichier = os.path.join(tmp, "consigne.md")

@@ -5,6 +5,7 @@
 import {el} from "./dom.js";
 import {auTravail, tronquer} from "./texte.js";
 import {urlProjet} from "./projets.js";
+import {creerBoutonConnexion} from "./abonnement.js";
 
 const liste = (v) => (Array.isArray(v) ? v : []);
 const MAX_TITRE = 90;
@@ -32,7 +33,7 @@ export function pointAtelier(etat, maintenant = new Date()) {
   const bloquees = taches.filter((t) => typeof t?.bloquee === "string" && t.bloquee.trim() && t.colonne !== "fait")
     .map((t) => ({tache: t.id, titre: tronquer(t.titre || "", MAX_TITRE)}));
   const retenue = typeof etat?.attente_charge?.texte === "string" ? etat.attente_charge.texte : null;
-  return {agents, decisions, bloquees, retenue};
+  return {agents, decisions, bloquees, retenue, connexion: !!retenue && etat?.attente_charge?.connexion === true};
 }
 
 // Le bloc du panneau ; `ouvrirTache(id)` ouvre la tâche.
@@ -57,6 +58,10 @@ export function blocPoint(etat, ouvrirTache, maintenant = new Date()) {
   if (p.bloquees.length) resume.push(`${p.bloquees.length} tâche${p.bloquees.length > 1 ? "s" : ""} bloquée${p.bloquees.length > 1 ? "s" : ""}`);
   bloc.append(el("p", "lecon-meta", resume.join(" · ")));
   if (p.retenue) bloc.append(el("p", "carte-attente", p.retenue));
+  if (p.connexion) {      // la limite est celle du compte de `claude` : si l'abonnement affiché a de la marge, ce n'est pas le même
+    bloc.append(el("p", "lecon-meta", "Votre abonnement a de la marge ? Le claude du poste est alors connecté à un autre "
+      + "compte que l'application : reconnectez-le."), creerBoutonConnexion());
+  }
   return bloc;
 }
 

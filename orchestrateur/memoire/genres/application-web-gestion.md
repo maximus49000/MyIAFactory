@@ -98,3 +98,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Dans un modèle de validation en deux temps (brouillon modifiable → version figée immuable), une donnée annexe qui n'a pas besoin d'être comparée à une version antérieure n'a pas besoin d'être copiée dans la structure figée : la garder uniquement sur l'entité vivante, avec le même verrou de modification que les autres champs du brouillon, suffit et simplifie le cycle validation/annulation.
+
+## G17 — Avant de reprendre un element de developpement signale comme
+Rôles : dev
+Date : 2026-11-18
+
+Avant de reprendre un element de developpement signale comme interrompu/repris d'une session precedente, verifier d'abord l'etat reel du code et lancer les tests deja ecrits plutot que de relire ou reecrire le perimetre : cela tranche en quelques secondes entre deja fait et reste a faire.

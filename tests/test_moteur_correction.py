@@ -147,6 +147,31 @@ class TestCorrection(Base):
         (flux,) = self.taches(etape="flux:f1-correctif")
         return flux
 
+    def test_correctif_sans_doit_marcher_pose_la_validation_avec_l_attendu_de_la_fiche(self):
+        """Essai réel (RoadmapReborn, 4 fois) : l'agent du correctif, jugeant l'anomalie déjà corrigée, rendait sa preuve
+        sans `doit_marcher` ; l'étape était refaite pour rien. Pour une correction, ce qui doit marcher est connu : le
+        résultat attendu de la fiche. La validation est posée sans relancer d'agent."""
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        regles._suite_cadrage(self.projet, self.etat, t, {"nom": "Corriger : score", "fiche_correction": FICHE})
+        preuve = self.dossier / "pieces" / "f1" / "preuve.md"
+        preuve.parent.mkdir(parents=True, exist_ok=True)
+        preuve.write_text("# Preuve\n\nLe test passe.\n", encoding="utf-8")
+        muet = {"statut": "fait", "message": {"texte": "Déjà corrigé : rien à changer, le test passe."},
+                "nature": "mecanique",
+                "fichiers": [{"chemin": "pieces/f1/preuve.md", "titre": "Preuve", "element": "correction"}]}
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[muet])
+        self.assertEqual(len(self.taches(etape="flux:f1-correctif")), 1)        # pas de relance
+        (d,) = self.decisions("valider_etape")
+        self.assertIn("revient à 0", d["doit_marcher"])
+        self.assertLessEqual(len(d["doit_marcher"]), 480)
+
+    def test_le_correctif_demande_le_rapport_complet_meme_sans_changement(self):
+        matiere = regles._matiere(self.projet, self.etat, self.en_serie())
+        self.assertIn("Même si tu ne changes rien", matiere)
+        for c in ("doit_marcher", "pas_encore", "conclusion", "points_a_verifier", "nature"):
+            self.assertIn(f'"{c}"', matiere)
+
     def test_la_matiere_du_correctif_et_de_la_livraison(self):
         matiere = regles._matiere(self.projet, self.etat, self.en_serie())
         self.assertIn("Symptôme : reste à 12", matiere)

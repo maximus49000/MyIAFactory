@@ -439,7 +439,8 @@ Le même agent dit aussi ce que le Directeur doit juger, en trois champs (dans u
 l'élément) : `doit_marcher` (1 à 3 phrases, 480 caractères au plus, obligatoire : ce qui doit fonctionner pour
 valider), `pas_encore` (480 au plus, peut être vide : ce qui n'est pas encore attendu à ce stade) et `conclusion`
 (une phrase, 200 au plus : « Validez si… »). Une forme fautive est écartée ; sans `doit_marcher`, même relance unique
-(un seul compteur avec « rien à valider »), puis tâche bloquée avec la raison. Ils sont stockés sur la décision
+(un seul compteur avec « rien à valider »), puis tâche bloquée avec la raison. Exception : pour une correction,
+`doit_marcher` manquant est tiré de l'« attendu » de sa fiche, sans relance. Ils sont stockés sur la décision
 `valider_etape`.
 Il déclare aussi la `nature` de ce qu'il fait valider (rapport, ou compte rendu de l'élément dans un lot) et ne joint que
 les preuves qui conviennent : `en_jeu` (à essayer dans le livrable exécutable) → le livrable téléchargeable (apk, exe, zip…)

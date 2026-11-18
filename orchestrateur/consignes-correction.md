@@ -51,6 +51,14 @@ fonction (ce qui ne va pas, ce que ça change pour l'utilisateur de l'applicatio
     fait, ce que ça change) : elle s'affiche en tête de la fenêtre de validation du Directeur.
   - `pas_encore` vide (tout est attendu) et `conclusion` : « Validez si … ».
   - `points_a_verifier` : 3 points tirés de la fiche, chacun vérifiable en regardant l'illustration ou le document.
+- **Même si tu ne changes rien** (anomalie déjà corrigée, hors du code, ou venue d'ailleurs), ton rapport garde
+  cette forme : sans ces champs, ta preuve n'arrive pas au Directeur et l'étape est refaite pour rien.
+  ```json
+  {"statut": "fait", "en_clair": "…", "message": {"texte": "En clair : … Détail technique : …"},
+   "nature": "mecanique", "fichiers": [{"chemin": "…/preuve.md", "titre": "…", "element": "correction"}],
+   "doit_marcher": "…", "pas_encore": "", "conclusion": "Validez si …",
+   "points_a_verifier": ["…", "…", "…"]}
+  ```
 
 ## Vérification
 - Rejoue le scénario de la fiche et les tests ; joins la capture (ou le schéma) « après », légendée, en reprenant

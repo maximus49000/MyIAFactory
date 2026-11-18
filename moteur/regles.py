@@ -4811,8 +4811,14 @@ def _attendre_le_directeur(projet, etat, v, s):
         # Après un renvoi, ce qui doit marcher est connu : les points que le Directeur a demandé de revoir (essai réel :
         # l'agent, jugeant la correction déjà faite ailleurs, ne le disait pas, deux fois, et la validation restait bloquée).
         renvoi = _remarque_du_renvoi(projet, v)
+        attendu = _attendu_de_correction(projet, v)
         if renvoi:
             precedent = {**precedent, "doit_marcher": renvoi}
+        elif attendu:
+            # Une correction sait ce qui doit marcher : le résultat attendu de sa fiche (essai réel, RoadmapReborn, quatre
+            # fois : l'agent du correctif, jugeant l'anomalie déjà corrigée, rendait sa preuve sans le dire, et l'étape
+            # était refaite pour rien). La validation est posée sans relancer d'agent.
+            precedent = {**precedent, "doit_marcher": attendu}
         elif v.get("rien_a_verifier") and _de_quoi_verifier(projet, precedent):
             # Second essai toujours muet, mais il y a de quoi vérifier : la validation est posée avec l'objectif de
             # l'étape comme consigne, plutôt que bloquée (essai réel : trois validations arrêtées, l'agent jugeant
@@ -4889,6 +4895,17 @@ def _remarque_du_renvoi(projet, v):
                     phrase = "Les points renvoyés sont corrigés : " + points
                     return phrase if len(phrase) <= rel.MAX_DOIT_MARCHER else phrase[:rel.MAX_DOIT_MARCHER - 1] + "…"
     return None
+
+
+def _attendu_de_correction(projet, v):
+    """Ce qui doit marcher pour une correction, tiré de sa fiche (sans appel d'IA) ; None pour une fonctionnalité."""
+    if (_fonc(projet, v["fid"]) or {}).get("nature") != "correction":
+        return None
+    attendu = " ".join(str(v["element"].get("objectif") or "").split())
+    if not attendu:
+        return None
+    phrase = f"Le scénario de la fiche donne maintenant le résultat attendu : {attendu}"
+    return phrase if len(phrase) <= rel.MAX_DOIT_MARCHER else phrase[:rel.MAX_DOIT_MARCHER - 1] + "…"
 
 
 def _doit_marcher_derive(objectif):

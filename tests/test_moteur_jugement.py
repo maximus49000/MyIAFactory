@@ -379,6 +379,26 @@ class Valider(unittest.TestCase):
         o["flux"][1]["modele"] = "GPT"
         self.assertIsNotNone(self._def(o))
 
+    def test_proposer_organisation_projet_polyvalent_sans_nouveau_metier(self):
+        """Essai réel (RoadmapReborn, f9) : projet aux agents polyvalents dont les métiers suffisent ; le modèle omettait
+        « metiers » et la proposition, jugée à l'ancien format, était refusée deux fois (« agents » est la liste…)."""
+        dossier = dict(DOSSIERS["proposer_organisation"],
+                       agents=[{"cle": "agent-1", "role": None, "modele": "Opus", "specialite": None}],
+                       services=[{"id": s, "nom": s} for s in ("jeu", "qualite", "livraison")],
+                       metiers=[{"role": r, "service": s, "modele": "Sonnet", "lieu": "indifférent", "specialite": None}
+                                for r, s in (("dev", "jeu"), ("testeur", "qualite"), ("livreur", "livraison"))])
+        objet = json.loads(json.dumps(VALIDES["proposer_organisation"]))
+        for c in ("agents", "briefs"):
+            objet.pop(c)
+        objet["services"] = []
+        self.assertIsNone(jugement.valider("proposer_organisation", objet, dossier))
+        self.assertEqual(objet["metiers"], [])          # la suite (application) le lit comme une proposition polyvalente
+        del objet["metiers"]
+        objet["agents"] = {"locaux": 2, "cloud": 0}     # sans « metiers » mais avec le nombre d'agents
+        self.assertIsNone(jugement.valider("proposer_organisation", objet, dossier))
+        objet["flux"][0]["role"] = "inconnu"
+        self.assertIn("Aucun métier", jugement.valider("proposer_organisation", objet, dossier))
+
     def test_proposer_organisation_role_sans_agent_refuse(self):
         agents = VALIDES["proposer_organisation"]["agents"]
         self.assertIsNotNone(self._orga(agents=agents[1:]))              # testeur sans agent

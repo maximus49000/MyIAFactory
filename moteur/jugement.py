@@ -554,6 +554,11 @@ def _valider_proposer_organisation(o, d):
     if not _dit_le_livrable(flux[-1]["nom"], o["livrable"]):
         return (f"La dernière étape (« {flux[-1]['nom']} ») doit produire ou remettre le livrable, et son nom doit le "
                 "dire (par exemple « Livraison de … ») : le workflow va de la demande au livrable remis.")
+    if "metiers" not in o and "metiers" in d and not isinstance(o.get("agents"), list):
+        # Projet aux agents polyvalents (le dossier porte ses métiers) dont les métiers suffisent : la réponse omet
+        # « metiers », ce qui veut dire « aucun nouveau ». Essai réel (RoadmapReborn, f9) : jugée à l'ancien format, elle
+        # était refusée deux fois. La clé est posée vide pour que l'application la lise aussi comme polyvalente.
+        o["metiers"] = []
     if "metiers" in o:       # le nouveau format : des métiers et le nombre d'agents (agents polyvalents)
         erreur = _valider_metiers(o, d, agents_projet, tous_services, roles_du_flux)
     else:

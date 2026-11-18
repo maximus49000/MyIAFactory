@@ -1491,3 +1491,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand un processus est lancé détaché depuis un script avec des flags de détachement système, la redirection de sa sortie standard vers un fichier peut rester vide même si le processus a réellement démarré et s'est lié à son port ; vérifier l'état réel par une requête fonctionnelle (ex. HTTP) plutôt que de se fier au contenu du fichier de log.
+
+## S249 — Avant de corriger un symptôme décrit dans un cahier des char
+Rôles : dev
+Date : 2026-11-18
+
+Avant de corriger un symptôme décrit dans un cahier des charges, vérifier directement dans le code si la fonction citée existe déjà avec le comportement attendu ; si oui, se limiter à relancer les tests ciblés et produire la preuve demandée plutôt que de ré-écrire du code.

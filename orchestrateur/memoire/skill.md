@@ -1521,3 +1521,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Pour une tâche de vérification, lancer d'abord les tests existants couvrant exactement le scénario. Cela résout en quelques secondes ce qu'une lecture de code approfondie prendrait des minutes à clarifier.
+
+## S254 — Avant de produire une nouvelle preuve visuelle, vérifier si
+Rôles : dev
+Date : 2026-11-18
+
+Avant de produire une nouvelle preuve visuelle, vérifier si une preuve équivalente a déjà été produite par une session très récente sur le même sujet, et la réutiliser plutôt que de la régénérer.

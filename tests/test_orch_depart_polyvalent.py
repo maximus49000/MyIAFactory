@@ -117,3 +117,30 @@ class SessionCloud(Base):
         self.assertEqual(session, "session_01Manuel")
         self.assertIn(f".factory/rapports/{t_qa}.json", texte)
         self.assertIn("Ton métier : qa", texte)
+
+
+class LeconsPertinentes(Base):
+    """Essai réel (RoadmapReborn f9, 2026-11-18) : 94 leçons relues à chaque échange, presque toutes sans rapport avec la
+    tâche. Au-delà de 20 leçons validées, seules les plus proches de la tâche sont listées."""
+
+    def brief_de_30_lecons(self):
+        lecons = "".join(f"- [validée] dev:L{i} : Le module zorglub{i} exige un redémarrage du serveur{i}.\n"
+                         for i in range(1, 30))
+        lecons += "- [validée] dev:L30 : Dans le calendrier des absences, filtrer les congés annulés avant le calcul.\n"
+        (self.dossier / "fiches" / "briefs" / "dev.md").write_text(
+            "Service : dev\n\nBrief des développeurs.\n\n## Leçons\n" + lecons, encoding="utf-8")
+
+    def test_une_longue_liste_ne_garde_que_les_lecons_du_sujet_de_la_tache(self):
+        self.brief_de_30_lecons()
+        t = self.tache("dev", "e1", "Calendrier des absences")
+        m = self.ok("depart", entree={"agent": "agent-1", "tache": t, "moteur": True})["message"]
+        self.assertIn("filtrer les congés annulés", m)                 # la leçon du sujet est là
+        self.assertLess(m.count("zorglub"), 8)                         # pas les 29 autres
+        self.assertIn("autres leçons de ce métier, sans rapport avec cette tâche", m)
+        self.assertIn("dev.md", m)                                     # où les retrouver
+
+    def test_peu_de_lecons_sont_toutes_listees(self):
+        t = self.tache("dev", "e1", "Calendrier des absences")
+        m = self.ok("depart", entree={"agent": "agent-1", "tache": t, "moteur": True})["message"]
+        self.assertIn("Toujours tester.", m)
+        self.assertNotIn("sans rapport avec cette tâche", m)

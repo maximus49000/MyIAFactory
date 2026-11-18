@@ -5,7 +5,9 @@ tâche, avec sa fiche entière, les leçons de la skill et du genre qui touchent
 et la consigne de fin d'étape.
 """
 import json
+import math
 import re
+import unicodedata
 from pathlib import Path
 
 from orchestrateur import modele_necessaire as mn
@@ -237,7 +239,45 @@ def outils_du_poste(factory):
     return ("## Outils du poste\nDéjà installés ; sers-t'en directement, sans les réinstaller :\n" + "\n".join(lignes)) if lignes else ""
 
 
-def _section_metier(metiers_):
+# Essai réel (RoadmapReborn f9, 2026-11-18) : 94 leçons validées, 24 000 caractères (≈ 6 000 jetons) relus à chaque échange
+# de l'agent, dont l'immense majorité sans rapport avec la tâche. Au-delà de LECONS_TOUTES, seules les plus proches de la
+# tâche sont listées (jamais plus de LECONS_RETENUES) ; le reste reste dans le brief, que l'agent peut lire.
+LECONS_TOUTES = 20
+LECONS_RETENUES = 15
+LECONS_AU_MOINS = 5          # même sans rapport apparent, les plus récentes
+
+
+def _mots(texte):
+    sans_accents = unicodedata.normalize("NFKD", str(texte or "").lower()).encode("ascii", "ignore").decode()
+    return set(re.findall(r"[a-z0-9_]{4,}", sans_accents))
+
+
+def lecons_pertinentes(lecons, contexte):
+    """Les leçons à lister pour une tâche : toutes si elles sont peu nombreuses, sinon les plus proches du `contexte` (le
+    texte de la tâche : titre, fonctionnalité, cahier, élément, fichiers). Un mot compte d'autant plus qu'il est rare
+    parmi les leçons ; un mot présent dans plus du tiers d'entre elles ne compte pas. Rend `(retenues, nombre_écartées)`,
+    les retenues dans leur ordre d'origine."""
+    if len(lecons) <= LECONS_TOUTES:
+        return list(lecons), 0
+    mots = [_mots(x["texte"]) for x in lecons]
+    frequence = {}
+    for ms in mots:
+        for m in ms:
+            frequence[m] = frequence.get(m, 0) + 1
+    voulu = _mots(contexte)
+    poids = {m: math.log(1 + len(lecons) / n) for m, n in frequence.items() if n <= len(lecons) / 3}
+    notes = [sum(poids.get(m, 0) for m in ms & voulu) for ms in mots]
+    ordre = sorted((i for i, n in enumerate(notes) if n > 0), key=lambda i: (-notes[i], -i))[:LECONS_RETENUES]
+    for i in range(len(lecons) - 1, -1, -1):          # de quoi garder quelques leçons récentes même sans rapport
+        if len(ordre) >= LECONS_AU_MOINS:
+            break
+        if i not in ordre:
+            ordre.append(i)
+    gardees = sorted(ordre)
+    return [lecons[i] for i in gardees], len(lecons) - len(gardees)
+
+
+def _section_metier(metiers_, contexte=""):
     """« Ton métier » d'un agent polyvalent : pour chaque métier de la tâche (ou du lot), sa spécialité, ses outils et ses
     leçons validées (celles « à valider » ne sont pas encore la règle). Le texte du brief est donné à part."""
     blocs = []
@@ -247,14 +287,18 @@ def _section_metier(metiers_):
             if m.get(cle):
                 lignes.append(f"{nom} : {m[cle]}")
         validees = [x for x in m.get("lecons") or [] if x["etat"] == "validée"]
+        validees, ecartees = lecons_pertinentes(validees, contexte)
         lignes.append("Leçons de ce métier :")
         lignes += [f"- {x['texte']}" for x in validees] if validees else ["(aucune)"]
+        if ecartees:
+            lignes.append(f"({ecartees} autres leçons de ce métier, sans rapport avec cette tâche, ne sont pas listées"
+                          + (f" ; elles sont dans {m['chemin']}" if m.get("chemin") else "") + ".)")
         blocs.append("\n".join(lignes))
     titre = metiers_[0]["role"] if len(metiers_) == 1 else "les métiers de ce lot"
     return f"## Ton métier : {titre}\nPour cette tâche, tu es le spécialiste de ce métier.\n" + "\n\n".join(blocs)
 
 
-def _entete(factory, fiche, lecons_memoire, regles_projet=(), metiers_=None):
+def _entete(factory, fiche, lecons_memoire, regles_projet=(), metiers_=None, contexte=""):
     parties = []
     if fiche["lieu"] == "cloud":
         parties.append("Tu repars de zéro. Rien de ce qui s'est dit dans cette session avant ce message ne compte : "
@@ -268,7 +312,7 @@ def _entete(factory, fiche, lecons_memoire, regles_projet=(), metiers_=None):
     if poste:
         parties.append(poste)
     if metiers_:   # un agent polyvalent : l'identité est dans l'en-tête, le reste est celui du métier de la tâche
-        parties.append(_section_metier(metiers_))
+        parties.append(_section_metier(metiers_, contexte))
     else:
         parties.append("## Ta fiche\n" + _texte_fiche(fiche))
     parties.append(_lecons("Leçons de la skill qui touchent ton rôle", lecons_memoire.get("skill") or []))
@@ -328,7 +372,7 @@ def _partenaires_inscrits(inscrits, ecartes):
 
 
 def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=(), inscrits=(),
-            ecartes=(), metiers_=None):
+            ecartes=(), metiers_=None, contexte=""):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
@@ -370,11 +414,11 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
-                regles_projet=(), inscrits=(), ecartes=(), metiers_=None):
+                regles_projet=(), inscrits=(), ecartes=(), metiers_=None, contexte=""):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
-    parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
+    parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_, contexte)
     if len(briefs) == 1:
         parties.append("## Le brief de ton rôle\n" + (briefs[0][1] or "(pas de brief propre à ce rôle)"))
     else:

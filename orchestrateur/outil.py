@@ -3692,7 +3692,10 @@ def _depart_d_un_lot(ctx, e):
     factory = {**ctx.f, "genre": ", ".join(g for g in genres if g) or None}
     return {"message": depart.message_lot(factory, fiche_agent, taches, briefs, lecons_lot, glossaire, regles,
                                           par_le_moteur=e.get("moteur", False), regles_projet=rp.lire(ctx.f),
-                                          inscrits=inscrits, ecartes=ecartes, metiers_=metiers_)}
+                                          inscrits=inscrits, ecartes=ecartes, metiers_=metiers_,
+                                          contexte=" ".join(_contexte_de_tache(
+                                              t, su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite")
+                                              else None) for t in taches))}
 
 
 def cmd_depart(ctx, e):
@@ -3724,7 +3727,17 @@ def cmd_depart(ctx, e):
     return {"message": depart.message({**ctx.f, "genre": genre}, fiche_agent, tache_suivie, brief_du_role, lecons,
                                       (fonc or {}).get("glossaire") or [], partenaires[0],
                                       regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2],
-                                      metiers_=metiers_)}
+                                      metiers_=metiers_, contexte=_contexte_de_tache(tache_suivie, fonc))}
+
+
+def _contexte_de_tache(tache, fonc):
+    """Le texte qui dit de quoi parle la tâche, pour choisir les leçons du métier qui s'y rapportent (voir
+    `depart.lecons_pertinentes`) : son titre, la fonctionnalité (nom, étapes du cahier) et l'élément (objectif, fichiers)."""
+    elem = ((fonc or {}).get("elements") or {}).get(tache.get("element")) or {}
+    etapes = ((fonc or {}).get("cahier") or {}).get("etapes") or []
+    morceaux = [tache.get("titre"), tache.get("etape"), (fonc or {}).get("nom"), *etapes, elem.get("nom"),
+                elem.get("objectif"), *(elem.get("fichiers") or [])]
+    return " ".join(str(x) for x in morceaux if x)
 
 
 def cmd_lieux(ctx, e):

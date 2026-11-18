@@ -90,6 +90,58 @@ export function avancementEnClair(av) {
   };
 }
 
+// --- Où en est un retour transmis à l'agent (`r.suivi`, noté par le moteur) : essai réel du 2026-11-18, « Question
+// transmise à Hugo » restait la seule trace alors que la réponse arrivait plus tard, dans la discussion.
+const SUIVIS_RETOUR = {
+  transmis: {libelle: "Transmis, en attente", ton: "attente"},
+  reponse_en_cours: {libelle: "Réponse en cours de rédaction", ton: "attente"},
+  repondu: {libelle: "Répondu", ton: "ok"},
+  repris: {libelle: "Repris dans un nouvel essai", ton: "attente"},
+  confie: {libelle: "Confié à une tâche", ton: "attente"},
+  sans_reponse: {libelle: "Sans réponse", ton: "alerte"},
+};
+const SUIVIS_SANS_REPONSE = new Set(["transmis", "reponse_en_cours"]);
+
+// {etat, libelle, ton, texte, tache, ouAgent} ou null. `avancement` : celui de la tâche de l'agent, pour dire où il en est
+// tant qu'il n'a pas lu la question (« 3/4 points · en cours : … »).
+export function suiviDuRetour(r, avancement) {
+  const s = r?.suivi;
+  if (!s || typeof s !== "object" || !SUIVIS_RETOUR[s.etat]) return null;
+  const sortie = {etat: s.etat, ...SUIVIS_RETOUR[s.etat], texte: texteNonVide(s.texte) ? s.texte.trim() : "",
+                  tache: texteNonVide(s.tache) ? s.tache : null, ouAgent: null};
+  const av = s.etat === "transmis" ? avancementEnClair(avancement) : null;
+  if (av) {
+    const parties = [];
+    if (av.points.length) parties.push(`${av.points.filter((p) => p.fait).length}/${av.points.length} points faits`);
+    if (av.enCours) parties.push("en cours : " + av.enCours);
+    if (av.etatTexte) parties.push(av.etatTexte);
+    if (av.reste && av.reste !== "inconnu") parties.push("reste " + av.reste);
+    sortie.ouAgent = parties.join(" · ") || null;
+  }
+  return sortie;
+}
+
+// Les retours répondus que le Directeur n'a pas marqués « pris en compte » : [{tache, retour}]. Chacun compte au bureau
+// du Directeur (la clé « retour:<id> » rejoint les « Vu » gardés par le bureau).
+export const PREFIXE_VU_RETOUR = "retour:";
+export function retoursRepondusNonVus(etat) {
+  const vus = new Set(Array.isArray(etat?.echanges_vus) ? etat.echanges_vus : []);
+  const sortie = [];
+  for (const t of Array.isArray(etat?.taches) ? etat.taches : []) {
+    for (const r of Array.isArray(t?.retours) ? t.retours : []) {
+      if (r?.suivi?.etat === "repondu" && texteNonVide(r.id) && !vus.has(PREFIXE_VU_RETOUR + r.id)) sortie.push({tache: t, retour: r});
+    }
+  }
+  return sortie;
+}
+
+// Un retour sans réponse : rien de répondu, ou seulement « transmis » à l'agent qui n'a pas encore répondu.
+export function retourSansReponse(r) {
+  const s = r?.suivi;
+  if (s && typeof s === "object" && s.etat) return SUIVIS_SANS_REPONSE.has(s.etat);
+  return !(typeof r?.reponse === "string" && r.reponse.trim());
+}
+
 // Le voyant de la factory : {libelle, ton} avec ton parmi ok | pause | alerte.
 export function voyant(factory, erreur, maintenant = new Date()) {
   if (erreur) return {libelle: "Relevé indisponible", ton: "alerte"};

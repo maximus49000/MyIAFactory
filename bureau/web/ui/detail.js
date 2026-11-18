@@ -2,7 +2,7 @@
 // Chaque fonction remplit `contenu` ; les gestes passent par `ctx.barre.demander` (une demande au projet).
 
 import {el, ligne} from "./dom.js";
-import {tronquer, ilYA, auTravail, avancementEnClair, dateFr, pourquoiElleAttend, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
+import {tronquer, ilYA, auTravail, avancementEnClair, suiviDuRetour, dateFr, pourquoiElleAttend, filtrer, filtresEtat, filtreEtatEffectif, filtreDeListe, imagesUrl, imagesVisibles, notesValides, elementsDeFile, resteNonListe} from "./texte.js";
 import {lienSur, libelleMontee, libelleModeleNecessaire, libelleLot} from "./actions.js";
 import {reessayerImage} from "./reessai.js";
 import {rendreTexte} from "./markdown.js";
@@ -177,6 +177,18 @@ function blocAvancement(av, travail) {
   return bloc;
 }
 
+// Où en est un retour transmis (voir suiviDuRetour) : l'étape, où en est l'agent, puis sa réponse quand elle est là.
+function blocSuiviRetour(s, quand) {
+  const bloc = el("div", "retour-suivi retour-suivi-" + s.ton);
+  const tete = el("div", "retour-suivi-etat");
+  tete.append(el("strong", "", "Suivi : " + s.libelle), document.createTextNode(quand ? " · " + dateFr(quand) : ""));
+  bloc.append(tete);
+  if (s.ouAgent) bloc.append(el("div", "retour-suivi-agent", "Où en est l'agent : " + s.ouAgent));
+  if (s.texte) bloc.append(s.etat === "repondu" ? rendreTexte("retour-suivi-texte", s.texte)
+    : el("div", "retour-suivi-texte", s.texte));
+  return bloc;
+}
+
 export function ligneStory(ctx, e, t) {
   if (!t?.fonctionnalite) return null;
   const f = (e?.fonctionnalites || []).find((x) => x?.id === t.fonctionnalite);
@@ -300,6 +312,8 @@ export function contenuTache(ctx, contenu, t) {
     li.append(el("div", "retour-texte", r.texte), el("div", "retour-date", dateFr(r.t) + (r.etat ? " · " + r.etat : "")));
     li.append(r.reponse && r.reponse.trim() ? el("div", "retour-reponse", r.reponse)
       : el("div", "retour-attente", "en attente de réponse"));
+    const suivi = suiviDuRetour(r, t.avancement);
+    if (suivi) li.append(blocSuiviRetour(suivi, r.suivi?.t));
     retours.append(li);
   }
   contenu.append(retours);

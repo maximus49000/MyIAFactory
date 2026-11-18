@@ -681,6 +681,28 @@ def cmd_demande_traitee(ctx, e):
     return {"ok": True}
 
 
+SUIVIS_DE_RETOUR = ("transmis", "reponse_en_cours", "repondu", "repris", "sans_reponse", "confie")
+
+
+def cmd_demande_suivi(ctx, e):
+    """Où en est une demande déjà traitée (un retour transmis à l'agent au travail) : `{id, etat, texte, tache?}`.
+    Essai réel (2026-11-18) : « Question transmise à Hugo » restait la seule trace, la réponse arrivait ailleurs."""
+    i = texte(e, "id")
+    etat = texte(e, "etat")
+    if etat not in SUIVIS_DE_RETOUR:
+        raise Refus(f"« etat » : un de {', '.join(SUIVIS_DE_RETOUR)}.")
+    with ctx.suivi.transaction() as s:
+        d = next((x for x in s["demandes"] if x["id"] == i), None)
+        if d is None:
+            raise Refus(f"Demande inconnue : {i}")
+        d["suivi"] = {"etat": etat, "texte": texte(e, "texte", obligatoire=False, vide_ok=True) or "",
+                      "t": su.maintenant()}
+        tache = texte(e, "tache", obligatoire=False)
+        if tache:
+            d["suivi"]["tache"] = tache
+    return {"ok": True}
+
+
 def _agents(ctx, s, fiches):
     sessions, occupes = ctx.sessions(), {t["agent"] for t in s["taches"] if t.get("active") and t.get("agent")}
     sortie = []
@@ -2332,9 +2354,11 @@ def construire_releve(ctx):
     retours = {}
     for d in s["demandes"]:
         if d["type"] in ("retour", "challenge") and isinstance(d.get("tache"), str):   # un challenge ouvre sa tâche
-            r = {"t": d["t"], "texte": d.get("texte") or ""}
+            r = {"id": d["id"], "t": d["t"], "texte": d.get("texte") or ""}
             if d.get("reponse"):
                 r["reponse"] = d["reponse"]
+            if isinstance(d.get("suivi"), dict):      # où en est le retour transmis (cmd_demande_suivi)
+                r["suivi"] = dict(d["suivi"])
             retours.setdefault(d["tache"], []).append(r)
     taches = [{"id": "orchestration", "titre": "Orchestration", "colonne": "cadrage", "active": True,
                "titulaire": chef, "etape": "", "maj": s["reveil"], "postit": False}]
@@ -3901,7 +3925,8 @@ def cmd_fiche(ctx, e):
 COMMANDES = {
     "fiche": (cmd_fiche, "obligatoire"), "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"), "guetter": (cmd_guetter, "aucune"),
-    "demande-traitee": (cmd_demande_traitee, "obligatoire"), "etat": (cmd_etat, "aucune"),
+    "demande-traitee": (cmd_demande_traitee, "obligatoire"), "demande-suivi": (cmd_demande_suivi, "obligatoire"),
+    "etat": (cmd_etat, "aucune"),
     "fonctionnalite": (cmd_fonctionnalite, "obligatoire"), "message": (cmd_message, "obligatoire"),
     "decision": (cmd_decision, "obligatoire"), "tache": (cmd_tache, "obligatoire"), "file": (cmd_file, "obligatoire"),
     "file-prendre": (cmd_file_prendre, "obligatoire"), "session": (cmd_session, "obligatoire"),

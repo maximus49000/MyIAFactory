@@ -289,6 +289,10 @@ class Projet:
                 self._cout_en_cours(e.get("taches") or [], regl)
             e["images_ok"] = images_declarees(regl)
             e["echanges_vus"] = self.echanges_vus()      # les échanges avec le Chef masqués de la direction (« Vu »)
+            if isinstance(e.get("directeur"), dict):      # une réponse à un retour : à marquer « pris en compte »
+                n = len(etat.retours_repondus_non_vus(e.get("taches"), e["echanges_vus"]))
+                e["directeur"]["retours_repondus"] = n
+                e["directeur"]["total"] = (e["directeur"].get("total") or 0) + n
             e["abonnement"] = self._abonnement(regl)
             self._cache_etat = (time.monotonic(), e)
             return e

@@ -1485,3 +1485,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand une correction lève explicitement une règle métier déjà couverte par un test, rechercher ce test par son nom/assertion et le réécrire pour le nouveau comportement, plutôt que d'ajouter un test en parallèle qui laisserait l'ancien échouer ou mentir.
+
+## S248 — Quand un processus est lancé détaché depuis un script avec d
+Rôles : dev
+Date : 2026-11-18
+
+Quand un processus est lancé détaché depuis un script avec des flags de détachement système, la redirection de sa sortie standard vers un fichier peut rester vide même si le processus a réellement démarré et s'est lié à son port ; vérifier l'état réel par une requête fonctionnelle (ex. HTTP) plutôt que de se fier au contenu du fichier de log.

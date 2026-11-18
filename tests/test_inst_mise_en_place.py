@@ -302,6 +302,7 @@ class TestGitignore(Base):
         self.assertIn("dist", lignes)
         self.assertIn("node_modules/", lignes)
         self.assertIn(".factory/equipe.json", lignes)
+        self.assertIn(".factory/scratch/", lignes)      # les scripts jetables des agents n'entrent pas dans le dépôt
 
     def test_gitignore_variantes_de_l_ancienne_regle(self):
         variantes = [".factory/*", ".factory/**", "/.factory/*", "/.factory/**", "**/.factory", "**/.factory/",

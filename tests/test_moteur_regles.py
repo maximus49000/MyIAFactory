@@ -1471,6 +1471,20 @@ class VitesseDeLivraison(Base):
         self.assertIn(regles.TESTS_CIBLES, m)
         self.assertNotIn(regles.SUITE_COMPLETE_UNE_FOIS, m)
 
+    def test_les_fichiers_jetables_vont_dans_un_dossier_ignore_et_un_echec_ancien_ne_refuse_pas(self):
+        # Essai réel RoadmapReborn f12 : un script jetable commité par le moteur, des échecs hérités comptés au refus.
+        self.livrer_un_element()
+        m = self.matiere("dev")
+        self.assertIn(regles.FICHIERS_JETABLES, m)
+        self.assertIn(regles.DEFAUT_ANTERIEUR, m)
+        self.assertIn(".factory/scratch/", regles.FICHIERS_JETABLES)
+
+    def test_une_petite_demande_ne_refuse_que_sur_la_demande_elle_meme(self):
+        petite = {"cahier": {"parcours": regles.PARCOURS_UN_ELEMENT}}
+        self.assertEqual(regles._consigne_petite_demande(petite), [regles.PETITE_DEMANDE])
+        for autre in ({"cahier": {"parcours": regles.PARCOURS_SANS_PROTOTYPE}}, {"cahier": None}, {}, None):
+            self.assertEqual(regles._consigne_petite_demande(autre), [])
+
     def test_le_dernier_regard_relit_le_diff_sans_relancer_la_suite(self):
         self.livrer_un_element()
         m = self.matiere("essai")

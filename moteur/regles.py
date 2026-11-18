@@ -63,6 +63,24 @@ REVUE_COMPLETE = ("Revue complète : vérifie l'élément entier contre sa fiche
                   "défauts d'un coup. Si ton journal liste les points d'un tour de correction, vérifie ces points et "
                   "ce que la correction a pu casser ; un autre défaut, déjà là avant, se rend dans `points` précédé de "
                   f"« {OUBLI.strip()} » (il sera corrigé sans compter comme un tour de plus).")
+# Essai réel (RoadmapReborn f12, 2026-11-18) : une évolution de quelques lignes (la fiche Excel passe à 4 objectifs) refusée
+# deux fois de suite, pour un script jetable commité et pour des échecs (tsc, un test d'un autre écran) que l'agent avait
+# lui-même jugés hérités ; la correction a alors élargi le chantier à ces défauts.
+DEFAUT_ANTERIEUR = ("Un échec déjà là avant l'élément (test, build ou lint hors de ses fichiers : compare avec le "
+                    "commit d'avant l'élément) ne rend jamais l'élément non conforme : dis-le dans ton message, "
+                    "sans en faire un point.")
+# Une demande très simple ne doit pas revenir en correction (RoadmapReborn f12 : une limite de lignes dans une fiche
+# Excel, deux refus). Pour une petite évolution, seul ce qui empêche la demande elle-même refuse l'élément.
+PETITE_DEMANDE = ("Demande petite : ne rends « non conforme » que si la demande elle-même n'est pas satisfaite "
+                  "(le comportement demandé est absent ou faux, ou un test de l'élément échoue). Tout le reste (un "
+                  "fichier en trop, du style, un nettoyage, un défaut voisin) se dit dans ton message, sans devenir un "
+                  "point de refus.")
+# Le moteur commite tout (`git add -A`) après chaque tâche et l'agent ne peut pas supprimer un fichier : ses scripts
+# jetables vont dans un dossier que git ignore (`.factory/scratch/`, dans le bloc du .gitignore de MyIAFactory).
+FICHIERS_JETABLES = ("Fichiers jetables : tout script, exemple ou sortie écrit pour tes essais ou tes contrôles (générer "
+                     "une fiche d'exemple, lire un résultat…) va dans `.factory/scratch/`, jamais dans le code du "
+                     "projet : ce dossier n'entre pas dans le dépôt. Le moteur commite tout le reste après ta tâche : "
+                     "ne laisse hors de ce dossier que ce qui fait partie de la demande.")
 CORRECTION_COMPLETE = ("Corrige la cause, pas seulement les endroits cités : cherche dans tout le projet les autres "
                        "occurrences du même défaut (le même réglage à appliquer, le même composant, le même genre de "
                        "texte écrit en dur…) et corrige-les dans ce tour. Dans ton message, liste chaque endroit "
@@ -3799,10 +3817,16 @@ def _consigne_des_controles(projet, t, f):
         f"{_factory(projet)['controles']}) :", *montres])
 
 
+def _consigne_petite_demande(f):
+    """La consigne d'indulgence des vérificateurs d'une petite évolution (parcours `un_element`) ; rien sinon."""
+    return [PETITE_DEMANDE] if ((f or {}).get("cahier") or {}).get("parcours") == PARCOURS_UN_ELEMENT else []
+
+
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
     if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
-        return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS]
-    return [TESTS_DU_DERNIER_REGARD if dernier_regard else TESTS_CIBLES, APK_A_JOUR_AVANT_LES_TESTS]
+        return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS, FICHIERS_JETABLES, DEFAUT_ANTERIEUR]
+    return [TESTS_DU_DERNIER_REGARD if dernier_regard else TESTS_CIBLES, APK_A_JOUR_AVANT_LES_TESTS, FICHIERS_JETABLES,
+            DEFAUT_ANTERIEUR]
 
 
 def _matiere(projet, etat, t):
@@ -3900,6 +3924,7 @@ def _matiere(projet, etat, t):
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
             parties.append(REVUE_COMPLETE)
+            parties += _consigne_petite_demande(f)
             parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=True)
         else:
             parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=False)
@@ -3908,7 +3933,7 @@ def _matiere(projet, etat, t):
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
                     "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD,
-                    APK_A_JOUR_AVANT_LES_TESTS]
+                    APK_A_JOUR_AVANT_LES_TESTS, FICHIERS_JETABLES, DEFAUT_ANTERIEUR, *_consigne_petite_demande(f)]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
                     "(son chemin et sa version). Dans ton message, dis pour chaque outil : en place (chemin, version) ou "

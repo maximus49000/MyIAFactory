@@ -1479,3 +1479,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand l'analyse d'une correction de cahier des charges est déjà complète, rendre le cahier des charges (étapes, taille) dans le même rapport que l'analyse ; un rapport sans ce cahier laisse la fonctionnalité bloquée et provoque un aller-retour inutile.
+
+## S247 — Quand une correction lève explicitement une règle métier déj
+Rôles : dev
+Date : 2026-11-18
+
+Quand une correction lève explicitement une règle métier déjà couverte par un test, rechercher ce test par son nom/assertion et le réécrire pour le nouveau comportement, plutôt que d'ajouter un test en parallèle qui laisserait l'ancien échouer ou mentir.

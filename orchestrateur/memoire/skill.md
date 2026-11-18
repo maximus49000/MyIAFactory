@@ -1527,3 +1527,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Avant de produire une nouvelle preuve visuelle, vérifier si une preuve équivalente a déjà été produite par une session très récente sur le même sujet, et la réutiliser plutôt que de la régénérer.
+
+## S255 — Quand un commanditaire conteste un diagnostic « hors périmèt
+Rôles : dev
+Date : 2026-11-18
+
+Quand un commanditaire conteste un diagnostic « hors périmètre » avec un détail précis et contradictoire, avant de répéter la même conclusion, vérifier l'artefact produit au niveau le plus bas possible (octets/fichier réel, pas seulement l'objet en mémoire de la bibliothèque utilisée) : cela donne une preuve plus forte, positive ou négative, que de relire seulement le code.

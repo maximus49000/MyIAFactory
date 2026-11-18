@@ -1478,14 +1478,31 @@ def _classer_rate(projet, etat, fid, ctx):
     return _repondre_cadrage(projet, etat, fid)
 
 
+def _nature_du_workflow(projet, w):
+    """« correction » ou « fonctionnalite » : celle que le workflow porte, sinon celle de sa fonctionnalité (les
+    workflows écrits avant que la nature y soit notée) ; un workflow de genre est de fonctionnalité."""
+    if w.get("nature"):
+        return w["nature"]
+    if not w.get("fonctionnalite"):
+        return "fonctionnalite"
+    try:
+        porteur = _fonc(projet, w["fonctionnalite"])
+    except Refus:
+        porteur = None
+    return (porteur or {}).get("nature") or "fonctionnalite"
+
+
 def _workflow_de_repli(projet, fid):
-    """Le workflow qu'une fonctionnalité reprend sans proposition : le plus récent du même genre, sinon le principal ;
-    `None` si le projet n'a aucun workflow."""
+    """Le workflow qu'une fonctionnalité reprend sans proposition : le plus récent du même genre et de la même nature
+    (jamais le workflow d'une correction pour une fonctionnalité, ni l'inverse), sinon le principal ; `None` si le
+    projet n'a aucun workflow."""
     fac = _factory(projet)
     f = _fonc(projet, fid)
     genre = f.get("genre") or _genre_du_projet(fac)
+    nature = f.get("nature") or "fonctionnalite"
     ws = [w for w in wf.tous(fac) if w["id"] != f.get("workflow")]
-    memes = [w for w in reversed(ws) if genre and w.get("genre") == genre and w["id"] != wf.PRINCIPAL]
+    memes = [w for w in reversed(ws) if genre and w.get("genre") == genre and w["id"] != wf.PRINCIPAL
+             and _nature_du_workflow(projet, w) == nature]
     if memes:
         return memes[0]
     return next((w for w in ws if w["id"] == wf.PRINCIPAL), None)

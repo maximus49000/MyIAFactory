@@ -527,6 +527,25 @@ class Parcours(AvecParcours):
         self.assertTrue(any("workflow existant" in m["texte"] for m in self.fonc()["discussion"]))
         self.assertEqual(self.statut(d["id"])["statut"], "traitée")
 
+    def test_refus_sans_texte_ne_reprend_pas_un_workflow_de_correction(self):
+        # cas réel (RoadmapReborn f9) : une fonctionnalité reprenait le workflow « Correctif » d'une correction récente
+        dev = [{"id": "f0-dev", "nom": "Dev", "role": "dev", "service": "dev"}]
+        corr = [{"id": "f00-correctif", "nom": "Correctif", "role": "dev", "service": "dev"}]
+        self.reecrire(workflows=[{"id": "w-f0", "fonctionnalite": "f0", "genre": "badges", "flux": dev},
+                                 {"id": "w-f00", "fonctionnalite": "f00", "genre": "badges", "nature": "correction",
+                                  "flux": corr}])
+        _, decision = self.vers_l_organisation()
+        self.traiter(type="organisation", decision=decision["id"], verdict="refuser")
+        self.assertEqual(self.fonc()["workflow"], "w-f0")
+
+    def test_refus_sans_texte_que_des_corrections_du_genre_reprend_le_principal(self):
+        corr = [{"id": "f00-correctif", "nom": "Correctif", "role": "dev", "service": "dev"}]
+        self.reecrire(workflows=[{"id": "w-f00", "fonctionnalite": "f00", "genre": "badges", "nature": "correction",
+                                  "flux": corr}])
+        _, decision = self.vers_l_organisation()
+        self.traiter(type="organisation", decision=decision["id"], verdict="refuser")
+        self.assertEqual(self.fonc()["workflow"], "principal")
+
     def test_refus_sans_texte_sans_workflow_du_genre_reprend_le_principal(self):
         _, decision = self.vers_l_organisation()
         self.traiter(type="organisation", decision=decision["id"], verdict="refuser")

@@ -211,7 +211,9 @@ def _lire(chemin):
         "consignes": chem("consignes", facultatif=True), "reglages": chem("reglages", facultatif=True),
         "services": [dict(s) for s in services], "flux": [dict(e) for e in flux],
         "workflows": [{"id": w["id"], "fonctionnalite": w.get("fonctionnalite"), "genre": w.get("genre"),
-                       "flux": [dict(e) for e in w["flux"]]} for w in workflows],
+                       "flux": [dict(e) for e in w["flux"]],
+                       **({"nature": w["nature"]} if w.get("nature") in ("correction", "fonctionnalite") else {})}
+                      for w in workflows],
         "description": description, "seuil_methode": seuil,
         "catalogues": catalogues, "sessions": chem("sessions", "sessions.json"),
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),

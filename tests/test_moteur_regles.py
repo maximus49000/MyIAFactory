@@ -1608,6 +1608,52 @@ class ParcoursSelonLaTaille(Base):
         (t,) = [t for t in self.taches() if str(t["etape"]).startswith("flux:")]
         self.assertNotIn(regles.PERIMETRE_ELEMENT, regles._matiere(self.projet, self.etat, t))
 
+    def moyenne_en_serie(self, n=2):
+        """Une évolution moyenne découpée en n éléments, sans relecteur (le contrôle du flux fait la vérification)."""
+        Serie.sans_relecteurs(self)
+        self.fonctionnalite("serie", methode=None, cahier={"maquette": [PNG], "etapes": ["Faire les écrans"],
+                                                           "parcours": regles.PARCOURS_SANS_PROTOTYPE})
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": DECOUPAGE["elements"][:n]})
+
+    def test_une_evolution_moyenne_n_a_qu_une_verification_pour_tous_ses_elements(self):
+        """Essai réel (RoadmapReborn f9, 2026-11-18) : trois éléments, quatre vérifications (≈ 1,9 €). Les éléments qui
+        ne sont pas les derniers sautent le contrôle ; le dernier revoit toute la fonctionnalité."""
+        self.moyenne_en_serie(2)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écrans faits."}},          # un seul appel pour le lot e1, e2
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": []}, {"element": "e2", "conforme": True, "points": []}]}])
+        (controle,) = self.taches(etape="flux:controle")                   # une seule vérification
+        m = regles._matiere(self.projet, self.etat, controle)
+        self.assertIn(regles.REVUE_D_ENSEMBLE, m)
+        self.assertNotIn(regles.PERIMETRE_ELEMENT, m)                      # ici, juger les autres éléments est son rôle
+        self.assertIn("Profil", m)
+        self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()}, {"f1/e1": "fait", "f1/e2": "fait"})
+
+    def test_un_refus_d_un_element_deja_fait_est_corrige_par_le_dernier_puis_la_revue_est_refaite(self):
+        self.moyenne_en_serie(2)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écrans faits."}},          # un seul appel pour le lot e1, e2
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": False, "points": ["Le titre est trop petit"]},
+                {"element": "e2", "conforme": True, "points": []}]},
+            {"statut": "fait", "message": {"texte": "Corrigé."}},
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": []}, {"element": "e2", "conforme": True, "points": []}]}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Agrandir le titre.", "raison": "trop petit"}})
+        self.assertEqual(len(self.taches(etape="correction")), 1)
+        self.assertEqual(len(self.taches(etape="flux:controle")), 2)       # la revue refaite après la correction
+        self.assertIn("[Accueil] Le titre est trop petit", (self.dossier / "controles.md").read_text(encoding="utf-8"))      # le défaut dit de quel élément il vient
+        self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()}, {"f1/e1": "fait", "f1/e2": "fait"})
+
+    def test_un_element_seul_ou_un_parcours_complet_garde_sa_verification(self):
+        Serie.sans_relecteurs(self)
+        self.serie(2)                                                       # parcours complet : pas de revue d'ensemble
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Fait."}}, verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Fait."}}, verdict("e2")])
+        self.assertEqual(len(self.taches(etape="flux:controle")), 2)
+
     def test_le_directeur_peut_demander_le_parcours_complet(self):
         self.cahier_de_taille(self.PETITE)
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")

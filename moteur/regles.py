@@ -114,6 +114,12 @@ ETAPES_DE_FLUX = "flux:"
 PERIMETRE_ELEMENT = ("Ton périmètre est ton élément seul : n'écris pas le code des autres éléments de la "
                      "fonctionnalité et ne juge jamais ton élément non conforme pour ce qui leur revient (au plus, "
                      "signale-le dans ton message).")
+# Essai réel (RoadmapReborn f9, 2026-11-18) : trois éléments, quatre vérifications (≈ 1,9 €), chacune relisant le même
+# code. Une évolution moyenne (sans prototype) n'a qu'une revue, faite par le dernier élément sur toute la fonctionnalité.
+REVUE_D_ENSEMBLE = ("Revue d'ensemble : les autres éléments de la fonctionnalité n'ont pas eu de vérification, c'est la "
+                    "tienne. Vérifie la fonctionnalité entière contre sa fiche, avec les tests ciblés, et rends un "
+                    "verdict pour chacun de ses éléments (`element` = son identifiant) ; chaque défaut va dans les "
+                    "`points` de l'élément qui le porte.")
 # Le parcours d'une petite correction, jugée au diagnostic (essai réel du 2026-11-17 : diagnostic, correctif et livraison,
 # trois agents et 0,94 € pour deux lignes de CSS ; une session directe : 0,10 à 0,40 €).
 TAILLE_PETITE_CORRECTION, PARCOURS_CORRECTION_COURTE = "petite", "correction_courte"
@@ -3658,19 +3664,64 @@ def _chemin_avancement(projet, tid):
         return chemin.as_posix()
 
 
-def _perimetre_de_l_element(f, eid):
-    """Les autres éléments de la fonctionnalité (nom et objectif) et la consigne de s'en tenir au sien ; rien s'il est seul."""
-    # Un élément quitte la file quand il est pris : les autres sont ceux de la file et ceux déjà pris (`elements`).
+def _elements_de(f, sauf=None):
+    """Les éléments de la fonctionnalité : ceux de la file et ceux déjà pris (un élément quitte la file quand il est
+    pris), chacun avec son nom et son objectif."""
     tous = {x["id"]: x for x in (f or {}).get("file") or [] if isinstance(x, dict) and x.get("id")}
     for k, x in ((f or {}).get("elements") or {}).items():
         if isinstance(x, dict):
             tous[k] = {"id": k, **x, **{c: v for c, v in tous.get(k, {}).items() if v}}
-    autres = [x for k, x in tous.items() if k != eid]
+    return [x for k, x in tous.items() if k != sauf]
+
+
+def _lignes_des_elements(elements):
+    return [f"- {x['id']} : {x.get('nom') or x['id']}" + (f" — {x['objectif']}" if x.get("objectif") else "")
+            for x in elements]
+
+
+def _perimetre_de_l_element(f, eid):
+    """Les autres éléments de la fonctionnalité (nom et objectif) et la consigne de s'en tenir au sien ; rien s'il est seul."""
+    autres = _elements_de(f, sauf=eid)
     if not autres:
         return []
-    lignes = [f"- {x['id']} : {x.get('nom') or x['id']}" + (f" — {x['objectif']}" if x.get("objectif") else "")
-              for x in autres]
-    return ["Les autres éléments de la fonctionnalité, traités par d'autres tâches :", *lignes, PERIMETRE_ELEMENT]
+    return ["Les autres éléments de la fonctionnalité, traités par d'autres tâches :", *_lignes_des_elements(autres),
+            PERIMETRE_ELEMENT]
+
+
+def _revue_d_ensemble(projet, etat, v, journal):
+    """Une évolution moyenne (sans prototype, découpée) n'a qu'une vérification : « saute » pour un élément qui n'est
+    pas le dernier, « ensemble » pour le dernier, qui revoit toute la fonctionnalité. Rien dans les autres cas (un seul
+    élément, parcours complet, correction, étape refaite après un refus ou une remarque)."""
+    fid = v["fid"]
+    f = _fonc(projet, fid)
+    production = _production(projet, fid)
+    if (journal or v.get("corrections") or v.get("tour") or f.get("nature") == "correction"
+            or (f.get("cahier") or {}).get("parcours") != PARCOURS_SANS_PROTOTYPE
+            or not _sans_relecteur(projet) or v["pas"] != _etape_de_relecture(projet, fid)
+            or wf.est_validation(production[v["pas"]]) or len(_elements_de(f)) < 2):
+        return None
+    en_cours = ("flux", "relecture", "correction", "validation", "attente_methode")
+    dernier = not f.get("file") and not any(
+        x["fid"] == fid and x["element"].get("id") != v["element"]["id"] and x["phase"] in en_cours
+        for x in _m(etat, "elements").values())
+    return "ensemble" if dernier else "saute"
+
+
+def _verdicts_de_la_revue(f, v, verdicts):
+    """Les verdicts de la revue d'ensemble, ramenés à l'élément du dernier : il corrige aussi les défauts des autres,
+    chacun dit de quel élément il vient."""
+    noms = {x["id"]: x.get("nom") or x["id"] for x in _elements_de(f)}
+    points, conforme = [], True
+    for x in verdicts:
+        if x.get("conforme"):
+            continue
+        conforme = False
+        pour = x.get("element")
+        for p in x.get("points") or ["(refus sans détail)"]:
+            texte = p if pour == v["element"]["id"] else f"[{noms.get(pour, pour)}] {p}"
+            if texte not in points:
+                points.append(texte)
+    return [{"element": v["element"]["id"], "conforme": conforme, "points": points}]
 
 
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
@@ -3751,7 +3802,13 @@ def _matiere(projet, etat, t):
             else:
                 parties.append("Méthode validée : " + str(methode.get("chemin") or methode.get("lien")
                                                            or "(voir ton brief)"))
-            parties += _perimetre_de_l_element(f, t.get("element"))
+            ve = _m(etat, "elements").get(f"{fid}/{t.get('element')}") or {}
+            if ve.get("revue_d_ensemble") and etape == ETAPES_DE_FLUX + _production(projet, fid)[
+                    _etape_de_relecture(projet, fid)]["id"]:
+                parties += ["Les éléments de la fonctionnalité :", *_lignes_des_elements(_elements_de(f)),
+                            REVUE_D_ENSEMBLE]
+            else:
+                parties += _perimetre_de_l_element(f, t.get("element"))
             parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
         fichiers =((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
         if fichiers:
@@ -4840,6 +4897,13 @@ def _tache_de_flux(projet, etat, v, journal=None):
     if wf.est_validation(s):
         return _attendre_le_directeur(projet, etat, v, s)
     journal = list(journal or []) + v.pop("journal_suivant", [])     # la note du Directeur jointe à sa validation
+    revue = _revue_d_ensemble(projet, etat, v, journal)
+    if revue == "saute":      # un élément qui n'est pas le dernier : conforme d'office, le dernier revoit l'ensemble
+        v["phase"], v["attendus"], v["rapports"] = "relecture", 1, [[]]
+        v["pas"] += 1
+        return _conclure_relecture(projet, etat, v)
+    if revue == "ensemble":
+        v["revue_d_ensemble"] = True
     if lieux.est_partie_locale(pas, s):      # la partie locale d'une étape découpée : le code est déjà écrit
         journal = [lieux.CONSIGNE_PARTIE_LOCALE] + journal
     tid = _creer_tache(projet, f"{s['nom']} : {v['element']['nom']}", v["fid"], s["role"], ETAPES_DE_FLUX + s["id"],
@@ -5235,7 +5299,9 @@ def _apres_flux(projet, etat, v, r=None):
     if sans and v["pas"] - 1 == _etape_de_relecture(projet, v["fid"]):
         # les verdicts de l'étape de qualité sur cet élément (un lot en porte pour chacun) ; aucun = conforme
         v["phase"], v["attendus"] = "relecture", 1
-        v["rapports"] = [[x for x in (r or {}).get("verdicts") or [] if x["element"] == v["element"]["id"]]]
+        verdicts = (r or {}).get("verdicts") or []
+        v["rapports"] = [_verdicts_de_la_revue(_fonc(projet, v["fid"]), v, verdicts) if v.get("revue_d_ensemble")
+                         else [x for x in verdicts if x["element"] == v["element"]["id"]]]
         return _conclure_relecture(projet, etat, v)
     if v["pas"] < len(_production(projet, v["fid"])):
         suivante = _production(projet, v["fid"])[v["pas"]]

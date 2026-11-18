@@ -79,6 +79,18 @@ function dureeCourte(secondes) {
 const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause", lot_faite: "ok", lot_a_venir: "pause",
                         attente_tests: "pause"};
 
+// L'agent écrit « termine » dans `en_cours` quand sa liste est finie, mais il travaille encore (tests finaux, compte
+// rendu) : dire « terminé » faisait croire la tâche finie (essai réel du 2026-11-18, Léa lançait encore vitest).
+// Même liste que FINS_DE_LISTE dans moteur/detache.py.
+const FINS_DE_LISTE = new Set(["termine", "terminé", "terminee", "terminée", "fini", "finie", "fait", "faite", "done"]);
+const LIBELLE_FIN_DE_LISTE = "vérifications finales et compte rendu";
+
+function enCoursEnClair(texte) {
+  if (typeof texte !== "string" || !texte.trim()) return null;
+  const t = texte.trim();
+  return FINS_DE_LISTE.has(t.toLowerCase().replace(/[.!]+$/, "")) ? LIBELLE_FIN_DE_LISTE : t;
+}
+
 // Ce que dit la fiche d'une tâche (`avancement` servi par le bureau, voir bureau/avancement.py) : où elle en est (la
 // liste de l'agent, sinon la phase déduite de son flux), le temps passé et restant, et si ça avance. null sans avancement.
 export function avancementEnClair(av) {
@@ -87,7 +99,7 @@ export function avancementEnClair(av) {
     .filter((p) => p && typeof p.texte === "string").map((p) => ({texte: p.texte, fait: p.fait === true}));
   return {
     etat: av.etat, etatTexte: av.etat_texte || "", ton: TON_AVANCEMENT[av.etat] || "alerte",
-    points, enCours: typeof av.en_cours === "string" && av.en_cours.trim() ? av.en_cours.trim() : null,
+    points, enCours: enCoursEnClair(av.en_cours),
     phase: typeof av.phase === "string" ? av.phase : null, sansListe: points.length === 0,
     passe: dureeCourte(av.passe_s), cumul: dureeCourte(av.cumul_s), reste: av.reste_texte || "inconnu",
     dansLeLot: av.etat === "lot_faite" || av.etat === "lot_a_venir",

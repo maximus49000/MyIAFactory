@@ -60,3 +60,11 @@ test("lot et attente du verrou de tests : à son tour, pas une alerte", () => {
   assert.equal(avancementEnClair({...base, etat: "attente_tests"}).ton, "pause");
   assert.equal(avancementEnClair(base).dansLeLot, false);
 });
+
+test("« termine » dans la ligne en cours ne fait pas croire la tâche finie : l'agent vérifie encore", () => {
+  for (const mot of ["termine", "Terminé.", " fini ", "done"]) {
+    assert.equal(avancementEnClair({...base, en_cours: mot}).enCours, "vérifications finales et compte rendu");
+  }
+  assert.equal(avancementEnClair({...base, en_cours: "terminer les tests"}).enCours, "terminer les tests");
+  assert.equal(avancementEnClair({...base, en_cours: "  "}).enCours, null);
+});

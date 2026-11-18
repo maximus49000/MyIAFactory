@@ -1461,3 +1461,9 @@ Rôles : testeur
 Date : 2026-11-17
 
 Pour juger si un fichier livré est périmé, comparer la date de la sortie de build d'origine avec le dernier changement de code, car la copie dans le dossier de livraison porte la date de la copie.
+
+## S244 — Dans un cadrage, quand l'utilisateur corrige une règle métie
+Rôles : dev
+Date : 2026-11-18
+
+Dans un cadrage, quand l'utilisateur corrige une règle métier après la rédaction du cahier, il faut réécrire explicitement toutes les parties du cahier affectées (étapes, taille, légendes de maquette) dans le rapport final — le message de confirmation et une nouvelle maquette ne suffisent pas si le champ structuré du cahier n'est pas lui-même renvoyé à jour.

@@ -1473,3 +1473,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Quand une correction de cahier déjà posée par l'utilisateur introduit un besoin distinct de l'objet initial de la fonctionnalité, on l'intègre quand même dans le même cahier corrigé, sans rouvrir de série de questions ; on choisit soi-même la forme des points encore ouverts et on l'explique dans le compte rendu.
+
+## S246 — Quand l'analyse d'une correction de cahier des charges est d
+Rôles : dev
+Date : 2026-11-18
+
+Quand l'analyse d'une correction de cahier des charges est déjà complète, rendre le cahier des charges (étapes, taille) dans le même rapport que l'analyse ; un rapport sans ce cahier laisse la fonctionnalité bloquée et provoque un aller-retour inutile.

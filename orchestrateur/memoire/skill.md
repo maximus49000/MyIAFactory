@@ -1515,3 +1515,9 @@ Rôles : dev
 Date : 2026-11-18
 
 Sur un poste partagé, un port déjà annoncé « in use » par un outil de build peut être occupé en IPv6 loopback ([::1]) sans répondre sur 127.0.0.1 ; vérifier les deux avant de conclure à un échec de démarrage ou de tenter de libérer le port.
+
+## S253 — Pour une tâche de vérification, lancer d'abord les tests exi
+Rôles : dev
+Date : 2026-11-18
+
+Pour une tâche de vérification, lancer d'abord les tests existants couvrant exactement le scénario. Cela résout en quelques secondes ce qu'une lecture de code approfondie prendrait des minutes à clarifier.

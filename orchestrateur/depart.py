@@ -252,29 +252,43 @@ def _mots(texte):
     return set(re.findall(r"[a-z0-9_]{4,}", sans_accents))
 
 
-def lecons_pertinentes(lecons, contexte):
-    """Les leçons à lister pour une tâche : toutes si elles sont peu nombreuses, sinon les plus proches du `contexte` (le
-    texte de la tâche : titre, fonctionnalité, cahier, élément, fichiers). Un mot compte d'autant plus qu'il est rare
-    parmi les leçons ; un mot présent dans plus du tiers d'entre elles ne compte pas. Rend `(retenues, nombre_écartées)`,
-    les retenues dans leur ordre d'origine."""
-    if len(lecons) <= LECONS_TOUTES:
-        return list(lecons), 0
-    mots = [_mots(x["texte"]) for x in lecons]
+def proches(textes, contexte, tout=LECONS_TOUTES, retenus=LECONS_RETENUES, au_moins=LECONS_AU_MOINS):
+    """Les rangs des `textes` à garder pour une tâche : tous s'ils sont peu nombreux, sinon les plus proches du
+    `contexte` (le texte de la tâche). Un mot compte d'autant plus qu'il est rare parmi les textes ; un mot présent dans
+    plus du tiers d'entre eux ne compte pas. Rend `(rangs dans l'ordre d'origine, nombre d'écartés)`."""
+    if len(textes) <= tout:
+        return list(range(len(textes))), 0
+    mots = [_mots(x) for x in textes]
     frequence = {}
     for ms in mots:
         for m in ms:
             frequence[m] = frequence.get(m, 0) + 1
     voulu = _mots(contexte)
-    poids = {m: math.log(1 + len(lecons) / n) for m, n in frequence.items() if n <= len(lecons) / 3}
+    poids = {m: math.log(1 + len(textes) / n) for m, n in frequence.items() if n <= len(textes) / 3}
     notes = [sum(poids.get(m, 0) for m in ms & voulu) for ms in mots]
-    ordre = sorted((i for i, n in enumerate(notes) if n > 0), key=lambda i: (-notes[i], -i))[:LECONS_RETENUES]
-    for i in range(len(lecons) - 1, -1, -1):          # de quoi garder quelques leçons récentes même sans rapport
-        if len(ordre) >= LECONS_AU_MOINS:
+    ordre = sorted((i for i, n in enumerate(notes) if n > 0), key=lambda i: (-notes[i], -i))[:retenus]
+    for i in range(len(textes) - 1, -1, -1):          # de quoi garder quelques textes récents même sans rapport
+        if len(ordre) >= au_moins:
             break
         if i not in ordre:
             ordre.append(i)
-    gardees = sorted(ordre)
-    return [lecons[i] for i in gardees], len(lecons) - len(gardees)
+    return sorted(ordre), len(textes) - len(ordre)
+
+
+def lecons_pertinentes(lecons, contexte):
+    """Les leçons à lister pour une tâche (voir `proches`). Rend `(retenues, nombre_écartées)`."""
+    rangs, ecartees = proches([x["texte"] for x in lecons], contexte)
+    return [lecons[i] for i in rangs], ecartees
+
+
+def contexte_de_tache(tache, fonc):
+    """Le texte qui dit de quoi parle la tâche, pour choisir ce qui s'y rapporte (leçons du métier, contrôles du
+    registre) : son titre, la fonctionnalité (nom, étapes du cahier) et l'élément (objectif, fichiers)."""
+    elem = ((fonc or {}).get("elements") or {}).get(tache.get("element")) or {}
+    etapes = ((fonc or {}).get("cahier") or {}).get("etapes") or []
+    morceaux = [tache.get("titre"), tache.get("etape"), (fonc or {}).get("nom"), *etapes, elem.get("nom"),
+                elem.get("objectif"), *(elem.get("fichiers") or [])]
+    return " ".join(str(x) for x in morceaux if x)
 
 
 def _section_metier(metiers_, contexte=""):

@@ -3724,6 +3724,36 @@ def _verdicts_de_la_revue(f, v, verdicts):
     return [{"element": v["element"]["id"], "conforme": conforme, "points": points}]
 
 
+# Essai réel (RoadmapReborn f9, 2026-11-18) : 107 contrôles, 29 000 caractères que l'agent relit à chaque étape (et qui
+# restent dans son contexte), dont plus de la moitié sont des remarques sur la factory sans rapport avec sa tâche. Au-delà
+# de CONTROLES_TOUS, les contrôles d'installation (règles de tout le projet) sont toujours donnés, les autres seulement
+# s'ils touchent la tâche ; le registre complet reste dans son fichier.
+CONTROLES_TOUS = 20
+ORIGINES_TOUJOURS = ("installation",)
+_CONTROLE = re.compile(r"^- C\d+ · \S+ · ([^:]*?) :")
+
+
+def _consigne_des_controles(projet, t, f):
+    sans_lecture = "Registre des contrôles : relis-le avant de rendre l'élément."
+    try:
+        lignes = [x.strip() for x in Path(_factory(projet)["controles"]).read_text(encoding="utf-8-sig").splitlines()]
+    except (OSError, KeyError, TypeError):
+        return sans_lecture
+    actifs = [x for x in lignes if _CONTROLE.match(x) and "(retiré le" not in x]
+    if not actifs:
+        return sans_lecture
+    toujours = [x for x in actifs if _CONTROLE.match(x).group(1).strip().lower() in ORIGINES_TOUJOURS]
+    autres = [x for x in actifs if x not in toujours]
+    rangs, ecartes = dep.proches(autres, dep.contexte_de_tache(t, f), tout=max(CONTROLES_TOUS - len(toujours), 0))
+    montres = toujours + [autres[i] for i in rangs]
+    if not ecartes:
+        return "\n".join(["Registre des contrôles : passe-les avant de rendre l'élément.", *montres])
+    return "\n".join([
+        "Contrôles du registre à passer avant de rendre l'élément (les plus proches de ta tâche ; "
+        f"{ecartes} autres, sans rapport avec elle, ne sont pas listés : registre complet dans "
+        f"{_factory(projet)['controles']}) :", *montres])
+
+
 def _consigne_de_tests(projet, etat, t, fid, f, dernier_regard):
     if _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
         return [SUITE_COMPLETE_UNE_FOIS, APK_A_JOUR_AVANT_LES_TESTS]
@@ -3786,7 +3816,7 @@ def _matiere(projet, etat, t):
                         "C'est une **correction**, pas une nouvelle fonctionnalité. Fiche de correction :",
                         "\n".join(f"- {x}" for x in (f.get("cahier") or {}).get("etapes") or []) or "(vide)"]
             parties += ([consigne] if consigne else []) + _contexte_concerne(projet, f)
-            parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
+            parties.append(_consigne_des_controles(projet, t, f))
         else:
             methode = (f or {}).get("methode") or {}
             cahier = (f or {}).get("cahier") or {}
@@ -3809,7 +3839,7 @@ def _matiere(projet, etat, t):
                             REVUE_D_ENSEMBLE]
             else:
                 parties += _perimetre_de_l_element(f, t.get("element"))
-            parties.append("Registre des contrôles : relis-le avant de rendre l'élément.")
+            parties.append(_consigne_des_controles(projet, t, f))
         fichiers =((f or {}).get("elements") or {}).get(t.get("element"), {}).get("fichiers") or []
         if fichiers:
             parties.append("Fichiers de ton élément : " + ", ".join(fichiers) + " (si tu dois en toucher un autre, "

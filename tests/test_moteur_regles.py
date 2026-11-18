@@ -1654,6 +1654,40 @@ class ParcoursSelonLaTaille(Base):
             {"statut": "fait", "message": {"texte": "Fait."}}, verdict("e2")])
         self.assertEqual(len(self.taches(etape="flux:controle")), 2)
 
+    def registre(self, n):
+        lignes = ["# Registre des contrôles", "", "## Contrôles", "",
+                  "- C1 · 2026-11-16 · installation : Aucune régression : tous les tests passent."]
+        lignes += [f"- C{i} · 2026-11-17 · retour de agent-1 : Le module zorglub{i} exige un redémarrage du serveur{i}."
+                   for i in range(2, n)]
+        lignes += [f"- C{n} · 2026-11-17 · relecture : Dans l'écran Accueil, le titre fait 24 px.",
+                   f"- C{n + 1} · 2026-11-17 · relecture : (retiré le 2026-11-18 : obsolète) Accueil sans titre."]
+        (self.dossier / "controles.md").write_text("\n".join(lignes) + "\n", encoding="utf-8")
+
+    def matiere_du_premier_element(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        regles.avancer(self.projet, self.etat)
+        (t,) = [t for t in self.taches() if str(t["etape"]).startswith("flux:")]
+        return regles._matiere(self.projet, self.etat, t)
+
+    def test_un_long_registre_ne_donne_que_les_controles_de_la_tache_et_ceux_d_installation(self):
+        """Essai réel (RoadmapReborn f9, 2026-11-18) : 107 contrôles (29 000 caractères) relus à chaque étape, dont plus
+        de la moitié sans rapport avec la tâche."""
+        self.registre(40)
+        m = self.matiere_du_premier_element()
+        self.assertIn("le titre fait 24 px", m)                         # le contrôle de l'écran de la tâche
+        self.assertIn("Aucune régression", m)                          # les contrôles d'installation, toujours
+        self.assertLess(m.count("zorglub"), 8)                         # pas les 38 autres
+        self.assertNotIn("Accueil sans titre", m)                      # un contrôle retiré n'est jamais donné
+        self.assertIn("sans rapport avec elle, ne sont pas listés", m)
+        self.assertIn("controles.md", m)                               # où trouver le registre complet
+
+    def test_un_petit_registre_est_donne_en_entier(self):
+        self.registre(6)
+        m = self.matiere_du_premier_element()
+        self.assertEqual(m.count("zorglub"), 4)
+        self.assertNotIn("ne sont pas listés", m)
+
     def test_le_directeur_peut_demander_le_parcours_complet(self):
         self.cahier_de_taille(self.PETITE)
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")

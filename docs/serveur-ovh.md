@@ -156,9 +156,14 @@ hors snap), Unity Hub (dépôt officiel d'Unity), et fait démarrer Hub à l'ouv
 sont retéléchargées et validées à chaque exécution ; si l'une est introuvable, vide ou illisible, l'étape se bloque. Une liste
 de sources n'est retirée que si sa propre clé manque ou est invalide (pour ne pas casser les `apt-get update` suivants du
 serveur) ; si une clé valide et sa liste existent déjà d'une exécution réussie, les deux sont conservées telles quelles (le
-Firefox de Mozilla reste épinglé et le paquet snap d'Ubuntu ne le remplace pas), et le détail le dit. Le paquet xrdp démarre
+Firefox de Mozilla reste épinglé et le paquet snap d'Ubuntu ne le remplace pas), et le détail le dit ; à la première
+exécution (aucun dépôt n'existait), le détail dit seulement qu'aucun dépôt n'a été ajouté ni modifié. Le paquet xrdp démarre
 d'office sur toutes les interfaces : l'étape l'arrête aussitôt après l'installation et le laisse arrêté à tout blocage qui
-précède la preuve d'écoute en boucle locale ; il ne redémarre qu'une fois configuré sur `127.0.0.1`. Les contrôles de clé
+précède la preuve d'écoute en boucle locale, y compris l'échec de l'installation de XFCE/xrdp elle-même ; il ne redémarre
+qu'une fois configuré sur `127.0.0.1`. Comportement attendu, non vérifié sur le vrai serveur : après un blocage précoce, xrdp
+reste arrêté jusqu'à une nouvelle exécution réussie ; et chaque exécution redémarre xrdp, ce qui coupe une connexion RDP
+ouverte (la session précédente peut rester orpheline sur le serveur et garder sa mémoire jusqu'à ce que vous vous y
+déconnectiez). Les contrôles de clé
 utilisent un dossier gpg temporaire supprimé ensuite (aucun `/root/.gnupg`). Coût **estimé** (non mesuré) : environ 1 Go de
 mémoire pendant la session, 2 à 3 Go de disque ; budget d'attente de l'étape : 25 minutes.
 

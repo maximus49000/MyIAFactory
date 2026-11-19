@@ -277,17 +277,23 @@ installer_cle_apt() {
 }
 
 # Après un échec de clé : une liste de sources n'est retirée que si SA clé finale manque ou est invalide ; si une clé valide
-# et sa liste existent déjà (exécution précédente réussie), les deux restent intacts. Rend 0 si une liste a été retirée.
-# $1 = dossier apt.
+# et sa liste existent déjà (exécution précédente réussie), les deux restent intacts. Positionne LISTES_RETIREES et
+# LISTES_GARDEES (nombres de listes retirées / conservées avec une clé valide). $1 = dossier apt.
 retirer_listes_sans_cle_valide() {
-  local apt="$1" retire=1
-  if ! cle_apt_valide "$apt/keyrings/packages.mozilla.org.asc" && [ -e "$apt/sources.list.d/mozilla.list" ]; then
-    sudo rm -f "$apt/sources.list.d/mozilla.list"; retire=0
-  fi
-  if ! cle_apt_valide "$apt/keyrings/unityhub.gpg" && [ -e "$apt/sources.list.d/unityhub.list" ]; then
-    sudo rm -f "$apt/sources.list.d/unityhub.list"; retire=0
-  fi
-  return "$retire"
+  local apt="$1" liste cle
+  LISTES_RETIREES=0
+  LISTES_GARDEES=0
+  for liste in "mozilla.list:packages.mozilla.org.asc" "unityhub.list:unityhub.gpg"; do
+    cle="$apt/keyrings/${liste#*:}"
+    liste="$apt/sources.list.d/${liste%%:*}"
+    [ -e "$liste" ] || continue
+    if cle_apt_valide "$cle"; then
+      LISTES_GARDEES=$((LISTES_GARDEES + 1))
+    else
+      sudo rm -f "$liste"
+      LISTES_RETIREES=$((LISTES_RETIREES + 1))
+    fi
+  done
 }
 
 # Sortie bloque APRÈS l'installation du paquet xrdp (qui démarre le service sur 0.0.0.0:3389) : le service est arrêté avant de
@@ -330,7 +336,7 @@ etape_bureau_distant() {
 
   sudo apt-get update -y >/dev/null 2>&1
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gpg xfce4 xfce4-terminal dbus-x11 xrdp >/dev/null 2>&1 \
-    || repondre bloque "Installation de XFCE et de xrdp impossible."
+    || bloque_xrdp_arrete "Installation de XFCE et de xrdp impossible."
   # Le paquet xrdp démarre le service sur 0.0.0.0:3389 : on l'arrête tout de suite ; il ne repart qu'après la configuration
   # en boucle locale (restart plus bas). Tout bloque entre-temps le laisse arrêté.
   sudo systemctl stop xrdp >/dev/null 2>&1
@@ -344,10 +350,18 @@ etape_bureau_distant() {
   installer_cle_apt "$URL_CLE_MOZILLA" "$apt/keyrings/packages.mozilla.org.asc" asc || echec_cle="Mozilla"
   [ -n "$echec_cle" ] || installer_cle_apt "$URL_CLE_UNITY_HUB" "$apt/keyrings/unityhub.gpg" dearmor || echec_cle="Unity Hub"
   if [ -n "$echec_cle" ]; then
-    if retirer_listes_sans_cle_valide "$apt"; then
-      bloque_xrdp_arrete "Clé du dépôt ${echec_cle} introuvable, vide ou illisible : dépôt sans clé valide retiré, rien n'est installé de plus."
+    local suite
+    retirer_listes_sans_cle_valide "$apt"
+    if [ "$LISTES_RETIREES" -gt 0 ] && [ "$LISTES_GARDEES" -gt 0 ]; then
+      suite="dépôt sans clé valide retiré, l'autre dépôt (clé valide) est conservé"
+    elif [ "$LISTES_RETIREES" -gt 0 ]; then
+      suite="dépôt sans clé valide retiré"
+    elif [ "$LISTES_GARDEES" -gt 0 ]; then
+      suite="la configuration précédente (clés et dépôts valides) est conservée"
+    else
+      suite="aucun dépôt n'a été ajouté ni modifié"
     fi
-    bloque_xrdp_arrete "Clé du dépôt ${echec_cle} introuvable, vide ou illisible : la configuration précédente (clés et dépôts valides) est conservée, rien n'est installé de plus."
+    bloque_xrdp_arrete "Clé du dépôt ${echec_cle} introuvable, vide ou illisible : ${suite}, rien n'est installé de plus."
   fi
   # Firefox hors snap : dépôt Mozilla, trousseau signé, priorité sur le paquet de transition d'Ubuntu.
   echo "deb [signed-by=$apt/keyrings/packages.mozilla.org.asc] ${URL_DEPOT_MOZILLA} mozilla main" \

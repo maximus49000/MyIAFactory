@@ -132,7 +132,7 @@ class TestScriptSimule(unittest.TestCase):
 
     def _bureau(self, mdp, simuler=False, ecoute="127.0.0.1:3389", ufw="Status: active\n22/tcp LIMIT Anywhere", ssh_mdp="no",
                 sshd_sortie=None, utilisateur="ubuntu", ini=None, politique=None, firefox_reel="/usr/lib/firefox/firefox", maj_ok=True,
-                cle_mozilla="ok", cle_unity="ok", apt_avant=None):
+                cle_mozilla="ok", cle_unity="ok", apt_avant=None, install_ok=True):
         """Lance bureau_distant avec de faux binaires ; rend (JSON, journal des appels, mot de passe reçu par chpasswd, dossier home)."""
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
@@ -158,7 +158,8 @@ class TestScriptSimule(unittest.TestCase):
             }
             corps["curl"] = CURL_FACTICE
             corps["gpg"] = GPG_FACTICE
-            corps["apt-get"] = '[ "$1" = update ] && [ "%s" = non ] && exit 1\nexit 0' % ("oui" if maj_ok else "non")
+            corps["apt-get"] = ('[ "$1" = update ] && [ "%s" = non ] && exit 1\n' % ("oui" if maj_ok else "non")
+                                + '[ "$1" = install ] && [ "%s" = non ] && case "$*" in *xrdp*) exit 1;; esac\nexit 0' % ("oui" if install_ok else "non"))
             for nom in ("apt-get", "systemctl", "usermod", "chpasswd"):
                 corps.setdefault(nom, "exit 0")
             for nom, texte in corps.items():
@@ -166,7 +167,8 @@ class TestScriptSimule(unittest.TestCase):
                     texte = f'echo "{nom} $@" >> "{journal.as_posix()}"\n' + texte
                 (faux / nom).write_text("#!/bin/sh\n" + texte + "\n", newline="\n")
                 (faux / nom).chmod(0o755)
-            envs = dict(APT_RACINE=(t / "apt").as_posix(), CLE_MOZILLA=cle_mozilla, CLE_UNITY=cle_unity)
+            (t / "tmp").mkdir()
+            envs = dict(APT_RACINE=(t / "apt").as_posix(), CLE_MOZILLA=cle_mozilla, CLE_UNITY=cle_unity, TMPDIR=(t / "tmp").as_posix())
             for dossier_apt in ("sources.list.d", "preferences.d"):
                 (t / "apt" / dossier_apt).mkdir(parents=True)
             for rel, contenu in (apt_avant or {}).items():
@@ -180,6 +182,7 @@ class TestScriptSimule(unittest.TestCase):
                                env=dict(os.environ, HOME=home.as_posix(), DISQUE_LIBRE_GO="500", BUREAU_ATTENTE_S="0", **envs,
                                         PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
             appels = journal.read_text() if journal.exists() else ""
+            self.tmp_restant = [x.name for x in (t / "tmp").iterdir()]   # dossiers gpg temporaires oubliés
             self.apt = {x.relative_to(t / "apt").as_posix(): x.read_text() for x in (t / "apt").rglob("*") if x.is_file()}
             autostart = home / ".config" / "autostart" / "unityhub.desktop"
             return (json.loads(r.stdout), appels, recu.read_text() if recu.exists() else "", r,
@@ -378,13 +381,31 @@ class TestScriptSimule(unittest.TestCase):
                 d, appels, _, _, _, _ = self._bureau(self.MDP + "\n", cle_unity=cle_unity)
                 gpgs = [x for x in appels.splitlines() if x.startswith("gpg ")]
                 self.assertTrue(gpgs, appels)
-                homes = set()
                 for x in gpgs:
-                    m = re.search(r"--homedir (\S+)", x)
-                    self.assertTrue(m, x)
-                    homes.add(m.group(1))
-                for h in homes:
-                    self.assertFalse(os.path.exists(h), h)
+                    self.assertRegex(x, r"--homedir \S+/tmp/tmp\.", x)   # créé par mktemp sous le TMPDIR du test
+                self.assertEqual(self.tmp_restant, [])                   # et tous supprimés (vrai aussi sous Windows)
+
+    def test_bureau_distant_echec_de_l_installation_arrete_xrdp(self):
+        d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", install_ok=False)
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("Installation de XFCE", d["detail"])
+        self.assertEqual(self._systemctl(appels)[-1], "sudo systemctl stop xrdp", appels)
+        self.assertNotIn("chpasswd", appels)
+        self.assertEqual(recu, "")
+
+    def test_bureau_distant_cle_en_echec_premiere_execution_ne_pretend_pas_conserver(self):
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", cle_mozilla="http")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("Clé du dépôt Mozilla", d["detail"])
+        self.assertNotIn("précédente", d["detail"])
+        self.assertNotIn("conservée", d["detail"])
+        self.assertIn("aucun dépôt", d["detail"])
+        self.assertEqual([x for x in self.apt if x.startswith("sources.list.d/")], [])
+
+    def test_bureau_distant_cle_en_echec_avec_liste_retiree_le_dit(self):
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", apt_avant={"sources.list.d/mozilla.list": "deb M\n"}, cle_mozilla="http")
+        self.assertIn("retiré", d["detail"])
+        self.assertNotIn("précédente", d["detail"])
 
     @staticmethod
     def _systemctl(appels):

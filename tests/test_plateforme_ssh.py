@@ -140,6 +140,22 @@ class TestAttendre(unittest.TestCase):
         self.assertLessEqual(len(pauses), 3)
 
 
+    def test_attendre_ssh_distingue_l_empreinte_changee_du_delai(self):
+        pauses = []
+
+        def runner(args, **kw):
+            return subprocess.CompletedProcess(args, 255, stdout="", stderr="WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!")
+        r = plateforme_ssh.attendre_ssh(HOTE, Path("cle"), 100, runner=runner, dormir=pauses.append)
+        self.assertEqual(r, plateforme_ssh.CLE_CHANGEE)
+        self.assertIsNot(r, True)
+        self.assertEqual(pauses, [])
+
+    def test_attendre_ssh_refus_de_connexion_n_est_pas_une_empreinte_changee(self):
+        def runner(args, **kw):
+            return subprocess.CompletedProcess(args, 255, stdout="", stderr="Connection refused")
+        self.assertIs(plateforme_ssh.attendre_ssh(HOTE, Path("cle"), 20, pas=10, runner=runner, dormir=lambda s: None), False)
+
+
 class TestOublier(unittest.TestCase):
     def test_oublier_hote_sans_accord_refuse(self):
         for accord in (False, None, "oui", 1):

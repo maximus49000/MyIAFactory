@@ -78,6 +78,20 @@ class TestPlateformeOvh(unittest.TestCase):
         self.assertEqual(corps, {"operatingSystem": "ubuntu2404-server_64", "customizations": {"sshKey": CLE}})
         self.assertFalse([a for a in c.appels if "/install/start" in a[1] or "/me/sshKey" in a[1]])
 
+    def test_get_de_validation_en_panne_leve_erreur_avant_ecriture_sans_post(self):
+        for panne in (ovh_api.ErreurOvh(503, "indisponible"), ovh_api.ErreurOvh(0, "délai"), OSError("réseau")):
+            c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): panne})
+            with self.assertRaises(plateforme_ovh.ErreurAvantEcriture, msg=repr(panne)):
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", CLE, True)
+            self.assertEqual(c.ecritures(), [])
+
+    def test_echec_du_post_n_est_jamais_une_erreur_avant_ecriture(self):
+        for panne in (ovh_api.ErreurOvh(503, "x"), ovh_api.ErreurOvh(0, "x"), ovh_api.ErreurOvh(400, "x")):
+            c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES,
+                               ("POST", f"/dedicated/server/{NOM}/reinstall"): panne})
+            with self.assertRaises(ovh_api.ErreurOvh):
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", CLE, True)
+
     def test_reinstaller_refuse_un_modele_non_compatible(self):
         c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
         with self.assertRaises(ValueError):
@@ -109,6 +123,10 @@ class TestPlateformeOvh(unittest.TestCase):
             self.assertTrue(plateforme_ovh.est_ubuntu_lts(os_), os_)
         for os_ in ("ubuntu2410-server_64", "ubuntu2610-server_64", "ubuntu2304-server_64", "debian12_64", "none_64", "", None):
             self.assertFalse(plateforme_ovh.est_ubuntu_lts(os_), repr(os_))
+
+    def test_ubuntu_ancien_ou_variante_n_est_jamais_reinstalle(self):
+        for os_ in ("ubuntu2004-server_64", "ubuntu1804-server_64", "ubuntu1604-server_64", "ubuntu2404-withapp_64"):
+            self.assertTrue(plateforme_ovh.est_ubuntu_lts(os_), os_)
 
     def test_plus_aucune_trace_de_l_enregistrement_de_cle_chez_ovh(self):
         self.assertFalse(hasattr(plateforme_ovh, "enregistrer_cle_ssh"))

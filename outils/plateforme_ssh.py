@@ -12,6 +12,8 @@ from pathlib import Path
 from plateforme_ovh import ErreurAccord
 
 NOM_CLE = "id_ed25519_myiafactory"
+CHANGEMENT_CLE = "HOST IDENTIFICATION HAS CHANGED"   # message d'OpenSSH quand l'empreinte connue ne correspond plus
+CLE_CHANGEE = "empreinte_changee"   # valeur de retour de `attendre_ssh` : abandon parce que l'empreinte du serveur a changé
 
 
 class ErreurSsh(Exception):
@@ -86,11 +88,19 @@ def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
 
 
 def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=time.sleep):
-    """Réessaie une commande triviale jusqu'au succès ; renvoie False une fois `delai_total` secondes écoulées."""
+    """Réessaie une commande triviale jusqu'au succès.
+
+    Renvoie True au succès, False une fois `delai_total` secondes écoulées, ou `CLE_CHANGEE` dès qu'OpenSSH refuse parce que
+    l'empreinte connue du serveur a changé (attendre n'y changerait rien : l'appelant décide s'il peut l'oublier).
+    Tester le succès par `is True` (`CLE_CHANGEE` est un texte non vide).
+    """
     ecoule = 0
     while True:
-        if executer(hote, "true", cle, delai=min(pas, 30), runner=runner)[0] == 0:
+        code, _sortie, erreur = executer(hote, "true", cle, delai=min(pas, 30), runner=runner)
+        if code == 0:
             return True
+        if CHANGEMENT_CLE in erreur:
+            return CLE_CHANGEE
         if ecoule >= delai_total:
             return False
         dormir(pas)

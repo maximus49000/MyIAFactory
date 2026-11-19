@@ -22,7 +22,7 @@ import plateforme_ovh
 import plateforme_ssh
 from ovh_api import ErreurOvh
 from plateforme_acces import ErreurAcces
-from plateforme_ovh import ErreurAccord
+from plateforme_ovh import ErreurAccord, ErreurAvantEcriture
 from plateforme_ssh import ErreurSsh
 
 ETAPES = ("lecture", "os", "ssh", "durcissement", "docker", "images", "licence")
@@ -41,7 +41,7 @@ SCRIPT_DISTANT = "$HOME/myiafactory/mise_en_place.sh"   # dossier privé (0700) 
 VERROU_JEUNE_S = 30
 DOSSIER_DISTANT = "$HOME/myiafactory/serveur_ovh"
 DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600}
-CHANGEMENT_CLE = "HOST IDENTIFICATION HAS CHANGED"
+CHANGEMENT_CLE = plateforme_ssh.CHANGEMENT_CLE
 ENCOURS = {"durcissement": "Durcissement en cours sur le serveur (quelques minutes).",
            "docker": "Installation de Docker en cours (quelques minutes).",
            "images": "Images en cours de préparation (long la première fois : téléchargement et construction).",
@@ -147,16 +147,26 @@ def _repli_possible(c):
             and c.cache.get("tache") is None and not c.cache.get("demande") and bool(c.cache.get("ip")))
 
 
+def _cause_repli(e):
+    """Texte vrai pour la cause du repli sur le cache (le serveur reste « prêt » dans tous les cas)."""
+    code = e.code if isinstance(e, ErreurOvh) else 0
+    if code in (401, 403):
+        return "OVH a refusé l'accès (jeton/droits)"
+    if code == 404:
+        return "OVH ne connaît pas ce serveur (nom à vérifier)"
+    return "OVH injoignable"
+
+
 def _etape_lecture(c):
     try:
         if c.acces is None:
             raise c.erreur_acces
         c.srv = plateforme_ovh.lire_serveur(c.client_ovh(), c.acces["serveur"])
-    except (ErreurOvh, ErreurAcces, OSError):
+    except (ErreurOvh, ErreurAcces, OSError) as e:
         if not _repli_possible(c):
             raise
         c.hors_ligne, c.ip = True, c.cache["ip"]
-        return _rapport("fait", f"OVH injoignable : adresse en cache ({c.ip}).")
+        return _rapport("fait", f"{_cause_repli(e)} : adresse en cache ({c.ip}).")
     c.ip = c.srv.get("ip") or c.cache.get("ip")
     if not c.ip:
         return _rapport("bloque", "OVH ne donne pas d'adresse pour ce serveur.",
@@ -216,6 +226,10 @@ def _reinstaller(c):
                         f"Vérifiez les droits d'écriture sur {c.dossier}, puis relancez.")
     try:
         c.cache["tache"] = plateforme_ovh.reinstaller(c.client, c.acces["serveur"], modele, c.pub, c.accord)
+    except ErreurAvantEcriture as e:                # la lecture de validation a échoué : aucune requête d'écriture n'est partie
+        c.cache["demande"] = None
+        c.ecrire()
+        return _rapport("bloque", c.masquer(e), "OVH n'a pas répondu à la vérification : relancez l'installation dans un instant.")
     except (ErreurAccord, ValueError):              # échec net avant la requête
         c.cache["demande"] = None
         c.ecrire()
@@ -250,24 +264,51 @@ def _etape_os(c):
     return _reinstaller(c)
 
 
+def _oublier_empreinte(c):
+    """L'empreinte SSH a changé : oubliée seulement si CETTE exécution a réinstallé (ou vu finir la tâche) ;
+    sinon renvoie le rapport bloquant (possible interception), et rien n'est oublié."""
+    if not (c.reinstalle or c.tache_finie):
+        return _rapport("bloque", "L'empreinte SSH du serveur a changé alors qu'aucune réinstallation n'a eu lieu dans cette "
+                        "exécution : connexion refusée par précaution (risque d'interception).",
+                        f"Si vous savez que le serveur a été réinstallé, supprimez vous-même l'ancienne empreinte "
+                        f"(ssh-keygen -R {c.ip}) puis relancez ; sinon, ne continuez pas.")
+    c.ssh.oublier_hote(c.ip, True)
+    return None
+
+
+def _encore_changee(c):
+    return _rapport("bloque", "L'empreinte SSH du serveur a encore changé après avoir été oubliée : connexion refusée par précaution.",
+                    f"Vérifiez le serveur dans l'espace client OVH ; si c'est bien le vôtre, supprimez l'empreinte "
+                    f"(ssh-keygen -R {c.ip}) puis relancez.")
+
+
 def _etape_ssh(c):
     if c.cle is None:
         c.cle, c.pub = c.ssh.generer_cle(c.dossier)
+    oublie = False
     for _ in range(2):
         code, _sortie, erreur = c.ssh.executer(c.hote, "true", c.cle, delai=20)
         if code == 0:
             return _rapport("fait", f"Connexion SSH par clé dédiée à {c.hote} établie.")
         if CHANGEMENT_CLE not in erreur:
             break
-        if not (c.reinstalle or c.tache_finie):    # sans réinstallation dans cette exécution : possible interception
-            return _rapport("bloque", "L'empreinte SSH du serveur a changé alors qu'aucune réinstallation n'a eu lieu dans cette "
-                            "exécution : connexion refusée par précaution (risque d'interception).",
-                            f"Si vous savez que le serveur a été réinstallé, supprimez vous-même l'ancienne empreinte "
-                            f"(ssh-keygen -R {c.ip}) puis relancez ; sinon, ne continuez pas.")
-        c.ssh.oublier_hote(c.ip, True)
+        bloc = _oublier_empreinte(c)
+        if bloc:
+            return bloc
+        oublie = True
     c.rapports["ssh"] = _rapport("en_cours", "Attente du redémarrage du serveur (SSH pas encore disponible).")
     c.ecrire()
-    if c.ssh.attendre_ssh(c.hote, c.cle, c.restant_s or 60):
+    attente = c.ssh.attendre_ssh(c.hote, c.cle, c.restant_s or 60)
+    if attente == plateforme_ssh.CLE_CHANGEE:     # le serveur a fini de redémarrer, avec sa nouvelle empreinte
+        if oublie:
+            return _encore_changee(c)
+        bloc = _oublier_empreinte(c)
+        if bloc:
+            return bloc
+        attente = c.ssh.attendre_ssh(c.hote, c.cle, c.restant_s or 60)     # une seule nouvelle attente
+        if attente == plateforme_ssh.CLE_CHANGEE:
+            return _encore_changee(c)
+    if attente is True:
         return _rapport("fait", f"Connexion SSH par clé dédiée à {c.hote} établie.")
     return _rapport("bloque", f"Le serveur {c.hote} ne répond pas en SSH avec la clé dédiée.",
                     f"Ajoutez la clé publique {c.cle}.pub à ~/.ssh/authorized_keys de {c.hote} "

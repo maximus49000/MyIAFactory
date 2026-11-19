@@ -23,9 +23,9 @@ PUB = "ssh-ed25519 AAAAKEYDEDIEE myiafactory"
 
 class ClientFactice:
     def __init__(self, os_="none_64", statut_tache="done", script=None, echec_start=None, sans_tache=False, au_start=None,
-                 lecture_echoue=None):
+                 lecture_echoue=None, modeles_echoue_au=None):
         self.os, self.statut_tache, self.appels, self.corps_reinstall = os_, statut_tache, [], None
-        self.lecture_echoue = lecture_echoue
+        self.lecture_echoue, self.modeles_echoue_au, self.lectures_modeles = lecture_echoue, modeles_echoue_au, 0
         self.script, self.echec_start, self.sans_tache, self.au_start = list(script or []), echec_start, sans_tache, au_start
 
     def appeler(self, methode, chemin, corps=None):
@@ -49,6 +49,9 @@ class ClientFactice:
                 raise self.lecture_echoue
             return {"os": self.os, "ip": IP, "state": "ok", "commercialRange": "x"}
         if chemin.endswith("/install/compatibleTemplates"):
+            self.lectures_modeles += 1
+            if self.modeles_echoue_au == self.lectures_modeles:
+                raise ErreurOvh(503, "indisponible")
             return {"ovh": ["ubuntu2204-server_64", "ubuntu2404-server_64", "debian12_64"], "personal": []}
         if "/task/" in chemin:
             return {"status": self.statut_tache}
@@ -62,10 +65,12 @@ class ClientFactice:
 
 
 class SshFactice:
-    def __init__(self, erreur_cle_hote=False):
+    def __init__(self, erreur_cle_hote=False, attente=None):
         self.commandes, self.oublies, self.erreur_cle_hote = [], [], erreur_cle_hote
+        self.attente, self.attentes, self.cles_generees = attente, 0, 0
 
     def generer_cle(self, dossier):
+        self.cles_generees += 1
         return Path(dossier) / "cle", PUB
 
     def executer(self, hote, commande, cle, stdin=None, delai=60):
@@ -81,7 +86,8 @@ class SshFactice:
         return 0, "", ""
 
     def attendre_ssh(self, hote, cle, delai_total):
-        return True
+        self.attentes += 1
+        return self.attente(self) if self.attente else True
 
     def oublier_hote(self, hote, accord):
         self.oublies.append((hote, accord))
@@ -265,6 +271,8 @@ class TestRobustesse(Base):
         client, ssh = ClientFactice(), SshFactice()
         self.lancer(client, ssh)
         self.assertEqual(client.ecritures(), [])
+        self.assertEqual(ssh.cles_generees, 0)
+        self.assertEqual(ssh.commandes, [])
 
     def test_os_cible_absent_de_la_liste_ovh_ne_reinstalle_pas(self):
         class SansCible(ClientFactice):
@@ -517,6 +525,90 @@ class TestProgression(Base):
         self.assertEqual(self.statuts(_cache(self.dossier)["etat"])["docker"], "fait")
 
 
+class TestEmpreinteApresAttente(Base):
+    """R-1 : empreinte SSH changée découverte pendant l'attente du redémarrage."""
+
+    class Refuse(SshFactice):
+        """Sondes `true` refusées (serveur en train de redémarrer) tant que l'empreinte n'a pas été oubliée."""
+        def executer(self, hote, commande, cle, stdin=None, delai=60):
+            if commande == "true" and not self.oublies:
+                self.commandes.append((commande, stdin))
+                return 255, "", "Connection refused"
+            return super().executer(hote, commande, cle, stdin, delai)
+
+    @staticmethod
+    def attente_empreinte(ssh):
+        return True if ssh.oublies else plateforme.plateforme_ssh.CLE_CHANGEE
+
+    def test_reinstallation_de_cette_execution_empreinte_oubliee_une_fois_puis_ssh_fait(self):
+        ssh = self.Refuse(attente=self.attente_empreinte)
+        etat = self.lancer(ClientFactice(), ssh, accord=True)
+        self.assertEqual(ssh.oublies, [(IP, True)])
+        self.assertEqual(ssh.attentes, 2)
+        self.assertEqual(self.statuts(etat)["ssh"], "fait")
+        self.assertTrue(etat["pret"])
+
+    def test_sans_reinstallation_empreinte_changee_bloque_avec_le_bon_message(self):
+        ssh = self.Refuse(attente=self.attente_empreinte)
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), ssh, accord=True)
+        ssh_ = [e for e in etat["etapes"] if e["id"] == "ssh"][0]
+        self.assertEqual(ssh_["statut"], "bloque")
+        self.assertEqual(ssh.oublies, [])
+        self.assertIn("empreinte", ssh_["detail"])
+        self.assertIn("ssh-keygen -R " + IP, ssh_["geste"])
+        self.assertNotIn("authorized_keys", ssh_["geste"])
+
+    def test_delai_simple_garde_l_ancien_message(self):
+        ssh = self.Refuse(attente=lambda s: False)
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), ssh)
+        ssh_ = [e for e in etat["etapes"] if e["id"] == "ssh"][0]
+        self.assertEqual(ssh_["statut"], "bloque")
+        self.assertIn("ne répond pas en SSH", ssh_["detail"])
+        self.assertIn("authorized_keys", ssh_["geste"])
+        self.assertEqual(ssh.oublies, [])
+
+    def test_empreinte_encore_changee_apres_l_oubli_ne_boucle_pas(self):
+        class Tetue(self.Refuse):
+            def executer(inner, hote, commande, cle, stdin=None, delai=60):
+                if commande == "true":
+                    inner.commandes.append((commande, stdin))
+                    return 255, "", "Connection refused"
+                return SshFactice.executer(inner, hote, commande, cle, stdin, delai)
+        ssh = Tetue(attente=lambda s: plateforme.plateforme_ssh.CLE_CHANGEE)
+        etat = self.lancer(ClientFactice(), ssh, accord=True)
+        self.assertEqual(self.statuts(etat)["ssh"], "bloque")
+        self.assertEqual(len(ssh.oublies), 1)
+        self.assertEqual(ssh.attentes, 2)
+
+
+class TestDemandeAvantEcriture(Base):
+    """R-4 : seule une panne prouvée avant le POST efface la marque de demande."""
+
+    def test_get_de_validation_en_panne_efface_la_marque_sans_post(self):
+        client = ClientFactice(modeles_echoue_au=2)   # 1re lecture (choix du modèle) ok, 2e (dans reinstaller) en 503
+        etat = self.lancer(client, SshFactice(), accord=True)
+        os_ = [e for e in etat["etapes"] if e["id"] == "os"][0]
+        self.assertEqual(os_["statut"], "bloque")
+        self.assertIn("relancez", os_["geste"].lower())
+        self.assertEqual(client.reinstallations(), [])
+        self.assertFalse(_cache(self.dossier).get("demande"))
+        self.assertEqual(self.statuts(etat)["ssh"], "a_faire")
+
+    def test_post_en_echec_incertain_garde_la_marque(self):
+        for erreur in (ErreurOvh(0, "délai"), ErreurOvh(502, "passerelle")):
+            (self.dossier / "plateforme.json").unlink(missing_ok=True)    # repart d'un cache vierge à chaque cas
+            client = ClientFactice(echec_start=erreur)
+            etat = self.lancer(client, SshFactice(), accord=True)
+            self.assertEqual(self.statuts(etat)["os"], "bloque")
+            self.assertTrue(_cache(self.dossier)["demande"], repr(erreur))
+            self.assertEqual(len(client.reinstallations()), 1)
+
+    def test_post_refuse_en_4xx_efface_la_marque(self):
+        client = ClientFactice(echec_start=ErreurOvh(403, "refusé"))
+        self.lancer(client, SshFactice(), accord=True)
+        self.assertFalse(_cache(self.dossier).get("demande"))
+
+
 class TestRepliHorsLigne(Base):
     def semer(self, **extra):
         rapports = {i: {"statut": "fait", "detail": "ancien", "geste": ""} for i in plateforme.ETAPES[:6]}
@@ -531,10 +623,27 @@ class TestRepliHorsLigne(Base):
             self.assertTrue(etat["pret"], repr(erreur))
             lecture = [e for e in etat["etapes"] if e["id"] == "lecture"][0]
             self.assertEqual(lecture["statut"], "fait")
-            self.assertIn("OVH injoignable", lecture["detail"])
+            self.assertIn("adresse en cache", lecture["detail"])
             self.assertIn(IP, lecture["detail"])
             self.assertEqual(client.reinstallations(), [])
             self.assertEqual(self.statuts(etat)["os"], "fait")
+
+    def test_detail_du_repli_dit_la_vraie_cause(self):
+        attendus = {0: "OVH injoignable", 500: "OVH injoignable", 429: "OVH injoignable",
+                    401: "refusé l'accès (jeton/droits)", 403: "refusé l'accès (jeton/droits)",
+                    404: "ne connaît pas ce serveur (nom à vérifier)"}
+        for code, texte in attendus.items():
+            self.semer()
+            client = ClientFactice(os_="ubuntu2404-server_64", lecture_echoue=ErreurOvh(code, "x"))
+            etat = self.lancer(client, SshFactice())
+            self.assertTrue(etat["pret"], code)
+            detail = [e for e in etat["etapes"] if e["id"] == "lecture"][0]["detail"]
+            self.assertIn(texte, detail, code)
+            self.assertIn("adresse en cache", detail, code)
+            self.assertIn(IP, detail, code)
+        self.semer()
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64", lecture_echoue=ErreurOvh(403, "x")), SshFactice())
+        self.assertNotIn("injoignable", [e for e in etat["etapes"] if e["id"] == "lecture"][0]["detail"])
 
     def test_ovh_json_disparu_ne_degrade_pas_non_plus(self):
         self.semer()

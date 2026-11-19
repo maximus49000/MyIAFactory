@@ -166,6 +166,24 @@ class TestPlateformeBureau(AvecServeur):
         self.srv.travail_plateforme.attendre()
         self.assertNotIn("erreur", self.json("/api/plateforme"))
 
+    def test_erreur_precedente_effacee_des_le_debut_de_la_nouvelle_execution(self):
+        def casse(dossier, accord_reinstallation=False):
+            raise RuntimeError("panne")
+        travail = bplateforme.Travail(casse)
+        self.srv.travail_plateforme = travail
+        self.poster({})
+        travail.attendre()
+        self.assertIn("Installation interrompue", travail.erreur)
+        self.assertIn("erreur", self.json("/api/plateforme"))
+        travail._installer = self.installer_factice      # la nouvelle exécution reste en cours
+        self.poster({})
+        self.assertIsNone(travail.erreur)
+        e = self.json("/api/plateforme")
+        self.assertIs(e["en_cours"], True)
+        self.assertNotIn("erreur", e)
+        self.libre.set()
+        travail.attendre()
+
 
 class TestIsolationEtCacheAbime(unittest.TestCase):
     def test_dossier_par_defaut_des_essais_n_est_pas_le_vrai_dossier_personnel(self):

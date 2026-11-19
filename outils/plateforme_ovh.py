@@ -15,6 +15,10 @@ class ErreurAccord(Exception):
     """Action destructive demandée sans l'accord explicite de l'utilisateur."""
 
 
+class ErreurAvantEcriture(Exception):
+    """Échec prouvé AVANT l'envoi de la requête qui efface le disque : rien n'est parti, une nouvelle tentative est sûre."""
+
+
 def _serveur(nom):
     return "/dedicated/server/" + quote(nom, safe="")
 
@@ -56,7 +60,11 @@ def reinstaller(client, nom, modele_os, cle_publique, accord):
     cle = cle_publique.strip() if isinstance(cle_publique, str) else ""
     if not cle:
         raise ValueError("La clé publique SSH est vide : la réinstallation n'est pas lancée.")
-    if modele_os not in modeles_os(client, nom):
+    try:
+        compatibles = modeles_os(client, nom)
+    except (ErreurOvh, OSError) as e:      # lecture seule, avant l'unique écriture : rien n'est parti
+        raise ErreurAvantEcriture(f"Vérification du modèle impossible avant la réinstallation ({e}) : rien n'a été demandé.") from None
+    if modele_os not in compatibles:
         raise ValueError(f"Le modèle « {modele_os} » n'est pas compatible avec ce serveur.")
     reponse = client.appeler("POST", _serveur(nom) + "/reinstall",
                              {"operatingSystem": modele_os, "customizations": {"sshKey": cle}})

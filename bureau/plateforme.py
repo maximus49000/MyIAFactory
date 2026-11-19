@@ -107,7 +107,7 @@ class Travail:
         self._installer = installer
         self._verrou = threading.Lock()
         self._fil = None
-        self.erreur = ""
+        self.erreur = None
 
     def en_cours(self):
         with self._verrou:
@@ -117,6 +117,7 @@ class Travail:
         with self._verrou:
             if self._fil is not None and self._fil.is_alive():
                 return False
+            self.erreur = None   # l'erreur de l'exécution précédente ne doit pas survivre à une nouvelle exécution
             self._fil = threading.Thread(target=self._courir, args=(Path(d) if d else dossier(), accord_reinstallation is True),
                                          daemon=True)
             self._fil.start()
@@ -131,7 +132,7 @@ class Travail:
         try:
             installer = self._installer or _modules()[0].installer
             installer(d, accord_reinstallation=accord)
-            self.erreur = ""
+            self.erreur = None
         except BaseException as e:   # jamais un fil qui meurt avec un message qui pourrait citer un secret
             self.erreur = f"Installation interrompue ({type(e).__name__}) ; le cache garde le dernier état connu."
             print(self.erreur, file=sys.stderr)

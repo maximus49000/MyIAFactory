@@ -488,7 +488,8 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_dista
     if etat:
         return etat
     for i, id_ in enumerate(ETAPES):
-        if c.rapports.get(id_, {}).get("statut") == "fait" and id_ not in ("lecture", "os"):
+        if (c.rapports.get(id_, {}).get("statut") == "fait" and id_ not in ("lecture", "os")
+                and not (id_ == "bureau_distant" and bureau_distant)):    # le drapeau rejoue l'étape 8 (idempotente)
             if id_ == "ssh":
                 c.cle, c.pub = c.ssh.generer_cle(c.dossier)
             continue
@@ -511,7 +512,8 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_dista
         if id_ != "licence" and r["statut"] in ("bloque", "a_faire"):   # la licence (facultative) ne bloque pas la suite
             for suivant in ETAPES[i + 1:]:
                 if c.rapports.get(suivant, {}).get("statut") != "fait":
-                    c.rapports[suivant] = _rapport("a_faire", "En attente de l'étape précédente.")
+                    c.rapports[suivant] = _rapport("a_faire", NON_DEMANDEE if suivant == "bureau_distant" and not bureau_distant
+                                                   else "En attente de l'étape précédente.")
             break
     return c.ecrire()
 

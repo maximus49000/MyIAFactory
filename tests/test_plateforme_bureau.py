@@ -44,8 +44,8 @@ class TestBureau(Base):
     def etape8(self, etat):
         return [e for e in etat["etapes"] if e["id"] == "bureau_distant"][0]
 
-    def installer(self, ssh, bureau=False):
-        return plateforme.installer(self.dossier, True, client=ClientFactice(), ssh=ssh, dormir=lambda s: None,
+    def installer(self, ssh, bureau=False, client=None):
+        return plateforme.installer(self.dossier, True, client=client or ClientFactice(), ssh=ssh, dormir=lambda s: None,
                                     bureau_distant=bureau)
 
     def test_mot_de_passe_genere_puis_relu(self):
@@ -197,6 +197,39 @@ class TestBureau(Base):
         self.assertTrue(etat["pret"])
         self.assertFalse((self.dossier / plateforme_bureau.FICHIER_MDP).exists())
 
+    def test_rejouer_avec_drapeau_relance_l_etape_8_deja_faite_et_renvoie_le_mot_de_passe_modifie(self):
+        ssh, client = SshBureau(), ClientFactice()
+        self.installer(ssh, bureau=True, client=client)
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        chemin.write_text("Mon-Propre-Mot-De-Passe-77\n", encoding="utf-8")
+        ssh2 = SshBureau()
+        etat = self.installer(ssh2, bureau=True, client=client)
+        self.assertEqual(ssh2.etapes_lancees(), ["bureau_distant"])      # ni étapes 1 à 6, ni réinstallation
+        self.assertEqual(ssh2.recus[0][1], "Mon-Propre-Mot-De-Passe-77\n")
+        self.assertEqual(self.etape8(etat)["statut"], "fait")
+        self.assertEqual(len([c for c, _ in ssh2.commandes if "reinstall" in c]), 0)
+
+    def test_rejouer_sans_drapeau_ne_relance_pas_l_etape_8_deja_faite(self):
+        client = ClientFactice()
+        self.installer(SshBureau(), bureau=True, client=client)
+        ssh2 = SshBureau()
+        etat = self.installer(ssh2, client=client)
+        self.assertEqual(ssh2.recus, [])
+        self.assertEqual(ssh2.etapes_lancees(), [])
+        self.assertEqual(self.etape8(etat)["statut"], "fait")
+
+    def test_sans_drapeau_et_etape_precedente_bloquee_le_detail_reste_non_demandee(self):
+        class ImagesBloquees(SshFactice):
+            def executer(self, hote, commande, cle, stdin=None, delai=60):
+                if "--etape images" in commande:
+                    self.commandes.append((commande, stdin))
+                    return 0, json.dumps({"etape": "images", "statut": "bloque", "detail": "non"}) + "\n", ""
+                return super().executer(hote, commande, cle, stdin, delai)
+        for bureau, attendu in ((False, plateforme.NON_DEMANDEE), (True, "En attente de l'étape précédente.")):
+            with self.subTest(bureau=bureau):
+                etat = self.installer(ImagesBloquees(), bureau=bureau)
+                self.assertEqual(self.etape8(etat)["detail"], attendu)
+
     def test_installer_avec_drapeau_lance_l_etape_8_apres_les_images(self):
         ssh = SshBureau()
         etat = self.installer(ssh, bureau=True)
@@ -312,7 +345,7 @@ class TestOuvrir(Base):
 
     def ouvrir(self, **kw):
         options = dict(popen=self.popen, lancer_rdp=self.rdp_ok, port_libre=lambda: 33890,
-                       attendre_port=lambda port, proc, delai=15: True)
+                       attendre_port=lambda port, proc, delai=25: True)
         options.update(kw)
         sortie = io.StringIO()
         with redirect_stdout(sortie), mock.patch("sys.stderr", sortie):
@@ -459,6 +492,28 @@ class TestOuvrir(Base):
         self.assertEqual(code, 2)
         self.assertIn("mstsc introuvable (Bureau à distance de Windows)", sortie)
         self.assertTrue(self.procs[0].termine)
+
+    def test_filenotfound_de_l_ecriture_du_rdp_ne_dit_pas_mstsc_introuvable(self):
+        self.cache()
+        with mock.patch.object(plateforme_bureau, "_ecrire_rdp", side_effect=FileNotFoundError("dossier")):
+            code, sortie = self.ouvrir()
+        self.assertEqual(code, 1)
+        self.assertNotIn("mstsc introuvable", sortie)
+        self.assertTrue(self.procs[0].termine)
+
+    def test_tunnel_avec_keepalive(self):
+        self.cache()
+        self.ouvrir()
+        args = self.procs[0].args
+        self.assertIn("ServerAliveInterval=30", args)
+        self.assertIn("ServerAliveCountMax=3", args)
+
+    def test_l_attente_du_port_depasse_le_delai_de_connexion_ssh(self):
+        self.cache()
+        self.ouvrir()
+        delai_connexion = int(next(a for a in self.procs[0].args if a.startswith("ConnectTimeout=")).split("=")[1])
+        self.assertGreater(plateforme_bureau.ATTENTE_TUNNEL_S, delai_connexion)
+        self.assertEqual(plateforme_bureau._attendre_port.__defaults__[0], plateforme_bureau.ATTENTE_TUNNEL_S)
 
     def test_main_delegue_bureau_distant(self):
         with mock.patch.object(plateforme_bureau, "ouvrir", return_value=0) as o:

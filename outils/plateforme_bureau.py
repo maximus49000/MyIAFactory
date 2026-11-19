@@ -139,7 +139,10 @@ def _port_libre(prefere=PORT_LOCAL):
     raise OSError("aucun port local libre")
 
 
-def _attendre_port(port, proc, delai=15, connecter=socket.create_connection, dormir=time.sleep, horloge=time.monotonic):
+ATTENTE_TUNNEL_S = 25      # plus long que ConnectTimeout=20 du tunnel : une connexion lente n'est pas prise pour un échec
+
+
+def _attendre_port(port, proc, delai=ATTENTE_TUNNEL_S, connecter=socket.create_connection, dormir=time.sleep, horloge=time.monotonic):
     """Vrai si 127.0.0.1:<port> accepte une connexion ET que ssh tourne encore (avant et après une courte confirmation) :
     un port pris par un autre processus pendant que ssh sort ne doit pas être pris pour le tunnel."""
     fin = horloge() + delai
@@ -228,7 +231,8 @@ def ouvrir(dossier, popen=subprocess.Popen, lancer_rdp=subprocess.run, port_libr
     try:
         port = port_libre()
         args = ["ssh", "-N", "-L", f"127.0.0.1:{port}:127.0.0.1:{PORT_XRDP}", *ssh_options(dossier / plateforme_ssh.NOM_CLE),
-                "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=20", "--", hote]
+                "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=20",
+                "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", "--", hote]
         erreurs, fichier_err = _ouvrir_erreurs(dossier)
         proc = popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=fichier_err)
         fichier_err.close()
@@ -248,11 +252,12 @@ def ouvrir(dossier, popen=subprocess.Popen, lancer_rdp=subprocess.run, port_libr
             return 1
         fichier = _ecrire_rdp(dossier, port)
         print(f"Ouverture de la session graphique (mot de passe dans {dossier / FICHIER_MDP}).")
-        lancer_rdp(["mstsc", str(fichier)])
+        try:
+            lancer_rdp(["mstsc", str(fichier)])
+        except FileNotFoundError:       # seulement ici : une autre FileNotFoundError n'est pas « mstsc introuvable »
+            print("mstsc introuvable (Bureau à distance de Windows).", file=sys.stderr)
+            return 2
         return 0
-    except FileNotFoundError:
-        print("mstsc introuvable (Bureau à distance de Windows).", file=sys.stderr)
-        return 2
     except KeyboardInterrupt:
         print("Interrompu : le tunnel est fermé.", file=sys.stderr)
         return 1

@@ -4,7 +4,7 @@
   py -3.12 lancer.py charge --reglages <réglages d'un projet>
   python lancer.py tests [--dossier <dossier>] [--sans-attendre] -- <commande de test>
       (les tests d'un projet, une seule campagne à la fois sur le poste : voir `outils/campagne.py`)
-  py -3.12 lancer.py plateforme <etat|installer|verifier> [--accord-reinstallation] [--dossier <dossier>]
+  py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)
 """
 import sys

@@ -6,14 +6,23 @@
 # commande composée ni dans un motif de fichiers (expansion des motifs coupée : set -f) ; les limites sont appliquées ici,
 # pas par la bonne foi de l'appelant.
 # Les arguments donnés à `adb shell` sont relus par le shell de l'appareil : c'est pourquoi les motifs n'admettent aucun
-# caractère spécial du shell (ni ; $ ` ' " | & < > ( ) * ? \ ni retour à la ligne).
+# caractère spécial du shell (ni ; $ ` ' " | & < > ( ) * ? [ \ ni retour à la ligne) et commencent par une lettre ou un
+# chiffre (jamais une option comme -s ou --).
 # Sortie standard : UNE ligne JSON {"ok": bool, "verbe": "...", "detail": "..."}.
-# Codes de retour : 0 ok, 2 verbe ou argument refusé (nom de capture déjà pris compris), 3 limite atteinte, 4 outil en échec.
-# Environnement (posé par l'enveloppe lancer_emulation.sh, jamais par l'appelant) : PONT_SORTIE (/sortie), PONT_CAPTURES (50),
-# PONT_OCTETS (104857600 = 100 Mo de captures cumulées), PONT_AVD (emulateur), PONT_DEMARRAGE_S (300), PONT_PAQUET (facultatif :
-# sinon le paquet est relevé par `installer`) ; PONT_ADB / PONT_EMULATEUR remplacent adb / emulator (tests).
-# Écrit seulement sous PONT_SORTIE : pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log.
-# Un appel = une ligne « verbe arguments durée » ajoutée à ${PONT_SORTIE}/pont.log (caractères hors liste remplacés par « ? »).
+# Codes de retour : 0 ok ; 2 verbe ou argument refusé ; 3 limite atteinte ; 4 outil ou réglage en échec.
+#   Décision R7 : un nom de capture déjà pris rend 2 (argument refusé), JAMAIS 3 : 3 est réservé aux vraies limites
+#   (nombre ou octets de captures), pour que le statut « limite » du rapport reste juste. Un second `demarrer` alors que
+#   l'émulateur tourne rend aussi 2.
+# Environnement : posé par l'enveloppe lancer_emulation.sh, JAMAIS transmis par l'appelant (celui qui relaie un verbe ne doit
+# en aucun cas faire suivre son propre environnement : ces variables désignent les outils exécutés et les limites).
+#   PONT_SORTIE (/sortie ; absolu, sans . ni ..), PONT_CAPTURES (50), PONT_OCTETS (104857600 = 100 Mo de captures cumulées),
+#   PONT_AVD (emulateur), PONT_DEMARRAGE_S (300), PONT_DELAI_ADB_S (30 : délai de chaque appel à adb, `installer` x4),
+#   PONT_PAQUET (facultatif : sinon le paquet est relevé par `installer`) ;
+#   PONT_ADB / PONT_EMULATEUR : « adb » / « emulator » ou un chemin absolu (tests).
+# Écrit seulement sous PONT_SORTIE : pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log, emulateur.pid,
+# .verrou-captures.
+# Un appel = une ligne « verbe arguments durée » ajoutée à ${PONT_SORTIE}/pont.log (au plus 6 arguments, chacun tronqué à
+# 80 caractères, caractères hors liste remplacés par « ? »).
 set -u
 set -f
 set -o pipefail
@@ -24,11 +33,11 @@ exec </dev/null
 # MOTIFS DU PONT : table unique, expressions régulières POSIX étendues ancrées.
 # Miroir Python à garder IDENTIQUE : VERBES de outils/serveur_tache.py (décision R2) ; le test
 # test_motifs_python_et_pont_s_accordent fait passer les mêmes exemples par les deux.
-MOTIF_ENTIER='^[0-9]{1,4}$'                     # coordonnée : 0 à 9999
-MOTIF_DUREE='^([0-9]{1,2}|1[01][0-9]|120)$'      # attendre : 0 à 120 secondes
-MOTIF_NOM='^[a-z0-9_-]{1,40}$'                  # nom de capture
-MOTIF_TEXTE='^[A-Za-z0-9 .,_-]{1,60}$'          # texte saisi (espaces transmis en %s à `input text`)
-MOTIF_FILTRE='^[A-Za-z0-9._:-]{1,60}$'          # filtre du journal (texte littéral, pas une expression)
+MOTIF_ENTIER='^[0-9]{1,4}$'                              # coordonnée : 0 à 9999
+MOTIF_DUREE='^([0-9]{1,2}|1[01][0-9]|120)$'               # attendre : 0 à 120 secondes
+MOTIF_NOM='^[a-z0-9][a-z0-9_-]{0,39}$'                   # nom de capture
+MOTIF_TEXTE='^[A-Za-z0-9][A-Za-z0-9 .,_-]{0,59}$'        # texte saisi (espaces transmis en %s à `input text`)
+MOTIF_FILTRE='^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$'        # filtre du journal (texte littéral, pas une expression)
 MOTIF_TOUCHE='^(retour|accueil|menu)$'
 # verbe -> motifs de ses arguments, dans l'ordre ; FACULTATIFS = nombre de derniers arguments facultatifs.
 #   demarrer, installer, lancer, arreter : aucun argument (installer prend toujours entree/app.apk, chemin fixe)
@@ -46,27 +55,27 @@ motifs_du_verbe() {
     *) return 1 ;;
   esac
 }
-# Internes (hors table de l'appelant) : nom de paquet relevé sur l'appareil, réglages numériques de l'environnement.
+# Internes (hors table de l'appelant) : nom de paquet relevé sur l'appareil, réglages de l'environnement.
 MOTIF_PAQUET='^[A-Za-z][A-Za-z0-9_]{0,60}(\.[A-Za-z][A-Za-z0-9_]{0,60}){1,10}$'
 MOTIF_REGLAGE='^[0-9]{1,12}$'
+MOTIF_POINTS='(^|/)\.\.?(/|$)'                           # composant . ou .. dans un chemin
 # ==============================================================================================================
 
 LISTE_VERBES="demarrer, installer, lancer, toucher, glisser, texte, touche, attendre, capturer, journal, arreter"
 LIGNES_JOURNAL=200
-SORTIE="${PONT_SORTIE:-/sortie}"
-SORTIE="${SORTIE%/}"
-APK="$SORTIE/../entree/app.apk"
-ADB="${PONT_ADB:-adb}"
-EMULATEUR="${PONT_EMULATEUR:-emulator}"
+LARGEUR_JOURNAL=500
+ARGS_JOURNALISES=6
+SORTIE_VALIDE=0
+SORTIE=""
 
 # --- Utilitaires -----------------------------------------------------------
 
-horloge_us() {
+horloge_us() {   # met dans HORLOGE l'heure en microsecondes (sans processus)
   local t="${EPOCHREALTIME:-}"
   t="${t//[.,]/}"
-  if [[ $t =~ ^[0-9]+$ ]]; then printf '%s' "$((10#$t))"; else printf '%s' "$((SECONDS * 1000000))"; fi
+  if [[ $t =~ ^[0-9]+$ ]]; then HORLOGE=$((10#$t)); else HORLOGE=$((SECONDS * 1000000)); fi
 }
-DEBUT_US=$(horloge_us)
+horloge_us; DEBUT_US=$HORLOGE
 
 echapper_json() {
   local s="$1"
@@ -81,26 +90,28 @@ echapper_json() {
 # Texte venu de l'extérieur (journal de l'appareil) : tout octet non imprimable devient « ? » (JSON toujours valide).
 assainir() { tr -c '[:print:]\t\n' '?'; }
 
-# Forme sûre d'un mot pour le journal et la réponse : tronqué, caractères hors liste remplacés.
-mot_sur() {
-  local m="${1:0:80}"
-  [ -n "$m" ] || { printf '""'; return; }
-  printf '%s' "${m//[^A-Za-z0-9 .,_:-]/?}"
-}
-
 VERBE="${1-}"
 [ $# -gt 0 ] && shift
 ARGS=("$@")
 VERBE_SUR="${VERBE:0:40}"
 VERBE_SUR="${VERBE_SUR//[^a-z0-9_-]/?}"
 
+# Une ligne par appel, sans sous-processus par argument : au plus ARGS_JOURNALISES arguments, puis « … (N arguments) ».
 journaliser() {
-  local ligne a fin
-  ligne=$(mot_sur "$VERBE_SUR")
-  for a in "${ARGS[@]}"; do ligne+=" $(mot_sur "$a")"; done
-  fin=$(horloge_us)
+  [ "$SORTIE_VALIDE" = 1 ] || return 0
+  local ligne="$VERBE_SUR" a n=0
+  [ -n "$ligne" ] || ligne='""'
+  for a in "${ARGS[@]}"; do
+    if [ "$n" -ge "$ARGS_JOURNALISES" ]; then ligne+=" … (${#ARGS[@]} arguments)"; break; fi
+    a="${a:0:80}"
+    a="${a//[^A-Za-z0-9 .,_:-]/?}"
+    [ -n "$a" ] || a='""'
+    ligne+=" $a"
+    n=$((n + 1))
+  done
+  horloge_us
   mkdir -p -- "$SORTIE" 2>/dev/null
-  printf '%s %sms\n' "$ligne" "$(( (fin - DEBUT_US) / 1000 ))" >> "$SORTIE/pont.log" 2>/dev/null
+  printf '%s %sms\n' "$ligne" "$(( (HORLOGE - DEBUT_US) / 1000 ))" >> "$SORTIE/pont.log" 2>/dev/null
 }
 
 # repondre <code> <détail> : écrit l'unique ligne JSON, la ligne du journal, et termine avec <code>.
@@ -118,6 +129,54 @@ reglage() {
   local v="${2:-$3}"
   [[ $v =~ $MOTIF_REGLAGE ]] || repondre 4 "Réglage $1 mal formé : le pont refuse de travailler sans limite sûre."
   REGLAGE=$((10#$v))
+}
+
+# Chemins venus de l'environnement : PONT_SORTIE absolu sans . ni .. ; outils = nom attendu ou chemin absolu.
+verifier_environnement() {
+  local s="${PONT_SORTIE-/sortie}" nom valeur
+  [ -n "$s" ] && [ "${s:0:1}" = / ] || repondre 4 "PONT_SORTIE vide ou non absolu."
+  [[ $s =~ $MOTIF_POINTS ]] && repondre 4 "PONT_SORTIE ne doit contenir ni . ni .. ."
+  while [ "${s%/}" != "$s" ]; do s="${s%/}"; done
+  [ -n "$s" ] || repondre 4 "PONT_SORTIE ne peut pas être la racine."
+  for nom in adb emulator; do
+    if [ "$nom" = adb ]; then valeur="${PONT_ADB-adb}"; else valeur="${PONT_EMULATEUR-emulator}"; fi
+    [ "$valeur" = "$nom" ] && continue
+    [ "${valeur:0:1}" = / ] && [[ ! $valeur =~ $MOTIF_POINTS ]] && continue
+    repondre 4 "Outil $nom mal désigné : « $nom » ou un chemin absolu."
+  done
+  SORTIE="$s"
+  SORTIE_VALIDE=1
+  APK="$SORTIE/../entree/app.apk"
+  ADB="${PONT_ADB-adb}"
+  EMULATEUR="${PONT_EMULATEUR-emulator}"
+}
+
+# outil <délai s> <commande...> : coupe un outil bloqué (timeout, puis KILL 2 s plus tard).
+A_TIMEOUT=0
+command -v timeout > /dev/null 2>&1 && A_TIMEOUT=1
+outil() {
+  local d="$1"; shift
+  [ "$d" -ge 1 ] || d=1
+  if [ "$A_TIMEOUT" = 1 ]; then timeout -k 2 "$d" "$@"; else "$@"; fi
+}
+
+# Verrou des captures (compte + capture + revérification + mv, sérialisés entre appels simultanés).
+# flock quand il existe (image Linux) ; sinon un dossier créé atomiquement par mkdir, retiré à la sortie.
+VERROU_DOSSIER=""
+liberer_verrou() { [ -n "$VERROU_DOSSIER" ] && rmdir -- "$VERROU_DOSSIER" 2>/dev/null; return 0; }
+trap liberer_verrou EXIT
+prendre_verrou() {
+  local f="$SORTIE/.verrou-captures" debut=$SECONDS
+  if command -v flock > /dev/null 2>&1; then
+    exec 9>> "$f" || repondre 4 "Verrou des captures impossible."
+    flock -w 60 9 || repondre 4 "Verrou des captures occupé depuis 60 s."
+    return 0
+  fi
+  until mkdir -- "$f.d" 2>/dev/null; do
+    [ $((SECONDS - debut)) -lt 60 ] || repondre 4 "Verrou des captures occupé depuis 60 s."
+    sleep 0.2
+  done
+  VERROU_DOSSIER="$f.d"
 }
 
 # Paquet de l'APK : PONT_PAQUET, sinon celui relevé par `installer` ; rien si inconnu ou mal formé.
@@ -139,29 +198,54 @@ detecter_plantage() {
     }
     { if (n > 0) { n--; if (apres($0, "Process: " p)) { print f; print; n = 0 } }
       if (index($0, "FATAL EXCEPTION")) { f = $0; n = 3 }
-      else if (apres($0, "ANR in " p)) print }' | head -n "$LIGNES_JOURNAL" | assainir)
+      else if (apres($0, "ANR in " p)) print }' | head -n "$LIGNES_JOURNAL" | cut -c "1-$LARGEUR_JOURNAL" | assainir)
   [ -n "$trouve" ] || return 0
   printf '%s\n' "$trouve" > "$SORTIE/plantage.txt.tmp" && mv -f -- "$SORTIE/plantage.txt.tmp" "$SORTIE/plantage.txt"
 }
 
 liste_paquets() {
   local brut
-  brut=$("$ADB" shell pm list packages -3 2>/dev/null) || return 1
+  brut=$(outil "$DELAI_ADB" "$ADB" shell pm list packages -3 2>/dev/null) || return 1
   printf '%s\n' "$brut" | tr -d '\r' | sed -n 's/^package://p' | sort -u
+}
+
+# Processus de l'émulateur noté par `demarrer` (PID vivant), sinon rien.
+pid_emulateur() {
+  local p=""
+  [ -f "$SORTIE/emulateur.pid" ] && IFS= read -r p < "$SORTIE/emulateur.pid"
+  [[ $p =~ ^[0-9]{1,10}$ ]] && kill -0 "$p" 2>/dev/null && printf '%s' "$p"
+}
+
+# attendre_fin <pid> <essais> : vrai dès que le processus a disparu.
+attendre_fin() {
+  local i=0
+  while kill -0 "$1" 2>/dev/null; do
+    [ "$i" -lt "$2" ] || return 1
+    sleep 1
+    i=$((i + 1))
+  done
+  return 0
 }
 
 # --- Verbes ----------------------------------------------------------------
 
 verbe_demarrer() {
-  local avd="${PONT_AVD:-emulateur}" limite pid debut etat
+  local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache
   [[ $avd =~ $MOTIF_NOM ]] || repondre 4 "Réglage PONT_AVD mal formé."
   reglage PONT_DEMARRAGE_S "${PONT_DEMARRAGE_S:-}" 300; limite=$REGLAGE
-  "$EMULATEUR" -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect \
+  ancien=$(pid_emulateur) && repondre 2 "Émulateur déjà démarré (processus $ancien) : arreter d'abord."
+  # Détaché du pont (nouvelle session si setsid existe, insensible à SIGHUP sinon) ; noté dans emulateur.pid.
+  if command -v setsid > /dev/null 2>&1; then detache=setsid; else detache=nohup; fi
+  "$detache" "$EMULATEUR" -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect \
     > "$SORTIE/emulateur.log" 2>&1 &
   pid=$!
+  printf '%s\n' "$pid" > "$SORTIE/emulateur.pid"
   debut=$SECONDS
   while :; do
-    etat=$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
+    reste=$((limite - (SECONDS - debut)))
+    [ "$reste" -gt 0 ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
+    [ "$reste" -le 10 ] || reste=10
+    etat=$(outil "$reste" "$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
     [ "$etat" = 1 ] && repondre 0 "Émulateur démarré."
     kill -0 "$pid" 2>/dev/null || repondre 4 "L'émulateur s'est arrêté avant la fin du démarrage (voir emulateur.log)."
     [ $((SECONDS - debut)) -lt "$limite" ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
@@ -173,7 +257,7 @@ verbe_installer() {
   local avant apres nouveaux p="" ancien
   [ -f "$APK" ] && [ ! -L "$APK" ] || repondre 4 "APK absent : l'enveloppe le dépose dans entree/app.apk."
   avant=$(liste_paquets) || repondre 4 "adb ne répond pas (liste des paquets)."
-  "$ADB" install -r "$APK" > /dev/null 2>&1 || repondre 4 "adb install a échoué."
+  outil $((DELAI_ADB * 4)) "$ADB" install -r "$APK" > /dev/null 2>&1 || repondre 4 "adb install a échoué."
   apres=$(liste_paquets) || repondre 4 "adb ne répond pas (liste des paquets)."
   nouveaux=$(printf '%s\n' "$apres" | grep -vxF -e "$avant" 2>/dev/null)
   [ -n "$avant" ] || nouveaux="$apres"
@@ -192,31 +276,32 @@ verbe_installer() {
 verbe_lancer() {
   local p sortie
   p=$(paquet_connu) || repondre 4 "Paquet inconnu : appeler installer d'abord."
-  sortie=$("$ADB" shell monkey -p "$p" -c android.intent.category.LAUNCHER 1 2>&1) || repondre 4 "adb a échoué (lancement)."
+  sortie=$(outil "$DELAI_ADB" "$ADB" shell monkey -p "$p" -c android.intent.category.LAUNCHER 1 2>&1) \
+    || repondre 4 "adb a échoué (lancement)."
   case "$sortie" in *"No activities found"*|*"aborted"*) repondre 4 "L'application n'a pas d'activité de lancement." ;; esac
   repondre 0 "Application lancée : $p."
 }
 
 verbe_toucher() {
-  "$ADB" shell input tap "${ARGS[0]}" "${ARGS[1]}" > /dev/null 2>&1 || repondre 4 "adb a échoué (input tap)."
+  outil "$DELAI_ADB" "$ADB" shell input tap "${ARGS[0]}" "${ARGS[1]}" > /dev/null 2>&1 || repondre 4 "adb a échoué (input tap)."
   repondre 0 "Touché en ${ARGS[0]} ${ARGS[1]}."
 }
 
 verbe_glisser() {
-  "$ADB" shell input swipe "${ARGS[0]}" "${ARGS[1]}" "${ARGS[2]}" "${ARGS[3]}" > /dev/null 2>&1 \
+  outil "$DELAI_ADB" "$ADB" shell input swipe "${ARGS[0]}" "${ARGS[1]}" "${ARGS[2]}" "${ARGS[3]}" > /dev/null 2>&1 \
     || repondre 4 "adb a échoué (input swipe)."
   repondre 0 "Glissé de ${ARGS[0]} ${ARGS[1]} à ${ARGS[2]} ${ARGS[3]}."
 }
 
 verbe_texte() {
-  "$ADB" shell input text "${ARGS[0]// /%s}" > /dev/null 2>&1 || repondre 4 "adb a échoué (input text)."
+  outil "$DELAI_ADB" "$ADB" shell input text "${ARGS[0]// /%s}" > /dev/null 2>&1 || repondre 4 "adb a échoué (input text)."
   repondre 0 "Texte saisi (${#ARGS[0]} caractères)."
 }
 
 verbe_touche() {
   local code
   case "${ARGS[0]}" in retour) code=4 ;; accueil) code=3 ;; menu) code=82 ;; esac
-  "$ADB" shell input keyevent "$code" > /dev/null 2>&1 || repondre 4 "adb a échoué (input keyevent)."
+  outil "$DELAI_ADB" "$ADB" shell input keyevent "$code" > /dev/null 2>&1 || repondre 4 "adb a échoué (input keyevent)."
   repondre 0 "Touche ${ARGS[0]}."
 }
 
@@ -227,51 +312,74 @@ verbe_attendre() {
 }
 
 verbe_capturer() {
-  local nom="${ARGS[0]}" dossier="$SORTIE/captures" max octets_max cible tmp n s taille sig
+  local nom="${ARGS[0]}" dossier="$SORTIE/captures" max octets_max cible tmp tailles t n=0 s=0 taille sig
   reglage PONT_CAPTURES "${PONT_CAPTURES:-}" 50; max=$REGLAGE
   reglage PONT_OCTETS "${PONT_OCTETS:-}" 104857600; octets_max=$REGLAGE
   cible="$dossier/$nom.png"
-  tmp="$dossier/.$nom.png.tmp"
-  [ ! -L "$dossier" ] || repondre 4 "Dossier des captures invalide."
+  tmp="$dossier/.$nom.$$.tmp"
+  [ ! -L "$dossier" ] || repondre 4 "Dossier des captures invalide (lien symbolique)."
   mkdir -p -- "$dossier" || repondre 4 "Écriture impossible dans la sortie."
+  [ -d "$dossier" ] && [ ! -L "$dossier" ] || repondre 4 "Dossier des captures invalide."
+  prendre_verrou
   if [ -e "$cible" ] || [ -L "$cible" ]; then repondre 2 "Nom de capture déjà pris : $nom."; fi
-  read -r n s < <(find "$dossier" -maxdepth 1 -type f -name '*.png' -printf '%s\n' \
-                  | awk '{ n++; s += $1 } END { printf "%d %d\n", n, s }')
-  [ "${n:-0}" -lt "$max" ] || repondre 3 "Limite de captures atteinte ($max)."
-  [ "${s:-0}" -lt "$octets_max" ] || repondre 3 "Limite d'octets des captures atteinte ($octets_max)."
+  # Comptage : un échec ferme (code 4), il ne lève jamais les limites.
+  tailles=$(find "$dossier" -maxdepth 1 -type f -name '*.png' -printf '%s\n') \
+    || repondre 4 "Comptage des captures impossible : capture refusée."
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    [[ $t =~ ^[0-9]{1,15}$ ]] || repondre 4 "Comptage des captures illisible : capture refusée."
+    n=$((n + 1)); s=$((s + 10#$t))
+  done <<< "$tailles"
+  [ "$n" -lt "$max" ] || repondre 3 "Limite de captures atteinte ($max)."
+  [ "$s" -lt "$octets_max" ] || repondre 3 "Limite d'octets des captures atteinte ($octets_max)."
   rm -f -- "$tmp"
-  if ! "$ADB" exec-out screencap -p > "$tmp" 2>/dev/null; then rm -f -- "$tmp"; repondre 4 "adb a échoué (capture)."; fi
+  if ! outil "$DELAI_ADB" "$ADB" exec-out screencap -p > "$tmp" 2>/dev/null; then
+    rm -f -- "$tmp"; repondre 4 "adb a échoué (capture)."
+  fi
   sig=$(od -An -tx1 -N8 -- "$tmp" 2>/dev/null | tr -d ' \n')
   if [ "$sig" != 89504e470d0a1a0a ]; then rm -f -- "$tmp"; repondre 4 "La capture n'est pas une image PNG."; fi
   taille=$(wc -c < "$tmp")
-  if [ $(( ${s:-0} + taille )) -gt "$octets_max" ]; then rm -f -- "$tmp"; repondre 3 "Limite d'octets des captures atteinte ($octets_max)."; fi
-  mv -n -- "$tmp" "$cible"
-  if [ -e "$tmp" ]; then rm -f -- "$tmp"; repondre 2 "Nom de capture déjà pris : $nom."; fi
+  if [ $((s + taille)) -gt "$octets_max" ]; then rm -f -- "$tmp"; repondre 3 "Limite d'octets des captures atteinte ($octets_max)."; fi
+  if ! mv -n -- "$tmp" "$cible" || [ -e "$tmp" ]; then rm -f -- "$tmp"; repondre 2 "Nom de capture déjà pris : $nom."; fi
   repondre 0 "captures/$nom.png ($taille octets)."
 }
 
 verbe_journal() {
   local brut lignes
-  brut=$("$ADB" logcat -d 2>/dev/null) || repondre 4 "adb a échoué (logcat)."
+  brut=$(outil "$DELAI_ADB" "$ADB" logcat -d 2>/dev/null) || repondre 4 "adb a échoué (logcat)."
   detecter_plantage "$brut"
   if [ ${#ARGS[@]} -eq 1 ]; then
-    lignes=$(printf '%s\n' "$brut" | tr -d '\r' | { grep -F -e "${ARGS[0]}" || true; } | tail -n "$LIGNES_JOURNAL" | assainir)
+    lignes=$(printf '%s\n' "$brut" | tr -d '\r' | { grep -F -e "${ARGS[0]}" || true; } | tail -n "$LIGNES_JOURNAL" \
+             | cut -c "1-$LARGEUR_JOURNAL" | assainir)
   else
-    lignes=$(printf '%s\n' "$brut" | tr -d '\r' | tail -n "$LIGNES_JOURNAL" | assainir)
+    lignes=$(printf '%s\n' "$brut" | tr -d '\r' | tail -n "$LIGNES_JOURNAL" | cut -c "1-$LARGEUR_JOURNAL" | assainir)
   fi
   repondre 0 "$lignes"
 }
 
+# Arrêt : adb emu kill, puis, si le processus noté par demarrer vit encore, TERM puis KILL.
 verbe_arreter() {
-  local brut
-  brut=$("$ADB" logcat -d 2>/dev/null) && detecter_plantage "$brut"
-  "$ADB" emu kill > /dev/null 2>&1 || repondre 4 "adb a échoué (arrêt de l'émulateur)."
-  if [ -f "$SORTIE/plantage.txt" ]; then repondre 0 "Émulateur arrêté ; plantage relevé (plantage.txt)."; fi
-  repondre 0 "Émulateur arrêté."
+  local brut adb_ok=1 pid detail="Émulateur arrêté."
+  brut=$(outil "$DELAI_ADB" "$ADB" logcat -d 2>/dev/null) && detecter_plantage "$brut"
+  outil "$DELAI_ADB" "$ADB" emu kill > /dev/null 2>&1 || adb_ok=0
+  if pid=$(pid_emulateur); then
+    if ! attendre_fin "$pid" 10; then
+      kill -TERM "$pid" 2>/dev/null
+      attendre_fin "$pid" 5 || { kill -KILL "$pid" 2>/dev/null; attendre_fin "$pid" 5; }
+      detail="Émulateur arrêté par signal."
+    fi
+    kill -0 "$pid" 2>/dev/null && repondre 4 "L'émulateur (processus $pid) ne s'arrête pas."
+  elif [ "$adb_ok" = 0 ]; then
+    repondre 4 "adb a échoué (arrêt de l'émulateur)."
+  fi
+  rm -f -- "$SORTIE/emulateur.pid"
+  if [ -f "$SORTIE/plantage.txt" ]; then detail="$detail Plantage relevé (plantage.txt)."; fi
+  repondre 0 "$detail"
 }
 
 # --- Validation puis exécution -----------------------------------------------
 
+verifier_environnement
 motifs_du_verbe "$VERBE" || repondre 2 "Verbe inconnu : liste fermée ($LISTE_VERBES)."
 VERBE_SUR="$VERBE"
 attendus=${#MOTIFS[@]}
@@ -281,6 +389,7 @@ fi
 for i in "${!ARGS[@]}"; do
   [[ ${ARGS[$i]} =~ ${MOTIFS[$i]} ]] || repondre 2 "Argument $((i + 1)) refusé pour $VERBE (forme non permise)."
 done
+reglage PONT_DELAI_ADB_S "${PONT_DELAI_ADB_S:-}" 30; DELAI_ADB=$REGLAGE
 mkdir -p -- "$SORTIE" 2>/dev/null || repondre 4 "Dossier de sortie inaccessible."
 
 case "$VERBE" in

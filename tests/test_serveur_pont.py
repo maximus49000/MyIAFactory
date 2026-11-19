@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -17,8 +18,9 @@ PAQUET = "com.exemple.app"
 
 ADB_FACTICE = r'''echo "adb $*" >> "$FAUX_JOURNAL"
 [ -n "${FAUX_ADB_ECHEC:-}" ] && exit 1
+[ -n "${FAUX_ADB_LENT:-}" ] && exec /usr/bin/sleep "$FAUX_ADB_LENT"
 case "$1" in
-  exec-out) printf '\211PNG\r\n\032\n'; head -c "${FAUX_PNG_OCTETS:-100}" /dev/zero ;;
+  exec-out) [ -n "${FAUX_CAPTURE_LENTE:-}" ] && /usr/bin/sleep "$FAUX_CAPTURE_LENTE"; printf '\211PNG\r\n\032\n'; head -c "${FAUX_PNG_OCTETS:-100}" /dev/zero ;;
   logcat) [ -n "${FAUX_LOGCAT:-}" ] && cat "$FAUX_LOGCAT" ;;
   install) echo Success ;;
   shell) case "$2 $3" in
@@ -28,11 +30,23 @@ case "$1" in
          esac ;;
 esac
 exit 0'''
-EMULATEUR_FACTICE = 'echo "emulator $*" >> "$FAUX_JOURNAL"\nexit 0'
+EMULATEUR_FACTICE = 'echo "emulator $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_EMU_RESTE:-}" ] && exec /usr/bin/sleep 60\nexit 0'
 SLEEP_FACTICE = 'echo "sleep $*" >> "$FAUX_JOURNAL"\nexit 0'
 # Lit les arguments séparés par des octets nuls puis lance le pont avec exactement ces arguments.
 PILOTE = 'mapfile -d "" -t A < "$1"; exec bash "$2" "${A[@]}"'
 LIGNE_JOURNAL = re.compile(r"^\S+( .*)? \d+ms$")
+
+
+def posix(chemin):
+    """Chemin absolu tel que le voit bash (/c/... sous Git bash) : le pont refuse un PONT_SORTIE non absolu."""
+    if shutil.which("cygpath"):
+        return subprocess.run(["cygpath", "-u", str(chemin)], capture_output=True, text=True, check=True).stdout.strip()
+    return Path(chemin).as_posix()
+
+
+def bash(script, *args, env=None):
+    return subprocess.run(["bash", "-c", script, "bash", *args], capture_output=True, text=True, timeout=60,
+                          env=dict(os.environ, **(env or {})))
 
 
 class Banc:
@@ -53,30 +67,53 @@ class Banc:
             (self.bin / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
             (self.bin / nom).chmod(0o755)
         self.n = 0
+        self.sortie_posix = posix(self.sortie)
         return self
 
     def __exit__(self, *a):
+        pid = self.sortie / "emulateur.pid"
+        if pid.exists():
+            bash('kill -9 "$(cat "$1")" 2>/dev/null; exit 0', pid.as_posix())
         self._t.cleanup()
+
+    def faux(self, nom, corps):
+        (self.bin / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+        (self.bin / nom).chmod(0o755)
+
+    def lien(self, cible, lien):
+        """Lien symbolique créé par bash (vu comme tel par le pont) ; le test est ignoré si le système ne sait pas en faire."""
+        # Sous Git bash, `ln -s` copie par défaut ; winsymlinks:lnk fait de vrais liens (vus par [ -L ]) sans droit particulier.
+        r = bash('ln -s "$1" "$2" && [ -L "$2" ]', posix(cible), posix(lien), env={"MSYS": "winsymlinks:lnk"})
+        if r.returncode != 0:
+            raise unittest.SkipTest("liens symboliques non pris en charge")
 
     def logcat(self, texte):
         f = self.t / "logcat.txt"
         f.write_bytes(texte if isinstance(texte, bytes) else texte.encode("utf-8"))
         self.env["FAUX_LOGCAT"] = f.as_posix()
 
-    def lancer(self, *args, **env):
-        """Rend (code, objet JSON) ; exige UNE seule ligne JSON sur la sortie standard."""
+    def _preparer(self, args, env):
         self.n += 1
         fichier_args = self.t / f"args{self.n}.bin"
         fichier_args.write_bytes(b"".join(a.encode("utf-8") + b"\0" for a in args))
-        e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"], PONT_SORTIE=self.sortie.as_posix(),
+        e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"], PONT_SORTIE=self.sortie_posix,
                  FAUX_JOURNAL=self.fichier_journal.as_posix())
-        e.pop("PONT_PAQUET", None)
+        for nom in ("PONT_PAQUET", "PONT_ADB", "PONT_EMULATEUR", "PONT_AVD"):
+            e.pop(nom, None)
         e.update(self.env)
         e.update(env)
-        r = subprocess.run(["bash", "-c", PILOTE, "pilote", fichier_args.as_posix(), SCRIPT.as_posix()], stdin=subprocess.DEVNULL,
-                           capture_output=True, text=True, encoding="utf-8", env=e, timeout=60)
+        return ["bash", "-c", PILOTE, "pilote", fichier_args.as_posix(), SCRIPT.as_posix()], e
+
+    def lancer_fond(self, *args, **env):
+        commande, e = self._preparer(args, env)
+        return subprocess.Popen(commande, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", env=e)
+
+    def lancer(self, *args, **env):
+        """Rend (code, objet JSON) ; exige UNE seule ligne JSON sur la sortie standard."""
+        commande, e = self._preparer(args, env)
+        r = subprocess.run(commande, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", env=e, timeout=60)
         self.derniere = r
-        fichier_args.unlink()
         lignes = [x for x in r.stdout.splitlines() if x.strip()]
         assert len(lignes) == 1, (r.returncode, r.stdout, r.stderr)
         d = json.loads(lignes[0])
@@ -101,7 +138,7 @@ class Banc:
     def arbre(self):
         """Tous les fichiers du banc, sauf pont.log (seule écriture permise pour un appel refusé)."""
         return sorted(p.relative_to(self.t).as_posix() for p in self.t.rglob("*")
-                      if p != self.sortie / "pont.log" and p != self.fichier_journal)
+                      if p != self.sortie / "pont.log" and p != self.fichier_journal and not p.name.startswith("args"))
 
     def captures(self):
         d = self.sortie / "captures"
@@ -121,7 +158,8 @@ class TestPont(unittest.TestCase):
             self.assertEqual(b.appels, [])
 
     def test_arguments_hostiles_refuses_sans_rien_executer(self):
-        communs = [";", "$(x)", "`x`", "a\nb", "", "$(touch ../pwn)", "*", "a;b", "x'y", "a|b"]
+        communs = [";", "$(x)", "`x`", "a\nb", "", "$(touch ../pwn)", "*", "a;b", "x'y", "a|b",
+                   "&", ">", "a\r", "\r", "--", "-s", "?", "[", "a&b", "a>b"]
         cas = {
             "toucher": [[h, "10"] for h in communs + ["..", "-1", "99999", "1.5", " 1"]] + [["10", h] for h in ("-1", "99999")]
                        + [["10"], ["10", "20", "30"]],
@@ -269,7 +307,7 @@ class TestPont(unittest.TestCase):
             code, d = b.lancer("installer")
             self.assertEqual(code, 0, d)
             installs = [x for x in b.appels if x.startswith("adb install")]
-            self.assertEqual(installs, [f"adb install -r {b.sortie.as_posix()}/../entree/app.apk"])
+            self.assertEqual(installs, [f"adb install -r {b.sortie_posix}/../entree/app.apk"])
             self.assertIn(PAQUET, d["detail"])
             self.assertEqual((b.sortie / ".paquet").read_text().strip(), PAQUET)
             (b.entree / "app.apk").unlink()
@@ -364,6 +402,118 @@ class TestPont(unittest.TestCase):
             for args in (("toucher", "1", "2"), ("journal",), ("demarrer",), ("arreter",)):
                 with self.subTest(echec=args):
                     self.assertEqual(b.lancer(*args)[0], 4)
+
+    # --- Corrections de revue (tour 1) ---------------------------------------------------------------------
+
+    def test_captures_simultanees_respectent_les_limites(self):
+        with Banc(PONT_CAPTURES="2", FAUX_CAPTURE_LENTE="1") as b:
+            procs = [b.lancer_fond("capturer", f"n{i}") for i in range(5)]
+            codes = [p.wait(timeout=120) for p in procs]
+            for p in procs:
+                p.communicate()
+            self.assertLessEqual(len(b.captures()), 2, (codes, b.captures()))
+            self.assertEqual(codes.count(0), len(b.captures()), codes)
+            self.assertEqual(sorted(codes), [0, 0, 3, 3, 3], codes)
+
+    def test_meme_nom_simultane_un_seul_ok(self):
+        with Banc(FAUX_CAPTURE_LENTE="1") as b:
+            procs = [b.lancer_fond("capturer", "meme") for _ in range(4)]
+            codes = [p.wait(timeout=120) for p in procs]
+            for p in procs:
+                p.communicate()
+            self.assertEqual(sorted(codes), [0, 2, 2, 2], codes)
+            self.assertEqual(b.captures(), ["meme.png"])         # aucun temporaire laissé
+
+    def test_echec_du_comptage_ferme_les_limites(self):
+        with Banc() as b:
+            b.faux("find", "exit 1")
+            code, d = b.lancer("capturer", "a")
+            self.assertEqual(code, 4, d)
+            self.assertEqual([x for x in b.appels if "screencap" in x], [])
+            self.assertEqual(b.captures(), [])
+
+    def test_adb_bloque_est_coupe_par_le_delai(self):
+        with Banc(FAUX_ADB_LENT="30", PONT_DELAI_ADB_S="1") as b:
+            for args in (("toucher", "1", "2"), ("journal",), ("capturer", "a")):
+                with self.subTest(args=args):
+                    debut = time.monotonic()
+                    self.assertEqual(b.lancer(*args)[0], 4)
+                    self.assertLess(time.monotonic() - debut, 15)
+            self.assertEqual(b.captures(), [])
+
+    def test_demarrer_avec_adb_bloque_s_arrete_a_l_echeance(self):
+        with Banc(FAUX_ADB_LENT="30", FAUX_EMU_RESTE="1", PONT_DEMARRAGE_S="3") as b:
+            debut = time.monotonic()
+            self.assertEqual(b.lancer("demarrer")[0], 4)
+            self.assertLess(time.monotonic() - debut, 25)
+
+    def test_journal_d_un_appel_borne_et_rapide(self):
+        with Banc() as b:
+            debut = time.monotonic()
+            code, _ = b.lancer("zz", *(["1"] * 20000))
+            self.assertEqual(code, 2)
+            self.assertLess(time.monotonic() - debut, 20)
+            self.assertEqual(b.lancer("toucher", *[str(i) for i in range(10)])[0], 2)
+            lignes = b.lignes_pont_log
+            self.assertEqual(len(lignes), 2)
+            for ligne in lignes:
+                self.assertLess(len(ligne), 300)
+                self.assertRegex(ligne, LIGNE_JOURNAL)
+            self.assertRegex(lignes[1], r"^toucher 0 1 2 3 4 5 … ")
+
+    def test_demarrer_deux_fois_refuse_et_arreter_tue_l_emulateur(self):
+        with Banc(FAUX_EMU_RESTE="1") as b:
+            self.assertEqual(b.lancer("demarrer")[0], 0)
+            pid = b.sortie / "emulateur.pid"
+            self.assertTrue(pid.exists())
+            numero = pid.read_text().strip()
+            code, d = b.lancer("demarrer")
+            self.assertEqual(code, 2, d)
+            self.assertIn("déjà", d["detail"])
+            self.assertEqual(len([x for x in b.appels if x.startswith("emulator ")]), 1)
+            code, d = b.lancer("arreter")                    # adb emu kill ne tue rien ici : le pont tue le processus
+            self.assertEqual(code, 0, d)
+            self.assertNotEqual(bash('kill -0 "$1" 2>/dev/null', numero).returncode, 0, "émulateur encore vivant")
+            self.assertFalse(pid.exists())
+            self.assertEqual(b.lancer("demarrer")[0], 0)     # redémarrage possible après l'arrêt
+            self.assertEqual(b.lancer("arreter")[0], 0)
+
+    def test_chemins_d_environnement_invalides_refuses(self):
+        with Banc() as b:
+            for env in ({"PONT_SORTIE": ""}, {"PONT_SORTIE": "sortie"}, {"PONT_SORTIE": b.sortie_posix + "/../x"},
+                        {"PONT_ADB": ""}, {"PONT_ADB": "bin/adb"}, {"PONT_EMULATEUR": ""}, {"PONT_EMULATEUR": "./emulator"}):
+                with self.subTest(env=env):
+                    self.assertEqual(b.lancer("toucher", "1", "2", **env)[0], 4)
+            self.assertEqual(b.appels, [])
+            self.assertFalse((b.t / "x").exists())
+            self.assertEqual(b.lancer("toucher", "1", "2", PONT_ADB="adb")[0], 0)
+
+    def test_journal_coupe_les_lignes_longues(self):
+        with Banc() as b:
+            b.logcat("I Test: " + "x" * 5000 + "\nI Test: court\n")
+            code, d = b.lancer("journal")
+            self.assertEqual(code, 0)
+            lignes = d["detail"].splitlines()
+            self.assertEqual(len(lignes[0]), 500)
+            self.assertEqual(lignes[1], "I Test: court")
+
+    def test_apk_lien_symbolique_refuse(self):
+        with Banc() as b:
+            vrai = b.t / "ailleurs.apk"
+            vrai.write_bytes(b"PK")
+            (b.entree / "app.apk").unlink()
+            b.lien(vrai, b.entree / "app.apk")
+            self.assertEqual(b.lancer("installer")[0], 4)
+            self.assertEqual([x for x in b.appels if x.startswith("adb install")], [])
+
+    def test_dossier_captures_lien_symbolique_refuse(self):
+        with Banc() as b:
+            ailleurs = b.t / "ailleurs"
+            ailleurs.mkdir()
+            b.lien(ailleurs, b.sortie / "captures")
+            self.assertEqual(b.lancer("capturer", "a")[0], 4)
+            self.assertEqual(list(ailleurs.iterdir()), [])
+            self.assertEqual([x for x in b.appels if "screencap" in x], [])
 
 
 if __name__ == "__main__":

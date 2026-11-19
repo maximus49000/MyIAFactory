@@ -45,6 +45,10 @@ export const AIDE_LIVRAISON_SUR_DEMANDE = "Cochée, l'apk (8 à 14 minutes de co
   "quand le travail est conforme : il attend « Livrer maintenant » dans l'avis qui s'affiche. Décochée, la livraison part " +
   "dès que plus rien n'est en cours.";
 
+export const AIDE_UNE_SESSION_MOYENNE = "Cochée, une évolution moyenne (dont vous validez le cahier ensuite) n'a plus de " +
+  "session de tests et de revue à part : l'agent qui programme relit et teste lui-même. Moins cher et plus court (3 à 7 " +
+  "minutes, 0,12 à 0,17 €), mais sans regard neuf d'un second agent. Décochée : comme avant.";
+
 export const AIDE_CLOUD_DOSSIER = "Le moteur répond lui-même « Yes, I trust this folder » quand Claude Code le " +
   "demande pour lancer une session cloud dans ce projet.";
 
@@ -64,6 +68,12 @@ export function enregistrerAnalyseBlocages(valeur, fetchFn = fetch) {
 export function enregistrerLivraisonSurDemande(valeur, fetchFn = fetch) {
   return enregistrerReglage("livraison_sur_demande", valeur, ["La livraison attendra « Livrer maintenant ».",
     "La livraison repartira toute seule dès que le travail est conforme."], fetchFn);
+}
+
+// Le réglage « Évolution moyenne : une seule session » (décoché par défaut).
+export function enregistrerUneSessionMoyenne(valeur, fetchFn = fetch) {
+  return enregistrerReglage("une_session_moyenne", valeur, ["Une évolution moyenne se fera en une seule session.",
+    "Une évolution moyenne garde sa session de tests et de revue."], fetchFn);
 }
 
 // Une case, son aide et son message ; n'agit que par le serveur du bureau. `coche` : l'état lu dans l'état du bureau.
@@ -109,6 +119,14 @@ function caseLivraisonSurDemande(ctx) {
   return caseReglage(ctx, {classe: "lecons-auto livraison-sur-demande", libelle: "Livrer seulement sur demande",
     aide: AIDE_LIVRAISON_SUR_DEMANDE, coche: e.livraison_sur_demande === true,
     enregistrer: (v) => enregistrerLivraisonSurDemande(v), noter: (v) => { e.livraison_sur_demande = v; }});
+}
+
+// À côté de la livraison sur demande : le réglage `une_session_moyenne` (décochée si absente de l'état).
+function caseUneSessionMoyenne(ctx) {
+  const e = ctx.etat;
+  return caseReglage(ctx, {classe: "lecons-auto une-session-moyenne", libelle: "Évolution moyenne : une seule session",
+    aide: AIDE_UNE_SESSION_MOYENNE, coche: e.une_session_moyenne === true,
+    enregistrer: (v) => enregistrerUneSessionMoyenne(v), noter: (v) => { e.une_session_moyenne = v; }});
 }
 
 // À côté des deux autres : le réglage `cloud_dossier_approuve` (décochée si absente de l'état).
@@ -293,7 +311,7 @@ export function contenuDirecteur(ctx, contenu) {
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
   if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
-    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseLivraisonSurDemande(ctx), caseCloudDossier(ctx),
+    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseLivraisonSurDemande(ctx), caseUneSessionMoyenne(ctx), caseCloudDossier(ctx),
       ...(e.deport ? [blocDeport(ctx)] : []));
   }
   if (e.agir && (e.version ?? 1) >= 4) contenu.append(sectionPartage());   // un réglage de tout le bureau

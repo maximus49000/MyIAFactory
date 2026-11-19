@@ -23,6 +23,10 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # Vrai : la livraison (la construction de l'apk, 8 à 14 min) ne part pas toute seule quand les éléments sont
            # conformes ; elle attend « Livrer maintenant » (essai de coûts du 2026-11-19). Faux : comme avant.
            "livraison_sur_demande": False,
+           # Vrai : une évolution moyenne (cahier validé ensuite) n'a plus de session de tests et de revue à part ; la
+           # programmation relit et teste elle-même (essai de coûts du 2026-11-19 : 0,12 à 0,17 € et 3 à 7 min de moins,
+           # mais plus de regard neuf). Faux : comme avant.
+           "une_session_moyenne": False,
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -67,6 +71,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
     if type(r.get("livraison_sur_demande")) is not bool:
         raise ReglagesInvalides("Réglages : « livraison_sur_demande » doit valoir true ou false.")
+    if type(r.get("une_session_moyenne")) is not bool:
+        raise ReglagesInvalides("Réglages : « une_session_moyenne » doit valoir true ou false.")
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
 
 
@@ -222,6 +228,13 @@ def fixer_livraison_sur_demande(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« livraison_sur_demande » doit valoir true ou false.")
     return _ecrire_cle(chemin, "livraison_sur_demande", valeur)
+
+
+def fixer_une_session_moyenne(chemin, valeur):
+    """Note si une évolution moyenne se fait en une seule session, sans tests ni revue à part (vrai ou faux)."""
+    if type(valeur) is not bool:
+        raise ValueError("« une_session_moyenne » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "une_session_moyenne", valeur)
 
 
 def fixer_cloud_dossier_approuve(chemin, valeur):

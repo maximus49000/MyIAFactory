@@ -92,6 +92,7 @@ def ouvrir_projet(fichier_reglages, environ=None):
         projet.lecons_auto = lus["lecons_auto"]
         projet.analyse_blocages = lus["analyse_blocages"]
         projet.livraison_sur_demande = lus["livraison_sur_demande"]
+        projet.une_session_moyenne = lus["une_session_moyenne"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet

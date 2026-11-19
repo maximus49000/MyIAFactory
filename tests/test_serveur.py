@@ -212,6 +212,15 @@ class TestServeur(AvecServeur):
         r, _ = self.req("POST", "/api/reglages", '{"analyse_blocages": "non"}', self.ENT)
         self.assertEqual(r.status, 400)
 
+    def test_reglage_une_session_moyenne_decoche_par_defaut_ecrit_et_visible(self):
+        self.assertIs(self.json("/api/etat")["une_session_moyenne"], False)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"une_session_moyenne": True}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["une_session_moyenne"], True)
+        self.assertIs(self.json("/api/etat")["une_session_moyenne"], True)
+        r, _ = self.req("POST", "/api/reglages", '{"une_session_moyenne": "non"}', self.ENT)
+        self.assertEqual(r.status, 400)
+
     def test_reglage_livraison_sur_demande_decoche_par_defaut_ecrit_et_visible(self):
         self.assertIs(self.json("/api/etat")["livraison_sur_demande"], False)
         r, data = self.req("POST", "/api/reglages", json.dumps({"livraison_sur_demande": True}), self.ENT)

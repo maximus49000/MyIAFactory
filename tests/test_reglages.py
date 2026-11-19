@@ -78,6 +78,25 @@ class TestReglages(unittest.TestCase):
         with self.assertRaises(ValueError):
             reglages.fixer_livraison_sur_demande(r, "oui")
 
+    def test_une_session_moyenne_faux_par_defaut_et_booleen_seulement(self):
+        self.assertIs(reglages.charger(self.tmp / "absent.json")["une_session_moyenne"], False)
+        (self.tmp / "r.json").write_text('{"une_session_moyenne": true}', encoding="utf-8")
+        self.assertIs(reglages.charger(self.tmp / "r.json")["une_session_moyenne"], True)
+        for v in ("oui", 1, None):
+            (self.tmp / "r.json").write_text(json.dumps({"une_session_moyenne": v}), encoding="utf-8")
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages.charger(self.tmp / "r.json")
+
+    def test_fixer_une_session_moyenne_ecrit_et_refuse_un_non_booleen(self):
+        r = self.tmp / "r.json"
+        r.write_text('{"charge_max": 70}', encoding="utf-8")
+        reglages.fixer_une_session_moyenne(r, True)
+        d = json.loads(r.read_text(encoding="utf-8"))
+        self.assertIs(d["une_session_moyenne"], True)
+        self.assertEqual(d["charge_max"], 70)
+        with self.assertRaises(ValueError):
+            reglages.fixer_une_session_moyenne(r, "oui")
+
     def test_fixer_lecons_auto_ecrit_et_conserve_le_reste(self):
         (self.tmp / "r.json").write_text('{"port": 9000}', encoding="utf-8")
         self.assertIs(reglages.fixer_lecons_auto(self.tmp / "r.json", True)["lecons_auto"], True)

@@ -219,6 +219,7 @@ class Projet:
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
+        self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -339,9 +340,29 @@ def _flux(projet, fid=None):
 
 def _production(projet, fid=None):
     """Les étapes du workflow de la fonctionnalité que le moteur enchaîne pour un élément (la relecture croisée tient
-    lieu de l'étape du relecteur)."""
+    lieu de l'étape du relecteur). En mode « une session » (évolution moyenne), l'étape de qualité n'est plus un agent à
+    part : la programmation rend le verdict."""
     flux = _flux(projet, fid)
-    return [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+    production = [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+    if _en_une_session(projet, fid):
+        services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
+        sans_qualite = [s for s in production if wf.est_validation(s) or not _est_de_qualite(s, services)]
+        if len(sans_qualite) > 1:
+            production = sans_qualite
+    return production
+
+
+def _en_une_session(projet, fid):
+    """Vrai quand le cahier de la fonctionnalité a été validé en mode « une session » (`cahier.une_session`, posé à la
+    validation d'une évolution moyenne quand le réglage est coché) et qu'aucun agent relecteur n'existe. Lu dans le cahier,
+    pas dans le réglage : décocher le réglage ne change pas une évolution déjà en route."""
+    if not fid:
+        return False
+    try:
+        cahier = _fonc(projet, fid).get("cahier") or {}
+    except Refus:
+        return False
+    return cahier.get("une_session") is True and _sans_relecteur(projet)
 
 
 def _role_cadrage(projet, fid=None):
@@ -651,6 +672,8 @@ def _sur_cahier(projet, demande, etat):
             cahier["taille"] = f["cahier"]["taille"]
         cahier["valide_le"] = su.maintenant()
         cahier["parcours"] = parcours = _parcours(f.get("cahier"), demande["verdict"])
+        if parcours == PARCOURS_SANS_PROTOTYPE and _une_session_active(projet):
+            cahier["une_session"] = True     # essai de coûts du 2026-11-19 : code, tests et revue dans une seule session
         if parcours == PARCOURS_UN_ELEMENT:
             lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier})
             _lever(projet, f, "valider_cahier")
@@ -5410,8 +5433,12 @@ def _est_de_qualite(etape, services):
 
 def _etape_de_relecture(projet, fid=None):
     """Sans relecteur, le rang (dans la production du workflow) de l'étape qui tient lieu de relecture : la dernière
-    étape tenue par un service ou un rôle de qualité (les tests avant la livraison), à défaut la dernière du flux."""
+    étape tenue par un service ou un rôle de qualité (les tests avant la livraison), à défaut la dernière du flux. En mode
+    « une session », la dernière étape avant la livraison : la programmation, qui relit et teste elle-même."""
     production = _production(projet, fid)
+    if _en_une_session(projet, fid):
+        rangs = [r for r, s in enumerate(production) if not wf.est_validation(s)]
+        return rangs[-2] if len(rangs) > 1 else (rangs[-1] if rangs else 0)
     services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
     for rang in range(len(production) - 1, -1, -1):
         if not wf.est_validation(production[rang]) and _est_de_qualite(production[rang], services):
@@ -6154,6 +6181,16 @@ RETOUR_DU_CHEF = "Retour du Chef : "
 CORRECTION_DU_CHEF = "Correction confiée par le Chef"
 JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyées au Chef
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
+
+
+def _une_session_active(projet):
+    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["une_session_moyenne"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "une_session_moyenne", False) is True
 
 
 def _livraison_sur_demande(projet):

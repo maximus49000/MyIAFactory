@@ -735,6 +735,51 @@ class Serie(Base):
                              {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "livraison"}]
         self.factory.write_text(json.dumps(f), encoding="utf-8")
 
+    def une_session(self):
+        """Une évolution moyenne en mode « une session » : le cahier validé porte `une_session`."""
+        self.casse_briques()
+        self.fonctionnalite("serie", methode=None, cahier={"maquette": [PNG], "etapes": ["Faire les écrans"],
+                                                           "parcours": regles.PARCOURS_SANS_PROTOTYPE,
+                                                           "une_session": True})
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": DECOUPAGE["elements"][:1]})
+
+    def test_une_session_le_code_tient_lieu_de_tests_et_de_revue(self):
+        """Essai de coûts du 2026-11-19 : une session de tests et de revue de plus coûte 0,12 à 0,17 € et 3 à 7 min pour une
+        évolution moyenne ; en mode « une session », l'étape de qualité n'est plus un agent à part."""
+        self.une_session()
+        self.assertEqual([s["id"] for s in regles._production(self.projet, "f1")], ["dev", "livraison"])
+        self.assertEqual(regles._etape_de_relecture(self.projet, "f1"), 0)          # c'est la programmation qui rend le verdict
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            verdict("e1"), {"statut": "fait", "message": {"texte": "Livré."}}])
+        self.assertEqual(self.taches(etape="flux:essai"), [])                       # aucune session de tests séparée
+        self.assertEqual(len(self.taches(etape="flux:dev")), 1)
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
+    def test_une_session_la_programmation_recoit_le_role_de_dernier_regard(self):
+        self.une_session()
+        regles.avancer(self.projet, self.etat)
+        (dev,) = self.taches(etape="flux:dev")
+        m = regles._matiere(self.projet, self.etat, dev)
+        self.assertIn("Tu es le dernier regard sur l'élément", m)
+        self.assertIn(regles.DEFAUT_VU_EST_UN_REFUS, m)
+
+    def test_une_session_un_defaut_refait_la_programmation_avec_ses_points(self):
+        self.une_session()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            verdict("e1", ["Pâtes est satisfait par pâte brisée"]),
+            verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Livré."}}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Mot entier.", "raison": "faux positif"}})
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        self.assertEqual(self.taches(etape="flux:essai"), [])
+
+    def test_sans_le_mode_une_session_le_flux_garde_son_etape_de_qualite(self):
+        self.casse_briques()
+        self.fonctionnalite("serie", methode=None, cahier={"maquette": [PNG], "etapes": ["Faire"],
+                                                           "parcours": regles.PARCOURS_SANS_PROTOTYPE})
+        self.assertEqual([s["id"] for s in regles._production(self.projet, "f1")], ["dev", "essai", "livraison"])
+
     def test_sans_relecteur_la_qualite_juge_et_la_livraison_suit_un_verdict_favorable(self):
         self.casse_briques()
         self.serie(1)
@@ -1771,6 +1816,22 @@ class ParcoursSelonLaTaille(Base):
         self.assertEqual(f["etape"], "serie")                                  # ni prototype ni méthode
         self.assertEqual(f["cahier"]["parcours"], regles.PARCOURS_SANS_PROTOTYPE)
         self.assertEqual(self.taches(etape="prototype"), [])
+
+    def test_le_reglage_une_session_marque_le_cahier_d_une_evolution_moyenne(self):
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        self.projet.une_session_moyenne = True
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertIs(self.fonc()["cahier"].get("une_session"), True)
+
+    def test_sans_le_reglage_ou_hors_moyenne_le_cahier_n_est_pas_marque(self):
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertIsNot(self.fonc()["cahier"].get("une_session"), True)
+        self.setUp()
+        self.projet.une_session_moyenne = True
+        self.cahier_de_taille(self.GRANDE)
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")          # parcours complet : jamais une session
+        self.assertIsNot(self.fonc()["cahier"].get("une_session"), True)
 
     def test_valider_court_une_petite_evolution_reste_un_seul_element(self):
         self.cahier_de_taille(self.PETITE)

@@ -8,6 +8,7 @@ import ovh_api  # noqa: E402
 import plateforme_ovh  # noqa: E402
 
 NOM = "ns1234.ip-1-2-3.eu"
+CLE = "ssh-ed25519 AAAAFAKEKEY myiafactory"
 MODELES = {"ovh": ["debian12_64", "ubuntu2204-server_64", "ubuntu2404-server_64", "ubuntu2404-desktop_64",
                    "ubuntu2410-server_64"], "personal": []}
 
@@ -42,65 +43,76 @@ class TestPlateformeOvh(unittest.TestCase):
     def test_reinstaller_sans_accord_ne_touche_a_rien(self):
         c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
         with self.assertRaises(plateforme_ovh.ErreurAccord):
-            plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", False)
+            plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", CLE, False)
         self.assertEqual(c.appels, [])
 
     def test_reinstaller_accord_non_booleen_refuse(self):
         for accord in ("False", "0", 0, None, 1, "", "true"):
             c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
             with self.assertRaises(plateforme_ovh.ErreurAccord, msg=repr(accord)):
-                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", accord)
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", CLE, accord)
             self.assertEqual(c.appels, [], repr(accord))
 
     def test_reinstaller_sans_id_de_tache_message_lisible(self):
         for reponse in (None, {}, {"taskId": "x"}):
             c = ClientFactice({
                 ("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES,
-                ("POST", f"/dedicated/server/{NOM}/install/start"): reponse,
+                ("POST", f"/dedicated/server/{NOM}/reinstall"): reponse,
             })
             with self.assertRaises(ovh_api.ErreurOvh) as e:
-                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", True)
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", CLE, True)
             self.assertIn("lancée", str(e.exception))
 
-    def test_reinstaller_avec_accord_demande_ubuntu_lts_et_cle(self):
+    def test_reinstaller_avec_accord_poste_sur_reinstall_avec_la_cle_publique(self):
         c = ClientFactice({
             ("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES,
-            ("POST", f"/dedicated/server/{NOM}/install/start"): {"taskId": 42},
+            ("POST", f"/dedicated/server/{NOM}/reinstall"): {"taskId": 42},
         })
-        modele = plateforme_ovh.choisir_ubuntu_lts(plateforme_ovh.modeles_os(c, NOM))
+        modele = plateforme_ovh.choisir_os_cible(plateforme_ovh.modeles_os(c, NOM))
         self.assertEqual(modele, "ubuntu2404-server_64")
-        self.assertEqual(plateforme_ovh.reinstaller(c, NOM, modele, "cle", True), 42)
-        methode, chemin, corps = c.ecritures()[0]
-        self.assertEqual(chemin, f"/dedicated/server/{NOM}/install/start")
-        self.assertEqual(corps["templateName"], "ubuntu2404-server_64")
-        self.assertEqual(corps["details"]["sshKeyName"], "cle")
+        self.assertEqual(plateforme_ovh.reinstaller(c, NOM, modele, CLE + " ", True), 42)
+        ecritures = c.ecritures()
+        self.assertEqual(len(ecritures), 1)
+        methode, chemin, corps = ecritures[0]
+        self.assertEqual((methode, chemin), ("POST", f"/dedicated/server/{NOM}/reinstall"))
+        self.assertEqual(corps, {"operatingSystem": "ubuntu2404-server_64", "customizations": {"sshKey": CLE}})
+        self.assertFalse([a for a in c.appels if "/install/start" in a[1] or "/me/sshKey" in a[1]])
 
     def test_reinstaller_refuse_un_modele_non_compatible(self):
         c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
         with self.assertRaises(ValueError):
-            plateforme_ovh.reinstaller(c, NOM, "windows", "cle", True)
+            plateforme_ovh.reinstaller(c, NOM, "windows", CLE, True)
         self.assertEqual(c.ecritures(), [])
 
-    def test_aucun_ubuntu_lts_message_lisible(self):
+    def test_reinstaller_refuse_une_cle_publique_vide(self):
+        for cle in ("", "  ", None):
+            c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
+            with self.assertRaises(ValueError, msg=repr(cle)):
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", cle, True)
+            self.assertEqual(c.ecritures(), [])
+
+    def test_os_cible_est_ubuntu_2404(self):
+        self.assertEqual(plateforme_ovh.OS_CIBLE, "ubuntu2404-server_64")
+
+    def test_os_cible_present_dans_ovh_ou_personal(self):
+        self.assertEqual(plateforme_ovh.choisir_os_cible(["debian12_64", "ubuntu2404-server_64", "ubuntu2604-server_64"]),
+                         "ubuntu2404-server_64")
+
+    def test_os_cible_absent_message_lisible_sans_reinstaller(self):
         with self.assertRaises(ValueError) as e:
-            plateforme_ovh.choisir_ubuntu_lts(["debian12_64", "ubuntu2410-server_64"])
-        self.assertIn("Ubuntu", str(e.exception))
+            plateforme_ovh.choisir_os_cible(["debian12_64", "ubuntu2204-server_64", "ubuntu2604-server_64"])
+        self.assertIn("ubuntu2404-server_64", str(e.exception))
+        self.assertIn("pas tentée", str(e.exception))
 
-    def test_cle_enregistree(self):
-        c = ClientFactice()
-        plateforme_ovh.enregistrer_cle_ssh(c, "cle", "ssh-ed25519 AAA")
-        self.assertEqual(c.appels, [("POST", "/me/sshKey", {"keyName": "cle", "key": "ssh-ed25519 AAA"})])
+    def test_ubuntu_lts_reconnu_22_24_26_seulement(self):
+        for os_ in ("ubuntu2204-server_64", "ubuntu2404-server_64", "ubuntu2604-server_64", "Ubuntu2404-Server_64"):
+            self.assertTrue(plateforme_ovh.est_ubuntu_lts(os_), os_)
+        for os_ in ("ubuntu2410-server_64", "ubuntu2610-server_64", "ubuntu2304-server_64", "debian12_64", "none_64", "", None):
+            self.assertFalse(plateforme_ovh.est_ubuntu_lts(os_), repr(os_))
 
-    def test_cle_existante_identique_tolérée(self):
-        c = ClientFactice({("POST", "/me/sshKey"): ovh_api.ErreurOvh(409, "existe déjà"),
-                           ("GET", "/me/sshKey/cle"): {"keyName": "cle", "key": "ssh-ed25519 AAA"}})
-        plateforme_ovh.enregistrer_cle_ssh(c, "cle", "ssh-ed25519 AAA ")
-
-    def test_cle_existante_differente_refusee(self):
-        c = ClientFactice({("POST", "/me/sshKey"): ovh_api.ErreurOvh(409, "existe déjà"),
-                           ("GET", "/me/sshKey/cle"): {"keyName": "cle", "key": "ssh-ed25519 BBB"}})
-        with self.assertRaises(plateforme_ovh.ErreurCleSsh):
-            plateforme_ovh.enregistrer_cle_ssh(c, "cle", "ssh-ed25519 AAA")
+    def test_plus_aucune_trace_de_l_enregistrement_de_cle_chez_ovh(self):
+        self.assertFalse(hasattr(plateforme_ovh, "enregistrer_cle_ssh"))
+        self.assertFalse(hasattr(plateforme_ovh, "ErreurCleSsh"))
 
     def test_etat_tache_traduit_les_statuts_ovh(self):
         for statut, attendu in [("doing", "en_cours"), ("todo", "en_cours"), ("init", "en_cours"),

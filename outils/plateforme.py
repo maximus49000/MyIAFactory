@@ -3,7 +3,8 @@
 Étapes : lecture, os, ssh, durcissement, docker, images, licence. Aucune ne s'exécute avant que la précédente soit « fait ».
 « Prêt » = étapes 1 à 6 ; la licence Unity est facultative. L'état est écrit dans `plateforme.json` à chaque étape, sans
 aucun secret (clés OVH, licence) : tout texte écrit ou affiché passe par `masquer`. Le client OVH et les fonctions SSH sont
-injectables : les tests ne font aucun appel réel. Un OS non Ubuntu LTS n'est jamais effacé sans `--accord-reinstallation`.
+injectables : les tests ne font aucun appel réel. Un OS non Ubuntu LTS n'est jamais effacé sans `--accord-reinstallation` ; la clé publique dédiée est envoyée avec la
+requête `POST /reinstall` (pas de clé enregistrée à part chez OVH).
 """
 import json
 import os
@@ -21,7 +22,7 @@ import plateforme_ovh
 import plateforme_ssh
 from ovh_api import ErreurOvh
 from plateforme_acces import ErreurAcces
-from plateforme_ovh import ErreurAccord, ErreurCleSsh
+from plateforme_ovh import ErreurAccord
 from plateforme_ssh import ErreurSsh
 
 ETAPES = ("lecture", "os", "ssh", "durcissement", "docker", "images", "licence")
@@ -33,15 +34,19 @@ LIBELLES = {
 CACHE = "plateforme.json"
 VERROU = "plateforme.lock"
 UTILISATEUR = "ubuntu"
-NOM_CLE_OVH = "myiafactory-plateforme"
 BUDGET_REINSTALLATION_S = 40 * 60
 PAS_TACHE_S = 30
 RACINE_SERVEUR = Path(__file__).resolve().parent.parent / "serveur_ovh"
-SCRIPT_DISTANT = "/tmp/myiafactory_mise_en_place.sh"
+SCRIPT_DISTANT = "$HOME/myiafactory/mise_en_place.sh"   # dossier privé (0700) du serveur, jamais /tmp
+VERROU_JEUNE_S = 30
 DOSSIER_DISTANT = "$HOME/myiafactory/serveur_ovh"
 DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600}
 CHANGEMENT_CLE = "HOST IDENTIFICATION HAS CHANGED"
-ERREURS = (ErreurOvh, ErreurSsh, ErreurAcces, ErreurCleSsh, ErreurAccord, ValueError, RuntimeError, OSError,
+ENCOURS = {"durcissement": "Durcissement en cours sur le serveur (quelques minutes).",
+           "docker": "Installation de Docker en cours (quelques minutes).",
+           "images": "Images en cours de préparation (long la première fois : téléchargement et construction).",
+           "licence": "Activation de la licence Unity en cours."}
+ERREURS = (ErreurOvh, ErreurSsh, ErreurAcces, ErreurAccord, ValueError, RuntimeError, OSError,
            subprocess.SubprocessError)
 
 
@@ -76,6 +81,7 @@ class _Contexte:
         self.acces, self.secrets, self.srv = None, [], {}
         self.ip, self.cle, self.pub = None, None, None
         self.restant_s, self.script_envoye, self.persister, self.reinstalle = 0, False, True, False
+        self.tache_finie, self.hors_ligne, self.erreur_acces = False, False, None
 
     @property
     def hote(self):
@@ -135,13 +141,22 @@ class _Contexte:
         return self.client
 
 
-def _est_ubuntu_lts(os_):
-    m = re.match(r"ubuntu(\d{2})(\d{2})", (os_ or "").lower())
-    return bool(m and int(m.group(1)) % 2 == 0 and m.group(2) == "04")
+def _repli_possible(c):
+    """OVH injoignable mais le serveur est déjà en service (étapes 2 à 6 faites, rien en attente) : l'adresse en cache suffit."""
+    return (all(c.rapports.get(i, {}).get("statut") == "fait" for i in ETAPES[1:6])
+            and c.cache.get("tache") is None and not c.cache.get("demande") and bool(c.cache.get("ip")))
 
 
 def _etape_lecture(c):
-    c.srv = plateforme_ovh.lire_serveur(c.client_ovh(), c.acces["serveur"])
+    try:
+        if c.acces is None:
+            raise c.erreur_acces
+        c.srv = plateforme_ovh.lire_serveur(c.client_ovh(), c.acces["serveur"])
+    except (ErreurOvh, ErreurAcces, OSError):
+        if not _repli_possible(c):
+            raise
+        c.hors_ligne, c.ip = True, c.cache["ip"]
+        return _rapport("fait", f"OVH injoignable : adresse en cache ({c.ip}).")
     c.ip = c.srv.get("ip") or c.cache.get("ip")
     if not c.ip:
         return _rapport("bloque", "OVH ne donne pas d'adresse pour ce serveur.",
@@ -170,6 +185,7 @@ def _attendre_tache(c, id_tache):
             etat = "en_cours"
         if etat == "fini":
             c.cache["tache"], c.cache["demande"], c.restant_s = None, None, BUDGET_REINSTALLATION_S - ecoule
+            c.tache_finie = True
             return None
         if etat == "echec":                        # définitif : rien ne tourne plus, une nouvelle demande reste possible
             c.cache["tache"], c.cache["demande"] = None, None
@@ -188,9 +204,8 @@ def _demande_incertaine(detail):
 
 
 def _reinstaller(c):
-    modele = plateforme_ovh.choisir_ubuntu_lts(plateforme_ovh.modeles_os(c.client, c.acces["serveur"]))
-    c.cle, c.pub = c.ssh.generer_cle(c.dossier)     # la clé doit être chez OVH avant l'installation qui l'injecte
-    plateforme_ovh.enregistrer_cle_ssh(c.client, NOM_CLE_OVH, c.pub)
+    modele = plateforme_ovh.choisir_os_cible(plateforme_ovh.modeles_os(c.client, c.acces["serveur"]))
+    c.cle, c.pub = c.ssh.generer_cle(c.dossier)     # la clé publique part dans la requête de réinstallation
     c.reinstalle = True
     c.cache["demande"] = True                       # noté AVANT la requête : si la suite se perd, pas de seconde réinstallation
     try:
@@ -200,7 +215,7 @@ def _reinstaller(c):
         return _rapport("bloque", "Écriture de plateforme.json impossible : réinstallation non lancée.",
                         f"Vérifiez les droits d'écriture sur {c.dossier}, puis relancez.")
     try:
-        c.cache["tache"] = plateforme_ovh.reinstaller(c.client, c.acces["serveur"], modele, NOM_CLE_OVH, c.accord)
+        c.cache["tache"] = plateforme_ovh.reinstaller(c.client, c.acces["serveur"], modele, c.pub, c.accord)
     except (ErreurAccord, ValueError):              # échec net avant la requête
         c.cache["demande"] = None
         c.ecrire()
@@ -223,7 +238,7 @@ def _etape_os(c):
     os_ = c.srv.get("os") or ""
     if c.cache.get("tache") is not None:     # une réinstallation est déjà lancée : on l'attend, on n'en relance pas
         return _attendre_tache(c, c.cache["tache"]) or _rapport("fait", "Ubuntu LTS installé par OVH.")
-    if _est_ubuntu_lts(os_):
+    if plateforme_ovh.est_ubuntu_lts(os_):
         c.cache["demande"] = None
         return _rapport("fait", f"Ubuntu LTS déjà présent ({os_}) : rien à installer.")
     if c.cache.get("demande"):
@@ -244,10 +259,11 @@ def _etape_ssh(c):
             return _rapport("fait", f"Connexion SSH par clé dédiée à {c.hote} établie.")
         if CHANGEMENT_CLE not in erreur:
             break
-        if not c.accord:
-            return _rapport("bloque", "L'empreinte SSH du serveur a changé (réinstallation ?).",
-                            "Si vous savez que le serveur a été réinstallé, relancez avec --accord-reinstallation "
-                            "pour oublier l'ancienne empreinte.")
+        if not (c.reinstalle or c.tache_finie):    # sans réinstallation dans cette exécution : possible interception
+            return _rapport("bloque", "L'empreinte SSH du serveur a changé alors qu'aucune réinstallation n'a eu lieu dans cette "
+                            "exécution : connexion refusée par précaution (risque d'interception).",
+                            f"Si vous savez que le serveur a été réinstallé, supprimez vous-même l'ancienne empreinte "
+                            f"(ssh-keygen -R {c.ip}) puis relancez ; sinon, ne continuez pas.")
         c.ssh.oublier_hote(c.ip, True)
     c.rapports["ssh"] = _rapport("en_cours", "Attente du redémarrage du serveur (SSH pas encore disponible).")
     c.ecrire()
@@ -279,7 +295,7 @@ def _envoyer_script(c):
     if c.script_envoye:
         return None
     texte = (RACINE_SERVEUR / "mise_en_place.sh").read_text(encoding="utf-8")
-    r = _deposer(c, f"cat > {SCRIPT_DISTANT} && chmod +x {SCRIPT_DISTANT}", texte)
+    r = _deposer(c, f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > "{SCRIPT_DISTANT}" && chmod 700 "{SCRIPT_DISTANT}"', texte)
     c.script_envoye = r is None
     return r
 
@@ -299,7 +315,7 @@ def _lancer_etape(c, etape, stdin=None):
     r = _envoyer_script(c)
     if r:
         return r
-    commande = f'SERVEUR_OVH_DIR="{DOSSIER_DISTANT}" bash {SCRIPT_DISTANT} --etape {etape}'
+    commande = f'SERVEUR_OVH_DIR="{DOSSIER_DISTANT}" bash "{SCRIPT_DISTANT}" --etape {etape}'
     code, sortie, erreur = c.ssh.executer(c.hote, commande, c.cle, stdin=stdin, delai=DELAIS_ETAPE_S.get(etape, 600))
     d = _analyser(sortie)
     if not d or d.get("statut") not in ("fait", "a_faire", "bloque"):
@@ -361,10 +377,26 @@ def _preparer(dossier, accord, client, ssh, dormir, persister=True):
     c = _Contexte(dossier, accord, client, ssh or plateforme_ssh, dormir)
     c.persister = persister
     erreur = c.preparer_secrets()
-    if erreur:
+    c.erreur_acces = erreur
+    if erreur and not (persister and _repli_possible(c)):   # ovh.json absent mais serveur déjà en service : on garde le cache
         c.rapports["lecture"] = _rapport("bloque", c.masquer(erreur), "Créez ou corrigez ovh.json comme indiqué.")
         return c, c.ecrire()
     return c, None
+
+
+def _verrou_tenu(chemin, vivant):
+    """Le fichier verrou est-il tenu ? Pid d'un autre processus vivant, ou fichier vide/illisible trop récent pour être périmé
+    (il est créé puis rempli : on ne le prend pas pour un verrou abandonné pendant cette fenêtre)."""
+    try:
+        autre = json.loads(chemin.read_text(encoding="utf-8")).get("pid")
+    except (OSError, ValueError, AttributeError):
+        autre = None
+    if isinstance(autre, int):
+        return autre != os.getpid() and bool(vivant(autre))
+    try:
+        return time.time() - chemin.stat().st_mtime < VERROU_JEUNE_S
+    except OSError:
+        return False
 
 
 def _prendre_verrou(dossier, vivant):
@@ -377,11 +409,7 @@ def _prendre_verrou(dossier, vivant):
                 f.write(json.dumps({"pid": os.getpid()}))
             return chemin
         except FileExistsError:
-            try:
-                autre = json.loads(chemin.read_text(encoding="utf-8")).get("pid")
-            except (OSError, ValueError, AttributeError):
-                autre = None
-            if isinstance(autre, int) and autre != os.getpid() and vivant(autre):
+            if _verrou_tenu(chemin, vivant):
                 return None
             try:
                 chemin.unlink()
@@ -418,7 +446,12 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir):
             if id_ == "ssh":
                 c.cle, c.pub = c.ssh.generer_cle(c.dossier)
             continue
+        if c.hors_ligne and id_ == "os":      # OVH injoignable : le système en cache reste celui du serveur en service
+            continue
         pendant = c.cache.get("tache") is not None or bool(c.cache.get("demande"))
+        if id_ in ENCOURS and not (id_ == "licence" and not plateforme_acces.chemin_licence(c.dossier)):
+            c.rapports[id_] = _rapport("en_cours", ENCOURS[id_])    # visible dans la carte pendant la durée de l'étape distante
+            c.ecrire()
         r = _executer_etape(c, id_)
         c.rapports[id_] = r
         if id_ == "os" and (r["statut"] != "fait" or pendant or c.reinstalle):

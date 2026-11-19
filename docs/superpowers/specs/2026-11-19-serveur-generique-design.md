@@ -81,6 +81,26 @@ On déplace et renomme sans réécrire la logique éprouvée (verrou, accord str
 1. Un seul serveur au départ avec un modèle prêt pour plusieurs : le Directeur confirme-t-il ?
 2. Où vit la configuration : un fichier global du bureau (`~/MyIAFactory/serveurs.json`) ou le fichier du bureau existant (`bureau.json`) ?
 
+## Exigences retenues pour les morceaux suivants (décidées avec le Directeur le 2026-11-19, non construites ici)
+**Agents sur le serveur (morceau 3).** Un conteneur d'agent éphémère par tâche, lancé en SSH par le bureau ; authentification par l'abonnement
+du Directeur (connexion une fois, dans la session graphique du serveur ; identifiants dans un volume lisible par les seuls conteneurs
+d'agent) ; l'agent ne contient que le CLI Claude, Git et le lanceur, et ses compilations/tests partent dans des **conteneurs d'outils séparés,
+sans identifiants**, sur le même dossier de travail ; il commite sur une branche `agent/<tâche>` et écrit un rapport ; **le serveur n'écrit
+jamais sur GitHub** : le bureau récupère la branche par SSH ; limites de temps, mémoire et processeur, bouton d'arrêt ; l'usage est compté dans le
+suivi d'abonnement. À trancher plus tard : questions de l'agent à l'utilisateur par SSH, reprise après panne, accès réseau des conteneurs.
+
+**Clé de signature partagée (morceaux 2 et 3).** Les livrables doivent garder la même clé de signature (sinon une mise à jour ne s'installe pas
+par-dessus la précédente). Le « coffre de signature » d'un projet : la clé maîtresse reste sur le poste (pour fridge :
+`~/MyFridgeCleaner-keys/release.jks` + `keystore.properties`, passés à Gradle par `-PmfcKeystoreProps=`) ; sur demande explicite du Directeur
+(écran d'accord), le bureau la copie sur le serveur dans un dossier protégé (0600) avec un fichier de propriétés adapté au chemin du serveur,
+sans afficher ni saisir de mot de passe ; elle n'est montée, en lecture seule, que dans le conteneur de compilation **release**, jamais dans un
+conteneur d'agent ni dans Git ni dans les journaux ; preuve que la clé est la même : comparer l'empreinte SHA-256 du certificat de l'APK compilé
+au serveur et de celui compilé au poste (`apksigner verify --print-certs`, sans mot de passe) ; bouton « Retirer la clé du serveur » ; rappel
+que la copie n'est pas une sauvegarde. Même principe pour le keystore Android d'Unity (par la ligne de commande du build).
+**Autorisation (choix du Directeur) : donnée une fois par projet**, les agents et le bureau pouvant ensuite lancer des releases signées sans
+confirmation ; garde-fous proposés par le rédacteur (désactivables) : signer seulement des commits de la branche de release du projet (donc du
+code déjà fusionné), journal de chaque signature (commit, empreinte de la clé, date, demandeur) dans la fiche du projet, révocation d'un bouton.
+
 ## Laissé au réalisateur
 Découpage des modules, format du catalogue de capacités, noms des fichiers, détails de la migration, texte et mise en page des écrans.
 

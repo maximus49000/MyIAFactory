@@ -121,10 +121,33 @@ test("capacite non installable affiche sa raison", async () => {
   assert.match(c.textContent, /10 min/);
 });
 
-test("les capacites se lisent : presente, absente, inconnue, bloquee", () => {
-  const e = {serveurs: [{...SERVEUR, capacites: {base: "presente", "android-build": "absente", "unity-cli": "inconnue", "unity-editeur": {statut: "bloquee", raison: "pas d'éditeur"}}}], rejets: []};
-  const t = ecranServeurs(e, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX}).textContent;
-  for (const mot of [/présente/, /absente/, /inconnue/, /bloquée/, /pas d'éditeur/]) assert.match(t, mot);
+const cap = (statut, detail = "", geste = "") => ({statut, detail, geste});    // la forme réelle envoyée par le serveur
+
+test("les capacites se lisent : presente, absente, inconnue, bloque (forme reelle du serveur)", () => {
+  const e = {serveurs: [{...SERVEUR, capacites: {base: cap("presente", "Constatée par la sonde."), "android-build": cap("absente"),
+    "unity-cli": cap("inconnue"), "unity-editeur": cap("bloque", "pas d'éditeur", "Installez-le par Unity Hub.")}}], rejets: []};
+  const c = ecranServeurs(e, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
+  for (const mot of [/présente/, /absente/, /inconnue/, /bloquée/, /pas d'éditeur/, /Installez-le par Unity Hub/]) assert.match(c.textContent, mot);
+  assert.equal(c.tous((n) => n.className.includes("capacite-badge-bloquee")).length, 1);
+  assert.doesNotMatch(c.textContent, /Constatée par la sonde/);       // le détail d'une capacité présente n'encombre pas la carte
+});
+
+test("les statuts du moteur a_faire et en_cours se lisent en francais, bloque garde sa raison", () => {
+  const e = {serveurs: [{...SERVEUR, capacites: {base: cap("en_cours", "Installation de « Base » en cours."),
+    "android-build": cap("a_faire", "En attente de base.", "Relancez l'installation."), agent: cap("bloque", "Disque plein", "Libérez de la place.")}}], rejets: []};
+  const c = ecranServeurs(e, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
+  assert.equal(c.tous((n) => n.className.includes("capacite-badge-en_cours")).length, 1);
+  assert.equal(c.tous((n) => n.className.includes("capacite-badge-a_faire")).length, 1);
+  assert.equal(c.tous((n) => n.className.includes("capacite-badge-bloquee")).length, 1);
+  for (const mot of [/à faire/, /en cours/, /bloquée/, /En attente de base/, /Disque plein/, /Libérez de la place/]) assert.match(c.textContent, mot);
+  assert.doesNotMatch(c.textContent, /a_faire|en_cours|bloque\b/);
+});
+
+test("le detail d'une capacite bloquee passe par textContent, jamais par du HTML", () => {
+  const e = {serveurs: [{...SERVEUR, capacites: {agent: cap("bloque", "<img src=x onerror=alert(1)>", "<b>geste</b>")}}], rejets: []};
+  const c = ecranServeurs(e, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
+  assert.match(c.textContent, /<img src=x onerror=alert\(1\)>/);
+  assert.equal(c.tous((n) => n.tagName === "img" || n.tagName === "b").length, 0);
 });
 
 test("une capacite installee (statut fait) se lit presente", () => {

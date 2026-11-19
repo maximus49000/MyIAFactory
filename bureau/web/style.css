@@ -1431,6 +1431,8 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .capacite-badge-absente { background: #f6e6c8; color: #7a5410; }
 .capacite-badge-inconnue { background: #eee7d6; color: #5a5568; }
 .capacite-badge-bloquee, .capacite-badge-non_installable { background: #f6d9d4; color: #9a2f22; }
+.capacite-badge-a_faire { background: #f6e6c8; color: #7a5410; }
+.capacite-badge-en_cours { background: #e0e8f6; color: #274a8a; }
 .serveurs-erreur { margin: 6px 0; font-weight: 700; color: #9a2f22; }
 .serveurs-erreur:empty { display: none; }
 .serveurs-installation, .serveurs-formulaire, .serveurs-lieux { margin-top: 10px; }

@@ -19,7 +19,8 @@ const INSTALLABLES = ACTIONS.filter((a) => a !== "charge");   // « charge » ne
 const LIEUX = ["poste", "github", "serveur"];
 const LIBELLES_LIEUX = {poste: "poste", github: "GitHub", serveur: "serveur"};
 const NIVEAUX = {recommande: "recommandé", possible: "possible", deconseille: "déconseillé", indisponible: "indisponible"};
-const STATUTS = {presente: "présente", absente: "absente", inconnue: "inconnue", bloquee: "bloquée", non_installable: "non installable"};
+const STATUTS = {presente: "présente", absente: "absente", inconnue: "inconnue", bloquee: "bloquée", non_installable: "non installable",
+  a_faire: "à faire", en_cours: "en cours"};
 const LIBELLES_CAPACITES = {base: "Base du serveur", durcissement: "Durcissement SSH", "android-build": "Construction Android",
   "android-emulateur": "Émulateur Android", "unity-cli": "Unity CLI", "unity-editeur": "Éditeur Unity",
   "session-graphique": "Session graphique distante", agent: "Agent de développement"};
@@ -125,11 +126,18 @@ export async function confirmerMigration(accord, fetchFn = globalThis.fetch) {
 
 const nombre = (v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v * 10) / 10).replace(".", ",") : "?");
 
+// Le serveur envoie, par capacité, {statut, detail, geste} (statuts du moteur : presente, absente, inconnue, a_faire, en_cours,
+// fait, bloque). Une simple chaîne reste lue comme un statut. La raison (détail puis geste proposé) se montre quand elle aide :
+// capacité bloquée, à faire (en attente) ou inconnue.
+const STATUTS_MOTEUR = {fait: "presente", bloque: "bloquee"};
+const AVEC_RAISON = new Set(["bloquee", "a_faire", "inconnue"]);
 function statutCapacite(valeur, bloquee) {
   if (bloquee) return {statut: "non_installable", raison: texte(bloquee.raison)};
   const brut = typeof valeur === "string" ? {statut: valeur} : objet(valeur);
-  const statut = brut.statut === "fait" ? "presente" : brut.statut;     // l'installeur écrit « fait » pour une capacité installée
-  return {statut: STATUTS[statut] ? statut : "inconnue", raison: texte(brut.raison)};
+  const lu = STATUTS_MOTEUR[brut.statut] || brut.statut;
+  const statut = STATUTS[lu] ? lu : "inconnue";
+  const raison = AVEC_RAISON.has(statut) ? [texte(brut.raison) || texte(brut.detail), texte(brut.geste)].filter(Boolean).join(" ") : "";
+  return {statut, raison};
 }
 
 function lieuxVides(l) { return !l || typeof l !== "object" || !Object.keys(l).length; }

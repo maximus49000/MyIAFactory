@@ -125,7 +125,7 @@
 - Modify: `docs/superpowers/specs/2026-11-19-session-graphique-serveur-design.md` (note de réalisation si un choix a changé)
 
 - [ ] **Step 1:** rédiger la section en vérifiant chaque commande et drapeau contre le code (`outils/plateforme.py` `main`, `outils/plateforme_bureau.py`) ; dire que l'exécution réelle sur le serveur n'a pas encore eu lieu et ce qui est « Non vérifié » (paquet et dépôt Unity Hub, xrdp+XFCE sur 24.04, démarrage de Hub dans la session, licence Personal utilisable en compilation) ; rappeler que le mot de passe reste dans `bureau-distant.txt` seulement.
-- [ ] **Step 2:** suite complète `py -3.12 outils/tests_paralleles.py` (≈ 4 minutes ; un test instable `test_inst_examen` qui repasse seul est connu), puis `node --test bureau/web/tests/*.test.js`, `bash -n serveur_ovh/mise_en_place.sh`, et `git grep` qu'aucun fragment de clé OVH réelle (`ee279d7a`, `eed004db`, `8c7d7a60`, `f3c3a90b`, `0a2d814d`, `350bf0d1`, `71fa5a13`, `e387741b`, `c67bfe11`, `xxxxxxfa`, `xxxxxx7c`, `exxxxxx3`) n'est suivi.
+- [ ] **Step 2:** suite complète `py -3.12 outils/tests_paralleles.py` (≈ 4 minutes ; un test instable `test_inst_examen` qui repasse seul est connu), puis `node --test bureau/web/tests/*.test.js`, `bash -n serveur_ovh/mise_en_place.sh`, et `git grep` que rien de secret n'est suivi (aucun fragment de clé OVH réelle collée pendant le développement n'est suivi ; liste tenue dans le registre du contrôleur, hors dépôt).
 - [ ] **Step 3: Commit** : `git add docs/serveur-ovh.md docs/superpowers/specs/2026-11-19-session-graphique-serveur-design.md` ; message « Documentation : session graphique du serveur ». Ne rien pousser.
 
 ---

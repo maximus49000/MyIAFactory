@@ -164,3 +164,42 @@ test("monterEcranServeurs lit la proposition au démarrage sans rien écrire", a
   assert.ok(conteneur.textContent.includes("Votre serveur OVH a été détecté"));
   assert.equal(posts(f).length, 0);
 });
+
+const CONNU = {serveurs: [{id: "serveur-ovh", nom: "Serveur OVH", hote: "203.0.113.9", utilisateur: "ubuntu", fournisseur: "ovh", capacites: {}, installation_en_cours: false}], rejets: []};
+
+test("409 « déjà déclaré » : la liste est relue et la carte disparaît", async () => {
+  const {c, f} = ecran(PROPOSITION, {"POST /api/serveurs/migration/confirmer": reponse(409, {erreur: "Un serveur est déjà déclaré : la migration n'a rien changé."}),
+    "GET /api/serveurs": reponse(200, CONNU)});
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);
+  assert.ok(f.appels.some((a) => a.methode === "GET" && a.chemin === "/api/serveurs"));
+  assert.ok(!c.textContent.includes("Votre serveur OVH a été détecté"));
+});
+
+test("504 : la carte disparaît si la liste relue montre le serveur inscrit", async () => {
+  const {c} = ecran(PROPOSITION, {"POST /api/serveurs/migration/confirmer": reponse(504, {erreur: "La migration prend trop de temps."}),
+    "GET /api/serveurs": reponse(200, CONNU)});
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);
+  assert.ok(!c.textContent.includes("Votre serveur OVH a été détecté"));
+});
+
+test("504 : nouvel envoi bloqué tant que la liste n'a pas été relue", async () => {
+  let lisible = false;
+  const {c, f} = ecran(PROPOSITION, {"POST /api/serveurs/migration/confirmer": reponse(504, {erreur: "La migration prend trop de temps."}),
+    "GET /api/serveurs": () => (lisible ? reponse(200, VIDE) : reponse(500, {erreur: "x"}))});
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);
+  assert.equal(posts(f).length, 1);
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);              // liste toujours illisible : pas de second envoi
+  assert.equal(posts(f).length, 1);
+  assert.ok(c.textContent.includes("Relisez"));
+  lisible = true;
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);              // la liste est relue (vide) : on débloque, mais sans envoyer
+  assert.equal(posts(f).length, 1);
+  caseAccord(c).checked = true;
+  await clic(boutons(c, "Confirmer")[0]);
+  assert.equal(posts(f).length, 2);
+});

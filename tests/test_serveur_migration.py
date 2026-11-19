@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -31,9 +32,13 @@ class FauxSsh:
 
     def __init__(self, presentes=("base",), injoignable=False):
         self.presentes, self.injoignable, self.appels = set(presentes), injoignable, []
+        self.entre, self.libre = threading.Event(), None       # `libre` : si posé, l'appel attend qu'on le libère
 
     def executer(self, hote, commande, cle, stdin=None, delai=60, runner=None):
         self.appels.append({"hote": hote, "commande": commande, "stdin": stdin or "", "cle": cle})
+        self.entre.set()
+        if self.libre is not None:
+            self.libre.wait(10)
         if self.injoignable:
             return 255, "", "ssh: connect to host: Connection timed out"
         ids = re.findall(r'echo "([a-z-]+)=0"', stdin or "")
@@ -224,6 +229,114 @@ class TestConfirmer(Base):
             mig.apercu(p, ssh=FauxSsh())
             mig.confirmer(p, True, self.d, ssh=FauxSsh())
         self.assertEqual(ecritures, [])
+
+
+class TestConcurrence(Base):
+    def test_deux_confirmer_concurrents_une_seule_inscription(self):
+        self.installer_ovh()
+        p = mig.detecter(self.d)
+        lent = FauxSsh()
+        lent.libre = threading.Event()
+        self.addCleanup(lent.libre.set)
+        resultats = []
+        t = threading.Thread(target=lambda: resultats.append(mig.confirmer(p, True, self.d, ssh=lent)))
+        t.start()
+        self.assertTrue(lent.entre.wait(5))
+        with self.assertRaises(mig.ErreurMigration) as c:          # le second arrive pendant le premier (cas du 504 puis nouvel essai)
+            mig.confirmer(p, True, self.d, ssh=FauxSsh())
+        self.assertEqual(c.exception.code, "occupe")
+        lent.libre.set()
+        t.join(10)
+        declares = serveur_modele.lire(self.d)
+        self.assertEqual([s.id for s in declares], [resultats[0].id])
+        self.assertIn(resultats[0].id, serveur_installation.lire_etat(self.d))
+
+    def test_declare_par_un_autre_pendant_la_sonde_est_respecte(self):
+        self.installer_ovh()
+        p = mig.detecter(self.d)
+        autre = {"nom": "Autre", "hote": "srv.exemple.fr", "utilisateur": "bob", "cle": str(self.d / "k")}
+        vraie = mig.serveur_etat.sonder
+
+        def sonde_puis_declare(*a, **k):
+            r = vraie(*a, **k)
+            serveur_modele.ajouter(autre, self.d)               # la CLI déclare un serveur entre la sonde et l'écriture
+            return r
+        with mock.patch.object(mig.serveur_etat, "sonder", sonde_puis_declare):
+            with self.assertRaises(mig.ErreurMigration) as c:
+                mig.confirmer(p, True, self.d, ssh=FauxSsh())
+        self.assertEqual(c.exception.code, "deja")
+        self.assertEqual([s.nom for s in serveur_modele.lire(self.d)], ["Autre"])      # jamais supprimé ni écrasé
+        self.assertNotIn("serveurs-etat.json", self.instantane())
+
+    def test_retour_arriere_ne_supprime_pas_un_fichier_qu_il_n_a_pas_ecrit(self):
+        self.installer_ovh()
+        p = mig.detecter(self.d)
+        autre = '[{"id": "autre", "nom": "Autre", "hote": "srv.exemple.fr", "utilisateur": "bob", "cle": "k", "fournisseur": null, "reglages_fournisseur": {}}]'
+
+        def echec_apres_ecriture_concurrente(*a, **k):
+            (self.d / "serveurs.json").write_text(autre, encoding="utf-8")     # un autre écrivain remplace le fichier
+            raise OSError("disque plein")
+        with mock.patch.object(serveur_installation, "_ecrire_etat", echec_apres_ecriture_concurrente):
+            with self.assertRaises(OSError):
+                mig.confirmer(p, True, self.d, ssh=FauxSsh())
+        self.assertEqual((self.d / "serveurs.json").read_text(encoding="utf-8"), autre)
+
+    def test_retour_arriere_propre_si_l_ecriture_de_l_etat_echoue(self):
+        self.installer_ovh()
+        with mock.patch.object(serveur_installation, "_ecrire_etat", side_effect=OSError("disque plein")):
+            with self.assertRaises(OSError):
+                mig.confirmer(mig.detecter(self.d), True, self.d, ssh=FauxSsh())
+        self.assertFalse((self.d / "serveurs.json").exists())
+
+    def test_le_verrou_d_installation_est_tenu_pendant_l_inscription(self):
+        self.installer_ovh()
+        vue = []
+        vraie = serveur_modele.ajouter
+
+        def ajouter_espion(*a, **k):
+            vue.append((self.d / serveur_installation.VERROU).exists())
+            return vraie(*a, **k)
+        with mock.patch.object(serveur_modele, "ajouter", ajouter_espion):
+            mig.confirmer(mig.detecter(self.d), True, self.d, ssh=FauxSsh())
+        self.assertEqual(vue, [True])
+        self.assertFalse((self.d / serveur_installation.VERROU).exists())       # relâché ensuite
+
+    def test_proposition_illisible_a_son_propre_code(self):
+        with self.assertRaises(mig.ErreurMigration) as c:
+            mig.confirmer({"x": 1}, True, self.d, ssh=FauxSsh())
+        self.assertEqual(c.exception.code, "illisible")
+
+    def test_adresse_ipv6_du_cache_n_est_pas_proposee(self):
+        # `valider` refuse « : » dans l'hôte (IPv6 non prise en charge) : mieux vaut ne rien proposer qu'une adresse inutilisable.
+        self.installer_ovh(ip="2001:db8::1")
+        self.assertIsNone(mig.detecter(self.d))
+
+
+class TestIdentifiantReserve(Base):
+    def test_valider_refuse_migration(self):
+        for nom in ("migration", "Migration"):
+            with self.assertRaises(ValueError):
+                serveur_modele.valider({"nom": nom, "hote": "a.fr", "utilisateur": "bob", "cle": "k"})
+        with self.assertRaises(ValueError):
+            serveur_modele.valider({"id": "migration", "nom": "X", "hote": "a.fr", "utilisateur": "bob", "cle": "k"})
+
+    def test_ajouter_refuse_migration(self):
+        with self.assertRaises(ValueError):
+            serveur_modele.ajouter({"nom": "Migration", "hote": "a.fr", "utilisateur": "bob"}, self.d)
+        self.assertFalse((self.d / "serveurs.json").exists())
+
+    def test_entree_migration_ecrite_a_la_main_est_un_rejet_visible(self):
+        (self.d / "serveurs.json").write_text(json.dumps([{"id": "migration", "nom": "M", "hote": "a.fr", "utilisateur": "bob",
+                                                            "cle": "k", "fournisseur": None}]), encoding="utf-8")
+        serveurs, rejets = serveur_modele.lire_avec_rejets(self.d)
+        self.assertEqual(serveurs, [])
+        self.assertEqual(len(rejets), 1)
+
+    def test_declarer_en_ligne_de_commande_refuse_migration(self):
+        import serveur_cli
+        code = serveur_cli._declarer(["Migration", "a.fr", "bob"], {"fournisseur": None, "accord": False, "dossier": None}, self.d, None)
+        self.assertEqual(code, 1)
+        self.assertFalse((self.d / "serveurs.json").exists())
 
 
 if __name__ == "__main__":

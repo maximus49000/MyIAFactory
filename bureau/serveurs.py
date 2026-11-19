@@ -24,7 +24,6 @@ AGE_MAX_CHARGE_S = 900   # une charge sondée il y a plus longtemps est ignorée
 HORLOGE = time.time
 LIGNE_CLE_MAX = 4096
 ROUTES_MIGRATION = {"/api/serveurs/migration/apercu": "migration_apercu", "/api/serveurs/migration/confirmer": "migration_confirmer"}
-ID_RESERVE = "migration"   # ne doit pas se confondre avec /api/serveurs/migration/...
 
 
 class Occupe(Exception):
@@ -124,12 +123,15 @@ class Travaux:
         self._cible = None          # (genre, id du serveur) de la tâche en cours
         self.erreurs = {}           # id du serveur -> message de la dernière tâche interrompue
         self._places_apercu = threading.BoundedSemaphore(MAX_APERCUS)
+        self._migrations = 0        # migrations (aperçu, confirmation) dont le fil tourne encore
 
     def _options_ssh(self):
         return {} if self._ssh is None else {"ssh": self._ssh}
 
     def en_cours(self, genre=None, serveur_id=None):
         with self._verrou:
+            if self._migrations and genre is None:      # une migration (aperçu ou confirmation) tourne : tout est occupé
+                return True
             if self._fil is None or not self._fil.is_alive() or self._cible is None:
                 return False
             return (genre in (None, self._cible[0])) and (serveur_id in (None, self._cible[1]))
@@ -217,8 +219,32 @@ class Travaux:
         return self._borne(lambda: _modules()[3].apercu(serveur, actions, dossier=d, **self._options_ssh()), delai)
 
     def migration(self, travail, delai=None):
-        """Un travail de migration (sondes en lecture seule, ou confirmation), borné comme l'aperçu."""
-        return self._borne(travail, delai)
+        """Un travail de migration (sondes en lecture seule, ou confirmation), borné comme l'aperçu. Il compte comme une tâche
+        en cours (`en_cours()`) jusqu'à la fin RÉELLE de son fil, même si l'appelant a abandonné l'attente (504)."""
+        etat = {"demarre": False}
+        with self._verrou:
+            self._migrations += 1
+
+        def suivi():
+            etat["demarre"] = True
+            try:
+                return travail()
+            finally:
+                with self._verrou:
+                    self._migrations -= 1
+        try:
+            return self._borne(suivi, delai)
+        except BaseException:
+            if not etat["demarre"]:            # refusé (Occupe) ou fil jamais parti : rien ne décomptera
+                with self._verrou:
+                    self._migrations -= 1
+            raise
+
+    def attendre_migration(self, delai=10):
+        """Attend (essais) la fin des migrations en fond."""
+        fin = time.time() + delai
+        while time.time() < fin and self._migrations:
+            time.sleep(0.01)
 
 
 # ---------------------------------------------------------------- lectures (fichiers seulement)
@@ -405,12 +431,7 @@ def poster(travaux, cible, corps, d=None):
         return _poster_migration(travaux, genre, corps, d)
     if genre == "declarer":
         champs = {k: corps.get(k) for k in ("nom", "hote", "utilisateur", "fournisseur")}   # rien d'autre n'est pris
-        try:
-            if modeles.valider({**champs, "cle": "x"}).id == ID_RESERVE:
-                return 400, {"erreur": "Ce nom est réservé : choisissez-en un autre."}
-        except ValueError:
-            pass        # `ajouter` redonne le vrai message
-        try:
+        try:           # l'identifiant « migration » est réservé : `valider` le refuse avec un message clair (400)
             serveur = modeles.ajouter(champs, d)
         except ValueError as e:
             return 400, {"erreur": _masquer(str(e), _secrets(d, []))}
@@ -487,7 +508,7 @@ def _poster_migration(travaux, genre, corps, d):
     except Occupe:
         return 409, {"erreur": "Des sondes de migration sont déjà en cours : réessayez dans un instant."}
     except migration.ErreurMigration as e:
-        return {"accord": 400, "deja": 409, "occupe": 409}.get(e.code, 400), {"erreur": _masquer(str(e), masque)}
+        return {"accord": 400, "illisible": 400, "deja": 409, "occupe": 409}.get(e.code, 400), {"erreur": _masquer(str(e), masque)}
     except Exception as e:
         print(f"Migration interrompue ({type(e).__name__}).", file=sys.stderr)
         return 500, {"erreur": "La migration a échoué : rien n'a été modifié ou relisez la liste des serveurs, puis réessayez."}

@@ -119,7 +119,7 @@ export async function apercuMigration(fetchFn = globalThis.fetch) {
 export async function confirmerMigration(accord, fetchFn = globalThis.fetch) {
   const r = await appeler("/api/serveurs/migration/confirmer", "POST", {accord: accord === true}, fetchFn);
   if (r.injoignable) return {ok: false, message: "Migration impossible : le bureau est injoignable."};
-  if (!r.ok) return {ok: false, message: refus(r)};
+  if (!r.ok) return {ok: false, status: r.status, message: refus(r)};
   return {ok: true, message: "Serveur inscrit."};
 }
 
@@ -530,6 +530,8 @@ export function ecranServeurs(etat, options = {}) {
     const bConfirmer = el("button", "bouton serveurs-migration-confirmer", "Confirmer l'inscription du serveur");
     bConfirmer.type = "button";
     let envoi = false;
+    let aRelire = false;                    // après un délai dépassé (504), la liste doit être relue avant tout nouvel envoi
+    const declare = () => tableau(courant?.serveurs).length > 0;
     bApercu.addEventListener("click", async () => {
       if (bApercu.disabled) return;
       bApercu.disabled = true;
@@ -550,8 +552,17 @@ export function ecranServeurs(etat, options = {}) {
       // L'accord n'est donné que par la case cochée, et il ne sert qu'une fois : décochée tout de suite, avant l'envoi.
       const accorde = accord.checked === true;
       accord.checked = false;
+      if (aRelire) {                         // aucun envoi : on relit d'abord la liste (la confirmation a pu aboutir)
+        envoi = true;
+        const neuf = await relire();
+        envoi = false;
+        if (neuf && declare()) { zoneMigration.replaceChildren(); dessiner(); return; }
+        if (neuf) { aRelire = false; note.textContent = "Liste relue : le serveur n'est pas inscrit. Cochez la case puis confirmez de nouveau."; }
+        else note.textContent = "Relisez d'abord la liste des serveurs : la confirmation précédente a peut-être abouti.";
+        return;
+      }
       if (!accorde) { note.textContent = "Cochez la case d'accord pour inscrire le serveur."; return; }
-      envoi = true;                          // posé de façon synchrone : aucun second envoi avant la réponse
+      envoi = true;                         // posé de façon synchrone : aucun second envoi avant la réponse
       bConfirmer.disabled = true;
       note.textContent = "Inscription…";
       let r;
@@ -565,6 +576,15 @@ export function ecranServeurs(etat, options = {}) {
         return;
       }
       note.textContent = r.message;
+      if (r.status === 409 || r.status === 504) {      // déjà déclaré, ou issue inconnue : on relit la liste avant toute autre chose
+        if (r.status === 504) aRelire = true;
+        const neuf = await relire();
+        if (neuf) {
+          if (r.status === 504) aRelire = false;
+          if (declare()) { zoneMigration.replaceChildren(); dessiner(); return; }
+        } else if (r.status === 504) note.textContent = `${r.message} Relisez la liste des serveurs avant de réessayer.`;
+        dessiner();
+      }
     });
     carte.append(bApercu, etiquette, bConfirmer);
     return carte;

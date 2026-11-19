@@ -750,6 +750,37 @@ class TestMigration(AvecServeurs):
         self.assertEqual(r.status, 500)
         self.assertNotIn(SECRET.encode(), data)
 
+    def test_confirmer_rejoue_pendant_un_premier_lent_est_refuse(self):
+        bloque = threading.Event()
+        self.addCleanup(bloque.set)
+        self.travaux._ssh = SimpleNamespace(executer=lambda *a, **k: (bloque.wait(5), (0, "", ""))[1], CHANGEMENT_CLE="x")
+        with mock.patch.object(bserveurs, "DELAI_APERCU_S", 0.05):
+            self.assertEqual(self.poster("/api/serveurs/migration/confirmer", {"accord": True})[0].status, 504)
+        self.assertTrue(self.travaux.en_cours())               # la migration en fond compte
+        self.assertEqual(self.poster("/api/serveurs/migration/confirmer", {"accord": True})[0].status, 409)
+        bloque.set()
+        self.travaux.attendre_migration(5)
+        self.assertFalse(self.travaux.en_cours())
+        self.assertEqual(len(bserveurs._modules()[4].lire(self.dossier)), 1)       # exactement une inscription
+
+    def test_une_migration_en_cours_bloque_sonder_et_installer(self):
+        (self.dossier / "serveurs.json").unlink(missing_ok=True)
+        self.declarer()
+        bloque = threading.Event()
+        self.addCleanup(bloque.set)
+        fil = threading.Thread(target=lambda: self.travaux.migration(lambda: bloque.wait(5), delai=0.01))
+        fil.start()
+        fil.join(5)
+        self.assertTrue(self.travaux.en_cours())
+        self.assertEqual(self.poster("/api/serveurs/mon-serveur/sonder", {})[0].status, 409)
+        self.assertEqual(self.poster("/api/serveurs/mon-serveur/installer", {"actions": ["apk"], "accord": True})[0].status, 409)
+        bloque.set()
+
+    def test_proposition_illisible_donne_400_et_pas_409(self):
+        with mock.patch("serveur_migration.detecter", return_value={"serveur": 12, "source": []}):
+            r, _ = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
+        self.assertEqual(r.status, 400)
+
     def test_migration_ne_prend_jamais_la_place_d_un_serveur_nomme_migration(self):
         # « migration » n'est pas un identifiant de serveur utilisable pour les routes /api/serveurs/<id>/...
         r, data = self.declarer(nom="Migration")

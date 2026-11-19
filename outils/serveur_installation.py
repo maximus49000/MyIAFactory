@@ -138,7 +138,7 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
                  "inconnue": "Serveur injoignable ou état illisible."}
 
 
-def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time):
+def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time, sous_verrou=None):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
@@ -157,6 +157,8 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
         if verrou is None:
             raise deja
         try:
+            if sous_verrou is not None:
+                sous_verrou()       # exécuté verrou pris : aucune installation ne peut démarrer entre cette action et l'écriture
             avant = lire_etat(dossier).get(serveur.id, {})
             anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
             caps = {}

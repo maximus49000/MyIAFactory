@@ -21,6 +21,7 @@ UTILISATEUR_INTERDIT = "root"
 TERMES_SECRETS = ("password", "passwd", "passphrase", "secret", "token", "jeton", "mdp", "apikey", "api_key", "cle_api",
                   "cle_app", "mot_de_passe")      # comparés par segments entiers : « passerelle », « bypass » ne correspondent pas
 LONGUEURS_MAX = {"hote": 253, "utilisateur": 64, "id": 64, "nom": 100}
+IDENTIFIANT_RESERVE = "migration"      # les routes /api/serveurs/migration/... ne doivent pas se confondre avec /api/serveurs/<id>/...
 CARACTERES_HOTE_INTERDITS = set("/:[],")
 
 
@@ -104,6 +105,8 @@ def valider(serveur):
         ident = _identifiant(_texte(ident, "id"))       # forme de slug : sûre comme segment d'URL ou de nom de fichier
         if not ident:
             raise ValueError("Identifiant invalide : il doit contenir au moins une lettre ou un chiffre.")
+    if ident == IDENTIFIANT_RESERVE:
+        raise ValueError("Ce nom est réservé (il se confondrait avec l'adresse /api/serveurs/migration) : choisissez-en un autre.")
     return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages))
 
 

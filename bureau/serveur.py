@@ -20,6 +20,8 @@ from . import abonnement as modabonnement
 from . import acces, attente, catalogue, charge, conso, cout, creations, demandes, demarrage, equipe, etat, kpi, lancement as lancement_, prix, reglages
 from . import avancement as modavancement
 from . import deport as moddeport
+from . import deport_conso
+from . import deport_types
 from . import fichiers_joints, releve, statuts
 from . import plateforme as modplateforme
 from . import serveurs as modserveurs
@@ -84,7 +86,7 @@ IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
 LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancement, hors de tout dépôt
 ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
-                 "/api/catalogue", "/api/livrable", "/api/telecharger")
+                 "/api/catalogue", "/api/livrable", "/api/telecharger", "/api/deport/apercu")
 # La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
@@ -241,24 +243,64 @@ class Projet:
         return dict(moddeport.LIEUX_PAR_DEFAUT)
 
     def lieux_du_projet(self):
-        """Les lieux écrits dans les réglages du projet (surcharges), tels quels, sans les défauts."""
+        """Les lieux écrits dans les réglages du projet (surcharges), sans les défauts. Une valeur qui n'est pas un lieu
+        connu (texte inconnu, liste, objet : fichier abîmé ou écrit à la main) est lue `poste` : l'état ne casse pas."""
         try:
             donnees = json.loads(self.chemin_reglages.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError):
+        except (ValueError, OSError, RecursionError):
             return {}
         d = donnees.get("deport") if isinstance(donnees, dict) else None
         lieux = d.get("lieux") if isinstance(d, dict) else None
-        return dict(lieux) if isinstance(lieux, dict) else {}
+        if not isinstance(lieux, dict):
+            return {}
+        return {a: (v if isinstance(v, str) and v in moddeport.LIEUX else "poste") for a, v in lieux.items()}
+
+    def catalogue_deport(self):
+        """Le catalogue d'actions du type du projet (générique si le genre est absent ou inconnu)."""
+        return deport_types.catalogue_du_projet(str(self.chemin_reglages.parent))[1]
 
     def lieux_effectifs(self):
         globaux, projet = self.lieux_globaux(), self.lieux_du_projet()
-        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in moddeport.ACTIONS}
+        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in self.catalogue_deport()}
 
     def etat_deport(self):
+        catalogue = self.catalogue_deport()
         lieux = self.lieux_effectifs()
         # le serveur n'est disponible que lorsque la plateforme est prête (cache `plateforme.json`, sans appel réseau)
-        return {"lieux": lieux, "avertissements": moddeport.avertissements(lieux),
-                "serveur_disponible": modplateforme.pret()}
+        d = {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
+             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": modplateforme.pret()}
+        # résultats et minutes GitHub : seulement si une action tourne sur GitHub (sinon aucun appel à gh)
+        conso = deport_conso.conso(str(self.chemin_reglages.parent), {a: e["libelle"] for a, e in catalogue.items()}, lieux)
+        if conso is not None:
+            d["conso"] = conso
+        return d
+
+    def reglages_deport(self):
+        """Les réglages de déport tels que le dépôt les lit : lieux effectifs (projet puis bureau), commandes, heure."""
+        regl, err = self.reglages()
+        if err:
+            raise ValueError(err)
+        d = regl["deport"]
+        return {"deport": {"lieux": self.lieux_effectifs(), "commandes": d["commandes"], "charge_heure": d["charge_heure"]}}
+
+    def apercu_deport(self):
+        """(code, objet) : ce que le déport écrirait dans le dépôt du projet ; ne modifie rien."""
+        from outils import deport_depot
+        try:
+            return 200, deport_depot.apercu(str(self.chemin_reglages.parent), self.reglages_deport())
+        except ValueError as e:
+            return 400, {"erreur": str(e)}
+
+    def appliquer_deport(self, empreinte):
+        """(code, objet) : écrit le workflow sur la branche de travail et la pousse, si l'empreinte validée est à jour."""
+        from outils import deport_depot
+        try:
+            r = deport_depot.appliquer(str(self.chemin_reglages.parent), empreinte, self.reglages_deport())
+        except ValueError as e:
+            return 400, {"erreur": str(e)}
+        if r.get("ok"):
+            return 200, r
+        return 409, {"erreur": r.get("message", "Refusé."), **{k: v for k, v in r.items() if k != "message"}}
 
     # -- état -------------------------------------------------------------
     def etat(self, bloquant=False):
@@ -288,9 +330,14 @@ class Projet:
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
             e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
-            e["deport"] = self.etat_deport()
+            try:      # le bloc du déport ne coupe jamais l'état du projet (réglages abîmés, catalogue illisible…)
+                e["deport"] = self.etat_deport()
+            except Exception as x:
+                e["deport_erreur"] = "Bloc « Où tournent les actions » indisponible : %s" % x
             sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
+            e["livraison_sur_demande"] = regl.get("livraison_sur_demande") is True   # « Livrer seulement sur demande »
+            e["une_session_moyenne"] = regl.get("une_session_moyenne") is True   # « Évolution moyenne : une session »
             # « Dossier approuvé pour les sessions cloud »
             e["cloud_dossier_approuve"] = regl.get("cloud_dossier_approuve") is True
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
@@ -1525,6 +1572,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._image(projet, morceaux.query)
         if chemin == "/api/telecharger":
             return self._telecharger(projet, morceaux.query)
+        if chemin == "/api/deport/apercu":
+            return self._json(*projet.apercu_deport())
         if chemin == "/api/etat":
             e = self.server.etat_du_projet(projet)
             if isinstance(e, dict):
@@ -2002,7 +2051,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*self.server.connaissances(corps))
-        if chemin not in ("/api/reglages", "/api/demande"):
+        if chemin not in ("/api/reglages", "/api/demande", "/api/deport/appliquer"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
         if projet is None:
@@ -2018,6 +2067,19 @@ class Handler(BaseHTTPRequestHandler):
             longueur = -1
         if not 0 < longueur <= (MAX_CORPS_DEMANDE if chemin == "/api/demande" else MAX_CORPS_REGLAGES):
             return self._json(400, {"erreur": "Corps de requête invalide."})
+        if chemin == "/api/deport/appliquer":   # le seul chemin qui pousse : la validation explicite du Directeur
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            empreinte = corps.get("empreinte") if isinstance(corps, dict) else None
+            if not isinstance(empreinte, str) or not empreinte:
+                return self._json(400, {"erreur": "L'empreinte validée est requise."})
+            try:
+                code, objet = projet.appliquer_deport(empreinte)
+            except Exception as e:  # jamais une connexion coupée sans réponse lisible
+                code, objet = 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
+            return self._json(code, objet)
         if chemin == "/api/demande":
             try:
                 demande = json.loads(self.rfile.read(longueur).decode("utf-8"))
@@ -2034,6 +2096,10 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = reglages.fixer_lecons_auto(projet.chemin_reglages, corps["lecons_auto"])
             elif isinstance(corps, dict) and "analyse_blocages" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_analyse_blocages(projet.chemin_reglages, corps["analyse_blocages"])
+            elif isinstance(corps, dict) and "livraison_sur_demande" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_livraison_sur_demande(projet.chemin_reglages, corps["livraison_sur_demande"])
+            elif isinstance(corps, dict) and "une_session_moyenne" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_une_session_moyenne(projet.chemin_reglages, corps["une_session_moyenne"])
             elif isinstance(corps, dict) and "cloud_dossier_approuve" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_cloud_dossier_approuve(projet.chemin_reglages, corps["cloud_dossier_approuve"])
             elif isinstance(corps, dict) and "deport" in corps and "charge_max" not in corps:
@@ -2042,16 +2108,20 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
                 actuel = reglages.charger(projet.chemin_reglages)["deport"]
                 # une demande partielle se fusionne sur les lieux écrits dans le projet ; ceux du bureau restent hérités
-                lieux = projet.lieux_du_projet()
+                # un lieu écrit pour une action que le type du projet n'a plus (genre changé) est oublié : il ne doit
+                # pas faire refuser toutes les demandes suivantes
+                catalogue = projet.catalogue_deport()
+                lieux = {a: v for a, v in projet.lieux_du_projet().items() if a in catalogue}
                 if isinstance(demande.get("lieux"), dict):
                     lieux.update(demande["lieux"])
                 elif "lieux" in demande:
                     lieux = demande["lieux"]
-                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux})
+                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},
+                                                catalogue)
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
                     raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "
-                                     "« deport » ou « cloud_dossier_approuve ».")
+                                     "« livraison_sur_demande », « une_session_moyenne », « deport » ou « cloud_dossier_approuve ».")
                 nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})

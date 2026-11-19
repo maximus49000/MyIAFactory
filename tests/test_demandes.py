@@ -329,6 +329,9 @@ class TestVerifierV4(unittest.TestCase):
 
     def test_cahier(self):
         self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider"})
+        self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider_court"})      # parcours court, sans prototype
+        self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "valider_complet"})    # parcours complet
+        self.refus({"type": "cahier", "fonctionnalite": "f5", "verdict": "valider_court"})   # pas de décision
         self.ok({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger", "texte": "Plus grand"})
         self.refus({"type": "cahier", "fonctionnalite": "f5", "verdict": "valider"})  # pas de décision
         self.refus({"type": "cahier", "fonctionnalite": "f1", "verdict": "corriger"})

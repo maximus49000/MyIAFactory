@@ -15,6 +15,12 @@ FICHE_RELECTEUR = ("Clé : relecteur-1\nPrénom : Rémi\nRôle : relecteur\nServ
 class AvecTaches(AvecProjet):
     def setUp(self):
         super().setUp()
+        # jamais le vrai ~/MyIAFactory/bureau.json (le Directeur y règle des lieux de déport globaux sur ce poste) :
+        # un fichier absent, donc seuls les lieux que le projet du test règle lui-même comptent
+        from orchestrateur import outil
+        avant = outil.BUREAU_DEPORT
+        outil.BUREAU_DEPORT = str(self.dossier / "absent" / "bureau.json")
+        self.addCleanup(setattr, outil, "BUREAU_DEPORT", avant)
         (self.dossier / "fiches" / "mia.md").write_text(FICHE_SON, encoding="utf-8")
         (self.dossier / "fiches" / "remi.md").write_text(FICHE_RELECTEUR, encoding="utf-8")
         briefs = self.dossier / "fiches" / "briefs"

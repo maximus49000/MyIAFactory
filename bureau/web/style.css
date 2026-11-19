@@ -247,6 +247,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   font-size: 14px; font-weight: 600;
 }
 .message-demande[data-ton="alerte"] { background: #fbe3d6; color: #8a3b1e; }
+.deport-conso { margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d9d6e3; }
+.deport-conso h5 { margin: 4px 0; }
+.deport-conso-alerte { border-color: #d98a6a; background: #fdeee6; }
+.deport-conso-depasse { border-color: #c4452a; background: #fbe3d6; color: #8a3b1e; }
 .message-demande[hidden] { display: none; }
 
 /* --- Bandeau d'erreur, sous la barre --- */

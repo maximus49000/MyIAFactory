@@ -25,8 +25,13 @@ B. Serveur personnel seul (type Hetzner) : tout est possible, mais administratio
 3. **Portée du réglage** : valeur globale (configuration de la skill) avec **surcharge par projet**, dans les réglages
    du projet (`bureau/reglages.py`, comme `lecons_auto`), validée à la lecture. Les cases du bureau écrivent là.
 4. **Étape 1, `github`** : à partir des cases, le bureau génère `.github/workflows/<projet>.yml` (Linux uniquement),
-   l'**affiche pour validation** avant le premier push, puis le pousse. Déclencheurs : push, bouton manuel, planification
-   (tests de charge de nuit). L'APK compilé est publié en artefact.
+   l'**affiche pour validation** avant le premier push, puis le pousse. Déclencheurs : bouton manuel
+   (`workflow_dispatch`, utilisé par `lancer.py deporter`) et planification (tests de charge de nuit, seulement si
+   `charge` est déportée ; la nuit, seuls `charge` et les jobs dont elle dépend tournent). L'APK compilé est publié en
+   artefact.
+   *Note (relecture finale, ruling 9)* : le déclencheur `push` a été retiré : un push suivi du déclenchement par
+   l'agent donnait deux exécutions pour un même commit, et le quota de minutes est limité. Les jobs Gradle reçoivent
+   un JDK 17 (`actions/setup-java@v4`, temurin) et `chmod +x gradlew` (dépôt créé sous Windows).
 5. **Étape 2, `serveur`** : le lanceur de tests exécute la commande sur le serveur par SSH, avec le même verrou de
    campagne que sur le poste (voir CLAUDE.md). Ajouté après l'étape 1, sans refaire l'écran.
    Ce lieu s'appuie sur la plateforme OVH (voir `2026-11-19-serveur-ovh-plateforme-design.md`).
@@ -60,6 +65,18 @@ lieu, l'agent doit **attendre** la première, puis récupérer son produit.
    le point d'entrée les pousse (sur une branche de travail, avec accord) ou refuse, jamais de compilation d'un code
    différent de celui que l'agent teste.
 
+## Type de projet (ajout demandé par le Directeur)
+Ce que Git peut faire dépend du type de projet : l'APK n'existe que pour un projet qui génère une application Android.
+1. **Catalogue par genre** : le genre du projet (`genre` dans `.factory/factory.json`, par exemple `application-mobile-android`)
+   donne la liste des actions proposées, leurs libellés, leurs commandes par défaut, leurs artefacts et leurs dépendances.
+   Genre absent ou inconnu : catalogue générique (apk, tests, charge, émulateur), commandes à fournir par le Directeur.
+2. **Android (Gradle natif, MyFridgeCleaner)** : APK (`assembleDebug`), tests unitaires (`testDebugUnitTest`, sans besoin
+   de l'APK : ils se compilent depuis les sources), lint, tests sur émulateur (poste seulement), APK signé release (poste
+   seulement tant que les clés ne sont pas dans les secrets GitHub, saisis par le Directeur). Pas d'action « charge » : une
+   application sans serveur n'a pas de test de charge.
+3. **Dépendances** : celles du catalogue du type. Le mécanisme d'attente reste, mais pour un projet Android Gradle les
+   tests n'attendent pas l'APK ; il sert quand une action consomme vraiment le produit d'une autre.
+
 ## Contraintes
 - Le dépôt MyFridgeCleaner est **privé** : quota gratuit limité (environ 2 000 min/mois sur Free, à vérifier).
 - Les secrets (clé de signature de l'APK, jetons) restent saisis par le Directeur dans GitHub.
@@ -84,3 +101,11 @@ lieu, l'agent doit **attendre** la première, puis récupérer son produit.
 ## Laissé au réalisateur
 Nom et emplacement du réglage global ; mise en page des cases ; forme exacte du workflow par type de projet ; cache des
 résultats ; tests.
+
+## Évolution prévue : bibliothèque globale d'actions (demande du Directeur, non commencée)
+Un catalogue global d'actions candidates, livré avec la skill, où chaque action est étiquetée par type de livrable
+(APK, application web, bureau, images…) et par technique (Gradle, Godot, Node…). À la création d'un nouveau genre de
+projet, les actions utiles lui sont associées d'après ce que fait le projet et son type de livrable, et le Directeur
+valide. Les catalogues `GENERIQUE` et `application-mobile-android` deviennent les premières instances de cette
+bibliothèque. À concevoir après la tâche 13 : lire d'abord le mécanisme de création d'un genre
+(`orchestrateur/memoire/genres`, décisions `confirmer_genre` / `elargir_genre`).

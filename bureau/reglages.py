@@ -6,7 +6,8 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
-from .deport import ACTIONS, LIEUX_PAR_DEFAUT, valider_lieux
+from .deport import LIEUX_PAR_DEFAUT, valider_lieux
+from .deport_types import catalogue_union
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 
 DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True,
@@ -19,6 +20,13 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # Vrai (par défaut) : le Chef analyse chaque blocage d'une tâche avant le Directeur (« Analyse intelligente
            # des blocages ») ; faux, le moteur fait comme avant, sans aucun appel de ce jugement.
            "analyse_blocages": True,
+           # Vrai : la livraison (la construction de l'apk, 8 à 14 min) ne part pas toute seule quand les éléments sont
+           # conformes ; elle attend « Livrer maintenant » (essai de coûts du 2026-11-19). Faux : comme avant.
+           "livraison_sur_demande": False,
+           # Vrai : une évolution moyenne (cahier validé ensuite) n'a plus de session de tests et de revue à part ; la
+           # programmation relit et teste elle-même (essai de coûts du 2026-11-19 : 0,12 à 0,17 € et 3 à 7 min de moins,
+           # mais plus de regard neuf). Faux : comme avant.
+           "une_session_moyenne": False,
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -61,24 +69,37 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
     if type(r.get("analyse_blocages")) is not bool:
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
+    if type(r.get("livraison_sur_demande")) is not bool:
+        raise ReglagesInvalides("Réglages : « livraison_sur_demande » doit valoir true ou false.")
+    if type(r.get("une_session_moyenne")) is not bool:
+        raise ReglagesInvalides("Réglages : « une_session_moyenne » doit valoir true ou false.")
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
 
 
-def normaliser_deport(v, contexte="Réglages"):
+def normaliser_deport(v, contexte="Réglages", catalogue=None):
     """Valide la clé `deport` et la rend complète : lieux manquants au défaut (poste), commandes vides, charge 03:00.
+    Lieux et commandes sont validés contre le catalogue d'actions du projet ; sans catalogue (réglage du bureau, qui
+    n'a pas de projet), toute action connue d'un type quelconque est admise et seuls les noms inconnus sont refusés.
     Lève ReglagesInvalides (message en français) si une valeur est mauvaise."""
+    if catalogue is None:
+        catalogue = catalogue_union()
     if not isinstance(v, dict):
         raise ReglagesInvalides(f"{contexte} : « deport » doit être un objet {{lieux, commandes, charge_heure}}.")
     lieux = v.get("lieux", {})
     try:
-        lieux = valider_lieux(lieux)
+        lieux = valider_lieux(lieux, catalogue=catalogue)
     except ValueError as e:
         raise ReglagesInvalides(f"{contexte} : « deport.lieux » : {e}")
     commandes = v.get("commandes", {})
-    if (not isinstance(commandes, dict)
-            or not all(k in ACTIONS and isinstance(c, str) for k, c in commandes.items())):
+    if not isinstance(commandes, dict) or not all(isinstance(c, str) for c in commandes.values()):
         raise ReglagesInvalides(f"{contexte} : « deport.commandes » doit associer une action connue à une "
                                 "commande (texte).")
+    for k in commandes:
+        if k not in catalogue:
+            raise ReglagesInvalides(f"{contexte} : « deport.commandes » : l'action « {k} » n'existe pas pour ce "
+                                    "type de projet." if k in catalogue_union() else
+                                    f"{contexte} : « deport.commandes » doit associer une action connue à une "
+                                    "commande (texte).")
     heure = v.get("charge_heure", DEFAUTS["deport"]["charge_heure"])
     if not isinstance(heure, str) or not _HEURE.match(heure):
         raise ReglagesInvalides(f"{contexte} : « deport.charge_heure » doit être une heure HH:MM (00:00 à 23:59).")
@@ -186,11 +207,11 @@ def fixer_lecons_auto(chemin, valeur):
     return _ecrire_cle(chemin, "lecons_auto", valeur)
 
 
-def fixer_deport(chemin, deport):
+def fixer_deport(chemin, deport, catalogue=None):
     """Note le déport du projet (lieux, commandes, heure de charge) : validé avant d'écrire, ReglagesInvalides sinon.
     Seuls les lieux explicitement donnés sont écrits (jamais ceux complétés par défaut : le projet hérite du bureau
-    pour les autres). Rend les réglages rechargés."""
-    complet = normaliser_deport(deport, "Réglages")
+    pour les autres). `catalogue` : les actions du type du projet. Rend les réglages rechargés."""
+    complet = normaliser_deport(deport, "Réglages", catalogue)
     explicites = {a: complet["lieux"][a] for a in deport.get("lieux", {})}
     return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
 
@@ -200,6 +221,20 @@ def fixer_analyse_blocages(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« analyse_blocages » doit valoir true ou false.")
     return _ecrire_cle(chemin, "analyse_blocages", valeur)
+
+
+def fixer_livraison_sur_demande(chemin, valeur):
+    """Note si la livraison attend le clic « Livrer maintenant » (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« livraison_sur_demande » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "livraison_sur_demande", valeur)
+
+
+def fixer_une_session_moyenne(chemin, valeur):
+    """Note si une évolution moyenne se fait en une seule session, sans tests ni revue à part (vrai ou faux)."""
+    if type(valeur) is not bool:
+        raise ValueError("« une_session_moyenne » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "une_session_moyenne", valeur)
 
 
 def fixer_cloud_dossier_approuve(chemin, valeur):

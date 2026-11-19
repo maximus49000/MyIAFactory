@@ -666,11 +666,13 @@ def _verifier_v4(demande, r, elements):
     if texte is not None and len(texte) > MAX_TEXTE:
         return f"« texte » dépasse {MAX_TEXTE} caractères."
     if genre == "cahier":
-        if verdict == "valider":
+        # valider : le parcours suit la taille jugée au cadrage ; valider_court : sans prototype ni méthode, même pour une
+        # évolution jugée grande ; valider_complet : prototype et méthode, même pour une petite ou une moyenne
+        if verdict in ("valider", "valider_court", "valider_complet"):
             return None if _a_decision(f, "valider_cahier") else "Aucun cahier des charges à valider."
         if verdict == "corriger":
             return _texte_libre(texte, "texte") if texte is not None else "« texte » est obligatoire pour corriger."
-        return "Verdict inconnu (valider ou corriger)."
+        return "Verdict inconnu (valider, valider_court, valider_complet ou corriger)."
     if verdict == "valider":  # méthode
         return None if _a_decision(f, "valider_methode") else "Aucune méthode à valider."
     if verdict in ("garder", "corriger"):

@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from bureau import abonnement, prix, serveur
+from bureau import abonnement, deport_conso, prix, serveur
 from tests import copie_demo
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -48,7 +48,14 @@ class AvecServeur(unittest.TestCase):
         self.regl = self.tmp / "demo" / "reglages.json"
         abonnement.DOSSIER = self.tmp / "commun"   # jamais le vrai dossier commun
         self.addCleanup(setattr, abonnement, "DOSSIER", None)
+        deport_conso.DOSSIER, deport_conso.LANCER = self.tmp / "commun", self.gh_absent   # jamais le vrai gh ni le vrai cache
+        self.addCleanup(setattr, deport_conso, "DOSSIER", None)
+        self.addCleanup(setattr, deport_conso, "LANCER", None)
         self.demarrer()
+
+    @staticmethod
+    def gh_absent(argv, **kw):
+        raise FileNotFoundError("gh")
 
     def demarrer(self, source=None):
         self.source = source or SourceSimulee()
@@ -203,6 +210,24 @@ class TestServeur(AvecServeur):
         self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["analyse_blocages"], False)
         self.assertIs(self.json("/api/etat")["analyse_blocages"], False)
         r, _ = self.req("POST", "/api/reglages", '{"analyse_blocages": "non"}', self.ENT)
+        self.assertEqual(r.status, 400)
+
+    def test_reglage_une_session_moyenne_decoche_par_defaut_ecrit_et_visible(self):
+        self.assertIs(self.json("/api/etat")["une_session_moyenne"], False)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"une_session_moyenne": True}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["une_session_moyenne"], True)
+        self.assertIs(self.json("/api/etat")["une_session_moyenne"], True)
+        r, _ = self.req("POST", "/api/reglages", '{"une_session_moyenne": "non"}', self.ENT)
+        self.assertEqual(r.status, 400)
+
+    def test_reglage_livraison_sur_demande_decoche_par_defaut_ecrit_et_visible(self):
+        self.assertIs(self.json("/api/etat")["livraison_sur_demande"], False)
+        r, data = self.req("POST", "/api/reglages", json.dumps({"livraison_sur_demande": True}), self.ENT)
+        self.assertEqual(r.status, 200)
+        self.assertIs(json.loads(self.regl.read_text(encoding="utf-8"))["livraison_sur_demande"], True)
+        self.assertIs(self.json("/api/etat")["livraison_sur_demande"], True)
+        r, _ = self.req("POST", "/api/reglages", '{"livraison_sur_demande": "non"}', self.ENT)
         self.assertEqual(r.status, 400)
 
     def test_reglage_cloud_dossier_approuve_decoche_par_defaut_ecrit_et_visible(self):

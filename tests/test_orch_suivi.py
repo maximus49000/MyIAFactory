@@ -1039,3 +1039,40 @@ class SuiviAbime(__import__("unittest").TestCase):
         self.s.chemin.write_bytes(b"\0" * 10)
         with self.assertRaises(ValueError):
             self.s.lire()
+
+    def test_ecriture_reessayee_si_le_fichier_est_tenu_ouvert(self):
+        """WinError 5 : un lecteur tient le suivi une fraction de seconde ; le rapport n'est pas perdu."""
+        import os
+        from unittest import mock
+        vrai = os.replace
+        refus = {"n": 2}
+
+        def tenu(source, cible):
+            if str(cible) == str(self.s.chemin) and refus["n"] > 0:
+                refus["n"] -= 1
+                raise PermissionError(5, "Accès refusé")
+            return vrai(source, cible)
+
+        with mock.patch.object(suivi, "PAUSE_REMPLACEMENT_S", 0), mock.patch("os.replace", tenu):
+            with self.s.transaction() as d:
+                d["livrable"] = "tenu"
+        self.assertEqual(refus["n"], 0)
+        self.assertEqual(json.loads(self.s.chemin.read_text(encoding="utf-8"))["livrable"], "tenu")
+
+    def test_ecriture_toujours_refusee_ne_laisse_pas_de_suivi_absent(self):
+        import os
+        from unittest import mock
+        with self.s.transaction() as d:
+            d["livrable"] = "avant"
+        vrai = os.replace
+
+        def tenu(source, cible):
+            if str(cible) == str(self.s.chemin):
+                raise PermissionError(5, "Accès refusé")
+            return vrai(source, cible)
+
+        with mock.patch.object(suivi, "PAUSE_REMPLACEMENT_S", 0), mock.patch("os.replace", tenu):
+            with self.assertRaises(PermissionError):
+                with self.s.transaction() as d:
+                    d["livrable"] = "apres"
+        self.assertEqual(json.loads(self.s.chemin.read_text(encoding="utf-8"))["livrable"], "avant")

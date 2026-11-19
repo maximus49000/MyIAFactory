@@ -19,3 +19,5 @@ py -3.12 outils/tests_paralleles.py orch_memoire  # un module précis
 
 - `--sans-attendre` refuse (code 3) au lieu d'attendre ; utile dans un script qui ne doit pas rester bloqué.
 - Un morceau en échec est relancé seul : « instable » s'il passe alors (sensible à la charge), vrai échec sinon.
+- **Un projet dont des actions sont déportées sur GitHub** : ses agents les lancent par `python lancer.py deporter <type> …`
+  (le message de départ donne la commande exacte ; voir `docs/deport.md`), jamais directement.

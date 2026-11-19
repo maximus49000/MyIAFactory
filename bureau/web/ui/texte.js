@@ -86,7 +86,7 @@ export function attenteTestsEnClair(attente) {
 // lot_faite / lot_a_venir : une tâche d'un lot que la même session a finie ou fera ensuite ; attente_tests : l'agent
 // attend le verrou de tests du poste (voir bureau/avancement.py).
 const TON_AVANCEMENT = {avance: "ok", demarre: "ok", commande_longue: "pause", lot_faite: "ok", lot_a_venir: "pause",
-                        attente_tests: "pause"};
+                        attente_tests: "pause", attente_deportee: "pause"};
 
 // L'agent écrit « termine » dans `en_cours` quand sa liste est finie, mais il travaille encore (tests finaux, compte
 // rendu) : dire « terminé » faisait croire la tâche finie (essai réel du 2026-11-18, Léa lançait encore vitest).

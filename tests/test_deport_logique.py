@@ -51,3 +51,20 @@ class TestDeportLogique(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLieuxAbimes(unittest.TestCase):
+    def test_avertissements_ne_levent_pas_sur_un_lieu_inconnu(self):
+        from bureau.deport import avertissements
+        textes = avertissements({"apk": "nuage", "tests": ["x"]})
+        self.assertTrue(all(isinstance(t, str) for t in textes))
+
+
+class TestCatalogueIllisible(unittest.TestCase):
+    def test_factory_json_trop_profond_donne_le_generique(self):
+        import tempfile
+        from pathlib import Path
+        from bureau.deport_types import catalogue_du_projet
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "factory.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+            self.assertEqual(catalogue_du_projet(t)[0], "generique")

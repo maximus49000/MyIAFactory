@@ -154,7 +154,27 @@
 - [ ] **Step 4: Run** — attendu : passent.
 - [ ] **Step 5: Commit** `Déport : aperçu, validation et push du workflow sur une branche de travail`
 
-### Task 8: Point d'entrée `lancer.py deporter` et dépendances
+### Task 8: Catalogue d'actions par type de projet
+
+**Pourquoi (demande du Directeur) :** ce que Git peut faire dépend du type de projet. L'APK appartient à un projet qui génère une application Android : on ne propose et on ne déporte que les actions qui existent pour ce type, avec leurs vraies commandes et leurs vraies dépendances. MyFridgeCleaner (genre `application-mobile-android`, lu dans `.factory/factory.json`) est un projet Gradle natif Kotlin (`gradlew`, `app/src/test`, `app/src/androidTest`, signature `release` dans `app/build.gradle.kts`).
+
+**Files:**
+- Create: `bureau/deport_types.py`
+- Modify: `bureau/deport.py` (les fonctions gagnent un paramètre optionnel `catalogue`, défaut `GENERIQUE` : aucun changement pour l'existant), `bureau/reglages.py` (valider lieux et commandes contre le catalogue du projet), `bureau/serveur.py` (état : `deport.actions`), `bureau/web/ui/deport.js` (n'afficher que les actions du type, avec leur libellé), `outils/workflow_github.py` (commande par défaut, chemin d'artefact et dépendances pris dans le catalogue ; plus de `_CHEMIN_APK` en dur)
+- Test: `tests/test_deport_types.py`, compléter `tests/test_deport_logique.py`, `tests/test_deport_workflow.py`, `tests/test_bureau_deport.py`, `bureau/web/tests/deport.test.js`
+
+**Interfaces:**
+- Produces: `GENERIQUE: dict` = le catalogue actuel (`apk`, `tests`, `charge`, `emulateur` avec leurs dépendances de la tâche 1) ; `CATALOGUES: dict` genre → catalogue, au moins `"application-mobile-android"` ; une entrée de catalogue = `{"libelle": str, "commande": str, "produit": Optional[str], "consomme": list, "artefact": Optional[str], "lieux": list, "bientot": Optional[str]}` ; `catalogue_du_projet(dossier: str) -> tuple` (`(genre, catalogue)` ; lit `genre` dans `<dossier>/.factory/factory.json` ou `<dossier>/factory.json`, genre absent ou inconnu → `("generique", GENERIQUE)`).
+- Catalogue `application-mobile-android` (valeurs à reprendre telles quelles) : `apk` « Générer l'APK » `./gradlew assembleDebug`, produit `apk`, artefact `app/build/outputs/apk/debug/*.apk`, consomme `[]`, lieux `poste`/`github` ; `tests` « Tests unitaires » `./gradlew testDebugUnitTest`, consomme `[]` (ils se compilent depuis les sources : **ils n'ont pas besoin de l'APK**), lieux `poste`/`github` ; `lint` « Analyse lint » `./gradlew lintDebug`, consomme `[]`, lieux `poste`/`github` ; `emulateur` « Tests sur émulateur » `./gradlew connectedDebugAndroidTest`, consomme `[]` (Gradle construit lui-même ce qu'il installe), lieux `poste` seulement (GitHub : « peu fiable, utilisez le poste ou le serveur ») ; `release` « APK signé (release) » `./gradlew assembleRelease`, produit `apk-release`, lieux `poste` seulement avec `bientot` = « demande vos clés de signature dans les secrets GitHub, que vous devez saisir vous-même » ; **pas de `charge`** (une application Android sans serveur n'a pas de test de charge : l'action n'est pas proposée).
+- `valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE)`, `a_attendre(lieux, action, catalogue=GENERIQUE)` et `avertissements(lieux, catalogue=GENERIQUE)` ne considèrent que les actions du catalogue ; une action absente du catalogue est refusée par `valider_lieux` avec « n'existe pas pour ce type de projet ».
+
+- [ ] **Step 1: Write the failing tests** — un dossier de projet temporaire avec `.factory/factory.json` `{"genre": "application-mobile-android"}` donne le catalogue Android ; sans fichier ou genre inconnu → générique ; `charge` refusé pour Android (« n'existe pas pour ce type de projet ») mais accepté en générique ; `a_attendre({"apk": "github", "tests": "poste"}, "tests", ANDROID) == []` (les tests unitaires n'attendent pas l'APK), alors que le même appel en `GENERIQUE` rend `["apk"]` ; `emulateur` en `github` refusé pour Android ; `release` en `github` refusé avec le texte « clés de signature » ; l'état du bureau expose `deport.actions` = la liste des actions du type avec libellé, lieux autorisés et `bientot` ; l'interface n'affiche que ces actions ; le workflow d'un projet Android pour `apk`+`tests` utilise `./gradlew assembleDebug` et `./gradlew testDebugUnitTest` sans `needs`, et publie `app/build/outputs/apk/debug/*.apk` ; une commande donnée dans `deport.commandes` l'emporte sur celle du catalogue.
+- [ ] **Step 2: Run** `py -3.12 outils/tests_paralleles.py deport_types deport_logique deport_workflow bureau_deport deport_reglages` et le test JS — attendu : échec.
+- [ ] **Step 3: Implement** le catalogue et brancher le paramètre `catalogue` partout (valeur par défaut = comportement actuel, donc les tests existants des tâches 1 à 7 restent verts sans modification de leurs attentes).
+- [ ] **Step 4: Run** les mêmes tests plus `deport_depot` — attendu : passent.
+- [ ] **Step 5: Commit** `Déport : le catalogue d'actions dépend du type de projet`
+
+### Task 9: Point d'entrée `lancer.py deporter` et dépendances
 
 **Files:**
 - Create: `outils/deporter.py`
@@ -171,14 +191,14 @@
 - [ ] **Step 4: Run** — attendu : passent, et `py -3.12 outils/tests_paralleles.py campagne` toujours vert.
 - [ ] **Step 5: Commit** `Déport : lancer.py deporter, avec attente des dépendances`
 
-### Task 9: L'attente n'est pas un blocage
+### Task 10: L'attente n'est pas un blocage
 
 **Files:**
 - Modify: `moteur/detache.py` (`attendre`, vers la ligne 613), `bureau/avancement.py` (nouvel état), `bureau/web/ui/texte.js`
 - Test: `tests/test_deport_attente.py`, `tests/test_bureau_avancement.py` (ajouter), `bureau/web/tests/avancement.test.js` (ajouter)
 
 **Interfaces:**
-- Consumes: le fichier `~/MyIAFactory/deport-en-cours/<id>.json` (Task 8).
+- Consumes: le fichier `~/MyIAFactory/deport-en-cours/<id>.json` (Task 9).
 - Produces: `moteur.detache.attente_deportee(dossier_etat: Path, maintenant: datetime, delai_s: int = 180) -> dict | None` (vivante si le battement a moins de `delai_s`) ; dans `attendre`, une attente vivante repousse l'échéance `delai_s` du garde-fou ; `avancement.pour_la_tache` gagne l'état `attente_deportee` avec le texte `en attente de l'APK (GitHub, depuis N min)` et la durée type.
 
 - [ ] **Step 1: Write the failing tests** — un agent sans action depuis 45 min mais dont le fichier d'attente a un battement récent n'est pas arrêté ; battement périmé de plus de 3 min → le garde-fou s'applique ; la fiche dit « en attente de l'APK (GitHub, depuis 12 min) » ; après le seuil d'alerte, l'état passe en alerte.
@@ -187,7 +207,7 @@
 - [ ] **Step 4: Run** — attendu : passent, plus le test JS.
 - [ ] **Step 5: Commit** `Déport : l'attente d'une exécution distante n'arrête pas l'agent`
 
-### Task 10: Consigne de départ des agents
+### Task 11: Consigne de départ des agents
 
 **Files:**
 - Modify: `orchestrateur/depart.py` (à côté de `tests_un_a_la_fois`), `orchestrateur/consignes.md` si la consigne y est reprise
@@ -203,7 +223,7 @@
 - [ ] **Step 4: Run** — attendu : passent.
 - [ ] **Step 5: Commit** `Déport : la consigne de départ envoie les agents vers le lanceur déporté`
 
-### Task 11: Résultats et consommation
+### Task 12: Résultats et consommation
 
 **Files:**
 - Create: `bureau/deport_conso.py`
@@ -220,7 +240,7 @@
 - [ ] **Step 4: Run** — attendu : passent, plus le test JS.
 - [ ] **Step 5: Commit** `Déport : consommation GitHub et alerte de quota dans la vue des coûts`
 
-### Task 12: Manuel et vérification de bout en bout
+### Task 13: Manuel et vérification de bout en bout
 
 **Files:**
 - Modify: `README.md` ou le manuel du bureau (là où `lecons_auto` est décrit), `CLAUDE.md` (une ligne : les agents déportés passent par `lancer.py deporter`)

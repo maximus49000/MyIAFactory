@@ -6,7 +6,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from bureau import serveur
+from bureau import deport_conso, serveur
 from tests import copie_demo
 from tests.test_serveur import AvecServeur, SourceSimulee
 
@@ -121,3 +121,153 @@ class TestDeportGlobalDuBureau(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDeportDepotRoutes(AvecServeur):
+    def setUp(self):
+        super().setUp()
+        import subprocess
+        self.depot = self.tmp / "demo"
+        for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@example.org"],
+                     ["config", "user.name", "T"], ["add", "."], ["commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *args], cwd=str(self.depot), check=True, capture_output=True)
+        r, _ = self.req("POST", "/api/reglages", json.dumps(
+            {"deport": {"lieux": {"apk": "github"}, "commandes": {"apk": "./gradlew assembleDebug"}}}), self.ENT)
+        self.assertEqual(r.status, 200)
+
+    def test_apercu_expose_etat_diff_et_empreinte(self):
+        a = self.json("/api/deport/apercu")
+        self.assertEqual(a["etat"], "absent")
+        self.assertIn("+jobs:", a["diff"])
+        self.assertEqual(len(a["empreinte"]), 64)
+
+    def test_appliquer_demande_l_en_tete_et_une_empreinte_a_jour(self):
+        r, _ = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": "0" * 64}), {"Content-Type": "application/json"})
+        self.assertEqual(r.status, 403)
+        r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": "0" * 64}), self.ENT)
+        self.assertEqual(r.status, 409)
+        self.assertIn("plus à jour", json.loads(data.decode("utf-8"))["erreur"])
+
+    def test_appliquer_sans_origine_dit_l_echec_du_push(self):
+        e = self.json("/api/deport/apercu")["empreinte"]
+        r, data = self.req("POST", "/api/deport/appliquer", json.dumps({"empreinte": e}), self.ENT)
+        self.assertEqual(r.status, 409)
+        self.assertIn("origin", json.loads(data.decode("utf-8"))["erreur"])
+
+
+class TestDeportParTypeDeProjet(AvecServeur):
+    def poster(self, corps):
+        return self.req("POST", "/api/reglages", json.dumps(corps), self.ENT)
+
+    def en_android(self):
+        (self.tmp / "demo" / "factory.json").write_text(json.dumps({"genre": "application-mobile-android"}),
+                                                        encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+
+    def test_projet_generique_expose_les_quatre_actions(self):
+        d = self.json("/api/etat")["deport"]
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
+        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge"})
+
+    def test_projet_android_expose_ses_actions_avec_libelle_lieux_et_bientot(self):
+        self.en_android()
+        d = self.json("/api/etat")["deport"]
+        actions = {a["id"]: a for a in d["actions"]}
+        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release"])
+        self.assertEqual(actions["tests"]["libelle"], "Tests unitaires")
+        self.assertEqual(actions["emulateur"]["lieux"], ["poste"])
+        self.assertIn("clés de signature", actions["release"]["bientot"])
+        self.assertEqual(set(d["lieux"]), set(actions))
+
+    def test_projet_android_refuse_la_charge_et_ne_signale_pas_d_attente_pour_les_tests(self):
+        self.en_android()
+        r, data = self.poster({"deport": {"lieux": {"charge": "poste"}}})
+        self.assertEqual(r.status, 400)
+        self.assertIn("n'existe pas pour ce type de projet", json.loads(data.decode("utf-8"))["erreur"])
+        r, _ = self.poster({"deport": {"lieux": {"apk": "github", "tests": "poste"}}})
+        self.assertEqual(r.status, 200)
+        self.assertEqual(self.json("/api/etat")["deport"]["avertissements"], [])
+
+
+class TestDeportConsoEtat(AvecServeur):
+    """`deport.conso` : présent seulement si une action tourne sur GitHub ; jamais de vrai gh (faux lanceur)."""
+
+    def faux_gh(self):
+        appels = []
+
+        def lancer(argv, **kw):
+            import subprocess
+            appels.append(list(argv))
+            sortie = {("run", "list"): json.dumps([{"databaseId": 1, "name": "MyIAFactory", "status": "completed",
+                                                    "conclusion": "success", "createdAt": "2026-11-10T10:00:00Z",
+                                                    "startedAt": "2026-11-10T10:00:00Z",
+                                                    "updatedAt": "2026-11-10T10:04:10Z", "url": "https://x/1"}]),
+                      ("run", "view"): json.dumps({"jobs": [{"name": "apk", "conclusion": "success",
+                                                     "startedAt": "2026-11-10T10:00:00Z",
+                                                     "completedAt": "2026-11-10T10:04:10Z"}]}),
+                      ("repo", "view"): json.dumps({"visibility": "PRIVATE"})}.get(tuple(argv[1:3]), "")
+            code = 1 if argv[1] == "api" else 0
+            return subprocess.CompletedProcess(argv, code, sortie, "")
+        return lancer, appels
+
+    def test_sans_action_github_pas_de_conso_et_pas_d_appel_gh(self):
+        lancer, appels = self.faux_gh()
+        deport_conso.LANCER = lancer
+        self.assertNotIn("conso", self.json("/api/etat")["deport"])
+        self.assertEqual(appels, [])
+
+    def test_avec_action_github_conso_exposee(self):
+        lancer, appels = self.faux_gh()
+        deport_conso.LANCER = lancer
+        self.addCleanup(deport_conso.arreter)
+        r, _ = self.req("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"apk": "github"}}}), self.ENT)
+        self.assertEqual(r.status, 200)
+        premier = self.json("/api/etat")["deport"]["conso"]   # rendu tout de suite : gh se lit en arrière-plan
+        self.assertIn("lecture", premier["texte"])
+        deport_conso.attendre()
+        c = self.p.etat_deport()["conso"]
+        self.assertEqual(set(c), {"niveau", "texte", "mois", "minutes_total", "quota", "restantes", "public",
+                                  "par_action", "derniers"})
+        self.assertTrue(appels)
+        self.assertEqual(c["derniers"][0]["conclusion"], "success")
+
+
+class TestDeportReglagesAbimes(AvecServeur):
+    """Relecture finale (I1) : des réglages de déport abîmés ne coupent jamais `/api/etat`."""
+
+    def ecrire_lieux(self, lieux):
+        donnees = json.loads(self.regl.read_text(encoding="utf-8"))
+        donnees["deport"] = {"lieux": lieux}
+        self.regl.write_text(json.dumps(donnees), encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+
+    def test_lieu_inconnu_ou_liste_ramene_au_poste(self):
+        for lieux in ({"apk": "nuage"}, {"apk": ["github"]}, {"apk": {"x": 1}}, {"apk": 3}):
+            self.ecrire_lieux(lieux)
+            d = self.json("/api/etat")["deport"]
+            self.assertEqual(d["lieux"]["apk"], "poste", lieux)
+            self.assertIsInstance(d["avertissements"], list)
+
+    def test_une_panne_du_bloc_deport_ne_coupe_pas_l_etat(self):
+        from unittest import mock
+        with mock.patch.object(serveur.Projet, "etat_deport", side_effect=RuntimeError("boum")):
+            self.p._cache_etat = (0.0, self.p._cache_etat[1])
+            e = self.json("/api/etat")
+        self.assertNotIn("deport", e)
+        self.assertIn("boum", e["deport_erreur"])
+
+    def test_factory_json_tres_profond_donne_le_catalogue_generique(self):
+        (self.tmp / "demo" / "factory.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        d = self.json("/api/etat")["deport"]
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
+
+    def test_un_lieu_perime_apres_changement_de_genre_ne_bloque_pas_les_reglages(self):
+        self.ecrire_lieux({"charge": "github", "apk": "poste"})
+        (self.tmp / "demo" / "factory.json").write_text(json.dumps({"genre": "application-mobile-android"}),
+                                                        encoding="utf-8")
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        r, data = self.req("POST", "/api/reglages", json.dumps({"deport": {"lieux": {"apk": "github"}}}), self.ENT)
+        self.assertEqual(r.status, 200, data)
+        ecrit = json.loads(self.regl.read_text(encoding="utf-8"))["deport"]["lieux"]
+        self.assertEqual(ecrit, {"apk": "github"})

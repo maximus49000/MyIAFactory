@@ -710,3 +710,21 @@ Chiffré : v1.oZ3FY5fKbIoWlQ5aRZZLGfuPFCCJ5WVu-7QojR4gjWwYo0OWB5JHHsPNlHPYTqTjJt
 ## G177 — chiffrée
 
 Chiffré : v1.1BIrmJAmf_KjZrd9kNFNNr_ZlfKbn92doJf3x5UY-rLjtk617aL1OVZxMezXXYCOosyoynxTgWPZfdbwcDU5JPktZhTmGq3ADm8W2_xtew0lE0ynsZHesRjLjurW_39kGNSruTvsg6qAQDvUjJ8cJG8yPa57YaAd_RuetOYUI6ZYOqeV4dx8xSS5tt1_FQE24POp3k7pMr71YhJtDCj_zhijcRHvtS4A1dp1VF3g1GqjMbmBr9Vy8uj7kT4bfCaxeKIwQg76XAEWH0c9ZyoQmHZwiOqferqNbOfYcIOES2meSRyO5n9ARfvjS4RffnsYWUUgJQ8q2-D2R7evBwRmsYtjzmR7r-QrDReGa0uNg-bH6OJybO26_QB5Q1Kgz7UxiC61SvhsBNvPiZP15eRg6r7nyUXAw1kUD_161UX2NOk-hjWRfzuaO7vlRuJ-NQ9Qd0EJ
+
+## G178 — Relever le versionCode dans le dernier livrable produit, jam
+Rôles : release
+Date : 2026-11-19
+
+Relever le versionCode dans le dernier livrable produit, jamais dans un journal de contrôle antérieur, qui peut être périmé.
+
+## G179 — Un test qui échoue puis réussit à la relance est instable :
+Rôles : release, testeur
+Date : 2026-11-19
+
+Un test qui échoue puis réussit à la relance est instable : le déclarer tel quel dans la note de livraison.
+
+## G180 — Relire chaque capture d'écran de livraison avant de la prése
+Rôles : release
+Date : 2026-11-19
+
+Relire chaque capture d'écran de livraison avant de la présenter : une boîte système peut masquer l'application.

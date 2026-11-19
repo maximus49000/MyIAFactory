@@ -69,6 +69,16 @@ REVUE_COMPLETE = ("Revue complète : vérifie l'élément entier contre sa fiche
 DEFAUT_ANTERIEUR = ("Un échec déjà là avant l'élément (test, build ou lint hors de ses fichiers : compare avec le "
                     "commit d'avant l'élément) ne rend jamais l'élément non conforme : dis-le dans ton message, "
                     "sans en faire un point.")
+# Essai de coûts du 2026-11-19 (dix fois la même évolution) : des défauts relevés (un ingrédient « pâtes » satisfait par
+# « pâte brisée ») restaient dans le message d'une revue « conforme » ou dans les `points` d'un verdict « conforme »,
+# ignorés, et la livraison partait avec « défauts connus non corrigés ».
+DEFAUT_VU_EST_UN_REFUS = ("Un défaut de l'élément que tu as vu, même petit, va dans `points` et rend `conforme: faux` : un "
+                          "verdict « conforme » qui porte des points est compté comme un refus. Ne garde pas un défaut de "
+                          "l'élément pour ton message ; seul un échec déjà là avant l'élément s'y dit.")
+AVANT_DE_LIVRER = ("Avant de livrer, relis le compte rendu de la revue et le journal de l'élément. S'ils signalent un défaut "
+                   "connu non corrigé de l'élément (« reste », « non corrigé », « réserve »), ne livre pas : rends un "
+                   "`verdicts` non conforme avec ce défaut en point, il repartira en correction. Un échec déjà là avant "
+                   "l'élément n'en est pas un.")
 # Une demande très simple ne doit pas revenir en correction (RoadmapReborn f12 : une limite de lignes dans une fiche
 # Excel, deux refus). Pour une petite évolution, seul ce qui empêche la demande elle-même refuse l'élément.
 PETITE_DEMANDE = ("Demande petite : ne rends « non conforme » que si la demande elle-même n'est pas satisfaite "
@@ -208,6 +218,8 @@ class Projet:
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
+        self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
+        self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -328,9 +340,29 @@ def _flux(projet, fid=None):
 
 def _production(projet, fid=None):
     """Les étapes du workflow de la fonctionnalité que le moteur enchaîne pour un élément (la relecture croisée tient
-    lieu de l'étape du relecteur)."""
+    lieu de l'étape du relecteur). En mode « une session » (évolution moyenne), l'étape de qualité n'est plus un agent à
+    part : la programmation rend le verdict."""
     flux = _flux(projet, fid)
-    return [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+    production = [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+    if _en_une_session(projet, fid):
+        services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
+        sans_qualite = [s for s in production if wf.est_validation(s) or not _est_de_qualite(s, services)]
+        if len(sans_qualite) > 1:
+            production = sans_qualite
+    return production
+
+
+def _en_une_session(projet, fid):
+    """Vrai quand le cahier de la fonctionnalité a été validé en mode « une session » (`cahier.une_session`, posé à la
+    validation d'une évolution moyenne quand le réglage est coché) et qu'aucun agent relecteur n'existe. Lu dans le cahier,
+    pas dans le réglage : décocher le réglage ne change pas une évolution déjà en route."""
+    if not fid:
+        return False
+    try:
+        cahier = _fonc(projet, fid).get("cahier") or {}
+    except Refus:
+        return False
+    return cahier.get("une_session") is True and _sans_relecteur(projet)
 
 
 def _role_cadrage(projet, fid=None):
@@ -595,11 +627,19 @@ def _texte_du_parcours(taille):
     if valeur == "moyenne":
         return (f" Évolution jugée moyenne ({taille['pourquoi']}) : elle sera découpée, sans prototype ni méthode. "
                 "Vous pouvez demander le parcours complet.")
+    if valeur == "grande":     # essai de coûts du 2026-11-19 : le chemin long était pris sans que le choix soit offert
+        return (f" Évolution jugée grande ({taille['pourquoi']}) : elle suivra le parcours complet, prototype puis "
+                "méthode, mis au point avec vous. Si elle est plus simple que cela, validez en parcours court (sans "
+                "prototype ni méthode).")
     return ""
 
 
 def _parcours(cahier, verdict):
     valeur = ((cahier or {}).get("taille") or {}).get("valeur")
+    if verdict == "valider_complet":
+        return PARCOURS_COMPLET
+    if verdict == "valider_court":     # le choix du Directeur : une petite reste un seul élément, le reste sans prototype
+        return PARCOURS_UN_ELEMENT if valeur == "petite" else PARCOURS_SANS_PROTOTYPE
     if verdict != "valider" or valeur not in ("petite", "moyenne"):
         return PARCOURS_COMPLET
     return PARCOURS_UN_ELEMENT if valeur == "petite" else PARCOURS_SANS_PROTOTYPE
@@ -624,7 +664,7 @@ def _parcours_un_element(projet, demande, f, cahier):
 def _sur_cahier(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
-    if demande.get("verdict") in ("valider", "valider_complet"):
+    if demande.get("verdict") in ("valider", "valider_complet", "valider_court"):
         cahier = {k: (f.get("cahier") or {}).get(k) for k in ("maquette", "etapes")}
         if (f.get("cahier") or {}).get("partenaires") is not None:     # décidés au cadrage : le cahier validé les garde
             cahier["partenaires"] = f["cahier"]["partenaires"]
@@ -632,6 +672,8 @@ def _sur_cahier(projet, demande, etat):
             cahier["taille"] = f["cahier"]["taille"]
         cahier["valide_le"] = su.maintenant()
         cahier["parcours"] = parcours = _parcours(f.get("cahier"), demande["verdict"])
+        if parcours == PARCOURS_SANS_PROTOTYPE and _une_session_active(projet):
+            cahier["une_session"] = True     # essai de coûts du 2026-11-19 : code, tests et revue dans une seule session
         if parcours == PARCOURS_UN_ELEMENT:
             lancer(projet, "fonctionnalite", {"id": fid, "cahier": cahier})
             _lever(projet, f, "valider_cahier")
@@ -3915,6 +3957,8 @@ def _matiere(projet, etat, t):
                            "dis-le dans ton message).")
         production = _production(projet, fid)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
+        if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
+            parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
         if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
                 and _concerne(((f or {}).get("elements") or {}).get(t.get("element")), production[rang + 1]["id"])):
             parties.append(CONSIGNE_AVANT_VALIDATION)
@@ -3923,6 +3967,7 @@ def _matiere(projet, etat, t):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
+            parties.append(DEFAUT_VU_EST_UN_REFUS)
             parties.append(REVUE_COMPLETE)
             parties += _consigne_petite_demande(f)
             parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=True)
@@ -3932,7 +3977,8 @@ def _matiere(projet, etat, t):
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
-                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD,
+                    "Un défaut devient un contrôle : sois précis.", DEFAUT_VU_EST_UN_REFUS, REVUE_COMPLETE,
+                    TESTS_DU_DERNIER_REGARD,
                     APK_A_JOUR_AVANT_LES_TESTS, FICHIERS_JETABLES, DEFAUT_ANTERIEUR, *_consigne_petite_demande(f)]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "
@@ -5387,8 +5433,12 @@ def _est_de_qualite(etape, services):
 
 def _etape_de_relecture(projet, fid=None):
     """Sans relecteur, le rang (dans la production du workflow) de l'étape qui tient lieu de relecture : la dernière
-    étape tenue par un service ou un rôle de qualité (les tests avant la livraison), à défaut la dernière du flux."""
+    étape tenue par un service ou un rôle de qualité (les tests avant la livraison), à défaut la dernière du flux. En mode
+    « une session », la dernière étape avant la livraison : la programmation, qui relit et teste elle-même."""
     production = _production(projet, fid)
+    if _en_une_session(projet, fid):
+        rangs = [r for r, s in enumerate(production) if not wf.est_validation(s)]
+        return rangs[-2] if len(rangs) > 1 else (rangs[-1] if rangs else 0)
     services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
     for rang in range(len(production) - 1, -1, -1):
         if not wf.est_validation(production[rang]) and _est_de_qualite(production[rang], services):
@@ -5538,6 +5588,14 @@ def livrer_si_calme(projet, etat, force=False):
     if not prets:
         return False
     noms = [v["element"]["nom"] for v in prets]
+    if not force and _livraison_sur_demande(projet):
+        # essai de coûts du 2026-11-19 : l'apk coûte 8 à 14 min à chaque évolution ; le Directeur choisit quand livrer
+        etat["attente_livraison"] = {
+            "texte": (f"{len(prets)} élément{'s' if len(prets) > 1 else ''} prêt{'s' if len(prets) > 1 else ''} à "
+                      f"livrer ({', '.join(noms)}) : la livraison est sur demande, elle partira sur « Livrer "
+                      f"maintenant »."),
+            "elements": noms}
+        return False
     en_cours = [v for v in elements.values() if v["phase"] in OCCUPE]
     if en_cours and not force:
         etat["attente_livraison"] = {
@@ -6123,6 +6181,26 @@ RETOUR_DU_CHEF = "Retour du Chef : "
 CORRECTION_DU_CHEF = "Correction confiée par le Chef"
 JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyées au Chef
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
+
+
+def _une_session_active(projet):
+    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["une_session_moyenne"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "une_session_moyenne", False) is True
+
+
+def _livraison_sur_demande(projet):
+    """Le réglage `livraison_sur_demande` (faux si absent), relu à chaque passage."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_sur_demande"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "livraison_sur_demande", False) is True
 
 
 def _analyse_active(projet):

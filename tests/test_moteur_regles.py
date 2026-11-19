@@ -735,6 +735,51 @@ class Serie(Base):
                              {"id": "livraison", "nom": "Livraison de l'apk signé", "role": "livreur", "service": "livraison"}]
         self.factory.write_text(json.dumps(f), encoding="utf-8")
 
+    def une_session(self):
+        """Une évolution moyenne en mode « une session » : le cahier validé porte `une_session`."""
+        self.casse_briques()
+        self.fonctionnalite("serie", methode=None, cahier={"maquette": [PNG], "etapes": ["Faire les écrans"],
+                                                           "parcours": regles.PARCOURS_SANS_PROTOTYPE,
+                                                           "une_session": True})
+        self.ok("file", entree={"fonctionnalite": "f1", "elements": DECOUPAGE["elements"][:1]})
+
+    def test_une_session_le_code_tient_lieu_de_tests_et_de_revue(self):
+        """Essai de coûts du 2026-11-19 : une session de tests et de revue de plus coûte 0,12 à 0,17 € et 3 à 7 min pour une
+        évolution moyenne ; en mode « une session », l'étape de qualité n'est plus un agent à part."""
+        self.une_session()
+        self.assertEqual([s["id"] for s in regles._production(self.projet, "f1")], ["dev", "livraison"])
+        self.assertEqual(regles._etape_de_relecture(self.projet, "f1"), 0)          # c'est la programmation qui rend le verdict
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            verdict("e1"), {"statut": "fait", "message": {"texte": "Livré."}}])
+        self.assertEqual(self.taches(etape="flux:essai"), [])                       # aucune session de tests séparée
+        self.assertEqual(len(self.taches(etape="flux:dev")), 1)
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
+    def test_une_session_la_programmation_recoit_le_role_de_dernier_regard(self):
+        self.une_session()
+        regles.avancer(self.projet, self.etat)
+        (dev,) = self.taches(etape="flux:dev")
+        m = regles._matiere(self.projet, self.etat, dev)
+        self.assertIn("Tu es le dernier regard sur l'élément", m)
+        self.assertIn(regles.DEFAUT_VU_EST_UN_REFUS, m)
+
+    def test_une_session_un_defaut_refait_la_programmation_avec_ses_points(self):
+        self.une_session()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            verdict("e1", ["Pâtes est satisfait par pâte brisée"]),
+            verdict("e1"),
+            {"statut": "fait", "message": {"texte": "Livré."}}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Mot entier.", "raison": "faux positif"}})
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        self.assertEqual(self.taches(etape="flux:essai"), [])
+
+    def test_sans_le_mode_une_session_le_flux_garde_son_etape_de_qualite(self):
+        self.casse_briques()
+        self.fonctionnalite("serie", methode=None, cahier={"maquette": [PNG], "etapes": ["Faire"],
+                                                           "parcours": regles.PARCOURS_SANS_PROTOTYPE})
+        self.assertEqual([s["id"] for s in regles._production(self.projet, "f1")], ["dev", "essai", "livraison"])
+
     def test_sans_relecteur_la_qualite_juge_et_la_livraison_suit_un_verdict_favorable(self):
         self.casse_briques()
         self.serie(1)
@@ -745,7 +790,9 @@ class Serie(Base):
         self.assertEqual((v["phase"], v["corrections"]), ("fait", 0))
         self.assertEqual([len(self.taches(etape=f"flux:{e}")) for e in ("dev", "essai", "livraison")], [1, 1, 1])
         self.assertIn("Rends un `verdicts`", regles._matiere(self.projet, self.etat, self.taches(etape="flux:essai")[0]))
-        self.assertNotIn("verdicts", regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0]))
+        livraison = regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0])
+        self.assertNotIn("Rends un `verdicts`", livraison)         # la livraison ne relit pas : elle ne rend pas de verdict
+        self.assertIn(regles.AVANT_DE_LIVRER, livraison)           # sauf pour refuser un défaut connu non corrigé
 
     def test_sans_relecteur_un_refus_de_la_qualite_refait_la_qualite_pas_la_livraison(self):
         self.casse_briques()
@@ -794,6 +841,29 @@ class Serie(Base):
         self.assertTrue(regles.livrer_si_calme(self.projet, self.etat, force=True))
         self.assertEqual(len(self.taches(etape="flux:livraison")), 2)
         self.assertNotIn("attente_livraison", self.etat)
+
+    def test_la_livraison_sur_demande_attend_le_clic_meme_au_calme(self):
+        """Essai de coûts du 2026-11-19 : la construction de l'APK prend 8 à 14 min à chaque évolution ; avec le réglage
+        `livraison_sur_demande`, les éléments conformes attendent « Livrer maintenant » au lieu de partir tout de suite."""
+        self.livrer_deux()
+        for v in self.etat["elements"].values():
+            v["phase"], v["taches"] = regles.A_LIVRER, []
+            v["pas"] = len(regles._production(self.projet, "f1")) - 1      # à la porte de la livraison
+        self.projet.livraison_sur_demande = True
+        self.assertFalse(regles.livrer_si_calme(self.projet, self.etat))              # rien n'est au travail, et pourtant
+        self.assertIn("sur demande", self.etat["attente_livraison"]["texte"])
+        self.assertIn("Livrer maintenant", self.etat["attente_livraison"]["texte"])
+        self.assertEqual({v["phase"] for v in self.etat["elements"].values()}, {regles.A_LIVRER})
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat, force=True))   # le clic livre
+        self.assertNotIn("attente_livraison", self.etat)
+
+    def test_sans_le_reglage_la_livraison_part_au_calme(self):
+        self.livrer_deux()
+        for v in self.etat["elements"].values():
+            v["phase"], v["taches"] = regles.A_LIVRER, []
+            v["pas"] = len(regles._production(self.projet, "f1")) - 1      # à la porte de la livraison
+        self.assertFalse(getattr(self.projet, "livraison_sur_demande", False))
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat))
 
     def test_le_moteur_relance_ne_relivre_pas_un_element_deja_dans_un_lot(self):
         self.livrer_deux()
@@ -1660,6 +1730,30 @@ class ParcoursSelonLaTaille(Base):
         self.assertIn("[Accueil] Le titre est trop petit", (self.dossier / "controles.md").read_text(encoding="utf-8"))      # le défaut dit de quel élément il vient
         self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()}, {"f1/e1": "fait", "f1/e2": "fait"})
 
+    def test_un_verdict_conforme_qui_porte_un_defaut_est_un_refus(self):
+        """Essai de coûts du 2026-11-19 : les défauts d'un verdict « conforme » étaient ignorés, et la livraison partait
+        avec « défauts connus non corrigés »."""
+        self.moyenne_en_serie(2)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écrans faits."}},
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": ["Pâtes est satisfait par pâte brisée"]},
+                {"element": "e2", "conforme": True, "points": []}]},
+            {"statut": "fait", "message": {"texte": "Corrigé."}},
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": []}, {"element": "e2", "conforme": True, "points": []}]}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Mot entier.", "raison": "faux positif"}})
+        self.assertEqual(len(self.taches(etape="correction")), 1)           # le défaut a ouvert une correction
+        self.assertIn("Pâtes est satisfait par pâte brisée", (self.dossier / "controles.md").read_text(encoding="utf-8"))
+
+    def test_la_revue_et_la_livraison_savent_qu_un_defaut_vu_est_un_refus(self):
+        self.moyenne_en_serie(2)
+        regles.avancer(self.projet, self.etat)
+        self.assertIn("conforme", regles.DEFAUT_VU_EST_UN_REFUS)
+        self.assertIn("points", regles.DEFAUT_VU_EST_UN_REFUS)
+        self.assertIn("défaut connu", regles.AVANT_DE_LIVRER)
+        self.assertIn("verdicts", regles.AVANT_DE_LIVRER)
+
     def test_un_element_seul_ou_un_parcours_complet_garde_sa_verification(self):
         Serie.sans_relecteurs(self)
         self.serie(2)                                                       # parcours complet : pas de revue d'ensemble
@@ -1708,6 +1802,56 @@ class ParcoursSelonLaTaille(Base):
         self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "decouper")])
         self.piloter(actions, juges={"decouper": DECOUPAGE})
         self.assertEqual(self.fonc()["etape"], "prototype")
+
+    GRANDE = {"valeur": "grande", "pourquoi": "Un catalogue de trente entrées à saisir, deux écrans neufs."}
+
+    def test_le_directeur_peut_valider_une_grande_evolution_en_parcours_court(self):
+        """Essai de coûts (2026-11-19) : le même texte, jugé « grande » une fois sur huit, prenait le parcours complet
+        (prototype et méthode) sans que la validation du cahier laisse le choix."""
+        self.cahier_de_taille(self.GRANDE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_court")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "decouper")])
+        self.piloter(actions, juges={"decouper": DECOUPAGE})
+        f = self.fonc()
+        self.assertEqual(f["etape"], "serie")                                  # ni prototype ni méthode
+        self.assertEqual(f["cahier"]["parcours"], regles.PARCOURS_SANS_PROTOTYPE)
+        self.assertEqual(self.taches(etape="prototype"), [])
+
+    def test_le_reglage_une_session_marque_le_cahier_d_une_evolution_moyenne(self):
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        self.projet.une_session_moyenne = True
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertIs(self.fonc()["cahier"].get("une_session"), True)
+
+    def test_sans_le_reglage_ou_hors_moyenne_le_cahier_n_est_pas_marque(self):
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertIsNot(self.fonc()["cahier"].get("une_session"), True)
+        self.setUp()
+        self.projet.une_session_moyenne = True
+        self.cahier_de_taille(self.GRANDE)
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")          # parcours complet : jamais une session
+        self.assertIsNot(self.fonc()["cahier"].get("une_session"), True)
+
+    def test_valider_court_une_petite_evolution_reste_un_seul_element(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_court")
+        self.assertEqual([a for a in actions if a[0] == "juger"], [])
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_UN_ELEMENT)
+
+    def test_valider_en_complet_une_petite_evolution_suit_toujours_le_parcours_complet(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_COMPLET)
+
+    def test_la_question_d_une_grande_evolution_annonce_le_parcours_et_le_choix(self):
+        d, actions = self.cadrer(texte="Un catalogue de recettes")
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Cahier prêt."},
+                                         "cahier": {"maquette": [PNG], "etapes": ["Faire"], "taille": self.GRANDE}}])
+        (dec,) = [x for x in self.fonc()["decisions"] if x["genre"] == "valider_cahier"]
+        self.assertIn("grande", dec["texte"])
+        self.assertIn("prototype", dec["texte"])                               # le chemin est annoncé
+        self.assertIn("parcours court", dec["texte"])                          # et le choix aussi
 
     def test_une_grande_evolution_ou_sans_taille_suit_le_parcours_complet(self):
         for taille in ({"valeur": "grande", "pourquoi": "Vingt écrans sur le même modèle."}, None):

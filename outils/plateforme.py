@@ -508,7 +508,7 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_dista
             for suivant in ETAPES[2:]:
                 c.rapports[suivant] = _rapport("a_faire", "À refaire : le système du serveur change.")
         c.ecrire()
-        if r["statut"] == "bloque" or (r["statut"] == "a_faire" and id_ != "licence"):
+        if id_ != "licence" and r["statut"] in ("bloque", "a_faire"):   # la licence (facultative) ne bloque pas la suite
             for suivant in ETAPES[i + 1:]:
                 if c.rapports.get(suivant, {}).get("statut") != "fait":
                     c.rapports[suivant] = _rapport("a_faire", "En attente de l'étape précédente.")

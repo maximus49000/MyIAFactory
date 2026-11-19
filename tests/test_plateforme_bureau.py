@@ -56,11 +56,65 @@ class TestBureau(Base):
         self.assertTrue((self.dossier / plateforme_bureau.FICHIER_MDP).is_file())
 
     def test_mot_de_passe_trop_court_dans_le_fichier_est_regenere_avec_prevenance(self):
-        (self.dossier / plateforme_bureau.FICHIER_MDP).write_text("abcde\n", encoding="utf-8")
-        mdp = plateforme_bureau.mot_de_passe(self.dossier)
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        chemin.write_text("abcde\n", encoding="utf-8")
+        ssh = SshBureau()
+        etat = self.installer(ssh, bureau=True)
+        mdp = chemin.read_text(encoding="utf-8").splitlines()[0]
         self.assertGreaterEqual(len(mdp), 24)
-        self.assertEqual((self.dossier / plateforme_bureau.FICHIER_MDP).read_text(encoding="utf-8").splitlines()[0], mdp)
+        self.assertEqual(ssh.recus[0][1], mdp + "\n")
+        e = self.etape8(etat)
+        self.assertIn("Mot de passe trop court dans bureau-distant.txt : remplacé par un mot de passe généré.", e["detail"])
+        self.assertNotIn(mdp, json.dumps(etat))
 
+    def test_fichier_illisible_donne_bloque_sans_ecraser(self):
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        chemin.write_text("x" * 30 + "\n", encoding="utf-8")
+        ssh = SshBureau()
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError("refusé")):
+            r = plateforme_bureau.etape_bureau_distant(plateforme._Contexte(self.dossier, False, None, ssh, None), lambda *a, **k: self.fail("envoi"))
+        self.assertEqual(r["statut"], "bloque")
+        self.assertEqual(chemin.read_text(encoding="utf-8"), "x" * 30 + "\n")
+
+    def test_bom_crlf_et_plusieurs_lignes_seule_la_premiere_sert(self):
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        chemin.write_bytes(b"\xef\xbb\xbfabcdefghijklmnop\r\nsecondeligne\r\n")
+        self.assertEqual(plateforme_bureau.mot_de_passe(self.dossier), "abcdefghijklmnop")
+        chemin.write_bytes(b"\xef\xbb\xbfabcdefghijkl\r\n")      # 12 caractères + BOM : trop court
+        self.assertGreaterEqual(len(plateforme_bureau.mot_de_passe(self.dossier)), 24)
+
+    def test_echec_d_ecriture_laisse_le_fichier_intact_et_sans_temporaire(self):
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        chemin.write_text("abc\n", encoding="utf-8")
+        with mock.patch.object(plateforme_bureau.os, "fsync", side_effect=OSError("disque plein")):
+            with self.assertRaises(OSError):
+                plateforme_bureau.mot_de_passe(self.dossier)
+        self.assertEqual(chemin.read_text(encoding="utf-8"), "abc\n")
+        self.assertEqual([p.name for p in self.dossier.glob("*.tmp")], [])
+
+    def test_ecriture_reussie_sans_temporaire_et_permission_0600(self):
+        plateforme_bureau.mot_de_passe(self.dossier)
+        self.assertEqual([p.name for p in self.dossier.glob("*.tmp")] + [p.name for p in self.dossier.glob(".*.tmp")], [])
+        if sys.platform != "win32":
+            self.assertEqual((self.dossier / plateforme_bureau.FICHIER_MDP).stat().st_mode & 0o777, 0o600)
+
+    def test_licence_bloquee_ou_a_faire_ne_bloque_pas_l_etape_8(self):
+        for licence in ("bloque", "a_faire"):
+            with self.subTest(licence=licence):
+                (self.dossier / "unity.ulf").write_text("<License>" + "A" * 40 + "</License>\n", encoding="utf-8")
+                def rep(c, s):
+                    return _json("fait")
+                class Ssh(SshBureau):
+                    def executer(s, hote, commande, cle, stdin=None, delai=60):
+                        if "--etape licence" in commande:
+                            return 0, json.dumps({"etape": "licence", "statut": licence, "detail": "non"}) + "\n", ""
+                        return super().executer(hote, commande, cle, stdin, delai)
+                ssh = Ssh()
+                (self.dossier / "plateforme.json").unlink(missing_ok=True)
+                etat = self.installer(ssh, bureau=True)
+                self.assertEqual(self.statuts(etat)["licence"], licence)
+                self.assertEqual(self.etape8(etat)["statut"], "fait")
+                self.assertTrue(etat["pret"])
     def test_etape_envoie_le_mot_de_passe_par_stdin_seulement(self):
         ssh = SshBureau()
         self.installer(ssh, bureau=True)
@@ -74,17 +128,27 @@ class TestBureau(Base):
     def test_mot_de_passe_absent_de_l_etat_du_cache_et_de_la_sortie(self):
         ssh = SshBureau(lambda c, s: _json("fait", f"mdp {s.strip()}", stderr=f"err {s.strip()}"))
         etat = self.installer(ssh, bureau=True)
-        mdp = plateforme_bureau.mot_de_passe(self.dossier)
-        self.assertNotIn(mdp, json.dumps(etat))
-        self.assertNotIn(mdp, (self.dossier / "plateforme.json").read_text(encoding="utf-8"))
-        # illisible : le stderr répété est masqué aussi
+        self.assertTrue(ssh.recus)
+        self.rien_ne_contient_le_mot_de_passe(etat)
+
+    def test_reponse_illisible_qui_repete_le_mot_de_passe_est_masquee(self):
         ssh = SshBureau(lambda c, s: (1, "", f"boum {s.strip()}"))
         etat = self.installer(ssh, bureau=True)
-        self.assertNotIn(mdp, json.dumps(etat))
+        self.assertTrue(ssh.recus)                      # la réponse factice a bien été reçue
+        e = self.etape8(etat)
+        self.assertEqual(e["statut"], "bloque")
+        self.assertIn("boum ***", e["detail"])
+        self.rien_ne_contient_le_mot_de_passe(etat)
+
+    def rien_ne_contient_le_mot_de_passe(self, etat):
+        mdp = plateforme_bureau.mot_de_passe(self.dossier)
         sortie = io.StringIO()
         with redirect_stdout(sortie):
             plateforme.main(["etat", "--dossier", str(self.dossier)])
-        self.assertNotIn(mdp, sortie.getvalue())
+        for texte in (json.dumps(etat), json.dumps(etat, ensure_ascii=False), (self.dossier / "plateforme.json").read_text(encoding="utf-8"),
+                      sortie.getvalue()):
+            self.assertNotIn(mdp, texte)
+            self.assertNotIn(json.dumps(mdp)[1:-1], texte)
 
     def test_geste_donne_le_chemin_pas_le_mot_de_passe(self):
         etat = self.installer(SshBureau(), bureau=True)

@@ -6,7 +6,8 @@ Le reste de l'application ne dépend pas du serveur : s'il ou OVH est injoignabl
 
 ## Ce que veut dire « prêt »
 
-Sept étapes, plus une huitième facultative, rejouables, chacune lancée seulement quand la précédente est « fait » :
+Sept étapes, plus une huitième facultative, rejouables, chacune lancée seulement quand la précédente est « fait » (la
+huitième, quand les étapes 1 à 6 le sont : la licence, étape 7, ne la bloque pas) :
 
 1. **Lecture** du serveur chez OVH (API).
 2. **Système** : toute version Ubuntu serveur reconnue (22.04, 24.04, 26.04 et anciennes, variantes comprises) n'est
@@ -22,8 +23,11 @@ Sept étapes, plus une huitième facultative, rejouables, chacune lancée seulem
 8. **Session graphique (Unity Hub)** : facultative, jamais lancée sans le drapeau `--bureau-distant` (voir « Session
    graphique »).
 
-**Prêt = étapes 1 à 6.** Sans la licence ni la session graphique, le serveur est « prêt, sans Unity ». L'indicateur
-`serveur_disponible` du bureau suit cet état.
+**Prêt = étapes 1 à 6.** Sans la licence (étape 7), le serveur est « prêt, sans Unity » : cette mention ne dépend que de
+la licence, jamais de la session graphique, même après une connexion à Unity Hub. Rien ne transporte la licence de Hub
+(dossier `~/.local/share/unity3d/...` de l'utilisateur du serveur) vers les conteneurs de compilation : se connecter à Hub ne
+rend donc pas, à lui seul, les compilations Docker sous licence (limite, voir « Utiliser Unity Hub »). L'indicateur
+`serveur_disponible` du bureau suit l'état « prêt ».
 
 ## 1. Créer les clés API OVH
 
@@ -85,7 +89,8 @@ py -3.12 lancer.py plateforme bureau-distant
   locale si elle n'existe pas encore ; rien n'est écrit chez OVH ni sur le serveur).
 - `--dossier <d>` remplace `~/MyIAFactory` (essais).
 - `--bureau-distant` (avec `installer`) : lance aussi l'étape 8 facultative ; `bureau-distant` (sans `installer`) ouvre la
-  session déjà installée. Voir « Session graphique (Unity Hub) ».
+  session déjà installée. Les autres sous-commandes acceptent le drapeau sans l'utiliser : il n'a d'effet qu'avec
+  `installer`. Voir « Session graphique (Unity Hub) ».
 - Sortie : l'état en JSON (secrets masqués). Code de sortie 0 = prêt et rien de bloqué ; 1 = bloqué ou pas prêt ;
   2 = mauvais usage. Un blocage de l'étape facultative 8 donne aussi le code 1, et `etat` donne 1 tant que le serveur
   n'est pas « prêt ». (La commande `bureau-distant` a ses propres codes, voir plus bas.)
@@ -145,10 +150,17 @@ py -3.12 lancer.py plateforme installer --bureau-distant
 ```
 
 Sans le drapeau, l'étape 8 n'est jamais lancée (« Facultative : non demandée ») et ne change rien à « prêt » ; avec lui, elle
-vient après les étapes 1 à 7 et un blocage de l'étape 8 donne le code de sortie 1. Sur le serveur, elle installe XFCE, xrdp
-(à l'écoute sur `127.0.0.1:3389` seulement), Mozilla Firefox (dépôt de Mozilla, hors snap), Unity Hub (dépôt officiel d'Unity),
-et fait démarrer Hub à l'ouverture de la session. Elle est rejouable. Coût **estimé** (non mesuré) : environ 1 Go de mémoire
-pendant la session, 2 à 3 Go de disque ; budget d'attente de l'étape : 25 minutes.
+vient après les étapes 1 à 6 (la licence, étape 7, ne la bloque pas) et un blocage de l'étape 8 donne le code de sortie 1.
+Sur le serveur, elle installe XFCE, xrdp (à l'écoute sur `127.0.0.1:3389` seulement), Mozilla Firefox (dépôt de Mozilla,
+hors snap), Unity Hub (dépôt officiel d'Unity), et fait démarrer Hub à l'ouverture de la session. Les clés des deux dépôts
+sont retéléchargées et validées à chaque exécution ; si l'une est introuvable, vide ou illisible, l'étape se bloque et retire
+les deux dépôts pour ne pas casser les `apt-get update` suivants du serveur. Coût **estimé** (non mesuré) : environ 1 Go de
+mémoire pendant la session, 2 à 3 Go de disque ; budget d'attente de l'étape : 25 minutes.
+
+**Rejouer.** Relancer `installer --bureau-distant` rejoue l'étape 8 même si elle est déjà « fait » : elle réapplique le mot de
+passe du fichier `bureau-distant.txt`, y compris celui que vous y avez mis vous-même (les preuves passent avant). Les étapes
+1 à 6 ne sont pas refaites et le serveur n'est jamais réinstallé. Sans le drapeau, une étape 8 déjà « fait » reste telle
+quelle et le mot de passe n'est jamais changé.
 
 L'étape refuse de s'exécuter (« bloqué », rien de modifié) si elle tourne en root, ou si SSH n'a pas **explicitement**
 `passwordauthentication no` et `kbdinteractiveauthentication no` : lancez d'abord le durcissement (étape 4). Le mot de passe
@@ -163,9 +175,19 @@ py -3.12 lancer.py plateforme bureau-distant
 
 Ouvre un tunnel `ssh -N -L 127.0.0.1:<port>:127.0.0.1:3389` avec la clé dédiée (port local 33890 s'il est libre, sinon un
 port libre choisi par le système), écrit `bureau-distant.rdp` (utilisateur `ubuntu`, **sans mot de passe**, saisie demandée
-par Windows), lance `mstsc`, et ferme toujours le tunnel à la fermeture de la fenêtre. Il faut que l'étape 8 soit « fait » dans
-le cache (sinon : « Installez d'abord la session »). Dans la fenêtre de connexion de Windows, saisissez l'utilisateur
-`ubuntu` et le mot de passe de `bureau-distant.txt`.
+par Windows), lance `mstsc`, et ferme le tunnel à la fermeture de la fenêtre (voir « Non vérifié » ci-dessous). Il faut que
+l'étape 8 soit « fait » dans le cache (sinon : « Installez d'abord la session »). Dans la fenêtre de connexion de Windows,
+saisissez l'utilisateur `ubuntu` et le mot de passe de `bureau-distant.txt` ; avec xrdp, l'invite peut être l'écran de
+connexion propre à xrdp. Windows signale un certificat auto-signé : acceptez-le. Fermer la fenêtre ne ferme **pas** la
+session xrdp côté serveur : elle reste active (Unity Hub continue d'y consommer de la mémoire) ; déconnectez-vous depuis la
+session XFCE pour la libérer.
+
+**Non vérifié :** que le tunnel se ferme bien à la fermeture de la fenêtre, ce qui suppose que `mstsc` bloque jusqu'à cette
+fermeture (probable, non constaté) ; le tunnel porte aussi un contrôle de vie SSH (`ServerAliveInterval=30`). Autres
+risques : `apt-get install` peut faire redémarrer des services par `needrestart` (dont `ssh` et `docker`) : lancez l'étape
+quand aucune compilation n'est en cours. Après un `apt upgrade` ultérieur de xrdp, vérifiez `ss -ltn | grep 3389` : un
+`xrdp.ini` fourni par le mainteneur pourrait de nouveau écouter sur `0.0.0.0`, et seul `ufw` resterait devant ; `verifier`
+ne le prouve pas à nouveau.
 
 Codes de sortie : 0 = session ouverte puis fermée ; 1 = échec (étape 8 pas faite, adresse du cache invalide, `ssh` introuvable,
 tunnel non ouvert, ou Ctrl-C) ; 2 = plateforme non Windows, ou `mstsc` introuvable.
@@ -177,7 +199,8 @@ tunnel non ouvert, ou Ctrl-C) ; 2 = plateforme non Windows, ou `mstsc` introuvab
   SSH, jamais en argument.
 - Il est généré (24 caractères) seulement si le fichier est absent ou si sa première ligne a moins de 16 caractères
   (l'étape le dit alors dans son détail). Un fichier existant assez long est repris tel quel : vous pouvez y mettre le
-  vôtre.
+  vôtre, puis relancer `installer --bureau-distant` pour que le serveur le prenne en compte (sans le drapeau, le mot de passe
+  du serveur n'est jamais changé).
 - Un fichier qui n'est pas du texte UTF-8 (UTF-16 notamment) met l'étape 8 en « bloqué » et **n'est jamais écrasé**.
   PowerShell 5.1 écrit en UTF-16 avec `>` ou `Out-File` ; utilisez `Set-Content -Encoding utf8` ou `Out-File -Encoding utf8`,
   ou supprimez le fichier pour en faire générer un nouveau.
@@ -189,8 +212,10 @@ tunnel non ouvert, ou Ctrl-C) ; 2 = plateforme non Windows, ou `mstsc` introuvab
 3. Si Hub ne s'affiche pas, lancez `unityhub` depuis le terminal XFCE ; une erreur de sandbox peut demander
    `--no-sandbox` (non vérifié).
 
-**Non vérifié :** qu'une licence obtenue ainsi serve aux compilations sans écran (dans les conteneurs). À constater à l'usage ;
-`plateforme verifier` n'affirme rien sur la licence.
+**Limite :** rien ne transporte la licence de Hub (dossier `~/.local/share/unity3d/...` de l'utilisateur du serveur) vers les
+conteneurs de compilation, qui utilisent leur propre licence (étape 7) : se connecter à Hub ne rend pas, à lui seul, les
+compilations Docker sous licence, et le libellé « prêt, sans Unity » ne change pas. **Non vérifié :** qu'une licence obtenue
+ainsi serve aux compilations sans écran. `plateforme verifier` n'affirme rien sur la licence.
 
 ### Sécurité
 
@@ -206,7 +231,9 @@ tunnel non ouvert, ou Ctrl-C) ; 2 = plateforme non Windows, ou `mstsc` introuvab
   bien été réinstallé, exécutez `ssh-keygen -R <adresse du serveur>` puis relancez ; sinon, ne continuez pas.
 - **« Le tunnel SSH ne s'est pas ouvert »** : serveur injoignable, clé refusée ou port local pris ; lancez `plateforme verifier`.
 - **« ssh est introuvable »** : activez le client OpenSSH de Windows (Paramètres, Applications, Fonctionnalités facultatives).
-- **« mstsc introuvable »** (code 2) : le Bureau à distance de Windows manque (ou le poste n'est pas Windows).
+- **« mstsc introuvable (Bureau à distance de Windows). »** (code 2) : le Bureau à distance de Windows manque. Hors Windows le
+  message est autre, avec le même code 2 : « Le client « mstsc » (Bureau à distance) n'existe que sous Windows : la session
+  ne peut pas s'ouvrir d'ici. »
 - **Étape 8 « bloqué »** : lisez le détail et le geste dans la carte ou la sortie JSON ; messages possibles : fichier de mot
   de passe illisible (voir ci-dessus), SSH par mot de passe pas explicitement coupé (lancez le durcissement), exécution en root,
   installation de XFCE/xrdp ou des paquets Firefox/Unity Hub impossible, clé de dépôt introuvable, xrdp n'écoutant pas sur

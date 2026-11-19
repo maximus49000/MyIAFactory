@@ -24,8 +24,9 @@
 # .verrou-captures, .verrou-demarrer (ou leurs dossiers .d sans flock).
 # Exige `timeout` (coreutils) : sans lui, refus (code 4) plutôt qu'un adb sans borne. Aucun outil ne reçoit le descripteur 9
 # du verrou (9>&-) : un serveur adb resté en vie ne doit pas garder le verrou.
-# emulateur.pid ne désigne l'émulateur que si /proc/<pid> le confirme (ni zombie, ni « emulator »/« qemu » absent de la ligne
-# de commande) : un PID mort, zombie ou recyclé n'est jamais signalé.
+# emulateur.pid ne désigne l'émulateur que si /proc/<pid> le confirme (PID >= 2, pas zombie, argv[0] de nom de base
+# emulator* ou qemu-system*) : un PID mort, zombie, recyclé, 0 ou 1 n'est jamais signalé ; le groupe n'est visé que si
+# l'émulateur en est le chef. `demarrer` garde son verrou jusqu'à ce que le nouveau processus soit reconnu (5 s au plus).
 # Un appel = une ligne « verbe arguments durée » ajoutée à ${PONT_SORTIE}/pont.log (au plus 6 arguments, chacun tronqué à
 # 80 caractères, caractères hors liste remplacés par « ? »).
 set -u
@@ -180,7 +181,7 @@ liberer_verrou() {
 }
 trap liberer_verrou EXIT
 prendre_verrou() {   # prendre_verrou <nom>
-  local f="$SORTIE/.verrou-$1" attente=$((3 * DELAI_ADB + 10)) debut=$SECONDS p q
+  local f="$SORTIE/.verrou-$1" attente=$((3 * DELAI_ADB + 10)) debut=$SECONDS p q m perime
   if command -v flock > /dev/null 2>&1; then
     exec 9>> "$f" || repondre 4 "Verrou $1 impossible."
     VERROU_FD=1
@@ -189,13 +190,21 @@ prendre_verrou() {   # prendre_verrou <nom>
   fi
   until mkdir -- "$f.d" 2>/dev/null; do
     p=""
+    perime=0
     IFS= read -r p < "$f.d/pid" 2>/dev/null
-    if [[ $p =~ ^[0-9]{1,10}$ ]] && ! kill -0 "$p" 2>/dev/null; then
-      # Détenteur mort : le dossier est mis de côté sous un nom unique, puis supprimé si c'est bien le même détenteur.
-      if mv -- "$f.d" "$f.d.perime.$$" 2>/dev/null; then
+    if [[ $p =~ ^[0-9]{1,10}$ ]]; then
+      [ -d "/proc/$p" ] || perime=1                    # détenteur mort (tué par SIGKILL)
+    elif [ -z "$p" ]; then                             # sans PID : périmé seulement s'il est plus vieux que l'attente
+      m=$(stat -c %Y -- "$f.d" 2>/dev/null)
+      [[ $m =~ ^[0-9]+$ ]] && [ $(( ${EPOCHSECONDS:-$(date +%s)} - m )) -gt "$attente" ] && perime=1
+    fi
+    if [ "$perime" = 1 ]; then
+      # Mis de côté sous un nom unique (mv -T : jamais imbriqué), supprimé si c'est bien le même détenteur.
+      if mv -T -- "$f.d" "$f.d.perime.$$" 2>/dev/null; then
         q=""
         IFS= read -r q < "$f.d.perime.$$/pid" 2>/dev/null
-        if [ "$q" = "$p" ]; then rm -rf -- "$f.d.perime.$$"; else mv -- "$f.d.perime.$$" "$f.d" 2>/dev/null; fi
+        if [ "$q" != "$p" ]; then mv -T -- "$f.d.perime.$$" "$f.d" 2>/dev/null; fi
+        rm -rf -- "$f.d.perime.$$"
       fi
       continue
     fi
@@ -236,18 +245,29 @@ liste_paquets() {
   printf '%s\n' "$brut" | tr -d '\r' | sed -n 's/^package://p' | sort -u
 }
 
-# est_emulateur <pid> : vrai seulement pour un processus vivant (pas zombie) dont la ligne de commande contient
-# « emulator » ou « qemu ». Un PID mort, zombie ou recyclé par un autre programme n'est jamais pris pour l'émulateur.
+# est_emulateur <pid> : vrai seulement pour un PID >= 2, vivant (pas zombie), dont argv[0] a pour nom de base
+# emulator* ou qemu-system* ; met son groupe de processus dans GROUPE. Un PID mort, zombie, recyclé par un autre
+# programme, 0, 1 ou mal formé n'est jamais pris pour l'émulateur.
+GROUPE=""
 est_emulateur() {
-  local p="$1" stat etat cmd
-  [[ $p =~ ^[0-9]{1,10}$ ]] || return 1
+  local p="$1" stat etat parent groupe a0=""
+  GROUPE=""
+  [[ $p =~ ^[1-9][0-9]{0,6}$ ]] && [ "$p" -ge 2 ] || return 1
   stat=$(cat -- "/proc/$p/stat" 2>/dev/null) || return 1
-  etat="${stat##*) }"
-  etat="${etat%% *}"
+  read -r etat parent groupe _ <<< "${stat##*) }"
   [ -n "$etat" ] && [ "$etat" != Z ] || return 1
-  cmd=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null) || return 1
-  case "$cmd" in *emulator*|*qemu*) return 0 ;; esac
+  IFS= read -r -d '' a0 < "/proc/$p/cmdline" 2>/dev/null
+  case "${a0##*/}" in emulator*|qemu-system*) GROUPE="$groupe"; return 0 ;; esac
   return 1
+}
+
+# effacer_pid <valeur lue> : retire emulateur.pid seulement s'il contient encore cette valeur (pas un PID réécrit entre-temps).
+effacer_pid() {
+  local v=""
+  [ -f "$SORTIE/emulateur.pid" ] || return 0
+  IFS= read -r v < "$SORTIE/emulateur.pid"
+  [ "$v" = "$1" ] && rm -f -- "$SORTIE/emulateur.pid"
+  return 0
 }
 
 # Processus de l'émulateur noté par `demarrer` (émulateur vivant), sinon rien.
@@ -257,11 +277,11 @@ pid_emulateur() {
   est_emulateur "$p" && printf '%s' "$p"
 }
 
-# signaler <signal> <pid> : au groupe de processus (setsid en a fait le chef), sinon au processus ; jamais sans
-# avoir revérifié juste avant que c'est bien l'émulateur.
+# signaler <signal> <pid> : au groupe seulement si le processus en est le chef (setsid ; champ 5 de /proc/<pid>/stat
+# égal au PID), sinon au processus seul ; jamais sans avoir revérifié juste avant que c'est bien l'émulateur.
 signaler() {
   est_emulateur "$2" || return 0
-  kill "-$1" -- "-$2" 2>/dev/null || kill "-$1" "$2" 2>/dev/null
+  if [ "$GROUPE" = "$2" ]; then kill "-$1" -- "-$2" 2>/dev/null; else kill "-$1" "$2" 2>/dev/null; fi
   return 0
 }
 
@@ -279,7 +299,7 @@ attendre_fin() {
 # --- Verbes ----------------------------------------------------------------
 
 verbe_demarrer() {
-  local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache
+  local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache presente
   [[ $avd =~ $MOTIF_NOM ]] || repondre 4 "Réglage PONT_AVD mal formé."
   reglage PONT_DEMARRAGE_S "${PONT_DEMARRAGE_S:-}" 300; limite=$REGLAGE
   debut=$SECONDS
@@ -292,6 +312,21 @@ verbe_demarrer() {
     > "$SORTIE/emulateur.log" 2>&1 9>&- &
   pid=$!
   printf '%s\n' "$pid" > "$SORTIE/emulateur.pid"
+  # Verrou gardé jusqu'à ce que le processus soit reconnu comme l'émulateur (exec fait) : sinon un second `demarrer`
+  # le prendrait pour un PID étranger et lancerait un second émulateur.
+  presente=$((SECONDS + 5))
+  until est_emulateur "$pid"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      effacer_pid "$pid"
+      repondre 4 "L'émulateur s'est arrêté aussitôt lancé (voir emulateur.log)."
+    fi
+    if [ "$SECONDS" -ge "$presente" ]; then
+      kill -TERM "$pid" 2>/dev/null
+      effacer_pid "$pid"
+      repondre 4 "L'émulateur ne s'est pas présenté en 5 s (voir emulateur.log)."
+    fi
+    sleep 0.1
+  done
   liberer_verrou
   # Chaque appel à adb est borné par le temps restant moins les 2 s de grâce du KILL : jamais au-delà de PONT_DEMARRAGE_S.
   while :; do
@@ -414,10 +449,12 @@ verbe_journal() {
 
 # Arrêt : adb emu kill, puis, si le processus noté par demarrer vit encore, TERM puis KILL.
 verbe_arreter() {
-  local brut adb_ok=1 pid detail="Émulateur arrêté."
+  local brut adb_ok=1 pid="" detail="Émulateur arrêté."
+  # PID lu AVANT d'agir : seul ce PID est arrêté, et emulateur.pid n'est retiré que s'il le contient encore.
+  [ -f "$SORTIE/emulateur.pid" ] && { IFS= read -r pid < "$SORTIE/emulateur.pid" || true; }
   brut=$(outil "$DELAI_ADB" "$ADB" logcat -d 2>/dev/null) && detecter_plantage "$brut"
   outil "$DELAI_ADB" "$ADB" emu kill > /dev/null 2>&1 || adb_ok=0
-  if pid=$(pid_emulateur); then
+  if est_emulateur "$pid"; then
     if ! attendre_fin "$pid" 10; then
       signaler TERM "$pid"
       attendre_fin "$pid" 5 || { signaler KILL "$pid"; attendre_fin "$pid" 5; }
@@ -425,10 +462,10 @@ verbe_arreter() {
     fi
     est_emulateur "$pid" && repondre 4 "L'émulateur (processus $pid) ne s'arrête pas."
   elif [ "$adb_ok" = 0 ]; then
-    rm -f -- "$SORTIE/emulateur.pid"     # PID mort, zombie ou étranger : effacé, jamais signalé
+    effacer_pid "$pid"                  # PID mort, zombie, étranger ou mal formé : effacé, jamais signalé
     repondre 4 "adb a échoué (arrêt de l'émulateur)."
   fi
-  rm -f -- "$SORTIE/emulateur.pid"
+  effacer_pid "$pid"
   if [ -f "$SORTIE/plantage.txt" ]; then detail="$detail Plantage relevé (plantage.txt)."; fi
   repondre 0 "$detail"
 }

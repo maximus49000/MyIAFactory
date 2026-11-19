@@ -35,7 +35,8 @@ exit 0'''
 # Resté vivant, il garde « emulator » dans sa ligne de commande (/proc/<pid>/cmdline), comme le vrai.
 EMULATEUR_FACTICE = ('echo "emulator $*" >> "$FAUX_JOURNAL"\n'
                      'if [ -n "${FAUX_VERIF_FD9:-}" ] && [ -e /proc/self/fd/9 ]; then echo "emulator a herite du verrou" >> "$FAUX_JOURNAL"; fi\n'
-                     '[ -n "${FAUX_EMU_RESTE:-}" ] && exec -a emulator-factice /usr/bin/sleep 60\nexit 0')
+                     '[ -n "${FAUX_EMU_MEURT:-}" ] && exit 0\n'
+                     'exec -a emulator-factice /usr/bin/sleep 60')
 SLEEP_FACTICE = 'echo "sleep $*" >> "$FAUX_JOURNAL"\nexit 0'
 # Lit les arguments séparés par des octets nuls puis lance le pont avec exactement ces arguments.
 PILOTE = 'mapfile -d "" -t A < "$1"; exec bash "$2" "${A[@]}"'
@@ -403,7 +404,7 @@ class TestPont(unittest.TestCase):
                     self.assertEqual(b.lancer(*args)[0], code)    # Banc.lancer vérifie déjà une ligne, un JSON, ses clés
             _, d = b.lancer("journal", "Test")
             self.assertIn('"guillemets"', d["detail"])
-        with Banc(FAUX_ADB_ECHEC="1") as b:
+        with Banc(FAUX_ADB_ECHEC="1", FAUX_EMU_MEURT="1") as b:
             for args in (("toucher", "1", "2"), ("journal",), ("demarrer",), ("arreter",)):
                 with self.subTest(echec=args):
                     self.assertEqual(b.lancer(*args)[0], 4)
@@ -601,6 +602,73 @@ class TestPont(unittest.TestCase):
             numero = (b.sortie / "emulateur.pid").read_text().strip()
             self.assertEqual(bash('kill -0 "$1"', numero).returncode, 0)
             self.assertEqual(b.lancer("arreter")[0], 0)
+
+    # --- Corrections de revue (tour 3) : démarrage et arrêt sûrs --------------------------------------------
+
+    def _vivant(self, numero):
+        return bash('kill -0 "$1" 2>/dev/null', numero).returncode == 0
+
+    def test_demarrer_simultanes_avec_emulateur_lent_a_se_presenter(self):
+        # L'émulateur met 1 s à devenir « emulator » (exec tardif) : le perdant ne doit pas en lancer un second.
+        with Banc() as b:
+            lent = b.bin / "emulateur-lent"
+            lent.write_text('#!/usr/bin/env bash\necho "emulator $*" >> "$FAUX_JOURNAL"\n/usr/bin/sleep 1\n'
+                            'exec -a emulator-lent /usr/bin/sleep 60\n', newline="\n")
+            lent.chmod(0o755)
+            procs = [b.lancer_fond("demarrer", PONT_EMULATEUR=posix(lent)) for _ in range(3)]
+            codes = [p.wait(timeout=120) for p in procs]
+            for p in procs:
+                p.communicate()
+            self.assertEqual(sorted(codes), [0, 2, 2], codes)
+            self.assertEqual(len([x for x in b.appels if x.startswith("emulator ")]), 1, b.appels)
+            self.assertTrue(self._vivant((b.sortie / "emulateur.pid").read_text().strip()))
+            self.assertEqual(b.lancer("arreter")[0], 0)
+
+    def test_pid_invalide_jamais_signale(self):
+        with Banc() as b:
+            temoin = self._sleep_etranger()
+            pid = b.sortie / "emulateur.pid"
+            for contenu in ("1", "0", "99999999", "abc", "", "-1", f"-{temoin}", f"{temoin} 1"):
+                with self.subTest(contenu=contenu):
+                    pid.write_text(contenu + "\n", newline="\n")
+                    self.assertEqual(b.lancer("arreter")[0], 0)
+                    self.assertFalse(pid.exists())
+                    self.assertTrue(self._vivant(temoin))
+
+    def test_pid_non_chef_de_groupe_signale_seul(self):
+        # Un « émulateur » qui n'est pas chef de son groupe : seul lui est arrêté, pas le témoin du même groupe.
+        with Banc() as b:
+            p = subprocess.Popen(["bash", "-c", "exec -a emulator-groupe /usr/bin/sleep 60 & echo $!; "
+                                  "/usr/bin/sleep 60 & echo $!; wait"], stdout=subprocess.PIPE, text=True)
+            emu, temoin = p.stdout.readline().strip(), p.stdout.readline().strip()
+            self.addCleanup(lambda: (bash('kill -9 "$1" "$2" 2>/dev/null; exit 0', emu, temoin), p.wait(timeout=30)))
+            time.sleep(1)
+            (b.sortie / "emulateur.pid").write_text(emu + "\n", newline="\n")
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertFalse(self._vivant(emu))
+            self.assertTrue(self._vivant(temoin))
+
+    def test_arreter_n_efface_pas_un_pid_reecrit(self):
+        # Un nouveau PID écrit pendant l'arrêt (autre demarrer) n'est pas effacé : seul celui qu'on a traité l'est.
+        with Banc() as b:
+            self.assertEqual(b.lancer("demarrer")[0], 0)
+            pid = b.sortie / "emulateur.pid"
+            ancien = pid.read_text().strip()
+            b.faux("adb", f'echo "adb $*" >> "$FAUX_JOURNAL"\n'
+                          f'[ "$1" = emu ] && printf "424242\\n" > "{b.sortie_posix}/emulateur.pid"\nexit 0')
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertFalse(self._vivant(ancien))
+            self.assertEqual(pid.read_text().strip(), "424242")
+
+    def test_verrou_sans_pid_ancien_est_repris(self):
+        with Banc(PONT_DELAI_ADB_S="1") as b:
+            verrou = b.sortie / ".verrou-captures.d"
+            verrou.mkdir()
+            vieux = time.time() - 3600
+            os.utime(verrou, (vieux, vieux))
+            self.assertEqual(b.lancer("capturer", "a")[0], 0)
+            self.assertFalse(verrou.exists())
+            self.assertEqual([x.name for x in b.sortie.iterdir() if x.name.startswith(".verrou")], [])
 
     def test_dossier_captures_lien_symbolique_refuse(self):
         with Banc() as b:

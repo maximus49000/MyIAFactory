@@ -3,6 +3,7 @@
 Colle mince au-dessus de `outils/plateforme.py` : la lecture ne contacte jamais OVH ni SSH (elle relit seulement
 `plateforme.json`), l'installation tourne dans un fil, un seul à la fois, et ne fait jamais tomber le bureau.
 """
+import os
 import sys
 import threading
 from datetime import datetime
@@ -22,7 +23,10 @@ def _modules():
 
 
 def dossier():
-    return Path(DOSSIER) if DOSSIER else _modules()[1].DOSSIER
+    """`DOSSIER`, sinon la variable `MYIAFACTORY_PLATEFORME` (posée par `tests/__init__.py` : un essai ne lit jamais le vrai
+    dossier personnel), sinon `plateforme_acces.DOSSIER`."""
+    brut = DOSSIER or os.environ.get("MYIAFACTORY_PLATEFORME")
+    return Path(brut) if brut else _modules()[1].DOSSIER
 
 
 def _masquer(v, secrets, acces):
@@ -55,12 +59,16 @@ def lire(d=None, travail=None):
     d = Path(d) if d else dossier()
     rapports, date = {}, ""
     try:
-        rapports = plateforme._lire_cache(d).get("rapports") or {}
+        brut = plateforme._lire_cache(d).get("rapports")
+        if isinstance(brut, dict):
+            rapports = {k: v for k, v in brut.items() if k in plateforme.ETAPES and isinstance(v, dict)}
         date = datetime.fromtimestamp((d / plateforme.CACHE).stat().st_mtime).astimezone().isoformat(timespec="seconds")
     except (OSError, ValueError, AttributeError):
         pass
-    etat = plateforme.calculer_etat(rapports if isinstance(rapports, dict) else {})
-    etat = _masquer(etat, _secrets(d, acces), acces)
+    try:
+        etat = _masquer(plateforme.calculer_etat(rapports), _secrets(d, acces), acces)
+    except Exception:   # un cache abîmé (types inattendus) : l'état « tout à faire », jamais une erreur
+        etat = plateforme.calculer_etat({})
     etat["derniere_lecture"] = date
     etat["en_cours"] = bool(travail and travail.en_cours())
     return etat

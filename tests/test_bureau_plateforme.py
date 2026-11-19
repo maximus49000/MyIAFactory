@@ -114,5 +114,28 @@ class TestPlateformeBureau(AvecServeur):
         self.srv.travail_plateforme.attendre()
 
 
+class TestIsolationEtCacheAbime(unittest.TestCase):
+    def test_dossier_par_defaut_des_essais_n_est_pas_le_vrai_dossier_personnel(self):
+        import os
+        from pathlib import Path
+        self.assertEqual(bplateforme.dossier(), Path(os.environ["MYIAFACTORY_PLATEFORME"]))
+        self.assertNotEqual(bplateforme.dossier(), Path("~/MyIAFactory").expanduser())
+        self.assertIs(bplateforme.pret(), False)   # dossier vide : jamais prête
+
+    def test_cache_abime_donne_l_etat_a_faire(self):
+        import tempfile
+        from pathlib import Path
+        formes = ['{"rapports": ["x"]}', '{"rapports": {"lecture": "x"}}', '{"rapports": {"lecture": null, "os": 3}}',
+                  '{"rapports": 5}', '{"rapports": {"lecture": {"statut": 3, "detail": null}}}',
+                  '{"rapports": {}, "demande": [1], "tache": "x"}', '[]', '"texte"', '', '{pas du json', 'null']
+        for texte in formes:
+            with self.subTest(texte=texte), tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+                (Path(t) / "plateforme.json").write_text(texte, encoding="utf-8")
+                e = bplateforme.lire(t)
+                self.assertEqual(len(e["etapes"]), 7)
+                self.assertIs(e["pret"], False)
+                self.assertIs(bplateforme.pret(t), False)
+
+
 if __name__ == "__main__":
     unittest.main()

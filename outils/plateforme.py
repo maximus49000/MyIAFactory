@@ -75,7 +75,7 @@ class _Contexte:
         self.rapports = {k: v for k, v in (self.cache.get("rapports") or {}).items() if k in ETAPES and isinstance(v, dict)}
         self.acces, self.secrets, self.srv = None, [], {}
         self.ip, self.cle, self.pub = None, None, None
-        self.restant_s, self.script_envoye, self.persister = 0, False, True
+        self.restant_s, self.script_envoye, self.persister, self.reinstalle = 0, False, True, False
 
     @property
     def hote(self):
@@ -184,6 +184,7 @@ def _reinstaller(c):
     modele = plateforme_ovh.choisir_ubuntu_lts(plateforme_ovh.modeles_os(c.client, c.acces["serveur"]))
     c.cle, c.pub = c.ssh.generer_cle(c.dossier)     # la clé doit être chez OVH avant l'installation qui l'injecte
     plateforme_ovh.enregistrer_cle_ssh(c.client, NOM_CLE_OVH, c.pub)
+    c.reinstalle = True
     c.cache["demande"] = True                       # noté AVANT la requête : si la suite se perd, pas de seconde réinstallation
     try:
         c.ecrire(strict=True)
@@ -398,8 +399,13 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir):
             if id_ == "ssh":
                 c.cle, c.pub = c.ssh.generer_cle(c.dossier)
             continue
+        pendant = c.cache.get("tache") is not None or bool(c.cache.get("demande"))
         r = _executer_etape(c, id_)
         c.rapports[id_] = r
+        if id_ == "os" and (r["statut"] != "fait" or pendant or c.reinstalle):
+            # Un changement de système est en cours ou vient d'avoir lieu : tout ce qui suit est à refaire.
+            for suivant in ETAPES[2:]:
+                c.rapports[suivant] = _rapport("a_faire", "À refaire : le système du serveur change.")
         c.ecrire()
         if r["statut"] == "bloque" or (r["statut"] == "a_faire" and id_ != "licence"):
             for suivant in ETAPES[i + 1:]:

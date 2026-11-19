@@ -407,6 +407,57 @@ class TestRobustesse(Base):
                 self.assertNotIn(b"\r", entree)
 
 
+class TestChangementDeSysteme(Base):
+    def semer(self, **extra):
+        rapports = {i: {"statut": "fait", "detail": "ancien", "geste": ""} for i in plateforme.ETAPES[:6]}
+        (self.dossier / "plateforme.json").write_text(
+            json.dumps({"rapports": rapports, "ip": IP, "tache": None, **extra}), encoding="utf-8")
+
+    def apres(self, etat):
+        return [self.statuts(etat)[i] for i in ("ssh", "durcissement", "docker", "images")]
+
+    def test_reinstallation_expiree_remet_la_suite_a_faire_puis_tout_est_refait(self):
+        self.semer()
+        client = ClientFactice(os_="debian12_64", statut_tache="init")
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+        self.assertEqual(self.apres(etat), ["a_faire"] * 4)
+        cache = self.statuts_cache()
+        self.assertEqual([cache[i] for i in ("ssh", "durcissement", "docker", "images")], ["a_faire"] * 4)
+        self.assertFalse(etat["pret"])
+        client.statut_tache = "done"
+        ssh = SshFactice()
+        etat = self.lancer(client, ssh, accord=True)
+        self.assertEqual(ssh.etapes_lancees(), ["durcissement", "docker", "images"])
+        self.assertIn("true", [c for c, _ in ssh.commandes])
+        self.assertEqual(len(client.reinstallations()), 1)
+        self.assertTrue(etat["pret"])
+
+    def statuts_cache(self):
+        return {r: v["statut"] for r, v in json.loads((self.dossier / "plateforme.json").read_text(encoding="utf-8"))["rapports"].items()}
+
+    def test_reprise_normale_saute_les_etapes_faites(self):
+        self.semer()
+        ssh = SshFactice()
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), ssh)
+        self.assertEqual(ssh.etapes_lancees(), [])
+        self.assertTrue(etat["pret"])
+
+    def test_marque_incertaine_remet_la_suite_a_faire(self):
+        self.semer(demande=True)
+        client = ClientFactice()
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+        self.assertEqual(self.apres(etat), ["a_faire"] * 4)
+        self.assertEqual(len(client.reinstallations()), 0)
+
+    def test_blocage_faute_d_accord_remet_la_suite_a_faire(self):
+        self.semer()
+        etat = self.lancer(ClientFactice(os_="debian12_64"), SshFactice())
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+        self.assertEqual(self.apres(etat), ["a_faire"] * 4)
+
+
 class TestMain(Base):
     def test_etat_lit_le_cache_et_n_expose_aucun_secret(self):
         self.lancer(ClientFactice(), SshFactice(), accord=True)

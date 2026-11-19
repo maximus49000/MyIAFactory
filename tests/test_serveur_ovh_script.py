@@ -1147,6 +1147,137 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertEqual(m.stdin_fichier.read_text() if m.stdin_fichier.exists() else "", "")
 
 
+DOCKER_IMAGE = r'''echo "docker $*" >> "JOURNAL"
+case "$1 $2" in
+  "image inspect") [ -s "ETAT/etiquette" ] && { cat "ETAT/etiquette"; exit 0; }; exit 1 ;;
+  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && exit 1
+             prec=""; for a in "$@"; do [ "$prec" = --label ] && printf '%s' "${a#versions=}" > "ETAT/etiquette"; prec="$a"; last="$a"; done
+             echo "contexte: $(ls "$last" | tr '\n' ' ')" >> "JOURNAL" ;;
+esac
+exit 0'''
+MARQUEUR = Path(".myiafactory") / "emulateur-image.version"
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEtapeEmulateurImage(unittest.TestCase):
+    def _monde(self, **kw):
+        m = Monde(**kw).__enter__()
+        self.addCleanup(m.__exit__)
+        corps = DOCKER_IMAGE.replace("JOURNAL", m.journal_fichier.as_posix()).replace("ETAT", m.etat.as_posix())
+        (m.faux / "docker").write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+        (m.faux / "docker").chmod(0o755)
+        return m
+
+    def _lancer(self, m, **env):
+        return m.lancer("emulateur_image", env={"SERVEUR_OVH_DIR": RACINE.as_posix(), **env})
+
+    def test_etape_emulateur_image_simulation_json_valide(self):
+        m = self._monde()
+        d = m.lancer("emulateur_image", simuler=True, env={"SERVEUR_OVH_DIR": RACINE.as_posix()})
+        self.assertEqual(set(d), CLES)
+        self.assertEqual((d["etape"], d["statut"]), ("emulateur_image", "a_faire"))
+        self.assertIn("simul", d["detail"].lower())
+        self.assertEqual(m.journal, "")
+        self.assertEqual(list(m.home.iterdir()), [])
+
+    def test_etape_emulateur_image_construit_puis_ecrit_le_marqueur(self):
+        m = self._monde()
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        builds = m.appels("docker build")
+        self.assertEqual(len(builds), 1, m.journal)
+        self.assertIn("--label versions=ubuntu=ubuntu:24.04;jdk=17;fichiers=", builds[0])
+        self.assertIn("--build-arg UBUNTU_TAG=24.04", builds[0])
+        self.assertIn("-t myiafactory/emulateur ", builds[0])
+        contexte = m.appels("contexte:")[0]
+        for f in ("Dockerfile", "entree-tache.sh", "pont.sh"):
+            self.assertIn(f, contexte)
+        etiquette = (m.etat / "etiquette").read_text()
+        self.assertEqual((m.home / MARQUEUR).read_text().strip(), etiquette)
+        self.assertEqual(m.restes(m.home / ".myiafactory"), ["emulateur-image.version"])     # pas de fichier temporaire oublié
+        self.assertNotIn("curl", m.journal)
+
+    def test_etape_emulateur_image_idempotente(self):
+        m = self._monde()
+        self.assertEqual(self._lancer(m)["statut"], "fait")
+        marqueur = (m.home / MARQUEUR).read_text()
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertEqual(len(m.appels("docker build")), 1, m.journal)                      # rien reconstruit
+        self.assertEqual((m.home / MARQUEUR).read_text(), marqueur)
+        (m.etat / "etiquette").write_text("ubuntu=autre", newline="\n")                    # image d'une autre version : reconstruite
+        self.assertEqual(self._lancer(m)["statut"], "fait")
+        self.assertEqual(len(m.appels("docker build")), 2, m.journal)
+
+    def test_etape_emulateur_image_blocages(self):
+        m = self._monde()
+        d = self._lancer(m, DISQUE_LIBRE_GO="2")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("isque", d["detail"])
+        d = self._lancer(m, SERVEUR_OVH_DIR=(m.t / "vide").as_posix())
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("introuvable", d["detail"])
+        d = self._lancer(m, FAUX_BUILD_ECHEC="1")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertFalse((m.home / MARQUEUR).exists())                                     # pas de marqueur sans image
+        m.opt["FAUX_UTILISATEUR"] = "root"
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("root", d["detail"])
+
+
+class TestDockerfileEmulateur(unittest.TestCase):
+    """L'image n'est jamais construite par un test : le Dockerfile et l'entrée sont seulement lus."""
+    DOCKERFILE = RACINE / "images" / "emulateur" / "Dockerfile"
+    ENTREE = RACINE / "images" / "emulateur" / "entree-tache.sh"
+
+    def setUp(self):
+        self.texte = self.DOCKERFILE.read_text(encoding="utf-8")
+        self.code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))
+
+    def test_base_epinglee_comme_les_autres_images(self):
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        tag = versions["base_ubuntu"].split(":")[1]
+        self.assertRegex(self.texte, rf"(?m)^ARG UBUNTU_TAG={re.escape(tag)}$")
+        self.assertRegex(self.texte, r"(?m)^FROM ubuntu:\$\{UBUNTU_TAG\}$")
+        self.assertGreaterEqual(float(tag), 22.04)                      # bash >= 4.4 (tableaux vides sous set -u) : 5.1 depuis 22.04
+
+    def test_outils_exiges_par_le_pont(self):
+        for paquet in ("openjdk-17-jdk-headless", "util-linux", "coreutils", "bash"):     # flock, setsid / timeout, stat, sleep / bash
+            self.assertRegex(self.code, rf"\b{paquet}\b")
+        self.assertNotRegex(self.code, r"\b(curl|wget)\b")
+
+    def test_sans_identifiants_et_utilisateur_1000(self):
+        for mot in ("credential", "token", "api_key", "secret", "password", ".ssh", ".claude", "ANTHROPIC"):
+            self.assertNotIn(mot.lower(), self.code.lower())
+        self.assertNotRegex(self.code, r"(?m)^VOLUME\b")
+        self.assertRegex(self.code, r"(?m)^USER 1000:1000$")
+
+    def test_pont_et_entree_copies_et_environnement_pose_par_l_image(self):
+        self.assertRegex(self.code, r"(?m)^COPY pont\.sh /usr/local/bin/pont$")
+        self.assertRegex(self.code, r"(?m)^COPY entree-tache\.sh /usr/local/bin/entree-tache$")
+        self.assertRegex(self.code, r'(?m)^ENTRYPOINT \["/usr/local/bin/entree-tache"\]$')
+        for reglage in ("PONT_SORTIE=/sortie", "PONT_AVD=emul", "ANDROID_AVD_HOME=/avd", "HOME=/tmp",
+                        "PONT_EMULATEUR=/opt/android-sdk/emulator/emulator", "PONT_ADB=/opt/android-sdk/platform-tools/adb"):
+            self.assertIn(reglage, self.code)
+
+    def test_adb_vient_du_sdk_monte_et_non_d_un_paquet(self):
+        self.assertNotIn("android-tools-adb", self.code)
+        apt = self.code[self.code.index("apt-get install"):self.code.index("rm -rf")]
+        self.assertNotRegex(apt, r"adb")
+
+    def test_entree_cree_l_avd_emul_puis_attend(self):
+        self.assertEqual(subprocess.run(["bash", "-n", self.ENTREE.as_posix()], capture_output=True).returncode, 0)
+        texte = self.ENTREE.read_text(encoding="utf-8")
+        self.assertNotIn("\r", texte)
+        self.assertIn("avdmanager", texte)
+        self.assertIn("SDK=/opt/android-sdk", texte)
+        self.assertIn("/system-images/*/*/x86_64", texte)
+        self.assertIn("x86_64", texte)
+        self.assertNotRegex(texte, r"\beval\b")
+        self.assertNotIn("docker", " ".join(x for x in texte.splitlines() if not x.lstrip().startswith("#")))
+
+
 class TestTexteDuScript(unittest.TestCase):
     def setUp(self):
         self.texte = SCRIPT.read_text(encoding="utf-8")
@@ -1207,7 +1338,7 @@ class TestTexteDuScript(unittest.TestCase):
     def test_images_reconstruites_si_les_versions_changent(self):
         self.assertIn('--label "versions=$empreinte"', self.texte)
         self.assertIn('"$actuelle" != "$empreinte"', self.texte)
-        self.assertEqual(self.texte.count("--build-arg"), 8)
+        self.assertEqual(self.texte.count("--build-arg"), 9)
 
     def test_dockerfile_script_et_versions_json_concordent(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
@@ -1230,7 +1361,7 @@ class TestTexteDuScript(unittest.TestCase):
         self.assertEqual(script("V_NODE"), versions["node"])
         self.assertEqual(script("V_CLAUDE_CODE"), versions["claude_code"])
         tag = versions["base_ubuntu"].split(":")[1]
-        for image in ("android", "agent"):
+        for image in ("android", "agent", "emulateur"):
             self.assertEqual(arg(image, "UBUNTU_TAG"), tag)
         self.assertEqual(arg("android", "BUILD_TOOLS"), versions["android_build_tools"])
         self.assertEqual(arg("android", "PLATEFORME"), versions["android_plateforme"])
@@ -1251,7 +1382,7 @@ class TestTexteDuScript(unittest.TestCase):
 
     def test_versions_epinglees(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
-        dockerfiles = [RACINE / "images/android/Dockerfile", RACINE / "images/agent/Dockerfile"]
+        dockerfiles = [RACINE / "images/android/Dockerfile", RACINE / "images/agent/Dockerfile", RACINE / "images/emulateur/Dockerfile"]
         for f in [RACINE / "versions.json", SCRIPT] + dockerfiles:
             # Aucune étiquette flottante ; le nom de fichier du téléchargement Google (`..._latest.zip`) n'est pas une étiquette.
             self.assertNotRegex(f.read_text(encoding="utf-8").lower(), r"[:=\"' ]latest\b(?!\.zip)", f.name)

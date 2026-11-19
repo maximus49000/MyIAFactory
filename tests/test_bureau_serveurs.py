@@ -14,7 +14,7 @@ from tests.test_acces import AvecBureauOuvert
 from tests.test_serveur import AvecServeur
 
 SECRET = "SECRET-SERVEUR-XYZ-123456"
-IDS = ["base", "durcissement", "android-build", "android-emulateur", "unity-cli", "unity-editeur", "session-graphique", "agent"]
+IDS = ["base", "durcissement", "android-build", "android-emulateur", "emulateur-image", "unity-cli", "unity-editeur", "session-graphique", "agent"]
 
 
 class FauxSsh:

@@ -22,7 +22,7 @@ const NIVEAUX = {recommande: "recommandé", possible: "possible", deconseille: "
 const STATUTS = {presente: "présente", absente: "absente", inconnue: "inconnue", bloquee: "bloquée", non_installable: "non installable",
   a_faire: "à faire", en_cours: "en cours"};
 const LIBELLES_CAPACITES = {base: "Base du serveur", durcissement: "Durcissement SSH", "android-build": "Construction Android",
-  "android-emulateur": "Émulateur Android", "unity-cli": "Unity CLI", "unity-editeur": "Éditeur Unity",
+  "android-emulateur": "Émulateur Android", "emulateur-image": "Image de l'émulateur", "unity-cli": "Unity CLI", "unity-editeur": "Éditeur Unity",
   "session-graphique": "Session graphique distante", agent: "Agent de développement"};
 
 export const LIBELLE_ACCORD = "J'autorise cette installation sur le serveur";

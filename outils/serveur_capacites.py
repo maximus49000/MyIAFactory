@@ -54,6 +54,9 @@ _CATALOGUE = {
         "android-emulateur", "Émulateur Android (KVM)", ("android-build",), "android_emulateur",
         "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images "
         "&& id -nG | grep -qw kvm && test -e /dev/kvm", 2.0, 8),
+    "emulateur-image": Capacite(
+        "emulateur-image", "Image de l'émulateur (conteneur d'outil sans identifiants)", ("android-emulateur",), "emulateur_image",
+        "test -s ~/.myiafactory/emulateur-image.version", 1.5, 10),
     "unity-cli": Capacite(
         "unity-cli", "Unity CLI (outil officiel en ligne de commande)", ("base",), "unity_cli",
         "test -x ~/.local/bin/unity && ~/.local/bin/unity --version >/dev/null 2>&1", 0.1, 2),

@@ -4,8 +4,8 @@
 # Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
 # session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Les étapes android_build, android_emulateur et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|unity_cli|etat> [--simuler]
+# Les étapes android_build, android_emulateur, emulateur_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|unity_cli|etat> [--simuler]
 # Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
@@ -37,6 +37,8 @@ MOT_DE_PASSE_MIN=16
 # Étiquette collée aux images construites : si elle diffère des valeurs épinglées, l'image est reconstruite.
 EMPREINTE_ANDROID="ubuntu=${V_UBUNTU};build_tools=${V_BUILD_TOOLS};plateforme=${V_PLATEFORME};cmdline_tools=${V_CMDLINE_TOOLS};gradle=${V_GRADLE}"
 EMPREINTE_AGENT="ubuntu=${V_UBUNTU};node=${V_NODE};claude_code=${V_CLAUDE_CODE}"
+# Image de l'émulateur : versions ET empreinte des fichiers de son contexte (Dockerfile, entree-tache.sh, pont.sh) : un pont modifié la reconstruit.
+EMPREINTE_EMULATEUR_BASE="ubuntu=${V_UBUNTU};jdk=17"
 SEUIL_DISQUE_GO=20
 DOSSIER_IMAGES="${SERVEUR_OVH_DIR:-/opt/myiafactory/serveur_ovh}/images"
 
@@ -45,14 +47,14 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, unity_cli ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, unity_cli ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|unity_cli|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|unity_cli|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
@@ -456,6 +458,7 @@ etape_bureau_distant() {
 SDK_ANDROID="${HOME}/android-sdk"
 SEUIL_ANDROID_BUILD_GO=15
 SEUIL_EMULATEUR_GO=10
+SEUIL_EMULATEUR_IMAGE_GO=3
 SEUIL_UNITY_CLI_GO=2
 
 # Les étapes de capacités s'installent pour l'utilisateur SSH ordinaire, jamais pour root (comme bureau_distant).
@@ -725,6 +728,46 @@ etape_android_emulateur() {
   repondre fait "Émulateur Android en place (${V_SDK_IMAGE_EMULATEUR}), accélération KVM disponible.${JDK21_NOTE}"
 }
 
+# --- Image de l'émulateur ----------------------------------------------------
+
+# Étape emulateur_image : construit myiafactory/emulateur depuis images/emulateur/Dockerfile, images/emulateur/entree-tache.sh
+# et taches/pont.sh (dossier $SERVEUR_OVH_DIR, par défaut ~/myiafactory/serveur_ovh : celui où l'installation dépose ces fichiers),
+# assemblés dans un contexte temporaire. Idempotente : l'image porte une étiquette « versions » (versions + empreinte des
+# fichiers) ; elle n'est reconstruite que si l'étiquette diffère. Écrit ensuite le marqueur ~/.myiafactory/emulateur-image.version
+# (contenu = l'étiquette) que la sonde du catalogue teste. Le SDK Android n'est pas dans l'image : il est monté à l'exécution.
+etape_emulateur_image() {
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont) depuis ${racine} puis écrirait ${marqueur}."
+  fi
+  refuser_root
+  exiger_disque "$SEUIL_EMULATEUR_IMAGE_GO"
+  command -v docker >/dev/null 2>&1 || repondre a_faire "Docker absent : installez d'abord la capacité base (étape docker), puis refaites celle-ci."
+  for f in images/emulateur/Dockerfile images/emulateur/entree-tache.sh taches/pont.sh; do
+    [ -f "$racine/$f" ] || repondre bloque "Fichier de l'image introuvable : $racine/$f. Redéposez les fichiers du serveur (serveur_ovh) puis relancez."
+  done
+  empreinte="${EMPREINTE_EMULATEUR_BASE};fichiers=$(cat "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" | sha256sum | cut -c1-16)"
+  actuelle=$(sudo docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/emulateur 2>/dev/null)
+  if [ "$actuelle" != "$empreinte" ]; then
+    ctx=$(mktemp -d) || repondre bloque "Dossier temporaire non créable pour construire l'image."
+    if ! { cp "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" "$ctx/"; }; then
+      rm -rf "$ctx"; repondre bloque "Contexte de construction de l'image non préparable."
+    fi
+    if ! sudo docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}"          -t myiafactory/emulateur "$ctx" >/dev/null 2>&1; then
+      rm -rf "$ctx"; repondre bloque "Construction de l'image myiafactory/emulateur impossible (contexte ${racine})."
+    fi
+    rm -rf "$ctx"
+    actuelle=""
+  fi
+  mkdir -p "$HOME/.myiafactory" || repondre bloque "Dossier $HOME/.myiafactory non créable."
+  if [ "$(cat "$marqueur" 2>/dev/null)" != "$empreinte" ]; then
+    printf '%s
+' "$empreinte" > "$marqueur.tmp.$$" && mv -f "$marqueur.tmp.$$" "$marqueur"       || { rm -f "$marqueur.tmp.$$"; repondre bloque "Marqueur $marqueur non écrit."; }
+  fi
+  if [ -z "$actuelle" ]; then repondre fait "Image myiafactory/emulateur construite (${empreinte}) ; marqueur écrit."; fi
+  repondre fait "Image myiafactory/emulateur déjà à jour (${empreinte})."
+}
+
 # --- Unity CLI -------------------------------------------------------------
 
 # Étape unity_cli : l'outil officiel Unity CLI seulement, installé pour l'utilisateur dans ~/.local/bin/unity. Le script
@@ -789,6 +832,7 @@ case "$ETAPE" in
   bureau_distant) etape_bureau_distant ;;
   android_build) etape_android_build ;;
   android_emulateur) etape_android_emulateur ;;
+  emulateur_image) etape_emulateur_image ;;
   unity_cli) etape_unity_cli ;;
   etat) etape_etat ;;
 esac

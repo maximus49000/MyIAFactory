@@ -401,7 +401,7 @@ class TestEtatPerime(Base):
 
     def test_les_delais_par_etape_sont_ceux_du_module(self):
         self.assertEqual(inst.DELAIS_ETAPE_S, {"docker": 1200, "durcissement": 900, "android_build": 1800,
-                                               "android_emulateur": 1800, "unity_cli": 300})
+                                               "android_emulateur": 1800, "emulateur_image": 900, "unity_cli": 300})
         self.assertEqual(inst.DELAI_DEFAUT_S, 600)
         ssh = FauxSsh()
         self.installer(ssh, actions=["emulateur"])

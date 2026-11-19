@@ -28,7 +28,7 @@ ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
 VERROU_JEUNE_S = 30
 DELAI_DEFAUT_S = 600
-DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "unity_cli": 300}
+DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "unity_cli": 300}
 LONGUEUR_MAX = 200
 STATUTS_ETAPE = ("fait", "a_faire", "bloque")
 

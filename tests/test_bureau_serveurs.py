@@ -170,6 +170,45 @@ class TestLecture(AvecServeurs):
         self.travaux.attendre()
         self.assertTrue(self.json("/api/serveurs/lieux?actions=charge")["charge"]["serveur"]["permis"])    # bonne sonde
 
+    def test_lieux_donnent_niveau_et_raison_pour_chaque_lieu(self):
+        self.declarer()
+        self.ecrire_etat(base="presente", **{"android-build": "presente"})
+        e = self.json("/api/serveurs/lieux?actions=apk")["apk"]
+        self.assertEqual(set(e), {"poste", "github", "serveur"})
+        for lieu in e.values():
+            self.assertIn(lieu["niveau"], ("recommande", "possible", "deconseille", "indisponible"))
+            self.assertTrue(lieu["raison"] or lieu["niveau"] == "recommande")
+            self.assertEqual(lieu["fondee_sur"], "regles")        # aucune durée mesurée ici
+        self.assertTrue(e["serveur"]["permis"])
+        self.assertNotEqual(e["serveur"]["niveau"], "recommande")   # charge du serveur inconnue
+
+    def test_lieux_serveur_non_permis_ou_jamais_sonde_est_indisponible(self):
+        self.declarer()
+        e = self.json("/api/serveurs/lieux?actions=apk")["apk"]      # jamais sondé
+        self.assertFalse(e["serveur"]["permis"])
+        self.assertEqual(e["serveur"]["niveau"], "indisponible")
+        self.assertTrue(e["serveur"]["raison"])
+        self.assertIn(e["poste"]["niveau"], ("possible", "recommande"))
+        self.ecrire_etat(base="presente", **{"android-build": "bloque"})
+        self.assertEqual(self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]["niveau"], "indisponible")
+
+    def test_lieux_serveur_recommande_avec_charge_lue_dans_l_etat(self):
+        self.declarer()
+        self.ecrire_etat(base="presente", **{"android-build": "presente"})
+        tout = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))
+        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.8, "conteneurs_outils": 0}
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
+        e = self.json("/api/serveurs/lieux?actions=apk")["apk"]
+        self.assertEqual((e["serveur"]["niveau"], e["serveur"]["fondee_sur"]), ("recommande", "regles"))   # seule charge connue, basse
+        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.99, "memoire_libre_ratio": 0.8}
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
+        self.assertEqual(self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]["niveau"], "deconseille")
+
+    def test_lieux_action_inconnue_indisponible_partout(self):
+        self.declarer()
+        e = self.json("/api/serveurs/lieux?actions=nimporte")["nimporte"]
+        self.assertEqual({v["niveau"] for v in e.values()}, {"indisponible"})
+
     def test_lieux_ne_se_connecte_a_rien(self):
         self.declarer()
         self.ssh.appels.clear()

@@ -50,6 +50,12 @@ def _modules():
     return plateforme_acces, serveur_capacites, serveur_etat, serveur_installation, serveur_modele
 
 
+def _recommandation():
+    _modules()
+    import serveur_recommandation
+    return serveur_recommandation
+
+
 def dossier():
     """`DOSSIER`, sinon le dossier de la plateforme (`MYIAFACTORY_PLATEFORME` dans les essais), sinon le dossier des secrets."""
     return Path(DOSSIER) if DOSSIER else modplateforme.dossier()
@@ -249,8 +255,49 @@ def _lieu(d, serveurs, etat, action):
             "raison": f"Capacités manquantes sur « {s.nom} » : " + ", ".join(morceaux) + "."}
 
 
+def _nombre_01(valeur):
+    return min(1.0, max(0.0, float(valeur))) if isinstance(valeur, (int, float)) and not isinstance(valeur, bool) else None
+
+
+def _charge_serveur(etat, serveur_id):
+    """La charge (0 à 1) que la sonde a rangée dans l'état du serveur, ou None si elle n'y est pas ou est illisible."""
+    brut = etat.get(serveur_id, {}).get("charge") if isinstance(etat.get(serveur_id), dict) else None
+    if not isinstance(brut, dict):
+        return None
+    par_coeur, libre = _nombre_01(brut.get("charge_par_coeur")), _nombre_01(brut.get("memoire_libre_ratio"))
+    mesures = [m for m in (par_coeur, None if libre is None else 1.0 - libre) if m is not None]
+    return max(mesures) if mesures else None
+
+
+def mesures_pour(action, serveurs, etat, serveur_id=None):
+    """Les mesures dont dispose la recommandation. SEUL point de branchement des durées par lieu, de la charge du poste et du
+    quota GitHub (consommation du bureau) : tant qu'ils ne sont pas câblés ils valent None et la recommandation retombe sur
+    les règles. Ne lit que l'état déjà lu : jamais de réseau."""
+    joignable = any(not all(v == "inconnue" for v in _capacites(etat.get(s.id, {})).values()) for s in serveurs)
+    return _recommandation().Mesures(duree_min={}, charge_poste=None, quota_github_restant=None, serveur_joignable=joignable,
+                                     charge_serveur=_charge_serveur(etat, serveur_id) if serveur_id else None)
+
+
+def _conseil(d, serveurs, etat, action):
+    """{lieu: fiche} : la fiche du serveur garde les champs de `_lieu` ; chaque lieu gagne `niveau` et `fondee_sur`."""
+    serveur = _lieu(d, serveurs, etat, action)
+    connue = not serveur.get("raison", "").startswith("Action inconnue")
+    permis = {"poste": connue, "github": connue, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
+    conseil = _recommandation().recommander(action, permis, mesures_pour(action, serveurs, etat, serveur.get("serveur_id")))
+    sortie = {}
+    for lieu, c in conseil.items():
+        fiche = dict(serveur) if lieu == "serveur" else {"permis": permis[lieu], "raison": ""}
+        fiche["niveau"], fiche["fondee_sur"] = c["niveau"], c["fondee_sur"]
+        if not fiche.get("raison"):
+            fiche["raison"] = c["raison"]
+        sortie[lieu] = fiche
+    return sortie
+
+
 def lieux(actions_brutes, d=None):
-    """(code, objet) de `GET /api/serveurs/lieux?actions=a,b` : `{action: {"serveur": {permis, manque, raison}}}`."""
+    """(code, objet) de `GET /api/serveurs/lieux?actions=a,b` : `{action: {lieu: {permis, raison, niveau, fondee_sur}}}`.
+
+    Le conseil (`niveau`) n'est qu'un avis : rien n'est jamais déplacé automatiquement."""
     d = Path(d) if d else dossier()
     actions = []
     for a in (actions_brutes or "").split(","):
@@ -261,7 +308,7 @@ def lieux(actions_brutes, d=None):
         return 400, {"erreur": "Indiquez entre 1 et 20 actions séparées par des virgules."}
     serveurs, _ = _modules()[4].lire_avec_rejets(d)
     etat = _modules()[3].lire_etat_vivant(d)
-    return 200, _masquer({a: {"serveur": _lieu(d, serveurs, etat, a)} for a in actions}, _secrets(d, serveurs))
+    return 200, _masquer({a: _conseil(d, serveurs, etat, a) for a in actions}, _secrets(d, serveurs))
 
 
 # ---------------------------------------------------------------- routes POST

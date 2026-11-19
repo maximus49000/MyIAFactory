@@ -4,6 +4,12 @@ Mise en place, depuis le poste Windows, d'un serveur dédié OVH : Ubuntu LTS, a
 les images d'outils (Unity, Android/Gradle, agent). Conception : [`2026-11-19-serveur-ovh-plateforme-design.md`](superpowers/specs/2026-11-19-serveur-ovh-plateforme-design.md).
 Le reste de l'application ne dépend pas du serveur : s'il ou OVH est injoignable, rien d'autre ne casse.
 
+> **OVH est désormais un fournisseur parmi d'autres.** Le serveur générique ([`serveur.md`](serveur.md)) accepte n'importe quel
+> serveur (adresse, utilisateur `sudo`, clé SSH) et n'installe que les capacités qu'exigent les actions confiées. Seules la
+> création et la réinstallation du système restent propres à OVH et se font encore ici. Un serveur OVH déjà installé par ce flux
+> peut être inscrit comme serveur générique **sans rien réinstaller** : la carte « migration » apparaît à l'ouverture du panneau
+> Direction (voir « Migration » dans `serveur.md`) ; elle ne modifie ni `ovh.json`, ni `plateforme.json`, ni le serveur.
+
 ## Ce que veut dire « prêt »
 
 Sept étapes, plus une huitième facultative, rejouables, chacune lancée seulement quand la précédente est « fait » (la

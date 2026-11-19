@@ -163,3 +163,20 @@ Découpage des modules, format du catalogue de capacités, noms des fichiers, d�
 ## Choix du rédacteur (à relire, non validés)
 Premier accès par clé publique collée par le Directeur ; un seul serveur au départ ; Ubuntu/Debian récent comme seul Linux supporté ;
 capacités d'Unity par Unity CLI (éditeur installé par Hub sur la session graphique).
+
+## Note de réalisation (2026-11-19, là où un choix a changé)
+Guide utilisateur : [`../../serveur.md`](../../serveur.md).
+- **Recommandation** : elle ne lit que les mesures rangées dans `serveurs-etat.json` par la sonde. Charge du serveur seule branchée ; durées par
+  lieu, charge du poste et quota GitHub valent `None` (point de branchement unique : `mesures_pour` dans `bureau/serveurs.py`), la couleur retombe alors
+  sur des règles et le dit (`fondee_sur`). Poste et GitHub ne sont pas modélisés : toute action connue y est permise.
+- **Sonde de charge** : elle écrit `charge` dans l'état avec un horodatage `maj` (secondes epoch) ; une mesure de plus de 15 minutes est ignorée.
+  La charge est la moyenne sur **5 minutes** (pas une minute) par cœur ; sans charge connue le serveur n'est jamais « recommandé ».
+- **Migration** : la carte apparaît à l'ouverture du panneau Direction (pas au démarrage du bureau), après confirmation explicite ; elle ne lit que des
+  fichiers (détection) puis sonde en lecture seule ; l'identifiant migré est `serveur-ovh` et l'identifiant **`migration` est réservé** (routes
+  `/api/serveurs/migration/...`). Une inscription est défaite seulement si `serveurs.json` n'a pas changé depuis.
+- **Capacités** : `unity` est scindée en `unity-cli` (installable) et `unity-editeur` (non installable) ; `durcissement` est une capacité séparée de `base` ;
+  `android-build` installe la plateforme **36** et les build-tools 36.0.0 (et non 34), l'image système de l'émulateur est android-34 ; `session-graphique` et
+  `agent` ne sont pas installables par le moteur générique.
+- **Clés par serveur** : chaque serveur a sa clé (`id_ed25519_<id>`) ; le serveur migré garde `id_ed25519_myiafactory`. `cle` génère la clé si elle est absente.
+- **Table `besoins`** limitée à `apk`, `tests`, `lint`, `release`, `emulateur`, `charge` : les actions Unity n'y sont pas encore ; aucune action ne
+  demande `durcissement` ni `unity-cli`.

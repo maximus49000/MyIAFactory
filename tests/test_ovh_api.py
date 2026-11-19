@@ -59,6 +59,33 @@ class TestOvhApi(unittest.TestCase):
         self.assertEqual(entetes["X-Ovh-Signature"], c.signer("POST", url, texte, 1700000000))
         self.assertEqual(entetes["Content-Type"], "application/json")
 
+    def test_nom_de_point_resolu_en_url(self):
+        http = HttpFactice([(200, "1700000000")])
+        c = ovh_api.ClientOvh("ovh-eu", "app", "secret", "consommateur", http=http)
+        c._heure()
+        self.assertTrue(http.appels[0][1].startswith(ovh_api.POINTS["ovh-eu"]))
+
+    def test_url_complete_inchangee(self):
+        http = HttpFactice([(200, "1700000000")])
+        c = ovh_api.ClientOvh("https://exemple.test/1.0/", "app", "secret", "consommateur", http=http)
+        c._heure()
+        self.assertEqual(http.appels[0][1], "https://exemple.test/1.0/auth/time")
+
+    def test_point_inconnu_leve_valueerror(self):
+        with self.assertRaises(ValueError) as ctx:
+            ovh_api.ClientOvh("ovh-xx", "app", "secret", "consommateur")
+        self.assertIn("ovh-eu", str(ctx.exception))
+        self.assertNotIn("secret", str(ctx.exception))
+        self.assertNotIn("consommateur", str(ctx.exception))
+
+    def test_http_exception_devient_erreur_ovh_0(self):
+        import http.client
+        from unittest import mock
+        with mock.patch("urllib.request.urlopen", side_effect=http.client.RemoteDisconnected("coupé")):
+            with self.assertRaises(ovh_api.ErreurOvh) as ctx:
+                ovh_api._http_urllib("GET", POINT + "/auth/time", {}, None)
+        self.assertEqual(ctx.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

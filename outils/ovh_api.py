@@ -5,6 +5,7 @@ vient de `GET {point}/auth/time` (non signé), jamais de l'horloge locale : un p
 toutes les requêtes. Le corps signé est exactement le texte envoyé. Aucun secret ni consommateur dans les messages d'erreur.
 """
 import hashlib
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -31,12 +32,16 @@ def _http_urllib(methode, url, entetes, corps):
             return reponse.status, reponse.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")
-    except (urllib.error.URLError, OSError) as e:
+    except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
         raise ErreurOvh(0, f"API OVH injoignable ({type(e).__name__})") from None
 
 
 class ClientOvh:
     def __init__(self, point, cle_app, secret, consommateur, http=None):
+        if point in POINTS:
+            point = POINTS[point]
+        elif not str(point).startswith("http"):
+            raise ValueError(f"Point d'accès OVH inconnu : « {point} ». Noms valides : {', '.join(sorted(POINTS))}, ou une URL http(s).")
         self.point = point.rstrip("/")
         self.cle_app = cle_app
         self.secret = secret

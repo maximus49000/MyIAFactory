@@ -595,11 +595,19 @@ def _texte_du_parcours(taille):
     if valeur == "moyenne":
         return (f" Évolution jugée moyenne ({taille['pourquoi']}) : elle sera découpée, sans prototype ni méthode. "
                 "Vous pouvez demander le parcours complet.")
+    if valeur == "grande":     # essai de coûts du 2026-11-19 : le chemin long était pris sans que le choix soit offert
+        return (f" Évolution jugée grande ({taille['pourquoi']}) : elle suivra le parcours complet, prototype puis "
+                "méthode, mis au point avec vous. Si elle est plus simple que cela, validez en parcours court (sans "
+                "prototype ni méthode).")
     return ""
 
 
 def _parcours(cahier, verdict):
     valeur = ((cahier or {}).get("taille") or {}).get("valeur")
+    if verdict == "valider_complet":
+        return PARCOURS_COMPLET
+    if verdict == "valider_court":     # le choix du Directeur : une petite reste un seul élément, le reste sans prototype
+        return PARCOURS_UN_ELEMENT if valeur == "petite" else PARCOURS_SANS_PROTOTYPE
     if verdict != "valider" or valeur not in ("petite", "moyenne"):
         return PARCOURS_COMPLET
     return PARCOURS_UN_ELEMENT if valeur == "petite" else PARCOURS_SANS_PROTOTYPE
@@ -624,7 +632,7 @@ def _parcours_un_element(projet, demande, f, cahier):
 def _sur_cahier(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
-    if demande.get("verdict") in ("valider", "valider_complet"):
+    if demande.get("verdict") in ("valider", "valider_complet", "valider_court"):
         cahier = {k: (f.get("cahier") or {}).get(k) for k in ("maquette", "etapes")}
         if (f.get("cahier") or {}).get("partenaires") is not None:     # décidés au cadrage : le cahier validé les garde
             cahier["partenaires"] = f["cahier"]["partenaires"]

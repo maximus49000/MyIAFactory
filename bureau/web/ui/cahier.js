@@ -95,6 +95,8 @@ export function parcoursDuCahier(cahier) {
     parcours: "Elle partira en un seul élément, sans prototype ni méthode."};
   if (t.valeur === "moyenne") return {taille: "moyenne", texte: `Évolution jugée moyenne : ${t.pourquoi}`,
     parcours: "Elle sera découpée, sans prototype ni méthode."};
+  if (t.valeur === "grande") return {taille: "grande", texte: `Évolution jugée grande : ${t.pourquoi}`,
+    parcours: "Elle suivra le parcours complet, prototype puis méthode, mis au point avec vous."};
   return null;
 }
 
@@ -104,8 +106,10 @@ function contenuDuCahier(etat, f, boite) {
   const parcours = parcoursDuCahier(vue.courant);
   if (parcours) {
     const p = el("p", "val-parcours");
-    p.append(el("strong", "", parcours.texte), el("span", "", " " + parcours.parcours
-      + " Si elle vous semble plus grosse, choisissez « Valider avec le parcours complet »."));
+    const choix = parcours.taille === "grande"
+      ? " Si elle est plus simple que cela, choisissez « Valider en parcours court »."
+      : " Si elle vous semble plus grosse, choisissez « Valider avec le parcours complet ».";
+    p.append(el("strong", "", parcours.texte), el("span", "", " " + parcours.parcours + choix));
     s.append(p);
   }
   if (vue.courant) {
@@ -271,15 +275,19 @@ export function contenuCahierMethode(ctx, d, {fermer = () => {}} = {}) {
   });
   const pied = el("div", "val-pied");
   pied.append(erreur, corriger);
-  // Petite ou moyenne évolution : le Directeur peut préférer le parcours complet (prototype et méthode).
-  if (!methode && parcoursDuCahier(vueCahier(f).courant)) {
-    const complet = el("button", "bouton secondaire val-envoyer", "Valider avec le parcours complet");
-    complet.type = "button";
-    complet.addEventListener("click", () => {
+  // Petite ou moyenne évolution : le Directeur peut préférer le parcours complet (prototype et méthode) ; une grande, qui
+  // le suit par défaut, peut être validée en parcours court (essai de coûts du 2026-11-19 : le chemin long était pris sans choix).
+  const parcoursCahier = !methode ? parcoursDuCahier(vueCahier(f).courant) : null;
+  if (parcoursCahier) {
+    const grande = parcoursCahier.taille === "grande";
+    const autre = el("button", "bouton secondaire val-envoyer",
+                     grande ? "Valider en parcours court" : "Valider avec le parcours complet");
+    autre.type = "button";
+    autre.addEventListener("click", () => {
       erreur.textContent = "";
-      return envoyer(demandeCahier(d.fonctionnalite, "valider_complet"), complet);
+      return envoyer(demandeCahier(d.fonctionnalite, grande ? "valider_court" : "valider_complet"), autre);
     });
-    pied.append(complet);
+    pied.append(autre);
   }
   pied.append(valider);
   boite.append(pied);

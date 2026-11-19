@@ -357,8 +357,23 @@ test("une petite évolution : la taille est dite, et le Directeur peut demander 
   V.oublierEnvoyee("dc-t");
 });
 
-test("une grande évolution ou sans taille : pas de bouton de parcours complet", () => {
-  for (const taille of [{valeur: "grande", pourquoi: "Vingt écrans."}, undefined]) {
+test("une grande évolution : le chemin est annoncé et le Directeur peut valider en parcours court", async () => {
+  globalThis.fetch = async () => ({ok: true, text: async () => "x"});
+  const demandes = [];
+  const etat = etatDe([{...DECISION_CAHIER, id: "dc-g"}]);
+  etat.fonctionnalites[0].cahier = {...CAHIER, taille: {valeur: "grande", pourquoi: "Un catalogue de trente entrées."}};
+  const ctx = {etat, barre: {demander: async (d) => { demandes.push(d); return {ok: true}; }}};
+  const {boite} = contenuCahierMethode(ctx, {...etat.fonctionnalites[0].decisions[0], fonctionnalite: "f1"});
+  assert.match(boite.textContent, /Évolution jugée grande : Un catalogue de trente entrées\./);
+  assert.match(boite.textContent, /parcours complet, prototype puis méthode/);
+  assert.equal(lien(boite, "Valider avec le parcours complet"), undefined);   // déjà le chemin pris par défaut
+  await lien(boite, "Valider en parcours court").click();
+  assert.deepEqual(demandes, [{type: "cahier", fonctionnalite: "f1", verdict: "valider_court"}]);
+  V.oublierEnvoyee("dc-g");
+});
+
+test("sans taille jugée : pas de bouton de parcours", () => {
+  for (const taille of [undefined]) {
     const etat = etatDe([DECISION_CAHIER]);
     etat.fonctionnalites[0].cahier = {...CAHIER, ...(taille ? {taille} : {})};
     const {boite} = contenuCahierMethode({etat, barre: {}}, {...DECISION_CAHIER, fonctionnalite: "f1"});

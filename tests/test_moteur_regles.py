@@ -1709,6 +1709,40 @@ class ParcoursSelonLaTaille(Base):
         self.piloter(actions, juges={"decouper": DECOUPAGE})
         self.assertEqual(self.fonc()["etape"], "prototype")
 
+    GRANDE = {"valeur": "grande", "pourquoi": "Un catalogue de trente entrées à saisir, deux écrans neufs."}
+
+    def test_le_directeur_peut_valider_une_grande_evolution_en_parcours_court(self):
+        """Essai de coûts (2026-11-19) : le même texte, jugé « grande » une fois sur huit, prenait le parcours complet
+        (prototype et méthode) sans que la validation du cahier laisse le choix."""
+        self.cahier_de_taille(self.GRANDE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_court")
+        self.assertEqual([(a[0], a[1]) for a in actions], [("juger", "decouper")])
+        self.piloter(actions, juges={"decouper": DECOUPAGE})
+        f = self.fonc()
+        self.assertEqual(f["etape"], "serie")                                  # ni prototype ni méthode
+        self.assertEqual(f["cahier"]["parcours"], regles.PARCOURS_SANS_PROTOTYPE)
+        self.assertEqual(self.taches(etape="prototype"), [])
+
+    def test_valider_court_une_petite_evolution_reste_un_seul_element(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_court")
+        self.assertEqual([a for a in actions if a[0] == "juger"], [])
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_UN_ELEMENT)
+
+    def test_valider_en_complet_une_petite_evolution_suit_toujours_le_parcours_complet(self):
+        self.cahier_de_taille(self.PETITE)
+        d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider_complet")
+        self.assertEqual(self.fonc()["cahier"]["parcours"], regles.PARCOURS_COMPLET)
+
+    def test_la_question_d_une_grande_evolution_annonce_le_parcours_et_le_choix(self):
+        d, actions = self.cadrer(texte="Un catalogue de recettes")
+        self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Cahier prêt."},
+                                         "cahier": {"maquette": [PNG], "etapes": ["Faire"], "taille": self.GRANDE}}])
+        (dec,) = [x for x in self.fonc()["decisions"] if x["genre"] == "valider_cahier"]
+        self.assertIn("grande", dec["texte"])
+        self.assertIn("prototype", dec["texte"])                               # le chemin est annoncé
+        self.assertIn("parcours court", dec["texte"])                          # et le choix aussi
+
     def test_une_grande_evolution_ou_sans_taille_suit_le_parcours_complet(self):
         for taille in ({"valeur": "grande", "pourquoi": "Vingt écrans sur le même modèle."}, None):
             self.setUp()

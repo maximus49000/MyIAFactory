@@ -107,7 +107,12 @@ def _charge_valide(charge):
     sortie = {}
     for cle in ("charge_par_coeur", "memoire_libre_ratio", "conteneurs_outils"):
         v = charge.get(cle)
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        try:
+            if not math.isfinite(v):
+                return None
+        except OverflowError:       # entier démesuré
             return None
         sortie[cle] = v
     return sortie
@@ -117,7 +122,7 @@ def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER
     """Réécrit l'entrée d'un serveur ; sa `charge` (lue par la sonde) est conservée sauf si `charge` est donnée."""
     tout = lire_etat(dossier)
     entree = {"capacites": capacites, "installation": {"en_cours": en_cours, "debut": debut}}
-    ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else _charge_valide(charge)
+    ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else charge
     if ancienne is not None:
         entree["charge"] = ancienne
     tout[serveur_id] = entree
@@ -133,7 +138,7 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
                  "inconnue": "Serveur injoignable ou état illisible."}
 
 
-def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None):
+def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
@@ -164,7 +169,10 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None):
                     caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
             inst = avant.get("installation")
             debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
-            _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=charge)
+            valide = _charge_valide(charge)
+            if valide is not None:
+                valide["maj"] = horloge()           # secondes epoch : une charge trop vieille est ignorée à la lecture
+            _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=valide)
         finally:
             try:
                 verrou.unlink()

@@ -9,6 +9,7 @@ import math
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 
 from . import plateforme as modplateforme
@@ -19,6 +20,8 @@ STATUTS_PRESENTS = ("presente", "fait")
 _ROUTE = re.compile(r"/api/serveurs(?:/([^/]+)/(sonder|apercu|installer))?")
 DELAI_APERCU_S = 150
 MAX_APERCUS = 2
+AGE_MAX_CHARGE_S = 900   # une charge sondée il y a plus longtemps est ignorée
+HORLOGE = time.time
 LIGNE_CLE_MAX = 4096
 
 
@@ -159,7 +162,7 @@ class Travaux:
             joint = not all(s == "inconnue" for s in etat.values())
             charge = etat_mod.charge(serveur, **self._options_ssh()) if joint else None     # lecture seule, hors verrou
             inst.enregistrer_sonde(d, serveur, etat, charge=charge)
-            if all(s == "inconnue" for s in etat.values()):
+            if not joint:
                 return "Serveur injoignable : l'état de ses capacités est inconnu."
             return None
         return self.lancer("sonder", serveur, travail)
@@ -269,10 +272,15 @@ def _nombre_01(valeur):
     return min(1.0, max(0.0, v)) if math.isfinite(v) else None
 
 
-def _charge_serveur(etat, serveur_id):
+def _charge_serveur(etat, serveur_id, maintenant):
     """La charge (0 à 1) que la sonde a rangée dans l'état du serveur, ou None si elle n'y est pas ou est illisible."""
     brut = etat.get(serveur_id, {}).get("charge") if isinstance(etat.get(serveur_id), dict) else None
     if not isinstance(brut, dict):
+        return None
+    maj = brut.get("maj")
+    if isinstance(maj, bool) or not isinstance(maj, (int, float)) or not math.isfinite(maj):
+        return None
+    if not -60 <= maintenant - maj <= AGE_MAX_CHARGE_S:         # trop vieille (ou datée du futur) : ignorée
         return None
     par_coeur, libre = _nombre_01(brut.get("charge_par_coeur")), _nombre_01(brut.get("memoire_libre_ratio"))
     mesures = [m for m in (par_coeur, None if libre is None else 1.0 - libre) if m is not None]
@@ -286,7 +294,7 @@ def mesures_pour(action, serveurs, etat, serveur_id=None):
     choisis = [s for s in serveurs if s.id == serveur_id]       # le serveur retenu pour l'action, pas « un serveur quelconque »
     joignable = any(not all(v == "inconnue" for v in _capacites(etat.get(s.id, {})).values()) for s in choisis)
     return _recommandation().Mesures(duree_min={}, charge_poste=None, quota_github_restant=None, serveur_joignable=joignable,
-                                     charge_serveur=_charge_serveur(etat, serveur_id) if serveur_id else None)
+                                     charge_serveur=_charge_serveur(etat, serveur_id, HORLOGE()) if serveur_id else None)
 
 
 def _action_connue(action):

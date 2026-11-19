@@ -71,7 +71,7 @@ class TestChargeDansEtat(Base):
 
     def test_sonde_enregistre_la_charge(self):
         inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
-        self.assertEqual(self.etat()["charge"], self.CHARGE)
+        self.assertEqual({k: v for k, v in self.etat()["charge"].items() if k != "maj"}, self.CHARGE)
 
     def test_lecture_de_charge_ratee_ne_stocke_rien_et_ne_leve_pas(self):
         inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
@@ -80,10 +80,21 @@ class TestChargeDansEtat(Base):
         inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge="n'importe quoi")
         self.assertNotIn("charge", self.etat())
 
+    def test_charge_avec_entier_demesure_est_refusee(self):
+        for bad in (10 ** 400, float("nan"), float("inf")):
+            inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge={**self.CHARGE, "charge_par_coeur": bad})
+            self.assertNotIn("charge", self.etat())
+
+    def test_la_charge_est_datee_et_la_date_conservee(self):
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE, horloge=lambda: 1234.5)
+        self.assertEqual(self.etat()["charge"], {**self.CHARGE, "maj": 1234.5})
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {}, False, "")
+        self.assertEqual(self.etat()["charge"]["maj"], 1234.5)
+
     def test_une_ecriture_d_installation_conserve_la_charge(self):
         inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
         inst._ecrire_etat(self.dossier, SERVEUR.id, {}, False, "")
-        self.assertEqual(self.etat()["charge"], self.CHARGE)
+        self.assertEqual({k: v for k, v in self.etat()["charge"].items() if k != "maj"}, self.CHARGE)
 
 
 class TestApercu(Base):

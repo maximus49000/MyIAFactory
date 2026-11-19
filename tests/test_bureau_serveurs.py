@@ -2,6 +2,7 @@
 l'installation en arrière-plan. Jamais de vrai `ssh` ni de vrai `ssh-keygen` : un faux ssh et un faux moteur sont injectés."""
 import json
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,6 +20,8 @@ class FauxSsh:
     """Un `ssh` de poche : répond à l'accès (`sudo`) et aux sondes (`CAPACITES` : id -> 0 présente, 1 absente)."""
     CHANGEMENT_CLE = "REMOTE HOST IDENTIFICATION HAS CHANGED"
 
+    CHARGE_SORTIE = "load=1.00\ncpu=4\nmemtotal=8000000\nmemlibre=6000000\nconteneurs=2\n"
+
     def __init__(self, presentes=("base",), accessible=True):
         self.presentes, self.accessible, self.appels = set(presentes), accessible, []
 
@@ -26,6 +29,8 @@ class FauxSsh:
         self.appels.append((hote, commande))
         if not self.accessible:
             return 255, "", "injoignable"
+        if "/proc/loadavg" in (stdin or ""):
+            return 0, self.CHARGE_SORTIE, ""
         if "sudo -n" in (stdin or ""):
             return 0, "user=bob\nsudo=0\n", ""
         if "echo" in (stdin or "") and "=0" in (stdin or ""):
@@ -196,7 +201,7 @@ class TestLecture(AvecServeurs):
         self.declarer()
         self.ecrire_etat(base="presente", **{"android-build": "presente"})
         tout = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))
-        tout["mon-serveur"]["charge"] = charge
+        tout["mon-serveur"]["charge"] = {"maj": time.time(), **charge}
         (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
         return self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]
 
@@ -219,15 +224,56 @@ class TestLecture(AvecServeurs):
         f = bserveurs._nombre_01
         self.assertEqual((f(-3), f(0.4), f(7), f(float("nan")), f(float("inf")), f(True), f("0.2")), (0.0, 0.4, 1.0, None, None, None, None))
 
+    def _ecrire_charge(self, charge):
+        tout = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))
+        tout["mon-serveur"]["charge"] = charge
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
+
+    def test_charge_trop_vieille_ou_sans_date_est_ignoree(self):
+        self.declarer()
+        for maj in (time.time() - 901, None, "hier", time.time() + 3600):
+            with self.subTest(maj=maj):
+                self.ecrire_etat(base="presente", **{"android-build": "presente"})
+                self._ecrire_charge({"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.9, "maj": maj})
+                e = self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]
+                self.assertNotEqual(e["niveau"], "recommande")
+
+    def test_charge_recente_avec_horloge_injectee(self):
+        self.declarer()
+        self.ecrire_etat(base="presente", **{"android-build": "presente"})
+        self._ecrire_charge({"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.9, "maj": 1000.0})
+        for maintenant, attendu in ((1000 + 899, "recommande"), (1000 + 901, "possible")):
+            with mock.patch.object(bserveurs, "HORLOGE", lambda m=maintenant: m):
+                self.assertEqual(self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]["niveau"], attendu)
+
+    def test_sonder_range_la_charge_lue_par_ssh(self):
+        self.declarer()
+        self.ssh.appels.clear()
+        self.poster("/api/serveurs/mon-serveur/sonder", {})
+        self.travaux.attendre()
+        charge = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))["mon-serveur"]["charge"]
+        self.assertEqual((charge["charge_par_coeur"], charge["memoire_libre_ratio"], charge["conteneurs_outils"]), (0.25, 0.75, 2))
+        self.assertLess(abs(charge["maj"] - time.time()), 60)
+        self.assertEqual(len(self.ssh.appels), 2)     # sondes puis charge : l'option ssh injectée atteint la charge
+
+    def test_sonder_serveur_injoignable_ne_garde_aucune_charge_perimee(self):
+        self.declarer()
+        self.poster("/api/serveurs/mon-serveur/sonder", {})
+        self.travaux.attendre()
+        self.ssh.accessible = False
+        self.poster("/api/serveurs/mon-serveur/sonder", {})
+        self.travaux.attendre()
+        self.assertNotIn("charge", json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))["mon-serveur"])
+
     def test_lieux_serveur_recommande_avec_charge_lue_dans_l_etat(self):
         self.declarer()
         self.ecrire_etat(base="presente", **{"android-build": "presente"})
         tout = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))
-        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.8, "conteneurs_outils": 0}
+        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.8, "conteneurs_outils": 0, "maj": time.time()}
         (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
         e = self.json("/api/serveurs/lieux?actions=apk")["apk"]
         self.assertEqual((e["serveur"]["niveau"], e["serveur"]["fondee_sur"]), ("recommande", "regles"))   # seule charge connue, basse
-        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.99, "memoire_libre_ratio": 0.8}
+        tout["mon-serveur"]["charge"] = {"charge_par_coeur": 0.99, "memoire_libre_ratio": 0.8, "maj": time.time()}
         (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
         self.assertEqual(self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]["niveau"], "deconseille")
 

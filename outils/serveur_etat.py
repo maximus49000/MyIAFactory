@@ -106,14 +106,15 @@ def refus_acces(serveur, ssh=plateforme_ssh, runner=None):
     return None
 
 
-_SCRIPT_CHARGE = ('read a b c rest </proc/loadavg; echo "load=$a"\n'
+_SCRIPT_CHARGE = ('read a b c rest </proc/loadavg; echo "load=$b"\n'
                   'echo "cpu=$(nproc)"\n'
                   "awk '/^MemTotal:/{t=$2} /^MemAvailable:/{l=$2} END{print \"memtotal=\" t; print \"memlibre=\" l}' /proc/meminfo\n"
                   'echo "conteneurs=$(docker ps -q 2>/dev/null | wc -l | tr -d \' \')"\n')
 
 
 def charge(serveur, ssh=plateforme_ssh, runner=None):
-    """{"charge_par_coeur", "memoire_libre_ratio", "conteneurs_outils"} ou None si injoignable ou illisible."""
+    """{"charge_par_coeur", "memoire_libre_ratio", "conteneurs_outils"} ou None si injoignable ou illisible.
+    La charge est la moyenne sur 5 minutes (plus stable que celle d'une minute)."""
     try:
         code, sortie, _ = _executer(serveur, _SCRIPT_CHARGE, ssh, runner, delai=30)
         if code != 0:

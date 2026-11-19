@@ -7,5 +7,7 @@
   "gradle": "8.7",
   "node": "22",
   "claude_code": "2.1.328",
+  "android_sdk": {"platform": "android-36", "build_tools": "36.0.0", "emulator_image": "system-images;android-34;google_apis;x86_64"},
+  "unity_cli": "script officiel https://unity.com/install.sh telecharge puis verifie (non vide, #!) avant execution ; il telecharge lui-meme le binaire et verifie son SHA-256 ; installation dans ~/.local/bin/unity (version non epinglee : suit l'outil officiel)",
   "unity_hub": "depot apt https://hub.unity3d.com/linux/repos/deb stable main, cle https://hub.unity3d.com/linux/keys/public, paquet unityhub (version non epinglee : suit le depot officiel)"
 }

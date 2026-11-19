@@ -1,4 +1,5 @@
 """Script de mise en place du serveur (`serveur_ovh/mise_en_place.sh`) : lancé avec le bash du poste, en `--simuler`."""
+import hashlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent / "serveur_ovh"
 SCRIPT = RACINE / "mise_en_place.sh"
 ETAPES = ("durcissement", "docker", "images", "licence", "etat")
+NOUVELLES = ("android_build", "android_emulateur", "unity_cli")
 CLES = {"etape", "statut", "detail", "versions", "disque_libre_go"}
 
 
@@ -528,6 +530,353 @@ class TestScriptSimule(unittest.TestCase):
                 self.assertIn("images", d["detail"])
 
 
+ZIP_CONTENU = b"ZIPFAKE\n"
+NUMERO_RECENT = "13000000"
+
+
+class Monde:
+    """Faux serveur pour les étapes android_build / android_emulateur / unity_cli / docker : de faux binaires dans le PATH
+    journalisent tous leurs appels ; rien n'atteint ni le réseau ni un vrai sudo. L'état (SDK, groupe kvm, paquets) persiste
+    d'un lancement à l'autre dans le même Monde, pour tester l'idempotence."""
+
+    def __init__(self, manifeste="ok", archive="ok", sha_manifeste=None, unity="ok", unzip_echec=False, jdk=True,
+                 paquets_absents=False, kvm=True, kvm_membre=False, sdkmanager_echec=False, unity_connecte=False):
+        self.opt = dict(CURL_MANIFESTE=manifeste, CURL_ZIP=archive, CURL_UNITY=unity, UNZIP_ECHEC="1" if unzip_echec else "",
+                        SDKMANAGER_ECHEC="1" if sdkmanager_echec else "", UNITY_CONNECTE="1" if unity_connecte else "",
+                        PAQUETS_ABSENTS="1" if paquets_absents else "")
+        self.sha = sha_manifeste or hashlib.sha1(ZIP_CONTENU).hexdigest()
+        self.jdk, self.kvm, self.kvm_membre = jdk, kvm, kvm_membre
+
+    def __enter__(self):
+        self._t = tempfile.TemporaryDirectory()
+        t = self.t = Path(self._t.name)
+        self.journal_fichier, self.stdin_fichier = t / "appels.txt", t / "stdin.txt"
+        self.home, self.jvm, self.etat, self.faux = t / "home", t / "jvm", t / "etat", t / "bin"
+        for d in (self.home, self.jvm, self.etat, self.faux, t / "tmp"):
+            d.mkdir()
+        self.sdk = self.home / "android-sdk"
+        j, si, tp, e = self.journal_fichier.as_posix(), self.stdin_fichier.as_posix(), t.as_posix(), self.etat.as_posix()
+        (t / "archive.zip").write_bytes(ZIP_CONTENU)
+        (t / "manifeste.xml").write_text(
+            '<sdk:sdk-repository xmlns:sdk="x"><remotePackage path="cmdline-tools;latest"><archives>\n'
+            f'<archive><complete><size>1</size><checksum type="sha1">{"b" * 40}</checksum>\n'
+            '   <url>commandlinetools-linux-11000000_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
+            f'<archive><complete><size>1</size><checksum type="sha1">{self.sha}</checksum>\n'
+            f'   <url>commandlinetools-linux-{NUMERO_RECENT}_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
+            f'<archive><complete><size>1</size><checksum type="sha1">{"c" * 40}</checksum>\n'
+            '   <url>commandlinetools-mac-99999999_latest.zip</url></complete><host-os>macosx</host-os></archive>\n'
+            '</archives></remotePackage></sdk:sdk-repository>\n', newline="\n")
+        (t / "sdkmanager.fixe").write_text(
+            '#!/bin/sh\n'
+            f'echo "sdkmanager $@" >> "{j}"\necho "JAVA_HOME=$JAVA_HOME" >> "{j}"\n'
+            'root=""; lic=""\n'
+            'for a in "$@"; do case "$a" in --sdk_root=*) root="${a#--sdk_root=}";; --licenses) lic=1;; esac; done\n'
+            'if [ -n "$lic" ]; then head -n 1 > /dev/null; exit 0; fi\n'
+            f'cat >> "{si}"\n'
+            '[ -n "$SDKMANAGER_ECHEC" ] && exit 1\n'
+            'for a in "$@"; do case "$a" in\n'
+            '  platform-tools) mkdir -p "$root/platform-tools"; echo "#!/bin/sh" > "$root/platform-tools/adb"; chmod 755 "$root/platform-tools/adb";;\n'
+            '  platforms\\;*) mkdir -p "$root/platforms/${a#platforms;}";;\n'
+            '  build-tools\\;*) mkdir -p "$root/build-tools/${a#build-tools;}";;\n'
+            '  emulator) mkdir -p "$root/emulator"; echo "#!/bin/sh" > "$root/emulator/emulator"; chmod 755 "$root/emulator/emulator";;\n'
+            '  system-images\\;*) mkdir -p "$root/$(echo "$a" | tr ";" "/")";;\n'
+            'esac; done\nexit 0\n', newline="\n")
+        (t / "install.sh").write_text(
+            '#!/bin/bash\n'
+            f'echo "installeur-unity-execute" >> "{j}"\ncat >> "{si}"\n'
+            'mkdir -p "$HOME/.local/bin"\n'
+            "cat > \"$HOME/.local/bin/unity\" <<'EOT'\n#!/bin/sh\n"
+            f'echo "unity $@" >> "{j}"\n'
+            'case "$1" in --version) echo "unity 1.0";; whoami) [ "$UNITY_CONNECTE" = 1 ];; '
+            f'install) cat >> "{si}";; esac\nEOT\n'
+            'chmod 755 "$HOME/.local/bin/unity"\n', newline="\n")
+        jdk_bin = f"{self.jvm.as_posix()}/java-17-openjdk-amd64/bin"
+        corps = {
+            "sudo": 'while case "$1" in *=*) true;; *) false;; esac; do shift; done\nexec "$@"',
+            "curl": ('out=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done\n'
+                     'case "$url" in\n'
+                     f'  */repository2-3.xml) case "$CURL_MANIFESTE" in http) exit 22;; vide) : > "$out";; sans) echo "<xml/>" > "$out";; *) cp "{tp}/manifeste.xml" "$out";; esac;;\n'
+                     f'  */commandlinetools-linux-*) case "$CURL_ZIP" in http) exit 22;; vide) : > "$out";; tronque) printf "ZIPFA" > "$out"; exit 18;; corrompu) echo "ZIPFAKE-AUTRE" > "$out";; *) cp "{tp}/archive.zip" "$out";; esac;;\n'
+                     f'  */install.sh) case "$CURL_UNITY" in http) exit 22;; vide) : > "$out";; sanshebang) echo "echo coucou" > "$out";; *) cp "{tp}/install.sh" "$out";; esac;;\n'
+                     '  *) exit 22;;\nesac'),
+            "unzip": ('[ -n "$UNZIP_ECHEC" ] && exit 1\nf=""; d=""\n'
+                      'while [ $# -gt 0 ]; do case "$1" in -q) shift;; -d) d="$2"; shift 2;; *) f="$1"; shift;; esac; done\n'
+                      'grep -q ZIPFAKE "$f" || exit 9\n'
+                      f'mkdir -p "$d/cmdline-tools/bin" && cp "{tp}/sdkmanager.fixe" "$d/cmdline-tools/bin/sdkmanager" && chmod 755 "$d/cmdline-tools/bin/sdkmanager"'),
+            "zip": "exit 0",
+            "dpkg": f'[ -e "{e}/apt" ] && exit 0\n[ "$PAQUETS_ABSENTS" = 1 ] && exit 1\nexit 0',
+            "apt-get": (f'case "$*" in *install*) touch "{e}/apt"; case "$*" in *openjdk*) mkdir -p "{jdk_bin}"; '
+                        f'echo "#!/bin/sh" > "{jdk_bin}/java"; chmod 755 "{jdk_bin}/java";; esac;; esac\nexit 0'),
+            "usermod": f'touch "{e}/kvm"',
+            "id": f'case "$1" in -un) echo ubuntu;; -nG) if [ -e "{e}/kvm" ]; then echo "ubuntu kvm"; else echo ubuntu; fi;; esac',
+            "docker": "exit 0",
+        }
+        for nom, texte in corps.items():
+            journalise = f'echo "{nom} $@" >> "{j}"\n' if nom != "id" else ""      # `id` est une simple lecture : hors journal
+            (self.faux / nom).write_text("#!/bin/sh\n" + journalise + texte + "\n", newline="\n")
+            (self.faux / nom).chmod(0o755)
+        if self.jdk:
+            java = self.jvm / "java-17-openjdk-amd64" / "bin" / "java"
+            java.parent.mkdir(parents=True)
+            java.write_text("#!/bin/sh\n", newline="\n")
+            java.chmod(0o755)
+        if self.kvm:
+            (t / "kvm").write_text("", newline="\n")
+        if self.kvm_membre:
+            (self.etat / "kvm").write_text("", newline="\n")
+        return self
+
+    def __exit__(self, *a):
+        self._t.cleanup()
+
+    def installer_sdkmanager(self):
+        """Une installation de cmdline-tools déjà valide (avec un marqueur pour constater qu'on n'y touche pas)."""
+        d = self.sdk / "cmdline-tools" / "latest"
+        (d / "bin").mkdir(parents=True)
+        shutil.copy(self.t / "sdkmanager.fixe", d / "bin" / "sdkmanager")
+        (d / "bin" / "sdkmanager").chmod(0o755)
+        (d / "marqueur").write_text("ancienne", newline="\n")
+        return d
+
+    def lancer(self, etape, simuler=False, entree="", env=None):
+        e = dict(os.environ, HOME=self.home.as_posix(), PATH=self.faux.as_posix() + os.pathsep + os.environ["PATH"],
+                 TMPDIR=(self.t / "tmp").as_posix(), DISQUE_LIBRE_GO="500", JVM_RACINE=self.jvm.as_posix(),
+                 KVM_PERIPH=(self.t / "kvm").as_posix(), UNITY_EDITEUR="", JAVA_HOME="", **self.opt)
+        e.update(env or {})
+        args = ["bash", SCRIPT.as_posix(), "--etape", etape] + (["--simuler"] if simuler else [])
+        r = subprocess.run(args, input=entree, capture_output=True, text=True, encoding="utf-8", env=e, timeout=60)
+        lignes = [x for x in r.stdout.splitlines() if x.strip()]
+        assert len(lignes) == 1, (r.stdout, r.stderr)
+        self.derniere = r
+        return json.loads(lignes[0])
+
+    @property
+    def journal(self):
+        return self.journal_fichier.read_text(encoding="utf-8") if self.journal_fichier.exists() else ""
+
+    def appels(self, prefixe):
+        return [x for x in self.journal.splitlines() if x.startswith(prefixe)]
+
+    def restes(self, dossier):
+        return sorted(x.name for x in dossier.iterdir()) if dossier.exists() else []
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEtapesCapacites(unittest.TestCase):
+    def test_nouvelles_etapes_json_valide_en_simulation(self):
+        for etape in NOUVELLES + ("docker",):
+            with self.subTest(etape=etape), Monde() as m:
+                d = m.lancer(etape, simuler=True)
+                self.assertEqual(m.derniere.returncode, 0, m.derniere.stderr)
+                self.assertEqual(set(d), CLES)
+                self.assertEqual(d["etape"], etape)
+                self.assertEqual(d["statut"], "a_faire")
+                self.assertIn("simul", d["detail"].lower())
+                self.assertEqual(d["disque_libre_go"], 500)
+                self.assertEqual(m.journal, "")                 # rien d'appelé : ni apt, ni curl, ni sudo
+                self.assertEqual(list(m.home.iterdir()), [])
+
+    # --- android_build ---------------------------------------------------------
+
+    def test_android_build_installe_le_sdk_dedie(self):
+        with Monde() as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            for rel in ("platform-tools/adb", "platforms/android-36", "build-tools/36.0.0", "cmdline-tools/latest/bin/sdkmanager"):
+                self.assertTrue((m.sdk / rel).exists(), rel)
+            self.assertEqual(m.restes(m.sdk / "cmdline-tools"), ["latest"])
+            curls = m.appels("curl ")
+            self.assertEqual(len(curls), 2, curls)
+            self.assertIn("-fsSL https://dl.google.com/android/repository/repository2-3.xml -o ", curls[0])
+            self.assertIn(f"-fsSL https://dl.google.com/android/repository/commandlinetools-linux-{NUMERO_RECENT}_latest.zip -o ", curls[1])
+            sdkm = m.appels("sdkmanager ")
+            self.assertTrue(any("--licenses" in x for x in sdkm), sdkm)
+            installe = [x for x in sdkm if "--licenses" not in x]
+            self.assertEqual(len(installe), 1, sdkm)
+            self.assertRegex(installe[0], r"--sdk_root=\S*/home/android-sdk ")
+            for paquet in ("platform-tools", "platforms;android-36", "build-tools;36.0.0"):
+                self.assertIn(paquet, installe[0])
+            self.assertIn(f"JAVA_HOME={(m.jvm / 'java-17-openjdk-amd64').as_posix()}", m.journal)
+            self.assertEqual(m.appels("apt-get "), [])            # unzip, zip et JDK déjà présents : rien à installer
+
+    def test_android_build_installe_unzip_zip_et_jdk17_s_ils_manquent(self):
+        with Monde(paquets_absents=True, jdk=False) as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            installs = [x for x in m.appels("apt-get ") if " install " in x]
+            self.assertEqual(len(installs), 1, installs)
+            for paquet in ("unzip", "zip", "openjdk-17-jdk-headless"):
+                self.assertIn(paquet, installs[0])
+
+    def test_android_build_manifest_introuvable_est_bloque(self):
+        for defaut in ("http", "vide", "sans"):
+            with self.subTest(manifeste=defaut), Monde(manifeste=defaut) as m:
+                d = m.lancer("android_build")
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertIn("anifeste", d["detail"])
+                self.assertEqual(len(m.appels("curl ")), 1)       # l'archive n'est jamais demandée
+                self.assertEqual(m.restes(m.sdk / "cmdline-tools"), [])
+                self.assertEqual(m.appels("sdkmanager "), [])
+
+    def test_android_build_telechargement_tronque_est_bloque_sans_rien_laisser(self):
+        for defaut, extra in (("tronque", {}), ("http", {}), ("vide", {}), ("ok", {"unzip_echec": True})):
+            with self.subTest(archive=defaut, extra=extra), Monde(archive=defaut, **extra) as m:
+                d = m.lancer("android_build")
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertEqual(m.restes(m.sdk / "cmdline-tools"), [])     # ni latest, ni temporaire
+                self.assertEqual(m.appels("sdkmanager "), [])
+
+    def test_android_build_verifie_le_sha1_du_manifest(self):
+        for nom, args in (("manifeste faux", dict(sha_manifeste="0" * 40)), ("archive corrompue", dict(archive="corrompu"))):
+            with self.subTest(cas=nom), Monde(**args) as m:
+                d = m.lancer("android_build")
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertIn("SHA-1", d["detail"])
+                self.assertEqual(m.restes(m.sdk / "cmdline-tools"), [])     # pas de mv en place, temporaire supprimé
+                self.assertEqual(m.appels("unzip "), [])                    # jamais extraite
+                self.assertEqual(m.appels("sdkmanager "), [])
+                self.assertFalse((m.sdk / "platform-tools").exists())
+
+    def test_android_build_ne_touche_pas_une_installation_valide(self):
+        with Monde(manifeste="http") as m:
+            ancienne = m.installer_sdkmanager()
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual((ancienne / "marqueur").read_text(), "ancienne")
+            self.assertEqual(m.appels("curl "), [])
+
+    def test_android_build_deuxieme_passage_ne_telecharge_rien(self):
+        with Monde() as m:
+            self.assertEqual(m.lancer("android_build")["statut"], "fait")
+            avant = m.journal
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.journal, avant)                       # aucun nouvel appel : ni curl, ni apt, ni sdkmanager
+
+    # --- android_emulateur -----------------------------------------------------
+
+    def test_android_emulateur_sans_android_build_est_a_faire(self):
+        with Monde() as m:
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "a_faire", d["detail"])
+            self.assertIn("android-build", d["detail"])
+            self.assertEqual(m.appels("sdkmanager "), [])
+            self.assertEqual(m.appels("sudo "), [])
+
+    def test_android_emulateur_exige_dev_kvm(self):
+        with Monde(kvm=False) as m:
+            self.assertEqual(m.lancer("android_build")["statut"], "fait")
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("KVM indisponible", d["detail"])
+            self.assertEqual(m.appels("sudo usermod"), [])
+            self.assertFalse((m.sdk / "emulator").exists())
+
+    def test_android_emulateur_installe_et_ajoute_au_groupe_kvm(self):
+        with Monde() as m:
+            m.lancer("android_build")
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("sudo usermod"), ["sudo usermod -aG kvm ubuntu"])
+            self.assertIn("prochaine connexion SSH", d["detail"])
+            self.assertTrue((m.sdk / "emulator" / "emulator").exists())
+            self.assertTrue((m.sdk / "system-images" / "android-34" / "google_apis" / "x86_64").is_dir())
+            self.assertTrue(any(" emulator " in x and "system-images;android-34;google_apis;x86_64" in x for x in m.appels("sdkmanager ")))
+            avant = m.journal
+            d = m.lancer("android_emulateur")                        # deuxième passage : rien à refaire
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.journal, avant)
+
+    def test_android_emulateur_membre_du_groupe_kvm_ne_refait_pas_usermod(self):
+        with Monde(kvm_membre=True) as m:
+            m.lancer("android_build")
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("sudo usermod"), [])
+            self.assertNotIn("prochaine connexion", d["detail"])
+
+    def test_android_emulateur_echec_sdkmanager_est_bloque(self):
+        with Monde() as m:
+            m.lancer("android_build")
+            m.opt["SDKMANAGER_ECHEC"] = "1"
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+
+    # --- unity_cli -------------------------------------------------------------
+
+    def test_unity_cli_installe_le_cli_sans_editeur(self):
+        with Monde() as m:
+            d = m.lancer("unity_cli")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertIn("installez un éditeur", d["detail"])
+            self.assertIn("Unity Hub", d["detail"])
+            self.assertTrue((m.home / ".local" / "bin" / "unity").exists())
+            self.assertEqual(m.appels("installeur-unity-execute"), ["installeur-unity-execute"])
+            self.assertEqual(len(m.appels("curl -fsSL https://unity.com/install.sh -o ")), 1, m.journal)
+            self.assertEqual([x for x in m.restes(m.home / ".local" / "bin") if x.startswith(".")], [])   # temporaire supprimé
+            self.assertEqual(m.appels("unity install"), [])          # aucun éditeur sans compte connecté
+            avant = m.journal
+            d = m.lancer("unity_cli")                                # idempotent : pas de nouveau téléchargement
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("curl "), m.appels("curl ")[:1])
+            self.assertEqual(m.journal.count("installeur-unity-execute"), 1)
+            self.assertTrue(m.journal.startswith(avant))
+
+    def test_unity_cli_exige_un_script_non_vide_avec_shebang(self):
+        for defaut in ("vide", "sanshebang", "http"):
+            with self.subTest(script=defaut), Monde(unity=defaut) as m:
+                d = m.lancer("unity_cli")
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertEqual(m.appels("installeur-unity-execute"), [])   # jamais exécuté
+                self.assertEqual(m.restes(m.home / ".local" / "bin"), [])
+                self.assertFalse((m.home / ".local" / "bin" / "unity").exists())
+
+    def test_unity_cli_n_execute_pas_un_script_non_verifie(self):
+        with Monde(unity="sanshebang") as m:
+            d = m.lancer("unity_cli")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertNotIn("coucou", m.derniere.stdout + m.derniere.stderr)
+
+    def test_unity_cli_editeur_installe_seulement_si_compte_connecte(self):
+        with Monde(unity_connecte=True) as m:
+            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "6000.6.7f1"})
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("unity install"), ["unity install 6000.6.7f1"])
+        with Monde(unity_connecte=False) as m:
+            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "6000.6.7f1"})
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("unity install"), [])
+        with Monde(unity_connecte=True) as m:
+            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "1; rm -rf /"})
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertEqual(m.appels("unity install"), [])
+
+    # --- docker : unzip et zip ---------------------------------------------------
+
+    def test_docker_installe_unzip_et_zip(self):
+        with Monde(paquets_absents=True) as m:
+            d = m.lancer("docker")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            installs = [x for x in m.appels("apt-get ") if " install " in x]
+            self.assertEqual(len(installs), 1, installs)
+            self.assertTrue(installs[0].endswith("unzip zip"), installs)
+        with Monde() as m:                                           # déjà présents : idempotent
+            d = m.lancer("docker")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("apt-get "), [])
+
+    # --- stdin fermé -------------------------------------------------------------
+
+    def test_nouvelles_etapes_gardent_stdin_ferme(self):
+        with Monde(unity_connecte=True) as m:
+            for etape in ("android_build", "android_emulateur", "unity_cli", "docker"):
+                d = m.lancer(etape, entree="ligne-secrete-12345\n", env={"UNITY_EDITEUR": "6000.6.7f1"} if etape == "unity_cli" else None)
+                self.assertEqual(d["statut"], "fait", (etape, d["detail"]))
+                self.assertNotIn("ligne-secrete", m.derniere.stdout + m.derniere.stderr)
+            self.assertNotIn("ligne-secrete", m.journal)
+            self.assertEqual(m.stdin_fichier.read_text() if m.stdin_fichier.exists() else "", "")
+
+
 class TestTexteDuScript(unittest.TestCase):
     def setUp(self):
         self.texte = SCRIPT.read_text(encoding="utf-8")
@@ -642,6 +991,37 @@ class TestTexteDuScript(unittest.TestCase):
             for ligne in origines:
                 self.assertRegex(ligne, r"FROM \S+:\S+", ligne)
         self.assertIn(versions["unity_gameci"], self.texte)
+
+    def test_sdk_android_script_et_versions_json_concordent(self):
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        sdk = versions["android_sdk"]
+
+        def script(nom):
+            m = re.search(rf'^{nom}="([^"]*)"', self.texte, re.M)
+            self.assertIsNotNone(m, nom)
+            return m.group(1)
+
+        self.assertEqual(script("V_SDK_PLATEFORME"), sdk["platform"])
+        self.assertEqual(script("V_SDK_BUILD_TOOLS"), sdk["build_tools"])
+        self.assertEqual(script("V_SDK_IMAGE_EMULATEUR"), sdk["emulator_image"])
+        self.assertIn("unity.com/install.sh", versions["unity_cli"])
+
+    def test_usage_et_dispatch_listent_les_nouvelles_etapes(self):
+        usage = next(x for x in self.texte.splitlines() if x.startswith("# Usage"))
+        for etape in NOUVELLES:
+            self.assertIn(etape, usage)
+            self.assertIn(f"  {etape}) etape_{etape} ;;", self.texte)
+
+    def test_unity_cli_n_utilise_jamais_curl_pipe_bash(self):
+        code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))
+        self.assertNotRegex(code, r"\|\s*(sudo\s+)?(ba|z)?sh\b")
+        unity = code[code.index("etape_unity_cli()"):code.index("etape_etat()")]
+        self.assertIn('bash "$tmp"', unity)
+        self.assertLess(unity.index("head -c 2"), unity.index('bash "$tmp"'))
+
+    def test_nouvelles_etapes_sans_set_e(self):
+        code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))
+        self.assertNotRegex(code, r"(?m)^\s*set -[a-z]*e")
 
     def test_fins_de_ligne_lf(self):
         self.assertNotIn(b"\r", SCRIPT.read_bytes())

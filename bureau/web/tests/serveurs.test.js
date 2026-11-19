@@ -127,6 +127,65 @@ test("les capacites se lisent : presente, absente, inconnue, bloquee", () => {
   for (const mot of [/présente/, /absente/, /inconnue/, /bloquée/, /pas d'éditeur/]) assert.match(t, mot);
 });
 
+test("une capacite installee (statut fait) se lit presente", () => {
+  const e = {serveurs: [{...SERVEUR, capacites: {base: "fait", "android-build": {statut: "fait"}}}], rejets: []};
+  const c = ecranServeurs(e, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX_OK});
+  assert.equal(c.tous((n) => n.className.includes("capacite-badge-presente")).length, 2);
+  assert.doesNotMatch(c.textContent, /inconnue|fait/);
+});
+
+test("un relevé pendant un aperçu ouvert garde la case cochee et l aperçu", async () => {
+  const m = minuterie();
+  const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: {base: "presente"}}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  const case1 = caseAccord(c);
+  case1.checked = true;
+  const lancer = boutons(c, "Lancer l'installation")[0];
+  await m.tic();
+  assert.equal(caseAccord(c), case1);
+  assert.equal(case1.checked, true);
+  assert.equal(boutons(c, "Lancer l'installation")[0], lancer);
+  assert.match(c.textContent, /Capacités à installer/);
+});
+
+test("pendant un envoi en cours, aucun second accord vrai ne peut partir", async () => {
+  const m = minuterie();
+  const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
+  let liberer;
+  const attente = new Promise((r) => { liberer = r; });
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "POST /api/serveurs/s1/installer": async () => { await attente; return reponse(202, {demarre: true}); },
+    "GET /api/serveurs": reponse(200, ETAT), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  caseAccord(c).checked = true;
+  const envoi = clic(boutons(c, "Lancer l'installation")[0]);      // en vol
+  await m.tic();                                                   // un relevé arrive pendant l'envoi
+  const neuf = boutons(c, "Lancer l'installation")[0];
+  if (neuf) { caseAccord(c).checked = true; assert.equal(neuf.disabled, true); await clic(neuf); }
+  liberer();
+  await envoi;
+  assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer") && a.corps.accord === true).length, 1);
+});
+
+test("la veille d un test dure longtemps puis dit que le test peut encore tourner", async () => {
+  const m = minuterie();
+  const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}), "GET /api/serveurs": reponse(200, ETAT), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Tester la connexion")[0]);
+  let lectures = 0;
+  while (m.taches.length && lectures < 100) { await m.tic(); lectures++; }
+  assert.ok(lectures >= 20 && lectures <= 25, `lectures : ${lectures}`);
+  assert.match(c.textContent, /Le test peut encore être en cours : actualisez dans un instant\./);
+});
+
 test("l accord n est jamais envoye vrai sans la case cochee", async () => {
   const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
   const {c, f} = await ouvrirApercu(apercu);

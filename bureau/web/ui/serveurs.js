@@ -6,7 +6,8 @@
 import {el} from "./dom.js";
 
 const INTERVALLE_MS = 3000;
-const RELEVES_SANS_TRAVAIL = 5;   // relevés sans travail en cours avant de cesser de guetter une sonde ou une installation lancée
+const RELEVES_SANS_TRAVAIL = 20;  // relevés sans travail en cours avant de cesser de guetter une sonde ou une installation lancée (environ 1 min)
+export const MESSAGE_TEST_ENCORE = "Le test peut encore être en cours : actualisez dans un instant.";
 const tableau = (v) => (Array.isArray(v) ? v : []);
 const texte = (v) => (typeof v === "string" ? v : "");
 const objet = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
@@ -101,7 +102,8 @@ const nombre = (v) => (typeof v === "number" && Number.isFinite(v) ? String(Math
 function statutCapacite(valeur, bloquee) {
   if (bloquee) return {statut: "non_installable", raison: texte(bloquee.raison)};
   const brut = typeof valeur === "string" ? {statut: valeur} : objet(valeur);
-  return {statut: STATUTS[brut.statut] ? brut.statut : "inconnue", raison: texte(brut.raison)};
+  const statut = brut.statut === "fait" ? "presente" : brut.statut;     // l'installeur écrit « fait » pour une capacité installée
+  return {statut: STATUTS[statut] ? statut : "inconnue", raison: texte(brut.raison)};
 }
 
 function lieuxVides(l) { return !l || typeof l !== "object" || !Object.keys(l).length; }
@@ -132,6 +134,11 @@ export function ecranServeurs(etat, options = {}) {
   let sansTravail = 0;
   let poignee = null;
   let fini = false;
+  const cartes = new Map();     // id du serveur -> éléments mis à jour en place à chaque relevé
+  let affiches = "";            // les serveurs dessinés
+  let instantane = "";          // l'état des capacités quand on a lancé un test : s'il change, le test a rendu son résultat
+  const empreinte = () => JSON.stringify(tableau(courant?.serveurs).map((s) => [s?.id, s?.capacites, s?.erreur]));
+  const idsAffiches = () => tableau(courant?.serveurs).filter((s) => s && typeof s === "object" && typeof s.id === "string").map((s) => s.id).join("\n");
 
   const actif = () => !fini && (options.actif ? options.actif() : racine.isConnected !== false);
   const enCours = () => tableau(courant?.serveurs).some((s) => s?.installation_en_cours === true);
@@ -207,19 +214,18 @@ export function ecranServeurs(etat, options = {}) {
     return zone;
   }
 
-  function listeCapacites(serveur, i) {
+  function remplirCapacites(zone, serveur, i) {
     const bloquees = new Map(tableau(i.apercu?.bloquees).filter((b) => b && typeof b.id === "string").map((b) => [b.id, b]));
-    const zone = el("div", "serveurs-capacites");
     const entrees = Object.entries(objet(serveur.capacites));
-    if (!entrees.length) zone.append(el("p", "ligne-detail", "Aucune capacité relevée : testez la connexion."));
+    const lignes = entrees.length ? [] : [el("p", "ligne-detail", "Aucune capacité relevée : testez la connexion.")];
     for (const [id, valeur] of entrees) {
       const {statut, raison} = statutCapacite(valeur, bloquees.get(id));
       const l = el("div", `serveurs-capacite capacite-${statut}`);
       l.append(el("strong", "serveurs-capacite-nom", LIBELLES_CAPACITES[id] || id), el("span", `serveur-badge capacite-badge-${statut}`, STATUTS[statut]));
       if (raison) l.append(el("span", "ligne-detail serveurs-capacite-raison", raison));
-      zone.append(l);
+      lignes.push(l);
     }
-    return zone;
+    zone.replaceChildren(...lignes);
   }
 
   function panneauInstallation(serveur, i) {
@@ -273,15 +279,18 @@ export function ecranServeurs(etat, options = {}) {
     etiquette.append(accord, el("span", "", ` ${LIBELLE_ACCORD}`));
     const lancer = el("button", "bouton serveurs-lancer", "Lancer l'installation");
     lancer.type = "button";
+    lancer.disabled = i.envoi === true;       // un bouton reconstruit pendant un envoi reste grisé
     lancer.addEventListener("click", async () => {
-      if (lancer.disabled) return;
+      if (lancer.disabled || i.envoi) return;
       // L'accord n'est donné que par la case cochée, et il ne sert qu'une fois : décochée tout de suite, avant l'envoi.
       const accorde = accord.checked === true;
       accord.checked = false;
       if (!accorde) { i.message = "Cochez la case d'accord pour lancer l'installation."; dessiner(); return; }
+      i.envoi = true;                         // posé de façon synchrone : aucun second envoi avant la réponse
       lancer.disabled = true;
       i.message = "Envoi…";
-      const r = await installerCapacites(serveur.id, ACTIONS.filter((x) => i.actions.has(x)), true, fetchFn);
+      let r;
+      try { r = await installerCapacites(serveur.id, ACTIONS.filter((x) => i.actions.has(x)), true, fetchFn); } finally { i.envoi = false; }
       i.message = r.message;
       if (r.ok || r.occupe) { lance = "installer"; sansTravail = 0; }
       if (r.ok) { i.apercu = null; i.ouvert = false; }
@@ -299,26 +308,31 @@ export function ecranServeurs(etat, options = {}) {
     tete.append(el("strong", "serveurs-nom", texte(serveur.nom) || texte(serveur.id)),
       el("span", "ligne-detail serveurs-adresse", `${texte(serveur.utilisateur)}@${texte(serveur.hote)}${texte(serveur.fournisseur) ? ` (${serveur.fournisseur})` : ""}`));
     c.append(tete);
-    if (serveur.installation_en_cours === true) c.append(el("p", "serveurs-encours", "Installation en cours …"));
-    if (texte(serveur.erreur)) { const e = el("p", "reglage-message serveurs-erreur", serveur.erreur); e.setAttribute("role", "alert"); c.append(e); }
+    const encours = el("p", "serveurs-encours");
+    const erreur = el("p", "reglage-message serveurs-erreur");
+    erreur.setAttribute("role", "alert");
+    c.append(encours, erreur);
     const cle = ligneCle(serveur, i);
     if (cle) c.append(cle);
     const tester = el("button", "bouton serveurs-tester", "Tester la connexion");
     tester.type = "button";
-    tester.disabled = serveur.installation_en_cours === true;
     const verifier = el("button", "bouton serveurs-verifier", "Vérifier");
     verifier.type = "button";
-    verifier.disabled = serveur.installation_en_cours === true;
     const installer = el("button", "bouton serveurs-installer", "Installer");
     installer.type = "button";
-    installer.disabled = serveur.installation_en_cours === true || lance === "installer";
+    const capacites = el("div", "serveurs-capacites");
+    const msg = el("p", "reglage-message serveurs-message-serveur");
+    msg.setAttribute("aria-live", "polite");
+    const refs = {encours, erreur, tester, verifier, installer, capacites, msg};
+    cartes.set(serveur.id, refs);
+    majServeur(serveur);
     const sonde = async (b) => {
       if (b.disabled) return;
-      i.message = "Envoi…"; dessiner();
+      i.message = "Envoi…"; msg.textContent = i.message;
       const r = await sonderServeur(serveur.id, fetchFn);
       i.message = r.message;
-      if (r.ok || r.occupe) { lance = "sonder"; sansTravail = 0; }
-      dessiner();
+      if (r.ok || r.occupe) { lance = "sonder"; sansTravail = 0; instantane = empreinte(); }
+      majServeur(serveur);
       planifier();
     };
     tester.addEventListener("click", () => sonde(tester));
@@ -326,10 +340,25 @@ export function ecranServeurs(etat, options = {}) {
     installer.addEventListener("click", () => { if (installer.disabled) return; i.ouvert = !i.ouvert; i.apercu = null; dessiner(); });
     const barre = el("div", "serveurs-boutons");
     barre.append(tester, verifier, installer);
-    c.append(listeCapacites(serveur, i), barre);
-    if (i.message) { const m = el("p", "reglage-message serveurs-message-serveur", i.message); m.setAttribute("aria-live", "polite"); c.append(m); }
+    c.append(capacites, barre, msg);
     if (i.ouvert) c.append(panneauInstallation(serveur, i));
     return c;
+  }
+
+  // Met à jour en place ce qui change au fil des relevés (capacités, état, erreur, boutons, message) : jamais la zone de l'aperçu
+  // ni la case d'accord, qui gardent leur DOM.
+  function majServeur(serveur) {
+    const r = cartes.get(serveur.id);
+    if (!r) return;
+    const i = info(serveur.id);
+    const occupe = serveur.installation_en_cours === true;
+    r.encours.textContent = occupe ? "Installation en cours …" : "";
+    r.erreur.textContent = texte(serveur.erreur);
+    r.tester.disabled = occupe;
+    r.verifier.disabled = occupe;
+    r.installer.disabled = occupe || lance === "installer";
+    remplirCapacites(r.capacites, serveur, i);
+    r.msg.textContent = i.message;
   }
 
   // ---- « Où tournent les actions »
@@ -391,7 +420,9 @@ export function ecranServeurs(etat, options = {}) {
     const serveurs = tableau(courant?.serveurs).filter((s) => s && typeof s === "object" && typeof s.id === "string");
     if (!courant) resume.textContent = "Le bureau ne répond pas : les serveurs n'ont pas pu être lus.";
     else resume.textContent = serveurs.length ? "" : "Aucun serveur déclaré : déclarez-en un ci-dessous.";
+    cartes.clear();
     liste.replaceChildren(...serveurs.map(cartePourServeur));
+    affiches = idsAffiches();
     const rejets = tableau(courant?.rejets).filter((r) => typeof r === "string");
     rejetsZone.replaceChildren(...(rejets.length ? [el("div", "carte-sous-titre", "Déclarations ignorées"), ...rejets.map((r) => el("p", "ligne-detail serveurs-rejet", r))] : []));
     dessinerLieux();
@@ -403,9 +434,18 @@ export function ecranServeurs(etat, options = {}) {
       poignee = null;
       if (!actif()) return;
       await relire();
+      if (!actif()) return;
       if (enCours()) sansTravail = 0;
-      else if (lance && ++sansTravail >= RELEVES_SANS_TRAVAIL) { lance = null; sansTravail = 0; }
-      dessiner();
+      else if (lance === "sonder" && empreinte() !== instantane) { lance = null; sansTravail = 0; }     // le test a rendu son résultat
+      else if (lance && ++sansTravail >= RELEVES_SANS_TRAVAIL) {
+        if (lance === "sonder") message.textContent = MESSAGE_TEST_ENCORE;
+        lance = null; sansTravail = 0;
+      }
+      if (idsAffiches() !== affiches) dessiner();       // un serveur apparu ou disparu : seul cas d'un dessin complet
+      else {
+        for (const s of tableau(courant?.serveurs)) if (s && typeof s.id === "string") majServeur(s);
+        dessinerLieux();
+      }
       planifier();
     }, INTERVALLE_MS);
   }

@@ -1449,3 +1449,4 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .lieu-pastille.niveau-indisponible { background: #a9a59b; }
 .lieu-manque { font-size: 13px; color: #7a5410; margin-top: 2px; overflow-wrap: anywhere; }
 .lieux-conseil { font-size: 13px; margin: 4px 0; }
+.serveurs-encours:empty { display: none; }

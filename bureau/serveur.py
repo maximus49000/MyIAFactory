@@ -1497,6 +1497,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, modplateforme.lire(travail=self.server.travail_plateforme))
         if chemin == "/api/serveurs":   # les fichiers seulement : aucune connexion à un serveur
             return self._json(200, modserveurs.lire(self.server.travaux_serveurs))
+        if chemin == "/api/serveurs/migration":   # les fichiers seulement : jamais de connexion, aucun secret
+            return self._json(200, modserveurs.lire_migration())
         if chemin == "/api/serveurs/lieux":
             actions = parse_qs(morceaux.query, keep_blank_values=True).get("actions", [])
             return self._json(*(modserveurs.lieux(actions[0]) if len(actions) == 1 else (400, {"erreur": "Actions illisibles."})))

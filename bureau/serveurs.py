@@ -23,6 +23,8 @@ MAX_APERCUS = 2
 AGE_MAX_CHARGE_S = 900   # une charge sondée il y a plus longtemps est ignorée
 HORLOGE = time.time
 LIGNE_CLE_MAX = 4096
+ROUTES_MIGRATION = {"/api/serveurs/migration/apercu": "migration_apercu", "/api/serveurs/migration/confirmer": "migration_confirmer"}
+ID_RESERVE = "migration"   # ne doit pas se confondre avec /api/serveurs/migration/...
 
 
 class Occupe(Exception):
@@ -52,6 +54,12 @@ def _modules():
     import serveur_installation
     import serveur_modele
     return plateforme_acces, serveur_capacites, serveur_etat, serveur_installation, serveur_modele
+
+
+def _migration():
+    _modules()
+    import serveur_migration
+    return serveur_migration
 
 
 def _recommandation():
@@ -175,9 +183,9 @@ class Travaux:
             return r.get("erreur") if isinstance(r, dict) else None
         return self.lancer("installer", serveur, travail)
 
-    def apercu(self, serveur, actions, d, delai=None):
-        """L'aperçu (lecture SSH seulement), borné dans le temps : `None` si le délai est dépassé. `ErreurInstallation` remonte.
-        `Occupe` si deux aperçus tournent déjà (un fil dépassé garde sa place jusqu'à sa fin)."""
+    def _borne(self, fonction, delai=None):
+        """Exécute `fonction()` dans un fil borné dans le temps : `None` si le délai est dépassé, l'exception remonte.
+        `Occupe` si deux opérations de ce genre tournent déjà (un fil dépassé garde sa place jusqu'à sa fin)."""
         delai = DELAI_APERCU_S if delai is None else delai
         sortie = {}
         if not self._places_apercu.acquire(blocking=False):
@@ -185,7 +193,7 @@ class Travaux:
 
         def courir():
             try:
-                sortie["r"] = _modules()[3].apercu(serveur, actions, dossier=d, **self._options_ssh())
+                sortie["r"] = fonction()
             except BaseException as e:
                 sortie["e"] = e
             finally:
@@ -202,6 +210,15 @@ class Travaux:
         if "e" in sortie:
             raise sortie["e"]
         return sortie["r"]
+
+    def apercu(self, serveur, actions, d, delai=None):
+        """L'aperçu (lecture SSH seulement), borné dans le temps : `None` si le délai est dépassé. `ErreurInstallation` remonte.
+        `Occupe` si deux aperçus tournent déjà."""
+        return self._borne(lambda: _modules()[3].apercu(serveur, actions, dossier=d, **self._options_ssh()), delai)
+
+    def migration(self, travail, delai=None):
+        """Un travail de migration (sondes en lecture seule, ou confirmation), borné comme l'aperçu."""
+        return self._borne(travail, delai)
 
 
 # ---------------------------------------------------------------- lectures (fichiers seulement)
@@ -227,6 +244,22 @@ def lire(travaux, d=None):
             fiche["erreur"] = _masquer(travaux.erreurs[s.id], secrets)
         sortie.append(fiche)
     return _masquer({"serveurs": sortie, "rejets": list(rejets)}, secrets)
+
+
+def _proposition_publique(proposition):
+    s = proposition["serveur"]
+    return {"serveur": {"nom": s.nom, "hote": s.hote, "utilisateur": s.utilisateur, "fournisseur": s.fournisseur},
+            "source": list(proposition["source"])}
+
+
+def lire_migration(d=None):
+    """`{"proposition": {...} | None}` d'après les fichiers seulement : jamais de connexion, aucun secret, aucune écriture."""
+    d = Path(d) if d else dossier()
+    try:
+        proposition = _migration().detecter(d)
+    except Exception:
+        proposition = None
+    return _masquer({"proposition": _proposition_publique(proposition) if proposition else None}, _secrets(d, []))
 
 
 def _lieu(d, serveurs, etat, action):
@@ -343,6 +376,8 @@ def lieux(actions_brutes, d=None):
 
 def route_post(chemin):
     """`("declarer", None)` ou `(action, id)` pour un chemin de ces routes ; `None` sinon."""
+    if chemin in ROUTES_MIGRATION:
+        return ROUTES_MIGRATION[chemin], None
     m = _ROUTE.fullmatch(chemin)
     if not m:
         return None
@@ -366,8 +401,15 @@ def poster(travaux, cible, corps, d=None):
     d = Path(d) if d else dossier()
     genre, ident = cible
     plateforme_acces, capacites, _etat, installation, modeles = _modules()
+    if genre in ("migration_apercu", "migration_confirmer"):
+        return _poster_migration(travaux, genre, corps, d)
     if genre == "declarer":
         champs = {k: corps.get(k) for k in ("nom", "hote", "utilisateur", "fournisseur")}   # rien d'autre n'est pris
+        try:
+            if modeles.valider({**champs, "cle": "x"}).id == ID_RESERVE:
+                return 400, {"erreur": "Ce nom est réservé : choisissez-en un autre."}
+        except ValueError:
+            pass        # `ajouter` redonne le vrai message
         try:
             serveur = modeles.ajouter(champs, d)
         except ValueError as e:
@@ -419,3 +461,43 @@ def poster(travaux, cible, corps, d=None):
     if not travaux.installer(serveur, actions, d):
         return 409, {"erreur": "Une installation est déjà en cours."}
     return 202, {"demarre": True}
+
+
+def _poster_migration(travaux, genre, corps, d):
+    """Aperçu (sondes en lecture seule) et confirmation de la migration du serveur OVH existant."""
+    migration = _migration()
+    installation = _modules()[3]
+    masque = _secrets(d, [])
+    if genre == "migration_confirmer" and corps.get("accord") is not True:     # avant toute sonde, tout fil, toute écriture
+        return 400, {"erreur": "Migration refusée : l'accord n'a pas été donné."}
+    proposition = migration.detecter(d)
+    if proposition is None:
+        if genre == "migration_confirmer" and _modules()[4].lire_avec_rejets(d) != ([], []):
+            return 409, {"erreur": "Un serveur est déjà déclaré : la migration n'a rien changé."}
+        return 404, {"erreur": "Aucun serveur OVH à migrer."}
+    options = travaux._options_ssh()
+    if genre == "migration_apercu":
+        travail = lambda: migration.apercu(proposition, **options)  # noqa: E731
+    else:
+        if travaux.en_cours() or installation.installation_en_cours(d):
+            return 409, {"erreur": "Une opération est déjà en cours : réessayez à sa fin."}
+        travail = lambda: migration.confirmer(proposition, True, d, **options)  # noqa: E731
+    try:
+        resultat = travaux.migration(travail)
+    except Occupe:
+        return 409, {"erreur": "Des sondes de migration sont déjà en cours : réessayez dans un instant."}
+    except migration.ErreurMigration as e:
+        return {"accord": 400, "deja": 409, "occupe": 409}.get(e.code, 400), {"erreur": _masquer(str(e), masque)}
+    except Exception as e:
+        print(f"Migration interrompue ({type(e).__name__}).", file=sys.stderr)
+        return 500, {"erreur": "La migration a échoué : rien n'a été modifié ou relisez la liste des serveurs, puis réessayez."}
+    if resultat is None:
+        return 504, {"erreur": "La migration prend trop de temps : relisez la liste des serveurs avant de réessayer."}
+    if genre == "migration_apercu":
+        s = resultat["serveur"]
+        return 200, _masquer({"serveur": {"nom": s.nom, "hote": s.hote, "utilisateur": s.utilisateur, "fournisseur": s.fournisseur},
+                              "source": resultat["source"], "capacites": resultat["capacites"],
+                              "joignable": resultat["joignable"]}, masque)
+    etat = installation.lire_etat_vivant(d).get(resultat.id, {})
+    fiche = _decrire(resultat, _capacites(etat), False, _ligne_cle_existante(d, resultat))
+    return 200, _masquer({"serveur": fiche}, _secrets(d, [resultat]))

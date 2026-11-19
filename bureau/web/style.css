@@ -1450,3 +1450,5 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .lieu-manque { font-size: 13px; color: #7a5410; margin-top: 2px; overflow-wrap: anywhere; }
 .lieux-conseil { font-size: 13px; margin: 4px 0; }
 .serveurs-encours:empty { display: none; }
+.serveurs-migration-carte { margin: 8px 0; padding: 10px; border: 1px solid #d9b25a; border-radius: 8px; background: #fbf4e0; }
+.serveurs-migration-message:empty { display: none; }

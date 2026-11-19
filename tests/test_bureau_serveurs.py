@@ -622,6 +622,158 @@ class TestReponsesSansSecret(AvecServeurs):
         self.assertNotIn(SECRET.encode(), data)
 
 
+def installer_ovh(dossier, ip="203.0.113.9"):
+    """Les anciens fichiers du flux OVH (valeurs factices)."""
+    (dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": SECRET, "secret": SECRET + "2",
+                                                  "consommateur": SECRET + "3", "serveur": "ns000.ip-1-2-3.eu"}), encoding="utf-8")
+    (dossier / "plateforme.json").write_text(json.dumps({"ip": ip}), encoding="utf-8")
+    (dossier / "id_ed25519_myiafactory").write_text("PRIVATE-KEY-CONTENT-ABCDEF", encoding="utf-8")
+
+
+class TestMigration(AvecServeurs):
+    def setUp(self):
+        super().setUp()
+        installer_ovh(self.dossier)
+
+    def test_get_migration_sans_fichiers_donne_null(self):
+        for p in self.dossier.iterdir():
+            p.unlink()
+        r, data = self.req("GET", "/api/serveurs/migration")
+        self.assertEqual((r.status, json.loads(data)), (200, {"proposition": None}))
+
+    def test_get_migration_propose_sans_secret_ni_connexion_ni_ecriture(self):
+        avant = self.instantane()
+        r, data = self.req("GET", "/api/serveurs/migration")
+        self.assertEqual(r.status, 200)
+        p = json.loads(data)["proposition"]
+        self.assertEqual((p["serveur"]["hote"], p["serveur"]["utilisateur"], p["serveur"]["fournisseur"]),
+                         ("203.0.113.9", "ubuntu", "ovh"))
+        self.assertEqual(sorted(p["source"]), ["id_ed25519_myiafactory", "ovh.json", "plateforme.json"])
+        for secret in (SECRET.encode(), b"PRIVATE-KEY-CONTENT"):
+            self.assertNotIn(secret, data)
+        self.assertEqual(self.ssh.appels, [])
+        self.assertEqual(self.instantane(), avant)
+
+    def test_get_migration_null_si_un_serveur_est_deja_declare(self):
+        self.declarer()
+        self.assertEqual(json.loads(self.req("GET", "/api/serveurs/migration")[1]), {"proposition": None})
+
+    def test_apercu_migration_lit_sans_rien_ecrire(self):
+        self.ssh.presentes = {"base", "android-build"}
+        avant = self.instantane()
+        r, data = self.poster("/api/serveurs/migration/apercu", {})
+        self.assertEqual(r.status, 200)
+        a = json.loads(data)
+        self.assertEqual(a["capacites"]["android-build"], "presente")
+        self.assertEqual(a["capacites"]["android-emulateur"], "absente")
+        self.assertTrue(self.ssh.appels)
+        self.assertEqual(self.instantane(), avant)
+        self.assertNotIn(SECRET.encode(), data)
+
+    def test_apercu_migration_injoignable_donne_inconnue(self):
+        self.ssh.accessible = False
+        r, data = self.poster("/api/serveurs/migration/apercu", {})
+        self.assertEqual(r.status, 200)
+        self.assertEqual(set(json.loads(data)["capacites"].values()), {"inconnue"})
+
+    def test_apercu_migration_rien_a_migrer_404(self):
+        self.declarer()
+        self.assertEqual(self.poster("/api/serveurs/migration/apercu", {})[0].status, 404)
+
+    def test_apercu_migration_limite_de_concurrence_409(self):
+        for _ in range(bserveurs.MAX_APERCUS):
+            self.assertTrue(self.travaux._places_apercu.acquire(blocking=False))
+        r, data = self.poster("/api/serveurs/migration/apercu", {})
+        self.assertEqual(r.status, 409)
+        self.assertIn("erreur", json.loads(data))
+
+    def test_apercu_migration_delai_depasse_504(self):
+        bloque = threading.Event()
+        self.addCleanup(bloque.set)
+        self.travaux._ssh = SimpleNamespace(executer=lambda *a, **k: (bloque.wait(5), (0, "", ""))[1], CHANGEMENT_CLE="x")
+        with mock.patch.object(bserveurs, "DELAI_APERCU_S", 0.05):
+            self.assertEqual(self.poster("/api/serveurs/migration/apercu", {})[0].status, 504)
+
+    def test_apercu_migration_exception_500_masquee(self):
+        with mock.patch("serveur_migration.apercu", side_effect=RuntimeError(SECRET)):
+            r, data = self.poster("/api/serveurs/migration/apercu", {})
+        self.assertEqual(r.status, 500)
+        self.assertNotIn(SECRET.encode(), data)
+        self.assertNotIn(b"RuntimeError", data)
+
+    def test_confirmer_sans_accord_exact_n_ecrit_rien(self):
+        avant = self.instantane()
+        for corps in ({}, {"accord": False}, {"accord": "true"}, {"accord": 1}, {"accord": [True]}, {"accord": None}):
+            with self.subTest(corps=corps):
+                r, data = self.poster("/api/serveurs/migration/confirmer", corps)
+                self.assertEqual(r.status, 400)
+                self.assertIn("erreur", json.loads(data))
+                self.assertEqual(self.instantane(), avant)
+        self.assertEqual(self.ssh.appels, [])
+
+    def test_confirmer_cles_dupliquees_refusees(self):
+        avant = self.instantane()
+        r, _ = self.req("POST", "/api/serveurs/migration/confirmer", '{"accord": false, "accord": true}', self.ENT)
+        self.assertEqual(r.status, 400)
+        self.assertEqual(self.instantane(), avant)
+
+    def test_confirmer_en_tetes_manquants_refuse(self):
+        self.assertEqual(self.poster("/api/serveurs/migration/confirmer", {"accord": True}, {"Content-Type": "application/json"})[0].status, 403)
+        self.assertEqual(self.poster("/api/serveurs/migration/confirmer", {"accord": True}, {"X-Bureau": "1"})[0].status, 403)
+        self.assertFalse((self.dossier / "serveurs.json").exists())
+
+    def test_confirmer_declare_le_serveur_puis_refuse_409(self):
+        self.ssh.presentes = {"base"}
+        ovh_avant = (self.dossier / "ovh.json").read_bytes()
+        r, data = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
+        self.assertEqual(r.status, 200)
+        fiche = json.loads(data)["serveur"]
+        self.assertEqual((fiche["hote"], fiche["fournisseur"], fiche["capacites"]["base"]), ("203.0.113.9", "ovh", "presente"))
+        self.assertNotIn(b"PRIVATE-KEY-CONTENT", data)
+        serveurs = bserveurs._modules()[4].lire(self.dossier)
+        self.assertEqual([s.hote for s in serveurs], ["203.0.113.9"])
+        self.assertEqual((self.dossier / "ovh.json").read_bytes(), ovh_avant)     # intact
+        r, data = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
+        self.assertEqual(r.status, 409)
+        self.assertIn("déjà déclaré", json.loads(data)["erreur"])
+        self.assertEqual(len(bserveurs._modules()[4].lire(self.dossier)), 1)
+
+    def test_confirmer_installation_en_cours_409_sans_ecriture(self):
+        with mock.patch.object(bserveurs._modules()[3], "installation_en_cours", return_value=True):
+            r, _ = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
+        self.assertEqual(r.status, 409)
+        self.assertFalse((self.dossier / "serveurs.json").exists())
+
+    def test_confirmer_exception_500_masquee(self):
+        with mock.patch("serveur_migration.confirmer", side_effect=RuntimeError(SECRET)):
+            r, data = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
+        self.assertEqual(r.status, 500)
+        self.assertNotIn(SECRET.encode(), data)
+
+    def test_migration_ne_prend_jamais_la_place_d_un_serveur_nomme_migration(self):
+        # « migration » n'est pas un identifiant de serveur utilisable pour les routes /api/serveurs/<id>/...
+        r, data = self.declarer(nom="Migration")
+        self.assertEqual(r.status, 400)
+
+
+class TestMigrationDistante(AvecBureauOuvert):
+    def test_routes_migration_distantes_404_et_aucune_ecriture(self):
+        cookie = self.associer()
+        ent = {"Cookie": cookie, "Origin": f"http://127.0.0.1:{self.distant}", "X-Bureau": "1",
+               "Content-Type": "application/json"}
+        d = self.tmp / "secrets-distant"
+        d.mkdir()
+        installer_ovh(d)
+        p = mock.patch.object(bserveurs, "DOSSIER", d)
+        p.start()
+        self.addCleanup(p.stop)
+        avant = sorted(x.name for x in d.iterdir())
+        for chemin in ("/api/serveurs/migration/apercu", "/api/serveurs/migration/confirmer"):
+            r, _ = self.req("POST", chemin, json.dumps({"accord": True}), ent)
+            self.assertEqual(r.status, 404)
+        self.assertEqual(sorted(x.name for x in d.iterdir()), avant)
+
+
 class TestEcouteurDistant(AvecBureauOuvert):
     def test_route_distante_404(self):
         cookie = self.associer()

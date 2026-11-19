@@ -97,6 +97,32 @@ export async function installerCapacites(idServeur, actions, accord, fetchFn = g
   }
 }
 
+// La migration du serveur OVH existant. `lireMigration` ne lit que des fichiers côté bureau. Ne lève jamais : proposition ou null.
+export const MESSAGE_MIGRATION_DETECTEE = "Votre serveur OVH a été détecté";
+export const LIBELLE_ACCORD_MIGRATION = "J'autorise l'inscription de ce serveur (rien n'est réinstallé ni modifié sur le serveur)";
+
+export async function lireMigration(fetchFn = globalThis.fetch) {
+  const r = await appeler("/api/serveurs/migration", "GET", undefined, fetchFn);
+  const p = r.ok ? objet(r.d.proposition) : {};
+  return r.ok && p.serveur && typeof p.serveur === "object" ? p : null;
+}
+
+// L'aperçu de la migration (sondes en lecture seule). Ne lève jamais : {ok, apercu, message}.
+export async function apercuMigration(fetchFn = globalThis.fetch) {
+  const r = await appeler("/api/serveurs/migration/apercu", "POST", {}, fetchFn);
+  if (r.injoignable) return {ok: false, message: "Aperçu impossible : le bureau est injoignable."};
+  if (!r.ok) return {ok: false, message: refus(r)};
+  return {ok: true, apercu: r.d};
+}
+
+// Confirme la migration. `accord` n'est envoyé vrai que s'il vaut exactement `true`. Ne lève jamais : {ok, message}.
+export async function confirmerMigration(accord, fetchFn = globalThis.fetch) {
+  const r = await appeler("/api/serveurs/migration/confirmer", "POST", {accord: accord === true}, fetchFn);
+  if (r.injoignable) return {ok: false, message: "Migration impossible : le bureau est injoignable."};
+  if (!r.ok) return {ok: false, message: refus(r)};
+  return {ok: true, message: "Serveur inscrit."};
+}
+
 const nombre = (v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v * 10) / 10).replace(".", ",") : "?");
 
 function statutCapacite(valeur, bloquee) {
@@ -124,7 +150,8 @@ export function ecranServeurs(etat, options = {}) {
   const formulaire = el("div", "serveurs-formulaire");
   const liste = el("div", "serveurs-liste");
   const zoneLieux = el("div", "serveurs-lieux");
-  racine.append(message, resume, liste, rejetsZone, formulaire, zoneLieux);
+  const zoneMigration = el("div", "serveurs-migration");
+  racine.append(message, zoneMigration, resume, liste, rejetsZone, formulaire, zoneLieux);
 
   let courant = etat;
   let lieux = options.lieux || null;
@@ -481,6 +508,69 @@ export function ecranServeurs(etat, options = {}) {
     }, INTERVALLE_MS);
   }
 
+  // ---- la migration du serveur OVH existant : jamais d'écriture sans la case cochée et le bouton de confirmation
+  function cartesMigration(proposition) {
+    const p = objet(proposition);
+    const s = objet(p.serveur);
+    const carte = el("div", "serveurs-migration-carte");
+    const note = el("p", "reglage-message serveurs-migration-message");
+    note.setAttribute("aria-live", "polite");
+    const detail = el("div", "serveurs-migration-detail");
+    carte.append(el("h3", "", MESSAGE_MIGRATION_DETECTEE),
+      el("p", "serveurs-migration-resume", `${texte(s.nom) || "Serveur OVH"} : ${texte(s.utilisateur)}@${texte(s.hote)} (fournisseur ${texte(s.fournisseur) || "aucun"}).`),
+      el("p", "serveurs-migration-source", `Lu dans : ${tableau(p.source).filter((f) => typeof f === "string").join(", ")}. Rien n'est réinstallé : seul le bureau l'inscrit.`),
+      detail, note);
+    const bApercu = el("button", "bouton serveurs-migration-apercu", "Voir l'aperçu (lecture seule)");
+    bApercu.type = "button";
+    const accord = el("input", "serveurs-accord");
+    accord.type = "checkbox";
+    accord.checked = false;
+    const etiquette = el("label", "serveurs-accord-libelle");
+    etiquette.append(accord, el("span", "", ` ${LIBELLE_ACCORD_MIGRATION}`));
+    const bConfirmer = el("button", "bouton serveurs-migration-confirmer", "Confirmer l'inscription du serveur");
+    bConfirmer.type = "button";
+    let envoi = false;
+    bApercu.addEventListener("click", async () => {
+      if (bApercu.disabled) return;
+      bApercu.disabled = true;
+      note.textContent = "Lecture du serveur…";
+      const r = await apercuMigration(fetchFn);
+      bApercu.disabled = false;
+      note.textContent = r.ok ? "" : r.message;
+      if (!r.ok) return;
+      const caps = objet(r.apercu.capacites);
+      detail.replaceChildren(el("div", "carte-sous-titre", r.apercu.joignable === false ? "Serveur injoignable : état inconnu" : "État constaté sur le serveur"),
+        ...Object.keys(LIBELLES_CAPACITES).filter((i) => i in caps).map((i) => {
+          const statut = STATUTS[caps[i]] ? caps[i] : "inconnue";
+          return el("div", "serveurs-capacite", `${LIBELLES_CAPACITES[i]} : ${STATUTS[statut]}`);
+        }));
+    });
+    bConfirmer.addEventListener("click", async () => {
+      if (envoi || bConfirmer.disabled) return;
+      // L'accord n'est donné que par la case cochée, et il ne sert qu'une fois : décochée tout de suite, avant l'envoi.
+      const accorde = accord.checked === true;
+      accord.checked = false;
+      if (!accorde) { note.textContent = "Cochez la case d'accord pour inscrire le serveur."; return; }
+      envoi = true;                          // posé de façon synchrone : aucun second envoi avant la réponse
+      bConfirmer.disabled = true;
+      note.textContent = "Inscription…";
+      let r;
+      try { r = await confirmerMigration(true, fetchFn); } finally { envoi = false; bConfirmer.disabled = false; }
+      if (r.ok) {
+        zoneMigration.replaceChildren();
+        message.textContent = "Serveur OVH inscrit : ses capacités sont celles constatées.";
+        await relire();
+        dessiner();
+        planifier();
+        return;
+      }
+      note.textContent = r.message;
+    });
+    carte.append(bApercu, etiquette, bConfirmer);
+    return carte;
+  }
+  if (options.migration) zoneMigration.append(cartesMigration(options.migration));
+
   racine.planifier = planifier;
   racine.rafraichir = async () => { await relire(); dessiner(); planifier(); };
   racine.arreter = () => { fini = true; if (poignee !== null) { planifieur.annuler(poignee); poignee = null; } };
@@ -492,8 +582,8 @@ export function ecranServeurs(etat, options = {}) {
 // Monte l'écran dans `conteneur` : lit les serveurs et les lieux puis dessine (injoignable : l'écran le dit). Rend l'écran.
 export async function monterEcranServeurs(conteneur, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
-  const [etat, lieux] = await Promise.all([lireServeurs(fetchFn), lireLieux(fetchFn)]);
-  const ecran = ecranServeurs(etat, {...options, fetchFn, lieux});
+  const [etat, lieux, migration] = await Promise.all([lireServeurs(fetchFn), lireLieux(fetchFn), lireMigration(fetchFn)]);
+  const ecran = ecranServeurs(etat, {...options, fetchFn, lieux, migration});
   conteneur.append(ecran);
   ecran.planifier();   // l'écran est maintenant dans la page : une installation en cours se suit
   return ecran;

@@ -1,0 +1,3 @@
+serveur_ovh/*.sh text eol=lf
+serveur_ovh/images/*/Dockerfile text eol=lf
+serveur_ovh/versions.json text eol=lf

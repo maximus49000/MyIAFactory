@@ -6,8 +6,7 @@
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
 # Les étapes android_build, android_emulateur et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
 # Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|unity_cli|etat> [--simuler]
-# Variable facultative pour unity_cli : UNITY_EDITEUR (version d'éditeur), installée seulement si `unity` indique un compte connecté.
-# Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH.
+# Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
 # La licence Unity (.ulf) et le mot de passe de session arrivent par l'entrée standard (stdin), jamais en argument, et ne sont jamais réaffichés.
@@ -157,9 +156,13 @@ etape_durcissement() {
 # Paquets dont dépendent l'extraction des modules Unity et les builds (absents du serveur réel au départ) : constat par dpkg,
 # installation seulement s'il en manque. $@ = paquets. Retourne 0 si tous sont présents à la fin.
 assurer_paquets() {
-  dpkg -s "$@" >/dev/null 2>&1 && return 0
-  sudo apt-get update -y >/dev/null 2>&1
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" >/dev/null 2>&1
+  local p manque=0
+  for p in "$@"; do
+    [ "$(dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null)" = installed ] || manque=1
+  done
+  [ "$manque" = 0 ] && return 0
+  sudo apt-get -o DPkg::Lock::Timeout=120 update -y >/dev/null 2>&1
+  sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=120 install -y "$@" >/dev/null 2>&1
 }
 
 etape_docker() {
@@ -451,18 +454,45 @@ etape_bureau_distant() {
 # --- Android : SDK dédié, émulateur ----------------------------------------
 
 SDK_ANDROID="${HOME}/android-sdk"
+SEUIL_ANDROID_BUILD_GO=15
+SEUIL_EMULATEUR_GO=10
+SEUIL_UNITY_CLI_GO=2
 
-# JDK 17 d'Ubuntu (JVM_RACINE : réservé aux tests). Positionne JAVA_HOME ; retourne 1 s'il est absent.
-trouver_jdk17() {
+# Les étapes de capacités s'installent pour l'utilisateur SSH ordinaire, jamais pour root (comme bureau_distant).
+refuser_root() {
+  if [ "$(id -un)" = root ]; then
+    repondre bloque "L'étape s'exécute en root : elle s'installe pour l'utilisateur SSH ordinaire. Lancez-la avec cet utilisateur. Rien n'a été modifié."
+  fi
+}
+
+# exiger_disque <Go> : bloque si l'espace libre est inférieur au seuil, avant toute installation.
+exiger_disque() {
+  local libre
+  libre=$(disque_libre_go)
+  if [ "$libre" -lt "$1" ]; then
+    repondre bloque "Disque presque plein : ${libre} Go libres, il en faut au moins $1 Go pour cette étape. Rien n'a été installé."
+  fi
+}
+
+# JDK d'Ubuntu en version $1 (JVM_RACINE : réservé aux tests). Écrit son dossier (liens résolus) dans JDK_TROUVE ; retourne 1 s'il est absent.
+chercher_jdk() {
   local d jvm="${JVM_RACINE:-/usr/lib/jvm}"
-  for d in "$jvm"/java-17-openjdk-*; do
+  JDK_TROUVE=""
+  for d in "$jvm"/java-"$1"-openjdk-*; do
     if [ -x "$d/bin/java" ]; then
-      JAVA_HOME="$d"
-      export JAVA_HOME
+      JDK_TROUVE=$(readlink -f "$d" 2>/dev/null || printf '%s' "$d")
       return 0
     fi
   done
   return 1
+}
+
+# JDK 17 du projet. Positionne JAVA_HOME ; retourne 1 s'il est absent.
+trouver_jdk17() {
+  chercher_jdk 17 || return 1
+  JAVA_HOME="$JDK_TROUVE"
+  export JAVA_HOME
+  return 0
 }
 
 android_sdk_pret() {
@@ -470,28 +500,72 @@ android_sdk_pret() {
     && [ -d "$SDK_ANDROID/build-tools/$V_SDK_BUILD_TOOLS" ] && trouver_jdk17
 }
 
-# Télécharge les cmdline-tools officiels de Google sans empreinte codée en dur : le manifeste officiel donne le nom de
-# l'archive Linux et son SHA-1 ; l'archive est téléchargée (échec HTTP = échec), vérifiée contre ce SHA-1, extraite, puis
-# déplacée atomiquement vers cmdline-tools/latest. Tout vit dans un dossier temporaire du même dossier, supprimé sur tous
-# les chemins ; une installation existante n'est jamais touchée (l'appelant n'y vient que si sdkmanager manque).
+# sdkmanager sous délai (SDK_DELAI_S, 1500 s par défaut ; réservé aux tests pour le réduire) et avec le JDK choisi pour lui
+# (SDK_JAVA_HOME). Code 124 = délai dépassé. Sans la commande timeout, il tourne sans délai.
+sdk_cmd() {
+  if command -v timeout >/dev/null 2>&1; then
+    JAVA_HOME="$SDK_JAVA_HOME" timeout "${SDK_DELAI_S:-1500}" "$@"
+  else
+    JAVA_HOME="$SDK_JAVA_HOME" "$@"
+  fi
+}
+
+# Choisit le JDK de sdkmanager : le JDK 17 du projet ; si les cmdline-tools récents refusent sa version de classe, le JDK 21
+# est installé et sert à sdkmanager SEULEMENT (le JDK 17 reste le JDK du projet). Positionne SDK_JAVA_HOME ; en cas d'échec,
+# ECHEC_ANDROID contient la cause et la fonction retourne 1.
+preparer_jdk_sdkmanager() {
+  local sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" sortie code
+  SDK_JAVA_HOME="${JAVA_HOME:-}"
+  sortie=$(sdk_cmd "$sdkmanager" --version 2>&1)
+  code=$?
+  [ "$code" = 0 ] && return 0
+  if [ "$code" = 124 ]; then
+    ECHEC_ANDROID="Délai dépassé pour « sdkmanager --version »."
+    return 1
+  fi
+  if ! printf '%s' "$sortie" | grep -qiE 'UnsupportedClassVersionError|class file version|Unsupported major\.minor'; then
+    ECHEC_ANDROID="sdkmanager inutilisable (« sdkmanager --version » échoue sans rapport avec la version de Java)."
+    return 1
+  fi
+  assurer_paquets openjdk-21-jdk-headless || { ECHEC_ANDROID="sdkmanager exige un JDK plus récent que le 17 et l'installation du JDK 21 est impossible."; return 1; }
+  chercher_jdk 21 || { ECHEC_ANDROID="JDK 21 introuvable après installation (java-21-openjdk) alors que sdkmanager refuse le JDK 17."; return 1; }
+  SDK_JAVA_HOME="$JDK_TROUVE"
+  if sdk_cmd "$sdkmanager" --version >/dev/null 2>&1; then
+    return 0
+  fi
+  ECHEC_ANDROID="sdkmanager refuse le JDK 17 et le JDK 21 : aucun JDK installé ne convient à ces cmdline-tools."
+  return 1
+}
+
+# Télécharge les cmdline-tools officiels de Google sans empreinte codée en dur : le manifeste officiel donne, pour le paquet
+# cmdline-tools;latest du canal stable, le nom de l'archive Linux et son SHA-1 ; l'archive est téléchargée (échec HTTP =
+# échec), vérifiée contre ce SHA-1, extraite, puis déplacée atomiquement vers cmdline-tools/latest. Tout vit dans un dossier
+# temporaire du même dossier, supprimé sur tous les chemins. Un cmdline-tools/latest incomplet (sans sdkmanager exécutable)
+# est mis de côté (latest.ancien.<horodatage>, jamais supprimé) juste avant la mise en place, et remis si elle échoue.
 # En cas d'échec, ECHEC_ANDROID contient la cause. Retourne 0 si installé.
 installer_cmdline_tools() {
-  local dest="$SDK_ANDROID/cmdline-tools" travail ligne fichier attendu obtenu ok=1
+  local dest="$SDK_ANDROID/cmdline-tools" travail ligne fichier attendu obtenu ancien="" ok=1
   ECHEC_ANDROID=""
   mkdir -p "$dest" || { ECHEC_ANDROID="Dossier $dest non créable."; return 1; }
   travail=$(mktemp -d "$dest/.telechargement.XXXXXX") || { ECHEC_ANDROID="Dossier temporaire non créable."; return 1; }
   while :; do
-    curl -fsSL "$URL_MANIFESTE_ANDROID" -o "$travail/manifeste.xml" >/dev/null 2>&1 && [ -s "$travail/manifeste.xml" ] \
+    curl -fsSL --connect-timeout 20 --max-time 60 "$URL_MANIFESTE_ANDROID" -o "$travail/manifeste.xml" >/dev/null 2>&1 \
+      && [ -s "$travail/manifeste.xml" ] \
       || { ECHEC_ANDROID="Manifeste officiel Google introuvable ou vide (${URL_MANIFESTE_ANDROID})."; break; }
-    # Entrées Linux « <checksum type="sha1">…</checksum><url>commandlinetools-linux-N_latest.zip</url> » : on garde le N le plus grand.
+    # Un paquet par ligne ; on garde celui de cmdline-tools;latest au canal stable (channel-0), entrée Linux
+    # « <checksum type="sha1">…</checksum><url>commandlinetools-linux-N_latest.zip</url> » (le plus grand N s'il y en a plusieurs).
     ligne=$(tr '\n\r\t' '   ' < "$travail/manifeste.xml" \
+      | sed 's#</remotePackage>#&\n#g' \
+      | grep -F 'remotePackage path="cmdline-tools;latest"' \
+      | grep -F 'channelRef ref="channel-0"' \
       | grep -oE '<checksum type="sha1">[0-9a-fA-F]{40}</checksum> *<url>commandlinetools-linux-[0-9]+_latest\.zip</url>' \
       | sed -E 's/.*type="sha1">([0-9a-fA-F]{40})<\/checksum> *<url>(commandlinetools-linux-([0-9]+)_latest\.zip)<\/url>/\3 \1 \2/' \
       | sort -n | tail -n 1)
-    [ -n "$ligne" ] || { ECHEC_ANDROID="Aucune archive cmdline-tools Linux dans le manifeste officiel Google."; break; }
+    [ -n "$ligne" ] || { ECHEC_ANDROID="Aucune archive cmdline-tools Linux (paquet cmdline-tools;latest, canal stable) dans le manifeste officiel Google."; break; }
     attendu=$(printf '%s' "$ligne" | awk '{print tolower($2)}')
     fichier=$(printf '%s' "$ligne" | awk '{print $3}')
-    curl -fsSL "${URL_DEPOT_ANDROID}/${fichier}" -o "$travail/archive.zip" >/dev/null 2>&1 && [ -s "$travail/archive.zip" ] \
+    curl -fsSL --connect-timeout 20 --max-time 1200 "${URL_DEPOT_ANDROID}/${fichier}" -o "$travail/archive.zip" >/dev/null 2>&1 \
+      && [ -s "$travail/archive.zip" ] \
       || { ECHEC_ANDROID="Téléchargement de ${fichier} impossible, vide ou tronqué."; break; }
     obtenu=$(sha1sum "$travail/archive.zip" 2>/dev/null | awk '{print tolower($1)}')
     [ -n "$obtenu" ] && [ "$obtenu" = "$attendu" ] \
@@ -499,8 +573,16 @@ installer_cmdline_tools() {
     mkdir "$travail/extrait" && unzip -q "$travail/archive.zip" -d "$travail/extrait" >/dev/null 2>&1 \
       && [ -x "$travail/extrait/cmdline-tools/bin/sdkmanager" ] \
       || { ECHEC_ANDROID="Extraction de ${fichier} impossible ou archive sans sdkmanager."; break; }
-    mv "$travail/extrait/cmdline-tools" "$dest/latest" 2>/dev/null \
-      || { ECHEC_ANDROID="Mise en place de cmdline-tools/latest impossible."; break; }
+    if [ -e "$dest/latest" ]; then
+      ancien="$dest/latest.ancien.$(date +%Y%m%d%H%M%S)"
+      mv -T "$dest/latest" "$ancien" 2>/dev/null \
+        || { ancien=""; ECHEC_ANDROID="Mise de côté de l'ancien cmdline-tools/latest incomplet impossible."; break; }
+    fi
+    if ! mv -T "$travail/extrait/cmdline-tools" "$dest/latest" 2>/dev/null; then
+      [ -z "$ancien" ] || mv -T "$ancien" "$dest/latest" 2>/dev/null
+      ECHEC_ANDROID="Mise en place de cmdline-tools/latest impossible (l'ancien dossier, s'il existait, a été remis)."
+      break
+    fi
     ok=0
     break
   done
@@ -510,21 +592,34 @@ installer_cmdline_tools() {
 
 # Étape android_build : unzip, zip, JDK 17, SDK dédié ~/android-sdk, licences, platform-tools, plateforme et build-tools.
 etape_android_build() {
-  local sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager"
+  local sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" lic code delai="${SDK_DELAI_S:-1500}"
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : installerait unzip, zip et le JDK 17, téléchargerait les cmdline-tools officiels de Google (SHA-1 vérifié d'après le manifeste officiel) dans ${SDK_ANDROID}, accepterait les licences puis installerait platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS}."
   fi
+  refuser_root
+  # Une session SSH tuée en cours de téléchargement laisse son dossier temporaire : on le retire.
+  rm -rf "$SDK_ANDROID"/cmdline-tools/.telechargement.* 2>/dev/null
   if android_sdk_pret; then
     repondre fait "SDK Android déjà en place dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, JDK 17)."
   fi
+  exiger_disque "$SEUIL_ANDROID_BUILD_GO"
   assurer_paquets unzip zip openjdk-17-jdk-headless || repondre bloque "Installation de unzip, zip et du JDK 17 impossible."
   trouver_jdk17 || repondre bloque "JDK 17 introuvable après installation (java-17-openjdk)."
   if [ ! -x "$sdkmanager" ]; then
     installer_cmdline_tools || repondre bloque "${ECHEC_ANDROID} Rien n'a été installé."
   fi
-  yes 2>/dev/null | "$sdkmanager" --sdk_root="$SDK_ANDROID" --licenses >/dev/null 2>&1
-  "$sdkmanager" --sdk_root="$SDK_ANDROID" "platform-tools" "platforms;${V_SDK_PLATEFORME}" "build-tools;${V_SDK_BUILD_TOOLS}" >/dev/null 2>&1 \
-    || repondre bloque "Installation de platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS} par sdkmanager impossible."
+  preparer_jdk_sdkmanager || repondre bloque "${ECHEC_ANDROID}"
+  yes 2>/dev/null | sdk_cmd "$sdkmanager" --sdk_root="$SDK_ANDROID" --licenses >/dev/null 2>&1
+  lic=${PIPESTATUS[1]}
+  sdk_cmd "$sdkmanager" --sdk_root="$SDK_ANDROID" "platform-tools" "platforms;${V_SDK_PLATEFORME}" "build-tools;${V_SDK_BUILD_TOOLS}" >/dev/null 2>&1
+  code=$?
+  if [ "$code" = 124 ] || [ "$lic" = 124 ]; then
+    repondre bloque "Délai dépassé (${delai} s) pour sdkmanager : installation du SDK Android interrompue, à refaire."
+  elif [ "$code" != 0 ] && [ "$lic" != 0 ]; then
+    repondre bloque "Licences Android non acceptées (sdkmanager --licenses a échoué, code ${lic}) : platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS} non installés."
+  elif [ "$code" != 0 ]; then
+    repondre bloque "Installation de platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS} par sdkmanager impossible."
+  fi
   android_sdk_pret || repondre bloque "SDK Android incomplet après installation (adb, ${V_SDK_PLATEFORME} ou build-tools ${V_SDK_BUILD_TOOLS} manquant)."
   repondre fait "SDK Android installé dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, JDK 17)."
 }
@@ -538,10 +633,11 @@ emulateur_pret() {
 
 # Étape android_emulateur : exige android_build et /dev/kvm ; groupe kvm, emulator et image système x86_64.
 etape_android_emulateur() {
-  local sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" kvm="${KVM_PERIPH:-/dev/kvm}" u ajoute=""
+  local sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" kvm="${KVM_PERIPH:-/dev/kvm}" u ajoute="" code delai="${SDK_DELAI_S:-1500}"
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : exigerait android_build et /dev/kvm, ajouterait l'utilisateur au groupe kvm puis installerait emulator et ${V_SDK_IMAGE_EMULATEUR} par sdkmanager."
   fi
+  refuser_root
   if [ ! -x "$sdkmanager" ] || ! android_sdk_pret; then
     repondre a_faire "SDK Android absent : installez d'abord la capacité android-build (étape android_build), puis refaites celle-ci."
   fi
@@ -549,13 +645,22 @@ etape_android_emulateur() {
     repondre bloque "KVM indisponible sur ce serveur : l'émulateur ne sera pas accéléré (${kvm} absent)."
   fi
   u=$(id -un)
+  if [ ! -x "$SDK_ANDROID/emulator/emulator" ] || [ ! -d "$SDK_ANDROID/${V_SDK_IMAGE_EMULATEUR//;//}" ]; then
+    exiger_disque "$SEUIL_EMULATEUR_GO"
+  fi
   if ! id -nG "$u" 2>/dev/null | tr ' ' '\n' | grep -qx kvm; then
     sudo usermod -aG kvm "$u" >/dev/null 2>&1 || repondre bloque "Ajout de ${u} au groupe kvm impossible."
     ajoute=1
   fi
   if [ ! -x "$SDK_ANDROID/emulator/emulator" ] || [ ! -d "$SDK_ANDROID/${V_SDK_IMAGE_EMULATEUR//;//}" ]; then
-    "$sdkmanager" --sdk_root="$SDK_ANDROID" "emulator" "$V_SDK_IMAGE_EMULATEUR" >/dev/null 2>&1 \
-      || repondre bloque "Installation de l'émulateur et de ${V_SDK_IMAGE_EMULATEUR} par sdkmanager impossible."
+    preparer_jdk_sdkmanager || repondre bloque "${ECHEC_ANDROID}"
+    sdk_cmd "$sdkmanager" --sdk_root="$SDK_ANDROID" "emulator" "$V_SDK_IMAGE_EMULATEUR" >/dev/null 2>&1
+    code=$?
+    if [ "$code" = 124 ]; then
+      repondre bloque "Délai dépassé (${delai} s) pour sdkmanager : installation de l'émulateur interrompue, à refaire."
+    elif [ "$code" != 0 ]; then
+      repondre bloque "Installation de l'émulateur et de ${V_SDK_IMAGE_EMULATEUR} par sdkmanager impossible."
+    fi
   fi
   emulateur_pret || repondre bloque "Émulateur incomplet après installation (emulator, image système, ${kvm} ou groupe kvm manquant)."
   if [ -n "$ajoute" ]; then
@@ -568,20 +673,26 @@ etape_android_emulateur() {
 
 # Étape unity_cli : l'outil officiel Unity CLI seulement, installé pour l'utilisateur dans ~/.local/bin/unity. Le script
 # officiel (https://unity.com/install.sh) est d'abord téléchargé dans un fichier, contrôlé (non vide, commence par #!) puis
-# exécuté par bash ; jamais de « curl | bash ». C'est ce script qui télécharge le binaire et vérifie son SHA-256.
-# Aucun éditeur n'est installé ici (il faut une session Unity authentifiée), sauf UNITY_EDITEUR avec un compte connecté.
+# exécuté par bash ; jamais de « curl | bash ». C'est ce script qui télécharge le binaire et vérifie son SHA-256. Il est lancé
+# avec UNITY_CLI_SKIP_SETUP=1 : sans son étape finale, qui installerait des skills Unity dans tous les clients d'agents trouvés
+# sur la machine ; il peut en revanche ajouter ~/.local/bin au PATH de ~/.bashrc (dit dans le détail). Aucun éditeur n'est
+# installé ici : il faut une session Unity authentifiée (Unity Hub dans la session graphique, ou `unity install <version>`).
 etape_unity_cli() {
   local dossier="$HOME/.local/bin" unity="$HOME/.local/bin/unity" tmp ok=0 prefixe="Unity CLI installé"
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : téléchargerait le script officiel ${URL_INSTALLEUR_UNITY} dans un fichier, le contrôlerait puis l'exécuterait par bash pour installer Unity CLI dans ${unity}."
   fi
+  refuser_root
+  # Une session SSH tuée en cours de téléchargement laisse son fichier temporaire : on le retire.
+  rm -f "$dossier"/.installeur-unity.* 2>/dev/null
   if "$unity" --version >/dev/null 2>&1; then
     prefixe="Unity CLI déjà installé"
   else
+    exiger_disque "$SEUIL_UNITY_CLI_GO"
     mkdir -p "$dossier" || repondre bloque "Dossier ${dossier} non créable."
     tmp=$(mktemp "$dossier/.installeur-unity.XXXXXX") || repondre bloque "Fichier temporaire non créable dans ${dossier}."
-    if curl -fsSL "$URL_INSTALLEUR_UNITY" -o "$tmp" >/dev/null 2>&1 && [ -s "$tmp" ] && [ "$(head -c 2 "$tmp")" = '#!' ]; then
-      bash "$tmp" >/dev/null 2>&1 && ok=1
+    if curl -fsSL --connect-timeout 20 --max-time 60 "$URL_INSTALLEUR_UNITY" -o "$tmp" >/dev/null 2>&1 && [ -s "$tmp" ] && [ "$(head -c 2 "$tmp")" = '#!' ]; then
+      UNITY_CLI_SKIP_SETUP=1 bash "$tmp" >/dev/null 2>&1 && ok=1
     fi
     rm -f "$tmp"
     if [ "$ok" != 1 ]; then
@@ -589,17 +700,7 @@ etape_unity_cli() {
     fi
     "$unity" --version >/dev/null 2>&1 || repondre bloque "Unity CLI absent ou inutilisable après l'installation (${unity} --version échoue)."
   fi
-  if [ -n "${UNITY_EDITEUR:-}" ]; then
-    case "$UNITY_EDITEUR" in
-      *[!0-9A-Za-z._-]*) repondre bloque "${prefixe}, mais UNITY_EDITEUR n'est pas un numéro de version valide." ;;
-    esac
-    if "$unity" whoami >/dev/null 2>&1; then
-      "$unity" install "$UNITY_EDITEUR" >/dev/null 2>&1 \
-        || repondre bloque "${prefixe}, mais l'installation de l'éditeur ${UNITY_EDITEUR} a échoué."
-      repondre fait "${prefixe} ; éditeur ${UNITY_EDITEUR} installé."
-    fi
-  fi
-  repondre fait "${prefixe} ; installez un éditeur par la session graphique (Unity Hub) ou \`unity install <version>\` une fois connecté."
+  repondre fait "${prefixe} ; l'installateur officiel a pu ajouter ~/.local/bin au PATH dans votre profil shell (~/.bashrc). Aucun éditeur installé : installez un éditeur par la session graphique (Unity Hub) ou \`unity install <version>\` une fois connecté."
 }
 
 # --- État ------------------------------------------------------------------

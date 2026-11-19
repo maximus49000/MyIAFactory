@@ -37,12 +37,12 @@ def sortie_complete(valeurs=None):
 
 class TestSonder(unittest.TestCase):
     def test_une_seule_connexion_pour_toutes_les_sondes(self):
-        ssh = FauxSsh((0, sortie_complete({"base": 0, "unity": 0}), ""))
+        ssh = FauxSsh((0, sortie_complete({"base": 0, "unity-cli": 0}), ""))
         etat = serveur_etat.sonder(SERVEUR, ssh=ssh)
         self.assertEqual(len(ssh.appels), 1)
         self.assertEqual(set(etat), set(CATALOGUE))
         self.assertEqual(etat["base"], "presente")
-        self.assertEqual(etat["unity"], "presente")
+        self.assertEqual(etat["unity-cli"], "presente")
         self.assertEqual(etat["agent"], "absente")
         self.assertEqual(ssh.appels[0]["hote"], "factory@203.0.113.7")
         self.assertEqual(ssh.appels[0]["commande"], "bash -s")
@@ -71,7 +71,7 @@ class TestSonder(unittest.TestCase):
             self.assertEqual(set(etat.values()), {"inconnue"})
 
     def test_sortie_illisible_donne_inconnue(self):
-        for sortie in ("n'importe quoi", "base=oui\nunity=2\n", "\x00\xff", None):
+        for sortie in ("n'importe quoi", "base=oui\nunity-cli=2\n", "\x00\xff", None):
             etat = serveur_etat.sonder(SERVEUR, ssh=FauxSsh((0, sortie, "")))
             self.assertEqual(set(etat.values()), {"inconnue"}, sortie)
 
@@ -80,13 +80,13 @@ class TestSonder(unittest.TestCase):
         etat = serveur_etat.sonder(SERVEUR, ssh=FauxSsh((0, sortie, "")))
         self.assertEqual(etat["agent"], "inconnue")
         self.assertEqual(etat["base"], "presente")
-        self.assertEqual(etat["unity"], "absente")
+        self.assertEqual(etat["unity-cli"], "absente")
         self.assertNotIn("extra", etat)
 
     def test_lignes_contradictoires_donnent_inconnue(self):
         etat = serveur_etat.sonder(SERVEUR, ssh=FauxSsh((0, sortie_complete() + "base=0\n", "")))
         self.assertEqual(etat["base"], "inconnue")
-        self.assertEqual(etat["unity"], "absente")
+        self.assertEqual(etat["unity-cli"], "absente")
 
     def test_aucune_commande_mutante_envoyee(self):
         ssh = FauxSsh((0, sortie_complete(), ""))

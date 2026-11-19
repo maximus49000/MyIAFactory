@@ -50,9 +50,14 @@ _CATALOGUE = {
         "android-emulateur", "Émulateur Android (KVM)", ("android-build",), "android_emulateur",
         "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images "
         "&& id -nG | grep -qw kvm && test -e /dev/kvm", 2.0, 8),
-    "unity": Capacite(
-        "unity", "Unity (éditeur en ligne de commande)", ("base",), "unity_cli",
-        "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1", 24.0, 25),
+    "unity-cli": Capacite(
+        "unity-cli", "Unity CLI (outil officiel en ligne de commande)", ("base",), "unity_cli",
+        "test -x ~/.local/bin/unity && ~/.local/bin/unity --version >/dev/null 2>&1", 0.1, 2),
+    "unity-editeur": Capacite(
+        "unity-editeur", "Éditeur Unity", ("unity-cli",), "unity_cli",
+        "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1", 24.0, 25,
+        installable=False,
+        raison_non_installable="installer l'éditeur par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté"),
     "session-graphique": Capacite(
         "session-graphique", "Session graphique distante (bureau + Unity Hub)", ("base",), "bureau_distant",
         "ss -ltn 2>/dev/null | grep -qE '127\\.0\\.0\\.1:3389( |$)' && command -v unityhub >/dev/null", 3.0, 12,

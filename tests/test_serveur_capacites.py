@@ -23,20 +23,31 @@ class CatalogueTests(unittest.TestCase):
                 self.assertIn(d, sc.CATALOGUE)
 
     def test_contenu_du_catalogue(self):
-        self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "unity",
-                                             "session-graphique", "agent"})
+        self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "unity-cli",
+                                             "unity-editeur", "session-graphique", "agent"})
         self.assertEqual(sc.CATALOGUE["durcissement"].depend, ("base",))
         self.assertEqual(sc.CATALOGUE["android-emulateur"].depend, ("android-build",))
         self.assertEqual(sc.CATALOGUE["base"].etape, "docker")
-        self.assertEqual(sc.CATALOGUE["unity"].etape, "unity_cli")
+        cli, ed = sc.CATALOGUE["unity-cli"], sc.CATALOGUE["unity-editeur"]
+        self.assertEqual((cli.etape, cli.depend, cli.installable), ("unity_cli", ("base",), True))
+        self.assertEqual((cli.taille_go, cli.duree_min), (0.1, 2))
+        self.assertTrue(cli.sonde.startswith("test -x ~/.local/bin/unity"))
+        self.assertIn("~/.local/bin/unity --version", cli.sonde)
+        self.assertEqual(ed.depend, ("unity-cli",))
+        self.assertFalse(ed.installable)
+        self.assertIn("Unity Hub", ed.raison_non_installable)
+        self.assertIn("unity install <version>", ed.raison_non_installable)
+        self.assertEqual((ed.taille_go, ed.duree_min), (24.0, 25))
+        self.assertEqual(ed.sonde, "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1")
+        self.assertEqual([b["id"] for b in sc.bloquees(sc.ordre_installation(["unity-editeur"], set()))], ["unity-editeur"])
 
     def test_ordre_respecte_les_dependances(self):
         self.assertEqual(sc.ordre_installation(["android-emulateur"], set()),
                          ["base", "android-build", "android-emulateur"])
 
     def test_ordre_stable_sans_doublon(self):
-        self.assertEqual(sc.ordre_installation(["android-emulateur", "android-build", "unity"], set()),
-                         ["base", "android-build", "android-emulateur", "unity"])
+        self.assertEqual(sc.ordre_installation(["android-emulateur", "android-build", "unity-cli"], set()),
+                         ["base", "android-build", "android-emulateur", "unity-cli"])
 
     def test_ordre_ignore_ce_qui_est_installe(self):
         self.assertEqual(sc.ordre_installation(["android-emulateur"], {"base"}), ["android-build", "android-emulateur"])

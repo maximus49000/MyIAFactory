@@ -540,10 +540,14 @@ class Monde:
     d'un lancement à l'autre dans le même Monde, pour tester l'idempotence."""
 
     def __init__(self, manifeste="ok", archive="ok", sha_manifeste=None, unity="ok", unzip_echec=False, jdk=True,
-                 paquets_absents=False, kvm=True, kvm_membre=False, sdkmanager_echec=False, unity_connecte=False):
+                 paquets_absents=False, kvm=True, kvm_membre=False, sdkmanager_echec=False, sdk_version="ok",
+                 utilisateur="ubuntu", sdk_lent=False, licence_echec=False, mv_echec=False, canal_latest="channel-0"):
         self.opt = dict(CURL_MANIFESTE=manifeste, CURL_ZIP=archive, CURL_UNITY=unity, UNZIP_ECHEC="1" if unzip_echec else "",
-                        SDKMANAGER_ECHEC="1" if sdkmanager_echec else "", UNITY_CONNECTE="1" if unity_connecte else "",
+                        SDKMANAGER_ECHEC="1" if sdkmanager_echec else "", SDK_VERSION_MODE=sdk_version,
+                        FAUX_UTILISATEUR=utilisateur, SDKMANAGER_LENT="1" if sdk_lent else "",
+                        SDKMANAGER_LICENCE_ECHEC="1" if licence_echec else "", MV_ECHEC="1" if mv_echec else "",
                         PAQUETS_ABSENTS="1" if paquets_absents else "")
+        self.canal_latest = canal_latest
         self.sha = sha_manifeste or hashlib.sha1(ZIP_CONTENU).hexdigest()
         self.jdk, self.kvm, self.kvm_membre = jdk, kvm, kvm_membre
 
@@ -558,22 +562,38 @@ class Monde:
         j, si, tp, e = self.journal_fichier.as_posix(), self.stdin_fichier.as_posix(), t.as_posix(), self.etat.as_posix()
         (t / "archive.zip").write_bytes(ZIP_CONTENU)
         (t / "manifeste.xml").write_text(
-            '<sdk:sdk-repository xmlns:sdk="x"><remotePackage path="cmdline-tools;latest"><archives>\n'
-            f'<archive><complete><size>1</size><checksum type="sha1">{"b" * 40}</checksum>\n'
-            '   <url>commandlinetools-linux-11000000_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
+            # Un paquet alpha (canal beta) AVANT le stable, avec un N plus grand et plus de chiffres, et un cmdline-tools;17.0
+            # stable de N plus grand : seul le paquet cmdline-tools;latest du canal stable doit être retenu.
+            '<sdk:sdk-repository xmlns:sdk="x">\n'
+            '<remotePackage path="cmdline-tools;19.0-alpha01"><channelRef ref="channel-1"/><archives>\n'
+            f'<archive><complete><size>1</size><checksum type="sha1">{"a" * 40}</checksum>\n'
+            '   <url>commandlinetools-linux-999999999_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
+            '</archives></remotePackage>\n'
+            f'<remotePackage path="cmdline-tools;latest">\n<channelRef ref="{self.canal_latest}"/><archives>\n'
             f'<archive><complete><size>1</size><checksum type="sha1">{self.sha}</checksum>\n'
             f'   <url>commandlinetools-linux-{NUMERO_RECENT}_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
             f'<archive><complete><size>1</size><checksum type="sha1">{"c" * 40}</checksum>\n'
             '   <url>commandlinetools-mac-99999999_latest.zip</url></complete><host-os>macosx</host-os></archive>\n'
+            '</archives></remotePackage>\n'
+            '<remotePackage path="cmdline-tools;17.0"><channelRef ref="channel-0"/><archives>\n'
+            f'<archive><complete><size>1</size><checksum type="sha1">{"b" * 40}</checksum>\n'
+            '   <url>commandlinetools-linux-20000000_latest.zip</url></complete><host-os>linux</host-os></archive>\n'
             '</archives></remotePackage></sdk:sdk-repository>\n', newline="\n")
         (t / "sdkmanager.fixe").write_text(
             '#!/bin/sh\n'
             f'echo "sdkmanager $@" >> "{j}"\necho "JAVA_HOME=$JAVA_HOME" >> "{j}"\n'
             'root=""; lic=""\n'
             'for a in "$@"; do case "$a" in --sdk_root=*) root="${a#--sdk_root=}";; --licenses) lic=1;; esac; done\n'
-            'if [ -n "$lic" ]; then head -n 1 > /dev/null; exit 0; fi\n'
+            'if [ "$1" = --version ]; then case "$SDK_VERSION_MODE" in\n'
+            '  classfile) case "$JAVA_HOME" in *java-21*) echo 12.0; exit 0;; *) echo "java.lang.UnsupportedClassVersionError: class file version 65.0" >&2; exit 1;; esac;;\n'
+            '  toujours) echo "java.lang.UnsupportedClassVersionError: class file version 65.0" >&2; exit 1;;\n'
+            '  autre) echo "boom" >&2; exit 1;;\n'
+            '  *) echo 12.0; exit 0;; esac; fi\n'
+            'if [ -n "$lic" ]; then head -n 1 > /dev/null; [ -n "$SDKMANAGER_LICENCE_ECHEC" ] && exit 1; exit 0; fi\n'
             f'cat >> "{si}"\n'
+            '[ -n "$SDKMANAGER_LENT" ] && sleep 5\n'
             '[ -n "$SDKMANAGER_ECHEC" ] && exit 1\n'
+            '[ -n "$SDKMANAGER_LICENCE_ECHEC" ] && exit 1\n'
             'for a in "$@"; do case "$a" in\n'
             '  platform-tools) mkdir -p "$root/platform-tools"; echo "#!/bin/sh" > "$root/platform-tools/adb"; chmod 755 "$root/platform-tools/adb";;\n'
             '  platforms\\;*) mkdir -p "$root/platforms/${a#platforms;}";;\n'
@@ -583,17 +603,17 @@ class Monde:
             'esac; done\nexit 0\n', newline="\n")
         (t / "install.sh").write_text(
             '#!/bin/bash\n'
-            f'echo "installeur-unity-execute" >> "{j}"\ncat >> "{si}"\n'
+            f'echo "installeur-unity-execute SKIP=$UNITY_CLI_SKIP_SETUP" >> "{j}"\ncat >> "{si}"\n'
             'mkdir -p "$HOME/.local/bin"\n'
             "cat > \"$HOME/.local/bin/unity\" <<'EOT'\n#!/bin/sh\n"
             f'echo "unity $@" >> "{j}"\n'
-            'case "$1" in --version) echo "unity 1.0";; whoami) [ "$UNITY_CONNECTE" = 1 ];; '
-            f'install) cat >> "{si}";; esac\nEOT\n'
+            'case "$1" in --version) echo "unity 1.0";; esac\nEOT\n'
             'chmod 755 "$HOME/.local/bin/unity"\n', newline="\n")
         jdk_bin = f"{self.jvm.as_posix()}/java-17-openjdk-amd64/bin"
+        jdk21_bin = f"{self.jvm.as_posix()}/java-21-openjdk-amd64/bin"
         corps = {
             "sudo": 'while case "$1" in *=*) true;; *) false;; esac; do shift; done\nexec "$@"',
-            "curl": ('out=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done\n'
+            "curl": ('out=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; --connect-timeout|--max-time) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done\n'
                      'case "$url" in\n'
                      f'  */repository2-3.xml) case "$CURL_MANIFESTE" in http) exit 22;; vide) : > "$out";; sans) echo "<xml/>" > "$out";; *) cp "{tp}/manifeste.xml" "$out";; esac;;\n'
                      f'  */commandlinetools-linux-*) case "$CURL_ZIP" in http) exit 22;; vide) : > "$out";; tronque) printf "ZIPFA" > "$out"; exit 18;; corrompu) echo "ZIPFAKE-AUTRE" > "$out";; *) cp "{tp}/archive.zip" "$out";; esac;;\n'
@@ -604,15 +624,20 @@ class Monde:
                       'grep -q ZIPFAKE "$f" || exit 9\n'
                       f'mkdir -p "$d/cmdline-tools/bin" && cp "{tp}/sdkmanager.fixe" "$d/cmdline-tools/bin/sdkmanager" && chmod 755 "$d/cmdline-tools/bin/sdkmanager"'),
             "zip": "exit 0",
-            "dpkg": f'[ -e "{e}/apt" ] && exit 0\n[ "$PAQUETS_ABSENTS" = 1 ] && exit 1\nexit 0',
-            "apt-get": (f'case "$*" in *install*) touch "{e}/apt"; case "$*" in *openjdk*) mkdir -p "{jdk_bin}"; '
-                        f'echo "#!/bin/sh" > "{jdk_bin}/java"; chmod 755 "{jdk_bin}/java";; esac;; esac\nexit 0'),
+            "dpkg-query": (f'case "$*" in *openjdk-21*) [ -e "{e}/apt21" ] && echo installed && exit 0; exit 1;; esac\n'
+                           f'[ -e "{e}/apt" ] && echo installed && exit 0\n[ "$PAQUETS_ABSENTS" = 1 ] && exit 1\necho installed'),
+            "apt-get": (f'case "$*" in *install*) touch "{e}/apt"; case "$*" in *openjdk-17*) mkdir -p "{jdk_bin}"; '
+                        f'echo "#!/bin/sh" > "{jdk_bin}/java"; chmod 755 "{jdk_bin}/java";; '
+                        f'*openjdk-21*) touch "{e}/apt21"; mkdir -p "{jdk21_bin}"; '
+                        f'echo "#!/bin/sh" > "{jdk21_bin}/java"; chmod 755 "{jdk21_bin}/java";; esac;; esac\nexit 0'),
             "usermod": f'touch "{e}/kvm"',
-            "id": f'case "$1" in -un) echo ubuntu;; -nG) if [ -e "{e}/kvm" ]; then echo "ubuntu kvm"; else echo ubuntu; fi;; esac',
+            "mv": 'case "$*" in *extrait*) [ -n "$MV_ECHEC" ] && exit 1;; esac\nexec /usr/bin/mv "$@"',
+            "id": (f'case "$1" in -un) echo "${{FAUX_UTILISATEUR:-ubuntu}}";; '
+                   f'-nG) if [ -e "{e}/kvm" ]; then echo "ubuntu kvm"; else echo ubuntu; fi;; esac'),
             "docker": "exit 0",
         }
         for nom, texte in corps.items():
-            journalise = f'echo "{nom} $@" >> "{j}"\n' if nom != "id" else ""      # `id` est une simple lecture : hors journal
+            journalise = f'echo "{nom} $@" >> "{j}"\n' if nom not in ("id", "dpkg-query") else ""   # simples lectures : hors journal
             (self.faux / nom).write_text("#!/bin/sh\n" + journalise + texte + "\n", newline="\n")
             (self.faux / nom).chmod(0o755)
         if self.jdk:
@@ -687,11 +712,11 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertEqual(m.restes(m.sdk / "cmdline-tools"), ["latest"])
             curls = m.appels("curl ")
             self.assertEqual(len(curls), 2, curls)
-            self.assertIn("-fsSL https://dl.google.com/android/repository/repository2-3.xml -o ", curls[0])
-            self.assertIn(f"-fsSL https://dl.google.com/android/repository/commandlinetools-linux-{NUMERO_RECENT}_latest.zip -o ", curls[1])
+            self.assertIn("-fsSL --connect-timeout 20 --max-time 60 https://dl.google.com/android/repository/repository2-3.xml -o ", curls[0])
+            self.assertIn(f"-fsSL --connect-timeout 20 --max-time 1200 https://dl.google.com/android/repository/commandlinetools-linux-{NUMERO_RECENT}_latest.zip -o ", curls[1])
             sdkm = m.appels("sdkmanager ")
             self.assertTrue(any("--licenses" in x for x in sdkm), sdkm)
-            installe = [x for x in sdkm if "--licenses" not in x]
+            installe = [x for x in sdkm if "--licenses" not in x and "--version" not in x]
             self.assertEqual(len(installe), 1, sdkm)
             self.assertRegex(installe[0], r"--sdk_root=\S*/home/android-sdk ")
             for paquet in ("platform-tools", "platforms;android-36", "build-tools;36.0.0"):
@@ -753,7 +778,138 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertEqual(d["statut"], "fait", d["detail"])
             self.assertEqual(m.journal, avant)                       # aucun nouvel appel : ni curl, ni apt, ni sdkmanager
 
+    def test_android_build_choisit_l_archive_du_paquet_latest_stable(self):
+        # le manifeste de test place avant lui un alpha (canal beta) et après lui un cmdline-tools;17.0 de N plus grands
+        with Monde() as m:
+            self.assertEqual(m.lancer("android_build")["statut"], "fait")
+            self.assertIn(f"commandlinetools-linux-{NUMERO_RECENT}_latest.zip", m.appels("curl ")[1])
+            self.assertNotIn("999999999", m.journal)
+            self.assertNotIn("20000000", m.journal)
+        with Monde(canal_latest="channel-1") as m:               # « latest » seulement en beta : aucune archive stable
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertEqual(len(m.appels("curl ")), 1)
+
+    def test_android_build_remplace_un_latest_incomplet_en_le_gardant_de_cote(self):
+        with Monde() as m:
+            latest = m.sdk / "cmdline-tools" / "latest"
+            (latest / "bin").mkdir(parents=True)
+            (latest / "bin" / "sdkmanager").write_text("tronque", newline="\n")      # non exécutable
+            (latest / "marqueur").write_text("ancienne", newline="\n")
+            (latest / "bin" / "sdkmanager").chmod(0o644)
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertIn("JAVA_HOME", (latest / "bin" / "sdkmanager").read_text())   # le nouveau, pas le tronqué
+            self.assertFalse((latest / "latest").exists())           # pas d'imbrication
+            self.assertFalse((latest / "cmdline-tools").exists())
+            anciens = [x for x in (m.sdk / "cmdline-tools").iterdir() if x.name.startswith("latest.ancien.")]
+            self.assertEqual(len(anciens), 1)
+            self.assertEqual((anciens[0] / "marqueur").read_text(), "ancienne")   # gardé, jamais supprimé
+
+    def test_android_build_restaure_l_ancien_latest_si_la_mise_en_place_echoue(self):
+        with Monde(mv_echec=True) as m:
+            latest = m.sdk / "cmdline-tools" / "latest"
+            latest.mkdir(parents=True)
+            (latest / "marqueur").write_text("ancienne", newline="\n")
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertEqual((latest / "marqueur").read_text(), "ancienne")
+            self.assertEqual(m.restes(m.sdk / "cmdline-tools"), ["latest"])
+        with Monde(archive="http") as m:                          # téléchargement raté : le latest incomplet n'est pas touché
+            latest = m.sdk / "cmdline-tools" / "latest"
+            latest.mkdir(parents=True)
+            (latest / "marqueur").write_text("ancienne", newline="\n")
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertEqual(m.restes(m.sdk / "cmdline-tools"), ["latest"])
+
+    def test_android_build_retire_les_temporaires_perimes(self):
+        with Monde() as m:
+            vieux = m.sdk / "cmdline-tools" / ".telechargement.ABC123"
+            vieux.mkdir(parents=True)
+            (vieux / "archive.zip").write_text("reste", newline="\n")
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.restes(m.sdk / "cmdline-tools"), ["latest"])
+
+    def test_android_build_refuse_root_et_disque_insuffisant(self):
+        with Monde(utilisateur="root") as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("root", d["detail"])
+            self.assertEqual(m.journal, "")
+            self.assertEqual(list(m.home.iterdir()), [])
+        with Monde() as m:
+            d = m.lancer("android_build", env={"DISQUE_LIBRE_GO": "14"})
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("isque", d["detail"])
+            self.assertEqual(m.journal, "")
+            self.assertEqual(m.lancer("android_build", env={"DISQUE_LIBRE_GO": "15"})["statut"], "fait")
+
+    def test_android_build_utilise_le_jdk21_pour_sdkmanager_si_le_17_est_refuse(self):
+        with Monde(sdk_version="classfile") as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            installs = [x for x in m.appels("apt-get ") if " install " in x]
+            self.assertEqual(len(installs), 1, installs)
+            self.assertIn("openjdk-21-jdk-headless", installs[0])
+            self.assertNotIn("openjdk-17", installs[0])               # le JDK 17 reste le JDK du projet, déjà là
+            self.assertTrue(any("java-21-openjdk" in x for x in m.journal.splitlines() if x.startswith("JAVA_HOME=")))
+            installe = [i for i, x in enumerate(m.journal.splitlines()) if x.startswith("sdkmanager --sdk_root=") and "--licenses" not in x]
+            self.assertTrue(installe)
+            self.assertIn("java-21-openjdk", m.journal.splitlines()[installe[0] + 1])   # JAVA_HOME de CET appel
+            self.assertTrue((m.sdk / "platform-tools" / "adb").exists())
+
+    def test_android_build_bloque_si_aucun_jdk_ne_convient_a_sdkmanager(self):
+        for mode, attendu in (("toujours", "JDK"), ("autre", "sdkmanager")):
+            with self.subTest(mode=mode), Monde(sdk_version=mode) as m:
+                d = m.lancer("android_build")
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertIn(attendu, d["detail"])
+                self.assertFalse((m.sdk / "platform-tools").exists())
+                if mode == "autre":                                   # autre erreur : pas d'installation de JDK à l'aveugle
+                    self.assertEqual([x for x in m.appels("apt-get ") if " install " in x], [])
+
+    def test_android_build_expire_proprement_et_distingue_les_licences(self):
+        with Monde(sdk_lent=True) as m:
+            d = m.lancer("android_build", env={"SDK_DELAI_S": "1"})
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("élai", d["detail"])
+        with Monde(licence_echec=True) as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("icence", d["detail"])
+            self.assertNotIn("Installation de platform-tools", d["detail"])
+
+    def test_apt_des_nouvelles_etapes_attend_le_verrou_dpkg(self):
+        with Monde(paquets_absents=True, jdk=False) as m:
+            m.lancer("android_build")
+            apts = m.appels("apt-get ")
+            self.assertTrue(apts)
+            for x in apts:
+                self.assertIn("-o DPkg::Lock::Timeout=120", x)
+        with Monde(paquets_absents=True) as m:
+            m.lancer("docker")
+            for x in m.appels("apt-get "):
+                self.assertIn("-o DPkg::Lock::Timeout=120", x)
+
     # --- android_emulateur -----------------------------------------------------
+
+    def test_android_emulateur_refuse_root_et_disque_insuffisant(self):
+        with Monde() as m:
+            m.lancer("android_build")
+            avant = m.journal
+            d = m.lancer("android_emulateur", env={"DISQUE_LIBRE_GO": "9"})
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("isque", d["detail"])
+            self.assertEqual(m.journal, avant)
+            m.opt["FAUX_UTILISATEUR"] = "root"
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("root", d["detail"])
+            self.assertEqual(m.journal, avant)
+            m.opt["FAUX_UTILISATEUR"] = "ubuntu"
+            self.assertEqual(m.lancer("android_emulateur", env={"DISQUE_LIBRE_GO": "10"})["statut"], "fait")
 
     def test_android_emulateur_sans_android_build_est_a_faire(self):
         with Monde() as m:
@@ -811,10 +967,12 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertIn("installez un éditeur", d["detail"])
             self.assertIn("Unity Hub", d["detail"])
             self.assertTrue((m.home / ".local" / "bin" / "unity").exists())
-            self.assertEqual(m.appels("installeur-unity-execute"), ["installeur-unity-execute"])
-            self.assertEqual(len(m.appels("curl -fsSL https://unity.com/install.sh -o ")), 1, m.journal)
+            # le script officiel tourne SANS son étape finale (skills dans les clients d'agents, plugin) : UNITY_CLI_SKIP_SETUP=1
+            self.assertEqual(m.appels("installeur-unity-execute"), ["installeur-unity-execute SKIP=1"])
+            self.assertIn("profil", d["detail"])
+            self.assertEqual(len(m.appels("curl -fsSL --connect-timeout 20 --max-time 60 https://unity.com/install.sh -o ")), 1, m.journal)
             self.assertEqual([x for x in m.restes(m.home / ".local" / "bin") if x.startswith(".")], [])   # temporaire supprimé
-            self.assertEqual(m.appels("unity install"), [])          # aucun éditeur sans compte connecté
+            self.assertEqual(m.appels("unity install"), [])          # jamais d'éditeur : CLI seulement
             avant = m.journal
             d = m.lancer("unity_cli")                                # idempotent : pas de nouveau téléchargement
             self.assertEqual(d["statut"], "fait", d["detail"])
@@ -837,19 +995,36 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertEqual(d["statut"], "bloque", d["detail"])
             self.assertNotIn("coucou", m.derniere.stdout + m.derniere.stderr)
 
-    def test_unity_cli_editeur_installe_seulement_si_compte_connecte(self):
-        with Monde(unity_connecte=True) as m:
-            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "6000.6.7f1"})
+    def test_unity_cli_n_installe_jamais_d_editeur(self):
+        with Monde() as m:
+            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "6000.6.7f1"})      # l'ancienne variable est ignorée
             self.assertEqual(d["statut"], "fait", d["detail"])
-            self.assertEqual(m.appels("unity install"), ["unity install 6000.6.7f1"])
-        with Monde(unity_connecte=False) as m:
-            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "6000.6.7f1"})
+            self.assertNotIn("6000.6.7f1", d["detail"])
+            self.assertEqual(m.appels("unity "), [x for x in m.appels("unity ") if x.startswith("unity --version")])
+
+    def test_unity_cli_retire_ses_temporaires_perimes(self):
+        with Monde() as m:
+            bin_ = m.home / ".local" / "bin"
+            bin_.mkdir(parents=True)
+            (bin_ / ".installeur-unity.ABC123").write_text("reste d'une session tuée", newline="\n")
+            d = m.lancer("unity_cli")
             self.assertEqual(d["statut"], "fait", d["detail"])
-            self.assertEqual(m.appels("unity install"), [])
-        with Monde(unity_connecte=True) as m:
-            d = m.lancer("unity_cli", env={"UNITY_EDITEUR": "1; rm -rf /"})
+            self.assertEqual([x for x in m.restes(bin_) if x.startswith(".")], [])
+
+    def test_unity_cli_refuse_root_et_disque_insuffisant(self):
+        with Monde(utilisateur="root") as m:
+            d = m.lancer("unity_cli")
             self.assertEqual(d["statut"], "bloque", d["detail"])
-            self.assertEqual(m.appels("unity install"), [])
+            self.assertIn("root", d["detail"])
+            self.assertEqual(m.journal, "")
+            self.assertEqual(list(m.home.iterdir()), [])
+        with Monde() as m:
+            d = m.lancer("unity_cli", env={"DISQUE_LIBRE_GO": "1"})
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("isque", d["detail"])
+            self.assertEqual(m.journal, "")
+            d = m.lancer("unity_cli", env={"DISQUE_LIBRE_GO": "2"})
+            self.assertEqual(d["statut"], "fait", d["detail"])
 
     # --- docker : unzip et zip ---------------------------------------------------
 
@@ -868,9 +1043,9 @@ class TestEtapesCapacites(unittest.TestCase):
     # --- stdin fermé -------------------------------------------------------------
 
     def test_nouvelles_etapes_gardent_stdin_ferme(self):
-        with Monde(unity_connecte=True) as m:
+        with Monde() as m:
             for etape in ("android_build", "android_emulateur", "unity_cli", "docker"):
-                d = m.lancer(etape, entree="ligne-secrete-12345\n", env={"UNITY_EDITEUR": "6000.6.7f1"} if etape == "unity_cli" else None)
+                d = m.lancer(etape, entree="ligne-secrete-12345\n")
                 self.assertEqual(d["statut"], "fait", (etape, d["detail"]))
                 self.assertNotIn("ligne-secrete", m.derniere.stdout + m.derniere.stderr)
             self.assertNotIn("ligne-secrete", m.journal)
@@ -1018,6 +1193,18 @@ class TestTexteDuScript(unittest.TestCase):
         unity = code[code.index("etape_unity_cli()"):code.index("etape_etat()")]
         self.assertIn('bash "$tmp"', unity)
         self.assertLess(unity.index("head -c 2"), unity.index('bash "$tmp"'))
+
+    def test_unity_cli_sans_editeur_et_installeur_sans_etape_finale(self):
+        self.assertNotIn("UNITY_EDITEUR", self.texte)
+        self.assertNotIn("whoami", self.texte)
+        self.assertIn('UNITY_CLI_SKIP_SETUP=1 bash "$tmp"', self.texte)
+
+    def test_mv_sur_latest_est_sans_imbrication_et_apt_sans_dpkg_s(self):
+        self.assertIn('mv -T "$travail/extrait/cmdline-tools" "$dest/latest"', self.texte)
+        helper = self.texte[self.texte.index("assurer_paquets()"):self.texte.index("etape_docker()")]
+        self.assertIn("dpkg-query -W -f='${db:Status-Status}'", helper)
+        self.assertNotIn("dpkg -s", helper)
+        self.assertIn("DPkg::Lock::Timeout=120", helper)
 
     def test_nouvelles_etapes_sans_set_e(self):
         code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))

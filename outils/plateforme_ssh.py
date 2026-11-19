@@ -87,6 +87,31 @@ def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
     return r.returncode, _texte(r.stdout), _texte(r.stderr)
 
 
+def _lancer_octets(runner, args, delai, entree=None):
+    """Comme `_lancer`, mais l'entrée reste des octets bruts (APK, image) : aucun encodage ni conversion."""
+    options = {"input": entree} if entree is not None else {"stdin": subprocess.DEVNULL}
+    try:
+        return runner(args, capture_output=True, timeout=delai, **options)
+    except FileNotFoundError:
+        raise ErreurSsh(f"« {args[0]} » est introuvable : le client OpenSSH de Windows est requis "
+                        "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
+
+
+def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):
+    """Comme `executer`, mais entrée et sortie standard restent des octets ; renvoie (code, sortie octets, erreur texte).
+
+    Un dépassement de délai donne le code 124.
+    """
+    _verifier_hote(hote)
+    args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
+    try:
+        r = _lancer_octets(runner, args, delai, entree)
+    except subprocess.TimeoutExpired:
+        return 124, b"", f"délai dépassé ({delai} s)"
+    sortie = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or "").encode("utf-8")
+    return r.returncode, sortie, _texte(r.stderr)
+
+
 def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=time.sleep):
     """Réessaie une commande triviale jusqu'au succès.
 

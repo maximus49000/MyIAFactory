@@ -67,6 +67,50 @@ class TestExecuter(unittest.TestCase):
         self.assertIn("délai", erreur)
 
 
+class TestExecuterOctets(unittest.TestCase):
+    def test_octets_en_entree_arrivent_intacts(self):
+        r = Runner()
+        donnees = b"PK\x03\x04\r\n\xff\xfe\x00abc\r\n"
+        plateforme_ssh.executer_octets(HOTE, "cat > /tmp/a.apk", Path("cle"), entree=donnees, runner=r)
+        kw = r.appels[0][1]
+        self.assertEqual(kw["input"], donnees)
+        self.assertNotIn("text", kw)
+        self.assertNotIn("stdin", kw)
+
+    def test_sortie_binaire_non_decodee(self):
+        png = b"\x89PNG\r\n\x1a\n\x00\xff\xfe"
+        def runner(args, **kw):
+            return subprocess.CompletedProcess(args, 0, stdout=png, stderr=b"\xffavert")
+        code, sortie, erreur = plateforme_ssh.executer_octets(HOTE, "cat /tmp/c.png", Path("cle"), runner=runner)
+        self.assertEqual(code, 0)
+        self.assertIsInstance(sortie, bytes)
+        self.assertEqual(sortie, png)
+        self.assertIsInstance(erreur, str)
+
+    def test_delai_donne_124(self):
+        def runner(args, **kw):
+            raise subprocess.TimeoutExpired(args, kw["timeout"])
+        code, sortie, erreur = plateforme_ssh.executer_octets(HOTE, "x", Path("cle"), delai=5, runner=runner)
+        self.assertEqual((code, sortie), (124, b""))
+        self.assertIn("délai", erreur)
+
+    def test_hote_invalide_refuse(self):
+        for hote in ("-oProxyCommand=x", "", "  "):
+            r = Runner()
+            with self.assertRaises(ValueError):
+                plateforme_ssh.executer_octets(hote, "true", Path("cle"), runner=r)
+            self.assertEqual(r.appels, [])
+
+    def test_options_et_double_tiret_comme_executer(self):
+        r1, r2 = Runner(), Runner()
+        plateforme_ssh.executer(HOTE, "true", Path("cle"), runner=r1)
+        plateforme_ssh.executer_octets(HOTE, "true", Path("cle"), runner=r2)
+        args = r2.appels[0][0]
+        self.assertEqual(args, r1.appels[0][0])
+        self.assertEqual(args[args.index(HOTE) - 1], "--")
+        self.assertIs(r2.appels[0][1]["stdin"], subprocess.DEVNULL)
+
+
 def _introuvable(args, **kw):
     raise FileNotFoundError(args[0])
 

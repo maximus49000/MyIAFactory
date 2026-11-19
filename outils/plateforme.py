@@ -336,8 +336,9 @@ def _etape_licence(c):
                         "série. L'activation manuelle (.alf) n'est pas prise en charge pour Unity Personal : "
                         "https://docs.unity3d.com/6000.6/Documentation/Manual/ManualActivationGuide.html (Unity 6000.6.7f1).")
     licence = chemin.read_bytes().decode("utf-8", errors="replace")   # octets : fins de ligne conservées, jamais en argument
-    if not licence.strip():
-        return _rapport("bloque", "Le fichier unity.ulf est vide.", f"Recopiez la licence Unity dans {chemin}, puis relancez.")
+    c.secrets += [x for x in plateforme_acces.secrets_licence(licence) if x not in c.secrets]   # octets exacts envoyés
+    if len(licence.strip()) < 12:
+        return _rapport("bloque", "Le fichier unity.ulf est vide ou trop court pour être une licence.", f"Recopiez la licence Unity dans {chemin}, puis relancez.")
     r = _lancer_etape(c, "licence", stdin=licence)
     if r["statut"] == "bloque":
         r["geste"] = "Vérifiez que unity.ulf est une licence valide pour Unity 6000.6.7f1 (détail ci-dessus), puis relancez."

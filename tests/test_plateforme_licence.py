@@ -111,6 +111,42 @@ class TestLicence(Base):
         self.jamais_visible(sortie.getvalue())
         self.assertIn("***", sortie.getvalue())
 
+    def test_ulf_trop_court_ne_masque_rien_d_autre(self):
+        ref = io.StringIO()
+        with redirect_stdout(ref):
+            plateforme.main(["etat", "--dossier", str(self.dossier)])
+        for court in ("\n", "x", " ", "  \n"):
+            (self.dossier / "unity.ulf").write_text(court, encoding="utf-8")
+            c = plateforme._Contexte(self.dossier, False, None, None, None)
+            c.preparer_secrets()
+            self.assertEqual(c.secrets[3:], [])                       # seuls les 3 secrets OVH
+            etat = self.lancer(ClientFactice(), SshLicence(), accord=True)
+            json.loads(self.cache())                                  # cache toujours du JSON valide
+            self.assertEqual(self.licence(etat)["statut"], "bloque")
+            (self.dossier / "plateforme.json").unlink()
+            sortie = io.StringIO()
+            with redirect_stdout(sortie):
+                plateforme.main(["etat", "--dossier", str(self.dossier)])
+            self.assertEqual(sortie.getvalue(), ref.getvalue())
+
+    def test_licence_remplacee_entre_lecture_et_envoi_reste_masquee(self):
+        (self.dossier / "unity.ulf").write_text(LICENCE, encoding="utf-8")
+        autre = LICENCE.replace("AAAABBBBCCCCDDDDEEEE", "ZZZZYYYYXXXXWWWWVVVV")
+        dossier = self.dossier
+
+        class Echange(SshLicence):
+            def executer(self, hote, commande, cle, stdin=None, delai=60):
+                if "--etape docker" in commande:
+                    (dossier / "unity.ulf").write_bytes(autre.encode("utf-8"))
+                return super().executer(hote, commande, cle, stdin, delai)
+        ssh = Echange(lambda c, s: (1, "pas du json", f"echo {s} / {json.dumps(s)[1:-1]}"))
+        etat = self.lancer(ClientFactice(), ssh, accord=True)
+        self.assertEqual(ssh.recus[0][1], autre)
+        self.assertEqual(self.licence(etat)["statut"], "bloque")
+        for t in (json.dumps(etat), self.cache()):
+            for forme in (autre, json.dumps(autre)[1:-1], "ZZZZYYYYXXXXWWWWVVVV"):
+                self.assertNotIn(forme, t)
+
     def test_ulf_vide_bloque_sans_appel_distant(self):
         (self.dossier / "unity.ulf").write_text("  \n", encoding="utf-8")
         ssh = SshLicence()

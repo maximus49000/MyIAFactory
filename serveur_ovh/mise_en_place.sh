@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Mise en place du serveur dédié (Ubuntu LTS). Le contrôleur dépose d'abord ce script dans un fichier du serveur, puis lance
 # `bash <fichier> --etape X`.
-# Contrat d'entrée standard : SEULE l'étape licence lit stdin (la licence). Pour toutes les autres, stdin est fermé
-# (/dev/null) afin qu'aucune commande (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|etat> [--simuler]
+# Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
+# session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
+# (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|etat> [--simuler]
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
-# La licence Unity (.ulf) arrive par l'entrée standard (stdin), jamais en argument, et n'est jamais réaffichée.
+# La licence Unity (.ulf) et le mot de passe de session arrivent par l'entrée standard (stdin), jamais en argument, et ne sont jamais réaffichés.
 set -u
 
 # Étiquettes épinglées (miroir de serveur_ovh/versions.json ; aucune étiquette sans étiquette flottante).
@@ -18,6 +19,12 @@ V_CMDLINE_TOOLS="11076708"
 V_GRADLE="8.7"
 V_NODE="22"
 V_CLAUDE_CODE="2.1.328"
+# Session graphique : dépôts apt (sources notées dans serveur_ovh/versions.json, clé unity_hub ; paquets non épinglés).
+URL_DEPOT_UNITY_HUB="https://hub.unity3d.com/linux/repos/deb"
+URL_CLE_UNITY_HUB="https://hub.unity3d.com/linux/keys/public"
+URL_DEPOT_MOZILLA="https://packages.mozilla.org/apt"
+URL_CLE_MOZILLA="https://packages.mozilla.org/apt/repo-signing-key.gpg"
+MOT_DE_PASSE_MIN=16
 # Étiquette collée aux images construites : si elle diffère des valeurs épinglées, l'image est reconstruite.
 EMPREINTE_ANDROID="ubuntu=${V_UBUNTU};build_tools=${V_BUILD_TOOLS};plateforme=${V_PLATEFORME};cmdline_tools=${V_CMDLINE_TOOLS};gradle=${V_GRADLE}"
 EMPREINTE_AGENT="ubuntu=${V_UBUNTU};node=${V_NODE};claude_code=${V_CLAUDE_CODE}"
@@ -29,19 +36,19 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
-# Seule l'étape licence lit stdin ; ailleurs il est fermé.
-if [ "$ETAPE" != "licence" ]; then
+# Seules les étapes licence et bureau_distant lisent stdin ; ailleurs il est fermé.
+if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ]; then
   exec </dev/null
 fi
 
@@ -239,6 +246,106 @@ etape_licence() {
   repondre bloque "Activation de la licence Unity non prouvée dans le conteneur de test (fichier ou journal sans confirmation)."
 }
 
+# --- Session graphique (bureau distant) -----------------------------------
+
+# Le mot de passe de session arrive sur la première ligne de stdin ; il n'est ni un argument, ni affiché, ni dans le JSON.
+etape_bureau_distant() {
+  local prefixe="" mdp="" utilisateur ecoute ini="/etc/xrdp/xrdp.ini" change=0 essais attente
+  [ "$SIMULER" = 1 ] && prefixe="Simulation : "
+  if [ ! -t 0 ]; then
+    IFS= read -r mdp
+  fi
+  mdp="${mdp%$'\r'}"
+  if [ -z "$mdp" ]; then
+    repondre a_faire "${prefixe}Aucun mot de passe de session reçu sur l'entrée standard : étape à refaire quand il sera fourni."
+  fi
+  if [ "${#mdp}" -lt "$MOT_DE_PASSE_MIN" ]; then
+    repondre bloque "${prefixe}Mot de passe de session trop court : ${MOT_DE_PASSE_MIN} caractères au moins sont exigés. Rien n'a été installé."
+  fi
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : installerait XFCE, xrdp (écoute 127.0.0.1:3389 seulement), Firefox (dépôt Mozilla, hors snap) et Unity Hub (dépôt officiel), fixerait le mot de passe de session et lancerait Unity Hub au démarrage de la session ; ufw et la connexion SSH ne seraient pas modifiés."
+  fi
+  exec </dev/null
+  utilisateur=$(id -un)
+  # Garde-fou : un mot de passe système n'a de sens que si la connexion SSH par mot de passe est coupée.
+  if sudo sshd -T 2>/dev/null | grep -qi '^passwordauthentication yes'; then
+    repondre bloque "La connexion SSH par mot de passe est encore ouverte : lancez d'abord l'étape de durcissement avant de fixer un mot de passe de session. Rien n'a été modifié."
+  fi
+
+  sudo apt-get update -y >/dev/null 2>&1
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gpg xfce4 xfce4-terminal dbus-x11 xrdp >/dev/null 2>&1 \
+    || repondre bloque "Installation de XFCE et de xrdp impossible."
+  sudo install -m 0755 -d /etc/apt/keyrings
+
+  # Firefox hors snap : dépôt Mozilla, trousseau signé, priorité sur le paquet de transition d'Ubuntu.
+  if [ ! -s /etc/apt/keyrings/packages.mozilla.org.asc ]; then
+    sudo curl -fsSL "$URL_CLE_MOZILLA" -o /etc/apt/keyrings/packages.mozilla.org.asc \
+      || repondre bloque "Clé du dépôt Mozilla introuvable."
+  fi
+  echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] ${URL_DEPOT_MOZILLA} mozilla main" \
+    | sudo tee /etc/apt/sources.list.d/mozilla.list >/dev/null
+  printf 'Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n' \
+    | sudo tee /etc/apt/preferences.d/mozilla >/dev/null
+  # Unity Hub : dépôt officiel d'Unity (clé armorée convertie en trousseau).
+  if [ ! -s /etc/apt/keyrings/unityhub.gpg ]; then
+    curl -fsSL "$URL_CLE_UNITY_HUB" | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/unityhub.gpg \
+      || repondre bloque "Clé du dépôt Unity Hub introuvable."
+  fi
+  echo "deb [signed-by=/etc/apt/keyrings/unityhub.gpg] ${URL_DEPOT_UNITY_HUB} stable main" \
+    | sudo tee /etc/apt/sources.list.d/unityhub.list >/dev/null
+  sudo apt-get update -y >/dev/null 2>&1
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox unityhub >/dev/null 2>&1 \
+    || repondre bloque "Installation de Firefox ou d'Unity Hub impossible."
+
+  # xrdp : écoute sur 127.0.0.1 seulement (accès par tunnel SSH), service activé, droit de lire le certificat.
+  grep -qx 'port=tcp://127.0.0.1:3389' "$ini" 2>/dev/null || {
+    sudo sed -i -E '0,/^port=.*/s//port=tcp:\/\/127.0.0.1:3389/' "$ini" || repondre bloque "Configuration de xrdp impossible."
+    change=1
+  }
+  id -nG xrdp 2>/dev/null | tr ' ' '\n' | grep -qx ssl-cert || {
+    sudo usermod -aG ssl-cert xrdp >/dev/null 2>&1 || repondre bloque "Ajout de xrdp au groupe ssl-cert impossible."
+    change=1
+  }
+  grep -qx 'startxfce4' "$HOME/.xsession" 2>/dev/null || printf 'startxfce4\n' > "$HOME/.xsession"
+  sudo systemctl enable xrdp >/dev/null 2>&1 || repondre bloque "Service xrdp non activable."
+  if [ "$change" = 1 ]; then
+    sudo systemctl restart xrdp >/dev/null 2>&1 || repondre bloque "Redémarrage de xrdp impossible."
+  else
+    sudo systemctl start xrdp >/dev/null 2>&1 || repondre bloque "Service xrdp absent ou impossible à démarrer."
+  fi
+
+  # Unity Hub au démarrage de la session graphique.
+  mkdir -p "$HOME/.config/autostart"
+  printf '[Desktop Entry]\nType=Application\nName=Unity Hub\nExec=unityhub\nTerminal=false\nX-GNOME-Autostart-enabled=true\n' \
+    > "$HOME/.config/autostart/unityhub.desktop"
+
+  # Mot de passe de session : par le tube seulement (printf est interne au shell, rien dans les arguments d'un processus).
+  printf '%s:%s\n' "$utilisateur" "$mdp" | sudo chpasswd >/dev/null 2>&1 \
+    || repondre bloque "Mot de passe de session non appliqué."
+  mdp=""
+
+  # Preuves : 3389 à l'écoute sur la boucle locale uniquement, aucune règle ufw pour 3389, binaires présents.
+  attente="${BUREAU_ATTENTE_S:-15}"
+  essais=0
+  while :; do
+    ecoute=$(ss -ltn 2>/dev/null | awk '$4 ~ /:3389$/ {print $4}')
+    [ -n "$ecoute" ] && break
+    [ "$essais" -ge "$attente" ] && break
+    essais=$((essais + 1))
+    sleep 1
+  done
+  [ -n "$ecoute" ] || repondre bloque "xrdp n'écoute sur aucun port 3389 : service non démarré."
+  if printf '%s\n' "$ecoute" | grep -qvx '127\.0\.0\.1:3389'; then
+    repondre bloque "Le port 3389 écoute ailleurs que sur 127.0.0.1 : accès distant non sûr, session non validée."
+  fi
+  if sudo ufw status 2>/dev/null | grep -qE '(^|[^0-9])3389([^0-9]|$)'; then
+    repondre bloque "Une règle ufw ouvre le port 3389 : retirez-la (la session ne se joint que par tunnel SSH)."
+  fi
+  command -v unityhub >/dev/null 2>&1 || repondre bloque "Le programme unityhub est absent après installation."
+  command -v startxfce4 >/dev/null 2>&1 || repondre bloque "Le bureau XFCE (startxfce4) est absent après installation."
+  repondre fait "Session graphique prête : bureau XFCE, xrdp sur 127.0.0.1:3389, Unity Hub au démarrage de la session."
+}
+
 # --- État ------------------------------------------------------------------
 
 etape_etat() {
@@ -266,5 +373,6 @@ case "$ETAPE" in
   docker) etape_docker ;;
   images) etape_images ;;
   licence) etape_licence ;;
+  bureau_distant) etape_bureau_distant ;;
   etat) etape_etat ;;
 esac

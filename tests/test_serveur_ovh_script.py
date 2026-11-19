@@ -77,6 +77,127 @@ class TestScriptSimule(unittest.TestCase):
                 self.assertEqual(r.returncode, 0, r.stderr)
                 json.loads(r.stdout)
 
+    def test_autres_etapes_ne_lisent_pas_stdin(self):
+        # Seules licence et bureau_distant lisent stdin : une commande lancée par les autres ne doit rien en consommer.
+        for etape in ("durcissement", "docker", "images", "etat"):
+            with self.subTest(etape=etape):
+                r = lancer(etape, entree="ligne-pour-personne\n", env={"DISQUE_LIBRE_GO": "500"})
+                self.assertEqual(r.returncode, 0, r.stderr)
+                json.loads(r.stdout)
+
+    # --- Étape bureau_distant ---------------------------------------------------
+
+    MDP = "Un-Mot-De-Passe-Long-42"
+
+    def _bureau(self, mdp, simuler=False, ecoute="127.0.0.1:3389", ufw="Status: active\n22/tcp LIMIT Anywhere", ssh_mdp="no"):
+        """Lance bureau_distant avec de faux binaires ; rend (JSON, journal des appels, mot de passe reçu par chpasswd, dossier home)."""
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            journal, recu = t / "appels.txt", t / "chpasswd.txt"
+            faux = t / "bin"
+            faux.mkdir()
+            home = t / "home"
+            home.mkdir()
+            corps = {
+                "sudo": (f'echo "sudo $@" >> "{journal.as_posix()}"\n'
+                         'while case "$1" in *=*) true;; *) false;; esac; do shift; done\n'
+                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd) "$@";; *) exit 0;; esac'),
+                "ss": f'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\n'
+                      f'echo "LISTEN 0 4096 {ecoute} 0.0.0.0:*"\necho "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"',
+                "ufw": f'echo "ufw $@" >> "{journal.as_posix()}"\ncat <<"EOT"\n{ufw}\nEOT',
+                "sshd": f'echo "passwordauthentication {ssh_mdp}"',
+                "unityhub": "exit 0",
+                "startxfce4": "exit 0",
+                "id": '[ "$1" = -un ] && echo ubuntu || echo "ubuntu ssl-cert"',
+            }
+            for nom in ("apt-get", "curl", "gpg", "systemctl", "usermod", "tee", "chpasswd"):
+                corps.setdefault(nom, "exit 0")
+            for nom, texte in corps.items():
+                if nom not in ("sudo", "ufw", "sshd"):
+                    texte = f'echo "{nom} $@" >> "{journal.as_posix()}"\n' + texte
+                (faux / nom).write_text("#!/bin/sh\n" + texte + "\n", newline="\n")
+                (faux / nom).chmod(0o755)
+            args = ["bash", SCRIPT.as_posix(), "--etape", "bureau_distant"] + (["--simuler"] if simuler else [])
+            r = subprocess.run(args, input=mdp, capture_output=True, text=True, encoding="utf-8", timeout=60,
+                               env=dict(os.environ, HOME=home.as_posix(), DISQUE_LIBRE_GO="500", BUREAU_ATTENTE_S="0",
+                                        PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
+            appels = journal.read_text() if journal.exists() else ""
+            autostart = home / ".config" / "autostart" / "unityhub.desktop"
+            return (json.loads(r.stdout), appels, recu.read_text() if recu.exists() else "", r,
+                    autostart.read_text() if autostart.exists() else None,
+                    (home / ".xsession").read_text() if (home / ".xsession").exists() else None)
+
+    def test_bureau_distant_rend_un_json_valide_en_simulation(self):
+        d, appels, _, r, _, _ = self._bureau(self.MDP + "\n", simuler=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len([x for x in r.stdout.splitlines() if x.strip()]), 1, r.stdout)
+        self.assertEqual(set(d), CLES)
+        self.assertEqual(d["etape"], "bureau_distant")
+        self.assertIn(d["statut"], ("fait", "a_faire", "bloque"))
+        self.assertIn("simul", d["detail"].lower())
+        self.assertEqual(appels, "")
+
+    def test_bureau_distant_sans_mot_de_passe_est_a_faire(self):
+        for entree in ("", "\n"):
+            with self.subTest(entree=entree):
+                d, appels, recu, _, _, _ = self._bureau(entree)
+                self.assertEqual(d["statut"], "a_faire")
+                self.assertEqual(appels, "")
+                self.assertEqual(recu, "")
+
+    def test_bureau_distant_refuse_un_mot_de_passe_trop_court(self):
+        court = "a1B2c3D4e5F6g7H"
+        self.assertEqual(len(court), 15)
+        d, appels, recu, r, _, _ = self._bureau(court + "\n")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertNotIn(court, r.stdout + r.stderr)
+        self.assertEqual(appels, "")
+        self.assertEqual(recu, "")
+        seize = court + "x"
+        d, _, _, _, _, _ = self._bureau(seize + "\n")
+        self.assertEqual(d["statut"], "fait")
+
+    def test_bureau_distant_mot_de_passe_jamais_en_argument_ni_dans_la_sortie(self):
+        d, appels, recu, r, autostart, xsession = self._bureau(self.MDP + "\n")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertEqual(recu, "ubuntu:" + self.MDP + "\n")     # il passe par le tube de chpasswd, et seulement là
+        self.assertIn("sudo chpasswd", appels)
+        self.assertNotIn(self.MDP, appels)
+        self.assertNotIn(self.MDP, r.stdout + r.stderr)
+        self.assertNotIn(self.MDP, autostart + xsession)
+        self.assertIn("Session graphique prête", d["detail"])
+
+    def test_bureau_distant_xrdp_ecoute_seulement_en_loopback(self):
+        for adresse in ("0.0.0.0:3389", "*:3389", "[::]:3389"):
+            with self.subTest(adresse=adresse):
+                d, _, _, _, _, _ = self._bureau(self.MDP + "\n", ecoute=adresse)
+                self.assertEqual(d["statut"], "bloque")
+                self.assertIn("3389", d["detail"])
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", ecoute="127.0.0.1:3389")
+        self.assertEqual(d["statut"], "fait")
+
+    def test_bureau_distant_ne_touche_pas_ufw(self):
+        _, appels, _, _, _, _ = self._bureau(self.MDP + "\n")
+        ufw = [x for x in appels.splitlines() if re.match(r"(sudo )?ufw\b", x)]
+        self.assertTrue(ufw, appels)
+        for x in ufw:
+            self.assertRegex(x, r"^(sudo )?ufw status$", x)
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", ufw="Status: active\n3389/tcp ALLOW Anywhere")
+        self.assertEqual(d["statut"], "bloque")
+
+    def test_bureau_distant_autostart_unityhub(self):
+        d, _, _, _, autostart, xsession = self._bureau(self.MDP + "\n")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertRegex(autostart, r"(?m)^Exec=.*\bunityhub\b")
+        self.assertIn("[Desktop Entry]", autostart)
+        self.assertEqual(xsession, "startxfce4\n")
+
+    def test_bureau_distant_refuse_si_connexion_ssh_par_mot_de_passe_ouverte(self):
+        d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", ssh_mdp="yes")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertEqual(recu, "")
+        self.assertNotIn("apt-get", appels)
+
     def _durcir_avec_faux(self, cles, ssh_ok):
         """Lance l'étape durcissement (réelle) avec de faux binaires ; rend (JSON, journal des appels)."""
         with tempfile.TemporaryDirectory() as t:
@@ -188,11 +309,28 @@ class TestTexteDuScript(unittest.TestCase):
         self.assertIn("|| repondre bloque", code[regle:verif])
         self.assertIn("|| repondre bloque", code[verif:activer])
 
-    def test_stdin_lu_uniquement_par_la_licence(self):
-        self.assertIn('if [ "$ETAPE" != "licence" ]; then\n  exec </dev/null', self.texte)
+    def test_stdin_lu_uniquement_par_la_licence_et_le_bureau_distant(self):
+        self.assertIn('if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ]; then\n  exec </dev/null', self.texte)
         self.assertIn("ssh -n ", self.texte)
         self.assertEqual(self.texte.count("$(cat)"), 1)
         self.assertLess(self.texte.index("etape_licence()"), self.texte.index("$(cat)"))
+        # Le mot de passe de session : une seule lecture, dans l'étape bureau_distant ; jamais passé à une commande en argument.
+        bureau = self.texte[self.texte.index("etape_bureau_distant()"):self.texte.index("etape_etat()")]
+        self.assertEqual(self.texte.count("IFS= read -r"), 1)
+        self.assertIn("IFS= read -r", bureau)
+        code = "\n".join(x for x in bureau.splitlines() if not x.lstrip().startswith("#"))
+        self.assertIn("| sudo chpasswd", code)
+        for ligne in code.splitlines():
+            if '"$mdp"' in ligne:
+                self.assertTrue(ligne.lstrip().startswith(("printf", "mdp=", "IFS= read", "if [")), ligne)
+
+    def test_bureau_distant_ne_modifie_ni_ufw_ni_sshd(self):
+        bureau = self.texte[self.texte.index("etape_bureau_distant()"):self.texte.index("etape_etat()")]
+        code = "\n".join(x for x in bureau.splitlines() if not x.lstrip().startswith("#"))
+        self.assertNotRegex(code, r"ufw (allow|limit|enable|--force|delete|deny|reload|reset)")
+        self.assertNotIn("PasswordAuthentication", code)
+        self.assertNotIn("sshd_config", code)
+        self.assertIn("127.0.0.1:3389", code)
 
     def test_licence_exige_une_preuve_et_ne_fait_pas_confiance_au_code_de_sortie(self):
         licence = self.texte[self.texte.index("etape_licence()"):self.texte.index("etape_etat()")]

@@ -15,6 +15,7 @@ import {contenuQuestions} from "./questions.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
+import {monterCarteServeur} from "./plateforme.js";
 import {envoyer as envoyerDemande} from "./actions.js";
 import {appliquerEnvoyees, surEnvoyees} from "./validation.js";
 import {ouvrirCahier} from "./cahier.js";
@@ -250,6 +251,8 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     } else if (type === "partenaires") {
       if (!e.partenaires) { fermerPanneau(); return; }
       contenuPartenaires(contexte(), contenu, envoyerDemande);
+      // La carte « Serveur » (mise en place du serveur) : elle lit elle-même son état au cache du bureau.
+      if (e.agir === true && typeof fetch === "function") monterCarteServeur(contenu);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id) || ficheAncienAgent(e, id);
       if (!a) { fermerPanneau(); return; }

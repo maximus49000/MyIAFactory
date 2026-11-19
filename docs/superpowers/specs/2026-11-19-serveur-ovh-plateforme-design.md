@@ -51,7 +51,7 @@ qui gère déjà la licence sans écran.
    7. *Licence Unity* : activée dans un conteneur de test avec les éléments fournis par le Directeur ; état affiché. (voir la note du 2026-11-19, « Réponses du Directeur », point 2.)
 4. **Réalisation des étapes 3 à 7** : un script de mise en place envoyé et exécuté par SSH, qui constate l'état avant
    d'agir (idempotent) et rend un compte rendu structuré (JSON) que le bureau affiche.
-5. **Point d'entrée** : `lancer.py serveur <état|installer|verifier>` (même style que `lancer.py deporter`), et le bureau
+5. **Point d'entrée** : `lancer.py plateforme <etat|installer|verifier>` (même style que `lancer.py deporter`), et le bureau
    l'appelle ; `installer` demande l'accord avant l'étape 2.
 6. **Carte « Serveur » du bureau** : état par étape (fait, à faire, bloqué avec la raison et le geste à faire),
    bouton « Mettre en place / reprendre », accord explicite pour la réinstallation, aide pour les étapes humaines
@@ -116,3 +116,11 @@ ses versions, durcissement détaillé, stratégie de tests, noms des réglages.
 ## Choix du rédacteur (à relire, non validés)
 - Ubuntu LTS comme OS par défaut ; image Unity GameCI ; client OVH écrit à la main (requêtes signées) plutôt que le SDK
   OVH, pour éviter une dépendance ; clé SSH dédiée au serveur plutôt que la clé personnelle.
+
+## Note du 2026-11-19 (après la revue finale)
+- La route d'installation de l'OS a changé chez OVH : `POST /dedicated/server/{serviceName}/install/start` n'existe plus ;
+  l'appel est `POST /dedicated/server/{serviceName}/reinstall` avec `{"operatingSystem": ..., "customizations": {"sshKey":
+  <clé publique>}}`. Les clés SSH ne sont donc plus enregistrées chez OVH (`/me/sshKey` n'est plus utilisé) : l'ordre devient
+  clé locale générée, puis réinstallation avec la clé publique.
+- L'OS cible est fixe : `ubuntu2404-server_64` (Ubuntu 24.04 LTS), qui doit figurer dans les modèles compatibles du serveur,
+  sinon la réinstallation n'est pas tentée. Un Ubuntu LTS déjà présent (22.04, 24.04, 26.04) n'est jamais réinstallé.

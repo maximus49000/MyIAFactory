@@ -1,5 +1,6 @@
 # Image de construction Android : JDK 17, SDK Android, Gradle. Étiquettes épinglées (voir serveur_ovh/versions.json).
-FROM ubuntu:24.04
+ARG UBUNTU_TAG=24.04
+FROM ubuntu:${UBUNTU_TAG}
 
 ARG CMDLINE_TOOLS=11076708
 ARG BUILD_TOOLS=34.0.0

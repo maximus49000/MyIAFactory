@@ -1,9 +1,10 @@
 {
-  "unity_gameci": "unityci/editor:ubuntu-2022.3.45f1-base-3.1.0",
+  "unity_gameci": "unityci/editor:ubuntu-6000.6.7f1-android-4.0.0",
   "base_ubuntu": "ubuntu:24.04",
   "android_build_tools": "34.0.0",
   "android_plateforme": "34",
   "android_cmdline_tools": "11076708",
   "gradle": "8.7",
-  "node": "20"
+  "node": "20",
+  "claude_code": "2.1.328"
 }

@@ -134,7 +134,7 @@ des captures (par défaut 30 jours, nettoyage par le bureau) ; plusieurs émulat
 4. **Cycle du mode pilote et autorisation.** `deporter recette-emulateur --mode pilote --apk <fichier>` crée la tâche et rend son identifiant ;
    le conteneur reste vivant (`docker exec` pour chaque verbe) jusqu'à `arreter`, jusqu'à 5 minutes d'inactivité, ou 20 minutes depuis le
    lancement. **Autorisation : régler le lieu de l'action sur le serveur vaut accord permanent, pour ce projet, de lancer cette action sur le
-   serveur, dans les limites ci-dessus** (décision à confirmer par le Directeur, voir la question qui lui est posée) ; sans ce réglage, la
+   serveur, dans les limites ci-dessus** (**confirmé par le Directeur le 2026-11-19 : accord permanent**) ; sans ce réglage, la
    commande refuse.
 5. **Origine de l'APK.** Option `--apk <fichier>` ; sinon l'APK produit par l'action `apk` du projet, résolu comme `deporter` le fait déjà
    (artefact GitHub ou sortie locale), puis envoyé par scp. Compiler l'`apk` sur le serveur est un autre travail, hors de ce plan.

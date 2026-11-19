@@ -6,6 +6,8 @@
       (les tests d'un projet, une seule campagne à la fois sur le poste : voir `outils/campagne.py`)
   py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)
+  py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>
+      (les serveurs distants génériques : voir `outils/serveur_cli.py`)
 """
 import sys
 from pathlib import Path

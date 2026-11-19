@@ -542,6 +542,9 @@ def _verifier_distant(c):
 
 def main(argv):
     args = list(argv)
+    if args[:1] == ["serveurs"]:      # serveurs distants génériques : voir `outils/serveur_cli.py`
+        import serveur_cli
+        return serveur_cli.main(args[1:])
     if not args or args[0] not in ("etat", "installer", "verifier", "bureau-distant"):
         print("Usage : lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <d>]", file=sys.stderr)
         return 2

@@ -138,7 +138,7 @@ test("un relevé pendant un aperçu ouvert garde la case cochee et l aperçu", a
   const m = minuterie();
   const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
   const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
-    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: {base: "presente"}}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, erreur: "Autre"}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
   const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
   await clic(boutons(c, "Installer")[0]);
   await clic(boutons(c, "Voir l'aperçu")[0]);
@@ -175,15 +175,87 @@ test("pendant un envoi en cours, aucun second accord vrai ne peut partir", async
   assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer") && a.corps.accord === true).length, 1);
 });
 
-test("la veille d un test dure longtemps puis dit que le test peut encore tourner", async () => {
+const avecSonde = (v, extra = {}) => ({serveurs: [{...SERVEUR, sonde_en_cours: v, ...extra}], rejets: []});
+
+test("sonde en cours : on guette tant que le drapeau est vrai, le message n arrive qu au vingtieme relevé", async () => {
+  const m = minuterie();
+  let etat = avecSonde(true);
+  const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}), "GET /api/serveurs": () => reponse(200, etat), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(avecSonde(false), {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Tester la connexion")[0]);
+  for (let i = 0; i < 19; i++) await m.tic();
+  assert.doesNotMatch(c.textContent, /peut encore être en cours/);
+  await m.tic();
+  assert.match(c.textContent, /Le test peut encore être en cours : actualisez dans un instant\./);
+  etat = avecSonde(false);
+  await m.tic();
+  assert.doesNotMatch(c.textContent, /peut encore être en cours/);
+});
+
+test("un test qui finit avec les memes capacites et la meme erreur ne produit aucun message", async () => {
+  const m = minuterie();
+  const lectures = [avecSonde(true, {erreur: "Serveur injoignable."}), avecSonde(false, {erreur: "Serveur injoignable."})];
+  const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}), "GET /api/serveurs": () => reponse(200, lectures.shift()), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(avecSonde(false, {erreur: "Serveur injoignable."}), {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Tester la connexion")[0]);
+  await m.tic();
+  await m.tic();
+  assert.equal(m.taches.length, 0);
+  assert.doesNotMatch(c.textContent, /peut encore être en cours/);
+});
+
+test("champ sonde_en_cours absent : la veille dure 20 relevés puis le message apparait", async () => {
   const m = minuterie();
   const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}), "GET /api/serveurs": reponse(200, ETAT), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
   const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
   await clic(boutons(c, "Tester la connexion")[0]);
   let lectures = 0;
   while (m.taches.length && lectures < 100) { await m.tic(); lectures++; }
-  assert.ok(lectures >= 20 && lectures <= 25, `lectures : ${lectures}`);
-  assert.match(c.textContent, /Le test peut encore être en cours : actualisez dans un instant\./);
+  assert.equal(lectures, 20);
+  assert.match(c.textContent, /Le test peut encore être en cours/);
+});
+
+test("un relevé qui change les capacites ecarte l apercu : case decochee, plus de confirmation, aucun accord vrai", async () => {
+  const m = minuterie();
+  const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: {base: "presente", "android-build": "presente"}}], rejets: []}),
+    "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  caseAccord(c).checked = true;
+  await m.tic();
+  assert.equal(caseAccord(c), undefined);
+  assert.equal(boutons(c, "Lancer l'installation").length, 0);
+  assert.match(c.textContent, /refaites l'aperçu/);
+  assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer")).length, 0);
+});
+
+test("zone reconstruite en cours d envoi (liste des serveurs changee) : la confirmation reste grisee", async () => {
+  const m = minuterie();
+  const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
+  let liberer;
+  const attente = new Promise((r) => { liberer = r; });
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "POST /api/serveurs/s1/installer": async () => { await attente; return reponse(202, {demarre: true}); },
+    "GET /api/serveurs": reponse(200, {serveurs: [SERVEUR, {...SERVEUR, id: "s2", nom: "Deux"}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  caseAccord(c).checked = true;
+  const envoi = clic(boutons(c, "Lancer l'installation")[0]);
+  await m.tic();
+  assert.match(c.textContent, /Deux/);
+  const neuf = boutons(c, "Lancer l'installation")[0];
+  assert.ok(neuf);
+  assert.equal(neuf.disabled, true);
+  await clic(neuf);
+  liberer();
+  await envoi;
+  assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer") && a.corps.accord === true).length, 1);
 });
 
 test("l accord n est jamais envoye vrai sans la case cochee", async () => {
@@ -290,7 +362,7 @@ test("declarer : un refus du serveur est montre en francais", async () => {
 
 test("tester la connexion lance la sonde puis suit l etat par la minuterie injectee", async () => {
   const m = minuterie();
-  const lectures = [{serveurs: [{...SERVEUR, capacites: {base: "presente", "android-build": "presente"}}], rejets: []}];
+  const lectures = [{serveurs: [{...SERVEUR, sonde_en_cours: false, capacites: {base: "presente", "android-build": "presente"}}], rejets: []}];
   const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}), "GET /api/serveurs": () => reponse(200, lectures[0]), "GET /api/serveurs/lieux": reponse(200, LIEUX_OK)});
   const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
   await clic(boutons(c, "Tester la connexion")[0]);

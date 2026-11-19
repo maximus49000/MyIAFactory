@@ -222,6 +222,7 @@ def lire(travaux, d=None):
         inst = e.get("installation") if isinstance(e, dict) else None
         en_cours = (isinstance(inst, dict) and inst.get("en_cours") is True) or travaux.en_cours("installer", s.id)
         fiche = _decrire(s, _capacites(e), bool(en_cours), _ligne_cle_existante(d, s))
+        fiche["sonde_en_cours"] = bool(travaux.en_cours("sonder", s.id))
         if travaux.erreurs.get(s.id):
             fiche["erreur"] = _masquer(travaux.erreurs[s.id], secrets)
         sortie.append(fiche)

@@ -390,6 +390,19 @@ class TestInstallation(AvecServeurs):
         self.assertEqual(self.appels, [("mon-serveur", ["apk"], True)])
         self.assertFalse(self.json("/api/serveurs")["serveurs"][0]["installation_en_cours"])
 
+    def test_sonde_en_cours_est_exposee_pendant_la_sonde_seulement(self):
+        import threading
+        from types import SimpleNamespace
+        libre = threading.Event()
+        self.assertFalse(self.json("/api/serveurs")["serveurs"][0]["sonde_en_cours"])
+        self.assertTrue(self.travaux.lancer("sonder", SimpleNamespace(id="mon-serveur"), lambda: libre.wait(10) and None))
+        e = self.json("/api/serveurs")["serveurs"][0]
+        self.assertTrue(e["sonde_en_cours"])
+        self.assertFalse(e["installation_en_cours"])
+        libre.set()
+        self.travaux.attendre()
+        self.assertFalse(self.json("/api/serveurs")["serveurs"][0]["sonde_en_cours"])
+
     def test_installer_deuxieme_lancement_409(self):
         self.assertEqual(self.poster(self.chemin, {"actions": ["apk"], "accord": True})[0].status, 202)
         self.assertEqual(self.poster(self.chemin, {"actions": ["apk"], "accord": True})[0].status, 409)

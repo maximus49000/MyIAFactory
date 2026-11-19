@@ -136,12 +136,12 @@ export function ecranServeurs(etat, options = {}) {
   let fini = false;
   const cartes = new Map();     // id du serveur -> éléments mis à jour en place à chaque relevé
   let affiches = "";            // les serveurs dessinés
-  let instantane = "";          // l'état des capacités quand on a lancé un test : s'il change, le test a rendu son résultat
-  const empreinte = () => JSON.stringify(tableau(courant?.serveurs).map((s) => [s?.id, s?.capacites, s?.erreur]));
+  let lectures = 0;             // relevés faits depuis le lancement d'un test
   const idsAffiches = () => tableau(courant?.serveurs).filter((s) => s && typeof s === "object" && typeof s.id === "string").map((s) => s.id).join("\n");
 
   const actif = () => !fini && (options.actif ? options.actif() : racine.isConnected !== false);
-  const enCours = () => tableau(courant?.serveurs).some((s) => s?.installation_en_cours === true);
+  const sondeTourne = () => tableau(courant?.serveurs).some((s) => s?.sonde_en_cours === true);
+  const enCours = () => tableau(courant?.serveurs).some((s) => s?.installation_en_cours === true) || sondeTourne();
   const info = (id) => {
     if (!infos.has(id)) infos.set(id, {ouvert: false, actions: new Set(["apk"]), apercu: null, message: "", chargement: false});
     return infos.get(id);
@@ -279,7 +279,8 @@ export function ecranServeurs(etat, options = {}) {
     etiquette.append(accord, el("span", "", ` ${LIBELLE_ACCORD}`));
     const lancer = el("button", "bouton serveurs-lancer", "Lancer l'installation");
     lancer.type = "button";
-    lancer.disabled = i.envoi === true;       // un bouton reconstruit pendant un envoi reste grisé
+    lancer.disabled = i.envoi === true || serveur.installation_en_cours === true;   // un bouton reconstruit pendant un envoi reste grisé
+    i.lancer = lancer;
     lancer.addEventListener("click", async () => {
       if (lancer.disabled || i.envoi) return;
       // L'accord n'est donné que par la case cochée, et il ne sert qu'une fois : décochée tout de suite, avant l'envoi.
@@ -323,7 +324,8 @@ export function ecranServeurs(etat, options = {}) {
     const capacites = el("div", "serveurs-capacites");
     const msg = el("p", "reglage-message serveurs-message-serveur");
     msg.setAttribute("aria-live", "polite");
-    const refs = {encours, erreur, tester, verifier, installer, capacites, msg};
+    const zone = el("div", "serveurs-installation-zone");
+    const refs = {encours, erreur, tester, verifier, installer, capacites, msg, zone};
     cartes.set(serveur.id, refs);
     majServeur(serveur);
     const sonde = async (b) => {
@@ -331,8 +333,8 @@ export function ecranServeurs(etat, options = {}) {
       i.message = "Envoi…"; msg.textContent = i.message;
       const r = await sonderServeur(serveur.id, fetchFn);
       i.message = r.message;
-      if (r.ok || r.occupe) { lance = "sonder"; sansTravail = 0; instantane = empreinte(); }
-      majServeur(serveur);
+      if (r.ok || r.occupe) { lance = "sonder"; sansTravail = 0; lectures = 0; }
+      majServeur(entreeCourante(serveur));     // l'entrée du dernier relevé, pas celle de la création de la carte
       planifier();
     };
     tester.addEventListener("click", () => sonde(tester));
@@ -340,9 +342,30 @@ export function ecranServeurs(etat, options = {}) {
     installer.addEventListener("click", () => { if (installer.disabled) return; i.ouvert = !i.ouvert; i.apercu = null; dessiner(); });
     const barre = el("div", "serveurs-boutons");
     barre.append(tester, verifier, installer);
-    c.append(capacites, barre, msg);
-    if (i.ouvert) c.append(panneauInstallation(serveur, i));
+    c.append(capacites, barre, msg, zone);
+    reconstruireInstallation(serveur);
     return c;
+  }
+
+  const entreeCourante = (serveur) => tableau(courant?.serveurs).find((s) => s && s.id === serveur.id) || serveur;
+
+  // La zone d'installation d'une carte (cases d'actions, aperçu, accord) : seule celle-ci est refaite.
+  function reconstruireInstallation(serveur) {
+    const r = cartes.get(serveur.id);
+    const i = info(serveur.id);
+    i.lancer = null;
+    if (r) r.zone.replaceChildren(...(i.ouvert ? [panneauInstallation(serveur, i)] : []));
+  }
+
+  // Les capacités ont changé depuis le dernier relevé vu : l'aperçu (et l'accord donné pour lui) ne vaut plus.
+  // Rend vrai si un aperçu a été écarté.
+  function perimer(serveur) {
+    const i = info(serveur.id);
+    const vu = JSON.stringify(serveur.capacites ?? null);
+    const change = i.vues !== undefined && i.vues !== vu;
+    i.vues = vu;
+    if (change && i.apercu) { i.apercu = null; return true; }
+    return false;
   }
 
   // Met à jour en place ce qui change au fil des relevés (capacités, état, erreur, boutons, message) : jamais la zone de l'aperçu
@@ -357,7 +380,10 @@ export function ecranServeurs(etat, options = {}) {
     r.tester.disabled = occupe;
     r.verifier.disabled = occupe;
     r.installer.disabled = occupe || lance === "installer";
+    const ecarte = perimer(serveur);
     remplirCapacites(r.capacites, serveur, i);
+    if (ecarte) { i.message = "L'état du serveur a changé : refaites l'aperçu avant d'installer."; reconstruireInstallation(serveur); }
+    if (i.lancer) i.lancer.disabled = occupe || i.envoi === true;
     r.msg.textContent = i.message;
   }
 
@@ -435,12 +461,15 @@ export function ecranServeurs(etat, options = {}) {
       if (!actif()) return;
       await relire();
       if (!actif()) return;
-      if (enCours()) sansTravail = 0;
-      else if (lance === "sonder" && empreinte() !== instantane) { lance = null; sansTravail = 0; }     // le test a rendu son résultat
-      else if (lance && ++sansTravail >= RELEVES_SANS_TRAVAIL) {
-        if (lance === "sonder") message.textContent = MESSAGE_TEST_ENCORE;
-        lance = null; sansTravail = 0;
-      }
+      const serveurs = tableau(courant?.serveurs);
+      const sondeConnue = serveurs.some((s) => typeof s?.sonde_en_cours === "boolean");
+      if (!sondeTourne() && message.textContent === MESSAGE_TEST_ENCORE) message.textContent = "";   // le test a fini : l'avis tombe
+      if (lance === "sonder") {
+        lectures++;
+        if (sondeConnue && !sondeTourne()) { lance = null; lectures = 0; }                 // front descendant : fin, sans message
+        else if (lectures >= RELEVES_SANS_TRAVAIL) { message.textContent = MESSAGE_TEST_ENCORE; lance = null; lectures = 0; }
+      } else if (enCours()) sansTravail = 0;
+      else if (lance && ++sansTravail >= RELEVES_SANS_TRAVAIL) { lance = null; sansTravail = 0; }
       if (idsAffiches() !== affiches) dessiner();       // un serveur apparu ou disparu : seul cas d'un dessin complet
       else {
         for (const s of tableau(courant?.serveurs)) if (s && typeof s.id === "string") majServeur(s);

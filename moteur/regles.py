@@ -69,6 +69,16 @@ REVUE_COMPLETE = ("Revue complète : vérifie l'élément entier contre sa fiche
 DEFAUT_ANTERIEUR = ("Un échec déjà là avant l'élément (test, build ou lint hors de ses fichiers : compare avec le "
                     "commit d'avant l'élément) ne rend jamais l'élément non conforme : dis-le dans ton message, "
                     "sans en faire un point.")
+# Essai de coûts du 2026-11-19 (dix fois la même évolution) : des défauts relevés (un ingrédient « pâtes » satisfait par
+# « pâte brisée ») restaient dans le message d'une revue « conforme » ou dans les `points` d'un verdict « conforme »,
+# ignorés, et la livraison partait avec « défauts connus non corrigés ».
+DEFAUT_VU_EST_UN_REFUS = ("Un défaut de l'élément que tu as vu, même petit, va dans `points` et rend `conforme: faux` : un "
+                          "verdict « conforme » qui porte des points est compté comme un refus. Ne garde pas un défaut de "
+                          "l'élément pour ton message ; seul un échec déjà là avant l'élément s'y dit.")
+AVANT_DE_LIVRER = ("Avant de livrer, relis le compte rendu de la revue et le journal de l'élément. S'ils signalent un défaut "
+                   "connu non corrigé de l'élément (« reste », « non corrigé », « réserve »), ne livre pas : rends un "
+                   "`verdicts` non conforme avec ce défaut en point, il repartira en correction. Un échec déjà là avant "
+                   "l'élément n'en est pas un.")
 # Une demande très simple ne doit pas revenir en correction (RoadmapReborn f12 : une limite de lignes dans une fiche
 # Excel, deux refus). Pour une petite évolution, seul ce qui empêche la demande elle-même refuse l'élément.
 PETITE_DEMANDE = ("Demande petite : ne rends « non conforme » que si la demande elle-même n'est pas satisfaite "
@@ -3923,6 +3933,8 @@ def _matiere(projet, etat, t):
                            "dis-le dans ton message).")
         production = _production(projet, fid)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
+        if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
+            parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
         if (rang is not None and rang + 1 < len(production) and wf.est_validation(production[rang + 1])
                 and _concerne(((f or {}).get("elements") or {}).get(t.get("element")), production[rang + 1]["id"])):
             parties.append(CONSIGNE_AVANT_VALIDATION)
@@ -3931,6 +3943,7 @@ def _matiere(projet, etat, t):
             parties.append("Tu es le dernier regard sur l'élément. Rends un `verdicts` : "
                            '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`, '
                            "un par élément. Un défaut devient un contrôle : sois précis.")
+            parties.append(DEFAUT_VU_EST_UN_REFUS)
             parties.append(REVUE_COMPLETE)
             parties += _consigne_petite_demande(f)
             parties += _consigne_de_tests(projet, etat, t, fid, f, dernier_regard=True)
@@ -3940,7 +3953,8 @@ def _matiere(projet, etat, t):
         parties += [f"Élément à relire : {t.get('element')}",
                     "Relis l'élément avec un regard neuf. Rends un `verdicts` : "
                     '`[{"element": <id>, "conforme": vrai|faux, "points": [chaque défaut trouvé, un texte]}]`. '
-                    "Un défaut devient un contrôle : sois précis.", REVUE_COMPLETE, TESTS_DU_DERNIER_REGARD,
+                    "Un défaut devient un contrôle : sois précis.", DEFAUT_VU_EST_UN_REFUS, REVUE_COMPLETE,
+                    TESTS_DU_DERNIER_REGARD,
                     APK_A_JOUR_AVANT_LES_TESTS, FICHIERS_JETABLES, DEFAUT_ANTERIEUR, *_consigne_petite_demande(f)]
     elif etape == "environnement":
         parties += ["Installe les outils du poste listés dans les consignes ci-dessous, un par un, puis vérifie chacun "

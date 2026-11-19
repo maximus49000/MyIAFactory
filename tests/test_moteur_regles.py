@@ -745,7 +745,9 @@ class Serie(Base):
         self.assertEqual((v["phase"], v["corrections"]), ("fait", 0))
         self.assertEqual([len(self.taches(etape=f"flux:{e}")) for e in ("dev", "essai", "livraison")], [1, 1, 1])
         self.assertIn("Rends un `verdicts`", regles._matiere(self.projet, self.etat, self.taches(etape="flux:essai")[0]))
-        self.assertNotIn("verdicts", regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0]))
+        livraison = regles._matiere(self.projet, self.etat, self.taches(etape="flux:livraison")[0])
+        self.assertNotIn("Rends un `verdicts`", livraison)         # la livraison ne relit pas : elle ne rend pas de verdict
+        self.assertIn(regles.AVANT_DE_LIVRER, livraison)           # sauf pour refuser un défaut connu non corrigé
 
     def test_sans_relecteur_un_refus_de_la_qualite_refait_la_qualite_pas_la_livraison(self):
         self.casse_briques()
@@ -1659,6 +1661,30 @@ class ParcoursSelonLaTaille(Base):
         self.assertEqual(len(self.taches(etape="flux:controle")), 2)       # la revue refaite après la correction
         self.assertIn("[Accueil] Le titre est trop petit", (self.dossier / "controles.md").read_text(encoding="utf-8"))      # le défaut dit de quel élément il vient
         self.assertEqual({k: v["phase"] for k, v in self.etat["elements"].items()}, {"f1/e1": "fait", "f1/e2": "fait"})
+
+    def test_un_verdict_conforme_qui_porte_un_defaut_est_un_refus(self):
+        """Essai de coûts du 2026-11-19 : les défauts d'un verdict « conforme » étaient ignorés, et la livraison partait
+        avec « défauts connus non corrigés »."""
+        self.moyenne_en_serie(2)
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[
+            {"statut": "fait", "message": {"texte": "Écrans faits."}},
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": ["Pâtes est satisfait par pâte brisée"]},
+                {"element": "e2", "conforme": True, "points": []}]},
+            {"statut": "fait", "message": {"texte": "Corrigé."}},
+            {"statut": "fait", "message": {"texte": "Relu."}, "verdicts": [
+                {"element": "e1", "conforme": True, "points": []}, {"element": "e2", "conforme": True, "points": []}]}],
+            juges={"apres_refus": {"suite": "corriger", "consigne": "Mot entier.", "raison": "faux positif"}})
+        self.assertEqual(len(self.taches(etape="correction")), 1)           # le défaut a ouvert une correction
+        self.assertIn("Pâtes est satisfait par pâte brisée", (self.dossier / "controles.md").read_text(encoding="utf-8"))
+
+    def test_la_revue_et_la_livraison_savent_qu_un_defaut_vu_est_un_refus(self):
+        self.moyenne_en_serie(2)
+        regles.avancer(self.projet, self.etat)
+        self.assertIn("conforme", regles.DEFAUT_VU_EST_UN_REFUS)
+        self.assertIn("points", regles.DEFAUT_VU_EST_UN_REFUS)
+        self.assertIn("défaut connu", regles.AVANT_DE_LIVRER)
+        self.assertIn("verdicts", regles.AVANT_DE_LIVRER)
 
     def test_un_element_seul_ou_un_parcours_complet_garde_sa_verification(self):
         Serie.sans_relecteurs(self)

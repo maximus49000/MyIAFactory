@@ -139,6 +139,16 @@ class Lire(unittest.TestCase):
         self.assertEqual((r["fichiers"], r["lecons"], r["controles"], r["verdicts"], r["retours_factory"]),
                          ([], [], [], [], []))
 
+    def test_un_verdict_conforme_qui_porte_des_defauts_est_non_conforme(self):
+        """Essai de coûts du 2026-11-19 : des défauts relevés (« pâtes » satisfait par « pâte brisée ») sortaient dans
+        `points` d'un verdict « conforme », puis étaient ignorés : un défaut vu est un refus."""
+        r = rapport.lire(reponse({"statut": "fait", "verdicts": [
+            {"element": "e1", "conforme": True, "points": ["Pâtes est satisfait par pâte brisée"]},
+            {"element": "e2", "conforme": True, "points": []},
+            {"element": "e3", "conforme": False, "points": ["Le titre est trop petit"]}]}))
+        self.assertEqual([v["conforme"] for v in r["verdicts"]], [False, True, False])
+        self.assertEqual(r["verdicts"][0]["points"], ["Pâtes est satisfait par pâte brisée"])
+
     def test_lecon_de_genre_demande_le_texte_general(self):
         mauvais = dict(FAIT, lecons=[{"texte": "Un conseil.", "etage_propose": "genre"}])
         with self.assertRaises(rapport.RapportIllisible):

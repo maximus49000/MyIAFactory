@@ -89,6 +89,8 @@ def lire(texte):
         if not _texte(v.get("element")) or not isinstance(v.get("conforme"), bool):
             raise RapportIllisible("chaque verdict a un « element » et un « conforme » (vrai ou faux)")
         v["points"] = list(v.get("points") or [])
+        if v["conforme"] and v["points"]:
+            v["conforme"] = False      # un défaut relevé est un refus : ses points ne sont plus ignorés (essai de coûts, 2026-11-19)
     if r["statut"] == "accord_requis":
         a = r.get("accord")
         if not isinstance(a, dict) or not all(_texte(a.get(c)) for c in ("quoi", "partenaire", "cout")):

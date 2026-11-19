@@ -48,7 +48,7 @@ qui gère déjà la licence sans écran.
    5. *Docker* installé et opérationnel.
    6. *Images d'outils* : image Unity (GameCI, version choisie par le Directeur), image Android/Gradle, image de base
       pour les agents (CLI Claude) ; tirées, versions épinglées.
-   7. *Licence Unity* : activée dans un conteneur de test avec les éléments fournis par le Directeur ; état affiché.
+   7. *Licence Unity* : activée dans un conteneur de test avec les éléments fournis par le Directeur ; état affiché. (voir la note du 2026-11-19, « Réponses du Directeur », point 2.)
 4. **Réalisation des étapes 3 à 7** : un script de mise en place envoyé et exécuté par SSH, qui constate l'état avant
    d'agir (idempotent) et rend un compte rendu structuré (JSON) que le bureau affiche.
 5. **Point d'entrée** : `lancer.py serveur <état|installer|verifier>` (même style que `lancer.py deporter`), et le bureau
@@ -64,7 +64,7 @@ qui gère déjà la licence sans écran.
 - Poste Windows, Python 3.12 ; pas de nouvelle dépendance lourde. SSH via le client `ssh` de Windows.
 - Les tests passent par le lanceur (`outils/tests_paralleles.py`) ; OVH et SSH sont simulés dans les tests, jamais réels.
 - Licence Unity Personal : l'activation sans écran est plus contraignante qu'avec une licence Pro/serial ; ce que le
-  Directeur possède décide du chemin (voir « Questions »).
+  Directeur possède décide du chemin (voir « Questions »). Voir la note du 2026-11-19 (« Réponses du Directeur », point 2).
 - Une réinstallation OVH peut prendre plusieurs minutes et le serveur change de clé d'hôte : l'empreinte connue est à
   réinitialiser avec accord.
 
@@ -80,6 +80,9 @@ qui gère déjà la licence sans écran.
    Directeur dépose sur le site d'Unity pour obtenir le fichier de licence (`.ulf`), à placer dans `~/MyIAFactory`.
    C'est une étape humaine : la carte donne le lien et le mode opératoire. Une licence Personal se renouvelle et son
    usage en compilation automatique est soumis aux conditions d'Unity (à vérifier par le Directeur).
+   *Note du 2026-11-19 : la méthode manuelle `.alf`/`.ulf` s'est révélée non prise en charge par Unity pour Personal
+   (docs.unity3d.com, ManualActivationGuide ; game-ci/unity-test-runner#235). Elle est remplacée par un fichier
+   `unity.ulf` fourni par le Directeur (règle R8), facultatif : voir `docs/serveur-ovh.md`.*
 3. **Matériel** : Xeon E5-1650v4 (6 cœurs / 12 threads, 3,6-4 GHz), 64 Go ECC DDR4, 2 × 4 To HDD SATA en RAID logiciel.
    Conséquences retenues : mémoire et processeur confortables pour plusieurs conteneurs ; **disques mécaniques lents** :
    les caches (Gradle, bibliothèque Unity) sont gardés dans des volumes persistants pour ne pas tout reconstruire, et le

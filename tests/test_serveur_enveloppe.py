@@ -33,7 +33,9 @@ FAUX = {
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"',
     "docker": DOCKER,
     "flock": 'echo "flock $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_FLOCK_OCCUPE:-}" ] && [ "$1" = -n ] && exit 1\nexit 0',
-    "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\nexec "$@"',
+    "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_SETSID_DELAI:-}" ] && sleep "$FAUX_SETSID_DELAI"\nexec "$@"',
+    # date : note l'état au moment où le veilleur... non : au moment où l'enveloppe écrit en_cours (premier appel après enveloppe.pid)
+    "date": 'echo "date: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json" 2>/dev/null)" >> "$FAUX_JOURNAL"\nexec /usr/bin/date "$@"',
     "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\nshift\nexec "$@"',
     "getent": '[ -n "${FAUX_SANS_KVM:-}" ] && exit 2\necho "kvm:x:993:"',
 }
@@ -327,6 +329,70 @@ class TestEnveloppe(unittest.TestCase):
             self.assertIn('"etat": "en_cours"', "".join(b.appels("run-vu:")))
             self.assertTrue((b.dossier / "enveloppe.pid").read_text().strip().isdigit())
             self.assertTrue((b.dossier / "veilleur.pid").exists())               # l'enveloppe attend le PID du veilleur avant de rendre la main
+            b.arreter()
+            b.attendre_final()
+
+    def test_enveloppe_pid_existe_avant_que_en_cours_ne_soit_ecrit(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            premier = b.appels("date:")[0]                                       # le 1er appel de date : l'horodatage de l'écriture en_cours
+            self.assertIn("pid=oui", premier)
+            self.assertNotIn('"etat": "en_cours"', premier)                      # en_cours n'est pas encore écrit à ce moment
+            b.arreter()
+            b.attendre_final()
+
+    def test_l_enveloppe_attend_le_pid_d_un_veilleur_lent(self):
+        with Banc(FAUX_SETSID_DELAI="1") as b:                                   # le veilleur ne démarre qu'après ~1 s
+            self.assertEqual(b.lancer().returncode, 0)
+            self.assertGreaterEqual(b.duree, 0.9)                                # l'enveloppe a attendu
+            self.assertTrue((b.dossier / "veilleur.pid").exists())               # et ne rend la main qu'avec veilleur.pid
+            b.arreter()
+            b.attendre_final()
+
+    def test_avd_pret_compte_comme_activite_du_pilote(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer("pilote", "60", "3", "2048", "2").returncode, 0)
+            for _ in range(8):                                    # l'AVD vient d'être créé : le conteneur travaille, rien d'autre encore
+                (b.dossier / "sortie" / ".avd-pret").write_text("", newline="\n")
+                time.sleep(0.5)
+                self.assertEqual(b.etat()["etat"], "en_cours")
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+
+    def test_captures_et_octets_facultatifs_passes_au_conteneur(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer("scenario", "30", "30", "2048", "2", "20", "5000000").returncode, 0)
+            envs = [b.run_args()[i + 1] for i, x in enumerate(b.run_args()[:-1]) if x == "-e"]
+            self.assertIn("PONT_CAPTURES=20", envs)
+            self.assertIn("PONT_OCTETS=5000000", envs)
+            self.assertTrue(all("=" in x for x in envs), envs)
+            b.arreter()
+            b.attendre_final()
+        with Banc() as b:                                                         # captures seul, puis rien : pas de réglage inventé
+            self.assertEqual(b.lancer("scenario", "30", "30", "2048", "2", "50").returncode, 0)
+            envs = [b.run_args()[i + 1] for i, x in enumerate(b.run_args()[:-1]) if x == "-e"]
+            self.assertIn("PONT_CAPTURES=50", envs)
+            self.assertFalse([x for x in envs if x.startswith("PONT_OCTETS")])
+            b.arreter()
+            b.attendre_final()
+        with Banc() as b:
+            self.assertEqual(b.lancer("scenario", "30", "30", "2048", "2").returncode, 0)
+            envs = [b.run_args()[i + 1] for i, x in enumerate(b.run_args()[:-1]) if x == "-e"]
+            self.assertFalse([x for x in envs if x.startswith(("PONT_CAPTURES", "PONT_OCTETS"))])
+            b.arreter()
+            b.attendre_final()
+
+    def test_captures_et_octets_hostiles_refuses(self):
+        base = ("scenario", "30", "30", "2048", "2")
+        mauvais = [("51",), ("0",), ("-1",), ("020",), ("a",), ("1;ls",), ("", ), ("20", "104857601"), ("20", "0"), ("20", "007"),
+                   ("20", "1e6"), ("20", "$(id)"), ("20", "1000", "9")]
+        with Banc() as b:
+            for extra in mauvais:
+                with self.subTest(extra=extra):
+                    self.assertEqual(b.lancer(*base, *extra).returncode, 2)
+            self.assertFalse((b.home / "taches").exists())
+            self.assertEqual(b.journal, "")
+            self.assertEqual(b.lancer(*base, "50", "104857600").returncode, 0)    # les bornes elles-mêmes sont admises
             b.arreter()
             b.attendre_final()
 

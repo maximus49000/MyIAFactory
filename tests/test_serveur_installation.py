@@ -26,6 +26,7 @@ class FauxSsh:
     _verifier_hote = staticmethod(plateforme_ssh._verifier_hote)
 
     def __init__(self, presentes=(), etapes=None, acces=True, injoignable=False, tomber_a=None, depot_code=0):
+        self.marqueur_fige = False          # vrai : l'étape « réussit » sans réécrire le marqueur
         self.marqueur = None                # contenu du marqueur de l'image (None : illisible) ; 255 : serveur injoignable
         self.depot_code, self.archives = depot_code, []             # archives : (commande, octets) de chaque dépôt de fichiers
         self.presentes = set(presentes)
@@ -49,7 +50,7 @@ class FauxSsh:
             return 0, "\n".join(f"{i}={0 if i in self.presentes else 1}" for i in CATALOGUE) + "\n", ""
         if "cat >" in commande:
             return 0, "", ""
-        if commande.startswith('cat "$HOME/.myiafactory/'):
+        if commande.startswith('head -c 256 "$HOME/.myiafactory/'):
             if self.marqueur == 255:
                 return 255, "", "Connection reset"
             return (0, self.marqueur + "\n", "") if isinstance(self.marqueur, str) else (1, "", "No such file")
@@ -60,6 +61,8 @@ class FauxSsh:
         statut, detail = self.etapes.get(etape, ("fait", f"{etape} ok"))
         if statut == "fait":
             self.presentes |= {c.id for c in CATALOGUE.values() if c.etape == etape and c.installable}
+            if etape == "emulateur_image" and not self.marqueur_fige:
+                self.marqueur = inst.empreinte_etape(etape)                  # l'étape réécrit le marqueur
         return 0, "log\n" + json.dumps({"etape": etape, "statut": statut, "detail": detail}) + "\n", ""
 
 
@@ -483,6 +486,32 @@ class TestEtatPerime(Base):
                 self.assertEqual(len(ssh.archives), 1 if perime else 0)
                 if perime:
                     self.assertEqual(r["capacites"]["emulateur-image"]["statut"], "fait")
+
+    def test_lecture_du_marqueur_bornee_et_apercu_marque_la_capacite_perimee(self):
+        ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
+        ssh.marqueur = "ubuntu=autre"
+        with self._besoins_image():
+            ap = inst.apercu(SERVEUR, ["image_test"], ssh=ssh, dossier=self.dossier)
+        lectures = [a["commande"] for a in ssh.appels if "emulateur-image.version" in a["commande"]]
+        self.assertEqual(len(lectures), 1)
+        self.assertTrue(lectures[0].startswith("head -c 256 "), lectures[0])      # lecture bornée : jamais un fichier énorme
+        self.assertNotEqual(ap["etat"]["emulateur-image"], "presente")             # cohérent avec « manquantes »
+        self.assertEqual(ap["perimees"], ["emulateur-image"])
+        ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
+        ssh.marqueur = inst.empreinte_etape("emulateur_image")
+        with self._besoins_image():
+            ap = inst.apercu(SERVEUR, ["image_test"], ssh=ssh, dossier=self.dossier)
+        self.assertEqual((ap["etat"]["emulateur-image"], ap["perimees"]), ("presente", []))
+
+    def test_sonde_finale_compare_aussi_l_empreinte(self):
+        ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
+        ssh.marqueur = "ubuntu=autre"
+        ssh.marqueur_fige = True                                                  # l'étape dit « fait » mais le marqueur reste périmé
+        r = self._installer_image(ssh)
+        e = r["capacites"]["emulateur-image"]
+        self.assertEqual(e["statut"], "bloque", r)
+        self.assertIn("périmé", e["detail"])
+        self.assertFalse(r["ok"])
 
     def test_depot_fichier_local_manquant_est_bloque_et_non_une_coupure_de_connexion(self):
         from unittest import mock

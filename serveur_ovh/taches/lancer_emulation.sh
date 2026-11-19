@@ -2,7 +2,9 @@
 # Enveloppe HÔTE d'une tâche d'émulation : exécutée sur le serveur (par SSH), elle prend le créneau, démarre le conteneur
 # `myiafactory/emulateur` puis rend la main ; un veilleur DÉTACHÉ (setsid + nohup, survit à la fin de la session SSH) tient le
 # créneau, applique les limites et écrit l'état final. Un appelant mort ne laisse donc ni conteneur ni créneau.
-# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus]]]]
+# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets]]]]]]
+#   captures (1..50) et octets (1..104857600) facultatifs : passés au conteneur en -e PONT_CAPTURES / -e PONT_OCTETS (limites du pont) ;
+#   absents, le conteneur garde les valeurs du pont (50 captures, 100 Mo).
 #   id : t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; mode : scenario | pilote ; valeurs par défaut : 1200 s, 600 s, 6144 Mo, 2 processeurs
 #   (inactivite_s 600 > PONT_DEMARRAGE_S 300 : un `demarrer` en cours n'est jamais pris pour de l'inactivité).
 #   Chaque valeur est validée par un motif strict AVANT tout usage (nombres entiers sans zéro initial : duree_s et inactivite_s
@@ -22,8 +24,8 @@
 #   plantage.txt existe, sinon echouee, erreur ; docker en échec -> echouee, erreur ; sortie/ au-delà de 2 x 100 Mo + 50 Mo
 #   (du -sk) -> terminee, limite « sortie trop volumineuse ». L'état du conteneur est constaté AVANT d'honorer arret ;
 #   arret contient « fin » (fin normale demandée par le lanceur) -> terminee, ok ; tout autre contenu -> arretee, ok.
-#   Inactivité du pilote = max(mtime sortie/pont.log, mtime sortie/.activite (touché par pont.sh au début de chaque verbe),
-#   début de la tâche).
+#   Inactivité du pilote = max(mtime sortie/pont.log, sortie/.activite (touché par pont.sh au début ET à la fin de chaque verbe),
+#   sortie/.avd-pret, début de la tâche).
 # Limite de taille : sondage toutes les ENVELOPPE_SONDE_S (2 s) de `du -sk`, PAS un quota : un dépassement entre deux sondages
 #   est accepté (résiduel connu) ; la limite du pont (octets de captures) reste la première barrière.
 # ÉCART VOLONTAIRE : l'échéance duree_s est appliquée par le veilleur (et, en dernier recours, par `timeout duree+60` dans le
@@ -49,7 +51,10 @@ refuser() { printf '%s\n' "lancer_emulation : $1" >&2; exit 2; }
 
 VEILLEUR=0
 if [ "${1:-}" = --veilleur ]; then VEILLEUR=1; shift; fi
-[ $# -ge 2 ] && [ $# -le 6 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus]]]]"
+[ $# -ge 2 ] && [ $# -le 8 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets]]]]]]"
+for argument in "$@"; do                 # aucun caractère de contrôle (retour à la ligne final compris : `$` d'un motif l'accepterait)
+  [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
+done
 ID="$1"; MODE="$2"; DUREE="${3-1200}"; INACTIVITE="${4-600}"; MEMOIRE="${5-6144}"; CPUS="${6-2}"
 [[ $ID =~ $MOTIF_ID ]] || refuser "identifiant refusé."
 [ "$MODE" = scenario ] || [ "$MODE" = pilote ] || refuser "mode refusé (scenario ou pilote)."
@@ -57,6 +62,15 @@ ID="$1"; MODE="$2"; DUREE="${3-1200}"; INACTIVITE="${4-600}"; MEMOIRE="${5-6144}
 [[ $INACTIVITE =~ $MOTIF_DUREE ]] && [ "$INACTIVITE" -le 86400 ] || refuser "inactivite_s refusée (1 à 86400, sans zéro initial)."
 [[ $MEMOIRE =~ $MOTIF_MEMOIRE ]] && [ "$MEMOIRE" -ge 256 ] && [ "$MEMOIRE" -le 65536 ] || refuser "memoire_mo refusée (256 à 65536)."
 [[ $CPUS =~ $MOTIF_CPUS ]] && [ "$CPUS" -le 64 ] || refuser "cpus refusés (1 à 64)."
+SUPPL=(); ENV_SUPPL=()                   # arguments facultatifs 7 et 8 : relayés au veilleur et au conteneur
+if [ $# -ge 7 ]; then
+  [[ $7 =~ ^[1-9][0-9]?$ ]] && [ "$7" -le 50 ] || refuser "captures refusées (1 à 50, sans zéro initial)."
+  SUPPL+=("$7"); ENV_SUPPL+=(-e "PONT_CAPTURES=$7")
+fi
+if [ $# -ge 8 ]; then
+  [[ $8 =~ ^[1-9][0-9]{0,8}$ ]] && [ "$8" -le 104857600 ] || refuser "octets refusés (1 à 104857600, sans zéro initial)."
+  SUPPL+=("$8"); ENV_SUPPL+=(-e "PONT_OCTETS=$8")
+fi
 [ -n "${HOME:-}" ] || refuser "HOME absent."
 SONDE="${ENVELOPPE_SONDE_S:-2}"
 [[ $SONDE =~ $MOTIF_SONDE ]] || SONDE=2
@@ -134,6 +148,7 @@ veilleur() {
   arreter_puis() {
     local etat="$1" statut="$2" raison="$3"
     arreter_conteneur || conclure echouee erreur "$raison mais le conteneur tache-$ID ne s'arrête pas : à arrêter à la main (docker stop)."
+    if [ -e "$DOSSIER/sortie/plantage.txt" ]; then plantage=1; fi       # relu APRÈS l'arrêt : un plantage écrit entre-temps compte
     if [ "$plantage" = 1 ]; then conclure "$etat" plantage "$raison ; plantage relevé (plantage.txt)."; fi
     conclure "$etat" "$statut" "$raison."
   }
@@ -165,6 +180,7 @@ veilleur() {
       derniere=$debut_s
       m=$(mtime "$DOSSIER/sortie/pont.log"); [ "$m" -gt "$derniere" ] && derniere=$m
       m=$(mtime "$DOSSIER/sortie/.activite"); [ "$m" -gt "$derniere" ] && derniere=$m
+      m=$(mtime "$DOSSIER/sortie/.avd-pret"); [ "$m" -gt "$derniere" ] && derniere=$m      # AVD créé : le conteneur travaille
       if [ $((maintenant - derniere)) -ge "$INACTIVITE" ]; then
         arreter_puis terminee limite "Inactivité du pilote : aucun verbe depuis ${INACTIVITE} s"
       fi
@@ -198,7 +214,7 @@ processus_vivant() {   # processus_vivant <fichier du pid> <motif>... : le PID e
 }
 veilleur_vivant() { processus_vivant "$DOSSIER/veilleur.pid" "--veilleur $ID"; }
 # L'enveloppe d'un lancement en cours de démarrage (docker run peut durer 120 s, le veilleur n'existe pas encore).
-enveloppe_vivante() { processus_vivant "$DOSSIER/enveloppe.pid" lancer_emulation.sh "$ID"; }
+enveloppe_vivante() { processus_vivant "$DOSSIER/enveloppe.pid" "lancer_emulation.sh $ID"; }   # paire contiguë, comme le lanceur
 
 umask 077
 mkdir -p -- "$DOSSIER/entree" "$DOSSIER/sortie" || refuser "dossier de la tâche non créable."
@@ -244,7 +260,7 @@ COMMANDE=(run --pull never --rm -d --init --name "tache-$ID" --network none --de
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS" --pids-limit 512 --ulimit nofile=4096:4096
   -e ANDROID_AVD_HOME=/avd -e HOME=/tmp -e PONT_SORTIE=/sortie -e PONT_AVD=emul
   -e PONT_EMULATEUR=/opt/android-sdk/emulator/emulator -e PONT_ADB=/opt/android-sdk/platform-tools/adb
-  -e "TACHE_DUREE_S=$DUREE" -e "TACHE_IMAGE_SYSTEME=$IMAGE_SYSTEME"
+  -e "TACHE_DUREE_S=$DUREE" -e "TACHE_IMAGE_SYSTEME=$IMAGE_SYSTEME" ${ENV_SUPPL[@]+"${ENV_SUPPL[@]}"}
   --mount "type=bind,src=$SDK,dst=/opt/android-sdk,readonly"
   --mount "type=bind,src=$DOSSIER/entree,dst=/entree,readonly"
   --mount "type=bind,src=$DOSSIER/sortie,dst=/sortie"
@@ -256,9 +272,9 @@ fi
 
 # Veilleur détaché : il hérite du descripteur 8 (donc du créneau) et le libère à la fin, même si cette session SSH a disparu.
 if command -v setsid >/dev/null 2>&1; then
-  setsid nohup bash "$SELF" --veilleur "$ID" "$MODE" "$DUREE" "$INACTIVITE" "$MEMOIRE" "$CPUS" </dev/null >> "$DOSSIER/veilleur.log" 2>&1 &
+  setsid nohup bash "$SELF" --veilleur "$ID" "$MODE" "$DUREE" "$INACTIVITE" "$MEMOIRE" "$CPUS" ${SUPPL[@]+"${SUPPL[@]}"} </dev/null >> "$DOSSIER/veilleur.log" 2>&1 &
 else
-  nohup bash "$SELF" --veilleur "$ID" "$MODE" "$DUREE" "$INACTIVITE" "$MEMOIRE" "$CPUS" </dev/null >> "$DOSSIER/veilleur.log" 2>&1 &
+  nohup bash "$SELF" --veilleur "$ID" "$MODE" "$DUREE" "$INACTIVITE" "$MEMOIRE" "$CPUS" ${SUPPL[@]+"${SUPPL[@]}"} </dev/null >> "$DOSSIER/veilleur.log" 2>&1 &
 fi
 disown 2>/dev/null
 # Rendre la main seulement quand veilleur.pid existe : après, « en_cours sans veilleur vivant » ne peut plus être qu'un veilleur mort.

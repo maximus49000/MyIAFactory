@@ -20,7 +20,7 @@
 #   PONT_DELAI_ADB_S (30 : délai de chaque appel à adb, `installer` x4 ; attente d'un verrou = 3 x délai + 10 s),
 #   PONT_PAQUET (facultatif : sinon le paquet est relevé par `installer`) ;
 #   PONT_ADB / PONT_EMULATEUR : « adb » / « emulator » ou un chemin absolu (tests).
-# Écrit seulement sous PONT_SORTIE : .activite (vide, touché au début de chaque verbe valide), pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log, emulateur.pid,
+# Écrit seulement sous PONT_SORTIE : .activite (vide, touché au début et à la fin de chaque verbe valide), pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log, emulateur.pid,
 # .verrou-captures, .verrou-demarrer (ou leurs dossiers .d sans flock).
 # Exige `timeout` (coreutils) : sans lui, refus (code 4) plutôt qu'un adb sans borne. Aucun outil ne reçoit le descripteur 9
 # du verrou (9>&-) : un serveur adb resté en vie ne doit pas garder le verrou.
@@ -121,11 +121,29 @@ journaliser() {
 }
 
 # repondre <code> <détail> : écrit l'unique ligne JSON, la ligne du journal, et termine avec <code>.
+# Activité : l'enveloppe hôte mesure l'inactivité du pilote sur la date de SORTIE/.activite (jamais lue, vide), touchée au début
+# ET à la fin de chaque verbe valide. Sans course : un lien symbolique, un dossier, un FIFO, un périphérique ne sont jamais ouverts
+# ni suivis ; un fichier ordinaire existant n'est jamais tronqué (touch -h : date seulement, jamais bloquant) ; la création
+# (fichier absent) se fait en noclobber (O_EXCL : échoue si quelque chose est apparu entre-temps, lien compris).
+ACTIVITE_ACTIVE=0
+activite() {
+  local f="$SORTIE/.activite"
+  if [ -L "$f" ]; then
+    :
+  elif [ -f "$f" ]; then
+    touch -h -- "$f" 2>/dev/null
+  elif [ ! -e "$f" ]; then
+    ( set -C; : > "$f" ) 2>/dev/null
+  fi
+  return 0
+}
+
 repondre() {
   local code="$1" detail="$2" ok=false
   [ "$code" -eq 0 ] && ok=true
   printf '{"ok": %s, "verbe": "%s", "detail": "%s"}\n' "$ok" "$VERBE_SUR" "$(echapper_json "$detail")"
   journaliser
+  [ "$ACTIVITE_ACTIVE" = 1 ] && activite
   exit "$code"
 }
 
@@ -485,10 +503,8 @@ done
 reglage PONT_DELAI_ADB_S "${PONT_DELAI_ADB_S:-}" 30; DELAI_ADB=$REGLAGE
 command -v timeout > /dev/null 2>&1 || repondre 4 "timeout absent : le pont refuse d'appeler adb sans délai."
 mkdir -p -- "$SORTIE" 2>/dev/null || repondre 4 "Dossier de sortie inaccessible."
-# Activité : l'enveloppe hôte mesure l'inactivité du pilote sur la date de ce fichier (jamais lu, vide) ; touché au début de CHAQUE
-# verbe valide, sauf si c'est un lien symbolique (aucune écriture ailleurs que sous PONT_SORTIE).
-# Seulement un fichier ordinaire ou rien : un FIFO ou un périphérique ouvert en écriture bloquerait le verbe.
-if [ ! -L "$SORTIE/.activite" ] && { [ -f "$SORTIE/.activite" ] || [ ! -e "$SORTIE/.activite" ]; }; then : > "$SORTIE/.activite" 2>/dev/null; fi
+activite                                       # début du verbe
+ACTIVITE_ACTIVE=1                              # et fin : repondre() retouche
 
 case "$VERBE" in
   demarrer) verbe_demarrer ;;

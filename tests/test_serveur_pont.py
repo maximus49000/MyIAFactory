@@ -18,6 +18,7 @@ CLES = {"ok", "verbe", "detail"}
 PAQUET = "com.exemple.app"
 
 ADB_FACTICE = r'''echo "adb $*" >> "$FAUX_JOURNAL"
+[ -n "${FAUX_EFFACER_ACTIVITE:-}" ] && rm -f "$PONT_SORTIE/.activite"
 [ -n "${FAUX_ADB_ECHEC:-}" ] && exit 1
 if [ -n "${FAUX_VERIF_FD9:-}" ] && [ -e /proc/self/fd/9 ]; then echo "adb a herite du verrou" >> "$FAUX_JOURNAL"; exit 1; fi
 [ -n "${FAUX_ADB_LENT:-}" ] && exec /usr/bin/sleep "$FAUX_ADB_LENT"
@@ -400,6 +401,9 @@ class TestPont(unittest.TestCase):
             self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)
             self.assertTrue(activite.is_file())
             self.assertEqual(activite.stat().st_size, 0)                  # mtime seulement, aucun contenu
+            activite.write_text("garde", newline="\n")
+            self.assertEqual(b.lancer("attendre", "0")[0], 0)
+            self.assertEqual(activite.read_text(), "garde")               # un fichier existant n'est jamais tronqué (touch, pas « : > »)
             os.utime(activite, (1000000, 1000000))
             self.assertEqual(b.lancer("attendre", "0")[0], 0)
             self.assertGreater(activite.stat().st_mtime, 1000000)         # chaque verbe valide le rafraîchit
@@ -407,16 +411,41 @@ class TestPont(unittest.TestCase):
             self.assertEqual(b.lancer("toucher", "a;b", "2")[0], 2)       # un verbe refusé n'est pas de l'activité
             self.assertFalse(activite.exists())
 
+    def test_activite_aussi_a_la_fin_de_chaque_verbe(self):
+        with Banc() as b:
+            activite = b.sortie / ".activite"
+            # le faux adb efface .activite pendant le verbe : seule une retouche en FIN de verbe la ramène (verbe long = activité)
+            self.assertEqual(b.lancer("toucher", "10", "20", FAUX_EFFACER_ACTIVITE="1")[0], 0)
+            self.assertTrue(activite.is_file())
+            self.assertEqual(activite.stat().st_size, 0)
+
+    def _lancer_borne(self, b, *args, delai=15):
+        """Un verbe avec garde dure : sortie dans des FICHIERS (aucun tube qu'un petit-enfant bloqué garderait ouvert), attente bornée,
+        arbre de processus tué puis échec franc si le verbe ne rend pas la main (jamais un blocage de la campagne)."""
+        commande, e = b._preparer(args, {})
+        with open(b.t / "borne.out", "wb") as sortie:
+            p = subprocess.Popen(commande, stdin=subprocess.DEVNULL, stdout=sortie, stderr=subprocess.STDOUT, env=e)
+            try:
+                p.wait(timeout=delai)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+                else:
+                    p.kill()
+                p.wait(timeout=10)
+                self.fail(f"le verbe {args} n'a pas rendu la main en {delai} s (blocage sur un fichier non ordinaire ?)")
+        return p.returncode
+
     def test_activite_non_ordinaire_n_est_jamais_ouvert(self):
         with Banc() as b:
             activite = b.sortie / ".activite"
             # un dossier : jamais touché ; un FIFO (si le système sait en faire) : l'ouvrir en écriture bloquerait le verbe
             activite.mkdir()
-            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)
+            self.assertEqual(self._lancer_borne(b, "toucher", "10", "20"), 0)
             activite.rmdir()
             if bash('mkfifo "$1"', posix(activite)).returncode != 0:
                 return
-            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)          # sinon : délai du harnais, test en échec
+            self.assertEqual(self._lancer_borne(b, "toucher", "10", "20"), 0)
 
     def test_activite_ne_suit_pas_un_lien_symbolique(self):
         with Banc() as b:

@@ -227,13 +227,16 @@ def apercu(serveur, actions, ssh=plateforme_ssh, dossier=plateforme_acces.DOSSIE
         return {"erreur": "État du serveur illisible ou serveur injoignable : " + ", ".join(illisibles) + ".",
                 "etat": {**inconnu, **etat}}
     installees = {i for i, s in etat.items() if s == serveur_etat.PRESENTE}
-    installees -= _perimees(serveur, ssh, installees, set(requises))
+    perimees = _perimees(serveur, ssh, installees, set(requises))
+    installees -= perimees
+    etat = {**etat, **{i: serveur_etat.ABSENTE for i in perimees}}      # une capacité périmée n'est pas « présente » (raison : « À mettre à jour »)
     manquantes = manquantes_pour(actions, installees)
     installables = [CATALOGUE[i] for i in manquantes if CATALOGUE[i].installable]
     return {"manquantes": manquantes,
             "taille_go": float(sum(c.taille_go for c in installables)),
             "duree_min": int(sum(c.duree_min for c in installables)),
             "bloquees": bloquees(manquantes),
+            "perimees": sorted(perimees),
             "etat": etat}
 
 
@@ -344,7 +347,7 @@ def _perimees(serveur, ssh, presentes, requises):
         except (OSError, ValueError, KeyError):
             perimees.add(i)
             continue
-        code, sortie, _e = ssh.executer(serveur_etat.cible(serveur), f'cat "{marqueur}" 2>/dev/null', serveur.cle, delai=20)
+        code, sortie, _e = ssh.executer(serveur_etat.cible(serveur), f'head -c 256 "{marqueur}" 2>/dev/null', serveur.cle, delai=20)
         if code in (255, 124):
             continue
         if code != 0 or (sortie or "").strip() != attendue:
@@ -556,6 +559,8 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
 
     if erreur is None:                                           # relecture finale : la présence réelle fait foi
         finales = serveur_etat.sonder(serveur, ssh=ssh)
+        finales_presentes = {i for i, v in finales.items() if v == serveur_etat.PRESENTE}
+        perimees_finales = _perimees(serveur, ssh, finales_presentes, set(requises))      # l'empreinte aussi, pas seulement l'existence
         for i in requises:
             if caps[i]["statut"] != "fait":
                 continue
@@ -565,4 +570,7 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
             elif finales.get(i) != serveur_etat.PRESENTE:
                 caps[i] = _entree("inconnue", "Présence non vérifiable après l'étape (serveur injoignable).",
                                   "Relancez un aperçu pour constater l'état.")
+            elif i in perimees_finales:
+                caps[i] = _entree("bloque", "L'étape s'est terminée mais le marqueur du serveur porte une empreinte périmée.",
+                                  GESTE_ETAPE)
     return resultat(erreur)

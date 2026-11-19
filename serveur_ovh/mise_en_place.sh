@@ -737,7 +737,7 @@ etape_android_emulateur() {
 # l'étiquette, testé par la sonde du catalogue) est retiré avant toute reconstruction puis réécrit une fois l'image construite.
 # Le SDK Android n'est pas dans l'image : il est monté à l'exécution.
 etape_emulateur_image() {
-  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f journal fin code
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f journal fin code fichiers_h
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont) depuis ${racine} puis écrirait ${marqueur}."
   fi
@@ -747,7 +747,9 @@ etape_emulateur_image() {
   for f in images/emulateur/Dockerfile images/emulateur/entree-tache.sh taches/pont.sh; do
     [ -f "$racine/$f" ] || repondre bloque "Fichier de l'image introuvable : $racine/$f. Relancez l'installation (elle redépose les fichiers)."
   done
-  empreinte="${EMPREINTE_EMULATEUR_BASE};fichiers=$(cat "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" | sha256sum | cut -c1-16)"
+  fichiers_h=$(cat "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" | sha256sum | cut -c1-16)
+  [[ $fichiers_h =~ ^[0-9a-f]{16}$ ]] || repondre bloque "Empreinte des fichiers de l'image incalculable (sha256sum) : rien n'a été construit ni écrit."
+  empreinte="${EMPREINTE_EMULATEUR_BASE};fichiers=${fichiers_h}"
   actuelle=$(sudo -n docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/emulateur 2>/dev/null)
   if [ "$actuelle" != "$empreinte" ]; then
     rm -f "$marqueur"

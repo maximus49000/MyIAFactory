@@ -1151,7 +1151,7 @@ class TestEtapesCapacites(unittest.TestCase):
 DOCKER_IMAGE = r'''echo "docker $*" >> "JOURNAL"
 case "$1 $2" in
   "image inspect") [ -s "ETAT/etiquette" ] && { cat "ETAT/etiquette"; exit 0; }; exit 1 ;;
-  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && { printf 'avec-controle \001\033[31m\010fin\n'; i=1; while [ $i -le 30 ]; do echo "ligne-de-build-$i $HOME/secret-dossier"; i=$((i + 1)); done; exit 1; }
+  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && { i=1; while [ $i -le 30 ]; do echo "ligne-de-build-$i $HOME/secret-dossier"; i=$((i + 1)); done; printf 'avec-controle \001\033[31m\010fin\n'; exit 1; }
              prec=""; for a in "$@"; do [ "$prec" = --label ] && printf '%s' "${a#versions=}" > "ETAT/etiquette"; prec="$a"; last="$a"; done
              echo "contexte: $(ls "$last" | tr '\n' ' ')" >> "JOURNAL" ;;
 esac
@@ -1222,6 +1222,16 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         self.assertEqual(d["statut"], "bloque")
         self.assertFalse((m.home / MARQUEUR).exists())                                     # la sonde ne ment pas sur une image périmée
 
+    def test_empreinte_illisible_est_un_blocage_et_jamais_un_marqueur_vide(self):
+        m = self._monde()
+        (m.faux / "sha256sum").write_text("#!/bin/sh\ncat > /dev/null\necho\n", newline="\n")      # sha256sum défaillant : sortie vide
+        (m.faux / "sha256sum").chmod(0o755)
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("mpreinte", d["detail"])
+        self.assertEqual(m.appels("docker build"), [])
+        self.assertFalse((m.home / MARQUEUR).exists())
+
     def test_etape_emulateur_image_blocages(self):
         m = self._monde()
         d = self._lancer(m, DISQUE_LIBRE_GO="2")
@@ -1234,8 +1244,9 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         d = self._lancer(m, FAUX_BUILD_ECHEC="1")
         self.assertEqual(d["statut"], "bloque", d["detail"])
         self.assertIn("ligne-de-build-30", d["detail"])                                    # fin du journal de construction...
-        self.assertIn("ligne-de-build-11", d["detail"])
-        self.assertNotIn("ligne-de-build-10 ", d["detail"])                                # ... les 20 dernières lignes seulement
+        self.assertIn("avec-controle", d["detail"])                                        # (la ligne à caractères de contrôle est dans la fin)
+        self.assertIn("ligne-de-build-12", d["detail"])
+        self.assertNotIn("ligne-de-build-11 ", d["detail"])                                # ... les 20 dernières lignes seulement
         self.assertNotRegex(d["detail"], r"[\x00-\x08\x0b\x0c\x0e-\x1f]")                  # le JSON reste valide : aucun caractère de contrôle
         self.assertIn("~/secret-dossier", d["detail"])                                     # dossier personnel masqué
         self.assertFalse((m.home / MARQUEUR).exists())                                     # pas de marqueur sans image

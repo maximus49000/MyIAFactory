@@ -59,6 +59,15 @@ On déplace et renomme sans réécrire la logique éprouvée (verrou, accord str
    « installer » et « réparer » ; (c) « Où tournent les actions » : pour chaque action du genre du projet, `poste`, `GitHub` ou `serveur`,
    `serveur` n'étant sélectionnable que si le serveur a (ou peut installer, avec accord) les capacités de l'action. Le bureau ne propose jamais
    un lieu que le serveur ne permet pas.
+6bis. **Recommandation par couleur (demande du Directeur)** : dans « Où tournent les actions », chaque lieu d'une action porte une couleur qui
+   dit s'il est le meilleur choix du moment, selon la vitesse, la performance et la non-surcharge : **vert** = recommandé, **ambre** = possible,
+   **rouge** = déconseillé (poste ou serveur surchargé, quota GitHub presque épuisé), **gris** = indisponible (capacité manquante, hors ligne).
+   Chaque couleur a sa raison en une phrase au survol (« Serveur : 8 min en moyenne contre 21 min au poste ; poste chargé à 92 % »). Les
+   critères viennent de mesures, jamais d'un réglage caché : durées réelles déjà mesurées par lieu et par action (suivi des exécutions
+   déportées), charge actuelle du poste (mémoire et processeur, que le bureau mesure déjà), charge du serveur (charge moyenne par cœur, mémoire
+   libre, créneaux occupés, lus par SSH en lecture seule), quota GitHub restant, coût en abonnement. Sans mesure suffisante, la couleur se
+   fonde sur des règles simples et le dit. **C'est un conseil, pas un routage** : le bureau ne déplace jamais une action de lui-même ; le
+   Directeur choisit (le design de déport écarte le déport automatique selon la charge).
 7. **Migration, DERNIÈRE ÉTAPE du morceau 1 (demande du Directeur)** : on construit et on valide d'abord le serveur générique sur un
    serveur vierge simulé, de façon que l'universalité soit prouvée sans dépendre du serveur actuel. Ensuite seulement, **l'instance
    MyIAFactory du Directeur intègre automatiquement son serveur OVH** : au démarrage, si `~/MyIAFactory/ovh.json` et `plateforme.json`
@@ -100,6 +109,19 @@ que la copie n'est pas une sauvegarde. Même principe pour le keystore Android d
 **Autorisation (choix du Directeur) : donnée une fois par projet**, les agents et le bureau pouvant ensuite lancer des releases signées sans
 confirmation ; garde-fous proposés par le rédacteur (désactivables) : signer seulement des commits de la branche de release du projet (donc du
 code déjà fusionné), journal de chaque signature (commit, empreinte de la clé, date, demandeur) dans la fiche du projet, révocation d'un bouton.
+
+**Bascule des agents entre lieux (morceaux 2 et 3, demande du Directeur).** Le Directeur déclare plusieurs lieux d'agents (par exemple
+« agent local » ET « agent serveur », plus tard « agent cloud ») avec un **ordre de préférence** et, pour chacun, un **maximum d'agents
+simultanés**. Au lancement d'une tâche, le bureau prend le premier lieu de la liste qui a une place libre ; **si le premier a atteint son
+maximum, la tâche passe au deuxième, puis au troisième**, etc. C'est une règle réglée et visible par le Directeur, pas un déport caché : elle
+s'applique seulement au moment du lancement (une tâche en cours ne migre jamais d'un lieu à l'autre). Choix du rédacteur : (1) le maximum est un
+nombre déclaré d'agents simultanés par lieu (limite dure), complété par un garde-fou souple (charge du lieu au-dessus d'un seuil réglable, la
+couleur de recommandation sert de signal) ; (2) quand tous les lieux sont pleins, la tâche attend dans une **file visible avec sa position**
+plutôt que d'échouer (le comportement alternatif « refuser » reste un réglage) ; (3) chaque tâche indique où elle a tourné et pourquoi (« agent
+local plein : 2/2, bascule sur le serveur ») ; (4) les agents du poste et du serveur partageant le même abonnement, un **plafond global
+d'abonnement** s'applique au-dessus des plafonds par lieu (le bureau suit déjà l'abonnement) ; (5) la bascule est réglable par type de tâche
+(par exemple « tests sur émulateur » : serveur seulement) ; (6) un lieu hors ligne ou dont une capacité est bloquée est sauté, sans bloquer la
+file. Réglage dans l'écran de paramétrage des agents (morceau 3) ; le modèle de serveur de ce morceau-ci n'a rien à changer.
 
 ## Laissé au réalisateur
 Découpage des modules, format du catalogue de capacités, noms des fichiers, détails de la migration, texte et mise en page des écrans.

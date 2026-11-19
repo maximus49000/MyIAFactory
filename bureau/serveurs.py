@@ -4,6 +4,7 @@ Colle mince au-dessus de `outils/serveur_*.py`. Les lectures ne se connectent ja
 `serveurs.json` et `serveurs-etat.json`) ; la sonde et l'installation tournent dans un fil, un seul à la fois, et ne font
 jamais tomber le bureau. Aucun message d'erreur d'un fil n'est montré sans masquage des secrets connus.
 """
+import json
 import re
 import sys
 import threading
@@ -14,8 +15,28 @@ from . import plateforme as modplateforme
 DOSSIER = None   # None : voir `dossier()` ; remplacé dans les essais
 MAX_ACTIONS = 20
 STATUTS_PRESENTS = ("presente", "fait")
-_ROUTE = re.compile(r"^/api/serveurs(?:/([^/]+)/(sonder|apercu|installer))?$")
+_ROUTE = re.compile(r"/api/serveurs(?:/([^/]+)/(sonder|apercu|installer))?")
 DELAI_APERCU_S = 150
+MAX_APERCUS = 2
+LIGNE_CLE_MAX = 4096
+
+
+class Occupe(Exception):
+    """Trop d'aperçus en même temps."""
+
+
+def _sans_doublon(paires):
+    objet = {}
+    for k, v in paires:
+        if k in objet:
+            raise ValueError("clé dupliquée")
+        objet[k] = v
+    return objet
+
+
+def lire_json(octets):
+    """Le JSON d'un corps de demande ; `ValueError` s'il est illisible ou répète une clé (à n'importe quel niveau)."""
+    return json.loads(octets.decode("utf-8"), object_pairs_hook=_sans_doublon)
 
 
 def _modules():
@@ -61,7 +82,8 @@ def _ligne_cle_existante(d, serveur):
     """La ligne publique si la clé dédiée existe déjà (jamais de génération) ; sinon None."""
     try:
         publique = Path(str(Path(d) / serveur.cle) + ".pub")
-        return publique.read_text(encoding="utf-8").strip() or None
+        with open(publique, "rb") as f:
+            return f.read(LIGNE_CLE_MAX).decode("utf-8", "replace").strip() or None
     except OSError:
         return None
 
@@ -83,6 +105,7 @@ class Travaux:
         self._fil = None
         self._cible = None          # (genre, id du serveur) de la tâche en cours
         self.erreurs = {}           # id du serveur -> message de la dernière tâche interrompue
+        self._places_apercu = threading.BoundedSemaphore(MAX_APERCUS)
 
     def _options_ssh(self):
         return {} if self._ssh is None else {"ssh": self._ssh}
@@ -126,12 +149,7 @@ class Travaux:
 
         def travail():
             etat = etat_mod.sonder(serveur, **self._options_ssh())
-            detail = {"presente": "Constatée par la sonde.", "absente": "Absente (constatée par la sonde).",
-                      "inconnue": "Serveur injoignable ou état illisible."}
-            caps = {i: inst._entree(s, detail.get(s, "")) for i, s in etat.items()}
-            avant = inst.lire_etat(d).get(serveur.id, {}).get("installation")
-            debut = avant.get("debut", "") if isinstance(avant, dict) and isinstance(avant.get("debut"), str) else ""
-            inst._ecrire_etat(d, serveur.id, caps, False, debut)
+            inst.enregistrer_sonde(d, serveur, etat)
             if all(s == "inconnue" for s in etat.values()):
                 return "Serveur injoignable : l'état de ses capacités est inconnu."
             return None
@@ -145,17 +163,27 @@ class Travaux:
             return r.get("erreur") if isinstance(r, dict) else None
         return self.lancer("installer", serveur, travail)
 
-    def apercu(self, serveur, actions, d, delai=DELAI_APERCU_S):
-        """L'aperçu (lecture SSH seulement), borné dans le temps : `None` si le délai est dépassé. `ErreurInstallation` remonte."""
+    def apercu(self, serveur, actions, d, delai=None):
+        """L'aperçu (lecture SSH seulement), borné dans le temps : `None` si le délai est dépassé. `ErreurInstallation` remonte.
+        `Occupe` si deux aperçus tournent déjà (un fil dépassé garde sa place jusqu'à sa fin)."""
+        delai = DELAI_APERCU_S if delai is None else delai
         sortie = {}
+        if not self._places_apercu.acquire(blocking=False):
+            raise Occupe()
 
         def courir():
             try:
                 sortie["r"] = _modules()[3].apercu(serveur, actions, dossier=d, **self._options_ssh())
             except BaseException as e:
                 sortie["e"] = e
+            finally:
+                self._places_apercu.release()
         fil = threading.Thread(target=courir, daemon=True)
-        fil.start()
+        try:
+            fil.start()
+        except BaseException:
+            self._places_apercu.release()
+            raise
         fil.join(delai)
         if fil.is_alive():
             return None
@@ -173,6 +201,9 @@ def lire(travaux, d=None):
     serveurs, rejets = modeles.lire_avec_rejets(d)
     etat = installation.lire_etat_vivant(d)
     secrets = _secrets(d, serveurs)
+    connus = {s.id for s in serveurs}
+    for ident in [i for i in list(travaux.erreurs) if i not in connus]:
+        travaux.erreurs.pop(ident, None)      # un serveur qui n'est plus déclaré ne garde pas d'erreur
     sortie = []
     for s in serveurs:
         e = etat.get(s.id, {})
@@ -195,13 +226,19 @@ def _lieu(d, serveurs, etat, action):
     if not serveurs:
         return {"permis": False, "manque": [], "raison": "Aucun serveur déclaré."}
     meilleur = None
+    muet = None     # serveur jamais sondé ou injoignable : aucune action, même sans capacité requise, n'y est permise
     for s in serveurs:
         caps = _capacites(etat.get(s.id, {}))
         manque = [i for i in requises if caps.get(i) not in STATUTS_PRESENTS]
         if not manque:
+            if all(v == "inconnue" for v in caps.values()):
+                muet = muet or s
+                continue
             return {"permis": True, "manque": [], "raison": "", "serveur_id": s.id}
         if meilleur is None or len(manque) < len(meilleur[1]):
             meilleur = (s, manque, caps)
+    if meilleur is None:
+        return {"permis": False, "manque": [], "serveur_id": muet.id, "raison": "Serveur jamais sondé ou injoignable"}
     s, manque, caps = meilleur
     morceaux = []
     for i in manque:
@@ -231,7 +268,7 @@ def lieux(actions_brutes, d=None):
 
 def route_post(chemin):
     """`("declarer", None)` ou `(action, id)` pour un chemin de ces routes ; `None` sinon."""
-    m = _ROUTE.match(chemin)
+    m = _ROUTE.fullmatch(chemin)
     if not m:
         return None
     return (m.group(2), m.group(1)) if m.group(1) else ("declarer", None)
@@ -289,8 +326,13 @@ def poster(travaux, cible, corps, d=None):
     if genre == "apercu":
         try:
             resultat = travaux.apercu(serveur, actions, d)
+        except Occupe:
+            return 409, {"erreur": "Deux aperçus sont déjà en cours : réessayez dans un instant."}
         except installation.ErreurInstallation as e:
             return 400, {"erreur": _masquer(str(e), _secrets(d, [serveur]))}
+        except Exception as e:
+            print(f"Aperçu interrompu ({type(e).__name__}).", file=sys.stderr)
+            return 500, {"erreur": "L'aperçu a échoué : réessayez."}
         if resultat is None:
             return 504, {"erreur": "L'aperçu prend trop de temps : réessayez."}
         return 200, _masquer(resultat, _secrets(d, [serveur]))

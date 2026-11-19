@@ -107,6 +107,49 @@ def _entree(statut, detail="", geste=""):
     return {"statut": statut, "detail": detail, "geste": geste, "maj": _maintenant()}
 
 
+_DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (constatée par la sonde).",
+                 "inconnue": "Serveur injoignable ou état illisible."}
+
+
+def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant):
+    """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
+
+    `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
+    « bloque » garde son entrée (et sa raison) tant que la sonde ne la constate pas présente."""
+    deja = ErreurInstallation("Une installation est déjà en cours sur ce poste.", "Attendez sa fin puis relancez.")
+    if not _VERROU_PROCESSUS.acquire(blocking=False):
+        raise deja
+    try:
+        try:
+            verrou = _prendre_verrou(dossier, vivant)
+        except OSError as e:
+            raise ErreurInstallation(f"Dossier de l'installation inutilisable : {_texte(e, serveur)}",
+                                     "Vérifiez les droits d'écriture du dossier de configuration.") from e
+        if verrou is None:
+            raise deja
+        try:
+            avant = lire_etat(dossier).get(serveur.id, {})
+            anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
+            caps = {}
+            for i, s in etat.items():
+                ancienne = anciennes.get(i)
+                if (i in CATALOGUE and not CATALOGUE[i].installable and s != "presente"
+                        and isinstance(ancienne, dict) and ancienne.get("statut") == "bloque"):
+                    caps[i] = ancienne
+                else:
+                    caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
+            inst = avant.get("installation")
+            debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
+            _ecrire_etat(dossier, serveur.id, caps, False, debut)
+        finally:
+            try:
+                verrou.unlink()
+            except OSError:
+                pass
+    finally:
+        _VERROU_PROCESSUS.release()
+
+
 # ---------------------------------------------------------------- aperçu
 
 def apercu(serveur, actions, ssh=plateforme_ssh, dossier=plateforme_acces.DOSSIER):

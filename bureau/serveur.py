@@ -1957,7 +1957,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._vider_corps()
                 return self._json(400, {"erreur": "Corps de requête invalide."})
             try:
-                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+                corps = modserveurs.lire_json(self.rfile.read(longueur))
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             if not isinstance(corps, dict):

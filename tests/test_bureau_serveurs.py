@@ -155,6 +155,21 @@ class TestLecture(AvecServeurs):
         self.assertFalse(e["apk"]["serveur"]["permis"])
         self.assertEqual(self.req("GET", "/api/serveurs/lieux")[0].status, 400)
 
+    def test_lieux_charge_ferme_par_defaut_sans_sonde_reussie(self):
+        self.declarer()
+        e = self.json("/api/serveurs/lieux?actions=charge")["charge"]["serveur"]      # jamais sondé
+        self.assertFalse(e["permis"])
+        self.assertEqual(e["manque"], [])
+        self.assertIn("jamais sondé", e["raison"])
+        self.ssh.accessible = False
+        self.poster("/api/serveurs/mon-serveur/sonder", {})
+        self.travaux.attendre()
+        self.assertFalse(self.json("/api/serveurs/lieux?actions=charge")["charge"]["serveur"]["permis"])   # injoignable
+        self.ssh.accessible = True
+        self.poster("/api/serveurs/mon-serveur/sonder", {})
+        self.travaux.attendre()
+        self.assertTrue(self.json("/api/serveurs/lieux?actions=charge")["charge"]["serveur"]["permis"])    # bonne sonde
+
     def test_lieux_ne_se_connecte_a_rien(self):
         self.declarer()
         self.ssh.appels.clear()
@@ -229,6 +244,23 @@ class TestInstallation(AvecServeurs):
         lancer.assert_not_called()
         installer.assert_not_called()
         self.assertFalse(self.travaux.en_cours())
+
+    def test_cles_dupliquees_refusees_sans_appel_moteur(self):
+        brut = '{"actions": ["apk"], "accord": false, "accord": true}'
+        for chemin in (self.chemin, "/api/serveurs/mon-serveur/apercu", "/api/serveurs/mon-serveur/sonder", "/api/serveurs"):
+            with self.subTest(chemin=chemin):
+                r, _ = self.req("POST", chemin, brut, self.ENT)
+                self.assertEqual(r.status, 400)
+        r, _ = self.req("POST", self.chemin, '{"actions": [{"a": 1, "a": 2}], "accord": true}', self.ENT)
+        self.assertEqual(r.status, 400)
+        self.travaux.attendre()
+        self.assertEqual(self.appels, [])
+        self.assertEqual(self.ssh.appels, [])
+
+    def test_erreur_d_un_serveur_disparu_n_est_plus_listee(self):
+        self.travaux.erreurs["fantome"] = "vieille erreur"
+        self.json("/api/serveurs")
+        self.assertNotIn("fantome", self.travaux.erreurs)
 
     def test_installer_actions_invalides_400(self):
         for corps in ({"accord": True}, {"actions": [], "accord": True}, {"actions": "apk", "accord": True},
@@ -363,6 +395,84 @@ class TestSondeEtApercu(AvecServeurs):
         self.assertIn("erreur", json.loads(data))
         self.assertNotIn(str(self.dossier / "id_ed25519_mon-serveur").encode(), data)
 
+    def test_sonde_avec_verrou_tenu_n_ecrit_rien_et_erreur_masquee(self):
+        import serveur_installation
+        avant = self.instantane()
+        self.assertTrue(serveur_installation._VERROU_PROCESSUS.acquire(blocking=False))
+        try:
+            self.poster("/api/serveurs/mon-serveur/sonder", {})
+            self.travaux.attendre()
+        finally:
+            serveur_installation._VERROU_PROCESSUS.release()
+        self.assertEqual(self.instantane(), avant)
+        self.assertIn("déjà en cours", self.json("/api/serveurs")["serveurs"][0]["erreur"])
+
+    def test_enregistrer_sonde_refuse_si_verrou_tenu(self):
+        import serveur_installation as si
+        serveur = bserveurs._modules()[4].lire_avec_rejets(self.dossier)[0][0]
+        self.assertTrue(si._VERROU_PROCESSUS.acquire(blocking=False))
+        try:
+            with self.assertRaises(si.ErreurInstallation) as c:
+                si.enregistrer_sonde(self.dossier, serveur, {"base": "presente"})
+        finally:
+            si._VERROU_PROCESSUS.release()
+        self.assertIn("déjà en cours", str(c.exception))
+        (self.dossier / si.VERROU).write_text("", encoding="utf-8")        # verrou fichier tout jeune
+        with self.assertRaises(si.ErreurInstallation):
+            si.enregistrer_sonde(self.dossier, serveur, {"base": "presente"})
+        (self.dossier / si.VERROU).unlink()
+        si.enregistrer_sonde(self.dossier, serveur, {"base": "presente"})
+        self.assertFalse((self.dossier / si.VERROU).exists())               # verrou rendu
+        self.assertEqual(si.lire_etat(self.dossier)["mon-serveur"]["capacites"]["base"]["statut"], "presente")
+
+    def test_sonde_garde_la_raison_d_une_capacite_non_installable_bloquee(self):
+        import serveur_capacites as sc
+        import serveur_installation as si
+        serveur = bserveurs._modules()[4].lire_avec_rejets(self.dossier)[0][0]
+        ni = next(i for i, c in sc.CATALOGUE.items() if not c.installable)
+        (self.dossier / si.ETAT).write_text(json.dumps({"mon-serveur": {"capacites": {
+            ni: {"statut": "bloque", "detail": "Licence à accepter à la main.", "geste": "g", "maj": "x"}},
+            "installation": {"en_cours": False, "debut": ""}}}), encoding="utf-8")
+        si.enregistrer_sonde(self.dossier, serveur, {ni: "absente", "base": "presente"})
+        e = si.lire_etat(self.dossier)["mon-serveur"]["capacites"]
+        self.assertEqual((e[ni]["statut"], e[ni]["detail"]), ("bloque", "Licence à accepter à la main."))
+        self.assertEqual(e["base"]["statut"], "presente")
+
+    def test_apercu_limite_de_concurrence_409(self):
+        bloque = threading.Event()
+        self.addCleanup(bloque.set)
+        self.travaux._ssh = SimpleNamespace(executer=lambda *a, **k: (bloque.wait(5), (0, "", ""))[1], CHANGEMENT_CLE="x")
+        serveur = bserveurs._modules()[4].lire_avec_rejets(self.dossier)[0][0]
+        for _ in range(2):
+            self.assertIsNone(self.travaux.apercu(serveur, ["apk"], self.dossier, delai=0.05))
+        r, data = self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["apk"]})
+        self.assertEqual(r.status, 409)
+        self.assertIn("erreur", json.loads(data))
+        bloque.set()
+        for _ in range(100):
+            if self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["apk"]})[0].status != 409:
+                break
+            threading.Event().wait(0.05)
+        else:
+            self.fail("la limite n'a pas été relâchée")
+
+    def test_apercu_delai_depasse_504_http(self):
+        bloque = threading.Event()
+        self.addCleanup(bloque.set)
+        self.travaux._ssh = SimpleNamespace(executer=lambda *a, **k: (bloque.wait(5), (0, "", ""))[1], CHANGEMENT_CLE="x")
+        with mock.patch.object(bserveurs, "DELAI_APERCU_S", 0.05):
+            r, data = self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["apk"]})
+        self.assertEqual(r.status, 504)
+        self.assertIn("erreur", json.loads(data))
+
+    def test_apercu_exception_inattendue_500_masque(self):
+        with mock.patch.object(bserveurs.Travaux, "apercu", side_effect=RuntimeError(SECRET)):
+            r, data = self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["apk"]})
+        self.assertEqual(r.status, 500)
+        self.assertNotIn(SECRET.encode(), data)
+        self.assertNotIn(b"RuntimeError", data)
+        self.assertIn("erreur", json.loads(data))
+
     def test_apercu_borne_dans_le_temps(self):
         bloque = threading.Event()
         self.addCleanup(bloque.set)
@@ -380,7 +490,10 @@ class TestReponsesSansSecret(AvecServeurs):
         for chemin in ("/api/serveurs", "/api/serveurs/lieux?actions=apk"):
             self.assertNotIn(SECRET.encode(), self.req("GET", chemin)[1])
         self.assertNotIn(str(self.dossier / "id_ed25519").encode(), self.req("GET", "/api/serveurs")[1])
-        r, data = self.poster("/api/serveurs/serveur-***/apercu", {"actions": ["apk"]})
+        ident = json.loads(self.req("GET", "/api/serveurs")[1])["serveurs"][0]["id"]
+        self.ssh.accessible = False
+        r, data = self.poster(f"/api/serveurs/{ident}/apercu", {"actions": ["apk"]})
+        self.assertEqual(r.status, 200)
         self.assertNotIn(SECRET.encode(), data)
 
 
@@ -391,6 +504,15 @@ class TestEcouteurDistant(AvecBureauOuvert):
                "Content-Type": "application/json"}
         appels = []
         self.srv.travaux_serveurs = bserveurs.Travaux(installer=lambda *a, **k: appels.append(a))
+        d = self.tmp / "secrets-distant"
+        d.mkdir()
+        (d / "serveurs.json").write_text(json.dumps([{
+            "id": "x", "nom": "X", "hote": "srv.exemple.fr", "utilisateur": "bob",
+            "cle": str(d / "id_ed25519_x"), "fournisseur": None}]), encoding="utf-8")
+        p = mock.patch.object(bserveurs, "DOSSIER", d)
+        p.start()
+        self.addCleanup(p.stop)
+        self.assertEqual([s.id for s in bserveurs._modules()[4].lire_avec_rejets(d)[0]], ["x"])   # le serveur existe bien
         for chemin, corps in (("/api/serveurs", {"nom": "n", "hote": "a.fr", "utilisateur": "bob"}),
                               ("/api/serveurs/x/sonder", {}), ("/api/serveurs/x/apercu", {"actions": ["apk"]}),
                               ("/api/serveurs/x/installer", {"actions": ["apk"], "accord": True})):
@@ -398,9 +520,10 @@ class TestEcouteurDistant(AvecBureauOuvert):
                 r, _ = self.req("POST", chemin, json.dumps(corps), ent)
                 self.assertEqual(r.status, 404)
         self.assertEqual(appels, [])
+        self.assertEqual(sorted(p.name for p in d.iterdir()), ["serveurs.json"])        # rien écrit
         r, data = self.req("GET", "/api/serveurs", entetes={"Cookie": cookie})      # lecture seule : permise, masquée
         self.assertEqual(r.status, 200)
-        self.assertEqual(json.loads(data)["serveurs"], [])
+        self.assertEqual([x["id"] for x in json.loads(data)["serveurs"]], ["x"])
         self.assertEqual(self.req("GET", "/api/serveurs")[0].status, 401)
 
 

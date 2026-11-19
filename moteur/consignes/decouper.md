@@ -14,6 +14,11 @@ Ce qu'il faut décider :
 - **Le moins d'éléments possible.** Chaque élément coûte un démarrage d'agent, une vérification et une validation : des
   parties presque identiques (des onglets, des écrans ou des fiches qui suivent le même modèle) forment **un seul
   élément**, pas un par partie. Une petite fonctionnalité tient en un ou deux éléments.
+- **Un seul élément quand les parties se servent les unes des autres.** Essai réel du 2026-11-19 (trois fois la même
+  évolution) : couper « logique » et « écrans qui l'affichent » en deux éléments a coûté un second démarrage d'agent
+  (contexte rechargé, environ 0,5 €) pour du code d'un seul tenant. Ne coupe en plusieurs éléments que si les parties
+  touchent des fichiers disjoints, peuvent vraiment avancer en parallèle, et sont chacune assez grosses pour justifier
+  un agent (de l'ordre de 600 lignes). Une évolution « moyenne » d'un seul module tient en **un** élément.
 - Donne à chaque élément ses `fichiers` : les chemins (relatifs au projet) qu'il va créer ou modifier, d'après le
   cahier. Deux éléments qui partagent un fichier ne travaillent jamais en même temps (le moteur les enchaîne) :
   découpe de préférence selon les fichiers, pour que les éléments puissent avancer en parallèle.

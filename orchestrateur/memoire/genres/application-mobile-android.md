@@ -722,3 +722,9 @@ Rôles : release, testeur
 Date : 2026-11-19
 
 Un test qui échoue puis réussit à la relance est instable : le déclarer tel quel dans la note de livraison.
+
+## G180 — Relire chaque capture d'écran de livraison avant de la prése
+Rôles : release
+Date : 2026-11-19
+
+Relire chaque capture d'écran de livraison avant de la présenter : une boîte système peut masquer l'application.

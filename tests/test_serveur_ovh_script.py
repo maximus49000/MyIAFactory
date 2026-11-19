@@ -724,6 +724,24 @@ class TestEtapesCapacites(unittest.TestCase):
 
     # --- android_build ---------------------------------------------------------
 
+    def test_android_build_fait_avec_le_jdk_d_unity_sans_rien_installer(self):
+        with Monde(jdk=False) as m:
+            for rel in ("platform-tools", "platforms/android-36", "build-tools/36.0.0"):
+                (m.sdk / rel).mkdir(parents=True)
+            adb = m.sdk / "platform-tools" / "adb"
+            adb.write_text("#!/bin/sh\n", newline="\n")
+            adb.chmod(0o755)
+            java = m.home / "Unity/Hub/Editor/6000.0.1f1/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java"
+            java.parent.mkdir(parents=True)
+            java.write_text("#!/bin/sh\n", newline="\n")
+            java.chmod(0o755)
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertIn("JDK d'Unity", d["detail"])
+            self.assertEqual(m.appels("apt-get "), [])               # le JDK 17 d'apt n'est pas installé sans y être invité
+            self.assertEqual(m.appels("curl "), [])
+            self.assertEqual(m.appels("sdkmanager "), [])
+
     def test_android_build_installe_le_sdk_dedie(self):
         with Monde() as m:
             d = m.lancer("android_build")

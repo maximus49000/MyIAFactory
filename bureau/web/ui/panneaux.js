@@ -251,14 +251,15 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     } else if (type === "partenaires") {
       if (!e.partenaires) { fermerPanneau(); return; }
       contenuPartenaires(contexte(), contenu, envoyerDemande);
-      // La carte « Serveur » (mise en place du serveur) : elle lit elle-même son état au cache du bureau.
-      if (e.agir === true && typeof fetch === "function") monterCarteServeur(contenu);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id) || ficheAncienAgent(e, id);
       if (!a) { fermerPanneau(); return; }
       contenuAgent(contexte(), contenu, a, STATUTS);
     } else {
       contenuDirecteur(contexte(), contenu);
+      // La carte « Serveur » : la plateforme est globale (pas liée aux partenaires d'un projet), le panneau Direction
+      // est toujours atteignable. Elle lit elle-même son état au cache du bureau ; le POST est refusé à distance.
+      if (e.agir === true && typeof fetch === "function") monterCarteServeur(contenu);
       avecReglage = !(e.services || []).some((s) => s.id === "facturation");
     }
     if (avecReglage) contenu.append(blocReglage());

@@ -196,3 +196,21 @@ test("carte retirée de la page : le suivi s arrête, arreter() annule le relev�
   assert.equal(m2.annulees, 1);
   assert.ok(c);
 });
+
+test("l accord est à usage unique : la case est décochée dès le clic, aussi sur 409 et sur erreur", async () => {
+  for (const reponseInstaller of [{ok: true, message: "Lancée."}, {ok: false, occupe: true, message: "Déjà en cours."}, {ok: false, message: "Erreur."}]) {
+    const accords = [];
+    let caseAuEnvoi = null;
+    const m = minuterie();
+    const c = carteServeur(ETAT, {minuterie: m, fetchFn: async () => reponse(200, {...ETAT, etapes: [etape("os", "en_cours")]}),
+      installer: async (a) => { accords.push(a); caseAuEnvoi = case_(c).checked; return reponseInstaller; }});
+    case_(c).checked = true;
+    await clic(c);
+    assert.equal(caseAuEnvoi, false, "décochée avant la réponse");
+    assert.equal(case_(c).checked, false);
+    bouton(c).disabled = false;      // un nouveau clic, la case n'a pas été recochée
+    await clic(c);
+    assert.deepEqual(accords, [true, false]);
+    assert.equal(case_(c).checked, false);
+  }
+});

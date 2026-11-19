@@ -154,8 +154,11 @@ export function carteServeur(etat, options = {}) {
     if (bouton.disabled) return;
     bouton.disabled = true;
     message.textContent = "Envoi…";
-    // L'accord n'est donné que par la case cochée.
-    const r = await installer(accord.checked === true);
+    // L'accord n'est donné que par la case cochée, et il ne sert qu'une fois : la case est décochée tout de suite,
+    // avant l'envoi, quelle que soit la réponse (succès, 409 ou erreur).
+    const accorde = accord.checked === true;
+    accord.checked = false;
+    const r = await installer(accorde);
     message.textContent = r?.message || (r?.ok ? "Installation lancée." : "Demande refusée.");
     if (r?.ok || r?.occupe) { lance = true; sansTravail = 0; }
     dessiner();

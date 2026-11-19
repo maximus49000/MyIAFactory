@@ -20,12 +20,19 @@ class ErreurSsh(Exception):
 
 def _lancer(runner, args, delai, entree=None):
     """Lance `args` : entrée standard fermée sans `entree` (jamais d'invite qui bloque), erreurs lisibles."""
-    options = {"input": entree} if entree is not None else {"stdin": subprocess.DEVNULL}
+    # Octets, jamais le mode texte : sous Windows il convertirait LF en CRLF (script bash et licence cassés).
+    options = {"input": entree.encode("utf-8")} if entree is not None else {"stdin": subprocess.DEVNULL}
     try:
-        return runner(args, capture_output=True, text=True, timeout=delai, **options)
+        return runner(args, capture_output=True, timeout=delai, **options)
     except FileNotFoundError:
         raise ErreurSsh(f"« {args[0]} » est introuvable : le client OpenSSH de Windows est requis "
                         "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
+
+
+def _texte(valeur):
+    if isinstance(valeur, bytes):
+        return valeur.decode("utf-8", errors="replace")
+    return valeur or ""
 
 
 def _verifier_hote(hote):
@@ -58,7 +65,7 @@ def generer_cle(dossier, runner=subprocess.run):
             r = _lancer_court(runner, ["ssh-keygen", "-y", "-f", str(prive)], 30)
             if r.returncode != 0:
                 raise RuntimeError("La clé privée existe mais sa partie publique n'a pu être relue.")
-            return prive, (r.stdout or "").strip()
+            return prive, _texte(r.stdout).strip()
         return prive, publique.read_text(encoding="utf-8").strip()
     dossier.mkdir(parents=True, exist_ok=True)
     r = _lancer_court(runner, ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "myiafactory", "-f", str(prive)], 60)
@@ -75,7 +82,7 @@ def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
         r = _lancer(runner, args, delai, stdin)
     except subprocess.TimeoutExpired:
         return 124, "", f"délai dépassé ({delai} s)"
-    return r.returncode, r.stdout or "", r.stderr or ""
+    return r.returncode, _texte(r.stdout), _texte(r.stderr)
 
 
 def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=time.sleep):

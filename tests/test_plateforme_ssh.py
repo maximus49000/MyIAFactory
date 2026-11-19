@@ -39,8 +39,25 @@ class TestExecuter(unittest.TestCase):
         r = Runner()
         plateforme_ssh.executer(HOTE, "cat > /tmp/f", Path("cle"), stdin="SECRET-LICENCE", runner=r)
         args, kw = r.appels[0]
-        self.assertEqual(kw["input"], "SECRET-LICENCE")
+        self.assertEqual(kw["input"], b"SECRET-LICENCE")
+        self.assertNotIn("text", kw)
         self.assertFalse(any("SECRET-LICENCE" in a for a in args))
+
+    def test_stdin_en_octets_sans_retour_chariot_et_aller_retour_utf8(self):
+        r = Runner()
+        texte = "#!/bin/bash\necho é à ü\nfin\n"
+        plateforme_ssh.executer(HOTE, "cat > /tmp/f", Path("cle"), stdin=texte, runner=r)
+        envoye = r.appels[0][1]["input"]
+        self.assertIsInstance(envoye, bytes)
+        self.assertNotIn(b"\r", envoye)
+        self.assertEqual(envoye.decode("utf-8"), texte)
+
+    def test_sortie_en_octets_decodee_sans_planter(self):
+        def runner(args, **kw):
+            return subprocess.CompletedProcess(args, 0, stdout="é\n".encode("utf-8"), stderr=b"\xff")
+        code, sortie, erreur = plateforme_ssh.executer(HOTE, "x", Path("cle"), runner=runner)
+        self.assertEqual((code, sortie), (0, "é\n"))
+        self.assertIsInstance(erreur, str)
 
     def test_delai_expire_renvoie_un_echec(self):
         def runner(args, **kw):

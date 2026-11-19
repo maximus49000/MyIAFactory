@@ -6,6 +6,7 @@ aucun secret (clés OVH, licence) : tout texte écrit ou affiché passe par `mas
 injectables : les tests ne font aucun appel réel. Un OS non Ubuntu LTS n'est jamais effacé sans `--accord-reinstallation`.
 """
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -14,6 +15,7 @@ import time
 from pathlib import Path
 
 import ovh_api
+from campagne import pid_vivant
 import plateforme_acces
 import plateforme_ovh
 import plateforme_ssh
@@ -29,6 +31,7 @@ LIBELLES = {
     "licence": "Licence Unity (facultative)",
 }
 CACHE = "plateforme.json"
+VERROU = "plateforme.lock"
 UTILISATEUR = "ubuntu"
 NOM_CLE_OVH = "myiafactory-plateforme"
 BUDGET_REINSTALLATION_S = 40 * 60
@@ -72,7 +75,7 @@ class _Contexte:
         self.rapports = {k: v for k, v in (self.cache.get("rapports") or {}).items() if k in ETAPES and isinstance(v, dict)}
         self.acces, self.secrets, self.srv = None, [], {}
         self.ip, self.cle, self.pub = None, None, None
-        self.restant_s, self.script_envoye = 0, False
+        self.restant_s, self.script_envoye, self.persister = 0, False, True
 
     @property
     def hote(self):
@@ -98,17 +101,24 @@ class _Contexte:
     def masquer(self, texte):
         return plateforme_acces.masquer(str(texte), self.secrets)
 
-    def ecrire(self, extra=None):
-        """Écrit le cache (jamais de secret) ; renvoie l'état calculé."""
+    def ecrire(self, extra=None, strict=False):
+        """Écrit le cache (jamais de secret) ; renvoie l'état calculé.
+
+        `strict` : une écriture impossible lève OSError (utilisé quand perdre l'écriture exposerait à une double
+        réinstallation) ; sinon l'échec est ignoré. `persister` à False (vérification) : rien n'est écrit.
+        """
         etat = calculer_etat(self.rapports)
         etat.update(extra or {})
-        donnees = {"rapports": self.rapports, "etat": etat, "ip": self.ip, "tache": self.cache.get("tache")}
-        texte = self.masquer(json.dumps(donnees, ensure_ascii=False, indent=2))
-        try:
-            self.dossier.mkdir(parents=True, exist_ok=True)
-            (self.dossier / CACHE).write_text(texte, encoding="utf-8")
-        except OSError:
-            pass
+        if self.persister:
+            donnees = {"rapports": self.rapports, "etat": etat, "ip": self.ip, "tache": self.cache.get("tache"),
+                       "demande": self.cache.get("demande")}
+            texte = self.masquer(json.dumps(donnees, ensure_ascii=False, indent=2))
+            try:
+                self.dossier.mkdir(parents=True, exist_ok=True)
+                (self.dossier / CACHE).write_text(texte, encoding="utf-8")
+            except OSError:
+                if strict:
+                    raise
         return json.loads(self.masquer(json.dumps(etat, ensure_ascii=False)))
 
     def client_ovh(self):
@@ -132,23 +142,73 @@ def _etape_lecture(c):
     return _rapport("fait", f"Serveur {c.acces['serveur']} lu (système : {c.srv.get('os') or 'aucun'}).")
 
 
+def _transitoire(e):
+    return e.code == 0 or e.code == 429 or e.code >= 500
+
+
 def _attendre_tache(c, id_tache):
-    """Attend la fin de la tâche OVH (40 min au plus) ; renvoie un rapport bloquant, ou None si elle est finie."""
+    """Attend la fin de la tâche OVH (40 min au plus) ; renvoie un rapport bloquant, ou None si elle est finie.
+
+    Une erreur OVH passagère (5xx, délai) est réessayée dans le budget. L'état « en_cours » est écrit avant l'attente.
+    """
+    c.rapports["os"] = _rapport("en_cours", f"Réinstallation OVH en cours, tâche {id_tache}.")
+    c.ecrire()
     ecoule = 0
     while True:
-        etat = plateforme_ovh.etat_tache(c.client, c.acces["serveur"], id_tache)
+        try:
+            etat = plateforme_ovh.etat_tache(c.client, c.acces["serveur"], id_tache)
+        except ErreurOvh as e:
+            if not _transitoire(e):
+                raise
+            etat = "en_cours"
         if etat == "fini":
-            c.cache["tache"], c.restant_s = None, BUDGET_REINSTALLATION_S - ecoule
+            c.cache["tache"], c.cache["demande"], c.restant_s = None, None, BUDGET_REINSTALLATION_S - ecoule
             return None
-        if etat == "echec":
-            c.cache["tache"] = None
+        if etat == "echec":                        # définitif : rien ne tourne plus, une nouvelle demande reste possible
+            c.cache["tache"], c.cache["demande"] = None, None
             return _rapport("bloque", "La tâche de réinstallation OVH a échoué.",
                             "Ouvrez l'espace client OVH (Bare Metal Cloud > serveur > Tâches), lisez l'erreur, puis relancez.")
         if ecoule >= BUDGET_REINSTALLATION_S:      # la tâche reste notée : une relance l'attend sans réinstaller
-            return _rapport("bloque", "La réinstallation n'est pas terminée après 40 minutes.",
+            return _rapport("bloque", f"La réinstallation (tâche {id_tache}) n'est pas terminée après 40 minutes.",
                             "Surveillez la tâche dans l'espace client OVH, puis relancez quand elle est terminée.")
         c.dormir(PAS_TACHE_S)
         ecoule += PAS_TACHE_S
+
+
+def _demande_incertaine(detail):
+    return _rapport("bloque", detail, "Vérifiez les tâches du serveur dans l'espace client OVH (Bare Metal Cloud > serveur > "
+                    "Tâches) : ne relancez pas la réinstallation tant qu'une tâche d'installation y apparaît.")
+
+
+def _reinstaller(c):
+    modele = plateforme_ovh.choisir_ubuntu_lts(plateforme_ovh.modeles_os(c.client, c.acces["serveur"]))
+    c.cle, c.pub = c.ssh.generer_cle(c.dossier)     # la clé doit être chez OVH avant l'installation qui l'injecte
+    plateforme_ovh.enregistrer_cle_ssh(c.client, NOM_CLE_OVH, c.pub)
+    c.cache["demande"] = True                       # noté AVANT la requête : si la suite se perd, pas de seconde réinstallation
+    try:
+        c.ecrire(strict=True)
+    except OSError:
+        c.cache["demande"] = None
+        return _rapport("bloque", "Écriture de plateforme.json impossible : réinstallation non lancée.",
+                        f"Vérifiez les droits d'écriture sur {c.dossier}, puis relancez.")
+    try:
+        c.cache["tache"] = plateforme_ovh.reinstaller(c.client, c.acces["serveur"], modele, NOM_CLE_OVH, c.accord)
+    except (ErreurAccord, ValueError):              # échec net avant la requête
+        c.cache["demande"] = None
+        c.ecrire()
+        raise
+    except ErreurOvh as e:
+        if 400 <= e.code < 500:                     # refus net d'OVH : rien n'a démarré
+            c.cache["demande"] = None
+            c.ecrire()
+            raise
+        return _demande_incertaine(f"La réinstallation a été demandée mais sa confirmation a échoué ({c.masquer(e)}).")
+    try:
+        c.ecrire(strict=True)
+    except OSError:
+        return _demande_incertaine(f"Réinstallation lancée (tâche {c.cache['tache']}) mais plateforme.json n'a pas pu "
+                                   "l'enregistrer : relancer risquerait une seconde réinstallation.")
+    return _attendre_tache(c, c.cache["tache"]) or _rapport("fait", f"{modele} installé par OVH.")
 
 
 def _etape_os(c):
@@ -156,17 +216,15 @@ def _etape_os(c):
     if c.cache.get("tache") is not None:     # une réinstallation est déjà lancée : on l'attend, on n'en relance pas
         return _attendre_tache(c, c.cache["tache"]) or _rapport("fait", "Ubuntu LTS installé par OVH.")
     if _est_ubuntu_lts(os_):
+        c.cache["demande"] = None
         return _rapport("fait", f"Ubuntu LTS déjà présent ({os_}) : rien à installer.")
+    if c.cache.get("demande"):
+        return _demande_incertaine("Une réinstallation a été demandée à OVH mais son identifiant de tâche est inconnu.")
     if not c.accord:
         etat = "vierge" if not os_ or os_.lower().startswith("none") else f"occupé par « {os_} », qui n'est pas Ubuntu LTS"
         return _rapport("bloque", f"Le serveur est {etat} ; l'installation d'Ubuntu LTS efface le disque. Rien n'a été effacé.",
                         "Si vous êtes d'accord pour effacer ce serveur, relancez avec --accord-reinstallation.")
-    c.cle, c.pub = c.ssh.generer_cle(c.dossier)     # la clé doit être chez OVH avant l'installation qui l'injecte
-    plateforme_ovh.enregistrer_cle_ssh(c.client, NOM_CLE_OVH, c.pub)
-    modele = plateforme_ovh.choisir_ubuntu_lts(plateforme_ovh.modeles_os(c.client, c.acces["serveur"]))
-    c.cache["tache"] = plateforme_ovh.reinstaller(c.client, c.acces["serveur"], modele, NOM_CLE_OVH, True)
-    c.ecrire()
-    return _attendre_tache(c, c.cache["tache"]) or _rapport("fait", f"{modele} installé par OVH.")
+    return _reinstaller(c)
 
 
 def _etape_ssh(c):
@@ -183,6 +241,8 @@ def _etape_ssh(c):
                             "Si vous savez que le serveur a été réinstallé, relancez avec --accord-reinstallation "
                             "pour oublier l'ancienne empreinte.")
         c.ssh.oublier_hote(c.ip, True)
+    c.rapports["ssh"] = _rapport("en_cours", "Attente du redémarrage du serveur (SSH pas encore disponible).")
+    c.ecrire()
     if c.ssh.attendre_ssh(c.hote, c.cle, c.restant_s or 60):
         return _rapport("fait", f"Connexion SSH par clé dédiée à {c.hote} établie.")
     return _rapport("bloque", f"Le serveur {c.hote} ne répond pas en SSH avec la clé dédiée.",
@@ -277,17 +337,59 @@ def _executer_etape(c, id_):
         return _rapport("bloque", c.masquer(e) or type(e).__name__, geste)
 
 
-def _preparer(dossier, accord, client, ssh, dormir):
+def _preparer(dossier, accord, client, ssh, dormir, persister=True):
     c = _Contexte(dossier, accord, client, ssh or plateforme_ssh, dormir)
+    c.persister = persister
     erreur = c.preparer_secrets()
     if erreur:
-        c.rapports = {"lecture": _rapport("bloque", c.masquer(erreur), "Créez ou corrigez ovh.json comme indiqué.")}
+        c.rapports["lecture"] = _rapport("bloque", c.masquer(erreur), "Créez ou corrigez ovh.json comme indiqué.")
         return c, c.ecrire()
     return c, None
 
 
-def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, client=None, ssh=None, dormir=time.sleep):
-    """Enchaîne les étapes en reprenant là où la dernière exécution s'est arrêtée."""
+def _prendre_verrou(dossier, vivant):
+    """Verrou pid dans le dossier : une seule installation à la fois ; celui d'un processus mort est repris."""
+    chemin = Path(dossier) / VERROU
+    Path(dossier).mkdir(parents=True, exist_ok=True)
+    for _ in range(3):
+        try:
+            with open(chemin, "x", encoding="utf-8") as f:
+                f.write(json.dumps({"pid": os.getpid()}))
+            return chemin
+        except FileExistsError:
+            try:
+                autre = json.loads(chemin.read_text(encoding="utf-8")).get("pid")
+            except (OSError, ValueError, AttributeError):
+                autre = None
+            if isinstance(autre, int) and autre != os.getpid() and vivant(autre):
+                return None
+            try:
+                chemin.unlink()
+            except OSError:
+                return None
+    return None
+
+
+def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, client=None, ssh=None, dormir=time.sleep,
+              vivant=pid_vivant):
+    """Enchaîne les étapes en reprenant là où la dernière exécution s'est arrêtée (une seule exécution à la fois)."""
+    try:
+        verrou = _prendre_verrou(dossier, vivant)
+    except OSError:
+        verrou = None
+    if verrou is None:
+        return calculer_etat({"lecture": _rapport("bloque", "Une installation est déjà en cours (ou le dossier est inaccessible).",
+                                                  "Attendez la fin de l'autre exécution, puis relancez.")})
+    try:
+        return _installer(dossier, accord_reinstallation, client, ssh, dormir)
+    finally:
+        try:
+            verrou.unlink()
+        except OSError:
+            pass
+
+
+def _installer(dossier, accord_reinstallation, client, ssh, dormir):
     c, etat = _preparer(dossier, accord_reinstallation, client, ssh, dormir)
     if etat:
         return etat
@@ -301,17 +403,18 @@ def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, cli
         c.ecrire()
         if r["statut"] == "bloque" or (r["statut"] == "a_faire" and id_ != "licence"):
             for suivant in ETAPES[i + 1:]:
-                c.rapports[suivant] = _rapport("a_faire", "En attente de l'étape précédente.")
+                if c.rapports.get(suivant, {}).get("statut") != "fait":
+                    c.rapports[suivant] = _rapport("a_faire", "En attente de l'étape précédente.")
             break
     return c.ecrire()
 
 
 def verifier(dossier=plateforme_acces.DOSSIER, client=None, ssh=None, dormir=time.sleep):
-    """Contrôle l'état réel sans rien modifier (jamais de réinstallation) : lecture, système, SSH, étape distante `etat`."""
-    c, etat = _preparer(dossier, False, client, ssh, dormir)
+    """Contrôle l'état réel sans rien modifier ni écrire (jamais de réinstallation) : lecture, système, SSH, étape `etat`."""
+    c, etat = _preparer(dossier, False, client, ssh, dormir, persister=False)
     if etat:
         return etat
-    c.cache["tache"], c.rapports, extra = None, {}, {}
+    c.cache, c.rapports, extra = {}, {}, {}
     for id_ in ("lecture", "os", "ssh"):
         c.rapports[id_] = _executer_etape(c, id_)
         if c.rapports[id_]["statut"] != "fait":

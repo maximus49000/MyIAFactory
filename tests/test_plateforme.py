@@ -20,11 +20,25 @@ PUB = "ssh-ed25519 AAAAKEYDEDIEE myiafactory"
 
 
 class ClientFactice:
-    def __init__(self, os_="none_64", statut_tache="done"):
+    def __init__(self, os_="none_64", statut_tache="done", script=None, echec_start=None, sans_tache=False, au_start=None):
         self.os, self.statut_tache, self.appels = os_, statut_tache, []
+        self.script, self.echec_start, self.sans_tache, self.au_start = list(script or []), echec_start, sans_tache, au_start
 
     def appeler(self, methode, chemin, corps=None):
         self.appels.append((methode, chemin))
+        if chemin.endswith("/install/start"):
+            if self.echec_start:
+                raise self.echec_start
+            if self.au_start:
+                self.au_start()
+            if not self.sans_tache:
+                self.os = "ubuntu2404-server_64"
+            return {} if self.sans_tache else {"taskId": 7}
+        if "/task/" in chemin and self.script:
+            v = self.script.pop(0)
+            if isinstance(v, Exception):
+                raise v
+            return {"status": v}
         if chemin == "/dedicated/server/ns1":
             return {"os": self.os, "ip": IP, "state": "ok", "commercialRange": "x"}
         if chemin.endswith("/install/compatibleTemplates"):
@@ -202,6 +216,195 @@ class TestEtat(Base):
             self.assertNotIn(secret, json.dumps(etat))
             self.assertNotIn(secret, cache)
         self.assertIn("***", cache)
+
+
+def _cache(dossier):
+    return json.loads((Path(dossier) / "plateforme.json").read_text(encoding="utf-8"))
+
+
+class TestRobustesse(Base):
+    def starts(self, client):
+        return len(client.reinstallations())
+
+    def taches(self, client):
+        return [a[1] for a in client.appels if "/task/" in a[1]]
+
+    def test_cle_ssh_enregistree_avant_la_reinstallation(self):
+        client = ClientFactice()
+        self.lancer(client, SshFactice(), accord=True)
+        chemins = [a for a in client.appels if a[0] == "POST"]
+        self.assertEqual([c for _, c in chemins][:2], ["/me/sshKey", "/dedicated/server/ns1/install/start"])
+
+    def test_tache_non_terminee_bloque_puis_la_relance_reprend_sans_reinstaller(self):
+        client = ClientFactice(statut_tache="init")
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+        self.assertEqual(_cache(self.dossier)["tache"], 7)
+        client.statut_tache = "done"
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.starts(client), 1)
+        self.assertEqual(set(self.taches(client)), {"/dedicated/server/ns1/task/7"})
+        self.assertTrue(etat["pret"])
+
+    def test_deuxieme_session_en_echec_empeche_le_durcissement(self):
+        class Seconde(SshFactice):
+            n = 0
+
+            def executer(self, hote, commande, cle, stdin=None, delai=60):
+                if commande == "true":
+                    Seconde.n += 1
+                    if Seconde.n >= 2:
+                        return 255, "", "refus"
+                return super().executer(hote, commande, cle, stdin, delai)
+        ssh = Seconde()
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), ssh)
+        self.assertEqual(self.statuts(etat)["durcissement"], "bloque")
+        self.assertEqual(ssh.etapes_lancees(), [])
+
+    def test_accord_non_booleen_ne_reinstalle_jamais(self):
+        for accord in ("yes", 1, "true"):
+            client = ClientFactice()
+            etat = plateforme.installer(self.dossier, accord, client=client, ssh=SshFactice(), dormir=lambda s: None)
+            self.assertEqual(self.starts(client), 0)
+            self.assertEqual(self.statuts(etat)["os"], "bloque")
+
+    def test_verifier_ne_modifie_rien_et_rapporte_l_etat_distant(self):
+        client, ssh = ClientFactice(os_="ubuntu2404-server_64"), SshFactice()
+        etat = plateforme.verifier(self.dossier, client=client, ssh=ssh, dormir=lambda s: None)
+        self.assertEqual(etat["serveur"]["statut"], "fait")
+        self.assertEqual(ssh.etapes_lancees(), ["etat"])
+        self.assertFalse((self.dossier / "plateforme.json").exists())
+        self.assertEqual(self.starts(client), 0)
+
+    def test_verifier_ne_perd_pas_la_tache_et_ne_ouvre_pas_de_seconde_reinstallation(self):
+        client = ClientFactice(statut_tache="init")
+        self.lancer(client, SshFactice(), accord=True)
+        avant = (self.dossier / "plateforme.json").read_bytes()
+        plateforme.verifier(self.dossier, client=client, ssh=SshFactice(), dormir=lambda s: None)
+        self.assertEqual((self.dossier / "plateforme.json").read_bytes(), avant)
+        client.statut_tache = "done"
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.starts(client), 1)
+        self.assertEqual(set(self.taches(client)), {"/dedicated/server/ns1/task/7"})
+        self.assertTrue(etat["pret"])
+
+    def test_ecriture_du_cache_impossible_apres_la_demande_bloque(self):
+        def casser():
+            fichier = self.dossier / "plateforme.json"
+            fichier.unlink()
+            fichier.mkdir()
+        client = ClientFactice(au_start=casser)
+        etat = self.lancer(client, SshFactice(), accord=True)
+        os_ = [e for e in etat["etapes"] if e["id"] == "os"][0]
+        self.assertEqual(os_["statut"], "bloque")
+        self.assertIn("plateforme.json", os_["detail"])
+        self.assertEqual(self.starts(client), 1)
+        self.assertEqual(self.statuts(etat)["ssh"], "a_faire")
+
+    def test_ecriture_impossible_avant_la_demande_ne_reinstalle_pas(self):
+        (self.dossier / "plateforme.json").mkdir()
+        client = ClientFactice()
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.starts(client), 0)
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+
+    def test_identifiant_de_tache_inconnu_bloque_et_la_relance_ne_reinstalle_pas(self):
+        client = ClientFactice(sans_tache=True)
+        etat = self.lancer(client, SshFactice(), accord=True)
+        os_ = [e for e in etat["etapes"] if e["id"] == "os"][0]
+        self.assertEqual(os_["statut"], "bloque")
+        self.assertIn("espace client OVH", os_["geste"])
+        self.assertTrue(_cache(self.dossier)["demande"])
+        etat = self.lancer(client, SshFactice(), accord=True)
+        self.assertEqual(self.starts(client), 1)
+        self.assertEqual(self.statuts(etat)["os"], "bloque")
+
+    def test_refus_net_avant_la_requete_efface_la_marque(self):
+        for erreur in (ErreurOvh(400, "refusé"), ValueError("modèle incompatible")):
+            client = ClientFactice(echec_start=erreur)
+            etat = self.lancer(client, SshFactice(), accord=True)
+            self.assertEqual(self.statuts(etat)["os"], "bloque")
+            self.assertFalse(_cache(self.dossier).get("demande"))
+
+    def test_deux_installations_simultanees_la_seconde_est_refusee(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        client = ClientFactice(os_="ubuntu2404-server_64")
+        etat = plateforme.installer(self.dossier, False, client=client, ssh=SshFactice(), vivant=lambda p: True)
+        self.assertEqual(self.statuts(etat)["lecture"], "bloque")
+        self.assertIn("déjà en cours", etat["etapes"][0]["detail"])
+        self.assertEqual(client.appels, [])
+
+    def test_verrou_d_un_processus_mort_repris_et_libere_a_la_fin(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        etat = plateforme.installer(self.dossier, False, client=ClientFactice(os_="ubuntu2404-server_64"),
+                                    ssh=SshFactice(), vivant=lambda p: False)
+        self.assertTrue(etat["pret"])
+        self.assertFalse((self.dossier / "plateforme.lock").exists())
+
+    def test_erreur_ovh_passagere_pendant_l_attente_est_reessayee_et_l_etat_est_en_cours(self):
+        client = ClientFactice(script=[ErreurOvh(503, "indisponible"), ErreurOvh(0, "délai"), "init", "doing", "done"])
+        vus, pauses = [], []
+
+        def dormir(s):
+            pauses.append(s)
+            vus.append(self.statuts(_cache(self.dossier)["etat"])["os"] if (self.dossier / "plateforme.json").exists() else None)
+        etat = plateforme.installer(self.dossier, True, client=client, ssh=SshFactice(), dormir=dormir)
+        self.assertEqual(len(pauses), 4)
+        self.assertEqual(vus[0], "en_cours")
+        self.assertEqual(self.starts(client), 1)
+        self.assertTrue(etat["pret"])
+
+    def test_detail_en_cours_ecrit_avant_l_attente(self):
+        details = []
+
+        def dormir(s):
+            details.append(_cache(self.dossier)["rapports"]["os"])
+        plateforme.installer(self.dossier, True, client=ClientFactice(script=["init", "done"]), ssh=SshFactice(), dormir=dormir)
+        self.assertEqual(details[0]["statut"], "en_cours")
+        self.assertIn("tâche 7", details[0]["detail"])
+
+    def test_ssh_refuse_pendant_le_redemarrage_se_lit_en_cours(self):
+        vus = []
+
+        class Redemarre(SshFactice):
+            def executer(self, hote, commande, cle, stdin=None, delai=60):
+                if commande == "true" and not vus:
+                    return 255, "", "Connection refused"
+                return super().executer(hote, commande, cle, stdin, delai)
+
+            def attendre_ssh(inner, hote, cle, delai_total):
+                vus.append(_cache(self.dossier)["rapports"]["ssh"]["statut"])
+                inner.commandes.append(("true", None))
+                vus.append("ok")
+                return True
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), Redemarre())
+        self.assertEqual(vus[0], "en_cours")
+        self.assertEqual(self.statuts(etat)["ssh"], "fait")
+
+    def test_script_envoye_en_octets_identiques_au_fichier_du_depot_sans_retour_chariot(self):
+        import functools
+        import subprocess
+        recus = []
+
+        def runner(args, **kw):
+            recus.append((args[-1], kw.get("input")))
+            sortie = b""
+            if "--etape" in args[-1]:
+                etape = args[-1].split("--etape ")[1].split()[0]
+                sortie = json.dumps({"etape": etape, "statut": "fait", "detail": "ok"}).encode()
+            return subprocess.CompletedProcess(args, 0, stdout=sortie, stderr=b"")
+
+        class Reel(SshFactice):
+            executer = staticmethod(lambda hote, commande, cle, stdin=None, delai=60:
+                                    plateforme.plateforme_ssh.executer(hote, commande, cle, stdin=stdin, delai=delai, runner=runner))
+        etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), Reel())
+        self.assertTrue(etat["pret"])
+        envoi = [i for c, i in recus if c.startswith("cat > /tmp/myiafactory_mise_en_place.sh")][0]
+        depot = (Path(plateforme.RACINE_SERVEUR) / "mise_en_place.sh").read_bytes()
+        self.assertEqual(envoi, depot.replace(b"\r\n", b"\n"))
+        for _, entree in recus:
+            if entree is not None:
+                self.assertNotIn(b"\r", entree)
 
 
 class TestMain(Base):

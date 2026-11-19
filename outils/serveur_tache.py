@@ -156,16 +156,20 @@ class Index:
     ou si le fichier est vide/invalide depuis plus de 5 s. La reprise est exclusive : un seul repreneur à la fois, grâce
     au fichier témoin `taches.lock.reprise` (créé en `x`, toujours retiré ; un témoin périmé se retire selon la même
     règle, ou après 30 s). Sous le témoin le verrou est relu, sa péremption revérifiée sur CETTE lecture, et il n'est
-    supprimé que s'il est encore périmé ; il n'est jamais renommé. Reste : un témoin périmé retiré par deux processus
-    en même temps (arrêt brutal pendant la reprise elle-même) ; la suppression du fichier verrou par un tiers qui ne
-    respecte pas le protocole n'est pas détectée."""
+    supprimé que s'il est encore périmé (le témoin est relu juste avant : s'il n'est plus à nous, on renonce) ; il
+    n'est jamais renommé. Reste, honnêtement : (1) un repreneur bloqué plus de 30 s en tenant le témoin peut se le voir
+    retirer par un autre, et deux repreneurs peuvent alors agir en même temps ; (2) un créateur bloqué plus de 5 s entre
+    la création du fichier verrou et l'écriture de son pid (fichier alors vide) peut se voir reprendre son verrou ; (3) la
+    suppression du fichier verrou par un tiers qui ne respecte pas le protocole n'est pas détectée. Le fichier verrou est
+    écrit après création en `x` (pas de `os.link` d'un temporaire : absent des systèmes de fichiers FAT/exFAT)."""
 
     def __init__(self, dossier=plateforme_acces.DOSSIER, attente=ATTENTE_S, vivant=pid_vivant, pid=os.getpid):
         self.dossier = Path(dossier)
         self.attente = attente
         self.vivant = vivant
         self.pid = pid
-        self._apres_verification = None      # point d'arrêt des tests : entre la vérification et la suppression
+        self._avant_temoin = None            # points d'arrêt des tests : avant la prise du témoin,
+        self._apres_verification = None      # puis entre la vérification sous témoin et la suppression
 
     @property
     def chemin(self):
@@ -256,6 +260,8 @@ class Index:
     def _reprendre(self, chemin):
         """Retire un verrou périmé, un seul repreneur à la fois (fichier témoin). Vrai si le verrou a disparu."""
         temoin = chemin.with_name(chemin.name + ".reprise")
+        if self._avant_temoin is not None:
+            self._avant_temoin()
         try:
             with open(temoin, "x", encoding="utf-8") as f:
                 f.write(json.dumps({"pid": self.pid()}))
@@ -276,6 +282,8 @@ class Index:
                 return False
             if self._apres_verification is not None:
                 self._apres_verification()
+            if _pid_verrou(temoin) != ("pid", self.pid()):   # témoin repris par un autre (nous étions trop lents)
+                return False
             try:
                 chemin.unlink()
             except OSError:
@@ -283,7 +291,8 @@ class Index:
             return True
         finally:
             try:
-                temoin.unlink()
+                if _pid_verrou(temoin) == ("pid", self.pid()):
+                    temoin.unlink()
             except OSError:
                 pass
 
@@ -297,8 +306,8 @@ class Index:
                 return chemin
             except FileExistsError:
                 genre, valeur = _pid_verrou(chemin)
-                if self._perime(genre, valeur) and self._reprendre(chemin):
-                    continue
+                repris = self._perime(genre, valeur) and self._reprendre(chemin)
             if time.monotonic() >= limite:
                 raise TimeoutError("Index des tâches occupé : réessayez.")
-            time.sleep(PAUSE_S)
+            if not repris:
+                time.sleep(PAUSE_S)

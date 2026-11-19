@@ -229,20 +229,66 @@ class TestIndex(unittest.TestCase):
                 index.enregistrer(tid(1), {"etat": "en_attente"})
         self.assertLess(time.monotonic() - debut, 5)
 
-    def test_temoin_de_reprise_perime_est_retire(self):
+    def _temoin(self, contenu, age=0):
+        chemin = self.dossier / "taches.lock.reprise"
+        chemin.write_text(contenu, encoding="utf-8")
+        if age:
+            vieux = time.time() - age
+            os.utime(chemin, (vieux, vieux))
+        return chemin
+
+    def test_regles_du_temoin_de_reprise(self):
+        """Une tentative de reprise (`_reprendre`) face à un témoin déjà là : respecté ou retiré, le verrou intact."""
+        cas = (("pid vivant frais", '{"pid": 4343}', 0, True), ("pid vivant vieux de 40 s", '{"pid": 4343}', 40, False),
+               ("pid mort", '{"pid": 4343}', 0, False), ("vide frais", "", 0, True), ("vide vieux de 10 s", "", 10, False))
+        for nom, contenu, age, respecte in cas:
+            with self.subTest(nom):
+                verrou = self._verrou('{"pid": 4242}')
+                temoin = self._temoin(contenu, age)
+                index = st.Index(self.dossier, vivant=lambda pid: pid == 4343 and "vivant" in nom)
+                self.assertFalse(index._reprendre(verrou))     # le témoin d'un autre : jamais de reprise cette fois-ci
+                self.assertEqual(temoin.exists(), respecte)
+                self.assertTrue(verrou.exists())
+                verrou.unlink()
+                if temoin.exists():
+                    temoin.unlink()
+
+    def test_temoin_perime_retire_et_reprise_possible_ensuite(self):
         self._verrou('{"pid": 4242}')
-        temoin = self.dossier / "taches.lock.reprise"
-        temoin.write_text('{"pid": 4343}', encoding="utf-8")
+        temoin = self._temoin('{"pid": 4343}')
         index = st.Index(self.dossier, attente=2, vivant=lambda pid: False)
+        self.assertFalse(index._reprendre(self.dossier / "taches.lock"))
+        self.assertFalse(temoin.exists())                      # retiré par le chemin de reprise, pas par autre chose
         index.enregistrer(tid(1), {"etat": "en_attente"})
-        self.assertFalse(temoin.exists())
+        self.assertIn(tid(1), index.lire())
+
+    def test_verrou_remplace_par_un_vivant_avant_le_temoin_n_est_pas_supprime(self):
+        chemin = self._verrou('{"pid": 4343}')
+        index = st.Index(self.dossier, attente=0.3, vivant=lambda pid: pid == 4242)
+        index._avant_temoin = lambda: chemin.write_text('{"pid": 4242}', encoding="utf-8")
+        with self.assertRaises(TimeoutError):
+            index._prendre(time.monotonic() + 0.3)
+        self.assertEqual(json.loads(chemin.read_text(encoding="utf-8")), {"pid": 4242})
+        self.assertFalse((self.dossier / "taches.lock.reprise").exists())
+
+    def test_temoin_perdu_avant_la_suppression_on_renonce(self):
+        chemin = self._verrou('{"pid": 4343}')
+        temoin = self.dossier / "taches.lock.reprise"
+        index = st.Index(self.dossier, attente=0.3, vivant=lambda pid: pid == 777, pid=lambda: 101)
+
+        def voler():
+            temoin.write_text('{"pid": 777}', encoding="utf-8")      # un autre repreneur vivant tient le témoin
+        index._apres_verification = voler
+        self.assertFalse(index._reprendre(chemin))
+        self.assertTrue(chemin.exists())
+        self.assertEqual(json.loads(temoin.read_text(encoding="utf-8")), {"pid": 777})   # pas retiré à tort
 
     def test_course_de_reprise_un_seul_detenteur(self):
-        """Deux repreneurs du même verrou périmé : le second attend le témoin ; un seul détient le verrou ensuite et son
-        fichier n'est jamais supprimé par l'autre."""
+        """Deux repreneurs du même verrou périmé : un seul obtient le verrou, qui porte son pid ; l'autre attend ou
+        expire, jamais deux détenteurs."""
         self._verrou('{"pid": 4242}')
         vivant = lambda pid: pid in (101, 102)      # noqa: E731
-        a = st.Index(self.dossier, attente=5, vivant=vivant, pid=lambda: 101)
+        a = st.Index(self.dossier, attente=2, vivant=vivant, pid=lambda: 101)
         b = st.Index(self.dossier, attente=1, vivant=vivant, pid=lambda: 102)
         dedans, suite = threading.Event(), threading.Event()
 
@@ -264,11 +310,14 @@ class TestIndex(unittest.TestCase):
         tb.start()
         time.sleep(0.3)                         # b tourne pendant que a est entre vérification et suppression
         suite.set()
-        ta.join(10)
-        tb.join(10)
-        self.assertIsInstance(resultats["a"], Path)
-        self.assertIsInstance(resultats["b"], TimeoutError)
-        self.assertEqual(json.loads((self.dossier / "taches.lock").read_text(encoding="utf-8")), {"pid": 101})
+        ta.join(15)
+        tb.join(15)
+        pris = [n for n, r in resultats.items() if isinstance(r, Path)]
+        self.assertEqual(len(pris), 1, resultats)
+        pid = {"a": 101, "b": 102}[pris[0]]
+        self.assertEqual(json.loads((self.dossier / "taches.lock").read_text(encoding="utf-8")), {"pid": pid})
+        autre = "b" if pris[0] == "a" else "a"
+        self.assertIsInstance(resultats[autre], TimeoutError)
         self.assertFalse((self.dossier / "taches.lock.reprise").exists())
 
     def test_verrou_libere_apres_exception(self):

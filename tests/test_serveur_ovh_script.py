@@ -20,6 +20,26 @@ def lancer(etape, simuler=True, entree="", env=None):
     return subprocess.run(args, input=entree, capture_output=True, text=True, env=e, timeout=60)
 
 
+POLITIQUE_MOZILLA = """firefox:
+  Installed: 130.0
+  Candidate: 130.0
+  Version table:
+ *** 130.0 1000
+       1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
+        100 /var/lib/dpkg/status
+     1:1snap1 500
+        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages"""
+POLITIQUE_SNAP = """firefox:
+  Installed: 1:1snap1
+  Candidate: 1:1snap1
+  Version table:
+     130.0 1000
+       1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
+ *** 1:1snap1 500
+        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages
+        100 /var/lib/dpkg/status"""
+
+
 @unittest.skipUnless(shutil.which("bash"), "bash absent")
 class TestScriptSimule(unittest.TestCase):
     def test_chaque_etape_rend_un_json_valide(self):
@@ -89,7 +109,8 @@ class TestScriptSimule(unittest.TestCase):
 
     MDP = "Un-Mot-De-Passe-Long-42"
 
-    def _bureau(self, mdp, simuler=False, ecoute="127.0.0.1:3389", ufw="Status: active\n22/tcp LIMIT Anywhere", ssh_mdp="no"):
+    def _bureau(self, mdp, simuler=False, ecoute="127.0.0.1:3389", ufw="Status: active\n22/tcp LIMIT Anywhere", ssh_mdp="no",
+                sshd_sortie=None, utilisateur="ubuntu", ini=None, politique=None, firefox_reel="/usr/lib/firefox/firefox", maj_ok=True):
         """Lance bureau_distant avec de faux binaires ; rend (JSON, journal des appels, mot de passe reçu par chpasswd, dossier home)."""
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
@@ -101,25 +122,33 @@ class TestScriptSimule(unittest.TestCase):
             corps = {
                 "sudo": (f'echo "sudo $@" >> "{journal.as_posix()}"\n'
                          'while case "$1" in *=*) true;; *) false;; esac; do shift; done\n'
-                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd) "$@";; *) exit 0;; esac'),
+                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get) "$@";; *) exit 0;; esac'),
                 "ss": f'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\n'
                       f'echo "LISTEN 0 4096 {ecoute} 0.0.0.0:*"\necho "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"',
                 "ufw": f'echo "ufw $@" >> "{journal.as_posix()}"\ncat <<"EOT"\n{ufw}\nEOT',
-                "sshd": f'echo "passwordauthentication {ssh_mdp}"',
+                "sshd": "cat <<'EOT'\n" + (f"passwordauthentication {ssh_mdp}\nkbdinteractiveauthentication no" if sshd_sortie is None else sshd_sortie) + "\nEOT",
                 "unityhub": "exit 0",
                 "startxfce4": "exit 0",
-                "id": '[ "$1" = -un ] && echo ubuntu || echo "ubuntu ssl-cert"',
+                "id": f'[ "$1" = -un ] && echo {utilisateur} || echo "ubuntu ssl-cert"',
+                "firefox": "exit 0",
+                "readlink": f'echo "{firefox_reel}"',
+                "apt-cache": "cat <<'EOT'\n" + (politique if politique is not None else POLITIQUE_MOZILLA) + "\nEOT",
             }
+            corps["apt-get"] = '[ "$1" = update ] && [ "%s" = non ] && exit 1\nexit 0' % ("oui" if maj_ok else "non")
             for nom in ("apt-get", "curl", "gpg", "systemctl", "usermod", "tee", "chpasswd"):
                 corps.setdefault(nom, "exit 0")
             for nom, texte in corps.items():
-                if nom not in ("sudo", "ufw", "sshd"):
+                if nom not in ("sudo", "ufw", "sshd", "apt-cache"):
                     texte = f'echo "{nom} $@" >> "{journal.as_posix()}"\n' + texte
                 (faux / nom).write_text("#!/bin/sh\n" + texte + "\n", newline="\n")
                 (faux / nom).chmod(0o755)
+            envs = {}
+            if ini is not None:
+                (t / "xrdp.ini").write_text(ini, newline="\n")
+                envs["XRDP_INI"] = (t / "xrdp.ini").as_posix()
             args = ["bash", SCRIPT.as_posix(), "--etape", "bureau_distant"] + (["--simuler"] if simuler else [])
             r = subprocess.run(args, input=mdp, capture_output=True, text=True, encoding="utf-8", timeout=60,
-                               env=dict(os.environ, HOME=home.as_posix(), DISQUE_LIBRE_GO="500", BUREAU_ATTENTE_S="0",
+                               env=dict(os.environ, HOME=home.as_posix(), DISQUE_LIBRE_GO="500", BUREAU_ATTENTE_S="0", **envs,
                                         PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
             appels = journal.read_text() if journal.exists() else ""
             autostart = home / ".config" / "autostart" / "unityhub.desktop"
@@ -197,6 +226,50 @@ class TestScriptSimule(unittest.TestCase):
         self.assertEqual(d["statut"], "bloque")
         self.assertEqual(recu, "")
         self.assertNotIn("apt-get", appels)
+
+    def test_bureau_distant_redemarre_xrdp_meme_si_le_ini_est_deja_bon(self):
+        # Une exécution précédente a pu écrire le ini puis mourir : le service garde alors l'ancienne écoute.
+        d, appels, _, _, _, _ = self._bureau(self.MDP + "\n", ini="[Globals]\nport=tcp://127.0.0.1:3389\n")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertIn("systemctl restart xrdp", appels)
+        self.assertNotIn("sed", appels)
+
+    def test_bureau_distant_ne_fixe_le_mot_de_passe_qu_apres_toutes_les_preuves(self):
+        for nom, args in (("ecoute", dict(ecoute="0.0.0.0:3389")),
+                          ("ufw", dict(ufw="Status: active\n3389/tcp ALLOW Anywhere")),
+                          ("firefox snap", dict(politique=POLITIQUE_SNAP)),
+                          ("firefox lien snap", dict(firefox_reel="/usr/bin/snap"))):
+            with self.subTest(preuve=nom):
+                d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", **args)
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertNotIn("chpasswd", appels)
+                self.assertEqual(recu, "")
+        _, appels, recu, _, _, _ = self._bureau(self.MDP + "\n")
+        self.assertEqual(recu, "ubuntu:" + self.MDP + "\n")
+
+    def test_bureau_distant_exige_ssh_sans_mot_de_passe_explicite(self):
+        for nom, sortie in (("vide", ""), ("kbdinteractive yes", "passwordauthentication no\nkbdinteractiveauthentication yes"),
+                            ("kbdinteractive absent", "passwordauthentication no")):
+            with self.subTest(sortie=nom):
+                d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", sshd_sortie=sortie)
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertIn("Rien n'a été modifié", d["detail"])
+                self.assertNotIn("apt-get", appels)
+                self.assertEqual(recu, "")
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", sshd_sortie="passwordauthentication no\nkbdinteractiveauthentication no")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+
+    def test_bureau_distant_refuse_root(self):
+        d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", utilisateur="root")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("root", d["detail"])
+        self.assertEqual(recu, "")
+        self.assertNotIn("apt-get", appels)
+
+    def test_bureau_distant_bloque_si_les_index_apt_echouent(self):
+        d, _, recu, _, _, _ = self._bureau(self.MDP + "\n", maj_ok=False)
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertEqual(recu, "")
 
     def _durcir_avec_faux(self, cles, ssh_ok):
         """Lance l'étape durcissement (réelle) avec de faux binaires ; rend (JSON, journal des appels)."""

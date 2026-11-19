@@ -250,7 +250,7 @@ etape_licence() {
 
 # Le mot de passe de session arrive sur la première ligne de stdin ; il n'est ni un argument, ni affiché, ni dans le JSON.
 etape_bureau_distant() {
-  local prefixe="" mdp="" utilisateur ecoute ini="/etc/xrdp/xrdp.ini" change=0 essais attente
+  local prefixe="" mdp="" utilisateur ecoute ini="${XRDP_INI:-/etc/xrdp/xrdp.ini}" essais attente sortie_sshd
   [ "$SIMULER" = 1 ] && prefixe="Simulation : "
   if [ ! -t 0 ]; then
     IFS= read -r mdp
@@ -267,9 +267,15 @@ etape_bureau_distant() {
   fi
   exec </dev/null
   utilisateur=$(id -un)
-  # Garde-fou : un mot de passe système n'a de sens que si la connexion SSH par mot de passe est coupée.
-  if sudo sshd -T 2>/dev/null | grep -qi '^passwordauthentication yes'; then
-    repondre bloque "La connexion SSH par mot de passe est encore ouverte : lancez d'abord l'étape de durcissement avant de fixer un mot de passe de session. Rien n'a été modifié."
+  if [ "$utilisateur" = root ]; then
+    repondre bloque "L'étape s'exécute en root : le mot de passe de session ne doit jamais être fixé pour root. Lancez-la avec l'utilisateur SSH ordinaire. Rien n'a été modifié."
+  fi
+  # Garde-fou (échoue fermé) : un mot de passe système n'a de sens que si SSH refuse explicitement le mot de passe ET le
+  # clavier interactif (avec UsePAM, ce dernier accepterait le mot de passe système). Sortie vide ou en erreur = bloque.
+  sortie_sshd=$(sudo sshd -T 2>/dev/null)
+  if ! printf '%s\n' "$sortie_sshd" | grep -qix 'passwordauthentication no' \
+     || ! printf '%s\n' "$sortie_sshd" | grep -qix 'kbdinteractiveauthentication no'; then
+    repondre bloque "La connexion SSH par mot de passe n'est pas explicitement coupée (passwordauthentication et kbdinteractiveauthentication doivent valoir no) : lancez d'abord l'étape de durcissement avant de fixer un mot de passe de session. Rien n'a été modifié."
   fi
 
   sudo apt-get update -y >/dev/null 2>&1
@@ -293,38 +299,30 @@ etape_bureau_distant() {
   fi
   echo "deb [signed-by=/etc/apt/keyrings/unityhub.gpg] ${URL_DEPOT_UNITY_HUB} stable main" \
     | sudo tee /etc/apt/sources.list.d/unityhub.list >/dev/null
-  sudo apt-get update -y >/dev/null 2>&1
+  sudo apt-get update -y >/dev/null 2>&1 \
+    || repondre bloque "Mise à jour des index apt impossible après ajout des dépôts Mozilla et Unity Hub : Firefox hors snap non garanti, rien de plus n'a été fait."
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox unityhub >/dev/null 2>&1 \
     || repondre bloque "Installation de Firefox ou d'Unity Hub impossible."
 
   # xrdp : écoute sur 127.0.0.1 seulement (accès par tunnel SSH), service activé, droit de lire le certificat.
   grep -qx 'port=tcp://127.0.0.1:3389' "$ini" 2>/dev/null || {
     sudo sed -i -E '0,/^port=.*/s//port=tcp:\/\/127.0.0.1:3389/' "$ini" || repondre bloque "Configuration de xrdp impossible."
-    change=1
   }
   id -nG xrdp 2>/dev/null | tr ' ' '\n' | grep -qx ssl-cert || {
     sudo usermod -aG ssl-cert xrdp >/dev/null 2>&1 || repondre bloque "Ajout de xrdp au groupe ssl-cert impossible."
-    change=1
   }
   grep -qx 'startxfce4' "$HOME/.xsession" 2>/dev/null || printf 'startxfce4\n' > "$HOME/.xsession"
   sudo systemctl enable xrdp >/dev/null 2>&1 || repondre bloque "Service xrdp non activable."
-  if [ "$change" = 1 ]; then
-    sudo systemctl restart xrdp >/dev/null 2>&1 || repondre bloque "Redémarrage de xrdp impossible."
-  else
-    sudo systemctl start xrdp >/dev/null 2>&1 || repondre bloque "Service xrdp absent ou impossible à démarrer."
-  fi
+  # Toujours redémarrer : le paquet démarre xrdp sur 0.0.0.0 à l'installation, et une exécution précédente a pu écrire
+  # le ini puis s'interrompre ; seul un redémarrage garantit que l'écoute en cours est celle du ini.
+  sudo systemctl restart xrdp >/dev/null 2>&1 || repondre bloque "Redémarrage de xrdp impossible (service absent ?)."
 
   # Unity Hub au démarrage de la session graphique.
   mkdir -p "$HOME/.config/autostart"
   printf '[Desktop Entry]\nType=Application\nName=Unity Hub\nExec=unityhub\nTerminal=false\nX-GNOME-Autostart-enabled=true\n' \
     > "$HOME/.config/autostart/unityhub.desktop"
 
-  # Mot de passe de session : par le tube seulement (printf est interne au shell, rien dans les arguments d'un processus).
-  printf '%s:%s\n' "$utilisateur" "$mdp" | sudo chpasswd >/dev/null 2>&1 \
-    || repondre bloque "Mot de passe de session non appliqué."
-  mdp=""
-
-  # Preuves : 3389 à l'écoute sur la boucle locale uniquement, aucune règle ufw pour 3389, binaires présents.
+  # Preuves (avant tout mot de passe) : 3389 à l'écoute sur la boucle locale uniquement, aucune règle ufw pour 3389, binaires présents.
   attente="${BUREAU_ATTENTE_S:-15}"
   essais=0
   while :; do
@@ -343,6 +341,19 @@ etape_bureau_distant() {
   fi
   command -v unityhub >/dev/null 2>&1 || repondre bloque "Le programme unityhub est absent après installation."
   command -v startxfce4 >/dev/null 2>&1 || repondre bloque "Le bureau XFCE (startxfce4) est absent après installation."
+  # Firefox hors snap : la version installée vient de packages.mozilla.org et le binaire n'est pas le lanceur snap.
+  apt-cache policy firefox 2>/dev/null \
+    | awk '/^ \*\*\* /{f=1; next} /^ [^ ]/{f=0} f && /packages\.mozilla\.org/{ok=1} END{exit !ok}' \
+    || repondre bloque "Le paquet firefox installé ne vient pas du dépôt Mozilla (paquet snap d'Ubuntu probable) : Firefox hors snap non obtenu."
+  command -v firefox >/dev/null 2>&1 || repondre bloque "Le programme firefox est absent après installation."
+  case "$(readlink -f "$(command -v firefox)" 2>/dev/null)" in
+    *snap*) repondre bloque "Firefox est le lanceur snap d'Ubuntu : Firefox hors snap non obtenu." ;;
+  esac
+  # Mot de passe de session, en dernier et seulement si tout est prouvé : par le tube seulement
+  # (printf est interne au shell, rien dans les arguments d'un processus).
+  printf '%s:%s\n' "$utilisateur" "$mdp" | sudo chpasswd >/dev/null 2>&1 \
+    || repondre bloque "Mot de passe de session non appliqué."
+  mdp=""
   repondre fait "Session graphique prête : bureau XFCE, xrdp sur 127.0.0.1:3389, Unity Hub au démarrage de la session."
 }
 

@@ -50,6 +50,65 @@ class TestExecuter(unittest.TestCase):
         self.assertIn("délai", erreur)
 
 
+def _introuvable(args, **kw):
+    raise FileNotFoundError(args[0])
+
+
+def _lent(args, **kw):
+    raise subprocess.TimeoutExpired(args, 1)
+
+
+class TestDurcissement(unittest.TestCase):
+    def test_hote_commencant_par_tiret_refuse(self):
+        for hote in ("-oProxyCommand=x", "", "  "):
+            r = Runner()
+            with self.assertRaises(ValueError):
+                plateforme_ssh.executer(hote, "true", Path("cle"), runner=r)
+            self.assertEqual(r.appels, [])
+        with self.assertRaises(ValueError):
+            plateforme_ssh.oublier_hote("-oProxyCommand=x", True, runner=Runner())
+
+    def test_double_tiret_avant_l_hote(self):
+        r = Runner()
+        plateforme_ssh.executer(HOTE, "true", Path("cle"), runner=r)
+        args = r.appels[0][0]
+        self.assertEqual(args[args.index(HOTE) - 1], "--")
+        self.assertIn("IdentitiesOnly=yes", args)
+
+    def test_stdin_ferme_sans_entree(self):
+        r = Runner()
+        plateforme_ssh.executer(HOTE, "true", Path("cle"), runner=r)
+        kw = r.appels[0][1]
+        self.assertIs(kw["stdin"], subprocess.DEVNULL)
+        self.assertNotIn("input", kw)
+        r = Runner()
+        plateforme_ssh.executer(HOTE, "true", Path("cle"), stdin="x", runner=r)
+        self.assertNotIn("stdin", r.appels[0][1])
+
+    def test_ssh_absent_erreur_lisible(self):
+        with self.assertRaises(plateforme_ssh.ErreurSsh) as c:
+            plateforme_ssh.executer(HOTE, "true", Path("cle"), runner=_introuvable)
+        self.assertIn("OpenSSH", str(c.exception))
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(plateforme_ssh.ErreurSsh):
+                plateforme_ssh.generer_cle(Path(d), runner=_introuvable)
+        with self.assertRaises(plateforme_ssh.ErreurSsh):
+            plateforme_ssh.oublier_hote(HOTE, True, runner=_introuvable)
+
+    def test_attendre_ssh_s_arrete_si_ssh_absent(self):
+        pauses = []
+        with self.assertRaises(plateforme_ssh.ErreurSsh):
+            plateforme_ssh.attendre_ssh(HOTE, Path("cle"), 100, runner=_introuvable, dormir=pauses.append)
+        self.assertEqual(pauses, [])
+
+    def test_delai_keygen_et_oubli_erreur_lisible(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(plateforme_ssh.ErreurSsh):
+                plateforme_ssh.generer_cle(Path(d), runner=_lent)
+        with self.assertRaises(plateforme_ssh.ErreurSsh):
+            plateforme_ssh.oublier_hote(HOTE, True, runner=_lent)
+
+
 class TestAttendre(unittest.TestCase):
     def test_attendre_ssh_patiente_puis_reussit(self):
         r = Runner([255, 255, 255, 0])

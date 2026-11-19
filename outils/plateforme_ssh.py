@@ -14,9 +14,35 @@ from plateforme_ovh import ErreurAccord
 NOM_CLE = "id_ed25519_myiafactory"
 
 
+class ErreurSsh(Exception):
+    """Le client OpenSSH est introuvable ou un utilitaire SSH n'a pas répondu à temps."""
+
+
+def _lancer(runner, args, delai, entree=None):
+    """Lance `args` : entrée standard fermée sans `entree` (jamais d'invite qui bloque), erreurs lisibles."""
+    options = {"input": entree} if entree is not None else {"stdin": subprocess.DEVNULL}
+    try:
+        return runner(args, capture_output=True, text=True, timeout=delai, **options)
+    except FileNotFoundError:
+        raise ErreurSsh(f"« {args[0]} » est introuvable : le client OpenSSH de Windows est requis "
+                        "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
+
+
+def _verifier_hote(hote):
+    if not isinstance(hote, str) or not hote.strip() or hote.startswith("-"):
+        raise ValueError("Adresse du serveur invalide : elle ne doit être ni vide ni commencer par un tiret.")
+
+
 def _options(cle):
     return ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "PasswordAuthentication=no", "-i", str(cle)]
+            "-o", "PasswordAuthentication=no", "-o", "IdentitiesOnly=yes", "-i", str(cle)]
+
+
+def _lancer_court(runner, args, delai):
+    try:
+        return _lancer(runner, args, delai)
+    except subprocess.TimeoutExpired:
+        raise ErreurSsh(f"« {args[0]} » n'a pas répondu en {delai} s.") from None
 
 
 def generer_cle(dossier, runner=subprocess.run):
@@ -29,14 +55,13 @@ def generer_cle(dossier, runner=subprocess.run):
     publique = Path(str(prive) + ".pub")
     if prive.exists():
         if not publique.exists():
-            r = runner(["ssh-keygen", "-y", "-f", str(prive)], capture_output=True, text=True, timeout=30)
+            r = _lancer_court(runner, ["ssh-keygen", "-y", "-f", str(prive)], 30)
             if r.returncode != 0:
                 raise RuntimeError("La clé privée existe mais sa partie publique n'a pu être relue.")
             return prive, (r.stdout or "").strip()
         return prive, publique.read_text(encoding="utf-8").strip()
     dossier.mkdir(parents=True, exist_ok=True)
-    r = runner(["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "myiafactory", "-f", str(prive)],
-               capture_output=True, text=True, timeout=60)
+    r = _lancer_court(runner, ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "myiafactory", "-f", str(prive)], 60)
     if r.returncode != 0 or not publique.exists():
         raise RuntimeError("La génération de la clé SSH a échoué.")
     return prive, publique.read_text(encoding="utf-8").strip()
@@ -44,9 +69,10 @@ def generer_cle(dossier, runner=subprocess.run):
 
 def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
     """Exécute `commande` sur l'hôte ; renvoie (code, sortie, erreur). Un dépassement de délai donne un code 124."""
-    args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", hote, commande]
+    _verifier_hote(hote)
+    args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
     try:
-        r = runner(args, input=stdin, capture_output=True, text=True, timeout=delai)
+        r = _lancer(runner, args, delai, stdin)
     except subprocess.TimeoutExpired:
         return 124, "", f"délai dépassé ({delai} s)"
     return r.returncode, r.stdout or "", r.stderr or ""
@@ -70,4 +96,5 @@ def oublier_hote(hote, accord, runner=subprocess.run):
     """Retire l'hôte de known_hosts (`ssh-keygen -R`) ; exige un accord strictement booléen."""
     if accord is not True:
         raise ErreurAccord("Oublier l'empreinte de l'hôte exige l'accord explicite de l'utilisateur.")
-    runner(["ssh-keygen", "-R", hote], capture_output=True, text=True, timeout=30)
+    _verifier_hote(hote)
+    _lancer_court(runner, ["ssh-keygen", "-R", hote], 30)

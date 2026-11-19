@@ -65,13 +65,17 @@ def enregistrer_cle_ssh(client, nom_cle, cle_publique):
 
 def reinstaller(client, nom, modele_os, nom_cle, accord):
     """Lance la réinstallation (efface le disque) et renvoie l'id de tâche."""
-    if not accord:
+    if accord is not True:
         raise ErreurAccord("La réinstallation efface le disque du serveur : l'accord explicite est requis.")
     if modele_os not in modeles_os(client, nom):
         raise ValueError(f"Le modèle « {modele_os} » n'est pas compatible avec ce serveur.")
     reponse = client.appeler("POST", _serveur(nom) + "/install/start",
                              {"templateName": modele_os, "details": {"sshKeyName": nom_cle}})
-    return int(reponse["taskId"])
+    try:
+        return int(reponse["taskId"])
+    except (KeyError, TypeError, ValueError):
+        raise ErreurOvh(0, "la réinstallation a été lancée mais l'identifiant de tâche est inconnu : "
+                           "vérifiez l'état du serveur dans l'espace client OVH") from None
 
 
 def etat_tache(client, nom, id_tache):

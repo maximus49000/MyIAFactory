@@ -45,6 +45,23 @@ class TestPlateformeOvh(unittest.TestCase):
             plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", False)
         self.assertEqual(c.appels, [])
 
+    def test_reinstaller_accord_non_booleen_refuse(self):
+        for accord in ("False", "0", 0, None, 1, "", "true"):
+            c = ClientFactice({("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES})
+            with self.assertRaises(plateforme_ovh.ErreurAccord, msg=repr(accord)):
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", accord)
+            self.assertEqual(c.appels, [], repr(accord))
+
+    def test_reinstaller_sans_id_de_tache_message_lisible(self):
+        for reponse in (None, {}, {"taskId": "x"}):
+            c = ClientFactice({
+                ("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES,
+                ("POST", f"/dedicated/server/{NOM}/install/start"): reponse,
+            })
+            with self.assertRaises(ovh_api.ErreurOvh) as e:
+                plateforme_ovh.reinstaller(c, NOM, "ubuntu2404-server_64", "cle", True)
+            self.assertIn("lancée", str(e.exception))
+
     def test_reinstaller_avec_accord_demande_ubuntu_lts_et_cle(self):
         c = ClientFactice({
             ("GET", f"/dedicated/server/{NOM}/install/compatibleTemplates"): MODELES,

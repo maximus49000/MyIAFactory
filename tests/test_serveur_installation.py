@@ -63,6 +63,29 @@ class Base(unittest.TestCase):
                               vivant=kw.pop("vivant", lambda p: False), **kw)
 
 
+class TestChargeDansEtat(Base):
+    CHARGE = {"charge_par_coeur": 0.3, "memoire_libre_ratio": 0.7, "conteneurs_outils": 2}
+
+    def etat(self):
+        return inst.lire_etat(self.dossier)[SERVEUR.id]
+
+    def test_sonde_enregistre_la_charge(self):
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
+        self.assertEqual(self.etat()["charge"], self.CHARGE)
+
+    def test_lecture_de_charge_ratee_ne_stocke_rien_et_ne_leve_pas(self):
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=None)
+        self.assertNotIn("charge", self.etat())
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge="n'importe quoi")
+        self.assertNotIn("charge", self.etat())
+
+    def test_une_ecriture_d_installation_conserve_la_charge(self):
+        inst.enregistrer_sonde(self.dossier, SERVEUR, {"base": "presente"}, charge=self.CHARGE)
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {}, False, "")
+        self.assertEqual(self.etat()["charge"], self.CHARGE)
+
+
 class TestApercu(Base):
     def test_apercu_ne_modifie_rien_et_donne_l_ordre(self):
         ssh = FauxSsh(presentes=())
@@ -134,7 +157,7 @@ class TestAccordEtVerrou(Base):
         r = self.installer(Casse())
         self.assertFalse(r["ok"])
         self.assertFalse((self.dossier / inst.VERROU).exists())
-        self.assertFalse(inst.lire_etat(self.dossier)["srv"]["installation"]["en_cours"])
+        self.assertFalse(inst.lire_etat(self.dossier)[SERVEUR.id]["installation"]["en_cours"])
 
 
 class TestInstallation(Base):
@@ -294,7 +317,7 @@ class TestEtatPerime(Base):
         self.assertIn("Installation interrompue", e["capacites"]["android-build"]["detail"])
         self.assertEqual(e["capacites"]["base"]["statut"], "fait")
         self.assertFalse(e["installation"]["en_cours"])
-        self.assertEqual(inst.lire_etat(self.dossier)["srv"]["capacites"]["android-build"]["statut"], "en_cours")  # brut stable
+        self.assertEqual(inst.lire_etat(self.dossier)[SERVEUR.id]["capacites"]["android-build"]["statut"], "en_cours")  # brut stable
 
     def test_verrou_vivant_garde_en_cours(self):
         self._etat_perime()
@@ -313,7 +336,7 @@ class TestEtatPerime(Base):
                 return super().executer(hote, commande, cle, stdin, delai, runner)
         with self.assertRaises(KeyboardInterrupt):
             self.installer(Interrompu())
-        e = inst.lire_etat(self.dossier)["srv"]
+        e = inst.lire_etat(self.dossier)[SERVEUR.id]
         self.assertNotIn("en_cours", {c["statut"] for c in e["capacites"].values()})
         self.assertEqual(e["capacites"]["android-build"]["statut"], "inconnue")
         self.assertFalse(e["installation"]["en_cours"])
@@ -391,14 +414,14 @@ class TestEtatPerime(Base):
         class Espion(FauxSsh):
             def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
                 if "--etape" in commande:
-                    e = inst.lire_etat(self.dossier)["srv"]
+                    e = inst.lire_etat(self.dossier)[SERVEUR.id]
                     instantanes.append((commande.rsplit("--etape ", 1)[1], {i: c["statut"] for i, c in e["capacites"].items()},
                                         e["installation"]["en_cours"]))
                 return super().executer(hote, commande, cle, stdin, delai, runner)
         self.installer(Espion())
         self.assertEqual(instantanes[0], ("docker", {"base": "en_cours", "android-build": "a_faire"}, True))
         self.assertEqual(instantanes[1], ("android_build", {"base": "fait", "android-build": "en_cours"}, True))
-        final = inst.lire_etat(self.dossier)["srv"]
+        final = inst.lire_etat(self.dossier)[SERVEUR.id]
         self.assertEqual({i: c["statut"] for i, c in final["capacites"].items()},
                          {"base": "fait", "android-build": "fait"})
         self.assertFalse(final["installation"]["en_cours"])

@@ -10,6 +10,7 @@ SEUIL_CHARGE = 0.85      # au-delà, le lieu est déconseillé
 SEUIL_QUOTA = 0.15       # quota GitHub restant en dessous duquel github est déconseillé
 ECART_MIN = 0.15         # écart relatif de durée exigé sur le suivant pour recommander
 ECART_CHARGE = 0.15      # écart de charge exigé (repli sur les règles)
+CHARGE_BASSE = 0.5       # charge assez basse pour recommander même sans comparaison possible
 NOMS = {"poste": "Le poste", "github": "GitHub", "serveur": "Le serveur"}
 
 
@@ -53,21 +54,21 @@ def recommander(action, lieux_permis, mesures):
 
     mesure = bool(candidats) and all(_duree(c, mesures) is not None for c in candidats)
     fondee = "mesures" if mesure else "regles"
-    gagnant = None
+    gagnant, raison_gagnant, raison_autres = None, "", "Utilisable ; pas de net avantage constaté."
     if mesure:
         ordre = sorted(candidats, key=lambda c: _duree(c, mesures))
         if len(ordre) == 1 or _duree(ordre[1], mesures) >= _duree(ordre[0], mesures) * (1 + ECART_MIN):
-            gagnant = ordre[0]
-            raison_gagnant = "Le plus rapide d'après les durées mesurées."
-        else:
-            raison_gagnant = ""
+            gagnant, raison_gagnant = ordre[0], "Le plus rapide d'après les durées mesurées."
     else:
         connues = sorted((c for c in candidats if _charge(c, mesures) is not None), key=lambda c: _charge(c, mesures))
-        if connues:
-            reste = [_charge(c, mesures) for c in connues[1:]]
-            if not reste or min(reste) - _charge(connues[0], mesures) >= ECART_CHARGE or len(candidats) == 1:
-                gagnant = connues[0]
-        raison_gagnant = "Le moins chargé d'après les règles simples."
+        tous_connus = bool(connues) and len(connues) == len(candidats)
+        if tous_connus and (len(connues) == 1 or _charge(connues[1], mesures) - _charge(connues[0], mesures) >= ECART_CHARGE):
+            gagnant, raison_gagnant = connues[0], "Le moins chargé des lieux utilisables."
+        elif connues and not tous_connus:
+            if _charge(connues[0], mesures) <= CHARGE_BASSE:
+                gagnant, raison_gagnant = connues[0], "Peu chargé ; les autres lieux n'ont pas de mesure."
+            else:
+                raison_autres = "Charges des autres lieux inconnues."
     if gagnant == "serveur" and mesures.charge_serveur is None:
         gagnant = None          # sans charge connue, le serveur n'est jamais présenté comme le meilleur choix
     for c in candidats:
@@ -76,5 +77,5 @@ def recommander(action, lieux_permis, mesures):
         elif mesure and c == "serveur" and mesures.charge_serveur is None:
             sortie[c] = _entree("possible", "Charge du serveur inconnue.", fondee)
         else:
-            sortie[c] = _entree("possible", "Utilisable ; pas de net avantage constaté.", fondee)
+            sortie[c] = _entree("possible", raison_autres, fondee)
     return {lieu: sortie[lieu] for lieu in LIEUX}

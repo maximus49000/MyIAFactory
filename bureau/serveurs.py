@@ -5,6 +5,7 @@ Colle mince au-dessus de `outils/serveur_*.py`. Les lectures ne se connectent ja
 jamais tomber le bureau. Aucun message d'erreur d'un fil n'est montré sans masquage des secrets connus.
 """
 import json
+import math
 import re
 import sys
 import threading
@@ -155,7 +156,9 @@ class Travaux:
 
         def travail():
             etat = etat_mod.sonder(serveur, **self._options_ssh())
-            inst.enregistrer_sonde(d, serveur, etat)
+            joint = not all(s == "inconnue" for s in etat.values())
+            charge = etat_mod.charge(serveur, **self._options_ssh()) if joint else None     # lecture seule, hors verrou
+            inst.enregistrer_sonde(d, serveur, etat, charge=charge)
             if all(s == "inconnue" for s in etat.values()):
                 return "Serveur injoignable : l'état de ses capacités est inconnu."
             return None
@@ -256,7 +259,14 @@ def _lieu(d, serveurs, etat, action):
 
 
 def _nombre_01(valeur):
-    return min(1.0, max(0.0, float(valeur))) if isinstance(valeur, (int, float)) and not isinstance(valeur, bool) else None
+    """Un nombre de l'état ramené dans 0..1 ; None s'il n'est pas un nombre fini (NaN, infini, booléen, texte)."""
+    if isinstance(valeur, bool) or not isinstance(valeur, (int, float)):
+        return None
+    try:
+        v = float(valeur)
+    except OverflowError:
+        return None
+    return min(1.0, max(0.0, v)) if math.isfinite(v) else None
 
 
 def _charge_serveur(etat, serveur_id):
@@ -273,15 +283,24 @@ def mesures_pour(action, serveurs, etat, serveur_id=None):
     """Les mesures dont dispose la recommandation. SEUL point de branchement des durées par lieu, de la charge du poste et du
     quota GitHub (consommation du bureau) : tant qu'ils ne sont pas câblés ils valent None et la recommandation retombe sur
     les règles. Ne lit que l'état déjà lu : jamais de réseau."""
-    joignable = any(not all(v == "inconnue" for v in _capacites(etat.get(s.id, {})).values()) for s in serveurs)
+    choisis = [s for s in serveurs if s.id == serveur_id]       # le serveur retenu pour l'action, pas « un serveur quelconque »
+    joignable = any(not all(v == "inconnue" for v in _capacites(etat.get(s.id, {})).values()) for s in choisis)
     return _recommandation().Mesures(duree_min={}, charge_poste=None, quota_github_restant=None, serveur_joignable=joignable,
                                      charge_serveur=_charge_serveur(etat, serveur_id) if serveur_id else None)
+
+
+def _action_connue(action):
+    try:
+        _modules()[1].manquantes_pour([action], set())
+    except ValueError:
+        return False
+    return True
 
 
 def _conseil(d, serveurs, etat, action):
     """{lieu: fiche} : la fiche du serveur garde les champs de `_lieu` ; chaque lieu gagne `niveau` et `fondee_sur`."""
     serveur = _lieu(d, serveurs, etat, action)
-    connue = not serveur.get("raison", "").startswith("Action inconnue")
+    connue = _action_connue(action)
     permis = {"poste": connue, "github": connue, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
     conseil = _recommandation().recommander(action, permis, mesures_pour(action, serveurs, etat, serveur.get("serveur_id")))
     sortie = {}

@@ -192,6 +192,33 @@ class TestLecture(AvecServeurs):
         self.ecrire_etat(base="presente", **{"android-build": "bloque"})
         self.assertEqual(self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]["niveau"], "indisponible")
 
+    def _charge(self, charge):
+        self.declarer()
+        self.ecrire_etat(base="presente", **{"android-build": "presente"})
+        tout = json.loads((self.dossier / "serveurs-etat.json").read_text(encoding="utf-8"))
+        tout["mon-serveur"]["charge"] = charge
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps(tout), encoding="utf-8")
+        return self.json("/api/serveurs/lieux?actions=apk")["apk"]["serveur"]
+
+    def test_lieux_serveur_charge_haute_sans_autres_mesures_n_est_que_possible(self):
+        e = self._charge({"charge_par_coeur": 0.8, "memoire_libre_ratio": 0.9})
+        self.assertEqual((e["niveau"], e["fondee_sur"]), ("possible", "regles"))
+        self.assertIn("inconnues", e["raison"])
+
+    def test_lieux_serveur_charge_basse_est_recommande(self):
+        e = self._charge({"charge_par_coeur": 0.3, "memoire_libre_ratio": 0.9})
+        self.assertEqual((e["niveau"], e["fondee_sur"]), ("recommande", "regles"))
+
+    def test_lieux_charge_illisible_ne_donne_jamais_recommande(self):
+        for bad in (float("nan"), float("inf"), -float("inf"), True, "0.1", None, 1e400):
+            with self.subTest(bad=bad):
+                e = self._charge({"charge_par_coeur": bad, "memoire_libre_ratio": bad})
+                self.assertNotEqual(e["niveau"], "recommande")
+
+    def test_nombre_01(self):
+        f = bserveurs._nombre_01
+        self.assertEqual((f(-3), f(0.4), f(7), f(float("nan")), f(float("inf")), f(True), f("0.2")), (0.0, 0.4, 1.0, None, None, None, None))
+
     def test_lieux_serveur_recommande_avec_charge_lue_dans_l_etat(self):
         self.declarer()
         self.ecrire_etat(base="presente", **{"android-build": "presente"})

@@ -78,6 +78,17 @@ class RecommandationTests(unittest.TestCase):
         r = recommander("apk", TOUS, m(duree_min={"poste": 20, "github": 20, "serveur": 2}, charge_poste=0.2, quota_github_restant=0.9))
         self.assertNotEqual(r["serveur"]["niveau"], "recommande")
 
+    def test_regles_charge_connue_haute_et_autres_inconnues_donne_possible(self):
+        r = recommander("apk", TOUS, m(charge_serveur=0.8))
+        self.assertEqual(r["serveur"]["niveau"], "possible")
+        self.assertIn("inconnues", r["serveur"]["raison"])
+        r = recommander("apk", TOUS, m(charge_serveur=0.3))
+        self.assertEqual(r["serveur"]["niveau"], "recommande")
+
+    def test_regles_tout_connu_exige_l_ecart(self):
+        r = recommander("apk", {"poste": True, "github": False, "serveur": True}, m(charge_poste=0.3, charge_serveur=0.35))
+        self.assertEqual(set(niveaux(r).values()) - {"indisponible"}, {"possible"})
+
     def test_mesures_est_fige(self):
         with self.assertRaises(Exception):
             m().charge_poste = 1.0

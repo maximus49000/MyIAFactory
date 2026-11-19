@@ -9,6 +9,7 @@ relu par sonde au début et à la fin (jamais l'état en cache) ; une panne de r
 « absente » ; l'état `serveurs-etat.json` ne contient aucun secret. Tout passe par `ssh` (injectable).
 """
 import json
+import math
 import os
 import threading
 import time
@@ -96,9 +97,30 @@ def lire_etat_vivant(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
     return sortie
 
 
-def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut):
+_GARDER = object()
+
+
+def _charge_valide(charge):
+    """La charge lue par la sonde si elle a la forme attendue (nombres finis), sinon None."""
+    if not isinstance(charge, dict):
+        return None
+    sortie = {}
+    for cle in ("charge_par_coeur", "memoire_libre_ratio", "conteneurs_outils"):
+        v = charge.get(cle)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            return None
+        sortie[cle] = v
+    return sortie
+
+
+def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER):
+    """Réécrit l'entrée d'un serveur ; sa `charge` (lue par la sonde) est conservée sauf si `charge` est donnée."""
     tout = lire_etat(dossier)
-    tout[serveur_id] = {"capacites": capacites, "installation": {"en_cours": en_cours, "debut": debut}}
+    entree = {"capacites": capacites, "installation": {"en_cours": en_cours, "debut": debut}}
+    ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else _charge_valide(charge)
+    if ancienne is not None:
+        entree["charge"] = ancienne
+    tout[serveur_id] = entree
     Path(dossier).mkdir(parents=True, exist_ok=True)
     ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
 
@@ -111,11 +133,13 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
                  "inconnue": "Serveur injoignable ou état illisible."}
 
 
-def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant):
+def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
-    « bloque » garde son entrée (et sa raison) tant que la sonde ne la constate pas présente."""
+    « bloque » garde son entrée (et sa raison) tant que la sonde ne la constate pas présente.
+    `charge` (lecture de `serveur_etat.charge`, faite par l'appelant hors verrou) est rangée dans l'état ; absente ou
+    illisible, aucune charge n'est conservée (une charge périmée induirait en erreur)."""
     deja = ErreurInstallation("Une installation est déjà en cours sur ce poste.", "Attendez sa fin puis relancez.")
     if not _VERROU_PROCESSUS.acquire(blocking=False):
         raise deja
@@ -140,7 +164,7 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant):
                     caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
             inst = avant.get("installation")
             debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
-            _ecrire_etat(dossier, serveur.id, caps, False, debut)
+            _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=charge)
         finally:
             try:
                 verrou.unlink()

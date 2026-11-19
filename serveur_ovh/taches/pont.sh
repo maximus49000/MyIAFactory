@@ -16,11 +16,16 @@
 # Environnement : posé par l'enveloppe lancer_emulation.sh, JAMAIS transmis par l'appelant (celui qui relaie un verbe ne doit
 # en aucun cas faire suivre son propre environnement : ces variables désignent les outils exécutés et les limites).
 #   PONT_SORTIE (/sortie ; absolu, sans . ni ..), PONT_CAPTURES (50), PONT_OCTETS (104857600 = 100 Mo de captures cumulées),
-#   PONT_AVD (emulateur), PONT_DEMARRAGE_S (300), PONT_DELAI_ADB_S (30 : délai de chaque appel à adb, `installer` x4),
+#   PONT_AVD (emulateur ; motif MOTIF_NOM, donc en minuscules : la tâche 4 nomme l'AVD « emul »), PONT_DEMARRAGE_S (300),
+#   PONT_DELAI_ADB_S (30 : délai de chaque appel à adb, `installer` x4 ; attente d'un verrou = 3 x délai + 10 s),
 #   PONT_PAQUET (facultatif : sinon le paquet est relevé par `installer`) ;
 #   PONT_ADB / PONT_EMULATEUR : « adb » / « emulator » ou un chemin absolu (tests).
 # Écrit seulement sous PONT_SORTIE : pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log, emulateur.pid,
-# .verrou-captures.
+# .verrou-captures, .verrou-demarrer (ou leurs dossiers .d sans flock).
+# Exige `timeout` (coreutils) : sans lui, refus (code 4) plutôt qu'un adb sans borne. Aucun outil ne reçoit le descripteur 9
+# du verrou (9>&-) : un serveur adb resté en vie ne doit pas garder le verrou.
+# emulateur.pid ne désigne l'émulateur que si /proc/<pid> le confirme (ni zombie, ni « emulator »/« qemu » absent de la ligne
+# de commande) : un PID mort, zombie ou recyclé n'est jamais signalé.
 # Un appel = une ligne « verbe arguments durée » ajoutée à ${PONT_SORTIE}/pont.log (au plus 6 arguments, chacun tronqué à
 # 80 caractères, caractères hors liste remplacés par « ? »).
 set -u
@@ -151,32 +156,54 @@ verifier_environnement() {
   EMULATEUR="${PONT_EMULATEUR-emulator}"
 }
 
-# outil <délai s> <commande...> : coupe un outil bloqué (timeout, puis KILL 2 s plus tard).
-A_TIMEOUT=0
-command -v timeout > /dev/null 2>&1 && A_TIMEOUT=1
+# outil <délai s> <commande...> : coupe un outil bloqué (TERM au délai, KILL 2 s plus tard) ; descripteur du verrou fermé.
 outil() {
   local d="$1"; shift
   [ "$d" -ge 1 ] || d=1
-  if [ "$A_TIMEOUT" = 1 ]; then timeout -k 2 "$d" "$@"; else "$@"; fi
+  timeout -k 2 "$d" "$@" 9>&-
 }
 
-# Verrou des captures (compte + capture + revérification + mv, sérialisés entre appels simultanés).
-# flock quand il existe (image Linux) ; sinon un dossier créé atomiquement par mkdir, retiré à la sortie.
+# Verrous (captures : compte + capture + revérification + mv ; demarrer : contrôle du PID + lancement + emulateur.pid).
+# flock sur le descripteur 9 quand il existe (image Linux) ; sinon un dossier créé atomiquement par mkdir, avec le PID
+# du détenteur dedans : un dossier dont le détenteur est mort est repris (verrou périmé après un SIGKILL).
 VERROU_DOSSIER=""
-liberer_verrou() { [ -n "$VERROU_DOSSIER" ] && rmdir -- "$VERROU_DOSSIER" 2>/dev/null; return 0; }
+VERROU_FD=0
+liberer_verrou() {
+  local p=""
+  if [ "$VERROU_FD" = 1 ]; then exec 9>&-; VERROU_FD=0; fi
+  if [ -n "$VERROU_DOSSIER" ]; then
+    IFS= read -r p < "$VERROU_DOSSIER/pid" 2>/dev/null
+    [ "$p" = "$$" ] && rm -rf -- "$VERROU_DOSSIER"
+    VERROU_DOSSIER=""
+  fi
+  return 0
+}
 trap liberer_verrou EXIT
-prendre_verrou() {
-  local f="$SORTIE/.verrou-captures" debut=$SECONDS
+prendre_verrou() {   # prendre_verrou <nom>
+  local f="$SORTIE/.verrou-$1" attente=$((3 * DELAI_ADB + 10)) debut=$SECONDS p q
   if command -v flock > /dev/null 2>&1; then
-    exec 9>> "$f" || repondre 4 "Verrou des captures impossible."
-    flock -w 60 9 || repondre 4 "Verrou des captures occupé depuis 60 s."
+    exec 9>> "$f" || repondre 4 "Verrou $1 impossible."
+    VERROU_FD=1
+    flock -w "$attente" 9 || repondre 4 "Verrou $1 occupé depuis $attente s."
     return 0
   fi
   until mkdir -- "$f.d" 2>/dev/null; do
-    [ $((SECONDS - debut)) -lt 60 ] || repondre 4 "Verrou des captures occupé depuis 60 s."
+    p=""
+    IFS= read -r p < "$f.d/pid" 2>/dev/null
+    if [[ $p =~ ^[0-9]{1,10}$ ]] && ! kill -0 "$p" 2>/dev/null; then
+      # Détenteur mort : le dossier est mis de côté sous un nom unique, puis supprimé si c'est bien le même détenteur.
+      if mv -- "$f.d" "$f.d.perime.$$" 2>/dev/null; then
+        q=""
+        IFS= read -r q < "$f.d.perime.$$/pid" 2>/dev/null
+        if [ "$q" = "$p" ]; then rm -rf -- "$f.d.perime.$$"; else mv -- "$f.d.perime.$$" "$f.d" 2>/dev/null; fi
+      fi
+      continue
+    fi
+    [ $((SECONDS - debut)) -lt "$attente" ] || repondre 4 "Verrou $1 occupé depuis $attente s."
     sleep 0.2
   done
   VERROU_DOSSIER="$f.d"
+  printf '%s\n' "$$" > "$f.d/pid"
 }
 
 # Paquet de l'APK : PONT_PAQUET, sinon celui relevé par `installer` ; rien si inconnu ou mal formé.
@@ -209,17 +236,39 @@ liste_paquets() {
   printf '%s\n' "$brut" | tr -d '\r' | sed -n 's/^package://p' | sort -u
 }
 
-# Processus de l'émulateur noté par `demarrer` (PID vivant), sinon rien.
+# est_emulateur <pid> : vrai seulement pour un processus vivant (pas zombie) dont la ligne de commande contient
+# « emulator » ou « qemu ». Un PID mort, zombie ou recyclé par un autre programme n'est jamais pris pour l'émulateur.
+est_emulateur() {
+  local p="$1" stat etat cmd
+  [[ $p =~ ^[0-9]{1,10}$ ]] || return 1
+  stat=$(cat -- "/proc/$p/stat" 2>/dev/null) || return 1
+  etat="${stat##*) }"
+  etat="${etat%% *}"
+  [ -n "$etat" ] && [ "$etat" != Z ] || return 1
+  cmd=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null) || return 1
+  case "$cmd" in *emulator*|*qemu*) return 0 ;; esac
+  return 1
+}
+
+# Processus de l'émulateur noté par `demarrer` (émulateur vivant), sinon rien.
 pid_emulateur() {
   local p=""
   [ -f "$SORTIE/emulateur.pid" ] && IFS= read -r p < "$SORTIE/emulateur.pid"
-  [[ $p =~ ^[0-9]{1,10}$ ]] && kill -0 "$p" 2>/dev/null && printf '%s' "$p"
+  est_emulateur "$p" && printf '%s' "$p"
 }
 
-# attendre_fin <pid> <essais> : vrai dès que le processus a disparu.
+# signaler <signal> <pid> : au groupe de processus (setsid en a fait le chef), sinon au processus ; jamais sans
+# avoir revérifié juste avant que c'est bien l'émulateur.
+signaler() {
+  est_emulateur "$2" || return 0
+  kill "-$1" -- "-$2" 2>/dev/null || kill "-$1" "$2" 2>/dev/null
+  return 0
+}
+
+# attendre_fin <pid> <essais> : vrai dès que l'émulateur a disparu (mort, zombie ou PID passé à autre chose).
 attendre_fin() {
   local i=0
-  while kill -0 "$1" 2>/dev/null; do
+  while est_emulateur "$1"; do
     [ "$i" -lt "$2" ] || return 1
     sleep 1
     i=$((i + 1))
@@ -233,23 +282,29 @@ verbe_demarrer() {
   local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache
   [[ $avd =~ $MOTIF_NOM ]] || repondre 4 "Réglage PONT_AVD mal formé."
   reglage PONT_DEMARRAGE_S "${PONT_DEMARRAGE_S:-}" 300; limite=$REGLAGE
+  debut=$SECONDS
+  # Sous verrou : deux `demarrer` simultanés ne lancent qu'un émulateur, et le perdant n'écrase pas emulateur.pid.
+  prendre_verrou demarrer
   ancien=$(pid_emulateur) && repondre 2 "Émulateur déjà démarré (processus $ancien) : arreter d'abord."
-  # Détaché du pont (nouvelle session si setsid existe, insensible à SIGHUP sinon) ; noté dans emulateur.pid.
+  # Détaché du pont (nouvelle session si setsid existe, insensible à SIGHUP sinon), sans le descripteur du verrou.
   if command -v setsid > /dev/null 2>&1; then detache=setsid; else detache=nohup; fi
   "$detache" "$EMULATEUR" -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect \
-    > "$SORTIE/emulateur.log" 2>&1 &
+    > "$SORTIE/emulateur.log" 2>&1 9>&- &
   pid=$!
   printf '%s\n' "$pid" > "$SORTIE/emulateur.pid"
-  debut=$SECONDS
+  liberer_verrou
+  # Chaque appel à adb est borné par le temps restant moins les 2 s de grâce du KILL : jamais au-delà de PONT_DEMARRAGE_S.
   while :; do
-    reste=$((limite - (SECONDS - debut)))
-    [ "$reste" -gt 0 ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
+    reste=$((limite - (SECONDS - debut) - 2))
+    [ "$reste" -ge 1 ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
     [ "$reste" -le 10 ] || reste=10
     etat=$(outil "$reste" "$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
     [ "$etat" = 1 ] && repondre 0 "Émulateur démarré."
-    kill -0 "$pid" 2>/dev/null || repondre 4 "L'émulateur s'est arrêté avant la fin du démarrage (voir emulateur.log)."
-    [ $((SECONDS - debut)) -lt "$limite" ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
-    sleep 2
+    est_emulateur "$pid" || repondre 4 "L'émulateur s'est arrêté avant la fin du démarrage (voir emulateur.log)."
+    reste=$((limite - (SECONDS - debut)))
+    [ "$reste" -gt 0 ] || repondre 4 "L'émulateur n'a pas fini de démarrer en $limite s."
+    [ "$reste" -le 2 ] || reste=2
+    sleep "$reste"
   done
 }
 
@@ -320,7 +375,7 @@ verbe_capturer() {
   [ ! -L "$dossier" ] || repondre 4 "Dossier des captures invalide (lien symbolique)."
   mkdir -p -- "$dossier" || repondre 4 "Écriture impossible dans la sortie."
   [ -d "$dossier" ] && [ ! -L "$dossier" ] || repondre 4 "Dossier des captures invalide."
-  prendre_verrou
+  prendre_verrou captures
   if [ -e "$cible" ] || [ -L "$cible" ]; then repondre 2 "Nom de capture déjà pris : $nom."; fi
   # Comptage : un échec ferme (code 4), il ne lève jamais les limites.
   tailles=$(find "$dossier" -maxdepth 1 -type f -name '*.png' -printf '%s\n') \
@@ -364,12 +419,13 @@ verbe_arreter() {
   outil "$DELAI_ADB" "$ADB" emu kill > /dev/null 2>&1 || adb_ok=0
   if pid=$(pid_emulateur); then
     if ! attendre_fin "$pid" 10; then
-      kill -TERM "$pid" 2>/dev/null
-      attendre_fin "$pid" 5 || { kill -KILL "$pid" 2>/dev/null; attendre_fin "$pid" 5; }
+      signaler TERM "$pid"
+      attendre_fin "$pid" 5 || { signaler KILL "$pid"; attendre_fin "$pid" 5; }
       detail="Émulateur arrêté par signal."
     fi
-    kill -0 "$pid" 2>/dev/null && repondre 4 "L'émulateur (processus $pid) ne s'arrête pas."
+    est_emulateur "$pid" && repondre 4 "L'émulateur (processus $pid) ne s'arrête pas."
   elif [ "$adb_ok" = 0 ]; then
+    rm -f -- "$SORTIE/emulateur.pid"     # PID mort, zombie ou étranger : effacé, jamais signalé
     repondre 4 "adb a échoué (arrêt de l'émulateur)."
   fi
   rm -f -- "$SORTIE/emulateur.pid"
@@ -390,6 +446,7 @@ for i in "${!ARGS[@]}"; do
   [[ ${ARGS[$i]} =~ ${MOTIFS[$i]} ]] || repondre 2 "Argument $((i + 1)) refusé pour $VERBE (forme non permise)."
 done
 reglage PONT_DELAI_ADB_S "${PONT_DELAI_ADB_S:-}" 30; DELAI_ADB=$REGLAGE
+command -v timeout > /dev/null 2>&1 || repondre 4 "timeout absent : le pont refuse d'appeler adb sans délai."
 mkdir -p -- "$SORTIE" 2>/dev/null || repondre 4 "Dossier de sortie inaccessible."
 
 case "$VERBE" in

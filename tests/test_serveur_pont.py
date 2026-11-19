@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -18,6 +19,7 @@ PAQUET = "com.exemple.app"
 
 ADB_FACTICE = r'''echo "adb $*" >> "$FAUX_JOURNAL"
 [ -n "${FAUX_ADB_ECHEC:-}" ] && exit 1
+if [ -n "${FAUX_VERIF_FD9:-}" ] && [ -e /proc/self/fd/9 ]; then echo "adb a herite du verrou" >> "$FAUX_JOURNAL"; exit 1; fi
 [ -n "${FAUX_ADB_LENT:-}" ] && exec /usr/bin/sleep "$FAUX_ADB_LENT"
 case "$1" in
   exec-out) [ -n "${FAUX_CAPTURE_LENTE:-}" ] && /usr/bin/sleep "$FAUX_CAPTURE_LENTE"; printf '\211PNG\r\n\032\n'; head -c "${FAUX_PNG_OCTETS:-100}" /dev/zero ;;
@@ -30,7 +32,10 @@ case "$1" in
          esac ;;
 esac
 exit 0'''
-EMULATEUR_FACTICE = 'echo "emulator $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_EMU_RESTE:-}" ] && exec /usr/bin/sleep 60\nexit 0'
+# Resté vivant, il garde « emulator » dans sa ligne de commande (/proc/<pid>/cmdline), comme le vrai.
+EMULATEUR_FACTICE = ('echo "emulator $*" >> "$FAUX_JOURNAL"\n'
+                     'if [ -n "${FAUX_VERIF_FD9:-}" ] && [ -e /proc/self/fd/9 ]; then echo "emulator a herite du verrou" >> "$FAUX_JOURNAL"; fi\n'
+                     '[ -n "${FAUX_EMU_RESTE:-}" ] && exec -a emulator-factice /usr/bin/sleep 60\nexit 0')
 SLEEP_FACTICE = 'echo "sleep $*" >> "$FAUX_JOURNAL"\nexit 0'
 # Lit les arguments séparés par des octets nuls puis lance le pont avec exactement ces arguments.
 PILOTE = 'mapfile -d "" -t A < "$1"; exec bash "$2" "${A[@]}"'
@@ -64,7 +69,7 @@ class Banc:
         (self.entree / "app.apk").write_bytes(b"PK\x03\x04apk-factice")
         self.fichier_journal = t / "appels.txt"
         for nom, corps in (("adb", ADB_FACTICE), ("emulator", EMULATEUR_FACTICE), ("sleep", SLEEP_FACTICE)):
-            (self.bin / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+            (self.bin / nom).write_text("#!/usr/bin/env bash\n" + corps + "\n", newline="\n")   # bash : exec -a
             (self.bin / nom).chmod(0o755)
         self.n = 0
         self.sortie_posix = posix(self.sortie)
@@ -505,6 +510,97 @@ class TestPont(unittest.TestCase):
             b.lien(vrai, b.entree / "app.apk")
             self.assertEqual(b.lancer("installer")[0], 4)
             self.assertEqual([x for x in b.appels if x.startswith("adb install")], [])
+
+    # --- Corrections de revue (tour 2) : verrou et PID ------------------------------------------------------
+
+    def _pid_mort(self):
+        return bash("echo $$").stdout.strip()                 # un processus terminé : son PID n'existe plus
+
+    def _sleep_etranger(self):
+        p = subprocess.Popen(["bash", "-c", "echo $$; exec /usr/bin/sleep 60"], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(lambda: (bash('kill -9 "$1" 2>/dev/null; exit 0', numero), p.wait(timeout=30)))
+        numero = p.stdout.readline().strip()
+        return numero
+
+    def test_verrou_ne_fuit_pas_vers_les_outils(self):
+        with Banc(FAUX_VERIF_FD9="1", FAUX_EMU_RESTE="1") as b:
+            b.faux("flock", "exit 0")                          # chemin de production : flock tient le descripteur 9
+            self.assertEqual(b.lancer("capturer", "a")[0], 0, b.appels)
+            self.assertEqual(b.lancer("demarrer")[0], 0, b.appels)
+            self.assertEqual([x for x in b.appels if "herite" in x], [])
+
+    def test_flock_en_echec_refuse_la_capture(self):
+        with Banc() as b:
+            b.faux("flock", "exit 1")
+            self.assertEqual(b.lancer("capturer", "a")[0], 4)
+            self.assertEqual([x for x in b.appels if "screencap" in x], [])
+            self.assertEqual(b.captures(), [])
+
+    def test_verrou_perime_est_repris(self):
+        with Banc() as b:
+            verrou = b.sortie / ".verrou-captures.d"
+            verrou.mkdir()
+            (verrou / "pid").write_text(self._pid_mort() + "\n", newline="\n")
+            debut = time.monotonic()
+            self.assertEqual(b.lancer("capturer", "a")[0], 0)
+            self.assertLess(time.monotonic() - debut, 20)
+            self.assertFalse(verrou.exists())
+            self.assertEqual(b.captures(), ["a.png"])
+
+    def test_nom_pris_par_un_lien_symbolique(self):
+        with Banc() as b:
+            ailleurs = b.t / "ailleurs.png"
+            (b.sortie / "captures").mkdir()
+            b.lien(ailleurs, b.sortie / "captures" / "a.png")
+            self.assertEqual(b.lancer("capturer", "a")[0], 2)
+            self.assertFalse(ailleurs.exists())
+            self.assertEqual([x for x in b.appels if "screencap" in x], [])
+
+    def test_pid_mort_efface_et_demarrer_permis(self):
+        with Banc(FAUX_EMU_RESTE="1") as b:
+            pid = b.sortie / "emulateur.pid"
+            pid.write_text(self._pid_mort() + "\n", newline="\n")
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertFalse(pid.exists())
+            pid.write_text(self._pid_mort() + "\n", newline="\n")
+            self.assertEqual(b.lancer("demarrer")[0], 0)
+            self.assertEqual(b.lancer("arreter")[0], 0)
+
+    def test_pid_etranger_jamais_tue(self):
+        with Banc(FAUX_EMU_RESTE="1") as b:
+            etranger = self._sleep_etranger()
+            pid = b.sortie / "emulateur.pid"
+            pid.write_text(etranger + "\n", newline="\n")
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertEqual(bash('kill -0 "$1"', etranger).returncode, 0, "processus étranger tué")
+            self.assertFalse(pid.exists())
+            pid.write_text(etranger + "\n", newline="\n")
+            self.assertEqual(b.lancer("demarrer")[0], 0)          # un PID étranger n'est pas un émulateur en marche
+            self.assertNotEqual(pid.read_text().strip(), etranger)
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertEqual(bash('kill -0 "$1"', etranger).returncode, 0, "processus étranger tué")
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "processus zombie : Linux seulement")
+    def test_pid_zombie_n_est_pas_un_emulateur(self):
+        with Banc(FAUX_EMU_RESTE="1") as b:
+            z = subprocess.Popen(["true"])
+            time.sleep(0.5)                                    # terminé, pas encore attendu : zombie
+            (b.sortie / "emulateur.pid").write_text(f"{z.pid}\n", newline="\n")
+            self.assertEqual(b.lancer("demarrer")[0], 0)
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            z.wait()
+
+    def test_demarrer_simultanes_un_seul_emulateur(self):
+        with Banc(FAUX_EMU_RESTE="1") as b:
+            procs = [b.lancer_fond("demarrer") for _ in range(3)]
+            codes = [p.wait(timeout=120) for p in procs]
+            for p in procs:
+                p.communicate()
+            self.assertEqual(sorted(codes), [0, 2, 2], codes)
+            self.assertEqual(len([x for x in b.appels if x.startswith("emulator ")]), 1, b.appels)
+            numero = (b.sortie / "emulateur.pid").read_text().strip()
+            self.assertEqual(bash('kill -0 "$1"', numero).returncode, 0)
+            self.assertEqual(b.lancer("arreter")[0], 0)
 
     def test_dossier_captures_lien_symbolique_refuse(self):
         with Banc() as b:

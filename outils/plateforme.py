@@ -92,8 +92,7 @@ class _Contexte:
         licence = plateforme_acces.chemin_licence(self.dossier)
         if licence:
             try:
-                texte = licence.read_text(encoding="utf-8", errors="replace")
-                self.secrets += [texte, texte.strip()]
+                self.secrets += plateforme_acces.secrets_licence(licence.read_bytes().decode("utf-8", errors="replace"))
             except OSError:
                 pass
         return erreur
@@ -101,17 +100,25 @@ class _Contexte:
     def masquer(self, texte):
         return plateforme_acces.masquer(str(texte), self.secrets)
 
+    def masquer_arbre(self, v):
+        """Masque chaque texte AVANT la sérialisation JSON (la licence multi-ligne y serait échappée)."""
+        if isinstance(v, str):
+            return self.masquer(v)
+        if isinstance(v, list):
+            return [self.masquer_arbre(x) for x in v]
+        return {k: self.masquer_arbre(x) for k, x in v.items()} if isinstance(v, dict) else v
+
     def ecrire(self, extra=None, strict=False):
         """Écrit le cache (jamais de secret) ; renvoie l'état calculé.
 
         `strict` : une écriture impossible lève OSError (utilisé quand perdre l'écriture exposerait à une double
         réinstallation) ; sinon l'échec est ignoré. `persister` à False (vérification) : rien n'est écrit.
         """
-        etat = calculer_etat(self.rapports)
-        etat.update(extra or {})
+        etat = self.masquer_arbre(calculer_etat(self.rapports))
+        etat.update(self.masquer_arbre(extra or {}))
         if self.persister:
-            donnees = {"rapports": self.rapports, "etat": etat, "ip": self.ip, "tache": self.cache.get("tache"),
-                       "demande": self.cache.get("demande")}
+            donnees = self.masquer_arbre({"rapports": self.rapports, "etat": etat, "ip": self.ip,
+                                          "tache": self.cache.get("tache"), "demande": self.cache.get("demande")})
             texte = self.masquer(json.dumps(donnees, ensure_ascii=False, indent=2))
             try:
                 self.dossier.mkdir(parents=True, exist_ok=True)
@@ -319,11 +326,22 @@ def _etape_images(c):
 
 
 def _etape_licence(c):
-    """Version minimale (la tâche 7 l'implémente) : sans unity.ulf, un geste humain est demandé."""
-    if not plateforme_acces.chemin_licence(c.dossier):
-        return _rapport("a_faire", "Aucune licence Unity fournie : le serveur reste prêt sans Unity.",
-                        f"Déposez votre licence Unity (fichier unity.ulf) dans {c.dossier}, puis relancez.")
-    return _rapport("a_faire", "Licence Unity présente ; son activation n'est pas encore disponible.")
+    """Sans unity.ulf : geste humain guidé (le serveur reste prêt sans Unity). Avec : envoyée en stdin à l'étape distante."""
+    chemin = plateforme_acces.chemin_licence(c.dossier)
+    if not chemin:
+        return _rapport("a_faire", "Aucune licence Unity fournie : le serveur reste prêt, sans Unity.",
+                        f"Activez Unity Personal dans Unity Hub sur votre PC, puis copiez le fichier de licence (en général "
+                        f"C:\\ProgramData\\Unity\\Unity_lic.ulf) vers {c.dossier / 'unity.ulf'} et relancez. Avec le nouveau client "
+                        "de licences Unity, ce fichier peut ne pas exister : il faut alors une licence Unity Pro/Plus à numéro de "
+                        "série. L'activation manuelle (.alf) n'est pas prise en charge pour Unity Personal : "
+                        "https://docs.unity3d.com/6000.6/Documentation/Manual/ManualActivationGuide.html (Unity 6000.6.7f1).")
+    licence = chemin.read_bytes().decode("utf-8", errors="replace")   # octets : fins de ligne conservées, jamais en argument
+    if not licence.strip():
+        return _rapport("bloque", "Le fichier unity.ulf est vide.", f"Recopiez la licence Unity dans {chemin}, puis relancez.")
+    r = _lancer_etape(c, "licence", stdin=licence)
+    if r["statut"] == "bloque":
+        r["geste"] = "Vérifiez que unity.ulf est une licence valide pour Unity 6000.6.7f1 (détail ci-dessus), puis relancez."
+    return r
 
 
 ACTIONS = {"lecture": _etape_lecture, "os": _etape_os, "ssh": _etape_ssh, "durcissement": _etape_durcissement,
@@ -461,6 +479,6 @@ def main(argv):
         etat = verifier(dossier)
     c = _Contexte(dossier, False, None, None, time.sleep)
     c.preparer_secrets()
-    print(c.masquer(json.dumps(etat, ensure_ascii=False, indent=2)))
+    print(c.masquer(json.dumps(c.masquer_arbre(etat), ensure_ascii=False, indent=2)))
     bloque = any(e["statut"] == "bloque" for e in etat["etapes"])
     return 1 if bloque or not etat["pret"] else 0

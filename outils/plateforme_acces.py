@@ -45,6 +45,17 @@ def chemin_licence(dossier=DOSSIER):
     return chemin if chemin.is_file() else None
 
 
+def secrets_licence(texte):
+    """Formes à masquer d'une licence multi-ligne : entière, nettoyée, échappée JSON, et chaque ligne (>= 12 caractères)."""
+    brut = [texte, texte.strip(), texte.replace("\r\n", "\n"), texte.replace("\r\n", "\n").strip()]
+    brut += [ligne.strip() for ligne in texte.splitlines() if len(ligne.strip()) >= 12]
+    formes = []
+    for m in brut:
+        if m:
+            formes += [m, json.dumps(m)[1:-1], json.dumps(m, ensure_ascii=False)[1:-1]]
+    return formes
+
+
 def masquer(texte, secrets):
     for secret in sorted((s for s in secrets if s), key=len, reverse=True):
         texte = texte.replace(secret, "***")

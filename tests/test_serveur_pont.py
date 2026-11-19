@@ -1,0 +1,370 @@
+"""Pont d'actions de l'émulateur (`serveur_ovh/taches/pont.sh`) : lancé avec le bash du poste, `adb`, `emulator` et `sleep`
+factices dans le PATH (ils journalisent leurs arguments). Les arguments passent par un fichier séparé par des octets nuls :
+ils arrivent au pont octet pour octet (retours à la ligne, guillemets, `$(...)`), sans le découpage de la ligne de commande
+Windows ni l'expansion de motifs du bash de Git."""
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parent.parent / "serveur_ovh" / "taches" / "pont.sh"
+CLES = {"ok", "verbe", "detail"}
+PAQUET = "com.exemple.app"
+
+ADB_FACTICE = r'''echo "adb $*" >> "$FAUX_JOURNAL"
+[ -n "${FAUX_ADB_ECHEC:-}" ] && exit 1
+case "$1" in
+  exec-out) printf '\211PNG\r\n\032\n'; head -c "${FAUX_PNG_OCTETS:-100}" /dev/zero ;;
+  logcat) [ -n "${FAUX_LOGCAT:-}" ] && cat "$FAUX_LOGCAT" ;;
+  install) echo Success ;;
+  shell) case "$2 $3" in
+           "getprop sys.boot_completed") echo 1 ;;
+           "pm list") printf '%s\n' "${FAUX_PAQUETS-package:com.exemple.app}" ;;
+           "monkey -p") echo "Events injected: 1" ;;
+         esac ;;
+esac
+exit 0'''
+EMULATEUR_FACTICE = 'echo "emulator $*" >> "$FAUX_JOURNAL"\nexit 0'
+SLEEP_FACTICE = 'echo "sleep $*" >> "$FAUX_JOURNAL"\nexit 0'
+# Lit les arguments séparés par des octets nuls puis lance le pont avec exactement ces arguments.
+PILOTE = 'mapfile -d "" -t A < "$1"; exec bash "$2" "${A[@]}"'
+LIGNE_JOURNAL = re.compile(r"^\S+( .*)? \d+ms$")
+
+
+class Banc:
+    """Un conteneur simulé : dossiers sortie/ et entree/app.apk côte à côte, faux outils journalisant leurs appels."""
+
+    def __init__(self, **env):
+        self.env = env
+
+    def __enter__(self):
+        self._t = tempfile.TemporaryDirectory()
+        t = self.t = Path(self._t.name)
+        self.bin, self.sortie, self.entree = t / "bin", t / "sortie", t / "entree"
+        for d in (self.bin, self.sortie, self.entree):
+            d.mkdir()
+        (self.entree / "app.apk").write_bytes(b"PK\x03\x04apk-factice")
+        self.fichier_journal = t / "appels.txt"
+        for nom, corps in (("adb", ADB_FACTICE), ("emulator", EMULATEUR_FACTICE), ("sleep", SLEEP_FACTICE)):
+            (self.bin / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+            (self.bin / nom).chmod(0o755)
+        self.n = 0
+        return self
+
+    def __exit__(self, *a):
+        self._t.cleanup()
+
+    def logcat(self, texte):
+        f = self.t / "logcat.txt"
+        f.write_bytes(texte if isinstance(texte, bytes) else texte.encode("utf-8"))
+        self.env["FAUX_LOGCAT"] = f.as_posix()
+
+    def lancer(self, *args, **env):
+        """Rend (code, objet JSON) ; exige UNE seule ligne JSON sur la sortie standard."""
+        self.n += 1
+        fichier_args = self.t / f"args{self.n}.bin"
+        fichier_args.write_bytes(b"".join(a.encode("utf-8") + b"\0" for a in args))
+        e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"], PONT_SORTIE=self.sortie.as_posix(),
+                 FAUX_JOURNAL=self.fichier_journal.as_posix())
+        e.pop("PONT_PAQUET", None)
+        e.update(self.env)
+        e.update(env)
+        r = subprocess.run(["bash", "-c", PILOTE, "pilote", fichier_args.as_posix(), SCRIPT.as_posix()], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, encoding="utf-8", env=e, timeout=60)
+        self.derniere = r
+        fichier_args.unlink()
+        lignes = [x for x in r.stdout.splitlines() if x.strip()]
+        assert len(lignes) == 1, (r.returncode, r.stdout, r.stderr)
+        d = json.loads(lignes[0])
+        assert set(d) == CLES, d
+        assert isinstance(d["ok"], bool) and isinstance(d["verbe"], str) and isinstance(d["detail"], str), d
+        assert d["ok"] == (r.returncode == 0), (r.returncode, d)
+        return r.returncode, d
+
+    @property
+    def appels(self):
+        return self.fichier_journal.read_text(encoding="utf-8").splitlines() if self.fichier_journal.exists() else []
+
+    def oublier_appels(self):
+        if self.fichier_journal.exists():
+            self.fichier_journal.unlink()
+
+    @property
+    def lignes_pont_log(self):
+        f = self.sortie / "pont.log"
+        return f.read_text(encoding="utf-8").splitlines() if f.exists() else []
+
+    def arbre(self):
+        """Tous les fichiers du banc, sauf pont.log (seule écriture permise pour un appel refusé)."""
+        return sorted(p.relative_to(self.t).as_posix() for p in self.t.rglob("*")
+                      if p != self.sortie / "pont.log" and p != self.fichier_journal)
+
+    def captures(self):
+        d = self.sortie / "captures"
+        return sorted(p.name for p in d.iterdir()) if d.exists() else []
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestPont(unittest.TestCase):
+    def test_verbe_inconnu_refuse(self):
+        with Banc() as b:
+            for verbe in ("rm", "", "TOUCHER", "toucher;ls", "sh", "eval", "demarrer\n", "../pont"):
+                with self.subTest(verbe=verbe):
+                    code, d = b.lancer(verbe, "1", "2")
+                    self.assertEqual(code, 2)
+                    self.assertFalse(d["ok"])
+                    self.assertIn("inconnu", d["detail"])
+            self.assertEqual(b.appels, [])
+
+    def test_arguments_hostiles_refuses_sans_rien_executer(self):
+        communs = [";", "$(x)", "`x`", "a\nb", "", "$(touch ../pwn)", "*", "a;b", "x'y", "a|b"]
+        cas = {
+            "toucher": [[h, "10"] for h in communs + ["..", "-1", "99999", "1.5", " 1"]] + [["10", h] for h in ("-1", "99999")]
+                       + [["10"], ["10", "20", "30"]],
+            "glisser": [["1", "2", "3", h] for h in communs + ["..", "-1", "99999"]] + [["1", "2", "3"]],
+            "attendre": [[h] for h in communs + ["..", "-1", "99999", "121", "1000"]],
+            "capturer": [[h] for h in communs + ["..", "../x", "a/b", "A", "x.png", "a" * 41]] + [["a", "b"]],
+            "texte": [[h] for h in communs + ["a" * 61, "a/b", "é", "50%"]],
+            "touche": [[h] for h in communs + ["..", "-1", "99999", "power", "retour "]],
+            "journal": [[h] for h in communs + ["a b", "a/b", "a" * 61]] + [["a", "b"]],
+            "installer": [["/etc/passwd"], ["../entree/app.apk"], [";"], [""]],
+            "demarrer": [["-1"]], "lancer": [[".."]], "arreter": [["99999"]],
+        }
+        with Banc() as b:
+            avant = b.arbre()
+            for verbe, listes in cas.items():
+                for args in listes:
+                    with self.subTest(verbe=verbe, args=args):
+                        code, d = b.lancer(verbe, *args)
+                        self.assertEqual(code, 2, d)
+                        self.assertEqual(d["verbe"], verbe)
+            self.assertEqual(b.appels, [])            # ni adb, ni emulator, ni sleep
+            self.assertEqual(b.arbre(), avant)        # aucune écriture hors pont.log (pas même captures/)
+            self.assertFalse((b.t / "pwn").exists())
+
+    def test_toucher_appelle_adb_input_tap(self):
+        with Banc() as b:
+            code, d = b.lancer("toucher", "540", "1200")
+            self.assertEqual(code, 0, d)
+            self.assertEqual(b.appels, ["adb shell input tap 540 1200"])
+            b.oublier_appels()
+            code, _ = b.lancer("toucher", "0", "9999")
+            self.assertEqual(code, 0)
+            self.assertEqual(b.appels, ["adb shell input tap 0 9999"])
+
+    def test_glisser_et_touche_bornes(self):
+        with Banc() as b:
+            code, _ = b.lancer("glisser", "100", "1500", "100", "300")
+            self.assertEqual(code, 0)
+            self.assertEqual(b.appels, ["adb shell input swipe 100 1500 100 300"])
+            for nom, valeur in (("retour", "4"), ("accueil", "3"), ("menu", "82")):
+                with self.subTest(touche=nom):
+                    b.oublier_appels()
+                    code, _ = b.lancer("touche", nom)
+                    self.assertEqual(code, 0)
+                    self.assertEqual(b.appels, [f"adb shell input keyevent {valeur}"])
+            b.oublier_appels()
+            for args in (["100", "1500", "100", "10000"], ["1", "2", "3", "4", "5"]):
+                self.assertEqual(b.lancer("glisser", *args)[0], 2)
+            self.assertEqual(b.lancer("touche", "KEYCODE_POWER")[0], 2)
+            self.assertEqual(b.appels, [])
+
+    def test_texte_remplace_les_espaces_pour_input_text(self):
+        with Banc() as b:
+            code, _ = b.lancer("texte", "Bonjour le monde, 3.5_kg-x")
+            self.assertEqual(code, 0)
+            self.assertEqual(b.appels, ["adb shell input text Bonjour%sle%smonde,%s3.5_kg-x"])
+
+    def test_attendre_borne_a_120(self):
+        with Banc() as b:
+            for s in ("0", "7", "120"):
+                b.oublier_appels()
+                self.assertEqual(b.lancer("attendre", s)[0], 0)
+                self.assertEqual(b.appels, [f"sleep {int(s)}"])
+            b.oublier_appels()
+            self.assertEqual(b.lancer("attendre", "121")[0], 2)
+            self.assertEqual(b.appels, [])
+
+    def test_capturer_ecrit_un_png_et_refuse_un_nom_pris(self):
+        with Banc() as b:
+            code, d = b.lancer("capturer", "accueil-1")
+            self.assertEqual(code, 0, d)
+            png = b.sortie / "captures" / "accueil-1.png"
+            self.assertTrue(png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertEqual(len(png.read_bytes()), 108)          # binaire intact
+            self.assertIn("captures/accueil-1.png", d["detail"])
+            self.assertEqual(b.appels, ["adb exec-out screencap -p"])
+            b.oublier_appels()
+            code, d = b.lancer("capturer", "accueil-1")
+            self.assertEqual(code, 2, d)
+            self.assertIn("déjà", d["detail"])
+            self.assertEqual(b.appels, [])
+            self.assertEqual(b.captures(), ["accueil-1.png"])
+
+    def test_capture_qui_n_est_pas_un_png_est_un_echec_sans_fichier(self):
+        with Banc(FAUX_ADB_ECHEC="1") as b:
+            code, _ = b.lancer("capturer", "rate")
+            self.assertEqual(code, 4)
+            self.assertEqual(b.captures(), [])
+
+    def test_limite_de_captures_donne_3(self):
+        with Banc(PONT_CAPTURES="2") as b:
+            self.assertEqual(b.lancer("capturer", "a")[0], 0)
+            self.assertEqual(b.lancer("capturer", "b")[0], 0)
+            code, d = b.lancer("capturer", "c")
+            self.assertEqual(code, 3, d)
+            self.assertIn("imite", d["detail"])
+            self.assertEqual(len([x for x in b.appels if "screencap" in x]), 2)   # la troisième n'a pas été prise
+            self.assertEqual(b.captures(), ["a.png", "b.png"])
+
+    def test_limite_d_octets_donne_3(self):
+        # 108 octets par capture : la première tient dans 150, la seconde dépasserait (216) et n'est pas gardée.
+        with Banc(PONT_OCTETS="150") as b:
+            self.assertEqual(b.lancer("capturer", "a")[0], 0)
+            code, d = b.lancer("capturer", "b")
+            self.assertEqual(code, 3, d)
+            self.assertEqual(b.captures(), ["a.png"])           # ni b.png, ni temporaire
+        # déjà au-delà avant de capturer : adb n'est pas appelé
+        with Banc(PONT_OCTETS="100") as b:
+            self.assertEqual(b.lancer("capturer", "a")[0], 3)
+            self.assertEqual(b.captures(), [])
+            (b.sortie / "captures").mkdir(exist_ok=True)
+            (b.sortie / "captures" / "ancienne.png").write_bytes(b"x" * 100)
+            b.oublier_appels()
+            self.assertEqual(b.lancer("capturer", "b")[0], 3)
+            self.assertEqual(b.appels, [])
+
+    def test_limites_mal_formees_refusees(self):
+        with Banc(PONT_CAPTURES="1;x") as b:
+            self.assertEqual(b.lancer("capturer", "a")[0], 4)
+            self.assertEqual(b.appels, [])
+
+    def test_journal_borne_a_200_lignes(self):
+        with Banc() as b:
+            b.logcat("".join(f"I Test: ligne {i} {'pair' if i % 2 == 0 else 'autre'}\n" for i in range(500)))
+            code, d = b.lancer("journal")
+            self.assertEqual(code, 0, d)
+            lignes = d["detail"].splitlines()
+            self.assertEqual(len(lignes), 200)
+            self.assertEqual(lignes[-1], "I Test: ligne 499 autre")
+            self.assertEqual(b.appels, ["adb logcat -d"])
+            code, d = b.lancer("journal", "pair")
+            lignes = d["detail"].splitlines()
+            self.assertEqual(len(lignes), 200)
+            self.assertTrue(all(x.endswith(" pair") for x in lignes), lignes)
+            self.assertEqual(lignes[-1], "I Test: ligne 498 pair")
+            code, d = b.lancer("journal", "introuvable")
+            self.assertEqual((code, d["detail"]), (0, ""))
+
+    def test_installer_chemin_fixe_seulement(self):
+        with Banc() as b:
+            for args in (["/etc/passwd"], ["../entree/app.apk"], [(b.entree / "app.apk").as_posix()]):
+                with self.subTest(args=args):
+                    self.assertEqual(b.lancer("installer", *args)[0], 2)
+            self.assertEqual(b.appels, [])
+            code, d = b.lancer("installer")
+            self.assertEqual(code, 0, d)
+            installs = [x for x in b.appels if x.startswith("adb install")]
+            self.assertEqual(installs, [f"adb install -r {b.sortie.as_posix()}/../entree/app.apk"])
+            self.assertIn(PAQUET, d["detail"])
+            self.assertEqual((b.sortie / ".paquet").read_text().strip(), PAQUET)
+            (b.entree / "app.apk").unlink()
+            b.oublier_appels()
+            self.assertEqual(b.lancer("installer")[0], 4)
+            self.assertEqual([x for x in b.appels if x.startswith("adb install")], [])
+
+    def test_installer_refuse_un_paquet_ambigu_ou_hostile(self):
+        for paquets in ("package:com.a\npackage:com.b", "package:com.x;reboot", ""):
+            with self.subTest(paquets=paquets), Banc(FAUX_PAQUETS=paquets) as b:
+                self.assertEqual(b.lancer("installer")[0], 4)
+                self.assertFalse((b.sortie / ".paquet").exists())
+
+    def test_demarrer_lancer_arreter_appellent_les_outils(self):
+        with Banc(PONT_AVD="emu34") as b:
+            code, d = b.lancer("demarrer")
+            self.assertEqual(code, 0, d)
+            emus = [x for x in b.appels if x.startswith("emulator ")]
+            self.assertEqual(len(emus), 1, b.appels)
+            self.assertRegex(emus[0], r"^emulator -avd emu34 .*-no-window.*-no-audio")
+            self.assertIn("adb shell getprop sys.boot_completed", b.appels)
+            b.oublier_appels()
+            self.assertEqual(b.lancer("lancer")[0], 4)            # paquet inconnu : installer d'abord
+            self.assertEqual(b.lancer("installer")[0], 0)
+            b.oublier_appels()
+            self.assertEqual(b.lancer("lancer")[0], 0)
+            self.assertEqual(b.appels, [f"adb shell monkey -p {PAQUET} -c android.intent.category.LAUNCHER 1"])
+            b.oublier_appels()
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertIn("adb emu kill", b.appels)
+        with Banc(PONT_AVD="../x") as b:
+            self.assertEqual(b.lancer("demarrer")[0], 4)
+            self.assertEqual(b.appels, [])
+
+    def test_plantage_detecte_dans_le_journal(self):
+        fatal = ("E AndroidRuntime: FATAL EXCEPTION: main\n"
+                 "E AndroidRuntime: Process: {p}, PID: 4242\n"
+                 "E AndroidRuntime: java.lang.NullPointerException\n")
+        anr = "E ActivityManager: ANR in {p} ({p}/.Principale)\n"
+        for nom, texte, attendu in (("fatal", fatal.format(p=PAQUET), True), ("anr", anr.format(p=PAQUET), True),
+                                    ("fatal autre", fatal.format(p="com.autre"), False),
+                                    ("fatal prefixe", fatal.format(p=PAQUET + "plus"), False),
+                                    ("anr autre", anr.format(p=PAQUET + ".service"), False), ("rien", "I Test: tout va bien\n", False)):
+            for source in ("env", "installer"):
+                with self.subTest(cas=nom, paquet=source), Banc() as b:
+                    b.logcat("I Test: avant\n" + texte + "I Test: apres\n")
+                    if source == "env":
+                        b.env["PONT_PAQUET"] = PAQUET
+                    else:
+                        self.assertEqual(b.lancer("installer")[0], 0)
+                    self.assertEqual(b.lancer("journal", "Test")[0], 0)
+                    plantage = b.sortie / "plantage.txt"
+                    self.assertEqual(plantage.exists(), attendu, nom)
+                    if attendu:
+                        contenu = plantage.read_text()
+                        self.assertIn("FATAL EXCEPTION" if nom == "fatal" else "ANR in", contenu)
+                        self.assertIn(PAQUET, contenu)
+        with Banc(PONT_PAQUET=PAQUET) as b:                 # l'arrêt relit aussi le journal
+            b.logcat(fatal.format(p=PAQUET))
+            self.assertEqual(b.lancer("arreter")[0], 0)
+            self.assertTrue((b.sortie / "plantage.txt").exists())
+        with Banc() as b:                                    # paquet inconnu : pas de détection, pas d'erreur
+            b.logcat(fatal.format(p=PAQUET))
+            self.assertEqual(b.lancer("journal")[0], 0)
+            self.assertFalse((b.sortie / "plantage.txt").exists())
+
+    def test_chaque_appel_laisse_une_ligne_de_journal(self):
+        with Banc(PONT_CAPTURES="1") as b:
+            appels = [("toucher", "10", "20"), ("toucher", "a\nb", "2"), ("inconnu",), ("capturer", "a"), ("capturer", "b"),
+                      ("texte", "un deux"), ("", ), ("journal",)]
+            for args in appels:
+                b.lancer(*args)
+            lignes = b.lignes_pont_log
+            self.assertEqual(len(lignes), len(appels), lignes)
+            for ligne in lignes:
+                self.assertRegex(ligne, LIGNE_JOURNAL)
+            self.assertRegex(lignes[0], r"^toucher 10 20 \d+ms$")
+            self.assertRegex(lignes[1], r"^toucher a\?b 2 \d+ms$")         # le retour à la ligne ne forge pas de ligne
+            self.assertRegex(lignes[5], r"^texte un deux \d+ms$")
+
+    def test_sortie_toujours_une_ligne_json_valide(self):
+        with Banc(PONT_PAQUET=PAQUET) as b:
+            b.logcat(b'I Test: "guillemets" \\ barre \t tab \x1b[31m \xff\xfe \r\n'
+                     b'E AndroidRuntime: FATAL EXCEPTION: main\nE AndroidRuntime: Process: com.exemple.app, PID: 1\n')
+            for args, code in ((("journal",), 0), (("x\x01\"\\y",), 2), (("toucher", "\"", "\\"), 2), (("capturer", "ok"), 0),
+                               (("touche", "menu"), 0), (("journal", "Test"), 0)):
+                with self.subTest(args=args):
+                    self.assertEqual(b.lancer(*args)[0], code)    # Banc.lancer vérifie déjà une ligne, un JSON, ses clés
+            _, d = b.lancer("journal", "Test")
+            self.assertIn('"guillemets"', d["detail"])
+        with Banc(FAUX_ADB_ECHEC="1") as b:
+            for args in (("toucher", "1", "2"), ("journal",), ("demarrer",), ("arreter",)):
+                with self.subTest(echec=args):
+                    self.assertEqual(b.lancer(*args)[0], 4)
+
+
+if __name__ == "__main__":
+    unittest.main()

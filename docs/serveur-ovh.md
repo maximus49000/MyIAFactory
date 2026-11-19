@@ -153,8 +153,13 @@ Sans le drapeau, l'étape 8 n'est jamais lancée (« Facultative : non demandée
 vient après les étapes 1 à 6 (la licence, étape 7, ne la bloque pas) et un blocage de l'étape 8 donne le code de sortie 1.
 Sur le serveur, elle installe XFCE, xrdp (à l'écoute sur `127.0.0.1:3389` seulement), Mozilla Firefox (dépôt de Mozilla,
 hors snap), Unity Hub (dépôt officiel d'Unity), et fait démarrer Hub à l'ouverture de la session. Les clés des deux dépôts
-sont retéléchargées et validées à chaque exécution ; si l'une est introuvable, vide ou illisible, l'étape se bloque et retire
-les deux dépôts pour ne pas casser les `apt-get update` suivants du serveur. Coût **estimé** (non mesuré) : environ 1 Go de
+sont retéléchargées et validées à chaque exécution ; si l'une est introuvable, vide ou illisible, l'étape se bloque. Une liste
+de sources n'est retirée que si sa propre clé manque ou est invalide (pour ne pas casser les `apt-get update` suivants du
+serveur) ; si une clé valide et sa liste existent déjà d'une exécution réussie, les deux sont conservées telles quelles (le
+Firefox de Mozilla reste épinglé et le paquet snap d'Ubuntu ne le remplace pas), et le détail le dit. Le paquet xrdp démarre
+d'office sur toutes les interfaces : l'étape l'arrête aussitôt après l'installation et le laisse arrêté à tout blocage qui
+précède la preuve d'écoute en boucle locale ; il ne redémarre qu'une fois configuré sur `127.0.0.1`. Les contrôles de clé
+utilisent un dossier gpg temporaire supprimé ensuite (aucun `/root/.gnupg`). Coût **estimé** (non mesuré) : environ 1 Go de
 mémoire pendant la session, 2 à 3 Go de disque ; budget d'attente de l'étape : 25 minutes.
 
 **Rejouer.** Relancer `installer --bureau-distant` rejoue l'étape 8 même si elle est déjà « fait » : elle réapplique le mot de
@@ -220,7 +225,9 @@ ainsi serve aux compilations sans écran. `plateforme verifier` n'affirme rien s
 ### Sécurité
 
 - xrdp écoute sur `127.0.0.1:3389` du serveur seulement ; le pare-feu reste limité au port 22 (aucune règle ajoutée,
-  une règle `ufw` pour 3389 bloque l'étape).
+  une règle `ufw` pour 3389 bloque l'étape). Si l'étape se bloque avant la preuve d'écoute en boucle locale, xrdp est laissé
+  **arrêté** (jamais exposé sur toutes les interfaces derrière `ufw` seul) ; un blocage plus tardif (règle `ufw`, binaires,
+  Firefox, mot de passe) le laisse démarré, mais déjà prouvé en boucle locale.
 - La connexion SSH par mot de passe reste coupée : le mot de passe de session ne sert **que** par le tunnel, jamais pour SSH
   (c'est pourquoi l'étape refuse de s'exécuter sans ces deux réglages explicites).
 - Le port local du tunnel n'est ouvert que sur `127.0.0.1` du poste, le temps de la session.

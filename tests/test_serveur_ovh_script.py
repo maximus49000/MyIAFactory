@@ -24,8 +24,11 @@ case "$m" in
   http) exit 22;;
   invalide) printf '<html>erreur</html>\n' > "$out";;
 esac'''
-GPG_FACTICE = r'''mode=""; out=""; entree=""
-while [ $# -gt 0 ]; do case "$1" in --dearmor) mode=d; shift;; --show-keys) mode=s; shift;; -o) out="$2"; shift 2;; --*) shift;; *) entree="$1"; shift;; esac; done
+GPG_FACTICE = r'''mode=""; out=""; entree=""; gh=""
+while [ $# -gt 0 ]; do case "$1" in --dearmor) mode=d; shift;; --show-keys) mode=s; shift;; -o) out="$2"; shift 2;; --homedir) gh="$2"; shift 2;; --*) shift;; *) entree="$1"; shift;; esac; done
+# sans --homedir temporaire existant, le vrai gpg créerait ~/.gnupg : le faux refuse
+[ -n "$gh" ] && [ -d "$gh" ] || exit 9
+: > "$gh/trustdb.gpg"
 case "$mode" in
   d) grep -q CLE-VALIDE "$entree" || exit 2; printf 'TROUSSEAU\n' > "$out";;
   s) grep -q -e CLE-VALIDE -e TROUSSEAU "$entree" || exit 2;;
@@ -141,7 +144,7 @@ class TestScriptSimule(unittest.TestCase):
             corps = {
                 "sudo": (f'echo "sudo $@" >> "{journal.as_posix()}"\n'
                          'while case "$1" in *=*) true;; *) false;; esac; do shift; done\n'
-                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get|curl|gpg|mv|rm|chmod|tee|install) "$@";; *) exit 0;; esac'),
+                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get|curl|gpg|mv|rm|chmod|tee|install|mktemp) "$@";; *) exit 0;; esac'),
                 "ss": f'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\n'
                       f'echo "LISTEN 0 4096 {ecoute} 0.0.0.0:*"\necho "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"',
                 "ufw": f'echo "ufw $@" >> "{journal.as_posix()}"\ncat <<"EOT"\n{ufw}\nEOT',
@@ -322,11 +325,94 @@ class TestScriptSimule(unittest.TestCase):
                     self.assertIn("Clé du dépôt", d["detail"])
                     fichier = "keyrings/packages.mozilla.org.asc" if cle == "mozilla" else "keyrings/unityhub.gpg"
                     self.assertEqual(self.apt[fichier], "ANCIENNE-M" if cle == "mozilla" else "ANCIENNE-U")
+                    # Mozilla en échec : les deux clés anciennes sont invalides, les deux listes partent. Unity Hub en échec :
+                    # la clé Mozilla, rafraîchie et valide, garde sa liste ; seule la liste Unity Hub (clé invalide) part.
                     for liste in self.LISTES:
-                        self.assertNotIn(liste, self.apt)
+                        if cle == "unity" and liste == self.LISTES[0]:
+                            self.assertEqual(self.apt[liste], "deb ancien\n")
+                        else:
+                            self.assertNotIn(liste, self.apt)
                     self.assertEqual([x for x in self.apt if x.endswith((".tmp", ".brut"))], [])
                     self.assertEqual(recu, "")
                     self.assertNotIn("firefox unityhub", appels)
+                    for interdit in ("systemctl restart xrdp", "usermod", "chpasswd"):
+                        self.assertNotIn(interdit, appels)
+
+    def test_bureau_distant_cle_valide_et_liste_existantes_survivent_a_un_echec_de_telechargement(self):
+        for cle in ("mozilla", "unity"):
+            for defaut in ("vide", "tronque", "http", "invalide"):
+                with self.subTest(cle=cle, defaut=defaut):
+                    avant = {"keyrings/packages.mozilla.org.asc": "CLE-VALIDE M ancienne\n", "keyrings/unityhub.gpg": "TROUSSEAU\n",
+                             "sources.list.d/mozilla.list": "deb M\n", "sources.list.d/unityhub.list": "deb U\n",
+                             "preferences.d/mozilla": "pin\n"}
+                    d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", apt_avant=avant, **{"cle_" + cle: defaut})
+                    self.assertEqual(d["statut"], "bloque", d["detail"])
+                    self.assertIn("conservée", d["detail"])
+                    # la clé en échec garde son ancienne valeur ; la clé téléchargée avec succès est rafraîchie
+                    rafraichie = "keyrings/unityhub.gpg" if cle == "mozilla" else "keyrings/packages.mozilla.org.asc"
+                    for rel, contenu in avant.items():
+                        if rel != rafraichie:
+                            self.assertEqual(self.apt[rel], contenu, rel)
+                    self.assertEqual([x for x in self.apt if x.endswith((".tmp", ".brut"))], [])
+                    self.assertEqual(recu, "")
+                    self.assertNotIn("firefox unityhub", appels)
+
+    def test_bureau_distant_ne_retire_que_la_liste_dont_la_cle_manque_ou_est_invalide(self):
+        # clé Mozilla absente + liste présente : retirée ; clé Unity Hub valide + liste présente : gardée
+        avant = {"keyrings/unityhub.gpg": "TROUSSEAU\n", "sources.list.d/mozilla.list": "deb M\n", "sources.list.d/unityhub.list": "deb U\n"}
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", apt_avant=avant, cle_mozilla="http")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertNotIn("sources.list.d/mozilla.list", self.apt)
+        self.assertEqual(self.apt["sources.list.d/unityhub.list"], "deb U\n")
+        self.assertNotIn("keyrings/packages.mozilla.org.asc", self.apt)
+        # clé Mozilla présente mais invalide + liste présente : liste retirée
+        avant = {"keyrings/packages.mozilla.org.asc": "<html>", "sources.list.d/mozilla.list": "deb M\n"}
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", apt_avant=avant, cle_mozilla="vide")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertNotIn("sources.list.d/mozilla.list", self.apt)
+        self.assertEqual([x for x in self.apt if x.endswith((".tmp", ".brut"))], [])
+
+    def test_bureau_distant_gpg_utilise_un_homedir_temporaire_supprime(self):
+        for cle_unity in ("ok", "invalide"):
+            with self.subTest(cle_unity=cle_unity):
+                d, appels, _, _, _, _ = self._bureau(self.MDP + "\n", cle_unity=cle_unity)
+                gpgs = [x for x in appels.splitlines() if x.startswith("gpg ")]
+                self.assertTrue(gpgs, appels)
+                homes = set()
+                for x in gpgs:
+                    m = re.search(r"--homedir (\S+)", x)
+                    self.assertTrue(m, x)
+                    homes.add(m.group(1))
+                for h in homes:
+                    self.assertFalse(os.path.exists(h), h)
+
+    @staticmethod
+    def _systemctl(appels):
+        return [x for x in appels.splitlines() if x.startswith("sudo systemctl ")]
+
+    def test_bureau_distant_arrete_xrdp_juste_apres_l_installation(self):
+        _, appels, _, _, _, _ = self._bureau(self.MDP + "\n")
+        lignes = appels.splitlines()
+        i = next(n for n, x in enumerate(lignes) if x.startswith("apt-get install -y ca-certificates"))
+        suite = [x for x in lignes[i + 1:] if x.startswith(("sudo systemctl", "curl", "sudo usermod", "gpg"))]
+        self.assertEqual(suite[0], "sudo systemctl stop xrdp", suite)
+
+    def test_bureau_distant_bloque_apres_installation_laisse_xrdp_arrete(self):
+        cas = (("cle mozilla", dict(cle_mozilla="http")), ("cle unity", dict(cle_unity="vide")), ("index apt", dict(maj_ok=False)),
+               ("ecoute ailleurs", dict(ecoute="0.0.0.0:3389")), ("aucune ecoute", dict(ecoute="")))
+        for nom, args in cas:
+            with self.subTest(cas=nom):
+                d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", **args)
+                self.assertEqual(d["statut"], "bloque", d["detail"])
+                self.assertEqual(self._systemctl(appels)[-1], "sudo systemctl stop xrdp", appels)
+                self.assertEqual(recu, "")
+
+    def test_bureau_distant_succes_finit_avec_xrdp_demarre_et_mot_de_passe_en_dernier(self):
+        d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertEqual(self._systemctl(appels)[-1], "sudo systemctl restart xrdp", appels)
+        self.assertTrue(appels.splitlines()[-1].startswith("sudo chpasswd"), appels)
+        self.assertEqual(recu, "ubuntu:" + self.MDP + "\n")
 
     def test_bureau_distant_bloque_si_les_index_apt_echouent(self):
         d, _, recu, _, _, _ = self._bureau(self.MDP + "\n", maj_ok=False)

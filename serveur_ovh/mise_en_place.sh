@@ -248,20 +248,53 @@ etape_licence() {
 
 # --- Session graphique (bureau distant) -----------------------------------
 
+# Une clé apt est valide si elle est non vide et lisible par gpg. gpg tourne toujours avec un --homedir temporaire (créé par
+# root, supprimé sur tous les chemins) : aucun /root/.gnupg n'est créé. $1 = fichier à valider.
+cle_apt_valide() {
+  local gh ok=1
+  [ -s "$1" ] || return 1
+  gh=$(sudo mktemp -d) || return 1
+  sudo gpg --homedir "$gh" --batch --no-tty --show-keys "$1" >/dev/null 2>&1 && ok=0
+  sudo rm -rf "$gh"
+  return "$ok"
+}
+
 # Clé de dépôt apt : téléchargée (échec HTTP = échec) dans un temporaire du même dossier, validée (non vide, lisible par gpg),
 # puis placée atomiquement ; rien de partiel ne reste. $1 = URL, $2 = destination, $3 = asc (telle quelle) ou dearmor.
 installer_cle_apt() {
-  local url="$1" final="$2" mode="$3" brut="$2.$$.brut" tmp="$2.$$.tmp"
+  local url="$1" final="$2" mode="$3" brut="$2.$$.brut" tmp="$2.$$.tmp" gh ok=1
   sudo rm -f "$brut" "$tmp"
+  gh=$(sudo mktemp -d) || return 1
   if sudo curl -fsSL "$url" -o "$brut" >/dev/null 2>&1 && [ -s "$brut" ] \
-     && { if [ "$mode" = dearmor ]; then sudo gpg --batch --yes --dearmor -o "$tmp" "$brut" >/dev/null 2>&1; else sudo mv -f "$brut" "$tmp"; fi; } \
-     && [ -s "$tmp" ] && sudo gpg --batch --no-tty --show-keys "$tmp" >/dev/null 2>&1 \
+     && { if [ "$mode" = dearmor ]; then sudo gpg --homedir "$gh" --batch --yes --dearmor -o "$tmp" "$brut" >/dev/null 2>&1; else sudo mv -f "$brut" "$tmp"; fi; } \
+     && cle_apt_valide "$tmp" \
      && sudo chmod 0644 "$tmp" && sudo mv -f "$tmp" "$final"; then
-    sudo rm -f "$brut"
-    return 0
+    ok=0
   fi
   sudo rm -f "$brut" "$tmp"
-  return 1
+  sudo rm -rf "$gh"
+  return "$ok"
+}
+
+# Après un échec de clé : une liste de sources n'est retirée que si SA clé finale manque ou est invalide ; si une clé valide
+# et sa liste existent déjà (exécution précédente réussie), les deux restent intacts. Rend 0 si une liste a été retirée.
+# $1 = dossier apt.
+retirer_listes_sans_cle_valide() {
+  local apt="$1" retire=1
+  if ! cle_apt_valide "$apt/keyrings/packages.mozilla.org.asc" && [ -e "$apt/sources.list.d/mozilla.list" ]; then
+    sudo rm -f "$apt/sources.list.d/mozilla.list"; retire=0
+  fi
+  if ! cle_apt_valide "$apt/keyrings/unityhub.gpg" && [ -e "$apt/sources.list.d/unityhub.list" ]; then
+    sudo rm -f "$apt/sources.list.d/unityhub.list"; retire=0
+  fi
+  return "$retire"
+}
+
+# Sortie bloque APRÈS l'installation du paquet xrdp (qui démarre le service sur 0.0.0.0:3389) : le service est arrêté avant de
+# répondre, pour qu'il ne reste jamais exposé derrière ufw seul. $1 = détail.
+bloque_xrdp_arrete() {
+  sudo systemctl stop xrdp >/dev/null 2>&1
+  repondre bloque "$1"
 }
 
 # Le mot de passe de session arrive sur la première ligne de stdin ; il n'est ni un argument, ni affiché, ni dans le JSON.
@@ -298,19 +331,24 @@ etape_bureau_distant() {
   sudo apt-get update -y >/dev/null 2>&1
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gpg xfce4 xfce4-terminal dbus-x11 xrdp >/dev/null 2>&1 \
     || repondre bloque "Installation de XFCE et de xrdp impossible."
+  # Le paquet xrdp démarre le service sur 0.0.0.0:3389 : on l'arrête tout de suite ; il ne repart qu'après la configuration
+  # en boucle locale (restart plus bas). Tout bloque entre-temps le laisse arrêté.
+  sudo systemctl stop xrdp >/dev/null 2>&1
   sudo install -m 0755 -d "$apt/keyrings"
 
   # Clés des deux dépôts tiers, rafraîchies à chaque exécution, AVANT d'écrire les listes de sources. Au moindre échec on
-  # retire les deux listes (jamais de dépôt sans clé valide : le apt-get update suivant du serveur, unattended-upgrades compris,
-  # ne doit pas casser) ; aucun fichier temporaire ne reste.
-  installer_cle_apt "$URL_CLE_MOZILLA" "$apt/keyrings/packages.mozilla.org.asc" asc || {
-    sudo rm -f "$apt/sources.list.d/mozilla.list" "$apt/sources.list.d/unityhub.list"
-    repondre bloque "Clé du dépôt Mozilla introuvable, vide ou illisible : dépôts Mozilla et Unity Hub retirés, rien n'est installé de plus."
-  }
-  installer_cle_apt "$URL_CLE_UNITY_HUB" "$apt/keyrings/unityhub.gpg" dearmor || {
-    sudo rm -f "$apt/sources.list.d/mozilla.list" "$apt/sources.list.d/unityhub.list"
-    repondre bloque "Clé du dépôt Unity Hub introuvable, vide ou illisible : dépôts Mozilla et Unity Hub retirés, rien n'est installé de plus."
-  }
+  # ne retire une liste que si sa clé finale manque ou est invalide (un dépôt sans clé valide casserait le apt-get update
+  # suivant du serveur, unattended-upgrades compris) ; une clé valide et sa liste déjà en place restent intactes, pour que
+  # l'épinglage Mozilla continue de s'appliquer. Aucun fichier temporaire ne reste.
+  local echec_cle=""
+  installer_cle_apt "$URL_CLE_MOZILLA" "$apt/keyrings/packages.mozilla.org.asc" asc || echec_cle="Mozilla"
+  [ -n "$echec_cle" ] || installer_cle_apt "$URL_CLE_UNITY_HUB" "$apt/keyrings/unityhub.gpg" dearmor || echec_cle="Unity Hub"
+  if [ -n "$echec_cle" ]; then
+    if retirer_listes_sans_cle_valide "$apt"; then
+      bloque_xrdp_arrete "Clé du dépôt ${echec_cle} introuvable, vide ou illisible : dépôt sans clé valide retiré, rien n'est installé de plus."
+    fi
+    bloque_xrdp_arrete "Clé du dépôt ${echec_cle} introuvable, vide ou illisible : la configuration précédente (clés et dépôts valides) est conservée, rien n'est installé de plus."
+  fi
   # Firefox hors snap : dépôt Mozilla, trousseau signé, priorité sur le paquet de transition d'Ubuntu.
   echo "deb [signed-by=$apt/keyrings/packages.mozilla.org.asc] ${URL_DEPOT_MOZILLA} mozilla main" \
     | sudo tee "$apt/sources.list.d/mozilla.list" >/dev/null
@@ -320,22 +358,22 @@ etape_bureau_distant() {
   echo "deb [signed-by=$apt/keyrings/unityhub.gpg] ${URL_DEPOT_UNITY_HUB} stable main" \
     | sudo tee "$apt/sources.list.d/unityhub.list" >/dev/null
   sudo apt-get update -y >/dev/null 2>&1 \
-    || repondre bloque "Mise à jour des index apt impossible après ajout des dépôts Mozilla et Unity Hub : Firefox hors snap non garanti, rien de plus n'a été fait."
+    || bloque_xrdp_arrete "Mise à jour des index apt impossible après ajout des dépôts Mozilla et Unity Hub : Firefox hors snap non garanti, rien de plus n'a été fait."
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox unityhub >/dev/null 2>&1 \
-    || repondre bloque "Installation de Firefox ou d'Unity Hub impossible."
+    || bloque_xrdp_arrete "Installation de Firefox ou d'Unity Hub impossible."
 
   # xrdp : écoute sur 127.0.0.1 seulement (accès par tunnel SSH), service activé, droit de lire le certificat.
   grep -qx 'port=tcp://127.0.0.1:3389' "$ini" 2>/dev/null || {
-    sudo sed -i -E '0,/^port=.*/s//port=tcp:\/\/127.0.0.1:3389/' "$ini" || repondre bloque "Configuration de xrdp impossible."
+    sudo sed -i -E '0,/^port=.*/s//port=tcp:\/\/127.0.0.1:3389/' "$ini" || bloque_xrdp_arrete "Configuration de xrdp impossible."
   }
   id -nG xrdp 2>/dev/null | tr ' ' '\n' | grep -qx ssl-cert || {
-    sudo usermod -aG ssl-cert xrdp >/dev/null 2>&1 || repondre bloque "Ajout de xrdp au groupe ssl-cert impossible."
+    sudo usermod -aG ssl-cert xrdp >/dev/null 2>&1 || bloque_xrdp_arrete "Ajout de xrdp au groupe ssl-cert impossible."
   }
   grep -qx 'startxfce4' "$HOME/.xsession" 2>/dev/null || printf 'startxfce4\n' > "$HOME/.xsession"
-  sudo systemctl enable xrdp >/dev/null 2>&1 || repondre bloque "Service xrdp non activable."
+  sudo systemctl enable xrdp >/dev/null 2>&1 || bloque_xrdp_arrete "Service xrdp non activable."
   # Toujours redémarrer : le paquet démarre xrdp sur 0.0.0.0 à l'installation, et une exécution précédente a pu écrire
   # le ini puis s'interrompre ; seul un redémarrage garantit que l'écoute en cours est celle du ini.
-  sudo systemctl restart xrdp >/dev/null 2>&1 || repondre bloque "Redémarrage de xrdp impossible (service absent ?)."
+  sudo systemctl restart xrdp >/dev/null 2>&1 || bloque_xrdp_arrete "Redémarrage de xrdp impossible (service absent ?)."
 
   # Unity Hub au démarrage de la session graphique.
   mkdir -p "$HOME/.config/autostart"
@@ -352,9 +390,9 @@ etape_bureau_distant() {
     essais=$((essais + 1))
     sleep 1
   done
-  [ -n "$ecoute" ] || repondre bloque "xrdp n'écoute sur aucun port 3389 : service non démarré."
+  [ -n "$ecoute" ] || bloque_xrdp_arrete "xrdp n'écoute sur aucun port 3389 : service non démarré."
   if printf '%s\n' "$ecoute" | grep -qvx '127\.0\.0\.1:3389'; then
-    repondre bloque "Le port 3389 écoute ailleurs que sur 127.0.0.1 : accès distant non sûr, session non validée."
+    bloque_xrdp_arrete "Le port 3389 écoute ailleurs que sur 127.0.0.1 : accès distant non sûr, session non validée."
   fi
   if sudo ufw status 2>/dev/null | grep -qE '(^|[^0-9])3389([^0-9]|$)'; then
     repondre bloque "Une règle ufw ouvre le port 3389 : retirez-la (la session ne se joint que par tunnel SSH)."

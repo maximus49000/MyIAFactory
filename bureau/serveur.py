@@ -334,6 +334,7 @@ class Projet:
                 e["deport_erreur"] = "Bloc « Où tournent les actions » indisponible : %s" % x
             sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
+            e["livraison_sur_demande"] = regl.get("livraison_sur_demande") is True   # « Livrer seulement sur demande »
             # « Dossier approuvé pour les sessions cloud »
             e["cloud_dossier_approuve"] = regl.get("cloud_dossier_approuve") is True
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
@@ -2035,6 +2036,8 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = reglages.fixer_lecons_auto(projet.chemin_reglages, corps["lecons_auto"])
             elif isinstance(corps, dict) and "analyse_blocages" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_analyse_blocages(projet.chemin_reglages, corps["analyse_blocages"])
+            elif isinstance(corps, dict) and "livraison_sur_demande" in corps and "charge_max" not in corps:
+                nouveau = reglages.fixer_livraison_sur_demande(projet.chemin_reglages, corps["livraison_sur_demande"])
             elif isinstance(corps, dict) and "cloud_dossier_approuve" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_cloud_dossier_approuve(projet.chemin_reglages, corps["cloud_dossier_approuve"])
             elif isinstance(corps, dict) and "deport" in corps and "charge_max" not in corps:
@@ -2056,7 +2059,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
                     raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "
-                                     "« deport » ou « cloud_dossier_approuve ».")
+                                     "« livraison_sur_demande », « deport » ou « cloud_dossier_approuve ».")
                 nouveau = reglages.fixer_charge_max(projet.chemin_reglages, corps["charge_max"])
         except (ValueError, UnicodeDecodeError, RecursionError, reglages.ReglagesInvalides) as e:
             return self._json(400, {"erreur": str(e)})

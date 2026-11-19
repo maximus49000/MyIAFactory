@@ -59,6 +59,25 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reglages.fixer_cloud_dossier_approuve(self.tmp / "r.json", v)
 
+    def test_livraison_sur_demande_faux_par_defaut_et_booleen_seulement(self):
+        self.assertIs(reglages.charger(self.tmp / "absent.json")["livraison_sur_demande"], False)
+        (self.tmp / "r.json").write_text('{"livraison_sur_demande": true}', encoding="utf-8")
+        self.assertIs(reglages.charger(self.tmp / "r.json")["livraison_sur_demande"], True)
+        for v in ("oui", 1, None):
+            (self.tmp / "r.json").write_text(json.dumps({"livraison_sur_demande": v}), encoding="utf-8")
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages.charger(self.tmp / "r.json")
+
+    def test_fixer_livraison_sur_demande_ecrit_et_refuse_un_non_booleen(self):
+        r = self.tmp / "r.json"
+        r.write_text('{"charge_max": 70}', encoding="utf-8")
+        reglages.fixer_livraison_sur_demande(r, True)
+        d = json.loads(r.read_text(encoding="utf-8"))
+        self.assertIs(d["livraison_sur_demande"], True)
+        self.assertEqual(d["charge_max"], 70)
+        with self.assertRaises(ValueError):
+            reglages.fixer_livraison_sur_demande(r, "oui")
+
     def test_fixer_lecons_auto_ecrit_et_conserve_le_reste(self):
         (self.tmp / "r.json").write_text('{"port": 9000}', encoding="utf-8")
         self.assertIs(reglages.fixer_lecons_auto(self.tmp / "r.json", True)["lecons_auto"], True)

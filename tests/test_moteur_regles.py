@@ -797,6 +797,29 @@ class Serie(Base):
         self.assertEqual(len(self.taches(etape="flux:livraison")), 2)
         self.assertNotIn("attente_livraison", self.etat)
 
+    def test_la_livraison_sur_demande_attend_le_clic_meme_au_calme(self):
+        """Essai de coûts du 2026-11-19 : la construction de l'APK prend 8 à 14 min à chaque évolution ; avec le réglage
+        `livraison_sur_demande`, les éléments conformes attendent « Livrer maintenant » au lieu de partir tout de suite."""
+        self.livrer_deux()
+        for v in self.etat["elements"].values():
+            v["phase"], v["taches"] = regles.A_LIVRER, []
+            v["pas"] = len(regles._production(self.projet, "f1")) - 1      # à la porte de la livraison
+        self.projet.livraison_sur_demande = True
+        self.assertFalse(regles.livrer_si_calme(self.projet, self.etat))              # rien n'est au travail, et pourtant
+        self.assertIn("sur demande", self.etat["attente_livraison"]["texte"])
+        self.assertIn("Livrer maintenant", self.etat["attente_livraison"]["texte"])
+        self.assertEqual({v["phase"] for v in self.etat["elements"].values()}, {regles.A_LIVRER})
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat, force=True))   # le clic livre
+        self.assertNotIn("attente_livraison", self.etat)
+
+    def test_sans_le_reglage_la_livraison_part_au_calme(self):
+        self.livrer_deux()
+        for v in self.etat["elements"].values():
+            v["phase"], v["taches"] = regles.A_LIVRER, []
+            v["pas"] = len(regles._production(self.projet, "f1")) - 1      # à la porte de la livraison
+        self.assertFalse(getattr(self.projet, "livraison_sur_demande", False))
+        self.assertTrue(regles.livrer_si_calme(self.projet, self.etat))
+
     def test_le_moteur_relance_ne_relivre_pas_un_element_deja_dans_un_lot(self):
         self.livrer_deux()
         self.etat["elements"].clear()                       # le moteur relancé : la mémoire est perdue

@@ -91,6 +91,7 @@ def ouvrir_projet(fichier_reglages, environ=None):
         projet.cloud_dossier_approuve = lus["cloud_dossier_approuve"]
         projet.lecons_auto = lus["lecons_auto"]
         projet.analyse_blocages = lus["analyse_blocages"]
+        projet.livraison_sur_demande = lus["livraison_sur_demande"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet

@@ -218,6 +218,7 @@ class Projet:
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
+        self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
@@ -5560,6 +5561,14 @@ def livrer_si_calme(projet, etat, force=False):
     if not prets:
         return False
     noms = [v["element"]["nom"] for v in prets]
+    if not force and _livraison_sur_demande(projet):
+        # essai de coûts du 2026-11-19 : l'apk coûte 8 à 14 min à chaque évolution ; le Directeur choisit quand livrer
+        etat["attente_livraison"] = {
+            "texte": (f"{len(prets)} élément{'s' if len(prets) > 1 else ''} prêt{'s' if len(prets) > 1 else ''} à "
+                      f"livrer ({', '.join(noms)}) : la livraison est sur demande, elle partira sur « Livrer "
+                      f"maintenant »."),
+            "elements": noms}
+        return False
     en_cours = [v for v in elements.values() if v["phase"] in OCCUPE]
     if en_cours and not force:
         etat["attente_livraison"] = {
@@ -6145,6 +6154,16 @@ RETOUR_DU_CHEF = "Retour du Chef : "
 CORRECTION_DU_CHEF = "Correction confiée par le Chef"
 JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyées au Chef
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
+
+
+def _livraison_sur_demande(projet):
+    """Le réglage `livraison_sur_demande` (faux si absent), relu à chaque passage."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_sur_demande"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "livraison_sur_demande", False) is True
 
 
 def _analyse_active(projet):

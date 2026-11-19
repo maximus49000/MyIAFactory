@@ -20,6 +20,9 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # Vrai (par défaut) : le Chef analyse chaque blocage d'une tâche avant le Directeur (« Analyse intelligente
            # des blocages ») ; faux, le moteur fait comme avant, sans aucun appel de ce jugement.
            "analyse_blocages": True,
+           # Vrai : la livraison (la construction de l'apk, 8 à 14 min) ne part pas toute seule quand les éléments sont
+           # conformes ; elle attend « Livrer maintenant » (essai de coûts du 2026-11-19). Faux : comme avant.
+           "livraison_sur_demande": False,
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -62,6 +65,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
     if type(r.get("analyse_blocages")) is not bool:
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
+    if type(r.get("livraison_sur_demande")) is not bool:
+        raise ReglagesInvalides("Réglages : « livraison_sur_demande » doit valoir true ou false.")
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
 
 
@@ -210,6 +215,13 @@ def fixer_analyse_blocages(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« analyse_blocages » doit valoir true ou false.")
     return _ecrire_cle(chemin, "analyse_blocages", valeur)
+
+
+def fixer_livraison_sur_demande(chemin, valeur):
+    """Note si la livraison attend le clic « Livrer maintenant » (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« livraison_sur_demande » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "livraison_sur_demande", valeur)
 
 
 def fixer_cloud_dossier_approuve(chemin, valeur):

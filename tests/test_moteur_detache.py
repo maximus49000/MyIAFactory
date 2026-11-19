@@ -411,7 +411,9 @@ class AuTravail(Base):
             return Faux()
         reg = detache.Registre(self.factory_dir, lancer=lancer)
         reg._lancer("t68", {"taches": ["t68", "t69"]}, ["claude"], b"", {"PATH": "x"}, str(self.dossier))
-        self.assertEqual(vu["env"], {"PATH": "x", detache.VARIABLE_TACHE: "t68"})
+        # la clé de l'agent est donnée deux fois : pour `lancer.py tests` (le bureau sait pour qui l'agent attend le poste)
+        # et pour `lancer.py deporter` (son fichier d'attente est le sien)
+        self.assertEqual(vu["env"], {"PATH": "x", detache.VARIABLE_TACHE: "t68", detache.VARIABLE_AGENT: "t68"})
 
     def test_effacer_oublie_la_liste_de_chaque_tache_du_lot(self):
         self.ecrire("t1", {"tache": "t1", "taches": ["t1", "t2"], "pid": 1, "debut": 1}, [])

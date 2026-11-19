@@ -113,6 +113,59 @@ class TestPlateformeBureau(AvecServeur):
         self.libre.set()
         self.srv.travail_plateforme.attendre()
 
+    def en_cours_au_cache(self):
+        self.ecrire_cache({"lecture": {"statut": "fait"}, "os": {"statut": "fait"}, "ssh": {"statut": "fait"},
+                           "durcissement": {"statut": "fait"}, "docker": {"statut": "en_cours", "detail": "Docker en cours"}})
+
+    def statut(self, etat, id_):
+        return [e for e in etat["etapes"] if e["id"] == id_][0]
+
+    def test_etape_en_cours_sans_fil_ni_verrou_est_interrompue_a_reprendre(self):
+        self.en_cours_au_cache()
+        e = self.json("/api/plateforme")
+        docker = self.statut(e, "docker")
+        self.assertEqual(docker["statut"], "a_faire")
+        self.assertIn("Interrompu : à reprendre", docker["detail"])
+        self.assertIs(e["en_cours"], False)
+
+    def test_etape_en_cours_avec_fil_vivant_reste_en_cours(self):
+        self.en_cours_au_cache()
+        self.poster({})
+        e = self.json("/api/plateforme")
+        self.assertEqual(self.statut(e, "docker")["statut"], "en_cours")
+        self.assertIs(e["en_cours"], True)
+        self.libre.set()
+        self.srv.travail_plateforme.attendre()
+
+    def test_etape_en_cours_avec_verrou_d_un_processus_vivant_reste_en_cours(self):
+        self.en_cours_au_cache()
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        vivant = bplateforme.lire(self.dossier, vivant=lambda p: True)
+        self.assertEqual(self.statut(vivant, "docker")["statut"], "en_cours")
+        mort = bplateforme.lire(self.dossier, vivant=lambda p: False)
+        self.assertEqual(self.statut(mort, "docker")["statut"], "a_faire")
+
+    def test_attente_os_interrompue_reste_reprenable(self):
+        self.ecrire_cache({"lecture": {"statut": "fait"}, "os": {"statut": "en_cours", "detail": "tâche 7"}})
+        os_ = self.statut(self.json("/api/plateforme"), "os")
+        self.assertEqual(os_["statut"], "a_faire")
+        self.assertIn("reprendre", os_["detail"])
+
+    def test_erreur_du_fil_exposee_et_masquee(self):
+        def casse(dossier, accord_reinstallation=False):
+            raise RuntimeError(SECRET)
+        self.srv.travail_plateforme = bplateforme.Travail(casse)
+        self.poster({})
+        self.srv.travail_plateforme.attendre()
+        e = self.json("/api/plateforme")
+        self.assertIn("Installation interrompue", e["erreur"])
+        self.assertNotIn(SECRET, json.dumps(e))
+        self.srv.travail_plateforme.attendre()
+        self.srv.travail_plateforme._installer = lambda dossier, accord_reinstallation=False: None
+        self.poster({})
+        self.srv.travail_plateforme.attendre()
+        self.assertNotIn("erreur", self.json("/api/plateforme"))
+
 
 class TestIsolationEtCacheAbime(unittest.TestCase):
     def test_dossier_par_defaut_des_essais_n_est_pas_le_vrai_dossier_personnel(self):

@@ -1414,5 +1414,7 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .serveur-badge.badge-en_cours { background: #e0e8f6; color: #274a8a; }
 .serveur-geste { margin: 6px 0 2px; padding: 6px 8px; border-left: 3px solid #c98a1b; background: #fbf3e0; font-size: 13px; overflow-wrap: anywhere; }
 .serveur-avertissement { margin: 10px 0 4px; font-weight: 700; color: #9a2f22; }
+.serveur-erreur { margin: 6px 0; font-weight: 700; color: #9a2f22; }
+.serveur-erreur:empty { display: none; }
 .serveur-accord-libelle { display: block; margin: 4px 0 8px; }
 .serveur-bouton[disabled] { opacity: 0.55; cursor: not-allowed; }

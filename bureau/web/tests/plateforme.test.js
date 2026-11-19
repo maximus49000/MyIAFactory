@@ -214,3 +214,36 @@ test("l accord est à usage unique : la case est décochée dès le clic, aussi 
     assert.equal(case_(c).checked, false);
   }
 });
+
+test("l indicateur en_cours du bureau grise le bouton et lance le suivi même sans étape en cours", async () => {
+  const m = minuterie();
+  const lectures = [{...ETAT, en_cours: true}, {...ETAT, en_cours: false}];
+  const c = carteServeur({...ETAT, en_cours: true}, {minuterie: m, fetchFn: async () => reponse(200, lectures.shift())});
+  assert.equal(bouton(c).disabled, true);
+  assert.equal(m.taches.length, 1);
+  await m.tic();
+  assert.equal(bouton(c).disabled, true);
+  assert.equal(m.taches.length, 1);
+  await m.tic();
+  assert.equal(bouton(c).disabled, false);
+  assert.equal(m.taches.length, 0);
+});
+
+test("sans en_cours ni étape en cours, le bouton reste libre et rien n est guetté", () => {
+  const m = minuterie();
+  const c = carteServeur({...ETAT, en_cours: false}, {minuterie: m});
+  assert.equal(bouton(c).disabled, false);
+  assert.equal(m.taches.length, 0);
+});
+
+test("l erreur du bureau est affichée en texte simple, et disparaît quand elle n est plus là", async () => {
+  const hostile = "Installation interrompue <img src=x onerror=alert(1)>";
+  const m = minuterie();
+  const c = carteServeur({...ETAT, en_cours: true, erreur: hostile}, {minuterie: m, fetchFn: async () => reponse(200, {...ETAT, en_cours: false})});
+  const zone = c.tous((n) => n.className.includes("serveur-erreur"))[0];
+  assert.equal(zone.textContent, hostile);
+  assert.equal(c.tous((n) => n.tagName === "img").length, 0);
+  await m.tic();
+  assert.equal(zone.textContent, "");
+  assert.equal(carteServeur(ETAT).tous((n) => n.className.includes("serveur-erreur"))[0].textContent, "");
+});

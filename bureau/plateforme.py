@@ -53,8 +53,21 @@ def _secrets(d, acces):
     return [s for s in secrets if isinstance(s, str)]
 
 
-def lire(d=None, travail=None):
-    """L'état tel que le dit le cache (jamais d'appel OVH ni SSH) ; sans cache : toutes les étapes à faire."""
+def _interrompu(d, plateforme, travail, vivant):
+    """Une étape « en cours » au cache n'est vraie que si un fil du bureau tourne, ou si un verrou tenu par un autre processus
+    vivant existe (installation lancée en ligne de commande). Sinon l'exécution a été coupée : l'étape est à reprendre."""
+    if travail and travail.en_cours():
+        return False
+    try:
+        return not plateforme._verrou_tenu(d / plateforme.VERROU, vivant or plateforme.pid_vivant)
+    except Exception:
+        return True
+
+
+def lire(d=None, travail=None, vivant=None):
+    """L'état tel que le dit le cache (jamais d'appel OVH ni SSH) ; sans cache : toutes les étapes à faire.
+
+    Les étapes « en cours » qu'aucune exécution ne porte plus (bureau fermé, panne) sont rendues « à faire : à reprendre »."""
     plateforme, acces = _modules()
     d = Path(d) if d else dossier()
     rapports, date = {}, ""
@@ -65,12 +78,17 @@ def lire(d=None, travail=None):
         date = datetime.fromtimestamp((d / plateforme.CACHE).stat().st_mtime).astimezone().isoformat(timespec="seconds")
     except (OSError, ValueError, AttributeError):
         pass
+    if any(r.get("statut") == "en_cours" for r in rapports.values()) and _interrompu(d, plateforme, travail, vivant):
+        rapports = {k: ({"statut": "a_faire", "detail": "Interrompu : à reprendre", "geste": ""} if r.get("statut") == "en_cours" else r)
+                    for k, r in rapports.items()}
     try:
         etat = _masquer(plateforme.calculer_etat(rapports), _secrets(d, acces), acces)
     except Exception:   # un cache abîmé (types inattendus) : l'état « tout à faire », jamais une erreur
         etat = plateforme.calculer_etat({})
     etat["derniere_lecture"] = date
     etat["en_cours"] = bool(travail and travail.en_cours())
+    if travail and getattr(travail, "erreur", ""):
+        etat["erreur"] = _masquer(str(travail.erreur), _secrets(d, acces), acces)
     return etat
 
 

@@ -101,6 +101,8 @@ export function carteServeur(etat, options = {}) {
   const resume = el("p", "serveur-resume");
   const message = el("p", "reglage-message serveur-message");
   message.setAttribute("aria-live", "polite");
+  const erreur = el("p", "reglage-message serveur-erreur");
+  erreur.setAttribute("role", "alert");
   const liste = el("div", "serveur-etapes");
   const avert = el("p", "serveur-avertissement", AVERTISSEMENT);
   avert.setAttribute("role", "note");
@@ -113,7 +115,7 @@ export function carteServeur(etat, options = {}) {
   etiquette.append(accord, el("span", "", ` ${LIBELLE_ACCORD}`));
   const bouton = el("button", "bouton serveur-bouton", LIBELLE_BOUTON);
   bouton.type = "button";
-  racine.append(resume, message, liste, avert, etiquette, bouton);
+  racine.append(resume, message, erreur, liste, avert, etiquette, bouton);
 
   let courant = etat;
   let lance = false;          // une installation vient d'être demandée : on guette son démarrage
@@ -121,7 +123,8 @@ export function carteServeur(etat, options = {}) {
   let poignee = null;
   let fini = false;
 
-  const enCours = () => tableau(courant?.etapes).some((e) => e?.statut === "en_cours");
+  // « en cours » : le fil du bureau tourne (`en_cours` du relevé) ou une étape se dit en cours.
+  const enCours = () => courant?.en_cours === true || tableau(courant?.etapes).some((e) => e?.statut === "en_cours");
   const actif = () => !fini && (options.actif ? options.actif() : racine.isConnected !== false);
 
   function dessiner() {
@@ -133,6 +136,7 @@ export function carteServeur(etat, options = {}) {
       const v = verdict(courant);
       resume.textContent = v || (etapes.length ? "Le serveur n'est pas encore prêt." : "Aucun état lu pour l'instant : le serveur est à mettre en place.");
     }
+    erreur.textContent = texte(courant?.erreur);
     bouton.disabled = enCours() || lance;
   }
 

@@ -123,6 +123,16 @@ d'abonnement** s'applique au-dessus des plafonds par lieu (le bureau suit déjà
 (par exemple « tests sur émulateur » : serveur seulement) ; (6) un lieu hors ligne ou dont une capacité est bloquée est sauté, sans bloquer la
 file. Réglage dans l'écran de paramétrage des agents (morceau 3) ; le modèle de serveur de ce morceau-ci n'a rien à changer.
 
+**Catalogue étendu des capacités (demande du Directeur : tout ce qui semble possible sur ce serveur, scripts écrits en dernière tâche).**
+Langages et build (Node, Python avec `uv`, Java et Maven, Go, Rust, .NET) ; données en conteneur (PostgreSQL, MySQL, Redis, SQLite) ; tests
+d'interface (Chromium et Firefox sans écran avec Playwright, Selenium) ; tests de charge (k6, Locust) ; **exécuteur GitHub Actions auto-hébergé**
+(supprime le quota de minutes des dépôts privés ; jeton saisi par le Directeur) ; Flutter, React Native, Godot sans écran ; Blender sans écran (rendu
+CPU), ImageMagick, Inkscape, ffmpeg ; LibreOffice sans écran, Pandoc, LaTeX ; analyseurs statiques, Trivy, Semgrep ; Git LFS, cache de dépendances,
+registre Docker local ; Unreal en ligne de commande (conditionnel : compte Epic, 50 à 100 Go, rendu logiciel). **Écartés** : compilation iOS (exige
+un Mac) et IA lourde ou génération d'images locale (exige un GPU). Chaque capacité garde la forme actuelle (identifiant, dépendances, étape rejouable,
+sonde en lecture seule, taille et durée estimées) et reçoit une **recette** (installer, sonder, nettoyer) ; un agent peut rédiger la recette d'une
+capacité nouvelle, que le Directeur relit avant son entrée au catalogue.
+
 ## Laissé au réalisateur
 Découpage des modules, format du catalogue de capacités, noms des fichiers, détails de la migration, texte et mise en page des écrans.
 

@@ -224,6 +224,37 @@
 - [ ] **Step 1: Write the failing tests** : `test_lieu_non_permis_est_indisponible`, `test_serveur_injoignable_est_indisponible_et_pas_deconseille`, `test_le_plus_rapide_est_recommande_si_ecart_net`, `test_ecart_faible_donne_possible_pour_tous`, `test_poste_surcharge_est_deconseille_et_serveur_recommande`, `test_quota_github_bas_deconseille_github`, `test_sans_mesure_repli_sur_les_regles_et_le_dit`, `test_au_plus_un_recommande`, `test_raison_ne_contient_aucun_secret_ni_chemin`, `test_charge_serveur_inconnue_ne_donne_jamais_recommande`.
 - [ ] **Step 2: Run** `py -3.12 outils/tests_paralleles.py serveur_recommandation` : échec. **Step 3: Implement** et étendre la route des lieux (champs `niveau`, `raison`, `fondee_sur` ; test dans `tests/test_bureau_serveurs.py`). **Step 4: Run** : passe. **Step 5: Commit** ; « Serveur générique : recommandation des lieux par couleur ».
 
+### Task 13: Recettes d'installation des capacités futures (DERNIÈRE TÂCHE, après la Task 11)
+
+Demande du Directeur : écrire, à la fin, les scripts d'installation de **tout ce qui semble possible sur ce serveur** (24 threads, 64 Go, sans carte
+graphique, disques mécaniques). Cette tâche se découpera à l'exécution en sous-tâches (une par famille) ; chaque famille a son propre cycle
+implémentation, relecture, correctifs.
+
+**Files:**
+- Create: `serveur_ovh/recettes/<capacite>.sh` (une recette par capacité), `serveur_ovh/recettes/README.md` (le modèle de recette)
+- Modify: `outils/serveur_capacites.py` (nouvelles entrées du catalogue, jamais la logique), `serveur_ovh/mise_en_place.sh` (dispatch des recettes) ou un chargeur de recettes
+- Test: `tests/test_serveur_recettes.py` et extensions de `tests/test_serveur_ovh_script.py`
+
+**Modèle de recette (identique pour toutes)** : un fichier avec `ID`, `DEPEND`, `TAILLE_GO`, `DUREE_MIN`, une fonction `installer` (idempotente, atomique, empreintes vérifiées, rien de partiel, jamais `curl | sh`, jamais de secret), une fonction `sonde` en lecture seule (mêmes règles que le catalogue), une fonction `nettoyer` (désinstallation propre), JSON de sortie identique aux autres étapes. Le catalogue de capacités et les recettes restent cohérents (test d'accord : chaque capacité a une recette et une sonde identique).
+
+**Familles à écrire (tout ce qui est réaliste ici ; ordre à confirmer avec le Directeur)** :
+1. Langages et outils de build : Node et npm, Python avec `uv` et `pytest`, Java avec Maven, Go, Rust, .NET.
+2. Données en conteneur : PostgreSQL, MySQL, Redis, SQLite (avec volumes persistants et sans port public).
+3. Tests d'interface : Chromium et Firefox sans écran (Playwright), Selenium.
+4. Tests de charge : k6, Locust (l'action `charge` du déport).
+5. Intégration continue : **exécuteur GitHub Actions auto-hébergé** (le jeton d'enregistrement est saisi par le Directeur, jamais par MyIAFactory ; enregistrement soumis à l'accord ; une recette par dépôt ou par organisation).
+6. Mobile et jeux : Flutter, React Native, Godot sans écran avec modèles d'export.
+7. Création graphique et média : Blender sans écran (rendu CPU), ImageMagick, Inkscape, ffmpeg.
+8. Documents : LibreOffice sans écran, Pandoc, LaTeX.
+9. Qualité et sécurité : analyseurs statiques, Trivy, Semgrep.
+10. Données de build : Git LFS, cache de dépendances partagé, registre Docker local.
+11. Unreal Engine en ligne de commande : conditionnel (compte Epic lié à GitHub fourni par le Directeur, 50 à 100 Go, rendu logiciel seulement) ; recette écrite mais marquée « conditionnelle ».
+**Hors périmètre, documenté comme impossible ou non adapté** : compilation iOS (exige un Mac), IA lourde et génération d'images locale (exige un GPU).
+
+**Mode « recette rédigée par un agent » (dernière sous-tâche)** : un agent rédige la recette d'une capacité nouvelle d'après les besoins d'un projet ; la recette est un fichier proposé dans une branche ; le Directeur la relit et l'accepte avant qu'elle entre au catalogue ; aucun script rédigé par un agent ne s'exécute sur le serveur sans cette acceptation.
+
+- [ ] **Steps :** à détailler au moment de l'exécution, famille par famille : test RED sur la recette (JSON valide en simulation, idempotence, échec de téléchargement sans trace, sonde en lecture seule, accord entre catalogue et recette), implémentation, relecture, correctifs, commit par famille. Aucune recette n'est exécutée sur le vrai serveur sans l'accord explicite du Directeur.
+
 ---
 
 ## Suite (hors de ce plan)

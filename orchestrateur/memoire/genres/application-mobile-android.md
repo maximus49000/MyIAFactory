@@ -716,3 +716,9 @@ Rôles : release
 Date : 2026-11-19
 
 Relever le versionCode dans le dernier livrable produit, jamais dans un journal de contrôle antérieur, qui peut être périmé.
+
+## G179 — Un test qui échoue puis réussit à la relance est instable :
+Rôles : release, testeur
+Date : 2026-11-19
+
+Un test qui échoue puis réussit à la relance est instable : le déclarer tel quel dans la note de livraison.

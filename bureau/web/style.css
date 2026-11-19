@@ -1418,3 +1418,34 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .serveur-erreur:empty { display: none; }
 .serveur-accord-libelle { display: block; margin: 4px 0 8px; }
 .serveur-bouton[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+/* L'écran « Serveurs de travail » (bureau/web/ui/serveurs.js). Les couleurs des lieux viennent de ces classes ; chaque pastille
+   est toujours suivie d'un libellé écrit : la couleur n'est jamais le seul signal. Comme le reste du bureau : thème clair. */
+.carte-serveurs { border: 1px solid #d9d2c3; border-radius: 8px; padding: 8px 12px; margin: 16px 0; background: #fffdf8; }
+.serveurs-serveur { border-top: 1px solid #eee7d6; padding: 8px 0; }
+.serveurs-serveur-tete { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.serveurs-cle-ligne { display: block; margin: 4px 0; padding: 6px 8px; background: #f4efe3; border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; user-select: all; }
+.serveurs-boutons { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.serveurs-capacite { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+.capacite-badge-presente { background: #dcefdc; color: #2f6b3f; }
+.capacite-badge-absente { background: #f6e6c8; color: #7a5410; }
+.capacite-badge-inconnue { background: #eee7d6; color: #5a5568; }
+.capacite-badge-bloquee, .capacite-badge-non_installable { background: #f6d9d4; color: #9a2f22; }
+.serveurs-erreur { margin: 6px 0; font-weight: 700; color: #9a2f22; }
+.serveurs-erreur:empty { display: none; }
+.serveurs-installation, .serveurs-formulaire, .serveurs-lieux { margin-top: 10px; }
+.serveurs-action, .serveurs-accord-libelle { display: block; margin: 3px 0; }
+.serveurs-etiquette { display: block; margin: 4px 0; }
+.serveurs-etiquette-texte { display: block; font-size: 12px; font-weight: 700; }
+.serveurs-bloquee { color: #9a2f22; }
+.lieux-action { border-top: 1px solid #eee7d6; padding: 6px 0; }
+.lieux-choix, .lieux-legende { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.lieu-choix { display: inline-flex; align-items: center; gap: 5px; }
+.lieu-grise { opacity: 0.6; cursor: not-allowed; }
+.lieu-pastille { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); }
+.lieu-pastille.niveau-recommande { background: #3f9b57; }
+.lieu-pastille.niveau-possible { background: #e0a52a; }
+.lieu-pastille.niveau-deconseille { background: #c8402f; }
+.lieu-pastille.niveau-indisponible { background: #a9a59b; }
+.lieu-manque { font-size: 13px; color: #7a5410; margin-top: 2px; overflow-wrap: anywhere; }
+.lieux-conseil { font-size: 13px; margin: 4px 0; }

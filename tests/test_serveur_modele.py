@@ -100,6 +100,91 @@ class ModeleTest(unittest.TestCase):
         serveur_modele.ecrire([serveur_modele.valider(BON)], self.dossier)
         self.assertEqual([p.name for p in self.dossier.iterdir()], [serveur_modele.FICHIER])
 
+    # --- I1 : une clé par serveur ---
+    def test_cle_au_chemin_exact_du_serveur(self):
+        chemin = self.dossier / "cles" / "id_ed25519_autre"
+        s = serveur_modele.valider({**BON, "cle": str(chemin)})
+        ligne = serveur_modele.ligne_cle_publique(self.dossier, s, runner=FauxKeygen())
+        self.assertTrue(chemin.is_file())
+        self.assertTrue(ligne.startswith("ssh-ed25519 "))
+        self.assertFalse((self.dossier / plateforme_ssh.NOM_CLE).exists())
+
+    def test_deux_serveurs_deux_cles_sans_ecrasement(self):
+        a = serveur_modele.valider({**BON, "cle": str(self.dossier / "cle_a")})
+        b = serveur_modele.valider({**BON, "id": "b", "cle": str(self.dossier / "cle_b")})
+        faux = FauxKeygen()
+        (self.dossier / "cle_a").write_text("A-EXISTANTE", encoding="utf-8")
+        Path(str(self.dossier / "cle_a") + ".pub").write_text("ssh-ed25519 PUBA\n", encoding="utf-8")
+        la = serveur_modele.ligne_cle_publique(self.dossier, a, runner=faux)
+        lb = serveur_modele.ligne_cle_publique(self.dossier, b, runner=faux)
+        self.assertEqual(la, "ssh-ed25519 PUBA")
+        self.assertEqual(faux.appels, 1)
+        self.assertNotEqual(la, lb)
+        self.assertEqual((self.dossier / "cle_a").read_text(encoding="utf-8"), "A-EXISTANTE")
+        self.assertEqual((self.dossier / "cle_b").read_text(encoding="utf-8"), "PRIVEE")
+
+    def test_cle_par_defaut_a_l_ajout(self):
+        s = serveur_modele.ajouter({k: v for k, v in BON.items() if k != "cle"}, self.dossier)
+        self.assertEqual(Path(s.cle), self.dossier / "id_ed25519_mon-serveur-ete")
+        with self.assertRaises(ValueError):
+            serveur_modele.valider({k: v for k, v in BON.items() if k != "cle"})
+
+    # --- I2 : aucune perte silencieuse ---
+    def test_lire_avec_rejets_signale_les_entrees_refusees(self):
+        chemin = self.dossier / serveur_modele.FICHIER
+        chemin.write_text(json.dumps([BON, {**BON, "id": "r", "utilisateur": "root"}, {"nom": "sans hote"}]), encoding="utf-8")
+        ok, rejets = serveur_modele.lire_avec_rejets(self.dossier)
+        self.assertEqual(len(ok), 1)
+        self.assertEqual(len(rejets), 2)
+        self.assertIn("2", rejets[0])
+        chemin.write_text("{abime", encoding="utf-8")
+        ok, rejets = serveur_modele.lire_avec_rejets(self.dossier)
+        self.assertEqual((ok, len(rejets)), ([], 1))
+        chemin.unlink()
+        self.assertEqual(serveur_modele.lire_avec_rejets(self.dossier), ([], []))
+
+    def test_ajouter_refuse_de_reecrire_un_fichier_abime_ou_avec_rejets(self):
+        chemin = self.dossier / serveur_modele.FICHIER
+        for contenu in (b"{abime", json.dumps([BON, {**BON, "id": "r", "utilisateur": "root"}]).encode()):
+            chemin.write_bytes(contenu)
+            with self.assertRaises(ValueError) as ctx:
+                serveur_modele.ajouter({**BON, "id": "nouveau"}, self.dossier)
+            self.assertIn("refusée(s) ou est abîmé", str(ctx.exception))
+            self.assertEqual(chemin.read_bytes(), contenu)
+            self.assertEqual([p.name for p in self.dossier.iterdir()], [serveur_modele.FICHIER])
+
+    def test_ajouter_sur_fichier_sain_fonctionne(self):
+        serveur_modele.ajouter(BON, self.dossier)
+        serveur_modele.ajouter({**BON, "id": "b"}, self.dossier)
+        self.assertEqual(len(serveur_modele.lire(self.dossier)), 2)
+
+    # --- cheap items ---
+    def test_id_normalise_et_doublon_insensible_a_la_casse(self):
+        self.assertEqual(serveur_modele.valider({**BON, "id": "A B"}).id, "a-b")
+        self.assertEqual(serveur_modele.valider({**BON, "id": "../x"}).id, "x")
+        with self.assertRaises(ValueError):
+            serveur_modele.valider({**BON, "id": "../"})
+        serveur_modele.ajouter({**BON, "id": "A"}, self.dossier)
+        with self.assertRaises(ValueError):
+            serveur_modele.ajouter({**BON, "id": "a"}, self.dossier)
+
+    def test_hote_et_longueurs_refuses(self):
+        for champ, valeur in (("hote", "a/b"), ("hote", "a:b"), ("hote", "[::1]"), ("hote", "a,b"), ("hote", "a\x00b"),
+                              ("hote", "a\x1bb"), ("hote", "a\nb"), ("hote", "h" * 254), ("utilisateur", "u" * 65),
+                              ("utilisateur", "u\x00"), ("id", "i" * 65), ("nom", "n" * 101)):
+            with self.subTest(champ=champ, valeur=valeur[:12]):
+                with self.assertRaises(ValueError):
+                    serveur_modele.valider({**BON, champ: valeur})
+        serveur_modele.valider({**BON, "hote": "h" * 253, "utilisateur": "u" * 64, "id": "i" * 64, "nom": "n" * 100})
+
+    def test_filtre_secrets_imbrique_et_par_mots(self):
+        for cles in ({"password": 1}, {"db_passwd": 1}, {"a": {"b": {"api_key": 1}}}, {"mot_de_passe": 1},
+                     {"cle_api": 1}, {"x": [{"Token": 1}]}, {"secret": 1}, {"client-secret": 1}):
+            with self.subTest(cles=cles):
+                with self.assertRaises(ValueError):
+                    serveur_modele.valider({**BON, "reglages_fournisseur": cles})
+        serveur_modele.valider({**BON, "reglages_fournisseur": {"passerelle": "x", "bypass": 1, "n": {"tokenizer": 1}}})
+
 
 if __name__ == "__main__":
     unittest.main()

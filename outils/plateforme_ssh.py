@@ -54,13 +54,13 @@ def _lancer_court(runner, args, delai):
         raise ErreurSsh(f"« {args[0]} » n'a pas répondu en {delai} s.") from None
 
 
-def generer_cle(dossier, runner=subprocess.run):
+def generer_cle(dossier, runner=subprocess.run, nom=NOM_CLE):
     """Renvoie (chemin privé, clé publique) ; crée la clé ed25519 sans phrase de passe si elle n'existe pas.
 
-    Une clé existante n'est jamais régénérée ni écrasée.
+    Une clé existante n'est jamais régénérée ni écrasée. `nom` : nom du fichier de la clé privée (une clé par serveur).
     """
     dossier = Path(dossier)
-    prive = dossier / NOM_CLE
+    prive = dossier / nom
     publique = Path(str(prive) + ".pub")
     if prive.exists():
         if not publique.exists():

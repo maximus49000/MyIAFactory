@@ -18,7 +18,10 @@ from plateforme_bureau import _restreindre_windows
 FICHIER = "serveurs.json"
 FOURNISSEURS = ("ovh", None)
 UTILISATEUR_INTERDIT = "root"
-MOTS_SECRETS = ("secret", "jeton", "token", "passe", "password", "cle_app", "cle_api", "api_key")
+TERMES_SECRETS = ("password", "passwd", "passphrase", "secret", "token", "jeton", "mdp", "apikey", "api_key", "cle_api",
+                  "cle_app", "mot_de_passe")      # comparés par segments entiers : « passerelle », « bypass » ne correspondent pas
+LONGUEURS_MAX = {"hote": 253, "utilisateur": 64, "id": 64, "nom": 100}
+CARACTERES_HOTE_INTERDITS = set("/:[],")
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,27 @@ def _identifiant(nom):
 def _texte(valeur, champ):
     if not isinstance(valeur, str) or not valeur.strip():
         raise ValueError(f"Le champ « {champ} » du serveur est obligatoire et doit être un texte non vide.")
-    return valeur.strip()
+    valeur = valeur.strip()
+    if champ in LONGUEURS_MAX and len(valeur) > LONGUEURS_MAX[champ]:
+        raise ValueError(f"Le champ « {champ} » est trop long ({LONGUEURS_MAX[champ]} caractères au plus).")
+    if any(ord(c) < 32 or ord(c) == 127 for c in valeur):
+        raise ValueError(f"Le champ « {champ} » ne doit contenir aucun caractère de contrôle.")
+    return valeur
+
+
+def _contient_secret(valeur):
+    """Vrai si une clé (à n'importe quel niveau d'imbrication) porte un nom de secret, par segments entiers."""
+    if isinstance(valeur, dict):
+        for k, v in valeur.items():
+            if isinstance(k, str):
+                segments = "_".join(s for s in re.split(r"[^a-z0-9]+", k.lower()) if s)
+                if any(f"_{t}_" in f"_{segments}_" for t in TERMES_SECRETS):
+                    return True
+            if _contient_secret(v):
+                return True
+    elif isinstance(valeur, list):
+        return any(_contient_secret(v) for v in valeur)
+    return False
 
 
 def valider(serveur):
@@ -51,8 +74,8 @@ def valider(serveur):
     if not isinstance(serveur, dict):
         raise ValueError("Un serveur doit être décrit par un objet (nom, hote, utilisateur, cle).")
     hote = _texte(serveur.get("hote"), "hote")
-    if hote.startswith("-") or any(c.isspace() for c in hote) or "@" in hote:
-        raise ValueError("Adresse du serveur invalide : ni espace, ni « @ », ni tiret au début.")
+    if hote.startswith("-") or any(c.isspace() or c in CARACTERES_HOTE_INTERDITS for c in hote) or "@" in hote:
+        raise ValueError("Adresse du serveur invalide : ni espace, ni « @ », ni « / : [ ] , », ni tiret au début.")
     utilisateur = _texte(serveur.get("utilisateur"), "utilisateur")
     if utilisateur.lower() == UTILISATEUR_INTERDIT or any(c.isspace() for c in utilisateur) \
             or "@" in utilisateur or utilisateur.startswith("-"):
@@ -67,33 +90,47 @@ def valider(serveur):
         reglages = {}
     if not isinstance(reglages, dict):
         raise ValueError("Les réglages du fournisseur doivent être un objet.")
-    if any(isinstance(k, str) and any(m in k.lower() for m in MOTS_SECRETS) for k in reglages):
+    if _contient_secret(reglages):
         raise ValueError("Les réglages du fournisseur ne doivent contenir aucun secret : les clés d'API restent "
                          "dans leurs propres fichiers.")
     nom = serveur.get("nom")
-    nom = nom.strip() if isinstance(nom, str) and nom.strip() else hote
+    nom = _texte(nom, "nom") if isinstance(nom, str) and nom.strip() else hote
     ident = serveur.get("id")
     if ident is None or (isinstance(ident, str) and not ident.strip()):
-        ident = _identifiant(nom) or _identifiant(hote)
-    ident = _texte(ident, "id")
+        ident = (_identifiant(nom) or _identifiant(hote))[:LONGUEURS_MAX["id"]].strip("-")
+        if not ident:
+            raise ValueError("Identifiant impossible à déduire du nom : indiquez-en un.")
+    else:
+        ident = _identifiant(_texte(ident, "id"))       # forme de slug : sûre comme segment d'URL ou de nom de fichier
+        if not ident:
+            raise ValueError("Identifiant invalide : il doit contenir au moins une lettre ou un chiffre.")
     return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages))
+
+
+def lire_avec_rejets(dossier=DOSSIER):
+    """(serveurs valides, rejets) ; `rejets` : messages français courts, sans valeur secrète, un par entrée refusée ou
+    un seul si le fichier est abîmé. Fichier absent : ([], []). Jamais d'exception."""
+    chemin = Path(dossier) / FICHIER
+    try:
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        return [], []
+    except (OSError, ValueError):
+        return [], [f"{FICHIER} est illisible (JSON invalide ou fichier inaccessible)."]
+    if not isinstance(donnees, list):
+        return [], [f"{FICHIER} doit contenir une liste de serveurs."]
+    serveurs, rejets = [], []
+    for numero, entree in enumerate(donnees, 1):
+        try:
+            serveurs.append(valider(entree))
+        except Exception as e:
+            rejets.append(f"entrée {numero} : {e}" if isinstance(e, ValueError) else f"entrée {numero} : refusée.")
+    return serveurs, rejets
 
 
 def lire(dossier=DOSSIER):
     """Serveurs configurés ; liste vide si le fichier est absent ou abîmé, entrées invalides ignorées. Jamais d'exception."""
-    try:
-        donnees = json.loads((Path(dossier) / FICHIER).read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(donnees, list):
-        return []
-    serveurs = []
-    for entree in donnees:
-        try:
-            serveurs.append(valider(entree))
-        except Exception:
-            continue
-    return serveurs
+    return lire_avec_rejets(dossier)[0]
 
 
 def _ecrire_atomique(chemin, texte):
@@ -120,17 +157,35 @@ def _ecrire_atomique(chemin, texte):
         raise
 
 
+def _exiger_fichier_sain(dossier):
+    """Refuse de réécrire un `serveurs.json` abîmé ou contenant des entrées refusées : elles seraient perdues. Renvoie les serveurs."""
+    existants, rejets = lire_avec_rejets(dossier)
+    if rejets:
+        raise ValueError(f"{FICHIER} contient {len(rejets)} entrée(s) refusée(s) ou est abîmé : corrigez-le ou supprimez-le "
+                         f"avant d'ajouter. Détail : {' '.join(rejets)}")
+    return existants
+
+
 def ecrire(serveurs, dossier=DOSSIER):
-    """Enregistre la liste (atomique, droits restreints). Chaque entrée est revalidée : aucun secret ni valeur piégée."""
+    """Enregistre la liste (atomique, droits restreints). Chaque entrée est revalidée : aucun secret ni valeur piégée.
+
+    Refuse (ValueError, fichier intact) si le fichier existant est abîmé ou a des entrées refusées."""
     contenu = [asdict(valider(asdict(s) if isinstance(s, Serveur) else s)) for s in serveurs]
+    _exiger_fichier_sain(dossier)
     Path(dossier).mkdir(parents=True, exist_ok=True)
     _ecrire_atomique(Path(dossier) / FICHIER, json.dumps(contenu, ensure_ascii=False, indent=2) + "\n")
 
 
 def ajouter(serveur, dossier=DOSSIER):
-    """Valide et ajoute un serveur (dict ou `Serveur`) ; refuse un identifiant déjà pris. Renvoie le serveur enregistré."""
-    nouveau = valider(asdict(serveur) if isinstance(serveur, Serveur) else serveur)
-    existants = lire(dossier)
+    """Valide et ajoute un serveur (dict ou `Serveur`) ; refuse un identifiant déjà pris et un fichier abîmé.
+
+    Sans `cle`, la clé du serveur est `<dossier>/id_ed25519_<id>`. Renvoie le serveur enregistré."""
+    donnees = asdict(serveur) if isinstance(serveur, Serveur) else dict(serveur) if isinstance(serveur, dict) else serveur
+    if isinstance(donnees, dict) and not (isinstance(donnees.get("cle"), str) and donnees["cle"].strip()):
+        ident = valider({**donnees, "cle": "x"}).id
+        donnees["cle"] = str(Path(dossier) / f"id_ed25519_{ident}")
+    nouveau = valider(donnees)
+    existants = _exiger_fichier_sain(dossier)
     if any(s.id == nouveau.id for s in existants):
         raise ValueError(f"Un serveur d'identifiant « {nouveau.id} » existe déjà.")
     ecrire([*existants, nouveau], dossier)
@@ -138,10 +193,7 @@ def ajouter(serveur, dossier=DOSSIER):
 
 
 def ligne_cle_publique(dossier, serveur, runner=subprocess.run):
-    """Ligne à coller dans `authorized_keys` du serveur ; la clé dédiée est générée seulement si elle est absente.
-
-    Le dossier de la clé est celui de `serveur.cle` (jamais écrasée : `plateforme_ssh.generer_cle`)."""
-    cle = Path(serveur.cle)
-    if cle.name != plateforme_ssh.NOM_CLE:
-        cle = Path(dossier) / plateforme_ssh.NOM_CLE
-    return plateforme_ssh.generer_cle(cle.parent, runner)[1]
+    """Ligne à coller dans `authorized_keys` du serveur ; la clé est celle du serveur, à `serveur.cle` (un chemin relatif
+    s'entend depuis `dossier`), générée seulement si elle est absente, jamais écrasée."""
+    cle = Path(dossier) / serveur.cle       # un chemin absolu l'emporte
+    return plateforme_ssh.generer_cle(cle.parent, runner, nom=cle.name)[1]

@@ -16,7 +16,7 @@ V_BUILD_TOOLS="34.0.0"
 V_PLATEFORME="34"
 V_CMDLINE_TOOLS="11076708"
 V_GRADLE="8.7"
-V_NODE="20"
+V_NODE="22"
 V_CLAUDE_CODE="2.1.328"
 # Étiquette collée aux images construites : si elle diffère des valeurs épinglées, l'image est reconstruite.
 EMPREINTE_ANDROID="ubuntu=${V_UBUNTU};build_tools=${V_BUILD_TOOLS};plateforme=${V_PLATEFORME};cmdline_tools=${V_CMDLINE_TOOLS};gradle=${V_GRADLE}"
@@ -28,7 +28,9 @@ ETAPE=""
 SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --etape) ETAPE="${2:-}"; shift 2 ;;
+    --etape)
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence ou etat)." >&2; exit 2; }
+      ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
@@ -247,7 +249,10 @@ etape_etat() {
   durcissement_fait || manque="$manque durcissement"
   command -v docker >/dev/null 2>&1 || manque="$manque docker"
   if command -v docker >/dev/null 2>&1; then
-    sudo docker image inspect "$V_UNITY" >/dev/null 2>&1 || manque="$manque images"
+    local image
+    for image in "$V_UNITY" myiafactory/android myiafactory/agent; do
+      sudo docker image inspect "$image" >/dev/null 2>&1 || { manque="$manque images"; break; }
+    done
     sudo docker volume inspect gradle-cache unity-cache >/dev/null 2>&1 || manque="$manque volumes"
   fi
   if [ -z "$manque" ]; then

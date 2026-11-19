@@ -125,6 +125,45 @@ class TestScriptSimule(unittest.TestCase):
         r = lancer("nimportequoi")
         self.assertNotEqual(r.returncode, 0)
 
+    def test_etape_sans_valeur_sort_en_erreur_sans_boucler(self):
+        for args in (["--etape"], ["--simuler", "--etape"]):
+            with self.subTest(args=args):
+                r = subprocess.run(["bash", SCRIPT.as_posix()] + args, stdin=subprocess.DEVNULL, capture_output=True,
+                                   text=True, encoding="utf-8", timeout=10)   # une boucle sans fin lèverait TimeoutExpired
+                self.assertEqual(r.returncode, 2)
+                self.assertIn("valeur", r.stderr)
+
+    def _etat_avec_faux(self, images_absentes=(), volumes_ok=True):
+        """Lance l'étape etat (réelle) avec de faux binaires : serveur durci, Docker présent, images au choix."""
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            faux = t / "bin"
+            faux.mkdir()
+            absentes = " ".join(f'*"{i}"*) exit 1;;' for i in images_absentes)
+            corps = {
+                "sudo": 'while case "$1" in *=*) true;; *) false;; esac; do shift; done\nexec "$@"',
+                "sshd": 'echo "passwordauthentication no"',
+                "ufw": 'echo "Status: active"',
+                "dpkg": "exit 0",
+                "docker": ('case "$1 $2" in "image inspect") case "$*" in ' + absentes + ' esac;; '
+                           f'"volume inspect") exit {0 if volumes_ok else 1};; esac\nexit 0'),
+            }
+            for nom, texte in corps.items():
+                (faux / nom).write_text("#!/bin/sh\n" + texte + "\n", newline="\n")
+                (faux / nom).chmod(0o755)
+            r = subprocess.run(["bash", SCRIPT.as_posix(), "--etape", "etat"], stdin=subprocess.DEVNULL, capture_output=True,
+                               text=True, encoding="utf-8", timeout=60, env=dict(os.environ, DISQUE_LIBRE_GO="500",
+                               PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
+            return json.loads(r.stdout)
+
+    def test_etat_exige_les_trois_images(self):
+        self.assertEqual(self._etat_avec_faux()["statut"], "fait")
+        for absente in ("unityci/editor", "myiafactory/android", "myiafactory/agent"):
+            with self.subTest(absente=absente):
+                d = self._etat_avec_faux(images_absentes=(absente,))
+                self.assertEqual(d["statut"], "a_faire")
+                self.assertIn("images", d["detail"])
+
 
 class TestTexteDuScript(unittest.TestCase):
     def setUp(self):
@@ -200,6 +239,11 @@ class TestTexteDuScript(unittest.TestCase):
         self.assertEqual(arg("android", "GRADLE"), versions["gradle"])
         self.assertEqual(arg("agent", "NODE_MAJEUR"), versions["node"])
         self.assertEqual(arg("agent", "CLAUDE_CODE"), versions["claude_code"])
+
+    def test_node_lts_22(self):
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        self.assertEqual(versions["node"], "22")
+        self.assertIn('V_NODE="22"', self.texte)
 
     def test_licence_non_lue_dans_argv(self):
         self.assertNotIn("--licence", self.texte)

@@ -150,8 +150,8 @@ Une limite de compilations simultanées (`compilations_max`, 2 par défaut) est 
   persiste, ajoutez `id_ed25519_myiafactory.pub` à `~/.ssh/authorized_keys` du serveur.
 - **« HOST IDENTIFICATION HAS CHANGED » / « L'empreinte SSH du serveur a changé »** : si la plateforme vient elle-même de
   réinstaller le serveur (ou de voir se terminer la tâche de réinstallation notée au cache), elle oublie l'ancienne
-  empreinte toute seule, une seule fois, que le changement soit vu au premier essai ou pendant l'attente du redémarrage,
-  puis réessaie l'attente. Sinon elle refuse (ce peut être une interception) : si vous savez que le serveur a été
+  empreinte toute seule (que le changement soit vu aux premiers essais ou pendant l'attente du redémarrage), puis
+  réessaie l'attente une fois ; si l'empreinte change encore, l'exécution s'arrête. Sinon elle refuse (ce peut être une interception) : si vous savez que le serveur a été
   réinstallé (par exemple depuis l'espace client OVH), supprimez l'ancienne empreinte vous-même
   (`ssh-keygen -R <adresse du serveur>`) puis relancez. Ce cas n'est jamais présenté comme un problème de
   `authorized_keys`.
@@ -169,8 +169,8 @@ Une limite de compilations simultanées (`compilations_max`, 2 par défaut) est 
      récente ;
   2. si une tâche est en cours, attendez qu'elle se termine ; si elle est terminée avec succès, ou s'il n'y en a aucune
      (la demande n'est pas partie), passez à l'étape 3 ;
-  3. fermez le bureau et toute installation, ouvrez `~/MyIAFactory/plateforme.json` dans un éditeur de texte et supprimez la
-     `"demande": true` en `"demande": null` (ne supprimez pas la ligne : le fichier deviendrait du JSON invalide et l'état
+  3. fermez le bureau et toute installation, ouvrez `~/MyIAFactory/plateforme.json` dans un éditeur de texte et remplacez
+     `"demande": true` par `"demande": null` (ne supprimez PAS la ligne : le fichier deviendrait du JSON invalide et l'état
      en cache serait perdu) ; ne touchez à rien d'autre ;
   4. relancez l'installation : si le système est déjà Ubuntu LTS, la suite continue ; sinon l'accord d'effacement est de
      nouveau demandé.

@@ -6,7 +6,7 @@ Le reste de l'application ne dépend pas du serveur : s'il ou OVH est injoignabl
 
 ## Ce que veut dire « prêt »
 
-Sept étapes, rejouables, chacune lancée seulement quand la précédente est « fait » :
+Sept étapes, plus une huitième facultative, rejouables, chacune lancée seulement quand la précédente est « fait » :
 
 1. **Lecture** du serveur chez OVH (API).
 2. **Système** : toute version Ubuntu serveur reconnue (22.04, 24.04, 26.04 et anciennes, variantes comprises) n'est
@@ -19,9 +19,11 @@ Sept étapes, rejouables, chacune lancée seulement quand la précédente est «
 6. **Images** : Unity `unityci/editor:ubuntu-6000.6.7f1-android-4.0.0` (le projet se construit avec Unity 6000.6.7f1),
    image Android/Gradle et image de l'agent, volumes de cache Gradle et Unity.
 7. **Licence Unity** : facultative.
+8. **Session graphique (Unity Hub)** : facultative, jamais lancée sans le drapeau `--bureau-distant` (voir « Session
+   graphique »).
 
-**Prêt = étapes 1 à 6.** Sans la licence, le serveur est « prêt, sans Unity ». L'indicateur `serveur_disponible` du bureau
-suit cet état.
+**Prêt = étapes 1 à 6.** Sans la licence ni la session graphique, le serveur est « prêt, sans Unity ». L'indicateur
+`serveur_disponible` du bureau suit cet état.
 
 ## 1. Créer les clés API OVH
 
@@ -73,6 +75,8 @@ py -3.12 lancer.py plateforme etat
 py -3.12 lancer.py plateforme installer
 py -3.12 lancer.py plateforme installer --accord-reinstallation
 py -3.12 lancer.py plateforme verifier
+py -3.12 lancer.py plateforme installer --bureau-distant
+py -3.12 lancer.py plateforme bureau-distant
 ```
 
 - `etat` : relit le cache `plateforme.json`, ne contacte rien.
@@ -80,8 +84,11 @@ py -3.12 lancer.py plateforme verifier
 - `verifier` : constate l'état réel du serveur sans rien modifier (seule exception : il peut créer la clé SSH dédiée
   locale si elle n'existe pas encore ; rien n'est écrit chez OVH ni sur le serveur).
 - `--dossier <d>` remplace `~/MyIAFactory` (essais).
+- `--bureau-distant` (avec `installer`) : lance aussi l'étape 8 facultative ; `bureau-distant` (sans `installer`) ouvre la
+  session déjà installée. Voir « Session graphique (Unity Hub) ».
 - Sortie : l'état en JSON (secrets masqués). Code de sortie 0 = prêt et rien de bloqué ; 1 = bloqué ou pas prêt ;
-  2 = mauvais usage.
+  2 = mauvais usage. Un blocage de l'étape facultative 8 donne aussi le code 1, et `etat` donne 1 tant que le serveur
+  n'est pas « prêt ». (La commande `bureau-distant` a ses propres codes, voir plus bas.)
 
 Le même parcours existe dans le bureau : carte **« Serveur »** du panneau Direction (étapes, raison et geste à faire en cas
 de blocage, suivi de l'installation, case d'accord d'effacement).
@@ -118,8 +125,92 @@ Le chemin retenu :
 3. Relancez `installer` : l'étape 7 l'envoie au serveur par l'entrée standard (jamais en argument, jamais réaffichée).
 
 Avec le nouveau client de licences d'Unity, ce fichier peut ne pas exister. Il faut alors une licence Pro/Plus à numéro de
-série, ou une session graphique du Hub sur le serveur. Sans licence, le serveur reste « prêt, sans Unity ». Les conditions
-d'usage de la licence en compilation automatique sont à vérifier par le Directeur.
+série, ou une session graphique du Hub sur le serveur (voir la section suivante). Sans licence, le serveur reste « prêt,
+sans Unity ». Les conditions d'usage de la licence en compilation automatique sont à vérifier par le Directeur.
+
+## Session graphique (Unity Hub)
+
+**Pourquoi.** Unity Personal ne s'active plus par fichier `.alf` : il faut se connecter à Unity Hub, qui exige un navigateur,
+et le serveur n'a pas d'écran. L'étape facultative 8 installe un bureau léger où Hub se lance tout seul ; vous vous y
+connectez une fois à votre compte Unity, et la licence reste sur le serveur.
+
+**Rien de ceci n'a encore été exécuté sur le vrai serveur** (code et script testés par simulation seulement). La première
+exécution réelle change le serveur et demande l'accord explicite du Directeur : c'est une action à part. Voir « Non
+vérifié ».
+
+### Installer
+
+```
+py -3.12 lancer.py plateforme installer --bureau-distant
+```
+
+Sans le drapeau, l'étape 8 n'est jamais lancée (« Facultative : non demandée ») et ne change rien à « prêt » ; avec lui, elle
+vient après les étapes 1 à 7 et un blocage de l'étape 8 donne le code de sortie 1. Sur le serveur, elle installe XFCE, xrdp
+(à l'écoute sur `127.0.0.1:3389` seulement), Mozilla Firefox (dépôt de Mozilla, hors snap), Unity Hub (dépôt officiel d'Unity),
+et fait démarrer Hub à l'ouverture de la session. Elle est rejouable. Coût **estimé** (non mesuré) : environ 1 Go de mémoire
+pendant la session, 2 à 3 Go de disque ; budget d'attente de l'étape : 25 minutes.
+
+L'étape refuse de s'exécuter (« bloqué », rien de modifié) si elle tourne en root, ou si SSH n'a pas **explicitement**
+`passwordauthentication no` et `kbdinteractiveauthentication no` : lancez d'abord le durcissement (étape 4). Le mot de passe
+de session n'est posé qu'en dernier, une fois prouvés : xrdp à l'écoute sur la boucle locale seule, aucune règle `ufw` pour
+3389, `unityhub`, `startxfce4` et `firefox` présents, Firefox venant du dépôt Mozilla et non du lanceur snap.
+
+### Ouvrir la session
+
+```
+py -3.12 lancer.py plateforme bureau-distant
+```
+
+Ouvre un tunnel `ssh -N -L 127.0.0.1:<port>:127.0.0.1:3389` avec la clé dédiée (port local 33890 s'il est libre, sinon un
+port libre choisi par le système), écrit `bureau-distant.rdp` (utilisateur `ubuntu`, **sans mot de passe**, saisie demandée
+par Windows), lance `mstsc`, et ferme toujours le tunnel à la fermeture de la fenêtre. Il faut que l'étape 8 soit « fait » dans
+le cache (sinon : « Installez d'abord la session »). Dans la fenêtre de connexion de Windows, saisissez l'utilisateur
+`ubuntu` et le mot de passe de `bureau-distant.txt`.
+
+Codes de sortie : 0 = session ouverte puis fermée ; 1 = échec (étape 8 pas faite, adresse du cache invalide, `ssh` introuvable,
+tunnel non ouvert, ou Ctrl-C) ; 2 = plateforme non Windows, ou `mstsc` introuvable.
+
+### Le mot de passe de session
+
+- Il vit dans `~/MyIAFactory/bureau-distant.txt` (UTF-8, droits réservés à l'utilisateur, écriture atomique) et **nulle
+  part ailleurs** : jamais dans `plateforme.json`, l'état affiché ou les journaux ; il part au serveur par l'entrée standard
+  SSH, jamais en argument.
+- Il est généré (24 caractères) seulement si le fichier est absent ou si sa première ligne a moins de 16 caractères
+  (l'étape le dit alors dans son détail). Un fichier existant assez long est repris tel quel : vous pouvez y mettre le
+  vôtre.
+- Un fichier qui n'est pas du texte UTF-8 (UTF-16 notamment) met l'étape 8 en « bloqué » et **n'est jamais écrasé**.
+  PowerShell 5.1 écrit en UTF-16 avec `>` ou `Out-File` ; utilisez `Set-Content -Encoding utf8` ou `Out-File -Encoding utf8`,
+  ou supprimez le fichier pour en faire générer un nouveau.
+
+### Utiliser Unity Hub
+
+1. Ouvrez la session ; Hub se lance seul. Connectez-vous **une fois** à votre compte Unity.
+2. Vérifiez dans Hub que la licence est active (Personal).
+3. Si Hub ne s'affiche pas, lancez `unityhub` depuis le terminal XFCE ; une erreur de sandbox peut demander
+   `--no-sandbox` (non vérifié).
+
+**Non vérifié :** qu'une licence obtenue ainsi serve aux compilations sans écran (dans les conteneurs). À constater à l'usage ;
+`plateforme verifier` n'affirme rien sur la licence.
+
+### Sécurité
+
+- xrdp écoute sur `127.0.0.1:3389` du serveur seulement ; le pare-feu reste limité au port 22 (aucune règle ajoutée,
+  une règle `ufw` pour 3389 bloque l'étape).
+- La connexion SSH par mot de passe reste coupée : le mot de passe de session ne sert **que** par le tunnel, jamais pour SSH
+  (c'est pourquoi l'étape refuse de s'exécuter sans ces deux réglages explicites).
+- Le port local du tunnel n'est ouvert que sur `127.0.0.1` du poste, le temps de la session.
+
+### Dépannage de la session
+
+- **« L'empreinte du serveur a changé »** : le tunnel refuse par sécurité et n'oublie **jamais** l'empreinte. Si le serveur a
+  bien été réinstallé, exécutez `ssh-keygen -R <adresse du serveur>` puis relancez ; sinon, ne continuez pas.
+- **« Le tunnel SSH ne s'est pas ouvert »** : serveur injoignable, clé refusée ou port local pris ; lancez `plateforme verifier`.
+- **« ssh est introuvable »** : activez le client OpenSSH de Windows (Paramètres, Applications, Fonctionnalités facultatives).
+- **« mstsc introuvable »** (code 2) : le Bureau à distance de Windows manque (ou le poste n'est pas Windows).
+- **Étape 8 « bloqué »** : lisez le détail et le geste dans la carte ou la sortie JSON ; messages possibles : fichier de mot
+  de passe illisible (voir ci-dessus), SSH par mot de passe pas explicitement coupé (lancez le durcissement), exécution en root,
+  installation de XFCE/xrdp ou des paquets Firefox/Unity Hub impossible, clé de dépôt introuvable, xrdp n'écoutant pas sur
+  3389 ou ailleurs que sur `127.0.0.1`, règle `ufw` pour 3389, Firefox venant du snap d'Ubuntu.
 
 ## Matériel et limites
 
@@ -138,6 +229,8 @@ Une limite de compilations simultanées (`compilations_max`, 2 par défaut) est 
 | `id_ed25519_myiafactory`, `.pub` | clé SSH dédiée, générée sur le poste à l'étape 2 (avant une réinstallation) ou à l'étape 3 |
 | `plateforme.json` | cache de l'état connu, sans secret ; l'état réel est relu à la demande |
 | `plateforme.lock` | verrou : une seule installation à la fois |
+| `bureau-distant.txt` | mot de passe de la session graphique (étape 8), à ne jamais committer |
+| `bureau-distant.rdp` | fichier de connexion écrit à l'ouverture de la session, sans mot de passe |
 
 ## Dépannage
 
@@ -202,13 +295,18 @@ Ce qui n'a été testé qu'avec des simulations, jamais sur un vrai serveur :
 - la disposition des disques / le RAID : aucun paramètre `storage` n'est envoyé, c'est la disposition par défaut d'OVH ;
 - `ufw limit` (limitation de débit) peut refuser des sessions SSH trop rapprochées (« Réponse illisible, code 255 ») :
   relancez simplement ;
+- la **session graphique** (étape 8 et commande `bureau-distant`), jamais exécutée sur un vrai serveur : le nom du paquet
+  `unityhub`, l'adresse du dépôt et la clé d'Unity Hub pour Ubuntu 24.04 ; la preuve « Firefox hors snap » (lecture de
+  `apt-cache policy firefox` et du chemin du binaire) ; xrdp avec XFCE sur 24.04 ; le démarrage automatique de Hub dans une
+  session xrdp (un `--no-sandbox` peut être nécessaire) ; les exécutions réelles de `ssh` et `mstsc` ; et surtout si la
+  connexion à Hub donne une licence utilisable en compilation sans écran ;
 - le déroulement réel de la réinstallation OVH, les marqueurs du journal d'activation de la licence, l'adresse de
   téléchargement des outils en ligne de commande Android, et l'utilisateur SSH `ubuntu`.
 
 ## À venir (non réalisé)
 
-- Un bouton d'accès direct : terminal SSH et vue graphique de la machine par un tunnel SSH (demande une étape
-  facultative de bureau léger avec VNC ou xrdp).
+- Un bouton d'accès direct : terminal SSH dans le bureau. La session graphique (étape 8, xrdp par tunnel SSH) existe
+  désormais en ligne de commande ; un bouton de la carte « Serveur » pour l'ouvrir reste à faire.
 - Une image Unreal Engine. Limites : pas de GPU sur ce serveur ; un PC de 7,4 Go ne fait pas tourner l'éditeur
   confortablement ; pistes : serveurs GPU OVH ou instances GPU horaires du cloud public.
 - L'activation du lieu `serveur` dans le routage de `bureau/deport.py` (le drapeau `serveur_disponible` existe ; lancer

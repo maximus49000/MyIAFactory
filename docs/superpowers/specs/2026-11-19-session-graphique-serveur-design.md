@@ -51,5 +51,13 @@ C. VNC avec un client à installer : un programme de plus.
 Le nom exact du paquet et du dépôt d'Unity Hub pour Ubuntu 24.04, le comportement de xrdp avec XFCE sur 24.04, le lancement automatique de
 Hub dans une session xrdp, et surtout si la connexion à Hub fournit une licence utilisable en compilation sans écran.
 
+## Réalisation (2026-11-19)
+Choix qui diffèrent de la conception : le fichier `.rdp` contient `prompt for credentials:i:1` (Windows demande le mot de passe,
+rien n'y est écrit) ; l'étape refuse de s'exécuter sans `passwordauthentication no` et `kbdinteractiveauthentication no`
+explicites dans `sshd -T`, et en root ; Firefox hors snap est prouvé (origine Mozilla dans `apt-cache policy`, binaire non snap) ;
+le mot de passe est fixé en dernier, après les preuves ; la longueur minimale acceptée est 16 (généré : 24) ; le tunnel prend le port 33890
+s'il est libre, sinon un port libre ; une empreinte SSH changée n'est jamais oubliée par la commande (message avec `ssh-keygen -R`).
+Mode d'emploi : `docs/serveur-ovh.md`.
+
 ## Laissé au réalisateur
 Découpage des fonctions, noms des fichiers de configuration, version de Firefox, détails de la session XFCE, tests.

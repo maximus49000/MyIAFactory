@@ -29,7 +29,9 @@ from serveur_modele import ecrire_atomique
 
 # ---------------------------------------------------------------- demande
 
-LIMITES_DEFAUT = MappingProxyType({"duree_s": 1200, "inactivite_s": 300, "captures": 50, "octets": 104857600})
+# inactivite_s (mode pilote) : 600 s et non les 5 min de départ (décision R9) : elle doit dépasser le budget de démarrage
+# de l'émulateur par le pont (PONT_DEMARRAGE_S, 300 s), sinon un `demarrer` lent serait pris pour de l'inactivité.
+LIMITES_DEFAUT = MappingProxyType({"duree_s": 1200, "inactivite_s": 600, "captures": 50, "octets": 104857600})
 ETATS = ("en_attente", "en_cours", "terminee", "echouee", "arretee")
 TYPES = ("emulation",)
 MODES = ("scenario", "pilote")
@@ -218,6 +220,50 @@ class Index:
     def retirer(self, ident):
         _id_valide(ident)
         self._modifier(lambda tout: tout.pop(ident, None))
+
+    def fusionner(self, ident, champs):
+        """Ajoute `champs` à la fiche existante (créée si absente), lecture et écriture sous le même verrou : deux mises à
+        jour simultanées de la même fiche ne se perdent pas. Une erreur de lecture transitoire lève `ErreurIndex` sans rien
+        écrire (jamais une fiche réduite aux seuls nouveaux champs)."""
+        _id_valide(ident)
+        if not isinstance(champs, dict):
+            raise ValueError("Champs de fiche invalides.")
+
+        def agir(tout):
+            fiche = {**(tout[ident] if isinstance(tout.get(ident), dict) else {}), **champs}
+            if fiche.get("etat") not in ETATS:
+                raise ValueError("Fiche de tâche invalide : « etat » doit valoir " + ", ".join(ETATS) + ".")
+            tout[ident] = fiche
+        self._modifier(agir)
+
+    def reserver(self, ident, cle, maximum):
+        """Incrémente le compteur `cle` de la fiche s'il est sous `maximum` (sous le verrou) ; vrai si réservé."""
+        _id_valide(ident)
+        pris = []
+
+        def agir(tout):
+            fiche = tout.get(ident)
+            if not isinstance(fiche, dict):
+                raise ValueError("Tâche absente de l'index.")
+            n = fiche.get(cle, 0)
+            n = n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else 0
+            if n < maximum:
+                tout[ident] = {**fiche, cle: n + 1}
+                pris.append(True)
+        self._modifier(agir)
+        return bool(pris)
+
+    def liberer(self, ident, cle):
+        """Rend une réservation de `reserver` (jamais sous zéro)."""
+        _id_valide(ident)
+
+        def agir(tout):
+            fiche = tout.get(ident)
+            if isinstance(fiche, dict):
+                n = fiche.get(cle, 0)
+                if isinstance(n, int) and not isinstance(n, bool) and n > 0:
+                    tout[ident] = {**fiche, cle: n - 1}
+        self._modifier(agir)
 
     def _modifier(self, agir):
         with self._verrou():
@@ -459,9 +505,7 @@ def _limites_fiche(fiche):
 def _noter(dossier, ident, champs):
     """Met à jour la fiche de l'index (champs masqués) ; None, ou le message si l'index a refusé (jamais d'exception)."""
     try:
-        index = Index(dossier)
-        fiche = {**(index.lire().get(ident) or {}), **_masque(champs, dossier), "maj": _maintenant_iso()}
-        index.enregistrer(ident, fiche)
+        Index(dossier).fusionner(ident, {**_masque(champs, dossier), "maj": _maintenant_iso()})
     except (ErreurIndex, TimeoutError, ValueError, OSError) as e:
         return f"Index des tâches non mis à jour : {_court(e)}"
     return None
@@ -571,15 +615,27 @@ cat > "$d/etat.json.lanceur.tmp" <<'FIN_ETAT'
 FIN_ETAT
 mv -f "$d/etat.json.lanceur.tmp" "$d/etat.json"
 """
-# Arrêt : fichier arret (le veilleur l'honore, arrête le conteneur et écrit l'état final), attente bornée de cet état,
-# puis docker stop dans tous les cas (sans effet si le conteneur n'existe plus : idempotent).
+# Arrêt : tâche jamais démarrée (pas d'etat.json, ou en_attente : créneau occupé) -> APK retiré puis etat.json arretee
+# (temporaire puis mv ; l'enveloppe refuse ensuite de démarrer un identifiant à l'état final, et un lanceur qui attend le
+# créneau relit arretee et s'arrête). Tâche en cours -> fichier arret (le veilleur l'honore, arrête le conteneur et écrit
+# l'état final), attente bornée de cet état. Puis docker stop dans tous les cas (sans effet si le conteneur n'existe plus :
+# idempotent). @JSON@ : comme pour _NETTOYER, une ligne ASCII construite par json.dumps de valeurs validées.
 _ARRETER = """# tache:arreter @ID@
 set -u
 d="$HOME/taches/@ID@"
 [ -d "$d" ] || exit 3
-if grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; then
-  umask 077
-  printf '%s\\n' @MOTIF@ > "$d/arret.tmp" && mv -f "$d/arret.tmp" "$d/arret"
+umask 077
+if [ ! -e "$d/etat.json" ] || grep -q '"etat": "en_attente"' "$d/etat.json" 2>/dev/null; then
+  rm -f -- "$d/entree/app.apk"
+  cat > "$d/etat.json.lanceur.tmp" <<'FIN_ETAT'
+@JSON@
+FIN_ETAT
+  if [ ! -e "$d/etat.json" ] || grep -q '"etat": "en_attente"' "$d/etat.json" 2>/dev/null; then
+    mv -f "$d/etat.json.lanceur.tmp" "$d/etat.json"
+  else
+    rm -f "$d/etat.json.lanceur.tmp"
+  fi
+el  printf '%s\\n' @MOTIF@ > "$d/arret.tmp" && mv -f "$d/arret.tmp" "$d/arret"
   i=0
   while [ "$i" -lt 30 ] && grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; do sleep 1; i=$((i + 1)); done
 fi
@@ -643,24 +699,27 @@ exec sudo -n docker exec tache-@ID@ /usr/local/bin/pont @VERBE@
 """
 # Archive de sortie/ : fichiers ORDINAIRES seulement (find sans -L ne suit aucun lien ; -type f écarte les liens
 # symboliques ; -links 1 écarte les liens durs), noms fixes, profondeur et nombre bornés, taille de chaque fichier et du
-# flux bornées. Le poste revérifie tout à l'extraction.
+# flux bornées. Deux archives tar à la suite : les journaux, lus depuis sortie/ (point de montage, que le conteneur ne peut
+# pas remplacer), puis les captures, lues DEPUIS l'intérieur de captures/ après `cd -P` et vérification du chemin physique :
+# des noms d'un seul composant, préfixés `captures/` par --transform ; un dossier captures/ remplacé par un lien n'est pas
+# lu, un fichier remplacé par un lien entre find et tar est archivé comme lien, que le poste refuse. Le poste revérifie tout.
+# Archive complète : au plus captures + 1 captures, pour que le poste voie le dépassement (statut limite).
 _RAPATRIER = """# tache:@OP@ @ID@ @NOM@
 set -u
 set -f
-d="$HOME/taches/@ID@/sortie"
-[ -d "$d" ] && [ ! -L "$d" ] || exit 3
-cd -- "$d" || exit 3
+r=$(cd -P -- "$HOME/taches/@ID@" 2>/dev/null && pwd -P) || exit 3
+cd -P -- "$r/sortie" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie" ] || exit 3
 {
-@LISTE@
-} | tar --null --no-recursion -c -f - -T - | head -c @TOTAL@
+@JOURNAUX@
+  if cd -P -- captures 2>/dev/null && [ "$(pwd -P)" = "$r/sortie/captures" ]; then
+    find . -mindepth 1 -maxdepth 1 -type f -links 1 -name '@MOTIF@' -size -@CMAX@c -print0 2>/dev/null \\
+      | head -z -n @NMAX@ | tar --null --no-recursion --transform 's,^\\./,captures/,' -c -f - -T -
+  fi
+} | head -c @TOTAL@
 """
 _LISTE_JOURNAUX = ("  for f in pont.log plantage.txt entree-tache.log emulateur.log; do\n"
                    "    find \"./$f\" -maxdepth 0 -type f -links 1 -size -@JMAX@c -print0 2>/dev/null\n"
-                   "  done\n")
-_LISTE_CAPTURES = ("  if [ -d captures ] && [ ! -L captures ]; then\n"
-                   "    find ./captures -mindepth 1 -maxdepth 1 -type f -links 1 -name '@MOTIF@' -size -@CMAX@c -print0 "
-                   "2>/dev/null | head -z -n @NMAX@\n"
-                   "  fi\n")
+                   "  done | tar --null --no-recursion -c -f - -T -")
 
 
 def _script(modele, ident, **valeurs):
@@ -673,11 +732,10 @@ def _script(modele, ident, **valeurs):
 
 def _script_rapatrier(ident, limites, nom=None):
     """Toute la sortie (nom=None) ou la seule capture `nom` (déjà validée par MOTIF_NOM)."""
-    captures = _LISTE_CAPTURES.replace("@MOTIF@", f"{nom}.png" if nom else "*.png")
-    liste = captures if nom else _LISTE_JOURNAUX + captures
-    return _script(_RAPATRIER.replace("@LISTE@", liste.rstrip("\n")), ident, OP="capture" if nom else "rapatrier",
+    modele = _RAPATRIER.replace("@JOURNAUX@\n", "" if nom else _LISTE_JOURNAUX + "\n")
+    return _script(modele, ident, OP="capture" if nom else "rapatrier", MOTIF=f"{nom}.png" if nom else "*.png",
                    NOM=nom or "", JMAX=str(JOURNAL_MAX_OCTETS + 1), CMAX=str(int(limites["octets"]) + 1),
-                   NMAX=str(1 if nom else int(limites["captures"])),
+                   NMAX=str(1 if nom else int(limites["captures"]) + 1),
                    TOTAL=str(int(limites["octets"]) + TAILLE_ARCHIVE_MARGE)).replace(" \nset -u", "\nset -u")
 
 
@@ -839,12 +897,17 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
     """Envoie l'APK et la demande, démarre l'enveloppe `lancer_emulation.sh` sur le serveur choisi, gère l'attente du
     créneau (nouvel essai, même identifiant, toutes les 15 s jusqu'à `attente_max_s`) et tient l'index.
 
-    Renvoie `{id, etat, serveur_id}` (plus `erreur` en cas d'échec ou d'abandon) ; `RefusLancement` avant tout envoi
-    (demande ou APK invalide, aucun serveur prêt, identifiant introuvable, index indisponible). Un identifiant déjà dans
-    l'index ou sur le serveur est remplacé par un nouveau (`nouvel_id`) : l'identifiant rendu fait foi. Seul le code 75
-    (créneau occupé) est réessayé avec le même identifiant ; tout autre échec le « brûle »."""
+    Renvoie `{id, etat, serveur_id}`, plus `erreur` en cas d'échec ou d'abandon : envoi impossible, index indisponible
+    juste après l'envoi (dossier effacé sur le serveur, rien n'a démarré) ou enveloppe en échec -> `etat` « echouee » ;
+    créneau toujours occupé -> « en_attente » (abandon) ; réponse perdue -> l'état relu sur le serveur. `RefusLancement`
+    avant tout envoi : demande, APK ou `attente_max_s` invalide, aucun serveur prêt, aucun identifiant libre. Un
+    identifiant déjà dans l'index ou sur le serveur est remplacé par un nouveau (`nouvel_id`) : l'identifiant rendu fait
+    foi. Seul le code 75 (créneau occupé) est réessayé avec le même identifiant ; tout autre échec le « brûle » (l'APK
+    déposé est alors retiré). Une tâche arrêtée pendant l'attente (`arreter`) est relue « arretee » et rien ne démarre."""
     d = _demande_sure(demande)
     _apk_sur(apk)
+    if isinstance(attente_max_s, bool) or not isinstance(attente_max_s, int) or attente_max_s < 0:
+        raise RefusLancement("attente_max_s doit être un nombre entier de secondes, positif ou nul.")
     serveur = choisir_serveur(dossier)
 
     def sortie(etat_, **plus):
@@ -859,7 +922,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
                 break
             if code != CODE_EXISTE:
                 d = replace(d, id=candidat)
-                _bash(serveur, ssh, _script(_EFFACER, candidat))
+                if code not in INJOIGNABLE:        # réponse perdue : le dossier n'est peut-être pas le nôtre, on n'y touche pas
+                    _bash(serveur, ssh, _script(_EFFACER, candidat))
                 return sortie("echouee", erreur=f"Envoi de l'APK impossible (code {code}) : {_court(erreur, 200)}")
         candidat = nouvel_id()
     else:
@@ -911,6 +975,7 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
                  if code != 4 else "Identifiant déjà utilisé sur le serveur : état relu sur le serveur.")
         return sortie(relu["etat"], erreur=f"{motif} {relu.get('raison', '')}".strip())
     raison = (lu or {}).get("raison") or f"Démarrage refusé par l'enveloppe (code {code}) : {_court(erreur, 200)}"
+    _bash(serveur, ssh, _script(_ABANDON, d.id))          # identifiant brûlé : l'APK n'a plus rien à faire sur le serveur
     avert = _noter(dossier, d.id, {"etat": "echouee", "statut": "erreur", "fin": (lu or {}).get("fin") or
                                    _maintenant_iso(), "raison": raison})
     return sortie("echouee", erreur=raison + (f" ({avert})" if avert else ""))
@@ -918,10 +983,13 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
 
 # --- arrêter
 
+RAISON_ARRET_AVANT_DEMARRAGE = "Arrêtée avant son démarrage (créneau occupé) : rien n'a tourné, APK retiré."
+
 def arreter(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, fin=False):
-    """Demande l'arrêt (fichier `arret` : « fin » si `fin is True`, fin normale d'un scénario ; « arret » sinon), attend
-    que le veilleur écrive l'état final (30 s au plus), puis `docker stop` dans tous les cas. Idempotent. Renvoie l'état
-    relu (comme `etat`) ; jamais d'exception."""
+    """Tâche en cours : demande l'arrêt (fichier `arret` : « fin » si `fin is True`, fin normale d'un scénario ; « arret »
+    sinon) et attend que le veilleur écrive l'état final (30 s au plus). Tâche jamais démarrée (en_attente ou sans état) :
+    l'APK est retiré et l'état devient « arretee » (un `lancer` qui attend le créneau le relit et ne démarre rien). Puis
+    `docker stop` dans tous les cas. Idempotent. Renvoie l'état relu (comme `etat`) ; jamais d'exception."""
     try:
         if not isinstance(ident, str) or not MOTIF_ID.fullmatch(ident):
             return _masque(_inconnu(ident, "Identifiant de tâche invalide."), dossier)
@@ -929,8 +997,10 @@ def arreter(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, fin=Fal
             serveur = _serveur_de(ident, dossier)
         except RefusLancement as e:
             return _masque(_inconnu(ident, str(e)), dossier)
-        code, _s, erreur = _bash(serveur, ssh, _script(_ARRETER, ident, MOTIF="fin" if fin is True else "arret"),
-                                 delai=150)
+        jamais = {"id": ident, "etat": "arretee", "statut": None, "debut": None, "fin": _maintenant_iso(),
+                  "raison": RAISON_ARRET_AVANT_DEMARRAGE}
+        code, _s, erreur = _bash(serveur, ssh, _script(_ARRETER, ident, MOTIF="fin" if fin is True else "arret",
+                                                       JSON=json.dumps(jamais, ensure_ascii=True)), delai=150)
         if code in INJOIGNABLE:
             return _masque(_inconnu(ident, f"Serveur injoignable ou délai dépassé : {_court(erreur, 200)}",
                                     serveur_id=serveur.id), dossier)
@@ -984,23 +1054,33 @@ def _extraire(donnees, destination, limites):
     """Extrait l'archive dans `destination` sans jamais écrire ailleurs. Admis : membres ordinaires aux noms fixes
     (JOURNAUX, captures/<nom>.png à signature PNG), au plus `captures + 5` fichiers, `captures` captures et `octets`
     octets au total. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
-    compté dans `refuses` ; un flux plus grand que le plafond n'est pas analysé du tout."""
-    res = {"captures": [], "fichiers": {}, "refuses": 0, "tronque": False}
+    compté dans `refuses` ; un flux plus grand que le plafond n'est pas analysé du tout. Plusieurs archives à la suite
+    sont lues (`ignore_zeros`). Flux coupé exactement au plafond (head -c du serveur) : `tronque` ; archive abîmée ou
+    lecture courte avant le plafond : `corrompue`."""
+    res = {"captures": [], "fichiers": {}, "refuses": 0, "tronque": False, "corrompue": False}
     plafond = int(limites["octets"]) + TAILLE_ARCHIVE_MARGE
     if len(donnees) > plafond:
         res["tronque"] = True
         return res
-    if len(donnees) == plafond:
-        res["tronque"] = True                       # le serveur a peut-être coupé le flux (head -c)
+    coupe = len(donnees) == plafond                 # le serveur a peut-être coupé le flux (head -c)
+    res["tronque"] = coupe
+    if not donnees:
+        return res
     max_fichiers, max_captures = int(limites["captures"]) + 5, int(limites["captures"])
     total, examines, vus = 0, 0, set()
+
+    def abime():
+        res["tronque" if coupe else "corrompue"] = True
+    fin, interrompu = 0, False
     try:
-        with tarfile.open(fileobj=io.BytesIO(donnees), mode="r:") as tar:
+        with tarfile.open(fileobj=io.BytesIO(donnees), mode="r:", ignore_zeros=True) as tar:
             for m in tar:
                 examines += 1
                 if examines > 4 * max_fichiers + 20:
-                    res["tronque"] = True
+                    res["tronque"] = interrompu = True
                     break
+                blocs = -(-max(m.size, 0) // tarfile.BLOCKSIZE)
+                fin = max(fin, m.offset_data + blocs * tarfile.BLOCKSIZE)
                 nom = m.name[2:] if m.name.startswith("./") else m.name
                 local = _nom_local(nom)
                 if local is None or m.type not in (tarfile.REGTYPE, tarfile.AREGTYPE) or nom in vus:
@@ -1014,7 +1094,8 @@ def _extraire(donnees, destination, limites):
                     continue
                 contenu = tar.extractfile(m).read(m.size)
                 if len(contenu) != m.size:
-                    res["tronque"] = True
+                    abime()
+                    interrompu = True
                     break
                 if capture and not contenu.startswith(SIGNATURE_PNG):
                     res["refuses"] += 1
@@ -1030,7 +1111,13 @@ def _extraire(donnees, destination, limites):
     except (tarfile.TarError, EOFError, ValueError) as e:
         if isinstance(e, ValueError) and "Destination" in str(e):
             raise
-        res["tronque"] = True
+        abime()
+        return res
+    # tarfile s'arrête sans erreur sur un en-tête tronqué : une archive complète finit par au moins deux blocs nuls
+    # après le dernier membre, et rien d'autre que des zéros.
+    reste = donnees[fin:]
+    if not interrompu and (len(reste) < 2 * tarfile.BLOCKSIZE or reste.strip(b"\0")):
+        abime()
     return res
 
 
@@ -1038,7 +1125,8 @@ def _statut(lu, fiche, res):
     """ok | plantage | limite | erreur, d'après etat.json, plantage.txt, le code 3 du pont noté dans la fiche."""
     if "plantage.txt" in res["fichiers"] or lu.get("statut") == "plantage":
         return "plantage"
-    if lu.get("etat") not in FINAUX or lu.get("etat") == "echouee" or lu.get("statut") == "erreur" or res["refuses"]:
+    if (lu.get("etat") not in FINAUX or lu.get("etat") == "echouee" or lu.get("statut") == "erreur" or res["refuses"]
+            or res.get("corrompue")):
         return "erreur"
     if lu.get("statut") == "limite" or fiche.get("limite_atteinte") is True or res["tronque"]:
         return "limite"
@@ -1073,6 +1161,9 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
             if res["refuses"]:
                 manifeste["raison"] = (f"Archive suspecte : {res['refuses']} élément(s) refusé(s) (lien, chemin ou nom "
                                        "non admis). " + manifeste["raison"]).strip()
+            if res["corrompue"]:
+                manifeste["raison"] = ("Archive de sortie abîmée ou incomplète : rapatriement partiel. "
+                                       + manifeste["raison"]).strip()
         journal = res["fichiers"].get("journal.txt")
         verbes = None
         if journal:
@@ -1163,7 +1254,11 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
     Renvoie `{ok, verbe, code, detail}` (code du pont : 0, 2 refus, 3 limite, 4 échec ; 124/255 serveur injoignable).
     `demarrer` attend d'abord `sortie/.avd-pret` (AVD_ATTENTE_S au plus). `capturer` réussi : la capture est rapatriée
     dans `destination/captures/` (par défaut `<dossier>/taches/<id>/`) et `capture` donne son chemin local. Un code 3
-    est noté dans la fiche (`limite_atteinte`) pour le statut du rapport."""
+    est noté dans la fiche (`limite_atteinte`) pour le statut du rapport.
+
+    Le lanceur applique lui-même la limite de captures de la demande (le pont n'applique que ses propres valeurs par
+    défaut) : chaque `capturer` réserve une place dans la fiche (`captures_prises`, sous le verrou de l'index) ; au-delà
+    de `limites["captures"]`, refus code 3 sans rien relayer ; une capture refusée par le pont rend sa place."""
     _id_valide(ident)
     args = valider_verbe(nom, arguments)
     serveur = _serveur_de(ident, dossier)
@@ -1171,9 +1266,29 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
         echec = _attendre_avd(serveur, ssh, ident, dormir)
         if echec:
             return _masque(echec, dossier)
+    reservee = False
+    if nom == "capturer":
+        maximum = int(_limites_fiche(Index(dossier).lire().get(ident) or {})["captures"])
+        try:
+            reservee = Index(dossier).reserver(ident, "captures_prises", maximum)
+        except (ErreurIndex, TimeoutError, ValueError, OSError) as e:
+            return _masque({"ok": False, "verbe": nom, "code": 4,
+                            "detail": f"Comptage des captures impossible ({_court(e)}) : capture refusée."}, dossier)
+        if not reservee:
+            res = {"ok": False, "verbe": nom, "code": 3,
+                   "detail": f"Limite de captures de la tâche atteinte ({maximum})."}
+            avert = _noter(dossier, ident, {"limite_atteinte": True})
+            if avert:
+                res["avertissement"] = avert
+            return _masque(res, dossier)
     script = _script(_VERBE, ident, VERBE=" ".join([nom, *(shlex.quote(a) for a in args)]))
     code, sortie, erreur = _bash(serveur, ssh, script, delai=DELAIS_VERBE_S.get(nom, DELAI_VERBE_S))
     res = _reponse_pont(nom, code, sortie, erreur)
+    if reservee and code != 0:
+        try:
+            Index(dossier).liberer(ident, "captures_prises")
+        except (ErreurIndex, TimeoutError, ValueError, OSError):
+            pass                                   # place perdue : la limite reste du côté prudent
     if code == 3:
         avert = _noter(dossier, ident, {"limite_atteinte": True})
         if avert:

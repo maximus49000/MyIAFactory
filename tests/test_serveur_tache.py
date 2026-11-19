@@ -357,6 +357,63 @@ class TestIndex(unittest.TestCase):
         self.index.enregistrer(tid(2), {"etat": "en_attente"})         # fichier absent : repart de vide
         self.assertEqual(list(self.index.lire()), [tid(2)])
 
+    def test_fusionner_deux_fils_sans_perte(self):
+        self.index.enregistrer(tid(1), {"etat": "en_attente", "serveur_id": "ovh1", "projet": "demo"})
+        erreurs = []
+
+        def a():
+            try:
+                for i in range(30):
+                    self.index.fusionner(tid(1), {"limite_atteinte": True, "compte_a": i})
+            except Exception as e:  # noqa: BLE001
+                erreurs.append(e)
+
+        def b():
+            try:
+                for i in range(30):
+                    self.index.fusionner(tid(1), {"etat": "en_cours", "compte_b": i})
+            except Exception as e:  # noqa: BLE001
+                erreurs.append(e)
+        fils = [threading.Thread(target=f) for f in (a, b)]
+        vrai = st.Index._lire_pour_ecrire
+
+        def lent(index):
+            tout = vrai(index)
+            time.sleep(0.002)                        # élargit la fenêtre lecture -> écriture
+            return tout
+        with mock.patch.object(st.Index, "_lire_pour_ecrire", lent):
+            [f.start() for f in fils]
+            [f.join(60) for f in fils]
+        self.assertEqual(erreurs, [])
+        f = self.index.lire()[tid(1)]
+        self.assertEqual((f["limite_atteinte"], f["etat"], f["compte_a"], f["compte_b"], f["serveur_id"], f["projet"]),
+                         (True, "en_cours", 29, 29, "ovh1", "demo"))
+
+    def test_fusionner_erreur_de_lecture_n_efface_rien(self):
+        fiche = {"etat": "en_cours", "serveur_id": "ovh1", "limites": {"captures": 2}, "projet": "demo"}
+        self.index.enregistrer(tid(1), fiche)
+        vrai = Path.read_text
+
+        def refuse(chemin, *a, **k):
+            if chemin.name == "taches.json":
+                raise PermissionError("antivirus")
+            return vrai(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", refuse):
+            with self.assertRaises(st.ErreurIndex):
+                self.index.fusionner(tid(1), {"etat": "terminee"})
+        self.assertEqual(self.index.lire()[tid(1)], fiche)
+        with self.assertRaises(ValueError):
+            self.index.fusionner(tid(2), {"limite_atteinte": True})       # fiche absente, sans état : rien d'écrit
+        self.assertEqual(list(self.index.lire()), [tid(1)])
+
+    def test_reserver_borne_et_liberer(self):
+        self.index.enregistrer(tid(1), {"etat": "en_cours"})
+        self.assertEqual([self.index.reserver(tid(1), "n", 2) for _ in range(3)], [True, True, False])
+        self.index.liberer(tid(1), "n")
+        self.assertTrue(self.index.reserver(tid(1), "n", 2))
+        with self.assertRaises(ValueError):
+            self.index.reserver(tid(9), "n", 2)
+
     def test_entrees_non_dict_ignorees(self):
         (self.dossier / "taches.json").write_text('{"a": 5, "b": {"etat": "en_cours"}}', encoding="utf-8")
         self.assertEqual(self.index.lire(), {"b": {"etat": "en_cours"}})
@@ -495,6 +552,8 @@ class FauxServeur:
     def _lancer(self, args, script, entree):
         ident = args[0]
         t = self.taches[ident]
+        if t["etat"] is not None and t["etat"]["etat"] != "en_attente":     # identifiant à l'état final : refus 4
+            return 4, (json.dumps(t["etat"]) + "\n").encode(), ""
         if self.codes_lancer:
             code = self.codes_lancer.pop(0)
             if code == 1:
@@ -535,7 +594,10 @@ class FauxServeur:
         t = self.taches.get(args[0])
         if not t:
             return 3, b"", ""
-        if t["etat"] and t["etat"]["etat"] == "en_cours":
+        if t["etat"] is None or t["etat"]["etat"] == "en_attente":
+            t["etat"] = json.loads(script.split("<<'FIN_ETAT'\n", 1)[1].split("\n", 1)[0])
+            t["apk"] = None
+        elif t["etat"]["etat"] == "en_cours":
             t["arret"] = "fin" if "printf '%s\\n' fin" in script else "arret"
             fin = t["arret"] == "fin"
             t["etat"] = {**t["etat"], "etat": "terminee" if fin else "arretee", "statut": "ok",
@@ -636,7 +698,7 @@ class TestLancer(BaseLanceur):
         prep = self.srv.ops("preparer")[0]
         self.assertNotIn(b"PK", prep[1].encode())             # l'APK n'est jamais dans la commande
         lancement = self.srv.ops("lancer")[0][1]
-        self.assertIn(f'lancer_emulation.sh" {ID1} scenario 1200 300\n', lancement)
+        self.assertIn(f'lancer_emulation.sh" {ID1} scenario 1200 600\n', lancement)
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "en_cours")
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["serveur_id"], "ovh1")
 
@@ -718,13 +780,13 @@ class TestLancer(BaseLanceur):
         self.assertEqual(len(self.srv.ops("effacer")), 1)
 
     def test_index_occupe_apres_le_lancement_sans_trace(self):
-        vrai = st.Index.enregistrer
+        vrai = st.Index.fusionner
 
-        def parfois(index, ident, fiche):
-            if fiche.get("etat") == "en_cours":
+        def parfois(index, ident, champs):
+            if champs.get("etat") == "en_cours":
                 raise TimeoutError("Index des tâches occupé : réessayez.")
-            return vrai(index, ident, fiche)
-        with mock.patch.object(st.Index, "enregistrer", parfois):
+            return vrai(index, ident, champs)
+        with mock.patch.object(st.Index, "fusionner", parfois):
             r = self.lancer()
         self.assertEqual(r["etat"], "en_cours")
         self.assertIn("occupé", r["erreur"])
@@ -735,6 +797,47 @@ class TestLancer(BaseLanceur):
         self.assertEqual(r["etat"], "echouee")
         self.assertEqual(len(self.srv.ops("lancer")), 1)
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "echouee")
+        self.assertEqual(len(self.srv.ops("abandon")), 1)               # identifiant brûlé : APK retiré
+        self.assertIsNone(self.srv.taches[ID1]["apk"])
+
+    def test_envoi_sans_reponse_n_efface_rien(self):
+        for code in (124, 255):
+            self.srv.appels.clear()
+            with mock.patch.object(self.srv, "_preparer", lambda *a, c=code: (c, b"", "délai")):
+                r = self.lancer()
+            self.assertEqual(r["etat"], "echouee")
+            self.assertEqual(self.srv.ops("effacer"), [])
+            self.assertEqual(self.srv.ops("lancer"), [])
+        with mock.patch.object(self.srv, "_preparer", lambda *a: (1, b"", "disque plein")):
+            self.lancer()
+        self.assertEqual(len(self.srv.ops("effacer")), 1)
+
+    def test_attente_max_invalide_refusee_avant_ssh(self):
+        for mauvais in (None, -1, "10", True, 1.5):
+            with self.assertRaises(st.RefusLancement, msg=repr(mauvais)):
+                self.lancer(attente_max_s=mauvais)
+        self.assertEqual(self.srv.appels, [])
+
+    def test_inactivite_par_defaut_depasse_le_demarrage_du_pont(self):
+        self.assertEqual(st.LIMITES_DEFAUT["inactivite_s"], 600)
+        self.assertGreater(st.LIMITES_DEFAUT["inactivite_s"], 300)
+        with self.assertRaises(ValueError):
+            st.valider_demande(brut(limites={"inactivite_s": 601}))
+
+    def test_arreter_pendant_l_attente_du_creneau(self):
+        self.srv.creneau = "t20261119-090000-ffff"
+
+        def dormir(s):
+            self.pauses.append(s)
+            if len(self.pauses) == 1:
+                st.arreter(ID1, dossier=self.dossier, ssh=self.srv)
+                self.srv.creneau = None                 # le créneau se libère : l'émulateur ne doit pas démarrer
+        r = self.lancer(dormir=dormir)
+        self.assertEqual(r["etat"], "arretee")
+        self.assertEqual(self.srv.taches[ID1]["etat"]["etat"], "arretee")
+        self.assertIsNone(self.srv.taches[ID1]["apk"])
+        self.assertIsNone(self.srv.creneau)
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "arretee")
 
     def test_delai_depasse_lit_l_etat_sans_relancer(self):
         self.srv.codes_lancer = [124]
@@ -907,6 +1010,25 @@ class TestRapatrier(BaseLanceur):
         self.assertEqual(m["captures"], [])
         self.assertTrue(m["tronque"])
 
+    def test_archive_abimee_erreur_mais_coupee_au_plafond_limite(self):
+        self.preparer(limites={"octets": 4000})
+        self.srv.archive = b"pas une archive tar" * 20
+        self.assertEqual(self.rapatrier()["statut"], "erreur")
+        complete = archive([("./pont.log", b"x\n" * 100), ("./captures/a.png", PNG + b"z" * 3000)])
+        self.srv.archive = complete[:1500]                                   # coupée avant le plafond : abîmée
+        self.assertEqual(self.rapatrier()["statut"], "erreur")
+        with mock.patch.object(st, "TAILLE_ARCHIVE_MARGE", 0):
+            self.srv.archive = complete[:4000]                               # coupée exactement au plafond (head -c)
+            m = self.rapatrier()
+        self.assertEqual(m["statut"], "limite")
+        self.assertTrue(m["tronque"])
+
+    def test_archive_complete_demande_une_capture_de_plus(self):
+        self.preparer(limites={"captures": 2})
+        script = st._script_rapatrier(ID1, st._limites({"captures": 2}))
+        self.assertIn("head -z -n 3 ", script)
+        self.assertIn("head -z -n 1 ", st._script_rapatrier(ID1, st._limites({"captures": 2}), "ecran"))
+
     def test_destination_lien_refusee(self):
         self.preparer()
         self.dest.parent.mkdir(parents=True)
@@ -991,6 +1113,24 @@ class TestVerbe(BaseLanceur):
         r = self.verbe("capturer", ["ecran-2"], destination=self.dest)     # absente du serveur
         self.assertFalse(r["ok"])
         self.assertNotIn("capture", r)
+
+    def test_capturer_compte_par_le_lanceur_au_dela_de_la_limite(self):
+        self.fiche(limites={"captures": 2})
+        for n in ("a", "b", "c"):
+            self.srv.taches[ID1]["fichiers"][f"captures/{n}.png"] = PNG
+        self.srv.pont["capturer"] = (2, ligne_pont(False, "capturer", "Nom de capture déjà pris : x."))
+        self.assertEqual(self.verbe("capturer", ["x"])["code"], 2)                 # refus du pont : place rendue
+        del self.srv.pont["capturer"]
+        self.assertTrue(self.verbe("capturer", ["a"])["ok"])
+        self.assertTrue(self.verbe("capturer", ["b"])["ok"])
+        appels = len(self.srv.ops("verbe"))
+        r = self.verbe("capturer", ["c"])
+        self.assertEqual((r["ok"], r["code"]), (False, 3))
+        self.assertIn("Limite de captures", r["detail"])
+        self.assertEqual(len(self.srv.ops("verbe")), appels)                       # rien relayé
+        f = st.Index(self.dossier).lire()[ID1]
+        self.assertEqual((f["captures_prises"], f["limite_atteinte"]), (2, True))
+        self.assertTrue(self.verbe("toucher", ["1", "2"])["ok"])                   # les autres verbes passent
 
     def test_capture_par_defaut_sous_le_dossier(self):
         self.srv.taches[ID1]["fichiers"]["captures/ecran.png"] = PNG
@@ -1120,14 +1260,16 @@ class BashSsh:
         self.home.mkdir()
         self.bin.mkdir()
         self.journal = Path(racine) / "docker.log"
+        self.pont = ""
         for nom, corps in (("sudo", '[ "$1" = -n ] && shift\nexec "$@"'),
-                           ("docker", 'echo "docker $*" >> "$FAUX_DOCKER"\nexit 0')):
+                           ("docker", 'echo "docker $*" >> "$FAUX_DOCKER"\n'
+                                      '[ "$1" = exec ] && printf \'%s\\n\' "$FAUX_PONT"\nexit 0')):
             (self.bin / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
             (self.bin / nom).chmod(0o755)
 
     def _env(self):
         return dict(os.environ, HOME=posix(self.home), PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"],
-                    FAUX_DOCKER=posix(self.journal), MSYS="winsymlinks:lnk")
+                    FAUX_DOCKER=posix(self.journal), MSYS="winsymlinks:lnk", FAUX_PONT=self.pont)
 
     def executer_octets(self, hote, commande, cle, entree=None, delai=60, runner=None):
         r = subprocess.run(["bash", "-c", commande], input=entree or b"", capture_output=True, env=self._env(),
@@ -1214,6 +1356,69 @@ class TestScriptsReels(BaseLanceur):
         self.assertEqual(self.ssh.docker().count(f"docker stop -t 10 tache-{ID1}"), 2)
         self.assertFalse((self.tache / "arret").exists())          # tâche finie : aucun fichier arret
         self.assertEqual(st.verbe(ID1, "lancer", [], dossier=self.dossier, ssh=self.ssh)["ok"], False)
+
+    def captures(self, n):
+        dossier = self.tache / "sortie" / "captures"
+        dossier.mkdir(parents=True, exist_ok=True)
+        for i in range(n):
+            (dossier / f"c{i}.png").write_bytes(PNG + bytes([i]))
+        return dossier
+
+    def test_rapatrier_reel_captures_au_dela_de_la_limite(self):
+        self.fiche(limites={"captures": 2})
+        self.ecrire_etat()
+        (self.tache / "sortie" / "pont.log").write_bytes(b"capturer c0 3ms\n")
+        self.captures(10)
+        m = st.rapatrier(ID1, self.dest, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(m["statut"], "limite")
+        self.assertTrue(m["tronque"])
+        self.assertEqual(len(m["captures"]), 2)
+        self.assertEqual(m["refuses"], 0)
+
+    def test_rapatrier_reel_dossier_captures_remplace_par_un_lien(self):
+        self.fiche()
+        self.ecrire_etat()
+        (self.tache / "sortie" / "pont.log").write_bytes(b"x\n")
+        dehors = Path(self.tmp.name) / "dehors"
+        dehors.mkdir()
+        (dehors / "vol.png").write_bytes(PNG)
+        r = self.ssh.bash(f'cd "{posix(self.tache / "sortie")}" && ln -s "{posix(dehors)}" captures && [ -L captures ]')
+        if r.returncode != 0:
+            self.skipTest("liens symboliques non pris en charge")
+        m = st.rapatrier(ID1, self.dest, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(m["captures"], [])
+        self.assertEqual(m["statut"], "ok")
+        self.assertFalse((self.dest / "captures").exists())
+
+    def test_capture_reelle_unique_par_le_relais(self):
+        self.fiche(limites={"captures": 5})
+        self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+        captures = self.captures(2)
+        self.ssh.bash(f'cd "{posix(captures)}" && ln -s c0.png lien.png; true')
+        self.ssh.pont = ligne_pont(True, "capturer", "captures/c1.png (90 octets).").strip()
+        res = st.verbe(ID1, "capturer", ["c1"], dossier=self.dossier, ssh=self.ssh, destination=self.dest)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(Path(res["capture"]).read_bytes(), PNG + b"\x01")
+        self.assertEqual(sorted(p.name for p in (self.dest / "captures").iterdir()), ["c1.png"])
+        res = st.verbe(ID1, "capturer", ["lien"], dossier=self.dossier, ssh=self.ssh, destination=self.dest)
+        self.assertFalse(res["ok"])                                        # un lien n'est jamais rapatrié
+        res = st.verbe(ID1, "capturer", ["absente"], dossier=self.dossier, ssh=self.ssh, destination=self.dest)
+        self.assertFalse(res["ok"])
+        self.assertIn(f"docker exec tache-{ID1} /usr/local/bin/pont capturer c1", self.ssh.docker())
+
+    def test_arreter_reel_en_attente(self):
+        self.fiche(etat="en_attente")
+        self.ecrire_etat(etat="en_attente", statut=None, debut=None, fin=None)
+        (self.tache / "entree").mkdir()
+        (self.tache / "entree" / "app.apk").write_bytes(APK)
+        r = st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(r["etat"], "arretee")
+        sur_disque = json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))
+        self.assertEqual((sur_disque["etat"], sur_disque["id"]), ("arretee", ID1))
+        self.assertFalse((self.tache / "entree" / "app.apk").exists())
+        self.assertFalse((self.tache / "etat.json.lanceur.tmp").exists())
+        self.assertFalse((self.tache / "arret").exists())
+        self.assertEqual(st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)["etat"], "arretee")   # idempotent
 
 
 if __name__ == "__main__":

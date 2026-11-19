@@ -23,6 +23,7 @@ TERMES_SECRETS = ("password", "passwd", "passphrase", "secret", "token", "jeton"
 LONGUEURS_MAX = {"hote": 253, "utilisateur": 64, "id": 64, "nom": 100}
 IDENTIFIANT_RESERVE = "migration"      # les routes /api/serveurs/migration/... ne doivent pas se confondre avec /api/serveurs/<id>/...
 CARACTERES_HOTE_INTERDITS = set("/:[],")
+SAIN = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._-]*")     # forme sûre d'un hôte ou d'un utilisateur, comparée en entier (fullmatch)
 
 
 @dataclass(frozen=True)
@@ -77,11 +78,15 @@ def valider(serveur):
     hote = _texte(serveur.get("hote"), "hote")
     if hote.startswith("-") or any(c.isspace() or c in CARACTERES_HOTE_INTERDITS for c in hote) or "@" in hote:
         raise ValueError("Adresse du serveur invalide : ni espace, ni « @ », ni « / : [ ] , », ni tiret au début.")
+    if not SAIN.fullmatch(hote):
+        raise ValueError("Adresse du serveur invalide : lettres, chiffres, « . », « _ » et « - » seulement.")
     utilisateur = _texte(serveur.get("utilisateur"), "utilisateur")
     if utilisateur.lower() == UTILISATEUR_INTERDIT or any(c.isspace() for c in utilisateur) \
             or "@" in utilisateur or utilisateur.startswith("-"):
         raise ValueError("Utilisateur refusé : « root », les espaces, « @ » et le tiret initial sont interdits ; "
                          "utilisez un compte dédié non administrateur.")
+    if not SAIN.fullmatch(utilisateur):
+        raise ValueError("Utilisateur invalide : lettres, chiffres, « . », « _ » et « - » seulement.")
     cle = _texte(serveur.get("cle"), "cle")
     fournisseur = serveur.get("fournisseur")
     if fournisseur not in FOURNISSEURS:
@@ -189,7 +194,7 @@ def ajouter(serveur, dossier=DOSSIER):
     donnees = asdict(serveur) if isinstance(serveur, Serveur) else dict(serveur) if isinstance(serveur, dict) else serveur
     if isinstance(donnees, dict) and not (isinstance(donnees.get("cle"), str) and donnees["cle"].strip()):
         ident = valider({**donnees, "cle": "x"}).id
-        donnees["cle"] = str(Path(dossier) / f"id_ed25519_{ident}")
+        donnees["cle"] = str(Path(dossier).resolve() / f"id_ed25519_{ident}")     # toujours absolue : le dossier courant peut changer
     nouveau = valider(donnees)
     existants = _exiger_fichier_sain(dossier)
     if any(s.id == nouveau.id for s in existants):

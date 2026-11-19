@@ -9,11 +9,12 @@ voir « Suite ».
 
 ## Ce qu'un serveur doit offrir (contrat minimal)
 
-- une **adresse** (nom d'hôte ou IPv4 ; ni espace, ni `@`, ni `/ : [ ] ,`, ni tiret au début : une adresse IPv6 est refusée) ;
+- une **adresse** (nom d'hôte ou IPv4 : lettres, chiffres, `.`, `_` et `-` seulement, sans tiret au début ; ni espace, ni `@`, ni `/ : [ ] ,`,
+  ni aucun autre signe : une adresse IPv6 est refusée) ; l'utilisateur suit la même règle ;
 - un **utilisateur** avec `sudo` **sans mot de passe** (le compte `root` est refusé : créez un utilisateur dédié, MyIAFactory
   n'en crée jamais) ;
 - une **clé SSH** : MyIAFactory en génère une par serveur, vous collez sa partie publique dans `authorized_keys` ;
-- un **Ubuntu ou Debian récent** (seul Linux supporté).
+- un **Ubuntu récent** (seul Ubuntu est supporté : l'étape Docker utilise le dépôt `download.docker.com/linux/ubuntu`).
 
 Rien d'autre. Un serveur sans fournisseur saute l'étape « système » : il suffit qu'on puisse s'y connecter.
 
@@ -82,11 +83,17 @@ les dépendances). Actions connues et capacité requise :
    installation sur le serveur » (décochée par défaut, décochée après chaque envoi), puis « Lancer l'installation ». En ligne de commande :
    l'option `--accord` sur la ligne même. **L'accord vaut pour une seule installation** : relancer demande un nouvel accord.
    Sans accord, `installer` affiche l'aperçu et sort avec le code 1, rien n'est installé.
-3. **Installation** : une seule à la fois sur le poste (verrou `serveurs-installation.lock`, aussi entre deux fenêtres). L'état réel est
-   relu par sonde avant et après chaque capacité, jamais le cache : une étape « fait » dont la capacité n'est pas détectée ensuite devient
-   « bloquée ». Un échec laisse le serveur dans un état connu (la capacité « bloquée » avec la raison, les suivantes « à faire ») ; une
-   connexion perdue ou un délai dépassé donne « inconnue » (l'étape peut encore tourner : attendez avant de relancer). Une installation
-   interrompue (fenêtre fermée) réapparaît « inconnue » : relancez ou lancez un aperçu.
+3. **Installation** : une seule à la fois sur le poste (verrou `serveurs-installation.lock`, aussi entre deux fenêtres). Elle partage le
+   script distant `mise_en_place.sh` avec l'installation de la plateforme OVH (verrou `plateforme.lock`) : **les deux flux se refusent
+   mutuellement**, dans le bureau (réponse 409 en français) comme en ligne de commande (code 1) : chacun prend son verrou puis vérifie
+   que celui de l'autre est libre, sans jamais attendre. Le script est déposé dans un fichier temporaire puis renommé (`mv -f`), jamais
+   écrit en place pendant que `bash` le lit. L'état réel est relu par sonde **une fois au début et une fois à la fin** (jamais le cache) ;
+   entre les deux, l'état est écrit avant et après chaque capacité. Une étape « fait » dont la capacité n'est pas détectée à la fin
+   devient « bloquée ». Un échec laisse le serveur dans un état connu : la capacité est « bloquée » avec sa raison et le geste proposé
+   (le bureau les affiche dans la carte du serveur), les suivantes « à faire » ; une connexion perdue ou un délai dépassé donne
+   « inconnue » (l'étape peut encore tourner : attendez avant de relancer). Une installation interrompue (fenêtre fermée) réapparaît
+   « inconnue » : relancez ou lancez un aperçu. **Une installation ne réécrit que ses propres capacités** : les autres, leurs raisons de
+   blocage et la charge mesurée sont conservées (une installation « charge » ne vide rien).
 
 Les étapes distantes sont celles de `serveur_ovh/mise_en_place.sh` (`docker`, `durcissement`, `android_build`, `android_emulateur`,
 `unity_cli`), rejouables. Le script est déposé dans `~/myiafactory/` du serveur (droits 0700). L'état est écrit dans
@@ -154,8 +161,9 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
 
 ## Limites : ce qui n'a PAS été exécuté sur un vrai serveur
 
-- Les étapes distantes **`android_build`, `android_emulateur` et `unity_cli`** de `mise_en_place.sh` ont été exécutées pour de vrai, à la
-  main, lors d'un essai antérieur ; leurs tests automatiques sont simulés.
+- Les étapes distantes **`android_build`, `android_emulateur` et `unity_cli`**, telles qu'écrites dans `mise_en_place.sh`, n'ont **jamais été
+  exécutées sur le vrai serveur** : leurs tests automatiques sont simulés. Une installation équivalente a été faite à la main plus tôt,
+  avec d'autres scripts (pas ceux-ci).
 - Le **moteur générique** (déclaration, sonde, aperçu, installation, charge), l'**interface du bureau**, la **ligne de commande** et la
   **migration** n'ont **jamais tourné contre le serveur réel** : tous leurs tests passent par de faux SSH et de faux dossiers. Aucune
   commande n'a été envoyée au vrai serveur pendant ce travail, et le vrai dossier `~/MyIAFactory` n'a pas été modifié.
@@ -163,8 +171,8 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
   (voir le rapport de vérification pour ce qui a été regardé avec un état jetable).
 - Le comportement d'un serveur non OVH (Debian, autre fournisseur) n'a été simulé que par les tests.
 - Connus et non corrigés : le durcissement n'ouvre le pare-feu que sur le port 22 ; la sonde du durcissement ne voit pas le pare-feu ;
-  la sonde `base` vérifie le binaire Docker, pas que son démon tourne ; la migration et la déclaration web n'excluent pas strictement
-  une déclaration simultanée de la ligne de commande (fenêtre limitée par une revérification) ; si le serveur n'a pas `/dev/kvm`
+  la sonde `base` vérifie le binaire Docker, pas que son démon tourne ; la déclaration web refuse (409) pendant une opération du bureau, mais ni elle ni la migration
+  n'excluent strictement une déclaration simultanée de la ligne de commande d'un autre processus (fenêtre limitée par une revérification) ; si le serveur n'a pas `/dev/kvm`
   l'étape émulateur reste « bloquée ».
 - L'historique Git contient d'anciens fragments de clés OVH (voir `serveur-ovh.md`) : le réécrire est un préalable à toute publication.
 

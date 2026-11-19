@@ -479,6 +479,82 @@ class TestEtatPerime(Base):
         self.assertEqual(ssh.appels, [])
 
 
+class TestEtatConserve(Base):
+    """Une installation ne réécrit que ses capacités : les autres, et les raisons de blocage, restent."""
+
+    def _avant(self):
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {
+            "agent": inst._entree("bloque", "Licence refusée", "Acceptez la licence."),
+            "unity-cli": inst._entree("presente", "Constatée par la sonde."),
+            "android-emulateur": inst._entree("bloque", "Pas de KVM", "Activez la virtualisation.")}, False, "debut")
+
+    def test_installer_une_capacite_garde_les_autres_et_leurs_raisons(self):
+        self._avant()
+        r = self.installer(FauxSsh(), actions=["apk"])
+        self.assertTrue(r["ok"])
+        caps = inst.lire_etat(self.dossier)[SERVEUR.id]["capacites"]
+        self.assertEqual((caps["base"]["statut"], caps["android-build"]["statut"]), ("fait", "fait"))
+        self.assertEqual(caps["agent"]["statut"], "bloque")
+        self.assertEqual(caps["agent"]["detail"], "Licence refusée")
+        self.assertEqual(caps["agent"]["geste"], "Acceptez la licence.")
+        self.assertEqual(caps["android-emulateur"]["detail"], "Pas de KVM")
+        self.assertEqual(caps["unity-cli"]["statut"], "presente")
+
+    def test_installer_charge_ne_vide_pas_l_etat(self):
+        self._avant()
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"base": inst._entree("presente")}, False, "debut",
+                          charge={"charge_par_coeur": 0.1, "memoire_libre_ratio": 0.9, "conteneurs_outils": 0, "maj": 5.0})
+        r = self.installer(FauxSsh(), actions=["charge"])
+        self.assertTrue(r["ok"])
+        e = inst.lire_etat(self.dossier)[SERVEUR.id]
+        self.assertEqual(set(e["capacites"]), {"agent", "unity-cli", "android-emulateur", "base"})
+        self.assertEqual(e["capacites"]["agent"]["detail"], "Licence refusée")
+        self.assertEqual(e["charge"]["maj"], 5.0)
+
+    def test_etat_abime_a_la_main_ne_fait_jamais_lever(self):
+        (self.dossier / inst.ETAT).write_text(json.dumps({SERVEUR.id: {"capacites": {
+            "base": "presente", "agent": 3, "unity-cli": None, "android-build": {"statut": "en_cours"}},
+            "installation": {"en_cours": True}}}), encoding="utf-8")
+        e = inst.lire_etat_vivant(self.dossier, vivant=lambda p: False)[SERVEUR.id]
+        self.assertEqual(e["capacites"]["android-build"]["statut"], "inconnue")
+        self.assertEqual(e["capacites"]["base"], "presente")      # une entrée qui n'est pas un dictionnaire est laissée telle quelle
+
+
+class TestDeuxFlux(Base):
+    """L'installation générique et celle de la plateforme OVH ne tournent jamais en même temps."""
+
+    def test_refuse_pendant_l_installation_de_la_plateforme(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        ssh = FauxSsh()
+        with self.assertRaises(inst.ErreurInstallation) as c:
+            self.installer(ssh, vivant=lambda p: p == 4242)
+        self.assertIn("plateforme", str(c.exception).lower())
+        self.assertTrue(c.exception.geste)
+        self.assertEqual(ssh.lancees, [])
+        self.assertFalse([a for a in ssh.appels if "cat >" in a["commande"]])
+        self.assertTrue((self.dossier / "plateforme.lock").exists())          # le verrou de l'autre n'est pas touché
+        self.assertFalse((self.dossier / inst.VERROU).exists())               # et le nôtre est rendu
+
+    def test_refuse_si_le_verrou_de_la_plateforme_est_celui_de_ce_processus(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+        with self.assertRaises(inst.ErreurInstallation):
+            self.installer(FauxSsh())
+
+    def test_verrou_plateforme_mort_ne_gene_pas(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 999999}), encoding="utf-8")
+        self.assertTrue(self.installer(FauxSsh())["ok"])
+
+    def test_script_depose_dans_un_fichier_temporaire_puis_renomme(self):
+        ssh = FauxSsh()
+        self.installer(ssh)
+        depot = [a for a in ssh.appels if "cat >" in a["commande"]][0]["commande"]
+        self.assertIn('cat > "$HOME/myiafactory/mise_en_place.sh.$$.tmp"', depot)
+        self.assertIn('mv -f "$HOME/myiafactory/mise_en_place.sh.$$.tmp" "$HOME/myiafactory/mise_en_place.sh"', depot)
+        self.assertNotIn('cat > "$HOME/myiafactory/mise_en_place.sh"', depot)
+        self.assertLess(depot.index("cat >"), depot.index("mv -f"))
+        self.assertLess(depot.index("chmod 700"), depot.index("mv -f"))
+
+
 class TestIndependance(unittest.TestCase):
     SOURCE = (RACINE / "outils" / "serveur_installation.py").read_text(encoding="utf-8")
 

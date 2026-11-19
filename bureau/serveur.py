@@ -1941,6 +1941,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"erreur": "Demande illisible."})
             if not isinstance(corps, dict):
                 return self._json(400, {"erreur": "Demande illisible."})
+            autre = modplateforme.autre_installation()
+            if autre:
+                return self._json(409, {"erreur": autre})
             if not self.server.travail_plateforme.lancer(accord_reinstallation=corps.get("accord_reinstallation") is True):
                 return self._json(409, {"erreur": "Une installation est déjà en cours."})
             return self._json(202, {"demarre": True})

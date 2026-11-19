@@ -121,6 +121,15 @@ class TestSonder(unittest.TestCase):
         self.assertIs(ssh.kw["runner"], marque)
 
 
+class TestCibleStricte(unittest.TestCase):
+    def test_cible_refuse_un_retour_a_la_ligne_final(self):
+        for hote, utilisateur in (("h\n", "factory"), ("203.0.113.7", "u\n"), ("a$b", "factory")):
+            with self.subTest(hote=hote, utilisateur=utilisateur):
+                with self.assertRaises(ValueError):
+                    serveur_etat.cible(Serveur("srv", "S", hote, utilisateur, "cle-privee"))
+        self.assertEqual(serveur_etat.cible(SERVEUR), "factory@203.0.113.7")
+
+
 class TestRefusAcces(unittest.TestCase):
     def test_acces_correct(self):
         ssh = FauxSsh((0, "user=factory\nsudo=0\n", ""))

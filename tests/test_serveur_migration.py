@@ -288,6 +288,23 @@ class TestConcurrence(Base):
                 mig.confirmer(mig.detecter(self.d), True, self.d, ssh=FauxSsh())
         self.assertFalse((self.d / "serveurs.json").exists())
 
+    def test_le_retour_arriere_se_fait_verrou_tenu(self):
+        self.installer_ovh()
+        vues = []
+        vraie = mig._restaurer
+
+        def restaurer_espion(chemin, ecrit):
+            vues.append((self.d / serveur_installation.VERROU).exists()
+                        and serveur_installation.installation_en_cours(self.d, vivant=lambda p: False))
+            return vraie(chemin, ecrit)
+        with mock.patch.object(serveur_installation, "_ecrire_etat", side_effect=OSError("disque plein")), \
+                mock.patch.object(mig, "_restaurer", restaurer_espion):
+            with self.assertRaises(OSError):
+                mig.confirmer(mig.detecter(self.d), True, self.d, ssh=FauxSsh())
+        self.assertTrue(vues and all(vues), vues)
+        self.assertFalse((self.d / "serveurs.json").exists())
+        self.assertFalse((self.d / serveur_installation.VERROU).exists())
+
     def test_le_verrou_d_installation_est_tenu_pendant_l_inscription(self):
         self.installer_ovh()
         vue = []

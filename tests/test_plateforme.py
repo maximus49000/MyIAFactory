@@ -130,7 +130,7 @@ class TestEtat(Base):
         self.assertEqual(self.statuts(etat)["images"], "fait")
         self.assertEqual(ssh.etapes_lancees(), ["durcissement", "docker", "images"])
         self.assertTrue(etat["pret"])
-        envois = [c for c, _ in ssh.commandes if 'cat > "$HOME/myiafactory/mise_en_place.sh"' in c]
+        envois = [c for c, _ in ssh.commandes if 'cat > "$HOME/myiafactory/mise_en_place.sh.$$.tmp"' in c]
         self.assertEqual(len(envois), 1)
         self.assertTrue(any("android/Dockerfile" in c for c, _ in ssh.commandes))
 
@@ -388,6 +388,16 @@ class TestRobustesse(Base):
         self.assertIn("déjà en cours", etat["etapes"][0]["detail"])
         self.assertEqual(client.appels, [])
 
+    def test_refuse_pendant_une_installation_des_serveurs_de_travail(self):
+        (self.dossier / "serveurs-installation.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        client, ssh = ClientFactice(os_="ubuntu2404-server_64"), SshFactice()
+        etat = plateforme.installer(self.dossier, False, client=client, ssh=ssh, vivant=lambda p: p == 4242)
+        self.assertEqual(self.statuts(etat)["lecture"], "bloque")
+        self.assertIn("serveurs", etat["etapes"][0]["detail"].lower())
+        self.assertEqual((client.appels, ssh.commandes), ([], []))
+        self.assertTrue((self.dossier / "serveurs-installation.lock").exists())     # celui de l'autre reste
+        self.assertFalse((self.dossier / "plateforme.lock").exists())               # le nôtre est rendu
+
     def test_verrou_d_un_processus_mort_repris_et_libere_a_la_fin(self):
         (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": 4242}), encoding="utf-8")
         etat = plateforme.installer(self.dossier, False, client=ClientFactice(os_="ubuntu2404-server_64"),
@@ -453,7 +463,7 @@ class TestRobustesse(Base):
                                     plateforme.plateforme_ssh.executer(hote, commande, cle, stdin=stdin, delai=delai, runner=runner))
         etat = self.lancer(ClientFactice(os_="ubuntu2404-server_64"), Reel())
         self.assertTrue(etat["pret"])
-        envoi = [i for c, i in recus if "cat > \"$HOME/myiafactory/mise_en_place.sh\"" in c][0]
+        envoi = [i for c, i in recus if 'cat > "$HOME/myiafactory/mise_en_place.sh.$$.tmp"' in c][0]
         depot = (Path(plateforme.RACINE_SERVEUR) / "mise_en_place.sh").read_bytes()
         self.assertEqual(envoi, depot.replace(b"\r\n", b"\n"))
         for _, entree in recus:
@@ -465,11 +475,12 @@ class TestScriptDistant(Base):
     def test_script_depose_sous_le_dossier_prive_pas_dans_tmp(self):
         ssh = SshFactice()
         self.lancer(ClientFactice(), ssh, accord=True)
-        depot = [c for c, _ in ssh.commandes if 'cat > "$HOME/myiafactory/mise_en_place.sh"' in c][0]
+        depot = [c for c, _ in ssh.commandes if 'cat > "$HOME/myiafactory/mise_en_place.sh.$$.tmp"' in c][0]
         self.assertNotIn("/tmp", depot)
         self.assertIn('install -d -m 700 "$HOME/myiafactory"', depot)
         self.assertIn("umask 077", depot)
-        self.assertIn('chmod 700 "$HOME/myiafactory/mise_en_place.sh"', depot)
+        self.assertIn('chmod 700 "$HOME/myiafactory/mise_en_place.sh.$$.tmp"', depot)
+        self.assertIn('mv -f "$HOME/myiafactory/mise_en_place.sh.$$.tmp" "$HOME/myiafactory/mise_en_place.sh"', depot)
         for c, _ in ssh.commandes:
             if "--etape" in c:
                 self.assertIn('bash "$HOME/myiafactory/mise_en_place.sh"', c)

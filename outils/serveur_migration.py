@@ -122,14 +122,11 @@ def confirmer(proposition, accord, dossier=DOSSIER, ssh=plateforme_ssh):
             ecrit["declare"] = serveur_modele.ajouter(serveur, dossier)
             ecrit["apres"] = chemin.read_bytes()
 
-        try:
-            serveur_installation.enregistrer_sonde(dossier, serveur, etat, charge=charge, sous_verrou=declarer)
+        try:        # le retour arrière (`sur_echec`) se fait verrou d'installation encore tenu
+            serveur_installation.enregistrer_sonde(dossier, serveur, etat, charge=charge, sous_verrou=declarer,
+                                                   sur_echec=lambda: _restaurer(chemin, ecrit))
         except serveur_installation.ErreurInstallation:
-            _restaurer(chemin, ecrit)
             raise occupe from None
-        except BaseException:
-            _restaurer(chemin, ecrit)
-            raise
         return ecrit["declare"]
     finally:
         _VERROU_MIGRATION.release()

@@ -177,6 +177,39 @@ class ModeleTest(unittest.TestCase):
                     serveur_modele.valider({**BON, champ: valeur})
         serveur_modele.valider({**BON, "hote": "h" * 253, "utilisateur": "u" * 64, "id": "i" * 64, "nom": "n" * 100})
 
+    def test_hote_et_utilisateur_suivent_la_regle_stricte_de_la_connexion(self):
+        for champ, valeur in (("hote", "a$b"), ("hote", "a;b"), ("hote", "a`b"), ("hote", "a'b"), ("hote", "h~x"),
+                              ("hote", "a|b"), ("hote", "h\nx"), ("utilisateur", "u$b"), ("utilisateur", "u;x"),
+                              ("utilisateur", "u\nx")):
+            with self.subTest(champ=champ, valeur=valeur):
+                with self.assertRaises(ValueError):
+                    serveur_modele.valider({**BON, champ: valeur})
+        self.assertEqual(serveur_modele.valider({**BON, "hote": "h\n"}).hote, "h")     # jamais rangé avec un retour à la ligne
+        for hote in ("srv.exemple.fr", "203.0.113.5", "a-b.c_d"):
+            serveur_modele.valider({**BON, "hote": hote})
+
+    def test_identifiant_migration_reste_reserve(self):
+        for ident in ("migration", "Migration", " migration "):
+            with self.assertRaises(ValueError):
+                serveur_modele.valider({**BON, "id": ident})
+
+    def test_cle_par_defaut_toujours_absolue_meme_avec_un_dossier_relatif(self):
+        import os
+        ancien = os.getcwd()
+        os.chdir(self.dossier)
+        self.addCleanup(os.chdir, ancien)
+        sans_cle = {k: v for k, v in BON.items() if k != "cle"}
+        s = serveur_modele.ajouter(sans_cle, Path("relatif"))
+        self.assertTrue(Path(s.cle).is_absolute(), s.cle)
+        self.assertEqual(Path(s.cle), (self.dossier / "relatif").resolve() / "id_ed25519_mon-serveur-ete")
+        stocke = serveur_modele.lire(Path("relatif"))[0]
+        self.assertEqual(stocke.cle, s.cle)
+        os.chdir(ancien)                                    # la clé ne dépend plus du dossier courant
+        fausse = FauxKeygen()
+        serveur_modele.ligne_cle_publique(Path("autre-dossier"), stocke, runner=fausse)
+        self.assertTrue(Path(s.cle).exists())
+        self.assertFalse((Path("autre-dossier")).exists())
+
     def test_filtre_secrets_imbrique_et_par_mots(self):
         for cles in ({"password": 1}, {"db_passwd": 1}, {"a": {"b": {"api_key": 1}}}, {"mot_de_passe": 1},
                      {"cle_api": 1}, {"x": [{"Token": 1}]}, {"secret": 1}, {"client-secret": 1}):

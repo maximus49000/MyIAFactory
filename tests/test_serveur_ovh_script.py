@@ -146,6 +146,7 @@ class TestScriptSimule(unittest.TestCase):
             corps = {
                 "sudo": (f'echo "sudo $@" >> "{journal.as_posix()}"\n'
                          'while case "$1" in *=*) true;; *) false;; esac; do shift; done\n'
+                         'if [ "$1" = env ]; then shift; while case "$1" in *=*) true;; *) false;; esac; do shift; done; fi\n'
                          f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get|curl|gpg|mv|rm|chmod|tee|install|mktemp) "$@";; *) exit 0;; esac'),
                 "ss": f'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\n'
                       f'echo "LISTEN 0 4096 {ecoute} 0.0.0.0:*"\necho "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"',
@@ -498,7 +499,7 @@ class TestScriptSimule(unittest.TestCase):
                 self.assertEqual(r.returncode, 2)
                 self.assertIn("valeur", r.stderr)
 
-    def _etat_avec_faux(self, images_absentes=(), volumes_ok=True):
+    def _etat_avec_faux(self, images_absentes=(), volumes_ok=True, ufw_francais=False):
         """Lance l'étape etat (réelle) avec de faux binaires : serveur durci, Docker présent, images au choix."""
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
@@ -508,7 +509,9 @@ class TestScriptSimule(unittest.TestCase):
             corps = {
                 "sudo": 'while case "$1" in *=*) true;; *) false;; esac; do shift; done\nexec "$@"',
                 "sshd": 'echo "passwordauthentication no"',
-                "ufw": 'echo "Status: active"',
+                # un serveur en français répond « État : actif » sauf si l'appelant force LC_ALL=C
+                "ufw": ('if [ "$LC_ALL" = C ] || [ -z "%s" ]; then echo "Status: active"; else echo "État : actif"; fi'
+                        % ("oui" if ufw_francais else "")),
                 "dpkg": "exit 0",
                 "docker": ('case "$1 $2" in "image inspect") case "$*" in ' + absentes + ' esac;; '
                            f'"volume inspect") exit {0 if volumes_ok else 1};; esac\nexit 0'),
@@ -520,6 +523,14 @@ class TestScriptSimule(unittest.TestCase):
                                text=True, encoding="utf-8", timeout=60, env=dict(os.environ, DISQUE_LIBRE_GO="500",
                                PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
             return json.loads(r.stdout)
+
+    def test_etat_lit_ufw_en_langue_c_meme_sur_un_serveur_francais(self):
+        self.assertEqual(self._etat_avec_faux(ufw_francais=True)["statut"], "fait")
+
+    def test_aucun_ufw_status_du_script_sans_langue_c(self):
+        for ligne in SCRIPT.read_text(encoding="utf-8").splitlines():
+            if "ufw status" in ligne and not ligne.lstrip().startswith("#"):
+                self.assertIn("sudo env LC_ALL=C ufw status", ligne)
 
     def test_etat_exige_les_trois_images(self):
         self.assertEqual(self._etat_avec_faux()["statut"], "fait")

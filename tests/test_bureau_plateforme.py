@@ -56,6 +56,14 @@ class TestPlateformeBureau(AvecServeur):
         self.assertIs(e["pret"], True)
         self.assertNotEqual(e["derniere_lecture"], "")
 
+    def test_post_refuse_409_pendant_une_installation_des_serveurs(self):
+        (self.dossier / "serveurs-installation.lock").write_text("", encoding="utf-8")    # verrou récent d'une installation générique
+        r, data = self.poster({"accord_reinstallation": False})
+        self.assertEqual(r.status, 409)
+        self.assertIn("serveurs", json.loads(data)["erreur"].lower())
+        self.srv.travail_plateforme.attendre()
+        self.assertEqual(self.appels, [])
+
     def test_post_sans_en_tete_bureau_refuse(self):
         r, _ = self.poster({"accord_reinstallation": True}, {"Content-Type": "application/json"})
         self.assertEqual(r.status, 403)

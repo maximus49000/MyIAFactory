@@ -117,7 +117,7 @@ verifier_seconde_session() {
 
 durcissement_fait() {
   sudo sshd -T 2>/dev/null | grep -qi '^passwordauthentication no' \
-    && sudo ufw status 2>/dev/null | grep -q '^Status: active' \
+    && sudo env LC_ALL=C ufw status 2>/dev/null | grep -q '^Status: active' \
     && dpkg -s unattended-upgrades >/dev/null 2>&1
 }
 
@@ -430,7 +430,7 @@ etape_bureau_distant() {
   if printf '%s\n' "$ecoute" | grep -qvx '127\.0\.0\.1:3389'; then
     bloque_xrdp_arrete "Le port 3389 écoute ailleurs que sur 127.0.0.1 : accès distant non sûr, session non validée."
   fi
-  if sudo ufw status 2>/dev/null | grep -qE '(^|[^0-9])3389([^0-9]|$)'; then
+  if sudo env LC_ALL=C ufw status 2>/dev/null | grep -qE '(^|[^0-9])3389([^0-9]|$)'; then
     repondre bloque "Une règle ufw ouvre le port 3389 : retirez-la (la session ne se joint que par tunnel SSH)."
   fi
   command -v unityhub >/dev/null 2>&1 || repondre bloque "Le programme unityhub est absent après installation."

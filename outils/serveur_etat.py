@@ -12,18 +12,19 @@ import math
 import re
 
 import plateforme_ssh
+import serveur_modele
 from serveur_capacites import CATALOGUE
 
 PRESENTE, ABSENTE, INCONNUE = "presente", "absente", "inconnue"
-_SAIN = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*$")
+_SAIN = serveur_modele.SAIN       # une seule règle pour la déclaration et la connexion
 
 
 def cible(serveur):
     """`utilisateur@hote` après contrôle ; `ValueError` avant toute connexion si une valeur est douteuse."""
     hote, utilisateur, cle = serveur.hote, serveur.utilisateur, serveur.cle
-    if not isinstance(hote, str) or not _SAIN.match(hote):
+    if not isinstance(hote, str) or not _SAIN.fullmatch(hote):
         raise ValueError("Adresse du serveur invalide.")
-    if not isinstance(utilisateur, str) or not _SAIN.match(utilisateur):
+    if not isinstance(utilisateur, str) or not _SAIN.fullmatch(utilisateur):
         raise ValueError("Utilisateur du serveur invalide.")
     if not cle or not str(cle).strip():
         raise ValueError("Clé SSH du serveur absente.")

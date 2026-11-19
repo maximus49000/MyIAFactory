@@ -19,7 +19,8 @@ from pathlib import Path
 import plateforme_acces
 import plateforme_ssh
 import serveur_etat
-from plateforme import RACINE_SERVEUR, SCRIPT_DISTANT, pid_vivant
+import plateforme
+from plateforme import COMMANDE_DEPOT, RACINE_SERVEUR, SCRIPT_DISTANT, pid_vivant
 from serveur_capacites import CATALOGUE, bloquees, manquantes_pour
 from serveur_modele import ecrire_atomique
 
@@ -75,7 +76,7 @@ def installation_en_cours(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
 def _degrader(caps):
     """Copie de `caps` où chaque capacité restée « en_cours » est devenue « inconnue » (installation interrompue)."""
     return {i: (_entree("inconnue", INTERROMPUE, "Relancez l'installation ou lancez un aperçu pour constater l'état.")
-                if c.get("statut") == "en_cours" else c) for i, c in caps.items()}
+                if isinstance(c, dict) and c.get("statut") == "en_cours" else c) for i, c in caps.items()}
 
 
 def lire_etat_vivant(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
@@ -118,9 +119,15 @@ def _charge_valide(charge):
     return sortie
 
 
-def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER):
-    """Réécrit l'entrée d'un serveur ; sa `charge` (lue par la sonde) est conservée sauf si `charge` est donnée."""
+def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER, fusionner=True):
+    """Réécrit l'entrée d'un serveur ; sa `charge` (lue par la sonde) est conservée sauf si `charge` est donnée.
+
+    `capacites` ne dit que ce qui vient d'être constaté ou fait : par défaut elles sont fusionnées dans celles déjà connues
+    (les autres capacités, et les raisons de blocage, ne sont jamais perdues). `fusionner=False` : une sonde complète."""
     tout = lire_etat(dossier)
+    avant = tout.get(serveur_id, {}).get("capacites")
+    if fusionner and isinstance(avant, dict):
+        capacites = {**avant, **capacites}
     entree = {"capacites": capacites, "installation": {"en_cours": en_cours, "debut": debut}}
     ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else charge
     if ancienne is not None:
@@ -138,13 +145,15 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
                  "inconnue": "Serveur injoignable ou état illisible."}
 
 
-def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time, sous_verrou=None):
+def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time, sous_verrou=None,
+                      sur_echec=None):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
     « bloque » garde son entrée (et sa raison) tant que la sonde ne la constate pas présente.
     `charge` (lecture de `serveur_etat.charge`, faite par l'appelant hors verrou) est rangée dans l'état ; absente ou
-    illisible, aucune charge n'est conservée (une charge périmée induirait en erreur)."""
+    illisible, aucune charge n'est conservée (une charge périmée induirait en erreur).
+    `sur_echec()` est appelée, verrou toujours tenu, si `sous_verrou` ou l'écriture échoue (retour arrière de l'appelant)."""
     deja = ErreurInstallation("Une installation est déjà en cours sur ce poste.", "Attendez sa fin puis relancez.")
     if not _VERROU_PROCESSUS.acquire(blocking=False):
         raise deja
@@ -157,24 +166,14 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
         if verrou is None:
             raise deja
         try:
-            if sous_verrou is not None:
-                sous_verrou()       # exécuté verrou pris : aucune installation ne peut démarrer entre cette action et l'écriture
-            avant = lire_etat(dossier).get(serveur.id, {})
-            anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
-            caps = {}
-            for i, s in etat.items():
-                ancienne = anciennes.get(i)
-                if (i in CATALOGUE and not CATALOGUE[i].installable and s != "presente"
-                        and isinstance(ancienne, dict) and ancienne.get("statut") == "bloque"):
-                    caps[i] = ancienne
-                else:
-                    caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
-            inst = avant.get("installation")
-            debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
-            valide = _charge_valide(charge)
-            if valide is not None:
-                valide["maj"] = horloge()           # secondes epoch : une charge trop vieille est ignorée à la lecture
-            _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=valide)
+            try:
+                if sous_verrou is not None:
+                    sous_verrou()       # exécuté verrou pris : aucune installation ne peut démarrer entre cette action et l'écriture
+                _enregistrer(dossier, serveur, etat, charge, horloge)
+            except BaseException:
+                if sur_echec is not None:
+                    sur_echec()         # encore sous le verrou : personne ne peut écrire entre l'échec et le retour arrière
+                raise
         finally:
             try:
                 verrou.unlink()
@@ -182,6 +181,26 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
                 pass
     finally:
         _VERROU_PROCESSUS.release()
+
+
+def _enregistrer(dossier, serveur, etat, charge, horloge):
+    """Écrit l'état constaté par une sonde (appelé verrou pris)."""
+    avant = lire_etat(dossier).get(serveur.id, {})
+    anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
+    caps = {}
+    for i, s in etat.items():
+        ancienne = anciennes.get(i)
+        if (i in CATALOGUE and not CATALOGUE[i].installable and s != "presente"
+                and isinstance(ancienne, dict) and ancienne.get("statut") == "bloque"):
+            caps[i] = ancienne
+        else:
+            caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
+    inst = avant.get("installation")
+    debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
+    valide = _charge_valide(charge)
+    if valide is not None:
+        valide["maj"] = horloge()           # secondes epoch : une charge trop vieille est ignorée à la lecture
+    _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=valide, fusionner=False)
 
 
 # ---------------------------------------------------------------- aperçu
@@ -249,6 +268,13 @@ def _prendre_verrou(dossier, vivant):
     return None
 
 
+def plateforme_en_cours(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
+    """L'installation de la plateforme (autre flux, verrou `plateforme.lock`) tourne-t-elle ? Un verrou à notre propre
+    pid compte : le bureau lance cette installation dans un fil de ce même processus."""
+    chemin = Path(dossier) / plateforme.VERROU
+    return chemin.exists() and _verrou_tenu(chemin, vivant, True)
+
+
 # ---------------------------------------------------------------- étapes distantes
 
 def _analyser(sortie):
@@ -265,8 +291,7 @@ def _analyser(sortie):
 def _deposer_script(serveur, ssh):
     """Dépose le script dans le dossier privé du serveur (0700, jamais /tmp). (statut, détail) ; None si réussi."""
     texte = (RACINE_SERVEUR / "mise_en_place.sh").read_bytes().decode("utf-8")   # octets du dépôt, fins de ligne intactes
-    commande = f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > "{SCRIPT_DISTANT}" && chmod 700 "{SCRIPT_DISTANT}"'
-    code, _o, erreur = ssh.executer(serveur_etat.cible(serveur), commande, serveur.cle, stdin=texte, delai=60)
+    code, _o, erreur = ssh.executer(serveur_etat.cible(serveur), COMMANDE_DEPOT, serveur.cle, stdin=texte, delai=60)
     if code == 0:
         return None
     return ("inconnue" if code in (255, 124) else "bloque",
@@ -323,6 +348,13 @@ def installer(serveur, actions, accord, dossier=plateforme_acces.DOSSIER, ssh=pl
                                      "Vérifiez les droits d'écriture du dossier de configuration.") from e
         if verrou is None:
             raise deja
+        if plateforme_en_cours(dossier, vivant):               # vérifié verrou pris : les deux flux se refusent mutuellement
+            try:
+                verrou.unlink()
+            except OSError:
+                pass
+            raise ErreurInstallation("L'installation de la plateforme est en cours : le script du serveur ne peut pas servir "
+                                     "aux deux à la fois.", "Attendez la fin de l'installation de la plateforme puis relancez.")
         debut = _maintenant()
         caps = {}
         try:

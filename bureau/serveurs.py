@@ -17,6 +17,8 @@ from . import plateforme as modplateforme
 DOSSIER = None   # None : voir `dossier()` ; remplacé dans les essais
 MAX_ACTIONS = 20
 STATUTS_PRESENTS = ("presente", "fait")
+LIBELLES_STATUTS = {"presente": "présente", "fait": "faite", "absente": "absente", "inconnue": "inconnue", "bloque": "bloquée",
+                    "a_faire": "à faire", "en_cours": "en cours"}
 _ROUTE = re.compile(r"/api/serveurs(?:/([^/]+)/(sonder|apercu|installer))?")
 DELAI_APERCU_S = 150
 MAX_APERCUS = 2
@@ -93,6 +95,20 @@ def _capacites(etat_serveur):
     brut = etat_serveur.get("capacites") if isinstance(etat_serveur, dict) else None
     brut = brut if isinstance(brut, dict) else {}
     return {i: _statut(brut.get(i)) for i in catalogue}
+
+
+def _fiches_capacites(etat_serveur):
+    """{capacité: {statut, detail, geste}} d'après l'état lu : ce que le moteur a constaté ou fait (statut `bloque`,
+    `a_faire`, `en_cours`, `fait`, `presente`, `absente`, `inconnue`) avec sa raison et le geste proposé."""
+    catalogue = _modules()[1].CATALOGUE
+    brut = etat_serveur.get("capacites") if isinstance(etat_serveur, dict) else None
+    brut = brut if isinstance(brut, dict) else {}
+    sortie = {}
+    for i in catalogue:
+        e = brut.get(i)
+        e = e if isinstance(e, dict) else {}
+        sortie[i] = {"statut": _statut(e), **{k: e[k] if isinstance(e.get(k), str) else "" for k in ("detail", "geste")}}
+    return sortie
 
 
 def _ligne_cle_existante(d, serveur):
@@ -264,7 +280,7 @@ def lire(travaux, d=None):
         e = etat.get(s.id, {})
         inst = e.get("installation") if isinstance(e, dict) else None
         en_cours = (isinstance(inst, dict) and inst.get("en_cours") is True) or travaux.en_cours("installer", s.id)
-        fiche = _decrire(s, _capacites(e), bool(en_cours), _ligne_cle_existante(d, s))
+        fiche = _decrire(s, _fiches_capacites(e), bool(en_cours), _ligne_cle_existante(d, s))
         fiche["sonde_en_cours"] = bool(travaux.en_cours("sonder", s.id))
         if travaux.erreurs.get(s.id):
             fiche["erreur"] = _masquer(travaux.erreurs[s.id], secrets)
@@ -315,7 +331,7 @@ def _lieu(d, serveurs, etat, action):
     morceaux = []
     for i in manque:
         cap = capacites.CATALOGUE[i]
-        note = f"{caps.get(i)}" + ("" if cap.installable else ", non installable automatiquement")
+        note = LIBELLES_STATUTS.get(caps.get(i), "inconnue") + ("" if cap.installable else ", non installable automatiquement")
         morceaux.append(f"{i} ({note})")
     return {"permis": False, "manque": manque, "serveur_id": s.id,
             "raison": f"Capacités manquantes sur « {s.nom} » : " + ", ".join(morceaux) + "."}
@@ -430,6 +446,8 @@ def poster(travaux, cible, corps, d=None):
     if genre in ("migration_apercu", "migration_confirmer"):
         return _poster_migration(travaux, genre, corps, d)
     if genre == "declarer":
+        if travaux.en_cours() or installation.installation_en_cours(d):     # une sonde, une installation ou une migration tourne
+            return 409, {"erreur": "Une opération est en cours : déclarez le serveur à sa fin."}
         champs = {k: corps.get(k) for k in ("nom", "hote", "utilisateur", "fournisseur")}   # rien d'autre n'est pris
         try:           # l'identifiant « migration » est réservé : `valider` le refuse avec un message clair (400)
             serveur = modeles.ajouter(champs, d)
@@ -440,7 +458,7 @@ def poster(travaux, cible, corps, d=None):
             avertissement = None
         except Exception:
             ligne, avertissement = None, "Le serveur est déclaré, mais la clé SSH n'a pas pu être créée : relancez la déclaration."
-        fiche = _decrire(serveur, _capacites({}), False, ligne)
+        fiche = _decrire(serveur, _fiches_capacites({}), False, ligne)
         if avertissement:
             fiche["avertissement"] = avertissement
         return 201, _masquer({"serveur": fiche}, _secrets(d, [serveur]))
@@ -479,6 +497,8 @@ def poster(travaux, cible, corps, d=None):
         return 400, {"erreur": "Installation refusée : l'accord n'a pas été donné."}
     if travaux.en_cours() or installation.installation_en_cours(d):
         return 409, {"erreur": "Une installation est déjà en cours."}
+    if installation.plateforme_en_cours(d):
+        return 409, {"erreur": "L'installation de la plateforme OVH est en cours : attendez sa fin avant d'installer sur ce serveur."}
     if not travaux.installer(serveur, actions, d):
         return 409, {"erreur": "Une installation est déjà en cours."}
     return 202, {"demarre": True}
@@ -520,5 +540,5 @@ def _poster_migration(travaux, genre, corps, d):
                               "source": resultat["source"], "capacites": resultat["capacites"],
                               "joignable": resultat["joignable"]}, masque)
     etat = installation.lire_etat_vivant(d).get(resultat.id, {})
-    fiche = _decrire(resultat, _capacites(etat), False, _ligne_cle_existante(d, resultat))
+    fiche = _decrire(resultat, _fiches_capacites(etat), False, _ligne_cle_existante(d, resultat))
     return 200, _masquer({"serveur": fiche}, _secrets(d, [resultat]))

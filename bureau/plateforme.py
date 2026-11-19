@@ -92,6 +92,20 @@ def lire(d=None, travail=None, vivant=None):
     return etat
 
 
+def autre_installation(d=None):
+    """Le message d'un refus si l'installation générique des serveurs de travail tourne (elle partage le script distant avec
+    celle de la plateforme : jamais les deux ensemble) ; `None` sinon ou au moindre ennui."""
+    try:
+        _modules()
+        import serveur_installation
+        d = Path(d) if d else dossier()
+        if serveur_installation.installation_en_cours(d):
+            return "Une installation des serveurs de travail est en cours : attendez sa fin avant de lancer celle de la plateforme."
+    except Exception:
+        pass
+    return None
+
+
 def pret(d=None):
     """La plateforme est-elle prête (étapes 1 à 6 faites, d'après le cache) ? Faux au moindre ennui."""
     try:

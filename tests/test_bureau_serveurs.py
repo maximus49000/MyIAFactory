@@ -1,6 +1,7 @@
 """Essai réel : le bureau expose les serveurs distants et leurs capacités (fichiers seulement) et lance la sonde ou
 l'installation en arrière-plan. Jamais de vrai `ssh` ni de vrai `ssh-keygen` : un faux ssh et un faux moteur sont injectés."""
 import json
+import os
 import threading
 import time
 import unittest
@@ -123,7 +124,36 @@ class TestLecture(AvecServeurs):
         self.declarer()
         self.ecrire_etat(base="presente", **{"android-build": "en_cours"})
         c = self.json("/api/serveurs")["serveurs"][0]["capacites"]
-        self.assertEqual((c["base"], c["android-build"], c["agent"]), ("presente", "inconnue", "inconnue"))
+        self.assertEqual((c["base"]["statut"], c["android-build"]["statut"], c["agent"]["statut"]), ("presente", "inconnue", "inconnue"))
+
+    def test_get_donne_statut_detail_et_geste_de_chaque_capacite(self):
+        (self.dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-XYZ-123456", "secret": SECRET,
+                                                            "consommateur": "CONSO-XYZ-123456", "serveur": "ns1"}), encoding="utf-8")
+        self.declarer()
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps({"mon-serveur": {"capacites": {
+            "base": {"statut": "presente", "detail": "Constatée par la sonde.", "geste": "", "maj": "x"},
+            "android-build": {"statut": "bloque", "detail": "Disque plein " + SECRET, "geste": "Libérez de la place.", "maj": "x"},
+            "android-emulateur": {"statut": "a_faire", "detail": "En attente de android-build.", "geste": "", "maj": "x"}},
+            "installation": {"en_cours": False, "debut": ""}}}), encoding="utf-8")
+        brut = self.req("GET", "/api/serveurs")[1]
+        c = json.loads(brut)["serveurs"][0]["capacites"]
+        self.assertEqual(set(c), set(IDS))
+        self.assertEqual(c["android-build"]["statut"], "bloque")
+        self.assertIn("Disque plein", c["android-build"]["detail"])
+        self.assertEqual(c["android-build"]["geste"], "Libérez de la place.")
+        self.assertEqual(c["android-emulateur"]["statut"], "a_faire")
+        self.assertEqual(c["unity-cli"], {"statut": "inconnue", "detail": "", "geste": ""})
+        self.assertNotIn(SECRET.encode(), brut)
+
+    def test_get_etat_abime_a_la_main_ne_leve_pas(self):
+        self.declarer()
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps({"mon-serveur": {"capacites": {
+            "base": "presente", "agent": 12, "android-build": {"statut": "en_cours"}, "unity-cli": None}}}), encoding="utf-8")
+        r, data = self.req("GET", "/api/serveurs")
+        self.assertEqual(r.status, 200)
+        c = json.loads(data)["serveurs"][0]["capacites"]
+        self.assertEqual((c["base"]["statut"], c["agent"]["statut"], c["android-build"]["statut"]), ("inconnue", "inconnue", "inconnue"))
+        self.assertEqual(self.req("GET", "/api/serveurs/lieux?actions=apk")[0].status, 200)
 
     def test_lieux_serveur_non_permis_si_capacite_bloquee(self):
         self.declarer()
@@ -320,6 +350,25 @@ class TestDeclaration(AvecServeurs):
         self.declarer()
         self.assertEqual(self.declarer()[0].status, 400)
 
+    def test_declarer_refuse_409_pendant_une_operation(self):
+        self.declarer()
+        self.poster("/api/serveurs/mon-serveur/installer", {"actions": ["apk"], "accord": True})
+        try:
+            r, data = self.declarer(nom="Autre", hote="autre.exemple.fr")
+            self.assertEqual(r.status, 409)
+            self.assertIn("erreur", json.loads(data))
+        finally:
+            self.libre.set()
+            self.travaux.attendre()
+        self.assertEqual([x["id"] for x in self.json("/api/serveurs")["serveurs"]], ["mon-serveur"])
+        self.assertEqual(self.declarer(nom="Autre", hote="autre.exemple.fr")[0].status, 201)
+
+    def test_declarer_refuse_409_pendant_une_migration(self):
+        with mock.patch.object(bserveurs.Travaux, "en_cours", return_value=True):
+            r, _ = self.declarer()
+        self.assertEqual(r.status, 409)
+        self.assertFalse((self.dossier / "serveurs.json").exists())
+
     def test_declarer_corps_trop_gros_ou_sans_en_tete(self):
         gros = {"nom": "x" * 3000, "hote": "a.fr", "utilisateur": "bob"}
         self.assertEqual(self.poster("/api/serveurs", gros)[0].status, 400)
@@ -336,6 +385,14 @@ class TestInstallation(AvecServeurs):
     def test_installer_sans_en_tete_bureau_refuse(self):
         r, _ = self.poster(self.chemin, {"actions": ["apk"], "accord": True}, {"Content-Type": "application/json"})
         self.assertEqual(r.status, 403)
+        self.assertEqual(self.appels, [])
+
+    def test_installer_refuse_409_pendant_l_installation_de_la_plateforme(self):
+        (self.dossier / "plateforme.lock").write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+        r, data = self.poster(self.chemin, {"actions": ["apk"], "accord": True})
+        self.assertEqual(r.status, 409)
+        self.assertIn("plateforme", json.loads(data)["erreur"].lower())
+        self.travaux.attendre()
         self.assertEqual(self.appels, [])
 
     def test_installer_accord_non_booleen_ne_lance_rien(self):
@@ -490,7 +547,7 @@ class TestSondeEtApercu(AvecServeurs):
         self.assertEqual((r.status, json.loads(data)), (202, {"demarre": True}))
         self.travaux.attendre()
         c = self.json("/api/serveurs")["serveurs"][0]["capacites"]
-        self.assertEqual((c["base"], c["android-build"], c["agent"]), ("presente", "presente", "absente"))
+        self.assertEqual((c["base"]["statut"], c["android-build"]["statut"], c["agent"]["statut"]), ("presente", "presente", "absente"))
         self.assertNotIn("erreur", self.json("/api/serveurs")["serveurs"][0])
 
     def test_sonde_serveur_injoignable_inconnue_et_erreur(self):
@@ -498,7 +555,7 @@ class TestSondeEtApercu(AvecServeurs):
         self.poster("/api/serveurs/mon-serveur/sonder", {})
         self.travaux.attendre()
         e = self.json("/api/serveurs")["serveurs"][0]
-        self.assertEqual(set(e["capacites"].values()), {"inconnue"})
+        self.assertEqual({v["statut"] for v in e["capacites"].values()}, {"inconnue"})
         self.assertIn("injoignable", e["erreur"])
 
     def test_apercu_ne_modifie_rien(self):
@@ -728,7 +785,7 @@ class TestMigration(AvecServeurs):
         r, data = self.poster("/api/serveurs/migration/confirmer", {"accord": True})
         self.assertEqual(r.status, 200)
         fiche = json.loads(data)["serveur"]
-        self.assertEqual((fiche["hote"], fiche["fournisseur"], fiche["capacites"]["base"]), ("203.0.113.9", "ovh", "presente"))
+        self.assertEqual((fiche["hote"], fiche["fournisseur"], fiche["capacites"]["base"]["statut"]), ("203.0.113.9", "ovh", "presente"))
         self.assertNotIn(b"PRIVATE-KEY-CONTENT", data)
         serveurs = bserveurs._modules()[4].lire(self.dossier)
         self.assertEqual([s.hote for s in serveurs], ["203.0.113.9"])

@@ -40,6 +40,11 @@ BUDGET_REINSTALLATION_S = 40 * 60
 PAS_TACHE_S = 30
 RACINE_SERVEUR = Path(__file__).resolve().parent.parent / "serveur_ovh"
 SCRIPT_DISTANT = "$HOME/myiafactory/mise_en_place.sh"   # dossier privé (0700) du serveur, jamais /tmp
+_TEMPORAIRE = f"{SCRIPT_DISTANT}.$$.tmp"
+# Dépôt du script : fichier temporaire (0700) puis `mv -f` sur la cible, jamais `cat >` sur le script que bash est peut-être
+# en train de lire. Partagé avec l'installation générique (`serveur_installation`) : un seul texte pour les deux flux.
+COMMANDE_DEPOT = (f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > "{_TEMPORAIRE}" && chmod 700 "{_TEMPORAIRE}" '
+                  f'&& mv -f "{_TEMPORAIRE}" "{SCRIPT_DISTANT}" || {{ rm -f "{_TEMPORAIRE}"; exit 1; }}')
 VERROU_JEUNE_S = 30
 DOSSIER_DISTANT = "$HOME/myiafactory/serveur_ovh"
 DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600,
@@ -340,7 +345,7 @@ def _envoyer_script(c):
     if c.script_envoye:
         return None
     texte = (RACINE_SERVEUR / "mise_en_place.sh").read_text(encoding="utf-8")
-    r = _deposer(c, f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > "{SCRIPT_DISTANT}" && chmod 700 "{SCRIPT_DISTANT}"', texte)
+    r = _deposer(c, COMMANDE_DEPOT, texte)
     c.script_envoye = r is None
     return r
 
@@ -464,6 +469,15 @@ def _prendre_verrou(dossier, vivant):
     return None
 
 
+def _generique_en_cours(dossier, vivant):
+    """L'installation générique des serveurs de travail (verrou `serveurs-installation.lock`) tourne-t-elle ?"""
+    try:
+        import serveur_installation       # import tardif : ce module importe celui-ci
+        return serveur_installation.installation_en_cours(dossier, vivant)
+    except Exception:
+        return False
+
+
 def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, client=None, ssh=None, dormir=time.sleep,
               vivant=pid_vivant, bureau_distant=False):
     """Enchaîne les étapes en reprenant là où la dernière exécution s'est arrêtée (une seule exécution à la fois)."""
@@ -475,6 +489,10 @@ def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, cli
         return calculer_etat({"lecture": _rapport("bloque", "Une installation est déjà en cours (ou le dossier est inaccessible).",
                                                   "Attendez la fin de l'autre exécution, puis relancez.")})
     try:
+        if _generique_en_cours(dossier, vivant):     # vérifié verrou pris : les deux flux se refusent mutuellement
+            return calculer_etat({"lecture": _rapport("bloque", "Une installation des serveurs de travail est déjà en cours : "
+                                                      "le script du serveur ne peut pas servir aux deux à la fois.",
+                                                      "Attendez la fin de l'installation des serveurs, puis relancez.")})
         return _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_distant)
     finally:
         try:

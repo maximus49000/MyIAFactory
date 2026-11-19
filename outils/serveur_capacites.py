@@ -6,8 +6,15 @@ sonde SHELL strictement en lecture seule (code 0 = présente). Les étapes `andr
 
 `taille_go` et `duree_min` sont des ESTIMATIONS tirées de nos installations réelles (espace disque en Go, durée en minutes),
 pas des garanties : elles servent à chiffrer une proposition avant validation.
+
+La couche de sonde est la source de vérité : elle sonde TOUTES les capacités indépendamment et fournit l'ensemble
+`installees` explicite ; `ordre_installation` ne déduit rien d'une capacité installée (aucune dépendance implicite).
+
+Limites connues des sondes (lecture seule, sans sudo) : celle du durcissement ne voit pas le pare-feu (ufw), configuré après
+le fichier sshd ; celle de la base vérifie la présence du binaire docker, pas que son démon tourne.
 """
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Iterable
 
 
@@ -23,14 +30,18 @@ class Capacite:
     installable: bool = True
     raison_non_installable: str = ""
 
+    def __post_init__(self):
+        if not self.installable and not self.raison_non_installable.strip():
+            raise ValueError(f"La capacité « {self.id} » non installable doit dire pourquoi (raison_non_installable).")
 
-CATALOGUE = {
+
+_CATALOGUE = {
     "base": Capacite(
         "base", "Base du serveur (Docker, outils)", (), "docker",
         "command -v docker >/dev/null", 0.5, 5),
     "durcissement": Capacite(
         "durcissement", "Durcissement SSH (connexion par clé seulement)", ("base",), "durcissement",
-        "test -f /etc/ssh/sshd_config.d/00-myiafactory.conf", 0, 2),
+        "grep -qi '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-myiafactory.conf", 0.0, 2),
     "android-build": Capacite(
         "android-build", "Construction Android (SDK, plateforme 36, Java)", ("base",), "android_build",
         "test -x ~/android-sdk/platform-tools/adb && test -d ~/android-sdk/platforms/android-36 "
@@ -41,19 +52,19 @@ CATALOGUE = {
         "&& id -nG | grep -qw kvm && test -e /dev/kvm", 2.0, 8),
     "unity": Capacite(
         "unity", "Unity (éditeur en ligne de commande)", ("base",), "unity_cli",
-        "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1", 24, 25),
+        "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1", 24.0, 25),
     "session-graphique": Capacite(
         "session-graphique", "Session graphique distante (bureau + Unity Hub)", ("base",), "bureau_distant",
-        "ss -ltn | grep -q '127.0.0.1:3389' && command -v unityhub >/dev/null", 3, 12,
+        "ss -ltn 2>/dev/null | grep -qE '127\\.0\\.0\\.1:3389( |$)' && command -v unityhub >/dev/null", 3.0, 12,
         installable=False,
         raison_non_installable="installer par `lancer.py plateforme installer --bureau-distant`"),
     "agent": Capacite(
         "agent", "Agent de développement sur le serveur", (), "agent",
-        "command -v claude >/dev/null", 1, 5,
+        "command -v claude >/dev/null", 1.0, 5,
         installable=False, raison_non_installable="non installable avant le morceau 3"),
 }
 
-BESOINS = {
+_BESOINS = {
     "apk": ("android-build",),
     "tests": ("android-build",),
     "lint": ("android-build",),
@@ -61,6 +72,9 @@ BESOINS = {
     "emulateur": ("android-emulateur",),
     "charge": (),
 }
+
+CATALOGUE = MappingProxyType(_CATALOGUE)
+BESOINS = MappingProxyType(_BESOINS)
 
 
 def verifier_catalogue(catalogue=None) -> None:
@@ -108,14 +122,12 @@ def _fermeture(demandees, catalogue):
 def ordre_installation(demandees: Iterable[str], installees: set, catalogue=None) -> list:
     """Capacités manquantes, dépendances d'abord. Une capacité non installable reste dans la liste : voir `bloquees`."""
     catalogue = CATALOGUE if catalogue is None else catalogue
-    for i in installees:                        # une capacité présente suppose ses dépendances présentes
-        if i in catalogue:
-            installees = set(installees) | set(_fermeture([i], catalogue))
     return [i for i in _fermeture(list(demandees), catalogue) if i not in installees]
 
 
 def bloquees(ids: Iterable[str], catalogue=None) -> list:
-    """Capacités non installables parmi `ids` et leurs dépendances : `[{"id", "raison"}]`."""
+    """Capacités non installables dans la fermeture des `ids` DONNÉS, même déjà installées : `[{"id", "raison"}]`.
+    L'appelant doit donc passer la liste des MANQUANTES : `bloquees(ordre_installation(...))`."""
     catalogue = CATALOGUE if catalogue is None else catalogue
     return [{"id": i, "raison": catalogue[i].raison_non_installable}
             for i in _fermeture(list(ids), catalogue) if not catalogue[i].installable]

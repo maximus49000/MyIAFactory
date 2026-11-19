@@ -32,6 +32,7 @@ from serveur_modele import ecrire_atomique
 # inactivite_s (mode pilote) : 600 s et non les 5 min de départ (décision R9) : elle doit dépasser le budget de démarrage
 # de l'émulateur par le pont (PONT_DEMARRAGE_S, 300 s), sinon un `demarrer` lent serait pris pour de l'inactivité.
 LIMITES_DEFAUT = MappingProxyType({"duree_s": 1200, "inactivite_s": 600, "captures": 50, "octets": 104857600})
+INACTIVITE_MIN_S = 300           # mode pilote : jamais sous le budget de démarrage du pont
 ETATS = ("en_attente", "en_cours", "terminee", "echouee", "arretee")
 TYPES = ("emulation",)
 MODES = ("scenario", "pilote")
@@ -112,8 +113,12 @@ def valider_demande(brut):
     ident = brut["id"] if "id" in brut else nouvel_id()
     if not isinstance(ident, str) or not MOTIF_ID.fullmatch(ident):
         raise ValueError("Identifiant de tâche invalide.")
+    limites = _limites(brut.get("limites"))
+    if mode == "pilote" and limites["inactivite_s"] < INACTIVITE_MIN_S:
+        raise ValueError(f"En mode pilote, « inactivite_s » doit valoir au moins {INACTIVITE_MIN_S} s (le démarrage de "
+                         "l'émulateur peut durer jusque-là) et au plus " f"{LIMITES_DEFAUT['inactivite_s']} s.")
     return Demande(id=ident, type="emulation", projet=_texte_court(brut.get("projet"), "projet"), mode=mode,
-                   scenario=scenario, limites=_limites(brut.get("limites")),
+                   scenario=scenario, limites=limites,
                    demandeur=_texte_court(brut.get("demandeur"), "demandeur"),
                    apk=_texte_court(brut.get("apk"), "apk", None))
 
@@ -237,21 +242,24 @@ class Index:
         self._modifier(agir)
 
     def reserver(self, ident, cle, maximum):
-        """Incrémente le compteur `cle` de la fiche s'il est sous `maximum` (sous le verrou) ; vrai si réservé."""
+        """Incrémente le compteur `cle` de la fiche s'il est sous le maximum, lecture et écriture sous le verrou.
+        `maximum` : un entier, ou une fonction de la fiche lue sous le verrou (jamais d'une lecture sans verrou).
+        Renvoie (réservé, maximum appliqué)."""
         _id_valide(ident)
-        pris = []
+        resultat = []
 
         def agir(tout):
             fiche = tout.get(ident)
             if not isinstance(fiche, dict):
                 raise ValueError("Tâche absente de l'index.")
+            borne = maximum(fiche) if callable(maximum) else maximum
             n = fiche.get(cle, 0)
             n = n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else 0
-            if n < maximum:
+            if n < borne:
                 tout[ident] = {**fiche, cle: n + 1}
-                pris.append(True)
+            resultat.append((n < borne, borne))
         self._modifier(agir)
-        return bool(pris)
+        return resultat[0]
 
     def liberer(self, ident, cle):
         """Rend une réservation de `reserver` (jamais sous zéro)."""
@@ -635,7 +643,8 @@ FIN_ETAT
   else
     rm -f "$d/etat.json.lanceur.tmp"
   fi
-el  printf '%s\\n' @MOTIF@ > "$d/arret.tmp" && mv -f "$d/arret.tmp" "$d/arret"
+elif grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; then
+  printf '%s\\n' @MOTIF@ > "$d/arret.tmp" && mv -f "$d/arret.tmp" "$d/arret"
   i=0
   while [ "$i" -lt 30 ] && grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; do sleep 1; i=$((i + 1)); done
 fi
@@ -971,7 +980,9 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
         # Réponse perdue (la tâche démarre peut-être encore) ou identifiant déjà utilisé : on relit l'état sur le
         # serveur, jamais de relance à l'aveugle ; le nettoyage n'a lieu que si rien n'y vit (voir etat).
         relu = _etat(d.id, dossier, ssh)
-        motif = ("Réponse du serveur perdue pendant le démarrage : état relu sur le serveur."
+        if relu["etat"] == "arretee":            # arrêtée pendant l'attente du créneau : issue normale, pas une erreur
+            return sortie("arretee", raison=relu.get("raison", ""))
+        motif =("Réponse du serveur perdue pendant le démarrage : état relu sur le serveur."
                  if code != 4 else "Identifiant déjà utilisé sur le serveur : état relu sur le serveur.")
         return sortie(relu["etat"], erreur=f"{motif} {relu.get('raison', '')}".strip())
     raison = (lu or {}).get("raison") or f"Démarrage refusé par l'enveloppe (code {code}) : {_court(erreur, 200)}"
@@ -1056,7 +1067,10 @@ def _extraire(donnees, destination, limites):
     octets au total. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
     compté dans `refuses` ; un flux plus grand que le plafond n'est pas analysé du tout. Plusieurs archives à la suite
     sont lues (`ignore_zeros`). Flux coupé exactement au plafond (head -c du serveur) : `tronque` ; archive abîmée ou
-    lecture courte avant le plafond : `corrompue`."""
+    lecture courte avant le plafond : `corrompue`. Limite connue : avec `ignore_zeros`, tarfile saute bloc par bloc ce
+    qu'il ne sait pas lire au milieu du flux, si bien qu'une zone abîmée suivie d'en-têtes valides peut passer inaperçue
+    (seule la fin du flux est vérifiée) ; le confinement, lui, ne dépend pas de cette détection (chaque membre admis est
+    revérifié : type, nom, taille, signature PNG)."""
     res = {"captures": [], "fichiers": {}, "refuses": 0, "tronque": False, "corrompue": False}
     plafond = int(limites["octets"]) + TAILLE_ARCHIVE_MARGE
     if len(donnees) > plafond:
@@ -1206,7 +1220,7 @@ def _reponse_pont(nom, code, sortie, erreur):
     if (not isinstance(d, dict) or not isinstance(d.get("ok"), bool) or not isinstance(d.get("detail"), str)
             or not isinstance(d.get("verbe"), str) or d["ok"] != (code == 0)):
         return illisible
-    return {"ok": d["ok"], "verbe": nom, "code": code, "detail": d["detail"]}
+    return {"ok": d["ok"], "verbe": nom, "code": code, "detail": d["detail"], "_lisible": True}
 
 
 def _attendre_avd(serveur, ssh, ident, dormir):
@@ -1268,9 +1282,9 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
             return _masque(echec, dossier)
     reservee = False
     if nom == "capturer":
-        maximum = int(_limites_fiche(Index(dossier).lire().get(ident) or {})["captures"])
         try:
-            reservee = Index(dossier).reserver(ident, "captures_prises", maximum)
+            reservee, maximum = Index(dossier).reserver(ident, "captures_prises",
+                                                        lambda fiche: int(_limites_fiche(fiche)["captures"]))
         except (ErreurIndex, TimeoutError, ValueError, OSError) as e:
             return _masque({"ok": False, "verbe": nom, "code": 4,
                             "detail": f"Comptage des captures impossible ({_court(e)}) : capture refusée."}, dossier)
@@ -1284,7 +1298,10 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
     script = _script(_VERBE, ident, VERBE=" ".join([nom, *(shlex.quote(a) for a in args)]))
     code, sortie, erreur = _bash(serveur, ssh, script, delai=DELAIS_VERBE_S.get(nom, DELAI_VERBE_S))
     res = _reponse_pont(nom, code, sortie, erreur)
-    if reservee and code != 0:
+    lisible = res.pop("_lisible", False)
+    # La place n'est rendue que sur un refus certain du pont (ligne JSON lisible, ok faux) ; réponse perdue (124/255) ou
+    # illisible : on ne sait pas si la capture a été prise, la place reste comptée (côté prudent).
+    if reservee and lisible and not res["ok"]:
         try:
             Index(dossier).liberer(ident, "captures_prises")
         except (ErreurIndex, TimeoutError, ValueError, OSError):

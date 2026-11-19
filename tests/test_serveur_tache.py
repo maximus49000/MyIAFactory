@@ -408,9 +408,11 @@ class TestIndex(unittest.TestCase):
 
     def test_reserver_borne_et_liberer(self):
         self.index.enregistrer(tid(1), {"etat": "en_cours"})
-        self.assertEqual([self.index.reserver(tid(1), "n", 2) for _ in range(3)], [True, True, False])
+        self.assertEqual([self.index.reserver(tid(1), "n", 2) for _ in range(3)], [(True, 2), (True, 2), (False, 2)])
         self.index.liberer(tid(1), "n")
-        self.assertTrue(self.index.reserver(tid(1), "n", 2))
+        self.assertEqual(self.index.reserver(tid(1), "n", 2), (True, 2))
+        self.index.fusionner(tid(1), {"max": 5})
+        self.assertEqual(self.index.reserver(tid(1), "n", lambda fiche: fiche["max"]), (True, 5))   # lu sous le verrou
         with self.assertRaises(ValueError):
             self.index.reserver(tid(9), "n", 2)
 
@@ -824,6 +826,19 @@ class TestLancer(BaseLanceur):
         with self.assertRaises(ValueError):
             st.valider_demande(brut(limites={"inactivite_s": 601}))
 
+    def test_inactivite_du_pilote_entre_300_et_600(self):
+        pilote = {"mode": "pilote", "scenario": None}
+        for mauvais in (1, 60, 299, 601):
+            with self.assertRaises(ValueError, msg=mauvais) as r:
+                st.valider_demande(brut(limites={"inactivite_s": mauvais}, **pilote))
+            self.assertIn("inactivite_s", str(r.exception))
+        for bon in (300, 450, 600):
+            self.assertEqual(st.valider_demande(brut(limites={"inactivite_s": bon}, **pilote)).limites["inactivite_s"], bon)
+        self.assertEqual(st.valider_demande(brut(limites={"inactivite_s": 60})).limites["inactivite_s"], 60)   # scénario
+        with self.assertRaises(st.RefusLancement):
+            self.lancer({**brut(id=ID1), "mode": "pilote", "scenario": None, "limites": {"inactivite_s": 120}})
+        self.assertEqual(self.srv.appels, [])
+
     def test_arreter_pendant_l_attente_du_creneau(self):
         self.srv.creneau = "t20261119-090000-ffff"
 
@@ -834,6 +849,7 @@ class TestLancer(BaseLanceur):
                 self.srv.creneau = None                 # le créneau se libère : l'émulateur ne doit pas démarrer
         r = self.lancer(dormir=dormir)
         self.assertEqual(r["etat"], "arretee")
+        self.assertNotIn("erreur", r)                                     # issue normale, pas « identifiant déjà utilisé »
         self.assertEqual(self.srv.taches[ID1]["etat"]["etat"], "arretee")
         self.assertIsNone(self.srv.taches[ID1]["apk"])
         self.assertIsNone(self.srv.creneau)
@@ -1132,6 +1148,20 @@ class TestVerbe(BaseLanceur):
         self.assertEqual((f["captures_prises"], f["limite_atteinte"]), (2, True))
         self.assertTrue(self.verbe("toucher", ["1", "2"])["ok"])                   # les autres verbes passent
 
+    def test_place_de_capture_gardee_si_la_reponse_est_perdue(self):
+        self.fiche(limites={"captures": 4})
+        for code, sortie in ((124, ""), (255, ""), (0, "pas du json\n"), (1, "")):
+            self.srv.pont["capturer"] = (code, sortie)
+            if code in (124, 255):
+                with mock.patch.object(self.srv, "_verbe", lambda *a, c=code: (c, b"", "délai")):
+                    r = self.verbe("capturer", ["x"])
+            else:
+                r = self.verbe("capturer", ["x"])
+            self.assertFalse(r["ok"])
+            self.assertNotIn("_lisible", r)
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["captures_prises"], 4)   # aucune place rendue
+        self.assertEqual(self.verbe("capturer", ["y"])["code"], 3)
+
     def test_capture_par_defaut_sous_le_dossier(self):
         self.srv.taches[ID1]["fichiers"]["captures/ecran.png"] = PNG
         r = self.verbe("capturer", ["ecran"])
@@ -1419,6 +1449,103 @@ class TestScriptsReels(BaseLanceur):
         self.assertFalse((self.tache / "etat.json.lanceur.tmp").exists())
         self.assertFalse((self.tache / "arret").exists())
         self.assertEqual(st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)["etat"], "arretee")   # idempotent
+        self.assertEqual(sorted(p.name for p in self.tache.iterdir()), ["entree", "etat.json", "sortie"])
+
+    def veilleur_factice(self):
+        """Un veilleur simulé : attend le fichier arret, puis écrit l'état final comme lancer_emulation.sh (fin -> terminee,
+        autre -> arretee, statut ok)."""
+        script = r'''d="$1"; i=0
+until [ -e "$d/arret" ]; do sleep 0.1; i=$((i + 1)); [ "$i" -lt 300 ] || exit 1; done
+m=""; IFS= read -r m < "$d/arret"; e=arretee; [ "$m" = fin ] && e=terminee
+printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00Z", "fin": "2026-11-19T10:16:40Z", "raison": "%s"}\n' \
+  "$2" "$e" "$m" > "$d/etat.json.v" && mv -f "$d/etat.json.v" "$d/etat.json"'''
+        p = subprocess.Popen(["bash", "-c", script, "bash", posix(self.tache), ID1], env=self.ssh._env(),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: (p.kill(), p.wait()))
+        return p
+
+    def test_arreter_reel_en_cours_ecrit_arret_et_attend_le_veilleur(self):
+        self.fiche()
+        for fin, motif, final in ((True, "fin", "terminee"), (False, "arret", "arretee")):
+            with self.subTest(motif=motif):
+                self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+                for reste in ("arret", "arret.tmp"):
+                    (self.tache / reste).unlink(missing_ok=True)
+                v = self.veilleur_factice()
+                debut = time.monotonic()
+                r = st.arreter(ID1, dossier=self.dossier, ssh=self.ssh, fin=fin)
+                self.assertEqual(v.wait(30), 0)
+                self.assertLess(time.monotonic() - debut, 25)
+                self.assertEqual((r["etat"], r["statut"]), (final, "ok"))
+                self.assertEqual((self.tache / "arret").read_text(encoding="utf-8"), motif + "\n")
+                self.assertFalse((self.tache / "arret.tmp").exists())
+        # Le script seul : aucun bruit sur la sortie d'erreur, code 0.
+        self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+        (self.tache / "arret").unlink()
+        v = self.veilleur_factice()
+        code, _s, erreur = self.ssh.executer("h", "bash -s", "c", stdin=st._script(
+            st._ARRETER, ID1, MOTIF="arret", JSON=json.dumps({"id": ID1, "etat": "arretee"})))
+        v.wait(30)
+        self.assertEqual((code, erreur), (0, ""))
+
+    def test_chaque_modele_passe_bash_n_et_s_execute(self):
+        """Tous les scripts distants du module : syntaxe (bash -n) puis exécution réelle, sans bruit sur stderr."""
+        modeles = {n for n, v in vars(st).items() if isinstance(v, str) and v.startswith("# tache:")}
+        self.assertEqual(modeles, {"_ETAT", "_NETTOYER", "_ARRETER", "_PREPARER", "_DEPOSER", "_LANCER", "_EFFACER",
+                                   "_ABANDON", "_AVD", "_VERBE", "_RAPATRIER"})
+        self.fiche(limites={"captures": 3})
+        lim = st._limites({"captures": 3})
+        final = json.dumps({"id": ID1, "etat": "arretee", "statut": None, "debut": None, "fin": "2026-11-19T10:16:40Z",
+                            "raison": "test"})
+        rendus = {"_PREPARER": st._script(st._PREPARER, ID1), "_DEPOSER": st._DEPOSER,
+                  "_LANCER": st._script(st._LANCER, ID1, MODE="pilote", DUREE="60", INACTIVITE="600"),
+                  "_ETAT": st._script(st._ETAT, ID1), "_NETTOYER": st._script(st._NETTOYER, ID1, JSON=final),
+                  "_ARRETER": st._script(st._ARRETER, ID1, MOTIF="arret", JSON=final),
+                  "_EFFACER": st._script(st._EFFACER, ID1), "_ABANDON": st._script(st._ABANDON, ID1),
+                  "_AVD": st._script(st._AVD, ID1), "_VERBE": st._script(st._VERBE, ID1, VERBE="texte 'un deux'"),
+                  "_RAPATRIER": st._script_rapatrier(ID1, lim), "capture": st._script_rapatrier(ID1, lim, "c1")}
+        for nom, script in rendus.items():
+            self.assertNotRegex(script, r"@[A-Z]+@", nom)                 # aucun jeton oublié
+            r = subprocess.run(["bash", "-n"], input=script.encode(), capture_output=True, timeout=30)
+            self.assertEqual((r.returncode, r.stderr), (0, b""), nom)
+
+        def bash_s(nom, attendu=0):
+            code, sortie, erreur = self.ssh.executer("h", "bash -s", "c", stdin=rendus[nom])
+            self.assertEqual((code, erreur), (attendu, ""), nom)
+            return sortie
+
+        code, erreur = st._envoyer(self.serveur, self.ssh, self.demande(), APK)
+        self.assertEqual((code, erreur), (0, ""))
+        self.assertIsNone(st._deposer_enveloppe(self.serveur, self.ssh))
+        souche = self.ssh.home / "myiafactory" / "serveur_ovh" / "taches" / "lancer_emulation.sh"
+        souche.write_text('printf "%s " "$@" > "$HOME/lance.txt"\n', encoding="utf-8", newline="\n")
+        bash_s("_LANCER")
+        self.assertEqual((self.ssh.home / "lance.txt").read_text(encoding="utf-8"), f"{ID1} pilote 60 600 ")
+        self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+        self.assertEqual(bash_s("_AVD").strip(), "attente")
+        (self.tache / "sortie" / ".avd-pret").write_bytes(b"")
+        self.assertEqual(bash_s("_AVD").strip(), "pret")
+        self.assertIn("veilleur=absent", bash_s("_ETAT"))
+        self.ssh.pont = ligne_pont(True, "texte", "ok").strip()
+        bash_s("_VERBE")
+        self.assertIn(f"docker exec tache-{ID1} /usr/local/bin/pont texte un deux", self.ssh.docker())
+        (self.tache / "sortie" / "pont.log").write_bytes(b"texte 3ms\n")
+        self.captures(2)
+        for nom, attendus in (("_RAPATRIER", {"./pont.log", "captures/c0.png", "captures/c1.png"}),
+                              ("capture", {"captures/c1.png"})):
+            code, donnees, erreur = self.ssh.executer_octets("h", "bash -s", "c", entree=rendus[nom].encode())
+            self.assertEqual((code, erreur), (0, ""), nom)
+            with tarfile.open(fileobj=io.BytesIO(donnees), ignore_zeros=True) as tar:
+                self.assertEqual({m.name for m in tar}, attendus, nom)
+        (self.tache / "veilleur.pid").write_text("999999\n", encoding="utf-8")
+        bash_s("_NETTOYER")
+        self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "arretee")
+        bash_s("_ARRETER")
+        self.assertTrue((self.tache / "entree" / "app.apk").exists())
+        bash_s("_ABANDON")
+        self.assertFalse((self.tache / "entree" / "app.apk").exists())
+        bash_s("_EFFACER", attendu=4)                                       # état présent : jamais effacé
+        self.assertTrue(self.tache.exists())
 
 
 if __name__ == "__main__":

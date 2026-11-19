@@ -1,6 +1,7 @@
 """Étape facultative 8 de la plateforme (session graphique) et mot de passe de session."""
 import io
 import json
+import subprocess
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -247,6 +248,46 @@ class ProcFactice:
         return 0
 
 
+class ProcVivant:
+    def __init__(self, sorties):
+        self.sorties = list(sorties)      # valeurs successives de poll()
+
+    def poll(self):
+        return self.sorties.pop(0) if len(self.sorties) > 1 else self.sorties[0]
+
+
+class TestAttendrePort(unittest.TestCase):
+    def attendre(self, proc, connecter, delai=15):
+        t = [0.0]
+
+        def dormir(s):
+            t[0] += s
+        return plateforme_bureau._attendre_port(1234, proc, delai, connecter=connecter, dormir=dormir,
+                                                horloge=lambda: t[0]), t[0]
+
+    def test_port_ouvert_et_ssh_vivant(self):
+        ok, _ = self.attendre(ProcVivant([None]), lambda *a, **k: mock.MagicMock())
+        self.assertTrue(ok)
+
+    def test_ssh_sorti_aussitot(self):
+        def connecter(*a, **k):
+            self.fail("pas de sonde")
+        ok, t = self.attendre(ProcVivant([1]), connecter)
+        self.assertFalse(ok)
+        self.assertLess(t, 1)
+
+    def test_connexion_etrangere_ssh_sorti_apres(self):
+        ok, _ = self.attendre(ProcVivant([None, 255]), lambda *a, **k: mock.MagicMock())
+        self.assertFalse(ok)
+
+    def test_delai_depasse(self):
+        def refuse(*a, **k):
+            raise OSError
+        ok, t = self.attendre(ProcVivant([None]), refuse, delai=3)
+        self.assertFalse(ok)
+        self.assertGreaterEqual(t, 3)
+
+
 class TestOuvrir(Base):
     def setUp(self):
         super().setUp()
@@ -360,6 +401,64 @@ class TestOuvrir(Base):
         self.assertEqual(code, 2)
         self.assertIn("mstsc", sortie)
         self.assertEqual(self.procs, [])
+
+    def test_popen_sans_tube_et_fichier_d_erreurs_supprime(self):
+        self.cache()
+        vus = []
+
+        def popen(args, **kw):
+            vus.append(kw)
+            return self.popen(args, **kw)
+        self.assertEqual(self.ouvrir(popen=popen)[0], 0)
+        kw = vus[0]
+        for nom in ("stdin", "stdout", "stderr"):
+            self.assertNotEqual(kw.get(nom), subprocess.PIPE, nom)
+            self.assertIsNotNone(kw.get(nom), nom)
+        self.assertEqual([p.name for p in self.dossier.glob(".*.err")], [])
+        # échec du port : fichier supprimé aussi
+        self.ouvrir(attendre_port=lambda port, proc, delai=15: False)
+        self.assertEqual([p.name for p in self.dossier.glob(".*.err")], [])
+
+    def test_cle_changee_message_precis_sans_oublier(self):
+        self.cache()
+
+        def popen(args, **kw):
+            kw["stderr"].write(b"@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\n")
+            kw["stderr"].flush()
+            return self.popen(args, **kw)
+        code, sortie = self.ouvrir(popen=popen, attendre_port=lambda port, proc, delai=15: False)
+        self.assertEqual(code, 1)
+        self.assertIn("ssh-keygen -R 203.0.113.7", sortie)
+        self.assertNotIn("@@@", sortie)
+        self.assertEqual([p.name for p in self.dossier.glob(".*.err")], [])
+
+    def test_ip_invalide_rien_lance(self):
+        for ip in ("-oProxyCommand=x", "a b", "u@x", "", None):
+            self.cache(ip=ip)
+            code, sortie = self.ouvrir()
+            self.assertEqual(code, 1, ip)
+            self.assertIn("Adresse" if ip else "Installez", sortie)
+        self.assertEqual(self.procs, [])
+
+    def test_ctrl_c_arrete_le_tunnel_sans_trace(self):
+        self.cache()
+
+        def interrompu(args, **kw):
+            raise KeyboardInterrupt
+        code, sortie = self.ouvrir(lancer_rdp=interrompu)
+        self.assertEqual(code, 1)
+        self.assertTrue(self.procs[0].termine)
+        self.assertNotIn("Traceback", sortie)
+
+    def test_mstsc_introuvable(self):
+        self.cache()
+
+        def absent(args, **kw):
+            raise FileNotFoundError("mstsc")
+        code, sortie = self.ouvrir(lancer_rdp=absent)
+        self.assertEqual(code, 2)
+        self.assertIn("mstsc introuvable (Bureau à distance de Windows)", sortie)
+        self.assertTrue(self.procs[0].termine)
 
     def test_main_delegue_bureau_distant(self):
         with mock.patch.object(plateforme_bureau, "ouvrir", return_value=0) as o:

@@ -139,18 +139,46 @@ def _port_libre(prefere=PORT_LOCAL):
     raise OSError("aucun port local libre")
 
 
-def _attendre_port(port, proc, delai=15):
-    """Vrai dès que 127.0.0.1:<port> accepte une connexion ; faux si le tunnel meurt ou si `delai` s s'écoulent."""
-    fin = time.monotonic() + delai
-    while time.monotonic() < fin:
+def _attendre_port(port, proc, delai=15, connecter=socket.create_connection, dormir=time.sleep, horloge=time.monotonic):
+    """Vrai si 127.0.0.1:<port> accepte une connexion ET que ssh tourne encore (avant et après une courte confirmation) :
+    un port pris par un autre processus pendant que ssh sort ne doit pas être pris pour le tunnel."""
+    fin = horloge() + delai
+    while horloge() < fin:
         if proc.poll() is not None:
             return False
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                return True
+            with connecter(("127.0.0.1", port), timeout=1):
+                pass
         except OSError:
-            time.sleep(0.3)
+            dormir(0.3)
+            continue
+        dormir(0.5)
+        return proc.poll() is None
     return False
+
+
+def _ouvrir_erreurs(dossier):
+    """Fichier temporaire (0600) qui reçoit la sortie d'erreur du tunnel : jamais un tube qui peut se remplir."""
+    chemin = Path(dossier) / f".{FICHIER_RDP}.{os.getpid()}.err"
+    try:
+        chemin.unlink()
+    except OSError:
+        pass
+    fd = os.open(chemin, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0), 0o600)
+    return chemin, os.fdopen(fd, "wb")
+
+
+def _echec_tunnel(chemin, ip):
+    """Message français précis, construit après la sortie de ssh ; jamais la sortie brute."""
+    try:
+        erreur = chemin.read_bytes().decode("utf-8", errors="replace")
+    except OSError:
+        erreur = ""
+    if plateforme_ssh.CHANGEMENT_CLE in erreur:
+        return (f"L'empreinte du serveur a changé : le tunnel est refusé par sécurité. Si le serveur a bien été réinstallé, "
+                f"exécutez ssh-keygen -R {ip} puis relancez ; sinon, ne continuez pas.")
+    return ("Le tunnel SSH ne s'est pas ouvert (serveur injoignable, clé refusée ou port local pris). "
+            "Lancez py -3.12 lancer.py plateforme verifier pour le détail.")
 
 
 def _arreter(proc):
@@ -187,31 +215,64 @@ def ouvrir(dossier, popen=subprocess.Popen, lancer_rdp=subprocess.run, port_libr
         print("Le client « mstsc » (Bureau à distance) n'existe que sous Windows : la session ne peut pas s'ouvrir d'ici.",
               file=sys.stderr)
         return 2
-    hote = f"{UTILISATEUR_DISTANT}@{ip}"
+    if not isinstance(ip, str) or any(ch.isspace() or ch == "@" for ch in ip):
+        print("Adresse du serveur invalide dans le cache : relancez lancer.py plateforme installer.", file=sys.stderr)
+        return 1
     try:
-        plateforme_ssh._verifier_hote(hote)
+        plateforme_ssh._verifier_hote(ip)
+    except ValueError:
+        print("Adresse du serveur invalide dans le cache : relancez lancer.py plateforme installer.", file=sys.stderr)
+        return 1
+    hote = f"{UTILISATEUR_DISTANT}@{ip}"
+    erreurs, fichier_err = None, None
+    try:
         port = port_libre()
         args = ["ssh", "-N", "-L", f"127.0.0.1:{port}:127.0.0.1:{PORT_XRDP}", *ssh_options(dossier / plateforme_ssh.NOM_CLE),
                 "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=20", "--", hote]
-        proc = popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        erreurs, fichier_err = _ouvrir_erreurs(dossier)
+        proc = popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=fichier_err)
+        fichier_err.close()
     except FileNotFoundError:
+        _nettoyer(erreurs, fichier_err)
         print("« ssh » est introuvable : le client OpenSSH de Windows est requis "
               "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).", file=sys.stderr)
         return 1
     except (OSError, ValueError) as e:
-        print(f"Tunnel impossible à lancer : {e}", file=sys.stderr)
+        _nettoyer(erreurs, fichier_err)
+        print(f"Tunnel impossible à lancer : {type(e).__name__}.", file=sys.stderr)
         return 1
     try:
         if not attendre_port(port, proc):
-            print("Le tunnel SSH ne s'est pas ouvert (serveur injoignable, clé refusée ou empreinte du serveur changée). "
-                  "Lancez py -3.12 lancer.py plateforme verifier pour le détail.", file=sys.stderr)
+            _arreter(proc)       # la sortie d'erreur n'est lue qu'une fois ssh terminé
+            print(_echec_tunnel(erreurs, ip), file=sys.stderr)
             return 1
         fichier = _ecrire_rdp(dossier, port)
         print(f"Ouverture de la session graphique (mot de passe dans {dossier / FICHIER_MDP}).")
         lancer_rdp(["mstsc", str(fichier)])
         return 0
+    except FileNotFoundError:
+        print("mstsc introuvable (Bureau à distance de Windows).", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("Interrompu : le tunnel est fermé.", file=sys.stderr)
+        return 1
     except Exception as e:      # jamais de trace de pile : un message clair
         print(f"La session n'a pas pu s'ouvrir ({type(e).__name__}).", file=sys.stderr)
         return 1
     finally:
         _arreter(proc)
+        _nettoyer(erreurs, None)
+
+
+def _nettoyer(chemin, fichier):
+    for f in (fichier,):
+        try:
+            if f is not None:
+                f.close()
+        except OSError:
+            pass
+    try:
+        if chemin is not None:
+            chemin.unlink()
+    except OSError:
+        pass

@@ -233,29 +233,76 @@ test("un relevé qui change les capacites ecarte l apercu : case decochee, plus 
   assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer")).length, 0);
 });
 
-test("zone reconstruite en cours d envoi (liste des serveurs changee) : la confirmation reste grisee", async () => {
+const APERCU_A = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
+const CAPS_B = {base: "presente", "android-build": "presente"};
+
+test("capacites changees pendant un envoi : la zone refaite n a ni case d accord ni second accord vrai", async () => {
   const m = minuterie();
-  const apercu = {manquantes: ["android-build"], taille_go: 5.4, duree_min: 10, bloquees: [], etat: {}};
   let liberer;
   const attente = new Promise((r) => { liberer = r; });
-  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, apercu), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, APERCU_A), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
     "POST /api/serveurs/s1/installer": async () => { await attente; return reponse(202, {demarre: true}); },
-    "GET /api/serveurs": reponse(200, {serveurs: [SERVEUR, {...SERVEUR, id: "s2", nom: "Deux"}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: CAPS_B}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
   const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
   await clic(boutons(c, "Installer")[0]);
   await clic(boutons(c, "Voir l'aperçu")[0]);
   await clic(boutons(c, "Vérifier")[0]);
   caseAccord(c).checked = true;
   const envoi = clic(boutons(c, "Lancer l'installation")[0]);
-  await m.tic();
-  assert.match(c.textContent, /Deux/);
-  const neuf = boutons(c, "Lancer l'installation")[0];
-  assert.ok(neuf);
-  assert.equal(neuf.disabled, true);
-  await clic(neuf);
+  await m.tic();                                              // le relevé change les capacités pendant l'envoi
+  assert.equal(caseAccord(c), undefined);
+  assert.equal(boutons(c, "Lancer l'installation").length, 0);
+  assert.match(c.textContent, /refaites l'aperçu/);
   liberer();
   await envoi;
   assert.equal(f.appels.filter((a) => a.chemin.endsWith("/installer") && a.corps.accord === true).length, 1);
+});
+
+test("une zone reconstruite depuis une entree en installation a sa confirmation grisee", async () => {
+  const m = minuterie();
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, APERCU_A), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, installation_en_cours: true}, {...SERVEUR, id: "s2", nom: "Deux"}], rejets: []}),
+    "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  await m.tic();                                              // la liste change : dessin complet, zone refaite
+  assert.match(c.textContent, /Deux/);
+  const lancer = boutons(c, "Lancer l'installation")[0];
+  assert.ok(lancer);
+  assert.equal(lancer.disabled, true);
+});
+
+test("la sonde lit l entree courante : Vérifier apres un relevé ne remet pas les capacites de la creation de la carte", async () => {
+  const m = minuterie();
+  const f = reseau({"POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: CAPS_B}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX_OK)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX_OK});
+  assert.match(c.textContent, /absente/);
+  await clic(boutons(c, "Vérifier")[0]);
+  await m.tic();                                              // les capacités passent à CAPS_B : plus rien d'absent
+  assert.doesNotMatch(c.textContent, /absente/);
+  await clic(boutons(c, "Vérifier")[0]);                      // même carte, non reconstruite : elle doit lire l'entrée courante
+  assert.doesNotMatch(c.textContent, /absente/);
+});
+
+test("un aperçu recu apres un changement de capacites pendant la requete est ecarte", async () => {
+  const m = minuterie();
+  let liberer;
+  const attente = new Promise((r) => { liberer = r; });
+  const f = reseau({"POST /api/serveurs/s1/apercu": async () => { await attente; return reponse(200, APERCU_A); }, "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [{...SERVEUR, capacites: CAPS_B}], rejets: []}), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: m, lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  await clic(boutons(c, "Vérifier")[0]);
+  const demande = clic(boutons(c, "Voir l'aperçu")[0]);       // en vol
+  await m.tic();                                              // les capacités changent pendant la requête
+  liberer();
+  await demande;
+  assert.equal(caseAccord(c), undefined);
+  assert.equal(boutons(c, "Lancer l'installation").length, 0);
+  assert.match(c.textContent, /refaites l'aperçu/);
 });
 
 test("l accord n est jamais envoye vrai sans la case cochee", async () => {

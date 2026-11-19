@@ -246,9 +246,11 @@ export function ecranServeurs(etat, options = {}) {
     voir.addEventListener("click", async () => {
       if (!i.actions.size) { i.message = "Choisissez au moins une action."; dessiner(); return; }
       i.chargement = true; i.apercu = null; i.message = "Lecture du serveur…"; dessiner();
+      const avant = i.vues;                    // l'état des capacités au départ de la demande
       const r = await apercuInstallation(serveur.id, ACTIONS.filter((a) => i.actions.has(a)), fetchFn);
       i.chargement = false;
-      if (r.ok) { i.apercu = r.apercu; i.message = ""; } else i.message = r.message;
+      if (r.ok && i.vues !== avant) i.message = "L'état du serveur a changé : refaites l'aperçu avant d'installer.";   // aperçu déjà périmé
+      else if (r.ok) { i.apercu = r.apercu; i.message = ""; } else i.message = r.message;
       dessiner();
     });
     zone.append(voir);

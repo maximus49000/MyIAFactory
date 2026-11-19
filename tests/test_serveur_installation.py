@@ -490,7 +490,7 @@ class TestEtatConserve(Base):
 
     def test_installer_une_capacite_garde_les_autres_et_leurs_raisons(self):
         self._avant()
-        r = self.installer(FauxSsh(), actions=["apk"])
+        r = self.installer(FauxSsh(presentes={"unity-cli"}), actions=["apk"])
         self.assertTrue(r["ok"])
         caps = inst.lire_etat(self.dossier)[SERVEUR.id]["capacites"]
         self.assertEqual((caps["base"]["statut"], caps["android-build"]["statut"]), ("fait", "fait"))
@@ -510,6 +510,42 @@ class TestEtatConserve(Base):
         self.assertEqual(set(e["capacites"]), {"agent", "unity-cli", "android-emulateur", "base"})
         self.assertEqual(e["capacites"]["agent"]["detail"], "Licence refusée")
         self.assertEqual(e["charge"]["maj"], 5.0)
+
+    def _caps(self):
+        return inst.lire_etat(self.dossier)[SERVEUR.id]["capacites"]
+
+    def test_entree_perimee_rafraichie_par_la_sonde_du_debut(self):
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"unity-cli": inst._entree("presente", "vieux")}, False, "")
+        self.installer(FauxSsh(presentes=()), actions=["apk"])           # la sonde dit « absente »
+        self.assertEqual(self._caps()["unity-cli"]["statut"], "absente")
+
+    def test_entree_presente_confirmee_par_la_sonde_reste_presente(self):
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"unity-cli": inst._entree("absente")}, False, "")
+        self.installer(FauxSsh(presentes={"unity-cli"}), actions=["apk"])
+        self.assertEqual(self._caps()["unity-cli"]["statut"], "presente")
+
+    def test_bloque_garde_sa_raison_si_la_sonde_dit_absente(self):
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"agent": inst._entree("bloque", "Licence refusée", "Acceptez.")}, False, "")
+        self.installer(FauxSsh(presentes=()), actions=["apk"])
+        self.assertEqual((self._caps()["agent"]["statut"], self._caps()["agent"]["detail"]), ("bloque", "Licence refusée"))
+
+    def test_sonde_inconnue_garde_l_etat_connu(self):
+        class SansAgent(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                code, sortie, err = super().executer(hote, commande, cle, stdin, delai, runner)
+                if commande == "bash -s" and "sudo=" not in (stdin or ""):
+                    sortie = "".join(x + "\n" for x in sortie.splitlines() if not x.startswith("agent="))
+                return code, sortie, err
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"agent": inst._entree("presente", "vu")}, False, "")
+        self.installer(SansAgent(), actions=["apk"])
+        self.assertEqual(self._caps()["agent"]["statut"], "presente")
+
+    def test_installer_charge_garde_toute_la_carte_meme_avec_une_sonde_differente(self):
+        inst._ecrire_etat(self.dossier, SERVEUR.id, {"agent": inst._entree("bloque", "Licence", "g"),
+                                                      "base": inst._entree("presente")}, False, "")
+        self.installer(FauxSsh(presentes=()), actions=["charge"])
+        self.assertEqual(set(self._caps()), {"agent", "base"})
+        self.assertEqual(self._caps()["agent"]["detail"], "Licence")
 
     def test_etat_abime_a_la_main_ne_fait_jamais_lever(self):
         (self.dossier / inst.ETAT).write_text(json.dumps({SERVEUR.id: {"capacites": {

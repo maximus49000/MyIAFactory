@@ -372,9 +372,28 @@ def installer(serveur, actions, accord, dossier=plateforme_acces.DOSSIER, ssh=pl
         _VERROU_PROCESSUS.release()
 
 
+def _rafraichies(anciennes, sondes, exclues):
+    """Entrées déjà connues, hors `exclues`, remises à jour d'après la sonde qui vient d'être lue (mêmes règles que
+    `_enregistrer`) : « bloque » gardé avec sa raison sauf si la sonde dit présente ; sonde illisible : état connu gardé ;
+    jamais « presente » sans confirmation de la sonde."""
+    sortie = {}
+    for i, ancienne in anciennes.items():
+        s = sondes.get(i)
+        if i in exclues or s not in (serveur_etat.PRESENTE, serveur_etat.ABSENTE):
+            continue
+        statut = ancienne.get("statut") if isinstance(ancienne, dict) else None
+        if s == serveur_etat.PRESENTE:
+            sortie[i] = ancienne if statut in ("presente", "fait") else _entree("presente", _DETAIL_SONDE["presente"])
+        elif statut != "bloque":
+            sortie[i] = _entree("absente", _DETAIL_SONDE["absente"])
+    return sortie
+
+
 def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
+    frais = {}
+
     def ecrire(en_cours=True):
-        _ecrire_etat(dossier, serveur.id, caps, en_cours, debut)
+        _ecrire_etat(dossier, serveur.id, {**frais, **caps}, en_cours, debut)
 
     def resultat(erreur=None):
         return {"capacites": caps, "ok": erreur is None and all(
@@ -387,6 +406,8 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
                               "Vérifiez la connexion au serveur puis relancez.")
         return resultat("Serveur injoignable : rien n'a été installé.")
     presentes = {i for i, s in sondes.items() if s == serveur_etat.PRESENTE}
+    avant = lire_etat(dossier).get(serveur.id, {}).get("capacites")
+    frais.update(_rafraichies(avant if isinstance(avant, dict) else {}, sondes, set(requises)))
     a_faire = manquantes_pour(actions, presentes)
     for i in requises:
         caps[i] = _entree("presente", "Déjà présente.") if i in presentes else _entree("a_faire", "À installer.")

@@ -133,7 +133,7 @@ def lire(dossier=DOSSIER):
     return lire_avec_rejets(dossier)[0]
 
 
-def _ecrire_atomique(chemin, texte):
+def ecrire_atomique(chemin, texte):
     """Temporaire 0600 (O_EXCL) dans le même dossier, écrit puis `os.replace` : jamais de fichier tronqué."""
     for vieux in chemin.parent.glob(f".{chemin.name}.*.tmp"):
         try:
@@ -155,6 +155,9 @@ def _ecrire_atomique(chemin, texte):
         except OSError:
             pass
         raise
+
+
+_ecrire_atomique = ecrire_atomique      # ancien nom conservé
 
 
 def _exiger_fichier_sain(dossier):

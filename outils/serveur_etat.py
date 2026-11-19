@@ -18,7 +18,7 @@ PRESENTE, ABSENTE, INCONNUE = "presente", "absente", "inconnue"
 _SAIN = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*$")
 
 
-def _cible(serveur):
+def cible(serveur):
     """`utilisateur@hote` après contrôle ; `ValueError` avant toute connexion si une valeur est douteuse."""
     hote, utilisateur, cle = serveur.hote, serveur.utilisateur, serveur.cle
     if not isinstance(hote, str) or not _SAIN.match(hote):
@@ -30,11 +30,14 @@ def _cible(serveur):
     return f"{utilisateur}@{hote}"
 
 
+_cible = cible      # ancien nom conservé
+
+
 def _executer(serveur, script, ssh, runner, delai=60):
     """(code, sortie, erreur) d'un `bash -s` ; `ValueError` si l'hôte est invalide, `ErreurSsh` etc. remontent."""
-    cible = _cible(serveur)
+    destination = _cible(serveur)
     options = {} if runner is None else {"runner": runner}
-    code, sortie, erreur = ssh.executer(cible, "bash -s", serveur.cle, stdin=script, delai=delai, **options)
+    code, sortie, erreur = ssh.executer(destination, "bash -s", serveur.cle, stdin=script, delai=delai, **options)
     return code, sortie if isinstance(sortie, str) else "", erreur if isinstance(erreur, str) else ""
 
 

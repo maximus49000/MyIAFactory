@@ -173,11 +173,152 @@ class TestInstallation(Base):
         self.assertEqual(r["capacites"]["base"]["statut"], "a_faire")
         self.assertEqual(r["capacites"]["android-build"]["statut"], "a_faire")
 
-    def test_serveur_injoignable_donne_inconnue_et_n_installe_rien(self):
+    def test_serveur_injoignable_leve_via_refus_acces_et_n_installe_rien(self):
         ssh = FauxSsh(injoignable=True)
         with self.assertRaises(inst.ErreurInstallation):          # l'accès est vérifié avant tout
             self.installer(ssh)
         self.assertEqual(ssh.lancees, [])
+        self.assertFalse((self.dossier / inst.VERROU).exists())
+
+    def test_sonde_partielle_inconnue_n_installe_rien(self):
+        class Partielle(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                code, sortie, err = super().executer(hote, commande, cle, stdin, delai, runner)
+                if commande == "bash -s" and "sudo=" not in (stdin or ""):
+                    sortie = "\n".join(l for l in sortie.splitlines() if not l.startswith("android-build=")) + "\n"
+                return code, sortie, err
+        ssh = Partielle()
+        r = self.installer(ssh)
+        self.assertEqual(ssh.lancees, [])
+        self.assertFalse(r["ok"])
+        self.assertEqual({c["statut"] for c in r["capacites"].values()}, {"inconnue"})
+
+    def test_delai_ssh_depasse_donne_inconnue_et_arrete_la_suite(self):
+        class Delai(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                if "--etape android_build" in commande:
+                    s.appels.append({"commande": commande})
+                    return 124, "", "délai dépassé (1800 s)"
+                return super().executer(hote, commande, cle, stdin, delai, runner)
+        ssh = Delai()
+        r = self.installer(ssh, actions=["emulateur"])
+        self.assertEqual(ssh.lancees, ["docker"])
+        self.assertEqual(r["capacites"]["android-build"]["statut"], "inconnue")
+        self.assertIn("peut encore tourner", r["capacites"]["android-build"]["detail"])
+        self.assertEqual(r["capacites"]["android-emulateur"]["statut"], "a_faire")
+        self.assertFalse(r["ok"])
+
+    def test_sortie_bruyante_avec_plusieurs_accolades_avant_le_json_final(self):
+        class Bruyant(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                code, sortie, err = super().executer(hote, commande, cle, stdin, delai, runner)
+                if "--etape" in commande:
+                    sortie = '{"etape": "x", "statut": "bloque", "detail": "faux"}\n{pas du json\n  {"a":\n' + sortie
+                return code, sortie, err
+        r = self.installer(Bruyant())
+        self.assertTrue(r["ok"])
+
+    def test_erreur_systeme_du_dossier_devient_erreur_installation(self):
+        fichier = self.dossier / "pas-un-dossier"
+        fichier.write_text("x", encoding="utf-8")
+        with self.assertRaises(inst.ErreurInstallation):
+            inst.installer(SERVEUR, ["apk"], True, dossier=fichier / "sous", ssh=FauxSsh(), vivant=lambda p: False)
+
+    def test_apercu_action_inconnue_leve_erreur_installation(self):
+        with self.assertRaises(inst.ErreurInstallation):
+            inst.apercu(SERVEUR, ["inconnue"], ssh=FauxSsh(), dossier=self.dossier)
+
+
+class TestMemeProcessus(Base):
+    def test_deux_appels_imbriques_le_second_est_refuse(self):
+        refus = []
+
+        class Imbrique(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                if "--etape docker" in commande and not refus:
+                    try:
+                        inst.installer(SERVEUR, ["apk"], True, dossier=self.dossier, ssh=FauxSsh(), vivant=lambda p: False)
+                    except inst.ErreurInstallation as e:
+                        refus.append(str(e))
+                return super().executer(hote, commande, cle, stdin, delai, runner)
+        r = self.installer(Imbrique())
+        self.assertTrue(r["ok"])
+        self.assertEqual(len(refus), 1)
+        self.assertIn("déjà en cours", refus[0])
+        self.assertFalse((self.dossier / inst.VERROU).exists())
+
+    def test_deux_threads_le_second_refuse_le_premier_termine(self):
+        import threading
+        en_etape, liberer = threading.Event(), threading.Event()
+
+        class Bloque(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                if "--etape docker" in commande:
+                    en_etape.set()
+                    liberer.wait(10)
+                return super().executer(hote, commande, cle, stdin, delai, runner)
+        sortie = {}
+        t = threading.Thread(target=lambda: sortie.update(r=self.installer(Bloque())))
+        t.start()
+        self.assertTrue(en_etape.wait(10))
+        ssh2 = FauxSsh()
+        with self.assertRaises(inst.ErreurInstallation) as c:
+            self.installer(ssh2)
+        self.assertIn("déjà en cours", str(c.exception))
+        self.assertEqual(ssh2.appels, [])
+        self.assertTrue((self.dossier / inst.VERROU).exists())      # le verrou du premier n'est pas retiré
+        self.assertTrue(inst.installation_en_cours(self.dossier, vivant=lambda p: False))
+        liberer.set()
+        t.join(10)
+        self.assertTrue(sortie["r"]["ok"])
+        self.assertFalse((self.dossier / inst.VERROU).exists())
+        self.assertFalse(inst.installation_en_cours(self.dossier, vivant=lambda p: False))
+
+    def test_verrou_a_notre_pid_sans_installation_locale_est_repris(self):
+        (self.dossier / inst.VERROU).write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+        self.assertFalse(inst.installation_en_cours(self.dossier, vivant=lambda p: True))
+        self.assertTrue(self.installer(FauxSsh())["ok"])
+
+
+class TestEtatPerime(Base):
+    def _etat_perime(self):
+        (self.dossier / inst.ETAT).write_text(json.dumps({"srv": {
+            "capacites": {"base": {"statut": "fait", "detail": "", "geste": "", "maj": "x"},
+                          "android-build": {"statut": "en_cours", "detail": "en cours", "geste": "", "maj": "x"}},
+            "installation": {"en_cours": True, "debut": "x"}}}), encoding="utf-8")
+
+    def test_etat_perime_sans_verrou_est_degrade_a_la_lecture(self):
+        self._etat_perime()
+        e = inst.lire_etat_vivant(self.dossier, vivant=lambda p: False)["srv"]
+        self.assertEqual(e["capacites"]["android-build"]["statut"], "inconnue")
+        self.assertIn("Installation interrompue", e["capacites"]["android-build"]["detail"])
+        self.assertEqual(e["capacites"]["base"]["statut"], "fait")
+        self.assertFalse(e["installation"]["en_cours"])
+        self.assertEqual(inst.lire_etat(self.dossier)["srv"]["capacites"]["android-build"]["statut"], "en_cours")  # brut stable
+
+    def test_verrou_vivant_garde_en_cours(self):
+        self._etat_perime()
+        (self.dossier / inst.VERROU).write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+        e = inst.lire_etat_vivant(self.dossier, vivant=lambda p: p == 4242)["srv"]
+        self.assertEqual(e["capacites"]["android-build"]["statut"], "en_cours")
+        self.assertTrue(e["installation"]["en_cours"])
+        self.assertTrue(inst.installation_en_cours(self.dossier, vivant=lambda p: p == 4242))
+        self.assertFalse(inst.installation_en_cours(self.dossier, vivant=lambda p: False))
+
+    def test_interruption_en_cours_ne_laisse_aucun_en_cours(self):
+        class Interrompu(FauxSsh):
+            def executer(s, hote, commande, cle, stdin=None, delai=60, runner=None):
+                if "--etape android_build" in commande:
+                    raise KeyboardInterrupt()
+                return super().executer(hote, commande, cle, stdin, delai, runner)
+        with self.assertRaises(KeyboardInterrupt):
+            self.installer(Interrompu())
+        e = inst.lire_etat(self.dossier)["srv"]
+        self.assertNotIn("en_cours", {c["statut"] for c in e["capacites"].values()})
+        self.assertEqual(e["capacites"]["android-build"]["statut"], "inconnue")
+        self.assertFalse(e["installation"]["en_cours"])
+        self.assertFalse((self.dossier / inst.VERROU).exists())
+        self.assertTrue(self.installer(FauxSsh(presentes={"base"}))["ok"])      # le verrou et le processus sont libres
 
     def test_sondes_illisibles_donnent_inconnue(self):
         class SondeMuette(FauxSsh):

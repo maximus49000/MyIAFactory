@@ -10,6 +10,7 @@ relu par sonde au début et à la fin (jamais l'état en cache) ; une panne de r
 """
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +20,7 @@ import plateforme_ssh
 import serveur_etat
 from plateforme import RACINE_SERVEUR, SCRIPT_DISTANT, pid_vivant
 from serveur_capacites import CATALOGUE, bloquees, manquantes_pour
-from serveur_modele import _ecrire_atomique
+from serveur_modele import ecrire_atomique
 
 ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
@@ -59,11 +60,47 @@ def lire_etat(dossier=plateforme_acces.DOSSIER):
     return {k: v for k, v in donnees.items() if isinstance(v, dict)} if isinstance(donnees, dict) else {}
 
 
+INTERROMPUE = "Installation interrompue : relancez ou vérifiez."
+_VERROU_PROCESSUS = threading.Lock()        # une seule installation à la fois dans CE processus (le fichier ne suffit pas)
+
+
+def installation_en_cours(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
+    """Une installation tourne-t-elle ? Verrou tenu par un processus vivant (ou par ce processus, tant que son verrou
+    interne est pris), ou fichier verrou vide récent."""
+    chemin = Path(dossier) / VERROU
+    return chemin.exists() and _verrou_tenu(chemin, vivant, _VERROU_PROCESSUS.locked())
+
+
+def _degrader(caps):
+    """Copie de `caps` où chaque capacité restée « en_cours » est devenue « inconnue » (installation interrompue)."""
+    return {i: (_entree("inconnue", INTERROMPUE, "Relancez l'installation ou lancez un aperçu pour constater l'état.")
+                if c.get("statut") == "en_cours" else c) for i, c in caps.items()}
+
+
+def lire_etat_vivant(dossier=plateforme_acces.DOSSIER, vivant=pid_vivant):
+    """Comme `lire_etat`, mais sans installation vivante les « en_cours » périmés (fenêtre fermée en cours de route)
+    sont présentés « inconnue ». Ne modifie aucun fichier. Jamais d'exception."""
+    etat = lire_etat(dossier)
+    try:
+        if installation_en_cours(dossier, vivant):
+            return etat
+    except Exception:
+        pass
+    sortie = {}
+    for sid, e in etat.items():
+        caps = e.get("capacites")
+        inst = e.get("installation")
+        sortie[sid] = {**e,
+                       "capacites": _degrader(caps) if isinstance(caps, dict) else caps,
+                       "installation": {**inst, "en_cours": False} if isinstance(inst, dict) else inst}
+    return sortie
+
+
 def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut):
     tout = lire_etat(dossier)
     tout[serveur_id] = {"capacites": capacites, "installation": {"en_cours": en_cours, "debut": debut}}
     Path(dossier).mkdir(parents=True, exist_ok=True)
-    _ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
+    ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
 
 
 def _entree(statut, detail="", geste=""):
@@ -78,7 +115,10 @@ def apercu(serveur, actions, ssh=plateforme_ssh, dossier=plateforme_acces.DOSSIE
     `taille_go` et `duree_min` ne comptent que les capacités installables. Serveur injoignable ou état illisible :
     `{"erreur", "etat"}` avec toutes les capacités « inconnue », et rien n'est calculé comme manquant."""
     inconnu = {i: serveur_etat.INCONNUE for i in CATALOGUE}
-    requises = manquantes_pour(actions, set())          # fermeture des actions ; ValueError si action inconnue
+    try:
+        requises = manquantes_pour(actions, set())      # fermeture des actions
+    except ValueError as e:
+        raise ErreurInstallation(str(e), "Choisissez des actions connues.") from e
     refus = serveur_etat.refus_acces(serveur, ssh=ssh)
     if refus:
         return {"erreur": _texte(refus, serveur), "etat": inconnu}
@@ -99,14 +139,15 @@ def apercu(serveur, actions, ssh=plateforme_ssh, dossier=plateforme_acces.DOSSIE
 
 # ---------------------------------------------------------------- verrou
 
-def _verrou_tenu(chemin, vivant):
-    """Pid d'un autre processus vivant, ou fichier vide/illisible trop récent pour être périmé (il est créé puis rempli)."""
+def _verrou_tenu(chemin, vivant, soi_tenu=False):
+    """Pid d'un autre processus vivant, ou fichier vide/illisible trop récent pour être périmé (il est créé puis rempli).
+    Notre propre pid : tenu seulement si `soi_tenu` (une installation de ce processus est en cours)."""
     try:
         autre = json.loads(chemin.read_text(encoding="utf-8")).get("pid")
     except (OSError, ValueError, AttributeError):
         autre = None
     if isinstance(autre, int):
-        return autre != os.getpid() and bool(vivant(autre))
+        return soi_tenu if autre == os.getpid() else bool(vivant(autre))
     try:
         return time.time() - chemin.stat().st_mtime < VERROU_JEUNE_S
     except OSError:
@@ -148,22 +189,25 @@ def _deposer_script(serveur, ssh):
     """Dépose le script dans le dossier privé du serveur (0700, jamais /tmp). (statut, détail) ; None si réussi."""
     texte = (RACINE_SERVEUR / "mise_en_place.sh").read_bytes().decode("utf-8")   # octets du dépôt, fins de ligne intactes
     commande = f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > "{SCRIPT_DISTANT}" && chmod 700 "{SCRIPT_DISTANT}"'
-    code, _o, erreur = ssh.executer(serveur_etat._cible(serveur), commande, serveur.cle, stdin=texte, delai=60)
+    code, _o, erreur = ssh.executer(serveur_etat.cible(serveur), commande, serveur.cle, stdin=texte, delai=60)
     if code == 0:
         return None
-    return ("inconnue" if code == 255 else "bloque",
+    return ("inconnue" if code in (255, 124) else "bloque",
             f"Dépôt du script sur le serveur impossible : {_texte(erreur, serveur)}")
 
 
 def _lancer_etape(serveur, ssh, etape):
     """(statut, détail) d'une étape distante : l'unique objet JSON de sa sortie ; « inconnue » si la connexion tombe."""
     delai = DELAIS_ETAPE_S.get(etape, DELAI_DEFAUT_S)
-    code, sortie, erreur = ssh.executer(serveur_etat._cible(serveur), f'bash "{SCRIPT_DISTANT}" --etape {etape}',
+    code, sortie, erreur = ssh.executer(serveur_etat.cible(serveur), f'bash "{SCRIPT_DISTANT}" --etape {etape}',
                                         serveur.cle, delai=delai)
     d = _analyser(sortie)
     if not d or d.get("statut") not in STATUTS_ETAPE:
+        if code == 124:
+            return "inconnue", ("Délai dépassé : l'étape peut encore tourner sur le serveur, attendez avant de relancer "
+                                f"({etape}).")
         if code == 255:
-            return "inconnue", f"Connexion perdue pendant l'étape {etape} : {_texte(erreur, serveur)}"
+            return "inconnue", f"Serveur injoignable pendant l'étape {etape} : {_texte(erreur, serveur)}"
         return "bloque", f"Réponse illisible du serveur (code {code}) : {_texte(erreur, serveur)}"
     return d["statut"], _texte(d.get("detail", ""), serveur)
 
@@ -178,7 +222,8 @@ def installer(serveur, actions, accord, dossier=plateforme_acces.DOSSIER, ssh=pl
     """Installe les capacités manquantes pour `actions`, dans l'ordre, après accord explicite (`accord is True`).
 
     Renvoie `{"capacites": {id: {statut, detail, geste, maj}}, "ok": bool, "erreur": str | None}`.
-    `ErreurInstallation` pour un refus (accord, accès, installation déjà en cours), sans rien avoir modifié."""
+    `ErreurInstallation` pour un refus (accord, accès, installation déjà en cours), sans rien avoir modifié.
+    `dormir` n'est pas utilisé : paramètre réservé aux tests et conservé pour la parité avec les autres moteurs."""
     if accord is not True:
         raise ErreurInstallation("Installation refusée : l'accord n'a pas été donné.",
                                  "Validez l'aperçu (taille, durée) pour donner votre accord.")
@@ -186,25 +231,36 @@ def installer(serveur, actions, accord, dossier=plateforme_acces.DOSSIER, ssh=pl
         requises = manquantes_pour(actions, set())
     except ValueError as e:
         raise ErreurInstallation(str(e), "Choisissez des actions connues.") from e
-    refus = serveur_etat.refus_acces(serveur, ssh=ssh)
-    if refus:
-        raise ErreurInstallation(_texte(refus, serveur), "Corrigez l'accès au serveur puis relancez.")
-    verrou = _prendre_verrou(dossier, vivant)
-    if verrou is None:
-        raise ErreurInstallation("Une installation est déjà en cours sur ce poste.",
-                                 "Attendez sa fin (ou son abandon) puis relancez.")
-    debut = _maintenant()
-    caps = {}
+    deja = ErreurInstallation("Une installation est déjà en cours sur ce poste.",
+                              "Attendez sa fin (ou son abandon) puis relancez.")
+    if not _VERROU_PROCESSUS.acquire(blocking=False):       # même processus : double clic, deuxième fil
+        raise deja
     try:
+        refus = serveur_etat.refus_acces(serveur, ssh=ssh)
+        if refus:
+            raise ErreurInstallation(_texte(refus, serveur), "Corrigez l'accès au serveur puis relancez.")
         try:
-            return _derouler(serveur, requises, actions, ssh, dossier, caps, debut)
+            verrou = _prendre_verrou(dossier, vivant)
+        except OSError as e:
+            raise ErreurInstallation(f"Dossier de l'installation inutilisable : {_texte(e, serveur)}",
+                                     "Vérifiez les droits d'écriture du dossier de configuration.") from e
+        if verrou is None:
+            raise deja
+        debut = _maintenant()
+        caps = {}
+        try:
+            try:
+                return _derouler(serveur, requises, actions, ssh, dossier, caps, debut)
+            finally:
+                caps.update(_degrader(caps))                # aucune capacité ne reste « en_cours » (interruption comprise)
+                _ecrire_etat(dossier, serveur.id, caps, False, debut)
         finally:
-            _ecrire_etat(dossier, serveur.id, caps, False, debut)
+            try:
+                verrou.unlink()
+            except OSError:
+                pass
     finally:
-        try:
-            verrou.unlink()
-        except OSError:
-            pass
+        _VERROU_PROCESSUS.release()
 
 
 def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
@@ -255,8 +311,8 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
             fait.add(i)
             caps[i] = _entree("fait", detail)
         elif statut == "inconnue":
-            caps[i] = _entree("inconnue", detail, "Vérifiez la connexion au serveur puis relancez.")
-            arret, erreur = i, "Serveur injoignable en cours d'installation : le reste n'a pas été lancé."
+            caps[i] = _entree("inconnue", detail, "Vérifiez la connexion au serveur (et que l'étape ne tourne plus) puis relancez.")
+            arret, erreur = i, f"Installation interrompue, serveur injoignable ou délai dépassé : {detail}"
         else:
             caps[i] = _entree(statut, detail, GESTE_ETAPE)
             arret = i

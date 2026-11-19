@@ -71,10 +71,38 @@ class TestBureau(Base):
         chemin = self.dossier / plateforme_bureau.FICHIER_MDP
         chemin.write_text("x" * 30 + "\n", encoding="utf-8")
         ssh = SshBureau()
-        with mock.patch.object(Path, "read_text", side_effect=PermissionError("refusé")):
+        with mock.patch.object(Path, "read_bytes", side_effect=PermissionError("refusé")):
             r = plateforme_bureau.etape_bureau_distant(plateforme._Contexte(self.dossier, False, None, ssh, None), lambda *a, **k: self.fail("envoi"))
         self.assertEqual(r["statut"], "bloque")
         self.assertEqual(chemin.read_text(encoding="utf-8"), "x" * 30 + "\n")
+
+    def test_fichier_non_utf8_bloque_sans_ecraser_ni_envoyer(self):
+        chemin = self.dossier / plateforme_bureau.FICHIER_MDP
+        for nom, octets in (("utf16le", b"\xff\xfe" + "motdepasse-tres-long-123".encode("utf-16-le")),
+                            ("utf16be", b"\xfe\xff" + "motdepasse-tres-long-123".encode("utf-16-be")),
+                            ("invalide", b"abcdefghijklmnopqrst\xe9\xff\n")):
+            with self.subTest(nom):
+                chemin.write_bytes(octets)
+                ssh = SshBureau()
+                etat = self.installer(ssh, bureau=True)
+                e = self.etape8(etat)
+                self.assertEqual(e["statut"], "bloque")
+                self.assertIn("UTF-8", e["detail"])
+                self.assertIn("UTF-8", e["geste"])
+                self.assertEqual(chemin.read_bytes(), octets)
+                self.assertEqual(ssh.recus, [])
+                self.assertNotIn("motdepasse", json.dumps(etat))
+                (self.dossier / "plateforme.json").unlink(missing_ok=True)
+
+    def test_fichier_absent_genere_et_temporaire_perime_supprime(self):
+        vieux = self.dossier / f".{plateforme_bureau.FICHIER_MDP}.99999.tmp"
+        vieux.write_text("ancien-secret", encoding="utf-8")
+        autre = self.dossier / "autre.tmp"
+        autre.write_text("x", encoding="utf-8")
+        mdp = plateforme_bureau.mot_de_passe(self.dossier)
+        self.assertGreaterEqual(len(mdp), 24)
+        self.assertFalse(vieux.exists())
+        self.assertTrue(autre.exists())
 
     def test_bom_crlf_et_plusieurs_lignes_seule_la_premiere_sert(self):
         chemin = self.dossier / plateforme_bureau.FICHIER_MDP

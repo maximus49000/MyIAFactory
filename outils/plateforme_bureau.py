@@ -30,6 +30,10 @@ def _restreindre_windows(chemin):
 AVIS_COURT = f"Mot de passe trop court dans {FICHIER_MDP} : remplacé par un mot de passe généré."
 
 
+class ErreurFichierMdp(OSError):
+    """Le fichier du mot de passe existe mais n'est pas du texte UTF-8 : jamais écrasé."""
+
+
 def _ecrire_atomique(chemin, mdp):
     """Temporaire créé en 0600 (O_EXCL) dans le même dossier, écrit puis `os.replace` : jamais de fichier tronqué."""
     tmp = chemin.with_name(f".{chemin.name}.{os.getpid()}.tmp")
@@ -59,16 +63,25 @@ def _lire_ou_generer(dossier):
     chemin = Path(dossier) / FICHIER_MDP
     avis = ""
     try:
-        brut = chemin.read_text(encoding="utf-8-sig")
-        premiere = (brut.splitlines() or [""])[0].strip()
+        octets = chemin.read_bytes()
+    except FileNotFoundError:
+        octets = None
+    if octets is not None:       # tout autre échec de lecture (OSError) remonte : jamais d'écrasement
+        try:
+            if octets[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                raise UnicodeError("UTF-16")
+            premiere = (octets.decode("utf-8-sig").splitlines() or [""])[0].strip()
+        except UnicodeError:
+            raise ErreurFichierMdp(f"{chemin} n'est pas lisible comme du texte UTF-8") from None
         if len(premiere) >= LONGUEUR_MIN:
             return premiere, ""
         avis = AVIS_COURT
-    except FileNotFoundError:
-        pass
-    except UnicodeDecodeError:
-        avis = AVIS_COURT
-    mdp = "".join(secrets.choice(ALPHABET) for _ in range(LONGUEUR_MDP))
+    for vieux in Path(dossier).glob(f".{FICHIER_MDP}.*.tmp"):     # temporaires de runs morts : ils contiennent le mot de passe
+        try:
+            vieux.unlink()
+        except OSError:
+            pass
+    mdp ="".join(secrets.choice(ALPHABET) for _ in range(LONGUEUR_MDP))
     Path(dossier).mkdir(parents=True, exist_ok=True)
     _ecrire_atomique(chemin, mdp)
     return mdp, avis
@@ -83,6 +96,11 @@ def etape_bureau_distant(c, lancer_etape):
     """Envoie le mot de passe par stdin à l'étape distante `bureau_distant` ; renvoie son rapport."""
     try:
         mdp, avis = _lire_ou_generer(c.dossier)
+    except ErreurFichierMdp:
+        chemin = Path(c.dossier) / FICHIER_MDP
+        return {"statut": "bloque", "detail": f"{FICHIER_MDP} n'est pas lisible comme du texte UTF-8 (fichier enregistré en UTF-16 ?).",
+                "geste": f"Réenregistrez {chemin} en UTF-8 (avec PowerShell 5, utilisez -Encoding utf8) ou supprimez-le pour "
+                         "qu'un nouveau mot de passe soit généré, puis relancez."}
     except OSError as e:
         return {"statut": "bloque", "detail": f"Mot de passe de session illisible ou impossible à écrire ({type(e).__name__}).",
                 "geste": f"Vérifiez les droits de {Path(c.dossier) / FICHIER_MDP}, puis relancez."}

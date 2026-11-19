@@ -28,6 +28,10 @@ class AccesTest(unittest.TestCase):
         (self.dossier / "ovh.json").write_text(json.dumps(COMPLET), encoding="utf-8")
         self.assertEqual(plateforme_acces.charger_ovh(self.dossier), COMPLET)
 
+    def test_ovh_json_avec_bom_est_charge(self):
+        (self.dossier / "ovh.json").write_bytes(b"\xef\xbb\xbf" + json.dumps(COMPLET).encode("utf-8"))
+        self.assertEqual(plateforme_acces.charger_ovh(self.dossier), COMPLET)
+
     def test_champ_manquant_nomme_le_champ(self):
         incomplet = {k: v for k, v in COMPLET.items() if k != "secret"}
         (self.dossier / "ovh.json").write_text(json.dumps(incomplet), encoding="utf-8")

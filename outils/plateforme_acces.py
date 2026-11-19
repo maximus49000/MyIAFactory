@@ -29,7 +29,7 @@ def charger_ovh(dossier=DOSSIER):
     if not chemin.is_file():
         raise ErreurAcces(f"{chemin} est absent. {_mode_operatoire(dossier)}")
     try:
-        donnees = json.loads(chemin.read_text(encoding="utf-8"))
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         raise ErreurAcces(f"{chemin} est illisible (JSON invalide). {_mode_operatoire(dossier)}") from None
     if not isinstance(donnees, dict):

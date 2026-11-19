@@ -4,6 +4,8 @@
   py -3.12 lancer.py charge --reglages <réglages d'un projet>
   python lancer.py tests [--dossier <dossier>] [--sans-attendre] -- <commande de test>
       (les tests d'un projet, une seule campagne à la fois sur le poste : voir `outils/campagne.py`)
+  py -3.12 lancer.py plateforme <etat|installer|verifier> [--accord-reinstallation] [--dossier <dossier>]
+      (le serveur dédié OVH : voir `outils/plateforme.py`)
 """
 import sys
 from pathlib import Path
@@ -22,4 +24,13 @@ if __name__ == "__main__":
             except (AttributeError, ValueError):
                 pass
         sys.exit(campagne.main(sys.argv[2:]))
+    if sys.argv[1:2] == ["plateforme"]:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
+        import plateforme  # noqa: E402
+        for flux in (sys.stdout, sys.stderr):
+            try:
+                flux.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
+        sys.exit(plateforme.main(sys.argv[2:]))
     sys.exit(serveur.main(sys.argv[1:]))

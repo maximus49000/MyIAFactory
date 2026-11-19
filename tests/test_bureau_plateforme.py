@@ -1,0 +1,118 @@
+"""Essai réel : le bureau expose l'état de la plateforme (cache seulement) et lance l'installation en arrière-plan."""
+import json
+import threading
+import unittest
+from unittest import mock
+
+from bureau import plateforme as bplateforme
+from tests.test_serveur import AvecServeur
+
+SECRET = "SECRET-OVH-XYZ-123456"
+
+
+class TestPlateformeBureau(AvecServeur):
+    def setUp(self):
+        super().setUp()
+        self.dossier = self.tmp / "secrets"
+        self.dossier.mkdir()
+        p = mock.patch.object(bplateforme, "DOSSIER", self.dossier)
+        p.start()
+        self.addCleanup(p.stop)
+        self.appels = []
+        self.libre = threading.Event()
+        self.srv.travail_plateforme = bplateforme.Travail(self.installer_factice)
+
+    def installer_factice(self, dossier, accord_reinstallation=False):
+        self.appels.append((dossier, accord_reinstallation))
+        self.libre.wait(5)
+
+    def ecrire_cache(self, rapports):
+        (self.dossier / "plateforme.json").write_text(json.dumps({"rapports": rapports}), encoding="utf-8")
+
+    def poster(self, corps, entetes=None):
+        return self.req("POST", "/api/plateforme/installer", json.dumps(corps), self.ENT if entetes is None else entetes)
+
+    def test_get_sans_cache_donne_etat_a_faire_sans_erreur(self):
+        e = self.json("/api/plateforme")
+        self.assertEqual(len(e["etapes"]), 7)
+        self.assertEqual({x["statut"] for x in e["etapes"]}, {"a_faire"})
+        self.assertIs(e["pret"], False)
+        self.assertIs(e["pret_sans_unity"], False)
+        self.assertEqual(e["derniere_lecture"], "")
+        self.assertNotIn("erreur", e)
+
+    def test_get_ne_bloque_pas_si_ovh_injoignable(self):
+        # aucun ovh.json, aucun client : la lecture ne touche ni OVH ni ssh
+        bplateforme._modules()
+        import ovh_api
+        with mock.patch("subprocess.run", side_effect=AssertionError("ssh")), \
+                mock.patch.object(ovh_api.ClientOvh, "appeler", side_effect=AssertionError("ovh")):
+            r, _ = self.req("GET", "/api/plateforme")
+        self.assertEqual(r.status, 200)
+
+    def test_get_relit_le_cache(self):
+        self.ecrire_cache({e: {"statut": "fait"} for e in ("lecture", "os", "ssh", "durcissement", "docker", "images")})
+        e = self.json("/api/plateforme")
+        self.assertIs(e["pret"], True)
+        self.assertNotEqual(e["derniere_lecture"], "")
+
+    def test_post_sans_en_tete_bureau_refuse(self):
+        r, _ = self.poster({"accord_reinstallation": True}, {"Content-Type": "application/json"})
+        self.assertEqual(r.status, 403)
+        self.assertEqual(self.appels, [])
+
+    def test_post_deuxieme_lancement_renvoie_409(self):
+        r, data = self.poster({})
+        self.assertEqual((r.status, json.loads(data)), (202, {"demarre": True}))
+        r2, _ = self.poster({})
+        self.assertEqual(r2.status, 409)
+        self.libre.set()
+        self.srv.travail_plateforme.attendre()
+        r3, _ = self.poster({})
+        self.assertEqual(r3.status, 202)
+        self.srv.travail_plateforme.attendre()
+
+    def test_post_sans_accord_ne_reinstalle_pas(self):
+        self.libre.set()
+        for corps in ({}, {"accord_reinstallation": "true"}, {"accord_reinstallation": 1}, {"accord_reinstallation": False}):
+            with self.subTest(corps=corps):
+                self.poster(corps)
+                self.srv.travail_plateforme.attendre()
+        self.assertEqual([a[1] for a in self.appels], [False] * 4)
+        self.poster({"accord_reinstallation": True})
+        self.srv.travail_plateforme.attendre()
+        self.assertIs(self.appels[-1][1], True)
+
+    def test_exception_du_fil_ne_tue_pas_le_serveur(self):
+        def casse(dossier, accord_reinstallation=False):
+            raise RuntimeError(SECRET)
+        self.srv.travail_plateforme = bplateforme.Travail(casse)
+        self.poster({})
+        self.srv.travail_plateforme.attendre()
+        self.assertNotIn(SECRET, self.srv.travail_plateforme.erreur)
+        self.assertEqual(self.req("GET", "/api/plateforme")[0].status, 200)
+
+    def test_serveur_disponible_vrai_seulement_si_pret(self):
+        self.assertIs(self.json("/api/etat")["deport"]["serveur_disponible"], False)
+        self.ecrire_cache({e: {"statut": "fait"} for e in ("lecture", "os", "ssh", "durcissement", "docker")})
+        self.srv.projets["projet"]._cache_etat = (0.0, None)
+        self.assertIs(self.json("/api/etat")["deport"]["serveur_disponible"], False)
+        self.ecrire_cache({e: {"statut": "fait"} for e in ("lecture", "os", "ssh", "durcissement", "docker", "images")})
+        self.srv.projets["projet"]._cache_etat = (0.0, None)
+        self.assertIs(self.json("/api/etat")["deport"]["serveur_disponible"], True)
+
+    def test_reponses_sans_secret(self):
+        (self.dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-XYZ-123456", "secret": SECRET,
+                                                            "consommateur": "CONSO-XYZ-123456", "serveur": "ns1"}), encoding="utf-8")
+        self.ecrire_cache({"lecture": {"statut": "bloque", "detail": f"échec avec {SECRET}"}})
+        r, data = self.req("GET", "/api/plateforme")
+        self.assertNotIn(SECRET.encode(), data)
+        self.assertIn("***", data.decode("utf-8"))
+        _, data = self.poster({})
+        self.assertNotIn(SECRET.encode(), data)
+        self.libre.set()
+        self.srv.travail_plateforme.attendre()
+
+
+if __name__ == "__main__":
+    unittest.main()

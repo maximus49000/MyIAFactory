@@ -25,11 +25,17 @@ class FauxSsh:
     CHANGEMENT_CLE = plateforme_ssh.CHANGEMENT_CLE
     _verifier_hote = staticmethod(plateforme_ssh._verifier_hote)
 
-    def __init__(self, presentes=(), etapes=None, acces=True, injoignable=False, tomber_a=None):
+    def __init__(self, presentes=(), etapes=None, acces=True, injoignable=False, tomber_a=None, depot_code=0):
+        self.depot_code, self.archives = depot_code, []             # archives : (commande, octets) de chaque dépôt de fichiers
         self.presentes = set(presentes)
         self.etapes = etapes or {}          # etape -> (statut, detail) ; absent : "fait" et la capacité devient présente
         self.acces, self.injoignable, self.tomber_a = acces, injoignable, tomber_a
         self.appels, self.lancees, self.nb_sondes = [], [], 0
+
+    def executer_octets(self, hote, commande, cle, entree=None, delai=60, runner=None):
+        self.archives.append((commande, entree))
+        self.appels.append({"hote": hote, "commande": commande, "stdin": None, "delai": delai})
+        return self.depot_code, b"", ("tar: erreur" if self.depot_code else "")
 
     def executer(self, hote, commande, cle, stdin=None, delai=60, runner=None):
         self.appels.append({"hote": hote, "commande": commande, "stdin": stdin, "delai": delai})
@@ -398,6 +404,54 @@ class TestEtatPerime(Base):
         self.assertEqual(r["capacites"]["unity-cli"]["statut"], "fait")
         self.assertEqual(r["capacites"]["unity-editeur"]["statut"], "bloque")
         self.assertEqual(r["capacites"]["android-build"]["statut"], "fait")   # sans lien de dépendance : la suite continue
+
+    def _installer_image(self, ssh):
+        import serveur_capacites
+        from unittest import mock
+        besoins = dict(serveur_capacites.BESOINS, image_test=("emulateur-image",))
+        with mock.patch.object(serveur_capacites, "BESOINS", besoins):
+            return self.installer(ssh, actions=["image_test"])
+
+    def test_fichiers_de_l_etape_deposes_en_archive_tar_puis_etape_avec_son_dossier(self):
+        import io
+        import tarfile
+        ssh = FauxSsh()
+        r = self._installer_image(ssh)
+        self.assertEqual(r["capacites"]["emulateur-image"]["statut"], "fait", r)
+        self.assertEqual(len(ssh.archives), 1)                              # une seule fois par exécution
+        commande, octets = ssh.archives[0]
+        for morceau in ('install -d -m 700 "$HOME/myiafactory"', "umask 077", 'mktemp -d "$HOME/myiafactory/.depot.XXXXXX"',
+                        "tar -x --no-same-owner", 'mv -f "$d/$f"', 'rm -rf "$d"', "$HOME/myiafactory/serveur_ovh"):
+            self.assertIn(morceau, commande)
+        with tarfile.open(fileobj=io.BytesIO(octets)) as tar:
+            membres = {m.name: m for m in tar.getmembers()}
+            self.assertEqual(sorted(membres), ["images/emulateur/Dockerfile", "images/emulateur/entree-tache.sh", "taches/pont.sh"])
+            for nom, m in membres.items():
+                self.assertTrue(m.isreg(), nom)
+                self.assertEqual((m.uid, m.gid), (0, 0))
+                self.assertEqual(m.mode, 0o755 if nom.endswith(".sh") else 0o644, nom)
+                self.assertEqual(tar.extractfile(m).read(), (RACINE / "serveur_ovh" / nom).read_bytes())   # octets du dépôt, LF intacts
+                self.assertNotIn(b"\r", tar.extractfile(m).read())
+        etape = [a["commande"] for a in ssh.appels if "--etape emulateur_image" in a["commande"]]
+        self.assertEqual(len(etape), 1)
+        self.assertTrue(etape[0].startswith('SERVEUR_OVH_DIR="$HOME/myiafactory/serveur_ovh" bash '), etape[0])
+        indices = [i for i, a in enumerate(ssh.appels) if a["commande"] in (inst.COMMANDE_DEPOT_FICHIERS, etape[0])]
+        self.assertEqual(indices, sorted(indices))                           # le dépôt précède l'étape
+
+    def test_depot_des_fichiers_en_echec(self):
+        for code, statut in ((255, "inconnue"), (124, "inconnue"), (1, "bloque")):
+            with self.subTest(code=code):
+                ssh = FauxSsh(depot_code=code)
+                r = self._installer_image(ssh)
+                self.assertEqual(r["capacites"]["emulateur-image"]["statut"], statut, r)
+                self.assertNotIn("emulateur_image", ssh.lancees)
+                self.assertIn("Dépôt des fichiers", r["capacites"]["emulateur-image"]["detail"])
+
+    def test_les_autres_etapes_ne_deposent_rien_de_plus(self):
+        ssh = FauxSsh()
+        self.installer(ssh, actions=["emulateur"])
+        self.assertEqual(ssh.archives, [])
+        self.assertFalse(any("SERVEUR_OVH_DIR" in a["commande"] for a in ssh.appels))
 
     def test_les_delais_par_etape_sont_ceux_du_module(self):
         self.assertEqual(inst.DELAIS_ETAPE_S, {"docker": 1200, "durcissement": 900, "android_build": 1800,

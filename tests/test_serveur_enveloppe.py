@@ -21,13 +21,15 @@ case "$1" in
        printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
   ps) n=$(cat "$ET/ps" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$ET/ps"
       if [ -n "${FAUX_MEURT_AU_PS:-}" ] && [ "$n" -ge "$FAUX_MEURT_AU_PS" ]; then rm -f "$ET/vivant"; fi
+      [ -n "${FAUX_ARRET_AU_PS:-}" ] && [ "$n" = 1 ] && echo > "$FAUX_ARRET_AU_PS"
+      [ -n "${FAUX_CONTENEUR_EXISTE:-}" ] && echo cidautre
       [ -e "$ET/vivant" ] && echo cid123
       exit 0 ;;
   stop|kill|rm) [ -n "${FAUX_STOP_ECHEC:-}" ] && exit 1; rm -f "$ET/vivant" ;;
 esac
 exit 0'''
 FAUX = {
-    "sudo": 'exec "$@"',
+    "sudo": '[ "$1" = -n ] && shift\nexec "$@"',
     "docker": DOCKER,
     "flock": 'echo "flock $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_FLOCK_OCCUPE:-}" ] && [ "$1" = -n ] && exit 1\nexit 0',
     "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\nexec "$@"',
@@ -194,7 +196,7 @@ class TestEnveloppe(unittest.TestCase):
 
     def test_conteneur_sans_reseau_ni_identifiants(self):
         with Banc(SECRET_DU_POSTE="jeton-secret-42", ANTHROPIC_API_KEY="cle-secrete-43") as b:
-            self.assertEqual(b.lancer().returncode, 0)
+            self.assertEqual(b.lancer("scenario", "30", "30", "6144", "2").returncode, 0)
             a = b.run_args()
             texte = "\n".join(a)
             h = subprocess.run(["bash", "-c", 'printf %s "$HOME"'], env=dict(os.environ, HOME=b.home.as_posix()),
@@ -203,7 +205,9 @@ class TestEnveloppe(unittest.TestCase):
             def suite(*motif):
                 self.assertTrue(any(a[i:i + len(motif)] == list(motif) for i in range(len(a))), f"{motif} absent de {a}")
 
-            self.assertEqual(a[:3], ["run", "--rm", "-d"])
+            self.assertEqual(a[0], "run")
+            self.assertIn("--rm", a)
+            self.assertIn("-d", a)
             self.assertIn("--init", a)
             self.assertIn("--read-only", a)
             suite("--network", "none")
@@ -211,18 +215,25 @@ class TestEnveloppe(unittest.TestCase):
             suite("--user", "1000:1000")
             suite("--group-add", "993")
             suite("--name", f"tache-{ID}")
-            suite("--memory", "2048m")
+            suite("--memory", "6144m")
             suite("--cpus", "2")
             suite("--tmpfs", "/avd:size=4g,mode=1777")
             self.assertTrue(any(x.startswith("/tmp") for i, x in enumerate(a) if i and a[i - 1] == "--tmpfs"), a)
             suite("--cap-drop", "ALL")
             suite("--security-opt", "no-new-privileges")
-            volumes = [a[i + 1] for i in range(len(a) - 1) if a[i] == "-v"]
-            self.assertEqual(sorted(volumes), sorted([f"{h}/android-sdk:/opt/android-sdk:ro", f"{h}/taches/{ID}/entree:/entree:ro",
-                                                      f"{h}/taches/{ID}/sortie:/sortie"]))
+            montages = [a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]
+            self.assertEqual(sorted(montages), sorted([f"type=bind,src={h}/android-sdk,dst=/opt/android-sdk,readonly",
+                                                       f"type=bind,src={h}/taches/{ID}/entree,dst=/entree,readonly",
+                                                       f"type=bind,src={h}/taches/{ID}/sortie,dst=/sortie"]))
+            self.assertNotIn("-v", a)                                # --mount : un chemin absent est une erreur, jamais créé par root
+            suite("--pull", "never")                                 # une image locale absente échoue, jamais tirée d'un registre
+            suite("--pids-limit", "512")
+            suite("--memory-swap", "6144m")
+            suite("--ulimit", "nofile=4096:4096")
             self.assertEqual(a[-1], "myiafactory/emulateur")
             envs = [a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"]
-            for attendu in ("ANDROID_AVD_HOME=/avd", "HOME=/tmp", "PONT_SORTIE=/sortie", "PONT_AVD=emul"):
+            for attendu in ("ANDROID_AVD_HOME=/avd", "HOME=/tmp", "PONT_SORTIE=/sortie", "PONT_AVD=emul",
+                            "TACHE_IMAGE_SYSTEME=system-images;android-34;google_apis;x86_64"):
                 self.assertIn(attendu, envs)
             self.assertTrue(all("=" in x for x in envs), envs)     # jamais « -e NOM » : ce serait l'environnement de l'appelant
             self.assertNotIn("--env-file", a)
@@ -249,15 +260,127 @@ class TestEnveloppe(unittest.TestCase):
             self.assertIn("kvm", b.etat()["raison"].lower())
             self.assertEqual(b.appels("docker run"), [])
 
-    def test_une_tache_deja_en_cours_n_est_pas_ecrasee(self):
+    def _etat_ecrit(self, b, etat, statut=None):
+        b.dossier.mkdir(parents=True, exist_ok=True)
+        texte = json.dumps({"id": ID, "etat": etat, "statut": statut, "debut": "2026-11-19T10:00:00Z", "fin": None, "raison": "x"})
+        (b.dossier / "etat.json").write_text(texte, newline="\n")
+        return texte
+
+    def test_une_tache_en_cours_avec_veilleur_vivant_rend_3_sans_rien_modifier(self):
         with Banc() as b:
-            b.dossier.mkdir(parents=True)
-            avant = json.dumps({"id": ID, "etat": "en_cours", "statut": None, "debut": "2026-11-19T10:00:00Z", "fin": None, "raison": ""})
-            (b.dossier / "etat.json").write_text(avant, newline="\n")
-            r = b.lancer()
-            self.assertEqual(r.returncode, 3, r.stderr)
-            self.assertEqual((b.dossier / "etat.json").read_text(), avant)
+            avant = self._etat_ecrit(b, "en_cours")
+            pidfile = (b.dossier / "veilleur.pid").as_posix()
+            # un faux veilleur : sa ligne de commande porte le marqueur et l'identifiant, son PID (celui de bash) est dans le fichier
+            p = subprocess.Popen(["bash", "-c", 'echo $$ > "$PIDFILE"; sleep 40; true', "faux", "--veilleur", ID],
+                                 env=dict(os.environ, PIDFILE=pidfile), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                for _ in range(50):
+                    if (b.dossier / "veilleur.pid").exists() and (b.dossier / "veilleur.pid").read_text().strip():
+                        break
+                    time.sleep(0.1)
+                r = b.lancer()
+                self.assertEqual(r.returncode, 3, r.stderr)
+                self.assertEqual((b.dossier / "etat.json").read_text(), avant)
+                self.assertEqual(b.appels("docker"), [])
+            finally:
+                p.kill()
+                p.wait()
+
+    def test_pid_recycle_ou_mort_n_est_pas_un_veilleur(self):
+        with Banc() as b:
+            avant = self._etat_ecrit(b, "en_cours")
+            for contenu in ("999999", "pas-un-pid", "1"):                   # mort, illisible, vivant mais sans le marqueur
+                with self.subTest(pid=contenu):
+                    (b.dossier / "veilleur.pid").write_text(contenu, newline="\n")
+                    r = b.lancer()
+                    self.assertEqual(r.returncode, 4, r.stderr)             # jamais 3 : le lanceur doit nettoyer, pas attendre
+                    self.assertEqual((b.dossier / "etat.json").read_text(), avant)
             self.assertEqual(b.appels("docker"), [])
+
+    def test_un_identifiant_deja_utilise_est_refuse_sans_rien_effacer(self):
+        for etat, statut in (("terminee", "plantage"), ("arretee", "ok"), ("echouee", "erreur")):
+            with self.subTest(etat=etat), Banc() as b:
+                avant = self._etat_ecrit(b, etat, statut)
+                (b.dossier / "sortie").mkdir(exist_ok=True)
+                (b.dossier / "sortie" / "plantage.txt").write_text("FATAL EXCEPTION", newline="\n")
+                r = b.lancer()
+                self.assertEqual(r.returncode, 4, r.stderr)
+                self.assertEqual((b.dossier / "etat.json").read_text(), avant)
+                self.assertTrue((b.dossier / "sortie" / "plantage.txt").exists())
+                self.assertEqual(b.appels("docker"), [])
+                self.assertEqual(b.appels("flock"), [])
+
+    def test_une_tache_en_attente_peut_etre_relancee(self):
+        with Banc() as b:
+            self._etat_ecrit(b, "en_attente")
+            self.assertEqual(b.lancer().returncode, 0)
+            self.assertEqual(b.etat()["etat"], "en_cours")
+            b.arreter()
+            b.attendre_final()
+
+    def test_un_conteneur_tache_existant_donne_75_sans_second_emulateur(self):
+        with Banc(FAUX_CONTENEUR_EXISTE="1") as b:
+            r = b.lancer()
+            self.assertEqual(r.returncode, 75, r.stderr)
+            self.assertEqual(b.etat()["etat"], "en_attente")
+            self.assertEqual(b.appels("docker run"), [])
+            self.assertTrue(b.appels("flock -u"))                           # créneau relâché
+            self.assertTrue(any("name=^tache-" in x and x.startswith("docker ps") for x in b.journal.splitlines()), b.journal)
+
+    def test_hup_ignore_avant_d_ecrire_en_cours(self):
+        code = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("trap '' HUP", code)
+        self.assertLess(code.index("trap '' HUP"), code.index("ecrire_etat en_cours"))
+
+    def test_docker_run_fige_ou_en_echec_nettoie_le_conteneur_a_demi_cree(self):
+        with Banc(FAUX_RUN_ECHEC="1") as b:
+            self.assertEqual(b.lancer().returncode, 1)
+            self.assertTrue(any(x.startswith("docker rm -f") and f"tache-{ID}" in x for x in b.journal.splitlines()), b.journal)
+
+    def test_arret_fin_est_une_fin_normale_et_tout_autre_motif_un_arret(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "arret").write_text("fin\n", newline="\n")
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "ok"))
+        with Banc() as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "arret").write_text("demande de l'agent\n", newline="\n")
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("arretee", "ok"))
+
+    def test_conteneur_mort_prime_sur_un_arret_present(self):
+        with Banc(FAUX_MEURT_AU_PS="2") as b:
+            b.env["FAUX_ARRET_AU_PS"] = (b.dossier / "arret").as_posix()    # le fichier arret apparaît pendant le 1er contrôle
+            self.assertEqual(b.lancer().returncode, 0)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+
+    def test_sortie_trop_volumineuse_arrete_la_tache_en_limite(self):
+        with Banc(ENVELOPPE_SORTIE_MAX_KO="50") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "sortie" / "gros.bin").write_bytes(b"x" * 300 * 1024)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertIn("sortie trop volumineuse", f["raison"])
+            self.assertTrue(b.appels("docker stop"))
+
+    def test_l_activite_du_pont_repousse_l_inactivite_du_pilote(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer("pilote", "60", "3", "2048", "2").returncode, 0)
+            for _ in range(8):                                    # seul .activite (verbe en cours, pas encore de pont.log)
+                (b.dossier / "sortie" / ".activite").write_text("", newline="\n")
+                time.sleep(0.5)
+                self.assertEqual(b.etat()["etat"], "en_cours")
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+
+    def test_valeurs_par_defaut_du_script(self):
+        code = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('INACTIVITE="${4-600}"', code)                 # > PONT_DEMARRAGE_S (300)
+        self.assertIn('MEMOIRE="${5-6144}"', code)
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        self.assertIn(f'IMAGE_SYSTEME="{versions["android_sdk"]["emulator_image"]}"', code)
 
     def test_arguments_hostiles_refuses_sans_rien_creer(self):
         mauvais_ids = ["../x", "t20261119-101500-zzzz", f"{ID};ls", f"{ID}\nx", "", "t20261119-101500-ab12/../..", " " + ID]
@@ -292,6 +415,78 @@ class TestEnveloppe(unittest.TestCase):
         self.assertNotRegex(code, r"\beval\b")
         self.assertNotRegex(code, r"(^|[^\w.-])bash\s+-c\b")
         self.assertNotRegex(code, r"(?m)^\s*set -[a-z]*e")
+
+
+
+ENTREE = RACINE / "images" / "emulateur" / "entree-tache.sh"
+IMAGE_SYSTEME = "system-images;android-34;google_apis;x86_64"
+AVDMANAGER = r'''echo "avdmanager $*" >> "$FAUX_JOURNAL"
+[ -n "${AVD_ECHEC:-}" ] && exit 1
+nom=""; prec=""; for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; done
+[ -n "${AVD_SANS_CONFIG:-}" ] && exit 0
+mkdir -p "$ANDROID_AVD_HOME/$nom.avd"
+printf 'hw.ramSize=1024\nfoo=bar\ndisk.dataPartition.size=800M\n' > "$ANDROID_AVD_HOME/$nom.avd/config.ini"'''
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEntreeTache(unittest.TestCase):
+    """entree-tache.sh lancé hors conteneur : SDK, avdmanager et dossiers factices (ENTREE_SDK, ENTREE_SANS_ATTENTE)."""
+
+    def lancer(self, retirer=(), image=IMAGE_SYSTEME, sdk_absent=False, **env):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
+            t = Path(t)
+            sdk = t / "sdk"
+            for rel in ("cmdline-tools/latest/bin/avdmanager", "platform-tools/adb", "emulator/emulator"):
+                f = sdk / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text("#!/bin/sh\n" + (AVDMANAGER if f.name == "avdmanager" else "exit 0") + "\n", newline="\n")
+                f.chmod(0o755)
+            (sdk / "system-images/android-34/google_apis/x86_64").mkdir(parents=True)
+            for rel in retirer:
+                shutil.rmtree(sdk / rel)
+            for d in ("sortie", "avd", "home"):
+                (t / d).mkdir()
+            e = dict(os.environ, ENTREE_SDK=(t / "nulle-part" if sdk_absent else sdk).as_posix(), ENTREE_SANS_ATTENTE="1",
+                     PONT_SORTIE=(t / "sortie").as_posix(), ANDROID_AVD_HOME=(t / "avd").as_posix(), HOME=(t / "home").as_posix(),
+                     PONT_AVD="emul", FAUX_JOURNAL=(t / "appels.txt").as_posix())
+            e.pop("TACHE_IMAGE_SYSTEME", None)
+            if image is not None:
+                e["TACHE_IMAGE_SYSTEME"] = image
+            e.update(env)
+            r = subprocess.run(["bash", ENTREE.as_posix()], capture_output=True, text=True, encoding="utf-8", env=e, timeout=30,
+                               stdin=subprocess.DEVNULL)
+            config = t / "avd" / "emul.avd" / "config.ini"
+            r.config = config.read_text(encoding="utf-8") if config.exists() else None
+            r.pret = (t / "sortie" / ".avd-pret").exists()
+            r.appels = (t / "appels.txt").read_text(encoding="utf-8") if (t / "appels.txt").exists() else ""
+            return r
+
+    def test_cree_l_avd_depuis_l_image_epinglee_puis_la_dimensionne(self):
+        r = self.lancer()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"--package {IMAGE_SYSTEME}", r.appels)
+        self.assertIn("--name emul", r.appels)
+        lignes = r.config.splitlines()
+        self.assertEqual(lignes.count("hw.ramSize=2048"), 1, lignes)
+        self.assertEqual(lignes.count("disk.dataPartition.size=2G"), 1, lignes)
+        self.assertIn("foo=bar", lignes)                                      # les autres réglages sont gardés
+        self.assertFalse([x for x in lignes if x in ("hw.ramSize=1024", "disk.dataPartition.size=800M")])
+        self.assertTrue(r.pret)
+
+    def test_erreurs_nettes_et_codes_distincts(self):
+        cas = [("sdk absent", dict(sdk_absent=True), 10, "SDK"),
+               ("outil absent", dict(retirer=("cmdline-tools",)), 10, "avdmanager"),
+               ("image sans correspondance (glob vide)", dict(image="system-images;android-35;google_apis;x86_64"), 11, "introuvable"),
+               ("image absente de l'environnement", dict(image=None), 11, "TACHE_IMAGE_SYSTEME"),
+               ("image mal formée", dict(image="system-images;../../x;a;x86_64"), 11, "mal formée"),
+               ("avdmanager en échec", dict(AVD_ECHEC="1"), 12, "Création de l'AVD"),
+               ("config.ini absent", dict(AVD_SANS_CONFIG="1"), 13, "config.ini")]
+        for nom, args, code, mot in cas:
+            with self.subTest(nom):
+                r = self.lancer(**args)
+                self.assertEqual(r.returncode, code, r.stderr)
+                self.assertIn(mot, r.stderr)
+                self.assertFalse(r.pret)
 
 
 if __name__ == "__main__":

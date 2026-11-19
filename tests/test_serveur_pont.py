@@ -394,6 +394,29 @@ class TestPont(unittest.TestCase):
             self.assertRegex(lignes[1], r"^toucher a\?b 2 \d+ms$")         # le retour à la ligne ne forge pas de ligne
             self.assertRegex(lignes[5], r"^texte un deux \d+ms$")
 
+    def test_activite_touchee_au_debut_de_chaque_verbe_valide(self):
+        with Banc() as b:
+            activite = b.sortie / ".activite"
+            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)
+            self.assertTrue(activite.is_file())
+            self.assertEqual(activite.stat().st_size, 0)                  # mtime seulement, aucun contenu
+            os.utime(activite, (1000000, 1000000))
+            self.assertEqual(b.lancer("attendre", "0")[0], 0)
+            self.assertGreater(activite.stat().st_mtime, 1000000)         # chaque verbe valide le rafraîchit
+            activite.unlink()
+            self.assertEqual(b.lancer("toucher", "a;b", "2")[0], 2)       # un verbe refusé n'est pas de l'activité
+            self.assertFalse(activite.exists())
+
+    def test_activite_ne_suit_pas_un_lien_symbolique(self):
+        with Banc() as b:
+            cible = b.t / "ailleurs.txt"
+            cible.write_text("intact", newline="\n")
+            b.lien(cible, b.sortie / ".activite")
+            os.utime(cible, (1000000, 1000000))
+            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)       # le verbe réussit
+            self.assertEqual(cible.read_text(), "intact")                 # rien n'est écrit à travers le lien
+            self.assertEqual(int(cible.stat().st_mtime), 1000000)
+
     def test_sortie_toujours_une_ligne_json_valide(self):
         with Banc(PONT_PAQUET=PAQUET) as b:
             b.logcat(b'I Test: "guillemets" \\ barre \t tab \x1b[31m \xff\xfe \r\n'

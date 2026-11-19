@@ -40,7 +40,7 @@ EMPREINTE_AGENT="ubuntu=${V_UBUNTU};node=${V_NODE};claude_code=${V_CLAUDE_CODE}"
 # Image de l'émulateur : versions ET empreinte des fichiers de son contexte (Dockerfile, entree-tache.sh, pont.sh) : un pont modifié la reconstruit.
 EMPREINTE_EMULATEUR_BASE="ubuntu=${V_UBUNTU};jdk=17"
 SEUIL_DISQUE_GO=20
-DOSSIER_IMAGES="${SERVEUR_OVH_DIR:-/opt/myiafactory/serveur_ovh}/images"
+DOSSIER_IMAGES="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}/images"   # là où l'installation dépose serveur_ovh
 
 ETAPE=""
 SIMULER=0
@@ -733,10 +733,11 @@ etape_android_emulateur() {
 # Étape emulateur_image : construit myiafactory/emulateur depuis images/emulateur/Dockerfile, images/emulateur/entree-tache.sh
 # et taches/pont.sh (dossier $SERVEUR_OVH_DIR, par défaut ~/myiafactory/serveur_ovh : celui où l'installation dépose ces fichiers),
 # assemblés dans un contexte temporaire. Idempotente : l'image porte une étiquette « versions » (versions + empreinte des
-# fichiers) ; elle n'est reconstruite que si l'étiquette diffère. Écrit ensuite le marqueur ~/.myiafactory/emulateur-image.version
-# (contenu = l'étiquette) que la sonde du catalogue teste. Le SDK Android n'est pas dans l'image : il est monté à l'exécution.
+# fichiers) ; elle n'est reconstruite que si l'étiquette diffère. Le marqueur ~/.myiafactory/emulateur-image.version (contenu =
+# l'étiquette, testé par la sonde du catalogue) est retiré avant toute reconstruction puis réécrit une fois l'image construite.
+# Le SDK Android n'est pas dans l'image : il est monté à l'exécution.
 etape_emulateur_image() {
-  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f journal fin code
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont) depuis ${racine} puis écrirait ${marqueur}."
   fi
@@ -744,25 +745,33 @@ etape_emulateur_image() {
   exiger_disque "$SEUIL_EMULATEUR_IMAGE_GO"
   command -v docker >/dev/null 2>&1 || repondre a_faire "Docker absent : installez d'abord la capacité base (étape docker), puis refaites celle-ci."
   for f in images/emulateur/Dockerfile images/emulateur/entree-tache.sh taches/pont.sh; do
-    [ -f "$racine/$f" ] || repondre bloque "Fichier de l'image introuvable : $racine/$f. Redéposez les fichiers du serveur (serveur_ovh) puis relancez."
+    [ -f "$racine/$f" ] || repondre bloque "Fichier de l'image introuvable : $racine/$f. Relancez l'installation (elle redépose les fichiers)."
   done
   empreinte="${EMPREINTE_EMULATEUR_BASE};fichiers=$(cat "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" | sha256sum | cut -c1-16)"
-  actuelle=$(sudo docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/emulateur 2>/dev/null)
+  actuelle=$(sudo -n docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/emulateur 2>/dev/null)
   if [ "$actuelle" != "$empreinte" ]; then
+    rm -f "$marqueur"
     ctx=$(mktemp -d) || repondre bloque "Dossier temporaire non créable pour construire l'image."
-    if ! { cp "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" "$ctx/"; }; then
-      rm -rf "$ctx"; repondre bloque "Contexte de construction de l'image non préparable."
+    if ! cp "$racine/images/emulateur/Dockerfile" "$racine/images/emulateur/entree-tache.sh" "$racine/taches/pont.sh" "$ctx/"; then
+      rm -rf "$ctx"
+      repondre bloque "Contexte de construction de l'image non préparable."
     fi
-    if ! sudo docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}"          -t myiafactory/emulateur "$ctx" >/dev/null 2>&1; then
-      rm -rf "$ctx"; repondre bloque "Construction de l'image myiafactory/emulateur impossible (contexte ${racine})."
-    fi
+    journal=$(sudo -n docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}" -t myiafactory/emulateur "$ctx" 2>&1)
+    code=$?
     rm -rf "$ctx"
+    if [ "$code" != 0 ]; then
+      fin=$(printf '%s\n' "$journal" | tail -n 20 | tr -d '\r' | cut -c1-200)
+      fin="${fin//$HOME/\~}"
+      repondre bloque "Construction de l'image myiafactory/emulateur impossible (contexte ${racine}). Fin du journal de construction : ${fin}"
+    fi
     actuelle=""
   fi
   mkdir -p "$HOME/.myiafactory" || repondre bloque "Dossier $HOME/.myiafactory non créable."
   if [ "$(cat "$marqueur" 2>/dev/null)" != "$empreinte" ]; then
-    printf '%s
-' "$empreinte" > "$marqueur.tmp.$$" && mv -f "$marqueur.tmp.$$" "$marqueur"       || { rm -f "$marqueur.tmp.$$"; repondre bloque "Marqueur $marqueur non écrit."; }
+    if ! { printf '%s\n' "$empreinte" > "$marqueur.tmp.$$" && mv -f "$marqueur.tmp.$$" "$marqueur"; }; then
+      rm -f "$marqueur.tmp.$$"
+      repondre bloque "Marqueur $marqueur non écrit."
+    fi
   fi
   if [ -z "$actuelle" ]; then repondre fait "Image myiafactory/emulateur construite (${empreinte}) ; marqueur écrit."; fi
   repondre fait "Image myiafactory/emulateur déjà à jour (${empreinte})."

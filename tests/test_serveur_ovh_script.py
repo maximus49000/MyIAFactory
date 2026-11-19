@@ -625,7 +625,7 @@ class Monde:
         jdk_bin = f"{self.jvm.as_posix()}/java-17-openjdk-amd64/bin"
         jdk21_bin = f"{self.jvm.as_posix()}/java-21-openjdk-amd64/bin"
         corps = {
-            "sudo": 'while case "$1" in *=*) true;; *) false;; esac; do shift; done\nexec "$@"',
+            "sudo": 'while case "$1" in *=*|-n) true;; *) false;; esac; do shift; done\nexec "$@"',
             "curl": ('out=""; url=""\nwhile [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; --connect-timeout|--max-time) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done\n'
                      'case "$url" in\n'
                      f'  */repository2-3.xml) case "$CURL_MANIFESTE" in http) exit 22;; vide) : > "$out";; sans) echo "<xml/>" > "$out";; *) cp "{tp}/manifeste.xml" "$out";; esac;;\n'
@@ -1150,7 +1150,7 @@ class TestEtapesCapacites(unittest.TestCase):
 DOCKER_IMAGE = r'''echo "docker $*" >> "JOURNAL"
 case "$1 $2" in
   "image inspect") [ -s "ETAT/etiquette" ] && { cat "ETAT/etiquette"; exit 0; }; exit 1 ;;
-  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && exit 1
+  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && { i=1; while [ $i -le 30 ]; do echo "ligne-de-build-$i $HOME/secret-dossier"; i=$((i + 1)); done; exit 1; }
              prec=""; for a in "$@"; do [ "$prec" = --label ] && printf '%s' "${a#versions=}" > "ETAT/etiquette"; prec="$a"; last="$a"; done
              echo "contexte: $(ls "$last" | tr '\n' ' ')" >> "JOURNAL" ;;
 esac
@@ -1209,6 +1209,15 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         self.assertEqual(self._lancer(m)["statut"], "fait")
         self.assertEqual(len(m.appels("docker build")), 2, m.journal)
 
+    def test_marqueur_retire_avant_la_reconstruction(self):
+        m = self._monde()
+        self.assertEqual(self._lancer(m)["statut"], "fait")
+        self.assertTrue((m.home / MARQUEUR).exists())
+        (m.etat / "etiquette").write_text("ubuntu=autre", newline="\n")                   # image périmée, reconstruction qui échoue
+        d = self._lancer(m, FAUX_BUILD_ECHEC="1")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertFalse((m.home / MARQUEUR).exists())                                     # la sonde ne ment pas sur une image périmée
+
     def test_etape_emulateur_image_blocages(self):
         m = self._monde()
         d = self._lancer(m, DISQUE_LIBRE_GO="2")
@@ -1217,8 +1226,13 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         d = self._lancer(m, SERVEUR_OVH_DIR=(m.t / "vide").as_posix())
         self.assertEqual(d["statut"], "bloque")
         self.assertIn("introuvable", d["detail"])
+        self.assertIn("Relancez l'installation (elle redépose les fichiers)", d["detail"])
         d = self._lancer(m, FAUX_BUILD_ECHEC="1")
         self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("ligne-de-build-30", d["detail"])                                    # fin du journal de construction...
+        self.assertIn("ligne-de-build-11", d["detail"])
+        self.assertNotIn("ligne-de-build-10 ", d["detail"])                                # ... les 20 dernières lignes seulement
+        self.assertIn("~/secret-dossier", d["detail"])                                     # dossier personnel masqué
         self.assertFalse((m.home / MARQUEUR).exists())                                     # pas de marqueur sans image
         m.opt["FAUX_UTILISATEUR"] = "root"
         d = self._lancer(m)
@@ -1271,8 +1285,10 @@ class TestDockerfileEmulateur(unittest.TestCase):
         texte = self.ENTREE.read_text(encoding="utf-8")
         self.assertNotIn("\r", texte)
         self.assertIn("avdmanager", texte)
-        self.assertIn("SDK=/opt/android-sdk", texte)
-        self.assertIn("/system-images/*/*/x86_64", texte)
+        self.assertIn("/opt/android-sdk", texte)
+        self.assertIn("TACHE_IMAGE_SYSTEME", texte)                     # image système épinglée par l'enveloppe, pas « la première »
+        self.assertIn("hw.ramSize=2048", texte)
+        self.assertIn("disk.dataPartition.size=2G", texte)
         self.assertIn("x86_64", texte)
         self.assertNotRegex(texte, r"\beval\b")
         self.assertNotIn("docker", " ".join(x for x in texte.splitlines() if not x.lstrip().startswith("#")))

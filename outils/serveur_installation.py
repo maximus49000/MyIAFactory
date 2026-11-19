@@ -8,9 +8,11 @@ Garanties : aucune écriture sans `accord is True` ; une seule installation à l
 relu par sonde au début et à la fin (jamais l'état en cache) ; une panne de réseau donne « inconnue », jamais
 « absente » ; l'état `serveurs-etat.json` ne contient aucun secret. Tout passe par `ssh` (injectable).
 """
+import io
 import json
 import math
 import os
+import tarfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -20,7 +22,7 @@ import plateforme_acces
 import plateforme_ssh
 import serveur_etat
 import plateforme
-from plateforme import COMMANDE_DEPOT, RACINE_SERVEUR, SCRIPT_DISTANT, pid_vivant
+from plateforme import COMMANDE_DEPOT, DOSSIER_DISTANT, RACINE_SERVEUR, VARIABLE_DOSSIER, SCRIPT_DISTANT, pid_vivant
 from serveur_capacites import CATALOGUE, bloquees, manquantes_pour
 from serveur_modele import ecrire_atomique
 
@@ -288,6 +290,48 @@ def _analyser(sortie):
     return None
 
 
+# Fichiers du dossier des scripts du dépôt dont une étape a besoin sur le serveur (chemins relatifs à ce dossier, noms fixes). Le lanceur de
+# tâches ajoutera lancer_emulation.sh à son propre dépôt.
+FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emulateur/entree-tache.sh", "taches/pont.sh")}
+# Dépôt par une archive tar lue sur l'entrée standard : extraite dans un dossier temporaire privé (umask 077, mktemp -d), chaque
+# fichier est ensuite déplacé (mv -f) à sa place, le dossier temporaire est supprimé quoi qu'il arrive.
+COMMANDE_DEPOT_FICHIERS = (
+    'install -d -m 700 "$HOME/myiafactory" && umask 077 && d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1; '
+    f'dest="{DOSSIER_DISTANT}"; r=1; '
+    'if tar -x --no-same-owner -C "$d" -f -; then r=0; '
+    '(cd "$d" && find . -type f) | while IFS= read -r f; do f="${f#./}"; '
+    'install -d -m 700 "$dest/$(dirname "$f")" && mv -f "$d/$f" "$dest/$f" || exit 1; done || r=1; fi; '
+    'rm -rf "$d"; exit $r')
+
+
+def _archive_fichiers(etape):
+    """Archive tar (en mémoire) des fichiers de l'étape : fichiers ordinaires seulement, noms fixes, propriétaire root,
+    droits 0644 (0755 pour un .sh), octets lus tels quels (fins de ligne LF du dépôt)."""
+    tampon = io.BytesIO()
+    with tarfile.open(fileobj=tampon, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+        for rel in FICHIERS_ETAPE[etape]:
+            chemin = RACINE_SERVEUR / rel
+            if chemin.is_symlink() or not chemin.is_file():
+                raise FileNotFoundError(f"Fichier du dépôt introuvable ou non ordinaire : {rel}")
+            donnees = chemin.read_bytes()
+            info = tarfile.TarInfo(rel)
+            info.size, info.mode, info.mtime = len(donnees), (0o755 if rel.endswith(".sh") else 0o644), 0
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            tar.addfile(info, io.BytesIO(donnees))
+    return tampon.getvalue()
+
+
+def _deposer_fichiers(serveur, ssh, etape):
+    """Dépose les fichiers dont l'étape a besoin. (statut, détail) ; None si réussi."""
+    code, _o, erreur = ssh.executer_octets(serveur_etat.cible(serveur), COMMANDE_DEPOT_FICHIERS, serveur.cle,
+                                           entree=_archive_fichiers(etape), delai=120)
+    if code == 0:
+        return None
+    return ("inconnue" if code in (255, 124) else "bloque",
+            f"Dépôt des fichiers de l'étape {etape} sur le serveur impossible : {_texte(erreur, serveur)}")
+
+
 def _deposer_script(serveur, ssh):
     """Dépose le script dans le dossier privé du serveur (0700, jamais /tmp). (statut, détail) ; None si réussi."""
     texte = (RACINE_SERVEUR / "mise_en_place.sh").read_bytes().decode("utf-8")   # octets du dépôt, fins de ligne intactes
@@ -301,7 +345,8 @@ def _deposer_script(serveur, ssh):
 def _lancer_etape(serveur, ssh, etape):
     """(statut, détail) d'une étape distante : l'unique objet JSON de sa sortie ; « inconnue » si la connexion tombe."""
     delai = DELAIS_ETAPE_S.get(etape, DELAI_DEFAUT_S)
-    code, sortie, erreur = ssh.executer(serveur_etat.cible(serveur), f'bash "{SCRIPT_DISTANT}" --etape {etape}',
+    prefixe = f'{VARIABLE_DOSSIER}="{DOSSIER_DISTANT}" ' if etape in FICHIERS_ETAPE else ""
+    code, sortie, erreur = ssh.executer(serveur_etat.cible(serveur), f'{prefixe}bash "{SCRIPT_DISTANT}" --etape {etape}',
                                         serveur.cle, delai=delai)
     d = _analyser(sortie)
     if not d or d.get("statut") not in STATUTS_ETAPE:
@@ -414,7 +459,7 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
     ecrire()
 
     fait, erreur, arret = set(presentes), None, None            # arret : capacité qui interrompt toute la suite
-    script_depose = False
+    script_depose, fichiers_deposes = False, set()
     for i in a_faire:
         cap = CATALOGUE[i]
         if arret:
@@ -434,6 +479,10 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
         try:
             r = None if script_depose else _deposer_script(serveur, ssh)
             script_depose = script_depose or r is None
+            if r is None and cap.etape in FICHIERS_ETAPE and cap.etape not in fichiers_deposes:
+                r = _deposer_fichiers(serveur, ssh, cap.etape)
+                if r is None:
+                    fichiers_deposes.add(cap.etape)
             statut, detail = r or _lancer_etape(serveur, ssh, cap.etape)
         except Exception as e:                                   # réseau, hôte invalide, fichier du script absent
             statut, detail = "inconnue", f"Étape interrompue : {_texte(e, serveur) or type(e).__name__}"

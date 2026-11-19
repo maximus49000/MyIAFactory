@@ -1059,3 +1059,9 @@ Chiffré : v1.Mg4u5j-g29evWKzxBqO-vfXK4IdaZrscNFLcKaR4N67vQY9aucduTYm8OIi_Rj8foj
 ## S264 — chiffrée
 
 Chiffré : v1.1Ng6vSxyIENP42tJwl_gJ5ScjPGjSCWgWGPD84bDPJ2c59trRi2WEIiKrF1sdvMDUT-QWmhrNKiPs2vBni3uoQCkghpXJzEKvITN2RX6Lf01uFejX2iKqVU_HZbLtQ9PSk5oV6Hgdc8nNFj0nJm6oK8B_1blH4nCYZvj8WsKzfI4ubaKfDOTMPdl8s8GaWe0Qro27P5ldSnix6-b_EPJwPRrP6mQvC-kPfYBtYPTijDuKDzn11H3vZSpcqj7HwKkc9AcFqHfVMIOvHWJ1xkv9nEA0SOn1dbXrvsMrmIukFc8y7L9pZIfbVZ3QZEDl_XssvteO8zteTZMpXGCCmZKYqZTuWOCWL-jGUGXrBJqitRbXnxIXUV_YdXUXQppa4uReNgX83Xt5VK4WrrWQZ_c-kYQlUjjWzSi5sKfozw_U98
+
+## S265 — Avant de rapporter des résultats de tests, relire l'horodata
+Rôles : designer
+Date : 2026-11-19
+
+Avant de rapporter des résultats de tests, relire l'horodatage et les comptes de chaque XML de résultats ; si une relance rapide n'a rien réécrit, le dire plutôt que d'affirmer une revérification complète.

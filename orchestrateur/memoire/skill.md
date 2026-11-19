@@ -1065,3 +1065,9 @@ Rôles : designer
 Date : 2026-11-19
 
 Avant de rapporter des résultats de tests, relire l'horodatage et les comptes de chaque XML de résultats ; si une relance rapide n'a rien réécrit, le dire plutôt que d'affirmer une revérification complète.
+
+## S266 — Une mesure de performance faite uniquement sur émulateur ne
+Rôles : designer
+Date : 2026-11-19
+
+Une mesure de performance faite uniquement sur émulateur ne doit pas être présentée comme validée sur appareil réel ; le périmètre se déclare dans la note de livraison et dans la fenêtre de validation.

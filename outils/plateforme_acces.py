@@ -19,8 +19,9 @@ def _mode_operatoire(dossier):
     return (
         f"Créez le fichier {Path(dossier) / 'ovh.json'} avec les champs {', '.join(CHAMPS)}. "
         f"Pour obtenir cle_app, secret et consommateur, créez une clé d'API sur {LIEN_JETON} en n'accordant que les droits "
-        "minimaux sur ce seul serveur (GET/POST/PUT/DELETE limités à /dedicated/server/<nom du serveur>/*), "
-        "et indiquez dans « serveur » le nom de ce serveur."
+        "minimaux sur ce seul serveur : GET /dedicated/server/<nom du serveur>, GET /dedicated/server/<nom du serveur>/* "
+        "(modèles d'installation et suivi des tâches) et POST /dedicated/server/<nom du serveur>/reinstall ; "
+        "indiquez dans « serveur » le nom de ce serveur."
     )
 
 
@@ -34,10 +35,14 @@ def charger_ovh(dossier=DOSSIER):
         raise ErreurAcces(f"{chemin} est illisible (JSON invalide). {_mode_operatoire(dossier)}") from None
     if not isinstance(donnees, dict):
         raise ErreurAcces(f"{chemin} doit contenir un objet JSON. {_mode_operatoire(dossier)}")
-    manquants = [c for c in CHAMPS if not str(donnees.get(c) or "").strip()]
+    manquants = [c for c in CHAMPS if donnees.get(c) is None or (isinstance(donnees[c], str) and not donnees[c].strip())]
     if manquants:
         raise ErreurAcces(f"{chemin} : champ(s) manquant(s) ou vide(s) : {', '.join(manquants)}. {_mode_operatoire(dossier)}")
-    return {c: donnees[c] for c in CHAMPS}
+    pas_texte = [c for c in CHAMPS if not isinstance(donnees[c], str)]
+    if pas_texte:
+        raise ErreurAcces(f"{chemin} : champ(s) qui doivent être du texte entre guillemets : {', '.join(pas_texte)}. "
+                          f"{_mode_operatoire(dossier)}")
+    return {c: donnees[c].strip() for c in CHAMPS}
 
 
 def chemin_licence(dossier=DOSSIER):

@@ -45,6 +45,32 @@ class AccesTest(unittest.TestCase):
             plateforme_acces.charger_ovh(self.dossier)
         self.assertNotIn("TOPSECRET", str(ctx.exception))
 
+    def test_mode_operatoire_donne_les_droits_du_nouveau_flux(self):
+        with self.assertRaises(plateforme_acces.ErreurAcces) as ctx:
+            plateforme_acces.charger_ovh(self.dossier)
+        m = str(ctx.exception)
+        nom = "/dedicated/server/<nom du serveur>"
+        self.assertIn("POST " + nom + "/reinstall", m)
+        self.assertIn("GET " + nom + "/*", m)
+        self.assertRegex(m, r"GET " + nom + r"(?!/)")           # le chemin de base, sans /*
+        self.assertNotIn("sshKey", m)
+        self.assertNotIn("DELETE", m)
+        self.assertIn(plateforme_acces.LIEN_JETON, m)
+
+    def test_valeurs_nettoyees_des_blancs(self):
+        brut = {**COMPLET, "secret": " s" + chr(10), "serveur": "ns123.ip-1-2-3.eu " + chr(13) + chr(10)}
+        (self.dossier / "ovh.json").write_text(json.dumps(brut), encoding="utf-8")
+        d = plateforme_acces.charger_ovh(self.dossier)
+        self.assertEqual((d["secret"], d["serveur"]), ("s", "ns123.ip-1-2-3.eu"))
+
+    def test_valeur_non_texte_nomme_le_champ_sans_trace(self):
+        for valeur in (123, ["a"], None, {"x": 1}, True, "   "):
+            with self.subTest(valeur=valeur):
+                (self.dossier / "ovh.json").write_text(json.dumps({**COMPLET, "consommateur": valeur}), encoding="utf-8")
+                with self.assertRaises(plateforme_acces.ErreurAcces) as ctx:
+                    plateforme_acces.charger_ovh(self.dossier)
+                self.assertIn("consommateur", str(ctx.exception))
+
     def test_chemin_licence(self):
         self.assertIsNone(plateforme_acces.chemin_licence(self.dossier))
         (self.dossier / "unity.ulf").write_text("x", encoding="utf-8")

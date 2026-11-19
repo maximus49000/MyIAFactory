@@ -6,10 +6,18 @@ envoyé par l'entrée standard SSH, ajouté aux secrets masqués AVANT tout envo
 import getpass
 import os
 import secrets
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import plateforme_ssh
+
+FICHIER_RDP = "bureau-distant.rdp"
+PORT_LOCAL = 33890
+PORT_XRDP = 3389
+UTILISATEUR_DISTANT = "ubuntu"
 FICHIER_MDP = "bureau-distant.txt"
 LONGUEUR_MDP = 24
 LONGUEUR_MIN = 16
@@ -113,3 +121,97 @@ def etape_bureau_distant(c, lancer_etape):
         r["geste"] = (f"Lancez py -3.12 lancer.py plateforme bureau-distant pour ouvrir la session ; "
                       f"le mot de passe est dans {Path(c.dossier) / FICHIER_MDP}.")
     return r
+
+
+def _windows():
+    return sys.platform == "win32"
+
+
+def _port_libre(prefere=PORT_LOCAL):
+    """`prefere` s'il est libre sur 127.0.0.1, sinon un port libre choisi par le système."""
+    for port in (prefere, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return s.getsockname()[1]
+    raise OSError("aucun port local libre")
+
+
+def _attendre_port(port, proc, delai=15):
+    """Vrai dès que 127.0.0.1:<port> accepte une connexion ; faux si le tunnel meurt ou si `delai` s s'écoulent."""
+    fin = time.monotonic() + delai
+    while time.monotonic() < fin:
+        if proc.poll() is not None:
+            return False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                return True
+        except OSError:
+            time.sleep(0.3)
+    return False
+
+
+def _arreter(proc):
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except OSError:
+        pass
+
+
+def _ecrire_rdp(dossier, port):
+    chemin = Path(dossier) / FICHIER_RDP
+    chemin.write_text(f"full address:s:127.0.0.1:{port}\r\nusername:s:{UTILISATEUR_DISTANT}\r\n"
+                      "prompt for credentials:i:1\r\n", encoding="utf-8")
+    return chemin
+
+
+def ouvrir(dossier, popen=subprocess.Popen, lancer_rdp=subprocess.run, port_libre=_port_libre,
+           attendre_port=_attendre_port, ssh_options=plateforme_ssh._options):
+    """Ouvre la session graphique : tunnel SSH (127.0.0.1 seulement) puis Bureau à distance de Windows. Code 0/1/2."""
+    import plateforme    # import tardif : plateforme importe ce module
+    dossier = Path(dossier)
+    cache = plateforme._lire_cache(dossier)
+    etapes = ((cache.get("etat") or {}).get("etapes") or [])
+    etape = next((e for e in etapes if isinstance(e, dict) and e.get("id") == "bureau_distant"), {})
+    ip = cache.get("ip")
+    if etape.get("statut") != "fait" or not ip:
+        print("Installez d'abord la session : lancer.py plateforme installer --bureau-distant", file=sys.stderr)
+        return 1
+    if not _windows():
+        print("Le client « mstsc » (Bureau à distance) n'existe que sous Windows : la session ne peut pas s'ouvrir d'ici.",
+              file=sys.stderr)
+        return 2
+    hote = f"{UTILISATEUR_DISTANT}@{ip}"
+    try:
+        plateforme_ssh._verifier_hote(hote)
+        port = port_libre()
+        args = ["ssh", "-N", "-L", f"127.0.0.1:{port}:127.0.0.1:{PORT_XRDP}", *ssh_options(dossier / plateforme_ssh.NOM_CLE),
+                "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=20", "--", hote]
+        proc = popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        print("« ssh » est introuvable : le client OpenSSH de Windows est requis "
+              "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as e:
+        print(f"Tunnel impossible à lancer : {e}", file=sys.stderr)
+        return 1
+    try:
+        if not attendre_port(port, proc):
+            print("Le tunnel SSH ne s'est pas ouvert (serveur injoignable, clé refusée ou empreinte du serveur changée). "
+                  "Lancez py -3.12 lancer.py plateforme verifier pour le détail.", file=sys.stderr)
+            return 1
+        fichier = _ecrire_rdp(dossier, port)
+        print(f"Ouverture de la session graphique (mot de passe dans {dossier / FICHIER_MDP}).")
+        lancer_rdp(["mstsc", str(fichier)])
+        return 0
+    except Exception as e:      # jamais de trace de pile : un message clair
+        print(f"La session n'a pas pu s'ouvrir ({type(e).__name__}).", file=sys.stderr)
+        return 1
+    finally:
+        _arreter(proc)

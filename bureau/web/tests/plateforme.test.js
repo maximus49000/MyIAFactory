@@ -1,4 +1,4 @@
-// La carte « Serveur » du bureau, rendue sur un faux DOM : les sept étapes, l'accord d'effacement, les gestes, l'injoignable, le suivi.
+// La carte « Serveur » du bureau, rendue sur un faux DOM : les huit étapes, l'accord d'effacement, les gestes, l'injoignable, le suivi.
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -16,7 +16,7 @@ globalThis.document = {createElement: (t) => new Noeud(t)};
 
 const {carteServeur, demanderInstallation, lirePlateforme, texteAvecLiens} = await import("../ui/plateforme.js");
 
-const IDS = ["lecture", "os", "ssh", "durcissement", "docker", "images", "licence"];
+const IDS = ["lecture", "os", "ssh", "durcissement", "docker", "images", "licence", "bureau_distant"];
 const etape = (id, statut = "a_faire", extra = {}) => ({id, libelle: `Étape ${id}`, statut, detail: `détail ${id}`, geste: "", ...extra});
 const ETAT = {etapes: IDS.map((i) => etape(i)), pret: false, pret_sans_unity: false, derniere_lecture: ""};
 const reponse = (status, corps) => ({ok: status >= 200 && status < 300, status, json: async () => corps});
@@ -31,12 +31,32 @@ function minuterie() {
   return m;
 }
 
-test("la carte liste les sept étapes dans l ordre", () => {
+test("la carte liste les huit étapes dans l ordre", () => {
   const c = carteServeur(ETAT, {installer: async () => ({ok: true})});
   const libelles = c.tous((n) => n.className.startsWith("serveur-libelle")).map((n) => n.textContent);
   assert.deepEqual(libelles, IDS.map((i) => `Étape ${i}`));
   assert.match(c.textContent, /détail docker/);
   assert.match(c.textContent, /à faire/);
+});
+
+test("la carte liste huit étapes dont la session graphique facultative", () => {
+  const c = carteServeur(ETAT, {installer: async () => ({ok: true})});
+  const libelles = c.tous((n) => n.className.startsWith("serveur-libelle")).map((n) => n.textContent);
+  assert.equal(libelles.length, 8);
+  assert.equal(libelles[7], "Étape bureau_distant");
+});
+
+test("l étape facultative à faire n est pas présentée comme une alerte", () => {
+  const e = {...ETAT, etapes: [...ETAT.etapes.slice(0, 7), etape("bureau_distant", "a_faire", {detail: "Facultative : non demandée (installer --bureau-distant)."})]};
+  const c = carteServeur(e);
+  const ligne = c.tous((n) => n.className.startsWith("serveur-etape ")).pop();
+  assert.ok(!/bloque|alerte|erreur/.test(ligne.className));
+  const badge = c.tous((n) => n.className.startsWith("serveur-badge")).pop();
+  assert.equal(badge.textContent, "à faire");
+  assert.ok(!/bloque|erreur|alerte/.test(badge.className));
+  const alertes = c.tous((n) => n.attributs.role === "alert" || n.className.includes("erreur") || n.className.includes("alerte"));
+  assert.ok(alertes.every((n) => n.textContent === ""));
+  assert.match(c.textContent, /Facultative : non demandée/);
 });
 
 test("fait, bloqué et en cours ont leur badge", () => {

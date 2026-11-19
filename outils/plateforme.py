@@ -540,8 +540,8 @@ def _verifier_distant(c):
 
 def main(argv):
     args = list(argv)
-    if not args or args[0] not in ("etat", "installer", "verifier"):
-        print("Usage : lancer.py plateforme <etat|installer|verifier> [--accord-reinstallation] [--bureau-distant] [--dossier <d>]", file=sys.stderr)
+    if not args or args[0] not in ("etat", "installer", "verifier", "bureau-distant"):
+        print("Usage : lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <d>]", file=sys.stderr)
         return 2
     commande, accord, dossier, bureau = args[0], False, plateforme_acces.DOSSIER, False
     reste = args[1:]
@@ -556,6 +556,8 @@ def main(argv):
         else:
             print(f"Argument inconnu : {a}", file=sys.stderr)
             return 2
+    if commande == "bureau-distant":
+        return plateforme_bureau.ouvrir(dossier)
     if commande == "etat":
         etat = _lire_cache(dossier).get("etat") or calculer_etat({})
     elif commande == "installer":

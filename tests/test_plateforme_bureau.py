@@ -230,5 +230,146 @@ class TestBureau(Base):
         self.assertIs(inst.call_args.kwargs.get("bureau_distant"), True)
 
 
+class ProcFactice:
+    def __init__(self, args):
+        self.args, self.termine, self.tue, self.stderr = args, False, False, None
+
+    def poll(self):
+        return None
+
+    def terminate(self):
+        self.termine = True
+
+    def kill(self):
+        self.tue = True
+
+    def wait(self, timeout=None):
+        return 0
+
+
+class TestOuvrir(Base):
+    def setUp(self):
+        super().setUp()
+        self.procs = []
+        self.rdp = []
+        self.windows = mock.patch.object(plateforme_bureau, "_windows", lambda: True)
+        self.windows.start()
+        self.addCleanup(self.windows.stop)
+
+    def cache(self, statut="fait", ip="203.0.113.7"):
+        etat = plateforme.calculer_etat({"bureau_distant": {"statut": statut}})
+        (self.dossier / "plateforme.json").write_text(json.dumps({"ip": ip, "etat": etat}), encoding="utf-8")
+
+    def popen(self, args, **kw):
+        p = ProcFactice(args)
+        self.procs.append(p)
+        return p
+
+    def rdp_ok(self, args, **kw):
+        self.rdp.append(args)
+        return mock.Mock(returncode=0)
+
+    def ouvrir(self, **kw):
+        options = dict(popen=self.popen, lancer_rdp=self.rdp_ok, port_libre=lambda: 33890,
+                       attendre_port=lambda port, proc, delai=15: True)
+        options.update(kw)
+        sortie = io.StringIO()
+        with redirect_stdout(sortie), mock.patch("sys.stderr", sortie):
+            code = plateforme_bureau.ouvrir(self.dossier, **options)
+        return code, sortie.getvalue()
+
+    def test_ouvrir_refuse_si_l_etape_8_n_est_pas_faite(self):
+        for statut in ("a_faire", "bloque"):
+            self.cache(statut)
+            code, sortie = self.ouvrir()
+            self.assertEqual(code, 1)
+            self.assertIn("installer --bureau-distant", sortie)
+        self.assertEqual(self.procs, [])
+
+    def test_ouvrir_refuse_sans_cache(self):
+        code, _ = self.ouvrir()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.procs, [])
+
+    def test_ouvrir_lance_le_tunnel_en_loopback_puis_mstsc(self):
+        self.cache()
+        code, _ = self.ouvrir(port_libre=lambda: 41234)
+        self.assertEqual(code, 0)
+        args = self.procs[0].args
+        self.assertEqual(args[0], "ssh")
+        self.assertIn("-N", args)
+        self.assertEqual(args[args.index("-L") + 1], "127.0.0.1:41234:127.0.0.1:3389")
+        self.assertIn("-i", args)
+        self.assertEqual(args[args.index("-i") + 1], str(self.dossier / "id_ed25519_myiafactory"))
+        self.assertIn("StrictHostKeyChecking=accept-new", args)
+        self.assertFalse([a for a in args if a.endswith("=no") and "StrictHostKeyChecking" in a])
+        self.assertEqual(args[-2:], ["--", "ubuntu@203.0.113.7"])
+        fichier = self.dossier / "bureau-distant.rdp"
+        texte = fichier.read_text(encoding="utf-8")
+        self.assertIn("full address:s:127.0.0.1:41234", texte)
+        self.assertIn("username:s:ubuntu", texte)
+        self.assertNotIn("password", texte.lower())
+        self.assertEqual(self.rdp, [["mstsc", str(fichier)]])
+        self.assertTrue(self.procs[0].termine)
+
+    def test_ouvrir_arrete_le_tunnel_meme_si_mstsc_echoue(self):
+        self.cache()
+
+        def casse(args, **kw):
+            raise OSError("mstsc a planté")
+        code, sortie = self.ouvrir(lancer_rdp=casse)
+        self.assertNotEqual(code, 0)
+        self.assertTrue(self.procs[0].termine)
+        self.assertNotIn("Traceback", sortie)
+
+    def test_ouvrir_arrete_le_tunnel_si_le_port_ne_s_ouvre_pas(self):
+        self.cache()
+        code, sortie = self.ouvrir(attendre_port=lambda port, proc, delai=15: False)
+        self.assertEqual(code, 1)
+        self.assertTrue(self.procs[0].termine)
+        self.assertEqual(self.rdp, [])
+        self.assertNotIn("Traceback", sortie)
+
+    def test_ouvrir_choisit_un_autre_port_si_33890_est_pris(self):
+        import socket
+        with socket.socket() as occupe:
+            occupe.bind(("127.0.0.1", 0))
+            pris = occupe.getsockname()[1]
+            autre = plateforme_bureau._port_libre(pris)
+            self.assertNotEqual(autre, pris)
+            self.assertGreater(autre, 0)
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            libre = s.getsockname()[1]
+        self.assertEqual(plateforme_bureau._port_libre(libre), libre)
+
+    def test_ouvrir_n_affiche_jamais_le_mot_de_passe(self):
+        self.cache()
+        mdp = plateforme_bureau.mot_de_passe(self.dossier)
+        code, sortie = self.ouvrir()
+        self.assertEqual(code, 0)
+        self.assertNotIn(mdp, sortie)
+        self.assertIn(str(self.dossier / plateforme_bureau.FICHIER_MDP), sortie)
+        self.assertNotIn(mdp, (self.dossier / "bureau-distant.rdp").read_text(encoding="utf-8"))
+        self.assertFalse([a for a in self.procs[0].args if mdp in a])
+
+    def test_ouvrir_hors_windows_dit_que_mstsc_est_absent(self):
+        self.cache()
+        with mock.patch.object(plateforme_bureau, "_windows", lambda: False):
+            code, sortie = self.ouvrir()
+        self.assertEqual(code, 2)
+        self.assertIn("mstsc", sortie)
+        self.assertEqual(self.procs, [])
+
+    def test_main_delegue_bureau_distant(self):
+        with mock.patch.object(plateforme_bureau, "ouvrir", return_value=0) as o:
+            self.assertEqual(plateforme.main(["bureau-distant", "--dossier", str(self.dossier)]), 0)
+        self.assertEqual(o.call_args.args[0], self.dossier)
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            plateforme.main([])
+        self.assertIn("bureau-distant", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

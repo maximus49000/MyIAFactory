@@ -14,6 +14,24 @@ ETAPES = ("durcissement", "docker", "images", "licence", "etat")
 CLES = {"etape", "statut", "detail", "versions", "disque_libre_go"}
 
 
+CURL_FACTICE = r'''out=""; url=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in *mozilla*) m="$CLE_MOZILLA";; *) m="$CLE_UNITY";; esac
+case "$m" in
+  ok) printf 'CLE-VALIDE %s\n' "$url" > "$out";;
+  vide) : > "$out";;
+  tronque) printf 'CLE-PART' > "$out"; exit 18;;
+  http) exit 22;;
+  invalide) printf '<html>erreur</html>\n' > "$out";;
+esac'''
+GPG_FACTICE = r'''mode=""; out=""; entree=""
+while [ $# -gt 0 ]; do case "$1" in --dearmor) mode=d; shift;; --show-keys) mode=s; shift;; -o) out="$2"; shift 2;; --*) shift;; *) entree="$1"; shift;; esac; done
+case "$mode" in
+  d) grep -q CLE-VALIDE "$entree" || exit 2; printf 'TROUSSEAU\n' > "$out";;
+  s) grep -q -e CLE-VALIDE -e TROUSSEAU "$entree" || exit 2;;
+esac'''
+
+
 def lancer(etape, simuler=True, entree="", env=None):
     args = ["bash", SCRIPT.as_posix(), "--etape", etape] + (["--simuler"] if simuler else [])
     e = dict(os.environ, **(env or {}))
@@ -110,7 +128,8 @@ class TestScriptSimule(unittest.TestCase):
     MDP = "Un-Mot-De-Passe-Long-42"
 
     def _bureau(self, mdp, simuler=False, ecoute="127.0.0.1:3389", ufw="Status: active\n22/tcp LIMIT Anywhere", ssh_mdp="no",
-                sshd_sortie=None, utilisateur="ubuntu", ini=None, politique=None, firefox_reel="/usr/lib/firefox/firefox", maj_ok=True):
+                sshd_sortie=None, utilisateur="ubuntu", ini=None, politique=None, firefox_reel="/usr/lib/firefox/firefox", maj_ok=True,
+                cle_mozilla="ok", cle_unity="ok", apt_avant=None):
         """Lance bureau_distant avec de faux binaires ; rend (JSON, journal des appels, mot de passe reçu par chpasswd, dossier home)."""
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
@@ -122,7 +141,7 @@ class TestScriptSimule(unittest.TestCase):
             corps = {
                 "sudo": (f'echo "sudo $@" >> "{journal.as_posix()}"\n'
                          'while case "$1" in *=*) true;; *) false;; esac; do shift; done\n'
-                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get) "$@";; *) exit 0;; esac'),
+                         f'case "$1" in chpasswd) cat > "{recu.as_posix()}";; ufw|sshd|apt-get|curl|gpg|mv|rm|chmod|tee|install) "$@";; *) exit 0;; esac'),
                 "ss": f'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\n'
                       f'echo "LISTEN 0 4096 {ecoute} 0.0.0.0:*"\necho "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"',
                 "ufw": f'echo "ufw $@" >> "{journal.as_posix()}"\ncat <<"EOT"\n{ufw}\nEOT',
@@ -134,15 +153,22 @@ class TestScriptSimule(unittest.TestCase):
                 "readlink": f'echo "{firefox_reel}"',
                 "apt-cache": "cat <<'EOT'\n" + (politique if politique is not None else POLITIQUE_MOZILLA) + "\nEOT",
             }
+            corps["curl"] = CURL_FACTICE
+            corps["gpg"] = GPG_FACTICE
             corps["apt-get"] = '[ "$1" = update ] && [ "%s" = non ] && exit 1\nexit 0' % ("oui" if maj_ok else "non")
-            for nom in ("apt-get", "curl", "gpg", "systemctl", "usermod", "tee", "chpasswd"):
+            for nom in ("apt-get", "systemctl", "usermod", "chpasswd"):
                 corps.setdefault(nom, "exit 0")
             for nom, texte in corps.items():
                 if nom not in ("sudo", "ufw", "sshd", "apt-cache"):
                     texte = f'echo "{nom} $@" >> "{journal.as_posix()}"\n' + texte
                 (faux / nom).write_text("#!/bin/sh\n" + texte + "\n", newline="\n")
                 (faux / nom).chmod(0o755)
-            envs = {}
+            envs = dict(APT_RACINE=(t / "apt").as_posix(), CLE_MOZILLA=cle_mozilla, CLE_UNITY=cle_unity)
+            for dossier_apt in ("sources.list.d", "preferences.d"):
+                (t / "apt" / dossier_apt).mkdir(parents=True)
+            for rel, contenu in (apt_avant or {}).items():
+                (t / "apt" / rel).parent.mkdir(parents=True, exist_ok=True)
+                (t / "apt" / rel).write_text(contenu, newline="\n")
             if ini is not None:
                 (t / "xrdp.ini").write_text(ini, newline="\n")
                 envs["XRDP_INI"] = (t / "xrdp.ini").as_posix()
@@ -151,6 +177,7 @@ class TestScriptSimule(unittest.TestCase):
                                env=dict(os.environ, HOME=home.as_posix(), DISQUE_LIBRE_GO="500", BUREAU_ATTENTE_S="0", **envs,
                                         PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
             appels = journal.read_text() if journal.exists() else ""
+            self.apt = {x.relative_to(t / "apt").as_posix(): x.read_text() for x in (t / "apt").rglob("*") if x.is_file()}
             autostart = home / ".config" / "autostart" / "unityhub.desktop"
             return (json.loads(r.stdout), appels, recu.read_text() if recu.exists() else "", r,
                     autostart.read_text() if autostart.exists() else None,
@@ -265,6 +292,41 @@ class TestScriptSimule(unittest.TestCase):
         self.assertIn("root", d["detail"])
         self.assertEqual(recu, "")
         self.assertNotIn("apt-get", appels)
+
+    LISTES = ("sources.list.d/mozilla.list", "sources.list.d/unityhub.list")
+
+    def test_bureau_distant_cles_valides_installees_sans_temporaire(self):
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n")
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertIn("CLE-VALIDE", self.apt["keyrings/packages.mozilla.org.asc"])
+        self.assertEqual(self.apt["keyrings/unityhub.gpg"], "TROUSSEAU\n")
+        for liste in self.LISTES:
+            self.assertIn(liste, self.apt)
+        self.assertEqual([x for x in self.apt if x.endswith((".tmp", ".brut"))], [])
+
+    def test_bureau_distant_rafraichit_les_cles_a_chaque_execution(self):
+        d, _, _, _, _, _ = self._bureau(self.MDP + "\n", apt_avant={"keyrings/packages.mozilla.org.asc": "ANCIENNE",
+                                                                  "keyrings/unityhub.gpg": "ANCIENNE"})
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertIn("CLE-VALIDE", self.apt["keyrings/packages.mozilla.org.asc"])
+        self.assertEqual(self.apt["keyrings/unityhub.gpg"], "TROUSSEAU\n")
+
+    def test_bureau_distant_cle_defectueuse_bloque_sans_remplacer_la_cle_et_retire_les_listes(self):
+        for cle in ("mozilla", "unity"):
+            for defaut in ("vide", "tronque", "http", "invalide"):
+                with self.subTest(cle=cle, defaut=defaut):
+                    avant = {"keyrings/packages.mozilla.org.asc": "ANCIENNE-M", "keyrings/unityhub.gpg": "ANCIENNE-U",
+                             **{liste: "deb ancien\n" for liste in self.LISTES}}
+                    d, appels, recu, _, _, _ = self._bureau(self.MDP + "\n", apt_avant=avant, **{"cle_" + cle: defaut})
+                    self.assertEqual(d["statut"], "bloque", d["detail"])
+                    self.assertIn("Clé du dépôt", d["detail"])
+                    fichier = "keyrings/packages.mozilla.org.asc" if cle == "mozilla" else "keyrings/unityhub.gpg"
+                    self.assertEqual(self.apt[fichier], "ANCIENNE-M" if cle == "mozilla" else "ANCIENNE-U")
+                    for liste in self.LISTES:
+                        self.assertNotIn(liste, self.apt)
+                    self.assertEqual([x for x in self.apt if x.endswith((".tmp", ".brut"))], [])
+                    self.assertEqual(recu, "")
+                    self.assertNotIn("firefox unityhub", appels)
 
     def test_bureau_distant_bloque_si_les_index_apt_echouent(self):
         d, _, recu, _, _, _ = self._bureau(self.MDP + "\n", maj_ok=False)

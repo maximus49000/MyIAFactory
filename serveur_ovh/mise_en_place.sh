@@ -248,9 +248,26 @@ etape_licence() {
 
 # --- Session graphique (bureau distant) -----------------------------------
 
+# Clé de dépôt apt : téléchargée (échec HTTP = échec) dans un temporaire du même dossier, validée (non vide, lisible par gpg),
+# puis placée atomiquement ; rien de partiel ne reste. $1 = URL, $2 = destination, $3 = asc (telle quelle) ou dearmor.
+installer_cle_apt() {
+  local url="$1" final="$2" mode="$3" brut="$2.$$.brut" tmp="$2.$$.tmp"
+  sudo rm -f "$brut" "$tmp"
+  if sudo curl -fsSL "$url" -o "$brut" >/dev/null 2>&1 && [ -s "$brut" ] \
+     && { if [ "$mode" = dearmor ]; then sudo gpg --batch --yes --dearmor -o "$tmp" "$brut" >/dev/null 2>&1; else sudo mv -f "$brut" "$tmp"; fi; } \
+     && [ -s "$tmp" ] && sudo gpg --batch --no-tty --show-keys "$tmp" >/dev/null 2>&1 \
+     && sudo chmod 0644 "$tmp" && sudo mv -f "$tmp" "$final"; then
+    sudo rm -f "$brut"
+    return 0
+  fi
+  sudo rm -f "$brut" "$tmp"
+  return 1
+}
+
 # Le mot de passe de session arrive sur la première ligne de stdin ; il n'est ni un argument, ni affiché, ni dans le JSON.
+# XRDP_INI, BUREAU_ATTENTE_S et APT_RACINE : réservés aux tests (valeurs par défaut en production).
 etape_bureau_distant() {
-  local prefixe="" mdp="" utilisateur ecoute ini="${XRDP_INI:-/etc/xrdp/xrdp.ini}" essais attente sortie_sshd
+  local prefixe="" mdp="" utilisateur ecoute ini="${XRDP_INI:-/etc/xrdp/xrdp.ini}" essais attente sortie_sshd apt="${APT_RACINE:-/etc/apt}"
   [ "$SIMULER" = 1 ] && prefixe="Simulation : "
   if [ ! -t 0 ]; then
     IFS= read -r mdp
@@ -281,24 +298,27 @@ etape_bureau_distant() {
   sudo apt-get update -y >/dev/null 2>&1
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gpg xfce4 xfce4-terminal dbus-x11 xrdp >/dev/null 2>&1 \
     || repondre bloque "Installation de XFCE et de xrdp impossible."
-  sudo install -m 0755 -d /etc/apt/keyrings
+  sudo install -m 0755 -d "$apt/keyrings"
 
+  # Clés des deux dépôts tiers, rafraîchies à chaque exécution, AVANT d'écrire les listes de sources. Au moindre échec on
+  # retire les deux listes (jamais de dépôt sans clé valide : le apt-get update suivant du serveur, unattended-upgrades compris,
+  # ne doit pas casser) ; aucun fichier temporaire ne reste.
+  installer_cle_apt "$URL_CLE_MOZILLA" "$apt/keyrings/packages.mozilla.org.asc" asc || {
+    sudo rm -f "$apt/sources.list.d/mozilla.list" "$apt/sources.list.d/unityhub.list"
+    repondre bloque "Clé du dépôt Mozilla introuvable, vide ou illisible : dépôts Mozilla et Unity Hub retirés, rien n'est installé de plus."
+  }
+  installer_cle_apt "$URL_CLE_UNITY_HUB" "$apt/keyrings/unityhub.gpg" dearmor || {
+    sudo rm -f "$apt/sources.list.d/mozilla.list" "$apt/sources.list.d/unityhub.list"
+    repondre bloque "Clé du dépôt Unity Hub introuvable, vide ou illisible : dépôts Mozilla et Unity Hub retirés, rien n'est installé de plus."
+  }
   # Firefox hors snap : dépôt Mozilla, trousseau signé, priorité sur le paquet de transition d'Ubuntu.
-  if [ ! -s /etc/apt/keyrings/packages.mozilla.org.asc ]; then
-    sudo curl -fsSL "$URL_CLE_MOZILLA" -o /etc/apt/keyrings/packages.mozilla.org.asc \
-      || repondre bloque "Clé du dépôt Mozilla introuvable."
-  fi
-  echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] ${URL_DEPOT_MOZILLA} mozilla main" \
-    | sudo tee /etc/apt/sources.list.d/mozilla.list >/dev/null
+  echo "deb [signed-by=$apt/keyrings/packages.mozilla.org.asc] ${URL_DEPOT_MOZILLA} mozilla main" \
+    | sudo tee "$apt/sources.list.d/mozilla.list" >/dev/null
   printf 'Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n' \
-    | sudo tee /etc/apt/preferences.d/mozilla >/dev/null
+    | sudo tee "$apt/preferences.d/mozilla" >/dev/null
   # Unity Hub : dépôt officiel d'Unity (clé armorée convertie en trousseau).
-  if [ ! -s /etc/apt/keyrings/unityhub.gpg ]; then
-    curl -fsSL "$URL_CLE_UNITY_HUB" | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/unityhub.gpg \
-      || repondre bloque "Clé du dépôt Unity Hub introuvable."
-  fi
-  echo "deb [signed-by=/etc/apt/keyrings/unityhub.gpg] ${URL_DEPOT_UNITY_HUB} stable main" \
-    | sudo tee /etc/apt/sources.list.d/unityhub.list >/dev/null
+  echo "deb [signed-by=$apt/keyrings/unityhub.gpg] ${URL_DEPOT_UNITY_HUB} stable main" \
+    | sudo tee "$apt/sources.list.d/unityhub.list" >/dev/null
   sudo apt-get update -y >/dev/null 2>&1 \
     || repondre bloque "Mise à jour des index apt impossible après ajout des dépôts Mozilla et Unity Hub : Firefox hors snap non garanti, rien de plus n'a été fait."
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y firefox unityhub >/dev/null 2>&1 \

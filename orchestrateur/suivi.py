@@ -5,6 +5,7 @@ du bureau y écrivent en même temps sans rien perdre.
 """
 import json
 import os
+import shutil
 import tempfile
 import time
 from contextlib import contextmanager
@@ -15,6 +16,21 @@ from orchestrateur import lecture
 
 DELAI_VERROU_S = 5
 VERROU_PERIME_S = 30      # un verrou plus vieux est celui d'un processus mort
+ESSAIS_REMPLACEMENT = 40  # sous Windows, un lecteur (bureau, antivirus) peut tenir le fichier une fraction de seconde
+PAUSE_REMPLACEMENT_S = 0.05
+
+
+def _remplacer(source, cible):
+    """`os.replace` qui réessaie sur « accès refusé » (WinError 5) : le fichier est tenu ouvert un instant par un
+    autre processus. Un rapport d'agent n'est plus perdu, et sa tâche bloquée, pour une prise de 50 ms."""
+    for essai in range(ESSAIS_REMPLACEMENT):
+        try:
+            os.replace(source, cible)
+            return
+        except PermissionError:
+            if essai == ESSAIS_REMPLACEMENT - 1:
+                raise
+            time.sleep(PAUSE_REMPLACEMENT_S)
 
 
 class SuiviOccupe(Exception):
@@ -103,10 +119,10 @@ class Suivi:
                 os.fsync(f.fileno())      # sur le disque avant de remplacer : une coupure ne laisse pas un fichier de zéros
             if self.chemin.exists():
                 try:
-                    os.replace(self.chemin, self.precedent)
+                    shutil.copyfile(self.chemin, self.precedent)   # une copie : le suivi n'a jamais un instant d'absence
                 except OSError:
                     pass                  # sans copie précédente cette fois : le suivi s'écrit quand même
-            os.replace(tmp, self.chemin)
+            _remplacer(tmp, self.chemin)
         except BaseException:
             if os.path.exists(tmp):
                 os.unlink(tmp)

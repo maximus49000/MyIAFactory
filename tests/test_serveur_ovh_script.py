@@ -541,11 +541,13 @@ class Monde:
 
     def __init__(self, manifeste="ok", archive="ok", sha_manifeste=None, unity="ok", unzip_echec=False, jdk=True,
                  paquets_absents=False, kvm=True, kvm_membre=False, sdkmanager_echec=False, sdk_version="ok",
-                 utilisateur="ubuntu", sdk_lent=False, licence_echec=False, mv_echec=False, canal_latest="channel-0"):
+                 utilisateur="ubuntu", sdk_lent=False, licence_echec=False, mv_echec=False, canal_latest="channel-0",
+                 alternatives="auto", licence_lente=False):
         self.opt = dict(CURL_MANIFESTE=manifeste, CURL_ZIP=archive, CURL_UNITY=unity, UNZIP_ECHEC="1" if unzip_echec else "",
                         SDKMANAGER_ECHEC="1" if sdkmanager_echec else "", SDK_VERSION_MODE=sdk_version,
                         FAUX_UTILISATEUR=utilisateur, SDKMANAGER_LENT="1" if sdk_lent else "",
                         SDKMANAGER_LICENCE_ECHEC="1" if licence_echec else "", MV_ECHEC="1" if mv_echec else "",
+                        ALT_MODE=alternatives, SDKMANAGER_LICENCE_LENTE="1" if licence_lente else "",
                         PAQUETS_ABSENTS="1" if paquets_absents else "")
         self.canal_latest = canal_latest
         self.sha = sha_manifeste or hashlib.sha1(ZIP_CONTENU).hexdigest()
@@ -589,7 +591,7 @@ class Monde:
             '  toujours) echo "java.lang.UnsupportedClassVersionError: class file version 65.0" >&2; exit 1;;\n'
             '  autre) echo "boom" >&2; exit 1;;\n'
             '  *) echo 12.0; exit 0;; esac; fi\n'
-            'if [ -n "$lic" ]; then head -n 1 > /dev/null; [ -n "$SDKMANAGER_LICENCE_ECHEC" ] && exit 1; exit 0; fi\n'
+            'if [ -n "$lic" ]; then head -n 1 > /dev/null; [ -n "$SDKMANAGER_LICENCE_LENTE" ] && sleep 5; [ -n "$SDKMANAGER_LICENCE_ECHEC" ] && exit 1; exit 0; fi\n'
             f'cat >> "{si}"\n'
             '[ -n "$SDKMANAGER_LENT" ] && sleep 5\n'
             '[ -n "$SDKMANAGER_ECHEC" ] && exit 1\n'
@@ -627,9 +629,13 @@ class Monde:
             "dpkg-query": (f'case "$*" in *openjdk-21*) [ -e "{e}/apt21" ] && echo installed && exit 0; exit 1;; esac\n'
                            f'[ -e "{e}/apt" ] && echo installed && exit 0\n[ "$PAQUETS_ABSENTS" = 1 ] && exit 1\necho installed'),
             "apt-get": (f'case "$*" in *install*) touch "{e}/apt"; case "$*" in *openjdk-17*) mkdir -p "{jdk_bin}"; '
-                        f'echo "#!/bin/sh" > "{jdk_bin}/java"; chmod 755 "{jdk_bin}/java";; '
+                        f'echo "#!/bin/sh" > "{jdk_bin}/java"; echo "#!/bin/sh" > "{jdk_bin}/javac"; chmod 755 "{jdk_bin}/java" "{jdk_bin}/javac";; '
                         f'*openjdk-21*) touch "{e}/apt21"; mkdir -p "{jdk21_bin}"; '
-                        f'echo "#!/bin/sh" > "{jdk21_bin}/java"; chmod 755 "{jdk21_bin}/java";; esac;; esac\nexit 0'),
+                        f'echo "#!/bin/sh" > "{jdk21_bin}/java"; echo "#!/bin/sh" > "{jdk21_bin}/javac"; chmod 755 "{jdk21_bin}/java" "{jdk21_bin}/javac";; esac;; esac\nexit 0'),
+            "update-alternatives": (f'if [ "$1" = --query ]; then echo "Name: $2"; '
+                                    f'if [ "$ALT_MODE" = autre ]; then echo "Status: manual"; echo "Value: /opt/autre-jdk/bin/$2"; '
+                                    f'elif [ -e "{e}/apt21" ]; then echo "Status: auto"; echo "Value: {jdk21_bin}/$2"; '
+                                    f'else echo "Status: auto"; echo "Value: {jdk_bin}/$2"; fi; fi\nexit 0'),
             "usermod": f'touch "{e}/kvm"',
             "mv": 'case "$*" in *extrait*) [ -n "$MV_ECHEC" ] && exit 1;; esac\nexec /usr/bin/mv "$@"',
             "id": (f'case "$1" in -un) echo "${{FAUX_UTILISATEUR:-ubuntu}}";; '
@@ -645,6 +651,8 @@ class Monde:
             java.parent.mkdir(parents=True)
             java.write_text("#!/bin/sh\n", newline="\n")
             java.chmod(0o755)
+            (java.parent / "javac").write_text("#!/bin/sh\n", newline="\n")
+            (java.parent / "javac").chmod(0o755)
         if self.kvm:
             (t / "kvm").write_text("", newline="\n")
         if self.kvm_membre:
@@ -859,6 +867,54 @@ class TestEtapesCapacites(unittest.TestCase):
             self.assertTrue(installe)
             self.assertIn("java-21-openjdk", m.journal.splitlines()[installe[0] + 1])   # JAVA_HOME de CET appel
             self.assertTrue((m.sdk / "platform-tools" / "adb").exists())
+
+    def test_jdk21_installe_pour_sdkmanager_ne_devient_pas_le_jdk_par_defaut(self):
+        with Monde(sdk_version="classfile") as m:             # alternatives en auto : l'installation du 21 les a fait passer au 21
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            sets = m.appels("update-alternatives --set")
+            self.assertEqual(len(sets), 2, m.journal)
+            self.assertRegex(sets[0], r"--set java \S*/java-17-openjdk-amd64/bin/java$")
+            self.assertRegex(sets[1], r"--set javac \S*/java-17-openjdk-amd64/bin/javac$")
+            self.assertIn("JDK 21", d["detail"])
+            self.assertIn("sdkmanager", d["detail"])
+            self.assertIn("JDK 17 reste", d["detail"])
+        with Monde(sdk_version="classfile", alternatives="autre") as m:   # réglage du Directeur (ni 21 ni auto) : jamais touché
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(m.appels("update-alternatives --set"), [])
+            self.assertIn("JDK 17 reste", d["detail"])
+        with Monde() as m:                                    # pas de repli : aucune alternative lue ni changée, détail inchangé
+            d = m.lancer("android_build")
+            self.assertEqual(m.appels("update-alternatives"), [])
+            self.assertNotIn("JDK 21", d["detail"])
+
+    def test_android_emulateur_apres_repli_jdk21_garde_aussi_le_17_par_defaut(self):
+        with Monde(sdk_version="classfile") as m:
+            m.installer_sdkmanager()                          # android_build déjà fait à la main, sdkmanager exige le 21
+            (m.sdk / "platform-tools").mkdir()
+            (m.sdk / "platform-tools" / "adb").write_text("#!/bin/sh\n", newline="\n")
+            (m.sdk / "platform-tools" / "adb").chmod(0o755)
+            (m.sdk / "platforms" / "android-36").mkdir(parents=True)
+            (m.sdk / "build-tools" / "36.0.0").mkdir(parents=True)
+            d = m.lancer("android_emulateur")
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertEqual(len(m.appels("update-alternatives --set")), 2, m.journal)
+            self.assertIn("JDK 17 reste", d["detail"])
+
+    def test_licence_expiree_n_est_qu_un_avertissement_si_l_installation_reussit(self):
+        with Monde(licence_lente=True) as m:
+            d = m.lancer("android_build", env={"SDK_DELAI_LICENCE_S": "1"})
+            self.assertEqual(d["statut"], "fait", d["detail"])
+            self.assertTrue((m.sdk / "platform-tools" / "adb").exists())
+
+    def test_sdkmanager_inutilisable_dit_comment_reparer(self):
+        with Monde(sdk_version="autre") as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "bloque", d["detail"])
+            self.assertIn("supprimez ~/android-sdk/cmdline-tools/latest puis relancez", d["detail"])
+            self.assertIn("rm -rf", d["detail"])
+            self.assertTrue((m.sdk / "cmdline-tools" / "latest").exists())      # jamais supprimé automatiquement
 
     def test_android_build_bloque_si_aucun_jdk_ne_convient_a_sdkmanager(self):
         for mode, attendu in (("toujours", "JDK"), ("autre", "sdkmanager")):

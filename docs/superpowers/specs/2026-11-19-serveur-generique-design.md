@@ -47,7 +47,7 @@ On déplace et renomme sans réécrire la logique éprouvée (verrou, accord str
    fournisseur saute l'étape « système » et exige seulement un accès SSH qui marche.
 3. **Capacités** (catalogue dans le dépôt, une entrée par capacité : `id`, libellé, dépendances, étapes rejouables, taille et durée estimées,
    preuve de réussite) : `base` (Ubuntu, durcissement, Docker, `unzip`), `android-build` (JDK 17, Gradle, SDK, plateformes 34/36),
-   `android-emulateur` (KVM, groupe `kvm`, émulateur, image système), `unity` (éditeur et modules via Unity CLI ; licence par Hub),
+   `android-emulateur` (KVM, groupe `kvm`, émulateur, image système), `unity-cli` (outil officiel Unity CLI, installable), `unity-editeur` (éditeur Unity : non installable génériquement, à installer par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté ; licence par Hub),
    `session-graphique` (XFCE, xrdp en loopback, Hub), `agent` (CLI Claude, Git, clé de déploiement).
 4. **Besoins des actions** : chaque entrée des catalogues d'actions (`bureau/deport_types.py`, par genre de projet) gagne `besoins: [capacités]`
    (ex. « Tests sur émulateur » → `android-emulateur`). Les types d'agents déclarent leurs besoins de la même manière.
@@ -140,7 +140,7 @@ Découpage des modules, format du catalogue de capacités, noms des fichiers, d�
 - **Catalogue des actions** : `bureau/deport_types.py` (catalogues par genre) fait partie du travail de déport du Directeur, non commité dans
   cette branche. Le cœur générique ne dépend donc PAS de ce fichier : il porte sa propre table `besoins` (identifiant d'action → capacités),
   fusionnée plus tard avec les catalogues. Table de départ : `apk`, `tests`, `lint` → `android-build` ; `emulateur` → `android-emulateur` ;
-  `release` → `android-build` (clés de signature restant au poste) ; actions Unity → `unity` ; `charge` → aucune capacité propre. L'écran « Où
+  `release` → `android-build` (clés de signature restant au poste) ; actions Unity → `unity-cli` (l'éditeur, `unity-editeur`, reste non installable génériquement) ; `charge` → aucune capacité propre. L'écran « Où
   tournent les actions » et le branchement sur `deport_types.py` sont les tâches qui exigent que le travail de déport soit commité.
 - **Preuves de capacité** : une sonde en lecture seule par capacité (fichier ou commande de vérification), jamais d'installation. Une sonde
   qui échoue donne « absente », même si l'ancien état disait « fait » ; les anciennes entrées d'état sans capacité correspondante (`licence`,
@@ -151,7 +151,7 @@ Découpage des modules, format du catalogue de capacités, noms des fichiers, d�
 - **Accord d'installation** : même mécanisme que la plateforme (accord strict, jamais implicite, case ou bouton dans le bureau, option en
   ligne de commande). Tailles et durées : estimées dans le catalogue d'après nos installations réelles (SDK Android et émulateur ≈ 5 Go,
   éditeur Unity avec Android ≈ 24 Go, etc.), marquées « estimation ».
-- **Dépendances** : `base` ← tout le reste ; `android-emulateur` ← `android-build` ; `unity` ← `base` (la connexion à Unity Hub passe par
+- **Dépendances** : `base` ← tout le reste ; `android-emulateur` ← `android-build` ; `unity-cli` ← `base`, `unity-editeur` ← `unity-cli` (la connexion à Unity Hub passe par
   `session-graphique`, facultative) ; `agent` déclarée mais « non installable avant le morceau 3 » (affichée ainsi).
 - **Tests** : les tests existants restent verts ; les modules déplacés laissent des **raccourcis** (`plateforme_ovh.py` etc. ré-exportent)
   jusqu'à la fin de la migration ; les tests peuvent être adaptés aux nouveaux noms quand un raccourci disparaît.

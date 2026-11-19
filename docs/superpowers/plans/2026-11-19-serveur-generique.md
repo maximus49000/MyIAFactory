@@ -60,7 +60,7 @@
 **Interfaces:**
 - Produces:
   - `Capacite` (dataclass figée) : `id`, `libelle`, `depend: tuple[str, ...]`, `etape: str` (nom de l'étape distante de `mise_en_place.sh`), `sonde: str` (commande SHELL de vérification en lecture seule, code 0 = présente), `taille_go: float`, `duree_min: int` (estimations), `installable: bool`, `raison_non_installable: str`.
-  - `CATALOGUE: dict[str, Capacite]` : `base`, `durcissement` (facultative, dépend de `base`), `android-build`, `android-emulateur` (dépend de `android-build`), `unity` (dépend de `base`), `session-graphique` (dépend de `base`), `agent` (`installable=False`, raison « non installable avant le morceau 3 »).
+  - `CATALOGUE: dict[str, Capacite]` : `base`, `durcissement` (facultative, dépend de `base`), `android-build`, `android-emulateur` (dépend de `android-build`), `unity-cli` (dépend de `base`), `unity-editeur` (dépend de `unity-cli`, `installable=False`, raison « installer l'éditeur par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté »), `session-graphique` (dépend de `base`), `agent` (`installable=False`, raison « non installable avant le morceau 3 »).
   - `BESOINS: dict[str, tuple[str, ...]]` : `apk`, `tests`, `lint`, `release` → `("android-build",)` ; `emulateur` → `("android-emulateur",)` ; `charge` → `()`.
   - `ordre_installation(demandees: Iterable[str], installees: set[str]) -> list[str]` : capacités manquantes dans l'ordre des dépendances ; lève `ValueError` pour une capacité inconnue ou un cycle.
   - `manquantes_pour(actions: Iterable[str], installees: set[str]) -> list[str]` (via `BESOINS`) ; `verifier_catalogue() -> None` (cycles, dépendances inconnues).

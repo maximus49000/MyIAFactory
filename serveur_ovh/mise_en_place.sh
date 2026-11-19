@@ -503,12 +503,36 @@ android_sdk_pret() {
 # sdkmanager sous délai (SDK_DELAI_S, 1500 s par défaut ; réservé aux tests pour le réduire) et avec le JDK choisi pour lui
 # (SDK_JAVA_HOME). Code 124 = délai dépassé. Sans la commande timeout, il tourne sans délai.
 sdk_cmd() {
+  sdk_cmd_delai "${SDK_DELAI_S:-1500}" "$@"
+}
+
+# Comme sdk_cmd, avec un délai propre : $1 = secondes.
+sdk_cmd_delai() {
+  local delai="$1"
+  shift
   if command -v timeout >/dev/null 2>&1; then
-    JAVA_HOME="$SDK_JAVA_HOME" timeout "${SDK_DELAI_S:-1500}" "$@"
+    JAVA_HOME="$SDK_JAVA_HOME" timeout "$delai" "$@"
   else
     JAVA_HOME="$SDK_JAVA_HOME" "$@"
   fi
 }
+
+# Le paquet openjdk-21 passe devant le 17 dans update-alternatives (priorité plus haute) : après son installation, java et
+# javac du système seraient devenus le 21. On les remet sur le 17 SEULEMENT s'ils pointent maintenant sur un JDK 21 ; un autre
+# réglage (posé par le Directeur) n'est jamais touché. $1 = dossier du JDK 17.
+retablir_alternatives_jdk17() {
+  local outil valeur
+  for outil in java javac; do
+    valeur=$(update-alternatives --query "$outil" 2>/dev/null | awk '/^Value:/ {print $2}')
+    case "$valeur" in
+      */java-21-openjdk-*/*)
+        [ -x "$1/bin/$outil" ] && sudo update-alternatives --set "$outil" "$1/bin/$outil" >/dev/null 2>&1 ;;
+    esac
+  done
+}
+
+# Phrase ajoutée au détail final quand le repli JDK 21 a servi dans cette exécution.
+JDK21_NOTE=""
 
 # Choisit le JDK de sdkmanager : le JDK 17 du projet ; si les cmdline-tools récents refusent sa version de classe, le JDK 21
 # est installé et sert à sdkmanager SEULEMENT (le JDK 17 reste le JDK du projet). Positionne SDK_JAVA_HOME ; en cas d'échec,
@@ -524,12 +548,16 @@ preparer_jdk_sdkmanager() {
     return 1
   fi
   if ! printf '%s' "$sortie" | grep -qiE 'UnsupportedClassVersionError|class file version|Unsupported major\.minor'; then
-    ECHEC_ANDROID="sdkmanager inutilisable (« sdkmanager --version » échoue sans rapport avec la version de Java)."
+    ECHEC_ANDROID="sdkmanager inutilisable (« sdkmanager --version » échoue sans rapport avec la version de Java) : supprimez ~/android-sdk/cmdline-tools/latest puis relancez l'étape, ou lancez « rm -rf ~/android-sdk/cmdline-tools/latest » depuis le bureau (rien n'est supprimé automatiquement)."
     return 1
   fi
   assurer_paquets openjdk-21-jdk-headless || { ECHEC_ANDROID="sdkmanager exige un JDK plus récent que le 17 et l'installation du JDK 21 est impossible."; return 1; }
   chercher_jdk 21 || { ECHEC_ANDROID="JDK 21 introuvable après installation (java-21-openjdk) alors que sdkmanager refuse le JDK 17."; return 1; }
   SDK_JAVA_HOME="$JDK_TROUVE"
+  JDK21_NOTE=" Le JDK 21 n'a été installé que pour faire tourner sdkmanager ; le JDK 17 reste le JDK du projet (le JDK par défaut du serveur est conservé ou rétabli)."
+  if chercher_jdk 17; then
+    retablir_alternatives_jdk17 "$JDK_TROUVE"
+  fi
   if sdk_cmd "$sdkmanager" --version >/dev/null 2>&1; then
     return 0
   fi
@@ -609,19 +637,20 @@ etape_android_build() {
     installer_cmdline_tools || repondre bloque "${ECHEC_ANDROID} Rien n'a été installé."
   fi
   preparer_jdk_sdkmanager || repondre bloque "${ECHEC_ANDROID}"
-  yes 2>/dev/null | sdk_cmd "$sdkmanager" --sdk_root="$SDK_ANDROID" --licenses >/dev/null 2>&1
+  # Licences : délai court, et un dépassement n'est qu'un avertissement (l'installation qui suit fait foi).
+  yes 2>/dev/null | sdk_cmd_delai "${SDK_DELAI_LICENCE_S:-120}" "$sdkmanager" --sdk_root="$SDK_ANDROID" --licenses >/dev/null 2>&1
   lic=${PIPESTATUS[1]}
   sdk_cmd "$sdkmanager" --sdk_root="$SDK_ANDROID" "platform-tools" "platforms;${V_SDK_PLATEFORME}" "build-tools;${V_SDK_BUILD_TOOLS}" >/dev/null 2>&1
   code=$?
-  if [ "$code" = 124 ] || [ "$lic" = 124 ]; then
+  if [ "$code" = 124 ]; then
     repondre bloque "Délai dépassé (${delai} s) pour sdkmanager : installation du SDK Android interrompue, à refaire."
-  elif [ "$code" != 0 ] && [ "$lic" != 0 ]; then
+  elif [ "$code" != 0 ] && [ "$lic" != 0 ] && [ "$lic" != 124 ]; then
     repondre bloque "Licences Android non acceptées (sdkmanager --licenses a échoué, code ${lic}) : platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS} non installés."
   elif [ "$code" != 0 ]; then
     repondre bloque "Installation de platform-tools, ${V_SDK_PLATEFORME} et build-tools ${V_SDK_BUILD_TOOLS} par sdkmanager impossible."
   fi
   android_sdk_pret || repondre bloque "SDK Android incomplet après installation (adb, ${V_SDK_PLATEFORME} ou build-tools ${V_SDK_BUILD_TOOLS} manquant)."
-  repondre fait "SDK Android installé dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, JDK 17)."
+  repondre fait "SDK Android installé dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, JDK 17).${JDK21_NOTE}"
 }
 
 emulateur_pret() {
@@ -664,9 +693,9 @@ etape_android_emulateur() {
   fi
   emulateur_pret || repondre bloque "Émulateur incomplet après installation (emulator, image système, ${kvm} ou groupe kvm manquant)."
   if [ -n "$ajoute" ]; then
-    repondre fait "Émulateur Android installé (${V_SDK_IMAGE_EMULATEUR}). ${u} a été ajouté au groupe kvm : cela prend effet à la prochaine connexion SSH."
+    repondre fait "Émulateur Android installé (${V_SDK_IMAGE_EMULATEUR}). ${u} a été ajouté au groupe kvm : cela prend effet à la prochaine connexion SSH.${JDK21_NOTE}"
   fi
-  repondre fait "Émulateur Android en place (${V_SDK_IMAGE_EMULATEUR}), accélération KVM disponible."
+  repondre fait "Émulateur Android en place (${V_SDK_IMAGE_EMULATEUR}), accélération KVM disponible.${JDK21_NOTE}"
 }
 
 # --- Unity CLI -------------------------------------------------------------

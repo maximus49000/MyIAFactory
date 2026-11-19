@@ -79,6 +79,12 @@ class TestDemande(unittest.TestCase):
             with self.assertRaises(ValueError, msg=repr(mauvais)):
                 st.valider_demande(brut(scenario=mauvais))
 
+    def test_message_limite_inconnue_sans_controles(self):
+        with self.assertRaises(ValueError) as r:
+            st.valider_demande(brut(limites={"a\x1b[31m\nb": 1}))
+        self.assertNotIn("\x1b", str(r.exception))
+        self.assertNotIn("\n", str(r.exception))
+
     def test_cles_inconnues_refusees(self):
         with self.assertRaises(ValueError):
             st.valider_demande(brut(commande="rm -rf /"))
@@ -100,6 +106,10 @@ class TestDemande(unittest.TestCase):
         self.assertEqual(st.nouvel_id(lambda: 0, lambda n: "ab12"), "t19700101-000000-ab12")
 
 
+def tid(n):
+    return f"t20261119-101500-{n:04x}"
+
+
 class TestIndex(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -109,33 +119,40 @@ class TestIndex(unittest.TestCase):
 
     def test_index_ecriture_atomique_et_lecture(self):
         self.assertEqual(self.index.lire(), {})
-        self.index.enregistrer("a", {"etat": "en_attente"})
-        self.index.enregistrer("b", {"etat": "en_cours"})
-        self.index.enregistrer("a", {"etat": "terminee"})
-        self.assertEqual(self.index.lire(), {"a": {"etat": "terminee"}, "b": {"etat": "en_cours"}})
-        self.index.retirer("a")
-        self.index.retirer("absent")
-        self.assertEqual(list(self.index.lire()), ["b"])
+        self.index.enregistrer(tid(1), {"etat": "en_attente"})
+        self.index.enregistrer(tid(2), {"etat": "en_cours"})
+        self.index.enregistrer(tid(1), {"etat": "terminee"})
+        self.assertEqual(self.index.lire(), {tid(1): {"etat": "terminee"}, tid(2): {"etat": "en_cours"}})
+        self.index.retirer(tid(1))
+        self.index.retirer(tid(99))
+        self.assertEqual(list(self.index.lire()), [tid(2)])
         self.assertEqual([p.name for p in self.dossier.iterdir()], ["taches.json"])
 
     def test_index_abime_lu_comme_vide(self):
-        for contenu in ("{pas du json", "[1, 2]", ""):
+        for contenu in ("{pas du json", "[1, 2]", "", "[" * 100000):
             (self.dossier / "taches.json").write_text(contenu, encoding="utf-8")
             self.assertEqual(self.index.lire(), {})
-        self.index.enregistrer("a", {"etat": "en_attente"})
-        self.assertEqual(self.index.lire(), {"a": {"etat": "en_attente"}})
+        self.index.enregistrer(tid(1), {"etat": "en_attente"})
+        self.assertEqual(self.index.lire(), {tid(1): {"etat": "en_attente"}})
+
+    def test_id_hostile_refuse_dans_l_index(self):
+        for mauvais in ("a", "../x", "", None, 5, tid(1) + "\n"):
+            with self.assertRaises(ValueError, msg=repr(mauvais)):
+                self.index.enregistrer(mauvais, {"etat": "en_attente"})
+            with self.assertRaises(ValueError, msg=repr(mauvais)):
+                self.index.retirer(mauvais)
 
     def test_deux_ecritures_simultanees_sans_perte(self):
         erreurs = []
 
-        def ecrire(prefixe):
+        def ecrire(base):
             try:
                 for i in range(20):
-                    self.index.enregistrer(f"{prefixe}{i}", {"etat": "en_attente"})
+                    self.index.enregistrer(tid(base + i), {"etat": "en_attente"})
             except Exception as e:  # noqa: BLE001
                 erreurs.append(e)
 
-        fils = [threading.Thread(target=ecrire, args=(p,)) for p in "xy"]
+        fils = [threading.Thread(target=ecrire, args=(b,)) for b in (0, 100)]
         [f.start() for f in fils]
         [f.join() for f in fils]
         self.assertEqual(erreurs, [])
@@ -144,16 +161,16 @@ class TestIndex(unittest.TestCase):
     def test_deux_processus_sans_perte(self):
         code = ("import sys\nsys.path.insert(0, sys.argv[1])\nimport serveur_tache as st\n"
                 "i = st.Index(sys.argv[2], attente=60)\n"
-                "for n in range(20):\n    i.enregistrer(f'p{n}', {'etat': 'en_cours'})\n")
-        sous = subprocess.Popen(["py", "-3.12", "-I", "-c", code, str(RACINE / "outils"), str(self.dossier)])
+                "for n in range(20):\n    i.enregistrer(f't20261119-101500-{1000 + n:04x}', {'etat': 'en_cours'})\n")
+        sous = subprocess.Popen([sys.executable, "-I", "-c", code, str(RACINE / "outils"), str(self.dossier)])
         self.addCleanup(sous.kill)
         long = st.Index(self.dossier, attente=60)
         for n in range(20):
-            long.enregistrer(f"m{n}", {"etat": "en_attente"})
+            long.enregistrer(tid(n), {"etat": "en_attente"})
         self.assertEqual(sous.wait(timeout=120), 0)
         self.assertEqual(len(long.lire()), 40)
         json.loads((self.dossier / "taches.json").read_text(encoding="utf-8"))
-        self.assertFalse((self.dossier / "taches.lock").exists())
+        self.assertEqual(sorted(p.name for p in self.dossier.iterdir()), ["taches.json"])
 
     def _verrou(self, contenu, age=0):
         chemin = self.dossier / "taches.lock"
@@ -163,38 +180,96 @@ class TestIndex(unittest.TestCase):
             os.utime(chemin, (vieux, vieux))
         return chemin
 
-    def test_verrou_perime_est_repris(self):
-        cas = {"pid mort": ('{"pid": 4242}', 0), "pid propre": ('{"pid": %d}' % os.getpid(), 0),
-               "vide ancien": ("", 10), "illisible ancien": ("{x", 10), "pid bool": ('{"pid": true}', 10),
-               "pid 1": ('{"pid": 1}', 10)}
-        for nom, (contenu, age) in cas.items():
-            with self.subTest(nom):
-                self._verrou(contenu, age)
-                index = st.Index(self.dossier, attente=2, vivant=lambda pid: False)
-                index.enregistrer("a", {"etat": "en_attente"})
-                self.assertIn("a", index.lire())
-                self.assertFalse((self.dossier / "taches.lock").exists())
+    def _essai(self, contenu, age, vivant):
+        """True si l'écriture a réussi (verrou repris), False si TimeoutError (verrou respecté)."""
+        chemin = self._verrou(contenu, age)
+        index = st.Index(self.dossier, attente=0.3, vivant=vivant)
+        try:
+            index.enregistrer(tid(1), {"etat": "en_attente"})
+        except TimeoutError:
+            chemin.unlink()
+            return False
+        return True
 
-    def test_verrou_vivant_ou_frais_fait_attendre(self):
-        for nom, contenu in (("vide frais", ""), ("pid vivant", '{"pid": 4242}')):
-            with self.subTest(nom):
-                chemin = self._verrou(contenu)
-                index = st.Index(self.dossier, attente=0.3, vivant=lambda pid: True)
-                debut = time.monotonic()
-                with self.assertRaises(TimeoutError):
-                    index.enregistrer("a", {"etat": "en_attente"})
-                self.assertGreaterEqual(time.monotonic() - debut, 0.25)
-                self.assertTrue(chemin.exists())          # le verrou d'un autre n'est jamais supprimé
-                chemin.unlink()
+    def test_reprise_pid_mort(self):
+        self.assertTrue(self._essai('{"pid": 4242}', 0, lambda pid: False))
+
+    def test_pas_de_reprise_pid_vivant(self):
+        self.assertFalse(self._essai('{"pid": 4242}', 0, lambda pid: True))
+
+    def test_reprise_pid_propre_meme_si_vivant(self):
+        self.assertTrue(self._essai('{"pid": %d}' % os.getpid(), 0, lambda pid: True))
+
+    def test_fichier_vide_recent_respecte_puis_repris_apres_5_s(self):
+        self.assertFalse(self._essai("", 0, lambda pid: True))
+        self.assertTrue(self._essai("", 10, lambda pid: True))
+
+    def test_pid_invalide_respecte_puis_repris_apres_5_s(self):
+        for contenu in ('{"pid": true}', '{"pid": 1}', '{"pid": "7"}', "{x", '{"pid": 0}'):
+            with self.subTest(contenu):
+                self.assertFalse(self._essai(contenu, 0, lambda pid: True))
+                self.assertTrue(self._essai(contenu, 10, lambda pid: True))
+
+    def test_verrou_vivant_fait_attendre_et_n_est_pas_supprime(self):
+        chemin = self._verrou('{"pid": 4242}')
+        index = st.Index(self.dossier, attente=0.3, vivant=lambda pid: True)
+        debut = time.monotonic()
+        with self.assertRaises(TimeoutError):
+            index.enregistrer(tid(1), {"etat": "en_attente"})
+        self.assertGreaterEqual(time.monotonic() - debut, 0.25)
+        self.assertEqual(json.loads(chemin.read_text(encoding="utf-8")), {"pid": 4242})
+        self.assertFalse((self.dossier / "taches.lock.reprise").exists())
 
     def test_verrou_perime_impossible_a_retirer_ne_boucle_pas(self):
         self._verrou('{"pid": 4242}')
         index = st.Index(self.dossier, attente=0.3, vivant=lambda pid: False)
         debut = time.monotonic()
-        with mock.patch.object(st.os, "rename", side_effect=PermissionError("verrouillé")):
+        with mock.patch.object(Path, "unlink", side_effect=PermissionError("verrouillé")):
             with self.assertRaises(TimeoutError):
-                index.enregistrer("a", {"etat": "en_attente"})
+                index.enregistrer(tid(1), {"etat": "en_attente"})
         self.assertLess(time.monotonic() - debut, 5)
+
+    def test_temoin_de_reprise_perime_est_retire(self):
+        self._verrou('{"pid": 4242}')
+        temoin = self.dossier / "taches.lock.reprise"
+        temoin.write_text('{"pid": 4343}', encoding="utf-8")
+        index = st.Index(self.dossier, attente=2, vivant=lambda pid: False)
+        index.enregistrer(tid(1), {"etat": "en_attente"})
+        self.assertFalse(temoin.exists())
+
+    def test_course_de_reprise_un_seul_detenteur(self):
+        """Deux repreneurs du même verrou périmé : le second attend le témoin ; un seul détient le verrou ensuite et son
+        fichier n'est jamais supprimé par l'autre."""
+        self._verrou('{"pid": 4242}')
+        vivant = lambda pid: pid in (101, 102)      # noqa: E731
+        a = st.Index(self.dossier, attente=5, vivant=vivant, pid=lambda: 101)
+        b = st.Index(self.dossier, attente=1, vivant=vivant, pid=lambda: 102)
+        dedans, suite = threading.Event(), threading.Event()
+
+        def pause():
+            dedans.set()
+            suite.wait(10)
+        a._apres_verification = pause
+        resultats = {}
+
+        def lancer(nom, index):
+            try:
+                resultats[nom] = index._prendre(time.monotonic() + index.attente)
+            except TimeoutError as e:
+                resultats[nom] = e
+        ta = threading.Thread(target=lancer, args=("a", a))
+        ta.start()
+        self.assertTrue(dedans.wait(10))
+        tb = threading.Thread(target=lancer, args=("b", b))
+        tb.start()
+        time.sleep(0.3)                         # b tourne pendant que a est entre vérification et suppression
+        suite.set()
+        ta.join(10)
+        tb.join(10)
+        self.assertIsInstance(resultats["a"], Path)
+        self.assertIsInstance(resultats["b"], TimeoutError)
+        self.assertEqual(json.loads((self.dossier / "taches.lock").read_text(encoding="utf-8")), {"pid": 101})
+        self.assertFalse((self.dossier / "taches.lock.reprise").exists())
 
     def test_verrou_libere_apres_exception(self):
         index = st.Index(self.dossier, attente=1)
@@ -204,7 +279,7 @@ class TestIndex(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             index._modifier(boum)
         self.assertFalse((self.dossier / "taches.lock").exists())
-        index.enregistrer("a", {"etat": "en_attente"})
+        index.enregistrer(tid(1), {"etat": "en_attente"})
 
     def test_verrou_dun_autre_jamais_supprime_a_la_sortie(self):
         index = st.Index(self.dossier, attente=1)
@@ -216,7 +291,7 @@ class TestIndex(unittest.TestCase):
         self.assertTrue(autre.exists())
 
     def test_erreur_de_lecture_transitoire_n_ecrase_rien(self):
-        self.index.enregistrer("a", {"etat": "en_attente"})
+        self.index.enregistrer(tid(1), {"etat": "en_attente"})
         vrai = Path.read_text
 
         def refuse(chemin, *a, **k):
@@ -226,11 +301,11 @@ class TestIndex(unittest.TestCase):
         with mock.patch.object(Path, "read_text", refuse):
             self.assertEqual(self.index.lire(), {})                    # affichage : vide
             with self.assertRaises(st.ErreurIndex):
-                self.index.enregistrer("b", {"etat": "en_attente"})
-        self.assertEqual(list(self.index.lire()), ["a"])               # rien d'écrasé
+                self.index.enregistrer(tid(2), {"etat": "en_attente"})
+        self.assertEqual(list(self.index.lire()), [tid(1)])            # rien d'écrasé
         (self.dossier / "taches.json").unlink()
-        self.index.enregistrer("b", {"etat": "en_attente"})            # fichier absent : repart de vide
-        self.assertEqual(list(self.index.lire()), ["b"])
+        self.index.enregistrer(tid(2), {"etat": "en_attente"})         # fichier absent : repart de vide
+        self.assertEqual(list(self.index.lire()), [tid(2)])
 
     def test_entrees_non_dict_ignorees(self):
         (self.dossier / "taches.json").write_text('{"a": 5, "b": {"etat": "en_cours"}}', encoding="utf-8")
@@ -239,7 +314,7 @@ class TestIndex(unittest.TestCase):
     def test_etat_invalide_refuse(self):
         for fiche in ({"etat": "nimporte"}, {}, {"etat": None}, "x"):
             with self.assertRaises(ValueError):
-                self.index.enregistrer("a", fiche)
+                self.index.enregistrer(tid(1), fiche)
         self.assertEqual(self.index.lire(), {})
 
 

@@ -9,7 +9,6 @@ import re
 import secrets
 import threading
 import time
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,7 +54,7 @@ def _limites(brut):
         raise ValueError("Les limites doivent être un dictionnaire.")
     for cle in brut:
         if cle not in LIMITES_DEFAUT:
-            raise ValueError(f"Limite inconnue : {str(cle)[:40]}.")
+            raise ValueError("Limite inconnue : " + repr(str(cle)[:40]) + ".")
     sortie = dict(LIMITES_DEFAUT)
     for cle, v in brut.items():
         if isinstance(v, bool) or not isinstance(v, int):
@@ -85,7 +84,7 @@ def valider_demande(brut):
         raise ValueError("La demande doit être un dictionnaire.")
     inconnues = set(brut) - CLES_DEMANDE
     if inconnues:
-        raise ValueError("Champ inconnu dans la demande : " + ", ".join(sorted(str(c)[:40] for c in inconnues)) + ".")
+        raise ValueError("Champ inconnu dans la demande : " + ", ".join(sorted(repr(str(c)[:40]) for c in inconnues)) + ".")
     if brut.get("type") != "emulation":
         raise ValueError("Type de tâche inconnu : seul « emulation » est accepté.")
     mode = brut.get("mode")
@@ -112,10 +111,16 @@ def valider_demande(brut):
 
 INDEX = "taches.json"
 VERROU = "taches.lock"
+TEMOIN_PERIME_S = 30
 VERROU_VIDE_S = 5          # fichier verrou vide ou illisible plus vieux que cela : créé puis jamais rempli (arrêt brutal)
 ATTENTE_S = 10.0
 PAUSE_S = 0.02
 _VERROU_PROCESSUS = threading.Lock()
+
+
+def _id_valide(ident):
+    if not isinstance(ident, str) or not MOTIF_ID.fullmatch(ident):
+        raise ValueError("Identifiant de tâche invalide.")
 
 
 class ErreurIndex(Exception):
@@ -133,7 +138,7 @@ def _pid_verrou(chemin):
         return "illisible", None
     try:
         pid = json.loads(contenu).get("pid")
-    except (ValueError, AttributeError):
+    except (ValueError, RecursionError, AttributeError):
         pid = None
     if isinstance(pid, int) and not isinstance(pid, bool) and pid > 1:
         return "pid", pid
@@ -147,15 +152,20 @@ class Index:
     """Cache local des tâches `{id: fiche}` (états : `ETATS`). Lecture sans exception ; écritures sous verrou.
 
     Verrou : verrou de processus (fils) + fichier `taches.lock` créé en exclusif (`x`) avec le pid, comme
-    `serveur_installation`. Un verrou périmé (pid mort, notre propre pid, fichier invalide de plus de 5 s) est repris en
-    le renommant sous un nom unique puis en revérifiant son contenu avant de le supprimer. Reste : deux reprises
-    simultanées d'un même verrou périmé se départagent par ce renommage (une seule réussit) ; un verrou vivant
-    renommé par erreur est remis en place, avec une très brève absence possible du fichier."""
+    `serveur_installation`. Un verrou est périmé si son pid est mort ou est le nôtre (le verrou de processus est pris),
+    ou si le fichier est vide/invalide depuis plus de 5 s. La reprise est exclusive : un seul repreneur à la fois, grâce
+    au fichier témoin `taches.lock.reprise` (créé en `x`, toujours retiré ; un témoin périmé se retire selon la même
+    règle, ou après 30 s). Sous le témoin le verrou est relu, sa péremption revérifiée sur CETTE lecture, et il n'est
+    supprimé que s'il est encore périmé ; il n'est jamais renommé. Reste : un témoin périmé retiré par deux processus
+    en même temps (arrêt brutal pendant la reprise elle-même) ; la suppression du fichier verrou par un tiers qui ne
+    respecte pas le protocole n'est pas détectée."""
 
-    def __init__(self, dossier=plateforme_acces.DOSSIER, attente=ATTENTE_S, vivant=pid_vivant):
+    def __init__(self, dossier=plateforme_acces.DOSSIER, attente=ATTENTE_S, vivant=pid_vivant, pid=os.getpid):
         self.dossier = Path(dossier)
         self.attente = attente
         self.vivant = vivant
+        self.pid = pid
+        self._apres_verification = None      # point d'arrêt des tests : entre la vérification et la suppression
 
     @property
     def chemin(self):
@@ -170,7 +180,7 @@ class Index:
         """Pour affichage : vide si absent, abîmé ou illisible. Jamais d'exception."""
         try:
             return self._analyser(self.chemin.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             return {}
 
     def _lire_pour_ecrire(self):
@@ -182,16 +192,18 @@ class Index:
             raise ErreurIndex(f"Index des tâches illisible ({type(e).__name__}) : rien n'a été modifié.") from e
         try:
             return self._analyser(contenu)
-        except ValueError:
+        except (ValueError, RecursionError):
             return {}
 
     def enregistrer(self, ident, fiche):
+        _id_valide(ident)
         if not isinstance(fiche, dict) or fiche.get("etat") not in ETATS:
             raise ValueError("Fiche de tâche invalide : « etat » doit valoir " + ", ".join(ETATS) + ".")
         copie = dict(fiche)
         self._modifier(lambda tout: tout.__setitem__(ident, copie))
 
     def retirer(self, ident):
+        _id_valide(ident)
         self._modifier(lambda tout: tout.pop(ident, None))
 
     def _modifier(self, agir):
@@ -202,7 +214,7 @@ class Index:
 
     def _perime(self, genre, valeur):
         if genre == "pid":
-            return valeur == os.getpid() or not self.vivant(valeur)
+            return valeur == self.pid() or not self.vivant(valeur)
         return genre == "invalide" and valeur > VERROU_VIDE_S
 
     def _verrou(self):
@@ -221,7 +233,7 @@ class Index:
 
             def __exit__(self, *_):
                 try:
-                    if _pid_verrou(self.chemin) == ("pid", os.getpid()):     # jamais le verrou d'un autre
+                    if _pid_verrou(self.chemin) == ("pid", index.pid()):     # jamais le verrou d'un autre
                         self.chemin.unlink()
                 except OSError:
                     pass
@@ -229,29 +241,51 @@ class Index:
                     _VERROU_PROCESSUS.release()
         return _Verrou()
 
-    def _reprendre(self, chemin):
-        """Retire un verrou jugé périmé : renommé sous un nom unique, contenu revérifié, puis supprimé. Faux si échec."""
-        mort = chemin.with_name(f"{chemin.name}.{os.getpid()}.{uuid.uuid4().hex}.perime")
+    def _temoin_perime(self, temoin):
+        genre, valeur = _pid_verrou(temoin)
+        if genre == "absent":
+            return False
+        if genre == "pid" and self._perime(genre, valeur):
+            return True
         try:
-            os.rename(chemin, mort)
+            return (time.time() - temoin.stat().st_mtime > TEMOIN_PERIME_S
+                    or (genre == "invalide" and valeur > VERROU_VIDE_S))
         except OSError:
             return False
-        genre, valeur = _pid_verrou(mort)
-        if genre != "illisible" and self._perime(genre, valeur):
+
+    def _reprendre(self, chemin):
+        """Retire un verrou périmé, un seul repreneur à la fois (fichier témoin). Vrai si le verrou a disparu."""
+        temoin = chemin.with_name(chemin.name + ".reprise")
+        try:
+            with open(temoin, "x", encoding="utf-8") as f:
+                f.write(json.dumps({"pid": self.pid()}))
+        except FileExistsError:
+            if self._temoin_perime(temoin):
+                try:
+                    temoin.unlink()
+                except OSError:
+                    pass
+            return False
+        except OSError:
+            return False
+        try:
+            genre, valeur = _pid_verrou(chemin)          # relu sous le témoin : c'est CETTE lecture qui décide
+            if genre == "absent":
+                return True
+            if not self._perime(genre, valeur):
+                return False
+            if self._apres_verification is not None:
+                self._apres_verification()
             try:
-                mort.unlink()
+                chemin.unlink()
+            except OSError:
+                return False
+            return True
+        finally:
+            try:
+                temoin.unlink()
             except OSError:
                 pass
-            return True
-        try:                                     # c'était un verrou vivant : on le remet (sans écraser un nouveau)
-            os.link(mort, chemin)
-        except OSError:
-            pass
-        try:
-            mort.unlink()
-        except OSError:
-            pass
-        return False
 
     def _prendre(self, limite):
         chemin = self.dossier / VERROU
@@ -259,7 +293,7 @@ class Index:
         while True:
             try:
                 with open(chemin, "x", encoding="utf-8") as f:
-                    f.write(json.dumps({"pid": os.getpid()}))
+                    f.write(json.dumps({"pid": self.pid()}))
                 return chemin
             except FileExistsError:
                 genre, valeur = _pid_verrou(chemin)

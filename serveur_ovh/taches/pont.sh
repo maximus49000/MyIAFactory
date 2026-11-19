@@ -487,7 +487,8 @@ command -v timeout > /dev/null 2>&1 || repondre 4 "timeout absent : le pont refu
 mkdir -p -- "$SORTIE" 2>/dev/null || repondre 4 "Dossier de sortie inaccessible."
 # Activité : l'enveloppe hôte mesure l'inactivité du pilote sur la date de ce fichier (jamais lu, vide) ; touché au début de CHAQUE
 # verbe valide, sauf si c'est un lien symbolique (aucune écriture ailleurs que sous PONT_SORTIE).
-if [ ! -L "$SORTIE/.activite" ]; then : > "$SORTIE/.activite" 2>/dev/null; fi
+# Seulement un fichier ordinaire ou rien : un FIFO ou un périphérique ouvert en écriture bloquerait le verbe.
+if [ ! -L "$SORTIE/.activite" ] && { [ -f "$SORTIE/.activite" ] || [ ! -e "$SORTIE/.activite" ]; }; then : > "$SORTIE/.activite" 2>/dev/null; fi
 
 case "$VERBE" in
   demarrer) verbe_demarrer ;;

@@ -9,11 +9,11 @@
 #   1..86400, memoire_mo 256..65536, cpus 1..64) ; rien n'en est jamais interprété par un shell : les commandes sont des tableaux.
 # Sortie standard : UNE ligne JSON, l'état écrit dans ~/taches/<id>/etat.json.
 # Codes : 0 conteneur démarré (état en_cours) ; 1 démarrage impossible (état echouee) ; 2 argument refusé (rien créé) ;
-#   3 tâche déjà en cours, veilleur vivant (rien modifié) ; 4 identifiant déjà utilisé (état final, ou en_cours sans veilleur :
-#   rien modifié, à nettoyer par le lanceur) ; 75 créneau occupé ou un conteneur tache-* existe déjà (en_attente, à relancer).
+#   3 tâche déjà en cours : veilleur vivant OU enveloppe vivante (démarrage en cours, enveloppe.pid) (rien modifié) ;
+#   4 identifiant déjà utilisé (état final, ou en_cours sans veilleur ni enveloppe vivants : rien modifié, à nettoyer par le lanceur) ; 75 créneau occupé ou un conteneur tache-* existe déjà (en_attente, à relancer).
 # Dossier de la tâche ~/taches/<id>/ : entree/ (monté en lecture seule, l'APK y est déposé avant), sortie/ (monté en écriture :
 #   pont.log, captures/, plantage.txt, entree-tache.log), etat.json, arret (créé par le lanceur : demande d'arrêt),
-#   veilleur.pid, veilleur.log, docker-run.log. Créneau : verrou flock sur ~/taches/.creneau-emulation (descripteur 8, hérité
+#   enveloppe.pid, veilleur.pid, veilleur.log, docker-run.log. Créneau : verrou flock sur ~/taches/.creneau-emulation (descripteur 8, hérité
 #   par le veilleur).
 # etat.json : {"id","etat","statut","debut","fin","raison"}, écrit par un fichier temporaire puis mv (jamais à moitié écrit).
 #   etat : en_attente | en_cours | terminee | arretee | echouee ; statut (à la fin) : ok | plantage | limite | erreur.
@@ -24,6 +24,8 @@
 #   arret contient « fin » (fin normale demandée par le lanceur) -> terminee, ok ; tout autre contenu -> arretee, ok.
 #   Inactivité du pilote = max(mtime sortie/pont.log, mtime sortie/.activite (touché par pont.sh au début de chaque verbe),
 #   début de la tâche).
+# Limite de taille : sondage toutes les ENVELOPPE_SONDE_S (2 s) de `du -sk`, PAS un quota : un dépassement entre deux sondages
+#   est accepté (résiduel connu) ; la limite du pont (octets de captures) reste la première barrière.
 # ÉCART VOLONTAIRE : l'échéance duree_s est appliquée par le veilleur (et, en dernier recours, par `timeout duree+60` dans le
 #   conteneur : entree-tache.sh), et non par `timeout <duree_s>` autour de `docker run -d`, qui rend la main aussitôt.
 # Réservées aux tests : ENVELOPPE_SONDE_S (période de surveillance, 2 s par défaut). Aucun identifiant n'est monté ni transmis ;
@@ -184,13 +186,19 @@ fin_erreur() {   # fin_erreur <raison> : tâche échouée, créneau libéré
 
 # Un veilleur est vivant si son PID existe ET si /proc/<pid>/cmdline porte le marqueur --veilleur et l'identifiant (jamais un
 # PID recyclé par un autre processus).
-veilleur_vivant() {
-  local pid=""
-  [ -f "$DOSSIER/veilleur.pid" ] && IFS= read -r pid < "$DOSSIER/veilleur.pid"
+processus_vivant() {   # processus_vivant <fichier du pid> <motif>... : le PID existe ET sa ligne de commande porte tous les motifs
+  local fichier="$1" pid="" cmd m
+  shift
+  [ -f "$fichier" ] && IFS= read -r pid < "$fichier"
   [[ $pid =~ ^[0-9]{1,10}$ ]] || return 1
   [ -r "/proc/$pid/cmdline" ] || return 1
-  tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -qF -e "--veilleur $ID"
+  cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+  for m in "$@"; do [[ $cmd == *"$m"* ]] || return 1; done
+  return 0
 }
+veilleur_vivant() { processus_vivant "$DOSSIER/veilleur.pid" "--veilleur $ID"; }
+# L'enveloppe d'un lancement en cours de démarrage (docker run peut durer 120 s, le veilleur n'existe pas encore).
+enveloppe_vivante() { processus_vivant "$DOSSIER/enveloppe.pid" lancer_emulation.sh "$ID"; }
 
 umask 077
 mkdir -p -- "$DOSSIER/entree" "$DOSSIER/sortie" || refuser "dossier de la tâche non créable."
@@ -201,7 +209,7 @@ chmod 777 "$DOSSIER/sortie"        # écrit par l'utilisateur 1000 du conteneur,
 # plantage.txt, .avd-pret ou des captures d'une tâche précédente ne fuient jamais dans la suivante. Rien n'est modifié.
 if [ -f "$DOSSIER/etat.json" ] && ! grep -q '"etat": "en_attente"' "$DOSSIER/etat.json"; then
   montrer_etat
-  if grep -q '"etat": "en_cours"' "$DOSSIER/etat.json" && veilleur_vivant; then exit 3; fi
+  if grep -q '"etat": "en_cours"' "$DOSSIER/etat.json" && { veilleur_vivant || enveloppe_vivante; }; then exit 3; fi
   exit 4
 fi
 rm -f "$DOSSIER/arret"
@@ -226,6 +234,7 @@ kvm_gid=$(getent group kvm 2>/dev/null | cut -d: -f3)
 [[ $kvm_gid =~ ^[0-9]{1,10}$ ]] || fin_erreur "Groupe kvm introuvable sur ce serveur : l'émulateur ne peut pas être accéléré."
 [[ $IMAGE_SYSTEME =~ $MOTIF_IMAGE_SYSTEME ]] || fin_erreur "Image système mal formée."
 
+printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid"      # AVANT en_cours : un second lancement voit une enveloppe vivante, pas un veilleur mort
 ecrire_etat en_cours "" "$(maintenant_iso)" "" "Conteneur en cours de démarrage."
 
 # --mount (et non -v) : un chemin source absent est une erreur, jamais un dossier créé par root ; SDK et entree en lecture seule.
@@ -252,5 +261,10 @@ else
   nohup bash "$SELF" --veilleur "$ID" "$MODE" "$DUREE" "$INACTIVITE" "$MEMOIRE" "$CPUS" </dev/null >> "$DOSSIER/veilleur.log" 2>&1 &
 fi
 disown 2>/dev/null
+# Rendre la main seulement quand veilleur.pid existe : après, « en_cours sans veilleur vivant » ne peut plus être qu'un veilleur mort.
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+  [ -s "$DOSSIER/veilleur.pid" ] && break
+  sleep 0.1
+done
 montrer_etat
 exit 0

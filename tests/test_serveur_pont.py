@@ -407,6 +407,17 @@ class TestPont(unittest.TestCase):
             self.assertEqual(b.lancer("toucher", "a;b", "2")[0], 2)       # un verbe refusé n'est pas de l'activité
             self.assertFalse(activite.exists())
 
+    def test_activite_non_ordinaire_n_est_jamais_ouvert(self):
+        with Banc() as b:
+            activite = b.sortie / ".activite"
+            # un dossier : jamais touché ; un FIFO (si le système sait en faire) : l'ouvrir en écriture bloquerait le verbe
+            activite.mkdir()
+            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)
+            activite.rmdir()
+            if bash('mkfifo "$1"', posix(activite)).returncode != 0:
+                return
+            self.assertEqual(b.lancer("toucher", "10", "20")[0], 0)          # sinon : délai du harnais, test en échec
+
     def test_activite_ne_suit_pas_un_lien_symbolique(self):
         with Banc() as b:
             cible = b.t / "ailleurs.txt"

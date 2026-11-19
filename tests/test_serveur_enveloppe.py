@@ -17,7 +17,8 @@ CLES_ETAT = {"id", "etat", "statut", "debut", "fin", "raison"}
 DOCKER = r'''echo "docker $*" >> "$FAUX_JOURNAL"
 ET="$FAUX_ETAT"
 case "$1" in
-  run) [ -n "${FAUX_RUN_ECHEC:-}" ] && { echo "boom" >&2; exit 125; }
+  run) echo "run-vu: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json")" >> "$FAUX_JOURNAL"
+       [ -n "${FAUX_RUN_ECHEC:-}" ] && { echo "boom" >&2; exit 125; }
        printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
   ps) n=$(cat "$ET/ps" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$ET/ps"
       if [ -n "${FAUX_MEURT_AU_PS:-}" ] && [ "$n" -ge "$FAUX_MEURT_AU_PS" ]; then rm -f "$ET/vivant"; fi
@@ -64,7 +65,7 @@ class Banc:
 
     def lancer(self, *args, env=None, ident=ID):
         e = dict(os.environ, HOME=self.home.as_posix(), PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"],
-                 FAUX_JOURNAL=self.journal_fichier.as_posix(), FAUX_ETAT=self.et.as_posix(), ENVELOPPE_SONDE_S="0.2")
+                 FAUX_JOURNAL=self.journal_fichier.as_posix(), FAUX_ETAT=self.et.as_posix(), ENVELOPPE_SONDE_S="0.2", FAUX_DOSSIER=self.dossier.as_posix())
         e.update(self.env)
         e.update(env or {})
         corps = list(args) if args else ["scenario", "30", "30", "2048", "2"]
@@ -285,6 +286,52 @@ class TestEnveloppe(unittest.TestCase):
             finally:
                 p.kill()
                 p.wait()
+
+    def _faux_processus(self, b, fichier, *arguments):
+        """Un processus vivant dont la ligne de commande porte `arguments` et dont le PID (celui de bash) est dans `fichier`."""
+        p = subprocess.Popen(["bash", "-c", 'echo $$ > "$PIDFILE"; sleep 40; true', *arguments],
+                             env=dict(os.environ, PIDFILE=(b.dossier / fichier).as_posix()), stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: (p.kill(), p.wait()))
+        for _ in range(50):
+            if (b.dossier / fichier).exists() and (b.dossier / fichier).read_text().strip():
+                return p
+            time.sleep(0.1)
+        self.fail("faux processus non démarré")
+
+    def test_un_demarrage_en_cours_rend_3_tant_que_l_enveloppe_vit_sans_veilleur(self):
+        # en_cours est écrit, docker run peut durer 120 s, veilleur.pid vient plus tard : un second lancement n'est jamais « mort »
+        with Banc() as b:
+            avant = self._etat_ecrit(b, "en_cours")
+            self._faux_processus(b, "enveloppe.pid", "lancer_emulation.sh", ID)
+            r = b.lancer()
+            self.assertEqual(r.returncode, 3, r.stderr)
+            self.assertEqual((b.dossier / "etat.json").read_text(), avant)
+            self.assertEqual(b.appels("docker"), [])
+
+    def test_enveloppe_et_veilleur_morts_ou_etrangers_rendent_4(self):
+        with Banc() as b:
+            avant = self._etat_ecrit(b, "en_cours")
+            (b.dossier / "veilleur.pid").write_text("999999\n", newline="\n")
+            (b.dossier / "enveloppe.pid").write_text("999999\n", newline="\n")
+            self.assertEqual(b.lancer().returncode, 4)
+            # vivant mais sans la ligne de commande attendue (pid recyclé) : pas une enveloppe
+            self._faux_processus(b, "enveloppe.pid", "autre-programme", ID)
+            self.assertEqual(b.lancer().returncode, 4)
+            self.assertEqual((b.dossier / "etat.json").read_text(), avant)
+
+    def test_enveloppe_pid_ecrit_avant_en_cours_et_veilleur_pid_au_retour(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            self.assertIn("pid=oui", "".join(b.appels("run-vu:")))              # présent quand docker run tourne
+            self.assertIn('"etat": "en_cours"', "".join(b.appels("run-vu:")))
+            self.assertTrue((b.dossier / "enveloppe.pid").read_text().strip().isdigit())
+            self.assertTrue((b.dossier / "veilleur.pid").exists())               # l'enveloppe attend le PID du veilleur avant de rendre la main
+            b.arreter()
+            b.attendre_final()
+
+    def test_taille_de_sortie_documentee_comme_sondage_et_non_quota(self):
+        self.assertIn("sondage", SCRIPT.read_text(encoding="utf-8").lower())
 
     def test_pid_recycle_ou_mort_n_est_pas_un_veilleur(self):
         with Banc() as b:

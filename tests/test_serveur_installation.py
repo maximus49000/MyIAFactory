@@ -26,6 +26,7 @@ class FauxSsh:
     _verifier_hote = staticmethod(plateforme_ssh._verifier_hote)
 
     def __init__(self, presentes=(), etapes=None, acces=True, injoignable=False, tomber_a=None, depot_code=0):
+        self.marqueur = None                # contenu du marqueur de l'image (None : illisible) ; 255 : serveur injoignable
         self.depot_code, self.archives = depot_code, []             # archives : (commande, octets) de chaque dépôt de fichiers
         self.presentes = set(presentes)
         self.etapes = etapes or {}          # etape -> (statut, detail) ; absent : "fait" et la capacité devient présente
@@ -48,6 +49,10 @@ class FauxSsh:
             return 0, "\n".join(f"{i}={0 if i in self.presentes else 1}" for i in CATALOGUE) + "\n", ""
         if "cat >" in commande:
             return 0, "", ""
+        if commande.startswith('cat "$HOME/.myiafactory/'):
+            if self.marqueur == 255:
+                return 255, "", "Connection reset"
+            return (0, self.marqueur + "\n", "") if isinstance(self.marqueur, str) else (1, "", "No such file")
         etape = commande.rsplit("--etape ", 1)[1].strip()
         if self.tomber_a == etape:
             return 255, "", "Connection reset"
@@ -437,6 +442,106 @@ class TestEtatPerime(Base):
         self.assertTrue(etape[0].startswith('SERVEUR_OVH_DIR="$HOME/myiafactory/serveur_ovh" bash '), etape[0])
         indices = [i for i, a in enumerate(ssh.appels) if a["commande"] in (inst.COMMANDE_DEPOT_FICHIERS, etape[0])]
         self.assertEqual(indices, sorted(indices))                           # le dépôt précède l'étape
+
+    PRESENTES_IMAGE = ("base", "android-build", "android-emulateur", "emulateur-image")
+
+    def _besoins_image(self):
+        import serveur_capacites
+        from unittest import mock
+        return mock.patch.object(serveur_capacites, "BESOINS", dict(serveur_capacites.BESOINS, image_test=("emulateur-image",)))
+
+    def test_empreinte_change_avec_un_fichier_local(self):
+        import shutil
+        import tempfile
+        from unittest import mock
+        avant = inst.empreinte_etape("emulateur_image")
+        self.assertRegex(avant, r"^ubuntu=ubuntu:24\.04;jdk=17;fichiers=[0-9a-f]{16}$")
+        with tempfile.TemporaryDirectory() as t:
+            copie = Path(t) / "serveur_ovh"
+            for rel in ("versions.json",) + inst.FICHIERS_ETAPE["emulateur_image"]:
+                (copie / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(RACINE / "serveur_ovh" / rel, copie / rel)
+            with mock.patch.object(inst, "RACINE_SERVEUR", copie):
+                self.assertEqual(inst.empreinte_etape("emulateur_image"), avant)       # mêmes octets, même empreinte
+                with open(copie / "taches" / "pont.sh", "ab") as f:
+                    f.write(b"# modifie\n")
+                self.assertNotEqual(inst.empreinte_etape("emulateur_image"), avant)
+
+    def test_capacite_presente_mais_marqueur_perime_est_a_refaire(self):
+        for contenu, perime in ((inst.empreinte_etape("emulateur_image"), False), ("ubuntu=ubuntu:24.04;jdk=17;fichiers=0000000000000000", True),
+                                (None, True), (255, False)):
+            with self.subTest(marqueur=contenu):
+                ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
+                ssh.marqueur = contenu
+                with self._besoins_image():
+                    ap = inst.apercu(SERVEUR, ["image_test"], ssh=ssh, dossier=self.dossier)
+                    self.assertEqual(ap["manquantes"], ["emulateur-image"] if perime else [], ap)
+                    ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
+                    ssh.marqueur = contenu
+                    r = self.installer(ssh, actions=["image_test"])
+                self.assertEqual("emulateur_image" in ssh.lancees, perime)
+                self.assertEqual(len(ssh.archives), 1 if perime else 0)
+                if perime:
+                    self.assertEqual(r["capacites"]["emulateur-image"]["statut"], "fait")
+
+    def test_depot_fichier_local_manquant_est_bloque_et_non_une_coupure_de_connexion(self):
+        from unittest import mock
+        vide = Path(self.dossier) / "vide"
+        vide.mkdir()
+        (vide / "mise_en_place.sh").write_bytes((RACINE / "serveur_ovh" / "mise_en_place.sh").read_bytes())
+        with mock.patch.object(inst, "RACINE_SERVEUR", vide):
+            ssh = FauxSsh()
+            r = self._installer_image(ssh)
+        e = r["capacites"]["emulateur-image"]
+        self.assertEqual(e["statut"], "bloque", r)
+        self.assertIn("introuvable", e["detail"])
+        self.assertNotIn("connexion", e["detail"].lower())
+
+    def _deposer_sous_bash(self, octets):
+        """Exécute la VRAIE commande de dépôt sous bash, dans un faux HOME ; rend (code, dossier des fichiers déposés, restes)."""
+        import subprocess
+        import shutil
+        if not shutil.which("bash") or not shutil.which("tar"):
+            self.skipTest("bash ou tar absent")
+        t = Path(self.dossier) / "faux-home"
+        t.mkdir(exist_ok=True)
+        faux = Path(self.dossier) / "faux-bin"                          # Git bash sur Windows ne sait pas faire `install -m 700` : repli mkdir
+        faux.mkdir(exist_ok=True)
+        (faux / "install").write_text('#!/bin/sh\n[ "$1" = -d ] && shift\n[ "$1" = -m ] && shift 2\nmkdir -p "$@"\n', newline="\n")
+        (faux / "install").chmod(0o755)
+        r = subprocess.run(["bash", "-c", inst.COMMANDE_DEPOT_FICHIERS], input=octets, capture_output=True, timeout=60,
+                           env=dict(os.environ, HOME=t.as_posix(), PATH=faux.as_posix() + os.pathsep + os.environ["PATH"]))
+        dest = t / "myiafactory" / "serveur_ovh"
+        deposes = sorted(x.relative_to(dest).as_posix() for x in dest.rglob("*") if x.is_file()) if dest.exists() else []
+        restes = sorted(x.name for x in (t / "myiafactory").iterdir() if x.name.startswith(".depot")) if (t / "myiafactory").exists() else []
+        return r.returncode, deposes, restes, dest
+
+    def test_commande_de_depot_sous_bash_complete_puis_tronquee(self):
+        archive = inst._archive_fichiers("emulateur_image")
+        attendus = sorted(inst.FICHIERS_ETAPE["emulateur_image"])
+        code, deposes, restes, dest = self._deposer_sous_bash(archive)
+        self.assertEqual((code, deposes, restes), (0, attendus, []))
+        for rel in attendus:
+            self.assertEqual((dest / rel).read_bytes(), (RACINE / "serveur_ovh" / rel).read_bytes())
+        # Flux coupé à une frontière de membre (premier fichier entier, le reste absent) : rien n'est mis à jour.
+        fins, position = [], 0
+        for rel in inst.FICHIERS_ETAPE["emulateur_image"]:                   # fin de chaque membre : en-tête 512 + données arrondies à 512
+            position += 512 + ((len((RACINE / "serveur_ovh" / rel).read_bytes()) + 511) // 512) * 512
+            fins.append(position)
+        # après le 1er membre, après le 2e (le 3e absent : tar réussit mais il manque un fichier), au milieu du 3e, entêtes coupés
+        for coupe in (fins[0], fins[1], fins[1] + 100, fins[2] - 1024, 0, 700):
+            with self.subTest(coupe=coupe):
+                self.dossier = Path(tempfile.mkdtemp())                       # faux HOME neuf à chaque cas
+                self.addCleanup(__import__("shutil").rmtree, self.dossier, True)
+                code, deposes, restes, _ = self._deposer_sous_bash(archive[:coupe])
+                self.assertNotEqual(code, 0)
+                self.assertEqual(deposes, [])                                 # aucun fichier déposé, même partiel
+                self.assertEqual(restes, [])                                  # dossier temporaire supprimé
+        self.dossier = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, self.dossier, True)
+        code, deposes, restes, _ = self._deposer_sous_bash(b"pas une archive tar" * 100)
+        self.assertNotEqual(code, 0)
+        self.assertEqual((deposes, restes), ([], []))
 
     def test_depot_des_fichiers_en_echec(self):
         for code, statut in ((255, "inconnue"), (124, "inconnue"), (1, "bloque")):

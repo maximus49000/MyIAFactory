@@ -760,7 +760,7 @@ etape_emulateur_image() {
     code=$?
     rm -rf "$ctx"
     if [ "$code" != 0 ]; then
-      fin=$(printf '%s\n' "$journal" | tail -n 20 | tr -d '\r' | cut -c1-200)
+      fin=$(printf '%s\n' "$journal" | tail -n 20 | tr -d '\000-\010\013-\037' | cut -c1-200)
       fin="${fin//$HOME/\~}"
       repondre bloque "Construction de l'image myiafactory/emulateur impossible (contexte ${racine}). Fin du journal de construction : ${fin}"
     fi

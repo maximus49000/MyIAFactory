@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -1150,7 +1151,7 @@ class TestEtapesCapacites(unittest.TestCase):
 DOCKER_IMAGE = r'''echo "docker $*" >> "JOURNAL"
 case "$1 $2" in
   "image inspect") [ -s "ETAT/etiquette" ] && { cat "ETAT/etiquette"; exit 0; }; exit 1 ;;
-  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && { i=1; while [ $i -le 30 ]; do echo "ligne-de-build-$i $HOME/secret-dossier"; i=$((i + 1)); done; exit 1; }
+  "build "*) [ -n "${FAUX_BUILD_ECHEC:-}" ] && { printf 'avec-controle \001\033[31m\010fin\n'; i=1; while [ $i -le 30 ]; do echo "ligne-de-build-$i $HOME/secret-dossier"; i=$((i + 1)); done; exit 1; }
              prec=""; for a in "$@"; do [ "$prec" = --label ] && printf '%s' "${a#versions=}" > "ETAT/etiquette"; prec="$a"; last="$a"; done
              echo "contexte: $(ls "$last" | tr '\n' ' ')" >> "JOURNAL" ;;
 esac
@@ -1194,6 +1195,9 @@ class TestEtapeEmulateurImage(unittest.TestCase):
             self.assertIn(f, contexte)
         etiquette = (m.etat / "etiquette").read_text()
         self.assertEqual((m.home / MARQUEUR).read_text().strip(), etiquette)
+        sys.path.insert(0, str(RACINE.parent / "outils"))
+        import serveur_installation
+        self.assertEqual(etiquette, serveur_installation.empreinte_etape("emulateur_image"))   # même empreinte côté poste et côté serveur
         self.assertEqual(m.restes(m.home / ".myiafactory"), ["emulateur-image.version"])     # pas de fichier temporaire oublié
         self.assertNotIn("curl", m.journal)
 
@@ -1232,6 +1236,7 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         self.assertIn("ligne-de-build-30", d["detail"])                                    # fin du journal de construction...
         self.assertIn("ligne-de-build-11", d["detail"])
         self.assertNotIn("ligne-de-build-10 ", d["detail"])                                # ... les 20 dernières lignes seulement
+        self.assertNotRegex(d["detail"], r"[\x00-\x08\x0b\x0c\x0e-\x1f]")                  # le JSON reste valide : aucun caractère de contrôle
         self.assertIn("~/secret-dossier", d["detail"])                                     # dossier personnel masqué
         self.assertFalse((m.home / MARQUEUR).exists())                                     # pas de marqueur sans image
         m.opt["FAUX_UTILISATEUR"] = "root"

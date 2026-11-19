@@ -8,6 +8,7 @@ Garanties : aucune écriture sans `accord is True` ; une seule installation à l
 relu par sonde au début et à la fin (jamais l'état en cache) ; une panne de réseau donne « inconnue », jamais
 « absente » ; l'état `serveurs-etat.json` ne contient aucun secret. Tout passe par `ssh` (injectable).
 """
+import hashlib
 import io
 import json
 import math
@@ -226,6 +227,7 @@ def apercu(serveur, actions, ssh=plateforme_ssh, dossier=plateforme_acces.DOSSIE
         return {"erreur": "État du serveur illisible ou serveur injoignable : " + ", ".join(illisibles) + ".",
                 "etat": {**inconnu, **etat}}
     installees = {i for i, s in etat.items() if s == serveur_etat.PRESENTE}
+    installees -= _perimees(serveur, ssh, installees, set(requises))
     manquantes = manquantes_pour(actions, installees)
     installables = [CATALOGUE[i] for i in manquantes if CATALOGUE[i].installable]
     return {"manquantes": manquantes,
@@ -293,15 +295,61 @@ def _analyser(sortie):
 # Fichiers du dossier des scripts du dépôt dont une étape a besoin sur le serveur (chemins relatifs à ce dossier, noms fixes). Le lanceur de
 # tâches ajoutera lancer_emulation.sh à son propre dépôt.
 FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emulateur/entree-tache.sh", "taches/pont.sh")}
-# Dépôt par une archive tar lue sur l'entrée standard : extraite dans un dossier temporaire privé (umask 077, mktemp -d), chaque
-# fichier est ensuite déplacé (mv -f) à sa place, le dossier temporaire est supprimé quoi qu'il arrive.
-COMMANDE_DEPOT_FICHIERS = (
-    'install -d -m 700 "$HOME/myiafactory" && umask 077 && d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1; '
-    f'dest="{DOSSIER_DISTANT}"; r=1; '
-    'if tar -x --no-same-owner -C "$d" -f -; then r=0; '
-    '(cd "$d" && find . -type f) | while IFS= read -r f; do f="${f#./}"; '
-    'install -d -m 700 "$dest/$(dirname "$f")" && mv -f "$d/$f" "$dest/$f" || exit 1; done || r=1; fi; '
-    'rm -rf "$d"; exit $r')
+# Dépôt par une archive tar lue sur l'entrée standard : extraite dans un dossier temporaire privé (umask 077, mktemp -d) ;
+# RIEN n'est déplacé tant que tar n'a pas réussi ET que chacun des fichiers attendus n'est pas là et non vide (un flux coupé
+# à une frontière de membre ne laisse donc rien de mis à jour) ; chaque fichier est ensuite déplacé (mv -f) à sa place ; le
+# dossier temporaire est supprimé quoi qu'il arrive.
+def commande_depot(etape):
+    fichiers = " ".join(f'"{rel}"' for rel in FICHIERS_ETAPE[etape])         # noms fixes du dépôt, jamais une entrée externe
+    return (
+        'install -d -m 700 "$HOME/myiafactory" && umask 077 && d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1; '
+        f'dest="{DOSSIER_DISTANT}"; r=1; '
+        'if tar -x --no-same-owner -C "$d" -f -; then r=0; '
+        f'for f in {fichiers}; do [ -f "$d/$f" ] && [ -s "$d/$f" ] || r=1; done; '
+        'if [ "$r" = 0 ]; then '
+        f'for f in {fichiers}; do '
+        'install -d -m 700 "$dest/$(dirname "$f")" && mv -f "$d/$f" "$dest/$f" || r=1; done; fi; fi; '
+        'rm -rf "$d"; exit $r')
+
+
+COMMANDE_DEPOT_FICHIERS = commande_depot("emulateur_image")
+
+
+def empreinte_etape(etape):
+    """Empreinte de l'image de l'étape, identique à celle que l'étape écrit dans son marqueur sur le serveur : versions
+    épinglées + 16 premiers hexa du SHA-256 des fichiers déposés, concaténés dans l'ordre de FICHIERS_ETAPE, mêmes octets."""
+    versions = json.loads((RACINE_SERVEUR / "versions.json").read_text(encoding="utf-8"))
+    h = hashlib.sha256()
+    for rel in FICHIERS_ETAPE[etape]:
+        h.update((RACINE_SERVEUR / rel).read_bytes())
+    return f"ubuntu={versions['base_ubuntu']};jdk=17;fichiers={h.hexdigest()[:16]}"
+
+
+# Capacités dont la sonde (lecture seule, existence du marqueur) ne dit pas si ce qui est installé est à jour : le marqueur
+# contient l'empreinte, que le moteur compare à l'empreinte locale par une lecture SSH de ce seul fichier (`cat`). Choix : la
+# sonde du catalogue reste une pure existence de fichier (le validateur interdit d'y passer une valeur du poste) ; la
+# péremption est une lecture de plus, faite par le moteur seulement pour les capacités demandées.
+MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version')}
+
+
+def _perimees(serveur, ssh, presentes, requises):
+    """Capacités présentes (sonde) dont le marqueur ne porte pas l'empreinte locale : à refaire. Un serveur injoignable pendant la
+    lecture (255/124) laisse la capacité telle que la sonde l'a vue ; un fichier local illisible la rend périmée (l'étape dira pourquoi)."""
+    perimees = set()
+    for i, (etape, marqueur) in MARQUEURS.items():
+        if i not in presentes or i not in requises:
+            continue
+        try:
+            attendue = empreinte_etape(etape)
+        except (OSError, ValueError, KeyError):
+            perimees.add(i)
+            continue
+        code, sortie, _e = ssh.executer(serveur_etat.cible(serveur), f'cat "{marqueur}" 2>/dev/null', serveur.cle, delai=20)
+        if code in (255, 124):
+            continue
+        if code != 0 or (sortie or "").strip() != attendue:
+            perimees.add(i)
+    return perimees
 
 
 def _archive_fichiers(etape):
@@ -323,9 +371,14 @@ def _archive_fichiers(etape):
 
 
 def _deposer_fichiers(serveur, ssh, etape):
-    """Dépose les fichiers dont l'étape a besoin. (statut, détail) ; None si réussi."""
-    code, _o, erreur = ssh.executer_octets(serveur_etat.cible(serveur), COMMANDE_DEPOT_FICHIERS, serveur.cle,
-                                           entree=_archive_fichiers(etape), delai=120)
+    """Dépose les fichiers dont l'étape a besoin. (statut, détail) ; None si réussi. Un fichier local manquant est un blocage
+    (rien à voir avec la connexion)."""
+    try:
+        archive = _archive_fichiers(etape)
+    except OSError as e:
+        return "bloque", f"Fichier du dépôt introuvable ou illisible, l'étape ne peut pas être préparée : {_texte(e, serveur)}"
+    code, _o, erreur = ssh.executer_octets(serveur_etat.cible(serveur), commande_depot(etape), serveur.cle,
+                                           entree=archive, delai=120)
     if code == 0:
         return None
     return ("inconnue" if code in (255, 124) else "bloque",
@@ -451,11 +504,15 @@ def _derouler(serveur, requises, actions, ssh, dossier, caps, debut):
                               "Vérifiez la connexion au serveur puis relancez.")
         return resultat("Serveur injoignable : rien n'a été installé.")
     presentes = {i for i, s in sondes.items() if s == serveur_etat.PRESENTE}
+    perimees = _perimees(serveur, ssh, presentes, set(requises))
+    presentes -= perimees
     avant = lire_etat(dossier).get(serveur.id, {}).get("capacites")
     frais.update(_rafraichies(avant if isinstance(avant, dict) else {}, sondes, set(requises)))
     a_faire = manquantes_pour(actions, presentes)
     for i in requises:
-        caps[i] = _entree("presente", "Déjà présente.") if i in presentes else _entree("a_faire", "À installer.")
+        caps[i] = (_entree("presente", "Déjà présente.") if i in presentes else
+                   _entree("a_faire", "À mettre à jour : les fichiers déposés sur le serveur sont périmés.") if i in perimees else
+                   _entree("a_faire", "À installer."))
     ecrire()
 
     fait, erreur, arret = set(presentes), None, None            # arret : capacité qui interrompt toute la suite

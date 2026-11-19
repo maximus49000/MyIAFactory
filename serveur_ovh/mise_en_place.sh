@@ -158,7 +158,7 @@ etape_durcissement() {
 assurer_paquets() {
   local p manque=0
   for p in "$@"; do
-    [ "$(dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null)" = installed ] || manque=1
+    [ "$(LC_ALL=C dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null)" = installed ] || manque=1
   done
   [ "$manque" = 0 ] && return 0
   sudo apt-get -o DPkg::Lock::Timeout=120 update -y >/dev/null 2>&1
@@ -511,9 +511,9 @@ sdk_cmd_delai() {
   local delai="$1"
   shift
   if command -v timeout >/dev/null 2>&1; then
-    JAVA_HOME="$SDK_JAVA_HOME" timeout "$delai" "$@"
+    LC_ALL=C JAVA_HOME="$SDK_JAVA_HOME" timeout "$delai" "$@"
   else
-    JAVA_HOME="$SDK_JAVA_HOME" "$@"
+    LC_ALL=C JAVA_HOME="$SDK_JAVA_HOME" "$@"
   fi
 }
 
@@ -521,14 +521,20 @@ sdk_cmd_delai() {
 # javac du système seraient devenus le 21. On les remet sur le 17 SEULEMENT s'ils pointent maintenant sur un JDK 21 ; un autre
 # réglage (posé par le Directeur) n'est jamais touché. $1 = dossier du JDK 17.
 retablir_alternatives_jdk17() {
-  local outil valeur
+  local outil valeur echec=0
   for outil in java javac; do
-    valeur=$(update-alternatives --query "$outil" 2>/dev/null | awk '/^Value:/ {print $2}')
+    # LC_ALL=C : la sortie est analysée, et sur un serveur en français la ligne serait « Valeur : ».
+    valeur=$(LC_ALL=C update-alternatives --query "$outil" 2>/dev/null | awk '/^Value:/ {print $2}')
     case "$valeur" in
       */java-21-openjdk-*/*)
-        [ -x "$1/bin/$outil" ] && sudo update-alternatives --set "$outil" "$1/bin/$outil" >/dev/null 2>&1 ;;
+        if [ -x "$1/bin/$outil" ] && sudo update-alternatives --set "$outil" "$1/bin/$outil" >/dev/null 2>&1; then
+          :
+        else
+          echec=1
+        fi ;;
     esac
   done
+  return "$echec"
 }
 
 # Phrase ajoutée au détail final quand le repli JDK 21 a servi dans cette exécution.
@@ -556,7 +562,9 @@ preparer_jdk_sdkmanager() {
   SDK_JAVA_HOME="$JDK_TROUVE"
   JDK21_NOTE=" Le JDK 21 n'a été installé que pour faire tourner sdkmanager ; le JDK 17 reste le JDK du projet (le JDK par défaut du serveur est conservé ou rétabli)."
   if chercher_jdk 17; then
-    retablir_alternatives_jdk17 "$JDK_TROUVE"
+    if ! retablir_alternatives_jdk17 "$JDK_TROUVE"; then
+      JDK21_NOTE=" Le JDK 21 n'a été installé que pour faire tourner sdkmanager, mais le JDK 17 n'a pas pu être remis comme Java par défaut du système : le JDK 21 est resté le Java par défaut ; lancez « sudo update-alternatives --config java » (puis javac) pour choisir le 17."
+    fi
   fi
   if sdk_cmd "$sdkmanager" --version >/dev/null 2>&1; then
     return 0

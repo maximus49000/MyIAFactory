@@ -542,12 +542,12 @@ class Monde:
     def __init__(self, manifeste="ok", archive="ok", sha_manifeste=None, unity="ok", unzip_echec=False, jdk=True,
                  paquets_absents=False, kvm=True, kvm_membre=False, sdkmanager_echec=False, sdk_version="ok",
                  utilisateur="ubuntu", sdk_lent=False, licence_echec=False, mv_echec=False, canal_latest="channel-0",
-                 alternatives="auto", licence_lente=False):
+                 alternatives="auto", licence_lente=False, alt_set_echec=False):
         self.opt = dict(CURL_MANIFESTE=manifeste, CURL_ZIP=archive, CURL_UNITY=unity, UNZIP_ECHEC="1" if unzip_echec else "",
                         SDKMANAGER_ECHEC="1" if sdkmanager_echec else "", SDK_VERSION_MODE=sdk_version,
                         FAUX_UTILISATEUR=utilisateur, SDKMANAGER_LENT="1" if sdk_lent else "",
                         SDKMANAGER_LICENCE_ECHEC="1" if licence_echec else "", MV_ECHEC="1" if mv_echec else "",
-                        ALT_MODE=alternatives, SDKMANAGER_LICENCE_LENTE="1" if licence_lente else "",
+                        ALT_MODE=alternatives, ALT_SET_ECHEC="1" if alt_set_echec else "", SDKMANAGER_LICENCE_LENTE="1" if licence_lente else "",
                         PAQUETS_ABSENTS="1" if paquets_absents else "")
         self.canal_latest = canal_latest
         self.sha = sha_manifeste or hashlib.sha1(ZIP_CONTENU).hexdigest()
@@ -632,10 +632,12 @@ class Monde:
                         f'echo "#!/bin/sh" > "{jdk_bin}/java"; echo "#!/bin/sh" > "{jdk_bin}/javac"; chmod 755 "{jdk_bin}/java" "{jdk_bin}/javac";; '
                         f'*openjdk-21*) touch "{e}/apt21"; mkdir -p "{jdk21_bin}"; '
                         f'echo "#!/bin/sh" > "{jdk21_bin}/java"; echo "#!/bin/sh" > "{jdk21_bin}/javac"; chmod 755 "{jdk21_bin}/java" "{jdk21_bin}/javac";; esac;; esac\nexit 0'),
-            "update-alternatives": (f'if [ "$1" = --query ]; then echo "Name: $2"; '
-                                    f'if [ "$ALT_MODE" = autre ]; then echo "Status: manual"; echo "Value: /opt/autre-jdk/bin/$2"; '
-                                    f'elif [ -e "{e}/apt21" ]; then echo "Status: auto"; echo "Value: {jdk21_bin}/$2"; '
-                                    f'else echo "Status: auto"; echo "Value: {jdk_bin}/$2"; fi; fi\nexit 0'),
+            "update-alternatives": (f'if [ "$1" = --set ] && [ -n "$ALT_SET_ECHEC" ]; then exit 1; fi\n'
+                                    # sortie en français (« Valeur : ») sauf si l'appelant force LC_ALL=C, comme un serveur français
+                                    f'if [ "$1" = --query ]; then if [ "$LC_ALL" = C ]; then V="Value:"; else V="Valeur :"; fi; echo "Name: $2"; '
+                                    f'if [ "$ALT_MODE" = autre ]; then echo "Status: manual"; echo "$V /opt/autre-jdk/bin/$2"; '
+                                    f'elif [ -e "{e}/apt21" ]; then echo "Status: auto"; echo "$V {jdk21_bin}/$2"; '
+                                    f'else echo "Status: auto"; echo "$V {jdk_bin}/$2"; fi; fi\nexit 0'),
             "usermod": f'touch "{e}/kvm"',
             "mv": 'case "$*" in *extrait*) [ -n "$MV_ECHEC" ] && exit 1;; esac\nexec /usr/bin/mv "$@"',
             "id": (f'case "$1" in -un) echo "${{FAUX_UTILISATEUR:-ubuntu}}";; '
@@ -888,6 +890,14 @@ class TestEtapesCapacites(unittest.TestCase):
             d = m.lancer("android_build")
             self.assertEqual(m.appels("update-alternatives"), [])
             self.assertNotIn("JDK 21", d["detail"])
+
+    def test_echec_du_retablissement_du_jdk17_est_dit_dans_le_detail(self):
+        with Monde(sdk_version="classfile", alt_set_echec=True) as m:
+            d = m.lancer("android_build")
+            self.assertEqual(d["statut"], "fait", d["detail"])                   # le SDK fonctionne
+            self.assertIn("JDK 21 est resté le Java par défaut", d["detail"])
+            self.assertIn("sudo update-alternatives --config java", d["detail"])
+            self.assertNotIn("rétabli", d["detail"])
 
     def test_android_emulateur_apres_repli_jdk21_garde_aussi_le_17_par_defaut(self):
         with Monde(sdk_version="classfile") as m:

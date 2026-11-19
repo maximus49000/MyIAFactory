@@ -157,6 +157,59 @@ class CatalogueTests(unittest.TestCase):
         self.assertNotEqual(code("LISTEN 0 128 127.0.0.1:33890 0.0.0.0:*"), 0)
         self.assertNotEqual(code("LISTEN 0 128 127x0x0x1:3389 0.0.0.0:*"), 0)
 
+    # --- sonde android-build : le Java peut venir du PATH, d'Ubuntu (JDK 17) ou du JDK livré avec Unity -------------------
+    def _android_build(self, sdk=True, java="aucun", glob_vide=False):
+        """Lance la VRAIE sonde sous bash, dans un faux HOME et un PATH sans java ; rend le code de sortie."""
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            home, bin_ = t / "home", t / "bin"
+            home.mkdir()
+            bin_.mkdir()
+            if sdk:
+                for rel in ("android-sdk/platform-tools", "android-sdk/platforms/android-36", "android-sdk/build-tools/36.0.0"):
+                    (home / rel).mkdir(parents=True)
+                adb = home / "android-sdk/platform-tools/adb"
+                adb.write_text("#!/bin/sh\n", newline="\n")
+                adb.chmod(0o755)
+            if java == "unity":
+                j = home / "Unity/Hub/Editor/6000.0.1f1/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java"
+            elif java == "path":
+                j = bin_ / "java"
+            else:
+                j = None
+            if j is not None:
+                j.parent.mkdir(parents=True, exist_ok=True)
+                j.write_text("#!/bin/sh\n", newline="\n")
+                j.chmod(0o755)
+            if java == "unity-non-executable":
+                j = home / "Unity/Hub/Editor/6000.0.1f1/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java"
+                j.parent.mkdir(parents=True)
+                j.write_text("x", newline="\n")
+            env = dict(os.environ, HOME=home.as_posix(), PATH=bin_.as_posix() + os.pathsep + "/usr/bin" + os.pathsep + "/bin")
+            return subprocess.run(["bash", "-c", f"( {sc.CATALOGUE['android-build'].sonde} ) </dev/null >/dev/null 2>&1"],
+                                  env=env, capture_output=True, timeout=30).returncode
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sonde_android_build_accepte_le_jdk_d_unity_seul(self):
+        self.assertEqual(self._android_build(java="unity"), 0)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sonde_android_build_accepte_java_du_path(self):
+        self.assertEqual(self._android_build(java="path"), 0)
+
+    @unittest.skipUnless(shutil.which("bash") and not list(Path("/usr/lib/jvm").glob("java-17-openjdk-*/bin/java")),
+                         "bash absent ou JDK 17 présent sur ce poste")
+    def test_sonde_android_build_absente_sans_java_nulle_part(self):
+        self.assertNotEqual(self._android_build(java="aucun"), 0)           # aucun glob sans correspondance ne compte
+        self.assertNotEqual(self._android_build(java="unity-non-executable"), 0)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sonde_android_build_absente_si_le_sdk_est_incomplet(self):
+        self.assertNotEqual(self._android_build(sdk=False, java="unity"), 0)
+        self.assertNotEqual(self._android_build(sdk=False, java="path"), 0)
+
     def test_sondes_et_estimations_du_catalogue(self):
         for cap in sc.CATALOGUE.values():
             self.assertGreaterEqual(cap.taille_go, 0)

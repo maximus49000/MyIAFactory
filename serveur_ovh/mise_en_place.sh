@@ -488,10 +488,29 @@ chercher_jdk() {
 }
 
 # JDK 17 du projet. Positionne JAVA_HOME ; retourne 1 s'il est absent.
+# Sinon, un Java déjà là : le JDK livré avec le module Android d'Unity (UNITY_HUB_RACINE : réservé aux tests), puis `java` du PATH
+# (mêmes lieux que la sonde de la capacité android-build). JDK_SOURCE dit lequel a servi.
 trouver_jdk17() {
-  chercher_jdk 17 || return 1
-  JAVA_HOME="$JDK_TROUVE"
+  local d j
+  JDK_SOURCE="JDK 17"
+  if chercher_jdk 17; then
+    JAVA_HOME="$JDK_TROUVE"
+    export JAVA_HOME
+    return 0
+  fi
+  for d in "${UNITY_HUB_RACINE:-$HOME/Unity/Hub/Editor}"/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK; do
+    if [ -x "$d/bin/java" ]; then
+      JAVA_HOME=$(readlink -f "$d" 2>/dev/null || printf '%s' "$d")
+      export JAVA_HOME
+      JDK_SOURCE="JDK d'Unity"
+      return 0
+    fi
+  done
+  j=$(command -v java 2>/dev/null) || return 1
+  j=$(readlink -f "$j" 2>/dev/null || printf '%s' "$j")
+  JAVA_HOME="${j%/bin/java}"
   export JAVA_HOME
+  JDK_SOURCE="Java du PATH"
   return 0
 }
 
@@ -636,7 +655,7 @@ etape_android_build() {
   # Une session SSH tuée en cours de téléchargement laisse son dossier temporaire : on le retire.
   rm -rf "$SDK_ANDROID"/cmdline-tools/.telechargement.* 2>/dev/null
   if android_sdk_pret; then
-    repondre fait "SDK Android déjà en place dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, JDK 17)."
+    repondre fait "SDK Android déjà en place dans ${SDK_ANDROID} (adb, ${V_SDK_PLATEFORME}, build-tools ${V_SDK_BUILD_TOOLS}, ${JDK_SOURCE})."
   fi
   exiger_disque "$SEUIL_ANDROID_BUILD_GO"
   assurer_paquets unzip zip openjdk-17-jdk-headless || repondre bloque "Installation de unzip, zip et du JDK 17 impossible."

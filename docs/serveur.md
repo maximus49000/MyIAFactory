@@ -51,7 +51,7 @@ d'installation) : une sonde qui échoue donne « absente », un serveur injoigna
 |---|---|---|---|---|
 | `base` | Docker et outils | rien | 0,5 Go / 5 min | oui |
 | `durcissement` | SSH par clé seule, pare-feu | `base` | 0 Go / 2 min | oui (étape `durcissement`) |
-| `android-build` | SDK Android, plateforme 36, build-tools 36.0.0, JDK 17 | `base` | 5,4 Go / 10 min | oui |
+| `android-build` | SDK Android, plateforme 36, build-tools 36.0.0 et un Java (au choix : `java` du PATH, JDK 17 d'Ubuntu, ou JDK livré avec le module Android d'Unity, `~/Unity/Hub/Editor/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK` ; l'étape n'installe le JDK 17 d'apt que si aucun n'existe) | `base` | 5,4 Go / 10 min | oui |
 | `android-emulateur` | KVM, émulateur, image système | `android-build` | 2 Go / 8 min | oui, **si le serveur offre `/dev/kvm`** |
 | `unity-cli` | Outil officiel Unity en ligne de commande | `base` | 0,1 Go / 2 min | oui |
 | `unity-editeur` | Éditeur Unity | `unity-cli` | 24 Go / 25 min | **non** : à installer par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté ; licence par Hub |

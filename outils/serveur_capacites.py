@@ -45,7 +45,11 @@ _CATALOGUE = {
     "android-build": Capacite(
         "android-build", "Construction Android (SDK, plateforme 36, Java)", ("base",), "android_build",
         "test -x ~/android-sdk/platform-tools/adb && test -d ~/android-sdk/platforms/android-36 "
-        "&& test -d ~/android-sdk/build-tools/36.0.0 && command -v java >/dev/null", 5.4, 10),
+        "&& test -d ~/android-sdk/build-tools/36.0.0 && { command -v java >/dev/null "
+        # un Java quelconque : sur le PATH, JDK 17 d'Ubuntu, ou JDK livré avec le module Android d'Unity (boucle : un motif sans
+        # correspondance reste un texte brut que `test -x` refuse, et `break` rend 0 dès qu'un exécutable existe)
+        "|| for j in /usr/lib/jvm/java-17-openjdk-*/bin/java "
+        "~/Unity/Hub/Editor/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java; do test -x \"$j\" && break; done; }", 5.4, 10),
     "android-emulateur": Capacite(
         "android-emulateur", "Émulateur Android (KVM)", ("android-build",), "android_emulateur",
         "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images "

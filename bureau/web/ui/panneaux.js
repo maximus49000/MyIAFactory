@@ -15,6 +15,8 @@ import {contenuQuestions} from "./questions.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
+import {monterCarteServeur} from "./plateforme.js";
+import {monterEcranServeurs} from "./serveurs.js";
 import {envoyer as envoyerDemande} from "./actions.js";
 import {appliquerEnvoyees, surEnvoyees} from "./validation.js";
 import {ouvrirCahier} from "./cahier.js";
@@ -256,6 +258,11 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       contenuAgent(contexte(), contenu, a, STATUTS);
     } else {
       contenuDirecteur(contexte(), contenu);
+      // La carte « Serveur » : la plateforme est globale (pas liée aux partenaires d'un projet), le panneau Direction
+      // est toujours atteignable. Elle lit elle-même son état au cache du bureau ; le POST est refusé à distance.
+      if (e.agir === true && typeof fetch === "function") monterCarteServeur(contenu);
+      // Les serveurs de travail déclarés (génériques) : sous la carte « Serveur », même condition ; lecture seule au chargement.
+      if (e.agir === true && typeof fetch === "function") monterEcranServeurs(contenu).catch(() => {});
       avecReglage = !(e.services || []).some((s) => s.id === "facturation");
     }
     if (avecReglage) contenu.append(blocReglage());

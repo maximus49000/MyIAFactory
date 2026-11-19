@@ -8,6 +8,10 @@
   python lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] [-- <commande>]
       (une action là où le Directeur l'a réglée : poste ou GitHub Actions, avec attente des dépendances ; voir
       `outils/deporter.py`)
+  py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
+      (le serveur dédié OVH : voir `outils/plateforme.py`)
+  py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>
+      (les serveurs distants génériques : voir `outils/serveur_cli.py`)
 """
 import sys
 from pathlib import Path
@@ -30,4 +34,13 @@ if __name__ == "__main__":
             sys.exit(deporter.main(sys.argv[2:]))
         # sur GitHub, ou en attente d'une production d'ailleurs : par `deporter` ; sinon les tests au poste (campagne)
         sys.exit(deporter.lancer_tests(sys.argv[2:]))
+    if sys.argv[1:2] == ["plateforme"]:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
+        import plateforme  # noqa: E402
+        for flux in (sys.stdout, sys.stderr):
+            try:
+                flux.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
+        sys.exit(plateforme.main(sys.argv[2:]))
     sys.exit(serveur.main(sys.argv[1:]))

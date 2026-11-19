@@ -23,6 +23,8 @@ from . import deport as moddeport
 from . import deport_conso
 from . import deport_types
 from . import fichiers_joints, releve, statuts
+from . import plateforme as modplateforme
+from . import serveurs as modserveurs
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -264,9 +266,9 @@ class Projet:
     def etat_deport(self):
         catalogue = self.catalogue_deport()
         lieux = self.lieux_effectifs()
-        # le serveur n'existe pas encore (étape 1) : jamais disponible
+        # le serveur n'est disponible que lorsque la plateforme est prête (cache `plateforme.json`, sans appel réseau)
         d = {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
-             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": False}
+             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": modplateforme.pret()}
         # résultats et minutes GitHub : seulement si une action tourne sur GitHub (sinon aucun appel à gh)
         conso = deport_conso.conso(str(self.chemin_reglages.parent), {a: e["libelle"] for a, e in catalogue.items()}, lieux)
         if conso is not None:
@@ -953,6 +955,8 @@ class Bureau(ThreadingHTTPServer):
         self.multi = multi
         self.lancement = lancement_.Drapeau(lancement)   # le premier lancement a-t-il été proposé ?
         self.cles = None
+        self.travail_plateforme = modplateforme.Travail()   # l'installation de la plateforme : une à la fois, en arrière-plan
+        self.travaux_serveurs = modserveurs.Travaux()   # sonde et installation des serveurs déclarés : une à la fois
         self.ecouteurs = []
         self.distants = []    # [{"genre", "url"}]
         self.annonces = []    # ce que le terminal dit au lancement
@@ -1536,6 +1540,15 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/connaissances":   # le partage des connaissances : un réglage de tout le bureau
             from orchestrateur import connaissances
             return self._json(200, connaissances.vue())
+        if chemin == "/api/plateforme":   # le cache seulement : ni OVH ni SSH, jamais bloquant
+            return self._json(200, modplateforme.lire(travail=self.server.travail_plateforme))
+        if chemin == "/api/serveurs":   # les fichiers seulement : aucune connexion à un serveur
+            return self._json(200, modserveurs.lire(self.server.travaux_serveurs))
+        if chemin == "/api/serveurs/migration":   # les fichiers seulement : jamais de connexion, aucun secret
+            return self._json(200, modserveurs.lire_migration())
+        if chemin == "/api/serveurs/lieux":
+            actions = parse_qs(morceaux.query, keep_blank_values=True).get("actions", [])
+            return self._json(*(modserveurs.lieux(actions[0]) if len(actions) == 1 else (400, {"erreur": "Actions illisibles."})))
         if chemin == "/api/conso":
             return self._json(200, self.server.conso.lire())
         if chemin == "/api/processus":   # les programmes qui chargent l'ordinateur (environ 1 s de mesure)
@@ -1958,6 +1971,52 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(corps, dict):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*getattr(creations, ROUTES_CREATIONS[chemin])(self.server, corps))
+        if chemin == "/api/plateforme/installer":   # depuis l'ordinateur seulement, sur un clic
+            if (self.server.distant or self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(404 if self.server.distant else 403,
+                                  {"erreur": "Introuvable." if self.server.distant else "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= 1024:
+                self._vider_corps()
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            if not isinstance(corps, dict):
+                return self._json(400, {"erreur": "Demande illisible."})
+            autre = modplateforme.autre_installation()
+            if autre:
+                return self._json(409, {"erreur": autre})
+            if not self.server.travail_plateforme.lancer(accord_reinstallation=corps.get("accord_reinstallation") is True):
+                return self._json(409, {"erreur": "Une installation est déjà en cours."})
+            return self._json(202, {"demarre": True})
+        cible_serveur = modserveurs.route_post(chemin)
+        if cible_serveur is not None:   # déclarer, sonder, prévisualiser, installer : depuis l'ordinateur seulement
+            if (self.server.distant or self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(404 if self.server.distant else 403,
+                                  {"erreur": "Introuvable." if self.server.distant else "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= modserveurs.taille_max(cible_serveur):
+                self._vider_corps()
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = modserveurs.lire_json(self.rfile.read(longueur))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            if not isinstance(corps, dict):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*modserveurs.poster(self.server.travaux_serveurs, cible_serveur, corps))
         if chemin == "/api/processus/arreter":   # arrêter un programme : seulement sur le clic de l'utilisateur
             if (self.headers.get("X-Bureau") != "1"
                     or not self.headers.get("Content-Type", "").lower().startswith("application/json")):

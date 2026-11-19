@@ -1,6 +1,16 @@
 import shutil
 from pathlib import Path
 
+import atexit
+import os
+import tempfile
+
+# La plateforme (cache, ovh.json, licence) : un dossier vide pour tous les essais, jamais le vrai ~/MyIAFactory
+# (voir `bureau/plateforme.dossier`). Un essai qui en veut un autre remplace `bureau.plateforme.DOSSIER`.
+_PLATEFORME = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+atexit.register(_PLATEFORME.cleanup)
+os.environ["MYIAFACTORY_PLATEFORME"] = _PLATEFORME.name
+
 DEMO = Path(__file__).resolve().parent.parent / "exemples" / "demo"
 
 

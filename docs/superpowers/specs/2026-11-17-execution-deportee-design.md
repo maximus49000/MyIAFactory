@@ -34,6 +34,7 @@ B. Serveur personnel seul (type Hetzner) : tout est possible, mais administratio
    un JDK 17 (`actions/setup-java@v4`, temurin) et `chmod +x gradlew` (dépôt créé sous Windows).
 5. **Étape 2, `serveur`** : le lanceur de tests exécute la commande sur le serveur par SSH, avec le même verrou de
    campagne que sur le poste (voir CLAUDE.md). Ajouté après l'étape 1, sans refaire l'écran.
+   Ce lieu s'appuie sur la plateforme OVH (voir `2026-11-19-serveur-ovh-plateforme-design.md`).
 6. **Retour des résultats** : la fiche du projet montre, par action déportée, réussi/échoué, durée et lien. Les agents
    lisent ce résultat (`gh run list/view`) au lieu de lancer la commande.
 7. **Suivi de la consommation** : somme des durées d'exécution par projet, type d'action et mois, dans la vue des coûts.

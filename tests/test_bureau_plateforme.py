@@ -34,7 +34,7 @@ class TestPlateformeBureau(AvecServeur):
 
     def test_get_sans_cache_donne_etat_a_faire_sans_erreur(self):
         e = self.json("/api/plateforme")
-        self.assertEqual(len(e["etapes"]), 7)
+        self.assertEqual(len(e["etapes"]), 8)
         self.assertEqual({x["statut"] for x in e["etapes"]}, {"a_faire"})
         self.assertIs(e["pret"], False)
         self.assertIs(e["pret_sans_unity"], False)
@@ -203,7 +203,7 @@ class TestIsolationEtCacheAbime(unittest.TestCase):
             with self.subTest(texte=texte), tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
                 (Path(t) / "plateforme.json").write_text(texte, encoding="utf-8")
                 e = bplateforme.lire(t)
-                self.assertEqual(len(e["etapes"]), 7)
+                self.assertEqual(len(e["etapes"]), 8)
                 self.assertIs(e["pret"], False)
                 self.assertIs(bplateforme.pret(t), False)
 

@@ -1,6 +1,6 @@
-"""Plateforme (serveur dédié OVH) : machine à états en 7 étapes et point d'entrée `lancer.py plateforme`.
+"""Plateforme (serveur dédié OVH) : machine à états en 7 étapes (plus une facultative) et point d'entrée `lancer.py plateforme`.
 
-Étapes : lecture, os, ssh, durcissement, docker, images, licence. Aucune ne s'exécute avant que la précédente soit « fait ».
+Étapes : lecture, os, ssh, durcissement, docker, images, licence, bureau_distant (facultative, `--bureau-distant`). Aucune ne s'exécute avant que la précédente soit « fait ».
 « Prêt » = étapes 1 à 6 ; la licence Unity est facultative. L'état est écrit dans `plateforme.json` à chaque étape, sans
 aucun secret (clés OVH, licence) : tout texte écrit ou affiché passe par `masquer`. Le client OVH et les fonctions SSH sont
 injectables : les tests ne font aucun appel réel. Un OS non Ubuntu LTS n'est jamais effacé sans `--accord-reinstallation` ; la clé publique dédiée est envoyée avec la
@@ -18,6 +18,7 @@ from pathlib import Path
 import ovh_api
 from campagne import pid_vivant
 import plateforme_acces
+import plateforme_bureau
 import plateforme_ovh
 import plateforme_ssh
 from ovh_api import ErreurOvh
@@ -25,12 +26,13 @@ from plateforme_acces import ErreurAcces
 from plateforme_ovh import ErreurAccord, ErreurAvantEcriture
 from plateforme_ssh import ErreurSsh
 
-ETAPES = ("lecture", "os", "ssh", "durcissement", "docker", "images", "licence")
+ETAPES = ("lecture", "os", "ssh", "durcissement", "docker", "images", "licence", "bureau_distant")
 LIBELLES = {
     "lecture": "Lecture du serveur chez OVH", "os": "Système Ubuntu LTS installé", "ssh": "Accès SSH par clé dédiée",
     "durcissement": "Durcissement (clé seule, pare-feu)", "docker": "Docker installé", "images": "Images Unity, Android et agent",
-    "licence": "Licence Unity (facultative)",
+    "licence": "Licence Unity (facultative)", "bureau_distant": "Session graphique (Unity Hub, facultative)",
 }
+NON_DEMANDEE = "Facultative : non demandée (installer --bureau-distant)."
 CACHE = "plateforme.json"
 VERROU = "plateforme.lock"
 UTILISATEUR = "ubuntu"
@@ -40,12 +42,14 @@ RACINE_SERVEUR = Path(__file__).resolve().parent.parent / "serveur_ovh"
 SCRIPT_DISTANT = "$HOME/myiafactory/mise_en_place.sh"   # dossier privé (0700) du serveur, jamais /tmp
 VERROU_JEUNE_S = 30
 DOSSIER_DISTANT = "$HOME/myiafactory/serveur_ovh"
-DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600}
+DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600,
+                  "bureau_distant": 1500}
 CHANGEMENT_CLE = plateforme_ssh.CHANGEMENT_CLE
 ENCOURS = {"durcissement": "Durcissement en cours sur le serveur (quelques minutes).",
            "docker": "Installation de Docker en cours (quelques minutes).",
            "images": "Images en cours de préparation (long la première fois : téléchargement et construction).",
-           "licence": "Activation de la licence Unity en cours."}
+           "licence": "Activation de la licence Unity en cours.",
+           "bureau_distant": "Installation de la session graphique en cours (quelques minutes)."}
 ERREURS = (ErreurOvh, ErreurSsh, ErreurAcces, ErreurAccord, ValueError, RuntimeError, OSError,
            subprocess.SubprocessError)
 
@@ -54,7 +58,7 @@ def calculer_etat(rapports):
     """Mise en forme des rapports par étape ; `pret` = étapes 1 à 6 faites (la licence ne compte pas)."""
     etapes = []
     for id_ in ETAPES:
-        r = rapports.get(id_) or {}
+        r = rapports.get(id_) or ({"detail": NON_DEMANDEE} if id_ == "bureau_distant" else {})
         etapes.append({"id": id_, "libelle": LIBELLES[id_], "statut": r.get("statut", "a_faire"),
                        "detail": r.get("detail", ""), "geste": r.get("geste", "")})
     pret = all(e["statut"] == "fait" for e in etapes[:6])
@@ -403,7 +407,8 @@ def _etape_licence(c):
 
 
 ACTIONS = {"lecture": _etape_lecture, "os": _etape_os, "ssh": _etape_ssh, "durcissement": _etape_durcissement,
-           "docker": lambda c: _lancer_etape(c, "docker"), "images": _etape_images, "licence": _etape_licence}
+           "docker": lambda c: _lancer_etape(c, "docker"), "images": _etape_images, "licence": _etape_licence,
+           "bureau_distant": lambda c: plateforme_bureau.etape_bureau_distant(c, _lancer_etape)}
 
 
 def _executer_etape(c, id_):
@@ -460,7 +465,7 @@ def _prendre_verrou(dossier, vivant):
 
 
 def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, client=None, ssh=None, dormir=time.sleep,
-              vivant=pid_vivant):
+              vivant=pid_vivant, bureau_distant=False):
     """Enchaîne les étapes en reprenant là où la dernière exécution s'est arrêtée (une seule exécution à la fois)."""
     try:
         verrou = _prendre_verrou(dossier, vivant)
@@ -470,7 +475,7 @@ def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, cli
         return calculer_etat({"lecture": _rapport("bloque", "Une installation est déjà en cours (ou le dossier est inaccessible).",
                                                   "Attendez la fin de l'autre exécution, puis relancez.")})
     try:
-        return _installer(dossier, accord_reinstallation, client, ssh, dormir)
+        return _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_distant)
     finally:
         try:
             verrou.unlink()
@@ -478,7 +483,7 @@ def installer(dossier=plateforme_acces.DOSSIER, accord_reinstallation=False, cli
             pass
 
 
-def _installer(dossier, accord_reinstallation, client, ssh, dormir):
+def _installer(dossier, accord_reinstallation, client, ssh, dormir, bureau_distant=False):
     c, etat = _preparer(dossier, accord_reinstallation, client, ssh, dormir)
     if etat:
         return etat
@@ -486,6 +491,9 @@ def _installer(dossier, accord_reinstallation, client, ssh, dormir):
         if c.rapports.get(id_, {}).get("statut") == "fait" and id_ not in ("lecture", "os"):
             if id_ == "ssh":
                 c.cle, c.pub = c.ssh.generer_cle(c.dossier)
+            continue
+        if id_ == "bureau_distant" and not bureau_distant:    # facultative : jamais lancée sans le drapeau, ne bloque rien
+            c.rapports[id_] = _rapport("a_faire", NON_DEMANDEE)
             continue
         if c.hors_ligne and id_ == "os":      # OVH injoignable : le système en cache reste celui du serveur en service
             continue
@@ -533,14 +541,16 @@ def _verifier_distant(c):
 def main(argv):
     args = list(argv)
     if not args or args[0] not in ("etat", "installer", "verifier"):
-        print("Usage : lancer.py plateforme <etat|installer|verifier> [--accord-reinstallation] [--dossier <d>]", file=sys.stderr)
+        print("Usage : lancer.py plateforme <etat|installer|verifier> [--accord-reinstallation] [--bureau-distant] [--dossier <d>]", file=sys.stderr)
         return 2
-    commande, accord, dossier = args[0], False, plateforme_acces.DOSSIER
+    commande, accord, dossier, bureau = args[0], False, plateforme_acces.DOSSIER, False
     reste = args[1:]
     while reste:
         a = reste.pop(0)
         if a == "--accord-reinstallation":
             accord = True
+        elif a == "--bureau-distant":
+            bureau = True
         elif a == "--dossier" and reste:
             dossier = Path(reste.pop(0))
         else:
@@ -549,7 +559,7 @@ def main(argv):
     if commande == "etat":
         etat = _lire_cache(dossier).get("etat") or calculer_etat({})
     elif commande == "installer":
-        etat = installer(dossier, accord)
+        etat = installer(dossier, accord, bureau_distant=bureau)
     else:
         etat = verifier(dossier)
     c = _Contexte(dossier, False, None, None, time.sleep)

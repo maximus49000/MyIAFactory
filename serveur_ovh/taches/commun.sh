@@ -90,9 +90,12 @@ conteneur_vivant() {   # 0 vivant, 1 absent, 2 docker ne répond pas
   etat_docker
 }
 
+# Délai laissé au conteneur entre SIGTERM et SIGKILL (docker stop -t) : 10 s (émulation) ; l'enveloppe d'agent le porte à 60 s
+# APRÈS avoir sourcé ce fichier (l'entrée de l'agent conclut : commit des restes, paquet, fin.json). Jamais lu de l'environnement.
+DELAI_ARRET=10
 arreter_conteneur() {   # 0 si le conteneur n'existe plus : constaté par une réponse NETTE de docker (jamais par /proc)
   local r
-  dk 60 stop -t 10 "tache-$ID" >/dev/null 2>&1 || dk 30 kill "tache-$ID" >/dev/null 2>&1
+  dk $((DELAI_ARRET + 50)) stop -t "$DELAI_ARRET" "tache-$ID" >/dev/null 2>&1 || dk 30 kill "tache-$ID" >/dev/null 2>&1
   etat_docker_sur; r=$?
   if [ "$r" != 1 ]; then dk 30 rm -f "tache-$ID" >/dev/null 2>&1; etat_docker_sur; r=$?; fi
   [ "$r" = 1 ]

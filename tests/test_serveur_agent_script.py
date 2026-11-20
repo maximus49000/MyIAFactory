@@ -43,13 +43,19 @@ case "$1" in
                 printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
       *) printf '%s\n' "$@" > "$ET/verif.txt"
          [ -n "${FAUX_VERIF:-}" ] && cat "$FAUX_VERIF"
+         [ -n "${FAUX_VERIF_ERR:-}" ] && cat "$FAUX_VERIF_ERR" >&2
          exit "${FAUX_VERIF_CODE:-0}" ;;
     esac ;;
   inspect)
     [ -e "$ET/mort" ] && rm -f "$ET/vivant"
     if [ -e "$ET/vivant" ]; then echo "true 999999"; exit 0; fi
     echo "Error: No such object: tache-x" >&2; exit 1 ;;
-  stop|kill|rm) rm -f "$ET/vivant" ;;
+  stop)   # FAUX_STOP_ECRIT : l'entrée de l'agent conclut sur SIGTERM (paquet et fin.json) avant de partir
+    if [ -n "${FAUX_STOP_ECRIT:-}" ] && [ -e "$ET/vivant" ]; then
+      printf 'PAQUET' > "$FAUX_STOP_ECRIT/resultat.bundle"; printf '{"code": 143, "commits": 1}' > "$FAUX_STOP_ECRIT/fin.json"
+    fi
+    rm -f "$ET/vivant" ;;
+  kill|rm) rm -f "$ET/vivant" ;;
 esac
 exit 0'''
 FAUX = {
@@ -59,6 +65,7 @@ FAUX = {
              'if [ "$1" = -n ]; then\n'
              '  n=$(cat "$FAUX_ETAT/flock" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAUX_ETAT/flock"\n'
              '  [ -n "${FAUX_FLOCK_OCCUPES:-}" ] && [ "$n" -le "$FAUX_FLOCK_OCCUPES" ] && exit 1\n'
+             '  case " ${FAUX_FLOCK_PRIS:-} " in *" $n "*) exit 1 ;; esac\n'      # places prises, par numéro d'essai
              'fi\nexit 0',
     "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\nexec "$@"',
     "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\nshift\nexec "$@"',
@@ -146,7 +153,7 @@ class Banc:
     def attendre_final(self, delai=30):
         fin = time.time() + delai
         while time.time() < fin:
-            if self.appels("flock -u") and (self.dossier / "etat.json").exists() and \
+            if self.appels("flock -u 8") and (self.dossier / "etat.json").exists() and \
                     self.etat()["etat"] not in ("en_cours", "en_attente"):
                 return self.etat()
             time.sleep(0.1)
@@ -202,6 +209,27 @@ class TestCommun(unittest.TestCase):
             b.arreter()
             self.assertEqual(b.attendre_final()["etat"], "arretee")
 
+    def test_emulation_ignore_les_conteneurs_d_agent(self):
+        # un conteneur tache-* étiqueté myiafactory.genre=agent n'est pas un émulateur ; un conteneur sans étiquette (ancien)
+        # ou d'un autre genre en reste un (75)
+        for lignes, attendu in (("genre=agent", 0), ("genre=agent\ngenre=agent", 0), ("genre=", 75), ("genre=agent\ngenre=", 75),
+                                ("genre=emulateur", 75)):
+            with self.subTest(lignes=lignes), BancEmulation() as b:
+                (b.bin / "docker").rename(b.bin / "docker-banc")
+                (b.bin / "docker").write_text('#!/bin/sh\nif [ "$1" = ps ]; then echo "docker $*" >> "$FAUX_JOURNAL"; '
+                                              'printf "%s\\n" "$FAUX_PS_LIGNES"; exit 0; fi\n'
+                                              'exec "$(dirname "$0")/docker-banc" "$@"\n', newline="\n")
+                (b.bin / "docker").chmod(0o755)
+                r = b.lancer(env={"FAUX_PS_LIGNES": lignes})
+                self.assertEqual(r.returncode, attendu, r.stderr + r.stdout)
+                ps = b.appels("docker ps")
+                self.assertTrue(ps and "name=^tache-" in ps[0] and "myiafactory.genre" in ps[0], b.journal)
+                if attendu == 0:
+                    b.arreter()
+                    b.attendre_final()
+                else:
+                    self.assertEqual(b.appels("docker run"), [])
+
 
 @unittest.skipUnless(shutil.which("bash"), "bash absent")
 class TestEnveloppeAgent(unittest.TestCase):
@@ -211,9 +239,9 @@ class TestEnveloppeAgent(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             self.assertEqual(json.loads(r.stdout.strip().splitlines()[-1])["etat"], "en_cours")
             self.assertEqual((b.dossier / "creneau").read_text().strip(), "2")
-            self.assertEqual(len(b.appels("flock -n 8")), 2, b.journal)
+            self.assertEqual(len(b.appels("flock -n 9")), 4, b.journal)        # les 4 places sont comptées
             noms = sorted(p.name for p in (b.home / "taches").glob(".creneau-agent-*"))
-            self.assertEqual(noms, [".creneau-agent-1", ".creneau-agent-2"])
+            self.assertEqual(noms, [f".creneau-agent-{i}" for i in (1, 2, 3, 4)])
             b.arreter()
             self.assertEqual(b.attendre_final()["etat"], "arretee")
 
@@ -224,9 +252,23 @@ class TestEnveloppeAgent(unittest.TestCase):
             e = b.etat()
             self.assertEqual((e["etat"], e["statut"]), ("en_attente", None))
             self.assertEqual(json.loads(r.stdout.strip().splitlines()[-1])["etat"], "en_attente")
-            self.assertEqual(len(b.appels("flock -n 8")), 2, b.journal)
             self.assertEqual(b.appels("docker"), [])
             self.assertEqual(b.appels("setsid"), [])
+
+    def test_places_abaissees_jamais_depassees(self):
+        # places 3 et 4 tenues (lancées quand le serveur en avait 4), puis places ramené à 2 : la place 1 est libre, mais
+        # deux agents tournent déjà, un troisième serait de trop
+        with Banc(FAUX_FLOCK_PRIS="3 4") as b:
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 75, r.stderr + r.stdout)
+            self.assertEqual(b.etat()["etat"], "en_attente")
+            self.assertEqual(b.appels("docker"), [])
+        with Banc(FAUX_FLOCK_PRIS="4") as b:                      # une seule tenue : la place 1 est prise
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertEqual((b.dossier / "creneau").read_text().strip(), "1")
+            b.arreter()
+            b.attendre_final()
 
     def test_ligne_docker_run_agent(self):
         with Banc(SECRET_DU_POSTE="cle-du-poste-42", CLAUDE_CODE_OAUTH_TOKEN="jeton-du-poste-43") as b:
@@ -250,6 +292,7 @@ class TestEnveloppeAgent(unittest.TestCase):
             suite_dans(self, a, "--memory", "2048m")
             suite_dans(self, a, "--memory-swap", "2048m")
             suite_dans(self, a, "--cpus", "2")
+            suite_dans(self, a, "--label", "myiafactory.genre=agent")     # l'émulation ne le compte pas comme un émulateur
             self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"], ["HOME=/maison"])
             d = f"{h}/taches/{ID}"
             self.assertEqual(sorted(volumes(a)), sorted([f"{d}/entree:/entree:ro", f"{d}/travail:/travail",
@@ -299,11 +342,37 @@ class TestEnveloppeAgent(unittest.TestCase):
             b.arreter()
             b.attendre_final()
 
+    def prec_finie(self, b, projet="Demo"):
+        prec = b.home / "taches" / PREC
+        (prec / "travail" / "projet").mkdir(parents=True)
+        (prec / "maison").mkdir()
+        (prec / "entree").mkdir()
+        (prec / "entree" / "demande.json").write_text(json.dumps({**demande(), "id": PREC, "projet": projet}, indent=2),
+                                                      newline="\n")
+        (prec / "etat.json").write_text(json.dumps({"id": PREC, "etat": "terminee"}), newline="\n")
+        b.ecrire_entree(reprend=PREC)
+
+    def test_reprise_d_un_autre_projet_refusee(self):
+        with Banc() as b:
+            self.prec_finie(b, projet="Autre")
+            r = b.lancer()
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertIn("projet", b.etat()["raison"])
+            self.assertEqual(b.appels("docker run"), [])
+            self.assertEqual(list((b.dossier / "travail").iterdir()), [])
+        with Banc() as b:
+            self.prec_finie(b)
+            self.assertEqual(b.lancer().returncode, 0)
+            b.arreter()
+            b.attendre_final()
+
     def test_reprise_copie_sans_suivre_les_liens(self):
         with Banc() as b:
             prec = b.home / "taches" / PREC
             (prec / "travail" / "projet").mkdir(parents=True)
             (prec / "maison" / ".claude").mkdir(parents=True)
+            (prec / "entree").mkdir()
+            (prec / "entree" / "demande.json").write_text(json.dumps(demande()), newline="\n")
             (prec / "travail" / "projet" / "a.txt").write_text("travail gardé", newline="\n")
             (prec / "maison" / ".claude" / "session.jsonl").write_text("{}", newline="\n")
             (prec / "etat.json").write_text(json.dumps({"id": PREC, "etat": "terminee", "statut": "ok", "debut": None,
@@ -427,10 +496,17 @@ class TestEnveloppeAgent(unittest.TestCase):
         code = code_sans_commentaires(SCRIPT) + "\n" + code_sans_commentaires(COMMUN)
         self.assertNotRegex(code, r"(^|[\s;|&(])git\s")
 
+    def emulation_liee(self, b, emu, agent=ID, genre="emulation"):
+        d = b.home / "taches" / emu
+        d.mkdir(parents=True)
+        (d / "demande.json").write_text(json.dumps({"id": emu, "type": genre, "projet": "Demo"}, indent=2), newline="\n")
+        (d / "agent").write_text(agent + "\n", newline="\n")
+        return d
+
     def test_arret_coupe_agent_pont_et_emulation(self):
         with Banc(pont=True) as b:
             (b.entree / "app.apk").write_bytes(b"PK")
-            (b.home / "taches" / EMU).mkdir(parents=True)
+            emu = self.emulation_liee(b, EMU)
             self.assertEqual(b.lancer("pilote", "30", "2048", "2", "2", EMU).returncode, 0)
             self.assertTrue((b.dossier / "pont-hote.pid").exists())
             b.arreter()
@@ -438,10 +514,39 @@ class TestEnveloppeAgent(unittest.TestCase):
             self.assertEqual((f["etat"], f["statut"]), ("arretee", "ok"))
             self.assertTrue(any(x.startswith("docker stop") and f"tache-{ID}" in x for x in b.journal.splitlines()), b.journal)
             self.assertTrue(b.appels("pont-arrete"), b.journal)
-            self.assertEqual((b.home / "taches" / EMU / "arret").read_text().strip(), "fin")
+            self.assertEqual((emu / "arret").read_text().strip(), "fin")
             j = b.journal
-            self.assertLess(j.index("docker stop"), j.index("flock -u"))
-            self.assertLess(j.index("pont-arrete"), j.index("flock -u"))
+            self.assertLess(j.index("docker stop"), j.index("flock -u 8"))
+            self.assertLess(j.index("pont-arrete"), j.index("flock -u 8"))
+
+    def test_emulation_liee_seulement_par_l_hote(self):
+        # pont/emulation (écrit dans un dossier monté dans le conteneur) n'est jamais lu ; $DOSSIER/emulation (hôte seul) l'est,
+        # et seulement pour une tâche d'émulation liée à cet agent
+        autre = "t20261120-101700-aa99"
+        with Banc(pont=True) as b:
+            (b.entree / "app.apk").write_bytes(b"PK")
+            victime = self.emulation_liee(b, autre, agent="t20261120-111111-bbbb")
+            liee = self.emulation_liee(b, EMU)
+            self.assertEqual(b.lancer("pilote", "30", "2048", "2", "2").returncode, 0)
+            (b.dossier / "pont" / "emulation").write_text(autre + "\n", newline="\n")
+            (b.dossier / "emulation").write_text(EMU + "\n", newline="\n")
+            b.arreter()
+            b.attendre_final()
+            self.assertFalse((victime / "arret").exists())
+            self.assertEqual((liee / "arret").read_text().strip(), "fin")
+        with Banc(pont=True) as b:                                 # argument 7 non lié à cet agent, ou pas une émulation
+            (b.entree / "app.apk").write_bytes(b"PK")
+            for genre, agent in (("emulation", "t20261120-111111-bbbb"), ("agent", ID)):
+                with self.subTest(genre=genre, agent=agent):
+                    shutil.rmtree(b.home / "taches" / EMU, ignore_errors=True)
+                    emu = self.emulation_liee(b, EMU, agent=agent, genre=genre)
+                    for f in ("etat.json", "veilleur.pid", "enveloppe.pid", "arret", "flock"):
+                        (b.dossier / f).unlink(missing_ok=True)
+                    (b.et / "flock").unlink(missing_ok=True)
+                    self.assertEqual(b.lancer("pilote", "30", "2048", "2", "2", EMU).returncode, 0)
+                    b.arreter()
+                    b.attendre_final()
+                    self.assertFalse((emu / "arret").exists())
 
     def test_echeance_donne_limite(self):
         with Banc() as b:
@@ -450,6 +555,101 @@ class TestEnveloppeAgent(unittest.TestCase):
             self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
             self.assertIn("durée", f["raison"].lower())
             self.assertTrue(b.appels("docker stop"), b.journal)
+
+    def test_echeance_garde_le_travail_de_l_agent(self):
+        # docker stop laisse 60 s à l'entrée pour conclure (paquet des commits déjà faits) : rien n'est jeté, état limite
+        with Banc() as b:
+            sortie = b.dossier / "sortie"
+            self.assertEqual(b.lancer("seul", "1", "2048", "2", "2", env={"FAUX_STOP_ECRIT": sortie.as_posix()}).returncode, 0)
+            (b.dossier / "travail" / "projet").mkdir(parents=True)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertEqual(sorted(p.name for p in sortie.iterdir()), ["fin.json", "resultat.bundle"])
+            self.assertTrue(any(x.startswith("docker stop -t 60") for x in b.journal.splitlines()), b.journal)
+        with Banc() as b:                                          # l'entrée a tenu sa propre échéance (avant le veilleur)
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "sortie" / "fin.json").write_text('{"code": 137, "commits": 1, "echeance": true}', newline="\n")
+            b.mourir()
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+        self.assertIn('stop -t "$DELAI_ARRET"', COMMUN.read_text(encoding="utf-8"))
+        self.assertIn("DELAI_ARRET=60", SCRIPT.read_text(encoding="utf-8"))
+        self.assertNotIn("DELAI_ARRET=", EMULATION.read_text(encoding="utf-8"))   # l'émulation garde 10 s
+
+    def test_paquet_plante_sans_depot_est_controle(self):
+        # l'agent efface travail/projet et dépose un paquet dans sortie/ : le contrôle a lieu quand même et se ferme
+        with Banc(FAUX_VERIF_CODE="3") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "sortie" / "resultat.bundle").write_bytes(b"# v2 git bundle\n-" + b"0" * 40 + b"\n\nPACK")
+            (b.dossier / "sortie" / "fin.json").write_text('{"code": 0, "commits": 1}', newline="\n")
+            b.mourir()
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+            self.assertTrue((b.et / "verif.txt").exists())
+            self.assertEqual(list((b.dossier / "sortie").iterdir()), [])
+
+    def test_jeton_encode_en_base64_trouve(self):
+        import base64
+        for decalage in (0, 1, 2):
+            with self.subTest(decalage=decalage), Banc() as b:
+                self.assertEqual(b.lancer().returncode, 0)
+                code = base64.b64encode(b"x" * decalage + JETON.encode() + b"\n").decode()
+                (b.dossier / "sortie" / "flux.jsonl").write_text('{"texte": "' + code + '"}\n', newline="\n")
+                (b.dossier / "sortie" / "fin.json").write_text('{"code": 0}', newline="\n")
+                b.mourir()
+                f = b.attendre_final()
+                self.assertEqual((f["etat"], f["raison"]), ("echouee", RAISON_SECRET))
+
+    def test_fichier_jeton_mal_forme_ferme_le_controle(self):
+        for contenu in (JETON + "\n\n", JETON + "\nautre-ligne-de-vingt-car\n", "court\n", JETON + " x\n"):
+            with self.subTest(contenu=contenu), Banc() as b:
+                self.assertEqual(b.lancer().returncode, 0)
+                (b.home / "agent-identifiants" / "jeton").write_text(contenu, newline="\n")
+                (b.dossier / "sortie" / "fin.json").write_text('{"code": 0}', newline="\n")
+                b.mourir()
+                f = b.attendre_final()
+                self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+                self.assertEqual(list((b.dossier / "sortie").iterdir()), [])
+
+    def test_controle_log_sans_le_jeton(self):
+        with Banc() as b:
+            err = b.t / "err.txt"
+            err.write_text("fatal: blob contenant " + JETON + "\nautre ligne\n", newline="\n")
+            self.assertEqual(b.lancer(env={"FAUX_VERIF_ERR": err.as_posix()}).returncode, 0)
+            (b.dossier / "travail" / "projet").mkdir(parents=True)
+            (b.dossier / "sortie" / "fin.json").write_text('{"code": 0}', newline="\n")
+            b.mourir()
+            b.attendre_final()
+            for f in b.dossier.rglob("*"):
+                if f.is_file():
+                    self.assertNotIn(JETON.encode(), f.read_bytes(), f)
+            self.assertIn("autre ligne", (b.dossier / "controle.log").read_text(encoding="utf-8"))
+
+    def test_espace_disque_et_taille_du_travail(self):
+        with Banc(ENVELOPPE_LIBRE_MIN_KO="999999999999") as b:      # disque presque plein : arrêt en limite
+            self.assertEqual(b.lancer().returncode, 0)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertIn("disque", f["raison"].lower())
+        with Banc(ENVELOPPE_TRAVAIL_MAX_KO="100", ENVELOPPE_DU_TRAVAIL_S="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            (b.dossier / "maison" / "gros.bin").write_bytes(b"x" * 300 * 1024)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertIn("travail", f["raison"].lower())
+        code = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("LIBRE_MIN_KO=5242880", code)
+        self.assertIn("TRAVAIL_MAX_KO=8388608", code)
+        self.assertIn("--apparent-size", code)
+
+    def test_virgule_ou_deux_points_refuses_sans_rien_creer(self):
+        with Banc() as b:
+            home = b.t / "ho,me"
+            home.mkdir()
+            r = b.lancer(env={"HOME": home.as_posix()})
+            self.assertEqual(r.returncode, 2, r.stderr + r.stdout)
+            self.assertFalse((home / "taches").exists())
+            self.assertEqual(b.journal, "")
 
     def test_entrees_et_jeton_exiges(self):
         for manquant in ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json"):
@@ -460,7 +660,7 @@ class TestEnveloppeAgent(unittest.TestCase):
                 self.assertEqual((b.etat()["etat"], b.etat()["statut"]), ("echouee", "erreur"))
                 self.assertIn(manquant, b.etat()["raison"])
                 self.assertEqual(b.appels("docker run"), [])
-                self.assertTrue(b.appels("flock -u"))
+                self.assertTrue(b.appels("flock -u 8"))
         with Banc() as b:
             (b.home / "agent-identifiants" / "jeton").unlink()
             r = b.lancer()
@@ -473,7 +673,7 @@ class TestEnveloppeAgent(unittest.TestCase):
             r = b.lancer()
             self.assertEqual(r.returncode, 1, r.stderr)
             self.assertEqual((b.etat()["etat"], b.etat()["statut"]), ("echouee", "erreur"))
-            self.assertTrue(b.appels("flock -u"))
+            self.assertTrue(b.appels("flock -u 8"))
 
     def test_identifiant_deja_utilise_et_tache_en_cours(self):
         with Banc() as b:
@@ -525,9 +725,22 @@ if cmd.get("commit"):
     for nom, texte in cmd.get("apres", {}).items():
         with open(nom, "w", encoding="utf-8", newline="\n") as f:
             f.write(texte)
+racine = os.path.dirname(os.environ["HOME"])
+if cmd.get("effacer_depot"):                 # l'agent efface son dépôt (après en être sorti)
+    import shutil, stat
+    os.chdir(os.environ["HOME"])
+    def forcer(f, p, e):
+        os.chmod(p, stat.S_IWRITE)
+        f(p)
+    shutil.rmtree(os.path.join(racine, "travail", "projet"), onexc=forcer)
+for nom, texte in cmd.get("planter", {}).items():   # l'agent dépose ses propres fichiers dans /sortie
+    with open(os.path.join(racine, "sortie", nom), "w", encoding="utf-8") as f:
+        f.write(texte)
 for ligne in cmd.get("flux", []):
     sys.stdout.write(json.dumps(ligne) + "\n")
 sys.stdout.flush()
+if cmd.get("dormir"):
+    time.sleep(600)
 if cmd.get("bavard"):
     while True:
         sys.stdout.write("x" * 999 + "\n")
@@ -581,7 +794,7 @@ class TestEntreeAgent(unittest.TestCase):
         (self.racine / "run" / "identifiants" / "jeton").write_text(JETON + "\n", newline="\n")
         (self.racine / "entree" / "consigne.md").write_text("Consigne.\n", newline="\n")
         self.faux = t / "faux_claude.py"
-        self.faux.write_text(FAUX_CLAUDE, newline="\n")
+        self.faux.write_text(FAUX_CLAUDE, encoding="utf-8", newline="\n")
         self.ecrire(ARGV, {})
 
     def ecrire(self, argv, message, **d):
@@ -778,6 +991,83 @@ class TestEntreeAgent(unittest.TestCase):
         # un paquet abîmé : contrôle impossible (code non nul), jamais « propre »
         self.sortie("resultat.bundle").write_bytes(b"# v2 git bundle\nabime\n")
         self.assertNotEqual(self.lancer("--verifier").returncode, 0)
+
+    def test_verifier_ferme_sur_un_paquet_sans_depot(self):
+        # paquet mince (prérequis : la base) et dépôt effacé : invérifiable, donc jamais « propre »
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A"})
+        self.lancer()
+        self.assertTrue(self.sortie("resultat.bundle").exists())
+        effacer(self.depot)
+        self.assertEqual(self.lancer("--verifier").returncode, 3)
+
+    def test_entree_nettoie_la_sortie_de_l_agent(self):
+        # l'agent efface son dépôt et dépose un paquet, un fin.json et un autre fichier : il ne reste que nos sorties
+        self.ecrire(ARGV, {"effacer_depot": True, "planter": {"resultat.bundle": "faux paquet", "autre.txt": "x",
+                                                            "fin.json": '{"code": 0, "commits": 9}'}})
+        r = self.lancer()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sorted(p.name for p in (self.racine / "sortie").iterdir()), ["claude.err", "fin.json", "flux.jsonl"])
+        self.assertEqual((self.fin()["commits"], self.fin()["branche"]), (0, None))
+        # dépôt gardé : notre paquet reste, ce que l'agent a déposé à côté part
+        effacer(self.depot)
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A", "planter": {"autre.txt": "x", "sous.bundle": "y"}})
+        self.lancer()
+        self.assertEqual(sorted(p.name for p in (self.racine / "sortie").iterdir()),
+                         ["claude.err", "fin.json", "flux.jsonl", "resultat.bundle"])
+        self.assertEqual(self.fin()["commits"], 1)
+
+    def test_entree_echeance_interne_garde_les_commits(self):
+        e = charger_entree()
+        self.assertEqual(e.MARGE_ECHEANCE_S, 120)
+        self.assertEqual(e.echeance_interne(2400), 2280)       # 120 s avant le veilleur
+        self.assertEqual(e.echeance_interne(4), 2)             # tâche très courte : à mi-chemin
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A", "dormir": True},
+                    limites={**demande()["limites"], "duree_s": 4})
+        debut = time.time()
+        r = self.lancer()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.time() - debut, 30)
+        fin = self.fin()
+        self.assertEqual((fin["commits"], fin["branche"], fin.get("echeance")), (1, "agent/corriger-le-titre", True))
+        self.assertNotEqual(fin["code"], 0)
+        self.assertTrue(self.sortie("resultat.bundle").is_file())
+
+    def test_signal_ne_tue_que_claude_et_l_entree_conclut(self):
+        code = ENTREE.read_text(encoding="utf-8")
+        self.assertNotIn("os._exit", code)
+        self.assertNotIn("SIG_IGN", code)
+        self.assertRegex(code, r"signal\.signal\(signal\.SIGTERM, signal_recu\)")
+        self.assertRegex(code, r"signal\.signal\(signal\.SIGINT, signal_recu\)")
+        self.assertIn("non fiables", code)                        # fin.json et le paquet restent à vérifier par le poste
+        if os.name != "posix":
+            self.skipTest("signal POSIX : vérifié sur le serveur (Linux)")
+        import signal as sig
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A", "dormir": True})
+        env = {k: v for k, v in os.environ.items() if k not in ("AGENT_RACINE", "AGENT_CLAUDE")}
+        env.update(AGENT_RACINE=self.racine.as_posix(), AGENT_CLAUDE=json.dumps([sys.executable, self.faux.as_posix()]))
+        p = subprocess.Popen([sys.executable, ENTREE.as_posix()], env=env, stdin=subprocess.DEVNULL)
+        for _ in range(200):
+            if self.vu() and self.depot.exists() and "A" in git(self.depot, "log", "-1", "--format=%s"):
+                break
+            time.sleep(0.1)
+        time.sleep(0.5)
+        p.send_signal(sig.SIGTERM)
+        self.assertEqual(p.wait(timeout=60), 0)
+        self.assertEqual(self.fin()["commits"], 1)
+        self.assertTrue(self.sortie("resultat.bundle").is_file())
+
+    def test_allowedtools_par_la_grammaire_des_regles(self):
+        e = charger_entree()
+        bons = ["Read", "Bash(git status:*),Read,Edit", "Bash(npm run test:*) Read", "WebFetch(domain:exemple.org)",
+                ",".join(["Read"] * 64)]
+        mauvais = ["Bash(a)(b)", "Bash((x))", ",Read", "Read,,Edit", "Read;Edit", ",".join(["Read"] * 65), "Read,", "(x)",
+                   "Bash(a\nb)", "Read Edit ", "1Read"]
+        for v in bons:
+            with self.subTest(bon=v):
+                e.valider_argv(ARGV[:10] + [v] + ARGV[11:])
+        for v in mauvais:
+            with self.subTest(mauvais=v), self.assertRaises(e.Refus):
+                e.valider_argv(ARGV[:10] + [v] + ARGV[11:])
 
 
 if __name__ == "__main__":

@@ -218,8 +218,12 @@ trap '' HUP                         # la fin de la session SSH ne doit jamais in
 # verrou par tâche partagé par l'enveloppe et _ARRETER. (honorer_final et occupe : commun.sh ; occupe : jamais deux émulateurs.)
 flock -n 8 || occupe "Créneau d'émulation occupé : une autre tâche tourne, relancez plus tard."
 honorer_final
-existants=$(dk 20 ps -q --filter "name=^tache-") || fin_erreur "Docker ne répond pas : impossible de vérifier qu'aucun émulateur ne tourne."
-[ -z "$existants" ] || occupe "Un conteneur tache-* tourne déjà (veilleur mort ?) : relancez plus tard."
+# Un conteneur tache-* étiqueté myiafactory.genre=agent (lancer_agent.sh) n'est pas un émulateur ; tout autre, sans étiquette
+# (anciens conteneurs) compris, en est un. Le préfixe « genre= » donne une ligne non vide même sans étiquette.
+genres=$(dk 20 ps --filter "name=^tache-" --format 'genre={{.Label "myiafactory.genre"}}') || fin_erreur "Docker ne répond pas : impossible de vérifier qu'aucun émulateur ne tourne."
+while IFS= read -r genre; do
+  [ -z "$genre" ] || [ "$genre" = genre=agent ] || occupe "Un conteneur tache-* tourne déjà (veilleur mort ?) : relancez plus tard."
+done <<< "$genres"
 
 kvm_gid=$(getent group kvm 2>/dev/null | cut -d: -f3)
 [[ $kvm_gid =~ ^[0-9]{1,10}$ ]] || fin_erreur "Groupe kvm introuvable sur ce serveur : l'émulateur ne peut pas être accéléré."

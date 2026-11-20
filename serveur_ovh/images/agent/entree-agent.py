@@ -11,10 +11,19 @@
   3. lance claude dans /travail/projet : message sur l'entrée standard, CLAUDE_CODE_OAUTH_TOKEN lu dans
      /run/identifiants/jeton et posé dans l'environnement de CE SEUL processus (jamais dans celui de entree-agent, de git,
      ni sur une ligne de commande, ni dans un fichier écrit ici) ; flux vers /sortie/flux.jsonl (coupé à 20 Mo : claude est
-     alors arrêté), erreurs vers /sortie/claude.err (64 Ko au plus) ; échéance de secours : duree_s + 60 s ;
-  4. tue tout processus restant du conteneur (PID 1 seulement : kill(-1)), commite les restes (« Agent : travail non commité
-     à la fin »), écrit /sortie/resultat.bundle (`git bundle create … <base>..agent/<tâche>`, rien si aucun commit) puis
-     /sortie/fin.json {"code", "commits", "branche", "base"} (temporaire puis renommage).
+     alors arrêté), erreurs vers /sortie/claude.err (64 Ko au plus) ; échéance INTERNE : claude est arrêté à
+     `echeance_interne(duree_s)` (duree_s - 120 s, à mi-chemin pour une tâche très courte), AVANT celle du veilleur, puis
+     l'entrée conclut (le travail déjà commité est rapporté, fin.json porte alors "echeance": true) ;
+  4. tue tout processus restant du conteneur (PID 1 seulement : kill(-1), puis récolte des zombies), commite les restes
+     (« Agent : travail non commité à la fin »), écrit /sortie/resultat.bundle (`git bundle create … <base>..agent/<tâche>`,
+     rien si aucun commit), retire de /sortie TOUT ce que l'agent y a déposé (seuls flux.jsonl, claude.err et le paquet créé
+     ici restent) puis écrit /sortie/fin.json {"code", "commits", "branche", "base"[, "echeance": true]} (temporaire puis
+     renommage).
+Signaux : SIGTERM et SIGINT (docker stop, ou `kill -TERM 1` lancé par l'agent lui-même) n'arrêtent que le groupe de processus
+de claude ; l'entrée conclut quand même (étape 4). PID 1 d'un espace de noms ne reçoit de l'intérieur aucun signal sans
+gestionnaire, SIGKILL compris : l'agent ne peut pas tuer l'entrée pour laisser un fin.json ou un paquet forgé.
+Ces garanties ne valent qu'à l'intérieur du conteneur : fin.json, flux.jsonl et resultat.bundle restent des données NON
+FIABLES pour l'hôte et le poste (T3 : paquet vérifié, seule référence agent/<tâche>, tailles bornées) ; données non fiables.
 
 `entree-agent --verifier` (conteneur de CONTRÔLE lancé par le veilleur de l'hôte : sans jeton, `--network none`, /travail,
 /sortie et /entree en lecture seule) : écrit sur la sortie standard le texte de
@@ -36,6 +45,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 # Liste blanche des options de `claude` (miroir exact de moteur/executeur_serveur.py, décision R2) : nom -> None (option sans
 # valeur) ou motif que la valeur suivante doit vérifier EN ENTIER (re.fullmatch). Une valeur ne commence jamais par « - ».
@@ -45,7 +55,10 @@ DRAPEAUX = {
     "--verbose": None,
     "--model": r"claude-[a-z0-9][a-z0-9.-]{0,62}|fable",
     "--tools": r"|[A-Za-z][A-Za-z0-9_]{0,63}(?:,[A-Za-z][A-Za-z0-9_]{0,63}){0,63}",
-    "--allowedTools": r"[^\x00-\x1f\x7f-][^\x00-\x1f\x7f]{0,8191}",
+    # règles « Nom » ou « Nom(motif sans parenthèse) », séparées par « , » ou une espace, 64 au plus, 8 Ko au plus
+    "--allowedTools": r"(?=[\s\S]{1,8192}\Z)"
+                      r"[A-Za-z][A-Za-z0-9_]{0,63}(?:\([^()\x00-\x1f\x7f]*\))?"
+                      r"(?:[, ][A-Za-z][A-Za-z0-9_]{0,63}(?:\([^()\x00-\x1f\x7f]*\))?){0,63}",
     "--permission-prompts": r"none",
     "--append-system-prompt-file": r"/entree/consigne\.md",
     "--system-prompt-file": r"/entree/consigne\.md",
@@ -61,6 +74,7 @@ LIMITE_ERREURS = 64 * 1024
 TOURS_MAX = 200
 DUREE_MAX_S = 86400
 DUREE_DEFAUT_S = 2400
+MARGE_ECHEANCE_S = 120                    # l'entrée arrête claude 120 s avant l'échéance du veilleur, puis conclut
 JSON_MAX_OCTETS = 65536
 IDENTITE = ("Agent serveur MyIAFactory", "agent@myiafactory.invalid")
 MESSAGE_RESTES = "Agent : travail non commité à la fin"
@@ -372,24 +386,63 @@ def tuer_groupe(proc):
 
 def tuer_les_restes():
     """Dans le conteneur (PID 1) : tout processus laissé par claude (démon, tâche de fond) est tué avant que entree-agent
-    n'écrive le paquet et fin.json ; kill(-1) épargne le processus appelant et le PID 1."""
+    n'écrive le paquet et fin.json ; kill(-1) épargne le processus appelant et le PID 1. Les zombies sont ensuite récoltés."""
     if os.getpid() == 1:
         try:
             os.kill(-1, signal.SIGKILL)
         except OSError:
             pass
+        recolter_orphelins(None)
+
+
+def recolter_orphelins(epargne):
+    """PID 1 seulement : récolte les processus orphelins terminés (reparentés au PID 1), qui sinon resteraient zombies et
+    useraient --pids-limit. `epargne` (le PID de claude) n'est jamais récolté ici : subprocess garde son code de retour. Le
+    prochain enfant terminé est d'abord regardé sans être récolté (WNOWAIT)."""
+    if os.getpid() != 1 or not hasattr(os, "waitid"):
+        return
+    while True:
+        try:
+            info = os.waitid(os.P_ALL, 0, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        except ChildProcessError:
+            return
+        if info is None or info.si_pid == epargne:
+            return
+        try:
+            os.waitpid(info.si_pid, os.WNOHANG)
+        except ChildProcessError:
+            return
+
+
+def echeance_interne(duree_s):
+    """Secondes après lesquelles l'entrée arrête claude pour conclure : 120 s avant l'échéance du veilleur, ou à mi-chemin
+    pour une tâche de moins de 240 s (au moins 1 s)."""
+    return max(duree_s - MARGE_ECHEANCE_S, (duree_s + 1) // 2, 1)
+
+
+# SIGTERM / SIGINT : seul le groupe de claude est tué ; `principal` conclut ensuite (jamais de sortie immédiate du
+# processus ni de signal ignoré).
+SIGNAL = {"proc": None, "recu": False}
+
+
+def signal_recu(_numero, _cadre):
+    SIGNAL["recu"] = True
+    if SIGNAL["proc"] is not None:
+        tuer_groupe(SIGNAL["proc"])
 
 
 def lancer_claude(c, options, d, jeton, depot, erreurs):
-    """Lance claude ; rend son code (128 + signal s'il a été tué ; non nul si le flux a été coupé ou l'échéance passée)."""
+    """Lance claude ; rend (code, echeance) : code 128 + signal s'il a été tué, non nul si le flux a été coupé, l'échéance
+    interne atteinte ou un signal reçu ; echeance vrai si l'échéance interne l'a arrêté."""
+    if SIGNAL["recu"]:
+        raise Refus("arrêt demandé avant le lancement de claude")
     env = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "HOME": c["maison"], "LANG": "C.UTF-8",
            "BASH_DEFAULT_TIMEOUT_MS": "1800000", "BASH_MAX_TIMEOUT_MS": "1800000", "DISABLE_AUTOUPDATER": "1",
            "CLAUDE_CODE_OAUTH_TOKEN": jeton}
     if os.name == "nt" and os.environ.get("SYSTEMROOT"):
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    etat = {"proc": None}
     flux = Borne(os.path.join(c["sortie"], "flux.jsonl"), d["flux_octets"],
-                 depasse=lambda: etat["proc"] is not None and tuer_groupe(etat["proc"]))
+                 depasse=lambda: SIGNAL["proc"] is not None and tuer_groupe(SIGNAL["proc"]))
     try:
         message = os.open(os.path.join(c["entree"], "message.md"), os.O_RDONLY | SANS_LIEN | getattr(os, "O_BINARY", 0))
     except OSError:
@@ -400,18 +453,24 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
                                 stderr=subprocess.PIPE, **({"start_new_session": True} if os.name == "posix" else {}))
     finally:
         os.close(message)
-    etat["proc"] = proc
+    SIGNAL["proc"] = proc
+    if SIGNAL["recu"]:                      # signal arrivé entre la vérification et Popen
+        tuer_groupe(proc)
     fils = [threading.Thread(target=pomper, args=(proc.stdout, flux), daemon=True),
             threading.Thread(target=pomper, args=(proc.stderr, erreurs), daemon=True)]
     for f in fils:
         f.start()
-    delai = False
-    try:
-        proc.wait(timeout=d["duree_s"] + 60)
-    except subprocess.TimeoutExpired:
-        delai = True
-        tuer_groupe(proc)
-        proc.wait()
+    echeance = False
+    limite = time.monotonic() + echeance_interne(d["duree_s"])
+    while proc.poll() is None:
+        if time.monotonic() >= limite:
+            echeance = True
+            tuer_groupe(proc)
+            proc.wait()
+            break
+        recolter_orphelins(proc.pid)
+        time.sleep(0.2)
+    SIGNAL["proc"] = None
     tuer_groupe(proc)                       # les petits-enfants qui tiendraient encore les tuyaux
     for f in fils:
         f.join(timeout=10)
@@ -422,26 +481,47 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
     if flux.coupe:
         erreurs.ecrire(f"\nentree-agent : flux coupé à {d['flux_octets']} octets : claude arrêté\n")
         code = code or 1
-    if delai:
-        erreurs.ecrire(f"\nentree-agent : échéance de secours ({d['duree_s'] + 60} s) : claude arrêté\n")
+    if echeance:
+        erreurs.ecrire(f"\nentree-agent : échéance interne ({echeance_interne(d['duree_s'])} s) : claude arrêté, "
+                       "travail conclu\n")
         code = code or 1
-    return code
+    if SIGNAL["recu"]:
+        erreurs.ecrire("\nentree-agent : signal d'arrêt reçu : claude arrêté, travail conclu\n")
+        code = code or 143
+    return code, echeance
+
+
+def nettoyer_sortie(sortie, garder):
+    """Retire de /sortie tout ce qui n'est pas l'une de nos sorties (`garder`, fichiers ordinaires seulement) : rien de ce que
+    l'agent y a déposé (faux paquet, faux fin.json, autre fichier, lien, dossier) ne reste."""
+    try:
+        noms = os.listdir(sortie)
+    except OSError:
+        return
+    for nom in noms:
+        chemin = os.path.join(sortie, nom)
+        if nom in garder and not os.path.islink(chemin) and os.path.isfile(chemin):
+            continue
+        try:
+            retirer(chemin)
+        except OSError:
+            pass
 
 
 def principal():
     c = chemins()
-    if os.getpid() == 1:
-        signal.signal(signal.SIGTERM, lambda *_: os._exit(143))
+    signal.signal(signal.SIGTERM, signal_recu)
+    signal.signal(signal.SIGINT, signal_recu)
     erreurs = Borne(os.path.join(c["sortie"], "claude.err"), LIMITE_ERREURS)
     d = depot = None
-    code, commits, branche = 1, 0, None
+    code, commits, branche, echeance = 1, 0, None, False
     env = env_git(c["maison"])
     try:
         d = valider_demande(lire_json(os.path.join(c["entree"], "demande.json")))
         options = valider_argv(lire_json(os.path.join(c["entree"], "argv.json"))) + ["--max-turns", str(d["tours"])]
         jeton = lire_jeton(c["jeton"])
         depot = preparer_depot(c, d, env)
-        code = lancer_claude(c, options, d, jeton, depot, erreurs)
+        code, echeance = lancer_claude(c, options, d, jeton, depot, erreurs)
         jeton = None
     except Refus as e:
         erreurs.ecrire(f"entree-agent : refusé : {e}\n")
@@ -456,11 +536,15 @@ def principal():
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             erreurs.ecrire(f"entree-agent : paquet impossible : {type(e).__name__}\n")
             commits, branche = 0, None
-            retirer(os.path.join(c["sortie"], "resultat.bundle"))
             code = code or 1
     tuer_les_restes()
     erreurs.fermer()
-    ecrire_fin(c["sortie"], {"code": code, "commits": commits, "branche": branche, "base": d["base"] if d else None})
+    # Seules nos sorties restent ; le paquet seulement s'il vient d'être créé ici (sinon tout resultat.bundle part).
+    nettoyer_sortie(c["sortie"], {"flux.jsonl", "claude.err"} | ({"resultat.bundle"} if branche else set()))
+    fin = {"code": code, "commits": commits, "branche": branche, "base": d["base"] if d else None}
+    if echeance:
+        fin["echeance"] = True
+    ecrire_fin(c["sortie"], fin)
     return 0
 
 

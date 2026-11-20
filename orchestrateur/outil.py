@@ -3405,7 +3405,7 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
         occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
         avec_taches = {t["agent"] for t in suivi["taches"] if t.get("agent")}
         plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer,
-                                 avec_taches)
+                                 avec_taches, serveur=ctx.f.get("agents_serveur_max", 0))
         plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
         par_cle = {x["cle"]: x for x in fiches_}
         plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] != "cloud"]

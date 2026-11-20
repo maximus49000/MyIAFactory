@@ -151,8 +151,9 @@ class ExecuteurServeur:
     noter_abonnement = True          # l'instantané d'abonnement du flux est noté par `appel` (compté dans l'abonnement)
 
     def __init__(self, projet, tache, mode, demande_base, dossier=None, ssh=None, dormir=time.sleep, pas_s=15,
-                 horloge=time.monotonic, git=None, attente_max_s=600):
+                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None):
         self.projet = Path(projet)
+        self.apk = apk                   # mode pilote : l'APK déposé sur le serveur (`serveur_agent.lancer_agent`)
         self.tache = tache
         self.mode = mode
         self.demande_base = dict(demande_base or {})
@@ -324,7 +325,7 @@ class ExecuteurServeur:
             demande["modele"] = _valeur(distant, "--model")
         res = sa.lancer_agent(demande, paquet, distant, consigne, entree, dossier=self.dossier, ssh=self.ssh,
                               attente_max_s=self.attente_max_s, dormir=self._dormir, projet=self.projet,
-                              git=self._git_(sa))
+                              git=self._git_(sa), **({"apk": self.apk} if self.apk else {}))
         self.avertissement = res.get("avertissement")
         ident, etat = res.get("id"), res.get("etat")
         erreur = res.get("erreur") or res.get("raison") or ""

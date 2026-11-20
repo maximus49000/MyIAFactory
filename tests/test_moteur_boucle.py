@@ -668,6 +668,215 @@ class Lecons(Base):
         self.assertTrue(boucle.ouvrir_projet(reglages).lecons_auto)
 
 
+class FauxExecuteurServeur:
+    """L'exécuteur distant des essais : garde ce qu'il a reçu ; `arreter` réveille l'agent qui l'attend."""
+
+    def __init__(self, projet, tache, mode, demande_base, apk=None, **kw):
+        self.projet, self.tache, self.mode, self.demande_base, self.apk = projet, tache, mode, demande_base, apk
+        self.branche, self.arrets = None, 0
+        self.arret = __import__("threading").Event()
+
+    def arreter(self):
+        self.arrets += 1
+        self.arret.set()
+        return {"etat": "arretee"}
+
+
+class FauxFusion:
+    def __init__(self):
+        self.fusions = []
+
+    def fusionner(self, dossier, branche, **kw):
+        self.fusions.append((dossier, branche, kw))
+        return None
+
+
+class Serveur(Base):
+    """Le lieu `serveur` : un agent ordinaire dont l'exécuteur est distant (`ExecuteurServeur`)."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.orch_aide import FICHE_LEA
+        (self.dossier / "fiches" / "lea.md").write_text(FICHE_LEA.replace("Lieu : local", "Lieu : serveur"),
+                                                        encoding="utf-8")
+        from moteur import executeur_serveur
+        from bureau import deport_types
+        self.executeurs, self.accord, self.accords, self.actives = [], False, [], []
+
+        def fabrique(*a, **kw):
+            ex = FauxExecuteurServeur(*a, **kw)
+            self.executeurs.append(ex)
+            return ex
+
+        def accord(racine, action, *a, **kw):
+            self.accords.append((racine, action))
+            return self.accord
+        for cible, nom, valeur in ((executeur_serveur, "ExecuteurServeur", fabrique),
+                                   (deport_types, "accord_serveur", accord)):
+            p = mock.patch.object(cible, nom, valeur)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(boucle.Moteur, "_taches_serveur_actives", lambda moteur: list(self.actives), create=True)
+        p.start()
+        self.addCleanup(p.stop)
+        self.cloud = FauxFusion()
+        self.moteur = self.fabriquer([self.projet], session_cloud=self.cloud)
+        self.ok("demande-traitee", entree={"id": self.demande(type="fonctionnalite", texte="Des écrans")})
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "serie"})
+        self.tache = self.ok("tache", entree={"titre": "Développement : Accueil", "fonctionnalite": "f1", "role": "dev",
+                                              "colonne": "dev", "etape": "flux:dev", "element": "e1", "agent": "dev-1",
+                                              "active": True})["id"]
+
+    def tache_suivie(self):
+        return next(x for x in self.suivi()["taches"] if x["id"] == self.tache)
+
+    def journal(self):
+        return [j["texte"] for j in self.tache_suivie()["journal"]]
+
+    def lances(self):
+        return [x for x in self.agents.lances if x["agent"] == "dev-1"]
+
+    def partir(self, matiere="Matière."):
+        """Le départ tel que `regles` le donne : la tâche en cours, son départ noté, puis l'action `agent`."""
+        etat = self.moteur._etat(self.projet)
+        etat["repris"] = True
+        etat["en_cours"].add(self.tache)
+        etat["departs"][self.tache] = {"agent": "dev-1", "taches": [self.tache], "matiere": matiere, "modele": "sonnet",
+                                       "lot": None, "suite": None}
+        self.moteur._partir(self.projet, ("agent", "dev-1", [self.tache], matiere))
+
+    def test_partir_serveur_utilise_l_executeur_distant(self):
+        self.partir()
+        (lance,) = self.lances()
+        (ex,) = self.executeurs
+        self.assertIs(lance["executeur"], ex)
+        self.assertEqual((Path(ex.projet), ex.tache, ex.mode, ex.demande_base, ex.apk),
+                         (self.dossier, self.tache, "seul", {"projet": self.projet.nom}, None))
+        self.assertEqual((lance["tache"], lance["matiere"], lance["dossier"]), (self.tache, "Matière.", str(self.dossier)))
+        self.assertIn(f"`agent/{self.tache}`", lance["depart"])
+        self.assertIn("commite", lance["depart"])
+        self.assertNotIn("lancer.py\" tests --", lance["depart"])     # pas le lanceur de tests du poste
+        self.assertNotIn("reprendre", lance)
+        self.assertFalse(any(detache.dossier(self.dossier).glob("*.json")))   # aucun agent détaché sur le poste
+        self.moteur.tour()
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+        self.assertEqual(self.cloud.fusions, [])          # sans commit rapatrié : rien à fusionner
+
+    def test_mode_pilote_seulement_avec_accord_et_apk(self):
+        sorties = self.dossier / "app" / "build" / "outputs" / "apk"
+        (sorties / "androidTest" / "debug").mkdir(parents=True)
+        (sorties / "androidTest" / "debug" / "app-debug-androidTest.apk").write_bytes(b"PK")
+        cas = []
+        for accord, apk in ((False, False), (True, False), (True, True), (False, True)):
+            self.accord = accord
+            if apk:
+                (sorties / "debug").mkdir(parents=True, exist_ok=True)
+                (sorties / "debug" / "app-debug.apk").write_bytes(b"PK")
+            self.partir()
+            ex = self.executeurs[-1]
+            cas.append((accord, apk, ex.mode, ex.apk and Path(ex.apk).name))
+            depart = self.lances()[-1]["depart"]
+            self.assertEqual("`pont <verbe> [arguments]`" in depart, ex.mode == "pilote")
+        self.assertEqual(cas, [(False, False, "seul", None), (True, False, "seul", None),
+                               (True, True, "pilote", "app-debug.apk"), (False, True, "seul", None)])
+        self.assertEqual(set(self.accords), {(str(self.dossier), "recette-emulateur")})
+
+    def test_redemarrage_rattache_sans_relancer(self):
+        self.actives = [{"id": "20261120-101010-abcdef", "type": "agent", "etat": "en_cours", "projet": self.projet.nom,
+                         "tache": self.tache}]
+        self.moteur.tour()                  # premier passage : la tâche active tenue par l'agent serveur est retrouvée
+        (lance,) = self.lances()
+        (ex,) = self.executeurs
+        self.assertIs(lance["executeur"], ex)
+        self.assertEqual((ex.tache, lance["tache"]), (self.tache, self.tache))
+        self.assertTrue(any("travaille encore sur le serveur" in j for j in self.journal()))
+        self.assertFalse(any("avait disparu" in j for j in self.journal()))     # jamais relancée par `orphelines`
+        self.moteur.tour()
+        self.assertEqual(len(self.lances()), 1)
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+
+    def test_arret_du_bureau_arrete_la_tache_serveur(self):
+        self.moteur.synchrone = False
+
+        def attend_l_arret(depart, matiere, *, agent, tache=None, lot=None, executeur=None, **k):
+            self.agents.lances.append({"agent": agent["cle"], "tache": tache, "executeur": executeur})
+            executeur.arret.wait(10)
+            e = agents.Execution(tache, agent["cle"], lot, erreur="l'appel a échoué : " + detache.ARRET)
+            e.arrete = True
+            return e
+        self.moteur.executer_agent = attend_l_arret
+        self.partir()
+        (ex,) = self.executeurs
+        self.assertEqual(ex.arrets, 0)
+        detache.demander_arret(self.dossier, self.tache)     # le bouton « Arrêter » du bureau
+        self.moteur.tour()
+        self.assertTrue(ex.arret.wait(10))
+        for _ in range(200):          # le retour arrive dans la file (ou a déjà été lu par ce passage)
+            if not self.moteur.retours.empty() or self.tache_suivie().get("bloquee"):
+                break
+            __import__("time").sleep(0.05)
+        self.moteur.synchrone = True
+        self.moteur.tour()
+        self.assertEqual(ex.arrets, 1)
+        self.assertEqual(self.tache_suivie()["bloquee"], regles.ARRET_DEPUIS_LE_BUREAU)
+        self.assertEqual(len(self.lances()), 1)              # ni nouvel essai ni relance
+        self.assertFalse((detache.dossier(self.dossier) / f"{self.tache}.arrete").exists())
+        self.moteur.tour()
+        self.assertEqual((ex.arrets, len(self.lances())), (1, 1))
+
+    def test_rapport_fait_fusionne_agent_tache(self):
+        vrai = self.agents.__call__
+
+        def avec_commit(depart, matiere, *, executeur=None, tache=None, **k):
+            executeur.branche = f"agent/{tache}"
+            return vrai(depart, matiere, executeur=executeur, tache=tache, **k)
+        self.moteur.executer_agent = avec_commit
+        self.partir()
+        self.moteur.tour()
+        self.assertEqual(self.cloud.fusions, [(str(self.dossier), f"agent/{self.tache}", {"distante": False})])
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+        self.assertTrue(self.commits)                    # le commit du rapport, avant la fusion
+
+    def test_echeance_dite_sans_nouvel_essai(self):
+        from moteur import executeur_serveur
+
+        def echeance(depart, matiere, *, agent, tache=None, lot=None, executeur=None, **k):
+            self.agents.lances.append({"agent": agent["cle"], "tache": tache})
+            executeur.branche = f"agent/{tache}"
+            e = agents.Execution(tache, agent["cle"], lot, erreur="l'appel a échoué : " + executeur_serveur.ECHEANCE)
+            e.echeance = True
+            return e
+        self.moteur.executer_agent = echeance
+        self.partir()
+        self.moteur.tour()
+        self.moteur.tour()
+        self.assertEqual(len(self.lances()), 1)                     # pas de nouvel essai
+        bloquee = self.tache_suivie()["bloquee"]
+        self.assertIn("durée maximale", bloquee)
+        self.assertIn(f"agent/{self.tache}", bloquee)               # le travail rapatrié est gardé sur sa branche
+        self.assertEqual(self.cloud.fusions, [])
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertIn("durée maximale", f["discussion"][-1]["texte"])
+
+    def test_question_puis_reponse_reprend_la_session(self):
+        detache.ajouter_question(self.dossier, self.tache, "Où en es-tu ?")
+        self.partir()
+        self.moteur.tour()                 # la tâche finie : l'agent reprend sa session (sur le serveur) pour répondre
+        premier, reponse = self.lances()
+        self.assertNotIn("reprendre", premier)
+        self.assertEqual(reponse["reprendre"], "s-1")
+        self.assertEqual(len(self.executeurs), 2)
+        self.assertIs(reponse["executeur"], self.executeurs[-1])
+        self.assertEqual(self.executeurs[-1].mode, "seul")
+        self.assertEqual(reponse["fiche"]["outils"], "Read, Grep, Glob")
+        self.assertIn("Où en es-tu ?", reponse["depart"])
+        self.assertEqual(detache.questions(self.dossier, self.tache), [])
+        self.moteur.tour()
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertEqual((f["discussion"][-1]["auteur"], f["discussion"][-1]["texte"]), ("dev-1", "Voilà."))
+        self.assertEqual(self.cloud.fusions, [])
+
+
 class Lecteur(Base):
     """L'agent lecteur d'une question : Read, Grep, Glob seulement, sur Sonnet, dans le dossier du projet."""
     PREMIERE = {"reponse": "D'après les documents, la sauvegarde est automatique.", "sur": False, "suggestion": None}

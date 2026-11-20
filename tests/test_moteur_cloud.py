@@ -917,6 +917,66 @@ class FusionEtatLocal(__import__("unittest").TestCase):
         self.assertIn("conflit de fusion", cloud.fusionner(".", "claude/x", executer=executer))
 
 
+class FusionLocale(__import__("unittest").TestCase):
+    """`distante=False` (agent serveur) : la branche locale `agent/<tâche>` est fusionnée, jamais `origin/<branche>`."""
+
+    def test_fusionner_branche_locale(self):
+        import shutil, subprocess, tempfile
+        from pathlib import Path
+        from moteur import cloud
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        git = lambda *a: subprocess.run(["git", *a], cwd=d, capture_output=True)
+        git("init", "-q")
+        git("config", "user.email", "x@x")
+        git("config", "user.name", "x")
+        git("config", "commit.gpgsign", "false")
+        (d / "a.txt").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        principale = git("rev-parse", "--abbrev-ref", "HEAD").stdout.decode().strip()
+        git("checkout", "-q", "-b", "agent/t1")
+        (d / "b.txt").write_text("b\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "travail de l'agent")
+        git("checkout", "-q", principale)
+        self.assertFalse((d / "b.txt").exists())
+        # par défaut (cloud) : origin/agent/t1, qui n'existe pas ici -> refus, rien n'est cassé
+        self.assertIn("conflit de fusion", cloud.fusionner(str(d), "agent/t1"))
+        self.assertFalse((d / "b.txt").exists())
+        # serveur : la branche locale ; sans origine, le push manqué n'est pas un échec (la fusion est dans le dépôt)
+        self.assertIsNone(cloud.fusionner(str(d), "agent/t1", distante=False))
+        self.assertEqual((d / "b.txt").read_text(encoding="utf-8"), "b\n")
+        self.assertEqual(git("log", "-1", "--format=%s").stdout.decode().strip(), "Factory : fusion de agent/t1")
+        self.assertEqual(git("rev-parse", "--abbrev-ref", "HEAD").stdout.decode().strip(), principale)
+        self.assertEqual(git("status", "--porcelain").stdout.decode().strip(), "")
+
+    def test_fusion_locale_argv(self):
+        from moteur import cloud
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(argv[1:])
+            return (1, b"fatal: No configured push destination.") if argv[1] == "push" else (0, b"")
+        self.assertIsNone(cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+        (fusion,) = [a for a in vus if a[0] == "merge"]
+        self.assertEqual(fusion[-1], "refs/heads/agent/t1")
+        self.assertIn("Factory : fusion de agent/t1", fusion)
+        vus.clear()
+        self.assertIn("n'a pas pu être poussée", cloud.fusionner(".", "claude/x", executer=executer))
+        self.assertEqual([a for a in vus if a[0] == "merge"][0][-1], "origin/claude/x")
+
+    def test_conflit_local_reste_au_directeur(self):
+        from moteur import cloud
+        def executer(argv, cwd, delai):
+            if argv[1] == "merge" and "--abort" not in argv:
+                return 1, b"CONFLICT (content): app/Main.kt"
+            if argv[1] == "diff":
+                return 0, b"app/Main.kt\n"
+            return 0, b""
+        self.assertIn("conflit de fusion", cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+
+
 class EtatHorsDuDepot(__import__("unittest").TestCase):
     """La règle de fond : les fichiers d'état du moteur ne sont pas suivis par git (vrai dépôt temporaire)."""
 

@@ -37,6 +37,47 @@ def ecrire_origine(dossier, url):
     (Path(dossier) / ".git" / "config").write_text(corps, encoding="utf-8")
 
 
+def poly(cle, lieu, **extra):
+    return {"cle": cle, "prenom": cle.title(), "role": None, "lieu": lieu, "session": None, **extra}
+
+
+class EquipeParLieu(unittest.TestCase):
+    """`ajuster_equipe` : le lieu `serveur` suit les mêmes règles que `local` et `cloud`."""
+
+    def test_ajuster_equipe_cree_et_retire_des_places_serveur(self):
+        fiches = [poly("agent-1", "local")]
+        plan = rc.ajuster_equipe(fiches, set(), 1, 0, serveur=2)
+        self.assertEqual(plan["creer"], ["serveur", "serveur"])
+        self.assertEqual(plan["retirer"], [])
+        fiches = [poly("agent-1", "local"), poly("agent-2", "serveur"), poly("agent-3", "serveur"),
+                  poly("agent-4", "serveur")]
+        plan = rc.ajuster_equipe(fiches, {"agent-4"}, 1, 0, serveur=1)
+        self.assertEqual(plan["retirer"], ["agent-3", "agent-2"])     # les libres partent, l'occupé n'est jamais retiré
+        self.assertEqual(plan["marquer"], [])
+        plan = rc.ajuster_equipe(fiches, {"agent-3", "agent-4"}, 1, 0, serveur=1)
+        self.assertEqual((plan["retirer"], plan["marquer"]), (["agent-2"], ["agent-4"]))
+        # une place serveur remontée réactive d'abord un agent serveur retiré, jamais un agent d'un autre lieu
+        fiches = [poly("agent-1", "local"), poly("agent-5", "local", retire=True), poly("agent-6", "serveur", retire=True)]
+        plan = rc.ajuster_equipe(fiches, set(), 1, 0, serveur=1)
+        self.assertEqual((plan["reactiver"], plan["creer"]), (["agent-6"], []))
+        # une marque de retrait prévu se lève avant de créer
+        fiches = [poly("agent-1", "local"), poly("agent-7", "serveur", retrait_prevu=True)]
+        plan = rc.ajuster_equipe(fiches, {"agent-7"}, 1, 0, serveur=1)
+        self.assertEqual((plan["demarquer"], plan["creer"]), (["agent-7"], []))
+
+    def test_ajuster_equipe_sans_serveur_inchange(self):
+        fiches = [poly("agent-1", "local"), poly("agent-2", "local"), poly("agent-3", "cloud", session="s")]
+        for args in ((fiches, set(), 1, 2), (fiches, {"agent-2"}, 1, 0), (fiches, set(), 3, 1),
+                     (fiches, set(), 0, 0, False)):
+            self.assertEqual(rc.ajuster_equipe(*args), rc.ajuster_equipe(*args, serveur=0))
+        self.assertEqual(rc.ajuster_equipe(fiches, set(), 2, 1),
+                         {"creer": [], "retirer": [], "marquer": [], "demarquer": [], "reactiver": []})
+        self.assertEqual(rc.ajuster_equipe(fiches, set(), 3, 2)["creer"], ["local", "cloud"])
+        # sans place serveur, un agent serveur libre est retiré comme un autre
+        plan = rc.ajuster_equipe(fiches + [poly("agent-4", "serveur")], set(), 2, 1)
+        self.assertEqual(plan["retirer"], ["agent-4"])
+
+
 class Depot(unittest.TestCase):
     def test_lu_dans_la_config_sans_lancer_git(self):
         import tempfile

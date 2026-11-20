@@ -4283,6 +4283,24 @@ def arret_depuis_le_bureau(projet, etat, taches):
     return []
 
 
+ECHEANCE_SERVEUR = "Tâche arrêtée : l'agent serveur a atteint sa durée maximale"
+
+
+def echeance_serveur(projet, etat, taches, branche=None):
+    """L'agent serveur a atteint sa durée maximale (`agents.Execution.echeance`) : son travail commité a été rapatrié
+    (branche `agent/<tâche>`, jamais fusionnée d'elle-même). La tâche s'arrête là, sans nouvel essai ni analyse : la
+    discussion le dit ; elle se relance depuis le bureau comme toute tâche bloquée."""
+    garde = (f" ; son travail commité est gardé sur la branche {branche} (non fusionnée)" if branche
+             else " ; aucun commit n'a été rapatrié")
+    raison = f"{ECHEANCE_SERVEUR}{garde}. Relancez la tâche ou découpez-la."
+    _bloquer_taches(projet, taches, raison)
+    t = _tache(projet, taches[0])
+    if t.get("fonctionnalite"):
+        _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
+    return []
+
+
 def _agent_en_echec(projet, etat, execution, depart):
     """Un agent sans rapport : relancé une fois, puis tâche bloquée avec la raison au journal. Une panne du service
     Claude n'est pas un échec : voir `_service_en_panne`."""
@@ -4292,6 +4310,8 @@ def _agent_en_echec(projet, etat, execution, depart):
     tid = depart["taches"][0]
     if getattr(execution, "arrete", False):
         return arret_depuis_le_bureau(projet, etat, depart["taches"])
+    if getattr(execution, "echeance", False):
+        return echeance_serveur(projet, etat, depart["taches"], getattr(execution, "branche", None))
     relancees = _m(etat, "relancees", set)
     if tid not in relancees:
         relancees.add(tid)

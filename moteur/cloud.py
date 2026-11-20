@@ -438,14 +438,16 @@ def etat_hors_du_depot(dossier, executer=None):
     return bool(change or suivis)
 
 
-def fusionner(dossier_projet, branche, *, executer=None):
+def fusionner(dossier_projet, branche, *, executer=None, distante=True):
     with git_sur.verrou(dossier_projet):      # la fusion et son envoi d'un seul tenant, sans autre git du moteur
-        return _fusionner(dossier_projet, branche, executer)
+        return _fusionner(dossier_projet, branche, executer, distante)
 
 
-def _fusionner(dossier_projet, branche, executer):
+def _fusionner(dossier_projet, branche, executer, distante=True):
     """Fusionne la branche de la session dans la branche du projet, puis pousse. `None` si c'est fait, sinon la raison
-    (un conflit : la fusion est annulée, rien n'est cassé)."""
+    (un conflit : la fusion est annulée, rien n'est cassé). `distante` faux (agent serveur) : la branche LOCALE
+    (`refs/heads/<branche>`, rapatriée par paquet Git) au lieu de `origin/<branche>` ; un push manqué n'est alors pas un
+    échec (comme `boucle.commit_et_push` : la fusion est dans le dépôt local et part avec le push suivant)."""
     # L'état du moteur s'écrit sans cesse (attente-*.json, anomalies…) : enregistré juste avant la fusion, sinon git
     # refuse (« Your local changes … would be overwritten by merge », cas réel).
     etat_hors_du_depot(dossier_projet, executer)
@@ -454,12 +456,12 @@ def _fusionner(dossier_projet, branche, executer):
         _git(executer, dossier_projet, "add", "-A")
         _git(executer, dossier_projet, "commit", "-q", "-m", f"Factory : état local avant la fusion de {branche}")
     code, sortie = _git(executer, dossier_projet, "merge", "--no-ff", "-m", f"Factory : fusion de {branche}",
-                        f"origin/{branche}")
+                        f"origin/{branche}" if distante else f"refs/heads/{branche}")
     if code != 0 and not _regler_les_conflits_d_etat(executer, dossier_projet):
         _git(executer, dossier_projet, "merge", "--abort")
         return "conflit de fusion : " + _texte(sortie)[:200]
     code, sortie = _pousser(executer, dossier_projet)
-    if code != 0 and not any(m in _texte(sortie) for m in _PUSH_CONCURRENT):
+    if distante and code != 0 and not any(m in _texte(sortie) for m in _PUSH_CONCURRENT):
         return "la fusion est faite mais n'a pas pu être poussée : " + _texte(sortie)[:200]
     # Encore refusé par un autre push en cours après les essais : la fusion est faite dans le dépôt local et part avec le
     # push suivant (cas réel : deux fusions bloquées puis retrouvées dans le dépôt distant, la tâche restait arrêtée).

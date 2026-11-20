@@ -151,6 +151,39 @@ class TestDepart(unittest.TestCase):
     def test_message_cloud_repart_de_zero(self):
         self.assertTrue(self.message("cloud").startswith("Tu repars de zéro."))
 
+    def test_consigne_serveur_seul_et_pilote(self):
+        seul, pilote = depart.consigne_serveur("seul", "t7"), depart.consigne_serveur("pilote", "t7")
+        for c in (seul, pilote):
+            self.assertIn("`agent/t7`", c)
+            self.assertIn("commite", c)
+            self.assertIn("donnée", c)
+            self.assertIn("message.questions", c)
+            self.assertIn("attend: true", c)
+            self.assertIn("GitHub", c)
+            self.assertNotIn("lancer.py", c)                 # ni lanceur de tests du poste, ni deporter
+        self.assertIn("`pont <verbe> [arguments]`", pilote)
+        self.assertIn("/outil/", pilote)
+        self.assertNotIn("pont", seul)
+        with self.assertRaises(ValueError):
+            depart.consigne_serveur("scenario", "t7")
+        # le message d'un agent serveur : ni la section du lanceur de tests du poste, ni les actions déportées
+        f = {"nom": "P", "genre": None}
+        t = {"id": "t7", "titre": "T"}
+        m = depart.message(f, fiche("dev-1", "dev", lieu="serveur"), t, None, {"skill": [], "genre": []},
+                           deport="## Actions déportées sur GitHub\nx")
+        self.assertNotIn("lancer.py\" tests --", m)
+        self.assertNotIn("Actions déportées", m)
+        self.assertNotIn("Tu repars de zéro.", m)
+        lot = depart.message_lot(f, fiche("dev-1", "dev", lieu="serveur"), [t], [("dev", None)],
+                                 {"skill": [], "genre": []}, deport="## Actions déportées sur GitHub\nx")
+        self.assertNotIn("lancer.py\" tests --", lot)
+        self.assertNotIn("Actions déportées", lot)
+        # local : inchangé (la section des tests et le déport restent)
+        m = depart.message(f, fiche("dev-1", "dev"), t, None, {"skill": [], "genre": []},
+                           deport="## Actions déportées sur GitHub\nx")
+        self.assertIn("lancer.py\" tests --", m)
+        self.assertIn("Actions déportées", m)
+
 
 class TestDepartCommandes(AvecProjet):
     def preparer(self):

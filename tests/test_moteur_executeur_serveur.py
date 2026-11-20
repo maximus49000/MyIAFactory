@@ -75,7 +75,7 @@ class FauxServeurAgent:
     def lancer_agent(self, demande, paquet, argv, consigne, message, apk=None, dossier=None, ssh=None,
                      attente_max_s=600, dormir=None, projet=None, git=None):
         self.lancements.append({"demande": demande, "paquet": paquet, "argv": argv, "consigne": consigne,
-                                "message": message, "dossier": dossier, "projet": projet})
+                                "message": message, "dossier": dossier, "projet": projet, "apk": apk})
         if self.refus_lancer is not None:
             raise self.refus_lancer
         st.Index(dossier).enregistrer(self.ident, {
@@ -252,6 +252,19 @@ class Appel(Base):
         f.ident = "t20261120-121500-dddd"
         self.executeur()(argv, b"m", {}, None, 99999)
         self.assertEqual(f.lancements[1]["demande"]["limites"]["duree_s"], sa.LIMITES_AGENT["duree_s"])
+
+    def test_apk_du_mode_pilote_transmis_au_lancement(self):
+        f = self.faux()
+        (self.tmp / "c.md").write_text("c", encoding="utf-8")
+        argv = appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None)
+        self.executeur()(argv, b"m", {}, None, 300)
+        self.assertIsNone(f.lancements[0]["apk"])                  # mode seul : aucun APK
+        f.ident = "t20261120-121500-dddd"
+        ex = es.ExecuteurServeur(self.projet, TACHE, "pilote", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
+                                 dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
+                                 apk="C:/p/app-debug.apk")
+        ex(argv, b"m", {}, None, 300)
+        self.assertEqual((f.lancements[1]["apk"], f.lancements[1]["demande"]["mode"]), ("C:/p/app-debug.apk", "pilote"))
 
     def test_echec_rend_code_1_et_la_raison(self):
         self.faux(etats=("echouee",), statut="erreur", raison="Secret de l'abonnement trouvé : rien rapatrié.")

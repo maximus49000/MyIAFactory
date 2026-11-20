@@ -25,10 +25,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from bureau import attente
+from bureau import attente, deport_types
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, detache, figes, git_sur, jugement, regles
+from moteur import agents, appel, cloud, detache, executeur_serveur, figes, git_sur, jugement, regles
 from orchestrateur import anonymat, connaissances
+from orchestrateur import depart as dp
 from orchestrateur import factory as fa
 from orchestrateur import fiches as fi
 from orchestrateur import guetteur
@@ -69,6 +70,28 @@ def depart_de_reponse(tache, questions, session, rendu=None):
                    "modifie aucun fichier. Termine par le bloc ```json "
                    '{"statut": "fait", "message": {"texte": "ta réponse", "attend": false}}.')
     return "\n\n".join(parties)
+
+
+ACTION_PILOTE = "recette-emulateur"     # l'accord du Directeur qui ouvre le mode pilote d'un agent serveur
+
+
+def apk_pour_le_pilote(dossier):
+    """L'APK qu'un agent serveur en mode pilote installe sur l'émulateur, ou None : la production `apk` du projet, résolue
+    comme `deporter recette-emulateur` sans `--apk` ni artefact GitHub téléchargé (`outils/deporter._apk_de_la_recette`,
+    non importé : il reste en Python 3.9) : la sortie locale que le catalogue publie, la plus récente, jamais l'APK des
+    tests instrumentés (`androidTest`)."""
+    catalogue = deport_types.catalogue_du_projet(dossier)[1]
+    if ACTION_PILOTE not in catalogue:
+        return None
+    sources = [catalogue[d] for d in catalogue[ACTION_PILOTE]["consomme"] if d in catalogue and catalogue[d]["produit"]]
+    trouves = []
+    for motif in (e["artefact"] for e in sources if e["artefact"]):
+        try:
+            trouves += [p for p in Path(dossier).glob(motif) if p.is_file()]
+        except (OSError, ValueError):
+            continue
+    trouves = [p for p in trouves if p.suffix.lower() == ".apk" and "androidtest" not in p.name.lower()]
+    return str(max(trouves, key=lambda p: p.stat().st_mtime)) if trouves else None
 
 
 def ouvrir_projet(fichier_reglages, environ=None):
@@ -170,6 +193,8 @@ class Moteur:
         self.mesures_de_charge = 0         # combien de vraies mesures (sous-processus) ont été faites
         self.duree_dernier_tour_s = None
         self._reveils_vus = {}             # dossier du projet -> dernier horodatage du fichier de réveil traité
+        # les agents serveur au travail : (factory, clé de la tâche) -> leur `ExecuteurServeur` (l'arrêt du bureau)
+        self._serveurs, self._serveurs_arretes = {}, {}
         for p in projets:
             self._ajouter(p)
 
@@ -334,6 +359,7 @@ class Moteur:
             etat["repris"] = True
             self._demarrage(projet, etat)
         self._demandes(projet, etat)
+        self._arreter_les_agents_serveur(projet)
         self._valider_les_lecons(projet, etat)
         self._ecritures_en_attente(projet, etat)
         self._relever_le_cloud(projet, etat)
@@ -413,6 +439,10 @@ class Moteur:
             self._rattacher_les_agents(projet, etat)
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
             self._noter(projet, f"agents en cours : {e}")
+        try:    # avant `orphelines` : une tâche d'agent serveur est rattachée, jamais relancée en double
+            self._rattacher_les_agents_serveur(projet, etat)
+        except (regles.Refus, regles.ErreurMoteur, OSError) as e:
+            self._noter(projet, f"agents serveur en cours : {e}")
         try:
             self._reprendre_les_reprises(projet, etat)
         except (regles.Refus, regles.ErreurMoteur, OSError) as e:
@@ -757,6 +787,9 @@ class Moteur:
             raise regles.Refus(f"agent inconnu : {cle}")
         modele = (d.get("modele") or fiche["modele"] or "Sonnet").lower()
         fiche = self._fiche_avec_accord(self._fiche_du_metier(projet, fiche, taches), modele, d.get("fable_accorde"))
+        if fiche["lieu"] == "serveur":
+            self._lancer_serveur(projet, fiche, modele, taches[0], depart, matiere, d.get("lot"))
+            return
         if fiche["lieu"] != "cloud":
             infos = {"genre": "tache", "tache": taches[0], "taches": list(taches), "agent": cle, "modele": modele,
                      "lot": d.get("lot"), "matiere": matiere,
@@ -823,6 +856,142 @@ class Moteur:
             travail()
         else:
             threading.Thread(target=travail, name=f"agent-{fiche['cle']}", daemon=True).start()
+
+    # --- Les agents du lieu `serveur` (tranche B) : `executer_agent` ordinaire, exécuteur distant (`ExecuteurServeur`).
+
+    def _lancer_serveur(self, projet, fiche, modele, tache, depart, matiere, lot, reprendre=None, reponse=None):
+        """L'agent serveur, dans un fil comme un agent local : `claude -p` tourne dans un conteneur du serveur, le
+        rapport, les usages, la reprise (`reprendre`) et l'arrêt passent par le chemin ordinaire. L'exécuteur rattache
+        la tâche serveur active de (projet, tâche) au lieu d'en lancer une seconde. Mode `pilote` seulement avec
+        l'accord du Directeur et un APK (`_mode_serveur`) ; une réponse aux questions (`reponse`) est toujours `seul`.
+        L'`Execution` rendue porte `serveur` et, après des commits rapatriés, `branche` (`agent/<tâche>`)."""
+        mode, apk = ("seul", None) if reponse is not None else self._mode_serveur(projet)
+        executeur = executeur_serveur.ExecuteurServeur(projet.dossier, tache, mode, {"projet": projet.nom},
+                                                       **({"apk": apk} if apk else {}))
+        if reponse is None:
+            depart = depart.rstrip() + "\n\n" + dp.consigne_serveur(mode, tache) + "\n"
+        cle = (str(projet.factory), f"{tache}.reponse" if reponse is not None else tache)
+        self._serveurs[cle] = executeur
+        plus = {"reprendre": reprendre} if reprendre else {}
+
+        def travail():
+            try:
+                e = self.executer_agent(depart, matiere, agent=fiche, modele=modele, dossier_projet=str(projet.dossier),
+                                        tache=tache, lot=lot, executeur=executeur, **plus)
+            except Exception as ex:          # noqa: BLE001 — un retour toujours : la tâche ne reste jamais « active »
+                e = agents.Execution(tache, fiche["cle"], lot, erreur=f"agent serveur : {type(ex).__name__} : {ex}"[:500],
+                                     modele=modele)
+            finally:
+                if self._serveurs.get(cle) is executeur:
+                    self._serveurs.pop(cle, None)
+                if self._serveurs_arretes.get(cle) is executeur:
+                    self._serveurs_arretes.pop(cle, None)
+            e.serveur = True
+            if reponse is not None:
+                e.reponse = reponse
+            elif getattr(executeur, "branche", None):
+                e.branche = executeur.branche
+            self.retours.put((projet, e))
+
+        if self.synchrone:
+            travail()
+        else:
+            threading.Thread(target=travail, name=f"agent-serveur-{fiche['cle']}", daemon=True).start()
+
+    def _mode_serveur(self, projet):
+        """`(mode, apk)` : `("pilote", apk)` seulement si le Directeur a réglé `recette-emulateur` sur serveur pour ce
+        projet (accord permanent, `deport_types.accord_serveur`) ET qu'un APK est trouvé (`apk_pour_le_pilote`) ; sinon
+        `("seul", None)`. Une lecture qui échoue vaut « seul »."""
+        try:
+            plus = {"bureau": str(Path(self.bureau).expanduser())} if self.bureau else {}
+            if not deport_types.accord_serveur(str(projet.dossier), ACTION_PILOTE, **plus):
+                return "seul", None
+            apk = apk_pour_le_pilote(projet.dossier)
+        except Exception:                    # noqa: BLE001 — jamais une raison de ne pas partir
+            return "seul", None
+        return ("pilote", apk) if apk else ("seul", None)
+
+    @staticmethod
+    def _taches_serveur_actives():
+        """Les tâches d'agent en attente ou en cours de l'index des tâches serveur (sans connexion) ; [] si illisible."""
+        try:
+            sa, _st = executeur_serveur._modules()
+            return sa.taches_agent_actives()
+        except Exception:                    # noqa: BLE001 — une aide au journal : jamais une raison d'échouer
+            return []
+
+    def _rattacher_les_agents_serveur(self, projet, etat):
+        """Au démarrage : une tâche active tenue par un agent du lieu `serveur` repart par `_lancer_serveur` (avec le
+        reste de son lot), avant `orphelines` : l'exécuteur rattache la tâche serveur que l'index dit active (ou rapatrie
+        le travail fini) au lieu d'en lancer une seconde. Sans tâche serveur active, elle repart une fois."""
+        court = regles.lancer(projet, "etat")
+        serveurs = {a["cle"] for a in court["agents"] if a.get("lieu") == "serveur"}
+        taches = [t for t in court["taches"] if t.get("active") and t.get("agent") in serveurs
+                  and t["id"] not in etat["en_cours"]]
+        if not taches:
+            return
+        actives = {str(f.get("tache") or "").lower() for f in self._taches_serveur_actives()
+                   if f.get("projet") == projet.nom}
+        par_id, vues = {x["id"]: x for x in court["taches"]}, set()
+        for t in taches:
+            if t["id"] in vues:
+                continue
+            ids = [t["id"]]
+            if isinstance(t.get("lot"), dict):
+                reste = [x for x in court["taches"] if isinstance(x.get("lot"), dict)
+                         and x["lot"]["id"] == t["lot"]["id"] and x["lot"]["rang"] > t["lot"]["rang"]
+                         and x["colonne"] != "fait"]
+                ids += [x["id"] for x in sorted(reste, key=lambda x: x["lot"]["rang"])]
+            vues.update(ids)
+            modele = regles._modele_de_depart(projet, court, t["agent"], t)
+            matiere = (chr(10) * 2).join(regles._matiere(projet, etat, par_id[i]) for i in ids)
+            etat["departs"][ids[0]] = {"agent": t["agent"], "taches": ids, "matiere": matiere, "modele": modele,
+                                       "lot": (t.get("lot") or {}).get("id"), "suite": None}
+            etat["en_cours"].add(ids[0])
+            vivante = t["id"].lower() in actives
+            if not vivante:          # pas (plus) active sur le serveur : un seul nouvel essai, comme `orphelines`
+                regles._m(etat, "relancees", set).add(t["id"])
+            try:
+                regles.lancer(projet, "tache", {"id": t["id"], "journal": [
+                    "Le moteur a repris : l'agent serveur travaille encore sur le serveur, son résultat sera lu."
+                    if vivante else "Le moteur a repris : l'agent serveur n'est plus actif sur le serveur ; son travail "
+                                    "fini est rapatrié, sinon la tâche repart une fois."]})
+            except (regles.Refus, regles.ErreurMoteur) as e:
+                self._noter(projet, f"agent serveur repris ({t['id']}) : {e}")
+            try:
+                self._partir(projet, ("agent", t["agent"], ids, matiere))
+            except (regles.Refus, regles.ErreurMoteur) as e:
+                etat["en_cours"].discard(ids[0])
+                self._noter(projet, f"agent serveur non repris ({t['id']}) : {e}")
+
+    def _arreter_les_agents_serveur(self, projet):
+        """Le bouton « Arrêter » du bureau pour un agent serveur (la marque `detache.demander_arret(<factory>, <tâche>)`,
+        comme pour un agent local) : `ExecuteurServeur.arreter()`, une fois ; son `Execution` revient arrêtée par
+        l'utilisateur (ni nouvel essai ni relance)."""
+        if not self._serveurs:
+            return
+        registre = self._registre(projet)
+        for (cle, nom), executeur in list(self._serveurs.items()):
+            if cle != str(projet.factory) or self._serveurs_arretes.get((cle, nom)) is executeur:
+                continue
+            if registre.arret_demande(nom):
+                self.arreter_agent_serveur(projet, nom)
+
+    def arreter_agent_serveur(self, projet, tache):
+        """Arrête l'agent serveur de `tache` (sa clé : l'identifiant de la tâche, `<tâche>.reponse` pour une réponse) :
+        `ExecuteurServeur.arreter()` dans un fil (une connexion au serveur ne retient pas la boucle). Faux si aucun agent
+        serveur ne tient cette tâche."""
+        cle = (str(projet.factory), tache)
+        executeur = self._serveurs.get(cle)
+        if executeur is None:
+            return False
+        self._serveurs_arretes[cle] = executeur
+        self._noter(projet, f"{tache} : arrêt de l'agent serveur demandé depuis le bureau")
+        if self.synchrone:
+            executeur.arreter()
+        else:
+            threading.Thread(target=executeur.arreter, name=f"arret-serveur-{tache}", daemon=True).start()
+        return True
 
     def _arreter_les_emulateurs_oublies(self):
         """Toutes les `figes.EMULATEURS_TOUS_LES_S` (pas au premier tour) : un émulateur né avant tous les agents locaux
@@ -978,6 +1147,12 @@ class Moteur:
         for d in demandes:
             regles.suivre_demande(projet, d, "reponse_en_cours", f"{fiche.get('prenom') or fiche['cle']} a fini la "
                                   f"tâche {tid} et rédige sa réponse.", tache=tid)
+        if fiche["lieu"] == "serveur":      # sa session reprise sur le serveur (`--resume`), comme un agent local
+            self._lancer_serveur(projet, self._fiche_de_reponse(fiche), modele, tid,
+                                 depart_de_reponse(tid, questions, session, rendu), "", None, reprendre=session,
+                                 reponse={"fonctionnalite": fid, "questions": questions, "cle": cle,
+                                          "demandes": list(demandes)})
+            return
         self._lancer_local(projet, self._fiche_de_reponse(fiche), modele, cle, infos,
                            depart_de_reponse(tid, questions, session, rendu), "", tache=tid, lot=None,
                            reprendre=session, reponse={"fonctionnalite": fid, "questions": questions, "cle": cle,
@@ -1129,12 +1304,17 @@ class Moteur:
 
     def _fusionner(self, projet, etat, e):
         """Après un rapport « fait » venu d'une branche `claude/…` : la fusionner. Un conflit devient une question au
-        Directeur, avec la branche et l'adresse de la session."""
-        raison = self.cloud.fusionner(str(projet.dossier), e.branche)
+        Directeur, avec la branche et l'adresse de la session. Un agent serveur : sa branche locale `agent/<tâche>`
+        (rapatriée par paquet Git, `distante=False`)."""
+        if getattr(e, "serveur", False):
+            raison = self.cloud.fusionner(str(projet.dossier), e.branche, distante=False)
+        else:
+            raison = self.cloud.fusionner(str(projet.dossier), e.branche)
         if raison is None:
             return
         self._noter(projet, f"fusion de {e.branche} : {raison}")
-        self._executer(projet, regles.fusion_impossible(projet, etat, e.tache, e.agent, e.branche, e.adresse, raison))
+        self._executer(projet, regles.fusion_impossible(projet, etat, e.tache, e.agent, e.branche,
+                                                        getattr(e, "adresse", None), raison))
 
     def _retours_des_agents(self, projet, etat):
         garde = []

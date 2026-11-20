@@ -2492,6 +2492,8 @@ def construire_releve(ctx):
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
+         "agents_serveur_max": places_serveur_du_projet(ctx), "ordre_lieux": list(ctx.f["ordre_lieux"]),
+         "ordre_lieux_par_metier": {r: list(o) for r, o in ctx.f["ordre_lieux_par_metier"].items()},
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
          "anomalies_logiciel": anomalies_logiciel.lire(ctx.f)[-ANOMALIES_AU_RELEVE:],
@@ -3476,14 +3478,17 @@ def cmd_parallelisme(ctx, e):
     ajoutée, un agent libre de moins par place retirée (un agent au travail finit sa tâche, voir `synchroniser_equipe`).
     Rend les valeurs écrites et, pour un projet polyvalent seulement, `{crees, retires, retraits_prevus}`."""
     locaux, cloud = e.get("agents_locaux_max"), e.get("agents_cloud_max")
+    plus = [c for c in ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier") if e.get(c) is not None]
     try:
-        fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud)
+        fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud, serveur=e.get("agents_serveur_max"), ordre=e.get("ordre_lieux"),
+                               par_metier=e.get("ordre_lieux_par_metier"))
     except fa.FactoryInvalide as ex:
         raise Refus(str(ex))
     ctx.f = fa.lire(ctx.f["chemin"])     # les places qui viennent d'être écrites
+    ecrit = {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **{c: ctx.f[c] for c in plus}}
     if rc.equipe_pure(ctx.fiches()) is None:      # un projet à l'ancienne (ou mixte) : la réponse d'avant, rien d'autre
-        return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
-    return {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **synchroniser_equipe(ctx)}
+        return ecrit
+    return {**ecrit, **synchroniser_equipe(ctx)}
 
 
 # --- Le recrutement depuis le bureau (conception 2026-11-12-recrutement-design.md).

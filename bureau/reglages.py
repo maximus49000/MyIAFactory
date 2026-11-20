@@ -222,6 +222,34 @@ def fixer_deport(chemin, deport, catalogue=None):
     return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
 
 
+def fixer_agents_abonnement_max(chemin, valeur):
+    """Note, dans le fichier du bureau, le plafond des agents actifs sur l'abonnement (entier de 1 à 32 ; `None` : plus de
+    plafond, la clé disparaît). Le reste du fichier est gardé. Rend la valeur écrite."""
+    if valeur is not None and (type(valeur) is not int or not AGENTS_ABONNEMENT_MAX[0] <= valeur <= AGENTS_ABONNEMENT_MAX[1]):
+        raise ValueError("« agents_abonnement_max » doit être un entier de 1 à 32 (ou nul : aucun plafond).")
+    chemin = Path(chemin)
+    try:
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except (ValueError, OSError) as e:
+        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
+    if not isinstance(donnees, dict):
+        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
+    if valeur is None:
+        donnees.pop("agents_abonnement_max", None)
+    else:
+        donnees["agents_abonnement_max"] = valeur
+    fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(donnees, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, chemin)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return valeur
+
+
 def fixer_analyse_blocages(chemin, valeur):
     """Note si le Chef analyse les blocages avant le Directeur (vrai ou faux, rien d'autre)."""
     if type(valeur) is not bool:

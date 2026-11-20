@@ -878,6 +878,13 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({**base, "agents_serveur_max": 1, "ordre_lieux": ["local"], "autre": 1}),
                          {**base, "agents_serveur_max": 1, "ordre_lieux": ["local"]})
 
+    def test_parallelisme_refuse_deux_roles_qui_n_en_font_qu_un(self):
+        base = {"type": "parallelisme", "agents_locaux_max": 2, "agents_cloud_max": 1}
+        self.ok({**base, "ordre_lieux_par_metier": {"qa": ["local"], "dev": ["cloud"]}})
+        self.refus({**base, "ordre_lieux_par_metier": {"qa": ["local"], "qa ": ["cloud"]}})      # comme factory._lire
+        self.refus({**base, "ordre_lieux_par_metier": {" qa": ["local"], "qa": ["cloud"]}})
+        self.refus({**base, "ordre_lieux_par_metier": {"   ": ["local"]}})
+
     def test_organisation_d_un_workflow(self):
         base = {"type": "organisation", "decision": "o2"}
         self.ok({**base, "verdict": "accepter"})

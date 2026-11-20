@@ -356,7 +356,8 @@ def _verifier_parallelisme(demande):
     if "ordre_lieux_par_metier" in demande:
         par = demande["ordre_lieux_par_metier"]
         if not isinstance(par, dict) or len(par) > 50 or not all(isinstance(r, str) and r.strip() and _ordre_de_lieux(o)
-                                                for r, o in par.items()):
+                                                for r, o in par.items()) \
+                or len({r.strip() for r in par}) != len(par):      # deux clés qui n'en font qu'une : refusé, comme factory._lire
             return "« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux (local, serveur, cloud)."
     return None
 

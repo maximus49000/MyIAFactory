@@ -257,13 +257,31 @@ def ecrire_genre(chemin, genre):
     _ecrire_cles(chemin, {"genre": genre})
 
 
-def ecrire_parallelisme(chemin, locaux, cloud):
-    """Note les places du projet (`agents_locaux_max` 1 à 16, `agents_cloud_max` 0 à 16) ; le reste est gardé."""
+def ecrire_parallelisme(chemin, locaux, cloud, serveur=None, ordre=None, par_metier=None):
+    """Note les places du projet (`agents_locaux_max` 1 à 16, `agents_cloud_max` 0 à 16) ; le reste est gardé. Facultatifs,
+    écrits seulement s'ils sont donnés : `serveur` (`agents_serveur_max`, 0 à 4), `ordre` (`ordre_lieux`) et `par_metier`
+    (`ordre_lieux_par_metier`, clés nettoyées ; `{}` le vide), contrôlés comme `lire` : rien n'est écrit si l'un est refusé."""
     if not _entier_borne(locaux, AGENTS_LOCAUX):
         raise FactoryInvalide("« agents_locaux_max » doit être un entier de 1 à 16.")
     if not _entier_borne(cloud, AGENTS_CLOUD):
         raise FactoryInvalide("« agents_cloud_max » doit être un entier de 0 à 16.")
-    _ecrire_cles(chemin, {"agents_locaux_max": locaux, "agents_cloud_max": cloud})
+    cles = {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
+    if serveur is not None:
+        if not _entier_borne(serveur, AGENTS_SERVEUR):
+            raise FactoryInvalide("« agents_serveur_max » doit être un entier de 0 à 4.")
+        cles["agents_serveur_max"] = serveur
+    if ordre is not None:
+        if not _ordre_valide(ordre):
+            raise FactoryInvalide("« ordre_lieux » doit lister, sans doublon, au moins un lieu parmi local, serveur, cloud.")
+        cles["ordre_lieux"] = list(ordre)
+    if par_metier is not None:
+        if (not isinstance(par_metier, dict) or len(par_metier) > MAX_ORDRES_PAR_METIER
+                or not all(_texte(r) and _ordre_valide(o) for r, o in par_metier.items())
+                or len({r.strip() for r in par_metier}) != len(par_metier)):
+            raise FactoryInvalide("« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux "
+                                  "(local, serveur, cloud, sans doublon).")
+        cles["ordre_lieux_par_metier"] = {r.strip(): list(o) for r, o in par_metier.items()}
+    _ecrire_cles(chemin, cles)
 
 
 def _ecrire_cles(chemin, cles):

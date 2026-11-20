@@ -253,6 +253,12 @@ def construire(r, eq, maintenant, fraicheur_min, alertes=None):
         e["genre"] = r["genre"]
         e["agents_locaux_max"] = r["agents_locaux_max"]
         e["agents_cloud_max"] = r["agents_cloud_max"]
+        if isinstance(r.get("agents_serveur_max"), int):       # les places serveur et l'ordre des lieux (tranche B)
+            e["agents_serveur_max"] = r["agents_serveur_max"]
+        if isinstance(r.get("ordre_lieux"), list):
+            e["ordre_lieux"] = list(r["ordre_lieux"])
+        if isinstance(r.get("ordre_lieux_par_metier"), dict):
+            e["ordre_lieux_par_metier"] = copy.deepcopy(r["ordre_lieux_par_metier"])
         if r.get("recrutement") is not None:      # de quoi recruter depuis « Parallélisme du projet »
             e["recrutement"] = copy.deepcopy(r["recrutement"])
         e["livrable"] = r["livrable"]

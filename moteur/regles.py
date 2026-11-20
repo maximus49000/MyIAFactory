@@ -2384,7 +2384,9 @@ def _sur_parallelisme(projet, demande, etat):
     """Les places du projet, réglées depuis l'onglet Facturation : écrites par l'outil (qui les vérifie de nouveau),
     puis ce qui peut partir part."""
     r = lancer(projet, "parallelisme", {"agents_locaux_max": demande.get("agents_locaux_max"),
-                                        "agents_cloud_max": demande.get("agents_cloud_max")})
+                                        "agents_cloud_max": demande.get("agents_cloud_max"),
+                                        **{c: demande[c] for c in ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier")
+                                           if c in demande}})
     locaux, nuage = r["agents_locaux_max"], r["agents_cloud_max"]
     equipe = []
     if r.get("crees"):
@@ -2397,6 +2399,9 @@ def _sur_parallelisme(projet, demande, etat):
     _terminer(projet, {"demande": demande["id"]},
               f"C'est noté : au plus {locaux} {'agents locaux' if locaux > 1 else 'agent local'} et {nuage} "
               f"{'agents cloud' if nuage > 1 else 'agent cloud'} travaillent en même temps sur ce projet."
+              + (f" Places sur le serveur : {r['agents_serveur_max']}." if "agents_serveur_max" in r else "")
+              + (f" Ordre des lieux : {', '.join(r['ordre_lieux'])}." if "ordre_lieux" in r else "")
+              + (" L'ordre des lieux de certains métiers est réglé à part." if r.get("ordre_lieux_par_metier") else "")
               + (f" Équipe : {', '.join(equipe)}." if equipe else ""))
     return _demarrer_en_attente(projet, etat, None)
 

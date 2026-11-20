@@ -89,6 +89,26 @@ class TestReglages(unittest.TestCase):
             with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
                 reglages.lire_bureau(self.bureau_avec(agents_abonnement_max=v))
 
+    def test_fixer_agents_abonnement_max(self):
+        bureau = self.bureau_avec(port=9100)
+        avant = json.loads(bureau.read_text(encoding="utf-8"))
+        self.assertEqual(reglages.fixer_agents_abonnement_max(bureau, 6), 6)
+        lu = reglages.lire_bureau(bureau)
+        self.assertEqual((lu["agents_abonnement_max"], lu["port"]), (6, 9100))
+        self.assertEqual(json.loads(bureau.read_text(encoding="utf-8")), {**avant, "agents_abonnement_max": 6})   # le reste est gardé
+        for v in (1, 32):
+            reglages.fixer_agents_abonnement_max(bureau, v)
+            self.assertEqual(reglages.lire_bureau(bureau)["agents_abonnement_max"], v)
+        self.assertIsNone(reglages.fixer_agents_abonnement_max(bureau, None))          # plus de plafond : la clé disparaît
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        for v in (0, 33, -1, True, "4", 2.5):
+            with self.assertRaises(ValueError, msg=repr(v)):
+                reglages.fixer_agents_abonnement_max(bureau, v)
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        (self.tmp / "abime.json").write_text("{pas du json", encoding="utf-8")
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.fixer_agents_abonnement_max(self.tmp / "abime.json", 3)
+
     def test_lecons_auto_faux_par_defaut_et_booleen_seulement(self):
         self.assertIs(reglages.charger(self.tmp / "absent.json")["lecons_auto"], False)
         (self.tmp / "r.json").write_text('{"lecons_auto": true}', encoding="utf-8")

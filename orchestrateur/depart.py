@@ -61,20 +61,29 @@ def ordre_du_metier(factory, role):
 
 
 def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None,
-                lieu_etape=None, ordre_lieux=None, places=None, hors_ligne=frozenset(), abonnement=(0, None)):
+                lieu_etape=None, ordre_lieux=None, places=None, hors_ligne=frozenset(), abonnement=(0, None),
+                abonnement_refus=None):
     """(clé, raison) de l'agent libre (voir `_agent_libre_dans`). Sans `ordre_lieux`, ou quand `lieu`, `lieu_reserve` ou
     `lieu_etape` impose un lieu, c'est le comportement d'avant, à l'octet près. Avec `ordre_lieux` (lieux dans l'ordre de
     préférence), `places` (`{lieu: places}`), `hors_ligne` (lieux injoignables) et `abonnement` (`(actifs, plafond)`) :
     les lieux sont essayés dans l'ordre de `lieu_pour` ; un lieu qui a une place mais aucune fiche libre passe au suivant.
-    Si rien n'est libre, la raison nomme chaque lieu : la tâche reste en file, jamais lancée ailleurs en silence."""
+    Si rien n'est libre, la raison nomme chaque lieu : la tâche reste en file, jamais lancée ailleurs en silence.
+    Le plafond d'abonnement lie toute tâche, même celle dont un lieu est imposé ; `abonnement_refus` (le texte d'un réglage
+    de plafond illisible) ferme la porte de la même façon, avec sa raison. Un lieu `serveur` demandé exige une place
+    serveur et un serveur en ligne (quand `places` est donné)."""
+    if abonnement_refus:
+        return None, abonnement_refus
+    actifs, plafond = abonnement
+    if plafond is not None and actifs >= plafond:
+        return None, f"plafond d'abonnement atteint ({actifs}/{plafond})"
+    if lieu == "serveur" and places is not None:
+        occupes = _occupation(fiches, taches)
+        if lieu in hors_ligne or occupes.get(lieu, 0) >= places.get(lieu, 0):
+            return None, f"serveur : {_etat_du_lieu(lieu, places, occupes, hors_ligne)}"
     if ordre_lieux is None or lieu or mn.lieu_impose(lieu_etape, lieu_reserve):
         return _agent_libre_dans(fiches, taches, role, modele, lieu, agents_locaux_max, lieu_reserve, lieu_etape)
     places = places or {}
-    occupes = {}
-    par_cle = {f["cle"]: f["lieu"] for f in fiches}
-    for t in taches:
-        if t.get("active") and t.get("agent") in par_cle:
-            occupes[par_cle[t["agent"]]] = occupes.get(par_cle[t["agent"]], 0) + 1
+    occupes = _occupation(fiches, taches)
     ordre, sans_fiche = list(ordre_lieux), set()
     while True:
         choisi, raison = lieu_pour([x for x in ordre if x not in sans_fiche], places, occupes, hors_ligne, *abonnement)
@@ -86,9 +95,22 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
         sans_fiche.add(choisi)
     if not sans_fiche or raison.startswith("plafond d'abonnement"):
         return None, raison     # `raison` nomme déjà chaque lieu de l'ordre (ou le plafond)
-    return None, " ; ".join(
-        f"{x} : " + ("aucune fiche libre" if x in sans_fiche else _etat_du_lieu(x, places, occupes, hors_ligne))
-        for x in ordre)
+    attend = sans_session(fiches, role, modele) if "cloud" in sans_fiche else None   # la session à créer, dite au Directeur
+
+    def etat(x):
+        if x not in sans_fiche:
+            return _etat_du_lieu(x, places, occupes, hors_ligne)
+        return f"session à créer pour {attend}" if x == "cloud" and attend else "aucune fiche libre"
+    return None, " ; ".join(f"{x} : {etat(x)}" for x in ordre)
+
+
+def _occupation(fiches, taches):
+    """`{lieu: tâches actives tenues par un agent de ce lieu}`."""
+    occupes, par_cle = {}, {f["cle"]: f["lieu"] for f in fiches}
+    for t in taches:
+        if t.get("active") and t.get("agent") in par_cle:
+            occupes[par_cle[t["agent"]]] = occupes.get(par_cle[t["agent"]], 0) + 1
+    return occupes
 
 
 def _agent_libre_dans(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None,

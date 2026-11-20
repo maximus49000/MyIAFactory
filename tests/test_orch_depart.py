@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -265,7 +266,27 @@ class TestBasculeLieux(unittest.TestCase):
         cle, raison = depart.agent_libre(liste, occupe, "dev", lieu_etape="local", ordre_lieux=ORDRE, places=PLACES,
                                          agents_locaux_max=1)
         self.assertIsNone(cle)
-        self.assertNotEqual(cle, "srv-1")
+        self.assertEqual(raison, "aucun agent local libre : la tâche attend le poste local")
+        # le plafond d'abonnement lie aussi les tâches dont le lieu est imposé (étape, métier, lieu donné, sans ordre)
+        plafond = (4, 4)
+        for kw in ({"lieu_etape": "local"}, {"lieu_reserve": "cloud"}, {"lieu": "serveur"}, {"lieu": "local"},
+                   {"lieu_etape": "cloud"}):
+            self.assertEqual(depart.agent_libre(liste, [], "dev", ordre_lieux=ORDRE, places=PLACES, abonnement=plafond, **kw),
+                             (None, "plafond d'abonnement atteint (4/4)"), kw)
+            self.assertEqual(depart.agent_libre(liste, [], "dev", abonnement=plafond, **kw),
+                             (None, "plafond d'abonnement atteint (4/4)"), kw)      # même sans ordre des lieux
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_etape="local", abonnement=(3, 4))[0], "dev-1")
+        # un lieu serveur demandé : hors ligne ou sans place, la tâche attend, elle ne part pas
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu="serveur", ordre_lieux=ORDRE, places=PLACES,
+                                            hors_ligne=frozenset({"serveur"})), (None, "serveur : hors ligne"))
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu="serveur", ordre_lieux=ORDRE,
+                                            places={"local": 2, "serveur": 0}), (None, "serveur : 0 place"))
+        self.assertEqual(depart.agent_libre(liste, [{"agent": "srv-1", "active": True}], "dev", lieu="serveur",
+                                            ordre_lieux=ORDRE, places={"serveur": 1}), (None, "serveur : 1/1 occupés"))
+        # un réglage de plafond illisible : la tâche attend avec sa raison, quel que soit le lieu
+        refus = "plafond d'abonnement : réglage illisible"
+        for kw in ({}, {"lieu_etape": "local"}, {"lieu": "serveur"}):
+            self.assertEqual(depart.agent_libre(liste, [], "dev", abonnement_refus=refus, **kw), (None, refus), kw)
         # le métier réservé au cloud : l'ordre n'y change rien
         self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_reserve="cloud", ordre_lieux=ORDRE, places=PLACES)[0], "cl-1")
         # un lieu donné explicitement l'emporte aussi
@@ -288,6 +309,13 @@ class TestBasculeLieux(unittest.TestCase):
         sans_serveur = [f for f in liste if f["lieu"] != "serveur"]
         self.assertEqual(depart.agent_libre(sans_serveur, [{"agent": "dev-1", "active": True}], "dev", ordre_lieux=ORDRE,
                                             places=places, agents_locaux_max=1)[0], "cl-1")
+
+    def test_agent_libre_cloud_sans_session_le_dit(self):
+        liste = [fiche("dev-1", "dev"), fiche("cl-1", "dev", lieu="cloud")]            # la fiche cloud n'a pas de session
+        cle, raison = depart.agent_libre(liste, [{"agent": "dev-1", "active": True}], "dev", ordre_lieux=ORDRE,
+                                         places={"local": 1, "serveur": 0, "cloud": 2}, agents_locaux_max=1)
+        self.assertIsNone(cle)
+        self.assertEqual(raison, "local : 1/1 occupés ; serveur : 0 place ; cloud : session à créer pour cl-1")
 
     def test_agent_libre_tout_plein_nomme_chaque_lieu(self):
         liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur")]
@@ -313,7 +341,7 @@ class TestBasculeLieux(unittest.TestCase):
         # même résultat que sans les nouveaux paramètres (la suite actuelle l'éprouve par ailleurs)
         for kw in ({}, {"agents_locaux_max": 1}, {"lieu": "local"}, {"modele": "Opus"}):
             self.assertEqual(depart.agent_libre(liste, taches, "dev", ordre_lieux=None, places=PLACES,
-                                                hors_ligne=frozenset({"local"}), abonnement=(9, 1), **kw),
+                                                hors_ligne=frozenset({"local"}), **kw),
                              depart.agent_libre(liste, taches, "dev", **kw))
 
 
@@ -339,7 +367,7 @@ class TestDepartCommandes(AvecProjet):
 
     # --- la bascule entre lieux : le serveur sondé, l'abonnement du bureau, l'ordre du projet
 
-    def serveur(self, caps):
+    def serveur(self, caps, maj=None):
         """Un serveur déclaré dans un dossier de plateforme de test, avec ces capacités à la dernière sonde."""
         plateforme = self.dossier / "plateforme"
         plateforme.mkdir(exist_ok=True)
@@ -347,7 +375,8 @@ class TestDepartCommandes(AvecProjet):
             "id": "ovh1", "nom": "ovh1", "hote": "ovh1.exemple.net", "utilisateur": "ubuntu", "cle": "C:/cles/id"}]),
             encoding="utf-8")
         (plateforme / "serveurs-etat.json").write_text(json.dumps({"ovh1": {
-            "capacites": {k: {"statut": v} for k, v in caps.items()}, "installation": {"en_cours": False}}}),
+            "capacites": {k: {"statut": v, **({"maj": maj} if maj else {})} for k, v in caps.items()},
+            "installation": {"en_cours": False}}}),
             encoding="utf-8")
         patch = mock.patch.object(outil, "DOSSIER_PLATEFORME", plateforme)
         patch.start()
@@ -365,6 +394,14 @@ class TestDepartCommandes(AvecProjet):
         self.serveur({"agent": "inconnue", "agent-abonnement": "inconnue"})       # sonde ancienne ou injoignable
         self.assertTrue(outil.serveur_hors_ligne())
         self.serveur({})                                                           # jamais sondé
+        self.assertTrue(outil.serveur_hors_ligne())
+        prets = {"agent": "presente", "agent-abonnement": "presente"}
+        maintenant = datetime.now(timezone.utc)
+        self.serveur(prets, maj=(maintenant - timedelta(hours=2)).isoformat(timespec="seconds"))
+        self.assertFalse(outil.serveur_hors_ligne())                               # sondé il y a 2 h
+        self.serveur(prets, maj=(maintenant - timedelta(hours=25)).isoformat(timespec="seconds"))
+        self.assertTrue(outil.serveur_hors_ligne())                                # sonde de plus de 24 h : hors ligne
+        self.serveur(prets, maj="pas une date")                                    # date illisible : on ne peut le dire prêt
         self.assertTrue(outil.serveur_hors_ligne())
 
     def regler(self, **cles):
@@ -402,24 +439,83 @@ class TestDepartCommandes(AvecProjet):
         self.serveur({"agent": "presente", "agent-abonnement": "presente"})
         self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
 
-    def test_commande_plafond_d_abonnement_du_bureau(self):
-        self.regler(agents_serveur_max=1)
+    def bureau_avec_autre(self, plafond=2, suivi=None, factory_autre=True, brut=None):
+        """Un bureau à deux projets (celui-ci et `autre`, qui tient 1 tâche d'agent active) et ce plafond d'abonnement."""
         bureau = self.dossier / "bureau.json"
         autre = self.dossier / "autre"
-        (autre / ".factory").mkdir(parents=True)
+        (autre / ".factory").mkdir(parents=True, exist_ok=True)
         (autre / ".factory" / "reglages.json").write_text("{}", encoding="utf-8")
-        (autre / ".factory" / "factory.json").write_text(json.dumps({"skill": "s", "suivi": "suivi.json"}), encoding="utf-8")
-        (autre / ".factory" / "suivi.json").write_text(json.dumps({"taches": [
+        if factory_autre:
+            (autre / ".factory" / "factory.json").write_text(json.dumps({"skill": "s", "suivi": "suivi.json"}), encoding="utf-8")
+        else:
+            (autre / ".factory" / "factory.json").unlink(missing_ok=True)
+        (autre / ".factory" / "suivi.json").write_text(suivi if suivi is not None else json.dumps({"taches": [
             {"id": "t1", "agent": "x-1", "active": True}, {"id": "t2", "agent": "x-2", "active": False},
             {"id": "t3", "agent": None, "active": True}]}), encoding="utf-8")
         (self.dossier / "reglages.json").write_text("{}", encoding="utf-8")
-        bureau.write_text(json.dumps({"projets": ["reglages.json", "autre/.factory/reglages.json"],
-                                      "agents_abonnement_max": 2}), encoding="utf-8")
-        with mock.patch.object(outil, "BUREAU_DEPORT", str(bureau)):
-            self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
-            self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
-            r = self.ok("agent-libre", entree={"role": "dev"})                       # 2 actives (ici et ailleurs) : plafond
-            self.assertEqual((r["agent"], r["raison"]), (None, "plafond d'abonnement atteint (2/2)"))
+        contenu = {"projets": ["reglages.json", "autre/.factory/reglages.json"]}
+        if plafond is not None:
+            contenu["agents_abonnement_max"] = plafond
+        bureau.write_text(brut if brut is not None else json.dumps(contenu), encoding="utf-8")
+        if not getattr(self, "_bureau_patch", False):
+            self._bureau_patch = True
+            patch = mock.patch.object(outil, "BUREAU_DEPORT", str(bureau))
+            patch.start()
+            self.addCleanup(patch.stop)
+        return bureau
+
+    def test_commande_plafond_d_abonnement_du_bureau(self):
+        self.regler(agents_serveur_max=1)
+        self.bureau_avec_autre(2)
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+        self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
+        r = self.ok("agent-libre", entree={"role": "dev"})                       # 2 actives (ici et ailleurs) : plafond
+        self.assertEqual((r["agent"], r["raison"]), (None, "plafond d'abonnement atteint (2/2)"))
+        # le plafond lie aussi un lieu imposé : un lieu donné
+        r = self.ok("agent-libre", entree={"role": "dev", "lieu": "local"})
+        self.assertEqual((r["agent"], r["raison"]), (None, "plafond d'abonnement atteint (2/2)"))
+
+    def test_commande_plafond_invalide_ou_bureau_illisible_garde_la_porte_fermee(self):
+        refus = "plafond d'abonnement : réglage illisible"
+        for mauvais in (0, 33, "4", True, None, 2.5):
+            bureau = self.bureau_avec_autre(1)
+            contenu = json.loads(bureau.read_text(encoding="utf-8"))
+            contenu["agents_abonnement_max"] = mauvais
+            bureau.write_text(json.dumps(contenu), encoding="utf-8")
+            r = self.ok("agent-libre", entree={"role": "dev"})
+            self.assertEqual((r["agent"], r["raison"]), (None, refus), repr(mauvais))
+        self.bureau_avec_autre(brut="{pas du json")                               # bureau illisible
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertEqual((r["agent"], r["raison"]), (None, refus))
+        self.bureau_avec_autre(brut="[1, 2]")
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["raison"], refus)
+        # sans plafond réglé, ou sans fichier du bureau : rien ne limite
+        self.bureau_avec_autre(None)
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+        (self.dossier / "bureau.json").unlink()
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+
+    def test_commande_suivi_d_un_autre_projet_illisible_garde_la_porte_fermee(self):
+        self.bureau_avec_autre(5, suivi="{abime")
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertIsNone(r["agent"])
+        self.assertIn("plafond d'abonnement", r["raison"])
+        self.assertIn("autre", r["raison"])                                       # le projet illisible est nommé
+        self.bureau_avec_autre(5, factory_autre=False)
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertIsNone(r["agent"])
+        self.assertIn("autre", r["raison"])
+
+    def test_commande_cloud_sans_session_en_bascule(self):
+        (self.dossier / "fiches" / "cl.md").write_text(
+            "Clé : cl-1\nRôle : dev\nService : dev\nModèle : Sonnet\nLieu : cloud\n\n## Leçons\n", encoding="utf-8")
+        self.regler(agents_serveur_max=1, agents_cloud_max=2, agents_locaux_max=1)
+        self.serveur({"agent": "presente", "agent-abonnement": "absente"})
+        self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertIsNone(r["agent"])
+        self.assertEqual(r["raison"], "local : 1/1 occupés ; serveur : hors ligne ; cloud : session à créer pour cl-1")
+        self.assertEqual(r["sans_session"], "cl-1")
 
     def test_agent_libre_voit_la_session_de_la_table(self):
         (self.dossier / "fiches" / "prep.md").write_text(

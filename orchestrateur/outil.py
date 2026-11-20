@@ -3638,61 +3638,100 @@ def lieu_de_la_tache(ctx, s, t, fiches_):
 DOSSIER_PLATEFORME = None     # le dossier de la plateforme (serveurs.json, serveurs-etat.json) ; remplacé par les tests
 
 
-def serveur_hors_ligne(dossier=None):
-    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes
-    (état local `serveurs-etat.json` : aucune connexion). Au moindre souci de lecture, le serveur est dit hors ligne."""
+SONDE_PERIMEE_S = 24 * 3600     # une sonde plus vieille que 24 h ne dit plus que le serveur est en ligne
+
+
+def serveur_hors_ligne(dossier=None, maintenant=None):
+    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes et
+    constatées il y a moins de 24 h (état local `serveurs-etat.json` : aucune connexion). Une date de sonde illisible, ou
+    la moindre erreur de lecture, vaut hors ligne ; une capacité sans date (état ancien) n'est pas jugée périmée."""
     try:
         outils = str(Path(__file__).resolve().parent.parent / "outils")
         if outils not in sys.path:
             sys.path.append(outils)
         import serveur_capacites
+        import serveur_installation
+        import serveur_modele
         import serveur_tache
-        dossier = dossier or DOSSIER_PLATEFORME
-        args = (dossier,) if dossier else ()
-        serveur_tache.choisir_serveur(*args, requises=serveur_capacites.BESOINS["agent-serveur"])
-        return False
-    except Exception:       # `RefusLancement` : aucun serveur prêt ; toute autre erreur : on ne peut pas dire qu'il l'est
+        args = (dossier or DOSSIER_PLATEFORME,) if (dossier or DOSSIER_PLATEFORME) else ()
+        connu = serveur_installation.lire_etat_vivant(*args)
+        limite = (maintenant or datetime.now().astimezone()).timestamp() - SONDE_PERIMEE_S
+        for serveur in serveur_modele.lire(*args):
+            caps = (connu.get(serveur.id) or {}).get("capacites")
+            caps = caps if isinstance(caps, dict) else {}
+            pret = True
+            for c in serveur_capacites.BESOINS["agent-serveur"]:
+                e = caps.get(c) if isinstance(caps.get(c), dict) else {}
+                if e.get("statut") not in serveur_tache.STATUTS_PRETS:
+                    pret = False
+                elif e.get("maj") is not None:
+                    quand = datetime.fromisoformat(str(e["maj"]))
+                    if quand.tzinfo is None:
+                        quand = quand.astimezone()
+                    pret = pret and quand.timestamp() >= limite
+            if pret:
+                return False
+        return True
+    except Exception:       # tout souci de lecture : on ne peut pas dire qu'il est en ligne
         return True
 
 
 def actifs_abonnement(ctx, s, bureau=None):
-    """Les tâches actives tenues par un agent, tous lieux, dans tous les projets du bureau (le suivi de ce projet est `s` ;
-    un projet dont le suivi est illisible ne compte pas)."""
+    """`(actifs, refus)` : les tâches actives tenues par un agent, tous lieux, dans tous les projets du bureau (le suivi de
+    ce projet est `s`). `refus` : le texte à rendre quand le compte est impossible (bureau ou projet illisible) : le
+    plafond l'exige, la tâche attend plutôt que de compter de moins."""
     total = sum(1 for t in s.get("taches") or [] if t.get("active") and t.get("agent"))
     try:
         from bureau import reglages as rg
         projets = rg.lire_bureau(Path(bureau or BUREAU_DEPORT).expanduser())["projets"]
     except Exception:
-        return total
+        return total, "plafond d'abonnement : projets du bureau illisibles"
     ici = Path(ctx.suivi.chemin).resolve()
     for p in projets:
+        nom = Path(p["chemin"]).resolve().parent
+        nom = (nom.parent if nom.name == ".factory" else nom).name
         try:
             suivi = Path(fa.lire(Path(p["chemin"]).parent / "factory.json")["suivi"]).resolve()
             if suivi == ici:
                 continue
             taches = su.Suivi(suivi).lire().get("taches") or []
         except Exception:
-            continue
+            return total, f"plafond d'abonnement : suivi illisible pour le projet {nom}"
         total += sum(1 for t in taches if isinstance(t, dict) and t.get("active") and t.get("agent"))
-    return total
+    return total, None
+
+
+REFUS_PLAFOND = "plafond d'abonnement : réglage illisible"
 
 
 def plafond_abonnement(bureau=None):
-    """`agents_abonnement_max` du fichier du bureau (1 à 32), ou `None` : absent ou illisible, rien ne limite."""
+    """`(plafond, refus)` : `agents_abonnement_max` du fichier du bureau (1 à 32). Fichier absent, ou réglage absent :
+    `(None, None)`, rien ne limite. Fichier illisible, ou réglage invalide : `(None, REFUS_PLAFOND)` (on ne retire pas la
+    garde en silence)."""
+    chemin = Path(bureau or BUREAU_DEPORT).expanduser()
+    if not chemin.exists():
+        return None, None
     try:
-        from bureau import reglages as rg
-        return rg.lire_bureau(Path(bureau or BUREAU_DEPORT).expanduser())["agents_abonnement_max"]
-    except Exception:
-        return None
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None, REFUS_PLAFOND
+    if not isinstance(donnees, dict):
+        return None, REFUS_PLAFOND
+    if "agents_abonnement_max" not in donnees:
+        return None, None
+    v = donnees["agents_abonnement_max"]
+    if type(v) is not int or not 1 <= v <= 32:
+        return None, REFUS_PLAFOND
+    return v, None
 
 
-def _bascule_des_lieux(ctx, role, plafond=None):
+def _bascule_des_lieux(ctx, role, garde=False):
     """Les paramètres de la bascule entre lieux (`ordre_lieux`, `places`, `hors_ligne`), ou `None` pour un projet à
-    l'ancienne : aucune place serveur, ni ordre ni ordre par métier réglés, ni plafond d'abonnement (le comportement
-    d'avant, inchangé)."""
+    l'ancienne : aucune place serveur, ni ordre ni ordre par métier réglés, ni plafond d'abonnement (`garde`) : le
+    comportement d'avant, inchangé."""
     serveur = places_serveur_du_projet(ctx)
     regle = (ctx.f.get("ordre_lieux") not in (None, depart.ORDRE_PAR_DEFAUT)) or bool(ctx.f.get("ordre_lieux_par_metier"))
-    if not serveur and not regle and plafond is None:
+    if not serveur and not regle and not garde:
         return None
     return {"ordre_lieux": depart.ordre_du_metier(ctx.f, role),
             "places": {"local": ctx.f["agents_locaux_max"], "serveur": serveur, "cloud": places_cloud_du_projet(ctx)},
@@ -3708,15 +3747,19 @@ def cmd_agent_libre(ctx, e):
     t = su.tache(s, tid) if tid else None
     if tid and t is None:
         raise Refus(f"Tâche inconnue : {tid}")
-    plafond = plafond_abonnement()
-    bascule = _bascule_des_lieux(ctx, role, plafond) or {}
-    if bascule:
-        bascule["abonnement"] = (actifs_abonnement(ctx, s), plafond)
+    plafond, refus = plafond_abonnement()
+    garde = plafond is not None or refus is not None
+    bascule = _bascule_des_lieux(ctx, role, garde) or {}
+    if garde:
+        actifs = 0
+        if plafond is not None:
+            actifs, refus = actifs_abonnement(ctx, s)
+        bascule["abonnement"], bascule["abonnement_refus"] = (actifs, plafond), refus
     cle, raison = depart.agent_libre(fiches_, s["taches"], role, modele, lieu,
                                      ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_),
                                      lieu_etape=lieu_de_l_etape(ctx, s, t), **bascule)
     sortie = {"agent": cle, "raison": raison}
-    if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
+    if cle is None and (lieu == "cloud" or (bascule and "session à créer" in raison)):   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
     return sortie
 

@@ -73,6 +73,14 @@ class TestReglages(unittest.TestCase):
         for mauvais in ([], {"qa": []}, {"qa": ["x"]}, {"qa": ["local", "local"]}, {"": ["local"]}, {"qa": "local"}):
             with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
                 factory.lire(self.factory_avec(ordre_lieux_par_metier=mauvais))
+        # les clés de l'ordre par métier sont nettoyées ; au plus 50 rôles
+        self.assertEqual(factory.lire(self.factory_avec(ordre_lieux_par_metier={" qa ": ["local"]}))["ordre_lieux_par_metier"],
+                         {"qa": ["local"]})
+        factory.lire(self.factory_avec(ordre_lieux_par_metier={f"r{i}": ["local"] for i in range(50)}))
+        with self.assertRaises(factory.FactoryInvalide):
+            factory.lire(self.factory_avec(ordre_lieux_par_metier={f"r{i}": ["local"] for i in range(51)}))
+        with self.assertRaises(factory.FactoryInvalide):                      # deux clés qui n'en font qu'une
+            factory.lire(self.factory_avec(ordre_lieux_par_metier={"qa": ["local"], " qa": ["cloud"]}))
         # le plafond de l'abonnement, dans le fichier du bureau : 1 à 32 ou absent
         self.assertIsNone(reglages.lire_bureau(self.bureau_avec())["agents_abonnement_max"])
         for v in (1, 5, 32):

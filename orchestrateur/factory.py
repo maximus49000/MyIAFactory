@@ -19,6 +19,7 @@ CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consi
 AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
 AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
 AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
+MAX_ORDRES_PAR_METIER = 50   # au plus 50 rôles ont leur propre ordre de lieux
 LIEUX_D_AGENT = ("local", "serveur", "cloud")   # l'ordre des lieux d'un projet en est une permutation non vide
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 # Le modèle nécessaire d'une étape. Fable n'y est qu'une proposition : la tâche ne part sur Fable qu'avec l'accord du
@@ -207,7 +208,9 @@ def _lire(chemin):
         raise FactoryInvalide("Factory : « ordre_lieux » doit lister, sans doublon, au moins un lieu parmi "
                               "local, serveur, cloud (local, serveur, cloud par défaut).")
     par_metier = d.get("ordre_lieux_par_metier", {})
-    if not isinstance(par_metier, dict) or not all(_texte(r) and _ordre_valide(o) for r, o in par_metier.items()):
+    if (not isinstance(par_metier, dict) or len(par_metier) > MAX_ORDRES_PAR_METIER
+            or not all(_texte(r) and _ordre_valide(o) for r, o in par_metier.items())
+            or len({r.strip() for r in par_metier}) != len(par_metier)):
         raise FactoryInvalide("Factory : « ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux "
                               "(local, serveur, cloud, sans doublon).")
     environnement = d.get("environnement", [])
@@ -235,7 +238,7 @@ def _lire(chemin):
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
         "modele_orchestrateur": modele, "agents_locaux_max": locaux, "agents_cloud_max": cloud,
         "agents_serveur_max": serveur, "ordre_lieux": list(ordre),
-        "ordre_lieux_par_metier": {r: list(o) for r, o in par_metier.items()},
+        "ordre_lieux_par_metier": {r.strip(): list(o) for r, o in par_metier.items()},
         "environnement": [dict(x) for x in environnement],
     }
 

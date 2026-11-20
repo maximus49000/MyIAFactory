@@ -872,7 +872,8 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         for mauvais in ({"agents_serveur_max": 5}, {"agents_serveur_max": -1}, {"agents_serveur_max": "1"},
                         {"agents_serveur_max": True}, {"ordre_lieux": []}, {"ordre_lieux": ["local", "local"]},
                         {"ordre_lieux": ["autre"]}, {"ordre_lieux": "local"}, {"ordre_lieux_par_metier": {"qa": []}},
-                        {"ordre_lieux_par_metier": {"qa": ["x"]}}, {"ordre_lieux_par_metier": ["local"]}):
+                        {"ordre_lieux_par_metier": {"qa": ["x"]}}, {"ordre_lieux_par_metier": ["local"]},
+                        {"ordre_lieux_par_metier": {f"r{i}": ["local"] for i in range(51)}}):
             self.refus({**base, **mauvais})
         self.assertEqual(demandes.nettoyer({**base, "agents_serveur_max": 1, "ordre_lieux": ["local"], "autre": 1}),
                          {**base, "agents_serveur_max": 1, "ordre_lieux": ["local"]})

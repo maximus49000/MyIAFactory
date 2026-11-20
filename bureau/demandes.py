@@ -355,7 +355,7 @@ def _verifier_parallelisme(demande):
         return "« ordre_lieux » doit lister, sans doublon, au moins un lieu parmi local, serveur, cloud."
     if "ordre_lieux_par_metier" in demande:
         par = demande["ordre_lieux_par_metier"]
-        if not isinstance(par, dict) or not all(isinstance(r, str) and r.strip() and _ordre_de_lieux(o)
+        if not isinstance(par, dict) or len(par) > 50 or not all(isinstance(r, str) and r.strip() and _ordre_de_lieux(o)
                                                 for r, o in par.items()):
             return "« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux (local, serveur, cloud)."
     return None

@@ -494,19 +494,20 @@ class TestEnveloppe(unittest.TestCase):
 
     def test_echeance_tenue_a_la_seconde_malgre_une_sonde_lente(self):
         # M4 : la sonde passe à 5 s, mais le veilleur se réveille à l'échéance (jamais 5 s de retard).
-        with Banc(ENVELOPPE_SONDE_S="8") as b:
-            debut = time.time()
+        # Sonde de 15 s : sans réveil à l'échéance, la fin viendrait 15 s après le départ du veilleur ; avec, ~2 s.
+        with Banc(ENVELOPPE_SONDE_S="15") as b:
             self.assertEqual(b.lancer("scenario", "2", "30", "2048", "2").returncode, 0)
-            f = b.attendre_final(delai=20)
+            debut = time.time()                                     # le veilleur est parti (l'enveloppe a rendu la main)
+            f = b.attendre_final(delai=30)
             self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
-            self.assertLess(time.time() - debut, 6.5)                # et non 8 s (une sonde entière)
-        with Banc(ENVELOPPE_SONDE_S="8") as b:                          # inactivité du pilote : de même
-            debut = time.time()
+            self.assertLess(time.time() - debut, 10)
+        with Banc(ENVELOPPE_SONDE_S="15") as b:                         # inactivité du pilote : de même
             self.assertEqual(b.lancer("pilote", "60", "2", "2048", "2").returncode, 0)
-            f = b.attendre_final(delai=20)
+            debut = time.time()
+            f = b.attendre_final(delai=30)
             self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
             self.assertIn("Inactivité", f["raison"])
-            self.assertLess(time.time() - debut, 6.5)
+            self.assertLess(time.time() - debut, 10)
 
     def test_hup_ignore_avant_d_ecrire_en_cours(self):
         code = SCRIPT.read_text(encoding="utf-8")

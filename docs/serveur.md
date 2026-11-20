@@ -5,8 +5,9 @@ qu'exigent les actions que vous lui confiez**, après aperçu et accord. OVH n'e
 brancher (voir [`serveur-ovh.md`](serveur-ovh.md)). Conception : [`2026-11-19-serveur-generique-design.md`](superpowers/specs/2026-11-19-serveur-generique-design.md).
 
 Ce guide couvre le serveur et ses capacités. Les **tâches d'émulation** (l'APK joué sur un émulateur du serveur) ont leur propre
-guide : [`serveur-taches.md`](serveur-taches.md) (rien n'y a encore tourné sur un vrai serveur). Le reste du lancement d'actions sur le
-serveur n'existe pas encore : voir « Suite ».
+guide : [`serveur-taches.md`](serveur-taches.md) (un premier essai réel a réussi le 2026-11-20). Les **agents qui travaillent sur le serveur**
+(tranche B : modes seul et pilote, bascule entre lieux, connexion à l'abonnement) sont décrits dans [`serveur-agents.md`](serveur-agents.md)
+(rien n'y a encore tourné sur un vrai serveur). Le reste du lancement d'actions sur le serveur n'existe pas encore : voir « Suite ».
 
 ## Ce qu'un serveur doit offrir (contrat minimal)
 
@@ -58,7 +59,8 @@ d'installation) : une sonde qui échoue donne « absente », un serveur injoigna
 | `unity-cli` | Outil officiel Unity en ligne de commande | `base` | 0,1 Go / 2 min | oui |
 | `unity-editeur` | Éditeur Unity | `unity-cli` | 24 Go / 25 min | **non** : à installer par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté ; licence par Hub |
 | `session-graphique` | Bureau distant et Unity Hub | `base` | 3 Go / 12 min | **non** par ce moteur : `py -3.12 lancer.py plateforme installer --bureau-distant` (il faut un mot de passe de session) |
-| `agent` | Agent de développement sur le serveur | rien | 1 Go / 5 min | **non** avant le morceau 3 |
+| `agent` | Agent de développement sur le serveur : image `myiafactory/agent` et réseau Docker `myiafactory-agents` (étape `agent_image`) | `base` | 1 Go / 5 min (estimation) | oui, mais les agents n'ont de jeton qu'avec la capacité suivante ; voir [`serveur-agents.md`](serveur-agents.md) |
+| `agent-abonnement` | Connexion de l'agent à l'abonnement (jeton enregistré par le Directeur dans `~/agent-identifiants/jeton`) | `agent` | (geste humain) | **non** : étape humaine, [procédure pas à pas](serveur-agents.md#connexion-a-l-abonnement) ; la sonde ne lit jamais le jeton |
 
 La sonde de `android-emulateur` vérifie le dossier de l'**image système épinglée** (pas seulement la présence de `system-images`) :
 une autre image Android installée ne suffit pas à l'émulateur des tâches. Tailles et durées sont des **estimations** tirées de nos installations réelles, pas des garanties. Une capacité non
@@ -73,6 +75,11 @@ les dépendances). Actions connues et capacité requise :
 | `emulateur` | `android-emulateur` (donc `base`, `android-build`) |
 | `recette-emulateur` | `emulateur-image` (donc `base`, `android-build`, `android-emulateur`) |
 | `charge` | aucune |
+| `agent-serveur` | `agent` et `agent-abonnement` (un agent du projet travaille seul sur le serveur) |
+| `agent-pilote` | `agent`, `agent-abonnement` et `emulateur-image` (l'agent conduit aussi l'émulateur) |
+
+Les deux dernières actions ne sont pas encore proposées par l'écran Serveurs du bureau : `py -3.12 lancer.py plateforme serveurs apercu <id> agent-serveur`
+puis `installer <id> agent-serveur --accord` (voir [`serveur-agents.md`](serveur-agents.md)).
 
 C'est l'action `recette-emulateur` qui installe la capacité `emulateur-image` : écran Serveurs (« Installer », cocher « Recette
 sur émulateur », aperçu puis accord), ou `py -3.12 lancer.py plateforme serveurs apercu <id> recette-emulateur` puis
@@ -189,6 +196,8 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
 
 ## Limites : ce qui n'a PAS été exécuté sur un vrai serveur
 
+- L'étape **`agent_image`**, la capacité `agent-abonnement` et tout ce que décrit [`serveur-agents.md`](serveur-agents.md) (liste dans « Non vérifié sur un
+  vrai serveur ») n'ont jamais tourné sur le vrai serveur.
 - Les étapes distantes **`android_build`, `android_emulateur`, `emulateur_image` et `unity_cli`**, telles qu'écrites dans `mise_en_place.sh`, n'ont **jamais été
   exécutées sur le vrai serveur** : leurs tests automatiques sont simulés. Une installation équivalente a été faite à la main plus tôt,
   avec d'autres scripts (pas ceux-ci).
@@ -210,8 +219,10 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
    ([`serveur-taches.md`](serveur-taches.md), jamais exécutées sur un vrai serveur) ; reste le reste du lancement d'actions. Brancher la table `besoins` de ce cœur sur
    `bureau/deport_types.py` **une fois le travail de déport du Directeur commité** (le cœur n'en dépend pas : il porte sa propre table) ;
    alimenter les mesures (durées par lieu, charge du poste, quota GitHub) par `mesures_pour`, point unique de branchement ; enregistrer le choix de lieu.
-2. **Morceau 3 : agents sur le serveur** (conteneur d'agent éphémère par tâche, conteneurs d'outils sans identifiants, authentification
-   par abonnement, **coffre de signature** partagé, **bascule** des agents entre lieux avec ordre de préférence, maximum par lieu et file visible).
+2. **Morceau 3 : agents sur le serveur.** **Tranche B écrite** ([`serveur-agents.md`](serveur-agents.md) : conteneur d'agent éphémère par tâche, modes seul et pilote,
+   authentification par abonnement, **bascule** des agents entre lieux avec ordre de préférence, places par lieu, plafond d'abonnement et file visible), **jamais exécutée
+   sur un vrai serveur** : reste à faire la connexion à l'abonnement par le Directeur puis les essais réels. Reste aussi le **coffre de signature** partagé (conception à part),
+   la proposition d'agents serveur par l'installation et le recrutement, et un filtrage du trafic sortant des agents (écarté pour l'instant).
 3. **Morceau 4 : bouton d'accès SSH ou graphique** dans le bureau, suivi des tâches et des agents.
 4. **Tâche 13 : recettes des capacités futures.** Familles 1 à 11 du plan, **ordre à confirmer avec le Directeur** avant d'écrire quoi que ce
    soit. Chaque capacité garde la forme actuelle (identifiant, dépendances, étape rejouable, sonde en lecture seule, taille et durée) et reçoit une recette

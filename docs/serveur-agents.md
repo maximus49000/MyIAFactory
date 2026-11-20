@@ -1,0 +1,387 @@
+# Les agents sur le serveur (tranche B)
+
+Un agent de l'équipe peut travailler **sur le serveur** au lieu du poste ou du cloud : il y reçoit une copie du projet, y fait son
+travail dans un conteneur éphémère, et ses **commits** reviennent sur le poste dans une branche `agent/<tâche>`, avec son rapport.
+Deux modes : **seul** (il produit du code ou des documents) et **pilote** (il conduit en plus un émulateur Android du serveur par le
+pont fermé de la tranche A et analyse les captures). Le serveur n'écrit **jamais** sur GitHub.
+Conception : [`2026-11-19-agents-serveur-design.md`](superpowers/specs/2026-11-19-agents-serveur-design.md) ; plan :
+[`2026-11-20-agents-serveur-tranche-b.md`](superpowers/plans/2026-11-20-agents-serveur-tranche-b.md). Le serveur lui-même :
+[`serveur.md`](serveur.md) ; l'émulateur et le pont (tranche A) : [`serveur-taches.md`](serveur-taches.md).
+
+> **Rien de cette tranche n'a encore tourné sur un vrai serveur.** Tout est vérifié par de faux SSH, de faux `docker`, de faux
+> `claude` et des dépôts Git jetables. La liste de ce qui reste à prouver est dans « Non vérifié sur un vrai serveur », et la marche
+> à suivre pour le prouver dans « Essais réels ». **Aucun agent n'est possible tant que le Directeur n'a pas fait la
+> [connexion à l'abonnement](#connexion-a-l-abonnement).**
+
+## Vue d'ensemble (poste et serveur)
+
+En mots, de bout en bout :
+
+1. **Au poste**, le moteur du bureau choisit un lieu pour l'agent (la bascule : local, serveur ou cloud, voir plus bas). Si c'est le
+   serveur, un **exécuteur distant** (`moteur/executeur_serveur.py`) remplace le lancement de `claude -p` sur le poste : il prépare un
+   paquet Git du projet, la consigne et le message, et les envoie par SSH (`outils/serveur_agent.py`). L'environnement et le dossier
+   de travail du poste ne partent jamais.
+2. **Sur le serveur**, l'enveloppe `lancer_agent.sh` prend une **place** d'agent, démarre le conteneur `myiafactory/agent` (le réseau
+   `myiafactory-agents`, le jeton de l'abonnement monté en lecture seule) et rend la main. Un **veilleur détaché** tient la place,
+   applique les limites, arrête le conteneur et écrit l'état final.
+3. **Dans le conteneur**, `entree-agent` clone le paquet, crée la branche `agent/<tâche>`, lance `claude -p` sur le projet, puis
+   commite les restes et écrit un paquet Git des seuls nouveaux commits, plus `fin.json`.
+4. **En mode pilote**, un **pont hôte** (`pont_hote.py`, sur l'hôte, hors de tout conteneur) écoute sur une socket Unix montée dans le
+   conteneur de l'agent et relaie, vers un **second conteneur** (l'émulateur de la tranche A, créé à la demande), la même liste fermée de verbes. L'agent
+   n'a ni Docker ni accès à l'hôte.
+5. **À la fin**, l'hôte contrôle que le jeton n'est dans aucune sortie ; si c'est propre, le poste rapatrie le flux, `fin.json` et le
+   paquet, **vérifie** le paquet, récupère la branche `agent/<tâche>` dans le projet et lit le rapport. Une tâche faite est alors
+   **fusionnée localement** (sauf chemins réservés), sans rien pousser depuis le serveur.
+
+Le suivi est entièrement du côté du poste : la vérité sur une tâche est `~/taches/<id>/etat.json` sur le serveur, l'**index** du poste
+(`~/MyIAFactory/taches.json`, un cache, comme en tranche A) en garde la fiche `type: "agent"`. Un moteur ou un bureau redémarré **rattache**
+la tâche encore active au lieu d'en lancer une seconde.
+
+## Modèle d'une tâche d'agent
+
+Même identifiant que les tâches d'émulation : `t<AAAAMMJJ>-<HHMMSS>-<4 hexadécimaux>` (heure UTC), même `etat.json`, même veilleur.
+Le **nom de tâche** (`<tâche>`, celui de la tâche du suivi du projet) donne la branche `agent/<tâche>` : lettres, chiffres, `_` `.` `-`,
+60 caractères au plus, ni `..` ni point au début ou à la fin, pas de nom réservé de Windows (`con`, `nul`...). Deux tâches d'agent actives du
+même projet ne peuvent pas porter le même nom, à la casse près.
+
+### États
+
+| `etat` | `statut` | Ce que cela veut dire |
+|---|---|---|
+| `en_attente` | `null` | pas de place d'agent libre (l'enveloppe rend 75) : la tâche attend, le poste réessaie toutes les 15 s, 600 s au plus, puis abandonne (la tâche reste « en attente » et marquée abandonnée, le paquet et l'APK sont retirés du serveur) |
+| `en_cours` | `null` | le conteneur tourne, un veilleur le surveille |
+| `terminee` | `ok` | `fin.json` présent : l'agent a fini (le code de sortie de `claude` est dans `fin.json`), ou fin normale demandée |
+| `terminee` | `limite` | durée maximale (échéance du veilleur ou échéance interne de l'entrée), sortie trop volumineuse, `travail/` + `maison/` trop gros, ou moins de 5 Go libres sur le disque |
+| `arretee` | `ok` | arrêt demandé (bouton du bureau) : le travail déjà fait est conclu et rapatrié |
+| `echouee` | `erreur` | le conteneur est parti sans `fin.json`, Docker ne répond plus, le veilleur est mort, **secret de l'abonnement trouvé** (rien n'est rapatrié), contrôle du secret impossible, jeton absent ou mal formé, `ptrace_scope` à 0, entrée manquante |
+
+Il n'y a pas de statut `plantage` pour un agent (c'est une notion de l'émulateur). Le poste ne rapatrie **que** les tâches `terminee` et
+`arretee` : `echouee` ne donne jamais ni flux ni paquet (la sortie a pu être vidée pour un secret).
+
+### Dossiers et fichiers sur le serveur
+
+```
+~/taches/.creneau-agent-1 ... .creneau-agent-4   les 4 verrous des places d'agent (flock) ; ~/taches/.creneau-emulation : celui de l'émulation
+~/taches/<id>/
+    entree/        déposé par le poste AVANT le lancement, monté en lecture seule dans le conteneur : projet.bundle (le paquet aller),
+                   argv.json (les options de claude), consigne.md, message.md, demande.json, et app.apk en mode pilote
+    travail/       le dépôt de l'agent (travail/projet) ; 0700, écrit par le conteneur
+    maison/        le HOME de l'agent (HOME=/maison : ses sessions Claude) ; 0700
+    sortie/        écrit à la fin par l'entrée : flux.jsonl, claude.err, resultat.bundle (le paquet retour), fin.json ; 0700
+    pont/          pilote : pont.sock, la socket du pont hôte (monté sous /pont)
+    outil/         pilote : les médias que le pont hôte COPIE depuis l'émulation (monté en lecture seule sous /outil)
+    etat.json      l'état de la tâche (écrit par l'enveloppe, atomiquement) : la vérité
+    arret          créé pour demander l'arrêt (« arret » ou « fin »)
+    creneau        le numéro de la place prise
+    emulation      pilote : l'identifiant de l'émulation liée (écrit par le pont hôte, hors de tout montage)
+    enveloppe.pid, veilleur.pid, pont-hote.pid       les processus de l'hôte
+    veilleur.log, docker-run.log, controle.log       journaux de l'hôte (jamais rapatriés)
+    pont-hote.log, pont-hote.out                     pilote : une ligne par appel du pont hôte ; sa sortie d'erreur
+~/myiafactory/serveur_ovh/...   les fichiers du dépôt déposés sur le serveur : images/agent/{Dockerfile,entree-agent.py,pont},
+                                taches/{lancer_agent.sh,commun.sh,pont_hote.py,lancer_emulation.sh,enregistrer_jeton.sh}
+~/agent-identifiants/jeton      le jeton de l'abonnement (dossier 0700, fichier 0600)
+~/.myiafactory/agent-image.version   le marqueur de l'image (comme `emulateur-image.version`, voir `serveur.md`)
+```
+
+Sur le poste : la fiche de la tâche dans `~/MyIAFactory/taches.json` (type `agent`, tâche, mode, branche, base, session, lieu...) ; la réponse
+d'un agent aux questions du Directeur est gardée dans `<projet>/.factory/agents-en-cours/` (fichier `<tâche>.reponse-serveur`) tant qu'elle tourne.
+
+## Les paquets Git, à l'aller et au retour
+
+**Aller.** Le poste envoie `git bundle create - HEAD <branche>` : **seuls les commits partent**.
+- Les changements **non commités** restent au poste : le lancement en dit le nombre (un avertissement) et les premiers fichiers.
+- Le projet doit être **sur une branche** : un HEAD détaché est refusé (« placez le projet sur une branche »), un dépôt sans commit aussi, et
+  le nom de la branche doit être admis (lettres, chiffres, `_ . / -`, 200 caractères au plus).
+- Le paquet fait **500 Mo au plus** (au-delà : refus avant tout envoi). Il est écrit dans un fichier temporaire puis envoyé par SSH, jamais
+  gardé en entier en mémoire.
+- La branche locale **`agent/<tâche>` ne doit pas être extraite** dans un dossier de travail du projet (`git worktree`) ni être la branche
+  courante : le travail de l'agent ne pourrait pas y être récupéré, le lancement est refusé avant tout envoi. Si `agent/<tâche>` existe déjà et
+  n'est **pas un ancêtre** de la base envoyée, le lancement est refusé aussi (choisir un autre nom de tâche, ou fusionner ou supprimer
+  l'ancienne branche) : le retour n'écrase jamais une branche.
+
+**Dans le conteneur.** `git clone --branch <branche>` du paquet, `HEAD` vérifié égal à la base annoncée, puis `git switch -c agent/<tâche>` (identité
+« Agent serveur MyIAFactory » / `agent@myiafactory.invalid`). À la fin, les restes non commités sont commités (message « Agent : travail non commité à la
+fin ») et `git bundle create` ne met dans `resultat.bundle` que `<base>..agent/<tâche>` ; **sans commit, il n'y a pas de paquet**.
+Ces commandes tournent dans un dépôt que l'agent a pu piéger : elles sont lancées sans crochet, sans `fsmonitor`, sans signature, sans
+maintenance automatique, et avec les filtres de `.gitattributes` neutralisés le temps de conclure.
+
+**Retour.** Le poste ne fait confiance à rien de ce que le serveur renvoie (`fin.json`, flux et paquet sont des données **non fiables**) :
+- tailles bornées : flux 20 Mo, `fin.json` 64 Ko, paquet 500 Mo, fichiers ordinaires seulement ;
+- `fin.json` est revalidé champ par champ (code, nombre de commits, branche **exactement** `agent/<tâche>`, base égale à celle envoyée) ;
+- l'en-tête du paquet est relu (format v2 ou v3 `sha1`, un seul prérequis égal à la base, **une seule référence** `refs/heads/agent/<tâche>`), puis
+  `git bundle verify` et `git bundle list-heads` ; un paquet qui porte `refs/heads/main` ou une deuxième tête est refusé ;
+- la branche est récupérée par un simple `git fetch` (`transfer.fsckObjects`, crochets et `fsmonitor` coupés), **jamais forcé** : une
+  branche locale qui a divergé n'est pas réécrite ;
+- le paquet temporaire est toujours effacé.
+
+La branche **est gardée, non fusionnée** quand : l'agent a été **arrêté** (bouton du bureau) ; la **durée maximale** a été atteinte ou une
+autre limite du serveur l'a arrêté ; le rapport n'est pas « fait » ; ou la branche touche des **chemins réservés** (voir « La fusion
+locale protégée »). Elle reste alors dans le projet, à la disposition du Directeur.
+
+## Les limites par défaut
+
+Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer_agent.sh`, `entree-agent.py`). Une limite ne dépasse jamais son défaut.
+
+| Limite | Valeur | Où elle est appliquée |
+|---|---|---|
+| Durée maximale | **2400 s** (40 min) ; jamais au-dessus du délai demandé par le moteur ; l'enveloppe accepte 1 à 86400 | veilleur ; l'entrée arrête `claude` **120 s avant** (à mi-chemin pour une tâche de moins de 240 s), conclut, et note `"echeance": true` |
+| Tours de l'agent | **200** (`--max-turns`, ajouté par l'entrée) | `claude` |
+| Mémoire | **4096 Mo** (swap identique : pas de swap) | `docker run` |
+| Processeurs | **2** | `docker run` |
+| Processus | **512** ; `/tmp` en mémoire de 1 Go ; système de fichiers en lecture seule | `docker run` |
+| Paquet Git | **500 Mo** à l'aller comme au retour | poste (aller) ; poste et serveur (retour) |
+| Flux `stream-json` | **20 Mo** (au-delà : `claude` arrêté) ; `claude.err` 64 Ko | entrée |
+| `sortie/` | **540 672 Ko** (paquet 500 Mo + flux 20 Mo + marge), taille apparente, sondé toutes les 5 s | veilleur (`limite`) |
+| `travail/` + `maison/` | **8 Go**, sondés toutes les 60 s | veilleur (`limite`) |
+| Disque du serveur | plancher de **5 Go** libres (`df`), sondé toutes les 5 s | veilleur (`limite`) |
+| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) | enveloppe (verrous `flock`) |
+| Attente d'une place | nouvel essai toutes les **15 s**, **600 s** au plus | poste |
+| Suivi par le poste | durée de la tâche **+ 120 s**, puis arrêt et rapatriement du travail | exécuteur distant |
+| Consigne, message | 1 Mo au plus chacun ; options de `claude` : 64 Ko | poste |
+
+Détail utile : la place prise est le **premier verrou libre** parmi `.creneau-agent-1..4` de rang au plus `places`, et seulement si moins de `places`
+verrous sont tenus (une place abaissée pendant que des agents tiennent les rangs 3 et 4 n'est jamais dépassée). Les places sont **par serveur**, et partagées
+par tous les projets qui s'en servent. Le nombre de places **par projet** dans la bascule est une autre notion : voir « La bascule ».
+
+## Les modes « seul » et « pilote »
+
+**Seul** : aucun pont, aucune émulation. L'agent travaille sur le code et rend des commits et un rapport. Le conteneur a le réseau
+`myiafactory-agents` (sortant : l'API de Claude, mais aussi npm, Gradle, la documentation).
+
+**Pilote** : l'agent conduit un émulateur Android du serveur, par la commande `pont <verbe> [arguments]` (client dans l'image : une ligne JSON vers
+`/pont/pont.sock`, une ligne de réponse, le code du pont rendu). Même liste fermée de verbes que la tranche A
+([`serveur-taches.md`](serveur-taches.md), « Les verbes du pont »). Il commence par `pont demarrer` et finit par `pont arreter`.
+
+Un agent n'est lancé **en pilote** que si **toutes** ces conditions sont réunies (sinon il part **seul**, et le journal du moteur dit pourquoi) :
+1. le Directeur a réglé l'action `recette-emulateur` sur **serveur** pour ce projet (l'accord permanent, voir [`deport.md`](deport.md)) ;
+2. un **APK** est trouvé : la production `apk` du projet, la **sortie locale la plus récente** (jamais un APK de tests instrumentés, jamais un fichier atteint par un
+   lien qui sort du projet) ; l'artefact GitHub n'est pas téléchargé ici ;
+3. à la dernière sonde, un serveur déclaré a les capacités **`agent`, `agent-abonnement` et `emulateur-image`** (le besoin `agent-pilote`).
+
+Une **réponse aux questions** d'un agent (voir plus bas) repart toujours en mode seul.
+
+**Un créneau d'émulation par serveur.** L'émulation liée est une tâche d'émulation ordinaire de la tranche A : elle prend le **créneau d'émulation** du
+serveur (`~/taches/.creneau-emulation`), distinct des places d'agent, et **partagé avec les tâches « Test »** et les recettes. Créneau occupé : `demarrer` rend le
+code 4 « créneau d'émulation occupé, réessaie plus tard », et l'agent peut réessayer.
+
+**Limites de l'émulation liée.** Celles de la tranche A (2 processeurs, 6144 Mo, sans réseau, 50 captures, 100 Mo de médias, 5 vidéos...) avec deux
+différences : la durée de l'émulation est **le temps qui reste à l'agent**, et son inactivité est de 600 s au plus, bornée par ce reste. Quand il ne reste
+plus de temps, plus aucune nouvelle émulation n'est créée (code 4). L'émulation est arrêtée (« fin ») avec l'agent, qu'il finisse, soit arrêté ou échoue.
+
+**Médias en lecture seule sous `/outil`.** Après `capturer`, `journal`, `finfilm` (et `arreter` qui finit un film), le pont hôte **copie** la capture, `logcat.txt`, la vidéo et
+ses images depuis la sortie de l'émulation vers `~/taches/<id>/outil`, que le conteneur de l'agent monte **en lecture seule** sous `/outil/` : la
+réponse du pont donne le chemin `/outil/...`. Seuls des fichiers ordinaires à un seul lien sont copiés, sans jamais suivre un lien (`O_NOFOLLOW`),
+dans un temporaire puis renommés ; 64 Mo au plus par fichier, 160 Mo pour tout `outil/`. L'agent lit les captures lui-même.
+
+## Le pont hôte
+
+`serveur_ovh/taches/pont_hote.py <id> <duree_s>` (Python 3 de l'hôte, bibliothèque standard, lancé détaché par `lancer_agent.sh`, chef de son
+groupe de processus) : **la seule porte** de l'agent vers l'émulateur. Il n'a pas de confiance en l'agent, qui tient le client de la socket :
+
+- **protocole** : une connexion, **une requête** d'une ligne JSON de 4 Ko au plus `{"verbe": ..., "args": [...]}` (exactement ces deux clés, arguments
+  textes), une ligne de réponse `{"ok", "verbe", "code", "detail"}` ; une requête à la fois ;
+- **liste fermée et motifs de la tranche A** (un test les fait passer par `pont.sh`, `serveur_tache.VERBES` et `pont_hote.py`) : clé dupliquée, type faux,
+  verbe hors liste, argument hors motif, JSON invalide : **code 2, sans rien exécuter** ;
+- **codes** : 0 fait ; 2 refusé ; 3 limite atteinte ; 4 outil en échec, émulation indisponible, **pas de pont** (« pas de pont : tâche en mode seul » si le
+  dossier `/pont` n'est pas monté ; « pont pas encore prêt : réessaie dans quelques secondes » s'il l'est mais que la socket n'existe pas) ;
+- **exécution** : `sudo -n docker exec tache-<émulation> /usr/local/bin/pont <verbe> ...` en **tableau, sans shell**, avec un environnement fixe, borné par
+  les délais de la tranche A ; le nom du conteneur est celui de l'émulation que **ce** pont a créée, jamais une valeur reçue ;
+- **5 émulations** par tâche d'agent au plus (après `arreter`, le `demarrer` suivant en crée une nouvelle ; au-delà : code 4 « limite d'émulations ») ;
+- **2000 appels** au plus (les refus comptent) : au-delà, code 3 sans rien exécuter ;
+- **socket** : dossier `pont/` 0700, socket 0600, propriétaire l'utilisateur de l'hôte (le même uid que le conteneur) ; un pair d'un autre uid (`SO_PEERCRED`) est refusé ;
+- **journal** `pont-hote.log` : une ligne par appel (heure, verbe et arguments **validés** seulement, code, durée), sur l'hôte seul : `pont/` est inscriptible par l'agent ;
+- le pont hôte **ne voit jamais le jeton** ; à sa fin (signal du veilleur), il arrête l'émulation encore liée.
+
+## La bascule entre lieux et les places
+
+Un projet a trois lieux possibles pour ses agents : **local** (le poste), **serveur**, **cloud**. Réglages, dans la partie « Parallélisme du projet »
+du bureau (onglet de facturation) ou dans `.factory/factory.json` du projet :
+
+| Réglage | Valeurs | Défaut |
+|---|---|---|
+| `agents_locaux_max` | 1 à 16 | (réglage existant) |
+| `agents_cloud_max` | 0 à 16 | (réglage existant) |
+| **`agents_serveur_max`** | **0 à 4** : agents simultanés au serveur pour ce projet | **0** : le serveur ne sert à rien tant qu'on ne l'a pas réglé |
+| **`ordre_lieux`** | liste sans doublon d'au moins un lieu parmi `local`, `serveur`, `cloud` ; un lieu retiré n'est jamais utilisé | **`["local", "serveur", "cloud"]`** |
+| **`ordre_lieux_par_metier`** | `{rôle: ordre}` : l'ordre d'un métier l'emporte sur celui du projet (« réglable par type de tâche ») | vide |
+| **`agents_abonnement_max`** | **1 à 32**, ou absent (aucun plafond) ; dans le fichier du **bureau** (`~/MyIAFactory/bureau.json`), pas dans le projet | absent |
+
+**Règle.** Pour une tâche, le moteur essaie les lieux **dans l'ordre**, et prend le **premier lieu non hors ligne qui a une place libre** (agents actifs du lieu < places
+du lieu) **et une fiche d'agent libre**. Un lieu imposé (le `lieu` écrit de l'étape de la tâche, ou le métier réservé à un lieu) l'emporte sur l'ordre. Un projet sans place
+serveur, sans ordre réglé et sans plafond garde le comportement d'avant, à l'identique.
+
+**Le plafond d'abonnement** est **au-dessus** des places par lieu : c'est le nombre total d'agents actifs, **tous lieux et tous projets du bureau**,
+que l'abonnement supporte. Atteint, la tâche attend : « plafond d'abonnement atteint (n/n) ». Un fichier du bureau illisible ou un plafond invalide ferme
+aussi la porte (« plafond d'abonnement : réglage illisible (chemin) ») : on ne retire pas la garde en silence.
+
+**Serveur hors ligne.** Le serveur est « hors ligne » pour la bascule si **aucun** serveur déclaré n'a les capacités `agent` et `agent-abonnement` constatées
+présentes **il y a moins de 24 h** (état local `serveurs-etat.json`, aucune connexion à ce moment-là). Le moteur **rafraîchit la sonde toutes les 6 h** (seulement
+si un projet a `agents_serveur_max` > 0), et aussi après le retour d'un agent serveur sans erreur (au plus une fois toutes les 10 min) : il faut donc plusieurs sondes ratées de suite (24 h pour 6 h) avant que le
+serveur passe hors ligne. Un lieu hors ligne est sauté.
+
+**La file.** Si tout est plein ou hors ligne, la tâche **reste en file avec une raison qui nomme chaque lieu**, par exemple
+`local : 2/2 occupés ; serveur : hors ligne ; cloud : 0 place` (ou `serveur : 1/2 occupés`, `cloud : session à créer pour ...`). Elle n'est **jamais lancée ailleurs en silence**.
+Cette raison est celle que montre la file du bureau.
+
+## Les questions de l'agent
+
+Personne ne voit la fenêtre d'un agent serveur et le Directeur n'est pas joignable pendant son travail (le conteneur n'a **aucun accès entrant**). Sa consigne de départ
+(`depart.consigne_serveur`) lui dit donc : commiter son travail sur `agent/<tâche>`, ne rien pousser, et poser une question ou demander un accord dans son rapport, en
+`message.questions` avec `attend: true`, puis s'arrêter. Le bureau relaie les questions au Directeur par le chemin habituel. À la réponse, le moteur relance l'agent **avec sa
+session** (`claude --resume <session>`) :
+
+- une **nouvelle tâche serveur** démarre avec `reprend: <ancienne tâche>` : l'enveloppe copie `~/taches/<ancienne>/{travail,maison}` par `cp -a` (les liens sont copiés comme des liens, jamais suivis)
+  et refuse si l'ancienne tâche n'est pas finie ou n'est pas une tâche d'agent du même projet ;
+- l'entrée reprend le dépôt gardé tel quel (pas de nouveau clone) ; la nouvelle base est la tête de la branche rapatriée si elle descend de l'ancienne base ;
+- une réponse aux questions est toujours en mode **seul**.
+
+Conséquence : **ne supprimez pas `~/taches/<id>`** d'un agent qui attend une réponse (voir « Entretien »).
+
+## L'arrêt
+
+- **Le bouton « Arrêter »** de la carte « Tâches du serveur » du bureau (route `POST /api/serveurs/taches/<id>/arreter`, mêmes protections que les autres POST des
+  serveurs, voir [`serveur-taches.md`](serveur-taches.md)). Pour un agent, il pose la marque d'arrêt du moteur (par le **nom du dossier** du projet), arrête l'agent **et son
+  émulation liée**, et attend au plus **25 s** avant de répondre. L'arrêt fini dans ce délai : réponse 200 avec l'état final (et `emulation` : `arretee` ou `non_confirmee`) ; sinon
+  **202** (`{"demarre": true}`) et l'écran lit l'état. 404 tâche inconnue, 409 déjà terminée ou une opération déjà en cours.
+- **La conclusion.** Le veilleur arrête le conteneur par `docker stop -t 60` : l'entrée reçoit `SIGTERM`, arrête `claude`, mais **conclut quand même** (restes commités, paquet,
+  `fin.json`) : la **fenêtre de conclusion va jusqu'à 60 s**. Le pont hôte (son groupe de processus) et l'émulation liée sont arrêtés, **puis le contrôle du secret** passe, et
+  seulement alors l'état final `arretee` est écrit.
+- **Aucune relance.** L'agent est lu comme « agent arrêté par l'utilisateur depuis le bouton du bureau » : le moteur ne repart pas de lui-même. Son travail déjà commité est rapatrié
+  dans la branche `agent/<tâche>`, **non fusionnée**. Serveur muet au moment de l'arrêt : il est noté (`arret_demande`) et relayé dès que le serveur répond.
+- **Une échéance n'est jamais relancée** : durée maximale atteinte (celle du veilleur, ou celle que le poste constate après durée + 120 s), le travail rapatrié est gardé et le moteur ne
+  relance pas (un nouvel essai retrouverait la même limite). Même règle pour les autres limites du serveur (sortie, disque, travail trop gros), dont la raison est dite.
+
+## La fusion locale protégée
+
+Un agent serveur dont le rapport est « fait » et qui a rapporté une branche voit celle-ci **fusionnée dans le projet, localement** (`cloud.fusionner(..., distante=False)`) : la fusion se fait
+dans le dépôt du poste, sans crochet ni `fsmonitor` du dépôt, sur le **commit épinglé** de la branche (ce qui est fusionné est exactement ce qui a été contrôlé). Un envoi manqué n'est pas un échec :
+la fusion part avec le prochain envoi du moteur. **Avant la fusion**, deux listes de chemins sont contrôlées : ce que la branche change depuis la base commune, **et** ce que la fusion changerait
+vraiment (renommages, bases multiples). Un seul chemin **réservé** et la fusion est **refusée** : la branche est gardée telle quelle pour le Directeur.
+
+Sont réservés, **à toute profondeur** (un projet peut vivre dans un sous-dossier : `app/.factory/...`), sans tenir compte de la casse ni des points et espaces finaux :
+
+- `.factory`, `fiches`, `factory.json` (l'état et les réglages de la factory, dont l'accord du Directeur) ;
+- `.gitattributes`, `.gitmodules`, `.lfsconfig`, `.git` et **tout dossier dont le nom commence par `.git`** (`.github`, crochets, workflows ; un simple fichier `.gitignore` reste permis) ;
+- `.claude`, `.mcp.json` (réglages et serveurs MCP de Claude Code), `.pre-commit-config.yaml` / `.yml`, `lefthook.yml` / `.yaml` (et leurs variantes `.lefthook`, `lefthook-local`), `.husky` ;
+- `.vscode`, `.devcontainer`, `.devcontainer.json`, `.envrc` ;
+- le **dossier de crochets** que le dépôt déclare (`core.hooksPath`, même absolu s'il tombe dans le dépôt) ;
+- tout chemin qui sort du dépôt (`..`, absolu, lecteur, `:`) et les noms courts de Windows (`FACTOR~1`).
+
+Message de refus : « la branche ... de l'agent serveur touche des chemins réservés au Directeur et à la factory (...) : elle est gardée telle quelle pour le Directeur, non fusionnée ». Le moteur note la
+raison et pose au Directeur la question habituelle d'une fusion impossible (comme un conflit). Les fichiers d'état du moteur en conflit gardent la version locale.
+
+## Sécurité
+
+- **Le jeton de l'abonnement** vit dans `~/agent-identifiants/jeton` (dossier 0700, fichier 0600), **monté en lecture seule** (`-v ...:/run/identifiants/jeton:ro`) dans les **seuls** conteneurs d'agent :
+  jamais dans un conteneur d'outil, une ligne de commande, `docker inspect` (pas de `-e` du jeton), Git ou un journal. MyIAFactory ne le lit, ne le saisit, ne le transmet ni ne le journalise jamais.
+- **Ce que l'agent peut lire.** L'agent **peut lire le jeton** : l'entrée le lit dans `/run/identifiants/jeton` et le pose dans la variable **`CLAUDE_CODE_OAUTH_TOKEN`** de `claude`, que **ses outils héritent**, et le
+  fichier reste lisible sous le même utilisateur. Il faut le savoir : un agent manipulé peut tenter de le recopier ou de l'envoyer.
+- **Le contrôle du secret** (par le veilleur, **avant** l'état final) cherche le jeton **brut** et ses **trois alignements en base64** : dans tout `sortie/` (flux, erreurs, `fin.json`, paquet), puis, **toujours**, dans le
+  texte de `git log -p` (sans filtres ni conversions) et dans le contenu de **chaque objet** du paquet, produit par un **conteneur de contrôle sans jeton et sans réseau** (jamais par un `git` de l'hôte : la configuration
+  du dépôt piégé pourrait y lancer n'importe quoi). Trouvé : `sortie/` est vidée, la tâche finit `echouee`/`erreur`, raison **« secret de l'abonnement trouvé dans la sortie : rien n'est rapatrié »**.
+  Contrôle impossible (fichier du jeton qui n'est pas **une** ligne valide, `grep` ou conteneur de contrôle en échec ou trop long) : même sortie vidée, raison « Contrôle du secret de l'abonnement impossible (voir
+  controle.log) : rien n'est rapatrié ».
+- **Ce que le contrôle ne voit pas, dit franchement.** Il ne détecte **que la forme brute et trois alignements base64** : une sortie **encodée autrement** (hexadécimal, découpée, chiffrée...) passe, et un **envoi par le
+  réseau** n'est pas vu du tout. **Le réseau sortant du conteneur reste OUVERT** (npm, Gradle, documentation en ont besoin). C'est une **décision du Directeur** : la liste blanche du trafic sortant (limiter à l'API de Claude)
+  est **écartée pour l'instant**, **à rouvrir avant d'exposer des projets sensibles** à un agent serveur.
+- **Le conteneur d'agent** : utilisateur de l'hôte (`--user $(id -u):$(id -g)`, jamais root), `--read-only`, `--cap-drop ALL`, `no-new-privileges`, 512 processus, mémoire et processeurs bornés. Il n'a ni socket Docker, ni `sudo`,
+  ni accès entrant, ni `curl` ni `wget` dans l'image (purgés en fin de construction).
+- **Ce que l'agent ne peut pas falsifier.** L'entrée de l'agent (PID 1) se rend non « dumpable », écrit le flux et les erreurs dans des fichiers **sans nom** qu'elle recopie à la fin, retire de `sortie/` tout ce que
+  l'agent y a déposé, et ne laisse que le paquet qu'elle a créé. Elle ne lance jamais ce que contient le dépôt de l'agent. Malgré cela, `fin.json`, le flux et le paquet restent des **données non fiables** pour le poste (vérifiées, voir
+  « Retour »).
+- **`ptrace_scope`.** `claude` et l'entrée tournent sous le même utilisateur : avec `kernel.yama.ptrace_scope` à 0, `claude` pourrait tracer l'entrée et lui faire écrire n'importe quoi. L'enveloppe **exige 1 ou plus** : à **0**,
+  la tâche est refusée (`echouee`, avec la commande à lancer : `sudo sysctl -w kernel.yama.ptrace_scope=1`, et un fichier dans `/etc/sysctl.d/` pour le garder) ; **valeur illisible** (Yama absent) : un **avertissement**
+  dans `veilleur.log`, et la tâche démarre.
+- **Données, jamais instructions.** Ce qui vient de l'application émulée ou du pont (textes à l'écran, journaux, captures, réponse du pont) est une donnée : la consigne de départ le dit à l'agent.
+
+## Prérequis du serveur
+
+- Les capacités **`agent`** (installable : image `myiafactory/agent` et réseau Docker `myiafactory-agents`, depuis `base`), **`agent-abonnement`** (**non installable** : l'étape humaine de la
+  section suivante) et, pour le mode pilote, **`emulateur-image`** (donc `android-emulateur`, `/dev/kvm`). Besoins : `agent-serveur` = `agent` + `agent-abonnement` ; `agent-pilote` = `agent-serveur` + `emulateur-image`.
+- Installer la capacité `agent` : l'écran Serveurs du bureau ne propose pas (encore) d'action pour elle ; en ligne de commande, `py -3.12 lancer.py plateforme serveurs apercu <id> agent-serveur`, puis
+  `py -3.12 lancer.py plateforme serveurs installer <id> agent-serveur --accord` (aperçu puis accord, comme toute installation : [`serveur.md`](serveur.md)). L'aperçu range `agent-abonnement` dans les capacités bloquées
+  avec le geste à faire. Elle demande de la place pour construire l'image (Ubuntu 24.04, Node, Claude Code à la version épinglée de `versions.json`) et refuse de tourner sous root.
+- Sur l'hôte : un utilisateur ordinaire avec `sudo` sans mot de passe (comme pour tout le serveur), `python3` (pour le pont hôte), `flock`, `setsid`, `timeout`, `base64`, `/proc` et `kernel.yama.ptrace_scope` ≥ 1 (Ubuntu : 1 par défaut).
+- **Si l'image change** dans le dépôt (Dockerfile, entrée ou client du pont), le marqueur `~/.myiafactory/agent-image.version` ne correspond plus : la capacité `agent` devient « À mettre à jour » et il faut la réinstaller
+  (même mécanisme que `emulateur-image`).
+
+<a id="connexion-a-l-abonnement"></a>
+## Connexion à l'abonnement
+
+**Étape humaine, à faire une seule fois par le Directeur.** MyIAFactory ne saisit, ne lit et ne transmet jamais le jeton : c'est **vous** qui le créez et le déposez sur le serveur. Sans lui, la capacité
+`agent-abonnement` est absente, le serveur est « hors ligne » pour la bascule, et la carte du serveur affiche « Connexion à l'abonnement à faire » avec un lien vers cette page.
+
+**Avant de commencer** : la capacité `agent` doit être installée (l'image `myiafactory/agent` existe, voir « Prérequis du serveur ») ; vous avez la session graphique du serveur (capacité `session-graphique`).
+
+1. **Ouvrir la session graphique du serveur.** Procédure complète dans [`serveur-ovh.md`](serveur-ovh.md#session-graphique-unity-hub) : `py -3.12 lancer.py plateforme bureau-distant` ouvre le tunnel et le fichier de connexion ; saisissez l'utilisateur
+   du serveur et le mot de passe de session (fichier `bureau-distant.txt`). Si la capacité `session-graphique` manque : `py -3.12 lancer.py plateforme installer --bureau-distant` (voir [`serveur.md`](serveur.md)).
+2. **Ouvrir un terminal** dans cette session et lancer (l'image n'a pas de point d'entrée, la commande s'exécute telle quelle) :
+   ```
+   sudo docker run --rm -it --network myiafactory-agents myiafactory/agent claude setup-token
+   ```
+3. **Se connecter.** Le terminal affiche un **lien** : ouvrez-le dans le **navigateur de la session** (Firefox), connectez-vous au **compte de l'abonnement** que les agents utiliseront, autorisez l'accès ; si le terminal demande un code,
+   collez-le. Le terminal affiche alors le **jeton** (une longue suite de lettres, chiffres, points et tirets). **Copiez-le entièrement** : une coupure de ligne ou un espace en trop le fait refuser à l'étape suivante.
+4. **Le déposer.** Dans le même terminal :
+   ```
+   bash ~/myiafactory/serveur_ovh/taches/enregistrer_jeton.sh
+   ```
+   puis **collez** le jeton et validez par Entrée. **Rien ne s'affiche** pendant la saisie (c'est voulu). Le script refuse un jeton vide ou hors de 20 à 400 caractères parmi lettres, chiffres, `.`, `-`, `_`, l'écrit dans
+   `~/agent-identifiants/jeton` (dossier 0700, fichier 0600, par un fichier temporaire puis renommage : un refus laisse l'ancien jeton intact), et répond « Jeton enregistré... ». Il ne l'affiche jamais ; code 0 enregistré, 2 refusé.
+5. **Effacer la trace.** Fermez le terminal (le jeton est resté à l'écran à l'étape 3), et fermez la session graphique si vous ne vous en servez plus.
+6. **Vérifier dans le bureau.** La capacité « **Connexion à l'abonnement** » (`agent-abonnement`) doit passer à « présente » à la **prochaine sonde** : « Tester la connexion » sur la carte du serveur, ou
+   `py -3.12 lancer.py plateforme serveurs sonder <id>`. Le message « Connexion à l'abonnement à faire » disparaît. (Le moteur sonde aussi de lui-même toutes les 6 h quand un projet a des places serveur.)
+
+**Renouvellement.** Le jeton a une durée limitée (un an, d'après le plan) et peut être révoqué : refaites les étapes 1 à 6 ; le nouveau jeton remplace l'ancien, qui reste en place si un refus survient. **Retrait.**
+Pour retirer l'accès des agents du serveur : `rm ~/agent-identifiants/jeton` sur le serveur ; la capacité redevient absente à la sonde suivante et le serveur est hors ligne pour la bascule. Révoquer le jeton lui-même se fait
+depuis le compte de l'abonnement (chemin exact non vérifié ici).
+
+## Essais réels
+
+À faire **un seul à la fois, avec l'accord explicite du Directeur**, jamais par un sous-agent, sur MyFridgeCleaner ; noter chaque écart et les temps mesurés.
+
+- [ ] **Capacité `agent` installée** : aperçu puis accord (`plateforme serveurs installer <id> agent-serveur --accord`) ; la capacité passe « présente » ; le réseau `myiafactory-agents` existe (`sudo docker network ls`).
+- [ ] **Image reconstruite** : `sudo docker image inspect myiafactory/agent` ; `~/.myiafactory/agent-image.version` présent ; ni `curl` ni `wget` dans l'image ; relancer l'installation ne reconstruit rien (idempotente).
+- [ ] **Connexion** (« Connexion à l'abonnement » ci-dessus) : `agent-abonnement` « présente » dans le bureau ; vérifier à l'hôte `stat -c %a ~/agent-identifiants ~/agent-identifiants/jeton` (700 puis 600) ; vérifier `cat /proc/sys/kernel/yama/ptrace_scope` (≥ 1) ;
+  vérifier l'uid de l'hôte et celui du conteneur ; vérifier l'accès sortant à l'API depuis `myiafactory-agents`.
+- [ ] **Agent seul** : `agents_serveur_max = 1`, `ordre_lieux = ["serveur"]`, une petite tâche documentaire → branche `agent/<tâche>` rapatriée, rapport lu, fusion locale, usage noté dans l'abonnement du bureau.
+- [ ] **Agent pilote** : l'accord `recette-emulateur` sur serveur, `emulateur-image` présente, un APK → « lance l'application et décris l'écran d'accueil » : `pont demarrer` ... `capturer`, capture sous `/outil/`, lue par l'agent.
+- [ ] **Bascule** : places locales pleines → le serveur est choisi ; serveur marqué hors ligne (sonde ancienne ou jeton retiré) → la tâche reste en file avec la raison qui nomme chaque lieu.
+- [ ] **Arrêt** : « Arrêter » depuis le bureau pendant l'essai pilote : agent, pont hôte et émulation s'arrêtent, les deux créneaux sont libérés, « arrêtée par l'utilisateur », branche gardée non fusionnée ; puis nettoyer `~/taches`.
+
+## Entretien
+
+- **Aucun nettoyage automatique.** `~/taches/<id>` garde le dépôt de l'agent, sa maison et ses sorties : **le disque du serveur grossit** (jusqu'à 8 Go de `travail/` + `maison/` par tâche) ; le veilleur arrête les tâches qui descendent le disque sous 5 Go libres.
+  Pour nettoyer à la main, **une fois la tâche à l'état final** et si aucune question ne lui est en attente (la reprise relit son `travail/` et sa `maison/`) : se connecter (`ssh -i ~/MyIAFactory/id_ed25519_<id du serveur> <utilisateur>@<hôte>`),
+  lire l'émulation liée (`cat ~/taches/<id>/emulation`) puis `rm -rf ~/taches/<id>` (et celui de l'émulation). L'index du poste garde ses fiches : c'est un cache.
+- **Journaux** (sur le serveur, dans `~/taches/<id>/`) : `veilleur.log` (le veilleur, l'avertissement `ptrace_scope`), `controle.log` (les erreurs du conteneur de contrôle du secret, 64 Ko, lignes portant le jeton retirées),
+  `docker-run.log` (l'échec d'un `docker run`), `pont-hote.log` (une ligne par appel du pont hôte) et `pont-hote.out` (sa sortie d'erreur). `sortie/claude.err` (64 Ko) n'existe qu'à la fin de la tâche.
+- **Reste d'un incident** : un conteneur `tache-<id>` qui ne s'arrête pas est dit par la raison de la tâche (« à arrêter à la main (docker stop) ») ; `sudo docker ps --filter label=myiafactory.genre=agent` les liste.
+
+## Limites connues
+
+- **Projets homonymes.** Le bureau retrouve le projet d'un agent par le **nom du dossier** : deux projets du bureau de même nom de dossier n'ont **aucune** marque d'arrêt posée (l'arrêt sur le serveur a lieu quand même).
+- **Réglage des places.** La commande de réglage des places du projet (`parallelisme`, qui écrit `agents_serveur_max` et l'ordre des lieux) peut être appelée par un **agent local** : il peut donc changer ces réglages du projet.
+  Le **plafond d'abonnement** (`agents_abonnement_max`) n'est pas réglable par cette commande : il n'est écrit que par le bureau, dans son propre fichier.
+- **Installation et recrutement.** L'installation (skill d'installation) et le recrutement d'agents **ne proposent pas encore d'agents serveur** : les places serveur et l'ordre des lieux se règlent à la main (bureau ou
+  `factory.json`).
+- **Pas de `.factory/recettes`.** Un agent serveur **ne peut pas livrer** `.factory/recettes` (ni rien sous `.factory`) : la branche serait gardée, non fusionnée. Les recettes se font au poste.
+- **Flux et `claude.err`** n'existent qu'à la fin de la tâche : on ne peut pas suivre l'agent en direct, seulement l'état, la durée et les journaux de l'hôte.
+- **Réseau ouvert** (voir « Sécurité ») et **accord permanent** de la recette sur émulateur : mêmes limites que la tranche A.
+
+## Non vérifié sur un vrai serveur
+
+Tout ce qui précède est vérifié par des tests simulés. À prouver sur le serveur réel (voir « Essais réels ») :
+
+- **Node et Claude Code** lancés avec `--user <uid>:<gid>` **sans entrée dans `/etc/passwd`**, sur un système de fichiers racine en **lecture seule**, avec `HOME=/maison`.
+- L'acceptation d'un jeton **`setup-token`** par `CLAUDE_CODE_OAUTH_TOKEN` en mode `-p` (et le déroulé exact de `claude setup-token` dans un conteneur sans navigateur : lien, code éventuel, affichage du jeton).
+- Le **trafic sortant** du réseau `myiafactory-agents` sous les règles `ufw` du serveur (l'API de Claude passe-t-elle ?).
+- L'accès des conteneurs aux **services de l'hôte** (`sshd`, `xrdp`) et à l'**adresse de métadonnées OVH** depuis le réseau des agents.
+- `SO_PEERCRED` et l'**uid à travers Docker** (`userns-remap`) : le pair de la socket a-t-il bien l'uid de l'hôte ?
+- La **socket du pont par montage** (`bind mount`) dans le conteneur, et l'**arrêt par groupe de processus** (`setsid`) du pont hôte.
+- La **valeur réelle de `ptrace_scope`** du serveur et l'effet du **profil seccomp** par défaut de Docker sur `claude` et ses outils.
+- La **durée du contrôle du secret** sur de gros paquets (le poste suit jusqu'à la durée de la tâche + 120 s ; le contrôle peut durer jusqu'à 15 min) ; son effet sur un arrêt.
+- `git bundle unbundle` d'un **paquet mince** avec `alternates` sur `/travail` en lecture seule, dans le conteneur de contrôle.
+- Le **budget mémoire** : émulateur 6 Go + 2 agents × 4 Go + l'hôte, sur les 62 Go du serveur.
+- Le parcours de dossiers sans suivre de lien (**`O_NOFOLLOW`**) et les droits **0700 / 0600** sur le serveur réel.
+- La fenêtre de **60 s** de `docker stop` : l'entrée conclut-elle (restes, paquet, `fin.json`) dans ce délai sur un vrai projet ?
+- La **neutralisation des filtres** (`info/attributes`, `.gitattributes`) avec la version de Git du conteneur.

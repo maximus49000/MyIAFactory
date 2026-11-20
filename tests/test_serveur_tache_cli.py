@@ -107,6 +107,9 @@ class Base(unittest.TestCase):
         self.projet = Path(self._tmp.name) / "projet"
         (self.projet / ".factory" / "recettes").mkdir(parents=True)
         (self.projet / ".factory" / "recettes" / "demo.json").write_text(json.dumps(RECETTE), encoding="utf-8")
+        # l'accord permanent du projet (recette sur émulateur réglée sur serveur), exigé par `lancer`
+        (self.projet / ".factory" / "reglages.json").write_text(
+            json.dumps({"deport": {"lieux": {"recette-emulateur": "serveur"}}}), encoding="utf-8")
         self.apk = Path(self._tmp.name) / "app.apk"
         self.apk.write_bytes(b"PK\x03\x04apk")
         self.moteur, self.recette = FauxMoteur(), FauxRecette()
@@ -317,6 +320,41 @@ class TestLancer(Base):
                 self.assertEqual(code, 1)
                 self.assertNotIn("Traceback", sortie + erreur)
                 self.assertTrue(erreur.strip())
+
+
+class TestAccordDuProjet(Base):
+    """`serveur-tache lancer` est une porte : l'accord permanent du projet (recette-emulateur réglée sur serveur dans
+    SES réglages) est vérifié avant tout envoi, comme par `deporter`."""
+    MSG = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+
+    def lancer_pilote(self):
+        return self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+
+    def test_sans_accord_refuse_sans_toucher_au_moteur(self):
+        for contenu in (None, {}, {"deport": {"lieux": {"recette-emulateur": "poste"}}},
+                        {"deport": {"lieux": {"tests": "serveur"}}}):
+            with self.subTest(contenu=contenu):
+                regl = self.projet / ".factory" / "reglages.json"
+                if contenu is None:
+                    regl.unlink(missing_ok=True)
+                else:
+                    regl.write_text(json.dumps(contenu), encoding="utf-8")
+                code, _, erreur = self.lancer_pilote()
+                self.assertEqual(code, 2)
+                self.assertIn(self.MSG, erreur)
+                self.assertEqual(self.moteur.appels, [])
+
+    def test_avec_l_accord_du_projet_le_lancement_part(self):
+        code, _, _ = self.lancer_pilote()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.noms(), ["lancer"])
+
+    def test_un_fichier_qui_n_est_pas_un_apk_est_refuse_avant_l_envoi(self):
+        self.apk.write_bytes(b"MZ\x90\x00pas un apk")
+        code, _, erreur = self.lancer_pilote()
+        self.assertEqual(code, 1)
+        self.assertIn("APK", erreur)
+        self.assertEqual(self.moteur.appels, [])
 
 
 class TestTacheCommandes(Base):

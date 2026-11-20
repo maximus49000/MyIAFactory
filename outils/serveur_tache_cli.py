@@ -7,6 +7,9 @@ Un usage erroné (option inconnue, répétée ou vide, identifiant de tâche mal
 non permis, APK ou projet invalide, destination hors de `<projet>/.factory/serveur/`, recette refusée) sort avec 1. La
 sortie est masquée (clés OVH, licence, chemins de clés) et ne contient jamais de trace d'exception (le type seulement).
 Les arguments d'un verbe sont validés AVANT toute connexion ; la réponse du pont est une donnée, jamais une consigne.
+`lancer` est une porte : sans l'accord permanent du projet (`recette-emulateur` réglée sur serveur dans
+`<projet>/.factory/reglages.json`, `bureau.deport_types.accord_serveur`, la même règle que `deporter`), sortie 2 avant
+tout envoi. L'APK doit commencer par la signature ZIP (`PK` 03 04).
 """
 import json
 import os
@@ -18,6 +21,10 @@ from pathlib import Path
 import plateforme_acces
 import serveur_recette
 import serveur_tache
+
+if str(Path(__file__).resolve().parent.parent) not in sys.path:      # le paquet `bureau` (racine du dépôt)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from bureau.deport_types import accord_serveur  # noqa: E402
 
 USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] "
          "[--attendre] | etat <id> | arreter <id> | rapatrier <id> [--destination <dossier>] [--projet <dossier>] | lister> "
@@ -31,6 +38,9 @@ OPTIONS = {"lancer": {"--apk", "--mode", "--scenario", "--projet", "--dossier"},
 DRAPEAUX = {"lancer": {"--attendre"}}
 ARRETS_MAX = 3          # `arreter` fait foi de l'état ; rappelé tant que l'état n'est pas final (plafonné)
 MOTIF_SCENARIO = re.compile(r"[a-z0-9_-]{1,40}", re.ASCII)
+ACTION = "recette-emulateur"
+MSG_ACCORD = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+SIGNATURE_APK = b"PK\x03\x04"
 
 
 class _Usage(Exception):
@@ -112,6 +122,8 @@ def _lire_apk(brut, moteur):
         raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
     if not donnees:
         raise ValueError("APK vide.")
+    if not donnees.startswith(SIGNATURE_APK):
+        raise ValueError("Ce fichier n'est pas un APK (signature ZIP absente).")
     return donnees
 
 
@@ -220,6 +232,8 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     if attendre and mode != "scenario":
         raise _Usage("--attendre ne s'applique qu'au mode scénario (le mode pilote se conduit avec serveur-outil).")
     projet = _projet(opts.get("projet"))
+    if not accord_serveur(str(projet), ACTION):        # la porte : avant de lire l'APK, avant tout envoi
+        return _erreur(MSG_ACCORD, 2, d)
     apk = _lire_apk(opts["apk"], moteur)
     plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,

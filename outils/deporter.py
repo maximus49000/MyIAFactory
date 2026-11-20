@@ -16,9 +16,10 @@ Lance l'action `<type>` (tests, apk, charge…) là où le Directeur l'a réglé
 - le projet est le plus proche dossier (`--dossier` ou ses parents) qui contient `.factory/` : un agent peut donner
   un sous-dossier (catalogue, lieux et nom du workflow restent ceux du projet).
 - `deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>]` : l'APK sur un émulateur
-  du serveur. Le lieu DOIT être `serveur` dans les réglages du projet (accord permanent du Directeur, pour ce projet et
-  cette action ; le défaut du bureau ne compte pas) ; sinon code 2, jamais le poste ni GitHub (`--poste` ne s'applique
-  pas). L'APK : `--apk`, sinon la production `apk` du projet (artefact GitHub du commit, attendu comme pour les tests,
+  du serveur. Le lieu DOIT être `serveur` dans `<projet>/.factory/reglages.json` (accord permanent du Directeur, pour
+  ce projet et cette action ; ni le défaut du bureau ni un autre fichier donné par `--reglages` ne comptent) ; sinon
+  code 2, jamais le poste ni GitHub (`--poste` et `--sans-attendre` ne s'appliquent pas). Le lanceur de tâches vérifie
+  le même accord (`serveur-tache lancer` est l'autre porte). L'APK : `--apk`, sinon la production `apk` du projet (artefact GitHub du commit, attendu comme pour les tests,
   ou sortie locale du catalogue, la plus récente) ; aucun APK : code 2. Le lancement passe par le lanceur de tâches
   (`serveur_tache_cli`, Python 3.12 : importé à l'appel seulement, ou `py -3.12 lancer.py serveur-tache` à part sous
   un Python plus ancien). Scénario (par défaut, `--scenario` exigé) : lance, déroule la recette, arrête, rapatrie dans
@@ -56,8 +57,8 @@ import deport_depot  # noqa: E402
 import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
-from bureau.deport_types import (SERVIES_AU_SERVEUR, catalogue_du_projet, racine_du_projet,  # noqa: E402
-                                 servie_au_serveur)
+from bureau.deport_types import (SERVIES_AU_SERVEUR, accord_serveur, catalogue_du_projet,  # noqa: E402
+                                 racine_du_projet, reglages_du_projet, servie_au_serveur)
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
 EN_COURS = Path("~/MyIAFactory/deport-en-cours").expanduser()
@@ -380,12 +381,43 @@ def _sonder(commande):
     return f.returncode == 0
 
 
-def _python_312(which=shutil.which, sonder=_sonder):
-    """La commande d'un Python 3.12 (`[py, -3.12]` ou `[python3.12]`), vérifiée ; None si aucune."""
-    for nom, options in (("py", ["-3.12"]), ("python3.12", [])):
-        chemin = which(nom)
-        if chemin and sonder([chemin] + options):
-            return [chemin] + options
+def _sur(chemin, cwd, nt):
+    """Un programme qu'on peut lancer sans risque : chemin absolu d'un fichier existant, hors du dossier courant (un
+    `py.bat` posé là par un projet ne doit jamais tourner), `.exe` seulement sous Windows."""
+    if not chemin or not os.path.isabs(chemin) or not os.path.isfile(chemin):
+        return False
+    if nt and not chemin.lower().endswith(".exe"):
+        return False
+    reel, ici = os.path.normcase(os.path.realpath(chemin)), os.path.normcase(os.path.realpath(cwd))
+    return not (reel == ici or reel.startswith(ici.rstrip("\\/") + os.sep))
+
+
+def _python_312(sonder=_sonder, environ=None, executable=None, version=None, nt=None, cwd=None):
+    """La commande d'un Python 3.12, vérifiée ; None si aucune. Seulement des lieux fixes et sûrs, jamais une recherche
+    qui passerait par le dossier courant (sous Windows, `shutil.which` le fouille en premier) : sous Windows le lanceur
+    `%SystemRoot%\\py.exe` puis celui de l'utilisateur (`%LOCALAPPDATA%\\Programs\\Python\\Launcher\\py.exe`), avec
+    `-3.12` ; l'interpréteur courant s'il est déjà en 3.12 ; ailleurs `python3.12` des dossiers ABSOLUS du PATH. Tout
+    candidat hors `_sur` (relatif, dans le dossier courant, pas `.exe` sous Windows) est écarté."""
+    environ = os.environ if environ is None else environ
+    executable = sys.executable if executable is None else executable
+    version = tuple(sys.version_info[:2]) if version is None else tuple(version)
+    nt = (os.name == "nt") if nt is None else nt
+    cwd = os.getcwd() if cwd is None else cwd
+    candidats = []
+    if nt:
+        for base, suite in ((environ.get("SystemRoot"), ("py.exe",)),
+                            (environ.get("LOCALAPPDATA"), ("Programs", "Python", "Launcher", "py.exe"))):
+            if base:
+                candidats.append([os.path.join(base, *suite), "-3.12"])
+    if version >= (3, 12) and executable:
+        candidats.append([executable])
+    if not nt:
+        for d in environ.get("PATH", "").split(os.pathsep):
+            if d and os.path.isabs(d):
+                candidats.append([os.path.join(d, "python3.12")])
+    for commande in candidats:
+        if _sur(commande[0], cwd, nt) and sonder(commande):
+            return commande
     return None
 
 
@@ -420,6 +452,9 @@ def _usage_recette(opt, commande):
                 % MSG_REGLEZ_SERVEUR)
     if commande:
         return "La recette sur émulateur ne prend pas de commande locale (rien après « -- »).\n" + USAGE
+    if not opt["attendre"]:
+        return ("--sans-attendre ne s'applique pas à la recette sur émulateur : le lanceur de tâches du serveur attend "
+                "son créneau et la fin du scénario.\n" + USAGE)
     mode = opt["mode"] or "scenario"
     if mode not in MODES_RECETTE:
         return "Mode inconnu : « %s » (attendu : scenario ou pilote).\n%s" % (mode, USAGE)
@@ -449,6 +484,7 @@ def _apk_de_la_recette(opt, projet, catalogue, action, env):
             trouves += [p for p in Path(projet).glob(motif) if p.is_file()]
         except (OSError, ValueError):
             continue
+    trouves = [p for p in trouves if _apk_utile(p)]      # jamais l'APK des tests instrumentés (androidTest)
     if trouves:
         return str(max(trouves, key=lambda p: p.stat().st_mtime)), None
     return None, ("Aucun APK trouvé pour la recette sur émulateur : ni --apk, ni sortie locale (%s) dans %s. Générez-le "
@@ -501,6 +537,16 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         print("--mode, --scenario et --apk ne valent que pour %s.\n%s" % (", ".join(SERVIES_AU_SERVEUR), USAGE),
               file=sys.stderr)
         return 2
+    if au_serveur:
+        # l'accord se lit dans les SEULS réglages du projet visé, jamais dans un autre fichier (--reglages) ni au bureau
+        racine = racine_du_projet(dossier)
+        propre = reglages_du_projet(racine)
+        if opt["reglages"] and (os.path.normcase(str(Path(opt["reglages"]).resolve()))
+                                != os.path.normcase(str(Path(propre).resolve()))):
+            print("--reglages ne vaut pas accord pour « %s » : l'accord se lit seulement dans les réglages du projet "
+                  "(%s). %s" % (action, propre, MSG_REGLEZ_SERVEUR), file=sys.stderr)
+            return 2
+        lieux[action] = "serveur" if accord_serveur(racine, action) else None
     if opt["poste"] and not au_serveur:
         lieux[action] = "poste"
     refus = lieux_refuses(lieux, action, catalogue)
@@ -518,8 +564,11 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         print(USAGE, file=sys.stderr)
         return 2
 
+    id_ = "%s-%s-%s" % (os.getpid(), threading.get_ident(), action)
+
     def lancer_au_poste(env=None):
         if au_serveur:      # jamais le poste : la recette part sur le serveur, l'APK venu de GitHub dans `env`
+            retirer_attente(id_, repertoire_attente)      # plus rien n'est attendu de GitHub : pas de fichier figé
             return _recette_au_serveur(opt, racine_du_projet(dossier), catalogue, action, env,
                                        serveur_tache or _serveur_tache, dire)
         if env:      # les chemins des artefacts téléchargés (MYIAFACTORY_ARTEFACT_<PRODUIT>)
@@ -529,7 +578,6 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
     if lieux[action] != "github" and not amont:
         return lancer_au_poste()
 
-    id_ = "%s-%s-%s" % (os.getpid(), threading.get_ident(), action)
     contexte = {"action": action, "lieux": lieux, "catalogue": catalogue, "amont": amont, "opt": opt,
                 "dossier": dossier, "projet": racine_du_projet(dossier), "gh": gh, "git": git, "dormir": dormir,
                 "dire": dire, "id": id_, "repertoire": repertoire_attente, "artefacts": artefacts,
@@ -662,9 +710,18 @@ def _nom_variable(produit):
     return "MYIAFACTORY_ARTEFACT_" + "".join(ch if ch.isalnum() else "_" for ch in str(produit).upper())
 
 
+def _apk_utile(p):
+    """Un APK de l'application, jamais celui des tests instrumentés (`…-androidTest.apk`)."""
+    return p.suffix.lower() == ".apk" and "androidtest" not in p.name.lower()
+
+
 def _premier_fichier(dossier):
+    """Le fichier de l'artefact : d'abord un APK de l'application, sinon un fichier qui n'est pas d'androidTest, sinon
+    le premier (artefact d'un autre genre)."""
     fichiers = sorted(p for p in Path(dossier).rglob("*") if p.is_file())
-    return str(fichiers[0]) if fichiers else str(dossier)
+    choix = ([p for p in fichiers if _apk_utile(p)] or [p for p in fichiers if "androidtest" not in p.name.lower()]
+             or fichiers)
+    return str(choix[0]) if choix else str(dossier)
 
 
 def _artefact(c, racine, run, commit, produit):

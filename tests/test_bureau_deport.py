@@ -171,6 +171,10 @@ class TestRecetteEmulateurAuBureau(AvecServeur):
         self.assertEqual(r.status, 400)
         self.assertIsNone(self.etat()["lieux"][self.RECETTE])
 
+    def test_null_pour_une_action_inconnue_reste_refuse(self):
+        r, data = self.poster({"deport": {"lieux": {"zzz": None}}})
+        self.assertEqual(r.status, 400, data)
+
 
 if __name__ == "__main__":
     unittest.main()

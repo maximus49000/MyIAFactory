@@ -2117,7 +2117,8 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(demande.get("lieux"), dict):
                     lieux.update(demande["lieux"])
                     # null : l'action redevient non réglée (le projet hérite du bureau ; la recette est refusée)
-                    lieux = {a: v for a, v in lieux.items() if v is not None}
+                    # (pour une action du catalogue seulement : une action inconnue reste refusée)
+                    lieux = {a: v for a, v in lieux.items() if not (v is None and a in catalogue)}
                 elif "lieux" in demande:
                     lieux = demande["lieux"]
                 nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},

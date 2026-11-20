@@ -4,7 +4,7 @@ Une entrée de catalogue : `libelle` (texte affiché), `commande` (commande par 
 `produit` (artefact produit, ou None), `consomme` (actions dont elle dépend), `artefact` (chemin publié, ou None),
 `lieux` (lieux où elle peut tourner) et `bientot` (texte qui explique un lieu indisponible, ou None).
 
-Logique pure, sans accès disque hors `catalogue_du_projet`. Reste compatible Python 3.9 : le code déporté est aussi
+Logique pure, sans accès disque hors `catalogue_du_projet` et `accord_serveur`. Reste compatible Python 3.9 : le code déporté est aussi
 lancé par les agents.
 """
 import json
@@ -109,6 +109,27 @@ def racine_du_projet(dossier):
 def servie_au_serveur(nom, catalogue):
     """Vrai si `deporter` sait servir l'action `nom` sur le serveur et que ce catalogue l'y permet."""
     return nom in SERVIES_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
+
+
+def reglages_du_projet(racine):
+    """Le seul fichier où vit l'accord permanent d'un projet : `<racine>/.factory/reglages.json`."""
+    return os.path.join(str(racine), ".factory", "reglages.json")
+
+
+def accord_serveur(racine, action):
+    """Vrai si le projet `racine` a réglé `action` (servie au serveur) sur `serveur` dans SES réglages
+    (`reglages_du_projet`) : l'accord permanent du Directeur pour ce projet et cette action. Jamais hérité du bureau,
+    jamais lu dans un autre fichier ; faux au moindre ennui (fichier absent, illisible, valeur autre)."""
+    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
+        return False
+    try:
+        with open(reglages_du_projet(racine), encoding="utf-8-sig") as f:
+            donnees = json.load(f)
+    except (OSError, ValueError, RecursionError):
+        return False
+    deport = donnees.get("deport") if isinstance(donnees, dict) else None
+    lieux = deport.get("lieux") if isinstance(deport, dict) else None
+    return isinstance(lieux, dict) and lieux.get(action) == "serveur"
 
 
 def sans_poste(entree):

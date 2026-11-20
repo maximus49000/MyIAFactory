@@ -932,6 +932,66 @@ class TestRecetteEmulateur(Base):
         self.assertIn("serveur injoignable", self.sortie)
         self.assertEqual(self.poste, [])
 
+    def test_reglages_ailleurs_ne_valent_pas_accord(self):
+        d = self.projet_recette({})                       # le projet n'a pas donné son accord
+        faux = self.tmp / "ailleurs" / "reglages.json"
+        faux.parent.mkdir()
+        faux.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}), encoding="utf-8")
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--reglages", str(faux)), 2)
+        self.assertIn("--reglages", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+        # même si le projet a donné son accord : un autre fichier est refusé
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}),
+                                                      encoding="utf-8")
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--reglages", str(faux)), 2)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_reglages_du_projet_lui_meme_accepte(self):
+        d = self.projet_recette()
+        propre = d / ".factory" / "reglages.json"
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--reglages", str(propre)), 0)
+        self.assertEqual(len(self.serveur.appels), 1)
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--projet")), d)
+
+    def test_sans_attendre_refuse_pour_la_recette(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--sans-attendre"), 2)
+        self.assertIn("--sans-attendre", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_l_attente_github_est_retiree_avant_le_serveur(self):
+        d = self.projet_recette({"apk": "github", self.RECETTE: "serveur"}, genre=None)
+        vus = []
+
+        class Temoin(FauxServeurTache):
+            def __call__(s, argv):
+                vus.append(list(self.attente.glob("*.json")))
+                return FauxServeurTache.__call__(s, argv)
+        self.assertEqual(self.recette(d, "--scenario", "demo", gh=GhQuiTelecharge(), serveur=Temoin()), 0, self.sortie)
+        self.assertEqual(vus, [[]])
+
+    def test_l_apk_androidtest_n_est_jamais_choisi(self):
+        d = self.projet_recette()
+        sortie = d / "app" / "build" / "outputs" / "apk" / "debug"
+        sortie.mkdir(parents=True)
+        bon = sortie / "app-debug.apk"
+        bon.write_bytes(b"PK1")
+        os.utime(str(bon), (1000000000, 1000000000))
+        (sortie / "app-debug-androidTest.apk").write_bytes(b"PK2")       # le plus récent
+        self.assertEqual(self.recette(d, "--scenario", "demo"), 0, self.sortie)
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--apk")), bon)
+
+    def test_l_artefact_androidtest_n_est_jamais_choisi(self):
+        d = self.projet_recette({"apk": "github", self.RECETTE: "serveur"}, genre=None)
+
+        class GhDeuxApk(GhQuiTelecharge):
+            def telecharger(s, depot, run_id, nom, dossier):
+                GhQuiTelecharge.telecharger(s, depot, run_id, nom, dossier)
+                (Path(dossier) / "app-debug-androidTest.apk").write_bytes(b"PK")      # trié avant app-debug.apk
+                (Path(dossier) / "LISEZMOI.txt").write_text("x", encoding="utf-8")
+        self.assertEqual(self.recette(d, "--scenario", "demo", gh=GhDeuxApk()), 0, self.sortie)
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--apk")).name, "app-debug.apk")
+
     def test_actions_existantes_inchangees(self):
         d = self.projet_recette({})
         self.assertEqual(self.lancer(["emulateur", "--dossier", str(d), "--", "x"]), 0)       # au poste, comme avant
@@ -976,14 +1036,74 @@ class TestLanceurServeurTache(unittest.TestCase):
         self.assertNotIn(code, (0, 1))
         self.assertIn("Python 3.12", sortie.getvalue())
 
-    def test_recherche_de_python_3_12(self):
-        trouve = deporter._python_312(which=lambda n: {"py": "C:/py.exe"}.get(n), sonder=lambda c: c[0] == "C:/py.exe")
-        self.assertEqual(trouve, ["C:/py.exe", "-3.12"])
-        self.assertIsNone(deporter._python_312(which=lambda n: None, sonder=lambda c: True))
-        autre = deporter._python_312(which=lambda n: {"py": "C:/py.exe", "python3.12": "/u/python3.12"}.get(n),
-                                     sonder=lambda c: c[0] == "/u/python3.12")
-        self.assertEqual(autre, ["/u/python3.12"])
-        self.assertIsNone(deporter._python_312(which=lambda n: "/x/" + n, sonder=lambda c: False))
+    def lieux_surs(self):
+        """Un dossier courant piégé (py.bat, py.exe, python3.12) et des dossiers sûrs hors de lui."""
+        t = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(t, ignore_errors=True))
+        base = Path(t).resolve()
+        cwd, win, local, usr = base / "travail", base / "win", base / "local", base / "usr" / "bin"
+        lanceur = local / "Programs" / "Python" / "Launcher"
+        for d in (cwd, win, lanceur, usr):
+            d.mkdir(parents=True)
+        for nom in ("py.bat", "py.exe", "py.cmd", "python3.12"):
+            (cwd / nom).write_text("piège", encoding="utf-8")
+        return cwd, win, local, lanceur, usr
+
+    def sonde(self, cwd, vus):
+        def sonder(commande):
+            vus.append(list(commande))
+            self.assertFalse(str(commande[0]).startswith(str(cwd)), "jamais un programme du dossier courant")
+            return True
+        return sonder
+
+    def test_python_3_12_windows_seulement_des_lieux_surs(self):
+        cwd, win, local, lanceur, _ = self.lieux_surs()
+        (win / "py.exe").write_bytes(b"MZ")
+        vus = []
+        environ = {"SystemRoot": str(win), "LOCALAPPDATA": str(local), "PATH": "%s;." % cwd}
+        trouve = deporter._python_312(sonder=self.sonde(cwd, vus), environ=environ, executable=str(cwd / "py.exe"),
+                                      version=(3, 9), nt=True, cwd=str(cwd))
+        self.assertEqual(trouve, [str(win / "py.exe"), "-3.12"])
+        # SystemRoot qui pointe dans le dossier courant : ignoré ; le lanceur de l'utilisateur prend la suite
+        (lanceur / "py.exe").write_bytes(b"MZ")
+        environ = {"SystemRoot": str(cwd), "LOCALAPPDATA": str(local), "PATH": str(cwd)}
+        trouve = deporter._python_312(sonder=self.sonde(cwd, vus), environ=environ, executable="", version=(3, 9),
+                                      nt=True, cwd=str(cwd))
+        self.assertEqual(trouve, [str(lanceur / "py.exe"), "-3.12"])
+        # rien de sûr : None, même avec py.bat / python3.12 posés dans le dossier courant et un PATH qui y mène
+        self.assertIsNone(deporter._python_312(sonder=self.sonde(cwd, vus), environ={"PATH": ".;" + str(cwd)},
+                                               executable=str(cwd / "py.exe"), version=(3, 12), nt=True,
+                                               cwd=str(cwd)))
+        self.assertIsNone(deporter._python_312(sonder=lambda c: False, environ={"SystemRoot": str(win)},
+                                               executable="", version=(3, 9), nt=True, cwd=str(cwd)))
+
+    def test_python_3_12_l_interpreteur_courant_s_il_est_sur(self):
+        cwd, win, local, lanceur, _ = self.lieux_surs()
+        exe = win / "python.exe"
+        exe.write_bytes(b"MZ")
+        bat = win / "python.bat"
+        bat.write_text("x", encoding="utf-8")
+        vus = []
+        self.assertEqual(deporter._python_312(sonder=self.sonde(cwd, vus), environ={}, executable=str(exe),
+                                              version=(3, 12), nt=True, cwd=str(cwd)), [str(exe)])
+        self.assertIsNone(deporter._python_312(sonder=self.sonde(cwd, vus), environ={}, executable=str(exe),
+                                               version=(3, 9), nt=True, cwd=str(cwd)))
+        self.assertIsNone(deporter._python_312(sonder=self.sonde(cwd, vus), environ={}, executable=str(bat),
+                                               version=(3, 12), nt=True, cwd=str(cwd)))      # .exe seulement
+        self.assertIsNone(deporter._python_312(sonder=self.sonde(cwd, vus), environ={}, executable="python.exe",
+                                               version=(3, 12), nt=True, cwd=str(cwd)))      # chemin relatif
+
+    def test_python_3_12_posix_path_absolu_hors_du_dossier_courant(self):
+        cwd, _, _, _, usr = self.lieux_surs()
+        (usr / "python3.12").write_text("x", encoding="utf-8")
+        vus = []
+        environ = {"PATH": os.pathsep.join([str(cwd), ".", "bin", "", str(usr)])}
+        trouve = deporter._python_312(sonder=self.sonde(cwd, vus), environ=environ, executable="", version=(3, 9),
+                                      nt=False, cwd=str(cwd))
+        self.assertEqual(trouve, [str(usr / "python3.12")])
+        self.assertEqual(vus, [[str(usr / "python3.12")]])
+        self.assertIsNone(deporter._python_312(sonder=self.sonde(cwd, vus), environ={"PATH": str(cwd) + os.pathsep + "."},
+                                               executable="", version=(3, 9), nt=False, cwd=str(cwd)))
 
     def test_deporter_n_importe_pas_le_lanceur_3_12_au_chargement(self):
         import ast

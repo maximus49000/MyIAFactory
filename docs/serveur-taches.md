@@ -36,7 +36,8 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
     enveloppe.pid, veilleur.pid      les deux processus de l'hôte (voir plus bas)
     veilleur.log, docker-run.log     journaux de l'hôte (jamais rapatriés)
 ~/myiafactory/serveur_ovh/...        les fichiers du dépôt déposés sur le serveur : images/emulateur/{Dockerfile,entree-tache.sh},
-                                     taches/{pont.sh,lancer_emulation.sh}, versions.json (dossier `$HOME/myiafactory`, en minuscules)
+                                     taches/{pont.sh,lancer_emulation.sh,commun.sh}, versions.json (dossier `$HOME/myiafactory`,
+                                     en minuscules) ; commun.sh (fonctions partagées des enveloppes) est déposé avec l'enveloppe
 ~/.myiafactory/emulateur-image.version    le marqueur de l'image (voir « Maintenance »)
 ~/android-sdk                        le SDK Android de l'hôte, monté en lecture seule dans le conteneur
 ```

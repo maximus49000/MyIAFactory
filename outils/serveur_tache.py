@@ -482,6 +482,8 @@ IMAGES_FILM_MAX = VIDEOS_MAX * IMAGES_PAR_FILM
 TAILLE_ARCHIVE_MARGE = 4 * JOURNAL_MAX_OCTETS + LOGCAT_MAX_OCTETS + 2 * 1024 * 1024
 ENVELOPPE = "taches/lancer_emulation.sh"
 ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/{ENVELOPPE}"
+COMMUN = "taches/commun.sh"          # sourcé par l'enveloppe : déposé avec elle, juste avant elle
+COMMUN_DISTANT = f"{DOSSIER_DISTANT}/{COMMUN}"
 # Délai SSH de chaque verbe relayé, au-dessus de la borne propre du pont : `arreter` (adb + attentes 10 + 5 + 5 s, jusqu'à
 # ~80 s, plus la fin d'un film resté en cours), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S
 # 300 s), `finfilm` (verrou, SIGINT et attente 10 s, adb pull, ffmpeg 120 s : jusqu'à ~250 s), `filmer` (1 s d'attente).
@@ -731,9 +733,10 @@ umask 077
 mkdir -p "$HOME/myiafactory" || exit 1
 d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1
 f="$d/{ENVELOPPE}"
+c="$d/{COMMUN}"
 r=1
-if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ]; then
-  mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$f" "{ENVELOPPE_DISTANTE}" && r=0
+if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ] && [ -f "$c" ] && [ ! -L "$c" ] && [ -s "$c" ]; then
+  mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$c" "{COMMUN_DISTANT}" && mv -f "$f" "{ENVELOPPE_DISTANTE}" && r=0
 fi
 rm -rf "$d"
 exit $r
@@ -974,12 +977,15 @@ def _envoyer(serveur, ssh, demande, apk):
 
 
 def _deposer_enveloppe(serveur, ssh):
-    """Dépose lancer_emulation.sh dans $HOME/myiafactory/serveur_ovh/taches/ (`_DEPOSER` : temporaire privé puis mv).
-    None si réussi, sinon le message."""
-    source = RACINE_SERVEUR / ENVELOPPE
-    if source.is_symlink() or not source.is_file():
-        return f"Fichier du dépôt introuvable : serveur_ovh/{ENVELOPPE}."
-    donnees = _archive([(ENVELOPPE, source.read_bytes(), 0o755)])
+    """Dépose lancer_emulation.sh et commun.sh (qu'il source) dans $HOME/myiafactory/serveur_ovh/taches/ (`_DEPOSER` :
+    temporaire privé puis mv, commun.sh d'abord). None si réussi, sinon le message."""
+    fichiers = []
+    for rel, mode in ((ENVELOPPE, 0o755), (COMMUN, 0o644)):
+        source = RACINE_SERVEUR / rel
+        if source.is_symlink() or not source.is_file():
+            return f"Fichier du dépôt introuvable : serveur_ovh/{rel}."
+        fichiers.append((rel, source.read_bytes(), mode))
+    donnees = _archive(fichiers)
     code, _o, erreur = _octets(serveur, ssh, _DEPOSER, donnees, delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe sur le serveur impossible (code {code}) : {_court(erreur, 200)}"

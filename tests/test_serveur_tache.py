@@ -732,8 +732,8 @@ class TestLancer(BaseLanceur):
         self.assertEqual(r, {"id": ID1, "etat": "en_cours", "serveur_id": "ovh1"})
         self.assertEqual(self.srv.taches[ID1]["apk"], APK)
         self.assertEqual(self.srv.taches[ID1]["demande"]["mode"], "scenario")
-        self.assertEqual(self.srv.deposes, {"taches/lancer_emulation.sh": (
-            RACINE / "serveur_ovh" / "taches" / "lancer_emulation.sh").read_bytes()})
+        self.assertEqual(self.srv.deposes, {nom: (RACINE / "serveur_ovh" / nom).read_bytes()      # commun.sh : sourcé par l'enveloppe
+                                            for nom in ("taches/lancer_emulation.sh", "taches/commun.sh")})
         prep = self.srv.ops("preparer")[0]
         self.assertNotIn(b"PK", prep[1].encode())             # l'APK n'est jamais dans la commande
         lancement = self.srv.ops("lancer")[0][1]
@@ -1672,6 +1672,8 @@ class TestScriptsReels(BaseLanceur):
         self.assertIsNone(st._deposer_enveloppe(self.serveur, self.ssh))
         depose = self.ssh.home / "myiafactory" / "serveur_ovh" / "taches" / "lancer_emulation.sh"
         self.assertEqual(depose.read_bytes(), (RACINE / "serveur_ovh" / "taches" / "lancer_emulation.sh").read_bytes())
+        commun = self.ssh.home / "myiafactory" / "serveur_ovh" / "taches" / "commun.sh"     # sourcé par l'enveloppe
+        self.assertEqual(commun.read_bytes(), (RACINE / "serveur_ovh" / "taches" / "commun.sh").read_bytes())
 
     def test_rapatrier_reel_fichiers_ordinaires_seulement(self):
         self.fiche()

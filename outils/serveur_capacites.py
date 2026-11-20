@@ -52,7 +52,9 @@ _CATALOGUE = {
         "~/Unity/Hub/Editor/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java; do test -x \"$j\" && break; done; }", 5.4, 10),
     "android-emulateur": Capacite(
         "android-emulateur", "Émulateur Android (KVM)", ("android-build",), "android_emulateur",
-        "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images "
+        # le dossier de l'image système ÉPINGLÉE (android_sdk.emulator_image de versions.json, « ; » -> « / » ; test de
+        # concordance), pas seulement system-images : une autre image ne suffit pas à l'émulateur des tâches
+        "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images/android-34/google_apis/x86_64 "
         "&& id -nG | grep -qw kvm && test -e /dev/kvm", 2.0, 8),
     "emulateur-image": Capacite(
         "emulateur-image", "Image de l'émulateur (conteneur d'outil sans identifiants)", ("android-emulateur",), "emulateur_image",

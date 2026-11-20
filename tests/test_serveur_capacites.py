@@ -242,6 +242,35 @@ class CatalogueTests(unittest.TestCase):
         self.assertNotEqual(self._android_build(sdk=False, java="unity"), 0)
         self.assertNotEqual(self._android_build(sdk=False, java="path"), 0)
 
+    def test_sonde_android_emulateur_verifie_l_image_epinglee(self):
+        # M7 : le dossier de l'image système ÉPINGLÉE (versions.json), pas seulement ~/android-sdk/system-images.
+        import json
+        versions = json.loads((Path(__file__).resolve().parent.parent / "serveur_ovh" / "versions.json")
+                              .read_text(encoding="utf-8"))
+        chemin = versions["android_sdk"]["emulator_image"].replace(";", "/")
+        sonde = sc.CATALOGUE["android-emulateur"].sonde
+        self.assertIn(f"test -d ~/android-sdk/{chemin} ", sonde)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sonde_android_emulateur_absente_sans_l_image_epinglee(self):
+        import os
+        import tempfile
+        sonde = sc.CATALOGUE["android-emulateur"].sonde.split(" && id -nG")[0]      # sans kvm (ce poste n'en a pas)
+        with tempfile.TemporaryDirectory() as t:
+            home = Path(t)
+            emu = home / "android-sdk/emulator/emulator"
+            emu.parent.mkdir(parents=True)
+            emu.write_text("#!/bin/sh\n", newline="\n")
+            emu.chmod(0o755)
+            (home / "android-sdk/system-images/android-35/google_apis/x86_64").mkdir(parents=True)
+
+            def code():
+                return subprocess.run(["bash", "-c", f"( {sonde} ) </dev/null >/dev/null 2>&1"], timeout=30,
+                                      env=dict(os.environ, HOME=home.as_posix())).returncode
+            self.assertNotEqual(code(), 0)                                  # une autre image ne compte pas
+            (home / "android-sdk/system-images/android-34/google_apis/x86_64").mkdir(parents=True)
+            self.assertEqual(code(), 0)
+
     def test_sondes_et_estimations_du_catalogue(self):
         for cap in sc.CATALOGUE.values():
             self.assertGreaterEqual(cap.taille_go, 0)

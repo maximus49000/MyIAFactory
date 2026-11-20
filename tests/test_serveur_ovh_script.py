@@ -1353,6 +1353,227 @@ class TestDockerfileEmulateur(unittest.TestCase):
         self.assertNotIn("docker", " ".join(x for x in texte.splitlines() if not x.lstrip().startswith("#")))
 
 
+DOCKER_AGENT = DOCKER_IMAGE.replace(
+    '  "image inspect")',
+    '  "network inspect") [ -e "ETAT/reseau" ] && exit 0; exit 1 ;;\n'
+    '  "network create") [ -n "${FAUX_RESEAU_ECHEC:-}" ] && exit 1; : > "ETAT/reseau"; exit 0 ;;\n'
+    '  "image inspect")')
+MARQUEUR_AGENT = Path(".myiafactory") / "agent-image.version"
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEtapeAgentImage(unittest.TestCase):
+    def _monde(self, **kw):
+        m = Monde(**kw).__enter__()
+        self.addCleanup(m.__exit__)
+        corps = DOCKER_AGENT.replace("JOURNAL", m.journal_fichier.as_posix()).replace("ETAT", m.etat.as_posix())
+        (m.faux / "docker").write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+        (m.faux / "docker").chmod(0o755)
+        return m
+
+    def _lancer(self, m, **env):
+        return m.lancer("agent_image", env={"SERVEUR_OVH_DIR": RACINE.as_posix(), **env})
+
+    def test_etape_agent_image_simulation_json_valide(self):
+        m = self._monde()
+        d = m.lancer("agent_image", simuler=True, env={"SERVEUR_OVH_DIR": RACINE.as_posix()})
+        self.assertEqual(set(d), CLES)
+        self.assertEqual((d["etape"], d["statut"]), ("agent_image", "a_faire"))
+        self.assertIn("simul", d["detail"].lower())
+        self.assertIn("myiafactory/agent", d["detail"])
+        self.assertIn("myiafactory-agents", d["detail"])
+        self.assertEqual(m.journal, "")
+        self.assertEqual(list(m.home.iterdir()), [])
+
+    def test_etape_agent_image_construit_reseau_et_marqueur(self):
+        m = self._monde()
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        builds = m.appels("docker build")
+        self.assertEqual(len(builds), 1, m.journal)
+        self.assertIn("--label versions=ubuntu=ubuntu:24.04;node=22;claude_code=2.1.328;fichiers=", builds[0])
+        self.assertIn("--build-arg UBUNTU_TAG=24.04", builds[0])
+        self.assertIn("--build-arg NODE_MAJEUR=22", builds[0])
+        self.assertIn("--build-arg CLAUDE_CODE=2.1.328", builds[0])
+        self.assertIn("-t myiafactory/agent ", builds[0])
+        self.assertNotIn("--network", builds[0])                                          # la construction a besoin du réseau
+        contexte = m.appels("contexte:")[0]
+        for f in ("Dockerfile", "entree-agent.py", "pont"):
+            self.assertIn(f, contexte)
+        self.assertEqual(len(m.appels("docker network create myiafactory-agents")), 1, m.journal)
+        self.assertTrue((m.etat / "reseau").exists())
+        etiquette = (m.etat / "etiquette").read_text()
+        self.assertEqual((m.home / MARQUEUR_AGENT).read_text().strip(), etiquette)
+        sys.path.insert(0, str(RACINE.parent / "outils"))
+        import serveur_installation
+        self.assertEqual(etiquette, serveur_installation.empreinte_etape("agent_image"))   # même empreinte côté poste et côté serveur
+        self.assertEqual(m.restes(m.home / ".myiafactory"), ["agent-image.version"])
+        self.assertNotIn("curl", m.journal)
+
+    def test_etape_agent_image_idempotente(self):
+        m = self._monde()
+        self.assertEqual(self._lancer(m)["statut"], "fait")
+        marqueur = (m.home / MARQUEUR_AGENT).read_text()
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertEqual(len(m.appels("docker build")), 1, m.journal)                      # rien reconstruit
+        self.assertEqual(len(m.appels("docker network create")), 1, m.journal)             # réseau déjà là : pas recréé
+        self.assertEqual((m.home / MARQUEUR_AGENT).read_text(), marqueur)
+        (m.etat / "etiquette").write_text("ubuntu=autre", newline="\n")                    # image d'une autre version : reconstruite
+        self.assertEqual(self._lancer(m)["statut"], "fait")
+        self.assertEqual(len(m.appels("docker build")), 2, m.journal)
+
+    def test_etape_agent_image_blocages(self):
+        m = self._monde()
+        d = self._lancer(m, DISQUE_LIBRE_GO="1")
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("isque", d["detail"])
+        d = self._lancer(m, SERVEUR_OVH_DIR=(m.t / "vide").as_posix())
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("introuvable", d["detail"])
+        d = self._lancer(m, FAUX_BUILD_ECHEC="1")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("ligne-de-build-30", d["detail"])
+        self.assertFalse((m.home / MARQUEUR_AGENT).exists())                               # pas de marqueur sans image
+        d = self._lancer(m, FAUX_RESEAU_ECHEC="1")
+        self.assertEqual(d["statut"], "bloque", d["detail"])
+        self.assertIn("myiafactory-agents", d["detail"])
+        self.assertFalse((m.home / MARQUEUR_AGENT).exists())                               # pas de marqueur sans réseau
+        m.opt["FAUX_UTILISATEUR"] = "root"
+        d = self._lancer(m)
+        self.assertEqual(d["statut"], "bloque")
+        self.assertIn("root", d["detail"])
+
+    def test_fichiers_de_l_entree_et_du_pont_peuvent_manquer_sans_planter_l_empreinte(self):
+        # les deux fichiers arrivent aux tâches 2 et 7 : l'étape tolère leur absence (le Dockerfile, lui, est exigé)
+        m = self._monde()
+        copie = m.t / "serveur_ovh"
+        (copie / "images" / "agent").mkdir(parents=True)
+        shutil.copyfile(RACINE / "images" / "agent" / "Dockerfile", copie / "images" / "agent" / "Dockerfile")
+        d = self._lancer(m, SERVEUR_OVH_DIR=copie.as_posix())
+        self.assertEqual(d["statut"], "fait", d["detail"])
+        self.assertRegex((m.home / MARQUEUR_AGENT).read_text().strip(), r";fichiers=[0-9a-f]{16}$")
+
+
+class TestDockerfileAgent(unittest.TestCase):
+    """L'image n'est jamais construite par un test : le Dockerfile est seulement lu."""
+    DOCKERFILE = RACINE / "images" / "agent" / "Dockerfile"
+
+    def setUp(self):
+        self.texte = self.DOCKERFILE.read_text(encoding="utf-8")
+        self.code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))
+        self.instructions = re.sub(r"\\\n\s*", " ", self.code).splitlines()
+
+    def test_image_agent_sans_curl_ni_wget(self):
+        self.assertNotRegex(self.code, r"\bwget\b")
+        avec_curl = [x for x in self.instructions if re.search(r"\bcurl\b", x)]
+        self.assertEqual(len(avec_curl), 1, avec_curl)                    # une seule couche s'en sert...
+        couche = avec_curl[0]
+        self.assertTrue(couche.startswith("RUN "), couche)
+        purge = re.search(r"apt-get purge\b[^&]*\bcurl\b", couche)
+        self.assertIsNotNone(purge, couche)                               # ... et la purge en fin de couche
+        self.assertGreater(purge.start(), couche.rindex("curl -"))        # après le dernier appel à curl
+        self.assertGreater(purge.start(), couche.index("install -y --no-install-recommends nodejs"))
+        # aucune couche suivante ne le réinstalle
+        suite = self.instructions[self.instructions.index(couche) + 1:]
+        self.assertFalse([x for x in suite if re.search(r"\b(curl|wget)\b", x)], suite)
+
+    def test_dockerfile_agent_suit_versions_json(self):
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        self.assertRegex(self.texte, rf"(?m)^ARG UBUNTU_TAG={re.escape(versions['base_ubuntu'].split(':')[1])}$")
+        self.assertRegex(self.texte, rf"(?m)^ARG NODE_MAJEUR={re.escape(versions['node'])}$")
+        self.assertRegex(self.texte, rf"(?m)^ARG CLAUDE_CODE={re.escape(versions['claude_code'])}$")
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertRegex(script, rf'(?m)^V_CLAUDE_CODE="{re.escape(versions["claude_code"])}"$')
+        etape = script[script.index("etape_agent_image()"):script.index("# --- Unity CLI")]
+        for arg in ('--build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}"', '--build-arg "NODE_MAJEUR=$V_NODE"', '--build-arg "CLAUDE_CODE=$V_CLAUDE_CODE"'):
+            self.assertIn(arg, etape)
+
+    def test_entree_et_pont_copies_en_lecture_seule_pour_root(self):
+        self.assertRegex(self.code, r"(?m)^COPY entree-agent\.py /usr/local/bin/entree-agent$")
+        self.assertRegex(self.code, r"(?m)^COPY pont /usr/local/bin/pont$")
+        chmod = [x for x in self.instructions if "chown root:root" in x]
+        self.assertEqual(len(chmod), 1)
+        self.assertIn("/usr/local/bin/entree-agent", chmod[0])
+        self.assertIn("/usr/local/bin/pont", chmod[0])
+        self.assertRegex(chmod[0], r"chmod 0?555 ")                       # lecture et exécution seules : jamais d'écriture
+        self.assertNotRegex(self.code, r"(?mi)^(USER|VOLUME)\b")          # l'agent tourne sous l'identifiant de l'hôte (--user)
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEnregistrerJeton(unittest.TestCase):
+    """Le jeton de test est inventé ; le script ne doit jamais l'afficher. Git bash : les droits ne tiennent qu'à la création
+    (umask), ce que le script fait."""
+    SCRIPT_JETON = RACINE / "taches" / "enregistrer_jeton.sh"
+    JETON = "jeton-de-test-0123456789ABCDEF"
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.home = Path(self._t.name)
+
+    def _lancer(self, entree):
+        # octets : le mode texte de Windows changerait « \n » en « \r\n » avant le script
+        r = subprocess.run(["bash", self.SCRIPT_JETON.as_posix()], input=entree.encode("utf-8"), capture_output=True,
+                           env=dict(os.environ, HOME=self.home.as_posix()), timeout=60)
+        r.stdout, r.stderr = r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+        return r
+
+    def _mode(self, chemin):
+        return subprocess.run(["stat", "-c", "%a", chemin.as_posix()], capture_output=True, text=True).stdout.strip()
+
+    def _droits_persistants(self):
+        """Faux sous Git bash sur Windows : les droits y sont simulés par processus et ne se relisent pas d'un processus à l'autre.
+        Sur un vrai système de fichiers (le serveur), on vérifie les droits ; sinon seul le texte du script les garantit."""
+        sonde = self.home / "sonde-droits"
+        subprocess.run(["bash", "-c", 'umask 077; mkdir "$1"', "x", sonde.as_posix()], capture_output=True, timeout=30)
+        return self._mode(sonde) == "700"
+
+    def test_la_syntaxe_est_valide_et_la_lecture_se_fait_sans_echo(self):
+        self.assertEqual(subprocess.run(["bash", "-n", self.SCRIPT_JETON.as_posix()], capture_output=True).returncode, 0)
+        texte = self.SCRIPT_JETON.read_text(encoding="utf-8")
+        # les droits sont posés à la création (umask) puis contrôlés : jamais un instant lisible par d'autres
+        self.assertLess(texte.index("umask 077"), texte.index("mkdir -p"))
+        self.assertIn('droits "$dossier" 700', texte)
+        self.assertIn('droits "$tmp" 600', texte)
+        self.assertLess(texte.index('droits "$tmp" 600'), texte.index('mv -f "$tmp"'))      # droits réglés AVANT d'atteindre « jeton »
+        self.assertNotIn("\r", texte)
+        self.assertIn("read -rs", texte)
+        self.assertNotRegex(texte, r"\bset -x\b|\becho\b[^\n]*\$\{?jeton")
+
+    def test_enregistrer_jeton_droits_et_sans_echo(self):
+        for entree in (self.JETON + "\n", self.JETON):                    # avec ou sans retour à la ligne final
+            with self.subTest(entree=entree):
+                r = self._lancer(entree)
+                self.assertEqual(r.returncode, 0, (r.stdout, r.stderr))
+                self.assertNotIn(self.JETON, r.stdout + r.stderr)
+                dossier = self.home / "agent-identifiants"
+                if self._droits_persistants():
+                    self.assertEqual(self._mode(dossier), "700")
+                    self.assertEqual(self._mode(dossier / "jeton"), "600")
+                self.assertEqual((dossier / "jeton").read_text(encoding="utf-8").strip(), self.JETON)
+                self.assertEqual(sorted(x.name for x in dossier.iterdir()), ["jeton"])   # pas de fichier temporaire oublié
+        autre = "un-autre-jeton-de-test-9876543210"
+        self.assertEqual(self._lancer(autre + "\n").returncode, 0)        # remplacement
+        self.assertEqual((self.home / "agent-identifiants" / "jeton").read_text(encoding="utf-8").strip(), autre)
+
+    def test_enregistrer_jeton_refuse_vide_ou_hostile(self):
+        refuses = ["", "\n", "court", "a" * 19 + "\n", "a" * 401 + "\n", "a" * 20 + " b\n", "a" * 20 + ";rm -rf /\n",
+                   "$(touch pirate)" + "a" * 20 + "\n", "a" * 20 + '"\n', "a" * 20 + "\r\n", "é" * 20 + "\n", "a" * 20 + "`id`\n"]
+        for entree in refuses:
+            with self.subTest(entree=entree[:30]):
+                r = self._lancer(entree)
+                self.assertEqual(r.returncode, 2, (r.stdout, r.stderr))
+                if entree.strip():
+                    self.assertNotIn(entree.strip(), r.stdout + r.stderr)  # jamais de renvoi de la valeur saisie
+                self.assertFalse((self.home / "agent-identifiants" / "jeton").exists())
+                self.assertFalse((self.home / "pirate").exists())
+        self.assertEqual(self._lancer(self.JETON + "\n").returncode, 0)
+        self.assertEqual(self._lancer("\n").returncode, 2)                # un refus ne détruit pas le jeton en place
+        self.assertEqual((self.home / "agent-identifiants" / "jeton").read_text(encoding="utf-8").strip(), self.JETON)
+        self.assertEqual(sorted(x.name for x in (self.home / "agent-identifiants").iterdir()), ["jeton"])
+
+
 class TestTexteDuScript(unittest.TestCase):
     def setUp(self):
         self.texte = SCRIPT.read_text(encoding="utf-8")
@@ -1413,7 +1634,7 @@ class TestTexteDuScript(unittest.TestCase):
     def test_images_reconstruites_si_les_versions_changent(self):
         self.assertIn('--label "versions=$empreinte"', self.texte)
         self.assertIn('"$actuelle" != "$empreinte"', self.texte)
-        self.assertEqual(self.texte.count("--build-arg"), 10)          # + CMDLINE_TOOLS de l'image de l'émulateur
+        self.assertEqual(self.texte.count("--build-arg"), 13)          # + CMDLINE_TOOLS de l'émulateur, + 3 de l'étape agent_image
 
     def test_dockerfile_script_et_versions_json_concordent(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))

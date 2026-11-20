@@ -2,6 +2,7 @@
 l'installation en arrière-plan. Jamais de vrai `ssh` ni de vrai `ssh-keygen` : un faux ssh et un faux moteur sont injectés."""
 import json
 import os
+import socket
 import threading
 import time
 import unittest
@@ -939,12 +940,27 @@ class TestListeTaches(AvecTaches):
             ident_tache(2): {"etat": "en_cours", "mode": "pilote", "projet": "MonJeu", "serveur_id": "mon-serveur",
                              "debut": None, "fin": None, "statut": None}})
         self.ssh.appels.clear()
+        connexions = []
+        vrai_connect, vrai_connect_ex = socket.socket.connect, socket.socket.connect_ex
+
+        def garde(nom, vrai):
+            def connecter(sock, adresse):
+                if adresse[:2] != ("127.0.0.1", self.port):               # seul le bureau d'essai est joignable
+                    connexions.append((nom, adresse))
+                    raise AssertionError(f"réseau : {adresse}")
+                return vrai(sock, adresse)
+            return connecter
         with mock.patch("subprocess.run", side_effect=AssertionError("subprocess")), \
+                mock.patch("subprocess.Popen", side_effect=AssertionError("Popen")), \
+                mock.patch.object(socket.socket, "connect", garde("connect", vrai_connect)), \
+                mock.patch.object(socket.socket, "connect_ex", garde("connect_ex", vrai_connect_ex)), \
                 mock.patch("plateforme_ssh.executer", side_effect=AssertionError("ssh")), \
+                mock.patch("plateforme_ssh.executer_octets", side_effect=AssertionError("ssh octets")), \
                 mock.patch.object(self.moteur, "arreter", side_effect=AssertionError("moteur")):
             r, data = self.req("GET", "/api/serveurs/taches")
         self.assertEqual(r.status, 200)
         self.assertEqual(self.ssh.appels, [])
+        self.assertEqual(connexions, [])
         t = json.loads(data)["taches"]
         self.assertEqual([x["id"] for x in t], [ident_tache(2), ident_tache(1)])       # la plus récente d'abord
         self.assertEqual(set(t[0]), {"id", "etat", "mode", "projet", "serveur_id", "debut", "duree_s", "captures", "statut"})
@@ -1102,12 +1118,35 @@ class TestArretTache(AvecTaches):
         self.assertIn("en cours", self.taches()[0]["erreur"])        # et dit honnêtement que l'arrêt n'est pas confirmé
 
     def test_arreter_dit_la_raison_masquee_et_bornee_quand_l_etat_est_inconnu(self):
-        self.moteur.arreter = lambda ident, **k: {"id": ident, "etat": "inconnu", "raison": "Serveur injoignable " + "y" * 3000}
+        appels = []
+
+        def arreter(ident, **k):
+            appels.append(ident)
+            return {"id": ident, "etat": "inconnu", "raison": "Serveur injoignable " + "y" * 3000}
+        self.moteur.arreter = arreter
         self.lancer()
         self.travaux.attendre()
         erreur = self.taches()[0]["erreur"]
         self.assertIn("injoignable", erreur)
         self.assertLessEqual(len(erreur), 400)
+        # T9 : au bureau, un état « inconnu » (serveur muet) n'est pas réessayé : le fil unique n'est pas tenu 3 x 150 s
+        self.assertEqual(appels, [self.ident])
+
+    def test_pendant_un_arret_les_autres_operations_disent_qu_un_arret_est_en_cours(self):
+        self.declarer()
+        self.moteur.libre = self.libre
+        try:
+            self.assertEqual(self.lancer()[0], 202)
+            for chemin, corps in (("/api/serveurs/mon-serveur/sonder", {}),
+                                  ("/api/serveurs/mon-serveur/installer", {"actions": ["apk"], "accord": True}),
+                                  ("/api/serveurs", {"nom": "Autre", "hote": "b.exemple.fr", "utilisateur": "bob"})):
+                with self.subTest(chemin=chemin):
+                    r, data = self.poster(chemin, corps)
+                    self.assertEqual(r.status, 409)
+                    self.assertIn("arrêt de tâche", json.loads(data)["erreur"])
+        finally:
+            self.libre.set()
+            self.travaux.attendre()
 
     def test_arreter_409_quand_un_arret_tourne_deja(self):
         self.moteur.libre = self.libre

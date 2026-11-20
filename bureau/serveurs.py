@@ -236,7 +236,9 @@ class Travaux:
         options = self._options_ssh()
 
         def travail():
-            r = _tache_cli()._terminer(moteur, ident, False, d, options)      # le même arrêt que la commande serveur-tache
+            # Le même arrêt que la commande serveur-tache, sans réessayer un état « inconnu » (serveur muet : jusqu'à
+            # 150 s par appel) : le fil unique du bureau n'est pas tenu des minutes, la raison est affichée.
+            r = _tache_cli()._terminer(moteur, ident, False, d, options, reessayer_inconnu=False)
             if isinstance(r, dict) and r.get("etat") in moteur.FINAUX:
                 return None
             r = r if isinstance(r, dict) else {}
@@ -557,6 +559,9 @@ def _actions(corps):
     return a
 
 
+MSG_ARRET_EN_COURS = "Un arrêt de tâche d'émulation est en cours : réessayez à sa fin."
+
+
 def poster(travaux, cible, corps, d=None):
     """(code, objet) d'une demande POST déjà contrôlée (en-têtes, taille, JSON objet)."""
     d = Path(d) if d else dossier()
@@ -566,9 +571,13 @@ def poster(travaux, cible, corps, d=None):
         return _poster_migration(travaux, genre, corps, d)
     if genre == "tache_arreter":
         return _poster_tache(travaux, ident, d)
+
+    def occupe(message):
+        """409 : un arrêt de tâche qui tient le fil de fond est nommé comme tel (pas « une installation »)."""
+        return 409, {"erreur": MSG_ARRET_EN_COURS if travaux.en_cours("arreter_tache") else message}
     if genre == "declarer":
         if travaux.en_cours() or installation.installation_en_cours(d):     # une sonde, une installation ou une migration tourne
-            return 409, {"erreur": "Une opération est en cours : déclarez le serveur à sa fin."}
+            return occupe("Une opération est en cours : déclarez le serveur à sa fin.")
         champs = {k: corps.get(k) for k in ("nom", "hote", "utilisateur", "fournisseur")}   # rien d'autre n'est pris
         try:           # l'identifiant « migration » est réservé : `valider` le refuse avec un message clair (400)
             serveur = modeles.ajouter(champs, d)
@@ -589,9 +598,9 @@ def poster(travaux, cible, corps, d=None):
         return 404, {"erreur": "Serveur inconnu."}
     if genre == "sonder":
         if travaux.en_cours() or installation.installation_en_cours(d):
-            return 409, {"erreur": "Une opération est déjà en cours."}
+            return occupe("Une opération est déjà en cours.")
         if not travaux.sonder(serveur, d):
-            return 409, {"erreur": "Une opération est déjà en cours."}
+            return occupe("Une opération est déjà en cours.")
         return 202, {"demarre": True}
     actions = _actions(corps)
     if actions is None:
@@ -617,11 +626,11 @@ def poster(travaux, cible, corps, d=None):
     if corps.get("accord") is not True:
         return 400, {"erreur": "Installation refusée : l'accord n'a pas été donné."}
     if travaux.en_cours() or installation.installation_en_cours(d):
-        return 409, {"erreur": "Une installation est déjà en cours."}
+        return occupe("Une installation est déjà en cours.")
     if installation.plateforme_en_cours(d):
         return 409, {"erreur": "L'installation de la plateforme OVH est en cours : attendez sa fin avant d'installer sur ce serveur."}
     if not travaux.installer(serveur, actions, d):
-        return 409, {"erreur": "Une installation est déjà en cours."}
+        return occupe("Une installation est déjà en cours.")
     return 202, {"demarre": True}
 
 

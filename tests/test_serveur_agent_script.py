@@ -84,8 +84,9 @@ def demande(reprend=None, **limites):
 
 
 class Banc:
-    """HOME jetable avec ~/taches/<ID>/entree prête et le jeton factice ; le script lancé est celui du dépôt, ou une copie
-    (avec un faux pont_hote.py) quand `pont` est vrai."""
+    """HOME jetable avec ~/taches/<ID>/entree prête et le jeton factice ; le script lancé est celui du dépôt (où est le vrai
+    pont_hote.py ; python3 est factice), ou une copie avec un faux pont_hote.py quand `pont` est vrai, ou une copie SANS
+    pont_hote.py quand `pont` vaut "absent"."""
 
     def __init__(self, pont=False, **env):
         self.env, self.pont = env, pont
@@ -104,9 +105,10 @@ class Banc:
         if self.pont:
             copie = t / "copie"
             copie.mkdir()
-            for f in (SCRIPT, COMMUN):
+            for f in (SCRIPT, COMMUN, EMULATION):
                 shutil.copy(f, copie / f.name)
-            (copie / "pont_hote.py").write_text("# faux pont hôte\n", newline="\n")
+            if self.pont != "absent":
+                (copie / "pont_hote.py").write_text("# faux pont hôte\n", newline="\n")
             self.script = copie / SCRIPT.name
         self.dossier = self.home / "taches" / ID
         self.entree = self.dossier / "entree"
@@ -309,13 +311,25 @@ class TestEnveloppeAgent(unittest.TestCase):
             b.attendre_final()
 
     def test_pilote_monte_le_pont_seul_ne_le_monte_pas(self):
-        with Banc() as b:                                          # pont_hote.py absent du dépôt (tâche 7) : refusé
+        with Banc(pont="absent") as b:                             # pont_hote.py absent du serveur : refusé, rien créé
             avant = sorted(p.name for p in b.dossier.iterdir())
             r = b.lancer("pilote", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 2, r.stderr + r.stdout)
             self.assertIn("pont", r.stderr)
             self.assertEqual(sorted(p.name for p in b.dossier.iterdir()), avant)
             self.assertEqual(b.journal, "")
+        with Banc() as b:                                          # le script du dépôt : pilote accepté (tâche 7)
+            self.assertTrue((TACHES / "pont_hote.py").is_file())
+            (b.entree / "app.apk").write_bytes(b"PK")
+            r = b.lancer("pilote", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertTrue(any(x.startswith("python3 -I ") and x.endswith(f"/pont_hote.py {ID}")
+                                for x in b.journal.splitlines()), b.journal)
+            if os.name == "posix":
+                self.assertEqual((b.dossier / "pont").stat().st_mode & 0o777, 0o700)
+            b.arreter()
+            self.assertEqual(b.attendre_final()["etat"], "arretee")
+            self.assertTrue(b.appels("pont-arrete"), b.journal)
         with Banc(pont=True) as b:
             (b.entree / "app.apk").write_bytes(b"PK")
             r = b.lancer("pilote", "30", "2048", "2", "2", EMU)

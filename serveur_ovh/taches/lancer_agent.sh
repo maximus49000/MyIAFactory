@@ -6,7 +6,9 @@
 #   id et emulation_id : t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; duree_s 1..86400, memoire_mo 256..65536, cpus 1..64 (nombres sans zéro
 #   initial) ; places 1..4 : nombre de places d'agent du serveur. Chaque valeur est validée par un motif strict AVANT tout
 #   usage ; rien n'en est jamais interprété par un shell : les commandes sont des tableaux.
-#   pilote : exige pont_hote.py à côté de ce script (tâche 7 ; absent, le mode pilote est refusé, code 2) et entree/app.apk.
+#   pilote : exige pont_hote.py et lancer_emulation.sh à côté de ce script (déposés avec lui ; absents, le mode pilote est
+#   refusé, code 2) et entree/app.apk. Le pont hôte (python3 -I pont_hote.py <id>, détaché, chef de son groupe) crée
+#   l'émulation au premier `demarrer` de l'agent (créneau d'émulation à part des places d'agent).
 # Sortie standard : UNE ligne JSON, l'état écrit dans ~/taches/<id>/etat.json (même forme que lancer_emulation.sh).
 # Codes : 0 conteneur démarré (en_cours) ; 1 démarrage impossible (echouee) ; 2 argument refusé (rien créé) ; 3 tâche déjà en
 #   cours (veilleur ou enveloppe vivants, rien modifié) ; 4 identifiant déjà utilisé (rien modifié) ; 75 toutes les places
@@ -20,7 +22,8 @@
 #   demande.json, et app.apk en pilote ; monté en lecture seule), travail/ (le dépôt de l'agent), maison/ (HOME de l'agent :
 #   sessions de claude), sortie/ (flux.jsonl, claude.err, resultat.bundle, fin.json), pont/ et outil/ (pilote : socket du pont
 #   hôte ; médias copiés par le pont hôte, en lecture seule dans le conteneur), etat.json, arret, enveloppe.pid, veilleur.pid,
-#   pont-hote.pid, veilleur.log, docker-run.log, controle.log. travail/, maison/, sortie/ : 0700 (le conteneur tourne sous
+#   pont-hote.pid, pont-hote.log et pont-hote.out (journal et sorties du pont hôte), emulation (pilote : l'émulation liée),
+#   veilleur.log, docker-run.log, controle.log. travail/, maison/, sortie/ : 0700 (le conteneur tourne sous
 #   l'utilisateur de l'hôte, --user $(id -u):$(id -g)).
 # Reprise : si demande.json porte « "reprend": "<id>" » (une tâche finie), ~/taches/<id>/{travail,maison} sont copiés par
 #   `cp -a` (liens copiés comme liens, jamais suivis).
@@ -90,8 +93,10 @@ if [ $# -ge 7 ]; then
   [[ $7 =~ $MOTIF_ID ]] && [ "$7" != "$ID" ] || refuser "identifiant d'émulation refusé."
   EMU="$7"
 fi
-if [ "$MODE" = pilote ] && [ ! -f "$ICI/pont_hote.py" ]; then
-  refuser "mode pilote indisponible : le pont hôte (pont_hote.py) n'est pas sur ce serveur."
+if [ "$MODE" = pilote ]; then
+  for f in pont_hote.py lancer_emulation.sh; do
+    [ -f "$ICI/$f" ] && [ ! -L "$ICI/$f" ] || refuser "mode pilote indisponible : $f (pont hôte) n'est pas sur ce serveur."
+  done
 fi
 [ -n "${HOME:-}" ] || refuser "HOME absent."
 SONDE="${ENVELOPPE_SONDE_S:-5}"

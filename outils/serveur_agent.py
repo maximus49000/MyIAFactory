@@ -341,7 +341,8 @@ def _verifier_et_recuperer_paquet(projet, paquet, tache, base, git):
 
 AGENT_SCRIPT = "taches/lancer_agent.sh"
 AGENT_DISTANT = f"{DOSSIER_DISTANT}/{AGENT_SCRIPT}"
-PONT_HOTE = "taches/pont_hote.py"          # tâche 7 : déposé s'il existe dans le dépôt (mode pilote)
+PONT_HOTE = "taches/pont_hote.py"          # mode pilote : le pont hôte, et l'enveloppe d'émulation qu'il lance
+EMULATION_SCRIPT = st.ENVELOPPE            # taches/lancer_emulation.sh
 FICHIERS_ENTREE = ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json")
 FICHIERS_SORTIE = ("flux.jsonl", "fin.json", "resultat.bundle")
 CODE_TROP_GROS = 5
@@ -375,9 +376,11 @@ d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1
 f="$d/{AGENT_SCRIPT}"
 c="$d/{st.COMMUN}"
 p="$d/{PONT_HOTE}"
+e="$d/{EMULATION_SCRIPT}"
 r=1
 if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ] && [ -f "$c" ] && [ ! -L "$c" ] && [ -s "$c" ]; then
   mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$c" "{st.COMMUN_DISTANT}" && mv -f "$f" "{AGENT_DISTANT}" && r=0
+  if [ "$r" = 0 ] && [ -f "$e" ] && [ ! -L "$e" ] && [ -s "$e" ]; then mv -f "$e" "{st.ENVELOPPE_DISTANTE}" || r=1; fi
   if [ "$r" = 0 ] && [ -f "$p" ] && [ ! -L "$p" ] && [ -s "$p" ]; then mv -f "$p" "{DOSSIER_DISTANT}/{PONT_HOTE}" || r=1; fi
 fi
 rm -rf "$d"
@@ -410,17 +413,17 @@ def _script(modele, ident, **valeurs):
 
 
 def _deposer_agent(serveur, ssh, avec_pont):
-    """Dépose lancer_agent.sh, commun.sh (qu'il source) et, s'il existe et pour le mode pilote, pont_hote.py. None si réussi,
-    sinon le message."""
+    """Dépose lancer_agent.sh, commun.sh (qu'il source) et, pour le mode pilote, pont_hote.py et lancer_emulation.sh (que le
+    pont hôte lance au premier `demarrer`). None si réussi, sinon le message."""
     fichiers = []
-    for rel, mode in ((AGENT_SCRIPT, 0o755), (st.COMMUN, 0o644)):
+    a_deposer = [(AGENT_SCRIPT, 0o755), (st.COMMUN, 0o644)]
+    if avec_pont:
+        a_deposer += [(EMULATION_SCRIPT, 0o755), (PONT_HOTE, 0o644)]
+    for rel, mode in a_deposer:
         source = RACINE_SERVEUR / rel
         if source.is_symlink() or not source.is_file():
             return f"Fichier du dépôt introuvable : serveur_ovh/{rel}."
         fichiers.append((rel, source.read_bytes(), mode))
-    pont = RACINE_SERVEUR / PONT_HOTE
-    if avec_pont and pont.is_file() and not pont.is_symlink():
-        fichiers.append((PONT_HOTE, pont.read_bytes(), 0o644))
     code, _o, erreur = st._octets(serveur, ssh, _DEPOSER_AGENT, st._archive(fichiers), delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe d'agent sur le serveur impossible (code {code}) : {st._court(erreur, 200)}"

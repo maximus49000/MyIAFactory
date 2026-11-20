@@ -298,9 +298,10 @@ def _analyser(sortie):
 # Fichiers du dossier des scripts du dépôt dont une étape a besoin sur le serveur (chemins relatifs à ce dossier, noms fixes). Le lanceur de
 # tâches ajoutera lancer_emulation.sh à son propre dépôt.
 FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emulateur/entree-tache.sh", "taches/pont.sh"),
-                  # enregistrer_jeton.sh est lancé à la main par le Directeur : déposé avec l'étape, hors de l'empreinte de l'image
+                  # enregistrer_jeton.sh est lancé à la main par le Directeur, pont_hote.py par lancer_agent.sh (mode pilote,
+                  # sur l'hôte) : déposés avec l'étape, hors de l'empreinte de l'image (ils n'y entrent pas)
                   "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont",
-                                  "taches/enregistrer_jeton.sh")}
+                                  "taches/enregistrer_jeton.sh", "taches/pont_hote.py")}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
                       "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont")}

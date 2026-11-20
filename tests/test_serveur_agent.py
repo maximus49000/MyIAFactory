@@ -372,6 +372,10 @@ class TestLancer(Base):
         self.assertEqual(r["etat"], "en_cours")
         self.assertEqual(self.srv.entrees[ID1]["entree/app.apk"], APK)
         self.assertIn(f'lancer_agent.sh" {ID1} pilote ', self.srv.ops("lancer_agent")[0][1])
+        # pilote : le pont hôte et l'enveloppe d'émulation qu'il lance sont déposés avec l'enveloppe d'agent
+        self.assertEqual(self.srv.deposes, {nom: (RACINE / "serveur_ovh" / nom).read_bytes()
+                                            for nom in ("taches/lancer_agent.sh", "taches/commun.sh",
+                                                        "taches/lancer_emulation.sh", "taches/pont_hote.py")})
 
     def test_mode_seul_n_envoie_pas_d_apk(self):
         self.lancer(apk=APK)

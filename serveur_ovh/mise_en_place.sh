@@ -797,6 +797,9 @@ etape_emulateur_image() {
 # diffère ; le marqueur est retiré avant toute reconstruction puis réécrit en dernier. L'entrée de l'agent et le pont arrivent
 # aux tâches 2 et 7 : s'ils manquent, l'étape les ignore dans l'empreinte (le Dockerfile, lui, est exigé). Aucun identifiant
 # n'entre dans l'image : le jeton de l'abonnement est monté à l'exécution, jamais construit dedans (la construction a besoin du réseau).
+# Déposés avec l'étape mais HORS de l'image et de son empreinte : taches/enregistrer_jeton.sh (lancé à la main par le
+# Directeur) et taches/pont_hote.py (pont hôte du mode pilote, lancé sur l'hôte par lancer_agent.sh avec le python3 du
+# système ; aussi redéposé à chaque lancement pilote avec lancer_agent.sh et lancer_emulation.sh).
 etape_agent_image() {
   local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/agent-image.version" f journal fin code fichiers_h
   local presents=()

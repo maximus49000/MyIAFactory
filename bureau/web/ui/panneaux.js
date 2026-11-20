@@ -2,7 +2,7 @@
 // Lecture seule, sauf le réglage de la charge maximum. Tout texte venu du serveur passe par textContent.
 
 import {CSS2DObject} from "three/addons/renderers/CSS2DRenderer.js";
-import {tronquer, filtrer, filtreDeListe, cleTravail} from "./texte.js";
+import {tronquer, filtrer, filtreDeListe, cleTravail, libelleLieuAgent} from "./texte.js";
 import {el, ligne} from "./dom.js";
 import {garderDefilementDOM} from "./defilement.js";
 import {urlProjet} from "./projets.js";
@@ -116,7 +116,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     c.append(ligne("Service", service));
     if (a.specialite) c.append(ligne("Spécialité", a.specialite));
     for (const [libelle, valeur] of lignesModele(e, a)) c.append(ligne(libelle, tronquer(valeur, MAX_TITRE)));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
-    c.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
+    c.append(ligne("Lieu", libelleLieuAgent(a.lieu)));
     c.append(ligne("Statut", STATUTS[a.statut] || a.statut || "—"));
     if (resumeLecons(a)) c.append(ligne("Leçons", resumeLecons(a)));
     const titres = (a.taches || []).map((id) => (e.taches || []).find((t) => t.id === id)).filter(Boolean);

@@ -3,7 +3,7 @@
 
 import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1, retourSansReponse, suiviDuRetour, retoursRepondusNonVus,
-        PREFIXE_VU_RETOUR} from "./texte.js";
+        PREFIXE_VU_RETOUR, libelleLieuAgent} from "./texte.js";
 import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie, enregistrerReglage,
   enregistrerCloudDossierApprouve} from "./actions.js";
@@ -434,7 +434,7 @@ export function contenuAgent(ctx, contenu, a, statuts) {
   if (!a.retire) contenu.append(ligne("Service", service));
   if (a.specialite) contenu.append(ligne("Spécialité", a.specialite));
   if (!a.retire) for (const [libelle, valeur] of lignesModele(e, a)) contenu.append(ligne(libelle, valeur));   // plafond de la fiche, ou tâche + son modèle (polyvalent)
-  contenu.append(ligne("Lieu", a.lieu === "cloud" ? "cloud ☁" : "local"));
+  contenu.append(ligne("Lieu", libelleLieuAgent(a.lieu)));
   if (!a.retire) contenu.append(ligne("Statut", statuts[a.statut] || a.statut || "—"));
   if (a.chef) {
     contenu.append(blocPoint(e, ctx.ouvrirTache));      // « où en est-on ? » : la réponse immédiate

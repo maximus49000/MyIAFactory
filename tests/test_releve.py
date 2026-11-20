@@ -67,6 +67,16 @@ class TestValider(unittest.TestCase):
         r["titulaires"][0].update(modele="Sonnet", permanent=True, fraicheur_min=12.5)
         self.assertEqual(releve.valider(r), [])
 
+    def test_titulaire_du_serveur_valide(self):
+        """Tranche B : un agent du lieu `serveur` est un titulaire valide (la page du bureau ne casse pas)."""
+        r = copy.deepcopy(BASE)
+        r["titulaires"][0]["lieu"] = "serveur"
+        self.assertEqual(releve.valider(r), [])
+        r4 = copy.deepcopy(BASE)
+        r4["version"] = 4
+        r4["titulaires"].append({"cle": "s1", "service": "dev", "lieu": "serveur"})
+        self.assertFalse([e for e in releve.valider(r4) if "s1" in e])
+
     def test_valider_ne_plante_pas_sur_n_importe_quoi(self):
         for r in (None, [], "x", {"taches": 3}, {"version": 1, "taches": [None]}):
             self.assertTrue(releve.valider(r))

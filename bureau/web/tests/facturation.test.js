@@ -72,12 +72,18 @@ test("resumeParallelisme : réglages, agents recrutés par lieu, attente d'une v
     {id: "chef", chef: true, lieu: "local"}, {id: "dev1", lieu: "local"}, {id: "qa1", lieu: "local"}],
     attente_validation: {texte: "1 place libre : en attente de votre validation « DA »"}};
   const r = resumeParallelisme(etat);
-  assert.deepEqual([r.locaux, r.cloud, r.recrutes], [3, 2, {locaux: 2, cloud: 0}]);
+  assert.deepEqual([r.locaux, r.cloud, r.recrutes], [3, 2, {locaux: 2, serveur: 0, cloud: 0}]);
   assert.match(r.notes[0], /Aucun agent cloud recruté/);
   assert.equal(r.attente, "1 place libre : en attente de votre validation « DA »");
   const defaut = resumeParallelisme({agents: []});
   assert.deepEqual([defaut.locaux, defaut.cloud, defaut.attente], [2, 0, null]);
   assert.doesNotMatch(defaut.notes.join(" "), /Aucun agent cloud/);
+});
+
+test("resumeParallelisme : un agent du serveur est compté à part, jamais comme local", () => {
+  const r = resumeParallelisme({agents: [{id: "dev1", lieu: "local"}, {id: "s1", lieu: "serveur"}, {id: "s2", lieu: "serveur"},
+                                         {id: "c1", lieu: "cloud"}]});
+  assert.deepEqual(r.recrutes, {locaux: 1, serveur: 2, cloud: 1});
 });
 
 const f = {
@@ -208,7 +214,7 @@ test("bloc recruter caché si polyvalent : l'équipe suit les places, la note le
   assert.equal(partieRecrutement({etat: poly}), null);
   const r = resumeParallelisme(poly);
   assert.equal(r.polyvalent, true);
-  assert.deepEqual(r.recrutes, {locaux: 2, cloud: 1});
+  assert.deepEqual(r.recrutes, {locaux: 2, serveur: 0, cloud: 1});
   assert.ok(r.notes.some((n) => n.includes("Chaque place est un agent polyvalent.")));
   assert.ok(!r.notes.some((n) => /Aucun agent cloud recruté|plusieurs agents de ce rôle/.test(n)));
   // un projet à l'ancienne : le bloc et les notes d'avant

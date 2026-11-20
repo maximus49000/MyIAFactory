@@ -344,7 +344,10 @@ export async function enregistrerPlafondAbonnement(valeur, fetchFn = fetch) {
 // Ce que dit la partie « Parallélisme du projet » : les réglages, les agents recrutés de chaque lieu, et ce qui retient.
 export function resumeParallelisme(etat) {
   const agents = (etat?.agents || []).filter((a) => !a.fixe && !a.chef && a.id !== "chef" && a.id !== "directeur");
-  const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud").length, cloud: agents.filter((a) => a.lieu === "cloud").length};
+  // Un agent du serveur (tranche B) se compte à part : il ne tient pas une place du poste.
+  const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud" && a.lieu !== "serveur").length,
+                    serveur: agents.filter((a) => a.lieu === "serveur").length,
+                    cloud: agents.filter((a) => a.lieu === "cloud").length};
   const locaux = Number.isInteger(etat?.agents_locaux_max) ? etat.agents_locaux_max : 2;
   const cloud = Number.isInteger(etat?.agents_cloud_max) ? etat.agents_cloud_max : 0;
   // Un projet d'agents polyvalents : l'équipe est exactement les places, rien ne se recrute par rôle.
@@ -451,7 +454,7 @@ export function partieParallelisme(ctx) {
   const r = resumeParallelisme(ctx.etat);
   const bloc = el("div", "parallelisme");
   bloc.append(el("div", "carte-sous-titre", "Parallélisme du projet"));
-  bloc.append(el("p", "note", `${r.polyvalent ? "Agents" : "Agents recrutés"} : ${r.recrutes.locaux} locaux, ${r.recrutes.cloud} cloud.`));
+  bloc.append(el("p", "note", `${r.polyvalent ? "Agents" : "Agents recrutés"} : ${r.recrutes.locaux} locaux, ${r.recrutes.serveur} serveur, ${r.recrutes.cloud} cloud.`));
   const champ = (libelle, valeur, [bas, haut]) => {
     const label = el("label", "parallelisme-champ");
     const input = document.createElement("input");

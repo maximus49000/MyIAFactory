@@ -87,6 +87,9 @@ def _dans(valeur, ensemble):
     return isinstance(valeur, str) and valeur in ensemble
 
 
+LIEUX_DE_TITULAIRE = ("local", "serveur", "cloud")     # le lieu d'un agent (tranche B : les agents du serveur)
+
+
 def valider(r):
     """Messages d'erreur en français ; liste vide si le relevé est valide."""
     if not _est_dict(r):
@@ -112,8 +115,8 @@ def valider(r):
     chefs = 0
     for t in titulaires:
         cle = t.get("cle")
-        if t.get("lieu") not in ("local", "cloud"):
-            erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local » ou « cloud ».")
+        if t.get("lieu") not in LIEUX_DE_TITULAIRE:
+            erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local », « serveur » ou « cloud ».")
         if t.get("chef") is True:
             chefs += 1
         elif t.get("polyvalent") is True:      # un agent polyvalent : le service est celui de sa tâche (ou nul)

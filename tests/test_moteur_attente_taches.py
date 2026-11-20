@@ -67,6 +67,35 @@ class Agent(Attentes):
         self.assertIn("Léa", " ".join(r["detail"]))
         self.assertIn("Max", " ".join(r["detail"]))
 
+    def serveur(self):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_serveur_max"] = 1
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        self.agent("serveur-1", prenom="Ana", lieu="serveur")
+        self.occuper("local-1")
+        self.occuper("cloud-1", element="e8")
+        self.occuper("serveur-1", element="e7")
+        return self.tache("flux:qa")
+
+    def test_place_serveur_occupee_dite(self):
+        """Tranche B : un projet à places serveur dit aussi ce qui retient le serveur (ses places, qui les tient)."""
+        from unittest import mock
+        from orchestrateur import outil
+        t = self.serveur()
+        with mock.patch.object(outil, "serveur_hors_ligne", return_value=False):
+            r = self.raison(self.raisons(), t)
+        tout = " ".join(r["detail"])
+        self.assertEqual(r["genre"], "agent")
+        self.assertIn("elle peut se faire sur le serveur ; 1 place serveur, occupée par Ana", tout)
+
+    def test_serveur_hors_ligne_dit(self):
+        from unittest import mock
+        from orchestrateur import outil
+        t = self.serveur()
+        with mock.patch.object(outil, "serveur_hors_ligne", return_value=True):
+            r = self.raison(self.raisons(), t)
+        self.assertIn("le serveur est hors ligne", " ".join(r["detail"]))
+
 
 class Prerequis(Attentes):
     def test_etape_d_avant_pas_faite_avec_son_agent(self):

@@ -3046,18 +3046,24 @@ def _raison_prerequis(ctx, t):
 
 
 def _ligne_du_lieu(ctx, lieu, ensuite=False):
-    """« elle exige le poste local ; 1 place locale, occupée par Léa » et le détail de chaque occupant."""
-    if lieu not in ("local", "cloud"):
+    """« elle exige le poste local ; 1 place locale, occupée par Léa » et le détail de chaque occupant. `serveur` (tranche
+    B) : les places serveur du projet (`agents_serveur_max`), ses agents serveur et, s'il est hors ligne, pourquoi."""
+    if lieu not in ("local", "cloud", "serveur"):
         return []
     occupants = ctx.occupants(lieu)
     if lieu == "local":
         n, quoi, mot = ctx.fac["agents_locaux_max"], "elle exige le poste local", "locale"
+    elif lieu == "serveur":
+        n, quoi, mot = ctx.fac.get("agents_serveur_max") or 0, "elle peut se faire sur le serveur", "serveur"
     else:
         n, quoi, mot = ctx.cloud_max, "elle se fait dans le cloud", "cloud"
     s = "s" if n > 1 else ""
+    accord = s if mot == "locale" else ""
     noms = ", ".join(dict.fromkeys(ctx.prenoms.get(o["agent"], o["agent"]) for o in occupants))
-    if occupants and len(occupants) >= n:
-        ligne = f"{quoi} ; {n} place{s} {mot}{s if mot != 'cloud' else ''}, occupée{s} par {noms}"
+    if lieu == "serveur" and n and outil.serveur_hors_ligne():
+        ligne = f"{quoi} ; le serveur est hors ligne (aucune sonde récente ne le dit prêt pour les agents)"
+    elif occupants and len(occupants) >= n:
+        ligne = f"{quoi} ; {n} place{s} {mot}{accord}, occupée{s} par {noms}"
     elif n == 0:
         ligne = f"{quoi} ; aucune place {mot} dans ce projet"
     else:
@@ -3088,6 +3094,8 @@ def _raison_agent(ctx, t, lieu):
         detail = [f"{ctx.places['total']} place{s} au total, toutes prises"]
     else:
         detail = [f"aucun agent libre ne peut la prendre ({t.get('role') or 'sans rôle'})"]
+    if ctx.fac.get("agents_serveur_max"):       # un projet à places serveur : ce qui retient le serveur aussi
+        detail += _ligne_du_lieu(ctx, "serveur", ensuite=True)
     detail += [f"{ctx.qui(o)} : « {o['titre']} »" for o in occupants[:4]]
     return "aucun agent libre", "aucun agent libre", detail, "quand un agent se libérera"
 

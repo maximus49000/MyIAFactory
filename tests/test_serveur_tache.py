@@ -1708,6 +1708,37 @@ class TestScriptsReels(BaseLanceur):
         sur_disque = json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))
         self.assertEqual((sur_disque["etat"], sur_disque["debut"]), ("echouee", "2026-11-19T10:15:00Z"))
 
+    def lancer_enveloppe_agent(self):
+        """Un vrai processus `bash lancer_agent.sh <id>` vivant, son pid dans enveloppe.pid ; renvoie l'arrêt à appeler."""
+        dossier = self.ssh.home / "faux"
+        dossier.mkdir()
+        (dossier / "lancer_agent.sh").write_text("sleep 60\n", encoding="utf-8", newline="\n")
+        r = self.ssh.bash(f'cd "{posix(dossier)}" && {{ nohup bash lancer_agent.sh {ID1} </dev/null >/dev/null 2>&1 & '
+                          f'echo $! > "{posix(self.tache)}/enveloppe.pid"; }}')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.addCleanup(lambda: self.ssh.bash(f'kill $(cat "{posix(self.tache)}/enveloppe.pid") 2>/dev/null; true'))
+
+    def test_etat_et_nettoyer_reels_voient_l_enveloppe_d_agent_vivante(self):
+        self.fiche()
+        self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+        (self.tache / "veilleur.pid").write_text("999999\n", encoding="utf-8")
+        self.lancer_enveloppe_agent()
+        lu = st._etat_json((self.tache / "etat.json").read_text(encoding="utf-8"), ID1)
+        self.assertEqual(st._nettoyer(self.serveur, self.ssh, ID1, lu), lu)          # code 4 : rien nettoyé
+        self.assertNotIn("docker rm", self.ssh.docker())
+        r = st.etat(ID1, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(r["etat"], "en_cours")
+        self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "en_cours")
+
+    def test_arreter_reel_en_attente_retire_le_paquet_d_un_agent(self):
+        self.fiche(etat="en_attente")
+        (self.tache / "entree").mkdir(parents=True)
+        for nom in ("projet.bundle", "app.apk", "argv.json"):
+            (self.tache / "entree" / nom).write_bytes(b"x")
+        r = st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(r["etat"], "arretee")
+        self.assertEqual(sorted(p.name for p in (self.tache / "entree").iterdir()), ["argv.json"])
+
     def test_etat_reel_absent_et_arreter_reel_idempotent(self):
         self.fiche()
         self.assertEqual(st.etat(ID1, dossier=self.dossier, ssh=self.ssh)["etat"], "inconnu")

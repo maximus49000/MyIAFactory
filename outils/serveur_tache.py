@@ -658,7 +658,7 @@ vivant() {
   tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -qF -e "$2"
 }
 v=absent; [ -f "$d/veilleur.pid" ] && v=mort; vivant "$d/veilleur.pid" "--veilleur @ID@" && v=vivant
-e=absent; [ -f "$d/enveloppe.pid" ] && e=mort; vivant "$d/enveloppe.pid" "lancer_emulation.sh @ID@" && e=vivant
+e=absent; [ -f "$d/enveloppe.pid" ] && e=mort; { vivant "$d/enveloppe.pid" "lancer_emulation.sh @ID@" || vivant "$d/enveloppe.pid" "lancer_agent.sh @ID@"; } && e=vivant
 """
 _ETAT = """# tache:etat @ID@
 set -u
@@ -691,7 +691,7 @@ d="$HOME/taches/@ID@"
 [ -d "$d" ] || exit 3
 umask 077
 if [ ! -e "$d/etat.json" ] || grep -q '"etat": "en_attente"' "$d/etat.json" 2>/dev/null; then
-  rm -f -- "$d/entree/app.apk"
+  rm -f -- "$d/entree/app.apk" "$d/entree/projet.bundle"
   cat > "$d/etat.json.lanceur.tmp" <<'FIN_ETAT'
 @JSON@
 FIN_ETAT

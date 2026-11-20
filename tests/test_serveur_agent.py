@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +63,7 @@ class FauxServeur:
         self.entrees = {}
         self.deposes = None
         self.codes_lancer = []
+        self.veilleur, self.enveloppe = "vivant", "absent"   # ce que `etat` voit (enveloppe vivante d'un agent)
         self.pleine = 0              # nombre de réponses 75 (aucune place) avant d'accepter
         self.maintenant = 1_800_000_000
 
@@ -105,6 +108,12 @@ class FauxServeur:
         self.taches.pop(args[0], None)
         return 0, b"", ""
 
+    def _abandon_agent(self, args, script, entree):
+        e = self.entrees[args[0]]
+        e.pop("entree/projet.bundle", None)
+        e.pop("entree/app.apk", None)
+        return 0, b"", ""
+
     def _lancer_agent(self, args, script, entree):
         t = self.taches[args[0]]
         if self.codes_lancer:
@@ -120,7 +129,7 @@ class FauxServeur:
         t = self.taches.get(args[0])
         if not t:
             return 3, b"", ""
-        texte = (f"maintenant={self.maintenant}\nveilleur=vivant\nenveloppe=absent\n"
+        texte = (f"maintenant={self.maintenant}\nveilleur={self.veilleur}\nenveloppe={self.enveloppe}\n"
                  f"etat={json.dumps(t['etat'])}\n")
         return 0, texte.encode(), ""
 
@@ -261,8 +270,59 @@ class TestPaquet(unittest.TestCase):
             with self.assertRaises(st.RefusLancement) as r:
                 sa.preparer_paquet(self.projet)
         self.assertIn("trop gros", str(r.exception))
-        # le message annonce que les changements non commités ne partent pas
-        self.assertIn("commit", str(sa.preparer_paquet.__doc__))
+
+    def test_changements_non_commites_listes(self):
+        depot(self.projet)
+        self.assertEqual(sa.changements_non_commites(self.projet), [])
+        (self.projet / "f.txt").write_text("modifié")
+        (self.projet / "neuf.txt").write_text("neuf")
+        lignes = sa.changements_non_commites(self.projet)
+        self.assertEqual(sorted(l[3:] for l in lignes), ["f.txt", "neuf.txt"])
+
+    def test_branche_hors_motif_refusee_et_ref_complete(self):
+        depot(self.projet)
+        git(self.projet, "checkout", "-q", "-b", "fonction/é")
+        with self.assertRaises(st.RefusLancement):
+            sa.preparer_paquet(self.projet)
+        git(self.projet, "checkout", "-q", "-b", "fonction/ok")
+        appels = []
+
+        def espion(projet, args, max_octets=None):
+            appels.append(args)
+            return sa._git(projet, args, max_octets)
+        _p, branche, _b = sa.preparer_paquet(self.projet, git=espion)
+        self.assertEqual(branche, "fonction/ok")
+        self.assertIn(["bundle", "create", "-", "HEAD", "refs/heads/fonction/ok"], appels)
+
+
+class TestGitRobuste(unittest.TestCase):
+    """`_git` ne se fige jamais : stderr vidé en continu, échéance réelle, processus tué puis attendu."""
+
+    def lancer(self, code, delai=None):
+        sortie = []
+        with mock.patch.object(sa, "_COMMANDE_GIT", [sys.executable, "-c", code, "--"]), \
+                mock.patch.object(sa, "DELAI_GIT_S", delai or 60):
+            fil = threading.Thread(target=lambda: sortie.append(sa._git(Path("."), ["x"])), daemon=True)
+            fil.start()
+            fil.join(30)
+            self.assertFalse(fil.is_alive(), "_git est figé")
+        return sortie[0]
+
+    def test_git_qui_inonde_stderr_ne_fige_pas(self):
+        code, sortie, erreur = self.lancer("import sys; sys.stderr.write('e' * 5_000_000); sys.stdout.write('ok')")
+        self.assertEqual((code, sortie), (0, b"ok"))
+        self.assertLessEqual(len(erreur), 65536)
+
+    def test_git_qui_ne_finit_jamais_est_tue(self):
+        debut = time.monotonic()
+        code, sortie, erreur = self.lancer("import time; time.sleep(120)", delai=1)
+        self.assertEqual(code, 124)
+        self.assertLess(time.monotonic() - debut, 25)
+
+    def test_git_muet_apres_une_sortie_partielle_est_tue(self):
+        code, _s, _e = self.lancer("import sys, time; sys.stdout.write('x'); sys.stdout.flush(); time.sleep(120)",
+                                   delai=1)
+        self.assertEqual(code, 124)
 
 
 class TestLancer(Base):
@@ -326,10 +386,10 @@ class TestLancer(Base):
         # pilote : l'image d'émulation est aussi requise
         declarer(self.dossier, serveurs=[("d", CAPS_AGENT), ("e", {**CAPS_AGENT, "emulateur-image": "presente"})])
         self.srv = FauxServeur()
-        self.assertEqual(self.lancer(self.demande(mode="pilote", id="t20261120-101501-bbbb"), apk=APK)["serveur_id"], "e")
+        self.assertEqual(self.lancer(self.demande(mode="pilote", tache="pil", id="t20261120-101501-bbbb"), apk=APK)["serveur_id"], "e")
         declarer(self.dossier, serveurs=[("a", {"agent": "presente"})])
         with self.assertRaises(st.RefusLancement) as r:
-            self.lancer(self.demande(id="t20261120-101502-cccc"))
+            self.lancer(self.demande(tache="troisieme", id="t20261120-101502-cccc"))
         self.assertIn("agent-abonnement", str(r.exception))
         self.assertIn("a :", str(r.exception))
 
@@ -340,10 +400,69 @@ class TestLancer(Base):
         self.assertEqual(self.pauses, [15, 15])
         self.srv = FauxServeur()
         self.srv.pleine = 99
-        r = self.lancer(self.demande(id="t20261120-101503-dddd"), attente_max_s=30)
+        r = self.lancer(self.demande(tache="quatrieme", id="t20261120-101503-dddd"), attente_max_s=30)
         self.assertEqual(r["etat"], "en_attente")
         self.assertIn("place", r["erreur"])
         self.assertTrue(st.Index(self.dossier).lire()["t20261120-101503-dddd"]["abandonnee"])
+
+    def test_abandon_efface_paquet_et_apk_sur_le_serveur(self):
+        self.srv.pleine = 99
+        r = self.lancer(attente_max_s=0)
+        self.assertEqual(r["etat"], "en_attente")
+        self.assertEqual(len(self.srv.ops("abandon_agent")), 1)
+        self.assertNotIn("entree/projet.bundle", self.srv.entrees[ID1])
+        self.assertIn("projet.bundle", self.srv.ops("abandon_agent")[0][1])
+
+    def test_lancer_avertit_des_changements_non_commites(self):
+        projet = Path(self.tmp.name) / "projet"
+        base = depot(projet)
+        d = self.demande(base=base)
+        self.assertNotIn("avertissement", self.lancer(d, projet=projet))
+        (projet / "brouillon.txt").write_text("pas commité")
+        r = self.lancer(self.demande(base=base, tache="deux", id="t20261120-101504-1234"), projet=projet)
+        self.assertIn("non commit", r["avertissement"])
+        self.assertIn("brouillon.txt", r["avertissement"])
+        self.assertEqual(r["etat"], "en_cours")
+
+    def test_branche_agent_existante_non_ancetre_refusee_avant_envoi(self):
+        projet = Path(self.tmp.name) / "projet"
+        base = depot(projet, commits=2)
+        git(projet, "checkout", "-q", "-b", "agent/ajout-bouton", "HEAD~1")
+        (projet / "x.txt").write_text("x")
+        git(projet, "add", "x.txt")
+        git(projet, "commit", "-q", "-m", "x")
+        git(projet, "checkout", "-q", "main")
+        with self.assertRaises(st.RefusLancement) as r:
+            self.lancer(self.demande(base=base), projet=projet)
+        self.assertIn("agent/ajout-bouton", str(r.exception))
+        self.assertEqual(self.srv.appels, [])
+        # un ancêtre de la base (reprise d'un travail déjà fusionné) est accepté
+        git(projet, "branch", "-f", "agent/ajout-bouton", "HEAD~1")
+        self.assertEqual(self.lancer(self.demande(base=base), projet=projet)["etat"], "en_cours")
+
+    def test_tache_en_double_ou_en_collision_de_casse_refusee(self):
+        self.lancer()
+        for tache in ("ajout-bouton", "AJOUT-bouton"):
+            with self.assertRaises(st.RefusLancement, msg=tache) as r:
+                self.lancer(self.demande(tache=tache, id="t20261120-101505-9999"))
+            self.assertIn("déjà", str(r.exception))
+        self.assertEqual(self.lancer(self.demande(tache="autre", id="t20261120-101506-9998"))["etat"], "en_cours")
+        st.Index(self.dossier).fusionner(ID1, {"etat": "terminee"})
+        self.assertEqual(self.lancer(self.demande(tache="AJOUT-bouton", id="t20261120-101507-9997"))["etat"],
+                         "en_cours")
+
+    def test_noms_reserves_de_windows_refuses(self):
+        for tache in ("con", "CON", "nul", "com1", "lpt9", "aux.txt", "Prn"):
+            with self.assertRaises(ValueError, msg=tache):
+                sa.valider_demande_agent(brut(tache=tache))
+        self.assertEqual(sa.valider_demande_agent(brut(tache="console")).tache, "console")
+
+    def test_enveloppe_d_agent_vivante_n_est_pas_nettoyee(self):
+        self.lancer()
+        self.srv.veilleur, self.srv.enveloppe = "mort", "vivant"
+        self.srv.maintenant += 1000
+        self.assertEqual(st.etat(ID1, dossier=self.dossier, ssh=self.srv)["etat"], "en_cours")
+        self.assertEqual(self.srv.ops("nettoyer"), [])
 
     def test_lancer_refus_de_l_enveloppe_efface_les_entrees(self):
         self.srv.codes_lancer = [2]
@@ -530,6 +649,15 @@ class TestRecuperer(Base):
         git(self.projet, "branch", "-f", self.ref, self.base)
         self.assertEqual(self.recuperer()["branche"], self.ref)
         self.assertEqual(git(self.projet, "rev-parse", f"refs/heads/{self.ref}").decode().strip(), self.tete)
+
+    def test_recuperer_branche_extraite_message_clair(self):
+        git(self.projet, "checkout", "-q", "-b", self.ref, self.base)
+        self.servir()
+        with self.assertRaises(sa.RefusRecuperation) as r:
+            self.recuperer()
+        self.assertIn("extraite", str(r.exception))
+        self.assertNotIn("divergé", str(r.exception))
+        self.assertEqual(git(self.projet, "rev-parse", f"refs/heads/{self.ref}").decode().strip(), self.base)
 
     def test_recuperer_fin_json_hostile_refuse(self):
         hostiles = {"base": self.fin(base="b" * 40), "branche": self.fin(branche="agent/autre"),

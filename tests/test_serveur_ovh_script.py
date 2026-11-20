@@ -1313,7 +1313,8 @@ class TestDockerfileEmulateur(unittest.TestCase):
         self.assertGreaterEqual(float(tag), 22.04)                      # bash >= 4.4 (tableaux vides sous set -u) : 5.1 depuis 22.04
 
     def test_outils_exiges_par_le_pont(self):
-        for paquet in ("openjdk-17-jdk-headless", "util-linux", "coreutils", "bash"):     # flock, setsid / timeout, stat, sleep / bash
+        # flock, setsid / timeout, stat, sleep / bash / ffmpeg : images tirées des vidéos (finfilm)
+        for paquet in ("openjdk-17-jdk-headless", "util-linux", "coreutils", "bash", "ffmpeg"):
             self.assertRegex(self.finale, rf"\b{paquet}\b")
         self.assertNotRegex(self.finale, r"\b(curl|wget)\b")                 # l'image livrée ne télécharge rien
 

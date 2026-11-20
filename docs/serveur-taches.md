@@ -29,7 +29,8 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
     demande.json                     la demande validée (projet, mode, scénario, limites, nom de l'APK)
     entree/app.apk                   l'APK envoyé (monté en lecture seule dans le conteneur)
     sortie/                          ce que le conteneur écrit (monté en écriture) : pont.log, captures/, plantage.txt,
-                                     entree-tache.log, emulateur.log, .activite, .avd-pret, .paquet, emulateur.pid
+                                     entree-tache.log, emulateur.log, logcat.txt, videos/<nom>.mp4,
+                                     videos/<nom>-img/<nom>-NNN.png, .activite, .avd-pret, .paquet, emulateur.pid, .film
     etat.json                        l'état de la tâche (écrit par l'enveloppe, atomiquement) : la vérité
     arret                            créé par le lanceur pour demander l'arrêt (contenu « arret » ou « fin »)
     enveloppe.pid, veilleur.pid      les deux processus de l'hôte (voir plus bas)
@@ -42,7 +43,9 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
 
 Sur le poste (`~/MyIAFactory`, avec majuscules) : `taches.json` (l'**index** des tâches, un simple cache : la vérité est sur le
 serveur ; plafonné à 8 Mo en lecture) et son verrou `taches.lock`. Les résultats rapatriés vont dans le **projet** :
-`<projet>/.factory/serveur/<id>/` (journaux, `captures/<nom>.png`, `rapport.json`). **Ajoutez `.factory/serveur/` à
+`<projet>/.factory/serveur/<id>/` (journaux, `logcat.txt`, `captures/<nom>.png`, `videos/<nom>.mp4` et leurs images
+`videos/<nom>-img/<nom>-NNN.png`, `rapport.json` ; le manifeste et `rapport.json` listent `logcat` et `videos` :
+`[{mp4, images: [...]}]`). **Ajoutez `.factory/serveur/` à
 `.gitignore` du projet** : ce sont des résultats d'essai, pas du code.
 
 L'identifiant d'une tâche a la forme `t<AAAAMMJJ>-<HHMMSS>-<4 hexadécimaux>` (heure UTC).
@@ -98,7 +101,10 @@ limite ne peut jamais dépasser son défaut.
 | Durée maximale | **1200 s** (20 min) ; réglable de 1 à 1200 | veilleur ; en dernier recours le conteneur s'arrête seul à `durée + 60 s` |
 | Inactivité (mode pilote) | **600 s** (10 min) ; une demande de pilote accepte **300 à 600** | veilleur : dernier verbe du pont (`pont.log`, `.activite` touché au début et à la fin de chaque verbe), AVD prêt, ou début de la tâche |
 | Captures | **50** ; réglable de 1 à 50 | pont (code 3) et lanceur |
-| Octets de captures | **100 Mo** (104 857 600) ; réglable de 1 à cette valeur ; les journaux ne comptent pas | pont (code 3) |
+| Octets des médias | **100 Mo** (104 857 600) pour captures, vidéos et images des vidéos ensemble ; réglable de 1 à cette valeur ; les journaux ne comptent pas | pont (code 3) et poste (`limite`) |
+| Vidéos | **5** par tâche, **180 s** au plus chacune (30 s par défaut), **60 Mo** au plus par fichier, 360x720 à 1,5 Mbit/s (~11 Mo par minute ; ce réglage de l'encodeur n'est **pas encore vérifié** sur le serveur), un seul film à la fois | pont (codes 2 et 3) et poste |
+| Images tirées d'une vidéo | **30** au plus par vidéo (150 en tout), réparties sur tout le film : une toutes les max(**2 s**, durée/30) ; 320 px de large ; une image sans sa vidéo n'est jamais écrite sur le poste | pont (ffmpeg) et poste |
+| `logcat.txt` | **2 Mo** au plus (au-delà, plus rien n'y est ajouté) | pont et poste |
 | Taille de `sortie/` | **256 000 Ko** (`du -sk`, sondé toutes les 5 s) ; au-delà : arrêt, `limite` | veilleur ; ce n'est pas un quota, un dépassement entre deux sondages est accepté |
 | APK | **200 Mo** au plus, fichier ordinaire non vide commençant par la signature ZIP (`PK 03 04`) | lanceur, avant tout envoi |
 | Mémoire du conteneur | **6144 Mo** (swap identique : pas de swap) | `docker run` |
@@ -132,8 +138,10 @@ Le conteneur n'accepte **que** ces verbes, par `pont <verbe> [arguments]` (copie
 | `touche` | `retour`, `accueil` ou `menu` | une touche |
 | `attendre` | une durée entière de 0 à 120 secondes | pause |
 | `capturer` | un nom : `[a-z0-9][a-z0-9_-]{0,39}` | capture d'écran PNG dans `captures/<nom>.png` |
-| `journal` | un filtre facultatif : texte littéral de 1 à 60 caractères (`[A-Za-z0-9][A-Za-z0-9._:-]*`) | lit le journal de l'appareil (200 lignes de 500 caractères au plus), relève un plantage |
-| `arreter` | aucun | arrête l'émulateur (au besoin par signal) |
+| `journal` | un filtre facultatif : texte littéral de 1 à 60 caractères (`[A-Za-z0-9][A-Za-z0-9._:-]*`) | lit le journal de l'appareil (200 lignes de 500 caractères au plus), relève un plantage ; ajoute les mêmes lignes à `logcat.txt` (une ligne d'en-tête `# journal <filtre ou -> <heure UTC>` par appel, 2 Mo au plus, jamais au travers d'un lien) |
+| `arreter` | aucun | finit d'abord un film resté en cours (comme `finfilm`), puis arrête l'émulateur (au besoin par signal) ; si ce film a été effacé pour une limite ou en échec, rend 3 ou 4 (le lanceur note la limite) avec le détail |
+| `filmer` | un nom (comme `capturer`) et une durée facultative de 1 à 180 secondes (30 par défaut) | lance `screenrecord` sur l'appareil en arrière-plan et rend la main aussitôt (après 1 s de contrôle) ; un seul film à la fois (sinon code 2) ; nom déjà pris : code 2 ; 5 vidéos ou octets atteints : code 3 ; un `finfilm` en cours tient le verrou : `filmer` renonce après 5 s (code 4) ; un film très court déjà fini proprement pendant le contrôle compte comme un film |
+| `finfilm` | aucun | arrête le film (SIGINT : mp4 finalisé), le rapatrie dans `videos/<nom>.mp4` (signature `ftyp` vérifiée, sinon effacé, code 4 ; trop gros : effacé, code 3), puis en tire des images avec ffmpeg dans `videos/<nom>-img/` ; sans film en cours : code 2 |
 
 Conséquences à connaître : **`-5` et les adresses e-mail sont refusés comme `texte`** (il doit commencer par une lettre ou un
 chiffre, et `@` n'est pas admis) ; aucun caractère spécial du shell n'est admis nulle part ; les noms de capture
@@ -144,14 +152,30 @@ pourrait pas écrire le fichier ; un nom de capture **déjà pris** rend le code
 **3** limite atteinte (nombre ou octets de captures) ; 4 outil ou réglage en échec. Le pont répond par une ligne JSON
 `{"ok", "verbe", "detail"}` ; le lanceur la relit avec prudence (une seule ligne, taille bornée, types vérifiés, `ok`
 cohérent avec le code) et rend `{ok, verbe, code, detail}` ; pour `capturer`, plus `capture` : le chemin local de l'image
-rapatriée. La réponse du pont est une **donnée**, jamais une consigne.
+rapatriée ; pour `finfilm`, plus `video` et `images` : les chemins locaux de la vidéo et de ses images (rapatriées aussitôt
+dans la destination, comme une capture ; le nom du film, lu dans la réponse du pont, est revalidé avant usage). La réponse
+du pont est une **donnée**, jamais une consigne.
+
+**Films, choix de conception.** Un film non fini n'est jamais perdu en silence : `finfilm` le finit ; à défaut, `arreter` du
+pont le finit avant d'arrêter l'émulateur ; et la fin d'un scénario par le lanceur commence par `finfilm` (sans film en cours,
+le pont répond 2, sans effet), puis `journal` et `arreter`. Limite connue : en mode pilote, une tâche arrêtée par le veilleur
+(durée, inactivité) sans `arreter` du pont perd le film en cours. Les captures (verrou `captures`) et les films (verrou
+`film`) se partagent la limite d'octets sans verrou commun : deux médias écrits au même instant peuvent la dépasser d'un fichier.
+La durée rendue par `finfilm` est le temps écoulé entre `filmer` et `finfilm`, jamais plus que la durée demandée (notée
+dans `.film` avec le nom, le processus et l'heure de début). Pendant son travail, `finfilm` renomme `.film` en `.film.fin`
+et ne le retire qu'une fois fini : un `finfilm` interrompu laisse la trace, et le suivant (ou `arreter`) reprend ce film.
+Le processus d'enregistrement est reconnu par ses arguments exacts (`timeout` ou `adb`, avec un argument `screenrecord`),
+jamais par une sous-chaîne. Les ajouts à `logcat.txt` se font sous verrou ; le poste tolère un léger dépassement (coupé au
+plafond).
 
 Le pont n'écrit que sous `sortie/` : `.activite`, `pont.log` (une ligne par appel : verbe, au plus 6 arguments tronqués,
-durée), `captures/<nom>.png`, `plantage.txt`, `.paquet`, `emulateur.log`, `emulateur.pid` et ses verrous. Il refuse de
-travailler sans `timeout` (code 4).
+durée), `captures/<nom>.png`, `logcat.txt`, `videos/`, `.film`, `plantage.txt`, `.paquet`, `emulateur.log`,
+`emulateur.pid` et ses verrous. Il refuse de travailler sans `timeout` (code 4).
 
-Délais SSH par verbe côté poste : `demarrer` 360 s, `installer` 240 s, `arreter` 120 s, `attendre` et `capturer` 150 s, les autres
-90 s. `demarrer` attend d'abord que l'AVD soit créé dans le conteneur (jusqu'à 300 s).
+Délais SSH par verbe côté poste : `demarrer` 360 s, `installer` 240 s, `arreter` 480 s (il peut finir un film), `finfilm`
+420 s, `filmer` 60 s, `attendre` et `capturer` 150 s, les autres 90 s. `demarrer` attend d'abord que l'AVD soit créé dans le
+conteneur (jusqu'à 300 s). Les temps réels de `filmer`, `finfilm` et de l'extraction des images ne sont **pas encore
+mesurés** sur le serveur.
 
 ## Les recettes (mode scénario)
 
@@ -191,6 +215,14 @@ Exemple de recette, **donné en exemple seulement (il n'est créé dans aucun pr
     {"verbe": "capturer", "args": ["menu"]}
   ]
 }
+```
+
+Pour filmer un passage (vidéo `videos/demo.mp4` et ses images, rapatriées avec le reste), insérer dans les étapes :
+
+```json
+    {"verbe": "filmer", "args": ["demo", "30"]},
+    {"verbe": "attendre", "args": ["30"]},
+    {"verbe": "finfilm"}
 ```
 
 ## Les commandes

@@ -406,6 +406,7 @@ MOTIF_TOUCHE = r"(retour|accueil|menu)"
 # Noms de capture refusés en plus de MOTIF_NOM : noms réservés de Windows (le poste ne pourrait pas écrire <nom>.png ;
 # majuscules et extension déjà exclues par MOTIF_NOM). Même règle dans pont.sh (MOTIF_NOM_RESERVE).
 MOTIF_NOM_RESERVE = r"(con|prn|aux|nul|com[0-9]|lpt[0-9])"
+MOTIF_SECONDES_FILM = r"([1-9][0-9]?|1[0-7][0-9]|180)"    # filmer : 1 à 180 secondes
 # verbe -> motifs de ses arguments, dans l'ordre ; FACULTATIFS : nombre de derniers arguments facultatifs.
 VERBES = MappingProxyType({
     "demarrer": (), "installer": (), "lancer": (), "arreter": (),
@@ -416,9 +417,11 @@ VERBES = MappingProxyType({
     "attendre": (MOTIF_DUREE,),
     "capturer": (MOTIF_NOM,),
     "journal": (MOTIF_FILTRE,),
+    "filmer": (MOTIF_NOM, MOTIF_SECONDES_FILM),
+    "finfilm": (),
 })
-FACULTATIFS = MappingProxyType({"journal": 1})
-_NUMERIQUES = (MOTIF_ENTIER, MOTIF_DUREE)        # seuls arguments qui peuvent être donnés en entier Python
+FACULTATIFS = MappingProxyType({"journal": 1, "filmer": 1})
+_NUMERIQUES = (MOTIF_ENTIER, MOTIF_DUREE, MOTIF_SECONDES_FILM)   # seuls arguments qui peuvent être donnés en entier Python
 
 
 def valider_verbe(verbe, args):
@@ -470,21 +473,34 @@ AVD_PAS_S = 5
 REPONSE_PONT_MAX = 256 * 1024              # journal : 200 lignes de 500 caractères au plus, plus l'enveloppe JSON
 ETAT_MAX = 4096
 JOURNAL_MAX_OCTETS = 5 * 1024 * 1024       # chaque journal rapatrié ; au-delà il n'est pas rapatrié
-TAILLE_ARCHIVE_MARGE = 4 * JOURNAL_MAX_OCTETS + 1024 * 1024     # journaux + en-têtes tar, en plus des captures
+LOGCAT_MAX_OCTETS = 2 * 1024 * 1024        # logcat.txt (sauvegarde des lignes de `journal`), plafonné aussi par le pont
+VIDEO_MAX_OCTETS = 60 * 1024 * 1024        # chaque vidéo (mp4) ; toutes les médias partagent limites["octets"]
+VIDEOS_MAX = 5                             # vidéos par tâche
+IMAGES_PAR_FILM = 30                       # images tirées d'une vidéo (le pont en tire 30 au plus)
+IMAGES_FILM_MAX = VIDEOS_MAX * IMAGES_PAR_FILM
+# journaux + logcat + en-têtes tar (des 150 images comprises), en plus des médias
+TAILLE_ARCHIVE_MARGE = 4 * JOURNAL_MAX_OCTETS + LOGCAT_MAX_OCTETS + 2 * 1024 * 1024
 ENVELOPPE = "taches/lancer_emulation.sh"
 ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/{ENVELOPPE}"
 # Délai SSH de chaque verbe relayé, au-dessus de la borne propre du pont : `arreter` (adb + attentes 10 + 5 + 5 s, jusqu'à
-# ~80 s), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S 300 s).
-DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 240, "arreter": 120, "attendre": 150,
-                                   "capturer": 150})
+# ~80 s, plus la fin d'un film resté en cours), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S
+# 300 s), `finfilm` (verrou, SIGINT et attente 10 s, adb pull, ffmpeg 120 s : jusqu'à ~250 s), `filmer` (1 s d'attente).
+DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 240, "arreter": 480, "attendre": 150,
+                                   "capturer": 150, "filmer": 60, "finfilm": 420})
 DELAI_VERBE_S = 90
 # Mémoire et processeurs du conteneur passés à l'enveloppe (ses propres valeurs par défaut : la demande ne les règle pas).
 MEMOIRE_MO = 6144
 CPUS = 2
-# Fichiers rapatriés : ces journaux (nom sur le serveur -> nom local) et captures/<nom>.png, rien d'autre.
+# Fichiers rapatriés : ces journaux (nom sur le serveur -> nom local), captures/<nom>.png, videos/<nom>.mp4 et
+# videos/<nom>-img/<nom>-NNN.png (le même nom dans le dossier et le fichier), rien d'autre.
 JOURNAUX = MappingProxyType({"pont.log": "journal.txt", "plantage.txt": "plantage.txt",
-                             "entree-tache.log": "entree-tache.log", "emulateur.log": "emulateur.log"})
+                             "entree-tache.log": "entree-tache.log", "emulateur.log": "emulateur.log",
+                             "logcat.txt": "logcat.txt"})
 MOTIF_CAPTURE = re.compile(r"captures/([a-z0-9][a-z0-9_-]{0,39})\.png", re.ASCII)
+MOTIF_VIDEO = re.compile(r"videos/([a-z0-9][a-z0-9_-]{0,39})\.mp4", re.ASCII)
+MOTIF_IMAGE_FILM = re.compile(r"videos/([a-z0-9][a-z0-9_-]{0,39})-img/\1-([0-9]{3})\.png", re.ASCII)
+MOTIF_DETAIL_FILM = re.compile(r"videos/([a-z0-9][a-z0-9_-]{0,39})\.mp4 \(", re.ASCII)   # réponse de finfilm
+SIGNATURE_MP4 = b"ftyp"                    # octets 4 à 8 d'un fichier MP4 (boîte ftyp)
 MOTIF_ISO = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", re.ASCII)
 NOMS_RESERVES = frozenset({"con", "prn", "aux", "nul", *(f"com{i}" for i in range(10)), *(f"lpt{i}" for i in range(10))})
 SIGNATURE_PNG = b"\x89PNG\r\n\x1a\n"
@@ -756,6 +772,10 @@ exec sudo -n docker exec tache-@ID@ /usr/local/bin/pont @VERBE@
 # des noms d'un seul composant, préfixés `captures/` par --transform ; un dossier captures/ remplacé par un lien n'est pas
 # lu, un fichier remplacé par un lien entre find et tar est archivé comme lien, que le poste refuse. Le poste revérifie tout.
 # Archive complète : au plus captures + 1 captures, pour que le poste voie le dépassement (statut limite).
+# Vidéos : de même, lues depuis l'intérieur de videos/ (`cd -P` + chemin physique vérifié) : les mp4 (noms d'un composant),
+# puis chaque dossier d'images `<nom>-img` (vrai dossier : find -type d n'en suit aucun lien ; nom revérifié par motif avant
+# tout usage), lu depuis son intérieur de la même façon. Au plus VIDEOS_MAX + 1 vidéos et IMAGES_PAR_FILM + 1 images par
+# dossier, pour que le poste voie un dépassement.
 _RAPATRIER = """# tache:@OP@ @ID@ @NOM@
 set -u
 set -f
@@ -763,15 +783,29 @@ r=$(cd -P -- "$HOME/taches/@ID@" 2>/dev/null && pwd -P) || exit 3
 cd -P -- "$r/sortie" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie" ] || exit 3
 {
 @JOURNAUX@
-  if cd -P -- captures 2>/dev/null && [ "$(pwd -P)" = "$r/sortie/captures" ]; then
-    find . -mindepth 1 -maxdepth 1 -type f -links 1 -name '@MOTIF@' -size -@CMAX@c -print0 2>/dev/null \\
-      | head -z -n @NMAX@ | tar --null --no-recursion --transform 's,^\\./,captures/,' -c -f - -T -
-  fi
+@CAPTURES@
+@VIDEOS@
 } | head -c @TOTAL@
 """
-_LISTE_JOURNAUX = ("  for f in pont.log plantage.txt entree-tache.log emulateur.log; do\n"
+_LISTE_JOURNAUX = ("  for f in pont.log plantage.txt entree-tache.log emulateur.log logcat.txt; do\n"
                    "    find \"./$f\" -maxdepth 0 -type f -links 1 -size -@JMAX@c -print0 2>/dev/null\n"
                    "  done | tar --null --no-recursion -c -f - -T -")
+_BLOC_CAPTURES = """  if cd -P -- "$r/sortie/captures" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie/captures" ]; then
+    find . -mindepth 1 -maxdepth 1 -type f -links 1 -name '@MOTIF@' -size -@CMAX@c -print0 2>/dev/null \\
+      | head -z -n @NMAX@ | tar --null --no-recursion --transform 's,^\\./,captures/,' -c -f - -T -
+  fi"""
+_BLOC_VIDEOS = """  if cd -P -- "$r/sortie/videos" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie/videos" ]; then
+    find . -mindepth 1 -maxdepth 1 -type f -links 1 -name '@VMOTIF@' -size -@VMAX@c -print0 2>/dev/null \\
+      | head -z -n @VNMAX@ | tar --null --no-recursion --transform 's,^\\./,videos/,' -c -f - -T -
+    find . -mindepth 1 -maxdepth 1 -type d -name '@IMOTIF@' -print 2>/dev/null | head -n @VNMAX@ | while IFS= read -r i; do
+      n="${i#./}"
+      [[ $n =~ ^[a-z0-9][a-z0-9_-]{0,39}-img$ ]] || continue
+      if cd -P -- "$r/sortie/videos/$n" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie/videos/$n" ]; then
+        find . -mindepth 1 -maxdepth 1 -type f -links 1 -name '*.png' -size -@CMAX@c -print0 2>/dev/null \\
+          | head -z -n @INMAX@ | tar --null --no-recursion --transform "s,^\\./,videos/$n/," -c -f - -T -
+      fi
+    done
+  fi"""
 
 
 def _script(modele, ident, **valeurs):
@@ -782,13 +816,24 @@ def _script(modele, ident, **valeurs):
     return texte
 
 
-def _script_rapatrier(ident, limites, nom=None):
-    """Toute la sortie (nom=None) ou la seule capture `nom` (déjà validée par MOTIF_NOM)."""
-    modele = _RAPATRIER.replace("@JOURNAUX@\n", "" if nom else _LISTE_JOURNAUX + "\n")
-    return _script(modele, ident, OP="capture" if nom else "rapatrier", MOTIF=f"{nom}.png" if nom else "*.png",
-                   NOM=nom or "", JMAX=str(JOURNAL_MAX_OCTETS + 1), CMAX=str(int(limites["octets"]) + 1),
-                   NMAX=str(1 if nom else int(limites["captures"]) + 1),
-                   TOTAL=str(int(limites["octets"]) + TAILLE_ARCHIVE_MARGE)).replace(" \nset -u", "\nset -u")
+def _script_rapatrier(ident, limites, nom=None, film=None):
+    """Toute la sortie (ni `nom` ni `film`), la seule capture `nom`, ou le seul film `film` (sa vidéo et ses images) ;
+    `nom` et `film` déjà validés par MOTIF_NOM."""
+    for v in (nom, film):
+        if v is not None and not re.fullmatch(MOTIF_NOM, v, re.ASCII):
+            raise ValueError("Nom refusé.")
+    tout = nom is None and film is None
+    modele = (_RAPATRIER.replace("@JOURNAUX@\n", _LISTE_JOURNAUX + "\n" if tout else "")
+              .replace("@CAPTURES@\n", _BLOC_CAPTURES + "\n" if film is None else "")
+              .replace("@VIDEOS@\n", _BLOC_VIDEOS + "\n" if nom is None else ""))
+    octets = int(limites["octets"])
+    return _script(modele, ident, OP="capture" if nom else ("film" if film else "rapatrier"),
+                   MOTIF=f"{nom}.png" if nom else "*.png", NOM=nom or film or "",
+                   VMOTIF=f"{film}.mp4" if film else "*.mp4", IMOTIF=f"{film}-img" if film else "*-img",
+                   JMAX=str(JOURNAL_MAX_OCTETS + 1), CMAX=str(octets + 1), VMAX=str(min(VIDEO_MAX_OCTETS, octets) + 1),
+                   NMAX=str(1 if nom else int(limites["captures"]) + 1), VNMAX=str(1 if film else VIDEOS_MAX + 1),
+                   INMAX=str(IMAGES_PAR_FILM + 1),
+                   TOTAL=str(octets + TAILLE_ARCHIVE_MARGE)).replace(" \nset -u", "\nset -u")
 
 
 # --- lecture de l'état
@@ -1127,26 +1172,55 @@ def _ecrire_sur(chemin, donnees):
 
 
 def _nom_local(nom):
-    """(nom local, est_capture) pour un nom admis de l'archive ; None sinon (chemins, liens, noms inconnus)."""
+    """(nom local, genre, nom du film) pour un nom admis de l'archive ; None sinon (chemins, liens, noms inconnus, noms
+    réservés de Windows). Genres : journal, logcat, capture, video, image. Les noms locaux sont reconstruits à partir des
+    seuls groupes validés, jamais recopiés de l'archive."""
     if nom in JOURNAUX:
-        return JOURNAUX[nom], False
+        return JOURNAUX[nom], ("logcat" if nom == "logcat.txt" else "journal"), None
     m = MOTIF_CAPTURE.fullmatch(nom)
     if m and m.group(1) not in NOMS_RESERVES:
-        return f"captures/{m.group(1)}.png", True
+        return f"captures/{m.group(1)}.png", "capture", None
+    m = MOTIF_VIDEO.fullmatch(nom)
+    if m and m.group(1) not in NOMS_RESERVES:
+        return f"videos/{m.group(1)}.mp4", "video", m.group(1)
+    m = MOTIF_IMAGE_FILM.fullmatch(nom)
+    if m and m.group(1) not in NOMS_RESERVES:
+        f = m.group(1)
+        return f"videos/{f}-img/{f}-{m.group(2)}.png", "image", f
     return None
+
+
+def _depasse(genre, taille, res, total, limites, film=None):
+    """Vrai si ce membre ferait dépasser une limite (le flux est alors « tronqué » : statut limite)."""
+    if genre == "journal":
+        return taille > JOURNAL_MAX_OCTETS
+    if genre == "logcat":
+        # Un léger dépassement (ajouts concurrents passés avant le verrou du pont) est toléré : le fichier est alors lu
+        # coupé au plafond ; au-delà du double, il n'est pas pris du tout.
+        return taille > 2 * LOGCAT_MAX_OCTETS
+    if total + taille > int(limites["octets"]):          # captures, vidéos et images partagent les octets de la demande
+        return True
+    if genre == "capture":
+        return len(res["captures"]) >= int(limites["captures"])
+    if genre == "video":
+        return taille > VIDEO_MAX_OCTETS or sum(1 for v in res["videos"].values() if v["mp4"]) >= VIDEOS_MAX
+    return (len(res["videos"][film]["images"]) >= IMAGES_PAR_FILM
+            or sum(len(v["images"]) for v in res["videos"].values()) >= IMAGES_FILM_MAX)
 
 
 def _extraire(donnees, destination, limites):
     """Extrait l'archive dans `destination` sans jamais écrire ailleurs. Admis : membres ordinaires aux noms fixes
-    (JOURNAUX, captures/<nom>.png à signature PNG), au plus `captures + 5` fichiers, `captures` captures, `octets`
-    octets de captures au total et JOURNAL_MAX_OCTETS par journal. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
+    (JOURNAUX, captures/<nom>.png et videos/<nom>-img/<nom>-NNN.png à signature PNG, videos/<nom>.mp4 à signature
+    « ftyp » aux octets 4..8), au plus `captures` captures, VIDEOS_MAX vidéos de VIDEO_MAX_OCTETS chacune, IMAGES_FILM_MAX
+    images, `octets` octets de médias (captures, vidéos, images) au total, JOURNAL_MAX_OCTETS par journal et
+    LOGCAT_MAX_OCTETS pour logcat.txt. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
     compté dans `refuses` ; un flux plus grand que le plafond n'est pas analysé du tout. Plusieurs archives à la suite
     sont lues (`ignore_zeros`). Flux coupé exactement au plafond (head -c du serveur) : `tronque` ; archive abîmée ou
     lecture courte avant le plafond : `corrompue`. Limite connue : avec `ignore_zeros`, tarfile saute bloc par bloc ce
     qu'il ne sait pas lire au milieu du flux, si bien qu'une zone abîmée suivie d'en-têtes valides peut passer inaperçue
     (seule la fin du flux est vérifiée) ; le confinement, lui, ne dépend pas de cette détection (chaque membre admis est
-    revérifié : type, nom, taille, signature PNG)."""
-    res = {"captures": [], "fichiers": {}, "refuses": 0, "tronque": False, "corrompue": False}
+    revérifié : type, nom, taille, signature). `videos` : {nom du film: {"mp4": chemin | None, "images": [chemins]}}."""
+    res = {"captures": [], "fichiers": {}, "videos": {}, "refuses": 0, "tronque": False, "corrompue": False}
     plafond = int(limites["octets"]) + TAILLE_ARCHIVE_MARGE
     if len(donnees) > plafond:
         res["tronque"] = True
@@ -1155,17 +1229,66 @@ def _extraire(donnees, destination, limites):
     res["tronque"] = coupe
     if not donnees:
         return res
-    max_fichiers, max_captures = int(limites["captures"]) + 5, int(limites["captures"])
-    # Les octets de la demande ne comptent que les CAPTURES (M6) ; les journaux ont leur propre plafond (chacun
-    # JOURNAL_MAX_OCTETS, déjà appliqué sur le serveur), pour que des journaux longs ne fassent pas passer en « limite »
-    # des captures dans les clous.
-    total, examines, vus = 0, 0, set()
+    max_fichiers = int(limites["captures"]) + len(JOURNAUX) + VIDEOS_MAX + IMAGES_FILM_MAX
+    # Les octets de la demande ne comptent que les MÉDIAS (M6 : captures, vidéos, images des vidéos) ; les journaux ont
+    # leur propre plafond (JOURNAL_MAX_OCTETS chacun, LOGCAT_MAX_OCTETS pour logcat.txt), pour que des journaux longs ne
+    # fassent pas passer en « limite » des médias dans les clous.
+    total, examines, vus, films_coupes = 0, 0, set(), set()
 
     def abime():
         res["tronque" if coupe else "corrompue"] = True
     fin, interrompu = 0, False
+
+    def traiter(tar, m, nom_local, genre, film):
+        """Vérifie puis écrit un membre admis par son nom ; faux si le flux est abîmé (lecture courte : on s'arrête)."""
+        nonlocal total
+        if genre == "image" and not (res["videos"].get(film) or {}).get("mp4"):
+            # Une image n'est admise qu'avec SA vidéo : sans elle, jamais écrite ; « limite » si la vidéo a été écartée
+            # par une limite, refusée sinon.
+            if film in films_coupes:
+                res["tronque"] = True
+            else:
+                res["refuses"] += 1
+            return True
+        if len(res["fichiers"]) >= max_fichiers or m.size < 0 or _depasse(genre, m.size, res, total, limites, film):
+            res["tronque"] = True
+            if genre == "video":
+                films_coupes.add(film)
+            return True
+        contenu = tar.extractfile(m).read(m.size)
+        if len(contenu) != m.size:
+            abime()
+            return False
+        if genre == "logcat":
+            contenu = contenu[:LOGCAT_MAX_OCTETS]
+        if ((genre in ("capture", "image") and not contenu.startswith(SIGNATURE_PNG))
+                or (genre == "video" and contenu[4:8] != SIGNATURE_MP4)):
+            res["refuses"] += 1
+            return True
+        cible = destination / nom_local
+        if genre == "capture":
+            _dossier_sur(destination / "captures")
+        elif genre in ("video", "image"):
+            _dossier_sur(destination / "videos")
+            if genre == "image":
+                _dossier_sur(destination / "videos" / f"{film}-img")
+        _ecrire_sur(cible, contenu)
+        if genre in ("capture", "video", "image"):
+            total += m.size
+        res["fichiers"][nom_local] = str(cible)
+        if genre == "capture":
+            res["captures"].append(str(cible))
+        elif film is not None:
+            v = res["videos"].setdefault(film, {"mp4": None, "images": []})
+            if genre == "video":
+                v["mp4"] = str(cible)
+            else:
+                v["images"].append(str(cible))
+        return True
+
     try:
         with tarfile.open(fileobj=io.BytesIO(donnees), mode="r:", ignore_zeros=True) as tar:
+            images = []                 # les images sont traitées après toutes les vidéos (l'ordre de l'archive n'y fait rien)
             for m in tar:
                 examines += 1
                 if examines > 4 * max_fichiers + 20:
@@ -1179,29 +1302,16 @@ def _extraire(donnees, destination, limites):
                     res["refuses"] += 1
                     continue
                 vus.add(nom)
-                nom_local, capture = local
-                if (len(res["fichiers"]) >= max_fichiers or m.size < 0
-                        or (capture and (len(res["captures"]) >= max_captures or total + m.size > int(limites["octets"])))
-                        or (not capture and m.size > JOURNAL_MAX_OCTETS)):
-                    res["tronque"] = True
+                if local[1] == "image":
+                    images.append((m, local))
                     continue
-                contenu = tar.extractfile(m).read(m.size)
-                if len(contenu) != m.size:
-                    abime()
+                if not traiter(tar, m, *local):
                     interrompu = True
                     break
-                if capture and not contenu.startswith(SIGNATURE_PNG):
-                    res["refuses"] += 1
-                    continue
-                cible = destination / nom_local
-                if capture:
-                    _dossier_sur(destination / "captures")
-                _ecrire_sur(cible, contenu)
-                if capture:
-                    total += m.size
-                res["fichiers"][nom_local] = str(cible)
-                if capture:
-                    res["captures"].append(str(cible))
+            for m, local in ([] if interrompu else images):
+                if not traiter(tar, m, *local):
+                    interrompu = True
+                    break
     except (tarfile.TarError, EOFError, ValueError) as e:
         if isinstance(e, ValueError) and "Destination" in str(e):
             raise
@@ -1234,6 +1344,11 @@ def _statut(lu, fiche, res, echec=None):
     return "ok" if lu.get("statut") == "ok" else "erreur"
 
 
+def _liste_videos(res):
+    """Les films extraits, par nom : [{"mp4": chemin | None, "images": [chemins triés]}]."""
+    return [{"mp4": v["mp4"], "images": sorted(v["images"])} for _n, v in sorted(res.get("videos", {}).items())]
+
+
 def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, echec=None):
     """Rapatrie `sortie/` de la tâche dans `destination` (captures/*.png, journal.txt, plantage.txt...) et y écrit
     `rapport.json`. Renvoie le manifeste `{statut, captures, journal, rapport, duree_s, ...}` ; jamais d'exception.
@@ -1241,7 +1356,7 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
     dans le statut (jamais « ok ») et recopié dans le rapport."""
     manifeste = {"id": ident if isinstance(ident, str) and MOTIF_ID.fullmatch(ident) else None, "statut": "erreur",
                  "captures": [], "journal": None, "rapport": None, "duree_s": None, "etat": "inconnu", "raison": "",
-                 "tronque": False, "refuses": 0}
+                 "tronque": False, "refuses": 0, "logcat": None, "videos": []}
     try:
         lu = _etat(ident, dossier, ssh)
         manifeste.update(etat=lu["etat"], raison=lu.get("raison", ""), duree_s=_duree(lu))
@@ -1255,7 +1370,7 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
         code, donnees, erreur = _octets(serveur, ssh, "bash -s", _script_rapatrier(ident, limites).encode("utf-8"),
                                         delai=600)
         if code != 0:
-            res = {"captures": [], "fichiers": {}, "refuses": 0, "tronque": False}
+            res = {"captures": [], "fichiers": {}, "videos": {}, "refuses": 0, "tronque": False}
             manifeste["raison"] = f"Rapatriement en échec (code {code}) : {_court(erreur, 200)}"
             statut = "erreur"
         else:
@@ -1271,14 +1386,22 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
         verbes = None
         if journal:
             verbes = sum(1 for ligne in Path(journal).read_bytes().splitlines() if ligne.strip())
+        logcat = res["fichiers"].get("logcat.txt")
+        videos = _liste_videos(res)
         manifeste.update(statut=statut, captures=res["captures"], journal=journal, tronque=res["tronque"],
-                         refuses=res["refuses"], rapport=str(dest / "rapport.json"))
+                         refuses=res["refuses"], rapport=str(dest / "rapport.json"), logcat=logcat, videos=videos)
+
+        def relatif(c):
+            return Path(c).relative_to(dest).as_posix()
         rapport = {"id": ident, "statut": statut, "etat": lu["etat"], "raison": manifeste["raison"],
                    "debut": lu.get("debut"), "fin": lu.get("fin"), "duree_s": manifeste["duree_s"], "verbes": verbes,
                    "limites": dict(limites), "limite_atteinte": fiche.get("limite_atteinte") is True,
                    "tronque": res["tronque"], "refuses": res["refuses"],
-                   "captures": [Path(c).relative_to(dest).as_posix() for c in res["captures"]],
-                   "journal": "journal.txt" if journal else None, "rapatrie": _maintenant_iso()}
+                   "captures": [relatif(c) for c in res["captures"]],
+                   "videos": [{"mp4": relatif(v["mp4"]) if v["mp4"] else None, "images": [relatif(i) for i in v["images"]]}
+                              for v in videos],
+                   "journal": "journal.txt" if journal else None, "logcat": "logcat.txt" if logcat else None,
+                   "rapatrie": _maintenant_iso()}
         if echec is not None:
             e = echec if isinstance(echec, dict) else {}
             rapport["echec"] = {"etape": e.get("etape") if isinstance(e.get("etape"), int) else None,
@@ -1357,6 +1480,24 @@ def _rapatrier_capture(serveur, ssh, ident, nom, destination, limites):
     return None, "capture absente ou refusée au rapatriement"
 
 
+def _rapatrier_film(serveur, ssh, ident, nom, destination, limites):
+    """(chemin du mp4, [images], None) ou (None, [], raison) : la seule vidéo `nom` et ses images, par la même extraction
+    sûre (signature, tailles, noms)."""
+    if nom in NOMS_RESERVES or not re.fullmatch(MOTIF_NOM, nom, re.ASCII):
+        return None, [], "nom de vidéo refusé"
+    code, donnees, erreur = _octets(serveur, ssh, "bash -s",
+                                    _script_rapatrier(ident, limites, film=nom).encode("utf-8"), delai=300)
+    if code != 0:
+        return None, [], f"vidéo non rapatriée (code {code}) {_court(erreur, 200)}".strip()
+    dest = Path(destination)
+    _dossier_sur(dest)
+    res = _extraire(donnees, dest, limites)
+    v = res["videos"].get(nom)
+    if v and v["mp4"]:
+        return Path(v["mp4"]), sorted(v["images"]), None
+    return None, [], "vidéo absente ou refusée au rapatriement"
+
+
 def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, destination=None,
           dormir=time.sleep):
     """Relaie UN verbe au pont du conteneur (`sudo -n docker exec tache-<id> /usr/local/bin/pont <verbe> <args>`, sans
@@ -1364,7 +1505,8 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
 
     Renvoie `{ok, verbe, code, detail}` (code du pont : 0, 2 refus, 3 limite, 4 échec ; 124/255 serveur injoignable).
     `demarrer` attend d'abord `sortie/.avd-pret` (AVD_ATTENTE_S au plus). `capturer` réussi : la capture est rapatriée
-    dans `destination/captures/` (par défaut `<dossier>/taches/<id>/`) et `capture` donne son chemin local. Un code 3
+    dans `destination/captures/` (par défaut `<dossier>/taches/<id>/`) et `capture` donne son chemin local. `finfilm`
+    réussi : la vidéo et ses images sont rapatriées dans `destination/videos/` (`video`, `images`). Un code 3
     est noté dans la fiche (`limite_atteinte`) pour le statut du rapport.
 
     Le lanceur applique lui-même la limite de captures de la demande (le pont n'applique que ses propres valeurs par
@@ -1419,4 +1561,22 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
         else:
             res["ok"] = False
             res["detail"] = f"{res['detail']} Capture prise mais non rapatriée : {raison}."
+    if nom == "finfilm" and res["ok"]:
+        # Le nom du film vient de la réponse du pont (« videos/<nom>.mp4 (...) ») : une donnée, revalidée par le motif des
+        # noms et les noms réservés avant de servir ; rien n'est rapatrié sinon.
+        m = MOTIF_DETAIL_FILM.match(res["detail"])
+        film = m.group(1) if m and m.group(1) not in NOMS_RESERVES else None
+        chemin, images, raison = None, [], "réponse du pont inattendue"
+        if film:
+            limites = _limites_fiche(Index(dossier).lire().get(ident) or {})
+            try:
+                chemin, images, raison = _rapatrier_film(serveur, ssh, ident, film,
+                                                         destination or Path(dossier) / "taches" / ident, limites)
+            except (ValueError, OSError) as e:
+                chemin, images, raison = None, [], _court(e)
+        if chemin:
+            res["video"], res["images"] = str(chemin), [str(i) for i in images]
+        else:
+            res["ok"] = False
+            res["detail"] = f"{res['detail']} Film fini mais non rapatrié : {raison}."
     return _masque(res, dossier)

@@ -909,12 +909,12 @@ class TestRecetteEmulateur(Base):
         self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), serveur=self.cli_reel()), 0,
                          self.sortie)
         # le lanceur finit toujours par journal puis arreter du pont (plantage relevé) avant d'arrêter la tâche
-        self.assertEqual([a[0] for a in self.moteur.appels], ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
-        self.assertEqual([a[2] for a in self.moteur.appels if a[0] == "verbe"], ["journal", "arreter"])
-        self.assertTrue(self.moteur.appels[3][2])                    # fin normale : arrêt avec fin=True
+        self.assertEqual([a[0] for a in self.moteur.appels], ["lancer", "verbe", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertEqual([a[2] for a in self.moteur.appels if a[0] == "verbe"], ["finfilm", "journal", "arreter"])
+        self.assertTrue(self.moteur.appels[4][2])                    # fin normale : arrêt avec fin=True
         self.assertIn('"statut": "ok"', self.sortie)                  # le manifeste est imprimé
         ident = self.moteur.appels[0][1].id
-        self.assertEqual(Path(self.moteur.appels[4][2]), (d / ".factory" / "serveur" / ident).resolve())
+        self.assertEqual(Path(self.moteur.appels[5][2]), (d / ".factory" / "serveur" / ident).resolve())
         for statut in ("plantage", "limite", "erreur"):
             moteur = t7.FauxMoteur()
             moteur.manifeste = {"id": "x", "statut": statut, "captures": []}

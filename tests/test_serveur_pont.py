@@ -26,12 +26,24 @@ case "$1" in
   exec-out) [ -n "${FAUX_CAPTURE_LENTE:-}" ] && /usr/bin/sleep "$FAUX_CAPTURE_LENTE"; printf '\211PNG\r\n\032\n'; head -c "${FAUX_PNG_OCTETS:-100}" /dev/zero ;;
   logcat) [ -n "${FAUX_LOGCAT:-}" ] && cat "$FAUX_LOGCAT" ;;
   install) echo Success ;;
+  pull) if [ -n "${FAUX_MP4_FAUX:-}" ]; then printf 'PAS UNE VIDEO' > "$3"
+        else printf '\000\000\000\030ftypisom' > "$3"; head -c "${FAUX_MP4_OCTETS:-200}" /dev/zero >> "$3"; fi ;;
   shell) case "$2 $3" in
            "getprop sys.boot_completed") echo 1 ;;
            "pm list") printf '%s\n' "${FAUX_PAQUETS-package:com.exemple.app}" ;;
            "monkey -p") echo "Events injected: 1" ;;
+           # screenrecord : tourne jusqu'au SIGINT (pkill -2 côté appareil), comme le vrai
+           "screenrecord --size") [ -n "${FAUX_FILM_MEURT:-}" ] && exit 1; [ -n "${FAUX_FILM_COURT:-}" ] && exit 0
+                                  echo $$ > "$FAUX_FILM_PID"; exec /usr/bin/sleep 300 ;;
+           "pkill -2") [ -f "$FAUX_FILM_PID" ] && kill "$(cat "$FAUX_FILM_PID")" 2>/dev/null; rm -f "$FAUX_FILM_PID" ;;
          esac ;;
 esac
+exit 0'''
+# ffmpeg factice : écrit FAUX_IMAGES (3) images PNG selon le motif de sortie (dernier argument, « ...-%03d.png »).
+FFMPEG_FACTICE = r'''echo "ffmpeg $*" >> "$FAUX_JOURNAL"
+[ -n "${FAUX_FFMPEG_ECHEC:-}" ] && exit 1
+sortie=""; for a in "$@"; do sortie="$a"; done
+i=1; while [ "$i" -le "${FAUX_IMAGES:-3}" ]; do f=$(printf "$sortie" "$i"); printf '\211PNG\r\n\032\nimage' > "$f"; i=$((i + 1)); done
 exit 0'''
 # Resté vivant, il garde « emulator » dans sa ligne de commande (/proc/<pid>/cmdline), comme le vrai.
 EMULATEUR_FACTICE = ('echo "emulator $*" >> "$FAUX_JOURNAL"\n'
@@ -70,7 +82,8 @@ class Banc:
             d.mkdir()
         (self.entree / "app.apk").write_bytes(b"PK\x03\x04apk-factice")
         self.fichier_journal = t / "appels.txt"
-        for nom, corps in (("adb", ADB_FACTICE), ("emulator", EMULATEUR_FACTICE), ("sleep", SLEEP_FACTICE)):
+        for nom, corps in (("adb", ADB_FACTICE), ("emulator", EMULATEUR_FACTICE), ("sleep", SLEEP_FACTICE),
+                           ("ffmpeg", FFMPEG_FACTICE)):
             (self.bin / nom).write_text("#!/usr/bin/env bash\n" + corps + "\n", newline="\n")   # bash : exec -a
             (self.bin / nom).chmod(0o755)
         self.n = 0
@@ -78,9 +91,10 @@ class Banc:
         return self
 
     def __exit__(self, *a):
-        pid = self.sortie / "emulateur.pid"
-        if pid.exists():
-            bash('kill -9 "$(cat "$1")" 2>/dev/null; exit 0', pid.as_posix())
+        for pid in (self.sortie / "emulateur.pid", self.t / "film.pid"):
+            if pid.exists():
+                bash('kill -9 "$(cat "$1")" 2>/dev/null; exit 0', pid.as_posix())
+        time.sleep(0.2)
         self._t.cleanup()
 
     def faux(self, nom, corps):
@@ -104,8 +118,8 @@ class Banc:
         fichier_args = self.t / f"args{self.n}.bin"
         fichier_args.write_bytes(b"".join(a.encode("utf-8") + b"\0" for a in args))
         e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"], PONT_SORTIE=self.sortie_posix,
-                 FAUX_JOURNAL=self.fichier_journal.as_posix())
-        for nom in ("PONT_PAQUET", "PONT_ADB", "PONT_EMULATEUR", "PONT_AVD"):
+                 FAUX_JOURNAL=self.fichier_journal.as_posix(), FAUX_FILM_PID=(self.t / "film.pid").as_posix())
+        for nom in ("PONT_PAQUET", "PONT_ADB", "PONT_EMULATEUR", "PONT_AVD", "PONT_FFMPEG"):
             e.pop(nom, None)
         e.update(self.env)
         e.update(env)
@@ -178,6 +192,9 @@ class TestPont(unittest.TestCase):
             "journal": [[h] for h in communs + ["a b", "a/b", "a" * 61]] + [["a", "b"]],
             "installer": [["/etc/passwd"], ["../entree/app.apk"], [";"], [""]],
             "demarrer": [["-1"]], "lancer": [[".."]], "arreter": [["99999"]],
+            "filmer": [[h] for h in communs + ["..", "../x", "a/b", "A", "x.mp4", "a" * 41, "con", "nul"]]
+                      + [["demo", h] for h in communs + ["0", "181", "030", "-1", "1.5", "999"]] + [["a", "30", "x"]],
+            "finfilm": [["demo"], [";"], ["--"]],
         }
         with Banc() as b:
             avant = b.arbre()
@@ -741,6 +758,259 @@ class TestPont(unittest.TestCase):
             self.assertEqual(b.lancer("capturer", "a")[0], 4)
             self.assertEqual(list(ailleurs.iterdir()), [])
             self.assertEqual([x for x in b.appels if "screencap" in x], [])
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestJournalSauvegarde(unittest.TestCase):
+    """`journal` ajoute aussi ses lignes (mêmes bornes, caractères de contrôle remplacés) à sortie/logcat.txt."""
+
+    def test_journal_ajoute_a_logcat_txt_avec_un_en_tete_par_appel(self):
+        with Banc() as b:
+            b.logcat("I Test: un\x1b[31m rouge\nI Test: deux pair\n")
+            self.assertEqual(b.lancer("journal")[0], 0)
+            self.assertEqual(b.lancer("journal", "pair")[0], 0)
+            lignes = (b.sortie / "logcat.txt").read_text(encoding="utf-8").splitlines()
+            self.assertRegex(lignes[0], r"^# journal - \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+            self.assertEqual(lignes[1], "I Test: un?[31m rouge")
+            self.assertEqual(lignes[2], "I Test: deux pair")
+            self.assertRegex(lignes[3], r"^# journal pair \d{4}-")
+            self.assertEqual(lignes[4:], ["I Test: deux pair"])
+
+    def test_logcat_txt_plafonne(self):
+        with Banc(PONT_LOGCAT_OCTETS="300") as b:
+            b.logcat("".join(f"I Test: ligne {i}\n" for i in range(100)))
+            for _ in range(3):
+                self.assertEqual(b.lancer("journal")[0], 0)        # la réponse reste complète
+            self.assertLessEqual((b.sortie / "logcat.txt").stat().st_size, 300)
+
+    def test_logcat_txt_jamais_suivi_s_il_est_un_lien(self):
+        with Banc() as b:
+            cible = b.t / "ailleurs.txt"
+            cible.write_text("intact\n", encoding="utf-8")
+            b.lien(cible, b.sortie / "logcat.txt")
+            b.logcat("I Test: x\n")
+            code, d = b.lancer("journal")
+            self.assertEqual(code, 0, d)
+            self.assertEqual(cible.read_text(encoding="utf-8"), "intact\n")
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestFilm(unittest.TestCase):
+    """`filmer <nom> [secondes]` lance screenrecord en arrière-plan ; `finfilm` l'arrête, rapatrie le mp4 et en tire des images."""
+
+    def filmer(self, b, nom="demo", *plus, **env):
+        code, d = b.lancer("filmer", nom, *plus, **env)
+        self.assertEqual(code, 0, (d, b.derniere.stderr))
+        return d
+
+    def test_filmer_puis_finfilm(self):
+        with Banc() as b:
+            d = self.filmer(b)
+            self.assertIn("demo", d["detail"])
+            enreg = [x for x in b.appels if "screenrecord" in x]
+            self.assertEqual(enreg, ["adb shell screenrecord --size 360x720 --bit-rate 1500000 --time-limit 30 "
+                                     "/data/local/tmp/demo.mp4"])
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 0, (d, b.derniere.stderr))
+            self.assertIn("adb shell pkill -2 screenrecord", b.appels)
+            self.assertTrue(any(x.startswith("adb pull /data/local/tmp/demo.mp4 ") for x in b.appels), b.appels)
+            video = b.sortie / "videos" / "demo.mp4"
+            self.assertEqual(video.read_bytes()[4:8], b"ftyp")
+            images = sorted(p.name for p in (b.sortie / "videos" / "demo-img").iterdir())
+            self.assertEqual(images, ["demo-001.png", "demo-002.png", "demo-003.png"])
+            ff = [x for x in b.appels if x.startswith("ffmpeg ")][0]
+            self.assertIn("fps=1/2,scale=320:-2", ff)
+            self.assertIn("-frames:v 30", ff)
+            self.assertTrue(ff.endswith("/videos/demo-img/demo-%03d.png"), ff)
+            self.assertRegex(d["detail"], r"^videos/demo\.mp4 \(\d+ octets, \d+ s, 3 images\)")
+            self.assertFalse((b.sortie / ".film").exists())
+            self.assertEqual(sorted(p.name for p in (b.sortie / "videos").iterdir()), ["demo-img", "demo.mp4"])
+
+    def test_duree_choisie_et_bornee(self):
+        with Banc() as b:
+            self.filmer(b, "a", "180")
+            self.assertIn("--time-limit 180", [x for x in b.appels if "screenrecord" in x][0])
+            self.assertEqual(b.lancer("finfilm")[0], 0)
+
+    def test_un_seul_film_a_la_fois(self):
+        with Banc() as b:
+            self.filmer(b, "un")
+            code, d = b.lancer("filmer", "deux")
+            self.assertEqual(code, 2, d)
+            self.assertEqual(len([x for x in b.appels if "screenrecord" in x]), 1)
+            self.assertEqual(b.lancer("finfilm")[0], 0)
+            self.filmer(b, "deux")                                    # le film fini, un autre peut commencer
+            self.assertEqual(b.lancer("finfilm")[0], 0)
+
+    def test_finfilm_sans_film_donne_2(self):
+        with Banc() as b:
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 2, d)
+            self.assertEqual(b.appels, [])
+
+    def test_nom_deja_pris_refuse(self):
+        with Banc() as b:
+            (b.sortie / "videos").mkdir()
+            (b.sortie / "videos" / "demo.mp4").write_bytes(b"x")
+            self.assertEqual(b.lancer("filmer", "demo")[0], 2)
+            self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
+
+    def test_cinq_videos_au_plus(self):
+        with Banc() as b:
+            (b.sortie / "videos").mkdir()
+            for i in range(5):
+                (b.sortie / "videos" / f"v{i}.mp4").write_bytes(b"x")
+            self.assertEqual(b.lancer("filmer", "sixieme")[0], 3)
+            self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
+
+    def test_video_au_dela_des_octets_effacee_code_3(self):
+        with Banc(PONT_OCTETS="1000", FAUX_MP4_OCTETS="5000") as b:
+            self.filmer(b)
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 3, d)
+            videos = b.sortie / "videos"
+            self.assertEqual([p.name for p in videos.iterdir()] if videos.exists() else [], [])
+            self.assertFalse((b.sortie / ".film").exists())
+
+    def test_video_trop_grosse_par_fichier_code_3(self):
+        with Banc(PONT_VIDEO_OCTETS="1000", FAUX_MP4_OCTETS="5000") as b:
+            self.filmer(b)
+            self.assertEqual(b.lancer("finfilm")[0], 3)
+            self.assertFalse((b.sortie / "videos" / "demo.mp4").exists())
+
+    def test_fichier_qui_n_est_pas_un_mp4_efface_code_4(self):
+        with Banc(FAUX_MP4_FAUX="1") as b:
+            self.filmer(b)
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 4, d)
+            self.assertFalse((b.sortie / "videos" / "demo.mp4").exists())
+            self.assertEqual([x for x in b.appels if x.startswith("ffmpeg")], [])
+
+    def test_extraction_d_images_en_echec_garde_la_video(self):
+        with Banc(FAUX_FFMPEG_ECHEC="1") as b:
+            self.filmer(b)
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 0, d)
+            self.assertIn("0 images", d["detail"])
+            self.assertTrue((b.sortie / "videos" / "demo.mp4").exists())
+
+    def test_enregistrement_qui_meurt_aussitot_est_un_echec(self):
+        with Banc(FAUX_FILM_MEURT="1") as b:
+            code, d = b.lancer("filmer", "demo")
+            self.assertEqual(code, 4, d)
+            self.assertFalse((b.sortie / ".film").exists())
+
+    def test_arreter_finit_un_film_en_cours(self):
+        with Banc() as b:
+            self.filmer(b)
+            code, d = b.lancer("arreter")
+            self.assertEqual(code, 0, d)
+            self.assertTrue((b.sortie / "videos" / "demo.mp4").exists())
+            self.assertIn("videos/demo.mp4", d["detail"])
+            self.assertFalse((b.sortie / ".film").exists())
+
+    def _pid_vivant(self):
+        p = subprocess.Popen(["bash", "-c", "echo $$; exec /usr/bin/sleep 60"], stdout=subprocess.PIPE, text=True)
+        numero = p.stdout.readline().strip()
+        self.addCleanup(lambda: (bash('kill -9 "$1" 2>/dev/null; exit 0', numero), p.wait(timeout=30)))
+        return numero
+
+    def test_filmer_n_attend_le_verrou_que_quelques_secondes(self):
+        # Revue 1 : un finfilm en cours tient le verrou « film » longtemps ; filmer renonce vite (code 4), bien avant le
+        # délai SSH de filmer côté poste.
+        with Banc() as b:
+            verrou = b.sortie / ".verrou-film.d"
+            verrou.mkdir(parents=True)
+            (verrou / "pid").write_text(self._pid_vivant() + "\n", newline="\n")
+            debut = time.monotonic()
+            code, d = b.lancer("filmer", "demo")
+            self.assertEqual(code, 4, d)
+            self.assertLess(time.monotonic() - debut, 15)
+            self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
+
+    def test_trace_du_film_gardee_tant_que_le_travail_n_est_pas_fini(self):
+        # Revue 2 : un finfilm interrompu (ici : ffmpeg tué) ne perd pas la trace ; un finfilm suivant reprend le film.
+        with Banc() as b:
+            self.filmer(b)
+            # tue le pont (grand-parent : pont -> timeout -> ffmpeg) pendant l'extraction des images
+            b.faux("ffmpeg", 'echo "ffmpeg $*" >> "$FAUX_JOURNAL"; kill -9 "$(cut -d" " -f4 /proc/$PPID/stat)"')
+            commande, e = b._preparer(["finfilm"], {})
+            subprocess.run(commande, stdin=subprocess.DEVNULL, capture_output=True, env=e, timeout=60)
+            self.assertTrue((b.sortie / ".film.fin").exists() or (b.sortie / ".film").exists())
+            self.assertEqual(b.lancer("filmer", "autre")[0], 2)                        # pas de nouveau film entre-temps
+            (b.bin / "ffmpeg").write_text("#!/usr/bin/env bash\n" + FFMPEG_FACTICE + "\n", newline="\n")
+            code, d = b.lancer("finfilm")
+            self.assertIn(code, (0, 2), d)
+            self.assertFalse((b.sortie / ".film").exists())
+            self.assertFalse((b.sortie / ".film.fin").exists())
+
+    def test_processus_reconnu_par_ses_arguments_exacts(self):
+        # Revue 3 : un processus dont la ligne de commande CONTIENT « screenrecord » sans en être un n'est pas le film.
+        with Banc() as b:
+            p = subprocess.Popen(["bash", "-c", "echo $$; exec -a xscreenrecordx /usr/bin/sleep 60"],
+                                 stdout=subprocess.PIPE, text=True)
+            numero = p.stdout.readline().strip()
+            self.addCleanup(lambda: (bash('kill -9 "$1" 2>/dev/null; exit 0', numero), p.wait(timeout=30)))
+            (b.sortie / ".film").write_text(f"demo {numero} {int(time.time())} 30\n", newline="\n")
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 0, d)
+            self.assertIsNone(p.poll())                                              # jamais signalé
+
+    def test_duree_rendue_bornee_par_la_duree_demandee_et_images_sur_tout_le_film(self):
+        # Revues 6 et 7 : durée = min(temps écoulé, durée demandée) ; une image toutes les max(2, durée/30) s.
+        with Banc() as b:
+            (b.sortie / ".film").write_text(f"demo 999999 {int(time.time()) - 1000} 180\n", newline="\n")
+            code, d = b.lancer("finfilm")
+            self.assertEqual(code, 0, d)
+            self.assertIn(", 180 s,", d["detail"])
+            ff = [x for x in b.appels if x.startswith("ffmpeg ")][0]
+            self.assertIn("fps=1/6,scale=320:-2", ff)
+        with Banc() as b:
+            (b.sortie / ".film").write_text(f"court 999999 {int(time.time()) - 1000} 20\n", newline="\n")
+            self.assertEqual(b.lancer("finfilm")[0], 0)
+            self.assertIn("fps=1/2,scale=320:-2", [x for x in b.appels if x.startswith("ffmpeg ")][0])
+
+    def test_arreter_dit_un_film_au_dela_des_limites(self):
+        # Revue 5 : le film fini par arreter dépasse les octets : code 3 (le lanceur note la limite), détail explicite.
+        with Banc(PONT_OCTETS="1000", FAUX_MP4_OCTETS="5000") as b:
+            self.filmer(b)
+            code, d = b.lancer("arreter")
+            self.assertEqual(code, 3, d)
+            self.assertIn("Émulateur arrêté", d["detail"])
+            self.assertIn("Limite d'octets", d["detail"])
+        with Banc(FAUX_MP4_FAUX="1") as b:
+            self.filmer(b)
+            code, d = b.lancer("arreter")
+            self.assertEqual(code, 4, d)
+            self.assertIn("MP4", d["detail"])
+
+    def test_film_court_fini_avant_le_controle_est_un_film(self):
+        # Revue 10 : filmer 1 s : l'enregistrement a pu finir (proprement) avant le contrôle d'une seconde.
+        with Banc(FAUX_FILM_COURT="1") as b:
+            code, d = b.lancer("filmer", "bref", "1")
+            self.assertEqual(code, 0, d)
+            self.assertEqual(b.lancer("finfilm")[0], 0)
+            self.assertTrue((b.sortie / "videos" / "bref.mp4").exists())
+
+    def test_logcat_txt_sous_verrou(self):
+        # Revue 4 : les ajouts à logcat.txt prennent un verrou (le plafond tient même à plusieurs).
+        with Banc(PONT_LOGCAT_OCTETS="2000") as b:
+            b.logcat("".join(f"I Test: ligne {i}\n" for i in range(40)))
+            fils = [b.lancer_fond("journal") for _ in range(4)]
+            for f in fils:
+                f.communicate(timeout=60)
+            self.assertLessEqual((b.sortie / "logcat.txt").stat().st_size, 2000)
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("prendre_verrou journal", source)
+
+    def test_dossier_videos_lien_symbolique_refuse(self):
+        with Banc() as b:
+            ailleurs = b.t / "ailleurs"
+            ailleurs.mkdir()
+            b.lien(ailleurs, b.sortie / "videos")
+            self.assertEqual(b.lancer("filmer", "demo")[0], 4)
+            self.assertEqual(list(ailleurs.iterdir()), [])
+            self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
 
 
 if __name__ == "__main__":

@@ -246,13 +246,15 @@ def _arret_apres_interruption(moteur, ident, d, kw, reessayer_inconnu=True):
             f"« serveur-tache arreter {ident} ».")
 
 
-def _fin_du_pont(moteur, ident, d, kw):
-    """Fin d'un scénario, TOUJOURS faite par le lanceur (même si la recette l'a faite) : `journal` puis `arreter` du pont,
-    pour que le plantage soit relevé (plantage.txt) avant l'arrêt de la tâche. Au mieux : chaque verbe est tenté, une
-    panne ne masque jamais le résultat de la recette (délais SSH bornés par verbe)."""
-    for nom in ("journal", "arreter"):
+def _fin_du_pont(moteur, ident, d, kw, destination=None):
+    """Fin d'un scénario, TOUJOURS faite par le lanceur (même si la recette l'a faite) : `finfilm` (un film resté en cours
+    est fini et rapatrié dans `destination` ; sans film, le pont répond 2, sans effet), `journal` puis `arreter` du pont,
+    pour que le plantage soit relevé (plantage.txt) avant l'arrêt de la tâche (`arreter` du pont finit aussi un film qui
+    resterait). Au mieux : chaque verbe est tenté, une panne ne masque jamais le résultat de la recette (délais SSH bornés
+    par verbe)."""
+    for nom in ("finfilm", "journal", "arreter"):
         try:
-            moteur.verbe(ident, nom, [], dossier=d, **kw)
+            moteur.verbe(ident, nom, [], dossier=d, **({"destination": destination} if nom == "finfilm" else {}), **kw)
         except Exception:       # noqa: BLE001 - au mieux
             pass
 
@@ -302,7 +304,8 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         return 1
     if mode == "pilote":
         sortie["usage"] = (f"Pilotez l'émulateur verbe par verbe : py -3.12 lancer.py serveur-outil {ident} <verbe> "
-                           f"[arguments] (verbes : {', '.join(moteur.VERBES)}). Terminez par « serveur-tache arreter "
+                           f"[arguments] (verbes : {', '.join(moteur.VERBES)}) ; une vidéo : filmer <nom> [secondes] puis finfilm "
+                           f"(vidéo et images rapatriées). Terminez par « serveur-tache arreter "
                            f"{ident} » puis « serveur-tache rapatrier {ident} ».")
         _afficher(sortie, d)
         return 0
@@ -312,7 +315,7 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     try:
         destination = _destination(projet, ident, None)   # <projet>/.factory/serveur/<id> : captures et rapport
         res = recette.executer(plan, ident, dossier=d, destination=destination, **kw)
-        _fin_du_pont(moteur, ident, d, kw)                    # journal puis arreter du pont : plantage relevé
+        _fin_du_pont(moteur, ident, d, kw, destination)       # finfilm, journal puis arreter du pont : plantage relevé
     except BaseException as e:
         _afficher({"id": ident, "etat": "en_cours"}, d)         # l'identifiant, pour rapatrier ensuite
         message = _arret_apres_interruption(moteur, ident, d, kw)
@@ -336,8 +339,9 @@ def _outil(pos, opts, d, moteur, kw):
     ident = _id(pos[0], moteur)
     verbe, arguments = pos[1], pos[2:]
     arguments = list(moteur.valider_verbe(verbe, arguments))      # ValueError : refus avant toute connexion
-    # Seul `capturer` écrit sur le poste : le projet et sa destination ne sont calculés (et contrôlés) que pour lui.
-    destination = _destination(_projet(opts.get("projet")), ident, None) if verbe == "capturer" else None
+    # Seuls `capturer` et `finfilm` écrivent sur le poste : le projet et sa destination ne sont calculés (et contrôlés)
+    # que pour eux.
+    destination = _destination(_projet(opts.get("projet")), ident, None) if verbe in ("capturer", "finfilm") else None
     r = moteur.verbe(ident, verbe, arguments, dossier=d, destination=destination, **kw)
     _afficher(r, d, compact=True)
     return 0 if isinstance(r, dict) and r.get("ok") is True else 1

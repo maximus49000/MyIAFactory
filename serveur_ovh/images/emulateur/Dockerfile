@@ -58,11 +58,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # util-linux : flock et setsid ; coreutils : timeout, stat, sleep fractionnaire ; bash >= 4.4 (tableaux vides sous set -u).
 # openjdk-17 : avdmanager (outils 16111833 = version 23.0, essayés sur JDK 17 sur le serveur). Bibliothèques de l'émulateur : rendu logiciel
-# (swiftshader) et dépendances de qemu même sans fenêtre.
+# (swiftshader) et dépendances de qemu même sans fenêtre. ffmpeg (~100 Mo) : images tirées des vidéos par `finfilm` du pont.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash coreutils util-linux procps ca-certificates openjdk-17-jdk-headless \
         libpulse0 libnss3 libx11-6 libxext6 libxrender1 libxcomposite1 libxcursor1 libxdamage1 libxfixes3 libxi6 libxrandr2 \
-        libxtst6 libxkbfile1 libxcb1 libgl1 libasound2t64 libdbus-1-3 libbsd0 libunwind8 \
+        libxtst6 libxkbfile1 libxcb1 libgl1 libasound2t64 libdbus-1-3 libbsd0 libunwind8 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=outils /opt/sdk-tache /opt/sdk-tache

@@ -52,8 +52,13 @@ _CATALOGUE = {
         "~/Unity/Hub/Editor/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK/bin/java; do test -x \"$j\" && break; done; }", 5.4, 10),
     "android-emulateur": Capacite(
         "android-emulateur", "Émulateur Android (KVM)", ("android-build",), "android_emulateur",
-        "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images "
+        # le dossier de l'image système ÉPINGLÉE (android_sdk.emulator_image de versions.json, « ; » -> « / » ; test de
+        # concordance), pas seulement system-images : une autre image ne suffit pas à l'émulateur des tâches
+        "test -x ~/android-sdk/emulator/emulator && test -d ~/android-sdk/system-images/android-34/google_apis/x86_64 "
         "&& id -nG | grep -qw kvm && test -e /dev/kvm", 2.0, 8),
+    "emulateur-image": Capacite(
+        "emulateur-image", "Image de l'émulateur (conteneur d'outil sans identifiants)", ("android-emulateur",), "emulateur_image",
+        "test -s ~/.myiafactory/emulateur-image.version", 1.5, 10),
     "unity-cli": Capacite(
         "unity-cli", "Unity CLI (outil officiel en ligne de commande)", ("base",), "unity_cli",
         "test -x ~/.local/bin/unity && ~/.local/bin/unity --version >/dev/null 2>&1", 0.1, 2),
@@ -79,6 +84,9 @@ _BESOINS = {
     "lint": ("android-build",),
     "release": ("android-build",),
     "emulateur": ("android-emulateur",),
+    # la recette sur émulateur (tâches serveur) tourne dans l'image de l'émulateur : c'est par cette action que le bureau
+    # et `lancer.py plateforme serveurs apercu|installer <id> recette-emulateur` installent emulateur-image (et sa chaîne)
+    "recette-emulateur": ("emulateur-image",),
     "charge": (),
 }
 

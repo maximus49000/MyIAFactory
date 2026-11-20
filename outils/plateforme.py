@@ -47,6 +47,7 @@ COMMANDE_DEPOT = (f'install -d -m 700 "$HOME/myiafactory" && umask 077 && cat > 
                   f'&& mv -f "{_TEMPORAIRE}" "{SCRIPT_DISTANT}" || {{ rm -f "{_TEMPORAIRE}"; exit 1; }}')
 VERROU_JEUNE_S = 30
 DOSSIER_DISTANT = "$HOME/myiafactory/serveur_ovh"
+VARIABLE_DOSSIER = "SERVEUR_OVH_DIR"            # variable que lit mise_en_place.sh pour retrouver ces fichiers
 DELAIS_ETAPE_S = {"durcissement": 900, "docker": 1200, "images": 3600, "etat": 120, "licence": 600,
                   "bureau_distant": 1500}
 CHANGEMENT_CLE = plateforme_ssh.CHANGEMENT_CLE
@@ -365,7 +366,7 @@ def _lancer_etape(c, etape, stdin=None):
     r = _envoyer_script(c)
     if r:
         return r
-    commande = f'SERVEUR_OVH_DIR="{DOSSIER_DISTANT}" bash "{SCRIPT_DISTANT}" --etape {etape}'
+    commande = f'{VARIABLE_DOSSIER}="{DOSSIER_DISTANT}" bash "{SCRIPT_DISTANT}" --etape {etape}'
     code, sortie, erreur = c.ssh.executer(c.hote, commande, c.cle, stdin=stdin, delai=DELAIS_ETAPE_S.get(etape, 600))
     d = _analyser(sortie)
     if not d or d.get("statut") not in ("fait", "a_faire", "bloque"):

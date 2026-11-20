@@ -3,20 +3,22 @@
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
 
-from .deport_types import GENERIQUE, catalogue_union
+from .deport_types import GENERIQUE, SERVIES_AU_SERVEUR, catalogue_union, sans_poste
 
 # Vue d'ensemble du catalogue générique (compatibilité) : ce que chaque action produit et consomme.
 ACTIONS = {nom: {"produit": e["produit"], "consomme": list(e["consomme"])} for nom, e in GENERIQUE.items()}
 LIEUX = ("poste", "github", "serveur")
 LIEUX_ETAPE_1 = ("poste", "github")
-LIEUX_PAR_DEFAUT = {action: "poste" for action in ACTIONS}
+# une action qui ne tourne pas au poste (la recette sur émulateur) n'a pas de défaut : non réglée, elle est refusée
+LIEUX_PAR_DEFAUT = {action: "poste" for action, e in GENERIQUE.items() if not sans_poste(e)}
 
 _NOMS_LIEUX = {"poste": "poste", "github": "GitHub", "serveur": "serveur"}
 
 
 def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
     """Vérifie un dictionnaire {action: lieu} et le renvoie copié ; lève ValueError (message en français).
-    Seules les actions du catalogue existent ; un lieu que l'action n'offre pas est refusé avec son explication."""
+    Seules les actions du catalogue existent ; un lieu que l'action n'offre pas est refusé avec son explication. Le
+    serveur n'est permis (hors `etape_serveur`) qu'aux actions que `deporter` y sert (`SERVIES_AU_SERVEUR`)."""
     if not isinstance(lieux, dict):
         raise ValueError("Les lieux doivent être un dictionnaire {action: lieu}.")
     permis = LIEUX if etape_serveur else LIEUX_ETAPE_1
@@ -32,13 +34,20 @@ def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
         if lieu not in entree["lieux"]:
             raison = entree["bientot"] or "ce lieu n'est pas prévu pour ce type de projet"
             raise ValueError("« %s » ne tourne pas au lieu « %s » : %s." % (action, _NOMS_LIEUX[lieu], raison))
-        if lieu not in permis:
+        if lieu not in permis and not (lieu == "serveur" and action in SERVIES_AU_SERVEUR):
             raise ValueError("Le lieu « %s » n'est pas encore disponible pour « %s »." % (lieu, action))
     return dict(lieux)
 
 
-def lieu_effectif(global_, projet, action):
-    """Lieu d'une action : la surcharge du projet l'emporte, sinon le réglage global, sinon le poste."""
+def lieu_effectif(global_, projet, action, catalogue=None):
+    """Lieu d'une action : la surcharge du projet l'emporte, sinon le réglage global, sinon le poste.
+
+    Avec `catalogue`, une action qui ne tourne pas au poste (la recette sur émulateur, au seul serveur) ne prend que le
+    réglage du projet (accord permanent donné projet par projet, jamais hérité du bureau) ; sans lui, ou s'il n'est
+    pas un lieu de l'action (écrit à la main), None (non réglée : refusée)."""
+    if catalogue is not None and action in catalogue and sans_poste(catalogue[action]):
+        lieu = (projet or {}).get(action)
+        return lieu if isinstance(lieu, str) and lieu in catalogue[action]["lieux"] else None
     for source in (projet, global_):
         if source and source.get(action):
             return source[action]
@@ -57,9 +66,12 @@ def _nom_lieu(lieu):
 
 
 def avertissements(lieux, catalogue=GENERIQUE):
-    """Un texte par action qui devra attendre une production venue d'un autre lieu."""
+    """Un texte par action qui devra attendre une production venue d'un autre lieu. Une action qui ne tourne pas au
+    poste (la recette sur émulateur) n'en a pas : elle prend l'APK là où il est produit, la chaîne n'a pas à suivre."""
     textes = []
     for action in catalogue:
+        if sans_poste(catalogue[action]):
+            continue
         for dep in a_attendre(lieux, action, catalogue):
             produit = (catalogue[dep]["produit"] or dep).upper()
             ici = _nom_lieu(lieux.get(action, "poste"))

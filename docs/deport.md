@@ -7,7 +7,8 @@ Compiler l'APK, lancer les tests ou les tests de charge ralentit le poste. Chaqu
 
 - **Par défaut, tout reste au poste.** Rien ne change tant que le Directeur ne coche rien : ni consigne d'agent
   supplémentaire, ni appel à GitHub.
-- **Un lieu par action** : `poste` ou `github`. `serveur` est affiché grisé (« bientôt »).
+- **Un lieu par action** : `poste` ou `github`. `serveur` est affiché grisé (« bientôt »), **sauf pour la recette sur émulateur**
+  (voir plus bas), qui ne tourne que sur le serveur.
 - Le réglage est global (clé `deport` de `~/MyIAFactory/bureau.json`) avec **surcharge par projet** (clé `deport` des
   réglages du projet, comme `lecons_auto`). Le projet l'emporte, puis le défaut global, puis le poste.
 - Jamais de bascule silencieuse : si GitHub est injoignable (code 4) ou le quota épuisé (code 8), `deporter` s'arrête
@@ -22,6 +23,19 @@ Le catalogue vient du genre du projet (`genre` dans `.factory/factory.json`). Ge
 | Générique | `apk` (APK), `tests` (Tests), `emulateur` (Émulateur), `charge` (Charge), sans commande par défaut : le Directeur la fournit | poste, GitHub ; l'émulateur : poste seulement |
 | `application-mobile-android` (Gradle natif) | `apk` « Générer l'APK » (`./gradlew assembleDebug`), `tests` « Tests unitaires » (`./gradlew testDebugUnitTest`), `lint` « Analyse lint » (`./gradlew lintDebug`) | poste, GitHub |
 | | `emulateur` « Tests sur émulateur » (`./gradlew connectedDebugAndroidTest`), `release` « APK signé (release) » (`./gradlew assembleRelease`) | **poste seulement** |
+
+**La recette sur émulateur** (`recette-emulateur`, libellé « Recette sur émulateur », présente dans le catalogue générique et dans
+`application-mobile-android`) : l'APK est installé et joué sur un émulateur du **serveur** (voir [`serveur-taches.md`](serveur-taches.md)).
+Elle est à part :
+
+- **Serveur seulement** : ni poste ni GitHub, et **aucun lieu par défaut**. Non réglée, elle est refusée (code 2) ; `--poste` et
+  `--sans-attendre` ne s'appliquent pas.
+- **Réglée dans les réglages du projet seulement** : le défaut global du bureau ne compte jamais pour elle. Régler le lieu sur
+  « serveur » vaut **accord permanent, pour ce projet**, de la lancer.
+- **Projets enregistrés seulement** : le projet doit figurer dans le bureau (`bureau.json`) et le réglage être lu dans le fichier
+  de réglages que le bureau enregistre pour lui ; `--reglages` n'est admis que s'il désigne ce fichier.
+- Elle consomme l'APK mais **n'attend pas** une chaîne au même lieu : elle prend l'APK là où il est produit (aucun avertissement de
+  chaîne pour elle).
 
 Ce qui n'est pas proposé, et pourquoi :
 
@@ -39,6 +53,9 @@ et `charge` consomment l'APK. Dans le catalogue Android, les tests unitaires se 
 
 Dans les réglages du projet, le bloc « Où tournent les actions » montre une rangée par action du type du projet, avec
 le choix Poste / GitHub / Serveur (grisé « bientôt »). Un lieu que l'action n'offre pas est grisé avec son explication.
+Pour la **recette sur émulateur** la rangée ne propose que **« Serveur »** et **« Non réglé »** (le choix par défaut, qui vaut
+refus) : « Serveur » est grisé avec « déclarez d'abord un serveur (Serveurs), puis réglez sur serveur » tant qu'aucun serveur n'est
+déclaré, et une note rappelle que la régler sur serveur vaut accord permanent pour le projet (l'agent la lance sans redemander).
 Une combinaison qui impose une attente est signalée (« les tests au poste attendront l'APK de GitHub… ») avec la
 suggestion de mettre la chaîne entière au même lieu. Dès qu'une action est sur GitHub, le bloc propose l'aperçu du
 workflow et affiche la consommation du mois.
@@ -73,6 +90,7 @@ cache (le cache est propre au dépôt et n'est en lecture-écriture que sur la b
 
 ```
 python lancer.py deporter <type> [--dossier <d>] [--reglages <fichier>] [--sans-attendre] [--poste] [-- <commande locale>]
+python lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] [--dossier <d>] [--reglages <fichier>]
 ```
 
 Au poste, la commande locale (après `--`) part par le lanceur de tests (verrou du poste). Sur GitHub, l'exécution du
@@ -107,6 +125,10 @@ Les agents reçoivent la commande exacte dans leur message de départ.
 | 7 | le workflow n'est pas dans la branche (ou GitHub ne le trouve pas : il doit aussi être sur la branche par défaut) : fusionner `deport/workflow` |
 | 8 | quota GitHub épuisé (cache au niveau « dépassé », ou exécution en `startup_failure`) : proposer le poste au Directeur |
 
+Pour `recette-emulateur` : **0 seulement si le statut du rapport est `ok`** (pas de plantage, pas de limite atteinte, pas d'erreur),
+1 en cas d'échec, 2 pour un usage faux, un accord absent ou **aucun APK trouvé** (ni `--apk`, ni production `apk` du projet), et
+**4** quand Python 3.12 est introuvable (le lanceur de tâches l'exige ; `deporter` lui-même reste compatible 3.9). Tout le détail
+(recettes, pilote, rapatriement dans `<projet>/.factory/serveur/<id>/`, limites) est dans [`serveur-taches.md`](serveur-taches.md).
 ## Dépendances et attente visible
 
 Si une action au poste consomme la production d'une action sur GitHub (tests au poste, APK sur GitHub), `deporter`
@@ -148,7 +170,8 @@ Lecture en arrière-plan, au plus toutes les 5 minutes, cache dans `~/MyIAFactor
 
 ## Pas encore fait
 
-- Le lieu `serveur` (exécution par SSH avec le même verrou de campagne) : grisé « bientôt ».
+- Le lieu `serveur` pour les autres actions (exécution par SSH avec le même verrou de campagne) : grisé « bientôt ». Seule la
+  recette sur émulateur tourne déjà sur le serveur (jamais encore essayée sur un vrai serveur).
 - La bibliothèque globale d'actions : les catalogues générique et Android sont les premiers ; un nouveau genre n'en
   reçoit pas encore automatiquement.
 - Les catalogues des autres genres (aujourd'hui : générique et `application-mobile-android`).

@@ -2,6 +2,7 @@
 l'installation en arrière-plan. Jamais de vrai `ssh` ni de vrai `ssh-keygen` : un faux ssh et un faux moteur sont injectés."""
 import json
 import os
+import socket
 import threading
 import time
 import unittest
@@ -14,7 +15,7 @@ from tests.test_acces import AvecBureauOuvert
 from tests.test_serveur import AvecServeur
 
 SECRET = "SECRET-SERVEUR-XYZ-123456"
-IDS = ["base", "durcissement", "android-build", "android-emulateur", "unity-cli", "unity-editeur", "session-graphique", "agent"]
+IDS = ["base", "durcissement", "android-build", "android-emulateur", "emulateur-image", "unity-cli", "unity-editeur", "session-graphique", "agent"]
 
 
 class FauxSsh:
@@ -180,6 +181,36 @@ class TestLecture(AvecServeurs):
         self.ecrire_etat(base="presente", **{"android-build": "presente", "android-emulateur": "inconnue"})
         e = self.json("/api/serveurs/lieux?actions=emulateur")
         self.assertEqual(e["emulateur"]["serveur"]["manque"], ["android-emulateur"])
+
+    def test_lieux_recette_emulateur_exige_l_image(self):
+        # recette-emulateur demande emulateur-image (et ses dépendances) ; servie au serveur seulement.
+        self.declarer()
+        tout = {"base": "presente", "android-build": "presente", "android-emulateur": "presente"}
+        for statut in ("absente", "a_faire", "bloque", "inconnue"):        # absente, ou périmée (à refaire), ou inconnue
+            with self.subTest(statut=statut):
+                self.ecrire_etat(**tout, **{"emulateur-image": statut})
+                e = self.json("/api/serveurs/lieux?actions=recette-emulateur")["recette-emulateur"]
+                self.assertFalse(e["serveur"]["permis"])
+                self.assertEqual(e["serveur"]["manque"], ["emulateur-image"])
+        self.ecrire_etat(**tout, **{"emulateur-image": "presente"})
+        e = self.json("/api/serveurs/lieux?actions=recette-emulateur")["recette-emulateur"]
+        self.assertTrue(e["serveur"]["permis"])
+        self.assertFalse(e["poste"]["permis"])                              # jamais au poste ni sur GitHub
+        self.assertFalse(e["github"]["permis"])
+
+    def test_apercu_et_installation_de_recette_emulateur(self):
+        self.declarer()
+        r, data = self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["recette-emulateur"]})
+        self.assertEqual(r.status, 200, data)
+        a = json.loads(data)
+        self.assertEqual(a["manquantes"], ["android-build", "android-emulateur", "emulateur-image"])   # base présente
+        self.assertGreater(a["taille_go"], 0)
+        self.assertGreater(a["duree_min"], 0)
+        r, _ = self.poster("/api/serveurs/mon-serveur/installer", {"actions": ["recette-emulateur"], "accord": True})
+        self.assertEqual(r.status, 202)
+        self.libre.set()
+        self.travaux.attendre()
+        self.assertEqual(self.appels, [("mon-serveur", ["recette-emulateur"], True)])
 
     def test_lieux_sans_serveur_ou_sans_etat_ou_action_inconnue(self):
         e = self.json("/api/serveurs/lieux?actions=apk,nimporte")
@@ -890,6 +921,324 @@ class TestEcouteurDistant(AvecBureauOuvert):
         self.assertEqual(r.status, 200)
         self.assertEqual([x["id"] for x in json.loads(data)["serveurs"]], ["x"])
         self.assertEqual(self.req("GET", "/api/serveurs")[0].status, 401)
+
+
+def ident_tache(n, h="abcd"):
+    return f"t20261119-{n:06d}-{h}"
+
+
+class MoteurFictif:
+    """Le moteur des tâches de poche : `arreter` rend la suite d'états donnée (le dernier se répète) ; jamais de réseau."""
+    FINAUX = ("terminee", "arretee", "echouee")
+
+    def __init__(self, etats=("arretee",), erreur=None, libre=None):
+        self.etats, self.erreur, self.libre, self.appels = list(etats), erreur, libre, []
+
+    def arreter(self, ident, dossier=None, ssh=None, fin=False):
+        self.appels.append((ident, fin))
+        if self.libre is not None:
+            self.libre.wait(5)
+        if self.erreur is not None:
+            raise self.erreur
+        etat = self.etats[min(len(self.appels) - 1, len(self.etats) - 1)]
+        return {"id": ident, "etat": etat, "raison": ""}
+
+
+class AvecTaches(AvecServeurs):
+    def setUp(self):
+        super().setUp()
+        self.moteur = MoteurFictif()
+        self.srv.travaux_serveurs = bserveurs.Travaux(ssh=self.ssh, installer=self.installer_factice, runner=self.keygen,
+                                                      tache=self.moteur)
+
+    def ecrire_index(self, fiches):
+        (self.dossier / "taches.json").write_text(json.dumps(fiches), encoding="utf-8")
+
+    def taches(self):
+        return self.json("/api/serveurs/taches")["taches"]
+
+    def chemin_arret(self, ident):
+        return f"/api/serveurs/taches/{ident}/arreter"
+
+
+class TestListeTaches(AvecTaches):
+    def test_get_taches_lit_l_index_sans_reseau(self):
+        self.ecrire_index({
+            ident_tache(1): {"etat": "terminee", "mode": "scenario", "projet": "MonJeu", "serveur_id": "mon-serveur",
+                             "debut": "2026-11-19T10:00:00Z", "fin": "2026-11-19T10:02:05Z", "statut": "ok", "captures_prises": 4,
+                             "scenario": "x", "limites": {"duree_s": 1200}, "raison": "peu importe"},
+            ident_tache(2): {"etat": "en_cours", "mode": "pilote", "projet": "MonJeu", "serveur_id": "mon-serveur",
+                             "debut": None, "fin": None, "statut": None}})
+        self.ssh.appels.clear()
+        connexions = []
+        vrai_connect, vrai_connect_ex = socket.socket.connect, socket.socket.connect_ex
+
+        def garde(nom, vrai):
+            def connecter(sock, adresse):
+                if adresse[:2] != ("127.0.0.1", self.port):               # seul le bureau d'essai est joignable
+                    connexions.append((nom, adresse))
+                    raise AssertionError(f"réseau : {adresse}")
+                return vrai(sock, adresse)
+            return connecter
+        with mock.patch("subprocess.run", side_effect=AssertionError("subprocess")), \
+                mock.patch("subprocess.Popen", side_effect=AssertionError("Popen")), \
+                mock.patch.object(socket.socket, "connect", garde("connect", vrai_connect)), \
+                mock.patch.object(socket.socket, "connect_ex", garde("connect_ex", vrai_connect_ex)), \
+                mock.patch("plateforme_ssh.executer", side_effect=AssertionError("ssh")), \
+                mock.patch("plateforme_ssh.executer_octets", side_effect=AssertionError("ssh octets")), \
+                mock.patch.object(self.moteur, "arreter", side_effect=AssertionError("moteur")):
+            r, data = self.req("GET", "/api/serveurs/taches")
+        self.assertEqual(r.status, 200)
+        self.assertEqual(self.ssh.appels, [])
+        self.assertEqual(connexions, [])
+        t = json.loads(data)["taches"]
+        self.assertEqual([x["id"] for x in t], [ident_tache(2), ident_tache(1)])       # la plus récente d'abord
+        self.assertEqual(set(t[0]), {"id", "etat", "mode", "projet", "serveur_id", "debut", "duree_s", "captures", "statut"})
+        self.assertEqual({k: t[1][k] for k in ("etat", "mode", "projet", "serveur_id", "debut", "duree_s", "captures", "statut")},
+                         {"etat": "terminee", "mode": "scenario", "projet": "MonJeu", "serveur_id": "mon-serveur",
+                          "debut": "2026-11-19T10:00:00Z", "duree_s": 125, "captures": 4, "statut": "ok"})
+        self.assertEqual((t[0]["debut"], t[0]["duree_s"], t[0]["captures"], t[0]["statut"]), (None, None, 0, None))
+
+    def test_index_absent_ou_abime_donne_une_liste_vide(self):
+        self.assertEqual(self.taches(), [])
+        for brut in ("{pas du json", "[1, 2]", "null", '"texte"', ""):
+            with self.subTest(brut=brut):
+                (self.dossier / "taches.json").write_text(brut, encoding="utf-8")
+                self.assertEqual(self.taches(), [])
+
+    def test_fiches_de_forme_inattendue_sont_tolerees(self):
+        gros = "x" * 5000
+        self.ecrire_index({
+            ident_tache(1): {"etat": "inconnu-etat", "mode": 7, "projet": {"a": 1}, "serveur_id": [1], "debut": "hier",
+                             "statut": "bizarre", "captures_prises": "beaucoup"},
+            ident_tache(2): {"etat": "en_cours", "mode": "pilote", "projet": gros, "serveur_id": gros, "debut": gros,
+                             "fin": gros, "captures_prises": -3},
+            ident_tache(3): {"etat": ["x"], "captures_prises": True, "debut": "2026-11-19T10:00:00Z", "fin": "2026-11-19T09:00:00Z"},
+            ident_tache(4): {"etat": "terminee", "captures_prises": 10 ** 30, "statut": "limite"},
+            "../evasion": {"etat": "en_cours"}, "t1": {"etat": "en_cours"}, ident_tache(5, "ZZZZ"): {"etat": "en_cours"},
+            ident_tache(6): "pas une fiche", ident_tache(7): None, ident_tache(8): [1]})
+        t = self.taches()
+        self.assertEqual([x["id"] for x in t], [ident_tache(4), ident_tache(3), ident_tache(2), ident_tache(1)])
+        par = {x["id"]: x for x in t}
+        a = par[ident_tache(1)]
+        self.assertEqual((a["etat"], a["mode"], a["projet"], a["serveur_id"], a["debut"], a["statut"], a["captures"]),
+                         ("inconnu", None, "", "", None, None, 0))
+        b = par[ident_tache(2)]
+        self.assertLessEqual(len(b["projet"]), 80)
+        self.assertLessEqual(len(b["serveur_id"]), 80)
+        self.assertEqual((b["debut"], b["duree_s"], b["captures"]), (None, None, 0))
+        c = par[ident_tache(3)]
+        self.assertEqual((c["etat"], c["duree_s"], c["captures"]), ("inconnu", None, 0))      # fin avant le début : pas de durée
+        self.assertLessEqual(par[ident_tache(4)]["captures"], 9999)
+        self.assertEqual(par[ident_tache(4)]["statut"], "limite")
+
+    def test_la_liste_est_bornee_a_cent_la_plus_recente_d_abord(self):
+        self.ecrire_index({ident_tache(n): {"etat": "terminee"} for n in range(1, 151)})
+        t = self.taches()
+        self.assertEqual(len(t), 100)
+        self.assertEqual(t[0]["id"], ident_tache(150))
+        self.assertEqual(t[-1]["id"], ident_tache(51))
+
+    def test_tout_texte_est_masque(self):
+        (self.dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-XYZ-123456", "secret": SECRET,
+                                                            "consommateur": "CONSO-XYZ-123456", "serveur": "ns1"}), encoding="utf-8")
+        self.ecrire_index({ident_tache(1): {"etat": "en_cours", "projet": f"Jeu {SECRET}", "serveur_id": SECRET}})
+        r, data = self.req("GET", "/api/serveurs/taches")
+        self.assertEqual(r.status, 200)
+        self.assertNotIn(SECRET.encode(), data)
+        self.assertEqual(len(json.loads(data)["taches"]), 1)
+
+    def test_la_duree_d_une_tache_en_cours_court_jusqu_a_maintenant(self):
+        debut = bserveurs._tache()._epoch("2026-11-19T10:00:00Z")
+        self.ecrire_index({ident_tache(1): {"etat": "en_cours", "debut": "2026-11-19T10:00:00Z"},
+                           ident_tache(2): {"etat": "en_attente", "debut": "2026-11-19T10:00:00Z"}})
+        with mock.patch.object(bserveurs, "HORLOGE", lambda: debut + 42):
+            par = {x["id"]: x for x in self.taches()}
+        self.assertEqual(par[ident_tache(1)]["duree_s"], 42)
+        self.assertIsNone(par[ident_tache(2)]["duree_s"])
+
+    def test_la_liste_n_ecrit_rien(self):
+        self.ecrire_index({ident_tache(1): {"etat": "en_cours"}})
+        avant = self.instantane()
+        self.taches()
+        self.assertEqual(self.instantane(), avant)
+
+
+class TestArretTache(AvecTaches):
+    def setUp(self):
+        super().setUp()
+        self.ident = ident_tache(1)
+        self.ecrire_index({self.ident: {"etat": "en_cours", "mode": "pilote", "projet": "MonJeu", "serveur_id": "mon-serveur"}})
+
+    def lancer(self, ident=None, corps=None):
+        r, data = self.poster(self.chemin_arret(ident or self.ident), {} if corps is None else corps)
+        return r.status, json.loads(data)
+
+    def test_arreter_lance_le_moteur_en_fond_et_repond_202(self):
+        self.assertEqual(self.lancer(), (202, {"demarre": True}))
+        self.travaux.attendre()
+        self.assertEqual(self.moteur.appels, [(self.ident, False)])
+        self.assertNotIn("erreur", self.taches()[0])
+
+    def test_arreter_refuse_un_id_inconnu_ou_hostile(self):
+        for ident in (ident_tache(9), "..%2Fetc", "%2e%2e", "t1", "a%00b", "..", ident_tache(1, "ZZZZ"), self.ident + "%20",
+                      self.ident.upper(), "../taches", "t20261119-000001-abcd%2F..%2Fx"):
+            with self.subTest(ident=ident):
+                r, _ = self.poster(self.chemin_arret(ident), {})
+                self.assertEqual(r.status, 404)
+        self.assertEqual(self.poster("/api/serveurs/taches/a/b/arreter", {})[0].status, 404)
+        self.assertEqual(self.poster("/api/serveurs/taches//arreter", {})[0].status, 404)
+        self.assertEqual(self.moteur.appels, [])
+        self.assertFalse(self.travaux.en_cours())
+        self.assertEqual(self.ssh.appels, [])
+
+    def test_arreter_n_est_pas_confondu_avec_un_serveur_nomme_taches(self):
+        self.assertEqual(self.poster("/api/serveurs/taches/sonder", {})[0].status, 404)
+        self.assertEqual(self.moteur.appels, [])
+
+    def test_une_tache_deja_finie_n_est_pas_arretee(self):
+        self.ecrire_index({self.ident: {"etat": "terminee"}})
+        self.assertEqual(self.lancer()[0], 409)
+        self.assertEqual(self.moteur.appels, [])
+
+    def test_arreter_a_les_protections_des_autres_post(self):
+        chemin = self.chemin_arret(self.ident)
+        corps = json.dumps({})
+        self.assertEqual(self.req("POST", chemin, corps, {"Content-Type": "application/json"})[0].status, 403)
+        self.assertEqual(self.req("POST", chemin, corps, {"X-Bureau": "1"})[0].status, 403)
+        self.assertEqual(self.req("POST", chemin, corps, {"X-Bureau": "1", "Content-Type": "text/plain"})[0].status, 403)
+        self.assertEqual(self.req("POST", chemin, corps, {**self.ENT, "Host": "evil.example.com"})[0].status, 403)
+        self.assertEqual(self.req("POST", chemin, "x" * 1025, self.ENT)[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, json.dumps({"a": "x" * 1100}), self.ENT)[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, "", {**self.ENT, "Content-Length": "0"})[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, "{pas json", self.ENT)[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, "[1]", self.ENT)[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, '{"a": 1, "a": 2}', self.ENT)[0].status, 400)
+        self.assertEqual(self.req("POST", chemin, '{"x": {"b": 1, "b": 2}}', self.ENT)[0].status, 400)
+        self.assertEqual(self.moteur.appels, [])
+        self.assertFalse(self.travaux.en_cours())
+
+    def test_arreter_est_borne_et_masque_les_erreurs(self):
+        (self.dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-XYZ-123456", "secret": SECRET,
+                                                            "consommateur": "CONSO-XYZ-123456", "serveur": "ns1"}), encoding="utf-8")
+        self.moteur.erreur = RuntimeError(SECRET)
+        self.assertEqual(self.lancer()[0], 202)
+        self.travaux.attendre()
+        r, data = self.req("GET", "/api/serveurs/taches")
+        self.assertNotIn(SECRET.encode(), data)
+        erreur = json.loads(data)["taches"][0]["erreur"]
+        self.assertIn("RuntimeError", erreur)
+        self.assertLessEqual(len(erreur), 400)
+        self.moteur.erreur = None
+        self.moteur.appels.clear()
+        self.assertEqual(self.lancer()[0], 202)                      # l'erreur ne survit pas à l'appel suivant
+        self.travaux.attendre()
+        self.assertNotIn("erreur", self.taches()[0])
+
+    def test_arreter_rappelle_tant_que_l_etat_n_est_pas_final_trois_fois_au_plus(self):
+        self.moteur.etats = ["en_cours", "en_cours", "arretee"]
+        self.lancer()
+        self.travaux.attendre()
+        self.assertEqual(len(self.moteur.appels), 3)
+        self.assertNotIn("erreur", self.taches()[0])
+        self.moteur.etats, self.moteur.appels = ["en_cours"], []
+        self.lancer()
+        self.travaux.attendre()
+        self.assertEqual(len(self.moteur.appels), 3)                 # borné
+        self.assertIn("en cours", self.taches()[0]["erreur"])        # et dit honnêtement que l'arrêt n'est pas confirmé
+
+    def test_arreter_dit_la_raison_masquee_et_bornee_quand_l_etat_est_inconnu(self):
+        appels = []
+
+        def arreter(ident, **k):
+            appels.append(ident)
+            return {"id": ident, "etat": "inconnu", "raison": "Serveur injoignable " + "y" * 3000}
+        self.moteur.arreter = arreter
+        self.lancer()
+        self.travaux.attendre()
+        erreur = self.taches()[0]["erreur"]
+        self.assertIn("injoignable", erreur)
+        self.assertLessEqual(len(erreur), 400)
+        # T9 : au bureau, un état « inconnu » (serveur muet) n'est pas réessayé : le fil unique n'est pas tenu 3 x 150 s
+        self.assertEqual(appels, [self.ident])
+
+    def test_pendant_un_arret_les_autres_operations_disent_qu_un_arret_est_en_cours(self):
+        self.declarer()
+        self.moteur.libre = self.libre
+        try:
+            self.assertEqual(self.lancer()[0], 202)
+            for chemin, corps in (("/api/serveurs/mon-serveur/sonder", {}),
+                                  ("/api/serveurs/mon-serveur/installer", {"actions": ["apk"], "accord": True}),
+                                  ("/api/serveurs", {"nom": "Autre", "hote": "b.exemple.fr", "utilisateur": "bob"})):
+                with self.subTest(chemin=chemin):
+                    r, data = self.poster(chemin, corps)
+                    self.assertEqual(r.status, 409)
+                    self.assertIn("arrêt de tâche", json.loads(data)["erreur"])
+        finally:
+            self.libre.set()
+            self.travaux.attendre()
+
+    def test_arreter_409_quand_un_arret_tourne_deja(self):
+        self.moteur.libre = self.libre
+        self.assertEqual(self.lancer()[0], 202)
+        self.assertTrue(self.taches()[0]["arret_en_cours"])          # exposé à l'écran, qui grise le bouton
+        self.assertEqual(self.lancer()[0], 409)                      # un seul arrêt à la fois
+        self.libre.set()
+        self.travaux.attendre()
+        self.assertEqual(len(self.moteur.appels), 1)
+
+    def test_arreter_409_pendant_une_sonde(self):
+        gele = threading.Event()
+        self.assertTrue(self.travaux.lancer("sonder", SimpleNamespace(id="mon-serveur"), lambda: gele.wait(10) and None))
+        try:
+            self.assertEqual(self.lancer()[0], 409)
+            self.assertEqual(self.moteur.appels, [])
+        finally:
+            gele.set()
+            self.travaux.attendre()
+
+    def test_une_sonde_est_refusee_pendant_un_arret(self):
+        self.declarer()
+        self.moteur.libre = self.libre
+        self.assertEqual(self.lancer()[0], 202)
+        self.assertEqual(self.poster("/api/serveurs/mon-serveur/sonder", {})[0].status, 409)
+        self.libre.set()
+        self.travaux.attendre()
+
+    def test_les_erreurs_d_une_tache_disparue_de_l_index_sont_oubliees(self):
+        self.travaux.erreurs_taches["t20000101-000000-aaaa"] = "vieille erreur"
+        self.taches()
+        self.assertEqual(self.travaux.erreurs_taches, {})
+
+    def test_le_corps_est_ignore_et_n_ouvre_aucun_chemin(self):
+        self.assertEqual(self.lancer(corps={"id": "../x", "chemin": "/etc", "fin": True})[0], 202)
+        self.travaux.attendre()
+        self.assertEqual(self.moteur.appels, [(self.ident, False)])
+        self.assertEqual(sorted(self.instantane()), ["taches.json"])
+
+
+class TestArretTacheDistant(AvecBureauOuvert):
+    def test_arreter_sur_l_ecouteur_distant_404_et_rien_d_appele(self):
+        cookie = self.associer()
+        ent = {"Cookie": cookie, "Origin": f"http://127.0.0.1:{self.distant}", "X-Bureau": "1", "Content-Type": "application/json"}
+        moteur = MoteurFictif()
+        self.srv.travaux_serveurs = bserveurs.Travaux(tache=moteur)
+        d = self.tmp / "secrets-distant"
+        d.mkdir()
+        ident = ident_tache(1)
+        (d / "taches.json").write_text(json.dumps({ident: {"etat": "en_cours"}}), encoding="utf-8")
+        p = mock.patch.object(bserveurs, "DOSSIER", d)
+        p.start()
+        self.addCleanup(p.stop)
+        r, _ = self.req("POST", f"/api/serveurs/taches/{ident}/arreter", "{}", ent)
+        self.assertEqual(r.status, 404)
+        self.srv.travaux_serveurs.attendre()
+        self.assertEqual(moteur.appels, [])
+        self.assertEqual(sorted(x.name for x in d.iterdir()), ["taches.json"])
+        r, data = self.req("GET", "/api/serveurs/taches", entetes={"Cookie": cookie})      # la lecture reste permise
+        self.assertEqual(r.status, 200)
+        self.assertEqual([x["id"] for x in json.loads(data)["taches"]], [ident])
+        self.assertEqual(self.req("GET", "/api/serveurs/taches")[0].status, 401)
 
 
 if __name__ == "__main__":

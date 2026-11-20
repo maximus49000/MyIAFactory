@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from . import plateforme as modplateforme
+from .deport_types import SERVIES_AU_SERVEUR
 
 DOSSIER = None   # None : voir `dossier()` ; remplacé dans les essais
 MAX_ACTIONS = 20
@@ -25,6 +26,13 @@ MAX_APERCUS = 2
 AGE_MAX_CHARGE_S = 900   # une charge sondée il y a plus longtemps est ignorée
 HORLOGE = time.time
 LIGNE_CLE_MAX = 4096
+_ROUTE_TACHE = re.compile(r"/api/serveurs/taches/([^/]+)/arreter")
+MAX_TACHES = 100         # tâches rendues par `GET /api/serveurs/taches`
+TEXTE_MAX = 80           # un texte de l'index (projet, serveur) rendu au plus à cette longueur
+ERREUR_MAX = 300         # un message d'arrêt rendu au plus à cette longueur
+CAPTURES_MAX = 9999
+LIBELLES_ETATS_TACHE = {"en_attente": "en attente", "en_cours": "en cours", "terminee": "terminée", "echouee": "échouée",
+                        "arretee": "arrêtée"}
 ROUTES_MIGRATION = {"/api/serveurs/migration/apercu": "migration_apercu", "/api/serveurs/migration/confirmer": "migration_confirmer"}
 
 
@@ -69,9 +77,31 @@ def _recommandation():
     return serveur_recommandation
 
 
+def _tache():
+    """Le moteur des tâches d'émulation (`serveur_tache`) : l'index local et l'arrêt ; l'import ne se connecte à rien."""
+    _modules()
+    import serveur_tache
+    return serveur_tache
+
+
+def _tache_cli():
+    _modules()
+    import serveur_tache_cli
+    return serveur_tache_cli
+
+
 def dossier():
     """`DOSSIER`, sinon le dossier de la plateforme (`MYIAFACTORY_PLATEFORME` dans les essais), sinon le dossier des secrets."""
     return Path(DOSSIER) if DOSSIER else modplateforme.dossier()
+
+
+def declare(d=None):
+    """Vrai si au moins un serveur est déclaré (`serveurs.json` : les fichiers seulement, aucune connexion) ; faux au
+    moindre ennui."""
+    try:
+        return bool(_modules()[4].lire(dossier() if d is None else d))
+    except Exception:
+        return False
 
 
 def _secrets(d, serveurs):
@@ -132,12 +162,13 @@ class Travaux:
 
     `ssh`, `installer` et `runner` s'injectent dans les essais (jamais de vraie connexion ni de vrai `ssh-keygen`)."""
 
-    def __init__(self, ssh=None, installer=None, runner=None):
-        self._ssh, self._installer, self._runner = ssh, installer, runner
+    def __init__(self, ssh=None, installer=None, runner=None, tache=None):
+        self._ssh, self._installer, self._runner, self._tache = ssh, installer, runner, tache
         self._verrou = threading.Lock()
         self._fil = None
         self._cible = None          # (genre, id du serveur) de la tâche en cours
         self.erreurs = {}           # id du serveur -> message de la dernière tâche interrompue
+        self.erreurs_taches = {}    # id de la tâche d'émulation -> message de son dernier arrêt non confirmé
         self._places_apercu = threading.BoundedSemaphore(MAX_APERCUS)
         self._migrations = 0        # migrations (aperçu, confirmation) dont le fil tourne encore
 
@@ -178,6 +209,44 @@ class Travaux:
             print(erreur, file=sys.stderr)
         if erreur:
             self.erreurs[serveur.id] = str(erreur)
+
+    def lancer_tache(self, ident, travail):
+        """Comme `lancer`, pour l'arrêt d'une tâche d'émulation : même fil unique, l'erreur est rangée sous l'id de la tâche."""
+        with self._verrou:
+            if self._migrations or (self._fil is not None and self._fil.is_alive()):
+                return False
+            self.erreurs_taches.pop(ident, None)     # l'erreur de l'arrêt précédent ne survit pas à un nouvel appel
+            self._cible = ("arreter_tache", ident)
+            self._fil = threading.Thread(target=self._courir_tache, args=(ident, travail), daemon=True)
+            self._fil.start()
+            return True
+
+    def _courir_tache(self, ident, travail):
+        try:
+            erreur = travail()
+        except BaseException as e:   # le type seulement : jamais un message qui pourrait citer un secret
+            erreur = f"Arrêt interrompu ({type(e).__name__}) ; l'état affiché est le dernier connu."
+            print(erreur, file=sys.stderr)
+        if erreur:
+            self.erreurs_taches[ident] = str(erreur)
+
+    def arreter_tache(self, ident, d):
+        """Demande l'arrêt de la tâche `ident` (déjà validée et connue de l'index) dans le fil de fond : `arreter` fait foi de
+        l'état, rappelé tant qu'il n'est pas final (3 fois au plus). Faux si une autre opération tourne."""
+        moteur = self._tache or _tache()
+        options = self._options_ssh()
+
+        def travail():
+            # Le même arrêt que la commande serveur-tache, sans réessayer un état « inconnu » (serveur muet : jusqu'à
+            # 150 s par appel) : le fil unique du bureau n'est pas tenu des minutes, la raison est affichée.
+            r = _tache_cli()._terminer(moteur, ident, False, d, options, reessayer_inconnu=False)
+            if isinstance(r, dict) and r.get("etat") in moteur.FINAUX:
+                return None
+            r = r if isinstance(r, dict) else {}
+            etat = LIBELLES_ETATS_TACHE.get(r.get("etat"), "inconnu")
+            raison = " ".join(str(r.get("raison") or "").split())[:200]
+            return f"L'arrêt n'est pas confirmé (état : {etat})." + (f" {raison}" if raison else "")
+        return self.lancer_tache(ident, travail)
 
     # -- les tâches ---------------------------------------------------------
     def sonder(self, serveur, d):
@@ -288,6 +357,56 @@ def lire(travaux, d=None):
     return _masquer({"serveurs": sortie, "rejets": list(rejets)}, secrets)
 
 
+def _texte_index(valeur, secrets, borne=TEXTE_MAX):
+    """Un texte de l'index : masqué PUIS borné (jamais l'inverse : une coupe ne doit pas laisser un bout de secret)."""
+    if not isinstance(valeur, str):
+        return ""
+    return _masquer(valeur, secrets)[:borne]
+
+
+def _fiche_tache(ident, fiche, secrets, tache, maintenant):
+    etat = fiche.get("etat") if fiche.get("etat") in tache.ETATS else "inconnu"
+    debut = fiche.get("debut") if isinstance(fiche.get("debut"), str) and tache.MOTIF_ISO.fullmatch(fiche["debut"]) else None
+    fin = fiche.get("fin") if isinstance(fiche.get("fin"), str) and tache.MOTIF_ISO.fullmatch(fiche["fin"]) else None
+    duree = None
+    if debut is not None:
+        t0 = tache._epoch(debut)
+        t1 = tache._epoch(fin) if fin is not None else (maintenant if etat == "en_cours" else None)
+        if t0 is not None and t1 is not None and t1 >= t0:
+            duree = int(t1 - t0)
+    captures = fiche.get("captures_prises")
+    captures = min(captures, CAPTURES_MAX) if isinstance(captures, int) and not isinstance(captures, bool) and captures > 0 else 0
+    return {"id": ident, "etat": etat, "mode": fiche.get("mode") if fiche.get("mode") in tache.MODES else None,
+            "projet": _texte_index(fiche.get("projet"), secrets), "serveur_id": _texte_index(fiche.get("serveur_id"), secrets),
+            "debut": debut, "duree_s": duree, "captures": captures,
+            "statut": fiche.get("statut") if fiche.get("statut") in tache.STATUTS_RAPPORT else None}
+
+
+def lire_taches(travaux, d=None):
+    """`{"taches": [...]}` : les 100 tâches les plus récentes de l'index LOCAL (`taches.json`) ; jamais de connexion, jamais
+    d'exception, aucun secret. Une fiche de forme inattendue est tolérée ; une clé qui n'est pas un identifiant de tâche est ignorée."""
+    d = Path(d) if d else dossier()
+    tache = _tache()
+    try:
+        serveurs, _ = _modules()[4].lire_avec_rejets(d)
+    except Exception:
+        serveurs = []
+    secrets = _secrets(d, serveurs)
+    fiches = {i: f for i, f in tache.Index(d).lire().items() if isinstance(i, str) and tache.MOTIF_ID.fullmatch(i)}
+    for ident in [i for i in list(travaux.erreurs_taches) if i not in fiches]:
+        travaux.erreurs_taches.pop(ident, None)      # une tâche disparue de l'index ne garde pas d'erreur
+    maintenant = HORLOGE()
+    sortie = []
+    for ident in sorted(fiches, reverse=True)[:MAX_TACHES]:       # tAAAAMMJJ-HHMMSS-xxxx : l'ordre des identifiants est celui du temps
+        fiche = _fiche_tache(ident, fiches[ident], secrets, tache, maintenant)
+        if travaux.en_cours("arreter_tache", ident):
+            fiche["arret_en_cours"] = True       # l'écran grise « Arrêter » tant que l'arrêt demandé n'est pas fini
+        if travaux.erreurs_taches.get(ident):
+            fiche["erreur"] = _texte_index(travaux.erreurs_taches[ident], secrets, ERREUR_MAX)
+        sortie.append(fiche)
+    return {"taches": sortie}
+
+
 def _proposition_publique(proposition):
     s = proposition["serveur"]
     return {"serveur": {"nom": s.nom, "hote": s.hote, "utilisateur": s.utilisateur, "fournisseur": s.fournisseur},
@@ -385,7 +504,8 @@ def _conseil(d, serveurs, etat, action):
     """{lieu: fiche} : la fiche du serveur garde les champs de `_lieu` ; chaque lieu gagne `niveau` et `fondee_sur`."""
     serveur = _lieu(d, serveurs, etat, action)
     connue = _action_connue(action)
-    permis = {"poste": connue, "github": connue, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
+    ailleurs = connue and action not in SERVIES_AU_SERVEUR          # une action servie au serveur seulement (recette)
+    permis = {"poste": ailleurs, "github": ailleurs, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
     conseil = _recommandation().recommander(action, permis, mesures_pour(action, serveurs, etat, serveur.get("serveur_id")))
     sortie = {}
     for lieu, c in conseil.items():
@@ -420,6 +540,9 @@ def route_post(chemin):
     """`("declarer", None)` ou `(action, id)` pour un chemin de ces routes ; `None` sinon."""
     if chemin in ROUTES_MIGRATION:
         return ROUTES_MIGRATION[chemin], None
+    t = _ROUTE_TACHE.fullmatch(chemin)
+    if t:
+        return "tache_arreter", t.group(1)
     m = _ROUTE.fullmatch(chemin)
     if not m:
         return None
@@ -438,6 +561,9 @@ def _actions(corps):
     return a
 
 
+MSG_ARRET_EN_COURS = "Un arrêt de tâche d'émulation est en cours : réessayez à sa fin."
+
+
 def poster(travaux, cible, corps, d=None):
     """(code, objet) d'une demande POST déjà contrôlée (en-têtes, taille, JSON objet)."""
     d = Path(d) if d else dossier()
@@ -445,9 +571,15 @@ def poster(travaux, cible, corps, d=None):
     plateforme_acces, capacites, _etat, installation, modeles = _modules()
     if genre in ("migration_apercu", "migration_confirmer"):
         return _poster_migration(travaux, genre, corps, d)
+    if genre == "tache_arreter":
+        return _poster_tache(travaux, ident, d)
+
+    def occupe(message):
+        """409 : un arrêt de tâche qui tient le fil de fond est nommé comme tel (pas « une installation »)."""
+        return 409, {"erreur": MSG_ARRET_EN_COURS if travaux.en_cours("arreter_tache") else message}
     if genre == "declarer":
         if travaux.en_cours() or installation.installation_en_cours(d):     # une sonde, une installation ou une migration tourne
-            return 409, {"erreur": "Une opération est en cours : déclarez le serveur à sa fin."}
+            return occupe("Une opération est en cours : déclarez le serveur à sa fin.")
         champs = {k: corps.get(k) for k in ("nom", "hote", "utilisateur", "fournisseur")}   # rien d'autre n'est pris
         try:           # l'identifiant « migration » est réservé : `valider` le refuse avec un message clair (400)
             serveur = modeles.ajouter(champs, d)
@@ -468,9 +600,9 @@ def poster(travaux, cible, corps, d=None):
         return 404, {"erreur": "Serveur inconnu."}
     if genre == "sonder":
         if travaux.en_cours() or installation.installation_en_cours(d):
-            return 409, {"erreur": "Une opération est déjà en cours."}
+            return occupe("Une opération est déjà en cours.")
         if not travaux.sonder(serveur, d):
-            return 409, {"erreur": "Une opération est déjà en cours."}
+            return occupe("Une opération est déjà en cours.")
         return 202, {"demarre": True}
     actions = _actions(corps)
     if actions is None:
@@ -496,11 +628,27 @@ def poster(travaux, cible, corps, d=None):
     if corps.get("accord") is not True:
         return 400, {"erreur": "Installation refusée : l'accord n'a pas été donné."}
     if travaux.en_cours() or installation.installation_en_cours(d):
-        return 409, {"erreur": "Une installation est déjà en cours."}
+        return occupe("Une installation est déjà en cours.")
     if installation.plateforme_en_cours(d):
         return 409, {"erreur": "L'installation de la plateforme OVH est en cours : attendez sa fin avant d'installer sur ce serveur."}
     if not travaux.installer(serveur, actions, d):
-        return 409, {"erreur": "Une installation est déjà en cours."}
+        return occupe("Une installation est déjà en cours.")
+    return 202, {"demarre": True}
+
+
+def _poster_tache(travaux, ident, d):
+    """Arrêt d'une tâche d'émulation : l'identifiant suit le motif des tâches ET se retrouve dans l'index local ; il ne sert
+    jamais à construire un chemin. Le corps de la demande est ignoré."""
+    tache = _tache()
+    if not isinstance(ident, str) or not tache.MOTIF_ID.fullmatch(ident):
+        return 404, {"erreur": "Tâche inconnue."}
+    fiche = tache.Index(d).lire().get(ident)
+    if not isinstance(fiche, dict):
+        return 404, {"erreur": "Tâche inconnue."}
+    if fiche.get("etat") in tache.FINAUX:
+        return 409, {"erreur": "Cette tâche est déjà terminée."}
+    if travaux.en_cours() or not travaux.arreter_tache(ident, d):
+        return 409, {"erreur": "Une opération est déjà en cours : réessayez dans un instant."}
     return 202, {"demarre": True}
 
 

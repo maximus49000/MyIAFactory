@@ -23,6 +23,14 @@ export function actionsDe(deport) {
 }
 const LIEUX = [["poste", "Poste"], ["github", "GitHub"], ["serveur", "Serveur"]];
 const MSG_SERVEUR = "bientôt";
+// Une action au seul serveur (la recette sur émulateur) : pas de défaut au poste, « Non réglé » (refusée) tant que le
+// Directeur ne l'a pas réglée sur serveur pour ce projet ; ce réglage vaut accord permanent.
+const NON_REGLE = ["", "Non réglé"];
+const MSG_SANS_SERVEUR = "déclarez d'abord un serveur (Serveurs), puis réglez sur serveur";
+export const NOTE_SERVEUR_SEUL = "Ne tourne que sur le serveur : la régler sur serveur vaut accord permanent pour ce " +
+  "projet (l'agent la lance sans redemander). Non réglée, elle est refusée.";
+const surServeurSeul = (def) => Array.isArray(def.lieux) && !def.lieux.includes("poste") && !def.lieux.includes("github");
+const defautDe = (def) => (surServeurSeul(def) ? null : "poste");
 
 // Écrit les lieux voulus (partiels : le serveur fusionne). {ok, message}, sans jamais lever.
 export async function enregistrerDeport(lieux, fetchFn = fetch) {
@@ -68,24 +76,30 @@ function rangee(ctx, def, lieuxActuels, groupe, message, fetchFn) {
   fieldset.setAttribute("aria-label", nom);
   fieldset.append(el("span", "deport-nom", nom));
   const radios = [];
-  for (const [lieu, libelle] of LIEUX) {
+  const seul = surServeurSeul(def);
+  // au seul serveur : ses lieux permis et « Non réglé », jamais poste ni GitHub
+  const choix = seul ? [...LIEUX.filter(([l]) => def.lieux.includes(l)), NON_REGLE] : LIEUX;
+  const serveurDeclare = ctx.etat.deport?.serveur_declare === true;
+  for (const [lieu, libelle] of choix) {
     const label = el("label", "lecons-auto-label deport-choix");
     const r = document.createElement("input");
     r.type = "radio";
     r.name = "deport-" + action;
     r.value = lieu;
-    r.checked = lieuxActuels[action] === lieu;
-    const permis = Array.isArray(def.lieux) ? def.lieux.includes(lieu) : true;
-    const grise = lieu === "serveur" ? MSG_SERVEUR : (permis ? "" : (def.bientot || "indisponible pour ce type de projet"));
+    r.checked = (lieuxActuels[action] ?? "") === lieu;
+    const permis = lieu === "" || (Array.isArray(def.lieux) ? def.lieux.includes(lieu) : true);
+    // le serveur n'est réglable que pour une action que `deporter` y sert, et seulement si un serveur est déclaré
+    const msgServeur = def.servie_au_serveur === true ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
+    const grise = lieu === "serveur" ? msgServeur : (permis ? "" : (def.bientot || "indisponible pour ce type de projet"));
     r.disabled = grise !== "";
     label.append(r, el("span", "", " " + libelle + (grise ? " (" + grise + ")" : "")));
     r.addEventListener("change", async () => {
-      const avant = lieuxActuels[action];
+      const avant = lieuxActuels[action] ?? "";
       message.textContent = "";
       groupe.forEach((x) => { x.disabled = true; });
-      const rep = await enregistrerDeport({[action]: lieu}, fetchFn);
+      const rep = await enregistrerDeport({[action]: lieu === "" ? null : lieu}, fetchFn);
       groupe.forEach((x) => { x.disabled = x.grise; });
-      if (rep.ok) { lieuxActuels[action] = lieu; ctx.rouvrir?.(); }
+      if (rep.ok) { lieuxActuels[action] = lieu === "" ? null : lieu; ctx.rouvrir?.(); }
       else radios.forEach((x) => { x.checked = x.value === avant; });   // refus : le choix redit l'état réel
       message.textContent = rep.message;
     });
@@ -94,6 +108,7 @@ function rangee(ctx, def, lieuxActuels, groupe, message, fetchFn) {
     groupe.push(r);
     fieldset.append(label);
   }
+  if (seul) fieldset.append(el("p", "note", NOTE_SERVEUR_SEUL));
   return fieldset;
 }
 
@@ -225,7 +240,7 @@ export function blocDeport(ctx, fetchFn = fetch) {
   const bloc = el("div", "lecons-auto deport");
   const d = ctx.etat.deport || {};
   const actions = actionsDe(d);
-  const lieux = {...Object.fromEntries(actions.map((a) => [a.id, "poste"])), ...(d.lieux || {})};
+  const lieux = {...Object.fromEntries(actions.map((a) => [a.id, defautDe(a)])), ...(d.lieux || {})};
   if (ctx.etat.deport) ctx.etat.deport.lieux = lieux;
   const message = el("p", "note", "");
   message.setAttribute("aria-live", "polite");

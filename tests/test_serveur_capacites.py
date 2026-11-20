@@ -1,8 +1,10 @@
 """Catalogue de capacités du serveur générique (`outils/serveur_capacites.py`) : données et logique pures."""
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -23,8 +25,8 @@ class CatalogueTests(unittest.TestCase):
                 self.assertIn(d, sc.CATALOGUE)
 
     def test_contenu_du_catalogue(self):
-        self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "unity-cli",
-                                             "unity-editeur", "session-graphique", "agent"})
+        self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "emulateur-image",
+                                             "unity-cli", "unity-editeur", "session-graphique", "agent"})
         self.assertEqual(sc.CATALOGUE["durcissement"].depend, ("base",))
         self.assertEqual(sc.CATALOGUE["android-emulateur"].depend, ("android-build",))
         self.assertEqual(sc.CATALOGUE["base"].etape, "docker")
@@ -40,6 +42,36 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual((ed.taille_go, ed.duree_min), (24.0, 25))
         self.assertEqual(ed.sonde, "ls ~/Unity/Hub/Editor/*/Editor/Unity >/dev/null 2>&1")
         self.assertEqual([b["id"] for b in sc.bloquees(sc.ordre_installation(["unity-editeur"], set()))], ["unity-editeur"])
+
+    def test_catalogue_et_recette_s_accordent(self):
+        cap = sc.CATALOGUE["emulateur-image"]
+        self.assertEqual((cap.etape, cap.depend, cap.installable), ("emulateur_image", ("android-emulateur",), True))
+        self.assertEqual(cap.sonde, "test -s ~/.myiafactory/emulateur-image.version")
+        self.assertGreater(cap.taille_go, 0)
+        self.assertEqual(sc.ordre_installation(["emulateur-image"], set()),
+                         ["base", "android-build", "android-emulateur", "emulateur-image"])
+        script = (Path(__file__).resolve().parent.parent / "serveur_ovh" / "mise_en_place.sh").read_text(encoding="utf-8")
+        self.assertIn(f"  {cap.etape}) etape_{cap.etape} ;;", script)          # l'étape nommée par le catalogue existe dans le script
+        self.assertIn("emulateur-image.version", script)                       # et écrit le marqueur que la sonde teste
+        self.assertEqual(sc.bloquees(["emulateur-image"]), [])
+        import serveur_installation as inst
+        self.assertEqual(inst.DELAIS_ETAPE_S[cap.etape], 900)
+
+    def test_sonde_emulateur_image_en_lecture_seule(self):
+        sonde = sc.CATALOGUE["emulateur-image"].sonde
+        self.assertNotRegex(sonde, r"sudo|docker|[<>]")
+        with tempfile.TemporaryDirectory() as t:
+            def code(creer):
+                dossier = Path(t) / ".myiafactory"
+                if creer is not None:
+                    dossier.mkdir(exist_ok=True)
+                    (dossier / "emulateur-image.version").write_text(creer, encoding="utf-8")
+                r = subprocess.run(["bash", "-c", f"( {sonde} ) </dev/null >/dev/null 2>&1"], env={"HOME": Path(t).as_posix(), "PATH": os.environ["PATH"]})
+                return r.returncode
+            self.assertNotEqual(code(None), 0)
+            self.assertNotEqual(code(""), 0)
+            self.assertEqual(code("ubuntu=ubuntu:24.04"), 0)
+            self.assertEqual(sorted(x.name for x in (Path(t) / ".myiafactory").iterdir()), ["emulateur-image.version"])
 
     def test_ordre_respecte_les_dependances(self):
         self.assertEqual(sc.ordre_installation(["android-emulateur"], set()),
@@ -101,6 +133,16 @@ class CatalogueTests(unittest.TestCase):
             self.assertEqual(sc.BESOINS[a], ("android-build",))
         self.assertEqual(sc.BESOINS["emulateur"], ("android-emulateur",))
         self.assertEqual(sc.BESOINS["charge"], ())
+
+    def test_recette_emulateur_demande_l_image_et_toute_sa_chaine(self):
+        self.assertEqual(sc.BESOINS["recette-emulateur"], ("emulateur-image",))
+        self.assertEqual(sc.manquantes_pour(["recette-emulateur"], set()),
+                         ["base", "android-build", "android-emulateur", "emulateur-image"])
+        self.assertEqual(sc.manquantes_pour(["recette-emulateur"], {"base", "android-build", "android-emulateur"}),
+                         ["emulateur-image"])
+        # toute capacité installable est demandée par au moins une action (sinon le bureau ne peut pas l'installer)
+        demandees = set(sc.manquantes_pour(list(sc.BESOINS), set()))
+        self.assertEqual({i for i, c in sc.CATALOGUE.items() if c.installable} - demandees, {"durcissement", "unity-cli"})
 
     def test_action_inconnue_leve_une_erreur(self):
         with self.assertRaises(ValueError):
@@ -209,6 +251,35 @@ class CatalogueTests(unittest.TestCase):
     def test_sonde_android_build_absente_si_le_sdk_est_incomplet(self):
         self.assertNotEqual(self._android_build(sdk=False, java="unity"), 0)
         self.assertNotEqual(self._android_build(sdk=False, java="path"), 0)
+
+    def test_sonde_android_emulateur_verifie_l_image_epinglee(self):
+        # M7 : le dossier de l'image système ÉPINGLÉE (versions.json), pas seulement ~/android-sdk/system-images.
+        import json
+        versions = json.loads((Path(__file__).resolve().parent.parent / "serveur_ovh" / "versions.json")
+                              .read_text(encoding="utf-8"))
+        chemin = versions["android_sdk"]["emulator_image"].replace(";", "/")
+        sonde = sc.CATALOGUE["android-emulateur"].sonde
+        self.assertIn(f"test -d ~/android-sdk/{chemin} ", sonde)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sonde_android_emulateur_absente_sans_l_image_epinglee(self):
+        import os
+        import tempfile
+        sonde = sc.CATALOGUE["android-emulateur"].sonde.split(" && id -nG")[0]      # sans kvm (ce poste n'en a pas)
+        with tempfile.TemporaryDirectory() as t:
+            home = Path(t)
+            emu = home / "android-sdk/emulator/emulator"
+            emu.parent.mkdir(parents=True)
+            emu.write_text("#!/bin/sh\n", newline="\n")
+            emu.chmod(0o755)
+            (home / "android-sdk/system-images/android-35/google_apis/x86_64").mkdir(parents=True)
+
+            def code():
+                return subprocess.run(["bash", "-c", f"( {sonde} ) </dev/null >/dev/null 2>&1"], timeout=30,
+                                      env=dict(os.environ, HOME=home.as_posix())).returncode
+            self.assertNotEqual(code(), 0)                                  # une autre image ne compte pas
+            (home / "android-sdk/system-images/android-34/google_apis/x86_64").mkdir(parents=True)
+            self.assertEqual(code(), 0)
 
     def test_sondes_et_estimations_du_catalogue(self):
         for cap in sc.CATALOGUE.values():

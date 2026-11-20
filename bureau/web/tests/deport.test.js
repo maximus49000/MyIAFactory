@@ -157,6 +157,58 @@ test("un lieu que l'action n'offre pas est grisé avec le texte de l'état", () 
   assert.equal(radio(bloc, "release", "poste").disabled, false);
 });
 
+// La recette sur émulateur ne tourne que sur le serveur : accord permanent du projet, jamais le poste ni GitHub.
+const RECETTE = {id: "recette-emulateur", libelle: "Recette sur émulateur", lieux: ["serveur"], bientot: "ne tourne que sur le serveur", servie_au_serveur: true};
+const choixDe = (b, action) => radios(b).filter((r) => r.name === "deport-" + action).map((r) => r.value);
+
+test("recette sur émulateur : seuls « serveur » et « non réglé » sont offerts, non réglé coché par défaut", () => {
+  const {bloc} = rendre({lieux: {apk: "poste", "recette-emulateur": null}, avertissements: [], actions: [...ACTIONS_ANDROID, RECETTE], serveur_declare: true});
+  assert.deepEqual(choixDe(bloc, "recette-emulateur"), ["serveur", ""]);
+  assert.equal(radio(bloc, "recette-emulateur", "").checked, true);
+  assert.equal(radio(bloc, "recette-emulateur", "serveur").checked, false);
+  assert.equal(radio(bloc, "recette-emulateur", "serveur").disabled, false);
+  assert.match(bloc.textContent, /Recette sur émulateur/);
+  assert.match(bloc.textContent, /Non réglé/);
+  assert.match(bloc.textContent, /accord permanent/);
+  // les autres actions gardent leurs trois choix, serveur toujours « bientôt »
+  assert.deepEqual(choixDe(bloc, "apk"), ["poste", "github", "serveur"]);
+  assert.equal(radio(bloc, "apk", "serveur").disabled, true);
+});
+
+test("recette sur émulateur sans lieu dans l'état : non réglée, jamais le poste", () => {
+  const {bloc, ctx} = rendre({lieux: {apk: "poste"}, avertissements: [], actions: [...ACTIONS_ANDROID, RECETTE], serveur_declare: true});
+  assert.equal(radio(bloc, "recette-emulateur", "").checked, true);
+  assert.equal(ctx.etat.deport.lieux["recette-emulateur"], null);
+});
+
+test("sans serveur déclaré, « serveur » est grisé et dit de déclarer un serveur puis de régler sur serveur", () => {
+  const {bloc} = rendre({lieux: {"recette-emulateur": null}, avertissements: [], actions: [RECETTE], serveur_declare: false});
+  assert.equal(radio(bloc, "recette-emulateur", "serveur").disabled, true);
+  assert.match(bloc.textContent, /déclarez d'abord un serveur/);
+  assert.match(bloc.textContent, /réglez sur serveur/);
+});
+
+test("régler la recette sur serveur puis la remettre à non réglé (null) écrit le réglage du projet", async () => {
+  const vus = [];
+  const {bloc, ctx} = rendre({lieux: {"recette-emulateur": null}, avertissements: [], actions: [RECETTE], serveur_declare: true},
+    async (url, options) => { vus.push(JSON.parse(options.body)); return {ok: true}; });
+  await changer(radio(bloc, "recette-emulateur", "serveur"));
+  assert.deepEqual(vus[0], {deport: {lieux: {"recette-emulateur": "serveur"}}});
+  assert.equal(ctx.etat.deport.lieux["recette-emulateur"], "serveur");
+  await changer(radio(bloc, "recette-emulateur", ""));
+  assert.deepEqual(vus[1], {deport: {lieux: {"recette-emulateur": null}}});
+  assert.equal(ctx.etat.deport.lieux["recette-emulateur"], null);
+});
+
+test("un refus remet la recette à non réglé", async () => {
+  const {bloc} = rendre({lieux: {"recette-emulateur": null}, avertissements: [], actions: [RECETTE], serveur_declare: true},
+    async () => ({ok: false, status: 400, json: async () => ({erreur: "non"})}));
+  await changer(radio(bloc, "recette-emulateur", "serveur"));
+  assert.equal(radio(bloc, "recette-emulateur", "serveur").checked, false);
+  assert.equal(radio(bloc, "recette-emulateur", "").checked, true);
+  assert.equal(radio(bloc, "recette-emulateur", "serveur").disabled, false);
+});
+
 test("sans `actions` dans l'état, les quatre actions génériques s'affichent", () => {
   const {bloc} = rendre({lieux: POSTE, avertissements: []});
   assert.deepEqual([...new Set(radios(bloc).map((r) => r.name))], ["deport-apk", "deport-tests", "deport-charge", "deport-emulateur"]);

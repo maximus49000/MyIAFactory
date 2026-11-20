@@ -8,10 +8,16 @@
   python lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] [-- <commande>]
       (une action là où le Directeur l'a réglée : poste ou GitHub Actions, avec attente des dépendances ; voir
       `outils/deporter.py`)
+  python lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] [--dossier <dossier>] [--reglages <fichier>]
+      (l'APK sur un émulateur du serveur, sans défaut au poste : le projet doit être enregistré au bureau et l'action
+      réglée sur serveur ; voir docs/serveur-taches.md)
   py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)
   py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>
       (les serveurs distants génériques : voir `outils/serveur_cli.py`)
+  py -3.12 lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] [--attendre]|etat <id>|arreter <id>|rapatrier <id> [--destination <dossier>] [--projet <dossier>]|lister> [--dossier <dossier>]
+  py -3.12 lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <dossier>]
+      (les tâches d'émulation sur le serveur : voir `outils/serveur_tache_cli.py`)
 """
 import sys
 from pathlib import Path
@@ -43,4 +49,13 @@ if __name__ == "__main__":
             except (AttributeError, ValueError):
                 pass
         sys.exit(plateforme.main(sys.argv[2:]))
+    if sys.argv[1:2] in (["serveur-tache"], ["serveur-outil"]):
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
+        import serveur_tache_cli  # noqa: E402
+        for flux in (sys.stdout, sys.stderr):
+            try:
+                flux.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
+        sys.exit(serveur_tache_cli.main(sys.argv[1:]))
     sys.exit(serveur.main(sys.argv[1:]))

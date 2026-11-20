@@ -4,8 +4,9 @@ MyIAFactory ne dépend pas d'un fournisseur : vous lui donnez **l'adresse d'un s
 qu'exigent les actions que vous lui confiez**, après aperçu et accord. OVH n'est plus qu'un fournisseur parmi ceux qu'on peut
 brancher (voir [`serveur-ovh.md`](serveur-ovh.md)). Conception : [`2026-11-19-serveur-generique-design.md`](superpowers/specs/2026-11-19-serveur-generique-design.md).
 
-Ce guide ne couvre que le premier morceau (le serveur et ses capacités). **Il ne lance pas encore de tâche sur le serveur** :
-voir « Suite ».
+Ce guide couvre le serveur et ses capacités. Les **tâches d'émulation** (l'APK joué sur un émulateur du serveur) ont leur propre
+guide : [`serveur-taches.md`](serveur-taches.md) (rien n'y a encore tourné sur un vrai serveur). Le reste du lancement d'actions sur le
+serveur n'existe pas encore : voir « Suite ».
 
 ## Ce qu'un serveur doit offrir (contrat minimal)
 
@@ -52,13 +53,15 @@ d'installation) : une sonde qui échoue donne « absente », un serveur injoigna
 | `base` | Docker et outils | rien | 0,5 Go / 5 min | oui |
 | `durcissement` | SSH par clé seule, pare-feu | `base` | 0 Go / 2 min | oui (étape `durcissement`) |
 | `android-build` | SDK Android, plateforme 36, build-tools 36.0.0 et un Java (au choix : `java` du PATH, JDK 17 d'Ubuntu, ou JDK livré avec le module Android d'Unity, `~/Unity/Hub/Editor/*/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK`  ; si le SDK est déjà complet et qu'un de ces Java existe, l'étape répond « déjà en place » sans rien installer ; sinon elle installe le JDK 17 d'apt avec le SDK) | `base` | 5,4 Go / 10 min | oui |
-| `android-emulateur` | KVM, émulateur, image système | `android-build` | 2 Go / 8 min | oui, **si le serveur offre `/dev/kvm`** |
+| `android-emulateur` | KVM, émulateur, image système (l'image **épinglée** `system-images;android-34;google_apis;x86_64`, celle de `versions.json`) | `android-build` | 2 Go / 8 min | oui, **si le serveur offre `/dev/kvm`** |
+| `emulateur-image` | Image de conteneur `myiafactory/emulateur` (sans identifiants), construite sur le serveur ; sert aux tâches d'émulation | `android-emulateur` | 1,5 Go / 10 min | oui (étape `emulateur_image`) |
 | `unity-cli` | Outil officiel Unity en ligne de commande | `base` | 0,1 Go / 2 min | oui |
 | `unity-editeur` | Éditeur Unity | `unity-cli` | 24 Go / 25 min | **non** : à installer par la session graphique (Unity Hub) ou `unity install <version>` une fois connecté ; licence par Hub |
 | `session-graphique` | Bureau distant et Unity Hub | `base` | 3 Go / 12 min | **non** par ce moteur : `py -3.12 lancer.py plateforme installer --bureau-distant` (il faut un mot de passe de session) |
 | `agent` | Agent de développement sur le serveur | rien | 1 Go / 5 min | **non** avant le morceau 3 |
 
-Tailles et durées sont des **estimations** tirées de nos installations réelles, pas des garanties. Une capacité non
+La sonde de `android-emulateur` vérifie le dossier de l'**image système épinglée** (pas seulement la présence de `system-images`) :
+une autre image Android installée ne suffit pas à l'émulateur des tâches. Tailles et durées sont des **estimations** tirées de nos installations réelles, pas des garanties. Une capacité non
 installable est « bloquée » avec sa raison et le geste à faire ; elle n'est jamais lancée.
 
 **On n'installe pas une capacité directement : on confie une action**, et le bureau calcule les capacités manquantes (en suivant
@@ -68,7 +71,13 @@ les dépendances). Actions connues et capacité requise :
 |---|---|
 | `apk`, `tests`, `lint`, `release` | `android-build` (donc `base`) |
 | `emulateur` | `android-emulateur` (donc `base`, `android-build`) |
+| `recette-emulateur` | `emulateur-image` (donc `base`, `android-build`, `android-emulateur`) |
 | `charge` | aucune |
+
+C'est l'action `recette-emulateur` qui installe la capacité `emulateur-image` : écran Serveurs (« Installer », cocher « Recette
+sur émulateur », aperçu puis accord), ou `py -3.12 lancer.py plateforme serveurs apercu <id> recette-emulateur` puis
+`py -3.12 lancer.py plateforme serveurs installer <id> recette-emulateur --accord`. Le lieu « serveur » de cette action n'est
+permis que si l'image est présente et à jour (une image périmée est « à refaire ») ; elle n'est jamais permise au poste ni sur GitHub.
 
 `release` n'est qu'un besoin de construction : les clés de signature restent au poste. Aujourd'hui aucune action ne demande
 `durcissement`, `unity-cli` ni les capacités non installables : elles sont **sondées et affichées**, pas installables depuis un
@@ -96,8 +105,26 @@ les dépendances). Actions connues et capacité requise :
    blocage et la charge mesurée sont conservées (une installation « charge » ne vide rien).
 
 Les étapes distantes sont celles de `serveur_ovh/mise_en_place.sh` (`docker`, `durcissement`, `android_build`, `android_emulateur`,
-`unity_cli`), rejouables. Le script est déposé dans `~/myiafactory/` du serveur (droits 0700). L'état est écrit dans
+`emulateur_image`, `unity_cli`), rejouables. Le script est déposé dans `~/myiafactory/` du serveur (droits 0700). L'état est écrit dans
 `~/MyIAFactory/serveurs-etat.json` (aucun secret).
+
+### La capacité `emulateur-image`
+
+Elle construit l'image `myiafactory/emulateur` (Ubuntu 24.04, JDK 17, le pont d'actions, sans identifiants) sur le serveur, à partir
+de trois fichiers déposés par le moteur : `images/emulateur/Dockerfile`, `images/emulateur/entree-tache.sh` et `taches/pont.sh`
+(liste `FICHIERS_ETAPE`, sous `serveur_ovh/`). Ils sont déposés dans `$HOME/myiafactory/serveur_ovh/` du serveur (dossier que
+l'étape retrouve par la variable `SERVEUR_OVH_DIR`, `$HOME/myiafactory/serveur_ovh` par défaut) par une archive tar, extraite dans
+un dossier temporaire privé : rien n'est déplacé si l'archive est coupée ou si un fichier manque ou est vide. Elle demande 3 Go
+libres et refuse de tourner sous root.
+
+- **Le marqueur** : `~/.myiafactory/emulateur-image.version` contient les versions épinglées et l'**empreinte** des trois fichiers
+  (16 premiers hexadécimaux du SHA-256). La sonde du catalogue est une simple existence de fichier (`test -s`) ; la **péremption**
+  est une lecture de plus (`head -c 256` de ce seul fichier) faite par le moteur pour les capacités demandées.
+- **Périmée** : si l'empreinte du marqueur diffère de celle des fichiers du dépôt, la capacité n'est plus « présente » : l'aperçu
+  la range dans `perimees` et l'étape se montre **« À mettre à jour : les fichiers déposés sur le serveur sont périmés »** ;
+  réinstaller reconstruit l'image (l'étape n'est refaite que si l'étiquette de l'image diffère). Une installation qui se termine
+  avec un marqueur encore périmé est « bloquée ».
+- Le lanceur de tâches refuse d'envoyer quoi que ce soit tant que l'image est périmée (voir `serveur-taches.md`).
 
 ## L'écran « Où tournent les actions »
 
@@ -112,8 +139,9 @@ porte une **pastille de couleur et un libellé écrit** (la couleur n'est jamais
 | `indisponible` | gris | capacité manquante, serveur muet ou hors ligne : le choix « serveur » est grisé avec « Manque : ... » |
 
 **C'est un conseil, pas un routage** : le bureau ne déplace jamais une action de lui-même, et l'écran le rappelle (« Ce n'est qu'un
-conseil : le choix reste au Directeur »). Le choix de lieu fait avec les boutons radio n'est aujourd'hui **pas enregistré** (aucune
-route ne le garde) et le lancement sur le serveur n'existe pas encore.
+conseil : le choix reste au Directeur »). Le choix de lieu fait avec les boutons radio de cet écran-ci n'est **pas enregistré** (aucune route ne le garde) ; le
+réglage qui compte (l'accord permanent de la recette sur émulateur) se fait dans les réglages du projet : voir
+[`deport.md`](deport.md).
 
 **Ce qui est mesuré aujourd'hui, et ce qui ne l'est pas encore.** La recommandation n'utilise que ce que le **dernier test de connexion
 du serveur** a rangé dans l'état : la charge moyenne **sur 5 minutes** par cœur, la mémoire libre, le nombre de conteneurs (lus par SSH en
@@ -161,7 +189,7 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
 
 ## Limites : ce qui n'a PAS été exécuté sur un vrai serveur
 
-- Les étapes distantes **`android_build`, `android_emulateur` et `unity_cli`**, telles qu'écrites dans `mise_en_place.sh`, n'ont **jamais été
+- Les étapes distantes **`android_build`, `android_emulateur`, `emulateur_image` et `unity_cli`**, telles qu'écrites dans `mise_en_place.sh`, n'ont **jamais été
   exécutées sur le vrai serveur** : leurs tests automatiques sont simulés. Une installation équivalente a été faite à la main plus tôt,
   avec d'autres scripts (pas ceux-ci).
 - Le **moteur générique** (déclaration, sonde, aperçu, installation, charge), l'**interface du bureau**, la **ligne de commande** et la
@@ -178,7 +206,8 @@ Le serveur OVH déjà installé par l'ancien flux (`lancer.py plateforme ...`) p
 
 ## Suite
 
-1. **Morceau 2 : lancer des tâches sur le serveur** (verrou et créneaux de ressources). Brancher la table `besoins` de ce cœur sur
+1. **Morceau 2 : lancer des tâches sur le serveur** (verrou et créneaux de ressources). **Premier pas fait : les tâches d'émulation**
+   ([`serveur-taches.md`](serveur-taches.md), jamais exécutées sur un vrai serveur) ; reste le reste du lancement d'actions. Brancher la table `besoins` de ce cœur sur
    `bureau/deport_types.py` **une fois le travail de déport du Directeur commité** (le cœur n'en dépend pas : il porte sa propre table) ;
    alimenter les mesures (durées par lieu, charge du poste, quota GitHub) par `mesures_pour`, point unique de branchement ; enregistrer le choix de lieu.
 2. **Morceau 3 : agents sur le serveur** (conteneur d'agent éphémère par tâche, conteneurs d'outils sans identifiants, authentification

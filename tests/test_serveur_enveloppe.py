@@ -235,7 +235,8 @@ class TestEnveloppe(unittest.TestCase):
             suite("--name", f"tache-{ID}")
             suite("--memory", "6144m")
             suite("--cpus", "2")
-            suite("--tmpfs", "/avd:size=4g,mode=1777")
+            # 9 Go (plafond tmpfs, non réservé) : l'émulateur copie system.img (4,3 Go) dans l'AVD et exige ~7,4 Go libres
+            suite("--tmpfs", "/avd:size=9g,mode=1777")
             self.assertTrue(any(x.startswith("/tmp") for i, x in enumerate(a) if i and a[i - 1] == "--tmpfs"), a)
             suite("--cap-drop", "ALL")
             suite("--security-opt", "no-new-privileges")
@@ -250,7 +251,7 @@ class TestEnveloppe(unittest.TestCase):
             suite("--ulimit", "nofile=4096:4096")
             self.assertEqual(a[-1], "myiafactory/emulateur")
             envs = [a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"]
-            for attendu in ("ANDROID_AVD_HOME=/avd", "HOME=/tmp", "PONT_SORTIE=/sortie", "PONT_AVD=emul",
+            for attendu in ("ANDROID_AVD_HOME=/avd", "HOME=/tmp", "ANDROID_USER_HOME=/tmp/.android", "PONT_SORTIE=/sortie", "PONT_AVD=emul",
                             "TACHE_IMAGE_SYSTEME=system-images;android-34;google_apis;x86_64"):
                 self.assertIn(attendu, envs)
             self.assertTrue(all("=" in x for x in envs), envs)     # jamais « -e NOM » : ce serait l'environnement de l'appelant
@@ -548,6 +549,32 @@ class TestEnveloppe(unittest.TestCase):
             self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
             self.assertIn("s'est arrêté de lui-même", f["raison"])
 
+    def ecrire_image(self, b, octets):
+        img = b.home / "android-sdk" / "system-images" / "android-34" / "google_apis" / "x86_64"
+        img.mkdir(parents=True, exist_ok=True)
+        (img / "system.img").write_bytes(b"\0" * octets)
+
+    def test_image_systeme_trop_grosse_pour_avd_refusee_avant_docker_run(self):
+        # L'émulateur copie system.img dans /avd (tmpfs de 9 Go) : une image plus grosse que 9 Go - 2 Go de marge échouerait
+        # tard et obscurément (« Not enough space to create userdata partition ») ; elle est refusée tout de suite.
+        with Banc(ENVELOPPE_IMAGE_MAX_OCTETS="1000") as b:
+            self.ecrire_image(b, 2000)
+            r = b.lancer()
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            e = b.etat()
+            self.assertEqual((e["etat"], e["statut"]), ("echouee", "erreur"))
+            self.assertIn("system.img", e["raison"])
+            self.assertIn("/avd", e["raison"])
+            self.assertEqual(b.appels("docker run"), [])
+            self.assertTrue(b.appels("flock -u"))
+        with Banc(ENVELOPPE_IMAGE_MAX_OCTETS="1000") as b:          # dans la limite : le lancement part
+            self.ecrire_image(b, 500)
+            self.assertEqual(b.lancer().returncode, 0)
+            b.arreter()
+            b.attendre_final()
+        code = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("IMAGE_MAX_OCTETS=$(( (9 - 2) * 1024 * 1024 * 1024 ))", code)
+
     def test_docker_muet_au_veilleur_finit_en_erreur(self):
         with Banc(FAUX_DOCKER_MUET="1") as b:
             self.assertEqual(b.lancer().returncode, 0)
@@ -667,6 +694,7 @@ ENTREE = RACINE / "images" / "emulateur" / "entree-tache.sh"
 IMAGE_SYSTEME = "system-images;android-34;google_apis;x86_64"
 AVDMANAGER = r'''echo "avdmanager $* racine=${ANDROID_SDK_ROOT:-} home=${ANDROID_HOME:-}" >> "$FAUX_JOURNAL"
 rep=""; IFS= read -r rep; echo "reponse=$rep" >> "$FAUX_JOURNAL"      # la question du profil matériel personnalisé
+echo "user_home=${ANDROID_USER_HOME:-} existe=$([ -d "${ANDROID_USER_HOME:-/nulle}" ] && echo oui || echo non)" >> "$FAUX_JOURNAL"
 if [ -n "${AVD_BRUIT:-}" ]; then           # progression à retours chariot et séquences ANSI, puis l'erreur réelle d'avdmanager
   printf '\033[1m[=      ] 10%% Loading local repository...\r[=======] 100%% Fetch remote repository...\033[0m\r\n'
   printf 'Warning: This version only understands SDK XML versions up to 3\nError: AVD not created\n'
@@ -736,6 +764,14 @@ class TestEntreeTache(unittest.TestCase):
     def test_non_repond_a_la_question_du_profil_materiel(self):
         r = self.lancer()
         self.assertIn("reponse=no", r.appels)
+
+    def test_dossier_utilisateur_android_inscriptible(self):
+        # Java prend user.home dans /etc/passwd (/home/ubuntu, en lecture seule dans le conteneur), pas dans $HOME :
+        # ANDROID_USER_HOME, exporté et créé, est le seul dossier .android qu'avdmanager et l'émulateur utilisent.
+        r = self.lancer()
+        self.assertRegex(r.appels, r"user_home=\S*/home/\.android existe=oui")
+        r = self.lancer(ANDROID_USER_HOME="")
+        self.assertRegex(r.appels, r"user_home=\S*/home/\.android existe=oui")
 
     def test_journal_lisible_sans_progression_ni_sequences_ansi(self):
         # avdmanager affiche sa progression à retours chariot et en couleurs : le journal garde seulement le texte utile.

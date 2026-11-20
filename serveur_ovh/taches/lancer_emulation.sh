@@ -47,6 +47,14 @@ IMAGE_SYSTEME="system-images;android-34;google_apis;x86_64"   # miroir de androi
 MOTIF_IMAGE_SYSTEME='^system-images;android-[0-9]{1,3}(-[a-z0-9]+)?;[a-z0-9_]+;x86_64$'
 LIMITE_SORTIE_KO=256000                   # 2 x 100 Mo de captures + 50 Mo, en Ko (du -sk)
 if [[ ${ENVELOPPE_SORTIE_MAX_KO:-} =~ ^[1-9][0-9]{0,8}$ ]]; then LIMITE_SORTIE_KO="$ENVELOPPE_SORTIE_MAX_KO"; fi   # tests
+# /avd est un tmpfs de 9 Go (un PLAFOND : seul ce qui est écrit occupe la mémoire, ~760 Mo constatés). Pourquoi 9 Go : au premier
+# démarrage l'émulateur fait une copie inscriptible du system.img de l'hôte (4,3 Go pour android-34 google_apis, partitions
+# dynamiques) dans l'AVD et exige ~6 Go x 1,2 = 7,4 Go libres (« Not enough space to create userdata partition » avec 4 Go,
+# constaté sur le serveur) ; disk.dataPartition.size du config.ini n'y change rien (essayé : 2G, 2048M, 2048, -partition-size).
+# Une image système plus grosse que le tmpfs moins 2 Go de marge est refusée AVANT docker run, avec sa raison.
+AVD_TMPFS_GO=9
+IMAGE_MAX_OCTETS=$(( (9 - 2) * 1024 * 1024 * 1024 ))
+if [[ ${ENVELOPPE_IMAGE_MAX_OCTETS:-} =~ ^[1-9][0-9]{0,11}$ ]]; then IMAGE_MAX_OCTETS="$ENVELOPPE_IMAGE_MAX_OCTETS"; fi   # tests
 
 refuser() { printf '%s\n' "lancer_emulation : $1" >&2; exit 2; }
 
@@ -340,6 +348,11 @@ existants=$(dk 20 ps -q --filter "name=^tache-") || fin_erreur "Docker ne répon
 kvm_gid=$(getent group kvm 2>/dev/null | cut -d: -f3)
 [[ $kvm_gid =~ ^[0-9]{1,10}$ ]] || fin_erreur "Groupe kvm introuvable sur ce serveur : l'émulateur ne peut pas être accéléré."
 [[ $IMAGE_SYSTEME =~ $MOTIF_IMAGE_SYSTEME ]] || fin_erreur "Image système mal formée."
+# Taille du system.img de l'image épinglée (stat sans suivre de lien : absent ici, l'entrée du conteneur dira l'image absente).
+taille_img=$(stat -c %s -- "$SDK/${IMAGE_SYSTEME//;//}/system.img" 2>/dev/null)
+if [[ $taille_img =~ ^[0-9]{1,15}$ ]] && [ "$taille_img" -gt "$IMAGE_MAX_OCTETS" ]; then
+  fin_erreur "Image système trop grosse pour /avd : system.img fait $((taille_img / 1048576)) Mo, au plus $((IMAGE_MAX_OCTETS / 1048576)) Mo (tmpfs /avd de ${AVD_TMPFS_GO} Go moins 2 Go de marge : l'émulateur en fait une copie inscriptible)."
+fi
 
 honorer_final                                       # relu juste avant d'écrire en_cours
 printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid"      # AVANT en_cours : un second lancement voit une enveloppe vivante, pas un veilleur mort
@@ -348,9 +361,9 @@ ecrire_etat en_cours "" "$(maintenant_iso)" "" "Conteneur en cours de démarrage
 # --mount (et non -v) : un chemin source absent est une erreur, jamais un dossier créé par root ; SDK et entree en lecture seule.
 COMMANDE=(run --pull never --rm -d --init --name "tache-$ID" --network none --device /dev/kvm
   --user 1000:1000 --group-add "$kvm_gid" --cap-drop ALL --security-opt no-new-privileges
-  --read-only --tmpfs /tmp:size=512m,mode=1777 --tmpfs /avd:size=4g,mode=1777
+  --read-only --tmpfs /tmp:size=512m,mode=1777 --tmpfs "/avd:size=${AVD_TMPFS_GO}g,mode=1777"
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS" --pids-limit 512 --ulimit nofile=4096:4096
-  -e ANDROID_AVD_HOME=/avd -e HOME=/tmp -e PONT_SORTIE=/sortie -e PONT_AVD=emul
+  -e ANDROID_AVD_HOME=/avd -e HOME=/tmp -e ANDROID_USER_HOME=/tmp/.android -e PONT_SORTIE=/sortie -e PONT_AVD=emul
   -e PONT_EMULATEUR=/opt/android-sdk/emulator/emulator -e PONT_ADB=/opt/android-sdk/platform-tools/adb
   -e "TACHE_DUREE_S=$DUREE" -e "TACHE_IMAGE_SYSTEME=$IMAGE_SYSTEME" ${ENV_SUPPL[@]+"${ENV_SUPPL[@]}"}
   --mount "type=bind,src=$SDK,dst=/opt/android-sdk,readonly"

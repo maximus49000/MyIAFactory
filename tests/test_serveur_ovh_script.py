@@ -1327,7 +1327,8 @@ class TestDockerfileEmulateur(unittest.TestCase):
         self.assertRegex(self.code, r"(?m)^COPY pont\.sh /usr/local/bin/pont$")
         self.assertRegex(self.code, r"(?m)^COPY entree-tache\.sh /usr/local/bin/entree-tache$")
         self.assertRegex(self.code, r'(?m)^ENTRYPOINT \["/usr/local/bin/entree-tache"\]$')
-        for reglage in ("PONT_SORTIE=/sortie", "PONT_AVD=emul", "ANDROID_AVD_HOME=/avd", "HOME=/tmp",
+        # ANDROID_USER_HOME : Java prend user.home dans /etc/passwd (/home/ubuntu, lecture seule), pas dans $HOME (constaté)
+        for reglage in ("PONT_SORTIE=/sortie", "PONT_AVD=emul", "ANDROID_AVD_HOME=/avd", "HOME=/tmp", "ANDROID_USER_HOME=/tmp/.android",
                         "PONT_EMULATEUR=/opt/android-sdk/emulator/emulator", "PONT_ADB=/opt/android-sdk/platform-tools/adb"):
             self.assertIn(reglage, self.code)
 

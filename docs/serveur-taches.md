@@ -6,9 +6,9 @@ fait que cela (une tâche de type « émulation ») ; l'agent qui travaille *sur
 Conception : [`2026-11-19-agents-serveur-design.md`](superpowers/specs/2026-11-19-agents-serveur-design.md). Le serveur lui-même
 (déclaration, capacités, installation) : [`serveur.md`](serveur.md).
 
-> **Rien de tout cela n'a encore tourné sur un vrai serveur.** Tous les essais passent par de faux SSH et de faux dossiers ;
-> la liste exacte de ce qui n'a pas été exécuté est dans « Ce qui n'a PAS été exécuté sur un vrai serveur ». Le premier essai
-> réel est prévu avec l'accord explicite du Directeur, jamais avant.
+> **Un premier essai réel a réussi le 2026-11-20** (recette en mode scénario avec MyFridgeCleaner, voir « Le premier essai
+> réel »). Le reste n'est vérifié que par de faux SSH et de faux dossiers : la liste est dans « Ce qui n'a PAS encore été
+> vérifié sur un vrai serveur ».
 
 ## Les deux modes
 
@@ -288,8 +288,11 @@ entrée dont le fichier mène ailleurs est écartée. La règle est la même dan
 ## Sécurité : ce que le conteneur ne peut pas faire
 
 - Il tourne avec l'**utilisateur 1000** (pas root), `--cap-drop ALL`, `no-new-privileges`, système de fichiers en **lecture
-  seule** (seuls `/tmp` 512 Mo et `/avd` 4 Go sont des volumes mémoire), **aucun réseau**, 512 processus, mémoire et swap
-  bornés.
+  seule** (seuls `/tmp` 512 Mo et `/avd` 9 Go sont des volumes mémoire : des plafonds, seul l'écrit occupe la mémoire),
+  **aucun réseau**, 512 processus, mémoire et swap bornés (6144 Mo par défaut). `/avd` fait 9 Go parce que l'émulateur copie
+  le `system.img` de l'hôte (4,3 Go pour android-34 google_apis) dans l'AVD et exige ~7,4 Go libres ; le réglage
+  `disk.dataPartition.size` du `config.ini` n'y change rien. Une image système plus grosse que 9 Go moins 2 Go de marge est
+  refusée avant `docker run`, avec sa raison dans `etat.json`.
 - Il ne monte que le SDK Android (**lecture seule**), `entree/` (**lecture seule**) et `sortie/` (**lecture-écriture**). Pas de
   secret, pas de clé, pas de socket Docker, pas d'environnement de l'appelant (seuls les réglages posés par l'enveloppe, en
   `-e NOM=valeur`). L'image n'a ni `curl` ni `wget`.
@@ -335,19 +338,41 @@ affichée sur la tâche. Un arrêt qui échoue laisse l'état affiché tel que l
   de cette capacité. Les autres capacités ne sont pas concernées. `lancer_emulation.sh` n'entre pas dans l'empreinte : il est
   redéposé à chaque lancement.
 
-## Ce qui n'a PAS été exécuté sur un vrai serveur
+## Le premier essai réel (2026-11-20)
 
-Tout ce qui précède est vérifié par des tests simulés (faux SSH, dossiers jetables), pas contre le serveur réel. En
-particulier **jamais exécutés** : `pont.sh`, `lancer_emulation.sh` et `entree-tache.sh` sous Linux (leurs tests bash tournent
-sous Git bash sur Windows) ; la **construction de l'image** (`Dockerfile`) ; les chemins **`flock`, `setsid`, zombie et groupe de
-processus** (absents de Windows : `test_serveur_pont` et les tests de l'enveloppe n'ont jamais tourné sous Linux) ;
-**adb et l'émulateur** eux-mêmes ; la **création de l'AVD** (JDK 17 des outils en ligne de commande contre Java 21) ; le
-**`/tmp` monté `noexec`** et la lisibilité de `~/android-sdk` par l'utilisateur 1000 ; l'appartenance au **groupe `kvm`** et
-`/dev/kvm` ; le cycle de vie de **`docker exec`**. Le premier essai réel (installer la capacité `emulateur-image`, lancer une
-recette avec l'APK de MyFridgeCleaner, vérifier KVM, la capture, le rapport, l'arrêt et la libération du créneau) n'aura lieu
-qu'avec l'accord explicite du Directeur.
+Une recette (mode scénario) a tourné **pour de vrai** sur le serveur du Directeur avec l'APK de MyFridgeCleaner : statut `ok`,
+code 0, capture de l'écran d'accueil rapatriée dans le projet. Image construite, KVM, AVD, adb, pont, `docker exec`, rapport,
+arrêt et libération du créneau ont donc fonctionné au moins une fois.
 
-**Installer l'image avant cet essai** : l'action `recette-emulateur` demande la capacité `emulateur-image` (et sa chaîne
+**Temps mesurés** : construction de l'image ~3 min (une fois). Par tâche : `demarrer` 45 s (démarrage à froid d'Android 14
+avec KVM), `installer` 2,5 s, `lancer` 1,3 s, `attendre` 8 s, `capturer` 0,7 s, `journal` ~1 s, `arreter` 2,8 s ; **79 s** sur
+le serveur, **85 s** de bout en bout depuis le poste. L'émulateur (QEMU) occupe ~3,4 Go de mémoire résidente et ~160 % de
+processeur ; `/avd` n'utilise réellement que ~760 Mo de son plafond de 9 Go.
+
+**Défauts trouvés par cet essai, corrigés** :
+- les outils en ligne de commande 11076708 (12.0) ne lisaient pas le `package.xml` (XML v4) de l'image système (« AVD not
+  created ») : l'image de l'émulateur a sa propre épingle `emulateur_cmdline_tools` = 16111833 (23.0) ;
+- dans le conteneur en lecture seule, Java prend `user.home` dans `/etc/passwd` (`/home/ubuntu`, non inscriptible), pas dans
+  `$HOME` : `ANDROID_USER_HOME=/tmp/.android` est posé par l'image, par `docker run` et par l'entrée du conteneur ;
+- `/avd` de 4 Go ne suffisait pas à la copie du `system.img` (« Not enough space to create userdata partition ») : 9 Go,
+  et refus anticipé d'une image trop grosse ;
+- (et le veilleur, qui ne reconnaissait pas « error: no such object » en minuscules, dit désormais tout de suite qu'un
+  conteneur est mort au démarrage, avec la fin de `entree-tache.log`.)
+
+## Ce qui n'a PAS encore été vérifié sur un vrai serveur
+
+Le reste est vérifié par des tests simulés (faux SSH, dossiers jetables), pas contre le serveur réel :
+- le **mode pilote** par `serveur-outil` (verbe par verbe, inactivité) ;
+- l'**arrêt d'une tâche en cours depuis le bureau** (`arreter` d'une tâche qui tourne : l'essai a fini par le `arret: fin`
+  du lanceur, fin normale d'un scénario) ;
+- la **détection d'un plantage** avec une application qui plante vraiment ;
+- la **lecture de `/proc`** par le veilleur pour suivre le conteneur sans `sudo docker inspect` (l'essai s'est terminé par la
+  fin demandée par le lanceur : rien ne montre si ce suivi a servi ou si `inspect` a pris le relais) ;
+- les **tâches longues** (échéance, inactivité, taille de `sortie/`) ;
+- **deux tâches à la suite** et la **concurrence pour le créneau** ;
+- le **nettoyage** de `~/taches` : chaque dossier de tâche garde ~12 Mo, rien ne les efface encore automatiquement.
+
+**Installer l'image avant un essai** : l'action `recette-emulateur` demande la capacité `emulateur-image` (et sa chaîne
 `base`, `android-build`, `android-emulateur`). Dans le bureau : écran Serveurs, « Installer », cocher « Recette sur émulateur »,
 « Voir l'aperçu » puis donner l'accord. En ligne de commande : `py -3.12 lancer.py plateforme serveurs apercu <id>
 recette-emulateur`, puis `py -3.12 lancer.py plateforme serveurs installer <id> recette-emulateur --accord`.

@@ -15,6 +15,8 @@
 # system-images,licenses,build-tools} -> /opt/android-sdk/... : avdmanager déduit la racine du SDK de sa propre place
 # (<racine>/cmdline-tools/latest) et y trouve l'image système montée de l'hôte.
 # L'ENV ci-dessous pose les réglages du pont dans l'image : `docker exec` les retrouve sans que l'appelant n'en transmette aucun.
+# ANDROID_USER_HOME : Java prend user.home dans /etc/passwd (uid 1000 -> /home/ubuntu, en lecture seule ici), pas dans $HOME ;
+# sans lui avdmanager échoue « Can't locate Android SDK installation directory for the AVD .ini file » (constaté).
 ARG UBUNTU_TAG=24.04
 
 FROM ubuntu:${UBUNTU_TAG} AS outils
@@ -47,6 +49,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_AVD_HOME=/avd \
     HOME=/tmp \
+    ANDROID_USER_HOME=/tmp/.android \
     PONT_SORTIE=/sortie \
     PONT_AVD=emul \
     PONT_EMULATEUR=/opt/android-sdk/emulator/emulator \

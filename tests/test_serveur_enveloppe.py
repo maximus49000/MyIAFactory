@@ -20,9 +20,18 @@ case "$1" in
   run) echo "run-vu: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json")" >> "$FAUX_JOURNAL"
        [ -n "${FAUX_RUN_ECHEC:-}" ] && { echo "boom" >&2; exit 125; }
        printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
-  ps) n=$(cat "$ET/ps" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$ET/ps"
+  ps|inspect)   # un seul compteur de contrôles : « ps » de l'enveloppe puis « inspect » du veilleur
+      n=$(cat "$ET/ps" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$ET/ps"
       if [ -n "${FAUX_MEURT_AU_PS:-}" ] && [ "$n" -ge "$FAUX_MEURT_AU_PS" ]; then rm -f "$ET/vivant"; fi
       [ -n "${FAUX_ARRET_AU_PS:-}" ] && [ "$n" = 1 ] && echo > "$FAUX_ARRET_AU_PS"
+      if [ "$1" = inspect ]; then
+        [ -n "${FAUX_DOCKER_MUET:-}" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
+        if [ -e "$ET/vivant" ]; then
+          p=999999; [ -n "${FAUX_PID_VEILLEUR:-}" ] && p=$(cat "$FAUX_DOSSIER/veilleur.pid")
+          echo "true $p"; exit 0
+        fi
+        echo "Error: No such object: tache-x" >&2; exit 1
+      fi
       [ -n "${FAUX_CONTENEUR_EXISTE:-}" ] && echo cidautre
       [ -e "$ET/vivant" ] && echo cid123
       exit 0 ;;
@@ -32,7 +41,10 @@ exit 0'''
 FAUX = {
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"',
     "docker": DOCKER,
-    "flock": 'echo "flock $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_FLOCK_OCCUPE:-}" ] && [ "$1" = -n ] && exit 1\nexit 0',
+    # FAUX_FLOCK_ARRETEE : un `arreter` du lanceur passe pendant l'attente du créneau (il écrit l'état final arretee)
+    "flock": 'echo "flock $*" >> "$FAUX_JOURNAL"\n'
+             '[ -n "${FAUX_FLOCK_ARRETEE:-}" ] && [ "$1" = -n ] && printf \'%s\\n\' "$FAUX_FLOCK_ARRETEE" > "$FAUX_DOSSIER/etat.json"\n'
+             '[ -n "${FAUX_FLOCK_OCCUPE:-}" ] && [ "$1" = -n ] && exit 1\nexit 0',
     "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\n[ -n "${FAUX_SETSID_DELAI:-}" ] && sleep "$FAUX_SETSID_DELAI"\nexec "$@"',
     # date : note l'état au moment où le veilleur... non : au moment où l'enveloppe écrit en_cours (premier appel après enveloppe.pid)
     "date": 'echo "date: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json" 2>/dev/null)" >> "$FAUX_JOURNAL"\nexec /usr/bin/date "$@"',
@@ -439,6 +451,62 @@ class TestEnveloppe(unittest.TestCase):
             self.assertEqual(b.appels("docker run"), [])
             self.assertTrue(b.appels("flock -u"))                           # créneau relâché
             self.assertTrue(any("name=^tache-" in x and x.startswith("docker ps") for x in b.journal.splitlines()), b.journal)
+
+    ARRETEE = json.dumps({"id": ID, "etat": "arretee", "statut": None, "debut": None, "fin": "2026-11-19T10:16:40Z",
+                          "raison": "Arrêtée avant son démarrage (créneau occupé) : rien n'a tourné, APK retiré."})
+
+    def test_un_arret_pendant_l_attente_du_creneau_est_honore(self):
+        # T4 : `arreter` écrit arretee pendant que l'enveloppe attend le créneau : elle ne démarre rien et ne réécrit
+        # jamais l'état final (ni en_cours, ni en_attente), créneau relâché.
+        for occupe in ("", "1"):
+            with self.subTest(creneau_occupe=bool(occupe)), Banc(FAUX_FLOCK_ARRETEE=self.ARRETEE,
+                                                                 **({"FAUX_FLOCK_OCCUPE": "1"} if occupe else {})) as b:
+                self._etat_ecrit(b, "en_attente")
+                r = b.lancer()
+                self.assertEqual(r.returncode, 4, r.stderr + r.stdout)
+                self.assertEqual(b.etat()["etat"], "arretee")
+                self.assertEqual(json.loads(r.stdout.strip().splitlines()[-1])["etat"], "arretee")
+                self.assertEqual(b.appels("docker run"), [])
+                self.assertEqual(b.appels("setsid"), [])
+                self.assertTrue(b.appels("flock -u"), b.journal)
+                self.assertFalse((b.dossier / "enveloppe.pid").exists())
+
+    def test_le_veilleur_ne_sonde_plus_docker_ps_toutes_les_2_s(self):
+        # M4 : `docker ps` une seule fois (l'enveloppe) ; le veilleur lit l'état par `docker inspect`, et seulement
+        # quand le processus du conteneur n'est plus vu dans /proc (auth.log de sudo épargné).
+        with Banc(FAUX_PID_VEILLEUR="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            time.sleep(2.5)                                       # une douzaine de tours à 0,2 s
+            self.assertEqual(len(b.appels("docker ps")), 1, b.journal)
+            self.assertLessEqual(len(b.appels("docker inspect")), 2, b.journal)
+            b.arreter()
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("arretee", "ok"))
+        code = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('SONDE="${ENVELOPPE_SONDE_S:-5}"', code)
+
+    def test_docker_muet_au_veilleur_finit_en_erreur(self):
+        with Banc(FAUX_DOCKER_MUET="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            f = b.attendre_final(delai=30)
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+            self.assertIn("Docker ne répond plus", f["raison"])
+
+    def test_echeance_tenue_a_la_seconde_malgre_une_sonde_lente(self):
+        # M4 : la sonde passe à 5 s, mais le veilleur se réveille à l'échéance (jamais 5 s de retard).
+        with Banc(ENVELOPPE_SONDE_S="8") as b:
+            debut = time.time()
+            self.assertEqual(b.lancer("scenario", "2", "30", "2048", "2").returncode, 0)
+            f = b.attendre_final(delai=20)
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertLess(time.time() - debut, 6.5)                # et non 8 s (une sonde entière)
+        with Banc(ENVELOPPE_SONDE_S="8") as b:                          # inactivité du pilote : de même
+            debut = time.time()
+            self.assertEqual(b.lancer("pilote", "60", "2", "2048", "2").returncode, 0)
+            f = b.attendre_final(delai=20)
+            self.assertEqual((f["etat"], f["statut"]), ("terminee", "limite"))
+            self.assertIn("Inactivité", f["raison"])
+            self.assertLess(time.time() - debut, 6.5)
 
     def test_hup_ignore_avant_d_ecrire_en_cours(self):
         code = SCRIPT.read_text(encoding="utf-8")

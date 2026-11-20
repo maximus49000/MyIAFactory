@@ -26,11 +26,12 @@
 #   arret contient « fin » (fin normale demandée par le lanceur) -> terminee, ok ; tout autre contenu -> arretee, ok.
 #   Inactivité du pilote = max(mtime sortie/pont.log, sortie/.activite (touché par pont.sh au début ET à la fin de chaque verbe),
 #   sortie/.avd-pret, début de la tâche).
-# Limite de taille : sondage toutes les ENVELOPPE_SONDE_S (2 s) de `du -sk`, PAS un quota : un dépassement entre deux sondages
+# Limite de taille : sondage toutes les ENVELOPPE_SONDE_S (5 s) de `du -sk`, PAS un quota : un dépassement entre deux sondages
 #   est accepté (résiduel connu) ; la limite du pont (octets de captures) reste la première barrière.
 # ÉCART VOLONTAIRE : l'échéance duree_s est appliquée par le veilleur (et, en dernier recours, par `timeout duree+60` dans le
 #   conteneur : entree-tache.sh), et non par `timeout <duree_s>` autour de `docker run -d`, qui rend la main aussitôt.
-# Réservées aux tests : ENVELOPPE_SONDE_S (période de surveillance, 2 s par défaut). Aucun identifiant n'est monté ni transmis ;
+# Réservées aux tests : ENVELOPPE_SONDE_S (période de surveillance, 5 s par défaut ; le veilleur se réveille plus tôt pour
+#   l'échéance de durée ou d'inactivité, jamais une période en retard ; l'état du conteneur : voir etat_docker). Aucun identifiant n'est monté ni transmis ;
 # le conteneur reçoit seulement les réglages posés ci-dessous (-e NOM=valeur, jamais l'environnement de l'appelant).
 set -u
 export LC_ALL=C
@@ -72,8 +73,8 @@ if [ $# -ge 8 ]; then
   SUPPL+=("$8"); ENV_SUPPL+=(-e "PONT_OCTETS=$8")
 fi
 [ -n "${HOME:-}" ] || refuser "HOME absent."
-SONDE="${ENVELOPPE_SONDE_S:-2}"
-[[ $SONDE =~ $MOTIF_SONDE ]] || SONDE=2
+SONDE="${ENVELOPPE_SONDE_S:-5}"
+[[ $SONDE =~ $MOTIF_SONDE ]] || SONDE=5
 
 TACHES="$HOME/taches"
 DOSSIER="$TACHES/$ID"
@@ -111,17 +112,44 @@ liberer_creneau() { flock -u 8 2>/dev/null; exec 8>&-; }
 # docker sans hériter du verrou (8>&-) ni de l'entrée, et borné : un docker figé ne fige jamais l'enveloppe.
 dk() { local delai="$1"; shift; timeout "$delai" sudo -n docker "$@" 8>&- </dev/null; }
 
-conteneur_vivant() {   # 0 vivant, 1 absent, 2 docker ne répond pas
-  local sortie
-  sortie=$(dk 20 ps -q --no-trunc --filter "name=^tache-${ID}\$" 2>/dev/null) || return 2
-  [ -n "$sortie" ]
+# État du conteneur : `docker inspect` (par sudo : une ligne d'auth.log) seulement quand il le faut. Entre deux, le processus
+# principal du conteneur (PID relevé par inspect) est suivi dans /proc, sans sudo : même PID ET même date de démarrage
+# (champ 22 de /proc/<pid>/stat), jamais un PID recyclé.
+PID_CONTENEUR=""; DEBUT_CONTENEUR=""
+debut_processus() {   # debut_processus <pid> : date de démarrage du processus (ticks depuis l'amorçage)
+  local s
+  s=$(cat -- "/proc/$1/stat" 2>/dev/null) || return 1
+  s="${s##*) }"
+  set -- $s
+  [[ ${20:-} =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "${20}"
 }
 
-arreter_conteneur() {   # 0 si le conteneur n'existe plus
+etat_docker() {   # 0 vivant, 1 absent ou arrêté, 2 docker ne répond pas
+  local sortie r
+  sortie=$(dk 20 inspect -f '{{.State.Running}} {{.State.Pid}}' "tache-$ID" 2>&1); r=$?
+  PID_CONTENEUR=""; DEBUT_CONTENEUR=""
+  if [ "$r" = 0 ]; then
+    set -- $sortie
+    [ "${1:-}" = true ] || return 1
+    if [[ ${2:-} =~ ^[1-9][0-9]{0,9}$ ]] && DEBUT_CONTENEUR=$(debut_processus "$2"); then PID_CONTENEUR="$2"; fi
+    return 0
+  fi
+  case "$sortie" in *"No such"*) return 1 ;; esac
+  return 2
+}
+
+conteneur_vivant() {   # 0 vivant, 1 absent, 2 docker ne répond pas
+  local d
+  if [ -n "$PID_CONTENEUR" ] && d=$(debut_processus "$PID_CONTENEUR") && [ "$d" = "$DEBUT_CONTENEUR" ]; then return 0; fi
+  etat_docker
+}
+
+arreter_conteneur() {   # 0 si le conteneur n'existe plus (constaté par docker, jamais par /proc)
   local r
   dk 60 stop -t 10 "tache-$ID" >/dev/null 2>&1 || dk 30 kill "tache-$ID" >/dev/null 2>&1
-  conteneur_vivant; r=$?
-  if [ "$r" = 0 ]; then dk 30 rm -f "tache-$ID" >/dev/null 2>&1; conteneur_vivant; r=$?; fi
+  etat_docker; r=$?
+  if [ "$r" = 0 ]; then dk 30 rm -f "tache-$ID" >/dev/null 2>&1; etat_docker; r=$?; fi
   [ "$r" = 1 ]
 }
 
@@ -132,7 +160,7 @@ mtime() { local m; m=$(stat -c %Y "$1" 2>/dev/null); if [[ $m =~ ^[0-9]+$ ]]; th
 veilleur() {
   { : >&8; } 2>/dev/null || exit 2                  # sans le créneau hérité de l'enveloppe, jamais de veilleur
   printf '%s\n' "$$" > "$DOSSIER/veilleur.pid"
-  local debut_iso debut_s maintenant derniere m pannes=0 etat_conteneur plantage=0 motif ko
+  local debut_iso debut_s maintenant derniere m pannes=0 etat_conteneur plantage=0 motif ko prochaine pause
   debut_iso=$(debut_ecrit); [ -n "$debut_iso" ] || debut_iso=$(maintenant_iso)
   debut_s=$(date +%s)
   FINI=0
@@ -172,6 +200,7 @@ veilleur() {
     fi
     maintenant=$(date +%s)
     if [ $((maintenant - debut_s)) -ge "$DUREE" ]; then arreter_puis terminee limite "Durée maximale atteinte (${DUREE} s)"; fi
+    prochaine=$((DUREE - (maintenant - debut_s)))            # secondes avant la prochaine échéance (durée, puis inactivité)
     ko=$(du -sk "$DOSSIER/sortie" 2>/dev/null | cut -f1)
     if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$LIMITE_SORTIE_KO" ]; then
       arreter_puis terminee limite "Limite atteinte : sortie trop volumineuse (${ko} Ko, maximum ${LIMITE_SORTIE_KO} Ko)"
@@ -184,8 +213,13 @@ veilleur() {
       if [ $((maintenant - derniere)) -ge "$INACTIVITE" ]; then
         arreter_puis terminee limite "Inactivité du pilote : aucun verbe depuis ${INACTIVITE} s"
       fi
+      [ $((INACTIVITE - (maintenant - derniere))) -lt "$prochaine" ] && prochaine=$((INACTIVITE - (maintenant - derniere)))
     fi
-    sleep "$SONDE"
+    # Sommeil d'une sonde, raccourci jusqu'à l'échéance la plus proche si elle tombe avant (au moins 1 s).
+    pause="$SONDE"
+    [ "$prochaine" -ge 1 ] || prochaine=1
+    [ "${SONDE%%.*}" -ge "$prochaine" ] && pause="$prochaine"
+    sleep "$pause"
   done
 }
 
@@ -193,7 +227,10 @@ if [ "$VEILLEUR" = 1 ]; then veilleur; exit 0; fi
 
 # --- Enveloppe (au premier plan, rend vite la main) ------------------------
 
-fin_erreur() {   # fin_erreur <raison> : tâche échouée, créneau libéré
+fin_erreur() {   # fin_erreur <raison> : tâche échouée, créneau libéré (un état final déjà écrit par arreter est gardé)
+  if grep -qE '"etat": "(terminee|arretee|echouee)"' "$DOSSIER/etat.json" 2>/dev/null; then
+    liberer_creneau; montrer_etat; exit 4
+  fi
   ecrire_etat echouee erreur "$(debut_ecrit)" "$(maintenant_iso)" "$1"
   liberer_creneau
   montrer_etat
@@ -236,13 +273,25 @@ esac
 
 exec 8>> "$TACHES/.creneau-emulation" || { ecrire_etat echouee erreur "" "$(maintenant_iso)" "Créneau inaccessible."; exit 1; }
 trap '' HUP                         # la fin de la session SSH ne doit jamais interrompre l'écriture de l'état
-occupe() {   # occupe <raison> : jamais deux émulateurs ; ne remplace jamais un état en_cours
+# Un `arreter` du lanceur a pu passer pendant l'attente du créneau (il retire l'APK puis écrit arretee) : un état FINAL est
+# alors honoré, jamais réécrit (ni en_attente, ni en_cours) ; la tâche ne démarre jamais sans son APK. Relu sous le créneau,
+# juste avant chaque écriture d'état.
+honorer_final() {
+  if grep -qE '"etat": "(terminee|arretee|echouee)"' "$DOSSIER/etat.json" 2>/dev/null; then
+    liberer_creneau
+    montrer_etat
+    exit 4
+  fi
+}
+occupe() {   # occupe <raison> : jamais deux émulateurs ; ne remplace jamais un état en_cours ni un état final
+  honorer_final
   grep -q '"etat": "en_cours"' "$DOSSIER/etat.json" 2>/dev/null || ecrire_etat en_attente "" "" "" "$1"
   liberer_creneau
   montrer_etat
   exit 75
 }
 flock -n 8 || occupe "Créneau d'émulation occupé : une autre tâche tourne, relancez plus tard."
+honorer_final
 existants=$(dk 20 ps -q --filter "name=^tache-") || fin_erreur "Docker ne répond pas : impossible de vérifier qu'aucun émulateur ne tourne."
 [ -z "$existants" ] || occupe "Un conteneur tache-* tourne déjà (veilleur mort ?) : relancez plus tard."
 
@@ -250,6 +299,7 @@ kvm_gid=$(getent group kvm 2>/dev/null | cut -d: -f3)
 [[ $kvm_gid =~ ^[0-9]{1,10}$ ]] || fin_erreur "Groupe kvm introuvable sur ce serveur : l'émulateur ne peut pas être accéléré."
 [[ $IMAGE_SYSTEME =~ $MOTIF_IMAGE_SYSTEME ]] || fin_erreur "Image système mal formée."
 
+honorer_final                                       # relu juste avant d'écrire en_cours
 printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid"      # AVANT en_cours : un second lancement voit une enveloppe vivante, pas un veilleur mort
 ecrire_etat en_cours "" "$(maintenant_iso)" "" "Conteneur en cours de démarrage."
 

@@ -265,6 +265,7 @@ class TestRequetes(unittest.TestCase):
                 vus.append((args, kw))
                 self.returncode = 0
                 self.pid = 4242
+                self.stdout = io.BytesIO(ligne_pont("toucher", "ok"))
 
             def communicate(self, timeout=None):
                 return ligne_pont("toucher", "ok"), b""
@@ -396,6 +397,157 @@ class TestRequetes(unittest.TestCase):
                              [e for e in b.emulations() if e != premiere][0])
 
 
+class TestCorrectifs(unittest.TestCase):
+    """Revue de la tâche 7 (tour 1) : disque borné (I1), arrêts sûrs, réponses et lectures bornées."""
+
+    def test_limite_d_emulations_et_apk_precedent_retire(self):
+        self.assertEqual(PH.EMULATIONS_MAX, 5)
+        with Banc() as b:
+            vues = []
+            for i in range(5):
+                code, d = b.appel("demarrer")
+                self.assertEqual(code, 0, d)
+                emu = (b.dossier / "emulation").read_text(encoding="utf-8").strip()
+                vues.append(emu)
+                for ancienne in vues[:-1]:                                  # disque rendu : APK des précédentes retiré
+                    self.assertFalse((b.taches / ancienne / "entree" / "app.apk").exists(), ancienne)
+                self.assertTrue((b.taches / emu / "entree" / "app.apk").exists())
+                self.assertEqual(b.appel("arreter")[0], 0)
+            code, d = b.appel("demarrer")
+            self.assertEqual(code, 4, d)
+            self.assertIn("limite d'émulations", d["detail"].lower())
+            self.assertEqual(len(b.emulations()), 5)
+            self.assertEqual(len(b.faux.lancements()), 5)
+
+    def test_lancement_refuse_sans_nouveau_dossier(self):
+        for code_lancer in (1, 2):
+            with self.subTest(code=code_lancer), Banc() as b:
+                b.faux.codes_lancer = [code_lancer]
+                self.assertEqual(b.appel("demarrer")[0], 4)
+                emus = b.emulations()
+                self.assertEqual(len(emus), 1)
+                self.assertEqual((b.taches / emus[0] / "arret").read_text(encoding="utf-8").strip(), "fin")
+                for _ in range(3):                                        # une boucle d'essais ne crée rien
+                    code, d = b.appel("demarrer")
+                    self.assertEqual(code, 4, d)
+                self.assertEqual(b.emulations(), emus)
+                self.assertEqual(len(b.faux.lancements()), 1)
+
+    def test_echec_inattendu_arrete_puis_une_neuve(self):
+        for code_lancer in (9, None):
+            with self.subTest(code=code_lancer), Banc() as b:
+                b.faux.codes_lancer = [code_lancer]
+                self.assertEqual(b.appel("demarrer")[0], 4)
+                premiere = b.emulations()[0]
+                self.assertEqual((b.taches / premiere / "arret").read_text(encoding="utf-8").strip(), "fin")
+                self.assertEqual(b.appel("demarrer")[0], 0)
+                self.assertEqual(len(b.emulations()), 2)
+
+    def test_requete_rembourree_et_cle_verbe_doublee(self):
+        with Banc() as b:
+            valide = b'{"verbe": "toucher", "args": ["1", "2"]}'
+            self.assertEqual(b.requete(valide)[0], 4)                     # valide (pas d'émulation : 4, pas 2)
+            code, d = b.requete(valide + b" " * (PH.REQUETE_MAX - len(valide) + 1))   # JSON valide, mais 4097 octets
+            self.assertEqual(code, 2, d)
+            code, d = b.requete(b'{"verbe": "toucher", "verbe": "toucher", "args": ["1", "2"]}')
+            self.assertEqual(code, 2, d)
+            self.assertEqual(b.faux.appels, [])
+
+    def test_reponse_bornee_en_octets(self):
+        ligne = PH.reponse(0, "journal", "\x01" * 300000)                # 6 octets par caractère une fois échappé
+        self.assertLessEqual(len(ligne), PH.REPONSE_OCTETS_MAX)
+        self.assertEqual(json.loads(ligne)["code"], 0)
+        client = charger(CLIENT, "pont_client")
+        self.assertLessEqual(PH.REPONSE_OCTETS_MAX, client.REPONSE_MAX)
+
+    def test_exception_inattendue_code_4_et_le_pont_continue(self):
+        def casse(sortie, args):
+            raise RuntimeError("réponse inattendue")
+
+        with Banc() as b:
+            self.assertEqual(b.appel("demarrer")[0], 0)
+            b.faux.actions["toucher"] = casse
+            try:
+                code, d = b.appel("toucher", "1", "2")
+            except RuntimeError:
+                self.fail("une réponse inattendue a fait tomber le pont")
+            self.assertEqual(code, 4, d)
+            self.assertEqual(b.appel("attendre", "1")[0], 0)
+
+    def test_executer_borne_la_sortie_et_arrete_en_deux_temps(self):
+        gestes = []
+
+        class FauxPopen:
+            sortie = b"x" * (5 * 1024 * 1024)
+            bloque = False
+
+            def __init__(self, args, **kw):
+                self.returncode = None
+                self.stdout = io.BytesIO(FauxPopen.sortie)
+
+            def communicate(self, timeout=None):
+                if FauxPopen.bloque:
+                    raise subprocess.TimeoutExpired("x", timeout)
+                self.returncode = 0
+                return FauxPopen.sortie, b""
+
+            def wait(self, timeout=None):
+                gestes.append(("wait", timeout))
+                if FauxPopen.bloque and timeout is not None:              # ne part qu'au SIGKILL
+                    raise subprocess.TimeoutExpired("x", timeout)
+                self.returncode = -9 if FauxPopen.bloque else 0
+                return self.returncode
+
+            def terminate(self):
+                gestes.append(("terminate", None))
+
+            def kill(self):
+                gestes.append(("kill", None))
+
+        with mock.patch.object(PH.subprocess, "Popen", FauxPopen):
+            code, sortie = PH.executer(["sudo", "x"], 90, dict(PH.ENV_FIXE))
+            self.assertEqual(code, 0)
+            self.assertLessEqual(len(sortie), PH.SORTIE_MAX_OCTETS)
+            FauxPopen.bloque = True
+            gestes.clear()
+            code, _s = PH.executer(["sudo", "x"], 90, dict(PH.ENV_FIXE))
+        self.assertIsNone(code)
+        noms = [g[0] for g in gestes]
+        self.assertIn("terminate", noms)                                    # SIGTERM d'abord
+        self.assertLess(noms.index("terminate"), noms.index("kill"))       # puis SIGKILL
+        self.assertEqual(noms[-1], "wait")                                 # toujours attendu
+
+    def test_lecture_d_une_requete_bornee_dans_le_temps(self):
+        horloge = [0.0]
+
+        class GoutteAGoutte:
+            appels = 0
+
+            def settimeout(self, t):
+                pass
+
+            def recv(self, n):
+                GoutteAGoutte.appels += 1
+                horloge[0] += 1.0                                          # une seconde par octet
+                return b"a"
+
+        try:
+            ligne = PH._lire_ligne(GoutteAGoutte(), horloge=lambda: horloge[0])
+        except TypeError:
+            self.fail("lecture sans échéance globale")
+        self.assertLessEqual(GoutteAGoutte.appels, PH.LECTURE_S + 1)
+        with Banc() as b:
+            self.assertEqual(b.requete(ligne)[0], 2)                      # incomplète : refusée
+
+    def test_fin_jamais_interrompue_par_un_signal(self):
+        source = PONT_HOTE.read_text(encoding="utf-8")
+        fin = source[source.index("def main("):]
+        bloc = fin[fin.index("finally:"):]
+        for s in ("SIGTERM", "SIGINT", "SIGHUP"):
+            self.assertIn(s, bloc[:bloc.index("ctx.fin()")])
+        self.assertIn("SIG_IGN", bloc[:bloc.index("ctx.fin()")])
+
+
 @unittest.skipUnless(hasattr(socket, "AF_UNIX") and os.name == "posix", "socket Unix : Linux seulement (ignoré sous Windows)")
 class TestSocket(unittest.TestCase):
     def test_socket_droits_et_un_appel(self):
@@ -442,15 +594,32 @@ class TestClient(unittest.TestCase):
         self.assertTrue(CLIENT.read_bytes().startswith(b"#!/usr/bin/env python3\n"))
         self.assertNotIn(b"\r", CLIENT.read_bytes())
         with tempfile.TemporaryDirectory() as t:
-            env = dict(os.environ, PONT_SOCKET=str(Path(t) / "absente.sock"))
-            r = subprocess.run([sys.executable, str(CLIENT), "toucher", "1", "2"], env=env, capture_output=True,
-                               text=True, encoding="utf-8", timeout=60, stdin=subprocess.DEVNULL)
-        self.assertEqual(r.returncode, 4, r.stderr)
-        lignes = [x for x in r.stdout.splitlines() if x.strip()]
-        self.assertEqual(len(lignes), 1, r.stdout)
-        d = json.loads(lignes[0])
-        self.assertEqual(set(d), CLES)
-        self.assertEqual((d["ok"], d["code"], d["detail"]), (False, 4, SANS_PONT))
+            # dossier du pont absent : mode seul ; dossier présent sans socket : pont pas encore prêt
+            for chemin, attendu in ((Path(t) / "pas-de-pont" / "pont.sock", SANS_PONT),
+                                    (Path(t) / "absente.sock", "pont pas encore prêt : réessaie dans quelques secondes")):
+                with self.subTest(chemin=chemin.name):
+                    env = dict(os.environ, PONT_SOCKET=str(chemin))
+                    r = subprocess.run([sys.executable, str(CLIENT), "toucher", "1", "2"], env=env, capture_output=True,
+                                       text=True, encoding="utf-8", timeout=60, stdin=subprocess.DEVNULL)
+                    self.assertEqual(r.returncode, 4, r.stderr)
+                    lignes = [x for x in r.stdout.splitlines() if x.strip()]
+                    self.assertEqual(len(lignes), 1, r.stdout)
+                    d = json.loads(lignes[0])
+                    self.assertEqual(set(d), CLES)
+                    self.assertEqual((d["ok"], d["code"], d["detail"]), (False, 4, attendu))
+
+    def test_client_argument_non_encodable_code_2(self):
+        client = charger(CLIENT, "pont_client")
+        connexions = []
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            try:
+                rc = client.appeler(["texte", "a\ud800b"], connecter=lambda: connexions.append(1))
+            except UnicodeEncodeError:
+                self.fail("UnicodeEncodeError non rattrapée")
+        self.assertEqual(rc, 2)
+        self.assertEqual(connexions, [])
+        self.assertEqual(json.loads(out.getvalue())["code"], 2)
 
     def test_client_rend_le_code_du_pont(self):
         client = charger(CLIENT, "pont_client")

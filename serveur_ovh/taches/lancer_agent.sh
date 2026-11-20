@@ -137,7 +137,7 @@ emulation_liee() {
 }
 
 arreter_pont_et_emulation() {
-  local pid="" e="$EMU" n
+  local pid="" n
   if pont_vivant; then                   # le pont est chef de sa session (setsid) : son groupe entier, sinon lui seul
     IFS= read -r pid < "$DOSSIER/pont-hote.pid"
     kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
@@ -147,8 +147,15 @@ arreter_pont_et_emulation() {
     done
     if pont_vivant; then kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null; fi
   fi
-  # L'émulation liée : l'argument 7, sinon $DOSSIER/emulation (écrit par le pont hôte, HORS de tout montage du conteneur ;
-  # pont/emulation, inscriptible par l'agent, n'est jamais lu).
+  fin_emulation_liee
+  return 0
+}
+
+# « fin » à l'émulation liée : l'argument 7, sinon $DOSSIER/emulation (écrit par le pont hôte, HORS de tout montage du
+# conteneur ; pont/emulation, inscriptible par l'agent, n'est jamais lu). Rappelé APRÈS le contrôle du secret (finir) : un
+# lancement d'émulation encore en cours au premier appel ne la laisse jamais tourner.
+fin_emulation_liee() {
+  local e="$EMU"
   [ -n "$e" ] || e=$(premiere_ligne "$DOSSIER/emulation")
   if emulation_liee "$e"; then printf 'fin\n' > "$TACHES/$e/arret" 2>/dev/null; fi
   return 0
@@ -233,6 +240,7 @@ veilleur() {
     local r
     arreter_pont_et_emulation
     controle_secret; r=$?
+    fin_emulation_liee                     # de nouveau, après le contrôle (jusqu'à 15 min) : jamais d'émulation orpheline
     if [ "$r" = 1 ]; then vider_sortie; conclure echouee erreur "$RAISON_SECRET"; fi
     if [ "$r" != 0 ]; then
       vider_sortie

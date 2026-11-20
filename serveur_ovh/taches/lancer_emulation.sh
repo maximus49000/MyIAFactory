@@ -10,7 +10,10 @@
 #   Chaque valeur est validée par un motif strict AVANT tout usage (nombres entiers sans zéro initial : duree_s et inactivite_s
 #   1..86400, memoire_mo 256..65536, cpus 1..64) ; rien n'en est jamais interprété par un shell : les commandes sont des tableaux.
 # Sortie standard : UNE ligne JSON, l'état écrit dans ~/taches/<id>/etat.json.
-# Codes : 0 conteneur démarré (état en_cours) ; 1 démarrage impossible (état echouee) ; 2 argument refusé (rien créé) ;
+# Émulation liée à un agent (pilote ; ~/taches/<id>/agent écrit par le pont hôte) : arret n'est jamais effacé au lancement ;
+#   agent déjà fini ou arrêt déjà demandé -> refus (code 1, état arretee) ; le veilleur s'arrête aussi (terminee, ok) dès que
+#   l'agent est à l'état final ou que son pont hôte (pont-hote.pid) ne vit plus.
+# Codes : 0 conteneur démarré (état en_cours) ; 1 démarrage impossible (état echouee ; arretee : émulation liée refusée) ; 2 argument refusé (rien créé) ;
 #   3 tâche déjà en cours : veilleur vivant OU enveloppe vivante (démarrage en cours, enveloppe.pid) (rien modifié) ;
 #   4 identifiant déjà utilisé (état final, ou en_cours sans veilleur ni enveloppe vivants : rien modifié, à nettoyer par le lanceur) ; 75 créneau occupé ou un conteneur tache-* existe déjà (en_attente, à relancer).
 # Dossier de la tâche ~/taches/<id>/ : entree/ (monté en lecture seule, l'APK y est déposé avant), sortie/ (monté en écriture :
@@ -107,6 +110,21 @@ extrait_demarrage() {
   printf '%s' "${t:0:300}"
 }
 
+# Émulation LIÉE à un agent (mode pilote, créée par le pont hôte de l'agent) : ~/taches/<id>/agent, fichier ordinaire écrit
+# sur l'hôte, porte l'identifiant de l'agent. Sans ce fichier (tranche A), rien de ce qui suit ne s'applique.
+agent_lie() {
+  local f="$DOSSIER/agent" a=""
+  [ -f "$f" ] && [ ! -L "$f" ] || return 0
+  a=$(head -c 200 -- "$f" 2>/dev/null | head -n 1)
+  [[ $a =~ $MOTIF_ID ]] && [ "$a" != "$ID" ] && printf '%s' "$a"
+  return 0
+}
+agent_fini() { grep -qE '"etat": "(terminee|arretee|echouee)"' "$TACHES/$AGENT_LIE/etat.json" 2>/dev/null; }
+# L'agent lié travaille encore : son état n'est pas final ET son pont hôte vit (pont-hote.pid, reconnu par sa ligne de commande).
+agent_actif() { ! agent_fini && processus_vivant "$TACHES/$AGENT_LIE/pont-hote.pid" "pont_hote.py $AGENT_LIE"; }
+AGENT_LIE=""
+if [ "$MODE" = pilote ]; then AGENT_LIE=$(agent_lie); fi
+
 # --- Veilleur (détaché) ----------------------------------------------------
 
 veilleur() {
@@ -162,6 +180,9 @@ veilleur() {
     if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$LIMITE_SORTIE_KO" ]; then
       arreter_puis terminee limite "Limite atteinte : sortie trop volumineuse (${ko} Ko, maximum ${LIMITE_SORTIE_KO} Ko)"
     fi
+    if [ -n "$AGENT_LIE" ] && ! agent_actif; then             # l'agent lié a fini ou son pont est parti : plus de pilote
+      arreter_puis terminee ok "Agent lié $AGENT_LIE fini ou pont hôte arrêté : émulation arrêtée"
+    fi
     if [ "$MODE" = pilote ]; then
       derniere=$debut_s
       m=$(mtime "$DOSSIER/sortie/pont.log"); [ "$m" -gt "$derniere" ] && derniere=$m
@@ -201,7 +222,17 @@ if [ -f "$DOSSIER/etat.json" ] && ! grep -q '"etat": "en_attente"' "$DOSSIER/eta
   if grep -q '"etat": "en_cours"' "$DOSSIER/etat.json" && { veilleur_vivant || enveloppe_vivante; }; then exit 3; fi
   exit 4
 fi
-rm -f "$DOSSIER/arret"
+if [ -n "$AGENT_LIE" ]; then
+  # Émulation liée : arret n'est JAMAIS effacé (le pont hôte ou le veilleur de l'agent a pu y écrire « fin » pendant ce
+  # lancement) ; un agent déjà fini ou un arrêt déjà demandé : refusé (code 1), rien ne démarre.
+  if agent_fini || [ -e "$DOSSIER/arret" ] || [ -L "$DOSSIER/arret" ]; then
+    ecrire_etat arretee ok "" "$(maintenant_iso)" "Agent lié $AGENT_LIE déjà fini ou arrêt déjà demandé : émulation non démarrée."
+    montrer_etat
+    exit 1
+  fi
+else
+  rm -f "$DOSSIER/arret"
+fi
 
 case "$SDK$DOSSIER" in
   *,*) fin_erreur "Chemin non admis (virgule) : montage impossible." ;;

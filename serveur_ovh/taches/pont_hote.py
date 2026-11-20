@@ -24,7 +24,13 @@ agent = <id>), ~/taches/<id>/emulation (HÔTE SEUL, hors de tout montage : le ve
 lui, distinct des places d'agent ; 75 = occupé -> code 4 « créneau d'émulation occupé, réessaie plus tard », la même tâche
 est relancée au demarrer suivant), l'AVD attendu (sortie/.avd-pret), et seulement alors `demarrer` est relayé.
 `arreter` : relayé au pont, puis « fin » écrit dans ~/taches/<emu>/arret. À la fin du pont (SIGTERM du veilleur, SIGINT,
-SIGHUP, ou état final de la tâche d'agent constaté), l'émulation encore liée reçoit « fin » de même.
+SIGHUP, ou état final de la tâche d'agent constaté), l'émulation encore liée reçoit « fin » de même. Le veilleur de
+l'émulation surveille aussi l'agent lié (état final ou pont hôte disparu : il s'arrête de lui-même).
+Après `arreter` (ou une émulation finie), le `demarrer` suivant crée une NOUVELLE tâche d'émulation : un autre <emu>, donc
+un autre conteneur tache-<emu> ; l'APK de la précédente est retiré. EMULATIONS_MAX (5) émulations par pont au plus
+(au-delà : code 4 « limite d'émulations »). Un lancement refusé par lancer_emulation.sh (code 1 ou 2 : rien à espérer d'un
+nouvel essai) rend les `demarrer` suivants en échec immédiat (code 4), sans nouveau dossier ; un autre échec (délai, code
+inattendu) arrête l'émulation (« fin ») et le `demarrer` suivant en crée une neuve, dans la limite.
 
 Retour des médias : après `capturer`, `journal`, `finfilm` (et `arreter` qui finit un film), la capture, logcat.txt, la vidéo
 et ses images sont COPIÉS de ~/taches/<emu>/sortie (écrit par le conteneur d'émulation, que l'agent ne peut pas toucher) vers
@@ -47,6 +53,7 @@ import stat
 import struct
 import subprocess
 import sys
+import threading
 import time
 
 # ==============================================================================================================
@@ -89,6 +96,10 @@ APPELS_MAX = 2000
 LECTURE_S = 10                    # une requête doit arriver en entier dans ce délai (sinon : refusée, code 2)
 ECRITURE_S = 10
 REPONSE_PONT_MAX = 256 * 1024     # détail rendu à l'agent (journal : 200 lignes de 500 caractères au plus)
+SORTIE_MAX_OCTETS = 512 * 1024    # sortie standard de docker exec gardée au plus (le reste est lu et jeté)
+REPONSE_OCTETS_MAX = 768 * 1024   # ligne de réponse, échappement JSON compris (le client en lit 1 Mo au plus)
+GRACE_ARRET_S = 5                 # entre SIGTERM et SIGKILL d'une commande au délai dépassé
+EMULATIONS_MAX = 5                # tâches d'émulation créées par un même pont
 LANCEMENT_EMULATION_S = 240       # lancer_emulation.sh : docker run borné à 120 s, plus la marge
 AVD_ATTENTE_S = 300
 AVD_PAS_S = 2
@@ -170,8 +181,13 @@ def lire_requete(ligne):
 
 
 def reponse(code, verbe, detail):
-    return (json.dumps({"ok": code == 0, "verbe": verbe, "code": code, "detail": detail}, ensure_ascii=False)
-            + "\n").encode("utf-8")
+    """La ligne de réponse, bornée en OCTETS après l'échappement JSON (REPONSE_OCTETS_MAX) : le détail est raccourci."""
+    while True:
+        ligne = (json.dumps({"ok": code == 0, "verbe": verbe, "code": code, "detail": detail}, ensure_ascii=False)
+                 + "\n").encode("utf-8")
+        if len(ligne) <= REPONSE_OCTETS_MAX or not detail:
+            return ligne
+        detail = detail[:len(detail) * 3 // 4]
 
 
 # ---------------------------------------------------------------- exécution (tableau, sans shell)
@@ -179,21 +195,50 @@ def reponse(code, verbe, detail):
 def executer(argv, delai, env, nouvelle_session=False):
     """(code, sortie standard) d'une commande en TABLEAU, sans shell, avec l'environnement `env` et rien d'autre ; code None
     si le délai est dépassé. Une commande de la même session est tuée au délai ou à la fin du pont ; une commande dans sa
-    propre session (lancer_emulation.sh) est laissée finir seule (la tuer à demi laisserait un conteneur sans veilleur)."""
+    propre session (lancer_emulation.sh) est laissée finir seule (la tuer à demi laisserait un conteneur sans veilleur).
+    Arrêt : SIGTERM, GRACE_ARRET_S secondes, puis SIGKILL, et toujours wait(). La sortie standard est lue au fil de l'eau
+    par un fil : SORTIE_MAX_OCTETS gardés au plus, le reste lu et jeté (jamais un tube plein qui bloquerait la commande)."""
     p = subprocess.Popen(list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                          env=dict(env), close_fds=True, start_new_session=nouvelle_session)
-    try:
-        sortie, _ = p.communicate(timeout=delai)
-    except subprocess.TimeoutExpired:
-        if not nouvelle_session:
+    gardes = []
+
+    def lire():
+        taille = 0
+        try:
+            while True:
+                m = p.stdout.read1(65536)
+                if not m:
+                    break
+                if taille < SORTIE_MAX_OCTETS:
+                    m = m[:SORTIE_MAX_OCTETS - taille]
+                    gardes.append(m)
+                    taille += len(m)
+        except (OSError, ValueError):
+            pass
+
+    fil = threading.Thread(target=lire, daemon=True)
+    fil.start()
+
+    def arreter():
+        p.terminate()
+        try:
+            p.wait(timeout=GRACE_ARRET_S)
+        except subprocess.TimeoutExpired:
             p.kill()
             p.wait()
+
+    try:
+        p.wait(timeout=delai)
+    except subprocess.TimeoutExpired:
+        if not nouvelle_session:
+            arreter()
         return None, b""
     except BaseException:
         if not nouvelle_session:
-            p.kill()
+            arreter()
         raise
-    return p.returncode, sortie or b""
+    fil.join(timeout=GRACE_ARRET_S)
+    return p.returncode, b"".join(gardes)
 
 
 # ---------------------------------------------------------------- fichiers sûrs
@@ -303,6 +348,8 @@ class Contexte:
         self.appels = 0
         self.emu = None              # tâche d'émulation créée par CE pont
         self.emu_arretee = False
+        self.emulations = 0          # tâches d'émulation créées (EMULATIONS_MAX au plus)
+        self.echec_lancement = None  # refus définitif de lancer_emulation.sh (code 1 ou 2) : plus de nouvel essai
 
     # --- journal (hôte seul)
     def noter(self, texte, debut):
@@ -330,9 +377,16 @@ class Contexte:
             return None, ""
 
     def _nouvelle_emulation(self):
+        if self.emulations >= EMULATIONS_MAX:
+            raise Refus(4, f"Limite d'émulations atteinte ({EMULATIONS_MAX} pour cette tâche) : plus de nouvelle émulation.")
         apk = _lire_ordinaire(os.path.join(self.dossier, "entree"), "app.apk", APK_MAX_OCTETS)
         if not apk:
             raise Refus(4, "APK de l'agent absent ou invalide (entree/app.apk) : émulation impossible.")
+        if self.emu:                 # la précédente (finie ou arrêtée) n'a plus besoin de son APK : disque rendu
+            try:
+                os.unlink(os.path.join(self._dossier_emu(), "entree", "app.apk"))
+            except OSError:
+                pass
         for _ in range(5):
             emu = time.strftime("t%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(2)
             if emu == self.id:
@@ -355,9 +409,12 @@ class Contexte:
         # lancement : un veilleur qui arrête l'agent pendant le lancement arrête aussi cette émulation.
         _ecrire_atomique(os.path.join(self.dossier, "emulation"), (emu + "\n").encode("ascii"))
         self.emu, self.emu_arretee = emu, False
+        self.emulations += 1
 
     def preparer_emulation(self):
         """Émulation liée en marche et AVD prêt ; `Refus(4, ...)` sinon (créneau occupé, échec, délai)."""
+        if self.echec_lancement:
+            raise Refus(4, self.echec_lancement)
         if self.emu and not self.emu_arretee:
             etat, _r = self.etat_emu()
             if etat in FINAUX:
@@ -373,7 +430,11 @@ class Contexte:
                 raise Refus(4, MESSAGE_OCCUPE)
             if code not in (0, 3):
                 etat, raison = self.etat_emu()
-                raise Refus(4, f"Démarrage de l'émulation impossible (code {code}) : {raison[:300] or 'voir etat.json'}")
+                message = f"Démarrage de l'émulation impossible (code {code}) : {raison[:300] or 'voir etat.json'}"
+                self.arreter_emulation()       # « fin » : jamais une émulation à demi lancée laissée sans suite
+                if code in (1, 2):             # refus de l'enveloppe : un nouvel essai échouerait de même, sans dossier
+                    self.echec_lancement = message + " (inutile de réessayer pendant cette tâche)"
+                raise Refus(4, message)
         debut = time.monotonic()
         while True:
             if os.path.lexists(os.path.join(self._dossier_emu(), "sortie", ".avd-pret")):
@@ -517,7 +578,7 @@ def traiter_requete(ligne, ctx):
         code, detail = ctx.executer_verbe(verbe, args)
     except Refus as r:
         code, detail = r.code, r.detail
-    except OSError as e:
+    except Exception as e:           # une réponse inattendue ne fait jamais mourir le pont (Fin, elle, passe)
         code, detail = 4, f"Erreur du pont hôte ({type(e).__name__})."
     ctx.noter(" ".join((verbe, *args, f"code={code}")), debut)       # arguments validés seulement
     return reponse(code, verbe, detail)
@@ -525,11 +586,17 @@ def traiter_requete(ligne, ctx):
 
 # ---------------------------------------------------------------- socket
 
-def _lire_ligne(conn):
-    conn.settimeout(LECTURE_S)
+def _lire_ligne(conn, horloge=time.monotonic):
+    """La ligne de requête, lue avant une échéance GLOBALE de LECTURE_S secondes (un client qui envoie goutte à goutte
+    n'obtient pas plus) ; ce qui est arrivé à l'échéance est jugé tel quel (incomplet : refusé)."""
+    echeance = horloge() + LECTURE_S
     donnees = b""
     try:
         while b"\n" not in donnees and len(donnees) <= REQUETE_MAX:
+            reste = echeance - horloge()
+            if reste <= 0:
+                break
+            conn.settimeout(reste)
             morceau = conn.recv(REQUETE_MAX + 2 - len(donnees))     # au plus la ligne, son \n, et un octet de trop
             if not morceau:
                 break
@@ -622,7 +689,8 @@ def main(argv):
         print(f"pont_hote : {type(e).__name__} : {e}", file=sys.stderr)
         return 1
     finally:
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):    # la fin n'est jamais interrompue à demi
+            signal.signal(s, signal.SIG_IGN)
         ctx.fin()
     return 0
 

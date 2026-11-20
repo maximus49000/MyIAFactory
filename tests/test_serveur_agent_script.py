@@ -42,6 +42,7 @@ case "$1" in
       *" -d "*) [ -n "${FAUX_RUN_ECHEC:-}" ] && { echo "boom" >&2; exit 125; }
                 printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
       *) printf '%s\n' "$@" > "$ET/verif.txt"
+         [ -n "${FAUX_VERIF_EFFACE:-}" ] && rm -f "$FAUX_VERIF_EFFACE"     # pendant le contrôle : « fin » effacée
          [ -n "${FAUX_VERIF:-}" ] && cat "$FAUX_VERIF"
          [ -n "${FAUX_VERIF_ERR:-}" ] && cat "$FAUX_VERIF_ERR" >&2
          exit "${FAUX_VERIF_CODE:-0}" ;;
@@ -533,6 +534,20 @@ class TestEnveloppeAgent(unittest.TestCase):
             self.assertLess(j.index("docker stop"), j.index("flock -u 8"))
             self.assertLess(j.index("pont-arrete"), j.index("flock -u 8"))
 
+    def test_fin_de_l_emulation_reecrite_apres_le_controle(self):
+        # « fin » écrite à l'émulation avant le contrôle du secret a pu être effacée (lancement de l'émulation encore en
+        # cours) : finir la réécrit APRÈS le contrôle
+        with Banc(pont=True) as b:
+            (b.entree / "app.apk").write_bytes(b"PK")
+            emu = self.emulation_liee(b, EMU)
+            r = b.lancer("pilote", "30", "2048", "2", "2", EMU, env={"FAUX_VERIF_EFFACE": (emu / "arret").as_posix()})
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            b.arreter()
+            b.attendre_final()
+            self.assertTrue((b.et / "verif.txt").exists())                  # le contrôle a eu lieu (et a effacé arret)
+            self.assertTrue((emu / "arret").exists(), b.journal)
+            self.assertEqual((emu / "arret").read_text().strip(), "fin")
+
     def test_emulation_liee_seulement_par_l_hote(self):
         # pont/emulation (écrit dans un dossier monté dans le conteneur) n'est jamais lu ; $DOSSIER/emulation (hôte seul) l'est,
         # et seulement pour une tâche d'émulation liée à cet agent
@@ -722,6 +737,80 @@ class TestEnveloppeAgent(unittest.TestCase):
                 self.assertNotRegex(code, r"\beval\b")
                 self.assertNotRegex(code, r"(^|[^\w.-])bash\s+-c\b")
                 self.assertNotRegex(code, r"(?m)^\s*set -[a-z]*e")
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestEmulationLiee(unittest.TestCase):
+    """lancer_emulation.sh d'une émulation liée à un agent (~/taches/<emu>/agent, écrit par le pont hôte) : arret jamais
+    effacé, refus si l'agent est fini, arrêt de lui-même quand l'agent finit ou que son pont hôte disparaît."""
+
+    def lier(self, b, etat="en_cours"):
+        b.dossier.mkdir(parents=True, exist_ok=True)
+        (b.dossier / "agent").write_text(ID + "\n", newline="\n")
+        agent = b.home / "taches" / ID
+        agent.mkdir(parents=True, exist_ok=True)
+        (agent / "etat.json").write_text(json.dumps({"id": ID, "etat": etat}), newline="\n")
+        return agent
+
+    def pont_vivant(self, agent):
+        """Un processus dont la ligne de commande porte « pont_hote.py <ID> », son PID (vu par bash) dans pont-hote.pid."""
+        pid = agent / "pont-hote.pid"
+        p = subprocess.Popen(["bash", "-c", 'echo $$ > "$F"; while :; do sleep 1; done', "pont_hote.py", ID],
+                             env=dict(os.environ, F=pid.as_posix()), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        fin = time.time() + 10
+        while not (pid.exists() and pid.read_text().strip()) and time.time() < fin:
+            time.sleep(0.05)
+        numero = pid.read_text().strip()
+
+        def tuer():
+            subprocess.run(["bash", "-c", 'kill -9 "$1" 2>/dev/null; exit 0', "bash", numero])
+            p.kill()
+            p.wait(timeout=10)
+        self.addCleanup(tuer)
+        return tuer
+
+    def test_emulation_liee_s_arrete_quand_l_agent_finit_ou_que_le_pont_disparait(self):
+        for cas in ("agent fini", "pont parti"):
+            with self.subTest(cas=cas), BancEmulation() as b:
+                agent = self.lier(b)
+                tuer = self.pont_vivant(agent)
+                r = b.lancer("pilote", "60", "60", "2048", "2")
+                self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+                time.sleep(1)
+                self.assertEqual(b.etat()["etat"], "en_cours")             # agent actif : l'émulation continue
+                if cas == "agent fini":
+                    (agent / "etat.json").write_text(json.dumps({"id": ID, "etat": "terminee"}), newline="\n")
+                else:
+                    tuer()
+                f = b.attendre_final()
+                self.assertEqual((f["etat"], f["statut"]), ("terminee", "ok"))
+                self.assertIn("Agent lié", f["raison"])
+                self.assertTrue(b.appels("docker stop"), b.journal)
+
+    def test_emulation_liee_refusee_si_agent_fini_ou_arret_demande(self):
+        with BancEmulation() as b:                                       # agent déjà fini : rien ne démarre
+            self.lier(b, etat="arretee")
+            r = b.lancer("pilote", "60", "60", "2048", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertEqual(b.etat()["etat"], "arretee")
+            self.assertEqual(b.appels("docker run"), [])
+        with BancEmulation() as b:                                       # « fin » écrite avant le lancement : gardée
+            agent = self.lier(b)
+            self.pont_vivant(agent)
+            (b.dossier / "arret").write_text("fin\n", newline="\n")
+            r = b.lancer("pilote", "60", "60", "2048", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertEqual((b.dossier / "arret").read_text().strip(), "fin")
+            self.assertEqual(b.appels("docker run"), [])
+        with BancEmulation() as b:                                       # tranche A (pas d'agent lié) : inchangée
+            b.dossier.mkdir(parents=True)
+            (b.dossier / "arret").write_text("", newline="\n")
+            r = b.lancer("pilote", "60", "60", "2048", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertFalse((b.dossier / "arret").exists())
+            b.arreter()
+            b.attendre_final()
 
 
 # ------------------------------------------------------------------------------------------- entrée du conteneur (Python)

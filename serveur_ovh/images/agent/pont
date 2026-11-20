@@ -6,7 +6,9 @@ Envoie UNE ligne JSON {"verbe": ..., "args": [...]} à la socket /pont/pont.sock
 imprime l'unique ligne JSON de réponse {"ok", "verbe", "code", "detail"} et rend `code` : 0 fait ; 2 verbe ou argument
 refusé (rien n'a été exécuté) ; 3 limite atteinte ; 4 outil en échec, émulation indisponible ou pas de pont. Tout est
 revalidé par le pont hôte puis par le pont de l'émulation : ce client ne valide rien lui-même.
-Sans socket (tâche en mode seul) : code 4 « pas de pont : tâche en mode seul ».
+Sans socket : code 4, « pas de pont : tâche en mode seul » si le dossier /pont n'existe pas, « pont pas encore prêt :
+réessaie dans quelques secondes » s'il existe (mode pilote, pont hôte en démarrage). Argument non encodable : code 2.
+Après `arreter`, le `demarrer` suivant crée une NOUVELLE émulation (autre conteneur) ; 5 émulations par tâche au plus.
 Verbes : demarrer, installer, lancer, toucher X Y, glisser X1 Y1 X2 Y2, texte T, touche retour|accueil|menu, attendre S,
 capturer NOM, journal [FILTRE], filmer NOM [SECONDES], finfilm, arreter. Les captures, la vidéo et ses images, logcat.txt
 sont copiés en lecture seule sous /outil/ ; `detail` donne leur chemin. Ce que renvoie le pont (captures, journaux, textes
@@ -21,6 +23,7 @@ SOCKET = "/pont/pont.sock"
 ATTENTE_S = 1500              # demarrer : lancement de l'émulation, attente de l'AVD puis démarrage (jusqu'à ~15 min)
 REPONSE_MAX = 1024 * 1024
 SANS_PONT = "pas de pont : tâche en mode seul"
+PAS_PRET = "pont pas encore prêt : réessaie dans quelques secondes"
 CLES = {"ok", "verbe", "code", "detail"}
 
 
@@ -38,9 +41,16 @@ def appeler(argv, chemin=None, connecter=None):
     """Une requête au pont hôte ; imprime la réponse et rend son code. `connecter()` (tests) rend une socket connectée."""
     argv = list(argv)
     verbe = _verbe_sur(argv)
+    try:
+        requete = (json.dumps({"verbe": argv[0] if argv else "", "args": argv[1:]}, ensure_ascii=False)
+                   + "\n").encode("utf-8", "surrogateescape")
+    except UnicodeEncodeError:
+        return _ecrire(2, verbe, "argument non encodable en UTF-8 : refusé, rien n'a été envoyé.")
     if connecter is None:
         chemin = chemin or os.environ.get("PONT_SOCKET") or SOCKET
         if not hasattr(socket, "AF_UNIX") or not os.path.exists(chemin):
+            if os.path.isdir(os.path.dirname(chemin) or "."):      # dossier du pont monté : mode pilote, pont en route
+                return _ecrire(4, verbe, PAS_PRET)
             return _ecrire(4, verbe, SANS_PONT)
 
         def connecter():
@@ -48,12 +58,11 @@ def appeler(argv, chemin=None, connecter=None):
             s.settimeout(ATTENTE_S)
             s.connect(chemin)
             return s
-    requete = json.dumps({"verbe": argv[0] if argv else "", "args": argv[1:]}, ensure_ascii=False) + "\n"
     donnees = b""
     try:
         s = connecter()
         with s:
-            s.sendall(requete.encode("utf-8", "surrogateescape"))
+            s.sendall(requete)
             while b"\n" not in donnees and len(donnees) <= REPONSE_MAX:
                 morceau = s.recv(65536)
                 if not morceau:

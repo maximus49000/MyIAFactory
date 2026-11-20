@@ -72,6 +72,9 @@ class FauxServeur:
         return code, sortie.decode("utf-8", "replace"), erreur
 
     def executer_octets(self, hote, commande, cle, entree=None, delai=60, runner=None):
+        if hasattr(entree, "read"):                  # archive des entrées passée en FICHIER (comme au vrai ssh)
+            self.entrees_fichier = getattr(self, "entrees_fichier", 0) + 1
+            entree = entree.read()
         return self._repondre(commande, entree, delai)
 
     def ops(self, op=None):
@@ -271,6 +274,26 @@ class TestPaquet(unittest.TestCase):
                 sa.preparer_paquet(self.projet)
         self.assertIn("trop gros", str(r.exception))
 
+    def test_paquet_ecrit_dans_un_fichier_sans_copie_en_memoire(self):
+        base = depot(self.projet, commits=2)
+        fichier = Path(self.tmp.name) / "projet.bundle"
+        paquet, branche, tete = sa.preparer_paquet(self.projet, fichier=fichier)
+        self.assertEqual((paquet, branche, tete), (fichier, "main", base))
+        git(self.projet, "bundle", "verify", str(fichier))
+        with mock.patch.dict(sa.LIMITES_AGENT, {"paquet_octets": 100}):
+            with self.assertRaises(st.RefusLancement) as r:
+                sa.preparer_paquet(self.projet, fichier=fichier)
+        self.assertIn("trop gros", str(r.exception))
+
+    def test_changements_non_commites_git_en_echec_et_sans_verrou(self):
+        appels = []
+
+        def faux(projet, args, max_octets=None):
+            appels.append(args)
+            return 128, b"", "fatal"
+        self.assertIsNone(sa.changements_non_commites(self.projet, git=faux))
+        self.assertEqual(appels[0][:2], ["--no-optional-locks", "status"])
+
     def test_changements_non_commites_listes(self):
         depot(self.projet)
         self.assertEqual(sa.changements_non_commites(self.projet), [])
@@ -323,6 +346,28 @@ class TestGitRobuste(unittest.TestCase):
         code, _s, _e = self.lancer("import sys, time; sys.stdout.write('x'); sys.stdout.flush(); time.sleep(120)",
                                    delai=1)
         self.assertEqual(code, 124)
+
+    def test_echeance_stricte_meme_si_un_petit_enfant_garde_la_sortie(self):
+        """git finit mais un petit-enfant (pack-objects…) garde la sortie ouverte : l'échéance tient quand même."""
+        debut = time.monotonic()
+        code, _s, _e = self.lancer("import subprocess, sys; subprocess.Popen([sys.executable, '-c', "
+                                   "'import time; time.sleep(15)']); sys.stdout.write('x'); sys.stdout.flush()", delai=2)
+        self.assertEqual(code, 124)
+        self.assertLess(time.monotonic() - debut, 12)
+
+    def test_git_en_langue_c_et_stderr_borne_en_memoire(self):
+        code, sortie, erreur = self.lancer("import os, sys; sys.stdout.write(os.environ.get('LC_ALL', '?')); "
+                                           "sys.stderr.write('e' * 300_000)")
+        self.assertEqual((code, sortie), (0, b"C"))
+        self.assertEqual(len(erreur), sa.ERREUR_MAX)
+
+    def test_sortie_vers_un_fichier_sans_la_garder(self):
+        sortie = io.BytesIO()
+        with mock.patch.object(sa, "_COMMANDE_GIT", [sys.executable, "-c", "import sys; sys.stdout.write('abc' * 1000)",
+                                                     "--"]):
+            code, garde, _e = sa._git(Path("."), ["x"], max_octets=10_000, vers=sortie)
+            self.assertEqual((code, garde, sortie.getvalue()), (0, b"", b"abc" * 1000))
+            self.assertEqual(sa._git(Path("."), ["x"], max_octets=100, vers=io.BytesIO())[0], 99)
 
 
 class TestLancer(Base):
@@ -443,6 +488,42 @@ class TestLancer(Base):
         # un ancêtre de la base (reprise d'un travail déjà fusionné) est accepté
         git(projet, "branch", "-f", "agent/ajout-bouton", "HEAD~1")
         self.assertEqual(self.lancer(self.demande(base=base), projet=projet)["etat"], "en_cours")
+
+    def test_paquet_en_fichier_envoye_intact_par_un_fichier(self):
+        fichier = Path(self.tmp.name) / "projet.bundle"
+        fichier.write_bytes(PAQUET)
+        self.assertEqual(self.lancer(paquet=fichier)["etat"], "en_cours")
+        self.assertEqual(self.srv.entrees[ID1]["entree/projet.bundle"], PAQUET)
+        self.assertEqual(self.srv.entrees_fichier, 1)        # l'archive est passée à ssh en fichier
+        with self.assertRaises(st.RefusLancement):
+            self.lancer(self.demande(tache="vide", id="t20261120-101510-0001"), paquet=Path(self.tmp.name) / "absent")
+
+    def test_branche_agent_extraite_refusee_avant_envoi(self):
+        projet = Path(self.tmp.name) / "projet"
+        base = depot(projet)
+        git(projet, "worktree", "add", "-q", "-b", "agent/ajout-bouton", str(Path(self.tmp.name) / "wt"), base)
+        with self.assertRaises(st.RefusLancement) as r:
+            self.lancer(self.demande(base=base), projet=projet)
+        self.assertIn("extraite", str(r.exception))
+        self.assertEqual(self.srv.appels, [])
+
+    def test_git_status_en_echec_le_dit_dans_l_avertissement(self):
+        projet = Path(self.tmp.name) / "projet"
+        base = depot(projet)
+
+        def git_(p, args, max_octets=None):
+            if "status" in args:
+                return 128, b"", "fatal"
+            return sa._git(p, args, max_octets)
+        r = self.lancer(self.demande(base=base), projet=projet, git=git_)
+        self.assertIn("illisible", r["avertissement"])
+
+    def test_tache_abandonnee_faute_de_place_ne_bloque_pas_le_meme_nom(self):
+        self.srv.pleine = 99
+        self.assertEqual(self.lancer(attente_max_s=0)["etat"], "en_attente")
+        self.srv.pleine = 0
+        r = self.lancer(self.demande(id="t20261120-101511-0002"))
+        self.assertEqual(r["etat"], "en_cours")
 
     def test_tache_en_double_ou_en_collision_de_casse_refusee(self):
         self.lancer()
@@ -582,6 +663,30 @@ class TestRecuperer(Base):
         with mock.patch.object(tempfile, "tempdir", str(vide)):
             self.recuperer()
         self.assertEqual(list(vide.iterdir()), [])
+
+    def test_paquet_resultat_ecrit_droit_dans_un_fichier(self):
+        """ssh réel : `executer_vers_fichier` écrit la sortie dans le fichier temporaire, jamais en mémoire."""
+        self.servir()
+        vus = []
+
+        def vers_fichier(hote, commande, cle, destination, maximum, entree=None, delai=60):
+            code, donnees, erreur = self.srv._repondre(commande, entree, delai)
+            Path(destination).write_bytes(donnees)
+            vus.append((Path(destination).name, maximum))
+            return code, len(donnees), erreur
+        self.srv.executer_vers_fichier = vers_fichier
+        self.assertEqual(self.recuperer()["branche"], self.ref)
+        self.assertEqual(vus, [("resultat.bundle", sa.LIMITES_AGENT["paquet_octets"])])
+
+    def test_refus_transitoires_et_definitifs_marques(self):
+        self.servir(paquet=self.bon_paquet()[:-20] + bytes(20))
+        with self.assertRaises(sa.RefusRecuperation) as r:
+            self.recuperer()
+        self.assertTrue(r.exception.transitoire)
+        self.servir(fin=self.fin(base="b" * 40))
+        with self.assertRaises(sa.RefusRecuperation) as r:
+            self.recuperer()
+        self.assertFalse(r.exception.transitoire)
 
     def test_recuperer_seulement_terminee_ou_arretee(self):
         for etat in ("en_cours", "echouee", "en_attente"):

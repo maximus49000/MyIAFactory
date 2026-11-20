@@ -67,6 +67,46 @@ class TestExecuter(unittest.TestCase):
         self.assertIn("délai", erreur)
 
 
+def _faux_ssh(code_python):
+    """`popen` qui lance Python à la place de ssh (mêmes tuyaux) : la vraie mécanique de copie est exercée."""
+    def popen(args, **kw):
+        return subprocess.Popen([sys.executable, "-c", code_python], **kw)
+    return popen
+
+
+class TestExecuterVersFichier(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dest = Path(self.tmp.name) / "sortie.bin"
+
+    def test_sortie_ecrite_dans_le_fichier_et_entree_transmise(self):
+        code = ("import sys; s = sys.stdin.buffer.read(); sys.stdout.buffer.write(s * 300_000); "
+                "sys.stderr.write('avert')")
+        r = plateforme_ssh.executer_vers_fichier(HOTE, "bash -s", Path("cle"), self.dest, 10_000_000,
+                                                 entree=b"ab\x00\r\n", popen=_faux_ssh(code))
+        self.assertEqual(r, (0, 1_500_000, "avert"))
+        self.assertEqual(self.dest.read_bytes(), b"ab\x00\r\n" * 300_000)
+
+    def test_plus_que_le_maximum_coupe_le_transfert(self):
+        code = "import sys\nwhile True: sys.stdout.buffer.write(b'x' * 65536)"
+        r = plateforme_ssh.executer_vers_fichier(HOTE, "x", Path("cle"), self.dest, 1_000_000, popen=_faux_ssh(code))
+        self.assertEqual(r[0], 99)
+        self.assertLessEqual(self.dest.stat().st_size, 1_000_000)
+
+    def test_delai_depasse_donne_124(self):
+        r = plateforme_ssh.executer_vers_fichier(HOTE, "x", Path("cle"), self.dest, 100, delai=1,
+                                                 popen=_faux_ssh("import time; time.sleep(60)"))
+        self.assertEqual(r[0], 124)
+
+    def test_fichier_ouvert_passe_en_entree_standard(self):
+        r = Runner()
+        with tempfile.TemporaryFile() as f:
+            plateforme_ssh.executer_octets(HOTE, "x", Path("cle"), entree=f, runner=r)
+            self.assertIs(r.appels[0][1]["stdin"], f)
+            self.assertNotIn("input", r.appels[0][1])
+
+
 class TestExecuterOctets(unittest.TestCase):
     def test_octets_en_entree_arrivent_intacts(self):
         r = Runner()

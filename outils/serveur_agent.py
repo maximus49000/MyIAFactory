@@ -7,10 +7,12 @@ champ, le paquet est analysé (en-tête relu ici, puis `git bundle verify` et `l
 `refs/heads/agent/<tâche>` est acceptée, sans jamais exécuter ce que contient un dépôt du serveur. Sections : demande ;
 paquets Git ; scripts distants ; lancer ; récupérer ; index.
 """
+import io
 import json
 import os
 import re
 import subprocess
+import tarfile
 import tempfile
 import threading
 import time
@@ -21,6 +23,7 @@ from types import MappingProxyType
 import plateforme_acces
 import plateforme_ssh
 import serveur_capacites
+import serveur_etat
 import serveur_tache as st
 from plateforme import DOSSIER_DISTANT, RACINE_SERVEUR
 
@@ -60,61 +63,124 @@ class DemandeAgent:
 
 
 class RefusRecuperation(ValueError):
-    """Ce que le serveur a renvoyé est refusé (fin.json ou paquet suspect, branche locale divergente) : message français."""
+    """Ce que le serveur a renvoyé est refusé (fin.json ou paquet suspect, branche locale divergente) : message français.
+    `transitoire` : True si le refus peut venir d'une panne passagère (transfert coupé, dépôt verrouillé) et mérite un
+    nouvel essai ; False (défaut) si le refus est définitif (paquet ou fin.json suspects, branche extraite)."""
+
+    def __init__(self, message, transitoire=False):
+        super().__init__(message)
+        self.transitoire = transitoire is True
 
 
 _COMMANDE_GIT = ["git"]            # remplaçable par les tests (faux git qui inonde stderr ou ne finit jamais)
 ERREUR_MAX = 65536                 # texte d'erreur gardé de git (le reste est jeté)
+BLOC = 1 << 20
 
 
-def _git(projet, args, max_octets=None):
-    """(code, sortie octets, erreur texte) d'un appel `git` en tableau d'arguments (aucun shell), dans `projet`. Ne se fige
-    jamais : stderr va dans un fichier temporaire (rien à vider), et une échéance réelle (`DELAI_GIT_S`, minuterie) tue le
-    processus puis l'attend : code 124. Sortie plus grande que `max_octets` : même arrêt, code 99. Jamais d'invite."""
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    with tempfile.TemporaryFile() as err:
+def _tuer_arbre(p):
+    """Tue git ET ses descendants (pack-objects, ssh, filtres…) qui tiendraient sa sortie ouverte. POSIX : le groupe de
+    processus (git démarré dans sa propre session). Windows : `taskkill /T` (l'arbre tant que git vit encore)."""
+    if os.name == "nt":
         try:
-            p = subprocess.Popen([*_COMMANDE_GIT, *args], cwd=str(projet), stdout=subprocess.PIPE, stderr=err,
-                                 stdin=subprocess.DEVNULL, env=env)
-        except OSError as e:
-            return 127, b"", f"git introuvable ou inutilisable ({type(e).__name__})"
-        delai = {"depasse": False}
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        try:
+            os.killpg(p.pid, 9)
+        except OSError:
+            pass
+    try:
+        p.kill()
+    except OSError:
+        pass
 
-        def tuer():
-            delai["depasse"] = True
-            try:
-                p.kill()
-            except OSError:
-                pass
-        minuterie = threading.Timer(DELAI_GIT_S, tuer)
-        minuterie.daemon = True
-        minuterie.start()
-        morceaux, total, trop = [], 0, False
+
+def _git(projet, args, max_octets=None, vers=None):
+    """(code, sortie octets, erreur texte) d'un appel `git` en tableau d'arguments (aucun shell), dans `projet`.
+
+    Ne se fige jamais, même quand un petit-enfant de git garde la sortie ouverte : sortie et erreur sont lues par deux fils,
+    le fil appelant n'attend que jusqu'à l'échéance (`DELAI_GIT_S`, mesurée sur l'horloge monotone, sans minuterie qui
+    pourrait se déclencher après une fin normale) ; échéance passée, l'arbre de processus est tué : code 124 (un fil de
+    lecture resté bloqué sur un petit-enfant orphelin est abandonné, il finit avec lui). Sortie plus grande que `max_octets` :
+    même arrêt, code 99. L'erreur est bornée à `ERREUR_MAX` octets gardés EN MÉMOIRE (le reste est lu et jeté : aucun fichier
+    qui grossirait). `vers` (fichier binaire ouvert) : la sortie y est écrite au fil de l'eau au lieu d'être gardée (paquet
+    Git sans double copie en mémoire) ; la sortie rendue est alors vide. Langue C (messages de git stables), jamais d'invite."""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C", "LANGUAGE": "C"}
+    options = {} if os.name == "nt" else {"start_new_session": True}
+    try:
+        p = subprocess.Popen([*_COMMANDE_GIT, *args], cwd=str(projet), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             stdin=subprocess.DEVNULL, env=env, **options)
+    except OSError as e:
+        return 127, b"", f"git introuvable ou inutilisable ({type(e).__name__})"
+    echeance = time.monotonic() + DELAI_GIT_S
+    morceaux, erreurs = [], []
+    etat = {"total": 0, "trop": False, "ecriture": None}
+    fini = threading.Event()
+
+    def lire_sortie():
         try:
             while True:
-                bloc = p.stdout.read(1 << 20)
+                bloc = p.stdout.read1(BLOC)
                 if not bloc:
-                    break
-                total += len(bloc)
-                if max_octets is not None and total > max_octets:
-                    trop = True
-                    p.kill()
-                    break
-                morceaux.append(bloc)
-            p.wait()                    # la minuterie tue un git qui ne finit pas : cette attente est donc bornée
+                    return
+                etat["total"] += len(bloc)
+                if max_octets is not None and etat["total"] > max_octets:
+                    etat["trop"] = True
+                    return
+                if vers is None:
+                    morceaux.append(bloc)
+                else:
+                    try:
+                        vers.write(bloc)
+                    except (OSError, ValueError) as e:
+                        etat["ecriture"] = f"{type(e).__name__} : {e}"
+                        return
+        except (OSError, ValueError):
+            return
         finally:
-            minuterie.cancel()
-            if p.poll() is None:
-                p.kill()
-                p.wait()
-            p.stdout.close()
-        if delai["depasse"]:
-            return 124, b"", "git : délai dépassé"
-        if trop:
-            return 99, b"", ""
-        err.seek(0)
-        erreur = err.read(ERREUR_MAX)
-    return p.returncode, b"".join(morceaux), erreur.decode("utf-8", "replace")
+            fini.set()
+
+    def lire_erreur():
+        garde = 0
+        try:
+            while True:
+                bloc = p.stderr.read1(BLOC)
+                if not bloc:
+                    return
+                if garde < ERREUR_MAX:
+                    erreurs.append(bloc[:ERREUR_MAX - garde])
+                    garde += len(erreurs[-1])
+        except (OSError, ValueError):
+            return
+
+    fils = [threading.Thread(target=lire_sortie, daemon=True), threading.Thread(target=lire_erreur, daemon=True)]
+    for f in fils:
+        f.start()
+    depasse = not fini.wait(max(0.0, echeance - time.monotonic()))
+    if not depasse and not etat["trop"] and etat["ecriture"] is None:
+        try:
+            p.wait(timeout=max(0.0, echeance - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            depasse = True
+    if depasse or etat["trop"] or etat["ecriture"] is not None or p.poll() is None:
+        _tuer_arbre(p)
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+    fils[1].join(max(0.0, min(5.0, echeance - time.monotonic())) if not depasse else 0.5)
+    if not any(f.is_alive() for f in fils):        # un fil encore bloqué lit toujours : ses tuyaux restent à lui
+        p.stdout.close()
+        p.stderr.close()
+    if depasse:
+        return 124, b"", "git : délai dépassé"
+    if etat["trop"]:
+        return 99, b"", ""
+    if etat["ecriture"] is not None:
+        return 98, b"", f"écriture de la sortie de git impossible ({etat['ecriture']})"
+    return p.returncode, b"".join(morceaux), b"".join(erreurs).decode("utf-8", "replace")
 
 
 def _ref_valide(nom, git_, drapeau=()):
@@ -215,10 +281,13 @@ def _demande_sure(demande):
 
 # ---------------------------------------------------------------- paquets Git
 
-def preparer_paquet(projet, git=_git):
+def preparer_paquet(projet, git=_git, fichier=None):
     """`(paquet, branche, base)` de `HEAD` du dépôt `projet` : `git bundle create - HEAD <branche>`. Refuse un HEAD détaché,
     un dépôt sans commit et un paquet au-dessus de `LIMITES_AGENT["paquet_octets"]`. Les changements non commités ne partent
-    pas : `changements_non_commites` les liste pour que `lancer_agent` en avertisse."""
+    pas : `changements_non_commites` les liste pour que `lancer_agent` en avertisse.
+
+    `fichier` (chemin) : le paquet est écrit dans ce fichier au fil de l'eau et `paquet` est ce chemin (`Path`), jamais les
+    octets en mémoire (un paquet de 500 Mo ne coûte alors que des tampons de 1 Mo ; `lancer_agent` l'envoie de même)."""
     projet = Path(projet)
     code, sortie, _e = git(projet, ["symbolic-ref", "-q", "HEAD"])
     ref_tete = sortie.decode("utf-8", "replace").strip()
@@ -234,6 +303,20 @@ def preparer_paquet(projet, git=_git):
     if code != 0 or not MOTIF_BASE.fullmatch(base):
         raise st.RefusLancement("Le projet n'a aucun commit : rien à envoyer à l'agent serveur.")
     maximum = LIMITES_AGENT["paquet_octets"]
+    trop_gros = (f"Le paquet Git du projet dépasse {maximum // (1024 * 1024)} Mo : trop gros pour l'agent serveur.")
+    if fichier is not None:
+        fichier = Path(fichier)
+        try:
+            with open(fichier, "wb") as f:
+                code, _o, erreur = git(projet, ["bundle", "create", "-", "HEAD", ref_tete], max_octets=maximum, vers=f)
+            taille = fichier.stat().st_size
+        except OSError as e:
+            raise st.RefusLancement(f"Paquet Git impossible à écrire sur le poste : {type(e).__name__}.") from None
+        if code == 99 or taille > maximum:
+            raise st.RefusLancement(trop_gros)
+        if code != 0 or not taille:
+            raise st.RefusLancement(f"Paquet Git impossible (git bundle, code {code}) : {st._court(erreur, 200)}")
+        return fichier, branche, base
     code, paquet, erreur = git(projet, ["bundle", "create", "-", "HEAD", ref_tete], max_octets=maximum)
     if code == 99:
         raise st.RefusLancement(f"Le paquet Git du projet dépasse {maximum // (1024 * 1024)} Mo : trop gros pour "
@@ -248,18 +331,26 @@ def preparer_paquet(projet, git=_git):
 
 def changements_non_commites(projet, git=_git):
     """Lignes de `git status --porcelain` du projet (fichiers modifiés ou nouveaux) : ce qui NE PART PAS à l'agent, seuls les
-    commits partant. Liste vide si tout est commité (ou si git ne répond pas : rien n'est alors affirmé)."""
-    code, sortie, _e = git(Path(projet), ["status", "--porcelain"], max_octets=4 * 1024 * 1024)
+    commits partant. Liste vide si tout est commité ; None si git n'a pas pu répondre (rien n'est affirmé : `lancer_agent`
+    le dit dans son avertissement). `--no-optional-locks` : la lecture ne prend jamais le verrou de l'index (un autre
+    git du poste n'est pas gêné)."""
+    code, sortie, _e = git(Path(projet), ["--no-optional-locks", "status", "--porcelain"], max_octets=4 * 1024 * 1024)
     if code != 0:
-        return []
+        return None
     return [ligne for ligne in sortie.decode("utf-8", "replace").splitlines() if ligne.strip()]
 
 
 def controle_branche_agent(projet, tache, base, git=_git):
     """Message de refus si la branche locale `agent/<tâche>` existe déjà et n'est pas un ancêtre de `base` : le résultat de
     l'agent ne pourrait pas la faire avancer (récupération sans réécriture). Même nom de tâche avec une base nouvelle, après
-    un travail non fusionné : choisir un autre nom (ou fusionner ou supprimer l'ancienne branche). None sinon."""
+    un travail non fusionné : choisir un autre nom (ou fusionner ou supprimer l'ancienne branche). Refus aussi, AVANT tout
+    envoi, si `agent/<tâche>` est la branche extraite d'un dossier de travail du projet (le travail de l'agent ne pourrait
+    pas y être récupéré). None sinon."""
     ref = f"refs/heads/agent/{tache}"
+    code, sortie, _e = git(Path(projet), ["worktree", "list", "--porcelain"], max_octets=4 * 1024 * 1024)
+    if code == 0 and f"branch {ref}" in sortie.decode("utf-8", "replace").splitlines():
+        return (f"La branche agent/{tache} est extraite dans un dossier de travail du projet : changez de branche avant de "
+                "lancer l'agent (son travail ne pourrait pas y être récupéré).")
     code, _o, _e = git(Path(projet), ["rev-parse", "--verify", "-q", ref])
     if code != 0:
         return None
@@ -307,19 +398,31 @@ def _verifier_et_recuperer_paquet(projet, paquet, tache, base, git):
     Le fichier temporaire est toujours effacé. Rien du dépôt du serveur n'est exécuté : le paquet est un fichier de données,
     lu par git avec les contrôles d'intégrité des objets (`transfer.fsckObjects`), hooks et moniteur de fichiers coupés."""
     ref = f"refs/heads/agent/{tache}"
-    tete = _analyser_entete(paquet, ref, base)
-    sur = ["-c", "core.hooksPath=" + os.devnull, "-c", "core.fsmonitor=false", "-c", "gc.auto=0",
+    if isinstance(paquet, os.PathLike):         # paquet rapatrié dans un fichier : seul l'en-tête est lu en mémoire
+        try:
+            with open(paquet, "rb") as f:
+                debut = f.read(ENTETE_MAX)
+        except OSError as e:
+            raise RefusRecuperation(f"Paquet Git illisible sur le poste ({type(e).__name__}).", transitoire=True) from None
+        tete = _analyser_entete(debut, ref, base)
+    else:
+        tete = _analyser_entete(paquet, ref, base)
+    sur =["-c", "core.hooksPath=" + os.devnull, "-c", "core.fsmonitor=false", "-c", "gc.auto=0",
            "-c", "maintenance.auto=false", "-c", "transfer.fsckObjects=true"]
     code, sortie, _e = git(projet, ["symbolic-ref", "-q", "HEAD"])
     if code == 0 and sortie.decode("utf-8", "replace").strip() == ref:
         raise RefusRecuperation(f"La branche agent/{tache} est la branche extraite du projet : changez de branche pour "
                                 "recevoir le travail de l'agent (rien n'a été modifié).")
     with tempfile.TemporaryDirectory(prefix="agent-paquet-", ignore_cleanup_errors=True) as tmp:
-        fichier = Path(tmp) / "resultat.bundle"
-        fichier.write_bytes(paquet)
+        if isinstance(paquet, os.PathLike):
+            fichier = Path(paquet)
+        else:
+            fichier = Path(tmp) / "resultat.bundle"
+            fichier.write_bytes(paquet)
         code, _o, erreur = git(projet, [*sur, "bundle", "verify", str(fichier)])
         if code != 0:
-            raise RefusRecuperation(f"Paquet Git abîmé ou incomplet (git bundle verify) : {st._court(erreur, 200)}")
+            raise RefusRecuperation(f"Paquet Git abîmé ou incomplet (git bundle verify) : {st._court(erreur, 200)}",
+                                    transitoire=True)
         code, sortie, erreur = git(projet, [*sur, "bundle", "list-heads", str(fichier)])
         tetes = [ligne.split(" ", 1) for ligne in sortie.decode("utf-8", "replace").splitlines() if ligne.strip()]
         if code != 0 or tetes != [[tete, ref]]:
@@ -331,10 +434,11 @@ def _verifier_et_recuperer_paquet(projet, paquet, tache, base, git):
                 raise RefusRecuperation(f"La branche agent/{tache} est extraite dans un dossier de travail du projet : "
                                         "changez de branche pour recevoir le travail de l'agent (rien n'a été modifié).")
             raise RefusRecuperation("Branche non récupérée : la branche locale agent/" + tache + " a divergé ou ne "
-                                    f"peut pas être mise à jour (non réécrite) : {st._court(erreur, 200)}")
+                                    f"peut pas être mise à jour (non réécrite) : {st._court(erreur, 200)}",
+                                    transitoire=True)
         code, sortie, _e = git(projet, ["rev-parse", "--verify", "-q", ref])
         if sortie.decode("ascii", "replace").strip() != tete:
-            raise RefusRecuperation("Branche récupérée inattendue : vérification impossible.")
+            raise RefusRecuperation("Branche récupérée inattendue : vérification impossible.", transitoire=True)
 
 
 # ---------------------------------------------------------------- scripts distants
@@ -444,8 +548,27 @@ def _texte_octets(valeur, nom):
     raise st.RefusLancement(f"{nom} : du texte est attendu.")
 
 
+def _archive_fichier(membres, sortie):
+    """Archive tar de (nom, données, droits) écrite dans le fichier binaire `sortie` : comme `serveur_tache._archive`, mais
+    une donnée peut être un CHEMIN (`os.PathLike`, le paquet Git) recopié par blocs, jamais chargé en mémoire."""
+    with tarfile.open(fileobj=sortie, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+        for nom, donnees, droits in membres:
+            info = tarfile.TarInfo(nom)
+            info.mode, info.mtime = droits, 0
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            if isinstance(donnees, os.PathLike):
+                with open(donnees, "rb") as source:
+                    info.size = os.fstat(source.fileno()).st_size
+                    tar.addfile(info, source)
+            else:
+                info.size = len(donnees)
+                tar.addfile(info, io.BytesIO(donnees))
+
+
 def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk):
-    """Crée ~/taches/<id> (qui ne doit pas exister) avec entree/ ; (code, erreur), 73 si l'identifiant est pris."""
+    """Crée ~/taches/<id> (qui ne doit pas exister) avec entree/ ; (code, erreur), 73 si l'identifiant est pris. L'archive est
+    écrite dans un fichier temporaire, puis ce FICHIER est l'entrée standard de ssh (aucune copie du paquet en mémoire)."""
     demande = (json.dumps(_demande_dict(d), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     membres = [("entree/projet.bundle", paquet, 0o600),
                ("entree/argv.json", (json.dumps(argv, ensure_ascii=False) + "\n").encode("utf-8"), 0o600),
@@ -455,15 +578,29 @@ def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk):
     if d.mode == "pilote":
         membres.append(("entree/app.apk", apk, 0o644))
         fichiers.append("app.apk")
-    code, _s, erreur = st._octets(serveur, ssh, _script(_PREPARER_AGENT, d.id, FICHIERS=" ".join(fichiers)),
-                                  st._archive(membres), delai=900)
+    try:
+        archive = tempfile.TemporaryFile(prefix="agent-entree-")
+    except OSError as e:
+        return 1, f"Archive des entrées impossible sur le poste ({type(e).__name__})."
+    with archive:
+        try:
+            _archive_fichier(membres, archive)
+            archive.flush()
+            archive.seek(0)
+        except OSError as e:
+            return 1, f"Archive des entrées impossible sur le poste ({type(e).__name__} : {e})."
+        code, _s, erreur = st._octets(serveur, ssh, _script(_PREPARER_AGENT, d.id, FICHIERS=" ".join(fichiers)),
+                                      archive, delai=900)
     return code, erreur
 
 
 def _doublon(dossier, d):
     """Message de refus si une tâche d'agent ACTIVE du même projet porte le même nom de tâche, à la casse près (deux agents
-    sur la même branche agent/<tâche>, ou deux branches qui se confondent sous Windows) ; None sinon."""
+    sur la même branche agent/<tâche>, ou deux branches qui se confondent sous Windows) ; None sinon. Une tâche abandonnée
+    faute de place (`abandonnee`, jamais démarrée et jamais démarrable) ne compte pas."""
     for i, f in st.Index(dossier).lire().items():
+        if f.get("abandonnee") is True and f.get("etat") == "en_attente":
+            continue
         if (f.get("type") == "agent" and f.get("etat") in ("en_attente", "en_cours") and f.get("projet") == d.projet
                 and isinstance(f.get("tache"), str) and f["tache"].lower() == d.tache.lower() and i != d.id):
             return (f"Une tâche d'agent « {f['tache']} » est déjà en cours pour ce projet ({i}) : attendez sa fin ou "
@@ -483,7 +620,10 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
         if message_branche:
             raise st.RefusLancement(message_branche)
         lignes = changements_non_commites(projet, git)
-        if lignes:
+        if lignes is None:
+            avertissement = ("État des fichiers du projet illisible (git status en échec) : d'éventuels changements non "
+                             "commités ne partiront pas, seuls les commits partent à l'agent.")
+        elif lignes:
             avertissement = (f"{len(lignes)} changement(s) non commité(s) restent sur le poste : seuls les commits partent à "
                              "l'agent (" + st._court(" ; ".join(l.strip() for l in lignes[:5]), 200)
                              + (" ; ..." if len(lignes) > 5 else "") + ").")
@@ -510,9 +650,18 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
     doublon = _doublon(dossier, d)
     if doublon:
         raise st.RefusLancement(doublon)
-    if not isinstance(paquet, (bytes, bytearray)) or not paquet:
-        raise st.RefusLancement("Paquet Git absent ou vide : les octets du paquet sont attendus.")
-    if len(paquet) > d.limites["paquet_octets"]:
+    if isinstance(paquet, os.PathLike):        # paquet écrit dans un fichier par `preparer_paquet(fichier=...)`
+        try:
+            taille = Path(paquet).stat().st_size if Path(paquet).is_file() else 0
+        except OSError:
+            taille = 0
+        if not taille:
+            raise st.RefusLancement("Paquet Git absent ou vide : le fichier du paquet est introuvable ou vide.")
+    elif isinstance(paquet, (bytes, bytearray)) and paquet:
+        taille = len(paquet)
+    else:
+        raise st.RefusLancement("Paquet Git absent ou vide : les octets du paquet (ou son fichier) sont attendus.")
+    if taille > d.limites["paquet_octets"]:
         raise st.RefusLancement(f"Paquet Git trop gros : {d.limites['paquet_octets'] // (1024 * 1024)} Mo au plus.")
     if (not isinstance(argv, list) or not argv or not all(isinstance(a, str) and "\0" not in a for a in argv)
             or len(json.dumps(argv)) > 65536):
@@ -614,13 +763,45 @@ def _fichier_sortie(serveur, ssh, ident, nom, maximum):
                                        delai=900)
     if code == 3:
         return None
-    if code == CODE_TROP_GROS:
-        raise RefusRecuperation(f"{nom} refusé : fichier trop gros (plus de {maximum} octets) ou qui n'est pas ordinaire.")
-    if code != 0:
-        raise RefusRecuperation(f"Rapatriement de {nom} en échec (code {code}) : {st._court(erreur, 200)}")
+    _juger_code(nom, code, erreur, maximum)
     if len(donnees) > maximum:
         raise RefusRecuperation(f"{nom} refusé : plus de {maximum} octets reçus.")
     return donnees
+
+
+def _juger_code(nom, code, erreur, maximum):
+    if code in (CODE_TROP_GROS, 99):
+        raise RefusRecuperation(f"{nom} refusé : fichier trop gros (plus de {maximum} octets) ou qui n'est pas ordinaire.")
+    if code != 0:
+        raise RefusRecuperation(f"Rapatriement de {nom} en échec (code {code}) : {st._court(erreur, 200)}",
+                                transitoire=True)
+
+
+def _fichier_sortie_vers(serveur, ssh, ident, nom, maximum, destination):
+    """Comme `_fichier_sortie`, mais la sortie de ssh va DROIT dans le fichier `destination` par blocs bornés
+    (`ssh.executer_vers_fichier`) : un paquet résultat de 500 Mo n'est jamais en mémoire. Taille reçue, ou None si le
+    fichier est absent sur le serveur. Un exécuteur SSH sans cette fonction (faux SSH) passe par les octets."""
+    vers = getattr(ssh, "executer_vers_fichier", None)
+    if vers is None:
+        donnees = _fichier_sortie(serveur, ssh, ident, nom, maximum)
+        if donnees is None:
+            return None
+        Path(destination).write_bytes(donnees)
+        return len(donnees)
+    if nom not in FICHIERS_SORTIE:
+        raise ValueError("Fichier de sortie inconnu.")
+    script = _script(_FICHIER, ident, NOM=nom, MAX=str(maximum + 1)).encode("utf-8")
+    try:
+        code, taille, erreur = vers(serveur_etat.cible(serveur), "bash -s", serveur.cle, destination, maximum,
+                                    entree=script, delai=900)
+    except Exception as e:  # noqa: BLE001 - ssh absent, hôte invalide : panne de transfert
+        code, taille, erreur = 255, 0, f"{type(e).__name__} : {e}"
+    if code == 3:
+        return None
+    _juger_code(nom, code, erreur, maximum)
+    if not isinstance(taille, int) or taille > maximum:
+        raise RefusRecuperation(f"{nom} refusé : plus de {maximum} octets reçus.")
+    return taille
 
 
 def _entier_fin(v, nom, maxi):
@@ -674,10 +855,12 @@ def recuperer(ident, projet, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ss
     fin = _lire_fin(brut_fin, tache, base) if brut_fin is not None else {}
     branche = None
     if fin.get("commits", 0) > 0:
-        paquet = _fichier_sortie(serveur, ssh, ident, "resultat.bundle", LIMITES_AGENT["paquet_octets"])
-        if not paquet:
-            raise RefusRecuperation("Le paquet résultat est absent alors que fin.json annonce des commits.")
-        _verifier_et_recuperer_paquet(Path(projet), paquet, tache, base, git)
+        with tempfile.TemporaryDirectory(prefix="agent-resultat-", ignore_cleanup_errors=True) as tmp:
+            fichier = Path(tmp) / "resultat.bundle"
+            taille = _fichier_sortie_vers(serveur, ssh, ident, "resultat.bundle", LIMITES_AGENT["paquet_octets"], fichier)
+            if not taille:
+                raise RefusRecuperation("Le paquet résultat est absent alors que fin.json annonce des commits.")
+            _verifier_et_recuperer_paquet(Path(projet), fichier, tache, base, git)
         branche = f"agent/{tache}"
     return {"flux": flux, "fin": fin, "branche": branche, "etat": lu["etat"], "raison": lu.get("raison", "")}
 

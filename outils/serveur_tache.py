@@ -1317,8 +1317,9 @@ def _reponse_pont(nom, code, sortie, erreur):
     return {"ok": d["ok"], "verbe": nom, "code": code, "detail": d["detail"], "_lisible": True}
 
 
-def _attendre_avd(serveur, ssh, ident, dormir):
-    """None quand sortie/.avd-pret existe (l'AVD est créé) ; sinon la réponse d'échec (attente bornée)."""
+def _attendre_avd(serveur, ssh, ident, dormir, dossier=plateforme_acces.DOSSIER):
+    """None quand sortie/.avd-pret existe (l'AVD est créé) ; sinon la réponse d'échec (attente bornée). Tâche finie : la raison
+    écrite par le veilleur (ex. « Le conteneur s'est arrêté au démarrage : Création de l'AVD ... ») est jointe au détail."""
     attendu = 0
     while True:
         code, sortie, erreur = _bash(serveur, ssh, _script(_AVD, ident), delai=30)
@@ -1328,8 +1329,10 @@ def _attendre_avd(serveur, ssh, ident, dormir):
         if mot == "pret":
             return None
         if mot != "attente":
+            raison = _etat(ident, dossier, ssh).get("raison") or ""
             return {"ok": False, "verbe": "demarrer", "code": 4,
-                    "detail": "La tâche n'est plus en cours : l'émulateur ne peut pas démarrer."}
+                    "detail": ("La tâche n'est plus en cours : l'émulateur ne peut pas démarrer."
+                               + (f" {_court(raison)}" if raison else ""))}
         if attendu >= AVD_ATTENTE_S:
             return {"ok": False, "verbe": "demarrer", "code": 4,
                     "detail": f"L'AVD n'est pas prêt après {AVD_ATTENTE_S} s (voir sortie/entree-tache.log)."}
@@ -1371,7 +1374,7 @@ def verbe(ident, nom, arguments, dossier=plateforme_acces.DOSSIER, ssh=plateform
     args = valider_verbe(nom, arguments)
     serveur = _serveur_de(ident, dossier)
     if nom == "demarrer":
-        echec = _attendre_avd(serveur, ssh, ident, dormir)
+        echec = _attendre_avd(serveur, ssh, ident, dormir, dossier)
         if echec:
             return _masque(echec, dossier)
     reservee = False

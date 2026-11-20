@@ -18,6 +18,8 @@ V_UBUNTU="ubuntu:24.04"
 V_BUILD_TOOLS="34.0.0"
 V_PLATEFORME="34"
 V_CMDLINE_TOOLS="11076708"
+# emulateur_cmdline_tools : outils propres à l'image de l'émulateur (23.0 : lit le XML v4 des images système)
+V_CMDLINE_TOOLS_EMULATEUR="16111833"
 V_GRADLE="8.7"
 V_NODE="22"
 V_CLAUDE_CODE="2.1.328"
@@ -736,13 +738,13 @@ etape_android_emulateur() {
 # fichiers) ; elle n'est reconstruite que si l'étiquette diffère. Le marqueur ~/.myiafactory/emulateur-image.version (contenu =
 # l'étiquette, testé par la sonde du catalogue) est retiré avant toute reconstruction puis réécrit une fois l'image construite.
 # Le SDK Android n'est pas dans l'image : il est monté à l'exécution. Les outils en ligne de commande Android (avdmanager), que
-# le SDK de l'hôte n'a pas, sont apportés par l'image (version ${V_CMDLINE_TOOLS} épinglée, SHA-1 vérifié d'après le manifeste
+# le SDK de l'hôte n'a pas, sont apportés par l'image (version ${V_CMDLINE_TOOLS_EMULATEUR} épinglée, SHA-1 vérifié d'après le manifeste
 # officiel Google à la construction) : la construction a besoin du réseau (aucun --network none), et l'image grossit d'environ
-# 150 Mo.
+# 180 Mo.
 etape_emulateur_image() {
   local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f journal fin code fichiers_h
   if [ "$SIMULER" = 1 ]; then
-    repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont, outils en ligne de commande Android ${V_CMDLINE_TOOLS} téléchargés de Google à la construction, SHA-1 vérifié d'après le manifeste officiel, environ 150 Mo de plus) depuis ${racine} puis écrirait ${marqueur}."
+    repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont, outils en ligne de commande Android ${V_CMDLINE_TOOLS_EMULATEUR} téléchargés de Google à la construction, SHA-1 vérifié d'après le manifeste officiel, environ 180 Mo de plus) depuis ${racine} puis écrirait ${marqueur}."
   fi
   refuser_root
   exiger_disque "$SEUIL_EMULATEUR_IMAGE_GO"
@@ -761,7 +763,7 @@ etape_emulateur_image() {
       rm -rf "$ctx"
       repondre bloque "Contexte de construction de l'image non préparable."
     fi
-    journal=$(sudo -n docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}" -t myiafactory/emulateur "$ctx" 2>&1)
+    journal=$(sudo -n docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}" --build-arg "CMDLINE_TOOLS=$V_CMDLINE_TOOLS_EMULATEUR" -t myiafactory/emulateur "$ctx" 2>&1)
     code=$?
     rm -rf "$ctx"
     if [ "$code" != 0 ]; then

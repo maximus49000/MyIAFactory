@@ -3,7 +3,10 @@
 /pont), seule porte de l'agent vers l'émulateur. Lancé détaché par lancer_agent.sh (setsid + nohup, `python3 -I`, chef de
 son groupe), arrêté par le veilleur de l'agent (SIGTERM au groupe) ; bibliothèque standard seulement.
 
-Usage : python3 -I pont_hote.py <id_agent>
+Usage : python3 -I pont_hote.py <id_agent> [<duree_s>]
+  duree_s (1..86400, celle de l'agent, passée par lancer_agent.sh) : l'émulation liée reçoit la durée QUI RESTE à l'agent
+  (`lancer_emulation.sh <emu> pilote <reste> <min(600, reste)>`), jamais les 1200 s / 600 s par défaut ; plus de temps
+  restant : pas de nouvelle émulation (code 4). Sans duree_s : les valeurs par défaut de lancer_emulation.sh.
 
 L'AGENT N'EST PAS DE CONFIANCE : il tient le client de la socket. Donc :
 - une connexion = UNE requête, une ligne JSON de 4 Ko au plus {"verbe": str, "args": [str]} (exactement ces deux clés),
@@ -103,6 +106,8 @@ SORTIE_MAX_OCTETS = 512 * 1024    # sortie standard de docker exec gardée au pl
 REPONSE_OCTETS_MAX = 768 * 1024   # ligne de réponse, échappement JSON compris (le client en lit 1 Mo au plus)
 GRACE_ARRET_S = 5                 # entre SIGTERM et SIGKILL d'une commande au délai dépassé
 EMULATIONS_MAX = 5                # tâches d'émulation créées par un même pont
+DUREE_MAX_S = 86400                # durée d'un agent (lancer_agent.sh) : 1 à 86400 s
+INACTIVITE_EMULATION_S = 600       # inactivité de l'émulation liée (défaut de lancer_emulation.sh), bornée par le reste
 LANCEMENT_EMULATION_S = 240       # lancer_emulation.sh : docker run borné à 120 s, plus la marge
 AVD_ATTENTE_S = 300
 AVD_PAS_S = 2
@@ -339,9 +344,13 @@ class Contexte:
     """État d'un pont hôte : tâche d'agent `ident` sous `home`/taches, scripts dans `ici` ; `executer(argv, delai, env,
     nouvelle_session)` -> (code, sortie) et `dormir(s)` remplaçables (tests)."""
 
-    def __init__(self, ident, home, ici, executer=None, dormir=time.sleep):
+    def __init__(self, ident, home, ici, executer=None, dormir=time.sleep, duree_s=None):
         if not isinstance(ident, str) or not re.fullmatch(MOTIF_ID, ident, re.ASCII):
             raise ValueError("identifiant refusé")
+        if duree_s is not None and (type(duree_s) is not int or not 1 <= duree_s <= DUREE_MAX_S):
+            raise ValueError("durée refusée")
+        # l'échéance de l'agent (le pont part juste avant son conteneur : elle tombe un peu avant la sienne, jamais après)
+        self.echeance = time.monotonic() + duree_s if duree_s else None
         self.id = ident
         self.home = str(home)
         self.ici = str(ici)
@@ -433,7 +442,8 @@ class Contexte:
         etat, raison = self.etat_emu()
         if etat != "en_cours":
             env = dict(ENV_FIXE, HOME=self.home)
-            code, sortie = self.executer(["bash", os.path.join(self.ici, "lancer_emulation.sh"), self.emu, "pilote"],
+            code, sortie = self.executer(["bash", os.path.join(self.ici, "lancer_emulation.sh"), self.emu, "pilote",
+                                          *self.limites_emulation()],
                                          LANCEMENT_EMULATION_S, env, nouvelle_session=True)
             if code == CODE_OCCUPE:
                 raise Refus(4, MESSAGE_OCCUPE)
@@ -458,6 +468,16 @@ class Contexte:
             if time.monotonic() - debut >= AVD_ATTENTE_S:
                 raise Refus(4, f"L'AVD de l'émulation n'est pas prêt en {AVD_ATTENTE_S} s.")
             self.dormir(AVD_PAS_S)
+
+    def limites_emulation(self):
+        """`[duree_s, inactivite_s]` de l'émulation liée : le temps qui reste à l'agent, et l'inactivité par défaut (600 s)
+        bornée par lui ; `[]` sans durée connue (valeurs par défaut de lancer_emulation.sh). Plus de temps : Refus(4)."""
+        if self.echeance is None:
+            return []
+        reste = int(self.echeance - time.monotonic())
+        if reste < 1:
+            raise Refus(4, "L'agent arrive à sa durée maximale : plus de nouvelle émulation.")
+        return [str(reste), str(min(INACTIVITE_EMULATION_S, reste))]
 
     def arreter_emulation(self):
         """« fin » dans ~/taches/<emu>/arret (son veilleur arrête le conteneur et libère le créneau d'émulation)."""
@@ -686,8 +706,9 @@ def _signal(_numero, _cadre):
 
 
 def main(argv):
-    if len(argv) != 2 or not re.fullmatch(MOTIF_ID, argv[1], re.ASCII):
-        print("pont_hote : usage : pont_hote.py <id_agent>", file=sys.stderr)
+    if len(argv) not in (2, 3) or not re.fullmatch(MOTIF_ID, argv[1], re.ASCII) or (
+            len(argv) == 3 and (not re.fullmatch(r"[1-9][0-9]{0,5}", argv[2], re.ASCII) or int(argv[2]) > DUREE_MAX_S)):
+        print("pont_hote : usage : pont_hote.py <id_agent> [<duree_s>]", file=sys.stderr)
         return 2
     if not hasattr(socket, "AF_UNIX") or not O_NOFOLLOW or not PAR_DESCRIPTEUR:
         print("pont_hote : système sans socket Unix ni O_NOFOLLOW : refusé.", file=sys.stderr)
@@ -696,7 +717,8 @@ def main(argv):
     if not home.startswith("/"):
         print("pont_hote : HOME absent.", file=sys.stderr)
         return 2
-    ctx = Contexte(argv[1], home, os.path.dirname(os.path.abspath(__file__)))
+    ctx = Contexte(argv[1], home, os.path.dirname(os.path.abspath(__file__)),
+                   duree_s=int(argv[2]) if len(argv) == 3 else None)
     for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(s, _signal)
     try:

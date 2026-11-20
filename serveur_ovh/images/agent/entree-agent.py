@@ -16,9 +16,9 @@
      l'entrée conclut (le travail déjà commité est rapporté, fin.json porte alors "echeance": true) ;
   4. tue tout processus restant du conteneur (PID 1 seulement : kill(-1), puis récolte des zombies), commite les restes
      (« Agent : travail non commité à la fin »), écrit /sortie/resultat.bundle (`git bundle create … <base>..agent/<tâche>`,
-     rien si aucun commit), retire de /sortie TOUT ce que l'agent y a déposé (seuls flux.jsonl, claude.err et le paquet créé
-     ici restent) puis écrit /sortie/fin.json {"code", "commits", "branche", "base"[, "echeance": true]} (temporaire puis
-     renommage). Ces commandes git tournent dans le dépôt QUE L'AGENT A ÉCRIT (configuration, .gitattributes compris) : elles
+     rien si aucun commit), retire de /sortie TOUT ce que l'agent y a déposé (seul le paquet créé ici reste), recrée
+     /sortie/flux.jsonl et /sortie/claude.err depuis SES descripteurs (voir plus bas), puis écrit /sortie/fin.json
+     {"code", "commits", "branche", "base"[, "echeance": true]} (temporaire puis renommage). Ces commandes git tournent dans le dépôt QUE L'AGENT A ÉCRIT (configuration, .gitattributes compris) : elles
      ne lancent rien de lui (`SURETE_GIT` : ni crochet, ni fsmonitor, ni signature gpg, ni maintenance automatique ;
      GIT_ATTR_NOSYSTEM et core.attributesFile neutre ; $GIT_DIR/info/attributes, prioritaire, remplacé le temps de conclure
      par « * -filter -text -ident -working-tree-encoding » : aucun filtre clean/process, contenu brut) et tiennent une
@@ -28,7 +28,11 @@ de claude ; l'entrée conclut quand même (étape 4). PID 1 d'un espace de noms 
 gestionnaire, SIGKILL compris : l'agent ne peut pas tuer l'entrée pour l'empêcher de conclure. Il garde en revanche la main
 sur ce que l'entrée met dans le paquet (ses commits, ses références, ses objets) : resultat.bundle n'est jamais « sûr ».
 Sur l'hôte, kernel.yama.ptrace_scope >= 1 est exigé (vérifié par lancer_agent.sh) : sinon claude, même utilisateur que
-l'entrée, pourrait la tracer (ptrace) et lui faire écrire n'importe quoi.
+l'entrée, pourrait la tracer (ptrace) et lui faire écrire n'importe quoi. L'entrée se rend aussi non « dumpable » dès son
+départ (`prctl(PR_SET_DUMPABLE, 0)`, Linux) : /proc/1/fd et /proc/1/mem lui sont fermés. Le flux et les erreurs sont écrits
+dans des fichiers SANS NOM (ouverts puis détachés : O_TMPFILE, sinon créés puis effacés) : l'agent ne peut ni les lire ni
+les réécrire ; /sortie/flux.jsonl et /sortie/claude.err ne sont créés qu'à la fin, quand plus aucun processus de l'agent ne
+tourne, en copiant ces descripteurs : rien de ce que l'agent aurait mis à leur place n'est rendu.
 Ces garanties ne valent qu'à l'intérieur du conteneur : fin.json, flux.jsonl et resultat.bundle restent des données NON
 FIABLES pour l'hôte et le poste (T3 : paquet vérifié, seule référence agent/<tâche>, tailles bornées) ; données non fiables.
 
@@ -396,6 +400,37 @@ def ouvrir_sortie(chemin):
     return os.open(chemin, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | SANS_LIEN | getattr(os, "O_BINARY", 0), 0o600)
 
 
+def ouvrir_sans_nom(dossier):
+    """Un fichier en lecture-écriture SANS NOM dans `dossier` (le descripteur seul y mène) : O_TMPFILE (Linux), sinon
+    créé puis effacé aussitôt ; sous Windows (tests), effacé à la fermeture. Rend le descripteur."""
+    binaire = getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_TMPFILE"):
+        try:
+            return os.open(dossier, os.O_RDWR | os.O_TMPFILE | binaire, 0o600)
+        except OSError:                   # système de fichiers sans O_TMPFILE : créé puis effacé
+            pass
+    fd, chemin = tempfile.mkstemp(prefix=".e-", dir=dossier)
+    try:
+        os.unlink(chemin)
+    except OSError:                       # Windows : un fichier ouvert ne s'efface pas ; il part à la fermeture
+        os.close(fd)
+        fd = os.open(chemin, os.O_RDWR | getattr(os, "O_TEMPORARY", 0) | binaire)
+    return fd
+
+
+def interdire_le_vidage():
+    """`prctl(PR_SET_DUMPABLE, 0)` (Linux) : un processus du même utilisateur (claude, ses outils) ne peut plus ouvrir
+    /proc/<entrée>/fd ni /proc/<entrée>/mem, ni la tracer. Vrai si c'est fait ; ailleurs, ou en cas d'échec : faux, ignoré."""
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        return libc.prctl(4, 0, 0, 0, 0) == 0            # PR_SET_DUMPABLE = 4
+    except (OSError, AttributeError):
+        return False
+
+
 def ecrire_tout(fd, donnees):
     vue = memoryview(donnees)
     while vue:
@@ -404,11 +439,32 @@ def ecrire_tout(fd, donnees):
 
 
 class Borne:
-    """Un fichier de sortie borné à `limite` octets ; `depasse` est appelé (une fois) au premier octet en trop."""
+    """Une sortie bornée à `limite` octets, écrite dans un fichier SANS NOM de `dossier` (`ouvrir_sans_nom`) ; `publier`
+    la copie, à la fin, sous `chemin`. `depasse` est appelé (une fois) au premier octet en trop."""
 
     def __init__(self, chemin, limite, depasse=None):
-        self.fd, self.limite, self.ecrits, self.depasse, self.coupe = ouvrir_sortie(chemin), limite, 0, depasse, False
+        self.chemin = chemin
+        self.fd = ouvrir_sans_nom(os.path.dirname(chemin) or ".")
+        self.limite, self.ecrits, self.depasse, self.coupe = limite, 0, depasse, False
         self.verrou = threading.Lock()
+
+    def publier(self):
+        """Recrée `chemin` (ce que l'agent y aurait mis est retiré, jamais suivi) avec les octets écrits ici."""
+        with self.verrou:
+            retirer(self.chemin)
+            sortie = os.open(self.chemin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | SANS_LIEN | getattr(os, "O_BINARY", 0),
+                             0o600)
+            try:
+                os.lseek(self.fd, 0, os.SEEK_SET)
+                reste = self.ecrits
+                while reste > 0:
+                    bloc = os.read(self.fd, min(reste, 1024 * 1024))
+                    if not bloc:
+                        break
+                    ecrire_tout(sortie, bloc)
+                    reste -= len(bloc)
+            finally:
+                os.close(sortie)
 
     def ecrire(self, donnees):
         if isinstance(donnees, str):
@@ -515,6 +571,7 @@ def echeance_interne(duree_s):
 # SIGTERM / SIGINT : seul le groupe de claude est tué ; `principal` conclut ensuite (jamais de sortie immédiate du
 # processus ni de signal ignoré).
 SIGNAL = {"proc": None, "recu": False}
+SORTIES = []                                # les `Borne` à publier à la fin (flux.jsonl), après le nettoyage de /sortie
 
 
 def signal_recu(_numero, _cadre):
@@ -538,7 +595,7 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
     try:
         message = os.open(os.path.join(c["entree"], "message.md"), os.O_RDONLY | SANS_LIEN | getattr(os, "O_BINARY", 0))
     except OSError:
-        flux.fermer()
+        SORTIES.append(flux)
         raise Refus("message.md absent ou illisible")
     try:
         proc = subprocess.Popen(commande_claude() + options, cwd=depot, env=env, stdin=message, stdout=subprocess.PIPE,
@@ -566,7 +623,7 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
     tuer_groupe(proc)                       # les petits-enfants qui tiendraient encore les tuyaux
     for f in fils:
         f.join(timeout=10)
-    flux.fermer()
+    SORTIES.append(flux)                    # publiée par `principal`, après le nettoyage de /sortie
     code = proc.returncode
     if code < 0:
         code = 128 - code
@@ -601,6 +658,7 @@ def nettoyer_sortie(sortie, garder):
 
 
 def principal():
+    interdire_le_vidage()                   # avant tout : /proc/1/fd et /proc/1/mem fermés à l'agent
     c = chemins()
     signal.signal(signal.SIGTERM, signal_recu)
     signal.signal(signal.SIGINT, signal_recu)
@@ -631,9 +689,15 @@ def principal():
             commits, branche = 0, None
             code = code or 1
     tuer_les_restes()
-    erreurs.fermer()
-    # Seules nos sorties restent ; le paquet seulement s'il vient d'être créé ici (sinon tout resultat.bundle part).
-    nettoyer_sortie(c["sortie"], {"flux.jsonl", "claude.err"} | ({"resultat.bundle"} if branche else set()))
+    # Plus aucun processus de l'agent : seul le paquet créé ici reste de /sortie (sinon tout resultat.bundle part) ; le flux
+    # et les erreurs sont recréés depuis NOS descripteurs (ce que l'agent aurait mis sous leur nom est retiré).
+    nettoyer_sortie(c["sortie"], {"resultat.bundle"} if branche else set())
+    for borne in SORTIES + [erreurs]:
+        try:
+            borne.publier()
+        except OSError:
+            pass
+        borne.fermer()
     fin = {"code": code, "commits": commits, "branche": branche, "base": d["base"] if d else None}
     if echeance:
         fin["echeance"] = True

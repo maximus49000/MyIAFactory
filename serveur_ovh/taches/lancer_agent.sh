@@ -7,7 +7,8 @@
 #   initial) ; places 1..4 : nombre de places d'agent du serveur. Chaque valeur est validée par un motif strict AVANT tout
 #   usage ; rien n'en est jamais interprété par un shell : les commandes sont des tableaux.
 #   pilote : exige pont_hote.py et lancer_emulation.sh à côté de ce script (déposés avec lui ; absents, le mode pilote est
-#   refusé, code 2) et entree/app.apk. Le pont hôte (python3 -I pont_hote.py <id>, détaché, chef de son groupe) crée
+#   refusé, code 2) et entree/app.apk. Le pont hôte (python3 -I pont_hote.py <id> <duree_s>, détaché, chef de son groupe ;
+#   l'émulation liée reçoit la durée qui reste à l'agent) crée
 #   l'émulation au premier `demarrer` de l'agent (créneau d'émulation à part des places d'agent).
 # Sortie standard : UNE ligne JSON, l'état écrit dans ~/taches/<id>/etat.json (même forme que lancer_emulation.sh).
 # Codes : 0 conteneur démarré (en_cours) ; 1 démarrage impossible (echouee) ; 2 argument refusé (rien créé) ; 3 tâche déjà en
@@ -427,9 +428,9 @@ if [ "$MODE" = pilote ]; then                      # pont hôte détaché, sans 
   mkdir -p -- "$DOSSIER/pont" "$DOSSIER/outil" && chmod 700 "$DOSSIER/pont" "$DOSSIER/outil" ||
     fin_erreur "Dossiers du pont non créables."
   if command -v setsid >/dev/null 2>&1; then
-    setsid nohup python3 -I "$ICI/pont_hote.py" "$ID" </dev/null >> "$DOSSIER/pont-hote.out" 2>&1 8>&- &
+    setsid nohup python3 -I "$ICI/pont_hote.py" "$ID" "$DUREE" </dev/null >> "$DOSSIER/pont-hote.out" 2>&1 8>&- &
   else
-    nohup python3 -I "$ICI/pont_hote.py" "$ID" </dev/null >> "$DOSSIER/pont-hote.out" 2>&1 8>&- &
+    nohup python3 -I "$ICI/pont_hote.py" "$ID" "$DUREE" </dev/null >> "$DOSSIER/pont-hote.out" 2>&1 8>&- &
   fi
   printf '%s\n' "$!" > "$DOSSIER/pont-hote.pid"
   disown 2>/dev/null

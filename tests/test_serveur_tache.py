@@ -1739,6 +1739,19 @@ class TestScriptsReels(BaseLanceur):
         self.assertEqual(r["etat"], "arretee")
         self.assertEqual(sorted(p.name for p in (self.tache / "entree").iterdir()), ["argv.json"])
 
+    def test_arreter_reel_d_un_agent_laisse_l_arret_au_veilleur(self):
+        """Tâche d'agent : jamais de docker stop -t 10 (le veilleur arrête avec -t 60, le temps que l'entrée conclue) ;
+        une tâche d'émulation garde le sien."""
+        self.fiche()
+        self.ecrire_etat()
+        (self.tache / "entree").mkdir(parents=True, exist_ok=True)
+        (self.tache / "entree" / "demande.json").write_text(json.dumps({"id": ID1, "type": "agent"}), encoding="utf-8")
+        st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)
+        self.assertNotIn(f"docker stop -t 10 tache-{ID1}", self.ssh.docker())
+        (self.tache / "entree" / "demande.json").write_text(json.dumps({"id": ID1, "type": "emulation"}), encoding="utf-8")
+        st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)
+        self.assertIn(f"docker stop -t 10 tache-{ID1}", self.ssh.docker())
+
     def test_etat_reel_absent_et_arreter_reel_idempotent(self):
         self.fiche()
         self.assertEqual(st.etat(ID1, dossier=self.dossier, ssh=self.ssh)["etat"], "inconnu")

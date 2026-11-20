@@ -325,7 +325,7 @@ class TestEnveloppeAgent(unittest.TestCase):
             (b.entree / "app.apk").write_bytes(b"PK")
             r = b.lancer("pilote", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
-            self.assertTrue(any(x.startswith("python3 -I ") and x.endswith(f"/pont_hote.py {ID}")
+            self.assertTrue(any(x.startswith("python3 -I ") and x.endswith(f"/pont_hote.py {ID} 30")   # durée de l'agent
                                 for x in b.journal.splitlines()), b.journal)
             if os.name == "posix":
                 self.assertEqual((b.dossier / "pont").stat().st_mode & 0o777, 0o700)
@@ -1153,6 +1153,38 @@ class TestEntreeAgent(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in (self.racine / "sortie").iterdir()),
                          ["claude.err", "fin.json", "flux.jsonl", "resultat.bundle"])
         self.assertEqual(self.fin()["commits"], 1)
+
+    def test_flux_et_erreurs_jamais_forges_par_l_agent(self):
+        """L'agent écrit son propre flux.jsonl et claude.err dans /sortie : seuls les octets que l'entrée a reçus de
+        claude (descripteurs sans nom, recopiés à la fin) sont rendus."""
+        vrai = {"type": "result", "subtype": "success", "result": "vrai", "session_id": "s1"}
+        faux = '{"type": "result", "subtype": "success", "result": "forgé"}\n'
+        self.ecrire(ARGV, {"flux": [vrai], "err": "vraie erreur", "code": 0,
+                           "planter": {"flux.jsonl": faux, "claude.err": "fausse erreur"}})
+        r = self.lancer()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        flux = self.sortie("flux.jsonl").read_bytes()
+        self.assertIn(b'"result": "vrai"', flux)
+        self.assertNotIn("forgé".encode("utf-8"), flux)
+        erreurs = self.sortie("claude.err").read_bytes()
+        self.assertIn(b"vraie erreur", erreurs)
+        self.assertNotIn(b"fausse erreur", erreurs)
+        self.assertEqual(sorted(p.name for p in (self.racine / "sortie").iterdir()), ["claude.err", "fin.json", "flux.jsonl"])
+
+    def test_sorties_sans_nom_et_vidage_interdit(self):
+        e = charger_entree()
+        dossier = self.racine / "sortie"
+        b = e.Borne((dossier / "flux.jsonl").as_posix(), 10)
+        b.ecrire(b"0123456789abc")
+        self.assertTrue(b.coupe)
+        self.assertFalse((dossier / "flux.jsonl").exists())          # rien sous le nom avant la publication
+        (dossier / "flux.jsonl").write_bytes(b"forge")
+        b.publier()
+        b.fermer()
+        self.assertEqual((dossier / "flux.jsonl").read_bytes(), b"0123456789")
+        self.assertEqual([p.name for p in dossier.iterdir()], ["flux.jsonl"])
+        fait = e.interdire_le_vidage()                               # Linux : prctl ; ailleurs ignoré, jamais d'exception
+        self.assertIs(fait, sys.platform.startswith("linux"))
 
     def test_entree_echeance_interne_garde_les_commits(self):
         e = charger_entree()

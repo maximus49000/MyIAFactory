@@ -221,6 +221,29 @@ class TestRequetes(unittest.TestCase):
             self.assertEqual(b.emulations(), [emu])
             self.assertEqual(len(b.faux.lancements()), 1)
 
+    def test_duree_de_l_emulation_suit_celle_qui_reste_a_l_agent(self):
+        """Pont lancé avec la durée de l'agent : l'émulation liée reçoit le temps restant (et l'inactivité bornée par
+        lui), jamais 1200 s / 600 s ; plus de temps : aucune émulation, code 4."""
+        with Banc() as b:
+            b.ctx = PH.Contexte(ID, str(b.home), str(TACHES), executer=b.faux, dormir=lambda s: None, duree_s=300)
+            self.assertEqual(b.appel("demarrer")[0], 0)
+            (argv,) = [a["argv"] for a in b.faux.lancements()]
+            duree, inactivite = int(argv[-2]), int(argv[-1])
+            self.assertTrue(295 <= duree <= 300, argv)
+            self.assertEqual(inactivite, duree)                     # 600 s par défaut, bornées par le reste
+        with Banc() as b:
+            b.ctx = PH.Contexte(ID, str(b.home), str(TACHES), executer=b.faux, dormir=lambda s: None, duree_s=3600)
+            b.appel("demarrer")
+            self.assertEqual(b.faux.lancements()[0]["argv"][-1], "600")
+            b.ctx.echeance = PH.time.monotonic() - 1                # l'agent est à sa durée maximale
+            with self.assertRaises(PH.Refus):
+                b.ctx.limites_emulation()
+        for mauvaise in (0, 86401, "60", True):
+            with self.subTest(duree=mauvaise), self.assertRaises(ValueError):
+                PH.Contexte(ID, "/h", str(TACHES), duree_s=mauvaise)
+        self.assertEqual(PH.main(["pont_hote.py", ID, "0"]), 2)
+        self.assertEqual(PH.main(["pont_hote.py", ID, "60", "x"]), 2)
+
     def test_creneau_emulation_occupe_donne_4(self):
         with Banc() as b:
             b.faux.codes_lancer = [75]

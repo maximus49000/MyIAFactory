@@ -705,7 +705,12 @@ elif grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; then
   i=0
   while [ "$i" -lt 30 ] && grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; do sleep 1; i=$((i + 1)); done
 fi
-timeout 60 sudo -n docker stop -t 10 tache-@ID@ >/dev/null 2>&1
+# Une tâche d'AGENT (entree/demande.json : "type": "agent") : son veilleur tient l'arrêt (docker stop -t 60, le temps que
+# l'entrée conclue) ; un docker stop -t 10 ici l'écourterait. Les autres tâches (émulation) : comme avant.
+a="$d/entree/demande.json"
+if ! { [ -f "$a" ] && [ ! -L "$a" ] && head -c 65536 -- "$a" 2>/dev/null | grep -Eq '"type"[[:space:]]*:[[:space:]]*"agent"'; }; then
+  timeout 60 sudo -n docker stop -t 10 tache-@ID@ >/dev/null 2>&1
+fi
 exit 0
 """
 # Préparation (commande, shell POSIX : l'entrée standard porte l'archive) : le dossier de la tâche est créé par mkdir

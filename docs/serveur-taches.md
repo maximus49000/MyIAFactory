@@ -102,8 +102,8 @@ limite ne peut jamais dépasser son défaut.
 | Inactivité (mode pilote) | **600 s** (10 min) ; une demande de pilote accepte **300 à 600** | veilleur : dernier verbe du pont (`pont.log`, `.activite` touché au début et à la fin de chaque verbe), AVD prêt, ou début de la tâche |
 | Captures | **50** ; réglable de 1 à 50 | pont (code 3) et lanceur |
 | Octets des médias | **100 Mo** (104 857 600) pour captures, vidéos et images des vidéos ensemble ; réglable de 1 à cette valeur ; les journaux ne comptent pas | pont (code 3) et poste (`limite`) |
-| Vidéos | **5** par tâche, **180 s** au plus chacune (30 s par défaut), **60 Mo** au plus par fichier, 360x720 à 1,5 Mbit/s (~11 Mo par minute), un seul film à la fois | pont (codes 2 et 3) et poste |
-| Images tirées d'une vidéo | une toutes les **2 s**, **30** au plus par vidéo (150 en tout), 320 px de large | pont (ffmpeg) et poste |
+| Vidéos | **5** par tâche, **180 s** au plus chacune (30 s par défaut), **60 Mo** au plus par fichier, 360x720 à 1,5 Mbit/s (~11 Mo par minute ; ce réglage de l'encodeur n'est **pas encore vérifié** sur le serveur), un seul film à la fois | pont (codes 2 et 3) et poste |
+| Images tirées d'une vidéo | **30** au plus par vidéo (150 en tout), réparties sur tout le film : une toutes les max(**2 s**, durée/30) ; 320 px de large ; une image sans sa vidéo n'est jamais écrite sur le poste | pont (ffmpeg) et poste |
 | `logcat.txt` | **2 Mo** au plus (au-delà, plus rien n'y est ajouté) | pont et poste |
 | Taille de `sortie/` | **256 000 Ko** (`du -sk`, sondé toutes les 5 s) ; au-delà : arrêt, `limite` | veilleur ; ce n'est pas un quota, un dépassement entre deux sondages est accepté |
 | APK | **200 Mo** au plus, fichier ordinaire non vide commençant par la signature ZIP (`PK 03 04`) | lanceur, avant tout envoi |
@@ -139,8 +139,8 @@ Le conteneur n'accepte **que** ces verbes, par `pont <verbe> [arguments]` (copie
 | `attendre` | une durée entière de 0 à 120 secondes | pause |
 | `capturer` | un nom : `[a-z0-9][a-z0-9_-]{0,39}` | capture d'écran PNG dans `captures/<nom>.png` |
 | `journal` | un filtre facultatif : texte littéral de 1 à 60 caractères (`[A-Za-z0-9][A-Za-z0-9._:-]*`) | lit le journal de l'appareil (200 lignes de 500 caractères au plus), relève un plantage ; ajoute les mêmes lignes à `logcat.txt` (une ligne d'en-tête `# journal <filtre ou -> <heure UTC>` par appel, 2 Mo au plus, jamais au travers d'un lien) |
-| `arreter` | aucun | finit d'abord un film resté en cours (comme `finfilm`), puis arrête l'émulateur (au besoin par signal) |
-| `filmer` | un nom (comme `capturer`) et une durée facultative de 1 à 180 secondes (30 par défaut) | lance `screenrecord` sur l'appareil en arrière-plan et rend la main aussitôt (après 1 s de contrôle) ; un seul film à la fois (sinon code 2) ; nom déjà pris : code 2 ; 5 vidéos ou octets atteints : code 3 |
+| `arreter` | aucun | finit d'abord un film resté en cours (comme `finfilm`), puis arrête l'émulateur (au besoin par signal) ; si ce film a été effacé pour une limite ou en échec, rend 3 ou 4 (le lanceur note la limite) avec le détail |
+| `filmer` | un nom (comme `capturer`) et une durée facultative de 1 à 180 secondes (30 par défaut) | lance `screenrecord` sur l'appareil en arrière-plan et rend la main aussitôt (après 1 s de contrôle) ; un seul film à la fois (sinon code 2) ; nom déjà pris : code 2 ; 5 vidéos ou octets atteints : code 3 ; un `finfilm` en cours tient le verrou : `filmer` renonce après 5 s (code 4) ; un film très court déjà fini proprement pendant le contrôle compte comme un film |
 | `finfilm` | aucun | arrête le film (SIGINT : mp4 finalisé), le rapatrie dans `videos/<nom>.mp4` (signature `ftyp` vérifiée, sinon effacé, code 4 ; trop gros : effacé, code 3), puis en tire des images avec ffmpeg dans `videos/<nom>-img/` ; sans film en cours : code 2 |
 
 Conséquences à connaître : **`-5` et les adresses e-mail sont refusés comme `texte`** (il doit commencer par une lettre ou un
@@ -161,14 +161,19 @@ pont le finit avant d'arrêter l'émulateur ; et la fin d'un scénario par le la
 le pont répond 2, sans effet), puis `journal` et `arreter`. Limite connue : en mode pilote, une tâche arrêtée par le veilleur
 (durée, inactivité) sans `arreter` du pont perd le film en cours. Les captures (verrou `captures`) et les films (verrou
 `film`) se partagent la limite d'octets sans verrou commun : deux médias écrits au même instant peuvent la dépasser d'un fichier.
-La durée rendue par `finfilm` est celle mesurée entre `filmer` et `finfilm` (approchée, bornée par la durée demandée).
+La durée rendue par `finfilm` est le temps écoulé entre `filmer` et `finfilm`, jamais plus que la durée demandée (notée
+dans `.film` avec le nom, le processus et l'heure de début). Pendant son travail, `finfilm` renomme `.film` en `.film.fin`
+et ne le retire qu'une fois fini : un `finfilm` interrompu laisse la trace, et le suivant (ou `arreter`) reprend ce film.
+Le processus d'enregistrement est reconnu par ses arguments exacts (`timeout` ou `adb`, avec un argument `screenrecord`),
+jamais par une sous-chaîne. Les ajouts à `logcat.txt` se font sous verrou ; le poste tolère un léger dépassement (coupé au
+plafond).
 
 Le pont n'écrit que sous `sortie/` : `.activite`, `pont.log` (une ligne par appel : verbe, au plus 6 arguments tronqués,
 durée), `captures/<nom>.png`, `logcat.txt`, `videos/`, `.film`, `plantage.txt`, `.paquet`, `emulateur.log`,
 `emulateur.pid` et ses verrous. Il refuse de travailler sans `timeout` (code 4).
 
-Délais SSH par verbe côté poste : `demarrer` 360 s, `installer` 240 s, `arreter` 420 s (il peut finir un film), `finfilm`
-360 s, `filmer` 60 s, `attendre` et `capturer` 150 s, les autres 90 s. `demarrer` attend d'abord que l'AVD soit créé dans le
+Délais SSH par verbe côté poste : `demarrer` 360 s, `installer` 240 s, `arreter` 480 s (il peut finir un film), `finfilm`
+420 s, `filmer` 60 s, `attendre` et `capturer` 150 s, les autres 90 s. `demarrer` attend d'abord que l'AVD soit créé dans le
 conteneur (jusqu'à 300 s). Les temps réels de `filmer`, `finfilm` et de l'extraction des images ne sont **pas encore
 mesurés** sur le serveur.
 

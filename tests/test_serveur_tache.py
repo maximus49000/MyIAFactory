@@ -1248,7 +1248,7 @@ class TestRapatrier(BaseLanceur):
         self.srv.archive = archive(membres)
         m = self.rapatrier()
         self.assertEqual(len(m["videos"]), 5)
-        self.assertLessEqual(sum(len(v["images"]) for v in m["videos"]), 150)
+        self.assertEqual(len(m["videos"][0]["images"]), 30)              # 30 images par film au plus
         self.assertTrue(m["tronque"])
         self.assertEqual(m["statut"], "limite")
         with mock.patch.object(st, "VIDEO_MAX_OCTETS", 50):                 # au-delà de la taille d'une vidéo
@@ -1260,6 +1260,34 @@ class TestRapatrier(BaseLanceur):
             m = self.rapatrier()
         self.assertIsNone(m["logcat"])
         self.assertTrue(m["tronque"])
+
+    def test_images_sans_leur_video_refusees_et_jamais_ecrites(self):
+        self.preparer()
+        self.srv.archive = archive([("./videos/orphelin-img/orphelin-001.png", PNG), ("./videos/ok.mp4", MP4),
+                                    ("./videos/ok-img/ok-001.png", PNG), ("./videos/faux.mp4", b"pas une video" * 3),
+                                    ("./videos/faux-img/faux-001.png", PNG)])
+        m = self.rapatrier()
+        self.assertEqual(m["statut"], "erreur")
+        self.assertGreaterEqual(m["refuses"], 3)                                 # orphelin, faux.mp4, image de faux
+        ecrits = sorted(p.relative_to(self.dest).as_posix() for p in self.dest.rglob("*") if p.is_file())
+        self.assertEqual(ecrits, ["rapport.json", "videos/ok-img/ok-001.png", "videos/ok.mp4"])
+        self.assertFalse((self.dest / "videos" / "orphelin-img").exists())
+
+    def test_images_d_une_video_coupee_par_les_limites_sont_une_limite(self):
+        self.preparer()
+        with mock.patch.object(st, "VIDEO_MAX_OCTETS", 50):
+            self.srv.archive = archive([("./videos/grosse.mp4", MP4), ("./videos/grosse-img/grosse-001.png", PNG)])
+            m = self.rapatrier()
+        self.assertEqual((m["statut"], m["refuses"]), ("limite", 0))
+        self.assertFalse((self.dest / "videos" / "grosse-img").exists())
+
+    def test_logcat_un_peu_trop_long_est_coupe_au_plafond(self):
+        self.preparer()
+        with mock.patch.object(st, "LOGCAT_MAX_OCTETS", 10):
+            self.srv.archive = archive([("./pont.log", b"x\n"), ("./logcat.txt", b"0123456789ABCDE")])
+            m = self.rapatrier()
+        self.assertEqual(Path(m["logcat"]).read_bytes(), b"0123456789")
+        self.assertEqual((m["statut"], m["tronque"]), ("ok", False))
 
     def test_bombe_de_taille_video(self):
         self.preparer(limites={"octets": 1000})
@@ -1471,8 +1499,8 @@ class TestVerbe(BaseLanceur):
     def test_delai_ssh_par_verbe(self):
         # M5 : `arreter` du pont peut durer ~80 s, `installer` ~180 s : marge au-dessus de leur propre borne.
         # arreter et finfilm : jusqu'à ~250 s de film (SIGINT, attente, adb pull, ffmpeg 120 s) en plus de leur propre borne
-        for v, attendu in (("arreter", 420), ("installer", 240), ("toucher", st.DELAI_VERBE_S), ("demarrer", 360),
-                           ("filmer", 60), ("finfilm", 360)):
+        for v, attendu in (("arreter", 480), ("installer", 240), ("toucher", st.DELAI_VERBE_S), ("demarrer", 360),
+                           ("filmer", 60), ("finfilm", 420)):
             with self.subTest(verbe=v):
                 self.verbe(v, {"toucher": ["1", "2"], "filmer": ["demo"]}.get(v, []))
                 self.assertEqual(self.srv.ops("verbe")[-1][3], attendu)

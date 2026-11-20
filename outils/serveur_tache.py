@@ -485,8 +485,8 @@ ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/{ENVELOPPE}"
 # Délai SSH de chaque verbe relayé, au-dessus de la borne propre du pont : `arreter` (adb + attentes 10 + 5 + 5 s, jusqu'à
 # ~80 s, plus la fin d'un film resté en cours), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S
 # 300 s), `finfilm` (verrou, SIGINT et attente 10 s, adb pull, ffmpeg 120 s : jusqu'à ~250 s), `filmer` (1 s d'attente).
-DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 240, "arreter": 420, "attendre": 150,
-                                   "capturer": 150, "filmer": 60, "finfilm": 360})
+DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 240, "arreter": 480, "attendre": 150,
+                                   "capturer": 150, "filmer": 60, "finfilm": 420})
 DELAI_VERBE_S = 90
 # Mémoire et processeurs du conteneur passés à l'enveloppe (ses propres valeurs par défaut : la demande ne les règle pas).
 MEMOIRE_MO = 6144
@@ -1190,19 +1190,22 @@ def _nom_local(nom):
     return None
 
 
-def _depasse(genre, taille, res, total, limites):
+def _depasse(genre, taille, res, total, limites, film=None):
     """Vrai si ce membre ferait dépasser une limite (le flux est alors « tronqué » : statut limite)."""
     if genre == "journal":
         return taille > JOURNAL_MAX_OCTETS
     if genre == "logcat":
-        return taille > LOGCAT_MAX_OCTETS
+        # Un léger dépassement (ajouts concurrents passés avant le verrou du pont) est toléré : le fichier est alors lu
+        # coupé au plafond ; au-delà du double, il n'est pas pris du tout.
+        return taille > 2 * LOGCAT_MAX_OCTETS
     if total + taille > int(limites["octets"]):          # captures, vidéos et images partagent les octets de la demande
         return True
     if genre == "capture":
         return len(res["captures"]) >= int(limites["captures"])
     if genre == "video":
         return taille > VIDEO_MAX_OCTETS or sum(1 for v in res["videos"].values() if v["mp4"]) >= VIDEOS_MAX
-    return sum(len(v["images"]) for v in res["videos"].values()) >= IMAGES_FILM_MAX
+    return (len(res["videos"][film]["images"]) >= IMAGES_PAR_FILM
+            or sum(len(v["images"]) for v in res["videos"].values()) >= IMAGES_FILM_MAX)
 
 
 def _extraire(donnees, destination, limites):
@@ -1230,13 +1233,62 @@ def _extraire(donnees, destination, limites):
     # Les octets de la demande ne comptent que les MÉDIAS (M6 : captures, vidéos, images des vidéos) ; les journaux ont
     # leur propre plafond (JOURNAL_MAX_OCTETS chacun, LOGCAT_MAX_OCTETS pour logcat.txt), pour que des journaux longs ne
     # fassent pas passer en « limite » des médias dans les clous.
-    total, examines, vus = 0, 0, set()
+    total, examines, vus, films_coupes = 0, 0, set(), set()
 
     def abime():
         res["tronque" if coupe else "corrompue"] = True
     fin, interrompu = 0, False
+
+    def traiter(tar, m, nom_local, genre, film):
+        """Vérifie puis écrit un membre admis par son nom ; faux si le flux est abîmé (lecture courte : on s'arrête)."""
+        nonlocal total
+        if genre == "image" and not (res["videos"].get(film) or {}).get("mp4"):
+            # Une image n'est admise qu'avec SA vidéo : sans elle, jamais écrite ; « limite » si la vidéo a été écartée
+            # par une limite, refusée sinon.
+            if film in films_coupes:
+                res["tronque"] = True
+            else:
+                res["refuses"] += 1
+            return True
+        if len(res["fichiers"]) >= max_fichiers or m.size < 0 or _depasse(genre, m.size, res, total, limites, film):
+            res["tronque"] = True
+            if genre == "video":
+                films_coupes.add(film)
+            return True
+        contenu = tar.extractfile(m).read(m.size)
+        if len(contenu) != m.size:
+            abime()
+            return False
+        if genre == "logcat":
+            contenu = contenu[:LOGCAT_MAX_OCTETS]
+        if ((genre in ("capture", "image") and not contenu.startswith(SIGNATURE_PNG))
+                or (genre == "video" and contenu[4:8] != SIGNATURE_MP4)):
+            res["refuses"] += 1
+            return True
+        cible = destination / nom_local
+        if genre == "capture":
+            _dossier_sur(destination / "captures")
+        elif genre in ("video", "image"):
+            _dossier_sur(destination / "videos")
+            if genre == "image":
+                _dossier_sur(destination / "videos" / f"{film}-img")
+        _ecrire_sur(cible, contenu)
+        if genre in ("capture", "video", "image"):
+            total += m.size
+        res["fichiers"][nom_local] = str(cible)
+        if genre == "capture":
+            res["captures"].append(str(cible))
+        elif film is not None:
+            v = res["videos"].setdefault(film, {"mp4": None, "images": []})
+            if genre == "video":
+                v["mp4"] = str(cible)
+            else:
+                v["images"].append(str(cible))
+        return True
+
     try:
         with tarfile.open(fileobj=io.BytesIO(donnees), mode="r:", ignore_zeros=True) as tar:
+            images = []                 # les images sont traitées après toutes les vidéos (l'ordre de l'archive n'y fait rien)
             for m in tar:
                 examines += 1
                 if examines > 4 * max_fichiers + 20:
@@ -1250,38 +1302,16 @@ def _extraire(donnees, destination, limites):
                     res["refuses"] += 1
                     continue
                 vus.add(nom)
-                nom_local, genre, film = local
-                if len(res["fichiers"]) >= max_fichiers or m.size < 0 or _depasse(genre, m.size, res, total, limites):
-                    res["tronque"] = True
+                if local[1] == "image":
+                    images.append((m, local))
                     continue
-                contenu = tar.extractfile(m).read(m.size)
-                if len(contenu) != m.size:
-                    abime()
+                if not traiter(tar, m, *local):
                     interrompu = True
                     break
-                if ((genre in ("capture", "image") and not contenu.startswith(SIGNATURE_PNG))
-                        or (genre == "video" and contenu[4:8] != SIGNATURE_MP4)):
-                    res["refuses"] += 1
-                    continue
-                cible = destination / nom_local
-                if genre == "capture":
-                    _dossier_sur(destination / "captures")
-                elif genre in ("video", "image"):
-                    _dossier_sur(destination / "videos")
-                    if genre == "image":
-                        _dossier_sur(destination / "videos" / f"{film}-img")
-                _ecrire_sur(cible, contenu)
-                if genre in ("capture", "video", "image"):
-                    total += m.size
-                res["fichiers"][nom_local] = str(cible)
-                if genre == "capture":
-                    res["captures"].append(str(cible))
-                elif film is not None:
-                    v = res["videos"].setdefault(film, {"mp4": None, "images": []})
-                    if genre == "video":
-                        v["mp4"] = str(cible)
-                    else:
-                        v["images"].append(str(cible))
+            for m, local in ([] if interrompu else images):
+                if not traiter(tar, m, *local):
+                    interrompu = True
+                    break
     except (tarfile.TarError, EOFError, ValueError) as e:
         if isinstance(e, ValueError) and "Destination" in str(e):
             raise

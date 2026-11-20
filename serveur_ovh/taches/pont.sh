@@ -15,21 +15,24 @@
 #   l'émulateur tourne rend aussi 2.
 # Environnement : posé par l'enveloppe lancer_emulation.sh, JAMAIS transmis par l'appelant (celui qui relaie un verbe ne doit
 # en aucun cas faire suivre son propre environnement : ces variables désignent les outils exécutés et les limites).
-#   PONT_SORTIE (/sortie ; absolu, sans . ni ..), PONT_CAPTURES (50), PONT_OCTETS (104857600 = 100 Mo de captures cumulées),
+#   PONT_SORTIE (/sortie ; absolu, sans . ni ..), PONT_CAPTURES (50), PONT_OCTETS (104857600 = 100 Mo de médias cumulés :
+#   captures, vidéos et images des vidéos),
 #   PONT_AVD (emulateur ; motif MOTIF_NOM, donc en minuscules : la tâche 4 nomme l'AVD « emul »), PONT_DEMARRAGE_S (300),
 #   PONT_DELAI_ADB_S (30 : délai de chaque appel à adb, `installer` x4 ; attente d'un verrou = 3 x délai + 10 s),
 #   PONT_PAQUET (facultatif : sinon le paquet est relevé par `installer`) ;
 #   PONT_ADB / PONT_EMULATEUR / PONT_FFMPEG : « adb » / « emulator » / « ffmpeg » ou un chemin absolu (tests) ;
 #   PONT_LOGCAT_OCTETS (2097152 : plafond de logcat.txt), PONT_VIDEOS (5 vidéos), PONT_VIDEO_OCTETS (62914560 = 60 Mo par
-#   vidéo), PONT_FILM_PAS (2 : une image toutes les N secondes de vidéo, 30 images au plus).
+#   vidéo), PONT_FILM_PAS (2 : écart minimal en secondes entre deux images d'une vidéo ; 30 images au plus, réparties sur
+#   tout le film : une toutes les max(PONT_FILM_PAS, durée/30) s).
 #   Les octets des médias (captures, vidéos, images des vidéos) se partagent la limite PONT_OCTETS.
 # Écrit seulement sous PONT_SORTIE : .activite (vide, touché au début et à la fin de chaque verbe valide), pont.log, captures/<nom>.png, plantage.txt, .paquet, emulateur.log, emulateur.pid,
 # logcat.txt (lignes de `journal`), videos/<nom>.mp4 et videos/<nom>-img/<nom>-NNN.png, .film (le film en cours),
-# .verrou-captures, .verrou-demarrer, .verrou-film (ou leurs dossiers .d sans flock).
+# .film.fin (un film en train d'être fini), .verrou-captures, .verrou-demarrer, .verrou-film, .verrou-journal (ou leurs
+# dossiers .d sans flock).
 # Film : `filmer` lance `adb shell screenrecord` DÉTACHÉ (rend la main aussitôt ; borné par --time-limit côté appareil et par
-# timeout côté conteneur) et note « nom pid début » dans .film ; un seul film à la fois. `finfilm` (ou `arreter`, qui finit
-# un film resté en cours plutôt que de le perdre) envoie SIGINT au screenrecord de l'appareil (mp4 finalisé), rapatrie le
-# fichier, le vérifie (signature « ftyp » aux octets 4..8, tailles) puis en tire des images avec ffmpeg.
+# timeout côté conteneur) et note « nom pid début durée » dans .film ; un seul film à la fois. `finfilm` (ou `arreter`, qui
+# finit un film resté en cours plutôt que de le perdre) envoie SIGINT au screenrecord de l'appareil (mp4 finalisé), rapatrie
+# le fichier, le vérifie (signature « ftyp » aux octets 4..8, tailles) puis en tire des images avec ffmpeg.
 # Exige `timeout` (coreutils) : sans lui, refus (code 4) plutôt qu'un adb sans borne. Aucun outil ne reçoit le descripteur 9
 # du verrou (9>&-) : un serveur adb resté en vie ne doit pas garder le verrou.
 # emulateur.pid ne désigne l'émulateur que si /proc/<pid> le confirme (PID >= 2, pas zombie, argv[0] de nom de base
@@ -215,8 +218,8 @@ liberer_verrou() {
   return 0
 }
 trap liberer_verrou EXIT
-prendre_verrou() {   # prendre_verrou <nom>
-  local f="$SORTIE/.verrou-$1" attente=$((3 * DELAI_ADB + 10)) debut=$SECONDS p q m perime
+prendre_verrou() {   # prendre_verrou <nom> [attente_s] (par défaut 3 x délai adb + 10 s)
+  local f="$SORTIE/.verrou-$1" attente="${2:-$((3 * DELAI_ADB + 10))}" debut=$SECONDS p q m perime
   if command -v flock > /dev/null 2>&1; then
     exec 9>> "$f" || repondre 4 "Verrou $1 impossible."
     VERROU_FD=1
@@ -510,10 +513,17 @@ sauver_journal() {   # sauver_journal <filtre> <lignes> <plafond>
 }
 
 # film_vivant <pid> : le processus d'enregistrement lancé par `filmer` (timeout ... adb shell screenrecord) vit encore.
+# Reconnu par ses arguments EXACTS (jamais une sous-chaîne de la ligne de commande) : argv[0] de nom de base timeout ou adb,
+# et un argument égal à « screenrecord ». Un PID recyclé par un autre programme n'est jamais pris pour le film.
 film_vivant() {
+  local a=() x vu=0
   [[ $1 =~ ^[1-9][0-9]{0,9}$ ]] || return 1
   [ -r "/proc/$1/cmdline" ] || return 1
-  tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -qF -e screenrecord
+  mapfile -d '' -t a < "/proc/$1/cmdline" 2>/dev/null || return 1
+  [ "${#a[@]}" -gt 0 ] || return 1
+  case "${a[0]##*/}" in timeout|adb) ;; *) return 1 ;; esac
+  for x in "${a[@]}"; do [ "$x" = screenrecord ] && vu=1; done
+  [ "$vu" = 1 ]
 }
 
 reglages_film() {   # réglages des vidéos, lus dans le shell principal (un refus écrit sa ligne JSON)
@@ -532,12 +542,13 @@ dossier_videos() {   # crée SORTIE/videos ; jamais un lien
 }
 
 verbe_filmer() {
-  local nom="${ARGS[0]}" duree="${ARGS[1]:-30}" d="$SORTIE/videos" n pid detache fin
+  local nom="${ARGS[0]}" duree="${ARGS[1]:-30}" d="$SORTIE/videos" n pid detache fin statut
   duree=$((10#$duree))
   reglages_film
   dossier_videos
-  prendre_verrou film
-  if [ -e "$SORTIE/.film" ] || [ -L "$SORTIE/.film" ]; then
+  # Attente courte du verrou : un finfilm en cours (jusqu'à plusieurs minutes) le tient ; filmer renonce vite (code 4).
+  prendre_verrou film 5
+  if [ -e "$SORTIE/.film" ] || [ -L "$SORTIE/.film" ] || [ -e "$SORTIE/.film.fin" ] || [ -L "$SORTIE/.film.fin" ]; then
     repondre 2 "Un film est déjà en cours (ou pas encore fini) : finfilm d'abord."
   fi
   if [ -e "$d/$nom.mp4" ] || [ -L "$d/$nom.mp4" ] || [ -e "$d/$nom-img" ] || [ -L "$d/$nom-img" ]; then
@@ -554,65 +565,90 @@ verbe_filmer() {
     --time-limit "$duree" "/data/local/tmp/$nom.mp4" > /dev/null 2>&1 9>&- &
   pid=$!
   # Une seconde pour constater que l'enregistrement tient (appareil absent, screenrecord en échec : il meurt aussitôt) ;
-  # attendue en entier : juste après le fork, /proc/<pid>/cmdline est encore celle du pont.
+  # attendue en entier : juste après le fork, /proc/<pid>/cmdline est encore celle du pont. S'il ne vit plus, son code de
+  # sortie (c'est notre enfant : `wait`) départage un film court déjà fini proprement (0 : un film, finfilm le rapatriera)
+  # d'un échec (autre code : 4).
   horloge_us; fin=$((HORLOGE + 1000000))
   while horloge_us; [ "$HORLOGE" -lt "$fin" ]; do sleep 0.1; done
-  film_vivant "$pid" || repondre 4 "L'enregistrement n'a pas démarré (adb screenrecord en échec)."
-  printf '%s %s %s\n' "$nom" "$pid" "$(date +%s)" > "$SORTIE/.film.tmp" && mv -f -- "$SORTIE/.film.tmp" "$SORTIE/.film" \
+  if ! film_vivant "$pid"; then
+    wait "$pid" 2>/dev/null; statut=$?
+    [ "$statut" = 0 ] || repondre 4 "L'enregistrement n'a pas démarré (adb screenrecord en échec, code $statut)."
+  fi
+  printf '%s %s %s %s\n' "$nom" "$pid" "$(date +%s)" "$duree" > "$SORTIE/.film.tmp" \
+    && mv -f -- "$SORTIE/.film.tmp" "$SORTIE/.film" \
     || { kill -TERM "$pid" 2>/dev/null; repondre 4 "Écriture impossible dans la sortie."; }
   repondre 0 "Film $nom lancé ($duree s au plus) : finfilm pour l'arrêter et le rapatrier."
 }
 
+# film_fini <code> <détail> : résultat de finir_film ; la trace .film.fin n'est retirée qu'ici, travail terminé.
+film_fini() { FILM_CODE="$1"; FILM_DETAIL="$2"; rm -f -- "$SORTIE/.film.fin"; }
+
 # finir_film : arrête le film noté dans .film, rapatrie et vérifie le mp4, en tire les images. Ne termine jamais le pont :
 # met FILM_CODE (0 fait, 2 aucun film, 3 limite, 4 échec) et FILM_DETAIL. Appelé verrou « film » pris, réglages lus.
+# La trace .film devient .film.fin le temps du travail et n'est retirée qu'une fois ce travail fini (réussi ou non) : un
+# finfilm interrompu (pont tué) la laisse ; le suivant (finfilm, ou arreter) reprend ce film là où il en était.
 finir_film() {
-  local f="$SORTIE/.film" d="$SORTIE/videos" ligne="" nom="" pid="" debut="" fin tmp video img taille duree n=0 note=""
+  local f="$SORTIE/.film" ff="$SORTIE/.film.fin" d="$SORTIE/videos" ligne="" nom="" pid="" debut="" demandee=""
+  local fin tmp video img taille duree pas n=0 note=""
   FILM_CODE=2; FILM_DETAIL="Aucun film en cours."
-  [ -e "$f" ] || [ -L "$f" ] || return 0
-  [ -f "$f" ] && [ ! -L "$f" ] && IFS= read -r ligne < "$f"
-  rm -f -- "$f"
-  read -r nom pid debut _ <<< "$ligne"
-  if ! [[ $nom =~ $MOTIF_NOM ]] || ! [[ $pid =~ ^[1-9][0-9]{0,9}$ ]] || ! [[ $debut =~ ^[0-9]{1,12}$ ]]; then
-    FILM_CODE=4; FILM_DETAIL="État du film illisible : film abandonné."; return 0
+  if [ ! -e "$ff" ] && [ ! -L "$ff" ]; then
+    [ -e "$f" ] || [ -L "$f" ] || return 0
+    mv -f -- "$f" "$ff" 2>/dev/null || { FILM_CODE=4; FILM_DETAIL="État du film inaccessible."; return 0; }
+  fi
+  [ -f "$ff" ] && [ ! -L "$ff" ] && IFS= read -r ligne < "$ff"
+  read -r nom pid debut demandee _ <<< "$ligne"
+  if ! [[ $nom =~ $MOTIF_NOM ]] || ! [[ $pid =~ ^[1-9][0-9]{0,9}$ ]] || ! [[ $debut =~ ^[0-9]{1,12}$ ]] \
+     || ! [[ $demandee =~ $MOTIF_SECONDES_FILM ]]; then
+    film_fini 4 "État du film illisible : film abandonné."; return 0
   fi
   # SIGINT au screenrecord de l'appareil : il finalise le mp4. Puis attente bornée de la fin du processus local.
   outil "$DELAI_ADB" "$ADB" shell pkill -2 screenrecord > /dev/null 2>&1
   fin=$((SECONDS + 10))
   while film_vivant "$pid" && [ "$SECONDS" -lt "$fin" ]; do sleep 0.2; done
   film_vivant "$pid" && kill -TERM "$pid" 2>/dev/null
+  # Durée : le temps écoulé depuis filmer, jamais plus que la durée demandée (--time-limit l'arrête là côté appareil).
   duree=$(( $(date +%s) - 10#$debut )); [ "$duree" -ge 0 ] || duree=0
-  if [ -L "$d" ] || [ ! -d "$d" ]; then FILM_CODE=4; FILM_DETAIL="Dossier des vidéos invalide."; return 0; fi
+  [ "$duree" -le "$((10#$demandee))" ] || duree=$((10#$demandee))
+  [ -L "$d" ] || mkdir -p -- "$d" 2>/dev/null
+  if [ -L "$d" ] || [ ! -d "$d" ]; then film_fini 4 "Dossier des vidéos invalide."; return 0; fi
   video="$d/$nom.mp4"; tmp="$d/.$nom.$$.tmp"
-  rm -f -- "$tmp"
-  if ! outil $((DELAI_ADB * 2)) "$ADB" pull "/data/local/tmp/$nom.mp4" "$tmp" > /dev/null 2>&1 || [ -L "$tmp" ] || [ ! -f "$tmp" ]; then
+  if [ -f "$video" ] && [ ! -L "$video" ]; then
+    taille=$(wc -c < "$video")                   # reprise : la vidéo avait déjà été rapatriée et vérifiée
+  else
     rm -f -- "$tmp"
-    FILM_CODE=4; FILM_DETAIL="adb a échoué (rapatriement de la vidéo $nom)."; return 0
+    if ! outil $((DELAI_ADB * 2)) "$ADB" pull "/data/local/tmp/$nom.mp4" "$tmp" > /dev/null 2>&1 || [ -L "$tmp" ] || [ ! -f "$tmp" ]; then
+      rm -f -- "$tmp"; film_fini 4 "adb a échoué (rapatriement de la vidéo $nom)."; return 0
+    fi
+    outil "$DELAI_ADB" "$ADB" shell rm -f "/data/local/tmp/$nom.mp4" > /dev/null 2>&1
+    if [ "$(od -An -tx1 -j4 -N4 -- "$tmp" 2>/dev/null | tr -d ' \n')" != 66747970 ]; then     # « ftyp »
+      rm -f -- "$tmp"; film_fini 4 "Le fichier rapatrié n'est pas une vidéo MP4 : effacé."; return 0
+    fi
+    taille=$(wc -c < "$tmp")
+    if ! octets_videos || ! octets_captures; then
+      rm -f -- "$tmp"; film_fini 4 "Comptage des médias impossible : vidéo effacée."; return 0
+    fi
+    if [ "$taille" -gt "$FILM_VIDEO_OCTETS" ] || [ $((OCTETS_VIDEOS + OCTETS_CAPTURES + taille)) -gt "$FILM_OCTETS_MAX" ]; then
+      rm -f -- "$tmp"
+      film_fini 3 "Limite d'octets atteinte : vidéo de $taille octets effacée (au plus $FILM_VIDEO_OCTETS par vidéo, $FILM_OCTETS_MAX en tout)."
+      return 0
+    fi
+    if ! mv -n -- "$tmp" "$video" || [ -e "$tmp" ]; then rm -f -- "$tmp"; film_fini 2 "Nom de vidéo déjà pris : $nom."; return 0; fi
   fi
-  outil "$DELAI_ADB" "$ADB" shell rm -f "/data/local/tmp/$nom.mp4" > /dev/null 2>&1
-  if [ "$(od -An -tx1 -j4 -N4 -- "$tmp" 2>/dev/null | tr -d ' \n')" != 66747970 ]; then     # « ftyp »
-    rm -f -- "$tmp"; FILM_CODE=4; FILM_DETAIL="Le fichier rapatrié n'est pas une vidéo MP4 : effacé."; return 0
-  fi
-  taille=$(wc -c < "$tmp")
-  if ! octets_videos || ! octets_captures; then
-    rm -f -- "$tmp"; FILM_CODE=4; FILM_DETAIL="Comptage des médias impossible : vidéo effacée."; return 0
-  fi
-  if [ "$taille" -gt "$FILM_VIDEO_OCTETS" ] || [ $((OCTETS_VIDEOS + OCTETS_CAPTURES + taille)) -gt "$FILM_OCTETS_MAX" ]; then
-    rm -f -- "$tmp"
-    FILM_CODE=3; FILM_DETAIL="Limite d'octets atteinte : vidéo de $taille octets effacée (au plus $FILM_VIDEO_OCTETS par vidéo, $FILM_OCTETS_MAX en tout)."
-    return 0
-  fi
-  if ! mv -n -- "$tmp" "$video" || [ -e "$tmp" ]; then rm -f -- "$tmp"; FILM_CODE=2; FILM_DETAIL="Nom de vidéo déjà pris : $nom."; return 0; fi
-  # Images : une toutes les FILM_PAS secondes, 320 px de large, 30 au plus, dans un dossier neuf (jamais un dossier existant).
+  # Images sur TOUT le film : une toutes les max(FILM_PAS, durée/30) secondes, 30 au plus, 320 px de large, dans un dossier
+  # neuf (jamais un dossier existant ; à la reprise, celui déjà commencé est gardé tel quel).
+  pas=$(( (duree + 29) / 30 )); [ "$pas" -ge "$FILM_PAS" ] || pas=$FILM_PAS
   img="$d/$nom-img"
   if mkdir -- "$img" 2>/dev/null; then
-    outil 120 "$FFMPEG" -nostdin -loglevel error -i "$video" -vf "fps=1/$FILM_PAS,scale=320:-2" -frames:v 30 \
+    outil 120 "$FFMPEG" -nostdin -loglevel error -i "$video" -vf "fps=1/$pas,scale=320:-2" -frames:v 30 \
       "$img/$nom-%03d.png" > /dev/null 2>&1
+  fi
+  if [ -d "$img" ] && [ ! -L "$img" ]; then
     n=$(find "$img" -maxdepth 1 -type f -name "$nom-[0-9][0-9][0-9].png" -printf 'x\n' 2>/dev/null | wc -l)
     if ! octets_videos || ! octets_captures || [ $((OCTETS_VIDEOS + OCTETS_CAPTURES)) -gt "$FILM_OCTETS_MAX" ]; then
       rm -rf -- "$img"; n=0; note=" ; images effacées (limite d'octets)"
     fi
   fi
-  FILM_CODE=0; FILM_DETAIL="videos/$nom.mp4 ($taille octets, $duree s, $n images)$note."
+  film_fini 0 "videos/$nom.mp4 ($taille octets, $duree s, $n images)$note."
 }
 
 verbe_finfilm() {
@@ -633,7 +669,10 @@ verbe_journal() {
   else
     lignes=$(printf '%s\n' "$brut" | tr -d '\r' | tail -n "$LIGNES_JOURNAL" | cut -c "1-$LARGEUR_JOURNAL" | assainir)
   fi
-  sauver_journal "${ARGS[0]:--}" "$lignes" "$plafond"     # les mêmes lignes, gardées dans logcat.txt (rapatrié)
+  # Les mêmes lignes, gardées dans logcat.txt (rapatrié), sous verrou : deux journal simultanés respectent le plafond.
+  prendre_verrou journal
+  sauver_journal "${ARGS[0]:--}" "$lignes" "$plafond"
+  liberer_verrou
   repondre 0 "$lignes"
 }
 
@@ -641,12 +680,16 @@ verbe_journal() {
 verbe_arreter() {
   local brut adb_ok=1 pid="" detail="Émulateur arrêté." film=""
   # Un film resté en cours est fini AVANT d'arrêter l'émulateur (mp4 finalisé et rapatrié), jamais perdu en silence.
-  if [ -e "$SORTIE/.film" ] || [ -L "$SORTIE/.film" ]; then
+  # Son résultat compte : une vidéo effacée pour une limite (3) ou en échec (4) rend ce code, après l'arrêt de l'émulateur
+  # (le lanceur note alors la limite) ; jamais un « ok » silencieux.
+  local film_code=0
+  if [ -e "$SORTIE/.film" ] || [ -L "$SORTIE/.film" ] || [ -e "$SORTIE/.film.fin" ] || [ -L "$SORTIE/.film.fin" ]; then
     reglages_film
     prendre_verrou film
     finir_film
     liberer_verrou
     film=" Film : $FILM_DETAIL"
+    case "$FILM_CODE" in 3|4) film_code=$FILM_CODE ;; esac
   fi
   # PID lu AVANT d'agir : seul ce PID est arrêté, et emulateur.pid n'est retiré que s'il le contient encore.
   [ -f "$SORTIE/emulateur.pid" ] && { IFS= read -r pid < "$SORTIE/emulateur.pid" || true; }
@@ -665,7 +708,7 @@ verbe_arreter() {
   fi
   effacer_pid "$pid"
   if [ -f "$SORTIE/plantage.txt" ]; then detail="$detail Plantage relevé (plantage.txt)."; fi
-  repondre 0 "$detail$film"
+  repondre "$film_code" "$detail$film"
 }
 
 # --- Validation puis exécution -----------------------------------------------

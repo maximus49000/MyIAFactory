@@ -17,7 +17,8 @@ class TestDeportReglage(AvecServeur):
 
     def test_etat_par_defaut_tout_au_poste(self):
         d = self.json("/api/etat")["deport"]
-        self.assertEqual(set(d["lieux"].values()), {"poste"})
+        self.assertEqual(set(d["lieux"].values()), {"poste", None})          # la recette sur émulateur : non réglée
+        self.assertIsNone(d["lieux"]["recette-emulateur"])
         self.assertEqual(d["avertissements"], [])
         self.assertIs(d["serveur_disponible"], False)
 
@@ -119,6 +120,58 @@ class TestDeportGlobalDuBureau(unittest.TestCase):
                 srv.server_close()
 
 
+class TestRecetteEmulateurAuBureau(AvecServeur):
+    """`recette-emulateur` : réglable sur serveur seulement (accord permanent du projet), ou remise à « non réglé »."""
+    RECETTE = "recette-emulateur"
+
+    def setUp(self):
+        super().setUp()
+        from bureau import serveurs as modserveurs
+        self.plateforme = self.tmp / "plateforme"
+        self.plateforme.mkdir()
+        ancien = modserveurs.DOSSIER
+        modserveurs.DOSSIER = self.plateforme          # jamais les serveurs déclarés du vrai poste
+        self.addCleanup(setattr, modserveurs, "DOSSIER", ancien)
+
+    def poster(self, corps):
+        return self.req("POST", "/api/reglages", json.dumps(corps), self.ENT)
+
+    def etat(self):
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        return self.json("/api/etat")["deport"]
+
+    def test_exposee_non_reglee_et_servie_au_serveur(self):
+        d = self.etat()
+        action = {a["id"]: a for a in d["actions"]}[self.RECETTE]
+        self.assertEqual((action["lieux"], action["servie_au_serveur"]), (["serveur"], True))
+        self.assertIsNone(d["lieux"][self.RECETTE])
+        self.assertIs(d["serveur_declare"], False)
+        self.assertFalse(any(self.RECETTE in a for a in d["avertissements"]))
+
+    def test_serveur_declare_quand_un_serveur_est_declare(self):
+        (self.plateforme / "serveurs.json").write_text(json.dumps(
+            [{"id": "s1", "nom": "S1", "hote": "s1.example.org", "utilisateur": "ubuntu", "cle": "C:/cles/s1"}]), encoding="utf-8")
+        self.assertIs(self.etat()["serveur_declare"], True)
+
+    def test_reglee_sur_serveur_puis_non_reglee(self):
+        r, data = self.poster({"deport": {"lieux": {self.RECETTE: "serveur"}}})
+        self.assertEqual(r.status, 200, data)
+        self.assertEqual(json.loads(self.regl.read_text(encoding="utf-8"))["deport"]["lieux"], {self.RECETTE: "serveur"})
+        self.assertEqual(self.etat()["lieux"][self.RECETTE], "serveur")
+        r, data = self.poster({"deport": {"lieux": {self.RECETTE: None}}})
+        self.assertEqual(r.status, 200, data)
+        self.assertNotIn(self.RECETTE, json.loads(self.regl.read_text(encoding="utf-8"))["deport"]["lieux"])
+        self.assertIsNone(self.etat()["lieux"][self.RECETTE])
+
+    def test_poste_et_github_refuses(self):
+        for lieu in ("poste", "github"):
+            r, _ = self.poster({"deport": {"lieux": {self.RECETTE: lieu}}})
+            self.assertEqual(r.status, 400, lieu)
+        r, _ = self.poster({"deport": {"lieux": {"tests": "serveur"}}})
+        self.assertEqual(r.status, 400)
+        self.assertIsNone(self.etat()["lieux"][self.RECETTE])
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -166,14 +219,14 @@ class TestDeportParTypeDeProjet(AvecServeur):
 
     def test_projet_generique_expose_les_quatre_actions(self):
         d = self.json("/api/etat")["deport"]
-        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
-        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge"})
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur"])
+        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge", "recette-emulateur"})
 
     def test_projet_android_expose_ses_actions_avec_libelle_lieux_et_bientot(self):
         self.en_android()
         d = self.json("/api/etat")["deport"]
         actions = {a["id"]: a for a in d["actions"]}
-        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release"])
+        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release", "recette-emulateur"])
         self.assertEqual(actions["tests"]["libelle"], "Tests unitaires")
         self.assertEqual(actions["emulateur"]["lieux"], ["poste"])
         self.assertIn("clés de signature", actions["release"]["bientot"])
@@ -260,7 +313,7 @@ class TestDeportReglagesAbimes(AvecServeur):
         (self.tmp / "demo" / "factory.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
         self.p._cache_etat = (0.0, self.p._cache_etat[1])
         d = self.json("/api/etat")["deport"]
-        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge"])
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur"])
 
     def test_un_lieu_perime_apres_changement_de_genre_ne_bloque_pas_les_reglages(self):
         self.ecrire_lieux({"charge": "github", "apk": "poste"})

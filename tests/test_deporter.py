@@ -373,6 +373,11 @@ class TestRoutageDeTests(Base):
         self.assertFalse(deporter.doit_passer_par_deporter("tests", dict({a: "poste" for a in ANDROID}, apk="github"),
                                                            ANDROID))
         self.assertFalse(deporter.doit_passer_par_deporter("inconnue", poste, GENERIQUE))
+        # la recette sur émulateur : déportée (par deporter seul) une fois réglée sur serveur ; non réglée, rien à router
+        self.assertFalse(deporter.doit_passer_par_deporter("recette-emulateur", dict(poste, **{"recette-emulateur": None}),
+                                                           GENERIQUE))
+        self.assertTrue(deporter.doit_passer_par_deporter("recette-emulateur",
+                                                          dict(poste, **{"recette-emulateur": "serveur"}), ANDROID))
 
     def test_lancer_declare_deporter(self):
         texte = (RACINE / "lancer.py").read_text(encoding="utf-8")
@@ -715,6 +720,282 @@ class TestCampagneEnv(unittest.TestCase):
         self.assertEqual(campagne.executer(["x"], dossier=dossier, env={"A": "1"},
                                            lancer=lambda c, d, env=None: vus.append((c, d, env)) or 0, **kw), 0)
         self.assertEqual(vus[1][2], {"A": "1"})
+
+
+class FauxServeurTache:
+    """Ce que `deporter` passe au lanceur de tâches serveur (T7) ; rend `code` sans rien lancer."""
+
+    def __init__(self, code=0):
+        self.code, self.appels = code, []
+
+    def __call__(self, argv):
+        self.appels.append(list(argv))
+        return self.code
+
+
+def _option(argv, nom):
+    return argv[argv.index(nom) + 1] if nom in argv else None
+
+
+class TestRecetteEmulateur(Base):
+    """`deporter recette-emulateur` : seulement sur le serveur, accord permanent du projet ; jamais le poste ni GitHub."""
+    RECETTE = "recette-emulateur"
+    ANDROID = "application-mobile-android"
+    MSG = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+
+    def setUp(self):
+        Base.setUp(self)
+        self.apk = self.tmp / "fourni.apk"
+        self.apk.write_bytes(b"PK\x03\x04apk")
+        self.serveur = FauxServeurTache()
+
+    def projet_recette(self, lieux=None, genre=ANDROID, **k):
+        lieux = {self.RECETTE: "serveur"} if lieux is None else lieux
+        d = self.projet(lieux, genre=genre, **k)
+        (d / ".factory" / "recettes").mkdir(parents=True, exist_ok=True)
+        (d / ".factory" / "recettes" / "demo.json").write_text(json.dumps(
+            {"nom": "demo", "reseau": False, "etapes": [{"verbe": "demarrer", "args": []}]}), encoding="utf-8")
+        return d
+
+    def recette(self, d, *options, serveur=None, gh=None):
+        self.serveur = serveur or FauxServeurTache()
+        return self.lancer([self.RECETTE, "--dossier", str(d), *options], gh=gh, serveur_tache=self.serveur)
+
+    def cli_reel(self, moteur=None, recette=None):
+        """Le vrai `serveur_tache_cli.main` (T7), moteur et recette factices : aucune connexion."""
+        from tests import test_serveur_tache_cli as t7
+        import serveur_tache_cli
+        self.moteur = moteur or t7.FauxMoteur()
+        plateforme = self.tmp / "plateforme"
+        plateforme.mkdir(exist_ok=True)
+
+        def appeler(argv):
+            return serveur_tache_cli.main(argv, dossier=str(plateforme), moteur=self.moteur,
+                                          recette=recette or t7.FauxRecette())
+        return appeler
+
+    def test_refus_si_le_lieu_n_est_pas_serveur(self):
+        base = self.tmp
+        self.addCleanup(setattr, self, "tmp", base)
+        for i, lieux in enumerate(({}, {self.RECETTE: "poste"}, {self.RECETTE: "github"}, {self.RECETTE: "mars"})):
+            with self.subTest(lieux=lieux):
+                self.tmp = base / ("cas%d" % i)       # un dépôt neuf par cas
+                self.tmp.mkdir()
+                d = self.projet_recette(lieux)
+                gh = FauxGh()
+                self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), gh=gh), 2)
+                self.assertIn(self.MSG, self.sortie)
+                self.assertEqual(self.serveur.appels, [])
+                self.assertEqual(self.poste, [])
+                self.assertEqual(gh.appels, [])
+
+    def test_le_reglage_du_bureau_ne_vaut_pas_accord_du_projet(self):
+        self.bureau.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}), encoding="utf-8")
+        d = self.projet_recette({})
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 2)
+        self.assertIn(self.MSG, self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_poste_ne_s_applique_pas_et_pas_de_commande_locale(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--poste"), 2)
+        self.assertIn("--poste", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+        self.assertEqual(self.lancer([self.RECETTE, "--dossier", str(d), "--scenario", "demo", "--apk",
+                                      str(self.apk), "--", "echo", "x"], serveur_tache=self.serveur), 2)
+        self.assertEqual((self.serveur.appels, self.poste), ([], []))
+
+    def test_accepte_le_lieu_serveur_pour_cette_action_seulement(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 0)
+        self.assertEqual(len(self.serveur.appels), 1)
+        self.assertEqual(self.poste, [])
+        from bureau.deport_types import ANDROID, GENERIQUE
+        for catalogue in (ANDROID, GENERIQUE):
+            lieux = {a: "poste" for a in catalogue}
+            self.assertEqual(deporter.lieux_refuses(dict(lieux, **{self.RECETTE: "serveur"}), self.RECETTE,
+                                                    catalogue), [])
+            self.assertTrue(deporter.lieux_refuses(dict(lieux, tests="serveur"), "tests", catalogue))
+        # « tests » réglé sur serveur à la main reste refusé, comme avant
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {"tests": "serveur"}}}),
+                                                      encoding="utf-8")
+        self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"]), 2)
+        self.assertIn("n'est pas disponible", self.sortie)
+
+    def test_scenario_passe_par_le_lanceur_t7_avec_les_bonnes_options(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 0)
+        argv = self.serveur.appels[0]
+        self.assertEqual(argv[:2], ["serveur-tache", "lancer"])
+        self.assertEqual(_option(argv, "--mode"), "scenario")
+        self.assertEqual(_option(argv, "--scenario"), "demo")
+        self.assertEqual(Path(_option(argv, "--apk")), self.apk)
+        self.assertEqual(Path(_option(argv, "--projet")), d)
+        self.assertIn("--attendre", argv)
+
+    def test_scenario_code_0_seulement_si_ok(self):
+        from tests import test_serveur_tache_cli as t7
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), serveur=self.cli_reel()), 0,
+                         self.sortie)
+        self.assertEqual([a[0] for a in self.moteur.appels], ["lancer", "arreter", "rapatrier"])
+        self.assertTrue(self.moteur.appels[1][2])                    # fin normale : arrêt avec fin=True
+        self.assertIn('"statut": "ok"', self.sortie)                  # le manifeste est imprimé
+        ident = self.moteur.appels[0][1].id
+        self.assertEqual(Path(self.moteur.appels[2][2]), d / ".factory" / "serveur" / ident)
+        for statut in ("plantage", "limite", "erreur"):
+            moteur = t7.FauxMoteur()
+            moteur.manifeste = {"id": "x", "statut": statut, "captures": []}
+            self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk),
+                                          serveur=self.cli_reel(moteur)), 1, statut)
+
+    def test_plantage_donne_le_code_1(self):
+        from tests import test_serveur_tache_cli as t7
+        d = self.projet_recette()
+        moteur = t7.FauxMoteur()
+        moteur.manifeste = {"id": "x", "statut": "plantage", "captures": []}
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), serveur=self.cli_reel(moteur)), 1)
+        self.assertIn("plantage", self.sortie)
+        self.assertEqual(self.poste, [])
+
+    def test_usage_du_mode(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--apk", str(self.apk)), 2)              # scénario par défaut : il faut un nom
+        self.assertIn("--scenario", self.sortie)
+        self.assertEqual(self.recette(d, "--mode", "fantome", "--apk", str(self.apk)), 2)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_pilote_imprime_identifiant_et_mode_d_emploi(self):
+        import serveur_tache
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--mode", "pilote", "--apk", str(self.apk), serveur=self.cli_reel()), 0)
+        self.assertEqual([a[0] for a in self.moteur.appels], ["lancer"])
+        self.assertRegex(self.sortie, serveur_tache.MOTIF_ID.pattern)
+        self.assertIn("serveur-outil", self.sortie)
+        for verbe in serveur_tache.VERBES:
+            self.assertIn(verbe, self.sortie)
+        self.recette(d, "--mode", "pilote", "--apk", str(self.apk))
+        self.assertNotIn("--attendre", self.serveur.appels[0])
+
+    def test_apk_pris_dans_la_production_apk(self):
+        # sortie locale (apk au poste) : le chemin publié par le catalogue, le plus récent
+        d = self.projet_recette()
+        sortie = d / "app" / "build" / "outputs" / "apk" / "debug"
+        sortie.mkdir(parents=True)
+        vieux, recent = sortie / "vieux.apk", sortie / "app-debug.apk"
+        vieux.write_bytes(b"PK1")
+        recent.write_bytes(b"PK2")
+        os.utime(str(vieux), (1000000000, 1000000000))
+        self.assertEqual(self.recette(d, "--scenario", "demo"), 0, self.sortie)
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--apk")), recent)
+
+    def test_apk_pris_dans_l_artefact_github(self):
+        d = self.projet_recette({"apk": "github", self.RECETTE: "serveur"}, genre=None)
+        gh = GhQuiTelecharge()
+        self.assertEqual(self.recette(d, "--scenario", "demo", gh=gh), 0, self.sortie)
+        self.assertEqual([a[2] for a in gh.appels if isinstance(a, tuple) and a[0] == "telecharger"], ["apk"])
+        chemin = Path(_option(self.serveur.appels[0], "--apk"))
+        self.assertEqual(chemin.name, "app-debug.apk")
+        self.assertTrue(str(chemin).startswith(str(self.artefacts)))
+        self.assertEqual(self.poste, [])
+
+    def test_apk_fourni_l_emporte_sans_attendre_github(self):
+        d = self.projet_recette({"apk": "github", self.RECETTE: "serveur"}, genre=None)
+        gh = FauxGh()
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), gh=gh), 0)
+        self.assertEqual(gh.appels, [])
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--apk")), self.apk)
+
+    def test_apk_introuvable_refus_clair(self):
+        d = self.projet_recette()
+        self.assertEqual(self.recette(d, "--scenario", "demo"), 2)
+        self.assertIn("Aucun APK", self.sortie)
+        self.assertIn("--apk", self.sortie)
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.tmp / "absent.apk")), 2)
+        self.assertIn("APK introuvable", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_amont_github_echoue_code_5_sans_lancer(self):
+        d = self.projet_recette({"apk": "github", self.RECETTE: "serveur"}, genre=None)
+        self.assertEqual(self.recette(d, "--scenario", "demo", gh=FauxGh(conclusion="failure")), 5)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_serveur_injoignable_message_clair_sans_repli_poste(self):
+        import serveur_tache
+        from tests import test_serveur_tache_cli as t7
+        d = self.projet_recette()
+        moteur = t7.FauxMoteur()
+        moteur.leve = serveur_tache.RefusLancement("Aucun serveur prêt pour l'émulation (s1 : serveur injoignable "
+                                                   "ou état inconnu à la dernière sonde).")
+        code = self.recette(d, "--scenario", "demo", "--apk", str(self.apk), serveur=self.cli_reel(moteur))
+        self.assertNotEqual(code, 0)
+        self.assertIn("serveur injoignable", self.sortie)
+        self.assertEqual(self.poste, [])
+
+    def test_actions_existantes_inchangees(self):
+        d = self.projet_recette({})
+        self.assertEqual(self.lancer(["emulateur", "--dossier", str(d), "--", "x"]), 0)       # au poste, comme avant
+        self.assertEqual(len(self.poste), 1)
+        for option in ("--apk", "--mode", "--scenario"):
+            self.assertEqual(self.lancer(["tests", "--dossier", str(d), option, "v", "--", "x"]), 2, option)
+        self.assertEqual(len(self.poste), 1)
+
+
+class TestLanceurServeurTache(unittest.TestCase):
+    """Python 3.9 pour `deporter` : le lanceur de tâches (3.12) est importé à l'appel seulement, ou lancé à part."""
+    ARGV = ["serveur-tache", "lancer", "--apk", "a.apk", "--mode", "pilote", "--projet", "p"]
+
+    def test_en_3_12_le_cli_est_appele_dans_le_processus(self):
+        vus = []
+
+        class Cli:
+            @staticmethod
+            def main(argv):
+                vus.append(list(argv))
+                return 1
+        self.assertEqual(deporter._serveur_tache(self.ARGV, version=(3, 12), importer=lambda: Cli,
+                                                 executer=lambda c: self.fail("pas de sous-processus")), 1)
+        self.assertEqual(vus, [self.ARGV])
+
+    def test_en_3_9_py_3_12_lance_le_lanceur_en_sous_processus(self):
+        vus = []
+
+        def executer(commande):
+            vus.append(commande)
+            return 3
+        code = deporter._serveur_tache(self.ARGV, version=(3, 9), trouver_python=lambda: ["py", "-3.12"],
+                                       executer=executer, importer=lambda: self.fail("pas d'import en 3.9"))
+        self.assertEqual(code, 3)
+        self.assertEqual(vus, [["py", "-3.12", str(RACINE / "lancer.py")] + self.ARGV])
+
+    def test_sans_python_3_12_message_clair(self):
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie), contextlib.redirect_stdout(sortie):
+            code = deporter._serveur_tache(self.ARGV, version=(3, 9), trouver_python=lambda: None,
+                                           executer=lambda c: self.fail("rien à lancer"))
+        self.assertNotIn(code, (0, 1))
+        self.assertIn("Python 3.12", sortie.getvalue())
+
+    def test_recherche_de_python_3_12(self):
+        trouve = deporter._python_312(which=lambda n: {"py": "C:/py.exe"}.get(n), sonder=lambda c: c[0] == "C:/py.exe")
+        self.assertEqual(trouve, ["C:/py.exe", "-3.12"])
+        self.assertIsNone(deporter._python_312(which=lambda n: None, sonder=lambda c: True))
+        autre = deporter._python_312(which=lambda n: {"py": "C:/py.exe", "python3.12": "/u/python3.12"}.get(n),
+                                     sonder=lambda c: c[0] == "/u/python3.12")
+        self.assertEqual(autre, ["/u/python3.12"])
+        self.assertIsNone(deporter._python_312(which=lambda n: "/x/" + n, sonder=lambda c: False))
+
+    def test_deporter_n_importe_pas_le_lanceur_3_12_au_chargement(self):
+        import ast
+        source = (RACINE / "outils" / "deporter.py").read_text(encoding="utf-8")
+        arbre = ast.parse(source, feature_version=(3, 9))
+        noms = set()
+        for noeud in arbre.body:
+            if isinstance(noeud, ast.Import):
+                noms.update(a.name for a in noeud.names)
+            elif isinstance(noeud, ast.ImportFrom):
+                noms.add(noeud.module or "")
+        self.assertFalse(noms & {"serveur_tache", "serveur_tache_cli", "serveur_recette"}, noms)
 
 
 if __name__ == "__main__":

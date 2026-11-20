@@ -260,15 +260,17 @@ class Projet:
         return deport_types.catalogue_du_projet(str(self.chemin_reglages.parent))[1]
 
     def lieux_effectifs(self):
-        globaux, projet = self.lieux_globaux(), self.lieux_du_projet()
-        return {a: moddeport.lieu_effectif(globaux, projet, a) for a in self.catalogue_deport()}
+        globaux, projet, catalogue = self.lieux_globaux(), self.lieux_du_projet(), self.catalogue_deport()
+        return {a: moddeport.lieu_effectif(globaux, projet, a, catalogue) for a in catalogue}
 
     def etat_deport(self):
         catalogue = self.catalogue_deport()
         lieux = self.lieux_effectifs()
         # le serveur n'est disponible que lorsque la plateforme est prête (cache `plateforme.json`, sans appel réseau)
         d = {"lieux": lieux, "avertissements": moddeport.avertissements(lieux, catalogue),
-             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": modplateforme.pret()}
+             "actions": deport_types.actions_exposees(catalogue), "serveur_disponible": modplateforme.pret(),
+             # un serveur déclaré (serveurs.json, sans connexion) : la recette sur émulateur peut alors se régler
+             "serveur_declare": modserveurs.declare()}
         # résultats et minutes GitHub : seulement si une action tourne sur GitHub (sinon aucun appel à gh)
         conso = deport_conso.conso(str(self.chemin_reglages.parent), {a: e["libelle"] for a, e in catalogue.items()}, lieux)
         if conso is not None:
@@ -2114,6 +2116,8 @@ class Handler(BaseHTTPRequestHandler):
                 lieux = {a: v for a, v in projet.lieux_du_projet().items() if a in catalogue}
                 if isinstance(demande.get("lieux"), dict):
                     lieux.update(demande["lieux"])
+                    # null : l'action redevient non réglée (le projet hérite du bureau ; la recette est refusée)
+                    lieux = {a: v for a, v in lieux.items() if v is not None}
                 elif "lieux" in demande:
                     lieux = demande["lieux"]
                 nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},

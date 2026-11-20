@@ -12,6 +12,11 @@ import os
 
 _CHEMIN_APK = "**/build/outputs/apk/**/*.apk"
 _PEU_FIABLE = "peu fiable sur GitHub, utilisez le poste ou le serveur"
+_SERVEUR_SEUL = "ne tourne que sur le serveur (accord permanent pour ce projet)"
+
+# Les actions que `deporter` sait servir sur le serveur (tâches d'émulation, `outils/serveur_tache_cli.py`). Une telle
+# action ne tourne nulle part ailleurs : pas de défaut au poste, le Directeur la règle sur serveur projet par projet.
+SERVIES_AU_SERVEUR = ("recette-emulateur",)
 
 
 def _entree(libelle, commande="", produit=None, consomme=(), artefact=None, lieux=("poste", "github", "serveur"),
@@ -26,6 +31,7 @@ GENERIQUE = {
     "tests": _entree("Tests", consomme=["apk"]),
     "emulateur": _entree("Émulateur", consomme=["apk"], lieux=("poste", "serveur"), bientot=_PEU_FIABLE),
     "charge": _entree("Charge", consomme=["apk"]),
+    "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
 }
 
 # Application Android native (Gradle) : les tests se compilent depuis les sources et n'ont pas besoin de l'APK ;
@@ -40,6 +46,9 @@ ANDROID = {
     "release": _entree("APK signé (release)", "./gradlew assembleRelease", produit="apk-release", lieux=("poste",),
                        bientot="demande vos clés de signature dans les secrets GitHub, que vous devez saisir "
                                "vous-même"),
+    # l'APK installé sur un émulateur du serveur, piloté par un scénario (recette) ou par l'agent ; `emulateur` (les
+    # tests instrumentés Gradle) reste au poste
+    "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
 }
 
 CATALOGUES = {"application-mobile-android": ANDROID}
@@ -97,7 +106,18 @@ def racine_du_projet(dossier):
         return str(dossier)
 
 
+def servie_au_serveur(nom, catalogue):
+    """Vrai si `deporter` sait servir l'action `nom` sur le serveur et que ce catalogue l'y permet."""
+    return nom in SERVIES_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
+
+
+def sans_poste(entree):
+    """Vrai pour une action qui ne tourne pas au poste (ex. `recette-emulateur`) : jamais de défaut « poste »."""
+    return "poste" not in entree["lieux"]
+
+
 def actions_exposees(catalogue):
-    """La liste `[{id, libelle, lieux, bientot}]` que le bureau affiche pour ce catalogue."""
-    return [{"id": nom, "libelle": e["libelle"], "lieux": list(e["lieux"]), "bientot": e["bientot"]}
+    """La liste `[{id, libelle, lieux, bientot, servie_au_serveur}]` que le bureau affiche pour ce catalogue."""
+    return [{"id": nom, "libelle": e["libelle"], "lieux": list(e["lieux"]), "bientot": e["bientot"],
+             "servie_au_serveur": servie_au_serveur(nom, catalogue)}
             for nom, e in catalogue.items()]

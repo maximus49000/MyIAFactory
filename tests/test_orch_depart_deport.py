@@ -45,6 +45,13 @@ class TestDeportConsigne(unittest.TestCase):
         android = depart.deport_consigne({**{a: "poste" for a in ANDROID}, "apk": "github"}, ANDROID)
         self.assertNotIn("deporter tests", android)     # les tests Android ne consomment pas l'APK
 
+    def test_la_recette_sur_emulateur_n_est_jamais_une_commande_github_ni_poste(self):
+        for lieu in (None, "serveur", "github", "poste"):
+            for catalogue in (GENERIQUE, ANDROID):
+                t = depart.deport_consigne({**{a: "github" for a in catalogue}, "recette-emulateur": lieu}, catalogue)
+                self.assertNotIn("recette-emulateur", t, (lieu, catalogue is ANDROID))
+                self.assertNotIn("Recette sur émulateur", t)
+
     def test_generique_tout_sur_github_dans_le_budget(self):
         t = depart.deport_consigne({**_tous("github"), "emulateur": "poste"}, GENERIQUE, dossier="D:/un/long/chemin")
         self.assertLess(len(t), 2200)

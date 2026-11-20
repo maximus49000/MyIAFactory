@@ -74,6 +74,15 @@ def dossier():
     return Path(DOSSIER) if DOSSIER else modplateforme.dossier()
 
 
+def declare(d=None):
+    """Vrai si au moins un serveur est déclaré (`serveurs.json` : les fichiers seulement, aucune connexion) ; faux au
+    moindre ennui."""
+    try:
+        return bool(_modules()[4].lire(dossier() if d is None else d))
+    except Exception:
+        return False
+
+
 def _secrets(d, serveurs):
     acces = _modules()[0]
     chemins = [str(s.cle) for s in serveurs if len(str(getattr(s, "cle", "") or "")) >= 8]   # un chemin, pas une lettre

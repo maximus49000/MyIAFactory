@@ -15,10 +15,19 @@ Lance l'action `<type>` (tests, apk, charge…) là où le Directeur l'a réglé
   job amont échoué : code 5.
 - le projet est le plus proche dossier (`--dossier` ou ses parents) qui contient `.factory/` : un agent peut donner
   un sous-dossier (catalogue, lieux et nom du workflow restent ceux du projet).
+- `deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>]` : l'APK sur un émulateur
+  du serveur. Le lieu DOIT être `serveur` dans les réglages du projet (accord permanent du Directeur, pour ce projet et
+  cette action ; le défaut du bureau ne compte pas) ; sinon code 2, jamais le poste ni GitHub (`--poste` ne s'applique
+  pas). L'APK : `--apk`, sinon la production `apk` du projet (artefact GitHub du commit, attendu comme pour les tests,
+  ou sortie locale du catalogue, la plus récente) ; aucun APK : code 2. Le lancement passe par le lanceur de tâches
+  (`serveur_tache_cli`, Python 3.12 : importé à l'appel seulement, ou `py -3.12 lancer.py serveur-tache` à part sous
+  un Python plus ancien). Scénario (par défaut, `--scenario` exigé) : lance, déroule la recette, arrête, rapatrie dans
+  `<projet>/.factory/serveur/<id>/`, imprime le manifeste ; 0 seulement si le statut est `ok`, 1 sinon (plantage,
+  limite, erreur, serveur injoignable). Pilote : imprime l'identifiant et le mode d'emploi de `serveur-outil`.
 
 Codes : 0 réussi, 1 action échouée, 2 usage ou lieu refusé, 3 `--sans-attendre` refusé, 4 `gh` indisponible ou réseau
-absent, 5 amont échoué, 6 travail non poussé (origin/<branche> n'est pas au commit courant, ou modifications suivies
-non commitées), 7 workflow absent de la branche, 8 quota GitHub probablement épuisé (cache de consommation au niveau
+absent (ou Python 3.12 introuvable pour la recette sur émulateur), 5 amont échoué, 6 travail non poussé
+(origin/<branche> n'est pas au commit courant, ou modifications suivies non commitées), 7 workflow absent de la branche, 8 quota GitHub probablement épuisé (cache de consommation au niveau
 « dépassé », ou exécution en `startup_failure`) : proposer le poste au Directeur. Jamais de bascule silencieuse.
 
 Pendant l'attente, `~/MyIAFactory/deport-en-cours/<id>.json` = {action, attend, lieu, dossier, agent, depuis,
@@ -47,7 +56,8 @@ import deport_depot  # noqa: E402
 import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
-from bureau.deport_types import catalogue_du_projet, racine_du_projet  # noqa: E402
+from bureau.deport_types import (SERVIES_AU_SERVEUR, catalogue_du_projet, racine_du_projet,  # noqa: E402
+                                 servie_au_serveur)
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
 EN_COURS = Path("~/MyIAFactory/deport-en-cours").expanduser()
@@ -55,7 +65,17 @@ ARTEFACTS = Path("~/MyIAFactory/artefacts").expanduser()
 VARIABLE_AGENT = "MYIAFACTORY_AGENT"
 MAX_FICHIERS_LISTES = 10
 USAGE = ("Usage : lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] "
-         "[-- <commande locale>]")
+         "[-- <commande locale>]\n"
+         "        lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] "
+         "[--dossier <dossier>] [--reglages <fichier>]")
+MSG_REGLEZ_SERVEUR = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+MSG_SANS_312 = ("Python 3.12 introuvable : la recette sur émulateur passe par le lanceur de tâches du serveur, qui "
+                "l'exige. Installez Python 3.12 (python.org, ou « winget install Python.Python.3.12 »), puis relancez. "
+                "Rien n'est lancé au poste à la place.")
+OPTIONS_RECETTE = ("mode", "scenario", "apk")
+MODES_RECETTE = ("scenario", "pilote")
+LANCEUR = Path(__file__).resolve().parent.parent / "lancer.py"
+DELAI_SONDE_S = 60
 PROPOSITION = "relance avec --poste après accord du Directeur"
 MSG_NON_POUSSE = "pousse d'abord ton travail : le commit courant n'est pas sur le dépôt distant."
 MSG_SANS_WORKFLOW = ("le workflow n'est pas dans ta branche : fusionne deport/workflow (validé par le Directeur) "
@@ -139,14 +159,22 @@ def _lieux(dossier, reglages, bureau):
     catalogue = catalogue_du_projet(projet)[1]
     chemin = Path(reglages) if reglages else Path(projet) / ".factory" / "reglages.json"
     globaux, projet = _lieux_ecrits(bureau), _lieux_ecrits(chemin)
-    return {a: lieu_effectif(globaux, projet, a) for a in catalogue}, catalogue
+    # une action au seul serveur ne prend que le réglage du projet, sinon None (non réglée : refusée)
+    return {a: lieu_effectif(globaux, projet, a, catalogue) for a in catalogue}, catalogue
 
 
 def lieux_refuses(lieux, action, catalogue):
     """Les lieux que `deporter` ne sait pas servir (ni `poste` ni `github`, ex. `serveur` écrit à la main) pour
-    l'action et les actions dont elle dépend : jamais de repli silencieux sur le poste."""
+    l'action et les actions dont elle dépend : jamais de repli silencieux sur le poste. Le serveur n'est servi que pour
+    les actions qui le déclarent et que `deporter` y sait lancer (`SERVIES_AU_SERVEUR`) ; celles-là n'ont pas d'autre
+    lieu : tout autre réglage (ou aucun) est refusé."""
     refus = []
     for a in [action] + [d for d in catalogue[action]["consomme"] if d in lieux]:
+        if servie_au_serveur(a, catalogue):
+            if lieux.get(a) != "serveur":
+                refus.append("« %s » ne tourne que sur le serveur et n'y est pas réglée pour ce projet. %s Jamais de "
+                             "repli sur le poste ni sur GitHub." % (a, MSG_REGLEZ_SERVEUR))
+            continue
         if lieux[a] not in ("poste", "github"):
             refus.append("Le lieu « %s » de l'action « %s » n'est pas disponible : seuls « poste » et « github » le "
                          "sont. Corrigez les réglages du projet, ou relancez avec --poste après accord du "
@@ -159,21 +187,27 @@ def doit_passer_par_deporter(action, lieux, catalogue):
     alors une attente à faire) ; un lieu que `deporter` ne sert pas passe aussi par lui, qui le refuse."""
     if action not in catalogue:
         return False
+    if servie_au_serveur(action, catalogue):
+        # au seul serveur : réglée, seul `deporter` la lance ; non réglée, elle n'est pas déportée (et `deporter`,
+        # appelé quand même, la refuse)
+        return lieux.get(action) is not None
     return (lieux[action] == "github" or bool(a_attendre(lieux, action, catalogue))
             or bool(lieux_refuses(lieux, action, catalogue)))
 
 
 def _analyser(argv):
-    """`(options, commande)` ou `None` si l'usage est faux ; `options` : type, dossier, reglages, attendre, poste."""
+    """`(options, commande)` ou `None` si l'usage est faux ; `options` : type, dossier, reglages, attendre, poste, et
+    pour la recette sur émulateur mode, scenario, apk (None si absents)."""
     argv = list(argv)
     commande = []
     if "--" in argv:
         i = argv.index("--")
         argv, commande = argv[:i], argv[i + 1:]
-    opt = {"type": None, "dossier": None, "reglages": None, "attendre": True, "poste": False}
+    opt = {"type": None, "dossier": None, "reglages": None, "attendre": True, "poste": False, "mode": None,
+           "scenario": None, "apk": None}
     while argv:
         o = argv.pop(0)
-        if o in ("--dossier", "--reglages") and argv:
+        if o in ("--dossier", "--reglages", "--mode", "--scenario", "--apk") and argv:
             opt[o[2:]] = argv.pop(0)
         elif o == "--sans-attendre":
             opt["attendre"] = False
@@ -327,12 +361,125 @@ def _verrou_du_run(chemin, attendre, dormir, dire):
             pass
 
 
+# --- recette sur émulateur (serveur) -----------------------------------------------------------------------------
+
+def _importer_cli():
+    """Le lanceur de tâches du serveur (Python 3.12) : importé ici seulement, jamais au chargement de `deporter`."""
+    import serveur_tache_cli
+    return serveur_tache_cli
+
+
+def _sonder(commande):
+    """Vrai si `commande` lance un Python 3.12 ou plus récent (sans shell, sans fenêtre)."""
+    try:
+        f = subprocess.run(list(commande) + ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"],
+                           stdin=subprocess.DEVNULL, capture_output=True, timeout=DELAI_SONDE_S,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
+    return f.returncode == 0
+
+
+def _python_312(which=shutil.which, sonder=_sonder):
+    """La commande d'un Python 3.12 (`[py, -3.12]` ou `[python3.12]`), vérifiée ; None si aucune."""
+    for nom, options in (("py", ["-3.12"]), ("python3.12", [])):
+        chemin = which(nom)
+        if chemin and sonder([chemin] + options):
+            return [chemin] + options
+    return None
+
+
+def _executer(commande):
+    """Lance `commande` (une liste, jamais de shell) ; sa sortie est la nôtre. Rend son code de sortie."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        return subprocess.run(list(commande), stdin=subprocess.DEVNULL).returncode
+    except OSError as e:
+        print("Lancement du lanceur de tâches impossible (%s)." % type(e).__name__, file=sys.stderr)
+        return 4
+
+
+def _serveur_tache(argv, version=None, importer=_importer_cli, trouver_python=_python_312, executer=_executer):
+    """`lancer.py serveur-tache …` : dans ce processus sous Python 3.12 et plus, sinon par un Python 3.12 à part
+    (`deporter` reste compatible 3.9 : les agents le lancent). Rend le code du lanceur ; 4 sans Python 3.12."""
+    version = tuple(sys.version_info[:2]) if version is None else tuple(version)
+    if version >= (3, 12):
+        return importer().main(list(argv))
+    python = trouver_python()
+    if not python:
+        print(MSG_SANS_312, file=sys.stderr)
+        return 4
+    return executer(list(python) + [str(LANCEUR)] + list(argv))
+
+
+def _usage_recette(opt, commande):
+    """Le refus d'usage de la recette sur émulateur, ou None."""
+    if opt["poste"]:
+        return ("--poste ne s'applique pas à la recette sur émulateur : elle ne tourne que sur le serveur. %s"
+                % MSG_REGLEZ_SERVEUR)
+    if commande:
+        return "La recette sur émulateur ne prend pas de commande locale (rien après « -- »).\n" + USAGE
+    mode = opt["mode"] or "scenario"
+    if mode not in MODES_RECETTE:
+        return "Mode inconnu : « %s » (attendu : scenario ou pilote).\n%s" % (mode, USAGE)
+    if mode == "scenario" and not opt["scenario"]:
+        return ("Le mode scénario exige --scenario <nom> (la recette .factory/recettes/<nom>.json) ; --mode pilote "
+                "pour conduire l'émulateur verbe par verbe.\n" + USAGE)
+    return None
+
+
+def _apk_de_la_recette(opt, projet, catalogue, action, env):
+    """`(chemin, None)` de l'APK, ou `(None, message)` : `--apk`, sinon l'artefact GitHub téléchargé (`env`), sinon la
+    sortie locale publiée par le catalogue (`artefact` de l'action productrice), la plus récente."""
+    if opt["apk"]:
+        chemin = Path(opt["apk"]).resolve()
+        if not chemin.is_file():
+            return None, "Fichier APK introuvable : %s." % opt["apk"]
+        return str(chemin), None
+    sources = [catalogue[d] for d in catalogue[action]["consomme"] if d in catalogue and catalogue[d]["produit"]]
+    for e in sources:
+        chemin = (env or {}).get(_nom_variable(e["produit"]))
+        if chemin:
+            return chemin, None
+    motifs = [e["artefact"] for e in sources if e["artefact"]]
+    trouves = []
+    for motif in motifs:
+        try:
+            trouves += [p for p in Path(projet).glob(motif) if p.is_file()]
+        except (OSError, ValueError):
+            continue
+    if trouves:
+        return str(max(trouves, key=lambda p: p.stat().st_mtime)), None
+    return None, ("Aucun APK trouvé pour la recette sur émulateur : ni --apk, ni sortie locale (%s) dans %s. Générez-le "
+                  "(« deporter apk » ou la commande du projet), ou donnez --apk <fichier>."
+                  % (", ".join(motifs) or "aucune publiée", projet))
+
+
+def _recette_au_serveur(opt, projet, catalogue, action, env, serveur_tache, dire):
+    """Lance la recette sur le serveur par le lanceur de tâches (T7) ; rend son code (2 si aucun APK)."""
+    apk, erreur = _apk_de_la_recette(opt, projet, catalogue, action, env)
+    if erreur:
+        print(erreur, file=sys.stderr)
+        return 2
+    mode = opt["mode"] or "scenario"
+    argv = ["serveur-tache", "lancer", "--apk", apk, "--mode", mode]
+    if opt["scenario"]:
+        argv += ["--scenario", opt["scenario"]]
+    argv += ["--projet", str(projet)]
+    if mode == "scenario":
+        argv.append("--attendre")      # lance, déroule la recette, arrête, rapatrie et imprime le manifeste
+    dire("Recette sur émulateur au serveur (mode %s), APK : %s" % (mode, apk))
+    return serveur_tache(argv)
+
+
 # --- exécution ---------------------------------------------------------------------------------------------------
 
 def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_git, dormir=time.sleep, dire=None,
-         bureau=BUREAU, repertoire_attente=EN_COURS, artefacts=ARTEFACTS, cache_conso=None):
+         bureau=BUREAU, repertoire_attente=EN_COURS, artefacts=ARTEFACTS, cache_conso=None, serveur_tache=None):
     """`artefacts` : où vont les artefacts téléchargés (`<artefacts>/<commit>/<produit>`) ; `cache_conso` : le dossier
-    du cache de consommation (None : celui de `bureau.deport_conso`, `~/MyIAFactory`)."""
+    du cache de consommation (None : celui de `bureau.deport_conso`, `~/MyIAFactory`) ; `serveur_tache` : le lanceur
+    de tâches du serveur pour la recette sur émulateur (`argv -> code` ; None : `_serveur_tache`)."""
     argv = list(sys.argv[1:] if argv is None else argv)
     if dire is None:
         def dire(texte, **k):
@@ -349,18 +496,32 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         print("Action inconnue pour ce projet : « %s » (attendu : %s)." % (action, ", ".join(catalogue)),
               file=sys.stderr)
         return 2
-    if opt["poste"]:
+    au_serveur = servie_au_serveur(action, catalogue)
+    if not au_serveur and any(opt[k] is not None for k in OPTIONS_RECETTE):
+        print("--mode, --scenario et --apk ne valent que pour %s.\n%s" % (", ".join(SERVIES_AU_SERVEUR), USAGE),
+              file=sys.stderr)
+        return 2
+    if opt["poste"] and not au_serveur:
         lieux[action] = "poste"
     refus = lieux_refuses(lieux, action, catalogue)
     if refus:
         print("\n".join(refus), file=sys.stderr)
         return 2
+    erreur = _usage_recette(opt, commande) if au_serveur else None
+    if erreur:
+        print(erreur, file=sys.stderr)
+        return 2
     amont = [d for d in a_attendre(lieux, action, catalogue) if lieux.get(d) == "github"]
-    if lieux[action] != "github" and not commande:
+    if au_serveur and opt["apk"]:
+        amont = []      # l'APK fourni l'emporte : rien à attendre de GitHub
+    if not au_serveur and lieux[action] != "github" and not commande:
         print(USAGE, file=sys.stderr)
         return 2
 
     def lancer_au_poste(env=None):
+        if au_serveur:      # jamais le poste : la recette part sur le serveur, l'APK venu de GitHub dans `env`
+            return _recette_au_serveur(opt, racine_du_projet(dossier), catalogue, action, env,
+                                       serveur_tache or _serveur_tache, dire)
         if env:      # les chemins des artefacts téléchargés (MYIAFACTORY_ARTEFACT_<PRODUIT>)
             return executer_poste(commande, dossier=dossier, attendre=opt["attendre"], env=env)
         return executer_poste(commande, dossier=dossier, attendre=opt["attendre"])

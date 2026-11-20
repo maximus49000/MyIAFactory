@@ -22,12 +22,12 @@ class TestCatalogues(unittest.TestCase):
                 self.assertEqual(set(entree), CLES, nom)
 
     def test_le_generique_est_le_catalogue_d_origine(self):
-        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge"])
+        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge", "recette-emulateur"])
         self.assertEqual(GENERIQUE["tests"]["consomme"], ["apk"])
         self.assertEqual(GENERIQUE["apk"]["produit"], "apk")
 
     def test_android_valeurs_du_catalogue(self):
-        self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release"])
+        self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release", "recette-emulateur"])
         self.assertNotIn("charge", ANDROID)
         self.assertEqual(ANDROID["apk"]["commande"], "./gradlew assembleDebug")
         self.assertEqual(ANDROID["apk"]["artefact"], "app/build/outputs/apk/debug/*.apk")
@@ -65,8 +65,9 @@ class TestCatalogues(unittest.TestCase):
     def test_actions_exposees(self):
         liste = actions_exposees(ANDROID)
         self.assertEqual([a["id"] for a in liste], list(ANDROID))
-        release = liste[-1]
-        self.assertEqual(set(release), {"id", "libelle", "lieux", "bientot"})
+        release = liste[list(ANDROID).index("release")]
+        self.assertEqual(set(release), {"id", "libelle", "lieux", "bientot", "servie_au_serveur"})
+        self.assertIs(release["servie_au_serveur"], False)
         self.assertEqual(release["libelle"], "APK signé (release)")
         self.assertEqual(release["lieux"], ["poste"])
         self.assertIn("clés de signature", release["bientot"])
@@ -102,3 +103,57 @@ class TestValidationParCatalogue(unittest.TestCase):
         self.assertEqual(deport.a_attendre(lieux, "tests"), ["apk"])
         self.assertEqual(deport.avertissements(lieux, ANDROID), [])
         self.assertTrue(deport.avertissements(lieux)[0].startswith("« tests »"))
+
+
+class TestRecetteEmulateur(unittest.TestCase):
+    """L'action `recette-emulateur` : seulement sur le serveur, accord permanent par projet (jamais le poste par défaut)."""
+    RECETTE = "recette-emulateur"
+
+    def test_recette_emulateur_dans_le_catalogue_android_et_generique(self):
+        for catalogue in (GENERIQUE, ANDROID):
+            e = catalogue[self.RECETTE]
+            self.assertEqual(e["libelle"], "Recette sur émulateur")
+            self.assertEqual(e["lieux"], ["serveur"])
+            self.assertEqual(e["consomme"], ["apk"])
+            self.assertIsNone(e["produit"])
+        self.assertEqual(ANDROID["emulateur"]["lieux"], ["poste"])           # l'émulateur Gradle ne bouge pas
+        self.assertEqual(ANDROID["emulateur"]["commande"], "./gradlew connectedDebugAndroidTest")
+        self.assertEqual(GENERIQUE["emulateur"]["lieux"], ["poste", "serveur"])
+
+    def test_exposee_comme_servie_au_serveur(self):
+        exposees = {a["id"]: a for a in actions_exposees(ANDROID)}
+        self.assertIs(exposees[self.RECETTE]["servie_au_serveur"], True)
+        self.assertEqual(exposees[self.RECETTE]["lieux"], ["serveur"])
+        self.assertFalse(any(a["servie_au_serveur"] for n, a in exposees.items() if n != self.RECETTE))
+
+    def test_le_serveur_est_accepte_pour_cette_action_seulement(self):
+        for catalogue in (GENERIQUE, ANDROID):
+            self.assertEqual(deport.valider_lieux({self.RECETTE: "serveur"}, catalogue=catalogue),
+                             {self.RECETTE: "serveur"})
+            for lieu in ("poste", "github"):
+                with self.assertRaises(ValueError):
+                    deport.valider_lieux({self.RECETTE: lieu}, catalogue=catalogue)
+        with self.assertRaises(ValueError) as c:
+            deport.valider_lieux({"tests": "serveur"})
+        self.assertIn("pas encore disponible", str(c.exception))
+
+    def test_pas_de_defaut_au_poste(self):
+        self.assertNotIn(self.RECETTE, deport.LIEUX_PAR_DEFAUT)
+        self.assertEqual(set(deport.LIEUX_PAR_DEFAUT.values()), {"poste"})
+
+    def test_lieu_effectif_reglage_du_projet_seulement_sinon_non_regle(self):
+        globaux = {self.RECETTE: "serveur", "apk": "github"}
+        self.assertIsNone(deport.lieu_effectif(globaux, {}, self.RECETTE, ANDROID))
+        self.assertIsNone(deport.lieu_effectif({}, None, self.RECETTE, ANDROID))
+        self.assertEqual(deport.lieu_effectif({}, {self.RECETTE: "serveur"}, self.RECETTE, ANDROID), "serveur")
+        self.assertEqual(deport.lieu_effectif(globaux, {}, "apk", ANDROID), "github")      # les autres : inchangé
+        self.assertEqual(deport.lieu_effectif({}, {}, "apk", ANDROID), "poste")
+        self.assertEqual(deport.lieu_effectif({}, {}, "apk"), "poste")
+
+    def test_pas_d_avertissement_de_chaine_pour_la_recette(self):
+        for lieu in (None, "serveur"):
+            lieux = {"apk": "github", "tests": "github", "lint": "github", "emulateur": "poste", "release": "poste",
+                     self.RECETTE: lieu}
+            self.assertEqual(deport.avertissements(lieux, ANDROID), [])
+        lieux = {"apk": "github", "tests": "poste", "emulateur": "poste", "charge": "poste", self.RECETTE: "serveur"}
+        self.assertFalse(any(self.RECETTE in t for t in deport.avertissements(lieux)))

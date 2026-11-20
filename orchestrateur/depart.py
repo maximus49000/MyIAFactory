@@ -160,11 +160,13 @@ def deport_consigne(lieux, catalogue=GENERIQUE, commandes=None, dossier="<dossie
     projet (`deport.commandes`), sinon celle du catalogue ; `reglages` : le fichier de réglages du projet quand il n'est pas
     à l'emplacement par défaut (le lanceur doit résoudre le même lieu). Pure : l'appelant lit les réglages."""
     lieux, commandes = lieux or {}, commandes or {}
-    deportees = [a for a in catalogue if lieux.get(a, "poste") == "github"]
+    # une action qui ne tourne ni au poste ni sur GitHub (la recette sur émulateur, au seul serveur) n'a pas de ligne ici
+    ici = [a for a in catalogue if set(catalogue[a]["lieux"]) & {"poste", "github"}]
+    deportees = [a for a in ici if lieux.get(a, "poste") == "github"]
     if not deportees:
         return ""
     # au poste mais consommant une production de GitHub (catalogue générique : les tests consomment l'APK)
-    attendent = [a for a in catalogue if a not in deportees
+    attendent = [a for a in ici if a not in deportees
                  and any(lieux.get(d, "poste") == "github" for d in catalogue[a]["consomme"])]
     lancer = f'python "{LANCEUR_DE_TESTS}" deporter'
     options = f' --dossier "{dossier}"' + (f' --reglages "{reglages}"' if reglages else "")

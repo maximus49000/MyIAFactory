@@ -296,7 +296,8 @@ class TestEnveloppeAgent(unittest.TestCase):
             suite_dans(self, a, "--memory-swap", "2048m")
             suite_dans(self, a, "--cpus", "2")
             suite_dans(self, a, "--label", "myiafactory.genre=agent")     # l'émulation ne le compte pas comme un émulateur
-            self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"], ["HOME=/maison"])
+            # AGENT_DUREE_S : la durée de l'enveloppe (argument 3) fait foi dans le conteneur, comme pour le veilleur
+            self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"], ["HOME=/maison", "AGENT_DUREE_S=30"])
             d = f"{h}/taches/{ID}"
             self.assertEqual(sorted(volumes(a)), sorted([f"{d}/entree:/entree:ro", f"{d}/travail:/travail",
                                                           f"{d}/maison:/maison", f"{d}/sortie:/sortie",
@@ -704,6 +705,33 @@ class TestEnveloppeAgent(unittest.TestCase):
             self.assertEqual((b.etat()["etat"], b.etat()["statut"]), ("echouee", "erreur"))
             self.assertTrue(b.appels("flock -u 8"))
 
+    def test_ptrace_scope_zero_refuse_inconnu_averti(self):
+        with Banc() as b:                                          # 0 : un agent pourrait tracer l'entrée : refusé
+            scope = b.t / "ptrace_scope"
+            scope.write_text("0\n", newline="\n")
+            r = b.lancer(env={"ENVELOPPE_PTRACE_SCOPE": scope.as_posix()})
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertEqual((b.etat()["etat"], b.etat()["statut"]), ("echouee", "erreur"))
+            self.assertIn("ptrace_scope", b.etat()["raison"])
+            self.assertEqual(b.appels("docker run"), [])
+            self.assertTrue(b.appels("flock -u 8"))
+        with Banc() as b:                                          # 1 : démarre, sans avertissement
+            scope = b.t / "ptrace_scope"
+            scope.write_text("1\n", newline="\n")
+            r = b.lancer(env={"ENVELOPPE_PTRACE_SCOPE": scope.as_posix()})
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertNotIn("ptrace_scope", r.stderr)
+            b.arreter()
+            b.attendre_final()
+        with Banc() as b:                                          # illisible (pas de Yama) : démarre, averti
+            r = b.lancer(env={"ENVELOPPE_PTRACE_SCOPE": (b.t / "absent").as_posix()})
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertIn("ptrace_scope inconnu", r.stderr)
+            self.assertIn("ptrace_scope inconnu", (b.dossier / "veilleur.log").read_text(encoding="utf-8"))
+            b.arreter()
+            b.attendre_final()
+        self.assertIn("PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope", SCRIPT.read_text(encoding="utf-8"))
+
     def test_identifiant_deja_utilise_et_tache_en_cours(self):
         with Banc() as b:
             (b.dossier / "etat.json").write_text(json.dumps({"id": ID, "etat": "terminee"}), newline="\n")
@@ -828,7 +856,9 @@ if cmd.get("commit"):
     for nom, texte in cmd.get("apres", {}).items():
         with open(nom, "w", encoding="utf-8", newline="\n") as f:
             f.write(texte)
-racine = os.path.dirname(os.environ["HOME"])
+for cle, valeur in cmd.get("configurer", []):    # l'agent piège la configuration de son dépôt
+    subprocess.run(["git", "config", cle, valeur], check=True)
+racine =os.path.dirname(os.environ["HOME"])
 if cmd.get("effacer_depot"):                 # l'agent efface son dépôt (après en être sorti)
     import shutil, stat
     os.chdir(os.environ["HOME"])
@@ -910,9 +940,10 @@ class TestEntreeAgent(unittest.TestCase):
         (self.racine / "entree" / "argv.json").write_text(json.dumps(argv), newline="\n")
         (self.racine / "entree" / "message.md").write_text(json.dumps(message), newline="\n")
 
-    def lancer(self, *args):
-        env = {k: v for k, v in os.environ.items() if k not in ("AGENT_RACINE", "AGENT_CLAUDE")}
-        env.update(AGENT_RACINE=self.racine.as_posix(), AGENT_CLAUDE=json.dumps([sys.executable, self.faux.as_posix()]))
+    def lancer(self, *args, **plus):
+        env = {k: v for k, v in os.environ.items() if k not in ("AGENT_RACINE", "AGENT_CLAUDE", "AGENT_DUREE_S")}
+        env.update(AGENT_RACINE=self.racine.as_posix(), AGENT_CLAUDE=json.dumps([sys.executable, self.faux.as_posix()]),
+                   **plus)
         return subprocess.run([sys.executable, ENTREE.as_posix(), *args], capture_output=True, env=env, timeout=120,
                               stdin=subprocess.DEVNULL)
 
@@ -1138,6 +1169,56 @@ class TestEntreeAgent(unittest.TestCase):
         self.assertEqual((fin["commits"], fin["branche"], fin.get("echeance")), (1, "agent/corriger-le-titre", True))
         self.assertNotEqual(fin["code"], 0)
         self.assertTrue(self.sortie("resultat.bundle").is_file())
+
+    def test_conclure_ne_lance_rien_du_depot_de_l_agent(self):
+        # l'agent piège son dépôt (filtre clean par .gitattributes et info/attributes, signature gpg, fsmonitor) puis laisse
+        # du travail non commité : la conclusion le commite brut, sans rien lancer, et rend son info/attributes
+        marqueur = (self.t / "marqueur.txt").as_posix()
+        piege = f'echo lance >> "{marqueur}"; cat'
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A",
+                           "apres": {"note.txt": "brut\n", ".gitattributes": "* filter=piege\n",
+                                     ".git/info/attributes": "* filter=piege\n"},
+                           "configurer": [["filter.piege.clean", piege], ["filter.piege.required", "true"],
+                                          ["commit.gpgsign", "true"], ["gpg.program", piege], ["core.fsmonitor", piege],
+                                          ["gc.auto", "1"]]})
+        r = self.lancer()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(os.path.exists(marqueur), self.sortie("claude.err").read_bytes())
+        fin = self.fin()
+        self.assertEqual((fin["code"], fin["commits"], fin["branche"]), (0, 2, "agent/corriger-le-titre"),
+                         self.sortie("claude.err").read_bytes())
+        self.assertEqual(git(self.depot, "log", "-1", "--format=%s"), "Agent : travail non commité à la fin")
+        self.assertEqual(git(self.depot, "show", "HEAD:note.txt"), "brut")
+        self.assertEqual((self.depot / ".git" / "info" / "attributes").read_text(encoding="utf-8"), "* filter=piege\n")
+        self.assertTrue(self.sortie("resultat.bundle").is_file())
+        # échéance globale de la conclusion : au-delà, rien de plus n'est lancé
+        e = charger_entree()
+        self.assertLess(e.DELAI_CONCLURE_S, e.MARGE_ECHEANCE_S)
+        d = e.valider_demande({**demande(), "base": self.base})
+        erreurs = e.Borne((self.t / "err.txt").as_posix(), 4096)
+        try:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                e.conclure(self.depot.as_posix(), d, e.env_git(self.t.as_posix()), (self.racine / "sortie").as_posix(),
+                           erreurs, delai=0)
+        finally:
+            erreurs.fermer()
+
+    def test_duree_de_l_enveloppe_fait_foi(self):
+        # demande.json annonce 2400 s, l'enveloppe en passe 4 (AGENT_DUREE_S) : l'échéance interne suit l'enveloppe
+        self.ecrire(ARGV, {"fichiers": {"a.txt": "a\n"}, "commit": "A", "dormir": True})
+        debut = time.time()
+        r = self.lancer(AGENT_DUREE_S="4")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.time() - debut, 30)
+        self.assertEqual((self.fin()["commits"], self.fin().get("echeance")), (1, True))
+        for mauvais in ("0", "086400", "86401", "4s"):          # posée mais hors motif : claude n'est pas lancé
+            with self.subTest(mauvais=mauvais):
+                effacer(self.depot)
+                (self.racine / "maison" / "vu.json").unlink(missing_ok=True)
+                self.lancer(AGENT_DUREE_S=mauvais)
+                self.assertIsNone(self.vu())
+                self.assertNotEqual(self.fin()["code"], 0)
+                self.assertIn(b"AGENT_DUREE_S", self.sortie("claude.err").read_bytes())
 
     def test_signal_ne_tue_que_claude_et_l_entree_conclut(self):
         code = ENTREE.read_text(encoding="utf-8")

@@ -18,10 +18,17 @@
      (« Agent : travail non commité à la fin »), écrit /sortie/resultat.bundle (`git bundle create … <base>..agent/<tâche>`,
      rien si aucun commit), retire de /sortie TOUT ce que l'agent y a déposé (seuls flux.jsonl, claude.err et le paquet créé
      ici restent) puis écrit /sortie/fin.json {"code", "commits", "branche", "base"[, "echeance": true]} (temporaire puis
-     renommage).
+     renommage). Ces commandes git tournent dans le dépôt QUE L'AGENT A ÉCRIT (configuration, .gitattributes compris) : elles
+     ne lancent rien de lui (`SURETE_GIT` : ni crochet, ni fsmonitor, ni signature gpg, ni maintenance automatique ;
+     GIT_ATTR_NOSYSTEM et core.attributesFile neutre ; $GIT_DIR/info/attributes, prioritaire, remplacé le temps de conclure
+     par « * -filter -text -ident -working-tree-encoding » : aucun filtre clean/process, contenu brut) et tiennent une
+     échéance globale (DELAI_CONCLURE_S, sous la marge de 120 s) : l'agent ne peut pas bloquer sa propre conclusion.
 Signaux : SIGTERM et SIGINT (docker stop, ou `kill -TERM 1` lancé par l'agent lui-même) n'arrêtent que le groupe de processus
 de claude ; l'entrée conclut quand même (étape 4). PID 1 d'un espace de noms ne reçoit de l'intérieur aucun signal sans
-gestionnaire, SIGKILL compris : l'agent ne peut pas tuer l'entrée pour laisser un fin.json ou un paquet forgé.
+gestionnaire, SIGKILL compris : l'agent ne peut pas tuer l'entrée pour l'empêcher de conclure. Il garde en revanche la main
+sur ce que l'entrée met dans le paquet (ses commits, ses références, ses objets) : resultat.bundle n'est jamais « sûr ».
+Sur l'hôte, kernel.yama.ptrace_scope >= 1 est exigé (vérifié par lancer_agent.sh) : sinon claude, même utilisateur que
+l'entrée, pourrait la tracer (ptrace) et lui faire écrire n'importe quoi.
 Ces garanties ne valent qu'à l'intérieur du conteneur : fin.json, flux.jsonl et resultat.bundle restent des données NON
 FIABLES pour l'hôte et le poste (T3 : paquet vérifié, seule référence agent/<tâche>, tailles bornées) ; données non fiables.
 
@@ -33,9 +40,10 @@ l'agent a commité n'est caché par .gitattributes, une fusion ou un renommage) 
 (alternates) : ni la configuration, ni les crochets, ni les objets de remplacement, ni les greffes du dépôt de l'agent ne
 jouent. L'hôte y cherche le jeton (grep -F). Code 0 : texte complet ; 3 : contrôle impossible (l'hôte n'en rapatrie rien).
 
-Réservées aux tests (jamais posées par lancer_agent.sh, qui ne transmet que HOME) : AGENT_RACINE (préfixe des chemins
-/entree, /travail, /sortie, /maison, /run/identifiants/jeton ; « / » par défaut) et AGENT_CLAUDE (commande de claude, liste
-JSON ; ["claude"] par défaut).
+Environnement posé par lancer_agent.sh : HOME et AGENT_DUREE_S (la durée duree_s passée à l'enveloppe, celle de son veilleur ;
+elle l'emporte sur limites.duree_s de demande.json : l'échéance interne et celle du veilleur partent de la même valeur).
+Réservées aux tests (jamais posées par lancer_agent.sh) : AGENT_RACINE (préfixe des chemins /entree, /travail, /sortie,
+/maison, /run/identifiants/jeton ; « / » par défaut) et AGENT_CLAUDE (commande de claude, liste JSON ; ["claude"] par défaut).
 """
 import json
 import os
@@ -75,6 +83,14 @@ TOURS_MAX = 200
 DUREE_MAX_S = 86400
 DUREE_DEFAUT_S = 2400
 MARGE_ECHEANCE_S = 120                    # l'entrée arrête claude 120 s avant l'échéance du veilleur, puis conclut
+DELAI_CONCLURE_S = 100                    # échéance de TOUT `conclure` (restes, paquet) : sous la marge, fin.json écrit à temps
+MOTIF_DUREE = re.compile(r"[1-9][0-9]{0,5}")
+# Options de CHACUNE de nos commandes git (elles l'emportent sur la configuration du dépôt, que l'agent a pu écrire).
+SURETE_GIT = ("-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false", "-c", "commit.gpgsign=false",
+              "-c", "gpg.program=false", "-c", f"core.attributesFile={os.devnull}", "-c", "core.autocrlf=false",
+              "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "submodule.recurse=false")
+# $GIT_DIR/info/attributes (priorité la plus haute) le temps de conclure : aucun filtre, aucune conversion, contenu brut.
+ATTRIBUTS_NEUTRES = b"* -filter -text -ident -working-tree-encoding\n"
 JSON_MAX_OCTETS = 65536
 IDENTITE = ("Agent serveur MyIAFactory", "agent@myiafactory.invalid")
 MESSAGE_RESTES = "Agent : travail non commité à la fin"
@@ -163,6 +179,17 @@ def valider_demande(brut):
             "duree_s": _entier(limites.get("duree_s"), "duree_s", 1, DUREE_MAX_S, DUREE_DEFAUT_S)}
 
 
+def duree_hote(duree_demande):
+    """La durée qui fait foi : AGENT_DUREE_S (posée par lancer_agent.sh, la même que celle de son veilleur), sinon celle de
+    demande.json (tests). Une valeur posée mais hors motif (1 à 86400, sans zéro initial) : Refus."""
+    brut = os.environ.get("AGENT_DUREE_S")
+    if brut is None:
+        return duree_demande
+    if not MOTIF_DUREE.fullmatch(brut) or int(brut) > DUREE_MAX_S:
+        raise Refus(f"AGENT_DUREE_S refusée (1 à {DUREE_MAX_S})")
+    return int(brut)
+
+
 def valider_argv(argv):
     """argv.json -> les options de claude (sans argv[0]), chacune passée par DRAPEAUX. Refus pour tout le reste."""
     if not isinstance(argv, list) or not argv or not all(isinstance(x, str) for x in argv):
@@ -211,25 +238,24 @@ def lire_jeton(chemin):
 
 def env_git(maison):
     """L'environnement de NOS commandes git : jamais le jeton, ni la configuration globale ou système, ni les objets de
-    remplacement."""
+    remplacement, ni les attributs du système."""
     env = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "HOME": maison, "LC_ALL": "C", "LANG": "C",
            "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
-           "GIT_NO_REPLACE_OBJECTS": "1"}
+           "GIT_NO_REPLACE_OBJECTS": "1", "GIT_ATTR_NOSYSTEM": "1"}
     if os.name == "nt" and os.environ.get("SYSTEMROOT"):
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     return env
 
 
 def git(depot, *args, env, **kw):
-    """git sans crochets ni fsmonitor, en tableau d'arguments ; `check` par défaut."""
+    """git avec SURETE_GIT (ni crochet, ni fsmonitor, ni gpg...), en tableau d'arguments ; `check` par défaut."""
     kw.setdefault("check", True)
     kw.setdefault("stdin", subprocess.DEVNULL)
-    return subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false", "-C", depot, *args],
-                          env=env, **kw)
+    return subprocess.run(["git", *SURETE_GIT, "-C", depot, *args], env=env, **kw)
 
 
-def sortie_git(depot, *args, env):
-    return git(depot, *args, env=env, capture_output=True).stdout.decode("utf-8", "replace").strip()
+def sortie_git(depot, *args, env, timeout=None):
+    return git(depot, *args, env=env, capture_output=True, timeout=timeout).stdout.decode("utf-8", "replace").strip()
 
 
 def preparer_depot(c, d, env):
@@ -246,7 +272,7 @@ def preparer_depot(c, d, env):
     paquet = os.path.join(c["entree"], "projet.bundle")
     if os.path.islink(paquet) or not os.path.isfile(paquet):
         raise Refus("projet.bundle absent")
-    r = subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "clone", "--quiet", "--branch", d["branche"], "--",
+    r = subprocess.run(["git", *SURETE_GIT, "clone", "--quiet", "--branch", d["branche"], "--",
                         paquet, depot], env=env, stdin=subprocess.DEVNULL, capture_output=True)
     if r.returncode != 0:
         raise Refus("git clone du paquet impossible : " + r.stderr.decode("utf-8", "replace").strip()[:300])
@@ -258,31 +284,97 @@ def preparer_depot(c, d, env):
     return depot
 
 
-def conclure(depot, d, env, sortie, erreurs):
-    """Commit des restes, puis le paquet <base>..agent/<tâche>. Rend (commits, branche ou None)."""
+def neutraliser_attributs(depot):
+    """Pose ATTRIBUTS_NEUTRES dans $GIT_DIR/info/attributes (jamais à travers un lien) ; rend les octets du fichier de l'agent
+    (None s'il n'y en avait pas, ou s'il n'était pas un fichier ordinaire de 1 Mo au plus) pour `restaurer_attributs`."""
+    info = os.path.join(depot, ".git", "info")
+    if os.path.islink(info) or (os.path.lexists(info) and not os.path.isdir(info)):
+        retirer(info)
+    os.makedirs(info, exist_ok=True)
+    chemin = os.path.join(info, "attributes")
+    try:
+        ancien = lire_octets(chemin, 1024 * 1024) if os.path.lexists(chemin) else None
+    except Refus:
+        ancien = None
+    retirer(chemin)
+    _creer(chemin, ATTRIBUTS_NEUTRES)
+    return ancien
+
+
+def restaurer_attributs(depot, ancien):
+    chemin = os.path.join(depot, ".git", "info", "attributes")
+    retirer(chemin)
+    if ancien is not None:
+        _creer(chemin, ancien)
+
+
+def _creer(chemin, donnees):
+    fd = os.open(chemin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | SANS_LIEN | getattr(os, "O_BINARY", 0), 0o644)
+    try:
+        ecrire_tout(fd, donnees)
+    finally:
+        os.close(fd)
+
+
+def conclure(depot, d, env, sortie, erreurs, delai=DELAI_CONCLURE_S):
+    """Commit des restes, puis le paquet <base>..agent/<tâche>. Rend (commits, branche ou None). Le dépôt est celui de l'agent :
+    git y tourne avec SURETE_GIT et des attributs neutres, et le tout tient en `delai` secondes (au-delà :
+    subprocess.TimeoutExpired, le reste est abandonné, l'appelant conclut sans paquet)."""
+    limite = time.monotonic() + delai
+
+    def reste_s():
+        r = limite - time.monotonic()
+        if r <= 0:
+            raise subprocess.TimeoutExpired("git", delai)
+        return r
+
     ref = f"refs/heads/agent/{d['tache']}"
     paquet = os.path.join(sortie, "resultat.bundle")
     retirer(paquet)
-    if git(depot, "rev-parse", "-q", "--verify", ref + "^{commit}", env=env, check=False, capture_output=True).returncode:
-        erreurs.ecrire(f"entree-agent : la branche agent/{d['tache']} n'existe plus : rien à rapporter\n")
+    gitdir = os.path.join(depot, ".git")
+    if os.path.islink(gitdir) or not os.path.isdir(gitdir):
+        erreurs.ecrire("entree-agent : /travail/projet/.git n'est plus un dossier : rien à rapporter\n")
         return 0, None
-    tete = git(depot, "symbolic-ref", "-q", "HEAD", env=env, check=False, capture_output=True).stdout.decode().strip()
-    reste = git(depot, "status", "--porcelain", "-z", "--untracked-files=all", env=env, capture_output=True).stdout
-    if reste:
-        if tete != ref:
-            erreurs.ecrire(f"entree-agent : travail non commité hors de agent/{d['tache']} : laissé de côté\n")
+    reste_s()
+    try:
+        ancien, neutre = neutraliser_attributs(depot), True
+    except OSError:                       # .git rendu non inscriptible : les commits seuls partent, aucun `add` sans filtre sûr
+        ancien, neutre = None, False
+    try:
+        if git(depot, "rev-parse", "-q", "--verify", ref + "^{commit}", env=env, check=False, capture_output=True,
+               timeout=reste_s()).returncode:
+            erreurs.ecrire(f"entree-agent : la branche agent/{d['tache']} n'existe plus : rien à rapporter\n")
+            return 0, None
+        tete = git(depot, "symbolic-ref", "-q", "HEAD", env=env, check=False, capture_output=True,
+                   timeout=reste_s()).stdout.decode("utf-8", "replace").strip()
+        reste = b""
+        if not neutre:                    # sans attributs neutres, même `git status` pourrait lancer un filtre de l'agent
+            erreurs.ecrire("entree-agent : .git/info non inscriptible : travail non commité laissé de côté\n")
         else:
-            git(depot, "add", "-A", env=env, capture_output=True)
-            git(depot, "-c", f"user.name={IDENTITE[0]}", "-c", f"user.email={IDENTITE[1]}", "commit", "-q", "--no-verify",
-                "-m", MESSAGE_RESTES, env=env, capture_output=True)
-    if git(depot, "cat-file", "-e", d["base"] + "^{commit}", env=env, check=False, capture_output=True).returncode:
-        erreurs.ecrire("entree-agent : la base n'est pas dans le dépôt : aucun paquet\n")
-        return 0, None
-    commits = int(sortie_git(depot, "rev-list", "--count", f"{d['base']}..{ref}", env=env) or 0)
-    if commits == 0:
-        return 0, None
-    git(depot, "bundle", "create", "-q", paquet, f"{d['base']}..{ref}", env=env, capture_output=True)
-    return commits, f"agent/{d['tache']}"
+            reste = git(depot, "status", "--porcelain", "-z", "--untracked-files=all", "--ignore-submodules=all",
+                        env=env, capture_output=True, timeout=reste_s()).stdout
+        if reste:
+            if tete != ref:
+                erreurs.ecrire(f"entree-agent : travail non commité hors de agent/{d['tache']} : laissé de côté\n")
+            else:
+                git(depot, "add", "-A", env=env, capture_output=True, timeout=reste_s())
+                git(depot, "-c", f"user.name={IDENTITE[0]}", "-c", f"user.email={IDENTITE[1]}", "commit", "-q",
+                    "--no-verify", "--no-gpg-sign", "-m", MESSAGE_RESTES, env=env, capture_output=True, timeout=reste_s())
+        if git(depot, "cat-file", "-e", d["base"] + "^{commit}", env=env, check=False, capture_output=True,
+               timeout=reste_s()).returncode:
+            erreurs.ecrire("entree-agent : la base n'est pas dans le dépôt : aucun paquet\n")
+            return 0, None
+        commits = int(sortie_git(depot, "rev-list", "--count", f"{d['base']}..{ref}", env=env, timeout=reste_s()) or 0)
+        if commits == 0:
+            return 0, None
+        git(depot, "bundle", "create", "-q", paquet, f"{d['base']}..{ref}", env=env, capture_output=True, timeout=reste_s())
+        return commits, f"agent/{d['tache']}"
+    finally:
+        if neutre:
+            try:
+                restaurer_attributs(depot, ancien)
+            except OSError:
+                pass
 
 
 # ------------------------------------------------------------------------------------------------------------- sorties
@@ -518,6 +610,7 @@ def principal():
     env = env_git(c["maison"])
     try:
         d = valider_demande(lire_json(os.path.join(c["entree"], "demande.json")))
+        d["duree_s"] = duree_hote(d["duree_s"])           # celle de l'enveloppe fait foi (même échéance que le veilleur)
         options = valider_argv(lire_json(os.path.join(c["entree"], "argv.json"))) + ["--max-turns", str(d["tours"])]
         jeton = lire_jeton(c["jeton"])
         depot = preparer_depot(c, d, env)

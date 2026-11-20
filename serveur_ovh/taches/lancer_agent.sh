@@ -41,8 +41,12 @@
 #   conteneur parti avec sortie/fin.json -> terminee, ok (le code de claude est dans fin.json ; "echeance": true -> limite),
 #   sans -> echouee, erreur ; sortie/ au-delà de LIMITE_SORTIE_KO, travail/ + maison/ au-delà de TRAVAIL_MAX_KO (sondages du
 #   en taille apparente, pas des quotas), moins de LIBRE_MIN_KO libres sur le disque -> terminee, limite.
+# Durée : duree_s (argument 3) fait foi ; elle est passée au conteneur (-e AGENT_DUREE_S) : l'échéance interne de l'entrée
+#   (duree_s - 120 s) et celle du veilleur partent de la même valeur, quoi que porte limites.duree_s dans demande.json.
+# Hôte exigé : kernel.yama.ptrace_scope >= 1 (lu dans /proc/sys/kernel/yama/ptrace_scope ; 0 -> echouee, rien ne démarre ;
+#   illisible -> avertissement dans veilleur.log et sur stderr, la tâche démarre).
 # Réservées aux tests : ENVELOPPE_SONDE_S (période de surveillance, 5 s), ENVELOPPE_SORTIE_MAX_KO, ENVELOPPE_TRAVAIL_MAX_KO,
-#   ENVELOPPE_DU_TRAVAIL_S, ENVELOPPE_LIBRE_MIN_KO.
+#   ENVELOPPE_DU_TRAVAIL_S, ENVELOPPE_LIBRE_MIN_KO, ENVELOPPE_PTRACE_SCOPE (fichier lu à la place de celui de Yama).
 set -u
 export LC_ALL=C
 exec </dev/null
@@ -73,6 +77,8 @@ MOTIF_REPREND_NUL='"reprend"[[:space:]]*:[[:space:]]*null'
 MOTIF_PROJET='"projet"[[:space:]]*:[[:space:]]*"([^"\\]{1,200})"'
 MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
+PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
+if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
 
 refuser() { printf '%s\n' "lancer_agent : $1" >&2; exit 2; }
 
@@ -347,6 +353,17 @@ fi
   fin_erreur "Jeton de l'abonnement absent (~/agent-identifiants/jeton) : le Directeur l'enregistre une fois sur le serveur par bash ~/myiafactory/serveur_ovh/taches/enregistrer_jeton.sh."
 [[ $UTILISATEUR =~ ^[0-9]{1,10}:[0-9]{1,10}$ ]] || fin_erreur "Utilisateur de l'hôte illisible (id -u, id -g)."
 [ "${UTILISATEUR%%:*}" != 0 ] || fin_erreur "Refusé : un agent ne tourne jamais sous root (enveloppe à lancer par un utilisateur ordinaire)."
+# ptrace : claude tourne sous le même utilisateur que l'entrée de l'agent (PID 1 du conteneur) ; avec ptrace_scope 0, il
+# pourrait la tracer et lui faire écrire n'importe quoi. 1 (Ubuntu par défaut) : seul un ancêtre trace, l'entrée est hors
+# d'atteinte. 0 : refusé ; fichier absent ou illisible (Yama absent) : avertissement dans veilleur.log et sur stderr.
+scope=""
+if [ -f "$PTRACE_SCOPE" ]; then IFS= read -r scope < "$PTRACE_SCOPE" 2>/dev/null; fi
+case "$scope" in
+  0) fin_erreur "Refusé : kernel.yama.ptrace_scope vaut 0 sur ce serveur (un agent pourrait tracer l'entrée de son conteneur) : à régler à 1 (sudo sysctl -w kernel.yama.ptrace_scope=1, et dans /etc/sysctl.d/ pour le garder)." ;;
+  [1-3]) ;;
+  *) printf '%s\n' "lancer_agent : avertissement : kernel.yama.ptrace_scope inconnu ($PTRACE_SCOPE illisible) : 1 au moins est attendu." |
+       tee -a "$DOSSIER/veilleur.log" >&2 ;;
+esac
 
 # Reprise : « "reprend": "<id>" » de demande.json (écrit par le poste) ; une clé en double ou une valeur autre qu'un
 # identifiant ou null est refusée.
@@ -422,6 +439,7 @@ fi
 COMMANDE=(run --pull never -d --rm --name "tache-$ID" --label "$GENRE" --user "$UTILISATEUR" --read-only --tmpfs /tmp:size=1g
   --cap-drop ALL --security-opt no-new-privileges --pids-limit 512
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS" --network "$RESEAU" -e HOME=/maison
+  -e "AGENT_DUREE_S=$DUREE"
   -v "$DOSSIER/entree:/entree:ro" -v "$DOSSIER/travail:/travail" -v "$DOSSIER/maison:/maison" -v "$DOSSIER/sortie:/sortie"
   -v "$JETON:/run/identifiants/jeton:ro")
 if [ "$MODE" = pilote ]; then COMMANDE+=(-v "$DOSSIER/pont:/pont" -v "$DOSSIER/outil:/outil:ro"); fi

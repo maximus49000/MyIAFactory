@@ -157,3 +157,90 @@ class TestRecetteEmulateur(unittest.TestCase):
             self.assertEqual(deport.avertissements(lieux, ANDROID), [])
         lieux = {"apk": "github", "tests": "poste", "emulateur": "poste", "charge": "poste", self.RECETTE: "serveur"}
         self.assertFalse(any(self.RECETTE in t for t in deport.avertissements(lieux)))
+
+
+class TestAccordDuBureau(unittest.TestCase):
+    """R10 : l'accord ne vaut que pour un projet ENREGISTRÉ au bureau du Directeur, lu dans SES réglages enregistrés."""
+    RECETTE = "recette-emulateur"
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.tmp = Path(self._t.name).resolve()
+        self.bureau = self.tmp / "MyIAFactory" / "bureau.json"
+        self.bureau.parent.mkdir()
+
+    def projet(self, nom, lieu="serveur", reglages=".factory/reglages.json"):
+        d = self.tmp / nom
+        (d / ".factory").mkdir(parents=True, exist_ok=True)
+        f = d / reglages
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: lieu}}}), encoding="utf-8")
+        return d, f
+
+    def inscrire(self, *chemins):
+        self.bureau.write_text(json.dumps({"projets": [str(c) for c in chemins]}), encoding="utf-8")
+
+    def refus(self, racine, **k):
+        from bureau.deport_types import refus_accord
+        return refus_accord(str(racine), self.RECETTE, bureau=str(self.bureau), **k)
+
+    def test_dossier_non_enregistre_avec_des_reglages_forges_refuse(self):
+        d, _ = self.projet("forge")
+        autre, f = self.projet("inscrit")
+        self.inscrire(f)
+        self.assertIn("n'est pas enregistré dans le bureau", self.refus(d))
+        self.assertIsNone(self.refus(autre))
+        from bureau.deport_types import accord_serveur
+        self.assertFalse(accord_serveur(str(d), self.RECETTE, bureau=str(self.bureau)))
+        self.assertTrue(accord_serveur(str(autre), self.RECETTE, bureau=str(self.bureau)))
+
+    def test_projet_enregistre_sans_le_reglage_refuse(self):
+        d, f = self.projet("p", lieu="poste")
+        self.inscrire(f)
+        self.assertIn("Réglez le lieu de l'action sur serveur", self.refus(d))
+
+    def test_dossier_imbrique_refuse_sauf_s_il_est_enregistre_lui_meme(self):
+        d, f = self.projet("p", lieu="poste")
+        sous, fs = self.projet("p/sous")
+        self.inscrire(f)
+        self.assertIn("n'est pas enregistré", self.refus(sous))
+        self.inscrire(f, fs)
+        self.assertIsNone(self.refus(sous))
+        self.assertIsNotNone(self.refus(d))
+
+    def test_chemin_relatif_au_bureau_et_entree_objet(self):
+        d, f = self.projet("p")
+        self.bureau.write_text(json.dumps({"projets": [{"chemin": "../p/.factory/reglages.json", "id": "p"}]}),
+                               encoding="utf-8")
+        self.assertIsNone(self.refus(d))
+
+    def test_reglages_enregistres_ailleurs_qu_a_factory(self):
+        d, f = self.projet("demo", reglages="reglages.json")      # réglages à la racine (comme la démo)
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {}}}), encoding="utf-8")
+        self.inscrire(f)
+        self.assertIsNone(self.refus(d))                            # lu dans le fichier enregistré
+        self.assertIsNone(self.refus(d, reglages=str(f)))
+        self.assertIn("--reglages", self.refus(d, reglages=str(d / ".factory" / "reglages.json")))
+        # le fichier .factory/reglages.json qui dit serveur ne vaut rien si ce n'est pas lui qui est enregistré
+        f.write_text(json.dumps({"deport": {"lieux": {}}}), encoding="utf-8")
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}),
+                                                      encoding="utf-8")
+        self.assertIsNotNone(self.refus(d))
+
+    def test_bureau_absent_abime_ou_enorme_refuse(self):
+        d, f = self.projet("p")
+        self.assertIn("n'est pas enregistré", self.refus(d))                       # absent
+        for contenu in ("pas du json", "[1]", json.dumps({"projets": "x"}), "[" * 100000 + "]" * 100000):
+            self.bureau.write_text(contenu, encoding="utf-8")
+            self.assertIsNotNone(self.refus(d), contenu[:20])
+        enorme = json.dumps({"projets": [str(f)], "bourrage": "x" * (1024 * 1024)})
+        self.bureau.write_text(enorme, encoding="utf-8")
+        self.assertIsNotNone(self.refus(d))
+
+    def test_reglages_enormes_refuses(self):
+        d, f = self.projet("p")
+        self.inscrire(f)
+        f.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}, "bourrage": "x" * (1024 * 1024)}),
+                     encoding="utf-8")
+        self.assertIsNotNone(self.refus(d))

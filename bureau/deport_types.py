@@ -4,11 +4,12 @@ Une entrée de catalogue : `libelle` (texte affiché), `commande` (commande par 
 `produit` (artefact produit, ou None), `consomme` (actions dont elle dépend), `artefact` (chemin publié, ou None),
 `lieux` (lieux où elle peut tourner) et `bientot` (texte qui explique un lieu indisponible, ou None).
 
-Logique pure, sans accès disque hors `catalogue_du_projet` et `accord_serveur`. Reste compatible Python 3.9 : le code déporté est aussi
-lancé par les agents.
+Logique pure, sans accès disque hors `catalogue_du_projet` et l'accord au serveur (`refus_accord`, qui lit le fichier
+du bureau et les réglages enregistrés). Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
 import json
 import os
+import stat
 
 _CHEMIN_APK = "**/build/outputs/apk/**/*.apk"
 _PEU_FIABLE = "peu fiable sur GitHub, utilisez le poste ou le serveur"
@@ -17,6 +18,14 @@ _SERVEUR_SEUL = "ne tourne que sur le serveur (accord permanent pour ce projet)"
 # Les actions que `deporter` sait servir sur le serveur (tâches d'émulation, `outils/serveur_tache_cli.py`). Une telle
 # action ne tourne nulle part ailleurs : pas de défaut au poste, le Directeur la règle sur serveur projet par projet.
 SERVIES_AU_SERVEUR = ("recette-emulateur",)
+
+# Le fichier du bureau du Directeur : ses `projets[].chemin` (fichiers de réglages) disent quels projets existent.
+BUREAU = os.path.join(os.path.expanduser("~"), "MyIAFactory", "bureau.json")
+TAILLE_MAX_REGLAGES = 1024 * 1024
+MSG_REGLEZ_SERVEUR = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+MSG_NON_ENREGISTRE = ("Ce projet n'est pas enregistré dans le bureau (%s ; fichier du bureau : %s) : l'accord permanent "
+                      "pour « %s » ne vaut que pour un projet du bureau du Directeur. Ajoutez-le au bureau, puis " +
+                      MSG_REGLEZ_SERVEUR[0].lower() + MSG_REGLEZ_SERVEUR[1:])
 
 
 def _entree(libelle, commande="", produit=None, consomme=(), artefact=None, lieux=("poste", "github", "serveur"),
@@ -111,25 +120,83 @@ def servie_au_serveur(nom, catalogue):
     return nom in SERVIES_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
 
 
-def reglages_du_projet(racine):
-    """Le seul fichier où vit l'accord permanent d'un projet : `<racine>/.factory/reglages.json`."""
-    return os.path.join(str(racine), ".factory", "reglages.json")
-
-
-def accord_serveur(racine, action):
-    """Vrai si le projet `racine` a réglé `action` (servie au serveur) sur `serveur` dans SES réglages
-    (`reglages_du_projet`) : l'accord permanent du Directeur pour ce projet et cette action. Jamais hérité du bureau,
-    jamais lu dans un autre fichier ; faux au moindre ennui (fichier absent, illisible, valeur autre)."""
-    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
-        return False
+def _lire_json_sur(chemin):
+    """Le JSON d'un fichier ordinaire (ni lien, ni dossier, ni périphérique) d'au plus `TAILLE_MAX_REGLAGES` octets ;
+    None au moindre ennui (absent, trop gros, illisible, JSON invalide ou trop profond)."""
     try:
-        with open(reglages_du_projet(racine), encoding="utf-8-sig") as f:
-            donnees = json.load(f)
-    except (OSError, ValueError, RecursionError):
-        return False
-    deport = donnees.get("deport") if isinstance(donnees, dict) else None
-    lieux = deport.get("lieux") if isinstance(deport, dict) else None
-    return isinstance(lieux, dict) and lieux.get(action) == "serveur"
+        s = os.lstat(chemin)
+        if not stat.S_ISREG(s.st_mode) or s.st_size > TAILLE_MAX_REGLAGES:
+            return None
+        with open(chemin, "rb") as f:
+            brut = f.read(TAILLE_MAX_REGLAGES + 1)      # la taille est bornée à la lecture, quoi qu'ait dit lstat
+        if len(brut) > TAILLE_MAX_REGLAGES:
+            return None
+        return json.loads(brut.decode("utf-8-sig"))
+    except (OSError, ValueError, MemoryError, RecursionError):
+        return None
+
+
+def _norme(chemin):
+    """Un chemin comparable : absolu, liens et alias résolus, casse ignorée sous Windows."""
+    return os.path.normcase(os.path.realpath(os.path.abspath(str(chemin))))
+
+
+def _racine_des_reglages(fichier):
+    """Le projet d'un fichier de réglages : son dossier, ou le parent de `.factory`."""
+    dossier = os.path.dirname(fichier)
+    return os.path.dirname(dossier) if os.path.normcase(os.path.basename(dossier)) == ".factory" else dossier
+
+
+def reglages_enregistres(racine, bureau=None):
+    """Les fichiers de réglages (chemins réels) que le bureau enregistre pour le projet `racine`, dans son ordre ;
+    [] si aucun ou si le fichier du bureau est absent, illisible ou abîmé. Les chemins relatifs le sont au bureau."""
+    bureau = BUREAU if bureau is None else str(bureau)
+    donnees = _lire_json_sur(bureau)
+    projets = donnees.get("projets") if isinstance(donnees, dict) else None
+    if not isinstance(projets, list):
+        return []
+    base, cible, trouves = os.path.dirname(os.path.abspath(bureau)), _norme(racine), []
+    for entree in projets:
+        chemin = entree.get("chemin") if isinstance(entree, dict) else entree
+        if not isinstance(chemin, str) or not chemin.strip() or "\x00" in chemin:
+            continue
+        try:
+            reel = os.path.realpath(os.path.join(base, chemin))
+            if _norme(_racine_des_reglages(reel)) == cible:
+                trouves.append(reel)
+        except (OSError, ValueError):
+            continue
+    return trouves
+
+
+def refus_accord(racine, action, bureau=None, reglages=None):
+    """None si le Directeur a donné son accord permanent pour lancer `action` (servie au serveur) sur le projet
+    `racine` ; sinon le message du refus (en français). L'accord ne vaut que pour un projet ENREGISTRÉ dans le bureau
+    (`bureau`, par défaut `BUREAU`) et se lit dans le fichier de réglages qu'il enregistre pour ce projet (jamais un
+    dossier quelconque, un `.factory` imbriqué ni un autre fichier) ; `reglages` (l'option `--reglages`) n'est admis que
+    s'il est ce fichier enregistré. Fichier du bureau absent ou abîmé : refus."""
+    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
+        return "« %s » n'est pas une action servie au serveur pour ce type de projet." % action
+    enregistres = reglages_enregistres(racine, bureau)
+    if not enregistres:
+        return MSG_NON_ENREGISTRE % (racine, BUREAU if bureau is None else bureau, action)
+    if reglages is not None:
+        enregistres = [r for r in enregistres if _norme(r) == _norme(reglages)]
+        if not enregistres:
+            return ("--reglages (%s) n'est pas le fichier de réglages que le bureau enregistre pour ce projet : il ne "
+                    "vaut pas accord. %s" % (reglages, MSG_REGLEZ_SERVEUR))
+    for fichier in enregistres:
+        donnees = _lire_json_sur(fichier)
+        deport = donnees.get("deport") if isinstance(donnees, dict) else None
+        lieux = deport.get("lieux") if isinstance(deport, dict) else None
+        if isinstance(lieux, dict) and lieux.get(action) == "serveur":
+            return None
+    return "« %s » n'est pas réglée sur serveur pour ce projet. %s" % (action, MSG_REGLEZ_SERVEUR)
+
+
+def accord_serveur(racine, action, bureau=None, reglages=None):
+    """Vrai si `refus_accord` ne refuse pas."""
+    return refus_accord(racine, action, bureau, reglages) is None
 
 
 def sans_poste(entree):

@@ -113,6 +113,13 @@ class Base(unittest.TestCase):
         self.apk = Path(self._tmp.name) / "app.apk"
         self.apk.write_bytes(b"PK\x03\x04apk")
         self.moteur, self.recette = FauxMoteur(), FauxRecette()
+        # le projet est enregistré dans un bureau d'essai (jamais le vrai ~/MyIAFactory/bureau.json)
+        self.bureau = Path(self._tmp.name) / "bureau.json"
+        self.bureau.write_text(json.dumps({"projets": [str(self.projet / ".factory" / "reglages.json")]}),
+                               encoding="utf-8")
+        ancien = cli.BUREAU
+        cli.BUREAU = str(self.bureau)
+        self.addCleanup(setattr, cli, "BUREAU", ancien)
 
     def lancer(self, *args, moteur=None, recette=None, dossier=True):
         sortie, erreur = io.StringIO(), io.StringIO()
@@ -355,6 +362,38 @@ class TestAccordDuProjet(Base):
         self.assertEqual(code, 1)
         self.assertIn("APK", erreur)
         self.assertEqual(self.moteur.appels, [])
+
+    def test_la_porte_passe_avant_la_lecture_de_l_apk(self):
+        (self.projet / ".factory" / "reglages.json").unlink()
+        code, _, erreur = self.tache("lancer", "--apk", str(self.projet / "absent.apk"), "--mode", "pilote",
+                                     "--projet", str(self.projet))
+        self.assertEqual(code, 2)                           # le refus d'accord, pas « APK introuvable » (1)
+        self.assertIn(self.MSG, erreur)
+
+    def test_projet_non_enregistre_refuse(self):
+        forge = Path(self._tmp.name) / "forge"
+        (forge / ".factory" / "recettes").mkdir(parents=True)
+        (forge / ".factory" / "reglages.json").write_text(
+            json.dumps({"deport": {"lieux": {"recette-emulateur": "serveur"}}}), encoding="utf-8")
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(forge))
+        self.assertEqual(code, 2)
+        self.assertIn("n'est pas enregistré dans le bureau", erreur)
+        self.assertEqual(self.moteur.appels, [])
+        for contenu in ("abîmé", None):
+            if contenu is None:
+                self.bureau.unlink()
+            else:
+                self.bureau.write_text(contenu, encoding="utf-8")
+            code, _, _ = self.lancer_pilote()
+            self.assertEqual(code, 2)
+            self.assertEqual(self.moteur.appels, [])
+
+    def test_un_sous_dossier_est_juge_par_son_projet(self):
+        sous = self.projet / "app" / "src"
+        sous.mkdir(parents=True)
+        code, sortie, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(sous))
+        self.assertEqual(code, 0, erreur)
+        self.assertEqual(self.moteur.appels[0][1].projet, self.projet.name)
 
 
 class TestTacheCommandes(Base):

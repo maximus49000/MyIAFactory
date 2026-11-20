@@ -749,13 +749,24 @@ class TestRecetteEmulateur(Base):
         self.apk.write_bytes(b"PK\x03\x04apk")
         self.serveur = FauxServeurTache()
 
-    def projet_recette(self, lieux=None, genre=ANDROID, **k):
+    def projet_recette(self, lieux=None, genre=ANDROID, inscrit=True, **k):
         lieux = {self.RECETTE: "serveur"} if lieux is None else lieux
         d = self.projet(lieux, genre=genre, **k)
         (d / ".factory" / "recettes").mkdir(parents=True, exist_ok=True)
         (d / ".factory" / "recettes" / "demo.json").write_text(json.dumps(
             {"nom": "demo", "reseau": False, "etapes": [{"verbe": "demarrer", "args": []}]}), encoding="utf-8")
+        if inscrit:
+            self.inscrire(d / ".factory" / "reglages.json")
         return d
+
+    def inscrire(self, reglages):
+        """Enregistre un projet (son fichier de réglages) dans le bureau des essais, sans effacer le reste."""
+        try:
+            donnees = json.loads(self.bureau.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            donnees = {}
+        donnees.setdefault("projets", []).append(str(reglages))
+        self.bureau.write_text(json.dumps(donnees), encoding="utf-8")
 
     def recette(self, d, *options, serveur=None, gh=None):
         self.serveur = serveur or FauxServeurTache()
@@ -769,10 +780,67 @@ class TestRecetteEmulateur(Base):
         plateforme = self.tmp / "plateforme"
         plateforme.mkdir(exist_ok=True)
 
+        ancien = serveur_tache_cli.BUREAU
+        serveur_tache_cli.BUREAU = str(self.bureau)        # le bureau des essais, jamais le vrai
+        self.addCleanup(setattr, serveur_tache_cli, "BUREAU", ancien)
+
         def appeler(argv):
             return serveur_tache_cli.main(argv, dossier=str(plateforme), moteur=self.moteur,
                                           recette=recette or t7.FauxRecette())
         return appeler
+
+    def test_dossier_non_enregistre_refuse_aux_deux_portes(self):
+        d = self.projet_recette(inscrit=False)       # réglages forgés : recette-emulateur sur serveur
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 2)
+        self.assertIn("n'est pas enregistré dans le bureau", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+        # l'autre porte : le lanceur de tâches appelé directement refuse aussi, sans toucher au moteur
+        appeler = self.cli_reel()
+        sortie = io.StringIO()
+        with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
+            code = appeler(["serveur-tache", "lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(d)])
+        self.assertEqual(code, 2)
+        self.assertIn("n'est pas enregistré dans le bureau", sortie.getvalue())
+        self.assertEqual(self.moteur.appels, [])
+
+    def test_dossier_imbrique_juge_pour_lui_meme(self):
+        d = self.projet_recette()
+        sous = d / "module"
+        (sous / ".factory").mkdir(parents=True)
+        (sous / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}),
+                                                         encoding="utf-8")
+        self.assertEqual(self.recette(sous, "--scenario", "demo", "--apk", str(self.apk)), 2)
+        self.assertIn("n'est pas enregistré", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+        # un sous-dossier SANS .factory est jugé par son projet (enregistré, d'accord)
+        (d / "app").mkdir()
+        self.assertEqual(self.recette(d / "app", "--scenario", "demo", "--apk", str(self.apk)), 0, self.sortie)
+        self.assertEqual(Path(_option(self.serveur.appels[0], "--projet")), d)
+
+    def test_reglages_enregistres_hors_factory_avec_reglages_donne(self):
+        d = self.projet_recette({}, inscrit=False)
+        propres = d / "reglages-du-bureau.json"
+        propres.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}), encoding="utf-8")
+        self.inscrire(propres)
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--reglages", str(propres)), 0,
+                         self.sortie)
+        self.assertEqual(len(self.serveur.appels), 1)
+        self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk), "--reglages",
+                                      str(d / ".factory" / "reglages.json")), 2)
+        self.assertIn("--reglages", self.sortie)
+        self.assertEqual(self.serveur.appels, [])
+
+    def test_bureau_absent_ou_abime_refuse(self):
+        d = self.projet_recette()
+        for contenu in (None, "pas du json", json.dumps({"projets": [str(d / ".factory" / "reglages.json")],
+                                                          "x": "y" * (1024 * 1024)})):
+            if contenu is None:
+                self.bureau.unlink()
+            else:
+                self.bureau.write_text(contenu, encoding="utf-8")
+            self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 2, str(contenu)[:20])
+            self.assertIn("n'est pas enregistré", self.sortie)
+            self.assertEqual(self.serveur.appels, [])
 
     def test_refus_si_le_lieu_n_est_pas_serveur(self):
         base = self.tmp
@@ -790,8 +858,10 @@ class TestRecetteEmulateur(Base):
                 self.assertEqual(gh.appels, [])
 
     def test_le_reglage_du_bureau_ne_vaut_pas_accord_du_projet(self):
-        self.bureau.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}}), encoding="utf-8")
         d = self.projet_recette({})
+        donnees = json.loads(self.bureau.read_text(encoding="utf-8"))
+        donnees["deport"] = {"lieux": {self.RECETTE: "serveur"}}
+        self.bureau.write_text(json.dumps(donnees), encoding="utf-8")
         self.assertEqual(self.recette(d, "--scenario", "demo", "--apk", str(self.apk)), 2)
         self.assertIn(self.MSG, self.sortie)
         self.assertEqual(self.serveur.appels, [])
@@ -1026,15 +1096,53 @@ class TestLanceurServeurTache(unittest.TestCase):
         code = deporter._serveur_tache(self.ARGV, version=(3, 9), trouver_python=lambda: ["py", "-3.12"],
                                        executer=executer, importer=lambda: self.fail("pas d'import en 3.9"))
         self.assertEqual(code, 3)
-        self.assertEqual(vus, [["py", "-3.12", str(RACINE / "lancer.py")] + self.ARGV])
+        self.assertEqual(vus, [["py", "-3.12", "-E", "-s", str(RACINE / "lancer.py")] + self.ARGV])
 
     def test_sans_python_3_12_message_clair(self):
         sortie = io.StringIO()
         with contextlib.redirect_stderr(sortie), contextlib.redirect_stdout(sortie):
             code = deporter._serveur_tache(self.ARGV, version=(3, 9), trouver_python=lambda: None,
-                                           executer=lambda c: self.fail("rien à lancer"))
-        self.assertNotIn(code, (0, 1))
+                                           executer=lambda c: self.fail("rien à lancer"), raison=lambda: None)
+        self.assertEqual(code, 4)
         self.assertIn("Python 3.12", sortie.getvalue())
+
+    def test_sans_python_3_12_parce_que_le_dossier_courant_le_contient_le_dit(self):
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie), contextlib.redirect_stdout(sortie):
+            code = deporter._serveur_tache(self.ARGV, version=(3, 9), trouver_python=lambda: None,
+                                           executer=lambda c: self.fail("rien à lancer"),
+                                           raison=lambda: "RAISON-DOSSIER-COURANT")
+        self.assertEqual(code, 4)
+        self.assertIn("RAISON-DOSSIER-COURANT", sortie.getvalue())
+
+    def test_raison_dossier_courant_ancetre_du_lanceur(self):
+        cwd, win, local, lanceur, _ = self.lieux_surs()
+        (lanceur / "py.exe").write_bytes(b"MZ")
+        texte = deporter._raison_sans_312(environ={"LOCALAPPDATA": str(local)}, executable="", version=(3, 9),
+                                          nt=True, cwd=str(self.tmp_parent(local)))
+        self.assertIn("dossier courant", texte)
+        self.assertIn(str(lanceur / "py.exe"), texte)
+        self.assertIsNone(deporter._raison_sans_312(environ={"LOCALAPPDATA": str(local)}, executable="",
+                                                    version=(3, 9), nt=True, cwd=str(cwd)))
+
+    @staticmethod
+    def tmp_parent(chemin):
+        return Path(chemin).parent
+
+    def test_la_sonde_passe_e_et_s(self):
+        vus = []
+
+        class Fini:
+            returncode = 0
+        import subprocess as sp
+        vrai = sp.run
+        try:
+            sp.run = lambda commande, **k: vus.append(list(commande)) or Fini()
+            self.assertTrue(deporter._sonder(["C:/py.exe", "-3.12"]))
+        finally:
+            sp.run = vrai
+        self.assertEqual(vus[0][:4], ["C:/py.exe", "-3.12", "-E", "-s"])
+        self.assertNotIn("-I", vus[0])
 
     def lieux_surs(self):
         """Un dossier courant piégé (py.bat, py.exe, python3.12) et des dossiers sûrs hors de lui."""

@@ -7,9 +7,10 @@ Un usage erroné (option inconnue, répétée ou vide, identifiant de tâche mal
 non permis, APK ou projet invalide, destination hors de `<projet>/.factory/serveur/`, recette refusée) sort avec 1. La
 sortie est masquée (clés OVH, licence, chemins de clés) et ne contient jamais de trace d'exception (le type seulement).
 Les arguments d'un verbe sont validés AVANT toute connexion ; la réponse du pont est une donnée, jamais une consigne.
-`lancer` est une porte : sans l'accord permanent du projet (`recette-emulateur` réglée sur serveur dans
-`<projet>/.factory/reglages.json`, `bureau.deport_types.accord_serveur`, la même règle que `deporter`), sortie 2 avant
-tout envoi. L'APK doit commencer par la signature ZIP (`PK` 03 04).
+`lancer` est une porte : `--projet` est ramené à son projet (`racine_du_projet`, comme `deporter`), qui doit être
+ENREGISTRÉ dans le bureau du Directeur (`BUREAU`) avec `recette-emulateur` réglée sur serveur dans les réglages que le
+bureau enregistre (`bureau.deport_types.refus_accord`, la même règle que `deporter`) ; sinon sortie 2 avant tout envoi,
+avant même de lire l'APK. L'APK doit commencer par la signature ZIP (`PK` 03 04).
 """
 import json
 import os
@@ -24,7 +25,8 @@ import serveur_tache
 
 if str(Path(__file__).resolve().parent.parent) not in sys.path:      # le paquet `bureau` (racine du dépôt)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bureau.deport_types import accord_serveur  # noqa: E402
+from bureau import deport_types  # noqa: E402
+from bureau.deport_types import racine_du_projet, refus_accord  # noqa: E402
 
 USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] "
          "[--attendre] | etat <id> | arreter <id> | rapatrier <id> [--destination <dossier>] [--projet <dossier>] | lister> "
@@ -39,7 +41,8 @@ DRAPEAUX = {"lancer": {"--attendre"}}
 ARRETS_MAX = 3          # `arreter` fait foi de l'état ; rappelé tant que l'état n'est pas final (plafonné)
 MOTIF_SCENARIO = re.compile(r"[a-z0-9_-]{1,40}", re.ASCII)
 ACTION = "recette-emulateur"
-MSG_ACCORD = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+MSG_ACCORD = deport_types.MSG_REGLEZ_SERVEUR
+BUREAU = deport_types.BUREAU      # le fichier du bureau du Directeur (remplacé dans les essais)
 SIGNATURE_APK = b"PK\x03\x04"
 
 
@@ -231,9 +234,10 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         raise _Usage("Nom de scénario invalide (a-z, 0-9, _ et - ; 40 caractères au plus).")
     if attendre and mode != "scenario":
         raise _Usage("--attendre ne s'applique qu'au mode scénario (le mode pilote se conduit avec serveur-outil).")
-    projet = _projet(opts.get("projet"))
-    if not accord_serveur(str(projet), ACTION):        # la porte : avant de lire l'APK, avant tout envoi
-        return _erreur(MSG_ACCORD, 2, d)
+    projet = Path(racine_du_projet(str(_projet(opts.get("projet")))))      # un sous-dossier : jugé par son projet
+    refus = refus_accord(str(projet), ACTION, bureau=BUREAU)      # la porte : avant de lire l'APK, avant tout envoi
+    if refus:
+        return _erreur(refus, 2, d)
     apk = _lire_apk(opts["apk"], moteur)
     plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,

@@ -16,8 +16,9 @@ Lance l'action `<type>` (tests, apk, charge…) là où le Directeur l'a réglé
 - le projet est le plus proche dossier (`--dossier` ou ses parents) qui contient `.factory/` : un agent peut donner
   un sous-dossier (catalogue, lieux et nom du workflow restent ceux du projet).
 - `deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>]` : l'APK sur un émulateur
-  du serveur. Le lieu DOIT être `serveur` dans `<projet>/.factory/reglages.json` (accord permanent du Directeur, pour
-  ce projet et cette action ; ni le défaut du bureau ni un autre fichier donné par `--reglages` ne comptent) ; sinon
+  du serveur. Le projet doit être ENREGISTRÉ dans le bureau du Directeur (`bureau.json`) et le lieu `serveur` dans les
+  réglages que le bureau enregistre pour lui (accord permanent, pour ce projet et cette action ; ni le défaut du
+  bureau, ni un dossier non enregistré, ni un autre fichier donné par `--reglages` ne comptent) ; sinon
   code 2, jamais le poste ni GitHub (`--poste` et `--sans-attendre` ne s'appliquent pas). Le lanceur de tâches vérifie
   le même accord (`serveur-tache lancer` est l'autre porte). L'APK : `--apk`, sinon la production `apk` du projet (artefact GitHub du commit, attendu comme pour les tests,
   ou sortie locale du catalogue, la plus récente) ; aucun APK : code 2. Le lancement passe par le lanceur de tâches
@@ -57,8 +58,8 @@ import deport_depot  # noqa: E402
 import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
-from bureau.deport_types import (SERVIES_AU_SERVEUR, accord_serveur, catalogue_du_projet,  # noqa: E402
-                                 racine_du_projet, reglages_du_projet, servie_au_serveur)
+from bureau.deport_types import (MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR, catalogue_du_projet,  # noqa: E402
+                                 racine_du_projet, refus_accord, servie_au_serveur)
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
 EN_COURS = Path("~/MyIAFactory/deport-en-cours").expanduser()
@@ -69,7 +70,7 @@ USAGE = ("Usage : lancer.py deporter <type> [--dossier <dossier>] [--reglages <f
          "[-- <commande locale>]\n"
          "        lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] "
          "[--dossier <dossier>] [--reglages <fichier>]")
-MSG_REGLEZ_SERVEUR = "Réglez le lieu de l'action sur serveur dans le bureau (accord permanent pour ce projet)."
+OPTIONS_PYTHON = ["-E", "-s"]       # le Python 3.12 lancé à part : sans variables PYTHON*, sans site utilisateur
 MSG_SANS_312 = ("Python 3.12 introuvable : la recette sur émulateur passe par le lanceur de tâches du serveur, qui "
                 "l'exige. Installez Python 3.12 (python.org, ou « winget install Python.Python.3.12 »), puis relancez. "
                 "Rien n'est lancé au poste à la place.")
@@ -373,7 +374,8 @@ def _importer_cli():
 def _sonder(commande):
     """Vrai si `commande` lance un Python 3.12 ou plus récent (sans shell, sans fenêtre)."""
     try:
-        f = subprocess.run(list(commande) + ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"],
+        f = subprocess.run(list(commande) + OPTIONS_PYTHON
+                           + ["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"],
                            stdin=subprocess.DEVNULL, capture_output=True, timeout=DELAI_SONDE_S,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired, ValueError):
@@ -398,6 +400,15 @@ def _python_312(sonder=_sonder, environ=None, executable=None, version=None, nt=
     `%SystemRoot%\\py.exe` puis celui de l'utilisateur (`%LOCALAPPDATA%\\Programs\\Python\\Launcher\\py.exe`), avec
     `-3.12` ; l'interpréteur courant s'il est déjà en 3.12 ; ailleurs `python3.12` des dossiers ABSOLUS du PATH. Tout
     candidat hors `_sur` (relatif, dans le dossier courant, pas `.exe` sous Windows) est écarté."""
+    candidats, cwd, nt = _candidats_312(environ, executable, version, nt, cwd)
+    for commande in candidats:
+        if _sur(commande[0], cwd, nt) and sonder(commande):
+            return commande
+    return None
+
+
+def _candidats_312(environ=None, executable=None, version=None, nt=None, cwd=None):
+    """`(candidats, cwd, nt)` : les commandes possibles d'un Python 3.12, dans l'ordre (voir `_python_312`)."""
     environ = os.environ if environ is None else environ
     executable = sys.executable if executable is None else executable
     version = tuple(sys.version_info[:2]) if version is None else tuple(version)
@@ -415,10 +426,21 @@ def _python_312(sonder=_sonder, environ=None, executable=None, version=None, nt=
         for d in environ.get("PATH", "").split(os.pathsep):
             if d and os.path.isabs(d):
                 candidats.append([os.path.join(d, "python3.12")])
-    for commande in candidats:
-        if _sur(commande[0], cwd, nt) and sonder(commande):
-            return commande
-    return None
+    return candidats, cwd, nt
+
+
+def _raison_sans_312(environ=None, executable=None, version=None, nt=None, cwd=None):
+    """Le texte à ajouter quand un lanceur Python existe mais est écarté parce que le dossier courant le contient
+    (dossier courant = un de ses ancêtres, ex. le dossier personnel) ; None sinon."""
+    candidats, cwd, nt = _candidats_312(environ, executable, version, nt, cwd)
+    ecartes = [c[0] for c in candidats
+               if c[0] and os.path.isabs(c[0]) and os.path.isfile(c[0]) and not _sur(c[0], cwd, nt)
+               and (not nt or c[0].lower().endswith(".exe"))]
+    if not ecartes:
+        return None
+    return ("Python 3.12 existe (%s) mais n'est pas lancé : il se trouve dans le dossier courant (%s) ou en dessous, "
+            "et rien n'est lancé depuis le dossier courant par prudence. Relancez depuis le dossier du projet "
+            "(--dossier ne suffit pas : c'est le dossier courant qui compte)." % (", ".join(ecartes), cwd))
 
 
 def _executer(commande):
@@ -432,17 +454,20 @@ def _executer(commande):
         return 4
 
 
-def _serveur_tache(argv, version=None, importer=_importer_cli, trouver_python=_python_312, executer=_executer):
+def _serveur_tache(argv, version=None, importer=_importer_cli, trouver_python=_python_312, executer=_executer,
+                   raison=_raison_sans_312):
     """`lancer.py serveur-tache …` : dans ce processus sous Python 3.12 et plus, sinon par un Python 3.12 à part
-    (`deporter` reste compatible 3.9 : les agents le lancent). Rend le code du lanceur ; 4 sans Python 3.12."""
+    (`deporter` reste compatible 3.9 : les agents le lancent), avec `-E -s` (ni variables PYTHON*, ni dossier
+    site-packages de l'utilisateur). Rend le code du lanceur ; 4 sans Python 3.12 (`raison` dit pourquoi s'il existe)."""
     version = tuple(sys.version_info[:2]) if version is None else tuple(version)
     if version >= (3, 12):
         return importer().main(list(argv))
     python = trouver_python()
     if not python:
-        print(MSG_SANS_312, file=sys.stderr)
+        pourquoi = raison()
+        print(("%s %s" % (pourquoi, MSG_SANS_312)) if pourquoi else MSG_SANS_312, file=sys.stderr)
         return 4
-    return executer(list(python) + [str(LANCEUR)] + list(argv))
+    return executer(list(python) + OPTIONS_PYTHON + [str(LANCEUR)] + list(argv))
 
 
 def _usage_recette(opt, commande):
@@ -538,15 +563,13 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
               file=sys.stderr)
         return 2
     if au_serveur:
-        # l'accord se lit dans les SEULS réglages du projet visé, jamais dans un autre fichier (--reglages) ni au bureau
-        racine = racine_du_projet(dossier)
-        propre = reglages_du_projet(racine)
-        if opt["reglages"] and (os.path.normcase(str(Path(opt["reglages"]).resolve()))
-                                != os.path.normcase(str(Path(propre).resolve()))):
-            print("--reglages ne vaut pas accord pour « %s » : l'accord se lit seulement dans les réglages du projet "
-                  "(%s). %s" % (action, propre, MSG_REGLEZ_SERVEUR), file=sys.stderr)
+        # l'accord ne vaut que pour un projet enregistré au bureau, lu dans SES réglages enregistrés (`--reglages`
+        # admis seulement s'il est ce fichier) : la même porte que `serveur-tache lancer`
+        refus_du_bureau = refus_accord(racine_du_projet(dossier), action, bureau=str(bureau), reglages=opt["reglages"])
+        if refus_du_bureau:
+            print(refus_du_bureau, file=sys.stderr)
             return 2
-        lieux[action] = "serveur" if accord_serveur(racine, action) else None
+        lieux[action] = "serveur"
     if opt["poste"] and not au_serveur:
         lieux[action] = "poste"
     refus = lieux_refuses(lieux, action, catalogue)

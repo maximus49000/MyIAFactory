@@ -3727,7 +3727,8 @@ def _deport_du_depart(ctx, bureau=None):
         reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else par_defaut
         du_projet = deport(reglages)
         globaux = deport(Path(bureau or BUREAU_DEPORT).expanduser())
-        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a) for a in catalogue}
+        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a, catalogue)
+                 for a in catalogue}
         ailleurs = str(reglages) if reglages != par_defaut else None
         return depart.deport_consigne(lieux, catalogue, objet(du_projet, "commandes"), str(projet), ailleurs)
     except Exception:

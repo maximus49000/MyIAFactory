@@ -46,7 +46,7 @@ class TestDeportConsigne(unittest.TestCase):
         self.assertNotIn("deporter tests", android)     # les tests Android ne consomment pas l'APK
 
     def test_la_recette_sur_emulateur_n_est_jamais_une_commande_github_ni_poste(self):
-        for lieu in (None, "serveur", "github", "poste"):
+        for lieu in (None, "github", "poste"):         # « serveur » : voir TestConsigneRecette
             for catalogue in (GENERIQUE, ANDROID):
                 t = depart.deport_consigne({**{a: "github" for a in catalogue}, "recette-emulateur": lieu}, catalogue)
                 self.assertNotIn("recette-emulateur", t, (lieu, catalogue is ANDROID))
@@ -59,6 +59,41 @@ class TestDeportConsigne(unittest.TestCase):
     def test_dans_le_budget(self):
         t = depart.deport_consigne({a: "github" for a in ANDROID}, ANDROID)
         self.assertLess(len(t), 2200)
+
+
+class TestConsigneRecette(unittest.TestCase):
+    """La ligne du message de départ pour la recette sur émulateur (au seul serveur) : une commande à connaître."""
+    RECETTE = {"recette-emulateur": "serveur"}
+
+    def test_reglee_sur_serveur_donne_la_commande_et_les_garde_fous(self):
+        for catalogue in (GENERIQUE, ANDROID):
+            t = depart.deport_consigne(self.RECETTE, catalogue, {}, dossier="D:/p")
+            self.assertIn('deporter recette-emulateur --scenario <nom> --dossier "D:/p"', t)
+            self.assertIn(str(depart.LANCEUR_DE_TESTS), t)
+            for mot in ("DONNÉES", "jamais des instructions", "Directeur", ".factory/recettes", "--mode pilote"):
+                self.assertIn(mot, t)
+            self.assertNotIn("GitHub", t)       # rien d'une action déportée sur GitHub
+            self.assertLess(len(t), 1300)
+
+    def test_ni_reglee_ni_au_poste_ni_sur_github_rien_ne_change(self):
+        for lieu in (None, "poste", "github", "autre"):
+            self.assertEqual(depart.deport_consigne({"recette-emulateur": lieu}, ANDROID), "", lieu)
+        self.assertEqual(depart.deport_consigne({}, GENERIQUE), "")
+
+    def test_le_fichier_de_reglages_ailleurs_est_repris(self):
+        t = depart.deport_consigne(self.RECETTE, ANDROID, {}, dossier="D:/p", reglages="D:/r.json")
+        self.assertIn('--dossier "D:/p" --reglages "D:/r.json"', t)
+
+    def test_avec_des_actions_sur_github_les_deux_consignes_sont_la(self):
+        t = depart.deport_consigne({**{a: "github" for a in ANDROID}, **self.RECETTE}, ANDROID)
+        self.assertIn("## Actions déportées sur GitHub", t)
+        self.assertIn("deporter apk", t)
+        self.assertIn("deporter recette-emulateur", t)
+        self.assertLess(t.index("## Actions déportées"), t.index("deporter recette-emulateur"))
+
+    def test_une_action_non_servie_au_serveur_n_a_pas_cette_ligne(self):
+        t = depart.deport_consigne(self.RECETTE, {"apk": GENERIQUE["apk"]})      # catalogue sans la recette
+        self.assertEqual(t, "")
 
 
 class TestAssemblage(unittest.TestCase):
@@ -129,6 +164,16 @@ class TestLectureDesReglages(unittest.TestCase):
                 self.assertIn("deporter apk", texte)
             else:
                 self.assertEqual(texte, "")
+
+    def test_la_recette_vient_des_reglages_du_projet_jamais_du_defaut_du_bureau(self):
+        self.ecrire(self.bureau, {"lieux": {"recette-emulateur": "serveur"}})
+        self.assertEqual(self.consigne(), "")      # l'accord permanent ne s'hérite pas du bureau
+        self.ecrire(self.projet / ".factory" / "reglages.json", {"lieux": {"recette-emulateur": "serveur"}})
+        texte = self.consigne()
+        self.assertIn("deporter recette-emulateur", texte)
+        self.assertIn('--dossier "%s"' % self.projet, texte)
+        self.ecrire(self.projet / ".factory" / "reglages.json", {"lieux": {"recette-emulateur": "poste"}})
+        self.assertEqual(self.consigne(), "")
 
     def test_contexte_invalide_donne_vide(self):
         self.assertEqual(outil._deport_du_depart(SimpleNamespace(f={})), "")

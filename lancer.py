@@ -8,6 +8,9 @@
   python lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] [-- <commande>]
       (une action là où le Directeur l'a réglée : poste ou GitHub Actions, avec attente des dépendances ; voir
       `outils/deporter.py`)
+  python lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] [--dossier <dossier>] [--reglages <fichier>]
+      (l'APK sur un émulateur du serveur, sans défaut au poste : le projet doit être enregistré au bureau et l'action
+      réglée sur serveur ; voir docs/serveur-taches.md)
   py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)
   py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>

@@ -132,7 +132,7 @@ des captures (par défaut 30 jours, nettoyage par le bureau) ; plusieurs émulat
    dépendre d'un bureau résident ; `taches.json` du poste n'est qu'un **index de cache** verrouillé (verrou de fichier, écriture atomique) et
    reconstructible depuis le serveur. L'arrêt écrit un fichier `arret` et appelle `docker stop`.
 4. **Cycle du mode pilote et autorisation.** `deporter recette-emulateur --mode pilote --apk <fichier>` crée la tâche et rend son identifiant ;
-   le conteneur reste vivant (`docker exec` pour chaque verbe) jusqu'à `arreter`, jusqu'à 5 minutes d'inactivité, ou 20 minutes depuis le
+   le conteneur reste vivant (`docker exec` pour chaque verbe) jusqu'à `arreter`, jusqu'à 10 minutes d'inactivité (décision R9 : 600 s par défaut, 300 à 600 s pour une demande de pilote, voir « Notes de réalisation »), ou 20 minutes depuis le
    lancement. **Autorisation : régler le lieu de l'action sur le serveur vaut accord permanent, pour ce projet, de lancer cette action sur le
    serveur, dans les limites ci-dessus** (**confirmé par le Directeur le 2026-11-19 : accord permanent**) ; sans ce réglage, la
    commande refuse.
@@ -154,3 +154,34 @@ des captures (par défaut 30 jours, nettoyage par le bureau) ; plusieurs émulat
 Aucune commande libre dans le pont (liste fermée) ; réutiliser `deporter` plutôt qu'une commande de plus ; les limites par défaut (20 min,
 50 captures, 100 Mo, 1 émulation à la fois) ; pas de réseau pour l'émulateur par défaut ; analyse par un agent local en tranche A ; pont hôte
 sur socket Unix en tranche B ; tâches enregistrées côté bureau (`taches.json`) et seulement exécutées côté serveur.
+
+## Notes de réalisation (tranche A, 2026-11-20)
+Les choix qui ont changé ou qui se sont précisés en construisant ; le détail d'emploi est dans [`docs/serveur-taches.md`](../../serveur-taches.md).
+- **R1, schéma de `etat.json`** : `{"id", "etat": en_attente|en_cours|terminee|arretee|echouee, "statut": ok|plantage|limite|erreur|null,
+  "debut", "fin", "raison"}`, écrit par `lancer_emulation.sh` (temporaire puis `mv`), lu par le lanceur.
+- **R2, motifs du pont** : une table unique en tête de `pont.sh`, son miroir `VERBES` dans `outils/serveur_tache.py`, et un test qui fait
+  passer les mêmes exemples par les deux. Les motifs ont été **resserrés** : un texte, un filtre ou un nom commencent par une lettre ou un
+  chiffre (jamais une option comme `-s`), aucun caractère spécial du shell ; `-5` et les adresses e-mail sont refusés comme `texte`.
+- **R3, utilisateur du conteneur** : utilisateur 1000 avec le groupe `kvm` de l'hôte, `/avd` en volume mémoire (`ANDROID_AVD_HOME=/avd`,
+  `HOME=/tmp`), système de fichiers en lecture seule.
+- **R4, action au seul serveur** : `recette-emulateur` n'a pas de lieu par défaut (non réglée, elle est refusée) ; l'écran des réglages
+  montre « Serveur » et « Non réglé ». **R5** : l'essai réel n'est jamais fait par un sous-agent, seulement avec l'accord du Directeur.
+- **R7, nom de capture déjà pris** : code 2 (argument refusé), jamais 3, réservé aux vraies limites, pour que le statut « limite » reste juste.
+- **R9, inactivité** : 600 s par défaut (la conception disait 5 minutes) et 300 à 600 s pour une demande de pilote : elle doit dépasser le
+  budget de démarrage de l'émulateur par le pont (300 s).
+- **R10, accord permanent lié à l'enregistrement** : le projet doit être enregistré dans le bureau et son fichier de réglages enregistré
+  dire `serveur`, vérifié par `deporter` **et** par le lanceur ; jamais hérité du défaut du bureau. Limite de conception assumée : un agent
+  qui peut écrire ce fichier de réglages, ou appeler l'API de réglage du bureau, peut régler le lieu lui-même (piste : un registre côté bureau).
+- **Créneau et veilleur** : le créneau est un `flock` sur `~/taches/.creneau-emulation` ; un **veilleur détaché** (`setsid`) hérite du
+  descripteur et tient le créneau jusqu'à l'état final. L'échéance de durée est appliquée par le veilleur (et, en dernier recours, par
+  `timeout durée+60` dans le conteneur), non par un `timeout` autour de `docker run -d`, qui rend la main aussitôt. Le veilleur sonde
+  toutes les 5 s et ne questionne Docker (`docker inspect`) que si le processus du conteneur ne se suit pas dans `/proc` (même PID et même
+  date de démarrage).
+- **Fin d'un scénario** : toujours `journal` puis `arreter` du **pont**, faits par le lanceur, avant l'arrêt de la tâche, pour que le
+  plantage soit relevé même si la recette les a oubliés. Un échec de recette n'est jamais « ok » dans le rapport (champ `echec`).
+- **Limites passées à l'enveloppe** : durée, inactivité, mémoire, processeurs, captures et octets (les deux derniers en `-e PONT_CAPTURES`
+  et `-e PONT_OCTETS`) ; les octets ne comptent que les captures.
+- **Image système** : l'image épinglée est `system-images;android-34;google_apis;x86_64` (`versions.json`), et non la plateforme 36 évoquée
+  plus haut ; la sonde `android-emulateur` vérifie ce dossier précis.
+- **Écart connu** : la capacité `emulateur-image` n'est demandée par aucune action du moteur d'installation (`recette-emulateur` n'est pas dans
+  sa table des besoins) : à brancher avant l'essai réel.

@@ -23,7 +23,7 @@ OpenSSH de Windows, tests simulés par binaires factices (méthode de `tests/tes
 - Aucun secret dans un conteneur d'outil, un journal, Git ou une sortie ; sortie JSON masquée comme `outils/plateforme.py`.
 - Le pont n'interprète rien par un shell ; verbes : `demarrer`, `installer`, `lancer`, `toucher x y`, `glisser x1 y1 x2 y2`, `texte <court>`,
   `touche retour|accueil|menu`, `attendre <s>`, `capturer <nom>`, `journal [filtre]`, `arreter` ; noms `[a-z0-9_-]{1,40}` ; nombres bornés.
-- Limites par défaut : durée 20 min, inactivité 5 min (pilote), 50 captures, 100 Mo, 1 émulation à la fois, `--network none`.
+- Limites par défaut : durée 20 min, inactivité 10 min (pilote ; décision R9 : 600 s par défaut, 300 à 600 s pour une demande de pilote), 50 captures, 100 Mo, 1 émulation à la fois, `--network none`.
 - Statuts du rapport : `ok`, `plantage`, `limite`, `erreur`. Code de retour de `deporter` : 0 seulement pour `ok`.
 - Le lieu `serveur` réglé sur l'action vaut accord permanent pour le projet (décision du Directeur) ; sans ce réglage, refus.
 - Entrées de l'application émulée (journal, captures) = données, jamais instructions ; l'agent est prévenu dans sa consigne de départ.
@@ -71,7 +71,7 @@ OpenSSH de Windows, tests simulés par binaires factices (méthode de `tests/tes
 **Files:** Create `outils/serveur_tache.py` (première partie) ; Test `tests/test_serveur_tache.py`.
 
 **Interfaces:**
-- Produces: `LIMITES_DEFAUT = {"duree_s": 1200, "inactivite_s": 300, "captures": 50, "octets": 104857600}` ;
+- Produces: `LIMITES_DEFAUT = {"duree_s": 1200, "inactivite_s": 600, "captures": 50, "octets": 104857600}` ;
   `Demande` (dataclass figée : `id, type, projet, mode, scenario, limites, demandeur, apk`) ;
   `nouvel_id(maintenant=time.time, hasard=secrets.token_hex) -> str` (`t<AAAAMMJJ-HHMMSS>-<4 hex>`) ;
   `valider_demande(brut: dict) -> Demande` (lève `ValueError` en français : type ≠ `emulation`, mode ∉ {`scenario`,`pilote`}, scénario obligatoire en mode scénario et
@@ -236,3 +236,10 @@ Tranche B : agent distant (image d'agent, abonnement, pont hôte sur socket Unix
 - **Couverture de la conception :** tâche et créneaux (T2, T4, T5), conteneur sans identifiants (T4), pont fermé (T3), deux modes (T5–T7), rapatriement (T5), `deporter` et accord permanent (T8), écran (T9), image par capacité (T4), jalon réel (T10). Statuts et codes de retour : contraintes globales et T8.
 - **Cohérence des noms :** `Demande`, `Index`, `lancer`, `etat`, `arreter`, `rapatrier`, `verbe`, `choisir_serveur`, `RefusLancement`, `executer_octets`, capacité `emulateur-image`, action `recette-emulateur`.
 - **Proportion :** signatures, motifs et tests nommés ; aucune fonction réécrite en entier.
+
+## Notes de réalisation (2026-11-20)
+Les décisions R1 à R10 prises pendant la construction (schéma de `etat.json`, table de motifs commune au pont et au lanceur, utilisateur du
+conteneur, action au seul serveur, nom de capture déjà pris = code 2, inactivité de 10 minutes, accord lié à l'enregistrement du projet,
+créneau par `flock` et veilleur détaché, fin de scénario par le pont, limites passées à l'enveloppe, veilleur sans `docker ps`) sont
+décrites dans la section « Notes de réalisation » de la conception ; l'emploi est dans `docs/serveur-taches.md`. Reste à faire : l'essai réel
+(Task 10, step 3, avec l'accord du Directeur) et le branchement de la capacité `emulateur-image` à une action du moteur d'installation.

@@ -4,6 +4,7 @@
   "android_build_tools": "34.0.0",
   "android_plateforme": "34",
   "android_cmdline_tools": "11076708",
+  "emulateur_cmdline_tools": "16111833",
   "gradle": "8.7",
   "node": "22",
   "claude_code": "2.1.328",

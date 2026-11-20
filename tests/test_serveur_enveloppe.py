@@ -32,6 +32,7 @@ case "$1" in
           p=999999; [ -n "${FAUX_PID_VEILLEUR:-}" ] && p=$(cat "$FAUX_DOSSIER/veilleur.pid")
           echo "true $p"; exit 0
         fi
+        if [ -n "${FAUX_INSPECT_MINUSCULE:-}" ]; then echo "error: no such object: tache-x" >&2; exit 1; fi   # le vrai docker
         echo "Error: No such object: tache-x" >&2; exit 1
       fi
       [ -n "${FAUX_CONTENEUR_EXISTE:-}" ] && echo cidautre
@@ -516,6 +517,37 @@ class TestEnveloppe(unittest.TestCase):
             self.assertIn("Docker ne répond plus", f["raison"])
             self.assertNotIn("arrêté de lui-même", f["raison"])
 
+    def test_conteneur_mort_au_demarrage_constate_aussitot_avec_la_raison(self):
+        # Le vrai docker écrit « error: no such object » (minuscule) pour un conteneur --rm disparu : c'est « parti »,
+        # constaté au premier contrôle (jamais 30 essais puis « Docker ne répond plus »), avec la fin de entree-tache.log.
+        journal = ("Démarrage de l'entrée.\nligne 2\nligne 3\nWarning: This version only understands SDK XML versions up to 3\n"
+                   "Error: AVD not created\x1b[0m\r\n" + "Création de l'AVD emul impossible (image " + IMAGE_SYSTEME + ").\n")
+        for variante in ({"FAUX_INSPECT_MINUSCULE": "1"}, {}):
+            with self.subTest(variante=variante), Banc(FAUX_MEURT_AU_PS="2", **variante) as b:
+                (b.dossier / "sortie").mkdir(parents=True)
+                (b.dossier / "sortie" / "entree-tache.log").write_bytes(journal.encode("utf-8"))
+                debut = time.time()
+                self.assertEqual(b.lancer().returncode, 0)
+                f = b.attendre_final(delai=20)
+                self.assertLess(time.time() - debut, 12)
+                self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+                self.assertTrue(f["raison"].startswith("Le conteneur s'est arrêté au démarrage"), f["raison"])
+                self.assertIn("Création de l'AVD emul impossible", f["raison"])
+                self.assertIn("Error: AVD not created", f["raison"])
+                self.assertNotIn("Démarrage de l'entrée", f["raison"])                       # seulement les dernières lignes
+                self.assertFalse(any(ord(c) < 32 for c in f["raison"]), f["raison"])
+                self.assertLessEqual(len(f["raison"].encode("utf-8")), 400)
+                self.assertNotIn("Docker ne répond plus", f["raison"])
+
+    def test_conteneur_mort_apres_l_avd_garde_le_message_habituel(self):
+        with Banc(FAUX_MEURT_AU_PS="2", FAUX_INSPECT_MINUSCULE="1") as b:
+            (b.dossier / "sortie").mkdir(parents=True)
+            (b.dossier / "sortie" / ".avd-pret").write_bytes(b"")
+            self.assertEqual(b.lancer().returncode, 0)
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+            self.assertIn("s'est arrêté de lui-même", f["raison"])
+
     def test_docker_muet_au_veilleur_finit_en_erreur(self):
         with Banc(FAUX_DOCKER_MUET="1") as b:
             self.assertEqual(b.lancer().returncode, 0)
@@ -634,6 +666,12 @@ class TestEnveloppe(unittest.TestCase):
 ENTREE = RACINE / "images" / "emulateur" / "entree-tache.sh"
 IMAGE_SYSTEME = "system-images;android-34;google_apis;x86_64"
 AVDMANAGER = r'''echo "avdmanager $* racine=${ANDROID_SDK_ROOT:-} home=${ANDROID_HOME:-}" >> "$FAUX_JOURNAL"
+rep=""; IFS= read -r rep; echo "reponse=$rep" >> "$FAUX_JOURNAL"      # la question du profil matériel personnalisé
+if [ -n "${AVD_BRUIT:-}" ]; then           # progression à retours chariot et séquences ANSI, puis l'erreur réelle d'avdmanager
+  printf '\033[1m[=      ] 10%% Loading local repository...\r[=======] 100%% Fetch remote repository...\033[0m\r\n'
+  printf 'Warning: This version only understands SDK XML versions up to 3\nError: AVD not created\n'
+  exit 1
+fi
 [ -n "${AVD_ECHEC:-}" ] && exit 1
 nom=""; prec=""; for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; done
 [ -n "${AVD_SANS_CONFIG:-}" ] && exit 0
@@ -677,6 +715,8 @@ class TestEntreeTache(unittest.TestCase):
             r.config = config.read_text(encoding="utf-8") if config.exists() else None
             r.pret = (t / "sortie" / ".avd-pret").exists()
             r.appels = (t / "appels.txt").read_text(encoding="utf-8") if (t / "appels.txt").exists() else ""
+            journal = t / "sortie" / "entree-tache.log"
+            r.log = journal.read_bytes() if journal.exists() else b""
             return r
 
     def test_cree_l_avd_depuis_l_image_epinglee_puis_la_dimensionne(self):
@@ -692,6 +732,21 @@ class TestEntreeTache(unittest.TestCase):
         self.assertIn("foo=bar", lignes)                                      # les autres réglages sont gardés
         self.assertFalse([x for x in lignes if x in ("hw.ramSize=1024", "disk.dataPartition.size=800M")])
         self.assertTrue(r.pret)
+
+    def test_non_repond_a_la_question_du_profil_materiel(self):
+        r = self.lancer()
+        self.assertIn("reponse=no", r.appels)
+
+    def test_journal_lisible_sans_progression_ni_sequences_ansi(self):
+        # avdmanager affiche sa progression à retours chariot et en couleurs : le journal garde seulement le texte utile.
+        r = self.lancer(AVD_BRUIT="1")
+        self.assertEqual(r.returncode, 12, r.stderr)
+        self.assertNotIn(b"\r", r.log)
+        self.assertNotIn(b"\x1b", r.log)
+        self.assertNotIn(b"10%", r.log)
+        self.assertIn(b"Error: AVD not created", r.log)
+        self.assertIn(b"only understands SDK XML versions", r.log)
+        self.assertIn("Création de l'AVD emul impossible".encode("utf-8"), r.log)
 
     def test_erreurs_nettes_et_codes_distincts(self):
         cas = [("sdk absent", dict(sdk_absent=True), 10, "SDK"),

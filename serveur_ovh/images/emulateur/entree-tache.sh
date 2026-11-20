@@ -45,9 +45,15 @@ chemin="${IMAGE//;//}"
 [ -d "$SDK/$chemin" ] || echec 11 "Image système $IMAGE introuvable sous $SDK/system-images (installez-la : capacité android-emulateur)."
 
 mkdir -p "$AVD_RACINE" "${HOME:-/tmp}/.android" 2>/dev/null
-# Sans réseau ni question : « no » répond à la proposition d'un profil matériel personnalisé.
-if ! printf 'no\n' | ANDROID_SDK_ROOT="$OUTILS" ANDROID_HOME="$OUTILS" "$AVDMANAGER" create avd --force --name "$AVD" \
-     --package "$IMAGE" >> "$JOURNAL" 2>&1; then
+# Sans réseau ni question : « no » (entrée standard) répond à la proposition d'un profil matériel personnalisé. La sortie
+# d'avdmanager est nettoyée avant d'aller au journal : sa progression réécrite par retours chariot et ses séquences ANSI
+# deviennent illisibles une fois rapatriées ; seules restent les lignes de texte (avertissements, erreurs).
+avd_sortie=$(printf 'no\n' | ANDROID_SDK_ROOT="$OUTILS" ANDROID_HOME="$OUTILS" "$AVDMANAGER" create avd --force --name "$AVD" \
+     --package "$IMAGE" 2>&1)
+avd_code=$?
+printf '%s\n' "$avd_sortie" | tr '\r' '\n' | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' \
+  | grep -vE '^[[:space:]]*(\[[= ]*\][[:space:]]*[0-9]+%.*)?$' >> "$JOURNAL" 2>/dev/null
+if [ "$avd_code" != 0 ]; then
   echec 12 "Création de l'AVD $AVD impossible (image $IMAGE)."
 fi
 

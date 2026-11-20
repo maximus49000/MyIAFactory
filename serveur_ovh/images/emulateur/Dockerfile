@@ -5,10 +5,12 @@
 # système, platform-tools) est monté en LECTURE SEULE sur /opt/android-sdk. adb vient de ce SDK (platform-tools) plutôt que
 # du paquet android-tools-adb : même version que l'émulateur (un adb d'une autre version redémarre le serveur adb en boucle).
 # Les OUTILS EN LIGNE DE COMMANDE Android (avdmanager) viennent de l'image elle-même : le SDK de l'hôte n'en a pas (l'étape
-# android_build ne les garde pas). Version épinglée (android_cmdline_tools de versions.json, la même que l'image android),
+# android_build ne les garde pas). Version épinglée PROPRE à cette image (emulateur_cmdline_tools de versions.json, 16111833 =
+# cmdline-tools 23.0 : la 11076708 (12.0) de l'image android ne lit pas le package.xml en XML v4 de l'image système de l'hôte et
+# échoue « AVD not created », constaté sur le serveur ; 23.0 crée l'AVD sans avertissement sur JDK 17),
 # téléchargée À LA CONSTRUCTION dans une étape séparée « outils » : archive vérifiée contre le SHA-1 du manifeste officiel
 # Google (même discipline que installer_cmdline_tools de mise_en_place.sh), échec de la construction sinon ; seule l'arborescence
-# extraite passe dans l'image livrée (environ 150 Mo de plus).
+# extraite passe dans l'image livrée (environ 180 Mo de plus). La valeur réelle est passée par l'étape (--build-arg).
 # Disposition : /opt/sdk-tache/cmdline-tools/latest (vrai dossier) + liens /opt/sdk-tache/{emulator,platform-tools,platforms,
 # system-images,licenses,build-tools} -> /opt/android-sdk/... : avdmanager déduit la racine du SDK de sa propre place
 # (<racine>/cmdline-tools/latest) et y trouve l'image système montée de l'hôte.
@@ -16,7 +18,7 @@
 ARG UBUNTU_TAG=24.04
 
 FROM ubuntu:${UBUNTU_TAG} AS outils
-ARG CMDLINE_TOOLS=11076708
+ARG CMDLINE_TOOLS=16111833
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -52,7 +54,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/usr/local/bin:/usr/bin:/bin:/opt/sdk-tache/cmdline-tools/latest/bin"
 
 # util-linux : flock et setsid ; coreutils : timeout, stat, sleep fractionnaire ; bash >= 4.4 (tableaux vides sous set -u).
-# openjdk-17 : avdmanager (outils 11076708 = version 12.0, qui exige Java 17). Bibliothèques de l'émulateur : rendu logiciel
+# openjdk-17 : avdmanager (outils 16111833 = version 23.0, essayés sur JDK 17 sur le serveur). Bibliothèques de l'émulateur : rendu logiciel
 # (swiftshader) et dépendances de qemu même sans fenêtre.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash coreutils util-linux procps ca-certificates openjdk-17-jdk-headless \

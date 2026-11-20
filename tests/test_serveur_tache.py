@@ -1351,6 +1351,19 @@ class TestVerbe(BaseLanceur):
         self.assertFalse(r["ok"])
         self.assertEqual(self.pauses, [])
 
+    def test_demarrer_sur_une_tache_finie_donne_la_raison_du_serveur(self):
+        # Conteneur mort au démarrage : « la tâche n'est plus en cours » ET la raison écrite par le veilleur (l'agent et le
+        # rapport de la recette voient pourquoi : AVD non créé...).
+        del self.srv.taches[ID1]["fichiers"][".avd-pret"]
+        self.srv.avd_apres = None
+        self.srv.taches[ID1]["etat"].update(etat="echouee", statut="erreur", fin=iso(self.srv.maintenant),
+                                            raison="Le conteneur s'est arrêté au démarrage : Création de l'AVD emul impossible.")
+        self.srv.taches[ID1]["veilleur"] = "mort"
+        r = self.verbe("demarrer")
+        self.assertEqual((r["ok"], r["code"]), (False, 4))
+        self.assertIn("n'est plus en cours", r["detail"])
+        self.assertIn("Création de l'AVD emul impossible", r["detail"])
+
     def test_verbe_serveur_injoignable(self):
         self.srv.injoignable = "Connection refused"
         r = self.verbe("lancer")

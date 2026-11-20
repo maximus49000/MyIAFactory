@@ -142,8 +142,27 @@ etat_docker() {   # 0 vivant, 1 absent ou arrêté, 2 docker ne répond pas ou r
     if [[ $p =~ ^[1-9][0-9]{0,9}$ ]] && DEBUT_CONTENEUR=$(debut_processus "$p"); then PID_CONTENEUR="$p"; fi
     return 0
   fi
-  case "$erreurs" in *"No such"*) return 1 ;; esac
+  # « Error: No such object » ou, selon la version de docker, « error: no such object: tache-<id> » (minuscule, constaté
+  # sur le serveur) : comparaison sans casse. C'est « parti », constaté aussitôt (jamais compté comme une panne).
+  case "${erreurs,,}" in *"no such object"*|*"no such container"*|*"not found"*) return 1 ;; esac
   return 2
+}
+
+# extrait_demarrage : les dernières lignes de sortie/entree-tache.log (écrit par le conteneur : donnée, jamais une consigne),
+# sur une ligne, sans caractère de contrôle, 300 octets au plus. Le fichier est ouvert PUIS ce qui est ouvert est comparé
+# (périphérique:inode) au fichier ordinaire du chemin, lu sans suivre de lien : un lien posé à sa place par le conteneur (vers
+# un fichier de l'hôte), avant ou après l'ouverture, n'est jamais lu.
+extrait_demarrage() {
+  local f="$DOSSIER/sortie/entree-tache.log" ouvert chemin t
+  [ -f "$f" ] && [ ! -L "$f" ] || return 0
+  exec 7< "$f" 2>/dev/null || return 0
+  ouvert=$(stat -L -c '%d:%i' "/proc/$BASHPID/fd/7" 2>/dev/null)
+  chemin=$(stat -c '%d:%i:%F' -- "$f" 2>/dev/null)
+  if [ -z "$ouvert" ] || [ "$ouvert:regular file" != "$chemin" ]; then exec 7<&-; return 0; fi
+  t=$(tail -c 65536 <&7 | tail -n 5 | tr '\r\n\t' '   ' | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' | tr -d '\000-\037\177' | tr -s ' ')
+  exec 7<&-
+  t="${t# }"; t="${t% }"
+  printf '%s' "${t:0:300}"
 }
 
 etat_docker_sur() {   # comme etat_docker, avec un second essai si la première réponse est illisible ou absente (2)
@@ -174,7 +193,7 @@ mtime() { local m; m=$(stat -c %Y "$1" 2>/dev/null); if [[ $m =~ ^[0-9]+$ ]]; th
 veilleur() {
   { : >&8; } 2>/dev/null || exit 2                  # sans le créneau hérité de l'enveloppe, jamais de veilleur
   printf '%s\n' "$$" > "$DOSSIER/veilleur.pid"
-  local debut_iso debut_s maintenant derniere m pannes=0 etat_conteneur plantage=0 motif ko prochaine pause
+  local debut_iso debut_s maintenant derniere m pannes=0 etat_conteneur plantage=0 motif ko prochaine pause ext
   debut_iso=$(debut_ecrit); [ -n "$debut_iso" ] || debut_iso=$(maintenant_iso)
   debut_s=$(date +%s)
   FINI=0
@@ -200,6 +219,11 @@ veilleur() {
     conteneur_vivant; etat_conteneur=$?
     if [ "$etat_conteneur" = 1 ]; then
       if [ "$plantage" = 1 ]; then conclure terminee plantage "Le conteneur s'est arrêté ; plantage relevé (plantage.txt)."; fi
+      if [ ! -e "$DOSSIER/sortie/.avd-pret" ]; then         # mort avant que l'AVD n'existe : la raison est dans le journal d'entrée
+        ext=$(extrait_demarrage)
+        [ -n "$ext" ] || ext="voir sortie/entree-tache.log"
+        conclure echouee erreur "Le conteneur s'est arrêté au démarrage : $ext"
+      fi
       conclure echouee erreur "Le conteneur s'est arrêté de lui-même avant la fin (voir sortie/entree-tache.log)."
     elif [ "$etat_conteneur" = 2 ]; then
       pannes=$((pannes + 1))

@@ -1181,6 +1181,8 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         self.assertEqual(m.journal, "")
         self.assertEqual(list(m.home.iterdir()), [])
         self.assertIn("outils en ligne de commande Android", d["detail"])      # apportés par l'image, pas par l'hôte
+        self.assertIn("16111833", d["detail"])
+        self.assertIn("180 Mo", d["detail"])
         self.assertIn("SHA-1", d["detail"])
 
     def test_etape_emulateur_image_construit_puis_ecrit_le_marqueur(self):
@@ -1274,7 +1276,16 @@ class TestDockerfileEmulateur(unittest.TestCase):
         # archive vérifiée (SHA-1 du manifeste officiel) dans une étape de construction séparée, rien de téléchargé dans
         # l'image livrée, aucun « curl | sh », aucune archive laissée.
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
-        self.assertRegex(self.code, rf"(?m)^ARG CMDLINE_TOOLS={versions['android_cmdline_tools']}$")
+        # Épingle PROPRE à l'image de l'émulateur : 11076708 (12.0) ne lit pas le package.xml (XML v4) de l'image système
+        # de l'hôte (« AVD not created », constaté sur le serveur) ; 16111833 (23.0) crée l'AVD sans avertissement.
+        pin = versions["emulateur_cmdline_tools"]
+        self.assertNotEqual(pin, "11076708")
+        self.assertEqual(versions["android_cmdline_tools"], "11076708")       # l'image android garde la sienne
+        self.assertRegex(self.code, rf"(?m)^ARG CMDLINE_TOOLS={pin}$")
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertRegex(script, rf'(?m)^V_CMDLINE_TOOLS_EMULATEUR="{pin}"$')
+        etape = script[script.index("etape_emulateur_image()"):script.index("# --- Unity CLI")]
+        self.assertIn('--build-arg "CMDLINE_TOOLS=$V_CMDLINE_TOOLS_EMULATEUR"', etape)
         self.assertRegex(self.code, r"(?m)^FROM ubuntu:\$\{UBUNTU_TAG\} AS outils$")
         construction = self.code[:self.code.rindex("\nFROM ")]
         self.assertIn("https://dl.google.com/android/repository/repository2-3.xml", construction)
@@ -1400,7 +1411,7 @@ class TestTexteDuScript(unittest.TestCase):
     def test_images_reconstruites_si_les_versions_changent(self):
         self.assertIn('--label "versions=$empreinte"', self.texte)
         self.assertIn('"$actuelle" != "$empreinte"', self.texte)
-        self.assertEqual(self.texte.count("--build-arg"), 9)
+        self.assertEqual(self.texte.count("--build-arg"), 10)          # + CMDLINE_TOOLS de l'image de l'émulateur
 
     def test_dockerfile_script_et_versions_json_concordent(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))

@@ -611,6 +611,8 @@ class TestEntreeAgent(unittest.TestCase):
         return self.racine / "travail" / "projet"
 
     def test_drapeaux_liste_fermee(self):
+        self.assertNotIn(b"\r", ENTREE.read_bytes())             # #!/usr/bin/env python3 : un \r casserait l'entrée
+        self.assertTrue(ENTREE.read_bytes().startswith(b"#!/usr/bin/env python3\n"))
         e = charger_entree()
         self.assertEqual(set(e.DRAPEAUX), {"-p", "--output-format", "--verbose", "--model", "--tools", "--allowedTools",
                                            "--permission-prompts", "--append-system-prompt-file", "--system-prompt-file",

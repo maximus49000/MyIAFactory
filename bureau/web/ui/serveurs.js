@@ -1,11 +1,12 @@
 // L'écran « Serveurs de travail » : déclarer un serveur (et copier sa clé publique), tester la connexion, voir ses capacités,
 // installer ce qui manque (aperçu puis accord), et lire où tournent les actions (poste, GitHub, serveur) avec le conseil du bureau.
-// Le bureau ne fait qu'afficher `GET /api/serveurs` et `GET /api/serveurs/lieux` et demander les actions par POST. Tout texte
+// Le bureau ne fait qu'afficher `GET /api/serveurs`, `GET /api/serveurs/lieux` et `GET /api/serveurs/taches` et demander les actions par POST. Tout texte
 // venu du serveur passe par textContent ; la couleur d'un lieu vient d'une classe CSS et s'écrit toujours en toutes lettres.
 
 import {el} from "./dom.js";
 
 const INTERVALLE_MS = 3000;
+const INTERVALLE_REPOS_MS = 15000;   // relevé des tâches quand aucune n'est active (une nouvelle tâche apparaît quand même)
 const RELEVES_SANS_TRAVAIL = 20;  // relevés sans travail en cours avant de cesser de guetter une sonde ou une installation lancée (environ 1 min)
 export const MESSAGE_TEST_ENCORE = "Le test peut encore être en cours : actualisez dans un instant.";
 const tableau = (v) => (Array.isArray(v) ? v : []);
@@ -124,6 +125,35 @@ export async function confirmerMigration(accord, fetchFn = globalThis.fetch) {
   return {ok: true, message: "Serveur inscrit."};
 }
 
+// Les tâches d'émulation du serveur : `GET /api/serveurs/taches` (index local, jamais de réseau) et l'arrêt par POST.
+const LIBELLES_ETATS_TACHE = {en_attente: "en attente", en_cours: "en cours", terminee: "terminée", echouee: "échouée", arretee: "arrêtée", inconnu: "état inconnu"};
+const LIBELLES_STATUTS_RAPPORT = {ok: "ok", plantage: "plantage", limite: "limite atteinte", erreur: "erreur"};
+const LIBELLES_MODES = {scenario: "scénario", pilote: "pilote"};
+const TACHES_ACTIVES = new Set(["en_attente", "en_cours"]);
+const estActive = (t) => TACHES_ACTIVES.has(t.etat);
+
+// Lit les tâches. Rend {taches}, ou null si le bureau est injoignable ou répond mal.
+export async function lireTaches(fetchFn = globalThis.fetch) {
+  const r = await appeler("/api/serveurs/taches", "GET", undefined, fetchFn);
+  return r.ok && Array.isArray(r.d.taches) ? {taches: r.d.taches} : null;
+}
+
+// Demande l'arrêt d'une tâche. Ne lève jamais : {ok, occupe, message}.
+export async function arreterTache(id, fetchFn = globalThis.fetch) {
+  const r = await appeler(`/api/serveurs/taches/${encodeURIComponent(id)}/arreter`, "POST", {}, fetchFn);
+  if (r.injoignable) return {ok: false, message: "Arrêt impossible : le bureau est injoignable."};
+  if (r.status === 409) return {ok: false, occupe: true, message: texte(r.d.erreur) || "Une opération est déjà en cours : réessayez dans un instant."};
+  if (!r.ok) return {ok: false, message: refus(r)};
+  return {ok: true};
+}
+
+function duree(s) {
+  if (typeof s !== "number" || !Number.isFinite(s) || s < 0) return "";
+  const n = Math.round(s);
+  return n < 60 ? `${n} s` : `${Math.floor(n / 60)} min ${n % 60} s`;
+}
+const compte = (n) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? `${Math.floor(n)} capture${n >= 2 ? "s" : ""}` : "");
+
 const nombre = (v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v * 10) / 10).replace(".", ",") : "?");
 
 // Le serveur envoie, par capacité, {statut, detail, geste} (statuts du moteur : presente, absente, inconnue, a_faire, en_cours,
@@ -159,7 +189,8 @@ export function ecranServeurs(etat, options = {}) {
   const liste = el("div", "serveurs-liste");
   const zoneLieux = el("div", "serveurs-lieux");
   const zoneMigration = el("div", "serveurs-migration");
-  racine.append(message, zoneMigration, resume, liste, rejetsZone, formulaire, zoneLieux);
+  const zoneTaches = el("div", "serveurs-taches");
+  racine.append(message, zoneMigration, resume, liste, zoneTaches, rejetsZone, formulaire, zoneLieux);
 
   let courant = etat;
   let lieux = options.lieux || null;
@@ -169,6 +200,13 @@ export function ecranServeurs(etat, options = {}) {
   let sansTravail = 0;
   let poignee = null;
   let fini = false;
+  let taches = options.taches;    // undefined : l'écran ne montre pas les tâches ; null : lecture impossible ; sinon la liste
+  let echecLecture = taches === null;
+  let poigneeTaches = null;
+  const lignesTaches = new Map(); // id de la tâche -> éléments mis à jour en place à chaque relevé
+  const envois = new Set();       // tâches dont un POST d'arrêt est parti et n'a pas encore reçu sa réponse
+  const refusArret = new Map();   // id de la tâche -> message du dernier arrêt refusé ou impossible
+  let idsTaches = "";             // les tâches dessinées, dans l'ordre
   const cartes = new Map();     // id du serveur -> éléments mis à jour en place à chaque relevé
   let affiches = "";            // les serveurs dessinés
   let lectures = 0;             // relevés faits depuis le lancement d'un test
@@ -424,6 +462,98 @@ export function ecranServeurs(etat, options = {}) {
     r.msg.textContent = i.message;
   }
 
+  // ---- « Tâches du serveur » : la liste est refaite quand l'ordre ou l'ensemble des tâches change, sinon mise à jour en place
+  // (jamais d'autre zone de la carte). Tout texte venu du serveur passe par textContent ; l'état s'écrit toujours en toutes lettres.
+  const tachesZone = {
+    echec: el("p", "reglage-message serveurs-taches-echec"),
+    vide: el("p", "ligne-detail serveurs-taches-vide"),
+    liste: el("div", "serveurs-taches-liste"),
+  };
+  tachesZone.echec.setAttribute("role", "alert");
+  if (taches !== undefined) zoneTaches.append(el("h3", "", "Tâches du serveur"), tachesZone.echec, tachesZone.vide, tachesZone.liste);
+
+  const tachesValides = () => tableau(taches).filter((t) => t && typeof t === "object" && typeof t.id === "string").map((t) => ({...t, etat: LIBELLES_ETATS_TACHE[t.etat] ? t.etat : "inconnu"}));
+
+  function ligneTache(t) {
+    const racineLigne = el("div", "serveurs-tache");
+    const tete = el("div", "serveurs-tache-tete");
+    const refs = {ligne: racineLigne, etat: el("span", "serveur-badge tache-etat"), statut: el("span", "serveur-badge tache-statut"),
+      detail: el("span", "ligne-detail serveurs-tache-detail"), actions: el("div", "serveurs-tache-actions"), msg: el("p", "reglage-message serveurs-tache-message"), bouton: null};
+    refs.msg.setAttribute("role", "alert");
+    tete.append(el("strong", "serveurs-tache-id", t.id), refs.etat, refs.statut, refs.detail);
+    racineLigne.append(tete, refs.actions, refs.msg);
+    return refs;
+  }
+
+  function boutonArret(refs, id) {
+    const b = el("button", "bouton serveurs-tache-arreter", "Arrêter");
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      if (b.disabled || envois.has(id)) return;
+      envois.add(id);                                   // posé de façon synchrone : aucun second envoi avant la réponse
+      b.disabled = true;
+      refusArret.delete(id);
+      refs.msg.textContent = "Arrêt demandé…";
+      let r;
+      try { r = await arreterTache(id, fetchFn); } finally { envois.delete(id); }
+      if (!r.ok) refusArret.set(id, r.message);
+      await relireTaches();
+      majTaches();
+      planifierTaches();
+    });
+    return b;
+  }
+
+  function majLigneTache(refs, t) {
+    const id = t.id;
+    const arretEnCours = t.arret_en_cours === true || envois.has(id);
+    refs.etat.className = `serveur-badge tache-etat tache-etat-${t.etat}`;
+    refs.etat.textContent = LIBELLES_ETATS_TACHE[t.etat];
+    refs.statut.textContent = LIBELLES_STATUTS_RAPPORT[t.statut] ? `rapport : ${LIBELLES_STATUTS_RAPPORT[t.statut]}` : "";
+    refs.statut.className = `serveur-badge tache-statut tache-statut-${LIBELLES_STATUTS_RAPPORT[t.statut] ? t.statut : "aucun"}`;
+    refs.detail.textContent = [LIBELLES_MODES[t.mode], texte(t.projet), texte(t.serveur_id) && `serveur ${t.serveur_id}`, duree(t.duree_s), compte(t.captures)].filter(Boolean).join(" · ");
+    if (estActive(t)) {
+      if (!refs.bouton) { refs.bouton = boutonArret(refs, id); refs.actions.append(refs.bouton); }
+      refs.bouton.disabled = arretEnCours;
+      refs.bouton.textContent = arretEnCours ? "Arrêt en cours…" : "Arrêter";
+    } else if (refs.bouton) { refs.actions.replaceChildren(); refs.bouton = null; refusArret.delete(id); }
+    refs.msg.textContent = envois.has(id) ? "Arrêt demandé…" : arretEnCours ? "Arrêt en cours : un instant." : texte(refusArret.get(id)) || texte(t.erreur);
+  }
+
+  function majTaches() {
+    if (taches === undefined) return;
+    const valides = tachesValides();
+    tachesZone.echec.textContent = echecLecture ? (valides.length ? "Mise à jour impossible : dernière liste connue." : "Les tâches n'ont pas pu être lues : nouvel essai dans un instant.") : "";
+    tachesZone.vide.textContent = !echecLecture && !valides.length ? "Aucune tâche pour l'instant : les tâches d'émulation lancées sur le serveur apparaîtront ici." : "";
+    const ids = valides.map((t) => t.id).join("\n");
+    if (ids !== idsTaches) {                            // un ensemble ou un ordre différent : seule la liste des tâches est refaite
+      lignesTaches.clear();
+      tachesZone.liste.replaceChildren(...valides.map((t) => { const refs = ligneTache(t); lignesTaches.set(t.id, refs); return refs.ligne; }));
+      idsTaches = ids;
+    }
+    for (const t of valides) majLigneTache(lignesTaches.get(t.id), t);
+  }
+
+  async function relireTaches() {
+    const r = await lireTaches(fetchFn);
+    echecLecture = r === null;
+    if (r) taches = r.taches;
+    return r;
+  }
+
+  function planifierTaches() {
+    if (poigneeTaches !== null || !actif() || taches === undefined) return;
+    const vives = tachesValides().some(estActive) || envois.size > 0;
+    poigneeTaches = planifieur.attendre(async () => {
+      poigneeTaches = null;
+      if (!actif()) return;
+      await relireTaches();
+      if (!actif()) return;
+      majTaches();
+      planifierTaches();
+    }, vives ? INTERVALLE_MS : INTERVALLE_REPOS_MS);
+  }
+
   // ---- « Où tournent les actions »
   function legende() {
     const l = el("div", "lieux-legende");
@@ -599,19 +729,25 @@ export function ecranServeurs(etat, options = {}) {
   }
   if (options.migration) zoneMigration.append(cartesMigration(options.migration));
 
-  racine.planifier = planifier;
-  racine.rafraichir = async () => { await relire(); dessiner(); planifier(); };
-  racine.arreter = () => { fini = true; if (poignee !== null) { planifieur.annuler(poignee); poignee = null; } };
+  racine.planifier = () => { planifier(); planifierTaches(); };
+  racine.rafraichir = async () => { await relire(); if (taches !== undefined) { await relireTaches(); majTaches(); } dessiner(); planifier(); planifierTaches(); };
+  racine.arreter = () => {
+    fini = true;
+    if (poignee !== null) { planifieur.annuler(poignee); poignee = null; }
+    if (poigneeTaches !== null) { planifieur.annuler(poigneeTaches); poigneeTaches = null; }
+  };
   dessiner();
+  majTaches();
   planifier();
+  planifierTaches();
   return racine;
 }
 
 // Monte l'écran dans `conteneur` : lit les serveurs et les lieux puis dessine (injoignable : l'écran le dit). Rend l'écran.
 export async function monterEcranServeurs(conteneur, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
-  const [etat, lieux, migration] = await Promise.all([lireServeurs(fetchFn), lireLieux(fetchFn), lireMigration(fetchFn)]);
-  const ecran = ecranServeurs(etat, {...options, fetchFn, lieux, migration});
+  const [etat, lieux, migration, lues] = await Promise.all([lireServeurs(fetchFn), lireLieux(fetchFn), lireMigration(fetchFn), lireTaches(fetchFn)]);
+  const ecran = ecranServeurs(etat, {...options, fetchFn, lieux, migration, taches: lues ? lues.taches : null});
   conteneur.append(ecran);
   ecran.planifier();   // l'écran est maintenant dans la page : une installation en cours se suit
   return ecran;

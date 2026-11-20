@@ -1458,3 +1458,23 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .serveurs-encours:empty { display: none; }
 .serveurs-migration-carte { margin: 8px 0; padding: 10px; border: 1px solid #d9b25a; border-radius: 8px; background: #fbf4e0; }
 .serveurs-migration-message:empty { display: none; }
+
+/* « Tâches du serveur » (écran des serveurs) : chaque état est écrit en toutes lettres dans son badge, la couleur ne fait que souligner. */
+.serveurs-taches { margin-top: 10px; }
+.serveurs-tache { border-top: 1px solid #eee7d6; padding: 6px 0; }
+.serveurs-tache-tete { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.serveurs-tache-id { font-size: 13px; overflow-wrap: anywhere; }
+.serveurs-tache-detail { overflow-wrap: anywhere; }
+.serveurs-tache-actions { margin: 4px 0; }
+.serveurs-tache-actions:empty { display: none; }
+.serveurs-tache-message { margin: 4px 0; font-weight: 700; color: #7a5410; overflow-wrap: anywhere; }
+.serveurs-tache-message:empty, .serveurs-taches-echec:empty, .serveurs-taches-vide:empty, .tache-statut:empty { display: none; }
+.serveurs-taches-echec { color: #9a2f22; font-weight: 700; }
+.tache-etat-en_attente { background: #f6e6c8; color: #7a5410; }
+.tache-etat-en_cours { background: #e0e8f6; color: #274a8a; }
+.tache-etat-terminee { background: #dcefdc; color: #2f6b3f; }
+.tache-etat-echouee { background: #f6d9d4; color: #9a2f22; }
+.tache-etat-arretee, .tache-etat-inconnu { background: #eee7d6; color: #5a5568; }
+.tache-statut-ok { background: #dcefdc; color: #2f6b3f; }
+.tache-statut-plantage, .tache-statut-erreur { background: #f6d9d4; color: #9a2f22; }
+.tache-statut-limite { background: #f6e6c8; color: #7a5410; }

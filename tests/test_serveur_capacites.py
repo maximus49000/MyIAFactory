@@ -134,6 +134,16 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(sc.BESOINS["emulateur"], ("android-emulateur",))
         self.assertEqual(sc.BESOINS["charge"], ())
 
+    def test_recette_emulateur_demande_l_image_et_toute_sa_chaine(self):
+        self.assertEqual(sc.BESOINS["recette-emulateur"], ("emulateur-image",))
+        self.assertEqual(sc.manquantes_pour(["recette-emulateur"], set()),
+                         ["base", "android-build", "android-emulateur", "emulateur-image"])
+        self.assertEqual(sc.manquantes_pour(["recette-emulateur"], {"base", "android-build", "android-emulateur"}),
+                         ["emulateur-image"])
+        # toute capacité installable est demandée par au moins une action (sinon le bureau ne peut pas l'installer)
+        demandees = set(sc.manquantes_pour(list(sc.BESOINS), set()))
+        self.assertEqual({i for i, c in sc.CATALOGUE.items() if c.installable} - demandees, {"durcissement", "unity-cli"})
+
     def test_action_inconnue_leve_une_erreur(self):
         with self.assertRaises(ValueError):
             sc.manquantes_pour(["voler"], set())

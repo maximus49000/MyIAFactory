@@ -84,6 +84,9 @@ _BESOINS = {
     "lint": ("android-build",),
     "release": ("android-build",),
     "emulateur": ("android-emulateur",),
+    # la recette sur émulateur (tâches serveur) tourne dans l'image de l'émulateur : c'est par cette action que le bureau
+    # et `lancer.py plateforme serveurs apercu|installer <id> recette-emulateur` installent emulateur-image (et sa chaîne)
+    "recette-emulateur": ("emulateur-image",),
     "charge": (),
 }
 

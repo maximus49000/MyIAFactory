@@ -118,6 +118,15 @@ class TestServeursCli(Base):
         code, _, _ = self.lancer("installer", "mon-serveur", "apk", "--accord")
         self.assertEqual((code, self.installations), (0, [True]))
 
+    def test_recette_emulateur_apercu_puis_installation(self):
+        self.declarer()
+        self.ssh.presentes = {"base"}
+        code, sortie, _ = self.lancer("apercu", "mon-serveur", "recette-emulateur")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(sortie)["manquantes"], ["android-build", "android-emulateur", "emulateur-image"])
+        code, _, _ = self.lancer("installer", "mon-serveur", "recette-emulateur", "--accord")
+        self.assertEqual((code, self.installations), (0, [True]))
+
     def test_sonder_enregistre_l_etat(self):
         self.declarer()
         self.ssh.presentes = {"base"} if "base" in CATALOGUE else set()

@@ -347,9 +347,10 @@ processus** (absents de Windows : `test_serveur_pont` et les tests de l'envelopp
 recette avec l'APK de MyFridgeCleaner, vérifier KVM, la capture, le rapport, l'arrêt et la libération du créneau) n'aura lieu
 qu'avec l'accord explicite du Directeur.
 
-**Un geste manque avant cet essai** : la capacité `emulateur-image` n'est demandée par **aucune action** du moteur
-d'installation (`recette-emulateur` n'est pas dans sa table des besoins), donc ni le bureau ni `plateforme serveurs installer`
-ne savent aujourd'hui la demander ; elle est seulement sondée et affichée. À brancher avant le jalon réel.
+**Installer l'image avant cet essai** : l'action `recette-emulateur` demande la capacité `emulateur-image` (et sa chaîne
+`base`, `android-build`, `android-emulateur`). Dans le bureau : écran Serveurs, « Installer », cocher « Recette sur émulateur »,
+« Voir l'aperçu » puis donner l'accord. En ligne de commande : `py -3.12 lancer.py plateforme serveurs apercu <id>
+recette-emulateur`, puis `py -3.12 lancer.py plateforme serveurs installer <id> recette-emulateur --accord`.
 
 ## Suite
 

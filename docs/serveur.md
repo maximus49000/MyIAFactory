@@ -71,10 +71,13 @@ les dépendances). Actions connues et capacité requise :
 |---|---|
 | `apk`, `tests`, `lint`, `release` | `android-build` (donc `base`) |
 | `emulateur` | `android-emulateur` (donc `base`, `android-build`) |
+| `recette-emulateur` | `emulateur-image` (donc `base`, `android-build`, `android-emulateur`) |
 | `charge` | aucune |
 
-La capacité `emulateur-image` n'est demandée par **aucune action** de cette table aujourd'hui (l'action `recette-emulateur`, qui
-en a besoin, n'y figure pas) : elle est sondée et affichée, mais ni l'écran d'action ni `installer` ne savent encore la demander.
+C'est l'action `recette-emulateur` qui installe la capacité `emulateur-image` : écran Serveurs (« Installer », cocher « Recette
+sur émulateur », aperçu puis accord), ou `py -3.12 lancer.py plateforme serveurs apercu <id> recette-emulateur` puis
+`py -3.12 lancer.py plateforme serveurs installer <id> recette-emulateur --accord`. Le lieu « serveur » de cette action n'est
+permis que si l'image est présente et à jour (une image périmée est « à refaire ») ; elle n'est jamais permise au poste ni sur GitHub.
 
 `release` n'est qu'un besoin de construction : les clés de signature restent au poste. Aujourd'hui aucune action ne demande
 `durcissement`, `unity-cli` ni les capacités non installables : elles sont **sondées et affichées**, pas installables depuis un

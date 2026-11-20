@@ -182,6 +182,36 @@ class TestLecture(AvecServeurs):
         e = self.json("/api/serveurs/lieux?actions=emulateur")
         self.assertEqual(e["emulateur"]["serveur"]["manque"], ["android-emulateur"])
 
+    def test_lieux_recette_emulateur_exige_l_image(self):
+        # recette-emulateur demande emulateur-image (et ses dépendances) ; servie au serveur seulement.
+        self.declarer()
+        tout = {"base": "presente", "android-build": "presente", "android-emulateur": "presente"}
+        for statut in ("absente", "a_faire", "bloque", "inconnue"):        # absente, ou périmée (à refaire), ou inconnue
+            with self.subTest(statut=statut):
+                self.ecrire_etat(**tout, **{"emulateur-image": statut})
+                e = self.json("/api/serveurs/lieux?actions=recette-emulateur")["recette-emulateur"]
+                self.assertFalse(e["serveur"]["permis"])
+                self.assertEqual(e["serveur"]["manque"], ["emulateur-image"])
+        self.ecrire_etat(**tout, **{"emulateur-image": "presente"})
+        e = self.json("/api/serveurs/lieux?actions=recette-emulateur")["recette-emulateur"]
+        self.assertTrue(e["serveur"]["permis"])
+        self.assertFalse(e["poste"]["permis"])                              # jamais au poste ni sur GitHub
+        self.assertFalse(e["github"]["permis"])
+
+    def test_apercu_et_installation_de_recette_emulateur(self):
+        self.declarer()
+        r, data = self.poster("/api/serveurs/mon-serveur/apercu", {"actions": ["recette-emulateur"]})
+        self.assertEqual(r.status, 200, data)
+        a = json.loads(data)
+        self.assertEqual(a["manquantes"], ["android-build", "android-emulateur", "emulateur-image"])   # base présente
+        self.assertGreater(a["taille_go"], 0)
+        self.assertGreater(a["duree_min"], 0)
+        r, _ = self.poster("/api/serveurs/mon-serveur/installer", {"actions": ["recette-emulateur"], "accord": True})
+        self.assertEqual(r.status, 202)
+        self.libre.set()
+        self.travaux.attendre()
+        self.assertEqual(self.appels, [("mon-serveur", ["recette-emulateur"], True)])
+
     def test_lieux_sans_serveur_ou_sans_etat_ou_action_inconnue(self):
         e = self.json("/api/serveurs/lieux?actions=apk,nimporte")
         self.assertFalse(e["apk"]["serveur"]["permis"])

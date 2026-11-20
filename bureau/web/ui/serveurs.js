@@ -13,9 +13,9 @@ const tableau = (v) => (Array.isArray(v) ? v : []);
 const texte = (v) => (typeof v === "string" ? v : "");
 const objet = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 
-export const ACTIONS = ["apk", "tests", "lint", "release", "emulateur", "charge"];
+export const ACTIONS = ["apk", "tests", "lint", "release", "emulateur", "recette-emulateur", "charge"];
 const LIBELLES_ACTIONS = {apk: "Construire l'APK", tests: "Lancer les tests", lint: "Analyser le code (lint)", release: "Version de diffusion (release)",
-  emulateur: "Émulateur Android", charge: "Tâches de charge"};
+  emulateur: "Émulateur Android", "recette-emulateur": "Recette sur émulateur (image de l'émulateur)", charge: "Tâches de charge"};
 const INSTALLABLES = ACTIONS.filter((a) => a !== "charge");   // « charge » ne demande aucune capacité : rien à installer
 const LIEUX = ["poste", "github", "serveur"];
 const LIBELLES_LIEUX = {poste: "poste", github: "GitHub", serveur: "serveur"};

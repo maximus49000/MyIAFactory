@@ -479,3 +479,19 @@ test("l aperçu ne coche aucune action cachee : il envoie les actions cochees", 
   assert.equal(boutons(c, "Lancer l'installation").length, 0);
   assert.ok(cases(c).length >= 2);
 });
+
+test("la recette sur emulateur est proposee a l installation et demandee aux lieux", async () => {
+  const f = reseau({"POST /api/serveurs/s1/apercu": reponse(200, {manquantes: ["emulateur-image"], taille_go: 1.5, duree_min: 10, bloquees: [], etat: {}}),
+    "GET /api/serveurs": reponse(200, ETAT), "GET /api/serveurs/lieux": reponse(200, LIEUX)});
+  const c = ecranServeurs(ETAT, {fetchFn: f, planifier: minuterie(), lieux: LIEUX});
+  await clic(boutons(c, "Installer")[0]);
+  const ligne = c.tous((n) => n.className.includes("serveurs-action") && n.tagName === "label" && /Recette sur émulateur/.test(n.textContent));
+  assert.equal(ligne.length, 1);
+  const caseRecette = ligne[0].enfants[0];
+  caseRecette.checked = true;
+  caseRecette.auteurs.change[0]();
+  await clic(boutons(c, "Voir l'aperçu")[0]);
+  assert.ok(f.appels.find((a) => a.chemin === "/api/serveurs/s1/apercu").corps.actions.includes("recette-emulateur"));
+  const {ACTIONS} = await import("../ui/serveurs.js");
+  assert.ok(ACTIONS.includes("recette-emulateur"));
+});

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from . import plateforme as modplateforme
+from .deport_types import SERVIES_AU_SERVEUR
 
 DOSSIER = None   # None : voir `dossier()` ; remplacé dans les essais
 MAX_ACTIONS = 20
@@ -503,7 +504,8 @@ def _conseil(d, serveurs, etat, action):
     """{lieu: fiche} : la fiche du serveur garde les champs de `_lieu` ; chaque lieu gagne `niveau` et `fondee_sur`."""
     serveur = _lieu(d, serveurs, etat, action)
     connue = _action_connue(action)
-    permis = {"poste": connue, "github": connue, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
+    ailleurs = connue and action not in SERVIES_AU_SERVEUR          # une action servie au serveur seulement (recette)
+    permis = {"poste": ailleurs, "github": ailleurs, "serveur": serveur["permis"] is True}   # poste et github : pas encore modélisés
     conseil = _recommandation().recommander(action, permis, mesures_pour(action, serveurs, etat, serveur.get("serveur_id")))
     sortie = {}
     for lieu, c in conseil.items():

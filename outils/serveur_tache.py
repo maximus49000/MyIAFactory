@@ -566,9 +566,10 @@ def _noter(dossier, ident, champs):
 
 # --- choix du serveur et appels distants
 
-def choisir_serveur(dossier=plateforme_acces.DOSSIER):
-    """Premier serveur déclaré, joignable à la dernière sonde, avec `android-emulateur` et `emulateur-image` présentes
-    (état local `serveurs-etat.json` : aucune connexion) ; `RefusLancement` avec la raison sinon."""
+def choisir_serveur(dossier=plateforme_acces.DOSSIER, requises=CAPACITES_REQUISES):
+    """Premier serveur déclaré, joignable à la dernière sonde, avec les capacités `requises` présentes (par défaut
+    `android-emulateur` et `emulateur-image` : tranche A ; état local `serveurs-etat.json` : aucune connexion) ;
+    `RefusLancement` avec la raison sinon."""
     serveurs = serveur_modele.lire(dossier)
     if not serveurs:
         raise RefusLancement("Aucun serveur déclaré : déclarez-en un dans le bureau (Serveurs) ou par "
@@ -578,7 +579,7 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER):
     for s in serveurs:
         caps = (connu.get(s.id) or {}).get("capacites")
         caps = caps if isinstance(caps, dict) else {}
-        statuts = {c: caps[c].get("statut") if isinstance(caps.get(c), dict) else None for c in CAPACITES_REQUISES}
+        statuts = {c: caps[c].get("statut") if isinstance(caps.get(c), dict) else None for c in requises}
         if all(v in STATUTS_PRETS for v in statuts.values()):
             return s
         if not caps:
@@ -592,7 +593,8 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER):
                 return f"{c} périmée (à mettre à jour)" if ("mettre à jour" in detail or "périm" in detail) else c
             raisons.append(f"{s.id} : capacité(s) absente(s) ou périmée(s) : "
                            + ", ".join(libelle(c) for c, v in statuts.items() if v not in STATUTS_PRETS))
-    raise RefusLancement("Aucun serveur prêt pour l'émulation (" + " ; ".join(raisons) + ").")
+    usage = "l'émulation" if tuple(requises) == CAPACITES_REQUISES else "un agent (" + ", ".join(requises) + ")"
+    raise RefusLancement(f"Aucun serveur prêt pour {usage} (" + " ; ".join(raisons) + ").")
 
 
 def _serveur_de(ident, dossier):

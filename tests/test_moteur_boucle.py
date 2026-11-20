@@ -673,6 +673,7 @@ class FauxExecuteurServeur:
 
     def __init__(self, projet, tache, mode, demande_base, apk=None, **kw):
         self.projet, self.tache, self.mode, self.demande_base, self.apk = projet, tache, mode, demande_base, apk
+        self.autres_noms = kw.get("autres_noms", ())
         self.branche, self.arrets = None, 0
         self.arret = __import__("threading").Event()
 
@@ -846,6 +847,46 @@ class Serveur(Base):
         self.assertEqual(ex.tache, suivante)                     # l'exécuteur : la tâche serveur active
         self.assertIn(f"`agent/{suivante}`", lance["depart"])
         self.assertTrue(any("travaille encore sur le serveur" in j for j in self.journal()))
+
+    def test_redemarrage_lot_index_illisible_rattache_par_tous_ses_noms(self):
+        suivante = self.ok("tache", entree={"titre": "Développement : Menu", "fonctionnalite": "f1", "role": "dev",
+                                            "colonne": "dev", "etape": "flux:dev", "element": "e2",
+                                            "lot": {"id": "L1", "rang": 2}})["id"]
+        self.ok("tache", entree={"id": self.tache, "lot": {"id": "L1", "rang": 1}})
+        self.actives = None
+        self.moteur.tour()
+        (ex,) = self.executeurs
+        self.assertEqual(ex.tache, self.tache)
+        self.assertEqual(set(ex.autres_noms), {self.tache, suivante})   # l'exécuteur cherche le lot sous tous ses noms
+
+    def test_marque_d_arret_du_lot_sous_le_nom_de_la_tache_serveur(self):
+        """Un lot rattaché par un autre de ses identifiants : le bureau marque l'arrêt sous le nom de la tâche SERVEUR ;
+        le moteur l'entend, et la marque est prise (elle n'arrêtera pas le lancement suivant)."""
+        ex = FauxExecuteurServeur(self.dossier, "lot-suivante", "seul", {"projet": self.projet.nom})
+        self.moteur._serveurs[(str(self.projet.factory), self.tache)] = ex
+        detache.demander_arret(self.dossier, "lot-suivante")
+        self.moteur._arreter_les_agents_serveur(self.projet)
+        self.assertEqual(ex.arrets, 1)
+        self.assertFalse((detache.dossier(self.dossier) / "lot-suivante.arrete").exists())
+
+    def test_reponse_en_echec_n_arrete_pas_les_suivantes_et_reste_gardee(self):
+        dossier = detache.dossier(self.dossier)
+        dossier.mkdir(parents=True, exist_ok=True)
+        for tid in ("a-1", "b-2"):
+            (dossier / f"{tid}.reponse-serveur").write_text(json.dumps(
+                {"tache": tid, "agent": "dev-1", "modele": "sonnet", "session": "s-1", "questions": ["Où ?"],
+                 "demandes": []}), encoding="utf-8")
+        self.actives = []                                # finies sans être lues : redemandées
+        vues = []
+
+        def repondre(projet, etat, tid, *a, **k):
+            vues.append(tid)
+            if tid == "a-1":
+                raise RuntimeError("panne")
+        self.moteur._repondre = repondre
+        self.moteur._rattacher_les_reponses_serveur(self.projet, self.moteur._etat(self.projet))
+        self.assertEqual(vues, ["a-1", "b-2"])                       # la panne de la première n'arrête pas la suivante
+        self.assertTrue((dossier / "a-1.reponse-serveur").exists())  # remise : redemandée au prochain démarrage
 
     def test_apk_par_un_lien_ou_hors_du_projet_refuse(self):
         import os

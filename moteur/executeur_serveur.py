@@ -12,6 +12,7 @@ consigne, le message et le paquet Git sont envoyés. Tout ce que le serveur renv
 """
 import re
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -55,18 +56,37 @@ RAISON_SANS_ETAT = "Aucun état"     # serveur_tache.etat : dossier présent mai
 ESSAIS_RECUPERATION = 5             # rapatriement : nouvel essai après une panne passagère (SSH, état illisible, fetch)
 GRACE_SANS_ETAT_S = 300             # sans etat.json si longtemps : la tâche n'a jamais démarré (échec final)
 LANCEMENT_PERDU_S = 300             # réponse du lancement perdue et serveur muet si longtemps : échec, arrêt relayé plus tard
-# Refus de `serveur_agent.recuperer` qui peuvent venir d'une panne passagère (transfert coupé, dépôt verrouillé) : nouvel
-# essai. Tout autre refus (paquet ou fin.json suspects, branche extraite) est définitif.
-TRANSITOIRES = ("Rapatriement de", "Paquet Git abîmé", "Branche non récupérée", "Branche récupérée inattendue")
+RAISON_INJOIGNABLE = "Serveur injoignable"     # serveur_tache : panne réseau (le suivi continue sans limite propre)
+GRACE_ILLISIBLE_S = 300             # serveur joignable mais état illisible si longtemps : échec, arrêt relayé
+# Un refus de `serveur_agent.recuperer` qui peut venir d'une panne passagère (transfert coupé, dépôt verrouillé) porte
+# `transitoire` : nouvel essai. Tout autre refus (paquet ou fin.json suspects, branche extraite) est définitif.
 
-# Un seul exécuteur à la fois par (projet, tâche) dans ce processus (le moteur n'en lance qu'un ; ce verrou ne coûte rien).
+# Un seul exécuteur à la fois par (projet, tâche, genre) dans ce processus (le moteur n'en lance qu'un ; ce verrou ne coûte
+# rien). Une réponse aux questions n'attend jamais l'exécuteur de sa tâche (genres distincts). Compté : un verrou dont
+# plus personne ne se sert est oublié (le dictionnaire ne grossit pas avec les tâches).
 _VERROUS = {}
 _VERROU_VERROUS = threading.Lock()
 
 
-def _verrou(cle):
-    with _VERROU_VERROUS:
-        return _VERROUS.setdefault(cle, threading.Lock())
+class _verrou:
+    def __init__(self, cle):
+        self.cle = cle
+
+    def __enter__(self):
+        with _VERROU_VERROUS:
+            entree = _VERROUS.setdefault(self.cle, [threading.Lock(), 0])
+            entree[1] += 1
+        entree[0].acquire()
+        return self
+
+    def __exit__(self, *_exc):
+        with _VERROU_VERROUS:
+            entree = _VERROUS[self.cle]
+            entree[0].release()
+            entree[1] -= 1
+            if entree[1] == 0:
+                del _VERROUS[self.cle]
+        return False
 
 
 class EcheanceServeur(TimeoutError):
@@ -151,10 +171,13 @@ class ExecuteurServeur:
     noter_abonnement = True          # l'instantané d'abonnement du flux est noté par `appel` (compté dans l'abonnement)
 
     def __init__(self, projet, tache, mode, demande_base, dossier=None, ssh=None, dormir=time.sleep, pas_s=15,
-                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None):
+                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None, autres_noms=()):
         self.projet = Path(projet)
         self.apk = apk                   # mode pilote : l'APK déposé sur le serveur (`serveur_agent.lancer_agent`)
         self.tache = tache
+        # un lot : la tâche serveur active peut porter le nom d'un autre de ses identifiants (rattachée par celui-là)
+        self._noms = {str(tache).lower()} | {str(n).lower() for n in autres_noms or () if isinstance(n, str)}
+        self.avertissements_index = []   # écritures de l'index refusées (aussi dites sur la sortie d'erreur)
         self.mode = mode
         self.demande_base = dict(demande_base or {})
         self.nom_projet = self.demande_base.get("projet") or self.projet.name
@@ -193,26 +216,30 @@ class ExecuteurServeur:
 
     def _meme_tache(self, fiche):
         return (fiche.get("type") == "agent" and fiche.get("projet") == self.nom_projet
-                and isinstance(fiche.get("tache"), str) and fiche["tache"].lower() == str(self.tache).lower())
+                and isinstance(fiche.get("tache"), str) and fiche["tache"].lower() in self._noms)
 
     def _de_la_tache(self, fiche):
         """Une fiche de cette tâche ET de ce genre (une réponse n'est jamais prise pour la tâche, ni l'inverse)."""
         return self._meme_tache(fiche) and (fiche.get("genre") or "tache") == self.genre
 
-    def _arreter_les_reponses_orphelines(self, st):
-        """L'agent de la tâche repart : une réponse aux questions encore active pour cette tâche (moteur coupé pendant
-        qu'elle tournait) n'a plus de lecteur ; elle est arrêtée (serveur muet : l'arrêt est noté pour être relayé)."""
-        if self.genre != "tache":
-            return
-        for i, f in self._fiches(st):
-            if (self._meme_tache(f) and (f.get("genre") or "tache") == "reponse" and f.get("etat") in ACTIFS
-                    and f.get("arret_demande") is not True):
-                lu = st.arreter(i, self.dossier, self.ssh)
-                if lu.get("etat") not in st.FINAUX:
-                    self._noter(st, i, {"arret_demande": True})
+    # Une réponse aux questions restée active n'est PAS arrêtée ici : au redémarrage du moteur, `boucle` la rattache (elle
+    # est gardée sur le poste) ou arrête celle dont le poste ne sait plus rien ; l'arrêter depuis l'exécuteur de la tâche
+    # pourrait couper une réponse tout juste rattachée.
 
     def _noter(self, st, ident, champs):
-        st._noter(self.dossier, ident, champs)
+        """Met la fiche à jour ; un refus de l'index n'est jamais muet : gardé dans `avertissements_index` et dit sur la
+        sortie d'erreur (journal du moteur)."""
+        message = st._noter(self.dossier, ident, champs)
+        if message:
+            self.avertissements_index = (self.avertissements_index + [f"{ident} : {message}"])[-20:]
+            print(f"agent serveur {self.tache} : {ident} : {message}", file=sys.stderr)
+        return message
+
+    @staticmethod
+    def _rien_sur_le_serveur(st, lu):
+        """L'arrêt a trouvé que le serveur n'a aucun dossier pour cette tâche (lancement perdu avant l'envoi) : il n'y a
+        rien à arrêter, l'arrêt est acquis."""
+        return lu.get("etat") == "inconnu" and str(lu.get("raison") or "") == getattr(st, "RAISON_AUCUNE_TACHE", None)
 
     def _active(self, st):
         """L'identifiant de la tâche non finale de l'index pour (projet, tâche), la plus récente ; None sinon. Jamais une
@@ -225,19 +252,32 @@ class ExecuteurServeur:
             if f.get("abandonnee") is True:
                 if f.get("abandon_traite") is not True:
                     lu = st.arreter(i, self.dossier, self.ssh)
-                    if lu.get("etat") != "inconnu":
+                    if lu.get("etat") != "inconnu" or self._rien_sur_le_serveur(st, lu):
                         self._noter(st, i, {"abandon_traite": True})
                 continue
             trouve = i
         return trouve
 
-    def _relayer_arrets(self, st):
-        """Arrêts demandés quand le serveur ne répondait pas : redemandés, une fois réussis notés `arret_relaye`."""
+    def _relayer_arrets(self, sa, st):
+        """Arrêts demandés quand le serveur ne répondait pas : redemandés, une fois réussis notés `arret_relaye`. Rien sur
+        le serveur (lancement perdu) : acquis aussi (jamais un ssh à chaque appel pour toujours). Une tâche de ce genre
+        trouvée finie (`terminee` ou `arretee`) avant que l'arrêt n'arrive : son travail commité est rapatrié (branche
+        `agent/<tâche>` gardée), sans en faire le résultat de cet appel."""
         for i, f in self._fiches(st):
             if self._meme_tache(f) and f.get("arret_demande") is True and f.get("arret_relaye") is not True:
                 lu = st.arreter(i, self.dossier, self.ssh)
-                if lu.get("etat") in st.FINAUX:
+                if self._rien_sur_le_serveur(st, lu):
+                    self._noter(st, i, {"arret_relaye": True, "etat": "echouee", "statut": "erreur",
+                                        "raison": "Arrêt relayé : la tâche n'existe pas sur le serveur."})
+                elif lu.get("etat") in st.FINAUX:
                     self._noter(st, i, {"arret_relaye": True})
+                    if (lu.get("etat") in ("terminee", "arretee") and self._de_la_tache(f)
+                            and f.get("rapatriement") in (None, "en_attente")):
+                        statut, r = self._rapatrier(sa, st, i)
+                        if statut == "ok" and r.get("branche"):
+                            self.branche = r["branche"]
+                        elif statut == "transitoire":       # repris par l'arrêt relayé, jamais comme résultat
+                            self._noter(st, i, {"rapatriement": "abandonne", "raison": r})
 
     def _rapatriement_en_attente(self, st):
         trouve = None
@@ -272,9 +312,12 @@ class ExecuteurServeur:
     def __call__(self, argv, entree, env, cwd, delai_s):
         """`(code, flux)` comme `appel._executer_claude`. `env` et `cwd` du poste sont ignorés (jamais transmis)."""
         sa, st = _modules()
-        with _verrou((self.nom_projet, str(self.tache).lower())):
+        with _verrou((self.nom_projet, str(self.tache).lower(), self.genre)):
             try:
                 code, sortie = self._appeler(sa, st, argv, entree, delai_s)
+            except BaseException:
+                self._echec_precedent = None     # l'appel a fini par une exception : aucune erreur « précédente » gardée
+                raise
             finally:
                 # la demande d'arrêt valait pour cet appel (ou, faite entre deux appels, pour celui-ci) : consommée
                 self._arret, self._arret_lu = False, None
@@ -289,9 +332,19 @@ class ExecuteurServeur:
             return 1, str(e).encode("utf-8")
         consigne = Path(chemin_consigne).read_bytes()
         delai = max(1, int(delai_s))
-        self._relayer_arrets(st)
+        self._relayer_arrets(sa, st)
         self._verifier_arret(sa, st, None)
         attente = self._rapatriement_en_attente(st)
+        if attente is not None and attente[1].get("etat") == "arretee":
+            # une tâche ARRÊTÉE dont le rapatriement a échoué : son travail est repris, mais elle n'est jamais le résultat
+            # de cet appel (sinon chaque nouvel appel finirait « arrêté ») ; l'appel continue normalement
+            ident, _f = attente
+            statut, r = self._rapatrier(sa, st, ident)
+            if statut == "ok" and r.get("branche"):
+                self.branche = r["branche"]
+            elif statut == "transitoire":
+                self._noter(st, ident, {"rapatriement": "abandonne", "raison": r})
+            attente = None
         if attente is not None:          # une tâche finie dont le rapatriement a échoué : repris, jamais relancée
             ident, fiche = attente
             self.ident = ident
@@ -299,7 +352,6 @@ class ExecuteurServeur:
                                                   "raison": fiche.get("raison") or ""})
         ident, incertain = self._active(st), False
         if ident is None:
-            self._arreter_les_reponses_orphelines(st)
             try:
                 ident, echec, incertain = self._lancer(sa, st, distant, consigne, entree, delai)
             except ValueError as e:                     # RefusLancement : rien n'est parti
@@ -315,8 +367,13 @@ class ExecuteurServeur:
 
     def _lancer(self, sa, st, distant, consigne, entree, delai):
         """`(ident, None, incertain)` si la tâche est lancée (à suivre ; `incertain` : réponse du lancement perdue),
-        `(None, (code, sortie), False)` si elle n'a pas pu l'être."""
-        paquet, branche, base = sa.preparer_paquet(self.projet, git=self._git_(sa))
+        `(None, (code, sortie), False)` si elle n'a pas pu l'être. Le paquet Git est écrit dans un fichier temporaire
+        (jamais en mémoire, 500 Mo au plus), effacé dès l'envoi fait."""
+        with tempfile.TemporaryDirectory(prefix="agent-serveur-", ignore_cleanup_errors=True) as tmp:
+            return self._lancer_avec(sa, st, distant, consigne, entree, delai, Path(tmp) / "projet.bundle")
+
+    def _lancer_avec(self, sa, st, distant, consigne, entree, delai, fichier):
+        paquet, branche, base = sa.preparer_paquet(self.projet, git=self._git_(sa), fichier=fichier)
         self._verifier_arret(sa, st, None)
         reprend = None
         session = _valeur(distant, "--resume")
@@ -371,7 +428,7 @@ class ExecuteurServeur:
         -> échec qui le dit ; sinon arrêt, puis le travail est rapatrié (cause « echeance »)."""
         debut = self._horloge()
         limite = debut + delai + MARGE_SUIVI_S
-        sans_etat_depuis, joint = None, False
+        sans_etat_depuis, illisible_depuis, joint = None, None, False
         while True:
             self._verifier_arret(sa, st, ident)
             lu = st.etat(ident, self.dossier, self.ssh)
@@ -379,6 +436,23 @@ class ExecuteurServeur:
             maintenant = self._horloge()
             if etat in st.FINAUX:
                 return lu, None
+            if etat == "inconnu" and not raison.startswith((RAISON_SANS_ETAT, RAISON_INJOIGNABLE)):
+                # le serveur répond mais l'état reste illisible (etat.json abîmé, lecture en échec, serveur retiré) :
+                # borné comme l'absence d'état, l'arrêt est demandé (relayé plus tard si besoin)
+                joint = True
+                illisible_depuis = maintenant if illisible_depuis is None else illisible_depuis
+                if maintenant - illisible_depuis >= GRACE_ILLISIBLE_S:
+                    raison = (f"État de la tâche illisible sur le serveur depuis {int(maintenant - illisible_depuis)} s "
+                              f"({raison[:200]}) : tâche marquée en échec, son arrêt est demandé.")
+                    fin = st.arreter(ident, self.dossier, self.ssh)
+                    champs = {"etat": "echouee", "statut": "erreur", "fin": st._maintenant_iso(), "raison": raison}
+                    if fin.get("etat") not in st.FINAUX:
+                        champs["arret_demande"] = True
+                    self._noter(st, ident, champs)
+                    return {"etat": "echouee", "raison": raison}, None
+                self._dormir(self.pas_s)
+                continue
+            illisible_depuis = None
             if etat == "inconnu" and raison.startswith(RAISON_SANS_ETAT):
                 joint = True
                 sans_etat_depuis = maintenant if sans_etat_depuis is None else sans_etat_depuis
@@ -441,9 +515,9 @@ class ExecuteurServeur:
                 self._dormir(self.pas_s)
             try:
                 r = sa.recuperer(ident, self.projet, dossier=self.dossier, ssh=self.ssh, git=self._git_(sa))
-            except ValueError as e:                    # RefusRecuperation
+            except ValueError as e:                    # RefusRecuperation (`transitoire` : panne passagère)
                 message = str(e)
-                if not message.startswith(TRANSITOIRES):
+                if getattr(e, "transitoire", False) is not True:
                     self._noter(st, ident, {"rapatriement": "refuse"})
                     return "refus", message
                 continue

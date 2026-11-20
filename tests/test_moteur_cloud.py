@@ -917,6 +917,16 @@ class FusionEtatLocal(__import__("unittest").TestCase):
         self.assertIn("conflit de fusion", cloud.fusionner(".", "claude/x", executer=executer))
 
 
+SHA_BRANCHE = "c" * 40
+
+
+def _epingle(argv):
+    """Réponse d'un faux git à la lecture du commit de la branche (fusion locale épinglée), sinon None."""
+    if "rev-parse" in argv and "--verify" in argv:
+        return 0, (SHA_BRANCHE + "\n").encode()
+    return None
+
+
 class FusionLocale(__import__("unittest").TestCase):
     """`distante=False` (agent serveur) : la branche locale `agent/<tâche>` est fusionnée, jamais `origin/<branche>`."""
 
@@ -957,10 +967,10 @@ class FusionLocale(__import__("unittest").TestCase):
 
         def executer(argv, cwd, delai):
             vus.append(argv[1:])
-            return (1, b"fatal: No configured push destination.") if argv[1] == "push" else (0, b"")
+            return _epingle(argv) or ((1, b"fatal: No configured push destination.") if argv[1] == "push" else (0, b""))
         self.assertIsNone(cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
         (fusion,) = [a for a in vus if "merge" in a]
-        self.assertEqual(fusion[-1], "refs/heads/agent/t1")
+        self.assertEqual(fusion[-1], SHA_BRANCHE)                  # le commit vérifié, jamais la branche qui bougerait
         self.assertIn("Factory : fusion de agent/t1", fusion)
         # les crochets de git (hooks) et fsmonitor ne tournent jamais pendant la fusion locale
         avant = fusion[:fusion.index("merge")]
@@ -969,8 +979,9 @@ class FusionLocale(__import__("unittest").TestCase):
         self.assertEqual(len(crochets), 1)
         self.assertNotEqual(crochets[0], "core.hooksPath=")
         (diff,) = [a for a in vus if "diff" in a and "--name-only" in a and "--diff-filter=U" not in a]
-        for option in ("-z", "--no-renames", "HEAD...refs/heads/agent/t1"):
+        for option in ("-z", "--no-renames", f"HEAD...{SHA_BRANCHE}"):
             self.assertIn(option, diff)
+        self.assertTrue(any("merge-tree" in a and "--write-tree" in a for a in vus))
         self.assertLess(vus.index(diff), vus.index(fusion))
         vus.clear()
         self.assertIn("n'a pas pu être poussée", cloud.fusionner(".", "claude/x", executer=executer))
@@ -980,6 +991,8 @@ class FusionLocale(__import__("unittest").TestCase):
     def test_conflit_local_reste_au_directeur(self):
         from moteur import cloud
         def executer(argv, cwd, delai):
+            if _epingle(argv):
+                return _epingle(argv)
             if "merge" in argv and "--abort" not in argv:
                 return 1, b"CONFLICT (content): app/Main.kt"
             if "--diff-filter=U" in argv:
@@ -995,12 +1008,17 @@ class FusionLocale(__import__("unittest").TestCase):
                     ".github/workflows/x.yml", "src/.git/hooks/post-merge", "../dehors.txt", "src/../../dehors.txt",
                     "src\\..\\..\\dehors.txt", ".FACTORY/reglages.json", "Fiches/agent-1.md", "FACTORY.JSON",
                     ".factory./reglages.json", ".Husky/pre-commit", "FACTOR~1/reglages.json", "/etc/passwd",
-                    "C:/x.txt", ".factory /suivi.json")
+                    "C:/x.txt", ".factory /suivi.json",
+                    # projet dans un sous-dossier du dépôt : l'état de la factory est réservé à toute profondeur
+                    "app/.factory/reglages.json", "app/fiches/agent-1.md", "app/factory.json", ".lfsconfig",
+                    "app/.lfsconfig", "app/.FACTORY/suivi.json")
         for chemin in reserves:
             vus = []
 
             def executer(argv, cwd, delai, chemin=chemin):
                 vus.append(argv[1:])
+                if _epingle(argv):
+                    return _epingle(argv)
                 if "--name-only" in argv and "--diff-filter=U" not in argv:
                     return 0, ("app/Main.kt\x00" + chemin + "\x00").encode("utf-8")
                 return 0, b""
@@ -1027,11 +1045,84 @@ class FusionLocale(__import__("unittest").TestCase):
 
         def executer(argv, cwd, delai):
             vus.append(argv[1:])
+            if _epingle(argv):
+                return _epingle(argv)
             if "--name-only" in argv and "--diff-filter=U" not in argv:
                 return 0, b"app/src/Main.kt\x00docs/factory-notes.md\x00.gitignore\x00src/fiches.py\x00"
             return 0, b""
         self.assertIsNone(cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
         self.assertTrue(any("merge" in a for a in vus))
+
+    def test_branche_illisible_refusee(self):
+        from moteur import cloud
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(argv[1:])
+            return (1, b"") if "rev-parse" in argv else (0, b"")
+        self.assertIn("gardée", cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+        self.assertFalse(any("merge" in a for a in vus))
+
+    def test_resultat_de_la_fusion_controle_pas_seulement_la_base(self):
+        """Le diff depuis la base commune est propre, mais l'arbre que la fusion produirait touche un chemin réservé
+        (renommage, bases multiples) : refus."""
+        from moteur import cloud
+        arbre = "d" * 40
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(argv[1:])
+            if _epingle(argv):
+                return _epingle(argv)
+            if "merge-tree" in argv:
+                return 0, (arbre + "\n").encode()
+            if "--name-only" in argv and arbre in argv:
+                return 0, b"app/Main.kt\x00.factory/reglages.json\x00"
+            if "--name-only" in argv and "--diff-filter=U" not in argv:
+                return 0, b"app/Main.kt\x00"
+            return 0, b""
+        raison = cloud.fusionner(".", "agent/t1", executer=executer, distante=False)
+        self.assertIn(".factory/reglages.json", raison)
+        self.assertFalse(any(a[:1] == ["merge"] or "merge" in a and "merge-tree" not in a for a in vus))
+
+    def test_prefixe_des_crochets_normalise(self):
+        from moteur import cloud
+        racine = "C:/depots/projet" if __import__("os").name == "nt" else "/depots/projet"
+        cas = {"scripts/crochets": "scripts/crochets", "./scripts//./crochets/": "scripts/crochets",
+               "Scripts\\Crochets": "scripts/crochets", "../dehors": "", "a/../../dehors": "",
+               racine + "/outils/crochets": "outils/crochets", racine + "/../ailleurs": "", "": ""}
+        for valeur, attendu in cas.items():
+            self.assertEqual(cloud.prefixe_crochets(valeur, racine), attendu, valeur)
+        self.assertEqual(cloud.prefixe_crochets(racine + "/x", ""), "")     # racine inconnue : rien affirmé
+
+    def test_crochets_relatifs_ou_absolus_dans_le_depot_reserves(self):
+        """Dépôt jetable : `core.hooksPath` relatif ou absolu DANS le dépôt ; une branche qui y écrit est refusée."""
+        import shutil, subprocess, tempfile
+        from pathlib import Path
+        from moteur import cloud
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        git = lambda *a: subprocess.run(["git", *a], cwd=d, capture_output=True)
+        git("init", "-q")
+        git("config", "user.email", "x@x")
+        git("config", "user.name", "x")
+        git("config", "commit.gpgsign", "false")
+        (d / "a.txt").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        principale = git("rev-parse", "--abbrev-ref", "HEAD").stdout.decode().strip()
+        git("checkout", "-q", "-b", "agent/t1")
+        (d / "outils" / "crochets").mkdir(parents=True)
+        (d / "outils" / "crochets" / "pre-commit").write_text("#!/bin/sh\necho pirate\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "crochet")
+        git("checkout", "-q", principale)
+        for valeur in ("outils//./crochets/", (d / "outils" / "crochets").as_posix()):
+            git("config", "core.hooksPath", valeur)
+            raison = cloud.fusionner(str(d), "agent/t1", distante=False)
+            self.assertIsNotNone(raison, valeur)
+            self.assertIn("outils/crochets/pre-commit", raison)
+            self.assertFalse((d / "outils").exists())
 
     def test_crochets_du_depot_jamais_lances_par_la_fusion_locale(self):
         """Dépôt jetable : un crochet post-merge (core.hooksPath du dépôt) ne tourne pas ; une branche qui ajoute

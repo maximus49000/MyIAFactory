@@ -68,12 +68,17 @@ class FauxServeurAgent:
         self.reponse_lancer = None  # dict rendu par lancer_agent à la place de « en_cours »
         self.refus_lancer = None    # exception levée par lancer_agent
 
-    def preparer_paquet(self, projet, git=None):
+    def preparer_paquet(self, projet, git=None, fichier=None):
         self.paquets.append(projet)
+        if fichier is not None:                 # l'exécuteur demande le paquet dans un fichier (jamais en mémoire)
+            Path(fichier).write_bytes(b"PAQUET-GIT")
+            return Path(fichier), "main", BASE
         return b"PAQUET-GIT", "main", BASE
 
     def lancer_agent(self, demande, paquet, argv, consigne, message, apk=None, dossier=None, ssh=None,
                      attente_max_s=600, dormir=None, projet=None, git=None):
+        if isinstance(paquet, Path):
+            paquet = paquet.read_bytes()
         self.lancements.append({"demande": demande, "paquet": paquet, "argv": argv, "consigne": consigne,
                                 "message": message, "dossier": dossier, "projet": projet, "apk": apk})
         if self.refus_lancer is not None:
@@ -94,6 +99,9 @@ class FauxServeurAgent:
             return {"id": ident, "etat": "inconnu", "raison": "Serveur injoignable ou délai dépassé : ssh"}
         if e == "sans_etat":
             return {"id": ident, "etat": "inconnu", "raison": "Aucun état de cette tâche sur le serveur.",
+                    "serveur_id": "ovh1"}
+        if e == "illisible":
+            return {"id": ident, "etat": "inconnu", "raison": "État illisible sur le serveur (etat.json).",
                     "serveur_id": "ovh1"}
         lu = {"id": ident, "etat": e, "statut": self.statut if e in st.FINAUX else None, "raison": self.raison,
               "serveur_id": "ovh1"}
@@ -116,6 +124,8 @@ class FauxServeurAgent:
         e = self.reponses_arret.pop(0) if self.reponses_arret else "arretee"
         if e == "inconnu":
             return {"id": ident, "etat": "inconnu", "raison": "Serveur injoignable ou délai dépassé : ssh"}
+        if e == "aucune":
+            return {"id": ident, "etat": "inconnu", "raison": st.RAISON_AUCUNE_TACHE}
         st._noter(dossier, ident, {"etat": e})
         return {"id": ident, "etat": e, "raison": "Arrêt demandé (fichier arret)"}
 
@@ -264,13 +274,15 @@ class Appel(Base):
                                                    "branche": "main", "base": BASE})
 
     def test_reponse_orpheline_jamais_rattachee_comme_la_tache(self):
-        """Une réponse aux questions restée active n'est jamais prise pour la tâche : elle est arrêtée, la tâche lancée."""
+        """Une réponse aux questions restée active n'est jamais prise pour la tâche, ni arrêtée par l'exécuteur de la
+        tâche (elle vient peut-être d'être rattachée par le moteur) : la tâche est lancée."""
         f = self.faux()
         self.active(ID1, "reponse")
         (self.tmp / "c.md").write_text("c", encoding="utf-8")
         argv = appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None)
         self.executeur()(argv, b"m", {}, None, 300)
-        self.assertEqual(f.arrets[0], ID1)                       # la réponse orpheline arrêtée
+        self.assertNotIn(ID1, f.arrets)                          # la réponse n'est pas coupée
+        self.assertEqual(f.lancements[0]["paquet"], b"PAQUET-GIT")   # paquet passé par un fichier temporaire
         self.assertEqual(len(f.lancements), 1)                   # la tâche lancée, pas rattachée à la réponse
         self.assertEqual(f.lancements[0]["demande"].get("genre", "tache"), "tache")
         self.assertNotIn(ID1, f.sondes)
@@ -463,7 +475,8 @@ def agent_dev():
 class Recuperation(Base):
     def test_recuperation_transitoire_reessayee_sans_relancer(self):
         f = self.faux()
-        f.recups = [sa.RefusRecuperation("Rapatriement de flux.jsonl en échec (code 255) : ssh"), "inconnu",
+        f.recups = [sa.RefusRecuperation("Rapatriement de flux.jsonl en échec (code 255) : ssh", transitoire=True),
+                    "inconnu",
                     OSError("connexion perdue")]
         r = appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
         self.assertEqual(r.texte, "fini")
@@ -472,7 +485,7 @@ class Recuperation(Base):
 
     def test_recuperation_impossible_puis_nouvel_appel_reprend_la_recuperation_sans_relancer(self):
         f = self.faux()
-        f.recups = [sa.RefusRecuperation("Rapatriement de flux.jsonl en échec (code 124) : délai")] * 5
+        f.recups = [sa.RefusRecuperation("Rapatriement de flux.jsonl en échec (code 124) : délai", transitoire=True)] * 5
         ex = self.executeur()
         with self.assertRaises(appel.ErreurAppel) as e:
             appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
@@ -616,6 +629,96 @@ class Echeance(Base):
             r = agents.executer_agent("D.", "M.", agent=agent_dev(), modele="sonnet", dossier_projet=self.projet,
                                       executeur=ex)
         self.assertIn("Erreur du premier essai", r.erreur)
+
+
+class VagueFinale(Base):
+    """Correctifs finaux : reprise d'une tâche arrêtée, arrêt relayé sans tâche, état illisible borné, verrous."""
+
+    def fiche(self, ident, **plus):
+        st.Index(self.dossier).enregistrer(ident, {"type": "agent", "etat": "en_cours", "serveur_id": "ovh1",
+                                                   "mode": "seul", "projet": "demo", "tache": TACHE, "session": None,
+                                                   "branche": "main", "base": BASE, **plus})
+
+    def test_rapatriement_en_attente_d_une_tache_arretee_ne_tue_pas_le_lancement_suivant(self):
+        f = self.faux(branche=f"agent/{TACHE}")
+        self.fiche(ID1, etat="arretee", rapatriement="en_attente")
+        f.ident = AUTRE
+        r = appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertEqual(r.texte, "fini")
+        self.assertEqual(len(f.lancements), 1)                     # l'appel continue : une tâche lancée
+        self.assertEqual(f.recuperations[0], (ID1, self.projet))   # le travail de la tâche arrêtée repris d'abord
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["rapatriement"], "fait")
+
+    def test_arret_relaye_sans_tache_sur_le_serveur_est_acquis(self):
+        f = self.faux()
+        self.fiche(ID1, arret_demande=True)
+        f.reponses_arret = ["aucune"]
+        f.ident = AUTRE
+        appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertTrue(st.Index(self.dossier).lire()[ID1]["arret_relaye"])
+        f.ident = "t20261120-141500-ffff"
+        appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertEqual(f.arrets.count(ID1), 1)                   # jamais redemandé
+
+    def test_arret_relaye_sur_une_tache_finie_rapatrie_son_travail(self):
+        f = self.faux(branche=f"agent/{TACHE}")
+        self.fiche(ID1, arret_demande=True)
+        f.reponses_arret = ["terminee"]
+        f.ident = AUTRE
+        ex = self.executeur()
+        appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
+        self.assertEqual(f.recuperations[0], (ID1, self.projet))
+        self.assertEqual(len(f.lancements), 1)                     # jamais le résultat de cet appel
+
+    def test_etat_illisible_persistant_borne(self):
+        f = self.faux(etats=("illisible",))
+        with self.assertRaises(appel.ErreurAppel) as e:
+            appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=2400)
+        self.assertIn("illisible", e.exception.raison)
+        self.assertLess(self.t - 1000.0, 600)
+        self.assertEqual(st.Index(self.dossier).lire()[ID2]["etat"], "echouee")
+        self.assertIn(ID2, f.arrets)
+
+    def test_echec_precedent_oublie_apres_une_exception(self):
+        self.faux()
+        ex = self.executeur()
+        ex._echec_precedent = "vieille erreur"
+        ex.arreter()
+        with self.assertRaises(detache.ArretDemande):
+            (self.tmp / "c.md").write_text("c", encoding="utf-8")
+            ex(appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None), b"m", {}, None, 300)
+        self.assertIsNone(ex._echec_precedent)
+
+    def test_ecriture_d_index_refusee_jamais_muette(self):
+        self.faux()
+        ex = self.executeur()
+        with mock.patch.object(st, "_noter", lambda *a, **k: "Index des tâches non mis à jour : verrou"), \
+                mock.patch("sys.stderr") as err:
+            ex._noter(st, ID1, {"x": 1})
+        self.assertIn("verrou", ex.avertissements_index[0])
+        self.assertTrue(err.write.called)
+
+    def test_verrous_oublies_et_genres_distincts(self):
+        self.faux()
+        (self.tmp / "c.md").write_text("c", encoding="utf-8")
+        self.executeur()(appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None), b"m", {}, None, 300)
+        self.assertEqual(es._VERROUS, {})
+        with es._verrou(("demo", TACHE, "tache")):
+            with es._verrou(("demo", TACHE, "reponse")):             # une réponse n'attend pas sa tâche
+                self.assertEqual(len(es._VERROUS), 2)
+        self.assertEqual(es._VERROUS, {})
+
+    def test_lot_rattache_par_un_autre_de_ses_noms(self):
+        f = self.faux(etats=("en_cours", "terminee"))
+        st.Index(self.dossier).enregistrer(ID1, {"type": "agent", "etat": "en_cours", "serveur_id": "ovh1",
+                                                 "mode": "seul", "projet": "demo", "tache": "lot-2", "session": None,
+                                                 "branche": "main", "base": BASE})
+        ex = es.ExecuteurServeur(self.projet, "lot-1", "seul", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
+                                 dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
+                                 autres_noms=("lot-1", "lot-2"))
+        appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
+        self.assertEqual(f.lancements, [])                         # rattaché, jamais un doublon
+        self.assertIn(ID1, f.sondes)
 
 
 if __name__ == "__main__":

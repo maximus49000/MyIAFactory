@@ -5,8 +5,11 @@ import io
 import json
 import sys
 import tempfile
+import os
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
 import serveur_recette  # noqa: E402
@@ -37,11 +40,14 @@ class FauxMoteur:
         self.appels, self.manifeste, self.reponse_verbe = [], None, None
         self.etat_arret = "terminee"
         self.leve = None
+        self.retour_lancer = None
 
     def lancer(self, demande, apk, dossier=None, ssh=None, **kw):
         self.appels.append(("lancer", demande, len(apk)))
         if self.leve:
             raise self.leve
+        if self.retour_lancer:
+            return {"id": demande.id, "serveur_id": "s1", **self.retour_lancer}
         return {"id": demande.id, "etat": "en_cours", "serveur_id": "s1"}
 
     def etat(self, ident, dossier=None, ssh=None):
@@ -65,19 +71,31 @@ class FauxMoteur:
 
 
 class FauxRecette:
-    def __init__(self, echec=None):
-        self.echec, self.executees = echec, []
+    def __init__(self, echec=None, leve=None):
+        self.echec, self.executees, self.leve = echec, [], leve
 
     charger = staticmethod(serveur_recette.charger)
 
     def executer(self, recette, ident, dossier=None, ssh=None):
         self.executees.append((recette.nom, ident))
+        if self.leve:
+            raise self.leve
         return {"etapes_faites": len(recette.etapes), "echec": self.echec}
 
 
-class SshInterdit:
-    def __getattr__(self, nom):
-        raise AssertionError("aucun accès SSH attendu")
+class SshEnregistre:
+    """Consigne TOUT appel : un test qui exige `appels == []` prouve qu'aucun SSH n'a eu lieu."""
+
+    def __init__(self):
+        self.appels = []
+
+    def executer(self, *a, **k):
+        self.appels.append(("executer", a))
+        return 255, "", "interdit"
+
+    def executer_octets(self, *a, **k):
+        self.appels.append(("executer_octets", a))
+        return 255, b"", "interdit"
 
 
 class Base(unittest.TestCase):
@@ -143,15 +161,72 @@ class TestLancer(Base):
         self.moteur.etat_arret = "en_cours"
         code, _, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
                                 "--projet", str(self.projet), "--attendre")
-        self.assertGreater(self.noms().count("arreter"), 1)
-        self.assertIn("rapatrier", self.noms())
-
-    def test_lancer_sans_attendre_imprime_id_et_etat(self):
-        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
-                                     "--projet", str(self.projet))
+        self.assertEqual(self.noms().count("arreter"), cli.ARRETS_MAX)
+        self.assertEqual(self.noms()[-1], "rapatrier")
         self.assertEqual(code, 0)
-        self.assertEqual(set(json.loads(sortie)) & {"id", "etat"}, {"id", "etat"})
+
+    def test_scenario_sans_attendre_est_un_usage_errone(self):
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet))
+        self.assertEqual(code, 2)
+        self.assertIn("utilisez --attendre", erreur)
+        self.assertEqual(self.moteur.appels, [])
+
+    def test_en_cours_avec_erreur_continue_la_recette_et_arrete(self):
+        self.moteur.retour_lancer = {"etat": "en_cours", "erreur": "Index des tâches non mis à jour : x"}
+        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre")
+        self.assertEqual(len(self.recette.executees), 1)
+        self.assertEqual(self.noms(), ["lancer", "arreter", "rapatrier"])
+        self.assertEqual(code, 0)
+        self.assertIn("Index des tâches non mis à jour", json.loads(sortie)["avertissement"])
+
+    def test_en_cours_avec_erreur_manifeste_non_ok_sort_1(self):
+        self.moteur.retour_lancer = {"etat": "en_cours", "erreur": "x"}
+        self.moteur.manifeste = {"id": ID, "statut": "erreur", "captures": []}
+        code, _, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 1)
+        self.assertIn("arreter", self.noms())
+
+    def test_en_cours_avec_erreur_en_pilote_est_un_avertissement(self):
+        self.moteur.retour_lancer = {"etat": "en_cours", "erreur": "x"}
+        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(code, 0)
+        donnees = json.loads(sortie)
+        self.assertEqual(donnees["avertissement"], "x")
+        self.assertNotIn("erreur", donnees)
+
+    def test_echec_reel_du_lancement_ne_deroule_rien(self):
+        self.moteur.retour_lancer = {"etat": "echouee", "erreur": "Envoi impossible"}
+        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 1)
+        self.assertEqual(self.recette.executees, [])
         self.assertEqual(self.noms(), ["lancer"])
+        self.assertEqual(json.loads(sortie)["erreur"], "Envoi impossible")
+
+    def test_recette_qui_leve_imprime_l_id_arrete_sans_fin_et_sort_1(self):
+        for exc in (RuntimeError("imprévu"), KeyboardInterrupt()):
+            with self.subTest(exc=type(exc).__name__):
+                self.moteur.appels.clear()
+                recette = FauxRecette(leve=exc)
+                code, sortie, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario",
+                                                  "--scenario", "demo", "--projet", str(self.projet), "--attendre",
+                                                  recette=recette)
+                self.assertEqual(code, 1)
+                self.assertEqual(json.loads(sortie)["id"], recette.executees[0][1])
+                self.assertEqual([a[:3] for a in self.moteur.appels if a[0] == "arreter"],
+                                 [("arreter", recette.executees[0][1], False)])
+                self.assertNotIn("Traceback", sortie + erreur)
+                self.assertTrue(erreur.strip())
+
+    def test_scenario_mal_ecrit_ne_prend_jamais_le_creneau(self):
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demmo",
+                                     "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 1)
+        self.assertIn("introuvable", erreur)
+        self.assertEqual(self.moteur.appels, [])
 
     def test_lancer_pilote_rend_l_identifiant(self):
         code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
@@ -160,8 +235,7 @@ class TestLancer(Base):
         self.assertRegex(donnees["id"], serveur_tache.MOTIF_ID.pattern)
         self.assertEqual(donnees["etat"], "en_cours")
         self.assertIn("serveur-outil", sortie)
-        for verbe in serveur_tache.VERBES:
-            self.assertIn(verbe, sortie)
+        self.assertIn("verbes : " + ", ".join(serveur_tache.VERBES) + ")", donnees["usage"])
         self.assertEqual(self.noms(), ["lancer"])
 
     def test_pilote_avec_attendre_est_un_usage_errone(self):
@@ -206,6 +280,33 @@ class TestLancer(Base):
         self.assertEqual(self.moteur.appels, [])
         self.assertTrue(erreur.strip())
 
+    def test_apk_remplace_apres_le_controle_est_refuse(self):
+        gros = Path(self._tmp.name) / "gros2.apk"
+        with open(gros, "wb") as f:
+            f.truncate(serveur_tache.APK_MAX_OCTETS + 1)
+        with mock.patch.object(cli.os, "fstat", side_effect=lambda fd: os.stat(gros)):
+            code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote",
+                                         "--projet", str(self.projet))
+        self.assertEqual(code, 1)
+        self.assertIn("trop gros", erreur)
+        self.assertEqual(self.moteur.appels, [])
+        # un dossier présenté comme fichier ordinaire au contrôle (lstat) : refusé à l'ouverture ou par fstat
+        dossier = Path(self._tmp.name) / "faux.apk"
+        dossier.mkdir()
+        with mock.patch.object(cli.os, "lstat", side_effect=lambda p: os.stat(self.apk)):
+            code, _, erreur = self.tache("lancer", "--apk", str(dossier), "--mode", "pilote",
+                                         "--projet", str(self.projet))
+        self.assertEqual(code, 1)
+        self.assertEqual(self.moteur.appels, [])
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "tube nommé indisponible")
+    def test_apk_tube_nomme_refuse_sans_blocage(self):
+        tube = Path(self._tmp.name) / "tube.apk"
+        os.mkfifo(tube)
+        code, _, _ = self.tache("lancer", "--apk", str(tube), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(code, 1)
+        self.assertEqual(self.moteur.appels, [])
+
     def test_erreurs_du_moteur_sans_trace(self):
         for exc in (serveur_tache.ErreurIndex("illisible"), TimeoutError("occupé"),
                     serveur_tache.RefusLancement("Aucun serveur prêt"), ValueError("bof"), RuntimeError("imprévu")):
@@ -236,6 +337,23 @@ class TestTacheCommandes(Base):
                 self.assertTrue(erreur.strip())
         self.assertEqual(self.moteur.appels, [])
 
+    def test_option_repetee_ou_vide_est_un_usage_errone(self):
+        cas = [("serveur-tache", "lancer", "--apk", str(self.apk), "--apk", str(self.apk), "--mode", "pilote"),
+               ("serveur-tache", "lancer", "--apk", str(self.apk), "--mode", "pilote", "--mode", "pilote"),
+               ("serveur-tache", "etat", ID, "--dossier", "a", "--dossier", "b"),
+               ("serveur-outil", ID, "journal", "--projet", "a", "--projet", "b")]
+        for option in ("--projet", "--destination", "--dossier", "--scenario", "--apk"):
+            if option != "--destination":
+                cas.append(("serveur-tache", "lancer", "--apk", str(self.apk), "--mode", "pilote", option, ""))
+        cas += [("serveur-tache", "rapatrier", ID, "--destination", ""), ("serveur-tache", "etat", ID, "--dossier", ""),
+                ("serveur-outil", ID, "journal", "--projet", "")]
+        for args in cas:
+            with self.subTest(args=args):
+                code, _, erreur = self.lancer(*args, dossier=False)
+                self.assertEqual(code, 2)
+                self.assertTrue(erreur.strip())
+        self.assertEqual(self.moteur.appels, [])
+
     def test_etat_et_arreter(self):
         code, sortie, _ = self.tache("etat", ID)
         self.assertEqual((code, json.loads(sortie)["etat"]), (0, "en_cours"))
@@ -259,9 +377,40 @@ class TestTacheCommandes(Base):
         code, _, erreur = self.tache("rapatrier", ID, "--projet", str(self.projet), "--destination", str(autre))
         self.assertEqual(code, 1)
         self.assertEqual(len(self.moteur.appels), avant)
-        sous = self.projet / "sortie"
+        sous = self.projet / ".factory" / "serveur" / "mon-dossier"
         code, _, _ = self.tache("rapatrier", ID, "--projet", str(self.projet), "--destination", str(sous))
         self.assertEqual(code, 0)
+
+    def test_destination_strictement_sous_factory_serveur(self):
+        factory = self.projet / ".factory"
+        refusees = [self.projet, factory, factory / "serveur", self.projet / "sortie", self.projet.parent / "projet-frere",
+                    factory / "serveur" / ".." / ".." / "x", factory / "recettes"]
+        for dest in refusees:
+            with self.subTest(dest=str(dest)):
+                avant = len(self.moteur.appels)
+                code, _, erreur = self.tache("rapatrier", ID, "--projet", str(self.projet), "--destination", str(dest))
+                self.assertEqual(code, 1)
+                self.assertIn("sous-dossier", erreur)
+                self.assertEqual(len(self.moteur.appels), avant)
+
+    def test_destination_jonction_vers_l_exterieur_refusee(self):
+        dehors = Path(self._tmp.name) / "dehors"
+        dehors.mkdir()
+        serveur = self.projet / ".factory" / "serveur"
+        serveur.mkdir()
+        lien = serveur / "lien"
+        try:
+            if os.name == "nt":
+                r = subprocess.run(["cmd", "/c", "mklink", "/J", str(lien), str(dehors)], capture_output=True)
+                if r.returncode != 0:
+                    self.skipTest("jonction indisponible")
+            else:
+                lien.symlink_to(dehors, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("lien indisponible")
+        code, _, erreur = self.tache("rapatrier", ID, "--projet", str(self.projet), "--destination", str(lien))
+        self.assertEqual(code, 1)
+        self.assertEqual(self.moteur.appels, [])
 
     def test_rapatrier_statut_non_ok_sort_1(self):
         self.moteur.manifeste = {"id": ID, "statut": "limite", "captures": []}
@@ -303,36 +452,54 @@ class TestOutil(Base):
         self.assertEqual(code, 1)
         self.assertIn("raté", sortie)
 
+    HOSTILES = [(("rm", "-rf"), "Verbe inconnu"), (("demarrer;ls",), "Verbe inconnu"),
+                (("toucher", "1; ls", "2"), "refusé"),
+                (("toucher", "10"), "Nombre d'arguments"), (("texte", "$(id)"), "refusé"), (("texte", "-s"), "refusé"),
+                (("capturer", "--"), "refusé"), (("capturer", "../x"), "refusé"), (("texte", "a\nb"), "refusé"),
+                (("texte", "a\rb"), "refusé"), (("texte", "é"), "refusé"), (("texte", "a" * 61), "refusé"),
+                (("journal", "x\n"), "refusé"), (("attendre", "121"), "refusé"), (("touche", "power"), "refusé")]
+
     def test_serveur_outil_refuse_un_verbe_hors_liste(self):
-        ssh = SshInterdit()
-        for args in (("rm", "-rf"), ("toucher", "1; ls", "2"), ("toucher", "10"), ("texte", "a;b"), ("capturer", "../x")):
+        for args, message in self.HOSTILES:
             with self.subTest(args=args):
-                sortie, erreur = io.StringIO(), io.StringIO()
-                moteur = serveur_tache_reel_sans_reseau()
-                with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(erreur):
-                    code = cli.main(["serveur-outil", ID, *args, "--dossier", str(self.d)], moteur=moteur, ssh=ssh)
-                self.assertEqual(code, 1)
-                self.assertTrue(erreur.getvalue().strip())
-                self.assertNotIn("Traceback", erreur.getvalue())
+                self.moteur.appels.clear()
+                code, sortie, erreur = self.outil(ID, *args)
+                self.assertEqual((code, sortie), (1, ""))
+                self.assertIn(message, erreur)
+                self.assertEqual(self.moteur.appels, [])      # le moteur n'a même pas été appelé
 
-    def test_verbe_refuse_par_le_moteur_valide_avant_ssh(self):
-        # le moteur réel : valider_verbe lève avant toute connexion (ssh interdit)
-        code, _, erreur = self.lancer_reel("serveur-outil", ID, "rm", "x")
+    def test_verbe_hostile_avec_le_vrai_moteur_aucun_ssh(self):
+        ssh = SshEnregistre()
+        for args, message in self.HOSTILES:
+            with self.subTest(args=args):
+                code, sortie, erreur = self.lancer_reel(ssh, "serveur-outil", ID, *args)
+                self.assertEqual((code, sortie), (1, ""))
+                self.assertIn(message, erreur)
+        self.assertEqual(ssh.appels, [])
+
+    def test_validation_avant_la_recherche_du_serveur(self):
+        # dossier sans serveur : un verbe valide s'arrête sur « Aucun serveur », un verbe refusé AVANT (autre message)
+        ssh = SshEnregistre()
+        code, _, erreur = self.lancer_reel(ssh, "serveur-outil", ID, "toucher", "10", "20")
         self.assertEqual(code, 1)
-        self.assertIn("Verbe inconnu", erreur)
+        self.assertIn("Aucun serveur", erreur)
+        code, _, erreur = self.lancer_reel(ssh, "serveur-outil", ID, "toucher", "1;2", "20")
+        self.assertEqual(code, 1)
+        self.assertNotIn("Aucun serveur", erreur)
+        self.assertEqual(ssh.appels, [])
 
-    def lancer_reel(self, *args):
+    def lancer_reel(self, ssh, *args):
         sortie, erreur = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(erreur):
-            code = cli.main([*args, "--dossier", str(self.d)], ssh=SshInterdit())
+            code = cli.main([*args, "--dossier", str(self.d)], ssh=ssh)
         return code, sortie.getvalue(), erreur.getvalue()
 
-    def test_capturer_imprime_le_chemin_local(self):
+    def test_capturer_imprime_un_seul_objet_json_avec_le_chemin(self):
         local = str(self.projet / ".factory" / "serveur" / ID / "captures" / "ecran.png")
         self.moteur.reponse_verbe = {"ok": True, "verbe": "capturer", "code": 0, "detail": "ok", "capture": local}
         code, sortie, _ = self.outil(ID, "capturer", "ecran", "--projet", str(self.projet))
         self.assertEqual(code, 0)
-        self.assertIn(local, sortie.strip().splitlines()[-1])
+        self.assertEqual(json.loads(sortie)["capture"], local)       # toute la sortie est UN objet JSON
         self.assertEqual(Path(self.moteur.appels[0][4]), self.projet / ".factory" / "serveur" / ID)
 
     def test_la_reponse_du_pont_est_une_donnee(self):

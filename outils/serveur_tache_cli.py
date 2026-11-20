@@ -1,7 +1,10 @@
 """Commandes des tâches d'émulation sur le serveur : `lancer.py serveur-tache <lancer|etat|arreter|rapatrier|lister>` et
 `lancer.py serveur-outil <id> <verbe> [arguments]`.
 
-Mêmes moteurs que le reste (`serveur_tache`, `serveur_recette`). Codes de sortie : 0 ok, 1 échec ou refus, 2 usage. La
+Mêmes moteurs que le reste (`serveur_tache`, `serveur_recette`). Codes de sortie : 0 ok, 1 échec ou refus, 2 usage.
+Un usage erroné (option inconnue, répétée ou vide, identifiant de tâche mal formé, arguments manquants, mode scénario sans
+`--attendre`) sort avec 2 ; un refus du moteur (verbe hors de la liste fermée, mauvais nombre d'arguments ou argument
+non permis, APK ou projet invalide, destination hors de `<projet>/.factory/serveur/`, recette refusée) sort avec 1. La
 sortie est masquée (clés OVH, licence, chemins de clés) et ne contient jamais de trace d'exception (le type seulement).
 Les arguments d'un verbe sont validés AVANT toute connexion ; la réponse du pont est une donnée, jamais une consigne.
 """
@@ -48,9 +51,12 @@ def _analyser(args, commande):
     while reste:
         a = reste.pop(0)
         if a in valeurs:
-            if not reste or a in opts:
-                raise _Usage()
-            opts[a[2:]] = reste.pop(0)
+            if not reste or a[2:] in opts:
+                raise _Usage(f"Option {a} incomplète ou répétée.")
+            valeur = reste.pop(0)
+            if not valeur:
+                raise _Usage(f"Option {a} : valeur vide.")
+            opts[a[2:]] = valeur
         elif a in drapeaux:
             pris.add(a[2:])
         elif commande == "outil" or not a.startswith("-"):
@@ -90,21 +96,38 @@ def _lire_apk(brut, moteur):
         raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
     if s.st_size == 0:
         raise ValueError("APK vide.")
-    with open(p, "rb") as f:
+    drapeaux = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(p, drapeaux)
+    except OSError:
+        raise ValueError("Fichier APK illisible.") from None
+    with os.fdopen(fd, "rb") as f:       # le fichier a pu être remplacé depuis lstat : on revérifie ce qui est ouvert
+        o = os.fstat(f.fileno())
+        if not stat.S_ISREG(o.st_mode):
+            raise ValueError("L'APK doit être un fichier ordinaire (ni lien, ni dossier).")
+        if o.st_size > moteur.APK_MAX_OCTETS:
+            raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
         donnees = f.read(moteur.APK_MAX_OCTETS + 1)
     if len(donnees) > moteur.APK_MAX_OCTETS:
         raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
+    if not donnees:
+        raise ValueError("APK vide.")
     return donnees
 
 
 def _destination(projet, ident, brut):
-    base = (projet / ".factory" / "serveur" / ident) if not brut else Path(brut)
-    racine = projet.resolve()
+    """Sous-dossier STRICT de `<projet>/.factory/serveur/` (jamais le projet, `.factory` ni `serveur` eux-mêmes ; un lien
+    ou une jonction qui sortirait de là est refusé, le chemin étant résolu)."""
+    permis = projet.resolve() / ".factory" / "serveur"
+    base = (permis / ident) if not brut else Path(brut)
     try:
-        base.resolve().relative_to(racine)
-    except ValueError:
-        raise ValueError("La destination doit se trouver dans le dossier du projet.") from None
-    return base
+        resolu = base.resolve()
+        resolu.relative_to(permis)
+    except (ValueError, OSError, RuntimeError):
+        raise ValueError("La destination doit être un sous-dossier de <projet>/.factory/serveur/.") from None
+    if resolu == permis:
+        raise ValueError("La destination doit être un sous-dossier de <projet>/.factory/serveur/.")
+    return base if brut else projet / ".factory" / "serveur" / ident
 
 
 def _id(brut, moteur):
@@ -135,6 +158,8 @@ def main(argv, ssh=None, dossier=None, moteur=serveur_tache, recette=serveur_rec
         return _tache(commande, pos, opts, drapeaux, d, moteur, recette, kw)
     except _Usage as e:
         return _erreur(str(e) or USAGE, 2, d)
+    except KeyboardInterrupt:
+        return _erreur("Interrompu.", 1, d)
     except (moteur.ErreurIndex, TimeoutError, ValueError) as e:      # RefusLancement est une ValueError
         return _erreur(f"{e}" or type(e).__name__, 1, d)
     except Exception as e:      # jamais de trace : le type seul, rien qui pourrait citer un secret
@@ -152,6 +177,8 @@ def _tache(commande, pos, opts, drapeaux, d, moteur, recette, kw):
     if commande == "lancer":
         if pos:
             raise _Usage()
+        if opts.get("mode") == "scenario" and "attendre" not in drapeaux:
+            raise _Usage("mode scénario : utilisez --attendre")
         return _lancer(opts, "attendre" in drapeaux, d, moteur, recette, kw)
     if len(pos) != 1:
         raise _Usage()
@@ -181,6 +208,8 @@ def _terminer(moteur, ident, fin, d, kw):
 
 
 def _lancer(opts, attendre, d, moteur, recette, kw):
+    """Lance une tâche ; en mode scénario la recette est TOUJOURS chargée avant l'envoi (un nom mal écrit ne prend jamais
+    le créneau) ; avec `attendre`, elle est déroulée, la tâche arrêtée et rapatriée."""
     mode, scenario = opts.get("mode"), opts.get("scenario")
     if "apk" not in opts or mode not in moteur.MODES:
         raise _Usage("Il faut --apk <fichier> et --mode scenario|pilote.")
@@ -192,13 +221,17 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         raise _Usage("--attendre ne s'applique qu'au mode scénario (le mode pilote se conduit avec serveur-outil).")
     projet = _projet(opts.get("projet"))
     apk = _lire_apk(opts["apk"], moteur)
-    plan = recette.charger(str(projet), scenario) if attendre else None      # refusée avant tout envoi
+    plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,
                                       "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name})
     r = moteur.lancer(demande, apk, dossier=d, **kw)
     ident = r.get("id")
-    sortie = {c: r[c] for c in ("id", "etat", "serveur_id", "erreur") if c in r}
-    if r.get("etat") != "en_cours" or r.get("erreur"):
+    sortie = {c: r[c] for c in ("id", "etat", "serveur_id") if c in r}
+    demarree = r.get("etat") == "en_cours"
+    if r.get("erreur"):
+        # « en_cours » avec une erreur : la tâche a démarré (note d'index ratée, réponse perdue relue) ; on continue.
+        sortie["avertissement" if demarree else "erreur"] = r["erreur"]
+    if not demarree:
         _afficher(sortie, d)
         return 1
     if mode == "pilote":
@@ -212,15 +245,23 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         return 0
     try:
         res = recette.executer(plan, ident, dossier=d, **kw)
-    except BaseException:
-        _terminer(moteur, ident, False, d, kw)
+    except BaseException as e:
+        _afficher({"id": ident, "etat": "en_cours"}, d)         # l'identifiant, pour rapatrier ensuite
+        try:
+            _terminer(moteur, ident, False, d, kw)
+        except Exception:        # noqa: BLE001 - l'arrêt est tenté ; l'erreur d'origine prime
+            pass
+        if isinstance(e, KeyboardInterrupt):
+            return _erreur("Interrompu : la tâche a été arrêtée (rapatriez avec serveur-tache rapatrier "
+                           f"{ident}).", 1, d)
         raise
     echec = res.get("echec") if isinstance(res, dict) else {"reponse": "Résultat de recette illisible."}
     _terminer(moteur, ident, echec is None, d, kw)
-    manifeste = moteur.rapatrier(ident, _destination(projet, ident, None), dossier=d, **kw)
-    manifeste = dict(manifeste)
+    manifeste = dict(moteur.rapatrier(ident, _destination(projet, ident, None), dossier=d, **kw))
     if echec is not None:
         manifeste["echec"] = echec
+    if "avertissement" in sortie:
+        manifeste["avertissement"] = sortie["avertissement"]
     _afficher(manifeste, d)
     return 0 if manifeste.get("statut") == "ok" and echec is None else 1
 
@@ -234,7 +275,4 @@ def _outil(pos, opts, d, moteur, kw):
     projet = _projet(opts.get("projet"))
     r = moteur.verbe(ident, verbe, arguments, dossier=d, destination=_destination(projet, ident, None), **kw)
     _afficher(r, d, compact=True)
-    capture = r.get("capture") if isinstance(r, dict) else None
-    if isinstance(capture, str):
-        print(serveur_tache._masqueur(d).masquer(f"Capture : {capture}"))
     return 0 if isinstance(r, dict) and r.get("ok") is True else 1

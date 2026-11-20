@@ -12,8 +12,8 @@
       (le serveur dédié OVH : voir `outils/plateforme.py`)
   py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>
       (les serveurs distants génériques : voir `outils/serveur_cli.py`)
-  py -3.12 lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] [--attendre]|etat <id>|arreter <id>|rapatrier <id>|lister>
-  py -3.12 lancer.py serveur-outil <id> <verbe> [arguments]
+  py -3.12 lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] [--attendre]|etat <id>|arreter <id>|rapatrier <id> [--destination <dossier>] [--projet <dossier>]|lister> [--dossier <dossier>]
+  py -3.12 lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <dossier>]
       (les tâches d'émulation sur le serveur : voir `outils/serveur_tache_cli.py`)
 """
 import sys

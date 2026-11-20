@@ -3635,6 +3635,70 @@ def lieu_de_la_tache(ctx, s, t, fiches_):
     return mn.lieu_impose(lieu_de_l_etape(ctx, s, t), lieu_reserve(ctx, t.get("role"), fiches_))
 
 
+DOSSIER_PLATEFORME = None     # le dossier de la plateforme (serveurs.json, serveurs-etat.json) ; remplacé par les tests
+
+
+def serveur_hors_ligne(dossier=None):
+    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes
+    (état local `serveurs-etat.json` : aucune connexion). Au moindre souci de lecture, le serveur est dit hors ligne."""
+    try:
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import serveur_capacites
+        import serveur_tache
+        dossier = dossier or DOSSIER_PLATEFORME
+        args = (dossier,) if dossier else ()
+        serveur_tache.choisir_serveur(*args, requises=serveur_capacites.BESOINS["agent-serveur"])
+        return False
+    except Exception:       # `RefusLancement` : aucun serveur prêt ; toute autre erreur : on ne peut pas dire qu'il l'est
+        return True
+
+
+def actifs_abonnement(ctx, s, bureau=None):
+    """Les tâches actives tenues par un agent, tous lieux, dans tous les projets du bureau (le suivi de ce projet est `s` ;
+    un projet dont le suivi est illisible ne compte pas)."""
+    total = sum(1 for t in s.get("taches") or [] if t.get("active") and t.get("agent"))
+    try:
+        from bureau import reglages as rg
+        projets = rg.lire_bureau(Path(bureau or BUREAU_DEPORT).expanduser())["projets"]
+    except Exception:
+        return total
+    ici = Path(ctx.suivi.chemin).resolve()
+    for p in projets:
+        try:
+            suivi = Path(fa.lire(Path(p["chemin"]).parent / "factory.json")["suivi"]).resolve()
+            if suivi == ici:
+                continue
+            taches = su.Suivi(suivi).lire().get("taches") or []
+        except Exception:
+            continue
+        total += sum(1 for t in taches if isinstance(t, dict) and t.get("active") and t.get("agent"))
+    return total
+
+
+def plafond_abonnement(bureau=None):
+    """`agents_abonnement_max` du fichier du bureau (1 à 32), ou `None` : absent ou illisible, rien ne limite."""
+    try:
+        from bureau import reglages as rg
+        return rg.lire_bureau(Path(bureau or BUREAU_DEPORT).expanduser())["agents_abonnement_max"]
+    except Exception:
+        return None
+
+
+def _bascule_des_lieux(ctx, role, plafond=None):
+    """Les paramètres de la bascule entre lieux (`ordre_lieux`, `places`, `hors_ligne`), ou `None` pour un projet à
+    l'ancienne : aucune place serveur, ni ordre ni ordre par métier réglés, ni plafond d'abonnement (le comportement
+    d'avant, inchangé)."""
+    serveur = places_serveur_du_projet(ctx)
+    regle = (ctx.f.get("ordre_lieux") not in (None, depart.ORDRE_PAR_DEFAUT)) or bool(ctx.f.get("ordre_lieux_par_metier"))
+    if not serveur and not regle and plafond is None:
+        return None
+    return {"ordre_lieux": depart.ordre_du_metier(ctx.f, role),
+            "places": {"local": ctx.f["agents_locaux_max"], "serveur": serveur, "cloud": places_cloud_du_projet(ctx)},
+            "hors_ligne": frozenset({"serveur"}) if serveur and serveur_hors_ligne() else frozenset()}
+
+
 def cmd_agent_libre(ctx, e):
     """`{role, modele?, lieu?, tache?}` : l'agent libre ; `tache` (son id) fait lire le `lieu` de son étape."""
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
@@ -3644,9 +3708,13 @@ def cmd_agent_libre(ctx, e):
     t = su.tache(s, tid) if tid else None
     if tid and t is None:
         raise Refus(f"Tâche inconnue : {tid}")
+    plafond = plafond_abonnement()
+    bascule = _bascule_des_lieux(ctx, role, plafond) or {}
+    if bascule:
+        bascule["abonnement"] = (actifs_abonnement(ctx, s), plafond)
     cle, raison = depart.agent_libre(fiches_, s["taches"], role, modele, lieu,
                                      ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_),
-                                     lieu_etape=lieu_de_l_etape(ctx, s, t))
+                                     lieu_etape=lieu_de_l_etape(ctx, s, t), **bascule)
     sortie = {"agent": cle, "raison": raison}
     if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)

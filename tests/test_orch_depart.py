@@ -1,8 +1,9 @@
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from orchestrateur import depart, factory, fiches, memoire
+from orchestrateur import depart, factory, fiches, memoire, outil
 from tests.orch_aide import AvecProjet
 
 
@@ -211,6 +212,111 @@ class TestDepart(unittest.TestCase):
         self.assertIn("Actions déportées", m)
 
 
+PLACES = {"local": 2, "serveur": 2, "cloud": 3}
+ORDRE = ["local", "serveur", "cloud"]
+
+
+class TestBasculeLieux(unittest.TestCase):
+    """Le lieu où part une tâche libre : le premier de l'ordre qui a une place, jamais ailleurs en silence."""
+
+    def pour(self, ordre=None, places=None, occupes=None, hors=frozenset(), actifs=0, plafond=None):
+        return depart.lieu_pour(ordre or ORDRE, places or PLACES, occupes or {}, hors, actifs, plafond)
+
+    def test_premier_lieu_libre_dans_l_ordre(self):
+        self.assertEqual(self.pour()[0], "local")
+        self.assertEqual(self.pour(occupes={"local": 2})[0], "serveur")
+        self.assertEqual(self.pour(occupes={"local": 2, "serveur": 2})[0], "cloud")
+        self.assertEqual(self.pour(occupes={"local": 1})[0], "local")      # une place reste
+        self.assertEqual(self.pour(ordre=["cloud", "local"])[0], "cloud")
+        self.assertEqual(self.pour(ordre=["serveur"], occupes={"local": 2})[0], "serveur")
+
+    def test_lieu_hors_ligne_saute(self):
+        self.assertEqual(self.pour(occupes={"local": 2}, hors=frozenset({"serveur"}))[0], "cloud")
+        self.assertEqual(self.pour(ordre=["serveur", "local"], hors=frozenset({"serveur"}))[0], "local")
+
+    def test_tout_plein_raison_nomme_chaque_lieu(self):
+        self.assertEqual(self.pour(places={"local": 2, "serveur": 2, "cloud": 0}, occupes={"local": 2},
+                                   hors=frozenset({"serveur"})),
+                         (None, "local : 2/2 occupés ; serveur : hors ligne ; cloud : 0 place"))
+        cle, raison = self.pour(occupes={"local": 2, "serveur": 1, "cloud": 3}, places={"local": 2, "serveur": 1, "cloud": 3})
+        self.assertIsNone(cle)
+        self.assertEqual(raison, "local : 2/2 occupés ; serveur : 1/1 occupés ; cloud : 3/3 occupés")
+        # un lieu absent des places n'a aucune place ; l'ordre des lieux est celui de l'ordre donné
+        self.assertEqual(self.pour(ordre=["cloud", "serveur"], places={"local": 2}),
+                         (None, "cloud : 0 place ; serveur : 0 place"))
+
+    def test_plafond_d_abonnement_au_dessus_des_places(self):
+        self.assertEqual(self.pour(actifs=4, plafond=4), (None, "plafond d'abonnement atteint (4/4)"))
+        self.assertEqual(self.pour(actifs=5, plafond=4), (None, "plafond d'abonnement atteint (5/4)"))
+        self.assertEqual(self.pour(actifs=3, plafond=4)[0], "local")
+        self.assertEqual(self.pour(actifs=99, plafond=None)[0], "local")      # sans plafond : rien ne limite
+
+    def test_ordre_par_metier_l_emporte(self):
+        f = {"ordre_lieux": ORDRE, "ordre_lieux_par_metier": {"qa": ["cloud", "local"]}}
+        self.assertEqual(depart.ordre_du_metier(f, "qa"), ["cloud", "local"])
+        self.assertEqual(depart.ordre_du_metier(f, "dev"), ORDRE)
+        self.assertEqual(depart.ordre_du_metier({}, "dev"), ORDRE)           # défaut : local, serveur, cloud
+
+    def test_lieu_impose_par_l_etape_l_emporte_sur_l_ordre(self):
+        liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur"),
+                 fiche("cl-1", "dev", lieu="cloud", session="S")]
+        occupe = [{"agent": "dev-1", "active": True}]
+        # l'étape exige le poste : local plein, la tâche attend ; elle ne part ni sur le serveur ni dans le cloud
+        cle, raison = depart.agent_libre(liste, occupe, "dev", lieu_etape="local", ordre_lieux=ORDRE, places=PLACES,
+                                         agents_locaux_max=1)
+        self.assertIsNone(cle)
+        self.assertNotEqual(cle, "srv-1")
+        # le métier réservé au cloud : l'ordre n'y change rien
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_reserve="cloud", ordre_lieux=ORDRE, places=PLACES)[0], "cl-1")
+        # un lieu donné explicitement l'emporte aussi
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu="serveur", ordre_lieux=ORDRE, places=PLACES)[0], "srv-1")
+        # `indifférent` n'impose rien : l'ordre décide
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_etape="indifférent", ordre_lieux=["serveur", "local"],
+                                            places=PLACES)[0], "srv-1")
+
+    def test_agent_libre_suit_l_ordre_et_passe_au_suivant(self):
+        liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur"),
+                 fiche("cl-1", "dev", lieu="cloud", session="S")]
+        places = {"local": 1, "serveur": 1, "cloud": 1}
+        suivre = lambda taches, **k: depart.agent_libre(liste, taches, "dev", ordre_lieux=ORDRE, places=places,
+                                                        agents_locaux_max=1, **k)
+        self.assertEqual(suivre([])[0], "dev-1")
+        self.assertEqual(suivre([{"agent": "dev-1", "active": True}])[0], "srv-1")
+        self.assertEqual(suivre([{"agent": "dev-1", "active": True}, {"agent": "srv-1", "active": True}])[0], "cl-1")
+        self.assertEqual(suivre([], hors_ligne=frozenset({"local"}))[0], "srv-1")
+        # un lieu qui a une place mais aucune fiche libre passe au suivant
+        sans_serveur = [f for f in liste if f["lieu"] != "serveur"]
+        self.assertEqual(depart.agent_libre(sans_serveur, [{"agent": "dev-1", "active": True}], "dev", ordre_lieux=ORDRE,
+                                            places=places, agents_locaux_max=1)[0], "cl-1")
+
+    def test_agent_libre_tout_plein_nomme_chaque_lieu(self):
+        liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur")]
+        cle, raison = depart.agent_libre(liste, [{"agent": "dev-1", "active": True}], "dev", ordre_lieux=ORDRE,
+                                         places={"local": 1, "serveur": 1, "cloud": 0}, agents_locaux_max=1,
+                                         hors_ligne=frozenset({"serveur"}))
+        self.assertIsNone(cle)
+        self.assertEqual(raison, "local : 1/1 occupés ; serveur : hors ligne ; cloud : 0 place")
+        # des places, mais aucune fiche libre : la raison le dit pour ce lieu, sans en oublier un
+        cle, raison = depart.agent_libre([fiche("dev-1", "dev")], [{"agent": "dev-1", "active": True}], "dev",
+                                         ordre_lieux=ORDRE, places={"local": 2, "serveur": 2, "cloud": 2})
+        self.assertIsNone(cle)
+        for lieu in ORDRE:
+            self.assertIn(lieu, raison)
+        # le plafond d'abonnement l'emporte sur des places libres et une fiche libre
+        self.assertEqual(depart.agent_libre([fiche("dev-1", "dev")], [{"agent": "x", "active": True}], "dev", ordre_lieux=ORDRE,
+                                            places=PLACES, abonnement=(1, 1)),
+                         (None, "plafond d'abonnement atteint (1/1)"))
+
+    def test_sans_ordre_comportement_inchange(self):
+        liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur")]
+        taches = [{"agent": "dev-1", "active": True}]
+        # même résultat que sans les nouveaux paramètres (la suite actuelle l'éprouve par ailleurs)
+        for kw in ({}, {"agents_locaux_max": 1}, {"lieu": "local"}, {"modele": "Opus"}):
+            self.assertEqual(depart.agent_libre(liste, taches, "dev", ordre_lieux=None, places=PLACES,
+                                                hors_ligne=frozenset({"local"}), abonnement=(9, 1), **kw),
+                             depart.agent_libre(liste, taches, "dev", **kw))
+
+
 class TestDepartCommandes(AvecProjet):
     def preparer(self):
         (self.dossier / "fiches" / "briefs").mkdir()
@@ -230,6 +336,90 @@ class TestDepartCommandes(AvecProjet):
         self.assertEqual(self.ok("agent-libre", entree={"role": "dev"}), {"agent": None, "raison": "aucun dev libre"})
         self.assertEqual(self.ok("agent-libre", entree={"role": "cadrage"})["agent"], "metier-1")
         self.assertEqual(self.outil("agent-libre", entree={"modele": "Opus"})[0], 1)   # le rôle est obligatoire
+
+    # --- la bascule entre lieux : le serveur sondé, l'abonnement du bureau, l'ordre du projet
+
+    def serveur(self, caps):
+        """Un serveur déclaré dans un dossier de plateforme de test, avec ces capacités à la dernière sonde."""
+        plateforme = self.dossier / "plateforme"
+        plateforme.mkdir(exist_ok=True)
+        (plateforme / "serveurs.json").write_text(json.dumps([{
+            "id": "ovh1", "nom": "ovh1", "hote": "ovh1.exemple.net", "utilisateur": "ubuntu", "cle": "C:/cles/id"}]),
+            encoding="utf-8")
+        (plateforme / "serveurs-etat.json").write_text(json.dumps({"ovh1": {
+            "capacites": {k: {"statut": v} for k, v in caps.items()}, "installation": {"en_cours": False}}}),
+            encoding="utf-8")
+        patch = mock.patch.object(outil, "DOSSIER_PLATEFORME", plateforme)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return plateforme
+
+    def test_serveur_hors_ligne_si_sonde_ancienne_ou_sans_abonnement(self):
+        self.assertTrue(outil.serveur_hors_ligne(self.dossier / "vide"))          # aucun serveur déclaré
+        self.serveur({"agent": "presente", "agent-abonnement": "presente"})
+        self.assertFalse(outil.serveur_hors_ligne())
+        self.serveur({"agent": "presente", "agent-abonnement": "absente"})        # sans connexion à l'abonnement
+        self.assertTrue(outil.serveur_hors_ligne())
+        self.serveur({"agent": "presente"})                                        # capacité jamais constatée
+        self.assertTrue(outil.serveur_hors_ligne())
+        self.serveur({"agent": "inconnue", "agent-abonnement": "inconnue"})       # sonde ancienne ou injoignable
+        self.assertTrue(outil.serveur_hors_ligne())
+        self.serveur({})                                                           # jamais sondé
+        self.assertTrue(outil.serveur_hors_ligne())
+
+    def regler(self, **cles):
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d.update(cles)
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+
+    def fiche_serveur(self):
+        (self.dossier / "fiches" / "srv.md").write_text(
+            "Clé : srv-1\nRôle : dev\nService : dev\nModèle : Sonnet\nLieu : serveur\n\n## Leçons\n", encoding="utf-8")
+
+    def test_commande_ordre_serveur_puis_local(self):
+        self.fiche_serveur()
+        self.regler(agents_serveur_max=1, ordre_lieux=["serveur", "local", "cloud"])
+        self.serveur({"agent": "presente", "agent-abonnement": "presente"})
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "srv-1")
+        self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "srv-1"})   # la place serveur est prise
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+
+    def test_commande_serveur_hors_ligne_saute_et_raison_nomme_chaque_lieu(self):
+        self.fiche_serveur()
+        self.regler(agents_serveur_max=1, ordre_lieux=["serveur", "local", "cloud"])
+        self.serveur({"agent": "presente", "agent-abonnement": "absente"})
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+        self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertIsNone(r["agent"])
+        self.assertIn("serveur : hors ligne", r["raison"])
+        self.assertEqual(r["raison"], "serveur : hors ligne ; local : aucune fiche libre ; cloud : 0 place")
+
+    def test_commande_ordre_par_metier_l_emporte(self):
+        self.fiche_serveur()
+        self.regler(agents_serveur_max=1, ordre_lieux=["serveur", "local", "cloud"],
+                    ordre_lieux_par_metier={"dev": ["local", "serveur"]})
+        self.serveur({"agent": "presente", "agent-abonnement": "presente"})
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+
+    def test_commande_plafond_d_abonnement_du_bureau(self):
+        self.regler(agents_serveur_max=1)
+        bureau = self.dossier / "bureau.json"
+        autre = self.dossier / "autre"
+        (autre / ".factory").mkdir(parents=True)
+        (autre / ".factory" / "reglages.json").write_text("{}", encoding="utf-8")
+        (autre / ".factory" / "factory.json").write_text(json.dumps({"skill": "s", "suivi": "suivi.json"}), encoding="utf-8")
+        (autre / ".factory" / "suivi.json").write_text(json.dumps({"taches": [
+            {"id": "t1", "agent": "x-1", "active": True}, {"id": "t2", "agent": "x-2", "active": False},
+            {"id": "t3", "agent": None, "active": True}]}), encoding="utf-8")
+        (self.dossier / "reglages.json").write_text("{}", encoding="utf-8")
+        bureau.write_text(json.dumps({"projets": ["reglages.json", "autre/.factory/reglages.json"],
+                                      "agents_abonnement_max": 2}), encoding="utf-8")
+        with mock.patch.object(outil, "BUREAU_DEPORT", str(bureau)):
+            self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")
+            self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
+            r = self.ok("agent-libre", entree={"role": "dev"})                       # 2 actives (ici et ailleurs) : plafond
+            self.assertEqual((r["agent"], r["raison"]), (None, "plafond d'abonnement atteint (2/2)"))
 
     def test_agent_libre_voit_la_session_de_la_table(self):
         (self.dossier / "fiches" / "prep.md").write_text(

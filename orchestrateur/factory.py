@@ -14,9 +14,12 @@ MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
-        "modele_orchestrateur", "agents_locaux_max", "agents_cloud_max", "environnement")
+        "modele_orchestrateur", "agents_locaux_max", "agents_cloud_max", "agents_serveur_max", "ordre_lieux",
+        "ordre_lieux_par_metier", "environnement")
 AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
 AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
+AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
+LIEUX_D_AGENT = ("local", "serveur", "cloud")   # l'ordre des lieux d'un projet en est une permutation non vide
 MODELES_ORCHESTRATEUR = ("Haiku", "Sonnet", "Opus")   # jamais Fable ; Sonnet par défaut
 # Le modèle nécessaire d'une étape. Fable n'y est qu'une proposition : la tâche ne part sur Fable qu'avec l'accord du
 # Directeur, demandé avant son départ (décision `fable_tache`) ; sans accord, Opus.
@@ -196,6 +199,17 @@ def _lire(chemin):
     cloud = d.get("agents_cloud_max")
     if cloud is not None and not _entier_borne(cloud, AGENTS_CLOUD):
         raise FactoryInvalide("Factory : « agents_cloud_max » doit être un entier de 0 à 16 (0 par défaut).")
+    serveur = d.get("agents_serveur_max", 0)
+    if not _entier_borne(serveur, AGENTS_SERVEUR):
+        raise FactoryInvalide("Factory : « agents_serveur_max » doit être un entier de 0 à 4 (0 par défaut).")
+    ordre = d.get("ordre_lieux", list(LIEUX_D_AGENT))
+    if not _ordre_valide(ordre):
+        raise FactoryInvalide("Factory : « ordre_lieux » doit lister, sans doublon, au moins un lieu parmi "
+                              "local, serveur, cloud (local, serveur, cloud par défaut).")
+    par_metier = d.get("ordre_lieux_par_metier", {})
+    if not isinstance(par_metier, dict) or not all(_texte(r) and _ordre_valide(o) for r, o in par_metier.items()):
+        raise FactoryInvalide("Factory : « ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux "
+                              "(local, serveur, cloud, sans doublon).")
     environnement = d.get("environnement", [])
     if not isinstance(environnement, list) or not all(isinstance(x, dict) and _texte(x.get("outil"))
                                                       for x in environnement):
@@ -220,8 +234,15 @@ def _lire(chemin):
         "commandes": {k: list(v) for k, v in commandes.items()},
         "memoire": chem("memoire", str(Path(skill) / "orchestrateur" / "memoire")),
         "modele_orchestrateur": modele, "agents_locaux_max": locaux, "agents_cloud_max": cloud,
+        "agents_serveur_max": serveur, "ordre_lieux": list(ordre),
+        "ordre_lieux_par_metier": {r: list(o) for r, o in par_metier.items()},
         "environnement": [dict(x) for x in environnement],
     }
+
+
+def _ordre_valide(v):
+    """Une liste non vide de lieux d'agent, sans doublon."""
+    return isinstance(v, list) and bool(v) and all(isinstance(x, str) and x in LIEUX_D_AGENT for x in v) and len(set(v)) == len(v)
 
 
 def _entier_borne(v, bornes):

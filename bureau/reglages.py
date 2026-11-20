@@ -33,6 +33,7 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
 _HEURE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
+AGENTS_ABONNEMENT_MAX = (1, 32)   # le plafond des tâches d'agent actives sur l'abonnement, tous projets et tous lieux
 
 
 class ReglagesInvalides(Exception):
@@ -170,7 +171,12 @@ def lire_bureau(chemin):
                 id_ = base[:40 - len(suffixe)].rstrip("-") + suffixe
             pris.add(id_)
         sortie.append({"id": id_, "chemin": c})
+    plafond = donnees.get("agents_abonnement_max")
+    if "agents_abonnement_max" in donnees and (type(plafond) is not int or not
+                                                AGENTS_ABONNEMENT_MAX[0] <= plafond <= AGENTS_ABONNEMENT_MAX[1]):
+        raise ReglagesInvalides("Fichier du bureau : « agents_abonnement_max » doit être un entier de 1 à 32 (ou absent).")
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
+            "agents_abonnement_max": plafond,
             "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
             "deport": normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")}
 

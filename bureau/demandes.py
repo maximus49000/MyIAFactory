@@ -40,7 +40,10 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "blocage_analyse": ("decision", "verdict"), "anomalie": ("anomalie", "etat")}
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
-FACULTATIFS = {"session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
+AGENTS_SERVEUR = (0, 4)
+LIEUX_D_AGENT = ("local", "serveur", "cloud")
+FACULTATIFS = {"parallelisme": ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier"),
+               "session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
                "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne"),
                "question": ("images", "fichiers", "fil", "fonctionnalite"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
@@ -344,7 +347,22 @@ def _verifier_parallelisme(demande):
         v = demande.get(champ)
         if isinstance(v, bool) or not isinstance(v, int) or not bas <= v <= haut:
             return f"« {champ} » doit être un entier de {bas} à {haut}."
+    v = demande.get("agents_serveur_max")
+    if "agents_serveur_max" in demande and (isinstance(v, bool) or not isinstance(v, int)
+                                             or not AGENTS_SERVEUR[0] <= v <= AGENTS_SERVEUR[1]):
+        return f"« agents_serveur_max » doit être un entier de {AGENTS_SERVEUR[0]} à {AGENTS_SERVEUR[1]}."
+    if "ordre_lieux" in demande and not _ordre_de_lieux(demande["ordre_lieux"]):
+        return "« ordre_lieux » doit lister, sans doublon, au moins un lieu parmi local, serveur, cloud."
+    if "ordre_lieux_par_metier" in demande:
+        par = demande["ordre_lieux_par_metier"]
+        if not isinstance(par, dict) or not all(isinstance(r, str) and r.strip() and _ordre_de_lieux(o)
+                                                for r, o in par.items()):
+            return "« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux (local, serveur, cloud)."
     return None
+
+
+def _ordre_de_lieux(v):
+    return isinstance(v, list) and bool(v) and all(isinstance(x, str) and x in LIEUX_D_AGENT for x in v) and len(set(v)) == len(v)
 
 
 MODELES_RECRUE = ("Haiku", "Sonnet", "Opus")

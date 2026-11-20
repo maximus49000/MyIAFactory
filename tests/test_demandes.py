@@ -864,6 +864,19 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({**base, "agents_locaux_max": 2, "agents_cloud_max": 1, "autre": 1}),
                          {**base, "agents_locaux_max": 2, "agents_cloud_max": 1})
 
+    def test_parallelisme_serveur_et_ordre_des_lieux(self):
+        base = {"type": "parallelisme", "agents_locaux_max": 2, "agents_cloud_max": 1}
+        self.ok({**base, "agents_serveur_max": 0})
+        self.ok({**base, "agents_serveur_max": 4, "ordre_lieux": ["serveur", "local", "cloud"]})
+        self.ok({**base, "ordre_lieux": ["local"], "ordre_lieux_par_metier": {"qa": ["cloud", "local"]}})
+        for mauvais in ({"agents_serveur_max": 5}, {"agents_serveur_max": -1}, {"agents_serveur_max": "1"},
+                        {"agents_serveur_max": True}, {"ordre_lieux": []}, {"ordre_lieux": ["local", "local"]},
+                        {"ordre_lieux": ["autre"]}, {"ordre_lieux": "local"}, {"ordre_lieux_par_metier": {"qa": []}},
+                        {"ordre_lieux_par_metier": {"qa": ["x"]}}, {"ordre_lieux_par_metier": ["local"]}):
+            self.refus({**base, **mauvais})
+        self.assertEqual(demandes.nettoyer({**base, "agents_serveur_max": 1, "ordre_lieux": ["local"], "autre": 1}),
+                         {**base, "agents_serveur_max": 1, "ordre_lieux": ["local"]})
+
     def test_organisation_d_un_workflow(self):
         base = {"type": "organisation", "decision": "o2"}
         self.ok({**base, "verdict": "accepter"})

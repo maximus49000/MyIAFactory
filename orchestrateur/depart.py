@@ -29,8 +29,70 @@ def monter(modele, fable=False):
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 
+LIEUX_DE_TACHE = ("local", "serveur", "cloud")     # les lieux où une tâche d'agent peut partir
+ORDRE_PAR_DEFAUT = list(LIEUX_DE_TACHE)
+
+
+def lieu_pour(ordre, places, occupes, hors_ligne, actifs_abonnement, plafond_abonnement):
+    """`(lieu, raison)` : où part une tâche libre. Pure. Le plafond d'abonnement atteint l'emporte sur toute place
+    (`(None, "plafond d'abonnement atteint (n/n)")`) ; sinon le premier lieu de `ordre` qui n'est pas hors ligne et dont les
+    `occupes` sont sous les `places` ; sinon `(None, raison)` qui nomme chaque lieu de l'ordre, dans l'ordre : « local : 2/2
+    occupés ; serveur : hors ligne ; cloud : 0 place »."""
+    if plafond_abonnement is not None and actifs_abonnement >= plafond_abonnement:
+        return None, f"plafond d'abonnement atteint ({actifs_abonnement}/{plafond_abonnement})"
+    for lieu in ordre:
+        if lieu not in hors_ligne and occupes.get(lieu, 0) < places.get(lieu, 0):
+            return lieu, f"place libre : {lieu}"
+    return None, " ; ".join(f"{lieu} : {_etat_du_lieu(lieu, places, occupes, hors_ligne)}" for lieu in ordre)
+
+
+def _etat_du_lieu(lieu, places, occupes, hors_ligne):
+    if lieu in hors_ligne:
+        return "hors ligne"
+    n = places.get(lieu, 0)
+    return "0 place" if n <= 0 else f"{occupes.get(lieu, 0)}/{n} occupés"
+
+
+def ordre_du_metier(factory, role):
+    """L'ordre des lieux d'un métier : celui que le projet règle pour lui (`ordre_lieux_par_metier`), sinon celui du projet
+    (`ordre_lieux`), sinon local, serveur, cloud."""
+    par_metier = factory.get("ordre_lieux_par_metier") or {}
+    return list(par_metier.get(role) or factory.get("ordre_lieux") or ORDRE_PAR_DEFAUT)
+
+
 def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None,
-                lieu_etape=None):
+                lieu_etape=None, ordre_lieux=None, places=None, hors_ligne=frozenset(), abonnement=(0, None)):
+    """(clé, raison) de l'agent libre (voir `_agent_libre_dans`). Sans `ordre_lieux`, ou quand `lieu`, `lieu_reserve` ou
+    `lieu_etape` impose un lieu, c'est le comportement d'avant, à l'octet près. Avec `ordre_lieux` (lieux dans l'ordre de
+    préférence), `places` (`{lieu: places}`), `hors_ligne` (lieux injoignables) et `abonnement` (`(actifs, plafond)`) :
+    les lieux sont essayés dans l'ordre de `lieu_pour` ; un lieu qui a une place mais aucune fiche libre passe au suivant.
+    Si rien n'est libre, la raison nomme chaque lieu : la tâche reste en file, jamais lancée ailleurs en silence."""
+    if ordre_lieux is None or lieu or mn.lieu_impose(lieu_etape, lieu_reserve):
+        return _agent_libre_dans(fiches, taches, role, modele, lieu, agents_locaux_max, lieu_reserve, lieu_etape)
+    places = places or {}
+    occupes = {}
+    par_cle = {f["cle"]: f["lieu"] for f in fiches}
+    for t in taches:
+        if t.get("active") and t.get("agent") in par_cle:
+            occupes[par_cle[t["agent"]]] = occupes.get(par_cle[t["agent"]], 0) + 1
+    ordre, sans_fiche = list(ordre_lieux), set()
+    while True:
+        choisi, raison = lieu_pour([x for x in ordre if x not in sans_fiche], places, occupes, hors_ligne, *abonnement)
+        if choisi is None:
+            break
+        cle, dit = _agent_libre_dans(fiches, taches, role, modele, choisi, agents_locaux_max, None, lieu_etape)
+        if cle is not None:
+            return cle, dit
+        sans_fiche.add(choisi)
+    if not sans_fiche or raison.startswith("plafond d'abonnement"):
+        return None, raison     # `raison` nomme déjà chaque lieu de l'ordre (ou le plafond)
+    return None, " ; ".join(
+        f"{x} : " + ("aucune fiche libre" if x in sans_fiche else _etat_du_lieu(x, places, occupes, hors_ligne))
+        for x in ordre)
+
+
+def _agent_libre_dans(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=None, lieu_reserve=None,
+                      lieu_etape=None):
     """(clé, raison) du premier spécialiste du rôle sans tâche active, au lieu demandé, dont le plafond (le modèle de sa
     fiche) suffit au `modele` nécessaire de la tâche : le plus petit plafond suffisant d'abord (il fera tourner la tâche
     sur ce modèle, jamais au-dessus de son plafond). Un agent cloud sans session attitrée n'est pas utilisable : la raison dit qu'il faut créer la session.

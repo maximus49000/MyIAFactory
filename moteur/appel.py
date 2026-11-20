@@ -226,8 +226,9 @@ def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail
                                     cwd, delai_s)
         except subprocess.TimeoutExpired:
             raise ErreurAppel(f"délai dépassé ({delai_s} s)")
-        except TimeoutError as e:      # un agent détaché bloqué (voir `detache.Registre.attendre`)
-            raise ErreurAppel(str(e) or f"délai dépassé ({delai_s} s)")
+        except TimeoutError as e:      # un agent détaché bloqué (voir `detache.Registre.attendre`) ; un agent serveur arrêté
+            # ou à son échéance porte les usages de son flux rapatrié (`executeur_serveur`)
+            raise ErreurAppel(str(e) or f"délai dépassé ({delai_s} s)", getattr(e, "usages", None))
         except OSError as e:
             raise ErreurAppel(f"claude n'a pas pu être lancé : {e}")
     r, evenements = _lire_flux(sortie)

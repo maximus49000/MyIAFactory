@@ -44,7 +44,10 @@ echec() {   # echec <code> <message>
 chemin="${IMAGE//;//}"
 [ -d "$SDK/$chemin" ] || echec 11 "Image système $IMAGE introuvable sous $SDK/system-images (installez-la : capacité android-emulateur)."
 
-mkdir -p "$AVD_RACINE" "${HOME:-/tmp}/.android" 2>/dev/null
+# Dossier .android d'avdmanager et de l'émulateur : Java prend user.home dans /etc/passwd (/home/ubuntu, en lecture seule dans
+# le conteneur), pas dans $HOME : ANDROID_USER_HOME (posé par l'image et par docker run) est exporté et créé ici.
+export ANDROID_USER_HOME="${ANDROID_USER_HOME:-${HOME:-/tmp}/.android}"
+mkdir -p "$AVD_RACINE" "$ANDROID_USER_HOME" 2>/dev/null
 # Sans réseau ni question : « no » (entrée standard) répond à la proposition d'un profil matériel personnalisé. La sortie
 # d'avdmanager est nettoyée avant d'aller au journal : sa progression réécrite par retours chariot et ses séquences ANSI
 # deviennent illisibles une fois rapatriées ; seules restent les lignes de texte (avertissements, erreurs).
@@ -58,7 +61,9 @@ if [ "$avd_code" != 0 ]; then
 fi
 
 # Dimensionnement : 2 Go de RAM et 2 Go de partition de données (l'émulateur par défaut en réserve davantage) ; les lignes
-# existantes de ces deux clés sont remplacées, les autres gardées.
+# existantes de ces deux clés sont remplacées, les autres gardées. Gardé, mais SANS effet sur la place prise dans /avd : la
+# copie inscriptible du system.img (4,3 Go) faite par l'émulateur n'en dépend pas (essayé sur le serveur) ; c'est la taille
+# du tmpfs /avd (9 Go, posée par lancer_emulation.sh) qui la permet.
 config="$AVD_RACINE/$AVD.avd/config.ini"
 [ -f "$config" ] || echec 13 "config.ini de l'AVD introuvable ($config)."
 if ! { grep -v -e '^hw\.ramSize=' -e '^disk\.dataPartition\.size=' "$config" || :; printf 'hw.ramSize=2048\ndisk.dataPartition.size=2G\n'; } > "$config.tmp" \

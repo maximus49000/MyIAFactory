@@ -3686,11 +3686,12 @@ def actifs_abonnement(ctx, s, bureau=None):
     ce projet est `s`). `refus` : le texte à rendre quand le compte est impossible (bureau ou projet illisible) : le
     plafond l'exige, la tâche attend plutôt que de compter de moins."""
     total = sum(1 for t in s.get("taches") or [] if t.get("active") and t.get("agent"))
+    fichier = Path(bureau or BUREAU_DEPORT).expanduser()
     try:
         from bureau import reglages as rg
-        projets = rg.lire_bureau(Path(bureau or BUREAU_DEPORT).expanduser())["projets"]
+        projets = rg.lire_bureau(fichier)["projets"]
     except Exception:
-        return total, "plafond d'abonnement : projets du bureau illisibles"
+        return total, f"plafond d'abonnement : projets du bureau illisibles ({fichier})"
     ici = Path(ctx.suivi.chemin).resolve()
     for p in projets:
         nom = Path(p["chemin"]).resolve().parent
@@ -3711,22 +3712,23 @@ REFUS_PLAFOND = "plafond d'abonnement : réglage illisible"
 
 def plafond_abonnement(bureau=None):
     """`(plafond, refus)` : `agents_abonnement_max` du fichier du bureau (1 à 32). Fichier absent, ou réglage absent :
-    `(None, None)`, rien ne limite. Fichier illisible, ou réglage invalide : `(None, REFUS_PLAFOND)` (on ne retire pas la
-    garde en silence)."""
+    `(None, None)`, rien ne limite. Fichier illisible (même son existence), ou réglage invalide : `(None, refus)`, le refus
+    commençant par `REFUS_PLAFOND` et nommant le fichier (on ne retire pas la garde en silence)."""
     chemin = Path(bureau or BUREAU_DEPORT).expanduser()
-    if not chemin.exists():
-        return None, None
+    refus = f"{REFUS_PLAFOND} ({chemin})"
     try:
+        if not chemin.exists():
+            return None, None
         donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
-        return None, REFUS_PLAFOND
+        return None, refus
     if not isinstance(donnees, dict):
-        return None, REFUS_PLAFOND
+        return None, refus
     if "agents_abonnement_max" not in donnees:
         return None, None
     v = donnees["agents_abonnement_max"]
     if type(v) is not int or not 1 <= v <= 32:
-        return None, REFUS_PLAFOND
+        return None, refus
     return v, None
 
 

@@ -109,6 +109,22 @@ class TestReglages(unittest.TestCase):
         with self.assertRaises(reglages.ReglagesInvalides):
             reglages.fixer_agents_abonnement_max(self.tmp / "abime.json", 3)
 
+    def test_plafond_ecrit_sous_verrou(self):
+        import os
+        import time
+        from unittest import mock
+        bureau = self.bureau_avec(port=9100)
+        marque = Path(str(bureau) + ".verrou")
+        marque.write_text("", encoding="utf-8")                  # un autre programme écrit le fichier du bureau
+        with mock.patch.object(reglages, "VERROU_ATTENTE_S", 0.2):
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages.fixer_agents_abonnement_max(bureau, 4)
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        vieux = time.time() - 3600
+        os.utime(marque, (vieux, vieux))                         # verrou d'un programme mort : repris
+        self.assertEqual(reglages.fixer_agents_abonnement_max(bureau, 4), 4)
+        self.assertFalse(marque.exists())                        # rendu après l'écriture
+
     def test_lecons_auto_faux_par_defaut_et_booleen_seulement(self):
         self.assertIs(reglages.charger(self.tmp / "absent.json")["lecons_auto"], False)
         (self.tmp / "r.json").write_text('{"lecons_auto": true}', encoding="utf-8")

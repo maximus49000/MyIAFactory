@@ -887,7 +887,9 @@ class TestSuivi(AvecProjet):
             self.assertEqual(self.outil("parallelisme", entree={"agents_locaux_max": 2, "agents_cloud_max": 0, **mauvais})[0], 1, mauvais)
         self.assertEqual(self.releve()["agents_locaux_max"], 3)            # un refus n'écrit rien
         for champ, valeur in (("agents_serveur_max", 9), ("ordre_lieux", ["local", "local"]), ("ordre_lieux", []),
-                              ("ordre_lieux_par_metier", {"qa": ["x"]}), ("ordre_lieux_par_metier", ["local"])):
+                              ("ordre_lieux_par_metier", {"qa": ["x"]}), ("ordre_lieux_par_metier", ["local"]),
+                              ("ordre_lieux_par_metier", {"qa": ["local"], " qa": ["cloud"]}),       # doublon nettoyé
+                              ("ordre_lieux_par_metier", {f"r{i}": ["local"] for i in range(51)})):   # plus de 50
             with self.subTest(champ=champ, valeur=valeur):
                 self.assertTrue(releve.valider({**self.releve(), champ: valeur}))
 

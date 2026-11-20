@@ -1145,9 +1145,11 @@ class AvecAgents(AvecTaches):
         super().setUp()
         self.declarer()
         self.ident = ident_tache(1)
-        self.ecrire_index({self.ident: fiche_agent()})
         self.factory = self.p.chemin_reglages.parent
-        self.p._cache_etat = (time.monotonic(), {"projet": "MonJeu"})          # le nom du projet, comme le relevé le donne
+        dossier = self.factory.parent if self.factory.name == ".factory" else self.factory
+        self.nom_dossier = dossier.name           # le nom que le moteur donne à la tâche : celui du DOSSIER du projet
+        self.ecrire_index({self.ident: self.fiche()})
+        self.p._cache_etat = (time.monotonic(), {"projet": "MonJeu"})          # le nom affiché par le relevé : autre
         self.marque = self.factory / "agents-en-cours" / "t-12.arrete"
         self.scripts = []
         self.sortie_emulation = f"emulation={self.EMU}\nagent={self.ident}\n"
@@ -1163,6 +1165,13 @@ class AvecAgents(AvecTaches):
         p.start()
         self.addCleanup(p.stop)
 
+    def ligne(self):
+        """La ligne de l'agent dans la liste (son émulation liée y a aussi la sienne)."""
+        return next(t for t in self.taches() if t["id"] == self.ident)
+
+    def fiche(self, **plus):
+        return fiche_agent(**{"projet": self.nom_dossier, **plus})
+
     def lancer(self, ident=None):
         r, data = self.poster(self.chemin_arret(ident or self.ident), {})
         return r.status, json.loads(data)
@@ -1176,7 +1185,7 @@ class TestArretAgent(AvecAgents):
         self.assertEqual(self.moteur.appels, [(self.ident, False), (self.EMU, False)])   # l'agent, puis son émulation
         self.assertEqual(len(self.scripts), 1)
         self.assertIn(self.ident, self.scripts[0])
-        self.assertNotIn("erreur", self.taches()[0])
+        self.assertNotIn("erreur", self.ligne())
 
     def test_arreter_un_agent_ecrit_la_marque_du_moteur(self):
         self.assertFalse(self.marque.exists())
@@ -1185,20 +1194,48 @@ class TestArretAgent(AvecAgents):
         self.assertEqual(sorted(x.name for x in self.marque.parent.iterdir()), [".gitignore", "t-12.arrete"])
 
     def test_la_reponse_aux_questions_a_sa_propre_marque(self):
-        self.ecrire_index({self.ident: fiche_agent(genre="reponse")})
+        self.ecrire_index({self.ident: self.fiche(genre="reponse")})
         self.assertEqual(self.lancer()[0], 200)
         self.assertTrue((self.factory / "agents-en-cours" / "t-12.reponse.arrete").is_file())
         self.assertFalse(self.marque.exists())
 
     def test_la_marque_n_est_ecrite_que_dans_le_projet_de_l_agent(self):
-        self.p._cache_etat = (time.monotonic(), {"projet": "Autre projet"})
+        self.assertNotEqual(self.nom_dossier, "MonJeu")
+        self.ecrire_index({self.ident: self.fiche(projet="MonJeu")})   # le nom du relevé n'est PAS celui de la tâche
         self.assertEqual(self.lancer()[0], 200)                  # l'arrêt du serveur a lieu quand même
         self.assertEqual(self.moteur.appels[0], (self.ident, False))
         self.assertFalse(self.marque.exists())
 
+    def test_deux_projets_du_meme_nom_aucune_marque(self):
+        autre = self.tmp / "ailleurs" / self.nom_dossier / ".factory"
+        autre.mkdir(parents=True)
+        projets = lambda: [(self.nom_dossier, self.factory), (self.nom_dossier, autre)]      # noqa: E731
+        bserveurs._marques(self.fiche(), projets)()
+        self.assertFalse(self.marque.exists())
+        self.assertFalse((autre / "agents-en-cours").exists())
+        bserveurs._marques(self.fiche(), lambda: [(self.nom_dossier, self.factory)])()
+        self.assertTrue(self.marque.is_file())
+
+    def test_l_emulation_est_arretee_sur_le_serveur_de_l_agent(self):
+        self.assertEqual(self.lancer()[0], 200)
+        fiche = json.loads((self.dossier / "taches.json").read_text(encoding="utf-8"))[self.EMU]
+        self.assertEqual((fiche["serveur_id"], fiche["agent"]), ("mon-serveur", self.ident))   # jamais choisir_serveur
+        # l'index désigne un autre serveur pour cette émulation : « aucune tâche » n'y vaut pas arrêt
+        self.moteur.appels.clear()
+        index = json.loads((self.dossier / "taches.json").read_text(encoding="utf-8"))
+        index[self.EMU] = {**fiche, "serveur_id": "autre-serveur"}
+        index[self.ident] = self.fiche()
+        self.ecrire_index(index)
+        vrai = self.moteur.arreter
+        self.moteur.arreter = lambda ident, *a, **k: (vrai(ident, *a, **k) if ident == self.ident else
+                                                     {"id": ident, "etat": "inconnu", "raison": bserveurs._tache().RAISON_AUCUNE_TACHE})
+        statut, corps = self.lancer()
+        self.assertEqual((statut, corps["emulation"]), (200, "non_confirmee"))
+        self.assertIn("émulation", self.ligne().get("erreur", ""))
+
     def test_l_emulation_liee_peut_venir_de_l_index(self):
         self.ssh.executer = lambda *a, **k: self.fail("aucune lecture du serveur : l'index donne l'émulation")
-        self.ecrire_index({self.ident: fiche_agent(emulation=self.EMU)})
+        self.ecrire_index({self.ident: self.fiche(emulation=self.EMU)})
         self.assertEqual(self.lancer()[0], 200)
         self.assertEqual(self.moteur.appels, [(self.ident, False), (self.EMU, False)])
 
@@ -1213,7 +1250,7 @@ class TestArretAgent(AvecAgents):
                 self.assertEqual(self.moteur.appels, [(self.ident, False)])
 
     def test_un_agent_seul_n_a_pas_d_emulation(self):
-        self.ecrire_index({self.ident: fiche_agent(mode="seul")})
+        self.ecrire_index({self.ident: self.fiche(mode="seul")})
         self.assertEqual(self.lancer()[0], 200)
         self.assertEqual(self.moteur.appels, [(self.ident, False)])
         self.assertEqual(self.scripts, [])
@@ -1223,23 +1260,23 @@ class TestArretAgent(AvecAgents):
         statut, corps = self.lancer()
         self.assertEqual(statut, 200)
         self.assertEqual(corps["etat"], "inconnu")
-        self.assertIn("n'est pas confirmé", self.taches()[0]["erreur"])
+        self.assertIn("n'est pas confirmé", self.ligne()["erreur"])
         self.assertEqual(self.moteur.appels, [(self.ident, False), (self.EMU, False)])
 
     def test_l_arret_de_l_emulation_non_confirme_est_dit(self):
         self.moteur.etats = ["arretee", "en_cours"]
         statut, corps = self.lancer()
         self.assertEqual((statut, corps["etat"]), (200, "arretee"))
-        self.assertIn("émulation", self.taches()[0]["erreur"])
+        self.assertIn("émulation", self.ligne()["erreur"])
 
     def test_un_arret_long_repond_202_puis_se_lit(self):
         self.moteur.libre = self.libre
         with mock.patch.object(bserveurs, "ATTENTE_REPONSE_S", 0.05):
             self.assertEqual(self.lancer(), (202, {"demarre": True}))
-        self.assertTrue(self.taches()[0]["arret_en_cours"])
+        self.assertTrue(self.ligne()["arret_en_cours"])
         self.libre.set()
         self.travaux.attendre()
-        self.assertNotIn("erreur", self.taches()[0])
+        self.assertNotIn("erreur", self.ligne())
 
     def test_une_erreur_du_moteur_est_masquee(self):
         (self.dossier / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-XYZ-123456", "secret": SECRET,
@@ -1262,11 +1299,11 @@ class TestArretAgent(AvecAgents):
         self.assertEqual(self.req("POST", chemin, '{"a": 1, "a": 2}', self.ENT)[0].status, 400)
         self.assertEqual(self.poster(self.chemin_arret(ident_tache(9)), {})[0].status, 404)
         self.assertEqual(self.poster(self.chemin_arret("..%2Fetc"), {})[0].status, 404)
-        self.ecrire_index({self.ident: fiche_agent(etat="terminee")})
+        self.ecrire_index({self.ident: self.fiche(etat="terminee")})
         self.assertEqual(self.poster(chemin, {})[0].status, 409)               # déjà terminée
         self.assertEqual((self.moteur.appels, self.scripts), ([], []))         # rien n'est parti
         self.assertFalse(self.marque.exists())                                 # et aucune marque n'est posée
-        self.ecrire_index({self.ident: fiche_agent()})
+        self.ecrire_index({self.ident: self.fiche()})
         self.assertTrue(self.travaux.lancer("sonder", SimpleNamespace(id="mon-serveur"), lambda: self.libre.wait(5) and None))
         try:
             self.assertEqual(self.poster(chemin, {})[0].status, 409)           # une autre opération tient le fil de fond

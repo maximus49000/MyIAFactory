@@ -177,7 +177,8 @@ class Travaux:
         self._cible = None          # (genre, id du serveur) de la tâche en cours
         self.erreurs = {}           # id du serveur -> message de la dernière tâche interrompue
         self.erreurs_taches = {}    # id de la tâche d'émulation -> message de son dernier arrêt non confirmé
-        self.etats_arret = {}       # id de la tâche -> état final lu au dernier arrêt demandé
+        self.etats_arret = {}       # id de la tâche -> état final lu au dernier arrêt demandé (borné : ETATS_ARRET_MAX)
+        self.emulations_arret = {}  # id de l'agent -> « arretee » / « non_confirmee » pour son émulation liée (borné aussi)
         self._places_apercu = threading.BoundedSemaphore(MAX_APERCUS)
         self._migrations = 0        # migrations (aperçu, confirmation) dont le fil tourne encore
 
@@ -258,19 +259,29 @@ class Travaux:
             emulation = _emulation_liee(ident, agent, d, options) if agent is not None else None   # lue avant l'arrêt
             r = arreter(ident)
             r = r if isinstance(r, dict) else {}
-            self.etats_arret[ident] = r.get("etat") if isinstance(r.get("etat"), str) else "inconnu"
+            _ranger(self.etats_arret, ident, r.get("etat") if isinstance(r.get("etat"), str) else "inconnu")
             erreurs = []
             if r.get("etat") not in moteur.FINAUX:
                 etat = LIBELLES_ETATS_TACHE.get(r.get("etat"), "inconnu")
                 raison = " ".join(str(r.get("raison") or "").split())[:200]
                 erreurs.append(f"L'arrêt n'est pas confirmé (état : {etat})." + (f" {raison}" if raison else ""))
             if emulation:
-                e = arreter(emulation)
-                e = e if isinstance(e, dict) else {}
-                absente = e.get("raison") == getattr(moteur, "RAISON_AUCUNE_TACHE", None) and e.get("etat") == "inconnu"
-                if e.get("etat") not in moteur.FINAUX and not absente:
+                # l'émulation est arrêtée sur le SERVEUR DE L'AGENT : sa fiche d'index (créée si absente) le désigne,
+                # jamais le premier serveur prêt que choisirait un lancement
+                chez_l_agent = _noter_emulation_liee(emulation, ident, agent, d)
+                confirme = False
+                if chez_l_agent is not None:
+                    e = arreter(emulation)
+                    e = e if isinstance(e, dict) else {}
+                    # « aucune tâche » ne vaut arrêt que si la question a été posée au serveur de l'agent
+                    absente = (chez_l_agent and e.get("etat") == "inconnu"
+                               and e.get("raison") == getattr(moteur, "RAISON_AUCUNE_TACHE", None))
+                    confirme = e.get("etat") in moteur.FINAUX or absente
+                if not confirme:
                     erreurs.append("L'arrêt de l'émulation liée n'est pas confirmé.")
+                _ranger(self.emulations_arret, ident, "arretee" if confirme else "non_confirmee")
             return " ".join(erreurs) or None
+        self.emulations_arret.pop(ident, None)
         return self.lancer_tache(ident, travail)
 
     # -- les tâches ---------------------------------------------------------
@@ -362,9 +373,43 @@ set -u
 d="$HOME/taches/@ID@"
 e=""; [ -f "$d/emulation" ] && IFS= read -r e < "$d/emulation"
 printf '%s\\n' "$e" | grep -Eqx 't[0-9]{8}-[0-9]{6}-[0-9a-f]{4}' || exit 0
+f="$HOME/taches/$e/demande.json"
+[ -f "$f" ] && [ ! -L "$f" ] && grep -Fq '"type": "emulation"' "$f" || exit 0
 a=""; [ -f "$HOME/taches/$e/agent" ] && IFS= read -r a < "$HOME/taches/$e/agent"
 printf 'emulation=%s\\nagent=%s\\n' "$e" "$a"
 """
+
+
+ETATS_ARRET_MAX = 200    # états d'arrêt gardés en mémoire (les plus anciens sont oubliés)
+
+
+def _ranger(dico, cle, valeur, maximum=ETATS_ARRET_MAX):
+    """Range `valeur` sous `cle` en gardant au plus `maximum` entrées (la plus ancienne part la première)."""
+    dico.pop(cle, None)
+    dico[cle] = valeur
+    while len(dico) > maximum:
+        dico.pop(next(iter(dico)), None)
+
+
+def _noter_emulation_liee(emulation, agent_id, fiche_agent, d):
+    """Avant d'arrêter l'émulation liée : sa fiche d'index doit désigner son serveur. Absente, elle est créée avec le
+    serveur de l'agent (`serveur_tache.arreter` ira là, jamais au premier serveur prêt). Vrai si l'arrêt s'adresse au
+    serveur de l'agent, Faux si l'index en désigne un autre, None si l'index ne peut ni se lire ni s'écrire (rien n'est
+    alors arrêté : on ne saurait pas où)."""
+    serveur_id = fiche_agent.get("serveur_id") if isinstance(fiche_agent, dict) else None
+    try:
+        tache = _tache()
+        index = tache.Index(d)
+        lue = index.lire().get(emulation)
+        if lue is None:
+            if not isinstance(serveur_id, str) or not serveur_id:
+                return None
+            index.enregistrer(emulation, {"etat": "en_cours", "mode": "pilote", "serveur_id": serveur_id,
+                                          "projet": fiche_agent.get("projet"), "agent": agent_id})
+            return True
+        return lue.get("serveur_id") == serveur_id
+    except Exception:       # noqa: BLE001 - index illisible : rien n'est affirmé
+        return None
 
 
 def _emulation_liee(ident, fiche, d, options):
@@ -705,7 +750,9 @@ def poster(travaux, cible, corps, d=None, projets=None):
 
 def _marques(fiche, projets):
     """Les marques d'arrêt du moteur pour un agent serveur : `detache.demander_arret(<factory>, <tâche>)` (`<tâche>.reponse` pour
-    une réponse aux questions) dans le dossier de chaque projet de ce nom. Ne lève jamais."""
+    une réponse aux questions) dans le dossier du projet dont le NOM DE DOSSIER est celui de la tâche (le nom que le moteur
+    lui a donné). Posée seulement si exactement UN projet du bureau porte ce nom : deux projets homonymes, aucune marque
+    (l'arrêt sur le serveur a lieu quand même). Ne lève jamais."""
     def poser():
         try:
             from moteur import detache
@@ -713,9 +760,11 @@ def _marques(fiche, projets):
             if not isinstance(tache, str) or not tache:
                 return
             cle = tache + (".reponse" if fiche.get("genre") == "reponse" else "")
-            for nom, factory in list(projets() if projets else []):
-                if nom == fiche.get("projet"):
-                    detache.demander_arret(factory, cle)
+            trouves = [factory for nom, factory in list(projets() if projets else []) if nom == fiche.get("projet")]
+            if len(trouves) == 1:
+                detache.demander_arret(trouves[0], cle)
+            elif len(trouves) > 1:
+                print("Marque d'arrêt non posée : plusieurs projets portent ce nom.", file=sys.stderr)
         except Exception as e:      # noqa: BLE001
             print(f"Marque d'arrêt non posée ({type(e).__name__}).", file=sys.stderr)
     return poser
@@ -747,6 +796,8 @@ def _poster_tache(travaux, ident, d, projets=None):
     if travaux.en_cours("arreter_tache", ident):
         return 202, {"demarre": True}
     reponse = {"demarre": True, "etat": travaux.etats_arret.get(ident, "inconnu")}
+    if travaux.emulations_arret.get(ident):          # « arretee » ou « non_confirmee » : une émulation était liée
+        reponse["emulation"] = travaux.emulations_arret[ident]
     if travaux.erreurs_taches.get(ident):
         reponse["erreur"] = _texte_index(travaux.erreurs_taches[ident], _secrets(d, []), ERREUR_MAX)
     return 200, reponse

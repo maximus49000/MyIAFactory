@@ -150,7 +150,17 @@ export async function arreterTache(id, fetchFn = globalThis.fetch) {
   if (r.injoignable) return {ok: false, message: "Arrêt impossible : le bureau est injoignable."};
   if (r.status === 409) return {ok: false, occupe: true, message: texte(r.d.erreur) || "Une opération est déjà en cours : réessayez dans un instant."};
   if (!r.ok) return {ok: false, message: refus(r)};
-  return {ok: true, etat: texte(r.d.etat)};      // l'arrêt d'un agent répond avec l'état final (absent : l'arrêt tourne encore)
+  // l'arrêt d'un agent répond avec l'état final (absent : l'arrêt tourne encore) et, pour un agent pilote, celui de son
+  // émulation liée (`arretee`, `non_confirmee` ; absent : pas d'émulation liée)
+  return {ok: true, etat: texte(r.d.etat), emulation: texte(r.d.emulation)};
+}
+
+// Le message de fin d'un arrêt d'agent : il ne parle d'émulation que s'il y en avait une, et dit si son arrêt a échoué.
+export function messageArretAgent(r) {
+  if (!ETATS_FINAUX.has(r.etat)) return `L'arrêt n'est pas confirmé (état : ${LIBELLES_ETATS_TACHE[r.etat] || "état inconnu"}).`;
+  if (r.emulation === "arretee") return "Arrêt confirmé : l'agent et son émulation sont arrêtés.";
+  if (r.emulation === "non_confirmee") return "Arrêt de l'agent confirmé ; l'arrêt de son émulation n'est pas confirmé.";
+  return "Arrêt confirmé : l'agent est arrêté.";
 }
 
 function duree(s) {
@@ -515,8 +525,7 @@ export function ecranServeurs(etat, options = {}) {
       let r;
       try { r = await arreterTache(id, fetchFn); } finally { envois.delete(id); }
       if (!r.ok) refusArret.set(id, r.message);
-      else if (r.etat) noteArret.set(id, ETATS_FINAUX.has(r.etat) ? "Arrêt confirmé : l'agent et son émulation sont arrêtés."
-        : `L'arrêt n'est pas confirmé (état : ${LIBELLES_ETATS_TACHE[r.etat] || "état inconnu"}).`);
+      else if (r.etat) noteArret.set(id, messageArretAgent(r));
       await relireTaches();
       majTaches();
       planifierTaches();

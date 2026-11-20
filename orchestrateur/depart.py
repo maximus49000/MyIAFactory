@@ -76,6 +76,8 @@ def agent_libre(fiches, taches, role, modele=None, lieu=None, agents_locaux_max=
     actifs, plafond = abonnement
     if plafond is not None and actifs >= plafond:
         return None, f"plafond d'abonnement atteint ({actifs}/{plafond})"
+    if lieu is None and lieu_reserve == "serveur":       # le métier réservé au serveur : même garde qu'un lieu donné
+        lieu = "serveur"
     if lieu == "serveur" and places is not None:
         occupes = _occupation(fiches, taches)
         if lieu in hors_ligne or occupes.get(lieu, 0) >= places.get(lieu, 0):

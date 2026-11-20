@@ -905,8 +905,11 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     if r.get("ordre_lieux") is not None and not ordre_ok(r["ordre_lieux"]):
         erreurs.append("« ordre_lieux » doit lister, sans doublon, au moins un lieu parmi local, serveur, cloud.")
     par = r.get("ordre_lieux_par_metier")
-    if par is not None and (not isinstance(par, dict) or not all(isinstance(k, str) and k.strip() and ordre_ok(o)
-                                                                  for k, o in par.items())):
+    # mêmes règles que la factory (`factory._lire`) : 50 métiers au plus, deux clés qui n'en font qu'une une fois
+    # nettoyées (« dev » et « dev ») refusées
+    if par is not None and (not isinstance(par, dict) or len(par) > 50
+                            or not all(isinstance(k, str) and k.strip() and ordre_ok(o) for k, o in par.items())
+                            or len({k.strip() for k in par}) != len(par)):
         erreurs.append("« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux (local, serveur, cloud).")
     if r.get("recrutement") is not None:
         _verifier_recrutement(r["recrutement"], erreurs)

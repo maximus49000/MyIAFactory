@@ -1018,13 +1018,15 @@ class Bureau(ThreadingHTTPServer):
         return {**e, **plus}
 
     def projets_et_dossiers(self):
-        """`[(nom du projet, dossier de sa factory)]` d'après le dernier état connu de chaque projet : ce qui désigne, par le nom
-        que porte une tâche d'agent serveur, le dossier où le moteur lit la marque d'arrêt (jamais de relevé relancé ici)."""
+        """`[(nom du dossier du projet, dossier de sa factory)]` : le nom que porte une tâche d'agent serveur est celui que
+        le moteur lui donne, le NOM DU DOSSIER du projet (`regles.Projet.nom`), jamais le nom affiché du relevé ; le dossier
+        de la factory est celui où le moteur lit la marque d'arrêt. Lu des chemins seuls (aucun relevé, aucun cache)."""
         rendu = []
         for p in list(self.projets.values()):
-            nom = (p._cache_etat[1] or {}).get("projet")
-            if isinstance(nom, str) and nom:
-                rendu.append((nom, p.chemin_reglages.parent))
+            factory = p.chemin_reglages.parent
+            dossier = factory.parent if factory.name == ".factory" else factory
+            if dossier.name:
+                rendu.append((dossier.name, factory))
         return rendu
 
     def projet(self, id_=None):

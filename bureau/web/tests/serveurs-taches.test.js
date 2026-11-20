@@ -16,7 +16,7 @@ class Noeud {
 }
 globalThis.document = {createElement: (t) => new Noeud(t)};
 
-const {ecranServeurs, monterEcranServeurs, lireTaches, arreterTache, LIEN_CONNEXION_ABONNEMENT} = await import("../ui/serveurs.js");
+const {ecranServeurs, monterEcranServeurs, lireTaches, arreterTache, LIEN_CONNEXION_ABONNEMENT, messageArretAgent} = await import("../ui/serveurs.js");
 const {partieParallelisme, ordreDeLieux, demandeParallelisme, enregistrerPlafondAbonnement} = await import("../ui/facturation.js");
 // Aucun texte venu du serveur ni du projet ne passe jamais par innerHTML : le faux DOM le refuse.
 Object.defineProperty(Noeud.prototype, "innerHTML", {get() { return ""; }, set() { throw new Error("innerHTML interdit"); }});
@@ -259,11 +259,18 @@ test("une tache d agent montre sa tache et sa branche", () => {
   assert.doesNotMatch(premiere.textContent, /captures?/);                // un agent n'a pas de captures
 });
 
+test("le message d arret ne parle d emulation que s il y en avait une", () => {
+  assert.equal(messageArretAgent({etat: "arretee"}), "Arrêt confirmé : l'agent est arrêté.");               // agent seul
+  assert.equal(messageArretAgent({etat: "arretee", emulation: "arretee"}), "Arrêt confirmé : l'agent et son émulation sont arrêtés.");
+  assert.match(messageArretAgent({etat: "terminee", emulation: "non_confirmee"}), /émulation n'est pas confirmé/);
+  assert.match(messageArretAgent({etat: "en_cours", emulation: "arretee"}), /n'est pas confirmé \(état : en cours\)/);
+});
+
 test("le bouton arreter d un agent", async () => {
   const a = agent(1);
   const suivante = {taches: [{...a, etat: "arretee"}]};
   const {c, f} = ecran([a, agent(2, {etat: "terminee"})], {
-    [`POST /api/serveurs/taches/${a.id}/arreter`]: () => reponse(200, {demarre: true, etat: "arretee"}),
+    [`POST /api/serveurs/taches/${a.id}/arreter`]: () => reponse(200, {demarre: true, etat: "arretee", emulation: "arretee"}),
     "GET /api/serveurs/taches": () => reponse(200, suivante)});
   assert.equal(boutons(c, "Arrêter").length, 1);                         // seule la tâche active a son bouton
   await clic(boutons(c, "Arrêter")[0]);

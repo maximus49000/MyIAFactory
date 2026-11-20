@@ -1,8 +1,11 @@
 """Réglages d'un projet : lecture et écriture."""
+import contextlib
 import json
 import os
 import re
 import tempfile
+import threading
+import time
 import unicodedata
 from pathlib import Path
 
@@ -222,12 +225,57 @@ def fixer_deport(chemin, deport, catalogue=None):
     return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
 
 
+_VERROU_ECRITURE = threading.Lock()     # lecture-modification-écriture d'un fichier de réglages : une à la fois ici
+VERROU_ATTENTE_S = 10                   # attente au plus d'un autre processus qui écrit le même fichier
+VERROU_PERIME_S = 60                    # un verrou plus vieux (processus mort) est repris
+
+
+@contextlib.contextmanager
+def _verrou_fichier(chemin):
+    """Une écriture à la fois sur `chemin` : verrou du processus, plus un fichier `<nom>.verrou` créé en exclusif pour
+    les autres processus (le bureau et l'installation écrivent le même fichier du bureau). Attente bornée ; un verrou
+    périmé est repris. `TimeoutError` si l'autre écriture ne finit pas."""
+    marque = Path(str(chemin) + ".verrou")
+    with _VERROU_ECRITURE:
+        fin = time.monotonic() + VERROU_ATTENTE_S
+        while True:
+            try:
+                os.close(os.open(str(marque), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - marque.stat().st_mtime > VERROU_PERIME_S:
+                        marque.unlink()
+                        continue
+                except OSError:
+                    continue
+                if time.monotonic() >= fin:
+                    raise TimeoutError(f"Fichier en cours d'écriture par un autre programme : {chemin}")
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            try:
+                marque.unlink()
+            except OSError:
+                pass
+
+
 def fixer_agents_abonnement_max(chemin, valeur):
     """Note, dans le fichier du bureau, le plafond des agents actifs sur l'abonnement (entier de 1 à 32 ; `None` : plus de
-    plafond, la clé disparaît). Le reste du fichier est gardé. Rend la valeur écrite."""
+    plafond, la clé disparaît). Le reste du fichier est gardé (relu SOUS VERROU : une autre écriture du fichier du bureau
+    n'est jamais perdue). Rend la valeur écrite."""
     if valeur is not None and (type(valeur) is not int or not AGENTS_ABONNEMENT_MAX[0] <= valeur <= AGENTS_ABONNEMENT_MAX[1]):
         raise ValueError("« agents_abonnement_max » doit être un entier de 1 à 32 (ou nul : aucun plafond).")
     chemin = Path(chemin)
+    try:
+        with _verrou_fichier(chemin):
+            return _fixer_plafond(chemin, valeur)
+    except TimeoutError as e:
+        raise ReglagesInvalides(str(e)) from None
+
+
+def _fixer_plafond(chemin, valeur):
     try:
         donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
     except (ValueError, OSError) as e:

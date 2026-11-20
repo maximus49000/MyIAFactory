@@ -283,6 +283,11 @@ class TestBasculeLieux(unittest.TestCase):
                                             places={"local": 2, "serveur": 0}), (None, "serveur : 0 place"))
         self.assertEqual(depart.agent_libre(liste, [{"agent": "srv-1", "active": True}], "dev", lieu="serveur",
                                             ordre_lieux=ORDRE, places={"serveur": 1}), (None, "serveur : 1/1 occupés"))
+        # un métier réservé au serveur passe par la même garde qu'un lieu serveur donné (place et serveur en ligne)
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_reserve="serveur", ordre_lieux=ORDRE, places=PLACES,
+                                            hors_ligne=frozenset({"serveur"})), (None, "serveur : hors ligne"))
+        self.assertEqual(depart.agent_libre(liste, [], "dev", lieu_reserve="serveur", ordre_lieux=ORDRE,
+                                            places=PLACES)[0], "srv-1")
         # un réglage de plafond illisible : la tâche attend avec sa raison, quel que soit le lieu
         refus = "plafond d'abonnement : réglage illisible"
         for kw in ({}, {"lieu_etape": "local"}, {"lieu": "serveur"}):
@@ -476,7 +481,7 @@ class TestDepartCommandes(AvecProjet):
         self.assertEqual((r["agent"], r["raison"]), (None, "plafond d'abonnement atteint (2/2)"))
 
     def test_commande_plafond_invalide_ou_bureau_illisible_garde_la_porte_fermee(self):
-        refus = "plafond d'abonnement : réglage illisible"
+        refus = f"plafond d'abonnement : réglage illisible ({self.dossier / 'bureau.json'})"     # le fichier nommé
         for mauvais in (0, 33, "4", True, None, 2.5):
             bureau = self.bureau_avec_autre(1)
             contenu = json.loads(bureau.read_text(encoding="utf-8"))
@@ -489,6 +494,8 @@ class TestDepartCommandes(AvecProjet):
         self.assertEqual((r["agent"], r["raison"]), (None, refus))
         self.bureau_avec_autre(brut="[1, 2]")
         self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["raison"], refus)
+        with mock.patch.object(Path, "exists", side_effect=PermissionError("refusé")):     # existence illisible
+            self.assertEqual(outil.plafond_abonnement(self.dossier / "bureau.json"), (None, refus))
         # sans plafond réglé, ou sans fichier du bureau : rien ne limite
         self.bureau_avec_autre(None)
         self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")

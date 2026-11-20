@@ -633,7 +633,7 @@ class TestEnveloppe(unittest.TestCase):
 
 ENTREE = RACINE / "images" / "emulateur" / "entree-tache.sh"
 IMAGE_SYSTEME = "system-images;android-34;google_apis;x86_64"
-AVDMANAGER = r'''echo "avdmanager $*" >> "$FAUX_JOURNAL"
+AVDMANAGER = r'''echo "avdmanager $* racine=${ANDROID_SDK_ROOT:-} home=${ANDROID_HOME:-}" >> "$FAUX_JOURNAL"
 [ -n "${AVD_ECHEC:-}" ] && exit 1
 nom=""; prec=""; for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; done
 [ -n "${AVD_SANS_CONFIG:-}" ] && exit 0
@@ -643,14 +643,18 @@ printf 'hw.ramSize=1024\nfoo=bar\ndisk.dataPartition.size=800M\n' > "$ANDROID_AV
 
 @unittest.skipUnless(shutil.which("bash"), "bash absent")
 class TestEntreeTache(unittest.TestCase):
-    """entree-tache.sh lancé hors conteneur : SDK, avdmanager et dossiers factices (ENTREE_SDK, ENTREE_SANS_ATTENTE)."""
+    """entree-tache.sh lancé hors conteneur : SDK (SANS cmdline-tools, comme celui du serveur), outils en ligne de commande de
+    l'image, avdmanager et dossiers factices (ENTREE_SDK, ENTREE_OUTILS, ENTREE_SANS_ATTENTE)."""
 
-    def lancer(self, retirer=(), image=IMAGE_SYSTEME, sdk_absent=False, **env):
+    def lancer(self, retirer=(), image=IMAGE_SYSTEME, sdk_absent=False, sans_outils=False, **env):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as t:
             t = Path(t)
-            sdk = t / "sdk"
-            for rel in ("cmdline-tools/latest/bin/avdmanager", "platform-tools/adb", "emulator/emulator"):
-                f = sdk / rel
+            sdk, outils = t / "sdk", t / "sdk-tache"
+            for rel in ("outils:cmdline-tools/latest/bin/avdmanager", "platform-tools/adb", "emulator/emulator"):
+                racine, rel = (outils, rel[7:]) if rel.startswith("outils:") else (sdk, rel)
+                if sans_outils and racine == outils:
+                    continue
+                f = racine / rel
                 f.parent.mkdir(parents=True, exist_ok=True)
                 f.write_text("#!/bin/sh\n" + (AVDMANAGER if f.name == "avdmanager" else "exit 0") + "\n", newline="\n")
                 f.chmod(0o755)
@@ -660,6 +664,7 @@ class TestEntreeTache(unittest.TestCase):
             for d in ("sortie", "avd", "home"):
                 (t / d).mkdir()
             e = dict(os.environ, ENTREE_SDK=(t / "nulle-part" if sdk_absent else sdk).as_posix(), ENTREE_SANS_ATTENTE="1",
+                     ENTREE_OUTILS=outils.as_posix(),
                      PONT_SORTIE=(t / "sortie").as_posix(), ANDROID_AVD_HOME=(t / "avd").as_posix(), HOME=(t / "home").as_posix(),
                      PONT_AVD="emul", FAUX_JOURNAL=(t / "appels.txt").as_posix())
             e.pop("TACHE_IMAGE_SYSTEME", None)
@@ -679,6 +684,8 @@ class TestEntreeTache(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(f"--package {IMAGE_SYSTEME}", r.appels)
         self.assertIn("--name emul", r.appels)
+        # avdmanager de l'image, racine du SDK = celle de l'image (outils + liens vers le SDK monté), le SDK sans cmdline-tools
+        self.assertRegex(r.appels, r"racine=\S*/sdk-tache home=\S*/sdk-tache")
         lignes = r.config.splitlines()
         self.assertEqual(lignes.count("hw.ramSize=2048"), 1, lignes)
         self.assertEqual(lignes.count("disk.dataPartition.size=2G"), 1, lignes)
@@ -688,7 +695,7 @@ class TestEntreeTache(unittest.TestCase):
 
     def test_erreurs_nettes_et_codes_distincts(self):
         cas = [("sdk absent", dict(sdk_absent=True), 10, "SDK"),
-               ("outil absent", dict(retirer=("cmdline-tools",)), 10, "avdmanager"),
+               ("outils de l'image absents", dict(sans_outils=True), 10, "avdmanager"),
                ("image sans correspondance (glob vide)", dict(image="system-images;android-35;google_apis;x86_64"), 11, "introuvable"),
                ("image absente de l'environnement", dict(image=None), 11, "TACHE_IMAGE_SYSTEME"),
                ("image mal formée", dict(image="system-images;../../x;a;x86_64"), 11, "mal formée"),

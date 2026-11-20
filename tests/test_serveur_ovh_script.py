@@ -1180,6 +1180,8 @@ class TestEtapeEmulateurImage(unittest.TestCase):
         self.assertIn("simul", d["detail"].lower())
         self.assertEqual(m.journal, "")
         self.assertEqual(list(m.home.iterdir()), [])
+        self.assertIn("outils en ligne de commande Android", d["detail"])      # apportés par l'image, pas par l'hôte
+        self.assertIn("SHA-1", d["detail"])
 
     def test_etape_emulateur_image_construit_puis_ecrit_le_marqueur(self):
         m = self._monde()
@@ -1264,6 +1266,33 @@ class TestDockerfileEmulateur(unittest.TestCase):
     def setUp(self):
         self.texte = self.DOCKERFILE.read_text(encoding="utf-8")
         self.code = "\n".join(x for x in self.texte.splitlines() if not x.lstrip().startswith("#"))
+        # étape finale (l'image livrée) : tout ce qui suit le DERNIER FROM
+        self.finale = self.code[self.code.rindex("\nFROM "):]
+
+    def test_l_image_apporte_ses_outils_en_ligne_de_commande_epingles_et_verifies(self):
+        # Le SDK de l'hôte n'a pas de cmdline-tools : l'image apporte avdmanager, version épinglée de versions.json,
+        # archive vérifiée (SHA-1 du manifeste officiel) dans une étape de construction séparée, rien de téléchargé dans
+        # l'image livrée, aucun « curl | sh », aucune archive laissée.
+        versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
+        self.assertRegex(self.code, rf"(?m)^ARG CMDLINE_TOOLS={versions['android_cmdline_tools']}$")
+        self.assertRegex(self.code, r"(?m)^FROM ubuntu:\$\{UBUNTU_TAG\} AS outils$")
+        construction = self.code[:self.code.rindex("\nFROM ")]
+        self.assertIn("https://dl.google.com/android/repository/repository2-3.xml", construction)
+        self.assertIn("commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip", construction)
+        self.assertIn("sha1sum", construction)
+        self.assertRegex(construction, r'\[ "\$obtenu" = "\$attendu" \]')
+        self.assertNotRegex(self.code, r"\|\s*(sh|bash)\b")
+        self.assertIn("rm -rf /tmp/outils.zip", construction)
+        self.assertRegex(self.finale, r"(?m)^COPY --from=outils /opt/sdk-tache /opt/sdk-tache$")
+        self.assertNotRegex(self.finale, r"\b(curl|wget|unzip)\b")
+        for lien in ("emulator", "platform-tools", "system-images", "platforms", "licenses"):
+            self.assertIn(lien, self.finale)                                  # le reste du SDK : celui monté de l'hôte
+
+    def test_la_construction_de_l_image_garde_le_reseau(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        etape = script[script.index("etape_emulateur_image()"):script.index("# --- Unity CLI")]
+        ligne = [x for x in etape.splitlines() if "docker build" in x][0]
+        self.assertNotIn("--network", ligne)
 
     def test_base_epinglee_comme_les_autres_images(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))
@@ -1274,8 +1303,8 @@ class TestDockerfileEmulateur(unittest.TestCase):
 
     def test_outils_exiges_par_le_pont(self):
         for paquet in ("openjdk-17-jdk-headless", "util-linux", "coreutils", "bash"):     # flock, setsid / timeout, stat, sleep / bash
-            self.assertRegex(self.code, rf"\b{paquet}\b")
-        self.assertNotRegex(self.code, r"\b(curl|wget)\b")
+            self.assertRegex(self.finale, rf"\b{paquet}\b")
+        self.assertNotRegex(self.finale, r"\b(curl|wget)\b")                 # l'image livrée ne télécharge rien
 
     def test_sans_identifiants_et_utilisateur_1000(self):
         for mot in ("credential", "token", "api_key", "secret", "password", ".ssh", ".claude", "ANTHROPIC"):
@@ -1293,14 +1322,15 @@ class TestDockerfileEmulateur(unittest.TestCase):
 
     def test_adb_vient_du_sdk_monte_et_non_d_un_paquet(self):
         self.assertNotIn("android-tools-adb", self.code)
-        apt = self.code[self.code.index("apt-get install"):self.code.index("rm -rf")]
+        apt = self.finale[self.finale.index("apt-get install"):self.finale.index("rm -rf")]
         self.assertNotRegex(apt, r"adb")
 
     def test_entree_cree_l_avd_emul_puis_attend(self):
         self.assertEqual(subprocess.run(["bash", "-n", self.ENTREE.as_posix()], capture_output=True).returncode, 0)
         texte = self.ENTREE.read_text(encoding="utf-8")
         self.assertNotIn("\r", texte)
-        self.assertIn("avdmanager", texte)
+        self.assertIn("/opt/sdk-tache/cmdline-tools/latest/bin/avdmanager", texte)    # celui de l'image
+        self.assertNotIn("$SDK/cmdline-tools", texte)                                 # jamais celui du SDK monté
         self.assertIn("/opt/android-sdk", texte)
         self.assertIn("TACHE_IMAGE_SYSTEME", texte)                     # image système épinglée par l'enveloppe, pas « la première »
         self.assertIn("hw.ramSize=2048", texte)

@@ -352,6 +352,11 @@ qu'avec l'accord explicite du Directeur.
 « Voir l'aperçu » puis donner l'accord. En ligne de commande : `py -3.12 lancer.py plateforme serveurs apercu <id>
 recette-emulateur`, puis `py -3.12 lancer.py plateforme serveurs installer <id> recette-emulateur --accord`.
 
+L'image apporte ses propres outils en ligne de commande Android (`avdmanager`, version épinglée de `versions.json`, SHA-1
+vérifié à la construction) : l'hôte n'a besoin d'aucun `cmdline-tools` dans `~/android-sdk`. Vérification en lecture seule
+avant l'essai, sur le serveur : `ls ~/android-sdk/system-images/android-34/google_apis/x86_64` (l'image système épinglée doit
+y être).
+
 ## Suite
 
 - **Tranche B** : l'agent qui travaille sur le serveur (image d'agent, abonnement, pont hôte, bascule entre lieux, file visible).

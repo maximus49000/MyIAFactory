@@ -735,11 +735,14 @@ etape_android_emulateur() {
 # assemblés dans un contexte temporaire. Idempotente : l'image porte une étiquette « versions » (versions + empreinte des
 # fichiers) ; elle n'est reconstruite que si l'étiquette diffère. Le marqueur ~/.myiafactory/emulateur-image.version (contenu =
 # l'étiquette, testé par la sonde du catalogue) est retiré avant toute reconstruction puis réécrit une fois l'image construite.
-# Le SDK Android n'est pas dans l'image : il est monté à l'exécution.
+# Le SDK Android n'est pas dans l'image : il est monté à l'exécution. Les outils en ligne de commande Android (avdmanager), que
+# le SDK de l'hôte n'a pas, sont apportés par l'image (version ${V_CMDLINE_TOOLS} épinglée, SHA-1 vérifié d'après le manifeste
+# officiel Google à la construction) : la construction a besoin du réseau (aucun --network none), et l'image grossit d'environ
+# 150 Mo.
 etape_emulateur_image() {
   local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/emulateur-image.version" f journal fin code fichiers_h
   if [ "$SIMULER" = 1 ]; then
-    repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont) depuis ${racine} puis écrirait ${marqueur}."
+    repondre a_faire "Simulation : construirait l'image myiafactory/emulateur (Ubuntu ${V_UBUNTU#ubuntu:}, JDK 17, pont, outils en ligne de commande Android ${V_CMDLINE_TOOLS} téléchargés de Google à la construction, SHA-1 vérifié d'après le manifeste officiel, environ 150 Mo de plus) depuis ${racine} puis écrirait ${marqueur}."
   fi
   refuser_root
   exiger_disque "$SEUIL_EMULATEUR_IMAGE_GO"

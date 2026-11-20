@@ -51,6 +51,15 @@ class TestCharger(Base):
         self.assertEqual([(e.verbe, e.args) for e in r.etapes],
                          [("demarrer", ()), ("toucher", ("10", "20")), ("capturer", ("ecran",))])
 
+    def test_film_dans_une_recette(self):
+        self.ecrire("demo", {"nom": "demo", "reseau": False, "etapes": [
+            {"verbe": "filmer", "args": ["demo", "30"]}, {"verbe": "attendre", "args": ["30"]}, {"verbe": "finfilm"}]})
+        r = sr.charger(str(self.projet), "demo")
+        self.assertEqual([(e.verbe, e.args) for e in r.etapes],
+                         [("filmer", ("demo", "30")), ("attendre", ("30",)), ("finfilm", ())])
+        self.refuse({"nom": "demo", "reseau": False, "etapes": [{"verbe": "filmer", "args": ["demo", "181"]}]})
+        self.refuse({"nom": "demo", "reseau": False, "etapes": [{"verbe": "finfilm", "args": ["x"]}]})
+
     def test_verbe_hors_liste_refuse(self):
         self.refuse({"nom": "demo", "reseau": False, "etapes": [{"verbe": "rm", "args": ["-rf"]}]}, motif="Verbe")
 

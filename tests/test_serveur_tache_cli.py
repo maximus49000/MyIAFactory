@@ -155,7 +155,7 @@ class TestLancer(Base):
                                           "--projet", str(self.projet), "--attendre")
         self.assertEqual((code, erreur), (0, ""), sortie)
         self.assertEqual(self.recette.executees, [("demo", self.moteur.appels[0][1].id)])
-        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "verbe", "arreter", "rapatrier"])
         self.assertTrue(self.arrets()[0][2])                 # succès : arrêt avec fin=True
         ident = self.recette.executees[0][1]
         attendu = (self.projet / ".factory" / "serveur" / ident).resolve()
@@ -185,8 +185,8 @@ class TestLancer(Base):
         code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
                                      "--projet", str(self.projet), "--attendre")
         verbes = [a[2] for a in self.moteur.appels if a[0] == "verbe"]
-        self.assertEqual(verbes, ["journal", "arreter"])
-        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertEqual(verbes, ["finfilm", "journal", "arreter"])
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "verbe", "arreter", "rapatrier"])
         self.assertEqual(json.loads(sortie)["statut"], "plantage")
         self.assertEqual(code, 1)
 
@@ -197,7 +197,7 @@ class TestLancer(Base):
                 self.moteur.leve_verbe = exc
                 code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario",
                                              "demo", "--projet", str(self.projet), "--attendre")
-                self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])   # chacun tenté
+                self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "verbe", "arreter", "rapatrier"])   # chacun tenté
                 self.assertEqual((code, json.loads(sortie)["statut"]), (0, "ok"))
 
     def test_la_recette_capture_dans_le_projet(self):
@@ -331,7 +331,7 @@ class TestLancer(Base):
         code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
                                      "--projet", str(self.projet), "--attendre")
         self.assertEqual(len(self.recette.executees), 1)
-        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "verbe", "arreter", "rapatrier"])
         self.assertEqual(code, 0)
         self.assertIn("Index des tâches non mis à jour", json.loads(sortie)["avertissement"])
 
@@ -738,6 +738,17 @@ class TestOutil(Base):
                 lien.symlink_to(cible, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest("lien indisponible")
+
+    def test_finfilm_rapatrie_dans_le_projet(self):
+        local = str(self.projet / ".factory" / "serveur" / ID / "videos" / "demo.mp4")
+        self.moteur.reponse_verbe = {"ok": True, "verbe": "finfilm", "code": 0, "detail": "ok", "video": local, "images": []}
+        code, sortie, _ = self.outil(ID, "finfilm", "--projet", str(self.projet))
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(sortie)["video"], local)
+        self.assertEqual(Path(self.moteur.appels[0][4]), (self.projet / ".factory" / "serveur" / ID).resolve())
+        self.moteur.appels.clear()
+        self.outil(ID, "filmer", "demo", "30", "--projet", str(self.projet))
+        self.assertEqual(self.moteur.appels[0][:5], ("verbe", ID, "filmer", ("demo", "30"), "None"))
 
     def test_destination_calculee_pour_capturer_seulement(self):
         # T7 : une jonction .factory qui sort du projet ne bloque que capturer (le seul verbe qui écrit), pas les autres.

@@ -459,6 +459,7 @@ import tarfile  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\r\n\x00\xff\n\r\x1a" * 50
+MP4 = b"\x00\x00\x00\x18ftypisom" + b"\x00\x00\x02\x00isomiso2" + b"\r\n\x00\xff" * 40
 APK = b"PK\x03\x04" + bytes(range(256)) + b"\r\n\n\r\x00" * 10
 CLE_PRIVEE = "C:/cles-privees/id_ed25519_ovh1_SECRET-CHEMIN"
 SECRET_OVH = "SECRET-OVH-TACHE-0123456789"
@@ -646,6 +647,13 @@ class FauxServeur:
         if not t:
             return 3, b"", ""
         return 0, archive([("./" + n, d) for n, d in sorted(t["fichiers"].items()) if not n.startswith(".")]), ""
+
+    def _film(self, args, script, entree):
+        nom = args[1]
+        f = self.taches[args[0]]["fichiers"]
+        membres = [("./" + n, d) for n, d in sorted(f.items())
+                   if n == f"videos/{nom}.mp4" or n.startswith(f"videos/{nom}-img/")]
+        return (0, archive(membres), "") if membres else (3, b"", "")
 
     def _capture(self, args, script, entree):
         nom = f"captures/{args[1]}.png"
@@ -1196,6 +1204,75 @@ class TestRapatrier(BaseLanceur):
         self.preparer()
         self.assertEqual(self.rapatrier()["statut"], "ok")
 
+    def test_videos_images_et_logcat_rapatries(self):
+        self.preparer(fichiers={"pont.log": b"filmer demo 3ms\n", "logcat.txt": b"# journal - x\nI Test: un\n",
+                                "videos/demo.mp4": MP4, "videos/demo-img/demo-001.png": PNG,
+                                "videos/demo-img/demo-002.png": PNG + b"2", "videos/court.mp4": MP4 + b"c"})
+        m = self.rapatrier()
+        self.assertEqual(m["statut"], "ok", m)
+        self.assertEqual(Path(m["logcat"]).read_bytes(), b"# journal - x\nI Test: un\n")
+        par = {Path(v["mp4"]).name: v for v in m["videos"]}
+        self.assertEqual(set(par), {"demo.mp4", "court.mp4"})
+        self.assertEqual(Path(par["demo.mp4"]["mp4"]), self.dest / "videos" / "demo.mp4")
+        self.assertEqual(Path(par["demo.mp4"]["mp4"]).read_bytes(), MP4)
+        self.assertEqual([Path(p).name for p in par["demo.mp4"]["images"]], ["demo-001.png", "demo-002.png"])
+        self.assertEqual(par["court.mp4"]["images"], [])
+        rapport = json.loads(Path(m["rapport"]).read_text(encoding="utf-8"))
+        self.assertEqual(rapport["logcat"], "logcat.txt")
+        self.assertIn({"mp4": "videos/demo.mp4", "images": ["videos/demo-img/demo-001.png",
+                                                             "videos/demo-img/demo-002.png"]}, rapport["videos"])
+
+    def test_videos_hostiles_refusees(self):
+        self.preparer()
+        lien = tarfile.TarInfo("videos/lien.mp4")
+        lien.type, lien.linkname = tarfile.SYMTYPE, "/etc/passwd"
+        dossier = tarfile.TarInfo("videos")
+        dossier.type = tarfile.SYMTYPE
+        dossier.linkname = "/home"
+        self.srv.archive = archive([
+            ("./videos/ok.mp4", MP4), ("videos/faux.mp4", b"pas une video" * 3), ("videos/../x.mp4", MP4),
+            ("videos/con.mp4", MP4), ("videos/A.mp4", MP4), ("videos/ok-img/../../y.png", PNG),
+            ("videos/ok-img/autre-001.png", PNG), ("videos/ok-img/ok-1.png", PNG), ("videos/ok-img/ok-001.png", b"pas png"),
+            ("videos/ok-img/ok-001.PNG", PNG), ("videos/ok.mp4.exe", MP4), ("videos/sous/ok.mp4", MP4),
+            ("videos/ok-img/ok-002.png", PNG), (lien, None), (dossier, None)])
+        m = self.rapatrier()
+        self.assertEqual(m["statut"], "erreur")
+        self.assertGreaterEqual(m["refuses"], 12)
+        ecrits = sorted(p.relative_to(self.dest).as_posix() for p in self.dest.rglob("*") if p.is_file())
+        self.assertEqual(ecrits, ["rapport.json", "videos/ok-img/ok-002.png", "videos/ok.mp4"])
+
+    def test_videos_bornees_en_nombre_et_en_taille(self):
+        self.preparer()
+        membres = [(f"./videos/v{i}.mp4", MP4) for i in range(7)]
+        membres += [(f"./videos/v0-img/v0-{i:03d}.png", PNG) for i in range(1, 160)]
+        self.srv.archive = archive(membres)
+        m = self.rapatrier()
+        self.assertEqual(len(m["videos"]), 5)
+        self.assertLessEqual(sum(len(v["images"]) for v in m["videos"]), 150)
+        self.assertTrue(m["tronque"])
+        self.assertEqual(m["statut"], "limite")
+        with mock.patch.object(st, "VIDEO_MAX_OCTETS", 50):                 # au-delà de la taille d'une vidéo
+            self.srv.archive = archive([("./videos/grosse.mp4", MP4)])
+            m = self.rapatrier()
+        self.assertEqual((m["videos"], m["statut"]), ([], "limite"))
+        with mock.patch.object(st, "LOGCAT_MAX_OCTETS", 10):               # logcat.txt démesuré : pas pris
+            self.srv.archive = archive([("./logcat.txt", b"x" * 50)])
+            m = self.rapatrier()
+        self.assertIsNone(m["logcat"])
+        self.assertTrue(m["tronque"])
+
+    def test_bombe_de_taille_video(self):
+        self.preparer(limites={"octets": 1000})
+        info = tarfile.TarInfo("./videos/bombe.mp4")
+        info.size = 10 ** 10
+        tampon = io.BytesIO()
+        tampon.write(info.tobuf(format=tarfile.GNU_FORMAT))
+        tampon.write(MP4)
+        self.srv.archive = tampon.getvalue()
+        m = self.rapatrier()
+        self.assertEqual(m["videos"], [])
+        self.assertNotEqual(m["statut"], "ok")
+
     def test_une_recette_en_echec_ne_laisse_jamais_ok_sur_le_disque(self):
         # I2 : la recette a échoué (installer -> 4) ; le veilleur a écrit arretee/ok : le rapport dit erreur.
         for code, attendu in ((4, "erreur"), (2, "erreur"), (3, "limite")):
@@ -1351,6 +1428,28 @@ class TestVerbe(BaseLanceur):
         self.assertFalse(r["ok"])
         self.assertEqual(self.pauses, [])
 
+    def test_finfilm_rapatrie_la_video_et_ses_images(self):
+        f = self.srv.taches[ID1]["fichiers"]
+        f.update({"videos/demo.mp4": MP4, "videos/demo-img/demo-001.png": PNG, "videos/demo-img/demo-002.png": PNG,
+                  "videos/autre.mp4": MP4})
+        self.srv.pont["finfilm"] = (0, ligne_pont(True, "finfilm", "videos/demo.mp4 (200 octets, 3 s, 2 images)."))
+        r = self.verbe("finfilm", destination=self.dest)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(Path(r["video"]), self.dest / "videos" / "demo.mp4")
+        self.assertEqual(Path(r["video"]).read_bytes(), MP4)
+        self.assertEqual([Path(p).name for p in r["images"]], ["demo-001.png", "demo-002.png"])
+        self.assertFalse((self.dest / "videos" / "autre.mp4").exists())              # seulement ce film
+        self.assertEqual(self.srv.ops("film")[0][1].split("\n", 1)[0], f"# tache:film {ID1} demo")
+
+    def test_finfilm_reponse_douteuse_ne_rapatrie_rien(self):
+        for detail in ("videos/../x.mp4 (1 octets, 1 s, 0 images).", "videos/CON.mp4 (1 octets)", "rien", "videos/con.mp4 (1)"):
+            with self.subTest(detail=detail):
+                self.srv.pont["finfilm"] = (0, ligne_pont(True, "finfilm", detail))
+                r = self.verbe("finfilm", destination=self.dest)
+                self.assertFalse(r["ok"])
+                self.assertNotIn("video", r)
+        self.assertEqual(self.srv.ops("film"), [])
+
     def test_demarrer_sur_une_tache_finie_donne_la_raison_du_serveur(self):
         # Conteneur mort au démarrage : « la tâche n'est plus en cours » ET la raison écrite par le veilleur (l'agent et le
         # rapport de la recette voient pourquoi : AVD non créé...).
@@ -1371,9 +1470,11 @@ class TestVerbe(BaseLanceur):
 
     def test_delai_ssh_par_verbe(self):
         # M5 : `arreter` du pont peut durer ~80 s, `installer` ~180 s : marge au-dessus de leur propre borne.
-        for v, attendu in (("arreter", 120), ("installer", 240), ("toucher", st.DELAI_VERBE_S), ("demarrer", 360)):
+        # arreter et finfilm : jusqu'à ~250 s de film (SIGINT, attente, adb pull, ffmpeg 120 s) en plus de leur propre borne
+        for v, attendu in (("arreter", 420), ("installer", 240), ("toucher", st.DELAI_VERBE_S), ("demarrer", 360),
+                           ("filmer", 60), ("finfilm", 360)):
             with self.subTest(verbe=v):
-                self.verbe(v, ["1", "2"] if v == "toucher" else [])
+                self.verbe(v, {"toucher": ["1", "2"], "filmer": ["demo"]}.get(v, []))
                 self.assertEqual(self.srv.ops("verbe")[-1][3], attendu)
 
     def test_nom_de_capture_reserve_sous_windows_refuse_avant_ssh(self):
@@ -1419,7 +1520,8 @@ ACCEPTES = [("toucher", ["540", "1200"]), ("toucher", ["0", "9999"]), ("toucher"
             ("capturer", ["con-1"]), ("capturer", ["lpt"]), ("capturer", ["nulle"]), ("capturer", ["aux_2"]),
             ("journal", []), ("journal", ["pair"]),
             ("journal", ["ActivityManager:I"]), ("journal", ["com.exemple.app"]), ("installer", []), ("lancer", []),
-            ("arreter", [])]
+            ("arreter", []), ("filmer", ["demo"]), ("filmer", ["clip_2", "180"]), ("filmer", ["v", "1"]),
+            ("filmer", ["film-9", "99"]), ("finfilm", [])]
 COMMUNS = [";", "$(x)", "`x`", "a\nb", "", "$(touch ../pwn)", "*", "a;b", "x'y", "a|b", "&", ">", "a\r", "\r", "--",
            "-s", "?", "[", "a&b", "a>b"]
 REFUSES = ([("toucher", [v, "1"]) for v in COMMUNS + ["..", "-1", "99999", "1.5", " 1"]]
@@ -1438,7 +1540,10 @@ REFUSES = ([("toucher", [v, "1"]) for v in COMMUNS + ["..", "-1", "99999", "1.5"
            + [("journal", [v]) for v in COMMUNS + ["a b", "a/b", "a" * 61, ":x", ".x"]] + [("journal", ["a", "b"])]
            + [("installer", [v]) for v in ("/etc/passwd", "../entree/app.apk", ";", "")]
            + [("demarrer", ["-1"]), ("lancer", [".."]), ("arreter", ["99999"])]
-           + [(v, []) for v in ("rm", "", "TOUCHER", "toucher;ls", "sh", "eval", "demarrer\n", "../pont")])
+           + [(v, []) for v in ("rm", "", "TOUCHER", "toucher;ls", "sh", "eval", "demarrer\n", "../pont")]
+           + [("filmer", [v]) for v in COMMUNS + ["..", "../x", "a/b", "A", "x.mp4", "a" * 41, "con", "lpt1"]]
+           + [("filmer", ["demo", v]) for v in COMMUNS + ["0", "181", "030", "-1", "1.5", "999", "1000"]]
+           + [("filmer", []), ("filmer", ["a", "30", "x"]), ("finfilm", ["demo"]), ("finfilm", [";"])])
 
 
 class TestMotifs(unittest.TestCase):
@@ -1449,15 +1554,15 @@ class TestMotifs(unittest.TestCase):
             with self.assertRaises(ValueError, msg=(v, args)):
                 st.valider_verbe(v, args)
         self.assertEqual(set(st.VERBES), {"demarrer", "installer", "lancer", "toucher", "glisser", "texte", "touche",
-                                          "attendre", "capturer", "journal", "arreter"})
+                                          "attendre", "capturer", "journal", "arreter", "filmer", "finfilm"})
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
     def test_motifs_python_et_pont_s_accordent(self):
         from tests.test_serveur_pont import Banc
         with Banc(PONT_PAQUET="com.exemple.app") as banc:
             for v, args in ACCEPTES + REFUSES:
-                if v == "lancer" and not args:
-                    continue                                # exige un paquet installé : couvert par installer
+                if (v == "lancer" and not args) or (v == "finfilm" and not args):
+                    continue                                # exige un paquet installé / un film en cours : couverts ailleurs
                 with self.subTest(verbe=v, args=args):
                     try:
                         st.valider_verbe(v, args)
@@ -1466,6 +1571,8 @@ class TestMotifs(unittest.TestCase):
                         python = False
                     code, _d = banc.lancer(v, *args)
                     self.assertEqual(python, code != 2, (v, args, code, _d))
+                    if v == "filmer" and code == 0:
+                        self.assertEqual(banc.lancer("finfilm")[0], 0)      # un seul film à la fois : on le finit
 
 
 # ---------------------------------------------------------------- scripts réels sous bash (faux sudo et docker)
@@ -1589,6 +1696,38 @@ class TestScriptsReels(BaseLanceur):
             (dossier / f"c{i}.png").write_bytes(PNG + bytes([i]))
         return dossier
 
+    def test_rapatrier_reel_videos_images_et_logcat(self):
+        self.fiche()
+        self.ecrire_etat()
+        sortie = self.tache / "sortie"
+        (sortie / "pont.log").write_bytes(b"filmer demo 3ms\n")
+        (sortie / "logcat.txt").write_bytes(b"# journal - x\nI: un\n")
+        videos = sortie / "videos"
+        (videos / "demo-img").mkdir(parents=True)
+        (videos / "demo.mp4").write_bytes(MP4)
+        (videos / "demo-img" / "demo-001.png").write_bytes(PNG)
+        dehors = Path(self.tmp.name) / "dehors"
+        dehors.mkdir()
+        (dehors / "vol-001.png").write_bytes(PNG)
+        (dehors / "vol.mp4").write_bytes(MP4)
+        r = self.ssh.bash(f'cd "{posix(videos)}" && ln -s "{posix(dehors)}" vol-img && ln -s "{posix(dehors / "vol.mp4")}" '
+                          f'vol.mp4 && [ -L vol-img ]')
+        if r.returncode != 0:
+            self.skipTest("liens symboliques non pris en charge")
+        m = st.rapatrier(ID1, self.dest, dossier=self.dossier, ssh=self.ssh)
+        self.assertEqual(m["statut"], "ok", m)
+        self.assertEqual([(Path(v["mp4"]).name, [Path(i).name for i in v["images"]]) for v in m["videos"]],
+                         [("demo.mp4", ["demo-001.png"])])
+        self.assertEqual(Path(m["logcat"]).read_bytes(), b"# journal - x\nI: un\n")
+        self.assertFalse((self.dest / "videos" / "vol-img").exists())
+        self.assertFalse((self.dest / "videos" / "vol.mp4").exists())
+        # un seul film (pilote, après finfilm) : la vidéo et ses images, rien d'autre
+        dest2 = Path(self.tmp.name) / "projet" / ".factory" / "serveur" / "film"
+        chemin, images, raison = st._rapatrier_film(self.serveur, self.ssh, ID1, "demo", dest2, st._limites({}))
+        self.assertEqual((Path(chemin).name, [Path(i).name for i in images], raison), ("demo.mp4", ["demo-001.png"], None))
+        self.assertEqual(sorted(p.relative_to(dest2).as_posix() for p in dest2.rglob("*") if p.is_file()),
+                         ["videos/demo-img/demo-001.png", "videos/demo.mp4"])
+
     def test_rapatrier_reel_captures_au_dela_de_la_limite(self):
         self.fiche(limites={"captures": 2})
         self.ecrire_etat()
@@ -1699,7 +1838,8 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
                   "_ARRETER": st._script(st._ARRETER, ID1, MOTIF="arret", JSON=final),
                   "_EFFACER": st._script(st._EFFACER, ID1), "_ABANDON": st._script(st._ABANDON, ID1),
                   "_AVD": st._script(st._AVD, ID1), "_VERBE": st._script(st._VERBE, ID1, VERBE="texte 'un deux'"),
-                  "_RAPATRIER": st._script_rapatrier(ID1, lim), "capture": st._script_rapatrier(ID1, lim, "c1")}
+                  "_RAPATRIER": st._script_rapatrier(ID1, lim), "capture": st._script_rapatrier(ID1, lim, "c1"),
+                  "film": st._script_rapatrier(ID1, lim, film="c1")}
         for nom, script in rendus.items():
             self.assertNotRegex(script, r"@[A-Z]+@", nom)                 # aucun jeton oublié
             r = subprocess.run(["bash", "-n"], input=script.encode(), capture_output=True, timeout=30)
@@ -1732,8 +1872,13 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
         self.assertIn(f"docker exec tache-{ID1} /usr/local/bin/pont texte un deux", self.ssh.docker())
         (self.tache / "sortie" / "pont.log").write_bytes(b"texte 3ms\n")
         self.captures(2)
-        for nom, attendus in (("_RAPATRIER", {"./pont.log", "captures/c0.png", "captures/c1.png"}),
-                              ("capture", {"captures/c1.png"})):
+        (self.tache / "sortie" / "videos" / "c1-img").mkdir(parents=True)
+        (self.tache / "sortie" / "videos" / "c1.mp4").write_bytes(MP4)
+        (self.tache / "sortie" / "videos" / "c1-img" / "c1-001.png").write_bytes(PNG)
+        for nom, attendus in (("_RAPATRIER", {"./pont.log", "captures/c0.png", "captures/c1.png", "videos/c1.mp4",
+                                              "videos/c1-img/c1-001.png"}),
+                              ("capture", {"captures/c1.png"}),
+                              ("film", {"videos/c1.mp4", "videos/c1-img/c1-001.png"})):
             code, donnees, erreur = self.ssh.executer_octets("h", "bash -s", "c", entree=rendus[nom].encode())
             self.assertEqual((code, erreur), (0, ""), nom)
             with tarfile.open(fileobj=io.BytesIO(donnees), ignore_zeros=True) as tar:

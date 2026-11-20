@@ -158,6 +158,8 @@ class ExecuteurServeur:
         self.mode = mode
         self.demande_base = dict(demande_base or {})
         self.nom_projet = self.demande_base.get("projet") or self.projet.name
+        # `reponse` : la réponse aux questions de l'utilisateur, jamais confondue avec la tâche (rattachement, reprise)
+        self.genre = self.demande_base.get("genre") or "tache"
         self._dossier, self._ssh, self._git = dossier, ssh, git
         self._dormir, self._horloge, self.pas_s = dormir, horloge, pas_s
         self.attente_max_s = attente_max_s
@@ -189,9 +191,25 @@ class ExecuteurServeur:
     def _fiches(self, st):
         return sorted(st.Index(self.dossier).lire().items())
 
-    def _de_la_tache(self, fiche):
+    def _meme_tache(self, fiche):
         return (fiche.get("type") == "agent" and fiche.get("projet") == self.nom_projet
                 and isinstance(fiche.get("tache"), str) and fiche["tache"].lower() == str(self.tache).lower())
+
+    def _de_la_tache(self, fiche):
+        """Une fiche de cette tâche ET de ce genre (une réponse n'est jamais prise pour la tâche, ni l'inverse)."""
+        return self._meme_tache(fiche) and (fiche.get("genre") or "tache") == self.genre
+
+    def _arreter_les_reponses_orphelines(self, st):
+        """L'agent de la tâche repart : une réponse aux questions encore active pour cette tâche (moteur coupé pendant
+        qu'elle tournait) n'a plus de lecteur ; elle est arrêtée (serveur muet : l'arrêt est noté pour être relayé)."""
+        if self.genre != "tache":
+            return
+        for i, f in self._fiches(st):
+            if (self._meme_tache(f) and (f.get("genre") or "tache") == "reponse" and f.get("etat") in ACTIFS
+                    and f.get("arret_demande") is not True):
+                lu = st.arreter(i, self.dossier, self.ssh)
+                if lu.get("etat") not in st.FINAUX:
+                    self._noter(st, i, {"arret_demande": True})
 
     def _noter(self, st, ident, champs):
         st._noter(self.dossier, ident, champs)
@@ -216,7 +234,7 @@ class ExecuteurServeur:
     def _relayer_arrets(self, st):
         """Arrêts demandés quand le serveur ne répondait pas : redemandés, une fois réussis notés `arret_relaye`."""
         for i, f in self._fiches(st):
-            if self._de_la_tache(f) and f.get("arret_demande") is True and f.get("arret_relaye") is not True:
+            if self._meme_tache(f) and f.get("arret_demande") is True and f.get("arret_relaye") is not True:
                 lu = st.arreter(i, self.dossier, self.ssh)
                 if lu.get("etat") in st.FINAUX:
                     self._noter(st, i, {"arret_relaye": True})
@@ -281,6 +299,7 @@ class ExecuteurServeur:
                                                   "raison": fiche.get("raison") or ""})
         ident, incertain = self._active(st), False
         if ident is None:
+            self._arreter_les_reponses_orphelines(st)
             try:
                 ident, echec, incertain = self._lancer(sa, st, distant, consigne, entree, delai)
             except ValueError as e:                     # RefusLancement : rien n'est parti

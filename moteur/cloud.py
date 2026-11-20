@@ -14,6 +14,7 @@ clé n'est lue ni transmise : `ANTHROPIC_API_KEY` est retirée de l'environnemen
 import os
 import re
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -102,11 +103,11 @@ PUSH_PAUSE_S = 3
 _PUSH_CONCURRENT = ("cannot lock ref", "failed to lock", "unable to lock", "incorrect old value")
 
 
-def _pousser(executer, dossier):
+def _pousser(executer, dossier, options=()):
     """`git push`, réessayé quand un autre push du même dépôt est en cours (cas réel : trois sessions cloud lancées
     ensemble, GitHub en refusait deux avec « cannot lock ref »)."""
     for essai in range(PUSH_ESSAIS):
-        code, sortie = _git(executer, dossier, "push")
+        code, sortie = _git(executer, dossier, *options, "push")
         if code == 0 or not any(m in _texte(sortie) for m in _PUSH_CONCURRENT) or essai == PUSH_ESSAIS - 1:
             return code, sortie
         time.sleep(PUSH_PAUSE_S * (essai + 1))
@@ -402,16 +403,17 @@ ETAT_DU_MOTEUR = re.compile(r"^\.factory/(attente-[^/]+\.json|anomalies-logiciel
                             r"|suivi\.json(\.precedent)?|demandes\.jsonl|sessions\.json|[^/]+-historique\.jsonl)$")
 
 
-def _regler_les_conflits_d_etat(executer, dossier):
+def _regler_les_conflits_d_etat(executer, dossier, options=()):
     """Vrai si tous les conflits de la fusion en cours portent sur des fichiers d'état du moteur : la version locale
-    est gardée et la fusion est conclue. Faux sinon (rien n'est touché)."""
-    code, sortie = _git(executer, dossier, "diff", "--name-only", "--diff-filter=U", delai_s=30)
+    est gardée et la fusion est conclue. Faux sinon (rien n'est touché). `options` : avant la commande git (fusion
+    locale d'un agent serveur : ni crochet ni fsmonitor)."""
+    code, sortie = _git(executer, dossier, *options, "diff", "--name-only", "--diff-filter=U", delai_s=30)
     fichiers = [x.strip() for x in _texte(sortie).splitlines() if x.strip()]
     if code != 0 or not fichiers or not all(ETAT_DU_MOTEUR.match(f) for f in fichiers):
         return False
-    _git(executer, dossier, "checkout", "--ours", "--", *fichiers)
-    _git(executer, dossier, "add", "--", *fichiers)
-    code, _ = _git(executer, dossier, "commit", "--no-edit", "-q")
+    _git(executer, dossier, *options, "checkout", "--ours", "--", *fichiers)
+    _git(executer, dossier, *options, "add", "--", *fichiers)
+    code, _ = _git(executer, dossier, *options, "commit", "--no-edit", "-q")
     return code == 0
 
 
@@ -440,10 +442,68 @@ def etat_hors_du_depot(dossier, executer=None):
 
 def fusionner(dossier_projet, branche, *, executer=None, distante=True):
     with git_sur.verrou(dossier_projet):      # la fusion et son envoi d'un seul tenant, sans autre git du moteur
-        return _fusionner(dossier_projet, branche, executer, distante)
+        if distante:
+            return _fusionner(dossier_projet, branche, executer)
+        with tempfile.TemporaryDirectory(prefix="myiafactory-sans-crochet-") as vide:
+            # agent serveur : jamais un crochet (hook) ni fsmonitor du dépôt pendant la fusion de sa branche
+            options = ("-c", f"core.hooksPath={Path(vide).as_posix()}", "-c", "core.fsmonitor=false")
+            refus = chemins_reserves(executer, dossier_projet, branche, options)
+            if refus:
+                return refus
+            return _fusionner(dossier_projet, branche, executer, distante=False, options=options)
 
 
-def _fusionner(dossier_projet, branche, executer, distante=True):
+# Ce qu'une branche d'agent serveur ne touche jamais (fusion refusée, branche gardée) : l'état et les réglages de la factory
+# (dont l'accord du Directeur), les fiches, et ce qui ferait tourner du code sur le poste (crochets, attributs de git).
+RESERVES_RACINE = (".factory", "fiches", "factory.json")
+RESERVES_PARTOUT = (".gitattributes", ".gitmodules", ".husky", ".git")
+_NOM_COURT = re.compile(r"~\d")          # nom court de Windows (FACTOR~1) : il pourrait désigner un dossier réservé
+
+
+def chemin_reserve(chemin):
+    """Vrai si une branche d'agent serveur ne peut pas toucher `chemin` (chemin git, `/` ou `\\`) : sortie du dépôt
+    (`..`, absolu, lecteur, `:`), dossier ou fichier réservé (casse ignorée, points et espaces finaux ignorés comme sous
+    Windows), dossier `.git…` (crochets, workflows), nom court de Windows."""
+    if not isinstance(chemin, str) or not chemin or chemin.startswith(("/", "\\")) or ":" in chemin:
+        return True
+    parties = [p.rstrip(" .").lower() if p not in (".", "..") else p for p in re.split(r"[\\/]", chemin)]
+    if any(p in ("", ".", "..") for p in parties) or any(_NOM_COURT.search(p) for p in parties):
+        return True
+    if parties[0] in RESERVES_RACINE:
+        return True
+    for k, p in enumerate(parties):
+        if p in RESERVES_PARTOUT or (p.startswith(".git") and k < len(parties) - 1):
+            return True
+    return False
+
+
+def chemins_reserves(executer, dossier_projet, branche, options=()):
+    """La raison du refus de fusionner la branche locale `branche` (chemins réservés, ou différence illisible), ou None.
+    La branche n'est jamais touchée : elle reste gardée pour le Directeur."""
+    code, sortie = _git(executer, dossier_projet, *options, "diff", "--name-only", "-z", "--no-renames",
+                        f"HEAD...refs/heads/{branche}", delai_s=60)
+    if code != 0:
+        return (f"la branche {branche} n'a pas pu être vérifiée avant sa fusion ({_texte(sortie)[:160]}) : elle est "
+                "gardée, non fusionnée.")
+    chemins = [c for c in _texte(sortie).split("\x00") if c]
+    # le dossier de crochets que le dépôt déclare (core.hooksPath relatif, ex. `scripts/crochets`) : réservé aussi, sinon
+    # le prochain commit du moteur lancerait ce que l'agent y a mis
+    code, crochets = _git(executer, dossier_projet, "config", "--get", "core.hooksPath", delai_s=30)
+    prefixe = _texte(crochets).strip().replace("\\", "/").rstrip("/").lower() if code == 0 else ""
+    while prefixe.startswith("./"):
+        prefixe = prefixe[2:]
+    if prefixe.startswith(("/", "~")) or re.match(r"[a-z]:", prefixe):
+        prefixe = ""             # hors du dépôt : la branche ne peut pas l'atteindre (chemins sortants refusés)
+    touches = [c for c in chemins if chemin_reserve(c)
+               or (prefixe and (c.replace("\\", "/").lower() + "/").startswith(prefixe + "/"))]
+    if not touches:
+        return None
+    liste = ", ".join(touches[:5]) + (f" et {len(touches) - 5} autre(s)" if len(touches) > 5 else "")
+    return (f"la branche {branche} de l'agent serveur touche des chemins réservés au Directeur et à la factory ({liste}) : "
+            "elle est gardée telle quelle, non fusionnée.")
+
+
+def _fusionner(dossier_projet, branche, executer, distante=True, options=()):
     """Fusionne la branche de la session dans la branche du projet, puis pousse. `None` si c'est fait, sinon la raison
     (un conflit : la fusion est annulée, rien n'est cassé). `distante` faux (agent serveur) : la branche LOCALE
     (`refs/heads/<branche>`, rapatriée par paquet Git) au lieu de `origin/<branche>` ; un push manqué n'est alors pas un
@@ -453,14 +513,14 @@ def _fusionner(dossier_projet, branche, executer, distante=True):
     etat_hors_du_depot(dossier_projet, executer)
     code, sortie = _git(executer, dossier_projet, "status", "--porcelain", delai_s=30)
     if code == 0 and _texte(sortie).strip():
-        _git(executer, dossier_projet, "add", "-A")
-        _git(executer, dossier_projet, "commit", "-q", "-m", f"Factory : état local avant la fusion de {branche}")
-    code, sortie = _git(executer, dossier_projet, "merge", "--no-ff", "-m", f"Factory : fusion de {branche}",
+        _git(executer, dossier_projet, *options, "add", "-A")
+        _git(executer, dossier_projet, *options, "commit", "-q", "-m", f"Factory : état local avant la fusion de {branche}")
+    code, sortie = _git(executer, dossier_projet, *options, "merge", "--no-ff", "-m", f"Factory : fusion de {branche}",
                         f"origin/{branche}" if distante else f"refs/heads/{branche}")
-    if code != 0 and not _regler_les_conflits_d_etat(executer, dossier_projet):
-        _git(executer, dossier_projet, "merge", "--abort")
+    if code != 0 and not _regler_les_conflits_d_etat(executer, dossier_projet, options):
+        _git(executer, dossier_projet, *options, "merge", "--abort")
         return "conflit de fusion : " + _texte(sortie)[:200]
-    code, sortie = _pousser(executer, dossier_projet)
+    code, sortie = _pousser(executer, dossier_projet, options)
     if distante and code != 0 and not any(m in _texte(sortie) for m in _PUSH_CONCURRENT):
         return "la fusion est faite mais n'a pas pu être poussée : " + _texte(sortie)[:200]
     # Encore refusé par un autre push en cours après les essais : la fusion est faite dans le dépôt local et part avec le

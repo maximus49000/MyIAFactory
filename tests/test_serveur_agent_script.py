@@ -754,7 +754,11 @@ sys.exit(cmd.get("code", 0))
 def charger_entree():
     spec = importlib.util.spec_from_file_location("entree_agent", ENTREE)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    avant, sys.dont_write_bytecode = sys.dont_write_bytecode, True     # aucun __pycache__ dans serveur_ovh/images
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = avant
     return module
 
 

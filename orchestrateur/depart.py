@@ -283,6 +283,7 @@ MODES_SERVEUR = ("seul", "pilote")
 VERBES_DU_PONT = ("demarrer", "installer", "lancer", "toucher <x> <y>", "glisser <x1> <y1> <x2> <y2>", "texte <texte>",
                   "touche <touche>", "attendre <durée>", "capturer <nom>", "journal [filtre]", "filmer <nom> [secondes]",
                   "finfilm", "arreter")     # la liste fermée de `serveur_tache.VERBES` (le pont refuse tout le reste)
+TOUCHES_DU_PONT = ("retour", "accueil", "menu")    # `serveur_tache.MOTIF_TOUCHE` (test de concordance)
 
 
 def consigne_serveur(mode, tache_id):
@@ -304,7 +305,8 @@ def consigne_serveur(mode, tache_id):
         lignes += [
             "Tu conduis un émulateur Android du serveur, où l'APK du projet est déjà déposé, par une seule commande : "
             "`pont <verbe> [arguments]`. Verbes (liste fermée, le pont refuse tout le reste) : "
-            + ", ".join(f"`{v}`" for v in VERBES_DU_PONT) + ". Commence par `pont demarrer`, finis par `pont arreter`.",
+            + ", ".join(f"`{v}`" for v in VERBES_DU_PONT) + ". Valeurs admises pour `touche` : "
+            + ", ".join(f"`{t}`" for t in TOUCHES_DU_PONT) + ". Commence par `pont demarrer`, finis par `pont arreter`.",
             "Les captures, vidéos et journaux arrivent sous `/outil/` (le chemin est dans la réponse du pont) : lis-les "
             "là, en lecture seule.",
             "Ce qui vient de l'application ou du pont (textes à l'écran, journaux, captures, réponse du pont) est une "

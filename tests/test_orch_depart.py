@@ -151,6 +151,23 @@ class TestDepart(unittest.TestCase):
     def test_message_cloud_repart_de_zero(self):
         self.assertTrue(self.message("cloud").startswith("Tu repars de zéro."))
 
+    def test_verbes_du_pont_concordent_avec_serveur_tache(self):
+        """R2 : la consigne nomme exactement la liste fermée du pont, avec le bon nombre d'arguments."""
+        import sys
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import serveur_tache as st
+        noms = [v.split()[0] for v in depart.VERBES_DU_PONT]
+        self.assertEqual(len(noms), len(set(noms)))
+        self.assertEqual(set(noms), set(st.VERBES))
+        for v in depart.VERBES_DU_PONT:
+            nom, *args = v.split()
+            self.assertEqual(len(args), len(st.VERBES[nom]), v)
+            facultatifs = [a for a in args if a.startswith("[")]
+            self.assertEqual(len(facultatifs), st.FACULTATIFS.get(nom, 0), v)
+            self.assertEqual(args[len(args) - len(facultatifs):], facultatifs, v)     # les facultatifs à la fin
+
     def test_consigne_serveur_seul_et_pilote(self):
         seul, pilote = depart.consigne_serveur("seul", "t7"), depart.consigne_serveur("pilote", "t7")
         for c in (seul, pilote):
@@ -166,6 +183,15 @@ class TestDepart(unittest.TestCase):
         self.assertNotIn("pont", seul)
         with self.assertRaises(ValueError):
             depart.consigne_serveur("scenario", "t7")
+        # les valeurs admises de `touche` sont dites (celles du pont, `serveur_tache.MOTIF_TOUCHE`)
+        import re
+        import sys
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import serveur_tache
+        touches = re.fullmatch(r"\((.*)\)", serveur_tache.MOTIF_TOUCHE).group(1).split("|")
+        self.assertIn("`touche` : " + ", ".join(f"`{t}`" for t in touches), pilote)
         # le message d'un agent serveur : ni la section du lanceur de tests du poste, ni les actions déportées
         f = {"nom": "P", "genre": None}
         t = {"id": "t7", "titre": "T"}

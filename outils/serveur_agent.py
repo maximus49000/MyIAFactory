@@ -30,7 +30,10 @@ LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "
                  "flux_octets": 20971520}
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
-CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places"})
+CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
+                                "genre"})
+# `tache` : l'agent de la tâche ; `reponse` : sa réponse aux questions de l'utilisateur (même tâche, jamais confondues)
+GENRES_AGENT = ("tache", "reponse")
 # Mêmes motifs que serveur_ovh/images/agent/entree-agent.py (qui les revérifie sur le serveur).
 MOTIF_TACHE = re.compile(r"[A-Za-z0-9_.-]{1,60}", re.ASCII)
 MOTIF_BRANCHE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}", re.ASCII)
@@ -53,6 +56,7 @@ class DemandeAgent:
     limites: object          # MappingProxyType : immuable
     reprend: object
     places: int
+    genre: str = "tache"
 
 
 class RefusRecuperation(ValueError):
@@ -171,6 +175,9 @@ def valider_demande_agent(brut, git=_git):
     places = brut.get("places", PLACES_DEFAUT)
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= 4:
         raise ValueError("Le nombre de places d'agent doit être compris entre 1 et 4.")
+    genre = brut.get("genre", "tache")
+    if genre not in GENRES_AGENT:
+        raise ValueError("Genre d'agent inconnu : « tache » ou « reponse ».")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
@@ -180,7 +187,7 @@ def valider_demande_agent(brut, git=_git):
             raise ValueError("Limite inconnue : " + repr(str(cle)[:40]) + ".")
         limites[cle] = _entier_limite(cle, v)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
-                        limites=MappingProxyType(limites), reprend=reprend, places=places)
+                        limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre)
 
 
 def _demande_dict(d):
@@ -194,7 +201,8 @@ def _demande_sure(demande):
     if isinstance(demande, DemandeAgent):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
-                "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places}
+                "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
+                "genre": demande.genre}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -539,7 +547,7 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
         raise st.RefusLancement("Aucun identifiant de tâche libre après plusieurs essais : réessayez.")
     d = replace(d, id=candidat)
     fiche = {"type": "agent", "etat": "en_attente", "serveur_id": serveur.id, "mode": d.mode, "projet": d.projet,
-             "tache": d.tache, "session": None, "branche": d.branche, "base": d.base, "reprend": d.reprend,
+             "tache": d.tache, "genre": d.genre, "session": None, "branche": d.branche, "base": d.base, "reprend": d.reprend,
              "limites": dict(d.limites), "cree": st._maintenant_iso(), "debut": None, "fin": None, "statut": None,
              "raison": "Entrées envoyées : démarrage demandé."}
     try:

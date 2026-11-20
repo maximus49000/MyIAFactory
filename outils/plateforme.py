@@ -353,7 +353,10 @@ def _envoyer_script(c):
 
 def _envoyer_images(c):
     """Dépose `serveur_ovh/images/**` là où le script les lit ($SERVEUR_OVH_DIR/images)."""
-    for fichier in sorted(p for p in (RACINE_SERVEUR / "images").rglob("*") if p.is_file()):
+    images = RACINE_SERVEUR / "images"
+    # jamais le cache de Python (un test qui importe entree-agent.py en laisse un) : binaire, inutile au serveur
+    for fichier in sorted(p for p in images.rglob("*") if p.is_file() and p.suffix != ".pyc"
+                          and "__pycache__" not in p.relative_to(images).parts):
         dest = f"{DOSSIER_DISTANT}/{shlex.quote(fichier.relative_to(RACINE_SERVEUR).as_posix())}"
         r = _deposer(c, f'mkdir -p "$(dirname "{dest}")" && cat > "{dest}"', fichier.read_text(encoding="utf-8"))
         if r:

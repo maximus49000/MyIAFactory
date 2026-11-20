@@ -716,7 +716,8 @@ class Serveur(Base):
             p = mock.patch.object(cible, nom, valeur)
             p.start()
             self.addCleanup(p.stop)
-        p = mock.patch.object(boucle.Moteur, "_taches_serveur_actives", lambda moteur: list(self.actives), create=True)
+        p = mock.patch.object(boucle.Moteur, "_taches_serveur_actives",
+                              lambda moteur: None if self.actives is None else list(self.actives), create=True)
         p.start()
         self.addCleanup(p.stop)
         self.cloud = FauxFusion()
@@ -794,6 +795,151 @@ class Serveur(Base):
         self.moteur.tour()
         self.assertEqual(len(self.lances()), 1)
         self.assertEqual(self.tache_suivie()["colonne"], "fait")
+
+    def active(self, tache, genre="tache"):
+        return {"id": "t20261120-101010-abcd", "type": "agent", "etat": "en_cours", "projet": self.projet.nom,
+                "tache": tache, "genre": genre}
+
+    def test_redemarrage_tache_plus_active_laissee_a_orphelines(self):
+        self.actives = []                   # l'index se lit : la tâche n'y est plus active
+        self.moteur.tour()
+        (lance,) = self.lances()            # relancée une fois, par `orphelines`
+        self.assertIs(lance["executeur"], self.executeurs[0])
+        self.assertTrue(any("avait disparu" in j for j in self.journal()))
+        self.assertFalse(any("n'est plus actif" in j for j in self.journal()))
+
+    def test_redemarrage_projet_en_pause_ne_lance_rien(self):
+        self.actives = []
+        self.ok("actions", entree={"type": "bouton", "id": "pause"})
+        self.moteur.tour()
+        self.assertEqual(self.lances(), [])
+        self.assertEqual(self.executeurs, [])
+
+    def test_redemarrage_amont_pas_pret_ne_lance_rien(self):
+        self.actives = []
+        avant = self.ok("tache", entree={"titre": "Maquette", "fonctionnalite": "f1", "colonne": "dev"})["id"]
+        self.ok("tache", entree={"id": self.tache, "depend_de": [avant]})
+        self.moteur.tour()
+        self.assertEqual(self.lances(), [])
+        self.assertFalse(self.tache_suivie()["active"])
+        self.assertTrue(any("amont" in j for j in self.journal()))
+
+    def test_redemarrage_index_illisible(self):
+        self.actives = None
+        self.moteur.tour()
+        (lance,) = self.lances()            # rattachée par son exécuteur (qui relit l'index), jamais en double
+        self.assertIs(lance["executeur"], self.executeurs[0])
+        self.assertTrue(any("illisible" in j for j in self.journal()))
+        self.assertFalse(any("n'est plus actif" in j for j in self.journal()))
+        self.assertFalse(any("avait disparu" in j for j in self.journal()))
+
+    def test_redemarrage_lot_rattache_par_l_identifiant_actif(self):
+        suivante = self.ok("tache", entree={"titre": "Développement : Menu", "fonctionnalite": "f1", "role": "dev",
+                                            "colonne": "dev", "etape": "flux:dev", "element": "e2",
+                                            "lot": {"id": "L1", "rang": 2}})["id"]
+        self.ok("tache", entree={"id": self.tache, "lot": {"id": "L1", "rang": 1}})
+        self.actives = [self.active(suivante.upper())]       # la tâche serveur porte l'autre identifiant du lot
+        self.moteur.tour()
+        (lance,) = self.lances()
+        (ex,) = self.executeurs
+        self.assertEqual(lance["tache"], self.tache)            # le départ du moteur : la première du lot
+        self.assertEqual(ex.tache, suivante)                     # l'exécuteur : la tâche serveur active
+        self.assertIn(f"`agent/{suivante}`", lance["depart"])
+        self.assertTrue(any("travaille encore sur le serveur" in j for j in self.journal()))
+
+    def test_apk_par_un_lien_ou_hors_du_projet_refuse(self):
+        import os
+        import tempfile
+        dehors = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, dehors, ignore_errors=True)
+        (dehors / "pirate.apk").write_bytes(b"PK")
+        sortie = self.dossier / "app" / "build" / "outputs" / "apk" / "debug"
+        sortie.mkdir(parents=True)
+        try:
+            os.symlink(dehors / "pirate.apk", sortie / "app-debug.apk")
+        except (OSError, NotImplementedError):
+            self.skipTest("liens symboliques indisponibles")
+        self.assertIsNone(boucle.apk_pour_le_pilote(self.dossier))
+        (sortie / "app-debug.apk").unlink()
+        try:
+            os.symlink(dehors, sortie / "lien", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("liens symboliques indisponibles")
+        (dehors / "app-release.apk").write_bytes(b"PK")
+        self.assertIsNone(boucle.apk_pour_le_pilote(self.dossier))   # un dossier lié qui sort du projet
+        (sortie / "vrai.apk").write_bytes(b"PK")
+        self.assertEqual(Path(boucle.apk_pour_le_pilote(self.dossier)).name, "vrai.apk")
+
+    def lancer_une_reponse_en_cours(self):
+        """Une réponse aux questions lancée (dans un fil) puis le moteur « coupé » : rend l'évènement qui la libère."""
+        detache.ajouter_question(self.dossier, self.tache, "Où en es-tu ?")
+        self.partir()
+        libere = __import__("threading").Event()
+        self.addCleanup(libere.set)
+        vrai = self.agents.__call__
+
+        def bloque_la_reponse(*a, **k):
+            if k.get("reprendre"):
+                libere.wait(10)
+            return vrai(*a, **k)
+        self.moteur.executer_agent = bloque_la_reponse
+        self.moteur.synchrone = False
+        self.moteur.tour()                    # la tâche finie : la réponse part (et reste en cours)
+        self.assertEqual(len(self.executeurs), 2)
+        self.moteur = self.fabriquer([self.projet], session_cloud=self.cloud)     # le moteur redémarre
+        self.agents.lances.clear()
+        self.executeurs.clear()
+
+    def test_redemarrage_pendant_une_reponse_rattachee(self):
+        self.lancer_une_reponse_en_cours()
+        self.actives = [self.active(self.tache, "reponse")]
+        self.moteur.tour()
+        (reponse,) = self.lances()
+        (ex,) = self.executeurs
+        self.assertIs(reponse["executeur"], ex)
+        self.assertEqual(ex.demande_base, {"projet": self.projet.nom, "genre": "reponse"})
+        self.assertEqual(reponse["reprendre"], "s-1")
+        self.moteur.tour()
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertEqual((f["discussion"][-1]["auteur"], f["discussion"][-1]["texte"]), ("dev-1", "Voilà."))
+        self.assertEqual(list(detache.dossier(self.dossier).glob("*.reponse-serveur")), [])
+
+    def test_redemarrage_reponse_plus_active_redemandee(self):
+        self.lancer_une_reponse_en_cours()
+        self.actives = []
+        self.moteur.tour()
+        (reponse,) = self.lances()            # la réponse repart (sa session reprise), jamais oubliée
+        self.assertEqual(reponse["reprendre"], "s-1")
+        self.assertEqual(self.executeurs[0].demande_base["genre"], "reponse")
+        self.moteur.tour()
+        f = self.ok("detail", entree={"fonctionnalite": "f1"})
+        self.assertEqual(f["discussion"][-1]["texte"], "Voilà.")
+
+    def test_reponse_orpheline_arretee_au_redemarrage(self):
+        """Une réponse active sur le serveur dont le moteur ne sait plus rien : arrêtée, jamais prise pour la tâche."""
+        self.ok("tache", entree={"id": self.tache, "active": False})
+        self.ok("tache", entree={"id": self.tache, "colonne": "fait"})
+        self.actives = [self.active(self.tache, "reponse")]
+        self.moteur.tour()
+        self.assertEqual(self.lances(), [])
+        (ex,) = self.executeurs
+        self.assertEqual((ex.tache, ex.demande_base, ex.arrets), (self.tache, {"projet": self.projet.nom,
+                                                                                "genre": "reponse"}, 1))
+
+    def test_arret_garde_la_branche_rapatriee(self):
+        def arrete(depart, matiere, *, agent, tache=None, lot=None, executeur=None, **k):
+            self.agents.lances.append({"agent": agent["cle"], "tache": tache})
+            executeur.branche = f"agent/{tache}"
+            e = agents.Execution(tache, agent["cle"], lot, erreur="l'appel a échoué : " + detache.ARRET)
+            e.arrete = True
+            return e
+        self.moteur.executer_agent = arrete
+        self.partir()
+        self.moteur.tour()
+        bloquee = self.tache_suivie()["bloquee"]
+        self.assertTrue(bloquee.startswith(regles.ARRET_DEPUIS_LE_BUREAU))
+        self.assertIn(f"agent/{self.tache}", bloquee)
+        self.assertEqual((len(self.lances()), self.cloud.fusions), (1, []))
 
     def test_arret_du_bureau_arrete_la_tache_serveur(self):
         self.moteur.synchrone = False

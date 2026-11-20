@@ -3383,6 +3383,15 @@ def places_cloud_du_projet(ctx):
                                any(x["lieu"] == "cloud" for x in ctx.fiches()))
 
 
+AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
+
+
+def places_serveur_du_projet(ctx):
+    """Les places serveur du projet (`agents_serveur_max`) : un entier de 0 à 4, sinon 0 (absent ou invalide)."""
+    v = ctx.f.get("agents_serveur_max", 0)
+    return v if isinstance(v, int) and not isinstance(v, bool) and AGENTS_SERVEUR[0] <= v <= AGENTS_SERVEUR[1] else 0
+
+
 def retirer_l_agent(fiche, a_des_taches):
     """Retire un agent de l'équipe : avec au moins une tâche au suivi, sa fiche est gardée, inactive (`Retrait : fait`),
     pour l'historique de ses tâches ; sans tâche, elle est supprimée. Rejouable."""
@@ -3396,7 +3405,7 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
     Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet.
-    `cloud_aussi` faux : aucun agent cloud n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
+    `cloud_aussi` faux : aucun agent cloud ni serveur n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
     vide = {"crees": [], "retires": [], "retraits_prevus": [], "reactives": []}
     with ctx.suivi.transaction() as suivi:     # un seul écrivain à la fois (l'outil, le moteur et le bureau)
         fiches_ = ctx.fiches()
@@ -3405,10 +3414,11 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
         occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
         avec_taches = {t["agent"] for t in suivi["taches"] if t.get("agent")}
         plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer,
-                                 avec_taches, serveur=ctx.f.get("agents_serveur_max", 0))
-        plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
+                                 avec_taches, serveur=places_serveur_du_projet(ctx))
+        # la reprise d'un projet (`cloud_aussi` faux) ne crée ni ne réactive que des agents locaux
+        plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu == "local"]
         par_cle = {x["cle"]: x for x in fiches_}
-        plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] != "cloud"]
+        plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] == "local"]
         for cle in plan["reactiver"]:      # un agent retiré revient (historique, clé et prénom gardés) avant tout agent neuf
             par_cle[cle]["retire"] = False
             fi.ecrire_fiche(par_cle[cle])

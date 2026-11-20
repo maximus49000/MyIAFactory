@@ -78,6 +78,39 @@ class EquipeParLieu(unittest.TestCase):
         self.assertEqual(plan["retirer"], ["agent-4"])
 
 
+class EquipeServeurOutil(AvecProjet):
+    """`synchroniser_equipe` : les places serveur lues bornées (0 à 4, 0 sinon) ; la reprise (`cloud_aussi` faux) ne
+    crée que des agents locaux."""
+
+    def setUp(self):
+        super().setUp()
+        for nom in ("lea.md", "hugo.md"):
+            (self.dossier / "fiches" / nom).unlink()
+        (self.dossier / "fiches" / "agent-1.md").write_text("Clé : agent-1\nPrénom : Léa\nLieu : local\n", encoding="utf-8")
+
+    def contexte(self, places):
+        from orchestrateur import outil
+        ctx = outil.Contexte(self.factory)
+        ctx.f["agents_locaux_max"] = 1
+        if places is not None:
+            ctx.f["agents_serveur_max"] = places
+        return outil, ctx
+
+    def test_places_serveur_bornees(self):
+        for places, attendu in ((None, 0), (0, 0), (2, 2), (4, 4), (5, 0), (-1, 0), (True, 0), ("2", 0), (2.0, 0)):
+            outil, ctx = self.contexte(places)
+            self.assertEqual(outil.places_serveur_du_projet(ctx), attendu, places)
+        outil, ctx = self.contexte(9)
+        self.assertEqual(outil.synchroniser_equipe(ctx)["crees"], [])
+
+    def test_reprise_ne_cree_pas_d_agent_serveur(self):
+        outil, ctx = self.contexte(2)
+        self.assertEqual(outil.synchroniser_equipe(ctx, cloud_aussi=False)["crees"], [])
+        r = outil.synchroniser_equipe(ctx)
+        self.assertEqual(len(r["crees"]), 2)
+        self.assertEqual({x["lieu"] for x in ctx.fiches() if x["cle"] in r["crees"]}, {"serveur"})
+
+
 class Depot(unittest.TestCase):
     def test_lu_dans_la_config_sans_lancer_git(self):
         import tempfile

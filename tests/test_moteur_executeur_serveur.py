@@ -80,7 +80,8 @@ class FauxServeurAgent:
             raise self.refus_lancer
         st.Index(dossier).enregistrer(self.ident, {
             "type": "agent", "etat": "en_cours", "serveur_id": "ovh1", "mode": demande["mode"],
-            "projet": demande["projet"], "tache": demande["tache"], "session": None, "branche": demande["branche"],
+            "projet": demande["projet"], "tache": demande["tache"], "genre": demande.get("genre", "tache"),
+            "session": None, "branche": demande["branche"],
             "base": demande["base"], "reprend": demande.get("reprend"), "limites": demande["limites"]})
         if self.reponse_lancer is not None:
             return {"id": self.ident, "serveur_id": "ovh1", **self.reponse_lancer}
@@ -199,7 +200,11 @@ class Argv(unittest.TestCase):
     def test_drapeaux_concordent_avec_entree_agent(self):
         spec = importlib.util.spec_from_file_location("entree_agent_concordance", ENTREE_AGENT)
         ea = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(ea)
+        avant, sys.dont_write_bytecode = sys.dont_write_bytecode, True     # aucun __pycache__ dans serveur_ovh/images
+        try:
+            spec.loader.exec_module(ea)
+        finally:
+            sys.dont_write_bytecode = avant
         self.assertEqual(es.DRAPEAUX, ea.DRAPEAUX)
         self.assertEqual(list(es.DRAPEAUX), list(ea.DRAPEAUX))
         self.assertEqual(tuple(es.OBLIGATOIRES), tuple(ea.OBLIGATOIRES))
@@ -252,6 +257,41 @@ class Appel(Base):
         f.ident = "t20261120-121500-dddd"
         self.executeur()(argv, b"m", {}, None, 99999)
         self.assertEqual(f.lancements[1]["demande"]["limites"]["duree_s"], sa.LIMITES_AGENT["duree_s"])
+
+    def active(self, ident, genre):
+        st.Index(self.dossier).enregistrer(ident, {"type": "agent", "etat": "en_cours", "serveur_id": "ovh1", "mode": "seul",
+                                                   "projet": "demo", "tache": TACHE, "genre": genre, "session": SESSION,
+                                                   "branche": "main", "base": BASE})
+
+    def test_reponse_orpheline_jamais_rattachee_comme_la_tache(self):
+        """Une réponse aux questions restée active n'est jamais prise pour la tâche : elle est arrêtée, la tâche lancée."""
+        f = self.faux()
+        self.active(ID1, "reponse")
+        (self.tmp / "c.md").write_text("c", encoding="utf-8")
+        argv = appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None)
+        self.executeur()(argv, b"m", {}, None, 300)
+        self.assertEqual(f.arrets[0], ID1)                       # la réponse orpheline arrêtée
+        self.assertEqual(len(f.lancements), 1)                   # la tâche lancée, pas rattachée à la réponse
+        self.assertEqual(f.lancements[0]["demande"].get("genre", "tache"), "tache")
+        self.assertNotIn(ID1, f.sondes)
+
+    def test_reponse_rattachee_a_sa_reponse_et_jamais_a_la_tache(self):
+        f = self.faux()
+        self.active(ID1, "reponse")
+        (self.tmp / "c.md").write_text("c", encoding="utf-8")
+        argv = appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, SESSION)
+        self.executeur(genre="reponse")(argv, b"m", {}, None, 300)
+        self.assertEqual(f.lancements, [])                       # rattachée : rien de lancé
+        self.assertIn(ID1, f.sondes)
+        self.assertEqual(f.arrets, [])
+        # une tâche (genre tache) active n'est jamais prise pour une réponse
+        f2 = self.faux()
+        f2.ident = "t20261120-121500-dddd"
+        st.Index(self.dossier).enregistrer(ID1, {**st.Index(self.dossier).lire()[ID1], "etat": "terminee"})
+        self.active(ID2, "tache")
+        self.executeur(genre="reponse")(argv, b"m", {}, None, 300)
+        self.assertNotIn(ID2, f2.sondes)
+        self.assertEqual(f2.lancements[0]["demande"]["genre"], "reponse")
 
     def test_apk_du_mode_pilote_transmis_au_lancement(self):
         f = self.faux()

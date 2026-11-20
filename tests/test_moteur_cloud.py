@@ -959,22 +959,122 @@ class FusionLocale(__import__("unittest").TestCase):
             vus.append(argv[1:])
             return (1, b"fatal: No configured push destination.") if argv[1] == "push" else (0, b"")
         self.assertIsNone(cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
-        (fusion,) = [a for a in vus if a[0] == "merge"]
+        (fusion,) = [a for a in vus if "merge" in a]
         self.assertEqual(fusion[-1], "refs/heads/agent/t1")
         self.assertIn("Factory : fusion de agent/t1", fusion)
+        # les crochets de git (hooks) et fsmonitor ne tournent jamais pendant la fusion locale
+        avant = fusion[:fusion.index("merge")]
+        self.assertIn("core.fsmonitor=false", avant)
+        crochets = [x for x in avant if x.startswith("core.hooksPath=")]
+        self.assertEqual(len(crochets), 1)
+        self.assertNotEqual(crochets[0], "core.hooksPath=")
+        (diff,) = [a for a in vus if "diff" in a and "--name-only" in a and "--diff-filter=U" not in a]
+        for option in ("-z", "--no-renames", "HEAD...refs/heads/agent/t1"):
+            self.assertIn(option, diff)
+        self.assertLess(vus.index(diff), vus.index(fusion))
         vus.clear()
         self.assertIn("n'a pas pu être poussée", cloud.fusionner(".", "claude/x", executer=executer))
         self.assertEqual([a for a in vus if a[0] == "merge"][0][-1], "origin/claude/x")
+        self.assertFalse(any("--name-only" in a and "HEAD...refs/heads/claude/x" in a for a in vus))   # cloud inchangé
 
     def test_conflit_local_reste_au_directeur(self):
         from moteur import cloud
         def executer(argv, cwd, delai):
-            if argv[1] == "merge" and "--abort" not in argv:
+            if "merge" in argv and "--abort" not in argv:
                 return 1, b"CONFLICT (content): app/Main.kt"
-            if argv[1] == "diff":
+            if "--diff-filter=U" in argv:
                 return 0, b"app/Main.kt\n"
             return 0, b""
         self.assertIn("conflit de fusion", cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+
+    def test_branche_qui_touche_un_chemin_reserve_refusee(self):
+        """L'agent ne fabrique jamais l'accord du Directeur ni la factory : sa branche est gardée, pas fusionnée."""
+        from moteur import cloud
+        reserves = (".factory/reglages.json", ".factory/suivi.json", "fiches/agent-1.md", "factory.json",
+                    ".gitattributes", ".gitmodules", ".githooks/post-merge", ".husky/pre-commit",
+                    ".github/workflows/x.yml", "src/.git/hooks/post-merge", "../dehors.txt", "src/../../dehors.txt",
+                    "src\\..\\..\\dehors.txt", ".FACTORY/reglages.json", "Fiches/agent-1.md", "FACTORY.JSON",
+                    ".factory./reglages.json", ".Husky/pre-commit", "FACTOR~1/reglages.json", "/etc/passwd",
+                    "C:/x.txt", ".factory /suivi.json")
+        for chemin in reserves:
+            vus = []
+
+            def executer(argv, cwd, delai, chemin=chemin):
+                vus.append(argv[1:])
+                if "--name-only" in argv and "--diff-filter=U" not in argv:
+                    return 0, ("app/Main.kt\x00" + chemin + "\x00").encode("utf-8")
+                return 0, b""
+            raison = cloud.fusionner(".", "agent/t1", executer=executer, distante=False)
+            self.assertIsNotNone(raison, chemin)
+            self.assertIn("agent/t1", raison)
+            self.assertIn("gardée", raison)
+            self.assertFalse(any("merge" in a for a in vus), chemin)        # rien n'est fusionné
+            self.assertFalse(any("push" in a for a in vus), chemin)
+
+    def test_diff_illisible_refuse_la_fusion(self):
+        from moteur import cloud
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(argv[1:])
+            return (128, b"fatal: bad revision") if "--name-only" in argv else (0, b"")
+        self.assertIn("agent/t1", cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+        self.assertFalse(any("merge" in a for a in vus))
+
+    def test_branche_sans_chemin_reserve_fusionnee(self):
+        from moteur import cloud
+        vus = []
+
+        def executer(argv, cwd, delai):
+            vus.append(argv[1:])
+            if "--name-only" in argv and "--diff-filter=U" not in argv:
+                return 0, b"app/src/Main.kt\x00docs/factory-notes.md\x00.gitignore\x00src/fiches.py\x00"
+            return 0, b""
+        self.assertIsNone(cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
+        self.assertTrue(any("merge" in a for a in vus))
+
+    def test_crochets_du_depot_jamais_lances_par_la_fusion_locale(self):
+        """Dépôt jetable : un crochet post-merge (core.hooksPath du dépôt) ne tourne pas ; une branche qui ajoute
+        `.husky/` est refusée et gardée."""
+        import shutil, subprocess, tempfile
+        from pathlib import Path
+        from moteur import cloud
+        d = Path(tempfile.mkdtemp())
+        crochets = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, crochets, ignore_errors=True)
+        git = lambda *a: subprocess.run(["git", *a], cwd=d, capture_output=True)
+        git("init", "-q")
+        git("config", "user.email", "x@x")
+        git("config", "user.name", "x")
+        git("config", "commit.gpgsign", "false")
+        marque = d.parent / f"{d.name}-crochet-lance"
+        self.addCleanup(lambda: marque.unlink(missing_ok=True))
+        (crochets / "post-merge").write_text(f"#!/bin/sh\necho x > '{marque.as_posix()}'\n", encoding="utf-8",
+                                             newline="\n")
+        (crochets / "post-merge").chmod(0o755)
+        git("config", "core.hooksPath", crochets.as_posix())
+        (d / "a.txt").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "init")
+        principale = git("rev-parse", "--abbrev-ref", "HEAD").stdout.decode().strip()
+        git("checkout", "-q", "-b", "agent/t1")
+        (d / "b.txt").write_text("b\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "travail")
+        git("checkout", "-q", "-b", "agent/t2")
+        (d / ".husky").mkdir()
+        (d / ".husky" / "post-merge").write_text("#!/bin/sh\necho pirate\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "crochet")
+        git("checkout", "-q", principale)
+        self.assertIsNone(cloud.fusionner(str(d), "agent/t1", distante=False))
+        self.assertTrue((d / "b.txt").exists())
+        self.assertFalse(marque.exists())                         # le crochet du dépôt n'a pas tourné
+        raison = cloud.fusionner(str(d), "agent/t2", distante=False)
+        self.assertIn(".husky/post-merge", raison)
+        self.assertFalse((d / ".husky").exists())
+        self.assertEqual(git("rev-parse", "--verify", "-q", "refs/heads/agent/t2").returncode, 0)   # gardée
 
 
 class EtatHorsDuDepot(__import__("unittest").TestCase):

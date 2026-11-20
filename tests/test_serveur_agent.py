@@ -484,6 +484,16 @@ class TestLancer(Base):
             self.lancer({"tache": "../x"})
         self.assertEqual(self.srv.appels, [])
 
+    def test_genre_reponse_garde_dans_l_index_jamais_dans_demande_json(self):
+        """Une réponse aux questions (`genre: reponse`) se distingue de la tâche dans l'index ; l'enveloppe ne la voit pas."""
+        self.assertEqual(self.demande().genre, "tache")
+        for mauvais in ("autre", "", None, 1):
+            with self.assertRaises(ValueError):
+                self.demande(genre=mauvais)
+        self.lancer(self.demande(genre="reponse"))
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["genre"], "reponse")
+        self.assertNotIn("genre", json.loads(self.srv.entrees[ID1]["entree/demande.json"]))
+
     def test_index_garde_type_agent_et_tranche_a_inchangee(self):
         self.lancer()
         etat = st.etat(ID1, dossier=self.dossier, ssh=self.srv)

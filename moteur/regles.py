@@ -4275,11 +4275,14 @@ def _service_en_panne(projet, etat, execution, depart, maintenant=None):
 ARRET_DEPUIS_LE_BUREAU = "Tâche arrêtée : l'agent a été arrêté depuis le bureau (Optimiser la charge)."
 
 
-def arret_depuis_le_bureau(projet, etat, taches):
+def arret_depuis_le_bureau(projet, etat, taches, branche=None):
     """L'utilisateur a arrêté l'agent depuis le bureau (« Optimiser la charge », `detache.ArretDemande`) : la tâche
-    s'arrête là, sans nouvel essai ni analyse de blocage ; elle se relance depuis le bureau comme toute tâche bloquée."""
-    _bloquer_taches(projet, taches, ARRET_DEPUIS_LE_BUREAU)
-    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, ARRET_DEPUIS_LE_BUREAU)
+    s'arrête là, sans nouvel essai ni analyse de blocage ; elle se relance depuis le bureau comme toute tâche bloquée.
+    `branche` : un agent serveur dont les commits ont été rapatriés (gardés sur cette branche, non fusionnés)."""
+    raison = ARRET_DEPUIS_LE_BUREAU + (f" Son travail commité est gardé sur la branche {branche} (non fusionnée)."
+                                       if branche else "")
+    _bloquer_taches(projet, taches, raison)
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
     return []
 
 
@@ -4309,7 +4312,7 @@ def _agent_en_echec(projet, etat, execution, depart):
     etat.pop("panne", None)
     tid = depart["taches"][0]
     if getattr(execution, "arrete", False):
-        return arret_depuis_le_bureau(projet, etat, depart["taches"])
+        return arret_depuis_le_bureau(projet, etat, depart["taches"], getattr(execution, "branche", None))
     if getattr(execution, "echeance", False):
         return echeance_serveur(projet, etat, depart["taches"], getattr(execution, "branche", None))
     relancees = _m(etat, "relancees", set)

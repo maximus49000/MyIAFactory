@@ -127,8 +127,11 @@ def _lire_json_sur(chemin):
         s = os.lstat(chemin)
         if not stat.S_ISREG(s.st_mode) or s.st_size > TAILLE_MAX_REGLAGES:
             return None
+        # Course acceptée : entre `lstat` et `open`, le fichier pourrait être remplacé par un lien. Seul qui peut écrire
+        # dans le dossier des réglages enregistrés le peut, et il peut de toute façon y écrire le réglage lui-même ;
+        # la taille reste bornée à la lecture.
         with open(chemin, "rb") as f:
-            brut = f.read(TAILLE_MAX_REGLAGES + 1)      # la taille est bornée à la lecture, quoi qu'ait dit lstat
+            brut = f.read(TAILLE_MAX_REGLAGES + 1)
         if len(brut) > TAILLE_MAX_REGLAGES:
             return None
         return json.loads(brut.decode("utf-8-sig"))
@@ -136,9 +139,20 @@ def _lire_json_sur(chemin):
         return None
 
 
+def _sans_prefixe(chemin):
+    """`\\\\?\\C:\\…` ramené à `C:\\…` (même fichier, autre écriture) ; la forme UNC `\\\\?\\UNC\\…` est refusée
+    (ValueError) : un partage réseau n'est jamais un projet du poste."""
+    c = str(chemin)
+    if c[:4] in ("\\\\?\\", "//?/"):
+        if c[4:8].upper() in ("UNC\\", "UNC/"):
+            raise ValueError("chemin UNC refusé")
+        return c[4:]
+    return c
+
+
 def _norme(chemin):
-    """Un chemin comparable : absolu, liens et alias résolus, casse ignorée sous Windows."""
-    return os.path.normcase(os.path.realpath(os.path.abspath(str(chemin))))
+    """Un chemin comparable : préfixe `\\\\?\\` ôté, absolu, liens et alias résolus, casse ignorée sous Windows."""
+    return os.path.normcase(_sans_prefixe(os.path.realpath(os.path.abspath(_sans_prefixe(chemin)))))
 
 
 def _racine_des_reglages(fichier):
@@ -148,22 +162,33 @@ def _racine_des_reglages(fichier):
 
 
 def reglages_enregistres(racine, bureau=None):
-    """Les fichiers de réglages (chemins réels) que le bureau enregistre pour le projet `racine`, dans son ordre ;
-    [] si aucun ou si le fichier du bureau est absent, illisible ou abîmé. Les chemins relatifs le sont au bureau."""
+    """Les fichiers de réglages que le bureau enregistre pour le projet `racine`, TELS QU'ENREGISTRÉS (chemins absolus
+    non résolus, pour que la lecture refuse un fichier en lien), dans son ordre ; [] si aucun ou si le fichier du
+    bureau est absent, illisible ou abîmé. Les chemins relatifs le sont au bureau. Le projet d'une entrée est pris sur
+    le chemin enregistré, PAS sur sa cible : une entrée dont le fichier mène ailleurs (`.factory` en jonction ou lien,
+    `reglages.json` en lien vers un autre projet) est écartée, et le projet visé par le lien n'en devient pas enregistré."""
     bureau = BUREAU if bureau is None else str(bureau)
     donnees = _lire_json_sur(bureau)
     projets = donnees.get("projets") if isinstance(donnees, dict) else None
     if not isinstance(projets, list):
         return []
-    base, cible, trouves = os.path.dirname(os.path.abspath(bureau)), _norme(racine), []
+    try:
+        cible = _norme(racine)
+    except (OSError, ValueError):
+        return []
+    base, trouves = os.path.dirname(os.path.abspath(bureau)), []
     for entree in projets:
         chemin = entree.get("chemin") if isinstance(entree, dict) else entree
         if not isinstance(chemin, str) or not chemin.strip() or "\x00" in chemin:
             continue
         try:
-            reel = os.path.realpath(os.path.join(base, chemin))
-            if _norme(_racine_des_reglages(reel)) == cible:
-                trouves.append(reel)
+            fichier = os.path.abspath(os.path.join(base, _sans_prefixe(chemin)))
+            projet = _norme(_racine_des_reglages(fichier))
+            if projet != cible:
+                continue
+            if _norme(_racine_des_reglages(os.path.realpath(fichier))) != projet:
+                continue          # le fichier enregistré mène dans un autre projet : jamais d'accord par un lien
+            trouves.append(fichier)
         except (OSError, ValueError):
             continue
     return trouves
@@ -175,11 +200,11 @@ def refus_accord(racine, action, bureau=None, reglages=None):
     (`bureau`, par défaut `BUREAU`) et se lit dans le fichier de réglages qu'il enregistre pour ce projet (jamais un
     dossier quelconque, un `.factory` imbriqué ni un autre fichier) ; `reglages` (l'option `--reglages`) n'est admis que
     s'il est ce fichier enregistré. Fichier du bureau absent ou abîmé : refus."""
-    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
-        return "« %s » n'est pas une action servie au serveur pour ce type de projet." % action
-    enregistres = reglages_enregistres(racine, bureau)
+    enregistres = reglages_enregistres(racine, bureau)      # d'abord : rien n'est lu dans un dossier non enregistré
     if not enregistres:
         return MSG_NON_ENREGISTRE % (racine, BUREAU if bureau is None else bureau, action)
+    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
+        return "« %s » n'est pas une action servie au serveur pour ce type de projet." % action
     if reglages is not None:
         enregistres = [r for r in enregistres if _norme(r) == _norme(reglages)]
         if not enregistres:

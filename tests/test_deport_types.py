@@ -244,3 +244,88 @@ class TestAccordDuBureau(unittest.TestCase):
         f.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur"}}, "bourrage": "x" * (1024 * 1024)}),
                      encoding="utf-8")
         self.assertIsNotNone(self.refus(d))
+
+
+class TestAccordSansLiens(unittest.TestCase):
+    """L'accord ne suit pas les liens : le projet enregistré est jugé sur son chemin tel qu'enregistré, ses réglages
+    sont lus à ce chemin, et un `.factory` (ou un `reglages.json`) qui mène ailleurs est refusé ; le projet visé par le
+    lien, lui, n'est pas enregistré et reste refusé."""
+    RECETTE = "recette-emulateur"
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.tmp = Path(self._t.name).resolve()
+        self.bureau = self.tmp / "bureau.json"
+
+    def reglages(self, d, lieu="serveur"):
+        (d / ".factory").mkdir(parents=True, exist_ok=True)
+        f = d / ".factory" / "reglages.json"
+        f.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: lieu}}}), encoding="utf-8")
+        return f
+
+    def inscrire(self, *chemins):
+        self.bureau.write_text(json.dumps({"projets": [str(c) for c in chemins]}), encoding="utf-8")
+
+    def refus(self, racine):
+        from bureau.deport_types import refus_accord
+        return refus_accord(str(racine), self.RECETTE, bureau=str(self.bureau))
+
+    def jonction(self, lien, cible):
+        import os
+        import subprocess
+        if os.name != "nt":
+            os.symlink(str(cible), str(lien), target_is_directory=True)
+            self.addCleanup(os.unlink, str(lien))
+            return
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(lien), str(cible)], capture_output=True, text=True)
+        if r.returncode != 0:
+            self.skipTest("mklink /J impossible ici : %s" % (r.stdout + r.stderr).strip()[:120])
+        self.addCleanup(os.rmdir, str(lien))        # avant le nettoyage du dossier : jamais à travers la jonction
+
+    def test_projet_normal_enregistre_accepte(self):
+        v = self.tmp / "V"
+        self.inscrire(self.reglages(v))
+        self.assertIsNone(self.refus(v))
+
+    def test_factory_en_jonction_vers_un_projet_non_enregistre(self):
+        q, v = self.tmp / "Q", self.tmp / "V"
+        self.reglages(q)
+        v.mkdir()
+        self.jonction(v / ".factory", q / ".factory")
+        self.inscrire(v / ".factory" / "reglages.json")
+        self.assertIsNotNone(self.refus(v))
+        self.assertIsNotNone(self.refus(q))
+
+    def test_reglages_en_lien_symbolique_refuses(self):
+        import os
+        q, v = self.tmp / "Q", self.tmp / "V"
+        cible = self.reglages(q)
+        (v / ".factory").mkdir(parents=True)
+        try:
+            os.symlink(str(cible), str(v / ".factory" / "reglages.json"))
+        except (OSError, NotImplementedError) as e:
+            self.skipTest("liens symboliques indisponibles ici (%s)" % type(e).__name__)
+        self.inscrire(v / ".factory" / "reglages.json")
+        self.assertIsNotNone(self.refus(v))
+        self.assertIsNotNone(self.refus(q))
+
+    def test_chemins_prefixes_windows(self):
+        v = self.tmp / "V"
+        f = self.reglages(v)
+        self.inscrire("\\\\?\\" + str(f))
+        self.assertIsNone(self.refus(v))
+        self.assertIsNone(self.refus("\\\\?\\" + str(v)))
+        self.inscrire("\\\\?\\UNC\\serveur\\partage\\V\\.factory\\reglages.json")
+        self.assertIsNotNone(self.refus(v))
+        self.inscrire(f)
+        self.assertIsNotNone(self.refus("\\\\?\\UNC\\serveur\\partage\\V"))
+
+    def test_l_enregistrement_est_verifie_avant_de_lire_le_dossier(self):
+        from unittest import mock
+        from bureau import deport_types
+        d = self.tmp / "inconnu"
+        self.reglages(d)
+        self.inscrire(self.reglages(self.tmp / "autre"))
+        with mock.patch.object(deport_types, "catalogue_du_projet", side_effect=AssertionError("lu trop tôt")):
+            self.assertIn("n'est pas enregistré", self.refus(d))

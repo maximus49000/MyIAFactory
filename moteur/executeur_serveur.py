@@ -47,6 +47,7 @@ OBLIGATOIRES = ("-p", "--output-format")
 OPTIONS_CONSIGNE = ("--append-system-prompt-file", "--system-prompt-file")
 CONSIGNE_DISTANTE = "/entree/consigne.md"
 ECHEANCE = "durée maximale de l'agent serveur atteinte"
+LIMITE = "agent serveur arrêté par une limite du serveur"     # toute autre limite (disque, sortie, travail trop gros)
 MARGE_SUIVI_S = 120                 # le suivi attend delai_s + 120 s (le veilleur du serveur conclut avant)
 ACTIFS = ("en_attente", "en_cours")
 MOTIF_SESSION = re.compile(DRAPEAUX["--resume"], re.ASCII)
@@ -95,6 +96,16 @@ class EcheanceServeur(TimeoutError):
 
     def __init__(self, usages=None):
         super().__init__(ECHEANCE)
+        self.usages = usages or []
+
+
+class LimiteServeur(TimeoutError):
+    """Le veilleur du serveur a arrêté l'agent sur une limite AUTRE que sa durée (sortie, disque, travail trop gros) : un
+    nouvel essai la retrouverait ; `agents` ne relance pas, la raison du veilleur est dite. `usages` : comme
+    `EcheanceServeur`."""
+
+    def __init__(self, raison, usages=None):
+        super().__init__(f"{LIMITE} : {raison}" if raison else LIMITE)
         self.usages = usages or []
 
 
@@ -550,12 +561,16 @@ class ExecuteurServeur:
         raison = str(lu.get("raison") or "")
         if etat == "echouee":            # rien n'est rapatrié (un secret trouvé vide la sortie)
             return 1, (raison or "L'agent serveur a échoué.").encode("utf-8")
+        # une limite du veilleur autre que la durée (sortie, disque, travail trop gros) : jamais un nouvel essai
+        autre_limite = lu.get("statut") == "limite" and RAISON_DUREE not in raison
         statut, r = self._rapatrier(sa, st, ident)
         if statut != "ok":
             if cause == "echeance":
                 raise EcheanceServeur()
             if etat == "arretee":
                 raise _arret()
+            if autre_limite:
+                raise LimiteServeur(raison)
             return 1, r.encode("utf-8")
         usages = self._garder(st, ident, r)
         if cause == "echeance":
@@ -565,6 +580,8 @@ class ExecuteurServeur:
         fin = r.get("fin") if isinstance(r.get("fin"), dict) else {}
         if fin.get("echeance") is True or (lu.get("statut") == "limite" and RAISON_DUREE in raison):
             raise EcheanceServeur(usages)
+        if autre_limite:
+            raise LimiteServeur(raison, usages)
         code = fin.get("code") if isinstance(fin.get("code"), int) and not isinstance(fin.get("code"), bool) else 1
         if not self.flux:
             return code or 1, (raison or "Aucun flux rapatrié de l'agent serveur.").encode("utf-8")

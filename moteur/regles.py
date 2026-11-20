@@ -4317,6 +4317,25 @@ def echeance_serveur(projet, etat, taches, branche=None):
     return []
 
 
+LIMITE_SERVEUR = "Tâche arrêtée : l'agent serveur a été arrêté par une limite du serveur"
+
+
+def limite_serveur(projet, etat, taches, erreur, branche=None):
+    """L'agent serveur a été arrêté par une limite AUTRE que sa durée (`agents.Execution.limite` : sortie, disque, travail
+    trop gros) : un nouvel essai la retrouverait. La tâche s'arrête là, sans nouvel essai ni analyse, avec la raison du
+    serveur ; elle se relance depuis le bureau comme toute tâche bloquée."""
+    detail = str(erreur or "")
+    detail = detail.split(agents.executeur_serveur.LIMITE, 1)[-1].lstrip(" :").strip()   # la raison du veilleur seule
+    garde = (f" Son travail commité est gardé sur la branche {branche} (non fusionnée)." if branche else "")
+    raison = f"{LIMITE_SERVEUR}" + (f" ({detail[:300]})" if detail else "") + f".{garde} Relancez la tâche ou découpez-la."
+    _bloquer_taches(projet, taches, raison)
+    t = _tache(projet, taches[0])
+    if t.get("fonctionnalite"):
+        _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
+    return []
+
+
 def _agent_en_echec(projet, etat, execution, depart):
     """Un agent sans rapport : relancé une fois, puis tâche bloquée avec la raison au journal. Une panne du service
     Claude n'est pas un échec : voir `_service_en_panne`."""
@@ -4328,6 +4347,8 @@ def _agent_en_echec(projet, etat, execution, depart):
         return arret_depuis_le_bureau(projet, etat, depart["taches"], getattr(execution, "branche", None))
     if getattr(execution, "echeance", False):
         return echeance_serveur(projet, etat, depart["taches"], getattr(execution, "branche", None))
+    if getattr(execution, "limite", False):
+        return limite_serveur(projet, etat, depart["taches"], execution.erreur, getattr(execution, "branche", None))
     relancees = _m(etat, "relancees", set)
     if tid not in relancees:
         relancees.add(tid)

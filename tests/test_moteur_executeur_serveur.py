@@ -614,6 +614,23 @@ class Echeance(Base):
         self.assertEqual(r.usage["entree"], 10)                    # l'usage du flux rapatrié est compté
         self.assertEqual(ex.branche, f"agent/{TACHE}")
 
+    def test_autre_limite_sans_second_essai_et_raison_dite(self):
+        """Une limite du veilleur AUTRE que la durée (disque, sortie, travail trop gros) : jamais un second essai, la
+        raison du serveur est dite ; une échéance de durée reste une échéance."""
+        raison = "Limite atteinte : espace disque du serveur insuffisant (12 Ko libres, minimum 5242880 Ko)"
+        f = self.faux(etats=("terminee",), statut="limite", raison=raison, branche=f"agent/{TACHE}",
+                      fin={"code": 137, "commits": 1, "branche": f"agent/{TACHE}", "base": BASE})
+        ex = self.executeur()
+        r = agents.executer_agent("D.", "M.", agent=agent_dev(), modele="sonnet", dossier_projet=self.projet,
+                                  executeur=ex)
+        self.assertEqual(len(f.lancements), 1)                     # aucun second essai
+        self.assertTrue(getattr(r, "limite", False))
+        self.assertFalse(getattr(r, "echeance", False))
+        self.assertIn(es.LIMITE, r.erreur)
+        self.assertIn("espace disque", r.erreur)
+        self.assertEqual(ex.branche, f"agent/{TACHE}")             # le travail rapatrié est gardé
+        self.assertFalse(appel.est_une_panne(r.erreur))
+
     def test_premiere_erreur_gardee_quand_le_nouvel_essai_est_refuse(self):
         f = self.faux(branche=f"agent/{TACHE}", flux_=b"Erreur du premier essai : tests rouges",
                       fin={"code": 1, "commits": 1, "branche": f"agent/{TACHE}", "base": BASE})

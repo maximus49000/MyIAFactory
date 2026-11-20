@@ -31,16 +31,20 @@ MODELES_API = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus
 
 
 _MODELES_DES_REGLAGES = {}
+# Un identifiant de modèle accepté : le motif `--model` de la liste blanche des agents serveur (executeur_serveur.DRAPEAUX,
+# entree-agent.py ; test de concordance). Un identifiant qu'elle refuserait ferait échouer TOUT agent serveur du projet.
+MOTIF_IDENTIFIANT = re.compile(r"claude-[a-z0-9][a-z0-9.-]{0,62}", re.ASCII)
 
 
 def enregistrer_modeles(alias):
     """Les identifiants exacts voulus par les réglages du projet (`alias_modeles` : {"Sonnet": "claude-sonnet-5-5", …}).
     Un nouveau modèle (Opus 5.5 après Opus 5.0, une nouvelle famille) se change là, sans toucher au code : le fichier est
-    relu à chaque tour du moteur. Seuls les alias connus et des identifiants `claude-…` sont retenus."""
+    relu à chaque tour du moteur. Seuls les alias connus et des identifiants `claude-…` que le motif `--model` des agents
+    serveur accepte (`MOTIF_IDENTIFIANT` : minuscules, chiffres, `.` et `-`) sont retenus ; un autre garde le défaut."""
     _MODELES_DES_REGLAGES.clear()
     for nom, identifiant in (alias if isinstance(alias, dict) else {}).items():
         cle = str(nom).strip().lower()
-        if cle in MODELES and isinstance(identifiant, str) and identifiant.strip().startswith("claude-"):
+        if cle in MODELES and isinstance(identifiant, str) and MOTIF_IDENTIFIANT.fullmatch(identifiant.strip()):
             _MODELES_DES_REGLAGES[cle] = identifiant.strip()
 
 

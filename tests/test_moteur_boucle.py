@@ -721,6 +721,10 @@ class Serveur(Base):
                               lambda moteur: None if self.actives is None else list(self.actives), create=True)
         p.start()
         self.addCleanup(p.stop)
+        self.pilote_refus = None        # le mode pilote : serveur prêt à la dernière sonde (sans connexion ni état réel)
+        p = mock.patch.object(boucle.Moteur, "_pilote_impossible", staticmethod(lambda: self.pilote_refus))
+        p.start()
+        self.addCleanup(p.stop)
         self.cloud = FauxFusion()
         self.moteur = self.fabriquer([self.projet], session_cloud=self.cloud)
         self.ok("demande-traitee", entree={"id": self.demande(type="fonctionnalite", texte="Des écrans")})
@@ -782,6 +786,58 @@ class Serveur(Base):
         self.assertEqual(cas, [(False, False, "seul", None), (True, False, "seul", None),
                                (True, True, "pilote", "app-debug.apk"), (False, True, "seul", None)])
         self.assertEqual(set(self.accords), {(str(self.dossier), "recette-emulateur")})
+
+    def test_pilote_sans_image_de_l_emulateur_part_seul_et_le_dit(self):
+        sorties = self.dossier / "app" / "build" / "outputs" / "apk" / "debug"
+        sorties.mkdir(parents=True)
+        (sorties / "app-debug.apk").write_bytes(b"PK")
+        self.accord = True
+        self.pilote_refus = "Aucun serveur prêt pour un agent (agent, agent-abonnement, emulateur-image) (ovh : emulateur-image)."
+        self.partir()
+        ex = self.executeurs[-1]
+        self.assertEqual((ex.mode, ex.apk), ("seul", None))
+        self.assertNotIn("`pont <verbe> [arguments]`", self.lances()[-1]["depart"])
+        self.assertTrue(any("mode pilote impossible" in j and "emulateur-image" in j for j in self.moteur.journal),
+                        self.moteur.journal)
+
+    def regler_places_serveur(self, n):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_serveur_max"] = n
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def test_places_serveur_du_projet_passees_a_l_executeur(self):
+        self.regler_places_serveur(3)
+        self.partir()
+        self.assertEqual(self.executeurs[-1].demande_base, {"projet": self.projet.nom, "places": 3})
+
+    def test_sonde_des_serveurs_periodique_et_apres_un_agent(self):
+        sondes, heure = [], [1000.0]
+        moteur = self.fabriquer([self.projet], session_cloud=self.cloud, horloge=lambda: heure[0],
+                                sonder_serveurs=lambda: sondes.append(heure[0]))
+        moteur._sonde_des_serveurs()
+        self.assertEqual(sondes, [])                       # aucune place serveur : jamais de sonde
+        self.regler_places_serveur(1)
+        moteur._sonde_des_serveurs()
+        moteur._sonde_des_serveurs()
+        self.assertEqual(sondes, [1000.0])                 # une fois, pas à chaque passage
+        heure[0] += boucle.SONDE_SERVEURS_TOUS_LES_S
+        moteur._sonde_des_serveurs()
+        self.assertEqual(len(sondes), 2)                   # toutes les 6 h
+        moteur._sonde_demandee = True                      # un agent serveur revenu sans erreur
+        moteur._sonde_des_serveurs()
+        self.assertEqual(len(sondes), 2)                   # pas avant l'écart minimal
+        heure[0] += boucle.SONDE_SERVEURS_ECART_S
+        moteur._sonde_des_serveurs()
+        self.assertEqual(len(sondes), 3)
+        moteur.sonder_serveurs = lambda: 1 / 0             # une sonde ratée ne casse rien
+        heure[0] += boucle.SONDE_SERVEURS_TOUS_LES_S
+        moteur._sonde_des_serveurs()
+        self.assertTrue(any("Sonde des serveurs impossible" in j for j in moteur.journal))
+
+    def test_agent_revenu_sans_erreur_demande_une_sonde(self):
+        self.assertFalse(self.moteur._sonde_demandee)
+        self.partir()
+        self.assertTrue(self.moteur._sonde_demandee)
 
     def test_redemarrage_rattache_sans_relancer(self):
         self.actives = [{"id": "20261120-101010-abcdef", "type": "agent", "etat": "en_cours", "projet": self.projet.nom,
@@ -1044,6 +1100,25 @@ class Serveur(Base):
         self.assertEqual(self.cloud.fusions, [])
         f = self.ok("detail", entree={"fonctionnalite": "f1"})
         self.assertIn("durée maximale", f["discussion"][-1]["texte"])
+
+    def test_autre_limite_dite_sans_nouvel_essai(self):
+        from moteur import executeur_serveur
+
+        def limite(depart, matiere, *, agent, tache=None, lot=None, executeur=None, **k):
+            self.agents.lances.append({"agent": agent["cle"], "tache": tache})
+            e = agents.Execution(tache, agent["cle"], lot, erreur="l'appel a échoué : " + executeur_serveur.LIMITE
+                                 + " : Limite atteinte : sortie trop volumineuse (9 Ko, maximum 8 Ko)")
+            e.limite = True
+            return e
+        self.moteur.executer_agent = limite
+        self.partir()
+        self.moteur.tour()
+        self.moteur.tour()
+        self.assertEqual(len(self.lances()), 1)                     # pas de nouvel essai
+        bloquee = self.tache_suivie()["bloquee"]
+        self.assertIn("limite du serveur", bloquee)
+        self.assertIn("sortie trop volumineuse", bloquee)          # la raison du serveur est dite
+        self.assertEqual(self.cloud.fusions, [])
 
     def test_question_puis_reponse_reprend_la_session(self):
         detache.ajouter_question(self.dossier, self.tache, "Où en es-tu ?")

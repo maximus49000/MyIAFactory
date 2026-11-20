@@ -469,11 +469,16 @@ def _commit_de(executer, dossier_projet, branche, options=()):
 
 
 # Ce qu'une branche d'agent serveur ne touche jamais (fusion refusée, branche gardée) : l'état et les réglages de la factory
-# (dont l'accord du Directeur), les fiches, et ce qui ferait tourner du code sur le poste (crochets, attributs de git, LFS).
-# L'état de la factory est réservé à TOUTE profondeur : un projet peut vivre dans un sous-dossier du dépôt
+# (dont l'accord du Directeur), les fiches, et ce qui ferait tourner du code sur le poste (crochets, attributs de git, LFS),
+# ou dans les outils du Directeur : réglages et serveurs MCP de Claude Code (`.claude`, `.mcp.json`), crochets de
+# pre-commit, lefthook et husky, tâches de VS Code, conteneur de développement, direnv (`.envrc`).
+# Tout est réservé à TOUTE profondeur : un projet peut vivre dans un sous-dossier du dépôt
 # (`app/.factory/reglages.json`), et un chemin du diff est relatif à la racine du dépôt.
 RESERVES_RACINE = (".factory", "fiches", "factory.json")
-RESERVES_PARTOUT = (".gitattributes", ".gitmodules", ".husky", ".git", ".lfsconfig", *RESERVES_RACINE)
+RESERVES_OUTILS = (".claude", ".mcp.json", ".pre-commit-config.yaml", ".pre-commit-config.yml", "lefthook.yml",
+                   "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "lefthook-local.yml", ".vscode", ".devcontainer",
+                   ".devcontainer.json", ".envrc", ".husky")
+RESERVES_PARTOUT = (".gitattributes", ".gitmodules", ".git", ".lfsconfig", *RESERVES_OUTILS, *RESERVES_RACINE)
 _NOM_COURT = re.compile(r"~\d")          # nom court de Windows (FACTOR~1) : il pourrait désigner un dossier réservé
 
 
@@ -555,7 +560,7 @@ def chemins_reserves(executer, dossier_projet, branche, options=(), sha=None):
         return None
     liste = ", ".join(touches[:5]) + (f" et {len(touches) - 5} autre(s)" if len(touches) > 5 else "")
     return (f"la branche {branche} de l'agent serveur touche des chemins réservés au Directeur et à la factory ({liste}) : "
-            "elle est gardée telle quelle, non fusionnée.")
+            "elle est gardée telle quelle pour le Directeur, non fusionnée.")
 
 
 def _fusionner(dossier_projet, branche, executer, distante=True, options=(), sha=None):

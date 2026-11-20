@@ -48,6 +48,11 @@ DELAI_GIT_S = 60
 INTERVALLE_MAJ_S = 15 * 60       # la skill regarde GitHub toutes les 15 minutes (conception 2026-11-16-mise-a-jour-automatique)
 ESSAIS_INSTALLATION = 3          # un départ d'installation qui échoue ainsi trois fois est laissé : il ne retient pas le bureau
 CONNAISSANCES_TOUS_LES_S = 60      # la file du partage des connaissances (relecture, envoi)
+# La sonde des serveurs (tranche B) : un projet à places serveur lit `serveurs-etat.json`, qu'une sonde de plus de 24 h
+# ne dit plus en ligne (`outil.serveur_hors_ligne`). Le moteur la refait toutes les 6 h, et après un agent serveur revenu
+# sans erreur (au plus une fois par ÉCART), dans un fil : la boucle n'attend jamais une connexion SSH.
+SONDE_SERVEURS_TOUS_LES_S = 6 * 3600
+SONDE_SERVEURS_ECART_S = 10 * 60
 ECRITURE_LECONS_TOUS_LES_S = 300  # une leçon validée mais pas encore écrite dans la mémoire de la skill est réessayée ainsi
 REECRIRE_TOUS_LES_S = 20        # un fichier pour le bureau (pause, attente de charge) est réécrit au moins toutes les 20 s
 OUTILS_DE_REPONSE = "Read, Grep, Glob"   # l'agent qui répond à une question lit, il ne modifie rien
@@ -170,6 +175,22 @@ def commit_et_push(dossier, message):
         return False
 
 
+def sonder_les_serveurs():
+    """Sonde chaque serveur déclaré (une connexion SSH chacun, lecture seule) et range le résultat dans
+    `serveurs-etat.json` (le dossier de la plateforme d'`outil.DOSSIER_PLATEFORME`, celui que lit `serveur_hors_ligne`)."""
+    from orchestrateur import outil
+    executeur_serveur._modules()            # le dossier `outils` dans le chemin des modules
+    import serveur_etat
+    import serveur_installation
+    import serveur_modele
+    dossier = outil.DOSSIER_PLATEFORME or serveur_installation.plateforme_acces.DOSSIER
+    for serveur in serveur_modele.lire(dossier):
+        etat = serveur_etat.sonder(serveur)
+        joint = not all(s == serveur_etat.INCONNUE for s in etat.values())
+        charge = serveur_etat.charge(serveur) if joint else None
+        serveur_installation.enregistrer_sonde(dossier, serveur, etat, charge=charge)
+
+
 class Moteur:
     """`projets` : les `regles.Projet` tenus ; `bureau` (facultatif) : le fichier du bureau, relu à chaque passage pour
     prendre les projets ajoutés. `executer_agent`, `commit` et `synchrone` (les agents tournent dans l'appel, pas dans
@@ -177,7 +198,7 @@ class Moteur:
 
     def __init__(self, projets, *, appeler=appel.appeler, horloge=time.time, bureau=None, environ=None,
                  executer_agent=agents.executer_agent, commit=commit_et_push, synchrone=False, session_cloud=None,
-                 registre=None, surveillance=None, mise_a_jour=None, relancer_bureau=None):
+                 registre=None, surveillance=None, mise_a_jour=None, relancer_bureau=None, sonder_serveurs=None):
         self.appeler, self.horloge, self.bureau, self.environ = appeler, horloge, bureau, environ
         # La mise à jour de la skill (`installation.mise_a_jour`) : branchée par `python -m moteur`, jamais par défaut
         # (les essais du moteur ne touchent pas au vrai dépôt). `relance_demandee` : le moteur doit être relancé.
@@ -205,6 +226,9 @@ class Moteur:
         self._reveils_vus = {}             # dossier du projet -> dernier horodatage du fichier de réveil traité
         # les agents serveur au travail : (factory, clé de la tâche) -> leur `ExecuteurServeur` (l'arrêt du bureau)
         self._serveurs, self._serveurs_arretes = {}, {}
+        # la sonde des serveurs (`_sonde_des_serveurs`) : `sonder_serveurs()` remplaçable (essais) ; sinon la vraie
+        self.sonder_serveurs = sonder_serveurs or sonder_les_serveurs
+        self._sonde_en_vol, self._sonde_derniere, self._sonde_demandee = None, None, False
         for p in projets:
             self._ajouter(p)
 
@@ -240,6 +264,7 @@ class Moteur:
         self._connaissances()
         self._traiter_les_reveils()
         self._arreter_les_emulateurs_oublies()
+        self._sonde_des_serveurs()
         for projet in list(self.projets):
             self._traiter_les_reveils()
             try:
@@ -248,6 +273,42 @@ class Moteur:
                 self._noter(projet, f"erreur au passage : {e}")
         self._mise_a_jour_de_la_skill()
         self.duree_dernier_tour_s = time.monotonic() - debut
+
+    # --- La sonde des serveurs (tranche B), seulement quand un projet a des places serveur.
+
+    def _places_serveur(self, projet):
+        """`agents_serveur_max` du projet (0 à 4), 0 si la factory ne se lit pas."""
+        try:
+            v = fa.lire(projet.factory).get("agents_serveur_max", 0)
+        except Exception:                   # noqa: BLE001 — une factory illisible n'a pas de place serveur
+            return 0
+        return v if type(v) is int and 0 <= v <= 4 else 0
+
+    def _sonde_des_serveurs(self):
+        """Refait la sonde des serveurs déclarés toutes les `SONDE_SERVEURS_TOUS_LES_S`, ou après un agent serveur revenu
+        sans erreur (au plus une fois par `SONDE_SERVEURS_ECART_S`), si un projet a `agents_serveur_max` > 0. Dans un fil
+        (jamais deux à la fois) : la boucle ne l'attend pas. La détection hors ligne reste celle de `serveur_hors_ligne`."""
+        if self._sonde_en_vol is not None:
+            if self._sonde_en_vol.is_alive():
+                return
+            self._sonde_en_vol = None
+        maintenant, derniere = self.horloge(), self._sonde_derniere
+        due = derniere is None or maintenant - derniere >= SONDE_SERVEURS_TOUS_LES_S
+        demandee = self._sonde_demandee and (derniere is None or maintenant - derniere >= SONDE_SERVEURS_ECART_S)
+        if not (due or demandee) or not any(self._places_serveur(p) > 0 for p in self.projets):
+            return
+        self._sonde_derniere, self._sonde_demandee = maintenant, False
+
+        def travail():
+            try:
+                self.sonder_serveurs()
+            except Exception as e:          # noqa: BLE001 — une sonde ratée : le serveur reste jugé sur l'état connu
+                self.journal.append(f"Sonde des serveurs impossible : {type(e).__name__}.")
+        if self.synchrone:
+            travail()
+            return
+        self._sonde_en_vol = threading.Thread(target=travail, name="sonde-serveurs", daemon=True)
+        self._sonde_en_vol.start()
 
     # --- La mise à jour de la skill : vérifiée à intervalle, appliquée au premier passage où rien ne travaille.
 
@@ -892,6 +953,9 @@ class Moteur:
         else:
             (mode, apk), base = self._mode_serveur(projet), {"projet": projet.nom}
             depart = depart.rstrip() + "\n\n" + dp.consigne_serveur(mode, nom) + "\n"
+        places = self._places_serveur(projet)
+        if places:                          # les places serveur du projet ; sans réglage, le défaut du serveur (2)
+            base["places"] = places
         plus_ex = {"apk": apk} if apk else {}
         if noms_du_lot and reponse is None:
             plus_ex["autres_noms"] = tuple(noms_du_lot)
@@ -919,6 +983,8 @@ class Moteur:
                 except Exception:        # noqa: BLE001
                     pass
             e.serveur = True
+            if not getattr(e, "erreur", None):      # l'agent est revenu sans erreur : le serveur répond, sonde à refaire
+                self._sonde_demandee = True
             if reponse is not None:
                 e.reponse = reponse
             elif getattr(executeur, "branche", None):
@@ -957,7 +1023,8 @@ class Moteur:
     def _mode_serveur(self, projet):
         """`(mode, apk)` : `("pilote", apk)` seulement si le Directeur a réglé `recette-emulateur` sur serveur pour ce
         projet (accord permanent, `deport_types.accord_serveur`) ET qu'un APK est trouvé (`apk_pour_le_pilote`) ; sinon
-        `("seul", None)`. Une lecture qui échoue vaut « seul »."""
+        `("seul", None)`. Une lecture qui échoue vaut « seul ». Le pilote exige aussi, à la dernière sonde, un serveur
+        prêt pour lui (`agent-pilote` : agent, abonnement ET image de l'émulateur) : sinon « seul », et le journal le dit."""
         try:
             plus = {"bureau": str(Path(self.bureau).expanduser())} if self.bureau else {}
             if not deport_types.accord_serveur(str(projet.dossier), ACTION_PILOTE, **plus):
@@ -965,7 +1032,25 @@ class Moteur:
             apk = apk_pour_le_pilote(projet.dossier)
         except Exception:                    # noqa: BLE001 — jamais une raison de ne pas partir
             return "seul", None
-        return ("pilote", apk) if apk else ("seul", None)
+        if not apk:
+            return "seul", None
+        refus = self._pilote_impossible()
+        if refus:
+            self._noter(projet, f"mode pilote impossible, l'agent serveur part seul (sans émulateur) : {refus}")
+            return "seul", None
+        return "pilote", apk
+
+    @staticmethod
+    def _pilote_impossible():
+        """None si un serveur déclaré a, à la dernière sonde, les capacités du mode pilote (`BESOINS["agent-pilote"]`,
+        dont `emulateur-image` ; état local, aucune connexion) ; sinon la raison."""
+        try:
+            _sa, st = executeur_serveur._modules()
+            import serveur_capacites
+            st.choisir_serveur(requises=serveur_capacites.BESOINS["agent-pilote"])
+            return None
+        except Exception as e:               # noqa: BLE001 — RefusLancement ou lecture impossible : pas de pilote
+            return str(e)[:300] or type(e).__name__
 
     @staticmethod
     def _taches_serveur_actives():

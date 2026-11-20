@@ -1,6 +1,7 @@
 """La couche d'appel du moteur : `claude -p` dépouillé, l'API Messages en option. Aucun appel réel."""
 import json
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -57,6 +58,19 @@ class ClaudeP(unittest.TestCase):
         self.assertEqual(appel.modele_exact("fable"), "fable")                         # jamais réécrit
         argv = appel._argv("claude", "opus", "c.md", [], None)
         self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-6")
+
+    def test_un_identifiant_que_les_agents_serveur_refuseraient_est_refuse(self):
+        """`--model` des agents serveur (liste blanche) : un identifiant qu'elle refuserait n'est jamais enregistré."""
+        from moteur import executeur_serveur
+        self.addCleanup(appel.enregistrer_modeles, None)
+        self.assertTrue(executeur_serveur.DRAPEAUX["--model"].startswith(appel.MOTIF_IDENTIFIANT.pattern + "|"))
+        for mauvais in ("claude-Opus-6", "claude-opus 6", "claude-opus_6", "claude-", "claude-" + "x" * 64, "claude-é"):
+            with self.subTest(identifiant=mauvais):
+                appel.enregistrer_modeles({"opus": mauvais})
+                self.assertEqual(appel.modele_exact("opus"), "claude-opus-5-5")
+                self.assertIsNone(re.fullmatch(executeur_serveur.DRAPEAUX["--model"], mauvais))
+        appel.enregistrer_modeles({"opus": " claude-opus-6.1 "})
+        self.assertEqual(appel.modele_exact("opus"), "claude-opus-6.1")
 
     def test_consigne_et_dossier_passent_par_l_entree_pas_par_argv(self):
         vu = Vu()

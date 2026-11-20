@@ -1011,7 +1011,12 @@ class FusionLocale(__import__("unittest").TestCase):
                     "C:/x.txt", ".factory /suivi.json",
                     # projet dans un sous-dossier du dépôt : l'état de la factory est réservé à toute profondeur
                     "app/.factory/reglages.json", "app/fiches/agent-1.md", "app/factory.json", ".lfsconfig",
-                    "app/.lfsconfig", "app/.FACTORY/suivi.json")
+                    "app/.lfsconfig", "app/.FACTORY/suivi.json",
+                    # les outils du Directeur, à toute profondeur : Claude Code, MCP, crochets, éditeur, conteneur, direnv
+                    ".claude/settings.json", "app/.claude/settings.local.json", ".mcp.json", "app/.MCP.json",
+                    ".pre-commit-config.yaml", "app/.pre-commit-config.yaml", "lefthook.yml", "app/lefthook.yml",
+                    ".vscode/tasks.json", "app/.vscode/settings.json", ".devcontainer/devcontainer.json",
+                    "app/.devcontainer/Dockerfile", ".envrc", "app/.envrc", "app/.husky/pre-commit")
         for chemin in reserves:
             vus = []
 
@@ -1026,6 +1031,7 @@ class FusionLocale(__import__("unittest").TestCase):
             self.assertIsNotNone(raison, chemin)
             self.assertIn("agent/t1", raison)
             self.assertIn("gardée", raison)
+            self.assertIn("pour le Directeur", raison)
             self.assertFalse(any("merge" in a for a in vus), chemin)        # rien n'est fusionné
             self.assertFalse(any("push" in a for a in vus), chemin)
 

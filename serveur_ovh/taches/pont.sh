@@ -45,6 +45,8 @@ MOTIF_NOM='^[a-z0-9][a-z0-9_-]{0,39}$'                   # nom de capture
 MOTIF_TEXTE='^[A-Za-z0-9][A-Za-z0-9 .,_-]{0,59}$'        # texte saisi (espaces transmis en %s à `input text`)
 MOTIF_FILTRE='^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$'        # filtre du journal (texte littéral, pas une expression)
 MOTIF_TOUCHE='^(retour|accueil|menu)$'
+# Refusé EN PLUS de MOTIF_NOM : noms réservés de Windows (la capture ne pourrait pas être rapatriée sur le poste).
+MOTIF_NOM_RESERVE='^(con|prn|aux|nul|com[0-9]|lpt[0-9])$'
 # verbe -> motifs de ses arguments, dans l'ordre ; FACULTATIFS = nombre de derniers arguments facultatifs.
 #   demarrer, installer, lancer, arreter : aucun argument (installer prend toujours entree/app.apk, chemin fixe)
 motifs_du_verbe() {
@@ -499,6 +501,9 @@ if [ ${#ARGS[@]} -lt $((attendus - FACULTATIFS)) ] || [ ${#ARGS[@]} -gt "$attend
 fi
 for i in "${!ARGS[@]}"; do
   [[ ${ARGS[$i]} =~ ${MOTIFS[$i]} ]] || repondre 2 "Argument $((i + 1)) refusé pour $VERBE (forme non permise)."
+  if [ "${MOTIFS[$i]}" = "$MOTIF_NOM" ] && [[ ${ARGS[$i]} =~ $MOTIF_NOM_RESERVE ]]; then
+    repondre 2 "Argument $((i + 1)) refusé pour $VERBE (nom réservé sous Windows)."
+  fi
 done
 reglage PONT_DELAI_ADB_S "${PONT_DELAI_ADB_S:-}" 30; DELAI_ADB=$REGLAGE
 command -v timeout > /dev/null 2>&1 || repondre 4 "timeout absent : le pont refuse d'appeler adb sans délai."

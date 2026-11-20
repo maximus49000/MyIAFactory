@@ -120,7 +120,11 @@ def _lire_apk(brut, moteur):
             raise ValueError("L'APK doit être un fichier ordinaire (ni lien, ni dossier).")
         if o.st_size > moteur.APK_MAX_OCTETS:
             raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
-        donnees = f.read(moteur.APK_MAX_OCTETS + 1)
+        # Taille constatée + 1 (jamais APK_MAX_OCTETS d'un coup : un tampon de 200 Mo à chaque lancement) ; un fichier qui
+        # grandirait entre-temps est vu par l'octet de plus, puis lu jusqu'au plafond pour être refusé.
+        donnees = f.read(o.st_size + 1)
+        if len(donnees) > o.st_size:
+            donnees += f.read(moteur.APK_MAX_OCTETS + 1 - len(donnees))
     if len(donnees) > moteur.APK_MAX_OCTETS:
         raise ValueError(f"APK trop gros : {moteur.APK_MAX_OCTETS // (1024 * 1024)} Mo au plus.")
     if not donnees:
@@ -142,7 +146,7 @@ def _destination(projet, ident, brut):
         raise ValueError("La destination doit être un sous-dossier de <projet>/.factory/serveur/.") from None
     if resolu == permis:
         raise ValueError("La destination doit être un sous-dossier de <projet>/.factory/serveur/.")
-    return base if brut else projet / ".factory" / "serveur" / ident
+    return resolu                    # le chemin contrôlé, et non celui qu'un lien posé ensuite pourrait détourner
 
 
 def _id(brut, moteur):
@@ -212,14 +216,40 @@ def _tache(commande, pos, opts, drapeaux, d, moteur, recette, kw):
     return 0 if manifeste.get("statut") == "ok" else 1
 
 
-def _terminer(moteur, ident, fin, d, kw):
-    """Arrête la tâche (`fin` : fin normale d'un scénario) ; `arreter` fait foi de l'état, rappelé tant qu'il n'est pas final."""
+def _terminer(moteur, ident, fin, d, kw, reessayer_inconnu=True):
+    """Arrête la tâche (`fin` : fin normale d'un scénario) ; `arreter` fait foi de l'état, rappelé tant qu'il n'est pas
+    final (ARRETS_MAX fois au plus). `reessayer_inconnu=False` (bureau) : un état « inconnu » (serveur muet, jusqu'à
+    150 s par appel) n'est pas réessayé, la raison est rendue telle quelle."""
     r = {}
     for _ in range(ARRETS_MAX):
         r = moteur.arreter(ident, dossier=d, fin=fin, **kw)
-        if r.get("etat") in moteur.FINAUX:
+        if r.get("etat") in moteur.FINAUX or (not reessayer_inconnu and r.get("etat") == "inconnu"):
             break
     return r
+
+
+def _arret_apres_interruption(moteur, ident, d, kw):
+    """Arrête au mieux une tâche interrompue ; le message dit ce qui est vrai (arrêt confirmé ou non)."""
+    try:
+        r = _terminer(moteur, ident, False, d, kw)
+    except BaseException:       # noqa: BLE001 - un second Ctrl-C ou une panne : l'arrêt n'est pas confirmé
+        r = {}
+    if isinstance(r, dict) and r.get("etat") in moteur.FINAUX:
+        return f"Interrompu : la tâche a été arrêtée (rapatriez avec serveur-tache rapatrier {ident})."
+    etat = r.get("etat") if isinstance(r, dict) and isinstance(r.get("etat"), str) else "inconnu"
+    return (f"Interrompu : l'arrêt de la tâche n'est pas confirmé (état : {etat[:20]}) ; arrêtez-la avec "
+            f"« serveur-tache arreter {ident} ».")
+
+
+def _fin_du_pont(moteur, ident, d, kw):
+    """Fin d'un scénario, TOUJOURS faite par le lanceur (même si la recette l'a faite) : `journal` puis `arreter` du pont,
+    pour que le plantage soit relevé (plantage.txt) avant l'arrêt de la tâche. Au mieux : chaque verbe est tenté, une
+    panne ne masque jamais le résultat de la recette (délais SSH bornés par verbe)."""
+    for nom in ("journal", "arreter"):
+        try:
+            moteur.verbe(ident, nom, [], dossier=d, **kw)
+        except Exception:       # noqa: BLE001 - au mieux
+            pass
 
 
 def _lancer(opts, attendre, d, moteur, recette, kw):
@@ -242,7 +272,18 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,
                                       "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name})
-    r = moteur.lancer(demande, apk, dossier=d, **kw)
+    try:
+        r = moteur.lancer(demande, apk, dossier=d, **kw)
+    except moteur.RefusLancement:
+        raise                                   # refus avant tout envoi : rien ne tourne, rien à arrêter
+    except BaseException as e:
+        # Interrompu (Ctrl-C) ou panne PENDANT le lancement (l'APK est peut-être envoyé, la tâche en attente du
+        # créneau) : l'identifiant est connu avant l'appel ; il est donné, et la tâche arrêtée au mieux.
+        _afficher({"id": demande.id, "etat": "inconnu"}, d)
+        message = _arret_apres_interruption(moteur, demande.id, d, kw)
+        if isinstance(e, KeyboardInterrupt):
+            return _erreur(message, 1, d)
+        raise
     ident = r.get("id")
     sortie = {c: r[c] for c in ("id", "etat", "serveur_id") if c in r}
     demarree = r.get("etat") == "en_cours"
@@ -262,20 +303,18 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         _afficher(sortie, d)
         return 0
     try:
-        res = recette.executer(plan, ident, dossier=d, **kw)
+        destination = _destination(projet, ident, None)   # <projet>/.factory/serveur/<id> : captures et rapport
+        res = recette.executer(plan, ident, dossier=d, destination=destination, **kw)
+        _fin_du_pont(moteur, ident, d, kw)                    # journal puis arreter du pont : plantage relevé
     except BaseException as e:
         _afficher({"id": ident, "etat": "en_cours"}, d)         # l'identifiant, pour rapatrier ensuite
-        try:
-            _terminer(moteur, ident, False, d, kw)
-        except Exception:        # noqa: BLE001 - l'arrêt est tenté ; l'erreur d'origine prime
-            pass
+        message = _arret_apres_interruption(moteur, ident, d, kw)
         if isinstance(e, KeyboardInterrupt):
-            return _erreur("Interrompu : la tâche a été arrêtée (rapatriez avec serveur-tache rapatrier "
-                           f"{ident}).", 1, d)
+            return _erreur(message, 1, d)
         raise
-    echec = res.get("echec") if isinstance(res, dict) else {"reponse": "Résultat de recette illisible."}
+    echec = res.get("echec") if isinstance(res, dict) else {"code": 4, "reponse": "Résultat de recette illisible."}
     _terminer(moteur, ident, echec is None, d, kw)
-    manifeste = dict(moteur.rapatrier(ident, _destination(projet, ident, None), dossier=d, **kw))
+    manifeste = dict(moteur.rapatrier(ident, destination, dossier=d, echec=echec, **kw))
     if echec is not None:
         manifeste["echec"] = echec
     if "avertissement" in sortie:
@@ -290,7 +329,8 @@ def _outil(pos, opts, d, moteur, kw):
     ident = _id(pos[0], moteur)
     verbe, arguments = pos[1], pos[2:]
     arguments = list(moteur.valider_verbe(verbe, arguments))      # ValueError : refus avant toute connexion
-    projet = _projet(opts.get("projet"))
-    r = moteur.verbe(ident, verbe, arguments, dossier=d, destination=_destination(projet, ident, None), **kw)
+    # Seul `capturer` écrit sur le poste : le projet et sa destination ne sont calculés (et contrôlés) que pour lui.
+    destination = _destination(_projet(opts.get("projet")), ident, None) if verbe == "capturer" else None
+    r = moteur.verbe(ident, verbe, arguments, dossier=d, destination=destination, **kw)
     _afficher(r, d, compact=True)
     return 0 if isinstance(r, dict) and r.get("ok") is True else 1

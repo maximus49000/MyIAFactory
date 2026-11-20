@@ -126,6 +126,7 @@ def valider_demande(brut):
 # ---------------------------------------------------------------- index du poste
 
 INDEX = "taches.json"
+INDEX_MAX_OCTETS = 8 * 1024 * 1024        # au-delà, l'index n'est pas lu (affichage vide, écriture refusée)
 VERROU = "taches.lock"
 TEMOIN_PERIME_S = 30
 VERROU_VIDE_S = 5          # fichier verrou vide ou illisible plus vieux que cela : créé puis jamais rempli (arrêt brutal)
@@ -196,20 +197,32 @@ class Index:
         donnees = json.loads(contenu)
         return {k: v for k, v in donnees.items() if isinstance(v, dict)} if isinstance(donnees, dict) else {}
 
+    def _contenu(self):
+        """Texte de l'index ; `ValueError` s'il dépasse INDEX_MAX_OCTETS (taille vérifiée avant la lecture, puis sur
+        ce qui a été lu)."""
+        if self.chemin.stat().st_size > INDEX_MAX_OCTETS:
+            raise ValueError("Index des tâches démesuré.")
+        contenu = self.chemin.read_text(encoding="utf-8-sig")
+        if len(contenu) > INDEX_MAX_OCTETS:
+            raise ValueError("Index des tâches démesuré.")
+        return contenu
+
     def lire(self):
-        """Pour affichage : vide si absent, abîmé ou illisible. Jamais d'exception."""
+        """Pour affichage : vide si absent, abîmé, illisible ou démesuré. Jamais d'exception."""
         try:
-            return self._analyser(self.chemin.read_text(encoding="utf-8-sig"))
+            return self._analyser(self._contenu())
         except (OSError, ValueError, RecursionError):
             return {}
 
     def _lire_pour_ecrire(self):
         try:
-            contenu = self.chemin.read_text(encoding="utf-8-sig")
+            contenu = self._contenu()
         except FileNotFoundError:
             return {}
         except OSError as e:
             raise ErreurIndex(f"Index des tâches illisible ({type(e).__name__}) : rien n'a été modifié.") from e
+        except ValueError as e:      # démesuré : jamais réécrit à partir de rien (il serait vidé)
+            raise ErreurIndex(f"{e} (plus de {INDEX_MAX_OCTETS // (1024 * 1024)} Mo) : rien n'a été modifié.") from e
         try:
             return self._analyser(contenu)
         except (ValueError, RecursionError):
@@ -387,6 +400,9 @@ MOTIF_NOM = r"[a-z0-9][a-z0-9_-]{0,39}"                   # nom de capture
 MOTIF_TEXTE = r"[A-Za-z0-9][A-Za-z0-9 .,_-]{0,59}"        # texte saisi
 MOTIF_FILTRE = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,59}"        # filtre du journal
 MOTIF_TOUCHE = r"(retour|accueil|menu)"
+# Noms de capture refusés en plus de MOTIF_NOM : noms réservés de Windows (le poste ne pourrait pas écrire <nom>.png ;
+# majuscules et extension déjà exclues par MOTIF_NOM). Même règle dans pont.sh (MOTIF_NOM_RESERVE).
+MOTIF_NOM_RESERVE = r"(con|prn|aux|nul|com[0-9]|lpt[0-9])"
 # verbe -> motifs de ses arguments, dans l'ordre ; FACULTATIFS : nombre de derniers arguments facultatifs.
 VERBES = MappingProxyType({
     "demarrer": (), "installer": (), "lancer": (), "arreter": (),
@@ -418,6 +434,8 @@ def valider_verbe(verbe, args):
             a = str(a)
         if not isinstance(a, str) or not re.fullmatch(motif, a, re.ASCII):
             raise ValueError(f"Argument {i} refusé pour {verbe} (forme non permise).")
+        if motif == MOTIF_NOM and re.fullmatch(MOTIF_NOM_RESERVE, a, re.ASCII):
+            raise ValueError(f"Argument {i} refusé pour {verbe} (nom réservé sous Windows).")
         sortie.append(a)
     return tuple(sortie)
 
@@ -452,8 +470,14 @@ JOURNAL_MAX_OCTETS = 5 * 1024 * 1024       # chaque journal rapatrié ; au-delà
 TAILLE_ARCHIVE_MARGE = 4 * JOURNAL_MAX_OCTETS + 1024 * 1024     # journaux + en-têtes tar, en plus des captures
 ENVELOPPE = "taches/lancer_emulation.sh"
 ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/{ENVELOPPE}"
-DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 200, "attendre": 150, "capturer": 150})
+# Délai SSH de chaque verbe relayé, au-dessus de la borne propre du pont : `arreter` (adb + attentes 10 + 5 + 5 s, jusqu'à
+# ~80 s), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S 300 s).
+DELAIS_VERBE_S = MappingProxyType({"demarrer": 360, "installer": 240, "arreter": 120, "attendre": 150,
+                                   "capturer": 150})
 DELAI_VERBE_S = 90
+# Mémoire et processeurs du conteneur passés à l'enveloppe (ses propres valeurs par défaut : la demande ne les règle pas).
+MEMOIRE_MO = 6144
+CPUS = 2
 # Fichiers rapatriés : ces journaux (nom sur le serveur -> nom local) et captures/<nom>.png, rien d'autre.
 JOURNAUX = MappingProxyType({"pont.log": "journal.txt", "plantage.txt": "plantage.txt",
                              "entree-tache.log": "entree-tache.log", "emulateur.log": "emulateur.log"})
@@ -578,7 +602,12 @@ def _octets(serveur, ssh, commande, entree, delai):
 
 
 def _archive(membres):
-    """Archive tar en mémoire de (nom, octets, droits) : fichiers ordinaires, propriétaire root, octets tels quels."""
+    """Archive tar en mémoire de (nom, octets, droits) : fichiers ordinaires, propriétaire root, octets tels quels.
+
+    Mémoire (M8) : `BytesIO(donnees)` partage les octets de l'APK sans les copier, et `getvalue()` rend le tampon tel
+    quel quand il n'a plus d'autre référence : l'APK ne coexiste qu'avec UNE copie (l'archive), mesuré par
+    test_archive_sans_copie_superflue. L'archive est ensuite passée telle quelle à ssh (entrée standard), sans autre
+    copie ici. La lecture de l'APK sur le poste n'alloue que sa taille (`serveur_tache_cli._lire_apk`)."""
     tampon = io.BytesIO()
     with tarfile.open(fileobj=tampon, mode="w", format=tarfile.USTAR_FORMAT) as tar:
         for nom, donnees, droits in membres:
@@ -685,8 +714,14 @@ fi
 rm -rf "$d"
 exit $r
 """
+# Arguments de l'enveloppe : <id> <mode> <duree_s> <inactivite_s> <memoire_mo> <cpus> <captures> <octets>, tous des entiers
+# validés (limites de la demande, toujours dans les bornes de l'enveloppe : captures 1..50, octets 1..104857600).
 _LANCER = f"""# tache:lancer @ID@
-exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@
+exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@ @MEMOIRE@ @CPUS@ @CAPTURES@ @OCTETS@
+"""
+# Empreinte de l'image de l'émulateur sur le serveur (marqueur écrit par l'étape d'installation) : une lecture fixe.
+_IMAGE = f"""# tache:image
+head -c 256 "{serveur_installation.MARQUEURS['emulateur-image'][1]}" 2>/dev/null
 """
 _EFFACER = """# tache:effacer @ID@
 d="$HOME/taches/@ID@"
@@ -879,7 +914,8 @@ def _demande_dict(d):
 def _envoyer(serveur, ssh, demande, apk):
     """Crée ~/taches/<id> (qui ne doit pas exister) avec entree/app.apk et demande.json ; (code, erreur), 73 si pris."""
     contenu = (json.dumps(_demande_dict(demande), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    donnees = _archive([("entree/app.apk", bytes(apk), 0o644), ("demande.json", contenu, 0o600)])
+    apk = apk if type(apk) is bytes else bytes(apk)          # jamais une copie de plus pour des octets déjà `bytes`
+    donnees = _archive([("entree/app.apk", apk, 0o644), ("demande.json", contenu, 0o600)])
     code, _sortie, erreur = _octets(serveur, ssh, _script(_PREPARER, demande.id), donnees, delai=600)
     return code, erreur
 
@@ -892,7 +928,32 @@ def _deposer_enveloppe(serveur, ssh):
         return f"Fichier du dépôt introuvable : serveur_ovh/{ENVELOPPE}."
     donnees = _archive([(ENVELOPPE, source.read_bytes(), 0o755)])
     code, _o, erreur = _octets(serveur, ssh, _DEPOSER, donnees, delai=120)
-    return None if code == 0 else f"Dépôt de l'enveloppe sur le serveur impossible (code {code}) : {_court(erreur, 200)}"
+    if code != 0:
+        return f"Dépôt de l'enveloppe sur le serveur impossible (code {code}) : {_court(erreur, 200)}"
+    # Code 0 mais un message (tar, mv, mkdir...) sur la sortie d'erreur : dépôt douteux. Seul l'avertissement de ssh à
+    # la première connexion (« Warning: Permanently added ... », StrictHostKeyChecking=accept-new) est admis.
+    messages = [ligne for ligne in erreur.splitlines()
+                if ligne.strip() and not ligne.strip().startswith("Warning: Permanently added ")]
+    if messages:
+        return f"Dépôt de l'enveloppe douteux (messages du serveur) : {_court(' '.join(messages), 200)}"
+    return None
+
+
+def _verifier_image(serveur, ssh):
+    """`RefusLancement` si l'image de l'émulateur du serveur est périmée : son marqueur ne porte pas l'empreinte des
+    fichiers du dépôt (`serveur_installation.empreinte_etape`, la même règle que l'installation). Une lecture fixe ;
+    serveur injoignable pendant cette lecture : rien n'est affirmé (l'envoi qui suit le dira)."""
+    try:
+        attendue = serveur_installation.empreinte_etape("emulateur_image")
+    except (OSError, ValueError, KeyError):
+        attendue = None
+    code, sortie, _e = _bash(serveur, ssh, _IMAGE, delai=20)
+    if code in INJOIGNABLE:
+        return
+    if attendue is None or code != 0 or sortie.strip() != attendue:
+        raise RefusLancement(f"L'image de l'émulateur du serveur {serveur.id} est périmée (les fichiers du dépôt ont "
+                             "changé depuis son installation) : relancez l'installation de « emulateur-image » dans le "
+                             "bureau (Serveurs).")
 
 
 def _apk_sur(apk):
@@ -917,7 +978,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
     _apk_sur(apk)
     if isinstance(attente_max_s, bool) or not isinstance(attente_max_s, int) or attente_max_s < 0:
         raise RefusLancement("attente_max_s doit être un nombre entier de secondes, positif ou nul.")
-    serveur = choisir_serveur(dossier)
+    serveur = choisir_serveur(dossier)          # l'état connu (aucune connexion) : une image déjà dite à refaire refuse ici
+    _verifier_image(serveur, ssh)              # puis l'empreinte relue sur le serveur, avant tout envoi
 
     def sortie(etat_, **plus):
         return _masque({"id": d.id, "etat": etat_, "serveur_id": serveur.id, **plus}, dossier)
@@ -955,7 +1017,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
                                         "raison": probleme})
         return sortie("echouee", erreur=probleme + (f" ({avert})" if avert else ""))
     commande = _script(_LANCER, d.id, MODE=d.mode, DUREE=str(int(d.limites["duree_s"])),
-                       INACTIVITE=str(int(d.limites["inactivite_s"])))
+                       INACTIVITE=str(int(d.limites["inactivite_s"])), MEMOIRE=str(MEMOIRE_MO), CPUS=str(CPUS),
+                       CAPTURES=str(int(d.limites["captures"])), OCTETS=str(int(d.limites["octets"])))
     attendu = 0
     while True:
         code, sortie_texte, erreur = _bash(serveur, ssh, commande, delai=180)
@@ -982,7 +1045,7 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
         relu = _etat(d.id, dossier, ssh)
         if relu["etat"] == "arretee":            # arrêtée pendant l'attente du créneau : issue normale, pas une erreur
             return sortie("arretee", raison=relu.get("raison", ""))
-        motif =("Réponse du serveur perdue pendant le démarrage : état relu sur le serveur."
+        motif = ("Réponse du serveur perdue pendant le démarrage : état relu sur le serveur."
                  if code != 4 else "Identifiant déjà utilisé sur le serveur : état relu sur le serveur.")
         return sortie(relu["etat"], erreur=f"{motif} {relu.get('raison', '')}".strip())
     raison = (lu or {}).get("raison") or f"Démarrage refusé par l'enveloppe (code {code}) : {_court(erreur, 200)}"
@@ -1063,8 +1126,8 @@ def _nom_local(nom):
 
 def _extraire(donnees, destination, limites):
     """Extrait l'archive dans `destination` sans jamais écrire ailleurs. Admis : membres ordinaires aux noms fixes
-    (JOURNAUX, captures/<nom>.png à signature PNG), au plus `captures + 5` fichiers, `captures` captures et `octets`
-    octets au total. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
+    (JOURNAUX, captures/<nom>.png à signature PNG), au plus `captures + 5` fichiers, `captures` captures, `octets`
+    octets de captures au total et JOURNAL_MAX_OCTETS par journal. Tout autre membre (lien, périphérique, dossier, chemin absolu, `..`, lettre de lecteur, doublon) est
     compté dans `refuses` ; un flux plus grand que le plafond n'est pas analysé du tout. Plusieurs archives à la suite
     sont lues (`ignore_zeros`). Flux coupé exactement au plafond (head -c du serveur) : `tronque` ; archive abîmée ou
     lecture courte avant le plafond : `corrompue`. Limite connue : avec `ignore_zeros`, tarfile saute bloc par bloc ce
@@ -1081,6 +1144,9 @@ def _extraire(donnees, destination, limites):
     if not donnees:
         return res
     max_fichiers, max_captures = int(limites["captures"]) + 5, int(limites["captures"])
+    # Les octets de la demande ne comptent que les CAPTURES (M6) ; les journaux ont leur propre plafond (chacun
+    # JOURNAL_MAX_OCTETS, déjà appliqué sur le serveur), pour que des journaux longs ne fassent pas passer en « limite »
+    # des captures dans les clous.
     total, examines, vus = 0, 0, set()
 
     def abime():
@@ -1102,8 +1168,9 @@ def _extraire(donnees, destination, limites):
                     continue
                 vus.add(nom)
                 nom_local, capture = local
-                if (len(res["fichiers"]) >= max_fichiers or (capture and len(res["captures"]) >= max_captures)
-                        or m.size < 0 or total + m.size > int(limites["octets"])):
+                if (len(res["fichiers"]) >= max_fichiers or m.size < 0
+                        or (capture and (len(res["captures"]) >= max_captures or total + m.size > int(limites["octets"])))
+                        or (not capture and m.size > JOURNAL_MAX_OCTETS)):
                     res["tronque"] = True
                     continue
                 contenu = tar.extractfile(m).read(m.size)
@@ -1118,7 +1185,8 @@ def _extraire(donnees, destination, limites):
                 if capture:
                     _dossier_sur(destination / "captures")
                 _ecrire_sur(cible, contenu)
-                total += m.size
+                if capture:
+                    total += m.size
                 res["fichiers"][nom_local] = str(cible)
                 if capture:
                     res["captures"].append(str(cible))
@@ -1135,21 +1203,30 @@ def _extraire(donnees, destination, limites):
     return res
 
 
-def _statut(lu, fiche, res):
-    """ok | plantage | limite | erreur, d'après etat.json, plantage.txt, le code 3 du pont noté dans la fiche."""
+def _code_echec(echec):
+    code = echec.get("code") if isinstance(echec, dict) else None
+    return code if isinstance(code, int) and not isinstance(code, bool) else 4
+
+
+def _statut(lu, fiche, res, echec=None):
+    """ok | plantage | limite | erreur, d'après etat.json, plantage.txt, le code 3 du pont noté dans la fiche et l'échec
+    éventuel de la recette (`echec` : code 3 du pont -> limite, tout autre échec -> erreur ; le plantage prime)."""
     if "plantage.txt" in res["fichiers"] or lu.get("statut") == "plantage":
         return "plantage"
     if (lu.get("etat") not in FINAUX or lu.get("etat") == "echouee" or lu.get("statut") == "erreur" or res["refuses"]
-            or res.get("corrompue")):
+            or res.get("corrompue") or (echec is not None and _code_echec(echec) != 3)):
         return "erreur"
-    if lu.get("statut") == "limite" or fiche.get("limite_atteinte") is True or res["tronque"]:
+    if (lu.get("statut") == "limite" or fiche.get("limite_atteinte") is True or res["tronque"]
+            or echec is not None):
         return "limite"
     return "ok" if lu.get("statut") == "ok" else "erreur"
 
 
-def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh):
+def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, echec=None):
     """Rapatrie `sortie/` de la tâche dans `destination` (captures/*.png, journal.txt, plantage.txt...) et y écrit
-    `rapport.json`. Renvoie le manifeste `{statut, captures, journal, rapport, duree_s, ...}` ; jamais d'exception."""
+    `rapport.json`. Renvoie le manifeste `{statut, captures, journal, rapport, duree_s, ...}` ; jamais d'exception.
+    `echec` : l'échec de la recette (`{etape, verbe, code, reponse}`, de `serveur_recette.executer`), pris en compte
+    dans le statut (jamais « ok ») et recopié dans le rapport."""
     manifeste = {"id": ident if isinstance(ident, str) and MOTIF_ID.fullmatch(ident) else None, "statut": "erreur",
                  "captures": [], "journal": None, "rapport": None, "duree_s": None, "etat": "inconnu", "raison": "",
                  "tronque": False, "refuses": 0}
@@ -1171,7 +1248,7 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
             statut = "erreur"
         else:
             res = _extraire(donnees, dest, limites)
-            statut = _statut(lu, fiche, res)
+            statut = _statut(lu, fiche, res, echec)
             if res["refuses"]:
                 manifeste["raison"] = (f"Archive suspecte : {res['refuses']} élément(s) refusé(s) (lien, chemin ou nom "
                                        "non admis). " + manifeste["raison"]).strip()
@@ -1190,6 +1267,11 @@ def rapatrier(ident, destination, dossier=plateforme_acces.DOSSIER, ssh=platefor
                    "tronque": res["tronque"], "refuses": res["refuses"],
                    "captures": [Path(c).relative_to(dest).as_posix() for c in res["captures"]],
                    "journal": "journal.txt" if journal else None, "rapatrie": _maintenant_iso()}
+        if echec is not None:
+            e = echec if isinstance(echec, dict) else {}
+            rapport["echec"] = {"etape": e.get("etape") if isinstance(e.get("etape"), int) else None,
+                                "verbe": _court(e.get("verbe"), 40) if isinstance(e.get("verbe"), str) else None,
+                                "code": _code_echec(e), "reponse": _court(e.get("reponse"))}
         ecrire_atomique(dest / "rapport.json",
                         json.dumps(_masque(rapport, dossier), ensure_ascii=False, indent=2) + "\n")
     except Exception as e:  # noqa: BLE001 - destination refusée, disque, serveur non déclaré : statut erreur

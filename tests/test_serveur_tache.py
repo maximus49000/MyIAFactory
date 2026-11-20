@@ -416,6 +416,20 @@ class TestIndex(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.index.reserver(tid(9), "n", 2)
 
+    def test_index_demesure_jamais_lu(self):
+        # Taille plafonnée : vide pour l'affichage, ErreurIndex pour une écriture (rien n'est réécrit).
+        self.index.enregistrer(tid(1), {"etat": "en_cours", "projet": "x" * 3000})
+        avant = (self.dossier / "taches.json").read_bytes()
+        self.assertGreater(len(avant), 2000)
+        with mock.patch.object(st, "INDEX_MAX_OCTETS", 2000):
+            self.assertEqual(self.index.lire(), {})
+            with self.assertRaises(st.ErreurIndex):
+                self.index.enregistrer(tid(2), {"etat": "en_cours"})
+            with self.assertRaises(st.ErreurIndex):
+                self.index.fusionner(tid(1), {"etat": "terminee"})
+        self.assertEqual((self.dossier / "taches.json").read_bytes(), avant)
+        self.assertEqual(st.INDEX_MAX_OCTETS, 8 * 1024 * 1024)
+
     def test_entrees_non_dict_ignorees(self):
         (self.dossier / "taches.json").write_text('{"a": 5, "b": {"etat": "en_cours"}}', encoding="utf-8")
         self.assertEqual(self.index.lire(), {"b": {"etat": "en_cours"}})
@@ -494,6 +508,7 @@ class FauxServeur:
         self.ids_existants = set()
         self.avd_apres = 0
         self.deposes = None
+        self.empreinte = None          # marqueur de l'image sur le serveur ; None : l'empreinte du dépôt (à jour)
 
     # interface de plateforme_ssh
     def executer(self, hote, commande, cle, stdin=None, delai=60, runner=None):
@@ -537,6 +552,11 @@ class FauxServeur:
         t["apk"] = fichiers["entree/app.apk"]
         t["demande"] = json.loads(fichiers["demande.json"])
         return 0, b"", ""
+
+    def _image(self, args, script, entree):
+        import serveur_installation
+        texte = serveur_installation.empreinte_etape("emulateur_image") if self.empreinte is None else self.empreinte
+        return (0, (texte + "\n").encode(), "") if texte else (1, b"", "")
 
     def _deposer(self, args, script, entree):
         with tarfile.open(fileobj=io.BytesIO(entree)) as tar:
@@ -700,9 +720,73 @@ class TestLancer(BaseLanceur):
         prep = self.srv.ops("preparer")[0]
         self.assertNotIn(b"PK", prep[1].encode())             # l'APK n'est jamais dans la commande
         lancement = self.srv.ops("lancer")[0][1]
-        self.assertIn(f'lancer_emulation.sh" {ID1} scenario 1200 600\n', lancement)
+        self.assertIn(f'lancer_emulation.sh" {ID1} scenario 1200 600 6144 2 50 104857600\n', lancement)
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "en_cours")
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["serveur_id"], "ovh1")
+
+    def test_lancer_passe_les_limites_de_la_demande_a_l_enveloppe(self):
+        # T5 : mémoire et processeurs (valeurs de l'enveloppe), captures et octets de la demande, dans cet ordre.
+        self.lancer(self.demande(limites={"duree_s": 300, "captures": 3, "octets": 5000}))
+        lancement = self.srv.ops("lancer")[0][1]
+        self.assertEqual(lancement.splitlines()[-1],
+                         f'exec bash "{st.ENVELOPPE_DISTANTE}" {ID1} scenario 300 600 6144 2 3 5000')
+
+    def test_image_perimee_refusee_avant_tout_envoi(self):
+        # M3 : l'empreinte de l'image du serveur est relue (une lecture fixe) ; périmée -> refus, rien n'est envoyé.
+        self.srv.empreinte = "ubuntu=20.04;jdk=17;fichiers=0000000000000000"
+        with self.assertRaises(st.RefusLancement) as r:
+            self.lancer()
+        self.assertIn("périmée", str(r.exception))
+        self.assertEqual([a[0] for a in self.srv.appels], ["image"])
+        self.srv.empreinte = ""                                            # marqueur absent : périmée aussi
+        with self.assertRaises(st.RefusLancement):
+            self.lancer()
+        self.srv.appels.clear()
+        declarer(self.dossier, {"android-emulateur": "presente", "emulateur-image": "a_faire"})
+        with self.assertRaises(st.RefusLancement):                         # l'état connu le dit : aucune connexion
+            self.lancer()
+        self.assertEqual(self.srv.appels, [])
+
+    def test_image_a_jour_lancement_normal(self):
+        self.assertEqual(self.lancer()["etat"], "en_cours")
+        self.assertEqual(self.srv.appels[0][0], "image")
+        self.assertEqual(len(self.srv.ops("image")), 1)
+
+    def test_depot_de_l_enveloppe_lit_aussi_la_sortie_d_erreur(self):
+        # T5 : code 0 mais un message de tar ou de mv sur la sortie d'erreur : dépôt douteux, refusé.
+        serveur = st.choisir_serveur(self.dossier)
+        avert = "Warning: Permanently added 'ovh1.exemple.net' (ED25519) to the list of known hosts.\r\n"
+        for erreur, attendu in (("", None), (avert, None), ("tar: entree: Cannot open: Permission denied\n", "douteux"),
+                                (avert + "mv: cannot move\n", "douteux")):
+            with self.subTest(erreur=erreur), mock.patch.object(st, "_octets", return_value=(0, b"", erreur)):
+                r = st._deposer_enveloppe(serveur, self.srv)
+                if attendu is None:
+                    self.assertIsNone(r)
+                else:
+                    self.assertIn(attendu, r)
+
+    def test_archive_sans_copie_superflue(self):
+        # M8 : mêmes octets qu'une archive tarfile, et une seule copie de l'APK en mémoire pendant la construction.
+        import tracemalloc
+        membres = [("entree/app.apk", APK, 0o644), ("demande.json", b'{"id": "x"}\n', 0o600)]
+        tampon = io.BytesIO()
+        with tarfile.open(fileobj=tampon, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+            for nom, donnees, droits in membres:
+                info = tarfile.TarInfo(nom)
+                info.size, info.mode, info.mtime, info.uid, info.gid, info.uname, info.gname = (
+                    len(donnees), droits, 0, 0, 0, "", "")
+                tar.addfile(info, io.BytesIO(donnees))
+        self.assertEqual(st._archive(membres), tampon.getvalue())
+        gros = b"PK\x03\x04" + b"\x00" * (20 * 1024 * 1024)
+        tracemalloc.start()
+        try:
+            tracemalloc.reset_peak()
+            archive_ = st._archive([("entree/app.apk", gros, 0o644)])
+            _actuel, pic = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertGreater(len(archive_), len(gros))
+        self.assertLess(pic, 1.5 * len(gros))
 
     def test_lancer_creneau_occupe_attend_puis_abandonne(self):
         self.srv.creneau = "t20261119-090000-ffff"
@@ -1068,6 +1152,41 @@ class TestRapatrier(BaseLanceur):
         self.preparer()
         self.assertEqual(self.rapatrier()["statut"], "ok")
 
+    def test_une_recette_en_echec_ne_laisse_jamais_ok_sur_le_disque(self):
+        # I2 : la recette a échoué (installer -> 4) ; le veilleur a écrit arretee/ok : le rapport dit erreur.
+        for code, attendu in ((4, "erreur"), (2, "erreur"), (3, "limite")):
+            with self.subTest(code=code):
+                self.preparer(etat="arretee", statut="ok")
+                echec = {"etape": 1, "verbe": "installer", "code": code, "reponse": "adb install a échoué."}
+                m = self.rapatrier(echec=echec)
+                self.assertEqual(m["statut"], attendu)
+                rapport = json.loads(Path(m["rapport"]).read_text(encoding="utf-8"))
+                self.assertEqual(rapport["statut"], attendu)
+                self.assertEqual(rapport["echec"]["verbe"], "installer")
+        self.preparer(fichiers={"pont.log": b"x\n", "plantage.txt": b"FATAL EXCEPTION\n"})
+        self.assertEqual(self.rapatrier(echec={"etape": 0, "verbe": "lancer", "code": 4, "reponse": ""})["statut"],
+                         "plantage")                                         # le plantage prime
+        self.preparer()
+        self.assertEqual(self.rapatrier(echec=None)["statut"], "ok")
+
+    def test_les_journaux_ne_comptent_pas_dans_les_octets_des_captures(self):
+        # M6 : des captures proches de la limite ne deviennent pas « limite » à cause des journaux.
+        self.preparer(limites={"octets": 1000})
+        self.srv.archive = archive([("./pont.log", b"j" * 600), ("./emulateur.log", b"e" * 600),
+                                    ("./captures/a.png", PNG[:8] + b"y" * 892)])
+        m = self.rapatrier()
+        self.assertEqual((m["statut"], m["tronque"]), ("ok", False))
+        self.assertEqual(len(m["captures"]), 1)
+        self.assertEqual(Path(m["journal"]).read_bytes(), b"j" * 600)
+        self.assertEqual((self.dest / "emulateur.log").read_bytes(), b"e" * 600)
+        self.srv.archive = archive([("./pont.log", b"j" * (st.JOURNAL_MAX_OCTETS + 1)),
+                                    ("./captures/a.png", PNG[:8] + b"y" * 892)])
+        with mock.patch.object(st, "TAILLE_ARCHIVE_MARGE", st.TAILLE_ARCHIVE_MARGE + st.JOURNAL_MAX_OCTETS):
+            m = self.rapatrier()
+        self.assertTrue(m["tronque"])                                        # un journal démesuré n'est pas pris
+        self.assertFalse((self.dest / "journal.txt").exists() and
+                         (self.dest / "journal.txt").stat().st_size > st.JOURNAL_MAX_OCTETS)
+
     def test_statut_limite_apres_code_3_du_pont(self):
         self.preparer(etat="en_cours", statut=None)
         self.srv.taches[ID1]["veilleur"] = "vivant"
@@ -1193,6 +1312,19 @@ class TestVerbe(BaseLanceur):
         r = self.verbe("lancer")
         self.assertEqual((r["ok"], r["code"]), (False, 255))
 
+    def test_delai_ssh_par_verbe(self):
+        # M5 : `arreter` du pont peut durer ~80 s, `installer` ~180 s : marge au-dessus de leur propre borne.
+        for v, attendu in (("arreter", 120), ("installer", 240), ("toucher", st.DELAI_VERBE_S), ("demarrer", 360)):
+            with self.subTest(verbe=v):
+                self.verbe(v, ["1", "2"] if v == "toucher" else [])
+                self.assertEqual(self.srv.ops("verbe")[-1][3], attendu)
+
+    def test_nom_de_capture_reserve_sous_windows_refuse_avant_ssh(self):
+        for nom in ("con", "prn", "aux", "nul", "com1", "com9", "lpt1", "lpt9", "com0", "lpt0"):
+            with self.subTest(nom=nom), self.assertRaises(ValueError):
+                self.verbe("capturer", [nom])
+        self.assertEqual(self.srv.appels, [])
+
 
 class TestMasquage(BaseLanceur):
     def test_sorties_masquees_sans_secret(self):
@@ -1226,7 +1358,9 @@ ACCEPTES = [("toucher", ["540", "1200"]), ("toucher", ["0", "9999"]), ("toucher"
             ("touche", ["menu"]), ("attendre", ["0"]), ("attendre", ["7"]), ("attendre", ["99"]), ("attendre", ["120"]),
             ("texte", ["Bonjour le monde, 3.5_kg-x"]), ("texte", ["un deux"]), ("texte", ["a"]), ("texte", ["A."]),
             ("texte", ["a" * 60]), ("capturer", ["accueil-1"]), ("capturer", ["a"]), ("capturer", ["n0"]),
-            ("capturer", ["0_x"]), ("capturer", ["b" * 40]), ("journal", []), ("journal", ["pair"]),
+            ("capturer", ["0_x"]), ("capturer", ["b" * 40]), ("capturer", ["console"]), ("capturer", ["com10"]),
+            ("capturer", ["con-1"]), ("capturer", ["lpt"]), ("capturer", ["nulle"]), ("capturer", ["aux_2"]),
+            ("journal", []), ("journal", ["pair"]),
             ("journal", ["ActivityManager:I"]), ("journal", ["com.exemple.app"]), ("installer", []), ("lancer", []),
             ("arreter", [])]
 COMMUNS = [";", "$(x)", "`x`", "a\nb", "", "$(touch ../pwn)", "*", "a;b", "x'y", "a|b", "&", ">", "a\r", "\r", "--",
@@ -1237,6 +1371,10 @@ REFUSES = ([("toucher", [v, "1"]) for v in COMMUNS + ["..", "-1", "99999", "1.5"
            + [("glisser", ["1", "2", "3"]), ("glisser", ["1", "2", "3", "4", "5"])]
            + [("attendre", [v]) for v in COMMUNS + ["..", "-1", "99999", "121", "1000", "010"]]
            + [("capturer", [v]) for v in COMMUNS + ["..", "../x", "a/b", "A", "x.png", "a" * 41, "_a", "a\n"]]
+           # noms réservés de Windows (la capture ne pourrait pas être rapatriée sur le poste) ; CON, Con.png : déjà
+           # refusés par le motif (minuscules, sans point)
+           + [("capturer", [v]) for v in ("con", "prn", "aux", "nul", "com0", "com1", "com9", "lpt0", "lpt1", "lpt9",
+                                          "CON", "Con", "con.png", "nul.txt")]
            + [("capturer", ["a", "b"])]
            + [("texte", [v]) for v in COMMUNS + ["a" * 61, "a/b", "é", "50%", " a", ".x"]]
            + [("touche", [v]) for v in COMMUNS + ["..", "-1", "99999", "power", "retour ", "KEYCODE_POWER", "retour\n"]]
@@ -1492,13 +1630,14 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
         """Tous les scripts distants du module : syntaxe (bash -n) puis exécution réelle, sans bruit sur stderr."""
         modeles = {n for n, v in vars(st).items() if isinstance(v, str) and v.startswith("# tache:")}
         self.assertEqual(modeles, {"_ETAT", "_NETTOYER", "_ARRETER", "_PREPARER", "_DEPOSER", "_LANCER", "_EFFACER",
-                                   "_ABANDON", "_AVD", "_VERBE", "_RAPATRIER"})
+                                   "_ABANDON", "_AVD", "_VERBE", "_RAPATRIER", "_IMAGE"})
         self.fiche(limites={"captures": 3})
         lim = st._limites({"captures": 3})
         final = json.dumps({"id": ID1, "etat": "arretee", "statut": None, "debut": None, "fin": "2026-11-19T10:16:40Z",
                             "raison": "test"})
-        rendus = {"_PREPARER": st._script(st._PREPARER, ID1), "_DEPOSER": st._DEPOSER,
-                  "_LANCER": st._script(st._LANCER, ID1, MODE="pilote", DUREE="60", INACTIVITE="600"),
+        rendus = {"_PREPARER": st._script(st._PREPARER, ID1), "_DEPOSER": st._DEPOSER, "_IMAGE": st._IMAGE,
+                  "_LANCER": st._script(st._LANCER, ID1, MODE="pilote", DUREE="60", INACTIVITE="600", MEMOIRE="6144",
+                                        CPUS="2", CAPTURES="3", OCTETS="5000"),
                   "_ETAT": st._script(st._ETAT, ID1), "_NETTOYER": st._script(st._NETTOYER, ID1, JSON=final),
                   "_ARRETER": st._script(st._ARRETER, ID1, MOTIF="arret", JSON=final),
                   "_EFFACER": st._script(st._EFFACER, ID1), "_ABANDON": st._script(st._ABANDON, ID1),
@@ -1520,7 +1659,12 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
         souche = self.ssh.home / "myiafactory" / "serveur_ovh" / "taches" / "lancer_emulation.sh"
         souche.write_text('printf "%s " "$@" > "$HOME/lance.txt"\n', encoding="utf-8", newline="\n")
         bash_s("_LANCER")
-        self.assertEqual((self.ssh.home / "lance.txt").read_text(encoding="utf-8"), f"{ID1} pilote 60 600 ")
+        self.assertEqual((self.ssh.home / "lance.txt").read_text(encoding="utf-8"), f"{ID1} pilote 60 600 6144 2 3 5000 ")
+        marqueur = self.ssh.home / ".myiafactory" / "emulateur-image.version"
+        bash_s("_IMAGE", attendu=1)                                         # marqueur absent : code non nul, rien dit
+        marqueur.parent.mkdir()
+        marqueur.write_text("ubuntu=x;jdk=17;fichiers=abc\n", encoding="utf-8", newline="\n")
+        self.assertEqual(bash_s("_IMAGE"), "ubuntu=x;jdk=17;fichiers=abc\n")
         self.ecrire_etat(etat="en_cours", statut=None, fin=None)
         self.assertEqual(bash_s("_AVD").strip(), "attente")
         (self.tache / "sortie" / ".avd-pret").write_bytes(b"")
@@ -1540,7 +1684,25 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
         (self.tache / "veilleur.pid").write_text("999999\n", encoding="utf-8")
         bash_s("_NETTOYER")
         self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "arretee")
+        bash_s("_ARRETER")                                                  # état final : rien touché
+        self.assertTrue((self.tache / "entree" / "app.apk").exists())
+        # _ARRETER dans chaque état (le garde aurait ainsi vu une ligne abîmée de n'importe quelle branche)
+        self.ecrire_etat(etat="en_attente", statut=None, debut=None, fin=None)
         bash_s("_ARRETER")
+        self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "arretee")
+        self.assertFalse((self.tache / "entree" / "app.apk").exists())
+        (self.tache / "entree" / "app.apk").write_bytes(APK)
+        (self.tache / "etat.json").unlink()
+        bash_s("_ARRETER")
+        self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "arretee")
+        self.assertFalse((self.tache / "entree" / "app.apk").exists())
+        (self.tache / "entree" / "app.apk").write_bytes(APK)
+        self.ecrire_etat(etat="en_cours", statut=None, fin=None)
+        (self.tache / "arret").unlink(missing_ok=True)
+        v = self.veilleur_factice()
+        bash_s("_ARRETER")
+        self.assertEqual(v.wait(30), 0)
+        self.assertEqual(json.loads((self.tache / "etat.json").read_text(encoding="utf-8"))["etat"], "arretee")
         self.assertTrue((self.tache / "entree" / "app.apk").exists())
         bash_s("_ABANDON")
         self.assertFalse((self.tache / "entree" / "app.apk").exists())

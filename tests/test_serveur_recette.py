@@ -72,11 +72,37 @@ class TestCharger(Base):
         self.refuse(json.dumps(recette_json()) + " " * 70000, motif="trop gros")
 
     def test_taille_controlee_avant_lecture(self):
+        # Ce qui est ouvert est contrôlé (fstat) AVANT toute lecture : un fichier trop gros n'est jamais lu, et la
+        # lecture passe par le descripteur ouvert sans suivre de lien (jamais `open()` sur le chemin).
         self.ecrire("demo", " " * 70000)
-        with mock.patch.object(Path, "read_text", side_effect=AssertionError), \
-                mock.patch.object(Path, "read_bytes", side_effect=AssertionError):
-            with self.assertRaises(ValueError):
+        lectures = []
+        vrai_read = sr.os.read
+
+        def espion(fd, n):
+            lectures.append(n)
+            return vrai_read(fd, n)
+        with mock.patch("builtins.open", side_effect=AssertionError("open() sur le chemin")), \
+                mock.patch.object(sr.os, "read", espion):
+            with self.assertRaises(ValueError) as c:
                 sr.charger(str(self.projet), "demo")
+        self.assertIn("trop grosse", str(c.exception))
+        self.assertEqual(lectures, [])
+        self.ecrire("demo", recette_json())
+        with mock.patch("builtins.open", side_effect=AssertionError("open() sur le chemin")), \
+                mock.patch.object(sr.os, "read", espion):
+            self.assertEqual(sr.charger(str(self.projet), "demo").nom, "demo")
+        self.assertTrue(lectures)
+        self.assertTrue(all(n <= sr.TAILLE_MAX + 1 for n in lectures), lectures)
+
+    def test_ce_qui_est_ouvert_doit_etre_un_fichier_ordinaire(self):
+        # Fichier remplacé entre le contrôle du chemin et l'ouverture (tube, dossier) : fstat après ouverture le refuse.
+        self.ecrire("demo", recette_json())
+        dossier = Path(self._t.name) / "un-dossier"
+        dossier.mkdir()
+        with mock.patch.object(sr.os, "fstat", side_effect=lambda fd: sr.os.stat(dossier)):
+            with self.assertRaises(ValueError) as c:
+                sr.charger(str(self.projet), "demo")
+        self.assertIn("pas un fichier", str(c.exception))
 
     def test_reseau_vrai_refuse(self):
         self.refuse(recette_json(reseau=True), motif="réseau")
@@ -186,6 +212,28 @@ class TestExecuter(Base):
                 res = sr.executer(r, ID, dossier=self.projet)
                 self.assertEqual(res["etapes_faites"], 0)
                 self.assertIsNotNone(res["echec"])
+
+    def test_destination_des_captures_transmise_au_relais(self):
+        # M1 : les captures vont dans la destination donnée (le projet), jamais sous ~/MyIAFactory/taches.
+        r = self.recette(2)
+        dest = Path(self._t.name) / "projet" / ".factory" / "serveur" / ID
+        with mock.patch.object(sr.serveur_tache, "verbe",
+                               return_value={"ok": True, "verbe": "attendre", "code": 0, "detail": "ok"}) as v:
+            sr.executer(r, ID, dossier=self.projet, destination=dest)
+        self.assertEqual([c.kwargs["destination"] for c in v.call_args_list], [dest, dest])
+
+    def test_echec_masque_puis_tronque(self):
+        # Un secret à cheval sur la coupe à 300 caractères n'en laisse jamais un début lisible.
+        secret = "SECRET-RECETTE-0123456789"
+        (self.projet / "ovh.json").write_text(json.dumps({"point": "ovh-eu", "cle_app": "APP-RECETTE-XYZ",
+                                                          "secret": secret, "consommateur": "CONSO-RECETTE-XYZ",
+                                                          "serveur": "ns1"}), encoding="utf-8")
+        r = self.recette(1)
+        sale = {"ok": False, "verbe": "attendre", "code": 4, "detail": "x" * 290 + secret}
+        with mock.patch.object(sr.serveur_tache, "verbe", return_value=sale):
+            res = sr.executer(r, ID, dossier=self.projet)
+        self.assertNotIn(secret[:8], res["echec"]["reponse"])
+        self.assertLessEqual(len(res["echec"]["reponse"]), 300)
 
     def test_refus_du_lanceur_est_un_echec(self):
         r = self.recette(2)

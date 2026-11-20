@@ -41,6 +41,9 @@ class FauxMoteur:
         self.etat_arret = "terminee"
         self.leve = None
         self.retour_lancer = None
+        self.echec_rapatrie = "jamais appelé"
+        self.leve_verbe = None          # exception levée par `verbe` (fin du pont : best effort)
+        self.plantage_a_l_arret = False  # le pont `arreter` relève un plantage (plantage.txt) : le statut le dit
 
     def lancer(self, demande, apk, dossier=None, ssh=None, **kw):
         self.appels.append(("lancer", demande, len(apk)))
@@ -58,8 +61,9 @@ class FauxMoteur:
         self.appels.append(("arreter", ident, fin))
         return {"id": ident, "etat": self.etat_arret, "serveur_id": "s1"}
 
-    def rapatrier(self, ident, destination, dossier=None, ssh=None):
+    def rapatrier(self, ident, destination, dossier=None, ssh=None, echec=None):
         self.appels.append(("rapatrier", ident, str(destination)))
+        self.echec_rapatrie = echec
         return self.manifeste or {"id": ident, "statut": "ok", "captures": [], "journal": None, "rapport": None,
                                   "etat": "terminee", "raison": ""}
 
@@ -67,17 +71,23 @@ class FauxMoteur:
         self.appels.append(("verbe", ident, nom, tuple(arguments), str(destination)))
         if self.leve:
             raise self.leve
+        if self.leve_verbe:
+            raise self.leve_verbe
+        if nom == "arreter" and self.plantage_a_l_arret:
+            self.manifeste = {"id": ident, "statut": "plantage", "captures": [], "etat": "terminee", "raison": ""}
         return self.reponse_verbe or {"ok": True, "verbe": nom, "code": 0, "detail": "fait"}
 
 
 class FauxRecette:
     def __init__(self, echec=None, leve=None):
         self.echec, self.executees, self.leve = echec, [], leve
+        self.destinations = []
 
     charger = staticmethod(serveur_recette.charger)
 
-    def executer(self, recette, ident, dossier=None, ssh=None):
+    def executer(self, recette, ident, dossier=None, ssh=None, destination=None):
         self.executees.append((recette.nom, ident))
+        self.destinations.append(destination)
         if self.leve:
             raise self.leve
         return {"etapes_faites": len(recette.etapes), "echec": self.echec}
@@ -144,22 +154,113 @@ class TestLancer(Base):
                                           "--projet", str(self.projet), "--attendre")
         self.assertEqual((code, erreur), (0, ""), sortie)
         self.assertEqual(self.recette.executees, [("demo", self.moteur.appels[0][1].id)])
-        self.assertEqual(self.noms(), ["lancer", "arreter", "rapatrier"])
-        self.assertTrue(self.moteur.appels[1][2])            # succès : arrêt avec fin=True
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertTrue(self.arrets()[0][2])                 # succès : arrêt avec fin=True
         ident = self.recette.executees[0][1]
-        attendu = self.projet / ".factory" / "serveur" / ident
-        self.assertEqual(Path(self.moteur.appels[2][2]), attendu)
+        attendu = (self.projet / ".factory" / "serveur" / ident).resolve()
+        self.assertEqual(Path(self.moteur.appels[-1][2]), attendu)
         manifeste = json.loads(sortie)
         self.assertEqual(manifeste["statut"], "ok")
+        self.assertIsNone(self.moteur.echec_rapatrie)
+
+    def arrets(self):
+        return [a for a in self.moteur.appels if a[0] == "arreter"]
 
     def test_lancer_scenario_echec_de_recette_arrete_sans_fin_et_sort_1(self):
-        recette = FauxRecette(echec={"etape": 1, "verbe": "capturer", "code": 4, "reponse": "x"})
+        echec = {"etape": 1, "verbe": "capturer", "code": 4, "reponse": "x"}
+        recette = FauxRecette(echec=echec)
         code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
                                      "--projet", str(self.projet), "--attendre", recette=recette)
         self.assertEqual(code, 1)
-        self.assertFalse(self.moteur.appels[1][2])
+        self.assertFalse(self.arrets()[0][2])
         self.assertIn("capturer", sortie)
         self.assertIn("rapatrier", self.noms())
+        self.assertEqual(self.moteur.echec_rapatrie, echec)     # le rapport sur disque dira l'échec (pas « ok »)
+
+    def test_scenario_finit_toujours_par_journal_puis_arreter_du_pont(self):
+        # I1 : le lanceur relève lui-même le journal puis arrête l'émulateur par le pont (détection du plantage),
+        # AVANT d'arrêter la tâche, même si la recette ne le fait pas.
+        self.moteur.plantage_a_l_arret = True
+        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre")
+        verbes = [a[2] for a in self.moteur.appels if a[0] == "verbe"]
+        self.assertEqual(verbes, ["journal", "arreter"])
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
+        self.assertEqual(json.loads(sortie)["statut"], "plantage")
+        self.assertEqual(code, 1)
+
+    def test_les_verbes_de_fin_ne_masquent_jamais_le_resultat(self):
+        for exc in (RuntimeError("pont muet"), ValueError("refus")):
+            with self.subTest(exc=type(exc).__name__):
+                self.moteur.appels.clear()
+                self.moteur.leve_verbe = exc
+                code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario",
+                                             "demo", "--projet", str(self.projet), "--attendre")
+                self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])   # chacun tenté
+                self.assertEqual((code, json.loads(sortie)["statut"]), (0, "ok"))
+
+    def test_la_recette_capture_dans_le_projet(self):
+        # M1 : les captures de la recette vont dans <projet>/.factory/serveur/<id>/, jamais sous ~/MyIAFactory/taches.
+        self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                   "--projet", str(self.projet), "--attendre")
+        ident = self.recette.executees[0][1]
+        self.assertEqual(Path(self.recette.destinations[0]), (self.projet / ".factory" / "serveur" / ident).resolve())
+
+    def test_interruption_pendant_le_lancement_imprime_l_id_et_arrete(self):
+        # T7 : Ctrl-C (ou une panne) DANS moteur.lancer : l'identifiant est connu, la tâche est arrêtée.
+        for exc in (KeyboardInterrupt(), RuntimeError("imprévu")):
+            with self.subTest(exc=type(exc).__name__):
+                self.moteur.appels.clear()
+                self.moteur.leve = exc
+                code, sortie, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote",
+                                                  "--projet", str(self.projet))
+                self.assertEqual(code, 1)
+                ident = self.moteur.appels[0][1].id
+                self.assertEqual(json.loads(sortie)["id"], ident)
+                self.assertEqual([a[:3] for a in self.arrets()], [("arreter", ident, False)])
+                self.assertNotIn("Traceback", sortie + erreur)
+
+    def test_interruption_message_honnete_quand_l_arret_n_est_pas_confirme(self):
+        self.moteur.etat_arret = "en_cours"
+        self.moteur.leve = KeyboardInterrupt()
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(code, 1)
+        self.assertNotIn("a été arrêtée", erreur)
+        self.assertIn("pas confirmé", erreur)
+        self.moteur.leve = None
+        self.moteur.appels.clear()
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre", recette=FauxRecette(leve=KeyboardInterrupt()))
+        self.assertEqual(code, 1)
+        self.assertNotIn("a été arrêtée", erreur)
+        self.assertIn("pas confirmé", erreur)
+        self.moteur.etat_arret = "arretee"
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre", recette=FauxRecette(leve=KeyboardInterrupt()))
+        self.assertIn("a été arrêtée", erreur)
+
+    def test_lecture_de_l_apk_sans_tampon_demesure(self):
+        # M8 : lire l'APK n'alloue que sa taille (et non APK_MAX_OCTETS, 200 Mo, à chaque lancement).
+        import tracemalloc
+        gros = Path(self._tmp.name) / "gros-ok.apk"
+        with open(gros, "wb") as f:
+            f.write(b"PK\x03\x04")
+            f.truncate(8 * 1024 * 1024)
+        tracemalloc.start()
+        try:
+            tracemalloc.reset_peak()
+            donnees = cli._lire_apk(str(gros), serveur_tache)
+            _actuel, pic = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(len(donnees), 8 * 1024 * 1024)
+        self.assertLess(pic, 2 * len(donnees))
+
+    def test_refus_avant_envoi_n_arrete_rien(self):
+        self.moteur.leve = serveur_tache.RefusLancement("Aucun serveur prêt")
+        code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual((code, sortie), (1, ""))
+        self.assertEqual(self.arrets(), [])
 
     def test_lancer_scenario_statut_non_ok_sort_1(self):
         self.moteur.manifeste = {"id": ID, "statut": "plantage", "captures": []}
@@ -187,7 +288,7 @@ class TestLancer(Base):
         code, sortie, _ = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
                                      "--projet", str(self.projet), "--attendre")
         self.assertEqual(len(self.recette.executees), 1)
-        self.assertEqual(self.noms(), ["lancer", "arreter", "rapatrier"])
+        self.assertEqual(self.noms(), ["lancer", "verbe", "verbe", "arreter", "rapatrier"])
         self.assertEqual(code, 0)
         self.assertIn("Index des tâches non mis à jour", json.loads(sortie)["avertissement"])
 
@@ -447,7 +548,7 @@ class TestTacheCommandes(Base):
     def test_rapatrier_destination_par_defaut_et_refus_hors_projet(self):
         code, _, _ = self.tache("rapatrier", ID, "--projet", str(self.projet))
         self.assertEqual(code, 0)
-        self.assertEqual(Path(self.moteur.appels[-1][2]), self.projet / ".factory" / "serveur" / ID)
+        self.assertEqual(Path(self.moteur.appels[-1][2]), (self.projet / ".factory" / "serveur" / ID).resolve())
         autre = Path(self._tmp.name) / "ailleurs"
         autre.mkdir()
         avant = len(self.moteur.appels)
@@ -546,6 +647,9 @@ class TestOutil(Base):
                 self.assertEqual(self.moteur.appels, [])      # le moteur n'a même pas été appelé
 
     def test_verbe_hostile_avec_le_vrai_moteur_aucun_ssh(self):
+        # Un serveur prêt est déclaré : sans lui, `appels == []` ne prouverait rien (le moteur s'arrêterait avant SSH).
+        from tests.test_serveur_tache import declarer
+        declarer(self.d)
         ssh = SshEnregistre()
         for args, message in self.HOSTILES:
             with self.subTest(args=args):
@@ -553,6 +657,8 @@ class TestOutil(Base):
                 self.assertEqual((code, sortie), (1, ""))
                 self.assertIn(message, erreur)
         self.assertEqual(ssh.appels, [])
+        self.lancer_reel(ssh, "serveur-outil", ID, "toucher", "10", "20")     # témoin : un verbe valide, lui, se connecte
+        self.assertTrue(ssh.appels)
 
     def test_validation_avant_la_recherche_du_serveur(self):
         # dossier sans serveur : un verbe valide s'arrête sur « Aucun serveur », un verbe refusé AVANT (autre message)
@@ -577,7 +683,36 @@ class TestOutil(Base):
         code, sortie, _ = self.outil(ID, "capturer", "ecran", "--projet", str(self.projet))
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(sortie)["capture"], local)       # toute la sortie est UN objet JSON
-        self.assertEqual(Path(self.moteur.appels[0][4]), self.projet / ".factory" / "serveur" / ID)
+        self.assertEqual(Path(self.moteur.appels[0][4]), (self.projet / ".factory" / "serveur" / ID).resolve())
+
+    def jonction(self, lien, cible):
+        try:
+            if os.name == "nt":
+                r = subprocess.run(["cmd", "/c", "mklink", "/J", str(lien), str(cible)], capture_output=True)
+                if r.returncode != 0:
+                    self.skipTest("jonction indisponible")
+            else:
+                lien.symlink_to(cible, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("lien indisponible")
+
+    def test_destination_calculee_pour_capturer_seulement(self):
+        # T7 : une jonction .factory qui sort du projet ne bloque que capturer (le seul verbe qui écrit), pas les autres.
+        dehors = Path(self._tmp.name) / "dehors"
+        dehors.mkdir()
+        autre = Path(self._tmp.name) / "projet2"
+        autre.mkdir()
+        self.jonction(autre / ".factory", dehors)
+        code, _, erreur = self.outil(ID, "toucher", "10", "20", "--projet", str(autre))
+        self.assertEqual(code, 0, erreur)
+        self.assertEqual(self.moteur.appels[0][:5], ("verbe", ID, "toucher", ("10", "20"), "None"))
+        self.moteur.appels.clear()
+        code, _, erreur = self.outil(ID, "capturer", "ecran", "--projet", str(autre))
+        self.assertEqual(code, 1)
+        self.assertIn("sous-dossier", erreur)
+        self.assertEqual(self.moteur.appels, [])
+        code, _, _ = self.outil(ID, "journal", "--projet", str(Path(self._tmp.name) / "absent"))
+        self.assertEqual(code, 0)                                    # projet sans objet hors capturer
 
     def test_la_reponse_du_pont_est_une_donnee(self):
         self.moteur.reponse_verbe = {"ok": True, "verbe": "journal", "code": 0,

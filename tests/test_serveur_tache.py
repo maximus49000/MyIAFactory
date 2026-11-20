@@ -430,6 +430,15 @@ class TestIndex(unittest.TestCase):
         self.assertEqual((self.dossier / "taches.json").read_bytes(), avant)
         self.assertEqual(st.INDEX_MAX_OCTETS, 8 * 1024 * 1024)
 
+    def test_index_non_utf8_dit_illisible_et_non_demesure(self):
+        (self.dossier / "taches.json").write_bytes(b'{"a": "\xff\xfe"}')
+        self.assertEqual(self.index.lire(), {})
+        with self.assertRaises(st.ErreurIndex) as c:
+            self.index.enregistrer(tid(1), {"etat": "en_cours"})
+        self.assertIn("UTF-8", str(c.exception))
+        self.assertNotIn("démesuré", str(c.exception))
+        self.assertEqual((self.dossier / "taches.json").read_bytes(), b'{"a": "\xff\xfe"}')
+
     def test_entrees_non_dict_ignorees(self):
         (self.dossier / "taches.json").write_text('{"a": 5, "b": {"etat": "en_cours"}}', encoding="utf-8")
         self.assertEqual(self.index.lire(), {"b": {"etat": "en_cours"}})
@@ -764,6 +773,41 @@ class TestLancer(BaseLanceur):
                     self.assertIsNone(r)
                 else:
                     self.assertIn(attendu, r)
+
+    def test_depot_de_l_enveloppe_par_la_variante_silencieuse(self):
+        # Une bannière de sshd ne doit pas rendre chaque dépôt « douteux » : LogLevel=ERROR sur ce seul appel.
+        serveur = st.choisir_serveur(self.dossier)
+        appels = []
+
+        class Ssh:
+            def executer_octets(self, *a, **k):
+                appels.append("commun")
+                return 0, b"", "Bienvenue sur ce serveur (bannière)\n"
+
+            def executer_octets_silencieux(self, *a, **k):
+                appels.append("silencieux")
+                return 0, b"", ""
+        self.assertIsNone(st._deposer_enveloppe(serveur, Ssh()))
+        self.assertEqual(appels, ["silencieux"])
+
+    def test_messages_image_perimee_et_empreinte_locale_illisible(self):
+        with mock.patch.object(st.serveur_installation, "empreinte_etape", side_effect=OSError("absent")):
+            with self.assertRaises(st.RefusLancement) as r:
+                self.lancer()
+        self.assertIn("empreinte locale", str(r.exception))
+        self.assertNotIn("périmée", str(r.exception))
+        self.srv.empreinte = "ubuntu=20.04;jdk=17;fichiers=0000000000000000"
+        with self.assertRaises(st.RefusLancement) as r:
+            self.lancer()
+        self.assertIn("à mettre à jour", str(r.exception))
+        (self.dossier / "serveurs-etat.json").write_text(json.dumps({"ovh1": {"capacites": {
+            "android-emulateur": {"statut": "presente"},
+            "emulateur-image": {"statut": "a_faire",
+                                "detail": "À mettre à jour : les fichiers déposés sur le serveur sont périmés."}},
+            "installation": {"en_cours": False}}}), encoding="utf-8")
+        with self.assertRaises(st.RefusLancement) as r:
+            st.choisir_serveur(self.dossier)
+        self.assertIn("emulateur-image périmée (à mettre à jour)", str(r.exception))
 
     def test_archive_sans_copie_superflue(self):
         # M8 : mêmes octets qu'une archive tarfile, et une seule copie de l'APK en mémoire pendant la construction.

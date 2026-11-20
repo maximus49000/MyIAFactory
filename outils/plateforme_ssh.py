@@ -97,19 +97,26 @@ def _lancer_octets(runner, args, delai, entree=None):
                         "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
 
 
-def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):
+def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subprocess.run, _plus=()):
     """Comme `executer`, mais entrée et sortie standard restent des octets ; renvoie (code, sortie octets, erreur texte).
 
     Un dépassement de délai donne le code 124.
     """
     _verifier_hote(hote)
-    args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
+    args = ["ssh", *_options(cle), *_plus, "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
     try:
         r = _lancer_octets(runner, args, delai, entree)
     except subprocess.TimeoutExpired:
         return 124, b"", f"délai dépassé ({delai} s)"
     sortie = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or "").encode("utf-8")
     return r.returncode, sortie, _texte(r.stderr)
+
+
+def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):
+    """`executer_octets` avec `-o LogLevel=ERROR` : ni bannière de sshd ni avertissement de première connexion (niveau
+    INFO) sur la sortie d'erreur, qui ne porte plus que les messages du serveur et les vraies erreurs. Réservé aux appels
+    qui jugent la sortie d'erreur (dépôt de l'enveloppe des tâches) ; les autres appels gardent les options communes."""
+    return executer_octets(hote, commande, cle, entree=entree, delai=delai, runner=runner, _plus=("-o", "LogLevel=ERROR"))
 
 
 def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=time.sleep):

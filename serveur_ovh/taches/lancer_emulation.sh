@@ -125,18 +125,32 @@ debut_processus() {   # debut_processus <pid> : date de démarrage du processus 
   printf '%s' "${20}"
 }
 
-etat_docker() {   # 0 vivant, 1 absent ou arrêté, 2 docker ne répond pas
-  local sortie r
-  sortie=$(dk 20 inspect -f '{{.State.Running}} {{.State.Pid}}' "tache-$ID" 2>&1); r=$?
+# Seule la SORTIE STANDARD de docker inspect est analysée : un avertissement sur la sortie d'erreur (« sudo: unable to
+# resolve host », avertissement du client docker) avec le code 0 ne doit jamais faire passer un conteneur vivant pour
+# disparu. La sortie d'erreur va dans un fichier privé du dossier de la tâche (retiré aussitôt) et n'est lue que pour
+# « No such » (conteneur absent). Une réponse qui n'a pas exactement la forme « true|false <pid> » = on ne sait pas (2).
+etat_docker() {   # 0 vivant, 1 absent ou arrêté, 2 docker ne répond pas ou réponse illisible
+  local sortie r erreurs fichier="$DOSSIER/.inspect.$$.err" p
+  sortie=$(dk 20 inspect -f '{{.State.Running}} {{.State.Pid}}' "tache-$ID" 2>"$fichier"); r=$?
+  erreurs=$(head -c 4096 -- "$fichier" 2>/dev/null)
+  rm -f -- "$fichier"
   PID_CONTENEUR=""; DEBUT_CONTENEUR=""
   if [ "$r" = 0 ]; then
-    set -- $sortie
-    [ "${1:-}" = true ] || return 1
-    if [[ ${2:-} =~ ^[1-9][0-9]{0,9}$ ]] && DEBUT_CONTENEUR=$(debut_processus "$2"); then PID_CONTENEUR="$2"; fi
+    [[ $sortie =~ ^(true|false)\ ([0-9]+)$ ]] || return 2
+    [ "${BASH_REMATCH[1]}" = true ] || return 1
+    p="${BASH_REMATCH[2]}"
+    if [[ $p =~ ^[1-9][0-9]{0,9}$ ]] && DEBUT_CONTENEUR=$(debut_processus "$p"); then PID_CONTENEUR="$p"; fi
     return 0
   fi
-  case "$sortie" in *"No such"*) return 1 ;; esac
+  case "$erreurs" in *"No such"*) return 1 ;; esac
   return 2
+}
+
+etat_docker_sur() {   # comme etat_docker, avec un second essai si la première réponse est illisible ou absente (2)
+  local r
+  etat_docker; r=$?
+  if [ "$r" = 2 ]; then sleep 1; etat_docker; r=$?; fi
+  return "$r"
 }
 
 conteneur_vivant() {   # 0 vivant, 1 absent, 2 docker ne répond pas
@@ -145,11 +159,11 @@ conteneur_vivant() {   # 0 vivant, 1 absent, 2 docker ne répond pas
   etat_docker
 }
 
-arreter_conteneur() {   # 0 si le conteneur n'existe plus (constaté par docker, jamais par /proc)
+arreter_conteneur() {   # 0 si le conteneur n'existe plus : constaté par une réponse NETTE de docker (jamais par /proc)
   local r
   dk 60 stop -t 10 "tache-$ID" >/dev/null 2>&1 || dk 30 kill "tache-$ID" >/dev/null 2>&1
-  etat_docker; r=$?
-  if [ "$r" = 0 ]; then dk 30 rm -f "tache-$ID" >/dev/null 2>&1; etat_docker; r=$?; fi
+  etat_docker_sur; r=$?
+  if [ "$r" != 1 ]; then dk 30 rm -f "tache-$ID" >/dev/null 2>&1; etat_docker_sur; r=$?; fi
   [ "$r" = 1 ]
 }
 
@@ -275,7 +289,11 @@ exec 8>> "$TACHES/.creneau-emulation" || { ecrire_etat echouee erreur "" "$(main
 trap '' HUP                         # la fin de la session SSH ne doit jamais interrompre l'écriture de l'état
 # Un `arreter` du lanceur a pu passer pendant l'attente du créneau (il retire l'APK puis écrit arretee) : un état FINAL est
 # alors honoré, jamais réécrit (ni en_attente, ni en_cours) ; la tâche ne démarre jamais sans son APK. Relu sous le créneau,
-# juste avant chaque écriture d'état.
+# juste avant chaque écriture d'état. RÉSIDUEL CONNU (laissé ouvert) : entre honorer_final et ecrire_etat en_cours (moins
+# d'une milliseconde), un _ARRETER du lanceur, qui ne prend pas le créneau, peut encore retirer l'APK et écrire arretee ;
+# son second contrôle voit alors en_cours et n'écrase rien, et le lanceur, qui tient l'état rendu par arreter pour seul
+# juge, rappelle arreter (fichier arret) : la tâche démarrée sans APK est arrêtée au tour suivant. Le fermer demanderait un
+# verrou par tâche partagé par l'enveloppe et _ARRETER.
 honorer_final() {
   if grep -qE '"etat": "(terminee|arretee|echouee)"' "$DOSSIER/etat.json" 2>/dev/null; then
     liberer_creneau

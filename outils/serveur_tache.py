@@ -198,13 +198,16 @@ class Index:
         return {k: v for k, v in donnees.items() if isinstance(v, dict)} if isinstance(donnees, dict) else {}
 
     def _contenu(self):
-        """Texte de l'index ; `ValueError` s'il dépasse INDEX_MAX_OCTETS (taille vérifiée avant la lecture, puis sur
-        ce qui a été lu)."""
+        """Texte de l'index ; `ValueError` (message français) s'il dépasse INDEX_MAX_OCTETS (taille vérifiée avant la
+        lecture, puis sur ce qui a été lu) ou s'il n'est pas en UTF-8."""
         if self.chemin.stat().st_size > INDEX_MAX_OCTETS:
-            raise ValueError("Index des tâches démesuré.")
-        contenu = self.chemin.read_text(encoding="utf-8-sig")
+            raise ValueError(f"Index des tâches démesuré (plus de {INDEX_MAX_OCTETS // (1024 * 1024)} Mo)")
+        try:
+            contenu = self.chemin.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            raise ValueError("Index des tâches illisible (pas en UTF-8)") from None
         if len(contenu) > INDEX_MAX_OCTETS:
-            raise ValueError("Index des tâches démesuré.")
+            raise ValueError(f"Index des tâches démesuré (plus de {INDEX_MAX_OCTETS // (1024 * 1024)} Mo)")
         return contenu
 
     def lire(self):
@@ -221,8 +224,8 @@ class Index:
             return {}
         except OSError as e:
             raise ErreurIndex(f"Index des tâches illisible ({type(e).__name__}) : rien n'a été modifié.") from e
-        except ValueError as e:      # démesuré : jamais réécrit à partir de rien (il serait vidé)
-            raise ErreurIndex(f"{e} (plus de {INDEX_MAX_OCTETS // (1024 * 1024)} Mo) : rien n'a été modifié.") from e
+        except ValueError as e:      # démesuré ou pas en UTF-8 : jamais réécrit à partir de rien (il serait vidé)
+            raise ErreurIndex(f"{e} : rien n'a été modifié.") from e
         try:
             return self._analyser(contenu)
         except (ValueError, RecursionError):
@@ -565,8 +568,12 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER):
         elif any(v == "inconnue" for v in statuts.values()):
             raisons.append(f"{s.id} : serveur injoignable ou état inconnu à la dernière sonde")
         else:
-            raisons.append(f"{s.id} : capacité(s) absente(s) : "
-                           + ", ".join(c for c, v in statuts.items() if v not in STATUTS_PRETS))
+            def libelle(c):     # une capacité notée périmée par l'installation (empreinte) est dite « à mettre à jour »
+                detail = caps[c].get("detail") if isinstance(caps.get(c), dict) else None
+                detail = detail if isinstance(detail, str) else ""
+                return f"{c} périmée (à mettre à jour)" if ("mettre à jour" in detail or "périm" in detail) else c
+            raisons.append(f"{s.id} : capacité(s) absente(s) ou périmée(s) : "
+                           + ", ".join(libelle(c) for c, v in statuts.items() if v not in STATUTS_PRETS))
     raise RefusLancement("Aucun serveur prêt pour l'émulation (" + " ; ".join(raisons) + ").")
 
 
@@ -591,11 +598,12 @@ def _bash(serveur, ssh, script, delai=60):
     return code, sortie if isinstance(sortie, str) else "", erreur if isinstance(erreur, str) else ""
 
 
-def _octets(serveur, ssh, commande, entree, delai):
-    """(code, sortie octets, erreur) : octets intacts dans les deux sens."""
+def _octets(serveur, ssh, commande, entree, delai, silencieux=False):
+    """(code, sortie octets, erreur) : octets intacts dans les deux sens. `silencieux` : variante sans bannière ni
+    avertissement de ssh sur la sortie d'erreur (`executer_octets_silencieux`), quand l'appelant juge cette sortie."""
+    appel = (getattr(ssh, "executer_octets_silencieux", None) if silencieux else None) or ssh.executer_octets
     try:
-        code, sortie, erreur = ssh.executer_octets(serveur_etat.cible(serveur), commande, serveur.cle, entree=entree,
-                                                   delai=delai)
+        code, sortie, erreur = appel(serveur_etat.cible(serveur), commande, serveur.cle, entree=entree, delai=delai)
     except Exception as e:  # noqa: BLE001
         return 255, b"", f"{type(e).__name__} : {e}"
     return code, sortie if isinstance(sortie, bytes) else b"", erreur if isinstance(erreur, str) else ""
@@ -927,11 +935,12 @@ def _deposer_enveloppe(serveur, ssh):
     if source.is_symlink() or not source.is_file():
         return f"Fichier du dépôt introuvable : serveur_ovh/{ENVELOPPE}."
     donnees = _archive([(ENVELOPPE, source.read_bytes(), 0o755)])
-    code, _o, erreur = _octets(serveur, ssh, _DEPOSER, donnees, delai=120)
+    code, _o, erreur = _octets(serveur, ssh, _DEPOSER, donnees, delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe sur le serveur impossible (code {code}) : {_court(erreur, 200)}"
-    # Code 0 mais un message (tar, mv, mkdir...) sur la sortie d'erreur : dépôt douteux. Seul l'avertissement de ssh à
-    # la première connexion (« Warning: Permanently added ... », StrictHostKeyChecking=accept-new) est admis.
+    # Code 0 mais un message (tar, mv, mkdir...) sur la sortie d'erreur : dépôt douteux. LogLevel=ERROR (variante
+    # silencieuse) écarte la bannière de sshd ; l'avertissement de première connexion (« Warning: Permanently added ... »,
+    # StrictHostKeyChecking=accept-new) reste admis pour un ssh qui ne connaîtrait pas cette variante.
     messages = [ligne for ligne in erreur.splitlines()
                 if ligne.strip() and not ligne.strip().startswith("Warning: Permanently added ")]
     if messages:
@@ -948,12 +957,15 @@ def _verifier_image(serveur, ssh):
     except (OSError, ValueError, KeyError):
         attendue = None
     code, sortie, _e = _bash(serveur, ssh, _IMAGE, delai=20)
+    if attendue is None:
+        raise RefusLancement("L'empreinte locale de l'image de l'émulateur est illisible (fichiers du dépôt serveur_ovh "
+                             "absents ou illisibles sur ce poste) : lancement refusé, rien n'a été envoyé.")
     if code in INJOIGNABLE:
         return
-    if attendue is None or code != 0 or sortie.strip() != attendue:
-        raise RefusLancement(f"L'image de l'émulateur du serveur {serveur.id} est périmée (les fichiers du dépôt ont "
-                             "changé depuis son installation) : relancez l'installation de « emulateur-image » dans le "
-                             "bureau (Serveurs).")
+    if code != 0 or sortie.strip() != attendue:
+        raise RefusLancement(f"L'image de l'émulateur du serveur {serveur.id} est périmée, à mettre à jour (les fichiers "
+                             "du dépôt ont changé depuis son installation) : relancez l'installation de "
+                             "« emulateur-image » dans le bureau (Serveurs).")
 
 
 def _apk_sur(apk):
@@ -1058,6 +1070,7 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
 # --- arrêter
 
 RAISON_ARRET_AVANT_DEMARRAGE = "Arrêtée avant son démarrage (créneau occupé) : rien n'a tourné, APK retiré."
+RAISON_AUCUNE_TACHE = "Aucune tâche de cet identifiant sur le serveur."     # dossier absent : rien n'a été envoyé
 
 def arreter(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, fin=False):
     """Tâche en cours : demande l'arrêt (fichier `arret` : « fin » si `fin is True`, fin normale d'un scénario ; « arret »
@@ -1079,8 +1092,7 @@ def arreter(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, fin=Fal
             return _masque(_inconnu(ident, f"Serveur injoignable ou délai dépassé : {_court(erreur, 200)}",
                                     serveur_id=serveur.id), dossier)
         if code == 3:
-            return _masque(_inconnu(ident, "Aucune tâche de cet identifiant sur le serveur.", serveur_id=serveur.id),
-                           dossier)
+            return _masque(_inconnu(ident, RAISON_AUCUNE_TACHE, serveur_id=serveur.id), dossier)
         return _masque(_etat(ident, dossier, ssh), dossier)
     except Exception as e:  # noqa: BLE001
         return _inconnu(ident, f"Arrêt impossible ({type(e).__name__}).")

@@ -109,6 +109,20 @@ class TestExecuterOctets(unittest.TestCase):
         self.assertEqual(args, r1.appels[0][0])
         self.assertEqual(args[args.index(HOTE) - 1], "--")
         self.assertIs(r2.appels[0][1]["stdin"], subprocess.DEVNULL)
+        self.assertNotIn("LogLevel=ERROR", args)                        # l'appel commun ne change pas
+
+    def test_variante_silencieuse_sans_banniere_ni_avertissement(self):
+        # Le lanceur de tâches lit la sortie d'erreur d'un dépôt : la bannière de sshd et l'avertissement de première
+        # connexion (niveau INFO) n'y doivent pas apparaître. Même commande, mêmes options, plus LogLevel=ERROR.
+        r1, r2 = Runner(), Runner()
+        plateforme_ssh.executer_octets(HOTE, "true", Path("cle"), entree=b"x", runner=r1)
+        plateforme_ssh.executer_octets_silencieux(HOTE, "true", Path("cle"), entree=b"x", runner=r2)
+        a1, a2 = r1.appels[0][0], r2.appels[0][0]
+        self.assertEqual(a2[a2.index("LogLevel=ERROR") - 1], "-o")
+        self.assertLess(a2.index("LogLevel=ERROR"), a2.index("--"))
+        self.assertEqual([x for i, x in enumerate(a2) if not (x == "LogLevel=ERROR" or
+                                                              (x == "-o" and a2[i + 1] == "LogLevel=ERROR"))], a1)
+        self.assertEqual(r2.appels[0][1]["input"], b"x")
 
 
 def _introuvable(args, **kw):

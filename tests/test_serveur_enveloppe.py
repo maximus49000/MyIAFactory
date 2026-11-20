@@ -26,6 +26,8 @@ case "$1" in
       [ -n "${FAUX_ARRET_AU_PS:-}" ] && [ "$n" = 1 ] && echo > "$FAUX_ARRET_AU_PS"
       if [ "$1" = inspect ]; then
         [ -n "${FAUX_DOCKER_MUET:-}" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
+        [ -n "${FAUX_INSPECT_AVERTIT:-}" ] && echo "sudo: unable to resolve host serveur: Name or service not known" >&2
+        [ -n "${FAUX_INSPECT_ILLISIBLE:-}" ] && { echo "WARNING: something odd"; exit 0; }
         if [ -e "$ET/vivant" ]; then
           p=999999; [ -n "${FAUX_PID_VEILLEUR:-}" ] && p=$(cat "$FAUX_DOSSIER/veilleur.pid")
           echo "true $p"; exit 0
@@ -484,6 +486,35 @@ class TestEnveloppe(unittest.TestCase):
             self.assertEqual((f["etat"], f["statut"]), ("arretee", "ok"))
         code = SCRIPT.read_text(encoding="utf-8")
         self.assertIn('SONDE="${ENVELOPPE_SONDE_S:-5}"', code)
+
+    def test_un_avertissement_sur_stderr_ne_fait_pas_disparaitre_un_conteneur_vivant(self):
+        # `sudo: unable to resolve host` (code 0) : seule la sortie standard est lue ; le conteneur reste vivant.
+        with Banc(FAUX_INSPECT_AVERTIT="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            time.sleep(2)
+            self.assertEqual(b.etat()["etat"], "en_cours", b.journal)
+            self.assertGreaterEqual(len(b.appels("docker inspect")), 2, b.journal)
+            b.arreter()
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("arretee", "ok"))   # « No such » vu sur stderr : arrêt constaté
+            self.assertEqual(list(b.dossier.glob(".inspect*")), [])          # le fichier d'erreur privé est retiré
+
+    def test_arret_confirme_seulement_par_une_reponse_nette(self):
+        # docker stop échoue, inspect répond « true <pid> » avec un avertissement : jamais pris pour « disparu ».
+        with Banc(FAUX_INSPECT_AVERTIT="1", FAUX_STOP_ECHEC="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            b.arreter()
+            f = b.attendre_final()
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+            self.assertIn("ne s'arrête pas", f["raison"])
+
+    def test_reponse_illisible_de_docker_n_est_jamais_un_conteneur_disparu(self):
+        with Banc(FAUX_INSPECT_ILLISIBLE="1") as b:
+            self.assertEqual(b.lancer().returncode, 0)
+            f = b.attendre_final(delai=40)
+            self.assertEqual((f["etat"], f["statut"]), ("echouee", "erreur"))
+            self.assertIn("Docker ne répond plus", f["raison"])
+            self.assertNotIn("arrêté de lui-même", f["raison"])
 
     def test_docker_muet_au_veilleur_finit_en_erreur(self):
         with Banc(FAUX_DOCKER_MUET="1") as b:

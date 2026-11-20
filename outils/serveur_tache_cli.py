@@ -228,14 +228,19 @@ def _terminer(moteur, ident, fin, d, kw, reessayer_inconnu=True):
     return r
 
 
-def _arret_apres_interruption(moteur, ident, d, kw):
-    """Arrête au mieux une tâche interrompue ; le message dit ce qui est vrai (arrêt confirmé ou non)."""
+def _arret_apres_interruption(moteur, ident, d, kw, reessayer_inconnu=True):
+    """Arrête au mieux une tâche interrompue ; le message dit ce qui est vrai (arrêt confirmé, rien d'envoyé, ou arrêt
+    non confirmé). `reessayer_inconnu=False` pendant le lancement : la tâche n'a peut-être jamais été envoyée (Ctrl-C
+    pendant la vérification de l'image), un « inconnu » n'est pas réessayé."""
     try:
-        r = _terminer(moteur, ident, False, d, kw)
+        r = _terminer(moteur, ident, False, d, kw, reessayer_inconnu=reessayer_inconnu)
     except BaseException:       # noqa: BLE001 - un second Ctrl-C ou une panne : l'arrêt n'est pas confirmé
         r = {}
     if isinstance(r, dict) and r.get("etat") in moteur.FINAUX:
         return f"Interrompu : la tâche a été arrêtée (rapatriez avec serveur-tache rapatrier {ident})."
+    aucune = getattr(moteur, "RAISON_AUCUNE_TACHE", None)
+    if isinstance(r, dict) and r.get("etat") == "inconnu" and aucune and r.get("raison") == aucune:
+        return f"Interrompu avant l'envoi : aucune tâche {ident} sur le serveur, rien ne tourne."
     etat = r.get("etat") if isinstance(r, dict) and isinstance(r.get("etat"), str) else "inconnu"
     return (f"Interrompu : l'arrêt de la tâche n'est pas confirmé (état : {etat[:20]}) ; arrêtez-la avec "
             f"« serveur-tache arreter {ident} ».")
@@ -272,6 +277,8 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,
                                       "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name})
+    if attendre:        # destination contrôlée AVANT l'envoi : une jonction sous .factory refuse sans prendre le créneau
+        _destination(projet, demande.id, None)
     try:
         r = moteur.lancer(demande, apk, dossier=d, **kw)
     except moteur.RefusLancement:
@@ -280,7 +287,7 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
         # Interrompu (Ctrl-C) ou panne PENDANT le lancement (l'APK est peut-être envoyé, la tâche en attente du
         # créneau) : l'identifiant est connu avant l'appel ; il est donné, et la tâche arrêtée au mieux.
         _afficher({"id": demande.id, "etat": "inconnu"}, d)
-        message = _arret_apres_interruption(moteur, demande.id, d, kw)
+        message = _arret_apres_interruption(moteur, demande.id, d, kw, reessayer_inconnu=False)
         if isinstance(e, KeyboardInterrupt):
             return _erreur(message, 1, d)
         raise

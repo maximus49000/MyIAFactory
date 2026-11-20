@@ -29,6 +29,7 @@ class FauxMoteur:
     MODES = serveur_tache.MODES
     VERBES = serveur_tache.VERBES
     FINAUX = serveur_tache.FINAUX
+    RAISON_AUCUNE_TACHE = serveur_tache.RAISON_AUCUNE_TACHE
     APK_MAX_OCTETS = serveur_tache.APK_MAX_OCTETS
     RefusLancement = serveur_tache.RefusLancement
     ErreurIndex = serveur_tache.ErreurIndex
@@ -255,6 +256,48 @@ class TestLancer(Base):
             tracemalloc.stop()
         self.assertEqual(len(donnees), 8 * 1024 * 1024)
         self.assertLess(pic, 2 * len(donnees))
+
+    def test_interruption_avant_tout_envoi_ne_reessaie_pas_et_le_dit(self):
+        # Ctrl-C pendant la vérification de l'image (rien envoyé) : un seul arreter, qui ne trouve rien, et un
+        # message honnête (pas « arrêt non confirmé » pour une tâche jamais envoyée).
+        appels = []
+
+        def arreter(ident, dossier=None, ssh=None, fin=False):
+            appels.append(ident)
+            return {"id": ident, "etat": "inconnu", "raison": serveur_tache.RAISON_AUCUNE_TACHE}
+        self.moteur.arreter = arreter
+        self.moteur.leve = KeyboardInterrupt()
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(appels), 1)
+        self.assertIn("rien ne tourne", erreur)
+        self.assertNotIn("pas confirmé", erreur)
+        appels.clear()                                     # serveur muet : un seul essai aussi, et « non confirmé »
+        self.moteur.arreter = lambda ident, **k: appels.append(ident) or {"id": ident, "etat": "inconnu",
+                                                                          "raison": "Serveur injoignable"}
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(len(appels), 1)
+        self.assertIn("pas confirmé", erreur)
+
+    def test_jonction_de_destination_refusee_avant_l_envoi(self):
+        # La destination <projet>/.factory/serveur est contrôlée AVANT moteur.lancer : rien n'est envoyé.
+        dehors = Path(self._tmp.name) / "dehors-serveur"
+        dehors.mkdir()
+        lien = self.projet / ".factory" / "serveur"
+        try:
+            if os.name == "nt":
+                r = subprocess.run(["cmd", "/c", "mklink", "/J", str(lien), str(dehors)], capture_output=True)
+                if r.returncode != 0:
+                    self.skipTest("jonction indisponible")
+            else:
+                lien.symlink_to(dehors, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("lien indisponible")
+        code, _, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                     "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 1)
+        self.assertIn("sous-dossier", erreur)
+        self.assertEqual(self.moteur.appels, [])
 
     def test_refus_avant_envoi_n_arrete_rien(self):
         self.moteur.leve = serveur_tache.RefusLancement("Aucun serveur prêt")

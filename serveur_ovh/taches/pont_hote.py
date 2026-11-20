@@ -28,9 +28,11 @@ SIGHUP, ou état final de la tâche d'agent constaté), l'émulation encore lié
 l'émulation surveille aussi l'agent lié (état final ou pont hôte disparu : il s'arrête de lui-même).
 Après `arreter` (ou une émulation finie), le `demarrer` suivant crée une NOUVELLE tâche d'émulation : un autre <emu>, donc
 un autre conteneur tache-<emu> ; l'APK de la précédente est retiré. EMULATIONS_MAX (5) émulations par pont au plus
-(au-delà : code 4 « limite d'émulations »). Un lancement refusé par lancer_emulation.sh (code 1 ou 2 : rien à espérer d'un
-nouvel essai) rend les `demarrer` suivants en échec immédiat (code 4), sans nouveau dossier ; un autre échec (délai, code
-inattendu) arrête l'émulation (« fin ») et le `demarrer` suivant en crée une neuve, dans la limite.
+(au-delà : code 4 « limite d'émulations » ; une émulation compte dès son dossier créé, et un dossier à demi écrit est
+retiré). Un lancement refusé pour de bon par lancer_emulation.sh (code 2, ou code 1 avec l'état « arretee » : agent lié fini
+ou arrêt demandé) rend les `demarrer` suivants en échec immédiat (code 4), sans nouveau dossier ; un autre échec (code 1
+« echouee » comme un docker run en échec, délai, code inattendu) arrête l'émulation (« fin ») et le `demarrer` suivant en
+crée une neuve, dans la limite.
 
 Retour des médias : après `capturer`, `journal`, `finfilm` (et `arreter` qui finit un film), la capture, logcat.txt, la vidéo
 et ses images sont COPIÉS de ~/taches/<emu>/sortie (écrit par le conteneur d'émulation, que l'agent ne peut pas toucher) vers
@@ -47,6 +49,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import signal
 import socket
 import stat
@@ -180,11 +183,13 @@ def lire_requete(ligne):
     return objet["verbe"], valider_verbe(objet["verbe"], objet["args"])
 
 
-def reponse(code, verbe, detail):
-    """La ligne de réponse, bornée en OCTETS après l'échappement JSON (REPONSE_OCTETS_MAX) : le détail est raccourci."""
+def reponse(code, verbe, detail, ajout=""):
+    """La ligne de réponse, bornée en OCTETS après l'échappement JSON (REPONSE_OCTETS_MAX) : seul `detail` est raccourci,
+    `ajout` (chemin /outil/... du pont hôte, court) est toujours gardé en fin. Un caractère inencodable (demi-paire UTF-16
+    venue du pont) devient « ? »."""
     while True:
-        ligne = (json.dumps({"ok": code == 0, "verbe": verbe, "code": code, "detail": detail}, ensure_ascii=False)
-                 + "\n").encode("utf-8")
+        ligne = (json.dumps({"ok": code == 0, "verbe": verbe, "code": code, "detail": detail + ajout}, ensure_ascii=False)
+                 + "\n").encode("utf-8", "replace")
         if len(ligne) <= REPONSE_OCTETS_MAX or not detail:
             return ligne
         detail = detail[:len(detail) * 3 // 4]
@@ -349,7 +354,7 @@ class Contexte:
         self.emu = None              # tâche d'émulation créée par CE pont
         self.emu_arretee = False
         self.emulations = 0          # tâches d'émulation créées (EMULATIONS_MAX au plus)
-        self.echec_lancement = None  # refus définitif de lancer_emulation.sh (code 1 ou 2) : plus de nouvel essai
+        self.echec_lancement = None  # refus définitif de lancer_emulation.sh (2, ou 1 « arretee ») : plus de nouvel essai
 
     # --- journal (hôte seul)
     def noter(self, texte, debut):
@@ -398,18 +403,22 @@ class Contexte:
                 continue
         else:
             raise Refus(4, "Identifiant d'émulation introuvable (déjà pris).")
+        self.emulations += 1         # compté dès le dossier créé : un échec plus loin entame aussi la limite
         d = self._dossier_emu(emu)
-        os.mkdir(os.path.join(d, "entree"), 0o755)
-        os.chmod(os.path.join(d, "entree"), 0o755)
-        _ecrire_atomique(os.path.join(d, "entree", "app.apk"), apk, 0o644)   # lu par l'utilisateur 1000 du conteneur
-        demande = {"id": emu, "type": "emulation", "mode": "pilote", "agent": self.id}
-        _ecrire_atomique(os.path.join(d, "demande.json"), (json.dumps(demande, indent=2) + "\n").encode("ascii"))
-        _ecrire_atomique(os.path.join(d, "agent"), (self.id + "\n").encode("ascii"))
-        # Lien de l'agent vers son émulation : HÔTE SEUL (jamais sous pont/, inscriptible par l'agent), écrit AVANT le
-        # lancement : un veilleur qui arrête l'agent pendant le lancement arrête aussi cette émulation.
-        _ecrire_atomique(os.path.join(self.dossier, "emulation"), (emu + "\n").encode("ascii"))
+        try:
+            os.mkdir(os.path.join(d, "entree"), 0o755)
+            os.chmod(os.path.join(d, "entree"), 0o755)
+            _ecrire_atomique(os.path.join(d, "entree", "app.apk"), apk, 0o644)   # lu par l'utilisateur 1000 du conteneur
+            demande = {"id": emu, "type": "emulation", "mode": "pilote", "agent": self.id}
+            _ecrire_atomique(os.path.join(d, "demande.json"), (json.dumps(demande, indent=2) + "\n").encode("ascii"))
+            _ecrire_atomique(os.path.join(d, "agent"), (self.id + "\n").encode("ascii"))
+            # Lien de l'agent vers son émulation : HÔTE SEUL (jamais sous pont/, inscriptible par l'agent), écrit AVANT le
+            # lancement : un veilleur qui arrête l'agent pendant le lancement arrête aussi cette émulation.
+            _ecrire_atomique(os.path.join(self.dossier, "emulation"), (emu + "\n").encode("ascii"))
+        except OSError:              # dossier à demi écrit : retiré (rien n'a été lancé dessus)
+            shutil.rmtree(d, ignore_errors=True)
+            raise Refus(4, "Préparation de l'émulation impossible (écriture sur le disque du serveur en échec).") from None
         self.emu, self.emu_arretee = emu, False
-        self.emulations += 1
 
     def preparer_emulation(self):
         """Émulation liée en marche et AVD prêt ; `Refus(4, ...)` sinon (créneau occupé, échec, délai)."""
@@ -432,7 +441,10 @@ class Contexte:
                 etat, raison = self.etat_emu()
                 message = f"Démarrage de l'émulation impossible (code {code}) : {raison[:300] or 'voir etat.json'}"
                 self.arreter_emulation()       # « fin » : jamais une émulation à demi lancée laissée sans suite
-                if code in (1, 2):             # refus de l'enveloppe : un nouvel essai échouerait de même, sans dossier
+                # Refus définitifs : argument refusé (2), ou émulation liée refusée parce que l'agent est fini ou son arrêt
+                # demandé (1 avec l'état « arretee »). Un autre code 1 (docker run en échec, créneau inaccessible : état
+                # « echouee ») peut être passager : le demarrer suivant en crée une neuve, dans la limite EMULATIONS_MAX.
+                if code == 2 or (code == 1 and etat == "arretee"):
                     self.echec_lancement = message + " (inutile de réessayer pendant cette tâche)"
                 raise Refus(4, message)
         debut = time.monotonic()
@@ -538,20 +550,22 @@ class Contexte:
         return f" Copie : {video} et /outil/videos/{nom}-img/ ({n} images)."
 
     def apres(self, verbe, args, code, detail):
-        """Copie des médias produits par un verbe réussi ; le détail complété du chemin /outil/... ."""
+        """Copie des médias produits par un verbe réussi ; le texte à ajouter au détail (chemin /outil/...), gardé à part :
+        `reponse` ne raccourcit jamais cet ajout, seulement le détail du pont."""
         if verbe == "capturer" and code == 0:
             chemin = self.copier(f"captures/{args[0]}.png")
-            return detail + (f" Copie : {chemin}." if chemin else " Capture non copiée dans /outil (refusée ou au-delà des limites).")
+            return f" Copie : {chemin}." if chemin else " Capture non copiée dans /outil (refusée ou au-delà des limites)."
         if verbe == "journal" and code == 0:
             chemin = self.copier("logcat.txt")
-            return detail + (f"\n(copie : {chemin})" if chemin else "\n(logcat.txt non copié dans /outil)")
+            return f"\n(copie : {chemin})" if chemin else "\n(logcat.txt non copié dans /outil)"
         if verbe in ("finfilm", "arreter"):
             m = re.search(MOTIF_DETAIL_FILM, detail, re.ASCII)
             if m and (verbe == "arreter" or m.start() == 0):
-                return detail + self.copier_film(m.group(1))
-        return detail
+                return self.copier_film(m.group(1))
+        return ""
 
     def executer_verbe(self, verbe, args):
+        """(code, détail du pont, ajout du pont hôte)."""
         if verbe == "demarrer":
             self.preparer_emulation()
         elif not self.emu or self.emu_arretee:
@@ -559,7 +573,7 @@ class Contexte:
         code, detail = self.relayer(verbe, args)
         if verbe == "arreter":
             self.arreter_emulation()
-        return code, self.apres(verbe, args, code, detail)
+        return code, detail, self.apres(verbe, args, code, detail)
 
 
 def traiter_requete(ligne, ctx):
@@ -574,14 +588,18 @@ def traiter_requete(ligne, ctx):
     except Refus as r:
         ctx.noter(f"refus code={r.code}", debut)
         return reponse(r.code, "", r.detail)
+    ajout = ""
     try:
-        code, detail = ctx.executer_verbe(verbe, args)
+        code, detail, ajout = ctx.executer_verbe(verbe, args)
     except Refus as r:
         code, detail = r.code, r.detail
     except Exception as e:           # une réponse inattendue ne fait jamais mourir le pont (Fin, elle, passe)
         code, detail = 4, f"Erreur du pont hôte ({type(e).__name__})."
     ctx.noter(" ".join((verbe, *args, f"code={code}")), debut)       # arguments validés seulement
-    return reponse(code, verbe, detail)
+    try:
+        return reponse(code, verbe, detail, ajout)
+    except Exception as e:           # même une réponse inencodable ne fait jamais mourir le pont
+        return reponse(4, verbe, f"Erreur du pont hôte ({type(e).__name__}).")
 
 
 # ---------------------------------------------------------------- socket

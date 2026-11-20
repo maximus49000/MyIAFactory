@@ -75,8 +75,8 @@ class FauxExecuteur:
             emu = argv[2]
             d = self.b.taches / emu
             code = self.codes_lancer.pop(0) if self.codes_lancer else 0
+            code, etat = code if isinstance(code, tuple) else (code, {0: "en_cours", 75: "en_attente"}.get(code, "echouee"))
             (d / "sortie").mkdir(parents=True, exist_ok=True)
-            etat = {0: "en_cours", 75: "en_attente"}.get(code, "echouee")
             texte = json.dumps({"id": emu, "etat": etat, "statut": None, "debut": None, "fin": None, "raison": "r"})
             (d / "etat.json").write_text(texte + "\n", encoding="utf-8")
             if code == 0:
@@ -420,7 +420,8 @@ class TestCorrectifs(unittest.TestCase):
             self.assertEqual(len(b.faux.lancements()), 5)
 
     def test_lancement_refuse_sans_nouveau_dossier(self):
-        for code_lancer in (1, 2):
+        # refus définitifs : argument refusé (2) ; émulation liée refusée, agent fini ou arrêt demandé (1, « arretee »)
+        for code_lancer in (2, (1, "arretee")):
             with self.subTest(code=code_lancer), Banc() as b:
                 b.faux.codes_lancer = [code_lancer]
                 self.assertEqual(b.appel("demarrer")[0], 4)
@@ -433,8 +434,28 @@ class TestCorrectifs(unittest.TestCase):
                 self.assertEqual(b.emulations(), emus)
                 self.assertEqual(len(b.faux.lancements()), 1)
 
+    def test_dossier_d_emulation_a_demi_ecrit_retire_et_compte(self):
+        vrai = PH._ecrire_atomique
+
+        def casse(chemin, donnees, mode=0o600):
+            if os.path.basename(chemin) == "demande.json":
+                raise OSError("disque plein")
+            return vrai(chemin, donnees, mode)
+
+        with Banc() as b:
+            with mock.patch.object(PH, "_ecrire_atomique", casse):
+                code, d = b.appel("demarrer")
+            self.assertEqual(code, 4, d)
+            self.assertEqual(b.emulations(), [])                         # rien de laissé à demi sur le disque
+            self.assertEqual(b.ctx.emulations, 1)                        # mais compté dans la limite
+            self.assertFalse((b.dossier / "emulation").exists())
+            self.assertEqual(b.faux.lancements(), [])
+            self.assertEqual(b.appel("demarrer")[0], 0)                  # passager : la suivante est créée
+            self.assertEqual((b.ctx.emulations, len(b.emulations())), (2, 1))
+
     def test_echec_inattendu_arrete_puis_une_neuve(self):
-        for code_lancer in (9, None):
+        # code 1 « echouee » (docker run en échec, créneau inaccessible) : passager, jamais définitif
+        for code_lancer in (9, None, 1):
             with self.subTest(code=code_lancer), Banc() as b:
                 b.faux.codes_lancer = [code_lancer]
                 self.assertEqual(b.appel("demarrer")[0], 4)
@@ -457,6 +478,21 @@ class TestCorrectifs(unittest.TestCase):
         ligne = PH.reponse(0, "journal", "\x01" * 300000)                # 6 octets par caractère une fois échappé
         self.assertLessEqual(len(ligne), PH.REPONSE_OCTETS_MAX)
         self.assertEqual(json.loads(ligne)["code"], 0)
+
+        ajout = "\n(copie : /outil/logcat.txt)"                        # détail énorme : l'ajout du pont hôte reste en fin
+        ligne = PH.reponse(0, "journal", "\x01" * 300000, ajout)
+        self.assertLessEqual(len(ligne), PH.REPONSE_OCTETS_MAX)
+        self.assertTrue(json.loads(ligne)["detail"].endswith("\x01" + ajout))
+
+        def surrogat(sortie, args):                                    # demi-paire UTF-16 venue du pont : jamais fatale
+            return 0, b'{"ok": true, "verbe": "toucher", "detail": "a\\ud800b"}\n'
+
+        with Banc() as b:
+            b.faux.actions["toucher"] = surrogat
+            self.assertEqual(b.appel("demarrer")[0], 0)
+            code, d = b.appel("toucher", "1", "2")
+            self.assertEqual((code, d["detail"]), (0, "a?b"))
+            self.assertEqual(b.appel("attendre", "1")[0], 0)
         client = charger(CLIENT, "pont_client")
         self.assertLessEqual(PH.REPONSE_OCTETS_MAX, client.REPONSE_MAX)
 
